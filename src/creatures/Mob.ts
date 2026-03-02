@@ -63,6 +63,9 @@ export abstract class Mob extends Player {
   /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
   isConfused = false;
 
+  /** The player who dealt the killing blow; set when hp reaches 0. */
+  protected killedBy: Player | null = null;
+
   constructor(
     tileX: number,
     tileY: number,
@@ -277,19 +280,29 @@ export abstract class Mob extends Player {
     }
     if (this.hp === 0 && prev > 0) {
       this.justDied = true;
+      this.killedBy = attacker;
       // Roll loot
       const coins =
         this.coinDropMin +
         Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
-      const items: LootDrop['items'] = [];
-      if (Math.random() < 0.25)
-        items.push({ id: 'health_potion', quantity: 1 });
-      if (Math.random() < 0.05)
-        items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+      const items = this.rollLootItems(attacker);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
       }
     }
+  }
+
+  /**
+   * Generates the item portion of this mob's loot drop.
+   * Subclasses may override to add extra drops based on who killed them.
+   */
+  protected rollLootItems(killer: Player | null): LootDrop['items'] {
+    void killer; // available for subclasses
+    const items: LootDrop['items'] = [];
+    if (Math.random() < 0.25) items.push({ id: 'health_potion', quantity: 1 });
+    if (Math.random() < 0.05)
+      items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+    return items;
   }
 
   /** Extends Player.tickTimers to also decrement the health bar visibility timer. */

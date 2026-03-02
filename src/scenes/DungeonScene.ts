@@ -27,6 +27,11 @@ import type { LootDrop } from '../creatures/Mob';
 import type { ItemId } from '../core/Inventory';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
+import {
+  drawDynamiteFloorSprite,
+  drawDynamiteExplosion,
+  drawDynamiteChargeBar,
+} from '../sprites/dynamiteSprite';
 
 interface PendingLoot {
   x: number;
@@ -67,6 +72,32 @@ interface FloorItem {
   id: ItemId;
   quantity: number;
 }
+
+interface LiveDynamite {
+  /** Pixel-space center position. */
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  fuseFrames: number;
+  state: 'flying' | 'sliding' | 'stopped' | 'exploding';
+  explodeTimer: number;
+}
+
+// ── Goblin Dynamite constants ─────────────────────────────────────────────────
+const DYN_MAX_CHARGE = 120; // 2 s at 60 fps → full throw
+const DYN_DANGER = 240; // 4 s → charge bar turns red
+const DYN_EXPLODE_HAND = 300; // 5 s → boom in hand
+const DYN_FUSE = 300; // 5 s fuse after thrown/dropped
+const DYN_TAP = 8; // frames: release faster than this = tap (drop at feet)
+const DYN_SPEED_MIN = 2.0;
+const DYN_SPEED_MAX = 21.0;
+const DYN_BOUNCE = 0.6; // velocity fraction kept after wall bounce
+const DYN_FRICTION = 0.88; // per-frame speed multiplier
+const DYN_STOP = 0.08; // px/frame below which dynamite is considered stopped
+const DYN_RADIUS = TILE_SIZE * 3; // AoE explosion radius (96 px)
+const DYN_DAMAGE = 8; // damage dealt to all entities in radius
+const DYN_ANIM_FRAMES = 45; // explosion animation duration
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -116,9 +147,26 @@ export class DungeonScene extends Scene {
   // ── Follow override — set by "F" key; clears when companion arrives ────────
   private companionFollowOverride = false;
 
+  // ── Companion A* path cache — keyed by entity reference ─────────────────
+  private companionPaths = new Map<
+    object,
+    {
+      path: Array<{ x: number; y: number }>;
+      timer: number;
+      targetTX: number;
+      targetTY: number;
+    }
+  >();
+
   // ── Action-key listeners registered in onEnter / removed in onExit ─────────
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
   private actionHandler: ((e: KeyboardEvent) => void) | null = null;
+  private keyupHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  // ── Goblin Dynamite ────────────────────────────────────────────────────────
+  private liveDynamites: LiveDynamite[] = [];
+  private dynamiteCharging: { hotbarIdx: number; chargeFrames: number } | null =
+    null;
 
   // ── Safe Room ──────────────────────────────────────────────────────────────
   private safeRoomBounds: { x: number; y: number; w: number; h: number } | null;
@@ -309,19 +357,34 @@ export class DungeonScene extends Scene {
           this.triggerProtectiveShell();
         } else if (slot?.id === 'scroll_of_confusing_fog') {
           this.castConfusingFog();
+        } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
+          // Begin charge — release (keyup) will throw or drop
+          this.dynamiteCharging = { hotbarIdx, chargeFrames: 0 };
         }
         return;
       }
     };
 
+    // Dynamite throw — fires on key release
+    this.keyupHandler = (e: KeyboardEvent) => {
+      if (this.pauseMenu.isOpen || this.isSleeping || this.gameOver) return;
+      const idx = parseInt(e.key) - 1;
+      if (idx >= 0 && idx < 8 && this.dynamiteCharging?.hotbarIdx === idx) {
+        this.releaseDynamite();
+      }
+    };
+
     window.addEventListener('keydown', this.escHandler);
     window.addEventListener('keydown', this.actionHandler);
+    window.addEventListener('keyup', this.keyupHandler);
   }
 
   onExit(): void {
     if (this.escHandler) window.removeEventListener('keydown', this.escHandler);
     if (this.actionHandler)
       window.removeEventListener('keydown', this.actionHandler);
+    if (this.keyupHandler)
+      window.removeEventListener('keyup', this.keyupHandler);
   }
 
   handleClick(mx: number, my: number): void {
@@ -545,6 +608,32 @@ export class DungeonScene extends Scene {
     this.renderFogs(ctx, camX, camY);
     this.renderLevelUpFlash(ctx, camX, camY);
 
+    // ── Live dynamites (world space) ──────────────────────────────────────
+    for (const dyn of this.liveDynamites) {
+      const sx = dyn.x - camX;
+      const sy = dyn.y - camY;
+      if (dyn.state !== 'exploding') {
+        drawDynamiteFloorSprite(
+          ctx,
+          sx - TILE_SIZE * 0.5,
+          sy - TILE_SIZE * 0.5,
+          TILE_SIZE,
+          dyn.fuseFrames,
+          DYN_FUSE,
+        );
+      } else {
+        drawDynamiteExplosion(
+          ctx,
+          sx,
+          sy,
+          TILE_SIZE,
+          dyn.explodeTimer,
+          DYN_ANIM_FRAMES,
+          DYN_RADIUS,
+        );
+      }
+    }
+
     drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse);
 
     // ── Boss health bar + room barrier ────────────────────────────────────
@@ -570,6 +659,22 @@ export class DungeonScene extends Scene {
         active.coins,
       );
       this.gearPanel.render(ctx, canvas, active.inventory, name);
+
+      // ── Throw charge bar (right side, above hotbar) ───────────────────
+      if (this.dynamiteCharging) {
+        const ratio = Math.min(
+          1,
+          this.dynamiteCharging.chargeFrames / DYN_MAX_CHARGE,
+        );
+        drawDynamiteChargeBar(
+          ctx,
+          canvas.width,
+          canvas.height,
+          ratio,
+          this.dynamiteCharging.chargeFrames,
+          DYN_DANGER,
+        );
+      }
     }
 
     if (this.gameOver) {
@@ -900,11 +1005,146 @@ export class DungeonScene extends Scene {
     // ── Speech bubble pulse ───────────────────────────────────────────────
     this.speechBubblePulse++;
 
+    // ── Goblin Dynamite ───────────────────────────────────────────────────
+    if (this.dynamiteCharging) {
+      this.dynamiteCharging.chargeFrames++;
+      if (this.dynamiteCharging.chargeFrames >= DYN_EXPLODE_HAND) {
+        this.explodeDynamiteInHand();
+      }
+    }
+    this.updateLiveDynamites();
+
     // ── Death check ───────────────────────────────────────────────────────
     if (!this.human.isAlive || !this.cat.isAlive) {
       this.gameOver = true;
       this.deathScreen.activate();
     }
+  }
+
+  // ── Goblin Dynamite helpers ─────────────────────────────────────────────────
+
+  /** Called on keyup after the player has been charging a dynamite throw. */
+  private releaseDynamite(): void {
+    if (!this.dynamiteCharging) return;
+    const { chargeFrames } = this.dynamiteCharging;
+    this.dynamiteCharging = null;
+
+    if (!this.human.inventory.removeOne('goblin_dynamite')) return;
+
+    const isTap = chargeFrames < DYN_TAP;
+    const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
+    const speed = isTap
+      ? 0
+      : DYN_SPEED_MIN + (DYN_SPEED_MAX - DYN_SPEED_MIN) * chargeRatio;
+
+    this.liveDynamites.push({
+      x: this.human.x + TILE_SIZE * 0.5,
+      y: this.human.y + TILE_SIZE * 0.5,
+      vx: this.human.facingX * speed,
+      vy: this.human.facingY * speed,
+      fuseFrames: DYN_FUSE,
+      state: isTap ? 'stopped' : 'flying',
+      explodeTimer: 0,
+    });
+  }
+
+  /** AoE damage to all entities within DYN_RADIUS of the given pixel center. */
+  private triggerDynamiteExplosion(cx: number, cy: number): void {
+    const ts = TILE_SIZE;
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      if (
+        Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS
+      ) {
+        mob.takeDamageFrom(DYN_DAMAGE, this.human);
+      }
+    }
+    if (
+      Math.hypot(this.human.x + ts * 0.5 - cx, this.human.y + ts * 0.5 - cy) <=
+      DYN_RADIUS
+    ) {
+      this.human.takeDamage(DYN_DAMAGE);
+    }
+    if (
+      Math.hypot(this.cat.x + ts * 0.5 - cx, this.cat.y + ts * 0.5 - cy) <=
+      DYN_RADIUS
+    ) {
+      this.cat.takeDamage(DYN_DAMAGE);
+    }
+  }
+
+  /** Dynamite held too long — explodes in the Human's hand. */
+  private explodeDynamiteInHand(): void {
+    this.dynamiteCharging = null;
+    const cx = this.human.x + TILE_SIZE * 0.5;
+    const cy = this.human.y + TILE_SIZE * 0.5;
+    this.triggerDynamiteExplosion(cx, cy);
+    // Spawn an explosion animation at the human's position
+    this.liveDynamites.push({
+      x: cx,
+      y: cy,
+      vx: 0,
+      vy: 0,
+      fuseFrames: 0,
+      state: 'exploding',
+      explodeTimer: DYN_ANIM_FRAMES,
+    });
+  }
+
+  /** Update all live dynamite physics + fuses; must be called each gameplay frame. */
+  private updateLiveDynamites(): void {
+    for (const dyn of this.liveDynamites) {
+      if (dyn.state === 'exploding') {
+        dyn.explodeTimer--;
+        continue;
+      }
+
+      dyn.fuseFrames--;
+      if (dyn.fuseFrames <= 0) {
+        dyn.state = 'exploding';
+        dyn.explodeTimer = DYN_ANIM_FRAMES;
+        this.triggerDynamiteExplosion(dyn.x, dyn.y);
+        continue;
+      }
+
+      if (dyn.state === 'flying' || dyn.state === 'sliding') {
+        // X-axis movement with wall bounce
+        const nextX = dyn.x + dyn.vx;
+        const txX = Math.floor(nextX / TILE_SIZE);
+        const ty = Math.floor(dyn.y / TILE_SIZE);
+        if (!this.gameMap.isWalkable(txX, ty)) {
+          dyn.vx = -dyn.vx * DYN_BOUNCE;
+        } else {
+          dyn.x = nextX;
+        }
+
+        // Y-axis movement with wall bounce
+        const nextY = dyn.y + dyn.vy;
+        const tx = Math.floor(dyn.x / TILE_SIZE);
+        const tyY = Math.floor(nextY / TILE_SIZE);
+        if (!this.gameMap.isWalkable(tx, tyY)) {
+          dyn.vy = -dyn.vy * DYN_BOUNCE;
+        } else {
+          dyn.y = nextY;
+        }
+
+        // Friction / slide-to-stop
+        dyn.vx *= DYN_FRICTION;
+        dyn.vy *= DYN_FRICTION;
+        const spd = Math.hypot(dyn.vx, dyn.vy);
+        if (spd < DYN_STOP) {
+          dyn.state = 'stopped';
+          dyn.vx = 0;
+          dyn.vy = 0;
+        } else if (spd < 1.5) {
+          dyn.state = 'sliding';
+        }
+      }
+    }
+
+    this.liveDynamites = this.liveDynamites.filter(
+      (d) => !(d.state === 'exploding' && d.explodeTimer <= 0),
+    );
   }
 
   // ── Safe Room helpers ───────────────────────────────────────────────────────
@@ -1900,15 +2140,86 @@ export class DungeonScene extends Scene {
     const dist = Math.hypot(dx, dy);
     if (dist <= minDist) {
       entity.isMoving = false;
+      this.companionPaths.delete(entity);
       return;
     }
+
     const step = Math.min(speed, dist - minDist);
-    const nx = dx / dist;
-    const ny = dy / dist;
-    this.entityMoveWithCollision(entity, nx * step, ny * step);
+    const ts = TILE_SIZE;
+
+    // Use direct movement when close or LOS is clear
+    const hasLOS =
+      dist < ts * 2.5 ||
+      this.gameMap.hasLineOfSight(
+        entity.x + ts * 0.5,
+        entity.y + ts * 0.5,
+        targetX + ts * 0.5,
+        targetY + ts * 0.5,
+      );
+
+    let moveNx = dx / dist;
+    let moveNy = dy / dist;
+
+    if (!hasLOS) {
+      const goalTX = Math.floor((targetX + ts * 0.5) / ts);
+      const goalTY = Math.floor((targetY + ts * 0.5) / ts);
+
+      let cached = this.companionPaths.get(entity);
+      if (!cached) {
+        cached = { path: [], timer: 0, targetTX: -1, targetTY: -1 };
+        this.companionPaths.set(entity, cached);
+      }
+
+      cached.timer--;
+      if (
+        cached.timer <= 0 ||
+        cached.targetTX !== goalTX ||
+        cached.targetTY !== goalTY
+      ) {
+        const startTX = Math.floor((entity.x + ts * 0.5) / ts);
+        const startTY = Math.floor((entity.y + ts * 0.5) / ts);
+        const raw = this.gameMap.findPath(startTX, startTY, goalTX, goalTY);
+        // Skip first tile (we're already on it)
+        cached.path = raw.length > 1 ? raw.slice(1) : [];
+        cached.timer = 30;
+        cached.targetTX = goalTX;
+        cached.targetTY = goalTY;
+      }
+
+      if (cached.path.length > 0) {
+        const next = cached.path[0];
+        const wpX = next.x * ts;
+        const wpY = next.y * ts;
+        const wpDx = wpX - entity.x;
+        const wpDy = wpY - entity.y;
+        const wpDist = Math.hypot(wpDx, wpDy);
+
+        // Advance to next waypoint when close enough
+        if (wpDist < ts * 0.65 && cached.path.length > 1) {
+          cached.path.shift();
+          const next2 = cached.path[0];
+          const wpDx2 = next2.x * ts - entity.x;
+          const wpDy2 = next2.y * ts - entity.y;
+          const wpDist2 = Math.hypot(wpDx2, wpDy2);
+          if (wpDist2 > 0) {
+            moveNx = wpDx2 / wpDist2;
+            moveNy = wpDy2 / wpDist2;
+          }
+        } else if (wpDist > 0) {
+          moveNx = wpDx / wpDist;
+          moveNy = wpDy / wpDist;
+        }
+      }
+    } else {
+      // LOS available — clear stale path
+      const cached = this.companionPaths.get(entity);
+      if (cached) cached.path = [];
+    }
+
+    this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
     entity.isMoving = true;
-    entity.facingX = nx;
-    entity.facingY = ny;
+    entity.facingX = moveNx;
+    entity.facingY = moveNy;
   }
 
   // ── Camera ──────────────────────────────────────────────────────────────────

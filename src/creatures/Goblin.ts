@@ -1,5 +1,8 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
+import type { LootDrop } from './Mob';
+import { HumanPlayer } from './HumanPlayer';
+import { CatPlayer } from './CatPlayer';
 import { drawGoblinSprite, GoblinWeapon } from '../sprites/goblinSprite';
 
 export { GoblinWeapon };
@@ -49,6 +52,20 @@ export class Goblin extends Mob {
     this.attackRangePx = tileSize * ATTACK_RANGE_TILES;
     // Hammers hit harder than clubs
     this.attackDamage = weapon === 'hammer' ? 2 : 1;
+  }
+
+  protected rollLootItems(killer: Player | null): LootDrop['items'] {
+    const items = super.rollLootItems(killer);
+    const chance =
+      killer instanceof HumanPlayer
+        ? 0.2
+        : killer instanceof CatPlayer
+          ? 0.05
+          : 0;
+    if (chance > 0 && Math.random() < chance) {
+      items.push({ id: 'goblin_dynamite', quantity: 1 });
+    }
+    return items;
   }
 
   updateAI(targets: Player[]) {

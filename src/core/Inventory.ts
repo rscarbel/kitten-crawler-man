@@ -1,7 +1,8 @@
 export type ItemId =
   | 'health_potion'
   | 'enchanted_bigboi_boxers'
-  | 'scroll_of_confusing_fog';
+  | 'scroll_of_confusing_fog'
+  | 'goblin_dynamite';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -41,6 +42,17 @@ const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+  },
+  goblin_dynamite: {
+    id: 'goblin_dynamite',
+    name: 'Goblin Dynamite',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A hissing stick of goblin-made dynamite. Only the Human can throw it. ' +
+      'Hold the hotbar key to charge your throw — release to hurl it. ' +
+      'Tap it to drop it at your feet. Warning: holding too long has consequences.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',

@@ -5,6 +5,7 @@ import {
   HOTBAR_COUNT,
   SLOTS_PER_PAGE,
 } from '../core/Inventory';
+import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const SLOT_SIZE = 54;
@@ -656,6 +657,10 @@ export class InventoryPanel {
       ctx.strokeStyle = '#f87171';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+    }
+
+    if (item.id === 'goblin_dynamite') {
+      drawDynamiteInventoryIcon(ctx, x, y, size);
     }
 
     // Quantity badge (bottom-right)
