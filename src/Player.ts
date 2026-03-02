@@ -18,6 +18,7 @@ export abstract class Player {
   isMoving = false;
   walkFrame = 0;
   healthPotions = 10;
+  unspentPoints = 0;
   protected tileSize: number;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp = 10) {
@@ -53,21 +54,28 @@ export abstract class Player {
     if (this.xp >= xpNeeded) {
       this.xp -= xpNeeded;
       this.level++;
-      const roll = Math.floor(Math.random() * 3);
-      if (roll === 0) {
-        this.strength++;
-        this.levelUpStat = 'STR';
-      } else if (roll === 1) {
-        this.intelligence++;
-        this.levelUpStat = 'INT';
-      } else {
-        this.constitution++;
-        this.maxHp += 2;
-        this.hp = Math.min(this.hp + 2, this.maxHp);
-        this.levelUpStat = 'HP';
-      }
+      this.unspentPoints++;
+      this.levelUpStat = 'POINT';
       this.levelUpFlash = 120;
     }
+  }
+
+  spendPoint(stat: 'STR' | 'INT' | 'CON') {
+    if (this.unspentPoints <= 0) return;
+    this.unspentPoints--;
+    if (stat === 'STR') {
+      this.strength++;
+      this.levelUpStat = 'STR';
+    } else if (stat === 'INT') {
+      this.intelligence++;
+      this.levelUpStat = 'INT';
+    } else {
+      this.constitution++;
+      this.maxHp += 2;
+      this.hp = Math.min(this.hp + 2, this.maxHp);
+      this.levelUpStat = 'CON';
+    }
+    this.levelUpFlash = 60;
   }
 
   tickTimers() {

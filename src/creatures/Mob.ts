@@ -25,6 +25,15 @@ export abstract class Mob extends Player {
   protected readonly spawnX: number;
   protected readonly spawnY: number;
 
+  /** Last target position this mob had a clear LOS to — used for wall-aware navigation. */
+  protected lastKnownTargetX = 0;
+  protected lastKnownTargetY = 0;
+
+  /** Frames the mob has been fully stuck (both axes blocked) — triggers steering flip. */
+  private stuckFrames = 0;
+  /** +1 or -1: direction to rotate the movement vector when stuck. */
+  private steerSign = 1;
+
   protected wanderTimer: number;
   protected wanderDx = 0;
   protected wanderDy = 0;
@@ -36,6 +45,8 @@ export abstract class Mob extends Player {
     this.speed = speed;
     this.spawnX = tileX * tileSize;
     this.spawnY = tileY * tileSize;
+    this.lastKnownTargetX = this.spawnX;
+    this.lastKnownTargetY = this.spawnY;
     // Stagger wander timers so mobs don't all change direction together
     this.wanderTimer = Math.floor(Math.random() * 120);
   }
@@ -52,6 +63,17 @@ export abstract class Mob extends Player {
       this.x + ts * 0.5, this.y + ts * 0.5,
       target.x + ts * 0.5, target.y + ts * 0.5,
     );
+  }
+
+  /**
+   * Records the target's current position as the last known location when LOS
+   * is clear. Call each frame while a target is being chased.
+   */
+  protected updateLastKnown(target: Player) {
+    if (this.hasLOS(target)) {
+      this.lastKnownTargetX = target.x;
+      this.lastKnownTargetY = target.y;
+    }
   }
 
   /**
@@ -82,6 +104,8 @@ export abstract class Mob extends Player {
   /**
    * Wall-aware equivalent of Player.followTarget. Updates facing direction and
    * uses moveWithCollision so the mob slides along walls while chasing.
+   * When fully stuck (both axes blocked), rotates the movement vector ±90° to
+   * steer around corners. Flips steering direction after 50 stuck frames.
    */
   protected followTargetCollide(targetX: number, targetY: number, speed: number, minDist: number) {
     const dx = targetX - this.x;
@@ -96,7 +120,29 @@ export abstract class Mob extends Player {
     const ny = dy / dist;
     this.facingX = nx;
     this.facingY = ny;
+
+    const preX = this.x;
+    const preY = this.y;
     this.moveWithCollision(nx * step, ny * step);
+
+    if (this.x === preX && this.y === preY) {
+      // Fully stuck — try perpendicular steering direction
+      const perpX = -ny * this.steerSign;
+      const perpY =  nx * this.steerSign;
+      this.moveWithCollision(perpX * step, perpY * step);
+      if (this.x === preX && this.y === preY) {
+        this.stuckFrames++;
+        if (this.stuckFrames > 50) {
+          this.steerSign *= -1;
+          this.stuckFrames = 0;
+        }
+      } else {
+        this.stuckFrames = 0;
+      }
+    } else {
+      this.stuckFrames = 0;
+    }
+
     this.isMoving = true;
   }
 

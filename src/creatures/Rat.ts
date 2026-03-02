@@ -59,9 +59,12 @@ export class Rat extends Mob {
 
     this.isAggro = true;
 
-    // Skitter toward the target, stop just inside bite range
+    // Track last known position while we have LOS
+    this.updateLastKnown(nearest);
+
+    // Skitter toward last known position (= current when LOS clear)
     if (nearestDist > this.biteRangePx) {
-      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.biteRangePx * 0.8);
+      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.biteRangePx * 0.8);
     } else {
       this.isMoving = false;
     }

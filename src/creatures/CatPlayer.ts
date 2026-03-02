@@ -31,18 +31,23 @@ export class CatPlayer extends Player {
     return 2 + this.intelligence;
   }
 
-  triggerAttack() {
+  private fireMissile(angleOffset = 0) {
+    const baseAngle = Math.atan2(this.facingY, this.facingX) + angleOffset;
     this.missiles.push({
       x: this.x + this.tileSize * 0.5,
       y: this.y + this.tileSize * 0.5,
-      vx: this.facingX * this.MISSILE_SPEED,
-      vy: this.facingY * this.MISSILE_SPEED,
+      vx: Math.cos(baseAngle) * this.MISSILE_SPEED,
+      vy: Math.sin(baseAngle) * this.MISSILE_SPEED,
       distTraveled: 0,
       maxDist: 3.5 * this.tileSize,
       state: 'flying',
       explodeTimer: this.EXPLODE_FRAMES,
       hit: false,
     });
+  }
+
+  triggerAttack() {
+    this.fireMissile();
   }
 
   getMissiles(): Missile[] {
@@ -52,8 +57,9 @@ export class CatPlayer extends Player {
   /**
    * Called every frame when the cat is the follower and has an autoTarget.
    * Faces the target and fires missiles on cooldown.
+   * @param missChance 0–1 probability the shot flies slightly off-target (visible miss).
    */
-  autoFireTick() {
+  autoFireTick(missChance = 0) {
     if (!this.autoTarget || !this.autoTarget.isAlive) {
       this.autoTarget = null;
       return;
@@ -72,7 +78,11 @@ export class CatPlayer extends Player {
     if (this.autoFireCooldown > 0) {
       this.autoFireCooldown--;
     } else {
-      this.triggerAttack();
+      // Apply angular miss offset (±~25° spread when missChance > 0)
+      const offset = Math.random() < missChance
+        ? (Math.random() - 0.5) * 2 * 0.44
+        : 0;
+      this.fireMissile(offset);
       this.autoFireCooldown = this.AUTO_FIRE_COOLDOWN;
     }
   }

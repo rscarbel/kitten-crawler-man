@@ -79,9 +79,12 @@ export class Goblin extends Mob {
 
     this.isAggro = true;
 
-    // Chase — stop just inside attack range so the goblin doesn't overlap the target
+    // Track last known position while we have LOS (enables navigation around corners)
+    this.updateLastKnown(nearest);
+
+    // Chase toward last known position (= current position when LOS is clear)
     if (nearestDist > this.attackRangePx) {
-      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.attackRangePx * 0.8);
+      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.attackRangePx * 0.8);
     } else {
       this.isMoving = false;
     }

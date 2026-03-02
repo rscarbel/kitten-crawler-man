@@ -113,10 +113,16 @@ export class Llama extends Mob {
       ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY)
       : true;
 
-    // Movement: approach if no LOS or out of spit range; hold position otherwise
+    // Track last known position while we have LOS
+    if (hasLOS) {
+      this.lastKnownTargetX = nearest.x;
+      this.lastKnownTargetY = nearest.y;
+    }
+
+    // Movement: navigate toward last known pos when no LOS; hold when in range
     if (!hasLOS) {
-      // No line of sight — close in to find a clear angle
-      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.tileSize * 1.5);
+      // No line of sight — navigate toward last known position to find a clear angle
+      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.tileSize * 1.5);
     } else if (nearestDist > this.spitRangePx) {
       // Has LOS but too far — move closer
       this.followTargetCollide(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
