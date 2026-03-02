@@ -58,8 +58,9 @@ class GameStage {
   private cat: CatPlayer;
   private mobs: Mob[];
   private keys = new Set<string>();
-  private catWanderX = 0;
-  private catWanderY = 0;
+  /** Absolute world-pixel position the cat idles at during wander. */
+  private catWanderTargetX = 6 * TILE_SIZE;
+  private catWanderTargetY = 5 * TILE_SIZE;
   private catWanderTimer = 0;
   /** Angle used by the cat's kiting orbit. Increments every frame during kite mode. */
   private catKiteAngle = 0;
@@ -90,8 +91,13 @@ class GameStage {
       }
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
-        if (this.human.isActive) this.human.triggerAttack();
-        else this.cat.triggerAttack();
+        if (this.human.isActive) {
+          this.snapFacingToNearestMob(this.human, TILE_SIZE * 3);
+          this.human.triggerAttack();
+        } else {
+          this.snapFacingToNearestMob(this.cat, TILE_SIZE * 5);
+          this.cat.triggerAttack();
+        }
       }
       // Q — drink a health potion (active character)
       if ((e.key === 'q' || e.key === 'Q') && !e.repeat) {
@@ -178,20 +184,26 @@ class GameStage {
           this.cat.followTarget(enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
         }
       } else {
-        // Idle: wander near the human
+        // Idle: wander near the human using an absolute pixel target so the
+        // cat stays still (isMoving=false, no walk animation) once she arrives.
         this.catWanderTimer--;
         if (this.catWanderTimer <= 0) {
           const angle = Math.random() * Math.PI * 2;
-          const radius = Math.random() * TILE_SIZE * 1.5;
-          this.catWanderX = Math.cos(angle) * radius;
-          this.catWanderY = Math.sin(angle) * radius;
+          const radius = Math.random() * TILE_SIZE;
+          this.catWanderTargetX = this.human.x + Math.cos(angle) * radius;
+          this.catWanderTargetY = this.human.y + Math.sin(angle) * radius;
           this.catWanderTimer = 160 + Math.floor(Math.random() * 240);
         }
+        // If the cat has drifted too far from the human, walk back directly.
+        if (Math.hypot(this.cat.x - this.human.x, this.cat.y - this.human.y) > TILE_SIZE * 3.5) {
+          this.catWanderTargetX = this.human.x;
+          this.catWanderTargetY = this.human.y;
+        }
         this.cat.followTarget(
-          this.human.x + this.catWanderX,
-          this.human.y + this.catWanderY,
+          this.catWanderTargetX,
+          this.catWanderTargetY,
           FOLLOWER_SPEED,
-          TILE_SIZE * 0.3,
+          TILE_SIZE * 1.5,
         );
       }
     } else {
@@ -353,6 +365,38 @@ class GameStage {
       if (this.human.autoTarget) {
         this.human.autoFightTick();
       }
+    }
+  }
+
+  /**
+   * If a mob is within `range` px and roughly in the player's facing direction
+   * (dot product > 0.25), snaps the player's facing toward the nearest such mob.
+   * Called before the player manually triggers an attack so the hit connects.
+   */
+  private snapFacingToNearestMob(player: HumanPlayer | CatPlayer, range: number) {
+    const px = player.x + TILE_SIZE * 0.5;
+    const py = player.y + TILE_SIZE * 0.5;
+    let bestDist = range;
+    let bestMob: Mob | null = null;
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      const dx = (mob.x + TILE_SIZE * 0.5) - px;
+      const dy = (mob.y + TILE_SIZE * 0.5) - py;
+      const dist = Math.hypot(dx, dy);
+      if (dist > range) continue;
+      const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
+      if (dot < 0.25) continue;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMob = mob;
+      }
+    }
+    if (bestMob) {
+      const dx = (bestMob.x + TILE_SIZE * 0.5) - px;
+      const dy = (bestMob.y + TILE_SIZE * 0.5) - py;
+      const d = Math.hypot(dx, dy);
+      player.facingX = dx / d;
+      player.facingY = dy / d;
     }
   }
 

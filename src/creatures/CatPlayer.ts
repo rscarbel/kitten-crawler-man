@@ -12,7 +12,7 @@ export class CatPlayer extends Player {
   private readonly MISSILE_SPEED = 4.5;
   private readonly EXPLODE_FRAMES = 22;
   private autoFireCooldown = 0;
-  private readonly AUTO_FIRE_COOLDOWN = 60;
+  private readonly AUTO_FIRE_COOLDOWN = 180;
 
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Player | null = null;

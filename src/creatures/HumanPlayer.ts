@@ -12,6 +12,8 @@ export class HumanPlayer extends Player {
   private attackTimer = 0;
   private readonly ATTACK_FRAMES = 18;
   private nextType: 'punch' | 'kick' = 'punch';
+  private autoAttackCooldown = 0;
+  private readonly AUTO_ATTACK_COOLDOWN = 90;
 
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Player | null = null;
@@ -64,9 +66,14 @@ export class HumanPlayer extends Player {
       this.facingY = dy / dist;
     }
 
-    // Attack when in range (triggerAttack is self-gated by attackTimer)
+    // Attack when in range, gated by a slower auto-attack cooldown
     if (dist <= this.getMeleeRange()) {
-      this.triggerAttack();
+      if (this.autoAttackCooldown > 0) {
+        this.autoAttackCooldown--;
+      } else {
+        this.triggerAttack();
+        this.autoAttackCooldown = this.AUTO_ATTACK_COOLDOWN;
+      }
     }
   }
 

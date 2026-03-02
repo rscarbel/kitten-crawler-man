@@ -26,6 +26,10 @@ export class Goblin extends Mob {
   private attackCooldown = 0;
   private attackAnimTimer = 0;
   private isAggro = false;
+  /** True when the goblin has not yet landed its first hit on the current target. */
+  private firstHitPending = true;
+  /** Windup frames remaining before the first strike connects. */
+  private attackWindupTimer = 0;
 
   constructor(
     tileX: number,
@@ -67,6 +71,8 @@ export class Goblin extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.firstHitPending = true;
+      this.attackWindupTimer = 0;
       this.doWander();
       return;
     }
@@ -80,8 +86,16 @@ export class Goblin extends Mob {
       this.isMoving = false;
     }
 
-    // Attack on cooldown
-    if (nearestDist <= this.attackRangePx && this.attackCooldown === 0) {
+    // Brief windup before the very first strike of each engagement
+    const inRange = nearestDist <= this.attackRangePx;
+    if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
+      this.attackWindupTimer = 15;
+      this.firstHitPending = false;
+    }
+    if (this.attackWindupTimer > 0) this.attackWindupTimer--;
+
+    // Attack on cooldown (windup must have elapsed for the first hit)
+    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0) {
       nearest.takeDamage(this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
