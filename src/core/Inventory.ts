@@ -59,8 +59,8 @@ export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
   Head: ['Hat', 'Face', 'Neck'],
   Torso: ['Shirt', 'Jacket', 'Back'],
   Legs: ['Pants', 'Knee Pads'],
-  Hands: ['Gloves', ...Array.from({ length: 10 }, (_, i) => `Ring ${i + 1}`)],
-  Feet: ['Shoes', ...Array.from({ length: 10 }, (_, i) => `Toe Ring ${i + 1}`)],
+  Hands: ['Gloves', 'Ring 1', 'Ring 2', 'Ring 3', 'Ring 4'],
+  Feet: ['Shoes', 'Toe Ring 1', 'Toe Ring 2', 'Toe Ring 3', 'Toe Ring 4'],
 };
 
 export class Inventory {
@@ -70,10 +70,11 @@ export class Inventory {
   );
 
   /**
-   * Maps "Slot:SubSlot" key → inventory slot index.
-   * e.g. "Legs:Pants" → 1 means slots[1] is equipped in the Pants sub-slot.
+   * Maps "Slot:SubSlot" key → ItemId of the equipped item.
+   * e.g. "Legs:Pants" → 'enchanted_bigboi_boxers'. The item can be anywhere
+   * (inventory slot OR hotbar) — getEquippedItem searches both.
    */
-  readonly equipped: Map<string, number> = new Map();
+  readonly equipped: Map<string, ItemId> = new Map();
 
   /** Add `quantity` of the given item, stacking into an existing slot when possible. */
   addItem(id: ItemId, quantity: number): void {
@@ -119,11 +120,7 @@ export class Inventory {
 
   swapSlots(a: number, b: number): void {
     [this.slots[a], this.slots[b]] = [this.slots[b], this.slots[a]];
-    // Update equipped references
-    for (const [key, idx] of this.equipped) {
-      if (idx === a) this.equipped.set(key, b);
-      else if (idx === b) this.equipped.set(key, a);
-    }
+    // No equipped-map update needed — equipped tracks by ItemId, not slot index.
   }
 
   swapHotbar(a: number, b: number): void {
@@ -136,6 +133,7 @@ export class Inventory {
     const hot = this.hotbar[hotbarIdx];
     this.hotbar[hotbarIdx] = inv;
     this.slots[slotIdx] = hot;
+    // No equipped-map update needed — item keeps its equipped status by ID.
   }
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
@@ -148,9 +146,19 @@ export class Inventory {
 
   // ── Equipment ─────────────────────────────────────────────────────────────
 
+  /** Find an item by ID across both slots and hotbar. */
+  private findItemById(id: ItemId): InventoryItem | null {
+    return (
+      this.slots.find((s) => s?.id === id) ??
+      this.hotbar.find((s) => s?.id === id) ??
+      null
+    );
+  }
+
   /**
-   * Equip the item at `slotIdx`. Returns the previously equipped item in that
-   * sub-slot (or null), so the caller can handle stat swaps.
+   * Equip the item at `slotIdx`. Records the item's ID in the equipped map so
+   * it stays equipped regardless of where it is physically moved (slots/hotbar).
+   * Returns the previously equipped item in that sub-slot (or null).
    */
   equip(slotIdx: number): InventoryItem | null {
     const item = this.slots[slotIdx];
@@ -158,7 +166,7 @@ export class Inventory {
       return null;
     const key = `${item.equipSlot}:${item.equipSubSlot}`;
     const prev = this.getEquippedItem(key);
-    this.equipped.set(key, slotIdx);
+    this.equipped.set(key, item.id);
     return prev;
   }
 
@@ -176,25 +184,30 @@ export class Inventory {
     return prev;
   }
 
-  /** Get the item currently equipped in a sub-slot key ("Slot:SubSlot"). */
+  /**
+   * Get the item currently equipped in a sub-slot key ("Slot:SubSlot").
+   * Searches both slots and hotbar so the item can be moved freely.
+   */
   getEquippedItem(key: string): InventoryItem | null {
-    const idx = this.equipped.get(key);
-    if (idx === undefined) return null;
-    return this.slots[idx] ?? null;
+    const id = this.equipped.get(key);
+    if (id === undefined) return null;
+    return this.findItemById(id);
   }
 
-  /** True if the given inventory slot index is currently equipped somewhere. */
+  /** True if the item at the given inventory slot index is currently equipped. */
   isSlotEquipped(slotIdx: number): boolean {
-    for (const [, idx] of this.equipped) {
-      if (idx === slotIdx) return true;
+    const item = this.slots[slotIdx];
+    if (!item) return false;
+    for (const id of this.equipped.values()) {
+      if (id === item.id) return true;
     }
     return false;
   }
 
   /** True if any item with the given id is currently equipped. */
   hasEquipped(itemId: ItemId): boolean {
-    for (const [, idx] of this.equipped) {
-      if (this.slots[idx]?.id === itemId) return true;
+    for (const id of this.equipped.values()) {
+      if (id === itemId) return true;
     }
     return false;
   }
@@ -208,8 +221,8 @@ export class Inventory {
     let constitution = 0,
       strength = 0,
       intelligence = 0;
-    for (const [, idx] of this.equipped) {
-      const item = this.slots[idx];
+    for (const id of this.equipped.values()) {
+      const item = this.findItemById(id);
       if (item?.statBonus) {
         constitution += item.statBonus.constitution ?? 0;
         strength += item.statBonus.strength ?? 0;

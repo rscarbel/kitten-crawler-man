@@ -1,7 +1,7 @@
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule {
   /** String key resolved by the spawner factory. */
-  type: 'goblin' | 'llama' | 'rat';
+  type: 'goblin' | 'llama' | 'rat' | 'the_hoarder' | 'cockroach';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -17,10 +17,12 @@ export interface LevelDef {
   name: string;
   /** Side-length passed to `new GameMap(mapSize, TILE_SIZE)`. */
   mapSize: number;
-  /** Mobs that can spawn at room centres (all non-start rooms). */
+  /** Mobs that can spawn at room centres (all non-start, non-special rooms). */
   roomMobs: MobSpawnRule[];
   /** Mobs that can spawn at hallway points. */
   hallwayMobs: MobSpawnRule[];
+  /** Boss room configuration — spawns a single boss in rooms[2]. */
+  bossRoom?: { type: string };
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
 }

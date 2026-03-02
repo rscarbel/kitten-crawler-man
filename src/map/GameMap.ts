@@ -13,6 +13,8 @@ const FLOOR_TYPES = [
 const VOID_TYPE = 9;
 /** Tile type for the Safe Room floor — warm sanctuary look. */
 const SAFE_ROOM_FLOOR = 10;
+/** Tile type for the Boss Room floor — grimy, trash-covered look. */
+const HORDER_BOSS_ROOM_FLOOR = 11;
 type FloorTile = (typeof FLOOR_TYPES)[number];
 
 const FloorTypeValue = {
@@ -46,6 +48,10 @@ export class GameMap {
   safeRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
   /** Tile-space centre of the safe room, or null if none. */
   safeRoomCentre: { x: number; y: number } | null = null;
+  /** Bounds (in tile coords) of the boss room, or null if not enough rooms generated. */
+  bossRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
+  /** Tile-space centre of the boss room, or null if none. */
+  bossRoomCentre: { x: number; y: number } | null = null;
 
   constructor(mapSize = 100, tileHeight = 10) {
     this.tileHeight = tileHeight;
@@ -144,8 +150,10 @@ export class GameMap {
     const GAP = 3; // minimum tile gap between room edges
 
     for (let attempt = 0; attempt < 80 && rooms.length < 15; attempt++) {
-      const w = MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
-      const h = MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
+      // rooms[2] = Boss Room — always generate it extra large
+      const isBossRoom = rooms.length === 2;
+      const w = isBossRoom ? 22 : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
+      const h = isBossRoom ? 18 : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
       const x =
         BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
       const y =
@@ -160,11 +168,15 @@ export class GameMap {
       );
 
       if (!overlaps) {
-        // rooms[1] is designated the Safe Room — use special floor type
+        // rooms[1] = Safe Room, rooms[2] = Boss Room, rest = normal dungeon
         const floor =
           rooms.length === 1
             ? SAFE_ROOM_FLOOR
-            : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
+            : rooms.length === 2
+              ? HORDER_BOSS_ROOM_FLOOR
+              : DUNGEON_FLOORS[
+                  Math.floor(Math.random() * DUNGEON_FLOORS.length)
+                ];
         const room: Room = { x, y, w, h, floor };
         rooms.push(room);
         carveRoom(room);
@@ -201,8 +213,18 @@ export class GameMap {
       };
     }
 
-    // Mob spawn points start at rooms[2] (skip start room and safe room)
-    this.mobSpawnPoints = rooms.slice(2).map((r) => ({
+    // rooms[2] is the Boss Room — record its bounds and exclude from regular mob spawns
+    if (rooms.length > 2) {
+      const br = rooms[2];
+      this.bossRoomBounds = { x: br.x, y: br.y, w: br.w, h: br.h };
+      this.bossRoomCentre = {
+        x: Math.floor(br.x + br.w / 2),
+        y: Math.floor(br.y + br.h / 2),
+      };
+    }
+
+    // Mob spawn points start at rooms[3] (skip start, safe, and boss rooms)
+    this.mobSpawnPoints = rooms.slice(3).map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));
@@ -500,6 +522,49 @@ export class GameMap {
           ctx.fillStyle = 'rgba(255,200,80,0.25)';
           ctx.beginPath();
           ctx.arc(sx, sy, ts * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        this.drawWallShadow(ctx, sx, sy, ts, tx, ty);
+        break;
+      }
+
+      // ── Boss Room floor — grimy, trash-covered ────────────────────────────
+      case HORDER_BOSS_ROOM_FLOOR: {
+        // Dark yellowish-brown base with alternating grime variation
+        const bossBase = (tx + ty) % 2 === 0 ? '#2e2010' : '#281c0c';
+        ctx.fillStyle = bossBase;
+        ctx.fillRect(sx, sy, ts, ts);
+        // Dark cracked grout lines
+        ctx.fillStyle = '#1a1208';
+        ctx.fillRect(sx + ts - 1, sy, 1, ts);
+        ctx.fillRect(sx, sy + ts - 1, ts, 1);
+        // Puke/grime stain blotches scattered across floor
+        if ((tx * 3 + ty * 7) % 5 === 0) {
+          ctx.fillStyle = 'rgba(120,140,20,0.28)';
+          ctx.beginPath();
+          ctx.ellipse(
+            sx + ts * 0.4,
+            sy + ts * 0.5,
+            ts * 0.35,
+            ts * 0.22,
+            0.8,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+        if ((tx * 5 + ty * 3) % 7 === 0) {
+          ctx.fillStyle = 'rgba(80,60,10,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(
+            sx + ts * 0.65,
+            sy + ts * 0.35,
+            ts * 0.2,
+            ts * 0.14,
+            -0.5,
+            0,
+            Math.PI * 2,
+          );
           ctx.fill();
         }
         this.drawWallShadow(ctx, sx, sy, ts, tx, ty);

@@ -39,7 +39,7 @@ export class CatPlayer extends Player {
       vx: Math.cos(baseAngle) * this.MISSILE_SPEED,
       vy: Math.sin(baseAngle) * this.MISSILE_SPEED,
       distTraveled: 0,
-      maxDist: 3.5 * this.tileSize,
+      maxDist: (3.5 + this.intelligence * 0.5) * this.tileSize,
       state: 'flying',
       explodeTimer: this.EXPLODE_FRAMES,
       hit: false,

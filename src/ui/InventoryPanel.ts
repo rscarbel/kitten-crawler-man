@@ -31,10 +31,25 @@ interface DragState {
   my: number;
 }
 
+interface ContextMenu {
+  slotIdx: number;
+  x: number;
+  y: number;
+  item: InventoryItem;
+}
+
 export class InventoryPanel {
   isOpen = false;
   private page = 0;
   private drag: DragState | null = null;
+
+  private contextMenu: ContextMenu | null = null;
+  private contextMenuHover = -1;
+
+  /** Set by context-menu "Equip" selection; DungeonScene reads and clears this. */
+  pendingEquipSlot: number | null = null;
+  /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
+  pendingInfoItem: InventoryItem | null = null;
 
   toggle(): void {
     this.isOpen = !this.isOpen;
@@ -145,6 +160,113 @@ export class InventoryPanel {
         0.75,
       );
     }
+
+    // Context menu and info popup render above everything else
+    if (this.contextMenu) {
+      this.renderContextMenu(ctx, canvas);
+    }
+    if (this.pendingInfoItem) {
+      this.renderInfoPopup(ctx, canvas, this.pendingInfoItem);
+    }
+  }
+
+  private renderContextMenu(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const cm = this.contextMenu!;
+    const options = this.contextMenuOptions(cm.item);
+    const menuW = 120;
+    const menuItemH = 22;
+    const menuH = options.length * menuItemH + 4;
+    const mx = Math.min(cm.x, canvas.width - menuW - 4);
+    const my = Math.min(cm.y, canvas.height - menuH - 4);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,14,30,0.97)';
+    ctx.fillRect(mx, my, menuW, menuH);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mx, my, menuW, menuH);
+
+    ctx.font = '11px monospace';
+    for (let i = 0; i < options.length; i++) {
+      const oy = my + 2 + i * menuItemH;
+      if (this.contextMenuHover === i) {
+        ctx.fillStyle = 'rgba(59,130,246,0.3)';
+        ctx.fillRect(mx + 1, oy, menuW - 2, menuItemH);
+      }
+      ctx.fillStyle = options[i] === 'Equip' ? '#4ade80' : '#e2e8f0';
+      ctx.fillText(options[i], mx + 8, oy + 15);
+    }
+    ctx.restore();
+  }
+
+  private renderInfoPopup(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    item: InventoryItem,
+  ): void {
+    const popW = 280;
+    const lineH = 15;
+    const pad = 10;
+    const lines: string[] = [];
+
+    // Word-wrap description
+    if (item.description) {
+      const words = item.description.split(' ');
+      let cur = '';
+      for (const w of words) {
+        if ((cur + ' ' + w).trim().length <= 36) {
+          cur = (cur + ' ' + w).trim();
+        } else {
+          lines.push(cur);
+          cur = w;
+        }
+      }
+      if (cur) lines.push(cur);
+    } else {
+      lines.push('No description available.');
+    }
+
+    const popH = pad + lineH + pad * 0.5 + lines.length * lineH + pad;
+    const px = Math.floor((canvas.width - popW) / 2);
+    const py = Math.floor((canvas.height - popH) / 2);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,10,20,0.97)';
+    ctx.fillRect(px, py, popW, popH);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px, py, popW, popH);
+
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(item.name, px + pad, py + pad + lineH - 3);
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 4, py + pad + lineH + 2);
+    ctx.lineTo(px + popW - 4, py + pad + lineH + 2);
+    ctx.stroke();
+
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#94a3b8';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(
+        lines[i],
+        px + pad,
+        py + pad * 1.5 + lineH * 2 + i * lineH - 3,
+      );
+    }
+
+    ctx.fillStyle = '#475569';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('[Click anywhere to close]', px + popW / 2, py + popH - 4);
+    ctx.textAlign = 'left';
+    ctx.restore();
   }
 
   private renderToggleButton(
@@ -375,11 +497,11 @@ export class InventoryPanel {
     if (item.id === 'enchanted_bigboi_boxers') {
       const cx = x + size * 0.5;
       const cy = y + size * 0.56;
-      // Waistband
-      ctx.fillStyle = '#1e40af';
+      // Waistband — white/light grey
+      ctx.fillStyle = '#eeeeee';
       ctx.fillRect(x + size * 0.12, y + size * 0.22, size * 0.76, size * 0.18);
-      // Left leg
-      ctx.fillStyle = '#1d4ed8';
+      // Left leg — near-white
+      ctx.fillStyle = '#f5f5f5';
       ctx.beginPath();
       ctx.moveTo(cx - size * 0.32, y + size * 0.38);
       ctx.lineTo(cx - size * 0.38, y + size * 0.72);
@@ -395,14 +517,16 @@ export class InventoryPanel {
       ctx.lineTo(cx, y + size * 0.38);
       ctx.closePath();
       ctx.fill();
-      // Enchantment sparkle
-      ctx.fillStyle = '#a5f3fc';
-      ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+      // Red hearts pattern
+      ctx.fillStyle = '#ef4444';
+      ctx.font = `bold ${Math.floor(size * 0.18)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText('✦', cx, cy - size * 0.04);
+      ctx.fillText('♥', cx - size * 0.16, cy - size * 0.08);
+      ctx.fillText('♥', cx + size * 0.16, cy - size * 0.08);
+      ctx.fillText('♥', cx, cy + size * 0.08);
       ctx.textAlign = 'left';
-      // Blue border glow
-      ctx.strokeStyle = '#60a5fa';
+      // Red border glow
+      ctx.strokeStyle = '#f87171';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
     }
@@ -433,6 +557,37 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
     inventory: Inventory,
   ): boolean {
+    // Close info popup on any click
+    if (this.pendingInfoItem) {
+      this.pendingInfoItem = null;
+      return true;
+    }
+
+    // Handle context menu option click
+    if (this.contextMenu) {
+      const cm = this.contextMenu;
+      const options = this.contextMenuOptions(cm.item);
+      const menuW = 120;
+      const menuItemH = 22;
+      const menuH = options.length * menuItemH + 4;
+      const cmx = Math.min(cm.x, canvas.width - menuW - 4);
+      const cmy = Math.min(cm.y, canvas.height - menuH - 4);
+      if (mx >= cmx && mx <= cmx + menuW && my >= cmy && my <= cmy + menuH) {
+        const idx = Math.floor((my - cmy - 2) / menuItemH);
+        if (idx >= 0 && idx < options.length) {
+          const action = options[idx];
+          if (action === 'Equip') {
+            this.pendingEquipSlot = cm.slotIdx;
+          } else {
+            // 'Name' or 'Description' — show info popup
+            this.pendingInfoItem = cm.item;
+          }
+        }
+      }
+      this.contextMenu = null;
+      return true;
+    }
+
     // Toggle button
     const btn = this.toggleBtnRect(canvas);
     if (
@@ -517,11 +672,59 @@ export class InventoryPanel {
     }
   }
 
+  /** Open the right-click context menu over the inventory slot at (mx, my). */
+  openContextMenu(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): void {
+    if (!this.isOpen) return;
+    const p = this.panelRect(canvas);
+    const pageStart = this.page * SLOTS_PER_PAGE;
+    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
+      const slotIdx = pageStart + i;
+      if (slotIdx >= inventory.slots.length) break;
+      const r = this.invSlotRect(i, p);
+      if (inRect(mx, my, r)) {
+        const item = inventory.slots[slotIdx];
+        if (item) {
+          this.contextMenu = { slotIdx, x: mx, y: my, item };
+          this.contextMenuHover = -1;
+          return;
+        }
+      }
+    }
+    this.contextMenu = null;
+  }
+
   handleMouseMove(mx: number, my: number): void {
     if (this.drag) {
       this.drag.mx = mx;
       this.drag.my = my;
     }
+    if (this.contextMenu) {
+      const options = this.contextMenuOptions(this.contextMenu.item);
+      const menuItemH = 22;
+      const cmx = this.contextMenu.x;
+      const cmy = this.contextMenu.y;
+      if (
+        mx >= cmx &&
+        mx <= cmx + 120 &&
+        my >= cmy &&
+        my <= cmy + options.length * menuItemH + 4
+      ) {
+        this.contextMenuHover = Math.floor((my - cmy - 2) / menuItemH);
+      } else {
+        this.contextMenuHover = -1;
+      }
+    }
+  }
+
+  private contextMenuOptions(item: InventoryItem): string[] {
+    return item.type === 'armor'
+      ? ['Equip', 'Name', 'Description']
+      : ['Name', 'Description'];
   }
 
   handleMouseUp(

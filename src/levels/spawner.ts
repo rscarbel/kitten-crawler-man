@@ -3,6 +3,8 @@ import { Mob } from '../creatures/Mob';
 import { Goblin } from '../creatures/Goblin';
 import { Llama } from '../creatures/Llama';
 import { Rat } from '../creatures/Rat';
+import { TheHoarder } from '../creatures/TheHoarder';
+import { Cockroach } from '../creatures/Cockroach';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
 
@@ -32,7 +34,7 @@ function pickType(rules: MobSpawnRule[]): string {
 
 // ── Mob factory ───────────────────────────────────────────────────────────────
 
-function createMob(
+export function createMob(
   type: string,
   tileX: number,
   tileY: number,
@@ -43,6 +45,10 @@ function createMob(
     mob = new Llama(tileX, tileY, TILE_SIZE);
   } else if (type === 'rat') {
     mob = new Rat(tileX, tileY, TILE_SIZE);
+  } else if (type === 'the_hoarder') {
+    mob = new TheHoarder(tileX, tileY, TILE_SIZE);
+  } else if (type === 'cockroach') {
+    mob = new Cockroach(tileX, tileY, TILE_SIZE);
   } else {
     // default: goblin
     const v =
@@ -58,6 +64,7 @@ function createMob(
 /**
  * Instantiate all mobs for a level. Room spawn points draw from
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
+ * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
  */
 export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
   const mobs: Mob[] = [];
@@ -68,6 +75,18 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
 
   for (const { x, y } of map.hallwaySpawnPoints) {
     mobs.push(createMob(pickType(def.hallwayMobs), x, y, map));
+  }
+
+  // Spawn boss in the boss room (rooms[2])
+  if (def.bossRoom && map.bossRoomCentre) {
+    mobs.push(
+      createMob(
+        def.bossRoom.type,
+        map.bossRoomCentre.x,
+        map.bossRoomCentre.y,
+        map,
+      ),
+    );
   }
 
   return mobs;

@@ -11,6 +11,7 @@ export abstract class Scene {
   handleMouseDown?(mx: number, my: number): void;
   handleMouseMove?(mx: number, my: number): void;
   handleMouseUp?(mx: number, my: number): void;
+  handleContextMenu?(mx: number, my: number): void;
 }
 
 /**
@@ -62,6 +63,13 @@ export class SceneManager {
       if (!this.current?.handleMouseUp) return;
       const { x, y } = getPos(e);
       this.current.handleMouseUp(x, y);
+    });
+
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (!this.current?.handleContextMenu) return;
+      const { x, y } = getPos(e);
+      this.current.handleContextMenu(x, y);
     });
 
     this.loop();

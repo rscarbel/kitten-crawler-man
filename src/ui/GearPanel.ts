@@ -260,11 +260,11 @@ export class GearPanel {
     }
     lines.push('');
     if (item.description) {
-      // Word-wrap description at ~40 chars
+      // Word-wrap description at ~34 chars to fit inside the 230px tooltip box
       const words = item.description.split(' ');
       let cur = '';
       for (const w of words) {
-        if ((cur + ' ' + w).trim().length <= 42) {
+        if ((cur + ' ' + w).trim().length <= 34) {
           cur = (cur + ' ' + w).trim();
         } else {
           lines.push(cur);
@@ -289,6 +289,11 @@ export class GearPanel {
     ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 1;
     ctx.strokeRect(tx, ty, tw, th);
+
+    // Clip all text to the tooltip box so nothing overflows
+    ctx.beginPath();
+    ctx.rect(tx + 2, ty + 2, tw - 4, th - 4);
+    ctx.clip();
 
     ctx.font = 'bold 10px monospace';
     ctx.fillStyle = '#e2e8f0';
