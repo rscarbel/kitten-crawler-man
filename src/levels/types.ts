@@ -29,4 +29,6 @@ export interface LevelDef {
   bossRooms?: Array<{ type: string }>;
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
+  /** Safe levels have no timer and spawn no enemies. */
+  isSafeLevel?: boolean;
 }

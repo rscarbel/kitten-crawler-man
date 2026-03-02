@@ -14,6 +14,7 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel } from '../levels/spawner';
+import { getLevelDef } from '../levels';
 import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
@@ -172,6 +173,19 @@ export class DungeonScene extends Scene {
   private dynamiteCharging: { hotbarIdx: number; chargeFrames: number } | null =
     null;
 
+  // ── Level timer ────────────────────────────────────────────────────────────
+  /** Frames remaining before the level timer expires. Counts from LEVEL_TIME_LIMIT → 0. */
+  private levelTimerFrames = 0;
+  private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour at 60 fps
+
+  // ── Stairwell ──────────────────────────────────────────────────────────────
+  /** True when the active player is standing on a stairwell tile. */
+  private onStairwell = false;
+  /** True when the descent menu is showing. */
+  private stairwellMenuOpen = false;
+  /** Set to true when the player dismisses the menu so it doesn't immediately reopen. */
+  private stairwellDismissed = false;
+
   // ── Safe Room ──────────────────────────────────────────────────────────────
   private safeRoomBounds: { x: number; y: number; w: number; h: number } | null;
 
@@ -208,13 +222,30 @@ export class DungeonScene extends Scene {
   private readonly SLEEP_HOLD = 90;
   private sleepHealed = false;
 
+  // ── Mini-map ────────────────────────────────────────────────────────────────
+  /** Bit array: fogOfWar[ty * mapSize + tx] === 1 means that tile is revealed. */
+  private fogOfWar: Uint8Array;
+  private miniMapExpanded = false;
+  private readonly MM_REVEAL_RADIUS = 10; // tiles revealed around active player
+  private readonly MM_NORMAL_SIZE = 160; // px
+  private readonly MM_EXPANDED_SIZE = 240; // px
+  /** Corpse markers shown on mini-map for 30 s after a mob dies. */
+  private corpseMarkers: Array<{ x: number; y: number; ttl: number }> = [];
+
   constructor(
     private readonly levelDef: LevelDef,
     private readonly input: InputManager,
     private readonly sceneManager: SceneManager,
   ) {
     super();
-    this.gameMap = new GameMap(levelDef.mapSize, TILE_SIZE);
+    this.gameMap = new GameMap(
+      levelDef.mapSize,
+      TILE_SIZE,
+      levelDef.bossRooms?.length ?? 1,
+    );
+    const mapSz = this.gameMap.structure.length;
+    this.fogOfWar = new Uint8Array(mapSz * mapSz); // all zeros = hidden
+    this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
     const { x: sx, y: sy } = this.gameMap.startTile;
 
     this.human = new HumanPlayer(sx, sy, TILE_SIZE);
@@ -272,6 +303,11 @@ export class DungeonScene extends Scene {
       e.preventDefault();
       if (this.mordecaiDialogOpen) {
         this.mordecaiDialogOpen = false;
+        return;
+      }
+      if (this.stairwellMenuOpen) {
+        this.stairwellMenuOpen = false;
+        this.stairwellDismissed = true;
         return;
       }
       if (!this.gameOver) {
@@ -353,6 +389,12 @@ export class DungeonScene extends Scene {
         return;
       }
 
+      if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
+        e.preventDefault();
+        this.miniMapExpanded = !this.miniMapExpanded;
+        return;
+      }
+
       // Hotbar 1–8
       const hotbarIdx = parseInt(e.key) - 1;
       if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
@@ -398,6 +440,29 @@ export class DungeonScene extends Scene {
   handleClick(mx: number, my: number): void {
     if (this.mordecaiDialogOpen) {
       this.mordecaiDialogOpen = false;
+      return;
+    }
+
+    // Stairwell menu
+    if (this.stairwellMenuOpen) {
+      const canvas = this.sceneManager.canvas;
+      const rects = this.stairwellMenuRects(canvas);
+      if (
+        mx >= rects.descend.x &&
+        mx <= rects.descend.x + rects.descend.w &&
+        my >= rects.descend.y &&
+        my <= rects.descend.y + rects.descend.h
+      ) {
+        this.descend();
+      } else if (
+        mx >= rects.stay.x &&
+        mx <= rects.stay.x + rects.stay.w &&
+        my >= rects.stay.y &&
+        my <= rects.stay.y + rects.stay.h
+      ) {
+        this.stairwellMenuOpen = false;
+        this.stairwellDismissed = true;
+      }
       return;
     }
 
@@ -581,7 +646,8 @@ export class DungeonScene extends Scene {
   // ── Main update / render ────────────────────────────────────────────────────
 
   update(): void {
-    if (this.gameOver || this.pauseMenu.isOpen) return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.stairwellMenuOpen)
+      return;
 
     if (this.isSleeping) {
       this.updateSleep();
@@ -605,6 +671,9 @@ export class DungeonScene extends Scene {
 
     // ── Boss room world-space decorations ─────────────────────────────────
     this.renderBossRoomObjects(ctx, camX, camY);
+
+    // ── Stairwells (world space) ───────────────────────────────────────────
+    this.renderStairwells(ctx, camX, camY, canvas);
 
     // Only render mobs that are actually on screen (viewport culling).
     // With a large map and many mobs, this avoids drawing hundreds of off-screen sprites.
@@ -651,6 +720,16 @@ export class DungeonScene extends Scene {
     }
 
     drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse);
+
+    // ── Mini-map (top-right) ──────────────────────────────────────────────
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      this.renderMiniMap(ctx, canvas);
+    }
+
+    // ── Level timer HUD ───────────────────────────────────────────────────
+    if (!this.levelDef.isSafeLevel && !this.gameOver) {
+      this.renderLevelTimer(ctx, canvas);
+    }
 
     // ── Boss health bar + room barrier ────────────────────────────────────
     this.renderBossUI(ctx, canvas, camX, camY);
@@ -711,6 +790,11 @@ export class DungeonScene extends Scene {
     // ── Mordecai dialog ───────────────────────────────────────────────────
     if (this.mordecaiDialogOpen) {
       this.renderMordecaiDialog(ctx, canvas);
+    }
+
+    // ── Stairwell descent menu ─────────────────────────────────────────────
+    if (this.stairwellMenuOpen) {
+      this.renderStairwellMenu(ctx, canvas);
     }
 
     // ── Sleep overlay ─────────────────────────────────────────────────────
@@ -1033,8 +1117,50 @@ export class DungeonScene extends Scene {
     }
     this.updateLiveDynamites();
 
+    // ── Level timer ───────────────────────────────────────────────────────
+    if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {
+      this.levelTimerFrames--;
+    }
+
+    // ── Mini-map: reveal fog around active player ─────────────────────────
+    {
+      const p = player;
+      const ptx = Math.floor((p.x + TILE_SIZE * 0.5) / TILE_SIZE);
+      const pty = Math.floor((p.y + TILE_SIZE * 0.5) / TILE_SIZE);
+      this.revealFogAround(ptx, pty);
+    }
+
+    // ── Corpse markers: tick down TTL ─────────────────────────────────────
+    for (let i = this.corpseMarkers.length - 1; i >= 0; i--) {
+      if (--this.corpseMarkers[i].ttl <= 0) this.corpseMarkers.splice(i, 1);
+    }
+
+    // ── Stairwell detection ───────────────────────────────────────────────
+    {
+      const wasOnStairwell = this.onStairwell;
+      this.onStairwell =
+        Boolean(this.levelDef.nextLevelId) &&
+        this.isEntityOnStairwell(this.active());
+      if (!this.onStairwell) {
+        // Player left the stairwell — allow menu to reopen next time they step on it
+        this.stairwellDismissed = false;
+        this.stairwellMenuOpen = false;
+      } else if (!wasOnStairwell && !this.stairwellDismissed) {
+        // First frame stepping onto stairwell
+        this.stairwellMenuOpen = true;
+      }
+    }
+
     // ── Death check ───────────────────────────────────────────────────────
     if (!this.human.isAlive || !this.cat.isAlive) {
+      this.gameOver = true;
+      this.deathScreen.activate();
+    }
+    if (
+      !this.levelDef.isSafeLevel &&
+      this.levelTimerFrames <= 0 &&
+      !this.gameOver
+    ) {
       this.gameOver = true;
       this.deathScreen.activate();
     }
@@ -1262,6 +1388,8 @@ export class DungeonScene extends Scene {
         state.locked = false;
         state.defeated = true;
         state.defeatTimer = 300;
+        // Clear fog of war for the boss room neighbourhood
+        this.revealBossNeighborhood(state.bounds);
         // Kill all cockroaches spawned by this boss
         for (const mob of this.mobs) {
           if (mob instanceof Cockroach && mob.isAlive) {
@@ -2089,6 +2217,12 @@ export class DungeonScene extends Scene {
       if (!mob.justDied) continue;
       mob.justDied = false;
       this.mobGrid.remove(mob); // evict from spatial grid immediately
+      // Leave a corpse marker on the mini-map for 30 s (1 800 frames)
+      this.corpseMarkers.push({
+        x: mob.x + TILE_SIZE * 0.5,
+        y: mob.y + TILE_SIZE * 0.5,
+        ttl: 1800,
+      });
 
       let totalDmg = 0;
       for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;
@@ -2314,10 +2448,13 @@ export class DungeonScene extends Scene {
   }
 
   private pauseButtonRect() {
+    const mmSize = this.miniMapExpanded
+      ? this.MM_EXPANDED_SIZE
+      : this.MM_NORMAL_SIZE;
     return {
-      x: this.sceneManager.canvas.width - 84,
-      y: 8,
-      w: 76,
+      x: this.sceneManager.canvas.width - 88,
+      y: 8 + mmSize + 8,
+      w: 80,
       h: 28,
     };
   }
@@ -2631,5 +2768,463 @@ export class DungeonScene extends Scene {
 
   private inactive(): HumanPlayer | CatPlayer {
     return this.human.isActive ? this.cat : this.human;
+  }
+
+  // ── Stairwell helpers ────────────────────────────────────────────────────────
+
+  private isEntityOnStairwell(entity: { x: number; y: number }): boolean {
+    const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    // Stairwells are 2×2 tiles; check all four occupied tiles
+    return this.gameMap.stairwellTiles.some(
+      (s) => (tx === s.x || tx === s.x + 1) && (ty === s.y || ty === s.y + 1),
+    );
+  }
+
+  private renderStairwells(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    canvas: HTMLCanvasElement,
+  ): void {
+    if (!this.levelDef.nextLevelId) return;
+    const ts = TILE_SIZE;
+    const bw = ts * 2; // 2-tile-wide block
+    const bh = ts * 2; // 2-tile-tall block
+    const pulse = 0.7 + Math.sin(Date.now() / 500) * 0.2;
+    for (const { x, y } of this.gameMap.stairwellTiles) {
+      const sx = x * ts - camX;
+      const sy = y * ts - camY;
+      if (sx < -bw || sx > canvas.width || sy < -bh || sy > canvas.height)
+        continue;
+
+      // Dark background (2×2 tiles)
+      ctx.fillStyle = '#0d0718';
+      ctx.fillRect(sx, sy, bw, bh);
+
+      // Stair steps — 4 descending bands from amber to dark
+      const stepCount = 4;
+      const stepH = Math.floor(bh / stepCount);
+      for (let i = 0; i < stepCount; i++) {
+        const brightness = 180 - i * 35;
+        ctx.fillStyle = `rgb(${brightness}, ${Math.floor(brightness * 0.55)}, 0)`;
+        ctx.fillRect(sx + i * 6, sy + i * stepH, bw - i * 12, stepH + 1);
+      }
+
+      // Pulsing purple border
+      ctx.strokeStyle = `rgba(168, 85, 247, ${pulse})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx + 1, sy + 1, bw - 2, bh - 2);
+
+      // Down-arrow glyph — centred in the 2×2 block
+      ctx.fillStyle = `rgba(233, 213, 255, ${pulse})`;
+      ctx.font = `bold ${Math.floor(bh * 0.42)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('▼', sx + bw / 2, sy + bh * 0.67);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  private renderLevelTimer(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const totalSec = Math.max(0, Math.ceil(this.levelTimerFrames / 60));
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    const display = `${min}:${sec.toString().padStart(2, '0')}`;
+
+    const urgent = totalSec <= 60;
+    const warning = totalSec <= 300;
+
+    const mmSize = this.miniMapExpanded
+      ? this.MM_EXPANDED_SIZE
+      : this.MM_NORMAL_SIZE;
+    const w = 80;
+    const h = 28;
+    const x = canvas.width - w - 88; // left of the pause button (which is 80+8 wide)
+    const y = 8 + mmSize + 8;
+
+    // Background — pulses red when urgent
+    const urgentAlpha = urgent
+      ? 0.85 + Math.sin(Date.now() / 160) * 0.12
+      : 0.75;
+    ctx.fillStyle = urgent
+      ? `rgba(100,0,0,${urgentAlpha})`
+      : warning
+        ? 'rgba(80,40,0,0.85)'
+        : 'rgba(0,0,0,0.65)';
+    ctx.fillRect(x, y, w, h);
+
+    ctx.strokeStyle = urgent ? '#ef4444' : warning ? '#f59e0b' : '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '9px monospace';
+    ctx.fillText('TIME REMAINING', x + w / 2, y + 12);
+
+    ctx.fillStyle = urgent ? '#f87171' : warning ? '#fbbf24' : '#e2e8f0';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillText(display, x + w / 2, y + 29);
+    ctx.textAlign = 'left';
+  }
+
+  /** Returns screen-space rects for the two stairwell menu buttons. */
+  private stairwellMenuRects(canvas: HTMLCanvasElement): {
+    descend: { x: number; y: number; w: number; h: number };
+    stay: { x: number; y: number; w: number; h: number };
+  } {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const panelH = 190;
+    const panelY = ch / 2 - panelH / 2;
+    const btnW = 120;
+    const btnH = 42;
+    const btnY = panelY + 110;
+    return {
+      descend: { x: cw / 2 - btnW - 8, y: btnY, w: btnW, h: btnH },
+      stay: { x: cw / 2 + 8, y: btnY, w: btnW, h: btnH },
+    };
+  }
+
+  private renderStairwellMenu(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    // Dim backdrop
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, cw, ch);
+
+    const panelW = 340;
+    const panelH = 190;
+    const panelX = cw / 2 - panelW / 2;
+    const panelY = ch / 2 - panelH / 2;
+
+    ctx.fillStyle = '#0d0920';
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    ctx.textAlign = 'center';
+
+    // Title
+    ctx.fillStyle = '#e9d5ff';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText('▼  Stairwell  ▼', cw / 2, panelY + 38);
+
+    // Subtitle
+    const nextId = this.levelDef.nextLevelId;
+    const nextName = nextId ? getLevelDef(nextId).name : 'Next Floor';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '13px monospace';
+    ctx.fillText(`Descend to: ${nextName}?`, cw / 2, panelY + 68);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px monospace';
+    ctx.fillText('(Esc or Stay to remain on this floor)', cw / 2, panelY + 88);
+
+    const rects = this.stairwellMenuRects(canvas);
+
+    // Descend button
+    ctx.fillStyle = '#4c1d95';
+    ctx.fillRect(
+      rects.descend.x,
+      rects.descend.y,
+      rects.descend.w,
+      rects.descend.h,
+    );
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(
+      rects.descend.x,
+      rects.descend.y,
+      rects.descend.w,
+      rects.descend.h,
+    );
+    ctx.fillStyle = '#e9d5ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(
+      'Descend',
+      rects.descend.x + rects.descend.w / 2,
+      rects.descend.y + 27,
+    );
+
+    // Stay button
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('Stay', rects.stay.x + rects.stay.w / 2, rects.stay.y + 27);
+
+    ctx.textAlign = 'left';
+  }
+
+  /** Transition to the next level defined in levelDef.nextLevelId. */
+  private descend(): void {
+    if (!this.levelDef.nextLevelId) return;
+    const nextDef = getLevelDef(this.levelDef.nextLevelId);
+    this.sceneManager.replace(
+      new DungeonScene(nextDef, this.input, this.sceneManager),
+    );
+  }
+
+  // ── Mini-map helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Reveal all tiles within MM_REVEAL_RADIUS of (tileX, tileY) in the fog array.
+   * Called every frame for the active player position.
+   */
+  private revealFogAround(tileX: number, tileY: number): void {
+    const mapSize = this.gameMap.structure.length;
+    const r = this.MM_REVEAL_RADIUS;
+    const r2 = r * r;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r2) continue;
+        const tx = tileX + dx;
+        const ty = tileY + dy;
+        if (tx >= 0 && tx < mapSize && ty >= 0 && ty < mapSize) {
+          this.fogOfWar[ty * mapSize + tx] = 1;
+        }
+      }
+    }
+  }
+
+  /**
+   * Reveal all tiles within the boss room bounds plus a 15-tile border.
+   * Called once when the boss is defeated.
+   */
+  private revealBossNeighborhood(bounds: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }): void {
+    const mapSize = this.gameMap.structure.length;
+    const extra = 15;
+    const x1 = Math.max(0, bounds.x - extra);
+    const y1 = Math.max(0, bounds.y - extra);
+    const x2 = Math.min(mapSize - 1, bounds.x + bounds.w + extra);
+    const y2 = Math.min(mapSize - 1, bounds.y + bounds.h + extra);
+    for (let ty = y1; ty <= y2; ty++) {
+      for (let tx = x1; tx <= x2; tx++) {
+        this.fogOfWar[ty * mapSize + tx] = 1;
+      }
+    }
+  }
+
+  /** Returns a mini-map colour for a given tile type number. */
+  private miniMapTileColor(type: number): string {
+    // Tile type constants (mirrored from GameMap internals)
+    switch (type) {
+      case 9:
+        return '#000000'; // void border
+      case 2:
+        return '#3a3028'; // wall
+      case 0:
+        return '#3a7040'; // grass
+      case 1:
+        return '#6a5040'; // road
+      case 4:
+        return '#1a6880'; // water
+      case 5:
+        return '#606060'; // concrete (hallway)
+      case 6:
+        return '#707070'; // tile floor
+      case 7:
+        return '#503030'; // carpet
+      case 8:
+        return '#704030'; // wood
+      case 10:
+        return '#8a7040'; // safe room floor
+      case 11:
+        return '#2a1808'; // boss room floor
+      default:
+        return '#555555';
+    }
+  }
+
+  /**
+   * Renders the mini-map in the top-right corner.
+   * Normal mode: 160×160 px at 2 px/tile.
+   * Expanded mode (M key): 240×240 px at 1 px/tile.
+   */
+  private renderMiniMap(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const mapSize = this.gameMap.structure.length;
+    const expanded = this.miniMapExpanded;
+    const mmSize = expanded ? this.MM_EXPANDED_SIZE : this.MM_NORMAL_SIZE;
+    const pxPerTile = expanded ? 1 : 2;
+    const tilesInView = Math.floor(mmSize / pxPerTile);
+    const halfTiles = Math.floor(tilesInView / 2);
+
+    const mmX = canvas.width - mmSize - 8;
+    const mmY = 8;
+
+    const active = this.active();
+    const playerTX = Math.floor((active.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const playerTY = Math.floor((active.y + TILE_SIZE * 0.5) / TILE_SIZE);
+
+    // ── Background ─────────────────────────────────────────────────────────
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fillRect(mmX, mmY, mmSize, mmSize);
+
+    // ── Clip to mini-map bounds ────────────────────────────────────────────
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(mmX, mmY, mmSize, mmSize);
+    ctx.clip();
+
+    // ── Draw tiles ─────────────────────────────────────────────────────────
+    for (let dy = -halfTiles; dy <= halfTiles; dy++) {
+      for (let dx = -halfTiles; dx <= halfTiles; dx++) {
+        const tx = playerTX + dx;
+        const ty = playerTY + dy;
+        if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) continue;
+
+        const px = mmX + (dx + halfTiles) * pxPerTile;
+        const py = mmY + (dy + halfTiles) * pxPerTile;
+
+        const revealed = this.fogOfWar[ty * mapSize + tx] === 1;
+        if (!revealed) {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(px, py, pxPerTile, pxPerTile);
+          continue;
+        }
+
+        const tile = this.gameMap.structure[ty]?.[tx];
+        ctx.fillStyle = tile ? this.miniMapTileColor(tile.type) : '#555';
+        ctx.fillRect(px, py, pxPerTile, pxPerTile);
+      }
+    }
+
+    // ── Stairwells — white squares (always visible if revealed) ────────────
+    for (const st of this.gameMap.stairwellTiles) {
+      if (!this.fogOfWar[st.y * mapSize + st.x]) continue;
+      const sx = mmX + (st.x - playerTX + halfTiles) * pxPerTile - 1;
+      const sy = mmY + (st.y - playerTY + halfTiles) * pxPerTile - 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
+    }
+
+    // ── Corpse markers — X ─────────────────────────────────────────────
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    for (const corpse of this.corpseMarkers) {
+      const ctx2TX = Math.floor(corpse.x / TILE_SIZE);
+      const ctx2TY = Math.floor(corpse.y / TILE_SIZE);
+      if (!this.fogOfWar[ctx2TY * mapSize + ctx2TX]) continue;
+      const cx =
+        mmX +
+        (ctx2TX - playerTX + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      const cy =
+        mmY +
+        (ctx2TY - playerTY + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      ctx.beginPath();
+      ctx.moveTo(cx - 2, cy - 2);
+      ctx.lineTo(cx + 2, cy + 2);
+      ctx.moveTo(cx + 2, cy - 2);
+      ctx.lineTo(cx - 2, cy + 2);
+      ctx.stroke();
+    }
+
+    // ── Mobs — red dots (only within 20-tile radar range) ─────────────────
+    const MOB_RADAR_PX = TILE_SIZE * 20;
+    ctx.fillStyle = '#ef4444';
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      if (Math.hypot(mob.x - active.x, mob.y - active.y) > MOB_RADAR_PX)
+        continue;
+      const mobTX = Math.floor((mob.x + TILE_SIZE * 0.5) / TILE_SIZE);
+      const mobTY = Math.floor((mob.y + TILE_SIZE * 0.5) / TILE_SIZE);
+      if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;
+      const mx =
+        mmX +
+        (mobTX - playerTX + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      const my =
+        mmY +
+        (mobTY - playerTY + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      ctx.beginPath();
+      ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── Companion player — blue dot (always visible) ───────────────────────
+    const companion = this.inactive();
+    const compTX = Math.floor((companion.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const compTY = Math.floor((companion.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const compSX =
+      mmX +
+      (compTX - playerTX + halfTiles) * pxPerTile +
+      Math.floor(pxPerTile / 2);
+    const compSY =
+      mmY +
+      (compTY - playerTY + halfTiles) * pxPerTile +
+      Math.floor(pxPerTile / 2);
+    ctx.fillStyle = '#60a5fa';
+    ctx.beginPath();
+    ctx.arc(compSX, compSY, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Mordecai (friendly NPC) — white dot if revealed ───────────────────
+    if (this.gameMap.safeRoomCentre) {
+      const morcTX = this.mordecaiTileX;
+      const morcTY = this.mordecaiTileY;
+      if (this.fogOfWar[morcTY * mapSize + morcTX]) {
+        const msx =
+          mmX +
+          (morcTX - playerTX + halfTiles) * pxPerTile +
+          Math.floor(pxPerTile / 2);
+        const msy =
+          mmY +
+          (morcTY - playerTY + halfTiles) * pxPerTile +
+          Math.floor(pxPerTile / 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ── Active player — green dot (always at centre) ───────────────────────
+    const playerSX = mmX + halfTiles * pxPerTile + Math.floor(pxPerTile / 2);
+    const playerSY = mmY + halfTiles * pxPerTile + Math.floor(pxPerTile / 2);
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath();
+    ctx.arc(playerSX, playerSY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // ── Border ─────────────────────────────────────────────────────────────
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mmX, mmY, mmSize, mmSize);
+
+    // ── Expand hint ────────────────────────────────────────────────────────
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      expanded ? 'M: collapse' : 'M: expand',
+      mmX + mmSize / 2,
+      mmY + mmSize + 9,
+    );
+    ctx.textAlign = 'left';
   }
 }

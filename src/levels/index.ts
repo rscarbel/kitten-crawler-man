@@ -1,7 +1,11 @@
 import type { LevelDef } from './types';
 import { level1 } from './level1';
+import { level2 } from './level2';
 
-const registry = new Map<string, LevelDef>([['level1', level1]]);
+const registry = new Map<string, LevelDef>([
+  ['level1', level1],
+  ['level2', level2],
+]);
 
 /** Look up a level by ID. Throws if the ID is not registered. */
 export function getLevelDef(id: string): LevelDef {
@@ -10,5 +14,5 @@ export function getLevelDef(id: string): LevelDef {
   return def;
 }
 
-export { level1 };
+export { level1, level2 };
 export type { LevelDef, MobSpawnRule } from './types';

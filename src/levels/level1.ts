@@ -14,4 +14,5 @@ export const level1: LevelDef = {
   ],
   hallwayMobs: [{ type: 'rat', chance: 1.0 }],
   bossRooms: [{ type: 'the_hoarder' }],
+  nextLevelId: 'level2',
 };

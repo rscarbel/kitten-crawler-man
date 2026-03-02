@@ -53,6 +53,8 @@ export class GameMap {
     bounds: { x: number; y: number; w: number; h: number };
     centre: { x: number; y: number };
   }> = [];
+  /** Tile-space centres of rooms that contain a stairwell (descent point). */
+  stairwellTiles: Array<{ x: number; y: number }> = [];
 
   constructor(mapSize = 100, tileHeight = 10, numBossRooms = 1) {
     this.tileHeight = tileHeight;
@@ -282,7 +284,51 @@ export class GameMap {
       y: Math.floor(r.y + r.h / 2),
     }));
 
-    // 7. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
+    // 7. Place stairwells: 1 per 50 regular rooms (min 1), in rooms far from start.
+    if (rooms.length > 0) {
+      const startCenter = {
+        x: Math.floor(rooms[0].x + rooms[0].w / 2),
+        y: Math.floor(rooms[0].y + rooms[0].h / 2),
+      };
+      const MIN_STAIRWELL_DIST = 20; // tiles — must be this far from start
+      const regularRooms = rooms.slice(bossRoomEnd);
+      const farRooms = regularRooms.filter((r) => {
+        const rc = {
+          x: Math.floor(r.x + r.w / 2),
+          y: Math.floor(r.y + r.h / 2),
+        };
+        return (
+          Math.hypot(rc.x - startCenter.x, rc.y - startCenter.y) >=
+          MIN_STAIRWELL_DIST
+        );
+      });
+      // Sort farthest-first so stairwells are spread across the far reaches
+      farRooms.sort((a, b) => {
+        const da = Math.hypot(
+          Math.floor(a.x + a.w / 2) - startCenter.x,
+          Math.floor(a.y + a.h / 2) - startCenter.y,
+        );
+        const db = Math.hypot(
+          Math.floor(b.x + b.w / 2) - startCenter.x,
+          Math.floor(b.y + b.h / 2) - startCenter.y,
+        );
+        return db - da;
+      });
+      const stairwellCount = Math.max(1, Math.floor(regularRooms.length / 50));
+      // Pick every N-th room from the sorted list to spread them out
+      const step = Math.max(1, Math.floor(farRooms.length / stairwellCount));
+      for (let i = 0; i < stairwellCount; i++) {
+        const r = farRooms[i * step];
+        if (r) {
+          this.stairwellTiles.push({
+            x: Math.floor(r.x + r.w / 2),
+            y: Math.floor(r.y + r.h / 2),
+          });
+        }
+      }
+    }
+
+    // 9. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
     // Scale the max rat count proportionally to map area (same density as the base map).
     const maxHallwaySpawns = Math.round(10 * (size / 100) ** 2);
 

@@ -69,19 +69,23 @@ export function createMob(
 export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
   const mobs: Mob[] = [];
 
-  for (const { x, y } of map.mobSpawnPoints) {
-    const rule = pickRule(def.roomMobs);
-    const min = rule.minCount ?? 1;
-    const max = rule.maxCount ?? 1;
-    const count = min + Math.floor(Math.random() * (max - min + 1));
-    for (let i = 0; i < count; i++) {
-      mobs.push(createMob(rule.type, x, y, map));
+  if (def.roomMobs.length > 0) {
+    for (const { x, y } of map.mobSpawnPoints) {
+      const rule = pickRule(def.roomMobs);
+      const min = rule.minCount ?? 1;
+      const max = rule.maxCount ?? 1;
+      const count = min + Math.floor(Math.random() * (max - min + 1));
+      for (let i = 0; i < count; i++) {
+        mobs.push(createMob(rule.type, x, y, map));
+      }
     }
   }
 
-  for (const { x, y } of map.hallwaySpawnPoints) {
-    const rule = pickRule(def.hallwayMobs);
-    mobs.push(createMob(rule.type, x, y, map));
+  if (def.hallwayMobs.length > 0) {
+    for (const { x, y } of map.hallwaySpawnPoints) {
+      const rule = pickRule(def.hallwayMobs);
+      mobs.push(createMob(rule.type, x, y, map));
+    }
   }
 
   // Spawn one boss per boss room
