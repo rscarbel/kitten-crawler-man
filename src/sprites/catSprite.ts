@@ -17,7 +17,10 @@ export function drawCatSprite(
   s: number,
   walkFrame = 0,
   isMoving = false,
+  facingY = 0,
 ) {
+  const facingAway = facingY < -0.5;
+
   // Body bob — subtle upward bounce on each stride
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.028 : 0;
 
@@ -142,34 +145,37 @@ export function drawCatSprite(
   ctx.fillStyle = '#c47a15';
   ctx.fill();
   ctx.clip();
-  // Dark patch left side of face
-  ctx.fillStyle = '#1a0f00';
-  ctx.globalAlpha = 0.88;
-  ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.41,
-    sy + s * 0.33 + bodyBob,
-    s * 0.1,
-    s * 0.14,
-    -0.3,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  // Cream patch forehead-right
-  ctx.globalAlpha = 0.75;
-  ctx.fillStyle = '#f0c060';
-  ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.57,
-    sy + s * 0.28 + bodyBob,
-    s * 0.07,
-    s * 0.08,
-    0.2,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
+
+  if (!facingAway) {
+    // Dark patch left side of face (front view only)
+    ctx.fillStyle = '#1a0f00';
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath();
+    ctx.ellipse(
+      sx + s * 0.41,
+      sy + s * 0.33 + bodyBob,
+      s * 0.1,
+      s * 0.14,
+      -0.3,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    // Cream patch forehead-right
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = '#f0c060';
+    ctx.beginPath();
+    ctx.ellipse(
+      sx + s * 0.57,
+      sy + s * 0.28 + bodyBob,
+      s * 0.07,
+      s * 0.08,
+      0.2,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
   ctx.restore();
 
   // Ears (left) — dark tortoiseshell
@@ -188,23 +194,24 @@ export function drawCatSprite(
   ctx.lineTo(sx + s * 0.56, sy + s * 0.17 + bodyBob);
   ctx.fill();
 
-  // Eyes (green)
-  ctx.fillStyle = '#4ade80';
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
-  ctx.fill();
+  // Eyes and pupils (front view only)
+  if (!facingAway) {
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
+    ctx.fill();
 
-  // Pupils
-  ctx.fillStyle = '#1e293b';
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
-  ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export function drawMissiles(

@@ -1,3 +1,31 @@
+/** Draws a tiny heart shape centred at (cx, cy) with approximate radius r. */
+function drawTinyHeart(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.bezierCurveTo(
+    cx - r * 1.8,
+    cy + r * 0.4,
+    cx - r * 1.8,
+    cy - r * 0.6,
+    cx,
+    cy - r * 0.2,
+  );
+  ctx.bezierCurveTo(
+    cx + r * 1.8,
+    cy - r * 0.6,
+    cx + r * 1.8,
+    cy + r * 0.4,
+    cx,
+    cy + r,
+  );
+  ctx.fill();
+}
+
 export function drawHumanSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -6,15 +34,18 @@ export function drawHumanSprite(
   isKicking: boolean,
   walkFrame = 0,
   isMoving = false,
+  facingY = 0,
 ) {
+  const facingAway = facingY < -0.5;
+
   // Body bob — bounces up slightly twice per stride cycle
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.04 : 0;
 
   // Leg offsets — left and right swing in opposite phases
   const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.05 : 0;
 
-  // Legs — hide kicking leg during kick animation
-  ctx.fillStyle = '#1e3a5f';
+  // ── Bare legs (skin tone, no shoes) ─────────────────────────────────────
+  ctx.fillStyle = '#fcd5ae';
   // Left leg
   ctx.fillRect(
     sx + s * 0.27,
@@ -35,19 +66,34 @@ export function drawHumanSprite(
   // Arm swing (opposite to legs)
   const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.03 : 0;
 
-  // Body (blue shirt)
-  ctx.fillStyle = '#3b82f6';
-  ctx.fillRect(sx + s * 0.22, sy + s * 0.38 + bodyBob, s * 0.56, s * 0.38);
+  // ── Black jacket (upper body) ────────────────────────────────────────────
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(sx + s * 0.22, sy + s * 0.38 + bodyBob, s * 0.56, s * 0.26);
 
+  // ── White boxer shorts (lower body / hip area) ───────────────────────────
+  ctx.fillStyle = '#f4f4f4';
+  ctx.fillRect(sx + s * 0.22, sy + s * 0.64 + bodyBob, s * 0.56, s * 0.14);
+
+  // Boxer waistband (slightly darker strip at top)
+  ctx.fillStyle = '#d8d8d8';
+  ctx.fillRect(sx + s * 0.22, sy + s * 0.64 + bodyBob, s * 0.56, s * 0.025);
+
+  // Red hearts on boxers (front view only)
+  if (!facingAway) {
+    ctx.fillStyle = '#ef4444';
+    drawTinyHeart(ctx, sx + s * 0.38, sy + s * 0.72 + bodyBob, s * 0.05);
+    drawTinyHeart(ctx, sx + s * 0.62, sy + s * 0.72 + bodyBob, s * 0.05);
+  }
+
+  // ── Jacket arms (black) ──────────────────────────────────────────────────
+  ctx.fillStyle = '#111827';
   // Left arm
-  ctx.fillStyle = '#3b82f6';
   ctx.fillRect(
     sx + s * 0.07,
     sy + s * 0.4 + bodyBob + armSwing,
     s * 0.15,
     s * 0.22,
   );
-
   // Right arm
   ctx.fillRect(
     sx + s * 0.78,
@@ -56,20 +102,37 @@ export function drawHumanSprite(
     s * 0.22,
   );
 
-  // Head (skin tone)
+  // ── Head (skin tone) ─────────────────────────────────────────────────────
   ctx.fillStyle = '#fcd5ae';
   ctx.beginPath();
   ctx.arc(sx + s * 0.5, sy + s * 0.24 + bodyBob, s * 0.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes
-  ctx.fillStyle = '#1e293b';
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.42, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(sx + s * 0.58, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
-  ctx.fill();
+  if (facingAway) {
+    // Back of head — dark hair covering the top half
+    ctx.fillStyle = '#3a2010';
+    ctx.beginPath();
+    ctx.arc(
+      sx + s * 0.5,
+      sy + s * 0.22 + bodyBob,
+      s * 0.17,
+      Math.PI,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    // Collar visible at the back of the neck
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(sx + s * 0.38, sy + s * 0.37 + bodyBob, s * 0.24, s * 0.05);
+  } else {
+    // Eyes (front view only)
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.42, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx + s * 0.58, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export function drawHumanAttack(
@@ -86,10 +149,13 @@ export function drawHumanAttack(
   const t = 1 - attackTimer / ATTACK_FRAMES; // 0→1
   const ext = Math.sin(t * Math.PI); // peaks at t=0.5
 
-  // Arm socket origin — at shoulder height (s*0.42 from top) and offset
-  // toward the facing direction so the punch comes from the arm, not center mass.
-  const armOriginX = sx + s * 0.5 + facingX * s * 0.22;
-  const armOriginY = sy + s * 0.42 + facingY * s * 0.18;
+  // Arm socket origin — always at shoulder height.
+  // When facing sideways the socket is on the forward shoulder;
+  // when facing up/down it's offset to the right arm socket so the fist
+  // doesn't appear to come from the belly or the back of the head.
+  const armOffsetX = Math.abs(facingX) > 0.2 ? facingX * s * 0.28 : s * 0.2;
+  const armOriginX = sx + s * 0.5 + armOffsetX;
+  const armOriginY = sy + s * 0.42;
 
   ctx.save();
 
@@ -138,27 +204,31 @@ export function drawHumanAttack(
       }
     }
   } else {
-    // Kick — boot swings from right hip in facing direction
+    // Kick — bare leg swings from right hip in facing direction.
+    // When facing up the foot would travel through the body, so redirect sideways.
+    const kickFacingX = facingY < -0.5 ? (facingX >= 0 ? 1 : -1) : facingX;
+    const kickFacingY = facingY < -0.5 ? 0 : facingY;
+
     const hipX = sx + s * 0.55;
     const hipY = sy + s * 0.78;
     const reach = s * 0.55;
-    const bootX = hipX + facingX * reach * ext;
-    const bootY = hipY + facingY * reach * ext;
+    const footX = hipX + kickFacingX * reach * ext;
+    const footY = hipY + kickFacingY * reach * ext;
 
-    // Leg line from hip
-    ctx.strokeStyle = '#1e3a5f';
+    // Leg line from hip (skin tone — bare leg)
+    ctx.strokeStyle = '#fcd5ae';
     ctx.lineWidth = s * 0.15;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(hipX, hipY);
-    ctx.lineTo(bootX, bootY);
+    ctx.lineTo(footX, footY);
     ctx.stroke();
 
-    // Boot
-    const bootAngle = Math.atan2(facingY, facingX);
-    ctx.fillStyle = '#0f172a';
+    // Bare foot (skin tone ellipse)
+    const footAngle = Math.atan2(kickFacingY, kickFacingX);
+    ctx.fillStyle = '#fcd5ae';
     ctx.beginPath();
-    ctx.ellipse(bootX, bootY, s * 0.2, s * 0.1, bootAngle, 0, Math.PI * 2);
+    ctx.ellipse(footX, footY, s * 0.18, s * 0.09, footAngle, 0, Math.PI * 2);
     ctx.fill();
 
     // Dust cloud at peak
@@ -167,12 +237,12 @@ export function drawHumanAttack(
       ctx.globalAlpha = dustAmt * 0.5;
       ctx.fillStyle = '#c4a77d';
       for (let i = 0; i < 3; i++) {
-        const angle = bootAngle + (i - 1) * 0.8;
+        const angle = footAngle + (i - 1) * 0.8;
         const dist = s * 0.28 * dustAmt;
         ctx.beginPath();
         ctx.arc(
-          bootX + Math.cos(angle) * dist,
-          bootY + Math.sin(angle) * dist,
+          footX + Math.cos(angle) * dist,
+          footY + Math.sin(angle) * dist,
           s * 0.09,
           0,
           Math.PI * 2,

@@ -19,6 +19,8 @@ export abstract class Player {
   walkFrame = 0;
   healthPotions = 10;
   unspentPoints = 0;
+  /** When true, incoming damage is ignored (standing in the Safe Room). */
+  isProtected = false;
   protected tileSize: number;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp = 10) {
@@ -34,7 +36,7 @@ export abstract class Player {
   }
 
   takeDamage(amount: number) {
-    if (amount <= 0) return;
+    if (amount <= 0 || this.isProtected) return;
     this.hp = Math.max(0, this.hp - amount);
     this.damageFlash = 8;
   }

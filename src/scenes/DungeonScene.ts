@@ -17,6 +17,7 @@ import { spawnForLevel } from '../levels/spawner';
 import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
+import { drawMordecaiSprite, drawSpeechBubble } from '../sprites/mordecaiSprite';
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -46,6 +47,30 @@ export class DungeonScene extends Scene {
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
   private actionHandler: ((e: KeyboardEvent) => void) | null = null;
 
+  // ── Safe Room ──────────────────────────────────────────────────────────────
+  private safeRoomBounds: { x: number; y: number; w: number; h: number } | null;
+
+  // ── Mordecai NPC ──────────────────────────────────────────────────────────
+  /** Tile coords of Mordecai's position inside the Safe Room. */
+  private mordecaiTileX: number;
+  private mordecaiTileY: number;
+  private mordecaiDialogOpen = false;
+  private speechBubblePulse = 0;
+
+  // ── Bed ────────────────────────────────────────────────────────────────────
+  /** Tile coords of the bed inside the Safe Room. */
+  private bedTileX: number;
+  private bedTileY: number;
+
+  // ── Sleep ──────────────────────────────────────────────────────────────────
+  private isSleeping = false;
+  /** Countdown in frames (150 total: 30 fade-in, 90 black, 30 fade-out). */
+  private sleepTimer = 0;
+  private readonly SLEEP_TOTAL = 150;
+  private readonly SLEEP_FADEIN = 30;
+  private readonly SLEEP_HOLD = 90;
+  private sleepHealed = false;
+
   constructor(
     private readonly levelDef: LevelDef,
     private readonly input: InputManager,
@@ -66,27 +91,51 @@ export class DungeonScene extends Scene {
 
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
+
+    // ── Safe Room setup ──────────────────────────────────────────────────────
+    this.safeRoomBounds = this.gameMap.safeRoomBounds;
+    const centre = this.gameMap.safeRoomCentre;
+    if (centre && this.safeRoomBounds) {
+      const halfW = Math.floor(this.safeRoomBounds.w / 4);
+      // Mordecai stands on the left side of the safe room
+      this.mordecaiTileX = centre.x - halfW;
+      this.mordecaiTileY = centre.y;
+      // Bed on the right side
+      this.bedTileX = centre.x + halfW;
+      this.bedTileY = centre.y;
+    } else {
+      // Fallback (shouldn't happen with a normal map)
+      this.mordecaiTileX = sx;
+      this.mordecaiTileY = sy;
+      this.bedTileX = sx + 1;
+      this.bedTileY = sy;
+    }
   }
 
   // ── Scene lifecycle ─────────────────────────────────────────────────────────
 
   onEnter(): void {
-    // Esc: toggle pause (independent of pause state check)
+    // Esc: toggle pause / close dialog (independent of pause state check)
     this.escHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
+      if (this.mordecaiDialogOpen) {
+        this.mordecaiDialogOpen = false;
+        return;
+      }
       if (!this.gameOver) {
         this.pauseMenu.toggle();
         if (!this.pauseMenu.isOpen) this.input.clear();
       }
     };
 
-    // Game action keys — suppressed while paused
+    // Game action keys — suppressed while paused or sleeping
     this.actionHandler = (e: KeyboardEvent) => {
-      if (this.pauseMenu.isOpen) return;
+      if (this.pauseMenu.isOpen || this.isSleeping) return;
 
       if (e.key === 'Tab') {
         e.preventDefault();
+        this.mordecaiDialogOpen = false;
         this.human.isActive = !this.human.isActive;
         this.cat.isActive = !this.cat.isActive;
         this.cat.autoTarget = null;
@@ -96,6 +145,26 @@ export class DungeonScene extends Scene {
 
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
+
+        // Close dialog first if open
+        if (this.mordecaiDialogOpen) {
+          this.mordecaiDialogOpen = false;
+          return;
+        }
+
+        const active = this.active();
+
+        // Inside safe room: prioritise interactions, block combat
+        if (this.isEntityInSafeRoom(active)) {
+          if (this.isNearBed(active)) {
+            this.startSleep();
+          } else if (this.isNearMordecai(active)) {
+            this.mordecaiDialogOpen = true;
+          }
+          return;
+        }
+
+        // Outside safe room: normal attacks
         if (this.human.isActive) {
           this.snapFacingToNearestMob(this.human, TILE_SIZE * 3);
           this.human.triggerAttack();
@@ -124,6 +193,11 @@ export class DungeonScene extends Scene {
   }
 
   handleClick(mx: number, my: number): void {
+    if (this.mordecaiDialogOpen) {
+      this.mordecaiDialogOpen = false;
+      return;
+    }
+
     // Death screen takes priority
     if (this.gameOver) {
       if (this.deathScreen.handleClick(mx, my, this.sceneManager.canvas)) {
@@ -151,6 +225,12 @@ export class DungeonScene extends Scene {
 
   update(): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
+
+    if (this.isSleeping) {
+      this.updateSleep();
+      return;
+    }
+
     this.updateGameplay();
   }
 
@@ -162,6 +242,9 @@ export class DungeonScene extends Scene {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     this.gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
+
+    // ── Safe room world-space decorations ────────────────────────────────────
+    this.renderSafeRoomObjects(ctx, camX, camY);
 
     for (const mob of this.mobs) mob.render(ctx, camX, camY, TILE_SIZE);
 
@@ -182,6 +265,21 @@ export class DungeonScene extends Scene {
     }
 
     this.drawPauseButton(ctx, canvas);
+
+    // ── Safe room UI overlays ─────────────────────────────────────────────
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      this.renderSafeRoomUI(ctx, canvas, camX, camY);
+    }
+
+    // ── Mordecai dialog ───────────────────────────────────────────────────
+    if (this.mordecaiDialogOpen) {
+      this.renderMordecaiDialog(ctx, canvas);
+    }
+
+    // ── Sleep overlay ─────────────────────────────────────────────────────
+    if (this.isSleeping) {
+      this.renderSleepOverlay(ctx, canvas);
+    }
   }
 
   // ── Core gameplay update ────────────────────────────────────────────────────
@@ -222,6 +320,13 @@ export class DungeonScene extends Scene {
     const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
     const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
     if (this.gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
+
+    // ── Safe room protection flags (set each frame) ────────────────────────
+    this.human.isProtected = this.isEntityInSafeRoom(this.human);
+    this.cat.isProtected = this.isEntityInSafeRoom(this.cat);
+
+    // ── Teleport mobs that wander into the safe room ───────────────────────
+    this.evictMobsFromSafeRoom();
 
     // ── Follower movement ──────────────────────────────────────────────────
     if (this.human.isActive) {
@@ -289,10 +394,23 @@ export class DungeonScene extends Scene {
     this.cat.updateMissiles();
 
     // ── Mob AI ────────────────────────────────────────────────────────────
+    // Only run full AI for mobs within the activation radius of either player.
+    // Distant mobs are frozen (no wander, no pathfinding) until the player
+    // gets close. This keeps per-frame cost O(active_mobs) instead of O(all_mobs),
+    // which matters a lot on large maps with many spawned enemies.
     const playerTargets = [this.human, this.cat];
+    const AI_RADIUS_SQ = (TILE_SIZE * 22) ** 2;
+    const hx = this.human.x, hy = this.human.y;
+    const cx = this.cat.x, cy = this.cat.y;
     for (const mob of this.mobs) {
-      mob.updateAI(playerTargets);
-      mob.tickTimers();
+      if (!mob.isAlive) continue;
+      const dx1 = mob.x - hx, dy1 = mob.y - hy;
+      const dx2 = mob.x - cx, dy2 = mob.y - cy;
+      if (dx1 * dx1 + dy1 * dy1 <= AI_RADIUS_SQ ||
+          dx2 * dx2 + dy2 * dy2 <= AI_RADIUS_SQ) {
+        mob.updateAI(playerTargets);
+        mob.tickTimers();
+      }
     }
 
     this.updateAutoAI();
@@ -304,11 +422,309 @@ export class DungeonScene extends Scene {
 
     this.updateCompanionPotion();
 
+    // ── Speech bubble pulse ───────────────────────────────────────────────
+    this.speechBubblePulse++;
+
     // ── Death check ───────────────────────────────────────────────────────
     if (!this.human.isAlive || !this.cat.isAlive) {
       this.gameOver = true;
       this.deathScreen.activate();
     }
+  }
+
+  // ── Safe Room helpers ───────────────────────────────────────────────────────
+
+  private isEntityInSafeRoom(entity: { x: number; y: number }): boolean {
+    const b = this.safeRoomBounds;
+    if (!b) return false;
+    const ts = TILE_SIZE;
+    const tx = Math.floor((entity.x + ts * 0.5) / ts);
+    const ty = Math.floor((entity.y + ts * 0.5) / ts);
+    return tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h;
+  }
+
+  private isNearMordecai(entity: { x: number; y: number }): boolean {
+    const mx = this.mordecaiTileX * TILE_SIZE;
+    const my = this.mordecaiTileY * TILE_SIZE;
+    return Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * 2.5;
+  }
+
+  private isNearBed(entity: { x: number; y: number }): boolean {
+    const bx = this.bedTileX * TILE_SIZE;
+    const by = this.bedTileY * TILE_SIZE;
+    return Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * 1.8;
+  }
+
+  private evictMobsFromSafeRoom(): void {
+    if (!this.safeRoomBounds) return;
+    const fallback = this.gameMap.mobSpawnPoints.length > 0
+      ? this.gameMap.mobSpawnPoints
+      : this.gameMap.hallwaySpawnPoints;
+    if (fallback.length === 0) return;
+
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      if (this.isEntityInSafeRoom(mob)) {
+        const pt = fallback[Math.floor(Math.random() * fallback.length)];
+        mob.x = pt.x * TILE_SIZE;
+        mob.y = pt.y * TILE_SIZE;
+      }
+    }
+  }
+
+  // ── Sleep mechanic ──────────────────────────────────────────────────────────
+
+  private startSleep(): void {
+    this.isSleeping = true;
+    this.sleepTimer = this.SLEEP_TOTAL;
+    this.sleepHealed = false;
+  }
+
+  private updateSleep(): void {
+    this.sleepTimer--;
+
+    // Heal at the moment the screen goes fully black
+    if (
+      !this.sleepHealed &&
+      this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - 5
+    ) {
+      this.human.hp = this.human.maxHp;
+      this.cat.hp = this.cat.maxHp;
+      this.sleepHealed = true;
+    }
+
+    if (this.sleepTimer <= 0) {
+      this.isSleeping = false;
+    }
+  }
+
+  private renderSleepOverlay(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const t = this.sleepTimer;
+    const fadeIn = this.SLEEP_FADEIN;
+    const hold = this.SLEEP_HOLD;
+
+    let alpha: number;
+    if (t > hold + fadeIn) {
+      // Fading in
+      alpha = 1 - (t - hold - fadeIn) / fadeIn;
+    } else if (t > fadeIn) {
+      // Full black hold
+      alpha = 1;
+    } else {
+      // Fading out
+      alpha = t / fadeIn;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Show "Sleeping..." text only during the hold phase
+    if (t > fadeIn && t <= hold + fadeIn) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = 'bold 26px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Sleeping...', canvas.width / 2, canvas.height / 2 - 10);
+      ctx.font = '14px monospace';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('zZz', canvas.width / 2, canvas.height / 2 + 18);
+      ctx.textAlign = 'left';
+    }
+    ctx.restore();
+  }
+
+  // ── Safe room rendering helpers ─────────────────────────────────────────────
+
+  private renderSafeRoomObjects(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    if (!this.safeRoomBounds) return;
+
+    const ts = TILE_SIZE;
+
+    // ── "SAFE ROOM" banner above the room ─────────────────────────────────
+    // (world-space label rendered above the top wall of the safe room)
+    const bannerTileY = this.safeRoomBounds.y - 1;
+    const bannerTileX =
+      this.safeRoomBounds.x + Math.floor(this.safeRoomBounds.w / 2);
+    const bsx = bannerTileX * ts - camX;
+    const bsy = bannerTileY * ts - camY;
+    ctx.save();
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f0e4c8';
+    ctx.fillText('SAFE ROOM', bsx, bsy + ts * 0.65);
+    ctx.textAlign = 'left';
+    ctx.restore();
+
+    // ── Bed ───────────────────────────────────────────────────────────────
+    this.renderBed(
+      ctx,
+      this.bedTileX * ts - camX,
+      this.bedTileY * ts - camY,
+      ts,
+    );
+
+    // ── Mordecai ──────────────────────────────────────────────────────────
+    const msx = this.mordecaiTileX * ts - camX;
+    const msy = this.mordecaiTileY * ts - camY;
+    drawMordecaiSprite(ctx, msx, msy, ts);
+
+    // Speech bubble when active player is nearby
+    const activeNear = this.isNearMordecai(this.active());
+    if (activeNear && !this.mordecaiDialogOpen) {
+      drawSpeechBubble(ctx, msx, msy, ts, this.speechBubblePulse);
+    }
+  }
+
+  private renderBed(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    s: number,
+  ): void {
+    // Wooden frame
+    ctx.fillStyle = '#7a4e2c';
+    ctx.fillRect(sx + s * 0.05, sy + s * 0.12, s * 0.9, s * 0.8);
+
+    // Mattress (cream)
+    ctx.fillStyle = '#f0e8d8';
+    ctx.fillRect(sx + s * 0.1, sy + s * 0.18, s * 0.8, s * 0.65);
+
+    // Pillow (white)
+    ctx.fillStyle = '#fafaf8';
+    ctx.fillRect(sx + s * 0.14, sy + s * 0.21, s * 0.72, s * 0.2);
+    // Pillow seam
+    ctx.strokeStyle = '#d8d0c0';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx + s * 0.14, sy + s * 0.21, s * 0.72, s * 0.2);
+
+    // Blanket (blue-teal)
+    ctx.fillStyle = '#3a6e8a';
+    ctx.fillRect(sx + s * 0.1, sy + s * 0.41, s * 0.8, s * 0.42);
+
+    // Blanket fold
+    ctx.fillStyle = '#2e5a74';
+    ctx.fillRect(sx + s * 0.1, sy + s * 0.41, s * 0.8, s * 0.05);
+
+    // Headboard (slightly darker wood)
+    ctx.fillStyle = '#5c3820';
+    ctx.fillRect(sx + s * 0.05, sy + s * 0.12, s * 0.9, s * 0.1);
+
+    // Footboard
+    ctx.fillRect(sx + s * 0.05, sy + s * 0.82, s * 0.9, s * 0.1);
+  }
+
+  private renderSafeRoomUI(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    camX: number,
+    camY: number,
+  ): void {
+    const active = this.active();
+
+    // ── Sleep prompt near the bed ─────────────────────────────────────────
+    if (
+      this.isEntityInSafeRoom(active) &&
+      this.isNearBed(active) &&
+      !this.isSleeping
+    ) {
+      const bsx = this.bedTileX * TILE_SIZE - camX;
+      const bsy = this.bedTileY * TILE_SIZE - camY;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.68)';
+      const tw = 210;
+      const th = 28;
+      ctx.fillRect(bsx + TILE_SIZE * 0.5 - tw / 2, bsy - 38, tw, th);
+      ctx.fillStyle = '#f0e8d0';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('[Space] Sleep (restores HP)', bsx + TILE_SIZE * 0.5, bsy - 18);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+
+    // ── Talk prompt near Mordecai ─────────────────────────────────────────
+    if (
+      this.isEntityInSafeRoom(active) &&
+      this.isNearMordecai(active) &&
+      !this.mordecaiDialogOpen
+    ) {
+      const msx = this.mordecaiTileX * TILE_SIZE - camX;
+      const msy = this.mordecaiTileY * TILE_SIZE - camY;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.68)';
+      const tw = 110;
+      const th = 24;
+      ctx.fillRect(msx + TILE_SIZE * 0.5 - tw / 2, msy - 34, tw, th);
+      ctx.fillStyle = '#f0e8d0';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('[Space] Talk', msx + TILE_SIZE * 0.5, msy - 17);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+
+    // ── "SAFE ROOM" HUD label when player is inside ───────────────────────
+    if (this.isEntityInSafeRoom(active)) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(240,228,200,0.85)';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('~ Safe Room ~', canvas.width / 2, canvas.height - 18);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+  }
+
+  private renderMordecaiDialog(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const dh = 120;
+    const dw = Math.min(560, canvas.width - 40);
+    const dx = (canvas.width - dw) / 2;
+    const dy = canvas.height - dh - 20;
+
+    // Background
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,8,6,0.92)';
+    ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#c8a860';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(dx, dy, dw, dh);
+
+    // Name plate
+    ctx.fillStyle = '#c8a860';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('Mordecai', dx + 14, dy + 20);
+
+    // Dialog text (word-wrapped manually)
+    ctx.fillStyle = '#e8dfc8';
+    ctx.font = '12px monospace';
+    const lines = [
+      'Welcome to the dungeon. Here you must kill enemies to',
+      'level up and you must find the stairwell on each level',
+      'to get to the next level.',
+    ];
+    lines.forEach((line, i) => {
+      ctx.fillText(line, dx + 14, dy + 44 + i * 18);
+    });
+
+    // Dismiss hint
+    ctx.fillStyle = '#7a6e5a';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('[Space / Esc] Close', dx + dw - 12, dy + dh - 10);
+    ctx.textAlign = 'left';
+    ctx.restore();
   }
 
   // ── Cat positioning helpers ─────────────────────────────────────────────────
@@ -457,7 +873,7 @@ export class DungeonScene extends Scene {
     });
 
     // Human melee — fires once at the peak frame
-    if (this.human.isAttackPeak()) {
+    if (this.human.isAttackPeak() && !this.isEntityInSafeRoom(this.human)) {
       const hc = centerOf(this.human);
       const range = this.human.getMeleeRange();
       const damage = this.human.getMeleeDamage();
@@ -468,27 +884,32 @@ export class DungeonScene extends Scene {
         const dy = mc.y - hc.y;
         const dist = Math.hypot(dx, dy);
         if (dist === 0 || dist > range) continue;
-        const dot =
-          (dx / dist) * this.human.facingX + (dy / dist) * this.human.facingY;
-        if (dot <= 0.3) continue;
+        // Skip the facing check when sprites are basically on top of each other
+        if (dist > TILE_SIZE * 0.65) {
+          const dot =
+            (dx / dist) * this.human.facingX + (dy / dist) * this.human.facingY;
+          if (dot <= 0.3) continue;
+        }
         if (!this.gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
         mob.takeDamageFrom(damage, this.human);
       }
     }
 
     // Cat missiles
-    for (const missile of this.cat.getMissiles()) {
-      if (missile.state !== 'flying' || missile.hit) continue;
-      const damage = this.cat.getMissileDamage();
-      for (const mob of this.mobs) {
-        if (!mob.isAlive) continue;
-        const mc = centerOf(mob);
-        const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
-        if (dist < TILE_SIZE * 0.7) {
-          mob.takeDamageFrom(damage, this.cat);
-          missile.hit = true;
-          missile.state = 'exploding';
-          break;
+    if (!this.isEntityInSafeRoom(this.cat)) {
+      for (const missile of this.cat.getMissiles()) {
+        if (missile.state !== 'flying' || missile.hit) continue;
+        const damage = this.cat.getMissileDamage();
+        for (const mob of this.mobs) {
+          if (!mob.isAlive) continue;
+          const mc = centerOf(mob);
+          const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
+          if (dist < TILE_SIZE * 0.7) {
+            mob.takeDamageFrom(damage, this.cat);
+            missile.hit = true;
+            missile.state = 'exploding';
+            break;
+          }
         }
       }
     }
@@ -559,7 +980,7 @@ export class DungeonScene extends Scene {
   }
 
   private companionFollow(
-    entity: { x: number; y: number; isMoving: boolean },
+    entity: { x: number; y: number; isMoving: boolean; facingX: number; facingY: number },
     targetX: number,
     targetY: number,
     speed: number,
@@ -573,12 +994,12 @@ export class DungeonScene extends Scene {
       return;
     }
     const step = Math.min(speed, dist - minDist);
-    this.entityMoveWithCollision(
-      entity,
-      (dx / dist) * step,
-      (dy / dist) * step,
-    );
+    const nx = dx / dist;
+    const ny = dy / dist;
+    this.entityMoveWithCollision(entity, nx * step, ny * step);
     entity.isMoving = true;
+    entity.facingX = nx;
+    entity.facingY = ny;
   }
 
   // ── Camera ──────────────────────────────────────────────────────────────────

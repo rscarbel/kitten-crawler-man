@@ -11,6 +11,8 @@ const FLOOR_TYPES = [
 
 /** Tile type for the outer border — renders as pure black and is not walkable. */
 const VOID_TYPE = 9;
+/** Tile type for the Safe Room floor — warm sanctuary look. */
+const SAFE_ROOM_FLOOR = 10;
 type FloorTile = (typeof FLOOR_TYPES)[number];
 
 const FloorTypeValue = {
@@ -36,10 +38,14 @@ export class GameMap {
   tileHeight: number;
   /** Tile coordinates where the player should spawn (centre of the first room). */
   startTile: { x: number; y: number } = { x: 15, y: 15 };
-  /** Tile centres of all rooms except the start room — used for mob placement. */
+  /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
   mobSpawnPoints: Array<{ x: number; y: number }> = [];
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
+  /** Bounds (in tile coords) of the safe room, or null if not enough rooms generated. */
+  safeRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
+  /** Tile-space centre of the safe room, or null if none. */
+  safeRoomCentre: { x: number; y: number } | null = null;
 
   constructor(mapSize = 100, tileHeight = 10) {
     this.tileHeight = tileHeight;
@@ -154,8 +160,11 @@ export class GameMap {
       );
 
       if (!overlaps) {
+        // rooms[1] is designated the Safe Room — use special floor type
         const floor =
-          DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
+          rooms.length === 1
+            ? SAFE_ROOM_FLOOR
+            : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
         const room: Room = { x, y, w, h, floor };
         rooms.push(room);
         carveRoom(room);
@@ -182,7 +191,18 @@ export class GameMap {
       };
     }
 
-    this.mobSpawnPoints = rooms.slice(1).map((r) => ({
+    // rooms[1] is the Safe Room — record its bounds and exclude from mob spawns
+    if (rooms.length > 1) {
+      const sr = rooms[1];
+      this.safeRoomBounds = { x: sr.x, y: sr.y, w: sr.w, h: sr.h };
+      this.safeRoomCentre = {
+        x: Math.floor(sr.x + sr.w / 2),
+        y: Math.floor(sr.y + sr.h / 2),
+      };
+    }
+
+    // Mob spawn points start at rooms[2] (skip start room and safe room)
+    this.mobSpawnPoints = rooms.slice(2).map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));
@@ -320,6 +340,7 @@ export class GameMap {
       tile.type !== FloorTypeValue.wall &&
       tile.type !== FloorTypeValue.water &&
       tile.type !== VOID_TYPE
+      // SAFE_ROOM_FLOOR (10) is walkable — falls through as "not excluded"
     );
   }
 
@@ -460,6 +481,27 @@ export class GameMap {
         ctx.fillStyle = 'rgba(0,0,0,0.14)';
         ctx.fillRect(sx, sy, 1, ts);
         ctx.fillRect(sx, sy, ts, 1);
+        this.drawWallShadow(ctx, sx, sy, ts, tx, ty);
+        break;
+      }
+
+      // ── Safe Room floor — warm sanctuary ──────────────────────────────────
+      case SAFE_ROOM_FLOOR: {
+        // Alternating warm cream tiles
+        const safeBase = (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
+        ctx.fillStyle = safeBase;
+        ctx.fillRect(sx, sy, ts, ts);
+        // Soft golden grout lines
+        ctx.fillStyle = '#c8b890';
+        ctx.fillRect(sx + ts - 1, sy, 1, ts);
+        ctx.fillRect(sx, sy + ts - 1, ts, 1);
+        // Subtle warm glow dot at tile corners
+        if (tx % 4 === 0 && ty % 4 === 0) {
+          ctx.fillStyle = 'rgba(255,200,80,0.25)';
+          ctx.beginPath();
+          ctx.arc(sx, sy, ts * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
         this.drawWallShadow(ctx, sx, sy, ts, tx, ty);
         break;
       }
