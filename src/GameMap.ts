@@ -1,4 +1,13 @@
-const FLOOR_TYPES = ['grass', 'road', 'wall', 'water', 'concrete', 'tile_floor', 'carpet', 'wood'] as const;
+const FLOOR_TYPES = [
+  'grass',
+  'road',
+  'wall',
+  'water',
+  'concrete',
+  'tile_floor',
+  'carpet',
+  'wood',
+] as const;
 
 /** Tile type for the outer border — renders as pure black and is not walkable. */
 const VOID_TYPE = 9;
@@ -14,18 +23,6 @@ const FloorTypeValue = {
   carpet: 7,
   wood: 8,
 } as const satisfies Record<FloorTile, number>;
-
-// Used only by legacy paintMap()
-const floorTypeColors = {
-  grass: '#6de89d',
-  road: '#bc926b',
-  wall: '#2c2420',
-  water: '#2ac6ff',
-  concrete: '#b0ada8',
-  tile_floor: '#d5cdb8',
-  carpet: '#6e2418',
-  wood: '#9e6e3a',
-} as const satisfies Record<FloorTile, `#${string}`>;
 
 type Rarity =
   | 'common'
@@ -176,7 +173,12 @@ export class GameMap {
     // 2. Void border around the outside (renders as pure black, not walkable)
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        if (y < BORDER || y >= size - BORDER || x < BORDER || x >= size - BORDER) {
+        if (
+          y < BORDER ||
+          y >= size - BORDER ||
+          x < BORDER ||
+          x >= size - BORDER
+        ) {
           grid[y][x].type = VOID_TYPE;
         }
       }
@@ -202,7 +204,11 @@ export class GameMap {
       for (let hx = minX; hx <= maxX; hx++) {
         for (let off = -1; off <= 1; off++) {
           const hy = y1 + off;
-          if (hy >= BORDER && hy < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
+          if (
+            hy >= BORDER &&
+            hy < size - BORDER &&
+            grid[hy][hx].type === FloorTypeValue.wall
+          ) {
             grid[hy][hx].type = FloorTypeValue.concrete;
             hallwayTiles.push({ x: hx, y: hy });
           }
@@ -214,7 +220,11 @@ export class GameMap {
       for (let hy = minY; hy <= maxY; hy++) {
         for (let off = -1; off <= 1; off++) {
           const hx = x2 + off;
-          if (hx >= BORDER && hx < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
+          if (
+            hx >= BORDER &&
+            hx < size - BORDER &&
+            grid[hy][hx].type === FloorTypeValue.wall
+          ) {
             grid[hy][hx].type = FloorTypeValue.concrete;
             hallwayTiles.push({ x: hx, y: hy });
           }
@@ -224,18 +234,22 @@ export class GameMap {
 
     // 5. Place rooms
     const rooms: Room[] = [];
-    const MIN_W = 8, MAX_W = 16;
-    const MIN_H = 7, MAX_H = 14;
+    const MIN_W = 8,
+      MAX_W = 16;
+    const MIN_H = 7,
+      MAX_H = 14;
     const GAP = 3; // minimum tile gap between room edges
 
     for (let attempt = 0; attempt < 80 && rooms.length < 15; attempt++) {
       const w = MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
       const h = MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
-      const x = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
-      const y = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
+      const x =
+        BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
+      const y =
+        BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
 
       const overlaps = rooms.some(
-        r =>
+        (r) =>
           x < r.x + r.w + GAP &&
           x + w + GAP > r.x &&
           y < r.y + r.h + GAP &&
@@ -243,7 +257,8 @@ export class GameMap {
       );
 
       if (!overlaps) {
-        const floor = DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
+        const floor =
+          DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
         const room: Room = { x, y, w, h, floor };
         rooms.push(room);
         carveRoom(room);
@@ -264,22 +279,27 @@ export class GameMap {
     // 6. Record spawn locations
     if (rooms.length > 0) {
       const r = rooms[0];
-      this.startTile = { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
+      this.startTile = {
+        x: Math.floor(r.x + r.w / 2),
+        y: Math.floor(r.y + r.h / 2),
+      };
     }
 
-    this.mobSpawnPoints = rooms.slice(1).map(r => ({
+    this.mobSpawnPoints = rooms.slice(1).map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));
 
     // 7. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
-    const roomCenters = rooms.map(r => ({
+    const roomCenters = rooms.map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));
     const MIN_FROM_ROOM = 5;
-    const validHallway = hallwayTiles.filter(t =>
-      roomCenters.every(c => Math.hypot(t.x - c.x, t.y - c.y) > MIN_FROM_ROOM),
+    const validHallway = hallwayTiles.filter((t) =>
+      roomCenters.every(
+        (c) => Math.hypot(t.x - c.x, t.y - c.y) > MIN_FROM_ROOM,
+      ),
     );
     // Fisher-Yates shuffle then pick up to 10 tiles with ≥3-tile separation.
     for (let i = validHallway.length - 1; i > 0; i--) {
@@ -289,43 +309,88 @@ export class GameMap {
     const chosen: Array<{ x: number; y: number }> = [];
     for (const t of validHallway) {
       if (chosen.length >= 10) break;
-      if (chosen.every(c => Math.hypot(t.x - c.x, t.y - c.y) >= 3)) chosen.push(t);
+      if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= 3))
+        chosen.push(t);
     }
     this.hallwaySpawnPoints = chosen;
 
     return grid;
   }
 
-  paintMap(parentNode: HTMLElement | null) {
-    if (parentNode === null) return;
+  /**
+   * A* pathfinding on the tile grid. Returns an ordered array of tile
+   * coordinates from start to goal (inclusive), or an empty array if no path
+   * exists. Diagonals are allowed but blocked when they cut through a wall
+   * corner. Capped at MAX_NODES expansions for predictable per-frame cost.
+   */
+  findPath(
+    startX: number,
+    startY: number,
+    goalX: number,
+    goalY: number,
+  ): Array<{ x: number; y: number }> {
+    if (!this.isWalkable(goalX, goalY)) return [];
+    if (startX === goalX && startY === goalY) return [{ x: goalX, y: goalY }];
 
+    type Node = { x: number; y: number; g: number; f: number; parent: Node | null };
     const size = this.structure.length;
-    const container = document.createElement('div');
-    container.style.display = 'grid';
-    container.style.gridTemplateColumns = `repeat(${size}, ${this.tileHeight}px)`;
+    const key  = (x: number, y: number) => y * size + x;
+    const h    = (x: number, y: number) => Math.abs(x - goalX) + Math.abs(y - goalY);
 
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const tile_content = this.structure[y][x];
-        let floorType: FloorTile = 'grass';
-        if (tile_content.type === FloorTypeValue.wall) floorType = 'wall';
-        else if (tile_content.type === FloorTypeValue.water) floorType = 'water';
-        else if (tile_content.type === FloorTypeValue.road) floorType = 'road';
-        else if (tile_content.type === FloorTypeValue.concrete) floorType = 'concrete';
-        else if (tile_content.type === FloorTypeValue.tile_floor) floorType = 'tile_floor';
-        else if (tile_content.type === FloorTypeValue.carpet) floorType = 'carpet';
-        else if (tile_content.type === FloorTypeValue.wood) floorType = 'wood';
+    const openMap   = new Map<number, Node>();
+    const closedSet = new Set<number>();
+    openMap.set(key(startX, startY), { x: startX, y: startY, g: 0, f: h(startX, startY), parent: null });
 
-        const tile = document.createElement('div');
-        tile.id = tile_content.tileId;
-        tile.style.backgroundColor = floorTypeColors[floorType];
-        tile.style.width = `${this.tileHeight}px`;
-        tile.style.height = `${this.tileHeight}px`;
-        container.appendChild(tile);
+    const dirs = [
+      { dx:  1, dy:  0, cost: 1     },
+      { dx: -1, dy:  0, cost: 1     },
+      { dx:  0, dy:  1, cost: 1     },
+      { dx:  0, dy: -1, cost: 1     },
+      { dx:  1, dy:  1, cost: 1.414 },
+      { dx:  1, dy: -1, cost: 1.414 },
+      { dx: -1, dy:  1, cost: 1.414 },
+      { dx: -1, dy: -1, cost: 1.414 },
+    ];
+
+    const MAX_NODES = 600;
+    let expanded = 0;
+
+    while (openMap.size > 0 && expanded < MAX_NODES) {
+      // Find lowest-f node (linear scan — fine for dungeon-scale maps)
+      let best: Node | null = null;
+      for (const n of openMap.values()) {
+        if (!best || n.f < best.f) best = n;
+      }
+      if (!best) break;
+      openMap.delete(key(best.x, best.y));
+
+      if (best.x === goalX && best.y === goalY) {
+        const path: Array<{ x: number; y: number }> = [];
+        let node: Node | null = best;
+        while (node) { path.unshift({ x: node.x, y: node.y }); node = node.parent; }
+        return path;
+      }
+
+      closedSet.add(key(best.x, best.y));
+      expanded++;
+
+      for (const dir of dirs) {
+        const nx = best.x + dir.dx;
+        const ny = best.y + dir.dy;
+        const nk = key(nx, ny);
+        if (closedSet.has(nk)) continue;
+        if (!this.isWalkable(nx, ny)) continue;
+        // Block diagonal moves that cut through wall corners
+        if (dir.cost > 1 && (!this.isWalkable(best.x + dir.dx, best.y) || !this.isWalkable(best.x, best.y + dir.dy))) continue;
+
+        const g = best.g + dir.cost;
+        const existing = openMap.get(nk);
+        if (existing && existing.g <= g) continue;
+        openMap.set(nk, { x: nx, y: ny, g, f: g + h(nx, ny), parent: best });
       }
     }
 
-    parentNode.appendChild(container);
+    return [];
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
@@ -333,7 +398,11 @@ export class GameMap {
     if (!row) return false;
     const tile = row[tileX];
     if (!tile) return false;
-    return tile.type !== FloorTypeValue.wall && tile.type !== FloorTypeValue.water && tile.type !== VOID_TYPE;
+    return (
+      tile.type !== FloorTypeValue.wall &&
+      tile.type !== FloorTypeValue.water &&
+      tile.type !== VOID_TYPE
+    );
   }
 
   /**
@@ -428,7 +497,7 @@ export class GameMap {
         ctx.fillStyle = '#1c1814';
         ctx.fillRect(sx, sy + Math.floor(ts / 2), ts, 1);
         // Staggered vertical mortar (brick bond pattern)
-        const brickOff = (ty % 2 === 0) ? 0 : Math.floor(ts / 2);
+        const brickOff = ty % 2 === 0 ? 0 : Math.floor(ts / 2);
         const vx = sx + (brickOff % ts);
         if (vx >= sx && vx < sx + ts) {
           ctx.fillRect(vx, sy + 3, 1, Math.floor(ts / 2) - 3);

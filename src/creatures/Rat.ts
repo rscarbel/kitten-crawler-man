@@ -53,6 +53,7 @@ export class Rat extends Mob {
       this.isAggro = false;
       this.firstBitePending = true;
       this.firstBiteWindup = 0;
+      this.clearAStarPath();
       this.doWander();
       return;
     }
@@ -64,7 +65,7 @@ export class Rat extends Mob {
 
     // Skitter toward last known position (= current when LOS clear)
     if (nearestDist > this.biteRangePx) {
-      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.biteRangePx * 0.8);
+      this.followTargetAStar(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.biteRangePx * 0.8);
     } else {
       this.isMoving = false;
     }
@@ -77,7 +78,8 @@ export class Rat extends Mob {
     }
     if (this.firstBiteWindup > 0) this.firstBiteWindup--;
 
-    if (inRange && this.attackCooldown === 0 && this.firstBiteWindup === 0 && this.hasLOS(nearest)) {
+    // Same-tile contact always bites — can't dodge point-blank.
+    if (inRange && this.attackCooldown === 0 && this.firstBiteWindup === 0 && (this.hasLOS(nearest) || this.onSameTile(nearest))) {
       nearest.takeDamage(1);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;

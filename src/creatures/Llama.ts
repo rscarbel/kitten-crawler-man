@@ -98,6 +98,7 @@ export class Llama extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.clearAStarPath();
       this.doWander();
       return;
     }
@@ -122,10 +123,10 @@ export class Llama extends Mob {
     // Movement: navigate toward last known pos when no LOS; hold when in range
     if (!hasLOS) {
       // No line of sight — navigate toward last known position to find a clear angle
-      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.tileSize * 1.5);
+      this.followTargetAStar(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.tileSize * 1.5);
     } else if (nearestDist > this.spitRangePx) {
       // Has LOS but too far — move closer
-      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
+      this.followTargetAStar(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
     } else {
       // In range with LOS — hold position
       this.isMoving = false;

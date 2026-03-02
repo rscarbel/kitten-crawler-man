@@ -29,6 +29,11 @@ export abstract class Mob extends Player {
   protected lastKnownTargetX = 0;
   protected lastKnownTargetY = 0;
 
+  /** Cached A* waypoint list (tile coords). Followed by followTargetAStar. */
+  private astarPath: Array<{ x: number; y: number }> = [];
+  /** Frames until the A* path is recalculated. */
+  private astarTimer = 0;
+
   /** Frames the mob has been fully stuck (both axes blocked) — triggers steering flip. */
   private stuckFrames = 0;
   /** +1 or -1: direction to rotate the movement vector when stuck. */
@@ -53,6 +58,74 @@ export abstract class Mob extends Player {
 
   setMap(map: GameMap) {
     this.map = map;
+  }
+
+  /** Returns true if this mob and `target` occupy the same map tile. */
+  protected onSameTile(target: Player): boolean {
+    const ts = this.tileSize;
+    return (
+      Math.floor((this.x + ts * 0.5) / ts) === Math.floor((target.x + ts * 0.5) / ts) &&
+      Math.floor((this.y + ts * 0.5) / ts) === Math.floor((target.y + ts * 0.5) / ts)
+    );
+  }
+
+  /** Clears the cached A* path so it is recomputed on the next followTargetAStar call. */
+  protected clearAStarPath() {
+    this.astarPath = [];
+    this.astarTimer = 0;
+  }
+
+  /**
+   * Wall-aware navigation using A* pathfinding. Recalculates the path to the
+   * goal every `refreshInterval` frames, then steers toward each waypoint in
+   * turn using moveWithCollision. Falls back to direct followTargetCollide
+   * if no path can be found (e.g. goal is unreachable or cap exceeded).
+   */
+  protected followTargetAStar(
+    targetPixelX: number,
+    targetPixelY: number,
+    speed: number,
+    minDist: number,
+    refreshInterval = 30,
+  ) {
+    if (!this.map) {
+      this.followTargetCollide(targetPixelX, targetPixelY, speed, minDist);
+      return;
+    }
+    const ts = this.tileSize;
+    const goalTileX = Math.floor((targetPixelX + ts * 0.5) / ts);
+    const goalTileY = Math.floor((targetPixelY + ts * 0.5) / ts);
+
+    // Refresh path on a timer
+    if (this.astarTimer <= 0) {
+      const myTileX = Math.floor((this.x + ts * 0.5) / ts);
+      const myTileY = Math.floor((this.y + ts * 0.5) / ts);
+      this.astarPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
+      // Drop the first waypoint — that's the tile we're already on
+      if (this.astarPath.length > 0) this.astarPath.shift();
+      this.astarTimer = refreshInterval;
+    } else {
+      this.astarTimer--;
+    }
+
+    // Pop waypoints that are already close enough (within 0.55 tiles)
+    while (this.astarPath.length > 0) {
+      const wp = this.astarPath[0];
+      if (Math.hypot(wp.x * ts - this.x, wp.y * ts - this.y) < ts * 0.55) {
+        this.astarPath.shift();
+      } else {
+        break;
+      }
+    }
+
+    if (this.astarPath.length > 0) {
+      // Navigate toward the next waypoint; stop distance 0 for intermediate hops
+      const wp = this.astarPath[0];
+      this.followTargetCollide(wp.x * ts, wp.y * ts, speed, 0);
+    } else {
+      // End of path — close in with the real stop distance
+      this.followTargetCollide(targetPixelX, targetPixelY, speed, minDist);
+    }
   }
 
   /** True if there is a clear line of sight from this mob's centre to the target's centre. */

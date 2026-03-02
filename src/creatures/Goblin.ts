@@ -73,6 +73,7 @@ export class Goblin extends Mob {
       this.isAggro = false;
       this.firstHitPending = true;
       this.attackWindupTimer = 0;
+      this.clearAStarPath();
       this.doWander();
       return;
     }
@@ -84,7 +85,7 @@ export class Goblin extends Mob {
 
     // Chase toward last known position (= current position when LOS is clear)
     if (nearestDist > this.attackRangePx) {
-      this.followTargetCollide(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.attackRangePx * 0.8);
+      this.followTargetAStar(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.attackRangePx * 0.8);
     } else {
       this.isMoving = false;
     }
@@ -97,8 +98,9 @@ export class Goblin extends Mob {
     }
     if (this.attackWindupTimer > 0) this.attackWindupTimer--;
 
-    // Attack on cooldown (windup must have elapsed for the first hit, wall must be clear)
-    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0 && this.hasLOS(nearest)) {
+    // Attack on cooldown (windup must have elapsed for the first hit).
+    // Same-tile contact always lands regardless of LOS — can't dodge point-blank.
+    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0 && (this.hasLOS(nearest) || this.onSameTile(nearest))) {
       nearest.takeDamage(this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
