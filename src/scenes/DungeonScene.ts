@@ -17,7 +17,10 @@ import { spawnForLevel } from '../levels/spawner';
 import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
-import { drawMordecaiSprite, drawSpeechBubble } from '../sprites/mordecaiSprite';
+import {
+  drawMordecaiSprite,
+  drawSpeechBubble,
+} from '../sprites/mordecaiSprite';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { GearPanel } from '../ui/GearPanel';
 import type { LootDrop } from '../creatures/Mob';
@@ -63,12 +66,15 @@ export class DungeonScene extends Scene {
 
   // ── Protective Shell Spell ────────────────────────────────────────────────
   private activeShell: {
-    x: number; y: number; radiusPx: number;
-    framesRemaining: number; totalFrames: number;
+    x: number;
+    y: number;
+    radiusPx: number;
+    framesRemaining: number;
+    totalFrames: number;
   } | null = null;
   private shellCooldown = 0;
-  private readonly SHELL_COOLDOWN = 7200;  // 2 min @ 60 fps
-  private readonly SHELL_DURATION = 1200;  // 20 s  @ 60 fps
+  private readonly SHELL_COOLDOWN = 7200; // 2 min @ 60 fps
+  private readonly SHELL_DURATION = 1200; // 20 s  @ 60 fps
 
   // ── Companion auto-potion cooldowns (frames) ───────────────────────────────
   private humanAutoPotionCooldown = 0;
@@ -279,15 +285,26 @@ export class DungeonScene extends Scene {
     const active = this.active();
 
     // Gear panel toggle / slot click (unequip)
-    const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
+    const gearResult = this.gearPanel.handleClick(
+      mx,
+      my,
+      canvas,
+      active.inventory,
+    );
     if (gearResult) {
-      if (gearResult.unequippedItem) active.removeItemBonus(gearResult.unequippedItem);
+      if (gearResult.unequippedItem)
+        active.removeItemBonus(gearResult.unequippedItem);
       return;
     }
 
     // Equip on click: click armor item in inventory while gear panel is open
     if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
-      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, canvas, active.inventory);
+      const slotIdx = this.inventoryPanel.getClickedInventorySlot(
+        mx,
+        my,
+        canvas,
+        active.inventory,
+      );
       if (slotIdx !== null) {
         const item = active.inventory.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
@@ -315,17 +332,32 @@ export class DungeonScene extends Scene {
 
   handleMouseDown(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.inventoryPanel.handleMouseDown(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
   }
 
   handleMouseMove(mx: number, my: number): void {
     this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.gearPanel.handleMouseMove(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
   }
 
   handleMouseUp(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.inventoryPanel.handleMouseUp(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
   }
 
   // ── Main update / render ────────────────────────────────────────────────────
@@ -376,7 +408,13 @@ export class DungeonScene extends Scene {
         current: this.shellCooldown,
         max: this.SHELL_COOLDOWN,
       });
-      this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
+      this.inventoryPanel.render(
+        ctx,
+        canvas,
+        active.inventory,
+        name,
+        active.coins,
+      );
       this.gearPanel.render(ctx, canvas, active.inventory, name);
     }
 
@@ -547,14 +585,20 @@ export class DungeonScene extends Scene {
     // which matters a lot on large maps with many spawned enemies.
     const playerTargets = [this.human, this.cat];
     const AI_RADIUS_SQ = (TILE_SIZE * 22) ** 2;
-    const hx = this.human.x, hy = this.human.y;
-    const cx = this.cat.x, cy = this.cat.y;
+    const hx = this.human.x,
+      hy = this.human.y;
+    const cx = this.cat.x,
+      cy = this.cat.y;
     for (const mob of this.mobs) {
       if (!mob.isAlive) continue;
-      const dx1 = mob.x - hx, dy1 = mob.y - hy;
-      const dx2 = mob.x - cx, dy2 = mob.y - cy;
-      if (dx1 * dx1 + dy1 * dy1 <= AI_RADIUS_SQ ||
-          dx2 * dx2 + dy2 * dy2 <= AI_RADIUS_SQ) {
+      const dx1 = mob.x - hx,
+        dy1 = mob.y - hy;
+      const dx2 = mob.x - cx,
+        dy2 = mob.y - cy;
+      if (
+        dx1 * dx1 + dy1 * dy1 <= AI_RADIUS_SQ ||
+        dx2 * dx2 + dy2 * dy2 <= AI_RADIUS_SQ
+      ) {
         mob.updateAI(playerTargets);
         mob.tickTimers();
       }
@@ -597,7 +641,9 @@ export class DungeonScene extends Scene {
         }
       }
     }
-    this.pendingLoots = this.pendingLoots.filter((l) => !l.collected && l.ttl > 0);
+    this.pendingLoots = this.pendingLoots.filter(
+      (l) => !l.collected && l.ttl > 0,
+    );
 
     // ── Speech bubble pulse ───────────────────────────────────────────────
     this.speechBubblePulse++;
@@ -634,9 +680,10 @@ export class DungeonScene extends Scene {
 
   private evictMobsFromSafeRoom(): void {
     if (!this.safeRoomBounds) return;
-    const fallback = this.gameMap.mobSpawnPoints.length > 0
-      ? this.gameMap.mobSpawnPoints
-      : this.gameMap.hallwaySpawnPoints;
+    const fallback =
+      this.gameMap.mobSpawnPoints.length > 0
+        ? this.gameMap.mobSpawnPoints
+        : this.gameMap.hallwaySpawnPoints;
     if (fallback.length === 0) return;
 
     for (const mob of this.mobs) {
@@ -823,7 +870,11 @@ export class DungeonScene extends Scene {
       ctx.fillStyle = '#f0e8d0';
       ctx.font = '11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('[Space] Sleep (restores HP)', bsx + TILE_SIZE * 0.5, bsy - 18);
+      ctx.fillText(
+        '[Space] Sleep (restores HP)',
+        bsx + TILE_SIZE * 0.5,
+        bsy - 18,
+      );
       ctx.textAlign = 'left';
       ctx.restore();
     }
@@ -991,8 +1042,10 @@ export class DungeonScene extends Scene {
       if (this.cat.autoTarget) {
         const tc = this.cat.autoTarget;
         const hasLOS = this.gameMap.hasLineOfSight(
-          this.cat.x + TILE_SIZE * 0.5, this.cat.y + TILE_SIZE * 0.5,
-          tc.x + TILE_SIZE * 0.5, tc.y + TILE_SIZE * 0.5,
+          this.cat.x + TILE_SIZE * 0.5,
+          this.cat.y + TILE_SIZE * 0.5,
+          tc.x + TILE_SIZE * 0.5,
+          tc.y + TILE_SIZE * 0.5,
         );
         if (hasLOS) this.cat.autoFireTick();
       }
@@ -1017,8 +1070,10 @@ export class DungeonScene extends Scene {
       if (this.human.autoTarget) {
         const th = this.human.autoTarget;
         const hasLOS = this.gameMap.hasLineOfSight(
-          this.human.x + TILE_SIZE * 0.5, this.human.y + TILE_SIZE * 0.5,
-          th.x + TILE_SIZE * 0.5, th.y + TILE_SIZE * 0.5,
+          this.human.x + TILE_SIZE * 0.5,
+          this.human.y + TILE_SIZE * 0.5,
+          th.x + TILE_SIZE * 0.5,
+          th.y + TILE_SIZE * 0.5,
         );
         if (hasLOS) this.human.autoFightTick();
       }
@@ -1041,7 +1096,15 @@ export class DungeonScene extends Scene {
       if (dist > range) continue;
       const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
       if (dot < 0.25) continue;
-      if (!this.gameMap.hasLineOfSight(px, py, mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5)) continue;
+      if (
+        !this.gameMap.hasLineOfSight(
+          px,
+          py,
+          mob.x + TILE_SIZE * 0.5,
+          mob.y + TILE_SIZE * 0.5,
+        )
+      )
+        continue;
       if (dist < bestDist) {
         bestDist = dist;
         bestMob = mob;
@@ -1196,7 +1259,13 @@ export class DungeonScene extends Scene {
   }
 
   private companionFollow(
-    entity: { x: number; y: number; isMoving: boolean; facingX: number; facingY: number },
+    entity: {
+      x: number;
+      y: number;
+      isMoving: boolean;
+      facingX: number;
+      facingY: number;
+    },
     targetX: number,
     targetY: number,
     speed: number,
@@ -1286,7 +1355,11 @@ export class DungeonScene extends Scene {
 
   // ── Loot helpers ────────────────────────────────────────────────────────────
 
-  private renderPendingLoots(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderPendingLoots(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
     const active = this.active();
     for (const loot of this.pendingLoots) {
       const sx = loot.x - camX;
@@ -1295,7 +1368,8 @@ export class DungeonScene extends Scene {
       // Determine label text
       const parts: string[] = [];
       if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
+      if (loot.loot.items.length > 0)
+        parts.push(`+${loot.loot.items.length} item`);
       const label = parts.join(' ');
 
       // Fade out as TTL drops below 120 frames
@@ -1308,7 +1382,8 @@ export class DungeonScene extends Scene {
       const bh = 20;
       const bx = sx - bw / 2;
       const by = sy - 26;
-      ctx.fillStyle = loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
+      ctx.fillStyle =
+        loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
       ctx.fillRect(bx, by, bw, bh);
       ctx.strokeStyle = loot.owner === active ? '#fbbf24' : '#475569';
       ctx.lineWidth = 1;
@@ -1328,7 +1403,10 @@ export class DungeonScene extends Scene {
 
       // "Click to loot" hint when active player is the owner and nearby
       if (loot.owner === active) {
-        const dist = Math.hypot(active.x + TILE_SIZE * 0.5 - loot.x, active.y + TILE_SIZE * 0.5 - loot.y);
+        const dist = Math.hypot(
+          active.x + TILE_SIZE * 0.5 - loot.x,
+          active.y + TILE_SIZE * 0.5 - loot.y,
+        );
         if (dist <= TILE_SIZE * 3) {
           ctx.fillStyle = '#94a3b8';
           ctx.font = '8px monospace';
@@ -1350,14 +1428,18 @@ export class DungeonScene extends Scene {
     const active = this.active();
     for (const loot of this.pendingLoots) {
       if (loot.owner !== active) continue;
-      const dist = Math.hypot(active.x + TILE_SIZE * 0.5 - loot.x, active.y + TILE_SIZE * 0.5 - loot.y);
+      const dist = Math.hypot(
+        active.x + TILE_SIZE * 0.5 - loot.x,
+        active.y + TILE_SIZE * 0.5 - loot.y,
+      );
       if (dist > TILE_SIZE * 3) continue;
 
       const sx = loot.x - camX;
       const sy = loot.y - camY;
       const parts: string[] = [];
       if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
+      if (loot.loot.items.length > 0)
+        parts.push(`+${loot.loot.items.length} item`);
       const label = parts.join(' ');
       const bw = Math.max(54, label.length * 7 + 16);
       const bh = 20;
@@ -1415,7 +1497,11 @@ export class DungeonScene extends Scene {
     }
   }
 
-  private renderShell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderShell(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
     if (!this.activeShell) return;
     const { x, y, radiusPx, framesRemaining, totalFrames } = this.activeShell;
     const sx = x - camX;

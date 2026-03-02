@@ -277,7 +277,8 @@ export abstract class Mob extends Player {
         this.coinDropMin +
         Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
       const items: LootDrop['items'] = [];
-      if (Math.random() < 0.25) items.push({ id: 'health_potion', quantity: 1 });
+      if (Math.random() < 0.25)
+        items.push({ id: 'health_potion', quantity: 1 });
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
       }

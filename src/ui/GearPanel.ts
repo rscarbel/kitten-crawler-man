@@ -68,7 +68,10 @@ export class GearPanel {
     }
   }
 
-  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderToggleButton(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
     const btn = this.toggleBtnRect(canvas);
     ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
@@ -133,7 +136,11 @@ export class GearPanel {
       // Section label
       ctx.fillStyle = '#64748b';
       ctx.font = 'bold 9px monospace';
-      ctx.fillText(slotName.toUpperCase(), p.x + PANEL_PAD, currentY + SLOT_SIZE * 0.5 + 3);
+      ctx.fillText(
+        slotName.toUpperCase(),
+        p.x + PANEL_PAD,
+        currentY + SLOT_SIZE * 0.5 + 3,
+      );
 
       // Find max row used
       let maxY = currentY;
@@ -165,7 +172,9 @@ export class GearPanel {
   ): SlotInfo[] {
     const infos: SlotInfo[] = [];
     const startX = panelX + PANEL_PAD + SECTION_LABEL_W;
-    const maxPerRow = Math.floor((340 - PANEL_PAD * 2 - SECTION_LABEL_W) / (SLOT_SIZE + SLOT_GAP));
+    const maxPerRow = Math.floor(
+      (340 - PANEL_PAD * 2 - SECTION_LABEL_W) / (SLOT_SIZE + SLOT_GAP),
+    );
 
     for (let i = 0; i < subSlots.length; i++) {
       const col = i % maxPerRow;
@@ -304,7 +313,12 @@ export class GearPanel {
 
   // ── Interaction ───────────────────────────────────────────────────────────
 
-  handleMouseMove(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseMove(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): void {
     if (!this.isOpen) return;
     this.tooltipMx = mx;
     this.tooltipMy = my;
@@ -319,7 +333,12 @@ export class GearPanel {
     inventory: Inventory,
   ): GearClickResult | null {
     const btn = this.toggleBtnRect(canvas);
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+    if (
+      mx >= btn.x &&
+      mx <= btn.x + btn.w &&
+      my >= btn.y &&
+      my <= btn.y + btn.h
+    ) {
       this.toggle();
       return { consumed: true };
     }
@@ -365,7 +384,12 @@ export class GearPanel {
       const infos = this.buildSlotInfos(slotName, subSlots, p.x, currentY);
       let maxY = currentY;
       for (const si of infos) {
-        if (mx >= si.x && mx <= si.x + SLOT_SIZE && my >= si.y && my <= si.y + SLOT_SIZE) {
+        if (
+          mx >= si.x &&
+          mx <= si.x + SLOT_SIZE &&
+          my >= si.y &&
+          my <= si.y + SLOT_SIZE
+        ) {
           return si.key;
         }
         maxY = Math.max(maxY, si.y + SLOT_SIZE);

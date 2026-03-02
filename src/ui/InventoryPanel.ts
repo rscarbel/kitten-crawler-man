@@ -1,4 +1,9 @@
-import { Inventory, InventoryItem, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
+import {
+  Inventory,
+  InventoryItem,
+  HOTBAR_COUNT,
+  SLOTS_PER_PAGE,
+} from '../core/Inventory';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const SLOT_SIZE = 54;
@@ -74,7 +79,12 @@ export class InventoryPanel {
     const innerH = ROWS_PER_PAGE * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
     const w = innerW + PANEL_PAD * 2;
     const h = HEADER_H + PANEL_PAD + innerH + PANEL_PAD + NAV_H;
-    return { x: Math.floor((canvas.width - w) / 2), y: Math.floor((canvas.height - h) / 2), w, h };
+    return {
+      x: Math.floor((canvas.width - w) / 2),
+      y: Math.floor((canvas.height - h) / 2),
+      w,
+      h,
+    };
   }
 
   private hotbarRect(canvas: HTMLCanvasElement) {
@@ -101,7 +111,12 @@ export class InventoryPanel {
 
   private hotbarSlotRect(i: number, canvas: HTMLCanvasElement) {
     const hb = this.hotbarRect(canvas);
-    return { x: hb.x + i * (HOTBAR_SLOT_SIZE + HOTBAR_GAP), y: hb.y, w: HOTBAR_SLOT_SIZE, h: HOTBAR_SLOT_SIZE };
+    return {
+      x: hb.x + i * (HOTBAR_SLOT_SIZE + HOTBAR_GAP),
+      y: hb.y,
+      w: HOTBAR_SLOT_SIZE,
+      h: HOTBAR_SLOT_SIZE,
+    };
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -121,11 +136,21 @@ export class InventoryPanel {
     // Dragged item floats on top of everything
     if (this.drag) {
       const s = SLOT_SIZE;
-      this.renderItemIcon(ctx, this.drag.item, this.drag.mx - s / 2, this.drag.my - s / 2, s, 0.75);
+      this.renderItemIcon(
+        ctx,
+        this.drag.item,
+        this.drag.mx - s / 2,
+        this.drag.my - s / 2,
+        s,
+        0.75,
+      );
     }
   }
 
-  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderToggleButton(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
     const btn = this.toggleBtnRect(canvas);
     ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
@@ -139,7 +164,11 @@ export class InventoryPanel {
     ctx.textAlign = 'left';
   }
 
-  private renderHotbar(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  private renderHotbar(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): void {
     const hb = this.hotbarRect(canvas);
     // Background strip
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
@@ -209,10 +238,21 @@ export class InventoryPanel {
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      const item = slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
-      const isDragged = this.drag?.source === 'inv' && this.drag.idx === slotIdx;
+      const item =
+        slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
+      const isDragged =
+        this.drag?.source === 'inv' && this.drag.idx === slotIdx;
       const r = this.invSlotRect(i, p);
-      this.renderSlot(ctx, r.x, r.y, r.w, item, isDragged, false, inventory.isSlotEquipped(slotIdx));
+      this.renderSlot(
+        ctx,
+        r.x,
+        r.y,
+        r.w,
+        item,
+        isDragged,
+        false,
+        inventory.isSlotEquipped(slotIdx),
+      );
     }
 
     // Pagination bar
@@ -274,7 +314,11 @@ export class InventoryPanel {
         ctx.fillStyle = '#e2e8f0';
         ctx.font = `bold ${Math.floor(size * 0.28)}px monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText(secs > 99 ? '…' : `${secs}`, x + size / 2, y + size / 2 + 4);
+        ctx.fillText(
+          secs > 99 ? '…' : `${secs}`,
+          x + size / 2,
+          y + size / 2 + 4,
+        );
         ctx.textAlign = 'left';
       }
     }
@@ -316,7 +360,15 @@ export class InventoryPanel {
       // Shine highlight
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.ellipse(cx - r * 0.3, cy - r * 0.3, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx - r * 0.3,
+        cy - r * 0.3,
+        r * 0.22,
+        r * 0.13,
+        -0.7,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
 
@@ -375,10 +427,20 @@ export class InventoryPanel {
    * close button or pagination). DungeonScene should skip other click handling
    * when this returns true.
    */
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): boolean {
+  handleClick(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): boolean {
     // Toggle button
     const btn = this.toggleBtnRect(canvas);
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+    if (
+      mx >= btn.x &&
+      mx <= btn.x + btn.w &&
+      my >= btn.y &&
+      my <= btn.y + btn.h
+    ) {
       this.toggle();
       return true;
     }
@@ -419,7 +481,12 @@ export class InventoryPanel {
     return false;
   }
 
-  handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseDown(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): void {
     // Hotbar slots
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
@@ -457,7 +524,12 @@ export class InventoryPanel {
     }
   }
 
-  handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseUp(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): void {
     const src = this.drag;
     if (!src) return;
     this.drag = null;
@@ -497,6 +569,10 @@ export class InventoryPanel {
   }
 }
 
-function inRect(mx: number, my: number, r: { x: number; y: number; w: number; h: number }): boolean {
+function inRect(
+  mx: number,
+  my: number,
+  r: { x: number; y: number; w: number; h: number },
+): boolean {
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }

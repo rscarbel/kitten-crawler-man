@@ -13,7 +13,11 @@ export interface InventoryItem {
   equipSlot?: EquipSlot;
   equipSubSlot?: string;
   description?: string;
-  statBonus?: { constitution?: number; strength?: number; intelligence?: number };
+  statBonus?: {
+    constitution?: number;
+    strength?: number;
+    intelligence?: number;
+  };
   /** References an active ability this item grants when equipped. */
   abilityId?: string;
 }
@@ -37,12 +41,12 @@ const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     statBonus: { constitution: 2 },
     abilityId: 'protective_shell',
     description:
-      "Have you ever read an Incredible Hulk comic and thought to yourself, " +
-      "everything rips off of his body except his pants? No way. Well, spoiler alert. " +
+      'Have you ever read an Incredible Hulk comic and thought to yourself, ' +
+      'everything rips off of his body except his pants? No way. Well, spoiler alert. ' +
       "You're not wrong. Size-altering and were-creatures, such as the BigBoi are " +
-      "required to wear enchanted, self-sizing items lest they wish to turn the dungeon " +
-      "into a nudist colony when they transform. That means everything they wear requires " +
-      "an enchantment. Everything, including their naughty little undies.",
+      'required to wear enchanted, self-sizing items lest they wish to turn the dungeon ' +
+      'into a nudist colony when they transform. That means everything they wear requires ' +
+      'an enchantment. Everything, including their naughty little undies.',
   },
 };
 
@@ -61,7 +65,9 @@ export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
 
 export class Inventory {
   readonly slots: (InventoryItem | null)[] = new Array(SLOT_COUNT).fill(null);
-  readonly hotbar: (InventoryItem | null)[] = new Array(HOTBAR_COUNT).fill(null);
+  readonly hotbar: (InventoryItem | null)[] = new Array(HOTBAR_COUNT).fill(
+    null,
+  );
 
   /**
    * Maps "Slot:SubSlot" key → inventory slot index.
@@ -148,7 +154,8 @@ export class Inventory {
    */
   equip(slotIdx: number): InventoryItem | null {
     const item = this.slots[slotIdx];
-    if (!item || item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot) return null;
+    if (!item || item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot)
+      return null;
     const key = `${item.equipSlot}:${item.equipSubSlot}`;
     const prev = this.getEquippedItem(key);
     this.equipped.set(key, slotIdx);
@@ -193,8 +200,14 @@ export class Inventory {
   }
 
   /** Sum all stat bonuses from currently equipped items. */
-  getEquippedStatBonus(): { constitution: number; strength: number; intelligence: number } {
-    let constitution = 0, strength = 0, intelligence = 0;
+  getEquippedStatBonus(): {
+    constitution: number;
+    strength: number;
+    intelligence: number;
+  } {
+    let constitution = 0,
+      strength = 0,
+      intelligence = 0;
     for (const [, idx] of this.equipped) {
       const item = this.slots[idx];
       if (item?.statBonus) {
