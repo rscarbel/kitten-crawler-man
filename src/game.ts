@@ -44,11 +44,6 @@ function spawnMob(tileX: number, tileY: number): Mob {
   return new Goblin(tileX, tileY, TILE_SIZE, v.weapon, v.skin, v.eye);
 }
 
-/** Tile coordinates where mobs can spawn. */
-const MOB_SPAWN_POINTS: [number, number][] = [
-  [15,  8], [20, 15], [12, 22], [28, 10],
-  [32, 18], [ 9, 28], [24, 32], [38, 12],
-];
 
 class GameStage {
   private canvas: HTMLCanvasElement;
@@ -59,8 +54,8 @@ class GameStage {
   private mobs: Mob[];
   private keys = new Set<string>();
   /** Absolute world-pixel position the cat idles at during wander. */
-  private catWanderTargetX = 6 * TILE_SIZE;
-  private catWanderTargetY = 5 * TILE_SIZE;
+  private catWanderTargetX = 0;
+  private catWanderTargetY = 0;
   private catWanderTimer = 0;
   /** Angle used by the cat's kiting orbit. Increments every frame during kite mode. */
   private catKiteAngle = 0;
@@ -74,10 +69,13 @@ class GameStage {
     this.ctx = this.canvas.getContext('2d')!;
 
     this.gameMap = new GameMap(100, TILE_SIZE);
-    this.human = new HumanPlayer(5, 5, TILE_SIZE);
-    this.cat = new CatPlayer(6, 5, TILE_SIZE);
+    const { x: sx, y: sy } = this.gameMap.startTile;
+    this.human = new HumanPlayer(sx, sy, TILE_SIZE);
+    this.cat = new CatPlayer(sx + 1, sy, TILE_SIZE);
+    this.catWanderTargetX = (sx + 1) * TILE_SIZE;
+    this.catWanderTargetY = sy * TILE_SIZE;
     this.human.isActive = true;
-    this.mobs = MOB_SPAWN_POINTS.map(([tx, ty]) => spawnMob(tx, ty));
+    this.mobs = this.gameMap.mobSpawnPoints.map(({ x, y }) => spawnMob(x, y));
 
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.key);
