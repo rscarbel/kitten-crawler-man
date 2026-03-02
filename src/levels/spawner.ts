@@ -84,16 +84,15 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     mobs.push(createMob(rule.type, x, y, map));
   }
 
-  // Spawn boss in the boss room (rooms[2])
-  if (def.bossRoom && map.bossRoomCentre) {
-    mobs.push(
-      createMob(
-        def.bossRoom.type,
-        map.bossRoomCentre.x,
-        map.bossRoomCentre.y,
-        map,
-      ),
-    );
+  // Spawn one boss per boss room
+  for (let i = 0; i < (def.bossRooms?.length ?? 0); i++) {
+    const bossEntry = def.bossRooms![i];
+    const brData = map.bossRooms[i];
+    if (brData) {
+      mobs.push(
+        createMob(bossEntry.type, brData.centre.x, brData.centre.y, map),
+      );
+    }
   }
 
   return mobs;

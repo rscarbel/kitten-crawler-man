@@ -13,5 +13,5 @@ export const level1: LevelDef = {
     { type: 'llama', chance: 0.15, minCount: 1, maxCount: 2 },
   ],
   hallwayMobs: [{ type: 'rat', chance: 1.0 }],
-  bossRoom: { type: 'the_hoarder' },
+  bossRooms: [{ type: 'the_hoarder' }],
 };

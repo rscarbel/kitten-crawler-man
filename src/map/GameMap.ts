@@ -48,21 +48,22 @@ export class GameMap {
   safeRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
   /** Tile-space centre of the safe room, or null if none. */
   safeRoomCentre: { x: number; y: number } | null = null;
-  /** Bounds (in tile coords) of the boss room, or null if not enough rooms generated. */
-  bossRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
-  /** Tile-space centre of the boss room, or null if none. */
-  bossRoomCentre: { x: number; y: number } | null = null;
+  /** All boss rooms generated on this map (bounds + centre in tile coords). */
+  bossRooms: Array<{
+    bounds: { x: number; y: number; w: number; h: number };
+    centre: { x: number; y: number };
+  }> = [];
 
-  constructor(mapSize = 100, tileHeight = 10) {
+  constructor(mapSize = 100, tileHeight = 10, numBossRooms = 1) {
     this.tileHeight = tileHeight;
-    this.structure = this.generate(mapSize);
+    this.structure = this.generate(mapSize, numBossRooms);
   }
 
-  private generate(size: number): TileContent[][] {
-    return this.generateDungeon(size);
+  private generate(size: number, numBossRooms: number): TileContent[][] {
+    return this.generateDungeon(size, numBossRooms);
   }
 
-  private generateDungeon(size: number): TileContent[][] {
+  private generateDungeon(size: number, numBossRooms: number): TileContent[][] {
     const BORDER = 5;
     const DUNGEON_FLOORS = [
       FloorTypeValue.concrete,
@@ -149,15 +150,24 @@ export class GameMap {
       MAX_H = 14;
     const GAP = 3; // minimum tile gap between room edges
 
+    // rooms[0]=start, rooms[1]=safe, rooms[2..2+numBossRooms-1]=boss rooms
+    const bossRoomEnd = 2 + numBossRooms;
+
     for (let attempt = 0; attempt < 80 && rooms.length < 15; attempt++) {
-      // rooms[2] = Boss Room — always generate it extra large
-      const isBossRoom = rooms.length === 2;
-      const w = isBossRoom ? 22 : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
-      const h = isBossRoom ? 18 : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
+      const isBossRoom = rooms.length >= 2 && rooms.length < bossRoomEnd;
+      const w = isBossRoom
+        ? 22
+        : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
+      const h = isBossRoom
+        ? 18
+        : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
       const x =
         BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
       const y =
         BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
+
+      const cx = Math.floor(x + w / 2);
+      const cy = Math.floor(y + h / 2);
 
       const overlaps = rooms.some(
         (r) =>
@@ -167,12 +177,22 @@ export class GameMap {
           y + h + GAP > r.y,
       );
 
-      if (!overlaps) {
-        // rooms[1] = Safe Room, rooms[2] = Boss Room, rest = normal dungeon
+      // Boss rooms must be at least 25 tiles apart from each other
+      const tooCloseToBoss =
+        isBossRoom &&
+        rooms.slice(2, bossRoomEnd).some((r) => {
+          const rc = {
+            x: Math.floor(r.x + r.w / 2),
+            y: Math.floor(r.y + r.h / 2),
+          };
+          return Math.hypot(cx - rc.x, cy - rc.y) < 25;
+        });
+
+      if (!overlaps && !tooCloseToBoss) {
         const floor =
           rooms.length === 1
             ? SAFE_ROOM_FLOOR
-            : rooms.length === 2
+            : isBossRoom
               ? HORDER_BOSS_ROOM_FLOOR
               : DUNGEON_FLOORS[
                   Math.floor(Math.random() * DUNGEON_FLOORS.length)
@@ -213,18 +233,20 @@ export class GameMap {
       };
     }
 
-    // rooms[2] is the Boss Room — record its bounds and exclude from regular mob spawns
-    if (rooms.length > 2) {
-      const br = rooms[2];
-      this.bossRoomBounds = { x: br.x, y: br.y, w: br.w, h: br.h };
-      this.bossRoomCentre = {
-        x: Math.floor(br.x + br.w / 2),
-        y: Math.floor(br.y + br.h / 2),
-      };
+    // Record all boss rooms (rooms[2..2+numBossRooms-1])
+    for (let i = 2; i < bossRoomEnd && i < rooms.length; i++) {
+      const br = rooms[i];
+      this.bossRooms.push({
+        bounds: { x: br.x, y: br.y, w: br.w, h: br.h },
+        centre: {
+          x: Math.floor(br.x + br.w / 2),
+          y: Math.floor(br.y + br.h / 2),
+        },
+      });
     }
 
-    // Mob spawn points start at rooms[3] (skip start, safe, and boss rooms)
-    this.mobSpawnPoints = rooms.slice(3).map((r) => ({
+    // Mob spawn points skip start, safe, and all boss rooms
+    this.mobSpawnPoints = rooms.slice(bossRoomEnd).map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));

@@ -25,8 +25,8 @@ export interface LevelDef {
   roomMobs: MobSpawnRule[];
   /** Mobs that can spawn at hallway points. */
   hallwayMobs: MobSpawnRule[];
-  /** Boss room configuration — spawns a single boss in rooms[2]. */
-  bossRoom?: { type: string };
+  /** Boss room configurations — one boss room per entry, placed in rooms[2+]. */
+  bossRooms?: Array<{ type: string }>;
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
 }

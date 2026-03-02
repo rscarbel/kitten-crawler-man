@@ -1,4 +1,7 @@
-export type ItemId = 'health_potion' | 'enchanted_bigboi_boxers';
+export type ItemId =
+  | 'health_potion'
+  | 'enchanted_bigboi_boxers'
+  | 'scroll_of_confusing_fog';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -23,6 +26,15 @@ export interface InventoryItem {
 }
 
 const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
+  scroll_of_confusing_fog: {
+    id: 'scroll_of_confusing_fog',
+    name: 'Scroll of Confusing Fog',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Lasts INT × 5 seconds.',
+  },
   health_potion: {
     id: 'health_potion',
     name: 'Health Potion',
@@ -90,6 +102,27 @@ export class Inventory {
     const empty = this.slots.findIndex((s) => s === null);
     if (empty !== -1) {
       this.slots[empty] = { ...ITEM_DEF[id], quantity };
+    }
+  }
+
+  /**
+   * Remove up to `qty` of the given item across hotbar and slots.
+   * Removes from hotbar first, then inventory slots.
+   */
+  removeItems(id: ItemId, qty: number): void {
+    let remaining = qty;
+    for (const arr of [this.hotbar, this.slots] as (InventoryItem | null)[][]) {
+      for (let i = 0; i < arr.length && remaining > 0; i++) {
+        const s = arr[i];
+        if (!s || s.id !== id) continue;
+        if (s.quantity <= remaining) {
+          remaining -= s.quantity;
+          arr[i] = null;
+        } else {
+          arr[i] = { ...s, quantity: s.quantity - remaining };
+          remaining = 0;
+        }
+      }
     }
   }
 

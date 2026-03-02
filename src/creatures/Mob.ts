@@ -58,6 +58,11 @@ export abstract class Mob extends Player {
 
   protected map: GameMap | null = null;
 
+  /** True for boss-tier mobs — used by DungeonScene to identify which mob belongs to which boss room. */
+  isBoss = false;
+  /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
+  isConfused = false;
+
   constructor(
     tileX: number,
     tileY: number,
@@ -279,6 +284,8 @@ export abstract class Mob extends Player {
       const items: LootDrop['items'] = [];
       if (Math.random() < 0.25)
         items.push({ id: 'health_potion', quantity: 1 });
+      if (Math.random() < 0.05)
+        items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
       }
@@ -295,7 +302,7 @@ export abstract class Mob extends Player {
    * Idle wandering: picks a random direction every ~2 s, slowly moves within
    * a 4-tile radius of the spawn point.
    */
-  protected doWander() {
+  doWander() {
     if (this.wanderTimer > 0) {
       this.wanderTimer--;
     } else {

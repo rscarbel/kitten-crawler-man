@@ -33,6 +33,7 @@ export class TheHoarder extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HOARDER_HP, HOARDER_SPEED);
+    this.isBoss = true;
   }
 
   updateAI(targets: Player[]): void {

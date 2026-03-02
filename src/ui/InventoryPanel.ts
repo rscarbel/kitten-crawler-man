@@ -1,6 +1,7 @@
 import {
   Inventory,
   InventoryItem,
+  ItemId,
   HOTBAR_COUNT,
   SLOTS_PER_PAGE,
 } from '../core/Inventory';
@@ -50,6 +51,15 @@ export class InventoryPanel {
   pendingEquipSlot: number | null = null;
   /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
   pendingInfoItem: InventoryItem | null = null;
+  /** Set when the user confirms a drop; DungeonScene reads and clears this. */
+  pendingDropItem: { id: ItemId; quantity: number } | null = null;
+  /** Active drop-quantity dialog (for stackable items with qty > 1). */
+  private dropDialog: {
+    slotIdx: number;
+    id: ItemId;
+    maxQty: number;
+    selectedQty: number;
+  } | null = null;
 
   toggle(): void {
     this.isOpen = !this.isOpen;
@@ -168,6 +178,9 @@ export class InventoryPanel {
     if (this.pendingInfoItem) {
       this.renderInfoPopup(ctx, canvas, this.pendingInfoItem);
     }
+    if (this.dropDialog) {
+      this.renderDropDialog(ctx, canvas);
+    }
   }
 
   private renderContextMenu(
@@ -265,6 +278,81 @@ export class InventoryPanel {
     ctx.font = '9px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('[Click anywhere to close]', px + popW / 2, py + popH - 4);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  private renderDropDialog(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const dd = this.dropDialog!;
+    const dlgW = 200;
+    const dlgH = 110;
+    const dlgX = Math.floor((canvas.width - dlgW) / 2);
+    const dlgY = Math.floor((canvas.height - dlgH) / 2);
+
+    ctx.save();
+    // Background
+    ctx.fillStyle = 'rgba(8,10,20,0.97)';
+    ctx.fillRect(dlgX, dlgY, dlgW, dlgH);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(dlgX, dlgY, dlgW, dlgH);
+
+    // Title
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Drop how many?', dlgX + dlgW / 2, dlgY + 22);
+
+    // Cancel [X]
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(dlgX + dlgW - 22, dlgY + 6, 16, 16);
+    ctx.fillStyle = '#ef4444';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('x', dlgX + dlgW - 14, dlgY + 18);
+
+    // [-] button
+    const minusBtnX = dlgX + 20;
+    const minusBtnY = dlgY + 54;
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(minusBtnX, minusBtnY, 24, 24);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(minusBtnX, minusBtnY, 24, 24);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText('-', minusBtnX + 12, minusBtnY + 17);
+
+    // [+] button
+    const plusBtnX = dlgX + dlgW - 44;
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(plusBtnX, minusBtnY, 24, 24);
+    ctx.strokeStyle = '#475569';
+    ctx.strokeRect(plusBtnX, minusBtnY, 24, 24);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText('+', plusBtnX + 12, minusBtnY + 17);
+
+    // Quantity display
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(dd.selectedQty.toString(), dlgX + dlgW / 2, minusBtnY + 18);
+
+    // Max hint
+    ctx.fillStyle = '#64748b';
+    ctx.font = '9px monospace';
+    ctx.fillText(`/ ${dd.maxQty}`, dlgX + dlgW / 2 + 14, minusBtnY + 18);
+
+    // [Drop] confirm button
+    const confirmY = dlgY + dlgH - 28;
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillRect(dlgX + 20, confirmY, dlgW - 40, 22);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.strokeRect(dlgX + 20, confirmY, dlgW - 40, 22);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('Drop', dlgX + dlgW / 2, confirmY + 15);
+
     ctx.textAlign = 'left';
     ctx.restore();
   }
@@ -494,6 +582,45 @@ export class InventoryPanel {
       ctx.fill();
     }
 
+    if (item.id === 'scroll_of_confusing_fog') {
+      const cx = x + size * 0.5;
+      const cy = y + size * 0.55;
+      const sw = size * 0.52;
+      const sh = size * 0.42;
+      // Parchment body
+      ctx.fillStyle = '#d4b483';
+      ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
+      ctx.strokeStyle = '#8b6914';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+      // Rolled top and bottom edges
+      ctx.fillStyle = '#c49a40';
+      ctx.fillRect(cx - sw / 2 - 3, cy - sh / 2 - 2, sw + 6, 6);
+      ctx.fillRect(cx - sw / 2 - 3, cy + sh / 2 - 4, sw + 6, 6);
+      // Fog squiggle lines
+      ctx.strokeStyle = '#1e3a5f';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let row = 0; row < 3; row++) {
+        const ly = cy - sh / 2 + 8 + row * 9;
+        ctx.moveTo(cx - sw * 0.35, ly);
+        ctx.bezierCurveTo(
+          cx - sw * 0.1,
+          ly - 4,
+          cx + sw * 0.1,
+          ly + 4,
+          cx + sw * 0.35,
+          ly,
+        );
+      }
+      ctx.stroke();
+      // Green fog tint glow
+      ctx.fillStyle = 'rgba(60,200,140,0.28)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, sw * 0.45, sh * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     if (item.id === 'enchanted_bigboi_boxers') {
       const cx = x + size * 0.5;
       const cy = y + size * 0.56;
@@ -557,6 +684,76 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
     inventory: Inventory,
   ): boolean {
+    // Drop quantity dialog takes priority
+    if (this.dropDialog) {
+      const dd = this.dropDialog;
+      const dlgW = 200;
+      const dlgH = 110;
+      const dlgX = Math.floor((canvas.width - dlgW) / 2);
+      const dlgY = Math.floor((canvas.height - dlgH) / 2);
+
+      // Cancel [X] button (top-right)
+      if (
+        mx >= dlgX + dlgW - 22 &&
+        mx <= dlgX + dlgW - 6 &&
+        my >= dlgY + 6 &&
+        my <= dlgY + 22
+      ) {
+        this.dropDialog = null;
+        return true;
+      }
+      // [-] minus button
+      const minusBtnX = dlgX + 20;
+      const minusBtnY = dlgY + 54;
+      if (
+        mx >= minusBtnX &&
+        mx <= minusBtnX + 24 &&
+        my >= minusBtnY &&
+        my <= minusBtnY + 24
+      ) {
+        this.dropDialog = {
+          ...dd,
+          selectedQty: Math.max(1, dd.selectedQty - 1),
+        };
+        return true;
+      }
+      // [+] plus button
+      const plusBtnX = dlgX + dlgW - 44;
+      const plusBtnY = dlgY + 54;
+      if (
+        mx >= plusBtnX &&
+        mx <= plusBtnX + 24 &&
+        my >= plusBtnY &&
+        my <= plusBtnY + 24
+      ) {
+        this.dropDialog = {
+          ...dd,
+          selectedQty: Math.min(dd.maxQty, dd.selectedQty + 1),
+        };
+        return true;
+      }
+      // [Drop] confirm button
+      const confirmX = dlgX + 20;
+      const confirmY = dlgY + dlgH - 28;
+      if (
+        mx >= confirmX &&
+        mx <= confirmX + dlgW - 40 &&
+        my >= confirmY &&
+        my <= confirmY + 22
+      ) {
+        this.pendingDropItem = { id: dd.id, quantity: dd.selectedQty };
+        this.dropDialog = null;
+        return true;
+      }
+      // Any other click inside dialog swallows the event
+      if (mx >= dlgX && mx <= dlgX + dlgW && my >= dlgY && my <= dlgY + dlgH) {
+        return true;
+      }
+      // Click outside dialog closes it
+      this.dropDialog = null;
+      return true;
+    }
+
     // Close info popup on any click
     if (this.pendingInfoItem) {
       this.pendingInfoItem = null;
@@ -578,6 +775,20 @@ export class InventoryPanel {
           const action = options[idx];
           if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
+          } else if (action === 'Drop') {
+            const item = inventory.slots[cm.slotIdx];
+            if (item) {
+              if (item.stackable && item.quantity > 1) {
+                this.dropDialog = {
+                  slotIdx: cm.slotIdx,
+                  id: item.id,
+                  maxQty: item.quantity,
+                  selectedQty: 1,
+                };
+              } else {
+                this.pendingDropItem = { id: item.id, quantity: 1 };
+              }
+            }
           } else {
             // 'Name' or 'Description' — show info popup
             this.pendingInfoItem = cm.item;
@@ -723,8 +934,8 @@ export class InventoryPanel {
 
   private contextMenuOptions(item: InventoryItem): string[] {
     return item.type === 'armor'
-      ? ['Equip', 'Name', 'Description']
-      : ['Name', 'Description'];
+      ? ['Equip', 'Name', 'Description', 'Drop']
+      : ['Name', 'Description', 'Drop'];
   }
 
   handleMouseUp(
