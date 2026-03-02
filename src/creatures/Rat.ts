@@ -74,7 +74,7 @@ export class Rat extends Mob {
     }
     if (this.firstBiteWindup > 0) this.firstBiteWindup--;
 
-    if (inRange && this.attackCooldown === 0 && this.firstBiteWindup === 0) {
+    if (inRange && this.attackCooldown === 0 && this.firstBiteWindup === 0 && this.hasLOS(nearest)) {
       nearest.takeDamage(1);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;

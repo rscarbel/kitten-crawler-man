@@ -65,15 +65,18 @@ export function drawHumanAttack(
 ) {
   const t = 1 - attackTimer / ATTACK_FRAMES; // 0→1
   const ext = Math.sin(t * Math.PI); // peaks at t=0.5
-  const cx = sx + s * 0.5;
-  const cy = sy + s * 0.5;
+
+  // Arm socket origin — at shoulder height (s*0.42 from top) and offset
+  // toward the facing direction so the punch comes from the arm, not center mass.
+  const armOriginX = sx + s * 0.5 + facingX * s * 0.22;
+  const armOriginY = sy + s * 0.42 + facingY * s * 0.18;
 
   ctx.save();
 
   if (attackPhase === 'punch') {
-    const reach = s * 0.62;
-    const fistX = cx + facingX * reach * ext;
-    const fistY = cy + facingY * reach * ext;
+    const reach = s * 0.55;
+    const fistX = armOriginX + facingX * reach * ext;
+    const fistY = armOriginY + facingY * reach * ext;
 
     // Motion trail
     if (ext > 0.05) {
@@ -82,7 +85,7 @@ export function drawHumanAttack(
       ctx.lineWidth = s * 0.09;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(cx + facingX * s * 0.2, cy + facingY * s * 0.2);
+      ctx.moveTo(armOriginX, armOriginY);
       ctx.lineTo(fistX, fistY);
       ctx.stroke();
     }

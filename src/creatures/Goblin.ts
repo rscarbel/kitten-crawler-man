@@ -94,8 +94,8 @@ export class Goblin extends Mob {
     }
     if (this.attackWindupTimer > 0) this.attackWindupTimer--;
 
-    // Attack on cooldown (windup must have elapsed for the first hit)
-    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0) {
+    // Attack on cooldown (windup must have elapsed for the first hit, wall must be clear)
+    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0 && this.hasLOS(nearest)) {
       nearest.takeDamage(this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;

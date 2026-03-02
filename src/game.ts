@@ -506,7 +506,10 @@ class GameStage {
         if (dist === 0 || dist > range) continue;
         // Must be roughly in front of the player
         const dot = (dx / dist) * this.human.facingX + (dy / dist) * this.human.facingY;
-        if (dot > 0.3) mob.takeDamageFrom(damage, this.human);
+        if (dot <= 0.3) continue;
+        // Wall check — no punching through solid tiles
+        if (!this.gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
+        mob.takeDamageFrom(damage, this.human);
       }
     }
 

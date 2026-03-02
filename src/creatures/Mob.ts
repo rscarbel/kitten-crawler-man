@@ -44,6 +44,16 @@ export abstract class Mob extends Player {
     this.map = map;
   }
 
+  /** True if there is a clear line of sight from this mob's centre to the target's centre. */
+  protected hasLOS(target: Player): boolean {
+    if (!this.map) return true;
+    const ts = this.tileSize;
+    return this.map.hasLineOfSight(
+      this.x + ts * 0.5, this.y + ts * 0.5,
+      target.x + ts * 0.5, target.y + ts * 0.5,
+    );
+  }
+
   /**
    * Moves by (dx, dy) with per-axis wall collision, mirroring the player's
    * movement so mobs can slide along walls instead of passing through them.
