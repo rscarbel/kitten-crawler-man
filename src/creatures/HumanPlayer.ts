@@ -20,6 +20,10 @@ export class HumanPlayer extends Player {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, 10);
+    // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
+    this.inventory.addItem('enchanted_bigboi_boxers', 1);
+    this.inventory.equipByItemId('enchanted_bigboi_boxers');
+    this.applyItemBonus(this.inventory.slots.find(s => s?.id === 'enchanted_bigboi_boxers')!);
   }
 
   getMeleeDamage(): number {

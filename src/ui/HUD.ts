@@ -25,7 +25,7 @@ export function drawHUD(
   const inactivePlayer = human.isActive ? cat : human;
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(8, 8, 340, 176);
+  ctx.fillRect(8, 8, 340, 190);
 
   ctx.fillStyle = '#facc15';
   ctx.font = 'bold 13px monospace';
@@ -38,6 +38,11 @@ export function drawHUD(
 
   drawHUDPlayerBlock(ctx, activeLabel, activePlayer, 16, 74);
   drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 128);
+
+  // Coins row
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = '11px monospace';
+  ctx.fillText(`\u{1FA99} ${human.coins + cat.coins}  coins`, 16, 185);
 
   renderNotification(ctx, human, cat, pulseRef);
 }

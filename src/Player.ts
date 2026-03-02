@@ -1,5 +1,6 @@
 import type { StatusEffect } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
+import type { InventoryItem } from './core/Inventory';
 
 export abstract class Player {
   x: number;
@@ -92,6 +93,32 @@ export abstract class Player {
       this.levelUpStat = 'CON';
     }
     this.levelUpFlash = 60;
+  }
+
+  /** Apply stat bonuses from an item being equipped. */
+  applyItemBonus(item: InventoryItem): void {
+    const b = item.statBonus;
+    if (!b) return;
+    if (b.constitution) {
+      this.constitution += b.constitution;
+      this.maxHp += b.constitution * 2;
+      this.hp = Math.min(this.hp + b.constitution * 2, this.maxHp);
+    }
+    if (b.strength) this.strength += b.strength;
+    if (b.intelligence) this.intelligence += b.intelligence;
+  }
+
+  /** Remove stat bonuses when an item is unequipped. */
+  removeItemBonus(item: InventoryItem): void {
+    const b = item.statBonus;
+    if (!b) return;
+    if (b.constitution) {
+      this.constitution -= b.constitution;
+      this.maxHp -= b.constitution * 2;
+      this.hp = Math.min(this.hp, this.maxHp);
+    }
+    if (b.strength) this.strength -= b.strength;
+    if (b.intelligence) this.intelligence -= b.intelligence;
   }
 
   /** Returns true if the player currently has the given status active. */

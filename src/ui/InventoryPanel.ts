@@ -41,6 +41,34 @@ export class InventoryPanel {
     return { x: canvas.width - 168, y: 8, w: 72, h: 28 };
   }
 
+  /**
+   * Optional per-ability cooldown fractions (0=ready, 1=full cooldown).
+   * Set by DungeonScene each frame to show cooldown overlays in hotbar.
+   */
+  abilityCooldowns: Map<string, { current: number; max: number }> = new Map();
+
+  /**
+   * Returns the inventory slot index if (mx, my) is on an inventory slot in the
+   * currently-visible page, or null otherwise. Used by DungeonScene for equip-on-click.
+   */
+  getClickedInventorySlot(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    inventory: Inventory,
+  ): number | null {
+    if (!this.isOpen) return null;
+    const p = this.panelRect(canvas);
+    const pageStart = this.page * SLOTS_PER_PAGE;
+    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
+      const slotIdx = pageStart + i;
+      if (slotIdx >= inventory.slots.length) break;
+      const r = this.invSlotRect(i, p);
+      if (inRect(mx, my, r)) return slotIdx;
+    }
+    return null;
+  }
+
   private panelRect(canvas: HTMLCanvasElement) {
     const innerW = COLS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
     const innerH = ROWS_PER_PAGE * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
@@ -151,11 +179,11 @@ export class InventoryPanel {
     ctx.font = 'bold 12px monospace';
     ctx.fillText(`${playerName} Inventory`, p.x + PANEL_PAD, p.y + 25);
 
-    // Coins (right-aligned in header)
+    // Coins — sits to the left of the close [X] button
     ctx.fillStyle = '#fbbf24';
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
-    ctx.fillText(`\u{1FA99} ${coins}`, p.x + p.w - PANEL_PAD, p.y + 25);
+    ctx.fillText(`\u{1FA99} ${coins}`, p.x + p.w - 36, p.y + 25);
     ctx.textAlign = 'left';
 
     // Close [X]
@@ -184,7 +212,7 @@ export class InventoryPanel {
       const item = slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
       const isDragged = this.drag?.source === 'inv' && this.drag.idx === slotIdx;
       const r = this.invSlotRect(i, p);
-      this.renderSlot(ctx, r.x, r.y, r.w, item, isDragged, false);
+      this.renderSlot(ctx, r.x, r.y, r.w, item, isDragged, false, inventory.isSlotEquipped(slotIdx));
     }
 
     // Pagination bar
@@ -214,22 +242,41 @@ export class InventoryPanel {
     item: InventoryItem | null,
     dimmed: boolean,
     isHotbar: boolean,
+    isEquipped = false,
   ): void {
     ctx.save();
     if (dimmed) ctx.globalAlpha = 0.25;
 
     ctx.fillStyle = isHotbar ? '#0f172a' : '#1e293b';
     ctx.fillRect(x, y, size, size);
-    ctx.strokeStyle = isHotbar ? '#475569' : '#334155';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = isEquipped ? '#3b82f6' : isHotbar ? '#475569' : '#334155';
+    ctx.lineWidth = isEquipped ? 2 : 1;
     ctx.strokeRect(x, y, size, size);
 
     if (item && !dimmed) {
       this.renderItemIcon(ctx, item, x, y, size, 1);
     } else if (item && dimmed) {
-      // Show ghost of dragged item
       ctx.globalAlpha = 0.25;
       this.renderItemIcon(ctx, item, x, y, size, 1);
+    }
+
+    // Ability cooldown overlay on hotbar
+    if (isHotbar && item?.abilityId) {
+      const cd = this.abilityCooldowns.get(item.abilityId);
+      if (cd && cd.current > 0) {
+        const frac = cd.current / cd.max;
+        ctx.globalAlpha = 0.65;
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(x, y + size * (1 - frac), size, size * frac);
+        ctx.globalAlpha = 1;
+        // Remaining seconds
+        const secs = Math.ceil(cd.current / 60);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = `bold ${Math.floor(size * 0.28)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(secs > 99 ? '…' : `${secs}`, x + size / 2, y + size / 2 + 4);
+        ctx.textAlign = 'left';
+      }
     }
 
     ctx.restore();
@@ -271,6 +318,41 @@ export class InventoryPanel {
       ctx.beginPath();
       ctx.ellipse(cx - r * 0.3, cy - r * 0.3, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (item.id === 'enchanted_bigboi_boxers') {
+      const cx = x + size * 0.5;
+      const cy = y + size * 0.56;
+      // Waistband
+      ctx.fillStyle = '#1e40af';
+      ctx.fillRect(x + size * 0.12, y + size * 0.22, size * 0.76, size * 0.18);
+      // Left leg
+      ctx.fillStyle = '#1d4ed8';
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.32, y + size * 0.38);
+      ctx.lineTo(cx - size * 0.38, y + size * 0.72);
+      ctx.lineTo(cx - size * 0.05, y + size * 0.72);
+      ctx.lineTo(cx, y + size * 0.38);
+      ctx.closePath();
+      ctx.fill();
+      // Right leg
+      ctx.beginPath();
+      ctx.moveTo(cx + size * 0.32, y + size * 0.38);
+      ctx.lineTo(cx + size * 0.38, y + size * 0.72);
+      ctx.lineTo(cx + size * 0.05, y + size * 0.72);
+      ctx.lineTo(cx, y + size * 0.38);
+      ctx.closePath();
+      ctx.fill();
+      // Enchantment sparkle
+      ctx.fillStyle = '#a5f3fc';
+      ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('✦', cx, cy - size * 0.04);
+      ctx.textAlign = 'left';
+      // Blue border glow
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
     }
 
     // Quantity badge (bottom-right)

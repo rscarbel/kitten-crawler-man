@@ -19,6 +19,7 @@ import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
 import { drawMordecaiSprite, drawSpeechBubble } from '../sprites/mordecaiSprite';
 import { InventoryPanel } from '../ui/InventoryPanel';
+import { GearPanel } from '../ui/GearPanel';
 import type { LootDrop } from '../creatures/Mob';
 
 interface PendingLoot {
@@ -40,6 +41,7 @@ export class DungeonScene extends Scene {
   private pauseMenu: PauseMenu;
   private deathScreen: DeathScreen;
   private inventoryPanel: InventoryPanel;
+  private gearPanel: GearPanel;
   private gameOver = false;
 
   /** Loot bags waiting to be collected after mob kills. */
@@ -54,6 +56,19 @@ export class DungeonScene extends Scene {
   private catWanderTimer = 0;
   /** Angle used by the cat's kiting orbit. Increments every frame. */
   private catKiteAngle = 0;
+
+  // ── Human idle tracking (for cat wander gate) ─────────────────────────────
+  /** Frames the human has been idle (not moving) while active as the player. */
+  private humanIdleFrames = 0;
+
+  // ── Protective Shell Spell ────────────────────────────────────────────────
+  private activeShell: {
+    x: number; y: number; radiusPx: number;
+    framesRemaining: number; totalFrames: number;
+  } | null = null;
+  private shellCooldown = 0;
+  private readonly SHELL_COOLDOWN = 7200;  // 2 min @ 60 fps
+  private readonly SHELL_DURATION = 1200;  // 20 s  @ 60 fps
 
   // ── Companion auto-potion cooldowns (frames) ───────────────────────────────
   private humanAutoPotionCooldown = 0;
@@ -108,6 +123,7 @@ export class DungeonScene extends Scene {
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
     this.inventoryPanel = new InventoryPanel();
+    this.gearPanel = new GearPanel();
 
     // ── Safe Room setup ──────────────────────────────────────────────────────
     this.safeRoomBounds = this.gameMap.safeRoomBounds;
@@ -205,13 +221,23 @@ export class DungeonScene extends Scene {
         return;
       }
 
+      if ((e.key === 'g' || e.key === 'G') && !e.repeat) {
+        e.preventDefault();
+        this.gearPanel.toggle();
+        return;
+      }
+
       // Hotbar 1–8
       const hotbarIdx = parseInt(e.key) - 1;
       if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
         e.preventDefault();
         const active = this.active();
         const slot = active.inventory.hotbar[hotbarIdx];
-        if (slot?.id === 'health_potion') active.usePotion();
+        if (slot?.id === 'health_potion') {
+          active.usePotion();
+        } else if (slot?.abilityId === 'protective_shell') {
+          this.triggerProtectiveShell();
+        }
         return;
       }
     };
@@ -250,7 +276,30 @@ export class DungeonScene extends Scene {
 
     // Inventory panel (toggle button, close, pagination)
     const canvas = this.sceneManager.canvas;
-    if (this.inventoryPanel.handleClick(mx, my, canvas, this.active().inventory)) {
+    const active = this.active();
+
+    // Gear panel toggle / slot click (unequip)
+    const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
+    if (gearResult) {
+      if (gearResult.unequippedItem) active.removeItemBonus(gearResult.unequippedItem);
+      return;
+    }
+
+    // Equip on click: click armor item in inventory while gear panel is open
+    if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
+      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, canvas, active.inventory);
+      if (slotIdx !== null) {
+        const item = active.inventory.slots[slotIdx];
+        if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
+          const prev = active.inventory.equip(slotIdx);
+          if (prev) active.removeItemBonus(prev);
+          active.applyItemBonus(item);
+          return;
+        }
+      }
+    }
+
+    if (this.inventoryPanel.handleClick(mx, my, canvas, active.inventory)) {
       return;
     }
 
@@ -271,6 +320,7 @@ export class DungeonScene extends Scene {
 
   handleMouseMove(mx: number, my: number): void {
     this.inventoryPanel.handleMouseMove(mx, my);
+    this.gearPanel.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
@@ -309,6 +359,7 @@ export class DungeonScene extends Scene {
     this.inactive().render(ctx, camX, camY, TILE_SIZE);
     this.active().render(ctx, camX, camY, TILE_SIZE);
 
+    this.renderShell(ctx, camX, camY);
     this.renderLevelUpFlash(ctx, camX, camY);
 
     drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse);
@@ -316,11 +367,17 @@ export class DungeonScene extends Scene {
     // ── Pending loot bubbles (world space) ────────────────────────────────
     this.renderPendingLoots(ctx, camX, camY);
 
-    // ── Inventory panel + hotbar ──────────────────────────────────────────
+    // ── Inventory panel + hotbar + gear panel ─────────────────────────────
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const active = this.active();
       const name = this.human.isActive ? 'Human' : 'Cat';
+      // Update ability cooldowns for hotbar display
+      this.inventoryPanel.abilityCooldowns.set('protective_shell', {
+        current: this.shellCooldown,
+        max: this.SHELL_COOLDOWN,
+      });
       this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
+      this.gearPanel.render(ctx, canvas, active.inventory, name);
     }
 
     if (this.gameOver) {
@@ -363,6 +420,14 @@ export class DungeonScene extends Scene {
     if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
 
     player.isMoving = dx !== 0 || dy !== 0;
+
+    // ── Human idle tracker (gates cat wander) ─────────────────────────────
+    if (this.human.isActive) {
+      if (player.isMoving) this.humanIdleFrames = 0;
+      else this.humanIdleFrames++;
+    } else {
+      this.humanIdleFrames = 0;
+    }
 
     if (dx !== 0 || dy !== 0) {
       const len = Math.hypot(dx, dy);
@@ -412,7 +477,8 @@ export class DungeonScene extends Scene {
             TILE_SIZE * 2.5,
           );
         }
-      } else {
+      } else if (this.humanIdleFrames >= 300) {
+        // ── Cat wander — only once human has been idle for 5 seconds ────────
         this.catWanderTimer--;
         if (this.catWanderTimer <= 0) {
           const angle = Math.random() * Math.PI * 2;
@@ -432,6 +498,20 @@ export class DungeonScene extends Scene {
           this.cat,
           this.catWanderTargetX,
           this.catWanderTargetY,
+          FOLLOWER_SPEED,
+          TILE_SIZE * 1.5,
+        );
+      } else {
+        // ── Human recently moved — cat follows smoothly, no wander jitter ───
+        // Reset wander target to human position so when wander eventually
+        // activates there's no sudden jump.
+        this.catWanderTargetX = this.human.x;
+        this.catWanderTargetY = this.human.y;
+        this.catWanderTimer = 160 + Math.floor(Math.random() * 240);
+        this.companionFollow(
+          this.cat,
+          this.human.x,
+          this.human.y,
           FOLLOWER_SPEED,
           TILE_SIZE * 1.5,
         );
@@ -480,6 +560,14 @@ export class DungeonScene extends Scene {
       }
     }
 
+    // ── Shell spell tick ──────────────────────────────────────────────────
+    if (this.shellCooldown > 0) this.shellCooldown--;
+    if (this.activeShell) {
+      this.activeShell.framesRemaining--;
+      this.pushMobsFromShell();
+      if (this.activeShell.framesRemaining <= 0) this.activeShell = null;
+    }
+
     this.updateAutoAI();
     this.resolvePlayerAttacks();
     this.resolveKills();
@@ -489,9 +577,25 @@ export class DungeonScene extends Scene {
 
     this.updateCompanionPotion();
 
-    // ── Pending loot TTL ──────────────────────────────────────────────────
+    // ── Pending loot TTL + auto-collect on proximity ──────────────────────
+    const activeForLoot = this.active();
     for (const loot of this.pendingLoots) {
-      if (!loot.collected) loot.ttl--;
+      if (loot.collected) continue;
+      loot.ttl--;
+      // Auto-collect when active player walks within 1.5 tiles of their loot
+      if (loot.owner === activeForLoot) {
+        const dist = Math.hypot(
+          activeForLoot.x + TILE_SIZE * 0.5 - loot.x,
+          activeForLoot.y + TILE_SIZE * 0.5 - loot.y,
+        );
+        if (dist <= TILE_SIZE * 1.5) {
+          activeForLoot.coins += loot.loot.coins;
+          for (const it of loot.loot.items) {
+            activeForLoot.inventory.addItem(it.id, it.quantity);
+          }
+          loot.collected = true;
+        }
+      }
     }
     this.pendingLoots = this.pendingLoots.filter((l) => !l.collected && l.ttl > 0);
 
@@ -884,7 +988,14 @@ export class DungeonScene extends Scene {
         this.cat.autoTarget = mobTargetingHuman;
       }
 
-      if (this.cat.autoTarget) this.cat.autoFireTick();
+      if (this.cat.autoTarget) {
+        const tc = this.cat.autoTarget;
+        const hasLOS = this.gameMap.hasLineOfSight(
+          this.cat.x + TILE_SIZE * 0.5, this.cat.y + TILE_SIZE * 0.5,
+          tc.x + TILE_SIZE * 0.5, tc.y + TILE_SIZE * 0.5,
+        );
+        if (hasLOS) this.cat.autoFireTick();
+      }
     } else {
       if (this.human.autoTarget && !this.human.autoTarget.isAlive)
         this.human.autoTarget = null;
@@ -903,7 +1014,14 @@ export class DungeonScene extends Scene {
         this.human.autoTarget = closest;
       }
 
-      if (this.human.autoTarget) this.human.autoFightTick();
+      if (this.human.autoTarget) {
+        const th = this.human.autoTarget;
+        const hasLOS = this.gameMap.hasLineOfSight(
+          this.human.x + TILE_SIZE * 0.5, this.human.y + TILE_SIZE * 0.5,
+          th.x + TILE_SIZE * 0.5, th.y + TILE_SIZE * 0.5,
+        );
+        if (hasLOS) this.human.autoFightTick();
+      }
     }
   }
 
@@ -923,6 +1041,7 @@ export class DungeonScene extends Scene {
       if (dist > range) continue;
       const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
       if (dot < 0.25) continue;
+      if (!this.gameMap.hasLineOfSight(px, py, mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5)) continue;
       if (dist < bestDist) {
         bestDist = dist;
         bestMob = mob;
@@ -1255,6 +1374,100 @@ export class DungeonScene extends Scene {
       }
     }
     return false;
+  }
+
+  // ── Protective Shell Spell ──────────────────────────────────────────────────
+
+  private triggerProtectiveShell(): void {
+    if (this.shellCooldown > 0) return;
+    const radiusTiles = 3 + this.human.intelligence * 0.5;
+    const radiusPx = radiusTiles * TILE_SIZE;
+    this.activeShell = {
+      x: this.human.x + TILE_SIZE * 0.5,
+      y: this.human.y + TILE_SIZE * 0.5,
+      radiusPx,
+      framesRemaining: this.SHELL_DURATION,
+      totalFrames: this.SHELL_DURATION,
+    };
+    this.shellCooldown = this.SHELL_COOLDOWN;
+    // Immediately push any mobs that are already inside
+    this.pushMobsFromShell();
+  }
+
+  private pushMobsFromShell(): void {
+    if (!this.activeShell) return;
+    const { x, y, radiusPx } = this.activeShell;
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      const mcx = mob.x + TILE_SIZE * 0.5;
+      const mcy = mob.y + TILE_SIZE * 0.5;
+      const dx = mcx - x;
+      const dy = mcy - y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < radiusPx) {
+        const nx = dist > 0 ? dx / dist : 1;
+        const ny = dist > 0 ? dy / dist : 0;
+        const push = radiusPx - dist + 2;
+        mob.x += nx * push;
+        mob.y += ny * push;
+        mob.takeDamageFrom(1, this.human);
+      }
+    }
+  }
+
+  private renderShell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this.activeShell) return;
+    const { x, y, radiusPx, framesRemaining, totalFrames } = this.activeShell;
+    const sx = x - camX;
+    const sy = y - camY;
+
+    // Fade in during first 30 frames, fade out during last 60 frames
+    const lifeFrac = framesRemaining / totalFrames;
+    const fadeIn = Math.min(1, (totalFrames - framesRemaining) / 30);
+    const fadeOut = Math.min(1, framesRemaining / 60);
+    const alpha = Math.min(fadeIn, fadeOut);
+
+    ctx.save();
+
+    // Soft outer glow rings
+    for (let i = 4; i >= 1; i--) {
+      ctx.globalAlpha = alpha * (0.06 * i);
+      ctx.strokeStyle = '#93c5fd';
+      ctx.lineWidth = i * 3;
+      ctx.beginPath();
+      ctx.arc(sx, sy, radiusPx + i * 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Main shell ring — pulse brightness with remaining time
+    const pulse = 0.7 + 0.3 * Math.sin(framesRemaining * 0.12);
+    ctx.globalAlpha = alpha * pulse;
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner fill — very subtle blue tint
+    ctx.globalAlpha = alpha * 0.06;
+    ctx.fillStyle = '#60a5fa';
+    ctx.beginPath();
+    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Remaining duration label
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fillStyle = '#93c5fd';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    const secs = Math.ceil(framesRemaining / 60);
+    ctx.fillText(`${secs}s`, sx, sy - radiusPx - 6);
+    ctx.textAlign = 'left';
+
+    ctx.restore();
+
+    // Cooldown HUD label (above active player when shell just ended)
+    void lifeFrac; // suppress unused warning
   }
 
   // ── Convenience accessors ───────────────────────────────────────────────────
