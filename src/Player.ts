@@ -1,3 +1,6 @@
+import type { StatusEffect } from './core/StatusEffect';
+import { Inventory } from './core/Inventory';
+
 export abstract class Player {
   x: number;
   y: number;
@@ -17,10 +20,20 @@ export abstract class Player {
   damageFlash = 0;
   isMoving = false;
   walkFrame = 0;
-  healthPotions = 10;
+  /** Shared inventory for this player (separate from the other player's). */
+  readonly inventory = new Inventory();
+  /** Gold coins collected — displayed in the inventory panel. */
+  coins = 0;
   unspentPoints = 0;
+
+  /** Computed count of health potions across inventory + hotbar. */
+  get healthPotions(): number {
+    return this.inventory.countOf('health_potion');
+  }
   /** When true, incoming damage is ignored (standing in the Safe Room). */
   isProtected = false;
+  /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
+  statusEffects: StatusEffect[] = [];
   protected tileSize: number;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp = 10) {
@@ -29,6 +42,7 @@ export abstract class Player {
     this.tileSize = tileSize;
     this.maxHp = maxHp;
     this.hp = maxHp;
+    this.inventory.addItem('health_potion', 10);
   }
 
   get isAlive() {
@@ -43,8 +57,8 @@ export abstract class Player {
 
   /** Drink a health potion — heals 50 % of max HP. Returns false if none available. */
   usePotion(): boolean {
-    if (this.healthPotions <= 0 || this.hp >= this.maxHp) return false;
-    this.healthPotions--;
+    if (this.hp >= this.maxHp) return false;
+    if (!this.inventory.removeOne('health_potion')) return false;
     this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * 0.5));
     return true;
   }
@@ -80,6 +94,43 @@ export abstract class Player {
     this.levelUpFlash = 60;
   }
 
+  /** Returns true if the player currently has the given status active. */
+  hasStatus(type: string): boolean {
+    return this.statusEffects.some((e) => e.type === type);
+  }
+
+  /**
+   * Apply a status effect. If the same type is already active it is refreshed
+   * (replaced) rather than stacked.
+   */
+  applyStatus(effect: StatusEffect) {
+    const idx = this.statusEffects.findIndex((e) => e.type === effect.type);
+    if (idx >= 0) {
+      this.statusEffects[idx] = effect;
+    } else {
+      this.statusEffects.push(effect);
+    }
+  }
+
+  /**
+   * Advance all active status effects by one tick and apply their per-tick
+   * behaviour. Called automatically from tickTimers().
+   *
+   * Per-type rules:
+   *   burn  — 1 damage every 60 ticks (1 /second); 8 hits over 480 ticks.
+   *   (future: frozen → block movement in scene; paralyzed → block all input)
+   */
+  private tickStatusEffects() {
+    this.statusEffects = this.statusEffects.filter((effect) => {
+      const elapsed = effect.totalTicks - effect.ticksRemaining;
+      if (effect.type === 'burn' && elapsed > 0 && elapsed % 60 === 0) {
+        this.takeDamage(1);
+      }
+      effect.ticksRemaining--;
+      return effect.ticksRemaining >= 0;
+    });
+  }
+
   tickTimers() {
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;
@@ -88,6 +139,7 @@ export abstract class Player {
     } else {
       this.walkFrame = 0;
     }
+    this.tickStatusEffects();
   }
 
   abstract render(

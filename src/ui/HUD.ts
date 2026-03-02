@@ -1,6 +1,7 @@
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import type { StatusEffect } from '../core/StatusEffect';
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -94,6 +95,62 @@ export function drawHUDPlayerBlock(
     barX,
     y2 + barH + 12,
   );
+
+  // Status effect badges (Burn, Frozen, Paralyzed, …)
+  if (player.statusEffects.length > 0) {
+    let iconX = barX;
+    for (const effect of player.statusEffects) {
+      drawStatusIcon(ctx, effect, iconX, y2 + barH + 16);
+      iconX += 30;
+    }
+  }
+}
+
+/**
+ * Renders a single status-effect badge: a coloured pill with a short label and
+ * a small duration bar across the bottom.
+ *
+ * Adding a new status type: add an `else if` branch below with the desired
+ * colour and label.
+ */
+function drawStatusIcon(
+  ctx: CanvasRenderingContext2D,
+  effect: StatusEffect,
+  x: number,
+  y: number,
+) {
+  const pillW = 26;
+  const pillH = 12;
+
+  let bgColor = '#6b7280';
+  let label = effect.type.toUpperCase().slice(0, 4);
+
+  if (effect.type === 'burn') {
+    bgColor = '#f97316';
+    label = 'BURN';
+  } else if (effect.type === 'frozen') {
+    bgColor = '#38bdf8';
+    label = 'FRZE';
+  } else if (effect.type === 'paralyzed') {
+    bgColor = '#a855f7';
+    label = 'PARA';
+  }
+
+  // Background pill
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(x, y, pillW, pillH);
+
+  // Label
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText(label, x + 2, y + 8);
+
+  // Duration bar (white strip across the bottom of the pill)
+  const ratio = effect.ticksRemaining / effect.totalTicks;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(x + 1, y + pillH - 3, pillW - 2, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(x + 1, y + pillH - 3, Math.ceil((pillW - 2) * ratio), 2);
 }
 
 /**

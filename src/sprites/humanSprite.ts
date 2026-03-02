@@ -124,6 +124,25 @@ export function drawHumanSprite(
     ctx.fillStyle = '#111827';
     ctx.fillRect(sx + s * 0.38, sy + s * 0.37 + bodyBob, s * 0.24, s * 0.05);
   } else {
+    // Brown hair cap — always visible when facing camera (all non-away directions)
+    {
+      const hcx = sx + s * 0.5;
+      const hcy = sy + s * 0.24 + bodyBob;
+      ctx.fillStyle = '#7b4520';
+      ctx.beginPath();
+      if (facingY > 0.5) {
+        // Facing down: tighter arc so the hair crown stays well above the eyes
+        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7.5 / 6), Math.PI * (10.5 / 6), false);
+      } else {
+        // Sideways / neutral / slight up: standard hair cap
+        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7 / 6), Math.PI * (11 / 6), false);
+      }
+      // closePath draws a chord from arc-end back to arc-start, forming a clean cap
+      // (no pie-slice line to centre that would dip into the face)
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // Eyes (front view only)
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();

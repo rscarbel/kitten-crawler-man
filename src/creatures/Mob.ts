@@ -1,5 +1,11 @@
 import { Player } from '../Player';
 import { GameMap } from '../map/GameMap';
+import type { ItemId } from '../core/Inventory';
+
+export interface LootDrop {
+  coins: number;
+  items: Array<{ id: ItemId; quantity: number }>;
+}
 
 /**
  * Abstract base for all enemy mobs. Subclasses define their own AI, appearance,
@@ -17,6 +23,13 @@ export abstract class Mob extends Player {
 
   /** Set to true on the frame this mob's HP reaches 0; game loop reads and resets it. */
   justDied = false;
+
+  /** Loot generated when this mob dies; null if nothing dropped. */
+  droppedLoot: LootDrop | null = null;
+
+  /** Coin drop range — subclasses override with their own min/max. */
+  protected coinDropMin = 0;
+  protected coinDropMax = 0;
 
   /** Frames remaining to show the health bar (set on each hit). */
   healthBarTimer = 0;
@@ -259,6 +272,15 @@ export abstract class Mob extends Player {
     }
     if (this.hp === 0 && prev > 0) {
       this.justDied = true;
+      // Roll loot
+      const coins =
+        this.coinDropMin +
+        Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
+      const items: LootDrop['items'] = [];
+      if (Math.random() < 0.25) items.push({ id: 'health_potion', quantity: 1 });
+      if (coins > 0 || items.length > 0) {
+        this.droppedLoot = { coins, items };
+      }
     }
   }
 

@@ -18,6 +18,18 @@ import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
 import { drawMordecaiSprite, drawSpeechBubble } from '../sprites/mordecaiSprite';
+import { InventoryPanel } from '../ui/InventoryPanel';
+import type { LootDrop } from '../creatures/Mob';
+
+interface PendingLoot {
+  x: number;
+  y: number;
+  loot: LootDrop;
+  owner: HumanPlayer | CatPlayer;
+  collected: boolean;
+  /** Frames until this loot expires and disappears. */
+  ttl: number;
+}
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -27,7 +39,11 @@ export class DungeonScene extends Scene {
 
   private pauseMenu: PauseMenu;
   private deathScreen: DeathScreen;
+  private inventoryPanel: InventoryPanel;
   private gameOver = false;
+
+  /** Loot bags waiting to be collected after mob kills. */
+  private pendingLoots: PendingLoot[] = [];
 
   /** Oscillation counter passed to HUD for the skill-point notification pulse. */
   private notifPulse = { value: 0 };
@@ -91,6 +107,7 @@ export class DungeonScene extends Scene {
 
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
+    this.inventoryPanel = new InventoryPanel();
 
     // ── Safe Room setup ──────────────────────────────────────────────────────
     this.safeRoomBounds = this.gameMap.safeRoomBounds;
@@ -179,6 +196,23 @@ export class DungeonScene extends Scene {
         e.preventDefault();
         if (this.human.isActive) this.human.usePotion();
         else this.cat.usePotion();
+        return;
+      }
+
+      if ((e.key === 'i' || e.key === 'I') && !e.repeat) {
+        e.preventDefault();
+        this.inventoryPanel.toggle();
+        return;
+      }
+
+      // Hotbar 1–8
+      const hotbarIdx = parseInt(e.key) - 1;
+      if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
+        e.preventDefault();
+        const active = this.active();
+        const slot = active.inventory.hotbar[hotbarIdx];
+        if (slot?.id === 'health_potion') active.usePotion();
+        return;
       }
     };
 
@@ -214,11 +248,34 @@ export class DungeonScene extends Scene {
       return;
     }
 
+    // Inventory panel (toggle button, close, pagination)
+    const canvas = this.sceneManager.canvas;
+    if (this.inventoryPanel.handleClick(mx, my, canvas, this.active().inventory)) {
+      return;
+    }
+
+    // Pending loot collection (click on the loot badge in world space)
+    if (this.tryCollectLootAt(mx, my)) return;
+
     // Pause button (top-right corner)
     const pb = this.pauseButtonRect();
     if (mx >= pb.x && mx <= pb.x + pb.w && my >= pb.y && my <= pb.y + pb.h) {
       this.pauseMenu.toggle();
     }
+  }
+
+  handleMouseDown(mx: number, my: number): void {
+    if (this.gameOver || this.pauseMenu.isOpen) return;
+    this.inventoryPanel.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
+  }
+
+  handleMouseMove(mx: number, my: number): void {
+    this.inventoryPanel.handleMouseMove(mx, my);
+  }
+
+  handleMouseUp(mx: number, my: number): void {
+    if (this.gameOver || this.pauseMenu.isOpen) return;
+    this.inventoryPanel.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   // ── Main update / render ────────────────────────────────────────────────────
@@ -255,6 +312,16 @@ export class DungeonScene extends Scene {
     this.renderLevelUpFlash(ctx, camX, camY);
 
     drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse);
+
+    // ── Pending loot bubbles (world space) ────────────────────────────────
+    this.renderPendingLoots(ctx, camX, camY);
+
+    // ── Inventory panel + hotbar ──────────────────────────────────────────
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      const active = this.active();
+      const name = this.human.isActive ? 'Human' : 'Cat';
+      this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
+    }
 
     if (this.gameOver) {
       this.deathScreen.render(ctx, canvas);
@@ -421,6 +488,12 @@ export class DungeonScene extends Scene {
     this.cat.tickTimers();
 
     this.updateCompanionPotion();
+
+    // ── Pending loot TTL ──────────────────────────────────────────────────
+    for (const loot of this.pendingLoots) {
+      if (!loot.collected) loot.ttl--;
+    }
+    this.pendingLoots = this.pendingLoots.filter((l) => !l.collected && l.ttl > 0);
 
     // ── Speech bubble pulse ───────────────────────────────────────────────
     this.speechBubblePulse++;
@@ -924,9 +997,33 @@ export class DungeonScene extends Scene {
       for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;
       if (totalDmg === 0) continue;
 
+      // Award XP to contributors
       for (const [player, dmg] of mob.damageTakenBy) {
         const share = Math.max(1, Math.round((dmg / totalDmg) * mob.xpValue));
         player.gainXp(share);
+      }
+
+      // Attribute loot to the top damage dealer
+      if (mob.droppedLoot) {
+        let creditPlayer: HumanPlayer | CatPlayer | null = null;
+        let maxDmg = 0;
+        for (const [player, dmg] of mob.damageTakenBy) {
+          if (dmg > maxDmg) {
+            maxDmg = dmg;
+            creditPlayer = player as HumanPlayer | CatPlayer;
+          }
+        }
+        if (creditPlayer) {
+          this.pendingLoots.push({
+            x: mob.x + TILE_SIZE * 0.5,
+            y: mob.y + TILE_SIZE * 0.5,
+            loot: mob.droppedLoot,
+            owner: creditPlayer,
+            collected: false,
+            ttl: 600,
+          });
+        }
+        mob.droppedLoot = null;
       }
     }
   }
@@ -1066,6 +1163,98 @@ export class DungeonScene extends Scene {
     ctx.textAlign = 'center';
     ctx.fillText('Pause (Esc)', pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
     ctx.textAlign = 'left';
+  }
+
+  // ── Loot helpers ────────────────────────────────────────────────────────────
+
+  private renderPendingLoots(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const active = this.active();
+    for (const loot of this.pendingLoots) {
+      const sx = loot.x - camX;
+      const sy = loot.y - camY;
+
+      // Determine label text
+      const parts: string[] = [];
+      if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
+      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
+      const label = parts.join(' ');
+
+      // Fade out as TTL drops below 120 frames
+      const alpha = Math.min(1, loot.ttl / 120);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Badge background
+      const bw = Math.max(54, label.length * 7 + 16);
+      const bh = 20;
+      const bx = sx - bw / 2;
+      const by = sy - 26;
+      ctx.fillStyle = loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = loot.owner === active ? '#fbbf24' : '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+
+      // Coin icon (small filled circle)
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Label text
+      ctx.fillStyle = loot.owner === active ? '#fde68a' : '#64748b';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, bx + 18, by + bh / 2 + 4);
+
+      // "Click to loot" hint when active player is the owner and nearby
+      if (loot.owner === active) {
+        const dist = Math.hypot(active.x + TILE_SIZE * 0.5 - loot.x, active.y + TILE_SIZE * 0.5 - loot.y);
+        if (dist <= TILE_SIZE * 3) {
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('[click]', sx, by - 3);
+        }
+      }
+
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Check if the click position lands on a pending loot badge that the active
+   * player owns and is close enough to collect. Returns true if loot was collected.
+   */
+  private tryCollectLootAt(mx: number, my: number): boolean {
+    const { x: camX, y: camY } = this.camera();
+    const active = this.active();
+    for (const loot of this.pendingLoots) {
+      if (loot.owner !== active) continue;
+      const dist = Math.hypot(active.x + TILE_SIZE * 0.5 - loot.x, active.y + TILE_SIZE * 0.5 - loot.y);
+      if (dist > TILE_SIZE * 3) continue;
+
+      const sx = loot.x - camX;
+      const sy = loot.y - camY;
+      const parts: string[] = [];
+      if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
+      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
+      const label = parts.join(' ');
+      const bw = Math.max(54, label.length * 7 + 16);
+      const bh = 20;
+      const bx = sx - bw / 2;
+      const by = sy - 26;
+
+      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+        active.coins += loot.loot.coins;
+        for (const it of loot.loot.items) {
+          active.inventory.addItem(it.id, it.quantity);
+        }
+        loot.collected = true;
+        return true;
+      }
+    }
+    return false;
   }
 
   // ── Convenience accessors ───────────────────────────────────────────────────

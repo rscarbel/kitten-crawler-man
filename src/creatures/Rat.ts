@@ -13,6 +13,8 @@ const ATTACK_ANIM_FRAMES = 14;
 
 export class Rat extends Mob {
   readonly xpValue = 2;
+  protected coinDropMin = 0;
+  protected coinDropMax = 1;
 
   private attackCooldown = 0;
   private attackAnimTimer = 0;

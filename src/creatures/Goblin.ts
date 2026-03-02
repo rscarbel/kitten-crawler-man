@@ -15,6 +15,8 @@ const ATTACK_ANIM_FRAMES = 18;
 
 export class Goblin extends Mob {
   readonly xpValue = 5;
+  protected coinDropMin = 1;
+  protected coinDropMax = 3;
   readonly weapon: GoblinWeapon;
   readonly skinColor: string;
   readonly eyeColor: string;

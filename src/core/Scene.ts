@@ -8,6 +8,9 @@ export abstract class Scene {
   onEnter?(): void;
   onExit?(): void;
   handleClick?(mx: number, my: number): void;
+  handleMouseDown?(mx: number, my: number): void;
+  handleMouseMove?(mx: number, my: number): void;
+  handleMouseUp?(mx: number, my: number): void;
 }
 
 /**
@@ -32,10 +35,33 @@ export class SceneManager {
       this.canvas.height = window.innerHeight;
     });
 
+    const getPos = (e: MouseEvent) => {
+      const rect = this.canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
     this.canvas.addEventListener('click', (e) => {
       if (!this.current?.handleClick) return;
-      const rect = this.canvas.getBoundingClientRect();
-      this.current.handleClick(e.clientX - rect.left, e.clientY - rect.top);
+      const { x, y } = getPos(e);
+      this.current.handleClick(x, y);
+    });
+
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (!this.current?.handleMouseDown) return;
+      const { x, y } = getPos(e);
+      this.current.handleMouseDown(x, y);
+    });
+
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (!this.current?.handleMouseMove) return;
+      const { x, y } = getPos(e);
+      this.current.handleMouseMove(x, y);
+    });
+
+    this.canvas.addEventListener('mouseup', (e) => {
+      if (!this.current?.handleMouseUp) return;
+      const { x, y } = getPos(e);
+      this.current.handleMouseUp(x, y);
     });
 
     this.loop();

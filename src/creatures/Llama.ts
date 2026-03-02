@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
 import { drawLlamaSprite } from '../sprites/llamaSprite';
+import { makeBurn } from '../core/StatusEffect';
 
 interface LavaBall {
   x: number;
@@ -28,6 +29,8 @@ const EXPLODE_TICKS = 22;
 
 export class Llama extends Mob {
   readonly xpValue = 8;
+  protected coinDropMin = 4;
+  protected coinDropMax = 5;
   private lavaBalls: LavaBall[] = [];
   private spitCooldown = 0;
   private spitAnimTimer = 0;
@@ -76,6 +79,7 @@ export class Llama extends Mob {
           LAVA_BALL_RADIUS + this.tileSize * 0.35
         ) {
           t.takeDamage(LAVA_BALL_DAMAGE);
+          if (Math.random() < 0.15) t.applyStatus(makeBurn());
           ball.exploding = true;
           ball.explodeTick = EXPLODE_TICKS;
           break;
