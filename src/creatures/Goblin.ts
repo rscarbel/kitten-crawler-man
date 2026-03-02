@@ -85,7 +85,12 @@ export class Goblin extends Mob {
 
     // Chase toward last known position (= current position when LOS is clear)
     if (nearestDist > this.attackRangePx) {
-      this.followTargetAStar(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.attackRangePx * 0.8);
+      this.followTargetAStar(
+        this.lastKnownTargetX,
+        this.lastKnownTargetY,
+        this.speed,
+        this.attackRangePx * 0.8,
+      );
     } else {
       this.isMoving = false;
     }
@@ -100,7 +105,12 @@ export class Goblin extends Mob {
 
     // Attack on cooldown (windup must have elapsed for the first hit).
     // Same-tile contact always lands regardless of LOS — can't dodge point-blank.
-    if (inRange && this.attackCooldown === 0 && this.attackWindupTimer === 0 && (this.hasLOS(nearest) || this.onSameTile(nearest))) {
+    if (
+      inRange &&
+      this.attackCooldown === 0 &&
+      this.attackWindupTimer === 0 &&
+      (this.hasLOS(nearest) || this.onSameTile(nearest))
+    ) {
       nearest.takeDamage(this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
@@ -126,14 +136,22 @@ export class Goblin extends Mob {
     }
 
     // Normalise attack animation to 0–1 peak-at-midpoint curve
-    const attackAnim = this.attackAnimTimer > 0
-      ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
-      : 0;
+    const attackAnim =
+      this.attackAnimTimer > 0
+        ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
+        : 0;
 
     drawGoblinSprite(
-      ctx, sx, sy, tileSize,
-      this.weapon, this.skinColor, this.eyeColor,
-      this.walkFrame, this.isMoving, attackAnim,
+      ctx,
+      sx,
+      sy,
+      tileSize,
+      this.weapon,
+      this.skinColor,
+      this.eyeColor,
+      this.walkFrame,
+      this.isMoving,
+      attackAnim,
     );
 
     this.renderMobHealthBar(ctx, sx, sy);

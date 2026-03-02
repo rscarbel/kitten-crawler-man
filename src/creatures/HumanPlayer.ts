@@ -58,8 +58,10 @@ export class HumanPlayer extends Player {
     }
 
     // Face the target
-    const dx = (this.autoTarget.x + this.tileSize * 0.5) - (this.x + this.tileSize * 0.5);
-    const dy = (this.autoTarget.y + this.tileSize * 0.5) - (this.y + this.tileSize * 0.5);
+    const dx =
+      this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
+    const dy =
+      this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       this.facingX = dx / dist;
@@ -98,7 +100,17 @@ export class HumanPlayer extends Player {
     drawHumanSprite(ctx, sx, sy, s, isKicking, this.walkFrame, this.isMoving);
 
     if (this.attackTimer > 0 && this.attackPhase) {
-      drawHumanAttack(ctx, sx, sy, s, this.attackPhase, this.attackTimer, this.ATTACK_FRAMES, this.facingX, this.facingY);
+      drawHumanAttack(
+        ctx,
+        sx,
+        sy,
+        s,
+        this.attackPhase,
+        this.attackTimer,
+        this.ATTACK_FRAMES,
+        this.facingX,
+        this.facingY,
+      );
     }
 
     this.renderHealthBar(ctx, sx, sy);

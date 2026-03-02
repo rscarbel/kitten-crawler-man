@@ -1,5 +1,5 @@
 import { Player } from '../Player';
-import { GameMap } from '../GameMap';
+import { GameMap } from '../map/GameMap';
 
 /**
  * Abstract base for all enemy mobs. Subclasses define their own AI, appearance,
@@ -45,7 +45,13 @@ export abstract class Mob extends Player {
 
   protected map: GameMap | null = null;
 
-  constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
+  constructor(
+    tileX: number,
+    tileY: number,
+    tileSize: number,
+    maxHp: number,
+    speed: number,
+  ) {
     super(tileX, tileY, tileSize, maxHp);
     this.speed = speed;
     this.spawnX = tileX * tileSize;
@@ -64,8 +70,10 @@ export abstract class Mob extends Player {
   protected onSameTile(target: Player): boolean {
     const ts = this.tileSize;
     return (
-      Math.floor((this.x + ts * 0.5) / ts) === Math.floor((target.x + ts * 0.5) / ts) &&
-      Math.floor((this.y + ts * 0.5) / ts) === Math.floor((target.y + ts * 0.5) / ts)
+      Math.floor((this.x + ts * 0.5) / ts) ===
+        Math.floor((target.x + ts * 0.5) / ts) &&
+      Math.floor((this.y + ts * 0.5) / ts) ===
+        Math.floor((target.y + ts * 0.5) / ts)
     );
   }
 
@@ -100,7 +108,12 @@ export abstract class Mob extends Player {
     if (this.astarTimer <= 0) {
       const myTileX = Math.floor((this.x + ts * 0.5) / ts);
       const myTileY = Math.floor((this.y + ts * 0.5) / ts);
-      this.astarPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
+      this.astarPath = this.map.findPath(
+        myTileX,
+        myTileY,
+        goalTileX,
+        goalTileY,
+      );
       // Drop the first waypoint — that's the tile we're already on
       if (this.astarPath.length > 0) this.astarPath.shift();
       this.astarTimer = refreshInterval;
@@ -133,8 +146,10 @@ export abstract class Mob extends Player {
     if (!this.map) return true;
     const ts = this.tileSize;
     return this.map.hasLineOfSight(
-      this.x + ts * 0.5, this.y + ts * 0.5,
-      target.x + ts * 0.5, target.y + ts * 0.5,
+      this.x + ts * 0.5,
+      this.y + ts * 0.5,
+      target.x + ts * 0.5,
+      target.y + ts * 0.5,
     );
   }
 
@@ -163,12 +178,12 @@ export abstract class Mob extends Player {
     if (dx !== 0) {
       const nextX = this.x + dx;
       const tileXnext = Math.floor((nextX + ts / 2) / ts);
-      const tileYcur  = Math.floor((this.y  + ts / 2) / ts);
+      const tileYcur = Math.floor((this.y + ts / 2) / ts);
       if (this.map.isWalkable(tileXnext, tileYcur)) this.x = nextX;
     }
     if (dy !== 0) {
       const nextY = this.y + dy;
-      const tileXcur  = Math.floor((this.x  + ts / 2) / ts);
+      const tileXcur = Math.floor((this.x + ts / 2) / ts);
       const tileYnext = Math.floor((nextY + ts / 2) / ts);
       if (this.map.isWalkable(tileXcur, tileYnext)) this.y = nextY;
     }
@@ -180,7 +195,12 @@ export abstract class Mob extends Player {
    * When fully stuck (both axes blocked), rotates the movement vector ±90° to
    * steer around corners. Flips steering direction after 50 stuck frames.
    */
-  protected followTargetCollide(targetX: number, targetY: number, speed: number, minDist: number) {
+  protected followTargetCollide(
+    targetX: number,
+    targetY: number,
+    speed: number,
+    minDist: number,
+  ) {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
@@ -201,7 +221,7 @@ export abstract class Mob extends Player {
     if (this.x === preX && this.y === preY) {
       // Fully stuck — try perpendicular steering direction
       const perpX = -ny * this.steerSign;
-      const perpY =  nx * this.steerSign;
+      const perpY = nx * this.steerSign;
       this.moveWithCollision(perpX * step, perpY * step);
       if (this.x === preX && this.y === preY) {
         this.stuckFrames++;
@@ -231,7 +251,10 @@ export abstract class Mob extends Player {
       this.damageFlash = 8;
       this.healthBarTimer = 180; // show health bar for ~3 seconds
       if (attacker) {
-        this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
+        this.damageTakenBy.set(
+          attacker,
+          (this.damageTakenBy.get(attacker) ?? 0) + actual,
+        );
       }
     }
     if (this.hp === 0 && prev > 0) {
@@ -288,7 +311,11 @@ export abstract class Mob extends Player {
    * Renders the health bar only while it is visible (after taking damage).
    * Fades out over the last 40 frames.
    */
-  protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  protected renderMobHealthBar(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+  ) {
     if (this.healthBarTimer <= 0) return;
     const alpha = this.healthBarTimer < 40 ? this.healthBarTimer / 40 : 1;
     ctx.save();

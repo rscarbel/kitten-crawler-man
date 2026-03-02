@@ -1,6 +1,6 @@
 import { Player } from '../Player';
 import { drawCatSprite, drawMissiles, Missile } from '../sprites/catSprite';
-import { GameMap } from '../GameMap';
+import { GameMap } from '../map/GameMap';
 
 /**
  * This is a playable character.
@@ -66,8 +66,10 @@ export class CatPlayer extends Player {
     }
 
     // Always face the target
-    const dx = (this.autoTarget.x + this.tileSize * 0.5) - (this.x + this.tileSize * 0.5);
-    const dy = (this.autoTarget.y + this.tileSize * 0.5) - (this.y + this.tileSize * 0.5);
+    const dx =
+      this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
+    const dy =
+      this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       this.facingX = dx / dist;
@@ -79,9 +81,8 @@ export class CatPlayer extends Player {
       this.autoFireCooldown--;
     } else {
       // Apply angular miss offset (±~25° spread when missChance > 0)
-      const offset = Math.random() < missChance
-        ? (Math.random() - 0.5) * 2 * 0.44
-        : 0;
+      const offset =
+        Math.random() < missChance ? (Math.random() - 0.5) * 2 * 0.44 : 0;
       this.fireMissile(offset);
       this.autoFireCooldown = this.AUTO_FIRE_COOLDOWN;
     }

@@ -16,10 +16,20 @@ export function drawHumanSprite(
   // Legs — hide kicking leg during kick animation
   ctx.fillStyle = '#1e3a5f';
   // Left leg
-  ctx.fillRect(sx + s * 0.27, sy + s * 0.72 + bodyBob + legSwing, s * 0.18, s * 0.24 - legSwing);
+  ctx.fillRect(
+    sx + s * 0.27,
+    sy + s * 0.72 + bodyBob + legSwing,
+    s * 0.18,
+    s * 0.24 - legSwing,
+  );
   if (!isKicking) {
     // Right leg
-    ctx.fillRect(sx + s * 0.55, sy + s * 0.72 + bodyBob - legSwing, s * 0.18, s * 0.24 + legSwing);
+    ctx.fillRect(
+      sx + s * 0.55,
+      sy + s * 0.72 + bodyBob - legSwing,
+      s * 0.18,
+      s * 0.24 + legSwing,
+    );
   }
 
   // Arm swing (opposite to legs)
@@ -31,10 +41,20 @@ export function drawHumanSprite(
 
   // Left arm
   ctx.fillStyle = '#3b82f6';
-  ctx.fillRect(sx + s * 0.07, sy + s * 0.40 + bodyBob + armSwing, s * 0.15, s * 0.22);
+  ctx.fillRect(
+    sx + s * 0.07,
+    sy + s * 0.4 + bodyBob + armSwing,
+    s * 0.15,
+    s * 0.22,
+  );
 
   // Right arm
-  ctx.fillRect(sx + s * 0.78, sy + s * 0.40 + bodyBob - armSwing, s * 0.15, s * 0.22);
+  ctx.fillRect(
+    sx + s * 0.78,
+    sy + s * 0.4 + bodyBob - armSwing,
+    s * 0.15,
+    s * 0.22,
+  );
 
   // Head (skin tone)
   ctx.fillStyle = '#fcd5ae';
@@ -153,7 +173,9 @@ export function drawHumanAttack(
         ctx.arc(
           bootX + Math.cos(angle) * dist,
           bootY + Math.sin(angle) * dist,
-          s * 0.09, 0, Math.PI * 2,
+          s * 0.09,
+          0,
+          Math.PI * 2,
         );
         ctx.fill();
       }

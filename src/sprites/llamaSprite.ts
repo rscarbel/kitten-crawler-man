@@ -16,9 +16,9 @@ export function drawLlamaSprite(
   ctx.save();
   ctx.translate(x, y);
 
-  const tan    = '#c8a45a';
-  const cream  = '#e8d498';
-  const dark   = '#4a2e10';
+  const tan = '#c8a45a';
+  const cream = '#e8d498';
+  const dark = '#4a2e10';
   const hooves = '#2d1a06';
 
   // Body bob
@@ -30,13 +30,29 @@ export function drawLlamaSprite(
   // ── Body ────────────────────────────────────────────────────────────────
   ctx.fillStyle = tan;
   ctx.beginPath();
-  ctx.ellipse(s * 0.55, s * 0.68 + bodyBob, s * 0.33, s * 0.22, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    s * 0.55,
+    s * 0.68 + bodyBob,
+    s * 0.33,
+    s * 0.22,
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   // Fluffy chest patch
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(s * 0.34, s * 0.62 + bodyBob, s * 0.1, s * 0.13, 0.3, 0, Math.PI * 2);
+  ctx.ellipse(
+    s * 0.34,
+    s * 0.62 + bodyBob,
+    s * 0.1,
+    s * 0.13,
+    0.3,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   // ── Neck ────────────────────────────────────────────────────────────────
@@ -45,20 +61,36 @@ export function drawLlamaSprite(
   ctx.moveTo(s * 0.24 - headLunge, s * 0.52 + bodyBob);
   ctx.lineTo(s * 0.36 - headLunge, s * 0.52 + bodyBob);
   ctx.lineTo(s * 0.32 - headLunge, s * 0.22);
-  ctx.lineTo(s * 0.20 - headLunge, s * 0.22);
+  ctx.lineTo(s * 0.2 - headLunge, s * 0.22);
   ctx.closePath();
   ctx.fill();
 
   // ── Head ────────────────────────────────────────────────────────────────
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(s * 0.25 - headLunge, s * 0.16, s * 0.13, s * 0.1, -0.15, 0, Math.PI * 2);
+  ctx.ellipse(
+    s * 0.25 - headLunge,
+    s * 0.16,
+    s * 0.13,
+    s * 0.1,
+    -0.15,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   // Snout — llamas have a distinctive long upper lip
   ctx.fillStyle = tan;
   ctx.beginPath();
-  ctx.ellipse(s * 0.22 - headLunge, s * 0.22, s * 0.07, s * 0.055, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    s * 0.22 - headLunge,
+    s * 0.22,
+    s * 0.07,
+    s * 0.055,
+    0,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   // Nostrils
@@ -75,13 +107,13 @@ export function drawLlamaSprite(
   // left ear
   ctx.beginPath();
   ctx.moveTo(s * 0.14 - headLunge, s * 0.09);
-  ctx.lineTo(s * 0.10 - headLunge, s * 0.01);
-  ctx.lineTo(s * 0.20 - headLunge, s * 0.07);
+  ctx.lineTo(s * 0.1 - headLunge, s * 0.01);
+  ctx.lineTo(s * 0.2 - headLunge, s * 0.07);
   ctx.closePath();
   ctx.fill();
   // right ear
   ctx.beginPath();
-  ctx.moveTo(s * 0.30 - headLunge, s * 0.08);
+  ctx.moveTo(s * 0.3 - headLunge, s * 0.08);
   ctx.lineTo(s * 0.34 - headLunge, s * 0.01);
   ctx.lineTo(s * 0.38 - headLunge, s * 0.08);
   ctx.closePath();
@@ -91,13 +123,13 @@ export function drawLlamaSprite(
   ctx.fillStyle = '#e8a0a0';
   ctx.beginPath();
   ctx.moveTo(s * 0.155 - headLunge, s * 0.085);
-  ctx.lineTo(s * 0.13  - headLunge, s * 0.04);
-  ctx.lineTo(s * 0.19  - headLunge, s * 0.08);
+  ctx.lineTo(s * 0.13 - headLunge, s * 0.04);
+  ctx.lineTo(s * 0.19 - headLunge, s * 0.08);
   ctx.closePath();
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(s * 0.31  - headLunge, s * 0.075);
-  ctx.lineTo(s * 0.34  - headLunge, s * 0.03);
+  ctx.moveTo(s * 0.31 - headLunge, s * 0.075);
+  ctx.lineTo(s * 0.34 - headLunge, s * 0.03);
   ctx.lineTo(s * 0.365 - headLunge, s * 0.075);
   ctx.closePath();
   ctx.fill();
@@ -116,29 +148,57 @@ export function drawLlamaSprite(
   // ── Tail (little nub) ───────────────────────────────────────────────────
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(s * 0.86, s * 0.60 + bodyBob, s * 0.07, s * 0.05, 0.5, 0, Math.PI * 2);
+  ctx.ellipse(
+    s * 0.86,
+    s * 0.6 + bodyBob,
+    s * 0.07,
+    s * 0.05,
+    0.5,
+    0,
+    Math.PI * 2,
+  );
   ctx.fill();
 
   // ── Legs — front and back pairs alternate phase ──────────────────────────
-  const frontLegOff = isMoving ?  Math.sin(walkFrame) * s * 0.045 : 0;
-  const backLegOff  = isMoving ? -Math.sin(walkFrame) * s * 0.045 : 0;
+  const frontLegOff = isMoving ? Math.sin(walkFrame) * s * 0.045 : 0;
+  const backLegOff = isMoving ? -Math.sin(walkFrame) * s * 0.045 : 0;
 
   ctx.fillStyle = tan;
   // front-left
-  ctx.fillRect(s * 0.30, s * 0.82 + bodyBob + frontLegOff, s * 0.08, s * 0.15 - Math.abs(frontLegOff));
+  ctx.fillRect(
+    s * 0.3,
+    s * 0.82 + bodyBob + frontLegOff,
+    s * 0.08,
+    s * 0.15 - Math.abs(frontLegOff),
+  );
   // front-right
-  ctx.fillRect(s * 0.42, s * 0.82 + bodyBob - frontLegOff, s * 0.08, s * 0.15 - Math.abs(frontLegOff));
+  ctx.fillRect(
+    s * 0.42,
+    s * 0.82 + bodyBob - frontLegOff,
+    s * 0.08,
+    s * 0.15 - Math.abs(frontLegOff),
+  );
   // back-left
-  ctx.fillRect(s * 0.62, s * 0.82 + bodyBob + backLegOff, s * 0.08, s * 0.15 - Math.abs(backLegOff));
+  ctx.fillRect(
+    s * 0.62,
+    s * 0.82 + bodyBob + backLegOff,
+    s * 0.08,
+    s * 0.15 - Math.abs(backLegOff),
+  );
   // back-right
-  ctx.fillRect(s * 0.74, s * 0.82 + bodyBob - backLegOff, s * 0.08, s * 0.15 - Math.abs(backLegOff));
+  ctx.fillRect(
+    s * 0.74,
+    s * 0.82 + bodyBob - backLegOff,
+    s * 0.08,
+    s * 0.15 - Math.abs(backLegOff),
+  );
 
   // Hooves
   ctx.fillStyle = hooves;
-  ctx.fillRect(s * 0.30, s * 0.93 + bodyBob + frontLegOff, s * 0.08, s * 0.04);
+  ctx.fillRect(s * 0.3, s * 0.93 + bodyBob + frontLegOff, s * 0.08, s * 0.04);
   ctx.fillRect(s * 0.42, s * 0.93 + bodyBob - frontLegOff, s * 0.08, s * 0.04);
-  ctx.fillRect(s * 0.62, s * 0.93 + bodyBob + backLegOff,  s * 0.08, s * 0.04);
-  ctx.fillRect(s * 0.74, s * 0.93 + bodyBob - backLegOff,  s * 0.08, s * 0.04);
+  ctx.fillRect(s * 0.62, s * 0.93 + bodyBob + backLegOff, s * 0.08, s * 0.04);
+  ctx.fillRect(s * 0.74, s * 0.93 + bodyBob - backLegOff, s * 0.08, s * 0.04);
 
   ctx.restore();
 }

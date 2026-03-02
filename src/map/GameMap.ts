@@ -24,109 +24,6 @@ const FloorTypeValue = {
   wood: 8,
 } as const satisfies Record<FloorTile, number>;
 
-type Rarity =
-  | 'common'
-  | 'uncommon'
-  | 'rare'
-  | 'epic'
-  | 'legendary'
-  | 'celestial';
-
-type InventoryItem =
-  | {
-      item_id: string;
-      name: string;
-      type: 'consumable';
-      action: 'heal' | 'Apply Buff' | 'Heal Debuff';
-      description: string;
-      rarity: Rarity;
-      rechargeTime: number;
-      quanity: number;
-    }
-  | {
-      item_id: string;
-      name: string;
-      type: 'weapon';
-      /** How many tiles this attack reaches */
-      range: number;
-      /** diameter of the area of effect. Minimum 1. */
-      aoe: number;
-      /** From where should the AOE be calculated */
-      epicenter: 'self' | 'weapon-landing';
-      rechargeTime: number;
-      /** -1 for weapons that do not use ammo or have infinite */
-      ammo: number;
-      strengthModification: number;
-      rarity: Rarity;
-      description: string;
-      quanity: number;
-    }
-  | {
-      item_id: string;
-      name: string;
-      type: 'armor';
-      slot:
-        | 'head'
-        | 'sholders'
-        | 'ring'
-        | 'helmet'
-        | 'neck'
-        | 'gloves'
-        | 'pants'
-        | 'feet'
-        | 'back';
-      special_effect: string;
-      /** How long until the special effect can activate again */
-      rechargeTime: number;
-      /** Value from 0-1 that determines how much damage the item will mitigate */
-      defense: number;
-      strengthModification: number;
-      speedModification: number;
-      constitutionModifier: number;
-      intelligenceModifer: number;
-      rarity: Rarity;
-      description: string;
-      quanity: number;
-    }
-  | {
-      item_id: string;
-      name: string;
-      type: 'quest';
-      description: string;
-      quanity: number;
-    };
-
-type CardinalDirection =
-  | 'N'
-  | 'NS'
-  | 'NE'
-  | 'NW'
-  | 'SN'
-  | 'S'
-  | 'SE'
-  | 'SW'
-  | 'EN'
-  | 'ES'
-  | 'E'
-  | 'EW'
-  | 'WN'
-  | 'WS'
-  | 'WE'
-  | 'W';
-
-type Occupant = {
-  entity_id: string;
-  currentTileId: string;
-  direction: CardinalDirection;
-  isMoving: boolean;
-  type: 'self' | 'ally' | 'enemy' | 'neutral' | 'Non-Combatant NPC';
-  sprite: number;
-  constitution: number;
-  strength: number;
-  intelligence: number;
-  inventory: InventoryItem[];
-};
-
 type TileContent = {
   tileId: string;
   type: number;
@@ -332,23 +229,36 @@ export class GameMap {
     if (!this.isWalkable(goalX, goalY)) return [];
     if (startX === goalX && startY === goalY) return [{ x: goalX, y: goalY }];
 
-    type Node = { x: number; y: number; g: number; f: number; parent: Node | null };
+    type Node = {
+      x: number;
+      y: number;
+      g: number;
+      f: number;
+      parent: Node | null;
+    };
     const size = this.structure.length;
-    const key  = (x: number, y: number) => y * size + x;
-    const h    = (x: number, y: number) => Math.abs(x - goalX) + Math.abs(y - goalY);
+    const key = (x: number, y: number) => y * size + x;
+    const h = (x: number, y: number) =>
+      Math.abs(x - goalX) + Math.abs(y - goalY);
 
-    const openMap   = new Map<number, Node>();
+    const openMap = new Map<number, Node>();
     const closedSet = new Set<number>();
-    openMap.set(key(startX, startY), { x: startX, y: startY, g: 0, f: h(startX, startY), parent: null });
+    openMap.set(key(startX, startY), {
+      x: startX,
+      y: startY,
+      g: 0,
+      f: h(startX, startY),
+      parent: null,
+    });
 
     const dirs = [
-      { dx:  1, dy:  0, cost: 1     },
-      { dx: -1, dy:  0, cost: 1     },
-      { dx:  0, dy:  1, cost: 1     },
-      { dx:  0, dy: -1, cost: 1     },
-      { dx:  1, dy:  1, cost: 1.414 },
-      { dx:  1, dy: -1, cost: 1.414 },
-      { dx: -1, dy:  1, cost: 1.414 },
+      { dx: 1, dy: 0, cost: 1 },
+      { dx: -1, dy: 0, cost: 1 },
+      { dx: 0, dy: 1, cost: 1 },
+      { dx: 0, dy: -1, cost: 1 },
+      { dx: 1, dy: 1, cost: 1.414 },
+      { dx: 1, dy: -1, cost: 1.414 },
+      { dx: -1, dy: 1, cost: 1.414 },
       { dx: -1, dy: -1, cost: 1.414 },
     ];
 
@@ -367,7 +277,10 @@ export class GameMap {
       if (best.x === goalX && best.y === goalY) {
         const path: Array<{ x: number; y: number }> = [];
         let node: Node | null = best;
-        while (node) { path.unshift({ x: node.x, y: node.y }); node = node.parent; }
+        while (node) {
+          path.unshift({ x: node.x, y: node.y });
+          node = node.parent;
+        }
         return path;
       }
 
@@ -381,7 +294,12 @@ export class GameMap {
         if (closedSet.has(nk)) continue;
         if (!this.isWalkable(nx, ny)) continue;
         // Block diagonal moves that cut through wall corners
-        if (dir.cost > 1 && (!this.isWalkable(best.x + dir.dx, best.y) || !this.isWalkable(best.x, best.y + dir.dy))) continue;
+        if (
+          dir.cost > 1 &&
+          (!this.isWalkable(best.x + dir.dx, best.y) ||
+            !this.isWalkable(best.x, best.y + dir.dy))
+        )
+          continue;
 
         const g = best.g + dir.cost;
         const existing = openMap.get(nk);

@@ -26,7 +26,7 @@ export class Rat extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, RAT_HP, RAT_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
-    this.biteRangePx  = tileSize * BITE_RANGE_TILES;
+    this.biteRangePx = tileSize * BITE_RANGE_TILES;
   }
 
   updateAI(targets: Player[]) {
@@ -65,7 +65,12 @@ export class Rat extends Mob {
 
     // Skitter toward last known position (= current when LOS clear)
     if (nearestDist > this.biteRangePx) {
-      this.followTargetAStar(this.lastKnownTargetX, this.lastKnownTargetY, this.speed, this.biteRangePx * 0.8);
+      this.followTargetAStar(
+        this.lastKnownTargetX,
+        this.lastKnownTargetY,
+        this.speed,
+        this.biteRangePx * 0.8,
+      );
     } else {
       this.isMoving = false;
     }
@@ -79,7 +84,12 @@ export class Rat extends Mob {
     if (this.firstBiteWindup > 0) this.firstBiteWindup--;
 
     // Same-tile contact always bites — can't dodge point-blank.
-    if (inRange && this.attackCooldown === 0 && this.firstBiteWindup === 0 && (this.hasLOS(nearest) || this.onSameTile(nearest))) {
+    if (
+      inRange &&
+      this.attackCooldown === 0 &&
+      this.firstBiteWindup === 0 &&
+      (this.hasLOS(nearest) || this.onSameTile(nearest))
+    ) {
       nearest.takeDamage(1);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
@@ -103,11 +113,20 @@ export class Rat extends Mob {
       ctx.strokeRect(sx, sy, tileSize, tileSize);
     }
 
-    const attackAnim = this.attackAnimTimer > 0
-      ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
-      : 0;
+    const attackAnim =
+      this.attackAnimTimer > 0
+        ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
+        : 0;
 
-    drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim);
+    drawRatSprite(
+      ctx,
+      sx,
+      sy,
+      tileSize,
+      this.walkFrame,
+      this.isMoving,
+      attackAnim,
+    );
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);

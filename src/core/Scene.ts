@@ -1,0 +1,61 @@
+/**
+ * Abstract base for all game scenes. Scenes own their own update/render logic
+ * and declare what action-key listeners they need via onEnter/onExit.
+ */
+export abstract class Scene {
+  abstract update(): void;
+  abstract render(ctx: CanvasRenderingContext2D): void;
+  onEnter?(): void;
+  onExit?(): void;
+  handleClick?(mx: number, my: number): void;
+}
+
+/**
+ * Owns the <canvas>, runs the rAF loop, and manages scene transitions.
+ * SceneManager is generic — it knows nothing about gameplay, levels, or mobs.
+ */
+export class SceneManager {
+  readonly canvas: HTMLCanvasElement;
+  readonly ctx: CanvasRenderingContext2D;
+  private current: Scene | null = null;
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    this.canvas.style.display = 'block';
+    document.getElementById('game')!.appendChild(this.canvas);
+    this.ctx = this.canvas.getContext('2d')!;
+
+    window.addEventListener('resize', () => {
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
+    });
+
+    this.canvas.addEventListener('click', (e) => {
+      if (!this.current?.handleClick) return;
+      const rect = this.canvas.getBoundingClientRect();
+      this.current.handleClick(e.clientX - rect.left, e.clientY - rect.top);
+    });
+
+    this.loop();
+  }
+
+  /**
+   * Replace the current scene. Calls onExit on the outgoing scene and
+   * onEnter on the incoming one.
+   */
+  replace(scene: Scene): void {
+    this.current?.onExit?.();
+    this.current = scene;
+    scene.onEnter?.();
+  }
+
+  private loop(): void {
+    if (this.current) {
+      this.current.update();
+      this.current.render(this.ctx);
+    }
+    requestAnimationFrame(() => this.loop());
+  }
+}
