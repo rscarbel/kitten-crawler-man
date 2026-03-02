@@ -19,6 +19,8 @@ const AGGRO_RANGE_TILES = 8;
 const SPIT_RANGE_TILES = 5.5;
 /** Frames between spits (~2.5 s at 60 fps) */
 const SPIT_COOLDOWN = 150;
+/** Frames the spit-lunge animation plays */
+const SPIT_ANIM_FRAMES = 20;
 const LAVA_BALL_SPEED = 1.3;
 const LAVA_BALL_DAMAGE = 2;
 const LAVA_BALL_RADIUS = 8;
@@ -28,6 +30,7 @@ export class Llama extends Mob {
   readonly xpValue = 8;
   private lavaBalls: LavaBall[] = [];
   private spitCooldown = 0;
+  private spitAnimTimer = 0;
   private aggroRangePx: number;
   private spitRangePx: number;
   private isAggro = false;
@@ -42,6 +45,7 @@ export class Llama extends Mob {
     if (!this.isAlive) return;
 
     if (this.spitCooldown > 0) this.spitCooldown--;
+    if (this.spitAnimTimer > 0) this.spitAnimTimer--;
 
     // ── Advance lava balls & check player hits ────────────────────────────
     for (const ball of this.lavaBalls) {
@@ -82,6 +86,7 @@ export class Llama extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.doWander();
       return;
     }
     this.isAggro = true;
@@ -89,6 +94,8 @@ export class Llama extends Mob {
     // Llamas prefer to keep spit distance — only close in if too far
     if (nearestDist > this.spitRangePx) {
       this.followTarget(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
+    } else {
+      this.isMoving = false;
     }
 
     // ── Spit a lava ball ─────────────────────────────────────────────────
@@ -109,6 +116,7 @@ export class Llama extends Mob {
         explodeTick: 0,
       });
       this.spitCooldown = SPIT_COOLDOWN;
+      this.spitAnimTimer = SPIT_ANIM_FRAMES;
     }
   }
 
@@ -168,7 +176,14 @@ export class Llama extends Mob {
       ctx.strokeRect(sx, sy, tileSize, tileSize);
     }
 
-    drawLlamaSprite(ctx, sx, sy, tileSize);
-    this.renderHealthBar(ctx, sx, sy);
+    // Normalise spit animation to 0–1 peak-at-midpoint curve
+    const spitAnim = this.spitAnimTimer > 0
+      ? Math.sin((1 - this.spitAnimTimer / SPIT_ANIM_FRAMES) * Math.PI)
+      : 0;
+
+    drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim);
+
+    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderDamageFlash(ctx, sx, sy);
   }
 }

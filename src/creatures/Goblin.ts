@@ -10,6 +10,8 @@ const AGGRO_RANGE_TILES = 6;
 const ATTACK_RANGE_TILES = 1.2;
 /** Frames between attacks (~1.5 s at 60 fps) */
 const ATTACK_COOLDOWN = 90;
+/** Frames the attack swing animation plays */
+const ATTACK_ANIM_FRAMES = 18;
 
 export class Goblin extends Mob {
   readonly xpValue = 5;
@@ -22,6 +24,7 @@ export class Goblin extends Mob {
   protected attackDamage: number;
 
   private attackCooldown = 0;
+  private attackAnimTimer = 0;
   private isAggro = false;
 
   constructor(
@@ -46,6 +49,7 @@ export class Goblin extends Mob {
     if (!this.isAlive) return;
 
     if (this.attackCooldown > 0) this.attackCooldown--;
+    if (this.attackAnimTimer > 0) this.attackAnimTimer--;
 
     // Find nearest living target within aggro range
     let nearest: Player | null = null;
@@ -63,6 +67,7 @@ export class Goblin extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.doWander();
       return;
     }
 
@@ -71,12 +76,15 @@ export class Goblin extends Mob {
     // Chase — stop just inside attack range so the goblin doesn't overlap the target
     if (nearestDist > this.attackRangePx) {
       this.followTarget(nearest.x, nearest.y, this.speed, this.attackRangePx * 0.8);
+    } else {
+      this.isMoving = false;
     }
 
     // Attack on cooldown
     if (nearestDist <= this.attackRangePx && this.attackCooldown === 0) {
       nearest.takeDamage(this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
+      this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }
   }
 
@@ -98,7 +106,18 @@ export class Goblin extends Mob {
       ctx.strokeRect(sx, sy, tileSize, tileSize);
     }
 
-    drawGoblinSprite(ctx, sx, sy, tileSize, this.weapon, this.skinColor, this.eyeColor);
-    this.renderHealthBar(ctx, sx, sy);
+    // Normalise attack animation to 0–1 peak-at-midpoint curve
+    const attackAnim = this.attackAnimTimer > 0
+      ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
+      : 0;
+
+    drawGoblinSprite(
+      ctx, sx, sy, tileSize,
+      this.weapon, this.skinColor, this.eyeColor,
+      this.walkFrame, this.isMoving, attackAnim,
+    );
+
+    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderDamageFlash(ctx, sx, sy);
   }
 }

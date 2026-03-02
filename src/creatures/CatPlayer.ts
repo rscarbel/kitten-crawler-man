@@ -106,9 +106,10 @@ export class CatPlayer extends Player {
       ctx.strokeRect(sx + 1, sy + 1, s - 2, s - 2);
     }
 
-    drawCatSprite(ctx, sx, sy, s);
+    drawCatSprite(ctx, sx, sy, s, this.walkFrame, this.isMoving);
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy);
+    this.renderDamageFlash(ctx, sx, sy);
   }
 }

@@ -15,8 +15,17 @@ const LLAMA_CHANCE = 0.15;
 /** How close an enemy must wander before the human auto-engages (cat-active mode). */
 const HUMAN_ENGAGE_RANGE = TILE_SIZE * 5;
 
-/** Cat stays this many px from its auto-target (within missile range of 3.5 tiles). */
-const CAT_FIGHT_OFFSET = TILE_SIZE * 2.5;
+/**
+ * Cat's preferred kiting distance from an enemy that is targeting her.
+ * She orbits at this radius and flees inward if the enemy gets too close.
+ */
+const CAT_KITE_DIST = TILE_SIZE * 3.5;
+
+/**
+ * When helping the human, the cat stands this many pixels behind the human
+ * (on the side away from the enemy) so the human acts as a shield.
+ */
+const CAT_BEHIND_HUMAN_OFFSET = TILE_SIZE * 2.2;
 
 type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
 const GOBLIN_VARIANTS: GoblinVariant[] = [
@@ -52,6 +61,8 @@ class GameStage {
   private catWanderX = 0;
   private catWanderY = 0;
   private catWanderTimer = 0;
+  /** Angle used by the cat's kiting orbit. Increments every frame during kite mode. */
+  private catKiteAngle = 0;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -82,6 +93,12 @@ class GameStage {
         if (this.human.isActive) this.human.triggerAttack();
         else this.cat.triggerAttack();
       }
+      // Q — drink a health potion (active character)
+      if ((e.key === 'q' || e.key === 'Q') && !e.repeat) {
+        e.preventDefault();
+        if (this.human.isActive) this.human.usePotion();
+        else this.cat.usePotion();
+      }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key));
     window.addEventListener('resize', () => {
@@ -110,6 +127,9 @@ class GameStage {
     if (this.keys.has('ArrowDown') || this.keys.has('s')) dy += 1;
     if (this.keys.has('ArrowLeft') || this.keys.has('a')) dx -= 1;
     if (this.keys.has('ArrowRight') || this.keys.has('d')) dx += 1;
+
+    // Track movement for walk animation
+    player.isMoving = (dx !== 0 || dy !== 0);
 
     // Update facing direction from raw input (before speed scaling)
     if (dx !== 0 || dy !== 0) {
@@ -144,15 +164,21 @@ class GameStage {
 
     // ── Follower movement ─────────────────────────────────────────────────
     if (this.human.isActive) {
-      // Cat: close on her auto-target when fighting, otherwise wander near human
+      // Cat follower: position depends on combat mode
       if (this.cat.autoTarget && this.cat.autoTarget.isAlive) {
-        this.cat.followTarget(
-          this.cat.autoTarget.x,
-          this.cat.autoTarget.y,
-          FOLLOWER_SPEED,
-          CAT_FIGHT_OFFSET,
-        );
+        const enemy = this.cat.autoTarget as Mob;
+        if (enemy.currentTarget === this.cat) {
+          // Enemy is targeting the cat → kite around the enemy
+          this.doCatKite(enemy);
+        } else if (enemy.currentTarget === this.human) {
+          // Enemy is targeting the human → shelter behind the human
+          this.doCatBehindHuman(enemy);
+        } else {
+          // Enemy isn't targeting anyone we know → standard fight offset
+          this.cat.followTarget(enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
+        }
       } else {
+        // Idle: wander near the human
         this.catWanderTimer--;
         if (this.catWanderTimer <= 0) {
           const angle = Math.random() * Math.PI * 2;
@@ -186,10 +212,11 @@ class GameStage {
     this.human.updateAttack();
     this.cat.updateMissiles();
 
-    // Mob AI
+    // Mob AI + timer ticking
     const playerTargets = [this.human, this.cat];
     for (const mob of this.mobs) {
       mob.updateAI(playerTargets);
+      mob.tickTimers();
     }
 
     // Companion auto-combat AI
@@ -201,10 +228,73 @@ class GameStage {
     // Award XP for kills this frame
     this.resolveKills();
 
-    // Tick level-up flash timers
+    // Tick level-up / damage flash timers for players
     this.human.tickTimers();
     this.cat.tickTimers();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cat positioning helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Kiting: the cat orbits the enemy at CAT_KITE_DIST and flees sideways when
+   * the enemy closes in. She keeps firing via autoFireTick (called separately).
+   */
+  private doCatKite(enemy: Mob) {
+    const ex = enemy.x + TILE_SIZE * 0.5;
+    const ey = enemy.y + TILE_SIZE * 0.5;
+    const cx = this.cat.x + TILE_SIZE * 0.5;
+    const cy = this.cat.y + TILE_SIZE * 0.5;
+    const distToEnemy = Math.hypot(cx - ex, cy - ey);
+
+    this.catKiteAngle += 0.022;
+
+    if (distToEnemy < CAT_KITE_DIST * 0.75) {
+      // Too close: flee directly away + slight lateral strafe
+      if (distToEnemy > 0) {
+        const nx = (cx - ex) / distToEnemy;
+        const ny = (cy - ey) / distToEnemy;
+        // Rotate flee vector slightly for strafe
+        const cos = Math.cos(0.4), sin = Math.sin(0.4);
+        const sx2 = nx * cos - ny * sin;
+        const sy2 = nx * sin + ny * cos;
+        this.cat.x += sx2 * FOLLOWER_SPEED * 1.35;
+        this.cat.y += sy2 * FOLLOWER_SPEED * 1.35;
+        this.cat.isMoving = true;
+      }
+    } else {
+      // Orbit: move to a point at kite distance at the current kite angle
+      const targetX = ex + Math.cos(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
+      const targetY = ey + Math.sin(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
+      this.cat.followTarget(targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
+    }
+  }
+
+  /**
+   * Shield position: cat moves to a point 2+ tiles behind the human
+   * (on the side away from the enemy) so the human is between them.
+   */
+  private doCatBehindHuman(enemy: Mob) {
+    const ex = enemy.x + TILE_SIZE * 0.5;
+    const ey = enemy.y + TILE_SIZE * 0.5;
+    const hx = this.human.x + TILE_SIZE * 0.5;
+    const hy = this.human.y + TILE_SIZE * 0.5;
+
+    // Direction from enemy → human
+    const dx = hx - ex;
+    const dy = hy - ey;
+    const dist = Math.hypot(dx, dy) || 1;
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    // Target: stand behind the human, even farther from the enemy
+    const targetX = hx + nx * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
+    const targetY = hy + ny * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
+    this.cat.followTarget(targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   /**
    * Decide which enemies the companion character auto-engages each frame.
@@ -401,7 +491,7 @@ class GameStage {
     const inactivePlayer = this.inactive();
 
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(8, 8, 320, 150);
+    ctx.fillRect(8, 8, 340, 176);
 
     ctx.fillStyle = '#facc15';
     ctx.font = 'bold 13px monospace';
@@ -410,10 +500,10 @@ class GameStage {
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '12px monospace';
     ctx.fillText('WASD/Arrows: Move  |  Tab: Switch', 16, 46);
-    ctx.fillText(`Space: ${atkLabel}`, 16, 62);
+    ctx.fillText(`Space: ${atkLabel}  |  Q: Potion`, 16, 62);
 
     this.drawHUDPlayerBlock(ctx, activeLabel,   activePlayer,   16,  74);
-    this.drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 112);
+    this.drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 128);
   }
 
   private drawHUDPlayerBlock(
@@ -460,11 +550,11 @@ class GameStage {
     ctx.font = '10px monospace';
     ctx.fillText(`${player.xp}/${xpNeeded}`, barX + barW + 4, y2 + barH);
 
-    // Stats
+    // Stats + potions
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '10px monospace';
     ctx.fillText(
-      `STR:${player.strength}  INT:${player.intelligence}  CON:${player.constitution}`,
+      `STR:${player.strength}  INT:${player.intelligence}  HP:${player.constitution}  🧪${player.healthPotions}`,
       barX, y2 + barH + 12,
     );
   }

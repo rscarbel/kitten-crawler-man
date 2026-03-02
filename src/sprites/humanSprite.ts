@@ -4,31 +4,51 @@ export function drawHumanSprite(
   sy: number,
   s: number,
   isKicking: boolean,
+  walkFrame = 0,
+  isMoving = false,
 ) {
+  // Body bob — bounces up slightly twice per stride cycle
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.04 : 0;
+
+  // Leg offsets — left and right swing in opposite phases
+  const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.05 : 0;
+
   // Legs — hide kicking leg during kick animation
   ctx.fillStyle = '#1e3a5f';
-  ctx.fillRect(sx + s * 0.27, sy + s * 0.72, s * 0.18, s * 0.24); // left leg always
+  // Left leg
+  ctx.fillRect(sx + s * 0.27, sy + s * 0.72 + bodyBob + legSwing, s * 0.18, s * 0.24 - legSwing);
   if (!isKicking) {
-    ctx.fillRect(sx + s * 0.55, sy + s * 0.72, s * 0.18, s * 0.24);
+    // Right leg
+    ctx.fillRect(sx + s * 0.55, sy + s * 0.72 + bodyBob - legSwing, s * 0.18, s * 0.24 + legSwing);
   }
+
+  // Arm swing (opposite to legs)
+  const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.03 : 0;
 
   // Body (blue shirt)
   ctx.fillStyle = '#3b82f6';
-  ctx.fillRect(sx + s * 0.22, sy + s * 0.38, s * 0.56, s * 0.38);
+  ctx.fillRect(sx + s * 0.22, sy + s * 0.38 + bodyBob, s * 0.56, s * 0.38);
+
+  // Left arm
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillRect(sx + s * 0.07, sy + s * 0.40 + bodyBob + armSwing, s * 0.15, s * 0.22);
+
+  // Right arm
+  ctx.fillRect(sx + s * 0.78, sy + s * 0.40 + bodyBob - armSwing, s * 0.15, s * 0.22);
 
   // Head (skin tone)
   ctx.fillStyle = '#fcd5ae';
   ctx.beginPath();
-  ctx.arc(sx + s * 0.5, sy + s * 0.24, s * 0.2, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.5, sy + s * 0.24 + bodyBob, s * 0.2, 0, Math.PI * 2);
   ctx.fill();
 
   // Eyes
   ctx.fillStyle = '#1e293b';
   ctx.beginPath();
-  ctx.arc(sx + s * 0.42, sy + s * 0.22, s * 0.035, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.42, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(sx + s * 0.58, sy + s * 0.22, s * 0.035, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.58, sy + s * 0.22 + bodyBob, s * 0.035, 0, Math.PI * 2);
   ctx.fill();
 }
 

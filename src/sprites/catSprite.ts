@@ -10,27 +10,52 @@ export interface Missile {
   hit: boolean;
 }
 
-export function drawCatSprite(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number) {
+export function drawCatSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+) {
+  // Body bob — subtle upward bounce on each stride
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.028 : 0;
+
+  // Tail — sways left/right while moving
+  const tailSway = Math.sin(isMoving ? walkFrame * 0.9 : 0) * s * 0.1;
+
   // Tail (drawn first so body covers the base)
   ctx.strokeStyle = '#c47a15';
   ctx.lineWidth = s * 0.07;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(sx + s * 0.75, sy + s * 0.62);
-  ctx.quadraticCurveTo(sx + s * 1.08, sy + s * 0.5, sx + s * 0.95, sy + s * 0.3);
+  ctx.moveTo(sx + s * 0.75, sy + s * 0.62 + bodyBob);
+  ctx.quadraticCurveTo(sx + s * 1.08 + tailSway, sy + s * 0.5, sx + s * 0.95, sy + s * 0.3);
   ctx.stroke();
   // Dark band on tail
   ctx.strokeStyle = '#1a0f00';
   ctx.lineWidth = s * 0.04;
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.88, sy + s * 0.44);
-  ctx.quadraticCurveTo(sx + s * 1.0, sy + s * 0.38, sx + s * 0.95, sy + s * 0.3);
+  ctx.quadraticCurveTo(sx + s * 1.0 + tailSway * 0.5, sy + s * 0.38, sx + s * 0.95, sy + s * 0.3);
   ctx.stroke();
+
+  // Paw offsets
+  const pawSwing = isMoving ? Math.sin(walkFrame) * s * 0.035 : 0;
+
+  // Front paws (left/right pair, opposite phase to back)
+  ctx.fillStyle = '#c47a15';
+  ctx.beginPath();
+  ctx.ellipse(sx + s * 0.32, sy + s * 0.80 + bodyBob + pawSwing, s * 0.07, s * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(sx + s * 0.52, sy + s * 0.80 + bodyBob - pawSwing, s * 0.07, s * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   // Body — tortoiseshell: base orange, clipped patches
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.5, sy + s * 0.62, s * 0.28, s * 0.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.5, sy + s * 0.62 + bodyBob, s * 0.28, s * 0.2, 0, 0, Math.PI * 2);
   ctx.fillStyle = '#c47a15';
   ctx.fill();
   ctx.clip();
@@ -38,24 +63,24 @@ export function drawCatSprite(ctx: CanvasRenderingContext2D, sx: number, sy: num
   ctx.fillStyle = '#1a0f00';
   ctx.globalAlpha = 0.88;
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.35, sy + s * 0.56, s * 0.13, s * 0.1, -0.4, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.35, sy + s * 0.56 + bodyBob, s * 0.13, s * 0.1, -0.4, 0, Math.PI * 2);
   ctx.fill();
   // Dark patch lower-right
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.64, sy + s * 0.68, s * 0.1, s * 0.09, 0.3, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.64, sy + s * 0.68 + bodyBob, s * 0.1, s * 0.09, 0.3, 0, Math.PI * 2);
   ctx.fill();
   // Cream patch mid-right
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = '#f0c060';
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.57, sy + s * 0.58, s * 0.1, s * 0.08, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.57, sy + s * 0.58 + bodyBob, s * 0.1, s * 0.08, 0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   // Head — tortoiseshell: base orange, clipped patches
   ctx.save();
   ctx.beginPath();
-  ctx.arc(sx + s * 0.5, sy + s * 0.34, s * 0.21, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.5, sy + s * 0.34 + bodyBob, s * 0.21, 0, Math.PI * 2);
   ctx.fillStyle = '#c47a15';
   ctx.fill();
   ctx.clip();
@@ -63,48 +88,48 @@ export function drawCatSprite(ctx: CanvasRenderingContext2D, sx: number, sy: num
   ctx.fillStyle = '#1a0f00';
   ctx.globalAlpha = 0.88;
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.41, sy + s * 0.33, s * 0.1, s * 0.14, -0.3, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.41, sy + s * 0.33 + bodyBob, s * 0.1, s * 0.14, -0.3, 0, Math.PI * 2);
   ctx.fill();
   // Cream patch forehead-right
   ctx.globalAlpha = 0.75;
   ctx.fillStyle = '#f0c060';
   ctx.beginPath();
-  ctx.ellipse(sx + s * 0.57, sy + s * 0.28, s * 0.07, s * 0.08, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(sx + s * 0.57, sy + s * 0.28 + bodyBob, s * 0.07, s * 0.08, 0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
   // Ears (left) — dark tortoiseshell
   ctx.fillStyle = '#1a0f00';
   ctx.beginPath();
-  ctx.moveTo(sx + s * 0.32, sy + s * 0.2);
-  ctx.lineTo(sx + s * 0.22, sy + s * 0.06);
-  ctx.lineTo(sx + s * 0.44, sy + s * 0.17);
+  ctx.moveTo(sx + s * 0.32, sy + s * 0.2 + bodyBob);
+  ctx.lineTo(sx + s * 0.22, sy + s * 0.06 + bodyBob);
+  ctx.lineTo(sx + s * 0.44, sy + s * 0.17 + bodyBob);
   ctx.fill();
 
   // Ears (right) — orange
   ctx.fillStyle = '#c47a15';
   ctx.beginPath();
-  ctx.moveTo(sx + s * 0.68, sy + s * 0.2);
-  ctx.lineTo(sx + s * 0.78, sy + s * 0.06);
-  ctx.lineTo(sx + s * 0.56, sy + s * 0.17);
+  ctx.moveTo(sx + s * 0.68, sy + s * 0.2 + bodyBob);
+  ctx.lineTo(sx + s * 0.78, sy + s * 0.06 + bodyBob);
+  ctx.lineTo(sx + s * 0.56, sy + s * 0.17 + bodyBob);
   ctx.fill();
 
   // Eyes (green)
   ctx.fillStyle = '#4ade80';
   ctx.beginPath();
-  ctx.arc(sx + s * 0.41, sy + s * 0.32, s * 0.045, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(sx + s * 0.59, sy + s * 0.32, s * 0.045, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.045, 0, Math.PI * 2);
   ctx.fill();
 
   // Pupils
   ctx.fillStyle = '#1e293b';
   ctx.beginPath();
-  ctx.arc(sx + s * 0.41, sy + s * 0.32, s * 0.022, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.41, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(sx + s * 0.59, sy + s * 0.32, s * 0.022, 0, Math.PI * 2);
+  ctx.arc(sx + s * 0.59, sy + s * 0.32 + bodyBob, s * 0.022, 0, Math.PI * 2);
   ctx.fill();
 }
 
