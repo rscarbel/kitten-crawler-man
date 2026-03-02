@@ -32,6 +32,7 @@ import {
   drawDynamiteExplosion,
   drawDynamiteChargeBar,
 } from '../sprites/dynamiteSprite';
+import { SpatialGrid } from '../core/SpatialGrid';
 
 interface PendingLoot {
   x: number;
@@ -113,6 +114,9 @@ export class DungeonScene extends Scene {
 
   /** Loot bags waiting to be collected after mob kills. */
   private pendingLoots: PendingLoot[] = [];
+
+  /** Spatial hash grid for fast mob proximity queries (AI, combat, rendering). */
+  private mobGrid!: SpatialGrid<Mob>;
 
   /** Oscillation counter passed to HUD for the skill-point notification pulse. */
   private notifPulse = { value: 0 };
@@ -221,6 +225,10 @@ export class DungeonScene extends Scene {
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
     this.cat.setMap(this.gameMap);
+
+    // Build the spatial grid — cell size = 4 tiles, a good fit for the 22-tile AI radius.
+    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);
+    for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
@@ -598,7 +606,15 @@ export class DungeonScene extends Scene {
     // ── Boss room world-space decorations ─────────────────────────────────
     this.renderBossRoomObjects(ctx, camX, camY);
 
-    for (const mob of this.mobs) mob.render(ctx, camX, camY, TILE_SIZE);
+    // Only render mobs that are actually on screen (viewport culling).
+    // With a large map and many mobs, this avoids drawing hundreds of off-screen sprites.
+    const visibleMobs = this.mobGrid.queryRect(
+      camX - TILE_SIZE,
+      camY - TILE_SIZE,
+      canvas.width + TILE_SIZE * 2,
+      canvas.height + TILE_SIZE * 2,
+    );
+    for (const mob of visibleMobs) mob.render(ctx, camX, camY, TILE_SIZE);
 
     // Inactive companion renders behind active player
     this.inactive().render(ctx, camX, camY, TILE_SIZE);
@@ -865,7 +881,12 @@ export class DungeonScene extends Scene {
         this.activeFogs.splice(fi, 1);
         continue;
       }
-      for (const mob of this.mobs) {
+      const inFog = this.mobGrid.queryCircle(
+        fog.x,
+        fog.y,
+        fog.radiusPx + TILE_SIZE,
+      );
+      for (const mob of inFog) {
         if (!mob.isAlive) continue;
         if (
           Math.hypot(
@@ -879,34 +900,32 @@ export class DungeonScene extends Scene {
     }
 
     // ── Mob AI ────────────────────────────────────────────────────────────
-    // Only run full AI for mobs within the activation radius of either player.
-    // Distant mobs are frozen (no wander, no pathfinding) until the player
-    // gets close. This keeps per-frame cost O(active_mobs) instead of O(all_mobs),
-    // which matters a lot on large maps with many spawned enemies.
+    // Query the spatial grid for mobs within the activation radius of either
+    // player.  Mobs outside this radius stay frozen — no wander, no pathfinding.
+    // This keeps per-frame cost O(active_mobs) rather than O(all_mobs), which
+    // is critical on the large map where most mobs are far from the players.
     const playerTargets = [this.human, this.cat];
-    const AI_RADIUS_SQ = (TILE_SIZE * 22) ** 2;
+    const AI_RADIUS = TILE_SIZE * 22;
     const hx = this.human.x,
       hy = this.human.y;
     const cx = this.cat.x,
       cy = this.cat.y;
-    for (const mob of this.mobs) {
+    // Union of mobs near human and cat (Set deduplicates overlap).
+    const activeMobs = this.mobGrid.queryCircle(hx, hy, AI_RADIUS);
+    this.mobGrid.queryCircle(cx, cy, AI_RADIUS, activeMobs);
+    for (const mob of activeMobs) {
       if (!mob.isAlive) continue;
-      const dx1 = mob.x - hx,
-        dy1 = mob.y - hy;
-      const dx2 = mob.x - cx,
-        dy2 = mob.y - cy;
-      if (
-        dx1 * dx1 + dy1 * dy1 <= AI_RADIUS_SQ ||
-        dx2 * dx2 + dy2 * dy2 <= AI_RADIUS_SQ
-      ) {
-        if (mob.isConfused) {
-          mob.currentTarget = null;
-          mob.doWander();
-        } else {
-          mob.updateAI(playerTargets);
-        }
-        mob.tickTimers();
+      const ox = mob.x,
+        oy = mob.y;
+      if (mob.isConfused) {
+        mob.currentTarget = null;
+        mob.doWander();
+      } else {
+        mob.updateAI(playerTargets);
       }
+      mob.tickTimers();
+      // Keep the grid in sync after the mob may have moved.
+      this.mobGrid.move(mob, ox, oy);
     }
 
     // ── Shell spell tick ──────────────────────────────────────────────────
@@ -1051,7 +1070,8 @@ export class DungeonScene extends Scene {
   /** AoE damage to all entities within DYN_RADIUS of the given pixel center. */
   private triggerDynamiteExplosion(cx: number, cy: number): void {
     const ts = TILE_SIZE;
-    for (const mob of this.mobs) {
+    const nearBlast = this.mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
+    for (const mob of nearBlast) {
       if (!mob.isAlive) continue;
       if (
         Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS
@@ -1178,12 +1198,25 @@ export class DungeonScene extends Scene {
         : this.gameMap.hallwaySpawnPoints;
     if (fallback.length === 0) return;
 
-    for (const mob of this.mobs) {
+    const b = this.safeRoomBounds;
+    const ts = TILE_SIZE;
+    // Query a slightly expanded rect (1 tile margin) to catch mobs whose
+    // centre is inside the room even if their top-left is just outside.
+    const candidates = this.mobGrid.queryRect(
+      b.x * ts - ts,
+      b.y * ts - ts,
+      b.w * ts + ts * 2,
+      b.h * ts + ts * 2,
+    );
+    for (const mob of candidates) {
       if (!mob.isAlive) continue;
       if (this.isEntityInSafeRoom(mob)) {
+        const ox = mob.x,
+          oy = mob.y;
         const pt = fallback[Math.floor(Math.random() * fallback.length)];
-        mob.x = pt.x * TILE_SIZE;
-        mob.y = pt.y * TILE_SIZE;
+        mob.x = pt.x * ts;
+        mob.y = pt.y * ts;
+        this.mobGrid.move(mob, ox, oy);
       }
     }
   }
@@ -1275,6 +1308,7 @@ export class DungeonScene extends Scene {
           const roach = new Cockroach(tileX, tileY, TILE_SIZE);
           roach.setMap(this.gameMap);
           this.mobs.push(roach);
+          this.mobGrid.insert(roach);
           spawned++;
         }
       }
@@ -1291,8 +1325,12 @@ export class DungeonScene extends Scene {
         mob.justDied = true;
       }
     }
-    // Prune dead cockroaches periodically to avoid unbounded array growth
+    // Prune dead cockroaches periodically to avoid unbounded array growth.
+    // Remove them from the spatial grid first so it stays consistent.
     if (this.mobs.length > 200) {
+      for (const m of this.mobs) {
+        if (!m.isAlive && m instanceof Cockroach) this.mobGrid.remove(m);
+      }
       this.mobs = this.mobs.filter(
         (m) => m.isAlive || !(m instanceof Cockroach),
       );
@@ -1919,7 +1957,12 @@ export class DungeonScene extends Scene {
       if (!this.human.autoTarget) {
         let closestDist = HUMAN_ENGAGE_RANGE;
         let closest: Mob | null = null;
-        for (const mob of this.mobs) {
+        const nearHuman = this.mobGrid.queryCircle(
+          this.human.x,
+          this.human.y,
+          HUMAN_ENGAGE_RANGE,
+        );
+        for (const mob of nearHuman) {
           if (!mob.isAlive) continue;
           const dist = Math.hypot(mob.x - this.human.x, mob.y - this.human.y);
           if (dist < closestDist) {
@@ -1951,12 +1994,13 @@ export class DungeonScene extends Scene {
     const py = player.y + TILE_SIZE * 0.5;
     let bestDist = range;
     let bestMob: Mob | null = null;
-    for (const mob of this.mobs) {
+    const nearPlayer = this.mobGrid.queryCircle(px, py, range);
+    for (const mob of nearPlayer) {
       if (!mob.isAlive) continue;
       const dx = mob.x + TILE_SIZE * 0.5 - px;
       const dy = mob.y + TILE_SIZE * 0.5 - py;
       const dist = Math.hypot(dx, dy);
-      if (dist > range) continue;
+      if (dist > range || dist === 0) continue;
       const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
       if (dot < 0.25) continue;
       if (
@@ -1995,7 +2039,8 @@ export class DungeonScene extends Scene {
       const hc = centerOf(this.human);
       const range = this.human.getMeleeRange();
       const damage = this.human.getMeleeDamage();
-      for (const mob of this.mobs) {
+      const nearHuman = this.mobGrid.queryCircle(hc.x, hc.y, range);
+      for (const mob of nearHuman) {
         if (!mob.isAlive) continue;
         const mc = centerOf(mob);
         const dx = mc.x - hc.x;
@@ -2015,14 +2060,20 @@ export class DungeonScene extends Scene {
 
     // Cat missiles
     if (!this.isEntityInSafeRoom(this.cat)) {
+      const hitRadius = TILE_SIZE * 0.7;
       for (const missile of this.cat.getMissiles()) {
         if (missile.state !== 'flying' || missile.hit) continue;
         const damage = this.cat.getMissileDamage();
-        for (const mob of this.mobs) {
+        const nearMissile = this.mobGrid.queryCircle(
+          missile.x,
+          missile.y,
+          hitRadius + TILE_SIZE,
+        );
+        for (const mob of nearMissile) {
           if (!mob.isAlive) continue;
           const mc = centerOf(mob);
           const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
-          if (dist < TILE_SIZE * 0.7) {
+          if (dist < hitRadius) {
             mob.takeDamageFrom(damage, this.cat);
             missile.hit = true;
             missile.state = 'exploding';
@@ -2037,6 +2088,7 @@ export class DungeonScene extends Scene {
     for (const mob of this.mobs) {
       if (!mob.justDied) continue;
       mob.justDied = false;
+      this.mobGrid.remove(mob); // evict from spatial grid immediately
 
       let totalDmg = 0;
       for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;
@@ -2414,7 +2466,9 @@ export class DungeonScene extends Scene {
   private pushMobsFromShell(): void {
     if (!this.activeShell) return;
     const { x, y, radiusPx } = this.activeShell;
-    for (const mob of this.mobs) {
+    // Add TILE_SIZE margin to catch mobs whose centre (x + 0.5 tile) is inside the radius.
+    const nearShell = this.mobGrid.queryCircle(x, y, radiusPx + TILE_SIZE);
+    for (const mob of nearShell) {
       if (!mob.isAlive) continue;
       const mcx = mob.x + TILE_SIZE * 0.5;
       const mcy = mob.y + TILE_SIZE * 0.5;
@@ -2422,12 +2476,15 @@ export class DungeonScene extends Scene {
       const dy = mcy - y;
       const dist = Math.hypot(dx, dy);
       if (dist < radiusPx) {
+        const ox = mob.x,
+          oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
         const push = radiusPx - dist + 2;
         mob.x += nx * push;
         mob.y += ny * push;
         mob.takeDamageFrom(1, this.human);
+        this.mobGrid.move(mob, ox, oy);
       }
     }
   }

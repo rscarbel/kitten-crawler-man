@@ -7,7 +7,7 @@ import type { LevelDef } from './types';
 export const level1: LevelDef = {
   id: 'level1',
   name: 'The Dungeon',
-  mapSize: 100,
+  mapSize: 450,
   roomMobs: [
     { type: 'goblin', chance: 0.85, minCount: 2, maxCount: 4 },
     { type: 'llama', chance: 0.15, minCount: 1, maxCount: 2 },

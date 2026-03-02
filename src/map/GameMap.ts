@@ -153,7 +153,21 @@ export class GameMap {
     // rooms[0]=start, rooms[1]=safe, rooms[2..2+numBossRooms-1]=boss rooms
     const bossRoomEnd = 2 + numBossRooms;
 
-    for (let attempt = 0; attempt < 80 && rooms.length < 15; attempt++) {
+    // Scale room count and attempts proportionally to map area.
+    // At size=100: 15 rooms, ~120 attempts.  At size=450: ~304 rooms, ~2432 attempts.
+    const maxRooms = Math.round(15 * (size / 100) ** 2);
+    const maxAttempts = Math.max(maxRooms * 8, 80);
+
+    // Fixed max-distance constraints for special rooms (in tiles from start centre).
+    // Keeps the safe room and boss room "nearby" regardless of how big the map grows.
+    const SAFE_MAX_DIST = 50; // rooms[1] — safe room
+    const BOSS_MAX_DIST = 80; // rooms[2+] — boss rooms
+
+    for (
+      let attempt = 0;
+      attempt < maxAttempts && rooms.length < maxRooms;
+      attempt++
+    ) {
       const isBossRoom = rooms.length >= 2 && rooms.length < bossRoomEnd;
       const w = isBossRoom
         ? 22
@@ -188,7 +202,24 @@ export class GameMap {
           return Math.hypot(cx - rc.x, cy - rc.y) < 25;
         });
 
-      if (!overlaps && !tooCloseToBoss) {
+      // Safe room and boss rooms must stay within a fixed tile-radius of the start
+      // room so they remain "near" even on very large maps.
+      let tooFarFromStart = false;
+      if (rooms.length > 0) {
+        const sc = {
+          x: Math.floor(rooms[0].x + rooms[0].w / 2),
+          y: Math.floor(rooms[0].y + rooms[0].h / 2),
+        };
+        const maxDist =
+          rooms.length === 1
+            ? SAFE_MAX_DIST
+            : isBossRoom
+              ? BOSS_MAX_DIST
+              : Infinity;
+        if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
+      }
+
+      if (!overlaps && !tooCloseToBoss && !tooFarFromStart) {
         const floor =
           rooms.length === 1
             ? SAFE_ROOM_FLOOR
@@ -252,24 +283,38 @@ export class GameMap {
     }));
 
     // 7. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
+    // Scale the max rat count proportionally to map area (same density as the base map).
+    const maxHallwaySpawns = Math.round(10 * (size / 100) ** 2);
+
     const roomCenters = rooms.map((r) => ({
       x: Math.floor(r.x + r.w / 2),
       y: Math.floor(r.y + r.h / 2),
     }));
     const MIN_FROM_ROOM = 5;
-    const validHallway = hallwayTiles.filter((t) =>
-      roomCenters.every(
-        (c) => Math.hypot(t.x - c.x, t.y - c.y) > MIN_FROM_ROOM,
-      ),
+
+    // Build a fast lookup of "near-room" tiles to avoid O(tiles × rooms) filtering.
+    const nearRoomSet = new Set<number>();
+    for (const c of roomCenters) {
+      for (let dy = -MIN_FROM_ROOM; dy <= MIN_FROM_ROOM; dy++) {
+        for (let dx = -MIN_FROM_ROOM; dx <= MIN_FROM_ROOM; dx++) {
+          if (Math.hypot(dx, dy) <= MIN_FROM_ROOM) {
+            nearRoomSet.add((c.y + dy) * size + (c.x + dx));
+          }
+        }
+      }
+    }
+    const validHallway = hallwayTiles.filter(
+      (t) => !nearRoomSet.has(t.y * size + t.x),
     );
-    // Fisher-Yates shuffle then pick up to 10 tiles with ≥3-tile separation.
+
+    // Fisher-Yates shuffle then pick up to maxHallwaySpawns tiles with ≥3-tile separation.
     for (let i = validHallway.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [validHallway[i], validHallway[j]] = [validHallway[j], validHallway[i]];
     }
     const chosen: Array<{ x: number; y: number }> = [];
     for (const t of validHallway) {
-      if (chosen.length >= 10) break;
+      if (chosen.length >= maxHallwaySpawns) break;
       if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= 3))
         chosen.push(t);
     }
