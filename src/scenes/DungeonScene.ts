@@ -95,6 +95,8 @@ export class DungeonScene extends Scene {
   private bossRoomLocked = false;
   /** True after the boss is killed — room stays unlocked permanently. */
   private bossDefeated = false;
+  /** Counts down after boss defeat to hide the boss UI after a short delay. */
+  private bossDefeatDisplayTimer = 0;
   /** Pulse timer for boss health bar animation. */
   private bossPulse = 0;
 
@@ -668,6 +670,7 @@ export class DungeonScene extends Scene {
 
     this.human.tickTimers();
     this.cat.tickTimers();
+    if (this.bossDefeatDisplayTimer > 0) this.bossDefeatDisplayTimer--;
 
     this.updateCompanionPotion();
 
@@ -796,6 +799,7 @@ export class DungeonScene extends Scene {
     if (this.bossRoomLocked && !bossAlive) {
       this.bossRoomLocked = false;
       this.bossDefeated = true;
+      this.bossDefeatDisplayTimer = 300;
       // Kill all cockroaches
       for (const mob of this.mobs) {
         if (mob instanceof Cockroach && mob.isAlive) {
@@ -1196,7 +1200,7 @@ export class DungeonScene extends Scene {
       this.isEntityInBossRoom(this.human) ||
       this.isEntityInBossRoom(this.cat) ||
       this.bossRoomLocked ||
-      (this.bossDefeated && boss.healthBarTimer > 0);
+      this.bossDefeatDisplayTimer > 0;
     if (!playerNearBoss && !this.bossRoomLocked) return;
 
     const barW = Math.min(360, canvas.width * 0.5);

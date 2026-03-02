@@ -21,15 +21,15 @@ export const GOBLIN_VARIANTS: GoblinVariant[] = [
 
 // ── Weighted random selection ─────────────────────────────────────────────────
 
-/** Pick a mob type from a weighted rule list. Weights need not sum to 1. */
-function pickType(rules: MobSpawnRule[]): string {
+/** Pick a rule from a weighted list. Weights need not sum to 1. */
+function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   const total = rules.reduce((sum, r) => sum + r.chance, 0);
   let roll = Math.random() * total;
   for (const rule of rules) {
     roll -= rule.chance;
-    if (roll <= 0) return rule.type;
+    if (roll <= 0) return rule;
   }
-  return rules[rules.length - 1].type;
+  return rules[rules.length - 1];
 }
 
 // ── Mob factory ───────────────────────────────────────────────────────────────
@@ -70,11 +70,18 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
   const mobs: Mob[] = [];
 
   for (const { x, y } of map.mobSpawnPoints) {
-    mobs.push(createMob(pickType(def.roomMobs), x, y, map));
+    const rule = pickRule(def.roomMobs);
+    const min = rule.minCount ?? 1;
+    const max = rule.maxCount ?? 1;
+    const count = min + Math.floor(Math.random() * (max - min + 1));
+    for (let i = 0; i < count; i++) {
+      mobs.push(createMob(rule.type, x, y, map));
+    }
   }
 
   for (const { x, y } of map.hallwaySpawnPoints) {
-    mobs.push(createMob(pickType(def.hallwayMobs), x, y, map));
+    const rule = pickRule(def.hallwayMobs);
+    mobs.push(createMob(rule.type, x, y, map));
   }
 
   // Spawn boss in the boss room (rooms[2])

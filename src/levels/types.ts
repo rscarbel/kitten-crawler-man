@@ -7,6 +7,10 @@ export interface MobSpawnRule {
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
    */
   chance: number;
+  /** Minimum number of this mob type to spawn per room (default 1). */
+  minCount?: number;
+  /** Maximum number of this mob type to spawn per room (default 1). */
+  maxCount?: number;
   /** Optional per-mob config forwarded to the constructor. */
   config?: Record<string, unknown>;
 }
