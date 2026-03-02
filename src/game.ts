@@ -4,6 +4,7 @@ import { CatPlayer } from './creatures/CatPlayer';
 import { Mob } from './creatures/Mob';
 import { Goblin } from './creatures/Goblin';
 import { Llama } from './creatures/Llama';
+import { Rat } from './creatures/Rat';
 
 const TILE_SIZE = 32;
 const PLAYER_SPEED = 2.5;
@@ -35,13 +36,17 @@ const GOBLIN_VARIANTS: GoblinVariant[] = [
   { weapon: 'hammer', skin: '#3d6b32', eye: '#fbbf24' },
 ];
 
-/** Spawn a random mob at the given tile coordinates. */
-function spawnMob(tileX: number, tileY: number): Mob {
+/** Spawn a random mob at the given tile coordinates and wire it to the map. */
+function spawnMob(tileX: number, tileY: number, map: GameMap): Mob {
+  let mob: Mob;
   if (Math.random() < LLAMA_CHANCE) {
-    return new Llama(tileX, tileY, TILE_SIZE);
+    mob = new Llama(tileX, tileY, TILE_SIZE);
+  } else {
+    const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
+    mob = new Goblin(tileX, tileY, TILE_SIZE, v.weapon, v.skin, v.eye);
   }
-  const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
-  return new Goblin(tileX, tileY, TILE_SIZE, v.weapon, v.skin, v.eye);
+  mob.setMap(map);
+  return mob;
 }
 
 
@@ -59,6 +64,12 @@ class GameStage {
   private catWanderTimer = 0;
   /** Angle used by the cat's kiting orbit. Increments every frame during kite mode. */
   private catKiteAngle = 0;
+  /** Cooldown (frames) before the inactive companion auto-drinks another potion. */
+  private humanAutoPotionCooldown = 0;
+  private catAutoPotionCooldown = 0;
+  /** True once either player has died — freezes update, shows death overlay. */
+  private gameOver = false;
+  private deathOverlayAlpha = 0;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -75,7 +86,15 @@ class GameStage {
     this.catWanderTargetX = (sx + 1) * TILE_SIZE;
     this.catWanderTargetY = sy * TILE_SIZE;
     this.human.isActive = true;
-    this.mobs = this.gameMap.mobSpawnPoints.map(({ x, y }) => spawnMob(x, y));
+    this.mobs = [
+      ...this.gameMap.mobSpawnPoints.map(({ x, y }) => spawnMob(x, y, this.gameMap)),
+      ...this.gameMap.hallwaySpawnPoints.map(({ x, y }) => {
+        const rat = new Rat(x, y, TILE_SIZE);
+        rat.setMap(this.gameMap);
+        return rat;
+      }),
+    ];
+    this.cat.setMap(this.gameMap);
 
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.key);
@@ -110,6 +129,22 @@ class GameStage {
       this.canvas.height = window.innerHeight;
     });
 
+    this.canvas.addEventListener('click', (e) => {
+      if (!this.gameOver || this.deathOverlayAlpha < 0.5) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const w = this.canvas.width;
+      const h = this.canvas.height;
+      const btnW = 210;
+      const btnH = 48;
+      const btnX = w / 2 - btnW / 2;
+      const btnY = h / 2 + 44;
+      if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+        this.resetGame();
+      }
+    });
+
     this.loop();
   }
 
@@ -119,6 +154,44 @@ class GameStage {
 
   private inactive(): HumanPlayer | CatPlayer {
     return this.human.isActive ? this.cat : this.human;
+  }
+
+  /** Moves `entity` by (dx, dy) with per-axis tile collision. */
+  private entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number) {
+    const mapPx = this.gameMap.structure.length * TILE_SIZE;
+    const ts = TILE_SIZE;
+    if (dx !== 0) {
+      const nextX = Math.max(0, Math.min(mapPx - ts, entity.x + dx));
+      const tileXnext = Math.floor((nextX    + ts / 2) / ts);
+      const tileYcur  = Math.floor((entity.y + ts / 2) / ts);
+      if (this.gameMap.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
+    }
+    if (dy !== 0) {
+      const nextY = Math.max(0, Math.min(mapPx - ts, entity.y + dy));
+      const tileXcur  = Math.floor((entity.x + ts / 2) / ts);
+      const tileYnext = Math.floor((nextY    + ts / 2) / ts);
+      if (this.gameMap.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
+    }
+  }
+
+  /** Wall-aware followTarget for companions. */
+  private companionFollow(
+    entity: { x: number; y: number; isMoving: boolean },
+    targetX: number,
+    targetY: number,
+    speed: number,
+    minDist: number,
+  ) {
+    const dx = targetX - entity.x;
+    const dy = targetY - entity.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= minDist) {
+      entity.isMoving = false;
+      return;
+    }
+    const step = Math.min(speed, dist - minDist);
+    this.entityMoveWithCollision(entity, (dx / dist) * step, (dy / dist) * step);
+    entity.isMoving = true;
   }
 
   private update() {
@@ -179,7 +252,7 @@ class GameStage {
           this.doCatBehindHuman(enemy);
         } else {
           // Enemy isn't targeting anyone we know → standard fight offset
-          this.cat.followTarget(enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
+          this.companionFollow(this.cat, enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
         }
       } else {
         // Idle: wander near the human using an absolute pixel target so the
@@ -197,7 +270,8 @@ class GameStage {
           this.catWanderTargetX = this.human.x;
           this.catWanderTargetY = this.human.y;
         }
-        this.cat.followTarget(
+        this.companionFollow(
+          this.cat,
           this.catWanderTargetX,
           this.catWanderTargetY,
           FOLLOWER_SPEED,
@@ -207,14 +281,15 @@ class GameStage {
     } else {
       // Human: charge auto-target when fighting, otherwise follow cat
       if (this.human.autoTarget && this.human.autoTarget.isAlive) {
-        this.human.followTarget(
+        this.companionFollow(
+          this.human,
           this.human.autoTarget.x,
           this.human.autoTarget.y,
           FOLLOWER_SPEED,
           TILE_SIZE * 0.9,
         );
       } else {
-        this.human.followTarget(this.cat.x, this.cat.y, FOLLOWER_SPEED, TILE_SIZE * 1.8);
+        this.companionFollow(this.human, this.cat.x, this.cat.y, FOLLOWER_SPEED, TILE_SIZE * 1.8);
       }
     }
 
@@ -241,6 +316,14 @@ class GameStage {
     // Tick level-up / damage flash timers for players
     this.human.tickTimers();
     this.cat.tickTimers();
+
+    // Auto-potion: inactive companion drinks if below 50 % HP
+    this.updateCompanionPotion();
+
+    // Death check
+    if (!this.gameOver && (!this.human.isAlive || !this.cat.isAlive)) {
+      this.gameOver = true;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -269,15 +352,14 @@ class GameStage {
         const cos = Math.cos(0.4), sin = Math.sin(0.4);
         const sx2 = nx * cos - ny * sin;
         const sy2 = nx * sin + ny * cos;
-        this.cat.x += sx2 * FOLLOWER_SPEED * 1.35;
-        this.cat.y += sy2 * FOLLOWER_SPEED * 1.35;
+        this.entityMoveWithCollision(this.cat, sx2 * FOLLOWER_SPEED * 1.35, sy2 * FOLLOWER_SPEED * 1.35);
         this.cat.isMoving = true;
       }
     } else {
       // Orbit: move to a point at kite distance at the current kite angle
       const targetX = ex + Math.cos(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
       const targetY = ey + Math.sin(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
-      this.cat.followTarget(targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
+      this.companionFollow(this.cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
     }
   }
 
@@ -301,7 +383,7 @@ class GameStage {
     // Target: stand behind the human, even farther from the enemy
     const targetX = hx + nx * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
     const targetY = hy + ny * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
-    this.cat.followTarget(targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
+    this.companionFollow(this.cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -479,7 +561,9 @@ class GameStage {
 
   private render() {
     const { x: camX, y: camY } = this.camera();
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    // Fill black so void/outside-map areas and canvas edges are always dark
+    this.ctx.fillStyle = '#000';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.gameMap.renderCanvas(
       this.ctx,
@@ -502,6 +586,10 @@ class GameStage {
     this.renderLevelUpFlash(camX, camY);
 
     this.drawHUD();
+
+    if (this.gameOver) {
+      this.renderDeathScreen();
+    }
   }
 
   /** Floating "LEVEL UP! +STAT" text that rises and fades over the levelled-up character. */
@@ -602,9 +690,112 @@ class GameStage {
   }
 
   private loop() {
-    this.update();
+    if (!this.gameOver) this.update();
     this.render();
     requestAnimationFrame(() => this.loop());
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Companion auto-potion
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private updateCompanionPotion() {
+    if (this.humanAutoPotionCooldown > 0) this.humanAutoPotionCooldown--;
+    if (this.catAutoPotionCooldown > 0) this.catAutoPotionCooldown--;
+
+    if (this.human.isActive) {
+      // Cat is the inactive companion
+      if (this.cat.isAlive && this.cat.hp < this.cat.maxHp * 0.5 && this.catAutoPotionCooldown === 0) {
+        if (this.cat.usePotion()) this.catAutoPotionCooldown = 180;
+      }
+    } else {
+      // Human is the inactive companion
+      if (this.human.isAlive && this.human.hp < this.human.maxHp * 0.5 && this.humanAutoPotionCooldown === 0) {
+        if (this.human.usePotion()) this.humanAutoPotionCooldown = 180;
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Death screen + restart
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private renderDeathScreen() {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    // Fade in dark overlay
+    if (this.deathOverlayAlpha < 0.82) this.deathOverlayAlpha = Math.min(0.82, this.deathOverlayAlpha + 0.018);
+    ctx.fillStyle = `rgba(0,0,0,${this.deathOverlayAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+
+    // Wait until overlay is visible enough before showing text
+    if (this.deathOverlayAlpha < 0.45) return;
+    const textAlpha = Math.min(1, (this.deathOverlayAlpha - 0.45) / 0.37);
+
+    ctx.save();
+    ctx.globalAlpha = textAlpha;
+    ctx.textAlign = 'center';
+
+    // "YOU DIED"
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 72px monospace';
+    ctx.fillText('YOU DIED', w / 2, h / 2 - 52);
+
+    // Subtitle
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '15px monospace';
+    ctx.fillText('All stats and progress on this level are lost.', w / 2, h / 2 + 8);
+
+    // Restart button
+    const btnW = 210;
+    const btnH = 48;
+    const btnX = w / 2 - btnW / 2;
+    const btnY = h / 2 + 44;
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    // Button border
+    ctx.strokeStyle = '#f87171';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillText('Restart Level', w / 2, btnY + 30);
+
+    ctx.restore();
+  }
+
+  private resetGame() {
+    this.gameOver = false;
+    this.deathOverlayAlpha = 0;
+    this.keys.clear();
+
+    this.gameMap = new GameMap(100, TILE_SIZE);
+    const { x: sx, y: sy } = this.gameMap.startTile;
+
+    this.human = new HumanPlayer(sx, sy, TILE_SIZE);
+    this.cat   = new CatPlayer(sx + 1, sy, TILE_SIZE);
+    this.catWanderTargetX = (sx + 1) * TILE_SIZE;
+    this.catWanderTargetY = sy * TILE_SIZE;
+    this.human.isActive = true;
+    this.cat.isActive   = false;
+    this.catKiteAngle   = 0;
+    this.catWanderTimer = 0;
+
+    this.mobs = [
+      ...this.gameMap.mobSpawnPoints.map(({ x, y }) => spawnMob(x, y, this.gameMap)),
+      ...this.gameMap.hallwaySpawnPoints.map(({ x, y }) => {
+        const rat = new Rat(x, y, TILE_SIZE);
+        rat.setMap(this.gameMap);
+        return rat;
+      }),
+    ];
+    this.cat.setMap(this.gameMap);
+
+    this.humanAutoPotionCooldown = 0;
+    this.catAutoPotionCooldown   = 0;
   }
 }
 

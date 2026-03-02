@@ -1,4 +1,7 @@
 const FLOOR_TYPES = ['grass', 'road', 'wall', 'water', 'concrete', 'tile_floor', 'carpet', 'wood'] as const;
+
+/** Tile type for the outer border — renders as pure black and is not walkable. */
+const VOID_TYPE = 9;
 type FloorTile = (typeof FLOOR_TYPES)[number];
 
 const FloorTypeValue = {
@@ -141,6 +144,8 @@ export class GameMap {
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start room — used for mob placement. */
   mobSpawnPoints: Array<{ x: number; y: number }> = [];
+  /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
+  hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
 
   constructor(mapSize = 100, tileHeight = 10) {
     this.tileHeight = tileHeight;
@@ -168,11 +173,11 @@ export class GameMap {
       })),
     );
 
-    // 2. Grass border around the outside
+    // 2. Void border around the outside (renders as pure black, not walkable)
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         if (y < BORDER || y >= size - BORDER || x < BORDER || x >= size - BORDER) {
-          grid[y][x].type = FloorTypeValue.grass;
+          grid[y][x].type = VOID_TYPE;
         }
       }
     }
@@ -186,6 +191,9 @@ export class GameMap {
       }
     };
 
+    // Tiles that were wall and got carved into hallway concrete — used for rat placement.
+    const hallwayTiles: Array<{ x: number; y: number }> = [];
+
     // 4. L-shaped 3-tile-wide hallway carver
     const carveHallway = (x1: number, y1: number, x2: number, y2: number) => {
       // Horizontal leg first (y stays at y1)
@@ -196,6 +204,7 @@ export class GameMap {
           const hy = y1 + off;
           if (hy >= BORDER && hy < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
             grid[hy][hx].type = FloorTypeValue.concrete;
+            hallwayTiles.push({ x: hx, y: hy });
           }
         }
       }
@@ -207,6 +216,7 @@ export class GameMap {
           const hx = x2 + off;
           if (hx >= BORDER && hx < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
             grid[hy][hx].type = FloorTypeValue.concrete;
+            hallwayTiles.push({ x: hx, y: hy });
           }
         }
       }
@@ -262,6 +272,27 @@ export class GameMap {
       y: Math.floor(r.y + r.h / 2),
     }));
 
+    // 7. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
+    const roomCenters = rooms.map(r => ({
+      x: Math.floor(r.x + r.w / 2),
+      y: Math.floor(r.y + r.h / 2),
+    }));
+    const MIN_FROM_ROOM = 5;
+    const validHallway = hallwayTiles.filter(t =>
+      roomCenters.every(c => Math.hypot(t.x - c.x, t.y - c.y) > MIN_FROM_ROOM),
+    );
+    // Fisher-Yates shuffle then pick up to 10 tiles with ≥3-tile separation.
+    for (let i = validHallway.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [validHallway[i], validHallway[j]] = [validHallway[j], validHallway[i]];
+    }
+    const chosen: Array<{ x: number; y: number }> = [];
+    for (const t of validHallway) {
+      if (chosen.length >= 10) break;
+      if (chosen.every(c => Math.hypot(t.x - c.x, t.y - c.y) >= 3)) chosen.push(t);
+    }
+    this.hallwaySpawnPoints = chosen;
+
     return grid;
   }
 
@@ -302,7 +333,26 @@ export class GameMap {
     if (!row) return false;
     const tile = row[tileX];
     if (!tile) return false;
-    return tile.type !== FloorTypeValue.wall && tile.type !== FloorTypeValue.water;
+    return tile.type !== FloorTypeValue.wall && tile.type !== FloorTypeValue.water && tile.type !== VOID_TYPE;
+  }
+
+  /**
+   * Returns true if there is a clear line of sight between two pixel-space
+   * points — i.e. no non-walkable tiles cross the line segment.
+   * Samples every half-tile along the line for accuracy.
+   */
+  hasLineOfSight(x1: number, y1: number, x2: number, y2: number): boolean {
+    const ts = this.tileHeight;
+    const dist = Math.hypot(x2 - x1, y2 - y1);
+    if (dist === 0) return true;
+    const steps = Math.ceil(dist / (ts * 0.5));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const tx = Math.floor((x1 + (x2 - x1) * t) / ts);
+      const ty = Math.floor((y1 + (y2 - y1) * t) / ts);
+      if (!this.isWalkable(tx, ty)) return false;
+    }
+    return true;
   }
 
   renderCanvas(
@@ -339,6 +389,13 @@ export class GameMap {
     ty: number,
   ) {
     switch (type) {
+      // ── Void (outer border) ───────────────────────────────────────────────
+      case VOID_TYPE: {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(sx, sy, ts, ts);
+        break;
+      }
+
       // ── Outdoors ─────────────────────────────────────────────────────────
       case FloorTypeValue.grass: {
         ctx.fillStyle = '#6de89d';

@@ -1,5 +1,6 @@
 import { Player } from '../Player';
 import { drawCatSprite, drawMissiles, Missile } from '../sprites/catSprite';
+import { GameMap } from '../GameMap';
 
 /**
  * This is a playable character.
@@ -13,9 +14,14 @@ export class CatPlayer extends Player {
   private readonly EXPLODE_FRAMES = 22;
   private autoFireCooldown = 0;
   private readonly AUTO_FIRE_COOLDOWN = 180;
+  private map: GameMap | null = null;
 
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Player | null = null;
+
+  setMap(map: GameMap) {
+    this.map = map;
+  }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, 8);
@@ -74,8 +80,19 @@ export class CatPlayer extends Player {
   updateMissiles() {
     for (const m of this.missiles) {
       if (m.state === 'flying') {
-        m.x += m.vx;
-        m.y += m.vy;
+        const nextX = m.x + m.vx;
+        const nextY = m.y + m.vy;
+        // Explode on wall contact
+        if (this.map) {
+          const tx = Math.floor(nextX / this.tileSize);
+          const ty = Math.floor(nextY / this.tileSize);
+          if (!this.map.isWalkable(tx, ty)) {
+            m.state = 'exploding';
+            continue;
+          }
+        }
+        m.x = nextX;
+        m.y = nextY;
         m.distTraveled += Math.hypot(m.vx, m.vy);
         if (m.distTraveled >= m.maxDist) {
           m.state = 'exploding';

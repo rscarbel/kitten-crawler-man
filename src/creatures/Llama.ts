@@ -47,14 +47,26 @@ export class Llama extends Mob {
     if (this.spitCooldown > 0) this.spitCooldown--;
     if (this.spitAnimTimer > 0) this.spitAnimTimer--;
 
-    // ── Advance lava balls & check player hits ────────────────────────────
+    // ── Advance lava balls & check wall/player hits ───────────────────────
     for (const ball of this.lavaBalls) {
       if (ball.exploding) {
         ball.explodeTick--;
         continue;
       }
-      ball.x += ball.vx;
-      ball.y += ball.vy;
+      const nextX = ball.x + ball.vx;
+      const nextY = ball.y + ball.vy;
+      // Wall collision — explode on impact
+      if (this.map) {
+        const tx = Math.floor(nextX / this.tileSize);
+        const ty = Math.floor(nextY / this.tileSize);
+        if (!this.map.isWalkable(tx, ty)) {
+          ball.exploding = true;
+          ball.explodeTick = EXPLODE_TICKS;
+          continue;
+        }
+      }
+      ball.x = nextX;
+      ball.y = nextY;
       for (const t of targets) {
         if (!t.isAlive) continue;
         const cx = t.x + this.tileSize * 0.5;
@@ -91,21 +103,32 @@ export class Llama extends Mob {
     }
     this.isAggro = true;
 
-    // Llamas prefer to keep spit distance — only close in if too far
-    if (nearestDist > this.spitRangePx) {
-      this.followTarget(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
+    const mouthX = this.x + this.tileSize * 0.22;
+    const mouthY = this.y + this.tileSize * 0.22;
+    const targetCX = nearest.x + this.tileSize * 0.5;
+    const targetCY = nearest.y + this.tileSize * 0.5;
+
+    // Check line of sight from mouth to target centre
+    const hasLOS = this.map
+      ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY)
+      : true;
+
+    // Movement: approach if no LOS or out of spit range; hold position otherwise
+    if (!hasLOS) {
+      // No line of sight — close in to find a clear angle
+      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.tileSize * 1.5);
+    } else if (nearestDist > this.spitRangePx) {
+      // Has LOS but too far — move closer
+      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
     } else {
+      // In range with LOS — hold position
       this.isMoving = false;
     }
 
-    // ── Spit a lava ball ─────────────────────────────────────────────────
-    if (nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
-      const mouthX = this.x + this.tileSize * 0.22;
-      const mouthY = this.y + this.tileSize * 0.22;
-      const tx = nearest.x + this.tileSize * 0.5;
-      const ty = nearest.y + this.tileSize * 0.5;
-      const dx = tx - mouthX;
-      const dy = ty - mouthY;
+    // ── Spit a lava ball (only when in range and line-of-sight is clear) ──
+    if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
+      const dx = targetCX - mouthX;
+      const dy = targetCY - mouthY;
       const dist = Math.hypot(dx, dy);
       this.lavaBalls.push({
         x: mouthX,

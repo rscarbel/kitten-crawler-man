@@ -81,7 +81,7 @@ export class Goblin extends Mob {
 
     // Chase — stop just inside attack range so the goblin doesn't overlap the target
     if (nearestDist > this.attackRangePx) {
-      this.followTarget(nearest.x, nearest.y, this.speed, this.attackRangePx * 0.8);
+      this.followTargetCollide(nearest.x, nearest.y, this.speed, this.attackRangePx * 0.8);
     } else {
       this.isMoving = false;
     }

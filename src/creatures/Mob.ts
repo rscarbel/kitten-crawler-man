@@ -1,4 +1,5 @@
 import { Player } from '../Player';
+import { GameMap } from '../GameMap';
 
 /**
  * Abstract base for all enemy mobs. Subclasses define their own AI, appearance,
@@ -28,6 +29,8 @@ export abstract class Mob extends Player {
   protected wanderDx = 0;
   protected wanderDy = 0;
 
+  protected map: GameMap | null = null;
+
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, maxHp);
     this.speed = speed;
@@ -35,6 +38,56 @@ export abstract class Mob extends Player {
     this.spawnY = tileY * tileSize;
     // Stagger wander timers so mobs don't all change direction together
     this.wanderTimer = Math.floor(Math.random() * 120);
+  }
+
+  setMap(map: GameMap) {
+    this.map = map;
+  }
+
+  /**
+   * Moves by (dx, dy) with per-axis wall collision, mirroring the player's
+   * movement so mobs can slide along walls instead of passing through them.
+   */
+  protected moveWithCollision(dx: number, dy: number) {
+    if (!this.map) {
+      this.x += dx;
+      this.y += dy;
+      return;
+    }
+    const ts = this.tileSize;
+    if (dx !== 0) {
+      const nextX = this.x + dx;
+      const tileXnext = Math.floor((nextX + ts / 2) / ts);
+      const tileYcur  = Math.floor((this.y  + ts / 2) / ts);
+      if (this.map.isWalkable(tileXnext, tileYcur)) this.x = nextX;
+    }
+    if (dy !== 0) {
+      const nextY = this.y + dy;
+      const tileXcur  = Math.floor((this.x  + ts / 2) / ts);
+      const tileYnext = Math.floor((nextY + ts / 2) / ts);
+      if (this.map.isWalkable(tileXcur, tileYnext)) this.y = nextY;
+    }
+  }
+
+  /**
+   * Wall-aware equivalent of Player.followTarget. Updates facing direction and
+   * uses moveWithCollision so the mob slides along walls while chasing.
+   */
+  protected followTargetCollide(targetX: number, targetY: number, speed: number, minDist: number) {
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= minDist) {
+      this.isMoving = false;
+      return;
+    }
+    const step = Math.min(speed, dist - minDist);
+    const nx = dx / dist;
+    const ny = dy / dist;
+    this.facingX = nx;
+    this.facingY = ny;
+    this.moveWithCollision(nx * step, ny * step);
+    this.isMoving = true;
   }
 
   /**
@@ -95,8 +148,7 @@ export abstract class Mob extends Player {
         this.wanderDx = nx * this.speed * 0.4;
         this.wanderDy = ny * this.speed * 0.4;
       }
-      this.x += this.wanderDx;
-      this.y += this.wanderDy;
+      this.moveWithCollision(this.wanderDx, this.wanderDy);
       this.isMoving = true;
     } else {
       this.isMoving = false;
