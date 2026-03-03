@@ -75,8 +75,7 @@ export class MiniMapSystem {
     active: { x: number; y: number },
     companion: { x: number; y: number },
     mobs: Mob[],
-    mordecaiTileX: number,
-    mordecaiTileY: number,
+    mordecaiPositions: Array<{ x: number; y: number }>,
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
@@ -194,22 +193,21 @@ export class MiniMapSystem {
     ctx.arc(compSX, compSY, 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Mordecai — white dot if revealed
-    if (this.gameMap.safeRoomCentre) {
-      if (this.fogOfWar[mordecaiTileY * mapSize + mordecaiTileX]) {
-        const msx =
-          mmX +
-          (mordecaiTileX - playerTX + halfTiles) * pxPerTile +
-          Math.floor(pxPerTile / 2);
-        const msy =
-          mmY +
-          (mordecaiTileY - playerTY + halfTiles) * pxPerTile +
-          Math.floor(pxPerTile / 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    // Mordecai — white dot per safe room if revealed
+    ctx.fillStyle = '#ffffff';
+    for (const pos of mordecaiPositions) {
+      if (!this.fogOfWar[pos.y * mapSize + pos.x]) continue;
+      const msx =
+        mmX +
+        (pos.x - playerTX + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      const msy =
+        mmY +
+        (pos.y - playerTY + halfTiles) * pxPerTile +
+        Math.floor(pxPerTile / 2);
+      ctx.beginPath();
+      ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Active player — green dot at centre

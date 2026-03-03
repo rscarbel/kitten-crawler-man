@@ -130,6 +130,17 @@ export class BossRoomSystem {
     this.tickCockroachTTLs(mobs, mobGrid);
   }
 
+  /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
+  clampBossToRoom(mob: Mob): void {
+    for (let i = 0; i < this.states.length; i++) {
+      const bossType = this.bossTypes[i] ?? 'the_hoarder';
+      // Only clamp the Juicer to its room (index 1); Hoarder can move freely
+      if (bossType !== 'juicer') continue;
+      const state = this.states[i];
+      this.clampToBossRoom(mob, state.bounds);
+    }
+  }
+
   private clampToBossRoom(
     entity: { x: number; y: number },
     bounds: { x: number; y: number; w: number; h: number },

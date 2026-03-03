@@ -46,10 +46,15 @@ export class GameMap {
   mobSpawnPoints: Array<{ x: number; y: number }> = [];
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
-  /** Bounds (in tile coords) of the safe room, or null if not enough rooms generated. */
+  /** Bounds (in tile coords) of the primary safe room, or null if not enough rooms generated. */
   safeRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
-  /** Tile-space centre of the safe room, or null if none. */
+  /** Tile-space centre of the primary safe room, or null if none. */
   safeRoomCentre: { x: number; y: number } | null = null;
+  /** All safe rooms on this map (bounds + centre in tile coords). */
+  safeRooms: Array<{
+    bounds: { x: number; y: number; w: number; h: number };
+    centre: { x: number; y: number };
+  }> = [];
   /** All boss rooms generated on this map (bounds + centre in tile coords). */
   bossRooms: Array<{
     bounds: { x: number; y: number; w: number; h: number };
@@ -58,16 +63,29 @@ export class GameMap {
   /** Tile-space centres of rooms that contain a stairwell (descent point). */
   stairwellTiles: Array<{ x: number; y: number }> = [];
 
-  constructor(mapSize = 100, tileHeight = 10, numBossRooms = 1) {
+  constructor(
+    mapSize = 100,
+    tileHeight = 10,
+    numBossRooms = 1,
+    numSafeRooms = 2,
+  ) {
     this.tileHeight = tileHeight;
-    this.structure = this.generate(mapSize, numBossRooms);
+    this.structure = this.generate(mapSize, numBossRooms, numSafeRooms);
   }
 
-  private generate(size: number, numBossRooms: number): TileContent[][] {
-    return this.generateDungeon(size, numBossRooms);
+  private generate(
+    size: number,
+    numBossRooms: number,
+    numSafeRooms: number,
+  ): TileContent[][] {
+    return this.generateDungeon(size, numBossRooms, numSafeRooms);
   }
 
-  private generateDungeon(size: number, numBossRooms: number): TileContent[][] {
+  private generateDungeon(
+    size: number,
+    numBossRooms: number,
+    numSafeRooms: number,
+  ): TileContent[][] {
     const BORDER = 5;
     const DUNGEON_FLOORS = [
       FloorTypeValue.concrete,
@@ -154,8 +172,11 @@ export class GameMap {
       MAX_H = 14;
     const GAP = 3; // minimum tile gap between room edges
 
-    // rooms[0]=start, rooms[1]=safe, rooms[2..2+numBossRooms-1]=boss rooms
-    const bossRoomEnd = 2 + numBossRooms;
+    // rooms[0]=start, rooms[1..numSafeRooms]=safe, rooms[numSafeRooms+1..bossRoomEnd-1]=boss
+    const safeRoomStart = 1;
+    const safeRoomEnd = 1 + numSafeRooms; // exclusive
+    const bossRoomStart = safeRoomEnd;
+    const bossRoomEnd = safeRoomEnd + numBossRooms;
 
     // Scale room count and attempts proportionally to map area.
     // At size=100: 15 rooms, ~120 attempts.  At size=450: ~304 rooms, ~2432 attempts.
@@ -163,16 +184,19 @@ export class GameMap {
     const maxAttempts = Math.max(maxRooms * 8, 80);
 
     // Fixed max-distance constraints for special rooms (in tiles from start centre).
-    // Keeps the safe room and boss room "nearby" regardless of how big the map grows.
-    const SAFE_MAX_DIST = 50; // rooms[1] — safe room
-    const BOSS_MAX_DIST = 80; // rooms[2+] — boss rooms
+    const SAFE_MAX_DIST = 50;
+    const BOSS_MAX_DIST = 80;
+    const SAFE_MIN_SEPARATION = 18; // safe rooms must be this far apart from each other
 
     for (
       let attempt = 0;
       attempt < maxAttempts && rooms.length < maxRooms;
       attempt++
     ) {
-      const isBossRoom = rooms.length >= 2 && rooms.length < bossRoomEnd;
+      const isSafeRoom =
+        rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
+      const isBossRoom =
+        rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
       const w = isBossRoom
         ? 22
         : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
@@ -195,10 +219,10 @@ export class GameMap {
           y + h + GAP > r.y,
       );
 
-      // Boss rooms must be at least 25 tiles apart from each other
+      // Boss rooms must be at least 60 tiles apart from each other
       const tooCloseToBoss =
         isBossRoom &&
-        rooms.slice(2, bossRoomEnd).some((r) => {
+        rooms.slice(bossRoomStart, bossRoomEnd).some((r) => {
           const rc = {
             x: Math.floor(r.x + r.w / 2),
             y: Math.floor(r.y + r.h / 2),
@@ -206,36 +230,47 @@ export class GameMap {
           return Math.hypot(cx - rc.x, cy - rc.y) < 60;
         });
 
-      // Safe room and boss rooms must stay within a fixed tile-radius of the start
-      // room so they remain "near" even on very large maps.
+      // Safe rooms must be separated from each other
+      const tooCloseToSafeRoom =
+        isSafeRoom &&
+        rooms.slice(safeRoomStart, safeRoomEnd).some((r) => {
+          const rc = {
+            x: Math.floor(r.x + r.w / 2),
+            y: Math.floor(r.y + r.h / 2),
+          };
+          return Math.hypot(cx - rc.x, cy - rc.y) < SAFE_MIN_SEPARATION;
+        });
+
+      // Safe rooms and boss rooms must stay within a fixed tile-radius of the start room.
       let tooFarFromStart = false;
       if (rooms.length > 0) {
         const sc = {
           x: Math.floor(rooms[0].x + rooms[0].w / 2),
           y: Math.floor(rooms[0].y + rooms[0].h / 2),
         };
-        const maxDist =
-          rooms.length === 1
-            ? SAFE_MAX_DIST
-            : isBossRoom
-              ? BOSS_MAX_DIST
-              : Infinity;
+        const maxDist = isSafeRoom
+          ? SAFE_MAX_DIST
+          : isBossRoom
+            ? BOSS_MAX_DIST
+            : Infinity;
         if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
       }
 
-      if (!overlaps && !tooCloseToBoss && !tooFarFromStart) {
-        // 0-indexed boss room index (rooms[2] = first boss, rooms[3] = second boss, etc.)
-        const bossIdx = rooms.length - 2;
-        const floor =
-          rooms.length === 1
-            ? SAFE_ROOM_FLOOR
-            : isBossRoom
-              ? bossIdx === 0
-                ? HORDER_BOSS_ROOM_FLOOR
-                : JUICER_BOSS_ROOM_FLOOR
-              : DUNGEON_FLOORS[
-                  Math.floor(Math.random() * DUNGEON_FLOORS.length)
-                ];
+      if (
+        !overlaps &&
+        !tooCloseToBoss &&
+        !tooCloseToSafeRoom &&
+        !tooFarFromStart
+      ) {
+        // 0-indexed boss room index
+        const bossIdx = rooms.length - bossRoomStart;
+        const floor = isSafeRoom
+          ? SAFE_ROOM_FLOOR
+          : isBossRoom
+            ? bossIdx === 0
+              ? HORDER_BOSS_ROOM_FLOOR
+              : JUICER_BOSS_ROOM_FLOOR
+            : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
         const room: Room = { x, y, w, h, floor };
         rooms.push(room);
         carveRoom(room);
@@ -262,18 +297,25 @@ export class GameMap {
       };
     }
 
-    // rooms[1] is the Safe Room — record its bounds and exclude from mob spawns
-    if (rooms.length > 1) {
-      const sr = rooms[1];
-      this.safeRoomBounds = { x: sr.x, y: sr.y, w: sr.w, h: sr.h };
-      this.safeRoomCentre = {
-        x: Math.floor(sr.x + sr.w / 2),
-        y: Math.floor(sr.y + sr.h / 2),
-      };
+    // Record all safe rooms (rooms[1..numSafeRooms])
+    for (let i = safeRoomStart; i < safeRoomEnd && i < rooms.length; i++) {
+      const sr = rooms[i];
+      this.safeRooms.push({
+        bounds: { x: sr.x, y: sr.y, w: sr.w, h: sr.h },
+        centre: {
+          x: Math.floor(sr.x + sr.w / 2),
+          y: Math.floor(sr.y + sr.h / 2),
+        },
+      });
+    }
+    // Backward-compat: primary safe room is first entry
+    if (this.safeRooms.length > 0) {
+      this.safeRoomBounds = this.safeRooms[0].bounds;
+      this.safeRoomCentre = this.safeRooms[0].centre;
     }
 
-    // Record all boss rooms (rooms[2..2+numBossRooms-1])
-    for (let i = 2; i < bossRoomEnd && i < rooms.length; i++) {
+    // Record all boss rooms (rooms[bossRoomStart..bossRoomEnd-1])
+    for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++) {
       const br = rooms[i];
       this.bossRooms.push({
         bounds: { x: br.x, y: br.y, w: br.w, h: br.h },

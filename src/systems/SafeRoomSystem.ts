@@ -9,12 +9,16 @@ import {
   drawSpeechBubble,
 } from '../sprites/mordecaiSprite';
 
+interface SafeRoomEntry {
+  bounds: { x: number; y: number; w: number; h: number };
+  mordecaiHomeTileX: number;
+  mordecaiHomeTileY: number;
+  bedTileX: number;
+  bedTileY: number;
+}
+
 export class SafeRoomSystem {
-  readonly bounds: { x: number; y: number; w: number; h: number } | null;
-  readonly mordecaiTileX: number;
-  readonly mordecaiTileY: number;
-  readonly bedTileX: number;
-  readonly bedTileY: number;
+  private readonly entries: SafeRoomEntry[];
 
   private _mordecaiDialogOpen = false;
   private _isSleeping = false;
@@ -25,25 +29,59 @@ export class SafeRoomSystem {
   private readonly SLEEP_FADEIN = 30;
   private readonly SLEEP_HOLD = 90;
 
+  // Mordecai wander animation (shared timer, different phase per entry)
+  private wanderTime = 0;
+
   constructor(
     private readonly gameMap: GameMap,
     startTileX: number,
     startTileY: number,
   ) {
-    this.bounds = gameMap.safeRoomBounds;
-    const centre = gameMap.safeRoomCentre;
-    if (centre && this.bounds) {
-      const halfW = Math.floor(this.bounds.w / 4);
-      this.mordecaiTileX = centre.x - halfW;
-      this.mordecaiTileY = centre.y;
-      this.bedTileX = centre.x + halfW;
-      this.bedTileY = centre.y;
+    this.entries = [];
+
+    if (gameMap.safeRooms.length > 0) {
+      for (const sr of gameMap.safeRooms) {
+        const halfW = Math.floor(sr.bounds.w / 4);
+        this.entries.push({
+          bounds: sr.bounds,
+          mordecaiHomeTileX: sr.centre.x - halfW,
+          mordecaiHomeTileY: sr.centre.y,
+          bedTileX: sr.centre.x + halfW,
+          bedTileY: sr.centre.y,
+        });
+      }
     } else {
-      this.mordecaiTileX = startTileX;
-      this.mordecaiTileY = startTileY;
-      this.bedTileX = startTileX + 1;
-      this.bedTileY = startTileY;
+      // Fallback: no map safe rooms
+      this.entries.push({
+        bounds: { x: startTileX, y: startTileY, w: 8, h: 7 },
+        mordecaiHomeTileX: startTileX,
+        mordecaiHomeTileY: startTileY,
+        bedTileX: startTileX + 1,
+        bedTileY: startTileY,
+      });
     }
+  }
+
+  // ── Backward-compat accessors (first entry) ─────────────────────────────────
+
+  get bounds(): { x: number; y: number; w: number; h: number } | null {
+    return this.entries[0]?.bounds ?? null;
+  }
+
+  get mordecaiTileX(): number {
+    return this.entries[0]?.mordecaiHomeTileX ?? 0;
+  }
+
+  get mordecaiTileY(): number {
+    return this.entries[0]?.mordecaiHomeTileY ?? 0;
+  }
+
+  /** All Mordecai home tile positions (for minimap). */
+  get mordecaiPositions(): Array<{ x: number; y: number }> {
+    return this.entries.map((e) => ({
+      x: e.mordecaiHomeTileX,
+      y: e.mordecaiHomeTileY,
+    }));
   }
 
   get isSleeping(): boolean {
@@ -58,52 +96,101 @@ export class SafeRoomSystem {
     this._mordecaiDialogOpen = v;
   }
 
+  // ── Wander update ────────────────────────────────────────────────────────────
+
+  updateWander(): void {
+    this.wanderTime++;
+  }
+
+  /** Returns pixel offset and facing for entry i's Mordecai. */
+  private getWanderState(entryIdx: number): {
+    offsetX: number;
+    isWalking: boolean;
+    facingX: number;
+  } {
+    // Each entry is out of phase with others so they don't walk in unison
+    const t = this.wanderTime + entryIdx * 210;
+    // Cycle: 150f walk right, 100f idle, 150f walk left, 100f idle = 500f
+    const cycle = t % 500;
+    const maxOffset = TILE_SIZE * 1.8;
+
+    if (cycle < 150) {
+      return {
+        offsetX: (cycle / 150) * maxOffset,
+        isWalking: true,
+        facingX: 1,
+      };
+    } else if (cycle < 250) {
+      return { offsetX: maxOffset, isWalking: false, facingX: 1 };
+    } else if (cycle < 400) {
+      return {
+        offsetX: maxOffset - ((cycle - 250) / 150) * maxOffset,
+        isWalking: true,
+        facingX: -1,
+      };
+    } else {
+      return { offsetX: 0, isWalking: false, facingX: -1 };
+    }
+  }
+
+  // ── Queries ──────────────────────────────────────────────────────────────────
+
   isEntityInSafeRoom(entity: { x: number; y: number }): boolean {
-    const b = this.bounds;
-    if (!b) return false;
     const ts = TILE_SIZE;
     const tx = Math.floor((entity.x + ts * 0.5) / ts);
     const ty = Math.floor((entity.y + ts * 0.5) / ts);
-    return tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h;
+    return this.entries.some(
+      (e) =>
+        tx >= e.bounds.x &&
+        tx < e.bounds.x + e.bounds.w &&
+        ty >= e.bounds.y &&
+        ty < e.bounds.y + e.bounds.h,
+    );
   }
 
   isNearMordecai(entity: { x: number; y: number }): boolean {
-    const mx = this.mordecaiTileX * TILE_SIZE;
-    const my = this.mordecaiTileY * TILE_SIZE;
-    return Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * 2.5;
+    return this.entries.some((e, i) => {
+      const { offsetX } = this.getWanderState(i);
+      const mx = e.mordecaiHomeTileX * TILE_SIZE + offsetX;
+      const my = e.mordecaiHomeTileY * TILE_SIZE;
+      return Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * 2.5;
+    });
   }
 
   isNearBed(entity: { x: number; y: number }): boolean {
-    const bx = this.bedTileX * TILE_SIZE;
-    const by = this.bedTileY * TILE_SIZE;
-    return Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * 1.8;
+    return this.entries.some((e) => {
+      const bx = e.bedTileX * TILE_SIZE;
+      const by = e.bedTileY * TILE_SIZE;
+      return Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * 1.8;
+    });
   }
 
-  evictMobs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
-    if (!this.bounds) return;
+  evictMobs(_mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     const fallback =
       this.gameMap.mobSpawnPoints.length > 0
         ? this.gameMap.mobSpawnPoints
         : this.gameMap.hallwaySpawnPoints;
     if (fallback.length === 0) return;
 
-    const b = this.bounds;
     const ts = TILE_SIZE;
-    const candidates = mobGrid.queryRect(
-      b.x * ts - ts,
-      b.y * ts - ts,
-      b.w * ts + ts * 2,
-      b.h * ts + ts * 2,
-    );
-    for (const mob of candidates) {
-      if (!mob.isAlive) continue;
-      if (this.isEntityInSafeRoom(mob)) {
-        const ox = mob.x,
-          oy = mob.y;
-        const pt = fallback[Math.floor(Math.random() * fallback.length)];
-        mob.x = pt.x * ts;
-        mob.y = pt.y * ts;
-        mobGrid.move(mob, ox, oy);
+    for (const e of this.entries) {
+      const b = e.bounds;
+      const candidates = mobGrid.queryRect(
+        b.x * ts - ts,
+        b.y * ts - ts,
+        b.w * ts + ts * 2,
+        b.h * ts + ts * 2,
+      );
+      for (const mob of candidates) {
+        if (!mob.isAlive) continue;
+        if (this.isEntityInSafeRoom(mob)) {
+          const ox = mob.x,
+            oy = mob.y;
+          const pt = fallback[Math.floor(Math.random() * fallback.length)];
+          mob.x = pt.x * ts;
+          mob.y = pt.y * ts;
+          mobGrid.move(mob, ox, oy);
+        }
       }
     }
   }
@@ -141,38 +228,47 @@ export class SafeRoomSystem {
     active: { x: number; y: number },
     speechBubblePulse: number,
   ): void {
-    if (!this.bounds) return;
-
     const ts = TILE_SIZE;
 
-    // "SAFE ROOM" banner
-    const bannerTileY = this.bounds.y - 1;
-    const bannerTileX = this.bounds.x + Math.floor(this.bounds.w / 2);
-    const bsx = bannerTileX * ts - camX;
-    const bsy = bannerTileY * ts - camY;
-    ctx.save();
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#f0e4c8';
-    ctx.fillText('SAFE ROOM', bsx, bsy + ts * 0.65);
-    ctx.textAlign = 'left';
-    ctx.restore();
+    for (let i = 0; i < this.entries.length; i++) {
+      const e = this.entries[i];
+      const b = e.bounds;
+      const { offsetX, isWalking, facingX } = this.getWanderState(i);
 
-    // Bed
-    this.renderBed(
-      ctx,
-      this.bedTileX * ts - camX,
-      this.bedTileY * ts - camY,
-      ts,
-    );
+      // "SAFE ROOM" banner
+      const bannerTileY = b.y - 1;
+      const bannerTileX = b.x + Math.floor(b.w / 2);
+      const bsx = bannerTileX * ts - camX;
+      const bsy = bannerTileY * ts - camY;
+      ctx.save();
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f0e4c8';
+      ctx.fillText('SAFE ROOM', bsx, bsy + ts * 0.65);
+      ctx.textAlign = 'left';
+      ctx.restore();
 
-    // Mordecai
-    const msx = this.mordecaiTileX * ts - camX;
-    const msy = this.mordecaiTileY * ts - camY;
-    drawMordecaiSprite(ctx, msx, msy, ts);
+      // Bed
+      const bedSx = e.bedTileX * ts - camX;
+      const bedSy = e.bedTileY * ts - camY;
+      this.renderBed(ctx, bedSx, bedSy, ts);
 
-    if (this.isNearMordecai(active) && !this._mordecaiDialogOpen) {
-      drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
+      // Mordecai (wandered position)
+      const msx = e.mordecaiHomeTileX * ts + offsetX - camX;
+      const msy = e.mordecaiHomeTileY * ts - camY;
+      drawMordecaiSprite(
+        ctx,
+        msx,
+        msy,
+        ts,
+        this.wanderTime,
+        isWalking,
+        facingX,
+      );
+
+      if (this.isNearMordecai(active) && !this._mordecaiDialogOpen) {
+        drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
+      }
     }
   }
 
@@ -183,50 +279,61 @@ export class SafeRoomSystem {
     camY: number,
     active: { x: number; y: number },
   ): void {
-    // Sleep prompt near bed
-    if (
-      this.isEntityInSafeRoom(active) &&
-      this.isNearBed(active) &&
-      !this._isSleeping
-    ) {
-      const bsx = this.bedTileX * TILE_SIZE - camX;
-      const bsy = this.bedTileY * TILE_SIZE - camY;
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.68)';
-      const tw = 210;
-      const th = 28;
-      ctx.fillRect(bsx + TILE_SIZE * 0.5 - tw / 2, bsy - 38, tw, th);
-      ctx.fillStyle = '#f0e8d0';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        '[Space] Sleep (restores HP)',
-        bsx + TILE_SIZE * 0.5,
-        bsy - 18,
-      );
-      ctx.textAlign = 'left';
-      ctx.restore();
-    }
+    for (let i = 0; i < this.entries.length; i++) {
+      const e = this.entries[i];
+      const { offsetX } = this.getWanderState(i);
 
-    // Talk prompt near Mordecai
-    if (
-      this.isEntityInSafeRoom(active) &&
-      this.isNearMordecai(active) &&
-      !this._mordecaiDialogOpen
-    ) {
-      const msx = this.mordecaiTileX * TILE_SIZE - camX;
-      const msy = this.mordecaiTileY * TILE_SIZE - camY;
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.68)';
-      const tw = 110;
-      const th = 24;
-      ctx.fillRect(msx + TILE_SIZE * 0.5 - tw / 2, msy - 34, tw, th);
-      ctx.fillStyle = '#f0e8d0';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('[Space] Talk', msx + TILE_SIZE * 0.5, msy - 17);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      // Sleep prompt near bed
+      if (
+        this.isEntityInSafeRoom(active) &&
+        this.isNearBed(active) &&
+        !this._isSleeping
+      ) {
+        const bsx = e.bedTileX * TILE_SIZE - camX;
+        const bsy = e.bedTileY * TILE_SIZE - camY;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.68)';
+        const tw = 210;
+        const th = 28;
+        ctx.fillRect(bsx + TILE_SIZE * 0.5 - tw / 2, bsy - 38, tw, th);
+        ctx.fillStyle = '#f0e8d0';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          '[Space] Sleep (restores HP)',
+          bsx + TILE_SIZE * 0.5,
+          bsy - 18,
+        );
+        ctx.textAlign = 'left';
+        ctx.restore();
+        break; // only prompt for the first nearby bed
+      }
+
+      // Talk prompt near Mordecai
+      const mx = e.mordecaiHomeTileX * TILE_SIZE + offsetX - camX;
+      const my = e.mordecaiHomeTileY * TILE_SIZE - camY;
+      const nearThis =
+        this.isEntityInSafeRoom(active) &&
+        Math.hypot(
+          active.x - (e.mordecaiHomeTileX * TILE_SIZE + offsetX),
+          active.y - e.mordecaiHomeTileY * TILE_SIZE,
+        ) <
+          TILE_SIZE * 2.5 &&
+        !this._mordecaiDialogOpen;
+      if (nearThis) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.68)';
+        const tw = 110;
+        const th = 24;
+        ctx.fillRect(mx + TILE_SIZE * 0.5 - tw / 2, my - 34, tw, th);
+        ctx.fillStyle = '#f0e8d0';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('[Space] Talk', mx + TILE_SIZE * 0.5, my - 17);
+        ctx.textAlign = 'left';
+        ctx.restore();
+        break; // only prompt once
+      }
     }
 
     // "SAFE ROOM" HUD label when player is inside

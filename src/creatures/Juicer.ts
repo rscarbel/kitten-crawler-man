@@ -20,6 +20,8 @@ const THROW_COOLDOWN_FRAMES = 90;
 const PROJECTILE_TTL = 240;
 const ENRAGE_THRESHOLD = 0.4;
 const TAUNT_INTERVAL = 300;
+/** Frames without attacking before forcing an attack grab. */
+const FORCE_ATTACK_FRAMES = 300; // 5 seconds at 60 fps
 
 const TAUNT_PHRASES = [
   'Bro',
@@ -57,6 +59,7 @@ export class Juicer extends Mob {
   private state: JuicerState = 'idle';
   private windupTimer = 0;
   private cooldownTimer = 0;
+  private framesSinceLastAttack = 0;
 
   // Dumbbell / throw
   heldDumbbell = false;
@@ -83,6 +86,8 @@ export class Juicer extends Mob {
 
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+
+    this.framesSinceLastAttack++;
 
     // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
@@ -206,9 +211,11 @@ export class Juicer extends Mob {
 
     this.updateLastKnown(nearest);
 
-    // In throw range and has LOS → wind up
+    const forceAttack = this.framesSinceLastAttack >= FORCE_ATTACK_FRAMES;
+
+    // In throw range and has LOS → wind up (force-attack ignores minimum range)
     if (
-      nearestDist >= THROW_RANGE_MIN &&
+      (nearestDist >= THROW_RANGE_MIN || forceAttack) &&
       nearestDist <= THROW_RANGE_MAX &&
       this.hasLOS(nearest)
     ) {
@@ -218,8 +225,8 @@ export class Juicer extends Mob {
       return;
     }
 
-    // Too close — back off a bit
-    if (nearestDist < THROW_RANGE_MIN) {
+    // Too close — back off, but only if not in force-attack mode
+    if (!forceAttack && nearestDist < THROW_RANGE_MIN) {
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
       const d = Math.hypot(dx, dy);
@@ -230,12 +237,12 @@ export class Juicer extends Mob {
       return;
     }
 
-    // Too far — chase
+    // Too far (or forced + no LOS) — chase
     this.followTargetAStar(
       this.lastKnownTargetX,
       this.lastKnownTargetY,
       this.speed,
-      THROW_RANGE_MAX * 0.85,
+      forceAttack ? TILE_SIZE : THROW_RANGE_MAX * 0.85,
       40,
     );
   }
@@ -295,6 +302,7 @@ export class Juicer extends Mob {
     this.throwAnim = 0;
     this.state = 'cooldown';
     this.cooldownTimer = THROW_COOLDOWN_FRAMES;
+    this.framesSinceLastAttack = 0;
   }
 
   private updateProjectile(targets: Player[]): void {

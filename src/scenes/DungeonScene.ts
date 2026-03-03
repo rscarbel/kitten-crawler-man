@@ -575,8 +575,7 @@ export class DungeonScene extends Scene {
         this.active(),
         this.inactive(),
         this.mobs,
-        this.safeRoom.mordecaiTileX,
-        this.safeRoom.mordecaiTileY,
+        this.safeRoom.mordecaiPositions,
       );
     }
 
@@ -725,7 +724,14 @@ export class DungeonScene extends Scene {
       this.catAchievements.tryUnlock('safe_haven');
     }
 
+    // Auto-show achievement notification on entering safe room
+    const inSafeRoom = this.human.isProtected || this.cat.isProtected;
+    if (inSafeRoom && !this._notifActive && !this.pauseMenu.isOpen) {
+      this.maybeStartAchievementNotif();
+    }
+
     this.safeRoom.evictMobs(this.mobs, this.mobGrid);
+    this.safeRoom.updateWander();
     this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
 
     // Trigger boss battle intro on first room entry
@@ -788,6 +794,8 @@ export class DungeonScene extends Scene {
       } else {
         mob.updateAI(playerTargets);
       }
+      // Keep bosses (specifically the Juicer) confined to their room
+      if (mob.isBoss) this.bossRoom.clampBossToRoom(mob);
       mob.tickTimers();
       this.mobGrid.move(mob, ox, oy);
     }
@@ -1037,6 +1045,27 @@ export class DungeonScene extends Scene {
     }
   }
 
+  // ── Achievement notification ─────────────────────────────────────────────────
+
+  private maybeStartAchievementNotif(): void {
+    if (this._notifActive) return;
+    const pending = [
+      ...this.humanAchievements.pendingNotifications.map((def) => ({
+        def,
+        mgr: this.humanAchievements,
+      })),
+      ...this.catAchievements.pendingNotifications.map((def) => ({
+        def,
+        mgr: this.catAchievements,
+      })),
+    ];
+    if (pending.length > 0) {
+      this._notifQueue = pending;
+      this._notifActive = true;
+      this.achievementNotif.reset();
+    }
+  }
+
   // ── Loot box queue ──────────────────────────────────────────────────────────
 
   private openBoxQueue(player: 'human' | 'cat'): void {
@@ -1212,20 +1241,69 @@ export class DungeonScene extends Scene {
       return;
     }
 
-    const r = this.achievementIconRect();
-    this._achievIconRect = r;
+    const inSafeRoom = this.human.isProtected || this.cat.isProtected;
+    const canvas = this.sceneManager.canvas;
 
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
-    ctx.fillStyle = 'rgba(26,42,10,0.9)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = `rgba(134,239,172,${0.6 + 0.4 * pulse})`;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = '#86efac';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`🏆 NEW (${unread})`, r.x + r.w / 2, r.y + r.h / 2 + 4);
-    ctx.textAlign = 'left';
+    if (inSafeRoom) {
+      // Big flashing banner on the left (same spot as loot box icon)
+      const w = 96;
+      const h = 88;
+      const x = 12;
+      const y = canvas.height / 2 - h / 2;
+      this._achievIconRect = { x, y, w, h };
+
+      const t = Date.now();
+      const pulse = 0.5 + 0.5 * Math.sin(t / 220);
+      const bounce = Math.sin(t / 400) * 3;
+
+      ctx.save();
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 18 + 14 * pulse;
+
+      ctx.fillStyle = 'rgba(10, 20, 0, 0.92)';
+      ctx.fillRect(x, y + bounce, w, h);
+
+      ctx.strokeStyle = `rgba(134, 239, 172, ${0.55 + 0.45 * pulse})`;
+      ctx.lineWidth = 2 + pulse;
+      ctx.strokeRect(x, y + bounce, w, h);
+      ctx.shadowBlur = 0;
+
+      ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('🏆', x + w / 2, y + bounce + 34);
+
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = `rgba(134, 239, 172, ${0.75 + 0.25 * pulse})`;
+      ctx.fillText('ACHIEVEMENT!', x + w / 2, y + bounce + 54);
+
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(
+        unread === 1 ? '1 new' : `${unread} new`,
+        x + w / 2,
+        y + bounce + 68,
+      );
+
+      ctx.textAlign = 'left';
+      ctx.restore();
+    } else {
+      // Small button in top-right corner
+      const r = this.achievementIconRect();
+      this._achievIconRect = r;
+
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+      ctx.fillStyle = 'rgba(26,42,10,0.9)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = `rgba(134,239,172,${0.6 + 0.4 * pulse})`;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#86efac';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🏆 NEW (${unread})`, r.x + r.w / 2, r.y + r.h / 2 + 4);
+      ctx.textAlign = 'left';
+    }
   }
 
   private drawLootBoxIcon(
