@@ -13,8 +13,10 @@ const FLOOR_TYPES = [
 const VOID_TYPE = 9;
 /** Tile type for the Safe Room floor — warm sanctuary look. */
 const SAFE_ROOM_FLOOR = 10;
-/** Tile type for the Boss Room floor — grimy, trash-covered look. */
+/** Tile type for the Boss Room floor — grimy, trash-covered look (TheHoarder). */
 const HORDER_BOSS_ROOM_FLOOR = 11;
+/** Tile type for the Gym Boss Room floor — dark rubber mat look (Juicer). */
+const JUICER_BOSS_ROOM_FLOOR = 12;
 type FloorTile = (typeof FLOOR_TYPES)[number];
 
 const FloorTypeValue = {
@@ -201,7 +203,7 @@ export class GameMap {
             x: Math.floor(r.x + r.w / 2),
             y: Math.floor(r.y + r.h / 2),
           };
-          return Math.hypot(cx - rc.x, cy - rc.y) < 25;
+          return Math.hypot(cx - rc.x, cy - rc.y) < 60;
         });
 
       // Safe room and boss rooms must stay within a fixed tile-radius of the start
@@ -222,11 +224,15 @@ export class GameMap {
       }
 
       if (!overlaps && !tooCloseToBoss && !tooFarFromStart) {
+        // 0-indexed boss room index (rooms[2] = first boss, rooms[3] = second boss, etc.)
+        const bossIdx = rooms.length - 2;
         const floor =
           rooms.length === 1
             ? SAFE_ROOM_FLOOR
             : isBossRoom
-              ? HORDER_BOSS_ROOM_FLOOR
+              ? bossIdx === 0
+                ? HORDER_BOSS_ROOM_FLOOR
+                : JUICER_BOSS_ROOM_FLOOR
               : DUNGEON_FLOORS[
                   Math.floor(Math.random() * DUNGEON_FLOORS.length)
                 ];
@@ -679,6 +685,35 @@ export class GameMap {
             Math.PI * 2,
           );
           ctx.fill();
+        }
+        this.drawWallShadow(ctx, sx, sy, ts, tx, ty);
+        break;
+      }
+
+      // ── Juicer Gym floor — dark rubber mat ───────────────────────────────
+      case JUICER_BOSS_ROOM_FLOOR: {
+        // Very dark grey rubber base
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(sx, sy, ts, ts);
+        // Subtle grid lines every tile
+        ctx.fillStyle = '#222';
+        ctx.fillRect(sx + ts - 1, sy, 1, ts);
+        ctx.fillRect(sx, sy + ts - 1, ts, 1);
+        // Rubber texture dots (deterministic pattern)
+        if ((tx + ty) % 3 === 0) {
+          ctx.fillStyle = 'rgba(255,255,255,0.04)';
+          ctx.beginPath();
+          ctx.arc(sx + ts * 0.5, sy + ts * 0.5, ts * 0.18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Orange gym line markings every 4 tiles
+        if (tx % 4 === 0) {
+          ctx.fillStyle = 'rgba(249,115,22,0.18)';
+          ctx.fillRect(sx, sy, 2, ts);
+        }
+        if (ty % 4 === 0) {
+          ctx.fillStyle = 'rgba(249,115,22,0.18)';
+          ctx.fillRect(sx, sy, ts, 2);
         }
         this.drawWallShadow(ctx, sx, sy, ts, tx, ty);
         break;

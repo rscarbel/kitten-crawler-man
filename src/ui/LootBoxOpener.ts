@@ -31,7 +31,7 @@ const SHAKE_FRAMES = 40;
 const OPEN_FRAMES = 30;
 const REVEAL_FRAMES = 50;
 /** Frames to display the open box before auto-advancing to the next. */
-const NEXT_DELAY = 90;
+const NEXT_DELAY = 180;
 
 /** Ascending rarity order for sorting boxes (lowest first). */
 const TIER_ORDER: Record<string, number> = {

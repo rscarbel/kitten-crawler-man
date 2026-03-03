@@ -63,6 +63,9 @@ export abstract class Mob extends Player {
   /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
   isConfused = false;
 
+  /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
+  isSlowed = false;
+
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;
 
@@ -232,7 +235,8 @@ export abstract class Mob extends Player {
       this.isMoving = false;
       return;
     }
-    const step = Math.min(speed, dist - minDist);
+    const effectiveSpeed = this.isSlowed ? speed * 0.35 : speed;
+    const step = Math.min(effectiveSpeed, dist - minDist);
     const nx = dx / dist;
     const ny = dy / dist;
     this.facingX = nx;

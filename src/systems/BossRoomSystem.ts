@@ -16,13 +16,26 @@ interface BossRoomState {
   pulse: number;
 }
 
+export const BOSS_META: Record<string, { displayName: string; color: string }> =
+  {
+    the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
+    juicer: { displayName: 'THE JUICER', color: '#fb923c' },
+  };
+
 export class BossRoomSystem {
   private readonly states: BossRoomState[];
+  private readonly bossTypes: string[];
+  private readonly enteredRooms = new Set<number>();
+
+  /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
+  newlyLockedBossType: string | null = null;
 
   constructor(
     private readonly gameMap: GameMap,
     private readonly miniMap: MiniMapSystem,
+    bossTypes: string[] = [],
   ) {
+    this.bossTypes = bossTypes;
     this.states = gameMap.bossRooms.map((br) => ({
       bounds: br.bounds,
       locked: false,
@@ -86,6 +99,11 @@ export class BossRoomSystem {
           this.isEntityInRoom(cat, state.bounds))
       ) {
         state.locked = true;
+        const idx = this.states.indexOf(state);
+        if (!this.enteredRooms.has(idx)) {
+          this.enteredRooms.add(idx);
+          this.newlyLockedBossType = this.bossTypes[idx] ?? 'the_hoarder';
+        }
       }
 
       if (state.locked && !bossAlive) {
@@ -179,8 +197,15 @@ export class BossRoomSystem {
     camX: number,
     camY: number,
   ): void {
-    for (const state of this.states) {
-      this.renderSingleBossRoomObjects(ctx, camX, camY, state.bounds);
+    for (let i = 0; i < this.states.length; i++) {
+      const bossType = this.bossTypes[i] ?? 'the_hoarder';
+      this.renderSingleBossRoomObjects(
+        ctx,
+        camX,
+        camY,
+        this.states[i].bounds,
+        bossType,
+      );
     }
   }
 
@@ -189,20 +214,25 @@ export class BossRoomSystem {
     camX: number,
     camY: number,
     b: { x: number; y: number; w: number; h: number },
+    bossType: string,
   ): void {
     const ts = TILE_SIZE;
     const cx = (b.x + b.w * 0.5) * ts - camX;
     const cy = (b.y + b.h * 0.5) * ts - camY;
 
+    const meta = BOSS_META[bossType] ?? BOSS_META['the_hoarder'];
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
     ctx.save();
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#7c3aed';
+    ctx.fillStyle = meta.color;
     ctx.fillText('BOSS ROOM', bannerX, bannerY + ts * 0.65);
     ctx.textAlign = 'left';
     ctx.restore();
+
+    // Juicer's gym room — decoration handled by JuicerRoomSystem
+    if (bossType === 'juicer') return;
 
     ctx.save();
 
@@ -361,10 +391,16 @@ export class BossRoomSystem {
     );
     if (!relevantState) return;
 
+    const relevantStateIdx = this.states.indexOf(relevantState);
+    const bossType = this.bossTypes[relevantStateIdx] ?? 'the_hoarder';
+    const meta = BOSS_META[bossType] ?? BOSS_META['the_hoarder'];
+
     const boss = mobs.find(
       (m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds),
-    ) as TheHoarder | undefined;
+    ) as (Mob & { isEnraged?: boolean }) | undefined;
     if (!boss) return;
+
+    const isEnraged = boss.isEnraged ?? false;
 
     const barW = Math.min(360, canvas.width * 0.5);
     const barH = 18;
@@ -376,24 +412,24 @@ export class BossRoomSystem {
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(barX - 6, barY - 22, barW + 12, barH + 30);
-    ctx.strokeStyle = '#7c3aed';
+    ctx.strokeStyle = meta.color;
     ctx.lineWidth = 1;
     ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
 
     ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = boss.isEnraged ? '#ef4444' : '#c084fc';
+    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
     ctx.textAlign = 'center';
     ctx.fillText(
-      boss.isEnraged ? '⚠ THE HOARDER [ENRAGED] ⚠' : 'THE HOARDER',
+      isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName,
       canvas.width / 2,
       barY - 6,
     );
     ctx.textAlign = 'left';
 
-    ctx.fillStyle = '#1a0a1e';
+    ctx.fillStyle = '#0a0a12';
     ctx.fillRect(barX, barY, barW, barH);
 
-    ctx.fillStyle = boss.isEnraged ? '#ef4444' : '#7c3aed';
+    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
     ctx.fillRect(barX, barY, barW * hpFrac, barH);
 
     ctx.strokeStyle = 'rgba(239,68,68,0.6)';
@@ -403,7 +439,7 @@ export class BossRoomSystem {
     ctx.lineTo(barX + barW * 0.5, barY + barH);
     ctx.stroke();
 
-    ctx.strokeStyle = '#7c3aed';
+    ctx.strokeStyle = meta.color;
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, barH);
 

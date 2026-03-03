@@ -179,6 +179,23 @@ export class AchievementManager {
   }
 
   /**
+   * Directly grant a loot box without requiring a new achievement unlock.
+   * Use when the achievement is already earned but the box should still be awarded.
+   */
+  grantBox(
+    tier: BoxTier,
+    category: BoxCategory,
+    fromAchievement: AchievementId,
+  ): void {
+    this.pendingBoxes.push({
+      id: this.nextBoxId++,
+      tier,
+      category,
+      fromAchievement,
+    });
+  }
+
+  /**
    * Open (remove) a specific box by ID. Returns the box if found, or null.
    * The caller is responsible for granting the box contents to the player.
    */

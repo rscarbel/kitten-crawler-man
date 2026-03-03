@@ -6,6 +6,11 @@ import {
   SLOTS_PER_PAGE,
 } from '../core/Inventory';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
+import {
+  drawDumbbellInventoryIcon,
+  drawBenchPressInventoryIcon,
+  drawTreadmillInventoryIcon,
+} from '../sprites/gymEquipmentSprite';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const SLOT_SIZE = 54;
@@ -661,6 +666,12 @@ export class InventoryPanel {
 
     if (item.id === 'goblin_dynamite') {
       drawDynamiteInventoryIcon(ctx, x, y, size);
+    } else if (item.id === 'gym_dumbbell') {
+      drawDumbbellInventoryIcon(ctx, x, y, size);
+    } else if (item.id === 'gym_bench_press') {
+      drawBenchPressInventoryIcon(ctx, x, y, size);
+    } else if (item.id === 'gym_treadmill') {
+      drawTreadmillInventoryIcon(ctx, x, y, size);
     }
 
     // Quantity badge (bottom-right)

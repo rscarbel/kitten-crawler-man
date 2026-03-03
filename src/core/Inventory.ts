@@ -2,7 +2,10 @@ export type ItemId =
   | 'health_potion'
   | 'enchanted_bigboi_boxers'
   | 'scroll_of_confusing_fog'
-  | 'goblin_dynamite';
+  | 'goblin_dynamite'
+  | 'gym_dumbbell'
+  | 'gym_bench_press'
+  | 'gym_treadmill';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -53,6 +56,33 @@ const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'A hissing stick of goblin-made dynamite. Only the Human can throw it. ' +
       'Hold the hotbar key to charge your throw — release to hurl it. ' +
       'Tap it to drop it at your feet. Warning: holding too long has consequences.',
+  },
+  gym_dumbbell: {
+    id: 'gym_dumbbell',
+    name: 'Dumbbell',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A heavy iron dumbbell. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
+  },
+  gym_bench_press: {
+    id: 'gym_bench_press',
+    name: 'Bench Press',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A full bench press machine. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
+  },
+  gym_treadmill: {
+    id: 'gym_treadmill',
+    name: 'Treadmill',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A sturdy treadmill. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',

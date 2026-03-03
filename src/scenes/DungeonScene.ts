@@ -22,12 +22,15 @@ import { SpatialGrid } from '../core/SpatialGrid';
 // Systems
 import { MiniMapSystem } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
-import { BossRoomSystem } from '../systems/BossRoomSystem';
+import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import { CompanionSystem } from '../systems/CompanionSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
+import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
+import { BarrierSystem } from '../systems/BarrierSystem';
+import { Juicer } from '../creatures/Juicer';
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -45,6 +48,8 @@ export class DungeonScene extends Scene {
   private companion: CompanionSystem;
   private loot: LootSystem;
   private stairwell: StairwellSystem;
+  private juicerRoom: JuicerRoomSystem;
+  private barriers: BarrierSystem;
 
   // UI
   private pauseMenu: PauseMenu;
@@ -62,6 +67,19 @@ export class DungeonScene extends Scene {
     [];
   private _achievIconRect = { x: 0, y: 0, w: 80, h: 28 };
   private _lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
+
+  // Boss battle intro
+  private bossIntro: {
+    bossType: string;
+    bossName: string;
+    bossColor: string;
+    frame: number;
+    phase: 'letters' | 'versus';
+  } | null = null;
+  private static readonly INTRO_TITLE = 'B-B-B-B-BOSS BATTLE!';
+  private static readonly INTRO_FRAMES_PER_CHAR = 7;
+  private static readonly INTRO_HOLD_FRAMES = 70;
+  private static readonly INTRO_VERSUS_FRAMES = 220;
 
   // Misc state
   private gameOver = false;
@@ -110,7 +128,13 @@ export class DungeonScene extends Scene {
     // Systems
     this.miniMap = new MiniMapSystem(this.gameMap);
     this.safeRoom = new SafeRoomSystem(this.gameMap, sx, sy);
-    this.bossRoom = new BossRoomSystem(this.gameMap, this.miniMap);
+    this.bossRoom = new BossRoomSystem(
+      this.gameMap,
+      this.miniMap,
+      levelDef.bossRooms?.map((b) => b.type) ?? [],
+    );
+    this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
+    this.barriers = new BarrierSystem(this.gameMap);
     this.dynamite = new DynamiteSystem(this.gameMap);
     this.spells = new SpellSystem();
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
@@ -187,6 +211,13 @@ export class DungeonScene extends Scene {
           }
           return;
         }
+        // Try picking up a gym item from the floor (juicer room or placed barrier)
+        if (
+          this.juicerRoom.tryPickupNear(active) ||
+          this.barriers.tryPickupNear(active)
+        ) {
+          return;
+        }
         if (this.human.isActive) {
           this.companion.snapFacingToNearestMob(
             this.human,
@@ -250,6 +281,13 @@ export class DungeonScene extends Scene {
           this.spells.castConfusingFog(active);
         } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
           this.dynamite.beginCharge(hotbarIdx);
+        } else if (
+          (slot?.id === 'gym_dumbbell' ||
+            slot?.id === 'gym_bench_press' ||
+            slot?.id === 'gym_treadmill') &&
+          !this.barriers.isConstructing
+        ) {
+          this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
         }
         return;
       }
@@ -324,10 +362,14 @@ export class DungeonScene extends Scene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const lb = this._lootBoxIconRect;
       if (mx >= lb.x && mx <= lb.x + lb.w && my >= lb.y && my <= lb.y + lb.h) {
-        if (this.humanAchievements.pendingBoxes.length > 0) {
-          this.openBoxQueue('human');
-        } else if (this.catAchievements.pendingBoxes.length > 0) {
-          this.openBoxQueue('cat');
+        const unread =
+          this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+        if (unread === 0) {
+          if (this.humanAchievements.pendingBoxes.length > 0) {
+            this.openBoxQueue('human');
+          } else if (this.catAchievements.pendingBoxes.length > 0) {
+            this.openBoxQueue('cat');
+          }
         }
         return;
       }
@@ -451,6 +493,11 @@ export class DungeonScene extends Scene {
     if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
     if (this._notifActive) this.achievementNotif.tick();
 
+    if (this.bossIntro) {
+      this.tickBossIntro();
+      return;
+    }
+
     if (this.gameOver || this.pauseMenu.isOpen || this.stairwell.menuOpen)
       return;
 
@@ -461,6 +508,25 @@ export class DungeonScene extends Scene {
     }
 
     this.updateGameplay();
+  }
+
+  private tickBossIntro(): void {
+    const intro = this.bossIntro!;
+    intro.frame++;
+
+    const FPC = DungeonScene.INTRO_FRAMES_PER_CHAR;
+    const titleLen = DungeonScene.INTRO_TITLE.length;
+    const lettersPhaseEnd = titleLen * FPC + DungeonScene.INTRO_HOLD_FRAMES;
+
+    if (intro.phase === 'letters' && intro.frame >= lettersPhaseEnd) {
+      intro.phase = 'versus';
+      intro.frame = 0;
+    } else if (
+      intro.phase === 'versus' &&
+      intro.frame >= DungeonScene.INTRO_VERSUS_FRAMES
+    ) {
+      this.bossIntro = null;
+    }
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -480,6 +546,7 @@ export class DungeonScene extends Scene {
       this.speechBubblePulse,
     );
     this.bossRoom.renderObjects(ctx, camX, camY);
+    this.juicerRoom.render(ctx, camX, camY, this.active());
     this.stairwell.renderStairwells(ctx, camX, camY, canvas);
 
     const visibleMobs = this.mobGrid.queryRect(
@@ -493,6 +560,7 @@ export class DungeonScene extends Scene {
     this.inactive().render(ctx, camX, camY, TILE_SIZE);
     this.active().render(ctx, camX, camY, TILE_SIZE);
 
+    this.barriers.render(ctx, camX, camY, this.active());
     this.spells.renderShell(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
     this.renderLevelUpFlash(ctx, camX, camY);
@@ -544,6 +612,7 @@ export class DungeonScene extends Scene {
       );
       this.gearPanel.render(ctx, canvas, active.inventory, name);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
+      this.barriers.renderConstructUI(ctx, canvas);
     }
 
     if (this.gameOver) {
@@ -600,6 +669,10 @@ export class DungeonScene extends Scene {
     if (this._notifActive && this._notifQueue.length > 0) {
       this.achievementNotif.render(ctx, canvas, this._notifQueue[0].def);
     }
+
+    if (this.bossIntro) {
+      this.renderBossIntro(ctx, canvas);
+    }
   }
 
   // ── Core gameplay update ────────────────────────────────────────────────────
@@ -654,6 +727,33 @@ export class DungeonScene extends Scene {
 
     this.safeRoom.evictMobs(this.mobs, this.mobGrid);
     this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
+
+    // Trigger boss battle intro on first room entry
+    if (this.bossRoom.newlyLockedBossType !== null) {
+      const bt = this.bossRoom.newlyLockedBossType;
+      this.bossRoom.newlyLockedBossType = null;
+      const meta = BOSS_META[bt] ?? {
+        displayName: 'THE BOSS',
+        color: '#ef4444',
+      };
+      this.bossIntro = {
+        bossType: bt,
+        bossName: meta.displayName,
+        bossColor: meta.color,
+        frame: 0,
+        phase: 'letters',
+      };
+    }
+
+    // Reset slow state before BarrierSystem re-applies it
+    for (const mob of this.mobs) mob.isSlowed = false;
+    this.barriers.update(this.mobs, this.mobGrid, this.gameMap);
+
+    // Juicer room gym pickups + Juicer AI coordination
+    const juicer =
+      (this.mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ??
+      null;
+    this.juicerRoom.update(this.human, this.cat, juicer, this.mobs);
 
     this.companion.update(
       this.human,
@@ -743,6 +843,7 @@ export class DungeonScene extends Scene {
     // Death check
     if (!this.human.isAlive || !this.cat.isAlive) {
       this.gameOver = true;
+      this.barriers.cancelConstruct();
       this.deathScreen.activate();
     }
     if (
@@ -849,8 +950,12 @@ export class DungeonScene extends Scene {
       if (mob.killedBy === this.cat)
         this.catAchievements.tryUnlock('first_blood');
       if (mob.isBoss) {
-        this.humanAchievements.tryUnlock('boss_slayer');
-        this.catAchievements.tryUnlock('boss_slayer');
+        if (!this.humanAchievements.tryUnlock('boss_slayer')) {
+          this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+        }
+        if (!this.catAchievements.tryUnlock('boss_slayer')) {
+          this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+        }
       }
       if (
         mob.killedBy === this.human &&
@@ -1014,7 +1119,7 @@ export class DungeonScene extends Scene {
     const w = 80;
     const h = 28;
     const x = canvas.width - w - 88;
-    const y = 8 + mmSize + 8;
+    const y = 8 + mmSize + 20;
 
     const urgentAlpha = urgent
       ? 0.85 + Math.sin(Date.now() / 160) * 0.12
@@ -1047,7 +1152,7 @@ export class DungeonScene extends Scene {
       : this.miniMap.NORMAL_SIZE;
     return {
       x: this.sceneManager.canvas.width - 88,
-      y: 8 + mmSize + 8,
+      y: 8 + mmSize + 20,
       w: 80,
       h: 28,
     };
@@ -1083,7 +1188,7 @@ export class DungeonScene extends Scene {
       : this.miniMap.NORMAL_SIZE;
     return {
       x: this.sceneManager.canvas.width - 88,
-      y: 8 + mmSize + 8 + 28 + 6,
+      y: 8 + mmSize + 20 + 28 + 6,
       w: 80,
       h: 26,
     };
@@ -1132,13 +1237,17 @@ export class DungeonScene extends Scene {
       this.humanAchievements.pendingBoxes.length +
       this.catAchievements.pendingBoxes.length;
 
+    const totalUnread =
+      this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+
     if (
       !inSafe ||
       totalBoxes === 0 ||
       this.gameOver ||
       this.pauseMenu.isOpen ||
       this.lootBoxOpener.isOpen ||
-      this._notifActive
+      this._notifActive ||
+      totalUnread > 0
     ) {
       this._lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
       return;
@@ -1184,6 +1293,309 @@ export class DungeonScene extends Scene {
     );
 
     ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  // ── Boss battle intro ────────────────────────────────────────────────────────
+
+  private renderBossIntro(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const intro = this.bossIntro!;
+    const CX = canvas.width / 2;
+    const CY = canvas.height / 2;
+
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (intro.phase === 'letters') {
+      const TITLE = DungeonScene.INTRO_TITLE;
+      const FPC = DungeonScene.INTRO_FRAMES_PER_CHAR;
+      const charsShown = Math.min(
+        TITLE.length,
+        Math.floor(intro.frame / FPC) + 1,
+      );
+
+      ctx.save();
+      ctx.textAlign = 'center';
+
+      // Render each visible character with individual color/scale for flair
+      const fullText = TITLE.slice(0, charsShown);
+      const fontSize = Math.min(64, Math.floor(canvas.width / 12));
+      ctx.font = `bold ${fontSize}px monospace`;
+
+      // Measure total width for centering
+      const charW = ctx.measureText('B').width;
+      // Draw character-by-character with last char having a flash
+      for (let i = 0; i < fullText.length; i++) {
+        const isLast = i === charsShown - 1;
+        const flashPulse = isLast ? Math.sin(intro.frame * 0.6) : 1;
+        const ch = fullText[i];
+
+        // B's in yellow-gold, dashes in grey, rest of "OSS BATTLE!" in white
+        if (ch === 'B') {
+          ctx.fillStyle = isLast
+            ? `rgba(255,200,0,${0.7 + 0.3 * flashPulse})`
+            : '#fbbf24';
+        } else if (ch === '-') {
+          ctx.fillStyle = '#94a3b8';
+        } else {
+          ctx.fillStyle = isLast
+            ? `rgba(255,255,255,${0.7 + 0.3 * flashPulse})`
+            : '#f1f5f9';
+        }
+
+        // Calculate x for each char
+        const totalW = fullText.length * charW;
+        const startX = CX - totalW / 2 + charW * 0.5;
+        const cx = startX + i * charW;
+
+        // Scale up last revealed char slightly
+        const scale = isLast ? 1 + 0.15 * Math.abs(flashPulse) : 1;
+        ctx.save();
+        ctx.translate(cx, CY);
+        ctx.scale(scale, scale);
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = isLast ? 24 : 8;
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      }
+
+      // Subtext hint after title is fully shown
+      const titleLen = TITLE.length;
+      if (charsShown >= titleLen) {
+        const holdProgress =
+          (intro.frame - titleLen * FPC) / DungeonScene.INTRO_HOLD_FRAMES;
+        const alpha = Math.min(1, holdProgress * 3);
+        ctx.globalAlpha = alpha;
+        ctx.font = `bold ${Math.floor(fontSize * 0.4)}px monospace`;
+        ctx.fillStyle = '#ef4444';
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 10;
+        ctx.fillText('GET READY!', CX, CY + fontSize * 0.9);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    } else {
+      // ── Versus screen ──────────────────────────────────────────────────────
+      const t = intro.frame;
+      const slideIn = Math.min(1, t / 30);
+      const eased = 1 - Math.pow(1 - slideIn, 3);
+
+      const panelW = Math.min(280, canvas.width * 0.38);
+      const panelH = 200;
+      const panelY = CY - panelH / 2;
+
+      // Left panel — Team Princess Posse
+      const leftX = CX - 20 - panelW - (1 - eased) * CX;
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,20,40,0.9)';
+      ctx.fillRect(leftX, panelY, panelW, panelH);
+      ctx.strokeStyle = '#60a5fa';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(leftX, panelY, panelW, panelH);
+
+      // Draw human figure
+      this.drawIntroHumanSprite(ctx, leftX + panelW * 0.3, panelY + 70);
+      // Draw cat figure
+      this.drawIntroCatSprite(ctx, leftX + panelW * 0.65, panelY + 78);
+
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#93c5fd';
+      ctx.fillText(
+        'TEAM PRINCESS POSSE',
+        leftX + panelW / 2,
+        panelY + panelH - 28,
+      );
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('Human + Cat', leftX + panelW / 2, panelY + panelH - 14);
+      ctx.restore();
+
+      // Right panel — Boss
+      const rightX = CX + 20 + (1 - eased) * CX;
+      ctx.save();
+      ctx.fillStyle = 'rgba(30,10,10,0.9)';
+      ctx.fillRect(rightX, panelY, panelW, panelH);
+      ctx.strokeStyle = intro.bossColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rightX, panelY, panelW, panelH);
+
+      this.drawIntroBossSprite(
+        ctx,
+        rightX + panelW / 2,
+        panelY + 70,
+        intro.bossType,
+        intro.bossColor,
+      );
+
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = intro.bossColor;
+      ctx.fillText(intro.bossName, rightX + panelW / 2, panelY + panelH - 28);
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('BOSS', rightX + panelW / 2, panelY + panelH - 14);
+      ctx.restore();
+
+      // VS in the centre
+      const vsAlpha = Math.min(1, (t - 20) / 15);
+      if (vsAlpha > 0) {
+        const vsPulse = 1 + 0.06 * Math.sin(t * 0.15);
+        ctx.save();
+        ctx.globalAlpha = vsAlpha;
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${Math.floor(48 * vsPulse)}px monospace`;
+        ctx.fillStyle = '#ef4444';
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 20;
+        ctx.fillText('VS', CX, CY + 18);
+        ctx.restore();
+      }
+
+      // Countdown hint at bottom
+      const framesLeft = DungeonScene.INTRO_VERSUS_FRAMES - t;
+      if (framesLeft < 90) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, (90 - framesLeft) / 20);
+        ctx.textAlign = 'center';
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('FIGHT!', CX, CY + panelH / 2 + 40);
+        ctx.restore();
+      }
+    }
+  }
+
+  private drawIntroHumanSprite(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+  ): void {
+    // Simple standing figure
+    ctx.save();
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(cx, cy - 28, 12, 0, Math.PI * 2);
+    ctx.fill();
+    // Body
+    ctx.fillStyle = '#4a7a8a';
+    ctx.fillRect(cx - 10, cy - 16, 20, 26);
+    // Legs
+    ctx.fillStyle = '#2d4a5a';
+    ctx.fillRect(cx - 9, cy + 10, 8, 18);
+    ctx.fillRect(cx + 1, cy + 10, 8, 18);
+    // Arms
+    ctx.fillStyle = '#4a7a8a';
+    ctx.fillRect(cx - 18, cy - 14, 8, 20);
+    ctx.fillRect(cx + 10, cy - 14, 8, 20);
+    ctx.restore();
+  }
+
+  private drawIntroCatSprite(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+  ): void {
+    ctx.save();
+    // Body
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 12, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Head
+    ctx.beginPath();
+    ctx.arc(cx, cy - 16, 10, 0, Math.PI * 2);
+    ctx.fill();
+    // Ears
+    ctx.fillStyle = '#fb923c';
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 22);
+    ctx.lineTo(cx - 12, cy - 32);
+    ctx.lineTo(cx - 3, cy - 25);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 8, cy - 22);
+    ctx.lineTo(cx + 12, cy - 32);
+    ctx.lineTo(cx + 3, cy - 25);
+    ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(cx - 4, cy - 17, 2.5, 0, Math.PI * 2);
+    ctx.arc(cx + 4, cy - 17, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.arc(cx - 4, cy - 17, 1.2, 0, Math.PI * 2);
+    ctx.arc(cx + 4, cy - 17, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawIntroBossSprite(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    bossType: string,
+    color: string,
+  ): void {
+    ctx.save();
+    const pulse = 1 + 0.05 * Math.sin(Date.now() * 0.004);
+    ctx.scale(pulse, pulse);
+    ctx.translate(cx * (1 - pulse), cy * (1 - pulse));
+
+    if (bossType === 'juicer') {
+      // Muscular figure
+      ctx.fillStyle = color;
+      // Torso (wide)
+      ctx.fillRect(cx - 20, cy - 20, 40, 30);
+      // Head
+      ctx.beginPath();
+      ctx.arc(cx, cy - 28, 14, 0, Math.PI * 2);
+      ctx.fill();
+      // Huge arms
+      ctx.fillRect(cx - 36, cy - 18, 16, 24);
+      ctx.fillRect(cx + 20, cy - 18, 16, 24);
+      // Legs
+      ctx.fillStyle = '#7c3aed';
+      ctx.fillRect(cx - 18, cy + 10, 14, 20);
+      ctx.fillRect(cx + 4, cy + 10, 14, 20);
+      // Dumbbell in hand
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(cx + 28, cy - 10, 16, 6);
+      ctx.fillRect(cx + 26, cy - 14, 6, 14);
+      ctx.fillRect(cx + 38, cy - 14, 6, 14);
+    } else {
+      // TheHoarder — large blob shape
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      // Main body (fat)
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 4, 28, 24, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head
+      ctx.beginPath();
+      ctx.arc(cx, cy - 22, 18, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(cx - 7, cy - 24, 4, 0, Math.PI * 2);
+      ctx.arc(cx + 7, cy - 24, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // Claws
+      ctx.fillStyle = '#7c3aed';
+      ctx.fillRect(cx - 38, cy - 4, 10, 6);
+      ctx.fillRect(cx + 28, cy - 4, 10, 6);
+    }
+
     ctx.restore();
   }
 
