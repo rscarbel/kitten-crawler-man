@@ -1,7 +1,14 @@
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule {
   /** String key resolved by the spawner factory. */
-  type: 'goblin' | 'llama' | 'rat' | 'the_hoarder' | 'cockroach' | 'juicer';
+  type:
+    | 'goblin'
+    | 'llama'
+    | 'rat'
+    | 'the_hoarder'
+    | 'cockroach'
+    | 'juicer'
+    | 'troglodyte';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.

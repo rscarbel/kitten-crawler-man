@@ -153,6 +153,9 @@ export abstract class Player {
       if (effect.type === 'burn' && elapsed > 0 && elapsed % 60 === 0) {
         this.takeDamage(1);
       }
+      if (effect.type === 'poison' && elapsed > 0 && elapsed % 120 === 0) {
+        this.takeDamage(1);
+      }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;
     });
@@ -250,6 +253,25 @@ export abstract class Player {
         ctx.beginPath();
         ctx.ellipse(cx + flicker * 0.5, sy - 11, 3, 4, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      if (effect.type === 'poison') {
+        const t = Date.now();
+        const drift = (t * 0.025) % (Math.PI * 2);
+        ctx.shadowColor = '#4ade80';
+        ctx.shadowBlur = 5;
+        ctx.fillStyle = '#22c55e';
+        // Three staggered green drips rising above the character
+        for (let b = 0; b < 3; b++) {
+          const phase = drift + b * 2.09; // 2π/3 apart
+          const bx = cx + Math.sin(phase) * 4.5;
+          const by = sy - 7 - b * 4.5 - Math.abs(Math.sin(phase * 0.5)) * 3;
+          const r = 2.8 - b * 0.5;
+          ctx.globalAlpha = 0.7 + 0.3 * Math.sin(phase);
+          ctx.beginPath();
+          ctx.arc(bx, by, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.shadowBlur = 0;
       }
     }

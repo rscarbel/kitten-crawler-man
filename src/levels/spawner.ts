@@ -6,6 +6,7 @@ import { Rat } from '../creatures/Rat';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
 import { Juicer } from '../creatures/Juicer';
+import { Troglodyte } from '../creatures/Troglodyte';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
 
@@ -52,6 +53,8 @@ export function createMob(
     mob = new Cockroach(tileX, tileY, TILE_SIZE);
   } else if (type === 'juicer') {
     mob = new Juicer(tileX, tileY, TILE_SIZE);
+  } else if (type === 'troglodyte') {
+    mob = new Troglodyte(tileX, tileY, TILE_SIZE);
   } else {
     // default: goblin
     const v =

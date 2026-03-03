@@ -6,7 +6,7 @@ import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
 import type { LevelDef } from '../levels/types';
-import { spawnForLevel } from '../levels/spawner';
+import { spawnForLevel, createMob } from '../levels/spawner';
 import { getLevelDef } from '../levels';
 import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
@@ -124,6 +124,24 @@ export class DungeonScene extends Scene {
     this.human.isActive = true;
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
+
+    // Spawn a few Troglodytes near the Juicer's boss room (bossRooms[1])
+    if (levelDef.bossRooms?.[1]?.type === 'juicer') {
+      const juicerRoom = this.gameMap.bossRooms[1];
+      if (juicerRoom) {
+        const { x: jcx, y: jcy } = juicerRoom.centre;
+        for (const [dx, dy] of [
+          [-3, -2],
+          [3, -2],
+          [0, 3],
+        ] as [number, number][]) {
+          this.mobs.push(
+            createMob('troglodyte', jcx + dx, jcy + dy, this.gameMap),
+          );
+        }
+      }
+    }
+
     this.cat.setMap(this.gameMap);
 
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);

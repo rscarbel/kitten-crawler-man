@@ -20,3 +20,8 @@ export interface StatusEffect {
 export function makeBurn(): StatusEffect {
   return { type: 'burn', ticksRemaining: 480, totalTicks: 480 };
 }
+
+/** 30-second poison: 1 damage every 2 seconds for 30 seconds (1800 ticks at 60 fps). */
+export function makePoison(): StatusEffect {
+  return { type: 'poison', ticksRemaining: 1800, totalTicks: 1800 };
+}
