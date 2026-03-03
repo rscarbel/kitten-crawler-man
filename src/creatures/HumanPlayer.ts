@@ -11,7 +11,7 @@ export class HumanPlayer extends Player {
   private attackPhase: 'punch' | 'kick' | null = null;
   private attackTimer = 0;
   private readonly ATTACK_FRAMES = 18;
-  private nextType: 'punch' | 'kick' = 'punch';
+  public nextType: 'punch' | 'kick' = 'punch';
   private autoAttackCooldown = 0;
   private readonly AUTO_ATTACK_COOLDOWN = 90;
 

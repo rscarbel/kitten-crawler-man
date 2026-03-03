@@ -64,7 +64,10 @@ export abstract class Mob extends Player {
   isConfused = false;
 
   /** The player who dealt the killing blow; set when hp reaches 0. */
-  protected killedBy: Player | null = null;
+  killedBy: Player | null = null;
+
+  /** The type of attack that landed the killing blow. */
+  killType: 'melee' | 'missile' | null = null;
 
   constructor(
     tileX: number,
@@ -264,7 +267,11 @@ export abstract class Mob extends Player {
    * Deal damage and attribute it to an attacker for kill-credit / XP tracking.
    * Also triggers the damage flash and shows the health bar.
    */
-  takeDamageFrom(amount: number, attacker: Player | null) {
+  takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: 'melee' | 'missile' = 'melee',
+  ) {
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - amount);
     const actual = prev - this.hp;
@@ -281,6 +288,7 @@ export abstract class Mob extends Player {
     if (this.hp === 0 && prev > 0) {
       this.justDied = true;
       this.killedBy = attacker;
+      this.killType = damageType;
       // Roll loot
       const coins =
         this.coinDropMin +
