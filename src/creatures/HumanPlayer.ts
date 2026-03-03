@@ -130,5 +130,6 @@ export class HumanPlayer extends Player {
 
     this.renderHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);
+    this.renderStatusEffects(ctx, sx, sy);
   }
 }

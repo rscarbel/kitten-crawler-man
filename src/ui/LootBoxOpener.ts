@@ -328,11 +328,11 @@ export class LootBoxOpener {
       ctx.rotate(lidAngle);
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.25;
-      ctx.fillRect(-size / 2 - 4, -size * 0.15, size + 8, size * 0.2);
+      ctx.fillRect(-size / 2 - 4, -size * 0.18, size + 8, size * 0.18);
       ctx.globalAlpha = 1;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.strokeRect(-size / 2 - 4, -size * 0.15, size + 8, size * 0.2);
+      ctx.strokeRect(-size / 2 - 4, -size * 0.18, size + 8, size * 0.18);
       ctx.restore();
 
       // Glow from inside

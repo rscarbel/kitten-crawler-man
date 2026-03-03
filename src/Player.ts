@@ -222,4 +222,37 @@ export abstract class Player {
     ctx.fillRect(sx, sy, this.tileSize, this.tileSize);
     ctx.restore();
   }
+
+  /** Renders world-space status effect indicators above the character sprite. */
+  protected renderStatusEffects(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+  ) {
+    if (this.statusEffects.length === 0) return;
+    const cx = sx + this.tileSize / 2;
+    ctx.save();
+    for (const effect of this.statusEffects) {
+      if (effect.type === 'burn') {
+        const t = Date.now();
+        const pulse = 0.5 + 0.5 * Math.sin(t * 0.009);
+        const flicker = Math.sin(t * 0.022) * 2.5;
+        ctx.globalAlpha = 0.75 + 0.25 * pulse;
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 6 + 5 * pulse;
+        // Outer flame
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.ellipse(cx + flicker, sy - 10, 5, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Inner flame
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.ellipse(cx + flicker * 0.5, sy - 11, 3, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    ctx.restore();
+  }
 }

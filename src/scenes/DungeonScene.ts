@@ -31,6 +31,10 @@ import { StairwellSystem } from '../systems/StairwellSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { Juicer } from '../creatures/Juicer';
+import { drawHumanSprite } from '../sprites/humanSprite';
+import { drawCatSprite } from '../sprites/catSprite';
+import { drawJuicerSprite } from '../sprites/juicerSprite';
+import { drawHoarderSprite } from '../sprites/hoarderSprite';
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -724,12 +728,6 @@ export class DungeonScene extends Scene {
       this.catAchievements.tryUnlock('safe_haven');
     }
 
-    // Auto-show achievement notification on entering safe room
-    const inSafeRoom = this.human.isProtected || this.cat.isProtected;
-    if (inSafeRoom && !this._notifActive && !this.pauseMenu.isOpen) {
-      this.maybeStartAchievementNotif();
-    }
-
     this.safeRoom.evictMobs(this.mobs, this.mobGrid);
     this.safeRoom.updateWander();
     this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
@@ -1042,27 +1040,6 @@ export class DungeonScene extends Scene {
       }
       active.inventory.removeItems(id, quantity);
       this.loot.addPlayerDrop(active.x, active.y, id, quantity, active);
-    }
-  }
-
-  // ── Achievement notification ─────────────────────────────────────────────────
-
-  private maybeStartAchievementNotif(): void {
-    if (this._notifActive) return;
-    const pending = [
-      ...this.humanAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.humanAchievements,
-      })),
-      ...this.catAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.catAchievements,
-      })),
-    ];
-    if (pending.length > 0) {
-      this._notifQueue = pending;
-      this._notifActive = true;
-      this.achievementNotif.reset();
     }
   }
 
@@ -1476,10 +1453,14 @@ export class DungeonScene extends Scene {
       ctx.lineWidth = 2;
       ctx.strokeRect(leftX, panelY, panelW, panelH);
 
-      // Draw human figure
-      this.drawIntroHumanSprite(ctx, leftX + panelW * 0.3, panelY + 70);
-      // Draw cat figure
-      this.drawIntroCatSprite(ctx, leftX + panelW * 0.65, panelY + 78);
+      // Human sprite — left portion of panel
+      ctx.save();
+      drawHumanSprite(ctx, leftX + 14, panelY + 16, 72, false, 0, false, 0);
+      ctx.restore();
+      // Cat sprite — right portion of panel
+      ctx.save();
+      drawCatSprite(ctx, leftX + panelW * 0.52, panelY + 20, 60, 0, false, 0);
+      ctx.restore();
 
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
@@ -1503,13 +1484,36 @@ export class DungeonScene extends Scene {
       ctx.lineWidth = 2;
       ctx.strokeRect(rightX, panelY, panelW, panelH);
 
-      this.drawIntroBossSprite(
-        ctx,
-        rightX + panelW / 2,
-        panelY + 70,
-        intro.bossType,
-        intro.bossColor,
-      );
+      ctx.save();
+      if (intro.bossType === 'juicer') {
+        const jS = 56;
+        drawJuicerSprite(
+          ctx,
+          rightX + panelW / 2 - jS / 2,
+          panelY + 32,
+          jS,
+          0,
+          false,
+          0,
+          0,
+          1,
+          false,
+          false,
+        );
+      } else {
+        const hS = 80;
+        drawHoarderSprite(
+          ctx,
+          rightX + panelW / 2 - hS / 2,
+          panelY + 18,
+          hS,
+          false,
+          0,
+          1,
+          0,
+        );
+      }
+      ctx.restore();
 
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
@@ -1547,134 +1551,6 @@ export class DungeonScene extends Scene {
         ctx.restore();
       }
     }
-  }
-
-  private drawIntroHumanSprite(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-  ): void {
-    // Simple standing figure
-    ctx.save();
-    // Head
-    ctx.fillStyle = '#d4a574';
-    ctx.beginPath();
-    ctx.arc(cx, cy - 28, 12, 0, Math.PI * 2);
-    ctx.fill();
-    // Body
-    ctx.fillStyle = '#4a7a8a';
-    ctx.fillRect(cx - 10, cy - 16, 20, 26);
-    // Legs
-    ctx.fillStyle = '#2d4a5a';
-    ctx.fillRect(cx - 9, cy + 10, 8, 18);
-    ctx.fillRect(cx + 1, cy + 10, 8, 18);
-    // Arms
-    ctx.fillStyle = '#4a7a8a';
-    ctx.fillRect(cx - 18, cy - 14, 8, 20);
-    ctx.fillRect(cx + 10, cy - 14, 8, 20);
-    ctx.restore();
-  }
-
-  private drawIntroCatSprite(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-  ): void {
-    ctx.save();
-    // Body
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 12, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Head
-    ctx.beginPath();
-    ctx.arc(cx, cy - 16, 10, 0, Math.PI * 2);
-    ctx.fill();
-    // Ears
-    ctx.fillStyle = '#fb923c';
-    ctx.beginPath();
-    ctx.moveTo(cx - 8, cy - 22);
-    ctx.lineTo(cx - 12, cy - 32);
-    ctx.lineTo(cx - 3, cy - 25);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx + 8, cy - 22);
-    ctx.lineTo(cx + 12, cy - 32);
-    ctx.lineTo(cx + 3, cy - 25);
-    ctx.fill();
-    // Eyes
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(cx - 4, cy - 17, 2.5, 0, Math.PI * 2);
-    ctx.arc(cx + 4, cy - 17, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.arc(cx - 4, cy - 17, 1.2, 0, Math.PI * 2);
-    ctx.arc(cx + 4, cy - 17, 1.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawIntroBossSprite(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    bossType: string,
-    color: string,
-  ): void {
-    ctx.save();
-    const pulse = 1 + 0.05 * Math.sin(Date.now() * 0.004);
-    ctx.scale(pulse, pulse);
-    ctx.translate(cx * (1 - pulse), cy * (1 - pulse));
-
-    if (bossType === 'juicer') {
-      // Muscular figure
-      ctx.fillStyle = color;
-      // Torso (wide)
-      ctx.fillRect(cx - 20, cy - 20, 40, 30);
-      // Head
-      ctx.beginPath();
-      ctx.arc(cx, cy - 28, 14, 0, Math.PI * 2);
-      ctx.fill();
-      // Huge arms
-      ctx.fillRect(cx - 36, cy - 18, 16, 24);
-      ctx.fillRect(cx + 20, cy - 18, 16, 24);
-      // Legs
-      ctx.fillStyle = '#7c3aed';
-      ctx.fillRect(cx - 18, cy + 10, 14, 20);
-      ctx.fillRect(cx + 4, cy + 10, 14, 20);
-      // Dumbbell in hand
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillRect(cx + 28, cy - 10, 16, 6);
-      ctx.fillRect(cx + 26, cy - 14, 6, 14);
-      ctx.fillRect(cx + 38, cy - 14, 6, 14);
-    } else {
-      // TheHoarder — large blob shape
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.85;
-      // Main body (fat)
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + 4, 28, 24, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Head
-      ctx.beginPath();
-      ctx.arc(cx, cy - 22, 18, 0, Math.PI * 2);
-      ctx.fill();
-      // Eyes
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.arc(cx - 7, cy - 24, 4, 0, Math.PI * 2);
-      ctx.arc(cx + 7, cy - 24, 4, 0, Math.PI * 2);
-      ctx.fill();
-      // Claws
-      ctx.fillStyle = '#7c3aed';
-      ctx.fillRect(cx - 38, cy - 4, 10, 6);
-      ctx.fillRect(cx + 28, cy - 4, 10, 6);
-    }
-
-    ctx.restore();
   }
 
   // ── Accessors ───────────────────────────────────────────────────────────────
