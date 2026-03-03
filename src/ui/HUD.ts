@@ -2,6 +2,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { StatusEffect } from '../core/StatusEffect';
+import { IS_MOBILE } from '../core/MobileDetect';
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -10,13 +11,21 @@ import type { StatusEffect } from '../core/StatusEffect';
  * @param pulseRef - Mutable object holding the oscillation counter for the
  *   notification pulse. Pass `{ value: 0 }` from the scene and keep it stable.
  */
+/**
+ * Returns the rect of the collapse/expand toggle button (mobile only).
+ */
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
+  _canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   pulseRef: { value: number },
-): void {
+  collapsed = false,
+): { x: number; y: number; w: number; h: number } {
+  if (IS_MOBILE && collapsed) {
+    return drawHUDCollapsed(ctx, human, cat);
+  }
+
   const activeLabel = human.isActive ? 'Human' : 'Cat (Donut)';
   const inactiveLabel = human.isActive ? 'Cat' : 'Human';
   const atkLabel = human.isActive ? 'Punch / Kick' : 'Magic Missile';
@@ -33,8 +42,13 @@ export function drawHUD(
 
   ctx.fillStyle = '#e2e8f0';
   ctx.font = '12px monospace';
-  ctx.fillText('WASD/Arrows: Move  |  Tab: Switch', 16, 46);
-  ctx.fillText(`Space: ${atkLabel}  |  Q: Potion`, 16, 62);
+  if (IS_MOBILE) {
+    ctx.fillText('Hold: Move  |  Tap: Attack', 16, 46);
+    ctx.fillText('Buttons: Switch / Follow', 16, 62);
+  } else {
+    ctx.fillText('WASD/Arrows: Move  |  Tab: Switch', 16, 46);
+    ctx.fillText(`Space: ${atkLabel}  |  Q: Potion`, 16, 62);
+  }
 
   drawHUDPlayerBlock(ctx, activeLabel, activePlayer, 16, 74);
   drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 128);
@@ -45,6 +59,74 @@ export function drawHUD(
   ctx.fillText(`\u{1FA99} ${human.coins + cat.coins}  coins`, 16, 185);
 
   renderNotification(ctx, human, cat, pulseRef);
+
+  if (IS_MOBILE) {
+    // Collapse toggle — small "▲" button at top-right of panel
+    const toggleRect = { x: 336, y: 8, w: 28, h: 22 };
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('▲', toggleRect.x + toggleRect.w / 2, toggleRect.y + 15);
+    ctx.textAlign = 'left';
+    return toggleRect;
+  }
+  return { x: -9999, y: 0, w: 0, h: 0 };
+}
+
+/** Compact single-row HUD for mobile collapsed state. */
+function drawHUDCollapsed(
+  ctx: CanvasRenderingContext2D,
+  human: HumanPlayer,
+  cat: CatPlayer,
+): { x: number; y: number; w: number; h: number } {
+  const BAR_W = 180;
+  const BAR_H = 26;
+  const x = 8;
+  const y = 8;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(x, y, BAR_W, BAR_H);
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, BAR_W, BAR_H);
+
+  // Human HP
+  const hHp = human.hp / human.maxHp;
+  const cHp = cat.hp / cat.maxHp;
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('\u{1F9CD}', x + 6, y + 17);
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(x + 22, y + 7, 60, 6);
+  ctx.fillStyle = hHp > 0.5 ? '#4ade80' : hHp > 0.25 ? '#facc15' : '#ef4444';
+  ctx.fillRect(x + 22, y + 7, Math.ceil(60 * hHp), 6);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('\u{1F431}', x + 90, y + 17);
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(x + 106, y + 7, 60, 6);
+  ctx.fillStyle = cHp > 0.5 ? '#4ade80' : cHp > 0.25 ? '#facc15' : '#ef4444';
+  ctx.fillRect(x + 106, y + 7, Math.ceil(60 * cHp), 6);
+
+  // Expand toggle
+  const toggleRect = { x: x + BAR_W, y, w: 26, h: BAR_H };
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('▼', toggleRect.x + toggleRect.w / 2, toggleRect.y + 17);
+  ctx.textAlign = 'left';
+
+  return toggleRect;
 }
 
 export function drawHUDPlayerBlock(

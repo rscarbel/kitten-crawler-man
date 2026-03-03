@@ -84,6 +84,7 @@ export class AchievementNotification {
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
     achievement: AchievementDef,
+    player: 'Human' | 'Cat' = 'Human',
   ): void {
     const cw = canvas.width;
     const ch = canvas.height;
@@ -140,6 +141,13 @@ export class AchievementNotification {
     ctx.font = 'bold 18px monospace';
     ctx.fillText(achievement.name, cw / 2, by + 88);
 
+    // ── Awarded-to label ─────────────────────────────────────────────────
+    const playerColor = player === 'Human' ? '#86efac' : '#93c5fd';
+    const playerIcon = player === 'Human' ? '\u{1F9CD}' : '\u{1F431}';
+    ctx.fillStyle = playerColor;
+    ctx.font = '11px monospace';
+    ctx.fillText(`${playerIcon} Awarded to: ${player}`, cw / 2, by + 107);
+
     // ── Description ───────────────────────────────────────────────────────
     ctx.fillStyle = '#94a3b8';
     ctx.font = '13px monospace';
@@ -148,7 +156,7 @@ export class AchievementNotification {
       ctx,
       achievement.description,
       cw / 2,
-      by + 118,
+      by + 126,
       BOX_W - 64,
       18,
     );

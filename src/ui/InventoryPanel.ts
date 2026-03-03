@@ -118,13 +118,22 @@ export class InventoryPanel {
     };
   }
 
+  private computedHotbarSlotSize(canvas: HTMLCanvasElement): number {
+    const margin = 20;
+    const available =
+      canvas.width - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
+    return Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
+  }
+
   private hotbarRect(canvas: HTMLCanvasElement) {
-    const w = HOTBAR_COUNT * (HOTBAR_SLOT_SIZE + HOTBAR_GAP) - HOTBAR_GAP;
+    const s = this.computedHotbarSlotSize(canvas);
+    const w = HOTBAR_COUNT * (s + HOTBAR_GAP) - HOTBAR_GAP;
     return {
       x: Math.floor((canvas.width - w) / 2),
-      y: canvas.height - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN,
+      y: canvas.height - s - HOTBAR_BOTTOM_MARGIN,
       w,
-      h: HOTBAR_SLOT_SIZE,
+      h: s,
+      slotSize: s,
     };
   }
 
@@ -143,11 +152,40 @@ export class InventoryPanel {
   private hotbarSlotRect(i: number, canvas: HTMLCanvasElement) {
     const hb = this.hotbarRect(canvas);
     return {
-      x: hb.x + i * (HOTBAR_SLOT_SIZE + HOTBAR_GAP),
+      x: hb.x + i * (hb.slotSize + HOTBAR_GAP),
       y: hb.y,
-      w: HOTBAR_SLOT_SIZE,
-      h: HOTBAR_SLOT_SIZE,
+      w: hb.slotSize,
+      h: hb.slotSize,
     };
+  }
+
+  /** Returns hotbar slot index (0–7) if (mx, my) hits a slot, else -1. */
+  getHotbarTappedIndex(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+  ): number {
+    const hb = this.hotbarRect(canvas);
+    if (my < hb.y - 12 || my > hb.y + hb.h + 12) return -1;
+    for (let i = 0; i < HOTBAR_COUNT; i++) {
+      const r = this.hotbarSlotRect(i, canvas);
+      if (mx >= r.x && mx <= r.x + r.w) return i;
+    }
+    return -1;
+  }
+
+  /** True if (mx, my) is within the open inventory panel area. */
+  hitsPanel(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+    if (!this.isOpen) return false;
+    const p = this.panelRect(canvas);
+    return (
+      mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h
+    );
+  }
+
+  /** True while an item is being dragged. */
+  get isDragging(): boolean {
+    return this.drag !== null;
   }
 
   // ── Render ────────────────────────────────────────────────────────────────

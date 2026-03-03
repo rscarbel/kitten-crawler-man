@@ -12,6 +12,9 @@ export abstract class Scene {
   handleMouseMove?(mx: number, my: number): void;
   handleMouseUp?(mx: number, my: number): void;
   handleContextMenu?(mx: number, my: number): void;
+  handleTouchStart?(e: TouchEvent, rect: DOMRect): void;
+  handleTouchMove?(e: TouchEvent, rect: DOMRect): void;
+  handleTouchEnd?(e: TouchEvent, rect: DOMRect): void;
 }
 
 /**
@@ -71,6 +74,29 @@ export class SceneManager {
       const { x, y } = getPos(e);
       this.current.handleContextMenu(x, y);
     });
+
+    this.canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (!this.current?.handleTouchStart) return;
+      const rect = this.canvas.getBoundingClientRect();
+      this.current.handleTouchStart(e, rect);
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!this.current?.handleTouchMove) return;
+      const rect = this.canvas.getBoundingClientRect();
+      this.current.handleTouchMove(e, rect);
+    }, { passive: false });
+
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!this.current?.handleTouchEnd) return;
+      const rect = this.canvas.getBoundingClientRect();
+      this.current.handleTouchEnd(e, rect);
+    };
+    this.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    this.canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
     this.loop();
   }
