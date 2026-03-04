@@ -1,6 +1,7 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
+import { IS_MOBILE } from '../core/MobileDetect';
 
 export class MiniMapSystem {
   private fogOfWar: Uint8Array;
@@ -229,11 +230,14 @@ export class MiniMapSystem {
     ctx.fillStyle = '#64748b';
     ctx.font = '8px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(
-      expanded ? 'M: collapse' : 'M: expand',
-      mmX + mmSize / 2,
-      mmY + mmSize + 9,
-    );
+    const expandHint = IS_MOBILE
+      ? expanded
+        ? 'Tap: collapse'
+        : 'Tap: expand'
+      : expanded
+        ? 'M: collapse'
+        : 'M: expand';
+    ctx.fillText(expandHint, mmX + mmSize / 2, mmY + mmSize + 9);
     ctx.textAlign = 'left';
   }
 

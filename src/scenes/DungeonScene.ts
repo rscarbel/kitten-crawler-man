@@ -68,8 +68,11 @@ export class DungeonScene extends Scene {
   private humanAchievements: AchievementManager;
   private catAchievements: AchievementManager;
   private _notifActive = false;
-  private _notifQueue: Array<{ def: AchievementDef; mgr: AchievementManager; player: 'Human' | 'Cat' }> =
-    [];
+  private _notifQueue: Array<{
+    def: AchievementDef;
+    mgr: AchievementManager;
+    player: 'Human' | 'Cat';
+  }> = [];
   private _achievIconRect = { x: 0, y: 0, w: 80, h: 28 };
   private _lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
 
@@ -112,6 +115,9 @@ export class DungeonScene extends Scene {
   private inventoryDragTouchId: number | null = null;
   private _mobileSwitchBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private _mobileFollowBtnRect = { x: 0, y: 0, w: 0, h: 0 };
+  private _mobileGearBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+  private _mobileBagBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+  private _miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
   private _hudCollapsed = IS_MOBILE;
   private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
@@ -307,7 +313,7 @@ export class DungeonScene extends Scene {
     this.inactive().autoTarget = null;
   }
 
-  private triggerSpaceAction(): void {
+  private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.mordecaiDialogOpen = false;
       return;
@@ -327,11 +333,32 @@ export class DungeonScene extends Scene {
     ) {
       return;
     }
+    // On mobile tap: aim toward tap position before snapping to nearest mob
+    if (tapScreenX !== undefined && tapScreenY !== undefined) {
+      const cam = this.camera();
+      const wx = tapScreenX + cam.x;
+      const wy = tapScreenY + cam.y;
+      const ddx = wx - (active.x + TILE_SIZE / 2);
+      const ddy = wy - (active.y + TILE_SIZE / 2);
+      const d = Math.hypot(ddx, ddy);
+      if (d > 0) {
+        active.facingX = ddx / d;
+        active.facingY = ddy / d;
+      }
+    }
     if (this.human.isActive) {
-      this.companion.snapFacingToNearestMob(this.human, TILE_SIZE * 3, this.mobGrid);
+      this.companion.snapFacingToNearestMob(
+        this.human,
+        TILE_SIZE * 3,
+        this.mobGrid,
+      );
       this.human.triggerAttack();
     } else {
-      this.companion.snapFacingToNearestMob(this.cat, TILE_SIZE * 5, this.mobGrid);
+      this.companion.snapFacingToNearestMob(
+        this.cat,
+        TILE_SIZE * 5,
+        this.mobGrid,
+      );
       this.cat.triggerAttack();
     }
   }
@@ -612,7 +639,14 @@ export class DungeonScene extends Scene {
 
     this.renderHealthVignette(ctx, canvas);
 
-    this._hudToggleRect = drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse, this._hudCollapsed);
+    this._hudToggleRect = drawHUD(
+      ctx,
+      canvas,
+      this.human,
+      this.cat,
+      this.notifPulse,
+      this._hudCollapsed,
+    );
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.miniMap.render(
@@ -623,6 +657,17 @@ export class DungeonScene extends Scene {
         this.mobs,
         this.safeRoom.mordecaiPositions,
       );
+      const mmSz = this.miniMap.isExpanded
+        ? this.miniMap.EXPANDED_SIZE
+        : this.miniMap.NORMAL_SIZE;
+      this._miniMapRect = {
+        x: canvas.width - mmSz - 8,
+        y: 8,
+        w: mmSz,
+        h: mmSz,
+      };
+    } else {
+      this._miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
 
     if (!this.levelDef.isSafeLevel && !this.gameOver) {
@@ -713,7 +758,12 @@ export class DungeonScene extends Scene {
     }
 
     if (this._notifActive && this._notifQueue.length > 0) {
-      this.achievementNotif.render(ctx, canvas, this._notifQueue[0].def, this._notifQueue[0].player);
+      this.achievementNotif.render(
+        ctx,
+        canvas,
+        this._notifQueue[0].def,
+        this._notifQueue[0].player,
+      );
     }
 
     if (this.bossIntro) {
@@ -735,8 +785,17 @@ export class DungeonScene extends Scene {
     if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
 
     // Mobile touch movement: only after holding ≥150 ms (not a tap)
-    const touchHoldMs = this.mobileTapStart ? Date.now() - this.mobileTapStart.time : 0;
-    if (IS_MOBILE && this.mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
+    const touchHoldMs = this.mobileTapStart
+      ? Date.now() - this.mobileTapStart.time
+      : 0;
+    let mobileMove = false;
+    if (
+      IS_MOBILE &&
+      this.mobileMoveTarget &&
+      touchHoldMs >= 150 &&
+      dx === 0 &&
+      dy === 0
+    ) {
       const cam = this.camera();
       const wx = this.mobileMoveTarget.x + cam.x;
       const wy = this.mobileMoveTarget.y + cam.y;
@@ -746,6 +805,7 @@ export class DungeonScene extends Scene {
       if (dist > 8) {
         dx = ddx / dist;
         dy = ddy / dist;
+        mobileMove = true;
       }
     }
 
@@ -756,7 +816,8 @@ export class DungeonScene extends Scene {
       player.facingX = dx / len;
       player.facingY = dy / len;
     }
-    if (dx !== 0 && dy !== 0) {
+    // Mobile touch already gives a unit vector — skip diagonal penalty
+    if (!mobileMove && dx !== 0 && dy !== 0) {
       dx *= 0.7071;
       dy *= 0.7071;
     }
@@ -848,6 +909,7 @@ export class DungeonScene extends Scene {
         mob.currentTarget = null;
         mob.doWander();
       } else {
+        if (mob.isBoss) mob.forceAggro = this.bossRoom.isBossInLockedRoom(mob);
         mob.updateAI(playerTargets);
       }
       // Keep bosses (specifically the Juicer) confined to their room
@@ -1110,8 +1172,10 @@ export class DungeonScene extends Scene {
     const boxes = [...mgr.pendingBoxes];
     if (boxes.length === 0) return;
     this.pauseMenu.close();
+    const playerName = player === 'human' ? 'Human' : 'Cat';
     this.lootBoxOpener.startQueue(
       boxes,
+      playerName,
       (box, contents) => {
         mgr.openBox(box.id);
         target.inventory.addItem('health_potion', contents.potions);
@@ -1236,7 +1300,11 @@ export class DungeonScene extends Scene {
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('Pause (Esc)', pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
+    ctx.fillText(
+      IS_MOBILE ? 'Pause' : 'Pause (Esc)',
+      pb.x + pb.w / 2,
+      pb.y + pb.h / 2 + 4,
+    );
     ctx.textAlign = 'left';
     void canvas;
   }
@@ -1635,8 +1703,12 @@ export class DungeonScene extends Scene {
     }
 
     const grad = ctx.createRadialGradient(
-      cw / 2, ch / 2, Math.min(cw, ch) * 0.25,
-      cw / 2, ch / 2, Math.max(cw, ch) * 0.85,
+      cw / 2,
+      ch / 2,
+      Math.min(cw, ch) * 0.25,
+      cw / 2,
+      ch / 2,
+      Math.max(cw, ch) * 0.85,
     );
     grad.addColorStop(0, 'rgba(220,0,0,0)');
     grad.addColorStop(1, `rgba(220,0,0,${alpha.toFixed(3)})`);
@@ -1653,8 +1725,7 @@ export class DungeonScene extends Scene {
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
   ): void {
-    // Position buttons above the hotbar
-    // Hotbar slot size is ~52px with 12px bottom margin; mirror that spacing
+    // Position Switch/Follow buttons above the hotbar
     const SLOT_H = 52;
     const BOTTOM_MARGIN = 12;
     const BTN_W = 80;
@@ -1669,6 +1740,17 @@ export class DungeonScene extends Scene {
       w: BTN_W,
       h: BTN_H,
     };
+
+    // Gear / Bag buttons stacked on the right side below the minimap column
+    const mmSize = this.miniMap.isExpanded
+      ? this.miniMap.EXPANDED_SIZE
+      : this.miniMap.NORMAL_SIZE;
+    const rightX = canvas.width - 88;
+    const pauseY = 8 + mmSize + 20;
+    const achieveY = pauseY + 28 + 6;
+    const gearY = achieveY + 26 + 6;
+    this._mobileGearBtnRect = { x: rightX, y: gearY, w: 80, h: 28 };
+    this._mobileBagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
 
     const drawBtn = (
       r: { x: number; y: number; w: number; h: number },
@@ -1691,6 +1773,23 @@ export class DungeonScene extends Scene {
       ctx.textAlign = 'left';
     };
 
+    const drawSmallBtn = (
+      r: { x: number; y: number; w: number; h: number },
+      label: string,
+      active: boolean,
+    ) => {
+      ctx.fillStyle = active ? 'rgba(59,130,246,0.35)' : 'rgba(0,0,0,0.65)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = active ? '#3b82f6' : '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 4);
+      ctx.textAlign = 'left';
+    };
+
     const humanActive = this.human.isActive;
     drawBtn(
       this._mobileSwitchBtnRect,
@@ -1704,6 +1803,8 @@ export class DungeonScene extends Scene {
       'Follow',
       this.companion.isFollowOverride,
     );
+    drawSmallBtn(this._mobileGearBtnRect, 'Gear', this.gearPanel.isOpen);
+    drawSmallBtn(this._mobileBagBtnRect, 'Bag', this.inventoryPanel.isOpen);
   }
 
   // ── Touch handlers (mobile) ──────────────────────────────────────────────────
@@ -1724,30 +1825,59 @@ export class DungeonScene extends Scene {
         }
       }
 
+      // Minimap tap to expand/collapse (mobile only)
+      if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
+        const mm = this._miniMapRect;
+        if (x >= mm.x && x <= mm.x + mm.w && y >= mm.y && y <= mm.y + mm.h) {
+          this.miniMap.toggle();
+          continue;
+        }
+      }
+
+      // Gear / Bag buttons (mobile only)
+      if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
+        const gb = this._mobileGearBtnRect;
+        if (x >= gb.x && x <= gb.x + gb.w && y >= gb.y && y <= gb.y + gb.h) {
+          this.gearPanel.toggle();
+          continue;
+        }
+        const bb = this._mobileBagBtnRect;
+        if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
+          this.inventoryPanel.toggle();
+          continue;
+        }
+      }
+
       // Mobile action buttons (always checked first)
       if (IS_MOBILE) {
         const sb = this._mobileSwitchBtnRect;
-        if (
-          x >= sb.x && x <= sb.x + sb.w &&
-          y >= sb.y && y <= sb.y + sb.h
-        ) {
-          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
+        if (x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) {
+          if (
+            !this.pauseMenu.isOpen &&
+            !this.safeRoom.isSleeping &&
+            !this.gameOver
+          )
             this.triggerSwitchCharacter();
           continue;
         }
         const fb = this._mobileFollowBtnRect;
-        if (
-          x >= fb.x && x <= fb.x + fb.w &&
-          y >= fb.y && y <= fb.y + fb.h
-        ) {
-          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
+        if (x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
+          if (
+            !this.pauseMenu.isOpen &&
+            !this.safeRoom.isSleeping &&
+            !this.gameOver
+          )
             this.triggerCompanionFollow();
           continue;
         }
       }
 
       // Hotbar slot tap
-      if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+      if (
+        !this.pauseMenu.isOpen &&
+        !this.safeRoom.isSleeping &&
+        !this.gameOver
+      ) {
         const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (hi >= 0) {
           this.triggerHotbarActivation(hi);
@@ -1769,7 +1899,11 @@ export class DungeonScene extends Scene {
       }
 
       // Inventory panel drag start
-      if (this.inventoryPanel.isOpen && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (
+        this.inventoryPanel.isOpen &&
+        !this.gameOver &&
+        !this.pauseMenu.isOpen
+      ) {
         if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
           if (this.inventoryDragTouchId === null) {
@@ -1830,8 +1964,12 @@ export class DungeonScene extends Scene {
           if (elapsed < 250 && moved < 20) {
             // Short tap: try UI click first, then space action
             this.handleClick(x, y);
-            if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
-              this.triggerSpaceAction();
+            if (
+              !this.pauseMenu.isOpen &&
+              !this.safeRoom.isSleeping &&
+              !this.gameOver
+            ) {
+              this.triggerSpaceAction(x, y);
             }
           }
         }

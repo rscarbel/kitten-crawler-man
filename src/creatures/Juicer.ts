@@ -104,7 +104,7 @@ export class Juicer extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < AGGRO_RANGE_PX && d < nearestDist) {
+      if ((this.forceAggro || d < AGGRO_RANGE_PX) && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }

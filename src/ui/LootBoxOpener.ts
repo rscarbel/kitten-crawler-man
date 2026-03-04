@@ -54,6 +54,7 @@ export class LootBoxOpener {
   private box: LootBox | null = null;
   private contents: BoxContents | null = null;
   private rewardGranted = false;
+  private playerName = '';
 
   private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null =
     null;
@@ -76,6 +77,7 @@ export class LootBoxOpener {
    */
   startQueue(
     boxes: LootBox[],
+    playerName: string,
     onBoxOpened: (box: LootBox, contents: BoxContents) => void,
     onAllDone: () => void,
   ): void {
@@ -84,6 +86,7 @@ export class LootBoxOpener {
       (a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0),
     );
     this.queueIndex = 0;
+    this.playerName = playerName;
     this.onBoxOpened = onBoxOpened;
     this.onAllDone = onAllDone;
     this.active = true;
@@ -190,12 +193,17 @@ export class LootBoxOpener {
     ctx.textAlign = 'center';
     ctx.fillText(`${this.box.tier} ${this.box.category} Box`, cx, by + 36);
 
+    // Player label
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px monospace';
+    ctx.fillText(`for ${this.playerName}`, cx, by + 52);
+
     // Divider
     ctx.strokeStyle = `${tierColor}55`;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(bx + 24, by + 48);
-    ctx.lineTo(bx + BOX_W - 24, by + 48);
+    ctx.moveTo(bx + 24, by + 62);
+    ctx.lineTo(bx + BOX_W - 24, by + 62);
     ctx.stroke();
 
     // Draw the animated box graphic
@@ -390,7 +398,7 @@ export class LootBoxOpener {
     ctx.textAlign = 'center';
     ctx.font = 'bold 13px monospace';
     ctx.fillStyle = '#f1f5f9';
-    ctx.fillText('You received:', cx, y);
+    ctx.fillText(`${this.playerName} received:`, cx, y);
     y += 18;
     ctx.font = '12px monospace';
     ctx.fillStyle = '#4ade80';
@@ -408,7 +416,12 @@ export class LootBoxOpener {
     if (this.contents.bonus) {
       ctx.fillStyle = '#fb923c';
       const name = this.contents.bonus.id.replace(/_/g, ' ');
-      ctx.fillText(`+${this.contents.bonus.quantity} ${name}`, cx, y);
+      const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
+      ctx.fillText(
+        `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`,
+        cx,
+        y,
+      );
     }
   }
 

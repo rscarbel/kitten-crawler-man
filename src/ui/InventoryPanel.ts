@@ -5,6 +5,7 @@ import {
   HOTBAR_COUNT,
   SLOTS_PER_PAGE,
 } from '../core/Inventory';
+import { IS_MOBILE } from '../core/MobileDetect';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
   drawDumbbellInventoryIcon,
@@ -178,9 +179,7 @@ export class InventoryPanel {
   hitsPanel(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
     if (!this.isOpen) return false;
     const p = this.panelRect(canvas);
-    return (
-      mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h
-    );
+    return mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h;
   }
 
   /** True while an item is being dragged. */
@@ -405,6 +404,8 @@ export class InventoryPanel {
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
   ): void {
+    // On mobile the button is drawn by DungeonScene.renderMobileButtons instead
+    if (IS_MOBILE) return;
     const btn = this.toggleBtnRect(canvas);
     ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);

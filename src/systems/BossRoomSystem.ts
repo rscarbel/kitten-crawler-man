@@ -72,6 +72,13 @@ export class BossRoomSystem {
     return this.states.some((s) => s.locked);
   }
 
+  /** Returns true when this mob is inside an active (locked) boss room. */
+  isBossInLockedRoom(mob: Mob): boolean {
+    return this.states.some(
+      (s) => s.locked && this.isEntityInRoom(mob, s.bounds),
+    );
+  }
+
   update(
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
@@ -132,13 +139,30 @@ export class BossRoomSystem {
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
   clampBossToRoom(mob: Mob): void {
-    for (let i = 0; i < this.states.length; i++) {
-      const bossType = this.bossTypes[i] ?? 'the_hoarder';
-      // Only clamp the Juicer to its room (index 1); Hoarder can move freely
-      if (bossType !== 'juicer') continue;
-      const state = this.states[i];
-      this.clampToBossRoom(mob, state.bounds);
+    // Only clamp to the room this mob is currently inside.
+    // Clamping to every room sequentially would displace bosses to the last room.
+    for (const state of this.states) {
+      if (this.isEntityInRoom(mob, state.bounds)) {
+        this.clampToBossRoom(mob, state.bounds);
+        return;
+      }
     }
+    // Mob outside all rooms (shouldn't normally happen): clamp to nearest by center.
+    let bestState: BossRoomState | null = null;
+    let bestDist = Infinity;
+    const mx = mob.x + TILE_SIZE * 0.5;
+    const my = mob.y + TILE_SIZE * 0.5;
+    for (const state of this.states) {
+      const b = state.bounds;
+      const cx = (b.x + b.w * 0.5) * TILE_SIZE;
+      const cy = (b.y + b.h * 0.5) * TILE_SIZE;
+      const d = Math.hypot(mx - cx, my - cy);
+      if (d < bestDist) {
+        bestDist = d;
+        bestState = state;
+      }
+    }
+    if (bestState) this.clampToBossRoom(mob, bestState.bounds);
   }
 
   private clampToBossRoom(

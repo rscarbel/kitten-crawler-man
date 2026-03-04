@@ -66,6 +66,9 @@ export abstract class Mob extends Player {
   /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
   isSlowed = false;
 
+  /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
+  forceAggro = false;
+
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;
 

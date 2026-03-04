@@ -1,5 +1,6 @@
 import { Inventory, EQUIP_SUBSLOTS, EquipSlot } from '../core/Inventory';
 import type { InventoryItem } from '../core/Inventory';
+import { IS_MOBILE } from '../core/MobileDetect';
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const SLOT_SIZE = 46;
@@ -72,6 +73,8 @@ export class GearPanel {
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
   ): void {
+    // On mobile the button is drawn by DungeonScene.renderMobileButtons instead
+    if (IS_MOBILE) return;
     const btn = this.toggleBtnRect(canvas);
     ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);

@@ -4,6 +4,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AchievementManager } from '../core/AchievementManager';
 import { ACHIEVEMENT_DEFS } from '../core/AchievementManager';
 import type { AchievementId } from '../core/AchievementManager';
+import { IS_MOBILE } from '../core/MobileDetect';
 
 type PauseTab = 'main' | 'inventory' | 'stats' | 'spend' | 'achievements';
 
@@ -184,7 +185,15 @@ export class PauseMenu {
     const bH = 40;
     let bY = by + 52;
 
-    this.menuBtn(ctx, bX, bY, bW, bH, 'Resume Game  (Esc)', () => this.close());
+    this.menuBtn(
+      ctx,
+      bX,
+      bY,
+      bW,
+      bH,
+      IS_MOBILE ? 'Resume Game' : 'Resume Game  (Esc)',
+      () => this.close(),
+    );
     bY += 50;
     this.menuBtn(ctx, bX, bY, bW, bH, 'Inventory', () => {
       this.tab = 'inventory';

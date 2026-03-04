@@ -264,7 +264,9 @@ function renderNotification(
   ctx.fillStyle = '#93c5fd';
   ctx.font = '10px monospace';
   ctx.fillText(
-    'Skill points available! Open menu (Esc) to spend them.',
+    IS_MOBILE
+      ? 'Skill points available! Open Pause menu to spend them.'
+      : 'Skill points available! Open menu (Esc) to spend them.',
     14,
     206,
   );
