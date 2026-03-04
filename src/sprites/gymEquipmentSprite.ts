@@ -5,7 +5,7 @@
  *   - Treadmill   (floor world, inventory icon)
  */
 
-// ── Dumbbell ──────────────────────────────────────────────────────────────────
+// Dumbbell
 
 export function drawDumbbellFloor(
   ctx: CanvasRenderingContext2D,
@@ -155,7 +155,7 @@ export function drawDumbbellHeld(
   ctx.restore();
 }
 
-// ── Bench Press ───────────────────────────────────────────────────────────────
+// Bench Press
 
 export function drawBenchPressFloor(
   ctx: CanvasRenderingContext2D,
@@ -278,7 +278,7 @@ export function drawBenchPressInventoryIcon(
   ctx.fillRect(cx - size * 0.32, cy - size * 0.05, size * 0.64, size * 0.16);
 }
 
-// ── Treadmill ─────────────────────────────────────────────────────────────────
+// Treadmill
 
 export function drawTreadmillFloor(
   ctx: CanvasRenderingContext2D,

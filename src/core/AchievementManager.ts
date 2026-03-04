@@ -1,3 +1,5 @@
+import { randomInt } from '../utils';
+
 export type AchievementId =
   | 'first_blood'
   | 'boss_slayer'
@@ -30,10 +32,8 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   first_blood: {
     id: 'first_blood',
     name: "You've killed a mob!",
-    description:
-      'You have killed a mob for the first time in the dungeon. Reward: You may now get experience.',
+    description: 'You have killed a mob for the first time in the dungeon',
     playerType: 'both',
-    lootBox: { tier: 'Bronze', category: 'Adventurer' },
   },
   boss_slayer: {
     id: 'boss_slayer',
@@ -44,7 +44,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   },
   smush: {
     id: 'smush',
-    name: 'Podophilia! Achievement',
+    name: 'Bare feet',
     description: "You've used your bare feet to crush and kill an opponent",
     playerType: 'human',
     lootBox: { tier: 'Bronze', category: 'Spicy' },
@@ -67,18 +67,18 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
 
 /** Contents granted when a loot box is opened. */
 export interface BoxContents {
-  potions: number;
+  potions?: number;
   coins: number;
   /** Optional extra item id and quantity. */
   bonus?: { id: string; quantity: number };
 }
 
-const BOX_CONTENTS: Record<BoxTier, Record<BoxCategory, BoxContents>> = {
+const BOX_CONTENTS = {
   Bronze: {
-    Adventurer: { potions: 2, coins: 10 },
-    Boss: { potions: 3, coins: 25 },
+    Adventurer: { potions: randomInt(1, 2), coins: randomInt(5, 10) },
+    Boss: { potions: randomInt(2, 3), coins: randomInt(20, 25) },
     Spicy: {
-      potions: 1,
+      ...(randomInt(0, 2) ? { potions: 1 } : {}),
       coins: 15,
       bonus: { id: 'goblin_dynamite', quantity: 1 },
     },
@@ -119,7 +119,7 @@ const BOX_CONTENTS: Record<BoxTier, Record<BoxCategory, BoxContents>> = {
       bonus: { id: 'goblin_dynamite', quantity: 5 },
     },
   },
-};
+} as const satisfies Record<BoxTier, Record<BoxCategory, BoxContents>>;
 
 export function getBoxContents(
   tier: BoxTier,

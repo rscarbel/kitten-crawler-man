@@ -21,7 +21,7 @@ export function drawHoarderSprite(
   ctx.ellipse(cx, sy + ts * 0.92, ts * 0.55, ts * 0.12, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Purple mumu dress ────────────────────────────────────────────────────
+  // Purple mumu dress
   ctx.fillStyle = isEnraged ? '#6b21a8' : '#7c3aed';
   // Main dress body (wide trapezoid)
   ctx.beginPath();
@@ -42,7 +42,7 @@ export function drawHoarderSprite(
   ctx.closePath();
   ctx.fill();
 
-  // ── Body / skin ───────────────────────────────────────────────────────────
+  // Body / skin
   const skinColor = '#d4956a';
   const skinDark = '#b87850';
 
@@ -62,7 +62,7 @@ export function drawHoarderSprite(
   ctx.ellipse(cx, sy + ts * 0.28, ts * 0.32, ts * 0.2, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Head ─────────────────────────────────────────────────────────────────
+  // Head
   ctx.fillStyle = skinColor;
   ctx.beginPath();
   ctx.ellipse(cx, sy + ts * 0.1, ts * 0.3, ts * 0.27, 0, 0, Math.PI * 2);
@@ -78,7 +78,7 @@ export function drawHoarderSprite(
   ctx.ellipse(cx, sy + ts * 0.24, ts * 0.22, ts * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Hair — messy bun ────────────────────────────────────────────────────
+  // Hair — messy bun
   ctx.fillStyle = '#3d1f0a';
   ctx.beginPath();
   ctx.ellipse(cx, sy - ts * 0.08, ts * 0.22, ts * 0.16, 0, 0, Math.PI * 2);
@@ -97,7 +97,7 @@ export function drawHoarderSprite(
     ctx.fill();
   }
 
-  // ── Face ─────────────────────────────────────────────────────────────────
+  // Face
   const eyeOffX = ts * 0.1;
   const eyeY = sy + ts * 0.07;
   ctx.fillStyle = '#fff';
@@ -139,7 +139,7 @@ export function drawHoarderSprite(
   ctx.arc(cx, sy + ts * 0.17, ts * 0.1, 0.2, Math.PI - 0.2);
   ctx.stroke();
 
-  // ── Vomit glow effect ────────────────────────────────────────────────────
+  // Vomit glow effect
   if (vomitFlash > 0) {
     const alpha = Math.min(1, vomitFlash / 20);
     ctx.save();
@@ -163,7 +163,7 @@ export function drawHoarderSprite(
     ctx.restore();
   }
 
-  // ── Arms — short stubby ───────────────────────────────────────────────────
+  // Arms — short stubby
   ctx.fillStyle = skinColor;
   ctx.beginPath();
   ctx.ellipse(
@@ -188,7 +188,7 @@ export function drawHoarderSprite(
   );
   ctx.fill();
 
-  // ── Enrage indicator ─────────────────────────────────────────────────────
+  // Enrage indicator
   if (isEnraged) {
     ctx.save();
     ctx.globalAlpha = 0.35 + 0.2 * Math.sin(Date.now() / 200);

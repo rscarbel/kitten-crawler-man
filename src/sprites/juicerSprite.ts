@@ -53,13 +53,13 @@ export function drawJuicerSprite(
 
   ctx.save();
 
-  // ── Shadow ────────────────────────────────────────────────────────────────
+  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(cx, sy + s * 0.97, cs * 0.45, cs * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Tail (behind body, drawn first) ──────────────────────────────────────
+  // Tail (behind body, drawn first)
   const tailBase = {
     x: cx - facingX * cs * 0.25,
     y: cy + cs * 0.1 + bodyBob,
@@ -92,7 +92,7 @@ export function drawJuicerSprite(
   ctx.stroke();
   ctx.lineCap = 'butt';
 
-  // ── Legs ──────────────────────────────────────────────────────────────────
+  // Legs
   const legY = cy + cs * 0.12 + bodyBob;
   const legW = cs * 0.2;
   const legH = cs * 0.34;
@@ -161,7 +161,7 @@ export function drawJuicerSprite(
   );
   ctx.fill();
 
-  // ── Shorts ────────────────────────────────────────────────────────────────
+  // Shorts
   const shortsY = cy + cs * 0.04 + bodyBob;
   ctx.fillStyle = shortsColor;
   ctx.beginPath();
@@ -182,7 +182,7 @@ export function drawJuicerSprite(
   ctx.lineTo(cx, shortsY + cs * 0.28);
   ctx.stroke();
 
-  // ── Torso (barrel chest) ──────────────────────────────────────────────────
+  // Torso (barrel chest)
   const torsoY = cy - cs * 0.08 + bodyBob;
   ctx.fillStyle = skinColor;
   ctx.beginPath();
@@ -240,7 +240,7 @@ export function drawJuicerSprite(
   );
   ctx.fill();
 
-  // ── Arms ──────────────────────────────────────────────────────────────────
+  // Arms
   // Arm positions — throw arm raised based on throwAnim
   const leftArmX = cx - cs * 0.48;
   const leftArmY = torsoY + armSwing;
@@ -315,7 +315,7 @@ export function drawJuicerSprite(
     ctx.stroke();
   }
 
-  // ── Bicep "pump" vein lines ───────────────────────────────────────────────
+  // Bicep "pump" vein lines
   ctx.strokeStyle = skinDark;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -330,7 +330,7 @@ export function drawJuicerSprite(
   );
   ctx.stroke();
 
-  // ── Head ──────────────────────────────────────────────────────────────────
+  // Head
   const headY = cy - cs * 0.38 + bodyBob;
   const headX = cx + facingX * cs * 0.08;
 
@@ -490,14 +490,14 @@ export function drawJuicerSprite(
   );
   ctx.stroke();
 
-  // ── Held dumbbell (on right hand) ─────────────────────────────────────────
+  // Held dumbbell (on right hand)
   if (heldDumbbell) {
     const handX = rightArmX + cs * 0.06;
     const handY = rightArmY + cs * 0.35;
     drawDumbbellHeld(ctx, handX, handY, s, throwAnim);
   }
 
-  // ── Enrage glow ───────────────────────────────────────────────────────────
+  // Enrage glow
   if (isEnraged) {
     ctx.save();
     ctx.globalAlpha = 0.35 + 0.2 * Math.sin(Date.now() / 180);

@@ -13,7 +13,7 @@ import {
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
 
-// ── Layout constants ──────────────────────────────────────────────────────────
+// Layout constants
 const SLOT_SIZE = 54;
 const SLOT_GAP = 4;
 const COLS = 4;
@@ -72,7 +72,7 @@ export class InventoryPanel {
     this.isOpen = !this.isOpen;
   }
 
-  // ── Layout helpers ────────────────────────────────────────────────────────
+  // Layout helpers
 
   toggleBtnRect(canvas: HTMLCanvasElement) {
     return { x: canvas.width - 168, y: 8, w: 72, h: 28 };
@@ -187,7 +187,7 @@ export class InventoryPanel {
     return this.drag !== null;
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // Render
 
   render(
     ctx: CanvasRenderingContext2D,
@@ -726,7 +726,7 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  // ── Interaction ───────────────────────────────────────────────────────────
+  // Interaction
 
   /**
    * Returns true if this panel consumed the click (inventory toggle button or
@@ -1003,7 +1003,7 @@ export class InventoryPanel {
     if (!src) return;
     this.drag = null;
 
-    // ── Drop on hotbar ────────────────────────────────────────────────────
+    // Drop on hotbar
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
       if (inRect(mx, my, r)) {
@@ -1018,7 +1018,7 @@ export class InventoryPanel {
 
     if (!this.isOpen) return;
 
-    // ── Drop on inventory slot ────────────────────────────────────────────
+    // Drop on inventory slot
     const p = this.panelRect(canvas);
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {

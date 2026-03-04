@@ -116,7 +116,7 @@ export class AchievementNotification {
     ctx.lineWidth = 8;
     ctx.strokeRect(bx + 4, by + 4, BOX_W - 8, BOX_H - 8);
 
-    // ── Header: NEW ACHIEVEMENT! ──────────────────────────────────────────
+    // Header: NEW ACHIEVEMENT!
     const pulse = 0.85 + 0.15 * Math.sin(this.frame * 0.12);
     ctx.globalAlpha = alpha * pulse;
     ctx.font = 'bold 22px monospace';
@@ -136,19 +136,19 @@ export class AchievementNotification {
     ctx.lineTo(bx + BOX_W - 24, by + 52);
     ctx.stroke();
 
-    // ── Achievement name ──────────────────────────────────────────────────
+    // Achievement name
     ctx.fillStyle = '#f1f5f9';
     ctx.font = 'bold 18px monospace';
     ctx.fillText(achievement.name, cw / 2, by + 88);
 
-    // ── Awarded-to label ─────────────────────────────────────────────────
+    // Awarded-to label
     const playerColor = player === 'Human' ? '#86efac' : '#93c5fd';
     const playerIcon = player === 'Human' ? '\u{1F9CD}' : '\u{1F431}';
     ctx.fillStyle = playerColor;
     ctx.font = '11px monospace';
     ctx.fillText(`${playerIcon} Awarded to: ${player}`, cw / 2, by + 107);
 
-    // ── Description ───────────────────────────────────────────────────────
+    // Description
     ctx.fillStyle = '#94a3b8';
     ctx.font = '13px monospace';
     // Word-wrap the description
@@ -161,7 +161,7 @@ export class AchievementNotification {
       18,
     );
 
-    // ── Loot box reward ───────────────────────────────────────────────────
+    // Loot box reward
     if (achievement.lootBox) {
       const { tier, category } = achievement.lootBox;
       const tierColor = this.tierColor(tier);
@@ -173,7 +173,7 @@ export class AchievementNotification {
       this.drawBoxIcon(ctx, cw / 2 - 12, by + 194, 24, tier);
     }
 
-    // ── OK button ─────────────────────────────────────────────────────────
+    // OK button
     const okX = cw / 2 - OK_BTN_W / 2;
     const okY = by + BOX_H - OK_BTN_H - 18;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
@@ -187,7 +187,7 @@ export class AchievementNotification {
     ctx.font = 'bold 14px monospace';
     ctx.fillText('OK!', cw / 2, okY + OK_BTN_H / 2 + 5);
 
-    // ── Sparkles ──────────────────────────────────────────────────────────
+    // Sparkles
     ctx.textAlign = 'left';
     for (const s of this.sparkles) {
       const lifeRatio = s.life / s.maxLife;
@@ -212,7 +212,7 @@ export class AchievementNotification {
     return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Helpers
 
   private wrapText(
     ctx: CanvasRenderingContext2D,

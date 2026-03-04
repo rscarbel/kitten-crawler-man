@@ -50,7 +50,7 @@ export class Llama extends Mob {
     if (this.spitCooldown > 0) this.spitCooldown--;
     if (this.spitAnimTimer > 0) this.spitAnimTimer--;
 
-    // ── Advance lava balls & check wall/player hits ───────────────────────
+    // Advance lava balls & check wall/player hits
     for (const ball of this.lavaBalls) {
       if (ball.exploding) {
         ball.explodeTick--;
@@ -91,7 +91,7 @@ export class Llama extends Mob {
       (b) => !b.exploding || b.explodeTick > 0,
     );
 
-    // ── Find nearest target ───────────────────────────────────────────────
+    // Find nearest target
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
@@ -151,7 +151,7 @@ export class Llama extends Mob {
       this.isMoving = false;
     }
 
-    // ── Spit a lava ball (only when in range and line-of-sight is clear) ──
+    // Spit a lava ball (only when in range and line-of-sight is clear)
     if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
       const dx = targetCX - mouthX;
       const dy = targetCY - mouthY;
@@ -177,7 +177,7 @@ export class Llama extends Mob {
   ) {
     if (!this.isAlive) return;
 
-    // ── Draw lava balls (behind sprite) ──────────────────────────────────
+    // Draw lava balls (behind sprite)
     for (const ball of this.lavaBalls) {
       const bx = ball.x - camX;
       const by = ball.y - camY;

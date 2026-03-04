@@ -16,7 +16,7 @@ export function drawRatSprite(
   // Head lurches forward during bite
   const biteLunge = Math.sin(attackAnim * Math.PI) * s * 0.06;
 
-  // ── Tail (drawn behind body) ────────────────────────────────────────────
+  // Tail (drawn behind body)
   const tailWave = isMoving ? Math.sin(walkFrame * 1.6) * s * 0.07 : 0;
   ctx.save();
   ctx.strokeStyle = '#606060';
@@ -35,7 +35,7 @@ export function drawRatSprite(
   ctx.stroke();
   ctx.restore();
 
-  // ── Hind feet ───────────────────────────────────────────────────────────
+  // Hind feet
   ctx.fillStyle = '#c0a080';
   ctx.beginPath();
   ctx.ellipse(
@@ -60,7 +60,7 @@ export function drawRatSprite(
   );
   ctx.fill();
 
-  // ── Legs ────────────────────────────────────────────────────────────────
+  // Legs
   ctx.fillStyle = '#808080';
   ctx.fillRect(
     sx + s * 0.3,
@@ -75,7 +75,7 @@ export function drawRatSprite(
     s * 0.17,
   );
 
-  // ── Body ────────────────────────────────────────────────────────────────
+  // Body
   ctx.fillStyle = '#8c8c8c';
   ctx.beginPath();
   ctx.ellipse(
@@ -89,7 +89,7 @@ export function drawRatSprite(
   );
   ctx.fill();
 
-  // ── Front arms ──────────────────────────────────────────────────────────
+  // Front arms
   const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.02 : 0;
   ctx.fillStyle = '#7c7c7c';
   ctx.fillRect(
@@ -105,7 +105,7 @@ export function drawRatSprite(
     s * 0.1,
   );
 
-  // ── Round ears ──────────────────────────────────────────────────────────
+  // Round ears
   ctx.fillStyle = '#b08888';
   ctx.beginPath();
   ctx.ellipse(
@@ -154,7 +154,7 @@ export function drawRatSprite(
   );
   ctx.fill();
 
-  // ── Head ────────────────────────────────────────────────────────────────
+  // Head
   ctx.fillStyle = '#949494';
   ctx.beginPath();
   ctx.ellipse(
@@ -168,7 +168,7 @@ export function drawRatSprite(
   );
   ctx.fill();
 
-  // ── Snout (pointy) ──────────────────────────────────────────────────────
+  // Snout (pointy)
   ctx.fillStyle = '#a89898';
   ctx.beginPath();
   ctx.ellipse(
@@ -194,7 +194,7 @@ export function drawRatSprite(
   );
   ctx.fill();
 
-  // ── Whiskers ────────────────────────────────────────────────────────────
+  // Whiskers
   ctx.save();
   ctx.strokeStyle = 'rgba(220,220,220,0.85)';
   ctx.lineWidth = 0.7;
@@ -218,7 +218,7 @@ export function drawRatSprite(
   ctx.stroke();
   ctx.restore();
 
-  // ── Eyes (beady red) ────────────────────────────────────────────────────
+  // Eyes (beady red)
   ctx.fillStyle = '#cc1122';
   ctx.beginPath();
   ctx.arc(

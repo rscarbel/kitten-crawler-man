@@ -62,7 +62,7 @@ export class SafeRoomSystem {
     }
   }
 
-  // ── Backward-compat accessors (first entry) ─────────────────────────────────
+  // Backward-compat accessors (first entry)
 
   get bounds(): { x: number; y: number; w: number; h: number } | null {
     return this.entries[0]?.bounds ?? null;
@@ -96,7 +96,7 @@ export class SafeRoomSystem {
     this._mordecaiDialogOpen = v;
   }
 
-  // ── Wander update ────────────────────────────────────────────────────────────
+  // Wander update
 
   updateWander(): void {
     this.wanderTime++;
@@ -133,7 +133,7 @@ export class SafeRoomSystem {
     }
   }
 
-  // ── Queries ──────────────────────────────────────────────────────────────────
+  // Queries
 
   isEntityInSafeRoom(entity: { x: number; y: number }): boolean {
     const ts = TILE_SIZE;

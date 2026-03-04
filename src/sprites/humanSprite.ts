@@ -44,7 +44,7 @@ export function drawHumanSprite(
   // Leg offsets — left and right swing in opposite phases
   const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.05 : 0;
 
-  // ── Bare legs (skin tone, no shoes) ─────────────────────────────────────
+  // Bare legs (skin tone, no shoes)
   ctx.fillStyle = '#fcd5ae';
   // Left leg
   ctx.fillRect(
@@ -66,11 +66,11 @@ export function drawHumanSprite(
   // Arm swing (opposite to legs)
   const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.03 : 0;
 
-  // ── Black jacket (upper body) ────────────────────────────────────────────
+  // Black jacket (upper body)
   ctx.fillStyle = '#111827';
   ctx.fillRect(sx + s * 0.22, sy + s * 0.38 + bodyBob, s * 0.56, s * 0.26);
 
-  // ── White boxer shorts (lower body / hip area) ───────────────────────────
+  // White boxer shorts (lower body / hip area)
   ctx.fillStyle = '#f4f4f4';
   ctx.fillRect(sx + s * 0.22, sy + s * 0.64 + bodyBob, s * 0.56, s * 0.14);
 
@@ -85,7 +85,7 @@ export function drawHumanSprite(
     drawTinyHeart(ctx, sx + s * 0.62, sy + s * 0.72 + bodyBob, s * 0.05);
   }
 
-  // ── Jacket arms (black) ──────────────────────────────────────────────────
+  // Jacket arms (black)
   ctx.fillStyle = '#111827';
   // Left arm
   ctx.fillRect(
@@ -102,7 +102,7 @@ export function drawHumanSprite(
     s * 0.22,
   );
 
-  // ── Head (skin tone) ─────────────────────────────────────────────────────
+  // Head (skin tone)
   ctx.fillStyle = '#fcd5ae';
   ctx.beginPath();
   ctx.arc(sx + s * 0.5, sy + s * 0.24 + bodyBob, s * 0.2, 0, Math.PI * 2);
@@ -132,10 +132,24 @@ export function drawHumanSprite(
       ctx.beginPath();
       if (facingY > 0.5) {
         // Facing down: tighter arc so the hair crown stays well above the eyes
-        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7.5 / 6), Math.PI * (10.5 / 6), false);
+        ctx.arc(
+          hcx,
+          hcy,
+          s * 0.21,
+          Math.PI * (7.5 / 6),
+          Math.PI * (10.5 / 6),
+          false,
+        );
       } else {
         // Sideways / neutral / slight up: standard hair cap
-        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7 / 6), Math.PI * (11 / 6), false);
+        ctx.arc(
+          hcx,
+          hcy,
+          s * 0.21,
+          Math.PI * (7 / 6),
+          Math.PI * (11 / 6),
+          false,
+        );
       }
       // closePath draws a chord from arc-end back to arc-start, forming a clean cap
       // (no pie-slice line to centre that would dip into the face)

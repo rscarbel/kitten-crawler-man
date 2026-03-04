@@ -6,7 +6,7 @@
  *  - Throw charge bar
  */
 
-// ── In-world floor/flying sprite ─────────────────────────────────────────────
+// In-world floor/flying sprite
 
 /**
  * Draws a dynamite stick at the given screen position.
@@ -98,7 +98,7 @@ export function drawDynamiteFloorSprite(
   ctx.restore();
 }
 
-// ── Explosion animation ───────────────────────────────────────────────────────
+// Explosion animation
 
 /**
  * Draws the dynamite explosion animation.
@@ -221,7 +221,7 @@ export function drawDynamiteExplosion(
   ctx.restore();
 }
 
-// ── Inventory icon ────────────────────────────────────────────────────────────
+// Inventory icon
 
 /**
  * Draws a compact dynamite stick icon for the inventory/hotbar slot.
@@ -281,7 +281,7 @@ export function drawDynamiteInventoryIcon(
   ctx.restore();
 }
 
-// ── Throw charge bar ──────────────────────────────────────────────────────────
+// Throw charge bar
 
 /**
  * Draws the throw-charge bar at the bottom center of the screen.

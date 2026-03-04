@@ -40,7 +40,7 @@ export class BarrierSystem {
 
   constructor(private readonly gameMap: GameMap) {}
 
-  // ── Queries ────────────────────────────────────────────────────────────────
+  // Queries
 
   get isConstructing(): boolean {
     return this.pending !== null;
@@ -50,7 +50,7 @@ export class BarrierSystem {
     return this.pending?.hotbarIdx ?? -1;
   }
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // Actions
 
   /** Start the 1-second construct animation for the given hotbar slot. */
   beginConstruct(player: Player, hotbarIdx: number, itemId: ItemId): void {
@@ -69,7 +69,7 @@ export class BarrierSystem {
     this.pending = null;
   }
 
-  // ── Update ─────────────────────────────────────────────────────────────────
+  // Update
 
   update(mobs: Mob[], _mobGrid: unknown, _gameMap: unknown): void {
     // Reset all mobs' slow state — BarrierSystem re-applies it each frame
@@ -159,7 +159,7 @@ export class BarrierSystem {
     return false;
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // Render
 
   render(
     ctx: CanvasRenderingContext2D,

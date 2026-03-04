@@ -580,14 +580,14 @@ export class GameMap {
     ty: number,
   ) {
     switch (type) {
-      // ── Void (outer border) ───────────────────────────────────────────────
+      // Void (outer border)
       case VOID_TYPE: {
         ctx.fillStyle = '#000000';
         ctx.fillRect(sx, sy, ts, ts);
         break;
       }
 
-      // ── Outdoors ─────────────────────────────────────────────────────────
+      // Outdoors
       case FloorTypeValue.grass: {
         ctx.fillStyle = '#6de89d';
         ctx.fillRect(sx, sy, ts, ts);
@@ -604,7 +604,7 @@ export class GameMap {
         break;
       }
 
-      // ── Dungeon wall ──────────────────────────────────────────────────────
+      // Dungeon wall
       case FloorTypeValue.wall: {
         // Dark brick/concrete base
         ctx.fillStyle = '#2e2420';
@@ -627,7 +627,7 @@ export class GameMap {
         break;
       }
 
-      // ── Dungeon floors ────────────────────────────────────────────────────
+      // Dungeon floors
 
       // Poured concrete — hallways, utility rooms
       case FloorTypeValue.concrete: {
@@ -668,7 +668,7 @@ export class GameMap {
         break;
       }
 
-      // ── Safe Room floor — warm sanctuary ──────────────────────────────────
+      // Safe Room floor — warm sanctuary
       case SAFE_ROOM_FLOOR: {
         // Alternating warm cream tiles
         const safeBase = (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
@@ -689,7 +689,7 @@ export class GameMap {
         break;
       }
 
-      // ── Boss Room floor — grimy, trash-covered ────────────────────────────
+      // Boss Room floor — grimy, trash-covered
       case HORDER_BOSS_ROOM_FLOOR: {
         // Dark yellowish-brown base with alternating grime variation
         const bossBase = (tx + ty) % 2 === 0 ? '#2e2010' : '#281c0c';
@@ -732,7 +732,7 @@ export class GameMap {
         break;
       }
 
-      // ── Juicer Gym floor — dark rubber mat ───────────────────────────────
+      // Juicer Gym floor — dark rubber mat
       case JUICER_BOSS_ROOM_FLOOR: {
         // Very dark grey rubber base
         ctx.fillStyle = '#1a1a1a';

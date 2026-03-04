@@ -10,7 +10,7 @@ import { Troglodyte } from '../creatures/Troglodyte';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
 
-// ── Goblin variant data (moved from game.ts) ──────────────────────────────────
+// Goblin variant data (moved from game.ts)
 
 type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
 
@@ -21,7 +21,7 @@ export const GOBLIN_VARIANTS: GoblinVariant[] = [
   { weapon: 'hammer', skin: '#3d6b32', eye: '#fbbf24' },
 ];
 
-// ── Weighted random selection ─────────────────────────────────────────────────
+// Weighted random selection
 
 /** Pick a rule from a weighted list. Weights need not sum to 1. */
 function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
@@ -34,7 +34,7 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   return rules[rules.length - 1];
 }
 
-// ── Mob factory ───────────────────────────────────────────────────────────────
+// Mob factory
 
 export function createMob(
   type: string,
@@ -65,7 +65,7 @@ export function createMob(
   return mob;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// Public API
 
 /**
  * Instantiate all mobs for a level. Room spawn points draw from

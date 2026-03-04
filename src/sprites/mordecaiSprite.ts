@@ -30,7 +30,7 @@ export function drawMordecaiSprite(
 
   const bsy = sy + bob; // bobbed y origin
 
-  // ── Tail (behind robe, thin curved line) ─────────────────────────────────
+  // Tail (behind robe, thin curved line)
   ctx.save();
   ctx.strokeStyle = '#a08868';
   ctx.lineWidth = s * 0.03;
@@ -46,7 +46,7 @@ export function drawMordecaiSprite(
   ctx.stroke();
   ctx.restore();
 
-  // ── Robe (dark brown-grey) with slight hem sway ──────────────────────────
+  // Robe (dark brown-grey) with slight hem sway
   ctx.fillStyle = '#2e2a26';
   ctx.fillRect(
     sx + s * 0.2,
@@ -68,14 +68,14 @@ export function drawMordecaiSprite(
   ctx.fillStyle = '#3a3530';
   ctx.fillRect(sx + s * 0.2, bsy + s * 0.88, s * 0.6, s * 0.05);
 
-  // ── Sleeves / arms (swing during walk) ───────────────────────────────────
+  // Sleeves / arms (swing during walk)
   const leftArmY = bsy + s * 0.4 + armSwing * s * 0.5;
   const rightArmY = bsy + s * 0.4 - armSwing * s * 0.5;
   ctx.fillStyle = '#2e2a26';
   ctx.fillRect(sx + s * 0.06, leftArmY, s * 0.14, s * 0.3);
   ctx.fillRect(sx + s * 0.8, rightArmY, s * 0.14, s * 0.3);
 
-  // ── Paw-hands (small, fur-coloured) ─────────────────────────────────────
+  // Paw-hands (small, fur-coloured)
   ctx.fillStyle = '#b8a898';
   ctx.beginPath();
   ctx.arc(sx + s * 0.1, leftArmY + s * 0.32, s * 0.07, 0, Math.PI * 2);
@@ -84,11 +84,11 @@ export function drawMordecaiSprite(
   ctx.arc(sx + s * 0.9, rightArmY + s * 0.32, s * 0.07, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Neck ─────────────────────────────────────────────────────────────────
+  // Neck
   ctx.fillStyle = '#a89888';
   ctx.fillRect(sx + s * 0.43, bsy + s * 0.34, s * 0.14, s * 0.07);
 
-  // ── Rat ears (large, rounded, behind head) ───────────────────────────────
+  // Rat ears (large, rounded, behind head)
   ctx.fillStyle = '#c8a898';
   // Left ear
   ctx.beginPath();
@@ -139,7 +139,7 @@ export function drawMordecaiSprite(
   );
   ctx.fill();
 
-  // ── Head (round, fur-coloured) ───────────────────────────────────────────
+  // Head (round, fur-coloured)
   ctx.fillStyle = '#b8a898';
   ctx.beginPath();
   ctx.ellipse(
@@ -153,7 +153,7 @@ export function drawMordecaiSprite(
   );
   ctx.fill();
 
-  // ── Snout (elongated rat muzzle) ─────────────────────────────────────────
+  // Snout (elongated rat muzzle)
   ctx.fillStyle = '#c8b4a4';
   ctx.beginPath();
   ctx.ellipse(
@@ -173,7 +173,7 @@ export function drawMordecaiSprite(
   ctx.arc(sx + s * 0.5, bsy + s * 0.42, s * 0.024, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Whiskers ─────────────────────────────────────────────────────────────
+  // Whiskers
   ctx.save();
   ctx.strokeStyle = 'rgba(230,225,210,0.8)';
   ctx.lineWidth = 0.6;
@@ -198,7 +198,7 @@ export function drawMordecaiSprite(
   ctx.stroke();
   ctx.restore();
 
-  // ── Eyes (amber/warm brown, not red like enemy rats) ─────────────────────
+  // Eyes (amber/warm brown, not red like enemy rats)
   ctx.fillStyle = '#b86820';
   ctx.beginPath();
   ctx.arc(sx + s * 0.41, bsy + s * 0.255, s * 0.032, 0, Math.PI * 2);
@@ -215,7 +215,7 @@ export function drawMordecaiSprite(
   ctx.arc(sx + s * 0.59, bsy + s * 0.255, s * 0.016, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Robe lapel / collar detail ────────────────────────────────────────────
+  // Robe lapel / collar detail
   ctx.fillStyle = '#4a4440';
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.38, bsy + s * 0.4);

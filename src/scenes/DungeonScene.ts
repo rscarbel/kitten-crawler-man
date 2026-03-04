@@ -201,7 +201,7 @@ export class DungeonScene extends Scene {
     this.catAchievements = new AchievementManager();
   }
 
-  // ── Scene lifecycle ─────────────────────────────────────────────────────────
+  // Scene lifecycle
 
   onEnter(): void {
     this.escHandler = (e: KeyboardEvent) => {
@@ -297,7 +297,7 @@ export class DungeonScene extends Scene {
       window.removeEventListener('keyup', this.keyupHandler);
   }
 
-  // ── Shared action helpers (keyboard + touch) ─────────────────────────────────
+  // Shared action helpers (keyboard + touch)
 
   private triggerSwitchCharacter(): void {
     this.safeRoom.mordecaiDialogOpen = false;
@@ -558,7 +558,7 @@ export class DungeonScene extends Scene {
     );
   }
 
-  // ── Main update / render ────────────────────────────────────────────────────
+  // Main update / render
 
   update(): void {
     if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
@@ -771,7 +771,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Core gameplay update ────────────────────────────────────────────────────
+  // Core gameplay update
 
   private updateGameplay(): void {
     const player = this.active();
@@ -818,6 +818,8 @@ export class DungeonScene extends Scene {
     }
     // Mobile touch already gives a unit vector — skip diagonal penalty
     if (!mobileMove && dx !== 0 && dy !== 0) {
+      // diagonal movement is 41% faster than moving straight.
+      // Hence, the .7 penalty
       dx *= 0.7071;
       dy *= 0.7071;
     }
@@ -982,7 +984,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Combat resolution ────────────────────────────────────────────────────────
+  // Combat resolution
 
   private resolvePlayerAttacks(): void {
     const centerOf = (e: { x: number; y: number }) => ({
@@ -1106,7 +1108,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Companion auto-potion ───────────────────────────────────────────────────
+  // Companion auto-potion
 
   private updateCompanionPotion(): void {
     if (this.humanAutoPotionCooldown > 0) this.humanAutoPotionCooldown--;
@@ -1131,7 +1133,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Inventory actions ───────────────────────────────────────────────────────
+  // Inventory actions
 
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
     if (this.inventoryPanel.pendingEquipSlot !== null) {
@@ -1163,7 +1165,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Loot box queue ──────────────────────────────────────────────────────────
+  // Loot box queue
 
   private openBoxQueue(player: 'human' | 'cat'): void {
     const mgr =
@@ -1178,7 +1180,8 @@ export class DungeonScene extends Scene {
       playerName,
       (box, contents) => {
         mgr.openBox(box.id);
-        target.inventory.addItem('health_potion', contents.potions);
+        contents.potions &&
+          target.inventory.addItem('health_potion', contents.potions);
         target.coins += contents.coins;
         if (contents.bonus) {
           this.human.inventory.addItem(
@@ -1191,7 +1194,7 @@ export class DungeonScene extends Scene {
     );
   }
 
-  // ── Camera ──────────────────────────────────────────────────────────────────
+  // Camera
 
   private camera(): { x: number; y: number } {
     const player = this.active();
@@ -1205,7 +1208,7 @@ export class DungeonScene extends Scene {
     };
   }
 
-  // ── Rendering helpers ───────────────────────────────────────────────────────
+  // Rendering helpers
 
   private renderLevelUpFlash(
     ctx: CanvasRenderingContext2D,
@@ -1477,7 +1480,7 @@ export class DungeonScene extends Scene {
     ctx.restore();
   }
 
-  // ── Boss battle intro ────────────────────────────────────────────────────────
+  // Boss battle intro
 
   private renderBossIntro(
     ctx: CanvasRenderingContext2D,
@@ -1561,7 +1564,7 @@ export class DungeonScene extends Scene {
 
       ctx.restore();
     } else {
-      // ── Versus screen ──────────────────────────────────────────────────────
+      // Versus screen
       const t = intro.frame;
       const slideIn = Math.min(1, t / 30);
       const eased = 1 - Math.pow(1 - slideIn, 3);
@@ -1570,7 +1573,7 @@ export class DungeonScene extends Scene {
       const panelH = 200;
       const panelY = CY - panelH / 2;
 
-      // Left panel — Team Princess Posse
+      // Left panel — Team Cat Posse
       const leftX = CX - 20 - panelW - (1 - eased) * CX;
       ctx.save();
       ctx.fillStyle = 'rgba(10,20,40,0.9)';
@@ -1591,11 +1594,7 @@ export class DungeonScene extends Scene {
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#93c5fd';
-      ctx.fillText(
-        'TEAM PRINCESS POSSE',
-        leftX + panelW / 2,
-        panelY + panelH - 28,
-      );
+      ctx.fillText('TEAM CAT POSSE', leftX + panelW / 2, panelY + panelH - 28);
       ctx.font = '9px monospace';
       ctx.fillStyle = '#64748b';
       ctx.fillText('Human + Cat', leftX + panelW / 2, panelY + panelH - 14);
@@ -1679,7 +1678,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  // ── Health vignette ──────────────────────────────────────────────────────────
+  // Health vignette
 
   private renderHealthVignette(
     ctx: CanvasRenderingContext2D,
@@ -1719,7 +1718,7 @@ export class DungeonScene extends Scene {
     ctx.restore();
   }
 
-  // ── Mobile button rendering ──────────────────────────────────────────────────
+  // Mobile button rendering
 
   private renderMobileButtons(
     ctx: CanvasRenderingContext2D,
@@ -1807,7 +1806,7 @@ export class DungeonScene extends Scene {
     drawSmallBtn(this._mobileBagBtnRect, 'Bag', this.inventoryPanel.isOpen);
   }
 
-  // ── Touch handlers (mobile) ──────────────────────────────────────────────────
+  // Touch handlers (mobile)
 
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
     const canvas = this.sceneManager.canvas;
@@ -1982,7 +1981,7 @@ export class DungeonScene extends Scene {
     void canvas;
   }
 
-  // ── Accessors ───────────────────────────────────────────────────────────────
+  // Accessors
 
   private active(): HumanPlayer | CatPlayer {
     return this.human.isActive ? this.human : this.cat;

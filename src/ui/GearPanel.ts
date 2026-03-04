@@ -2,7 +2,7 @@ import { Inventory, EQUIP_SUBSLOTS, EquipSlot } from '../core/Inventory';
 import type { InventoryItem } from '../core/Inventory';
 import { IS_MOBILE } from '../core/MobileDetect';
 
-// ── Layout constants ──────────────────────────────────────────────────────────
+// Layout constants
 const SLOT_SIZE = 46;
 const SLOT_GAP = 3;
 const PANEL_PAD = 12;
@@ -55,7 +55,7 @@ export class GearPanel {
     };
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // Render
 
   render(
     ctx: CanvasRenderingContext2D,
@@ -319,7 +319,7 @@ export class GearPanel {
     ctx.restore();
   }
 
-  // ── Interaction ───────────────────────────────────────────────────────────
+  // Interaction
 
   handleMouseMove(
     mx: number,

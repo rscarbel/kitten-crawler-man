@@ -219,7 +219,7 @@ export class Inventory {
     this.hotbar[hotbarIdx] = inv;
   }
 
-  // ── Equipment ─────────────────────────────────────────────────────────────
+  // Equipment
 
   /** Find an item by ID across both slots and hotbar. */
   private findItemById(id: ItemId): InventoryItem | null {

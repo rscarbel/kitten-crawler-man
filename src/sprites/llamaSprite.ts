@@ -27,7 +27,7 @@ export function drawLlamaSprite(
   // Spit lunge — head/neck extend forward (left) as the spit fires
   const headLunge = Math.sin(spitAnim * Math.PI) * s * 0.08;
 
-  // ── Body ────────────────────────────────────────────────────────────────
+  // Body
   ctx.fillStyle = tan;
   ctx.beginPath();
   ctx.ellipse(
@@ -55,7 +55,7 @@ export function drawLlamaSprite(
   );
   ctx.fill();
 
-  // ── Neck ────────────────────────────────────────────────────────────────
+  // Neck
   ctx.fillStyle = tan;
   ctx.beginPath();
   ctx.moveTo(s * 0.24 - headLunge, s * 0.52 + bodyBob);
@@ -65,7 +65,7 @@ export function drawLlamaSprite(
   ctx.closePath();
   ctx.fill();
 
-  // ── Head ────────────────────────────────────────────────────────────────
+  // Head
   ctx.fillStyle = cream;
   ctx.beginPath();
   ctx.ellipse(
@@ -102,7 +102,7 @@ export function drawLlamaSprite(
   ctx.arc(s * 0.26 - headLunge, s * 0.23, s * 0.018, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Ears (pointy banana ears) ────────────────────────────────────────────
+  // Ears (pointy banana ears)
   ctx.fillStyle = tan;
   // left ear
   ctx.beginPath();
@@ -134,7 +134,7 @@ export function drawLlamaSprite(
   ctx.closePath();
   ctx.fill();
 
-  // ── Eye ─────────────────────────────────────────────────────────────────
+  // Eye
   ctx.fillStyle = dark;
   ctx.beginPath();
   ctx.arc(s * 0.31 - headLunge, s * 0.14, s * 0.035, 0, Math.PI * 2);
@@ -145,7 +145,7 @@ export function drawLlamaSprite(
   ctx.arc(s * 0.32 - headLunge, s * 0.133, s * 0.012, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Tail (little nub) ───────────────────────────────────────────────────
+  // Tail (little nub)
   ctx.fillStyle = cream;
   ctx.beginPath();
   ctx.ellipse(
@@ -159,7 +159,7 @@ export function drawLlamaSprite(
   );
   ctx.fill();
 
-  // ── Legs — front and back pairs alternate phase ──────────────────────────
+  // Legs — front and back pairs alternate phase
   const frontLegOff = isMoving ? Math.sin(walkFrame) * s * 0.045 : 0;
   const backLegOff = isMoving ? -Math.sin(walkFrame) * s * 0.045 : 0;
 

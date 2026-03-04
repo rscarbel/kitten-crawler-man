@@ -138,7 +138,7 @@ export class PauseMenu {
     return true; // block clicks that pass through the overlay without hitting a button
   }
 
-  // ── Private rendering helpers ───────────────────────────────────────────────
+  // Private rendering helpers
 
   private menuBtn(
     ctx: CanvasRenderingContext2D,
@@ -266,7 +266,7 @@ export class PauseMenu {
 
     ctx.font = 'bold 12px monospace';
     ctx.fillStyle = '#fb923c';
-    ctx.fillText('Cat (Donut)', bx + 20, by + 122);
+    ctx.fillText('Cat', bx + 20, by + 122);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '11px monospace';
     ctx.fillText(`  Health Potions: ${cat.healthPotions}`, bx + 20, by + 140);
@@ -317,7 +317,7 @@ export class PauseMenu {
 
     ctx.fillStyle = '#fb923c';
     ctx.font = 'bold 12px monospace';
-    ctx.fillText(`Cat (Donut)  Lv ${cat.level}`, bx + 20, by + 152);
+    ctx.fillText(`Cat  Lv ${cat.level}`, bx + 20, by + 152);
     statLine(cat, by + 168);
 
     this.menuBtn(ctx, bx + 20, by + 268, bw - 40, 36, 'Back', () => {
@@ -353,7 +353,7 @@ export class PauseMenu {
     const gap = 10;
     const players: [Player, string][] = [
       [human, 'Human'],
-      [cat, 'Cat (Donut)'],
+      [cat, 'Cat'],
     ];
 
     for (const [player, name] of players) {
@@ -445,7 +445,7 @@ export class PauseMenu {
       bx,
       bw,
       oy,
-      '🐱 Cat (Donut)',
+      '🐱 Cat',
       '#fb923c',
       catAchievements,
       'cat',
@@ -559,7 +559,7 @@ export class PauseMenu {
     }
   }
 
-  // ── Shared helpers ──────────────────────────────────────────────────────────
+  // Shared helpers
 
   private tierColor(tier: string): string {
     switch (tier) {

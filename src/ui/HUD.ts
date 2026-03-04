@@ -26,7 +26,7 @@ export function drawHUD(
     return drawHUDCollapsed(ctx, human, cat);
   }
 
-  const activeLabel = human.isActive ? 'Human' : 'Cat (Donut)';
+  const activeLabel = human.isActive ? 'Human' : 'Cat';
   const inactiveLabel = human.isActive ? 'Cat' : 'Human';
   const atkLabel = human.isActive ? 'Punch / Kick' : 'Magic Missile';
 

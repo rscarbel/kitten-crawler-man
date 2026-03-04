@@ -10,7 +10,7 @@ import {
   drawDynamiteChargeBar,
 } from '../sprites/dynamiteSprite';
 
-// ── Goblin Dynamite constants ─────────────────────────────────────────────────
+// Goblin Dynamite constants
 export const DYN_MAX_CHARGE = 120; // 2 s at 60 fps → full throw
 export const DYN_DANGER = 240; // 4 s → charge bar turns red
 const DYN_EXPLODE_HAND = 300; // 5 s → boom in hand

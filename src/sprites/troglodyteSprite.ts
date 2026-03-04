@@ -28,13 +28,13 @@ export function drawTroglodyteSprite(
   const cs = s * 1.15; // slightly larger than one tile
   const cx = sx + s * 0.5;
 
-  // ── Animation values ───────────────────────────────────────────────────────
+  // Animation values
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.045 : 0;
   const legSwing = isMoving ? Math.sin(walkFrame) * cs * 0.07 : 0;
   const armSway = isMoving ? -Math.sin(walkFrame) * cs * 0.035 : 0;
   const tailSway = Math.sin(walkFrame * 0.6) * cs * 0.09;
 
-  // ── Colours ────────────────────────────────────────────────────────────────
+  // Colours
   const skinBase = '#4f6838';
   const skinDark = '#394d28';
   const skinLight = '#607848';
@@ -48,7 +48,7 @@ export function drawTroglodyteSprite(
   const eyeCol = '#d05000';
   const pupilCol = '#180800';
 
-  // ── Layout: measure from ground upward ────────────────────────────────────
+  // Layout: measure from ground upward
   const ground = sy + s * 0.94 + bodyBob;
   const legH = cs * 0.27;
   const bodyH = cs * 0.3;
@@ -72,13 +72,13 @@ export function drawTroglodyteSprite(
     ctx.translate(-cx, 0);
   }
 
-  // ── Shadow ─────────────────────────────────────────────────────────────────
+  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath();
   ctx.ellipse(cx, ground + cs * 0.04, cs * 0.36, cs * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Tail (behind body, drawn first) ───────────────────────────────────────
+  // Tail (behind body, drawn first)
   ctx.strokeStyle = skinDark;
   ctx.lineWidth = cs * 0.14;
   ctx.lineCap = 'round';
@@ -92,7 +92,7 @@ export function drawTroglodyteSprite(
   );
   ctx.stroke();
 
-  // ── Legs ──────────────────────────────────────────────────────────────────
+  // Legs
   ctx.fillStyle = skinDark;
   // Left leg
   ctx.beginPath();
@@ -144,7 +144,7 @@ export function drawTroglodyteSprite(
   );
   ctx.fill();
 
-  // ── Body ──────────────────────────────────────────────────────────────────
+  // Body
   ctx.fillStyle = skinBase;
   ctx.beginPath();
   ctx.ellipse(cx, bodyCy, cs * 0.28, cs * 0.185, 0, 0, Math.PI * 2);
@@ -172,7 +172,7 @@ export function drawTroglodyteSprite(
   }
   ctx.globalAlpha = 1;
 
-  // ── Arms ──────────────────────────────────────────────────────────────────
+  // Arms
   ctx.strokeStyle = skinDark;
   ctx.lineWidth = cs * 0.115;
   ctx.lineCap = 'round';
@@ -208,7 +208,7 @@ export function drawTroglodyteSprite(
   );
   ctx.fill();
 
-  // ── Head ──────────────────────────────────────────────────────────────────
+  // Head
   const headWR = cs * 0.32; // wide head
   const headHR = cs * 0.235;
 
@@ -250,7 +250,7 @@ export function drawTroglodyteSprite(
   );
   ctx.fill();
 
-  // ── THE BIG MOUTH ─────────────────────────────────────────────────────────
+  // THE BIG MOUTH
   const mouthOpen = Math.max(0.07, mouthOpenAmt); // always at least slightly ajar
   const mouthCy = headCy - headTiltY + headHR * 0.2;
   const mouthHW = headWR * 0.88; // very wide
@@ -327,7 +327,7 @@ export function drawTroglodyteSprite(
   );
   ctx.fill();
 
-  // ── Tongue ─────────────────────────────────────────────────────────────────
+  // Tongue
   const tongueOriginX = cx;
   const tongueOriginY = mouthCy + jawDrop * 0.35;
 
@@ -393,7 +393,7 @@ export function drawTroglodyteSprite(
     ctx.stroke();
   }
 
-  // ── Eyes — beady, near top of head ────────────────────────────────────────
+  // Eyes — beady, near top of head
   const eyeY = headCy - headTiltY - headHR * 0.32;
   const eyeSpX = headWR * 0.44;
   const eyeR = cs * 0.082;

@@ -256,7 +256,7 @@ export class LootBoxOpener {
     ctx.restore();
   }
 
-  // ── Private helpers ──────────────────────────────────────────────────────────
+  // Private helpers
 
   private loadCurrent(): void {
     this.box = this.queue[this.queueIndex];

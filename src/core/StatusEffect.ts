@@ -14,7 +14,7 @@ export interface StatusEffect {
   totalTicks: number;
 }
 
-// ── Preset constructors ───────────────────────────────────────────────────────
+// Preset constructors
 
 /** 8-second burn: 1 damage / second for 8 seconds (480 ticks at 60 fps). */
 export function makeBurn(): StatusEffect {
