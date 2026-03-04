@@ -38,4 +38,8 @@ export interface LevelDef {
   nextLevelId?: string;
   /** Safe levels have no timer and spawn no enemies. */
   isSafeLevel?: boolean;
+  /** Override the auto-calculated stairwell count (default: 1 per 50 regular rooms). */
+  numStairwells?: number;
+  /** Overworld levels use outdoor map generation instead of dungeon rooms. */
+  isOverworld?: boolean;
 }

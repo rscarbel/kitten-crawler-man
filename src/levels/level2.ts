@@ -13,4 +13,6 @@ export const level2: LevelDef = {
   hallwayMobs: [],
   bossRooms: [],
   isSafeLevel: true,
+  nextLevelId: 'level3',
+  numStairwells: 2,
 };

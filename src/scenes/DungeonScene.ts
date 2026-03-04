@@ -29,6 +29,7 @@ import { SpellSystem } from '../systems/SpellSystem';
 import { CompanionSystem } from '../systems/CompanionSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
+import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { Juicer } from '../creatures/Juicer';
@@ -36,6 +37,22 @@ import { drawHumanSprite } from '../sprites/humanSprite';
 import { drawCatSprite } from '../sprites/catSprite';
 import { drawJuicerSprite } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
+import {
+  snapPlayer,
+  restorePlayer,
+  type PlayerSnapshot,
+} from '../core/PlayerSnapshot';
+
+export interface DungeonSceneOptions {
+  /** Tile coordinates to spawn players at (instead of map start tile). */
+  spawnAt?: { x: number; y: number };
+  /** Preserved human player state from a previous scene (e.g. building interior). */
+  humanSnap?: PlayerSnapshot;
+  /** Preserved cat player state from a previous scene. */
+  catSnap?: PlayerSnapshot;
+  /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
+  existingMap?: GameMap;
+}
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
@@ -53,6 +70,7 @@ export class DungeonScene extends Scene {
   private companion: CompanionSystem;
   private loot: LootSystem;
   private stairwell: StairwellSystem;
+  private building: BuildingSystem | null = null;
   private juicerRoom: JuicerRoomSystem;
   private barriers: BarrierSystem;
 
@@ -125,20 +143,36 @@ export class DungeonScene extends Scene {
     private readonly levelDef: LevelDef,
     private readonly input: InputManager,
     private readonly sceneManager: SceneManager,
+    options?: DungeonSceneOptions,
   ) {
     super();
 
-    this.gameMap = new GameMap(
-      levelDef.mapSize,
-      TILE_SIZE,
-      levelDef.bossRooms?.length ?? 1,
-    );
+    this.gameMap =
+      options?.existingMap ??
+      new GameMap(
+        levelDef.mapSize,
+        TILE_SIZE,
+        levelDef.bossRooms?.length ?? 1,
+        2,
+        levelDef.numStairwells,
+        levelDef.isOverworld ? 'overworld' : 'dungeon',
+      );
     this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
-    const { x: sx, y: sy } = this.gameMap.startTile;
+    const spawn = options?.spawnAt ?? this.gameMap.startTile;
+    const { x: sx, y: sy } = spawn;
     this.human = new HumanPlayer(sx, sy, TILE_SIZE);
     this.cat = new CatPlayer(sx + 1, sy, TILE_SIZE);
     this.human.isActive = true;
+
+    // Restore player state if returning from a sub-scene (e.g. building interior)
+    if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
+    if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
+    // Re-apply spawn position (restorePlayer doesn't touch x/y)
+    this.human.x = sx * TILE_SIZE;
+    this.human.y = sy * TILE_SIZE;
+    this.cat.x = (sx + 1) * TILE_SIZE;
+    this.cat.y = sy * TILE_SIZE;
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
 
@@ -189,6 +223,35 @@ export class DungeonScene extends Scene {
       );
     });
 
+    if (levelDef.isOverworld) {
+      this.building = new BuildingSystem(this.gameMap, (entry) => {
+        // Spawn one tile south of the door so the player exits outside and
+        // doesn't immediately re-trigger the "Enter building?" prompt.
+        const returnTile = {
+          x: entry.doorTile.x,
+          y: entry.doorTile.y + 1,
+        };
+        const humanSnap = snapPlayer(this.human);
+        const catSnap = snapPlayer(this.cat);
+        import('../scenes/BuildingInteriorScene').then(
+          ({ BuildingInteriorScene }) => {
+            this.sceneManager.replace(
+              new BuildingInteriorScene(
+                entry,
+                levelDef,
+                returnTile,
+                humanSnap,
+                catSnap,
+                this.input,
+                this.sceneManager,
+                this.gameMap,
+              ),
+            );
+          },
+        );
+      });
+    }
+
     // UI
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
@@ -213,6 +276,10 @@ export class DungeonScene extends Scene {
       }
       if (this.stairwell.menuOpen) {
         this.stairwell.closeMenu();
+        return;
+      }
+      if (this.building?.menuOpen) {
+        this.building.closeMenu();
         return;
       }
       if (!this.gameOver) {
@@ -456,6 +523,11 @@ export class DungeonScene extends Scene {
       return;
     }
 
+    if (this.building?.menuOpen) {
+      this.building.handleClick(mx, my, this.sceneManager.canvas);
+      return;
+    }
+
     if (this.gameOver) {
       if (this.deathScreen.handleClick(mx, my, this.sceneManager.canvas)) {
         this.sceneManager.replace(
@@ -569,7 +641,12 @@ export class DungeonScene extends Scene {
       return;
     }
 
-    if (this.gameOver || this.pauseMenu.isOpen || this.stairwell.menuOpen)
+    if (
+      this.gameOver ||
+      this.pauseMenu.isOpen ||
+      this.stairwell.menuOpen ||
+      this.building?.menuOpen
+    )
       return;
 
     if (this.safeRoom.isSleeping) {
@@ -619,6 +696,7 @@ export class DungeonScene extends Scene {
     this.bossRoom.renderObjects(ctx, camX, camY);
     this.juicerRoom.render(ctx, camX, camY, this.active());
     this.stairwell.renderStairwells(ctx, camX, camY, canvas);
+    this.building?.renderDoorHints(ctx, camX, camY, canvas);
 
     const visibleMobs = this.mobGrid.queryRect(
       camX - TILE_SIZE,
@@ -751,6 +829,10 @@ export class DungeonScene extends Scene {
 
     if (this.stairwell.menuOpen) {
       this.stairwell.renderMenu(ctx, canvas);
+    }
+
+    if (this.building?.menuOpen) {
+      this.building.renderMenu(ctx, canvas);
     }
 
     if (this.safeRoom.isSleeping) {
@@ -967,6 +1049,7 @@ export class DungeonScene extends Scene {
     this.miniMap.tickCorpseMarkers();
 
     this.stairwell.detect(this.active());
+    this.building?.detect(this.active());
 
     // Death check
     if (!this.human.isAlive || !this.cat.isAlive) {
