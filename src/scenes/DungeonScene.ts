@@ -193,6 +193,32 @@ export class DungeonScene extends Scene {
       }
     }
 
+    // Spawn Sky Fowls wandering around the overworld town square
+    if (levelDef.isOverworld) {
+      const mapCx = Math.floor(levelDef.mapSize / 2);
+      const mapCy = Math.floor(levelDef.mapSize / 2);
+      // Positions scattered around the town square (22×22 road area centered on mapCx/mapCy)
+      const fowlOffsets: [number, number][] = [
+        [-8, -5],
+        [6, -7],
+        [-6, 4],
+        [8, 3],
+        [-2, 7],
+        [7, -3],
+        [-5, -8],
+        [3, 6],
+        [-8, 2],
+        [5, -4],
+        [0, -8],
+        [-4, -4],
+      ];
+      for (const [dx, dy] of fowlOffsets) {
+        this.mobs.push(
+          createMob('sky_fowl', mapCx + dx, mapCy + dy, this.gameMap),
+        );
+      }
+    }
+
     this.cat.setMap(this.gameMap);
 
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);
