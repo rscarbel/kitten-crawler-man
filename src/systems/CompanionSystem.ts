@@ -152,15 +152,26 @@ export class CompanionSystem {
     if (human.isActive) {
       if (cat.autoTarget && !cat.autoTarget.isAlive) cat.autoTarget = null;
 
-      const mobTargetingCat =
-        mobs.find((m) => m.isAlive && m.currentTarget === cat) ?? null;
-      const mobTargetingHuman =
-        mobs.find((m) => m.isAlive && m.currentTarget === human) ?? null;
+      // While companion is being recalled, don't auto-assign new targets
+      if (!this._followOverride) {
+        // Only pull cat into combat if the mob is within range of the active player;
+        // prevents the companion chasing back to distant fights after a follow recall.
+        const nearPlayerRange = HUMAN_ENGAGE_RANGE * 2.5;
+        const mobTargetingCat =
+          mobs.find(
+            (m) =>
+              m.isAlive &&
+              m.currentTarget === cat &&
+              Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
+          ) ?? null;
+        const mobTargetingHuman =
+          mobs.find((m) => m.isAlive && m.currentTarget === human) ?? null;
 
-      if (mobTargetingCat) {
-        cat.autoTarget = mobTargetingCat;
-      } else if (!cat.autoTarget && mobTargetingHuman) {
-        cat.autoTarget = mobTargetingHuman;
+        if (mobTargetingCat) {
+          cat.autoTarget = mobTargetingCat;
+        } else if (!cat.autoTarget && mobTargetingHuman) {
+          cat.autoTarget = mobTargetingHuman;
+        }
       }
 
       if (cat.autoTarget) {
@@ -221,6 +232,7 @@ export class CompanionSystem {
       const dist = Math.hypot(companion.x - caster.x, companion.y - caster.y);
       if (dist <= TILE_SIZE) {
         this._followOverride = false;
+        companion.autoTarget = null;
       } else {
         this.companionFollow(
           companion,
