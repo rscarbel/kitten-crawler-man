@@ -5,7 +5,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
-  drawMordecaiSprite,
+  drawMordecaiForLevel,
   drawSpeechBubble,
 } from '../sprites/mordecaiSprite';
 
@@ -36,6 +36,7 @@ export class SafeRoomSystem {
     private readonly gameMap: GameMap,
     startTileX: number,
     startTileY: number,
+    private readonly levelId = 'level1',
   ) {
     this.entries = [];
 
@@ -256,7 +257,7 @@ export class SafeRoomSystem {
       // Mordecai (wandered position)
       const msx = e.mordecaiHomeTileX * ts + offsetX - camX;
       const msy = e.mordecaiHomeTileY * ts - camY;
-      drawMordecaiSprite(
+      drawMordecaiForLevel(
         ctx,
         msx,
         msy,
@@ -264,6 +265,7 @@ export class SafeRoomSystem {
         this.wanderTime,
         isWalking,
         facingX,
+        this.levelId,
       );
 
       if (this.isNearMordecai(active) && !this._mordecaiDialogOpen) {

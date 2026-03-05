@@ -7,6 +7,7 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
+  SAFE_ROOM_FLOOR,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -142,6 +143,32 @@ export function generateOverworld(size: number): OverworldData {
     'Town Center Tower',
     ROOF_SLATE,
   );
+
+  // 6b. The Inn — safe room building, east of town square, north of E-W road.
+  //     Interior uses SAFE_ROOM_FLOOR (walkable) so no scene transition is needed;
+  //     the player simply walks in through the door gap in the south wall.
+  const innW = 14;
+  const innH = 10;
+  const innX = cx + 14;
+  const innY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
+  for (let dy = 0; dy < innH; dy++) {
+    for (let dx = 0; dx < innW; dx++) {
+      const isPerimeter =
+        dy === 0 || dy === innH - 1 || dx === 0 || dx === innW - 1;
+      set(innX + dx, innY + dy, isPerimeter ? BUILDING_WALL : SAFE_ROOM_FLOOR);
+    }
+  }
+  // Door: 2-tile gap in south wall at center
+  const innDoorX = innX + Math.floor(innW / 2) - 1;
+  set(innDoorX, innY + innH - 1, FloorTypeValue.road);
+  set(innDoorX + 1, innY + innH - 1, FloorTypeValue.road);
+  // Track for house collision avoidance (no buildingEntry — it's walkable, not a scene)
+  buildings.push({ x: innX, y: innY, w: innW, h: innH });
+  // Short road stub south from the Inn door to the E-W road
+  for (let ry = innY + innH; ry <= cy - 2; ry++) {
+    setRoad(innDoorX, ry);
+    setRoad(innDoorX + 1, ry);
+  }
 
   // 7. Small houses around town square
   const rng = (min: number, max: number) =>
@@ -381,14 +408,23 @@ export function generateOverworld(size: number): OverworldData {
   }
 
   // 11. Map metadata
-  const startTile: Point = { x: cx, y: cy };
-  // Expose town square as a "safe room" so SafeRoomSystem can mark it explored
-  const safeRooms = [
-    {
-      bounds: { x: cx - 11, y: cy - 11, w: 22, h: 22 },
-      centre: { x: cx, y: cy },
-    },
-  ];
+  // Start inside the Inn (one tile above the door, centred)
+  const startTile: Point = {
+    x: innX + Math.floor(innW / 2),
+    y: innY + innH - 2,
+  };
+  // Safe room = walkable interior of the Inn
+  const innInterior = {
+    x: innX + 1,
+    y: innY + 1,
+    w: innW - 2,
+    h: innH - 2,
+  };
+  const innCentre = {
+    x: innX + Math.floor(innW / 2),
+    y: innY + Math.floor(innH / 2),
+  };
+  const safeRooms = [{ bounds: innInterior, centre: innCentre }];
 
   return {
     grid,

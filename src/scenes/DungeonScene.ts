@@ -218,7 +218,7 @@ export class DungeonScene extends Scene {
 
     // Systems
     this.miniMap = new MiniMapSystem(this.gameMap);
-    this.safeRoom = new SafeRoomSystem(this.gameMap, sx, sy);
+    this.safeRoom = new SafeRoomSystem(this.gameMap, sx, sy, this.levelDef.id);
     this.bossRoom = new BossRoomSystem(
       this.gameMap,
       this.miniMap,
