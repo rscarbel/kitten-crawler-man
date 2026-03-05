@@ -4,7 +4,6 @@ import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
-import type { LevelDef } from '../levels/types';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import {
   snapPlayer,
@@ -33,13 +32,14 @@ export class BuildingInteriorScene extends Scene {
 
   constructor(
     private readonly entry: BuildingEntry,
-    private readonly returnLevelDef: LevelDef,
-    private readonly returnTile: { x: number; y: number },
     humanSnap: PlayerSnapshot,
     catSnap: PlayerSnapshot,
     private readonly input: InputManager,
     private readonly sceneManager: SceneManager,
-    private readonly overworldMap: GameMap,
+    private readonly onExitCallback: (
+      humanSnap: PlayerSnapshot,
+      catSnap: PlayerSnapshot,
+    ) => void,
   ) {
     super();
 
@@ -211,17 +211,7 @@ export class BuildingInteriorScene extends Scene {
   private doExit(): void {
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
-    // Lazy import to avoid circular dependency — DungeonScene imports BuildingInteriorScene
-    import('../scenes/DungeonScene').then(({ DungeonScene }) => {
-      this.sceneManager.replace(
-        new DungeonScene(this.returnLevelDef, this.input, this.sceneManager, {
-          spawnAt: this.returnTile,
-          humanSnap,
-          catSnap,
-          existingMap: this.overworldMap,
-        }),
-      );
-    });
+    this.onExitCallback(humanSnap, catSnap);
   }
 
   render(ctx: CanvasRenderingContext2D): void {
