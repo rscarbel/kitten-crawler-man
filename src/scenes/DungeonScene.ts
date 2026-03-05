@@ -713,19 +713,48 @@ export class DungeonScene extends Scene {
       canvas.width + TILE_SIZE * 2,
       canvas.height + TILE_SIZE * 2,
     );
-    for (const mob of visibleMobs) mob.render(ctx, camX, camY, TILE_SIZE);
 
-    this.inactive().render(ctx, camX, camY, TILE_SIZE);
-    this.active().render(ctx, camX, camY, TILE_SIZE);
+    // Y-sorted draw pass: interleave decoration tiles with entities so depth
+    // (north = behind, south = in front) is respected.
+    type DrawItem = { sortY: number; draw: () => void };
+    const drawItems: DrawItem[] = [];
 
-    // Draw tall decoration tiles (torch, well, tree, fountain) on top of all entities
-    this.gameMap.renderDecorationsOverlay(
-      ctx,
+    for (const { tx, ty } of this.gameMap.getVisibleDecorationTiles(
       camX,
       camY,
       canvas.width,
       canvas.height,
-    );
+    )) {
+      const capTx = tx;
+      const capTy = ty;
+      drawItems.push({
+        sortY: (capTy + 1) * TILE_SIZE,
+        draw: () =>
+          this.gameMap.drawDecorationAt(ctx, capTx, capTy, camX, camY),
+      });
+    }
+
+    for (const mob of visibleMobs) {
+      const m = mob;
+      drawItems.push({
+        sortY: m.y + TILE_SIZE,
+        draw: () => m.render(ctx, camX, camY, TILE_SIZE),
+      });
+    }
+
+    const inact = this.inactive();
+    const act = this.active();
+    drawItems.push({
+      sortY: inact.y + TILE_SIZE,
+      draw: () => inact.render(ctx, camX, camY, TILE_SIZE),
+    });
+    drawItems.push({
+      sortY: act.y + TILE_SIZE,
+      draw: () => act.render(ctx, camX, camY, TILE_SIZE),
+    });
+
+    drawItems.sort((a, b) => a.sortY - b.sortY);
+    for (const item of drawItems) item.draw();
 
     this.barriers.render(ctx, camX, camY, this.active());
     this.spells.renderShell(ctx, camX, camY);
@@ -927,7 +956,11 @@ export class DungeonScene extends Scene {
     dy *= PLAYER_SPEED;
 
     const nextX = Math.max(0, Math.min(mapPx - TILE_SIZE, player.x + dx));
-    const tileXnext = Math.floor((nextX + TILE_SIZE / 2) / TILE_SIZE);
+    // Use leading edge for X so entities can't approach as close from the sides.
+    const tileXnext =
+      dx >= 0
+        ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
+        : Math.floor((nextX + TILE_SIZE * 0.28) / TILE_SIZE);
     const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
     if (this.gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
 

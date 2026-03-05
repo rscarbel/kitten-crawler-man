@@ -207,7 +207,10 @@ export abstract class Mob extends Player {
     const ts = this.tileSize;
     if (dx !== 0) {
       const nextX = this.x + dx;
-      const tileXnext = Math.floor((nextX + ts / 2) / ts);
+      const tileXnext =
+        dx >= 0
+          ? Math.floor((nextX + ts * 0.72) / ts)
+          : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
       if (this.map.isWalkable(tileXnext, tileYcur)) this.x = nextX;
     }

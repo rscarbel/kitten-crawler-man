@@ -11,10 +11,15 @@ import {
   FOUNTAIN,
   TORCH,
   WELL,
+  SAFE_ROOM_FLOOR,
 } from './tileTypes';
 import { generateDungeon } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import { renderCanvas, renderDecorationsOverlay } from './TileRenderer';
+import {
+  renderCanvas,
+  renderDecorationsOverlay,
+  drawDecorationTileFull,
+} from './TileRenderer';
 
 export class GameMap {
   structure: TileContent[][];
@@ -45,7 +50,7 @@ export class GameMap {
   buildingEntries: Array<{
     doorTile: { x: number; y: number };
     name: string;
-    type: 'house' | 'tower';
+    type: 'house' | 'tower' | 'restaurant';
   }> = [];
 
   constructor(
@@ -105,11 +110,16 @@ export class GameMap {
   }
 
   /** Generates a small interior room for a building (called externally after construction). */
-  generateInterior(buildingType: 'house' | 'tower'): void {
+  generateInterior(buildingType: 'house' | 'tower' | 'restaurant'): void {
     const isTower = buildingType === 'tower';
-    const w = isTower ? 30 : 18;
-    const h = isTower ? 24 : 14;
-    const floorType = isTower ? 7 /* carpet */ : 8; /* wood */
+    const isRestaurant = buildingType === 'restaurant';
+    const w = isTower ? 30 : isRestaurant ? 22 : 18;
+    const h = isTower ? 24 : isRestaurant ? 16 : 14;
+    const floorType = isTower
+      ? 7 /* carpet */
+      : isRestaurant
+        ? SAFE_ROOM_FLOOR
+        : 8; /* wood */
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -122,6 +132,38 @@ export class GameMap {
     for (let y = 1; y < h - 1; y++)
       for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
+    if (isRestaurant) {
+      // Counter along the north wall (row 2, cols 2–8) — non-walkable wall tiles
+      for (let x = 2; x <= 8; x++) grid[2][x].type = FloorTypeValue.wall;
+      // Two 2×1 tables in the dining area (rows 5–6, cols 2–3 and 5–6)
+      grid[5][2].type = FloorTypeValue.wall;
+      grid[5][3].type = FloorTypeValue.wall;
+      grid[6][2].type = FloorTypeValue.wall;
+      grid[6][3].type = FloorTypeValue.wall;
+      grid[5][5].type = FloorTypeValue.wall;
+      grid[5][6].type = FloorTypeValue.wall;
+      grid[6][5].type = FloorTypeValue.wall;
+      grid[6][6].type = FloorTypeValue.wall;
+      // Two more tables on the east side (rows 5–6, cols 14–15 and 17–18)
+      grid[5][14].type = FloorTypeValue.wall;
+      grid[5][15].type = FloorTypeValue.wall;
+      grid[6][14].type = FloorTypeValue.wall;
+      grid[6][15].type = FloorTypeValue.wall;
+      grid[5][17].type = FloorTypeValue.wall;
+      grid[5][18].type = FloorTypeValue.wall;
+      grid[6][17].type = FloorTypeValue.wall;
+      grid[6][18].type = FloorTypeValue.wall;
+      // Two more tables deeper in (rows 9–10)
+      grid[9][2].type = FloorTypeValue.wall;
+      grid[9][3].type = FloorTypeValue.wall;
+      grid[10][2].type = FloorTypeValue.wall;
+      grid[10][3].type = FloorTypeValue.wall;
+      grid[9][5].type = FloorTypeValue.wall;
+      grid[9][6].type = FloorTypeValue.wall;
+      grid[10][5].type = FloorTypeValue.wall;
+      grid[10][6].type = FloorTypeValue.wall;
+    }
+
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
     const doorX = Math.floor(w / 2) - 1;
     grid[h - 1][doorX].type = 1; // road (walkable, acts as exit threshold)
@@ -131,7 +173,6 @@ export class GameMap {
     this.startTile = { x: Math.floor(w / 2), y: h - 2 };
     this.stairwellTiles = [];
     this.buildingEntries = [];
-    this.safeRooms = [];
     this.bossRooms = [];
     this.mobSpawnPoints = [];
     this.hallwaySpawnPoints = [];
@@ -139,6 +180,22 @@ export class GameMap {
       { x: doorX, y: h - 1 },
       { x: doorX + 1, y: h - 1 },
     ];
+
+    if (isRestaurant) {
+      const interior = { x: 1, y: 1, w: w - 2, h: h - 2 };
+      this.safeRooms = [
+        {
+          bounds: interior,
+          centre: { x: Math.floor(w / 2), y: Math.floor(h / 2) },
+        },
+      ];
+      this.safeRoomBounds = interior;
+      this.safeRoomCentre = this.safeRooms[0].centre;
+    } else {
+      this.safeRooms = [];
+      this.safeRoomBounds = null;
+      this.safeRoomCentre = null;
+    }
   }
 
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
@@ -315,6 +372,52 @@ export class GameMap {
       cameraY,
       viewW,
       viewH,
+    );
+  }
+
+  /** Returns tile coords of all visible decoration tiles (TORCH, WELL, TREE, FOUNTAIN). */
+  getVisibleDecorationTiles(
+    camX: number,
+    camY: number,
+    viewW: number,
+    viewH: number,
+  ): Array<{ tx: number; ty: number }> {
+    const ts = this.tileHeight;
+    const rows = this.structure.length;
+    const cols = this.structure[0]?.length ?? rows;
+    const startX = Math.max(0, Math.floor(camX / ts));
+    const startY = Math.max(0, Math.floor(camY / ts));
+    const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts));
+    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts));
+    const result: Array<{ tx: number; ty: number }> = [];
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        const t = this.structure[y][x].type;
+        if (t === TREE || t === TORCH || t === WELL || t === FOUNTAIN) {
+          result.push({ tx: x, ty: y });
+        }
+      }
+    }
+    return result;
+  }
+
+  /** Draws a single decoration tile at full fidelity (for z-sorted rendering). */
+  drawDecorationAt(
+    ctx: CanvasRenderingContext2D,
+    tx: number,
+    ty: number,
+    camX: number,
+    camY: number,
+  ): void {
+    const ts = this.tileHeight;
+    drawDecorationTileFull(
+      ctx,
+      this.structure,
+      tx,
+      ty,
+      tx * ts - camX,
+      ty * ts - camY,
+      ts,
     );
   }
 }

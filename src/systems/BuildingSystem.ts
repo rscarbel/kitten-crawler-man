@@ -4,7 +4,7 @@ import { TILE_SIZE } from '../core/constants';
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
   name: string;
-  type: 'house' | 'tower';
+  type: 'house' | 'tower' | 'restaurant';
 };
 
 export class BuildingSystem {
@@ -139,7 +139,8 @@ export class BuildingSystem {
 
     ctx.fillStyle = '#d4edaa';
     ctx.font = 'bold 18px monospace';
-    const icon = entry.type === 'tower' ? '🏰' : '🏠';
+    const icon =
+      entry.type === 'tower' ? '🏰' : entry.type === 'restaurant' ? '🍽' : '🏠';
     ctx.fillText(`${icon}  ${entry.name}  ${icon}`, cw / 2, panelY + 36);
 
     ctx.fillStyle = '#94a3b8';

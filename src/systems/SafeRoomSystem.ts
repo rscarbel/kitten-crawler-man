@@ -34,8 +34,8 @@ export class SafeRoomSystem {
 
   constructor(
     private readonly gameMap: GameMap,
-    startTileX: number,
-    startTileY: number,
+    _startTileX: number,
+    _startTileY: number,
     private readonly levelId = 'level1',
   ) {
     this.entries = [];
@@ -51,15 +51,6 @@ export class SafeRoomSystem {
           bedTileY: sr.centre.y,
         });
       }
-    } else {
-      // Fallback: no map safe rooms
-      this.entries.push({
-        bounds: { x: startTileX, y: startTileY, w: 8, h: 7 },
-        mordecaiHomeTileX: startTileX,
-        mordecaiHomeTileY: startTileY,
-        bedTileX: startTileX + 1,
-        bedTileY: startTileY,
-      });
     }
   }
 

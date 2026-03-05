@@ -11,6 +11,7 @@ import {
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import { drawHUD } from '../ui/HUD';
+import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 
 export class BuildingInteriorScene extends Scene {
   private readonly map: GameMap;
@@ -23,6 +24,9 @@ export class BuildingInteriorScene extends Scene {
   private onExitTile = false;
   private exitMenuOpen = false;
   private exitDismissed = false;
+
+  // Safe room (restaurant only)
+  private readonly safeRoom: SafeRoomSystem | null;
 
   // Key handler cleanup
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -65,12 +69,21 @@ export class BuildingInteriorScene extends Scene {
     this.human.y = sy * TILE_SIZE;
     this.cat.x = (sx + 1) * TILE_SIZE;
     this.cat.y = sy * TILE_SIZE;
+
+    this.safeRoom =
+      entry.type === 'restaurant'
+        ? new SafeRoomSystem(this.map, sx, sy, 'level3')
+        : null;
   }
 
   onEnter(): void {
     this.escHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
+      if (this.safeRoom?.mordecaiDialogOpen) {
+        this.safeRoom.mordecaiDialogOpen = false;
+        return;
+      }
       if (this.exitMenuOpen) {
         this.exitMenuOpen = false;
         this.exitDismissed = true;
@@ -95,6 +108,16 @@ export class BuildingInteriorScene extends Scene {
 
   update(): void {
     if (this.exitMenuOpen) return;
+    if (this.safeRoom?.mordecaiDialogOpen) return;
+
+    // Sleep tick
+    if (this.safeRoom?.isSleeping) {
+      this.safeRoom.updateSleep(this.human, this.cat);
+      this.safeRoom.updateWander();
+      this.human.tickTimers();
+      this.cat.tickTimers();
+      return;
+    }
 
     const player = this.active();
     const mapPxW = this.mapW * TILE_SIZE;
@@ -168,9 +191,20 @@ export class BuildingInteriorScene extends Scene {
       this.cat.isActive = !this.cat.isActive;
     }
 
+    // Safe room: sleep / talk to Mordecai
+    if (this.safeRoom && this.input.has(' ')) {
+      this.input.clear();
+      if (this.safeRoom.isNearBed(player)) {
+        this.safeRoom.startSleep();
+      } else if (this.safeRoom.isNearMordecai(player)) {
+        this.safeRoom.mordecaiDialogOpen = true;
+      }
+    }
+
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
+    this.safeRoom?.updateWander();
 
     // Exit tile detection
     const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
@@ -226,6 +260,11 @@ export class BuildingInteriorScene extends Scene {
     this.inactive().render(ctx, camX, camY, TILE_SIZE);
     this.active().render(ctx, camX, camY, TILE_SIZE);
 
+    if (this.safeRoom) {
+      const pulse = 0.6 + Math.sin(Date.now() / 600) * 0.3;
+      this.safeRoom.renderObjects(ctx, camX, camY, this.active(), pulse);
+    }
+
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
 
@@ -239,6 +278,14 @@ export class BuildingInteriorScene extends Scene {
     ctx.textAlign = 'center';
     ctx.fillText(`Inside: ${this.entry.name}`, canvas.width / 2, 18);
     ctx.textAlign = 'left';
+
+    if (this.safeRoom) {
+      this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
+      if (this.safeRoom.mordecaiDialogOpen)
+        this.safeRoom.renderMordecaiDialog(ctx, canvas);
+      if (this.safeRoom.isSleeping)
+        this.safeRoom.renderSleepOverlay(ctx, canvas);
+    }
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
   }

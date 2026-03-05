@@ -128,7 +128,10 @@ export class CompanionSystem {
     const ts = TILE_SIZE;
     if (dx !== 0) {
       const nextX = Math.max(0, Math.min(mapPx - ts, entity.x + dx));
-      const tileXnext = Math.floor((nextX + ts / 2) / ts);
+      const tileXnext =
+        dx >= 0
+          ? Math.floor((nextX + ts * 0.72) / ts)
+          : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((entity.y + ts / 2) / ts);
       if (this.gameMap.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
     }

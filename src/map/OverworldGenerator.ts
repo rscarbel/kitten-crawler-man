@@ -7,7 +7,6 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
-  SAFE_ROOM_FLOOR,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -22,7 +21,7 @@ type Rect = { x: number; y: number; w: number; h: number };
 export interface BuildingEntry {
   doorTile: Point;
   name: string;
-  type: 'house' | 'tower';
+  type: 'house' | 'tower' | 'restaurant';
 }
 
 export interface OverworldData {
@@ -108,7 +107,7 @@ export function generateOverworld(size: number): OverworldData {
     by: number,
     bw: number,
     bh: number,
-    type: 'house' | 'tower',
+    type: 'house' | 'tower' | 'restaurant',
     name: string,
     roofTile: number,
   ) => {
@@ -144,30 +143,26 @@ export function generateOverworld(size: number): OverworldData {
     ROOF_SLATE,
   );
 
-  // 6b. The Inn — safe room building, east of town square, north of E-W road.
-  //     Interior uses SAFE_ROOM_FLOOR (walkable) so no scene transition is needed;
-  //     the player simply walks in through the door gap in the south wall.
-  const innW = 14;
-  const innH = 10;
-  const innX = cx + 14;
-  const innY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
-  for (let dy = 0; dy < innH; dy++) {
-    for (let dx = 0; dx < innW; dx++) {
-      const isPerimeter =
-        dy === 0 || dy === innH - 1 || dx === 0 || dx === innW - 1;
-      set(innX + dx, innY + dy, isPerimeter ? BUILDING_WALL : SAFE_ROOM_FLOOR);
-    }
-  }
-  // Door: 2-tile gap in south wall at center
-  const innDoorX = innX + Math.floor(innW / 2) - 1;
-  set(innDoorX, innY + innH - 1, FloorTypeValue.road);
-  set(innDoorX + 1, innY + innH - 1, FloorTypeValue.road);
-  // Track for house collision avoidance (no buildingEntry — it's walkable, not a scene)
-  buildings.push({ x: innX, y: innY, w: innW, h: innH });
-  // Short road stub south from the Inn door to the E-W road
-  for (let ry = innY + innH; ry <= cy - 2; ry++) {
-    setRoad(innDoorX, ry);
-    setRoad(innDoorX + 1, ry);
+  // 6b. The Restaurant — safe room building, east of town square, north of E-W road.
+  //     Entering triggers a BuildingInteriorScene with a safe-room interior.
+  const restW = 14;
+  const restH = 10;
+  const restX = cx + 14;
+  const restY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
+  placeBuilding(
+    restX,
+    restY,
+    restW,
+    restH,
+    'restaurant',
+    'Safe Room',
+    ROOF_RED,
+  );
+  // Short road stub south from restaurant door to the E-W road
+  const restDoorX = restX + Math.floor(restW / 2) - 1;
+  for (let ry = restY + restH; ry <= cy - 2; ry++) {
+    setRoad(restDoorX, ry);
+    setRoad(restDoorX + 1, ry);
   }
 
   // 7. Small houses around town square
@@ -211,15 +206,7 @@ export function generateOverworld(size: number): OverworldData {
         hy + hh + pad > b.y,
     );
     if (overlaps) continue;
-    placeBuilding(
-      hx,
-      hy,
-      hw,
-      hh,
-      'house',
-      `House ${houseIdx + 1}`,
-      houseRoofs[houseIdx],
-    );
+    placeBuilding(hx, hy, hw, hh, 'house', 'Enter', houseRoofs[houseIdx]);
     placedHouses.push({ x: hx, y: hy, w: hw, h: hh });
 
     // Minor branch road connecting house door to nearest main road (L-shape, 3 wide)
@@ -408,30 +395,20 @@ export function generateOverworld(size: number): OverworldData {
   }
 
   // 11. Map metadata
-  // Start inside the Inn (one tile above the door, centred)
-  const startTile: Point = {
-    x: innX + Math.floor(innW / 2),
-    y: innY + innH - 2,
-  };
-  // Safe room = walkable interior of the Inn
-  const innInterior = {
-    x: innX + 1,
-    y: innY + 1,
-    w: innW - 2,
-    h: innH - 2,
-  };
-  const innCentre = {
-    x: innX + Math.floor(innW / 2),
-    y: innY + Math.floor(innH / 2),
-  };
-  const safeRooms = [{ bounds: innInterior, centre: innCentre }];
+  // Start in the town square center
+  const startTile: Point = { x: cx, y: cy };
+  // Safe room is inside the restaurant (handled by BuildingInteriorScene)
+  const safeRooms: Array<{
+    bounds: { x: number; y: number; w: number; h: number };
+    centre: { x: number; y: number };
+  }> = [];
 
   return {
     grid,
     startTile,
     safeRooms,
-    safeRoomBounds: safeRooms[0].bounds,
-    safeRoomCentre: safeRooms[0].centre,
+    safeRoomBounds: null,
+    safeRoomCentre: null,
     buildingEntries,
     bossRooms: [],
     mobSpawnPoints: [],
