@@ -27,7 +27,7 @@ export function resolvePlayerAttacks(
     const damage = human.getMeleeDamage();
     const nearHuman = mobGrid.queryCircle(hc.x, hc.y, range);
     for (const mob of nearHuman) {
-      if (!mob.isAlive) continue;
+      if (!mob.isAlive || !mob.isHostile) continue;
       const mc = centerOf(mob);
       const dx = mc.x - hc.x;
       const dy = mc.y - hc.y;

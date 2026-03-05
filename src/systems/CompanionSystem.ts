@@ -186,7 +186,7 @@ export class CompanionSystem {
           HUMAN_ENGAGE_RANGE,
         );
         for (const mob of nearHuman) {
-          if (!mob.isAlive) continue;
+          if (!mob.isAlive || !mob.isHostile) continue;
           const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
           if (dist < closestDist) {
             closestDist = dist;

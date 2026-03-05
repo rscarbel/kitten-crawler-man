@@ -69,6 +69,11 @@ export abstract class Mob extends Player {
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
 
+  /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
+  get isHostile(): boolean {
+    return true;
+  }
+
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;
 

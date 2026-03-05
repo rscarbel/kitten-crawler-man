@@ -31,6 +31,10 @@ export class SkyFowl extends Mob {
   readonly cloth: SkyFowlClothColors;
 
   private isAggressive = false;
+
+  get isHostile(): boolean {
+    return this.isAggressive;
+  }
   private peckCooldown = 0;
   private peckAnimTimer = 0;
 
