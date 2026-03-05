@@ -601,6 +601,31 @@ export class GameMap {
     return [];
   }
 
+  /**
+   * Infers the ground base colour for a decoration tile (TORCH, WELL, etc.) by
+   * examining cardinal neighbours. Priority: road > safe-room cobblestone > grass.
+   */
+  private inferGroundColor(tx: number, ty: number): string {
+    const dirs: [number, number][] = [
+      [0, 1],
+      [0, -1],
+      [-1, 0],
+      [1, 0],
+    ];
+    let hasRoad = false;
+    let hasSafe = false;
+    for (const [dx, dy] of dirs) {
+      const n = this.structure[ty + dy]?.[tx + dx];
+      if (!n) continue;
+      if (n.type === FloorTypeValue.road || n.type === DIRT_PATCH)
+        hasRoad = true;
+      else if (n.type === SAFE_ROOM_FLOOR) hasSafe = true;
+    }
+    if (hasRoad) return '#bc926b';
+    if (hasSafe) return (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
+    return '#6de89d';
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     const row = this.structure[tileY];
     if (!row) return false;
@@ -662,7 +687,51 @@ export class GameMap {
         const tile = this.structure[y][x];
         const sx = x * ts - cameraX;
         const sy = y * ts - cameraY;
-        this.drawTile(ctx, tile.type, sx, sy, ts, x, y);
+        // Decorations that should appear above entities are drawn as base-only
+        // here; the full visual is drawn in renderDecorationsOverlay after entities.
+        const isDecoration =
+          tile.type === TORCH ||
+          tile.type === WELL ||
+          tile.type === TREE ||
+          tile.type === FOUNTAIN;
+        this.drawTile(ctx, tile.type, sx, sy, ts, x, y, isDecoration);
+      }
+    }
+  }
+
+  /**
+   * Second render pass: draws the full visuals for tall decoration tiles
+   * (TORCH, WELL, TREE, FOUNTAIN) on top of entities so they correctly occlude
+   * characters walking near them from any direction.
+   */
+  renderDecorationsOverlay(
+    ctx: CanvasRenderingContext2D,
+    cameraX: number,
+    cameraY: number,
+    viewW: number,
+    viewH: number,
+  ) {
+    const rows = this.structure.length;
+    const cols = this.structure[0]?.length ?? rows;
+    const ts = this.tileHeight;
+    const startX = Math.max(0, Math.floor(cameraX / ts));
+    const startY = Math.max(0, Math.floor(cameraY / ts));
+    const endX = Math.min(cols - 1, Math.ceil((cameraX + viewW) / ts));
+    const endY = Math.min(rows - 1, Math.ceil((cameraY + viewH) / ts));
+
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        const tile = this.structure[y][x];
+        if (
+          tile.type !== TORCH &&
+          tile.type !== WELL &&
+          tile.type !== TREE &&
+          tile.type !== FOUNTAIN
+        )
+          continue;
+        const sx = x * ts - cameraX;
+        const sy = y * ts - cameraY;
+        this.drawTile(ctx, tile.type, sx, sy, ts, x, y, false);
       }
     }
   }
@@ -675,7 +744,24 @@ export class GameMap {
     ts: number,
     tx: number,
     ty: number,
+    baseOnly = false,
   ) {
+    // In the first (ground) pass, decorations that extend above tile bounds only
+    // draw their base fill so entities rendered between passes appear behind them.
+    if (baseOnly) {
+      switch (type) {
+        case TORCH:
+        case WELL:
+        case FOUNTAIN:
+          ctx.fillStyle = this.inferGroundColor(tx, ty);
+          ctx.fillRect(sx, sy, ts, ts);
+          return;
+        case TREE:
+          ctx.fillStyle = '#5cc87a';
+          ctx.fillRect(sx, sy, ts, ts);
+          return;
+      }
+    }
     switch (type) {
       // Void (outer border)
       case VOID_TYPE: {
@@ -1202,8 +1288,8 @@ export class GameMap {
         const t = performance.now() / 1000;
         const flicker = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 7.1) * 0.4;
 
-        // Grass base
-        ctx.fillStyle = '#6de89d';
+        // Ground base — colour matches surrounding floor (road, cobblestone, or grass)
+        ctx.fillStyle = this.inferGroundColor(tx, ty);
         ctx.fillRect(sx, sy, ts, ts);
 
         // Stone footing at pole base (bottom-centre)
@@ -1315,8 +1401,8 @@ export class GameMap {
 
       // Well — stone well with wooden crossbeam, not walkable
       case WELL: {
-        // Grass base
-        ctx.fillStyle = '#6de89d';
+        // Ground base — colour matches surrounding floor
+        ctx.fillStyle = this.inferGroundColor(tx, ty);
         ctx.fillRect(sx, sy, ts, ts);
 
         const wcx = sx + Math.floor(ts / 2);
@@ -1771,8 +1857,10 @@ export class GameMap {
       let hasRoadS = false;
       for (let bx = b.x - 1; bx <= b.x + b.w; bx++) {
         if (bx < BORDER || bx >= size - BORDER) continue;
-        if (b.y - 1 >= BORDER && grid[b.y - 1]?.[bx]?.type === ROAD) hasRoadN = true;
-        if (b.y + b.h < size - BORDER && grid[b.y + b.h]?.[bx]?.type === ROAD) hasRoadS = true;
+        if (b.y - 1 >= BORDER && grid[b.y - 1]?.[bx]?.type === ROAD)
+          hasRoadN = true;
+        if (b.y + b.h < size - BORDER && grid[b.y + b.h]?.[bx]?.type === ROAD)
+          hasRoadS = true;
       }
       if (hasRoadN && hasRoadS) {
         const rowTop = b.y - 1;
@@ -1780,12 +1868,18 @@ export class GameMap {
         let wClear = b.x - 1 >= BORDER;
         if (wClear) {
           for (let ry = rowTop; ry <= rowBot; ry++)
-            if (isSolid(b.x - 1, ry)) { wClear = false; break; }
+            if (isSolid(b.x - 1, ry)) {
+              wClear = false;
+              break;
+            }
         }
         let eClear = b.x + b.w < size - BORDER;
         if (eClear) {
           for (let ry = rowTop; ry <= rowBot; ry++)
-            if (isSolid(b.x + b.w, ry)) { eClear = false; break; }
+            if (isSolid(b.x + b.w, ry)) {
+              eClear = false;
+              break;
+            }
         }
         // Route on all available sides (west and/or east) + horizontal stitches
         if (wClear) {
@@ -1805,8 +1899,10 @@ export class GameMap {
       let hasRoadE = false;
       for (let bry = b.y - 1; bry <= b.y + b.h; bry++) {
         if (bry < BORDER || bry >= size - BORDER) continue;
-        if (b.x - 1 >= BORDER && grid[bry]?.[b.x - 1]?.type === ROAD) hasRoadW = true;
-        if (b.x + b.w < size - BORDER && grid[bry]?.[b.x + b.w]?.type === ROAD) hasRoadE = true;
+        if (b.x - 1 >= BORDER && grid[bry]?.[b.x - 1]?.type === ROAD)
+          hasRoadW = true;
+        if (b.x + b.w < size - BORDER && grid[bry]?.[b.x + b.w]?.type === ROAD)
+          hasRoadE = true;
       }
       if (hasRoadW && hasRoadE) {
         const colLeft = b.x - 1;
@@ -1814,12 +1910,18 @@ export class GameMap {
         let nClear = b.y - 1 >= BORDER;
         if (nClear) {
           for (let rx = colLeft; rx <= colRight; rx++)
-            if (isSolid(rx, b.y - 1)) { nClear = false; break; }
+            if (isSolid(rx, b.y - 1)) {
+              nClear = false;
+              break;
+            }
         }
         let sClear = b.y + b.h < size - BORDER;
         if (sClear) {
           for (let rx = colLeft; rx <= colRight; rx++)
-            if (isSolid(rx, b.y + b.h)) { sClear = false; break; }
+            if (isSolid(rx, b.y + b.h)) {
+              sClear = false;
+              break;
+            }
         }
         if (nClear) {
           for (let rx = colLeft; rx <= colRight; rx++) setRoad(rx, b.y - 1);
@@ -1838,10 +1940,14 @@ export class GameMap {
     // Fountain — 3×3 block in the SE quadrant of the town square
     fill(cx + 4, cy + 4, 3, 3, FOUNTAIN);
     // Torches flanking each of the 4 main-road gates into the town square
-    set(cx - 3, cy - 11, TORCH); set(cx + 3, cy - 11, TORCH); // North gate
-    set(cx - 3, cy + 11, TORCH); set(cx + 3, cy + 11, TORCH); // South gate
-    set(cx - 11, cy - 3, TORCH); set(cx - 11, cy + 3, TORCH); // West gate
-    set(cx + 11, cy - 3, TORCH); set(cx + 11, cy + 3, TORCH); // East gate
+    set(cx - 3, cy - 11, TORCH);
+    set(cx + 3, cy - 11, TORCH); // North gate
+    set(cx - 3, cy + 11, TORCH);
+    set(cx + 3, cy + 11, TORCH); // South gate
+    set(cx - 11, cy - 3, TORCH);
+    set(cx - 11, cy + 3, TORCH); // West gate
+    set(cx + 11, cy - 3, TORCH);
+    set(cx + 11, cy + 3, TORCH); // East gate
     // Torches flanking the tower entrance (one row below the tower's south wall)
     set(cx - 2, cy - 15, TORCH);
     set(cx + 1, cy - 15, TORCH);

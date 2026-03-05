@@ -735,6 +735,15 @@ export class DungeonScene extends Scene {
     this.inactive().render(ctx, camX, camY, TILE_SIZE);
     this.active().render(ctx, camX, camY, TILE_SIZE);
 
+    // Draw tall decoration tiles (torch, well, tree, fountain) on top of all entities
+    this.gameMap.renderDecorationsOverlay(
+      ctx,
+      camX,
+      camY,
+      canvas.width,
+      canvas.height,
+    );
+
     this.barriers.render(ctx, camX, camY, this.active());
     this.spells.renderShell(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
