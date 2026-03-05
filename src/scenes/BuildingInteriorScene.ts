@@ -12,6 +12,7 @@ import {
 } from '../core/PlayerSnapshot';
 import { drawHUD } from '../ui/HUD';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { ShopSystem } from '../systems/ShopSystem';
 
 export class BuildingInteriorScene extends Scene {
   private readonly map: GameMap;
@@ -27,6 +28,9 @@ export class BuildingInteriorScene extends Scene {
 
   // Safe room (restaurant only)
   private readonly safeRoom: SafeRoomSystem | null;
+
+  // Shop (store only)
+  private readonly shop: ShopSystem | null;
 
   // Key handler cleanup
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -74,15 +78,24 @@ export class BuildingInteriorScene extends Scene {
       entry.type === 'restaurant'
         ? new SafeRoomSystem(this.map, sx, sy, 'level3')
         : null;
+
+    this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
   }
 
   onEnter(): void {
     this.escHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') { e.preventDefault(); return; }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return;
+      }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
       if (this.safeRoom?.mordecaiDialogOpen) {
         this.safeRoom.mordecaiDialogOpen = false;
+        return;
+      }
+      if (this.shop?.shopOpen) {
+        this.shop.shopOpen = false;
         return;
       }
       if (this.exitMenuOpen) {
@@ -110,6 +123,7 @@ export class BuildingInteriorScene extends Scene {
   update(): void {
     if (this.exitMenuOpen) return;
     if (this.safeRoom?.mordecaiDialogOpen) return;
+    if (this.shop?.shopOpen) return;
 
     // Sleep tick
     if (this.safeRoom?.isSleeping) {
@@ -202,10 +216,22 @@ export class BuildingInteriorScene extends Scene {
       }
     }
 
+    // Store: toggle shop when near shopkeeper or close it with Space
+    if (this.shop && this.input.has(' ')) {
+      if (this.shop.shopOpen) {
+        this.input.clear();
+        this.shop.shopOpen = false;
+      } else if (this.shop.isNearShopkeeper(player)) {
+        this.input.clear();
+        this.shop.shopOpen = true;
+      }
+    }
+
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
     this.safeRoom?.updateWander();
+    this.shop?.update();
 
     // Exit tile detection
     const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
@@ -222,6 +248,10 @@ export class BuildingInteriorScene extends Scene {
   }
 
   handleClick(mx: number, my: number): void {
+    if (this.shop?.shopOpen) {
+      this.shop.handleClick(mx, my, this.active());
+      return;
+    }
     if (!this.exitMenuOpen) return;
     const canvas = this.sceneManager.canvas;
     const rects = this.menuRects(canvas);
@@ -266,6 +296,10 @@ export class BuildingInteriorScene extends Scene {
       this.safeRoom.renderObjects(ctx, camX, camY, this.active(), pulse);
     }
 
+    if (this.shop) {
+      this.shop.renderObjects(ctx, camX, camY, this.active());
+    }
+
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
 
@@ -286,6 +320,11 @@ export class BuildingInteriorScene extends Scene {
         this.safeRoom.renderMordecaiDialog(ctx, canvas);
       if (this.safeRoom.isSleeping)
         this.safeRoom.renderSleepOverlay(ctx, canvas);
+    }
+
+    if (this.shop) {
+      this.shop.renderUI(ctx, canvas, this.active());
+      this.shop.renderShopPanel(ctx, canvas, this.active());
     }
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);

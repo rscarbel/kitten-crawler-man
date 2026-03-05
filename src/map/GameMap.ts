@@ -50,7 +50,7 @@ export class GameMap {
   buildingEntries: Array<{
     doorTile: { x: number; y: number };
     name: string;
-    type: 'house' | 'tower' | 'restaurant';
+    type: 'house' | 'tower' | 'restaurant' | 'store';
   }> = [];
 
   constructor(
@@ -110,11 +110,14 @@ export class GameMap {
   }
 
   /** Generates a small interior room for a building (called externally after construction). */
-  generateInterior(buildingType: 'house' | 'tower' | 'restaurant'): void {
+  generateInterior(
+    buildingType: 'house' | 'tower' | 'restaurant' | 'store',
+  ): void {
     const isTower = buildingType === 'tower';
     const isRestaurant = buildingType === 'restaurant';
-    const w = isTower ? 30 : isRestaurant ? 22 : 18;
-    const h = isTower ? 24 : isRestaurant ? 16 : 14;
+    const isStore = buildingType === 'store';
+    const w = isTower ? 30 : isRestaurant ? 22 : isStore ? 20 : 18;
+    const h = isTower ? 24 : isRestaurant ? 16 : isStore ? 12 : 14;
     const floorType = isTower
       ? 7 /* carpet */
       : isRestaurant
@@ -131,6 +134,11 @@ export class GameMap {
     // Carve interior floor
     for (let y = 1; y < h - 1; y++)
       for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
+
+    if (isStore) {
+      // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
+      for (let x = 2; x <= w - 3; x++) grid[2][x].type = FloorTypeValue.wall;
+    }
 
     if (isRestaurant) {
       // Counter along the north wall (row 2, cols 2–8) — non-walkable wall tiles

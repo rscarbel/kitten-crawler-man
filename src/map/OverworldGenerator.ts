@@ -21,7 +21,7 @@ type Rect = { x: number; y: number; w: number; h: number };
 export interface BuildingEntry {
   doorTile: Point;
   name: string;
-  type: 'house' | 'tower' | 'restaurant';
+  type: 'house' | 'tower' | 'restaurant' | 'store';
 }
 
 export interface OverworldData {
@@ -107,7 +107,7 @@ export function generateOverworld(size: number): OverworldData {
     by: number,
     bw: number,
     bh: number,
-    type: 'house' | 'tower' | 'restaurant',
+    type: 'house' | 'tower' | 'restaurant' | 'store',
     name: string,
     roofTile: number,
   ) => {
@@ -163,6 +163,27 @@ export function generateOverworld(size: number): OverworldData {
   for (let ry = restY + restH; ry <= cy - 2; ry++) {
     setRoad(restDoorX, ry);
     setRoad(restDoorX + 1, ry);
+  }
+
+  // 6c. General Store — west of town square, mirroring the restaurant on the east side.
+  const storeW = 14;
+  const storeH = 10;
+  const storeX = cx - 28;
+  const storeY = cy - 16;
+  placeBuilding(
+    storeX,
+    storeY,
+    storeW,
+    storeH,
+    'store',
+    'General Store',
+    ROOF_GREEN,
+  );
+  // Short road stub south from store door to the E-W road
+  const storeDoorX = storeX + Math.floor(storeW / 2) - 1;
+  for (let ry = storeY + storeH; ry <= cy - 2; ry++) {
+    setRoad(storeDoorX, ry);
+    setRoad(storeDoorX + 1, ry);
   }
 
   // 7. Small houses around town square
