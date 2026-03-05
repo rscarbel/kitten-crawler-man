@@ -78,6 +78,7 @@ export class BuildingInteriorScene extends Scene {
 
   onEnter(): void {
     this.escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') { e.preventDefault(); return; }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
       if (this.safeRoom?.mordecaiDialogOpen) {
