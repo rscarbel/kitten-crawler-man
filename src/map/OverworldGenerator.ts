@@ -111,12 +111,11 @@ export function generateOverworld(size: number): OverworldData {
     name: string,
     roofTile: number,
   ) => {
-    // Perimeter = stone walls, interior = roof tile
+    // North/south rows = BUILDING_WALL (gable + facade), sides + interior = roof tile
     for (let dy = 0; dy < bh; dy++) {
       for (let dx = 0; dx < bw; dx++) {
-        const isPerimeter =
-          dy === 0 || dy === bh - 1 || dx === 0 || dx === bw - 1;
-        set(bx + dx, by + dy, isPerimeter ? BUILDING_WALL : roofTile);
+        const isNorthSouth = dy === 0 || dy === bh - 1;
+        set(bx + dx, by + dy, isNorthSouth ? BUILDING_WALL : roofTile);
       }
     }
     // Door: 2-tile gap at south face center
@@ -132,12 +131,12 @@ export function generateOverworld(size: number): OverworldData {
     });
   };
 
-  // 6. Town center tower (14×12, north of town square)
+  // 6. Town center tower (14×6, north of town square)
   placeBuilding(
     cx - 7,
-    cy - 27,
+    cy - 21,
     14,
-    12,
+    6,
     'tower',
     'Town Center Tower',
     ROOF_SLATE,
@@ -146,7 +145,7 @@ export function generateOverworld(size: number): OverworldData {
   // 6b. The Restaurant — safe room building, east of town square, north of E-W road.
   //     Entering triggers a BuildingInteriorScene with a safe-room interior.
   const restW = 14;
-  const restH = 10;
+  const restH = 5;
   const restX = cx + 14;
   const restY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
   placeBuilding(
@@ -167,7 +166,7 @@ export function generateOverworld(size: number): OverworldData {
 
   // 6c. General Store — west of town square, mirroring the restaurant on the east side.
   const storeW = 14;
-  const storeH = 10;
+  const storeH = 5;
   const storeX = cx - 28;
   const storeY = cy - 16;
   placeBuilding(
@@ -211,7 +210,7 @@ export function generateOverworld(size: number): OverworldData {
     const angle = (houseAngles[houseIdx] + rng(-15, 15)) * (Math.PI / 180);
     const dist = rng(16, 40);
     const hw = rng(5, 7);
-    const hh = rng(5, 7);
+    const hh = rng(3, 4);
     const hx = cx + Math.round(Math.cos(angle) * dist) - Math.floor(hw / 2);
     const hy = cy + Math.round(Math.sin(angle) * dist) - Math.floor(hh / 2);
     // Check bounds

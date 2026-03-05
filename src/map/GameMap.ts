@@ -401,7 +401,17 @@ export class GameMap {
     for (let y = startY; y <= endY; y++) {
       for (let x = startX; x <= endX; x++) {
         const t = this.structure[y][x].type;
-        if (t === TREE || t === TORCH || t === WELL || t === FOUNTAIN) {
+        if (
+          t === TREE ||
+          t === TORCH ||
+          t === WELL ||
+          t === FOUNTAIN ||
+          t === BUILDING_WALL ||
+          t === ROOF_THATCH ||
+          t === ROOF_SLATE ||
+          t === ROOF_RED ||
+          t === ROOF_GREEN
+        ) {
           result.push({ tx: x, ty: y });
         }
       }
