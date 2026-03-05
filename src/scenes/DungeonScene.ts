@@ -51,6 +51,9 @@ export interface DungeonSceneOptions {
   catSnap?: PlayerSnapshot;
   /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
   existingMap?: GameMap;
+  /** Carry achievement managers across floor transitions. */
+  humanAchievements?: AchievementManager;
+  catAchievements?: AchievementManager;
 }
 
 export class DungeonScene extends Scene {
@@ -234,6 +237,12 @@ export class DungeonScene extends Scene {
           getLevelDef(levelDef.nextLevelId),
           this.input,
           this.sceneManager,
+          {
+            humanSnap: snapPlayer(this.human),
+            catSnap: snapPlayer(this.cat),
+            humanAchievements: this.humanAchievements,
+            catAchievements: this.catAchievements,
+          },
         ),
       );
     });
@@ -277,9 +286,10 @@ export class DungeonScene extends Scene {
     this.gearPanel = new GearPanel();
     this.lootBoxOpener = new LootBoxOpener();
 
-    // Achievements
-    this.humanAchievements = new AchievementManager();
-    this.catAchievements = new AchievementManager();
+    // Achievements — carry over from previous floor if provided
+    this.humanAchievements =
+      options?.humanAchievements ?? new AchievementManager();
+    this.catAchievements = options?.catAchievements ?? new AchievementManager();
   }
 
   // Scene lifecycle
