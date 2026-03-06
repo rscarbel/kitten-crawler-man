@@ -362,7 +362,7 @@ export class Juicer extends Mob {
       const dx = proj.x - (t.x + ts * 0.5);
       const dy = proj.y - (t.y + ts * 0.5);
       if (Math.hypot(dx, dy) < hitRadius) {
-        t.takeDamage(THROW_DAMAGE);
+        this.dealDamage(t, THROW_DAMAGE);
         t.damageFlash = 8;
         this.activeThrow = null;
         return;

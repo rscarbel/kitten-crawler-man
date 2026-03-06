@@ -119,7 +119,7 @@ export class Troglodyte extends Mob {
           if (nearest) {
             const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
             if (dist <= tongueRangePx * 1.25) {
-              nearest.takeDamage(TONGUE_DAMAGE);
+              this.dealDamage(nearest, TONGUE_DAMAGE);
               if (Math.random() < POISON_CHANCE) {
                 nearest.applyStatus(makePoison());
               }

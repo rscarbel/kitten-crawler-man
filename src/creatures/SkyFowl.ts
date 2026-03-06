@@ -165,7 +165,7 @@ export class SkyFowl extends Mob {
       this.peckCooldown === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      nearest.takeDamage(PECK_DAMAGE);
+      this.dealDamage(nearest, PECK_DAMAGE);
       this.peckCooldown = PECK_COOLDOWN;
       this.peckAnimTimer = PECK_ANIM_FRAMES;
     }

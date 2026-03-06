@@ -50,7 +50,7 @@ export class Cockroach extends Mob {
 
     // Melee attack when close enough
     if (nearestDist <= ATTACK_RANGE_PX && this.attackCooldown <= 0) {
-      nearest.takeDamage(ATTACK_DAMAGE);
+      this.dealDamage(nearest, ATTACK_DAMAGE);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.isMoving = false;
       return;

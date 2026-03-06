@@ -18,6 +18,10 @@ export interface MobSpawnRule {
   minCount?: number;
   /** Maximum number of this mob type to spawn per room (default 1). */
   maxCount?: number;
+  /** Minimum mob level (default 1). Higher levels scale HP, speed, damage, XP, and coins. */
+  minLevel?: number;
+  /** Maximum mob level (default 1). A random level in [minLevel, maxLevel] is picked per spawn. */
+  maxLevel?: number;
   /** Optional per-mob config forwarded to the constructor. */
   config?: Record<string, unknown>;
 }

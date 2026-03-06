@@ -69,6 +69,9 @@ export abstract class Mob extends Player {
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
 
+  /** Difficulty level of this mob instance (1 = base). Set by applyMobLevel(). */
+  mobLevel = 1;
+
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   get isHostile(): boolean {
     return true;
@@ -95,6 +98,48 @@ export abstract class Mob extends Player {
     this.lastKnownTargetY = this.spawnY;
     // Stagger wander timers so mobs don't all change direction together
     this.wanderTimer = Math.floor(Math.random() * 120);
+  }
+
+  /**
+   * Scale this mob's stats for the given difficulty level.
+   * Level 1 = base stats. Each level above 1 increases:
+   *   HP:     +30% per level
+   *   Speed:  +8% per level
+   *   XP:     +25% per level
+   *   Coins:  +25% per level
+   * Damage is scaled via dealDamage() at +20% per level.
+   */
+  applyMobLevel(level: number) {
+    if (level <= 1) return;
+    this.mobLevel = level;
+    const extra = level - 1;
+
+    // HP
+    const hpMult = 1 + extra * 0.3;
+    this.maxHp = Math.ceil(this.maxHp * hpMult);
+    this.hp = this.maxHp;
+
+    // Speed
+    this.speed = this.speed * (1 + extra * 0.08);
+
+    // Coins
+    this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * 0.25));
+    this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * 0.25));
+  }
+
+  /** Returns XP value scaled by mob level. */
+  get scaledXpValue(): number {
+    if (this.mobLevel <= 1) return this.xpValue;
+    return Math.ceil(this.xpValue * (1 + (this.mobLevel - 1) * 0.25));
+  }
+
+  /**
+   * Deal level-scaled damage to a target. Mobs should call this instead of
+   * target.takeDamage() directly so damage scales with mob level.
+   */
+  protected dealDamage(target: Player, baseDamage: number) {
+    const mult = 1 + (this.mobLevel - 1) * 0.2;
+    target.takeDamage(Math.ceil(baseDamage * mult));
   }
 
   setMap(map: GameMap) {

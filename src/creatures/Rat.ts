@@ -92,7 +92,7 @@ export class Rat extends Mob {
       this.firstBiteWindup === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      nearest.takeDamage(1);
+      this.dealDamage(nearest, 1);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }

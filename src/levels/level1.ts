@@ -9,10 +9,24 @@ export const level1: LevelDef = {
   name: 'The Dungeon',
   mapSize: 450,
   roomMobs: [
-    { type: 'goblin', chance: 0.85, minCount: 2, maxCount: 4 },
-    { type: 'llama', chance: 0.15, minCount: 1, maxCount: 2 },
+    {
+      type: 'goblin',
+      chance: 0.85,
+      minCount: 2,
+      maxCount: 4,
+      minLevel: 1,
+      maxLevel: 2,
+    },
+    {
+      type: 'llama',
+      chance: 0.15,
+      minCount: 1,
+      maxCount: 2,
+      minLevel: 1,
+      maxLevel: 3,
+    },
   ],
-  hallwayMobs: [{ type: 'rat', chance: 1.0 }],
+  hallwayMobs: [{ type: 'rat', chance: 1.0, minLevel: 1, maxLevel: 1 }],
   bossRooms: [{ type: 'the_hoarder' }, { type: 'juicer' }],
   nextLevelId: 'level2',
 };

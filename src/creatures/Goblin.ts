@@ -130,7 +130,7 @@ export class Goblin extends Mob {
       this.attackWindupTimer === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      nearest.takeDamage(this.attackDamage);
+      this.dealDamage(nearest, this.attackDamage);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }

@@ -97,7 +97,7 @@ export function resolveKills(
     }
     const otherPlayer = topPlayer === human ? cat : human;
 
-    const totalXp = mob.xpValue;
+    const totalXp = mob.scaledXpValue;
     const topXp = Math.max(1, Math.round(totalXp * 0.85));
     const shareXp = Math.max(1, totalXp - topXp);
     if (topPlayer) topPlayer.gainXp(topXp);

@@ -92,7 +92,7 @@ export class TheHoarder extends Mob {
 
     // Melee attack
     if (nearestDist <= ATTACK_RANGE_PX && this.attackCooldown <= 0) {
-      nearest.takeDamage(ATTACK_DAMAGE);
+      this.dealDamage(nearest, ATTACK_DAMAGE);
       nearest.damageFlash = 8;
       this.attackCooldown = ATTACK_COOLDOWN;
       this.isMoving = false;

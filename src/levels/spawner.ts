@@ -35,6 +35,13 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   return rules[rules.length - 1];
 }
 
+/** Roll a random mob level from a spawn rule's min/max range. */
+function rollMobLevel(rule: MobSpawnRule): number {
+  const min = rule.minLevel ?? 1;
+  const max = rule.maxLevel ?? min;
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 // Mob factory
 
 export function createMob(
@@ -85,7 +92,9 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
       const max = rule.maxCount ?? 1;
       const count = min + Math.floor(Math.random() * (max - min + 1));
       for (let i = 0; i < count; i++) {
-        mobs.push(createMob(rule.type, x, y, map));
+        const mob = createMob(rule.type, x, y, map);
+        mob.applyMobLevel(rollMobLevel(rule));
+        mobs.push(mob);
       }
     }
   }
@@ -93,7 +102,9 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
   if (def.hallwayMobs.length > 0) {
     for (const { x, y } of map.hallwaySpawnPoints) {
       const rule = pickRule(def.hallwayMobs);
-      mobs.push(createMob(rule.type, x, y, map));
+      const mob = createMob(rule.type, x, y, map);
+      mob.applyMobLevel(rollMobLevel(rule));
+      mobs.push(mob);
     }
   }
 

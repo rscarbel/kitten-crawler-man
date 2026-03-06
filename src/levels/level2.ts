@@ -7,10 +7,39 @@ import type { LevelDef } from './types';
  */
 export const level2: LevelDef = {
   id: 'level2',
-  name: 'Safe Haven',
+  name: 'The Dungeon, Level 2',
   mapSize: 200,
-  roomMobs: [],
-  hallwayMobs: [],
+  roomMobs: [
+    {
+      type: 'troglodyte',
+      chance: 0.4,
+      minCount: 1,
+      maxCount: 3,
+      minLevel: 3,
+      maxLevel: 6,
+    },
+    {
+      type: 'llama',
+      chance: 0.35,
+      minCount: 1,
+      maxCount: 3,
+      minLevel: 3,
+      maxLevel: 6,
+    },
+    {
+      type: 'goblin',
+      chance: 0.25,
+      minCount: 3,
+      maxCount: 5,
+      minLevel: 3,
+      maxLevel: 6,
+    },
+  ],
+  hallwayMobs: [
+    { type: 'troglodyte', chance: 0.3, minLevel: 3, maxLevel: 6 },
+    { type: 'goblin', chance: 0.3, minLevel: 3, maxLevel: 6 },
+    { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
+  ],
   bossRooms: [],
   isSafeLevel: true,
   nextLevelId: 'level3',
