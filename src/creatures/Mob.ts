@@ -66,6 +66,13 @@ export abstract class Mob extends Player {
   /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
   isSlowed = false;
 
+  /**
+   * When set to a live Mob, this mob will chase and attack it as a priority target.
+   * Used so that Brindled Vespa acid hits cause enemy mobs to retaliate.
+   * DungeonScene injects this mob into the mob's target list each frame.
+   */
+  retaliateMob: Mob | null = null;
+
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
 

@@ -33,6 +33,7 @@ import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { Juicer } from '../creatures/Juicer';
+import { BrindleGrub } from '../creatures/BrindleGrub';
 import {
   snapPlayer,
   restorePlayer,
@@ -1043,7 +1044,21 @@ export class DungeonScene extends Scene {
         mob.doWander();
       } else {
         if (mob.isBoss) mob.forceAggro = this.bossRoom.isBossInLockedRoom(mob);
-        mob.updateAI(playerTargets);
+
+        // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
+        if (mob instanceof BrindleGrub) {
+          mob.allMobs = this.mobs;
+        }
+
+        // Clear stale retaliate target; add live ones to this mob's AI targets.
+        if (mob.retaliateMob && !mob.retaliateMob.isAlive)
+          mob.retaliateMob = null;
+        const aiTargets =
+          mob.retaliateMob && !(mob instanceof BrindleGrub)
+            ? [...playerTargets, mob.retaliateMob]
+            : playerTargets;
+
+        mob.updateAI(aiTargets);
       }
       // Keep bosses (specifically the Juicer) confined to their room
       if (mob.isBoss) this.bossRoom.clampBossToRoom(mob);
@@ -1058,10 +1073,29 @@ export class DungeonScene extends Scene {
       this.gameMap,
       this.safeRoom,
     );
-    // Spawn gore before resolveKills consumes justDied
+    // Spawn gore before resolveKills consumes justDied.
+    // On level 2, enemy deaths also spawn a cluster of Brindle Grubs.
+    const grubSpawnPositions: Array<{ tx: number; ty: number }> = [];
     for (const mob of this.mobs) {
-      if (mob.justDied) {
-        this.gore.spawnGore(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
+      if (!mob.justDied) continue;
+      this.gore.spawnGore(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
+      if (this.levelDef.id === 'level2' && !(mob instanceof BrindleGrub)) {
+        grubSpawnPositions.push({
+          tx: Math.round(mob.x / TILE_SIZE),
+          ty: Math.round(mob.y / TILE_SIZE),
+        });
+      }
+    }
+    for (const { tx, ty } of grubSpawnPositions) {
+      const count = 1 + Math.floor(Math.random() * 5); // 1–5
+      for (let i = 0; i < count; i++) {
+        // Scatter each grub within ±2 tiles of the death location.
+        const ox = Math.floor((Math.random() - 0.5) * 4);
+        const oy = Math.floor((Math.random() - 0.5) * 4);
+        const grub = new BrindleGrub(tx + ox, ty + oy, TILE_SIZE);
+        grub.setMap(this.gameMap);
+        this.mobs.push(grub);
+        this.mobGrid.insert(grub);
       }
     }
 
