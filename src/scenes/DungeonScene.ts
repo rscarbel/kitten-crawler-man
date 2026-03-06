@@ -40,6 +40,7 @@ import {
 } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills } from '../systems/CombatSystem';
+import { GoreSystem } from '../systems/GoreSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 
 export interface DungeonSceneOptions {
@@ -75,6 +76,7 @@ export class DungeonScene extends Scene {
   private building: BuildingSystem | null = null;
   private juicerRoom: JuicerRoomSystem;
   private barriers: BarrierSystem;
+  private gore = new GoreSystem();
 
   // UI
   private pauseMenu: PauseMenu;
@@ -694,6 +696,7 @@ export class DungeonScene extends Scene {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     this.gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
+    this.gore.renderPuddles(ctx, camX, camY);
 
     this.safeRoom.renderObjects(
       ctx,
@@ -756,6 +759,7 @@ export class DungeonScene extends Scene {
     drawItems.sort((a, b) => a.sortY - b.sortY);
     for (const item of drawItems) item.draw();
 
+    this.gore.renderParticles(ctx, camX, camY);
     this.barriers.render(ctx, camX, camY, this.active());
     this.spells.renderShell(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
@@ -1054,6 +1058,13 @@ export class DungeonScene extends Scene {
       this.gameMap,
       this.safeRoom,
     );
+    // Spawn gore before resolveKills consumes justDied
+    for (const mob of this.mobs) {
+      if (mob.justDied) {
+        this.gore.spawnGore(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
+      }
+    }
+
     resolveKills(
       this.mobs,
       this.human,
@@ -1096,6 +1107,7 @@ export class DungeonScene extends Scene {
 
     this.speechBubblePulse++;
 
+    this.gore.update();
     this.dynamite.update(this.human, this.cat, this.mobs, this.mobGrid);
 
     if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {
