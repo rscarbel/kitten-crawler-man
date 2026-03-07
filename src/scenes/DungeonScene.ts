@@ -126,6 +126,7 @@ export class DungeonScene extends Scene {
   private mobileMoveTarget: { x: number; y: number } | null = null;
   private mobileTapStart: { x: number; y: number; time: number } | null = null;
   private inventoryDragTouchId: number | null = null;
+  private mobileDynamiteTouchId: number | null = null;
   private _mobileSwitchBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private _mobileFollowBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private _mobileGearBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
@@ -1852,6 +1853,16 @@ export class DungeonScene extends Scene {
         continue;
       }
 
+      // Dynamite charge start: hold hotbar slot to charge, release to throw
+      if (!this.gameOver && !this.pauseMenu.isOpen && this.human.isActive) {
+        const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+        if (dynIdx >= 0 && this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite') {
+          this.dynamite.beginCharge(dynIdx);
+          this.mobileDynamiteTouchId = touch.identifier;
+          continue;
+        }
+      }
+
       // Inventory panel drag start
       if (
         this.inventoryPanel.isOpen &&
@@ -1897,6 +1908,13 @@ export class DungeonScene extends Scene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      // Dynamite charge release
+      if (touch.identifier === this.mobileDynamiteTouchId) {
+        this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+        this.mobileDynamiteTouchId = null;
+        continue;
+      }
 
       // Inventory drag end
       if (touch.identifier === this.inventoryDragTouchId) {
