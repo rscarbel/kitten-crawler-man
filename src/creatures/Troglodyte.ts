@@ -35,6 +35,11 @@ export class Troglodyte extends Mob {
   private strikeTimer = 0;
   private cooldownTimer = 0;
 
+  /** Facing direction locked in at the moment strike commits (partway through windup). */
+  private lockedFacingX = 0;
+  private lockedFacingY = 0;
+  private facingLocked = false;
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, TROG_HP, TROG_SPEED);
   }
@@ -110,23 +115,26 @@ export class Troglodyte extends Mob {
         this.tongueExtend = 0;
         this.isMoving = false;
 
-        // Keep tracking the target during windup
-        if (nearest) this._faceToward(nearest);
+        // Track the target only during the first half of windup.
+        // Once past the halfway point the aim locks in, giving the player
+        // time to sidestep before the tongue fires.
+        const lockThreshold = Math.floor(WINDUP_FRAMES / 2);
+        if (this.windupTimer > lockThreshold) {
+          if (nearest) this._faceToward(nearest);
+          this.lockedFacingX = this.facingX;
+          this.lockedFacingY = this.facingY;
+          this.facingLocked = false;
+        } else if (!this.facingLocked) {
+          // Snap to locked direction so the sprite telegraphs where the hit will go
+          this.facingX = this.lockedFacingX;
+          this.facingY = this.lockedFacingY;
+          this.facingLocked = true;
+        }
 
         if (this.windupTimer <= 0) {
           this.state = 'striking';
           this.strikeTimer = STRIKE_FRAMES;
-
-          // Apply damage to the target if still within range
-          if (nearest) {
-            const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
-            if (dist <= tongueRangePx * 1.25) {
-              this.dealDamage(nearest, TONGUE_DAMAGE);
-              if (Math.random() < POISON_CHANCE) {
-                nearest.applyStatus(makePoison());
-              }
-            }
-          }
+          this.facingLocked = false;
         }
         break;
       }
@@ -142,6 +150,27 @@ export class Troglodyte extends Mob {
           this.tongueExtend = (STRIKE_FRAMES - this.strikeTimer) / half;
         } else {
           this.tongueExtend = this.strikeTimer / half;
+        }
+
+        // Hit check at peak extension (frame == half), based on position NOW
+        // so the player can dodge during the windup telegraph.
+        if (this.strikeTimer === half) {
+          for (const t of targets) {
+            if (!t.isAlive) continue;
+            const dx = t.x - this.x;
+            const dy = t.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > tongueRangePx * 1.1) continue;
+
+            // Only hit if target is within a ~60° cone of the locked facing
+            const dot = (dx / dist) * this.facingX + (dy / dist) * this.facingY;
+            if (dot < 0.5) continue; // outside ~60° half-angle
+
+            this.dealDamage(t, TONGUE_DAMAGE);
+            if (Math.random() < POISON_CHANCE) {
+              t.applyStatus(makePoison());
+            }
+          }
         }
 
         if (this.strikeTimer <= 0) {
