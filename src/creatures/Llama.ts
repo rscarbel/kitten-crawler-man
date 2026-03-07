@@ -31,6 +31,8 @@ export class Llama extends Mob {
   readonly xpValue = 8;
   protected coinDropMin = 4;
   protected coinDropMax = 5;
+  displayName = 'Lava Llama';
+  description = 'Spits balls of molten rock from a distance.';
   private lavaBalls: LavaBall[] = [];
   private spitCooldown = 0;
   private spitAnimTimer = 0;

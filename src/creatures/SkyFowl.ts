@@ -26,6 +26,8 @@ export class SkyFowl extends Mob {
   readonly xpValue = 8;
   protected coinDropMin = 0;
   protected coinDropMax = 2;
+  displayName = 'Sky Fowl';
+  description = 'A feathery wanderer that pecks at anything that gets too close.';
 
   /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
   readonly cloth: SkyFowlClothColors;

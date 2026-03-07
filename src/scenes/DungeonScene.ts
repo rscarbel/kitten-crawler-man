@@ -134,6 +134,10 @@ export class DungeonScene extends Scene {
   private _hudCollapsed = IS_MOBILE;
   private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
+  // Mouse position in screen coords (updated by handleMouseMove)
+  private _mouseX = -9999;
+  private _mouseY = -9999;
+
   constructor(
     private readonly levelDef: LevelDef,
     private readonly input: InputManager,
@@ -631,6 +635,8 @@ export class DungeonScene extends Scene {
   }
 
   handleMouseMove(mx: number, my: number): void {
+    this._mouseX = mx;
+    this._mouseY = my;
     this.inventoryPanel.handleMouseMove(mx, my);
     this.gearPanel.handleMouseMove(
       mx,
@@ -903,6 +909,88 @@ export class DungeonScene extends Scene {
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx, canvas);
     }
+
+    if (!IS_MOBILE) {
+      this.renderEntityTooltip(ctx, canvas, camX, camY);
+    }
+  }
+
+  private renderEntityTooltip(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    camX: number,
+    camY: number,
+  ): void {
+    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen) return;
+
+    const mx = this._mouseX;
+    const my = this._mouseY;
+
+    // Convert screen coords to world coords
+    const wx = mx + camX;
+    const wy = my + camY;
+
+    // Find the first live mob under the cursor
+    let hovered: Mob | null = null;
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      if (
+        wx >= mob.x &&
+        wx <= mob.x + TILE_SIZE &&
+        wy >= mob.y &&
+        wy <= mob.y + TILE_SIZE
+      ) {
+        hovered = mob;
+        break;
+      }
+    }
+
+    if (!hovered) return;
+
+    const name = hovered.displayName;
+    const desc = hovered.description;
+
+    // Layout
+    const PAD = 8;
+    const LINE_GAP = 4;
+    ctx.font = 'bold 13px sans-serif';
+    const nameW = ctx.measureText(name).width;
+    ctx.font = '11px sans-serif';
+    const descW = ctx.measureText(desc).width;
+    const boxW = Math.max(nameW, descW) + PAD * 2;
+    const boxH = 13 + LINE_GAP + 11 + PAD * 2;
+
+    // Position tooltip above cursor, keep on screen
+    let tx = mx + 12;
+    let ty = my - boxH - 8;
+    if (tx + boxW > canvas.width - 4) tx = canvas.width - boxW - 4;
+    if (ty < 4) ty = my + 20;
+
+    // Background
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.strokeStyle = hovered.isHostile ? '#ef4444' : '#4ade80';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(tx, ty, boxW, boxH, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Name
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = hovered.isHostile ? '#fca5a5' : '#86efac';
+    ctx.fillText(name, tx + PAD, ty + PAD + 12);
+
+    // Description
+    if (desc) {
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#d1d5db';
+      ctx.fillText(desc, tx + PAD, ty + PAD + 12 + LINE_GAP + 11);
+    }
+
+    ctx.restore();
   }
 
   // Core gameplay update

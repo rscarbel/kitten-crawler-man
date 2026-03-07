@@ -87,6 +87,8 @@ export class BrindleGrub extends Mob {
     this.evolveTimer =
       STAGE1_EVOLVE_MIN +
       Math.floor(Math.random() * (STAGE1_EVOLVE_MAX - STAGE1_EVOLVE_MIN + 1));
+    this.displayName = 'Brindle Grub';
+    this.description = 'A harmless wriggling larva. It seems to be growing...';
   }
 
   /** Grubs drop nothing. */
@@ -106,6 +108,8 @@ export class BrindleGrub extends Mob {
     this.evolveTimer =
       STAGE2_EVOLVE_MIN +
       Math.floor(Math.random() * (STAGE2_EVOLVE_MAX - STAGE2_EVOLVE_MIN + 1));
+    this.displayName = 'Cow-Tailed Grub';
+    this.description = 'A bigger, angrier grub with a painful bite.';
   }
 
   private evolveToStage3(): void {
@@ -114,6 +118,8 @@ export class BrindleGrub extends Mob {
     this.maxHp = STAGE3_HP;
     this.hp = STAGE3_HP;
     this.evolveTimer = -1; // no further evolution
+    this.displayName = 'Brindled Vespa';
+    this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
   }
 
   // ---------------------------------------------------------------------------

@@ -22,6 +22,8 @@ export class Troglodyte extends Mob {
   readonly xpValue = 20;
   protected coinDropMin = 0;
   protected coinDropMax = 0;
+  displayName = 'Troglodyte';
+  description = 'A cave-dwelling predator with a venomous tongue lash.';
 
   /** 0–1: how far the tongue is currently extended (for sprite). */
   tongueExtend = 0;

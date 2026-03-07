@@ -79,6 +79,12 @@ export abstract class Mob extends Player {
   /** Difficulty level of this mob instance (1 = base). Set by applyMobLevel(). */
   mobLevel = 1;
 
+  /** Display name shown in hover tooltip. Subclasses should override. */
+  displayName = 'Unknown';
+
+  /** Short description shown in hover tooltip. Subclasses should override. */
+  description = '';
+
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   get isHostile(): boolean {
     return true;

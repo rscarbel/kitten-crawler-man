@@ -18,6 +18,8 @@ export class TheHoarder extends Mob {
   readonly xpValue = 500;
   protected coinDropMin = 50;
   protected coinDropMax = 100;
+  displayName = 'The Hoarder';
+  description = 'A hulking boss that guards its pile of junk with vile fury.';
 
   private attackCooldown = 60;
   private vomitTimer = VOMIT_INTERVAL;

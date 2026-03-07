@@ -15,6 +15,8 @@ export class Rat extends Mob {
   readonly xpValue = 2;
   protected coinDropMin = 0;
   protected coinDropMax = 1;
+  displayName = 'Rat';
+  description = 'A nimble rodent that bites when cornered.';
 
   private attackCooldown = 0;
   private attackAnimTimer = 0;
