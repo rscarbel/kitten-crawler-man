@@ -45,14 +45,12 @@ export class GearPanel {
   }
 
   private panelRect(canvas: HTMLCanvasElement) {
-    const w = 340;
-    const h = 420;
-    return {
-      x: Math.floor((canvas.width - w) / 2) - 180,
-      y: Math.floor((canvas.height - h) / 2),
-      w,
-      h,
-    };
+    const w = IS_MOBILE ? Math.min(340, canvas.width - 16) : 340;
+    const h = Math.min(420, canvas.height - 16);
+    const xOffset = IS_MOBILE ? 0 : -180;
+    const x = Math.max(8, Math.floor((canvas.width - w) / 2) + xOffset);
+    const y = Math.max(8, Math.floor((canvas.height - h) / 2));
+    return { x, y, w, h };
   }
 
   // Render
@@ -134,7 +132,7 @@ export class GearPanel {
 
     for (const slotName of SLOT_ORDER) {
       const subSlots = EQUIP_SUBSLOTS[slotName];
-      const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY);
+      const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
 
       // Section label
       ctx.fillStyle = '#64748b';
@@ -172,11 +170,12 @@ export class GearPanel {
     subSlots: string[],
     panelX: number,
     startY: number,
+    panelW: number,
   ): SlotInfo[] {
     const infos: SlotInfo[] = [];
     const startX = panelX + PANEL_PAD + SECTION_LABEL_W;
     const maxPerRow = Math.floor(
-      (340 - PANEL_PAD * 2 - SECTION_LABEL_W) / (SLOT_SIZE + SLOT_GAP),
+      (panelW - PANEL_PAD * 2 - SECTION_LABEL_W) / (SLOT_SIZE + SLOT_GAP),
     );
 
     for (let i = 0; i < subSlots.length; i++) {
@@ -383,13 +382,13 @@ export class GearPanel {
   private slotKeyAt(
     mx: number,
     my: number,
-    p: { x: number; y: number },
+    p: { x: number; y: number; w: number; h: number },
     _inventory: Inventory,
   ): string | null {
     let currentY = p.y + HEADER_H + PANEL_PAD;
     for (const slotName of SLOT_ORDER) {
       const subSlots = EQUIP_SUBSLOTS[slotName];
-      const infos = this.buildSlotInfos(slotName, subSlots, p.x, currentY);
+      const infos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
       let maxY = currentY;
       for (const si of infos) {
         if (
