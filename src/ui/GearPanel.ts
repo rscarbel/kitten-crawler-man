@@ -132,7 +132,13 @@ export class GearPanel {
 
     for (const slotName of SLOT_ORDER) {
       const subSlots = EQUIP_SUBSLOTS[slotName];
-      const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
+      const slotsInfos = this.buildSlotInfos(
+        slotName,
+        subSlots,
+        p.x,
+        currentY,
+        p.w,
+      );
 
       // Section label
       ctx.fillStyle = '#64748b';

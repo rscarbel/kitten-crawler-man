@@ -56,6 +56,10 @@ export interface DungeonSceneOptions {
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
+  /** Snapshot of player state at the very start of this floor — used to respawn after death. */
+  floorEntryHumanSnap?: PlayerSnapshot;
+  /** Snapshot of cat state at the very start of this floor — used to respawn after death. */
+  floorEntryCatSnap?: PlayerSnapshot;
 }
 
 export class DungeonScene extends Scene {
@@ -101,6 +105,10 @@ export class DungeonScene extends Scene {
 
   // Boss battle intro
   private bossIntro = new BossIntroSystem();
+
+  // Floor entry snapshots (used to respawn players at floor-start state on death)
+  private floorEntryHumanSnap!: PlayerSnapshot;
+  private floorEntryCatSnap!: PlayerSnapshot;
 
   // Misc state
   private gameOver = false;
@@ -173,6 +181,13 @@ export class DungeonScene extends Scene {
     this.human.y = sy * TILE_SIZE;
     this.cat.x = (sx + 1) * TILE_SIZE;
     this.cat.y = sy * TILE_SIZE;
+
+    // Capture floor-entry state for death respawn. If the caller already
+    // provides a floor-entry snap (i.e. we're respawning after death), reuse
+    // it so repeated deaths always reset to the same floor-start state.
+    this.floorEntryHumanSnap =
+      options?.floorEntryHumanSnap ?? snapPlayer(this.human);
+    this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
 
@@ -567,7 +582,14 @@ export class DungeonScene extends Scene {
     if (this.gameOver) {
       if (this.deathScreen.handleClick(mx, my, this.sceneManager.canvas)) {
         this.sceneManager.replace(
-          new DungeonScene(this.levelDef, this.input, this.sceneManager),
+          new DungeonScene(this.levelDef, this.input, this.sceneManager, {
+            humanSnap: this.floorEntryHumanSnap,
+            catSnap: this.floorEntryCatSnap,
+            floorEntryHumanSnap: this.floorEntryHumanSnap,
+            floorEntryCatSnap: this.floorEntryCatSnap,
+            humanAchievements: this.humanAchievements,
+            catAchievements: this.catAchievements,
+          }),
         );
       }
       return;
@@ -922,7 +944,8 @@ export class DungeonScene extends Scene {
     camX: number,
     camY: number,
   ): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen) return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen)
+      return;
 
     const mx = this._mouseX;
     const my = this._mouseY;
@@ -1856,7 +1879,10 @@ export class DungeonScene extends Scene {
       // Dynamite charge start: hold hotbar slot to charge, release to throw
       if (!this.gameOver && !this.pauseMenu.isOpen && this.human.isActive) {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-        if (dynIdx >= 0 && this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite') {
+        if (
+          dynIdx >= 0 &&
+          this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite'
+        ) {
           this.dynamite.beginCharge(dynIdx);
           this.mobileDynamiteTouchId = touch.identifier;
           continue;

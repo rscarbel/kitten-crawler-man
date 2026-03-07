@@ -61,7 +61,7 @@ export class DeathScreen {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '15px monospace';
     ctx.fillText(
-      'All stats and progress on this level are lost.',
+      'Respawning at floor start — progress from previous floors kept.',
       w / 2,
       h / 2 + 8,
     );

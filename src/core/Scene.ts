@@ -75,19 +75,27 @@ export class SceneManager {
       this.current.handleContextMenu(x, y);
     });
 
-    this.canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      if (!this.current?.handleTouchStart) return;
-      const rect = this.canvas.getBoundingClientRect();
-      this.current.handleTouchStart(e, rect);
-    }, { passive: false });
+    this.canvas.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        if (!this.current?.handleTouchStart) return;
+        const rect = this.canvas.getBoundingClientRect();
+        this.current.handleTouchStart(e, rect);
+      },
+      { passive: false },
+    );
 
-    this.canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      if (!this.current?.handleTouchMove) return;
-      const rect = this.canvas.getBoundingClientRect();
-      this.current.handleTouchMove(e, rect);
-    }, { passive: false });
+    this.canvas.addEventListener(
+      'touchmove',
+      (e) => {
+        e.preventDefault();
+        if (!this.current?.handleTouchMove) return;
+        const rect = this.canvas.getBoundingClientRect();
+        this.current.handleTouchMove(e, rect);
+      },
+      { passive: false },
+    );
 
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault();

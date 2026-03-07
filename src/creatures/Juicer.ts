@@ -53,7 +53,8 @@ export class Juicer extends Mob {
   protected coinDropMin = 60;
   protected coinDropMax = 120;
   displayName = 'The Juicer';
-  description = 'A roided-up gym rat who hurls dumbbells with reckless abandon.';
+  description =
+    'A roided-up gym rat who hurls dumbbells with reckless abandon.';
 
   isEnraged = false;
 
