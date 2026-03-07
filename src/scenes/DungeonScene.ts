@@ -520,7 +520,10 @@ export class DungeonScene extends Scene {
   }
 
   handleClick(mx: number, my: number): void {
-    if (this.lootBoxOpener.isOpen) return;
+    if (this.lootBoxOpener.isOpen) {
+      this.lootBoxOpener.skip();
+      return;
+    }
 
     if (this._notifActive) {
       if (this.achievementNotif.handleClick(mx, my)) {

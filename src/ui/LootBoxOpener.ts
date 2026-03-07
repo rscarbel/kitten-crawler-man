@@ -66,6 +66,33 @@ export class LootBoxOpener {
   }
 
   /**
+   * Skip the current animation.
+   * - During shaking/opening/revealing: jumps straight to the done/reveal state.
+   * - During done (waiting for auto-advance): immediately advances to the next box.
+   */
+  skip(): void {
+    if (!this.active || !this.box) return;
+    if (this.phase === 'done') {
+      this.nextTimer = 0;
+      this.advance();
+    } else {
+      this.phase = 'done';
+      this.frame = 0;
+      this.nextTimer = NEXT_DELAY;
+      this.burstParticles(50);
+      if (
+        !this.rewardGranted &&
+        this.onBoxOpened &&
+        this.box &&
+        this.contents
+      ) {
+        this.rewardGranted = true;
+        this.onBoxOpened(this.box, this.contents);
+      }
+    }
+  }
+
+  /**
    * Sort boxes by ascending rarity (Bronze first, Celestial last) and begin
    * opening them one by one automatically.
    *
@@ -219,6 +246,16 @@ export class LootBoxOpener {
       this.renderContents(ctx, cx, by + 190);
       ctx.globalAlpha = 1;
     }
+
+    // Skip hint
+    ctx.fillStyle = '#475569';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      this.phase === 'done' ? 'Click to continue' : 'Click to skip',
+      cx,
+      by + BOX_H - 30,
+    );
 
     // Auto-advance countdown bar (shown during 'done' phase)
     if (this.phase === 'done' && this.nextTimer > 0) {

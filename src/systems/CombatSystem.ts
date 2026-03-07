@@ -33,9 +33,9 @@ export function resolvePlayerAttacks(
       const dy = mc.y - hc.y;
       const dist = Math.hypot(dx, dy);
       if (dist === 0 || dist > range) continue;
-      if (dist > TILE_SIZE * 0.65) {
+      if (dist > TILE_SIZE * 1.0) {
         const dot = (dx / dist) * human.facingX + (dy / dist) * human.facingY;
-        if (dot <= 0.3) continue;
+        if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
