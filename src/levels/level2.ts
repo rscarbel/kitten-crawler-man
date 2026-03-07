@@ -41,6 +41,7 @@ export const level2: LevelDef = {
     { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
   ],
   bossRooms: [],
+  hasArena: true,
   isSafeLevel: true,
   nextLevelId: 'level3',
   numStairwells: 2,

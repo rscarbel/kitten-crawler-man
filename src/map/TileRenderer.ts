@@ -16,6 +16,8 @@ import {
   WELL,
   GRASSY_WEED,
   DIRT_PATCH,
+  METAL_WALL,
+  ARENA_FLOOR,
 } from './tileTypes';
 
 /**
@@ -59,6 +61,7 @@ function drawWallShadow(
   const SHADOW_TYPES = new Set([
     FloorTypeValue.wall,
     BUILDING_WALL,
+    METAL_WALL,
     TREE,
     ROOF_THATCH,
     ROOF_SLATE,
@@ -111,6 +114,11 @@ function drawTile(
       case ROOF_RED:
       case ROOF_GREEN:
         ctx.fillStyle = '#6de89d';
+        ctx.fillRect(sx, sy, ts, ts);
+        return;
+      case METAL_WALL:
+        // Draw dungeon wall base so shadows look correct beneath metal panels
+        ctx.fillStyle = '#1a1e22';
         ctx.fillRect(sx, sy, ts, ts);
         return;
     }
@@ -1622,6 +1630,121 @@ function drawTile(
         ctx.fillRect(crx, cry, 1, 5 + (h1 % 6));
         ctx.fillRect(crx, cry, 4 + (h2 % 5), 1);
       }
+      break;
+    }
+
+    // Metal wall — dark riveted steel panels for the arena exterior
+    case METAL_WALL: {
+      // Base: very dark charcoal steel
+      ctx.fillStyle = '#1a1e22';
+      ctx.fillRect(sx, sy, ts, ts);
+
+      // Panel plate (slightly lighter inset)
+      const pad = 2;
+      ctx.fillStyle = '#252c32';
+      ctx.fillRect(sx + pad, sy + pad, ts - pad * 2, ts - pad * 2);
+
+      // Horizontal weld seam in the middle
+      ctx.fillStyle = '#131619';
+      ctx.fillRect(sx, sy + Math.floor(ts / 2), ts, 2);
+
+      // Vertical seam staggered by row
+      const mOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
+      const mvx = sx + (mOff % ts);
+      ctx.fillStyle = '#131619';
+      ctx.fillRect(mvx, sy, 2, ts);
+
+      // Lit top edge (simulates overhead light catching the top of the wall)
+      ctx.fillStyle = '#3a444c';
+      ctx.fillRect(sx, sy, ts, 2);
+
+      // Rivets at each corner of the panel
+      const rivetColor = '#3c454e';
+      const rivetHighlight = '#5a6570';
+      const rivetPositions: [number, number][] = [
+        [sx + 4, sy + 4],
+        [sx + ts - 5, sy + 4],
+        [sx + 4, sy + ts - 5],
+        [sx + ts - 5, sy + ts - 5],
+      ];
+      for (const [rx, ry] of rivetPositions) {
+        ctx.fillStyle = rivetColor;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = rivetHighlight;
+        ctx.beginPath();
+        ctx.arc(rx - 0.5, ry - 0.5, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Subtle sheen on left edge
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(sx, sy, 2, ts);
+      break;
+    }
+
+    // Arena floor — dark steel grating with blood-stained centre
+    case ARENA_FLOOR: {
+      // Base: very dark steel grey
+      ctx.fillStyle = '#18191f';
+      ctx.fillRect(sx, sy, ts, ts);
+
+      // Grating crosshatch lines
+      ctx.strokeStyle = '#23262e';
+      ctx.lineWidth = 1;
+      const gridStep = Math.floor(ts / 4);
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(sx + i * gridStep, sy);
+        ctx.lineTo(sx + i * gridStep, sy + ts);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx, sy + i * gridStep);
+        ctx.lineTo(sx + ts, sy + i * gridStep);
+        ctx.stroke();
+      }
+
+      // Rivet dots at grid intersections
+      const h2 = tx * 7 + ty * 13;
+      if ((tx + ty) % 2 === 0) {
+        ctx.fillStyle = '#2e323c';
+        for (let iy = 1; iy < 4; iy++) {
+          for (let ix = 1; ix < 4; ix++) {
+            if ((ix + iy) % 2 === 0) {
+              ctx.beginPath();
+              ctx.arc(
+                sx + ix * gridStep,
+                sy + iy * gridStep,
+                1.2,
+                0,
+                Math.PI * 2,
+              );
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      // Subtle blood stain on some tiles
+      const bloodSeed = (tx * 3571 + ty * 1237) & 0xffff;
+      if (bloodSeed % 11 === 0) {
+        ctx.globalAlpha = 0.18 + (bloodSeed % 7) * 0.03;
+        ctx.fillStyle = '#6b1a1a';
+        ctx.beginPath();
+        ctx.ellipse(
+          sx + ts * 0.5 + ((bloodSeed % 8) - 4),
+          sy + ts * 0.5 + (((bloodSeed >> 4) % 8) - 4),
+          ts * (0.2 + (bloodSeed % 5) * 0.04),
+          ts * (0.12 + (bloodSeed % 4) * 0.03),
+          (bloodSeed % 16) * 0.4,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      void h2;
       break;
     }
   }

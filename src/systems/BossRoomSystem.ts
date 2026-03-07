@@ -20,6 +20,7 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
   {
     the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
     juicer: { displayName: 'THE JUICER', color: '#fb923c' },
+    ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
   };
 
 export class BossRoomSystem {

@@ -5,11 +5,21 @@ import {
   SAFE_ROOM_FLOOR,
   HORDER_BOSS_ROOM_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
+  METAL_WALL,
+  ARENA_FLOOR,
 } from './tileTypes';
 
 type Room = { x: number; y: number; w: number; h: number; floor: number };
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
+
+export interface ArenaExterior {
+  centre: Point;
+  radius: number;
+  doorTile: Point;
+  /** Tile position for the stairwell placed at the arena centre (initially locked). */
+  stairwellTile: Point;
+}
 
 export interface DungeonData {
   grid: TileContent[][];
@@ -21,6 +31,8 @@ export interface DungeonData {
   mobSpawnPoints: Point[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
+  buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }>;
+  arenaExteriors: ArenaExterior[];
 }
 
 export function generateDungeon(
@@ -28,6 +40,7 @@ export function generateDungeon(
   numBossRooms: number,
   numSafeRooms: number,
   numStairwellsOverride?: number,
+  hasArena = false,
 ): DungeonData {
   const BORDER = 5;
   const DUNGEON_FLOORS = [
@@ -361,6 +374,114 @@ export function generateDungeon(
   }
   const hallwaySpawnPoints = chosen;
 
+  // 10. Place a circular metal arena structure in the dungeon.
+  // Attempt to find a position 40–90 tiles from start, away from other boss rooms.
+  const ARENA_RADIUS = 15;
+  const buildingEntries: Array<{
+    doorTile: Point;
+    name: string;
+    type: 'arena';
+  }> = [];
+  const arenaExteriors: ArenaExterior[] = [];
+
+  if (hasArena && rooms.length > 0) {
+    const startCentre = {
+      x: Math.floor(rooms[0].x + rooms[0].w / 2),
+      y: Math.floor(rooms[0].y + rooms[0].h / 2),
+    };
+
+    let arenaPlaced = false;
+    const arenaCandidates: Point[] = [];
+    // Sample candidate positions in a ring 50–90 tiles from start
+    for (let attempt = 0; attempt < 200 && !arenaPlaced; attempt++) {
+      const angle = (attempt / 200) * Math.PI * 2 + Math.random() * 0.3;
+      const dist = 50 + Math.random() * 40;
+      const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
+      const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
+
+      // Must fit inside the non-void area
+      if (
+        acx - ARENA_RADIUS - 2 < BORDER ||
+        acx + ARENA_RADIUS + 2 >= size - BORDER ||
+        acy - ARENA_RADIUS - 2 < BORDER ||
+        acy + ARENA_RADIUS + 2 >= size - BORDER
+      )
+        continue;
+
+      // Must not overlap any existing room (with gap)
+      const overlapsRoom = rooms.some((r) => {
+        const rcx = Math.floor(r.x + r.w / 2);
+        const rcy = Math.floor(r.y + r.h / 2);
+        return Math.hypot(acx - rcx, acy - rcy) < ARENA_RADIUS + 10;
+      });
+      if (overlapsRoom) continue;
+
+      arenaCandidates.push({ x: acx, y: acy });
+
+      // Paint arena: outer ring = METAL_WALL, interior = ARENA_FLOOR
+      const ARENA_WALL_THICKNESS = 2;
+      for (let dy = -ARENA_RADIUS; dy <= ARENA_RADIUS; dy++) {
+        for (let dx = -ARENA_RADIUS; dx <= ARENA_RADIUS; dx++) {
+          const r = Math.hypot(dx, dy);
+          if (r <= ARENA_RADIUS) {
+            const gx = acx + dx;
+            const gy = acy + dy;
+            if (gy >= 0 && gy < size && gx >= 0 && gx < size) {
+              grid[gy][gx].type =
+                r > ARENA_RADIUS - ARENA_WALL_THICKNESS
+                  ? METAL_WALL
+                  : ARENA_FLOOR;
+            }
+          }
+        }
+      }
+
+      // Carve a 2-tile entrance gap at the south (toward the dungeon)
+      const doorY = acy + ARENA_RADIUS;
+      const doorX = acx;
+      if (doorY < size && doorY >= 0) {
+        grid[doorY][doorX - 1].type = FloorTypeValue.concrete;
+        grid[doorY][doorX].type = FloorTypeValue.concrete;
+        // Also clear one tile of interior wall behind entrance to make it flush
+        if (doorY - 1 >= 0) {
+          grid[doorY - 1][doorX - 1].type = METAL_WALL;
+          grid[doorY - 1][doorX].type = METAL_WALL;
+        }
+      }
+
+      // Connect entrance to nearest room with a hallway
+      const nearestRoom = rooms.reduce((best, r) => {
+        const rcx = Math.floor(r.x + r.w / 2);
+        const rcy = Math.floor(r.y + r.h / 2);
+        const d = Math.hypot(acx - rcx, acy - rcy);
+        const bd = Math.hypot(
+          acx - Math.floor(best.x + best.w / 2),
+          acy - Math.floor(best.y + best.h / 2),
+        );
+        return d < bd ? r : best;
+      }, rooms[0]);
+      carveHallway(
+        doorX,
+        doorY,
+        Math.floor(nearestRoom.x + nearestRoom.w / 2),
+        Math.floor(nearestRoom.y + nearestRoom.h / 2),
+      );
+
+      buildingEntries.push({
+        doorTile: { x: doorX, y: doorY },
+        name: 'The Iron Colosseum',
+        type: 'arena',
+      });
+      arenaExteriors.push({
+        centre: { x: acx, y: acy },
+        radius: ARENA_RADIUS,
+        doorTile: { x: doorX, y: doorY },
+        stairwellTile: { x: acx - 1, y: acy - 1 },
+      });
+      arenaPlaced = true;
+    }
+  }
+
   return {
     grid,
     startTile,
@@ -371,5 +492,7 @@ export function generateDungeon(
     mobSpawnPoints,
     hallwaySpawnPoints,
     stairwellTiles,
+    buildingEntries,
+    arenaExteriors,
   };
 }

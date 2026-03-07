@@ -8,7 +8,9 @@ export interface MobSpawnRule {
     | 'the_hoarder'
     | 'cockroach'
     | 'juicer'
-    | 'troglodyte';
+    | 'troglodyte'
+    | 'tuskling'
+    | 'ball_of_swine';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -46,4 +48,6 @@ export interface LevelDef {
   numStairwells?: number;
   /** Overworld levels use outdoor map generation instead of dungeon rooms. */
   isOverworld?: boolean;
+  /** Whether this level has a circular arena with the Ball of Swine boss. */
+  hasArena?: boolean;
 }

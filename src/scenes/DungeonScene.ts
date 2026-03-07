@@ -33,6 +33,8 @@ import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { Juicer } from '../creatures/Juicer';
+import { BallOfSwine } from '../creatures/BallOfSwine';
+import { Tuskling } from '../creatures/Tuskling';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import {
   snapPlayer,
@@ -106,6 +108,11 @@ export class DungeonScene extends Scene {
   // Boss battle intro
   private bossIntro = new BossIntroSystem();
 
+  // Arena (Ball of Swine) state
+  private arenaPhase2Active = false;
+  private arenaLiveTusklings: Tuskling[] = [];
+  private arenaStairwellUnlocked = false;
+
   // Floor entry snapshots (used to respawn players at floor-start state on death)
   private floorEntryHumanSnap!: PlayerSnapshot;
   private floorEntryCatSnap!: PlayerSnapshot;
@@ -164,6 +171,7 @@ export class DungeonScene extends Scene {
         2,
         levelDef.numStairwells,
         levelDef.isOverworld ? 'overworld' : 'dungeon',
+        levelDef.hasArena ?? false,
       );
     this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
@@ -206,6 +214,15 @@ export class DungeonScene extends Scene {
           );
         }
       }
+    }
+
+    // Spawn Ball of Swine at arena centre (dungeon levels only)
+    if (!levelDef.isOverworld && this.gameMap.arenaExteriors.length > 0) {
+      const arena = this.gameMap.arenaExteriors[0];
+      const bos = new BallOfSwine(arena.centre.x, arena.centre.y, TILE_SIZE);
+      bos.setArena(arena.centre.x, arena.centre.y);
+      bos.setMap(this.gameMap);
+      this.mobs.push(bos);
     }
 
     // Spawn Sky Fowls wandering around the overworld town square
@@ -842,6 +859,7 @@ export class DungeonScene extends Scene {
       this.human,
       this.cat,
     );
+    this.renderArenaUI(ctx, canvas);
 
     this.loot.render(ctx, camX, camY, this.active());
 
@@ -1173,7 +1191,8 @@ export class DungeonScene extends Scene {
         mob.updateAI(aiTargets);
       }
       // Keep bosses (specifically the Juicer) confined to their room
-      if (mob.isBoss) this.bossRoom.clampBossToRoom(mob);
+      if (mob.isBoss && !(mob instanceof BallOfSwine))
+        this.bossRoom.clampBossToRoom(mob);
       mob.tickTimers();
       this.mobGrid.move(mob, ox, oy);
     }
@@ -1209,6 +1228,44 @@ export class DungeonScene extends Scene {
         this.mobs.push(grub);
         this.mobGrid.insert(grub);
       }
+    }
+
+    // Ball of Swine burst: spawn 8 dazed Tusklings when burst animation completes
+    for (const mob of this.mobs) {
+      if (!(mob instanceof BallOfSwine) || !mob.justDied) continue;
+      if (!this.arenaPhase2Active) {
+        this.arenaPhase2Active = true;
+        this.arenaLiveTusklings = [];
+        const arena = this.gameMap.arenaExteriors[0];
+        const cx = arena ? arena.centre.x : Math.floor(mob.x / TILE_SIZE);
+        const cy = arena ? arena.centre.y : Math.floor(mob.y / TILE_SIZE);
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const r = 3;
+          const tx = cx + Math.round(Math.cos(angle) * r);
+          const ty = cy + Math.round(Math.sin(angle) * r);
+          const tusk = new Tuskling(tx, ty, TILE_SIZE);
+          tusk.setMap(this.gameMap);
+          tusk.dazeTimer = 600; // 10 seconds
+          this.mobs.push(tusk);
+          this.mobGrid.insert(tusk);
+          this.arenaLiveTusklings.push(tusk);
+        }
+        // Grant boss_slayer achievement
+        this.humanAchievements.tryUnlock('boss_slayer');
+        this.catAchievements.tryUnlock('boss_slayer');
+      }
+    }
+
+    // Phase 2: unlock arena stairwell when all spawned Tusklings are dead
+    if (
+      this.arenaPhase2Active &&
+      !this.arenaStairwellUnlocked &&
+      this.arenaLiveTusklings.length > 0 &&
+      this.arenaLiveTusklings.every((t) => !t.isAlive)
+    ) {
+      this.arenaStairwellUnlocked = true;
+      this.gameMap.unlockArenaStairwell();
     }
 
     resolveKills(
@@ -1307,6 +1364,81 @@ export class DungeonScene extends Scene {
       ) {
         if (this.human.usePotion()) this.humanAutoPotionCooldown = 180;
       }
+    }
+  }
+
+  // Arena UI
+
+  private renderArenaUI(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+  ): void {
+    const bos = this.mobs.find((m) => m instanceof BallOfSwine) as
+      | BallOfSwine
+      | undefined;
+
+    if (bos && bos.isAlive) {
+      const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
+      const barW = Math.min(360, canvas.width * 0.5);
+      const barH = 18;
+      const barX = Math.floor((canvas.width - barW) / 2);
+      const barY = 48;
+      const hpFrac = Math.max(0, bos.hp / bos.maxHp);
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(barX - 6, barY - 22, barW + 12, barH + 30);
+      ctx.strokeStyle = meta.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
+
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName,
+        canvas.width / 2,
+        barY - 6,
+      );
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
+      ctx.fillRect(barX, barY, barW * hpFrac, barH);
+
+      ctx.strokeStyle = meta.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        `${bos.hp} / ${bos.maxHp}`,
+        canvas.width / 2,
+        barY + barH - 4,
+      );
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+
+    // Phase 2: show how many Tusklings remain
+    if (this.arenaPhase2Active && !this.arenaStairwellUnlocked) {
+      const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
+      ctx.save();
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = alive > 0 ? '#f87171' : '#4ade80';
+      ctx.fillText(
+        alive > 0
+          ? `Tusklings remaining: ${alive}`
+          : 'All Tusklings defeated! Stairwell unlocked.',
+        canvas.width / 2,
+        78,
+      );
+      ctx.textAlign = 'left';
+      ctx.restore();
     }
   }
 

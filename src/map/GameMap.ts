@@ -4,6 +4,7 @@ import {
   VOID_TYPE,
   TREE,
   BUILDING_WALL,
+  METAL_WALL,
   ROOF_THATCH,
   ROOF_SLATE,
   ROOF_RED,
@@ -13,7 +14,7 @@ import {
   WELL,
   SAFE_ROOM_FLOOR,
 } from './tileTypes';
-import { generateDungeon } from './DungeonGenerator';
+import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
 import {
   renderCanvas,
@@ -52,6 +53,8 @@ export class GameMap {
     name: string;
     type: 'house' | 'tower' | 'restaurant' | 'store';
   }> = [];
+  /** Arena circles generated in the dungeon (one per dungeon map). */
+  arenaExteriors: ArenaExterior[] = [];
 
   constructor(
     mapSize = 100,
@@ -60,6 +63,7 @@ export class GameMap {
     numSafeRooms = 2,
     numStairwellsOverride?: number,
     mapType?: 'dungeon' | 'overworld',
+    hasArena = false,
   ) {
     this.tileHeight = tileHeight;
     this.structure = this.generate(
@@ -68,6 +72,7 @@ export class GameMap {
       numSafeRooms,
       numStairwellsOverride,
       mapType,
+      hasArena,
     );
   }
 
@@ -77,6 +82,7 @@ export class GameMap {
     numSafeRooms: number,
     numStairwellsOverride?: number,
     mapType?: 'dungeon' | 'overworld',
+    hasArena = false,
   ): TileContent[][] {
     if (mapType === 'overworld') {
       const data = generateOverworld(size);
@@ -97,6 +103,7 @@ export class GameMap {
       numBossRooms,
       numSafeRooms,
       numStairwellsOverride,
+      hasArena,
     );
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;
@@ -106,7 +113,20 @@ export class GameMap {
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;
+    this.arenaExteriors = data.arenaExteriors;
     return data.grid;
+  }
+
+  /** Adds the arena stairwell to the active stairwell list (call when Ball of Swine is defeated). */
+  unlockArenaStairwell(): void {
+    for (const arena of this.arenaExteriors) {
+      const already = this.stairwellTiles.some(
+        (s) => s.x === arena.stairwellTile.x && s.y === arena.stairwellTile.y,
+      );
+      if (!already) {
+        this.stairwellTiles.push(arena.stairwellTile);
+      }
+    }
   }
 
   /** Generates a small interior room for a building (called externally after construction). */
@@ -317,6 +337,7 @@ export class GameMap {
       tile.type !== VOID_TYPE &&
       tile.type !== TREE &&
       tile.type !== BUILDING_WALL &&
+      tile.type !== METAL_WALL &&
       tile.type !== ROOF_THATCH &&
       tile.type !== ROOF_SLATE &&
       tile.type !== ROOF_RED &&

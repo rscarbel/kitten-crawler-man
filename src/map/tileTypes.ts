@@ -39,6 +39,10 @@ export const WELL = 21;
 export const GRASSY_WEED = 22;
 /** Tile type for a dirt patch decoration — walkable road tile with pebbles and soil texture. */
 export const DIRT_PATCH = 23;
+/** Tile type for the metal arena exterior walls — dark riveted steel panels, not walkable. */
+export const METAL_WALL = 24;
+/** Tile type for the arena interior floor — dark steel grating, walkable combat surface. */
+export const ARENA_FLOOR = 25;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 
