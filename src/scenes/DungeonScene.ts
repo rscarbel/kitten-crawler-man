@@ -508,7 +508,11 @@ export class DungeonScene extends Scene {
     } else if (slot?.id === 'scroll_of_confusing_fog') {
       this.spells.castConfusingFog(active);
     } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
-      this.dynamite.beginCharge(hotbarIdx);
+      if (this.dynamite.isCharging) {
+        this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+      } else {
+        this.dynamite.beginCharge(hotbarIdx);
+      }
     } else if (
       (slot?.id === 'gym_dumbbell' ||
         slot?.id === 'gym_bench_press' ||
@@ -2095,14 +2099,38 @@ export class DungeonScene extends Scene {
             y - this.mobileTapStart.y,
           );
           if (elapsed < 250 && moved < 20) {
-            // Short tap: try UI click first, then space action
-            this.handleClick(x, y);
+            // If dynamite is charging, tap anywhere to aim and throw
             if (
+              this.dynamite.isCharging &&
+              this.human.isActive &&
               !this.pauseMenu.isOpen &&
               !this.safeRoom.isSleeping &&
               !this.gameOver
             ) {
-              this.triggerSpaceAction(x, y);
+              const cam = this.camera();
+              const ddx = x + cam.x - (this.human.x + TILE_SIZE / 2);
+              const ddy = y + cam.y - (this.human.y + TILE_SIZE / 2);
+              const dist = Math.hypot(ddx, ddy);
+              if (dist > 0) {
+                this.human.facingX = ddx / dist;
+                this.human.facingY = ddy / dist;
+              }
+              this.dynamite.release(
+                this.human,
+                this.cat,
+                this.mobs,
+                this.mobGrid,
+              );
+            } else {
+              // Short tap: try UI click first, then space action
+              this.handleClick(x, y);
+              if (
+                !this.pauseMenu.isOpen &&
+                !this.safeRoom.isSleeping &&
+                !this.gameOver
+              ) {
+                this.triggerSpaceAction(x, y);
+              }
             }
           }
         }

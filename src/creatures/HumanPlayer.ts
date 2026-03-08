@@ -49,7 +49,7 @@ export class HumanPlayer extends Player {
   }
 
   getMeleeRange(): number {
-    return this.tileSize * 1.5;
+    return this.tileSize * 1.95;
   }
 
   /**
