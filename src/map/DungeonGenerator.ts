@@ -392,10 +392,10 @@ export function generateDungeon(
 
     let arenaPlaced = false;
     const arenaCandidates: Point[] = [];
-    // Sample candidate positions in a ring 50–90 tiles from start
-    for (let attempt = 0; attempt < 200 && !arenaPlaced; attempt++) {
-      const angle = (attempt / 200) * Math.PI * 2 + Math.random() * 0.3;
-      const dist = 50 + Math.random() * 40;
+    // Sample candidate positions in a ring 30–90 tiles from start
+    for (let attempt = 0; attempt < 400 && !arenaPlaced; attempt++) {
+      const angle = (attempt / 400) * Math.PI * 2 + Math.random() * 0.3;
+      const dist = 30 + Math.random() * 60;
       const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
       const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
 
@@ -408,11 +408,11 @@ export function generateDungeon(
       )
         continue;
 
-      // Must not overlap any existing room (with gap)
+      // Must not physically overlap any existing room (check against actual bounds)
       const overlapsRoom = rooms.some((r) => {
-        const rcx = Math.floor(r.x + r.w / 2);
-        const rcy = Math.floor(r.y + r.h / 2);
-        return Math.hypot(acx - rcx, acy - rcy) < ARENA_RADIUS + 10;
+        const closestX = Math.max(r.x, Math.min(acx, r.x + r.w - 1));
+        const closestY = Math.max(r.y, Math.min(acy, r.y + r.h - 1));
+        return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + 3;
       });
       if (overlapsRoom) continue;
 
