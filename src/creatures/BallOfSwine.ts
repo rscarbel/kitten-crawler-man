@@ -183,6 +183,10 @@ export class BallOfSwine extends Mob {
     const nearest = this.nearestLiving(targets);
     this.currentTarget = nearest;
     this.currentAngularSpeed = ANGULAR_SPEED_IDLE;
+
+    // When idle (no target nearby), keep orbit centred on the arena
+    this.orbitCenterX += (this.arenaCenterPx.x - this.orbitCenterX) * 0.02;
+    this.orbitCenterY += (this.arenaCenterPx.y - this.orbitCenterY) * 0.02;
     this.advanceOrbit();
 
     if (nearest) {
@@ -201,7 +205,12 @@ export class BallOfSwine extends Mob {
 
     const nearest = this.nearestLiving(targets);
     this.currentTarget = nearest;
-    if (nearest) this.updateLastKnown(nearest);
+    // If all targets left the arena, return to idle
+    if (!nearest) {
+      this.state = 'idle';
+      return;
+    }
+    this.updateLastKnown(nearest);
 
     this.currentAngularSpeed = ANGULAR_SPEED_ZOOM;
 
@@ -314,11 +323,19 @@ export class BallOfSwine extends Mob {
 
   // --- Utilities ---
 
+  /** Only target players that are inside (or very near) the arena. */
   private nearestLiving(targets: Player[]): Player | null {
+    const aggroRange = this.arenaInteriorPx + TILE_SIZE * 3;
     let best: Player | null = null;
     let bestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
+      // Ignore players far from the arena centre
+      const distFromArena = Math.hypot(
+        t.x - this.arenaCenterPx.x,
+        t.y - this.arenaCenterPx.y,
+      );
+      if (distFromArena > aggroRange) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
       if (d < bestDist) {
         bestDist = d;

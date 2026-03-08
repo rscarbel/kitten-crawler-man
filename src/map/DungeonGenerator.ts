@@ -393,9 +393,9 @@ export function generateDungeon(
     let arenaPlaced = false;
     const arenaCandidates: Point[] = [];
     // Sample candidate positions in a ring 30–90 tiles from start
-    for (let attempt = 0; attempt < 400 && !arenaPlaced; attempt++) {
-      const angle = (attempt / 400) * Math.PI * 2 + Math.random() * 0.3;
-      const dist = 30 + Math.random() * 60;
+    for (let attempt = 0; attempt < 800 && !arenaPlaced; attempt++) {
+      const angle = (attempt / 800) * Math.PI * 2 + Math.random() * 0.3;
+      const dist = 20 + Math.random() * 70;
       const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
       const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
 
@@ -436,16 +436,14 @@ export function generateDungeon(
         }
       }
 
-      // Carve a 2-tile entrance gap at the south (toward the dungeon)
+      // Carve a 2-tile wide entrance gap through the 2-tile thick wall at the south
       const doorY = acy + ARENA_RADIUS;
       const doorX = acx;
-      if (doorY < size && doorY >= 0) {
-        grid[doorY][doorX - 1].type = FloorTypeValue.concrete;
-        grid[doorY][doorX].type = FloorTypeValue.concrete;
-        // Also clear one tile of interior wall behind entrance to make it flush
-        if (doorY - 1 >= 0) {
-          grid[doorY - 1][doorX - 1].type = METAL_WALL;
-          grid[doorY - 1][doorX].type = METAL_WALL;
+      for (let wy = 0; wy < ARENA_WALL_THICKNESS; wy++) {
+        const ty = doorY - wy;
+        if (ty >= 0 && ty < size) {
+          grid[ty][doorX - 1].type = FloorTypeValue.concrete;
+          grid[ty][doorX].type = FloorTypeValue.concrete;
         }
       }
 

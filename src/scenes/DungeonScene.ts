@@ -1412,6 +1412,18 @@ export class DungeonScene extends Scene {
       | undefined;
 
     if (bos && bos.isAlive) {
+      // Only show health bar when active player is near the arena
+      const arena = this.gameMap.arenaExteriors[0];
+      if (arena) {
+        const player = this.active();
+        const distToArena = Math.hypot(
+          player.x - arena.centre.x * TILE_SIZE,
+          player.y - arena.centre.y * TILE_SIZE,
+        );
+        if (distToArena > (arena.radius + 5) * TILE_SIZE) {
+          return;
+        }
+      }
       const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
       const barW = Math.min(360, canvas.width * 0.5);
       const barH = 18;
