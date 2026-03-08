@@ -205,4 +205,14 @@ export class AchievementManager {
     const [box] = this.pendingBoxes.splice(idx, 1);
     return box;
   }
+
+  /** Return a deep clone of this manager (used to snapshot state at floor entry). */
+  clone(): AchievementManager {
+    const copy = new AchievementManager();
+    copy.unlocked = new Set(this.unlocked);
+    copy.pendingNotifications.push(...this.pendingNotifications);
+    copy.pendingBoxes.push(...this.pendingBoxes.map((b) => ({ ...b })));
+    copy.nextBoxId = this.nextBoxId;
+    return copy;
+  }
 }

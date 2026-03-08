@@ -58,6 +58,9 @@ export interface DungeonSceneOptions {
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
+  /** Achievement state at floor entry — restored on death-restart so achievements can be re-earned. */
+  floorEntryHumanAchievements?: AchievementManager;
+  floorEntryCatAchievements?: AchievementManager;
   /** Snapshot of player state at the very start of this floor — used to respawn after death. */
   floorEntryHumanSnap?: PlayerSnapshot;
   /** Snapshot of cat state at the very start of this floor — used to respawn after death. */
@@ -116,6 +119,8 @@ export class DungeonScene extends Scene {
   // Floor entry snapshots (used to respawn players at floor-start state on death)
   private floorEntryHumanSnap!: PlayerSnapshot;
   private floorEntryCatSnap!: PlayerSnapshot;
+  private floorEntryHumanAchievements!: AchievementManager;
+  private floorEntryCatAchievements!: AchievementManager;
 
   // Misc state
   private gameOver = false;
@@ -330,6 +335,13 @@ export class DungeonScene extends Scene {
     this.humanAchievements =
       options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
+
+    // Snapshot achievement state at floor entry so death-restarts can rewind it,
+    // allowing players to re-earn achievements they unlocked during the failed run.
+    this.floorEntryHumanAchievements =
+      options?.floorEntryHumanAchievements ?? this.humanAchievements.clone();
+    this.floorEntryCatAchievements =
+      options?.floorEntryCatAchievements ?? this.catAchievements.clone();
   }
 
   // Scene lifecycle
@@ -611,8 +623,10 @@ export class DungeonScene extends Scene {
             catSnap: this.floorEntryCatSnap,
             floorEntryHumanSnap: this.floorEntryHumanSnap,
             floorEntryCatSnap: this.floorEntryCatSnap,
-            humanAchievements: this.humanAchievements,
-            catAchievements: this.catAchievements,
+            humanAchievements: this.floorEntryHumanAchievements.clone(),
+            catAchievements: this.floorEntryCatAchievements.clone(),
+            floorEntryHumanAchievements: this.floorEntryHumanAchievements,
+            floorEntryCatAchievements: this.floorEntryCatAchievements,
           }),
         );
       }
