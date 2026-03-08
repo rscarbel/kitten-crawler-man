@@ -8,6 +8,9 @@ import { drawHumanSprite, drawHumanAttack } from '../sprites/humanSprite';
  * it can be a punch of a stomp called "smush"
  */
 export class HumanPlayer extends Player {
+  /** Increases dynamite damage and throw distance. */
+  explosivesHandling = 1;
+
   private attackPhase: 'punch' | 'kick' | null = null;
   private attackTimer = 0;
   private readonly ATTACK_FRAMES = 18;
@@ -26,6 +29,18 @@ export class HumanPlayer extends Player {
     this.applyItemBonus(
       this.inventory.slots.find((s) => s?.id === 'enchanted_bigboi_boxers')!,
     );
+  }
+
+  spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
+    if (stat === 'EXP') {
+      if (this.unspentPoints <= 0) return;
+      this.unspentPoints--;
+      this.explosivesHandling++;
+      this.levelUpStat = 'EXP';
+      this.levelUpFlash = 60;
+      return;
+    }
+    super.spendPoint(stat);
   }
 
   getMeleeDamage(): number {

@@ -77,7 +77,7 @@ export abstract class Player {
     }
   }
 
-  spendPoint(stat: 'STR' | 'INT' | 'CON') {
+  spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
     if (this.unspentPoints <= 0) return;
     this.unspentPoints--;
     if (stat === 'STR') {

@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AchievementManager } from '../core/AchievementManager';
 import { ACHIEVEMENT_DEFS } from '../core/AchievementManager';
@@ -293,8 +293,11 @@ export class PauseMenu {
     const statLine = (p: Player, startY: number) => {
       ctx.font = '11px monospace';
       ctx.fillStyle = '#e2e8f0';
+      const midStat = p instanceof HumanPlayer
+        ? `EXP: ${p.explosivesHandling}`
+        : `INT: ${p.intelligence}`;
       ctx.fillText(
-        `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   INT: ${p.intelligence}   CON: ${p.constitution}`,
+        `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}`,
         bx + 20,
         startY,
       );
@@ -341,13 +344,14 @@ export class PauseMenu {
     ctx.fillStyle = '#64748b';
     ctx.font = '10px monospace';
     ctx.fillText(
-      'STR increases melee damage, INT increases magic damage,',
+      'STR increases melee damage, CON increases max HP by 2.',
       bx + 20,
       by + 52,
     );
-    ctx.fillText('CON increases max HP by 2.', bx + 20, by + 64);
+    ctx.fillText('Human: EXP increases dynamite damage and throw distance.', bx + 20, by + 64);
+    ctx.fillText('Cat: INT increases magic damage.', bx + 20, by + 76);
 
-    let oy = by + 84;
+    let oy = by + 92;
     const bW = 76;
     const bH = 32;
     const gap = 10;
@@ -368,11 +372,12 @@ export class PauseMenu {
       oy += 14;
       const totalBW = bW * 3 + gap * 2;
       const startX = bx + (bw - totalBW) / 2;
+      const midStat = player instanceof HumanPlayer ? '+EXP' : '+INT';
       this.menuBtn(ctx, startX, oy, bW, bH, '+STR', () =>
         player.spendPoint('STR'),
       );
-      this.menuBtn(ctx, startX + bW + gap, oy, bW, bH, '+INT', () =>
-        player.spendPoint('INT'),
+      this.menuBtn(ctx, startX + bW + gap, oy, bW, bH, midStat, () =>
+        player.spendPoint(player instanceof HumanPlayer ? 'EXP' : 'INT'),
       );
       this.menuBtn(ctx, startX + (bW + gap) * 2, oy, bW, bH, '+CON', () =>
         player.spendPoint('CON'),

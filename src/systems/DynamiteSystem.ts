@@ -33,6 +33,8 @@ interface LiveDynamite {
   fuseFrames: number;
   state: 'flying' | 'sliding' | 'stopped' | 'exploding';
   explodeTimer: number;
+  /** Snapshot of human.explosivesHandling at throw time — scales damage. */
+  explosivesLevel: number;
 }
 
 export class DynamiteSystem {
@@ -71,9 +73,11 @@ export class DynamiteSystem {
 
     const isTap = chargeFrames < DYN_TAP;
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
+    const expLvl = human.explosivesHandling;
+    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * 4;
     const speed = isTap
       ? 0
-      : DYN_SPEED_MIN + (DYN_SPEED_MAX - DYN_SPEED_MIN) * chargeRatio;
+      : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
     this.liveDynamites.push({
       x: human.x + TILE_SIZE * 0.5,
@@ -83,6 +87,7 @@ export class DynamiteSystem {
       fuseFrames: DYN_FUSE,
       state: isTap ? 'stopped' : 'flying',
       explodeTimer: 0,
+      explosivesLevel: expLvl,
     });
     void cat;
     void mobs;
@@ -114,7 +119,7 @@ export class DynamiteSystem {
     this._charging = null;
     const cx = human.x + TILE_SIZE * 0.5;
     const cy = human.y + TILE_SIZE * 0.5;
-    this.triggerExplosion(cx, cy, human, cat, mobs, mobGrid);
+    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobs, mobGrid);
     this.liveDynamites.push({
       x: cx,
       y: cy,
@@ -123,37 +128,40 @@ export class DynamiteSystem {
       fuseFrames: 0,
       state: 'exploding',
       explodeTimer: DYN_ANIM_FRAMES,
+      explosivesLevel: human.explosivesHandling,
     });
   }
 
   private triggerExplosion(
     cx: number,
     cy: number,
+    explosivesLevel: number,
     human: HumanPlayer,
     cat: CatPlayer,
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
   ): void {
     const ts = TILE_SIZE;
+    const damage = DYN_DAMAGE + (explosivesLevel - 1) * 2;
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
     for (const mob of nearBlast) {
       if (!mob.isAlive) continue;
       if (
         Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS
       ) {
-        mob.takeDamageFrom(DYN_DAMAGE, human);
+        mob.takeDamageFrom(damage, human);
       }
     }
     void mobs;
     if (
       Math.hypot(human.x + ts * 0.5 - cx, human.y + ts * 0.5 - cy) <= DYN_RADIUS
     ) {
-      human.takeDamage(DYN_DAMAGE);
+      human.takeDamage(damage);
     }
     if (
       Math.hypot(cat.x + ts * 0.5 - cx, cat.y + ts * 0.5 - cy) <= DYN_RADIUS
     ) {
-      cat.takeDamage(DYN_DAMAGE);
+      cat.takeDamage(damage);
     }
   }
 
@@ -173,7 +181,7 @@ export class DynamiteSystem {
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(dyn.x, dyn.y, human, cat, mobs, mobGrid);
+        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobs, mobGrid);
         continue;
       }
 

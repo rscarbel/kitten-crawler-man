@@ -18,10 +18,11 @@ export interface PlayerSnapshot {
   inventorySlots: (InventoryItem | null)[];
   inventoryHotbar: (InventoryItem | null)[];
   equippedEntries: [string, string][]; // Map entries as [key, ItemId]
+  explosivesHandling?: number;
 }
 
 export function snapPlayer(p: Player): PlayerSnapshot {
-  return {
+  const snap: PlayerSnapshot = {
     hp: p.hp,
     maxHp: p.maxHp,
     level: p.level,
@@ -37,6 +38,10 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     inventoryHotbar: p.inventory.hotbar.map((s) => (s ? { ...s } : null)),
     equippedEntries: [...p.inventory.equipped.entries()],
   };
+  if ('explosivesHandling' in p) {
+    snap.explosivesHandling = (p as { explosivesHandling: number }).explosivesHandling;
+  }
+  return snap;
 }
 
 export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
@@ -51,6 +56,9 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.coins = snap.coins;
   p.facingX = snap.facingX;
   p.facingY = snap.facingY;
+  if ('explosivesHandling' in p && snap.explosivesHandling !== undefined) {
+    (p as { explosivesHandling: number }).explosivesHandling = snap.explosivesHandling;
+  }
 
   // Restore inventory slots
   for (let i = 0; i < snap.inventorySlots.length; i++) {
