@@ -127,15 +127,24 @@ export class BrindleGrub extends Mob {
   // AI
   // ---------------------------------------------------------------------------
 
+  /**
+   * Ticks the evolution timer regardless of whether the grub is in the active
+   * AI radius. Called every frame for all alive BrindleGrubs in DungeonScene.
+   */
+  tickEvolve(): void {
+    if (!this.isAlive || this.stage >= 3) return;
+    this.evolveTimer--;
+    if (this.evolveTimer <= 0) {
+      if (this.stage === 1) this.evolveToStage2();
+      else this.evolveToStage3();
+    }
+  }
+
   updateAI(playerTargets: Player[]): void {
     if (!this.isAlive) return;
 
     if (this.stage < 3) {
-      this.evolveTimer--;
-      if (this.evolveTimer <= 0) {
-        if (this.stage === 1) this.evolveToStage2();
-        else this.evolveToStage3();
-      }
+      // evolveTimer is ticked by tickEvolve() separately (works off-screen too)
 
       if (this.stage === 1) {
         // Stage 1: wander passively, never attack

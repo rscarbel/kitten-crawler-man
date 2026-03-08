@@ -1163,6 +1163,11 @@ export class DungeonScene extends Scene {
     // Spell system (resets confusion, ticks fogs/shell)
     this.spells.update(this.mobs, this.mobGrid);
 
+    // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
+    for (const mob of this.mobs) {
+      if (mob instanceof BrindleGrub && mob.isAlive) mob.tickEvolve();
+    }
+
     // Mob AI — only activate mobs near players
     const AI_RADIUS = TILE_SIZE * 22;
     const activeMobs = this.mobGrid.queryCircle(
@@ -1228,12 +1233,20 @@ export class DungeonScene extends Scene {
       const count = 1 + Math.floor(Math.random() * 5); // 1–5
       for (let i = 0; i < count; i++) {
         // Scatter each grub within ±2 tiles of the death location.
-        const ox = Math.floor((Math.random() - 0.5) * 4);
-        const oy = Math.floor((Math.random() - 0.5) * 4);
-        const grub = new BrindleGrub(tx + ox, ty + oy, TILE_SIZE);
-        grub.setMap(this.gameMap);
-        this.mobs.push(grub);
-        this.mobGrid.insert(grub);
+        // Try up to 8 random offsets; skip if the tile is not walkable.
+        let placed = false;
+        for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+          const ox = Math.floor((Math.random() - 0.5) * 4);
+          const oy = Math.floor((Math.random() - 0.5) * 4);
+          const gtx = tx + ox;
+          const gty = ty + oy;
+          if (!this.gameMap.isWalkable(gtx, gty)) continue;
+          const grub = new BrindleGrub(gtx, gty, TILE_SIZE);
+          grub.setMap(this.gameMap);
+          this.mobs.push(grub);
+          this.mobGrid.insert(grub);
+          placed = true;
+        }
       }
     }
 
