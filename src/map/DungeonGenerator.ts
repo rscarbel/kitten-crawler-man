@@ -375,7 +375,7 @@ export function generateDungeon(
   const hallwaySpawnPoints = chosen;
 
   // 10. Place a circular metal arena structure in the dungeon.
-  // Attempt to find a position 40–90 tiles from start, away from other boss rooms.
+  // Attempt to find a position 10–90 tiles from start, away from other boss rooms.
   const ARENA_RADIUS = 15;
   const buildingEntries: Array<{
     doorTile: Point;
@@ -391,8 +391,15 @@ export function generateDungeon(
     };
 
     let arenaPlaced = false;
-    const arenaCandidates: Point[] = [];
-    // Sample candidate positions in a ring 30–90 tiles from start
+    // Indices of special rooms that the arena must not overlap
+    const specialRoomIndices = new Set<number>();
+    specialRoomIndices.add(0); // start room
+    for (let i = safeRoomStart; i < safeRoomEnd && i < rooms.length; i++)
+      specialRoomIndices.add(i);
+    for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++)
+      specialRoomIndices.add(i);
+
+    // Sample candidate positions in a ring 20–90 tiles from start
     for (let attempt = 0; attempt < 800 && !arenaPlaced; attempt++) {
       const angle = (attempt / 800) * Math.PI * 2 + Math.random() * 0.3;
       const dist = 20 + Math.random() * 70;
@@ -408,15 +415,14 @@ export function generateDungeon(
       )
         continue;
 
-      // Must not physically overlap any existing room (check against actual bounds)
-      const overlapsRoom = rooms.some((r) => {
+      // Must not overlap special rooms (start, safe, boss); regular rooms are OK
+      const overlapsSpecial = rooms.some((r, idx) => {
+        if (!specialRoomIndices.has(idx)) return false;
         const closestX = Math.max(r.x, Math.min(acx, r.x + r.w - 1));
         const closestY = Math.max(r.y, Math.min(acy, r.y + r.h - 1));
         return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + 3;
       });
-      if (overlapsRoom) continue;
-
-      arenaCandidates.push({ x: acx, y: acy });
+      if (overlapsSpecial) continue;
 
       // Paint arena: outer ring = METAL_WALL, interior = ARENA_FLOOR
       const ARENA_WALL_THICKNESS = 2;
@@ -447,7 +453,9 @@ export function generateDungeon(
         }
       }
 
-      // Connect entrance to nearest room with a hallway
+      // Connect entrance to nearest room with a hallway.
+      // Route east past the ring edge first so the vertical leg never intersects
+      // METAL_WALL tiles (carveHallway only carves FloorTypeValue.wall tiles).
       const nearestRoom = rooms.reduce((best, r) => {
         const rcx = Math.floor(r.x + r.w / 2);
         const rcy = Math.floor(r.y + r.h / 2);
@@ -458,9 +466,21 @@ export function generateDungeon(
         );
         return d < bd ? r : best;
       }, rooms[0]);
+
+      // Carve guaranteed south exit tiles (just outside the ring).
+      if (doorY + 1 < size) {
+        grid[doorY + 1][doorX - 1].type = FloorTypeValue.concrete;
+        grid[doorY + 1][doorX].type = FloorTypeValue.concrete;
+      }
+
+      // Pivot point: one tile south of the ring, then east past the ring's edge.
+      // At x = acx + ARENA_RADIUS + 2, any y has r > ARENA_RADIUS so no METAL_WALL.
+      const pivotX = Math.min(acx + ARENA_RADIUS + 2, size - BORDER - 1);
+      const pivotY = doorY + 1;
+      carveHallway(doorX, pivotY, pivotX, pivotY);
       carveHallway(
-        doorX,
-        doorY,
+        pivotX,
+        pivotY,
         Math.floor(nearestRoom.x + nearestRoom.w / 2),
         Math.floor(nearestRoom.y + nearestRoom.h / 2),
       );
@@ -480,6 +500,26 @@ export function generateDungeon(
     }
   }
 
+  // Filter out mob spawns and stairwells that fall inside the arena footprint
+  const filteredMobSpawns =
+    arenaExteriors.length > 0
+      ? mobSpawnPoints.filter((p) => {
+          const a = arenaExteriors[0];
+          return (
+            Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2
+          );
+        })
+      : mobSpawnPoints;
+  const filteredStairwells =
+    arenaExteriors.length > 0
+      ? stairwellTiles.filter((p) => {
+          const a = arenaExteriors[0];
+          return (
+            Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2
+          );
+        })
+      : stairwellTiles;
+
   return {
     grid,
     startTile,
@@ -487,9 +527,9 @@ export function generateDungeon(
     safeRoomBounds,
     safeRoomCentre,
     bossRooms,
-    mobSpawnPoints,
+    mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,
-    stairwellTiles,
+    stairwellTiles: filteredStairwells,
     buildingEntries,
     arenaExteriors,
   };

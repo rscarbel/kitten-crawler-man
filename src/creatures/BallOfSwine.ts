@@ -95,6 +95,15 @@ export class BallOfSwine extends Mob {
     return this.state === 'zooming';
   }
 
+  get isStopping(): boolean {
+    return this.state === 'stopping';
+  }
+
+  /** True while the ball is orbiting — companion AI should flee rather than engage. */
+  get avoidInstead(): boolean {
+    return this.state === 'zooming' || this.state === 'stopping';
+  }
+
   // --- Damage override ---
 
   takeDamageFrom(

@@ -150,7 +150,12 @@ export class CompanionSystem {
     mobGrid: SpatialGrid<Mob>,
   ): void {
     if (human.isActive) {
-      if (cat.autoTarget && !cat.autoTarget.isAlive) cat.autoTarget = null;
+      // Clear cat's target if it's dead or became an avoid-instead mob
+      if (
+        cat.autoTarget &&
+        (!cat.autoTarget.isAlive || (cat.autoTarget as Mob).avoidInstead)
+      )
+        cat.autoTarget = null;
 
       // While companion is being recalled, don't auto-assign new targets
       if (!this._followOverride) {
@@ -161,11 +166,14 @@ export class CompanionSystem {
           mobs.find(
             (m) =>
               m.isAlive &&
+              !m.avoidInstead &&
               m.currentTarget === cat &&
               Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
           ) ?? null;
         const mobTargetingHuman =
-          mobs.find((m) => m.isAlive && m.currentTarget === human) ?? null;
+          mobs.find(
+            (m) => m.isAlive && !m.avoidInstead && m.currentTarget === human,
+          ) ?? null;
 
         if (mobTargetingCat) {
           cat.autoTarget = mobTargetingCat;
@@ -185,7 +193,11 @@ export class CompanionSystem {
         if (hasLOS) cat.autoFireTick();
       }
     } else {
-      if (human.autoTarget && !human.autoTarget.isAlive)
+      // Clear human's target if it's dead or became an avoid-instead mob
+      if (
+        human.autoTarget &&
+        (!human.autoTarget.isAlive || (human.autoTarget as Mob).avoidInstead)
+      )
         human.autoTarget = null;
 
       if (!human.autoTarget) {
@@ -197,7 +209,7 @@ export class CompanionSystem {
           HUMAN_ENGAGE_RANGE,
         );
         for (const mob of nearHuman) {
-          if (!mob.isAlive || !mob.isHostile) continue;
+          if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
           const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
           if (dist < closestDist) {
             closestDist = dist;
@@ -220,10 +232,43 @@ export class CompanionSystem {
     }
   }
 
+  /** Flee companion away from the nearest avoidInstead mob within fleeRadius px. Returns true if fleeing. */
+  private fleeFromAvoidMobs(
+    companion: HumanPlayer | CatPlayer,
+    mobs: Mob[],
+    fleeRadius: number,
+  ): boolean {
+    let closest: Mob | null = null;
+    let closestDist = fleeRadius;
+    for (const m of mobs) {
+      if (!m.isAlive || !m.avoidInstead) continue;
+      const dist = Math.hypot(
+        m.x + TILE_SIZE * 0.5 - (companion.x + TILE_SIZE * 0.5),
+        m.y + TILE_SIZE * 0.5 - (companion.y + TILE_SIZE * 0.5),
+      );
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = m;
+      }
+    }
+    if (!closest) return false;
+
+    const dx = companion.x + TILE_SIZE * 0.5 - (closest.x + TILE_SIZE * 0.5);
+    const dy = companion.y + TILE_SIZE * 0.5 - (closest.y + TILE_SIZE * 0.5);
+    const len = Math.hypot(dx, dy) || 1;
+    this.entityMoveWithCollision(
+      companion,
+      (dx / len) * FOLLOWER_SPEED * 1.5,
+      (dy / len) * FOLLOWER_SPEED * 1.5,
+    );
+    companion.isMoving = true;
+    return true;
+  }
+
   private updateFollower(
     human: HumanPlayer,
     cat: CatPlayer,
-    _mobs: Mob[],
+    mobs: Mob[],
     _mobGrid: SpatialGrid<Mob>,
   ): void {
     if (this._followOverride) {
@@ -244,6 +289,10 @@ export class CompanionSystem {
       }
       return;
     }
+
+    // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
+    const companion = human.isActive ? cat : human;
+    if (this.fleeFromAvoidMobs(companion, mobs, TILE_SIZE * 8)) return;
 
     if (human.isActive) {
       if (cat.autoTarget && cat.autoTarget.isAlive) {

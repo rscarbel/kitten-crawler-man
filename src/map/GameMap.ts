@@ -55,6 +55,9 @@ export class GameMap {
   }> = [];
   /** Arena circles generated in the dungeon (one per dungeon map). */
   arenaExteriors: ArenaExterior[] = [];
+  /** When true, the arena door gap tiles are treated as unwalkable. */
+  arenaDoorLocked = false;
+  private arenaDoorTileSet = new Set<string>();
 
   constructor(
     mapSize = 100,
@@ -114,7 +117,28 @@ export class GameMap {
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;
     this.arenaExteriors = data.arenaExteriors;
+    for (const arena of data.arenaExteriors) {
+      const { x: doorX, y: doorY } = arena.doorTile;
+      for (const dy of [0, -1]) {
+        for (const dx of [-1, 0]) {
+          this.arenaDoorTileSet.add(`${doorX + dx},${doorY + dy}`);
+        }
+      }
+      // Also cover the south exit tile carved in the generator
+      this.arenaDoorTileSet.add(`${doorX - 1},${doorY + 1}`);
+      this.arenaDoorTileSet.add(`${doorX},${doorY + 1}`);
+    }
     return data.grid;
+  }
+
+  /** Locks the arena door so players cannot exit while the fight is active. */
+  lockArenaDoor(): void {
+    this.arenaDoorLocked = true;
+  }
+
+  /** Unlocks the arena door after the fight ends. */
+  unlockArenaDoor(): void {
+    this.arenaDoorLocked = false;
   }
 
   /** Adds the arena stairwell to the active stairwell list (call when Ball of Swine is defeated). */
@@ -331,6 +355,8 @@ export class GameMap {
     if (!row) return false;
     const tile = row[tileX];
     if (!tile) return false;
+    if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`))
+      return false;
     return (
       tile.type !== FloorTypeValue.wall &&
       tile.type !== FloorTypeValue.water &&

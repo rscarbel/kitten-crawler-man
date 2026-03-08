@@ -90,6 +90,14 @@ export abstract class Mob extends Player {
     return true;
   }
 
+  /**
+   * When true, the AI-controlled companion will flee from this mob instead of attacking it.
+   * Override in subclasses for enemies that are temporarily untargetable or instakill on contact.
+   */
+  get avoidInstead(): boolean {
+    return false;
+  }
+
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;
 

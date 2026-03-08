@@ -115,6 +115,7 @@ export class DungeonScene extends Scene {
   private arenaPhase2Active = false;
   private arenaLiveTusklings: Tuskling[] = [];
   private arenaStairwellUnlocked = false;
+  private arenaLocked = false;
 
   // Floor entry snapshots (used to respawn players at floor-start state on death)
   private floorEntryHumanSnap!: PlayerSnapshot;
@@ -1141,6 +1142,32 @@ export class DungeonScene extends Scene {
     this.safeRoom.evictMobs(this.mobs, this.mobGrid);
     this.safeRoom.updateWander();
     this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
+
+    // Arena door lock: lock when either player enters with BoS alive, unlock on BoS death
+    if (this.gameMap.arenaExteriors.length > 0) {
+      const arena = this.gameMap.arenaExteriors[0];
+      const bos = this.mobs.find((m) => m instanceof BallOfSwine) as
+        | BallOfSwine
+        | undefined;
+      if (bos) {
+        const cx = arena.centre.x * TILE_SIZE;
+        const cy = arena.centre.y * TILE_SIZE;
+        const innerRadius = (arena.radius - 2) * TILE_SIZE;
+        const humanInside =
+          Math.hypot(this.human.x - cx, this.human.y - cy) < innerRadius;
+        const catInside =
+          Math.hypot(this.cat.x - cx, this.cat.y - cy) < innerRadius;
+        if (!this.arenaLocked && bos.isAlive && (humanInside || catInside)) {
+          this.arenaLocked = true;
+          this.gameMap.lockArenaDoor();
+          this.bossRoom.newlyLockedBossType = 'ball_of_swine';
+        }
+        if (this.arenaLocked && !bos.isAlive) {
+          this.arenaLocked = false;
+          this.gameMap.unlockArenaDoor();
+        }
+      }
+    }
 
     // Trigger boss battle intro on first room entry
     if (this.bossRoom.newlyLockedBossType !== null) {
