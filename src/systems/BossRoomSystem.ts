@@ -113,6 +113,29 @@ export class BossRoomSystem {
           this.enteredRooms.add(idx);
           this.newlyLockedBossType = this.bossTypes[idx] ?? 'the_hoarder';
         }
+        // Teleport the other player in if they're within 5 tiles of the room
+        const b = state.bounds;
+        const roomCenterX = (b.x + b.w * 0.5) * TILE_SIZE;
+        const roomCenterY = (b.y + b.h * 0.5) * TILE_SIZE;
+        for (const player of [human, cat]) {
+          if (!this.isEntityInRoom(player, b)) {
+            const px = player.x + TILE_SIZE * 0.5;
+            const py = player.y + TILE_SIZE * 0.5;
+            // Distance from player center to nearest edge of room bounds (in tiles)
+            const roomMinX = b.x * TILE_SIZE;
+            const roomMinY = b.y * TILE_SIZE;
+            const roomMaxX = (b.x + b.w) * TILE_SIZE;
+            const roomMaxY = (b.y + b.h) * TILE_SIZE;
+            const dx = Math.max(roomMinX - px, 0, px - roomMaxX);
+            const dy = Math.max(roomMinY - py, 0, py - roomMaxY);
+            const distTiles = Math.hypot(dx, dy) / TILE_SIZE;
+            if (distTiles <= 5) {
+              // Teleport to room center
+              player.x = roomCenterX - TILE_SIZE * 0.5;
+              player.y = roomCenterY - TILE_SIZE * 0.5;
+            }
+          }
+        }
       }
 
       if (state.locked && !bossAlive) {
