@@ -45,6 +45,7 @@ interface ContextMenu {
   x: number;
   y: number;
   item: InventoryItem;
+  isEquipped?: boolean;
 }
 
 export class InventoryPanel {
@@ -57,6 +58,8 @@ export class InventoryPanel {
 
   /** Set by context-menu "Equip" selection; DungeonScene reads and clears this. */
   pendingEquipSlot: number | null = null;
+  /** Set by context-menu "Unequip" selection; DungeonScene reads and clears this. */
+  pendingUnequipSlot: number | null = null;
   /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
   pendingInfoItem: InventoryItem | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
@@ -236,7 +239,7 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
   ): void {
     const cm = this.contextMenu!;
-    const options = this.contextMenuOptions(cm.item, cm.source);
+    const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = 120;
     const menuItemH = 22;
     const menuH = options.length * menuItemH + 4;
@@ -257,7 +260,12 @@ export class InventoryPanel {
         ctx.fillStyle = 'rgba(59,130,246,0.3)';
         ctx.fillRect(mx + 1, oy, menuW - 2, menuItemH);
       }
-      ctx.fillStyle = options[i] === 'Equip' ? '#4ade80' : '#e2e8f0';
+      ctx.fillStyle =
+        options[i] === 'Equip'
+          ? '#4ade80'
+          : options[i] === 'Unequip'
+            ? '#f87171'
+            : '#e2e8f0';
       ctx.fillText(options[i], mx + 8, oy + 15);
     }
     ctx.restore();
@@ -560,6 +568,31 @@ export class InventoryPanel {
       this.renderItemIcon(ctx, item, x, y, size, 1);
     }
 
+    // Equipped icon badge (top-left corner)
+    if (isEquipped && item && !dimmed) {
+      ctx.save();
+      ctx.globalAlpha = 1;
+      const badgeSize = Math.floor(size * 0.3);
+      const bx = x + 1;
+      const by = y + 1;
+      // Green badge background
+      ctx.fillStyle = 'rgba(16,185,129,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + badgeSize, by);
+      ctx.lineTo(bx, by + badgeSize);
+      ctx.closePath();
+      ctx.fill();
+      // White "E" letter
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.floor(badgeSize * 0.55)}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('E', bx + 1, by + 1);
+      ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+    }
+
     // Ability cooldown overlay on hotbar
     if (isHotbar && item?.abilityId) {
       const cd = this.abilityCooldowns.get(item.abilityId);
@@ -823,7 +856,11 @@ export class InventoryPanel {
     // Handle context menu option click
     if (this.contextMenu) {
       const cm = this.contextMenu;
-      const options = this.contextMenuOptions(cm.item, cm.source);
+      const options = this.contextMenuOptions(
+        cm.item,
+        cm.source,
+        cm.isEquipped,
+      );
       const menuW = 120;
       const menuItemH = 22;
       const menuH = options.length * menuItemH + 4;
@@ -835,6 +872,8 @@ export class InventoryPanel {
           const action = options[idx];
           if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
+          } else if (action === 'Unequip') {
+            this.pendingUnequipSlot = cm.slotIdx;
           } else if (action === 'Move to Bag') {
             inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
           } else if (action === 'Drop') {
@@ -984,7 +1023,14 @@ export class InventoryPanel {
       if (inRect(mx, my, r)) {
         const item = inventory.slots[slotIdx];
         if (item) {
-          this.contextMenu = { source: 'inv', slotIdx, x: mx, y: my, item };
+          this.contextMenu = {
+            source: 'inv',
+            slotIdx,
+            x: mx,
+            y: my,
+            item,
+            isEquipped: inventory.isSlotEquipped(slotIdx),
+          };
           this.contextMenuHover = -1;
           return;
         }
@@ -1002,6 +1048,7 @@ export class InventoryPanel {
       const options = this.contextMenuOptions(
         this.contextMenu.item,
         this.contextMenu.source,
+        this.contextMenu.isEquipped,
       );
       const menuItemH = 22;
       const cmx = this.contextMenu.x;
@@ -1022,13 +1069,16 @@ export class InventoryPanel {
   private contextMenuOptions(
     item: InventoryItem,
     source: 'inv' | 'hotbar',
+    isEquipped?: boolean,
   ): string[] {
     if (source === 'hotbar') {
       return ['Move to Bag', 'Name', 'Description', 'Drop'];
     }
-    return item.type === 'armor'
-      ? ['Equip', 'Name', 'Description', 'Drop']
-      : ['Name', 'Description', 'Drop'];
+    if (item.type === 'armor') {
+      const label = isEquipped ? 'Unequip' : 'Equip';
+      return [label, 'Name', 'Description', 'Drop'];
+    }
+    return ['Name', 'Description', 'Drop'];
   }
 
   handleMouseUp(

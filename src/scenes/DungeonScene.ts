@@ -1540,6 +1540,16 @@ export class DungeonScene extends Scene {
       }
     }
 
+    if (this.inventoryPanel.pendingUnequipSlot !== null) {
+      const slotIdx = this.inventoryPanel.pendingUnequipSlot;
+      this.inventoryPanel.pendingUnequipSlot = null;
+      const item = active.inventory.slots[slotIdx];
+      if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
+        active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
+        active.removeItemBonus(item);
+      }
+    }
+
     if (this.inventoryPanel.pendingDropItem !== null) {
       const { id, quantity } = this.inventoryPanel.pendingDropItem;
       this.inventoryPanel.pendingDropItem = null;
