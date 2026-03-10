@@ -9,6 +9,9 @@ import {
   ROOF_SLATE,
   ROOF_RED,
   ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -372,6 +375,9 @@ export class GameMap {
       tile.type !== ROOF_SLATE &&
       tile.type !== ROOF_RED &&
       tile.type !== ROOF_GREEN &&
+      tile.type !== ROOF_CIRCUS_RED &&
+      tile.type !== ROOF_CIRCUS_BLUE &&
+      tile.type !== ROOF_CIRCUS_PURPLE &&
       tile.type !== FOUNTAIN &&
       tile.type !== TORCH &&
       tile.type !== WELL
@@ -461,7 +467,10 @@ export class GameMap {
           t === ROOF_THATCH ||
           t === ROOF_SLATE ||
           t === ROOF_RED ||
-          t === ROOF_GREEN
+          t === ROOF_GREEN ||
+          t === ROOF_CIRCUS_RED ||
+          t === ROOF_CIRCUS_BLUE ||
+          t === ROOF_CIRCUS_PURPLE
         ) {
           result.push({ tx: x, ty: y });
         }

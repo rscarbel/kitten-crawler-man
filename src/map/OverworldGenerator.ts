@@ -13,6 +13,9 @@ import {
   GRASSY_WEED,
   DIRT_PATCH,
   TREE,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
 } from './tileTypes';
 
 type Point = { x: number; y: number };
@@ -62,6 +65,9 @@ export function generateOverworld(size: number): OverworldData {
       t === ROOF_SLATE ||
       t === ROOF_RED ||
       t === ROOF_GREEN ||
+      t === ROOF_CIRCUS_RED ||
+      t === ROOF_CIRCUS_BLUE ||
+      t === ROOF_CIRCUS_PURPLE ||
       t === VOID_TYPE
     )
       return;
@@ -80,7 +86,10 @@ export function generateOverworld(size: number): OverworldData {
       t === ROOF_THATCH ||
       t === ROOF_SLATE ||
       t === ROOF_RED ||
-      t === ROOF_GREEN
+      t === ROOF_GREEN ||
+      t === ROOF_CIRCUS_RED ||
+      t === ROOF_CIRCUS_BLUE ||
+      t === ROOF_CIRCUS_PURPLE
     );
   };
 
@@ -263,6 +272,118 @@ export function generateOverworld(size: number): OverworldData {
     }
 
     houseIdx++;
+  }
+
+  // 7b. Circus — cluster of tents 60+ tiles from town center
+  {
+    // Pick a random angle and distance for circus placement
+    const circusAngle = Math.random() * Math.PI * 2;
+    const circusDist = 70 + Math.random() * 20; // 60–80 tiles from center
+    const circusCx = Math.round(cx + Math.cos(circusAngle) * circusDist);
+    const circusCy = Math.round(cy + Math.sin(circusAngle) * circusDist);
+
+    // Circus ground: a roughly circular dirt/road area
+    const circusRadius = 14;
+    for (let dy = -circusRadius; dy <= circusRadius; dy++) {
+      for (let dx = -circusRadius; dx <= circusRadius; dx++) {
+        if (Math.hypot(dx, dy) > circusRadius) continue;
+        const tx = circusCx + dx;
+        const ty2 = circusCy + dy;
+        if (tx < BORDER + 1 || tx >= size - BORDER - 1) continue;
+        if (ty2 < BORDER + 1 || ty2 >= size - BORDER - 1) continue;
+        if (isSolid(tx, ty2)) continue;
+        grid[ty2][tx].type = ROAD;
+      }
+    }
+
+    // Big tent (enterable) — 12×5, red & white stripes, centered in circus
+    const bigW = 12;
+    const bigH = 5;
+    const bigX = circusCx - Math.floor(bigW / 2);
+    const bigY = circusCy - Math.floor(bigH / 2) - 2; // offset north a bit
+    placeBuilding(bigX, bigY, bigW, bigH, 'house', 'Big Top', ROOF_CIRCUS_RED);
+
+    // Small decorative tents (not enterable) — just solid tile structures
+    const placeTent = (
+      tentX: number,
+      tentY: number,
+      tw: number,
+      th: number,
+      roofTile: number,
+    ) => {
+      // Bounds check
+      if (tentX < BORDER + 2 || tentX + tw > size - BORDER - 2) return;
+      if (tentY < BORDER + 2 || tentY + th > size - BORDER - 2) return;
+      // Collision check
+      const pad = 1;
+      const overlaps = buildings.some(
+        (b) =>
+          tentX < b.x + b.w + pad &&
+          tentX + tw + pad > b.x &&
+          tentY < b.y + b.h + pad &&
+          tentY + th + pad > b.y,
+      );
+      if (overlaps) return;
+      // Place as solid non-enterable structure (all walls + roof, no door)
+      for (let dy = 0; dy < th; dy++) {
+        for (let dx = 0; dx < tw; dx++) {
+          const isEdge = dy === 0 || dy === th - 1;
+          set(tentX + dx, tentY + dy, isEdge ? BUILDING_WALL : roofTile);
+        }
+      }
+      buildings.push({ x: tentX, y: tentY, w: tw, h: th });
+    };
+
+    const smallTents = [
+      { dx: -8, dy: -3, w: 6, h: 3, roof: ROOF_CIRCUS_BLUE },
+      { dx: 8, dy: -3, w: 6, h: 3, roof: ROOF_CIRCUS_PURPLE },
+      { dx: -7, dy: 5, w: 5, h: 3, roof: ROOF_CIRCUS_PURPLE },
+      { dx: 7, dy: 5, w: 5, h: 3, roof: ROOF_CIRCUS_BLUE },
+      { dx: 0, dy: 7, w: 6, h: 3, roof: ROOF_CIRCUS_RED },
+    ];
+
+    for (const tent of smallTents) {
+      const tx2 = circusCx + tent.dx - Math.floor(tent.w / 2);
+      const ty2 = circusCy + tent.dy - Math.floor(tent.h / 2);
+      placeTent(tx2, ty2, tent.w, tent.h, tent.roof);
+    }
+
+    // Road connecting circus to the nearest main road
+    // Route south/north to E-W road
+    const circusDoorY = circusCy + circusRadius + 1;
+    const targetRoadY = circusDoorY < cy ? cy - 2 : cy + 4;
+    const minRY = Math.min(circusDoorY, targetRoadY);
+    const maxRY = Math.max(circusDoorY, targetRoadY);
+    for (let ry = minRY; ry <= maxRY; ry++) {
+      setRoad(circusCx - 1, ry);
+      setRoad(circusCx, ry);
+      setRoad(circusCx + 1, ry);
+    }
+    // Also connect east/west to N-S road
+    const targetRoadX = circusCx < cx ? cx - 2 : cx + 4;
+    const minRX = Math.min(circusCx, targetRoadX);
+    const maxRX = Math.max(circusCx, targetRoadX);
+    for (let rx = minRX; rx <= maxRX; rx++) {
+      setRoad(rx, circusCy);
+      setRoad(rx, circusCy + 1);
+    }
+
+    // Torches around the circus perimeter
+    const torchAngles = [0, 60, 120, 180, 240, 300];
+    for (const deg of torchAngles) {
+      const a = (deg * Math.PI) / 180;
+      const torchX = Math.round(circusCx + Math.cos(a) * (circusRadius - 1));
+      const torchY = Math.round(circusCy + Math.sin(a) * (circusRadius - 1));
+      if (
+        torchX > BORDER &&
+        torchX < size - BORDER &&
+        torchY > BORDER &&
+        torchY < size - BORDER &&
+        !isSolid(torchX, torchY)
+      ) {
+        set(torchX, torchY, TORCH);
+      }
+    }
   }
 
   // 8. Forest blobs in wilderness (>65 tiles from center, not over roads)

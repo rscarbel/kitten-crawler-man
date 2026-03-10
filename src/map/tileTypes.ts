@@ -45,6 +45,12 @@ export const METAL_WALL = 24;
 export const ARENA_FLOOR = 25;
 /** Tile type for the Krakaren Clone boss room — dark wet cavern floor. */
 export const KRAKAREN_BOSS_ROOM_FLOOR = 26;
+/** Tile type for red & white striped circus tent roof — big top style, not walkable. */
+export const ROOF_CIRCUS_RED = 27;
+/** Tile type for blue & gold circus tent roof — smaller accent tents, not walkable. */
+export const ROOF_CIRCUS_BLUE = 28;
+/** Tile type for purple & yellow circus tent roof — smaller accent tents, not walkable. */
+export const ROOF_CIRCUS_PURPLE = 29;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 
