@@ -148,6 +148,9 @@ export class DungeonScene extends Scene {
   private mobileTapStart: { x: number; y: number; time: number } | null = null;
   private inventoryDragTouchId: number | null = null;
   private mobileDynamiteTouchId: number | null = null;
+  private invLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private invLongPressPos: { x: number; y: number } | null = null;
+  private invLongPressFired = false;
   private _mobileSwitchBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private _mobileFollowBtnRect = { x: 0, y: 0, w: 0, h: 0 };
   private _mobileGearBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
@@ -686,6 +689,14 @@ export class DungeonScene extends Scene {
     }
   }
 
+  private clearInvLongPress(): void {
+    if (this.invLongPressTimer !== null) {
+      clearTimeout(this.invLongPressTimer);
+      this.invLongPressTimer = null;
+    }
+    this.invLongPressPos = null;
+  }
+
   handleMouseDown(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
     this.inventoryPanel.handleMouseDown(
@@ -719,8 +730,7 @@ export class DungeonScene extends Scene {
   }
 
   handleContextMenu(mx: number, my: number): void {
-    if (this.gameOver || this.pauseMenu.isOpen || !this.inventoryPanel.isOpen)
-      return;
+    if (this.gameOver || this.pauseMenu.isOpen) return;
     this.inventoryPanel.openContextMenu(
       mx,
       my,
@@ -2055,7 +2065,7 @@ export class DungeonScene extends Scene {
         }
       }
 
-      // Hotbar slot tap
+      // Hotbar slot tap — defer activation until touch end so long-press can open context menu
       if (
         !this.pauseMenu.isOpen &&
         !this.safeRoom.isSleeping &&
@@ -2063,7 +2073,16 @@ export class DungeonScene extends Scene {
       ) {
         const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (hi >= 0) {
-          this.triggerHotbarActivation(hi);
+          this.inventoryDragTouchId = touch.identifier;
+          this.handleMouseDown(x, y);
+          this.clearInvLongPress();
+          this.invLongPressPos = { x, y };
+          this.invLongPressFired = false;
+          this.invLongPressTimer = setTimeout(() => {
+            this.invLongPressFired = true;
+            this.inventoryPanel.cancelDrag();
+            this.handleContextMenu(x, y);
+          }, 500);
           continue;
         }
       }
@@ -2094,7 +2113,7 @@ export class DungeonScene extends Scene {
         }
       }
 
-      // Inventory panel drag start
+      // Inventory panel drag start + long-press for context menu
       if (
         this.inventoryPanel.isOpen &&
         !this.gameOver &&
@@ -2105,6 +2124,15 @@ export class DungeonScene extends Scene {
           if (this.inventoryDragTouchId === null) {
             this.inventoryDragTouchId = touch.identifier;
           }
+          // Start long-press timer for context menu (Drop, etc.)
+          this.clearInvLongPress();
+          this.invLongPressPos = { x, y };
+          this.invLongPressFired = false;
+          this.invLongPressTimer = setTimeout(() => {
+            this.invLongPressFired = true;
+            this.inventoryPanel.cancelDrag();
+            this.handleContextMenu(x, y);
+          }, 500);
           continue;
         }
       }
@@ -2122,6 +2150,15 @@ export class DungeonScene extends Scene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      // Cancel long-press if finger moved too far
+      if (this.invLongPressPos) {
+        const dist = Math.hypot(
+          x - this.invLongPressPos.x,
+          y - this.invLongPressPos.y,
+        );
+        if (dist > 10) this.clearInvLongPress();
+      }
 
       // Update inventory drag
       this.handleMouseMove(x, y);
@@ -2147,11 +2184,26 @@ export class DungeonScene extends Scene {
         continue;
       }
 
-      // Inventory drag end
+      // Inventory / hotbar drag end
       if (touch.identifier === this.inventoryDragTouchId) {
-        this.handleMouseUp(x, y);
-        // Also fire click so slot interactions (equip, context menu) work
-        this.handleClick(x, y);
+        const longPressFired = this.invLongPressFired;
+        this.clearInvLongPress();
+        if (!longPressFired) {
+          this.handleMouseUp(x, y);
+          // Short tap on hotbar slot → activate item
+          const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+          if (
+            hi >= 0 &&
+            !this.pauseMenu.isOpen &&
+            !this.safeRoom.isSleeping &&
+            !this.gameOver
+          ) {
+            this.triggerHotbarActivation(hi);
+          } else {
+            // Also fire click so slot interactions (equip, context menu) work
+            this.handleClick(x, y);
+          }
+        }
         this.inventoryDragTouchId = null;
         continue;
       }

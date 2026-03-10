@@ -40,6 +40,7 @@ interface DragState {
 }
 
 interface ContextMenu {
+  source: 'inv' | 'hotbar';
   slotIdx: number;
   x: number;
   y: number;
@@ -67,6 +68,10 @@ export class InventoryPanel {
     maxQty: number;
     selectedQty: number;
   } | null = null;
+
+  cancelDrag(): void {
+    this.drag = null;
+  }
 
   toggle(): void {
     this.isOpen = !this.isOpen;
@@ -231,7 +236,7 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
   ): void {
     const cm = this.contextMenu!;
-    const options = this.contextMenuOptions(cm.item);
+    const options = this.contextMenuOptions(cm.item, cm.source);
     const menuW = 120;
     const menuItemH = 22;
     const menuH = options.length * menuItemH + 4;
@@ -818,7 +823,7 @@ export class InventoryPanel {
     // Handle context menu option click
     if (this.contextMenu) {
       const cm = this.contextMenu;
-      const options = this.contextMenuOptions(cm.item);
+      const options = this.contextMenuOptions(cm.item, cm.source);
       const menuW = 120;
       const menuItemH = 22;
       const menuH = options.length * menuItemH + 4;
@@ -830,8 +835,13 @@ export class InventoryPanel {
           const action = options[idx];
           if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
+          } else if (action === 'Move to Bag') {
+            inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
           } else if (action === 'Drop') {
-            const item = inventory.slots[cm.slotIdx];
+            const item =
+              cm.source === 'hotbar'
+                ? inventory.hotbar[cm.slotIdx]
+                : inventory.slots[cm.slotIdx];
             if (item) {
               if (item.stackable && item.quantity > 1) {
                 this.dropDialog = {
@@ -938,13 +948,32 @@ export class InventoryPanel {
     }
   }
 
-  /** Open the right-click context menu over the inventory slot at (mx, my). */
+  /** Open the right-click context menu over an inventory or hotbar slot at (mx, my). */
   openContextMenu(
     mx: number,
     my: number,
     canvas: HTMLCanvasElement,
     inventory: Inventory,
   ): void {
+    // Check hotbar slots
+    for (let i = 0; i < HOTBAR_COUNT; i++) {
+      const r = this.hotbarSlotRect(i, canvas);
+      if (inRect(mx, my, r)) {
+        const item = inventory.hotbar[i];
+        if (item) {
+          this.contextMenu = {
+            source: 'hotbar',
+            slotIdx: i,
+            x: mx,
+            y: my,
+            item,
+          };
+          this.contextMenuHover = -1;
+          return;
+        }
+      }
+    }
+
     if (!this.isOpen) return;
     const p = this.panelRect(canvas);
     const pageStart = this.page * SLOTS_PER_PAGE;
@@ -955,7 +984,7 @@ export class InventoryPanel {
       if (inRect(mx, my, r)) {
         const item = inventory.slots[slotIdx];
         if (item) {
-          this.contextMenu = { slotIdx, x: mx, y: my, item };
+          this.contextMenu = { source: 'inv', slotIdx, x: mx, y: my, item };
           this.contextMenuHover = -1;
           return;
         }
@@ -970,7 +999,10 @@ export class InventoryPanel {
       this.drag.my = my;
     }
     if (this.contextMenu) {
-      const options = this.contextMenuOptions(this.contextMenu.item);
+      const options = this.contextMenuOptions(
+        this.contextMenu.item,
+        this.contextMenu.source,
+      );
       const menuItemH = 22;
       const cmx = this.contextMenu.x;
       const cmy = this.contextMenu.y;
@@ -987,7 +1019,13 @@ export class InventoryPanel {
     }
   }
 
-  private contextMenuOptions(item: InventoryItem): string[] {
+  private contextMenuOptions(
+    item: InventoryItem,
+    source: 'inv' | 'hotbar',
+  ): string[] {
+    if (source === 'hotbar') {
+      return ['Move to Bag', 'Name', 'Description', 'Drop'];
+    }
     return item.type === 'armor'
       ? ['Equip', 'Name', 'Description', 'Drop']
       : ['Name', 'Description', 'Drop'];

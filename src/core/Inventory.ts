@@ -219,6 +219,16 @@ export class Inventory {
     this.hotbar[hotbarIdx] = inv;
   }
 
+  moveHotbarToFirstEmptySlot(hotbarIdx: number): boolean {
+    const item = this.hotbar[hotbarIdx];
+    if (!item) return false;
+    const emptyIdx = this.slots.indexOf(null);
+    if (emptyIdx === -1) return false;
+    this.slots[emptyIdx] = item;
+    this.hotbar[hotbarIdx] = null;
+    return true;
+  }
+
   // Equipment
 
   /** Find an item by ID across both slots and hotbar. */
