@@ -11,8 +11,11 @@ import {
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import { drawHUD } from '../ui/HUD';
+import { PauseMenu } from '../ui/PauseMenu';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { ShopSystem } from '../systems/ShopSystem';
+import { MobileHUDSystem } from '../systems/MobileHUDSystem';
+import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { IS_MOBILE } from '../core/MobileDetect';
 
 export class BuildingInteriorScene extends Scene {
@@ -36,13 +39,21 @@ export class BuildingInteriorScene extends Scene {
   // Key handler cleanup
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
 
-  // Mobile touch movement
-  private mobileMoveTouchId: number | null = null;
-  private mobileMoveTarget: { x: number; y: number } | null = null;
-  private mobileTapStart: { x: number; y: number; time: number } | null = null;
+  // Shared mobile HUD (buttons, panels, touch state)
+  private readonly mobileHUD = new MobileHUDSystem();
+
+  // Pause menu
+  private readonly pauseMenu = new PauseMenu();
+
+  // Companion follow override (mobile follow button)
+  private isFollowOverride = false;
 
   // Notif pulse (unused but needed for HUD signature)
   private readonly notifPulse = { value: 0 };
+
+  // HUD collapse state (mobile)
+  private _hudCollapsed = IS_MOBILE;
+  private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(
     private readonly entry: BuildingEntry,
@@ -94,6 +105,11 @@ export class BuildingInteriorScene extends Scene {
         e.preventDefault();
         return;
       }
+      if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
+        e.preventDefault();
+        this.mobileHUD.toggleMiniMap();
+        return;
+      }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
       if (this.safeRoom?.mordecaiDialogOpen) {
@@ -107,7 +123,9 @@ export class BuildingInteriorScene extends Scene {
       if (this.exitMenuOpen) {
         this.exitMenuOpen = false;
         this.exitDismissed = true;
+        return;
       }
+      this.pauseMenu.toggle();
     };
     window.addEventListener('keydown', this.escHandler);
   }
@@ -127,6 +145,7 @@ export class BuildingInteriorScene extends Scene {
   }
 
   update(): void {
+    if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.safeRoom?.mordecaiDialogOpen) return;
     if (this.shop?.shopOpen) return;
@@ -152,20 +171,17 @@ export class BuildingInteriorScene extends Scene {
     if (this.input.has('ArrowLeft') || this.input.has('a')) dx -= 1;
     if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
 
-    // Mobile touch movement
-    const touchHoldMs = this.mobileTapStart
-      ? Date.now() - this.mobileTapStart.time
-      : 0;
+    // Mobile touch movement (via shared MobileHUDSystem)
     if (
       IS_MOBILE &&
-      this.mobileMoveTarget &&
-      touchHoldMs >= 150 &&
+      this.mobileHUD.moveTarget &&
+      this.mobileHUD.touchHoldMs >= 150 &&
       dx === 0 &&
       dy === 0
     ) {
       const { x: camX, y: camY } = this.camera(this.sceneManager.canvas);
-      const wx = this.mobileMoveTarget.x + camX;
-      const wy = this.mobileMoveTarget.y + camY;
+      const wx = this.mobileHUD.moveTarget.x + camX;
+      const wy = this.mobileHUD.moveTarget.y + camY;
       const ddx = wx - (player.x + TILE_SIZE / 2);
       const ddy = wy - (player.y + TILE_SIZE / 2);
       const dist = Math.hypot(ddx, ddy);
@@ -203,7 +219,10 @@ export class BuildingInteriorScene extends Scene {
     const fdx = player.x - follower.x;
     const fdy = player.y - follower.y;
     const fdist = Math.hypot(fdx, fdy);
-    if (fdist > TILE_SIZE * 1.5) {
+    const followDist = this.isFollowOverride
+      ? TILE_SIZE * 0.8
+      : TILE_SIZE * 1.5;
+    if (fdist > followDist) {
       const spd = 3.5;
       const fmx = (fdx / fdist) * spd;
       const fmy = (fdy / fdist) * spd;
@@ -277,6 +296,16 @@ export class BuildingInteriorScene extends Scene {
   }
 
   handleClick(mx: number, my: number): void {
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.handleClick(mx, my);
+      return;
+    }
+    // Pause button (works on desktop + mobile)
+    const btn = this.mobileHUD.hitTest(mx, my);
+    if (btn === 'pause') {
+      this.pauseMenu.toggle();
+      return;
+    }
     if (this.shop?.shopOpen) {
       this.shop.handleClick(mx, my, this.active());
       return;
@@ -300,6 +329,33 @@ export class BuildingInteriorScene extends Scene {
       this.exitMenuOpen = false;
       this.exitDismissed = true;
     }
+  }
+
+  handleMouseDown(mx: number, my: number): void {
+    this.mobileHUD.handleMouseDown(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
+  }
+
+  handleMouseMove(mx: number, my: number): void {
+    this.mobileHUD.handleMouseMove(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
+  }
+
+  handleMouseUp(mx: number, my: number): void {
+    this.mobileHUD.handleMouseUp(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.active().inventory,
+    );
   }
 
   private doExit(): void {
@@ -332,7 +388,14 @@ export class BuildingInteriorScene extends Scene {
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
 
-    drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse, false);
+    this._hudToggleRect = drawHUD(
+      ctx,
+      canvas,
+      this.human,
+      this.cat,
+      this.notifPulse,
+      this._hudCollapsed,
+    );
 
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -342,6 +405,48 @@ export class BuildingInteriorScene extends Scene {
     ctx.textAlign = 'center';
     ctx.fillText(`Inside: ${this.entry.name}`, canvas.width / 2, 18);
     ctx.textAlign = 'left';
+
+    // Minimap + right-side buttons (pause, gear, bag)
+    if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
+      const mmSize = this.mobileHUD.renderInteriorMiniMap(
+        ctx,
+        canvas,
+        this.map,
+        this.active(),
+        this.inactive(),
+      );
+      const pauseY = 8 + mmSize + 20;
+      this.mobileHUD.renderPauseButton(ctx, canvas, pauseY);
+      const gearY = pauseY + 34;
+
+      const active = this.active();
+      const name = this.human.isActive ? 'Human' : 'Cat';
+      this.mobileHUD.renderPanels(
+        ctx,
+        canvas,
+        active.inventory,
+        name,
+        active.coins,
+      );
+      if (IS_MOBILE) {
+        const extraButtons: MobileHUDButton[] = [
+          {
+            id: 'follow',
+            icon: '↩',
+            label: 'Follow',
+            active: this.isFollowOverride,
+          },
+        ];
+        this.mobileHUD.renderButtons(
+          ctx,
+          canvas,
+          this.human.isActive,
+          extraButtons,
+          52,
+          gearY,
+        );
+      }
+    }
 
     if (this.safeRoom) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
@@ -357,6 +462,10 @@ export class BuildingInteriorScene extends Scene {
     }
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
+
+    if (this.pauseMenu.isOpen) {
+      this.pauseMenu.render(ctx, canvas, this.human, this.cat);
+    }
   }
 
   private camera(canvas: HTMLCanvasElement): { x: number; y: number } {
@@ -468,12 +577,15 @@ export class BuildingInteriorScene extends Scene {
   // Mobile touch handlers
 
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
+    const canvas = this.sceneManager.canvas;
+
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
       // Route to click for modals
       if (
+        this.pauseMenu.isOpen ||
         this.exitMenuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
         this.shop?.shopOpen
@@ -482,39 +594,140 @@ export class BuildingInteriorScene extends Scene {
         continue;
       }
 
-      // Start movement tracking
-      if (this.mobileMoveTouchId === null) {
-        this.mobileMoveTouchId = touch.identifier;
-        this.mobileMoveTarget = { x, y };
-        this.mobileTapStart = { x, y, time: Date.now() };
+      // HUD collapse/expand toggle (mobile only)
+      if (IS_MOBILE) {
+        const ht = this._hudToggleRect;
+        if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
+          this._hudCollapsed = !this._hudCollapsed;
+          continue;
+        }
+      }
+
+      // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
+      if (IS_MOBILE) {
+        const btn = this.mobileHUD.hitTest(x, y);
+        if (btn === 'switch') {
+          this.human.isActive = !this.human.isActive;
+          this.cat.isActive = !this.cat.isActive;
+          continue;
+        }
+        if (btn === 'gear') {
+          this.mobileHUD.gearPanel.toggle();
+          continue;
+        }
+        if (btn === 'bag') {
+          this.mobileHUD.inventoryPanel.toggle();
+          continue;
+        }
+        if (btn === 'pause') {
+          this.pauseMenu.toggle();
+          continue;
+        }
+        if (btn === 'minimap') {
+          this.mobileHUD.toggleMiniMap();
+          continue;
+        }
+        if (btn === 'follow') {
+          this.isFollowOverride = !this.isFollowOverride;
+          continue;
+        }
+      }
+
+      // Hotbar slot tap — defer activation until touch end so long-press opens context menu
+      const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(
+        x,
+        y,
+        canvas,
+      );
+      if (hi >= 0) {
+        this.mobileHUD.inventoryDragTouchId = touch.identifier;
+        this.handleMouseDown(x, y);
+        this.mobileHUD.startInvLongPress(x, y, () => {
+          this.mobileHUD.inventoryPanel.openContextMenu(
+            x,
+            y,
+            canvas,
+            this.active().inventory,
+          );
+        });
+        continue;
+      }
+
+      // Inventory panel drag start + long-press for context menu
+      if (this.mobileHUD.inventoryPanel.isOpen) {
+        if (this.mobileHUD.inventoryPanel.hitsPanel(x, y, canvas)) {
+          this.handleMouseDown(x, y);
+          if (this.mobileHUD.inventoryDragTouchId === null) {
+            this.mobileHUD.inventoryDragTouchId = touch.identifier;
+          }
+          this.mobileHUD.startInvLongPress(x, y, () => {
+            this.mobileHUD.inventoryPanel.openContextMenu(
+              x,
+              y,
+              canvas,
+              this.active().inventory,
+            );
+          });
+          continue;
+        }
+      }
+
+      // Game world touch: movement / tap tracking
+      if (this.mobileHUD.moveTouchId === null) {
+        this.mobileHUD.startMovement(touch.identifier, x, y);
       }
     }
   }
 
   handleTouchMove(e: TouchEvent, rect: DOMRect): void {
     for (const touch of Array.from(e.changedTouches)) {
-      if (touch.identifier === this.mobileMoveTouchId) {
-        const x = touch.clientX - rect.left;
-        const y = touch.clientY - rect.top;
-        this.mobileMoveTarget = { x, y };
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      // Cancel long-press if finger moved too far
+      this.mobileHUD.checkInvLongPressMove(x, y);
+
+      // Update inventory drag
+      this.handleMouseMove(x, y);
+
+      // Update movement target
+      if (touch.identifier === this.mobileHUD.moveTouchId) {
+        this.mobileHUD.moveTarget = { x, y };
       }
     }
   }
 
   handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
+    const canvas = this.sceneManager.canvas;
+
     for (const touch of Array.from(e.changedTouches)) {
-      if (touch.identifier !== this.mobileMoveTouchId) continue;
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      // Short tap → space action (talk to Mordecai, interact with shop, etc.)
-      if (this.mobileTapStart) {
-        const elapsed = Date.now() - this.mobileTapStart.time;
-        const moved = Math.hypot(
-          x - this.mobileTapStart.x,
-          y - this.mobileTapStart.y,
-        );
-        if (elapsed < 250 && moved < 20) {
+      // Inventory / hotbar drag end
+      if (touch.identifier === this.mobileHUD.inventoryDragTouchId) {
+        const longPressFired = this.mobileHUD.invLongPressFired;
+        this.mobileHUD.clearInvLongPress();
+        if (!longPressFired) {
+          this.handleMouseUp(x, y);
+          const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(
+            x,
+            y,
+            canvas,
+          );
+          if (hi >= 0) {
+            this.triggerHotbarActivation(hi);
+          } else {
+            this.handleClick(x, y);
+          }
+        }
+        this.mobileHUD.inventoryDragTouchId = null;
+        continue;
+      }
+
+      // Game world touch end
+      if (touch.identifier === this.mobileHUD.moveTouchId) {
+        if (this.mobileHUD.isTap(x, y)) {
           this.handleClick(x, y);
           // Trigger space-equivalent actions
           if (this.safeRoom && !this.exitMenuOpen) {
@@ -531,11 +744,16 @@ export class BuildingInteriorScene extends Scene {
             }
           }
         }
+        this.mobileHUD.clearMovement();
       }
+    }
+  }
 
-      this.mobileMoveTouchId = null;
-      this.mobileMoveTarget = null;
-      this.mobileTapStart = null;
+  private triggerHotbarActivation(hotbarIdx: number): void {
+    const active = this.active();
+    const slot = active.inventory.hotbar[hotbarIdx];
+    if (slot?.id === 'health_potion') {
+      active.usePotion();
     }
   }
 }
