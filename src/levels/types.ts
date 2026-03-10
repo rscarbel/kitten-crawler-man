@@ -10,7 +10,8 @@ export interface MobSpawnRule {
     | 'juicer'
     | 'troglodyte'
     | 'tuskling'
-    | 'ball_of_swine';
+    | 'ball_of_swine'
+    | 'krakaren_clone';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.

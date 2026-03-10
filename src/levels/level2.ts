@@ -40,7 +40,7 @@ export const level2: LevelDef = {
     { type: 'goblin', chance: 0.3, minLevel: 3, maxLevel: 6 },
     { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
   ],
-  bossRooms: [],
+  bossRooms: [{ type: 'krakaren_clone' }],
   hasArena: true,
   isSafeLevel: true,
   nextLevelId: 'level3',

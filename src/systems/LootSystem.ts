@@ -72,7 +72,6 @@ export class LootSystem {
   ): void {
     for (const loot of this.pendingLoots) {
       if (loot.collected) continue;
-      loot.ttl--;
       if (loot.pickupDelay > 0) {
         loot.pickupDelay--;
         continue;
@@ -131,9 +130,7 @@ export class LootSystem {
         }
       }
     }
-    this.pendingLoots = this.pendingLoots.filter(
-      (l) => !l.collected && l.ttl > 0,
-    );
+    this.pendingLoots = this.pendingLoots.filter((l) => !l.collected);
   }
 
   tryCollectLootAt(
@@ -191,9 +188,7 @@ export class LootSystem {
         parts.push(`+${loot.loot.items.length} item`);
       const label = parts.join(' ');
 
-      const alpha = Math.min(1, loot.ttl / 120);
       ctx.save();
-      ctx.globalAlpha = alpha;
 
       const bw = Math.max(54, label.length * 7 + 16);
       const bh = 20;

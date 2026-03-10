@@ -10,6 +10,7 @@ import { Troglodyte } from '../creatures/Troglodyte';
 import { Tuskling } from '../creatures/Tuskling';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { SkyFowl } from '../creatures/SkyFowl';
+import { KrakarenClone } from '../creatures/KrakarenClone';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
 
@@ -71,6 +72,8 @@ export function createMob(
     mob = new SkyFowl(tileX, tileY, TILE_SIZE);
   } else if (type === 'ball_of_swine') {
     mob = new BallOfSwine(tileX, tileY, TILE_SIZE);
+  } else if (type === 'krakaren_clone') {
+    mob = new KrakarenClone(tileX, tileY, TILE_SIZE);
   } else {
     // default: goblin
     const v =

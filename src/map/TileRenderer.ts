@@ -18,6 +18,7 @@ import {
   DIRT_PATCH,
   METAL_WALL,
   ARENA_FLOOR,
+  KRAKAREN_BOSS_ROOM_FLOOR,
 } from './tileTypes';
 
 /**
@@ -321,6 +322,55 @@ function drawTile(
       if (ty % 4 === 0) {
         ctx.fillStyle = 'rgba(249,115,22,0.18)';
         ctx.fillRect(sx, sy, ts, 2);
+      }
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Krakaren Clone lair — dark wet cavern floor
+    case KRAKAREN_BOSS_ROOM_FLOOR: {
+      // Dark blue-grey stone base
+      const cavBase = (tx + ty) % 2 === 0 ? '#1a1e24' : '#161a20';
+      ctx.fillStyle = cavBase;
+      ctx.fillRect(sx, sy, ts, ts);
+      // Wet sheen patches
+      if ((tx * 7 + ty * 13) % 5 === 0) {
+        ctx.fillStyle = 'rgba(100,140,180,0.08)';
+        ctx.beginPath();
+        ctx.ellipse(
+          sx + ts * 0.5,
+          sy + ts * 0.5,
+          ts * 0.35,
+          ts * 0.25,
+          (tx + ty) * 0.5,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      // Crack lines
+      if ((tx + ty * 3) % 7 === 0) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(sx + ts * 0.2, sy + ts * 0.3);
+        ctx.lineTo(sx + ts * 0.8, sy + ts * 0.7);
+        ctx.stroke();
+      }
+      // Pink slime drips (hints at the Krakaren)
+      if ((tx * 11 + ty * 5) % 9 === 0) {
+        ctx.fillStyle = 'rgba(220,100,140,0.15)';
+        ctx.beginPath();
+        ctx.ellipse(
+          sx + ts * 0.6,
+          sy + ts * 0.4,
+          ts * 0.12,
+          ts * 0.08,
+          0,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;

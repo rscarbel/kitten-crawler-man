@@ -5,6 +5,7 @@ import {
   SAFE_ROOM_FLOOR,
   HORDER_BOSS_ROOM_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
+  KRAKAREN_BOSS_ROOM_FLOOR,
   METAL_WALL,
   ARENA_FLOOR,
 } from './tileTypes';
@@ -35,12 +36,27 @@ export interface DungeonData {
   arenaExteriors: ArenaExterior[];
 }
 
+/** Map boss type string to the floor tile constant for that boss's room. */
+function bossFloorForType(type: string): number {
+  switch (type) {
+    case 'the_hoarder':
+      return HORDER_BOSS_ROOM_FLOOR;
+    case 'juicer':
+      return JUICER_BOSS_ROOM_FLOOR;
+    case 'krakaren_clone':
+      return KRAKAREN_BOSS_ROOM_FLOOR;
+    default:
+      return HORDER_BOSS_ROOM_FLOOR;
+  }
+}
+
 export function generateDungeon(
   size: number,
   numBossRooms: number,
   numSafeRooms: number,
   numStairwellsOverride?: number,
   hasArena = false,
+  bossTypes: string[] = [],
 ): DungeonData {
   const BORDER = 5;
   const DUNGEON_FLOORS = [
@@ -223,9 +239,7 @@ export function generateDungeon(
       const floor = isSafeRoom
         ? SAFE_ROOM_FLOOR
         : isBossRoom
-          ? bossIdx === 0
-            ? HORDER_BOSS_ROOM_FLOOR
-            : JUICER_BOSS_ROOM_FLOOR
+          ? bossFloorForType(bossTypes[bossIdx] ?? '')
           : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
       const room: Room = { x, y, w, h, floor };
       rooms.push(room);

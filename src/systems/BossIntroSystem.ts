@@ -2,6 +2,8 @@ import { drawHumanSprite } from '../sprites/humanSprite';
 import { drawCatSprite } from '../sprites/catSprite';
 import { drawJuicerSprite } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
+import { drawKrakarenSprite } from '../sprites/krakarenSprite';
+import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 
 type IntroState = {
   bossType: string;
@@ -186,6 +188,32 @@ export class BossIntroSystem {
           1,
           false,
           false,
+        );
+      } else if (intro.bossType === 'krakaren_clone') {
+        const kS = 70;
+        drawKrakarenSprite(
+          ctx,
+          rightX + panelW / 2 - kS / 2,
+          panelY + 22,
+          kS,
+          0,
+          false,
+          0,
+          1,
+          -1,
+          0,
+        );
+      } else if (intro.bossType === 'ball_of_swine') {
+        const bS = 64;
+        drawBallOfSwineSprite(
+          ctx,
+          rightX + panelW / 2 - bS / 2,
+          panelY + 28,
+          bS,
+          0,
+          true,
+          false,
+          0,
         );
       } else {
         const hS = 80;

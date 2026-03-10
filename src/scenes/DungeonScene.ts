@@ -181,6 +181,7 @@ export class DungeonScene extends Scene {
         levelDef.numStairwells,
         levelDef.isOverworld ? 'overworld' : 'dungeon',
         levelDef.hasArena ?? false,
+        levelDef.bossRooms?.map((b) => b.type) ?? [],
       );
     this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 

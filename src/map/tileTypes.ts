@@ -43,6 +43,8 @@ export const DIRT_PATCH = 23;
 export const METAL_WALL = 24;
 /** Tile type for the arena interior floor — dark steel grating, walkable combat surface. */
 export const ARENA_FLOOR = 25;
+/** Tile type for the Krakaren Clone boss room — dark wet cavern floor. */
+export const KRAKAREN_BOSS_ROOM_FLOOR = 26;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 

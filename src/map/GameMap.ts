@@ -67,6 +67,7 @@ export class GameMap {
     numStairwellsOverride?: number,
     mapType?: 'dungeon' | 'overworld',
     hasArena = false,
+    bossTypes: string[] = [],
   ) {
     this.tileHeight = tileHeight;
     this.structure = this.generate(
@@ -76,6 +77,7 @@ export class GameMap {
       numStairwellsOverride,
       mapType,
       hasArena,
+      bossTypes,
     );
   }
 
@@ -86,6 +88,7 @@ export class GameMap {
     numStairwellsOverride?: number,
     mapType?: 'dungeon' | 'overworld',
     hasArena = false,
+    bossTypes: string[] = [],
   ): TileContent[][] {
     if (mapType === 'overworld') {
       const data = generateOverworld(size);
@@ -107,6 +110,7 @@ export class GameMap {
       numSafeRooms,
       numStairwellsOverride,
       hasArena,
+      bossTypes,
     );
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;

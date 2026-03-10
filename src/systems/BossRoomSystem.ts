@@ -21,6 +21,7 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
     the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
     juicer: { displayName: 'THE JUICER', color: '#fb923c' },
     ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
+    krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
   };
 
 export class BossRoomSystem {
@@ -269,6 +270,55 @@ export class BossRoomSystem {
 
     // Juicer's gym room — decoration handled by JuicerRoomSystem
     if (bossType === 'juicer') return;
+
+    // Krakaren Clone lair — water puddles and slime
+    if (bossType === 'krakaren_clone') {
+      ctx.save();
+      const kseed = b.x * 31 + b.y * 17;
+      const krng = (n: number) => {
+        const sv = Math.sin(kseed + n * 127.1) * 43758.5453;
+        return sv - Math.floor(sv);
+      };
+      // Water puddles
+      for (let i = 0; i < 8; i++) {
+        const px = cx + (krng(i) - 0.5) * b.w * ts * 0.7;
+        const py = cy + (krng(i + 10) - 0.5) * b.h * ts * 0.7;
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = '#4080a0';
+        ctx.beginPath();
+        ctx.ellipse(
+          px,
+          py,
+          ts * (0.4 + krng(i + 20) * 0.3),
+          ts * (0.2 + krng(i + 30) * 0.15),
+          krng(i + 40) * Math.PI,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      // Pink slime trails
+      for (let i = 0; i < 6; i++) {
+        const slx = cx + (krng(i + 50) - 0.5) * b.w * ts * 0.6;
+        const sly = cy + (krng(i + 60) - 0.5) * b.h * ts * 0.6;
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = '#d06888';
+        ctx.beginPath();
+        ctx.ellipse(
+          slx,
+          sly,
+          ts * (0.15 + krng(i + 70) * 0.2),
+          ts * (0.08 + krng(i + 80) * 0.1),
+          krng(i + 90) * Math.PI,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
+    }
 
     ctx.save();
 
