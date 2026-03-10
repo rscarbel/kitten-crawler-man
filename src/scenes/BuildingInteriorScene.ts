@@ -13,6 +13,7 @@ import {
 import { drawHUD } from '../ui/HUD';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { ShopSystem } from '../systems/ShopSystem';
+import { IS_MOBILE } from '../core/MobileDetect';
 
 export class BuildingInteriorScene extends Scene {
   private readonly map: GameMap;
@@ -34,6 +35,11 @@ export class BuildingInteriorScene extends Scene {
 
   // Key handler cleanup
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  // Mobile touch movement
+  private mobileMoveTouchId: number | null = null;
+  private mobileMoveTarget: { x: number; y: number } | null = null;
+  private mobileTapStart: { x: number; y: number; time: number } | null = null;
 
   // Notif pulse (unused but needed for HUD signature)
   private readonly notifPulse = { value: 0 };
@@ -145,6 +151,29 @@ export class BuildingInteriorScene extends Scene {
     if (this.input.has('ArrowDown') || this.input.has('s')) dy += 1;
     if (this.input.has('ArrowLeft') || this.input.has('a')) dx -= 1;
     if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
+
+    // Mobile touch movement
+    const touchHoldMs = this.mobileTapStart
+      ? Date.now() - this.mobileTapStart.time
+      : 0;
+    if (
+      IS_MOBILE &&
+      this.mobileMoveTarget &&
+      touchHoldMs >= 150 &&
+      dx === 0 &&
+      dy === 0
+    ) {
+      const { x: camX, y: camY } = this.camera(this.sceneManager.canvas);
+      const wx = this.mobileMoveTarget.x + camX;
+      const wy = this.mobileMoveTarget.y + camY;
+      const ddx = wx - (player.x + TILE_SIZE / 2);
+      const ddy = wy - (player.y + TILE_SIZE / 2);
+      const dist = Math.hypot(ddx, ddy);
+      if (dist > 8) {
+        dx = ddx / dist;
+        dy = ddy / dist;
+      }
+    }
 
     player.isMoving = dx !== 0 || dy !== 0;
     if (dx !== 0 || dy !== 0) {
@@ -434,5 +463,79 @@ export class BuildingInteriorScene extends Scene {
       exit: { x: cw / 2 - btnW - 8, y: btnY, w: btnW, h: btnH },
       stay: { x: cw / 2 + 8, y: btnY, w: btnW, h: btnH },
     };
+  }
+
+  // Mobile touch handlers
+
+  handleTouchStart(e: TouchEvent, rect: DOMRect): void {
+    for (const touch of Array.from(e.changedTouches)) {
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      // Route to click for modals
+      if (
+        this.exitMenuOpen ||
+        this.safeRoom?.mordecaiDialogOpen ||
+        this.shop?.shopOpen
+      ) {
+        this.handleClick(x, y);
+        continue;
+      }
+
+      // Start movement tracking
+      if (this.mobileMoveTouchId === null) {
+        this.mobileMoveTouchId = touch.identifier;
+        this.mobileMoveTarget = { x, y };
+        this.mobileTapStart = { x, y, time: Date.now() };
+      }
+    }
+  }
+
+  handleTouchMove(e: TouchEvent, rect: DOMRect): void {
+    for (const touch of Array.from(e.changedTouches)) {
+      if (touch.identifier === this.mobileMoveTouchId) {
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        this.mobileMoveTarget = { x, y };
+      }
+    }
+  }
+
+  handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
+    for (const touch of Array.from(e.changedTouches)) {
+      if (touch.identifier !== this.mobileMoveTouchId) continue;
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      // Short tap → space action (talk to Mordecai, interact with shop, etc.)
+      if (this.mobileTapStart) {
+        const elapsed = Date.now() - this.mobileTapStart.time;
+        const moved = Math.hypot(
+          x - this.mobileTapStart.x,
+          y - this.mobileTapStart.y,
+        );
+        if (elapsed < 250 && moved < 20) {
+          this.handleClick(x, y);
+          // Trigger space-equivalent actions
+          if (this.safeRoom && !this.exitMenuOpen) {
+            const player = this.active();
+            if (this.safeRoom.isNearBed(player)) {
+              this.safeRoom.startSleep();
+            } else if (this.safeRoom.isNearMordecai(player)) {
+              this.safeRoom.mordecaiDialogOpen = true;
+            }
+          }
+          if (this.shop && !this.exitMenuOpen) {
+            if (this.shop.isNearShopkeeper(this.active())) {
+              this.shop.shopOpen = true;
+            }
+          }
+        }
+      }
+
+      this.mobileMoveTouchId = null;
+      this.mobileMoveTarget = null;
+      this.mobileTapStart = null;
+    }
   }
 }
