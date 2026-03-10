@@ -16,6 +16,8 @@ import {
   TORCH,
   WELL,
   SAFE_ROOM_FLOOR,
+  STAIRS_UP,
+  STAIRS_DOWN,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
@@ -160,9 +162,11 @@ export class GameMap {
     }
   }
 
-  /** Generates a small interior room for a building (called externally after construction). */
+  /** Generates a small interior room for a building (called externally after construction).
+   *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. */
   generateInterior(
     buildingType: 'house' | 'tower' | 'restaurant' | 'store',
+    towerFloor = 0,
   ): void {
     const isTower = buildingType === 'tower';
     const isRestaurant = buildingType === 'restaurant';
@@ -235,10 +239,42 @@ export class GameMap {
     this.bossRooms = [];
     this.mobSpawnPoints = [];
     this.hallwaySpawnPoints = [];
-    this._interiorExitTiles = [
-      { x: doorX, y: h - 1 },
-      { x: doorX + 1, y: h - 1 },
-    ];
+    // Only ground floor (towerFloor 0) or non-tower buildings have exit doors
+    if (isTower && towerFloor > 0) {
+      // Upper floors: wall off the door gap (no exit)
+      grid[h - 1][doorX].type = 2;
+      grid[h - 1][doorX + 1].type = 2;
+      this._interiorExitTiles = [];
+    } else {
+      this._interiorExitTiles = [
+        { x: doorX, y: h - 1 },
+        { x: doorX + 1, y: h - 1 },
+      ];
+    }
+
+    // Tower stair placement per floor
+    this._interiorStairUpTiles = [];
+    this._interiorStairDownTiles = [];
+    if (isTower) {
+      // Stairs up: upper-right area (2 tiles wide)
+      const upX = w - 5;
+      const upY = 2;
+      // Stairs down: upper-left area (2 tiles wide)
+      const dnX = 3;
+      const dnY = 2;
+
+      const hasUp = towerFloor < 3;
+      const hasDown = towerFloor > 0;
+
+      if (hasUp) {
+        grid[upY][upX].type = STAIRS_UP;
+        this._interiorStairUpTiles = [{ x: upX, y: upY }];
+      }
+      if (hasDown) {
+        grid[dnY][dnX].type = STAIRS_DOWN;
+        this._interiorStairDownTiles = [{ x: dnX, y: dnY }];
+      }
+    }
 
     if (isRestaurant) {
       const interior = { x: 1, y: 1, w: w - 2, h: h - 2 };
@@ -259,6 +295,10 @@ export class GameMap {
 
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
   _interiorExitTiles: Array<{ x: number; y: number }> = [];
+  /** Interior stair-up tile positions (tower floors). */
+  _interiorStairUpTiles: Array<{ x: number; y: number }> = [];
+  /** Interior stair-down tile positions (tower floors). */
+  _interiorStairDownTiles: Array<{ x: number; y: number }> = [];
 
   /**
    * A* pathfinding on the tile grid. Returns an ordered array of tile

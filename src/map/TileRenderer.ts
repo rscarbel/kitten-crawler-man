@@ -22,6 +22,8 @@ import {
   ROOF_CIRCUS_RED,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
+  STAIRS_UP,
+  STAIRS_DOWN,
 } from './tileTypes';
 
 /**
@@ -1957,6 +1959,46 @@ function drawTile(
         ctx.globalAlpha = 1;
       }
       void h2;
+      break;
+    }
+
+    // Interior stairs — carpet base with stone steps and directional arrow
+    case STAIRS_UP:
+    case STAIRS_DOWN: {
+      const isUp = type === STAIRS_UP;
+      // Carpet base (matches tower carpet floor type 7)
+      ctx.fillStyle = '#5a2d2d';
+      ctx.fillRect(sx, sy, ts, ts);
+      ctx.fillStyle = '#4a1e1e';
+      ctx.fillRect(sx + 1, sy + 1, ts - 2, ts - 2);
+
+      // Draw 4 stone steps
+      const stepCount = 4;
+      const stepH = Math.floor((ts - 4) / stepCount);
+      for (let i = 0; i < stepCount; i++) {
+        const idx = isUp ? stepCount - 1 - i : i;
+        const brightness = 140 - idx * 25;
+        ctx.fillStyle = `rgb(${brightness}, ${brightness - 10}, ${brightness - 20})`;
+        const stepY = sy + 2 + i * stepH;
+        const inset = idx * 3;
+        ctx.fillRect(sx + 2 + inset, stepY, ts - 4 - inset * 2, stepH - 1);
+        // Step edge highlight
+        ctx.fillStyle = `rgba(255,255,255,0.12)`;
+        ctx.fillRect(sx + 2 + inset, stepY, ts - 4 - inset * 2, 1);
+      }
+
+      // Pulsing amber glow border
+      const stairPulse = 0.5 + Math.sin(performance.now() / 600) * 0.3;
+      ctx.strokeStyle = `rgba(220, 170, 50, ${stairPulse})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx + 1, sy + 1, ts - 2, ts - 2);
+
+      // Directional arrow
+      ctx.fillStyle = `rgba(255, 230, 140, ${stairPulse + 0.2})`;
+      ctx.font = `bold ${Math.floor(ts * 0.5)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(isUp ? '\u25B2' : '\u25BC', sx + ts / 2, sy + ts * 0.65);
+      ctx.textAlign = 'left';
       break;
     }
   }

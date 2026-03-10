@@ -51,6 +51,10 @@ export const ROOF_CIRCUS_RED = 27;
 export const ROOF_CIRCUS_BLUE = 28;
 /** Tile type for purple & yellow circus tent roof — smaller accent tents, not walkable. */
 export const ROOF_CIRCUS_PURPLE = 29;
+/** Tile type for interior stairs going up — walkable trigger tile. */
+export const STAIRS_UP = 30;
+/** Tile type for interior stairs going down — walkable trigger tile. */
+export const STAIRS_DOWN = 31;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 

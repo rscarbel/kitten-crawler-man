@@ -17,13 +17,16 @@ import { ShopSystem } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { IS_MOBILE } from '../core/MobileDetect';
+import { TowerStairSystem } from '../systems/TowerStairSystem';
+
+const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
 export class BuildingInteriorScene extends Scene {
-  private readonly map: GameMap;
+  private map: GameMap;
   private readonly human: HumanPlayer;
   private readonly cat: CatPlayer;
-  private readonly mapW: number;
-  private readonly mapH: number;
+  private mapW: number;
+  private mapH: number;
 
   // Exit menu state
   private onExitTile = false;
@@ -55,6 +58,11 @@ export class BuildingInteriorScene extends Scene {
   private _hudCollapsed = IS_MOBILE;
   private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
+  // Tower multi-floor state
+  private towerFloors: GameMap[] = [];
+  private currentFloor = 0;
+  private towerStairs: TowerStairSystem | null = null;
+
   constructor(
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
@@ -68,9 +76,21 @@ export class BuildingInteriorScene extends Scene {
   ) {
     super();
 
-    // Build tiny interior map
-    this.map = new GameMap(0, TILE_SIZE, 0, 0);
-    this.map.generateInterior(entry.type);
+    const isTower = entry.type === 'tower';
+
+    if (isTower) {
+      // Generate 4 tower floors
+      for (let f = 0; f < 4; f++) {
+        const floorMap = new GameMap(0, TILE_SIZE, 0, 0);
+        floorMap.generateInterior('tower', f);
+        this.towerFloors.push(floorMap);
+      }
+      this.map = this.towerFloors[0];
+    } else {
+      // Build single interior map
+      this.map = new GameMap(0, TILE_SIZE, 0, 0);
+      this.map.generateInterior(entry.type);
+    }
 
     this.mapW = this.map.structure[0]?.length ?? 18;
     this.mapH = this.map.structure.length;
@@ -97,6 +117,44 @@ export class BuildingInteriorScene extends Scene {
         : null;
 
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
+
+    // Tower stair system
+    if (isTower) {
+      this.towerStairs = new TowerStairSystem(
+        this.map,
+        0,
+        () => this.changeFloor(this.currentFloor + 1),
+        () => this.changeFloor(this.currentFloor - 1),
+      );
+    }
+  }
+
+  private changeFloor(newFloor: number): void {
+    if (newFloor < 0 || newFloor > 3) return;
+    const goingUp = newFloor > this.currentFloor;
+    this.currentFloor = newFloor;
+    this.map = this.towerFloors[newFloor];
+    this.mapW = this.map.structure[0]?.length ?? 30;
+    this.mapH = this.map.structure.length;
+    this.cat.setMap(this.map);
+    this.towerStairs?.setMap(this.map, newFloor);
+
+    // Spawn at the opposite stair on the new floor:
+    // if ascending, place at the down-stairs; if descending, place at the up-stairs
+    const spawnTiles = goingUp
+      ? this.map._interiorStairDownTiles
+      : this.map._interiorStairUpTiles;
+    const spawn = spawnTiles[0] ?? this.map.startTile;
+    const spawnY = spawn.y + 1; // one tile below the stair so the menu doesn't re-trigger
+    this.human.x = spawn.x * TILE_SIZE;
+    this.human.y = spawnY * TILE_SIZE;
+    this.cat.x = (spawn.x + 1) * TILE_SIZE;
+    this.cat.y = spawnY * TILE_SIZE;
+
+    // Reset menu states
+    this.onExitTile = false;
+    this.exitMenuOpen = false;
+    this.exitDismissed = false;
   }
 
   onEnter(): void {
@@ -118,6 +176,10 @@ export class BuildingInteriorScene extends Scene {
       }
       if (this.shop?.shopOpen) {
         this.shop.shopOpen = false;
+        return;
+      }
+      if (this.towerStairs?.menuOpen) {
+        this.towerStairs.closeMenu();
         return;
       }
       if (this.exitMenuOpen) {
@@ -147,6 +209,7 @@ export class BuildingInteriorScene extends Scene {
   update(): void {
     if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
+    if (this.towerStairs?.menuOpen) return;
     if (this.safeRoom?.mordecaiDialogOpen) return;
     if (this.shop?.shopOpen) return;
 
@@ -293,6 +356,9 @@ export class BuildingInteriorScene extends Scene {
     } else if (!wasOnExit && !this.exitDismissed) {
       this.exitMenuOpen = true;
     }
+
+    // Tower stair detection
+    this.towerStairs?.detect(player);
   }
 
   handleClick(mx: number, my: number): void {
@@ -304,6 +370,10 @@ export class BuildingInteriorScene extends Scene {
     const btn = this.mobileHUD.hitTest(mx, my);
     if (btn === 'pause') {
       this.pauseMenu.toggle();
+      return;
+    }
+    if (this.towerStairs?.menuOpen) {
+      this.towerStairs.handleClick(mx, my, this.sceneManager.canvas);
       return;
     }
     if (this.shop?.shopOpen) {
@@ -388,6 +458,9 @@ export class BuildingInteriorScene extends Scene {
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
 
+    // Tower stair hints
+    this.towerStairs?.renderStairHints(ctx, camX, camY);
+
     this._hudToggleRect = drawHUD(
       ctx,
       canvas,
@@ -403,7 +476,15 @@ export class BuildingInteriorScene extends Scene {
     ctx.fillStyle = '#d4edaa';
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`Inside: ${this.entry.name}`, canvas.width / 2, 18);
+    const floorSuffix =
+      this.towerFloors.length > 0
+        ? ` (${FLOOR_LABELS[this.currentFloor]})`
+        : '';
+    ctx.fillText(
+      `Inside: ${this.entry.name}${floorSuffix}`,
+      canvas.width / 2,
+      18,
+    );
     ctx.textAlign = 'left';
 
     // Minimap + right-side buttons (pause, gear, bag)
@@ -462,6 +543,7 @@ export class BuildingInteriorScene extends Scene {
     }
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
+    if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
 
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
@@ -587,6 +669,7 @@ export class BuildingInteriorScene extends Scene {
       if (
         this.pauseMenu.isOpen ||
         this.exitMenuOpen ||
+        this.towerStairs?.menuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
         this.shop?.shopOpen
       ) {
