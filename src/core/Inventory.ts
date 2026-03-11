@@ -2,6 +2,7 @@ export type ItemId =
   | 'health_potion'
   | 'enchanted_bigboi_boxers'
   | 'trollskin_shirt'
+  | 'enchanted_crown_sepsis_whore'
   | 'scroll_of_confusing_fog'
   | 'goblin_dynamite'
   | 'gym_dumbbell'
@@ -98,6 +99,21 @@ const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'The wearer of this shirt gains +7 to the Regeneration skill. In addition, ' +
       'all melee-based damage debuffs such as Stun, Knockback, Disarm, and ' +
       'Out-of-Breath are negated.',
+  },
+  enchanted_crown_sepsis_whore: {
+    id: 'enchanted_crown_sepsis_whore',
+    name: 'Enchanted Crown of the Sepsis Whore',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Head',
+    equipSubSlot: 'Hat',
+    statBonus: { intelligence: 5 },
+    description:
+      'Imbues the wearer with +5 Intelligence. All attacks, including ' +
+      'magical attacks, now have a 15% chance to inflict the Sepsis debuff. ' +
+      'Sepsis is a health-sapping curse that slowly drains the life of its ' +
+      'victim until they perish.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',

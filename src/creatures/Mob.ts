@@ -448,12 +448,39 @@ export abstract class Mob extends Player {
     sx: number,
     sy: number,
   ) {
-    if (this.healthBarTimer <= 0) return;
-    const alpha = this.healthBarTimer < 40 ? this.healthBarTimer / 40 : 1;
+    if (this.healthBarTimer <= 0 && !this.hasStatus('sepsis')) return;
+    if (this.healthBarTimer > 0) {
+      const alpha = this.healthBarTimer < 40 ? this.healthBarTimer / 40 : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      this.renderHealthBar(ctx, sx, sy);
+      ctx.restore();
+    }
+    this.renderMobStatusLabels(ctx, sx, sy);
+  }
+
+  /** Renders status labels (e.g. "Septic") above the mob. */
+  private renderMobStatusLabels(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+  ) {
+    if (!this.hasStatus('sepsis')) return;
+    const t = Date.now();
+    const pulse = 0.7 + 0.3 * Math.sin(t * 0.006);
     ctx.save();
-    ctx.globalAlpha = alpha;
-    this.renderHealthBar(ctx, sx, sy);
+    ctx.globalAlpha = pulse;
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#bef264';
+    ctx.shadowColor = '#65a30d';
+    ctx.shadowBlur = 4;
+    ctx.fillText('Septic', sx + this.tileSize * 0.5, sy - 12);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
     ctx.restore();
+    // Render sepsis bubbles above mob
+    this.renderStatusEffects(ctx, sx, sy);
   }
 
   abstract updateAI(targets: Player[]): void;

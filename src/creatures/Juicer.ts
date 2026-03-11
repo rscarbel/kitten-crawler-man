@@ -1,5 +1,5 @@
 import { Player } from '../Player';
-import { Mob } from './Mob';
+import { Mob, LootDrop } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import {
   drawJuicerSprite,
@@ -377,6 +377,13 @@ export class Juicer extends Mob {
   onDumbbellPickedUp(): void {
     this.heldDumbbell = true;
     this.requestDumbbellAt = null;
+  }
+
+  protected rollLootItems(killer: Player | null): LootDrop['items'] {
+    const items = super.rollLootItems(killer);
+    // Guaranteed crown drop
+    items.push({ id: 'enchanted_crown_sepsis_whore', quantity: 1 });
+    return items;
   }
 
   render(

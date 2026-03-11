@@ -156,6 +156,9 @@ export abstract class Player {
       if (effect.type === 'poison' && elapsed > 0 && elapsed % 120 === 0) {
         this.takeDamage(1);
       }
+      if (effect.type === 'sepsis' && elapsed > 0 && elapsed % 120 === 0) {
+        this.takeDamage(1);
+      }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;
     });
@@ -275,6 +278,26 @@ export abstract class Player {
           const by = sy - 7 - b * 4.5 - Math.abs(Math.sin(phase * 0.5)) * 3;
           const r = 2.8 - b * 0.5;
           ctx.globalAlpha = 0.7 + 0.3 * Math.sin(phase);
+          ctx.beginPath();
+          ctx.arc(bx, by, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      }
+      if (effect.type === 'sepsis') {
+        const t = Date.now();
+        const drift = (t * 0.02) % (Math.PI * 2);
+        // Sickly yellow-green bubbles + dripping effect
+        ctx.shadowColor = '#a3e635';
+        ctx.shadowBlur = 4;
+        for (let b = 0; b < 4; b++) {
+          const phase = drift + b * 1.57; // π/2 apart
+          const bx = cx + Math.sin(phase) * 5.5;
+          const by = sy - 6 - b * 3.5 - Math.abs(Math.sin(phase * 0.7)) * 4;
+          const r = 2.5 - b * 0.35;
+          const pulse = 0.6 + 0.4 * Math.sin(phase + t * 0.005);
+          ctx.globalAlpha = pulse;
+          ctx.fillStyle = b % 2 === 0 ? '#bef264' : '#a3e635';
           ctx.beginPath();
           ctx.arc(bx, by, r, 0, Math.PI * 2);
           ctx.fill();

@@ -796,6 +796,59 @@ export class InventoryPanel {
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
     }
 
+    if (item.id === 'enchanted_crown_sepsis_whore') {
+      const cx = x + size * 0.5;
+      const cy = y + size * 0.48;
+      // Crown base band — deep purple
+      ctx.fillStyle = '#581c87';
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        cy + size * 0.08,
+        size * 0.34,
+        size * 0.1,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      // Crown body — royal purple
+      ctx.fillStyle = '#7c3aed';
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.32, cy + size * 0.04);
+      ctx.lineTo(cx - size * 0.28, cy - size * 0.18);
+      ctx.lineTo(cx - size * 0.14, cy - size * 0.06);
+      ctx.lineTo(cx, cy - size * 0.24);
+      ctx.lineTo(cx + size * 0.14, cy - size * 0.06);
+      ctx.lineTo(cx + size * 0.28, cy - size * 0.18);
+      ctx.lineTo(cx + size * 0.32, cy + size * 0.04);
+      ctx.closePath();
+      ctx.fill();
+      // Crown rim highlight
+      ctx.strokeStyle = '#a78bfa';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Gems — sickly green (sepsis theme)
+      ctx.fillStyle = '#bef264';
+      ctx.shadowColor = '#65a30d';
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy - size * 0.16, size * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#a3e635';
+      ctx.beginPath();
+      ctx.arc(cx - size * 0.2, cy - size * 0.08, size * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + size * 0.2, cy - size * 0.08, size * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Purple border glow
+      ctx.strokeStyle = '#a78bfa';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+    }
+
     if (item.id === 'goblin_dynamite') {
       drawDynamiteInventoryIcon(ctx, x, y, size);
     } else if (item.id === 'gym_dumbbell') {

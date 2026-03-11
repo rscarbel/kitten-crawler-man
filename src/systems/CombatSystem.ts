@@ -8,6 +8,7 @@ import { SafeRoomSystem } from './SafeRoomSystem';
 import { MiniMapSystem } from './MiniMapSystem';
 import { LootSystem } from './LootSystem';
 import { AchievementManager } from '../core/AchievementManager';
+import { makeSepsis } from '../core/StatusEffect';
 
 export function resolvePlayerAttacks(
   human: HumanPlayer,
@@ -39,6 +40,13 @@ export function resolvePlayerAttacks(
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
+      // Sepsis proc: 15% chance when Enchanted Crown is equipped
+      if (
+        human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+        Math.random() < 0.15
+      ) {
+        mob.applyStatus(makeSepsis());
+      }
     }
   }
 
@@ -58,6 +66,13 @@ export function resolvePlayerAttacks(
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
           mob.takeDamageFrom(damage, cat, 'missile');
+          // Sepsis proc: 15% chance when Enchanted Crown is equipped
+          if (
+            cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+            Math.random() < 0.15
+          ) {
+            mob.applyStatus(makeSepsis());
+          }
           missile.hit = true;
           missile.state = 'exploding';
           break;

@@ -25,3 +25,9 @@ export function makeBurn(): StatusEffect {
 export function makePoison(): StatusEffect {
   return { type: 'poison', ticksRemaining: 1800, totalTicks: 1800 };
 }
+
+/** Sepsis: permanent DoT (1 damage every 2 seconds) that lasts until the target dies. */
+export function makeSepsis(): StatusEffect {
+  // 999999 ticks ≈ 4.6 hours — effectively infinite
+  return { type: 'sepsis', ticksRemaining: 999999, totalTicks: 999999 };
+}
