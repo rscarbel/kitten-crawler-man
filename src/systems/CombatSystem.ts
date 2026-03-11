@@ -131,6 +131,7 @@ export function resolveKills(
         mob.y + TILE_SIZE * 0.5,
         mob.droppedLoot,
         topPlayer,
+        mob.isBoss,
       );
       mob.droppedLoot = null;
     }

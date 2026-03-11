@@ -741,6 +741,61 @@ export class InventoryPanel {
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
     }
 
+    if (item.id === 'trollskin_shirt') {
+      const cx = x + size * 0.5;
+      const cy = y + size * 0.52;
+      // Shirt body — mossy green (trollskin)
+      ctx.fillStyle = '#4a7c59';
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.3, cy - size * 0.14);
+      ctx.lineTo(cx + size * 0.3, cy - size * 0.14);
+      ctx.lineTo(cx + size * 0.28, cy + size * 0.28);
+      ctx.lineTo(cx - size * 0.28, cy + size * 0.28);
+      ctx.closePath();
+      ctx.fill();
+      // Sleeves
+      ctx.fillStyle = '#3d6b4a';
+      // Left sleeve
+      ctx.beginPath();
+      ctx.moveTo(cx - size * 0.3, cy - size * 0.14);
+      ctx.lineTo(cx - size * 0.42, cy + size * 0.04);
+      ctx.lineTo(cx - size * 0.32, cy + size * 0.08);
+      ctx.lineTo(cx - size * 0.26, cy - size * 0.02);
+      ctx.closePath();
+      ctx.fill();
+      // Right sleeve
+      ctx.beginPath();
+      ctx.moveTo(cx + size * 0.3, cy - size * 0.14);
+      ctx.lineTo(cx + size * 0.42, cy + size * 0.04);
+      ctx.lineTo(cx + size * 0.32, cy + size * 0.08);
+      ctx.lineTo(cx + size * 0.26, cy - size * 0.02);
+      ctx.closePath();
+      ctx.fill();
+      // Collar
+      ctx.fillStyle = '#2d5a3a';
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        cy - size * 0.16,
+        size * 0.1,
+        size * 0.06,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      // Enchantment rune — golden fist symbol
+      ctx.fillStyle = '#ffd700';
+      ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('\u{270A}', cx, cy + size * 0.14);
+      ctx.textAlign = 'left';
+      // Golden border glow
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+    }
+
     if (item.id === 'goblin_dynamite') {
       drawDynamiteInventoryIcon(ctx, x, y, size);
     } else if (item.id === 'gym_dumbbell') {

@@ -44,6 +44,9 @@ import {
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills } from '../systems/CombatSystem';
 import { GoreSystem } from '../systems/GoreSystem';
+import { PlayerTickSystem } from '../systems/PlayerTickSystem';
+import { readMoveInput, applyMovement } from '../systems/PlayerMovementSystem';
+import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 
 export interface DungeonSceneOptions {
@@ -87,6 +90,7 @@ export class DungeonScene extends Scene {
   private juicerRoom: JuicerRoomSystem;
   private barriers: BarrierSystem;
   private gore = new GoreSystem();
+  private playerTick = new PlayerTickSystem();
 
   // UI
   private pauseMenu: PauseMenu;
@@ -129,12 +133,6 @@ export class DungeonScene extends Scene {
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
   private safeRoomEntered = false;
-  private humanRegenAccum = 0;
-  private catRegenAccum = 0;
-  private readonly HUMAN_REGEN_FRAMES = 10800; // 3 min
-  private readonly CAT_REGEN_FRAMES = 14400; // 4 min
-  private humanAutoPotionCooldown = 0;
-  private catAutoPotionCooldown = 0;
   private speechBubblePulse = 0;
 
   // Key handlers
@@ -1354,29 +1352,7 @@ export class DungeonScene extends Scene {
     this.human.tickTimers();
     this.cat.tickTimers();
 
-    // Health regeneration
-    if (this.human.isAlive && this.human.hp < this.human.maxHp) {
-      this.humanRegenAccum += this.human.maxHp / this.HUMAN_REGEN_FRAMES;
-      const heal = Math.floor(this.humanRegenAccum);
-      if (heal >= 1) {
-        this.human.hp = Math.min(this.human.maxHp, this.human.hp + heal);
-        this.humanRegenAccum -= heal;
-      }
-    } else {
-      this.humanRegenAccum = 0;
-    }
-    if (this.cat.isAlive && this.cat.hp < this.cat.maxHp) {
-      this.catRegenAccum += this.cat.maxHp / this.CAT_REGEN_FRAMES;
-      const heal = Math.floor(this.catRegenAccum);
-      if (heal >= 1) {
-        this.cat.hp = Math.min(this.cat.maxHp, this.cat.hp + heal);
-        this.catRegenAccum -= heal;
-      }
-    } else {
-      this.catRegenAccum = 0;
-    }
-
-    this.updateCompanionPotion();
+    this.playerTick.update(this.human, this.cat);
 
     this.loot.update(this.active(), this.inactive());
 
@@ -1411,31 +1387,6 @@ export class DungeonScene extends Scene {
     ) {
       this.gameOver = true;
       this.deathScreen.activate();
-    }
-  }
-
-  // Companion auto-potion
-
-  private updateCompanionPotion(): void {
-    if (this.humanAutoPotionCooldown > 0) this.humanAutoPotionCooldown--;
-    if (this.catAutoPotionCooldown > 0) this.catAutoPotionCooldown--;
-
-    if (this.human.isActive) {
-      if (
-        this.cat.isAlive &&
-        this.cat.hp < this.cat.maxHp * 0.5 &&
-        this.catAutoPotionCooldown === 0
-      ) {
-        if (this.cat.usePotion()) this.catAutoPotionCooldown = 180;
-      }
-    } else {
-      if (
-        this.human.isAlive &&
-        this.human.hp < this.human.maxHp * 0.5 &&
-        this.humanAutoPotionCooldown === 0
-      ) {
-        if (this.human.usePotion()) this.humanAutoPotionCooldown = 180;
-      }
     }
   }
 

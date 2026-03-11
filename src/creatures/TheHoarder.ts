@@ -1,5 +1,6 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
+import type { LootDrop } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 
@@ -123,6 +124,13 @@ export class TheHoarder extends Mob {
         y: this.y + TILE_SIZE * 0.5 + Math.sin(angle) * dist,
       });
     }
+  }
+
+  protected rollLootItems(killer: Player | null): LootDrop['items'] {
+    const items = super.rollLootItems(killer);
+    // Guaranteed boss drop: Enchanted Trollskin Shirt of Pummeling
+    items.push({ id: 'trollskin_shirt', quantity: 1 });
+    return items;
   }
 
   render(

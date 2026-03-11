@@ -1,6 +1,7 @@
 export type ItemId =
   | 'health_potion'
   | 'enchanted_bigboi_boxers'
+  | 'trollskin_shirt'
   | 'scroll_of_confusing_fog'
   | 'goblin_dynamite'
   | 'gym_dumbbell'
@@ -83,6 +84,20 @@ const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     type: 'consumable',
     description:
       'A sturdy treadmill. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
+  },
+  trollskin_shirt: {
+    id: 'trollskin_shirt',
+    name: 'Enchanted Trollskin Shirt of Pummeling',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Torso',
+    equipSubSlot: 'Shirt',
+    statBonus: { constitution: 3 },
+    description:
+      'The wearer of this shirt gains +7 to the Regeneration skill. In addition, ' +
+      'all melee-based damage debuffs such as Stun, Knockback, Disarm, and ' +
+      'Out-of-Breath are negated.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',

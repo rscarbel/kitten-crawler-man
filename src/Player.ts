@@ -161,6 +161,13 @@ export abstract class Player {
     });
   }
 
+  /** Returns the regen speed multiplier from equipped gear. */
+  get regenMultiplier(): number {
+    // Trollskin Shirt grants 2.5× health regeneration rate
+    if (this.inventory.hasEquipped('trollskin_shirt')) return 2.5;
+    return 1;
+  }
+
   tickTimers() {
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;

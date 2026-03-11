@@ -14,6 +14,8 @@ interface PendingLoot {
   ttl: number;
   pickupDelay: number;
   droppedByPlayer?: boolean;
+  /** Boss loot never fades and gets a special ground indicator. */
+  isBossLoot?: boolean;
 }
 
 export interface FloorItem {
@@ -34,6 +36,7 @@ export class LootSystem {
     y: number,
     loot: LootDrop,
     owner: HumanPlayer | CatPlayer,
+    isBossLoot = false,
   ): void {
     this.pendingLoots.push({
       x,
@@ -43,6 +46,7 @@ export class LootSystem {
       collected: false,
       ttl: 600,
       pickupDelay: 0,
+      isBossLoot,
     });
   }
 
@@ -130,7 +134,15 @@ export class LootSystem {
         }
       }
     }
-    this.pendingLoots = this.pendingLoots.filter((l) => !l.collected);
+    // Decrement TTL for non-boss loot; boss loot never fades
+    for (const loot of this.pendingLoots) {
+      if (!loot.isBossLoot && !loot.collected) {
+        loot.ttl--;
+      }
+    }
+    this.pendingLoots = this.pendingLoots.filter(
+      (l) => !l.collected && (l.isBossLoot || l.ttl > 0),
+    );
   }
 
   tryCollectLootAt(
@@ -190,23 +202,79 @@ export class LootSystem {
 
       ctx.save();
 
+      // Fade non-boss loot as TTL expires
+      if (!loot.isBossLoot && loot.ttl < 120) {
+        ctx.globalAlpha = Math.max(0.15, loot.ttl / 120);
+      }
+
       const bw = Math.max(54, label.length * 7 + 16);
       const bh = 20;
       const bx = sx - bw / 2;
       const by = sy - 26;
+
+      // Boss loot: pulsing golden glow on the ground beneath the pill
+      if (loot.isBossLoot) {
+        const t = performance.now() / 1000;
+        const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+        const glowR = 18 + pulse * 6;
+        const grad = ctx.createRadialGradient(sx, sy, 2, sx, sy, glowR);
+        grad.addColorStop(0, `rgba(255,215,0,${0.55 + pulse * 0.25})`);
+        grad.addColorStop(0.5, `rgba(255,165,0,${0.25 + pulse * 0.15})`);
+        grad.addColorStop(1, 'rgba(255,165,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Star sparkles
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < 4; i++) {
+          const angle = t * 2 + i * (Math.PI / 2);
+          const dist = 10 + pulse * 4;
+          const sparkX = sx + Math.cos(angle) * dist;
+          const sparkY = sy - 10 + Math.sin(angle) * dist * 0.6;
+          const sparkSize = 1.5 + pulse;
+          ctx.globalAlpha = 0.6 + pulse * 0.4;
+          ctx.beginPath();
+          // 4-pointed star
+          ctx.moveTo(sparkX, sparkY - sparkSize);
+          ctx.lineTo(sparkX + sparkSize * 0.3, sparkY);
+          ctx.lineTo(sparkX, sparkY + sparkSize);
+          ctx.lineTo(sparkX - sparkSize * 0.3, sparkY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(sparkX - sparkSize, sparkY);
+          ctx.lineTo(sparkX, sparkY + sparkSize * 0.3);
+          ctx.lineTo(sparkX + sparkSize, sparkY);
+          ctx.lineTo(sparkX, sparkY - sparkSize * 0.3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       ctx.fillStyle =
         loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
       ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = loot.owner === active ? '#fbbf24' : '#475569';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = loot.isBossLoot
+        ? '#ffd700'
+        : loot.owner === active
+          ? '#fbbf24'
+          : '#475569';
+      ctx.lineWidth = loot.isBossLoot ? 2 : 1;
       ctx.strokeRect(bx, by, bw, bh);
 
-      ctx.fillStyle = '#fbbf24';
+      ctx.fillStyle = loot.isBossLoot ? '#ffd700' : '#fbbf24';
       ctx.beginPath();
       ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = loot.owner === active ? '#fde68a' : '#64748b';
+      ctx.fillStyle = loot.isBossLoot
+        ? '#fff8dc'
+        : loot.owner === active
+          ? '#fde68a'
+          : '#64748b';
       ctx.font = '10px monospace';
       ctx.textAlign = 'left';
       ctx.fillText(label, bx + 18, by + bh / 2 + 4);
