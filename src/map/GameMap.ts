@@ -18,6 +18,13 @@ import {
   SAFE_ROOM_FLOOR,
   STAIRS_UP,
   STAIRS_DOWN,
+  TABLE,
+  BOOKSHELF,
+  BED,
+  FIREPLACE,
+  BARREL,
+  RUG,
+  CHAIR,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
@@ -167,10 +174,13 @@ export class GameMap {
   generateInterior(
     buildingType: 'house' | 'tower' | 'restaurant' | 'store',
     towerFloor = 0,
+    buildingName = '',
   ): void {
     const isTower = buildingType === 'tower';
     const isRestaurant = buildingType === 'restaurant';
     const isStore = buildingType === 'store';
+    const isHouse = buildingType === 'house';
+    const isCarnival = buildingName === 'Big Top';
     const w = isTower ? 30 : isRestaurant ? 22 : isStore ? 20 : 18;
     const h = isTower ? 24 : isRestaurant ? 16 : isStore ? 12 : 14;
     const floorType = isTower
@@ -190,41 +200,93 @@ export class GameMap {
     for (let y = 1; y < h - 1; y++)
       for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
-    if (isStore) {
+    if (isStore && !isCarnival) {
       // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
       for (let x = 2; x <= w - 3; x++) grid[2][x].type = FloorTypeValue.wall;
+      // Shelving behind counter (row 1 is wall, so place barrels in row 1 area — skip)
+      // Barrels behind counter on east side
+      grid[3][w - 3].type = BARREL;
+      grid[3][w - 4].type = BARREL;
+      grid[4][w - 3].type = BARREL;
+      // Bookshelf (display shelf) on west wall
+      grid[4][1].type = BOOKSHELF;
+      grid[5][1].type = BOOKSHELF;
+      grid[6][1].type = BOOKSHELF;
+      // Barrel cluster near entrance
+      grid[h - 3][1].type = BARREL;
+      grid[h - 3][w - 2].type = BARREL;
+      // Small rug in front of counter
+      for (let x = 5; x <= 8; x++) grid[4][x].type = RUG;
+      for (let x = 5; x <= 8; x++) grid[5][x].type = RUG;
     }
 
     if (isRestaurant) {
       // Counter along the north wall (row 2, cols 2–8) — non-walkable wall tiles
       for (let x = 2; x <= 8; x++) grid[2][x].type = FloorTypeValue.wall;
       // Two 2×1 tables in the dining area (rows 5–6, cols 2–3 and 5–6)
-      grid[5][2].type = FloorTypeValue.wall;
-      grid[5][3].type = FloorTypeValue.wall;
-      grid[6][2].type = FloorTypeValue.wall;
-      grid[6][3].type = FloorTypeValue.wall;
-      grid[5][5].type = FloorTypeValue.wall;
-      grid[5][6].type = FloorTypeValue.wall;
-      grid[6][5].type = FloorTypeValue.wall;
-      grid[6][6].type = FloorTypeValue.wall;
+      grid[5][2].type = TABLE;
+      grid[5][3].type = TABLE;
+      grid[6][2].type = CHAIR;
+      grid[6][3].type = CHAIR;
+      grid[5][5].type = TABLE;
+      grid[5][6].type = TABLE;
+      grid[6][5].type = CHAIR;
+      grid[6][6].type = CHAIR;
       // Two more tables on the east side (rows 5–6, cols 14–15 and 17–18)
-      grid[5][14].type = FloorTypeValue.wall;
-      grid[5][15].type = FloorTypeValue.wall;
-      grid[6][14].type = FloorTypeValue.wall;
-      grid[6][15].type = FloorTypeValue.wall;
-      grid[5][17].type = FloorTypeValue.wall;
-      grid[5][18].type = FloorTypeValue.wall;
-      grid[6][17].type = FloorTypeValue.wall;
-      grid[6][18].type = FloorTypeValue.wall;
+      grid[5][14].type = TABLE;
+      grid[5][15].type = TABLE;
+      grid[6][14].type = CHAIR;
+      grid[6][15].type = CHAIR;
+      grid[5][17].type = TABLE;
+      grid[5][18].type = TABLE;
+      grid[6][17].type = CHAIR;
+      grid[6][18].type = CHAIR;
       // Two more tables deeper in (rows 9–10)
-      grid[9][2].type = FloorTypeValue.wall;
-      grid[9][3].type = FloorTypeValue.wall;
-      grid[10][2].type = FloorTypeValue.wall;
-      grid[10][3].type = FloorTypeValue.wall;
-      grid[9][5].type = FloorTypeValue.wall;
-      grid[9][6].type = FloorTypeValue.wall;
-      grid[10][5].type = FloorTypeValue.wall;
-      grid[10][6].type = FloorTypeValue.wall;
+      grid[9][2].type = TABLE;
+      grid[9][3].type = TABLE;
+      grid[10][2].type = CHAIR;
+      grid[10][3].type = CHAIR;
+      grid[9][5].type = TABLE;
+      grid[9][6].type = TABLE;
+      grid[10][5].type = CHAIR;
+      grid[10][6].type = CHAIR;
+      // Barrel near kitchen counter
+      grid[3][9].type = BARREL;
+      grid[3][10].type = BARREL;
+    }
+
+    // ── House furniture (skip carnival Big Top) ──
+    if (isHouse && !isCarnival) {
+      // Fireplace centered on north wall
+      grid[1][8].type = FIREPLACE;
+      grid[1][9].type = FIREPLACE;
+      // Rug in front of fireplace
+      for (let x = 7; x <= 10; x++) {
+        grid[2][x].type = RUG;
+        grid[3][x].type = RUG;
+      }
+      // Bed in NE corner
+      grid[2][15].type = BED;
+      grid[2][16].type = BED;
+      grid[3][15].type = BED;
+      grid[3][16].type = BED;
+      // Bookshelf on west wall
+      grid[3][1].type = BOOKSHELF;
+      grid[4][1].type = BOOKSHELF;
+      grid[5][1].type = BOOKSHELF;
+      // Dining table with chairs in center-south area
+      grid[7][7].type = TABLE;
+      grid[7][8].type = TABLE;
+      grid[7][9].type = TABLE;
+      grid[8][7].type = CHAIR;
+      grid[8][9].type = CHAIR;
+      // Barrel in SW corner
+      grid[11][1].type = BARREL;
+      grid[11][2].type = BARREL;
+      // Barrel in SE area
+      grid[10][16].type = BARREL;
+      // Chair by east wall
+      grid[6][16].type = CHAIR;
     }
 
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
@@ -273,6 +335,110 @@ export class GameMap {
       if (hasDown) {
         grid[dnY][dnX].type = STAIRS_DOWN;
         this._interiorStairDownTiles = [{ x: dnX, y: dnY }];
+      }
+
+      // ── Tower floor furniture (30×24, carpet) ──
+      // Avoid stair tiles at (upX=25,upY=2) and (dnX=3,dnY=2)
+      if (towerFloor === 0) {
+        // Ground floor: reception hall — large rug, tables, bookshelves, fireplace
+        // Fireplace centered on north wall
+        grid[1][14].type = FIREPLACE;
+        grid[1][15].type = FIREPLACE;
+        // Large rug in center
+        for (let ry = 8; ry <= 13; ry++)
+          for (let rx = 10; rx <= 19; rx++) grid[ry][rx].type = RUG;
+        // Bookshelves along west wall
+        for (let ry = 4; ry <= 10; ry++) grid[ry][1].type = BOOKSHELF;
+        // Reception table with chairs
+        grid[10][6].type = TABLE;
+        grid[10][7].type = TABLE;
+        grid[10][8].type = TABLE;
+        grid[11][6].type = CHAIR;
+        grid[11][8].type = CHAIR;
+        grid[9][7].type = CHAIR;
+        // Barrels near entrance
+        grid[h - 3][1].type = BARREL;
+        grid[h - 3][2].type = BARREL;
+        grid[h - 3][w - 2].type = BARREL;
+        // Torch-style decoration on east wall (use barrel as substitute)
+        grid[5][w - 2].type = BARREL;
+      } else if (towerFloor === 1) {
+        // 2nd floor: library — lots of bookshelves + reading tables
+        // Bookshelves along west wall
+        for (let ry = 4; ry <= 14; ry++) grid[ry][1].type = BOOKSHELF;
+        // Bookshelves along east wall
+        for (let ry = 4; ry <= 14; ry++) grid[ry][w - 2].type = BOOKSHELF;
+        // Center bookshelf island
+        for (let rx = 10; rx <= 13; rx++) grid[6][rx].type = BOOKSHELF;
+        for (let rx = 16; rx <= 19; rx++) grid[6][rx].type = BOOKSHELF;
+        // Reading tables
+        grid[10][8].type = TABLE;
+        grid[10][9].type = TABLE;
+        grid[11][8].type = CHAIR;
+        grid[11][9].type = CHAIR;
+        grid[10][16].type = TABLE;
+        grid[10][17].type = TABLE;
+        grid[11][16].type = CHAIR;
+        grid[11][17].type = CHAIR;
+        // Rug between tables
+        for (let rx = 11; rx <= 14; rx++) {
+          grid[10][rx].type = RUG;
+          grid[11][rx].type = RUG;
+        }
+      } else if (towerFloor === 2) {
+        // 3rd floor: living quarters — beds, tables, personal items
+        // Two beds along west wall
+        grid[5][1].type = BED;
+        grid[5][2].type = BED;
+        grid[6][1].type = BED;
+        grid[6][2].type = BED;
+        grid[9][1].type = BED;
+        grid[9][2].type = BED;
+        grid[10][1].type = BED;
+        grid[10][2].type = BED;
+        // Bookshelf between beds
+        grid[7][1].type = BOOKSHELF;
+        grid[8][1].type = BOOKSHELF;
+        // Table and chairs on east side
+        grid[8][w - 5].type = TABLE;
+        grid[8][w - 4].type = TABLE;
+        grid[8][w - 3].type = TABLE;
+        grid[9][w - 5].type = CHAIR;
+        grid[9][w - 3].type = CHAIR;
+        // Barrel storage
+        grid[12][w - 2].type = BARREL;
+        grid[13][w - 2].type = BARREL;
+        // Rug by beds
+        for (let rx = 4; rx <= 6; rx++) {
+          grid[6][rx].type = RUG;
+          grid[7][rx].type = RUG;
+          grid[8][rx].type = RUG;
+          grid[9][rx].type = RUG;
+        }
+        // Fireplace on north wall
+        grid[1][14].type = FIREPLACE;
+        grid[1][15].type = FIREPLACE;
+      } else {
+        // Top floor: study/throne room — desk, bookshelves, large rug
+        // Bookshelves along both walls
+        for (let ry = 4; ry <= 12; ry++) grid[ry][1].type = BOOKSHELF;
+        for (let ry = 4; ry <= 12; ry++) grid[ry][w - 2].type = BOOKSHELF;
+        // Grand desk at north end
+        grid[4][12].type = TABLE;
+        grid[4][13].type = TABLE;
+        grid[4][14].type = TABLE;
+        grid[4][15].type = TABLE;
+        grid[4][16].type = TABLE;
+        grid[5][14].type = CHAIR;
+        // Large rug in center
+        for (let ry = 8; ry <= 15; ry++)
+          for (let rx = 8; rx <= 21; rx++) grid[ry][rx].type = RUG;
+        // Fireplace on north wall
+        grid[1][10].type = FIREPLACE;
+        grid[1][11].type = FIREPLACE;
+        // Barrel in corners
+        grid[h - 3][1].type = BARREL;
+        grid[h - 3][w - 2].type = BARREL;
       }
     }
 
@@ -420,8 +586,14 @@ export class GameMap {
       tile.type !== ROOF_CIRCUS_PURPLE &&
       tile.type !== FOUNTAIN &&
       tile.type !== TORCH &&
-      tile.type !== WELL
-      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23) are walkable — fall through
+      tile.type !== WELL &&
+      tile.type !== TABLE &&
+      tile.type !== BOOKSHELF &&
+      tile.type !== BED &&
+      tile.type !== FIREPLACE &&
+      tile.type !== BARREL &&
+      tile.type !== CHAIR
+      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37) are walkable
     );
   }
 

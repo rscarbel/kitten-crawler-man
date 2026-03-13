@@ -82,14 +82,14 @@ export class BuildingInteriorScene extends Scene {
       // Generate 4 tower floors
       for (let f = 0; f < 4; f++) {
         const floorMap = new GameMap(0, TILE_SIZE, 0, 0);
-        floorMap.generateInterior('tower', f);
+        floorMap.generateInterior('tower', f, entry.name);
         this.towerFloors.push(floorMap);
       }
       this.map = this.towerFloors[0];
     } else {
       // Build single interior map
       this.map = new GameMap(0, TILE_SIZE, 0, 0);
-      this.map.generateInterior(entry.type);
+      this.map.generateInterior(entry.type, 0, entry.name);
     }
 
     this.mapW = this.map.structure[0]?.length ?? 18;

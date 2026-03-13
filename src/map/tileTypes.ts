@@ -55,6 +55,20 @@ export const ROOF_CIRCUS_PURPLE = 29;
 export const STAIRS_UP = 30;
 /** Tile type for interior stairs going down — walkable trigger tile. */
 export const STAIRS_DOWN = 31;
+/** Tile type for a wooden table — not walkable. */
+export const TABLE = 32;
+/** Tile type for a bookshelf against a wall — not walkable. */
+export const BOOKSHELF = 33;
+/** Tile type for a bed — not walkable. */
+export const BED = 34;
+/** Tile type for a stone fireplace/hearth — not walkable. */
+export const FIREPLACE = 35;
+/** Tile type for a storage barrel — not walkable. */
+export const BARREL = 36;
+/** Tile type for a decorative rug — walkable. */
+export const RUG = 37;
+/** Tile type for a chair — not walkable. */
+export const CHAIR = 38;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 
