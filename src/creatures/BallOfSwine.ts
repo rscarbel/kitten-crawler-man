@@ -13,9 +13,9 @@ const BOS_SPEED_BASE = 0; // movement is orbit-based, not collision-based
 // Orbit parameters
 const ORBIT_RADIUS_PX = TILE_SIZE * 5;
 /** Angular velocity (radians per frame) while zooming. */
-const ANGULAR_SPEED_ZOOM = 0.055;
+const ANGULAR_SPEED_ZOOM = 0.037;
 /** Angular velocity while idle (slow spin). */
-const ANGULAR_SPEED_IDLE = 0.018;
+const ANGULAR_SPEED_IDLE = 0.012;
 /** How fast the orbit centre lerps toward the aim target (0–1 per frame). */
 const ORBIT_AIM_LERP = 0.012;
 /** Radius of the arena interior floor in tiles (ARENA_RADIUS - WALL_THICKNESS = 15 - 2 = 13). */
