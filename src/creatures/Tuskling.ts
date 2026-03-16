@@ -18,7 +18,7 @@ const CHARGE_WINDUP_FRAMES = 35;
 /** Max frames the charge lasts before stopping on its own. */
 const CHARGE_DURATION = 22;
 const CHARGE_COOLDOWN = 180;
-const CHARGE_SPEED = 6.5;
+const CHARGE_SPEED = 5;
 
 type TuskState =
   | 'idle'

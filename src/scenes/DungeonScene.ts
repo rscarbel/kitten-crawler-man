@@ -1240,7 +1240,7 @@ export class DungeonScene extends Scene {
           this.gameMap.lockArenaDoor();
           this.bossRoom.newlyLockedBossType = 'ball_of_swine';
         }
-        if (this.arenaLocked && !bos.isAlive) {
+        if (this.arenaLocked && !bos.isAlive && !this.arenaPhase2Active) {
           this.arenaLocked = false;
           this.gameMap.unlockArenaDoor();
         }
@@ -1408,6 +1408,11 @@ export class DungeonScene extends Scene {
     ) {
       this.arenaStairwellUnlocked = true;
       this.gameMap.unlockArenaStairwell();
+      // Unlock the arena door now that all Tusklings are dead
+      if (this.arenaLocked) {
+        this.arenaLocked = false;
+        this.gameMap.unlockArenaDoor();
+      }
     }
 
     // Detect Krakaren Clone death → unlock Mongo for the cat

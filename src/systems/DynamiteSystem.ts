@@ -119,7 +119,15 @@ export class DynamiteSystem {
     this._charging = null;
     const cx = human.x + TILE_SIZE * 0.5;
     const cy = human.y + TILE_SIZE * 0.5;
-    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobs, mobGrid);
+    this.triggerExplosion(
+      cx,
+      cy,
+      human.explosivesHandling,
+      human,
+      cat,
+      mobs,
+      mobGrid,
+    );
     this.liveDynamites.push({
       x: cx,
       y: cy,
@@ -181,7 +189,15 @@ export class DynamiteSystem {
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobs, mobGrid);
+        this.triggerExplosion(
+          dyn.x,
+          dyn.y,
+          dyn.explosivesLevel,
+          human,
+          cat,
+          mobs,
+          mobGrid,
+        );
         continue;
       }
 

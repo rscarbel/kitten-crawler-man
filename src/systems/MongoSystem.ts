@@ -41,8 +41,12 @@ export class MongoSystem {
     const tx = Math.floor(cat.x / TILE_SIZE) - Math.round(cat.facingX);
     const ty = Math.floor(cat.y / TILE_SIZE) - Math.round(cat.facingY);
     // Fallback: spawn at cat's tile if behind isn't walkable
-    const spawnTx = gameMap.isWalkable(tx, ty) ? tx : Math.floor(cat.x / TILE_SIZE);
-    const spawnTy = gameMap.isWalkable(tx, ty) ? ty : Math.floor(cat.y / TILE_SIZE);
+    const spawnTx = gameMap.isWalkable(tx, ty)
+      ? tx
+      : Math.floor(cat.x / TILE_SIZE);
+    const spawnTy = gameMap.isWalkable(tx, ty)
+      ? ty
+      : Math.floor(cat.y / TILE_SIZE);
 
     this.mongo = new Mongo(spawnTx, spawnTy, TILE_SIZE, cat, levelId);
     this.mongo.setMap(gameMap);
@@ -72,7 +76,11 @@ export class MongoSystem {
     this.mongo.allMobs = mobs;
 
     // Check if Mongo's HP hit 0 from damage (not from recall completion)
-    if (!this.isRecalling && this.mongo.hp <= 0 && this.mongo.isAlive === false) {
+    if (
+      !this.isRecalling &&
+      this.mongo.hp <= 0 &&
+      this.mongo.isAlive === false
+    ) {
       // Mongo was killed by enemies — start recall
       // Actually his HP is 0 so he's dead. We need to catch before death.
       // Instead, check HP threshold before it reaches 0.
