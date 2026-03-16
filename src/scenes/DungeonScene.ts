@@ -3,6 +3,7 @@ import { InputManager } from '../core/InputManager';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
 import { GameMap } from '../map/GameMap';
+import { Player } from '../Player';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
@@ -48,6 +49,8 @@ import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMoveInput, applyMovement } from '../systems/PlayerMovementSystem';
 import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
+import { MongoSystem } from '../systems/MongoSystem';
+import { KrakarenClone } from '../creatures/KrakarenClone';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -68,6 +71,8 @@ export interface DungeonSceneOptions {
   floorEntryHumanSnap?: PlayerSnapshot;
   /** Snapshot of cat state at the very start of this floor — used to respawn after death. */
   floorEntryCatSnap?: PlayerSnapshot;
+  /** Whether Mongo the velociraptor has been unlocked (persists across floors). */
+  mongoUnlocked?: boolean;
 }
 
 export class DungeonScene extends Scene {
@@ -91,6 +96,7 @@ export class DungeonScene extends Scene {
   private barriers: BarrierSystem;
   private gore = new GoreSystem();
   private playerTick = new PlayerTickSystem();
+  private mongoSystem = new MongoSystem();
 
   // UI
   private pauseMenu: PauseMenu;
@@ -156,6 +162,8 @@ export class DungeonScene extends Scene {
   private _miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
   private _hudCollapsed = IS_MOBILE;
   private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
+  private _mobileSummonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+  private krakarenKilled = false;
 
   // Mouse position in screen coords (updated by handleMouseMove)
   private _mouseX = -9999;
@@ -280,6 +288,8 @@ export class DungeonScene extends Scene {
     this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
+      // Dismiss Mongo before floor transition
+      this.mongoSystem.dismiss(this.mobs, this.mobGrid);
       this.sceneManager.replace(
         new DungeonScene(
           getLevelDef(levelDef.nextLevelId),
@@ -290,6 +300,7 @@ export class DungeonScene extends Scene {
             catSnap: snapPlayer(this.cat),
             humanAchievements: this.humanAchievements,
             catAchievements: this.catAchievements,
+            mongoUnlocked: this.mongoSystem.unlocked,
           },
         ),
       );
@@ -345,6 +356,11 @@ export class DungeonScene extends Scene {
       options?.floorEntryHumanAchievements ?? this.humanAchievements.clone();
     this.floorEntryCatAchievements =
       options?.floorEntryCatAchievements ?? this.catAchievements.clone();
+
+    // Mongo summon state — carry unlock across floors
+    if (options?.mongoUnlocked) {
+      this.mongoSystem.unlocked = true;
+    }
   }
 
   // Scene lifecycle
@@ -417,6 +433,12 @@ export class DungeonScene extends Scene {
         return;
       }
 
+      if ((e.key === 'r' || e.key === 'R') && !e.repeat) {
+        e.preventDefault();
+        this.triggerMongoSummon();
+        return;
+      }
+
       const hotbarIdx = parseInt(e.key) - 1;
       if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
         e.preventDefault();
@@ -461,6 +483,19 @@ export class DungeonScene extends Scene {
   private triggerCompanionFollow(): void {
     this.companion.isFollowOverride = true;
     this.inactive().autoTarget = null;
+  }
+
+  private triggerMongoSummon(): void {
+    if (!this.cat.isActive || !this.mongoSystem.canSummon) return;
+    const mongo = this.mongoSystem.summon(
+      this.cat,
+      this.gameMap,
+      this.levelDef.id,
+    );
+    if (mongo) {
+      this.mobs.push(mongo);
+      this.mobGrid.insert(mongo);
+    }
   }
 
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
@@ -560,6 +595,21 @@ export class DungeonScene extends Scene {
       return;
     }
 
+    // Desktop summon button click
+    if (
+      !IS_MOBILE &&
+      !this.gameOver &&
+      !this.pauseMenu.isOpen &&
+      this.mongoSystem.canShow &&
+      this.cat.isActive
+    ) {
+      const sb = this._mobileSummonBtnRect;
+      if (mx >= sb.x && mx <= sb.x + sb.w && my >= sb.y && my <= sb.y + sb.h) {
+        this.triggerMongoSummon();
+        return;
+      }
+    }
+
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const ai = this._achievIconRect;
       if (mx >= ai.x && mx <= ai.x + ai.w && my >= ai.y && my <= ai.y + ai.h) {
@@ -630,6 +680,7 @@ export class DungeonScene extends Scene {
             catAchievements: this.floorEntryCatAchievements.clone(),
             floorEntryHumanAchievements: this.floorEntryHumanAchievements,
             floorEntryCatAchievements: this.floorEntryCatAchievements,
+            mongoUnlocked: this.mongoSystem.unlocked,
           }),
         );
       }
@@ -844,6 +895,13 @@ export class DungeonScene extends Scene {
     this.renderLevelUpFlash(ctx, camX, camY);
     this.dynamite.render(ctx, camX, camY);
 
+    // Cat speech bubble for Mongo summon/recall
+    this.mongoSystem.renderSpeechBubble(
+      ctx,
+      this.cat.x - camX,
+      this.cat.y - camY,
+    );
+
     this.renderHealthVignette(ctx, canvas);
 
     this._hudToggleRect = drawHUD(
@@ -911,6 +969,17 @@ export class DungeonScene extends Scene {
       this.gearPanel.render(ctx, canvas, active.inventory, name);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
+      // Mongo summon button (desktop: left side above hotbar, mobile: in renderMobileButtons)
+      if (!IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
+        this._mobileSummonBtnRect = this.mongoSystem.renderSummonButton(
+          ctx,
+          10,
+          canvas.height - 52 - 12 - 52 - 8,
+          80,
+          48,
+          this.cat.isActive,
+        );
+      }
       if (IS_MOBILE) this.renderMobileButtons(ctx, canvas);
     }
 
@@ -1226,7 +1295,10 @@ export class DungeonScene extends Scene {
       AI_RADIUS,
     );
     this.mobGrid.queryCircle(this.cat.x, this.cat.y, AI_RADIUS, activeMobs);
-    const playerTargets = [this.human, this.cat];
+    const playerTargets: Player[] = [this.human, this.cat];
+    if (this.mongoSystem.mongo?.isAlive) {
+      playerTargets.push(this.mongoSystem.mongo);
+    }
     for (const mob of activeMobs) {
       if (!mob.isAlive) continue;
       const ox = mob.x,
@@ -1338,6 +1410,20 @@ export class DungeonScene extends Scene {
       this.gameMap.unlockArenaStairwell();
     }
 
+    // Detect Krakaren Clone death → unlock Mongo for the cat
+    if (!this.krakarenKilled) {
+      for (const mob of this.mobs) {
+        if (mob instanceof KrakarenClone && mob.justDied) {
+          this.krakarenKilled = true;
+          this.mongoSystem.unlocked = true;
+          break;
+        }
+      }
+    }
+
+    // Intercept Mongo lethal damage before resolveKills consumes justDied
+    this.mongoSystem.checkHealth();
+
     resolveKills(
       this.mobs,
       this.human,
@@ -1348,6 +1434,9 @@ export class DungeonScene extends Scene {
       this.humanAchievements,
       this.catAchievements,
     );
+
+    // Update Mongo system (cooldown, recall, despawn)
+    this.mongoSystem.update(this.mobs, this.mobGrid);
 
     this.human.tickTimers();
     this.cat.tickTimers();
@@ -1960,6 +2049,21 @@ export class DungeonScene extends Scene {
     );
     drawSmallBtn(this._mobileGearBtnRect, 'Gear', this.gearPanel.isOpen);
     drawSmallBtn(this._mobileBagBtnRect, 'Bag', this.inventoryPanel.isOpen);
+
+    // Mongo summon button — above the switch button when cat is active
+    if (this.mongoSystem.canShow && this.cat.isActive) {
+      const summonY = btnY - BTN_H - 6;
+      this._mobileSummonBtnRect = this.mongoSystem.renderSummonButton(
+        ctx,
+        MARGIN,
+        summonY,
+        BTN_W,
+        BTN_H,
+        this.cat.isActive,
+      );
+    } else {
+      this._mobileSummonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+    }
   }
 
   // Touch handlers (mobile)
@@ -1999,6 +2103,20 @@ export class DungeonScene extends Scene {
         const bb = this._mobileBagBtnRect;
         if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
           this.inventoryPanel.toggle();
+          continue;
+        }
+      }
+
+      // Mobile Mongo summon button
+      if (IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
+        const mb = this._mobileSummonBtnRect;
+        if (x >= mb.x && x <= mb.x + mb.w && y >= mb.y && y <= mb.y + mb.h) {
+          if (
+            !this.pauseMenu.isOpen &&
+            !this.safeRoom.isSleeping &&
+            !this.gameOver
+          )
+            this.triggerMongoSummon();
           continue;
         }
       }
