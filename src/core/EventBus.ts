@@ -57,6 +57,12 @@ export interface GameEvents {
     achievementId: string;
     player: 'Human' | 'Cat';
   };
+
+  /** A quest was completed. */
+  questCompleted: { questId: string };
+
+  /** A quest was failed. */
+  questFailed: { questId: string };
 }
 
 // ── Implementation ─────────────────────────────────────────────────

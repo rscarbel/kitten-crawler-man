@@ -1,5 +1,5 @@
 import { Inventory } from '../core/Inventory';
-import { HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/ItemDefs';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 
 function inRect(
@@ -240,6 +240,7 @@ export class InventoryInteraction {
     page: number,
   ): void {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
+      if (i === QUEST_SLOT_IDX) continue; // Quest slot is not draggable
       const r = hotbarSlotRect(i, canvas);
       if (inRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
@@ -365,6 +366,7 @@ export class InventoryInteraction {
     this.drag = null;
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
+      if (i === QUEST_SLOT_IDX) continue; // Can't drop onto quest slot
       const r = hotbarSlotRect(i, canvas);
       if (inRect(mx, my, r)) {
         if (src.source === 'hotbar') {

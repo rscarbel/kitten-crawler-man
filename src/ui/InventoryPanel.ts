@@ -1,5 +1,5 @@
 import { Inventory } from '../core/Inventory';
-import { HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/ItemDefs';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
@@ -401,11 +401,22 @@ export class InventoryPanel {
       const r = this.hotbarSlotRect(i, canvas);
       const isDragged = this.drag?.source === 'hotbar' && this.drag.idx === i;
       this.renderSlot(ctx, r.x, r.y, r.w, inventory.actionBar.slots[i], isDragged, true);
-      // Key number label below slot
-      ctx.fillStyle = '#64748b';
+
+      // Separator line before quest slot
+      if (i === QUEST_SLOT_IDX) {
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(r.x - 2, r.y + 2);
+        ctx.lineTo(r.x - 2, r.y + r.h - 2);
+        ctx.stroke();
+      }
+
+      // Key label below slot — "Q" for quest slot, number for the rest
+      ctx.fillStyle = i === QUEST_SLOT_IDX ? '#fbbf24' : '#64748b';
       ctx.font = '9px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText((i + 1).toString(), r.x + r.w / 2, r.y + r.h + 11);
+      ctx.fillText(i === QUEST_SLOT_IDX ? 'Q' : (i + 1).toString(), r.x + r.w / 2, r.y + r.h + 11);
       ctx.textAlign = 'left';
     }
   }
@@ -508,9 +519,16 @@ export class InventoryPanel {
     ctx.save();
     if (dimmed) ctx.globalAlpha = 0.25;
 
-    ctx.fillStyle = isHotbar ? '#0f172a' : '#1e293b';
+    const isQuestItem = isHotbar && item?.isQuestItem;
+    ctx.fillStyle = isQuestItem ? '#1a2940' : isHotbar ? '#0f172a' : '#1e293b';
     ctx.fillRect(x, y, size, size);
-    ctx.strokeStyle = isEquipped ? '#3b82f6' : isHotbar ? '#475569' : '#334155';
+    ctx.strokeStyle = isQuestItem
+      ? '#fbbf24'
+      : isEquipped
+        ? '#3b82f6'
+        : isHotbar
+          ? '#475569'
+          : '#334155';
     ctx.lineWidth = isEquipped ? 2 : 1;
     ctx.strokeRect(x, y, size, size);
 

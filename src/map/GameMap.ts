@@ -26,7 +26,7 @@ import {
   RUG,
   CHAIR,
 } from './tileTypes';
-import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
+import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
 import { renderCanvas, renderDecorationsOverlay, drawDecorationTileFull } from './TileRenderer';
 
@@ -69,6 +69,8 @@ export class GameMap {
     name: string;
     type: 'house' | 'tower' | 'restaurant' | 'store';
   }> = [];
+  /** Quest rooms generated in the dungeon (defend-NPC encounters). */
+  questRooms: QuestRoomData[] = [];
   /** Arena circles generated in the dungeon (one per dungeon map). */
   arenaExteriors: ArenaExterior[] = [];
   /** When true, the arena door gap tiles are treated as unwalkable. */
@@ -130,6 +132,7 @@ export class GameMap {
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;
     this.bossRooms = data.bossRooms;
+    this.questRooms = data.questRooms;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;

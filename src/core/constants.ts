@@ -1,6 +1,6 @@
 export const TILE_SIZE = 32;
-export const PLAYER_SPEED = 2.5;
-export const FOLLOWER_SPEED = 3.5;
+export const PLAYER_SPEED = 3.25;
+export const FOLLOWER_SPEED = 4.55;
 
 /** Kiting speed multipliers — lower than FOLLOWER_SPEED to make the cat catchable. */
 export const CAT_KITE_FLEE_SPEED = FOLLOWER_SPEED * 0.92;

@@ -8,6 +8,7 @@ import {
   KRAKAREN_BOSS_ROOM_FLOOR,
   METAL_WALL,
   ARENA_FLOOR,
+  FLOOR_GRATE,
 } from './tileTypes';
 
 type Room = { x: number; y: number; w: number; h: number; floor: number };
@@ -22,11 +23,21 @@ export interface ArenaExterior {
   stairwellTile: Point;
 }
 
+export interface QuestRoomData {
+  bounds: Rect;
+  centre: Point;
+  grateTiles: Point[];
+  entranceTile: Point;
+  npcTile: Point;
+  woodPileTile: Point;
+}
+
 export interface DungeonData {
   grid: TileContent[][];
   startTile: Point;
   safeRooms: Array<{ bounds: Rect; centre: Point }>;
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
+  questRooms: QuestRoomData[];
   mobSpawnPoints: Point[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
@@ -129,11 +140,14 @@ export function generateDungeon(
     MAX_H = 14;
   const GAP = 3; // minimum tile gap between room edges
 
-  // rooms[0]=start, rooms[1..numSafeRooms]=safe, rooms[numSafeRooms+1..bossRoomEnd-1]=boss
+  // rooms[0]=start, rooms[1..numSafeRooms]=safe, rooms[safeRoomEnd..bossRoomEnd-1]=boss,
+  // rooms[bossRoomEnd]=quest room (1 slot reserved)
   const safeRoomStart = 1;
   const safeRoomEnd = 1 + numSafeRooms; // exclusive
   const bossRoomStart = safeRoomEnd;
   const bossRoomEnd = safeRoomEnd + numBossRooms;
+  const questRoomIdx = bossRoomEnd; // exactly 1 quest room
+  const regularRoomStart = questRoomIdx + 1;
 
   // Scale room count and attempts proportionally to map area.
   // At size=100: 15 rooms, ~120 attempts.  At size=450: ~304 rooms, ~2432 attempts.
@@ -148,8 +162,17 @@ export function generateDungeon(
   for (let attempt = 0; attempt < maxAttempts && rooms.length < maxRooms; attempt++) {
     const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
     const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
-    const w = isBossRoom ? 22 : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
-    const h = isBossRoom ? 18 : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
+    const isQuestRoom = rooms.length === questRoomIdx;
+    const w = isBossRoom
+      ? 22
+      : isQuestRoom
+        ? 14
+        : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
+    const h = isBossRoom
+      ? 18
+      : isQuestRoom
+        ? 12
+        : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
     const x = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
     const y = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
 
@@ -182,14 +205,21 @@ export function generateDungeon(
         return Math.hypot(cx - rc.x, cy - rc.y) < SAFE_MIN_SEPARATION;
       });
 
-    // Safe rooms and boss rooms must stay within a fixed tile-radius of the start room.
+    // Safe rooms, boss rooms, and quest rooms must stay within a fixed tile-radius of start.
+    const QUEST_MAX_DIST = 60;
     let tooFarFromStart = false;
     if (rooms.length > 0) {
       const sc = {
         x: Math.floor(rooms[0].x + rooms[0].w / 2),
         y: Math.floor(rooms[0].y + rooms[0].h / 2),
       };
-      const maxDist = isSafeRoom ? SAFE_MAX_DIST : isBossRoom ? BOSS_MAX_DIST : Infinity;
+      const maxDist = isSafeRoom
+        ? SAFE_MAX_DIST
+        : isBossRoom
+          ? BOSS_MAX_DIST
+          : isQuestRoom
+            ? QUEST_MAX_DIST
+            : Infinity;
       if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
     }
 
@@ -200,7 +230,9 @@ export function generateDungeon(
         ? SAFE_ROOM_FLOOR
         : isBossRoom
           ? bossFloorForType(bossTypes[bossIdx] ?? '')
-          : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
+          : isQuestRoom
+            ? FloorTypeValue.tile_floor
+            : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
       const room: Room = { x, y, w, h, floor };
       rooms.push(room);
       carveRoom(room);
@@ -253,8 +285,47 @@ export function generateDungeon(
     });
   }
 
-  // Mob spawn points skip start, safe, and all boss rooms
-  const mobSpawnPoints = rooms.slice(bossRoomEnd).map((r) => ({
+  // Record quest room and carve grate tiles
+  const questRooms: QuestRoomData[] = [];
+  if (rooms.length > questRoomIdx) {
+    const qr = rooms[questRoomIdx];
+    const qcx = Math.floor(qr.x + qr.w / 2);
+    const qcy = Math.floor(qr.y + qr.h / 2);
+
+    // 4 grate tiles placed symmetrically — 2 tiles inward from walls, near each cardinal edge
+    const grateTiles: Point[] = [
+      { x: qr.x + 2, y: qcy - 2 }, // left-upper
+      { x: qr.x + 2, y: qcy + 2 }, // left-lower
+      { x: qr.x + qr.w - 3, y: qcy - 2 }, // right-upper
+      { x: qr.x + qr.w - 3, y: qcy + 2 }, // right-lower
+    ];
+    for (const g of grateTiles) {
+      if (g.y >= 0 && g.y < size && g.x >= 0 && g.x < size) {
+        grid[g.y][g.x].type = FLOOR_GRATE;
+      }
+    }
+
+    // Wood pile in the top-left corner of the room interior
+    const woodPileTile: Point = { x: qr.x + 1, y: qr.y + 1 };
+
+    // NPC at dead centre
+    const npcTile: Point = { x: qcx, y: qcy };
+
+    // Entrance at bottom-centre of room (already open via hallway carving)
+    const entranceTile: Point = { x: qcx, y: qr.y + qr.h - 1 };
+
+    questRooms.push({
+      bounds: { x: qr.x, y: qr.y, w: qr.w, h: qr.h },
+      centre: { x: qcx, y: qcy },
+      grateTiles,
+      entranceTile,
+      npcTile,
+      woodPileTile,
+    });
+  }
+
+  // Mob spawn points skip start, safe, boss, and quest rooms
+  const mobSpawnPoints = rooms.slice(regularRoomStart).map((r) => ({
     x: Math.floor(r.x + r.w / 2),
     y: Math.floor(r.y + r.h / 2),
   }));
@@ -480,6 +551,7 @@ export function generateDungeon(
     startTile,
     safeRooms,
     bossRooms,
+    questRooms,
     mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,
     stairwellTiles: filteredStairwells,

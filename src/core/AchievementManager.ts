@@ -1,6 +1,12 @@
 import { randomInt } from '../utils';
 
-export type AchievementId = 'first_blood' | 'boss_slayer' | 'smush' | 'safe_haven' | 'magic_touch';
+export type AchievementId =
+  | 'first_blood'
+  | 'boss_slayer'
+  | 'smush'
+  | 'safe_haven'
+  | 'magic_touch'
+  | 'quest_defend_npc';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy';
@@ -57,6 +63,13 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Eliminate an enemy with a magic missile (Cat only).',
     playerType: 'cat',
     lootBox: { tier: 'Bronze', category: 'Adventurer' },
+  },
+  quest_defend_npc: {
+    id: 'quest_defend_npc',
+    name: 'Guardian Angel',
+    description: 'Successfully defend the Goblin Mother and reunite her with her child.',
+    playerType: 'both',
+    lootBox: { tier: 'Silver', category: 'Adventurer' },
   },
 };
 

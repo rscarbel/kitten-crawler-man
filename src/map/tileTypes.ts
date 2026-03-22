@@ -69,6 +69,8 @@ export const BARREL = 36;
 export const RUG = 37;
 /** Tile type for a chair — not walkable. */
 export const CHAIR = 38;
+/** Tile type for a floor grate — walkable, metal grate enemies can spawn from. */
+export const FLOOR_GRATE = 39;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 

@@ -45,6 +45,7 @@ import { readMovement, applyMovement, checkDeath, revealMinimap } from '../syste
 import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
+import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -93,6 +94,7 @@ export class DungeonScene extends GameplayScene {
   private building: BuildingSystem | null = null;
   private juicerRoom: JuicerRoomSystem;
   private barriers: BarrierSystem;
+  private defendQuest!: DefendQuestSystem;
   private gore = new GoreSystem();
   private playerTick = new PlayerTickSystem();
   private mongoSystem = new MongoSystem();
@@ -200,6 +202,21 @@ export class DungeonScene extends GameplayScene {
     );
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.barriers = new BarrierSystem(this.gameMap);
+    this.defendQuest = new DefendQuestSystem(
+      this.gameMap,
+      this.bus,
+      () => this.mobs,
+      () => this.mobGrid,
+      (mob) => {
+        this.mobs.push(mob);
+        this.mobGrid.insert(mob);
+      },
+      (mob) => {
+        const idx = this.mobs.indexOf(mob);
+        if (idx >= 0) this.mobs.splice(idx, 1);
+        this.mobGrid.remove(mob);
+      },
+    );
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -404,15 +421,42 @@ export class DungeonScene extends GameplayScene {
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
     });
+
+    bus.on('questCompleted', (e) => {
+      if (e.questId === 'defend_goblin_mother') {
+        const def = this.defendQuest.questManager.getDef(e.questId);
+        if (def?.rewards.coins) {
+          this.active().coins += def.rewards.coins;
+        }
+        // Grant a loot box with quest rewards (opened in safe room)
+        this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
+        // Clear quest items from both players' quest slots
+        this.human.inventory.clearQuestSlot();
+        this.cat.inventory.clearQuestSlot();
+      }
+    });
+
+    bus.on('questFailed', (e) => {
+      if (e.questId === 'defend_goblin_mother') {
+        // Clear quest items from both players' quest slots
+        this.human.inventory.clearQuestSlot();
+        this.cat.inventory.clearQuestSlot();
+      }
+    });
   }
 
   // Scene lifecycle
 
   onEnter(): void {
     this.inputHandler.bind({
-      isSuppressed: () => this.pauseMenu.isOpen || this.safeRoom.isSleeping,
+      isSuppressed: () =>
+        this.pauseMenu.isOpen ||
+        this.safeRoom.isSleeping ||
+        this.defendQuest.isSuppressed ||
+        this.defendQuest.isDialogOpen,
       isGameOver: () => this.gameOver,
       dismissDialog: () => {
+        if (this.defendQuest.dismissDialog()) return true;
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -503,6 +547,9 @@ export class DungeonScene extends GameplayScene {
       }
       return;
     }
+    if (this.defendQuest.tryInteract(active)) {
+      return;
+    }
     if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
       return;
     }
@@ -550,10 +597,15 @@ export class DungeonScene extends GameplayScene {
       !this.barriers.isConstructing
     ) {
       this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
+    } else if (slot?.id === 'quest_wood_board' && this.human.isActive) {
+      this.defendQuest.tryBuildBarrier(this.human);
     }
   }
 
   handleClick(mx: number, my: number): void {
+    // Quest dialog clicks
+    if (this.defendQuest.handleClick(mx, my)) return;
+
     // Achievement UI overlays (notification + loot box opener)
     if (this.achievementUI.handleClick(mx, my)) return;
 
@@ -696,7 +748,9 @@ export class DungeonScene extends GameplayScene {
       this.gameOver ||
       this.pauseMenu.isOpen ||
       this.stairwell.menuOpen ||
-      this.building?.menuOpen
+      this.building?.menuOpen ||
+      this.defendQuest.isDialogOpen ||
+      this.defendQuest.isSuppressed
     )
       return;
 
@@ -742,6 +796,7 @@ export class DungeonScene extends GameplayScene {
 
     // Layer 1: World (map, gore puddles, room objects, door hints)
     this.renderPipeline.renderWorld(ctx, rc);
+    this.defendQuest.renderObjects(ctx, camX, camY);
 
     // Layer 2: Entities (Y-sorted mobs, players, decorations)
     this.renderPipeline.renderEntities(ctx, rc);
@@ -763,6 +818,7 @@ export class DungeonScene extends GameplayScene {
         this.inactive(),
         this.mobs,
         this.safeRoom.mordecaiPositions,
+        this.defendQuest.questMarkers,
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -795,6 +851,7 @@ export class DungeonScene extends GameplayScene {
       this.gearPanel.render(ctx, canvas, active.inventory, name);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
+      this.defendQuest.renderUI(ctx, canvas);
       // Mongo summon button (desktop: left side above hotbar, mobile: in renderMobileButtons)
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
@@ -913,7 +970,13 @@ export class DungeonScene extends GameplayScene {
       mobGrid: this.mobGrid,
       gameMap: this.gameMap,
       bossRoom: this.bossRoom,
-      extraTargets: this.mongoSystem.mongo ? [this.mongoSystem.mongo] : undefined,
+      extraTargets: (() => {
+        const targets: import('../Player').Player[] = [];
+        if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
+        const npc = this.defendQuest.questNPC;
+        if (npc && npc.isAlive) targets.push(npc);
+        return targets.length > 0 ? targets : undefined;
+      })(),
     };
   }
 
@@ -959,6 +1022,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.barriers.update(ctx);
+    this.defendQuest.update(ctx);
 
     // Juicer room gym pickups + Juicer AI coordination
     this.juicerRoom.update(ctx);

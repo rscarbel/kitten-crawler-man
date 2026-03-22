@@ -7,7 +7,8 @@ export type ItemId =
   | 'goblin_dynamite'
   | 'gym_dumbbell'
   | 'gym_bench_press'
-  | 'gym_treadmill';
+  | 'gym_treadmill'
+  | 'quest_wood_board';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -29,6 +30,8 @@ export interface InventoryItem {
   };
   /** References an active ability this item grants when equipped. */
   abilityId?: string;
+  /** When true, hotbar slot renders with a lighter quest-item colour. */
+  isQuestItem?: boolean;
 }
 
 export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
@@ -115,6 +118,17 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'Sepsis is a health-sapping curse that slowly drains the life of its ' +
       'victim until they perish.',
   },
+  quest_wood_board: {
+    id: 'quest_wood_board',
+    name: 'Boards of Wood',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    isQuestItem: true,
+    description:
+      'Wooden boards scavenged from the wood pile. Place near floor grates to build ' +
+      'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards.',
+  },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',
     name: 'Enchanted BigBoi Boxers',
@@ -138,6 +152,8 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
 export const SLOT_COUNT = 32;
 export const HOTBAR_COUNT = 8;
 export const SLOTS_PER_PAGE = 16; // 4 × 4 grid
+/** Last hotbar slot index, reserved for quest items. */
+export const QUEST_SLOT_IDX = HOTBAR_COUNT - 1; // slot 7
 
 /** Sub-slots available in each equipment slot. */
 export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {

@@ -5,6 +5,7 @@ import {
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
   ARENA_FLOOR,
+  FLOOR_GRATE,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 
@@ -192,6 +193,33 @@ export function drawSpecialFloorTile(
         ctx.globalAlpha = 1;
       }
       void h2;
+      break;
+    }
+
+    // Floor Grate — dark metal grate over dungeon floor
+    case FLOOR_GRATE: {
+      // Base floor (same as concrete)
+      ctx.fillStyle = '#505050';
+      ctx.fillRect(sx, sy, ts, ts);
+      // Grate bars — horizontal slits
+      ctx.fillStyle = '#2a2a2a';
+      const barH = Math.max(2, ts * 0.06);
+      const gap = ts / 6;
+      for (let i = 1; i < 6; i++) {
+        ctx.fillRect(sx + ts * 0.1, sy + gap * i - barH / 2, ts * 0.8, barH);
+      }
+      // Vertical frame bars
+      ctx.fillStyle = '#3a3a3a';
+      ctx.fillRect(sx + ts * 0.08, sy + ts * 0.08, ts * 0.04, ts * 0.84);
+      ctx.fillRect(sx + ts * 0.88, sy + ts * 0.08, ts * 0.04, ts * 0.84);
+      // Dark centre void below grate
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(sx + ts * 0.14, sy + ts * 0.14, ts * 0.72, ts * 0.72);
+      // Metallic rim highlight
+      ctx.strokeStyle = '#6a6a6a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + ts * 0.08, sy + ts * 0.08, ts * 0.84, ts * 0.84);
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

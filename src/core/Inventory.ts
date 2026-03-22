@@ -1,7 +1,7 @@
 import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
 import { EquipmentManager } from './EquipmentManager';
-import { SLOT_COUNT, HOTBAR_COUNT } from './ItemDefs';
+import { SLOT_COUNT, HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 
 export class Inventory {
@@ -19,9 +19,35 @@ export class Inventory {
 
   /** Add `quantity` of the given item, stacking into an existing slot when possible. */
   addItem(id: ItemId, quantity: number): void {
+    // Quest items always go to the reserved quest slot (last hotbar slot)
+    if (ITEM_DEF[id].isQuestItem) {
+      this.addToQuestSlot(id, quantity);
+      return;
+    }
     if (this.bag.stackInto(id, quantity)) return;
     if (this.actionBar.stackInto(id, quantity)) return;
     this.bag.addToEmpty(id, quantity);
+  }
+
+  /** Place a quest item directly into the reserved quest slot. */
+  private addToQuestSlot(id: ItemId, quantity: number): void {
+    const slot = this.actionBar.slots[QUEST_SLOT_IDX];
+    if (slot && slot.id === id) {
+      // Stack onto existing
+      this.actionBar.slots[QUEST_SLOT_IDX] = { ...slot, quantity: slot.quantity + quantity };
+    } else {
+      // Place fresh
+      const def = ITEM_DEF[id];
+      this.actionBar.slots[QUEST_SLOT_IDX] = {
+        ...def,
+        quantity,
+      };
+    }
+  }
+
+  /** Clear the reserved quest slot (call when quest ends). */
+  clearQuestSlot(): void {
+    this.actionBar.slots[QUEST_SLOT_IDX] = null;
   }
 
   /**
@@ -55,10 +81,14 @@ export class Inventory {
   }
 
   swapHotbar(a: number, b: number): void {
+    // Block swapping into or out of the quest slot
+    if (a === QUEST_SLOT_IDX || b === QUEST_SLOT_IDX) return;
     this.actionBar.swap(a, b);
   }
 
   swapInvToHotbar(slotIdx: number, hotbarIdx: number): void {
+    // Block swapping into the quest slot
+    if (hotbarIdx === QUEST_SLOT_IDX) return;
     const inv = this.bag.slots[slotIdx];
     if (inv && !inv.canHotlist) return;
     const hot = this.actionBar.slots[hotbarIdx];
@@ -67,6 +97,8 @@ export class Inventory {
   }
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
+    // Block swapping out of the quest slot
+    if (hotbarIdx === QUEST_SLOT_IDX) return;
     const hot = this.actionBar.slots[hotbarIdx];
     const inv = this.bag.slots[slotIdx];
     if (inv && !inv.canHotlist) return;

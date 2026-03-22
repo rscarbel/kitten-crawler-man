@@ -73,6 +73,7 @@ export class MiniMapSystem implements GameSystem {
     companion: { x: number; y: number },
     mobs: Mob[],
     mordecaiPositions: Array<{ x: number; y: number }>,
+    questMarkers: Array<{ x: number; y: number; type: 'exclamation' | 'question' | 'red_x' }> = [],
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
@@ -180,6 +181,38 @@ export class MiniMapSystem implements GameSystem {
       ctx.beginPath();
       ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Quest markers — yellow !, green ?, or red X
+    for (const qm of questMarkers) {
+      if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
+      const qsx = mmX + (qm.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const qsy = mmY + (qm.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.005);
+      ctx.globalAlpha = pulse;
+      if (qm.type === 'exclamation') {
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', qsx, qsy + 3);
+        ctx.textAlign = 'left';
+      } else if (qm.type === 'question') {
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('?', qsx, qsy + 3);
+        ctx.textAlign = 'left';
+      } else {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(qsx - 3, qsy - 3);
+        ctx.lineTo(qsx + 3, qsy + 3);
+        ctx.moveTo(qsx + 3, qsy - 3);
+        ctx.lineTo(qsx - 3, qsy + 3);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
 
     // Active player — green dot at centre
