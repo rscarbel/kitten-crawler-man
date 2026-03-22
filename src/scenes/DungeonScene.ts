@@ -1,9 +1,8 @@
-import { Scene, SceneManager } from '../core/Scene';
+import { SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
-import { Player } from '../Player';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
@@ -12,7 +11,6 @@ import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel, createMob } from '../levels/spawner';
 import { getLevelDef } from '../levels';
-import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
 import { AchievementManager } from '../core/AchievementManager';
@@ -41,13 +39,17 @@ import { Tuskling } from '../creatures/Tuskling';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
-import { resolvePlayerAttacks, resolveKills } from '../systems/CombatSystem';
+import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
 import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
+import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
+import { MobUpdateLoop } from '../systems/MobUpdateLoop';
+import { DungeonInputHandler } from '../systems/DungeonInputHandler';
+import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 
 export interface DungeonSceneOptions {
@@ -73,15 +75,9 @@ export interface DungeonSceneOptions {
   mongoUnlocked?: boolean;
 }
 
-export class DungeonScene extends Scene {
+export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
   readonly pm: PlayerManager;
-  private get human(): HumanPlayer {
-    return this.pm.human;
-  }
-  private get cat(): CatPlayer {
-    return this.pm.cat;
-  }
   private mobs: Mob[];
   private mobGrid!: SpatialGrid<Mob>;
 
@@ -100,9 +96,11 @@ export class DungeonScene extends Scene {
   private gore = new GoreSystem();
   private playerTick = new PlayerTickSystem();
   private mongoSystem = new MongoSystem();
+  private renderPipeline = new RenderPipeline();
+  private mobLoop = new MobUpdateLoop();
 
   // UI
-  private pauseMenu: PauseMenu;
+  protected pauseMenu: PauseMenu;
   private deathScreen: DeathScreen;
   private inventoryPanel: InventoryPanel;
   private gearPanel: GearPanel;
@@ -138,16 +136,14 @@ export class DungeonScene extends Scene {
 
   // Misc state
   private gameOver = false;
-  private notifPulse = { value: 0 };
+  protected readonly notifPulse = { value: 0 };
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
   private safeRoomEntered = false;
   private speechBubblePulse = 0;
 
   // Key handlers
-  private escHandler: ((e: KeyboardEvent) => void) | null = null;
-  private actionHandler: ((e: KeyboardEvent) => void) | null = null;
-  private keyupHandler: ((e: KeyboardEvent) => void) | null = null;
+  private readonly inputHandler = new DungeonInputHandler();
 
   // Mobile touch state (encapsulated)
   private readonly touch = new MobileTouchState();
@@ -230,18 +226,6 @@ export class DungeonScene extends Scene {
   private set _miniMapRect(v) {
     this.touch.miniMapRect = v;
   }
-  private get _hudCollapsed() {
-    return this.touch.hudCollapsed;
-  }
-  private set _hudCollapsed(v) {
-    this.touch.hudCollapsed = v;
-  }
-  private get _hudToggleRect() {
-    return this.touch.hudToggleRect;
-  }
-  private set _hudToggleRect(v) {
-    this.touch.hudToggleRect = v;
-  }
   private get _mobileSummonBtnRect() {
     return this.touch.summonBtnRect;
   }
@@ -256,24 +240,24 @@ export class DungeonScene extends Scene {
 
   constructor(
     private readonly levelDef: LevelDef,
-    private readonly input: InputManager,
-    private readonly sceneManager: SceneManager,
+    input: InputManager,
+    sceneManager: SceneManager,
     options?: DungeonSceneOptions,
   ) {
-    super();
+    super(input, sceneManager);
 
     this.gameMap =
       options?.existingMap ??
-      new GameMap(
-        levelDef.mapSize,
-        TILE_SIZE,
-        levelDef.bossRooms?.length ?? 1,
-        2,
-        levelDef.numStairwells,
-        levelDef.isOverworld ? 'overworld' : 'dungeon',
-        levelDef.hasArena ?? false,
-        levelDef.bossRooms?.map((b) => b.type) ?? [],
-      );
+      new GameMap({
+        mapSize: levelDef.mapSize,
+        tileHeight: TILE_SIZE,
+        numBossRooms: levelDef.bossRooms?.length ?? 1,
+        numSafeRooms: 2,
+        numStairwellsOverride: levelDef.numStairwells,
+        mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
+        hasArena: levelDef.hasArena ?? false,
+        bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
+      });
     this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
     const spawn = options?.spawnAt ?? this.gameMap.startTile;
@@ -435,104 +419,59 @@ export class DungeonScene extends Scene {
   // Scene lifecycle
 
   onEnter(): void {
-    this.escHandler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.repeat) return;
-      e.preventDefault();
-      if (this.safeRoom.mordecaiDialogOpen) {
-        this.safeRoom.mordecaiDialogOpen = false;
-        return;
-      }
-      if (this.stairwell.menuOpen) {
-        this.stairwell.closeMenu();
-        return;
-      }
-      if (this.building?.menuOpen) {
-        this.building.closeMenu();
-        return;
-      }
-      if (!this.gameOver) {
+    this.inputHandler.bind({
+      isSuppressed: () => this.pauseMenu.isOpen || this.safeRoom.isSleeping,
+      isGameOver: () => this.gameOver,
+      dismissDialog: () => {
+        if (this.safeRoom.mordecaiDialogOpen) {
+          this.safeRoom.mordecaiDialogOpen = false;
+          return true;
+        }
+        return false;
+      },
+      dismissStairwell: () => {
+        if (this.stairwell.menuOpen) {
+          this.stairwell.closeMenu();
+          return true;
+        }
+        return false;
+      },
+      dismissBuilding: () => {
+        if (this.building?.menuOpen) {
+          this.building.closeMenu();
+          return true;
+        }
+        return false;
+      },
+      togglePause: () => {
         this.pauseMenu.toggle();
         if (!this.pauseMenu.isOpen) this.input.clear();
-      }
-    };
-
-    this.actionHandler = (e: KeyboardEvent) => {
-      if (this.pauseMenu.isOpen || this.safeRoom.isSleeping) return;
-
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        this.triggerSwitchCharacter();
-        return;
-      }
-
-      if (e.key === ' ' && !e.repeat) {
-        e.preventDefault();
-        this.triggerSpaceAction();
-        return;
-      }
-
-      if ((e.key === 'q' || e.key === 'Q') && !e.repeat) {
-        e.preventDefault();
+      },
+      clearInput: () => this.input.clear(),
+      switchCharacter: () => this.triggerSwitchCharacter(),
+      spaceAction: () => this.triggerSpaceAction(),
+      usePotion: () => {
         if (this.human.isActive) this.human.usePotion();
         else this.cat.usePotion();
-        return;
-      }
-
-      if ((e.key === 'i' || e.key === 'I') && !e.repeat) {
-        e.preventDefault();
-        this.inventoryPanel.toggle();
-        return;
-      }
-
-      if ((e.key === 'g' || e.key === 'G') && !e.repeat) {
-        e.preventDefault();
-        this.gearPanel.toggle();
-        return;
-      }
-
-      if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
-        e.preventDefault();
-        this.triggerCompanionFollow();
-        return;
-      }
-
-      if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
-        e.preventDefault();
-        this.miniMap.toggle();
-        return;
-      }
-
-      if ((e.key === 'r' || e.key === 'R') && !e.repeat) {
-        e.preventDefault();
-        this.triggerMongoSummon();
-        return;
-      }
-
-      const hotbarIdx = parseInt(e.key) - 1;
-      if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
-        e.preventDefault();
-        this.triggerHotbarActivation(hotbarIdx);
-        return;
-      }
-    };
-
-    this.keyupHandler = (e: KeyboardEvent) => {
-      if (this.pauseMenu.isOpen || this.safeRoom.isSleeping || this.gameOver) return;
-      const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx < 8 && this.dynamite.chargingHotbarIdx === idx) {
-        this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
-      }
-    };
-
-    window.addEventListener('keydown', this.escHandler);
-    window.addEventListener('keydown', this.actionHandler);
-    window.addEventListener('keyup', this.keyupHandler);
+      },
+      toggleInventory: () => this.inventoryPanel.toggle(),
+      toggleGear: () => this.gearPanel.toggle(),
+      companionFollow: () => this.triggerCompanionFollow(),
+      toggleMiniMap: () => this.miniMap.toggle(),
+      mongoSummon: () => this.triggerMongoSummon(),
+      hotbarActivation: (idx) => this.triggerHotbarActivation(idx),
+      dynamiteRelease: (idx) => {
+        if (this.dynamite.chargingHotbarIdx === idx) {
+          this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+          return true;
+        }
+        return false;
+      },
+    });
   }
 
   onExit(): void {
-    if (this.escHandler) window.removeEventListener('keydown', this.escHandler);
-    if (this.actionHandler) window.removeEventListener('keydown', this.actionHandler);
-    if (this.keyupHandler) window.removeEventListener('keyup', this.keyupHandler);
+    this.inputHandler.unbind();
   }
 
   // Shared action helpers (keyboard + touch)
@@ -838,86 +777,45 @@ export class DungeonScene extends Scene {
     const canvas = this.sceneManager.canvas;
     const { x: camX, y: camY } = this.camera();
 
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    this.gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
-    this.gore.renderPuddles(ctx, camX, camY);
-
-    this.safeRoom.renderObjects(ctx, camX, camY, this.active(), this.speechBubblePulse);
-    this.bossRoom.renderObjects(ctx, camX, camY);
-    this.juicerRoom.render(ctx, camX, camY, this.active());
-    this.stairwell.renderStairwells(ctx, camX, camY, canvas);
-    this.building?.renderDoorHints(ctx, camX, camY, canvas);
-
-    const visibleMobs = this.mobGrid.queryRect(
-      camX - TILE_SIZE,
-      camY - TILE_SIZE,
-      canvas.width + TILE_SIZE * 2,
-      canvas.height + TILE_SIZE * 2,
-    );
-
-    // Y-sorted draw pass: interleave decoration tiles with entities so depth
-    // (north = behind, south = in front) is respected.
-    type DrawItem = { sortY: number; draw: () => void };
-    const drawItems: DrawItem[] = [];
-
-    for (const { tx, ty } of this.gameMap.getVisibleDecorationTiles(
+    const rc: RenderContext = {
+      canvas,
       camX,
       camY,
-      canvas.width,
-      canvas.height,
-    )) {
-      const capTx = tx;
-      const capTy = ty;
-      drawItems.push({
-        sortY: (capTy + 1) * TILE_SIZE,
-        draw: () => this.gameMap.drawDecorationAt(ctx, capTx, capTy, camX, camY),
-      });
-    }
+      gameMap: this.gameMap,
+      pm: this.pm,
+      active: this.active(),
+      inactive: this.inactive(),
+      mobs: this.mobs,
+      mobGrid: this.mobGrid,
+      gameOver: this.gameOver,
+      pauseMenuOpen: this.pauseMenu.isOpen,
+      gore: this.gore,
+      safeRoom: this.safeRoom,
+      bossRoom: this.bossRoom,
+      juicerRoom: this.juicerRoom,
+      stairwell: this.stairwell,
+      building: this.building,
+      barriers: this.barriers,
+      spells: this.spells,
+      dynamite: this.dynamite,
+      loot: this.loot,
+      miniMap: this.miniMap,
+      mongoSystem: this.mongoSystem,
+      speechBubblePulse: this.speechBubblePulse,
+    };
 
-    for (const mob of visibleMobs) {
-      const m = mob;
-      drawItems.push({
-        sortY: m.y + TILE_SIZE,
-        draw: () => m.render(ctx, camX, camY, TILE_SIZE),
-      });
-    }
+    // Layer 1: World (map, gore puddles, room objects, door hints)
+    this.renderPipeline.renderWorld(ctx, rc);
 
-    const inact = this.inactive();
-    const act = this.active();
-    drawItems.push({
-      sortY: inact.y + TILE_SIZE,
-      draw: () => inact.render(ctx, camX, camY, TILE_SIZE),
-    });
-    drawItems.push({
-      sortY: act.y + TILE_SIZE,
-      draw: () => act.render(ctx, camX, camY, TILE_SIZE),
-    });
+    // Layer 2: Entities (Y-sorted mobs, players, decorations)
+    this.renderPipeline.renderEntities(ctx, rc);
 
-    drawItems.sort((a, b) => a.sortY - b.sortY);
-    for (const item of drawItems) item.draw();
+    // Layer 3: Effects (particles, barriers, spells, dynamite, speech bubbles)
+    this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) => this.renderLevelUpFlash(c, cx, cy));
 
-    this.gore.renderParticles(ctx, camX, camY);
-    this.barriers.render(ctx, camX, camY, this.active());
-    this.spells.renderShell(ctx, camX, camY);
-    this.spells.renderFogs(ctx, camX, camY);
-    this.renderLevelUpFlash(ctx, camX, camY);
-    this.dynamite.render(ctx, camX, camY);
-
-    // Cat speech bubble for Mongo summon/recall
-    this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
-
+    // Layer 4: Screen-space UI
     this.renderHealthVignette(ctx, canvas);
-
-    this._hudToggleRect = drawHUD(
-      ctx,
-      canvas,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-    );
+    this.renderHUD(ctx, canvas);
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.miniMap.render(
@@ -1196,50 +1094,29 @@ export class DungeonScene extends Scene {
     // Spell system (resets confusion, ticks fogs/shell)
     this.spells.update(this.mobs, this.mobGrid);
 
-    // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
-    for (const mob of this.mobs) {
-      if (mob instanceof BrindleGrub && mob.isAlive) mob.tickEvolve();
-    }
+    // Mob AI tick (activation radius, pathfinding, boss clamping)
+    this.mobLoop.update({
+      human: this.human,
+      cat: this.cat,
+      mobs: this.mobs,
+      mobGrid: this.mobGrid,
+      bossRoom: this.bossRoom,
+      extraTargets: this.mongoSystem.mongo ? [this.mongoSystem.mongo] : undefined,
+    });
 
-    // Mob AI — only activate mobs near players
-    const AI_RADIUS = TILE_SIZE * 22;
-    const activeMobs = this.mobGrid.queryCircle(this.human.x, this.human.y, AI_RADIUS);
-    this.mobGrid.queryCircle(this.cat.x, this.cat.y, AI_RADIUS, activeMobs);
-    const playerTargets: Player[] = [this.human, this.cat];
-    if (this.mongoSystem.mongo?.isAlive) {
-      playerTargets.push(this.mongoSystem.mongo);
-    }
-    for (const mob of activeMobs) {
-      if (!mob.isAlive) continue;
-      const ox = mob.x,
-        oy = mob.y;
-      if (mob.isConfused) {
-        mob.currentTarget = null;
-        mob.doWander();
-      } else {
-        if (mob.isBoss) mob.forceAggro = this.bossRoom.isBossInLockedRoom(mob);
-
-        // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
-        if (mob instanceof BrindleGrub) {
-          mob.allMobs = this.mobs;
-        }
-
-        // Clear stale retaliate target; add live ones to this mob's AI targets.
-        if (mob.retaliateMob && !mob.retaliateMob.isAlive) mob.retaliateMob = null;
-        const aiTargets =
-          mob.retaliateMob && !(mob instanceof BrindleGrub)
-            ? [...playerTargets, mob.retaliateMob]
-            : playerTargets;
-
-        mob.updateAI(aiTargets);
-      }
-      // Keep bosses (specifically the Juicer) confined to their room
-      if (mob.isBoss && !(mob instanceof BallOfSwine)) this.bossRoom.clampBossToRoom(mob);
-      mob.tickTimers();
-      this.mobGrid.move(mob, ox, oy);
-    }
-
-    resolvePlayerAttacks(this.human, this.cat, this.mobGrid, this.gameMap, this.safeRoom);
+    const combatCtx: CombatContext = {
+      human: this.human,
+      cat: this.cat,
+      mobs: this.mobs,
+      mobGrid: this.mobGrid,
+      gameMap: this.gameMap,
+      safeRoom: this.safeRoom,
+      miniMap: this.miniMap,
+      loot: this.loot,
+      humanAchievements: this.humanAchievements,
+      catAchievements: this.catAchievements,
+    };
+    resolvePlayerAttacks(combatCtx);
     // Spawn gore before resolveKills consumes justDied.
     // On level 2, enemy deaths also spawn a cluster of Brindle Grubs.
     const grubSpawnPositions: Array<{ tx: number; ty: number }> = [];
@@ -1331,16 +1208,7 @@ export class DungeonScene extends Scene {
     // Intercept Mongo lethal damage before resolveKills consumes justDied
     this.mongoSystem.checkHealth();
 
-    resolveKills(
-      this.mobs,
-      this.human,
-      this.cat,
-      this.mobGrid,
-      this.miniMap,
-      this.loot,
-      this.humanAchievements,
-      this.catAchievements,
-    );
+    resolveKills(combatCtx);
 
     // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(this.mobs, this.mobGrid);
@@ -2127,15 +1995,5 @@ export class DungeonScene extends Scene {
     }
 
     void canvas;
-  }
-
-  // Accessors
-
-  private active(): HumanPlayer | CatPlayer {
-    return this.pm.active();
-  }
-
-  private inactive(): HumanPlayer | CatPlayer {
-    return this.pm.inactive();
   }
 }

@@ -1,13 +1,10 @@
-import { Scene, SceneManager } from '../core/Scene';
+import { SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
-import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
-import { HumanPlayer } from '../creatures/HumanPlayer';
-import { CatPlayer } from '../creatures/CatPlayer';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
-import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { ShopSystem } from '../systems/ShopSystem';
@@ -15,18 +12,13 @@ import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
+import { GameplayScene } from './GameplayScene';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
-export class BuildingInteriorScene extends Scene {
+export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
   readonly pm: PlayerManager;
-  private get human(): HumanPlayer {
-    return this.pm.human;
-  }
-  private get cat(): CatPlayer {
-    return this.pm.cat;
-  }
   private mapW: number;
   private mapH: number;
 
@@ -48,17 +40,13 @@ export class BuildingInteriorScene extends Scene {
   private readonly mobileHUD = new MobileHUDSystem();
 
   // Pause menu
-  private readonly pauseMenu = new PauseMenu();
+  protected readonly pauseMenu = new PauseMenu();
 
   // Companion follow override (mobile follow button)
   private isFollowOverride = false;
 
   // Notif pulse (unused but needed for HUD signature)
-  private readonly notifPulse = { value: 0 };
-
-  // HUD collapse state (mobile)
-  private _hudCollapsed = IS_MOBILE;
-  private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
+  protected readonly notifPulse = { value: 0 };
 
   // Tower multi-floor state
   private towerFloors: GameMap[] = [];
@@ -69,25 +57,35 @@ export class BuildingInteriorScene extends Scene {
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
     catSnap: PlayerSnapshot,
-    private readonly input: InputManager,
-    private readonly sceneManager: SceneManager,
+    input: InputManager,
+    sceneManager: SceneManager,
     private readonly onExitCallback: (humanSnap: PlayerSnapshot, catSnap: PlayerSnapshot) => void,
   ) {
-    super();
+    super(input, sceneManager);
 
     const isTower = entry.type === 'tower';
 
     if (isTower) {
       // Generate 4 tower floors
       for (let f = 0; f < 4; f++) {
-        const floorMap = new GameMap(0, TILE_SIZE, 0, 0);
+        const floorMap = new GameMap({
+          mapSize: 0,
+          tileHeight: TILE_SIZE,
+          numBossRooms: 0,
+          numSafeRooms: 0,
+        });
         floorMap.generateInterior('tower', f, entry.name);
         this.towerFloors.push(floorMap);
       }
       this.map = this.towerFloors[0];
     } else {
       // Build single interior map
-      this.map = new GameMap(0, TILE_SIZE, 0, 0);
+      this.map = new GameMap({
+        mapSize: 0,
+        tileHeight: TILE_SIZE,
+        numBossRooms: 0,
+        numSafeRooms: 0,
+      });
       this.map.generateInterior(entry.type, 0, entry.name);
     }
 
@@ -188,13 +186,6 @@ export class BuildingInteriorScene extends Scene {
     }
   }
 
-  private active(): HumanPlayer | CatPlayer {
-    return this.human.isActive ? this.human : this.cat;
-  }
-  private inactive(): HumanPlayer | CatPlayer {
-    return this.human.isActive ? this.cat : this.human;
-  }
-
   update(): void {
     if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
@@ -212,80 +203,27 @@ export class BuildingInteriorScene extends Scene {
     }
 
     const player = this.active();
-    const mapPxW = this.mapW * TILE_SIZE;
-    const mapPxH = this.mapH * TILE_SIZE;
 
-    // Movement
-    let dx = 0;
-    let dy = 0;
-    if (this.input.has('ArrowUp') || this.input.has('w')) dy -= 1;
-    if (this.input.has('ArrowDown') || this.input.has('s')) dy += 1;
-    if (this.input.has('ArrowLeft') || this.input.has('a')) dx -= 1;
-    if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
-
-    // Mobile touch movement (via shared MobileHUDSystem)
-    if (
-      IS_MOBILE &&
-      this.mobileHUD.moveTarget &&
-      this.mobileHUD.touchHoldMs >= 150 &&
-      dx === 0 &&
-      dy === 0
-    ) {
-      const { x: camX, y: camY } = this.camera(this.sceneManager.canvas);
+    // Mobile touch movement
+    let mobileDx = 0;
+    let mobileDy = 0;
+    if (IS_MOBILE && this.mobileHUD.moveTarget && this.mobileHUD.touchHoldMs >= 150) {
+      const { x: camX, y: camY } = this.computeCamera(this.map);
       const wx = this.mobileHUD.moveTarget.x + camX;
       const wy = this.mobileHUD.moveTarget.y + camY;
       const ddx = wx - (player.x + TILE_SIZE / 2);
       const ddy = wy - (player.y + TILE_SIZE / 2);
       const dist = Math.hypot(ddx, ddy);
       if (dist > 8) {
-        dx = ddx / dist;
-        dy = ddy / dist;
+        mobileDx = ddx / dist;
+        mobileDy = ddy / dist;
       }
     }
 
-    player.isMoving = dx !== 0 || dy !== 0;
-    if (dx !== 0 || dy !== 0) {
-      const len = Math.hypot(dx, dy);
-      player.facingX = dx / len;
-      player.facingY = dy / len;
-    }
-    if (dx !== 0 && dy !== 0) {
-      dx *= 0.7071;
-      dy *= 0.7071;
-    }
-    dx *= PLAYER_SPEED;
-    dy *= PLAYER_SPEED;
-
-    const nextX = Math.max(0, Math.min(mapPxW - TILE_SIZE, player.x + dx));
-    const tileXnext = Math.floor((nextX + TILE_SIZE * 0.5) / TILE_SIZE);
-    const tileYcur = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    if (this.map.isWalkable(tileXnext, tileYcur)) player.x = nextX;
-
-    const nextY = Math.max(0, Math.min(mapPxH - TILE_SIZE, player.y + dy));
-    const tileXcur = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const tileYnext = Math.floor((nextY + TILE_SIZE * 0.5) / TILE_SIZE);
-    if (this.map.isWalkable(tileXcur, tileYnext)) player.y = nextY;
-
-    // Companion follow (simple — just nudge toward active player)
-    const follower = this.inactive();
-    const fdx = player.x - follower.x;
-    const fdy = player.y - follower.y;
-    const fdist = Math.hypot(fdx, fdy);
+    // Movement + companion follow via base class
+    this.applyPlayerMovement(this.map, mobileDx, mobileDy);
     const followDist = this.isFollowOverride ? TILE_SIZE * 0.8 : TILE_SIZE * 1.5;
-    if (fdist > followDist) {
-      const spd = 3.5;
-      const fmx = (fdx / fdist) * spd;
-      const fmy = (fdy / fdist) * spd;
-      const fnx = Math.max(0, Math.min(mapPxW - TILE_SIZE, follower.x + fmx));
-      const ftxn = Math.floor((fnx + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (this.map.isWalkable(ftxn, Math.floor((follower.y + TILE_SIZE * 0.5) / TILE_SIZE)))
-        follower.x = fnx;
-      const fny = Math.max(0, Math.min(mapPxH - TILE_SIZE, follower.y + fmy));
-      const ftyn = Math.floor((fny + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (this.map.isWalkable(Math.floor((follower.x + TILE_SIZE * 0.5) / TILE_SIZE), ftyn))
-        follower.y = fny;
-    }
-    follower.isMoving = fdist > TILE_SIZE * 1.5;
+    this.applyCompanionFollow(this.map, followDist);
 
     // Tab: switch active player
     if (this.input.has('Tab')) {
@@ -395,7 +333,7 @@ export class BuildingInteriorScene extends Scene {
 
   render(ctx: CanvasRenderingContext2D): void {
     const canvas = this.sceneManager.canvas;
-    const { x: camX, y: camY } = this.camera(canvas);
+    const { x: camX, y: camY } = this.computeCamera(this.map);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -420,14 +358,7 @@ export class BuildingInteriorScene extends Scene {
     // Tower stair hints
     this.towerStairs?.renderStairHints(ctx, camX, camY);
 
-    this._hudToggleRect = drawHUD(
-      ctx,
-      canvas,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-    );
+    this.renderHUD(ctx, canvas);
 
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -485,24 +416,6 @@ export class BuildingInteriorScene extends Scene {
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
     }
-  }
-
-  private camera(canvas: HTMLCanvasElement): { x: number; y: number } {
-    const player = this.active();
-    const mapPxW = this.mapW * TILE_SIZE;
-    const mapPxH = this.mapH * TILE_SIZE;
-    const cx = player.x + TILE_SIZE / 2 - canvas.width / 2;
-    const cy = player.y + TILE_SIZE / 2 - canvas.height / 2;
-    return {
-      x:
-        mapPxW <= canvas.width
-          ? (mapPxW - canvas.width) / 2
-          : Math.max(0, Math.min(mapPxW - canvas.width, cx)),
-      y:
-        mapPxH <= canvas.height
-          ? (mapPxH - canvas.height) / 2
-          : Math.max(0, Math.min(mapPxH - canvas.height, cy)),
-    };
   }
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {

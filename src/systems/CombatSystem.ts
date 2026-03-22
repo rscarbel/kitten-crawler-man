@@ -10,13 +10,22 @@ import { LootSystem } from './LootSystem';
 import { AchievementManager } from '../core/AchievementManager';
 import { makeSepsis } from '../core/StatusEffect';
 
-export function resolvePlayerAttacks(
-  human: HumanPlayer,
-  cat: CatPlayer,
-  mobGrid: SpatialGrid<Mob>,
-  gameMap: GameMap,
-  safeRoom: SafeRoomSystem,
-): void {
+/** Shared context passed to combat resolution functions. */
+export interface CombatContext {
+  human: HumanPlayer;
+  cat: CatPlayer;
+  mobs: Mob[];
+  mobGrid: SpatialGrid<Mob>;
+  gameMap: GameMap;
+  safeRoom: SafeRoomSystem;
+  miniMap: MiniMapSystem;
+  loot: LootSystem;
+  humanAchievements: AchievementManager;
+  catAchievements: AchievementManager;
+}
+
+export function resolvePlayerAttacks(ctx: CombatContext): void {
+  const { human, cat, mobGrid, gameMap, safeRoom } = ctx;
   const centerOf = (e: { x: number; y: number }) => ({
     x: e.x + TILE_SIZE * 0.5,
     y: e.y + TILE_SIZE * 0.5,
@@ -72,16 +81,8 @@ export function resolvePlayerAttacks(
   }
 }
 
-export function resolveKills(
-  mobs: Mob[],
-  human: HumanPlayer,
-  cat: CatPlayer,
-  mobGrid: SpatialGrid<Mob>,
-  miniMap: MiniMapSystem,
-  loot: LootSystem,
-  humanAchievements: AchievementManager,
-  catAchievements: AchievementManager,
-): void {
+export function resolveKills(ctx: CombatContext): void {
+  const { mobs, human, cat, mobGrid, miniMap, loot, humanAchievements, catAchievements } = ctx;
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;

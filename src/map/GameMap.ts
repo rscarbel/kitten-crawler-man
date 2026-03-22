@@ -30,6 +30,18 @@ import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
 import { renderCanvas, renderDecorationsOverlay, drawDecorationTileFull } from './TileRenderer';
 
+/** Options for GameMap construction. */
+export interface GameMapOptions {
+  mapSize?: number;
+  tileHeight?: number;
+  numBossRooms?: number;
+  numSafeRooms?: number;
+  numStairwellsOverride?: number;
+  mapType?: 'dungeon' | 'overworld';
+  hasArena?: boolean;
+  bossTypes?: string[];
+}
+
 export class GameMap {
   structure: TileContent[][];
   tileHeight: number;
@@ -67,16 +79,17 @@ export class GameMap {
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
 
-  constructor(
-    mapSize = 100,
-    tileHeight = 10,
-    numBossRooms = 1,
-    numSafeRooms = 2,
-    numStairwellsOverride?: number,
-    mapType?: 'dungeon' | 'overworld',
-    hasArena = false,
-    bossTypes: string[] = [],
-  ) {
+  constructor(opts: GameMapOptions = {}) {
+    const {
+      mapSize = 100,
+      tileHeight = 10,
+      numBossRooms = 1,
+      numSafeRooms = 2,
+      numStairwellsOverride,
+      mapType,
+      hasArena = false,
+      bossTypes = [],
+    } = opts;
     this.tileHeight = tileHeight;
     this.structure = this.generate(
       mapSize,
