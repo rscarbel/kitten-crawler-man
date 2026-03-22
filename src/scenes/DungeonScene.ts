@@ -2,6 +2,7 @@ import { SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
+import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
@@ -14,9 +15,7 @@ import { getLevelDef } from '../levels';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
 import { AchievementManager } from '../core/AchievementManager';
-import type { AchievementDef } from '../core/AchievementManager';
-import { LootBoxOpener } from '../ui/LootBoxOpener';
-import { AchievementNotification } from '../ui/AchievementNotification';
+import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { GearPanel } from '../ui/GearPanel';
 import { SpatialGrid } from '../core/SpatialGrid';
@@ -106,20 +105,11 @@ export class DungeonScene extends GameplayScene {
   private deathScreen: DeathScreen;
   private inventoryPanel: InventoryPanel;
   private gearPanel: GearPanel;
-  private lootBoxOpener: LootBoxOpener;
-  private achievementNotif = new AchievementNotification();
 
-  // Achievement state
+  // Achievement + loot box UI (notification queue, icons, opener)
+  private achievementUI!: AchievementUISystem;
   private humanAchievements: AchievementManager;
   private catAchievements: AchievementManager;
-  private _notifActive = false;
-  private _notifQueue: Array<{
-    def: AchievementDef;
-    mgr: AchievementManager;
-    player: 'Human' | 'Cat';
-  }> = [];
-  private _achievIconRect = { x: 0, y: 0, w: 80, h: 28 };
-  private _lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
 
   // Boss battle intro
   private bossIntro = new BossIntroSystem();
@@ -277,11 +267,18 @@ export class DungeonScene extends GameplayScene {
     this.deathScreen = new DeathScreen();
     this.inventoryPanel = new InventoryPanel();
     this.gearPanel = new GearPanel();
-    this.lootBoxOpener = new LootBoxOpener();
 
     // Achievements — carry over from previous floor if provided
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
+
+    // Achievement + loot box UI system
+    this.achievementUI = new AchievementUISystem(
+      this.humanAchievements,
+      this.catAchievements,
+      this.human,
+      this.cat,
+    );
 
     // Snapshot achievement state at floor entry so death-restarts can rewind it,
     // allowing players to re-earn achievements they unlocked during the failed run.
@@ -557,26 +554,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
-    if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.skip();
-      return;
-    }
-
-    if (this._notifActive) {
-      if (this.achievementNotif.handleClick(mx, my)) {
-        const shown = this._notifQueue.shift();
-        if (shown) {
-          const idx = shown.mgr.pendingNotifications.indexOf(shown.def);
-          if (idx >= 0) shown.mgr.pendingNotifications.splice(idx, 1);
-        }
-        if (this._notifQueue.length > 0) {
-          this.achievementNotif.reset();
-        } else {
-          this._notifActive = false;
-        }
-      }
-      return;
-    }
+    // Achievement UI overlays (notification + loot box opener)
+    if (this.achievementUI.handleClick(mx, my)) return;
 
     // Desktop summon button click
     if (
@@ -594,44 +573,8 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
-      const ai = this._achievIconRect;
-      if (mx >= ai.x && mx <= ai.x + ai.w && my >= ai.y && my <= ai.y + ai.h) {
-        const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-        if (totalUnread > 0) {
-          this._notifQueue = [
-            ...this.humanAchievements.pendingNotifications.map((def) => ({
-              def,
-              mgr: this.humanAchievements,
-              player: 'Human' as const,
-            })),
-            ...this.catAchievements.pendingNotifications.map((def) => ({
-              def,
-              mgr: this.catAchievements,
-              player: 'Cat' as const,
-            })),
-          ];
-          if (this._notifQueue.length > 0) {
-            this._notifActive = true;
-            this.achievementNotif.reset();
-          }
-        }
-        return;
-      }
-    }
-
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
-      const lb = this._lootBoxIconRect;
-      if (mx >= lb.x && mx <= lb.x + lb.w && my >= lb.y && my <= lb.y + lb.h) {
-        const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-        if (unread === 0) {
-          if (this.humanAchievements.pendingBoxes.length > 0) {
-            this.openBoxQueue('human');
-          } else if (this.catAchievements.pendingBoxes.length > 0) {
-            this.openBoxQueue('cat');
-          }
-        }
-        return;
-      }
+      if (this.achievementUI.handleAchievIconClick(mx, my)) return;
+      if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.pauseMenu.close())) return;
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
@@ -703,7 +646,7 @@ export class DungeonScene extends GameplayScene {
     const { x: camX, y: camY } = this.camera();
     if (this.loot.tryCollectLootAt(mx, my, camX, camY, active)) return;
 
-    const pb = this.pauseButtonRect();
+    const pb = UIRenderer.pauseButtonRect(this.sceneManager.canvas, this.miniMap);
     if (mx >= pb.x && mx <= pb.x + pb.w && my >= pb.y && my <= pb.y + pb.h) {
       this.pauseMenu.toggle();
     }
@@ -742,8 +685,7 @@ export class DungeonScene extends GameplayScene {
   // Main update / render
 
   update(): void {
-    if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
-    if (this._notifActive) this.achievementNotif.tick();
+    this.achievementUI.tick();
 
     if (this.bossIntro.isActive) {
       this.bossIntro.tick();
@@ -805,10 +747,12 @@ export class DungeonScene extends GameplayScene {
     this.renderPipeline.renderEntities(ctx, rc);
 
     // Layer 3: Effects (particles, barriers, spells, dynamite, speech bubbles)
-    this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) => this.renderLevelUpFlash(c, cx, cy));
+    this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) =>
+      UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm),
+    );
 
     // Layer 4: Screen-space UI
-    this.renderHealthVignette(ctx, canvas);
+    UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
     this.renderHUD(ctx, canvas);
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -832,7 +776,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (!this.levelDef.isSafeLevel && !this.gameOver) {
-      this.renderLevelTimer(ctx, canvas);
+      UIRenderer.renderLevelTimer(ctx, canvas, this.miniMap, this.levelTimerFrames);
     }
 
     this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
@@ -862,7 +806,16 @@ export class DungeonScene extends GameplayScene {
           this.cat.isActive,
         );
       }
-      if (platform.isMobile) this.renderMobileButtons(ctx, canvas);
+      if (platform.isMobile)
+        UIRenderer.renderMobileButtons(ctx, canvas, this.touch, {
+          human: this.human,
+          cat: this.cat,
+          miniMap: this.miniMap,
+          companion: this.companion,
+          mongoSystem: this.mongoSystem,
+          inventoryPanel: this.inventoryPanel,
+          gearPanel: this.gearPanel,
+        });
     }
 
     if (this.gameOver) {
@@ -873,11 +826,11 @@ export class DungeonScene extends GameplayScene {
       const inSafe = this.human.isProtected || this.cat.isProtected;
       const onOpenHuman =
         inSafe && this.humanAchievements.pendingBoxes.length > 0
-          ? () => this.openBoxQueue('human')
+          ? () => this.achievementUI.openBoxQueue('human', () => this.pauseMenu.close())
           : undefined;
       const onOpenCat =
         inSafe && this.catAchievements.pendingBoxes.length > 0
-          ? () => this.openBoxQueue('cat')
+          ? () => this.achievementUI.openBoxQueue('cat', () => this.pauseMenu.close())
           : undefined;
       this.pauseMenu.render(
         ctx,
@@ -892,13 +845,15 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.render(ctx, canvas);
-    }
-
-    this.drawPauseButton(ctx, canvas);
-    this.drawAchievementIcon(ctx);
-    this.drawLootBoxIcon(ctx, canvas);
+    UIRenderer.drawPauseButton(ctx, canvas, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
+    this.achievementUI.drawAchievementIcon(
+      ctx,
+      canvas,
+      this.miniMap,
+      this.gameOver,
+      this.pauseMenu.isOpen,
+    );
+    this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
@@ -920,95 +875,28 @@ export class DungeonScene extends GameplayScene {
       this.safeRoom.renderSleepOverlay(ctx, canvas);
     }
 
-    if (this._notifActive && this._notifQueue.length > 0) {
-      this.achievementNotif.render(
-        ctx,
-        canvas,
-        this._notifQueue[0].def,
-        this._notifQueue[0].player,
-      );
-    }
+    this.achievementUI.renderOverlays(ctx, canvas);
 
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx, canvas);
     }
 
-    if (platform.showEntityTooltip) {
-      this.renderEntityTooltip(ctx, canvas, camX, camY);
+    if (
+      platform.showEntityTooltip &&
+      !this.gameOver &&
+      !this.pauseMenu.isOpen &&
+      !this.achievementUI.isBlocking
+    ) {
+      UIRenderer.renderEntityTooltip(
+        ctx,
+        canvas,
+        camX,
+        camY,
+        this._mouseX,
+        this._mouseY,
+        this.mobs,
+      );
     }
-  }
-
-  private renderEntityTooltip(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    camX: number,
-    camY: number,
-  ): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen) return;
-
-    const mx = this._mouseX;
-    const my = this._mouseY;
-
-    // Convert screen coords to world coords
-    const wx = mx + camX;
-    const wy = my + camY;
-
-    // Find the first live mob under the cursor
-    let hovered: Mob | null = null;
-    for (const mob of this.mobs) {
-      if (!mob.isAlive) continue;
-      if (wx >= mob.x && wx <= mob.x + TILE_SIZE && wy >= mob.y && wy <= mob.y + TILE_SIZE) {
-        hovered = mob;
-        break;
-      }
-    }
-
-    if (!hovered) return;
-
-    const name = hovered.displayName;
-    const desc = hovered.description;
-
-    // Layout
-    const PAD = 8;
-    const LINE_GAP = 4;
-    ctx.font = 'bold 13px sans-serif';
-    const nameW = ctx.measureText(name).width;
-    ctx.font = '11px sans-serif';
-    const descW = ctx.measureText(desc).width;
-    const boxW = Math.max(nameW, descW) + PAD * 2;
-    const boxH = 13 + LINE_GAP + 11 + PAD * 2;
-
-    // Position tooltip above cursor, keep on screen
-    let tx = mx + 12;
-    let ty = my - boxH - 8;
-    if (tx + boxW > canvas.width - 4) tx = canvas.width - boxW - 4;
-    if (ty < 4) ty = my + 20;
-
-    // Background
-    ctx.save();
-    ctx.globalAlpha = 0.88;
-    ctx.fillStyle = '#1a1a2e';
-    ctx.strokeStyle = hovered.isHostile ? '#ef4444' : '#4ade80';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(tx, ty, boxW, boxH, 4);
-    ctx.fill();
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    // Name
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = hovered.isHostile ? '#fca5a5' : '#86efac';
-    ctx.fillText(name, tx + PAD, ty + PAD + 12);
-
-    // Description
-    if (desc) {
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = '#d1d5db';
-      ctx.fillText(desc, tx + PAD, ty + PAD + 12 + LINE_GAP + 11);
-    }
-
-    ctx.restore();
   }
 
   // Core gameplay update
@@ -1181,33 +1069,6 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
-  // Loot box queue
-
-  private openBoxQueue(player: 'human' | 'cat'): void {
-    const mgr = player === 'human' ? this.humanAchievements : this.catAchievements;
-    const target = player === 'human' ? this.human : this.cat;
-    const boxes = [...mgr.pendingBoxes];
-    if (boxes.length === 0) return;
-    this.pauseMenu.close();
-    const playerName = player === 'human' ? 'Human' : 'Cat';
-    this.lootBoxOpener.startQueue(
-      boxes,
-      playerName,
-      (box, contents) => {
-        mgr.openBox(box.id);
-        contents.potions && target.inventory.addItem('health_potion', contents.potions);
-        target.coins += contents.coins;
-        if (contents.bonus) {
-          this.human.inventory.addItem(
-            contents.bonus.id as import('../core/ItemDefs').ItemId,
-            contents.bonus.quantity,
-          );
-        }
-      },
-      () => {},
-    );
-  }
-
   // Camera
 
   private camera(): { x: number; y: number } {
@@ -1220,367 +1081,6 @@ export class DungeonScene extends GameplayScene {
       x: Math.max(0, Math.min(mapPx - canvas.width, camX)),
       y: Math.max(0, Math.min(mapPx - canvas.height, camY)),
     };
-  }
-
-  // Rendering helpers
-
-  private renderLevelUpFlash(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const p of this.pm.players()) {
-      if (p.levelUpFlash <= 0 || !p.levelUpStat) continue;
-      const alpha = p.levelUpFlash / 120;
-      const rise = (1 - alpha) * 28;
-      const sx = p.x - camX + TILE_SIZE / 2;
-      const sy = p.y - camY - 12 - rise;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.font = 'bold 13px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#facc15';
-      ctx.fillText(`LEVEL UP! +${p.levelUpStat}`, sx, sy);
-      ctx.restore();
-      ctx.textAlign = 'left';
-    }
-  }
-
-  private renderLevelTimer(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const totalSec = Math.max(0, Math.ceil(this.levelTimerFrames / 60));
-    const min = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    const display = `${min}:${sec.toString().padStart(2, '0')}`;
-
-    const urgent = totalSec <= 60;
-    const warning = totalSec <= 300;
-
-    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const w = 80;
-    const h = 28;
-    const x = canvas.width - w - 88;
-    const y = 8 + mmSize + 20;
-
-    const urgentAlpha = urgent ? 0.85 + Math.sin(Date.now() / 160) * 0.12 : 0.75;
-    ctx.fillStyle = urgent
-      ? `rgba(100,0,0,${urgentAlpha})`
-      : warning
-        ? 'rgba(80,40,0,0.85)'
-        : 'rgba(0,0,0,0.65)';
-    ctx.fillRect(x, y, w, h);
-
-    ctx.strokeStyle = urgent ? '#ef4444' : warning ? '#f59e0b' : '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x, y, w, h);
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '9px monospace';
-    ctx.fillText('TIME REMAINING', x + w / 2, y + 12);
-
-    ctx.fillStyle = urgent ? '#f87171' : warning ? '#fbbf24' : '#e2e8f0';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText(display, x + w / 2, y + 29);
-    ctx.textAlign = 'left';
-  }
-
-  private pauseButtonRect(): { x: number; y: number; w: number; h: number } {
-    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    return {
-      x: this.sceneManager.canvas.width - 88,
-      y: 8 + mmSize + 20,
-      w: 80,
-      h: 28,
-    };
-  }
-
-  private drawPauseButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    if (this.gameOver || this.pauseMenu.isOpen) return;
-    const pb = this.pauseButtonRect();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(pb.x, pb.y, pb.w, pb.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(platform.pauseButtonLabel, pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
-    ctx.textAlign = 'left';
-    void canvas;
-  }
-
-  private achievementIconRect(): {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  } {
-    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    return {
-      x: this.sceneManager.canvas.width - 88,
-      y: 8 + mmSize + 20 + 28 + 6,
-      w: 80,
-      h: 26,
-    };
-  }
-
-  private drawAchievementIcon(ctx: CanvasRenderingContext2D): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen || this._notifActive) {
-      this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-    if (unread === 0) {
-      this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const inSafeRoom = this.human.isProtected || this.cat.isProtected;
-    const canvas = this.sceneManager.canvas;
-
-    if (inSafeRoom) {
-      // Big flashing banner on the left (same spot as loot box icon)
-      const w = 96;
-      const h = 88;
-      const x = 12;
-      const y = canvas.height / 2 - h / 2;
-      this._achievIconRect = { x, y, w, h };
-
-      const t = Date.now();
-      const pulse = 0.5 + 0.5 * Math.sin(t / 220);
-      const bounce = Math.sin(t / 400) * 3;
-
-      ctx.save();
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 18 + 14 * pulse;
-
-      ctx.fillStyle = 'rgba(10, 20, 0, 0.92)';
-      ctx.fillRect(x, y + bounce, w, h);
-
-      ctx.strokeStyle = `rgba(134, 239, 172, ${0.55 + 0.45 * pulse})`;
-      ctx.lineWidth = 2 + pulse;
-      ctx.strokeRect(x, y + bounce, w, h);
-      ctx.shadowBlur = 0;
-
-      ctx.font = 'bold 28px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffd700';
-      ctx.fillText('🏆', x + w / 2, y + bounce + 34);
-
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = `rgba(134, 239, 172, ${0.75 + 0.25 * pulse})`;
-      ctx.fillText('ACHIEVEMENT!', x + w / 2, y + bounce + 54);
-
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(unread === 1 ? '1 new' : `${unread} new`, x + w / 2, y + bounce + 68);
-
-      ctx.textAlign = 'left';
-      ctx.restore();
-    } else {
-      // Small button in top-right corner
-      const r = this.achievementIconRect();
-      this._achievIconRect = r;
-
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
-      ctx.fillStyle = 'rgba(26,42,10,0.9)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = `rgba(134,239,172,${0.6 + 0.4 * pulse})`;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = '#86efac';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`🏆 NEW (${unread})`, r.x + r.w / 2, r.y + r.h / 2 + 4);
-      ctx.textAlign = 'left';
-    }
-  }
-
-  private drawLootBoxIcon(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const inSafe = this.human.isProtected || this.cat.isProtected;
-    const totalBoxes =
-      this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
-
-    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-
-    if (
-      !inSafe ||
-      totalBoxes === 0 ||
-      this.gameOver ||
-      this.pauseMenu.isOpen ||
-      this.lootBoxOpener.isOpen ||
-      this._notifActive ||
-      totalUnread > 0
-    ) {
-      this._lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const w = 96;
-    const h = 88;
-    const x = 12;
-    const y = canvas.height / 2 - h / 2;
-    this._lootBoxIconRect = { x, y, w, h };
-
-    const t = Date.now();
-    const pulse = 0.5 + 0.5 * Math.sin(t / 220);
-    const bounce = Math.sin(t / 400) * 3;
-
-    ctx.save();
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 18 + 14 * pulse;
-
-    ctx.fillStyle = 'rgba(20, 14, 0, 0.92)';
-    ctx.fillRect(x, y + bounce, w, h);
-
-    ctx.strokeStyle = `rgba(255, 215, 0, ${0.55 + 0.45 * pulse})`;
-    ctx.lineWidth = 2 + pulse;
-    ctx.strokeRect(x, y + bounce, w, h);
-    ctx.shadowBlur = 0;
-
-    ctx.font = 'bold 30px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText('📦', x + w / 2, y + bounce + 36);
-
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = `rgba(255, 215, 0, ${0.75 + 0.25 * pulse})`;
-    ctx.fillText('OPEN LOOT!', x + w / 2, y + bounce + 54);
-
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, x + w / 2, y + bounce + 68);
-
-    ctx.textAlign = 'left';
-    ctx.restore();
-  }
-
-  // Health vignette
-
-  private renderHealthVignette(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    if (this.gameOver) return;
-    const player = this.active();
-    const ratio = player.hp / player.maxHp;
-    if (ratio >= 0.25) return;
-
-    const cw = canvas.width;
-    const ch = canvas.height;
-
-    let alpha: number;
-    if (ratio < 0.1) {
-      // Blinking: fast pulse between 0.3 and 0.75
-      alpha = 0.3 + 0.45 * (0.5 + 0.5 * Math.sin(Date.now() / 120));
-    } else {
-      // Hazy: steady, scales from 0.1 at 25% to 0.35 at 10%
-      alpha = 0.1 + 0.25 * (1 - (ratio - 0.1) / 0.15);
-    }
-
-    const grad = ctx.createRadialGradient(
-      cw / 2,
-      ch / 2,
-      Math.min(cw, ch) * 0.25,
-      cw / 2,
-      ch / 2,
-      Math.max(cw, ch) * 0.85,
-    );
-    grad.addColorStop(0, 'rgba(220,0,0,0)');
-    grad.addColorStop(1, `rgba(220,0,0,${alpha.toFixed(3)})`);
-
-    ctx.save();
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.restore();
-  }
-
-  // Mobile button rendering
-
-  private renderMobileButtons(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    // Position Switch/Follow buttons above the hotbar
-    const SLOT_H = 52;
-    const BOTTOM_MARGIN = 12;
-    const BTN_W = 80;
-    const BTN_H = 52;
-    const MARGIN = 10;
-    const btnY = canvas.height - SLOT_H - BOTTOM_MARGIN - BTN_H - 8;
-
-    this.touch.switchBtnRect = { x: MARGIN, y: btnY, w: BTN_W, h: BTN_H };
-    this.touch.followBtnRect = {
-      x: canvas.width - MARGIN - BTN_W,
-      y: btnY,
-      w: BTN_W,
-      h: BTN_H,
-    };
-
-    // Gear / Bag buttons stacked on the right side below the minimap column
-    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const rightX = canvas.width - 88;
-    const pauseY = 8 + mmSize + 20;
-    const achieveY = pauseY + 28 + 6;
-    const gearY = achieveY + 26 + 6;
-    this.touch.gearBtnRect = { x: rightX, y: gearY, w: 80, h: 28 };
-    this.touch.bagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
-
-    const drawBtn = (
-      r: { x: number; y: number; w: number; h: number },
-      icon: string,
-      label: string,
-      active: boolean,
-    ) => {
-      ctx.fillStyle = active ? 'rgba(250,204,21,0.25)' : 'rgba(0,0,0,0.65)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = active ? '#facc15' : '#475569';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 20px monospace';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(icon, r.x + r.w / 2, r.y + r.h / 2 + 2);
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(label, r.x + r.w / 2, r.y + r.h - 6);
-      ctx.textAlign = 'left';
-    };
-
-    const drawSmallBtn = (
-      r: { x: number; y: number; w: number; h: number },
-      label: string,
-      active: boolean,
-    ) => {
-      ctx.fillStyle = active ? 'rgba(59,130,246,0.35)' : 'rgba(0,0,0,0.65)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = active ? '#3b82f6' : '#475569';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = '#e2e8f0';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 4);
-      ctx.textAlign = 'left';
-    };
-
-    const humanActive = this.human.isActive;
-    drawBtn(
-      this.touch.switchBtnRect,
-      humanActive ? '🐱' : '🧍',
-      humanActive ? 'Cat' : 'Human',
-      false,
-    );
-    drawBtn(this.touch.followBtnRect, '↩', 'Follow', this.companion.isFollowOverride);
-    drawSmallBtn(this.touch.gearBtnRect, 'Gear', this.gearPanel.isOpen);
-    drawSmallBtn(this.touch.bagBtnRect, 'Bag', this.inventoryPanel.isOpen);
-
-    // Mongo summon button — above the switch button when cat is active
-    if (this.mongoSystem.canShow && this.cat.isActive) {
-      const summonY = btnY - BTN_H - 6;
-      this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
-        ctx,
-        MARGIN,
-        summonY,
-        BTN_W,
-        BTN_H,
-        this.cat.isActive,
-      );
-    } else {
-      this.touch.summonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
-    }
   }
 
   // Touch handlers (mobile)
@@ -1670,8 +1170,7 @@ export class DungeonScene extends GameplayScene {
 
       // Modal / overlay states: route as click
       if (
-        this.lootBoxOpener.isOpen ||
-        this._notifActive ||
+        this.achievementUI.isBlocking ||
         this.stairwell.menuOpen ||
         this.gameOver ||
         this.pauseMenu.isOpen ||
