@@ -1,12 +1,14 @@
 import { Scene, SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
 import { IS_MOBILE } from '../core/MobileDetect';
-import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { Player } from '../Player';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
+import { PlayerManager } from '../core/PlayerManager';
+import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel, createMob } from '../levels/spawner';
 import { getLevelDef } from '../levels';
@@ -42,7 +44,7 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills } from '../systems/CombatSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
-import { readMoveInput, applyMovement } from '../systems/PlayerMovementSystem';
+import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
 import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
@@ -73,8 +75,13 @@ export interface DungeonSceneOptions {
 
 export class DungeonScene extends Scene {
   private gameMap: GameMap;
-  private human: HumanPlayer;
-  private cat: CatPlayer;
+  readonly pm: PlayerManager;
+  private get human(): HumanPlayer {
+    return this.pm.human;
+  }
+  private get cat(): CatPlayer {
+    return this.pm.cat;
+  }
   private mobs: Mob[];
   private mobGrid!: SpatialGrid<Mob>;
 
@@ -142,23 +149,105 @@ export class DungeonScene extends Scene {
   private actionHandler: ((e: KeyboardEvent) => void) | null = null;
   private keyupHandler: ((e: KeyboardEvent) => void) | null = null;
 
-  // Mobile touch state
-  private mobileMoveTouchId: number | null = null;
-  private mobileMoveTarget: { x: number; y: number } | null = null;
-  private mobileTapStart: { x: number; y: number; time: number } | null = null;
-  private inventoryDragTouchId: number | null = null;
-  private mobileDynamiteTouchId: number | null = null;
-  private invLongPressTimer: ReturnType<typeof setTimeout> | null = null;
-  private invLongPressPos: { x: number; y: number } | null = null;
-  private invLongPressFired = false;
-  private _mobileSwitchBtnRect = { x: 0, y: 0, w: 0, h: 0 };
-  private _mobileFollowBtnRect = { x: 0, y: 0, w: 0, h: 0 };
-  private _mobileGearBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
-  private _mobileBagBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
-  private _miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
-  private _hudCollapsed = IS_MOBILE;
-  private _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
-  private _mobileSummonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+  // Mobile touch state (encapsulated)
+  private readonly touch = new MobileTouchState();
+  // Aliases for backward-compat within the class
+  private get mobileMoveTouchId() {
+    return this.touch.moveTouchId;
+  }
+  private set mobileMoveTouchId(v) {
+    this.touch.moveTouchId = v;
+  }
+  private get mobileMoveTarget() {
+    return this.touch.moveTarget;
+  }
+  private set mobileMoveTarget(v) {
+    this.touch.moveTarget = v;
+  }
+  private get mobileTapStart() {
+    return this.touch.tapStart;
+  }
+  private set mobileTapStart(v) {
+    this.touch.tapStart = v;
+  }
+  private get inventoryDragTouchId() {
+    return this.touch.inventoryDragTouchId;
+  }
+  private set inventoryDragTouchId(v) {
+    this.touch.inventoryDragTouchId = v;
+  }
+  private get mobileDynamiteTouchId() {
+    return this.touch.dynamiteTouchId;
+  }
+  private set mobileDynamiteTouchId(v) {
+    this.touch.dynamiteTouchId = v;
+  }
+  private get invLongPressTimer() {
+    return this.touch.longPressTimer;
+  }
+  private set invLongPressTimer(v) {
+    this.touch.longPressTimer = v;
+  }
+  private get invLongPressPos() {
+    return this.touch.longPressPos;
+  }
+  private set invLongPressPos(v) {
+    this.touch.longPressPos = v;
+  }
+  private get invLongPressFired() {
+    return this.touch.longPressFired;
+  }
+  private set invLongPressFired(v) {
+    this.touch.longPressFired = v;
+  }
+  private get _mobileSwitchBtnRect() {
+    return this.touch.switchBtnRect;
+  }
+  private set _mobileSwitchBtnRect(v) {
+    this.touch.switchBtnRect = v;
+  }
+  private get _mobileFollowBtnRect() {
+    return this.touch.followBtnRect;
+  }
+  private set _mobileFollowBtnRect(v) {
+    this.touch.followBtnRect = v;
+  }
+  private get _mobileGearBtnRect() {
+    return this.touch.gearBtnRect;
+  }
+  private set _mobileGearBtnRect(v) {
+    this.touch.gearBtnRect = v;
+  }
+  private get _mobileBagBtnRect() {
+    return this.touch.bagBtnRect;
+  }
+  private set _mobileBagBtnRect(v) {
+    this.touch.bagBtnRect = v;
+  }
+  private get _miniMapRect() {
+    return this.touch.miniMapRect;
+  }
+  private set _miniMapRect(v) {
+    this.touch.miniMapRect = v;
+  }
+  private get _hudCollapsed() {
+    return this.touch.hudCollapsed;
+  }
+  private set _hudCollapsed(v) {
+    this.touch.hudCollapsed = v;
+  }
+  private get _hudToggleRect() {
+    return this.touch.hudToggleRect;
+  }
+  private set _hudToggleRect(v) {
+    this.touch.hudToggleRect = v;
+  }
+  private get _mobileSummonBtnRect() {
+    return this.touch.summonBtnRect;
+  }
+  private set _mobileSummonBtnRect(v) {
+    this.touch.summonBtnRect = v;
+  }
   private krakarenKilled = false;
 
   // Mouse position in screen coords (updated by handleMouseMove)
@@ -189,18 +278,13 @@ export class DungeonScene extends Scene {
 
     const spawn = options?.spawnAt ?? this.gameMap.startTile;
     const { x: sx, y: sy } = spawn;
-    this.human = new HumanPlayer(sx, sy, TILE_SIZE);
-    this.cat = new CatPlayer(sx + 1, sy, TILE_SIZE);
-    this.human.isActive = true;
+    this.pm = new PlayerManager(sx, sy);
 
     // Restore player state if returning from a sub-scene (e.g. building interior)
     if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
     if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
     // Re-apply spawn position (restorePlayer doesn't touch x/y)
-    this.human.x = sx * TILE_SIZE;
-    this.human.y = sy * TILE_SIZE;
-    this.cat.x = (sx + 1) * TILE_SIZE;
-    this.cat.y = sy * TILE_SIZE;
+    this.pm.setPositions(sx, sy);
 
     // Capture floor-entry state for death respawn. If the caller already
     // provides a floor-entry snap (i.e. we're respawning after death), reuse
@@ -455,8 +539,7 @@ export class DungeonScene extends Scene {
 
   private triggerSwitchCharacter(): void {
     this.safeRoom.mordecaiDialogOpen = false;
-    this.human.isActive = !this.human.isActive;
-    this.cat.isActive = !this.cat.isActive;
+    this.pm.switchActive();
     this.cat.autoTarget = null;
     this.human.autoTarget = null;
     this.companion.isFollowOverride = false;
@@ -1040,68 +1123,21 @@ export class DungeonScene extends Scene {
 
   private updateGameplay(): void {
     const player = this.active();
-    const mapPx = this.gameMap.structure.length * TILE_SIZE;
 
-    let dx = 0;
-    let dy = 0;
-    if (this.input.has('ArrowUp') || this.input.has('w')) dy -= 1;
-    if (this.input.has('ArrowDown') || this.input.has('s')) dy += 1;
-    if (this.input.has('ArrowLeft') || this.input.has('a')) dx -= 1;
-    if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
-
-    // Mobile touch movement: only after holding ≥150 ms (not a tap)
-    const touchHoldMs = this.mobileTapStart ? Date.now() - this.mobileTapStart.time : 0;
-    let mobileMove = false;
-    if (IS_MOBILE && this.mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
-      const cam = this.camera();
-      const wx = this.mobileMoveTarget.x + cam.x;
-      const wy = this.mobileMoveTarget.y + cam.y;
-      const ddx = wx - (player.x + TILE_SIZE / 2);
-      const ddy = wy - (player.y + TILE_SIZE / 2);
-      const dist = Math.hypot(ddx, ddy);
-      if (dist > 8) {
-        dx = ddx / dist;
-        dy = ddy / dist;
-        mobileMove = true;
-      }
-    }
-
-    player.isMoving = dx !== 0 || dy !== 0;
-
-    if (dx !== 0 || dy !== 0) {
-      const len = Math.hypot(dx, dy);
-      player.facingX = dx / len;
-      player.facingY = dy / len;
-    }
-    // Mobile touch already gives a unit vector — skip diagonal penalty
-    if (!mobileMove && dx !== 0 && dy !== 0) {
-      // diagonal movement is 41% faster than moving straight.
-      // Hence, the .7 penalty
-      dx *= 0.7071;
-      dy *= 0.7071;
-    }
-    dx *= PLAYER_SPEED;
-    dy *= PLAYER_SPEED;
-
-    const nextX = Math.max(0, Math.min(mapPx - TILE_SIZE, player.x + dx));
-    // Use leading edge for X so entities can't approach as close from the sides.
-    const tileXnext =
-      dx >= 0
-        ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
-        : Math.floor((nextX + TILE_SIZE * 0.28) / TILE_SIZE);
-    const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
-    if (this.gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
-
-    const nextY = Math.max(0, Math.min(mapPx - TILE_SIZE, player.y + dy));
-    const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
-    const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
-    if (this.gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
+    // Phase 1 & 2: Movement input → collision-checked position update
+    const move = readMovement(
+      this.input,
+      this.mobileMoveTarget,
+      this.mobileTapStart,
+      player,
+      this.camera(),
+    );
+    applyMovement(player, move, this.gameMap);
 
     // Safe room flags
-    this.human.isProtected = this.safeRoom.isEntityInSafeRoom(this.human);
-    this.cat.isProtected = this.safeRoom.isEntityInSafeRoom(this.cat);
+    this.pm.updateProtection(this.safeRoom);
 
-    if (!this.safeRoomEntered && (this.human.isProtected || this.cat.isProtected)) {
+    if (!this.safeRoomEntered && this.pm.isAnySafe(this.safeRoom)) {
       this.safeRoomEntered = true;
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
@@ -1309,8 +1345,7 @@ export class DungeonScene extends Scene {
     // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(this.mobs, this.mobGrid);
 
-    this.human.tickTimers();
-    this.cat.tickTimers();
+    this.pm.tickTimers();
 
     this.playerTick.update(this.human, this.cat);
 
@@ -1325,23 +1360,19 @@ export class DungeonScene extends Scene {
       this.levelTimerFrames--;
     }
 
-    // Mini-map fog reveal
-    const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const pty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    this.miniMap.revealAround(ptx, pty);
-    this.miniMap.tickCorpseMarkers();
+    // Phase 8: Mini-map fog reveal
+    revealMinimap(player, this.miniMap);
 
     this.stairwell.detect(this.active());
     this.building?.detect(this.active());
 
-    // Death check
-    if (!this.human.isAlive || !this.cat.isAlive) {
+    // Phase 9: Death check
+    if (
+      !this.gameOver &&
+      checkDeath(this.human, this.cat, !!this.levelDef.isSafeLevel, this.levelTimerFrames)
+    ) {
       this.gameOver = true;
       this.barriers.cancelConstruct();
-      this.deathScreen.activate();
-    }
-    if (!this.levelDef.isSafeLevel && this.levelTimerFrames <= 0 && !this.gameOver) {
-      this.gameOver = true;
       this.deathScreen.activate();
     }
   }
@@ -1508,7 +1539,7 @@ export class DungeonScene extends Scene {
   // Rendering helpers
 
   private renderLevelUpFlash(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const p of [this.human, this.cat] as const) {
+    for (const p of this.pm.players()) {
       if (p.levelUpFlash <= 0 || !p.levelUpStat) continue;
       const alpha = p.levelUpFlash / 120;
       const rise = (1 - alpha) * 28;
@@ -2101,10 +2132,10 @@ export class DungeonScene extends Scene {
   // Accessors
 
   private active(): HumanPlayer | CatPlayer {
-    return this.human.isActive ? this.human : this.cat;
+    return this.pm.active();
   }
 
   private inactive(): HumanPlayer | CatPlayer {
-    return this.human.isActive ? this.cat : this.human;
+    return this.pm.inactive();
   }
 }

@@ -4,6 +4,7 @@ import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
+import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { drawHUD } from '../ui/HUD';
@@ -19,8 +20,13 @@ const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
 export class BuildingInteriorScene extends Scene {
   private map: GameMap;
-  private readonly human: HumanPlayer;
-  private readonly cat: CatPlayer;
+  readonly pm: PlayerManager;
+  private get human(): HumanPlayer {
+    return this.pm.human;
+  }
+  private get cat(): CatPlayer {
+    return this.pm.cat;
+  }
   private mapW: number;
   private mapH: number;
 
@@ -89,20 +95,14 @@ export class BuildingInteriorScene extends Scene {
     this.mapH = this.map.structure.length;
 
     const { x: sx, y: sy } = this.map.startTile;
-    this.human = new HumanPlayer(sx, sy, TILE_SIZE);
-    this.cat = new CatPlayer(sx + 1, sy, TILE_SIZE);
+    this.pm = new PlayerManager(sx, sy);
     this.cat.setMap(this.map);
-    this.human.isActive = true;
 
     restorePlayer(this.human, humanSnap);
     restorePlayer(this.cat, catSnap);
 
-    // Re-position after restore (restore overwrites x/y via base class... actually no
-    // — restore doesn't set x/y since we snap stat fields only). Spawn is already set.
-    this.human.x = sx * TILE_SIZE;
-    this.human.y = sy * TILE_SIZE;
-    this.cat.x = (sx + 1) * TILE_SIZE;
-    this.cat.y = sy * TILE_SIZE;
+    // Re-position after restore (restore doesn't set x/y).
+    this.pm.setPositions(sx, sy);
 
     this.safeRoom =
       entry.type === 'restaurant' ? new SafeRoomSystem(this.map, sx, sy, 'level3') : null;
@@ -290,8 +290,7 @@ export class BuildingInteriorScene extends Scene {
     // Tab: switch active player
     if (this.input.has('Tab')) {
       this.input.clear();
-      this.human.isActive = !this.human.isActive;
-      this.cat.isActive = !this.cat.isActive;
+      this.pm.switchActive();
     }
 
     // Safe room: sleep / talk to Mordecai

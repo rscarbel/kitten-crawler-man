@@ -1,4 +1,4 @@
-import { Inventory, InventoryItem, ItemId, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
+import { Inventory, InventoryItem, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
@@ -6,6 +6,15 @@ import {
   drawBenchPressInventoryIcon,
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
+import { InventoryInteraction } from './InventoryInteraction';
+
+function inRect(
+  mx: number,
+  my: number,
+  r: { x: number; y: number; w: number; h: number },
+): boolean {
+  return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+}
 
 // Layout constants
 const SLOT_SIZE = 54;
@@ -25,49 +34,54 @@ function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
 }
 
-interface DragState {
-  source: 'inv' | 'hotbar';
-  idx: number;
-  item: InventoryItem;
-  mx: number;
-  my: number;
-}
-
-interface ContextMenu {
-  source: 'inv' | 'hotbar';
-  slotIdx: number;
-  x: number;
-  y: number;
-  item: InventoryItem;
-  isEquipped?: boolean;
-}
-
 export class InventoryPanel {
   isOpen = false;
   private page = 0;
-  private drag: DragState | null = null;
 
-  private contextMenu: ContextMenu | null = null;
-  private contextMenuHover = -1;
+  /** Interaction handler — owns drag, context menu, and pending action state. */
+  readonly interaction = new InventoryInteraction();
 
-  /** Set by context-menu "Equip" selection; DungeonScene reads and clears this. */
-  pendingEquipSlot: number | null = null;
-  /** Set by context-menu "Unequip" selection; DungeonScene reads and clears this. */
-  pendingUnequipSlot: number | null = null;
-  /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
-  pendingInfoItem: InventoryItem | null = null;
-  /** Set when the user confirms a drop; DungeonScene reads and clears this. */
-  pendingDropItem: { id: ItemId; quantity: number } | null = null;
-  /** Active drop-quantity dialog (for stackable items with qty > 1). */
-  private dropDialog: {
-    slotIdx: number;
-    id: ItemId;
-    maxQty: number;
-    selectedQty: number;
-  } | null = null;
+  // Delegate pending fields to interaction for backward compatibility
+  get pendingEquipSlot() {
+    return this.interaction.pendingEquipSlot;
+  }
+  set pendingEquipSlot(v) {
+    this.interaction.pendingEquipSlot = v;
+  }
+  get pendingUnequipSlot() {
+    return this.interaction.pendingUnequipSlot;
+  }
+  set pendingUnequipSlot(v) {
+    this.interaction.pendingUnequipSlot = v;
+  }
+  get pendingInfoItem() {
+    return this.interaction.pendingInfoItem;
+  }
+  set pendingInfoItem(v) {
+    this.interaction.pendingInfoItem = v;
+  }
+  get pendingDropItem() {
+    return this.interaction.pendingDropItem;
+  }
+  set pendingDropItem(v) {
+    this.interaction.pendingDropItem = v;
+  }
+
+  private get drag() {
+    return this.interaction.drag;
+  }
+  private get contextMenu() {
+    return this.interaction.contextMenu;
+  }
+  private get contextMenuHover() {
+    return this.interaction.contextMenuHover;
+  }
+  private get dropDialog() {
+    return this.interaction.dropDialog;
+  }
 
   cancelDrag(): void {
-    this.drag = null;
+    this.interaction.cancelDrag();
   }
 
   toggle(): void {
@@ -218,7 +232,7 @@ export class InventoryPanel {
 
   private renderContextMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cm = this.contextMenu!;
-    const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
+    const options = this.interaction.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = 120;
     const menuItemH = 22;
     const menuH = options.length * menuItemH + 4;
@@ -802,314 +816,69 @@ export class InventoryPanel {
 
   // Interaction
 
-  /**
-   * Returns true if this panel consumed the click (inventory toggle button or
-   * close button or pagination). DungeonScene should skip other click handling
-   * when this returns true.
-   */
   handleClick(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): boolean {
-    // Drop quantity dialog takes priority
-    if (this.dropDialog) {
-      const dd = this.dropDialog;
-      const dlgW = 200;
-      const dlgH = 110;
-      const dlgX = Math.floor((canvas.width - dlgW) / 2);
-      const dlgY = Math.floor((canvas.height - dlgH) / 2);
-
-      // Cancel [X] button (top-right)
-      if (mx >= dlgX + dlgW - 22 && mx <= dlgX + dlgW - 6 && my >= dlgY + 6 && my <= dlgY + 22) {
-        this.dropDialog = null;
-        return true;
-      }
-      // [-] minus button
-      const minusBtnX = dlgX + 20;
-      const minusBtnY = dlgY + 54;
-      if (mx >= minusBtnX && mx <= minusBtnX + 24 && my >= minusBtnY && my <= minusBtnY + 24) {
-        this.dropDialog = {
-          ...dd,
-          selectedQty: Math.max(1, dd.selectedQty - 1),
-        };
-        return true;
-      }
-      // [+] plus button
-      const plusBtnX = dlgX + dlgW - 44;
-      const plusBtnY = dlgY + 54;
-      if (mx >= plusBtnX && mx <= plusBtnX + 24 && my >= plusBtnY && my <= plusBtnY + 24) {
-        this.dropDialog = {
-          ...dd,
-          selectedQty: Math.min(dd.maxQty, dd.selectedQty + 1),
-        };
-        return true;
-      }
-      // [Drop] confirm button
-      const confirmX = dlgX + 20;
-      const confirmY = dlgY + dlgH - 28;
-      if (mx >= confirmX && mx <= confirmX + dlgW - 40 && my >= confirmY && my <= confirmY + 22) {
-        this.pendingDropItem = { id: dd.id, quantity: dd.selectedQty };
-        this.dropDialog = null;
-        return true;
-      }
-      // Any other click inside dialog swallows the event
-      if (mx >= dlgX && mx <= dlgX + dlgW && my >= dlgY && my <= dlgY + dlgH) {
-        return true;
-      }
-      // Click outside dialog closes it
-      this.dropDialog = null;
-      return true;
-    }
-
-    // Close info popup on any click
-    if (this.pendingInfoItem) {
-      this.pendingInfoItem = null;
-      return true;
-    }
-
-    // Handle context menu option click
-    if (this.contextMenu) {
-      const cm = this.contextMenu;
-      const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
-      const menuW = 120;
-      const menuItemH = 22;
-      const menuH = options.length * menuItemH + 4;
-      const cmx = Math.min(cm.x, canvas.width - menuW - 4);
-      const cmy = Math.min(cm.y, canvas.height - menuH - 4);
-      if (mx >= cmx && mx <= cmx + menuW && my >= cmy && my <= cmy + menuH) {
-        const idx = Math.floor((my - cmy - 2) / menuItemH);
-        if (idx >= 0 && idx < options.length) {
-          const action = options[idx];
-          if (action === 'Equip') {
-            this.pendingEquipSlot = cm.slotIdx;
-          } else if (action === 'Unequip') {
-            this.pendingUnequipSlot = cm.slotIdx;
-          } else if (action === 'Move to Bag') {
-            inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
-          } else if (action === 'Drop') {
-            const item =
-              cm.source === 'hotbar' ? inventory.hotbar[cm.slotIdx] : inventory.slots[cm.slotIdx];
-            if (item) {
-              if (item.stackable && item.quantity > 1) {
-                this.dropDialog = {
-                  slotIdx: cm.slotIdx,
-                  id: item.id,
-                  maxQty: item.quantity,
-                  selectedQty: 1,
-                };
-              } else {
-                this.pendingDropItem = { id: item.id, quantity: 1 };
-              }
-            }
-          } else {
-            // 'Name' or 'Description' — show info popup
-            this.pendingInfoItem = cm.item;
-          }
-        }
-      }
-      this.contextMenu = null;
-      return true;
-    }
-
-    // Toggle button
-    const btn = this.toggleBtnRect(canvas);
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-      this.toggle();
-      return true;
-    }
-
-    if (!this.isOpen) return false;
-
-    const p = this.panelRect(canvas);
-
-    // Close [X] button
-    const closeX = p.x + p.w - 20;
-    if (mx >= closeX && mx <= closeX + 16 && my >= p.y + 8 && my <= p.y + 24) {
-      this.isOpen = false;
-      return true;
-    }
-
-    // Pagination
-    const pages = pageCount(inventory.slots.length);
-    if (pages > 1) {
-      const navY = p.y + p.h - NAV_H + 6;
-      // Prev
-      if (my >= navY - 12 && my <= navY + 4) {
-        if (mx < p.x + p.w * 0.5 && this.page > 0) {
-          this.page--;
-          return true;
-        }
-        if (mx >= p.x + p.w * 0.5 && this.page < pages - 1) {
-          this.page++;
-          return true;
-        }
-      }
-    }
-
-    // Any click inside the panel suppresses other handlers
-    if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
-      return true;
-    }
-
-    return false;
+    return this.interaction.handleClick(
+      mx,
+      my,
+      canvas,
+      inventory,
+      this.isOpen,
+      () => this.toggle(),
+      this.toggleBtnRect(canvas),
+      this.panelRect(canvas),
+      this.page,
+      (p) => {
+        this.page = p;
+      },
+      (o) => {
+        this.isOpen = o;
+      },
+    );
   }
 
   handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    // Hotbar slots
-    for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = this.hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
-        const item = inventory.hotbar[i];
-        if (item) {
-          this.drag = { source: 'hotbar', idx: i, item, mx, my };
-          return;
-        }
-      }
-    }
-
-    if (!this.isOpen) return;
-
-    const p = this.panelRect(canvas);
-    const pageStart = this.page * SLOTS_PER_PAGE;
-    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
-      const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
-      const r = this.invSlotRect(i, p);
-      if (inRect(mx, my, r)) {
-        const item = inventory.slots[slotIdx];
-        if (item) {
-          this.drag = { source: 'inv', idx: slotIdx, item, mx, my };
-          return;
-        }
-      }
-    }
+    this.interaction.handleMouseDown(
+      mx,
+      my,
+      canvas,
+      inventory,
+      this.isOpen,
+      (i, c) => this.hotbarSlotRect(i, c),
+      this.panelRect(canvas),
+      (i, p) => this.invSlotRect(i, p),
+      this.page,
+    );
   }
 
-  /** Open the right-click context menu over an inventory or hotbar slot at (mx, my). */
   openContextMenu(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    // Check hotbar slots
-    for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = this.hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
-        const item = inventory.hotbar[i];
-        if (item) {
-          this.contextMenu = {
-            source: 'hotbar',
-            slotIdx: i,
-            x: mx,
-            y: my,
-            item,
-          };
-          this.contextMenuHover = -1;
-          return;
-        }
-      }
-    }
-
-    if (!this.isOpen) return;
-    const p = this.panelRect(canvas);
-    const pageStart = this.page * SLOTS_PER_PAGE;
-    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
-      const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
-      const r = this.invSlotRect(i, p);
-      if (inRect(mx, my, r)) {
-        const item = inventory.slots[slotIdx];
-        if (item) {
-          this.contextMenu = {
-            source: 'inv',
-            slotIdx,
-            x: mx,
-            y: my,
-            item,
-            isEquipped: inventory.isSlotEquipped(slotIdx),
-          };
-          this.contextMenuHover = -1;
-          return;
-        }
-      }
-    }
-    this.contextMenu = null;
+    this.interaction.openContextMenu(
+      mx,
+      my,
+      canvas,
+      inventory,
+      this.isOpen,
+      (i, c) => this.hotbarSlotRect(i, c),
+      this.panelRect(canvas),
+      (i, p) => this.invSlotRect(i, p),
+      this.page,
+    );
   }
 
   handleMouseMove(mx: number, my: number): void {
-    if (this.drag) {
-      this.drag.mx = mx;
-      this.drag.my = my;
-    }
-    if (this.contextMenu) {
-      const options = this.contextMenuOptions(
-        this.contextMenu.item,
-        this.contextMenu.source,
-        this.contextMenu.isEquipped,
-      );
-      const menuItemH = 22;
-      const cmx = this.contextMenu.x;
-      const cmy = this.contextMenu.y;
-      if (mx >= cmx && mx <= cmx + 120 && my >= cmy && my <= cmy + options.length * menuItemH + 4) {
-        this.contextMenuHover = Math.floor((my - cmy - 2) / menuItemH);
-      } else {
-        this.contextMenuHover = -1;
-      }
-    }
-  }
-
-  private contextMenuOptions(
-    item: InventoryItem,
-    source: 'inv' | 'hotbar',
-    isEquipped?: boolean,
-  ): string[] {
-    if (source === 'hotbar') {
-      return ['Move to Bag', 'Name', 'Description', 'Drop'];
-    }
-    if (item.type === 'armor') {
-      const label = isEquipped ? 'Unequip' : 'Equip';
-      return [label, 'Name', 'Description', 'Drop'];
-    }
-    return ['Name', 'Description', 'Drop'];
+    this.interaction.handleMouseMove(mx, my);
   }
 
   handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    const src = this.drag;
-    if (!src) return;
-    this.drag = null;
-
-    // Drop on hotbar
-    for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = this.hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
-        if (src.source === 'hotbar') {
-          if (src.idx !== i) inventory.swapHotbar(src.idx, i);
-        } else {
-          inventory.swapInvToHotbar(src.idx, i);
-        }
-        return;
-      }
-    }
-
-    if (!this.isOpen) return;
-
-    // Drop on inventory slot
-    const p = this.panelRect(canvas);
-    const pageStart = this.page * SLOTS_PER_PAGE;
-    for (let i = 0; i < SLOTS_PER_PAGE; i++) {
-      const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
-      const r = this.invSlotRect(i, p);
-      if (inRect(mx, my, r)) {
-        if (src.source === 'hotbar') {
-          inventory.swapHotbarToInv(src.idx, slotIdx);
-        } else {
-          if (src.idx !== slotIdx) inventory.swapSlots(src.idx, slotIdx);
-        }
-        return;
-      }
-    }
-    // Dropped outside a valid target — item stays in original slot (drag cancelled)
+    this.interaction.handleMouseUp(
+      mx,
+      my,
+      canvas,
+      inventory,
+      this.isOpen,
+      (i, c) => this.hotbarSlotRect(i, c),
+      this.panelRect(canvas),
+      (i, p) => this.invSlotRect(i, p),
+      this.page,
+    );
   }
-}
-
-function inRect(
-  mx: number,
-  my: number,
-  r: { x: number; y: number; w: number; h: number },
-): boolean {
-  return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }
