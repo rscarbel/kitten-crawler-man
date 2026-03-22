@@ -1,179 +1,48 @@
-export type ItemId =
-  | 'health_potion'
-  | 'enchanted_bigboi_boxers'
-  | 'trollskin_shirt'
-  | 'enchanted_crown_sepsis_whore'
-  | 'scroll_of_confusing_fog'
-  | 'goblin_dynamite'
-  | 'gym_dumbbell'
-  | 'gym_bench_press'
-  | 'gym_treadmill';
+import { ItemBag } from './ItemBag';
+import { Hotbar } from './Hotbar';
+import { EquipmentManager } from './EquipmentManager';
+import { SLOT_COUNT, HOTBAR_COUNT } from './ItemDefs';
+import type { InventoryItem, ItemId } from './ItemDefs';
 
-export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
+// Re-export everything from ItemDefs so existing consumers don't break.
+export type { ItemId, EquipSlot, InventoryItem } from './ItemDefs';
+export { ITEM_DEF, SLOT_COUNT, HOTBAR_COUNT, SLOTS_PER_PAGE, EQUIP_SUBSLOTS } from './ItemDefs';
 
-export interface InventoryItem {
-  id: ItemId;
-  name: string;
-  quantity: number;
-  stackable: boolean;
-  /** Only items with an action (e.g. potion, ability) may be placed in the hotbar. */
-  canHotlist: boolean;
-  type?: 'consumable' | 'armor';
-  equipSlot?: EquipSlot;
-  equipSubSlot?: string;
-  description?: string;
-  statBonus?: {
-    constitution?: number;
-    strength?: number;
-    intelligence?: number;
-  };
-  /** References an active ability this item grants when equipped. */
-  abilityId?: string;
-}
-
-const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
-  scroll_of_confusing_fog: {
-    id: 'scroll_of_confusing_fog',
-    name: 'Scroll of Confusing Fog',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-    description:
-      'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Lasts INT × 5 seconds.',
-  },
-  health_potion: {
-    id: 'health_potion',
-    name: 'Health Potion',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-  },
-  goblin_dynamite: {
-    id: 'goblin_dynamite',
-    name: 'Goblin Dynamite',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-    description:
-      'A hissing stick of goblin-made dynamite. Only the Human can throw it. ' +
-      'Hold the hotbar key to charge your throw — release to hurl it. ' +
-      'Tap it to drop it at your feet. Warning: holding too long has consequences.',
-  },
-  gym_dumbbell: {
-    id: 'gym_dumbbell',
-    name: 'Dumbbell',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-    description:
-      'A heavy iron dumbbell. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
-  },
-  gym_bench_press: {
-    id: 'gym_bench_press',
-    name: 'Bench Press',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-    description:
-      'A full bench press machine. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
-  },
-  gym_treadmill: {
-    id: 'gym_treadmill',
-    name: 'Treadmill',
-    stackable: true,
-    canHotlist: true,
-    type: 'consumable',
-    description:
-      'A sturdy treadmill. Place it on the ground (hotbar) to create a barrier that slows passing enemies.',
-  },
-  trollskin_shirt: {
-    id: 'trollskin_shirt',
-    name: 'Enchanted Trollskin Shirt of Pummeling',
-    stackable: false,
-    canHotlist: true,
-    type: 'armor',
-    equipSlot: 'Torso',
-    equipSubSlot: 'Shirt',
-    statBonus: { constitution: 3 },
-    description:
-      'The wearer of this shirt gains +7 to the Regeneration skill. In addition, ' +
-      'all melee-based damage debuffs such as Stun, Knockback, Disarm, and ' +
-      'Out-of-Breath are negated.',
-  },
-  enchanted_crown_sepsis_whore: {
-    id: 'enchanted_crown_sepsis_whore',
-    name: 'Enchanted Crown of the Sepsis Whore',
-    stackable: false,
-    canHotlist: true,
-    type: 'armor',
-    equipSlot: 'Head',
-    equipSubSlot: 'Hat',
-    statBonus: { intelligence: 5 },
-    description:
-      'Imbues the wearer with +5 Intelligence. All attacks, including ' +
-      'magical attacks, now have a 15% chance to inflict the Sepsis debuff. ' +
-      'Sepsis is a health-sapping curse that slowly drains the life of its ' +
-      'victim until they perish.',
-  },
-  enchanted_bigboi_boxers: {
-    id: 'enchanted_bigboi_boxers',
-    name: 'Enchanted BigBoi Boxers',
-    stackable: false,
-    canHotlist: true,
-    type: 'armor',
-    equipSlot: 'Legs',
-    equipSubSlot: 'Pants',
-    statBonus: { constitution: 2 },
-    abilityId: 'protective_shell',
-    description:
-      'Have you ever read an Incredible Hulk comic and thought to yourself, ' +
-      'everything rips off of his body except his pants? No way. Well, spoiler alert. ' +
-      "You're not wrong. Size-altering and were-creatures, such as the BigBoi are " +
-      'required to wear enchanted, self-sizing items lest they wish to turn the dungeon ' +
-      'into a nudist colony when they transform. That means everything they wear requires ' +
-      'an enchantment. Everything, including their naughty little undies.',
-  },
-};
-
-export const SLOT_COUNT = 32;
-export const HOTBAR_COUNT = 8;
-export const SLOTS_PER_PAGE = 16; // 4 × 4 grid
-
-/** Sub-slots available in each equipment slot. */
-export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
-  Head: ['Hat', 'Face', 'Neck'],
-  Torso: ['Shirt', 'Jacket', 'Back'],
-  Legs: ['Pants', 'Knee Pads'],
-  Hands: ['Gloves', 'Ring 1', 'Ring 2', 'Ring 3', 'Ring 4'],
-  Feet: ['Shoes', 'Toe Ring 1', 'Toe Ring 2', 'Toe Ring 3', 'Toe Ring 4'],
-};
+export { ItemBag } from './ItemBag';
+export { Hotbar } from './Hotbar';
+export { EquipmentManager } from './EquipmentManager';
 
 export class Inventory {
-  readonly slots: (InventoryItem | null)[] = new Array(SLOT_COUNT).fill(null);
-  readonly hotbar: (InventoryItem | null)[] = new Array(HOTBAR_COUNT).fill(null);
+  readonly bag: ItemBag;
+  readonly actionBar: Hotbar;
+  readonly equipment: EquipmentManager;
 
-  /**
-   * Maps "Slot:SubSlot" key → ItemId of the equipped item.
-   * e.g. "Legs:Pants" → 'enchanted_bigboi_boxers'. The item can be anywhere
-   * (inventory slot OR hotbar) — getEquippedItem searches both.
-   */
-  readonly equipped: Map<string, ItemId> = new Map();
+  /** @deprecated Use `bag.slots` directly. */
+  get slots(): (InventoryItem | null)[] {
+    return this.bag.slots;
+  }
+  /** @deprecated Use `actionBar.slots` directly. */
+  get hotbar(): (InventoryItem | null)[] {
+    return this.actionBar.slots;
+  }
+  /** @deprecated Use `equipment.equipped` directly. */
+  get equipped(): Map<string, ItemId> {
+    return this.equipment.equipped;
+  }
+
+  constructor() {
+    this.bag = new ItemBag(SLOT_COUNT);
+    this.actionBar = new Hotbar(HOTBAR_COUNT);
+    this.equipment = new EquipmentManager((id) => this.findItemById(id));
+  }
+
+  // ── Item storage (delegates to bag + actionBar) ──
 
   /** Add `quantity` of the given item, stacking into an existing slot when possible. */
   addItem(id: ItemId, quantity: number): void {
-    for (const arr of [this.slots, this.hotbar] as (InventoryItem | null)[][]) {
-      for (let i = 0; i < arr.length; i++) {
-        const s = arr[i];
-        if (s && s.id === id && ITEM_DEF[id].stackable) {
-          arr[i] = { ...s, quantity: s.quantity + quantity };
-          return;
-        }
-      }
-    }
-    const empty = this.slots.findIndex((s) => s === null);
-    if (empty !== -1) {
-      this.slots[empty] = { ...ITEM_DEF[id], quantity };
-    }
+    if (this.bag.stackInto(id, quantity)) return;
+    if (this.actionBar.stackInto(id, quantity)) return;
+    this.bag.addToEmpty(id, quantity);
   }
 
   /**
@@ -181,19 +50,9 @@ export class Inventory {
    * Removes from hotbar first, then inventory slots.
    */
   removeItems(id: ItemId, qty: number): void {
-    let remaining = qty;
-    for (const arr of [this.hotbar, this.slots] as (InventoryItem | null)[][]) {
-      for (let i = 0; i < arr.length && remaining > 0; i++) {
-        const s = arr[i];
-        if (!s || s.id !== id) continue;
-        if (s.quantity <= remaining) {
-          remaining -= s.quantity;
-          arr[i] = null;
-        } else {
-          arr[i] = { ...s, quantity: s.quantity - remaining };
-          remaining = 0;
-        }
-      }
+    let remaining = this.actionBar.removeFrom(id, qty);
+    if (remaining > 0) {
+      this.bag.removeFrom(id, remaining);
     }
   }
 
@@ -202,123 +61,95 @@ export class Inventory {
    * Returns true if an item was successfully consumed.
    */
   removeOne(id: ItemId): boolean {
-    for (const arr of [this.hotbar, this.slots] as (InventoryItem | null)[][]) {
-      for (let i = 0; i < arr.length; i++) {
-        const s = arr[i];
-        if (!s || s.id !== id) continue;
-        arr[i] = s.quantity > 1 ? { ...s, quantity: s.quantity - 1 } : null;
-        return true;
-      }
-    }
-    return false;
+    return this.actionBar.removeOne(id) || this.bag.removeOne(id);
   }
 
   /** Total count across all inventory slots and hotbar. */
   countOf(id: ItemId): number {
-    let n = 0;
-    for (const s of [...this.slots, ...this.hotbar]) {
-      if (s?.id === id) n += s.quantity;
-    }
-    return n;
+    return this.bag.countOf(id) + this.actionBar.countOf(id);
   }
 
+  // ── Slot management ──
+
   swapSlots(a: number, b: number): void {
-    [this.slots[a], this.slots[b]] = [this.slots[b], this.slots[a]];
-    // No equipped-map update needed — equipped tracks by ItemId, not slot index.
+    this.bag.swap(a, b);
   }
 
   swapHotbar(a: number, b: number): void {
-    [this.hotbar[a], this.hotbar[b]] = [this.hotbar[b], this.hotbar[a]];
+    this.actionBar.swap(a, b);
   }
 
   swapInvToHotbar(slotIdx: number, hotbarIdx: number): void {
-    const inv = this.slots[slotIdx];
+    const inv = this.bag.slots[slotIdx];
     if (inv && !inv.canHotlist) return;
-    const hot = this.hotbar[hotbarIdx];
-    this.hotbar[hotbarIdx] = inv;
-    this.slots[slotIdx] = hot;
-    // No equipped-map update needed — item keeps its equipped status by ID.
+    const hot = this.actionBar.slots[hotbarIdx];
+    this.actionBar.slots[hotbarIdx] = inv;
+    this.bag.slots[slotIdx] = hot;
   }
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
-    const hot = this.hotbar[hotbarIdx];
-    const inv = this.slots[slotIdx];
+    const hot = this.actionBar.slots[hotbarIdx];
+    const inv = this.bag.slots[slotIdx];
     if (inv && !inv.canHotlist) return;
-    this.slots[slotIdx] = hot;
-    this.hotbar[hotbarIdx] = inv;
+    this.bag.slots[slotIdx] = hot;
+    this.actionBar.slots[hotbarIdx] = inv;
   }
 
   moveHotbarToFirstEmptySlot(hotbarIdx: number): boolean {
-    const item = this.hotbar[hotbarIdx];
+    const item = this.actionBar.slots[hotbarIdx];
     if (!item) return false;
-    const emptyIdx = this.slots.indexOf(null);
+    const emptyIdx = this.bag.slots.indexOf(null);
     if (emptyIdx === -1) return false;
-    this.slots[emptyIdx] = item;
-    this.hotbar[hotbarIdx] = null;
+    this.bag.slots[emptyIdx] = item;
+    this.actionBar.slots[hotbarIdx] = null;
     return true;
   }
 
-  // Equipment
+  // ── Equipment (delegates to EquipmentManager) ──
 
-  /** Find an item by ID across both slots and hotbar. */
+  /** Find an item by ID across both bag and hotbar. */
   private findItemById(id: ItemId): InventoryItem | null {
-    return this.slots.find((s) => s?.id === id) ?? this.hotbar.find((s) => s?.id === id) ?? null;
+    return this.bag.findById(id) ?? this.actionBar.findById(id) ?? null;
   }
 
   /**
-   * Equip the item at `slotIdx`. Records the item's ID in the equipped map so
-   * it stays equipped regardless of where it is physically moved (slots/hotbar).
+   * Equip the item at `slotIdx` in the bag. Records the item's ID in the
+   * equipped map so it stays equipped regardless of physical location.
    * Returns the previously equipped item in that sub-slot (or null).
    */
   equip(slotIdx: number): InventoryItem | null {
-    const item = this.slots[slotIdx];
-    if (!item || item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot) return null;
-    const key = `${item.equipSlot}:${item.equipSubSlot}`;
-    const prev = this.getEquippedItem(key);
-    this.equipped.set(key, item.id);
-    return prev;
+    const item = this.bag.slots[slotIdx];
+    if (!item) return null;
+    return this.equipment.equip(item);
   }
 
-  /** Equip the first instance of `itemId` found in slots. */
+  /** Equip the first instance of `itemId` found in bag slots. */
   equipByItemId(itemId: ItemId): InventoryItem | null {
-    const idx = this.slots.findIndex((s) => s?.id === itemId);
+    const idx = this.bag.slots.findIndex((s) => s?.id === itemId);
     if (idx === -1) return null;
     return this.equip(idx);
   }
 
   /** Unequip the item in the given sub-slot key. Returns the unequipped item. */
   unequip(key: string): InventoryItem | null {
-    const prev = this.getEquippedItem(key);
-    this.equipped.delete(key);
-    return prev;
+    return this.equipment.unequip(key);
   }
 
-  /**
-   * Get the item currently equipped in a sub-slot key ("Slot:SubSlot").
-   * Searches both slots and hotbar so the item can be moved freely.
-   */
+  /** Get the item currently equipped in a sub-slot key ("Slot:SubSlot"). */
   getEquippedItem(key: string): InventoryItem | null {
-    const id = this.equipped.get(key);
-    if (id === undefined) return null;
-    return this.findItemById(id);
+    return this.equipment.getEquippedItem(key);
   }
 
   /** True if the item at the given inventory slot index is currently equipped. */
   isSlotEquipped(slotIdx: number): boolean {
-    const item = this.slots[slotIdx];
+    const item = this.bag.slots[slotIdx];
     if (!item) return false;
-    for (const id of this.equipped.values()) {
-      if (id === item.id) return true;
-    }
-    return false;
+    return this.equipment.isEquipped(item.id);
   }
 
   /** True if any item with the given id is currently equipped. */
   hasEquipped(itemId: ItemId): boolean {
-    for (const id of this.equipped.values()) {
-      if (id === itemId) return true;
-    }
-    return false;
+    return this.equipment.hasEquipped(itemId);
   }
 
   /** Sum all stat bonuses from currently equipped items. */
@@ -327,17 +158,6 @@ export class Inventory {
     strength: number;
     intelligence: number;
   } {
-    let constitution = 0,
-      strength = 0,
-      intelligence = 0;
-    for (const id of this.equipped.values()) {
-      const item = this.findItemById(id);
-      if (item?.statBonus) {
-        constitution += item.statBonus.constitution ?? 0;
-        strength += item.statBonus.strength ?? 0;
-        intelligence += item.statBonus.intelligence ?? 0;
-      }
-    }
-    return { constitution, strength, intelligence };
+    return this.equipment.getStatBonuses();
   }
 }

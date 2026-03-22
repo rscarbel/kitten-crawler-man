@@ -253,10 +253,6 @@ function renderNotification(
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#93c5fd';
   ctx.font = '10px monospace';
-  ctx.fillText(
-    platform.skillPointBanner,
-    14,
-    206,
-  );
+  ctx.fillText(platform.skillPointBanner, 14, 206);
   ctx.restore();
 }

@@ -36,14 +36,10 @@ class DesktopPlatform implements PlatformAdapter {
   readonly isMobile = false;
   readonly pauseButtonLabel = 'Pause (Esc)';
   readonly resumeButtonLabel = 'Resume Game  (Esc)';
-  readonly skillPointBanner =
-    'Skill points available! Open menu (Esc) to spend them.';
+  readonly skillPointBanner = 'Skill points available! Open menu (Esc) to spend them.';
 
   controlHints(atkLabel: string): [string, string] {
-    return [
-      'WASD/Arrows: Move  |  Tab: Switch',
-      `Space: ${atkLabel}  |  Q: Potion`,
-    ];
+    return ['WASD/Arrows: Move  |  Tab: Switch', `Space: ${atkLabel}  |  Q: Potion`];
   }
 
   miniMapHint(expanded: boolean): string {
@@ -67,8 +63,7 @@ class MobilePlatform implements PlatformAdapter {
   readonly isMobile = true;
   readonly pauseButtonLabel = 'Pause';
   readonly resumeButtonLabel = 'Resume Game';
-  readonly skillPointBanner =
-    'Skill points available! Open Pause menu to spend them.';
+  readonly skillPointBanner = 'Skill points available! Open Pause menu to spend them.';
 
   controlHints(): [string, string] {
     return ['Hold: Move  |  Tap: Attack', 'Buttons: Switch / Follow'];
@@ -91,6 +86,4 @@ class MobilePlatform implements PlatformAdapter {
 
 // ── Singleton ────────────────────────────────────────────────────
 
-export const platform: PlatformAdapter = IS_MOBILE
-  ? new MobilePlatform()
-  : new DesktopPlatform();
+export const platform: PlatformAdapter = IS_MOBILE ? new MobilePlatform() : new DesktopPlatform();
