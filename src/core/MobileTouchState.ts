@@ -1,4 +1,4 @@
-import { IS_MOBILE } from './MobileDetect';
+import { platform } from './Platform';
 import { TILE_SIZE } from './constants';
 
 export interface Rect {
@@ -42,7 +42,7 @@ export class MobileTouchState {
   summonBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
 
   /** HUD collapse state (mobile only). */
-  hudCollapsed = IS_MOBILE;
+  hudCollapsed = platform.initialHudCollapsed;
   hudToggleRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
 
   /** Returns true if the given point hits the given rect. */
@@ -66,7 +66,7 @@ export class MobileTouchState {
     cameraX: number,
     cameraY: number,
   ): { dx: number; dy: number; isMobile: boolean } {
-    if (!IS_MOBILE || !this.moveTarget) return { dx: 0, dy: 0, isMobile: false };
+    if (!platform.isMobile || !this.moveTarget) return { dx: 0, dy: 0, isMobile: false };
 
     const touchHoldMs = this.tapStart ? Date.now() - this.tapStart.time : 0;
     if (touchHoldMs < 150) return { dx: 0, dy: 0, isMobile: false };

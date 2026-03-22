@@ -10,7 +10,7 @@ import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { ShopSystem } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import { readMovement, applyMovement } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
@@ -378,7 +378,7 @@ export class BuildingInteriorScene extends GameplayScene {
       const active = this.active();
       const name = this.human.isActive ? 'Human' : 'Cat';
       this.mobileHUD.renderPanels(ctx, canvas, active.inventory, name, active.coins);
-      if (IS_MOBILE) {
+      if (platform.isMobile) {
         const extraButtons: MobileHUDButton[] = [
           {
             id: 'follow',
@@ -513,7 +513,7 @@ export class BuildingInteriorScene extends GameplayScene {
       }
 
       // HUD collapse/expand toggle (mobile only)
-      if (IS_MOBILE) {
+      if (platform.isMobile) {
         const ht = this._hudToggleRect;
         if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
           this._hudCollapsed = !this._hudCollapsed;
@@ -522,7 +522,7 @@ export class BuildingInteriorScene extends GameplayScene {
       }
 
       // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
-      if (IS_MOBILE) {
+      if (platform.isMobile) {
         const btn = this.mobileHUD.hitTest(x, y);
         if (btn === 'switch') {
           this.human.isActive = !this.human.isActive;

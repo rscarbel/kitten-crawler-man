@@ -1,7 +1,7 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
 
 export class MiniMapSystem implements GameSystem {
@@ -201,13 +201,7 @@ export class MiniMapSystem implements GameSystem {
     ctx.fillStyle = '#64748b';
     ctx.font = '8px monospace';
     ctx.textAlign = 'center';
-    const expandHint = IS_MOBILE
-      ? expanded
-        ? 'Tap: collapse'
-        : 'Tap: expand'
-      : expanded
-        ? 'M: collapse'
-        : 'M: expand';
+    const expandHint = platform.miniMapHint(expanded);
     ctx.fillText(expandHint, mmX + mmSize / 2, mmY + mmSize + 9);
     ctx.textAlign = 'left';
   }

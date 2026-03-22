@@ -1,6 +1,6 @@
 import { SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
@@ -580,7 +580,7 @@ export class DungeonScene extends GameplayScene {
 
     // Desktop summon button click
     if (
-      !IS_MOBILE &&
+      !platform.isMobile &&
       !this.gameOver &&
       !this.pauseMenu.isOpen &&
       this.mongoSystem.canShow &&
@@ -852,7 +852,7 @@ export class DungeonScene extends GameplayScene {
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
       // Mongo summon button (desktop: left side above hotbar, mobile: in renderMobileButtons)
-      if (!IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
+      if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
           10,
@@ -862,7 +862,7 @@ export class DungeonScene extends GameplayScene {
           this.cat.isActive,
         );
       }
-      if (IS_MOBILE) this.renderMobileButtons(ctx, canvas);
+      if (platform.isMobile) this.renderMobileButtons(ctx, canvas);
     }
 
     if (this.gameOver) {
@@ -933,7 +933,7 @@ export class DungeonScene extends GameplayScene {
       this.bossIntro.render(ctx, canvas);
     }
 
-    if (!IS_MOBILE) {
+    if (platform.showEntityTooltip) {
       this.renderEntityTooltip(ctx, canvas, camX, camY);
     }
   }
@@ -1301,7 +1301,7 @@ export class DungeonScene extends GameplayScene {
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(IS_MOBILE ? 'Pause' : 'Pause (Esc)', pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
+    ctx.fillText(platform.pauseButtonLabel, pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
     ctx.textAlign = 'left';
     void canvas;
   }
@@ -1593,7 +1593,7 @@ export class DungeonScene extends GameplayScene {
       const y = touch.clientY - rect.top;
 
       // HUD collapse/expand toggle (mobile only)
-      if (IS_MOBILE) {
+      if (platform.isMobile) {
         const ht = this._hudToggleRect;
         if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
           this._hudCollapsed = !this._hudCollapsed;
@@ -1602,7 +1602,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Minimap tap to expand/collapse (mobile only)
-      if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const mm = this.touch.miniMapRect;
         if (x >= mm.x && x <= mm.x + mm.w && y >= mm.y && y <= mm.y + mm.h) {
           this.miniMap.toggle();
@@ -1611,7 +1611,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Gear / Bag buttons (mobile only)
-      if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const gb = this.touch.gearBtnRect;
         if (x >= gb.x && x <= gb.x + gb.w && y >= gb.y && y <= gb.y + gb.h) {
           this.gearPanel.toggle();
@@ -1625,7 +1625,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Mobile Mongo summon button
-      if (IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
+      if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         const mb = this.touch.summonBtnRect;
         if (x >= mb.x && x <= mb.x + mb.w && y >= mb.y && y <= mb.y + mb.h) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
@@ -1635,7 +1635,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Mobile action buttons (always checked first)
-      if (IS_MOBILE) {
+      if (platform.isMobile) {
         const sb = this.touch.switchBtnRect;
         if (x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)

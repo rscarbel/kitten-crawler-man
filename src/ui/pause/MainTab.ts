@@ -1,7 +1,7 @@
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AchievementManager } from '../../core/AchievementManager';
-import { IS_MOBILE } from '../../core/MobileDetect';
+import { platform } from '../../core/Platform';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 
 export function renderMainTab(
@@ -28,7 +28,7 @@ export function renderMainTab(
   const bH = 40;
   let bY = by + 52;
 
-  menuBtn(ctx, buttons, bX, bY, bW, bH, IS_MOBILE ? 'Resume Game' : 'Resume Game  (Esc)', close);
+  menuBtn(ctx, buttons, bX, bY, bW, bH, platform.resumeButtonLabel, close);
   bY += 50;
   menuBtn(ctx, buttons, bX, bY, bW, bH, 'Inventory', () => setTab('inventory'));
   bY += 50;

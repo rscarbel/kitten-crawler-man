@@ -18,14 +18,14 @@ import { CatPlayer } from '../creatures/CatPlayer';
 import { PlayerManager } from '../core/PlayerManager';
 import { PauseMenu } from '../ui/PauseMenu';
 import { drawHUD } from '../ui/HUD';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 
 export abstract class GameplayScene extends Scene {
   abstract readonly pm: PlayerManager;
   protected abstract readonly pauseMenu: PauseMenu;
   protected abstract readonly notifPulse: { value: number };
 
-  protected _hudCollapsed = IS_MOBILE;
+  protected _hudCollapsed = platform.initialHudCollapsed;
   protected _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(
@@ -124,7 +124,7 @@ export abstract class GameplayScene extends Scene {
   // ── Shared mouse/keyboard helpers ─────────────────────────────
 
   protected handleHudToggleTap(x: number, y: number): boolean {
-    if (!IS_MOBILE) return false;
+    if (!platform.showHudCollapseToggle) return false;
     const ht = this._hudToggleRect;
     if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
       this._hudCollapsed = !this._hudCollapsed;

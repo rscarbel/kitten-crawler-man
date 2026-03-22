@@ -1,5 +1,5 @@
 import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 import { InputManager } from '../core/InputManager';
 import { GameMap } from '../map/GameMap';
 import { Player } from '../Player';
@@ -52,7 +52,7 @@ export function readMovement(
 
   let isMobile = false;
   const touchHoldMs = mobileTapStart ? Date.now() - mobileTapStart.time : 0;
-  if (IS_MOBILE && mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
+  if (platform.isMobile && mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
     const wx = mobileMoveTarget.x + camera.x;
     const wy = mobileMoveTarget.y + camera.y;
     const ddx = wx - (player.x + TILE_SIZE / 2);

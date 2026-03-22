@@ -7,7 +7,6 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { IS_MOBILE } from '../core/MobileDetect';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';

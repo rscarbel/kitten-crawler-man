@@ -2,7 +2,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { StatusEffect } from '../core/StatusEffect';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -22,7 +22,7 @@ export function drawHUD(
   pulseRef: { value: number },
   collapsed = false,
 ): { x: number; y: number; w: number; h: number } {
-  if (IS_MOBILE && collapsed) {
+  if (platform.showHudCollapseToggle && collapsed) {
     return drawHUDCollapsed(ctx, human, cat);
   }
 
@@ -42,13 +42,9 @@ export function drawHUD(
 
   ctx.fillStyle = '#e2e8f0';
   ctx.font = '12px monospace';
-  if (IS_MOBILE) {
-    ctx.fillText('Hold: Move  |  Tap: Attack', 16, 46);
-    ctx.fillText('Buttons: Switch / Follow', 16, 62);
-  } else {
-    ctx.fillText('WASD/Arrows: Move  |  Tab: Switch', 16, 46);
-    ctx.fillText(`Space: ${atkLabel}  |  Q: Potion`, 16, 62);
-  }
+  const [hintLine1, hintLine2] = platform.controlHints(atkLabel);
+  ctx.fillText(hintLine1, 16, 46);
+  ctx.fillText(hintLine2, 16, 62);
 
   drawHUDPlayerBlock(ctx, activeLabel, activePlayer, 16, 74);
   drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 128);
@@ -60,7 +56,7 @@ export function drawHUD(
 
   renderNotification(ctx, human, cat, pulseRef);
 
-  if (IS_MOBILE) {
+  if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
     const toggleRect = { x: 336, y: 8, w: 28, h: 22 };
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -258,9 +254,7 @@ function renderNotification(
   ctx.fillStyle = '#93c5fd';
   ctx.font = '10px monospace';
   ctx.fillText(
-    IS_MOBILE
-      ? 'Skill points available! Open Pause menu to spend them.'
-      : 'Skill points available! Open menu (Esc) to spend them.',
+    platform.skillPointBanner,
     14,
     206,
   );

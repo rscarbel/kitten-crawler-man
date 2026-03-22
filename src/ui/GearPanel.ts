@@ -1,6 +1,6 @@
 import { Inventory, EQUIP_SUBSLOTS, EquipSlot } from '../core/Inventory';
 import type { InventoryItem } from '../core/Inventory';
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -45,9 +45,9 @@ export class GearPanel {
   }
 
   private panelRect(canvas: HTMLCanvasElement) {
-    const w = IS_MOBILE ? Math.min(340, canvas.width - 16) : 340;
+    const w = platform.gearPanelWidth(canvas.width);
     const h = Math.min(420, canvas.height - 16);
-    const xOffset = IS_MOBILE ? 0 : -180;
+    const xOffset = platform.gearPanelXOffset;
     const x = Math.max(8, Math.floor((canvas.width - w) / 2) + xOffset);
     const y = Math.max(8, Math.floor((canvas.height - h) / 2));
     return { x, y, w, h };
@@ -68,8 +68,8 @@ export class GearPanel {
   }
 
   private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    // On mobile the button is drawn by DungeonScene.renderMobileButtons instead
-    if (IS_MOBILE) return;
+    // On mobile the button is drawn by MobileHUDSystem instead
+    if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
     ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);

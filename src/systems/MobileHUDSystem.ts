@@ -1,4 +1,4 @@
-import { IS_MOBILE } from '../core/MobileDetect';
+import { platform } from '../core/Platform';
 import { InventoryPanel } from '../ui/InventoryPanel';
 import { GearPanel } from '../ui/GearPanel';
 import { TILE_SIZE } from '../core/constants';
@@ -71,7 +71,7 @@ export class MobileHUDSystem implements GameSystem {
     hotbarHeight = 52,
     topRightY?: number,
   ): void {
-    if (!IS_MOBILE) return;
+    if (!platform.isMobile) return;
 
     const BOTTOM_MARGIN = 12;
     const BTN_W = 80;
@@ -130,7 +130,7 @@ export class MobileHUDSystem implements GameSystem {
     const y = topY ?? 38;
     const rightX = canvas.width - 88;
     this._pauseBtnRect = { x: rightX, y, w: 80, h: 28 };
-    this.drawSmallBtn(ctx, this._pauseBtnRect, IS_MOBILE ? 'Pause' : 'Pause (Esc)', false);
+    this.drawSmallBtn(ctx, this._pauseBtnRect, platform.pauseButtonLabel, false);
   }
 
   /**
@@ -230,13 +230,7 @@ export class MobileHUDSystem implements GameSystem {
     ctx.fillStyle = '#64748b';
     ctx.font = '8px monospace';
     ctx.textAlign = 'center';
-    const hint = IS_MOBILE
-      ? this._miniMapExpanded
-        ? 'Tap: collapse'
-        : 'Tap: expand'
-      : this._miniMapExpanded
-        ? 'M: collapse'
-        : 'M: expand';
+    const hint = platform.miniMapHint(this._miniMapExpanded);
     ctx.fillText(hint, mmX + mmSize / 2, mmY + mmSize + 9);
     ctx.textAlign = 'left';
 
