@@ -29,4 +29,15 @@ export const level1: LevelDef = {
   hallwayMobs: [{ type: 'rat', chance: 1.0, minLevel: 1, maxLevel: 1 }],
   bossRooms: [{ type: 'the_hoarder' }, { type: 'juicer' }],
   nextLevelId: 'level2',
+  extraSpawns: [
+    {
+      type: 'troglodyte',
+      origin: 'bossRoom:1',
+      offsets: [
+        [-3, -2],
+        [3, -2],
+        [0, 3],
+      ],
+    },
+  ],
 };

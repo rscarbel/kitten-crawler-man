@@ -9,7 +9,7 @@ import { Mob } from '../creatures/Mob';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
-import { spawnForLevel, createMob } from '../levels/spawner';
+import { spawnForLevel, spawnExtraMobs, createMob } from '../levels/spawner';
 import { getLevelDef } from '../levels';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
@@ -33,10 +33,10 @@ import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
+import { ArenaSystem } from '../systems/ArenaSystem';
 import { Juicer } from '../creatures/Juicer';
 import { BallOfSwine } from '../creatures/BallOfSwine';
-import { Tuskling } from '../creatures/Tuskling';
-import { BrindleGrub } from '../creatures/BrindleGrub';
+
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
@@ -124,11 +124,8 @@ export class DungeonScene extends GameplayScene {
   // Boss battle intro
   private bossIntro = new BossIntroSystem();
 
-  // Arena (Ball of Swine) state
-  private arenaPhase2Active = false;
-  private arenaLiveTusklings: Tuskling[] = [];
-  private arenaStairwellUnlocked = false;
-  private arenaLocked = false;
+  // Arena (Ball of Swine) — delegated to ArenaSystem
+  private arena!: ArenaSystem;
 
   // Floor entry snapshots (used to respawn players at floor-start state on death)
   private floorEntryHumanSnap!: PlayerSnapshot;
@@ -195,53 +192,8 @@ export class DungeonScene extends GameplayScene {
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
 
-    // Spawn a few Troglodytes near the Juicer's boss room (bossRooms[1])
-    if (levelDef.bossRooms?.[1]?.type === 'juicer') {
-      const juicerRoom = this.gameMap.bossRooms[1];
-      if (juicerRoom) {
-        const { x: jcx, y: jcy } = juicerRoom.centre;
-        for (const [dx, dy] of [
-          [-3, -2],
-          [3, -2],
-          [0, 3],
-        ] as [number, number][]) {
-          this.mobs.push(createMob('troglodyte', jcx + dx, jcy + dy, this.gameMap));
-        }
-      }
-    }
-
-    // Spawn Ball of Swine at arena centre (dungeon levels only)
-    if (!levelDef.isOverworld && this.gameMap.arenaExteriors.length > 0) {
-      const arena = this.gameMap.arenaExteriors[0];
-      const bos = new BallOfSwine(arena.centre.x, arena.centre.y, TILE_SIZE);
-      bos.setArena(arena.centre.x, arena.centre.y);
-      bos.setMap(this.gameMap);
-      this.mobs.push(bos);
-    }
-
-    // Spawn Sky Fowls wandering around the overworld town square
-    if (levelDef.isOverworld) {
-      const mapCx = Math.floor(levelDef.mapSize / 2);
-      const mapCy = Math.floor(levelDef.mapSize / 2);
-      // Positions scattered around the town square (22×22 road area centered on mapCx/mapCy)
-      const fowlOffsets: [number, number][] = [
-        [-8, -5],
-        [6, -7],
-        [-6, 4],
-        [8, 3],
-        [-2, 7],
-        [7, -3],
-        [-5, -8],
-        [3, 6],
-        [-8, 2],
-        [5, -4],
-        [0, -8],
-        [-4, -4],
-      ];
-      for (const [dx, dy] of fowlOffsets) {
-        this.mobs.push(createMob('sky_fowl', mapCx + dx, mapCy + dy, this.gameMap));
-      }
-    }
+    // Data-driven extra spawns (troglodytes near boss rooms, BoS at arena, sky fowls, etc.)
+    this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
 
     this.cat.setMap(this.gameMap);
 
@@ -258,6 +210,17 @@ export class DungeonScene extends GameplayScene {
     );
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.barriers = new BarrierSystem(this.gameMap);
+    this.arena = new ArenaSystem(
+      this.gameMap,
+      this.bus,
+      () => this.mobs,
+      () => this.mobGrid,
+      (mob) => {
+        this.mobs.push(mob);
+        this.mobGrid.insert(mob);
+      },
+      this.bossRoom,
+    );
     this.dynamite = new DynamiteSystem(this.gameMap);
     this.spells = new SpellSystem();
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
@@ -394,30 +357,35 @@ export class DungeonScene extends GameplayScene {
         bus.emit('bossDefeated', { bossType: 'krakaren_clone', mob });
       }
 
-      // Level 2: enemy deaths spawn Brindle Grubs
-      if (this.levelDef.id === 'level2' && !(mob instanceof BrindleGrub)) {
-        const tx = Math.round(mob.x / TILE_SIZE);
-        const ty = Math.round(mob.y / TILE_SIZE);
-        const count = 1 + Math.floor(Math.random() * 5);
-        for (let i = 0; i < count; i++) {
-          let placed = false;
-          for (let attempt = 0; attempt < 8 && !placed; attempt++) {
-            const ox = Math.floor((Math.random() - 0.5) * 4);
-            const oy = Math.floor((Math.random() - 0.5) * 4);
-            const gtx = tx + ox;
-            const gty = ty + oy;
-            if (!this.gameMap.isWalkable(gtx, gty)) continue;
-            const grub = new BrindleGrub(gtx, gty, TILE_SIZE);
-            grub.setMap(this.gameMap);
-            this.mobs.push(grub);
-            this.mobGrid.insert(grub);
-            placed = true;
+      // Data-driven on-kill spawns (e.g. level 2 Brindle Grubs)
+      if (this.levelDef.onMobKilledSpawns) {
+        const mobClassName = (mob.constructor as { name?: string }).name ?? '';
+        for (const rule of this.levelDef.onMobKilledSpawns) {
+          if (rule.excludeKilledTypes?.includes(mobClassName)) continue;
+          const tx = Math.round(mob.x / TILE_SIZE);
+          const ty = Math.round(mob.y / TILE_SIZE);
+          const count =
+            rule.minCount + Math.floor(Math.random() * (rule.maxCount - rule.minCount + 1));
+          for (let i = 0; i < count; i++) {
+            let placed = false;
+            for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+              const ox = Math.floor((Math.random() - 0.5) * rule.spreadRadius * 2);
+              const oy = Math.floor((Math.random() - 0.5) * rule.spreadRadius * 2);
+              const gtx = tx + ox;
+              const gty = ty + oy;
+              if (!this.gameMap.isWalkable(gtx, gty)) continue;
+              const spawned = createMob(rule.type, gtx, gty, this.gameMap);
+              this.mobs.push(spawned);
+              this.mobGrid.insert(spawned);
+              placed = true;
+            }
           }
         }
       }
     });
 
-    // ── bossDefeated: boss_slayer achievement, BoS tusklings, Krakaren → Mongo ──
+    // ── bossDefeated: boss_slayer achievement, Krakaren → Mongo ──
+    // (BoS tuskling spawning is handled by ArenaSystem via its own bus subscription)
     bus.on('bossDefeated', (e) => {
       // boss_slayer achievement for both players
       if (!this.humanAchievements.tryUnlock('boss_slayer')) {
@@ -425,27 +393,6 @@ export class DungeonScene extends GameplayScene {
       }
       if (!this.catAchievements.tryUnlock('boss_slayer')) {
         this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
-      }
-
-      // Ball of Swine burst → spawn 8 dazed Tusklings
-      if (e.bossType === 'ball_of_swine' && !this.arenaPhase2Active) {
-        this.arenaPhase2Active = true;
-        this.arenaLiveTusklings = [];
-        const arena = this.gameMap.arenaExteriors[0];
-        const acx = arena ? arena.centre.x : Math.floor(e.mob.x / TILE_SIZE);
-        const acy = arena ? arena.centre.y : Math.floor(e.mob.y / TILE_SIZE);
-        for (let i = 0; i < 8; i++) {
-          const angle = (i / 8) * Math.PI * 2;
-          const r = 3;
-          const tx = acx + Math.round(Math.cos(angle) * r);
-          const ty = acy + Math.round(Math.sin(angle) * r);
-          const tusk = new Tuskling(tx, ty, TILE_SIZE);
-          tusk.setMap(this.gameMap);
-          tusk.dazeTimer = 600;
-          this.mobs.push(tusk);
-          this.mobGrid.insert(tusk);
-          this.arenaLiveTusklings.push(tusk);
-        }
       }
 
       // Krakaren Clone death → unlock Mongo
@@ -889,7 +836,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
-    this.renderArenaUI(ctx, canvas);
+    this.arena.render(ctx, canvas, this.active());
 
     this.loot.render(ctx, camX, camY, this.active());
 
@@ -1091,27 +1038,8 @@ export class DungeonScene extends GameplayScene {
     this.safeRoom.updateWander();
     this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
 
-    // Arena door lock: lock when either player enters with BoS alive, unlock on BoS death
-    if (this.gameMap.arenaExteriors.length > 0) {
-      const arena = this.gameMap.arenaExteriors[0];
-      const bos = this.mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
-      if (bos) {
-        const cx = arena.centre.x * TILE_SIZE;
-        const cy = arena.centre.y * TILE_SIZE;
-        const innerRadius = (arena.radius - 2) * TILE_SIZE;
-        const humanInside = Math.hypot(this.human.x - cx, this.human.y - cy) < innerRadius;
-        const catInside = Math.hypot(this.cat.x - cx, this.cat.y - cy) < innerRadius;
-        if (!this.arenaLocked && bos.isAlive && (humanInside || catInside)) {
-          this.arenaLocked = true;
-          this.gameMap.lockArenaDoor();
-          this.bossRoom.newlyLockedBossType = 'ball_of_swine';
-        }
-        if (this.arenaLocked && !bos.isAlive && !this.arenaPhase2Active) {
-          this.arenaLocked = false;
-          this.gameMap.unlockArenaDoor();
-        }
-      }
-    }
+    // Arena system: door locking, phase transitions, stairwell unlock
+    this.arena.update(this.human, this.cat);
 
     // Trigger boss battle intro on first room entry
     if (this.bossRoom.newlyLockedBossType !== null) {
@@ -1168,21 +1096,6 @@ export class DungeonScene extends GameplayScene {
     // grub spawns, BoS tuskling burst, Krakaren → Mongo unlock
     resolveKills(combatCtx);
 
-    // Arena phase 2: unlock stairwell when all spawned Tusklings are dead
-    if (
-      this.arenaPhase2Active &&
-      !this.arenaStairwellUnlocked &&
-      this.arenaLiveTusklings.length > 0 &&
-      this.arenaLiveTusklings.every((t) => !t.isAlive)
-    ) {
-      this.arenaStairwellUnlocked = true;
-      this.gameMap.unlockArenaStairwell();
-      if (this.arenaLocked) {
-        this.arenaLocked = false;
-        this.gameMap.unlockArenaDoor();
-      }
-    }
-
     // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(this.mobs, this.mobGrid);
 
@@ -1215,82 +1128,6 @@ export class DungeonScene extends GameplayScene {
       this.gameOver = true;
       this.barriers.cancelConstruct();
       this.deathScreen.activate();
-    }
-  }
-
-  // Arena UI
-
-  private renderArenaUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const bos = this.mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
-
-    if (bos && bos.isAlive) {
-      // Only show health bar when active player is near the arena
-      const arena = this.gameMap.arenaExteriors[0];
-      if (arena) {
-        const player = this.active();
-        const distToArena = Math.hypot(
-          player.x - arena.centre.x * TILE_SIZE,
-          player.y - arena.centre.y * TILE_SIZE,
-        );
-        if (distToArena > (arena.radius + 5) * TILE_SIZE) {
-          return;
-        }
-      }
-      const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
-      const barW = Math.min(360, canvas.width * 0.5);
-      const barH = 18;
-      const barX = Math.floor((canvas.width - barW) / 2);
-      const barY = 48;
-      const hpFrac = Math.max(0, bos.hp / bos.maxHp);
-
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(barX - 6, barY - 22, barW + 12, barH + 30);
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
-
-      ctx.font = 'bold 11px monospace';
-      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName,
-        canvas.width / 2,
-        barY - 6,
-      );
-      ctx.textAlign = 'left';
-
-      ctx.fillStyle = '#0a0a12';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
-      ctx.fillRect(barX, barY, barW * hpFrac, barH);
-
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${bos.hp} / ${bos.maxHp}`, canvas.width / 2, barY + barH - 4);
-      ctx.textAlign = 'left';
-      ctx.restore();
-    }
-
-    // Phase 2: show how many Tusklings remain
-    if (this.arenaPhase2Active && !this.arenaStairwellUnlocked) {
-      const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
-      ctx.save();
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = alive > 0 ? '#f87171' : '#4ade80';
-      ctx.fillText(
-        alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
-        canvas.width / 2,
-        78,
-      );
-      ctx.textAlign = 'left';
-      ctx.restore();
     }
   }
 

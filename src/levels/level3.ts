@@ -14,4 +14,24 @@ export const level3: LevelDef = {
   bossRooms: [],
   isSafeLevel: true,
   isOverworld: true,
+  extraSpawns: [
+    {
+      type: 'sky_fowl',
+      origin: 'mapCenter',
+      offsets: [
+        [-8, -5],
+        [6, -7],
+        [-6, 4],
+        [8, 3],
+        [-2, 7],
+        [7, -3],
+        [-5, -8],
+        [3, 6],
+        [-8, 2],
+        [5, -4],
+        [0, -8],
+        [-4, -4],
+      ],
+    },
+  ],
 };

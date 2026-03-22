@@ -11,8 +11,9 @@ import { Tuskling } from '../creatures/Tuskling';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { SkyFowl } from '../creatures/SkyFowl';
 import { KrakarenClone } from '../creatures/KrakarenClone';
+import { BrindleGrub } from '../creatures/BrindleGrub';
 import { TILE_SIZE } from '../core/constants';
-import type { MobSpawnRule, LevelDef } from './types';
+import type { MobSpawnRule, LevelDef, ExtraSpawnRule } from './types';
 
 // Goblin variant data (moved from game.ts)
 
@@ -67,6 +68,7 @@ registerMob('tuskling', (x, y) => new Tuskling(x, y, TILE_SIZE));
 registerMob('sky_fowl', (x, y) => new SkyFowl(x, y, TILE_SIZE));
 registerMob('ball_of_swine', (x, y) => new BallOfSwine(x, y, TILE_SIZE));
 registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
+registerMob('brindle_grub', (x, y) => new BrindleGrub(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
   return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);
@@ -79,6 +81,72 @@ export function createMob(type: string, tileX: number, tileY: number, map: GameM
   const mob = factory ? factory(tileX, tileY) : MOB_REGISTRY.get('goblin')!(tileX, tileY); // default: goblin
   mob.setMap(map);
   return mob;
+}
+
+// ── Extra spawn origin resolution ──────────────────────────────────
+
+/** Resolve an ExtraSpawnRule origin string to a tile coordinate, or null if the landmark doesn't exist. */
+function resolveOrigin(
+  origin: string,
+  map: GameMap,
+  def: LevelDef,
+): { x: number; y: number } | null {
+  if (origin === 'mapCenter') {
+    const half = Math.floor(def.mapSize / 2);
+    return { x: half, y: half };
+  }
+  const bossMatch = origin.match(/^bossRoom:(\d+)$/);
+  if (bossMatch) {
+    const idx = parseInt(bossMatch[1], 10);
+    const br = map.bossRooms[idx];
+    return br ? br.centre : null;
+  }
+  const arenaMatch = origin.match(/^arena:(\d+)$/);
+  if (arenaMatch) {
+    const idx = parseInt(arenaMatch[1], 10);
+    const arena = map.arenaExteriors[idx];
+    return arena ? arena.centre : null;
+  }
+  return null;
+}
+
+/**
+ * Post-spawn setup callbacks for mobs that need special initialization
+ * beyond what `createMob` provides (e.g. BallOfSwine needs arena binding).
+ */
+const SPAWN_SETUP: Record<
+  string,
+  (mob: Mob, map: GameMap, origin: { x: number; y: number }) => void
+> = {
+  setupBallOfSwine(mob, map, origin) {
+    const bos = mob as BallOfSwine;
+    bos.setArena(origin.x, origin.y);
+    bos.setMap(map);
+  },
+};
+
+/**
+ * Spawn mobs described by `def.extraSpawns` — position-relative spawns
+ * that are tied to map landmarks rather than generic spawn points.
+ */
+export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
+  const mobs: Mob[] = [];
+  if (!def.extraSpawns) return mobs;
+
+  for (const rule of def.extraSpawns) {
+    const origin = resolveOrigin(rule.origin, map, def);
+    if (!origin) continue;
+
+    for (const [dx, dy] of rule.offsets) {
+      const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
+      if (rule.setup && SPAWN_SETUP[rule.setup]) {
+        SPAWN_SETUP[rule.setup](mob, map, origin);
+      }
+      mobs.push(mob);
+    }
+  }
+
+  return mobs;
 }
 
 // Public API

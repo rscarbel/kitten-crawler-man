@@ -45,4 +45,21 @@ export const level2: LevelDef = {
   isSafeLevel: true,
   nextLevelId: 'level3',
   numStairwells: 2,
+  extraSpawns: [
+    {
+      type: 'ball_of_swine',
+      origin: 'arena:0',
+      offsets: [[0, 0]],
+      setup: 'setupBallOfSwine',
+    },
+  ],
+  onMobKilledSpawns: [
+    {
+      type: 'brindle_grub',
+      minCount: 1,
+      maxCount: 5,
+      spreadRadius: 2,
+      excludeKilledTypes: ['BrindleGrub'],
+    },
+  ],
 };
