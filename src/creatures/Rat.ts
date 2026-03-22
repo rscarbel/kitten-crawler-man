@@ -100,12 +100,7 @@ export class Rat extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     if (!this.isAlive) return;
 
     const sx = this.x - camX;
@@ -122,15 +117,7 @@ export class Rat extends Mob {
         ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
         : 0;
 
-    drawRatSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      attackAnim,
-    );
+    drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim);
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);

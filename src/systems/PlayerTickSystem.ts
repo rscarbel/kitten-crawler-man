@@ -21,8 +21,7 @@ export class PlayerTickSystem {
    */
   tickRegen(human: HumanPlayer, cat: CatPlayer): void {
     if (human.isAlive && human.hp < human.maxHp) {
-      this.humanRegenAccum +=
-        (human.maxHp / this.HUMAN_REGEN_FRAMES) * human.regenMultiplier;
+      this.humanRegenAccum += (human.maxHp / this.HUMAN_REGEN_FRAMES) * human.regenMultiplier;
       const heal = Math.floor(this.humanRegenAccum);
       if (heal >= 1) {
         human.hp = Math.min(human.maxHp, human.hp + heal);
@@ -33,8 +32,7 @@ export class PlayerTickSystem {
     }
 
     if (cat.isAlive && cat.hp < cat.maxHp) {
-      this.catRegenAccum +=
-        (cat.maxHp / this.CAT_REGEN_FRAMES) * cat.regenMultiplier;
+      this.catRegenAccum += (cat.maxHp / this.CAT_REGEN_FRAMES) * cat.regenMultiplier;
       const heal = Math.floor(this.catRegenAccum);
       if (heal >= 1) {
         cat.hp = Math.min(cat.maxHp, cat.hp + heal);
@@ -54,19 +52,11 @@ export class PlayerTickSystem {
     if (this.catAutoPotionCooldown > 0) this.catAutoPotionCooldown--;
 
     if (human.isActive) {
-      if (
-        cat.isAlive &&
-        cat.hp < cat.maxHp * 0.5 &&
-        this.catAutoPotionCooldown === 0
-      ) {
+      if (cat.isAlive && cat.hp < cat.maxHp * 0.5 && this.catAutoPotionCooldown === 0) {
         if (cat.usePotion()) this.catAutoPotionCooldown = 180;
       }
     } else {
-      if (
-        human.isAlive &&
-        human.hp < human.maxHp * 0.5 &&
-        this.humanAutoPotionCooldown === 0
-      ) {
+      if (human.isAlive && human.hp < human.maxHp * 0.5 && this.humanAutoPotionCooldown === 0) {
         if (human.usePotion()) this.humanAutoPotionCooldown = 180;
       }
     }

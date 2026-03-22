@@ -85,10 +85,7 @@ export function drawJuicerSprite(
   ctx.strokeStyle = skinDark;
   ctx.beginPath();
   ctx.moveTo(tailTip.x, tailTip.y);
-  ctx.lineTo(
-    tailTip.x - facingX * cs * 0.12 + tailSway * 0.3,
-    tailTip.y + cs * 0.18,
-  );
+  ctx.lineTo(tailTip.x - facingX * cs * 0.12 + tailSway * 0.3, tailTip.y + cs * 0.18);
   ctx.stroke();
   ctx.lineCap = 'butt';
 
@@ -101,19 +98,8 @@ export function drawJuicerSprite(
   ctx.fillStyle = skinDark;
   ctx.beginPath();
   ctx.roundRect
-    ? ctx.roundRect(
-        cx - cs * 0.27 - legW * 0.5,
-        legY - legSwing * 0.5,
-        legW,
-        legH,
-        cs * 0.06,
-      )
-    : ctx.fillRect(
-        cx - cs * 0.27 - legW * 0.5,
-        legY - legSwing * 0.5,
-        legW,
-        legH,
-      );
+    ? ctx.roundRect(cx - cs * 0.27 - legW * 0.5, legY - legSwing * 0.5, legW, legH, cs * 0.06)
+    : ctx.fillRect(cx - cs * 0.27 - legW * 0.5, legY - legSwing * 0.5, legW, legH);
   ctx.fill();
   // Left foot
   ctx.fillStyle = skinColor;
@@ -133,19 +119,8 @@ export function drawJuicerSprite(
   ctx.fillStyle = skinDark;
   ctx.beginPath();
   ctx.roundRect
-    ? ctx.roundRect(
-        cx + cs * 0.07 - legW * 0.5,
-        legY + legSwing * 0.5,
-        legW,
-        legH,
-        cs * 0.06,
-      )
-    : ctx.fillRect(
-        cx + cs * 0.07 - legW * 0.5,
-        legY + legSwing * 0.5,
-        legW,
-        legH,
-      );
+    ? ctx.roundRect(cx + cs * 0.07 - legW * 0.5, legY + legSwing * 0.5, legW, legH, cs * 0.06)
+    : ctx.fillRect(cx + cs * 0.07 - legW * 0.5, legY + legSwing * 0.5, legW, legH);
   ctx.fill();
   // Right foot
   ctx.fillStyle = skinColor;
@@ -218,26 +193,10 @@ export function drawJuicerSprite(
   // Pectoral muscles (two bulges)
   ctx.fillStyle = skinLight;
   ctx.beginPath();
-  ctx.ellipse(
-    cx - cs * 0.14,
-    torsoY - cs * 0.06,
-    cs * 0.14,
-    cs * 0.1,
-    -0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - cs * 0.14, torsoY - cs * 0.06, cs * 0.14, cs * 0.1, -0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(
-    cx + cs * 0.14,
-    torsoY - cs * 0.06,
-    cs * 0.14,
-    cs * 0.1,
-    0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + cs * 0.14, torsoY - cs * 0.06, cs * 0.14, cs * 0.1, 0.3, 0, Math.PI * 2);
   ctx.fill();
 
   // Arms
@@ -246,8 +205,7 @@ export function drawJuicerSprite(
   const leftArmY = torsoY + armSwing;
   const rightArmX = cx + cs * 0.48;
   // Right arm is the throw arm; raise it during throwAnim
-  const throwRaise =
-    throwAnim > 0 ? -Math.sin(throwAnim * Math.PI) * cs * 0.3 : 0;
+  const throwRaise = throwAnim > 0 ? -Math.sin(throwAnim * Math.PI) * cs * 0.3 : 0;
   const rightArmY = torsoY - armSwing + throwRaise;
 
   // Upper arm (big ellipses for muscular look)
@@ -262,15 +220,7 @@ export function drawJuicerSprite(
   // Forearm
   ctx.fillStyle = skinDark;
   ctx.beginPath();
-  ctx.ellipse(
-    leftArmX - cs * 0.04,
-    leftArmY + cs * 0.2,
-    cs * 0.1,
-    cs * 0.15,
-    -0.1,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(leftArmX - cs * 0.04, leftArmY + cs * 0.2, cs * 0.1, cs * 0.15, -0.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
   ctx.ellipse(
@@ -287,22 +237,10 @@ export function drawJuicerSprite(
   // Hand / claws (small fist)
   ctx.fillStyle = skinColor;
   ctx.beginPath();
-  ctx.arc(
-    leftArmX - cs * 0.06,
-    leftArmY + cs * 0.35,
-    cs * 0.08,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(leftArmX - cs * 0.06, leftArmY + cs * 0.35, cs * 0.08, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    rightArmX + cs * 0.06,
-    rightArmY + cs * 0.35,
-    cs * 0.08,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(rightArmX + cs * 0.06, rightArmY + cs * 0.35, cs * 0.08, 0, Math.PI * 2);
   ctx.fill();
 
   // Claws (three small lines)
@@ -389,22 +327,10 @@ export function drawJuicerSprite(
   // Nostrils
   ctx.fillStyle = '#1a3a1a';
   ctx.beginPath();
-  ctx.arc(
-    headX + facingX * cs * 0.27,
-    headY + cs * 0.03,
-    cs * 0.015,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(headX + facingX * cs * 0.27, headY + cs * 0.03, cs * 0.015, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    headX + facingX * cs * 0.27,
-    headY + cs * 0.06,
-    cs * 0.015,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(headX + facingX * cs * 0.27, headY + cs * 0.06, cs * 0.015, 0, Math.PI * 2);
   ctx.fill();
 
   // Eyes
@@ -415,26 +341,10 @@ export function drawJuicerSprite(
   } else {
     ctx.fillStyle = eyeWhite;
     ctx.beginPath();
-    ctx.ellipse(
-      headX - eyeOffX,
-      eyeY,
-      cs * 0.075,
-      cs * 0.065,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(headX - eyeOffX, eyeY, cs * 0.075, cs * 0.065, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(
-      headX + eyeOffX,
-      eyeY,
-      cs * 0.075,
-      cs * 0.065,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(headX + eyeOffX, eyeY, cs * 0.075, cs * 0.065, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Slit pupils (vertical slits like a reptile)
@@ -481,13 +391,7 @@ export function drawJuicerSprite(
   ctx.strokeStyle = '#c8b87a';
   ctx.lineWidth = cs * 0.02;
   ctx.beginPath();
-  ctx.arc(
-    headX + facingX * cs * 0.18,
-    headY + cs * 0.06,
-    cs * 0.1,
-    0.15,
-    Math.PI - 0.15,
-  );
+  ctx.arc(headX + facingX * cs * 0.18, headY + cs * 0.06, cs * 0.1, 0.15, Math.PI - 0.15);
   ctx.stroke();
 
   // Held dumbbell (on right hand)
@@ -504,15 +408,7 @@ export function drawJuicerSprite(
     ctx.strokeStyle = '#f97316';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.ellipse(
-      cx,
-      cy + bodyBob * 0.5,
-      cs * 0.55,
-      cs * 0.72,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx, cy + bodyBob * 0.5, cs * 0.55, cs * 0.72, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -596,18 +492,14 @@ export function drawJuicerSpeechBubble(
   // Bubble background
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(bx, by, bw, bh, 5)
-    : ctx.fillRect(bx, by, bw, bh);
+  ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 5) : ctx.fillRect(bx, by, bw, bh);
   ctx.fill();
 
   // Border
   ctx.strokeStyle = '#f97316';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(bx, by, bw, bh, 5)
-    : ctx.strokeRect(bx, by, bw, bh);
+  ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 5) : ctx.strokeRect(bx, by, bw, bh);
   ctx.stroke();
 
   // Tail pointing down toward head

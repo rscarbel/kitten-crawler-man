@@ -56,8 +56,7 @@ export class LootBoxOpener {
   private rewardGranted = false;
   private playerName = '';
 
-  private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null =
-    null;
+  private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null = null;
   private onAllDone: (() => void) | null = null;
 
   /** True while the opener is running through its queue. */
@@ -80,12 +79,7 @@ export class LootBoxOpener {
       this.frame = 0;
       this.nextTimer = NEXT_DELAY;
       this.burstParticles(50);
-      if (
-        !this.rewardGranted &&
-        this.onBoxOpened &&
-        this.box &&
-        this.contents
-      ) {
+      if (!this.rewardGranted && this.onBoxOpened && this.box && this.contents) {
         this.rewardGranted = true;
         this.onBoxOpened(this.box, this.contents);
       }
@@ -109,9 +103,7 @@ export class LootBoxOpener {
     onAllDone: () => void,
   ): void {
     if (boxes.length === 0) return;
-    this.queue = [...boxes].sort(
-      (a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0),
-    );
+    this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0));
     this.queueIndex = 0;
     this.playerName = playerName;
     this.onBoxOpened = onBoxOpened;
@@ -156,12 +148,7 @@ export class LootBoxOpener {
           this.frame = 0;
           this.nextTimer = NEXT_DELAY;
           // Grant reward exactly once per box
-          if (
-            !this.rewardGranted &&
-            this.onBoxOpened &&
-            this.box &&
-            this.contents
-          ) {
+          if (!this.rewardGranted && this.onBoxOpened && this.box && this.contents) {
             this.rewardGranted = true;
             this.onBoxOpened(this.box, this.contents);
           }
@@ -239,9 +226,7 @@ export class LootBoxOpener {
     // Content reveal
     if (this.phase === 'revealing' || this.phase === 'done') {
       const revealAlpha =
-        this.phase === 'done'
-          ? 1
-          : Math.min(1, this.frame / (REVEAL_FRAMES * 0.6));
+        this.phase === 'done' ? 1 : Math.min(1, this.frame / (REVEAL_FRAMES * 0.6));
       ctx.globalAlpha = revealAlpha;
       this.renderContents(ctx, cx, by + 190);
       ctx.globalAlpha = 1;
@@ -332,8 +317,7 @@ export class LootBoxOpener {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (burst ? 3 : 0),
       radius: 2 + Math.random() * 4,
-      color:
-        PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+      color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
       life: 40 + Math.floor(Math.random() * 40),
       maxLife: 80,
     });
@@ -359,14 +343,9 @@ export class LootBoxOpener {
     const bx = cx - size / 2 + shakeX;
     const by = cy - size / 2 + shakeY;
 
-    if (
-      this.phase === 'opening' ||
-      this.phase === 'revealing' ||
-      this.phase === 'done'
-    ) {
+    if (this.phase === 'opening' || this.phase === 'revealing' || this.phase === 'done') {
       // Lid flying open
-      const t =
-        this.phase === 'opening' ? Math.min(1, this.frame / OPEN_FRAMES) : 1;
+      const t = this.phase === 'opening' ? Math.min(1, this.frame / OPEN_FRAMES) : 1;
       const lidAngle = t * -0.9;
       ctx.save();
       ctx.translate(bx + size / 2, by + size * 0.15);
@@ -384,9 +363,7 @@ export class LootBoxOpener {
       {
         ctx.save();
         const glowAlpha =
-          this.phase === 'opening'
-            ? Math.min(1, this.frame / OPEN_FRAMES) * 0.6
-            : 0.6;
+          this.phase === 'opening' ? Math.min(1, this.frame / OPEN_FRAMES) * 0.6 : 0.6;
         ctx.globalAlpha = glowAlpha;
         ctx.shadowColor = color;
         ctx.shadowBlur = 30;
@@ -426,11 +403,7 @@ export class LootBoxOpener {
     ctx.stroke();
   }
 
-  private renderContents(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    y: number,
-  ): void {
+  private renderContents(ctx: CanvasRenderingContext2D, cx: number, y: number): void {
     if (!this.contents) return;
     ctx.textAlign = 'center';
     ctx.font = 'bold 13px monospace';
@@ -454,11 +427,7 @@ export class LootBoxOpener {
       ctx.fillStyle = '#fb923c';
       const name = this.contents.bonus.id.replace(/_/g, ' ');
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
-      ctx.fillText(
-        `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`,
-        cx,
-        y,
-      );
+      ctx.fillText(`+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, cx, y);
     }
   }
 

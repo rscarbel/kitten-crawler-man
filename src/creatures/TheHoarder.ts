@@ -79,12 +79,7 @@ export class TheHoarder extends Mob {
       // Guard the spawn — slowly return if far
       const toHome = Math.hypot(this.x - this.spawnX, this.y - this.spawnY);
       if (toHome > TILE_SIZE * 2) {
-        this.followTargetCollide(
-          this.spawnX,
-          this.spawnY,
-          this.speed * 0.6,
-          TILE_SIZE,
-        );
+        this.followTargetCollide(this.spawnX, this.spawnY, this.speed * 0.6, TILE_SIZE);
       } else {
         this.isMoving = false;
       }
@@ -133,12 +128,7 @@ export class TheHoarder extends Mob {
     return items;
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;

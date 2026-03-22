@@ -69,20 +69,12 @@ export class ShopSystem {
     const skPx = this.wanderX + TILE_SIZE * 0.5;
     const skPy = this.shopkeeperTileY * TILE_SIZE + TILE_SIZE * 0.5;
     return (
-      Math.hypot(
-        player.x + TILE_SIZE * 0.5 - skPx,
-        player.y + TILE_SIZE * 0.5 - skPy,
-      ) <
+      Math.hypot(player.x + TILE_SIZE * 0.5 - skPx, player.y + TILE_SIZE * 0.5 - skPy) <
       TILE_SIZE * 3.5
     );
   }
 
-  renderObjects(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: Player,
-  ): void {
+  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     const ts = TILE_SIZE;
     const sx = this.wanderX - camX;
     const sy = this.shopkeeperTileY * ts - camY;
@@ -146,26 +138,10 @@ export class ShopSystem {
     // Hands
     ctx.fillStyle = '#c89068';
     ctx.beginPath();
-    ctx.ellipse(
-      cx - s * 0.285,
-      bsy + s * 0.68,
-      s * 0.07,
-      s * 0.07,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx - s * 0.285, bsy + s * 0.68, s * 0.07, s * 0.07, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(
-      cx + s * 0.285,
-      bsy + s * 0.68,
-      s * 0.07,
-      s * 0.07,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx + s * 0.285, bsy + s * 0.68, s * 0.07, s * 0.07, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Neck
@@ -209,11 +185,7 @@ export class ShopSystem {
     ctx.restore();
   }
 
-  renderUI(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    active: Player,
-  ): void {
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
     if (this.feedbackTimer > 0) {
       const alpha = Math.min(1, this.feedbackTimer / 30);
       ctx.save();
@@ -230,11 +202,7 @@ export class ShopSystem {
     }
   }
 
-  renderShopPanel(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    active: Player,
-  ): void {
+  renderShopPanel(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
     if (!this.shopOpen) return;
     const cw = canvas.width;
     const ch = canvas.height;
@@ -288,8 +256,7 @@ export class ShopSystem {
       const canAfford = active.coins >= item.price;
 
       // Row background
-      ctx.fillStyle =
-        i % 2 === 0 ? 'rgba(255,245,200,0.04)' : 'rgba(0,0,0,0.18)';
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,245,200,0.04)' : 'rgba(0,0,0,0.18)';
       ctx.fillRect(panelX + 8, rowY + 2, panelW - 16, itemH - 4);
 
       // Item name

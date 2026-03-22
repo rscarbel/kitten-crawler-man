@@ -96,14 +96,7 @@ export class CompanionSystem {
       if (dist > range || dist === 0) continue;
       const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
       if (dot < 0.25) continue;
-      if (
-        !this.gameMap.hasLineOfSight(
-          px,
-          py,
-          mob.x + TILE_SIZE * 0.5,
-          mob.y + TILE_SIZE * 0.5,
-        )
-      )
+      if (!this.gameMap.hasLineOfSight(px, py, mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5))
         continue;
       if (dist < bestDist) {
         bestDist = dist;
@@ -119,19 +112,13 @@ export class CompanionSystem {
     }
   }
 
-  entityMoveWithCollision(
-    entity: { x: number; y: number },
-    dx: number,
-    dy: number,
-  ): void {
+  entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
     const mapPx = this.gameMap.structure.length * TILE_SIZE;
     const ts = TILE_SIZE;
     if (dx !== 0) {
       const nextX = Math.max(0, Math.min(mapPx - ts, entity.x + dx));
       const tileXnext =
-        dx >= 0
-          ? Math.floor((nextX + ts * 0.72) / ts)
-          : Math.floor((nextX + ts * 0.28) / ts);
+        dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((entity.y + ts / 2) / ts);
       if (this.gameMap.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
     }
@@ -151,10 +138,7 @@ export class CompanionSystem {
   ): void {
     if (human.isActive) {
       // Clear cat's target if it's dead or became an avoid-instead mob
-      if (
-        cat.autoTarget &&
-        (!cat.autoTarget.isAlive || (cat.autoTarget as Mob).avoidInstead)
-      )
+      if (cat.autoTarget && (!cat.autoTarget.isAlive || (cat.autoTarget as Mob).avoidInstead))
         cat.autoTarget = null;
 
       // While companion is being recalled, don't auto-assign new targets
@@ -171,9 +155,7 @@ export class CompanionSystem {
               Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
           ) ?? null;
         const mobTargetingHuman =
-          mobs.find(
-            (m) => m.isAlive && !m.avoidInstead && m.currentTarget === human,
-          ) ?? null;
+          mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
 
         if (mobTargetingCat) {
           cat.autoTarget = mobTargetingCat;
@@ -194,20 +176,13 @@ export class CompanionSystem {
       }
     } else {
       // Clear human's target if it's dead or became an avoid-instead mob
-      if (
-        human.autoTarget &&
-        (!human.autoTarget.isAlive || (human.autoTarget as Mob).avoidInstead)
-      )
+      if (human.autoTarget && (!human.autoTarget.isAlive || (human.autoTarget as Mob).avoidInstead))
         human.autoTarget = null;
 
       if (!human.autoTarget) {
         let closestDist = HUMAN_ENGAGE_RANGE;
         let closest: Mob | null = null;
-        const nearHuman = mobGrid.queryCircle(
-          human.x,
-          human.y,
-          HUMAN_ENGAGE_RANGE,
-        );
+        const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
         for (const mob of nearHuman) {
           if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
           const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
@@ -279,13 +254,7 @@ export class CompanionSystem {
         this._followOverride = false;
         companion.autoTarget = null;
       } else {
-        this.companionFollow(
-          companion,
-          caster.x,
-          caster.y,
-          FOLLOWER_SPEED * 1.5,
-          TILE_SIZE * 0.9,
-        );
+        this.companionFollow(companion, caster.x, caster.y, FOLLOWER_SPEED * 1.5, TILE_SIZE * 0.9);
       }
       return;
     }
@@ -302,13 +271,7 @@ export class CompanionSystem {
         } else if (enemy.currentTarget === human) {
           this.doCatBehindHuman(cat, human, enemy);
         } else {
-          this.companionFollow(
-            cat,
-            enemy.x,
-            enemy.y,
-            FOLLOWER_SPEED,
-            TILE_SIZE * 2.5,
-          );
+          this.companionFollow(cat, enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
         }
       } else if (this.humanIdleFrames >= 300) {
         // Cat wander — only once human has been idle for 5 seconds
@@ -336,13 +299,7 @@ export class CompanionSystem {
         this.catWanderTargetX = human.x;
         this.catWanderTargetY = human.y;
         this.catWanderTimer = 160 + Math.floor(Math.random() * 240);
-        this.companionFollow(
-          cat,
-          human.x,
-          human.y,
-          FOLLOWER_SPEED,
-          TILE_SIZE * 1.5,
-        );
+        this.companionFollow(cat, human.x, human.y, FOLLOWER_SPEED, TILE_SIZE * 1.5);
       }
     } else {
       if (human.autoTarget && human.autoTarget.isAlive) {
@@ -354,13 +311,7 @@ export class CompanionSystem {
           TILE_SIZE * 0.9,
         );
       } else {
-        this.companionFollow(
-          human,
-          cat.x,
-          cat.y,
-          FOLLOWER_SPEED,
-          TILE_SIZE * 1.8,
-        );
+        this.companionFollow(human, cat.x, cat.y, FOLLOWER_SPEED, TILE_SIZE * 1.8);
       }
     }
   }
@@ -382,33 +333,17 @@ export class CompanionSystem {
           sin = Math.sin(0.4);
         const sx2 = nx * cos - ny * sin;
         const sy2 = nx * sin + ny * cos;
-        this.entityMoveWithCollision(
-          cat,
-          sx2 * FOLLOWER_SPEED * 1.35,
-          sy2 * FOLLOWER_SPEED * 1.35,
-        );
+        this.entityMoveWithCollision(cat, sx2 * FOLLOWER_SPEED * 1.35, sy2 * FOLLOWER_SPEED * 1.35);
         cat.isMoving = true;
       }
     } else {
-      const targetX =
-        ex + Math.cos(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
-      const targetY =
-        ey + Math.sin(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
-      this.companionFollow(
-        cat,
-        targetX,
-        targetY,
-        FOLLOWER_SPEED,
-        TILE_SIZE * 0.5,
-      );
+      const targetX = ex + Math.cos(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
+      const targetY = ey + Math.sin(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * 0.5;
+      this.companionFollow(cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
     }
   }
 
-  private doCatBehindHuman(
-    cat: CatPlayer,
-    human: HumanPlayer,
-    enemy: Mob,
-  ): void {
+  private doCatBehindHuman(cat: CatPlayer, human: HumanPlayer, enemy: Mob): void {
     const ex = enemy.x + TILE_SIZE * 0.5;
     const ey = enemy.y + TILE_SIZE * 0.5;
     const hx = human.x + TILE_SIZE * 0.5;
@@ -422,13 +357,7 @@ export class CompanionSystem {
 
     const targetX = hx + nx * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
     const targetY = hy + ny * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
-    this.companionFollow(
-      cat,
-      targetX,
-      targetY,
-      FOLLOWER_SPEED,
-      TILE_SIZE * 0.5,
-    );
+    this.companionFollow(cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
   }
 
   private companionFollow(
@@ -473,11 +402,7 @@ export class CompanionSystem {
       }
 
       cached.timer--;
-      if (
-        cached.timer <= 0 ||
-        cached.targetTX !== goalTX ||
-        cached.targetTY !== goalTY
-      ) {
+      if (cached.timer <= 0 || cached.targetTX !== goalTX || cached.targetTY !== goalTY) {
         const startTX = Math.floor((entity.x + ts * 0.5) / ts);
         const startTY = Math.floor((entity.y + ts * 0.5) / ts);
         const raw = this.gameMap.findPath(startTX, startTY, goalTX, goalTY);

@@ -41,12 +41,7 @@ export class MiniMapSystem {
     }
   }
 
-  revealBossNeighborhood(bounds: {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  }): void {
+  revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
     const mapSize = this.gameMap.structure.length;
     const extra = 15;
     const x1 = Math.max(0, bounds.x - extra);
@@ -139,14 +134,8 @@ export class MiniMapSystem {
       const ctx2TX = Math.floor(corpse.x / TILE_SIZE);
       const ctx2TY = Math.floor(corpse.y / TILE_SIZE);
       if (!this.fogOfWar[ctx2TY * mapSize + ctx2TX]) continue;
-      const cx =
-        mmX +
-        (ctx2TX - playerTX + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
-      const cy =
-        mmY +
-        (ctx2TY - playerTY + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
+      const cx = mmX + (ctx2TX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const cy = mmY + (ctx2TY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.moveTo(cx - 2, cy - 2);
       ctx.lineTo(cx + 2, cy + 2);
@@ -160,19 +149,12 @@ export class MiniMapSystem {
     ctx.fillStyle = '#ef4444';
     for (const mob of mobs) {
       if (!mob.isAlive) continue;
-      if (Math.hypot(mob.x - active.x, mob.y - active.y) > MOB_RADAR_PX)
-        continue;
+      if (Math.hypot(mob.x - active.x, mob.y - active.y) > MOB_RADAR_PX) continue;
       const mobTX = Math.floor((mob.x + TILE_SIZE * 0.5) / TILE_SIZE);
       const mobTY = Math.floor((mob.y + TILE_SIZE * 0.5) / TILE_SIZE);
       if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;
-      const mx =
-        mmX +
-        (mobTX - playerTX + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
-      const my =
-        mmY +
-        (mobTY - playerTY + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
+      const mx = mmX + (mobTX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const my = mmY + (mobTY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
       ctx.fill();
@@ -181,14 +163,8 @@ export class MiniMapSystem {
     // Companion — blue dot
     const compTX = Math.floor((companion.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const compTY = Math.floor((companion.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    const compSX =
-      mmX +
-      (compTX - playerTX + halfTiles) * pxPerTile +
-      Math.floor(pxPerTile / 2);
-    const compSY =
-      mmY +
-      (compTY - playerTY + halfTiles) * pxPerTile +
-      Math.floor(pxPerTile / 2);
+    const compSX = mmX + (compTX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+    const compSY = mmY + (compTY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     ctx.fillStyle = '#60a5fa';
     ctx.beginPath();
     ctx.arc(compSX, compSY, 2, 0, Math.PI * 2);
@@ -198,14 +174,8 @@ export class MiniMapSystem {
     ctx.fillStyle = '#ffffff';
     for (const pos of mordecaiPositions) {
       if (!this.fogOfWar[pos.y * mapSize + pos.x]) continue;
-      const msx =
-        mmX +
-        (pos.x - playerTX + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
-      const msy =
-        mmY +
-        (pos.y - playerTY + halfTiles) * pxPerTile +
-        Math.floor(pxPerTile / 2);
+      const msx = mmX + (pos.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const msy = mmY + (pos.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
       ctx.fill();

@@ -33,12 +33,7 @@ const TAUNT_PHRASES = [
   'Stop it, bro',
 ];
 
-type JuicerState =
-  | 'idle'
-  | 'seeking_dumbbell'
-  | 'pursuing'
-  | 'winding_up'
-  | 'cooldown';
+type JuicerState = 'idle' | 'seeking_dumbbell' | 'pursuing' | 'winding_up' | 'cooldown';
 
 interface Projectile {
   x: number;
@@ -53,8 +48,7 @@ export class Juicer extends Mob {
   protected coinDropMin = 60;
   protected coinDropMax = 120;
   displayName = 'The Juicer';
-  description =
-    'A roided-up gym rat who hurls dumbbells with reckless abandon.';
+  description = 'A roided-up gym rat who hurls dumbbells with reckless abandon.';
 
   isEnraged = false;
 
@@ -332,14 +326,8 @@ export class Juicer extends Mob {
         const prevX = proj.x - proj.vx;
         const prevY = proj.y - proj.vy;
 
-        const canMoveX = this.map.isWalkable(
-          Math.floor((prevX + proj.vx) / ts),
-          tileY,
-        );
-        const canMoveY = this.map.isWalkable(
-          tileX,
-          Math.floor((prevY + proj.vy) / ts),
-        );
+        const canMoveX = this.map.isWalkable(Math.floor((prevX + proj.vx) / ts), tileY);
+        const canMoveY = this.map.isWalkable(tileX, Math.floor((prevY + proj.vy) / ts));
 
         if (!canMoveX) proj.vx *= -0.7;
         if (!canMoveY) proj.vy *= -0.7;
@@ -386,12 +374,7 @@ export class Juicer extends Mob {
     return items;
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -420,14 +403,7 @@ export class Juicer extends Mob {
 
     // Speech bubble (outside save/restore so filter doesn't affect it)
     if (this.currentTaunt) {
-      drawJuicerSpeechBubble(
-        ctx,
-        sx,
-        sy,
-        tileSize,
-        this.currentTaunt,
-        this.bubblePulse,
-      );
+      drawJuicerSpeechBubble(ctx, sx, sy, tileSize, this.currentTaunt, this.bubblePulse);
     }
 
     // Active throw projectile

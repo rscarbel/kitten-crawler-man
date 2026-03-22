@@ -37,11 +37,7 @@ import { Juicer } from '../creatures/Juicer';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Tuskling } from '../creatures/Tuskling';
 import { BrindleGrub } from '../creatures/BrindleGrub';
-import {
-  snapPlayer,
-  restorePlayer,
-  type PlayerSnapshot,
-} from '../core/PlayerSnapshot';
+import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills } from '../systems/CombatSystem';
 import { GoreSystem } from '../systems/GoreSystem';
@@ -209,8 +205,7 @@ export class DungeonScene extends Scene {
     // Capture floor-entry state for death respawn. If the caller already
     // provides a floor-entry snap (i.e. we're respawning after death), reuse
     // it so repeated deaths always reset to the same floor-start state.
-    this.floorEntryHumanSnap =
-      options?.floorEntryHumanSnap ?? snapPlayer(this.human);
+    this.floorEntryHumanSnap = options?.floorEntryHumanSnap ?? snapPlayer(this.human);
     this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
@@ -225,9 +220,7 @@ export class DungeonScene extends Scene {
           [3, -2],
           [0, 3],
         ] as [number, number][]) {
-          this.mobs.push(
-            createMob('troglodyte', jcx + dx, jcy + dy, this.gameMap),
-          );
+          this.mobs.push(createMob('troglodyte', jcx + dx, jcy + dy, this.gameMap));
         }
       }
     }
@@ -261,9 +254,7 @@ export class DungeonScene extends Scene {
         [-4, -4],
       ];
       for (const [dx, dy] of fowlOffsets) {
-        this.mobs.push(
-          createMob('sky_fowl', mapCx + dx, mapCy + dy, this.gameMap),
-        );
+        this.mobs.push(createMob('sky_fowl', mapCx + dx, mapCy + dy, this.gameMap));
       }
     }
 
@@ -291,18 +282,13 @@ export class DungeonScene extends Scene {
       // Dismiss Mongo before floor transition
       this.mongoSystem.dismiss(this.mobs, this.mobGrid);
       this.sceneManager.replace(
-        new DungeonScene(
-          getLevelDef(levelDef.nextLevelId),
-          this.input,
-          this.sceneManager,
-          {
-            humanSnap: snapPlayer(this.human),
-            catSnap: snapPlayer(this.cat),
-            humanAchievements: this.humanAchievements,
-            catAchievements: this.catAchievements,
-            mongoUnlocked: this.mongoSystem.unlocked,
-          },
-        ),
+        new DungeonScene(getLevelDef(levelDef.nextLevelId), this.input, this.sceneManager, {
+          humanSnap: snapPlayer(this.human),
+          catSnap: snapPlayer(this.cat),
+          humanAchievements: this.humanAchievements,
+          catAchievements: this.catAchievements,
+          mongoUnlocked: this.mongoSystem.unlocked,
+        }),
       );
     });
 
@@ -346,8 +332,7 @@ export class DungeonScene extends Scene {
     this.lootBoxOpener = new LootBoxOpener();
 
     // Achievements — carry over from previous floor if provided
-    this.humanAchievements =
-      options?.humanAchievements ?? new AchievementManager();
+    this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
 
     // Snapshot achievement state at floor entry so death-restarts can rewind it,
@@ -448,8 +433,7 @@ export class DungeonScene extends Scene {
     };
 
     this.keyupHandler = (e: KeyboardEvent) => {
-      if (this.pauseMenu.isOpen || this.safeRoom.isSleeping || this.gameOver)
-        return;
+      if (this.pauseMenu.isOpen || this.safeRoom.isSleeping || this.gameOver) return;
       const idx = parseInt(e.key) - 1;
       if (idx >= 0 && idx < 8 && this.dynamite.chargingHotbarIdx === idx) {
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
@@ -463,10 +447,8 @@ export class DungeonScene extends Scene {
 
   onExit(): void {
     if (this.escHandler) window.removeEventListener('keydown', this.escHandler);
-    if (this.actionHandler)
-      window.removeEventListener('keydown', this.actionHandler);
-    if (this.keyupHandler)
-      window.removeEventListener('keyup', this.keyupHandler);
+    if (this.actionHandler) window.removeEventListener('keydown', this.actionHandler);
+    if (this.keyupHandler) window.removeEventListener('keyup', this.keyupHandler);
   }
 
   // Shared action helpers (keyboard + touch)
@@ -487,11 +469,7 @@ export class DungeonScene extends Scene {
 
   private triggerMongoSummon(): void {
     if (!this.cat.isActive || !this.mongoSystem.canSummon) return;
-    const mongo = this.mongoSystem.summon(
-      this.cat,
-      this.gameMap,
-      this.levelDef.id,
-    );
+    const mongo = this.mongoSystem.summon(this.cat, this.gameMap, this.levelDef.id);
     if (mongo) {
       this.mobs.push(mongo);
       this.mobGrid.insert(mongo);
@@ -512,10 +490,7 @@ export class DungeonScene extends Scene {
       }
       return;
     }
-    if (
-      this.juicerRoom.tryPickupNear(active) ||
-      this.barriers.tryPickupNear(active)
-    ) {
+    if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
       return;
     }
     // On mobile tap: aim toward tap position before snapping to nearest mob
@@ -532,18 +507,10 @@ export class DungeonScene extends Scene {
       }
     }
     if (this.human.isActive) {
-      this.companion.snapFacingToNearestMob(
-        this.human,
-        TILE_SIZE * 3,
-        this.mobGrid,
-      );
+      this.companion.snapFacingToNearestMob(this.human, TILE_SIZE * 3, this.mobGrid);
       this.human.triggerAttack();
     } else {
-      this.companion.snapFacingToNearestMob(
-        this.cat,
-        TILE_SIZE * 5,
-        this.mobGrid,
-      );
+      this.companion.snapFacingToNearestMob(this.cat, TILE_SIZE * 5, this.mobGrid);
       this.cat.triggerAttack();
     }
   }
@@ -613,8 +580,7 @@ export class DungeonScene extends Scene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const ai = this._achievIconRect;
       if (mx >= ai.x && mx <= ai.x + ai.w && my >= ai.y && my <= ai.y + ai.h) {
-        const totalUnread =
-          this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+        const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
         if (totalUnread > 0) {
           this._notifQueue = [
             ...this.humanAchievements.pendingNotifications.map((def) => ({
@@ -640,8 +606,7 @@ export class DungeonScene extends Scene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const lb = this._lootBoxIconRect;
       if (mx >= lb.x && mx <= lb.x + lb.w && my >= lb.y && my <= lb.y + lb.h) {
-        const unread =
-          this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+        const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
         if (unread === 0) {
           if (this.humanAchievements.pendingBoxes.length > 0) {
             this.openBoxQueue('human');
@@ -695,25 +660,14 @@ export class DungeonScene extends Scene {
     const canvas = this.sceneManager.canvas;
     const active = this.active();
 
-    const gearResult = this.gearPanel.handleClick(
-      mx,
-      my,
-      canvas,
-      active.inventory,
-    );
+    const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
     if (gearResult) {
-      if (gearResult.unequippedItem)
-        active.removeItemBonus(gearResult.unequippedItem);
+      if (gearResult.unequippedItem) active.removeItemBonus(gearResult.unequippedItem);
       return;
     }
 
     if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
-      const slotIdx = this.inventoryPanel.getClickedInventorySlot(
-        mx,
-        my,
-        canvas,
-        active.inventory,
-      );
+      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, canvas, active.inventory);
       if (slotIdx !== null) {
         const item = active.inventory.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
@@ -749,44 +703,24 @@ export class DungeonScene extends Scene {
 
   handleMouseDown(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseDown(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.inventoryPanel.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
     this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.gearPanel.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseUp(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.inventoryPanel.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleContextMenu(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.openContextMenu(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.inventoryPanel.openContextMenu(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   // Main update / render
@@ -827,13 +761,7 @@ export class DungeonScene extends Scene {
     this.gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
     this.gore.renderPuddles(ctx, camX, camY);
 
-    this.safeRoom.renderObjects(
-      ctx,
-      camX,
-      camY,
-      this.active(),
-      this.speechBubblePulse,
-    );
+    this.safeRoom.renderObjects(ctx, camX, camY, this.active(), this.speechBubblePulse);
     this.bossRoom.renderObjects(ctx, camX, camY);
     this.juicerRoom.render(ctx, camX, camY, this.active());
     this.stairwell.renderStairwells(ctx, camX, camY, canvas);
@@ -861,8 +789,7 @@ export class DungeonScene extends Scene {
       const capTy = ty;
       drawItems.push({
         sortY: (capTy + 1) * TILE_SIZE,
-        draw: () =>
-          this.gameMap.drawDecorationAt(ctx, capTx, capTy, camX, camY),
+        draw: () => this.gameMap.drawDecorationAt(ctx, capTx, capTy, camX, camY),
       });
     }
 
@@ -896,11 +823,7 @@ export class DungeonScene extends Scene {
     this.dynamite.render(ctx, camX, camY);
 
     // Cat speech bubble for Mongo summon/recall
-    this.mongoSystem.renderSpeechBubble(
-      ctx,
-      this.cat.x - camX,
-      this.cat.y - camY,
-    );
+    this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
 
     this.renderHealthVignette(ctx, canvas);
 
@@ -922,9 +845,7 @@ export class DungeonScene extends Scene {
         this.mobs,
         this.safeRoom.mordecaiPositions,
       );
-      const mmSz = this.miniMap.isExpanded
-        ? this.miniMap.EXPANDED_SIZE
-        : this.miniMap.NORMAL_SIZE;
+      const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this._miniMapRect = {
         x: canvas.width - mmSz - 8,
         y: 8,
@@ -939,15 +860,7 @@ export class DungeonScene extends Scene {
       this.renderLevelTimer(ctx, canvas);
     }
 
-    this.bossRoom.renderUI(
-      ctx,
-      canvas,
-      camX,
-      camY,
-      this.mobs,
-      this.human,
-      this.cat,
-    );
+    this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
     this.renderArenaUI(ctx, canvas);
 
     this.loot.render(ctx, camX, camY, this.active());
@@ -959,13 +872,7 @@ export class DungeonScene extends Scene {
         current: this.spells.shellCooldown,
         max: this.spells.shellCooldownMax,
       });
-      this.inventoryPanel.render(
-        ctx,
-        canvas,
-        active.inventory,
-        name,
-        active.coins,
-      );
+      this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
       this.gearPanel.render(ctx, canvas, active.inventory, name);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
@@ -1062,8 +969,7 @@ export class DungeonScene extends Scene {
     camX: number,
     camY: number,
   ): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen)
-      return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen) return;
 
     const mx = this._mouseX;
     const my = this._mouseY;
@@ -1076,12 +982,7 @@ export class DungeonScene extends Scene {
     let hovered: Mob | null = null;
     for (const mob of this.mobs) {
       if (!mob.isAlive) continue;
-      if (
-        wx >= mob.x &&
-        wx <= mob.x + TILE_SIZE &&
-        wy >= mob.y &&
-        wy <= mob.y + TILE_SIZE
-      ) {
+      if (wx >= mob.x && wx <= mob.x + TILE_SIZE && wy >= mob.y && wy <= mob.y + TILE_SIZE) {
         hovered = mob;
         break;
       }
@@ -1149,17 +1050,9 @@ export class DungeonScene extends Scene {
     if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
 
     // Mobile touch movement: only after holding ≥150 ms (not a tap)
-    const touchHoldMs = this.mobileTapStart
-      ? Date.now() - this.mobileTapStart.time
-      : 0;
+    const touchHoldMs = this.mobileTapStart ? Date.now() - this.mobileTapStart.time : 0;
     let mobileMove = false;
-    if (
-      IS_MOBILE &&
-      this.mobileMoveTarget &&
-      touchHoldMs >= 150 &&
-      dx === 0 &&
-      dy === 0
-    ) {
+    if (IS_MOBILE && this.mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
       const cam = this.camera();
       const wx = this.mobileMoveTarget.x + cam.x;
       const wy = this.mobileMoveTarget.y + cam.y;
@@ -1208,10 +1101,7 @@ export class DungeonScene extends Scene {
     this.human.isProtected = this.safeRoom.isEntityInSafeRoom(this.human);
     this.cat.isProtected = this.safeRoom.isEntityInSafeRoom(this.cat);
 
-    if (
-      !this.safeRoomEntered &&
-      (this.human.isProtected || this.cat.isProtected)
-    ) {
+    if (!this.safeRoomEntered && (this.human.isProtected || this.cat.isProtected)) {
       this.safeRoomEntered = true;
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
@@ -1224,17 +1114,13 @@ export class DungeonScene extends Scene {
     // Arena door lock: lock when either player enters with BoS alive, unlock on BoS death
     if (this.gameMap.arenaExteriors.length > 0) {
       const arena = this.gameMap.arenaExteriors[0];
-      const bos = this.mobs.find((m) => m instanceof BallOfSwine) as
-        | BallOfSwine
-        | undefined;
+      const bos = this.mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
       if (bos) {
         const cx = arena.centre.x * TILE_SIZE;
         const cy = arena.centre.y * TILE_SIZE;
         const innerRadius = (arena.radius - 2) * TILE_SIZE;
-        const humanInside =
-          Math.hypot(this.human.x - cx, this.human.y - cy) < innerRadius;
-        const catInside =
-          Math.hypot(this.cat.x - cx, this.cat.y - cy) < innerRadius;
+        const humanInside = Math.hypot(this.human.x - cx, this.human.y - cy) < innerRadius;
+        const catInside = Math.hypot(this.cat.x - cx, this.cat.y - cy) < innerRadius;
         if (!this.arenaLocked && bos.isAlive && (humanInside || catInside)) {
           this.arenaLocked = true;
           this.gameMap.lockArenaDoor();
@@ -1263,18 +1149,10 @@ export class DungeonScene extends Scene {
     this.barriers.update(this.mobs, this.mobGrid, this.gameMap);
 
     // Juicer room gym pickups + Juicer AI coordination
-    const juicer =
-      (this.mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ??
-      null;
+    const juicer = (this.mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ?? null;
     this.juicerRoom.update(this.human, this.cat, juicer, this.mobs);
 
-    this.companion.update(
-      this.human,
-      this.cat,
-      this.mobs,
-      this.mobGrid,
-      player.isMoving,
-    );
+    this.companion.update(this.human, this.cat, this.mobs, this.mobGrid, player.isMoving);
 
     this.human.updateAttack();
     this.cat.updateMissiles();
@@ -1289,11 +1167,7 @@ export class DungeonScene extends Scene {
 
     // Mob AI — only activate mobs near players
     const AI_RADIUS = TILE_SIZE * 22;
-    const activeMobs = this.mobGrid.queryCircle(
-      this.human.x,
-      this.human.y,
-      AI_RADIUS,
-    );
+    const activeMobs = this.mobGrid.queryCircle(this.human.x, this.human.y, AI_RADIUS);
     this.mobGrid.queryCircle(this.cat.x, this.cat.y, AI_RADIUS, activeMobs);
     const playerTargets: Player[] = [this.human, this.cat];
     if (this.mongoSystem.mongo?.isAlive) {
@@ -1315,8 +1189,7 @@ export class DungeonScene extends Scene {
         }
 
         // Clear stale retaliate target; add live ones to this mob's AI targets.
-        if (mob.retaliateMob && !mob.retaliateMob.isAlive)
-          mob.retaliateMob = null;
+        if (mob.retaliateMob && !mob.retaliateMob.isAlive) mob.retaliateMob = null;
         const aiTargets =
           mob.retaliateMob && !(mob instanceof BrindleGrub)
             ? [...playerTargets, mob.retaliateMob]
@@ -1325,19 +1198,12 @@ export class DungeonScene extends Scene {
         mob.updateAI(aiTargets);
       }
       // Keep bosses (specifically the Juicer) confined to their room
-      if (mob.isBoss && !(mob instanceof BallOfSwine))
-        this.bossRoom.clampBossToRoom(mob);
+      if (mob.isBoss && !(mob instanceof BallOfSwine)) this.bossRoom.clampBossToRoom(mob);
       mob.tickTimers();
       this.mobGrid.move(mob, ox, oy);
     }
 
-    resolvePlayerAttacks(
-      this.human,
-      this.cat,
-      this.mobGrid,
-      this.gameMap,
-      this.safeRoom,
-    );
+    resolvePlayerAttacks(this.human, this.cat, this.mobGrid, this.gameMap, this.safeRoom);
     // Spawn gore before resolveKills consumes justDied.
     // On level 2, enemy deaths also spawn a cluster of Brindle Grubs.
     const grubSpawnPositions: Array<{ tx: number; ty: number }> = [];
@@ -1474,11 +1340,7 @@ export class DungeonScene extends Scene {
       this.barriers.cancelConstruct();
       this.deathScreen.activate();
     }
-    if (
-      !this.levelDef.isSafeLevel &&
-      this.levelTimerFrames <= 0 &&
-      !this.gameOver
-    ) {
+    if (!this.levelDef.isSafeLevel && this.levelTimerFrames <= 0 && !this.gameOver) {
       this.gameOver = true;
       this.deathScreen.activate();
     }
@@ -1486,13 +1348,8 @@ export class DungeonScene extends Scene {
 
   // Arena UI
 
-  private renderArenaUI(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
-    const bos = this.mobs.find((m) => m instanceof BallOfSwine) as
-      | BallOfSwine
-      | undefined;
+  private renderArenaUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const bos = this.mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
 
     if (bos && bos.isAlive) {
       // Only show health bar when active player is near the arena
@@ -1543,11 +1400,7 @@ export class DungeonScene extends Scene {
       ctx.font = '9px monospace';
       ctx.fillStyle = '#e2e8f0';
       ctx.textAlign = 'center';
-      ctx.fillText(
-        `${bos.hp} / ${bos.maxHp}`,
-        canvas.width / 2,
-        barY + barH - 4,
-      );
+      ctx.fillText(`${bos.hp} / ${bos.maxHp}`, canvas.width / 2, barY + barH - 4);
       ctx.textAlign = 'left';
       ctx.restore();
     }
@@ -1560,9 +1413,7 @@ export class DungeonScene extends Scene {
       ctx.textAlign = 'center';
       ctx.fillStyle = alive > 0 ? '#f87171' : '#4ade80';
       ctx.fillText(
-        alive > 0
-          ? `Tusklings remaining: ${alive}`
-          : 'All Tusklings defeated! Stairwell unlocked.',
+        alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
         canvas.width / 2,
         78,
       );
@@ -1616,8 +1467,7 @@ export class DungeonScene extends Scene {
   // Loot box queue
 
   private openBoxQueue(player: 'human' | 'cat'): void {
-    const mgr =
-      player === 'human' ? this.humanAchievements : this.catAchievements;
+    const mgr = player === 'human' ? this.humanAchievements : this.catAchievements;
     const target = player === 'human' ? this.human : this.cat;
     const boxes = [...mgr.pendingBoxes];
     if (boxes.length === 0) return;
@@ -1628,8 +1478,7 @@ export class DungeonScene extends Scene {
       playerName,
       (box, contents) => {
         mgr.openBox(box.id);
-        contents.potions &&
-          target.inventory.addItem('health_potion', contents.potions);
+        contents.potions && target.inventory.addItem('health_potion', contents.potions);
         target.coins += contents.coins;
         if (contents.bonus) {
           this.human.inventory.addItem(
@@ -1658,11 +1507,7 @@ export class DungeonScene extends Scene {
 
   // Rendering helpers
 
-  private renderLevelUpFlash(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  private renderLevelUpFlash(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const p of [this.human, this.cat] as const) {
       if (p.levelUpFlash <= 0 || !p.levelUpStat) continue;
       const alpha = p.levelUpFlash / 120;
@@ -1680,10 +1525,7 @@ export class DungeonScene extends Scene {
     }
   }
 
-  private renderLevelTimer(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderLevelTimer(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const totalSec = Math.max(0, Math.ceil(this.levelTimerFrames / 60));
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
@@ -1692,17 +1534,13 @@ export class DungeonScene extends Scene {
     const urgent = totalSec <= 60;
     const warning = totalSec <= 300;
 
-    const mmSize = this.miniMap.isExpanded
-      ? this.miniMap.EXPANDED_SIZE
-      : this.miniMap.NORMAL_SIZE;
+    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     const w = 80;
     const h = 28;
     const x = canvas.width - w - 88;
     const y = 8 + mmSize + 20;
 
-    const urgentAlpha = urgent
-      ? 0.85 + Math.sin(Date.now() / 160) * 0.12
-      : 0.75;
+    const urgentAlpha = urgent ? 0.85 + Math.sin(Date.now() / 160) * 0.12 : 0.75;
     ctx.fillStyle = urgent
       ? `rgba(100,0,0,${urgentAlpha})`
       : warning
@@ -1726,9 +1564,7 @@ export class DungeonScene extends Scene {
   }
 
   private pauseButtonRect(): { x: number; y: number; w: number; h: number } {
-    const mmSize = this.miniMap.isExpanded
-      ? this.miniMap.EXPANDED_SIZE
-      : this.miniMap.NORMAL_SIZE;
+    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     return {
       x: this.sceneManager.canvas.width - 88,
       y: 8 + mmSize + 20,
@@ -1737,10 +1573,7 @@ export class DungeonScene extends Scene {
     };
   }
 
-  private drawPauseButton(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private drawPauseButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
     const pb = this.pauseButtonRect();
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -1751,11 +1584,7 @@ export class DungeonScene extends Scene {
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(
-      IS_MOBILE ? 'Pause' : 'Pause (Esc)',
-      pb.x + pb.w / 2,
-      pb.y + pb.h / 2 + 4,
-    );
+    ctx.fillText(IS_MOBILE ? 'Pause' : 'Pause (Esc)', pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
     ctx.textAlign = 'left';
     void canvas;
   }
@@ -1766,9 +1595,7 @@ export class DungeonScene extends Scene {
     w: number;
     h: number;
   } {
-    const mmSize = this.miniMap.isExpanded
-      ? this.miniMap.EXPANDED_SIZE
-      : this.miniMap.NORMAL_SIZE;
+    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     return {
       x: this.sceneManager.canvas.width - 88,
       y: 8 + mmSize + 20 + 28 + 6,
@@ -1778,18 +1605,12 @@ export class DungeonScene extends Scene {
   }
 
   private drawAchievementIcon(ctx: CanvasRenderingContext2D): void {
-    if (
-      this.gameOver ||
-      this.pauseMenu.isOpen ||
-      this.lootBoxOpener.isOpen ||
-      this._notifActive
-    ) {
+    if (this.gameOver || this.pauseMenu.isOpen || this.lootBoxOpener.isOpen || this._notifActive) {
       this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
       return;
     }
 
-    const unread =
-      this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+    const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
     if (unread === 0) {
       this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
       return;
@@ -1833,11 +1654,7 @@ export class DungeonScene extends Scene {
 
       ctx.font = '9px monospace';
       ctx.fillStyle = '#94a3b8';
-      ctx.fillText(
-        unread === 1 ? '1 new' : `${unread} new`,
-        x + w / 2,
-        y + bounce + 68,
-      );
+      ctx.fillText(unread === 1 ? '1 new' : `${unread} new`, x + w / 2, y + bounce + 68);
 
       ctx.textAlign = 'left';
       ctx.restore();
@@ -1860,17 +1677,12 @@ export class DungeonScene extends Scene {
     }
   }
 
-  private drawLootBoxIcon(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private drawLootBoxIcon(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const inSafe = this.human.isProtected || this.cat.isProtected;
     const totalBoxes =
-      this.humanAchievements.pendingBoxes.length +
-      this.catAchievements.pendingBoxes.length;
+      this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
 
-    const totalUnread =
-      this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
 
     if (
       !inSafe ||
@@ -1918,11 +1730,7 @@ export class DungeonScene extends Scene {
 
     ctx.font = '9px monospace';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText(
-      totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`,
-      x + w / 2,
-      y + bounce + 68,
-    );
+    ctx.fillText(totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, x + w / 2, y + bounce + 68);
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -1930,10 +1738,7 @@ export class DungeonScene extends Scene {
 
   // Health vignette
 
-  private renderHealthVignette(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderHealthVignette(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (this.gameOver) return;
     const player = this.active();
     const ratio = player.hp / player.maxHp;
@@ -1970,10 +1775,7 @@ export class DungeonScene extends Scene {
 
   // Mobile button rendering
 
-  private renderMobileButtons(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderMobileButtons(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     // Position Switch/Follow buttons above the hotbar
     const SLOT_H = 52;
     const BOTTOM_MARGIN = 12;
@@ -1991,9 +1793,7 @@ export class DungeonScene extends Scene {
     };
 
     // Gear / Bag buttons stacked on the right side below the minimap column
-    const mmSize = this.miniMap.isExpanded
-      ? this.miniMap.EXPANDED_SIZE
-      : this.miniMap.NORMAL_SIZE;
+    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     const rightX = canvas.width - 88;
     const pauseY = 8 + mmSize + 20;
     const achieveY = pauseY + 28 + 6;
@@ -2046,12 +1846,7 @@ export class DungeonScene extends Scene {
       humanActive ? 'Cat' : 'Human',
       false,
     );
-    drawBtn(
-      this._mobileFollowBtnRect,
-      '↩',
-      'Follow',
-      this.companion.isFollowOverride,
-    );
+    drawBtn(this._mobileFollowBtnRect, '↩', 'Follow', this.companion.isFollowOverride);
     drawSmallBtn(this._mobileGearBtnRect, 'Gear', this.gearPanel.isOpen);
     drawSmallBtn(this._mobileBagBtnRect, 'Bag', this.inventoryPanel.isOpen);
 
@@ -2116,11 +1911,7 @@ export class DungeonScene extends Scene {
       if (IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
         const mb = this._mobileSummonBtnRect;
         if (x >= mb.x && x <= mb.x + mb.w && y >= mb.y && y <= mb.y + mb.h) {
-          if (
-            !this.pauseMenu.isOpen &&
-            !this.safeRoom.isSleeping &&
-            !this.gameOver
-          )
+          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerMongoSummon();
           continue;
         }
@@ -2130,32 +1921,20 @@ export class DungeonScene extends Scene {
       if (IS_MOBILE) {
         const sb = this._mobileSwitchBtnRect;
         if (x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) {
-          if (
-            !this.pauseMenu.isOpen &&
-            !this.safeRoom.isSleeping &&
-            !this.gameOver
-          )
+          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerSwitchCharacter();
           continue;
         }
         const fb = this._mobileFollowBtnRect;
         if (x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
-          if (
-            !this.pauseMenu.isOpen &&
-            !this.safeRoom.isSleeping &&
-            !this.gameOver
-          )
+          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerCompanionFollow();
           continue;
         }
       }
 
       // Hotbar slot tap — defer activation until touch end so long-press can open context menu
-      if (
-        !this.pauseMenu.isOpen &&
-        !this.safeRoom.isSleeping &&
-        !this.gameOver
-      ) {
+      if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
         const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (hi >= 0) {
           this.inventoryDragTouchId = touch.identifier;
@@ -2188,10 +1967,7 @@ export class DungeonScene extends Scene {
       // Dynamite charge start: hold hotbar slot to charge, release to throw
       if (!this.gameOver && !this.pauseMenu.isOpen && this.human.isActive) {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-        if (
-          dynIdx >= 0 &&
-          this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite'
-        ) {
+        if (dynIdx >= 0 && this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite') {
           this.dynamite.beginCharge(dynIdx);
           this.mobileDynamiteTouchId = touch.identifier;
           continue;
@@ -2199,11 +1975,7 @@ export class DungeonScene extends Scene {
       }
 
       // Inventory panel drag start + long-press for context menu
-      if (
-        this.inventoryPanel.isOpen &&
-        !this.gameOver &&
-        !this.pauseMenu.isOpen
-      ) {
+      if (this.inventoryPanel.isOpen && !this.gameOver && !this.pauseMenu.isOpen) {
         if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
           if (this.inventoryDragTouchId === null) {
@@ -2238,10 +2010,7 @@ export class DungeonScene extends Scene {
 
       // Cancel long-press if finger moved too far
       if (this.invLongPressPos) {
-        const dist = Math.hypot(
-          x - this.invLongPressPos.x,
-          y - this.invLongPressPos.y,
-        );
+        const dist = Math.hypot(x - this.invLongPressPos.x, y - this.invLongPressPos.y);
         if (dist > 10) this.clearInvLongPress();
       }
 
@@ -2277,12 +2046,7 @@ export class DungeonScene extends Scene {
           this.handleMouseUp(x, y);
           // Short tap on hotbar slot → activate item
           const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-          if (
-            hi >= 0 &&
-            !this.pauseMenu.isOpen &&
-            !this.safeRoom.isSleeping &&
-            !this.gameOver
-          ) {
+          if (hi >= 0 && !this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
             this.triggerHotbarActivation(hi);
           } else {
             // Also fire click so slot interactions (equip, context menu) work
@@ -2297,10 +2061,7 @@ export class DungeonScene extends Scene {
       if (touch.identifier === this.mobileMoveTouchId) {
         if (this.mobileTapStart) {
           const elapsed = Date.now() - this.mobileTapStart.time;
-          const moved = Math.hypot(
-            x - this.mobileTapStart.x,
-            y - this.mobileTapStart.y,
-          );
+          const moved = Math.hypot(x - this.mobileTapStart.x, y - this.mobileTapStart.y);
           if (elapsed < 250 && moved < 20) {
             // If dynamite is charging, tap anywhere to aim and throw
             if (
@@ -2318,20 +2079,11 @@ export class DungeonScene extends Scene {
                 this.human.facingX = ddx / dist;
                 this.human.facingY = ddy / dist;
               }
-              this.dynamite.release(
-                this.human,
-                this.cat,
-                this.mobs,
-                this.mobGrid,
-              );
+              this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
             } else {
               // Short tap: try UI click first, then space action
               this.handleClick(x, y);
-              if (
-                !this.pauseMenu.isOpen &&
-                !this.safeRoom.isSleeping &&
-                !this.gameOver
-              ) {
+              if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
                 this.triggerSpaceAction(x, y);
               }
             }

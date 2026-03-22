@@ -58,12 +58,7 @@ export class Goblin extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    const chance =
-      killer instanceof HumanPlayer
-        ? 0.2
-        : killer instanceof CatPlayer
-          ? 0.05
-          : 0;
+    const chance = killer instanceof HumanPlayer ? 0.2 : killer instanceof CatPlayer ? 0.05 : 0;
     if (chance > 0 && Math.random() < chance) {
       items.push({ id: 'goblin_dynamite', quantity: 1 });
     }
@@ -138,12 +133,7 @@ export class Goblin extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     if (!this.isAlive) return;
 
     const sx = this.x - camX;

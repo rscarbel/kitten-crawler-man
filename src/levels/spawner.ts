@@ -47,12 +47,7 @@ function rollMobLevel(rule: MobSpawnRule): number {
 
 // Mob factory
 
-export function createMob(
-  type: string,
-  tileX: number,
-  tileY: number,
-  map: GameMap,
-): Mob {
+export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
   let mob: Mob;
   if (type === 'llama') {
     mob = new Llama(tileX, tileY, TILE_SIZE);
@@ -76,8 +71,7 @@ export function createMob(
     mob = new KrakarenClone(tileX, tileY, TILE_SIZE);
   } else {
     // default: goblin
-    const v =
-      GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
+    const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
     mob = new Goblin(tileX, tileY, TILE_SIZE, v.weapon, v.skin, v.eye);
   }
   mob.setMap(map);
@@ -122,9 +116,7 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     const bossEntry = def.bossRooms![i];
     const brData = map.bossRooms[i];
     if (brData) {
-      mobs.push(
-        createMob(bossEntry.type, brData.centre.x, brData.centre.y, map),
-      );
+      mobs.push(createMob(bossEntry.type, brData.centre.x, brData.centre.y, map));
     }
   }
 

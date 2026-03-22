@@ -53,9 +53,7 @@ export class JuicerRoomSystem {
   private readonly roomOriginX: number; // tile coords
   private readonly roomOriginY: number;
 
-  constructor(
-    bossRoomBounds: { x: number; y: number; w: number; h: number } | undefined,
-  ) {
+  constructor(bossRoomBounds: { x: number; y: number; w: number; h: number } | undefined) {
     // If no second boss room was generated, system is a no-op
     if (!bossRoomBounds) {
       this.roomOriginX = -9999;
@@ -68,27 +66,17 @@ export class JuicerRoomSystem {
 
     // Build pickup list
     for (const pos of DUMBBELL_POSITIONS) {
-      this.pickups.push(
-        this.makePickup(pos.relTileX, pos.relTileY, 'gym_dumbbell'),
-      );
+      this.pickups.push(this.makePickup(pos.relTileX, pos.relTileY, 'gym_dumbbell'));
     }
     for (const pos of BENCH_POSITIONS) {
-      this.pickups.push(
-        this.makePickup(pos.relTileX, pos.relTileY, 'gym_bench_press'),
-      );
+      this.pickups.push(this.makePickup(pos.relTileX, pos.relTileY, 'gym_bench_press'));
     }
     for (const pos of TREADMILL_POSITIONS) {
-      this.pickups.push(
-        this.makePickup(pos.relTileX, pos.relTileY, 'gym_treadmill'),
-      );
+      this.pickups.push(this.makePickup(pos.relTileX, pos.relTileY, 'gym_treadmill'));
     }
   }
 
-  private makePickup(
-    relTileX: number,
-    relTileY: number,
-    itemId: GymItemId,
-  ): GymPickup {
+  private makePickup(relTileX: number, relTileY: number, itemId: GymItemId): GymPickup {
     const absTileX = this.roomOriginX + relTileX;
     const absTileY = this.roomOriginY + relTileY;
     return {
@@ -139,12 +127,7 @@ export class JuicerRoomSystem {
       }));
   }
 
-  update(
-    _human: HumanPlayer,
-    _cat: CatPlayer,
-    juicer: Juicer | null,
-    _mobs: unknown,
-  ): void {
+  update(_human: HumanPlayer, _cat: CatPlayer, juicer: Juicer | null, _mobs: unknown): void {
     if (this.roomOriginX === -9999) return;
 
     const ts = TILE_SIZE;
@@ -160,11 +143,7 @@ export class JuicerRoomSystem {
       }
 
       // Check Juicer pickup request
-      if (
-        juicer &&
-        juicer.requestDumbbellAt &&
-        pickup.itemId === 'gym_dumbbell'
-      ) {
+      if (juicer && juicer.requestDumbbellAt && pickup.itemId === 'gym_dumbbell') {
         const req = juicer.requestDumbbellAt;
         const wcx = pickup.worldX + ts * 0.5;
         const wcy = pickup.worldY + ts * 0.5;
@@ -183,10 +162,7 @@ export class JuicerRoomSystem {
         const jcx = juicer.x + ts * 0.5;
         const jcy = juicer.y + ts * 0.5;
         let nearest = positions[0];
-        let nearestDist = Math.hypot(
-          positions[0].x - jcx,
-          positions[0].y - jcy,
-        );
+        let nearestDist = Math.hypot(positions[0].x - jcx, positions[0].y - jcy);
         for (const pos of positions) {
           const d = Math.hypot(pos.x - jcx, pos.y - jcy);
           if (d < nearestDist) {

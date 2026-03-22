@@ -1,10 +1,4 @@
-import {
-  Inventory,
-  InventoryItem,
-  ItemId,
-  HOTBAR_COUNT,
-  SLOTS_PER_PAGE,
-} from '../core/Inventory';
+import { Inventory, InventoryItem, ItemId, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
@@ -129,8 +123,7 @@ export class InventoryPanel {
 
   private computedHotbarSlotSize(canvas: HTMLCanvasElement): number {
     const margin = 20;
-    const available =
-      canvas.width - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
+    const available = canvas.width - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
     return Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
   }
 
@@ -169,11 +162,7 @@ export class InventoryPanel {
   }
 
   /** Returns hotbar slot index (0–7) if (mx, my) hits a slot, else -1. */
-  getHotbarTappedIndex(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-  ): number {
+  getHotbarTappedIndex(mx: number, my: number, canvas: HTMLCanvasElement): number {
     const hb = this.hotbarRect(canvas);
     if (my < hb.y - 12 || my > hb.y + hb.h + 12) return -1;
     for (let i = 0; i < HOTBAR_COUNT; i++) {
@@ -212,14 +201,7 @@ export class InventoryPanel {
     // Dragged item floats on top of everything
     if (this.drag) {
       const s = SLOT_SIZE;
-      this.renderItemIcon(
-        ctx,
-        this.drag.item,
-        this.drag.mx - s / 2,
-        this.drag.my - s / 2,
-        s,
-        0.75,
-      );
+      this.renderItemIcon(ctx, this.drag.item, this.drag.mx - s / 2, this.drag.my - s / 2, s, 0.75);
     }
 
     // Context menu and info popup render above everything else
@@ -234,10 +216,7 @@ export class InventoryPanel {
     }
   }
 
-  private renderContextMenu(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderContextMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cm = this.contextMenu!;
     const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = 120;
@@ -261,11 +240,7 @@ export class InventoryPanel {
         ctx.fillRect(mx + 1, oy, menuW - 2, menuItemH);
       }
       ctx.fillStyle =
-        options[i] === 'Equip'
-          ? '#4ade80'
-          : options[i] === 'Unequip'
-            ? '#f87171'
-            : '#e2e8f0';
+        options[i] === 'Equip' ? '#4ade80' : options[i] === 'Unequip' ? '#f87171' : '#e2e8f0';
       ctx.fillText(options[i], mx + 8, oy + 15);
     }
     ctx.restore();
@@ -323,11 +298,7 @@ export class InventoryPanel {
     ctx.font = '10px monospace';
     ctx.fillStyle = '#94a3b8';
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(
-        lines[i],
-        px + pad,
-        py + pad * 1.5 + lineH * 2 + i * lineH - 3,
-      );
+      ctx.fillText(lines[i], px + pad, py + pad * 1.5 + lineH * 2 + i * lineH - 3);
     }
 
     ctx.fillStyle = '#475569';
@@ -338,10 +309,7 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderDropDialog(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderDropDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const dd = this.dropDialog!;
     const dlgW = 200;
     const dlgH = 110;
@@ -413,10 +381,7 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderToggleButton(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     // On mobile the button is drawn by DungeonScene.renderMobileButtons instead
     if (IS_MOBILE) return;
     const btn = this.toggleBtnRect(canvas);
@@ -506,10 +471,8 @@ export class InventoryPanel {
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      const item =
-        slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
-      const isDragged =
-        this.drag?.source === 'inv' && this.drag.idx === slotIdx;
+      const item = slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
+      const isDragged = this.drag?.source === 'inv' && this.drag.idx === slotIdx;
       const r = this.invSlotRect(i, p);
       this.renderSlot(
         ctx,
@@ -607,11 +570,7 @@ export class InventoryPanel {
         ctx.fillStyle = '#e2e8f0';
         ctx.font = `bold ${Math.floor(size * 0.28)}px monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText(
-          secs > 99 ? '…' : `${secs}`,
-          x + size / 2,
-          y + size / 2 + 4,
-        );
+        ctx.fillText(secs > 99 ? '…' : `${secs}`, x + size / 2, y + size / 2 + 4);
         ctx.textAlign = 'left';
       }
     }
@@ -653,15 +612,7 @@ export class InventoryPanel {
       // Shine highlight
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.ellipse(
-        cx - r * 0.3,
-        cy - r * 0.3,
-        r * 0.22,
-        r * 0.13,
-        -0.7,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(cx - r * 0.3, cy - r * 0.3, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -687,14 +638,7 @@ export class InventoryPanel {
       for (let row = 0; row < 3; row++) {
         const ly = cy - sh / 2 + 8 + row * 9;
         ctx.moveTo(cx - sw * 0.35, ly);
-        ctx.bezierCurveTo(
-          cx - sw * 0.1,
-          ly - 4,
-          cx + sw * 0.1,
-          ly + 4,
-          cx + sw * 0.35,
-          ly,
-        );
+        ctx.bezierCurveTo(cx - sw * 0.1, ly - 4, cx + sw * 0.1, ly + 4, cx + sw * 0.35, ly);
       }
       ctx.stroke();
       // Green fog tint glow
@@ -774,15 +718,7 @@ export class InventoryPanel {
       // Collar
       ctx.fillStyle = '#2d5a3a';
       ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        cy - size * 0.16,
-        size * 0.1,
-        size * 0.06,
-        0,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(cx, cy - size * 0.16, size * 0.1, size * 0.06, 0, 0, Math.PI * 2);
       ctx.fill();
       // Enchantment rune — golden fist symbol
       ctx.fillStyle = '#ffd700';
@@ -802,15 +738,7 @@ export class InventoryPanel {
       // Crown base band — deep purple
       ctx.fillStyle = '#581c87';
       ctx.beginPath();
-      ctx.ellipse(
-        cx,
-        cy + size * 0.08,
-        size * 0.34,
-        size * 0.1,
-        0,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(cx, cy + size * 0.08, size * 0.34, size * 0.1, 0, 0, Math.PI * 2);
       ctx.fill();
       // Crown body — royal purple
       ctx.fillStyle = '#7c3aed';
@@ -879,12 +807,7 @@ export class InventoryPanel {
    * close button or pagination). DungeonScene should skip other click handling
    * when this returns true.
    */
-  handleClick(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): boolean {
+  handleClick(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): boolean {
     // Drop quantity dialog takes priority
     if (this.dropDialog) {
       const dd = this.dropDialog;
@@ -894,24 +817,14 @@ export class InventoryPanel {
       const dlgY = Math.floor((canvas.height - dlgH) / 2);
 
       // Cancel [X] button (top-right)
-      if (
-        mx >= dlgX + dlgW - 22 &&
-        mx <= dlgX + dlgW - 6 &&
-        my >= dlgY + 6 &&
-        my <= dlgY + 22
-      ) {
+      if (mx >= dlgX + dlgW - 22 && mx <= dlgX + dlgW - 6 && my >= dlgY + 6 && my <= dlgY + 22) {
         this.dropDialog = null;
         return true;
       }
       // [-] minus button
       const minusBtnX = dlgX + 20;
       const minusBtnY = dlgY + 54;
-      if (
-        mx >= minusBtnX &&
-        mx <= minusBtnX + 24 &&
-        my >= minusBtnY &&
-        my <= minusBtnY + 24
-      ) {
+      if (mx >= minusBtnX && mx <= minusBtnX + 24 && my >= minusBtnY && my <= minusBtnY + 24) {
         this.dropDialog = {
           ...dd,
           selectedQty: Math.max(1, dd.selectedQty - 1),
@@ -921,12 +834,7 @@ export class InventoryPanel {
       // [+] plus button
       const plusBtnX = dlgX + dlgW - 44;
       const plusBtnY = dlgY + 54;
-      if (
-        mx >= plusBtnX &&
-        mx <= plusBtnX + 24 &&
-        my >= plusBtnY &&
-        my <= plusBtnY + 24
-      ) {
+      if (mx >= plusBtnX && mx <= plusBtnX + 24 && my >= plusBtnY && my <= plusBtnY + 24) {
         this.dropDialog = {
           ...dd,
           selectedQty: Math.min(dd.maxQty, dd.selectedQty + 1),
@@ -936,12 +844,7 @@ export class InventoryPanel {
       // [Drop] confirm button
       const confirmX = dlgX + 20;
       const confirmY = dlgY + dlgH - 28;
-      if (
-        mx >= confirmX &&
-        mx <= confirmX + dlgW - 40 &&
-        my >= confirmY &&
-        my <= confirmY + 22
-      ) {
+      if (mx >= confirmX && mx <= confirmX + dlgW - 40 && my >= confirmY && my <= confirmY + 22) {
         this.pendingDropItem = { id: dd.id, quantity: dd.selectedQty };
         this.dropDialog = null;
         return true;
@@ -964,11 +867,7 @@ export class InventoryPanel {
     // Handle context menu option click
     if (this.contextMenu) {
       const cm = this.contextMenu;
-      const options = this.contextMenuOptions(
-        cm.item,
-        cm.source,
-        cm.isEquipped,
-      );
+      const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
       const menuW = 120;
       const menuItemH = 22;
       const menuH = options.length * menuItemH + 4;
@@ -986,9 +885,7 @@ export class InventoryPanel {
             inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
           } else if (action === 'Drop') {
             const item =
-              cm.source === 'hotbar'
-                ? inventory.hotbar[cm.slotIdx]
-                : inventory.slots[cm.slotIdx];
+              cm.source === 'hotbar' ? inventory.hotbar[cm.slotIdx] : inventory.slots[cm.slotIdx];
             if (item) {
               if (item.stackable && item.quantity > 1) {
                 this.dropDialog = {
@@ -1013,12 +910,7 @@ export class InventoryPanel {
 
     // Toggle button
     const btn = this.toggleBtnRect(canvas);
-    if (
-      mx >= btn.x &&
-      mx <= btn.x + btn.w &&
-      my >= btn.y &&
-      my <= btn.y + btn.h
-    ) {
+    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
       this.toggle();
       return true;
     }
@@ -1059,12 +951,7 @@ export class InventoryPanel {
     return false;
   }
 
-  handleMouseDown(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     // Hotbar slots
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
@@ -1096,12 +983,7 @@ export class InventoryPanel {
   }
 
   /** Open the right-click context menu over an inventory or hotbar slot at (mx, my). */
-  openContextMenu(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  openContextMenu(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     // Check hotbar slots
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
@@ -1161,12 +1043,7 @@ export class InventoryPanel {
       const menuItemH = 22;
       const cmx = this.contextMenu.x;
       const cmy = this.contextMenu.y;
-      if (
-        mx >= cmx &&
-        mx <= cmx + 120 &&
-        my >= cmy &&
-        my <= cmy + options.length * menuItemH + 4
-      ) {
+      if (mx >= cmx && mx <= cmx + 120 && my >= cmy && my <= cmy + options.length * menuItemH + 4) {
         this.contextMenuHover = Math.floor((my - cmy - 2) / menuItemH);
       } else {
         this.contextMenuHover = -1;
@@ -1189,12 +1066,7 @@ export class InventoryPanel {
     return ['Name', 'Description', 'Drop'];
   }
 
-  handleMouseUp(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     const src = this.drag;
     if (!src) return;
     this.drag = null;

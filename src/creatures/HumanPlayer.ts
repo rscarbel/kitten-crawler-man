@@ -26,9 +26,7 @@ export class HumanPlayer extends Player {
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
-    this.applyItemBonus(
-      this.inventory.slots.find((s) => s?.id === 'enchanted_bigboi_boxers')!,
-    );
+    this.applyItemBonus(this.inventory.slots.find((s) => s?.id === 'enchanted_bigboi_boxers')!);
   }
 
   spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
@@ -79,10 +77,8 @@ export class HumanPlayer extends Player {
     }
 
     // Face the target
-    const dx =
-      this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
-    const dy =
-      this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
+    const dx = this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
+    const dy = this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       this.facingX = dx / dist;
@@ -100,12 +96,7 @@ export class HumanPlayer extends Player {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;
@@ -118,16 +109,7 @@ export class HumanPlayer extends Player {
     }
 
     const isKicking = this.attackTimer > 0 && this.attackPhase === 'kick';
-    drawHumanSprite(
-      ctx,
-      sx,
-      sy,
-      s,
-      isKicking,
-      this.walkFrame,
-      this.isMoving,
-      this.facingY,
-    );
+    drawHumanSprite(ctx, sx, sy, s, isKicking, this.walkFrame, this.isMoving, this.facingY);
 
     if (this.attackTimer > 0 && this.attackPhase) {
       drawHumanAttack(

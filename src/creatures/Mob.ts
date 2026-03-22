@@ -104,13 +104,7 @@ export abstract class Mob extends Player {
   /** The type of attack that landed the killing blow. */
   killType: 'melee' | 'missile' | null = null;
 
-  constructor(
-    tileX: number,
-    tileY: number,
-    tileSize: number,
-    maxHp: number,
-    speed: number,
-  ) {
+  constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, maxHp);
     this.speed = speed;
     this.spawnX = tileX * tileSize;
@@ -171,10 +165,8 @@ export abstract class Mob extends Player {
   protected onSameTile(target: Player): boolean {
     const ts = this.tileSize;
     return (
-      Math.floor((this.x + ts * 0.5) / ts) ===
-        Math.floor((target.x + ts * 0.5) / ts) &&
-      Math.floor((this.y + ts * 0.5) / ts) ===
-        Math.floor((target.y + ts * 0.5) / ts)
+      Math.floor((this.x + ts * 0.5) / ts) === Math.floor((target.x + ts * 0.5) / ts) &&
+      Math.floor((this.y + ts * 0.5) / ts) === Math.floor((target.y + ts * 0.5) / ts)
     );
   }
 
@@ -209,12 +201,7 @@ export abstract class Mob extends Player {
     if (this.astarTimer <= 0) {
       const myTileX = Math.floor((this.x + ts * 0.5) / ts);
       const myTileY = Math.floor((this.y + ts * 0.5) / ts);
-      this.astarPath = this.map.findPath(
-        myTileX,
-        myTileY,
-        goalTileX,
-        goalTileY,
-      );
+      this.astarPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
       // Drop the first waypoint — that's the tile we're already on
       if (this.astarPath.length > 0) this.astarPath.shift();
       this.astarTimer = refreshInterval;
@@ -279,9 +266,7 @@ export abstract class Mob extends Player {
     if (dx !== 0) {
       const nextX = this.x + dx;
       const tileXnext =
-        dx >= 0
-          ? Math.floor((nextX + ts * 0.72) / ts)
-          : Math.floor((nextX + ts * 0.28) / ts);
+        dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
       if (this.map.isWalkable(tileXnext, tileYcur)) this.x = nextX;
     }
@@ -299,12 +284,7 @@ export abstract class Mob extends Player {
    * When fully stuck (both axes blocked), rotates the movement vector ±90° to
    * steer around corners. Flips steering direction after 50 stuck frames.
    */
-  protected followTargetCollide(
-    targetX: number,
-    targetY: number,
-    speed: number,
-    minDist: number,
-  ) {
+  protected followTargetCollide(targetX: number, targetY: number, speed: number, minDist: number) {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
@@ -360,10 +340,7 @@ export abstract class Mob extends Player {
       this.damageFlash = 8;
       this.healthBarTimer = 180; // show health bar for ~3 seconds
       if (attacker) {
-        this.damageTakenBy.set(
-          attacker,
-          (this.damageTakenBy.get(attacker) ?? 0) + actual,
-        );
+        this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
       }
     }
     if (this.hp === 0 && prev > 0) {
@@ -372,8 +349,7 @@ export abstract class Mob extends Player {
       this.killType = damageType;
       // Roll loot
       const coins =
-        this.coinDropMin +
-        Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
+        this.coinDropMin + Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
       const items = this.rollLootItems(attacker);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
@@ -389,8 +365,7 @@ export abstract class Mob extends Player {
     void killer; // available for subclasses
     const items: LootDrop['items'] = [];
     if (Math.random() < 0.25) items.push({ id: 'health_potion', quantity: 1 });
-    if (Math.random() < 0.05)
-      items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+    if (Math.random() < 0.05) items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
     return items;
   }
 
@@ -443,11 +418,7 @@ export abstract class Mob extends Player {
    * Renders the health bar only while it is visible (after taking damage).
    * Fades out over the last 40 frames.
    */
-  protected renderMobHealthBar(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-  ) {
+  protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.healthBarTimer <= 0 && !this.hasStatus('sepsis')) return;
     if (this.healthBarTimer > 0) {
       const alpha = this.healthBarTimer < 40 ? this.healthBarTimer / 40 : 1;
@@ -460,11 +431,7 @@ export abstract class Mob extends Player {
   }
 
   /** Renders status labels (e.g. "Septic") above the mob. */
-  private renderMobStatusLabels(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-  ) {
+  private renderMobStatusLabels(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.hasStatus('sepsis')) return;
     const t = Date.now();
     const pulse = 0.7 + 0.3 * Math.sin(t * 0.006);

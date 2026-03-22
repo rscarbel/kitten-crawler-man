@@ -77,12 +77,7 @@ export function generateDungeon(
   // 2. Void border around the outside (renders as pure black, not walkable)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      if (
-        y < BORDER ||
-        y >= size - BORDER ||
-        x < BORDER ||
-        x >= size - BORDER
-      ) {
+      if (y < BORDER || y >= size - BORDER || x < BORDER || x >= size - BORDER) {
         grid[y][x].type = VOID_TYPE;
       }
     }
@@ -108,11 +103,7 @@ export function generateDungeon(
     for (let hx = minX; hx <= maxX; hx++) {
       for (let off = -1; off <= 1; off++) {
         const hy = y1 + off;
-        if (
-          hy >= BORDER &&
-          hy < size - BORDER &&
-          grid[hy][hx].type === FloorTypeValue.wall
-        ) {
+        if (hy >= BORDER && hy < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
           grid[hy][hx].type = FloorTypeValue.concrete;
           hallwayTiles.push({ x: hx, y: hy });
         }
@@ -124,11 +115,7 @@ export function generateDungeon(
     for (let hy = minY; hy <= maxY; hy++) {
       for (let off = -1; off <= 1; off++) {
         const hx = x2 + off;
-        if (
-          hx >= BORDER &&
-          hx < size - BORDER &&
-          grid[hy][hx].type === FloorTypeValue.wall
-        ) {
+        if (hx >= BORDER && hx < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
           grid[hy][hx].type = FloorTypeValue.concrete;
           hallwayTiles.push({ x: hx, y: hy });
         }
@@ -160,35 +147,19 @@ export function generateDungeon(
   const BOSS_MAX_DIST = 80;
   const SAFE_MIN_SEPARATION = 18; // safe rooms must be this far apart from each other
 
-  for (
-    let attempt = 0;
-    attempt < maxAttempts && rooms.length < maxRooms;
-    attempt++
-  ) {
-    const isSafeRoom =
-      rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
-    const isBossRoom =
-      rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
-    const w = isBossRoom
-      ? 22
-      : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
-    const h = isBossRoom
-      ? 18
-      : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
-    const x =
-      BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
-    const y =
-      BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
+  for (let attempt = 0; attempt < maxAttempts && rooms.length < maxRooms; attempt++) {
+    const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
+    const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
+    const w = isBossRoom ? 22 : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
+    const h = isBossRoom ? 18 : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
+    const x = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
+    const y = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
 
     const cx = Math.floor(x + w / 2);
     const cy = Math.floor(y + h / 2);
 
     const overlaps = rooms.some(
-      (r) =>
-        x < r.x + r.w + GAP &&
-        x + w + GAP > r.x &&
-        y < r.y + r.h + GAP &&
-        y + h + GAP > r.y,
+      (r) => x < r.x + r.w + GAP && x + w + GAP > r.x && y < r.y + r.h + GAP && y + h + GAP > r.y,
     );
 
     // Boss rooms must be at least 60 tiles apart from each other
@@ -220,20 +191,11 @@ export function generateDungeon(
         x: Math.floor(rooms[0].x + rooms[0].w / 2),
         y: Math.floor(rooms[0].y + rooms[0].h / 2),
       };
-      const maxDist = isSafeRoom
-        ? SAFE_MAX_DIST
-        : isBossRoom
-          ? BOSS_MAX_DIST
-          : Infinity;
+      const maxDist = isSafeRoom ? SAFE_MAX_DIST : isBossRoom ? BOSS_MAX_DIST : Infinity;
       if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
     }
 
-    if (
-      !overlaps &&
-      !tooCloseToBoss &&
-      !tooCloseToSafeRoom &&
-      !tooFarFromStart
-    ) {
+    if (!overlaps && !tooCloseToBoss && !tooCloseToSafeRoom && !tooFarFromStart) {
       // 0-indexed boss room index
       const bossIdx = rooms.length - bossRoomStart;
       const floor = isSafeRoom
@@ -317,10 +279,7 @@ export function generateDungeon(
         x: Math.floor(r.x + r.w / 2),
         y: Math.floor(r.y + r.h / 2),
       };
-      return (
-        Math.hypot(rc.x - startCenter.x, rc.y - startCenter.y) >=
-        MIN_STAIRWELL_DIST
-      );
+      return Math.hypot(rc.x - startCenter.x, rc.y - startCenter.y) >= MIN_STAIRWELL_DIST;
     });
     // Sort farthest-first so stairwells are spread across the far reaches
     farRooms.sort((a, b) => {
@@ -335,8 +294,7 @@ export function generateDungeon(
       return db - da;
     });
     const stairwellCount =
-      numStairwellsOverride ??
-      Math.max(1, Math.floor(regularRooms.length / 50));
+      numStairwellsOverride ?? Math.max(1, Math.floor(regularRooms.length / 50));
     // Pick every N-th room from the sorted list to spread them out
     const step = Math.max(1, Math.floor(farRooms.length / stairwellCount));
     for (let i = 0; i < stairwellCount; i++) {
@@ -371,9 +329,7 @@ export function generateDungeon(
       }
     }
   }
-  const validHallway = hallwayTiles.filter(
-    (t) => !nearRoomSet.has(t.y * size + t.x),
-  );
+  const validHallway = hallwayTiles.filter((t) => !nearRoomSet.has(t.y * size + t.x));
 
   // Fisher-Yates shuffle then pick up to maxHallwaySpawns tiles with ≥3-tile separation.
   for (let i = validHallway.length - 1; i > 0; i--) {
@@ -383,8 +339,7 @@ export function generateDungeon(
   const chosen: Array<{ x: number; y: number }> = [];
   for (const t of validHallway) {
     if (chosen.length >= maxHallwaySpawns) break;
-    if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= 3))
-      chosen.push(t);
+    if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= 3)) chosen.push(t);
   }
   const hallwaySpawnPoints = chosen;
 
@@ -408,10 +363,8 @@ export function generateDungeon(
     // Indices of special rooms that the arena must not overlap
     const specialRoomIndices = new Set<number>();
     specialRoomIndices.add(0); // start room
-    for (let i = safeRoomStart; i < safeRoomEnd && i < rooms.length; i++)
-      specialRoomIndices.add(i);
-    for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++)
-      specialRoomIndices.add(i);
+    for (let i = safeRoomStart; i < safeRoomEnd && i < rooms.length; i++) specialRoomIndices.add(i);
+    for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++) specialRoomIndices.add(i);
 
     // Sample candidate positions in a ring 20–90 tiles from start
     for (let attempt = 0; attempt < 800 && !arenaPlaced; attempt++) {
@@ -448,9 +401,7 @@ export function generateDungeon(
             const gy = acy + dy;
             if (gy >= 0 && gy < size && gx >= 0 && gx < size) {
               grid[gy][gx].type =
-                r > ARENA_RADIUS - ARENA_WALL_THICKNESS
-                  ? METAL_WALL
-                  : ARENA_FLOOR;
+                r > ARENA_RADIUS - ARENA_WALL_THICKNESS ? METAL_WALL : ARENA_FLOOR;
             }
           }
         }
@@ -519,18 +470,14 @@ export function generateDungeon(
     arenaExteriors.length > 0
       ? mobSpawnPoints.filter((p) => {
           const a = arenaExteriors[0];
-          return (
-            Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2
-          );
+          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2;
         })
       : mobSpawnPoints;
   const filteredStairwells =
     arenaExteriors.length > 0
       ? stairwellTiles.filter((p) => {
           const a = arenaExteriors[0];
-          return (
-            Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2
-          );
+          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2;
         })
       : stairwellTiles;
 

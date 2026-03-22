@@ -1,10 +1,7 @@
 import { Mob } from './Mob';
 import { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
-import {
-  drawBallOfSwineSprite,
-  drawBallOfSwineStoppedWarning,
-} from '../sprites/ballOfSwineSprite';
+import { drawBallOfSwineSprite, drawBallOfSwineStoppedWarning } from '../sprites/ballOfSwineSprite';
 import type { LootDrop } from './Mob';
 
 const BOS_HP = 280;
@@ -124,10 +121,7 @@ export class BallOfSwine extends Mob {
       this.damageFlash = 8;
       this.healthBarTimer = 180;
       if (attacker) {
-        this.damageTakenBy.set(
-          attacker,
-          (this.damageTakenBy.get(attacker) ?? 0) + actual,
-        );
+        this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
       }
     }
 
@@ -139,8 +133,7 @@ export class BallOfSwine extends Mob {
       this.burstTimer = BURST_FRAMES;
       // Roll loot
       const coins =
-        this.coinDropMin +
-        Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
+        this.coinDropMin + Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
       const items = this.rollLootItems(attacker);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
@@ -250,9 +243,7 @@ export class BallOfSwine extends Mob {
       this.state = 'stopped';
       this.stoppedTimer =
         STOPPED_FRAMES_MIN +
-        Math.floor(
-          Math.random() * (STOPPED_FRAMES_MAX - STOPPED_FRAMES_MIN + 1),
-        );
+        Math.floor(Math.random() * (STOPPED_FRAMES_MAX - STOPPED_FRAMES_MIN + 1));
       this.currentAngularSpeed = 0;
     }
   }
@@ -314,18 +305,13 @@ export class BallOfSwine extends Mob {
 
     // Clamp orbit centre so the entire orbit stays inside the arena interior
     if (this.arenaInteriorPx > 0) {
-      const maxOffset = Math.max(
-        0,
-        this.arenaInteriorPx - ORBIT_RADIUS_PX - TILE_SIZE,
-      );
+      const maxOffset = Math.max(0, this.arenaInteriorPx - ORBIT_RADIUS_PX - TILE_SIZE);
       const cdx = this.orbitCenterX - this.arenaCenterPx.x;
       const cdy = this.orbitCenterY - this.arenaCenterPx.y;
       const centerDist = Math.hypot(cdx, cdy);
       if (centerDist > maxOffset) {
-        this.orbitCenterX =
-          this.arenaCenterPx.x + (cdx / centerDist) * maxOffset;
-        this.orbitCenterY =
-          this.arenaCenterPx.y + (cdy / centerDist) * maxOffset;
+        this.orbitCenterX = this.arenaCenterPx.x + (cdx / centerDist) * maxOffset;
+        this.orbitCenterY = this.arenaCenterPx.y + (cdy / centerDist) * maxOffset;
       }
     }
   }
@@ -340,10 +326,7 @@ export class BallOfSwine extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       // Ignore players far from the arena centre
-      const distFromArena = Math.hypot(
-        t.x - this.arenaCenterPx.x,
-        t.y - this.arenaCenterPx.y,
-      );
+      const distFromArena = Math.hypot(t.x - this.arenaCenterPx.x, t.y - this.arenaCenterPx.y);
       if (distFromArena > aggroRange) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
       if (d < bestDist) {
@@ -358,9 +341,7 @@ export class BallOfSwine extends Mob {
   get stoppedFraction(): number {
     const total =
       STOPPED_FRAMES_MIN +
-      (this.stoppedTimer > STOPPED_FRAMES_MIN
-        ? STOPPED_FRAMES_MAX - STOPPED_FRAMES_MIN
-        : 0);
+      (this.stoppedTimer > STOPPED_FRAMES_MIN ? STOPPED_FRAMES_MAX - STOPPED_FRAMES_MIN : 0);
     return 1 - this.stoppedTimer / total;
   }
 
@@ -370,14 +351,8 @@ export class BallOfSwine extends Mob {
 
   // --- Render ---
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
-    if (!this.isAlive && !this.pendingBurst && this.state !== 'bursting')
-      return;
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    if (!this.isAlive && !this.pendingBurst && this.state !== 'bursting') return;
 
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -402,13 +377,7 @@ export class BallOfSwine extends Mob {
     ctx.restore();
 
     if (this.isStopped) {
-      drawBallOfSwineStoppedWarning(
-        ctx,
-        sx,
-        sy,
-        tileSize,
-        this.stoppedFraction,
-      );
+      drawBallOfSwineStoppedWarning(ctx, sx, sy, tileSize, this.stoppedFraction);
     }
 
     this.renderMobHealthBar(ctx, sx, sy);

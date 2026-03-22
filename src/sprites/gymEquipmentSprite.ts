@@ -85,15 +85,7 @@ export function drawDumbbellInventoryIcon(
   // Left weight
   ctx.fillStyle = '#555';
   ctx.beginPath();
-  ctx.ellipse(
-    cx - size * 0.28,
-    cy,
-    size * 0.08,
-    size * 0.16,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - size * 0.28, cy, size * 0.08, size * 0.16, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#777';
   ctx.beginPath();
@@ -103,15 +95,7 @@ export function drawDumbbellInventoryIcon(
   // Right weight
   ctx.fillStyle = '#555';
   ctx.beginPath();
-  ctx.ellipse(
-    cx + size * 0.28,
-    cy,
-    size * 0.08,
-    size * 0.16,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + size * 0.28, cy, size * 0.08, size * 0.16, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#777';
   ctx.beginPath();
@@ -261,15 +245,7 @@ export function drawBenchPressInventoryIcon(
   for (const ox of [-size * 0.44, size * 0.38]) {
     ctx.fillStyle = '#444';
     ctx.beginPath();
-    ctx.ellipse(
-      cx + ox,
-      cy - size * 0.42,
-      size * 0.04,
-      size * 0.1,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx + ox, cy - size * 0.42, size * 0.04, size * 0.1, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 

@@ -76,10 +76,7 @@ export class Llama extends Mob {
         if (!t.isAlive) continue;
         const cx = t.x + this.tileSize * 0.5;
         const cy = t.y + this.tileSize * 0.5;
-        if (
-          Math.hypot(ball.x - cx, ball.y - cy) <
-          LAVA_BALL_RADIUS + this.tileSize * 0.35
-        ) {
+        if (Math.hypot(ball.x - cx, ball.y - cy) < LAVA_BALL_RADIUS + this.tileSize * 0.35) {
           this.dealDamage(t, LAVA_BALL_DAMAGE);
           if (Math.random() < 0.15) t.applyStatus(makeBurn());
           ball.exploding = true;
@@ -89,9 +86,7 @@ export class Llama extends Mob {
       }
     }
     // Prune fully-done balls
-    this.lavaBalls = this.lavaBalls.filter(
-      (b) => !b.exploding || b.explodeTick > 0,
-    );
+    this.lavaBalls = this.lavaBalls.filter((b) => !b.exploding || b.explodeTick > 0);
 
     // Find nearest target
     let nearest: Player | null = null;
@@ -121,9 +116,7 @@ export class Llama extends Mob {
     const targetCY = nearest.y + this.tileSize * 0.5;
 
     // Check line of sight from mouth to target centre
-    const hasLOS = this.map
-      ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY)
-      : true;
+    const hasLOS = this.map ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY) : true;
 
     // Track last known position while we have LOS
     if (hasLOS) {
@@ -142,12 +135,7 @@ export class Llama extends Mob {
       );
     } else if (nearestDist > this.spitRangePx) {
       // Has LOS but too far — move closer
-      this.followTargetAStar(
-        nearest.x,
-        nearest.y,
-        this.speed,
-        this.spitRangePx * 0.85,
-      );
+      this.followTargetAStar(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
     } else {
       // In range with LOS — hold position
       this.isMoving = false;
@@ -171,12 +159,7 @@ export class Llama extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     if (!this.isAlive) return;
 
     // Draw lava balls (behind sprite)
@@ -229,19 +212,9 @@ export class Llama extends Mob {
 
     // Normalise spit animation to 0–1 peak-at-midpoint curve
     const spitAnim =
-      this.spitAnimTimer > 0
-        ? Math.sin((1 - this.spitAnimTimer / SPIT_ANIM_FRAMES) * Math.PI)
-        : 0;
+      this.spitAnimTimer > 0 ? Math.sin((1 - this.spitAnimTimer / SPIT_ANIM_FRAMES) * Math.PI) : 0;
 
-    drawLlamaSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      spitAnim,
-    );
+    drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim);
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);

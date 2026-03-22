@@ -105,10 +105,8 @@ export class SpellSystem {
       for (const mob of inFog) {
         if (!mob.isAlive) continue;
         if (
-          Math.hypot(
-            mob.x + TILE_SIZE * 0.5 - fog.x,
-            mob.y + TILE_SIZE * 0.5 - fog.y,
-          ) <= fog.radiusPx
+          Math.hypot(mob.x + TILE_SIZE * 0.5 - fog.x, mob.y + TILE_SIZE * 0.5 - fog.y) <=
+          fog.radiusPx
         ) {
           mob.isConfused = true;
         }

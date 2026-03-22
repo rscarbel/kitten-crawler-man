@@ -88,8 +88,7 @@ export class StairwellSystem {
     for (const { x, y } of this.gameMap.stairwellTiles) {
       const sx = x * ts - camX;
       const sy = y * ts - camY;
-      if (sx < -bw || sx > canvas.width || sy < -bh || sy > canvas.height)
-        continue;
+      if (sx < -bw || sx > canvas.width || sy < -bh || sy > canvas.height) continue;
 
       ctx.fillStyle = '#0d0718';
       ctx.fillRect(sx, sy, bw, bh);
@@ -151,27 +150,13 @@ export class StairwellSystem {
     const rects = this.menuRects(canvas);
 
     ctx.fillStyle = '#4c1d95';
-    ctx.fillRect(
-      rects.descend.x,
-      rects.descend.y,
-      rects.descend.w,
-      rects.descend.h,
-    );
+    ctx.fillRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
     ctx.strokeStyle = '#a855f7';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(
-      rects.descend.x,
-      rects.descend.y,
-      rects.descend.w,
-      rects.descend.h,
-    );
+    ctx.strokeRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
     ctx.fillStyle = '#e9d5ff';
     ctx.font = 'bold 14px monospace';
-    ctx.fillText(
-      'Descend',
-      rects.descend.x + rects.descend.w / 2,
-      rects.descend.y + 27,
-    );
+    ctx.fillText('Descend', rects.descend.x + rects.descend.w / 2, rects.descend.y + 27);
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);

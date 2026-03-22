@@ -70,10 +70,7 @@ export class LootSystem {
     });
   }
 
-  update(
-    active: HumanPlayer | CatPlayer,
-    companion: HumanPlayer | CatPlayer,
-  ): void {
+  update(active: HumanPlayer | CatPlayer, companion: HumanPlayer | CatPlayer): void {
     for (const loot of this.pendingLoots) {
       if (loot.collected) continue;
       if (loot.pickupDelay > 0) {
@@ -82,10 +79,7 @@ export class LootSystem {
       }
 
       if (loot.droppedByPlayer) {
-        for (const player of [active, companion] as (
-          | HumanPlayer
-          | CatPlayer
-        )[]) {
+        for (const player of [active, companion] as (HumanPlayer | CatPlayer)[]) {
           if (loot.collected) break;
           const dist = Math.hypot(
             player.x + TILE_SIZE * 0.5 - loot.x,
@@ -117,8 +111,7 @@ export class LootSystem {
         }
       }
       if (!loot.collected && loot.owner === companion) {
-        const outOfCombat =
-          companion.autoTarget === null || !companion.autoTarget.isAlive;
+        const outOfCombat = companion.autoTarget === null || !companion.autoTarget.isAlive;
         if (outOfCombat) {
           const dist = Math.hypot(
             companion.x + TILE_SIZE * 0.5 - loot.x,
@@ -164,8 +157,7 @@ export class LootSystem {
       const sy = loot.y - camY;
       const parts: string[] = [];
       if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0)
-        parts.push(`+${loot.loot.items.length} item`);
+      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
       const label = parts.join(' ');
       const bw = Math.max(54, label.length * 7 + 16);
       const bh = 20;
@@ -196,8 +188,7 @@ export class LootSystem {
 
       const parts: string[] = [];
       if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0)
-        parts.push(`+${loot.loot.items.length} item`);
+      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
       const label = parts.join(' ');
 
       ctx.save();
@@ -254,14 +245,9 @@ export class LootSystem {
         ctx.globalAlpha = 1;
       }
 
-      ctx.fillStyle =
-        loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
+      ctx.fillStyle = loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
       ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = loot.isBossLoot
-        ? '#ffd700'
-        : loot.owner === active
-          ? '#fbbf24'
-          : '#475569';
+      ctx.strokeStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#475569';
       ctx.lineWidth = loot.isBossLoot ? 2 : 1;
       ctx.strokeRect(bx, by, bw, bh);
 
@@ -270,11 +256,7 @@ export class LootSystem {
       ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = loot.isBossLoot
-        ? '#fff8dc'
-        : loot.owner === active
-          ? '#fde68a'
-          : '#64748b';
+      ctx.fillStyle = loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#64748b';
       ctx.font = '10px monospace';
       ctx.textAlign = 'left';
       ctx.fillText(label, bx + 18, by + bh / 2 + 4);
@@ -296,10 +278,7 @@ export class LootSystem {
     }
   }
 
-  findDropPosition(
-    dropperX: number,
-    dropperY: number,
-  ): { x: number; y: number } {
+  findDropPosition(dropperX: number, dropperY: number): { x: number; y: number } {
     const ts = TILE_SIZE;
     const cx = Math.floor((dropperX + ts * 0.5) / ts);
     const cy = Math.floor((dropperY + ts * 0.5) / ts);

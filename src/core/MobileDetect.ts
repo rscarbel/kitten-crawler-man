@@ -5,6 +5,4 @@
 export const IS_MOBILE: boolean =
   typeof navigator !== 'undefined' &&
   (navigator.maxTouchPoints > 0 ||
-    /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent,
-    ));
+    /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));

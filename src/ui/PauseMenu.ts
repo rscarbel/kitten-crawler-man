@@ -82,16 +82,7 @@ export class PauseMenu {
 
     switch (this.tab) {
       case 'main':
-        this.renderMain(
-          ctx,
-          boxX,
-          boxY,
-          boxW,
-          human,
-          cat,
-          humanAchievements,
-          catAchievements,
-        );
+        this.renderMain(ctx, boxX, boxY, boxW, human, cat, humanAchievements, catAchievements);
         break;
       case 'inventory':
         this.renderInventory(ctx, boxX, boxY, boxW, human, cat);
@@ -125,12 +116,7 @@ export class PauseMenu {
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
     for (const btn of this.buttons) {
-      if (
-        mx >= btn.x &&
-        mx <= btn.x + btn.w &&
-        my >= btn.y &&
-        my <= btn.y + btn.h
-      ) {
+      if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
         btn.action();
         return true;
       }
@@ -185,14 +171,8 @@ export class PauseMenu {
     const bH = 40;
     let bY = by + 52;
 
-    this.menuBtn(
-      ctx,
-      bX,
-      bY,
-      bW,
-      bH,
-      IS_MOBILE ? 'Resume Game' : 'Resume Game  (Esc)',
-      () => this.close(),
+    this.menuBtn(ctx, bX, bY, bW, bH, IS_MOBILE ? 'Resume Game' : 'Resume Game  (Esc)', () =>
+      this.close(),
     );
     bY += 50;
     this.menuBtn(ctx, bX, bY, bW, bH, 'Inventory', () => {
@@ -205,11 +185,8 @@ export class PauseMenu {
     bY += 50;
 
     // Achievements button — badge shows total unread across both players
-    const unread =
-      (humanAchievements?.unreadCount ?? 0) +
-      (catAchievements?.unreadCount ?? 0);
-    const achLabel =
-      unread > 0 ? `Achievements  (${unread} new)` : 'Achievements';
+    const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
+    const achLabel = unread > 0 ? `Achievements  (${unread} new)` : 'Achievements';
     this.menuBtn(
       ctx,
       bX,
@@ -293,9 +270,8 @@ export class PauseMenu {
     const statLine = (p: Player, startY: number) => {
       ctx.font = '11px monospace';
       ctx.fillStyle = '#e2e8f0';
-      const midStat = p instanceof HumanPlayer
-        ? `EXP: ${p.explosivesHandling}`
-        : `INT: ${p.intelligence}`;
+      const midStat =
+        p instanceof HumanPlayer ? `EXP: ${p.explosivesHandling}` : `INT: ${p.intelligence}`;
       ctx.fillText(
         `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}`,
         bx + 20,
@@ -305,11 +281,7 @@ export class PauseMenu {
       ctx.fillText(`XP: ${p.xp} / ${p.level * 10}`, bx + 20, startY + 16);
       if (p.unspentPoints > 0) {
         ctx.fillStyle = '#fbbf24';
-        ctx.fillText(
-          `Unspent skill pts: ${p.unspentPoints}`,
-          bx + 20,
-          startY + 32,
-        );
+        ctx.fillText(`Unspent skill pts: ${p.unspentPoints}`, bx + 20, startY + 32);
       }
     };
 
@@ -343,11 +315,7 @@ export class PauseMenu {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#64748b';
     ctx.font = '10px monospace';
-    ctx.fillText(
-      'STR increases melee damage, CON increases max HP by 2.',
-      bx + 20,
-      by + 52,
-    );
+    ctx.fillText('STR increases melee damage, CON increases max HP by 2.', bx + 20, by + 52);
     ctx.fillText('Human: EXP increases dynamite damage and throw distance.', bx + 20, by + 64);
     ctx.fillText('Cat: INT increases magic damage.', bx + 20, by + 76);
 
@@ -373,9 +341,7 @@ export class PauseMenu {
       const totalBW = bW * 3 + gap * 2;
       const startX = bx + (bw - totalBW) / 2;
       const midStat = player instanceof HumanPlayer ? '+EXP' : '+INT';
-      this.menuBtn(ctx, startX, oy, bW, bH, '+STR', () =>
-        player.spendPoint('STR'),
-      );
+      this.menuBtn(ctx, startX, oy, bW, bH, '+STR', () => player.spendPoint('STR'));
       this.menuBtn(ctx, startX + bW + gap, oy, bW, bH, midStat, () =>
         player.spendPoint(player instanceof HumanPlayer ? 'EXP' : 'INT'),
       );
@@ -486,13 +452,11 @@ export class PauseMenu {
     let oy = startY + 20;
 
     // Achievement rows — only unlocked ones relevant to this player (locked ones are a surprise)
-    const relevant = (Object.keys(ACHIEVEMENT_DEFS) as AchievementId[]).filter(
-      (id) => {
-        const pt = ACHIEVEMENT_DEFS[id].playerType;
-        if (pt !== 'both' && pt !== playerTarget) return false;
-        return manager?.isUnlocked(id) ?? false;
-      },
-    );
+    const relevant = (Object.keys(ACHIEVEMENT_DEFS) as AchievementId[]).filter((id) => {
+      const pt = ACHIEVEMENT_DEFS[id].playerType;
+      if (pt !== 'both' && pt !== playerTarget) return false;
+      return manager?.isUnlocked(id) ?? false;
+    });
 
     if (relevant.length === 0) {
       ctx.font = '10px monospace';
@@ -523,11 +487,7 @@ export class PauseMenu {
         ctx.fillStyle = this.tierColor(def.lootBox.tier);
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'right';
-        ctx.fillText(
-          `${def.lootBox.tier} ${def.lootBox.category}`,
-          bx + bw - 14,
-          oy + 13,
-        );
+        ctx.fillText(`${def.lootBox.tier} ${def.lootBox.category}`, bx + bw - 14, oy + 13);
         ctx.textAlign = 'left';
       }
 
@@ -545,17 +505,7 @@ export class PauseMenu {
         // "Open Boxes" button (safe room only)
         const btnW = 100;
         const btnX = bx + bw - 20 - btnW;
-        this.menuBtn(
-          ctx,
-          btnX,
-          oy,
-          btnW,
-          22,
-          'Open Boxes',
-          onOpenBoxes,
-          '#14532d',
-          '#4ade80',
-        );
+        this.menuBtn(ctx, btnX, oy, btnW, 22, 'Open Boxes', onOpenBoxes, '#14532d', '#4ade80');
       } else if (!inSafeRoom) {
         ctx.fillStyle = '#374151';
         ctx.font = '9px monospace';

@@ -78,13 +78,7 @@ export class Mongo extends Mob {
   /** When true, Mongo is running back to the cat before despawning. */
   recalling = false;
 
-  constructor(
-    tileX: number,
-    tileY: number,
-    tileSize: number,
-    owner: Player,
-    levelId: string,
-  ) {
+  constructor(tileX: number, tileY: number, tileSize: number, owner: Player, levelId: string) {
     const stats = mongoStatsForFloor(levelId);
     super(tileX, tileY, tileSize, stats.hp, stats.speed);
     this.owner = owner;
@@ -129,12 +123,7 @@ export class Mongo extends Mob {
         this.hp = 0;
         return;
       }
-      this.followTargetAStar(
-        this.owner.x,
-        this.owner.y,
-        this.speed * 1.5,
-        TILE_SIZE * 0.5,
-      );
+      this.followTargetAStar(this.owner.x, this.owner.y, this.speed * 1.5, TILE_SIZE * 0.5);
       return;
     }
 
@@ -147,10 +136,7 @@ export class Mongo extends Mob {
     for (const mob of this.allMobs) {
       if (mob === this || !mob.isAlive || !mob.isHostile) continue;
       // Must be within aggro radius of the cat
-      const dCat = Math.hypot(
-        mob.x + TILE_SIZE * 0.5 - catCx,
-        mob.y + TILE_SIZE * 0.5 - catCy,
-      );
+      const dCat = Math.hypot(mob.x + TILE_SIZE * 0.5 - catCx, mob.y + TILE_SIZE * 0.5 - catCy);
       if (dCat > this.aggroRangePx) continue;
       const d = Math.hypot(mob.x - this.x, mob.y - this.y);
       if (d < nearestDist) {
@@ -164,12 +150,7 @@ export class Mongo extends Mob {
     if (!nearest || distToCat > this.leashPx) {
       // Return toward cat
       if (distToCat > TILE_SIZE * 1.5) {
-        this.followTargetAStar(
-          this.owner.x,
-          this.owner.y,
-          this.speed,
-          TILE_SIZE * 1,
-        );
+        this.followTargetAStar(this.owner.x, this.owner.y, this.speed, TILE_SIZE * 1);
       } else {
         this.isMoving = false;
         this.doWander();
@@ -199,23 +180,14 @@ export class Mongo extends Mob {
     }
 
     // Bite attack — deals damage directly to the mob, credited to the cat
-    if (
-      nearest &&
-      nearestDist <= this.biteRangePx * 1.2 &&
-      this.attackCooldown === 0
-    ) {
+    if (nearest && nearestDist <= this.biteRangePx * 1.2 && this.attackCooldown === 0) {
       nearest.takeDamageFrom(this.biteDamage, this.owner, 'melee');
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;

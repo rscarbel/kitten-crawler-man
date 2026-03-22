@@ -148,8 +148,7 @@ export function drawHUDPlayerBlock(
 
   ctx.fillStyle = '#374151';
   ctx.fillRect(barX, y, barW, barH);
-  ctx.fillStyle =
-    hpRatio > 0.5 ? '#4ade80' : hpRatio > 0.25 ? '#facc15' : '#ef4444';
+  ctx.fillStyle = hpRatio > 0.5 ? '#4ade80' : hpRatio > 0.25 ? '#facc15' : '#ef4444';
   ctx.fillRect(barX, y, Math.ceil(barW * hpRatio), barH);
 
   ctx.fillStyle = '#e2e8f0';
@@ -200,12 +199,7 @@ export function drawHUDPlayerBlock(
  * Adding a new status type: add an `else if` branch below with the desired
  * colour and label.
  */
-function drawStatusIcon(
-  ctx: CanvasRenderingContext2D,
-  effect: StatusEffect,
-  x: number,
-  y: number,
-) {
+function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: number, y: number) {
   const pillW = 26;
   const pillH = 12;
 

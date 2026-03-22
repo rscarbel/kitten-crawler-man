@@ -85,8 +85,7 @@ export class BrindleGrub extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, STAGE1_HP, STAGE1_SPEED);
     this.evolveTimer =
-      STAGE1_EVOLVE_MIN +
-      Math.floor(Math.random() * (STAGE1_EVOLVE_MAX - STAGE1_EVOLVE_MIN + 1));
+      STAGE1_EVOLVE_MIN + Math.floor(Math.random() * (STAGE1_EVOLVE_MAX - STAGE1_EVOLVE_MIN + 1));
     this.displayName = 'Brindle Grub';
     this.description = 'A harmless wriggling larva. It seems to be growing...';
   }
@@ -106,8 +105,7 @@ export class BrindleGrub extends Mob {
     this.maxHp = STAGE2_HP;
     this.hp = STAGE2_HP;
     this.evolveTimer =
-      STAGE2_EVOLVE_MIN +
-      Math.floor(Math.random() * (STAGE2_EVOLVE_MAX - STAGE2_EVOLVE_MIN + 1));
+      STAGE2_EVOLVE_MIN + Math.floor(Math.random() * (STAGE2_EVOLVE_MAX - STAGE2_EVOLVE_MIN + 1));
     this.displayName = 'Cow-Tailed Grub';
     this.description = 'A bigger, angrier grub with a painful bite.';
   }
@@ -119,8 +117,7 @@ export class BrindleGrub extends Mob {
     this.hp = STAGE3_HP;
     this.evolveTimer = -1; // no further evolution
     this.displayName = 'Brindled Vespa';
-    this.description =
-      'A fully-evolved hornet that spits corrosive acid at anything nearby.';
+    this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
   }
 
   // ---------------------------------------------------------------------------
@@ -303,11 +300,7 @@ export class BrindleGrub extends Mob {
     }
 
     // Fire acid spit
-    if (
-      nearestDist <= spitRange &&
-      this.spitCooldown === 0 &&
-      this.hasLOS(nearest)
-    ) {
+    if (nearestDist <= spitRange && this.spitCooldown === 0 && this.hasLOS(nearest)) {
       const cx = this.x + ts * 0.5;
       const cy = this.y + ts * 0.5;
       const tx = nearest.x + ts * 0.5;
@@ -341,12 +334,7 @@ export class BrindleGrub extends Mob {
   // Render
   // ---------------------------------------------------------------------------
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -363,35 +351,13 @@ export class BrindleGrub extends Mob {
 
     switch (this.stage) {
       case 1:
-        drawBrindleGrubSprite(
-          ctx,
-          sx,
-          sy,
-          tileSize,
-          this.walkFrame,
-          this.isMoving,
-        );
+        drawBrindleGrubSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
         break;
       case 2:
-        drawCowTailedGrubSprite(
-          ctx,
-          sx,
-          sy,
-          tileSize,
-          this.walkFrame,
-          this.isMoving,
-        );
+        drawCowTailedGrubSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
         break;
       case 3:
-        drawBrindledVespaSprite(
-          ctx,
-          sx,
-          sy,
-          tileSize,
-          this.walkFrame,
-          this.isMoving,
-          this.facingX,
-        );
+        drawBrindledVespaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, this.facingX);
         break;
     }
 

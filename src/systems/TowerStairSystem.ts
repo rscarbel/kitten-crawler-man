@@ -50,9 +50,7 @@ export class TowerStairSystem {
 
     // Up stairs
     const wasOnUp = this.onUpStair;
-    this.onUpStair = this.map._interiorStairUpTiles.some(
-      (s) => s.x === tx && s.y === ty,
-    );
+    this.onUpStair = this.map._interiorStairUpTiles.some((s) => s.x === tx && s.y === ty);
     if (!this.onUpStair) {
       this.upDismissed = false;
       this._upMenuOpen = false;
@@ -62,9 +60,7 @@ export class TowerStairSystem {
 
     // Down stairs
     const wasOnDown = this.onDownStair;
-    this.onDownStair = this.map._interiorStairDownTiles.some(
-      (s) => s.x === tx && s.y === ty,
-    );
+    this.onDownStair = this.map._interiorStairDownTiles.some((s) => s.x === tx && s.y === ty);
     if (!this.onDownStair) {
       this.downDismissed = false;
       this._downMenuOpen = false;
@@ -101,11 +97,7 @@ export class TowerStairSystem {
     return false;
   }
 
-  renderStairHints(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  renderStairHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
     ctx.fillStyle = `rgba(255, 220, 80, ${pulse})`;
     ctx.font = `bold ${Math.floor(TILE_SIZE * 0.45)}px monospace`;
@@ -157,11 +149,7 @@ export class TowerStairSystem {
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '13px monospace';
-    ctx.fillText(
-      `${isUp ? 'Ascend' : 'Descend'} to: ${targetLabel}?`,
-      cw / 2,
-      panelY + 68,
-    );
+    ctx.fillText(`${isUp ? 'Ascend' : 'Descend'} to: ${targetLabel}?`, cw / 2, panelY + 68);
 
     ctx.fillStyle = '#64748b';
     ctx.font = '11px monospace';
@@ -170,20 +158,10 @@ export class TowerStairSystem {
     const rects = this.menuRects(canvas);
 
     ctx.fillStyle = '#5c3d0a';
-    ctx.fillRect(
-      rects.action.x,
-      rects.action.y,
-      rects.action.w,
-      rects.action.h,
-    );
+    ctx.fillRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
     ctx.strokeStyle = '#d4a830';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(
-      rects.action.x,
-      rects.action.y,
-      rects.action.w,
-      rects.action.h,
-    );
+    ctx.strokeRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
     ctx.fillStyle = '#ffe8a0';
     ctx.font = 'bold 14px monospace';
     ctx.fillText(

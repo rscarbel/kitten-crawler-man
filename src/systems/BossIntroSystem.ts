@@ -61,10 +61,7 @@ export class BossIntroSystem {
     if (intro.phase === 'letters') {
       const TITLE = BossIntroSystem.INTRO_TITLE;
       const FPC = BossIntroSystem.INTRO_FRAMES_PER_CHAR;
-      const charsShown = Math.min(
-        TITLE.length,
-        Math.floor(intro.frame / FPC) + 1,
-      );
+      const charsShown = Math.min(TITLE.length, Math.floor(intro.frame / FPC) + 1);
 
       ctx.save();
       ctx.textAlign = 'center';
@@ -84,15 +81,11 @@ export class BossIntroSystem {
 
         // B's in yellow-gold, dashes in grey, rest of "OSS BATTLE!" in white
         if (ch === 'B') {
-          ctx.fillStyle = isLast
-            ? `rgba(255,200,0,${0.7 + 0.3 * flashPulse})`
-            : '#fbbf24';
+          ctx.fillStyle = isLast ? `rgba(255,200,0,${0.7 + 0.3 * flashPulse})` : '#fbbf24';
         } else if (ch === '-') {
           ctx.fillStyle = '#94a3b8';
         } else {
-          ctx.fillStyle = isLast
-            ? `rgba(255,255,255,${0.7 + 0.3 * flashPulse})`
-            : '#f1f5f9';
+          ctx.fillStyle = isLast ? `rgba(255,255,255,${0.7 + 0.3 * flashPulse})` : '#f1f5f9';
         }
 
         // Calculate x for each char
@@ -114,8 +107,7 @@ export class BossIntroSystem {
       // Subtext hint after title is fully shown
       const titleLen = TITLE.length;
       if (charsShown >= titleLen) {
-        const holdProgress =
-          (intro.frame - titleLen * FPC) / BossIntroSystem.INTRO_HOLD_FRAMES;
+        const holdProgress = (intro.frame - titleLen * FPC) / BossIntroSystem.INTRO_HOLD_FRAMES;
         const alpha = Math.min(1, holdProgress * 3);
         ctx.globalAlpha = alpha;
         ctx.font = `bold ${Math.floor(fontSize * 0.4)}px monospace`;
@@ -217,16 +209,7 @@ export class BossIntroSystem {
         );
       } else {
         const hS = 80;
-        drawHoarderSprite(
-          ctx,
-          rightX + panelW / 2 - hS / 2,
-          panelY + 18,
-          hS,
-          false,
-          0,
-          1,
-          0,
-        );
+        drawHoarderSprite(ctx, rightX + panelW / 2 - hS / 2, panelY + 18, hS, false, 0, 1, 0);
       }
       ctx.restore();
 

@@ -59,12 +59,7 @@ export class DynamiteSystem {
     this._charging = { hotbarIdx, chargeFrames: 0 };
   }
 
-  release(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
+  release(human: HumanPlayer, cat: CatPlayer, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     if (!this._charging) return;
     const { chargeFrames } = this._charging;
     this._charging = null;
@@ -75,9 +70,7 @@ export class DynamiteSystem {
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
     const expLvl = human.explosivesHandling;
     const speedMax = DYN_SPEED_MAX + (expLvl - 1) * 4;
-    const speed = isTap
-      ? 0
-      : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
+    const speed = isTap ? 0 : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
     this.liveDynamites.push({
       x: human.x + TILE_SIZE * 0.5,
@@ -94,12 +87,7 @@ export class DynamiteSystem {
     void mobGrid;
   }
 
-  update(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
+  update(human: HumanPlayer, cat: CatPlayer, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
@@ -119,15 +107,7 @@ export class DynamiteSystem {
     this._charging = null;
     const cx = human.x + TILE_SIZE * 0.5;
     const cy = human.y + TILE_SIZE * 0.5;
-    this.triggerExplosion(
-      cx,
-      cy,
-      human.explosivesHandling,
-      human,
-      cat,
-      mobs,
-      mobGrid,
-    );
+    this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobs, mobGrid);
     this.liveDynamites.push({
       x: cx,
       y: cy,
@@ -154,21 +134,15 @@ export class DynamiteSystem {
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
     for (const mob of nearBlast) {
       if (!mob.isAlive) continue;
-      if (
-        Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS
-      ) {
+      if (Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS) {
         mob.takeDamageFrom(damage, human);
       }
     }
     void mobs;
-    if (
-      Math.hypot(human.x + ts * 0.5 - cx, human.y + ts * 0.5 - cy) <= DYN_RADIUS
-    ) {
+    if (Math.hypot(human.x + ts * 0.5 - cx, human.y + ts * 0.5 - cy) <= DYN_RADIUS) {
       human.takeDamage(damage);
     }
-    if (
-      Math.hypot(cat.x + ts * 0.5 - cx, cat.y + ts * 0.5 - cy) <= DYN_RADIUS
-    ) {
+    if (Math.hypot(cat.x + ts * 0.5 - cx, cat.y + ts * 0.5 - cy) <= DYN_RADIUS) {
       cat.takeDamage(damage);
     }
   }
@@ -189,15 +163,7 @@ export class DynamiteSystem {
       if (dyn.fuseFrames <= 0) {
         dyn.state = 'exploding';
         dyn.explodeTimer = DYN_ANIM_FRAMES;
-        this.triggerExplosion(
-          dyn.x,
-          dyn.y,
-          dyn.explosivesLevel,
-          human,
-          cat,
-          mobs,
-          mobGrid,
-        );
+        this.triggerExplosion(dyn.x, dyn.y, dyn.explosivesLevel, human, cat, mobs, mobGrid);
         continue;
       }
 
@@ -265,20 +231,9 @@ export class DynamiteSystem {
     }
   }
 
-  renderChargeBar(
-    ctx: CanvasRenderingContext2D,
-    canvasW: number,
-    canvasH: number,
-  ): void {
+  renderChargeBar(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number): void {
     if (!this._charging) return;
     const ratio = Math.min(1, this._charging.chargeFrames / DYN_MAX_CHARGE);
-    drawDynamiteChargeBar(
-      ctx,
-      canvasW,
-      canvasH,
-      ratio,
-      this._charging.chargeFrames,
-      DYN_DANGER,
-    );
+    drawDynamiteChargeBar(ctx, canvasW, canvasH, ratio, this._charging.chargeFrames, DYN_DANGER);
   }
 }

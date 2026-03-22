@@ -152,14 +152,7 @@ export class AchievementNotification {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '13px monospace';
     // Word-wrap the description
-    this.wrapText(
-      ctx,
-      achievement.description,
-      cw / 2,
-      by + 126,
-      BOX_W - 64,
-      18,
-    );
+    this.wrapText(ctx, achievement.description, cw / 2, by + 126, BOX_W - 64, 18);
 
     // Loot box reward
     if (achievement.lootBox) {

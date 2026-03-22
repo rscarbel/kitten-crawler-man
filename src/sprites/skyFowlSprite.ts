@@ -101,15 +101,7 @@ export function drawSkyFowlSprite(
   // ── Ground shadow ────────────────────────────────────────────────────────────
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    ground + cs * 0.035,
-    cs * 0.28,
-    cs * 0.065,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx, ground + cs * 0.035, cs * 0.28, cs * 0.065, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // ── Tail feathers (behind body, drawn first so body covers base) ─────────────
@@ -219,12 +211,7 @@ export function drawSkyFowlSprite(
     // One rear talon
     ctx.beginPath();
     ctx.moveTo(fx, fy);
-    ctx.quadraticCurveTo(
-      fx - cs * 0.04,
-      fy + cs * 0.02,
-      fx - cs * 0.07,
-      fy + cs * 0.05,
-    );
+    ctx.quadraticCurveTo(fx - cs * 0.04, fy + cs * 0.02, fx - cs * 0.07, fy + cs * 0.05);
     ctx.stroke();
   }
 
@@ -237,29 +224,13 @@ export function drawSkyFowlSprite(
   // Belly (lighter front)
   ctx.fillStyle = belly;
   ctx.beginPath();
-  ctx.ellipse(
-    cx + cs * 0.045,
-    bodyCy + cs * 0.025,
-    bodyW * 0.52,
-    bodyH * 0.37,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + cs * 0.045, bodyCy + cs * 0.025, bodyW * 0.52, bodyH * 0.37, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // ── Vest ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = cloth.vest;
   ctx.beginPath();
-  ctx.ellipse(
-    cx + cs * 0.04,
-    bodyCy,
-    bodyW * 0.49,
-    bodyH * 0.34,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + cs * 0.04, bodyCy, bodyW * 0.49, bodyH * 0.34, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Vest collar V-shape
@@ -276,13 +247,7 @@ export function drawSkyFowlSprite(
   ctx.fillStyle = cloth.trim;
   for (let b = 0; b < 3; b++) {
     ctx.beginPath();
-    ctx.arc(
-      cx + cs * 0.04,
-      bodyCy - cs * 0.055 + b * cs * 0.072,
-      cs * 0.017,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(cx + cs * 0.04, bodyCy - cs * 0.055 + b * cs * 0.072, cs * 0.017, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -356,15 +321,7 @@ export function drawSkyFowlSprite(
   // Cap feathers (dark top of head)
   ctx.fillStyle = fDark;
   ctx.beginPath();
-  ctx.ellipse(
-    hx - cs * 0.015,
-    headCy - headR * 0.3,
-    headR * 0.82,
-    headR * 0.62,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(hx - cs * 0.015, headCy - headR * 0.3, headR * 0.82, headR * 0.62, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Small crest feather on top
@@ -373,12 +330,7 @@ export function drawSkyFowlSprite(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(hx - cs * 0.01, headCy - headR * 0.88);
-  ctx.quadraticCurveTo(
-    hx + cs * 0.04,
-    headCy - headR * 1.28,
-    hx + cs * 0.07,
-    headCy - headR * 1.2,
-  );
+  ctx.quadraticCurveTo(hx + cs * 0.04, headCy - headR * 1.28, hx + cs * 0.07, headCy - headR * 1.2);
   ctx.stroke();
 
   // ── Hat (optional) ────────────────────────────────────────────────────────────
@@ -393,15 +345,7 @@ export function drawSkyFowlSprite(
     ctx.fill();
     // Crown top ellipse
     ctx.beginPath();
-    ctx.ellipse(
-      hx,
-      brimY - crownH,
-      headR * 0.68,
-      headR * 0.16,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(hx, brimY - crownH, headR * 0.68, headR * 0.16, 0, 0, Math.PI * 2);
     ctx.fill();
     // Brim ellipse
     ctx.beginPath();
@@ -410,12 +354,7 @@ export function drawSkyFowlSprite(
 
     // Hat band (trim color)
     ctx.fillStyle = cloth.trim;
-    ctx.fillRect(
-      hx - headR * 0.68,
-      brimY - headR * 0.34,
-      headR * 1.36,
-      headR * 0.17,
-    );
+    ctx.fillRect(hx - headR * 0.68, brimY - headR * 0.34, headR * 1.36, headR * 0.17);
   }
 
   // ── Beak ─────────────────────────────────────────────────────────────────────
@@ -426,12 +365,7 @@ export function drawSkyFowlSprite(
   ctx.fillStyle = beakUpper;
   ctx.beginPath();
   ctx.moveTo(bx, by - headR * 0.15);
-  ctx.quadraticCurveTo(
-    bx + headR * 0.7,
-    by + headR * 0.05,
-    bx + headR * 0.5,
-    by + headR * 0.35,
-  );
+  ctx.quadraticCurveTo(bx + headR * 0.7, by + headR * 0.05, bx + headR * 0.5, by + headR * 0.35);
   ctx.lineTo(bx, by + headR * 0.2);
   ctx.closePath();
   ctx.fill();
@@ -440,12 +374,7 @@ export function drawSkyFowlSprite(
   ctx.fillStyle = beakHook;
   ctx.beginPath();
   ctx.moveTo(bx + headR * 0.44, by + headR * 0.3);
-  ctx.quadraticCurveTo(
-    bx + headR * 0.68,
-    by + headR * 0.38,
-    bx + headR * 0.52,
-    by + headR * 0.52,
-  );
+  ctx.quadraticCurveTo(bx + headR * 0.68, by + headR * 0.38, bx + headR * 0.52, by + headR * 0.52);
   ctx.lineTo(bx + headR * 0.3, by + headR * 0.42);
   ctx.closePath();
   ctx.fill();

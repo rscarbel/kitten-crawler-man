@@ -1,11 +1,6 @@
 import { randomInt } from '../utils';
 
-export type AchievementId =
-  | 'first_blood'
-  | 'boss_slayer'
-  | 'smush'
-  | 'safe_haven'
-  | 'magic_touch';
+export type AchievementId = 'first_blood' | 'boss_slayer' | 'smush' | 'safe_haven' | 'magic_touch';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy';
@@ -121,10 +116,7 @@ const BOX_CONTENTS = {
   },
 } as const satisfies Record<BoxTier, Record<BoxCategory, BoxContents>>;
 
-export function getBoxContents(
-  tier: BoxTier,
-  category: BoxCategory,
-): BoxContents {
+export function getBoxContents(tier: BoxTier, category: BoxCategory): BoxContents {
   return BOX_CONTENTS[tier][category];
 }
 
@@ -182,11 +174,7 @@ export class AchievementManager {
    * Directly grant a loot box without requiring a new achievement unlock.
    * Use when the achievement is already earned but the box should still be awarded.
    */
-  grantBox(
-    tier: BoxTier,
-    category: BoxCategory,
-    fromAchievement: AchievementId,
-  ): void {
+  grantBox(tier: BoxTier, category: BoxCategory, fromAchievement: AchievementId): void {
     this.pendingBoxes.push({
       id: this.nextBoxId++,
       tier,

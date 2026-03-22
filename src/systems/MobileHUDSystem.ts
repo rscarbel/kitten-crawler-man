@@ -121,20 +121,11 @@ export class MobileHUDSystem {
   /**
    * Render a pause button. Position is relative to the minimap or top-right area.
    */
-  renderPauseButton(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    topY?: number,
-  ): void {
+  renderPauseButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, topY?: number): void {
     const y = topY ?? 38;
     const rightX = canvas.width - 88;
     this._pauseBtnRect = { x: rightX, y, w: 80, h: 28 };
-    this.drawSmallBtn(
-      ctx,
-      this._pauseBtnRect,
-      IS_MOBILE ? 'Pause' : 'Pause (Esc)',
-      false,
-    );
+    this.drawSmallBtn(ctx, this._pauseBtnRect, IS_MOBILE ? 'Pause' : 'Pause (Esc)', false);
   }
 
   /**
@@ -323,50 +314,27 @@ export class MobileHUDSystem {
 
   checkInvLongPressMove(x: number, y: number): void {
     if (this.invLongPressPos) {
-      const dist = Math.hypot(
-        x - this.invLongPressPos.x,
-        y - this.invLongPressPos.y,
-      );
+      const dist = Math.hypot(x - this.invLongPressPos.x, y - this.invLongPressPos.y);
       if (dist > 10) this.clearInvLongPress();
     }
   }
 
   // --- Mouse/touch forwarding to panels ---
 
-  handleMouseDown(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     this.inventoryPanel.handleMouseDown(mx, my, canvas, inventory);
   }
 
-  handleMouseMove(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseMove(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     this.inventoryPanel.handleMouseMove(mx, my);
     this.gearPanel.handleMouseMove(mx, my, canvas, inventory);
   }
 
-  handleMouseUp(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     this.inventoryPanel.handleMouseUp(mx, my, canvas, inventory);
   }
 
-  handleContextMenu(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleContextMenu(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     this.inventoryPanel.openContextMenu(mx, my, canvas, inventory);
   }
 

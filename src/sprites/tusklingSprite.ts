@@ -172,21 +172,11 @@ export function drawTusklingSprite(
   ctx.globalAlpha = 0.45;
   ctx.beginPath();
   ctx.moveTo(cx - cs * 0.06, bodyTopY + cs * 0.04);
-  ctx.quadraticCurveTo(
-    cx - cs * 0.1,
-    bodyCy,
-    cx - cs * 0.06,
-    bodyBottomY - cs * 0.04,
-  );
+  ctx.quadraticCurveTo(cx - cs * 0.1, bodyCy, cx - cs * 0.06, bodyBottomY - cs * 0.04);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(cx + cs * 0.06, bodyTopY + cs * 0.04);
-  ctx.quadraticCurveTo(
-    cx + cs * 0.1,
-    bodyCy,
-    cx + cs * 0.06,
-    bodyBottomY - cs * 0.04,
-  );
+  ctx.quadraticCurveTo(cx + cs * 0.1, bodyCy, cx + cs * 0.06, bodyBottomY - cs * 0.04);
   ctx.stroke();
   ctx.globalAlpha = 1;
 
@@ -245,15 +235,7 @@ export function drawTusklingSprite(
   ctx.fillStyle = skinLight;
   ctx.globalAlpha = 0.4;
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    headCy - headHR * 0.35,
-    headWR * 0.6,
-    headHR * 0.35,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx, headCy - headHR * 0.35, headWR * 0.6, headHR * 0.35, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 
@@ -262,52 +244,20 @@ export function drawTusklingSprite(
   // Left ear
   ctx.fillStyle = earCol;
   ctx.beginPath();
-  ctx.ellipse(
-    cx - headWR * 0.78,
-    earY,
-    cs * 0.11,
-    cs * 0.09,
-    -0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - headWR * 0.78, earY, cs * 0.11, cs * 0.09, -0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = earInner;
   ctx.beginPath();
-  ctx.ellipse(
-    cx - headWR * 0.78,
-    earY + cs * 0.01,
-    cs * 0.065,
-    cs * 0.055,
-    -0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - headWR * 0.78, earY + cs * 0.01, cs * 0.065, cs * 0.055, -0.4, 0, Math.PI * 2);
   ctx.fill();
   // Right ear
   ctx.fillStyle = earCol;
   ctx.beginPath();
-  ctx.ellipse(
-    cx + headWR * 0.78,
-    earY,
-    cs * 0.11,
-    cs * 0.09,
-    0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + headWR * 0.78, earY, cs * 0.11, cs * 0.09, 0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = earInner;
   ctx.beginPath();
-  ctx.ellipse(
-    cx + headWR * 0.78,
-    earY + cs * 0.01,
-    cs * 0.065,
-    cs * 0.055,
-    0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + headWR * 0.78, earY + cs * 0.01, cs * 0.065, cs * 0.055, 0.4, 0, Math.PI * 2);
   ctx.fill();
 
   // Snout — protruding pig nose
@@ -338,15 +288,7 @@ export function drawTusklingSprite(
   );
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(
-    cx + headWR * 0.18,
-    snoutCy + cs * 0.005,
-    cs * 0.055,
-    cs * 0.04,
-    0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + headWR * 0.18, snoutCy + cs * 0.005, cs * 0.055, cs * 0.04, 0.3, 0, Math.PI * 2);
   ctx.fill();
 
   // Tusks — curving upward from sides of snout
@@ -356,12 +298,7 @@ export function drawTusklingSprite(
   // Left tusk
   ctx.beginPath();
   ctx.moveTo(cx - headWR * 0.32, snoutCy + headHR * 0.12);
-  ctx.quadraticCurveTo(
-    cx - headWR * 0.52,
-    snoutCy,
-    cx - headWR * 0.46,
-    snoutCy - headHR * 0.36,
-  );
+  ctx.quadraticCurveTo(cx - headWR * 0.52, snoutCy, cx - headWR * 0.46, snoutCy - headHR * 0.36);
   ctx.stroke();
   // Left tusk tip
   ctx.strokeStyle = tuskTip;
@@ -376,12 +313,7 @@ export function drawTusklingSprite(
   ctx.lineWidth = cs * 0.07;
   ctx.beginPath();
   ctx.moveTo(cx + headWR * 0.32, snoutCy + headHR * 0.12);
-  ctx.quadraticCurveTo(
-    cx + headWR * 0.52,
-    snoutCy,
-    cx + headWR * 0.46,
-    snoutCy - headHR * 0.36,
-  );
+  ctx.quadraticCurveTo(cx + headWR * 0.52, snoutCy, cx + headWR * 0.46, snoutCy - headHR * 0.36);
   ctx.stroke();
   // Right tusk tip
   ctx.strokeStyle = tuskTip;
@@ -407,22 +339,10 @@ export function drawTusklingSprite(
   // Pupils — small, dark, forward-looking
   ctx.fillStyle = pupilCol;
   ctx.beginPath();
-  ctx.arc(
-    cx - eyeSpX + eyeR * 0.2,
-    eyeY + eyeR * 0.1,
-    eyeR * 0.52,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(cx - eyeSpX + eyeR * 0.2, eyeY + eyeR * 0.1, eyeR * 0.52, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    cx + eyeSpX + eyeR * 0.2,
-    eyeY + eyeR * 0.1,
-    eyeR * 0.52,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(cx + eyeSpX + eyeR * 0.2, eyeY + eyeR * 0.1, eyeR * 0.52, 0, Math.PI * 2);
   ctx.fill();
 
   // Angry brow ridges — thick and furrowed

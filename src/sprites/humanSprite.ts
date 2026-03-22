@@ -1,28 +1,9 @@
 /** Draws a tiny heart shape centred at (cx, cy) with approximate radius r. */
-function drawTinyHeart(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-) {
+function drawTinyHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(cx, cy + r);
-  ctx.bezierCurveTo(
-    cx - r * 1.8,
-    cy + r * 0.4,
-    cx - r * 1.8,
-    cy - r * 0.6,
-    cx,
-    cy - r * 0.2,
-  );
-  ctx.bezierCurveTo(
-    cx + r * 1.8,
-    cy - r * 0.6,
-    cx + r * 1.8,
-    cy + r * 0.4,
-    cx,
-    cy + r,
-  );
+  ctx.bezierCurveTo(cx - r * 1.8, cy + r * 0.4, cx - r * 1.8, cy - r * 0.6, cx, cy - r * 0.2);
+  ctx.bezierCurveTo(cx + r * 1.8, cy - r * 0.6, cx + r * 1.8, cy + r * 0.4, cx, cy + r);
   ctx.fill();
 }
 
@@ -47,20 +28,10 @@ export function drawHumanSprite(
   // Bare legs (skin tone, no shoes)
   ctx.fillStyle = '#fcd5ae';
   // Left leg
-  ctx.fillRect(
-    sx + s * 0.27,
-    sy + s * 0.72 + bodyBob + legSwing,
-    s * 0.18,
-    s * 0.24 - legSwing,
-  );
+  ctx.fillRect(sx + s * 0.27, sy + s * 0.72 + bodyBob + legSwing, s * 0.18, s * 0.24 - legSwing);
   if (!isKicking) {
     // Right leg
-    ctx.fillRect(
-      sx + s * 0.55,
-      sy + s * 0.72 + bodyBob - legSwing,
-      s * 0.18,
-      s * 0.24 + legSwing,
-    );
+    ctx.fillRect(sx + s * 0.55, sy + s * 0.72 + bodyBob - legSwing, s * 0.18, s * 0.24 + legSwing);
   }
 
   // Arm swing (opposite to legs)
@@ -88,19 +59,9 @@ export function drawHumanSprite(
   // Jacket arms (black)
   ctx.fillStyle = '#111827';
   // Left arm
-  ctx.fillRect(
-    sx + s * 0.07,
-    sy + s * 0.4 + bodyBob + armSwing,
-    s * 0.15,
-    s * 0.22,
-  );
+  ctx.fillRect(sx + s * 0.07, sy + s * 0.4 + bodyBob + armSwing, s * 0.15, s * 0.22);
   // Right arm
-  ctx.fillRect(
-    sx + s * 0.78,
-    sy + s * 0.4 + bodyBob - armSwing,
-    s * 0.15,
-    s * 0.22,
-  );
+  ctx.fillRect(sx + s * 0.78, sy + s * 0.4 + bodyBob - armSwing, s * 0.15, s * 0.22);
 
   // Head (skin tone)
   ctx.fillStyle = '#fcd5ae';
@@ -112,13 +73,7 @@ export function drawHumanSprite(
     // Back of head — dark hair covering the top half
     ctx.fillStyle = '#3a2010';
     ctx.beginPath();
-    ctx.arc(
-      sx + s * 0.5,
-      sy + s * 0.22 + bodyBob,
-      s * 0.17,
-      Math.PI,
-      Math.PI * 2,
-    );
+    ctx.arc(sx + s * 0.5, sy + s * 0.22 + bodyBob, s * 0.17, Math.PI, Math.PI * 2);
     ctx.fill();
     // Collar visible at the back of the neck
     ctx.fillStyle = '#111827';
@@ -132,24 +87,10 @@ export function drawHumanSprite(
       ctx.beginPath();
       if (facingY > 0.5) {
         // Facing down: tighter arc so the hair crown stays well above the eyes
-        ctx.arc(
-          hcx,
-          hcy,
-          s * 0.21,
-          Math.PI * (7.5 / 6),
-          Math.PI * (10.5 / 6),
-          false,
-        );
+        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7.5 / 6), Math.PI * (10.5 / 6), false);
       } else {
         // Sideways / neutral / slight up: standard hair cap
-        ctx.arc(
-          hcx,
-          hcy,
-          s * 0.21,
-          Math.PI * (7 / 6),
-          Math.PI * (11 / 6),
-          false,
-        );
+        ctx.arc(hcx, hcy, s * 0.21, Math.PI * (7 / 6), Math.PI * (11 / 6), false);
       }
       // closePath draws a chord from arc-end back to arc-start, forming a clean cap
       // (no pie-slice line to centre that would dip into the face)

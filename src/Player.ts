@@ -189,12 +189,7 @@ export abstract class Player {
     tileSize: number,
   ): void;
 
-  followTarget(
-    targetX: number,
-    targetY: number,
-    speed: number,
-    minDist: number,
-  ) {
+  followTarget(targetX: number, targetY: number, speed: number, minDist: number) {
     const dx = targetX - this.x;
     const dy = targetY - this.y;
     const dist = Math.hypot(dx, dy);
@@ -208,26 +203,17 @@ export abstract class Player {
     this.isMoving = true;
   }
 
-  protected renderHealthBar(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-  ) {
+  protected renderHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     const barW = this.tileSize;
     const barH = 4;
     const ratio = this.hp / this.maxHp;
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(sx, sy - 7, barW, barH);
-    ctx.fillStyle =
-      ratio > 0.5 ? '#4ade80' : ratio > 0.25 ? '#facc15' : '#ef4444';
+    ctx.fillStyle = ratio > 0.5 ? '#4ade80' : ratio > 0.25 ? '#facc15' : '#ef4444';
     ctx.fillRect(sx, sy - 7, Math.ceil(barW * ratio), barH);
   }
 
-  protected renderDamageFlash(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-  ) {
+  protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.damageFlash <= 0) return;
     ctx.save();
     ctx.globalAlpha = (this.damageFlash / 8) * 0.55;
@@ -237,11 +223,7 @@ export abstract class Player {
   }
 
   /** Renders world-space status effect indicators above the character sprite. */
-  protected renderStatusEffects(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-  ) {
+  protected renderStatusEffects(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.statusEffects.length === 0) return;
     const cx = sx + this.tileSize / 2;
     ctx.save();

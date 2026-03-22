@@ -30,29 +30,13 @@ export function drawLlamaSprite(
   // Body
   ctx.fillStyle = tan;
   ctx.beginPath();
-  ctx.ellipse(
-    s * 0.55,
-    s * 0.68 + bodyBob,
-    s * 0.33,
-    s * 0.22,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(s * 0.55, s * 0.68 + bodyBob, s * 0.33, s * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Fluffy chest patch
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(
-    s * 0.34,
-    s * 0.62 + bodyBob,
-    s * 0.1,
-    s * 0.13,
-    0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(s * 0.34, s * 0.62 + bodyBob, s * 0.1, s * 0.13, 0.3, 0, Math.PI * 2);
   ctx.fill();
 
   // Neck
@@ -68,29 +52,13 @@ export function drawLlamaSprite(
   // Head
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(
-    s * 0.25 - headLunge,
-    s * 0.16,
-    s * 0.13,
-    s * 0.1,
-    -0.15,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(s * 0.25 - headLunge, s * 0.16, s * 0.13, s * 0.1, -0.15, 0, Math.PI * 2);
   ctx.fill();
 
   // Snout — llamas have a distinctive long upper lip
   ctx.fillStyle = tan;
   ctx.beginPath();
-  ctx.ellipse(
-    s * 0.22 - headLunge,
-    s * 0.22,
-    s * 0.07,
-    s * 0.055,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(s * 0.22 - headLunge, s * 0.22, s * 0.07, s * 0.055, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Nostrils
@@ -148,15 +116,7 @@ export function drawLlamaSprite(
   // Tail (little nub)
   ctx.fillStyle = cream;
   ctx.beginPath();
-  ctx.ellipse(
-    s * 0.86,
-    s * 0.6 + bodyBob,
-    s * 0.07,
-    s * 0.05,
-    0.5,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(s * 0.86, s * 0.6 + bodyBob, s * 0.07, s * 0.05, 0.5, 0, Math.PI * 2);
   ctx.fill();
 
   // Legs — front and back pairs alternate phase

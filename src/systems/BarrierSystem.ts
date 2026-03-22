@@ -9,10 +9,7 @@ import {
   drawTreadmillFloor,
 } from '../sprites/gymEquipmentSprite';
 
-export type BarrierItemId =
-  | 'gym_dumbbell'
-  | 'gym_bench_press'
-  | 'gym_treadmill';
+export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
 const CONSTRUCT_FRAMES = 60; // 1 second at 60 fps
 /** Tiles adjacent to a barrier that count as a slow zone (half-tile radius). */
@@ -113,9 +110,7 @@ export class BarrierSystem {
     const tileY = Math.floor(py / ts);
 
     // Don't stack barriers on the same tile
-    const occupied = this.barriers.some(
-      (b) => b.tileX === tileX && b.tileY === tileY,
-    );
+    const occupied = this.barriers.some((b) => b.tileX === tileX && b.tileY === tileY);
     if (occupied) {
       // Refund the item
       c.player.inventory.addItem(c.itemId as ItemId, 1);
@@ -147,9 +142,7 @@ export class BarrierSystem {
     const ts = TILE_SIZE;
     const ptx = Math.floor((player.x + ts * 0.5) / ts);
     const pty = Math.floor((player.y + ts * 0.5) / ts);
-    const idx = this.barriers.findIndex(
-      (b) => b.tileX === ptx && b.tileY === pty,
-    );
+    const idx = this.barriers.findIndex((b) => b.tileX === ptx && b.tileY === pty);
     if (idx !== -1) {
       const b = this.barriers[idx];
       player.inventory.addItem(b.itemId as ItemId, 1);
@@ -161,12 +154,7 @@ export class BarrierSystem {
 
   // Render
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    activePlayer?: Player,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, activePlayer?: Player): void {
     for (const b of this.barriers) {
       const sx = b.worldX - camX;
       const sy = b.worldY - camY;
@@ -189,13 +177,7 @@ export class BarrierSystem {
       ctx.strokeStyle = '#60a5fa';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(
-        sx + TILE_SIZE * 0.5,
-        sy + TILE_SIZE * 0.5,
-        SLOW_RADIUS_PX,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(sx + TILE_SIZE * 0.5, sy + TILE_SIZE * 0.5, SLOW_RADIUS_PX, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
@@ -220,10 +202,7 @@ export class BarrierSystem {
    * Render the construct progress indicator around the player's feet.
    * Draw this on top of the HUD layer.
    */
-  renderConstructUI(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  renderConstructUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (!this.pending) return;
 
     const ratio = 1 - this.pending.framesLeft / CONSTRUCT_FRAMES;

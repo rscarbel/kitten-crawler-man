@@ -5,10 +5,13 @@
   "license": "ISC",
   "author": "",
   "scripts": {
-    "build": "esbuild src/game.ts --bundle --outfile=dist/bundle.js"
+    "build": "esbuild src/game.ts --bundle --outfile=dist/bundle.js",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
   },
   "devDependencies": {
     "esbuild": "^0.27.3",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3"
   }
 }

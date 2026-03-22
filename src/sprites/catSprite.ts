@@ -33,24 +33,14 @@ export function drawCatSprite(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.75, sy + s * 0.62 + bodyBob);
-  ctx.quadraticCurveTo(
-    sx + s * 1.08 + tailSway,
-    sy + s * 0.5,
-    sx + s * 0.95,
-    sy + s * 0.3,
-  );
+  ctx.quadraticCurveTo(sx + s * 1.08 + tailSway, sy + s * 0.5, sx + s * 0.95, sy + s * 0.3);
   ctx.stroke();
   // Dark band on tail
   ctx.strokeStyle = '#1a0f00';
   ctx.lineWidth = s * 0.04;
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.88, sy + s * 0.44);
-  ctx.quadraticCurveTo(
-    sx + s * 1.0 + tailSway * 0.5,
-    sy + s * 0.38,
-    sx + s * 0.95,
-    sy + s * 0.3,
-  );
+  ctx.quadraticCurveTo(sx + s * 1.0 + tailSway * 0.5, sy + s * 0.38, sx + s * 0.95, sy + s * 0.3);
   ctx.stroke();
 
   // Paw offsets
@@ -84,15 +74,7 @@ export function drawCatSprite(
   // Body — tortoiseshell: base orange, clipped patches
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.5,
-    sy + s * 0.62 + bodyBob,
-    s * 0.28,
-    s * 0.2,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.5, sy + s * 0.62 + bodyBob, s * 0.28, s * 0.2, 0, 0, Math.PI * 2);
   ctx.fillStyle = '#c47a15';
   ctx.fill();
   ctx.clip();
@@ -100,41 +82,17 @@ export function drawCatSprite(
   ctx.fillStyle = '#1a0f00';
   ctx.globalAlpha = 0.88;
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.35,
-    sy + s * 0.56 + bodyBob,
-    s * 0.13,
-    s * 0.1,
-    -0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.35, sy + s * 0.56 + bodyBob, s * 0.13, s * 0.1, -0.4, 0, Math.PI * 2);
   ctx.fill();
   // Dark patch lower-right
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.64,
-    sy + s * 0.68 + bodyBob,
-    s * 0.1,
-    s * 0.09,
-    0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.64, sy + s * 0.68 + bodyBob, s * 0.1, s * 0.09, 0.3, 0, Math.PI * 2);
   ctx.fill();
   // Cream patch mid-right
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = '#f0c060';
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.57,
-    sy + s * 0.58 + bodyBob,
-    s * 0.1,
-    s * 0.08,
-    0.2,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.57, sy + s * 0.58 + bodyBob, s * 0.1, s * 0.08, 0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
@@ -151,29 +109,13 @@ export function drawCatSprite(
     ctx.fillStyle = '#1a0f00';
     ctx.globalAlpha = 0.88;
     ctx.beginPath();
-    ctx.ellipse(
-      sx + s * 0.41,
-      sy + s * 0.33 + bodyBob,
-      s * 0.1,
-      s * 0.14,
-      -0.3,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(sx + s * 0.41, sy + s * 0.33 + bodyBob, s * 0.1, s * 0.14, -0.3, 0, Math.PI * 2);
     ctx.fill();
     // Cream patch forehead-right
     ctx.globalAlpha = 0.75;
     ctx.fillStyle = '#f0c060';
     ctx.beginPath();
-    ctx.ellipse(
-      sx + s * 0.57,
-      sy + s * 0.28 + bodyBob,
-      s * 0.07,
-      s * 0.08,
-      0.2,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(sx + s * 0.57, sy + s * 0.28 + bodyBob, s * 0.07, s * 0.08, 0.2, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();

@@ -56,12 +56,7 @@ export class SpatialGrid<T extends { x: number; y: number }> {
    * Return all entities within `radius` pixels of (cx, cy).
    * Pass an existing Set to merge results (useful for union queries without extra allocation).
    */
-  queryCircle(
-    cx: number,
-    cy: number,
-    radius: number,
-    out = new Set<T>(),
-  ): Set<T> {
+  queryCircle(cx: number, cy: number, radius: number, out = new Set<T>()): Set<T> {
     const cs = this.cs;
     const minCX = Math.floor((cx - radius) / cs);
     const maxCX = Math.floor((cx + radius) / cs);

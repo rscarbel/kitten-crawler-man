@@ -27,8 +27,7 @@ export class SkyFowl extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = 2;
   displayName = 'Sky Fowl';
-  description =
-    'A feathery wanderer that pecks at anything that gets too close.';
+  description = 'A feathery wanderer that pecks at anything that gets too close.';
 
   /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
   readonly cloth: SkyFowlClothColors;
@@ -43,8 +42,7 @@ export class SkyFowl extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
-    this.cloth =
-      SKY_FOWL_PALETTES[Math.floor(Math.random() * SKY_FOWL_PALETTES.length)];
+    this.cloth = SKY_FOWL_PALETTES[Math.floor(Math.random() * SKY_FOWL_PALETTES.length)];
   }
 
   /** Sky Fowls are peaceful citizens — they carry no dungeon loot. */
@@ -174,12 +172,7 @@ export class SkyFowl extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -190,9 +183,7 @@ export class SkyFowl extends Mob {
     }
 
     const peckAmt =
-      this.peckAnimTimer > 0
-        ? Math.sin((1 - this.peckAnimTimer / PECK_ANIM_FRAMES) * Math.PI)
-        : 0;
+      this.peckAnimTimer > 0 ? Math.sin((1 - this.peckAnimTimer / PECK_ANIM_FRAMES) * Math.PI) : 0;
 
     drawSkyFowlSprite(
       ctx,

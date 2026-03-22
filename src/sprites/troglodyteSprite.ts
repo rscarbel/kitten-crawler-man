@@ -161,13 +161,7 @@ export function drawTroglodyteSprite(
   ctx.globalAlpha = 0.55;
   for (let i = 0; i < 3; i++) {
     ctx.beginPath();
-    ctx.arc(
-      cx - cs * 0.13 + i * cs * 0.13,
-      bodyCy - cs * 0.07,
-      cs * 0.038,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(cx - cs * 0.13 + i * cs * 0.13, bodyCy - cs * 0.07, cs * 0.038, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -190,22 +184,10 @@ export function drawTroglodyteSprite(
   // Clawed hands
   ctx.fillStyle = skinDark;
   ctx.beginPath();
-  ctx.arc(
-    cx - cs * 0.37 + armSway,
-    bodyCy + cs * 0.12 - armSway * 0.4,
-    cs * 0.065,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(cx - cs * 0.37 + armSway, bodyCy + cs * 0.12 - armSway * 0.4, cs * 0.065, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    cx + cs * 0.37 - armSway,
-    bodyCy + cs * 0.12 + armSway * 0.4,
-    cs * 0.065,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(cx + cs * 0.37 - armSway, bodyCy + cs * 0.12 + armSway * 0.4, cs * 0.065, 0, Math.PI * 2);
   ctx.fill();
 
   // Head
@@ -273,15 +255,7 @@ export function drawTroglodyteSprite(
   // Gum line
   ctx.fillStyle = gumCol;
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    mouthCy,
-    mouthHW * 0.8,
-    cs * 0.03 + jawDrop * 0.08,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx, mouthCy, mouthHW * 0.8, cs * 0.03 + jawDrop * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Upper teeth
@@ -290,8 +264,7 @@ export function drawTroglodyteSprite(
     const toothCount = 5;
     const toothH = cs * 0.065 * mouthOpen;
     for (let t = 0; t < toothCount; t++) {
-      const tx =
-        cx - mouthHW * 0.68 + (t + 0.5) * ((mouthHW * 1.36) / toothCount);
+      const tx = cx - mouthHW * 0.68 + (t + 0.5) * ((mouthHW * 1.36) / toothCount);
       ctx.beginPath();
       ctx.moveTo(tx - cs * 0.027, mouthCy);
       ctx.lineTo(tx, mouthCy + toothH);
@@ -316,15 +289,7 @@ export function drawTroglodyteSprite(
   // Lower jaw shape (drawn over teeth base)
   ctx.fillStyle = skinBase;
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    mouthCy + jawDrop + cs * 0.015,
-    mouthHW * 0.7,
-    headHR * 0.185,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx, mouthCy + jawDrop + cs * 0.015, mouthHW * 0.7, headHR * 0.185, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Tongue
@@ -335,15 +300,7 @@ export function drawTroglodyteSprite(
     // Tongue at rest — small curl inside mouth
     ctx.fillStyle = tongueCol;
     ctx.beginPath();
-    ctx.ellipse(
-      cx,
-      mouthCy + jawDrop * 0.2 + cs * 0.01,
-      cs * 0.1,
-      cs * 0.045,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx, mouthCy + jawDrop * 0.2 + cs * 0.01, cs * 0.1, cs * 0.045, 0, 0, Math.PI * 2);
     ctx.fill();
   } else {
     // Tongue shooting out in facing direction

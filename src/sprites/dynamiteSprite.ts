@@ -61,19 +61,12 @@ export function drawDynamiteFloorSprite(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx, cy - bh / 2);
-  ctx.quadraticCurveTo(
-    cx + s * 0.1,
-    cy - bh / 2 - s * 0.12,
-    cx + s * 0.06,
-    cy - bh / 2 - s * 0.22,
-  );
+  ctx.quadraticCurveTo(cx + s * 0.1, cy - bh / 2 - s * 0.12, cx + s * 0.06, cy - bh / 2 - s * 0.22);
   ctx.stroke();
 
   // Fuse tip spark — blinks faster as fuse runs low
   const sparkVisible =
-    fuseRatio > 0.2
-      ? true
-      : Math.floor(Date.now() / (fuseRatio < 0.07 ? 80 : 160)) % 2 === 0;
+    fuseRatio > 0.2 ? true : Math.floor(Date.now() / (fuseRatio < 0.07 ? 80 : 160)) % 2 === 0;
 
   if (sparkVisible) {
     const sparkX = cx + s * 0.06;

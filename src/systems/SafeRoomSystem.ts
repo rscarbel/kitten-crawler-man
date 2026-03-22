@@ -4,10 +4,7 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import {
-  drawMordecaiForLevel,
-  drawSpeechBubble,
-} from '../sprites/mordecaiSprite';
+import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprite';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -197,10 +194,7 @@ export class SafeRoomSystem {
   updateSleep(human: HumanPlayer, cat: CatPlayer): number {
     this.sleepTimer--;
 
-    if (
-      !this.sleepHealed &&
-      this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - 5
-    ) {
+    if (!this.sleepHealed && this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - 5) {
       human.hp = human.maxHp;
       cat.hp = cat.maxHp;
       this.sleepHealed = true;
@@ -248,16 +242,7 @@ export class SafeRoomSystem {
       // Mordecai (wandered position)
       const msx = e.mordecaiHomeTileX * ts + offsetX - camX;
       const msy = e.mordecaiHomeTileY * ts - camY;
-      drawMordecaiForLevel(
-        ctx,
-        msx,
-        msy,
-        ts,
-        this.wanderTime,
-        isWalking,
-        facingX,
-        this.levelId,
-      );
+      drawMordecaiForLevel(ctx, msx, msy, ts, this.wanderTime, isWalking, facingX, this.levelId);
 
       if (this.isNearMordecai(active) && !this._mordecaiDialogOpen) {
         drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
@@ -277,11 +262,7 @@ export class SafeRoomSystem {
       const { offsetX } = this.getWanderState(i);
 
       // Sleep prompt near bed
-      if (
-        this.isEntityInSafeRoom(active) &&
-        this.isNearBed(active) &&
-        !this._isSleeping
-      ) {
+      if (this.isEntityInSafeRoom(active) && this.isNearBed(active) && !this._isSleeping) {
         const bsx = e.bedTileX * TILE_SIZE - camX;
         const bsy = e.bedTileY * TILE_SIZE - camY;
         ctx.save();
@@ -292,11 +273,7 @@ export class SafeRoomSystem {
         ctx.fillStyle = '#f0e8d0';
         ctx.font = '11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(
-          '[Space] Sleep (restores HP)',
-          bsx + TILE_SIZE * 0.5,
-          bsy - 18,
-        );
+        ctx.fillText('[Space] Sleep (restores HP)', bsx + TILE_SIZE * 0.5, bsy - 18);
         ctx.textAlign = 'left';
         ctx.restore();
         break; // only prompt for the first nearby bed
@@ -341,10 +318,7 @@ export class SafeRoomSystem {
     }
   }
 
-  renderMordecaiDialog(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const dh = 120;
     const dw = Math.min(560, canvas.width - 40);
     const dx = (canvas.width - dw) / 2;
@@ -380,10 +354,7 @@ export class SafeRoomSystem {
     ctx.restore();
   }
 
-  renderSleepOverlay(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  renderSleepOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const t = this.sleepTimer;
     const fadeIn = this.SLEEP_FADEIN;
     const hold = this.SLEEP_HOLD;
@@ -416,12 +387,7 @@ export class SafeRoomSystem {
     ctx.restore();
   }
 
-  private renderBed(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-    s: number,
-  ): void {
+  private renderBed(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {
     ctx.fillStyle = '#7a4e2c';
     ctx.fillRect(sx + s * 0.05, sy + s * 0.12, s * 0.9, s * 0.8);
 

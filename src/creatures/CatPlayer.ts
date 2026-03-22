@@ -66,10 +66,8 @@ export class CatPlayer extends Player {
     }
 
     // Always face the target
-    const dx =
-      this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
-    const dy =
-      this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
+    const dx = this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
+    const dy = this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       this.facingX = dx / dist;
@@ -81,8 +79,7 @@ export class CatPlayer extends Player {
       this.autoFireCooldown--;
     } else {
       // Apply angular miss offset (±~25° spread when missChance > 0)
-      const offset =
-        Math.random() < missChance ? (Math.random() - 0.5) * 2 * 0.44 : 0;
+      const offset = Math.random() < missChance ? (Math.random() - 0.5) * 2 * 0.44 : 0;
       this.fireMissile(offset);
       this.autoFireCooldown = this.AUTO_FIRE_COOLDOWN;
     }
@@ -112,17 +109,10 @@ export class CatPlayer extends Player {
         m.explodeTimer--;
       }
     }
-    this.missiles = this.missiles.filter(
-      (m) => !(m.state === 'exploding' && m.explodeTimer <= 0),
-    );
+    this.missiles = this.missiles.filter((m) => !(m.state === 'exploding' && m.explodeTimer <= 0));
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;

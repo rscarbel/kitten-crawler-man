@@ -71,8 +71,7 @@ function drawTentacle(
   for (let s = 0; s < segments; s++) {
     const t = s / segments;
     const thickness = ts * (0.22 - t * 0.18);
-    const curlAmount =
-      Math.sin(time * 2.0 + desc.phase + s * 0.7) * 0.12 * (1 + t);
+    const curlAmount = Math.sin(time * 2.0 + desc.phase + s * 0.7) * 0.12 * (1 + t);
     angle += curlAmount;
 
     const nx = px + Math.cos(angle) * segLen;
@@ -164,29 +163,13 @@ function drawBody(
   const pulse = Math.sin(time * 1.2) * 0.04;
   ctx.fillStyle = isEnraged ? '#a83058' : '#cc6888';
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    mantleY,
-    mantleW * (1 + pulse),
-    mantleH * (1 + pulse),
-    0,
-    0,
-    TWO_PI,
-  );
+  ctx.ellipse(cx, mantleY, mantleW * (1 + pulse), mantleH * (1 + pulse), 0, 0, TWO_PI);
   ctx.fill();
 
   // Mantle highlight
   ctx.fillStyle = isEnraged ? '#d0506a' : '#e89aa8';
   ctx.beginPath();
-  ctx.ellipse(
-    cx - ts * 0.15,
-    mantleY - ts * 0.25,
-    mantleW * 0.45,
-    mantleH * 0.5,
-    -0.3,
-    0,
-    TWO_PI,
-  );
+  ctx.ellipse(cx - ts * 0.15, mantleY - ts * 0.25, mantleW * 0.45, mantleH * 0.5, -0.3, 0, TWO_PI);
   ctx.fill();
 
   // Eye clusters (3 groups of 2-3 eyes)
@@ -211,13 +194,7 @@ function drawBody(
       // Pupil — tracks facing direction
       ctx.fillStyle = isEnraged ? '#ff2020' : '#1a1a00';
       ctx.beginPath();
-      ctx.arc(
-        ex + facingX * er * 0.35,
-        ey + facingY * er * 0.35,
-        er * 0.5,
-        0,
-        TWO_PI,
-      );
+      ctx.arc(ex + facingX * er * 0.35, ey + facingY * er * 0.35, er * 0.5, 0, TWO_PI);
       ctx.fill();
 
       // Eye glint
@@ -244,18 +221,8 @@ function drawBody(
   ctx.fillStyle = '#1a0e08';
   ctx.beginPath();
   ctx.moveTo(cx - ts * 0.12, beakY + ts * 0.02);
-  ctx.quadraticCurveTo(
-    cx,
-    beakY + ts * 0.16,
-    cx + ts * 0.12,
-    beakY + ts * 0.02,
-  );
-  ctx.quadraticCurveTo(
-    cx,
-    beakY + ts * beakOpen + ts * 0.02,
-    cx - ts * 0.12,
-    beakY + ts * 0.02,
-  );
+  ctx.quadraticCurveTo(cx, beakY + ts * 0.16, cx + ts * 0.12, beakY + ts * 0.02);
+  ctx.quadraticCurveTo(cx, beakY + ts * beakOpen + ts * 0.02, cx - ts * 0.12, beakY + ts * 0.02);
   ctx.fill();
 
   // Enrage glow
@@ -370,17 +337,7 @@ export function drawKrakarenSprite(
   for (let i = 0; i < TENTACLE_COUNT; i++) {
     const desc = TENTACLES[i];
     if (desc.baseAngle > Math.PI * 0.25 && desc.baseAngle < Math.PI * 1.75) {
-      drawTentacle(
-        ctx,
-        cx,
-        cy,
-        ts,
-        desc,
-        time,
-        attackTentacle,
-        i,
-        attackProgress,
-      );
+      drawTentacle(ctx, cx, cy, ts, desc, time, attackTentacle, i, attackProgress);
     }
   }
 
@@ -391,17 +348,7 @@ export function drawKrakarenSprite(
   for (let i = 0; i < TENTACLE_COUNT; i++) {
     const desc = TENTACLES[i];
     if (!(desc.baseAngle > Math.PI * 0.25 && desc.baseAngle < Math.PI * 1.75)) {
-      drawTentacle(
-        ctx,
-        cx,
-        cy,
-        ts,
-        desc,
-        time,
-        attackTentacle,
-        i,
-        attackProgress,
-      );
+      drawTentacle(ctx, cx, cy, ts, desc, time, attackTentacle, i, attackProgress);
     }
   }
 }

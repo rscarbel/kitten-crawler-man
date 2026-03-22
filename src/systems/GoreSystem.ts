@@ -74,16 +74,11 @@ export class GoreSystem {
     }
   }
 
-  renderPuddles(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  renderPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const p of this.puddles) {
       const sx = p.x - camX;
       const sy = p.y - camY;
-      const alpha =
-        p.life <= PUDDLE_FADE_START ? p.life / PUDDLE_FADE_START : 1;
+      const alpha = p.life <= PUDDLE_FADE_START ? p.life / PUDDLE_FADE_START : 1;
       ctx.save();
       ctx.globalAlpha = alpha * 0.75;
       ctx.beginPath();
@@ -98,11 +93,7 @@ export class GoreSystem {
     }
   }
 
-  renderParticles(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  renderParticles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const p of this.particles) {
       const sx = p.x - camX;
       const sy = p.y - camY;

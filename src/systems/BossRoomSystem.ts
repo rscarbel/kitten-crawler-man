@@ -16,13 +16,12 @@ interface BossRoomState {
   pulse: number;
 }
 
-export const BOSS_META: Record<string, { displayName: string; color: string }> =
-  {
-    the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
-    juicer: { displayName: 'THE JUICER', color: '#fb923c' },
-    ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
-    krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
-  };
+export const BOSS_META: Record<string, { displayName: string; color: string }> = {
+  the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
+  juicer: { displayName: 'THE JUICER', color: '#fb923c' },
+  ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
+  krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
+};
 
 export class BossRoomSystem {
   private readonly states: BossRoomState[];
@@ -57,12 +56,7 @@ export class BossRoomSystem {
   ): boolean {
     const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    return (
-      tx >= bounds.x &&
-      tx < bounds.x + bounds.w &&
-      ty >= bounds.y &&
-      ty < bounds.y + bounds.h
-    );
+    return tx >= bounds.x && tx < bounds.x + bounds.w && ty >= bounds.y && ty < bounds.y + bounds.h;
   }
 
   isEntityInAnyBossRoom(entity: { x: number; y: number }): boolean {
@@ -76,17 +70,10 @@ export class BossRoomSystem {
 
   /** Returns true when this mob is inside an active (locked) boss room. */
   isBossInLockedRoom(mob: Mob): boolean {
-    return this.states.some(
-      (s) => s.locked && this.isEntityInRoom(mob, s.bounds),
-    );
+    return this.states.some((s) => s.locked && this.isEntityInRoom(mob, s.bounds));
   }
 
-  update(
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-    human: HumanPlayer,
-    cat: CatPlayer,
-  ): void {
+  update(mobs: Mob[], mobGrid: SpatialGrid<Mob>, human: HumanPlayer, cat: CatPlayer): void {
     // Tick defeat timers and pulse
     for (const state of this.states) {
       if (state.defeatTimer > 0) state.defeatTimer--;
@@ -96,16 +83,13 @@ export class BossRoomSystem {
     for (const state of this.states) {
       if (state.defeated) continue;
 
-      const boss = mobs.find(
-        (m) => m.isBoss && this.isEntityInRoom(m, state.bounds),
-      );
+      const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, state.bounds));
       const bossAlive = boss !== undefined && boss.isAlive;
 
       if (
         !state.locked &&
         bossAlive &&
-        (this.isEntityInRoom(human, state.bounds) ||
-          this.isEntityInRoom(cat, state.bounds))
+        (this.isEntityInRoom(human, state.bounds) || this.isEntityInRoom(cat, state.bounds))
       ) {
         state.locked = true;
         const idx = this.states.indexOf(state);
@@ -202,17 +186,12 @@ export class BossRoomSystem {
     entity.y = Math.max(minPy, Math.min(maxPy, entity.y));
   }
 
-  private spawnHoarderCockroaches(
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
+  private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     const MAX_COCKROACHES = 3;
     for (const mob of mobs) {
       if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
       if (mob.cockroachSpawns.length === 0) continue;
-      const liveCount = mobs.filter(
-        (m) => m instanceof Cockroach && m.isAlive,
-      ).length;
+      const liveCount = mobs.filter((m) => m instanceof Cockroach && m.isAlive).length;
       let spawned = liveCount;
       for (const sp of mob.cockroachSpawns) {
         if (spawned >= MAX_COCKROACHES) break;
@@ -252,20 +231,10 @@ export class BossRoomSystem {
     }
   }
 
-  renderObjects(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (let i = 0; i < this.states.length; i++) {
       const bossType = this.bossTypes[i] ?? 'the_hoarder';
-      this.renderSingleBossRoomObjects(
-        ctx,
-        camX,
-        camY,
-        this.states[i].bounds,
-        bossType,
-      );
+      this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
     }
   }
 
@@ -359,15 +328,7 @@ export class BossRoomSystem {
       const gh = ts * (0.35 + rng(i + 30) * 0.25);
       ctx.fillStyle = rng(i + 5) > 0.5 ? '#1a3018' : '#0f1f0e';
       ctx.beginPath();
-      ctx.ellipse(
-        gx,
-        gy,
-        gw * 0.5,
-        gh * 0.5,
-        rng(i + 40) * Math.PI,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(gx, gy, gw * 0.5, gh * 0.5, rng(i + 40) * Math.PI, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#4a7a40';
       ctx.beginPath();
@@ -400,15 +361,7 @@ export class BossRoomSystem {
       const canY = cy + (rng(i + 100) - 0.5) * b.h * ts * 0.75;
       ctx.fillStyle = '#8a8888';
       ctx.beginPath();
-      ctx.ellipse(
-        canX,
-        canY,
-        ts * 0.1,
-        ts * 0.06,
-        rng(i + 110) * Math.PI,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(canX, canY, ts * 0.1, ts * 0.06, rng(i + 110) * Math.PI, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -504,9 +457,9 @@ export class BossRoomSystem {
     const bossType = this.bossTypes[relevantStateIdx] ?? 'the_hoarder';
     const meta = BOSS_META[bossType] ?? BOSS_META['the_hoarder'];
 
-    const boss = mobs.find(
-      (m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds),
-    ) as (Mob & { isEnraged?: boolean }) | undefined;
+    const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds)) as
+      | (Mob & { isEnraged?: boolean })
+      | undefined;
     if (!boss) return;
 
     const isEnraged = boss.isEnraged ?? false;
@@ -555,11 +508,7 @@ export class BossRoomSystem {
     ctx.font = '9px monospace';
     ctx.fillStyle = '#e2e8f0';
     ctx.textAlign = 'center';
-    ctx.fillText(
-      `${boss.hp} / ${boss.maxHp}`,
-      canvas.width / 2,
-      barY + barH - 4,
-    );
+    ctx.fillText(`${boss.hp} / ${boss.maxHp}`, canvas.width / 2, barY + barH - 4);
     ctx.textAlign = 'left';
 
     if (relevantState.defeated) {

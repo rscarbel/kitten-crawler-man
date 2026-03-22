@@ -85,15 +85,7 @@ export function drawHoarderSprite(
   ctx.fill();
   for (let i = -2; i <= 2; i++) {
     ctx.beginPath();
-    ctx.ellipse(
-      cx + i * ts * 0.07,
-      sy - ts * 0.17,
-      ts * 0.06,
-      ts * 0.08,
-      i * 0.3,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx + i * ts * 0.07, sy - ts * 0.17, ts * 0.06, ts * 0.08, i * 0.3, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -166,26 +158,10 @@ export function drawHoarderSprite(
   // Arms — short stubby
   ctx.fillStyle = skinColor;
   ctx.beginPath();
-  ctx.ellipse(
-    cx - ts * 0.42,
-    sy + ts * 0.32,
-    ts * 0.12,
-    ts * 0.08,
-    -0.5,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - ts * 0.42, sy + ts * 0.32, ts * 0.12, ts * 0.08, -0.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(
-    cx + ts * 0.42,
-    sy + ts * 0.32,
-    ts * 0.12,
-    ts * 0.08,
-    0.5,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + ts * 0.42, sy + ts * 0.32, ts * 0.12, ts * 0.08, 0.5, 0, Math.PI * 2);
   ctx.fill();
 
   // Enrage indicator

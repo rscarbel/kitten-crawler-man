@@ -37,11 +37,7 @@ import {
  * Infers the ground base colour for a decoration tile (TORCH, WELL, etc.) by
  * examining cardinal neighbours. Priority: road > safe-room cobblestone > grass.
  */
-function inferGroundColor(
-  structure: TileContent[][],
-  tx: number,
-  ty: number,
-): string {
+function inferGroundColor(structure: TileContent[][], tx: number, ty: number): string {
   const dirs: [number, number][] = [
     [0, 1],
     [0, -1],
@@ -305,29 +301,13 @@ function drawTile(
       if ((tx * 3 + ty * 7) % 5 === 0) {
         ctx.fillStyle = 'rgba(120,140,20,0.28)';
         ctx.beginPath();
-        ctx.ellipse(
-          sx + ts * 0.4,
-          sy + ts * 0.5,
-          ts * 0.35,
-          ts * 0.22,
-          0.8,
-          0,
-          Math.PI * 2,
-        );
+        ctx.ellipse(sx + ts * 0.4, sy + ts * 0.5, ts * 0.35, ts * 0.22, 0.8, 0, Math.PI * 2);
         ctx.fill();
       }
       if ((tx * 5 + ty * 3) % 7 === 0) {
         ctx.fillStyle = 'rgba(80,60,10,0.35)';
         ctx.beginPath();
-        ctx.ellipse(
-          sx + ts * 0.65,
-          sy + ts * 0.35,
-          ts * 0.2,
-          ts * 0.14,
-          -0.5,
-          0,
-          Math.PI * 2,
-        );
+        ctx.ellipse(sx + ts * 0.65, sy + ts * 0.35, ts * 0.2, ts * 0.14, -0.5, 0, Math.PI * 2);
         ctx.fill();
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
@@ -397,15 +377,7 @@ function drawTile(
       if ((tx * 11 + ty * 5) % 9 === 0) {
         ctx.fillStyle = 'rgba(220,100,140,0.15)';
         ctx.beginPath();
-        ctx.ellipse(
-          sx + ts * 0.6,
-          sy + ts * 0.4,
-          ts * 0.12,
-          ts * 0.08,
-          0,
-          0,
-          Math.PI * 2,
-        );
+        ctx.ellipse(sx + ts * 0.6, sy + ts * 0.4, ts * 0.12, ts * 0.08, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
@@ -531,12 +503,7 @@ function drawTile(
           ctx.fillRect(sx, sy + Math.floor(ts * 0.34), ts, 1);
           ctx.fillRect(sx, sy + Math.floor(ts * 0.67), ts, 1);
           const bOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
-          ctx.fillRect(
-            sx + ((Math.floor(ts * 0.5) + bOff) % ts),
-            sy,
-            1,
-            Math.floor(ts * 0.34),
-          );
+          ctx.fillRect(sx + ((Math.floor(ts * 0.5) + bOff) % ts), sy, 1, Math.floor(ts * 0.34));
           ctx.fillRect(
             sx + (bOff % ts),
             sy + Math.floor(ts * 0.34) + 1,
@@ -945,12 +912,7 @@ function drawTile(
         }
         const sOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
         ctx.fillStyle = '#586878';
-        ctx.fillRect(
-          sx + ((Math.floor(ts * 0.5) + sOff) % ts),
-          sy + 6,
-          1,
-          ts - 9,
-        );
+        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + sOff) % ts), sy + 6, 1, ts - 9);
         ctx.fillStyle = '#404e5e'; // gutter at bottom
         ctx.fillRect(sx, sy + ts - 4, ts, 3);
         ctx.fillStyle = '#7888a0';
@@ -1025,12 +987,7 @@ function drawTile(
         }
         const rOff2 = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
         ctx.fillStyle = '#721e18';
-        ctx.fillRect(
-          sx + ((Math.floor(ts * 0.5) + rOff2) % ts),
-          sy + 6,
-          1,
-          ts - 9,
-        );
+        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + rOff2) % ts), sy + 6, 1, ts - 9);
         ctx.fillStyle = '#5e1810'; // drip edge
         ctx.fillRect(sx, sy + ts - 4, ts, 3);
         ctx.fillStyle = '#b83830';
@@ -1184,26 +1141,10 @@ function drawTile(
       const isCircusRed = type === ROOF_CIRCUS_RED;
       const isCircusBlue = type === ROOF_CIRCUS_BLUE;
       // Pick color palette based on tent type
-      const stripe1 = isCircusRed
-        ? '#cc2222'
-        : isCircusBlue
-          ? '#2244aa'
-          : '#7722aa';
-      const stripe2 = isCircusRed
-        ? '#f8f0e0'
-        : isCircusBlue
-          ? '#ffcc22'
-          : '#ffdd44';
-      const shadowStripe = isCircusRed
-        ? '#881414'
-        : isCircusBlue
-          ? '#162878'
-          : '#4a1470';
-      const ridgeColor = isCircusRed
-        ? '#ffdd44'
-        : isCircusBlue
-          ? '#ffee66'
-          : '#ffcc22';
+      const stripe1 = isCircusRed ? '#cc2222' : isCircusBlue ? '#2244aa' : '#7722aa';
+      const stripe2 = isCircusRed ? '#f8f0e0' : isCircusBlue ? '#ffcc22' : '#ffdd44';
+      const shadowStripe = isCircusRed ? '#881414' : isCircusBlue ? '#162878' : '#4a1470';
+      const ridgeColor = isCircusRed ? '#ffdd44' : isCircusBlue ? '#ffee66' : '#ffcc22';
 
       const ctS = structure[ty + 1]?.[tx]?.type === BUILDING_WALL; // eaves row
       const ctN = structure[ty - 1]?.[tx]?.type === BUILDING_WALL; // back slope row
@@ -1301,14 +1242,8 @@ function drawTile(
 
         // Animated water shimmer glints
         for (let i = 0; i < 3; i++) {
-          const gx =
-            sx +
-            5 +
-            ((i * 9 + Math.sin(t * 1.3 + i * 2.0) * 5 + 10) % (ts - 10));
-          const gy =
-            sy +
-            6 +
-            ((Math.cos(t * 1.1 + i * 1.6) * 4 + 5 + i * 6) % (ts - 12));
+          const gx = sx + 5 + ((i * 9 + Math.sin(t * 1.3 + i * 2.0) * 5 + 10) % (ts - 10));
+          const gy = sy + 6 + ((Math.cos(t * 1.1 + i * 1.6) * 4 + 5 + i * 6) % (ts - 12));
           const ga = 0.18 + Math.sin(t * 2.5 + i) * 0.1;
           ctx.fillStyle = `rgba(120,210,255,${ga})`;
           ctx.fillRect(Math.floor(gx), Math.floor(gy), 5, 2);
@@ -1367,19 +1302,9 @@ function drawTile(
         // Pedestal capital (wide cap)
         const capY = pedTop - 6;
         ctx.fillStyle = '#7a7268';
-        ctx.fillRect(
-          Math.floor(fcx - pedW * 0.6),
-          capY,
-          Math.floor(pedW * 1.2),
-          8,
-        );
+        ctx.fillRect(Math.floor(fcx - pedW * 0.6), capY, Math.floor(pedW * 1.2), 8);
         ctx.fillStyle = '#b0a898';
-        ctx.fillRect(
-          Math.floor(fcx - pedW * 0.6),
-          capY,
-          Math.floor(pedW * 1.2),
-          2,
-        );
+        ctx.fillRect(Math.floor(fcx - pedW * 0.6), capY, Math.floor(pedW * 1.2), 2);
 
         // === VERTICAL WATER JET ===
         const jetPulse = Math.sin(t * 4.2) * 0.12;
@@ -1415,23 +1340,12 @@ function drawTile(
           for (let d = 0; d < numDrops; d++) {
             const dp = (d / numDrops + t * 1.0 + i * 0.28) % 1;
             // Quadratic bezier position
-            const bx =
-              (1 - dp) * (1 - dp) * fcx +
-              2 * (1 - dp) * dp * ctrlX +
-              dp * dp * endX;
-            const by =
-              (1 - dp) * (1 - dp) * jetTipY +
-              2 * (1 - dp) * dp * ctrlY +
-              dp * dp * endY;
+            const bx = (1 - dp) * (1 - dp) * fcx + 2 * (1 - dp) * dp * ctrlX + dp * dp * endX;
+            const by = (1 - dp) * (1 - dp) * jetTipY + 2 * (1 - dp) * dp * ctrlY + dp * dp * endY;
             const dAlpha = 0.5 + dp * 0.4;
             const dSize = Math.ceil(1 + dp * 1.8);
             ctx.fillStyle = `rgba(190,238,255,${dAlpha})`;
-            ctx.fillRect(
-              Math.floor(bx - dSize / 2),
-              Math.floor(by),
-              dSize,
-              dSize,
-            );
+            ctx.fillRect(Math.floor(bx - dSize / 2), Math.floor(by), dSize, dSize);
           }
         }
 
@@ -1595,15 +1509,7 @@ function drawTile(
       // Flame mid layer
       ctx.fillStyle = `rgba(255,200,40,${0.85 + flicker * 0.1})`;
       ctx.beginPath();
-      ctx.ellipse(
-        glowX,
-        glowY + flameH * 0.08,
-        flameW * 0.55,
-        flameH * 0.6,
-        0,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(glowX, glowY + flameH * 0.08, flameW * 0.55, flameH * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
       // Flame hot core
       ctx.fillStyle = `rgba(255,255,200,${0.8 + flicker * 0.15})`;
@@ -1615,33 +1521,15 @@ function drawTile(
       const smokeBaseY = glowY - flameH - 2;
       ctx.fillStyle = `rgba(180,180,180,${0.28 + Math.sin(t * 4.1) * 0.08})`;
       ctx.beginPath();
-      ctx.arc(
-        glowX + Math.sin(t * 2.2) * 2,
-        smokeBaseY - ts * 0.05,
-        2.5,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(glowX + Math.sin(t * 2.2) * 2, smokeBaseY - ts * 0.05, 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = `rgba(150,150,150,${0.15 + Math.sin(t * 3.3) * 0.05})`;
       ctx.beginPath();
-      ctx.arc(
-        glowX + Math.sin(t * 2.9) * 3,
-        smokeBaseY - ts * 0.15,
-        3.5,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(glowX + Math.sin(t * 2.9) * 3, smokeBaseY - ts * 0.15, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = `rgba(120,120,120,0.08)`;
       ctx.beginPath();
-      ctx.arc(
-        glowX + Math.sin(t * 2.0) * 4,
-        smokeBaseY - ts * 0.26,
-        4.5,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(glowX + Math.sin(t * 2.0) * 4, smokeBaseY - ts * 0.26, 4.5, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
@@ -1718,19 +1606,9 @@ function drawTile(
       // Horizontal crossbeam
       const beamY = postTop;
       ctx.fillStyle = '#5a3818';
-      ctx.fillRect(
-        wcx - outerR - postW + 2,
-        beamY,
-        outerR * 2 + postW * 2 - 4,
-        5,
-      );
+      ctx.fillRect(wcx - outerR - postW + 2, beamY, outerR * 2 + postW * 2 - 4, 5);
       ctx.fillStyle = '#7a5030';
-      ctx.fillRect(
-        wcx - outerR - postW + 2,
-        beamY,
-        outerR * 2 + postW * 2 - 4,
-        2,
-      );
+      ctx.fillRect(wcx - outerR - postW + 2, beamY, outerR * 2 + postW * 2 - 4, 2);
 
       // Rope
       ctx.fillStyle = '#c8a050';
@@ -1949,13 +1827,7 @@ function drawTile(
           for (let ix = 1; ix < 4; ix++) {
             if ((ix + iy) % 2 === 0) {
               ctx.beginPath();
-              ctx.arc(
-                sx + ix * gridStep,
-                sy + iy * gridStep,
-                1.2,
-                0,
-                Math.PI * 2,
-              );
+              ctx.arc(sx + ix * gridStep, sy + iy * gridStep, 1.2, 0, Math.PI * 2);
               ctx.fill();
             }
           }
@@ -2047,31 +1919,16 @@ function drawTile(
       const surfL = tblLeft ? 0 : legInset - 2;
       const surfR = tblRight ? 0 : legInset - 2;
       ctx.fillStyle = '#8B5E3C';
-      ctx.fillRect(
-        sx + surfL,
-        sy + tabTop,
-        ts - surfL - surfR,
-        Math.floor(ts * 0.35),
-      );
+      ctx.fillRect(sx + surfL, sy + tabTop, ts - surfL - surfR, Math.floor(ts * 0.35));
       // Plank grain line
       ctx.fillStyle = '#7a5030';
-      ctx.fillRect(
-        sx + surfL,
-        sy + tabTop + Math.floor(ts * 0.15),
-        ts - surfL - surfR,
-        1,
-      );
+      ctx.fillRect(sx + surfL, sy + tabTop + Math.floor(ts * 0.15), ts - surfL - surfR, 1);
       // Top edge highlight
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.fillRect(sx + surfL, sy + tabTop, ts - surfL - surfR, 1);
       // Front edge shadow
       ctx.fillStyle = 'rgba(0,0,0,0.12)';
-      ctx.fillRect(
-        sx + surfL,
-        sy + tabTop + Math.floor(ts * 0.35) - 1,
-        ts - surfL - surfR,
-        1,
-      );
+      ctx.fillRect(sx + surfL, sy + tabTop + Math.floor(ts * 0.35) - 1, ts - surfL - surfR, 1);
       break;
     }
 
@@ -2147,31 +2004,16 @@ function drawTile(
       ctx.fillRect(sx, sy, ts, ts);
       // Mattress fill
       ctx.fillStyle = '#f5f0e1';
-      ctx.fillRect(
-        sx + frameL,
-        sy + frameT,
-        ts - frameL - frameR,
-        ts - frameT - frameB,
-      );
+      ctx.fillRect(sx + frameL, sy + frameT, ts - frameL - frameR, ts - frameT - frameB);
 
       if (isTop) {
         // Pillow area — cream/white pillows
         ctx.fillStyle = '#f8f4e8';
         const pw = ts - frameL - frameR - 4;
-        ctx.fillRect(
-          sx + frameL + 2,
-          sy + frameT + 2,
-          pw,
-          Math.floor(ts * 0.45),
-        );
+        ctx.fillRect(sx + frameL + 2, sy + frameT + 2, pw, Math.floor(ts * 0.45));
         // Pillow indent
         ctx.fillStyle = 'rgba(0,0,0,0.06)';
-        ctx.fillRect(
-          sx + frameL + 4,
-          sy + frameT + 5,
-          pw - 4,
-          Math.floor(ts * 0.2),
-        );
+        ctx.fillRect(sx + frameL + 4, sy + frameT + 5, pw - 4, Math.floor(ts * 0.2));
         // Blanket fold at bottom of pillow tile
         ctx.fillStyle = '#3b6ea5';
         ctx.fillRect(
@@ -2181,39 +2023,19 @@ function drawTile(
           Math.floor(ts * 0.3),
         );
         ctx.fillStyle = '#2c5a8a';
-        ctx.fillRect(
-          sx + frameL,
-          sy + ts - Math.floor(ts * 0.3),
-          ts - frameL - frameR,
-          2,
-        );
+        ctx.fillRect(sx + frameL, sy + ts - Math.floor(ts * 0.3), ts - frameL - frameR, 2);
       } else if (isBottom) {
         // Blanket fills entire bottom tile
         ctx.fillStyle = '#3b6ea5';
         ctx.fillRect(sx + frameL, sy, ts - frameL - frameR, ts - frameB);
         // Blanket texture lines
         ctx.fillStyle = '#2c5a8a';
-        ctx.fillRect(
-          sx + frameL,
-          sy + Math.floor(ts * 0.3),
-          ts - frameL - frameR,
-          1,
-        );
-        ctx.fillRect(
-          sx + frameL,
-          sy + Math.floor(ts * 0.65),
-          ts - frameL - frameR,
-          1,
-        );
+        ctx.fillRect(sx + frameL, sy + Math.floor(ts * 0.3), ts - frameL - frameR, 1);
+        ctx.fillRect(sx + frameL, sy + Math.floor(ts * 0.65), ts - frameL - frameR, 1);
       } else {
         // Single-tile bed fallback (no vertical neighbors)
         ctx.fillStyle = '#3b6ea5';
-        ctx.fillRect(
-          sx + 3,
-          sy + Math.floor(ts * 0.45),
-          ts - 6,
-          Math.floor(ts * 0.5),
-        );
+        ctx.fillRect(sx + 3, sy + Math.floor(ts * 0.45), ts - 6, Math.floor(ts * 0.5));
         ctx.fillStyle = '#f8f4e8';
         ctx.fillRect(sx + 5, sy + 3, ts - 10, Math.floor(ts * 0.35));
       }
@@ -2264,12 +2086,7 @@ function drawTile(
       }
       if (isRightHalf || (!fpLeft && !fpRight)) {
         // Right/center flame
-        ctx.fillRect(
-          sx + ts - 10,
-          flameBase - flameH * 0.85,
-          3,
-          Math.floor(flameH * 0.85),
-        );
+        ctx.fillRect(sx + ts - 10, flameBase - flameH * 0.85, 3, Math.floor(flameH * 0.85));
         ctx.fillRect(
           sx + Math.floor(ts * 0.3),
           flameBase - Math.floor(flameH * 0.6),
@@ -2282,18 +2099,8 @@ function drawTile(
       ctx.fillRect(sx + cavL + 2, flameBase - 2, ts - cavL - cavR - 4, 2);
       // Stone mortar lines
       ctx.fillStyle = '#555';
-      ctx.fillRect(
-        sx + stoneL,
-        sy + Math.floor(ts * 0.35),
-        ts - stoneL - stoneR,
-        1,
-      );
-      ctx.fillRect(
-        sx + stoneL,
-        sy + Math.floor(ts * 0.65),
-        ts - stoneL - stoneR,
-        1,
-      );
+      ctx.fillRect(sx + stoneL, sy + Math.floor(ts * 0.35), ts - stoneL - stoneR, 1);
+      ctx.fillRect(sx + stoneL, sy + Math.floor(ts * 0.65), ts - stoneL - stoneR, 1);
       // Pillar divider only on outer edges
       if (!fpLeft) ctx.fillRect(sx + 2, sy + 1, 1, ts - 2);
       if (!fpRight) ctx.fillRect(sx + ts - 3, sy + 1, 1, ts - 2);
@@ -2359,32 +2166,13 @@ function drawTile(
       const insetB = rugDown ? 0 : 2;
       // Rug body
       ctx.fillStyle = '#8b2e2e';
-      ctx.fillRect(
-        sx + insetX,
-        sy + insetY,
-        ts - insetX - insetR,
-        ts - insetY - insetB,
-      );
+      ctx.fillRect(sx + insetX, sy + insetY, ts - insetX - insetR, ts - insetY - insetB);
       // Border trim
       ctx.fillStyle = '#c4943a';
-      if (!rugUp)
-        ctx.fillRect(sx + insetX, sy + insetY, ts - insetX - insetR, 2);
-      if (!rugDown)
-        ctx.fillRect(
-          sx + insetX,
-          sy + ts - insetB - 2,
-          ts - insetX - insetR,
-          2,
-        );
-      if (!rugLeft)
-        ctx.fillRect(sx + insetX, sy + insetY, 2, ts - insetY - insetB);
-      if (!rugRight)
-        ctx.fillRect(
-          sx + ts - insetR - 2,
-          sy + insetY,
-          2,
-          ts - insetY - insetB,
-        );
+      if (!rugUp) ctx.fillRect(sx + insetX, sy + insetY, ts - insetX - insetR, 2);
+      if (!rugDown) ctx.fillRect(sx + insetX, sy + ts - insetB - 2, ts - insetX - insetR, 2);
+      if (!rugLeft) ctx.fillRect(sx + insetX, sy + insetY, 2, ts - insetY - insetB);
+      if (!rugRight) ctx.fillRect(sx + ts - insetR - 2, sy + insetY, 2, ts - insetY - insetB);
       // Center diamond pattern
       const midX = sx + ts / 2;
       const midY = sy + ts / 2;
@@ -2408,32 +2196,17 @@ function drawTile(
       const chInset = Math.floor(ts * 0.2);
       // Chair back (top portion)
       ctx.fillStyle = '#6b4226';
-      ctx.fillRect(
-        sx + chInset,
-        sy + 2,
-        ts - chInset * 2,
-        Math.floor(ts * 0.3),
-      );
+      ctx.fillRect(sx + chInset, sy + 2, ts - chInset * 2, Math.floor(ts * 0.3));
       // Back slats
       ctx.fillStyle = '#7a5030';
       const slatW = Math.floor((ts - chInset * 2) / 3);
       for (let i = 0; i < 3; i++) {
-        ctx.fillRect(
-          sx + chInset + i * slatW + 1,
-          sy + 3,
-          slatW - 2,
-          Math.floor(ts * 0.25),
-        );
+        ctx.fillRect(sx + chInset + i * slatW + 1, sy + 3, slatW - 2, Math.floor(ts * 0.25));
       }
       // Seat
       ctx.fillStyle = '#8B5E3C';
       const seatY = sy + Math.floor(ts * 0.35);
-      ctx.fillRect(
-        sx + chInset - 1,
-        seatY,
-        ts - chInset * 2 + 2,
-        Math.floor(ts * 0.25),
-      );
+      ctx.fillRect(sx + chInset - 1, seatY, ts - chInset * 2 + 2, Math.floor(ts * 0.25));
       // Legs
       ctx.fillStyle = '#5a3a1a';
       const legTop = seatY + Math.floor(ts * 0.25);

@@ -39,8 +39,7 @@ export function drawBrindleGrubSprite(
   const wiggle = isMoving ? Math.sin(walkFrame * 0.3) * s * 0.04 : 0;
   for (let i = 2; i >= 0; i--) {
     const ox = segOffsets[i];
-    const oy =
-      i === 1 ? bob : i === 0 ? bob * 0.5 - wiggle * 0.4 : wiggle * 0.3;
+    const oy = i === 1 ? bob : i === 0 ? bob * 0.5 - wiggle * 0.4 : wiggle * 0.3;
     const radius = i === 2 ? w * 0.8 : i === 1 ? w : w * 0.9; // head slightly smaller
 
     ctx.fillStyle = bodyCol;
@@ -128,12 +127,7 @@ export function drawCowTailedGrubSprite(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(tailBaseX, tailBaseY);
-  ctx.quadraticCurveTo(
-    tailBaseX + s * 0.1,
-    tailBaseY + s * 0.06,
-    tailTipX,
-    tailTipY,
-  );
+  ctx.quadraticCurveTo(tailBaseX + s * 0.1, tailBaseY + s * 0.06, tailTipX, tailTipY);
   ctx.stroke();
   // Spike tip
   ctx.fillStyle = tailCol;
@@ -168,15 +162,7 @@ export function drawCowTailedGrubSprite(
     ctx.fillStyle = bodyLight;
     ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.ellipse(
-      cx + ox,
-      cy + oy + rh * 0.28,
-      rw * 0.6,
-      rh * 0.38,
-      0,
-      0,
-      Math.PI * 2,
-    );
+    ctx.ellipse(cx + ox, cy + oy + rh * 0.28, rw * 0.6, rh * 0.38, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     // Brindle spots
@@ -317,14 +303,7 @@ export function drawBrindledVespaSprite(
   // Right upper wing
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.bezierCurveTo(
-    s * 0.12,
-    -s * 0.32,
-    s * 0.38,
-    -s * 0.28,
-    s * 0.34,
-    -s * 0.06,
-  );
+  ctx.bezierCurveTo(s * 0.12, -s * 0.32, s * 0.38, -s * 0.28, s * 0.34, -s * 0.06);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -339,14 +318,7 @@ export function drawBrindledVespaSprite(
   // Left upper wing
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.bezierCurveTo(
-    -s * 0.12,
-    -s * 0.32,
-    -s * 0.38,
-    -s * 0.28,
-    -s * 0.34,
-    -s * 0.06,
-  );
+  ctx.bezierCurveTo(-s * 0.12, -s * 0.32, -s * 0.38, -s * 0.28, -s * 0.34, -s * 0.06);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -361,14 +333,7 @@ export function drawBrindledVespaSprite(
   ctx.lineWidth = s * 0.014;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.bezierCurveTo(
-    s * 0.1,
-    -s * 0.18,
-    s * 0.28,
-    -s * 0.12,
-    s * 0.22,
-    s * 0.04,
-  );
+  ctx.bezierCurveTo(s * 0.1, -s * 0.18, s * 0.28, -s * 0.12, s * 0.22, s * 0.04);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -382,14 +347,7 @@ export function drawBrindledVespaSprite(
   ctx.lineWidth = s * 0.014;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.bezierCurveTo(
-    -s * 0.1,
-    -s * 0.18,
-    -s * 0.28,
-    -s * 0.12,
-    -s * 0.22,
-    s * 0.04,
-  );
+  ctx.bezierCurveTo(-s * 0.1, -s * 0.18, -s * 0.28, -s * 0.12, -s * 0.22, s * 0.04);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -479,15 +437,7 @@ export function drawBrindledVespaSprite(
   ctx.fillStyle = thoraxLight;
   ctx.globalAlpha = 0.6;
   ctx.beginPath();
-  ctx.ellipse(
-    cx - s * 0.05,
-    bodyY - s * 0.06,
-    s * 0.12,
-    s * 0.08,
-    -0.3,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx - s * 0.05, bodyY - s * 0.06, s * 0.12, s * 0.08, -0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
   ctx.strokeStyle = abdBlack;
@@ -512,29 +462,13 @@ export function drawBrindledVespaSprite(
   // Compound eyes
   ctx.fillStyle = eyeCol;
   ctx.beginPath();
-  ctx.ellipse(
-    headCx - s * 0.09,
-    headCy - s * 0.06,
-    s * 0.07,
-    s * 0.1,
-    -0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(headCx - s * 0.09, headCy - s * 0.06, s * 0.07, s * 0.1, -0.4, 0, Math.PI * 2);
   ctx.fill();
   // Green glow on eyes
   ctx.fillStyle = eyeShine;
   ctx.globalAlpha = 0.7;
   ctx.beginPath();
-  ctx.ellipse(
-    headCx - s * 0.09,
-    headCy - s * 0.06,
-    s * 0.04,
-    s * 0.065,
-    -0.4,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(headCx - s * 0.09, headCy - s * 0.06, s * 0.04, s * 0.065, -0.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 
@@ -559,13 +493,7 @@ export function drawBrindledVespaSprite(
     ctx.fillStyle = acidCol;
     ctx.globalAlpha = acidPulse * 0.9;
     ctx.beginPath();
-    ctx.arc(
-      headCx - s * 0.3,
-      headCy + s * 0.18,
-      s * 0.03 * acidPulse,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(headCx - s * 0.3, headCy + s * 0.18, s * 0.03 * acidPulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -576,21 +504,11 @@ export function drawBrindledVespaSprite(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(headCx - s * 0.06, headCy - s * 0.12);
-  ctx.quadraticCurveTo(
-    headCx - s * 0.04,
-    headCy - s * 0.3,
-    headCx + s * 0.06,
-    headCy - s * 0.38,
-  );
+  ctx.quadraticCurveTo(headCx - s * 0.04, headCy - s * 0.3, headCx + s * 0.06, headCy - s * 0.38);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(headCx - s * 0.0, headCy - s * 0.11);
-  ctx.quadraticCurveTo(
-    headCx + s * 0.08,
-    headCy - s * 0.27,
-    headCx + s * 0.18,
-    headCy - s * 0.32,
-  );
+  ctx.quadraticCurveTo(headCx + s * 0.08, headCy - s * 0.27, headCx + s * 0.18, headCy - s * 0.32);
   ctx.stroke();
   // Antenna tips
   ctx.fillStyle = abdYellow;

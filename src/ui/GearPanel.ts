@@ -67,10 +67,7 @@ export class GearPanel {
     }
   }
 
-  private renderToggleButton(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     // On mobile the button is drawn by DungeonScene.renderMobileButtons instead
     if (IS_MOBILE) return;
     const btn = this.toggleBtnRect(canvas);
@@ -132,22 +129,12 @@ export class GearPanel {
 
     for (const slotName of SLOT_ORDER) {
       const subSlots = EQUIP_SUBSLOTS[slotName];
-      const slotsInfos = this.buildSlotInfos(
-        slotName,
-        subSlots,
-        p.x,
-        currentY,
-        p.w,
-      );
+      const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
 
       // Section label
       ctx.fillStyle = '#64748b';
       ctx.font = 'bold 9px monospace';
-      ctx.fillText(
-        slotName.toUpperCase(),
-        p.x + PANEL_PAD,
-        currentY + SLOT_SIZE * 0.5 + 3,
-      );
+      ctx.fillText(slotName.toUpperCase(), p.x + PANEL_PAD, currentY + SLOT_SIZE * 0.5 + 3);
 
       // Find max row used
       let maxY = currentY;
@@ -326,12 +313,7 @@ export class GearPanel {
 
   // Interaction
 
-  handleMouseMove(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
+  handleMouseMove(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
     if (!this.isOpen) return;
     this.tooltipMx = mx;
     this.tooltipMy = my;
@@ -346,12 +328,7 @@ export class GearPanel {
     inventory: Inventory,
   ): GearClickResult | null {
     const btn = this.toggleBtnRect(canvas);
-    if (
-      mx >= btn.x &&
-      mx <= btn.x + btn.w &&
-      my >= btn.y &&
-      my <= btn.y + btn.h
-    ) {
+    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
       this.toggle();
       return { consumed: true };
     }
@@ -397,12 +374,7 @@ export class GearPanel {
       const infos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
       let maxY = currentY;
       for (const si of infos) {
-        if (
-          mx >= si.x &&
-          mx <= si.x + SLOT_SIZE &&
-          my >= si.y &&
-          my <= si.y + SLOT_SIZE
-        ) {
+        if (mx >= si.x && mx <= si.x + SLOT_SIZE && my >= si.y && my <= si.y + SLOT_SIZE) {
           return si.key;
         }
         maxY = Math.max(maxY, si.y + SLOT_SIZE);

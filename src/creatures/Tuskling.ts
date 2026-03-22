@@ -20,20 +20,14 @@ const CHARGE_DURATION = 22;
 const CHARGE_COOLDOWN = 180;
 const CHARGE_SPEED = 5;
 
-type TuskState =
-  | 'idle'
-  | 'stalking'
-  | 'charge_windup'
-  | 'charging'
-  | 'cooldown';
+type TuskState = 'idle' | 'stalking' | 'charge_windup' | 'charging' | 'cooldown';
 
 export class Tuskling extends Mob {
   readonly xpValue = 18;
   protected coinDropMin = 2;
   protected coinDropMax = 5;
   displayName = 'Tuskling';
-  description =
-    'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
+  description = 'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
 
   /** 0–1: charge windup progress (for sprite snort animation). */
   chargeWindup = 0;
@@ -123,11 +117,7 @@ export class Tuskling extends Mob {
         }
 
         // Initiate charge if in range and has LOS
-        if (
-          nearestDist <= chargeRangePx &&
-          nearestDist > meleeRangePx &&
-          this.hasLOS(nearest)
-        ) {
+        if (nearestDist <= chargeRangePx && nearestDist > meleeRangePx && this.hasLOS(nearest)) {
           this.state = 'charge_windup';
           this.windupTimer = CHARGE_WINDUP_FRAMES;
           this.isMoving = false;
@@ -173,10 +163,7 @@ export class Tuskling extends Mob {
         // Move at charge speed in the locked direction
         const prevX = this.x;
         const prevY = this.y;
-        this.moveWithCollision(
-          this.chargeDx * CHARGE_SPEED,
-          this.chargeDy * CHARGE_SPEED,
-        );
+        this.moveWithCollision(this.chargeDx * CHARGE_SPEED, this.chargeDy * CHARGE_SPEED);
 
         // Hit wall detection: if neither axis moved at all, the charge is blocked
         const movedX = Math.abs(this.x - prevX) > 0.05;
@@ -231,12 +218,7 @@ export class Tuskling extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
 
     const sx = this.x - camX;

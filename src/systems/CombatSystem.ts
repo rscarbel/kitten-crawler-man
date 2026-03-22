@@ -41,10 +41,7 @@ export function resolvePlayerAttacks(
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
       // Sepsis proc: 15% chance when Enchanted Crown is equipped
-      if (
-        human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-        Math.random() < 0.15
-      ) {
+      if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
         mob.applyStatus(makeSepsis());
       }
     }
@@ -55,11 +52,7 @@ export function resolvePlayerAttacks(
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit) continue;
       const damage = cat.getMissileDamage();
-      const nearMissile = mobGrid.queryCircle(
-        missile.x,
-        missile.y,
-        hitRadius + TILE_SIZE,
-      );
+      const nearMissile = mobGrid.queryCircle(missile.x, missile.y, hitRadius + TILE_SIZE);
       for (const mob of nearMissile) {
         if (!mob.isAlive) continue;
         const mc = centerOf(mob);
@@ -67,10 +60,7 @@ export function resolvePlayerAttacks(
         if (dist < hitRadius) {
           mob.takeDamageFrom(damage, cat, 'missile');
           // Sepsis proc: 15% chance when Enchanted Crown is equipped
-          if (
-            cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-            Math.random() < 0.15
-          ) {
+          if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
             mob.applyStatus(makeSepsis());
           }
           missile.hit = true;
@@ -129,11 +119,7 @@ export function resolveKills(
         catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
       }
     }
-    if (
-      mob.killedBy === human &&
-      mob.killType === 'melee' &&
-      human.nextType === 'punch'
-    ) {
+    if (mob.killedBy === human && mob.killType === 'melee' && human.nextType === 'punch') {
       humanAchievements.tryUnlock('smush');
     }
     if (mob.killedBy === cat && mob.killType === 'missile') {

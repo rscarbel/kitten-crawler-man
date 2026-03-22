@@ -1,11 +1,7 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
-import {
-  drawKrakarenSprite,
-  drawSlamShadow,
-  drawSlamImpact,
-} from '../sprites/krakarenSprite';
+import { drawKrakarenSprite, drawSlamShadow, drawSlamImpact } from '../sprites/krakarenSprite';
 
 const KRAKAREN_HP = 200;
 const KRAKAREN_SPEED = 0; // immobile
@@ -28,20 +24,14 @@ const SLAM_DAMAGE = 9999; // instant kill
 
 const ENRAGE_THRESHOLD = 0.4; // 40% HP
 
-type KrakarenState =
-  | 'idle'
-  | 'melee_windup'
-  | 'melee_swing'
-  | 'melee_cooldown'
-  | 'slam_charging';
+type KrakarenState = 'idle' | 'melee_windup' | 'melee_swing' | 'melee_cooldown' | 'slam_charging';
 
 export class KrakarenClone extends Mob {
   readonly xpValue = 700;
   protected coinDropMin = 80;
   protected coinDropMax = 150;
   displayName = 'Krakaren Clone';
-  description =
-    'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
+  description = 'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
 
   isEnraged = false;
 
@@ -186,11 +176,7 @@ export class KrakarenClone extends Mob {
     this.attackProgress = 1 - this.meleeSwingTimer / MELEE_SWING_FRAMES;
 
     // Deal damage at the midpoint of the swing
-    if (
-      this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) &&
-      nearest &&
-      nearest.isAlive
-    ) {
+    if (this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) && nearest && nearest.isAlive) {
       const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
       if (dist <= MELEE_RANGE_PX) {
         this.dealDamage(nearest, MELEE_DAMAGE);
@@ -242,9 +228,7 @@ export class KrakarenClone extends Mob {
     this.slamActive = true;
     this.state = 'slam_charging';
 
-    const interval = this.isEnraged
-      ? SLAM_INTERVAL_ENRAGED
-      : SLAM_INTERVAL_BASE;
+    const interval = this.isEnraged ? SLAM_INTERVAL_ENRAGED : SLAM_INTERVAL_BASE;
     this.slamTimer = interval;
   }
 
@@ -265,12 +249,7 @@ export class KrakarenClone extends Mob {
     }
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ): void {
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -278,25 +257,13 @@ export class KrakarenClone extends Mob {
     // Draw slam warning shadow (before boss so it appears on the ground)
     if (this.slamActive) {
       const progress = 1 - this.slamShadowTimer / SLAM_SHADOW_FRAMES;
-      drawSlamShadow(
-        ctx,
-        this.slamTargetX - camX,
-        this.slamTargetY - camY,
-        tileSize,
-        progress,
-      );
+      drawSlamShadow(ctx, this.slamTargetX - camX, this.slamTargetY - camY, tileSize, progress);
     }
 
     // Draw slam impact effect
     if (this.slamImpactTimer > 0) {
       const progress = 1 - this.slamImpactTimer / SLAM_IMPACT_FRAMES;
-      drawSlamImpact(
-        ctx,
-        this.slamTargetX - camX,
-        this.slamTargetY - camY,
-        tileSize,
-        progress,
-      );
+      drawSlamImpact(ctx, this.slamTargetX - camX, this.slamTargetY - camY, tileSize, progress);
     }
 
     ctx.save();

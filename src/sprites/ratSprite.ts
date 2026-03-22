@@ -62,96 +62,36 @@ export function drawRatSprite(
 
   // Legs
   ctx.fillStyle = '#808080';
-  ctx.fillRect(
-    sx + s * 0.3,
-    sy + s * 0.72 + bodyBob + legSwing,
-    s * 0.1,
-    s * 0.17,
-  );
-  ctx.fillRect(
-    sx + s * 0.58,
-    sy + s * 0.72 + bodyBob - legSwing,
-    s * 0.1,
-    s * 0.17,
-  );
+  ctx.fillRect(sx + s * 0.3, sy + s * 0.72 + bodyBob + legSwing, s * 0.1, s * 0.17);
+  ctx.fillRect(sx + s * 0.58, sy + s * 0.72 + bodyBob - legSwing, s * 0.1, s * 0.17);
 
   // Body
   ctx.fillStyle = '#8c8c8c';
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.5,
-    sy + s * 0.6 + bodyBob,
-    s * 0.23,
-    s * 0.18,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.5, sy + s * 0.6 + bodyBob, s * 0.23, s * 0.18, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Front arms
   const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.02 : 0;
   ctx.fillStyle = '#7c7c7c';
-  ctx.fillRect(
-    sx + s * 0.18,
-    sy + s * 0.55 + bodyBob + armSwing,
-    s * 0.1,
-    s * 0.1,
-  );
-  ctx.fillRect(
-    sx + s * 0.72,
-    sy + s * 0.55 + bodyBob - armSwing,
-    s * 0.1,
-    s * 0.1,
-  );
+  ctx.fillRect(sx + s * 0.18, sy + s * 0.55 + bodyBob + armSwing, s * 0.1, s * 0.1);
+  ctx.fillRect(sx + s * 0.72, sy + s * 0.55 + bodyBob - armSwing, s * 0.1, s * 0.1);
 
   // Round ears
   ctx.fillStyle = '#b08888';
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.34,
-    sy + s * 0.22 + bodyBob,
-    s * 0.085,
-    s * 0.075,
-    -0.25,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.34, sy + s * 0.22 + bodyBob, s * 0.085, s * 0.075, -0.25, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.66,
-    sy + s * 0.22 + bodyBob,
-    s * 0.085,
-    s * 0.075,
-    0.25,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.66, sy + s * 0.22 + bodyBob, s * 0.085, s * 0.075, 0.25, 0, Math.PI * 2);
   ctx.fill();
   // Inner ear
   ctx.fillStyle = '#d49898';
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.34,
-    sy + s * 0.22 + bodyBob,
-    s * 0.052,
-    s * 0.046,
-    -0.25,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.34, sy + s * 0.22 + bodyBob, s * 0.052, s * 0.046, -0.25, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(
-    sx + s * 0.66,
-    sy + s * 0.22 + bodyBob,
-    s * 0.052,
-    s * 0.046,
-    0.25,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(sx + s * 0.66, sy + s * 0.22 + bodyBob, s * 0.052, s * 0.046, 0.25, 0, Math.PI * 2);
   ctx.fill();
 
   // Head
@@ -185,13 +125,7 @@ export function drawRatSprite(
   // Nose
   ctx.fillStyle = '#d07080';
   ctx.beginPath();
-  ctx.arc(
-    sx + s * 0.5,
-    sy + s * 0.482 + bodyBob + biteLunge,
-    s * 0.026,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(sx + s * 0.5, sy + s * 0.482 + bodyBob + biteLunge, s * 0.026, 0, Math.PI * 2);
   ctx.fill();
 
   // Whiskers
@@ -221,41 +155,17 @@ export function drawRatSprite(
   // Eyes (beady red)
   ctx.fillStyle = '#cc1122';
   ctx.beginPath();
-  ctx.arc(
-    sx + s * 0.4,
-    sy + s * 0.295 + bodyBob + biteLunge,
-    s * 0.034,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(sx + s * 0.4, sy + s * 0.295 + bodyBob + biteLunge, s * 0.034, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    sx + s * 0.6,
-    sy + s * 0.295 + bodyBob + biteLunge,
-    s * 0.034,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(sx + s * 0.6, sy + s * 0.295 + bodyBob + biteLunge, s * 0.034, 0, Math.PI * 2);
   ctx.fill();
   // Pupils
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.arc(
-    sx + s * 0.4,
-    sy + s * 0.295 + bodyBob + biteLunge,
-    s * 0.018,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(sx + s * 0.4, sy + s * 0.295 + bodyBob + biteLunge, s * 0.018, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(
-    sx + s * 0.6,
-    sy + s * 0.295 + bodyBob + biteLunge,
-    s * 0.018,
-    0,
-    Math.PI * 2,
-  );
+  ctx.arc(sx + s * 0.6, sy + s * 0.295 + bodyBob + biteLunge, s * 0.018, 0, Math.PI * 2);
   ctx.fill();
 }

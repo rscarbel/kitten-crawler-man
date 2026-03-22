@@ -35,9 +35,7 @@ export class BuildingSystem {
     const tx = Math.floor((active.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const ty = Math.floor((active.y + TILE_SIZE * 0.5) / TILE_SIZE);
 
-    const idx = entries.findIndex(
-      (e) => e.doorTile.x === tx && e.doorTile.y === ty,
-    );
+    const idx = entries.findIndex((e) => e.doorTile.x === tx && e.doorTile.y === ty);
     const wasOn = this.onDoor;
     this.onDoor = idx !== -1;
 
@@ -89,13 +87,7 @@ export class BuildingSystem {
     for (const entry of this.gameMap.buildingEntries) {
       const sx = entry.doorTile.x * ts - camX + Math.floor(ts / 2);
       const sy = entry.doorTile.y * ts - camY;
-      if (
-        sx < -ts ||
-        sx > canvas.width + ts ||
-        sy < -ts * 3 ||
-        sy > canvas.height + ts
-      )
-        continue;
+      if (sx < -ts || sx > canvas.width + ts || sy < -ts * 3 || sy > canvas.height + ts) continue;
 
       // Small glowing marker above the door
       ctx.fillStyle = `rgba(250, 220, 80, ${pulse})`;
@@ -166,11 +158,7 @@ export class BuildingSystem {
     ctx.strokeRect(rects.enter.x, rects.enter.y, rects.enter.w, rects.enter.h);
     ctx.fillStyle = '#d4edaa';
     ctx.font = 'bold 14px monospace';
-    ctx.fillText(
-      'Enter',
-      rects.enter.x + rects.enter.w / 2,
-      rects.enter.y + 27,
-    );
+    ctx.fillText('Enter', rects.enter.x + rects.enter.w / 2, rects.enter.y + 27);
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);

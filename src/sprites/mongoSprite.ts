@@ -32,8 +32,7 @@ export function drawMongoSprite(
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * cs * 0.04 : 0;
   const legSwing = isMoving ? Math.sin(walkFrame) * cs * 0.12 : 0;
   const armSway = isMoving ? -Math.sin(walkFrame) * cs * 0.04 : 0;
-  const tailSway =
-    Math.sin((isMoving ? walkFrame : Date.now() * 0.003) * 0.7) * cs * 0.08;
+  const tailSway = Math.sin((isMoving ? walkFrame : Date.now() * 0.003) * 0.7) * cs * 0.08;
 
   // Bite lunge: head thrusts forward
   const biteLunge = attackAmt * cs * 0.14;
@@ -191,15 +190,7 @@ export function drawMongoSprite(
   // Belly (lighter underside)
   ctx.fillStyle = bellyCol;
   ctx.beginPath();
-  ctx.ellipse(
-    bodyCx + cs * 0.04,
-    bodyCy + cs * 0.06,
-    cs * 0.18,
-    cs * 0.07,
-    -0.1,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(bodyCx + cs * 0.04, bodyCy + cs * 0.06, cs * 0.18, cs * 0.07, -0.1, 0, Math.PI * 2);
   ctx.fill();
 
   // === ARMS === (small raptor forelimbs, tucked near chest)
@@ -226,10 +217,7 @@ export function drawMongoSprite(
     const angle = 0.3 + c * 0.6;
     ctx.beginPath();
     ctx.moveTo(handX, handY);
-    ctx.lineTo(
-      handX + Math.cos(angle) * cs * 0.05,
-      handY + Math.sin(angle) * cs * 0.05,
-    );
+    ctx.lineTo(handX + Math.cos(angle) * cs * 0.05, handY + Math.sin(angle) * cs * 0.05);
     ctx.lineTo(
       handX + Math.cos(angle + 0.3) * cs * 0.03,
       handY + Math.sin(angle + 0.3) * cs * 0.03,
@@ -361,10 +349,7 @@ export function drawMongoSprite(
     const angle = -2.1 + f * 0.3;
     const len = cs * (0.06 + f * 0.018);
     ctx.beginPath();
-    ctx.moveTo(
-      crestBaseX + cs * 0.015 + f * cs * 0.03,
-      crestBaseY + cs * 0.008,
-    );
+    ctx.moveTo(crestBaseX + cs * 0.015 + f * cs * 0.03, crestBaseY + cs * 0.008);
     ctx.lineTo(
       crestBaseX + cs * 0.015 + f * cs * 0.03 + Math.cos(angle) * len,
       crestBaseY + cs * 0.008 + Math.sin(angle) * len,
@@ -409,12 +394,7 @@ export function drawMongoIcon(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx - r * 0.3, cy - r * 0.05);
-  ctx.quadraticCurveTo(
-    cx - r * 0.65,
-    cy + r * 0.0,
-    cx - r * 0.9,
-    cy + r * 0.15,
-  );
+  ctx.quadraticCurveTo(cx - r * 0.65, cy + r * 0.0, cx - r * 0.9, cy + r * 0.15);
   ctx.stroke();
 
   // Tail feather tip (pink)
@@ -472,15 +452,7 @@ export function drawMongoIcon(
   // Belly highlight
   ctx.fillStyle = '#bfdbfe';
   ctx.beginPath();
-  ctx.ellipse(
-    cx + r * 0.05,
-    cy + r * 0.06,
-    r * 0.22,
-    r * 0.1,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + r * 0.05, cy + r * 0.06, r * 0.22, r * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Small arms (raptor forelimbs with feathers)
@@ -504,40 +476,19 @@ export function drawMongoIcon(
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx + r * 0.3, cy - r * 0.08);
-  ctx.quadraticCurveTo(
-    cx + r * 0.45,
-    cy - r * 0.25,
-    cx + r * 0.5,
-    cy - r * 0.4,
-  );
+  ctx.quadraticCurveTo(cx + r * 0.45, cy - r * 0.25, cx + r * 0.5, cy - r * 0.4);
   ctx.stroke();
 
   // Head (elongated raptor snout, not round like a bird)
   ctx.fillStyle = '#60a5fa';
   ctx.beginPath();
-  ctx.ellipse(
-    cx + r * 0.55,
-    cy - r * 0.45,
-    r * 0.28,
-    r * 0.16,
-    0.2,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + r * 0.55, cy - r * 0.45, r * 0.28, r * 0.16, 0.2, 0, Math.PI * 2);
   ctx.fill();
 
   // Snout / jaw (elongated forward)
   ctx.fillStyle = '#93c5fd';
   ctx.beginPath();
-  ctx.ellipse(
-    cx + r * 0.75,
-    cy - r * 0.4,
-    r * 0.15,
-    r * 0.09,
-    0.1,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + r * 0.75, cy - r * 0.4, r * 0.15, r * 0.09, 0.1, 0, Math.PI * 2);
   ctx.fill();
 
   // Jaw line
@@ -574,14 +525,6 @@ export function drawMongoIcon(
   // Slit pupil
   ctx.fillStyle = '#1c1917';
   ctx.beginPath();
-  ctx.ellipse(
-    cx + r * 0.55,
-    cy - r * 0.5,
-    r * 0.02,
-    r * 0.055,
-    0,
-    0,
-    Math.PI * 2,
-  );
+  ctx.ellipse(cx + r * 0.55, cy - r * 0.5, r * 0.02, r * 0.055, 0, 0, Math.PI * 2);
   ctx.fill();
 }

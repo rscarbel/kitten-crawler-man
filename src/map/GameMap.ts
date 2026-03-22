@@ -28,11 +28,7 @@ import {
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import {
-  renderCanvas,
-  renderDecorationsOverlay,
-  drawDecorationTileFull,
-} from './TileRenderer';
+import { renderCanvas, renderDecorationsOverlay, drawDecorationTileFull } from './TileRenderer';
 
 export class GameMap {
   structure: TileContent[][];
@@ -183,11 +179,7 @@ export class GameMap {
     const isCarnival = buildingName === 'Big Top';
     const w = isTower ? 30 : isRestaurant ? 22 : isStore ? 20 : 18;
     const h = isTower ? 24 : isRestaurant ? 16 : isStore ? 12 : 14;
-    const floorType = isTower
-      ? 7 /* carpet */
-      : isRestaurant
-        ? SAFE_ROOM_FLOOR
-        : 8; /* wood */
+    const floorType = isTower ? 7 /* carpet */ : isRestaurant ? SAFE_ROOM_FLOOR : 8; /* wood */
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -197,8 +189,7 @@ export class GameMap {
     );
 
     // Carve interior floor
-    for (let y = 1; y < h - 1; y++)
-      for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
     if (isStore && !isCarnival) {
       // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
@@ -345,8 +336,7 @@ export class GameMap {
         grid[1][14].type = FIREPLACE;
         grid[1][15].type = FIREPLACE;
         // Large rug in center
-        for (let ry = 8; ry <= 13; ry++)
-          for (let rx = 10; rx <= 19; rx++) grid[ry][rx].type = RUG;
+        for (let ry = 8; ry <= 13; ry++) for (let rx = 10; rx <= 19; rx++) grid[ry][rx].type = RUG;
         // Bookshelves along west wall
         for (let ry = 4; ry <= 10; ry++) grid[ry][1].type = BOOKSHELF;
         // Reception table with chairs
@@ -431,8 +421,7 @@ export class GameMap {
         grid[4][16].type = TABLE;
         grid[5][14].type = CHAIR;
         // Large rug in center
-        for (let ry = 8; ry <= 15; ry++)
-          for (let rx = 8; rx <= 21; rx++) grid[ry][rx].type = RUG;
+        for (let ry = 8; ry <= 15; ry++) for (let rx = 8; rx <= 21; rx++) grid[ry][rx].type = RUG;
         // Fireplace on north wall
         grid[1][10].type = FIREPLACE;
         grid[1][11].type = FIREPLACE;
@@ -490,8 +479,7 @@ export class GameMap {
     };
     const size = this.structure.length;
     const key = (x: number, y: number) => y * size + x;
-    const h = (x: number, y: number) =>
-      Math.abs(x - goalX) + Math.abs(y - goalY);
+    const h = (x: number, y: number) => Math.abs(x - goalX) + Math.abs(y - goalY);
 
     const openMap = new Map<number, Node>();
     const closedSet = new Set<number>();
@@ -548,8 +536,7 @@ export class GameMap {
         // Block diagonal moves that cut through wall corners
         if (
           dir.cost > 1 &&
-          (!this.isWalkable(best.x + dir.dx, best.y) ||
-            !this.isWalkable(best.x, best.y + dir.dy))
+          (!this.isWalkable(best.x + dir.dx, best.y) || !this.isWalkable(best.x, best.y + dir.dy))
         )
           continue;
 
@@ -568,8 +555,7 @@ export class GameMap {
     if (!row) return false;
     const tile = row[tileX];
     if (!tile) return false;
-    if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`))
-      return false;
+    if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
     return (
       tile.type !== FloorTypeValue.wall &&
       tile.type !== FloorTypeValue.water &&
@@ -623,15 +609,7 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    renderCanvas(
-      ctx,
-      this.structure,
-      this.tileHeight,
-      cameraX,
-      cameraY,
-      viewW,
-      viewH,
-    );
+    renderCanvas(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH);
   }
 
   renderDecorationsOverlay(
@@ -641,15 +619,7 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    renderDecorationsOverlay(
-      ctx,
-      this.structure,
-      this.tileHeight,
-      cameraX,
-      cameraY,
-      viewW,
-      viewH,
-    );
+    renderDecorationsOverlay(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH);
   }
 
   /** Returns tile coords of all visible decoration tiles (TORCH, WELL, TREE, FOUNTAIN). */
@@ -700,14 +670,6 @@ export class GameMap {
     camY: number,
   ): void {
     const ts = this.tileHeight;
-    drawDecorationTileFull(
-      ctx,
-      this.structure,
-      tx,
-      ty,
-      tx * ts - camX,
-      ty * ts - camY,
-      ts,
-    );
+    drawDecorationTileFull(ctx, this.structure, tx, ty, tx * ts - camX, ty * ts - camY, ts);
   }
 }

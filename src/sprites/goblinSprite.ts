@@ -21,33 +21,13 @@ export function drawGoblinSprite(
 
   // Feet
   ctx.fillStyle = '#2d1b00';
-  ctx.fillRect(
-    sx + s * 0.28,
-    sy + s * 0.86 + bodyBob + legSwing,
-    s * 0.17,
-    s * 0.07,
-  );
-  ctx.fillRect(
-    sx + s * 0.53,
-    sy + s * 0.86 + bodyBob - legSwing,
-    s * 0.17,
-    s * 0.07,
-  );
+  ctx.fillRect(sx + s * 0.28, sy + s * 0.86 + bodyBob + legSwing, s * 0.17, s * 0.07);
+  ctx.fillRect(sx + s * 0.53, sy + s * 0.86 + bodyBob - legSwing, s * 0.17, s * 0.07);
 
   // Legs (dark brown trousers)
   ctx.fillStyle = '#5c3a1e';
-  ctx.fillRect(
-    sx + s * 0.3,
-    sy + s * 0.68 + bodyBob + legSwing,
-    s * 0.15,
-    s * 0.2,
-  );
-  ctx.fillRect(
-    sx + s * 0.53,
-    sy + s * 0.68 + bodyBob - legSwing,
-    s * 0.15,
-    s * 0.2,
-  );
+  ctx.fillRect(sx + s * 0.3, sy + s * 0.68 + bodyBob + legSwing, s * 0.15, s * 0.2);
+  ctx.fillRect(sx + s * 0.53, sy + s * 0.68 + bodyBob - legSwing, s * 0.15, s * 0.2);
 
   // Body
   ctx.fillStyle = skinColor;
@@ -55,31 +35,15 @@ export function drawGoblinSprite(
 
   // Left arm — swings opposite to weapon arm during walk
   const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.025 : 0;
-  ctx.fillRect(
-    sx + s * 0.13,
-    sy + s * 0.46 + bodyBob + armSwing,
-    s * 0.14,
-    s * 0.12,
-  );
+  ctx.fillRect(sx + s * 0.13, sy + s * 0.46 + bodyBob + armSwing, s * 0.14, s * 0.12);
 
   // Right arm — raised during attack swing
   const weaponRaise = Math.sin(attackAnim * Math.PI) * s * 0.14;
   const weaponExtend = Math.sin(attackAnim * Math.PI) * s * 0.12;
-  ctx.fillRect(
-    sx + s * 0.73,
-    sy + s * 0.46 + bodyBob - weaponRaise - armSwing,
-    s * 0.14,
-    s * 0.12,
-  );
+  ctx.fillRect(sx + s * 0.73, sy + s * 0.46 + bodyBob - weaponRaise - armSwing, s * 0.14, s * 0.12);
 
   // Weapon at end of right arm, lunges forward on attack
-  drawWeapon(
-    ctx,
-    sx + s * 0.87 + weaponExtend,
-    sy + s * 0.5 - weaponRaise + bodyBob,
-    s,
-    weapon,
-  );
+  drawWeapon(ctx, sx + s * 0.87 + weaponExtend, sy + s * 0.5 - weaponRaise + bodyBob, s, weapon);
 
   // Head
   ctx.fillStyle = skinColor;

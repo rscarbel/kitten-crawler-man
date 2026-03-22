@@ -5,11 +5,7 @@ import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { BuildingEntry } from '../systems/BuildingSystem';
-import {
-  snapPlayer,
-  restorePlayer,
-  type PlayerSnapshot,
-} from '../core/PlayerSnapshot';
+import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { drawHUD } from '../ui/HUD';
 import { PauseMenu } from '../ui/PauseMenu';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
@@ -69,10 +65,7 @@ export class BuildingInteriorScene extends Scene {
     catSnap: PlayerSnapshot,
     private readonly input: InputManager,
     private readonly sceneManager: SceneManager,
-    private readonly onExitCallback: (
-      humanSnap: PlayerSnapshot,
-      catSnap: PlayerSnapshot,
-    ) => void,
+    private readonly onExitCallback: (humanSnap: PlayerSnapshot, catSnap: PlayerSnapshot) => void,
   ) {
     super();
 
@@ -112,9 +105,7 @@ export class BuildingInteriorScene extends Scene {
     this.cat.y = sy * TILE_SIZE;
 
     this.safeRoom =
-      entry.type === 'restaurant'
-        ? new SafeRoomSystem(this.map, sx, sy, 'level3')
-        : null;
+      entry.type === 'restaurant' ? new SafeRoomSystem(this.map, sx, sy, 'level3') : null;
 
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
 
@@ -141,9 +132,7 @@ export class BuildingInteriorScene extends Scene {
 
     // Spawn at the opposite stair on the new floor:
     // if ascending, place at the down-stairs; if descending, place at the up-stairs
-    const spawnTiles = goingUp
-      ? this.map._interiorStairDownTiles
-      : this.map._interiorStairUpTiles;
+    const spawnTiles = goingUp ? this.map._interiorStairDownTiles : this.map._interiorStairUpTiles;
     const spawn = spawnTiles[0] ?? this.map.startTile;
     const spawnY = spawn.y + 1; // one tile below the stair so the menu doesn't re-trigger
     this.human.x = spawn.x * TILE_SIZE;
@@ -282,30 +271,18 @@ export class BuildingInteriorScene extends Scene {
     const fdx = player.x - follower.x;
     const fdy = player.y - follower.y;
     const fdist = Math.hypot(fdx, fdy);
-    const followDist = this.isFollowOverride
-      ? TILE_SIZE * 0.8
-      : TILE_SIZE * 1.5;
+    const followDist = this.isFollowOverride ? TILE_SIZE * 0.8 : TILE_SIZE * 1.5;
     if (fdist > followDist) {
       const spd = 3.5;
       const fmx = (fdx / fdist) * spd;
       const fmy = (fdy / fdist) * spd;
       const fnx = Math.max(0, Math.min(mapPxW - TILE_SIZE, follower.x + fmx));
       const ftxn = Math.floor((fnx + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (
-        this.map.isWalkable(
-          ftxn,
-          Math.floor((follower.y + TILE_SIZE * 0.5) / TILE_SIZE),
-        )
-      )
+      if (this.map.isWalkable(ftxn, Math.floor((follower.y + TILE_SIZE * 0.5) / TILE_SIZE)))
         follower.x = fnx;
       const fny = Math.max(0, Math.min(mapPxH - TILE_SIZE, follower.y + fmy));
       const ftyn = Math.floor((fny + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (
-        this.map.isWalkable(
-          Math.floor((follower.x + TILE_SIZE * 0.5) / TILE_SIZE),
-          ftyn,
-        )
-      )
+      if (this.map.isWalkable(Math.floor((follower.x + TILE_SIZE * 0.5) / TILE_SIZE), ftyn))
         follower.y = fny;
     }
     follower.isMoving = fdist > TILE_SIZE * 1.5;
@@ -348,9 +325,7 @@ export class BuildingInteriorScene extends Scene {
     const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const pty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
     const wasOnExit = this.onExitTile;
-    this.onExitTile = this.map._interiorExitTiles.some(
-      (t) => t.x === ptx && t.y === pty,
-    );
+    this.onExitTile = this.map._interiorExitTiles.some((t) => t.x === ptx && t.y === pty);
     if (!this.onExitTile) {
       this.exitDismissed = false;
     } else if (!wasOnExit && !this.exitDismissed) {
@@ -402,30 +377,15 @@ export class BuildingInteriorScene extends Scene {
   }
 
   handleMouseDown(mx: number, my: number): void {
-    this.mobileHUD.handleMouseDown(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.mobileHUD.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
-    this.mobileHUD.handleMouseMove(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.mobileHUD.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
-    this.mobileHUD.handleMouseUp(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.active().inventory,
-    );
+    this.mobileHUD.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   private doExit(): void {
@@ -476,15 +436,8 @@ export class BuildingInteriorScene extends Scene {
     ctx.fillStyle = '#d4edaa';
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    const floorSuffix =
-      this.towerFloors.length > 0
-        ? ` (${FLOOR_LABELS[this.currentFloor]})`
-        : '';
-    ctx.fillText(
-      `Inside: ${this.entry.name}${floorSuffix}`,
-      canvas.width / 2,
-      18,
-    );
+    const floorSuffix = this.towerFloors.length > 0 ? ` (${FLOOR_LABELS[this.currentFloor]})` : '';
+    ctx.fillText(`Inside: ${this.entry.name}${floorSuffix}`, canvas.width / 2, 18);
     ctx.textAlign = 'left';
 
     // Minimap + right-side buttons (pause, gear, bag)
@@ -502,13 +455,7 @@ export class BuildingInteriorScene extends Scene {
 
       const active = this.active();
       const name = this.human.isActive ? 'Human' : 'Cat';
-      this.mobileHUD.renderPanels(
-        ctx,
-        canvas,
-        active.inventory,
-        name,
-        active.coins,
-      );
+      this.mobileHUD.renderPanels(ctx, canvas, active.inventory, name, active.coins);
       if (IS_MOBILE) {
         const extraButtons: MobileHUDButton[] = [
           {
@@ -518,23 +465,14 @@ export class BuildingInteriorScene extends Scene {
             active: this.isFollowOverride,
           },
         ];
-        this.mobileHUD.renderButtons(
-          ctx,
-          canvas,
-          this.human.isActive,
-          extraButtons,
-          52,
-          gearY,
-        );
+        this.mobileHUD.renderButtons(ctx, canvas, this.human.isActive, extraButtons, 52, gearY);
       }
     }
 
     if (this.safeRoom) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
-      if (this.safeRoom.mordecaiDialogOpen)
-        this.safeRoom.renderMordecaiDialog(ctx, canvas);
-      if (this.safeRoom.isSleeping)
-        this.safeRoom.renderSleepOverlay(ctx, canvas);
+      if (this.safeRoom.mordecaiDialogOpen) this.safeRoom.renderMordecaiDialog(ctx, canvas);
+      if (this.safeRoom.isSleeping) this.safeRoom.renderSleepOverlay(ctx, canvas);
     }
 
     if (this.shop) {
@@ -568,11 +506,7 @@ export class BuildingInteriorScene extends Scene {
     };
   }
 
-  private renderExitHint(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-  ): void {
+  private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
     for (const t of this.map._interiorExitTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
@@ -585,10 +519,7 @@ export class BuildingInteriorScene extends Scene {
     }
   }
 
-  private renderExitMenu(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-  ): void {
+  private renderExitMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
 
@@ -717,21 +648,12 @@ export class BuildingInteriorScene extends Scene {
       }
 
       // Hotbar slot tap — defer activation until touch end so long-press opens context menu
-      const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(
-        x,
-        y,
-        canvas,
-      );
+      const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
       if (hi >= 0) {
         this.mobileHUD.inventoryDragTouchId = touch.identifier;
         this.handleMouseDown(x, y);
         this.mobileHUD.startInvLongPress(x, y, () => {
-          this.mobileHUD.inventoryPanel.openContextMenu(
-            x,
-            y,
-            canvas,
-            this.active().inventory,
-          );
+          this.mobileHUD.inventoryPanel.openContextMenu(x, y, canvas, this.active().inventory);
         });
         continue;
       }
@@ -744,12 +666,7 @@ export class BuildingInteriorScene extends Scene {
             this.mobileHUD.inventoryDragTouchId = touch.identifier;
           }
           this.mobileHUD.startInvLongPress(x, y, () => {
-            this.mobileHUD.inventoryPanel.openContextMenu(
-              x,
-              y,
-              canvas,
-              this.active().inventory,
-            );
+            this.mobileHUD.inventoryPanel.openContextMenu(x, y, canvas, this.active().inventory);
           });
           continue;
         }
@@ -793,11 +710,7 @@ export class BuildingInteriorScene extends Scene {
         this.mobileHUD.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
-          const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(
-            x,
-            y,
-            canvas,
-          );
+          const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
           if (hi >= 0) {
             this.triggerHotbarActivation(hi);
           } else {

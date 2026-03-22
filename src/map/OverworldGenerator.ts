@@ -74,8 +74,7 @@ export function generateOverworld(size: number): OverworldData {
     grid[y][x].type = ROAD;
   };
   const fill = (x: number, y: number, w: number, h: number, type: number) => {
-    for (let dy = 0; dy < h; dy++)
-      for (let dx = 0; dx < w; dx++) set(x + dx, y + dy, type);
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) set(x + dx, y + dy, type);
   };
   const isSolid = (x: number, y: number) => {
     if (x < 0 || x >= size || y < 0 || y >= size) return true;
@@ -141,15 +140,7 @@ export function generateOverworld(size: number): OverworldData {
   };
 
   // 6. Town center tower (14×6, north of town square)
-  placeBuilding(
-    cx - 7,
-    cy - 21,
-    14,
-    6,
-    'tower',
-    'Town Center Tower',
-    ROOF_SLATE,
-  );
+  placeBuilding(cx - 7, cy - 21, 14, 6, 'tower', 'Town Center Tower', ROOF_SLATE);
 
   // 6b. The Restaurant — safe room building, east of town square, north of E-W road.
   //     Entering triggers a BuildingInteriorScene with a safe-room interior.
@@ -157,15 +148,7 @@ export function generateOverworld(size: number): OverworldData {
   const restH = 5;
   const restX = cx + 14;
   const restY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
-  placeBuilding(
-    restX,
-    restY,
-    restW,
-    restH,
-    'restaurant',
-    'Safe Room',
-    ROOF_RED,
-  );
+  placeBuilding(restX, restY, restW, restH, 'restaurant', 'Safe Room', ROOF_RED);
   // Short road stub south from restaurant door to the E-W road
   const restDoorX = restX + Math.floor(restW / 2) - 1;
   for (let ry = restY + restH; ry <= cy - 2; ry++) {
@@ -178,15 +161,7 @@ export function generateOverworld(size: number): OverworldData {
   const storeH = 5;
   const storeX = cx - 28;
   const storeY = cy - 16;
-  placeBuilding(
-    storeX,
-    storeY,
-    storeW,
-    storeH,
-    'store',
-    'General Store',
-    ROOF_GREEN,
-  );
+  placeBuilding(storeX, storeY, storeW, storeH, 'store', 'General Store', ROOF_GREEN);
   // Short road stub south from store door to the E-W road
   const storeDoorX = storeX + Math.floor(storeW / 2) - 1;
   for (let ry = storeY + storeH; ry <= cy - 2; ry++) {
@@ -195,8 +170,7 @@ export function generateOverworld(size: number): OverworldData {
   }
 
   // 7. Small houses around town square
-  const rng = (min: number, max: number) =>
-    Math.floor(Math.random() * (max - min + 1)) + min;
+  const rng = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
   const houseAngles = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
   const houseRoofs = [
     ROOF_THATCH,
@@ -212,8 +186,7 @@ export function generateOverworld(size: number): OverworldData {
     ROOF_GREEN,
     ROOF_THATCH,
   ];
-  const placedHouses: Array<{ x: number; y: number; w: number; h: number }> =
-    [];
+  const placedHouses: Array<{ x: number; y: number; w: number; h: number }> = [];
   let houseIdx = 0;
   for (let attempt = 0; attempt < 200 && houseIdx < 10; attempt++) {
     const angle = (houseAngles[houseIdx] + rng(-15, 15)) * (Math.PI / 180);
@@ -229,10 +202,7 @@ export function generateOverworld(size: number): OverworldData {
     const pad = 3;
     const overlaps = [...buildings, ...placedHouses].some(
       (b) =>
-        hx < b.x + b.w + pad &&
-        hx + hw + pad > b.x &&
-        hy < b.y + b.h + pad &&
-        hy + hh + pad > b.y,
+        hx < b.x + b.w + pad && hx + hw + pad > b.x && hy < b.y + b.h + pad && hy + hh + pad > b.y,
     );
     if (overlaps) continue;
     placeBuilding(hx, hy, hw, hh, 'house', 'Enter', houseRoofs[houseIdx]);
@@ -304,13 +274,7 @@ export function generateOverworld(size: number): OverworldData {
     placeBuilding(bigX, bigY, bigW, bigH, 'house', 'Big Top', ROOF_CIRCUS_RED);
 
     // Small decorative tents (not enterable) — just solid tile structures
-    const placeTent = (
-      tentX: number,
-      tentY: number,
-      tw: number,
-      th: number,
-      roofTile: number,
-    ) => {
+    const placeTent = (tentX: number, tentY: number, tw: number, th: number, roofTile: number) => {
       // Bounds check
       if (tentX < BORDER + 2 || tentX + tw > size - BORDER - 2) return;
       if (tentY < BORDER + 2 || tentY + th > size - BORDER - 2) return;
@@ -402,13 +366,7 @@ export function generateOverworld(size: number): OverworldData {
         if (d > radius * 0.7 && Math.random() < 0.45) continue;
         const tx = fx + dx;
         const ty = fy + dy;
-        if (
-          tx < BORDER ||
-          tx >= size - BORDER ||
-          ty < BORDER ||
-          ty >= size - BORDER
-        )
-          continue;
+        if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
         if (isSolid(tx, ty)) continue;
         if (grid[ty][tx].type === ROAD) continue; // Don't overwrite roads
         grid[ty][tx].type = TREE;
@@ -423,10 +381,8 @@ export function generateOverworld(size: number): OverworldData {
     let hasRoadS = false;
     for (let bx = b.x - 1; bx <= b.x + b.w; bx++) {
       if (bx < BORDER || bx >= size - BORDER) continue;
-      if (b.y - 1 >= BORDER && grid[b.y - 1]?.[bx]?.type === ROAD)
-        hasRoadN = true;
-      if (b.y + b.h < size - BORDER && grid[b.y + b.h]?.[bx]?.type === ROAD)
-        hasRoadS = true;
+      if (b.y - 1 >= BORDER && grid[b.y - 1]?.[bx]?.type === ROAD) hasRoadN = true;
+      if (b.y + b.h < size - BORDER && grid[b.y + b.h]?.[bx]?.type === ROAD) hasRoadS = true;
     }
     if (hasRoadN && hasRoadS) {
       const rowTop = b.y - 1;
@@ -465,10 +421,8 @@ export function generateOverworld(size: number): OverworldData {
     let hasRoadE = false;
     for (let bry = b.y - 1; bry <= b.y + b.h; bry++) {
       if (bry < BORDER || bry >= size - BORDER) continue;
-      if (b.x - 1 >= BORDER && grid[bry]?.[b.x - 1]?.type === ROAD)
-        hasRoadW = true;
-      if (b.x + b.w < size - BORDER && grid[bry]?.[b.x + b.w]?.type === ROAD)
-        hasRoadE = true;
+      if (b.x - 1 >= BORDER && grid[bry]?.[b.x - 1]?.type === ROAD) hasRoadW = true;
+      if (b.x + b.w < size - BORDER && grid[bry]?.[b.x + b.w]?.type === ROAD) hasRoadE = true;
     }
     if (hasRoadW && hasRoadE) {
       const colLeft = b.x - 1;
@@ -523,15 +477,13 @@ export function generateOverworld(size: number): OverworldData {
   // Scattered GRASSY_WEED on open grass tiles
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
-      if (grid[gy][gx].type === GRASS && Math.random() < 0.015)
-        set(gx, gy, GRASSY_WEED);
+      if (grid[gy][gx].type === GRASS && Math.random() < 0.015) set(gx, gy, GRASSY_WEED);
     }
   }
   // DIRT_PATCH on road tiles for visual variety
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
-      if (grid[gy][gx].type === ROAD && Math.random() < 0.06)
-        set(gx, gy, DIRT_PATCH);
+      if (grid[gy][gx].type === ROAD && Math.random() < 0.06) set(gx, gy, DIRT_PATCH);
     }
   }
 

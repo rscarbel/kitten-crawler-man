@@ -150,9 +150,7 @@ export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
 
 export class Inventory {
   readonly slots: (InventoryItem | null)[] = new Array(SLOT_COUNT).fill(null);
-  readonly hotbar: (InventoryItem | null)[] = new Array(HOTBAR_COUNT).fill(
-    null,
-  );
+  readonly hotbar: (InventoryItem | null)[] = new Array(HOTBAR_COUNT).fill(null);
 
   /**
    * Maps "Slot:SubSlot" key → ItemId of the equipped item.
@@ -264,11 +262,7 @@ export class Inventory {
 
   /** Find an item by ID across both slots and hotbar. */
   private findItemById(id: ItemId): InventoryItem | null {
-    return (
-      this.slots.find((s) => s?.id === id) ??
-      this.hotbar.find((s) => s?.id === id) ??
-      null
-    );
+    return this.slots.find((s) => s?.id === id) ?? this.hotbar.find((s) => s?.id === id) ?? null;
   }
 
   /**
@@ -278,8 +272,7 @@ export class Inventory {
    */
   equip(slotIdx: number): InventoryItem | null {
     const item = this.slots[slotIdx];
-    if (!item || item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot)
-      return null;
+    if (!item || item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot) return null;
     const key = `${item.equipSlot}:${item.equipSubSlot}`;
     const prev = this.getEquippedItem(key);
     this.equipped.set(key, item.id);
