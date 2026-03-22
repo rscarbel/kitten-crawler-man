@@ -1,9 +1,10 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
-export class TowerStairSystem {
+export class TowerStairSystem implements GameSystem {
   private onUpStair = false;
   private onDownStair = false;
   private _upMenuOpen = false;
@@ -42,6 +43,10 @@ export class TowerStairSystem {
     this._downMenuOpen = false;
     this.upDismissed = false;
     this.downDismissed = false;
+  }
+
+  update(ctx: SystemContext): void {
+    this.detect(ctx.active);
   }
 
   detect(active: { x: number; y: number }): void {

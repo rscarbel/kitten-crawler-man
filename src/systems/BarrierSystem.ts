@@ -1,8 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
-import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/Inventory';
+import type { GameSystem, SystemContext } from './GameSystem';
 import {
   drawDumbbellFloor,
   drawBenchPressFloor,
@@ -31,7 +31,7 @@ interface PendingConstruct {
   framesLeft: number;
 }
 
-export class BarrierSystem {
+export class BarrierSystem implements GameSystem {
   private barriers: PlacedBarrier[] = [];
   private pending: PendingConstruct | null = null;
 
@@ -68,7 +68,8 @@ export class BarrierSystem {
 
   // Update
 
-  update(mobs: Mob[], _mobGrid: unknown, _gameMap: unknown): void {
+  update(ctx: SystemContext): void {
+    const { mobs } = ctx;
     // Reset all mobs' slow state — BarrierSystem re-applies it each frame
     for (const mob of mobs) {
       mob.isSlowed = false;

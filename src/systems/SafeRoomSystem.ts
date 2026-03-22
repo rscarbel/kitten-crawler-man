@@ -5,6 +5,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprite';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -14,7 +15,7 @@ interface SafeRoomEntry {
   bedTileY: number;
 }
 
-export class SafeRoomSystem {
+export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
   private _mordecaiDialogOpen = false;
@@ -83,6 +84,11 @@ export class SafeRoomSystem {
 
   set mordecaiDialogOpen(v: boolean) {
     this._mordecaiDialogOpen = v;
+  }
+
+  update(ctx: SystemContext): void {
+    this.evictMobs(ctx.mobs, ctx.mobGrid);
+    this.updateWander();
   }
 
   // Wander update

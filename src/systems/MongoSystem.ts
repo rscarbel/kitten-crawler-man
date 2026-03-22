@@ -5,6 +5,7 @@ import { Mob } from '../creatures/Mob';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { GameMap } from '../map/GameMap';
 import { drawMongoIcon } from '../sprites/mongoSprite';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 /** Cooldown in frames: 90 seconds at 60 fps. */
 const COOLDOWN_FRAMES = 90 * 60; // 5400
@@ -12,7 +13,7 @@ const COOLDOWN_FRAMES = 90 * 60; // 5400
 /** Duration speech bubble stays visible (frames). */
 const SPEECH_DURATION = 150; // 2.5 seconds
 
-export class MongoSystem {
+export class MongoSystem implements GameSystem {
   /** Whether the player has unlocked Mongo by defeating the Krakaren Clone. */
   unlocked = false;
 
@@ -58,7 +59,8 @@ export class MongoSystem {
    * Called each frame to update Mongo state, cooldown, and speech.
    * Returns true if Mongo just fully despawned (so DungeonScene can remove it).
    */
-  update(mobs: Mob[], mobGrid: SpatialGrid<Mob>): boolean {
+  update(ctx: SystemContext): boolean {
+    const { mobs, mobGrid } = ctx;
     // Tick cooldown
     if (this.cooldownFrames > 0) this.cooldownFrames--;
 

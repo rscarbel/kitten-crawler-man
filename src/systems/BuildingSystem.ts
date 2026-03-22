@@ -1,5 +1,6 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
@@ -7,7 +8,7 @@ export type BuildingEntry = {
   type: 'house' | 'tower' | 'restaurant' | 'store';
 };
 
-export class BuildingSystem {
+export class BuildingSystem implements GameSystem {
   private onDoor = false;
   private _menuOpen = false;
   private dismissed = false;
@@ -25,6 +26,10 @@ export class BuildingSystem {
   closeMenu(): void {
     this._menuOpen = false;
     this.dismissed = true;
+  }
+
+  update(ctx: SystemContext): void {
+    this.detect(ctx.active);
   }
 
   /** Called each gameplay frame. Detects when the active player is on a door tile. */

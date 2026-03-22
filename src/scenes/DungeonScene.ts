@@ -34,7 +34,6 @@ import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
-import { Juicer } from '../creatures/Juicer';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
@@ -49,6 +48,7 @@ import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
+import type { SystemContext } from '../systems/GameSystem';
 import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
@@ -1013,6 +1013,22 @@ export class DungeonScene extends GameplayScene {
 
   // Core gameplay update
 
+  private buildSystemContext(): SystemContext {
+    const active = this.active();
+    return {
+      human: this.human,
+      cat: this.cat,
+      active,
+      inactive: this.inactive(),
+      activeIsMoving: active.isMoving,
+      mobs: this.mobs,
+      mobGrid: this.mobGrid,
+      gameMap: this.gameMap,
+      bossRoom: this.bossRoom,
+      extraTargets: this.mongoSystem.mongo ? [this.mongoSystem.mongo] : undefined,
+    };
+  }
+
   private updateGameplay(): void {
     const player = this.active();
 
@@ -1034,12 +1050,14 @@ export class DungeonScene extends GameplayScene {
       this.bus.emit('safeRoomEntered', {});
     }
 
-    this.safeRoom.evictMobs(this.mobs, this.mobGrid);
-    this.safeRoom.updateWander();
-    this.bossRoom.update(this.mobs, this.mobGrid, this.human, this.cat);
+    // Build shared context once — passed to every system update
+    const ctx = this.buildSystemContext();
+
+    this.safeRoom.update(ctx);
+    this.bossRoom.update(ctx);
 
     // Arena system: door locking, phase transitions, stairwell unlock
-    this.arena.update(this.human, this.cat);
+    this.arena.update(ctx);
 
     // Trigger boss battle intro on first room entry
     if (this.bossRoom.newlyLockedBossType !== null) {
@@ -1052,31 +1070,21 @@ export class DungeonScene extends GameplayScene {
       this.bossIntro.trigger(bt, meta.displayName, meta.color);
     }
 
-    // Reset slow state before BarrierSystem re-applies it
-    for (const mob of this.mobs) mob.isSlowed = false;
-    this.barriers.update(this.mobs, this.mobGrid, this.gameMap);
+    this.barriers.update(ctx);
 
     // Juicer room gym pickups + Juicer AI coordination
-    const juicer = (this.mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ?? null;
-    this.juicerRoom.update(this.human, this.cat, juicer, this.mobs);
+    this.juicerRoom.update(ctx);
 
-    this.companion.update(this.human, this.cat, this.mobs, this.mobGrid, player.isMoving);
+    this.companion.update(ctx);
 
     this.human.updateAttack();
     this.cat.updateMissiles();
 
     // Spell system (resets confusion, ticks fogs/shell)
-    this.spells.update(this.mobs, this.mobGrid);
+    this.spells.update(ctx);
 
     // Mob AI tick (activation radius, pathfinding, boss clamping)
-    this.mobLoop.update({
-      human: this.human,
-      cat: this.cat,
-      mobs: this.mobs,
-      mobGrid: this.mobGrid,
-      bossRoom: this.bossRoom,
-      extraTargets: this.mongoSystem.mongo ? [this.mongoSystem.mongo] : undefined,
-    });
+    this.mobLoop.update(ctx);
 
     const combatCtx: CombatContext = {
       human: this.human,
@@ -1097,18 +1105,18 @@ export class DungeonScene extends GameplayScene {
     resolveKills(combatCtx);
 
     // Update Mongo system (cooldown, recall, despawn)
-    this.mongoSystem.update(this.mobs, this.mobGrid);
+    this.mongoSystem.update(ctx);
 
     this.pm.tickTimers();
 
-    this.playerTick.update(this.human, this.cat);
+    this.playerTick.update(ctx);
 
-    this.loot.update(this.active(), this.inactive());
+    this.loot.update(ctx);
 
     this.speechBubblePulse++;
 
     this.gore.update();
-    this.dynamite.update(this.human, this.cat, this.mobs, this.mobGrid);
+    this.dynamite.update(ctx);
 
     if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {
       this.levelTimerFrames--;

@@ -4,6 +4,7 @@ import { drawJuicerSprite } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 import { drawKrakarenSprite } from '../sprites/krakarenSprite';
 import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
+import type { GameSystem } from './GameSystem';
 
 type IntroState = {
   bossType: string;
@@ -13,7 +14,7 @@ type IntroState = {
   phase: 'letters' | 'versus';
 };
 
-export class BossIntroSystem {
+export class BossIntroSystem implements GameSystem {
   private static readonly INTRO_TITLE = 'B-B-B-B-BOSS BATTLE!';
   private static readonly INTRO_FRAMES_PER_CHAR = 7;
   private static readonly INTRO_HOLD_FRAMES = 70;
@@ -27,6 +28,10 @@ export class BossIntroSystem {
 
   trigger(bossType: string, bossName: string, bossColor: string): void {
     this.state = { bossType, bossName, bossColor, frame: 0, phase: 'letters' };
+  }
+
+  update(): void {
+    this.tick();
   }
 
   tick(): void {

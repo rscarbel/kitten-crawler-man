@@ -1,6 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import type { ItemId } from '../core/Inventory';
 import type { Player } from '../Player';
+import type { GameSystem } from './GameSystem';
 
 const SHOP_ITEMS: Array<{
   id: ItemId;
@@ -28,7 +29,7 @@ const SHOP_ITEMS: Array<{
   },
 ];
 
-export class ShopSystem {
+export class ShopSystem implements GameSystem {
   shopOpen = false;
 
   private shopkeeperTileY = 1;

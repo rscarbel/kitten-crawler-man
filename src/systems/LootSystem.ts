@@ -4,6 +4,7 @@ import type { LootDrop } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/Inventory';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 interface PendingLoot {
   x: number;
@@ -25,7 +26,7 @@ export interface FloorItem {
   quantity: number;
 }
 
-export class LootSystem {
+export class LootSystem implements GameSystem {
   private pendingLoots: PendingLoot[] = [];
   readonly floorItems: FloorItem[] = [];
 
@@ -70,7 +71,8 @@ export class LootSystem {
     });
   }
 
-  update(active: HumanPlayer | CatPlayer, companion: HumanPlayer | CatPlayer): void {
+  update(ctx: SystemContext): void {
+    const { active, inactive: companion } = ctx;
     for (const loot of this.pendingLoots) {
       if (loot.collected) continue;
       if (loot.pickupDelay > 0) {

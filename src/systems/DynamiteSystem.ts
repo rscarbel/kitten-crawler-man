@@ -9,6 +9,7 @@ import {
   drawDynamiteExplosion,
   drawDynamiteChargeBar,
 } from '../sprites/dynamiteSprite';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 // Goblin Dynamite constants
 export const DYN_MAX_CHARGE = 120; // 2 s at 60 fps → full throw
@@ -37,7 +38,7 @@ interface LiveDynamite {
   explosivesLevel: number;
 }
 
-export class DynamiteSystem {
+export class DynamiteSystem implements GameSystem {
   private _charging: { hotbarIdx: number; chargeFrames: number } | null = null;
   private liveDynamites: LiveDynamite[] = [];
 
@@ -87,7 +88,8 @@ export class DynamiteSystem {
     void mobGrid;
   }
 
-  update(human: HumanPlayer, cat: CatPlayer, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  update(ctx: SystemContext): void {
+    const { human, cat, mobs, mobGrid } = ctx;
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {

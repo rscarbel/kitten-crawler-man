@@ -1,9 +1,10 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { LevelDef } from '../levels/types';
+import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 
-export class StairwellSystem {
+export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
   private dismissed = false;
@@ -21,6 +22,10 @@ export class StairwellSystem {
   closeMenu(): void {
     this._menuOpen = false;
     this.dismissed = true;
+  }
+
+  update(ctx: SystemContext): void {
+    this.detect(ctx.active);
   }
 
   /** Called each gameplay frame. Detects stairwell entry and opens/closes the menu. */

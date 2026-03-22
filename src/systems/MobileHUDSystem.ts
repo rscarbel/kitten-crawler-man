@@ -4,6 +4,7 @@ import { GearPanel } from '../ui/GearPanel';
 import { TILE_SIZE } from '../core/constants';
 import type { Inventory } from '../core/Inventory';
 import type { GameMap } from '../map/GameMap';
+import type { GameSystem } from './GameSystem';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -21,7 +22,11 @@ export interface MobileHUDButton {
  * Used by both DungeonScene and BuildingInteriorScene so mobile UI stays
  * consistent without duplicating rendering or hit-testing code.
  */
-export class MobileHUDSystem {
+export class MobileHUDSystem implements GameSystem {
+  dispose(): void {
+    /* no-op */
+  }
+
   // Touch movement state
   moveTouchId: number | null = null;
   moveTarget: { x: number; y: number } | null = null;

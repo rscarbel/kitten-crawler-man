@@ -3,6 +3,7 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 interface ActiveShell {
   x: number;
@@ -33,7 +34,7 @@ const CLOUD_BLOBS = [
   { dx: -0.42, dy: -0.42, sr: 0.25 },
 ];
 
-export class SpellSystem {
+export class SpellSystem implements GameSystem {
   private activeShell: ActiveShell | null = null;
   private _shellCooldown = 0;
   private activeFogs: ActiveFog[] = [];
@@ -81,7 +82,8 @@ export class SpellSystem {
   }
 
   /** Called every gameplay frame. Ticks cooldowns, pushes shell mobs, marks confused mobs. */
-  update(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  update(ctx: SystemContext): void {
+    const { mobs, mobGrid } = ctx;
     if (this._shellCooldown > 0) this._shellCooldown--;
     if (this.activeShell) {
       this.activeShell.framesRemaining--;

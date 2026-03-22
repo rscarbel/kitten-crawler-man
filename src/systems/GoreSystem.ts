@@ -21,7 +21,9 @@ interface BloodPuddle {
   life: number;
 }
 
-export class GoreSystem {
+import type { GameSystem } from './GameSystem';
+
+export class GoreSystem implements GameSystem {
   private particles: BloodParticle[] = [];
   private puddles: BloodPuddle[] = [];
 

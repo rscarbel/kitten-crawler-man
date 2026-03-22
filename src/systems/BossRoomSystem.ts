@@ -7,6 +7,7 @@ import { Cockroach } from '../creatures/Cockroach';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 interface BossRoomState {
   bounds: { x: number; y: number; w: number; h: number };
@@ -23,7 +24,7 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
   krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
 };
 
-export class BossRoomSystem {
+export class BossRoomSystem implements GameSystem {
   private readonly states: BossRoomState[];
   private readonly bossTypes: string[];
   private readonly enteredRooms = new Set<number>();
@@ -73,7 +74,8 @@ export class BossRoomSystem {
     return this.states.some((s) => s.locked && this.isEntityInRoom(mob, s.bounds));
   }
 
-  update(mobs: Mob[], mobGrid: SpatialGrid<Mob>, human: HumanPlayer, cat: CatPlayer): void {
+  update(ctx: SystemContext): void {
+    const { mobs, mobGrid, human, cat } = ctx;
     // Tick defeat timers and pulse
     for (const state of this.states) {
       if (state.defeatTimer > 0) state.defeatTimer--;

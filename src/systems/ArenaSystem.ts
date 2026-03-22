@@ -17,8 +17,9 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { BOSS_META } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
+import type { GameSystem, SystemContext } from './GameSystem';
 
-export class ArenaSystem {
+export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
   private arenaPhase2Active = false;
   private arenaStairwellUnlocked = false;
@@ -77,7 +78,8 @@ export class ArenaSystem {
 
   // ── Per-frame update ─────────────────────────────────────────────
 
-  update(human: HumanPlayer, cat: CatPlayer): void {
+  update(ctx: SystemContext): void {
+    const { human, cat } = ctx;
     if (!this.hasArena) return;
 
     const arena = this.gameMap.arenaExteriors[0];

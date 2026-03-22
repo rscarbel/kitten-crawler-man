@@ -10,6 +10,7 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import { Mob } from '../creatures/Mob';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 type Entity = {
   x: number;
@@ -19,7 +20,7 @@ type Entity = {
   facingY: number;
 };
 
-export class CompanionSystem {
+export class CompanionSystem implements GameSystem {
   private catWanderTargetX = 0;
   private catWanderTargetY = 0;
   private catWanderTimer = 0;
@@ -59,13 +60,8 @@ export class CompanionSystem {
   }
 
   /** Update both companion AI (auto-target) and companion follower movement. */
-  update(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobs: Mob[],
-    mobGrid: SpatialGrid<Mob>,
-    activeIsMoving: boolean,
-  ): void {
+  update(ctx: SystemContext): void {
+    const { human, cat, mobs, mobGrid, activeIsMoving } = ctx;
     // Track human idle frames
     if (human.isActive) {
       if (activeIsMoving) this.humanIdleFrames = 0;

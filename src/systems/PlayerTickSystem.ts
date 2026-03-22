@@ -1,12 +1,13 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 /**
  * Handles per-frame health regeneration and companion auto-potion logic.
  * Extracted from DungeonScene so it can be shared across scenes (dungeon,
  * building interiors, etc.).
  */
-export class PlayerTickSystem {
+export class PlayerTickSystem implements GameSystem {
   private humanRegenAccum = 0;
   private catRegenAccum = 0;
   private readonly HUMAN_REGEN_FRAMES = 10800; // 3 min @ 60fps
@@ -63,8 +64,8 @@ export class PlayerTickSystem {
   }
 
   /** Convenience: tick both regen and auto-potion. */
-  update(human: HumanPlayer, cat: CatPlayer): void {
-    this.tickRegen(human, cat);
-    this.tickAutoPotion(human, cat);
+  update(ctx: SystemContext): void {
+    this.tickRegen(ctx.human, ctx.cat);
+    this.tickAutoPotion(ctx.human, ctx.cat);
   }
 }

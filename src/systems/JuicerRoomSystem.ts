@@ -1,7 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { Juicer } from '../creatures/Juicer';
+import { Juicer } from '../creatures/Juicer';
+import type { GameSystem, SystemContext } from './GameSystem';
 import {
   drawDumbbellFloor,
   drawBenchPressFloor,
@@ -48,7 +49,7 @@ const TREADMILL_POSITIONS = [
   { relTileX: 12, relTileY: 3 },
 ];
 
-export class JuicerRoomSystem {
+export class JuicerRoomSystem implements GameSystem {
   private pickups: GymPickup[] = [];
   private readonly roomOriginX: number; // tile coords
   private readonly roomOriginY: number;
@@ -127,7 +128,9 @@ export class JuicerRoomSystem {
       }));
   }
 
-  update(_human: HumanPlayer, _cat: CatPlayer, juicer: Juicer | null, _mobs: unknown): void {
+  update(ctx: SystemContext): void {
+    const { mobs } = ctx;
+    const juicer = (mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ?? null;
     if (this.roomOriginX === -9999) return;
 
     const ts = TILE_SIZE;

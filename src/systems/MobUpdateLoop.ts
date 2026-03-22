@@ -7,33 +7,19 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
-import type { CatPlayer } from '../creatures/CatPlayer';
 import { Mob } from '../creatures/Mob';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
-import type { SpatialGrid } from '../core/SpatialGrid';
-import type { BossRoomSystem } from './BossRoomSystem';
+import type { GameSystem, SystemContext } from './GameSystem';
 
 const AI_RADIUS = TILE_SIZE * 22;
 
-/** Context needed for a mob update tick. */
-export interface MobUpdateContext {
-  human: HumanPlayer;
-  cat: CatPlayer;
-  mobs: Mob[];
-  mobGrid: SpatialGrid<Mob>;
-  bossRoom: BossRoomSystem;
-  /** Additional player-like targets (e.g. Mongo). */
-  extraTargets?: Player[];
-}
-
-export class MobUpdateLoop {
+export class MobUpdateLoop implements GameSystem {
   /**
    * Run one frame of mob AI for all mobs within activation radius
    * of either player. Updates spatial grid positions.
    */
-  update(ctx: MobUpdateContext): void {
+  update(ctx: SystemContext): void {
     const { human, cat, mobs, mobGrid, bossRoom, extraTargets } = ctx;
 
     // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)

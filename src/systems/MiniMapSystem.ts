@@ -2,8 +2,9 @@ import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import { IS_MOBILE } from '../core/MobileDetect';
+import type { GameSystem } from './GameSystem';
 
-export class MiniMapSystem {
+export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
   private _expanded = false;
   private corpseMarkers: Array<{ x: number; y: number; ttl: number }> = [];
@@ -238,5 +239,9 @@ export class MiniMapSystem {
       default:
         return '#555555';
     }
+  }
+
+  dispose(): void {
+    /* no-op — satisfies GameSystem interface */
   }
 }
