@@ -11,6 +11,7 @@ interface ActiveShell {
   radiusPx: number;
   framesRemaining: number;
   totalFrames: number;
+  didInitialDamage: boolean;
 }
 
 interface ActiveFog {
@@ -61,6 +62,7 @@ export class SpellSystem implements GameSystem {
       radiusPx,
       framesRemaining: this.SHELL_DURATION,
       totalFrames: this.SHELL_DURATION,
+      didInitialDamage: false,
     };
     this._shellCooldown = this.SHELL_COOLDOWN;
     this.shellOwner = human;
@@ -135,10 +137,13 @@ export class SpellSystem implements GameSystem {
         const push = radiusPx - dist + 2;
         mob.x += nx * push;
         mob.y += ny * push;
-        if (this.shellOwner) mob.takeDamageFrom(1, this.shellOwner);
+        if (this.shellOwner && !this.activeShell.didInitialDamage) {
+          mob.takeDamageFrom(3, this.shellOwner);
+        }
         mobGrid.move(mob, ox, oy);
       }
     }
+    this.activeShell.didInitialDamage = true;
   }
 
   renderShell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
