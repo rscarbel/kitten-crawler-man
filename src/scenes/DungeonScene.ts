@@ -147,91 +147,6 @@ export class DungeonScene extends GameplayScene {
 
   // Mobile touch state (encapsulated)
   private readonly touch = new MobileTouchState();
-  // Aliases for backward-compat within the class
-  private get mobileMoveTouchId() {
-    return this.touch.moveTouchId;
-  }
-  private set mobileMoveTouchId(v) {
-    this.touch.moveTouchId = v;
-  }
-  private get mobileMoveTarget() {
-    return this.touch.moveTarget;
-  }
-  private set mobileMoveTarget(v) {
-    this.touch.moveTarget = v;
-  }
-  private get mobileTapStart() {
-    return this.touch.tapStart;
-  }
-  private set mobileTapStart(v) {
-    this.touch.tapStart = v;
-  }
-  private get inventoryDragTouchId() {
-    return this.touch.inventoryDragTouchId;
-  }
-  private set inventoryDragTouchId(v) {
-    this.touch.inventoryDragTouchId = v;
-  }
-  private get mobileDynamiteTouchId() {
-    return this.touch.dynamiteTouchId;
-  }
-  private set mobileDynamiteTouchId(v) {
-    this.touch.dynamiteTouchId = v;
-  }
-  private get invLongPressTimer() {
-    return this.touch.longPressTimer;
-  }
-  private set invLongPressTimer(v) {
-    this.touch.longPressTimer = v;
-  }
-  private get invLongPressPos() {
-    return this.touch.longPressPos;
-  }
-  private set invLongPressPos(v) {
-    this.touch.longPressPos = v;
-  }
-  private get invLongPressFired() {
-    return this.touch.longPressFired;
-  }
-  private set invLongPressFired(v) {
-    this.touch.longPressFired = v;
-  }
-  private get _mobileSwitchBtnRect() {
-    return this.touch.switchBtnRect;
-  }
-  private set _mobileSwitchBtnRect(v) {
-    this.touch.switchBtnRect = v;
-  }
-  private get _mobileFollowBtnRect() {
-    return this.touch.followBtnRect;
-  }
-  private set _mobileFollowBtnRect(v) {
-    this.touch.followBtnRect = v;
-  }
-  private get _mobileGearBtnRect() {
-    return this.touch.gearBtnRect;
-  }
-  private set _mobileGearBtnRect(v) {
-    this.touch.gearBtnRect = v;
-  }
-  private get _mobileBagBtnRect() {
-    return this.touch.bagBtnRect;
-  }
-  private set _mobileBagBtnRect(v) {
-    this.touch.bagBtnRect = v;
-  }
-  private get _miniMapRect() {
-    return this.touch.miniMapRect;
-  }
-  private set _miniMapRect(v) {
-    this.touch.miniMapRect = v;
-  }
-  private get _mobileSummonBtnRect() {
-    return this.touch.summonBtnRect;
-  }
-  private set _mobileSummonBtnRect(v) {
-    this.touch.summonBtnRect = v;
-  }
   private krakarenKilled = false;
 
   // Mouse position in screen coords (updated by handleMouseMove)
@@ -592,7 +507,7 @@ export class DungeonScene extends GameplayScene {
       this.mongoSystem.canShow &&
       this.cat.isActive
     ) {
-      const sb = this._mobileSummonBtnRect;
+      const sb = this.touch.summonBtnRect;
       if (mx >= sb.x && mx <= sb.x + sb.w && my >= sb.y && my <= sb.y + sb.h) {
         this.triggerMongoSummon();
         return;
@@ -716,11 +631,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   private clearInvLongPress(): void {
-    if (this.invLongPressTimer !== null) {
-      clearTimeout(this.invLongPressTimer);
-      this.invLongPressTimer = null;
+    if (this.touch.longPressTimer !== null) {
+      clearTimeout(this.touch.longPressTimer);
+      this.touch.longPressTimer = null;
     }
-    this.invLongPressPos = null;
+    this.touch.longPressPos = null;
   }
 
   handleMouseDown(mx: number, my: number): void {
@@ -827,14 +742,14 @@ export class DungeonScene extends GameplayScene {
         this.safeRoom.mordecaiPositions,
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-      this._miniMapRect = {
+      this.touch.miniMapRect = {
         x: canvas.width - mmSz - 8,
         y: 8,
         w: mmSz,
         h: mmSz,
       };
     } else {
-      this._miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
+      this.touch.miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
 
     if (!this.levelDef.isSafeLevel && !this.gameOver) {
@@ -859,7 +774,7 @@ export class DungeonScene extends GameplayScene {
       this.barriers.renderConstructUI(ctx, canvas);
       // Mongo summon button (desktop: left side above hotbar, mobile: in renderMobileButtons)
       if (!IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
-        this._mobileSummonBtnRect = this.mongoSystem.renderSummonButton(
+        this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
           10,
           canvas.height - 52 - 12 - 52 - 8,
@@ -1025,8 +940,8 @@ export class DungeonScene extends GameplayScene {
     // Phase 1 & 2: Movement input → collision-checked position update
     const move = readMovement(
       this.input,
-      this.mobileMoveTarget,
-      this.mobileTapStart,
+      this.touch.moveTarget,
+      this.touch.tapStart,
       player,
       this.camera(),
     );
@@ -1683,8 +1598,8 @@ export class DungeonScene extends GameplayScene {
     const MARGIN = 10;
     const btnY = canvas.height - SLOT_H - BOTTOM_MARGIN - BTN_H - 8;
 
-    this._mobileSwitchBtnRect = { x: MARGIN, y: btnY, w: BTN_W, h: BTN_H };
-    this._mobileFollowBtnRect = {
+    this.touch.switchBtnRect = { x: MARGIN, y: btnY, w: BTN_W, h: BTN_H };
+    this.touch.followBtnRect = {
       x: canvas.width - MARGIN - BTN_W,
       y: btnY,
       w: BTN_W,
@@ -1697,8 +1612,8 @@ export class DungeonScene extends GameplayScene {
     const pauseY = 8 + mmSize + 20;
     const achieveY = pauseY + 28 + 6;
     const gearY = achieveY + 26 + 6;
-    this._mobileGearBtnRect = { x: rightX, y: gearY, w: 80, h: 28 };
-    this._mobileBagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
+    this.touch.gearBtnRect = { x: rightX, y: gearY, w: 80, h: 28 };
+    this.touch.bagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
 
     const drawBtn = (
       r: { x: number; y: number; w: number; h: number },
@@ -1740,19 +1655,19 @@ export class DungeonScene extends GameplayScene {
 
     const humanActive = this.human.isActive;
     drawBtn(
-      this._mobileSwitchBtnRect,
+      this.touch.switchBtnRect,
       humanActive ? '🐱' : '🧍',
       humanActive ? 'Cat' : 'Human',
       false,
     );
-    drawBtn(this._mobileFollowBtnRect, '↩', 'Follow', this.companion.isFollowOverride);
-    drawSmallBtn(this._mobileGearBtnRect, 'Gear', this.gearPanel.isOpen);
-    drawSmallBtn(this._mobileBagBtnRect, 'Bag', this.inventoryPanel.isOpen);
+    drawBtn(this.touch.followBtnRect, '↩', 'Follow', this.companion.isFollowOverride);
+    drawSmallBtn(this.touch.gearBtnRect, 'Gear', this.gearPanel.isOpen);
+    drawSmallBtn(this.touch.bagBtnRect, 'Bag', this.inventoryPanel.isOpen);
 
     // Mongo summon button — above the switch button when cat is active
     if (this.mongoSystem.canShow && this.cat.isActive) {
       const summonY = btnY - BTN_H - 6;
-      this._mobileSummonBtnRect = this.mongoSystem.renderSummonButton(
+      this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
         ctx,
         MARGIN,
         summonY,
@@ -1761,7 +1676,7 @@ export class DungeonScene extends GameplayScene {
         this.cat.isActive,
       );
     } else {
-      this._mobileSummonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+      this.touch.summonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
   }
 
@@ -1785,7 +1700,7 @@ export class DungeonScene extends GameplayScene {
 
       // Minimap tap to expand/collapse (mobile only)
       if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
-        const mm = this._miniMapRect;
+        const mm = this.touch.miniMapRect;
         if (x >= mm.x && x <= mm.x + mm.w && y >= mm.y && y <= mm.y + mm.h) {
           this.miniMap.toggle();
           continue;
@@ -1794,12 +1709,12 @@ export class DungeonScene extends GameplayScene {
 
       // Gear / Bag buttons (mobile only)
       if (IS_MOBILE && !this.gameOver && !this.pauseMenu.isOpen) {
-        const gb = this._mobileGearBtnRect;
+        const gb = this.touch.gearBtnRect;
         if (x >= gb.x && x <= gb.x + gb.w && y >= gb.y && y <= gb.y + gb.h) {
           this.gearPanel.toggle();
           continue;
         }
-        const bb = this._mobileBagBtnRect;
+        const bb = this.touch.bagBtnRect;
         if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
           this.inventoryPanel.toggle();
           continue;
@@ -1808,7 +1723,7 @@ export class DungeonScene extends GameplayScene {
 
       // Mobile Mongo summon button
       if (IS_MOBILE && this.mongoSystem.canShow && this.cat.isActive) {
-        const mb = this._mobileSummonBtnRect;
+        const mb = this.touch.summonBtnRect;
         if (x >= mb.x && x <= mb.x + mb.w && y >= mb.y && y <= mb.y + mb.h) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerMongoSummon();
@@ -1818,13 +1733,13 @@ export class DungeonScene extends GameplayScene {
 
       // Mobile action buttons (always checked first)
       if (IS_MOBILE) {
-        const sb = this._mobileSwitchBtnRect;
+        const sb = this.touch.switchBtnRect;
         if (x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerSwitchCharacter();
           continue;
         }
-        const fb = this._mobileFollowBtnRect;
+        const fb = this.touch.followBtnRect;
         if (x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerCompanionFollow();
@@ -1836,13 +1751,13 @@ export class DungeonScene extends GameplayScene {
       if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
         const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (hi >= 0) {
-          this.inventoryDragTouchId = touch.identifier;
+          this.touch.inventoryDragTouchId = touch.identifier;
           this.handleMouseDown(x, y);
           this.clearInvLongPress();
-          this.invLongPressPos = { x, y };
-          this.invLongPressFired = false;
-          this.invLongPressTimer = setTimeout(() => {
-            this.invLongPressFired = true;
+          this.touch.longPressPos = { x, y };
+          this.touch.longPressFired = false;
+          this.touch.longPressTimer = setTimeout(() => {
+            this.touch.longPressFired = true;
             this.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
           }, 500);
@@ -1868,7 +1783,7 @@ export class DungeonScene extends GameplayScene {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (dynIdx >= 0 && this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite') {
           this.dynamite.beginCharge(dynIdx);
-          this.mobileDynamiteTouchId = touch.identifier;
+          this.touch.dynamiteTouchId = touch.identifier;
           continue;
         }
       }
@@ -1877,15 +1792,15 @@ export class DungeonScene extends GameplayScene {
       if (this.inventoryPanel.isOpen && !this.gameOver && !this.pauseMenu.isOpen) {
         if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
-          if (this.inventoryDragTouchId === null) {
-            this.inventoryDragTouchId = touch.identifier;
+          if (this.touch.inventoryDragTouchId === null) {
+            this.touch.inventoryDragTouchId = touch.identifier;
           }
           // Start long-press timer for context menu (Drop, etc.)
           this.clearInvLongPress();
-          this.invLongPressPos = { x, y };
-          this.invLongPressFired = false;
-          this.invLongPressTimer = setTimeout(() => {
-            this.invLongPressFired = true;
+          this.touch.longPressPos = { x, y };
+          this.touch.longPressFired = false;
+          this.touch.longPressTimer = setTimeout(() => {
+            this.touch.longPressFired = true;
             this.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
           }, 500);
@@ -1894,10 +1809,10 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Game world touch: movement / tap tracking
-      if (this.mobileMoveTouchId === null) {
-        this.mobileMoveTouchId = touch.identifier;
-        this.mobileMoveTarget = { x, y };
-        this.mobileTapStart = { x, y, time: Date.now() };
+      if (this.touch.moveTouchId === null) {
+        this.touch.moveTouchId = touch.identifier;
+        this.touch.moveTarget = { x, y };
+        this.touch.tapStart = { x, y, time: Date.now() };
       }
     }
   }
@@ -1908,8 +1823,8 @@ export class DungeonScene extends GameplayScene {
       const y = touch.clientY - rect.top;
 
       // Cancel long-press if finger moved too far
-      if (this.invLongPressPos) {
-        const dist = Math.hypot(x - this.invLongPressPos.x, y - this.invLongPressPos.y);
+      if (this.touch.longPressPos) {
+        const dist = Math.hypot(x - this.touch.longPressPos.x, y - this.touch.longPressPos.y);
         if (dist > 10) this.clearInvLongPress();
       }
 
@@ -1917,8 +1832,8 @@ export class DungeonScene extends GameplayScene {
       this.handleMouseMove(x, y);
 
       // Update movement target
-      if (touch.identifier === this.mobileMoveTouchId) {
-        this.mobileMoveTarget = { x, y };
+      if (touch.identifier === this.touch.moveTouchId) {
+        this.touch.moveTarget = { x, y };
       }
     }
   }
@@ -1931,15 +1846,15 @@ export class DungeonScene extends GameplayScene {
       const y = touch.clientY - rect.top;
 
       // Dynamite charge release
-      if (touch.identifier === this.mobileDynamiteTouchId) {
+      if (touch.identifier === this.touch.dynamiteTouchId) {
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
-        this.mobileDynamiteTouchId = null;
+        this.touch.dynamiteTouchId = null;
         continue;
       }
 
       // Inventory / hotbar drag end
-      if (touch.identifier === this.inventoryDragTouchId) {
-        const longPressFired = this.invLongPressFired;
+      if (touch.identifier === this.touch.inventoryDragTouchId) {
+        const longPressFired = this.touch.longPressFired;
         this.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
@@ -1952,15 +1867,15 @@ export class DungeonScene extends GameplayScene {
             this.handleClick(x, y);
           }
         }
-        this.inventoryDragTouchId = null;
+        this.touch.inventoryDragTouchId = null;
         continue;
       }
 
       // Game world touch end
-      if (touch.identifier === this.mobileMoveTouchId) {
-        if (this.mobileTapStart) {
-          const elapsed = Date.now() - this.mobileTapStart.time;
-          const moved = Math.hypot(x - this.mobileTapStart.x, y - this.mobileTapStart.y);
+      if (touch.identifier === this.touch.moveTouchId) {
+        if (this.touch.tapStart) {
+          const elapsed = Date.now() - this.touch.tapStart.time;
+          const moved = Math.hypot(x - this.touch.tapStart.x, y - this.touch.tapStart.y);
           if (elapsed < 250 && moved < 20) {
             // If dynamite is charging, tap anywhere to aim and throw
             if (
@@ -1988,9 +1903,9 @@ export class DungeonScene extends GameplayScene {
             }
           }
         }
-        this.mobileMoveTouchId = null;
-        this.mobileMoveTarget = null;
-        this.mobileTapStart = null;
+        this.touch.moveTouchId = null;
+        this.touch.moveTarget = null;
+        this.touch.tapStart = null;
       }
     }
 

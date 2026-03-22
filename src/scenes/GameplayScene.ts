@@ -11,7 +11,7 @@
 
 import { Scene, SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
-import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
@@ -75,46 +75,6 @@ export abstract class GameplayScene extends Scene {
   }
 
   // ── Movement ──────────────────────────────────────────────────
-
-  /**
-   * Read WASD/Arrow input and apply collision-checked movement
-   * to the active player on the given map.
-   */
-  protected applyPlayerMovement(map: GameMap, extraDx = 0, extraDy = 0): void {
-    const player = this.active();
-    const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
-    const mapPxH = map.structure.length * TILE_SIZE;
-
-    let dx = extraDx;
-    let dy = extraDy;
-    if (this.input.has('ArrowUp') || this.input.has('w')) dy -= 1;
-    if (this.input.has('ArrowDown') || this.input.has('s')) dy += 1;
-    if (this.input.has('ArrowLeft') || this.input.has('a')) dx -= 1;
-    if (this.input.has('ArrowRight') || this.input.has('d')) dx += 1;
-
-    player.isMoving = dx !== 0 || dy !== 0;
-    if (dx !== 0 || dy !== 0) {
-      const len = Math.hypot(dx, dy);
-      player.facingX = dx / len;
-      player.facingY = dy / len;
-    }
-    if (dx !== 0 && dy !== 0) {
-      dx *= 0.7071;
-      dy *= 0.7071;
-    }
-    dx *= PLAYER_SPEED;
-    dy *= PLAYER_SPEED;
-
-    const nextX = Math.max(0, Math.min(mapPxW - TILE_SIZE, player.x + dx));
-    const tileXnext = Math.floor((nextX + TILE_SIZE * 0.5) / TILE_SIZE);
-    const tileYcur = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    if (map.isWalkable(tileXnext, tileYcur)) player.x = nextX;
-
-    const nextY = Math.max(0, Math.min(mapPxH - TILE_SIZE, player.y + dy));
-    const tileXcur = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const tileYnext = Math.floor((nextY + TILE_SIZE * 0.5) / TILE_SIZE);
-    if (map.isWalkable(tileXcur, tileYnext)) player.y = nextY;
-  }
 
   /**
    * Simple companion follow: nudge the inactive player toward the active one,

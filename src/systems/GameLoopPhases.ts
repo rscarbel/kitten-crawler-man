@@ -73,7 +73,8 @@ export function readMovement(
  */
 export function applyMovement(player: Player, move: MovementInput, gameMap: GameMap): void {
   let { dx, dy } = move;
-  const mapPx = gameMap.structure.length * TILE_SIZE;
+  const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
+  const mapPxH = gameMap.structure.length * TILE_SIZE;
 
   player.isMoving = dx !== 0 || dy !== 0;
 
@@ -91,7 +92,7 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   dx *= PLAYER_SPEED;
   dy *= PLAYER_SPEED;
 
-  const nextX = Math.max(0, Math.min(mapPx - TILE_SIZE, player.x + dx));
+  const nextX = Math.max(0, Math.min(mapPxW - TILE_SIZE, player.x + dx));
   const tileXnext =
     dx >= 0
       ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
@@ -99,7 +100,7 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
 
-  const nextY = Math.max(0, Math.min(mapPx - TILE_SIZE, player.y + dy));
+  const nextY = Math.max(0, Math.min(mapPxH - TILE_SIZE, player.y + dy));
   const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
   const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;

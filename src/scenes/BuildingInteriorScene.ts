@@ -12,6 +12,7 @@ import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { IS_MOBILE } from '../core/MobileDetect';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
+import { readMovement, applyMovement } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
@@ -204,24 +205,15 @@ export class BuildingInteriorScene extends GameplayScene {
 
     const player = this.active();
 
-    // Mobile touch movement
-    let mobileDx = 0;
-    let mobileDy = 0;
-    if (IS_MOBILE && this.mobileHUD.moveTarget && this.mobileHUD.touchHoldMs >= 150) {
-      const { x: camX, y: camY } = this.computeCamera(this.map);
-      const wx = this.mobileHUD.moveTarget.x + camX;
-      const wy = this.mobileHUD.moveTarget.y + camY;
-      const ddx = wx - (player.x + TILE_SIZE / 2);
-      const ddy = wy - (player.y + TILE_SIZE / 2);
-      const dist = Math.hypot(ddx, ddy);
-      if (dist > 8) {
-        mobileDx = ddx / dist;
-        mobileDy = ddy / dist;
-      }
-    }
-
-    // Movement + companion follow via base class
-    this.applyPlayerMovement(this.map, mobileDx, mobileDy);
+    // Movement via shared GameLoopPhases
+    const move = readMovement(
+      this.input,
+      this.mobileHUD.moveTarget,
+      this.mobileHUD.tapStart,
+      player,
+      this.computeCamera(this.map),
+    );
+    applyMovement(player, move, this.map);
     const followDist = this.isFollowOverride ? TILE_SIZE * 0.8 : TILE_SIZE * 1.5;
     this.applyCompanionFollow(this.map, followDist);
 

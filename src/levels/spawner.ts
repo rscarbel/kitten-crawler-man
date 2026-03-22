@@ -45,35 +45,38 @@ function rollMobLevel(rule: MobSpawnRule): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
+// Mob registry — maps type string → factory function
+
+type MobFactory = (tileX: number, tileY: number) => Mob;
+
+const MOB_REGISTRY = new Map<string, MobFactory>();
+
+/** Register a mob type so it can be spawned by name. */
+export function registerMob(type: string, factory: MobFactory): void {
+  MOB_REGISTRY.set(type, factory);
+}
+
+// Built-in registrations
+registerMob('llama', (x, y) => new Llama(x, y, TILE_SIZE));
+registerMob('rat', (x, y) => new Rat(x, y, TILE_SIZE));
+registerMob('the_hoarder', (x, y) => new TheHoarder(x, y, TILE_SIZE));
+registerMob('cockroach', (x, y) => new Cockroach(x, y, TILE_SIZE));
+registerMob('juicer', (x, y) => new Juicer(x, y, TILE_SIZE));
+registerMob('troglodyte', (x, y) => new Troglodyte(x, y, TILE_SIZE));
+registerMob('tuskling', (x, y) => new Tuskling(x, y, TILE_SIZE));
+registerMob('sky_fowl', (x, y) => new SkyFowl(x, y, TILE_SIZE));
+registerMob('ball_of_swine', (x, y) => new BallOfSwine(x, y, TILE_SIZE));
+registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
+registerMob('goblin', (x, y) => {
+  const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
+  return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);
+});
+
 // Mob factory
 
 export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
-  let mob: Mob;
-  if (type === 'llama') {
-    mob = new Llama(tileX, tileY, TILE_SIZE);
-  } else if (type === 'rat') {
-    mob = new Rat(tileX, tileY, TILE_SIZE);
-  } else if (type === 'the_hoarder') {
-    mob = new TheHoarder(tileX, tileY, TILE_SIZE);
-  } else if (type === 'cockroach') {
-    mob = new Cockroach(tileX, tileY, TILE_SIZE);
-  } else if (type === 'juicer') {
-    mob = new Juicer(tileX, tileY, TILE_SIZE);
-  } else if (type === 'troglodyte') {
-    mob = new Troglodyte(tileX, tileY, TILE_SIZE);
-  } else if (type === 'tuskling') {
-    mob = new Tuskling(tileX, tileY, TILE_SIZE);
-  } else if (type === 'sky_fowl') {
-    mob = new SkyFowl(tileX, tileY, TILE_SIZE);
-  } else if (type === 'ball_of_swine') {
-    mob = new BallOfSwine(tileX, tileY, TILE_SIZE);
-  } else if (type === 'krakaren_clone') {
-    mob = new KrakarenClone(tileX, tileY, TILE_SIZE);
-  } else {
-    // default: goblin
-    const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
-    mob = new Goblin(tileX, tileY, TILE_SIZE, v.weapon, v.skin, v.eye);
-  }
+  const factory = MOB_REGISTRY.get(type);
+  const mob = factory ? factory(tileX, tileY) : MOB_REGISTRY.get('goblin')!(tileX, tileY); // default: goblin
   mob.setMap(map);
   return mob;
 }
