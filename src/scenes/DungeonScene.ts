@@ -41,6 +41,7 @@ import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSn
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { GoreSystem } from '../systems/GoreSystem';
+import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
 import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
@@ -98,6 +99,7 @@ export class DungeonScene extends GameplayScene {
   private mongoSystem = new MongoSystem();
   private renderPipeline = new RenderPipeline();
   private mobLoop = new MobUpdateLoop();
+  private bus = new EventBus();
 
   // UI
   protected pauseMenu: PauseMenu;
@@ -329,6 +331,135 @@ export class DungeonScene extends GameplayScene {
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
     }
+
+    this.wireEventBus();
+  }
+
+  /** Subscribe systems to EventBus events, replacing imperative orchestration. */
+  private wireEventBus(): void {
+    const bus = this.bus;
+
+    // ── spawnGore: decoupled so any system can trigger gore independently ──
+    bus.on('spawnGore', (e) => {
+      this.gore.spawnGore(e.x, e.y);
+    });
+
+    // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
+    bus.on('mobKilled', (e) => {
+      const { mob, killer, topDamageDealer } = e;
+      const cx = mob.x + TILE_SIZE * 0.5;
+      const cy = mob.y + TILE_SIZE * 0.5;
+
+      // Gore via spawnGore event (decoupled from kill logic)
+      bus.emit('spawnGore', { x: cx, y: cy });
+
+      // Corpse marker on minimap
+      this.miniMap.addCorpseMarker(cx, cy);
+
+      // Achievements — first_blood
+      if (killer === this.human) this.humanAchievements.tryUnlock('first_blood');
+      if (killer === this.cat) this.catAchievements.tryUnlock('first_blood');
+
+      // Achievements — smush (Human melee punch kill)
+      if (killer === this.human && mob.killType === 'melee' && this.human.nextType === 'punch') {
+        this.humanAchievements.tryUnlock('smush');
+      }
+
+      // Achievements — magic_touch (Cat missile kill)
+      if (killer === this.cat && mob.killType === 'missile') {
+        this.catAchievements.tryUnlock('magic_touch');
+      }
+
+      // Loot drop
+      if (mob.droppedLoot && topDamageDealer) {
+        this.loot.addLoot(cx, cy, mob.droppedLoot, topDamageDealer, mob.isBoss);
+        mob.droppedLoot = null;
+      }
+
+      // Boss-specific effects (regular bosses managed by BossRoomSystem)
+      if (mob.isBoss) {
+        bus.emit('bossDefeated', {
+          bossType: (mob.constructor as { name?: string }).name ?? 'unknown',
+          mob,
+        });
+      }
+
+      // Ball of Swine is an arena boss (isBoss=false), handle separately
+      if (mob instanceof BallOfSwine) {
+        bus.emit('bossDefeated', { bossType: 'ball_of_swine', mob });
+      }
+
+      // Krakaren Clone — also not flagged as isBoss
+      if (mob instanceof KrakarenClone) {
+        bus.emit('bossDefeated', { bossType: 'krakaren_clone', mob });
+      }
+
+      // Level 2: enemy deaths spawn Brindle Grubs
+      if (this.levelDef.id === 'level2' && !(mob instanceof BrindleGrub)) {
+        const tx = Math.round(mob.x / TILE_SIZE);
+        const ty = Math.round(mob.y / TILE_SIZE);
+        const count = 1 + Math.floor(Math.random() * 5);
+        for (let i = 0; i < count; i++) {
+          let placed = false;
+          for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+            const ox = Math.floor((Math.random() - 0.5) * 4);
+            const oy = Math.floor((Math.random() - 0.5) * 4);
+            const gtx = tx + ox;
+            const gty = ty + oy;
+            if (!this.gameMap.isWalkable(gtx, gty)) continue;
+            const grub = new BrindleGrub(gtx, gty, TILE_SIZE);
+            grub.setMap(this.gameMap);
+            this.mobs.push(grub);
+            this.mobGrid.insert(grub);
+            placed = true;
+          }
+        }
+      }
+    });
+
+    // ── bossDefeated: boss_slayer achievement, BoS tusklings, Krakaren → Mongo ──
+    bus.on('bossDefeated', (e) => {
+      // boss_slayer achievement for both players
+      if (!this.humanAchievements.tryUnlock('boss_slayer')) {
+        this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+      }
+      if (!this.catAchievements.tryUnlock('boss_slayer')) {
+        this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+      }
+
+      // Ball of Swine burst → spawn 8 dazed Tusklings
+      if (e.bossType === 'ball_of_swine' && !this.arenaPhase2Active) {
+        this.arenaPhase2Active = true;
+        this.arenaLiveTusklings = [];
+        const arena = this.gameMap.arenaExteriors[0];
+        const acx = arena ? arena.centre.x : Math.floor(e.mob.x / TILE_SIZE);
+        const acy = arena ? arena.centre.y : Math.floor(e.mob.y / TILE_SIZE);
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const r = 3;
+          const tx = acx + Math.round(Math.cos(angle) * r);
+          const ty = acy + Math.round(Math.sin(angle) * r);
+          const tusk = new Tuskling(tx, ty, TILE_SIZE);
+          tusk.setMap(this.gameMap);
+          tusk.dazeTimer = 600;
+          this.mobs.push(tusk);
+          this.mobGrid.insert(tusk);
+          this.arenaLiveTusklings.push(tusk);
+        }
+      }
+
+      // Krakaren Clone death → unlock Mongo
+      if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
+        this.krakarenKilled = true;
+        this.mongoSystem.unlocked = true;
+      }
+    });
+
+    // ── safeRoomEntered: safe_haven achievement ──
+    bus.on('safeRoomEntered', () => {
+      this.humanAchievements.tryUnlock('safe_haven');
+      this.catAchievements.tryUnlock('safe_haven');
+    });
   }
 
   // Scene lifecycle
@@ -387,6 +518,7 @@ export class DungeonScene extends GameplayScene {
 
   onExit(): void {
     this.inputHandler.unbind();
+    this.bus.clear();
   }
 
   // Shared action helpers (keyboard + touch)
@@ -952,8 +1084,7 @@ export class DungeonScene extends GameplayScene {
 
     if (!this.safeRoomEntered && this.pm.isAnySafe(this.safeRoom)) {
       this.safeRoomEntered = true;
-      this.humanAchievements.tryUnlock('safe_haven');
-      this.catAchievements.tryUnlock('safe_haven');
+      this.bus.emit('safeRoomEntered', {});
     }
 
     this.safeRoom.evictMobs(this.mobs, this.mobGrid);
@@ -1026,74 +1157,18 @@ export class DungeonScene extends GameplayScene {
       mobGrid: this.mobGrid,
       gameMap: this.gameMap,
       safeRoom: this.safeRoom,
-      miniMap: this.miniMap,
-      loot: this.loot,
-      humanAchievements: this.humanAchievements,
-      catAchievements: this.catAchievements,
+      bus: this.bus,
     };
     resolvePlayerAttacks(combatCtx);
-    // Spawn gore before resolveKills consumes justDied.
-    // On level 2, enemy deaths also spawn a cluster of Brindle Grubs.
-    const grubSpawnPositions: Array<{ tx: number; ty: number }> = [];
-    for (const mob of this.mobs) {
-      if (!mob.justDied) continue;
-      this.gore.spawnGore(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
-      if (this.levelDef.id === 'level2' && !(mob instanceof BrindleGrub)) {
-        grubSpawnPositions.push({
-          tx: Math.round(mob.x / TILE_SIZE),
-          ty: Math.round(mob.y / TILE_SIZE),
-        });
-      }
-    }
-    for (const { tx, ty } of grubSpawnPositions) {
-      const count = 1 + Math.floor(Math.random() * 5); // 1–5
-      for (let i = 0; i < count; i++) {
-        // Scatter each grub within ±2 tiles of the death location.
-        // Try up to 8 random offsets; skip if the tile is not walkable.
-        let placed = false;
-        for (let attempt = 0; attempt < 8 && !placed; attempt++) {
-          const ox = Math.floor((Math.random() - 0.5) * 4);
-          const oy = Math.floor((Math.random() - 0.5) * 4);
-          const gtx = tx + ox;
-          const gty = ty + oy;
-          if (!this.gameMap.isWalkable(gtx, gty)) continue;
-          const grub = new BrindleGrub(gtx, gty, TILE_SIZE);
-          grub.setMap(this.gameMap);
-          this.mobs.push(grub);
-          this.mobGrid.insert(grub);
-          placed = true;
-        }
-      }
-    }
 
-    // Ball of Swine burst: spawn 8 dazed Tusklings when burst animation completes
-    for (const mob of this.mobs) {
-      if (!(mob instanceof BallOfSwine) || !mob.justDied) continue;
-      if (!this.arenaPhase2Active) {
-        this.arenaPhase2Active = true;
-        this.arenaLiveTusklings = [];
-        const arena = this.gameMap.arenaExteriors[0];
-        const cx = arena ? arena.centre.x : Math.floor(mob.x / TILE_SIZE);
-        const cy = arena ? arena.centre.y : Math.floor(mob.y / TILE_SIZE);
-        for (let i = 0; i < 8; i++) {
-          const angle = (i / 8) * Math.PI * 2;
-          const r = 3;
-          const tx = cx + Math.round(Math.cos(angle) * r);
-          const ty = cy + Math.round(Math.sin(angle) * r);
-          const tusk = new Tuskling(tx, ty, TILE_SIZE);
-          tusk.setMap(this.gameMap);
-          tusk.dazeTimer = 600; // 10 seconds
-          this.mobs.push(tusk);
-          this.mobGrid.insert(tusk);
-          this.arenaLiveTusklings.push(tusk);
-        }
-        // Grant boss_slayer achievement
-        this.humanAchievements.tryUnlock('boss_slayer');
-        this.catAchievements.tryUnlock('boss_slayer');
-      }
-    }
+    // Intercept Mongo lethal damage before resolveKills consumes justDied
+    this.mongoSystem.checkHealth();
 
-    // Phase 2: unlock arena stairwell when all spawned Tusklings are dead
+    // resolveKills emits mobKilled → listeners handle gore, loot, achievements,
+    // grub spawns, BoS tuskling burst, Krakaren → Mongo unlock
+    resolveKills(combatCtx);
+
+    // Arena phase 2: unlock stairwell when all spawned Tusklings are dead
     if (
       this.arenaPhase2Active &&
       !this.arenaStairwellUnlocked &&
@@ -1102,28 +1177,11 @@ export class DungeonScene extends GameplayScene {
     ) {
       this.arenaStairwellUnlocked = true;
       this.gameMap.unlockArenaStairwell();
-      // Unlock the arena door now that all Tusklings are dead
       if (this.arenaLocked) {
         this.arenaLocked = false;
         this.gameMap.unlockArenaDoor();
       }
     }
-
-    // Detect Krakaren Clone death → unlock Mongo for the cat
-    if (!this.krakarenKilled) {
-      for (const mob of this.mobs) {
-        if (mob instanceof KrakarenClone && mob.justDied) {
-          this.krakarenKilled = true;
-          this.mongoSystem.unlocked = true;
-          break;
-        }
-      }
-    }
-
-    // Intercept Mongo lethal damage before resolveKills consumes justDied
-    this.mongoSystem.checkHealth();
-
-    resolveKills(combatCtx);
 
     // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(this.mobs, this.mobGrid);

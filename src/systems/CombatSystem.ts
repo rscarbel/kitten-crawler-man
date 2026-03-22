@@ -5,9 +5,7 @@ import { Mob } from '../creatures/Mob';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { GameMap } from '../map/GameMap';
 import { SafeRoomSystem } from './SafeRoomSystem';
-import { MiniMapSystem } from './MiniMapSystem';
-import { LootSystem } from './LootSystem';
-import { AchievementManager } from '../core/AchievementManager';
+import { EventBus } from '../core/EventBus';
 import { makeSepsis } from '../core/StatusEffect';
 
 /** Shared context passed to combat resolution functions. */
@@ -18,10 +16,7 @@ export interface CombatContext {
   mobGrid: SpatialGrid<Mob>;
   gameMap: GameMap;
   safeRoom: SafeRoomSystem;
-  miniMap: MiniMapSystem;
-  loot: LootSystem;
-  humanAchievements: AchievementManager;
-  catAchievements: AchievementManager;
+  bus: EventBus;
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
@@ -82,12 +77,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 }
 
 export function resolveKills(ctx: CombatContext): void {
-  const { mobs, human, cat, mobGrid, miniMap, loot, humanAchievements, catAchievements } = ctx;
+  const { mobs, human, cat, mobGrid, bus } = ctx;
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
     mobGrid.remove(mob);
-    miniMap.addCorpseMarker(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
 
     let totalDmg = 0;
     for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;
@@ -109,33 +103,11 @@ export function resolveKills(ctx: CombatContext): void {
     if (topPlayer) topPlayer.gainXp(topXp);
     if (otherPlayer) otherPlayer.gainXp(shareXp);
 
-    // Achievement checks
-    if (mob.killedBy === human) humanAchievements.tryUnlock('first_blood');
-    if (mob.killedBy === cat) catAchievements.tryUnlock('first_blood');
-    if (mob.isBoss) {
-      if (!humanAchievements.tryUnlock('boss_slayer')) {
-        humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
-      }
-      if (!catAchievements.tryUnlock('boss_slayer')) {
-        catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
-      }
-    }
-    if (mob.killedBy === human && mob.killType === 'melee' && human.nextType === 'punch') {
-      humanAchievements.tryUnlock('smush');
-    }
-    if (mob.killedBy === cat && mob.killType === 'missile') {
-      catAchievements.tryUnlock('magic_touch');
-    }
-
-    if (mob.droppedLoot && topPlayer) {
-      loot.addLoot(
-        mob.x + TILE_SIZE * 0.5,
-        mob.y + TILE_SIZE * 0.5,
-        mob.droppedLoot,
-        topPlayer,
-        mob.isBoss,
-      );
-      mob.droppedLoot = null;
-    }
+    bus.emit('mobKilled', {
+      mob,
+      killer: mob.killedBy as HumanPlayer | CatPlayer | null,
+      killType: mob.killType,
+      topDamageDealer: topPlayer,
+    });
   }
 }
