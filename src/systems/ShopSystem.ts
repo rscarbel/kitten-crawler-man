@@ -2,6 +2,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 
 const SHOP_ITEMS: Array<{
   id: ItemId;
@@ -81,21 +82,9 @@ export class ShopSystem implements GameSystem {
     const sy = this.shopkeeperTileY * ts - camY;
     this.drawShopkeeper(ctx, sx, sy, ts, this.wanderTime, this.wanderDir);
 
-    // Speech bubble when player is near and shop is closed
+    // Interaction prompt when player is near and shop is closed
     if (!this.shopOpen && this.isNearShopkeeper(active)) {
-      const mx = sx + ts * 0.5;
-      const my = sy;
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.68)';
-      const tw = 126;
-      const th = 24;
-      ctx.fillRect(mx - tw / 2, my - 38, tw, th);
-      ctx.fillStyle = '#f0e8d0';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('[Space] Shop', mx, my - 21);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      drawInteractionPrompt(ctx, sx, sy, ts, 'Shop');
     }
   }
 

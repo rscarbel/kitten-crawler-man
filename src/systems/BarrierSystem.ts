@@ -3,6 +3,7 @@ import type { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import {
   drawDumbbellFloor,
   drawBenchPressFloor,
@@ -188,12 +189,7 @@ export class BarrierSystem implements GameSystem {
         const ptx = Math.floor((activePlayer.x + ts * 0.5) / ts);
         const pty = Math.floor((activePlayer.y + ts * 0.5) / ts);
         if (ptx === b.tileX && pty === b.tileY) {
-          ctx.save();
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#fbbf24';
-          ctx.fillText('[Space] Pick up', sx + ts * 0.5, sy - 4);
-          ctx.restore();
+          drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
         }
       }
     }

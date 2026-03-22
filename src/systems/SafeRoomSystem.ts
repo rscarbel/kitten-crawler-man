@@ -6,6 +6,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -257,17 +258,7 @@ export class SafeRoomSystem implements GameSystem {
       if (this.isEntityInSafeRoom(active) && this.isNearBed(active) && !this._isSleeping) {
         const bsx = e.bedTileX * TILE_SIZE - camX;
         const bsy = e.bedTileY * TILE_SIZE - camY;
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.68)';
-        const tw = 210;
-        const th = 28;
-        ctx.fillRect(bsx + TILE_SIZE * 0.5 - tw / 2, bsy - 38, tw, th);
-        ctx.fillStyle = '#f0e8d0';
-        ctx.font = '11px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('[Space] Sleep (restores HP)', bsx + TILE_SIZE * 0.5, bsy - 18);
-        ctx.textAlign = 'left';
-        ctx.restore();
+        drawInteractionPrompt(ctx, bsx, bsy, TILE_SIZE, 'Sleep');
         break; // only prompt for the first nearby bed
       }
 
@@ -283,17 +274,7 @@ export class SafeRoomSystem implements GameSystem {
           TILE_SIZE * 2.5 &&
         !this._mordecaiDialogOpen;
       if (nearThis) {
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.68)';
-        const tw = 110;
-        const th = 24;
-        ctx.fillRect(mx + TILE_SIZE * 0.5 - tw / 2, my - 34, tw, th);
-        ctx.fillStyle = '#f0e8d0';
-        ctx.font = '11px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('[Space] Talk', mx + TILE_SIZE * 0.5, my - 17);
-        ctx.textAlign = 'left';
-        ctx.restore();
+        drawInteractionPrompt(ctx, mx, my, TILE_SIZE, 'Talk');
         break; // only prompt once
       }
     }

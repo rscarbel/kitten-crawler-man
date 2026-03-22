@@ -796,7 +796,7 @@ export class DungeonScene extends GameplayScene {
 
     // Layer 1: World (map, gore puddles, room objects, door hints)
     this.renderPipeline.renderWorld(ctx, rc);
-    this.defendQuest.renderObjects(ctx, camX, camY);
+    this.defendQuest.renderObjects(ctx, camX, camY, this.active());
 
     // Layer 2: Entities (Y-sorted mobs, players, decorations)
     this.renderPipeline.renderEntities(ctx, rc);

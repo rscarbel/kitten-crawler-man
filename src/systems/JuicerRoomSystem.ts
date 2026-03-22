@@ -3,6 +3,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { Juicer } from '../creatures/Juicer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import {
   drawDumbbellFloor,
   drawBenchPressFloor,
@@ -208,19 +209,14 @@ export class JuicerRoomSystem implements GameSystem {
           break;
       }
 
-      // Show "Space to pick up" prompt when player is nearby
+      // Show interaction prompt when player is nearby
       if (activePlayer) {
         const pcx = activePlayer.x + ts * 0.5;
         const pcy = activePlayer.y + ts * 0.5;
         const wcx = pickup.worldX + ts * 0.5;
         const wcy = pickup.worldY + ts * 0.5;
         if (Math.hypot(pcx - wcx, pcy - wcy) < collectRadius) {
-          ctx.save();
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#fbbf24';
-          ctx.fillText('[Space] Pick up', sx + ts * 0.5, sy - 4);
-          ctx.restore();
+          drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
         }
       }
     }

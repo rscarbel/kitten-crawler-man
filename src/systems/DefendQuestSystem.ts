@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { GameMap } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
@@ -549,7 +550,12 @@ export class DefendQuestSystem implements GameSystem {
 
   // ── Render: World Objects ─────────────────────────────────────
 
-  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  renderObjects(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active?: { x: number; y: number },
+  ): void {
     if (this.phase === 'inactive') return;
 
     // Wood pile
@@ -569,6 +575,15 @@ export class DefendQuestSystem implements GameSystem {
     // NPC
     if (this.npc && this.npc.isAlive) {
       this.npc.render(ctx, camX, camY, TILE_SIZE);
+      // Interaction prompt when player is near and NPC is interactable
+      if (active && (this.phase === 'npc_waiting' || this.phase === 'complete_pending')) {
+        const dist = Math.hypot(active.x - this.npc.x, active.y - this.npc.y);
+        if (dist <= INTERACT_RANGE_PX) {
+          const sx = this.npc.x - camX;
+          const sy = this.npc.y - camY;
+          drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Talk');
+        }
+      }
     }
 
     // Dead NPC red X
