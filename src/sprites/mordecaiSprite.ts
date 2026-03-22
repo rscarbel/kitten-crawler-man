@@ -1,49 +1,6 @@
-/**
- * Mordecai sprite variants — thin wrappers around the reusable creature sprites.
- * Import the standalone sprites directly (ratKinSprite, incubusSprite, bugabooSprite)
- * if you need these visuals for enemies or other NPCs.
- */
 import { drawRatKinSprite } from './ratKinSprite';
 import { drawIncubusSprite } from './incubusSprite';
 import { drawBugabooSprite } from './bugabooSprite';
-
-// Re-export the standalone sprites under their Mordecai-specific names
-// so existing call-sites don't need to change.
-export function drawRatKinMordecaiSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  walkTime = 0,
-  isWalking = false,
-  facingX = 1,
-) {
-  drawRatKinSprite(ctx, sx, sy, s, walkTime, isWalking, facingX);
-}
-
-export function drawIncubusMordecaiSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  walkTime = 0,
-  isWalking = false,
-  facingX = 1,
-) {
-  drawIncubusSprite(ctx, sx, sy, s, walkTime, isWalking, facingX);
-}
-
-export function drawBugabooMordecaiSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  walkTime = 0,
-  isWalking = false,
-  facingX = 1,
-) {
-  drawBugabooSprite(ctx, sx, sy, s, walkTime, isWalking, facingX);
-}
 
 /**
  * Dispatcher: picks the correct Mordecai variant sprite for the given level ID.

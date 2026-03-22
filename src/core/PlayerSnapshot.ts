@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import type { InventoryItem } from './Inventory';
+import type { InventoryItem } from './ItemDefs';
 
 /** Serialisable snapshot of a single player's state, used when transitioning
  *  between scenes (e.g. entering/exiting a building interior). */
@@ -34,9 +34,9 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     coins: p.coins,
     facingX: p.facingX,
     facingY: p.facingY,
-    inventorySlots: p.inventory.slots.map((s) => (s ? { ...s } : null)),
-    inventoryHotbar: p.inventory.hotbar.map((s) => (s ? { ...s } : null)),
-    equippedEntries: [...p.inventory.equipped.entries()],
+    inventorySlots: p.inventory.bag.slots.map((s) => (s ? { ...s } : null)),
+    inventoryHotbar: p.inventory.actionBar.slots.map((s) => (s ? { ...s } : null)),
+    equippedEntries: [...p.inventory.equipment.equipped.entries()],
   };
   if ('explosivesHandling' in p) {
     snap.explosivesHandling = (p as { explosivesHandling: number }).explosivesHandling;
@@ -62,13 +62,13 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
 
   // Restore inventory slots
   for (let i = 0; i < snap.inventorySlots.length; i++) {
-    p.inventory.slots[i] = snap.inventorySlots[i];
+    p.inventory.bag.slots[i] = snap.inventorySlots[i];
   }
   for (let i = 0; i < snap.inventoryHotbar.length; i++) {
-    p.inventory.hotbar[i] = snap.inventoryHotbar[i];
+    p.inventory.actionBar.slots[i] = snap.inventoryHotbar[i];
   }
-  p.inventory.equipped.clear();
+  p.inventory.equipment.equipped.clear();
   for (const [k, v] of snap.equippedEntries) {
-    p.inventory.equipped.set(k, v as import('./Inventory').ItemId);
+    p.inventory.equipment.equipped.set(k, v as import('./ItemDefs').ItemId);
   }
 }

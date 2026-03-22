@@ -4,31 +4,10 @@ import { EquipmentManager } from './EquipmentManager';
 import { SLOT_COUNT, HOTBAR_COUNT } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 
-// Re-export everything from ItemDefs so existing consumers don't break.
-export type { ItemId, EquipSlot, InventoryItem } from './ItemDefs';
-export { ITEM_DEF, SLOT_COUNT, HOTBAR_COUNT, SLOTS_PER_PAGE, EQUIP_SUBSLOTS } from './ItemDefs';
-
-export { ItemBag } from './ItemBag';
-export { Hotbar } from './Hotbar';
-export { EquipmentManager } from './EquipmentManager';
-
 export class Inventory {
   readonly bag: ItemBag;
   readonly actionBar: Hotbar;
   readonly equipment: EquipmentManager;
-
-  /** @deprecated Use `bag.slots` directly. */
-  get slots(): (InventoryItem | null)[] {
-    return this.bag.slots;
-  }
-  /** @deprecated Use `actionBar.slots` directly. */
-  get hotbar(): (InventoryItem | null)[] {
-    return this.actionBar.slots;
-  }
-  /** @deprecated Use `equipment.equipped` directly. */
-  get equipped(): Map<string, ItemId> {
-    return this.equipment.equipped;
-  }
 
   constructor() {
     this.bag = new ItemBag(SLOT_COUNT);

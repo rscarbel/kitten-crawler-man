@@ -1,6 +1,6 @@
 import type { StatusEffect } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
-import type { InventoryItem } from './core/Inventory';
+import type { InventoryItem } from './core/ItemDefs';
 
 export abstract class Player {
   x: number;

@@ -1,5 +1,6 @@
-import { Inventory, EQUIP_SUBSLOTS, EquipSlot } from '../core/Inventory';
-import type { InventoryItem } from '../core/Inventory';
+import { Inventory } from '../core/Inventory';
+import { EQUIP_SUBSLOTS } from '../core/ItemDefs';
+import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 
 // Layout constants

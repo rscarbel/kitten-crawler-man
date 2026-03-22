@@ -1,6 +1,6 @@
 import { Player } from '../Player';
 import { GameMap } from '../map/GameMap';
-import type { ItemId } from '../core/Inventory';
+import type { ItemId } from '../core/ItemDefs';
 
 export interface LootDrop {
   coins: number;

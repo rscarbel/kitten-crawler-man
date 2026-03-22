@@ -52,20 +52,6 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
-  // Backward-compat accessors (first entry)
-
-  get bounds(): { x: number; y: number; w: number; h: number } | null {
-    return this.entries[0]?.bounds ?? null;
-  }
-
-  get mordecaiTileX(): number {
-    return this.entries[0]?.mordecaiHomeTileX ?? 0;
-  }
-
-  get mordecaiTileY(): number {
-    return this.entries[0]?.mordecaiHomeTileY ?? 0;
-  }
-
   /** All Mordecai home tile positions (for minimap). */
   get mordecaiPositions(): Array<{ x: number; y: number }> {
     return this.entries.map((e) => ({

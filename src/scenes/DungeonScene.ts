@@ -533,7 +533,7 @@ export class DungeonScene extends GameplayScene {
 
   private triggerHotbarActivation(hotbarIdx: number): void {
     const active = this.active();
-    const slot = active.inventory.hotbar[hotbarIdx];
+    const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
       active.usePotion();
     } else if (slot?.abilityId === 'protective_shell') {
@@ -685,7 +685,7 @@ export class DungeonScene extends GameplayScene {
     if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
       const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, canvas, active.inventory);
       if (slotIdx !== null) {
-        const item = active.inventory.slots[slotIdx];
+        const item = active.inventory.bag.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
           const prev = active.inventory.equip(slotIdx);
           if (prev) active.removeItemBonus(prev);
@@ -1142,10 +1142,10 @@ export class DungeonScene extends GameplayScene {
   // Inventory actions
 
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
-    if (this.inventoryPanel.pendingEquipSlot !== null) {
-      const slotIdx = this.inventoryPanel.pendingEquipSlot;
-      this.inventoryPanel.pendingEquipSlot = null;
-      const item = active.inventory.slots[slotIdx];
+    if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
+      const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
+      this.inventoryPanel.interaction.pendingEquipSlot = null;
+      const item = active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
         const prev = active.inventory.equip(slotIdx);
         if (prev) active.removeItemBonus(prev);
@@ -1153,23 +1153,23 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    if (this.inventoryPanel.pendingUnequipSlot !== null) {
-      const slotIdx = this.inventoryPanel.pendingUnequipSlot;
-      this.inventoryPanel.pendingUnequipSlot = null;
-      const item = active.inventory.slots[slotIdx];
+    if (this.inventoryPanel.interaction.pendingUnequipSlot !== null) {
+      const slotIdx = this.inventoryPanel.interaction.pendingUnequipSlot;
+      this.inventoryPanel.interaction.pendingUnequipSlot = null;
+      const item = active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
         active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
         active.removeItemBonus(item);
       }
     }
 
-    if (this.inventoryPanel.pendingDropItem !== null) {
-      const { id, quantity } = this.inventoryPanel.pendingDropItem;
-      this.inventoryPanel.pendingDropItem = null;
+    if (this.inventoryPanel.interaction.pendingDropItem !== null) {
+      const { id, quantity } = this.inventoryPanel.interaction.pendingDropItem;
+      this.inventoryPanel.interaction.pendingDropItem = null;
       if (active.inventory.hasEquipped(id)) {
         const item =
-          active.inventory.slots.find((s) => s?.id === id) ??
-          active.inventory.hotbar.find((s) => s?.id === id) ??
+          active.inventory.bag.slots.find((s) => s?.id === id) ??
+          active.inventory.actionBar.slots.find((s) => s?.id === id) ??
           null;
         if (item?.equipSlot && item?.equipSubSlot) {
           active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
@@ -1199,7 +1199,7 @@ export class DungeonScene extends GameplayScene {
         target.coins += contents.coins;
         if (contents.bonus) {
           this.human.inventory.addItem(
-            contents.bonus.id as import('../core/Inventory').ItemId,
+            contents.bonus.id as import('../core/ItemDefs').ItemId,
             contents.bonus.quantity,
           );
         }
@@ -1684,7 +1684,7 @@ export class DungeonScene extends GameplayScene {
       // Dynamite charge start: hold hotbar slot to charge, release to throw
       if (!this.gameOver && !this.pauseMenu.isOpen && this.human.isActive) {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-        if (dynIdx >= 0 && this.human.inventory.hotbar[dynIdx]?.id === 'goblin_dynamite') {
+        if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
           this.dynamite.beginCharge(dynIdx);
           this.touch.dynamiteTouchId = touch.identifier;
           continue;

@@ -51,10 +51,6 @@ export class GameMap {
   mobSpawnPoints: Array<{ x: number; y: number }> = [];
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
-  /** Bounds (in tile coords) of the primary safe room, or null if not enough rooms generated. */
-  safeRoomBounds: { x: number; y: number; w: number; h: number } | null = null;
-  /** Tile-space centre of the primary safe room, or null if none. */
-  safeRoomCentre: { x: number; y: number } | null = null;
   /** All safe rooms on this map (bounds + centre in tile coords). */
   safeRooms: Array<{
     bounds: { x: number; y: number; w: number; h: number };
@@ -115,8 +111,6 @@ export class GameMap {
       const data = generateOverworld(size);
       this.startTile = data.startTile;
       this.safeRooms = data.safeRooms;
-      this.safeRoomBounds = data.safeRoomBounds;
-      this.safeRoomCentre = data.safeRoomCentre;
       this.buildingEntries = data.buildingEntries;
       this.bossRooms = data.bossRooms;
       this.mobSpawnPoints = data.mobSpawnPoints;
@@ -135,8 +129,6 @@ export class GameMap {
     );
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;
-    this.safeRoomBounds = data.safeRoomBounds;
-    this.safeRoomCentre = data.safeRoomCentre;
     this.bossRooms = data.bossRooms;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
@@ -452,12 +444,8 @@ export class GameMap {
           centre: { x: Math.floor(w / 2), y: Math.floor(h / 2) },
         },
       ];
-      this.safeRoomBounds = interior;
-      this.safeRoomCentre = this.safeRooms[0].centre;
     } else {
       this.safeRooms = [];
-      this.safeRoomBounds = null;
-      this.safeRoomCentre = null;
     }
   }
 

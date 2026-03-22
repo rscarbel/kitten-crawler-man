@@ -31,8 +31,6 @@ export interface OverworldData {
   grid: TileContent[][];
   startTile: Point;
   safeRooms: Array<{ bounds: Rect; centre: Point }>;
-  safeRoomBounds: Rect | null;
-  safeRoomCentre: Point | null;
   buildingEntries: BuildingEntry[];
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   mobSpawnPoints: Point[];
@@ -500,8 +498,6 @@ export function generateOverworld(size: number): OverworldData {
     grid,
     startTile,
     safeRooms,
-    safeRoomBounds: null,
-    safeRoomCentre: null,
     buildingEntries,
     bossRooms: [],
     mobSpawnPoints: [],

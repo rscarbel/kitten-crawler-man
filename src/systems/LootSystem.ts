@@ -3,7 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { LootDrop } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { ItemId } from '../core/Inventory';
+import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 interface PendingLoot {

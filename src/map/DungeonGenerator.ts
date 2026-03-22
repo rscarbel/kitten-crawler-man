@@ -26,8 +26,6 @@ export interface DungeonData {
   grid: TileContent[][];
   startTile: Point;
   safeRooms: Array<{ bounds: Rect; centre: Point }>;
-  safeRoomBounds: Rect | null;
-  safeRoomCentre: Point | null;
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   mobSpawnPoints: Point[];
   hallwaySpawnPoints: Point[];
@@ -242,10 +240,6 @@ export function generateDungeon(
       },
     });
   }
-  // Backward-compat: primary safe room is first entry
-  const safeRoomBounds = safeRooms.length > 0 ? safeRooms[0].bounds : null;
-  const safeRoomCentre = safeRooms.length > 0 ? safeRooms[0].centre : null;
-
   // Record all boss rooms (rooms[bossRoomStart..bossRoomEnd-1])
   const bossRooms: Array<{ bounds: Rect; centre: Point }> = [];
   for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++) {
@@ -485,8 +479,6 @@ export function generateDungeon(
     grid,
     startTile,
     safeRooms,
-    safeRoomBounds,
-    safeRoomCentre,
     bossRooms,
     mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,

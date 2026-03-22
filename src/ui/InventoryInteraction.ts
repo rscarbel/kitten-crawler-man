@@ -1,4 +1,6 @@
-import { Inventory, InventoryItem, ItemId, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
+import { Inventory } from '../core/Inventory';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/ItemDefs';
+import type { InventoryItem, ItemId } from '../core/ItemDefs';
 
 function inRect(
   mx: number,
@@ -158,7 +160,9 @@ export class InventoryInteraction {
             inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
           } else if (action === 'Drop') {
             const item =
-              cm.source === 'hotbar' ? inventory.hotbar[cm.slotIdx] : inventory.slots[cm.slotIdx];
+              cm.source === 'hotbar'
+                ? inventory.actionBar.slots[cm.slotIdx]
+                : inventory.bag.slots[cm.slotIdx];
             if (item) {
               if (item.stackable && item.quantity > 1) {
                 this.dropDialog = {
@@ -195,7 +199,7 @@ export class InventoryInteraction {
       return true;
     }
 
-    const pages = pageCount(inventory.slots.length);
+    const pages = pageCount(inventory.bag.slots.length);
     if (pages > 1) {
       const NAV_H = 28;
       const navY = p.y + p.h - NAV_H + 6;
@@ -238,7 +242,7 @@ export class InventoryInteraction {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = hotbarSlotRect(i, canvas);
       if (inRect(mx, my, r)) {
-        const item = inventory.hotbar[i];
+        const item = inventory.actionBar.slots[i];
         if (item) {
           this.drag = { source: 'hotbar', idx: i, item, mx, my };
           return;
@@ -251,10 +255,10 @@ export class InventoryInteraction {
     const pageStart = page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
+      if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
       if (inRect(mx, my, r)) {
-        const item = inventory.slots[slotIdx];
+        const item = inventory.bag.slots[slotIdx];
         if (item) {
           this.drag = { source: 'inv', idx: slotIdx, item, mx, my };
           return;
@@ -283,7 +287,7 @@ export class InventoryInteraction {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = hotbarSlotRect(i, canvas);
       if (inRect(mx, my, r)) {
-        const item = inventory.hotbar[i];
+        const item = inventory.actionBar.slots[i];
         if (item) {
           this.contextMenu = { source: 'hotbar', slotIdx: i, x: mx, y: my, item };
           this.contextMenuHover = -1;
@@ -296,10 +300,10 @@ export class InventoryInteraction {
     const pageStart = page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
+      if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
       if (inRect(mx, my, r)) {
-        const item = inventory.slots[slotIdx];
+        const item = inventory.bag.slots[slotIdx];
         if (item) {
           this.contextMenu = {
             source: 'inv',
@@ -377,7 +381,7 @@ export class InventoryInteraction {
     const pageStart = page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
+      if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
       if (inRect(mx, my, r)) {
         if (src.source === 'hotbar') {

@@ -1,7 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
-import type { ItemId } from '../core/Inventory';
+import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import {
   drawDumbbellFloor,

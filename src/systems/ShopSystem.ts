@@ -1,5 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
-import type { ItemId } from '../core/Inventory';
+import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 

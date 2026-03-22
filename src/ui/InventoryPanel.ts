@@ -1,4 +1,6 @@
-import { Inventory, InventoryItem, HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/Inventory';
+import { Inventory } from '../core/Inventory';
+import { HOTBAR_COUNT, SLOTS_PER_PAGE } from '../core/ItemDefs';
+import type { InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
@@ -40,32 +42,6 @@ export class InventoryPanel {
 
   /** Interaction handler — owns drag, context menu, and pending action state. */
   readonly interaction = new InventoryInteraction();
-
-  // Delegate pending fields to interaction for backward compatibility
-  get pendingEquipSlot() {
-    return this.interaction.pendingEquipSlot;
-  }
-  set pendingEquipSlot(v) {
-    this.interaction.pendingEquipSlot = v;
-  }
-  get pendingUnequipSlot() {
-    return this.interaction.pendingUnequipSlot;
-  }
-  set pendingUnequipSlot(v) {
-    this.interaction.pendingUnequipSlot = v;
-  }
-  get pendingInfoItem() {
-    return this.interaction.pendingInfoItem;
-  }
-  set pendingInfoItem(v) {
-    this.interaction.pendingInfoItem = v;
-  }
-  get pendingDropItem() {
-    return this.interaction.pendingDropItem;
-  }
-  set pendingDropItem(v) {
-    this.interaction.pendingDropItem = v;
-  }
 
   private get drag() {
     return this.interaction.drag;
@@ -115,7 +91,7 @@ export class InventoryPanel {
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      if (slotIdx >= inventory.slots.length) break;
+      if (slotIdx >= inventory.bag.slots.length) break;
       const r = this.invSlotRect(i, p);
       if (inRect(mx, my, r)) return slotIdx;
     }
@@ -222,8 +198,8 @@ export class InventoryPanel {
     if (this.contextMenu) {
       this.renderContextMenu(ctx, canvas);
     }
-    if (this.pendingInfoItem) {
-      this.renderInfoPopup(ctx, canvas, this.pendingInfoItem);
+    if (this.interaction.pendingInfoItem) {
+      this.renderInfoPopup(ctx, canvas, this.interaction.pendingInfoItem);
     }
     if (this.dropDialog) {
       this.renderDropDialog(ctx, canvas);
@@ -424,7 +400,7 @@ export class InventoryPanel {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
       const isDragged = this.drag?.source === 'hotbar' && this.drag.idx === i;
-      this.renderSlot(ctx, r.x, r.y, r.w, inventory.hotbar[i], isDragged, true);
+      this.renderSlot(ctx, r.x, r.y, r.w, inventory.actionBar.slots[i], isDragged, true);
       // Key number label below slot
       ctx.fillStyle = '#64748b';
       ctx.font = '9px monospace';
@@ -485,7 +461,7 @@ export class InventoryPanel {
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
-      const item = slotIdx < inventory.slots.length ? inventory.slots[slotIdx] : null;
+      const item = slotIdx < inventory.bag.slots.length ? inventory.bag.slots[slotIdx] : null;
       const isDragged = this.drag?.source === 'inv' && this.drag.idx === slotIdx;
       const r = this.invSlotRect(i, p);
       this.renderSlot(
@@ -501,7 +477,7 @@ export class InventoryPanel {
     }
 
     // Pagination bar
-    const pages = pageCount(inventory.slots.length);
+    const pages = pageCount(inventory.bag.slots.length);
     const navY = p.y + p.h - NAV_H + 6;
     ctx.fillStyle = '#475569';
     ctx.font = '11px monospace';

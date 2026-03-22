@@ -651,7 +651,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private triggerHotbarActivation(hotbarIdx: number): void {
     const active = this.active();
-    const slot = active.inventory.hotbar[hotbarIdx];
+    const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
       active.usePotion();
     }
