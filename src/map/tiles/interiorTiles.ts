@@ -11,6 +11,7 @@ import {
   CHAIR,
 } from '../tileTypes';
 import { inferGroundColor, drawWallShadow } from './helpers';
+import { frameTime } from '../../utils';
 
 export function drawInteriorTile(
   ctx: CanvasRenderingContext2D,
@@ -49,7 +50,7 @@ export function drawInteriorTile(
       }
 
       // Pulsing amber glow border
-      const stairPulse = 0.5 + Math.sin(performance.now() / 600) * 0.3;
+      const stairPulse = 0.5 + Math.sin((frameTime * 1000) / 600) * 0.3;
       ctx.strokeStyle = `rgba(220, 170, 50, ${stairPulse})`;
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 1, sy + 1, ts - 2, ts - 2);
@@ -218,7 +219,7 @@ export function drawInteriorTile(
       const isLeftHalf = !fpLeft && fpRight;
       const isRightHalf = fpLeft && !fpRight;
 
-      const t = performance.now() / 1000;
+      const t = frameTime;
 
       // Stone surround — extend to neighbor edge
       const stoneL = isRightHalf ? 0 : 2;

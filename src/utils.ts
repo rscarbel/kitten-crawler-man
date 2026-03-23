@@ -28,3 +28,13 @@ export const pixelToTile = (px: number) => Math.floor((px + TILE_SIZE * 0.5) / T
 
 /** Convert a tile index to the pixel coordinate of its left/top edge. */
 export const tileToPixel = (tx: number) => tx * TILE_SIZE;
+
+/**
+ * Shared frame timestamp (seconds). Call `updateFrameTime()` once per frame
+ * at the start of the render loop; read `frameTime` anywhere to avoid
+ * redundant `performance.now()` calls in hot paths.
+ */
+export let frameTime = performance.now() / 1000;
+export function updateFrameTime(): void {
+  frameTime = performance.now() / 1000;
+}

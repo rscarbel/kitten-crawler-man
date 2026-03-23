@@ -24,17 +24,42 @@ import {
   CHAIR,
 } from '../tileTypes';
 
+const CARDINAL_DIRS: [number, number][] = [
+  [0, 1],
+  [0, -1],
+  [-1, 0],
+  [1, 0],
+];
+
+const SHADOW_TYPES = new Set([
+  FloorTypeValue.wall,
+  BUILDING_WALL,
+  METAL_WALL,
+  TREE,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+  FOUNTAIN,
+  TORCH,
+  WELL,
+  TABLE,
+  BOOKSHELF,
+  BED,
+  FIREPLACE,
+  BARREL,
+  CHAIR,
+]);
+
 /**
  * Infers the ground base colour for a decoration tile (TORCH, WELL, etc.) by
  * examining cardinal neighbours. Priority: road > safe-room cobblestone > grass.
  */
 export function inferGroundColor(structure: TileContent[][], tx: number, ty: number): string {
-  const dirs: [number, number][] = [
-    [0, 1],
-    [0, -1],
-    [-1, 0],
-    [1, 0],
-  ];
+  const dirs = CARDINAL_DIRS;
   let hasRoad = false;
   let hasSafe = false;
   let hasWood = false;
@@ -67,28 +92,6 @@ export function drawWallShadow(
   tx: number,
   ty: number,
 ) {
-  const SHADOW_TYPES = new Set([
-    FloorTypeValue.wall,
-    BUILDING_WALL,
-    METAL_WALL,
-    TREE,
-    ROOF_THATCH,
-    ROOF_SLATE,
-    ROOF_RED,
-    ROOF_GREEN,
-    ROOF_CIRCUS_RED,
-    ROOF_CIRCUS_BLUE,
-    ROOF_CIRCUS_PURPLE,
-    FOUNTAIN,
-    TORCH,
-    WELL,
-    TABLE,
-    BOOKSHELF,
-    BED,
-    FIREPLACE,
-    BARREL,
-    CHAIR,
-  ]);
   const above = structure[ty - 1]?.[tx];
   if (above && SHADOW_TYPES.has(above.type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';

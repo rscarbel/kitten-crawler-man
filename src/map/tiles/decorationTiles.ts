@@ -1,5 +1,6 @@
 import { TileContent, FOUNTAIN, TORCH, WELL, GRASSY_WEED, DIRT_PATCH } from '../tileTypes';
 import { inferGroundColor } from './helpers';
+import { frameTime } from '../../utils';
 
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
@@ -33,7 +34,7 @@ export function drawDecorationTile(
       const isCenter = nN && nS && nE && nW;
       const fcx = sx + ts / 2;
       const fcy = sy + ts / 2;
-      const t = performance.now() / 1000;
+      const t = frameTime;
 
       if (isCenter) {
         // === WATER BASIN FLOOR ===
@@ -258,7 +259,7 @@ export function drawDecorationTile(
 
     // Torch — animated flame, pole not walkable
     case TORCH: {
-      const t = performance.now() / 1000;
+      const t = frameTime;
       const flicker = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 7.1) * 0.4;
 
       // Ground base — colour matches surrounding floor (road, cobblestone, or grass)

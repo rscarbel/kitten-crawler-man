@@ -1,3 +1,5 @@
+import { updateFrameTime } from '../utils';
+
 /**
  * Abstract base for all game scenes. Scenes own their own update/render logic
  * and declare what action-key listeners they need via onEnter/onExit.
@@ -120,6 +122,7 @@ export class SceneManager {
   }
 
   private loop(): void {
+    updateFrameTime();
     if (this.current) {
       this.current.update();
       this.current.render(this.ctx);

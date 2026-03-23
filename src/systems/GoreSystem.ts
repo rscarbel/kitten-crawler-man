@@ -19,6 +19,7 @@ interface BloodPuddle {
   rx: number; // x radius of ellipse
   ry: number; // y radius
   life: number;
+  cachedGrad: CanvasGradient | null;
 }
 
 import type { GameSystem } from './GameSystem';
@@ -56,6 +57,7 @@ export class GoreSystem implements GameSystem {
         rx: 6 + Math.random() * 9,
         ry: 4 + Math.random() * 6,
         life: PUDDLE_LIFETIME,
+        cachedGrad: null,
       });
     }
   }
@@ -68,12 +70,18 @@ export class GoreSystem implements GameSystem {
       p.vy += PARTICLE_GRAVITY;
       p.vx *= 0.92;
       p.life--;
-      if (p.life <= 0) this.particles.splice(i, 1);
+      if (p.life <= 0) {
+        this.particles[i] = this.particles[this.particles.length - 1];
+        this.particles.pop();
+      }
     }
 
     for (let i = this.puddles.length - 1; i >= 0; i--) {
       this.puddles[i].life--;
-      if (this.puddles[i].life <= 0) this.puddles.splice(i, 1);
+      if (this.puddles[i].life <= 0) {
+        this.puddles[i] = this.puddles[this.puddles.length - 1];
+        this.puddles.pop();
+      }
     }
   }
 
@@ -86,11 +94,14 @@ export class GoreSystem implements GameSystem {
       ctx.globalAlpha = alpha * 0.75;
       ctx.beginPath();
       ctx.ellipse(sx, sy, p.rx, p.ry, 0, 0, Math.PI * 2);
-      // Dark blood puddle with slightly lighter center
-      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, p.rx);
-      grad.addColorStop(0, '#7a0000');
-      grad.addColorStop(1, '#3a0000');
-      ctx.fillStyle = grad;
+      // Lazily create and cache gradient (relative to 0,0 origin)
+      if (!p.cachedGrad) {
+        p.cachedGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, p.rx);
+        p.cachedGrad.addColorStop(0, '#7a0000');
+        p.cachedGrad.addColorStop(1, '#3a0000');
+      }
+      ctx.translate(sx, sy);
+      ctx.fillStyle = p.cachedGrad;
       ctx.fill();
       ctx.restore();
     }

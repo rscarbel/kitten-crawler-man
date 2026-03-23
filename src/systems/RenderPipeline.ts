@@ -26,6 +26,21 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 
+const DRAW_KIND_DECO = 0;
+const DRAW_KIND_MOB = 1;
+const DRAW_KIND_PLAYER = 2;
+
+/** A Y-sorted draw entry that avoids per-frame closure allocation. */
+interface DrawEntry {
+  sortY: number;
+  kind: number;
+  tx: number;
+  ty: number;
+  entity: {
+    render(ctx: CanvasRenderingContext2D, camX: number, camY: number, ts: number): void;
+  } | null;
+}
+
 /** Everything the render pipeline needs, provided by the scene each frame. */
 export interface RenderContext {
   canvas: HTMLCanvasElement;
@@ -59,6 +74,19 @@ export interface RenderContext {
 }
 
 export class RenderPipeline {
+  /** Reusable draw-entry pool to avoid per-frame allocations. */
+  private _drawPool: DrawEntry[] = [];
+  private _drawCount = 0;
+
+  private _getEntry(): DrawEntry {
+    if (this._drawCount < this._drawPool.length) {
+      return this._drawPool[this._drawCount++];
+    }
+    const e: DrawEntry = { sortY: 0, kind: 0, tx: 0, ty: 0, entity: null };
+    this._drawPool.push(e);
+    this._drawCount++;
+    return e;
+  }
   /**
    * Render the world layer: map tiles, gore puddles, room objects, door hints.
    */
@@ -105,8 +133,8 @@ export class RenderPipeline {
       canvas.height + TILE_SIZE * 2,
     );
 
-    type DrawItem = { sortY: number; draw: () => void };
-    const drawItems: DrawItem[] = [];
+    // Reset pool cursor (reuses existing objects)
+    this._drawCount = 0;
 
     for (const { tx, ty } of gameMap.getVisibleDecorationTiles(
       camX,
@@ -114,33 +142,49 @@ export class RenderPipeline {
       canvas.width,
       canvas.height,
     )) {
-      const capTx = tx;
-      const capTy = ty;
-      drawItems.push({
-        sortY: (capTy + 1) * TILE_SIZE,
-        draw: () => gameMap.drawDecorationAt(ctx, capTx, capTy, camX, camY),
-      });
+      const e = this._getEntry();
+      e.sortY = (ty + 1) * TILE_SIZE;
+      e.kind = DRAW_KIND_DECO;
+      e.tx = tx;
+      e.ty = ty;
+      e.entity = null;
     }
 
     for (const mob of visibleMobs) {
-      const m = mob;
-      drawItems.push({
-        sortY: m.y + TILE_SIZE,
-        draw: () => m.render(ctx, camX, camY, TILE_SIZE),
-      });
+      const e = this._getEntry();
+      e.sortY = mob.y + TILE_SIZE;
+      e.kind = DRAW_KIND_MOB;
+      e.entity = mob;
     }
 
-    drawItems.push({
-      sortY: inactive.y + TILE_SIZE,
-      draw: () => inactive.render(ctx, camX, camY, TILE_SIZE),
-    });
-    drawItems.push({
-      sortY: active.y + TILE_SIZE,
-      draw: () => active.render(ctx, camX, camY, TILE_SIZE),
-    });
+    {
+      const e = this._getEntry();
+      e.sortY = inactive.y + TILE_SIZE;
+      e.kind = DRAW_KIND_PLAYER;
+      e.entity = inactive;
+    }
+    {
+      const e = this._getEntry();
+      e.sortY = active.y + TILE_SIZE;
+      e.kind = DRAW_KIND_PLAYER;
+      e.entity = active;
+    }
 
-    drawItems.sort((a, b) => a.sortY - b.sortY);
-    for (const item of drawItems) item.draw();
+    // Sort only the active portion of the pool
+    const items = this._drawPool;
+    const count = this._drawCount;
+    // In-place sort of items[0..count)
+    items.length = count;
+    items.sort((a, b) => a.sortY - b.sortY);
+
+    for (let i = 0; i < count; i++) {
+      const item = items[i];
+      if (item.kind === DRAW_KIND_DECO) {
+        gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX, camY);
+      } else {
+        item.entity!.render(ctx, camX, camY, TILE_SIZE);
+      }
+    }
   }
 
   /**

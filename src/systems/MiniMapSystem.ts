@@ -3,6 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
+import { frameTime } from '../utils';
 
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
@@ -13,9 +14,25 @@ export class MiniMapSystem implements GameSystem {
   readonly NORMAL_SIZE = 160;
   readonly EXPANDED_SIZE = 240;
 
+  /** Offscreen canvas caching revealed tile colors (1px per tile). */
+  private _tileCache: OffscreenCanvas | HTMLCanvasElement;
+  private _tileCacheCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+
   constructor(private readonly gameMap: GameMap) {
     const sz = gameMap.structure.length;
     this.fogOfWar = new Uint8Array(sz * sz);
+
+    // Create offscreen tile cache (1px per tile, pre-filled with fog color)
+    if (typeof OffscreenCanvas !== 'undefined') {
+      this._tileCache = new OffscreenCanvas(sz, sz);
+    } else {
+      this._tileCache = document.createElement('canvas');
+      this._tileCache.width = sz;
+      this._tileCache.height = sz;
+    }
+    this._tileCacheCtx = this._tileCache.getContext('2d')!;
+    this._tileCacheCtx.fillStyle = '#111';
+    this._tileCacheCtx.fillRect(0, 0, sz, sz);
   }
 
   get isExpanded(): boolean {
@@ -30,13 +47,20 @@ export class MiniMapSystem implements GameSystem {
     const mapSize = this.gameMap.structure.length;
     const r = this.REVEAL_RADIUS;
     const r2 = r * r;
+    const cctx = this._tileCacheCtx;
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (dx * dx + dy * dy > r2) continue;
         const tx = tileX + dx;
         const ty = tileY + dy;
         if (tx >= 0 && tx < mapSize && ty >= 0 && ty < mapSize) {
-          this.fogOfWar[ty * mapSize + tx] = 1;
+          const idx = ty * mapSize + tx;
+          if (this.fogOfWar[idx] === 0) {
+            this.fogOfWar[idx] = 1;
+            const tile = this.gameMap.structure[ty]?.[tx];
+            cctx.fillStyle = tile ? this.tileColor(tile.type) : '#555';
+            cctx.fillRect(tx, ty, 1, 1);
+          }
         }
       }
     }
@@ -49,9 +73,16 @@ export class MiniMapSystem implements GameSystem {
     const y1 = Math.max(0, bounds.y - extra);
     const x2 = Math.min(mapSize - 1, bounds.x + bounds.w + extra);
     const y2 = Math.min(mapSize - 1, bounds.y + bounds.h + extra);
+    const cctx = this._tileCacheCtx;
     for (let ty = y1; ty <= y2; ty++) {
       for (let tx = x1; tx <= x2; tx++) {
-        this.fogOfWar[ty * mapSize + tx] = 1;
+        const idx = ty * mapSize + tx;
+        if (this.fogOfWar[idx] === 0) {
+          this.fogOfWar[idx] = 1;
+          const tile = this.gameMap.structure[ty]?.[tx];
+          cctx.fillStyle = tile ? this.tileColor(tile.type) : '#555';
+          cctx.fillRect(tx, ty, 1, 1);
+        }
       }
     }
   }
@@ -62,7 +93,10 @@ export class MiniMapSystem implements GameSystem {
 
   tickCorpseMarkers(): void {
     for (let i = this.corpseMarkers.length - 1; i >= 0; i--) {
-      if (--this.corpseMarkers[i].ttl <= 0) this.corpseMarkers.splice(i, 1);
+      if (--this.corpseMarkers[i].ttl <= 0) {
+        this.corpseMarkers[i] = this.corpseMarkers[this.corpseMarkers.length - 1];
+        this.corpseMarkers.pop();
+      }
     }
   }
 
@@ -97,28 +131,26 @@ export class MiniMapSystem implements GameSystem {
     ctx.rect(mmX, mmY, mmSize, mmSize);
     ctx.clip();
 
-    // Tiles
-    for (let dy = -halfTiles; dy <= halfTiles; dy++) {
-      for (let dx = -halfTiles; dx <= halfTiles; dx++) {
-        const tx = playerTX + dx;
-        const ty = playerTY + dy;
-        if (tx < 0 || tx >= mapSize || ty < 0 || ty >= mapSize) continue;
-
-        const px = mmX + (dx + halfTiles) * pxPerTile;
-        const py = mmY + (dy + halfTiles) * pxPerTile;
-
-        const revealed = this.fogOfWar[ty * mapSize + tx] === 1;
-        if (!revealed) {
-          ctx.fillStyle = '#111';
-          ctx.fillRect(px, py, pxPerTile, pxPerTile);
-          continue;
-        }
-
-        const tile = this.gameMap.structure[ty]?.[tx];
-        ctx.fillStyle = tile ? this.tileColor(tile.type) : '#555';
-        ctx.fillRect(px, py, pxPerTile, pxPerTile);
-      }
-    }
+    // Tiles — blit from offscreen cache (1px per tile → scaled by pxPerTile)
+    const srcX = Math.max(0, playerTX - halfTiles);
+    const srcY = Math.max(0, playerTY - halfTiles);
+    const srcW = Math.min(mapSize - srcX, tilesInView);
+    const srcH = Math.min(mapSize - srcY, tilesInView);
+    const destOffX = (srcX - (playerTX - halfTiles)) * pxPerTile;
+    const destOffY = (srcY - (playerTY - halfTiles)) * pxPerTile;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      this._tileCache,
+      srcX,
+      srcY,
+      srcW,
+      srcH,
+      mmX + destOffX,
+      mmY + destOffY,
+      srcW * pxPerTile,
+      srcH * pxPerTile,
+    );
+    ctx.imageSmoothingEnabled = true;
 
     // Stairwells — white squares (always visible if revealed)
     for (const st of this.gameMap.stairwellTiles) {
@@ -188,7 +220,7 @@ export class MiniMapSystem implements GameSystem {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
       const qsx = mmX + (qm.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const qsy = mmY + (qm.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const pulse = 0.7 + 0.3 * Math.sin(Date.now() * 0.005);
+      const pulse = 0.7 + 0.3 * Math.sin(frameTime * 5);
       ctx.globalAlpha = pulse;
       if (qm.type === 'exclamation') {
         ctx.fillStyle = '#fbbf24';

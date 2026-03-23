@@ -28,7 +28,12 @@ import {
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import { renderCanvas, renderDecorationsOverlay, drawDecorationTileFull } from './TileRenderer';
+import {
+  renderCanvas,
+  renderDecorationsOverlay,
+  drawDecorationTileFull,
+  TileChunkCache,
+} from './TileRenderer';
 
 /** Options for GameMap construction. */
 export interface GameMapOptions {
@@ -76,6 +81,7 @@ export class GameMap {
   /** When true, the arena door gap tiles are treated as unwalkable. */
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
+  private _chunkCache: TileChunkCache | null = null;
 
   constructor(opts: GameMapOptions = {}) {
     const {
@@ -613,7 +619,19 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    renderCanvas(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH);
+    if (!this._chunkCache) {
+      this._chunkCache = new TileChunkCache(this.structure, this.tileHeight);
+    }
+    renderCanvas(
+      ctx,
+      this.structure,
+      this.tileHeight,
+      cameraX,
+      cameraY,
+      viewW,
+      viewH,
+      this._chunkCache,
+    );
   }
 
   renderDecorationsOverlay(
