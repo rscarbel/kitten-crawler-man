@@ -4,7 +4,7 @@ import { TILE_SIZE } from '../core/constants';
 import { drawBugabooSprite } from '../sprites/bugabooSprite';
 
 const BUGABOO_HP = 8;
-const BUGABOO_SPEED = 1.2;
+const BUGABOO_SPEED = 0.8;
 const AGGRO_RANGE_TILES = 20;
 const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_COOLDOWN = 60;
