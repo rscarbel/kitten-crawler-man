@@ -1,5 +1,6 @@
 import type { LootBox, BoxContents } from '../core/AchievementManager';
 import { getBoxContents } from '../core/AchievementManager';
+import { randomFromArray, randomInt } from '../utils';
 
 interface Particle {
   x: number;
@@ -317,8 +318,8 @@ export class LootBoxOpener {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (burst ? 3 : 0),
       radius: 2 + Math.random() * 4,
-      color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
-      life: 40 + Math.floor(Math.random() * 40),
+      color: randomFromArray(PARTICLE_COLORS),
+      life: randomInt(40, 79),
       maxLife: 80,
     });
   }

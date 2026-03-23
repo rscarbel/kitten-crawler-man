@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import { Player } from '../Player';
 import { drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { makePoison } from '../core/StatusEffect';
+import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
 
 const TROG_HP = 22;
@@ -199,10 +200,10 @@ export class Troglodyte extends Mob {
   private _faceToward(target: Player): void {
     const dx = target.x - this.x;
     const dy = target.y - this.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0) {
-      this.facingX = dx / d;
-      this.facingY = dy / d;
+    if (dx !== 0 || dy !== 0) {
+      const n = normalize(dx, dy);
+      this.facingX = n.x;
+      this.facingY = n.y;
     }
   }
 

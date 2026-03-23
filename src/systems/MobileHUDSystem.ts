@@ -5,6 +5,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { Inventory } from '../core/Inventory';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem } from './GameSystem';
+import { pointInRect } from '../utils';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -380,7 +381,7 @@ export class MobileHUDSystem implements GameSystem {
   }
 
   private hitRect(x: number, y: number, r: Rect): boolean {
-    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    return pointInRect(x, y, r);
   }
 
   private tileColor(type: number): string {

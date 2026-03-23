@@ -2,6 +2,7 @@ import { Inventory } from '../core/Inventory';
 import { EQUIP_SUBSLOTS } from '../core/ItemDefs';
 import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
+import { pointInRect } from '../utils';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -329,7 +330,7 @@ export class GearPanel {
     inventory: Inventory,
   ): GearClickResult | null {
     const btn = this.toggleBtnRect(canvas);
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+    if (pointInRect(mx, my, btn)) {
       this.toggle();
       return { consumed: true };
     }
@@ -356,7 +357,7 @@ export class GearPanel {
     }
 
     // Absorb all clicks inside panel
-    if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
+    if (pointInRect(mx, my, p)) {
       return { consumed: true };
     }
 

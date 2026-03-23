@@ -3,6 +3,7 @@ import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { pointInRect } from '../utils';
 
 const SHOP_ITEMS: Array<{
   id: ItemId;
@@ -297,7 +298,7 @@ export class ShopSystem implements GameSystem {
   handleClick(mx: number, my: number, active: Player): void {
     for (let i = 0; i < this.buyRects.length; i++) {
       const r = this.buyRects[i];
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+      if (pointInRect(mx, my, r)) {
         this.tryBuy(i, active);
         return;
       }

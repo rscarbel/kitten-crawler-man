@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { drawCatSprite, drawMissiles, Missile } from '../sprites/catSprite';
 import { GameMap } from '../map/GameMap';
+import { normalize } from '../utils';
 
 /**
  * This is a playable character.
@@ -68,10 +69,10 @@ export class CatPlayer extends Player {
     // Always face the target
     const dx = this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
     const dy = this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0) {
-      this.facingX = dx / dist;
-      this.facingY = dy / dist;
+    if (dx !== 0 || dy !== 0) {
+      const n = normalize(dx, dy);
+      this.facingX = n.x;
+      this.facingY = n.y;
     }
 
     // Fire on cooldown

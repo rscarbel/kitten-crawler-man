@@ -11,6 +11,7 @@ import { Mob } from '../creatures/Mob';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
   x: number;
@@ -102,9 +103,9 @@ export class CompanionSystem implements GameSystem {
     if (bestMob) {
       const dx = bestMob.x + TILE_SIZE * 0.5 - px;
       const dy = bestMob.y + TILE_SIZE * 0.5 - py;
-      const d = Math.hypot(dx, dy);
-      player.facingX = dx / d;
-      player.facingY = dy / d;
+      const n = normalize(dx, dy);
+      player.facingX = n.x;
+      player.facingY = n.y;
     }
   }
 
@@ -112,14 +113,14 @@ export class CompanionSystem implements GameSystem {
     const mapPx = this.gameMap.structure.length * TILE_SIZE;
     const ts = TILE_SIZE;
     if (dx !== 0) {
-      const nextX = Math.max(0, Math.min(mapPx - ts, entity.x + dx));
+      const nextX = clamp(entity.x + dx, 0, mapPx - ts);
       const tileXnext =
         dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((entity.y + ts / 2) / ts);
       if (this.gameMap.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
     }
     if (dy !== 0) {
-      const nextY = Math.max(0, Math.min(mapPx - ts, entity.y + dy));
+      const nextY = clamp(entity.y + dy, 0, mapPx - ts);
       const tileXcur = Math.floor((entity.x + ts / 2) / ts);
       const tileYnext = Math.floor((nextY + ts / 2) / ts);
       if (this.gameMap.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
@@ -226,12 +227,8 @@ export class CompanionSystem implements GameSystem {
 
     const dx = companion.x + TILE_SIZE * 0.5 - (closest.x + TILE_SIZE * 0.5);
     const dy = companion.y + TILE_SIZE * 0.5 - (closest.y + TILE_SIZE * 0.5);
-    const len = Math.hypot(dx, dy) || 1;
-    this.entityMoveWithCollision(
-      companion,
-      (dx / len) * FOLLOWER_SPEED * 1.5,
-      (dy / len) * FOLLOWER_SPEED * 1.5,
-    );
+    const n = normalize(dx, dy);
+    this.entityMoveWithCollision(companion, n.x * FOLLOWER_SPEED * 1.5, n.y * FOLLOWER_SPEED * 1.5);
     companion.isMoving = true;
     return true;
   }
@@ -277,7 +274,7 @@ export class CompanionSystem implements GameSystem {
           const radius = Math.random() * TILE_SIZE;
           this.catWanderTargetX = human.x + Math.cos(angle) * radius;
           this.catWanderTargetY = human.y + Math.sin(angle) * radius;
-          this.catWanderTimer = 160 + Math.floor(Math.random() * 240);
+          this.catWanderTimer = randomInt(160, 399);
         }
         if (Math.hypot(cat.x - human.x, cat.y - human.y) > TILE_SIZE * 3.5) {
           this.catWanderTargetX = human.x;
@@ -294,7 +291,7 @@ export class CompanionSystem implements GameSystem {
         // Human recently moved — cat follows smoothly, no wander jitter
         this.catWanderTargetX = human.x;
         this.catWanderTargetY = human.y;
-        this.catWanderTimer = 160 + Math.floor(Math.random() * 240);
+        this.catWanderTimer = randomInt(160, 399);
         this.companionFollow(cat, human.x, human.y, FOLLOWER_SPEED, TILE_SIZE * 1.5);
       }
     } else {
@@ -347,12 +344,10 @@ export class CompanionSystem implements GameSystem {
 
     const dx = hx - ex;
     const dy = hy - ey;
-    const dist = Math.hypot(dx, dy) || 1;
-    const nx = dx / dist;
-    const ny = dy / dist;
+    const n = normalize(dx, dy);
 
-    const targetX = hx + nx * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
-    const targetY = hy + ny * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
+    const targetX = hx + n.x * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
+    const targetY = hy + n.y * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
     this.companionFollow(cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
   }
 

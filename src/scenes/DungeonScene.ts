@@ -2,6 +2,7 @@ import { SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
+import { clamp } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
@@ -53,6 +54,7 @@ import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
+import { randomInt, pointInRect } from '../utils';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -379,8 +381,7 @@ export class DungeonScene extends GameplayScene {
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
-          const count =
-            rule.minCount + Math.floor(Math.random() * (rule.maxCount - rule.minCount + 1));
+          const count = randomInt(rule.minCount, rule.maxCount);
           for (let i = 0; i < count; i++) {
             let placed = false;
             for (let attempt = 0; attempt < 8 && !placed; attempt++) {
@@ -625,7 +626,7 @@ export class DungeonScene extends GameplayScene {
       this.cat.isActive
     ) {
       const sb = this.touch.summonBtnRect;
-      if (mx >= sb.x && mx <= sb.x + sb.w && my >= sb.y && my <= sb.y + sb.h) {
+      if (pointInRect(mx, my, sb)) {
         this.triggerMongoSummon();
         return;
       }
@@ -706,7 +707,7 @@ export class DungeonScene extends GameplayScene {
     if (this.loot.tryCollectLootAt(mx, my, camX, camY, active)) return;
 
     const pb = UIRenderer.pauseButtonRect(this.sceneManager.canvas, this.miniMap);
-    if (mx >= pb.x && mx <= pb.x + pb.w && my >= pb.y && my <= pb.y + pb.h) {
+    if (pointInRect(mx, my, pb)) {
       this.pauseMenu.toggle();
     }
   }
@@ -1149,8 +1150,8 @@ export class DungeonScene extends GameplayScene {
     const camX = player.x + TILE_SIZE / 2 - canvas.width / 2;
     const camY = player.y + TILE_SIZE / 2 - canvas.height / 2;
     return {
-      x: Math.max(0, Math.min(mapPx - canvas.width, camX)),
-      y: Math.max(0, Math.min(mapPx - canvas.height, camY)),
+      x: clamp(camX, 0, mapPx - canvas.width),
+      y: clamp(camY, 0, mapPx - canvas.height),
     };
   }
 
@@ -1166,7 +1167,7 @@ export class DungeonScene extends GameplayScene {
       // HUD collapse/expand toggle (mobile only)
       if (platform.isMobile) {
         const ht = this._hudToggleRect;
-        if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
+        if (pointInRect(x, y, ht)) {
           this._hudCollapsed = !this._hudCollapsed;
           continue;
         }
@@ -1175,7 +1176,7 @@ export class DungeonScene extends GameplayScene {
       // Minimap tap to expand/collapse (mobile only)
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const mm = this.touch.miniMapRect;
-        if (x >= mm.x && x <= mm.x + mm.w && y >= mm.y && y <= mm.y + mm.h) {
+        if (pointInRect(x, y, mm)) {
           this.miniMap.toggle();
           continue;
         }
@@ -1184,12 +1185,12 @@ export class DungeonScene extends GameplayScene {
       // Gear / Bag buttons (mobile only)
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const gb = this.touch.gearBtnRect;
-        if (x >= gb.x && x <= gb.x + gb.w && y >= gb.y && y <= gb.y + gb.h) {
+        if (pointInRect(x, y, gb)) {
           this.gearPanel.toggle();
           continue;
         }
         const bb = this.touch.bagBtnRect;
-        if (x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) {
+        if (pointInRect(x, y, bb)) {
           this.inventoryPanel.toggle();
           continue;
         }
@@ -1198,7 +1199,7 @@ export class DungeonScene extends GameplayScene {
       // Mobile Mongo summon button
       if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         const mb = this.touch.summonBtnRect;
-        if (x >= mb.x && x <= mb.x + mb.w && y >= mb.y && y <= mb.y + mb.h) {
+        if (pointInRect(x, y, mb)) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerMongoSummon();
           continue;
@@ -1208,13 +1209,13 @@ export class DungeonScene extends GameplayScene {
       // Mobile action buttons (always checked first)
       if (platform.isMobile) {
         const sb = this.touch.switchBtnRect;
-        if (x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) {
+        if (pointInRect(x, y, sb)) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerSwitchCharacter();
           continue;
         }
         const fb = this.touch.followBtnRect;
-        if (x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
+        if (pointInRect(x, y, fb)) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerCompanionFollow();
           continue;

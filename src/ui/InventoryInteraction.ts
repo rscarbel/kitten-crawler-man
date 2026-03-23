@@ -1,14 +1,7 @@
 import { Inventory } from '../core/Inventory';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
-
-function inRect(
-  mx: number,
-  my: number,
-  r: { x: number; y: number; w: number; h: number },
-): boolean {
-  return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
-}
+import { pointInRect } from '../utils';
 
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
@@ -185,7 +178,7 @@ export class InventoryInteraction {
     }
 
     const btn = toggleBtnRect;
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+    if (pointInRect(mx, my, btn)) {
       toggleFn();
       return true;
     }
@@ -215,7 +208,7 @@ export class InventoryInteraction {
       }
     }
 
-    if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) {
+    if (pointInRect(mx, my, p)) {
       return true;
     }
 
@@ -242,7 +235,7 @@ export class InventoryInteraction {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       if (i === QUEST_SLOT_IDX) continue; // Quest slot is not draggable
       const r = hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item) {
           this.drag = { source: 'hotbar', idx: i, item, mx, my };
@@ -258,7 +251,7 @@ export class InventoryInteraction {
       const slotIdx = pageStart + i;
       if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
           this.drag = { source: 'inv', idx: slotIdx, item, mx, my };
@@ -287,7 +280,7 @@ export class InventoryInteraction {
   ): void {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item) {
           this.contextMenu = { source: 'hotbar', slotIdx: i, x: mx, y: my, item };
@@ -303,7 +296,7 @@ export class InventoryInteraction {
       const slotIdx = pageStart + i;
       if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
           this.contextMenu = {
@@ -368,7 +361,7 @@ export class InventoryInteraction {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       if (i === QUEST_SLOT_IDX) continue; // Can't drop onto quest slot
       const r = hotbarSlotRect(i, canvas);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         if (src.source === 'hotbar') {
           if (src.idx !== i) inventory.swapHotbar(src.idx, i);
         } else {
@@ -385,7 +378,7 @@ export class InventoryInteraction {
       const slotIdx = pageStart + i;
       if (slotIdx >= inventory.bag.slots.length) break;
       const r = invSlotRect(i, panelRect);
-      if (inRect(mx, my, r)) {
+      if (pointInRect(mx, my, r)) {
         if (src.source === 'hotbar') {
           inventory.swapHotbarToInv(src.idx, slotIdx);
         } else {

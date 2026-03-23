@@ -22,6 +22,7 @@ interface BloodPuddle {
 }
 
 import type { GameSystem } from './GameSystem';
+import { randomInt } from '../utils';
 
 export class GoreSystem implements GameSystem {
   private particles: BloodParticle[] = [];
@@ -29,7 +30,7 @@ export class GoreSystem implements GameSystem {
 
   spawnGore(cx: number, cy: number): void {
     // 8-14 splatter particles
-    const count = 8 + Math.floor(Math.random() * 7);
+    const count = randomInt(8, 14);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 1.5 + Math.random() * 3.5;
@@ -45,7 +46,7 @@ export class GoreSystem implements GameSystem {
     }
 
     // 1-3 puddles spread slightly from centre
-    const puddles = 1 + Math.floor(Math.random() * 3);
+    const puddles = randomInt(1, 3);
     for (let i = 0; i < puddles; i++) {
       const offX = (Math.random() - 0.5) * 14;
       const offY = (Math.random() - 0.5) * 10;

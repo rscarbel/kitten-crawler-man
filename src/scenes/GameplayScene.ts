@@ -12,6 +12,7 @@
 import { Scene, SceneManager } from '../core/Scene';
 import { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
+import { clamp, pointInRect } from '../utils';
 import { GameMap } from '../map/GameMap';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
@@ -63,14 +64,11 @@ export abstract class GameplayScene extends Scene {
     const cx = player.x + TILE_SIZE / 2 - canvas.width / 2;
     const cy = player.y + TILE_SIZE / 2 - canvas.height / 2;
     return {
-      x:
-        mapPxW <= canvas.width
-          ? (mapPxW - canvas.width) / 2
-          : Math.max(0, Math.min(mapPxW - canvas.width, cx)),
+      x: mapPxW <= canvas.width ? (mapPxW - canvas.width) / 2 : clamp(cx, 0, mapPxW - canvas.width),
       y:
         mapPxH <= canvas.height
           ? (mapPxH - canvas.height) / 2
-          : Math.max(0, Math.min(mapPxH - canvas.height, cy)),
+          : clamp(cy, 0, mapPxH - canvas.height),
     };
   }
 
@@ -96,11 +94,11 @@ export abstract class GameplayScene extends Scene {
     if (fdist > followDist) {
       const fmx = (fdx / fdist) * followSpeed;
       const fmy = (fdy / fdist) * followSpeed;
-      const fnx = Math.max(0, Math.min(mapPxW - TILE_SIZE, follower.x + fmx));
+      const fnx = clamp(follower.x + fmx, 0, mapPxW - TILE_SIZE);
       const ftxn = Math.floor((fnx + TILE_SIZE * 0.5) / TILE_SIZE);
       if (map.isWalkable(ftxn, Math.floor((follower.y + TILE_SIZE * 0.5) / TILE_SIZE)))
         follower.x = fnx;
-      const fny = Math.max(0, Math.min(mapPxH - TILE_SIZE, follower.y + fmy));
+      const fny = clamp(follower.y + fmy, 0, mapPxH - TILE_SIZE);
       const ftyn = Math.floor((fny + TILE_SIZE * 0.5) / TILE_SIZE);
       if (map.isWalkable(Math.floor((follower.x + TILE_SIZE * 0.5) / TILE_SIZE), ftyn))
         follower.y = fny;
@@ -126,7 +124,7 @@ export abstract class GameplayScene extends Scene {
   protected handleHudToggleTap(x: number, y: number): boolean {
     if (!platform.showHudCollapseToggle) return false;
     const ht = this._hudToggleRect;
-    if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
+    if (pointInRect(x, y, ht)) {
       this._hudCollapsed = !this._hudCollapsed;
       return true;
     }

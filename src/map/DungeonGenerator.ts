@@ -10,6 +10,7 @@ import {
   ARENA_FLOOR,
   FLOOR_GRATE,
 } from './tileTypes';
+import { randomFromArray, randomInt, clamp } from '../utils';
 
 type Room = { x: number; y: number; w: number; h: number; floor: number };
 type Point = { x: number; y: number };
@@ -163,18 +164,10 @@ export function generateDungeon(
     const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
     const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
     const isQuestRoom = rooms.length === questRoomIdx;
-    const w = isBossRoom
-      ? 22
-      : isQuestRoom
-        ? 14
-        : MIN_W + Math.floor(Math.random() * (MAX_W - MIN_W + 1));
-    const h = isBossRoom
-      ? 18
-      : isQuestRoom
-        ? 12
-        : MIN_H + Math.floor(Math.random() * (MAX_H - MIN_H + 1));
-    const x = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - w - 2));
-    const y = BORDER + 1 + Math.floor(Math.random() * (size - BORDER * 2 - h - 2));
+    const w = isBossRoom ? 22 : isQuestRoom ? 14 : randomInt(MIN_W, MAX_W);
+    const h = isBossRoom ? 18 : isQuestRoom ? 12 : randomInt(MIN_H, MAX_H);
+    const x = randomInt(BORDER + 1, size - BORDER - w - 2);
+    const y = randomInt(BORDER + 1, size - BORDER - h - 2);
 
     const cx = Math.floor(x + w / 2);
     const cy = Math.floor(y + h / 2);
@@ -232,7 +225,7 @@ export function generateDungeon(
           ? bossFloorForType(bossTypes[bossIdx] ?? '')
           : isQuestRoom
             ? FloorTypeValue.tile_floor
-            : DUNGEON_FLOORS[Math.floor(Math.random() * DUNGEON_FLOORS.length)];
+            : randomFromArray(DUNGEON_FLOORS);
       const room: Room = { x, y, w, h, floor };
       rooms.push(room);
       carveRoom(room);
@@ -398,7 +391,7 @@ export function generateDungeon(
 
   // Fisher-Yates shuffle then pick up to maxHallwaySpawns tiles with ≥3-tile separation.
   for (let i = validHallway.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i);
     [validHallway[i], validHallway[j]] = [validHallway[j], validHallway[i]];
   }
   const chosen: Array<{ x: number; y: number }> = [];
@@ -450,8 +443,8 @@ export function generateDungeon(
       // Must not overlap special rooms (start, safe, boss); regular rooms are OK
       const overlapsSpecial = rooms.some((r, idx) => {
         if (!specialRoomIndices.has(idx)) return false;
-        const closestX = Math.max(r.x, Math.min(acx, r.x + r.w - 1));
-        const closestY = Math.max(r.y, Math.min(acy, r.y + r.h - 1));
+        const closestX = clamp(acx, r.x, r.x + r.w - 1);
+        const closestY = clamp(acy, r.y, r.y + r.h - 1);
         return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + 3;
       });
       if (overlapsSpecial) continue;

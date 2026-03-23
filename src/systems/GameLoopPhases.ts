@@ -1,6 +1,7 @@
 import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
 import { platform } from '../core/Platform';
 import { InputManager } from '../core/InputManager';
+import { normalize, clamp } from '../utils';
 import { GameMap } from '../map/GameMap';
 import { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -79,9 +80,9 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   player.isMoving = dx !== 0 || dy !== 0;
 
   if (dx !== 0 || dy !== 0) {
-    const len = Math.hypot(dx, dy);
-    player.facingX = dx / len;
-    player.facingY = dy / len;
+    const n = normalize(dx, dy);
+    player.facingX = n.x;
+    player.facingY = n.y;
   }
 
   // Mobile touch already gives a unit vector — skip diagonal penalty
@@ -92,7 +93,7 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   dx *= PLAYER_SPEED;
   dy *= PLAYER_SPEED;
 
-  const nextX = Math.max(0, Math.min(mapPxW - TILE_SIZE, player.x + dx));
+  const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
   const tileXnext =
     dx >= 0
       ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
@@ -100,7 +101,7 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
 
-  const nextY = Math.max(0, Math.min(mapPxH - TILE_SIZE, player.y + dy));
+  const nextY = clamp(player.y + dy, 0, mapPxH - TILE_SIZE);
   const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
   const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;

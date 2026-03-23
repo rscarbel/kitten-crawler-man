@@ -9,14 +9,7 @@ import {
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
 import { InventoryInteraction } from './InventoryInteraction';
-
-function inRect(
-  mx: number,
-  my: number,
-  r: { x: number; y: number; w: number; h: number },
-): boolean {
-  return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
-}
+import { pointInRect } from '../utils';
 
 // Layout constants
 const SLOT_SIZE = 54;
@@ -93,7 +86,7 @@ export class InventoryPanel {
       const slotIdx = pageStart + i;
       if (slotIdx >= inventory.bag.slots.length) break;
       const r = this.invSlotRect(i, p);
-      if (inRect(mx, my, r)) return slotIdx;
+      if (pointInRect(mx, my, r)) return slotIdx;
     }
     return null;
   }
@@ -166,7 +159,7 @@ export class InventoryPanel {
   hitsPanel(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
     if (!this.isOpen) return false;
     const p = this.panelRect(canvas);
-    return mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h;
+    return pointInRect(mx, my, p);
   }
 
   /** True while an item is being dragged. */

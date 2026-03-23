@@ -1,5 +1,6 @@
 import { platform } from './Platform';
 import { TILE_SIZE } from './constants';
+import { pointInRect } from '../utils';
 
 export interface Rect {
   x: number;
@@ -47,7 +48,7 @@ export class MobileTouchState {
 
   /** Returns true if the given point hits the given rect. */
   static hitTest(x: number, y: number, r: Rect): boolean {
-    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    return pointInRect(x, y, r);
   }
 
   /**

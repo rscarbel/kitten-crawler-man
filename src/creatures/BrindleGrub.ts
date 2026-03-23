@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
+import { randomInt, normalize } from '../utils';
 import {
   drawBrindleGrubSprite,
   drawCowTailedGrubSprite,
@@ -84,8 +85,7 @@ export class BrindleGrub extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, STAGE1_HP, STAGE1_SPEED);
-    this.evolveTimer =
-      STAGE1_EVOLVE_MIN + Math.floor(Math.random() * (STAGE1_EVOLVE_MAX - STAGE1_EVOLVE_MIN + 1));
+    this.evolveTimer = randomInt(STAGE1_EVOLVE_MIN, STAGE1_EVOLVE_MAX);
     this.displayName = 'Brindle Grub';
     this.description = 'A harmless wriggling larva. It seems to be growing...';
   }
@@ -104,8 +104,7 @@ export class BrindleGrub extends Mob {
     this.speed = STAGE2_SPEED;
     this.maxHp = STAGE2_HP;
     this.hp = STAGE2_HP;
-    this.evolveTimer =
-      STAGE2_EVOLVE_MIN + Math.floor(Math.random() * (STAGE2_EVOLVE_MAX - STAGE2_EVOLVE_MIN + 1));
+    this.evolveTimer = randomInt(STAGE2_EVOLVE_MIN, STAGE2_EVOLVE_MAX);
     this.displayName = 'Cow-Tailed Grub';
     this.description = 'A bigger, angrier grub with a painful bite.';
   }
@@ -307,12 +306,12 @@ export class BrindleGrub extends Mob {
       const ty = nearest.y + ts * 0.5;
       const dx = tx - cx;
       const dy = ty - cy;
-      const d = Math.hypot(dx, dy);
+      const n = normalize(dx, dy);
       this.spits.push({
         x: cx,
         y: cy,
-        vx: (dx / d) * VESPA_SPIT_SPEED,
-        vy: (dy / d) * VESPA_SPIT_SPEED,
+        vx: n.x * VESPA_SPIT_SPEED,
+        vy: n.y * VESPA_SPIT_SPEED,
         ttl: VESPA_SPIT_TTL,
         hit: false,
       });
@@ -323,10 +322,10 @@ export class BrindleGrub extends Mob {
   private _faceToward(target: Player): void {
     const dx = target.x - this.x;
     const dy = target.y - this.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0) {
-      this.facingX = dx / d;
-      this.facingY = dy / d;
+    if (dx !== 0 || dy !== 0) {
+      const n = normalize(dx, dy);
+      this.facingX = n.x;
+      this.facingY = n.y;
     }
   }
 

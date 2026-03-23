@@ -1,5 +1,6 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
+import { clamp } from '../utils';
 import { SpatialGrid } from '../core/SpatialGrid';
 import { Mob } from '../creatures/Mob';
 import { TheHoarder } from '../creatures/TheHoarder';
@@ -184,8 +185,8 @@ export class BossRoomSystem implements GameSystem {
     const minPy = bounds.y * TILE_SIZE;
     const maxPx = (bounds.x + bounds.w - 1) * TILE_SIZE;
     const maxPy = (bounds.y + bounds.h - 1) * TILE_SIZE;
-    entity.x = Math.max(minPx, Math.min(maxPx, entity.x));
-    entity.y = Math.max(minPy, Math.min(maxPy, entity.y));
+    entity.x = clamp(entity.x, minPx, maxPx);
+    entity.y = clamp(entity.y, minPy, maxPy);
   }
 
   private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {

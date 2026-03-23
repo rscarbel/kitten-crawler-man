@@ -7,6 +7,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { randomFromArray, clamp } from '../utils';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -168,7 +169,7 @@ export class SafeRoomSystem implements GameSystem {
         if (this.isEntityInSafeRoom(mob)) {
           const ox = mob.x,
             oy = mob.y;
-          const pt = fallback[Math.floor(Math.random() * fallback.length)];
+          const pt = randomFromArray(fallback);
           mob.x = pt.x * ts;
           mob.y = pt.y * ts;
           mobGrid.move(mob, ox, oy);
@@ -342,7 +343,7 @@ export class SafeRoomSystem implements GameSystem {
     }
 
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.globalAlpha = clamp(alpha, 0, 1);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 

@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
+import { randomInt } from '../utils';
 
 export interface LootDrop {
   coins: number;
@@ -112,7 +113,7 @@ export abstract class Mob extends Player {
     this.lastKnownTargetX = this.spawnX;
     this.lastKnownTargetY = this.spawnY;
     // Stagger wander timers so mobs don't all change direction together
-    this.wanderTimer = Math.floor(Math.random() * 120);
+    this.wanderTimer = randomInt(0, 119);
   }
 
   /**
@@ -348,8 +349,7 @@ export abstract class Mob extends Player {
       this.killedBy = attacker;
       this.killType = damageType;
       // Roll loot
-      const coins =
-        this.coinDropMin + Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
+      const coins = randomInt(this.coinDropMin, this.coinDropMax);
       const items = this.rollLootItems(attacker);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
@@ -392,7 +392,7 @@ export abstract class Mob extends Player {
         this.wanderDx = Math.cos(angle) * this.speed * 0.35;
         this.wanderDy = Math.sin(angle) * this.speed * 0.35;
       }
-      this.wanderTimer = 90 + Math.floor(Math.random() * 130);
+      this.wanderTimer = randomInt(90, 219);
     }
 
     if (this.wanderDx !== 0 || this.wanderDy !== 0) {

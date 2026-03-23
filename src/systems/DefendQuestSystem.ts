@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { randomInt, pointInRect } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { GameMap } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
@@ -227,7 +228,7 @@ export class DefendQuestSystem implements GameSystem {
     }
     if (this.phase !== 'dialog') return false;
     for (const btn of this.dialogButtons) {
-      if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+      if (pointInRect(mx, my, btn)) {
         if (btn.action === 'accept') {
           this.acceptQuest();
         } else {
@@ -378,8 +379,7 @@ export class DefendQuestSystem implements GameSystem {
     this.spawnTimer--;
     if (this.spawnTimer <= 0) {
       this.spawnWave();
-      this.spawnTimer =
-        SPAWN_INTERVAL_MIN + Math.floor(Math.random() * (SPAWN_INTERVAL_MAX - SPAWN_INTERVAL_MIN));
+      this.spawnTimer = randomInt(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_MAX - 1);
     }
 
     // Clean up dead quest mobs

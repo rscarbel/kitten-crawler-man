@@ -2,6 +2,7 @@ import { Player } from '../Player';
 import { Mob } from './Mob';
 import { drawLlamaSprite } from '../sprites/llamaSprite';
 import { makeBurn } from '../core/StatusEffect';
+import { normalize } from '../utils';
 
 interface LavaBall {
   x: number;
@@ -145,12 +146,12 @@ export class Llama extends Mob {
     if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
       const dx = targetCX - mouthX;
       const dy = targetCY - mouthY;
-      const dist = Math.hypot(dx, dy);
+      const n = normalize(dx, dy);
       this.lavaBalls.push({
         x: mouthX,
         y: mouthY,
-        vx: (dx / dist) * LAVA_BALL_SPEED,
-        vy: (dy / dist) * LAVA_BALL_SPEED,
+        vx: n.x * LAVA_BALL_SPEED,
+        vy: n.y * LAVA_BALL_SPEED,
         exploding: false,
         explodeTick: 0,
       });

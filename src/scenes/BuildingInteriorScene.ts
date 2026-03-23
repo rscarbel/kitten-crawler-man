@@ -14,6 +14,7 @@ import { platform } from '../core/Platform';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import { readMovement, applyMovement } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
+import { pointInRect } from '../utils';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -515,7 +516,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // HUD collapse/expand toggle (mobile only)
       if (platform.isMobile) {
         const ht = this._hudToggleRect;
-        if (x >= ht.x && x <= ht.x + ht.w && y >= ht.y && y <= ht.y + ht.h) {
+        if (pointInRect(x, y, ht)) {
           this._hudCollapsed = !this._hudCollapsed;
           continue;
         }

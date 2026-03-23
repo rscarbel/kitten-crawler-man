@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
+import { randomInt } from '../utils';
 
 const COCKROACH_HP = 4;
 const COCKROACH_SPEED = 2.2;
@@ -19,7 +20,7 @@ export class Cockroach extends Mob {
   /** Frames until this cockroach despawns even if alive (30 s @ 60 fps). */
   ttl = 1800;
 
-  private attackCooldown = Math.floor(Math.random() * ATTACK_COOLDOWN);
+  private attackCooldown = randomInt(0, ATTACK_COOLDOWN - 1);
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, COCKROACH_HP, COCKROACH_SPEED);

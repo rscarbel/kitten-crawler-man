@@ -17,6 +17,7 @@ import {
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
 } from './tileTypes';
+import { randomInt } from '../utils';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -168,7 +169,7 @@ export function generateOverworld(size: number): OverworldData {
   }
 
   // 7. Small houses around town square
-  const rng = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const rng = randomInt;
   const houseAngles = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
   const houseRoofs = [
     ROOF_THATCH,
@@ -355,7 +356,7 @@ export function generateOverworld(size: number): OverworldData {
     const dist = 65 + Math.random() * (size / 2 - 75);
     const fx = Math.round(cx + Math.cos(angle) * dist);
     const fy = Math.round(cy + Math.sin(angle) * dist);
-    const radius = 8 + Math.floor(Math.random() * 14);
+    const radius = randomInt(8, 21);
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const d = Math.hypot(dx, dy);

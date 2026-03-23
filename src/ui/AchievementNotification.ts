@@ -1,4 +1,5 @@
 import type { AchievementDef } from '../core/AchievementManager';
+import { randomFromArray, randomInt, pointInRect } from '../utils';
 
 interface Sparkle {
   x: number;
@@ -74,8 +75,8 @@ export class AchievementNotification {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (burst ? 2 : 0),
       radius: 1.5 + Math.random() * 3,
-      color: SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)],
-      life: 30 + Math.floor(Math.random() * 40),
+      color: randomFromArray(SPARKLE_COLORS),
+      life: randomInt(30, 69),
       maxLife: 70,
     });
   }
@@ -202,7 +203,7 @@ export class AchievementNotification {
   handleClick(mx: number, my: number): boolean {
     if (this.frame < FADE_IN_FRAMES) return false;
     const r = this.okRect;
-    return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+    return pointInRect(mx, my, r);
   }
 
   // Helpers

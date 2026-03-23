@@ -13,6 +13,7 @@ import { SkyFowl } from '../creatures/SkyFowl';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { Bugaboo } from '../creatures/Bugaboo';
+import { randomFromArray, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef, ExtraSpawnRule } from './types';
 
@@ -44,7 +45,7 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
 function rollMobLevel(rule: MobSpawnRule): number {
   const min = rule.minLevel ?? 1;
   const max = rule.maxLevel ?? min;
-  return min + Math.floor(Math.random() * (max - min + 1));
+  return randomInt(min, max);
 }
 
 // Mob registry — maps type string → factory function
@@ -72,7 +73,7 @@ registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
 registerMob('brindle_grub', (x, y) => new BrindleGrub(x, y, TILE_SIZE));
 registerMob('bugaboo', (x, y) => new Bugaboo(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
-  const v = GOBLIN_VARIANTS[Math.floor(Math.random() * GOBLIN_VARIANTS.length)];
+  const v = randomFromArray(GOBLIN_VARIANTS);
   return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);
 });
 
@@ -166,7 +167,7 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
       const rule = pickRule(def.roomMobs);
       const min = rule.minCount ?? 1;
       const max = rule.maxCount ?? 1;
-      const count = min + Math.floor(Math.random() * (max - min + 1));
+      const count = randomInt(min, max);
       for (let i = 0; i < count; i++) {
         const mob = createMob(rule.type, x, y, map);
         mob.applyMobLevel(rollMobLevel(rule));

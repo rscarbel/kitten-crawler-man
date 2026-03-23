@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { drawMongoSprite } from '../sprites/mongoSprite';
+import { normalize } from '../utils';
 import type { GameMap } from '../map/GameMap';
 import type { LootDrop } from './Mob';
 
@@ -172,10 +173,10 @@ export class Mongo extends Mob {
       // Face target
       const dx = nearest.x - this.x;
       const dy = nearest.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 0) {
-        this.facingX = dx / d;
-        this.facingY = dy / d;
+      if (dx !== 0 || dy !== 0) {
+        const n = normalize(dx, dy);
+        this.facingX = n.x;
+        this.facingY = n.y;
       }
     }
 

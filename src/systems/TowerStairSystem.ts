@@ -1,6 +1,7 @@
 import { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { pointInRect } from '../utils';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -206,6 +207,6 @@ export class TowerStairSystem implements GameSystem {
     my: number,
     r: { x: number; y: number; w: number; h: number },
   ): boolean {
-    return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+    return pointInRect(mx, my, r);
   }
 }

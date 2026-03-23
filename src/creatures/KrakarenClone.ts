@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
+import { randomInt, normalize } from '../utils';
 import { drawKrakarenSprite, drawSlamShadow, drawSlamImpact } from '../sprites/krakarenSprite';
 
 const KRAKAREN_HP = 200;
@@ -95,10 +96,10 @@ export class KrakarenClone extends Mob {
       // Face the target
       const dx = nearest.x - this.x;
       const dy = nearest.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 0) {
-        this.facingX = dx / d;
-        this.facingY = dy / d;
+      if (dx !== 0 || dy !== 0) {
+        const n = normalize(dx, dy);
+        this.facingX = n.x;
+        this.facingY = n.y;
       }
     }
 
@@ -156,7 +157,7 @@ export class KrakarenClone extends Mob {
     if (nearestDist <= MELEE_RANGE_PX) {
       this.state = 'melee_windup';
       this.meleeWindupTimer = MELEE_WINDUP_FRAMES;
-      this.attackTentacle = Math.floor(Math.random() * 10);
+      this.attackTentacle = randomInt(0, 9);
       this.attackProgress = 0;
     }
   }
@@ -199,7 +200,7 @@ export class KrakarenClone extends Mob {
       if (nearest && nearestDist <= MELEE_RANGE_PX) {
         this.state = 'melee_windup';
         this.meleeWindupTimer = MELEE_WINDUP_FRAMES;
-        this.attackTentacle = Math.floor(Math.random() * 10);
+        this.attackTentacle = randomInt(0, 9);
       } else {
         this.state = 'idle';
       }

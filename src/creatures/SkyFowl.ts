@@ -6,6 +6,7 @@ import {
   type SkyFowlClothColors,
 } from '../sprites/skyFowlSprite';
 import type { LootDrop } from './Mob';
+import { randomFromArray, randomInt, normalize } from '../utils';
 
 const FOWL_HP = 14;
 const FOWL_SPEED_NEUTRAL = 0.55;
@@ -42,7 +43,7 @@ export class SkyFowl extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
-    this.cloth = SKY_FOWL_PALETTES[Math.floor(Math.random() * SKY_FOWL_PALETTES.length)];
+    this.cloth = randomFromArray(SKY_FOWL_PALETTES);
   }
 
   /** Sky Fowls are peaceful citizens — they carry no dungeon loot. */
@@ -86,7 +87,7 @@ export class SkyFowl extends Mob {
         this.wanderDy = Math.sin(angle) * spd;
       }
       // Slightly longer pauses between direction changes than dungeon mobs
-      this.wanderTimer = 110 + Math.floor(Math.random() * 200);
+      this.wanderTimer = randomInt(110, 309);
     }
 
     if (this.wanderDx !== 0 || this.wanderDy !== 0) {
@@ -153,10 +154,10 @@ export class SkyFowl extends Mob {
       // Face the target while in peck range
       const dx = nearest.x - this.x;
       const dy = nearest.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 0) {
-        this.facingX = dx / d;
-        this.facingY = dy / d;
+      if (dx !== 0 || dy !== 0) {
+        const n = normalize(dx, dy);
+        this.facingX = n.x;
+        this.facingY = n.y;
       }
     }
 

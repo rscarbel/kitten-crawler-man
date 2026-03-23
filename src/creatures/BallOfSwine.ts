@@ -1,6 +1,7 @@
 import { Mob } from './Mob';
 import { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import { randomInt } from '../utils';
 import { drawBallOfSwineSprite, drawBallOfSwineStoppedWarning } from '../sprites/ballOfSwineSprite';
 import type { LootDrop } from './Mob';
 
@@ -132,8 +133,7 @@ export class BallOfSwine extends Mob {
       this.state = 'bursting';
       this.burstTimer = BURST_FRAMES;
       // Roll loot
-      const coins =
-        this.coinDropMin + Math.floor(Math.random() * (this.coinDropMax - this.coinDropMin + 1));
+      const coins = randomInt(this.coinDropMin, this.coinDropMax);
       const items = this.rollLootItems(attacker);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
@@ -241,9 +241,7 @@ export class BallOfSwine extends Mob {
 
     if (this.stoppingTimer <= 0) {
       this.state = 'stopped';
-      this.stoppedTimer =
-        STOPPED_FRAMES_MIN +
-        Math.floor(Math.random() * (STOPPED_FRAMES_MAX - STOPPED_FRAMES_MIN + 1));
+      this.stoppedTimer = randomInt(STOPPED_FRAMES_MIN, STOPPED_FRAMES_MAX);
       this.currentAngularSpeed = 0;
     }
   }

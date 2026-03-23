@@ -7,6 +7,7 @@ import { renderInventoryTab } from './pause/InventoryTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
 import { renderAchievementsTab } from './pause/AchievementsTab';
+import { pointInRect } from '../utils';
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -125,7 +126,7 @@ export class PauseMenu {
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
     for (const btn of this.buttons) {
-      if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+      if (pointInRect(mx, my, btn)) {
         btn.action();
         return true;
       }

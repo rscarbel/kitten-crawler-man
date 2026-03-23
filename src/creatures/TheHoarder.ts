@@ -2,6 +2,7 @@ import { Player } from '../Player';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { TILE_SIZE } from '../core/constants';
+import { randomInt } from '../utils';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 
 const HOARDER_HP = 80;
@@ -110,7 +111,7 @@ export class TheHoarder extends Mob {
   private triggerVomit(): void {
     this.vomitFlash = 40;
     // Spawn 3–5 cockroaches in a scatter around the boss
-    const count = 3 + Math.floor(Math.random() * 3);
+    const count = randomInt(3, 5);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = TILE_SIZE * (0.5 + Math.random() * 1.5);

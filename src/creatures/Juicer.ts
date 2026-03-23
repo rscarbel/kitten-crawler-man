@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import { Mob, LootDrop } from './Mob';
 import { TILE_SIZE } from '../core/constants';
+import { normalize } from '../utils';
 import {
   drawJuicerSprite,
   drawThrownDumbbell,
@@ -226,9 +227,9 @@ export class Juicer extends Mob {
     if (!forceAttack && nearestDist < THROW_RANGE_MIN) {
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 0) {
-        this.moveWithCollision((dx / d) * this.speed, (dy / d) * this.speed);
+      if (dx !== 0 || dy !== 0) {
+        const n = normalize(dx, dy);
+        this.moveWithCollision(n.x * this.speed, n.y * this.speed);
         this.isMoving = true;
       }
       return;
@@ -258,10 +259,10 @@ export class Juicer extends Mob {
     // Face the target during wind-up
     const dx = nearest.x - this.x;
     const dy = nearest.y - this.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0) {
-      this.facingX = dx / d;
-      this.facingY = dy / d;
+    if (dx !== 0 || dy !== 0) {
+      const n = normalize(dx, dy);
+      this.facingX = n.x;
+      this.facingY = n.y;
     }
 
     if (this.windupTimer <= 0) {

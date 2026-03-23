@@ -1,5 +1,6 @@
 import { InputManager } from '../core/InputManager';
 import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { normalize, clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
 
 export type CollisionMode = 'leading_edge' | 'center';
@@ -75,9 +76,9 @@ export function applyMovement(
   entity.isMoving = dx !== 0 || dy !== 0;
 
   if (dx !== 0 || dy !== 0) {
-    const len = Math.hypot(dx, dy);
-    entity.facingX = dx / len;
-    entity.facingY = dy / len;
+    const n = normalize(dx, dy);
+    entity.facingX = n.x;
+    entity.facingY = n.y;
   }
 
   // Mobile touch already gives a unit vector — skip diagonal penalty
@@ -88,7 +89,7 @@ export function applyMovement(
   dx *= speed;
   dy *= speed;
 
-  const nextX = Math.max(0, Math.min(mapPxW - TILE_SIZE, entity.x + dx));
+  const nextX = clamp(entity.x + dx, 0, mapPxW - TILE_SIZE);
   let tileXnext: number;
   if (collision === 'leading_edge') {
     tileXnext =
@@ -101,7 +102,7 @@ export function applyMovement(
   const tileYcur = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
   if (map.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
 
-  const nextY = Math.max(0, Math.min(mapPxH - TILE_SIZE, entity.y + dy));
+  const nextY = clamp(entity.y + dy, 0, mapPxH - TILE_SIZE);
   const tileXcur = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
   const tileYnext = Math.floor((nextY + TILE_SIZE * 0.5) / TILE_SIZE);
   if (map.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
