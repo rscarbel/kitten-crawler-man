@@ -144,15 +144,23 @@ export function drawExclamationMark(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  const glyph = isQuestion ? '?' : '!';
+
+  // Black outline
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.strokeText(glyph, cx, baseY);
+
   // Glow
   ctx.shadowColor = color;
   ctx.shadowBlur = 8;
   ctx.fillStyle = color;
-  ctx.fillText(isQuestion ? '?' : '!', cx, baseY);
+  ctx.fillText(glyph, cx, baseY);
 
   // Second pass for brightness
   ctx.shadowBlur = 3;
-  ctx.fillText(isQuestion ? '?' : '!', cx, baseY);
+  ctx.fillText(glyph, cx, baseY);
 
   ctx.restore();
 }

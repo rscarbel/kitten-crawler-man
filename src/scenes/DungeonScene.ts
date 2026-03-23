@@ -493,6 +493,7 @@ export class DungeonScene extends GameplayScene {
       companionFollow: () => this.triggerCompanionFollow(),
       toggleMiniMap: () => this.miniMap.toggle(),
       mongoSummon: () => this.triggerMongoSummon(),
+      buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => this.triggerHotbarActivation(idx),
       dynamiteRelease: (idx) => {
         if (this.dynamite.chargingHotbarIdx === idx) {
@@ -522,6 +523,11 @@ export class DungeonScene extends GameplayScene {
   private triggerCompanionFollow(): void {
     this.companion.isFollowOverride = true;
     this.inactive().autoTarget = null;
+  }
+
+  private triggerBuildAction(): void {
+    if (!this.human.isActive) return;
+    this.defendQuest.tryBuildBarrier(this.human);
   }
 
   private triggerMongoSummon(): void {
@@ -796,7 +802,7 @@ export class DungeonScene extends GameplayScene {
 
     // Layer 1: World (map, gore puddles, room objects, door hints)
     this.renderPipeline.renderWorld(ctx, rc);
-    this.defendQuest.renderObjects(ctx, camX, camY, this.active());
+    this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
 
     // Layer 2: Entities (Y-sorted mobs, players, decorations)
     this.renderPipeline.renderEntities(ctx, rc);

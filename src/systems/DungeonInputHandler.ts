@@ -28,6 +28,7 @@ export interface DungeonInputActions {
   companionFollow(): void;
   toggleMiniMap(): void;
   mongoSummon(): void;
+  buildAction(): void;
   hotbarActivation(idx: number): void;
 
   // Key-up handlers
@@ -99,6 +100,7 @@ export class DungeonInputHandler {
 
       if ((e.key === 'r' || e.key === 'R') && !e.repeat) {
         e.preventDefault();
+        actions.buildAction();
         actions.mongoSummon();
         return;
       }

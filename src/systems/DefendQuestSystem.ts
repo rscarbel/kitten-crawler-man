@@ -33,10 +33,10 @@ const QUEST_ID = 'defend_goblin_mother';
 const APPROACH_TIMER_FRAMES = 25 * 60; // 25 seconds
 const DEFENSE_TIMER_FRAMES = 150 * 60; // 150 seconds
 const WOOD_RESPAWN_FRAMES = 6 * 60; // 6 seconds
-const WOOD_PER_PICKUP = 16;
+const WOOD_PER_PICKUP = 8;
 const BOARDS_PER_BUILD = 4;
 const BUILD_FRAMES = 2 * 60; // 2 seconds
-const BARRIER_MAX_HP = 12;
+const BARRIER_MAX_HP = 36;
 const SPAWN_INTERVAL_MIN = 180; // 3 seconds
 const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
@@ -62,6 +62,7 @@ interface WoodBarrier {
   hp: number;
   maxHp: number;
   grateIdx: number;
+  hitFlash: number;
 }
 
 interface PendingBuild {
@@ -282,6 +283,7 @@ export class DefendQuestSystem implements GameSystem {
     if (!barrier) return false;
     if (damage > 0) {
       barrier.hp -= damage;
+      barrier.hitFlash = 12;
       if (barrier.hp <= 0) {
         this.barriers = this.barriers.filter((b) => b !== barrier);
       }
@@ -336,6 +338,11 @@ export class DefendQuestSystem implements GameSystem {
       if (this.pendingBuild.framesLeft <= 0) {
         this.finishBuild(ctx.human);
       }
+    }
+
+    // Tick barrier hit flash
+    for (const b of this.barriers) {
+      if (b.hitFlash > 0) b.hitFlash--;
     }
   }
 
@@ -544,6 +551,7 @@ export class DefendQuestSystem implements GameSystem {
         hp: BARRIER_MAX_HP,
         maxHp: BARRIER_MAX_HP,
         grateIdx,
+        hitFlash: 0,
       });
     }
   }
@@ -555,6 +563,7 @@ export class DefendQuestSystem implements GameSystem {
     camX: number,
     camY: number,
     active?: { x: number; y: number },
+    human?: HumanPlayer,
   ): void {
     if (this.phase === 'inactive') return;
 
@@ -570,6 +579,13 @@ export class DefendQuestSystem implements GameSystem {
       const bx = b.worldX - camX;
       const by = b.worldY - camY;
       drawWoodBarrierSprite(ctx, bx, by, TILE_SIZE, b.hp / b.maxHp);
+      if (b.hitFlash > 0) {
+        ctx.save();
+        ctx.globalAlpha = (b.hitFlash / 12) * 0.45;
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(bx, by, TILE_SIZE, TILE_SIZE);
+        ctx.restore();
+      }
     }
 
     // NPC
@@ -613,6 +629,31 @@ export class DefendQuestSystem implements GameSystem {
     // Build progress indicator
     if (this.pendingBuild) {
       this.renderBuildProgress(ctx, camX, camY);
+    }
+
+    // Build/repair prompt on nearest grate
+    if (
+      human &&
+      human.isActive &&
+      !this.pendingBuild &&
+      (this.phase === 'countdown' || this.phase === 'defending') &&
+      this.roomData &&
+      human.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
+    ) {
+      const ptx = Math.floor((human.x + TILE_SIZE * 0.5) / TILE_SIZE);
+      const pty = Math.floor((human.y + TILE_SIZE * 0.5) / TILE_SIZE);
+      for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
+        const g = this.roomData.grateTiles[gi];
+        const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
+        if (dist > 2) continue;
+        const existing = this.barriers.find((b) => b.grateIdx === gi);
+        if (existing && existing.hp >= existing.maxHp) continue;
+        const label = existing ? 'Repair' : 'Build Barrier';
+        const gx = g.x * TILE_SIZE - camX;
+        const gy = g.y * TILE_SIZE - camY;
+        drawInteractionPrompt(ctx, gx, gy, TILE_SIZE, label, 'R');
+        break;
+      }
     }
   }
 
@@ -832,16 +873,17 @@ export class DefendQuestSystem implements GameSystem {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
 
-    // Big red X
+    // Big red X (above text)
     const xSize = 60;
+    const xCenterY = ch / 2 - 60;
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 8;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cw / 2 - xSize, ch / 2 - xSize - 30);
-    ctx.lineTo(cw / 2 + xSize, ch / 2 + xSize - 30);
-    ctx.moveTo(cw / 2 + xSize, ch / 2 - xSize - 30);
-    ctx.lineTo(cw / 2 - xSize, ch / 2 + xSize - 30);
+    ctx.moveTo(cw / 2 - xSize, xCenterY - xSize);
+    ctx.lineTo(cw / 2 + xSize, xCenterY + xSize);
+    ctx.moveTo(cw / 2 + xSize, xCenterY - xSize);
+    ctx.lineTo(cw / 2 - xSize, xCenterY + xSize);
     ctx.stroke();
     ctx.lineCap = 'butt';
 

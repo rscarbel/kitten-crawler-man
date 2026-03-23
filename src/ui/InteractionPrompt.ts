@@ -11,6 +11,7 @@ import { platform } from '../core/Platform';
  * @param sy       Screen-y of the object's top-left corner
  * @param objW     Width of the object in pixels (prompt is centered above it)
  * @param label    Optional action label shown to the right of the key, e.g. "Sleep"
+ * @param keyOverride  Optional key text override (default: "SPACE" / "TAP")
  */
 export function drawInteractionPrompt(
   ctx: CanvasRenderingContext2D,
@@ -18,8 +19,9 @@ export function drawInteractionPrompt(
   sy: number,
   objW: number,
   label?: string,
+  keyOverride?: string,
 ): void {
-  const keyText = platform.isMobile ? 'TAP' : 'SPACE';
+  const keyText = keyOverride ?? (platform.isMobile ? 'TAP' : 'SPACE');
   const bob = Math.sin(performance.now() / 400) * 2;
 
   ctx.save();
