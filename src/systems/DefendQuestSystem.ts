@@ -216,6 +216,15 @@ export class DefendQuestSystem implements GameSystem {
 
   /** Handle click on dialog menu buttons. */
   handleClick(mx: number, my: number): boolean {
+    // Dismiss completion/failure overlays on any click
+    if (this.completeOverlayTimer > 0) {
+      this.completeOverlayTimer = 0;
+      return true;
+    }
+    if (this.failOverlayTimer > 0) {
+      this.failOverlayTimer = 0;
+      return true;
+    }
     if (this.phase !== 'dialog') return false;
     for (const btn of this.dialogButtons) {
       if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
@@ -294,14 +303,14 @@ export class DefendQuestSystem implements GameSystem {
   // ── Update ────────────────────────────────────────────────────
 
   update(ctx: SystemContext): void {
+    // Overlay timers tick even after quest ends
+    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
+    if (this.failOverlayTimer > 0) this.failOverlayTimer--;
+
     if (this.phase === 'inactive' || this.phase === 'complete') return;
 
     // XP float text timer
     if (this.xpFloatTimer > 0) this.xpFloatTimer--;
-
-    // Completion overlay timer (non-blocking — game continues)
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
-    if (this.failOverlayTimer > 0) this.failOverlayTimer--;
 
     // NPC death check
     if (this.npc && !this.npc.isAlive && this.phase !== 'failed') {
@@ -834,8 +843,13 @@ export class DefendQuestSystem implements GameSystem {
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
+    const FADE_FRAMES = 90;
+    const alpha =
+      this.completeOverlayTimer < FADE_FRAMES ? this.completeOverlayTimer / FADE_FRAMES : 1;
 
     ctx.save();
+    ctx.globalAlpha = alpha;
+
     // Semi-transparent backdrop
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
@@ -861,6 +875,11 @@ export class DefendQuestSystem implements GameSystem {
     ctx.fillText('+50 Gold', cw / 2, ch / 2 + 55);
     ctx.fillText('Loot Box (open in Safe Room)', cw / 2, ch / 2 + 75);
 
+    // Dismiss hint
+    ctx.font = '12px monospace';
+    ctx.fillStyle = 'rgba(200,200,200,0.7)';
+    ctx.fillText('Click to dismiss', cw / 2, ch / 2 + 105);
+
     ctx.textAlign = 'left';
     ctx.restore();
   }
@@ -868,8 +887,12 @@ export class DefendQuestSystem implements GameSystem {
   private renderFailedOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
+    const FADE_FRAMES = 90;
+    const alpha = this.failOverlayTimer < FADE_FRAMES ? this.failOverlayTimer / FADE_FRAMES : 1;
 
     ctx.save();
+    ctx.globalAlpha = alpha;
+
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
 
@@ -893,6 +916,12 @@ export class DefendQuestSystem implements GameSystem {
     ctx.shadowColor = '#ef4444';
     ctx.shadowBlur = 15;
     ctx.fillText('QUEST FAILED', cw / 2, ch / 2 + 50);
+
+    // Dismiss hint
+    ctx.shadowBlur = 0;
+    ctx.font = '12px monospace';
+    ctx.fillStyle = 'rgba(200,200,200,0.7)';
+    ctx.fillText('Click to dismiss', cw / 2, ch / 2 + 80);
 
     ctx.textAlign = 'left';
     ctx.restore();

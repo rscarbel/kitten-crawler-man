@@ -59,7 +59,6 @@ export const level2: LevelDef = {
       minCount: 1,
       maxCount: 5,
       spreadRadius: 2,
-      excludeKilledTypes: ['BrindleGrub'],
     },
   ],
 };

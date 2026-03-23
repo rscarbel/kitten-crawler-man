@@ -65,8 +65,6 @@ export interface OnMobKilledSpawn {
   maxCount: number;
   /** Max tile offset from the death location for placement attempts. */
   spreadRadius: number;
-  /** If set, only triggers when the killed mob is NOT one of these types. */
-  excludeKilledTypes?: string[];
 }
 
 /** Data-only description of a dungeon level. No game-logic dependencies. */

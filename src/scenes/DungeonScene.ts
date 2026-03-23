@@ -52,6 +52,7 @@ import type { SystemContext } from '../systems/GameSystem';
 import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
+import { BrindleGrub } from '../creatures/BrindleGrub';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -373,9 +374,9 @@ export class DungeonScene extends GameplayScene {
 
       // Data-driven on-kill spawns (e.g. level 2 Brindle Grubs)
       if (this.levelDef.onMobKilledSpawns) {
-        const mobClassName = (mob.constructor as { name?: string }).name ?? '';
         for (const rule of this.levelDef.onMobKilledSpawns) {
-          if (rule.excludeKilledTypes?.includes(mobClassName)) continue;
+          // Don't spawn grubs from grub deaths (prevents infinite chain)
+          if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
           const count =
