@@ -27,12 +27,10 @@ import {
   drawExclamationMark,
 } from '../sprites/questNPCSprite';
 
-// ── Constants ─────────────────────────────────────────────────────
-
 const QUEST_ID = 'defend_goblin_mother';
 
 const APPROACH_TIMER_FRAMES = 25 * 60; // 25 seconds
-const DEFENSE_TIMER_FRAMES = 150 * 60; // 150 seconds
+const DEFENSE_TIMER_FRAMES = 60 * 60; // 60 seconds
 const WOOD_RESPAWN_FRAMES = 6 * 60; // 6 seconds
 const WOOD_PER_PICKUP = 8;
 const BOARDS_PER_BUILD = 4;

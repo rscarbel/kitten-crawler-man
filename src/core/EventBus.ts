@@ -63,6 +63,21 @@ export interface GameEvents {
 
   /** A quest was failed. */
   questFailed: { questId: string };
+
+  /** A player first attacks a mob after being out of combat. */
+  combatStarted: { attacker: 'Human' | 'Cat'; mobType: string };
+
+  /** Players entered a boss room and the fight has begun. */
+  bossFightInitiated: { bossType: string };
+
+  /** A player drank a healing potion. */
+  healingPotionUsed: { player: 'Human' | 'Cat'; hpRestored: number };
+
+  /** A player threw goblin dynamite. */
+  dynamiteUsed: { player: 'Human' | 'Cat' };
+
+  /** A player's HP dropped below 25 % of max. */
+  healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
 }
 
 // ── Implementation ─────────────────────────────────────────────────

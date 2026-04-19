@@ -6,7 +6,10 @@
     "strict": true,
     "lib": ["ES2020", "DOM"],
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "game-ai-server/sdk": ["./src/ai/game-ai-server-sdk.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -3,3 +3,5 @@ dist
 .claude
 memory
 .port_sessions
+.env
+game.db*

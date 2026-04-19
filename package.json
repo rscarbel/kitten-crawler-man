@@ -5,13 +5,35 @@
   "license": "ISC",
   "author": "",
   "scripts": {
-    "build": "esbuild src/game.ts --bundle --outfile=dist/bundle.js",
+    "build": "esbuild src/game.ts --bundle --outfile=dist/bundle.js --alias:ws=./src/ai/ws-stub.ts",
+    "serve": "esbuild src/game.ts --bundle --outfile=dist/bundle.js --alias:ws=./src/ai/ws-stub.ts --servedir=. --serve=8080",
+    "lint": "eslint src",
+    "server": "tsx server/index.ts",
+    "dev": "npm run build && npm run server",
     "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "esbuild": "^0.27.3",
-    "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.15.3",
+    "esbuild": "^0.27.7",
+    "eslint": "^10.2.1",
+    "prettier": "^3.8.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.58.2"
   }
 }

@@ -17,10 +17,13 @@ export interface CombatContext {
   gameMap: GameMap;
   safeRoom: SafeRoomSystem;
   bus: EventBus;
+  /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
+  hitLanded: boolean;
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
   const { human, cat, mobGrid, gameMap, safeRoom } = ctx;
+  ctx.hitLanded = false;
   const centerOf = (e: { x: number; y: number }) => ({
     x: e.x + TILE_SIZE * 0.5,
     y: e.y + TILE_SIZE * 0.5,
@@ -44,6 +47,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
+      ctx.hitLanded = true;
       // Sepsis proc: 15% chance when Enchanted Crown is equipped
       if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
         mob.applyStatus(makeSepsis());
@@ -63,6 +67,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
           mob.takeDamageFrom(damage, cat, 'missile');
+          ctx.hitLanded = true;
           // Sepsis proc: 15% chance when Enchanted Crown is equipped
           if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
             mob.applyStatus(makeSepsis());

@@ -55,6 +55,8 @@ import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { randomInt, pointInRect } from '../utils';
+import { aiAdapter } from '../ai/AIAdapter';
+import type { AISceneContext } from '../ai/aiActions';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -77,6 +79,12 @@ export interface DungeonSceneOptions {
   floorEntryCatSnap?: PlayerSnapshot;
   /** Whether Mongo the velociraptor has been unlocked (persists across floors). */
   mongoUnlocked?: boolean;
+  /** Called whenever the game wants to persist progress (e.g. on safe-room entry). */
+  saveProgress?: (data: {
+    humanSnap: PlayerSnapshot;
+    catSnap: PlayerSnapshot;
+    levelId: string;
+  }) => void;
 }
 
 export class DungeonScene extends GameplayScene {
@@ -142,10 +150,17 @@ export class DungeonScene extends GameplayScene {
   // Mobile touch state (encapsulated)
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
+  private combatCooldownFrames = 0;
+  private humanHealthLow = false;
+  private catHealthLow = false;
 
   // Mouse position in screen coords (updated by handleMouseMove)
   private _mouseX = -9999;
   private _mouseY = -9999;
+
+  private onSaveProgress:
+    | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
+    | undefined;
 
   constructor(
     private readonly levelDef: LevelDef,
@@ -246,6 +261,7 @@ export class DungeonScene extends GameplayScene {
           humanAchievements: this.humanAchievements,
           catAchievements: this.catAchievements,
           mongoUnlocked: this.mongoSystem.unlocked,
+          saveProgress: this.onSaveProgress,
         }),
       );
     });
@@ -312,7 +328,9 @@ export class DungeonScene extends GameplayScene {
       this.mongoSystem.unlocked = true;
     }
 
+    this.onSaveProgress = options?.saveProgress;
     this.wireEventBus();
+    aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
 
   /** Subscribe systems to EventBus events, replacing imperative orchestration. */
@@ -418,10 +436,15 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
-    // ── safeRoomEntered: safe_haven achievement ──
+    // ── safeRoomEntered: safe_haven achievement + progress autosave ──
     bus.on('safeRoomEntered', () => {
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
+      this.onSaveProgress?.({
+        humanSnap: snapPlayer(this.human),
+        catSnap: snapPlayer(this.cat),
+        levelId: this.levelDef.id,
+      });
     });
 
     bus.on('questCompleted', (e) => {
@@ -500,6 +523,7 @@ export class DungeonScene extends GameplayScene {
       dynamiteRelease: (idx) => {
         if (this.dynamite.chargingHotbarIdx === idx) {
           this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+          this.bus.emit('dynamiteUsed', { player: 'Human' });
           return true;
         }
         return false;
@@ -509,6 +533,7 @@ export class DungeonScene extends GameplayScene {
 
   onExit(): void {
     this.inputHandler.unbind();
+    aiAdapter.unbindScene();
     this.bus.clear();
   }
 
@@ -587,7 +612,14 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
-      active.usePotion();
+      const hpBefore = active.hp;
+      if (active.usePotion()) {
+        const playerName = active === this.human ? 'Human' : 'Cat';
+        this.bus.emit('healingPotionUsed', {
+          player: playerName,
+          hpRestored: active.hp - hpBefore,
+        });
+      }
     } else if (slot?.abilityId === 'protective_shell') {
       this.spells.triggerProtectiveShell(this.human, this.mobGrid);
     } else if (slot?.id === 'scroll_of_confusing_fog') {
@@ -595,6 +627,7 @@ export class DungeonScene extends GameplayScene {
     } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
       if (this.dynamite.isCharging) {
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+        this.bus.emit('dynamiteUsed', { player: 'Human' });
       } else {
         this.dynamite.beginCharge(hotbarIdx);
       }
@@ -745,6 +778,7 @@ export class DungeonScene extends GameplayScene {
   // Main update / render
 
   update(): void {
+    aiAdapter.update();
     this.achievementUI.tick();
 
     if (this.bossIntro.isActive) {
@@ -946,6 +980,8 @@ export class DungeonScene extends GameplayScene {
       this.bossIntro.render(ctx, canvas);
     }
 
+    aiAdapter.render(ctx, canvas);
+
     if (
       platform.showEntityTooltip &&
       !this.gameOver &&
@@ -1027,6 +1063,7 @@ export class DungeonScene extends GameplayScene {
         color: '#ef4444',
       };
       this.bossIntro.trigger(bt, meta.displayName, meta.color);
+      this.bus.emit('bossFightInitiated', { bossType: bt });
     }
 
     this.barriers.update(ctx);
@@ -1054,8 +1091,40 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       safeRoom: this.safeRoom,
       bus: this.bus,
+      hitLanded: false,
     };
     resolvePlayerAttacks(combatCtx);
+
+    if (combatCtx.hitLanded) {
+      if (this.combatCooldownFrames <= 0) {
+        const hitMob = this.mobs.find((m) => m.isAlive && m.damageTakenBy.size > 0);
+        this.bus.emit('combatStarted', {
+          attacker: this.human.isActive ? 'Human' : 'Cat',
+          mobType: hitMob?.constructor.name ?? 'Unknown',
+        });
+      }
+      this.combatCooldownFrames = 300;
+    } else if (this.combatCooldownFrames > 0) {
+      this.combatCooldownFrames--;
+    }
+
+    for (const [player, name] of [
+      [this.human, 'Human'],
+      [this.cat, 'Cat'],
+    ] as const) {
+      const isLow = player.hp / player.maxHp < 0.25;
+      if (name === 'Human') {
+        if (isLow && !this.humanHealthLow) {
+          this.bus.emit('healthLow', { player: 'Human', hp: player.hp, maxHp: player.maxHp });
+        }
+        this.humanHealthLow = isLow;
+      } else {
+        if (isLow && !this.catHealthLow) {
+          this.bus.emit('healthLow', { player: 'Cat', hp: player.hp, maxHp: player.maxHp });
+        }
+        this.catHealthLow = isLow;
+      }
+    }
 
     // Intercept Mongo lethal damage before resolveKills consumes justDied
     this.mongoSystem.checkHealth();
@@ -1139,6 +1208,22 @@ export class DungeonScene extends GameplayScene {
       active.inventory.removeItems(id, quantity);
       this.loot.addPlayerDrop(active.x, active.y, id, quantity, active);
     }
+  }
+
+  // AI integration
+
+  private createAISceneContext(): AISceneContext {
+    return {
+      getHuman: () => this.human,
+      getCat: () => this.cat,
+      getMobs: () => this.mobs,
+      getGameMap: () => this.gameMap,
+      getLevelId: () => this.levelDef.id,
+      spawnMob: (mob) => {
+        this.mobs.push(mob);
+        this.mobGrid.insert(mob);
+      },
+    };
   }
 
   // Camera
@@ -1321,7 +1406,9 @@ export class DungeonScene extends GameplayScene {
 
       // Dynamite charge release
       if (touch.identifier === this.touch.dynamiteTouchId) {
+        const wasCharging = this.dynamite.isCharging;
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+        if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
         this.touch.dynamiteTouchId = null;
         continue;
       }
@@ -1367,7 +1454,9 @@ export class DungeonScene extends GameplayScene {
                 this.human.facingX = ddx / dist;
                 this.human.facingY = ddy / dist;
               }
+              const wasCharging = this.dynamite.isCharging;
               this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+              if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
               // Short tap: try UI click first, then space action
               this.handleClick(x, y);
