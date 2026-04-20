@@ -249,6 +249,7 @@ export function drawWoodPileSprite(
   sx: number,
   sy: number,
   s: number,
+  showArrow = true,
 ) {
   const t = performance.now() / 1000;
   const glow = 0.15 + 0.08 * Math.sin(t * 2.5);
@@ -297,11 +298,41 @@ export function drawWoodPileSprite(
   ctx.fill();
 
   // "Boards" text
-  ctx.fillStyle = '#fbbf24';
   ctx.font = `bold ${Math.floor(s * 0.22)}px monospace`;
   ctx.textAlign = 'center';
+  ctx.strokeStyle = '#3a2500';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.strokeText('WOOD', sx + s * 0.5, sy + s * 0.38);
+  ctx.fillStyle = '#fbbf24';
   ctx.fillText('WOOD', sx + s * 0.5, sy + s * 0.38);
   ctx.textAlign = 'left';
+
+  if (!showArrow) return;
+
+  // Bouncing green pickup arrow
+  const bounce = Math.abs(Math.sin(t * 3.5)) * s * 0.18;
+  const ax = sx + s * 0.5;
+  const ay = sy - s * 0.22 - bounce;
+  const aw = s * 0.28;
+  const ah = s * 0.22;
+  ctx.save();
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(ax, ay + ah);
+  ctx.lineTo(ax - aw * 0.5, ay);
+  ctx.lineTo(ax - aw * 0.2, ay);
+  ctx.lineTo(ax - aw * 0.2, ay - ah * 0.55);
+  ctx.lineTo(ax + aw * 0.2, ay - ah * 0.55);
+  ctx.lineTo(ax + aw * 0.2, ay);
+  ctx.lineTo(ax + aw * 0.5, ay);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle = '#4ade80';
+  ctx.fill();
+  ctx.restore();
 }
 
 // ── Wood Barrier ──────────────────────────────────────────────────

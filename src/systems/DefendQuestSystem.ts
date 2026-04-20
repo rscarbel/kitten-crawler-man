@@ -732,10 +732,14 @@ export class DefendQuestSystem implements GameSystem {
     ctx.lineCap = 'butt';
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     const label = this.pendingBuild.isRepair ? 'REPAIRING...' : 'BUILDING...';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(label, sx, sy + radius + 12);
+    ctx.fillStyle = '#fbbf24';
     ctx.fillText(label, sx, sy + radius + 12);
     ctx.textAlign = 'left';
     ctx.restore();
@@ -1064,8 +1068,12 @@ export class DefendQuestSystem implements GameSystem {
       ctx.textAlign = 'center';
       ctx.fillText('→', illX + hw, icy + s * 0.06);
       drawWoodBarrierSprite(ctx, illX + hw + hw * 0.5 - s * 0.5, icy - s * 0.5, s, 1.0);
-      ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 11px monospace';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.strokeText('[R] to build', illX + hw + hw * 0.5, icy + s * 0.68);
+      ctx.fillStyle = '#fbbf24';
       ctx.fillText('[R] to build', illX + hw + hw * 0.5, icy + s * 0.68);
     } else {
       // Damaged barrier showing monster threat

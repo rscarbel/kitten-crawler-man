@@ -8,6 +8,7 @@ import {
   drawBenchPressInventoryIcon,
   drawTreadmillInventoryIcon,
 } from '../sprites/gymEquipmentSprite';
+import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
 import { pointInRect } from '../utils';
 
@@ -776,6 +777,10 @@ export class InventoryPanel {
       ctx.strokeStyle = '#a78bfa';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+    }
+
+    if (item.id === 'quest_wood_board') {
+      drawWoodPileSprite(ctx, x, y, size, false);
     }
 
     if (item.id === 'goblin_dynamite') {

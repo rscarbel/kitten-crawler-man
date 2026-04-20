@@ -81,9 +81,13 @@ export function drawInteractionPrompt(
 
   // Label
   if (label) {
-    ctx.fillStyle = '#f0e8d0';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(label, kx + keyW + 4, ky + keyH * 0.5 + 0.5);
+    ctx.fillStyle = '#f0e8d0';
     ctx.fillText(label, kx + keyW + 4, ky + keyH * 0.5 + 0.5);
   }
 

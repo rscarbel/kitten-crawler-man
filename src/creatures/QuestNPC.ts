@@ -16,6 +16,8 @@ export class QuestNPC extends Player {
   markerType: NPCMarkerType = 'exclamation';
   /** Which quest this NPC belongs to. */
   readonly questId: string;
+  /** Frames remaining on the persistent red damage box. Set to 308 on hit; box fades over final 8 frames. */
+  private redBoxTimer = 0;
 
   constructor(tileX: number, tileY: number, questId: string) {
     super(tileX, tileY, TILE_SIZE, 40);
@@ -45,5 +47,27 @@ export class QuestNPC extends Player {
     }
 
     this.renderDamageFlash(ctx, sx, sy);
+  }
+
+  takeDamage(amount: number) {
+    super.takeDamage(amount);
+    if (amount > 0 && !this.isProtected) {
+      this.redBoxTimer = 308; // 5 s at 60 fps + 8-frame fade
+    }
+  }
+
+  tickTimers() {
+    super.tickTimers();
+    if (this.redBoxTimer > 0) this.redBoxTimer--;
+  }
+
+  protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+    if (this.redBoxTimer <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, this.redBoxTimer / 8) * 0.9;
+    ctx.strokeStyle = '#ff1f1f';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(sx + 1, sy + 1, this.tileSize - 2, this.tileSize - 2);
+    ctx.restore();
   }
 }
