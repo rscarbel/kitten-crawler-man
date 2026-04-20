@@ -4,28 +4,40 @@ interface AIMessage {
   text: string;
   ttl: number;
   maxTtl: number;
+  scrollY: number;
 }
 
-const DISPLAY_TICKS = 660; // 11 seconds at 60 fps
+const MIN_DISPLAY_TICKS = 560;
+const TICKS_PER_WORD = 15; // ~4 words/sec reading pace at 60fps
 const FADE_TICKS = 90;
+const SCROLL_DELAY = 90; // ticks before auto-scroll starts
+const SCROLL_SPEED = 0.6; // px per tick
 
 const ACTION_DISPLAY_TICKS = 210; // 3.5 seconds at 60 fps
 const ACTION_FADE_TICKS = 45;
+
+function calcTtl(text: string): number {
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(MIN_DISPLAY_TICKS, words * TICKS_PER_WORD);
+}
 
 export class AIMessageDisplay {
   private messages: AIMessage[] = [];
   private actionNotifs: AIMessage[] = [];
 
   add(text: string): void {
-    this.messages.push({ text, ttl: DISPLAY_TICKS, maxTtl: DISPLAY_TICKS });
-    // Cap the queue so the AI can't flood the screen
-    if (this.messages.length > 3) {
-      this.messages.shift();
-    }
+    const ttl = calcTtl(text);
+    // New message immediately replaces any existing ones
+    this.messages = [{ text, ttl, maxTtl: ttl, scrollY: 0 }];
   }
 
   addAction(text: string): void {
-    this.actionNotifs.push({ text, ttl: ACTION_DISPLAY_TICKS, maxTtl: ACTION_DISPLAY_TICKS });
+    this.actionNotifs.push({
+      text,
+      ttl: ACTION_DISPLAY_TICKS,
+      maxTtl: ACTION_DISPLAY_TICKS,
+      scrollY: 0,
+    });
     if (this.actionNotifs.length > 3) {
       this.actionNotifs.shift();
     }
@@ -72,10 +84,18 @@ export class AIMessageDisplay {
 
     const lineH = fontSize + 5;
     const labelH = 18;
-    const boxH = labelH + lines.length * lineH + padding * 2;
+    const by = 14;
+    const maxBoxH = canvas.height - by - 20;
+    const fullContentH = labelH + lines.length * lineH + padding * 2;
+    const boxH = Math.min(fullContentH, maxBoxH);
     const boxW = maxW;
     const bx = Math.round((canvas.width - boxW) / 2);
-    const by = 14;
+
+    // Advance scroll if content overflows the box
+    const overflow = fullContentH - boxH;
+    if (overflow > 0 && msg.maxTtl - msg.ttl > SCROLL_DELAY) {
+      msg.scrollY = Math.min(msg.scrollY + SCROLL_SPEED, overflow);
+    }
 
     // Background
     ctx.globalAlpha = alpha * 0.93;
@@ -90,19 +110,25 @@ export class AIMessageDisplay {
     roundRect(ctx, bx, by, boxW, boxH, 5);
     ctx.stroke();
 
+    // Clip all text to the box interior
+    roundRect(ctx, bx, by, boxW, boxH, 5);
+    ctx.clip();
+
+    const scrolled = msg.scrollY;
+
     // "⚙ SYSTEM" label
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#a78bfa';
     ctx.font = `bold 10px monospace`;
-    ctx.fillText('⚙ SYSTEM AI', bx + padding, by + padding + 4);
+    ctx.fillText('⚙ SYSTEM AI', bx + padding, by + padding + 4 - scrolled);
 
     // Separator line
     ctx.strokeStyle = '#3b1d7a';
     ctx.lineWidth = 1;
     ctx.globalAlpha = alpha * 0.5;
     ctx.beginPath();
-    ctx.moveTo(bx + padding, by + padding + labelH - 2);
-    ctx.lineTo(bx + boxW - padding, by + padding + labelH - 2);
+    ctx.moveTo(bx + padding, by + padding + labelH - 2 - scrolled);
+    ctx.lineTo(bx + boxW - padding, by + padding + labelH - 2 - scrolled);
     ctx.stroke();
 
     // Message body
@@ -110,7 +136,11 @@ export class AIMessageDisplay {
     ctx.fillStyle = '#d4d4e8';
     ctx.font = `${fontSize}px monospace`;
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], bx + padding, by + padding + labelH + i * lineH + fontSize - 1);
+      ctx.fillText(
+        lines[i],
+        bx + padding,
+        by + padding + labelH + i * lineH + fontSize - 1 - scrolled,
+      );
     }
 
     ctx.restore();
