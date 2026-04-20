@@ -528,6 +528,7 @@ export class DefendQuestSystem implements GameSystem {
   private acceptQuest(): void {
     this.phase = 'countdown';
     this.questManager.startQuest(QUEST_ID);
+    this.bus.emit('questStarted', { questId: QUEST_ID });
     this.approachTimer = APPROACH_TIMER_FRAMES;
     this.woodPileAvailable = true;
     if (this.npc) this.npc.markerType = 'none';

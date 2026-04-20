@@ -58,6 +58,9 @@ export interface GameEvents {
     player: 'Human' | 'Cat';
   };
 
+  /** A quest was started. */
+  questStarted: { questId: string };
+
   /** A quest was completed. */
   questCompleted: { questId: string };
 

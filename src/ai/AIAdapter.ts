@@ -330,6 +330,20 @@ export class AIAdapter {
         });
       }),
 
+      bus.on('questStarted', (e) => {
+        const summaries: Record<string, string> = {
+          defend_goblin_mother:
+            'Quest started: Defend the Goblin Mother. The players accepted a mini-quest to protect a goblin NPC from incoming waves of enemies. They have a short countdown before attackers arrive and can build a wood-pile barricade to help hold them off. Rewards include XP, coins, and loot if they succeed.',
+        };
+        this.sendEvent({
+          ts: Date.now(),
+          type: 'quest_started',
+          data: { questId: e.questId },
+          importance: 4,
+          summary: summaries[e.questId] ?? `Quest started: ${e.questId}`,
+        });
+      }),
+
       bus.on('questCompleted', (e) => {
         this.sendEvent({
           ts: Date.now(),
