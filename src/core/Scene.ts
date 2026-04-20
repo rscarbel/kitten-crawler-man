@@ -14,6 +14,7 @@ export abstract class Scene {
   handleMouseMove?(mx: number, my: number): void;
   handleMouseUp?(mx: number, my: number): void;
   handleContextMenu?(mx: number, my: number): void;
+  handleWheel?(deltaY: number): void;
   handleTouchStart?(e: TouchEvent, rect: DOMRect): void;
   handleTouchMove?(e: TouchEvent, rect: DOMRect): void;
   handleTouchEnd?(e: TouchEvent, rect: DOMRect): void;
@@ -69,6 +70,16 @@ export class SceneManager {
       const { x, y } = getPos(e);
       this.current.handleMouseUp(x, y);
     });
+
+    this.canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (!this.current?.handleWheel) return;
+        e.preventDefault();
+        this.current.handleWheel(e.deltaY);
+      },
+      { passive: false },
+    );
 
     this.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();

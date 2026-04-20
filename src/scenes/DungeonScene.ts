@@ -58,6 +58,7 @@ import { randomInt, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
+import { GameStats } from '../core/GameStats';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -156,6 +157,7 @@ export class DungeonScene extends GameplayScene {
   private humanHealthLow = false;
   private catHealthLow = false;
   private playerIdleFrames = 0;
+  private gameStats = new GameStats();
 
   // Mouse position in screen coords (updated by handleMouseMove)
   private _mouseX = -9999;
@@ -346,6 +348,10 @@ export class DungeonScene extends GameplayScene {
     bus.on('spawnGore', (e) => {
       this.gore.spawnGore(e.x, e.y);
     });
+
+    // ── stats tracking ──
+    bus.on('mobKilled', (e) => this.gameStats.recordKill(e.mob.displayName));
+    bus.on('healingPotionUsed', () => this.gameStats.recordPotionUsed());
 
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
@@ -552,8 +558,14 @@ export class DungeonScene extends GameplayScene {
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       usePotion: () => {
-        if (this.human.isActive) this.human.usePotion();
-        else this.cat.usePotion();
+        const active = this.human.isActive ? this.human : this.cat;
+        const hpBefore = active.hp;
+        if (active.usePotion()) {
+          this.bus.emit('healingPotionUsed', {
+            player: active === this.human ? 'Human' : 'Cat',
+            hpRestored: active.hp - hpBefore,
+          });
+        }
       },
       toggleInventory: () => this.inventoryPanel.toggle(),
       toggleGear: () => this.gearPanel.toggle(),
@@ -840,6 +852,10 @@ export class DungeonScene extends GameplayScene {
     this.inventoryPanel.openContextMenu(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
+  handleWheel(deltaY: number): void {
+    if (this.pauseMenu.isOpen) this.pauseMenu.handleWheel(deltaY);
+  }
+
   // Main update / render
 
   update(): void {
@@ -1011,6 +1027,7 @@ export class DungeonScene extends GameplayScene {
         inSafe,
         onOpenHuman,
         onOpenCat,
+        this.gameStats,
       );
     }
 

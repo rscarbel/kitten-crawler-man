@@ -21,6 +21,7 @@ import { Bugaboo } from '../creatures/Bugaboo';
 import { QuestNPC } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
 import {
+  drawQuestNPCSprite,
   drawWoodPileSprite,
   drawWoodBarrierSprite,
   drawChildSprite,
@@ -41,12 +42,16 @@ const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
 
+// Persists for the game session — tutorial shows only once
+let tutorialSeen = false;
+
 // ── Types ─────────────────────────────────────────────────────────
 
 type QuestPhase =
   | 'inactive'
   | 'npc_waiting'
   | 'dialog'
+  | 'tutorial'
   | 'countdown'
   | 'defending'
   | 'complete_pending'
@@ -110,6 +115,11 @@ export class DefendQuestSystem implements GameSystem {
 
   // Dialog menu
   private dialogButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> = [];
+
+  // Tutorial
+  private tutorialPage = 0;
+  private tutorialButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> =
+    [];
 
   // Callbacks from DungeonScene
   private getMobs: () => Mob[];
@@ -187,7 +197,7 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   get isDialogOpen(): boolean {
-    return this.phase === 'dialog';
+    return this.phase === 'dialog' || this.phase === 'tutorial';
   }
 
   get isSuppressed(): boolean {
@@ -224,6 +234,22 @@ export class DefendQuestSystem implements GameSystem {
       this.failOverlayTimer = 0;
       return true;
     }
+    if (this.phase === 'tutorial') {
+      for (const btn of this.tutorialButtons) {
+        if (pointInRect(mx, my, btn)) {
+          if (btn.action === 'next') {
+            this.tutorialPage++;
+          } else if (btn.action === 'go') {
+            tutorialSeen = true;
+            this.tutorialButtons = [];
+            this.startCountdown();
+          }
+          this.tutorialButtons = [];
+          return true;
+        }
+      }
+      return true; // consume all clicks while tutorial is open
+    }
     if (this.phase !== 'dialog') return false;
     for (const btn of this.dialogButtons) {
       if (pointInRect(mx, my, btn)) {
@@ -244,6 +270,11 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase === 'dialog') {
       this.phase = 'npc_waiting';
       this.dialogButtons = [];
+      return true;
+    }
+    if (this.phase === 'tutorial') {
+      this.phase = 'npc_waiting';
+      this.tutorialButtons = [];
       return true;
     }
     return false;
@@ -526,6 +557,15 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private acceptQuest(): void {
+    if (!tutorialSeen) {
+      this.phase = 'tutorial';
+      this.tutorialPage = 0;
+      return;
+    }
+    this.startCountdown();
+  }
+
+  private startCountdown(): void {
     this.phase = 'countdown';
     this.questManager.startQuest(QUEST_ID);
     this.bus.emit('questStarted', { questId: QUEST_ID });
@@ -752,6 +792,11 @@ export class DefendQuestSystem implements GameSystem {
       this.renderDialog(ctx, canvas);
     }
 
+    // First-time tutorial
+    if (this.phase === 'tutorial') {
+      this.renderTutorial(ctx, canvas);
+    }
+
     // Quest complete overlay
     if (this.completeOverlayTimer > 0) {
       this.renderCompleteOverlay(ctx, canvas);
@@ -941,9 +986,171 @@ export class DefendQuestSystem implements GameSystem {
     ctx.restore();
   }
 
+  private renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const dw = Math.min(500, cw - 40);
+    const dh = Math.min(410, ch - 60);
+    const dx = Math.floor((cw - dw) / 2);
+    const dy = Math.floor((ch - dh) / 2);
+    const PAGES = 3;
+
+    ctx.save();
+
+    // Dim backdrop
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Panel background
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(dx, dy, dw, dh);
+
+    // Header bar
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(dx + 2, dy + 2, dw - 4, 36);
+
+    // Title
+    const titles = ['THE QUEST', 'BUILD BARRIERS', 'THE THREAT'];
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(titles[this.tutorialPage], dx + dw / 2, dy + 24);
+
+    // Page progress dots
+    const dotGap = 14;
+    const dotsX = dx + dw / 2 - ((PAGES - 1) * dotGap) / 2;
+    const dotsY = dy + dh - 16;
+    for (let i = 0; i < PAGES; i++) {
+      ctx.beginPath();
+      ctx.arc(dotsX + i * dotGap, dotsY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i === this.tutorialPage ? '#fbbf24' : '#334155';
+      ctx.fill();
+    }
+
+    // Illustration box
+    const pad = 16;
+    const illX = dx + pad;
+    const illY = dy + 46;
+    const illW = dw - pad * 2;
+    const illH = Math.floor(dh * 0.43);
+
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(illX, illY, illW, illH);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(illX, illY, illW, illH);
+
+    const s = Math.min(illH * 0.8, 72);
+    const icx = illX + illW / 2;
+    const icy = illY + illH / 2;
+
+    if (this.tutorialPage === 0) {
+      // Goblin mother + child with heart between them
+      drawQuestNPCSprite(ctx, icx - s * 1.3, icy - s * 0.5, s);
+      drawChildSprite(ctx, icx + s * 0.45, icy - s * 0.35, s * 0.72, 0, false, -1);
+      ctx.fillStyle = '#f87171';
+      ctx.font = `bold ${Math.floor(s * 0.38)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('♥', icx - s * 0.08, icy + s * 0.08);
+    } else if (this.tutorialPage === 1) {
+      // Wood pile → barrier diagram
+      const hw = illW / 2;
+      drawWoodPileSprite(ctx, illX + hw * 0.5 - s * 0.5, icy - s * 0.5, s);
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = `bold ${Math.floor(s * 0.5)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('→', illX + hw, icy + s * 0.06);
+      drawWoodBarrierSprite(ctx, illX + hw + hw * 0.5 - s * 0.5, icy - s * 0.5, s, 1.0);
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('[R] to build', illX + hw + hw * 0.5, icy + s * 0.68);
+    } else {
+      // Damaged barrier showing monster threat
+      drawWoodBarrierSprite(ctx, icx - s * 0.5, icy - s * 0.5, s, 0.18);
+      // Upward arrow indicating enemies from below
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(icx, icy + s * 1.05);
+      ctx.lineTo(icx, icy + s * 0.65);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(icx - 6, icy + s * 0.72);
+      ctx.lineTo(icx, icy + s * 0.58);
+      ctx.lineTo(icx + 6, icy + s * 0.72);
+      ctx.stroke();
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('enemies spawn below!', icx, icy + s * 1.2);
+    }
+
+    // Description text
+    const descriptions = [
+      [
+        'A goblin mother needs you to protect her.',
+        'Keep her alive for 60 seconds until her',
+        'child safely arrives. Do not let her die!',
+      ],
+      [
+        'Walk over the WOOD PILE to collect boards.',
+        'Stand near a floor grate, then press [R]',
+        'to build a barrier. Each barrier costs 4 boards.',
+      ],
+      [
+        'Bugaboos crawl up from grates to attack!',
+        'Barriers block them — repair when damaged.',
+        'Survive the full timer to complete the quest.',
+      ],
+    ];
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    const textStartY = illY + illH + 20;
+    for (let i = 0; i < descriptions[this.tutorialPage].length; i++) {
+      ctx.fillText(descriptions[this.tutorialPage][i], dx + dw / 2, textStartY + i * 18);
+    }
+
+    // Next / Let's Go button
+    this.tutorialButtons = [];
+    const btnW = 130;
+    const btnH = 30;
+    const btnX = dx + dw - pad - btnW;
+    const btnY = dy + dh - 50;
+    const isLast = this.tutorialPage === PAGES - 1;
+
+    ctx.fillStyle = isLast ? '#14532d' : '#1e3a5f';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = isLast ? '#4ade80' : '#60a5fa';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    ctx.fillStyle = isLast ? '#4ade80' : '#93c5fd';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(isLast ? "Let's Go!" : 'Next  ›', btnX + btnW / 2, btnY + 20);
+    this.tutorialButtons.push({
+      x: btnX,
+      y: btnY,
+      w: btnW,
+      h: btnH,
+      action: isLast ? 'go' : 'next',
+    });
+
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
   dispose(): void {
     this.questMobs = [];
     this.barriers = [];
     this.dialogButtons = [];
+    this.tutorialButtons = [];
   }
 }

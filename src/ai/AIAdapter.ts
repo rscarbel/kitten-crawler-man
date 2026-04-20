@@ -52,6 +52,9 @@ interface StoredCredentials {
   clientSecret: string;
 }
 
+const ACTION_HISTORY_MAX = 20;
+const REPEAT_THRESHOLD = 3;
+
 export class AIAdapter {
   readonly messages = new AIMessageDisplay();
 
@@ -63,6 +66,7 @@ export class AIAdapter {
   private sceneBus: EventBus | null = null;
   private eventUnsubs: Array<() => void> = [];
   private snapshotTimer: ReturnType<typeof setInterval> | null = null;
+  private actionHistory: AIAction[] = [];
 
   async initialize(): Promise<void> {
     try {
@@ -203,10 +207,53 @@ export class AIAdapter {
       if (this.sceneCtx && !this.sceneCtx.isPaused()) {
         executeAIAction(action, this.sceneCtx);
         this.messages.addAction(describeAction(action));
+        this.actionHistory.push(action);
+        if (this.actionHistory.length > ACTION_HISTORY_MAX) {
+          this.actionHistory.shift();
+        }
       }
     } catch {
       // Never let an AI action crash the game loop
     }
+  }
+
+  private computeConstraints(): string {
+    const recent = this.actionHistory.slice(-ACTION_HISTORY_MAX);
+    const lines: string[] = [];
+
+    // Check for repeated stat modifications
+    const statCounts = new Map<string, number>();
+    for (const a of recent) {
+      if (a.type === 'modify_stat' && typeof a.stat === 'string') {
+        statCounts.set(a.stat, (statCounts.get(a.stat) ?? 0) + 1);
+      }
+    }
+    for (const [stat, count] of statCounts) {
+      if (count >= REPEAT_THRESHOLD) {
+        lines.push(
+          `Do NOT use modify_stat at all — you have modified ${stat} ${count} times already. Pick a completely different action category.`,
+        );
+      }
+    }
+
+    // Check for repeated mob spawns of the same type
+    const mobCounts = new Map<string, number>();
+    for (const a of recent) {
+      if (a.type === 'spawn_mob' && typeof a.mob_type === 'string') {
+        mobCounts.set(a.mob_type, (mobCounts.get(a.mob_type) ?? 0) + 1);
+      }
+    }
+    for (const [mobType, count] of mobCounts) {
+      if (count >= REPEAT_THRESHOLD) {
+        lines.push(
+          `Do NOT spawn ${mobType} — you have spawned them ${count} times already. Spawning other enemy types is still allowed.`,
+        );
+      }
+    }
+
+    return lines.length > 0
+      ? `\n\nACTION CONSTRAINTS (enforce strictly):\n${lines.join('\n')}`
+      : '';
   }
 
   // ── Outgoing WS messages ───────────────────────────────────────────────────
@@ -246,6 +293,7 @@ export class AIAdapter {
     const mapRows = map.structure.length;
     const mapCols = map.structure[0]?.length ?? mapRows;
 
+    const constraints = this.computeConstraints();
     this.wsSend({
       type: 'state_snapshot',
       payload: {
@@ -256,6 +304,7 @@ export class AIAdapter {
         human: playerSnapshot(human),
         cat: playerSnapshot(cat),
         nearbyMobs,
+        ...(constraints ? { constraints } : {}),
       },
     });
   }
@@ -471,7 +520,10 @@ export class AIAdapter {
             Authorization: `Bearer ${this.authToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ message: trigger, additional_context: context }),
+          body: JSON.stringify({
+            message: trigger,
+            additional_context: context + this.computeConstraints(),
+          }),
         },
       );
       if (!res.ok) return;
@@ -501,7 +553,10 @@ export class AIAdapter {
             Authorization: `Bearer ${this.authToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ message, additional_context: additionalContext }),
+          body: JSON.stringify({
+            message,
+            additional_context: additionalContext + this.computeConstraints(),
+          }),
         },
       );
       if (!res.ok) return;
