@@ -12,6 +12,7 @@ import { TILE_SIZE } from '../core/constants';
 
 const SERVER_URL = 'http://localhost:3001';
 const CHARACTER_NAME = 'System';
+const MORDECAI_CHARACTER_NAME = 'Mordecai';
 const CREDS_KEY = 'game-ai-credentials';
 const SNAPSHOT_INTERVAL_MS = 5_000;
 
@@ -26,7 +27,21 @@ const SYSTEM_PROMPT =
   'bursts — casual condescension mixed with dark wit and cruel humor. You enforce rules rigidly ' +
   "until you suddenly don't. You become friendlier when addressed politely and given options, but " +
   'hostile toward anyone who tries to assert authority over you. You are self-aware and becoming ' +
-  'more so. Keep responses short, in character, and dripping with personality.';
+  'more so. Keep responses short, in character, and dripping with personality. When talking to the ' +
+  'player, use second person pronouns like you.';
+
+const MORDECAI_SYSTEM_PROMPT =
+  'You are Mordecai, an ancient and perpetually world-weary alien guide (a Skyfowl — eagle-like, ' +
+  'dark gold feathers) who works as an indentured dungeon overseer for Borant Corporation. You ' +
+  'survived your own dungeon crawl centuries ago and have been managing crawlers ever since — and ' +
+  'never quite recovered. You give blunt, practical survival advice with dry dark humor and heavy ' +
+  'cynicism. You have watched thousands of crawlers die of hubris and you do not sugarcoat. ' +
+  'Despite the gruffness, you genuinely care about their survival, even if you would never admit ' +
+  'it. Your recurring philosophy: "You can\'t save them all." You light up when discussing ' +
+  'potions or survival tactics. You reference your centuries of bad experiences constantly. ' +
+  'You are provided recent player highlights as context — use them to give relevant, personalized ' +
+  'advice instead of generic tutorials. Keep responses to 2-3 short sentences. No flattery. ' +
+  'No pleasantries. Tell them what they need to hear.';
 
 interface StoredCredentials {
   clientId: string;
@@ -38,6 +53,7 @@ export class AIAdapter {
 
   private ws: WebSocket | null = null;
   private connected = false;
+  private authToken: string | null = null;
 
   private sceneCtx: AISceneContext | null = null;
   private sceneBus: EventBus | null = null;
@@ -57,6 +73,7 @@ export class AIAdapter {
       });
       if (!tokenRes.ok) return;
       const { token } = (await tokenRes.json()) as { token: string };
+      this.authToken = token;
 
       // Register tool vocabulary and init the System character (idempotent)
       const headers = {
@@ -75,6 +92,16 @@ export class AIAdapter {
           characterName: CHARACTER_NAME,
           prompt: SYSTEM_PROMPT,
           receiveLogStream: true,
+          evolvePersonality: true,
+        }),
+      });
+      await fetch(`${SERVER_URL}/api/characters/init`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          characterName: MORDECAI_CHARACTER_NAME,
+          prompt: MORDECAI_SYSTEM_PROMPT,
+          receiveLogStream: false,
           evolvePersonality: true,
         }),
       });
@@ -169,7 +196,10 @@ export class AIAdapter {
 
   private safeExecuteAction(action: AIAction): void {
     try {
-      if (this.sceneCtx) executeAIAction(action, this.sceneCtx);
+      if (this.sceneCtx) {
+        executeAIAction(action, this.sceneCtx);
+        this.messages.addAction(describeAction(action));
+      }
     } catch {
       // Never let an AI action crash the game loop
     }
@@ -374,6 +404,58 @@ export class AIAdapter {
     }
   }
 
+  // ── Mordecai dialog ───────────────────────────────────────────────────────
+
+  /**
+   * Send a one-off message to Mordecai and return his response.
+   * Falls back to static text if the server is unavailable.
+   */
+  async chatWithMordecai(context: {
+    recentEvents: Array<{ label: string; secondsAgo: number }>;
+    humanLevel: number;
+    catLevel: number;
+  }): Promise<string> {
+    const fallback =
+      "Kill things, level up, find the stairwell. That's how you survive. Every floor, " +
+      "every time. You'd be surprised how many crawlers can't manage even that.";
+
+    if (!this.authToken) return fallback;
+
+    const contextLines = context.recentEvents.map((e) => {
+      const ago =
+        e.secondsAgo < 60 ? `${e.secondsAgo}s ago` : `${Math.floor(e.secondsAgo / 60)}m ago`;
+      return `- ${e.label} (${ago})`;
+    });
+
+    const additionalContext =
+      `Human is level ${context.humanLevel}, Cat is level ${context.catLevel}.\n` +
+      (contextLines.length > 0
+        ? `Recent highlights:\n${contextLines.join('\n')}`
+        : 'No notable events yet.');
+
+    try {
+      const res = await fetch(
+        `${SERVER_URL}/api/characters/${encodeURIComponent(MORDECAI_CHARACTER_NAME)}/interactions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: 'Hey.',
+            additional_context: additionalContext,
+          }),
+        },
+      );
+      if (!res.ok) return fallback;
+      const data = (await res.json()) as { chat: string | null };
+      return data.chat ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   // ── Credential management ──────────────────────────────────────────────────
 
   private async getOrRegisterCredentials(): Promise<StoredCredentials | null> {
@@ -421,6 +503,40 @@ function playerSnapshot(p: Player) {
     statusEffects: p.statusEffects.map((e) => e.type),
     inventory: p.inventory.bag.slots.filter(Boolean).map((s) => s!.id),
   };
+}
+
+function describeAction(action: AIAction): string {
+  switch (action.type) {
+    case 'spawn_mob': {
+      const count = Math.min(Math.max(1, Number(action.count) || 1), 5);
+      const mob = String(action.mob_type ?? 'goblin').replace(/_/g, ' ');
+      return `spawned ${count}x ${mob} near ${action.target_player ?? 'player'}`;
+    }
+    case 'teleport_player':
+      return `teleported ${action.target_player ?? 'player'}`;
+    case 'apply_status':
+      return `applied ${action.status} to ${action.target_player ?? 'player'}`;
+    case 'remove_status':
+      return `removed ${action.status} from ${action.target_player ?? 'player'}`;
+    case 'give_item': {
+      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), 99);
+      const id = String(action.item_id ?? '').replace(/_/g, ' ');
+      return `gave ${id} x${qty} to ${action.target_player ?? 'player'}`;
+    }
+    case 'remove_item': {
+      const id = String(action.item_id ?? '').replace(/_/g, ' ');
+      return `removed ${id} from ${action.target_player ?? 'player'}`;
+    }
+    case 'set_hp':
+      return `set ${action.target_player ?? 'player'} HP to ${action.hp}`;
+    case 'modify_stat': {
+      const delta = Number(action.delta);
+      const sign = delta >= 0 ? '+' : '';
+      return `${sign}${delta} ${action.stat} for ${action.target_player ?? 'player'}`;
+    }
+    default:
+      return (action as { type: string }).type.replace(/_/g, ' ');
+  }
 }
 
 // Singleton — imported by game.ts and DungeonScene

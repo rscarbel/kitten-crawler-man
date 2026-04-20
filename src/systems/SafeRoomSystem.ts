@@ -21,6 +21,8 @@ export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
   private _mordecaiDialogOpen = false;
+  private mordecaiLine: string | null = null;
+  private mordecaiLoading = false;
   private _isSleeping = false;
   private sleepTimer = 0;
   private sleepHealed = false;
@@ -72,6 +74,21 @@ export class SafeRoomSystem implements GameSystem {
 
   set mordecaiDialogOpen(v: boolean) {
     this._mordecaiDialogOpen = v;
+    if (!v) {
+      this.mordecaiLine = null;
+      this.mordecaiLoading = false;
+    }
+  }
+
+  /** Open the dialog and populate it with the async AI response. */
+  openMordecaiDialog(responsePromise: Promise<string>): void {
+    this._mordecaiDialogOpen = true;
+    this.mordecaiLine = null;
+    this.mordecaiLoading = true;
+    responsePromise.then((text) => {
+      this.mordecaiLine = text;
+      this.mordecaiLoading = false;
+    });
   }
 
   update(ctx: SystemContext): void {
@@ -293,10 +310,11 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const dh = 120;
+    const dh = 140;
     const dw = Math.min(560, canvas.width - 40);
     const dx = (canvas.width - dw) / 2;
     const dy = canvas.height - dh - 20;
+    const maxLineWidth = dw - 28;
 
     ctx.save();
     ctx.fillStyle = 'rgba(10,8,6,0.92)';
@@ -309,16 +327,30 @@ export class SafeRoomSystem implements GameSystem {
     ctx.font = 'bold 13px monospace';
     ctx.fillText('Mordecai', dx + 14, dy + 20);
 
-    ctx.fillStyle = '#e8dfc8';
     ctx.font = '12px monospace';
-    const lines = [
-      'Welcome to the dungeon. Here you must kill enemies to',
-      'level up and you must find the stairwell on each level',
-      'to get to the next level.',
-    ];
-    lines.forEach((line, i) => {
-      ctx.fillText(line, dx + 14, dy + 44 + i * 18);
-    });
+    if (this.mordecaiLoading) {
+      ctx.fillStyle = '#7a6e5a';
+      ctx.fillText('...', dx + 14, dy + 50);
+    } else {
+      const text = this.mordecaiLine ?? '';
+      ctx.fillStyle = '#e8dfc8';
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let current = '';
+      for (const word of words) {
+        const test = current ? `${current} ${word}` : word;
+        if (ctx.measureText(test).width > maxLineWidth && current) {
+          lines.push(current);
+          current = word;
+        } else {
+          current = test;
+        }
+      }
+      if (current) lines.push(current);
+      lines.slice(0, 5).forEach((line, i) => {
+        ctx.fillText(line, dx + 14, dy + 44 + i * 18);
+      });
+    }
 
     ctx.fillStyle = '#7a6e5a';
     ctx.font = '10px monospace';

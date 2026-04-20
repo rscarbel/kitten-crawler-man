@@ -305,11 +305,9 @@ export class DefendQuestSystem implements GameSystem {
     // Overlay timers tick even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.failOverlayTimer > 0) this.failOverlayTimer--;
+    if (this.xpFloatTimer > 0) this.xpFloatTimer--;
 
     if (this.phase === 'inactive' || this.phase === 'complete') return;
-
-    // XP float text timer
-    if (this.xpFloatTimer > 0) this.xpFloatTimer--;
 
     // NPC death check
     if (this.npc && !this.npc.isAlive && this.phase !== 'failed') {

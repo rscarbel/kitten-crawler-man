@@ -105,8 +105,12 @@ export function resolveKills(ctx: CombatContext): void {
     const totalXp = mob.scaledXpValue;
     const topXp = Math.max(1, Math.round(totalXp * 0.85));
     const shareXp = Math.max(1, totalXp - topXp);
-    if (topPlayer) topPlayer.gainXp(topXp);
-    if (otherPlayer) otherPlayer.gainXp(shareXp);
+    if (topPlayer && topPlayer.gainXp(topXp)) {
+      bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
+    }
+    if (otherPlayer && otherPlayer.gainXp(shareXp)) {
+      bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
+    }
 
     bus.emit('mobKilled', {
       mob,

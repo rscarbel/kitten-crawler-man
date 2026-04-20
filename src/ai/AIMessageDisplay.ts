@@ -9,8 +9,12 @@ interface AIMessage {
 const DISPLAY_TICKS = 660; // 11 seconds at 60 fps
 const FADE_TICKS = 90;
 
+const ACTION_DISPLAY_TICKS = 210; // 3.5 seconds at 60 fps
+const ACTION_FADE_TICKS = 45;
+
 export class AIMessageDisplay {
   private messages: AIMessage[] = [];
+  private actionNotifs: AIMessage[] = [];
 
   add(text: string): void {
     this.messages.push({ text, ttl: DISPLAY_TICKS, maxTtl: DISPLAY_TICKS });
@@ -20,8 +24,19 @@ export class AIMessageDisplay {
     }
   }
 
+  addAction(text: string): void {
+    this.actionNotifs.push({ text, ttl: ACTION_DISPLAY_TICKS, maxTtl: ACTION_DISPLAY_TICKS });
+    if (this.actionNotifs.length > 3) {
+      this.actionNotifs.shift();
+    }
+  }
+
   update(): void {
     this.messages = this.messages.filter((m) => {
+      m.ttl--;
+      return m.ttl > 0;
+    });
+    this.actionNotifs = this.actionNotifs.filter((m) => {
       m.ttl--;
       return m.ttl > 0;
     });
@@ -79,7 +94,7 @@ export class AIMessageDisplay {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#a78bfa';
     ctx.font = `bold 10px monospace`;
-    ctx.fillText('⚙ SYSTEM', bx + padding, by + padding + 4);
+    ctx.fillText('⚙ SYSTEM AI', bx + padding, by + padding + 4);
 
     // Separator line
     ctx.strokeStyle = '#3b1d7a';
@@ -99,6 +114,46 @@ export class AIMessageDisplay {
     }
 
     ctx.restore();
+
+    // Action notifications — bottom of screen
+    if (this.actionNotifs.length > 0) {
+      const notif = this.actionNotifs[this.actionNotifs.length - 1];
+      const alpha = notif.ttl < ACTION_FADE_TICKS ? notif.ttl / ACTION_FADE_TICKS : 1;
+      const pad = 8;
+      const fsize = 11;
+      ctx.save();
+      ctx.font = `${fsize}px monospace`;
+      const label = '⚙ System AI';
+      const labelW = ctx.measureText(label).width;
+      const textW = ctx.measureText(notif.text).width;
+      const pillW = pad * 2 + labelW + 8 + textW;
+      const pillH = fsize + pad * 2;
+      const px = Math.round((canvas.width - pillW) / 2);
+      const py = canvas.height - pillH - 16;
+
+      ctx.globalAlpha = alpha * 0.88;
+      ctx.fillStyle = '#0a0a0c';
+      roundRect(ctx, px, py, pillW, pillH, pillH / 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = alpha * 0.7;
+      roundRect(ctx, px, py, pillW, pillH, pillH / 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = alpha;
+      const ty = py + pad + fsize - 1;
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = `bold ${fsize}px monospace`;
+      ctx.fillText(label, px + pad, ty);
+
+      ctx.fillStyle = '#e5e5e5';
+      ctx.font = `${fsize}px monospace`;
+      ctx.fillText(notif.text, px + pad + labelW + 8, ty);
+
+      ctx.restore();
+    }
   }
 }
 

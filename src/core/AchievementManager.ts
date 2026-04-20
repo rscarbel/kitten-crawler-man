@@ -1,5 +1,10 @@
 import { randomInt } from '../utils';
 
+export interface RecentEvent {
+  label: string;
+  timestamp: number;
+}
+
 export type AchievementId =
   | 'first_blood'
   | 'boss_slayer'
@@ -140,6 +145,8 @@ export class AchievementManager {
   /** Loot boxes accumulated from achievements, awaiting opening in a safe room. */
   readonly pendingBoxes: LootBox[] = [];
   private nextBoxId = 1;
+  /** Rolling log of recent significant events (capped at 20, newest first). */
+  private recentEvents: RecentEvent[] = [];
 
   /** Number of achievements unlocked since the last clearUnread() call. */
   get unreadCount(): number {
@@ -163,7 +170,23 @@ export class AchievementManager {
         fromAchievement: id,
       });
     }
+    this.logRecentEvent(`Unlocked "${def.name}"`);
     return true;
+  }
+
+  /** Record a significant event (level-up, boss kill, etc.) for Mordecai's context. */
+  logRecentEvent(label: string): void {
+    this.recentEvents.unshift({ label, timestamp: Date.now() });
+    if (this.recentEvents.length > 20) this.recentEvents.pop();
+  }
+
+  /** Return the N most recent events with elapsed time in seconds. */
+  getTopRecentEvents(n: number): Array<{ label: string; secondsAgo: number }> {
+    const now = Date.now();
+    return this.recentEvents.slice(0, n).map((e) => ({
+      label: e.label,
+      secondsAgo: Math.floor((now - e.timestamp) / 1000),
+    }));
   }
 
   /** Clear all unread notifications (call when the player views the achievements tab). */
@@ -214,6 +237,7 @@ export class AchievementManager {
     copy.pendingNotifications.push(...this.pendingNotifications);
     copy.pendingBoxes.push(...this.pendingBoxes.map((b) => ({ ...b })));
     copy.nextBoxId = this.nextBoxId;
+    copy.recentEvents = this.recentEvents.map((e) => ({ ...e }));
     return copy;
   }
 }

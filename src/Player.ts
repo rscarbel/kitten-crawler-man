@@ -64,8 +64,8 @@ export abstract class Player {
     return true;
   }
 
-  gainXp(amount: number) {
-    if (amount <= 0) return;
+  gainXp(amount: number): boolean {
+    if (amount <= 0) return false;
     this.xp += amount;
     const xpNeeded = this.level * 10;
     if (this.xp >= xpNeeded) {
@@ -74,7 +74,9 @@ export abstract class Player {
       this.unspentPoints++;
       this.levelUpStat = 'POINT';
       this.levelUpFlash = 120;
+      return true;
     }
+    return false;
   }
 
   spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {

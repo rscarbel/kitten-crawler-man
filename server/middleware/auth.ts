@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
+import db from '../db.js';
 
 const SECRET = process.env.JWT_SECRET ?? (() => { throw new Error('JWT_SECRET is not set in environment'); })();
 
@@ -18,7 +19,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
   try {
     const payload = jwt.verify(token, SECRET) as unknown as AuthUser;
-    (req as AuthedRequest).user = { id: payload.id, username: payload.username };
+    const row = db.prepare('SELECT id, username FROM users WHERE id = ?').get(payload.id) as AuthUser | undefined;
+    if (!row) {
+      res.status(401).json({ error: 'Invalid or expired session' });
+      return;
+    }
+    (req as AuthedRequest).user = { id: row.id, username: row.username };
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired session' });

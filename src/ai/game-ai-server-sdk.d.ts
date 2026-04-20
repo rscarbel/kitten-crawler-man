@@ -45,4 +45,14 @@ declare module 'game-ai-server/sdk' {
     | { type: 'ai_action'; payload: { actions: AIAction[]; characterName: string } }
     | { type: 'ai_chat'; payload: { text: string; characterName: string } }
     | { type: 'ack' };
+
+  export interface CharacterInteractionBody {
+    message: string;
+    additional_context?: string;
+  }
+
+  export interface CharacterInteractionResponse {
+    chat: string | null;
+    actions: AIAction[];
+  }
 }

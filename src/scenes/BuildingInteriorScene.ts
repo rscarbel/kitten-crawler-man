@@ -15,6 +15,8 @@ import { TowerStairSystem } from '../systems/TowerStairSystem';
 import { readMovement, applyMovement } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
+import type { AchievementManager } from '../core/AchievementManager';
+import { aiAdapter } from '../ai/AIAdapter';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -62,6 +64,8 @@ export class BuildingInteriorScene extends GameplayScene {
     input: InputManager,
     sceneManager: SceneManager,
     private readonly onExitCallback: (humanSnap: PlayerSnapshot, catSnap: PlayerSnapshot) => void,
+    private readonly humanAchievements?: AchievementManager,
+    private readonly catAchievements?: AchievementManager,
   ) {
     super(input, sceneManager);
 
@@ -192,7 +196,13 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
-    if (this.safeRoom?.mordecaiDialogOpen) return;
+    if (this.safeRoom?.mordecaiDialogOpen) {
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.safeRoom.mordecaiDialogOpen = false;
+      }
+      return;
+    }
     if (this.shop?.shopOpen) return;
 
     // Sleep tick
@@ -230,7 +240,17 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.safeRoom.isNearBed(player)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(player)) {
-        this.safeRoom.mordecaiDialogOpen = true;
+        const humanEvents = this.humanAchievements?.getTopRecentEvents(5) ?? [];
+        const catEvents = this.catAchievements?.getTopRecentEvents(5) ?? [];
+        const merged = [...humanEvents, ...catEvents]
+          .sort((a, b) => a.secondsAgo - b.secondsAgo)
+          .slice(0, 5);
+        const responsePromise = aiAdapter.chatWithMordecai({
+          recentEvents: merged,
+          humanLevel: this.human.level,
+          catLevel: this.cat.level,
+        });
+        this.safeRoom.openMordecaiDialog(responsePromise);
       }
     }
 
@@ -636,7 +656,17 @@ export class BuildingInteriorScene extends GameplayScene {
             if (this.safeRoom.isNearBed(player)) {
               this.safeRoom.startSleep();
             } else if (this.safeRoom.isNearMordecai(player)) {
-              this.safeRoom.mordecaiDialogOpen = true;
+              const humanEvents = this.humanAchievements?.getTopRecentEvents(5) ?? [];
+              const catEvents = this.catAchievements?.getTopRecentEvents(5) ?? [];
+              const merged = [...humanEvents, ...catEvents]
+                .sort((a, b) => a.secondsAgo - b.secondsAgo)
+                .slice(0, 5);
+              const responsePromise = aiAdapter.chatWithMordecai({
+                recentEvents: merged,
+                humanLevel: this.human.level,
+                catLevel: this.cat.level,
+              });
+              this.safeRoom.openMordecaiDialog(responsePromise);
             }
           }
           if (this.shop && !this.exitMenuOpen) {

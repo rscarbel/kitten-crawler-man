@@ -293,6 +293,8 @@ export class DungeonScene extends GameplayScene {
                 }),
               );
             },
+            this.humanAchievements,
+            this.catAchievements,
           ),
         );
       });
@@ -370,7 +372,28 @@ export class DungeonScene extends GameplayScene {
 
       // Loot drop
       if (mob.droppedLoot && topDamageDealer) {
-        this.loot.addLoot(cx, cy, mob.droppedLoot, topDamageDealer, mob.isBoss);
+        const FORCED_TO_HUMAN = new Set(['trollskin_shirt']);
+        const FORCED_TO_CAT = new Set(['enchanted_crown_sepsis_whore']);
+        const mainItems = mob.droppedLoot.items.filter(
+          (it) => !FORCED_TO_HUMAN.has(it.id) && !FORCED_TO_CAT.has(it.id),
+        );
+        const humanItems = mob.droppedLoot.items.filter((it) => FORCED_TO_HUMAN.has(it.id));
+        const catItems = mob.droppedLoot.items.filter((it) => FORCED_TO_CAT.has(it.id));
+        if (mainItems.length > 0 || mob.droppedLoot.coins > 0) {
+          this.loot.addLoot(
+            cx,
+            cy,
+            { coins: mob.droppedLoot.coins, items: mainItems },
+            topDamageDealer,
+            mob.isBoss,
+          );
+        }
+        if (humanItems.length > 0) {
+          this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, mob.isBoss);
+        }
+        if (catItems.length > 0) {
+          this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, mob.isBoss);
+        }
         mob.droppedLoot = null;
       }
 
@@ -428,12 +451,23 @@ export class DungeonScene extends GameplayScene {
       if (!this.catAchievements.tryUnlock('boss_slayer')) {
         this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
       }
+      const bossLabel = `Defeated boss: ${e.bossType.replace(/_/g, ' ')}`;
+      this.humanAchievements.logRecentEvent(bossLabel);
+      this.catAchievements.logRecentEvent(bossLabel);
 
       // Krakaren Clone death → unlock Mongo
       if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
         this.krakarenKilled = true;
         this.mongoSystem.unlocked = true;
       }
+    });
+
+    // ── playerLevelUp: log for Mordecai context ──
+    bus.on('playerLevelUp', (e) => {
+      const isHuman = e.player === this.human;
+      const who = isHuman ? 'Human' : 'Cat';
+      const mgr = isHuman ? this.humanAchievements : this.catAchievements;
+      mgr.logRecentEvent(`${who} reached level ${e.newLevel}`);
     });
 
     // ── safeRoomEntered: safe_haven achievement + progress autosave ──
@@ -576,7 +610,17 @@ export class DungeonScene extends GameplayScene {
       if (this.safeRoom.isNearBed(active)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(active)) {
-        this.safeRoom.mordecaiDialogOpen = true;
+        const humanEvents = this.humanAchievements.getTopRecentEvents(5);
+        const catEvents = this.catAchievements.getTopRecentEvents(5);
+        const merged = [...humanEvents, ...catEvents]
+          .sort((a, b) => a.secondsAgo - b.secondsAgo)
+          .slice(0, 5);
+        const responsePromise = aiAdapter.chatWithMordecai({
+          recentEvents: merged,
+          humanLevel: this.human.level,
+          catLevel: this.cat.level,
+        });
+        this.safeRoom.openMordecaiDialog(responsePromise);
       }
       return;
     }
