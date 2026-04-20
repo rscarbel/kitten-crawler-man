@@ -81,6 +81,9 @@ export interface GameEvents {
 
   /** Players stepped onto a stairwell for the first time (menu just opened). */
   stairwellFound: {};
+
+  /** Active player has been standing still and doing nothing for another 5-second interval. */
+  playerIdle: { totalIdleMs: number };
 }
 
 // ── Implementation ─────────────────────────────────────────────────

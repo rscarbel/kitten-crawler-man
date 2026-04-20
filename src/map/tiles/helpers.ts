@@ -65,6 +65,7 @@ export function inferGroundColor(structure: TileContent[][], tx: number, ty: num
   let hasWood = false;
   let hasCarpet = false;
   let hasTileFloor = false;
+  let hasConcrete = false;
   for (const [dx, dy] of dirs) {
     const n = structure[ty + dy]?.[tx + dx];
     if (!n) continue;
@@ -73,10 +74,12 @@ export function inferGroundColor(structure: TileContent[][], tx: number, ty: num
     else if (n.type === FloorTypeValue.wood) hasWood = true;
     else if (n.type === FloorTypeValue.carpet) hasCarpet = true;
     else if (n.type === FloorTypeValue.tile_floor) hasTileFloor = true;
+    else if (n.type === FloorTypeValue.concrete) hasConcrete = true;
   }
   if (hasWood) return (tx + ty) % 2 === 0 ? '#b08050' : '#a07040';
   if (hasCarpet) return (tx + ty) % 2 === 0 ? '#8b3a3a' : '#7a3232';
   if (hasTileFloor) return '#c8bca0';
+  if (hasConcrete) return (tx + ty) % 2 === 0 ? '#b4b0ab' : '#aaa7a2';
   if (hasRoad) return '#bc926b';
   if (hasSafe) return (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
   return '#6de89d';

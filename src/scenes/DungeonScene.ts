@@ -155,6 +155,7 @@ export class DungeonScene extends GameplayScene {
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
   private catHealthLow = false;
+  private playerIdleFrames = 0;
 
   // Mouse position in screen coords (updated by handleMouseMove)
   private _mouseX = -9999;
@@ -1178,6 +1179,17 @@ export class DungeonScene extends GameplayScene {
       this.combatCooldownFrames--;
     }
 
+    if (player.isMoving || combatCtx.hitLanded) {
+      this.playerIdleFrames = 0;
+    } else {
+      this.playerIdleFrames++;
+      if (this.playerIdleFrames % 300 === 0) {
+        this.bus.emit('playerIdle', {
+          totalIdleMs: Math.round((this.playerIdleFrames / 60) * 1000),
+        });
+      }
+    }
+
     for (const [player, name] of [
       [this.human, 'Human'],
       [this.cat, 'Cat'],
@@ -1298,6 +1310,14 @@ export class DungeonScene extends GameplayScene {
         this.mobGrid.insert(mob);
       },
       isBossFightActive: () => this.bossRoom.anyLocked,
+      isPaused: () =>
+        this.gameOver ||
+        this.pauseMenu.isOpen ||
+        this.stairwell.menuOpen ||
+        (this.building?.menuOpen ?? false) ||
+        this.defendQuest.isDialogOpen ||
+        this.defendQuest.isSuppressed ||
+        this.playerChat.isOpen,
     };
   }
 

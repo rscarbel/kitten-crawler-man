@@ -9,6 +9,8 @@ import {
   METAL_WALL,
   ARENA_FLOOR,
   FLOOR_GRATE,
+  TORCH,
+  BARREL,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
 
@@ -315,6 +317,41 @@ export function generateDungeon(
       npcTile,
       woodPileTile,
     });
+  }
+
+  // Place torches and barrels in regular rooms for visual variety.
+  // Torches go at 2 opposite corners (alternated by room index).
+  // Every 3rd room also gets barrels along the top wall.
+  for (let i = regularRoomStart; i < rooms.length; i++) {
+    const r = rooms[i];
+    // Pick 2 diagonally-opposite corners, alternating by room index so not all rooms match
+    const corners =
+      i % 2 === 0
+        ? [
+            { x: r.x + 1, y: r.y + 1 },
+            { x: r.x + r.w - 2, y: r.y + r.h - 2 },
+          ]
+        : [
+            { x: r.x + r.w - 2, y: r.y + 1 },
+            { x: r.x + 1, y: r.y + r.h - 2 },
+          ];
+    for (const c of corners) {
+      if (grid[c.y]?.[c.x]?.type === r.floor) {
+        grid[c.y][c.x].type = TORCH;
+      }
+    }
+    // Barrels in every 3rd room, near the top wall
+    if ((i - regularRoomStart) % 3 === 1 && r.w >= 10) {
+      const barrelPositions = [
+        { x: r.x + 2, y: r.y + 1 },
+        { x: r.x + r.w - 3, y: r.y + 1 },
+      ];
+      for (const bp of barrelPositions) {
+        if (grid[bp.y]?.[bp.x]?.type === r.floor) {
+          grid[bp.y][bp.x].type = BARREL;
+        }
+      }
+    }
   }
 
   // Mob spawn points skip start, safe, boss, and quest rooms

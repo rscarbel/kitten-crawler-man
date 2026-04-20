@@ -16,6 +16,7 @@ export interface AISceneContext {
   getLevelId(): string;
   spawnMob(mob: Mob): void;
   isBossFightActive(): boolean;
+  isPaused(): boolean;
 }
 
 const SPAWNABLE_MOBS = new Set([
