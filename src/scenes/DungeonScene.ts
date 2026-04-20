@@ -614,6 +614,19 @@ export class DungeonScene extends GameplayScene {
       `Floor: ${this.levelDef.id}. ` +
       `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`;
     this.playerChat.open(this.sceneManager.canvas, (text) => {
+      if (text.trim() === '!god') {
+        for (const p of [this.human, this.cat]) {
+          p.strength = 300;
+          p.intelligence = 300;
+          p.constitution = 300;
+          p.maxHp = 300;
+          p.hp = 300;
+          p.godMode = true;
+          p.speedMultiplier = 2;
+        }
+        this.playerChat.showBubble('⚡ GOD MODE');
+        return;
+      }
       this.playerChat.showBubble(text);
       void aiAdapter.chatWithSystem(text, context);
     });

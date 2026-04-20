@@ -327,108 +327,122 @@ export function drawWoodBarrierSprite(
   ctx.fillStyle = '#080810';
   ctx.fillRect(sx + s * 0.08, sy + s * 0.08, s * 0.84, s * 0.84);
 
-  // ── Stage 2+: Eyes peeking up from below (drawn under the boards) ──
-  if (dmg > 0.35) {
-    const eyeAlpha = Math.min(1, (dmg - 0.35) * 3);
-    const eyeShift = Math.sin(t * 1.5) * s * 0.02; // subtle side-to-side
+  // ── Bugaboo body silhouette (dark mass below boards, subtle at pristine) ──
+  {
+    const bodyAlpha = 0.18 + dmg * 0.22;
+    ctx.save();
+    ctx.globalAlpha = bodyAlpha;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.ellipse(sx + s * 0.5, sy + s * 0.72, s * 0.28, s * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Eyes peeking up (visible from the start, narrow crack at pristine) ──
+  {
+    // At pristine both eyes sit within the center plank crack; they spread outward as boards break
+    const eyeSpread = Math.min(1, dmg * 4);
+    const eyeAlpha = 0.5 + dmg * 0.5;
+    const eyeY = sy + s * (0.52 - dmg * 0.06);
+    const eyeShift = Math.sin(t * 1.5) * s * 0.02;
+    const leftEyeX = sx + s * (0.44 - eyeSpread * 0.08) + eyeShift;
+    const rightEyeX = sx + s * (0.56 + eyeSpread * 0.08) + eyeShift;
+    const eyeW = s * (0.065 + dmg * 0.025);
+    const eyeH = s * (0.075 + dmg * 0.015);
+
     ctx.save();
     ctx.globalAlpha = eyeAlpha;
 
-    // Eye whites (enormous owl-like, same style as bugaboo)
+    // Eye whites
     ctx.fillStyle = '#e8e8d0';
     ctx.beginPath();
-    ctx.ellipse(sx + s * 0.36 + eyeShift, sy + s * 0.52, s * 0.08, s * 0.09, 0, 0, Math.PI * 2);
+    ctx.ellipse(leftEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(sx + s * 0.64 + eyeShift, sy + s * 0.52, s * 0.08, s * 0.09, 0, 0, Math.PI * 2);
+    ctx.ellipse(rightEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Dark ring outlines
     ctx.strokeStyle = '#0a0a1a';
     ctx.lineWidth = s * 0.015;
     ctx.beginPath();
-    ctx.ellipse(sx + s * 0.36 + eyeShift, sy + s * 0.52, s * 0.08, s * 0.09, 0, 0, Math.PI * 2);
+    ctx.ellipse(leftEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.ellipse(sx + s * 0.64 + eyeShift, sy + s * 0.52, s * 0.08, s * 0.09, 0, 0, Math.PI * 2);
+    ctx.ellipse(rightEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.stroke();
 
     // Amber irises
     ctx.fillStyle = '#d4a820';
     ctx.beginPath();
-    ctx.arc(sx + s * 0.36 + eyeShift, sy + s * 0.53, s * 0.05, 0, Math.PI * 2);
+    ctx.arc(leftEyeX, eyeY + s * 0.01, eyeW * 0.62, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(sx + s * 0.64 + eyeShift, sy + s * 0.53, s * 0.05, 0, Math.PI * 2);
+    ctx.arc(rightEyeX, eyeY + s * 0.01, eyeW * 0.62, 0, Math.PI * 2);
     ctx.fill();
 
     // Dark pupils
     ctx.fillStyle = '#0a0a1a';
     ctx.beginPath();
-    ctx.arc(sx + s * 0.36 + eyeShift, sy + s * 0.53, s * 0.025, 0, Math.PI * 2);
+    ctx.arc(leftEyeX, eyeY + s * 0.01, eyeW * 0.3, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(sx + s * 0.64 + eyeShift, sy + s * 0.53, s * 0.025, 0, Math.PI * 2);
+    ctx.arc(rightEyeX, eyeY + s * 0.01, eyeW * 0.3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ambient glow
-    ctx.globalAlpha = eyeAlpha * 0.12;
+    // Amber glow (bleeds slightly through boards)
+    ctx.globalAlpha = eyeAlpha * 0.18;
     ctx.fillStyle = '#d4a820';
     ctx.beginPath();
-    ctx.arc(sx + s * 0.36 + eyeShift, sy + s * 0.53, s * 0.1, 0, Math.PI * 2);
+    ctx.arc(leftEyeX, eyeY, eyeW * 1.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(sx + s * 0.64 + eyeShift, sy + s * 0.53, s * 0.1, 0, Math.PI * 2);
+    ctx.arc(rightEyeX, eyeY, eyeW * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
   }
 
-  // ── Stage 1+: Clawed hand reaching up through the hole ──
-  if (dmg > 0.15) {
-    const handAlpha = Math.min(1, (dmg - 0.15) * 3);
-    const wave = Math.sin(t * 3) * s * 0.06; // waving motion
-    const reach = Math.sin(t * 1.8) * s * 0.03; // reaching up/down
+  // ── Arm/hand reaching up through center crack (visible from the start) ──
+  {
+    const handAlpha = 0.42 + dmg * 0.58;
+    const wave = Math.sin(t * 3) * s * (0.025 + dmg * 0.035);
+    const reach = Math.sin(t * 1.8) * s * 0.03;
+
+    // Hand starts at center of tile (within center plank crack) and rises with damage
+    const armCx = sx + s * 0.5 + wave;
+    const armBaseY = sy + s * 0.88;
+    const armTopY = sy + s * (0.5 - dmg * 0.24) + reach;
 
     ctx.save();
     ctx.globalAlpha = handAlpha;
 
-    // Arm coming up from hole (obsidian-colored like bugaboo body)
-    const armX = sx + s * 0.72;
-    const armBaseY = sy + s * 0.7;
-    const armTopY = sy + s * 0.25 + reach;
-
     ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = s * 0.04;
+    ctx.lineWidth = s * (0.03 + dmg * 0.02);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(armX, armBaseY);
-    ctx.quadraticCurveTo(armX + wave * 0.5, sy + s * 0.45, armX + wave, armTopY);
+    ctx.moveTo(armCx, armBaseY);
+    ctx.quadraticCurveTo(armCx + wave * 0.3, sy + s * 0.68, armCx, armTopY);
     ctx.stroke();
 
-    // Tiny claw-hand at the top (3 pointed fingers splayed)
-    const handCx = armX + wave;
-    const handCy = armTopY;
-    ctx.fillStyle = '#1a1a2e';
-
     // Palm
+    ctx.fillStyle = '#1a1a2e';
     ctx.beginPath();
-    ctx.arc(handCx, handCy, s * 0.03, 0, Math.PI * 2);
+    ctx.arc(armCx, armTopY, s * (0.025 + dmg * 0.015), 0, Math.PI * 2);
     ctx.fill();
 
     // Three clawed fingers
     ctx.strokeStyle = '#12122a';
-    ctx.lineWidth = s * 0.02;
+    ctx.lineWidth = s * 0.018;
     for (let f = -1; f <= 1; f++) {
-      const angle = -Math.PI / 2 + f * 0.5;
-      const fx = handCx + Math.cos(angle) * s * 0.06;
-      const fy = handCy + Math.sin(angle) * s * 0.06;
+      const angle = -Math.PI / 2 + f * 0.45;
+      const fx = armCx + Math.cos(angle) * s * 0.055;
+      const fy = armTopY + Math.sin(angle) * s * 0.055;
       ctx.beginPath();
-      ctx.moveTo(handCx, handCy);
+      ctx.moveTo(armCx, armTopY);
       ctx.lineTo(fx, fy);
       ctx.stroke();
-
-      // Claw tip
       ctx.fillStyle = '#2a2a4e';
       ctx.beginPath();
       ctx.arc(fx, fy, s * 0.01, 0, Math.PI * 2);
@@ -454,8 +468,8 @@ export function drawWoodBarrierSprite(
     const offsetY = plankBuckle * s * 0.06 * (i % 2 === 0 ? -1 : 1);
     const tiltAngle = plankBuckle * 0.08 * (i % 2 === 0 ? 1 : -1);
 
-    // At mid-high damage, some planks have gaps (hole in centre)
-    const hasHole = dmg > 0.2 && (i === 2 || (dmg > 0.45 && (i === 1 || i === 3)));
+    // Center plank always has a hole (tiny crack at pristine, grows with damage); sides join in later
+    const hasHole = i === 2 || (dmg > 0.45 && (i === 1 || i === 3));
 
     ctx.save();
     if (tiltAngle !== 0) {
@@ -468,8 +482,9 @@ export function drawWoodBarrierSprite(
     ctx.fillStyle = shade;
 
     if (hasHole) {
-      // Draw plank in two halves with a gap
-      const holeSize = s * (0.12 + dmg * 0.15);
+      // Center plank: starts with a narrow crack, grows; side planks use standard size
+      const holeSize =
+        i === 2 ? s * Math.max(0.1, 0.12 + (dmg - 0.2) * 0.15) : s * (0.12 + dmg * 0.15);
       const holeCy = sy + s * 0.5;
       // Top half
       ctx.fillRect(
@@ -536,14 +551,13 @@ export function drawWoodBarrierSprite(
     }
   }
 
-  // ── Cracks on the remaining planks ──
-  if (dmg > 0.15) {
+  // ── Cracks on the remaining planks (always at least 2, from the pressure below) ──
+  {
     ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.strokeStyle = `rgba(0,0,0,${0.35 + dmg * 0.2})`;
     ctx.lineWidth = 1.5;
-    const numCracks = Math.min(8, Math.floor(dmg * 10));
+    const numCracks = Math.max(2, Math.min(8, Math.floor(dmg * 10) + 2));
     for (let c = 0; c < numCracks; c++) {
-      // Deterministic-ish positions based on crack index
       const cx = sx + s * (0.1 + (((c * 37) % 80) / 100) * 0.8);
       const cy = sy + s * (0.15 + (((c * 53) % 70) / 100) * 0.7);
       ctx.beginPath();

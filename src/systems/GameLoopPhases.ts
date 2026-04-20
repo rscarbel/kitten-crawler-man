@@ -90,8 +90,8 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
     dx *= 0.7071;
     dy *= 0.7071;
   }
-  dx *= PLAYER_SPEED;
-  dy *= PLAYER_SPEED;
+  dx *= PLAYER_SPEED * player.speedMultiplier;
+  dy *= PLAYER_SPEED * player.speedMultiplier;
 
   const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
   const tileXnext =

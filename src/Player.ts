@@ -33,6 +33,10 @@ export abstract class Player {
   }
   /** When true, incoming damage is ignored (standing in the Safe Room). */
   isProtected = false;
+  /** When true, incoming damage is ignored permanently (god mode). */
+  godMode = false;
+  /** Movement speed multiplier — 1 is normal, 2 is double speed. */
+  speedMultiplier = 1;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
   statusEffects: StatusEffect[] = [];
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
@@ -57,7 +61,7 @@ export abstract class Player {
   }
 
   takeDamage(amount: number) {
-    if (amount <= 0 || this.isProtected) return;
+    if (amount <= 0 || this.isProtected || this.godMode) return;
     this.hp = Math.max(0, this.hp - amount);
     this.damageFlash = 8;
   }

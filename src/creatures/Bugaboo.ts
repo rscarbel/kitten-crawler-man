@@ -24,6 +24,8 @@ export class Bugaboo extends Mob {
   defendTarget: Player | null = null;
   /** Callback for damaging a wood barrier at the assigned grate. */
   onBarrierAttack: ((grate: { x: number; y: number }, damage: number) => boolean) | null = null;
+  /** True while this bugaboo is actively breaking through a wood barrier (hidden beneath boards). */
+  isBreakingIn = false;
 
   private aggroRangePx: number;
   private attackRangePx: number;
@@ -43,6 +45,8 @@ export class Bugaboo extends Mob {
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
 
+    this.isBreakingIn = false;
+
     // Priority 1: If assigned grate has a barrier, attack the barrier
     if (this.assignedGrate && this.onBarrierAttack) {
       const barrierX = this.assignedGrate.x * TILE_SIZE;
@@ -52,6 +56,7 @@ export class Bugaboo extends Mob {
       // Check if barrier still exists
       const barrierExists = this.onBarrierAttack(this.assignedGrate, 0);
       if (barrierExists) {
+        this.isBreakingIn = true;
         this.isAggro = true;
         if (distToBarrier > this.attackRangePx) {
           this.followTargetCollide(barrierX, barrierY, this.speed, this.attackRangePx * 0.6);
@@ -135,6 +140,7 @@ export class Bugaboo extends Mob {
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
     if (!this.isAlive) return;
+    if (this.isBreakingIn) return;
 
     const sx = this.x - camX;
     const sy = this.y - camY;
