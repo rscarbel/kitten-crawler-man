@@ -17,8 +17,6 @@ import { randomFromArray, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef, ExtraSpawnRule } from './types';
 
-// Goblin variant data (moved from game.ts)
-
 type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
 
 export const GOBLIN_VARIANTS: GoblinVariant[] = [
@@ -27,8 +25,6 @@ export const GOBLIN_VARIANTS: GoblinVariant[] = [
   { weapon: 'club', skin: '#7ab86a', eye: '#ef4444' },
   { weapon: 'hammer', skin: '#3d6b32', eye: '#fbbf24' },
 ];
-
-// Weighted random selection
 
 /** Pick a rule from a weighted list. Weights need not sum to 1. */
 function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
@@ -48,8 +44,6 @@ function rollMobLevel(rule: MobSpawnRule): number {
   return randomInt(min, max);
 }
 
-// Mob registry — maps type string → factory function
-
 type MobFactory = (tileX: number, tileY: number) => Mob;
 
 const MOB_REGISTRY = new Map<string, MobFactory>();
@@ -59,7 +53,6 @@ export function registerMob(type: string, factory: MobFactory): void {
   MOB_REGISTRY.set(type, factory);
 }
 
-// Built-in registrations
 registerMob('llama', (x, y) => new Llama(x, y, TILE_SIZE));
 registerMob('rat', (x, y) => new Rat(x, y, TILE_SIZE));
 registerMob('the_hoarder', (x, y) => new TheHoarder(x, y, TILE_SIZE));
@@ -77,16 +70,12 @@ registerMob('goblin', (x, y) => {
   return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);
 });
 
-// Mob factory
-
 export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
   const factory = MOB_REGISTRY.get(type);
   const mob = factory ? factory(tileX, tileY) : MOB_REGISTRY.get('goblin')!(tileX, tileY); // default: goblin
   mob.setMap(map);
   return mob;
 }
-
-// ── Extra spawn origin resolution ──────────────────────────────────
 
 /** Resolve an ExtraSpawnRule origin string to a tile coordinate, or null if the landmark doesn't exist. */
 function resolveOrigin(
@@ -152,8 +141,6 @@ export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
   return mobs;
 }
 
-// Public API
-
 /**
  * Instantiate all mobs for a level. Room spawn points draw from
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
@@ -185,7 +172,6 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     }
   }
 
-  // Spawn one boss per boss room
   for (let i = 0; i < (def.bossRooms?.length ?? 0); i++) {
     const bossEntry = def.bossRooms![i];
     const brData = map.bossRooms[i];

@@ -51,13 +51,11 @@ export function drawSkyFowlSprite(
   const cs = s * 1.08;
   const cx = sx + s * 0.5;
 
-  // ── Animation values ────────────────────────────────────────────────────────
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.042 : 0;
   const legSwing = isMoving ? Math.sin(walkFrame) * cs * 0.065 : 0;
   const wingFlutter = isMoving ? Math.sin(walkFrame * 0.9) * cs * 0.018 : 0;
   const tailSway = Math.sin(walkFrame * 0.65) * cs * 0.038;
 
-  // ── Feather / body colours ───────────────────────────────────────────────────
   const fBase = '#7a5530'; // medium hawk brown body
   const fDark = '#4a3015'; // dark wing bars / cap
   const fLight = '#a07840'; // lighter feather highlights
@@ -69,7 +67,6 @@ export function drawSkyFowlSprite(
   const eyeAmber = '#e89010';
   const eyePupil = '#140800';
 
-  // ── Layout — measure from ground upward ─────────────────────────────────────
   const ground = sy + s * 0.95 + bodyBob;
   const thighH = cs * 0.22; // upper leg (covered by pants)
   const tarsusH = cs * 0.13; // lower leg (bare, scaly)
@@ -90,7 +87,6 @@ export function drawSkyFowlSprite(
 
   ctx.save();
 
-  // ── Horizontal flip for left-facing ─────────────────────────────────────────
   const flipped = facingX < -0.3;
   if (flipped) {
     ctx.translate(cx, 0);
@@ -98,13 +94,11 @@ export function drawSkyFowlSprite(
     ctx.translate(-cx, 0);
   }
 
-  // ── Ground shadow ────────────────────────────────────────────────────────────
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.beginPath();
   ctx.ellipse(cx, ground + cs * 0.035, cs * 0.28, cs * 0.065, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Tail feathers (behind body, drawn first so body covers base) ─────────────
   ctx.fillStyle = fDark;
   for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
@@ -135,7 +129,6 @@ export function drawSkyFowlSprite(
     ctx.fill();
   }
 
-  // ── Legs ─────────────────────────────────────────────────────────────────────
   // Leg positions (swing opposite for walking gait)
   const leftHipX = cx - cs * 0.115 - legSwing * 0.7;
   const rightHipX = cx + cs * 0.115 + legSwing * 0.7;
@@ -188,7 +181,6 @@ export function drawSkyFowlSprite(
     }
   }
 
-  // ── Talons ───────────────────────────────────────────────────────────────────
   ctx.strokeStyle = talonCol;
   ctx.lineWidth = cs * 0.04;
   ctx.lineCap = 'round';
@@ -215,7 +207,6 @@ export function drawSkyFowlSprite(
     ctx.stroke();
   }
 
-  // ── Body ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = fBase;
   ctx.beginPath();
   ctx.ellipse(cx, bodyCy, bodyW, bodyH * 0.5, 0, 0, Math.PI * 2);
@@ -227,7 +218,6 @@ export function drawSkyFowlSprite(
   ctx.ellipse(cx + cs * 0.045, bodyCy + cs * 0.025, bodyW * 0.52, bodyH * 0.37, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Vest ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = cloth.vest;
   ctx.beginPath();
   ctx.ellipse(cx + cs * 0.04, bodyCy, bodyW * 0.49, bodyH * 0.34, 0, 0, Math.PI * 2);
@@ -251,7 +241,6 @@ export function drawSkyFowlSprite(
     ctx.fill();
   }
 
-  // ── Folded wings (sides of body) ─────────────────────────────────────────────
   // Left wing
   ctx.fillStyle = fDark;
   ctx.beginPath();
@@ -304,14 +293,12 @@ export function drawSkyFowlSprite(
   );
   ctx.fill();
 
-  // ── Neck ─────────────────────────────────────────────────────────────────────
   ctx.fillStyle = fBase;
   const neckCy = bodyTopY + (headCy - bodyTopY) * 0.5;
   ctx.beginPath();
   ctx.ellipse(cx + cs * 0.02, neckCy, cs * 0.09, cs * 0.09, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Head ─────────────────────────────────────────────────────────────────────
   const hx = cx + peckOffsetX; // lunge forward when pecking
   ctx.fillStyle = fBase;
   ctx.beginPath();
@@ -333,7 +320,6 @@ export function drawSkyFowlSprite(
   ctx.quadraticCurveTo(hx + cs * 0.04, headCy - headR * 1.28, hx + cs * 0.07, headCy - headR * 1.2);
   ctx.stroke();
 
-  // ── Hat (optional) ────────────────────────────────────────────────────────────
   if (cloth.hat) {
     const brimY = headCy - headR * 0.58;
     const crownH = headR * 0.58;
@@ -357,7 +343,6 @@ export function drawSkyFowlSprite(
     ctx.fillRect(hx - headR * 0.68, brimY - headR * 0.34, headR * 1.36, headR * 0.17);
   }
 
-  // ── Beak ─────────────────────────────────────────────────────────────────────
   // Upper mandible — curved hook
   const bx = hx + headR * 0.68;
   const by = headCy + headR * 0.05;
@@ -394,7 +379,6 @@ export function drawSkyFowlSprite(
   ctx.closePath();
   ctx.fill();
 
-  // ── Eye ───────────────────────────────────────────────────────────────────────
   const eyeX = hx + headR * 0.3;
   const eyeY = headCy - headR * 0.18;
   const eyeR = headR * 0.27;

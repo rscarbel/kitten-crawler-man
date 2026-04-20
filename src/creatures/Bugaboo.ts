@@ -151,7 +151,20 @@ export class Bugaboo extends Mob {
       ctx.strokeRect(sx, sy, tileSize, tileSize);
     }
 
-    drawBugabooSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, this.facingX);
+    const attackAnim =
+      this.attackAnimTimer > 0
+        ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
+        : 0;
+    drawBugabooSprite(
+      ctx,
+      sx,
+      sy,
+      tileSize,
+      this.walkFrame,
+      this.isMoving,
+      this.facingX,
+      attackAnim,
+    );
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);

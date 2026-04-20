@@ -49,8 +49,6 @@ export class ArenaSystem implements GameSystem {
     return this.arenaStairwellUnlocked;
   }
 
-  // ── EventBus subscriptions ───────────────────────────────────────
-
   private wireEvents(): void {
     // Ball of Swine defeated → spawn 8 dazed Tusklings (phase 2)
     this.bus.on('bossDefeated', (e) => {
@@ -75,8 +73,6 @@ export class ArenaSystem implements GameSystem {
       }
     });
   }
-
-  // ── Per-frame update ─────────────────────────────────────────────
 
   update(ctx: SystemContext): void {
     const { human, cat } = ctx;
@@ -120,8 +116,6 @@ export class ArenaSystem implements GameSystem {
       }
     }
   }
-
-  // ── Rendering ────────────────────────────────────────────────────
 
   render(
     ctx: CanvasRenderingContext2D,

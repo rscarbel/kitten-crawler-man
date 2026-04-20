@@ -42,10 +42,7 @@ const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
 
-// Persists for the game session — tutorial shows only once
 let tutorialSeen = false;
-
-// ── Types ─────────────────────────────────────────────────────────
 
 type QuestPhase =
   | 'inactive'
@@ -75,31 +72,21 @@ interface PendingBuild {
   isRepair: boolean;
 }
 
-// ── System ────────────────────────────────────────────────────────
-
 export class DefendQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
   private phase: QuestPhase = 'inactive';
   private roomData: QuestRoomData | null = null;
-
-  // NPC
   private npc: QuestNPC | null = null;
-
-  // Timers
   private approachTimer = 0;
   private defenseTimer = 0;
   private spawnTimer = 0;
   private woodRespawnTimer = 0;
   private woodPileAvailable = false;
-
-  // Wood barriers
   private barriers: WoodBarrier[] = [];
   private pendingBuild: PendingBuild | null = null;
-
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
-  // Child reunion animation
   private childAnimTimer = 0;
   private childX = 0;
   private childY = 0;
@@ -107,21 +94,17 @@ export class DefendQuestSystem implements GameSystem {
   private childTargetY = 0;
   private childWalkFrame = 0;
 
-  // Completion overlay
   private completeOverlayTimer = 0;
   private failOverlayTimer = 0;
   private xpAwardShown = false;
   private xpFloatTimer = 0;
 
-  // Dialog menu
   private dialogButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> = [];
 
-  // Tutorial
   private tutorialPage = 0;
   private tutorialButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> =
     [];
 
-  // Callbacks from DungeonScene
   private getMobs: () => Mob[];
   private getMobGrid: () => SpatialGrid<Mob>;
   private addMob: (mob: Mob) => void;
@@ -159,17 +142,13 @@ export class DefendQuestSystem implements GameSystem {
       },
     });
 
-    // Initialize if map has a quest room
     if (gameMap.questRooms.length > 0) {
       this.roomData = gameMap.questRooms[0];
       this.phase = 'npc_waiting';
 
-      // Create NPC at room centre
       this.npc = new QuestNPC(this.roomData.npcTile.x, this.roomData.npcTile.y, QUEST_ID);
     }
   }
-
-  // ── Queries ───────────────────────────────────────────────────
 
   get isActive(): boolean {
     return this.phase !== 'inactive' && this.phase !== 'complete' && this.phase !== 'failed';
@@ -203,8 +182,6 @@ export class DefendQuestSystem implements GameSystem {
   get isSuppressed(): boolean {
     return false;
   }
-
-  // ── Actions ───────────────────────────────────────────────────
 
   /** Called when player presses Space near the NPC. */
   tryInteract(active: Player): boolean {
@@ -298,7 +275,6 @@ export class DefendQuestSystem implements GameSystem {
       const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
       if (dist > 2) continue;
 
-      // Check if barrier already exists at this grate
       const existing = this.barriers.find((b) => b.grateIdx === gi);
       if (existing) {
         if (existing.hp < existing.maxHp) {
@@ -330,8 +306,6 @@ export class DefendQuestSystem implements GameSystem {
     return true;
   }
 
-  // ── Update ────────────────────────────────────────────────────
-
   update(ctx: SystemContext): void {
     // Overlay timers tick even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
@@ -340,7 +314,6 @@ export class DefendQuestSystem implements GameSystem {
 
     if (this.phase === 'inactive' || this.phase === 'complete') return;
 
-    // NPC death check
     if (this.npc && !this.npc.isAlive && this.phase !== 'failed') {
       this.triggerQuestFailed();
       return;
@@ -386,7 +359,6 @@ export class DefendQuestSystem implements GameSystem {
   private updateCountdown(ctx: SystemContext): void {
     this.approachTimer--;
 
-    // Wood pile respawn
     this.tickWoodPile(ctx);
 
     if (this.approachTimer <= 0) {
@@ -399,20 +371,16 @@ export class DefendQuestSystem implements GameSystem {
   private updateDefending(ctx: SystemContext): void {
     this.defenseTimer--;
 
-    // Wood pile respawn
     this.tickWoodPile(ctx);
 
-    // Spawn Bugaboos
     this.spawnTimer--;
     if (this.spawnTimer <= 0) {
       this.spawnWave();
       this.spawnTimer = randomInt(SPAWN_INTERVAL_MIN, SPAWN_INTERVAL_MAX - 1);
     }
 
-    // Clean up dead quest mobs
     this.questMobs = this.questMobs.filter((m) => m.isAlive);
 
-    // Defense timer expired — quest success!
     if (this.defenseTimer <= 0) {
       this.triggerDefenseComplete();
     }
@@ -428,7 +396,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    // Auto-pickup when player walks over wood pile
     if (this.woodPileAvailable) {
       const wpx = this.roomData.woodPileTile.x * TILE_SIZE;
       const wpy = this.roomData.woodPileTile.y * TILE_SIZE;
@@ -449,14 +416,12 @@ export class DefendQuestSystem implements GameSystem {
   private spawnWave(): void {
     if (!this.roomData || !this.npc) return;
 
-    // Pick a grate or entrance
     const spawnAtEntrance = Math.random() < ENTRANCE_SPAWN_CHANCE;
 
     if (spawnAtEntrance) {
       const ent = this.roomData.entranceTile;
       this.spawnBugaboo(ent.x, ent.y, -1);
     } else {
-      // Pick a random grate
       const grateIdx = Math.floor(Math.random() * this.roomData.grateTiles.length);
       const grate = this.roomData.grateTiles[grateIdx];
       this.spawnBugaboo(grate.x, grate.y, grateIdx);
@@ -479,7 +444,6 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private triggerDefenseComplete(): void {
-    // Kill all remaining quest mobs with gore
     for (const mob of this.questMobs) {
       if (mob.isAlive) {
         mob.hp = 0;
@@ -492,13 +456,11 @@ export class DefendQuestSystem implements GameSystem {
     }
     this.questMobs = [];
 
-    // Start child reunion animation
     this.phase = 'complete_pending';
     if (this.npc) {
       this.npc.markerType = 'question';
     }
 
-    // Child spawns at entrance and walks to NPC
     if (this.roomData && this.npc) {
       this.childX = this.roomData.entranceTile.x * TILE_SIZE;
       this.childY = this.roomData.entranceTile.y * TILE_SIZE;
@@ -530,13 +492,11 @@ export class DefendQuestSystem implements GameSystem {
     this.questManager.completeQuest(QUEST_ID);
     if (this.npc) this.npc.markerType = 'none';
 
-    // Award XP immediately
     const rewards = this.questManager.getDef(QUEST_ID)!.rewards;
     active.gainXp(rewards.xp);
     this.xpAwardShown = true;
     this.xpFloatTimer = 180; // 3 seconds
 
-    // Emit quest completed — DungeonScene handles loot box
     this.bus.emit('questCompleted', { questId: QUEST_ID });
     this.completeOverlayTimer = 420; // 7 seconds
   }
@@ -602,8 +562,6 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
-  // ── Render: World Objects ─────────────────────────────────────
-
   renderObjects(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -613,14 +571,12 @@ export class DefendQuestSystem implements GameSystem {
   ): void {
     if (this.phase === 'inactive') return;
 
-    // Wood pile
     if (this.woodPileAvailable && this.roomData) {
       const wpx = this.roomData.woodPileTile.x * TILE_SIZE - camX;
       const wpy = this.roomData.woodPileTile.y * TILE_SIZE - camY;
       drawWoodPileSprite(ctx, wpx, wpy, TILE_SIZE);
     }
 
-    // Wood barriers
     for (const b of this.barriers) {
       const bx = b.worldX - camX;
       const by = b.worldY - camY;
@@ -634,7 +590,6 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    // NPC
     if (this.npc && this.npc.isAlive) {
       this.npc.render(ctx, camX, camY, TILE_SIZE);
       // Interaction prompt when player is near and NPC is interactable
@@ -672,7 +627,6 @@ export class DefendQuestSystem implements GameSystem {
       drawChildSprite(ctx, cx, cy, TILE_SIZE, this.childWalkFrame, true, facingX);
     }
 
-    // Build progress indicator
     if (this.pendingBuild) {
       this.renderBuildProgress(ctx, camX, camY);
     }
@@ -745,8 +699,6 @@ export class DefendQuestSystem implements GameSystem {
     ctx.restore();
   }
 
-  // ── Render: UI Overlays ───────────────────────────────────────
-
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (this.phase === 'inactive') return;
 
@@ -786,32 +738,22 @@ export class DefendQuestSystem implements GameSystem {
       ctx.restore();
     }
 
-    // NPC speech bubble prompt (waiting state)
-    if (this.phase === 'npc_waiting' && this.npc && this.npc.isAlive) {
-      // Rendered as part of NPC (exclamation mark above head)
-    }
-
-    // Dialog menu
     if (this.phase === 'dialog') {
       this.renderDialog(ctx, canvas);
     }
 
-    // First-time tutorial
     if (this.phase === 'tutorial') {
       this.renderTutorial(ctx, canvas);
     }
 
-    // Quest complete overlay
     if (this.completeOverlayTimer > 0) {
       this.renderCompleteOverlay(ctx, canvas);
     }
 
-    // Quest failed overlay
     if (this.failOverlayTimer > 0) {
       this.renderFailedOverlay(ctx, canvas);
     }
 
-    // XP float text
     if (this.xpFloatTimer > 0) {
       this.renderXPFloat(ctx, canvas);
     }
@@ -825,7 +767,6 @@ export class DefendQuestSystem implements GameSystem {
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
 
-    // Backdrop
     ctx.save();
     ctx.fillStyle = 'rgba(8,10,20,0.95)';
     ctx.fillRect(dx, dy, dw, dh);
@@ -833,12 +774,10 @@ export class DefendQuestSystem implements GameSystem {
     ctx.lineWidth = 2;
     ctx.strokeRect(dx, dy, dw, dh);
 
-    // NPC name
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 13px monospace';
     ctx.fillText('Goblin Mother', dx + 14, dy + 22);
 
-    // Dialog text
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '11px monospace';
     const lines = [
@@ -852,7 +791,6 @@ export class DefendQuestSystem implements GameSystem {
       ctx.fillText(lines[i], dx + 14, dy + 45 + i * 16);
     }
 
-    // Buttons
     this.dialogButtons = [];
     const btnW = 100;
     const btnH = 30;

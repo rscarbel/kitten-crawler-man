@@ -36,8 +36,6 @@ export abstract class GameplayScene extends Scene {
     super();
   }
 
-  // ── Shared accessors ──────────────────────────────────────────
-
   protected get human(): HumanPlayer {
     return this.pm.human;
   }
@@ -54,8 +52,6 @@ export abstract class GameplayScene extends Scene {
     return this.pm.inactive();
   }
 
-  // ── Camera ────────────────────────────────────────────────────
-
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
     const canvas = this.sceneManager.canvas;
@@ -71,8 +67,6 @@ export abstract class GameplayScene extends Scene {
           : clamp(cy, 0, mapPxH - canvas.height),
     };
   }
-
-  // ── Movement ──────────────────────────────────────────────────
 
   /**
    * Simple companion follow: nudge the inactive player toward the active one,
@@ -106,8 +100,6 @@ export abstract class GameplayScene extends Scene {
     follower.isMoving = fdist > TILE_SIZE * 1.5;
   }
 
-  // ── HUD ───────────────────────────────────────────────────────
-
   protected renderHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     this._hudToggleRect = drawHUD(
       ctx,
@@ -118,8 +110,6 @@ export abstract class GameplayScene extends Scene {
       this._hudCollapsed,
     );
   }
-
-  // ── Shared mouse/keyboard helpers ─────────────────────────────
 
   protected handleHudToggleTap(x: number, y: number): boolean {
     if (!platform.showHudCollapseToggle) return false;

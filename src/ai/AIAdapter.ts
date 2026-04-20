@@ -149,8 +149,6 @@ export class AIAdapter {
     }
   }
 
-  // ── Scene binding ──────────────────────────────────────────────────────────
-
   /** Call from DungeonScene constructor to wire events and state. */
   bindScene(ctx: AISceneContext, bus: EventBus): void {
     this.sceneCtx = ctx;
@@ -173,8 +171,6 @@ export class AIAdapter {
     this.sceneBus = null;
   }
 
-  // ── Per-frame hooks ────────────────────────────────────────────────────────
-
   update(): void {
     this.messages.update();
   }
@@ -182,8 +178,6 @@ export class AIAdapter {
   render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     this.messages.render(ctx, canvas);
   }
-
-  // ── Incoming WS messages ───────────────────────────────────────────────────
 
   private handleWsMessage(e: MessageEvent): void {
     let msg: ServerMessage;
@@ -256,8 +250,6 @@ export class AIAdapter {
       : '';
   }
 
-  // ── Outgoing WS messages ───────────────────────────────────────────────────
-
   private wsSend(msg: ClientMessage): void {
     if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(JSON.stringify(msg));
@@ -308,8 +300,6 @@ export class AIAdapter {
       },
     });
   }
-
-  // ── Event subscriptions ────────────────────────────────────────────────────
 
   private subscribeToEvents(bus: EventBus): void {
     const ctx = this.sceneCtx!;
@@ -507,8 +497,6 @@ export class AIAdapter {
     }
   }
 
-  // ── Important event notifications ─────────────────────────────────────────
-
   private async notifyImportantEvent(trigger: string, context: string): Promise<void> {
     if (!this.authToken) return;
     try {
@@ -534,8 +522,6 @@ export class AIAdapter {
       // Server unavailable — silently ignore
     }
   }
-
-  // ── Player → System AI chat ───────────────────────────────────────────────
 
   /**
    * Send a direct player message to the System AI.
@@ -569,8 +555,6 @@ export class AIAdapter {
       // Server unavailable — silently ignore
     }
   }
-
-  // ── Mordecai dialog ───────────────────────────────────────────────────────
 
   /**
    * Send a one-off message to Mordecai and return his response.
@@ -622,8 +606,6 @@ export class AIAdapter {
     }
   }
 
-  // ── Credential management ──────────────────────────────────────────────────
-
   private async getOrRegisterCredentials(): Promise<StoredCredentials | null> {
     const stored = localStorage.getItem(CREDS_KEY);
     if (stored) {
@@ -649,8 +631,6 @@ export class AIAdapter {
     return creds;
   }
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function playerSnapshot(p: Player) {
   return {

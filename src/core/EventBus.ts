@@ -16,9 +16,6 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 
-// ── Event definitions ──────────────────────────────────────────────
-// Add new event types here as the game grows.
-
 export interface GameEvents {
   /** A mob was just killed. */
   mobKilled: {
@@ -88,8 +85,6 @@ export interface GameEvents {
   /** Active player has been standing still and doing nothing for another 5-second interval. */
   playerIdle: { totalIdleMs: number };
 }
-
-// ── Implementation ─────────────────────────────────────────────────
 
 type EventCallback<T> = (data: T) => void;
 

@@ -32,7 +32,7 @@ export class QuestNPC extends Player {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX);
+    drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.redBoxTimer);
 
     // Overhead marker
     if (this.markerType === 'exclamation') {

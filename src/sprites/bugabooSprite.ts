@@ -11,10 +11,12 @@ export function drawBugabooSprite(
   walkTime = 0,
   isWalking = false,
   facingX = 1,
+  attackAnim = 0,
 ) {
   const bob = isWalking ? Math.sin(walkTime * 0.25) * s * 0.03 : 0;
   const armSwing = isWalking ? Math.sin(walkTime * 0.25) * 0.22 : 0;
   const legShuffle = isWalking ? Math.sin(walkTime * 0.25) * s * 0.04 : 0;
+  const scratchLift = attackAnim * s * 0.54;
 
   ctx.save();
   if (facingX < 0) {
@@ -65,28 +67,31 @@ export function drawBugabooSprite(
   ctx.fill();
 
   // === ABSURDLY THIN ARMS (behind body, long and dangling) ===
-  const leftArmEnd = bsy + s * 0.88 + armSwing * s * 0.6;
-  const rightArmEnd = bsy + s * 0.88 - armSwing * s * 0.6;
+  const leftArmEndX = sx + s * 0.1;
+  const leftArmEndY = bsy + s * 0.88 + armSwing * s * 0.6 - scratchLift;
+  const rightArmEndX = sx + s * 0.9;
+  const rightArmEndY = bsy + s * 0.88 - armSwing * s * 0.6 - scratchLift;
+  const armCtrlY = attackAnim > 0 ? bsy + s * (0.6 - attackAnim * 0.22) : bsy + s * 0.65;
   ctx.strokeStyle = '#1a1a2e';
   ctx.lineWidth = s * 0.035;
   ctx.lineCap = 'round';
   // Left arm
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.14, bsy + s * 0.4);
-  ctx.quadraticCurveTo(sx + s * 0.06, bsy + s * 0.65, sx + s * 0.1, leftArmEnd);
+  ctx.quadraticCurveTo(sx + s * 0.06, armCtrlY, leftArmEndX, leftArmEndY);
   ctx.stroke();
   // Right arm
   ctx.beginPath();
   ctx.moveTo(sx + s * 0.86, bsy + s * 0.4);
-  ctx.quadraticCurveTo(sx + s * 0.94, bsy + s * 0.65, sx + s * 0.9, rightArmEnd);
+  ctx.quadraticCurveTo(sx + s * 0.94, armCtrlY, rightArmEndX, rightArmEndY);
   ctx.stroke();
   // Tiny claw-hands
   ctx.fillStyle = '#12122a';
   ctx.beginPath();
-  ctx.arc(sx + s * 0.1, leftArmEnd, s * 0.03, 0, Math.PI * 2);
+  ctx.arc(leftArmEndX, leftArmEndY, s * 0.03, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(sx + s * 0.9, rightArmEnd, s * 0.03, 0, Math.PI * 2);
+  ctx.arc(rightArmEndX, rightArmEndY, s * 0.03, 0, Math.PI * 2);
   ctx.fill();
 
   // === MASSIVE BEAR-SHAPED BODY (no neck, head merges into torso) ===
@@ -227,6 +232,32 @@ export function drawBugabooSprite(
   ctx.moveTo(sx + s * 0.42, bsy + s * 0.39);
   ctx.quadraticCurveTo(sx + s * 0.5, bsy + s * 0.42, sx + s * 0.58, bsy + s * 0.39);
   ctx.stroke();
+
+  // === SCRATCH ATTACK — claws fan out from each raised hand ===
+  if (attackAnim > 0) {
+    ctx.save();
+    ctx.globalAlpha = attackAnim * 0.92;
+    ctx.strokeStyle = '#3a3a5e';
+    ctx.lineWidth = s * 0.017;
+    ctx.lineCap = 'round';
+    const clawLen = s * (0.055 + attackAnim * 0.055);
+    // Three claws per hand, fanning downward/inward from each claw tip
+    for (let c = -1; c <= 1; c++) {
+      const angle = Math.PI * 0.5 + c * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(leftArmEndX, leftArmEndY);
+      ctx.lineTo(leftArmEndX + Math.cos(angle) * clawLen, leftArmEndY + Math.sin(angle) * clawLen);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(rightArmEndX, rightArmEndY);
+      ctx.lineTo(
+        rightArmEndX + Math.cos(angle) * clawLen,
+        rightArmEndY + Math.sin(angle) * clawLen,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   ctx.restore(); // undo facing flip
 }

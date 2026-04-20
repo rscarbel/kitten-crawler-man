@@ -7,14 +7,13 @@
  *  - Wood barrier (with damage states)
  */
 
-// ── Goblin Mother (pink dress, no weapon) ─────────────────────────
-
 export function drawQuestNPCSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   s: number,
   facingX = 1,
+  hurtTimer = 0,
 ) {
   ctx.save();
   if (facingX < 0) {
@@ -55,10 +54,18 @@ export function drawQuestNPCSprite(
   ctx.fillStyle = '#c44d7a';
   ctx.fillRect(sx + s * 0.27, sy + s * 0.56, s * 0.46, s * 0.04);
 
-  // Arms (skin)
+  // Arms (skin) — wave frantically when hurt
   ctx.fillStyle = skinColor;
-  ctx.fillRect(sx + s * 0.15, sy + s * 0.46, s * 0.12, s * 0.11);
-  ctx.fillRect(sx + s * 0.73, sy + s * 0.46, s * 0.12, s * 0.11);
+  if (hurtTimer > 0) {
+    const wt = performance.now() / 1000;
+    const leftLift = Math.abs(Math.sin(wt * 8)) * s * 0.24;
+    const rightLift = Math.abs(Math.sin(wt * 8 + Math.PI)) * s * 0.24;
+    ctx.fillRect(sx + s * 0.15, sy + s * 0.46 - leftLift, s * 0.12, s * 0.11);
+    ctx.fillRect(sx + s * 0.73, sy + s * 0.46 - rightLift, s * 0.12, s * 0.11);
+  } else {
+    ctx.fillRect(sx + s * 0.15, sy + s * 0.46, s * 0.12, s * 0.11);
+    ctx.fillRect(sx + s * 0.73, sy + s * 0.46, s * 0.12, s * 0.11);
+  }
 
   // Head
   ctx.fillStyle = skinColor;
@@ -122,9 +129,49 @@ export function drawQuestNPCSprite(
   ctx.fill();
 
   ctx.restore();
-}
 
-// ── Exclamation / Question Mark ───────────────────────────────────
+  // === "Help!!!" speech bubble — shown while hurt ===
+  if (hurtTimer > 0) {
+    const bubbleAlpha = Math.min(1, hurtTimer / 15);
+    ctx.save();
+    ctx.globalAlpha = bubbleAlpha;
+
+    const bw = s * 0.92;
+    const bh = s * 0.28;
+    const bx = sx + s * 0.04;
+    const by = sy - s * 0.68;
+    const r = s * 0.07;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = s * 0.03;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bw - r, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+    ctx.lineTo(bx + bw, by + bh - r);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+    ctx.lineTo(bx + bw * 0.62, by + bh);
+    ctx.lineTo(bx + bw * 0.5, by + bh + s * 0.2);
+    ctx.lineTo(bx + bw * 0.38, by + bh);
+    ctx.lineTo(bx + r, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+    ctx.lineTo(bx, by + r);
+    ctx.quadraticCurveTo(bx, by, bx + r, by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ef4444';
+    ctx.font = `bold ${Math.floor(s * 0.2)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Help!!!', bx + bw * 0.5, by + bh * 0.5);
+    ctx.textAlign = 'left';
+
+    ctx.restore();
+  }
+}
 
 export function drawExclamationMark(
   ctx: CanvasRenderingContext2D,
@@ -164,8 +211,6 @@ export function drawExclamationMark(
 
   ctx.restore();
 }
-
-// ── Small Goblin Child ────────────────────────────────────────────
 
 export function drawChildSprite(
   ctx: CanvasRenderingContext2D,
@@ -241,8 +286,6 @@ export function drawChildSprite(
 
   ctx.restore();
 }
-
-// ── Wood Pile (pickup) ────────────────────────────────────────────
 
 export function drawWoodPileSprite(
   ctx: CanvasRenderingContext2D,
@@ -335,7 +378,6 @@ export function drawWoodPileSprite(
   ctx.restore();
 }
 
-// ── Wood Barrier ──────────────────────────────────────────────────
 //
 // Damage stages (based on hpFraction):
 //   1.0        — pristine boards, nailed cross-beam

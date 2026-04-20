@@ -73,7 +73,6 @@ export function renderStatsTab(
   y += 16;
   statBlock(cat);
 
-  // ── Kill log ─────────────────────────────────────────────────────
   if (gameStats) {
     y += 12;
     ctx.strokeStyle = '#334155';

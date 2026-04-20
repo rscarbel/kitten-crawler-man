@@ -7,30 +7,23 @@
 
 import { IS_MOBILE } from './MobileDetect';
 
-// ── Interface ────────────────────────────────────────────────────
-
 export interface PlatformAdapter {
   readonly isMobile: boolean;
 
-  // Labels
   readonly pauseButtonLabel: string;
   readonly resumeButtonLabel: string;
   readonly skillPointBanner: string;
   controlHints(atkLabel: string): [string, string];
   miniMapHint(expanded: boolean): string;
 
-  // Layout
   readonly initialHudCollapsed: boolean;
   gearPanelWidth(canvasWidth: number): number;
   readonly gearPanelXOffset: number;
 
-  // Feature flags
   readonly showEntityTooltip: boolean;
   readonly showDesktopToggleButtons: boolean;
   readonly showHudCollapseToggle: boolean;
 }
-
-// ── Desktop ──────────────────────────────────────────────────────
 
 class DesktopPlatform implements PlatformAdapter {
   readonly isMobile = false;
@@ -57,8 +50,6 @@ class DesktopPlatform implements PlatformAdapter {
   readonly showHudCollapseToggle = false;
 }
 
-// ── Mobile ───────────────────────────────────────────────────────
-
 class MobilePlatform implements PlatformAdapter {
   readonly isMobile = true;
   readonly pauseButtonLabel = 'Pause';
@@ -83,7 +74,5 @@ class MobilePlatform implements PlatformAdapter {
   readonly showDesktopToggleButtons = false;
   readonly showHudCollapseToggle = true;
 }
-
-// ── Singleton ────────────────────────────────────────────────────
 
 export const platform: PlatformAdapter = IS_MOBILE ? new MobilePlatform() : new DesktopPlatform();
