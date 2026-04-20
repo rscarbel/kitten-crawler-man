@@ -15,6 +15,7 @@ export interface AISceneContext {
   getGameMap(): GameMap;
   getLevelId(): string;
   spawnMob(mob: Mob): void;
+  isBossFightActive(): boolean;
 }
 
 const SPAWNABLE_MOBS = new Set([
@@ -46,6 +47,23 @@ function resolvePlayer(ctx: AISceneContext, target: unknown): HumanPlayer | CatP
   return target === 'Cat' ? ctx.getCat() : ctx.getHuman();
 }
 
+function nearestWalkableTile(
+  map: GameMap,
+  tileX: number,
+  tileY: number,
+): { x: number; y: number } | null {
+  if (map.isWalkable(tileX, tileY)) return { x: tileX, y: tileY };
+  for (let r = 1; r <= 15; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        if (map.isWalkable(tileX + dx, tileY + dy)) return { x: tileX + dx, y: tileY + dy };
+      }
+    }
+  }
+  return null;
+}
+
 export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
   switch (action.type) {
     case 'spawn_mob': {
@@ -72,14 +90,22 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
     }
 
     case 'teleport_player': {
+      if (ctx.isBossFightActive()) break;
       const player = resolvePlayer(ctx, action.target_player);
+      const companion = action.target_player === 'Cat' ? ctx.getHuman() : ctx.getCat();
       const tileX = Number(action.tile_x);
       const tileY = Number(action.tile_y);
       if (isNaN(tileX) || isNaN(tileY)) break;
       const map = ctx.getGameMap();
-      if (!map.isWalkable(tileX, tileY)) break;
-      player.x = tileX * TILE_SIZE;
-      player.y = tileY * TILE_SIZE;
+      const dest = nearestWalkableTile(map, tileX, tileY);
+      if (!dest) break;
+      player.x = dest.x * TILE_SIZE;
+      player.y = dest.y * TILE_SIZE;
+      const companionDest = nearestWalkableTile(map, dest.x + 1, dest.y);
+      if (companionDest) {
+        companion.x = companionDest.x * TILE_SIZE;
+        companion.y = companionDest.y * TILE_SIZE;
+      }
       break;
     }
 
@@ -128,16 +154,21 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const player = resolvePlayer(ctx, action.target_player);
       const delta = Number(action.delta);
       if (isNaN(delta)) break;
-      if (action.stat === 'strength') {
+      const stat = action.stat as 'strength' | 'intelligence' | 'constitution';
+      if (stat === 'strength') {
         player.strength = Math.max(1, player.strength + delta);
-      } else if (action.stat === 'intelligence') {
+      } else if (stat === 'intelligence') {
         player.intelligence = Math.max(1, player.intelligence + delta);
-      } else if (action.stat === 'constitution') {
+      } else if (stat === 'constitution') {
         const d = Math.round(delta);
         player.constitution = Math.max(1, player.constitution + d);
         player.maxHp = Math.max(1, player.maxHp + d * 2);
         player.hp = Math.min(player.hp, player.maxHp);
+      } else {
+        break;
       }
+      // Revert after 30 seconds (1800 ticks at 60fps)
+      player.tempStatMods.push({ ticksRemaining: 1800, stat, delta });
       break;
     }
   }

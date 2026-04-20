@@ -78,6 +78,9 @@ export interface GameEvents {
 
   /** A player's HP dropped below 25 % of max. */
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
+
+  /** Players stepped onto a stairwell for the first time (menu just opened). */
+  stairwellFound: {};
 }
 
 // ── Implementation ─────────────────────────────────────────────────

@@ -9,7 +9,7 @@ export const AI_TOOLS: ToolDefinition[] = [
       mob_type: {
         type: 'string',
         description:
-          'Type of mob. Valid: goblin, rat, llama, cockroach, troglodyte, tuskling, brindle_grub, sky_fowl, bugaboo, juicer',
+          'Type of mob. Valid: goblin, rat, llama, cockroach, troglodyte, tuskling, bugaboo',
         required: true,
       },
       target_player: {
@@ -20,13 +20,14 @@ export const AI_TOOLS: ToolDefinition[] = [
       },
       count: {
         type: 'number',
-        description: 'How many to spawn. Default 1, max 5.',
+        description: 'How many to spawn.',
       },
     },
   },
   {
     name: 'teleport_player',
-    description: 'Teleport a player to tile coordinates on the current map.',
+    description:
+      'Teleport a player to tile coordinates on the current map. Valid tile coordinates range from 0 to mapWidth-1 (X) and 0 to mapHeight-1 (Y), both provided in the state snapshot.',
     parameters: {
       target_player: {
         type: 'string',
@@ -35,12 +36,12 @@ export const AI_TOOLS: ToolDefinition[] = [
       },
       tile_x: {
         type: 'number',
-        description: 'Target tile X coordinate.',
+        description: 'Target tile X coordinate (0 to mapWidth-1).',
         required: true,
       },
       tile_y: {
         type: 'number',
-        description: 'Target tile Y coordinate.',
+        description: 'Target tile Y coordinate (0 to mapHeight-1).',
         required: true,
       },
     },
@@ -90,9 +91,6 @@ export const AI_TOOLS: ToolDefinition[] = [
         type: 'string',
         enum: [
           'health_potion',
-          'enchanted_bigboi_boxers',
-          'trollskin_shirt',
-          'enchanted_crown_sepsis_whore',
           'scroll_of_confusing_fog',
           'goblin_dynamite',
           'gym_dumbbell',
@@ -103,7 +101,7 @@ export const AI_TOOLS: ToolDefinition[] = [
       },
       quantity: {
         type: 'number',
-        description: 'How many. Default 1.',
+        description: 'How many.',
       },
     },
   },
@@ -145,7 +143,8 @@ export const AI_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'modify_stat',
-    description: "Permanently adjust a player's base stat. Use positive or negative delta.",
+    description:
+      "Temporarily adjust a player's base stat for 30 seconds. Use positive or negative delta.",
     parameters: {
       target_player: {
         type: 'string',

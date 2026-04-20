@@ -31,6 +31,9 @@ export interface DungeonInputActions {
   buildAction(): void;
   hotbarActivation(idx: number): void;
 
+  // Chat
+  openChat(): void;
+
   // Key-up handlers
   dynamiteRelease(idx: number): boolean;
 }
@@ -55,6 +58,12 @@ export class DungeonInputHandler {
 
     this.actionHandler = (e: KeyboardEvent) => {
       if (actions.isSuppressed()) return;
+
+      if (e.key === 'Enter' && !e.repeat) {
+        e.preventDefault();
+        actions.openChat();
+        return;
+      }
 
       if (e.key === 'Tab') {
         e.preventDefault();

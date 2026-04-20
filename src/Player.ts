@@ -35,6 +35,12 @@ export abstract class Player {
   isProtected = false;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
   statusEffects: StatusEffect[] = [];
+  /** Pending AI stat adjustments that will be reverted after their duration expires. */
+  tempStatMods: Array<{
+    ticksRemaining: number;
+    stat: 'strength' | 'intelligence' | 'constitution';
+    delta: number;
+  }> = [];
   protected tileSize: number;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp = 10) {
@@ -182,6 +188,26 @@ export abstract class Player {
       this.walkFrame = 0;
     }
     this.tickStatusEffects();
+    this.tickTempStatMods();
+  }
+
+  private tickTempStatMods() {
+    this.tempStatMods = this.tempStatMods.filter((mod) => {
+      mod.ticksRemaining--;
+      if (mod.ticksRemaining > 0) return true;
+      // Revert the stat change
+      if (mod.stat === 'strength') {
+        this.strength = Math.max(1, this.strength - mod.delta);
+      } else if (mod.stat === 'intelligence') {
+        this.intelligence = Math.max(1, this.intelligence - mod.delta);
+      } else if (mod.stat === 'constitution') {
+        const d = Math.round(mod.delta);
+        this.constitution = Math.max(1, this.constitution - d);
+        this.maxHp = Math.max(1, this.maxHp - d * 2);
+        this.hp = Math.min(this.hp, this.maxHp);
+      }
+      return false;
+    });
   }
 
   abstract render(

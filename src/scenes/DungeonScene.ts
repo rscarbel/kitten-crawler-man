@@ -57,6 +57,7 @@ import { BrindleGrub } from '../creatures/BrindleGrub';
 import { randomInt, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
+import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -146,6 +147,7 @@ export class DungeonScene extends GameplayScene {
 
   // Key handlers
   private readonly inputHandler = new DungeonInputHandler();
+  private readonly playerChat = new PlayerChatSystem();
 
   // Mobile touch state (encapsulated)
   private readonly touch = new MobileTouchState();
@@ -512,9 +514,14 @@ export class DungeonScene extends GameplayScene {
         this.pauseMenu.isOpen ||
         this.safeRoom.isSleeping ||
         this.defendQuest.isSuppressed ||
-        this.defendQuest.isDialogOpen,
+        this.defendQuest.isDialogOpen ||
+        this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissDialog: () => {
+        if (this.playerChat.isOpen) {
+          this.playerChat.cancel();
+          return true;
+        }
         if (this.defendQuest.dismissDialog()) return true;
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
@@ -551,6 +558,7 @@ export class DungeonScene extends GameplayScene {
       toggleGear: () => this.gearPanel.toggle(),
       companionFollow: () => this.triggerCompanionFollow(),
       toggleMiniMap: () => this.miniMap.toggle(),
+      openChat: () => this.triggerOpenChat(),
       mongoSummon: () => this.triggerMongoSummon(),
       buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => this.triggerHotbarActivation(idx),
@@ -584,6 +592,18 @@ export class DungeonScene extends GameplayScene {
   private triggerCompanionFollow(): void {
     this.companion.isFollowOverride = true;
     this.inactive().autoTarget = null;
+  }
+
+  private triggerOpenChat(): void {
+    if (this.gameOver || this.pauseMenu.isOpen) return;
+    const context =
+      `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
+      `Floor: ${this.levelDef.id}. ` +
+      `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`;
+    this.playerChat.open(this.sceneManager.canvas, (text) => {
+      this.playerChat.showBubble(text);
+      void aiAdapter.chatWithSystem(text, context);
+    });
   }
 
   private triggerBuildAction(): void {
@@ -823,6 +843,7 @@ export class DungeonScene extends GameplayScene {
 
   update(): void {
     aiAdapter.update();
+    this.playerChat.update();
     this.achievementUI.tick();
 
     if (this.bossIntro.isActive) {
@@ -836,7 +857,8 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.menuOpen ||
       this.building?.menuOpen ||
       this.defendQuest.isDialogOpen ||
-      this.defendQuest.isSuppressed
+      this.defendQuest.isSuppressed ||
+      this.playerChat.isOpen
     )
       return;
 
@@ -886,6 +908,9 @@ export class DungeonScene extends GameplayScene {
 
     // Layer 2: Entities (Y-sorted mobs, players, decorations)
     this.renderPipeline.renderEntities(ctx, rc);
+
+    // Player speech bubble (world-space, semi-transparent so enemies remain visible)
+    this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
     // Layer 3: Effects (particles, barriers, spells, dynamite, speech bubbles)
     this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) =>
@@ -1025,6 +1050,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     aiAdapter.render(ctx, canvas);
+    this.playerChat.renderChatHint(ctx, canvas);
 
     if (
       platform.showEntityTooltip &&
@@ -1198,7 +1224,11 @@ export class DungeonScene extends GameplayScene {
     // Phase 8: Mini-map fog reveal
     revealMinimap(player, this.miniMap);
 
+    const wasStairwellOpen = this.stairwell.menuOpen;
     this.stairwell.detect(this.active());
+    if (!wasStairwellOpen && this.stairwell.menuOpen) {
+      this.bus.emit('stairwellFound', {});
+    }
     this.building?.detect(this.active());
 
     // Phase 9: Death check
@@ -1267,6 +1297,7 @@ export class DungeonScene extends GameplayScene {
         this.mobs.push(mob);
         this.mobGrid.insert(mob);
       },
+      isBossFightActive: () => this.bossRoom.anyLocked,
     };
   }
 

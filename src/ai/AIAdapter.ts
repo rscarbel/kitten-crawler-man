@@ -238,11 +238,17 @@ export class AIAdapter {
       .filter((m) => Math.hypot(m.tileX - activeTileX, m.tileY - activeTileY) <= 15)
       .slice(0, 10);
 
+    const map = ctx.getGameMap();
+    const mapRows = map.structure.length;
+    const mapCols = map.structure[0]?.length ?? mapRows;
+
     this.wsSend({
       type: 'state_snapshot',
       payload: {
         activePlayer: human.isActive ? 'Human' : 'Cat',
         level: ctx.getLevelId(),
+        mapWidth: mapCols,
+        mapHeight: mapRows,
         human: playerSnapshot(human),
         cat: playerSnapshot(cat),
         nearbyMobs,
@@ -282,6 +288,11 @@ export class AIAdapter {
           importance: 5,
           summary: `Boss defeated: ${e.bossType}`,
         });
+        const bossName = e.bossType.replace(/_/g, ' ');
+        void this.notifyImportantEvent(
+          `The crawlers just defeated ${bossName}!`,
+          `Boss slain: ${bossName}. Level: ${ctx.getLevelId()}.`,
+        );
       }),
 
       bus.on('playerLevelUp', (e) => {
@@ -384,6 +395,20 @@ export class AIAdapter {
           summary: `${e.player} health is critically low (${e.hp}/${e.maxHp})`,
         });
       }),
+
+      bus.on('stairwellFound', () => {
+        this.sendEvent({
+          ts: Date.now(),
+          type: 'stairwell_found',
+          data: { level: ctx.getLevelId() },
+          importance: 4,
+          summary: 'Players found the stairwell',
+        });
+        void this.notifyImportantEvent(
+          'The crawlers found the stairwell!',
+          `Floor: ${ctx.getLevelId()}. Human level: ${ctx.getHuman().level}, Cat level: ${ctx.getCat().level}.`,
+        );
+      }),
     );
   }
 
@@ -401,6 +426,63 @@ export class AIAdapter {
     if (this.snapshotTimer !== null) {
       clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
+    }
+  }
+
+  // ── Important event notifications ─────────────────────────────────────────
+
+  private async notifyImportantEvent(trigger: string, context: string): Promise<void> {
+    if (!this.authToken) return;
+    try {
+      const res = await fetch(
+        `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: trigger, additional_context: context }),
+        },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { chat: string | null; actions?: AIAction[] };
+      if (data.chat) this.messages.add(data.chat);
+      for (const action of data.actions ?? []) this.safeExecuteAction(action);
+    } catch {
+      // Server unavailable — silently ignore
+    }
+  }
+
+  // ── Player → System AI chat ───────────────────────────────────────────────
+
+  /**
+   * Send a direct player message to the System AI.
+   * The response is displayed through the normal top-banner channel.
+   * Safe to call when disconnected — silently no-ops.
+   */
+  async chatWithSystem(message: string, additionalContext: string): Promise<void> {
+    if (!this.authToken) return;
+    try {
+      const res = await fetch(
+        `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message, additional_context: additionalContext }),
+        },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as { chat: string | null; actions?: AIAction[] };
+      if (data.chat) this.messages.add(data.chat);
+      for (const action of data.actions ?? []) {
+        this.safeExecuteAction(action);
+      }
+    } catch {
+      // Server unavailable — silently ignore
     }
   }
 
@@ -508,7 +590,7 @@ function playerSnapshot(p: Player) {
 function describeAction(action: AIAction): string {
   switch (action.type) {
     case 'spawn_mob': {
-      const count = Math.min(Math.max(1, Number(action.count) || 1), 5);
+      const count = Math.min(Math.max(1, Number(action.count) || 1), 20);
       const mob = String(action.mob_type ?? 'goblin').replace(/_/g, ' ');
       return `spawned ${count}x ${mob} near ${action.target_player ?? 'player'}`;
     }
