@@ -208,9 +208,7 @@ export function drawBenchPressFloor(
   // Padded bench seat
   ctx.fillStyle = '#8B0000';
   ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(cx - s * 0.42, cy - s * 0.05, s * 0.84, s * 0.22, s * 0.05)
-    : ctx.fillRect(cx - s * 0.42, cy - s * 0.05, s * 0.84, s * 0.22);
+  ctx.roundRect(cx - s * 0.42, cy - s * 0.05, s * 0.84, s * 0.22, s * 0.05);
   ctx.fill();
   // Padding highlight
   ctx.fillStyle = '#a00000';

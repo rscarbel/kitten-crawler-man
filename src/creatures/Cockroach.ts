@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt } from '../utils';

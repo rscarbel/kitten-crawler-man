@@ -155,6 +155,8 @@ export class LootBoxOpener {
           }
         }
         break;
+      case 'done':
+        break;
     }
 
     // Animate particles

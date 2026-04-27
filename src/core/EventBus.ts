@@ -26,7 +26,7 @@ export interface GameEvents {
   };
 
   /** A player entered a safe room for the first time. */
-  safeRoomEntered: {};
+  safeRoomEntered: Record<string, never>;
 
   /** A boss room was locked (player entered). */
   bossRoomLocked: { bossType: string };
@@ -80,7 +80,7 @@ export interface GameEvents {
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
 
   /** Players stepped onto a stairwell for the first time (menu just opened). */
-  stairwellFound: {};
+  stairwellFound: Record<string, never>;
 
   /** Active player has been standing still and doing nothing for another 5-second interval. */
   playerIdle: { totalIdleMs: number };
@@ -89,18 +89,22 @@ export interface GameEvents {
 type EventCallback<T> = (data: T) => void;
 
 export class EventBus {
-  private listeners = new Map<string, Set<EventCallback<unknown>>>();
+  // Type erasure is unavoidable for a heterogeneous event map — callbacks are
+  // stored as unknown and narrowed by the generic API surface.
+  private readonly listeners = new Map<string, Set<EventCallback<unknown>>>();
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<K extends keyof GameEvents>(event: K, callback: EventCallback<GameEvents[K]>): () => void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
+    let set = this.listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(event, set);
     }
-    const set = this.listeners.get(event)!;
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     set.add(callback as EventCallback<unknown>);
-
     return () => {
-      set.delete(callback as EventCallback<unknown>);
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      this.listeners.get(event)?.delete(callback as EventCallback<unknown>);
     };
   }
 

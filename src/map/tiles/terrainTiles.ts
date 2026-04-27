@@ -1,6 +1,6 @@
+import type { TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
-  TileContent,
   VOID_TYPE,
   BUILDING_WALL,
   ROOF_THATCH,

@@ -9,15 +9,16 @@
  *   - Inventory / gear panel interaction
  */
 
-import { Scene, SceneManager } from '../core/Scene';
-import { InputManager } from '../core/InputManager';
+import type { SceneManager } from '../core/Scene';
+import { Scene } from '../core/Scene';
+import type { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { clamp, pointInRect } from '../utils';
-import { GameMap } from '../map/GameMap';
-import { HumanPlayer } from '../creatures/HumanPlayer';
-import { CatPlayer } from '../creatures/CatPlayer';
-import { PlayerManager } from '../core/PlayerManager';
-import { PauseMenu } from '../ui/PauseMenu';
+import type { GameMap } from '../map/GameMap';
+import type { HumanPlayer } from '../creatures/HumanPlayer';
+import type { CatPlayer } from '../creatures/CatPlayer';
+import type { PlayerManager } from '../core/PlayerManager';
+import type { PauseMenu } from '../ui/PauseMenu';
 import { drawHUD } from '../ui/HUD';
 import { platform } from '../core/Platform';
 

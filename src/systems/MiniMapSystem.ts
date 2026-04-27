@@ -1,4 +1,4 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import { platform } from '../core/Platform';
@@ -24,13 +24,20 @@ export class MiniMapSystem implements GameSystem {
 
     // Create offscreen tile cache (1px per tile, pre-filled with fog color)
     if (typeof OffscreenCanvas !== 'undefined') {
-      this._tileCache = new OffscreenCanvas(sz, sz);
+      const c = new OffscreenCanvas(sz, sz);
+      const tctx = c.getContext('2d');
+      if (!tctx) throw new Error('Failed to get 2D context for minimap');
+      this._tileCache = c;
+      this._tileCacheCtx = tctx;
     } else {
-      this._tileCache = document.createElement('canvas');
-      this._tileCache.width = sz;
-      this._tileCache.height = sz;
+      const c = document.createElement('canvas');
+      c.width = sz;
+      c.height = sz;
+      const tctx = c.getContext('2d');
+      if (!tctx) throw new Error('Failed to get 2D context for minimap');
+      this._tileCache = c;
+      this._tileCacheCtx = tctx;
     }
-    this._tileCacheCtx = this._tileCache.getContext('2d')!;
     this._tileCacheCtx.fillStyle = '#111';
     this._tileCacheCtx.fillRect(0, 0, sz, sz);
   }
@@ -57,8 +64,8 @@ export class MiniMapSystem implements GameSystem {
           const idx = ty * mapSize + tx;
           if (this.fogOfWar[idx] === 0) {
             this.fogOfWar[idx] = 1;
-            const tile = this.gameMap.structure[ty]?.[tx];
-            cctx.fillStyle = tile ? this.tileColor(tile.type) : '#555';
+            const tile = this.gameMap.structure[ty][tx];
+            cctx.fillStyle = this.tileColor(tile.type);
             cctx.fillRect(tx, ty, 1, 1);
           }
         }
@@ -79,8 +86,8 @@ export class MiniMapSystem implements GameSystem {
         const idx = ty * mapSize + tx;
         if (this.fogOfWar[idx] === 0) {
           this.fogOfWar[idx] = 1;
-          const tile = this.gameMap.structure[ty]?.[tx];
-          cctx.fillStyle = tile ? this.tileColor(tile.type) : '#555';
+          const tile = this.gameMap.structure[ty][tx];
+          cctx.fillStyle = this.tileColor(tile.type);
           cctx.fillRect(tx, ty, 1, 1);
         }
       }

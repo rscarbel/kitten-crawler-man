@@ -584,9 +584,7 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.mobileHUD.inventoryPanel.isOpen) {
         if (this.mobileHUD.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
-          if (this.mobileHUD.inventoryDragTouchId === null) {
-            this.mobileHUD.inventoryDragTouchId = touch.identifier;
-          }
+          this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
           this.mobileHUD.startInvLongPress(x, y, () => {
             this.mobileHUD.inventoryPanel.openContextMenu(x, y, canvas, this.active().inventory);
           });

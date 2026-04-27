@@ -396,12 +396,10 @@ export function generateDungeon(
     const step = Math.max(1, Math.floor(farRooms.length / stairwellCount));
     for (let i = 0; i < stairwellCount; i++) {
       const r = farRooms[i * step];
-      if (r) {
-        stairwellTiles.push({
-          x: Math.floor(r.x + r.w / 2),
-          y: Math.floor(r.y + r.h / 2),
-        });
-      }
+      stairwellTiles.push({
+        x: Math.floor(r.x + r.w / 2),
+        y: Math.floor(r.y + r.h / 2),
+      });
     }
   }
 

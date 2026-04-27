@@ -97,9 +97,7 @@ export function drawJuicerSprite(
   // Left leg
   ctx.fillStyle = skinDark;
   ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(cx - cs * 0.27 - legW * 0.5, legY - legSwing * 0.5, legW, legH, cs * 0.06)
-    : ctx.fillRect(cx - cs * 0.27 - legW * 0.5, legY - legSwing * 0.5, legW, legH);
+  ctx.roundRect(cx - cs * 0.27 - legW * 0.5, legY - legSwing * 0.5, legW, legH, cs * 0.06);
   ctx.fill();
   // Left foot
   ctx.fillStyle = skinColor;
@@ -118,9 +116,7 @@ export function drawJuicerSprite(
   // Right leg
   ctx.fillStyle = skinDark;
   ctx.beginPath();
-  ctx.roundRect
-    ? ctx.roundRect(cx + cs * 0.07 - legW * 0.5, legY + legSwing * 0.5, legW, legH, cs * 0.06)
-    : ctx.fillRect(cx + cs * 0.07 - legW * 0.5, legY + legSwing * 0.5, legW, legH);
+  ctx.roundRect(cx + cs * 0.07 - legW * 0.5, legY + legSwing * 0.5, legW, legH, cs * 0.06);
   ctx.fill();
   // Right foot
   ctx.fillStyle = skinColor;
@@ -491,14 +487,14 @@ export function drawJuicerSpeechBubble(
   // Bubble background
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 5) : ctx.fillRect(bx, by, bw, bh);
+  ctx.roundRect(bx, by, bw, bh, 5);
   ctx.fill();
 
   // Border
   ctx.strokeStyle = '#f97316';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 5) : ctx.strokeRect(bx, by, bw, bh);
+  ctx.roundRect(bx, by, bw, bh, 5);
   ctx.stroke();
 
   // Tail pointing down toward head

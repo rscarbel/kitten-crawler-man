@@ -1,8 +1,8 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import { clamp } from '../utils';
-import { SpatialGrid } from '../core/SpatialGrid';
-import { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import type { Mob } from '../creatures/Mob';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -87,7 +87,7 @@ export class BossRoomSystem implements GameSystem {
       if (state.defeated) continue;
 
       const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, state.bounds));
-      const bossAlive = boss !== undefined && boss.isAlive;
+      const bossAlive = boss?.isAlive;
 
       if (
         !state.locked &&
@@ -252,7 +252,7 @@ export class BossRoomSystem implements GameSystem {
     const cx = (b.x + b.w * 0.5) * ts - camX;
     const cy = (b.y + b.h * 0.5) * ts - camY;
 
-    const meta = BOSS_META[bossType] ?? BOSS_META['the_hoarder'];
+    const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
     ctx.save();
@@ -426,12 +426,13 @@ export class BossRoomSystem implements GameSystem {
       ctx.lineWidth = 3;
       ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
       ctx.lineWidth = 2;
-      for (const [ex, ey] of [
+      const corners: [number, number][] = [
         [b.x, b.y],
         [b.x + b.w - 1, b.y],
         [b.x, b.y + b.h - 1],
         [b.x + b.w - 1, b.y + b.h - 1],
-      ] as [number, number][]) {
+      ];
+      for (const [ex, ey] of corners) {
         const sx = ex * ts - camX;
         const sy = ey * ts - camY;
         ctx.beginPath();
@@ -458,11 +459,9 @@ export class BossRoomSystem implements GameSystem {
 
     const relevantStateIdx = this.states.indexOf(relevantState);
     const bossType = this.bossTypes[relevantStateIdx] ?? 'the_hoarder';
-    const meta = BOSS_META[bossType] ?? BOSS_META['the_hoarder'];
+    const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
 
-    const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds)) as
-      | (Mob & { isEnraged?: boolean })
-      | undefined;
+    const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds));
     if (!boss) return;
 
     const isEnraged = boss.isEnraged ?? false;

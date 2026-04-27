@@ -1,5 +1,5 @@
 import { Mob } from './Mob';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { drawTusklingSprite } from '../sprites/tusklingSprite';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';

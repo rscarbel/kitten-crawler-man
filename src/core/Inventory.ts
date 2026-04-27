@@ -32,7 +32,7 @@ export class Inventory {
   /** Place a quest item directly into the reserved quest slot. */
   private addToQuestSlot(id: ItemId, quantity: number): void {
     const slot = this.actionBar.slots[QUEST_SLOT_IDX];
-    if (slot && slot.id === id) {
+    if (slot?.id === id) {
       // Stack onto existing
       this.actionBar.slots[QUEST_SLOT_IDX] = { ...slot, quantity: slot.quantity + quantity };
     } else {
@@ -55,7 +55,7 @@ export class Inventory {
    * Removes from hotbar first, then inventory slots.
    */
   removeItems(id: ItemId, qty: number): void {
-    let remaining = this.actionBar.removeFrom(id, qty);
+    const remaining = this.actionBar.removeFrom(id, qty);
     if (remaining > 0) {
       this.bag.removeFrom(id, remaining);
     }

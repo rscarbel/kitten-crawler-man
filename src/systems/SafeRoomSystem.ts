@@ -1,6 +1,6 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
-import { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -85,7 +85,7 @@ export class SafeRoomSystem implements GameSystem {
     this._mordecaiDialogOpen = true;
     this.mordecaiLine = null;
     this.mordecaiLoading = true;
-    responsePromise.then((text) => {
+    void responsePromise.then((text) => {
       this.mordecaiLine = text;
       this.mordecaiLoading = false;
     });

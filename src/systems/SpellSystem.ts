@@ -1,6 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import { platform } from '../core/Platform';
-import { SpatialGrid } from '../core/SpatialGrid';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -49,8 +49,12 @@ function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: numb
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
   const center = size * 0.5;
+
+  if (ctx === null) {
+    throw new Error('2d context cannot be found');
+  }
 
   for (const blob of FOG_BLOBS) {
     const bx = center + blob.dx * radiusPx;

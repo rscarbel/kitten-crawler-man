@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { drawBugabooSprite } from '../sprites/bugabooSprite';
@@ -73,7 +73,7 @@ export class Bugaboo extends Mob {
     }
 
     // Priority 2: Attack defend target (NPC) if alive
-    if (this.defendTarget && this.defendTarget.isAlive) {
+    if (this.defendTarget?.isAlive) {
       const dist = Math.hypot(this.defendTarget.x - this.x, this.defendTarget.y - this.y);
       this.isAggro = true;
       this.currentTarget = this.defendTarget;
@@ -101,7 +101,7 @@ export class Bugaboo extends Mob {
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      if ((t as { isDefendTarget?: boolean }).isDefendTarget) continue;
+      if (t.isDefendTarget) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
       if (dist < this.aggroRangePx && dist < nearestDist) {
         nearestDist = dist;

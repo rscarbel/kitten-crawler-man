@@ -1,5 +1,5 @@
 import { Mob } from './Mob';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { drawMongoSprite } from '../sprites/mongoSprite';
 import { normalize } from '../utils';
@@ -160,7 +160,7 @@ export class Mongo extends Mob {
     }
 
     // Chase the target
-    this.updateLastKnown(nearest as unknown as Player);
+    this.updateLastKnown(nearest);
     if (nearestDist > this.biteRangePx) {
       this.followTargetAStar(
         this.lastKnownTargetX,
@@ -181,7 +181,7 @@ export class Mongo extends Mob {
     }
 
     // Bite attack — deals damage directly to the mob, credited to the cat
-    if (nearest && nearestDist <= this.biteRangePx * 1.2 && this.attackCooldown === 0) {
+    if (nearestDist <= this.biteRangePx * 1.2 && this.attackCooldown === 0) {
       nearest.takeDamageFrom(this.biteDamage, this.owner, 'melee');
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;

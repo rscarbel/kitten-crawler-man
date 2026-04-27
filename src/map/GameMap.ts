@@ -561,10 +561,10 @@ export class GameMap {
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
+    if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
     const row = this.structure[tileY];
-    if (!row) return false;
+    if (tileX >= row.length) return false;
     const tile = row[tileX];
-    if (!tile) return false;
     if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
     return (
       tile.type !== FloorTypeValue.wall &&
@@ -619,9 +619,7 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    if (!this._chunkCache) {
-      this._chunkCache = new TileChunkCache(this.structure, this.tileHeight);
-    }
+    this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight);
     renderCanvas(
       ctx,
       this.structure,

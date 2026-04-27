@@ -151,16 +151,17 @@ export class LoginUI {
       </div>
     `;
 
-    const form = document.getElementById('auth-form') as HTMLFormElement;
-    const usernameInput = document.getElementById('auth-username') as HTMLInputElement;
-    const passwordInput = document.getElementById('auth-password') as HTMLInputElement;
-    const toggleBtn = document.getElementById('auth-toggle') as HTMLButtonElement;
-    const submitBtn = document.getElementById('auth-submit') as HTMLButtonElement;
+    const form = this.overlay.querySelector<HTMLFormElement>('#auth-form');
+    const usernameInput = this.overlay.querySelector<HTMLInputElement>('#auth-username');
+    const passwordInput = this.overlay.querySelector<HTMLInputElement>('#auth-password');
+    const toggleBtn = this.overlay.querySelector<HTMLButtonElement>('#auth-toggle');
+    const submitBtn = this.overlay.querySelector<HTMLButtonElement>('#auth-submit');
+    if (!form || !usernameInput || !passwordInput || !toggleBtn || !submitBtn) return;
 
     // Auto-focus username field
     requestAnimationFrame(() => usernameInput.focus());
 
-    form.addEventListener('submit', async (e) => {
+    const handleSubmit = async (e: Event): Promise<void> => {
       e.preventDefault();
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
@@ -180,8 +181,11 @@ export class LoginUI {
         this.destroy();
         resolve(user);
       } catch (err: unknown) {
-        this.render(mode, (err as Error).message, resolve);
+        this.render(mode, err instanceof Error ? err.message : 'Unknown error', resolve);
       }
+    };
+    form.addEventListener('submit', (e) => {
+      void handleSubmit(e);
     });
 
     toggleBtn.addEventListener('click', () => {

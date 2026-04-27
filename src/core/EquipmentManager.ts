@@ -14,7 +14,7 @@ export class EquipmentManager {
    * Maps "Slot:SubSlot" key → ItemId of the equipped item.
    * e.g. "Legs:Pants" → 'enchanted_bigboi_boxers'.
    */
-  readonly equipped: Map<string, ItemId> = new Map();
+  readonly equipped = new Map<string, ItemId>();
 
   constructor(private readonly findItem: ItemFinder) {}
 

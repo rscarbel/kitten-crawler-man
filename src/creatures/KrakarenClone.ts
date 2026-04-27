@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, normalize } from '../utils';
@@ -177,7 +177,7 @@ export class KrakarenClone extends Mob {
     this.attackProgress = 1 - this.meleeSwingTimer / MELEE_SWING_FRAMES;
 
     // Deal damage at the midpoint of the swing
-    if (this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) && nearest && nearest.isAlive) {
+    if (this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) && nearest?.isAlive) {
       const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
       if (dist <= MELEE_RANGE_PX) {
         this.dealDamage(nearest, MELEE_DAMAGE);

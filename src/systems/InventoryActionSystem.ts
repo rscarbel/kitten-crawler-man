@@ -46,7 +46,7 @@ export function resolvePendingInventoryAction(
         active.inventory.bag.slots.find((s) => s?.id === id) ??
         active.inventory.actionBar.slots.find((s) => s?.id === id) ??
         null;
-      if (item?.equipSlot && item?.equipSubSlot) {
+      if (item?.equipSlot && item.equipSubSlot) {
         active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
         active.removeItemBonus(item);
       }

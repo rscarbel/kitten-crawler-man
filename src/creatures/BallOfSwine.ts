@@ -1,5 +1,5 @@
 import { Mob } from './Mob';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt } from '../utils';
 import { drawBallOfSwineSprite, drawBallOfSwineStoppedWarning } from '../sprites/ballOfSwineSprite';

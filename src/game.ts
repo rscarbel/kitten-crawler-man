@@ -15,15 +15,16 @@ function launchGame(options?: DungeonSceneOptions): void {
   const sceneManager = new SceneManager();
   sceneManager.replace(new DungeonScene(level1, input, sceneManager, options));
   // Fire-and-forget: if the AI server isn't running the adapter stays silent.
-  aiAdapter.initialize().catch(() => {});
+  aiAdapter.initialize().catch(() => {
+    void 0;
+  });
 }
 
 (async () => {
   try {
     await authClient.getMe();
   } catch (err: unknown) {
-    const status = (err as { status?: number }).status;
-    if (status === 401) {
+    if (typeof err === 'object' && err !== null && 'status' in err && err.status === 401) {
       // Auth server is up but no session — show login/register screen.
       const ui = new LoginUI(authClient);
       await ui.show();
@@ -35,14 +36,16 @@ function launchGame(options?: DungeonSceneOptions): void {
   }
 
   // Load any previously saved progress for this user.
-  const progress = (await authClient.loadProgress().catch(() => null)) as GameProgress | null;
+  const progress = await authClient.loadProgress().catch(() => null);
 
   const saveProgress = (data: {
     humanSnap: GameProgress['humanSnap'];
     catSnap: GameProgress['catSnap'];
     levelId: string;
   }) => {
-    authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {});
+    authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {
+      void 0;
+    });
   };
 
   const options: DungeonSceneOptions = { saveProgress };

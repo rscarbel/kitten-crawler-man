@@ -1,5 +1,5 @@
 import { Mob } from './Mob';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { makePoison } from '../core/StatusEffect';
 import { normalize } from '../utils';

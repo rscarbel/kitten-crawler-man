@@ -106,11 +106,7 @@ export class DefendQuestSystem implements GameSystem {
   private bus: EventBus;
   private gameMap: GameMap;
 
-  constructor(
-    gameMap: GameMap,
-    bus: EventBus,
-    addMob: (mob: Mob) => void,
-  ) {
+  constructor(gameMap: GameMap, bus: EventBus, addMob: (mob: Mob) => void) {
     this.gameMap = gameMap;
     this.bus = bus;
     this.addMob = addMob;
@@ -167,13 +163,11 @@ export class DefendQuestSystem implements GameSystem {
     return this.phase === 'dialog' || this.phase === 'tutorial';
   }
 
-  get isSuppressed(): boolean {
-    return false;
-  }
+  readonly isSuppressed = false;
 
   /** Called when player presses Space near the NPC. */
   tryInteract(active: Player): boolean {
-    if (!this.npc || !this.npc.isAlive) return false;
+    if (!this.npc?.isAlive) return false;
     const dist = Math.hypot(active.x - this.npc.x, active.y - this.npc.y);
     if (dist > INTERACT_RANGE_PX) return false;
 
@@ -325,6 +319,7 @@ export class DefendQuestSystem implements GameSystem {
         this.updateChildAnimation();
         break;
 
+      case 'tutorial':
       case 'failed':
         // Remaining mobs now target players (handled by Bugaboo AI fallback)
         break;
@@ -460,19 +455,17 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private updateChildAnimation(): void {
-    if (this.childAnimTimer > 0) {
-      this.childAnimTimer--;
-      this.childWalkFrame += 0.14;
+    if (this.childAnimTimer <= 0 || !this.roomData) return;
+    this.childAnimTimer--;
+    this.childWalkFrame += 0.14;
 
-      // Lerp child toward NPC
-      const t = 1 - this.childAnimTimer / 180;
-      this.childX =
-        this.roomData!.entranceTile.x * TILE_SIZE +
-        (this.childTargetX - this.roomData!.entranceTile.x * TILE_SIZE) * t;
-      this.childY =
-        this.roomData!.entranceTile.y * TILE_SIZE +
-        (this.childTargetY - this.roomData!.entranceTile.y * TILE_SIZE) * t;
-    }
+    // Lerp child toward NPC
+    const rd = this.roomData;
+    const t = 1 - this.childAnimTimer / 180;
+    this.childX =
+      rd.entranceTile.x * TILE_SIZE + (this.childTargetX - rd.entranceTile.x * TILE_SIZE) * t;
+    this.childY =
+      rd.entranceTile.y * TILE_SIZE + (this.childTargetY - rd.entranceTile.y * TILE_SIZE) * t;
   }
 
   private triggerQuestComplete(active: Player): void {
@@ -480,8 +473,9 @@ export class DefendQuestSystem implements GameSystem {
     this.questManager.completeQuest(QUEST_ID);
     if (this.npc) this.npc.markerType = 'none';
 
-    const rewards = this.questManager.getDef(QUEST_ID)!.rewards;
-    active.gainXp(rewards.xp);
+    const def = this.questManager.getDef(QUEST_ID);
+    if (!def) return;
+    active.gainXp(def.rewards.xp);
     this.xpFloatTimer = 180; // 3 seconds
 
     this.bus.emit('questCompleted', { questId: QUEST_ID });
@@ -577,7 +571,7 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
 
-    if (this.npc && this.npc.isAlive) {
+    if (this.npc?.isAlive) {
       this.npc.render(ctx, camX, camY, TILE_SIZE);
       // Interaction prompt when player is near and NPC is interactable
       if (active && (this.phase === 'npc_waiting' || this.phase === 'complete_pending')) {

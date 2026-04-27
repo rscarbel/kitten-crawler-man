@@ -163,3 +163,7 @@ export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
   Hands: ['Gloves', 'Ring 1', 'Ring 2', 'Ring 3', 'Ring 4'],
   Feet: ['Shoes', 'Toe Ring 1', 'Toe Ring 2', 'Toe Ring 3', 'Toe Ring 4'],
 };
+
+export function isItemId(s: string): s is ItemId {
+  return s in ITEM_DEF;
+}

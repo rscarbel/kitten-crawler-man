@@ -1,4 +1,4 @@
-import { Inventory } from '../core/Inventory';
+import type { Inventory } from '../core/Inventory';
 import { EQUIP_SUBSLOTS } from '../core/ItemDefs';
 import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
@@ -243,7 +243,7 @@ export class GearPanel {
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
     item: InventoryItem,
-    subSlot: string,
+    _subSlot: string,
   ): void {
     const lines: string[] = [item.name];
     if (item.statBonus) {
@@ -276,7 +276,7 @@ export class GearPanel {
     const tw = 230;
     const lineH = 14;
     const th = lines.length * lineH + 12;
-    let tx = Math.min(this.tooltipMx + 10, canvas.width - tw - 4);
+    const tx = Math.min(this.tooltipMx + 10, canvas.width - tw - 4);
     let ty = Math.min(this.tooltipMy - th / 2, canvas.height - th - 4);
     ty = Math.max(ty, 4);
 

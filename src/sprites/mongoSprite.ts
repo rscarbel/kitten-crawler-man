@@ -21,7 +21,7 @@ export function drawMongoSprite(
   walkFrame = 0,
   isMoving = false,
   facingX = 1,
-  facingY = 0,
+  _facingY = 0,
   attackAmt = 0,
   scale = 1.0,
 ): void {

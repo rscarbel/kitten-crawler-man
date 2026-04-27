@@ -39,6 +39,8 @@ export abstract class Player {
   speedMultiplier = 1;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
   statusEffects: StatusEffect[] = [];
+  /** When true, mob AI treats this player as a defend target and will not attack other targets. */
+  isDefendTarget?: boolean;
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
   tempStatMods: Array<{
     ticksRemaining: number;
@@ -204,7 +206,7 @@ export abstract class Player {
         this.strength = Math.max(1, this.strength - mod.delta);
       } else if (mod.stat === 'intelligence') {
         this.intelligence = Math.max(1, this.intelligence - mod.delta);
-      } else if (mod.stat === 'constitution') {
+      } else {
         const d = Math.round(mod.delta);
         this.constitution = Math.max(1, this.constitution - d);
         this.maxHp = Math.max(1, this.maxHp - d * 2);

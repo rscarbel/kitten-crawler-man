@@ -71,8 +71,9 @@ registerMob('goblin', (x, y) => {
 });
 
 export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
-  const factory = MOB_REGISTRY.get(type);
-  const mob = factory ? factory(tileX, tileY) : MOB_REGISTRY.get('goblin')!(tileX, tileY); // default: goblin
+  const factory = MOB_REGISTRY.get(type) ?? MOB_REGISTRY.get('goblin');
+  if (!factory) throw new Error(`Unknown mob type: ${type}`);
+  const mob = factory(tileX, tileY);
   mob.setMap(map);
   return mob;
 }
@@ -87,17 +88,17 @@ function resolveOrigin(
     const half = Math.floor(def.mapSize / 2);
     return { x: half, y: half };
   }
-  const bossMatch = origin.match(/^bossRoom:(\d+)$/);
+  const bossMatch = /^bossRoom:(\d+)$/.exec(origin);
   if (bossMatch) {
     const idx = parseInt(bossMatch[1], 10);
-    const br = map.bossRooms[idx];
-    return br ? br.centre : null;
+    if (idx < 0 || idx >= map.bossRooms.length) return null;
+    return map.bossRooms[idx].centre;
   }
-  const arenaMatch = origin.match(/^arena:(\d+)$/);
+  const arenaMatch = /^arena:(\d+)$/.exec(origin);
   if (arenaMatch) {
     const idx = parseInt(arenaMatch[1], 10);
-    const arena = map.arenaExteriors[idx];
-    return arena ? arena.centre : null;
+    if (idx < 0 || idx >= map.arenaExteriors.length) return null;
+    return map.arenaExteriors[idx].centre;
   }
   return null;
 }
@@ -106,14 +107,14 @@ function resolveOrigin(
  * Post-spawn setup callbacks for mobs that need special initialization
  * beyond what `createMob` provides (e.g. BallOfSwine needs arena binding).
  */
-const SPAWN_SETUP: Record<
-  string,
-  (mob: Mob, map: GameMap, origin: { x: number; y: number }) => void
+const SPAWN_SETUP: Partial<
+  Record<string, (mob: Mob, map: GameMap, origin: { x: number; y: number }) => void>
 > = {
   setupBallOfSwine(mob, map, origin) {
-    const bos = mob as BallOfSwine;
-    bos.setArena(origin.x, origin.y);
-    bos.setMap(map);
+    if (mob instanceof BallOfSwine) {
+      mob.setArena(origin.x, origin.y);
+      mob.setMap(map);
+    }
   },
 };
 
@@ -131,8 +132,8 @@ export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
 
     for (const [dx, dy] of rule.offsets) {
       const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
-      if (rule.setup && SPAWN_SETUP[rule.setup]) {
-        SPAWN_SETUP[rule.setup](mob, map, origin);
+      if (rule.setup) {
+        SPAWN_SETUP[rule.setup]?.(mob, map, origin);
       }
       mobs.push(mob);
     }
@@ -188,12 +189,12 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     }
   }
 
-  for (let i = 0; i < (def.bossRooms?.length ?? 0); i++) {
-    const bossEntry = def.bossRooms![i];
+  const bossRooms = def.bossRooms ?? [];
+  for (let i = 0; i < bossRooms.length; i++) {
+    const bossEntry = bossRooms[i];
+    if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
-    if (brData) {
-      mobs.push(createMob(bossEntry.type, brData.centre.x, brData.centre.y, map));
-    }
+    mobs.push(createMob(bossEntry.type, brData.centre.x, brData.centre.y, map));
   }
 
   return mobs;

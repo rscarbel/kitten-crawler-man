@@ -1,4 +1,5 @@
 import { Player } from '../Player';
+import type { Mob } from './Mob';
 import { drawHumanSprite, drawHumanAttack } from '../sprites/humanSprite';
 
 /**
@@ -19,14 +20,15 @@ export class HumanPlayer extends Player {
   private readonly AUTO_ATTACK_COOLDOWN = 90;
 
   /** The mob the human will automatically fight when not player-controlled. */
-  autoTarget: Player | null = null;
+  autoTarget: Mob | null = null;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, 10);
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
-    this.applyItemBonus(this.inventory.bag.slots.find((s) => s?.id === 'enchanted_bigboi_boxers')!);
+    const boxersSlot = this.inventory.bag.slots.find((s) => s?.id === 'enchanted_bigboi_boxers');
+    if (boxersSlot) this.applyItemBonus(boxersSlot);
   }
 
   spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
@@ -71,7 +73,7 @@ export class HumanPlayer extends Player {
    * Movement toward the target is handled in game.ts.
    */
   autoFightTick() {
-    if (!this.autoTarget || !this.autoTarget.isAlive) {
+    if (!this.autoTarget?.isAlive) {
       this.autoTarget = null;
       return;
     }

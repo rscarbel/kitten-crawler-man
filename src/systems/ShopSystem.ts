@@ -176,7 +176,7 @@ export class ShopSystem implements GameSystem {
     ctx.restore();
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, _active: Player): void {
     if (this.feedbackTimer > 0) {
       const alpha = Math.min(1, this.feedbackTimer / 30);
       ctx.save();
@@ -307,7 +307,6 @@ export class ShopSystem implements GameSystem {
 
   private tryBuy(itemIdx: number, player: Player): void {
     const item = SHOP_ITEMS[itemIdx];
-    if (!item) return;
     if (player.coins < item.price) {
       this.feedbackMsg = 'Not enough coins!';
       this.feedbackTimer = 100;

@@ -1,6 +1,8 @@
 import { Player } from '../Player';
-import { drawCatSprite, drawMissiles, Missile } from '../sprites/catSprite';
-import { GameMap } from '../map/GameMap';
+import type { Mob } from './Mob';
+import type { Missile } from '../sprites/catSprite';
+import { drawCatSprite, drawMissiles } from '../sprites/catSprite';
+import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 
 /**
@@ -18,7 +20,7 @@ export class CatPlayer extends Player {
   private map: GameMap | null = null;
 
   /** The mob the cat will automatically shoot at when not player-controlled. */
-  autoTarget: Player | null = null;
+  autoTarget: Mob | null = null;
 
   setMap(map: GameMap) {
     this.map = map;
@@ -61,7 +63,7 @@ export class CatPlayer extends Player {
    * @param missChance 0–1 probability the shot flies slightly off-target (visible miss).
    */
   autoFireTick(missChance = 0) {
-    if (!this.autoTarget || !this.autoTarget.isAlive) {
+    if (!this.autoTarget?.isAlive) {
       this.autoTarget = null;
       return;
     }

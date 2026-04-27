@@ -138,6 +138,10 @@ export function getBoxContents(tier: BoxTier, category: BoxCategory): BoxContent
   return BOX_CONTENTS[tier][category];
 }
 
+export function isAchievementId(s: string): s is AchievementId {
+  return s in ACHIEVEMENT_DEFS;
+}
+
 export class AchievementManager {
   private unlocked = new Set<AchievementId>();
   /** Queue of achievement defs waiting to be shown as unread (icon badge). */
@@ -200,10 +204,12 @@ export class AchievementManager {
 
   /** Returns all achievement defs paired with their unlock status, in definition order. */
   getAllAchievements(): Array<{ def: AchievementDef; unlocked: boolean }> {
-    return (Object.keys(ACHIEVEMENT_DEFS) as AchievementId[]).map((id) => ({
-      def: ACHIEVEMENT_DEFS[id],
-      unlocked: this.unlocked.has(id),
-    }));
+    return Object.keys(ACHIEVEMENT_DEFS)
+      .filter(isAchievementId)
+      .map((id) => ({
+        def: ACHIEVEMENT_DEFS[id],
+        unlocked: this.unlocked.has(id),
+      }));
   }
 
   /**

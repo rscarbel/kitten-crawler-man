@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { drawRatSprite } from '../sprites/ratSprite';
 

@@ -1,4 +1,4 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import {
   TILE_SIZE,
   FOLLOWER_SPEED,
@@ -6,10 +6,10 @@ import {
   CAT_BEHIND_HUMAN_OFFSET,
   HUMAN_ENGAGE_RANGE,
 } from '../core/constants';
-import { SpatialGrid } from '../core/SpatialGrid';
-import { Mob } from '../creatures/Mob';
-import { HumanPlayer } from '../creatures/HumanPlayer';
-import { CatPlayer } from '../creatures/CatPlayer';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import type { Mob } from '../creatures/Mob';
+import type { HumanPlayer } from '../creatures/HumanPlayer';
+import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { normalize, clamp, randomInt } from '../utils';
 
@@ -135,7 +135,7 @@ export class CompanionSystem implements GameSystem {
   ): void {
     if (human.isActive) {
       // Clear cat's target if it's dead or became an avoid-instead mob
-      if (cat.autoTarget && (!cat.autoTarget.isAlive || (cat.autoTarget as Mob).avoidInstead))
+      if (cat.autoTarget && (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead))
         cat.autoTarget = null;
 
       // While companion is being recalled, don't auto-assign new targets
@@ -173,7 +173,7 @@ export class CompanionSystem implements GameSystem {
       }
     } else {
       // Clear human's target if it's dead or became an avoid-instead mob
-      if (human.autoTarget && (!human.autoTarget.isAlive || (human.autoTarget as Mob).avoidInstead))
+      if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
         human.autoTarget = null;
 
       if (!human.autoTarget) {
@@ -257,8 +257,8 @@ export class CompanionSystem implements GameSystem {
     if (this.fleeFromAvoidMobs(companion, mobs, TILE_SIZE * 8)) return;
 
     if (human.isActive) {
-      if (cat.autoTarget && cat.autoTarget.isAlive) {
-        const enemy = cat.autoTarget as Mob;
+      if (cat.autoTarget?.isAlive) {
+        const enemy = cat.autoTarget;
         if (enemy.currentTarget === cat) {
           this.doCatKite(cat, enemy);
         } else if (enemy.currentTarget === human) {
@@ -295,7 +295,7 @@ export class CompanionSystem implements GameSystem {
         this.companionFollow(cat, human.x, human.y, FOLLOWER_SPEED, TILE_SIZE * 1.5);
       }
     } else {
-      if (human.autoTarget && human.autoTarget.isAlive) {
+      if (human.autoTarget?.isAlive) {
         this.companionFollow(
           human,
           human.autoTarget.x,

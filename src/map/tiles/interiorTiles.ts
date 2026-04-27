@@ -1,5 +1,5 @@
+import type { TileContent } from '../tileTypes';
 import {
-  TileContent,
   STAIRS_UP,
   STAIRS_DOWN,
   TABLE,

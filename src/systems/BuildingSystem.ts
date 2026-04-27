@@ -1,4 +1,4 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 
@@ -64,7 +64,7 @@ export class BuildingSystem implements GameSystem {
       my <= rects.enter.y + rects.enter.h
     ) {
       const entry = this.gameMap.buildingEntries[this.activeDoorIdx];
-      if (entry) this.onEnterBuilding(entry);
+      this.onEnterBuilding(entry);
       return true;
     }
     if (
@@ -113,7 +113,6 @@ export class BuildingSystem implements GameSystem {
   renderMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (!this._menuOpen) return;
     const entry = this.gameMap.buildingEntries[this.activeDoorIdx];
-    if (!entry) return;
 
     const cw = canvas.width;
     const ch = canvas.height;

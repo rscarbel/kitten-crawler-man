@@ -1,4 +1,5 @@
-import { TileContent, FOUNTAIN, TORCH, WELL, GRASSY_WEED, DIRT_PATCH } from '../tileTypes';
+import type { TileContent } from '../tileTypes';
+import { FOUNTAIN, TORCH, WELL, GRASSY_WEED, DIRT_PATCH } from '../tileTypes';
 import { inferGroundColor } from './helpers';
 import { frameTime } from '../../utils';
 

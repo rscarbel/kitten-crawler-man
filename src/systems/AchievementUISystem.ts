@@ -4,14 +4,14 @@
  * icon, loot box icon, and the loot-box-opener lifecycle.
  */
 
-import { AchievementManager } from '../core/AchievementManager';
+import type { AchievementManager } from '../core/AchievementManager';
 import type { AchievementDef } from '../core/AchievementManager';
 import { AchievementNotification } from '../ui/AchievementNotification';
 import { LootBoxOpener } from '../ui/LootBoxOpener';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
-import type { ItemId } from '../core/ItemDefs';
+import { isItemId } from '../core/ItemDefs';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -153,13 +153,15 @@ export class AchievementUISystem {
       playerName,
       (box, contents) => {
         mgr.openBox(box.id);
-        contents.potions && target.inventory.addItem('health_potion', contents.potions);
+        if (contents.potions) target.inventory.addItem('health_potion', contents.potions);
         target.coins += contents.coins;
-        if (contents.bonus) {
-          this.human.inventory.addItem(contents.bonus.id as ItemId, contents.bonus.quantity);
+        if (contents.bonus && isItemId(contents.bonus.id)) {
+          this.human.inventory.addItem(contents.bonus.id, contents.bonus.quantity);
         }
       },
-      () => {},
+      () => {
+        void 0;
+      },
     );
   }
 

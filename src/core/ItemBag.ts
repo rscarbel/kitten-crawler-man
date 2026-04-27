@@ -9,7 +9,7 @@ export class ItemBag {
   readonly slots: (InventoryItem | null)[];
 
   constructor(size: number) {
-    this.slots = new Array(size).fill(null);
+    this.slots = new Array<InventoryItem | null>(size).fill(null);
   }
 
   /** Try to stack `quantity` of `id` into an existing slot. Returns true if stacked. */
@@ -17,7 +17,7 @@ export class ItemBag {
     if (!ITEM_DEF[id].stackable) return false;
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
-      if (s && s.id === id) {
+      if (s?.id === id) {
         this.slots[i] = { ...s, quantity: s.quantity + quantity };
         return true;
       }
@@ -41,7 +41,7 @@ export class ItemBag {
     let remaining = qty;
     for (let i = 0; i < this.slots.length && remaining > 0; i++) {
       const s = this.slots[i];
-      if (!s || s.id !== id) continue;
+      if (s?.id !== id) continue;
       if (s.quantity <= remaining) {
         remaining -= s.quantity;
         this.slots[i] = null;
@@ -57,7 +57,7 @@ export class ItemBag {
   removeOne(id: ItemId): boolean {
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
-      if (!s || s.id !== id) continue;
+      if (s?.id !== id) continue;
       this.slots[i] = s.quantity > 1 ? { ...s, quantity: s.quantity - 1 } : null;
       return true;
     }

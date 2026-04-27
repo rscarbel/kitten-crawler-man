@@ -1,4 +1,4 @@
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { LootDrop } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -81,7 +81,7 @@ export class LootSystem implements GameSystem {
       }
 
       if (loot.droppedByPlayer) {
-        for (const player of [active, companion] as (HumanPlayer | CatPlayer)[]) {
+        for (const player of [active, companion]) {
           if (loot.collected) break;
           const dist = Math.hypot(
             player.x + TILE_SIZE * 0.5 - loot.x,
@@ -113,7 +113,7 @@ export class LootSystem implements GameSystem {
         }
       }
       if (!loot.collected && loot.owner === companion) {
-        const outOfCombat = companion.autoTarget === null || !companion.autoTarget.isAlive;
+        const outOfCombat = !companion.autoTarget?.isAlive;
         if (outOfCombat) {
           const dist = Math.hypot(
             companion.x + TILE_SIZE * 0.5 - loot.x,
@@ -136,7 +136,7 @@ export class LootSystem implements GameSystem {
       }
     }
     this.pendingLoots = this.pendingLoots.filter(
-      (l) => !l.collected && (l.isBossLoot || l.ttl > 0),
+      (l) => !l.collected && ((l.isBossLoot ?? false) || l.ttl > 0),
     );
   }
 

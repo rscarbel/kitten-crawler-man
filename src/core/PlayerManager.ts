@@ -1,6 +1,6 @@
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import { TILE_SIZE } from './constants';
 
 /**

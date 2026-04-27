@@ -6,7 +6,7 @@ import type { GameMap } from '../map/GameMap';
 import { makeBurn, makePoison, makeSepsis } from '../core/StatusEffect';
 import { createMob } from '../levels/spawner';
 import { TILE_SIZE } from '../core/constants';
-import type { ItemId } from '../core/ItemDefs';
+import { isItemId } from '../core/ItemDefs';
 
 export interface AISceneContext {
   getHuman(): HumanPlayer;
@@ -128,18 +128,18 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
     case 'give_item': {
       const player = resolvePlayer(ctx, action.target_player);
       const itemId = String(action.item_id);
-      if (!VALID_ITEM_IDS.has(itemId)) break;
+      if (!VALID_ITEM_IDS.has(itemId) || !isItemId(itemId)) break;
       const qty = Math.min(Math.max(1, Number(action.quantity) || 1), 99);
-      player.inventory.addItem(itemId as ItemId, qty);
+      player.inventory.addItem(itemId, qty);
       break;
     }
 
     case 'remove_item': {
       const player = resolvePlayer(ctx, action.target_player);
       const itemId = String(action.item_id);
-      if (!VALID_ITEM_IDS.has(itemId)) break;
+      if (!VALID_ITEM_IDS.has(itemId) || !isItemId(itemId)) break;
       const qty = Math.max(1, Number(action.quantity) || 1);
-      player.inventory.removeItems(itemId as ItemId, qty);
+      player.inventory.removeItems(itemId, qty);
       break;
     }
 
@@ -155,18 +155,22 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const player = resolvePlayer(ctx, action.target_player);
       const delta = Number(action.delta);
       if (isNaN(delta)) break;
-      const stat = action.stat as 'strength' | 'intelligence' | 'constitution';
+      const statRaw = action.stat;
+      if (
+        typeof statRaw !== 'string' ||
+        (statRaw !== 'strength' && statRaw !== 'intelligence' && statRaw !== 'constitution')
+      )
+        break;
+      const stat = statRaw;
       if (stat === 'strength') {
         player.strength = Math.max(1, player.strength + delta);
       } else if (stat === 'intelligence') {
         player.intelligence = Math.max(1, player.intelligence + delta);
-      } else if (stat === 'constitution') {
+      } else {
         const d = Math.round(delta);
         player.constitution = Math.max(1, player.constitution + d);
         player.maxHp = Math.max(1, player.maxHp + d * 2);
         player.hp = Math.min(player.hp, player.maxHp);
-      } else {
-        break;
       }
       // Revert after 30 seconds (1800 ticks at 60fps)
       player.tempStatMods.push({ ticksRemaining: 1800, stat, delta });

@@ -1,11 +1,11 @@
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
-import { Mob } from '../creatures/Mob';
-import { SpatialGrid } from '../core/SpatialGrid';
-import { GameMap } from '../map/GameMap';
-import { SafeRoomSystem } from './SafeRoomSystem';
-import { EventBus } from '../core/EventBus';
+import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import type { GameMap } from '../map/GameMap';
+import type { SafeRoomSystem } from './SafeRoomSystem';
+import type { EventBus } from '../core/EventBus';
 import { makeSepsis } from '../core/StatusEffect';
 
 /** Shared context passed to combat resolution functions. */
@@ -97,7 +97,7 @@ export function resolveKills(ctx: CombatContext): void {
     for (const [p, dmg] of mob.damageTakenBy) {
       if (dmg > maxDmg) {
         maxDmg = dmg;
-        topPlayer = p as HumanPlayer | CatPlayer;
+        if (p instanceof HumanPlayer || p instanceof CatPlayer) topPlayer = p;
       }
     }
     const otherPlayer = topPlayer === human ? cat : human;
@@ -105,16 +105,20 @@ export function resolveKills(ctx: CombatContext): void {
     const totalXp = mob.scaledXpValue;
     const topXp = Math.max(1, Math.round(totalXp * 0.85));
     const shareXp = Math.max(1, totalXp - topXp);
-    if (topPlayer && topPlayer.gainXp(topXp)) {
+    if (topPlayer?.gainXp(topXp)) {
       bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
     }
-    if (otherPlayer && otherPlayer.gainXp(shareXp)) {
+    if (otherPlayer.gainXp(shareXp)) {
       bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
     }
 
+    const killer =
+      mob.killedBy instanceof HumanPlayer || mob.killedBy instanceof CatPlayer
+        ? mob.killedBy
+        : null;
     bus.emit('mobKilled', {
       mob,
-      killer: mob.killedBy as HumanPlayer | CatPlayer | null,
+      killer,
       killType: mob.killType,
       topDamageDealer: topPlayer,
     });

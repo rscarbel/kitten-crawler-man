@@ -1,4 +1,4 @@
-import { Inventory } from '../core/Inventory';
+import type { Inventory } from '../core/Inventory';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import { pointInRect } from '../utils';

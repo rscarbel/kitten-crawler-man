@@ -34,8 +34,12 @@ export class SceneManager {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
     this.canvas.style.display = 'block';
-    document.getElementById('game')!.appendChild(this.canvas);
-    this.ctx = this.canvas.getContext('2d')!;
+    const gameEl = document.getElementById('game');
+    if (!gameEl) throw new Error('#game element not found');
+    gameEl.appendChild(this.canvas);
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to get 2D context');
+    this.ctx = ctx;
 
     window.addEventListener('resize', () => {
       this.canvas.width = window.innerWidth;

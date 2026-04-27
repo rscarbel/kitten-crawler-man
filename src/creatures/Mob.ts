@@ -1,5 +1,5 @@
 import { Player } from '../Player';
-import { GameMap } from '../map/GameMap';
+import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
 
@@ -20,7 +20,7 @@ export abstract class Mob extends Player {
   currentTarget: Player | null = null;
 
   /** Tracks how much damage each player has dealt to this mob (for XP split). */
-  readonly damageTakenBy: Map<Player, number> = new Map();
+  readonly damageTakenBy = new Map<Player, number>();
 
   /** Set to true on the frame this mob's HP reaches 0; game loop reads and resets it. */
   justDied = false;
@@ -87,6 +87,7 @@ export abstract class Mob extends Player {
   description = '';
 
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style
   get isHostile(): boolean {
     return true;
   }
@@ -95,9 +96,13 @@ export abstract class Mob extends Player {
    * When true, the AI-controlled companion will flee from this mob instead of attacking it.
    * Override in subclasses for enemies that are temporarily untargetable or instakill on contact.
    */
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style
   get avoidInstead(): boolean {
     return false;
   }
+
+  /** Whether this mob is currently in an enraged state. Subclasses (e.g. Juicer) set this. */
+  isEnraged?: boolean;
 
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;

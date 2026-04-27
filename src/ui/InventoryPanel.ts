@@ -1,4 +1,4 @@
-import { Inventory } from '../core/Inventory';
+import type { Inventory } from '../core/Inventory';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
@@ -68,7 +68,7 @@ export class InventoryPanel {
    * Optional per-ability cooldown fractions (0=ready, 1=full cooldown).
    * Set by DungeonScene each frame to show cooldown overlays in hotbar.
    */
-  abilityCooldowns: Map<string, { current: number; max: number }> = new Map();
+  abilityCooldowns = new Map<string, { current: number; max: number }>();
 
   /**
    * Returns the inventory slot index if (mx, my) is on an inventory slot in the
@@ -201,7 +201,8 @@ export class InventoryPanel {
   }
 
   private renderContextMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cm = this.contextMenu!;
+    const cm = this.contextMenu;
+    if (!cm) return;
     const options = this.interaction.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = 120;
     const menuItemH = 22;
@@ -294,7 +295,8 @@ export class InventoryPanel {
   }
 
   private renderDropDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const dd = this.dropDialog!;
+    const dd = this.dropDialog;
+    if (!dd) return;
     const dlgW = 200;
     const dlgH = 110;
     const dlgX = Math.floor((canvas.width - dlgW) / 2);
@@ -589,7 +591,7 @@ export class InventoryPanel {
     alpha: number,
   ): void {
     ctx.save();
-    ctx.globalAlpha = (ctx.globalAlpha ?? 1) * alpha;
+    ctx.globalAlpha = ctx.globalAlpha * alpha;
 
     if (item.id === 'health_potion') {
       const cx = x + size * 0.5;

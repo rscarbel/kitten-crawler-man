@@ -131,7 +131,7 @@ export class JuicerRoomSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     const { mobs } = ctx;
-    const juicer = (mobs.find((m) => m instanceof Juicer) as Juicer | undefined) ?? null;
+    const juicer = mobs.find((m) => m instanceof Juicer) ?? null;
     if (this.roomOriginX === -9999) return;
 
     const ts = TILE_SIZE;
@@ -147,20 +147,20 @@ export class JuicerRoomSystem implements GameSystem {
       }
 
       // Check Juicer pickup request
-      if (juicer && juicer.requestDumbbellAt && pickup.itemId === 'gym_dumbbell') {
+      if (juicer?.requestDumbbellAt && pickup.itemId === 'gym_dumbbell') {
         const req = juicer.requestDumbbellAt;
         const wcx = pickup.worldX + ts * 0.5;
         const wcy = pickup.worldY + ts * 0.5;
         if (Math.hypot(req.x - wcx, req.y - wcy) < ts) {
           pickup.active = false;
-          pickup.respawnTimer = RESPAWN['gym_dumbbell'];
+          pickup.respawnTimer = RESPAWN.gym_dumbbell;
           juicer.onDumbbellPickedUp();
         }
       }
     }
 
     // Update Juicer's nearestDumbbell pointer
-    if (juicer && juicer.isAlive) {
+    if (juicer?.isAlive) {
       const positions = this.getActiveDumbbellPositions();
       if (positions.length > 0) {
         const jcx = juicer.x + ts * 0.5;

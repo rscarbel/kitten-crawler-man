@@ -45,21 +45,21 @@ export class QuestManager {
 
   startQuest(id: string): void {
     const q = this.quests.get(id);
-    if (q && q.state.status === 'available') {
+    if (q?.state.status === 'available') {
       q.state.status = 'active';
     }
   }
 
   completeQuest(id: string): void {
     const q = this.quests.get(id);
-    if (q && q.state.status === 'active') {
+    if (q?.state.status === 'active') {
       q.state.status = 'completed';
     }
   }
 
   failQuest(id: string): void {
     const q = this.quests.get(id);
-    if (q && q.state.status === 'active') {
+    if (q?.state.status === 'active') {
       q.state.status = 'failed';
     }
   }

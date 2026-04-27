@@ -1,9 +1,9 @@
 import { TILE_SIZE } from '../core/constants';
 import { Mongo } from '../creatures/Mongo';
-import { CatPlayer } from '../creatures/CatPlayer';
-import { Mob } from '../creatures/Mob';
-import { SpatialGrid } from '../core/SpatialGrid';
-import { GameMap } from '../map/GameMap';
+import type { CatPlayer } from '../creatures/CatPlayer';
+import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import type { GameMap } from '../map/GameMap';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 
@@ -74,7 +74,7 @@ export class MongoSystem implements GameSystem {
     this.mongo.allMobs = mobs;
 
     // Check if Mongo's HP hit 0 from damage (not from recall completion)
-    if (!this.isRecalling && this.mongo.hp <= 0 && this.mongo.isAlive === false) {
+    if (!this.isRecalling && this.mongo.hp <= 0 && !this.mongo.isAlive) {
       // Mongo was killed by enemies — start recall
       // Actually his HP is 0 so he's dead. We need to catch before death.
       // Instead, check HP threshold before it reaches 0.

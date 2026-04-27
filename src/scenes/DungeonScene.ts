@@ -8,6 +8,7 @@ import { GameMap } from '../map/GameMap';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
 import { type Mob } from '../creatures/Mob';
+import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
@@ -396,7 +397,7 @@ export class DungeonScene extends GameplayScene {
       // Boss-specific effects (regular bosses managed by BossRoomSystem)
       if (mob.isBoss) {
         bus.emit('bossDefeated', {
-          bossType: (mob.constructor as { name?: string }).name ?? 'unknown',
+          bossType: mob.constructor.name || 'unknown',
           mob,
         });
       }
@@ -507,7 +508,6 @@ export class DungeonScene extends GameplayScene {
       isSuppressed: () =>
         this.pauseMenu.isOpen ||
         this.safeRoom.isSleeping ||
-        this.defendQuest.isSuppressed ||
         this.defendQuest.isDialogOpen ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
@@ -874,7 +874,6 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.menuOpen ||
       this.building?.menuOpen ||
       this.defendQuest.isDialogOpen ||
-      this.defendQuest.isSuppressed ||
       this.playerChat.isOpen
     )
       return;
@@ -1103,10 +1102,10 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       bossRoom: this.bossRoom,
       extraTargets: (() => {
-        const targets: import('../Player').Player[] = [];
+        const targets: Player[] = [];
         if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
         const npc = this.defendQuest.questNPC;
-        if (npc && npc.isAlive) targets.push(npc);
+        if (npc?.isAlive) targets.push(npc);
         return targets.length > 0 ? targets : undefined;
       })(),
     };
@@ -1303,7 +1302,7 @@ export class DungeonScene extends GameplayScene {
           active.inventory.bag.slots.find((s) => s?.id === id) ??
           active.inventory.actionBar.slots.find((s) => s?.id === id) ??
           null;
-        if (item?.equipSlot && item?.equipSubSlot) {
+        if (item?.equipSlot && item.equipSubSlot) {
           active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
           active.removeItemBonus(item);
         }
@@ -1333,7 +1332,6 @@ export class DungeonScene extends GameplayScene {
         this.stairwell.menuOpen ||
         (this.building?.menuOpen ?? false) ||
         this.defendQuest.isDialogOpen ||
-        this.defendQuest.isSuppressed ||
         this.playerChat.isOpen,
     };
   }
@@ -1450,7 +1448,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Dynamite charge start: hold hotbar slot to charge, release to throw
-      if (!this.gameOver && !this.pauseMenu.isOpen && this.human.isActive) {
+      if (this.human.isActive) {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
           this.dynamite.beginCharge(dynIdx);
@@ -1460,12 +1458,10 @@ export class DungeonScene extends GameplayScene {
       }
 
       // Inventory panel drag start + long-press for context menu
-      if (this.inventoryPanel.isOpen && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (this.inventoryPanel.isOpen) {
         if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
-          if (this.touch.inventoryDragTouchId === null) {
-            this.touch.inventoryDragTouchId = touch.identifier;
-          }
+          this.touch.inventoryDragTouchId ??= touch.identifier;
           // Start long-press timer for context menu (Drop, etc.)
           this.clearInvLongPress();
           this.touch.longPressPos = { x, y };
@@ -1566,9 +1562,8 @@ export class DungeonScene extends GameplayScene {
                 this.human.facingX = ddx / dist;
                 this.human.facingY = ddy / dist;
               }
-              const wasCharging = this.dynamite.isCharging;
               this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
-              if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
+              this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
               // Short tap: try UI click first, then space action
               this.handleClick(x, y);

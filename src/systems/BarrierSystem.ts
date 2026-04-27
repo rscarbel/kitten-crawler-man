@@ -1,7 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
-import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import {
@@ -51,13 +50,12 @@ export class BarrierSystem implements GameSystem {
   // Actions
 
   /** Start the 1-second construct animation for the given hotbar slot. */
-  beginConstruct(player: Player, hotbarIdx: number, itemId: ItemId): void {
+  beginConstruct(player: Player, hotbarIdx: number, itemId: BarrierItemId): void {
     if (this.pending) return; // Already constructing
-    const barrierItemId = itemId as BarrierItemId;
     this.pending = {
       player,
       hotbarIdx,
-      itemId: barrierItemId,
+      itemId,
       framesLeft: CONSTRUCT_FRAMES,
     };
   }
@@ -102,7 +100,7 @@ export class BarrierSystem implements GameSystem {
 
   private finishConstruct(c: PendingConstruct): void {
     // Remove one item from player inventory
-    const removed = c.player.inventory.removeOne(c.itemId as ItemId);
+    const removed = c.player.inventory.removeOne(c.itemId);
     if (!removed) return; // Player lost the item before construction finished
 
     const ts = TILE_SIZE;
@@ -115,13 +113,13 @@ export class BarrierSystem implements GameSystem {
     const occupied = this.barriers.some((b) => b.tileX === tileX && b.tileY === tileY);
     if (occupied) {
       // Refund the item
-      c.player.inventory.addItem(c.itemId as ItemId, 1);
+      c.player.inventory.addItem(c.itemId, 1);
       return;
     }
 
     if (!this.gameMap.isWalkable(tileX, tileY)) {
       // Refund
-      c.player.inventory.addItem(c.itemId as ItemId, 1);
+      c.player.inventory.addItem(c.itemId, 1);
       return;
     }
 
@@ -147,7 +145,7 @@ export class BarrierSystem implements GameSystem {
     const idx = this.barriers.findIndex((b) => b.tileX === ptx && b.tileY === pty);
     if (idx !== -1) {
       const b = this.barriers[idx];
-      player.inventory.addItem(b.itemId as ItemId, 1);
+      player.inventory.addItem(b.itemId, 1);
       this.barriers.splice(idx, 1);
       return true;
     }

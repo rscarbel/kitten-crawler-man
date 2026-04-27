@@ -1,5 +1,5 @@
+import type { TileContent } from './tileTypes';
 import {
-  TileContent,
   TREE,
   BUILDING_WALL,
   ROOF_THATCH,
@@ -79,7 +79,7 @@ function drawTile(
  * NOT cached — they're drawn separately in the overlay pass.
  */
 export class TileChunkCache {
-  private chunks: Map<number, OffscreenCanvas | HTMLCanvasElement> = new Map();
+  private chunks = new Map<number, OffscreenCanvas | HTMLCanvasElement>();
   private chunksX: number;
   private chunksY: number;
 
@@ -117,6 +117,7 @@ export class TileChunkCache {
       chunk.width = pw;
       chunk.height = ph;
     }
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-non-null-assertion
     const cctx = chunk.getContext('2d')! as CanvasRenderingContext2D;
 
     for (let y = tileY0; y < tileY1; y++) {

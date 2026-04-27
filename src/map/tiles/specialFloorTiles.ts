@@ -1,5 +1,5 @@
+import type { TileContent } from '../tileTypes';
 import {
-  TileContent,
   SAFE_ROOM_FLOOR,
   HORDER_BOSS_ROOM_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,

@@ -10,7 +10,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { BallOfSwine } from '../creatures/BallOfSwine';
-import { type Tuskling } from '../creatures/Tuskling';
+import { Tuskling } from '../creatures/Tuskling';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -53,18 +53,20 @@ export class ArenaSystem implements GameSystem {
       this.arenaLiveTusklings = [];
 
       const arena = this.gameMap.arenaExteriors[0];
-      const acx = arena ? arena.centre.x : Math.floor(e.mob.x / TILE_SIZE);
-      const acy = arena ? arena.centre.y : Math.floor(e.mob.y / TILE_SIZE);
+      const acx = arena.centre.x;
+      const acy = arena.centre.y;
 
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const r = 3;
         const tx = acx + Math.round(Math.cos(angle) * r);
         const ty = acy + Math.round(Math.sin(angle) * r);
-        const tusk = createMob('tuskling', tx, ty, this.gameMap) as Tuskling;
-        tusk.dazeTimer = 600;
-        this.addMob(tusk);
-        this.arenaLiveTusklings.push(tusk);
+        const mob = createMob('tuskling', tx, ty, this.gameMap);
+        if (mob instanceof Tuskling) {
+          mob.dazeTimer = 600;
+          this.addMob(mob);
+          this.arenaLiveTusklings.push(mob);
+        }
       }
     });
   }
@@ -75,7 +77,7 @@ export class ArenaSystem implements GameSystem {
 
     const arena = this.gameMap.arenaExteriors[0];
     const mobs = this.getMobs();
-    const bos = mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
+    const bos = mobs.find((m) => m instanceof BallOfSwine);
 
     if (bos) {
       const cx = arena.centre.x * TILE_SIZE;
@@ -120,17 +122,15 @@ export class ArenaSystem implements GameSystem {
     if (!this.hasArena) return;
 
     const mobs = this.getMobs();
-    const bos = mobs.find((m) => m instanceof BallOfSwine) as BallOfSwine | undefined;
+    const bos = mobs.find((m) => m instanceof BallOfSwine);
 
-    if (bos && bos.isAlive) {
+    if (bos?.isAlive) {
       const arena = this.gameMap.arenaExteriors[0];
-      if (arena) {
-        const distToArena = Math.hypot(
-          activePlayer.x - arena.centre.x * TILE_SIZE,
-          activePlayer.y - arena.centre.y * TILE_SIZE,
-        );
-        if (distToArena > (arena.radius + 5) * TILE_SIZE) return;
-      }
+      const distToArena = Math.hypot(
+        activePlayer.x - arena.centre.x * TILE_SIZE,
+        activePlayer.y - arena.centre.y * TILE_SIZE,
+      );
+      if (distToArena > (arena.radius + 5) * TILE_SIZE) return;
 
       const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
       const barW = Math.min(360, canvas.width * 0.5);

@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
-import type { InventoryItem } from './ItemDefs';
+import { HumanPlayer } from '../creatures/HumanPlayer';
+import type { InventoryItem, ItemId } from './ItemDefs';
 
 /** Serialisable snapshot of a single player's state, used when transitioning
  *  between scenes (e.g. entering/exiting a building interior). */
@@ -17,7 +18,7 @@ export interface PlayerSnapshot {
   facingY: number;
   inventorySlots: (InventoryItem | null)[];
   inventoryHotbar: (InventoryItem | null)[];
-  equippedEntries: [string, string][]; // Map entries as [key, ItemId]
+  equippedEntries: [string, ItemId][];
   explosivesHandling?: number;
 }
 
@@ -38,8 +39,8 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     inventoryHotbar: p.inventory.actionBar.slots.map((s) => (s ? { ...s } : null)),
     equippedEntries: [...p.inventory.equipment.equipped.entries()],
   };
-  if ('explosivesHandling' in p) {
-    snap.explosivesHandling = (p as { explosivesHandling: number }).explosivesHandling;
+  if (p instanceof HumanPlayer) {
+    snap.explosivesHandling = p.explosivesHandling;
   }
   return snap;
 }
@@ -56,8 +57,8 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.coins = snap.coins;
   p.facingX = snap.facingX;
   p.facingY = snap.facingY;
-  if ('explosivesHandling' in p && snap.explosivesHandling !== undefined) {
-    (p as { explosivesHandling: number }).explosivesHandling = snap.explosivesHandling;
+  if (p instanceof HumanPlayer && snap.explosivesHandling !== undefined) {
+    p.explosivesHandling = snap.explosivesHandling;
   }
 
   // Restore inventory slots
@@ -69,6 +70,6 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   }
   p.inventory.equipment.equipped.clear();
   for (const [k, v] of snap.equippedEntries) {
-    p.inventory.equipment.equipped.set(k, v as import('./ItemDefs').ItemId);
+    p.inventory.equipment.equipped.set(k, v);
   }
 }

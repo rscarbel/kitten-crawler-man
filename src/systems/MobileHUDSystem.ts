@@ -45,7 +45,7 @@ export class MobileHUDSystem implements GameSystem {
   private _bagBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   private _pauseBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   private _miniMapRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
-  private _extraBtnRects: Map<string, Rect> = new Map();
+  private _extraBtnRects = new Map<string, Rect>();
 
   // Interior minimap state
   private _miniMapExpanded = false;
@@ -171,8 +171,7 @@ export class MobileHUDSystem implements GameSystem {
     // Tiles
     for (let ty = 0; ty < mapH; ty++) {
       for (let tx = 0; tx < mapW; tx++) {
-        const tile = gameMap.structure[ty]?.[tx];
-        if (!tile) continue;
+        const tile = gameMap.structure[ty][tx];
         const px = mmX + offsetX + tx * pxPerTile;
         const py = mmY + offsetY + ty * pxPerTile;
         ctx.fillStyle = this.tileColor(tile.type);
@@ -181,15 +180,13 @@ export class MobileHUDSystem implements GameSystem {
     }
 
     // Exit tiles — yellow dots
-    if (gameMap._interiorExitTiles) {
-      ctx.fillStyle = '#facc15';
-      for (const t of gameMap._interiorExitTiles) {
-        const ex = mmX + offsetX + (t.x + 0.5) * pxPerTile;
-        const ey = mmY + offsetY + (t.y + 0.5) * pxPerTile;
-        ctx.beginPath();
-        ctx.arc(ex, ey, Math.max(1.5, pxPerTile * 0.4), 0, Math.PI * 2);
-        ctx.fill();
-      }
+    ctx.fillStyle = '#facc15';
+    for (const t of gameMap._interiorExitTiles) {
+      const ex = mmX + offsetX + (t.x + 0.5) * pxPerTile;
+      const ey = mmY + offsetY + (t.y + 0.5) * pxPerTile;
+      ctx.beginPath();
+      ctx.arc(ex, ey, Math.max(1.5, pxPerTile * 0.4), 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Companion — blue dot

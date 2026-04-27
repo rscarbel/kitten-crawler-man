@@ -2,7 +2,7 @@
 // If the server is not running, initialize() silently no-ops and the game
 // continues normally. All public methods are safe to call whether connected or not.
 
-import type { AIAction, ClientMessage, GameEventRecord, ServerMessage } from 'game-ai-server/sdk';
+import type { AIAction, ClientMessage, GameEventRecord } from 'game-ai-server/sdk';
 import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
 import { AI_TOOLS } from './aiTools';
@@ -84,7 +84,15 @@ export class AIAdapter {
         headers: { Authorization: `Basic ${b64}` },
       });
       if (!tokenRes.ok) return;
-      const { token } = (await tokenRes.json()) as { token: string };
+      const rawToken: unknown = await tokenRes.json();
+      if (
+        typeof rawToken !== 'object' ||
+        rawToken === null ||
+        !('token' in rawToken) ||
+        typeof rawToken.token !== 'string'
+      )
+        return;
+      const token = rawToken.token;
       this.authToken = token;
 
       // Register tool vocabulary and init the System character (idempotent)
@@ -129,9 +137,10 @@ export class AIAdapter {
         this.ws?.close();
       };
 
+      const ws = this.ws;
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('WS connect timeout')), 5_000);
-        this.ws!.addEventListener('open', () => {
+        ws.addEventListener('open', () => {
           clearTimeout(timeout);
           this.connected = true;
           // If a scene was already bound while we were connecting, start sending now
@@ -142,7 +151,7 @@ export class AIAdapter {
           }
           resolve();
         });
-        this.ws!.addEventListener('error', () => {
+        ws.addEventListener('error', () => {
           clearTimeout(timeout);
           reject(new Error('WS error'));
         });
@@ -184,18 +193,37 @@ export class AIAdapter {
   }
 
   private handleWsMessage(e: MessageEvent): void {
-    let msg: ServerMessage;
+    if (typeof e.data !== 'string') return;
+    let rawMsg: unknown;
     try {
-      msg = JSON.parse(e.data as string) as ServerMessage;
+      rawMsg = JSON.parse(e.data);
     } catch {
       return;
     }
+    if (typeof rawMsg !== 'object' || rawMsg === null || !('type' in rawMsg)) return;
 
-    if (msg.type === 'ai_chat') {
-      this.messages.add(msg.payload.text);
-    } else if (msg.type === 'ai_action' && this.sceneCtx) {
-      for (const action of msg.payload.actions) {
-        this.safeExecuteAction(action);
+    if (rawMsg.type === 'ai_chat') {
+      if (
+        'payload' in rawMsg &&
+        typeof rawMsg.payload === 'object' &&
+        rawMsg.payload !== null &&
+        'text' in rawMsg.payload &&
+        typeof rawMsg.payload.text === 'string'
+      ) {
+        this.messages.add(rawMsg.payload.text);
+      }
+    } else if (rawMsg.type === 'ai_action' && this.sceneCtx) {
+      if (
+        'payload' in rawMsg &&
+        typeof rawMsg.payload === 'object' &&
+        rawMsg.payload !== null &&
+        'actions' in rawMsg.payload &&
+        Array.isArray(rawMsg.payload.actions)
+      ) {
+        for (const rawAction of rawMsg.payload.actions) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+          this.safeExecuteAction(rawAction as AIAction);
+        }
       }
     }
   }
@@ -255,7 +283,7 @@ export class AIAdapter {
   }
 
   private wsSend(msg: ClientMessage): void {
-    if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.connected || this.ws?.readyState !== WebSocket.OPEN) return;
     this.ws.send(JSON.stringify(msg));
   }
 
@@ -306,7 +334,8 @@ export class AIAdapter {
   }
 
   private subscribeToEvents(bus: EventBus): void {
-    const ctx = this.sceneCtx!;
+    if (!this.sceneCtx) return;
+    const ctx = this.sceneCtx;
 
     this.eventUnsubs.push(
       bus.on('mobKilled', (e) => {
@@ -519,9 +548,16 @@ export class AIAdapter {
         },
       );
       if (!res.ok) return;
-      const data = (await res.json()) as { chat: string | null; actions?: AIAction[] };
-      if (data.chat) this.messages.add(data.chat);
-      for (const action of data.actions ?? []) this.safeExecuteAction(action);
+      const rawData: unknown = await res.json();
+      if (typeof rawData === 'object' && rawData !== null) {
+        if ('chat' in rawData && typeof rawData.chat === 'string') this.messages.add(rawData.chat);
+        if ('actions' in rawData && Array.isArray(rawData.actions)) {
+          for (const rawAction of rawData.actions) {
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+            this.safeExecuteAction(rawAction as AIAction);
+          }
+        }
+      }
     } catch {
       // Server unavailable — silently ignore
     }
@@ -550,10 +586,15 @@ export class AIAdapter {
         },
       );
       if (!res.ok) return;
-      const data = (await res.json()) as { chat: string | null; actions?: AIAction[] };
-      if (data.chat) this.messages.add(data.chat);
-      for (const action of data.actions ?? []) {
-        this.safeExecuteAction(action);
+      const rawData: unknown = await res.json();
+      if (typeof rawData === 'object' && rawData !== null) {
+        if ('chat' in rawData && typeof rawData.chat === 'string') this.messages.add(rawData.chat);
+        if ('actions' in rawData && Array.isArray(rawData.actions)) {
+          for (const rawAction of rawData.actions) {
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+            this.safeExecuteAction(rawAction as AIAction);
+          }
+        }
       }
     } catch {
       // Server unavailable — silently ignore
@@ -603,8 +644,16 @@ export class AIAdapter {
         },
       );
       if (!res.ok) return fallback;
-      const data = (await res.json()) as { chat: string | null };
-      return data.chat ?? fallback;
+      const rawData: unknown = await res.json();
+      if (
+        typeof rawData === 'object' &&
+        rawData !== null &&
+        'chat' in rawData &&
+        typeof rawData.chat === 'string'
+      ) {
+        return rawData.chat;
+      }
+      return fallback;
     } catch {
       return fallback;
     }
@@ -620,10 +669,21 @@ export class AIAdapter {
     const stored = localStorage.getItem(CREDS_KEY);
     if (stored) {
       try {
-        return JSON.parse(stored) as StoredCredentials;
+        const rawParsed: unknown = JSON.parse(stored);
+        if (
+          typeof rawParsed === 'object' &&
+          rawParsed !== null &&
+          'clientId' in rawParsed &&
+          typeof rawParsed.clientId === 'string' &&
+          'clientSecret' in rawParsed &&
+          typeof rawParsed.clientSecret === 'string'
+        ) {
+          return { clientId: rawParsed.clientId, clientSecret: rawParsed.clientSecret };
+        }
       } catch {
-        localStorage.removeItem(CREDS_KEY);
+        // fall through
       }
+      localStorage.removeItem(CREDS_KEY);
     }
 
     const res = await fetch(`${SERVER_URL}/api/clients/self-register`, {
@@ -632,10 +692,19 @@ export class AIAdapter {
       body: JSON.stringify({ game_name: 'kitten-crawler-man' }),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { client_id: string; client_secret: string };
+    const rawData: unknown = await res.json();
+    if (
+      typeof rawData !== 'object' ||
+      rawData === null ||
+      !('client_id' in rawData) ||
+      typeof rawData.client_id !== 'string' ||
+      !('client_secret' in rawData) ||
+      typeof rawData.client_secret !== 'string'
+    )
+      return null;
     const creds: StoredCredentials = {
-      clientId: data.client_id,
-      clientSecret: data.client_secret,
+      clientId: rawData.client_id,
+      clientSecret: rawData.client_secret,
     };
     localStorage.setItem(CREDS_KEY, JSON.stringify(creds));
     return creds;
@@ -657,41 +726,47 @@ function playerSnapshot(p: Player) {
     isActive: p.isActive,
     isProtected: p.isProtected,
     statusEffects: p.statusEffects.map((e) => e.type),
-    inventory: p.inventory.bag.slots.filter(Boolean).map((s) => s!.id),
+    inventory: p.inventory.bag.slots
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .map((s) => s.id),
   };
+}
+
+function toStr(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
 }
 
 function describeAction(action: AIAction): string {
   switch (action.type) {
     case 'spawn_mob': {
       const count = Math.min(Math.max(1, Number(action.count) || 1), 20);
-      const mob = String(action.mob_type ?? 'goblin').replace(/_/g, ' ');
-      return `spawned ${count}x ${mob} near ${action.target_player ?? 'player'}`;
+      const mob = toStr(action.mob_type, 'goblin').replace(/_/g, ' ');
+      return `spawned ${count}x ${mob} near ${toStr(action.target_player, 'player')}`;
     }
     case 'teleport_player':
-      return `teleported ${action.target_player ?? 'player'}`;
+      return `teleported ${toStr(action.target_player, 'player')}`;
     case 'apply_status':
-      return `applied ${action.status} to ${action.target_player ?? 'player'}`;
+      return `applied ${action.status} to ${toStr(action.target_player, 'player')}`;
     case 'remove_status':
-      return `removed ${action.status} from ${action.target_player ?? 'player'}`;
+      return `removed ${action.status} from ${toStr(action.target_player, 'player')}`;
     case 'give_item': {
       const qty = Math.min(Math.max(1, Number(action.quantity) || 1), 99);
-      const id = String(action.item_id ?? '').replace(/_/g, ' ');
-      return `gave ${id} x${qty} to ${action.target_player ?? 'player'}`;
+      const id = toStr(action.item_id, '').replace(/_/g, ' ');
+      return `gave ${id} x${qty} to ${toStr(action.target_player, 'player')}`;
     }
     case 'remove_item': {
-      const id = String(action.item_id ?? '').replace(/_/g, ' ');
-      return `removed ${id} from ${action.target_player ?? 'player'}`;
+      const id = toStr(action.item_id, '').replace(/_/g, ' ');
+      return `removed ${id} from ${toStr(action.target_player, 'player')}`;
     }
     case 'set_hp':
-      return `set ${action.target_player ?? 'player'} HP to ${action.hp}`;
+      return `set ${toStr(action.target_player, 'player')} HP to ${action.hp}`;
     case 'modify_stat': {
       const delta = Number(action.delta);
       const sign = delta >= 0 ? '+' : '';
-      return `${sign}${delta} ${action.stat} for ${action.target_player ?? 'player'}`;
+      return `${sign}${delta} ${action.stat} for ${toStr(action.target_player, 'player')}`;
     }
     default:
-      return (action as { type: string }).type.replace(/_/g, ' ');
+      return 'unknown action';
   }
 }
 

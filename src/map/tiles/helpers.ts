@@ -1,6 +1,6 @@
+import type { TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
-  TileContent,
   SAFE_ROOM_FLOOR,
   BUILDING_WALL,
   METAL_WALL,
@@ -67,8 +67,10 @@ export function inferGroundColor(structure: TileContent[][], tx: number, ty: num
   let hasTileFloor = false;
   let hasConcrete = false;
   for (const [dx, dy] of dirs) {
-    const n = structure[ty + dy]?.[tx + dx];
-    if (!n) continue;
+    const ny = ty + dy;
+    const nx = tx + dx;
+    if (ny < 0 || ny >= structure.length || nx < 0 || nx >= structure[ny].length) continue;
+    const n = structure[ny][nx];
     if (n.type === FloorTypeValue.road || n.type === DIRT_PATCH) hasRoad = true;
     else if (n.type === SAFE_ROOM_FLOOR) hasSafe = true;
     else if (n.type === FloorTypeValue.wood) hasWood = true;
@@ -95,13 +97,11 @@ export function drawWallShadow(
   tx: number,
   ty: number,
 ) {
-  const above = structure[ty - 1]?.[tx];
-  if (above && SHADOW_TYPES.has(above.type)) {
+  if (ty > 0 && SHADOW_TYPES.has(structure[ty - 1][tx].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
     ctx.fillRect(sx, sy, ts, 8);
   }
-  const left = structure[ty]?.[tx - 1];
-  if (left && SHADOW_TYPES.has(left.type)) {
+  if (tx > 0 && SHADOW_TYPES.has(structure[ty][tx - 1].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.fillRect(sx, sy, 6, ts);
   }

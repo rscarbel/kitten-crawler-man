@@ -1,5 +1,6 @@
-import { Player } from '../Player';
-import { Mob, LootDrop } from './Mob';
+import type { Player } from '../Player';
+import type { LootDrop } from './Mob';
+import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import {

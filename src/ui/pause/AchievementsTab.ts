@@ -1,6 +1,5 @@
 import type { AchievementManager } from '../../core/AchievementManager';
-import { ACHIEVEMENT_DEFS } from '../../core/AchievementManager';
-import type { AchievementId } from '../../core/AchievementManager';
+import { ACHIEVEMENT_DEFS, isAchievementId } from '../../core/AchievementManager';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 
 function tierColor(tier: string): string {
@@ -38,11 +37,13 @@ function renderPlayerAchievements(
   ctx.fillText(label, bx + 16, startY + 12);
   let oy = startY + 20;
 
-  const relevant = (Object.keys(ACHIEVEMENT_DEFS) as AchievementId[]).filter((id) => {
-    const pt = ACHIEVEMENT_DEFS[id].playerType;
-    if (pt !== 'both' && pt !== playerTarget) return false;
-    return manager?.isUnlocked(id) ?? false;
-  });
+  const relevant = Object.keys(ACHIEVEMENT_DEFS)
+    .filter(isAchievementId)
+    .filter((id) => {
+      const pt = ACHIEVEMENT_DEFS[id].playerType;
+      if (pt !== 'both' && pt !== playerTarget) return false;
+      return manager?.isUnlocked(id) ?? false;
+    });
 
   if (relevant.length === 0) {
     ctx.font = '10px monospace';

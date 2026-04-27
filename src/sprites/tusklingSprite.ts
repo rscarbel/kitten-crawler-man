@@ -21,7 +21,7 @@ export function drawTusklingSprite(
   isMoving = false,
   chargeWindup = 0,
   facingX = 0,
-  facingY = 1,
+  _facingY = 1,
 ): void {
   const cs = s * 1.1;
   const cx = sx + s * 0.5;

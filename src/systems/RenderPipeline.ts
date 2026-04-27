@@ -182,7 +182,7 @@ export class RenderPipeline {
       if (item.kind === DRAW_KIND_DECO) {
         gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX, camY);
       } else {
-        item.entity!.render(ctx, camX, camY, TILE_SIZE);
+        item.entity?.render(ctx, camX, camY, TILE_SIZE);
       }
     }
   }

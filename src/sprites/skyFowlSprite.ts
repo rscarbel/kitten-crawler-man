@@ -44,7 +44,7 @@ export function drawSkyFowlSprite(
   isMoving = false,
   isAggressive = false,
   facingX = 0,
-  facingY = 1,
+  _facingY = 1,
   cloth: SkyFowlClothColors,
   peckAmt = 0,
 ): void {
@@ -184,10 +184,11 @@ export function drawSkyFowlSprite(
   ctx.strokeStyle = talonCol;
   ctx.lineWidth = cs * 0.04;
   ctx.lineCap = 'round';
-  for (const [fx, fy] of [
+  const feet: Array<[number, number]> = [
     [leftFootX, footY],
     [rightFootX, footY],
-  ] as [number, number][]) {
+  ];
+  for (const [fx, fy] of feet) {
     // Three forward talons
     for (let t = -1; t <= 1; t++) {
       ctx.beginPath();

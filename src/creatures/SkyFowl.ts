@@ -1,5 +1,5 @@
 import { Mob } from './Mob';
-import { Player } from '../Player';
+import type { Player } from '../Player';
 import {
   drawSkyFowlSprite,
   SKY_FOWL_PALETTES,

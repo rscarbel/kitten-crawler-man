@@ -1,5 +1,5 @@
+import type { TileContent } from '../tileTypes';
 import {
-  TileContent,
   TREE,
   BUILDING_WALL,
   ROOF_THATCH,
