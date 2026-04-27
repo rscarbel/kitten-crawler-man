@@ -5,3 +5,4 @@ memory
 .port_sessions
 .env
 game.db*
+.DS_Store

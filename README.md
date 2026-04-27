@@ -1,27 +1,86 @@
 # Kitten Crawler Man
 
-A browser-based dungeon crawler built with TypeScript. You control a human and a cat companion as they explore a procedurally generated dungeon, fight goblins, rats, and lava-spitting llamas, and level up their stats.
+A browser-based dungeon crawler built with TypeScript and HTML5 Canvas. Control a human and cat companion as they explore procedurally generated dungeons, fight bosses, collect loot, complete quests, and venture into an overworld town — all rendered with hand-drawn canvas sprites.
+
+**[Play it here](https://rscarbel.github.io/kitten-crawler-man/)**
 
 ---
 
-## Running the Game
+## Running Locally
 
 ```bash
 npm install      # first time only
-npm run build    # compiles TypeScript → dist/bundle.js (~2ms)
+npm run build    # compiles TypeScript → dist/bundle.js (~5ms)
 ```
 
-Then open `index.html` in a browser. No server needed — just open the file.
+Open `index.html` in a browser. No server needed.
 
-**Controls**
+---
+
+## Controls
 
 | Key               | Action                               |
 | ----------------- | ------------------------------------ |
-| WASD / Arrow keys | Move                                 |
+| WASD / Arrow Keys | Move                                 |
 | Tab               | Switch between Human and Cat         |
-| Space             | Attack (punch/kick or magic missile) |
+| Space             | Attack (melee or magic missile)      |
 | Q                 | Drink a health potion                |
+| G                 | Open gear (equipment) panel          |
+| I                 | Open inventory (bag) panel           |
+| M                 | Expand / collapse minimap            |
 | Esc               | Pause / menu                         |
+
+Mobile: touch controls with on-screen buttons for all actions.
+
+---
+
+## Features
+
+### Two Playable Characters
+- **Human** — melee fighter, strength-based damage, can throw dynamite
+- **Cat** — ranged magic missiles, intelligence-based damage, auto-kites enemies
+
+Switch between them with Tab. The inactive character auto-follows and auto-fights.
+
+### Three Levels
+
+**Level 1: The Dungeon** — Procedurally generated rooms and hallways. Goblins, rats, and lava-spitting llamas roam the corridors. Two boss rooms await: TheHoarder and the Juicer.
+
+**Level 2: Safe Haven** — A larger dungeon with tougher enemies (troglodytes, llamas, goblins). Features the Krakaren Clone boss and an arena with the Ball of Swine. Brindle Grubs spawn on mob kills.
+
+**Level 3: The Overworld** — An outdoor town with grass, roads, forests, a town square, and enterable buildings (houses, a tower, and Mordecai's Kitchen restaurant). Sky Fowl roam the outskirts.
+
+### Bosses
+- **TheHoarder** — Melee boss, drops the Trollskin Shirt
+- **Juicer** — Throws dumbbells, enrages at 40% HP, drops the Enchanted Crown of the Sepsis Whore
+- **Krakaren Clone** — Arena boss encounter
+- **Ball of Swine** — Orbiting arena boss (280 HP), contact kills while moving, vulnerable when stopped by barriers. Spawns 8 dazed Tusklings on death
+
+### Combat & Stats
+
+Three stats — STR (melee damage), INT (missile damage), CON (+2 max HP per point). Kill enemies for XP (85% to top damage dealer, 15% to the other character). Level up to earn skill points, allocated in the pause menu.
+
+Status effects: Burn, Poison (from troglodytes), Sepsis (from the Enchanted Crown).
+
+### Equipment & Items
+- **Trollskin Shirt** — 2.5x health regen, negates melee debuffs, +3 CON
+- **Enchanted Crown** — +5 INT, 15% chance to inflict permanent Sepsis on hit
+- **Goblin Dynamite** — Throwable AoE (3-tile radius, 8 dmg, friendly fire). Hold to charge, release to throw
+- **Gym Equipment** — Dumbbells, bench presses, treadmills. Place them to create barrier zones that slow enemies to 35% speed
+- **Scroll of Confusing Fog** — Blinds enemies for INT x 5 seconds
+- **Health Potions** — Restore HP
+
+### Buildings & Interiors
+Walk up to a building door in the overworld to enter. Interiors include houses, a tower, and a restaurant that doubles as a safe room with Mordecai the NPC, a bed for sleeping, and a shop.
+
+### Quests
+Quest system with NPC interactions. Includes the Defend Quest — protect an NPC from waves of enemies.
+
+### Achievements & Loot Boxes
+Six achievements (First Blood, Boss Slayer, Smush, Safe Haven, Magic Touch, Guardian Angel) that award loot boxes. Boxes can only be opened in safe rooms and contain potions, coins, and bonus items.
+
+### Minimap
+Fog of war that reveals as you explore. Shows corpse markers, NPC positions, boss rooms, and stairwells. Expandable with M key or tap on mobile.
 
 ---
 
@@ -29,392 +88,141 @@ Then open `index.html` in a browser. No server needed — just open the file.
 
 ```
 src/
-  game.ts                  ← entry point (7 lines): creates InputManager, SceneManager, starts level 1
-  Player.ts                ← base class for every entity (players + enemies)
-  core/
-    constants.ts           ← TILE_SIZE, speeds, and other numeric constants
-    InputManager.ts        ← raw keyboard state (which keys are held down)
-    Scene.ts               ← Scene base class + SceneManager (owns the canvas, runs the loop)
-  scenes/
-    DungeonScene.ts        ← all gameplay: movement, AI, combat, camera, rendering
-  levels/
-    types.ts               ← LevelDef and MobSpawnRule interfaces
-    level1.ts              ← level 1 data: which mobs spawn, map size
-    spawner.ts             ← mob factory: turns a LevelDef + map into a Mob[]
-    index.ts               ← level registry (look up levels by id)
-  map/
-    GameMap.ts             ← map generation, tile grid, A* pathfinding, tile rendering
-  ui/
-    HUD.ts                 ← HP/XP bars, control hints, skill-point notification
-    PauseMenu.ts           ← pause overlay with inventory / stats / spend tabs
-    DeathScreen.ts         ← "YOU DIED" fade-in overlay and restart button
-  creatures/
-    HumanPlayer.ts         ← the blue-shirt human you play as
-    CatPlayer.ts           ← the orange cat companion
-    Mob.ts                 ← base class for all enemies (A*, wander, LOS, damage tracking)
-    Goblin.ts              ← melee goblin enemy
-    Rat.ts                 ← fast, short-range rat enemy
-    Llama.ts               ← ranged lava-spitting llama enemy
-  sprites/
-    goblinSprite.ts        ← drawing code for the goblin
-    ratSprite.ts           ← drawing code for the rat
-    llamaSprite.ts         ← drawing code for the llama
-    humanSprite.ts         ← drawing code for the human
-    catSprite.ts           ← drawing code for the cat and magic missiles
+├── game.ts                    ← entry point: InputManager + SceneManager + DungeonScene
+├── Player.ts                  ← base class for all entities (players + enemies)
+├── core/
+│   ├── constants.ts           ← TILE_SIZE=32, speeds, combat parameters
+│   ├── InputManager.ts        ← raw keyboard state
+│   ├── Scene.ts               ← Scene base class + SceneManager (canvas, rAF loop)
+│   ├── Inventory.ts           ← item management, hotbar, equipment
+│   ├── ItemDefs.ts            ← item database with stat bonuses
+│   ├── StatusEffect.ts        ← Burn, Poison, Sepsis effects
+│   ├── AchievementManager.ts  ← achievement tracking + loot box rewards
+│   ├── QuestManager.ts        ← quest state machine
+│   ├── EventBus.ts            ← decoupled system communication
+│   ├── PlayerSnapshot.ts      ← serializes player state for scene transitions
+│   └── SpatialGrid.ts         ← spatial partitioning for collision checks
+├── scenes/
+│   ├── DungeonScene.ts        ← main gameplay orchestrator (~1,400 lines)
+│   ├── BuildingInteriorScene.ts ← interior exploration when entering buildings
+│   └── GameplayScene.ts       ← shared gameplay logic
+├── systems/                   ← ~30 modular game systems
+│   ├── CombatSystem.ts        ← damage resolution, sepsis proc
+│   ├── CompanionSystem.ts     ← cat AI: kiting, following, auto-attack
+│   ├── MiniMapSystem.ts       ← fog of war, corpse markers
+│   ├── SafeRoomSystem.ts      ← rest, sleep, Mordecai NPC
+│   ├── BossRoomSystem.ts      ← boss room state, cockroach spawning
+│   ├── ArenaSystem.ts         ← Ball of Swine arena encounters
+│   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode
+│   ├── SpellSystem.ts         ← protective shell, confusing fog
+│   ├── BarrierSystem.ts       ← gym item placement, mob slow zones
+│   ├── JuicerRoomSystem.ts    ← gym equipment spawns + Juicer coordination
+│   ├── LootSystem.ts          ← item drops, TTL, auto-collect
+│   ├── StairwellSystem.ts     ← level transitions
+│   ├── BuildingSystem.ts      ← door detection, entry prompts
+│   ├── ShopSystem.ts          ← buying/selling items
+│   ├── DefendQuestSystem.ts   ← defense quest with NPC protection
+│   ├── GoreSystem.ts          ← blood/death effects
+│   ├── RenderPipeline.ts      ← draw ordering
+│   ├── MobileHUDSystem.ts     ← mobile-specific UI buttons
+│   └── ...
+├── levels/
+│   ├── types.ts               ← LevelDef and MobSpawnRule interfaces
+│   ├── level1.ts              ← "The Dungeon" (goblins, llamas, rats)
+│   ├── level2.ts              ← "Safe Haven" (troglodytes, Krakaren, Ball of Swine)
+│   ├── level3.ts              ← "The Overworld" (outdoor town, buildings)
+│   ├── spawner.ts             ← mob factory: LevelDef + map → Mob[]
+│   └── index.ts               ← level registry
+├── map/
+│   └── GameMap.ts             ← dungeon/overworld generation, A* pathfinding, tile rendering
+├── creatures/
+│   ├── HumanPlayer.ts         ← melee fighter
+│   ├── CatPlayer.ts           ← ranged magic cat
+│   ├── Mob.ts                 ← enemy AI base (aggro, pathfinding, LOS)
+│   ├── Goblin.ts, Rat.ts, Llama.ts
+│   ├── TheHoarder.ts, Juicer.ts
+│   ├── Troglodyte.ts          ← poison tongue attack
+│   ├── BallOfSwine.ts         ← orbiting arena boss
+│   ├── Tuskling.ts, Cockroach.ts
+│   ├── KrakarenClone.ts, BrindleGrub.ts
+│   ├── SkyFowl.ts, Bugaboo.ts, Mongo.ts
+│   ├── QuestNPC.ts, NonCombatantNPC.ts
+│   └── ...
+├── sprites/                   ← ~21 sprite renderers (all Canvas 2D drawing)
+│   ├── humanSprite.ts, catSprite.ts
+│   ├── goblinSprite.ts, llamaSprite.ts, ratSprite.ts
+│   ├── hoarderSprite.ts, juicerSprite.ts
+│   ├── ballOfSwineSprite.ts, troglodyteSprite.ts
+│   ├── dynamiteSprite.ts, gymEquipmentSprite.ts
+│   └── ...
+├── ui/
+│   ├── HUD.ts                 ← HP/XP bars, control hints
+│   ├── PauseMenu.ts           ← pause overlay with tabs
+│   ├── DeathScreen.ts         ← game over screen
+│   ├── AchievementNotification.ts ← achievement unlock overlay
+│   ├── LootBoxOpener.ts       ← animated loot reveal
+│   ├── InteractionPrompt.ts   ← "Press X" hints
+│   └── pause/                 ← GearPanel, InventoryPanel
+└── utils.ts
 dist/
-  bundle.js                ← compiled output (generated by build)
-index.html                 ← loads the canvas and bundle.js
+  bundle.js                    ← compiled output
+index.html                     ← loads canvas + bundle.js
 ```
 
 ---
 
-## Core Concepts (No Game Dev Experience Needed)
+## Architecture
 
-### The Game Loop
+**No framework** — everything is Canvas 2D API calls. No DOM manipulation, no images, no external assets.
 
-A game doesn't just run once — it runs the same code over and over, about 60 times per second. Each pass through this loop is called a **frame**.
+**Game loop**: `SceneManager` runs `update()` + `render()` at 60 FPS via `requestAnimationFrame`. The active `Scene` (usually `DungeonScene`) orchestrates all gameplay.
 
-Every frame:
-
-1. **Update** — read player input, move characters, run enemy AI, check for hits
-2. **Render** — draw everything to the screen
-
-In this project the loop is managed by `SceneManager` in `core/Scene.ts`, and the active scene (`DungeonScene`) decides each frame whether to run gameplay logic:
-
-```ts
-// core/Scene.ts — SceneManager runs this every frame
-private loop(): void {
-  this.current?.update();
-  this.current?.render(this.ctx);
-  requestAnimationFrame(() => this.loop()); // schedules the next frame
-}
-
-// scenes/DungeonScene.ts — skips gameplay while paused or game over
-update(): void {
-  if (this.gameOver || this.pauseMenu.isOpen) return;
-  this.updateGameplay();
-}
+**Entity hierarchy**:
+```
+Player (base: position, HP, stats, walk animation)
+├── HumanPlayer
+├── CatPlayer
+└── Mob (AI: aggro, pathfinding, LOS, health bar)
+    ├── Goblin, Rat, Llama, Troglodyte, ...
+    ├── TheHoarder, Juicer (bosses)
+    └── BallOfSwine, KrakarenClone (arena bosses)
 ```
 
-`requestAnimationFrame` is a browser API that calls your function right before the next screen repaint, keeping animations smooth.
+**Modular systems**: ~30 independent `GameSystem` subclasses plugged into `DungeonScene` via composition. Each system owns its own state and rendering. Systems communicate through an `EventBus`.
+
+**Map generation**: procedural dungeon rooms + L-shaped hallways, boss rooms, safe rooms, arenas, and an overworld with roads, buildings, and forests.
+
+**Pathfinding**: A* with cached paths (recalculated every ~30 frames). Line-of-sight checks for attack validation.
 
 ---
 
-### Tiles and the Grid
+## Adding Content
 
-The world is a **100×100 grid of tiles**. Each tile is a square of 32 pixels. Think of it like a spreadsheet where each cell is a floor, a wall, water, etc.
+### New Enemy
 
-```
-Tile types:
-  grass (0)      — outdoors, walkable
-  road (1)       — walkable path
-  wall (2)       — solid, blocks movement
-  water (4)      — not walkable
-  concrete (5)   — dungeon hallway floor
-  tile_floor (6) — ceramic floor (rooms)
-  carpet (7)     — carpet floor (rooms)
-  wood (8)       — hardwood floor (rooms)
-  void (9)       — black border, never walkable
-```
+1. Create sprite: `src/sprites/myEnemySprite.ts`
+2. Create class: `src/creatures/MyEnemy.ts` extending `Mob`, implement `updateAI()` and `render()`
+3. Register in `src/levels/spawner.ts` and add the type to `src/levels/types.ts`
+4. Add to a level definition in `src/levels/`
 
-The grid is stored as a 2D array in `GameMap.structure[row][col]` (`src/map/GameMap.ts`).
+### New Level
 
----
+1. Create `src/levels/levelN.ts` with a `LevelDef`
+2. Register in `src/levels/index.ts`
+3. Transition via `sceneManager.replace(new DungeonScene(...))`
 
-### Pixel Coordinates vs Tile Coordinates
+### New Item
 
-The game uses two coordinate systems that you'll see everywhere:
-
-- **Tile coords** — which cell in the grid, e.g. tile (5, 3)
-- **Pixel coords** — actual screen position, e.g. x=160, y=96 (= tile 5×32, tile 3×32)
-
-Converting between them:
-
-```ts
-// Tile → pixel (top-left corner of the tile)
-pixelX = tileX * TILE_SIZE; // TILE_SIZE = 32
-
-// Pixel → tile (which tile contains this pixel)
-tileX = Math.floor(pixelX / TILE_SIZE);
-```
-
-Entity positions (`player.x`, `player.y`, `mob.x`, etc.) are always in **pixel** coordinates. Walkability checks use **tile** coordinates.
+1. Add to `ItemId` union and `ITEM_DEF` record in `src/core/Inventory.ts`
+2. Add mob loot drop in the creature's `rollLootItems()`
+3. Add hotbar activation in `DungeonScene.onEnter()`
+4. Add inventory icon in `InventoryPanel.renderItemIcon()`
 
 ---
 
-### The Canvas
-
-Instead of HTML elements like `<div>` and `<img>`, this game draws everything manually onto an HTML `<canvas>` element using the Canvas 2D API. Every frame, the canvas is cleared and redrawn from scratch.
-
-```ts
-ctx.fillStyle = '#6de89d'; // set colour
-ctx.fillRect(sx, sy, ts, ts); // draw a filled rectangle
-ctx.beginPath();
-ctx.arc(cx, cy, r, 0, Math.PI * 2); // draw a circle outline
-ctx.fill();
-```
-
-Everything you see — tiles, characters, health bars, the HUD — is drawn this way.
-
----
-
-### The Camera
-
-The map is 3200×3200 pixels (100 tiles × 32px), far bigger than the screen. The camera is just an offset (`camX`, `camY`) — the world-pixel position of the top-left corner of the screen.
-
-When rendering, every world position is adjusted by the camera:
-
-```ts
-const screenX = entity.x - camX;
-const screenY = entity.y - camY;
-```
-
-The camera is centred on whichever character is active, clamped so it never shows beyond the map edges.
-
----
-
-### Dungeon Generation
-
-The dungeon is generated fresh each time you start or restart. The algorithm lives in `src/map/GameMap.ts`:
-
-1. Fill the entire grid with walls
-2. Place a black void border around the edges
-3. Randomly place up to 15 rectangular rooms (8–16 tiles wide, 7–14 tiles tall), rejecting any that overlap
-4. Connect each room to the previous one with an L-shaped hallway (3 tiles wide)
-5. Record the centre of room 0 as the player spawn, and the centres of all other rooms as mob spawn points
-6. Pick hallway tiles far from rooms as rat spawn points
-
----
-
-### The Entity Hierarchy
-
-All moving things inherit from a chain of classes:
-
-```
-Player (base)
-├── HumanPlayer    ← the human you control
-├── CatPlayer      ← the cat companion
-└── Mob (base for enemies)
-    ├── Goblin
-    ├── Rat
-    └── Llama
-```
-
-`Player` holds the common state every entity needs: position (`x`, `y`), HP, facing direction, walk animation frame, and methods like `takeDamage()` and `followTarget()`.
-
-`Mob` extends `Player` with enemy-specific logic: aggro range, pathfinding, health bar display, and the abstract `updateAI()` method that each enemy must implement.
-
----
-
-### Movement and Wall Collision
-
-Characters move in pixel space, but walls are in tile space. The collision check happens **per-axis** so entities can slide along walls:
-
-```ts
-// Try X movement
-if (map.isWalkable(nextTileX, currentTileY)) entity.x = nextX;
-
-// Try Y movement separately
-if (map.isWalkable(currentTileX, nextTileY)) entity.y = nextY;
-```
-
-Checking axes separately means if you're moving diagonally into a corner, you'll slide along the wall instead of stopping dead.
-
----
-
-### Enemy AI
-
-Each enemy runs its `updateAI()` method every frame. The general pattern:
-
-1. **Find a target** — scan all players, pick the nearest one within aggro range
-2. **Navigate** — if no clear path to the target, use A\* pathfinding to route around walls
-3. **Attack** — when close enough and the cooldown is ready, deal damage
-
-**Aggro ranges** (in tiles):
-
-- Goblin: 6 tiles
-- Llama: 8 tiles
-- Rat: 3 tiles
-
-**A\* Pathfinding**
-
-When enemies need to navigate around corners they use A\* (pronounced "A-star"), a standard algorithm for finding shortest paths through a grid. It works like this:
-
-- Start at the enemy's tile, goal is the player's tile
-- Explore neighbouring tiles, preferring those that are closer to the goal
-- Build up the shortest route, then follow it one tile at a time
-- Recalculate every ~30 frames in case the player has moved
-
-The path is cached between recalculations, so running many enemies is still fast.
-
-**Line of Sight (LOS)**
-
-Before attacking, an enemy checks whether there is a clear line from itself to the player — no walls in between. This is done by stepping along the line segment in small increments and checking if any tile is a wall.
-
-Exception: if the enemy is **on the same tile** as the player, the attack always lands regardless of LOS (you can't dodge something that's already on top of you).
-
----
-
-### Stats and Levelling
-
-Each character has three stats:
-
-| Stat               | Effect                          |
-| ------------------ | ------------------------------- |
-| STR (Strength)     | Increases melee damage          |
-| INT (Intelligence) | Increases magic missile damage  |
-| CON (Constitution) | Increases max HP by 2 per point |
-
-Killing enemies awards XP, split proportionally by how much damage each character dealt. At each level-up you get 1 unspent skill point to assign in the pause menu.
-
----
-
-## How to Add a New Enemy
-
-1. **Create the sprite** — add a file `src/sprites/myEnemySprite.ts` with a `drawMyEnemySprite(ctx, x, y, tileSize, ...)` function using canvas draw calls.
-
-2. **Create the enemy class** — add `src/creatures/MyEnemy.ts`:
-
-```ts
-import { Mob } from './Mob';
-import { Player } from '../Player';
-import { drawMyEnemySprite } from '../sprites/myEnemySprite';
-
-const MY_ENEMY_HP = 5;
-const MY_ENEMY_SPEED = 1.5;
-const AGGRO_TILES = 5;
-const ATTACK_TILES = 1.0;
-const ATTACK_COOLDOWN = 80; // frames (~1.3 s at 60 fps)
-
-export class MyEnemy extends Mob {
-  readonly xpValue = 4;
-  private attackCooldown = 0;
-  private readonly aggroRangePx: number;
-  private readonly attackRangePx: number;
-
-  constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, MY_ENEMY_HP, MY_ENEMY_SPEED);
-    this.aggroRangePx = tileSize * AGGRO_TILES;
-    this.attackRangePx = tileSize * ATTACK_TILES;
-  }
-
-  updateAI(targets: Player[]) {
-    if (!this.isAlive) return;
-    if (this.attackCooldown > 0) this.attackCooldown--;
-
-    // Find nearest target in aggro range
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < this.aggroRangePx && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
-
-    this.currentTarget = nearest;
-    if (!nearest) {
-      this.clearAStarPath();
-      this.doWander();
-      return;
-    }
-
-    this.updateLastKnown(nearest);
-
-    // Chase with A* pathfinding
-    if (nearestDist > this.attackRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        this.attackRangePx * 0.8,
-      );
-    } else {
-      this.isMoving = false;
-    }
-
-    // Attack (same-tile always hits)
-    if (
-      nearestDist <= this.attackRangePx &&
-      this.attackCooldown === 0 &&
-      (this.hasLOS(nearest) || this.onSameTile(nearest))
-    ) {
-      nearest.takeDamage(1);
-      this.attackCooldown = ATTACK_COOLDOWN;
-    }
-  }
-
-  render(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    tileSize: number,
-  ) {
-    if (!this.isAlive) return;
-    const sx = this.x - camX;
-    const sy = this.y - camY;
-    drawMyEnemySprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
-    this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
-  }
-}
-```
-
-3. **Register the mob type** — add it to the spawner in `src/levels/spawner.ts`:
-
-```ts
-// In createMob():
-} else if (type === 'myEnemy') {
-  mob = new MyEnemy(tileX, tileY, TILE_SIZE);
-}
-```
-
-Then add the type string to the union in `src/levels/types.ts`:
-
-```ts
-type: 'goblin' | 'llama' | 'rat' | 'myEnemy';
-```
-
-4. **Add it to a level** — include the mob in a level definition in `src/levels/`:
-
-```ts
-// src/levels/level1.ts (or a new level file)
-roomMobs: [
-  { type: 'goblin',   chance: 0.70 },
-  { type: 'llama',    chance: 0.15 },
-  { type: 'myEnemy',  chance: 0.15 },
-],
-```
-
-No other files need to change.
-
----
-
-## How to Add a New Tile Type
-
-All changes are in `src/map/GameMap.ts`:
-
-1. Add the name to the `FLOOR_TYPES` array
-2. Add its numeric value to `FloorTypeValue`
-3. Add a `case FloorTypeValue.myTile:` block in the `drawTile` switch statement with canvas draw calls for how it looks
-4. Decide if it is walkable — `isWalkable()` currently blocks `wall`, `water`, and `void`; add your tile there if it should block movement
-5. Use it in `generateDungeon()` — e.g. add it to `DUNGEON_FLOORS` so rooms can randomly get that floor type
-
----
-
-## Glossary
-
-| Term         | Meaning                                                                       |
-| ------------ | ----------------------------------------------------------------------------- |
-| Frame        | One iteration of the game loop, ~1/60th of a second                           |
-| Tile         | A single grid cell, 32×32 pixels                                              |
-| Pixel coords | Actual x/y position in the world (used for movement math)                     |
-| Tile coords  | Column/row in the grid (used for walkability checks)                          |
-| Aggro        | Enemy has noticed a player and is actively chasing them                       |
-| LOS          | Line of Sight — a clear straight line with no walls between two points        |
-| A\*          | Pathfinding algorithm that finds the shortest walkable route through the grid |
-| HUD          | Heads-Up Display — the HP bars and info shown on screen                       |
-| XP           | Experience points, earned by dealing damage to enemies                        |
-| Mob          | Any enemy creature controlled by the AI                                       |
+## Tech Stack
+
+- **TypeScript** — strict mode, ES2020 target
+- **esbuild** — bundler (~5ms builds)
+- **Prettier** — code formatting
+- **GitHub Pages** — auto-deploy on push to main

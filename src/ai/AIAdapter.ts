@@ -47,6 +47,10 @@ const MORDECAI_SYSTEM_PROMPT =
   'advice instead of generic tutorials. Keep responses to 2-3 short sentences. No flattery. ' +
   'No pleasantries. Tell them what they need to hear.';
 
+// Injected at build time from .env via scripts/build.js
+declare const __AI_CLIENT_ID__: string;
+declare const __AI_CLIENT_SECRET__: string;
+
 interface StoredCredentials {
   clientId: string;
   clientSecret: string;
@@ -607,6 +611,12 @@ export class AIAdapter {
   }
 
   private async getOrRegisterCredentials(): Promise<StoredCredentials | null> {
+    // Use build-time credentials if available (from .env via scripts/build.js)
+    if (typeof __AI_CLIENT_ID__ !== 'undefined' && __AI_CLIENT_ID__) {
+      return { clientId: __AI_CLIENT_ID__, clientSecret: __AI_CLIENT_SECRET__ };
+    }
+
+    // Fall back to per-session self-registration
     const stored = localStorage.getItem(CREDS_KEY);
     if (stored) {
       try {

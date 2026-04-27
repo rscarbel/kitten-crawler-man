@@ -80,7 +80,7 @@ export class LootBoxOpener {
       this.frame = 0;
       this.nextTimer = NEXT_DELAY;
       this.burstParticles(50);
-      if (!this.rewardGranted && this.onBoxOpened && this.box && this.contents) {
+      if (!this.rewardGranted && this.onBoxOpened && this.contents) {
         this.rewardGranted = true;
         this.onBoxOpened(this.box, this.contents);
       }
@@ -149,7 +149,7 @@ export class LootBoxOpener {
           this.frame = 0;
           this.nextTimer = NEXT_DELAY;
           // Grant reward exactly once per box
-          if (!this.rewardGranted && this.onBoxOpened && this.box && this.contents) {
+          if (!this.rewardGranted && this.onBoxOpened && this.contents) {
             this.rewardGranted = true;
             this.onBoxOpened(this.box, this.contents);
           }

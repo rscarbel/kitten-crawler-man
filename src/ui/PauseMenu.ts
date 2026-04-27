@@ -1,4 +1,4 @@
-import { HumanPlayer } from '../creatures/HumanPlayer';
+import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AchievementManager } from '../core/AchievementManager';
 import type { GameStats } from '../core/GameStats';

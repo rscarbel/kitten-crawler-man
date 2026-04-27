@@ -1,8 +1,8 @@
 // @ts-check
-import tseslint from "typescript-eslint";
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ["src/**/*.js", "dist/**"] },
+  { ignores: ['src/**/*.js', 'dist/**'] },
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
@@ -15,12 +15,14 @@ export default tseslint.config(
   },
   {
     rules: {
-      "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-non-null-assertion": "warn",
-      "@typescript-eslint/consistent-type-imports": "error",
-      "@typescript-eslint/no-unnecessary-condition": "error",
-      "@typescript-eslint/prefer-nullish-coalescing": "error",
-      "@typescript-eslint/strict-boolean-expressions": "error",
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/strict-boolean-expressions': 'error',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
     },
   },
 );

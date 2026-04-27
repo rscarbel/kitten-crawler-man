@@ -1,4 +1,4 @@
-import { Player } from '../../Player';
+import { type Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
