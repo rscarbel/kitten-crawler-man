@@ -7,7 +7,6 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
-import { Mob } from '../creatures/Mob';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { GameSystem, SystemContext } from './GameSystem';

@@ -1,13 +1,13 @@
-import { SceneManager } from '../core/Scene';
-import { InputManager } from '../core/InputManager';
+import { type SceneManager } from '../core/Scene';
+import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
 import { clamp } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
-import { HumanPlayer } from '../creatures/HumanPlayer';
-import { CatPlayer } from '../creatures/CatPlayer';
-import { Mob } from '../creatures/Mob';
+import { type HumanPlayer } from '../creatures/HumanPlayer';
+import { type CatPlayer } from '../creatures/CatPlayer';
+import { type Mob } from '../creatures/Mob';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
@@ -43,7 +43,6 @@ import { GoreSystem } from '../systems/GoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
-import { resolvePendingInventoryAction } from '../systems/InventoryActionSystem';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
@@ -225,26 +224,14 @@ export class DungeonScene extends GameplayScene {
     );
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.barriers = new BarrierSystem(this.gameMap);
-    this.defendQuest = new DefendQuestSystem(
-      this.gameMap,
-      this.bus,
-      () => this.mobs,
-      () => this.mobGrid,
-      (mob) => {
-        this.mobs.push(mob);
-        this.mobGrid.insert(mob);
-      },
-      (mob) => {
-        const idx = this.mobs.indexOf(mob);
-        if (idx >= 0) this.mobs.splice(idx, 1);
-        this.mobGrid.remove(mob);
-      },
-    );
+    this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) => {
+      this.mobs.push(mob);
+      this.mobGrid.insert(mob);
+    });
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
       () => this.mobs,
-      () => this.mobGrid,
       (mob) => {
         this.mobs.push(mob);
         this.mobGrid.insert(mob);

@@ -1,5 +1,5 @@
-import { GameMap } from '../map/GameMap';
-import { Mob } from '../creatures/Mob';
+import { type GameMap } from '../map/GameMap';
+import { type Mob } from '../creatures/Mob';
 import { Goblin } from '../creatures/Goblin';
 import { Llama } from '../creatures/Llama';
 import { Rat } from '../creatures/Rat';
@@ -15,7 +15,7 @@ import { BrindleGrub } from '../creatures/BrindleGrub';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { randomFromArray, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
-import type { MobSpawnRule, LevelDef, ExtraSpawnRule } from './types';
+import type { MobSpawnRule, LevelDef } from './types';
 
 type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
 
@@ -150,13 +150,29 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
   const mobs: Mob[] = [];
 
   if (def.roomMobs.length > 0) {
-    for (const { x, y } of map.mobSpawnPoints) {
+    for (const { x, y, w, h } of map.mobSpawnPoints) {
       const rule = pickRule(def.roomMobs);
       const min = rule.minCount ?? 1;
       const max = rule.maxCount ?? 1;
       const count = randomInt(min, max);
+      // Interior tile range: 1-tile inset from walls on each side
+      const minTX = x - Math.floor(w / 2) + 1;
+      const minTY = y - Math.floor(h / 2) + 1;
+      const maxTX = minTX + w - 3;
+      const maxTY = minTY + h - 3;
       for (let i = 0; i < count; i++) {
-        const mob = createMob(rule.type, x, y, map);
+        let tx = x;
+        let ty = y;
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const cx = randomInt(minTX, maxTX);
+          const cy = randomInt(minTY, maxTY);
+          if (map.isWalkable(cx, cy)) {
+            tx = cx;
+            ty = cy;
+            break;
+          }
+        }
+        const mob = createMob(rule.type, tx, ty, map);
         mob.applyMobLevel(rollMobLevel(rule));
         mobs.push(mob);
       }

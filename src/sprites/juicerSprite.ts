@@ -480,7 +480,6 @@ export function drawJuicerSpeechBubble(
   ctx.font = 'bold 9px monospace';
   const textWidth = ctx.measureText(text).width;
   const padX = 8;
-  const padY = 5;
   const bw = textWidth + padX * 2;
   const bh = 18;
   const bx = cx - bw * 0.5;

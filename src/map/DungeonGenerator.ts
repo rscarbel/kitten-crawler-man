@@ -1,6 +1,6 @@
 import {
   FloorTypeValue,
-  TileContent,
+  type TileContent,
   VOID_TYPE,
   SAFE_ROOM_FLOOR,
   HORDER_BOSS_ROOM_FLOOR,
@@ -41,7 +41,7 @@ export interface DungeonData {
   safeRooms: Array<{ bounds: Rect; centre: Point }>;
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   questRooms: QuestRoomData[];
-  mobSpawnPoints: Point[];
+  mobSpawnPoints: Array<Point & { w: number; h: number }>;
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
   buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }>;
@@ -358,6 +358,8 @@ export function generateDungeon(
   const mobSpawnPoints = rooms.slice(regularRoomStart).map((r) => ({
     x: Math.floor(r.x + r.w / 2),
     y: Math.floor(r.y + r.h / 2),
+    w: r.w,
+    h: r.h,
   }));
 
   // 7. Place stairwells: 1 per 50 regular rooms (min 1), in rooms far from start.

@@ -1,5 +1,5 @@
-import { SceneManager } from '../core/Scene';
-import { InputManager } from '../core/InputManager';
+import { type SceneManager } from '../core/Scene';
+import { type InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
 import { PlayerManager } from '../core/PlayerManager';
@@ -24,7 +24,6 @@ export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
   readonly pm: PlayerManager;
   private mapW: number;
-  private mapH: number;
 
   // Exit menu state
   private onExitTile = false;
@@ -96,7 +95,6 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.mapW = this.map.structure[0]?.length ?? 18;
-    this.mapH = this.map.structure.length;
 
     const { x: sx, y: sy } = this.map.startTile;
     this.pm = new PlayerManager(sx, sy);
@@ -130,7 +128,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.currentFloor = newFloor;
     this.map = this.towerFloors[newFloor];
     this.mapW = this.map.structure[0]?.length ?? 30;
-    this.mapH = this.map.structure.length;
     this.cat.setMap(this.map);
     this.towerStairs?.setMap(this.map, newFloor);
 

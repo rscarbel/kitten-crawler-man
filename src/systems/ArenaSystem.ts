@@ -10,12 +10,8 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { BallOfSwine } from '../creatures/BallOfSwine';
-import { Tuskling } from '../creatures/Tuskling';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
-import type { CatPlayer } from '../creatures/CatPlayer';
-import type { SpatialGrid } from '../core/SpatialGrid';
+import { type Tuskling } from '../creatures/Tuskling';
 import type { BossRoomSystem } from './BossRoomSystem';
-import { BOSS_META } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import type { GameSystem, SystemContext } from './GameSystem';
 
@@ -29,7 +25,6 @@ export class ArenaSystem implements GameSystem {
     private readonly gameMap: GameMap,
     private readonly bus: EventBus,
     private readonly getMobs: () => Mob[],
-    private readonly getMobGrid: () => SpatialGrid<Mob>,
     private readonly addMob: (mob: Mob) => void,
     private readonly bossRoom: BossRoomSystem,
   ) {

@@ -1,6 +1,6 @@
 import {
   FloorTypeValue,
-  TileContent,
+  type TileContent,
   VOID_TYPE,
   TREE,
   BUILDING_WALL,
@@ -53,7 +53,7 @@ export class GameMap {
   /** Tile coordinates where the player should spawn (centre of the first room). */
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
-  mobSpawnPoints: Array<{ x: number; y: number }> = [];
+  mobSpawnPoints: Array<{ x: number; y: number; w: number; h: number }> = [];
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
   /** All safe rooms on this map (bounds + centre in tile coords). */
@@ -121,7 +121,7 @@ export class GameMap {
       this.safeRooms = data.safeRooms;
       this.buildingEntries = data.buildingEntries;
       this.bossRooms = data.bossRooms;
-      this.mobSpawnPoints = data.mobSpawnPoints;
+      this.mobSpawnPoints = [];
       this.hallwaySpawnPoints = data.hallwaySpawnPoints;
       this.stairwellTiles = data.stairwellTiles;
       return data.grid;

@@ -1,5 +1,5 @@
-import { InputManager } from '../core/InputManager';
-import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { type InputManager } from '../core/InputManager';
+import { TILE_SIZE } from '../core/constants';
 import { normalize, clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
 

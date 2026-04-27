@@ -14,7 +14,6 @@ import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
@@ -25,7 +24,6 @@ import {
   drawWoodPileSprite,
   drawWoodBarrierSprite,
   drawChildSprite,
-  drawExclamationMark,
 } from '../sprites/questNPCSprite';
 
 const QUEST_ID = 'defend_goblin_mother';
@@ -96,7 +94,6 @@ export class DefendQuestSystem implements GameSystem {
 
   private completeOverlayTimer = 0;
   private failOverlayTimer = 0;
-  private xpAwardShown = false;
   private xpFloatTimer = 0;
 
   private dialogButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> = [];
@@ -105,27 +102,18 @@ export class DefendQuestSystem implements GameSystem {
   private tutorialButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> =
     [];
 
-  private getMobs: () => Mob[];
-  private getMobGrid: () => SpatialGrid<Mob>;
   private addMob: (mob: Mob) => void;
-  private removeMob: (mob: Mob) => void;
   private bus: EventBus;
   private gameMap: GameMap;
 
   constructor(
     gameMap: GameMap,
     bus: EventBus,
-    getMobs: () => Mob[],
-    getMobGrid: () => SpatialGrid<Mob>,
     addMob: (mob: Mob) => void,
-    removeMob: (mob: Mob) => void,
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
-    this.getMobs = getMobs;
-    this.getMobGrid = getMobGrid;
     this.addMob = addMob;
-    this.removeMob = removeMob;
 
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -494,7 +482,6 @@ export class DefendQuestSystem implements GameSystem {
 
     const rewards = this.questManager.getDef(QUEST_ID)!.rewards;
     active.gainXp(rewards.xp);
-    this.xpAwardShown = true;
     this.xpFloatTimer = 180; // 3 seconds
 
     this.bus.emit('questCompleted', { questId: QUEST_ID });

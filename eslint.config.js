@@ -23,6 +23,8 @@ export default tseslint.config(
       '@typescript-eslint/strict-boolean-expressions': 'error',
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/array-type': 'off',
+      '@typescript-eslint/consistent-type-definitions': 'off',
     },
   },
 );

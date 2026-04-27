@@ -1,13 +1,11 @@
 import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
 import { platform } from '../core/Platform';
-import { InputManager } from '../core/InputManager';
+import { type InputManager } from '../core/InputManager';
 import { normalize, clamp } from '../utils';
-import { GameMap } from '../map/GameMap';
-import { Player } from '../Player';
+import { type GameMap } from '../map/GameMap';
+import { type Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { SpatialGrid } from '../core/SpatialGrid';
-import type { Mob } from '../creatures/Mob';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
