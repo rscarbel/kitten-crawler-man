@@ -40,6 +40,9 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
+import { AbilityManager } from '../core/AbilityManager';
+import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
+import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
 import { GoreSystem } from '../systems/GoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
@@ -81,6 +84,10 @@ export interface DungeonSceneOptions {
   floorEntryCatSnap?: PlayerSnapshot;
   /** Whether Mongo the velociraptor has been unlocked (persists across floors). */
   mongoUnlocked?: boolean;
+  /** Carry ability leveling progress across floor transitions. */
+  abilityManager?: AbilityManager;
+  /** Ability state at floor entry — restored on death-restart so level-up progress rewinds to floor-start. */
+  floorEntryAbilityManager?: AbilityManager;
   /** Called whenever the game wants to persist progress (e.g. on safe-room entry). */
   saveProgress?: (data: {
     humanSnap: PlayerSnapshot;
@@ -129,6 +136,10 @@ export class DungeonScene extends GameplayScene {
   // Boss battle intro
   private bossIntro = new BossIntroSystem();
 
+  // Ability leveling
+  private readonly abilityManager: AbilityManager;
+  private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
+
   // Arena (Ball of Swine) — delegated to ArenaSystem
   private arena!: ArenaSystem;
 
@@ -137,6 +148,7 @@ export class DungeonScene extends GameplayScene {
   private floorEntryCatSnap!: PlayerSnapshot;
   private floorEntryHumanAchievements!: AchievementManager;
   private floorEntryCatAchievements!: AchievementManager;
+  private floorEntryAbilityManager!: AbilityManager;
 
   // Misc state
   private gameOver = false;
@@ -254,6 +266,7 @@ export class DungeonScene extends GameplayScene {
           humanAchievements: this.humanAchievements,
           catAchievements: this.catAchievements,
           mongoUnlocked: this.mongoSystem.unlocked,
+          abilityManager: this.abilityManager,
           saveProgress: this.onSaveProgress,
         }),
       );
@@ -322,6 +335,17 @@ export class DungeonScene extends GameplayScene {
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
     }
+
+    // Ability leveling — carry across floors; register definitions fresh each time
+    this.abilityManager = options?.abilityManager ?? new AbilityManager();
+    this.abilityManager.register(MAGIC_MISSILE_DEF);
+    this.floorEntryAbilityManager =
+      options?.floorEntryAbilityManager ?? this.abilityManager.clone();
+    this.abilityLevelUpDialog = new AbilityLevelUpDialog(this.abilityManager);
+    this.abilityManager.onLevelUp = (id, newLevel) => {
+      this.abilityLevelUpDialog.enqueue(id, newLevel);
+    };
+    this.cat.setAbilityManager(this.abilityManager);
 
     this.onSaveProgress = options?.saveProgress;
     this.wireEventBus();
@@ -721,6 +745,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
+    // Ability level-up dialog (highest priority — game is paused while showing)
+    if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
+
     // Quest dialog clicks
     if (this.defendQuest.handleClick(mx, my)) return;
 
@@ -774,6 +801,8 @@ export class DungeonScene extends GameplayScene {
             catAchievements: this.floorEntryCatAchievements.clone(),
             floorEntryHumanAchievements: this.floorEntryHumanAchievements,
             floorEntryCatAchievements: this.floorEntryCatAchievements,
+            abilityManager: this.floorEntryAbilityManager.clone(),
+            floorEntryAbilityManager: this.floorEntryAbilityManager,
             mongoUnlocked: this.mongoSystem.unlocked,
           }),
         );
@@ -862,6 +891,7 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.update();
     this.playerChat.update();
     this.achievementUI.tick();
+    this.abilityLevelUpDialog.update();
 
     if (this.bossIntro.isActive) {
       this.bossIntro.tick();
@@ -870,6 +900,7 @@ export class DungeonScene extends GameplayScene {
 
     if (
       this.gameOver ||
+      this.abilityLevelUpDialog.isShowing ||
       this.pauseMenu.isOpen ||
       this.stairwell.menuOpen ||
       this.building?.menuOpen ||
@@ -1027,6 +1058,7 @@ export class DungeonScene extends GameplayScene {
         onOpenHuman,
         onOpenCat,
         this.gameStats,
+        this.abilityManager,
       );
     }
 
@@ -1061,6 +1093,8 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.achievementUI.renderOverlays(ctx, canvas);
+
+    this.abilityLevelUpDialog.render(ctx, canvas);
 
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx, canvas);
@@ -1162,7 +1196,7 @@ export class DungeonScene extends GameplayScene {
     this.companion.update(ctx);
 
     this.human.updateAttack();
-    this.cat.updateMissiles();
+    this.cat.updateMissiles(this.mobs);
 
     // Spell system (resets confusion, ticks fogs/shell)
     this.spells.update(ctx);
@@ -1178,9 +1212,11 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       safeRoom: this.safeRoom,
       bus: this.bus,
+      abilityManager: this.abilityManager,
       hitLanded: false,
     };
     resolvePlayerAttacks(combatCtx);
+    this.cat.flushPendingSubMissiles();
 
     if (combatCtx.hitLanded) {
       if (this.combatCooldownFrames <= 0) {
@@ -1480,6 +1516,7 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
         this.touch.tapStart = { x, y, time: Date.now() };
+        this.pauseMenu.touchScrollStart(y);
       }
     }
   }
@@ -1501,6 +1538,7 @@ export class DungeonScene extends GameplayScene {
       // Update movement target
       if (touch.identifier === this.touch.moveTouchId) {
         this.touch.moveTarget = { x, y };
+        this.pauseMenu.touchScrollMove(y);
       }
     }
   }
@@ -1573,6 +1611,7 @@ export class DungeonScene extends GameplayScene {
             }
           }
         }
+        this.pauseMenu.touchScrollEnd();
         this.touch.moveTouchId = null;
         this.touch.moveTarget = null;
         this.touch.tapStart = null;

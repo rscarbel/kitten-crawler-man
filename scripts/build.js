@@ -1,7 +1,10 @@
-const esbuild = require('esbuild');
-const path = require('path');
+import esbuild from 'esbuild';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const serve = process.argv.includes('--serve');
 

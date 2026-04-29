@@ -232,7 +232,6 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
 
 /**
  * Pulsing skill-point notification banner rendered below the HUD panel.
- * Previously defined in GameStage but never wired to the render path — now fixed.
  */
 function renderNotification(
   ctx: CanvasRenderingContext2D,

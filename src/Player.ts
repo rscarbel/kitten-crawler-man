@@ -173,6 +173,9 @@ export abstract class Player {
       if (effect.type === 'sepsis' && elapsed > 0 && elapsed % 120 === 0) {
         this.takeDamage(1);
       }
+      if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % 60 === 0) {
+        this.takeDamage(1);
+      }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;
     });

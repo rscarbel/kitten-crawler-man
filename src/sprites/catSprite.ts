@@ -8,6 +8,10 @@ export interface Missile {
   state: 'flying' | 'exploding';
   explodeTimer: number;
   hit: boolean;
+  /** The Magic Missile ability level when this missile was created. */
+  abilityLevel: number;
+  /** Sub-missiles spawned by level-10 never chain-react further. */
+  isSubMissile: boolean;
 }
 
 export function drawCatSprite(
@@ -167,70 +171,118 @@ export function drawMissiles(
   for (const m of missiles) {
     const mx = m.x - camX;
     const my = m.y - camY;
+    const isFullPower = m.abilityLevel >= 15;
 
     if (m.state === 'flying') {
-      // Purple trailing glow
       const speed = Math.hypot(m.vx, m.vy);
-      const trailLen = Math.min(m.distTraveled, s * 0.9);
-      if (trailLen > 2 && speed > 0) {
-        const tx = mx - (m.vx / speed) * trailLen;
-        const ty = my - (m.vy / speed) * trailLen;
-        const trailGrad = ctx.createLinearGradient(mx, my, tx, ty);
-        trailGrad.addColorStop(0, 'rgba(180, 100, 255, 0.75)');
-        trailGrad.addColorStop(1, 'rgba(180, 100, 255, 0)');
-        ctx.save();
-        ctx.strokeStyle = trailGrad;
-        ctx.lineWidth = s * 0.09;
-        ctx.lineCap = 'round';
+
+      if (isFullPower) {
+        // Level 15: elongated orange beam
+        const beamLen = Math.min(m.distTraveled, s * 1.8);
+        if (beamLen > 2 && speed > 0) {
+          const tx = mx - (m.vx / speed) * beamLen;
+          const ty = my - (m.vy / speed) * beamLen;
+          const beamGrad = ctx.createLinearGradient(mx, my, tx, ty);
+          beamGrad.addColorStop(0, 'rgba(255, 240, 120, 0.95)');
+          beamGrad.addColorStop(0.4, 'rgba(255, 120, 0, 0.8)');
+          beamGrad.addColorStop(1, 'rgba(200, 40, 0, 0)');
+          ctx.save();
+          ctx.strokeStyle = beamGrad;
+          ctx.lineWidth = s * 0.18;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Blazing outer glow
+        const grad = ctx.createRadialGradient(mx, my, 0, mx, my, s * 0.42);
+        grad.addColorStop(0, 'rgba(255, 240, 160, 1.0)');
+        grad.addColorStop(0.45, 'rgba(255, 100, 0, 0.7)');
+        grad.addColorStop(1, 'rgba(180, 20, 0, 0)');
         ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(tx, ty);
-        ctx.stroke();
-        ctx.restore();
+        ctx.arc(mx, my, s * 0.42, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        // White-hot core
+        ctx.fillStyle = '#fffbe0';
+        ctx.beginPath();
+        ctx.arc(mx, my, s * 0.13, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Standard purple missile
+        const trailLen = Math.min(m.distTraveled, s * 0.9);
+        if (trailLen > 2 && speed > 0) {
+          const tx = mx - (m.vx / speed) * trailLen;
+          const ty = my - (m.vy / speed) * trailLen;
+          const trailGrad = ctx.createLinearGradient(mx, my, tx, ty);
+          trailGrad.addColorStop(0, 'rgba(180, 100, 255, 0.75)');
+          trailGrad.addColorStop(1, 'rgba(180, 100, 255, 0)');
+          ctx.save();
+          ctx.strokeStyle = trailGrad;
+          ctx.lineWidth = m.isSubMissile ? s * 0.05 : s * 0.09;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+          ctx.restore();
+        }
+        const coreRadius = m.isSubMissile ? s * 0.2 : s * 0.32;
+        const grad = ctx.createRadialGradient(mx, my, 0, mx, my, coreRadius);
+        grad.addColorStop(0, 'rgba(230, 190, 255, 0.9)');
+        grad.addColorStop(0.5, 'rgba(150, 70, 240, 0.55)');
+        grad.addColorStop(1, 'rgba(80, 0, 180, 0)');
+        ctx.beginPath();
+        ctx.arc(mx, my, coreRadius, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.fillStyle = '#f0e0ff';
+        ctx.beginPath();
+        ctx.arc(mx, my, m.isSubMissile ? s * 0.06 : s * 0.1, 0, Math.PI * 2);
+        ctx.fill();
       }
-
-      // Outer glow
-      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, s * 0.32);
-      grad.addColorStop(0, 'rgba(230, 190, 255, 0.9)');
-      grad.addColorStop(0.5, 'rgba(150, 70, 240, 0.55)');
-      grad.addColorStop(1, 'rgba(80, 0, 180, 0)');
-      ctx.beginPath();
-      ctx.arc(mx, my, s * 0.32, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      // Bright core
-      ctx.fillStyle = '#f0e0ff';
-      ctx.beginPath();
-      ctx.arc(mx, my, s * 0.1, 0, Math.PI * 2);
-      ctx.fill();
     } else {
       // Explosion
       const t = 1 - m.explodeTimer / EXPLODE_FRAMES; // 0→1
-      const radius = t * s * 1.1;
+      const radius = t * s * (isFullPower ? 1.6 : 1.1);
       const alpha = 1 - t;
 
       ctx.save();
 
-      // Shockwave ring
-      ctx.globalAlpha = alpha * 0.7;
-      ctx.strokeStyle = '#d8b4fe';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(mx, my, radius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Filled area
-      ctx.globalAlpha = alpha * 0.35;
-      ctx.fillStyle = '#a855f7';
-      ctx.beginPath();
-      ctx.arc(mx, my, radius * 0.75, 0, Math.PI * 2);
-      ctx.fill();
+      if (isFullPower) {
+        // Orange shockwave ring
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.strokeStyle = '#ffdd44';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(mx, my, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = alpha * 0.45;
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.arc(mx, my, radius * 0.75, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Purple shockwave ring
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.strokeStyle = '#d8b4fe';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(mx, my, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = alpha * 0.35;
+        ctx.fillStyle = '#a855f7';
+        ctx.beginPath();
+        ctx.arc(mx, my, radius * 0.75, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // Spark rays (early in explosion)
       if (t < 0.55) {
         ctx.globalAlpha = alpha * 0.85;
-        ctx.strokeStyle = '#f3e8ff';
+        ctx.strokeStyle = isFullPower ? '#ffe080' : '#f3e8ff';
         ctx.lineWidth = 1.5;
         for (let i = 0; i < 6; i++) {
           const angle = (i / 6) * Math.PI * 2;
@@ -243,7 +295,6 @@ export function drawMissiles(
         }
       }
 
-      // Bright core
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();

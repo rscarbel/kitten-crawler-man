@@ -157,7 +157,6 @@ export function generateDungeon(
   const maxRooms = Math.round(15 * (size / 100) ** 2);
   const maxAttempts = Math.max(maxRooms * 8, 80);
 
-  // Fixed max-distance constraints for special rooms (in tiles from start centre).
   const SAFE_MAX_DIST = 50;
   const BOSS_MAX_DIST = 80;
   const SAFE_MIN_SEPARATION = 18; // safe rooms must be this far apart from each other

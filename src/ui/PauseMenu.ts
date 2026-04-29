@@ -1,6 +1,7 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AchievementManager } from '../core/AchievementManager';
+import type { AbilityManager } from '../core/AbilityManager';
 import type { GameStats } from '../core/GameStats';
 import type { PauseTab, ButtonRect } from './pause/types';
 import { renderMainTab } from './pause/MainTab';
@@ -8,6 +9,14 @@ import { renderInventoryTab } from './pause/InventoryTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
 import { renderAchievementsTab } from './pause/AchievementsTab';
+import {
+  renderAbilitiesTab,
+  resetAbilitiesTab,
+  scrollAbilitiesTab,
+  abilitiesTabTouchStart,
+  abilitiesTabTouchMove,
+  abilitiesTabTouchEnd,
+} from './pause/AbilitiesTab';
 import { pointInRect } from '../utils';
 
 /**
@@ -33,6 +42,7 @@ export class PauseMenu {
   }
   close(): void {
     this._isOpen = false;
+    resetAbilitiesTab();
   }
   toggle(): void {
     if (this._isOpen) this.close();
@@ -45,9 +55,28 @@ export class PauseMenu {
   }
 
   handleWheel(deltaY: number): void {
-    if (!this._isOpen || this.tab !== 'stats') return;
-    const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
-    this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + deltaY * 0.5));
+    if (!this._isOpen) return;
+    if (this.tab === 'stats') {
+      const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
+      this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + deltaY * 0.5));
+    } else if (this.tab === 'abilities') {
+      scrollAbilitiesTab(deltaY);
+    }
+  }
+
+  touchScrollStart(y: number): void {
+    if (!this._isOpen || this.tab !== 'abilities') return;
+    abilitiesTabTouchStart(y);
+  }
+
+  touchScrollMove(y: number): void {
+    if (!this._isOpen || this.tab !== 'abilities') return;
+    abilitiesTabTouchMove(y);
+  }
+
+  touchScrollEnd(): void {
+    if (!this._isOpen || this.tab !== 'abilities') return;
+    abilitiesTabTouchEnd();
   }
 
   private get statsScrollH(): number {
@@ -67,6 +96,7 @@ export class PauseMenu {
     onOpenHumanBoxes?: () => void,
     onOpenCatBoxes?: () => void,
     gameStats?: GameStats,
+    abilityManager?: AbilityManager,
   ): void {
     this.buttons = [];
 
@@ -77,7 +107,12 @@ export class PauseMenu {
     ctx.fillRect(0, 0, cw, ch);
 
     const boxW = 380;
-    const boxH = this.tab === 'achievements' ? 440 : this.tab === 'stats' ? STATS_BOX_H : 320;
+    const boxH =
+      this.tab === 'achievements' || this.tab === 'abilities'
+        ? 440
+        : this.tab === 'stats'
+          ? STATS_BOX_H
+          : 380;
     const boxX = cw / 2 - boxW / 2;
     const boxY = ch / 2 - boxH / 2;
 
@@ -89,6 +124,7 @@ export class PauseMenu {
 
     const setTab = (t: PauseTab) => {
       if (t !== 'stats') this.statsScrollY = 0;
+      if (t !== 'abilities') resetAbilitiesTab();
       this.tab = t;
     };
 
@@ -144,6 +180,11 @@ export class PauseMenu {
           onOpenHumanBoxes,
           onOpenCatBoxes,
         );
+        break;
+      case 'abilities':
+        if (abilityManager) {
+          renderAbilitiesTab(ctx, this.buttons, boxX, boxY, boxW, boxH, setTab, abilityManager);
+        }
         break;
     }
   }

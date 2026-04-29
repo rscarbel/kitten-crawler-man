@@ -31,3 +31,8 @@ export function makeSepsis(): StatusEffect {
   // 999999 ticks ≈ 4.6 hours — effectively infinite
   return { type: 'sepsis', ticksRemaining: 999999, totalTicks: 999999 };
 }
+
+/** Magic Burn: 10-second arcane DoT from a level-15 Magic Missile shockwave. 1 dmg/s. */
+export function makeMagicBurn(): StatusEffect {
+  return { type: 'magic_burn', ticksRemaining: 600, totalTicks: 600 };
+}

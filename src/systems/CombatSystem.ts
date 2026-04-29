@@ -6,7 +6,8 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { EventBus } from '../core/EventBus';
-import { makeSepsis } from '../core/StatusEffect';
+import type { AbilityManager } from '../core/AbilityManager';
+import { makeSepsis, makeMagicBurn } from '../core/StatusEffect';
 
 /** Shared context passed to combat resolution functions. */
 export interface CombatContext {
@@ -17,6 +18,7 @@ export interface CombatContext {
   gameMap: GameMap;
   safeRoom: SafeRoomSystem;
   bus: EventBus;
+  abilityManager: AbilityManager;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -48,7 +50,6 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
       ctx.hitLanded = true;
-      // Sepsis proc: 15% chance when Enchanted Crown is equipped
       if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
         mob.applyStatus(makeSepsis());
       }
@@ -56,7 +57,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   }
 
   if (!safeRoom.isEntityInSafeRoom(cat)) {
+    const missileLevel = cat.getMagicMissileLevel();
     const hitRadius = TILE_SIZE * 0.7;
+    const splashRadius = TILE_SIZE * 1.5; // AoE splash radius at level 5+
+
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit) continue;
       const damage = cat.getMissileDamage();
@@ -68,10 +72,35 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dist < hitRadius) {
           mob.takeDamageFrom(damage, cat, 'missile');
           ctx.hitLanded = true;
-          // Sepsis proc: 15% chance when Enchanted Crown is equipped
+
           if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
             mob.applyStatus(makeSepsis());
           }
+
+          // Level 5+: AoE magic splash
+          if (missileLevel >= 5) {
+            const splashDamage = Math.max(1, Math.round(damage * 0.4));
+            const nearSplash = mobGrid.queryCircle(missile.x, missile.y, splashRadius + TILE_SIZE);
+            for (const splashMob of nearSplash) {
+              if (!splashMob.isAlive || splashMob === mob) continue;
+              const splashDx = splashMob.x + TILE_SIZE * 0.5 - missile.x;
+              const splashDy = splashMob.y + TILE_SIZE * 0.5 - missile.y;
+              if (Math.hypot(splashDx, splashDy) < splashRadius) {
+                splashMob.takeDamageFrom(splashDamage, cat, 'missile');
+              }
+            }
+          }
+
+          // Level 10+: queue sub-missiles from impact point (non-sub missiles only)
+          if (missileLevel >= 10 && !missile.isSubMissile) {
+            cat.queueSubMissileSpawn(missile.x, missile.y);
+          }
+
+          // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
+          if (missileLevel >= 15 && mob.isBoss) {
+            mob.isSlowed = true;
+          }
+
           missile.hit = true;
           missile.state = 'exploding';
           break;
@@ -82,7 +111,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 }
 
 export function resolveKills(ctx: CombatContext): void {
-  const { mobs, human, cat, mobGrid, bus } = ctx;
+  const { mobs, human, cat, mobGrid, bus, abilityManager } = ctx;
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
@@ -116,6 +145,27 @@ export function resolveKills(ctx: CombatContext): void {
       mob.killedBy instanceof HumanPlayer || mob.killedBy instanceof CatPlayer
         ? mob.killedBy
         : null;
+
+    // Magic missile kill XP + level-15 death shockwave
+    if (mob.killType === 'missile' && killer === cat) {
+      abilityManager.addKillXp('magic_missile');
+
+      if (cat.getMagicMissileLevel() >= 15) {
+        const shockwaveRadius = TILE_SIZE * 5;
+        const cx = mob.x + TILE_SIZE * 0.5;
+        const cy = mob.y + TILE_SIZE * 0.5;
+        const nearShock = mobGrid.queryCircle(cx, cy, shockwaveRadius);
+        for (const nearMob of nearShock) {
+          if (!nearMob.isAlive) continue;
+          const sdx = nearMob.x + TILE_SIZE * 0.5 - cx;
+          const sdy = nearMob.y + TILE_SIZE * 0.5 - cy;
+          if (Math.hypot(sdx, sdy) < shockwaveRadius) {
+            nearMob.applyStatus(makeMagicBurn());
+          }
+        }
+      }
+    }
+
     bus.emit('mobKilled', {
       mob,
       killer,
