@@ -352,9 +352,16 @@ export class Juicer extends Mob {
     const hitRadius = ts * 1.5;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      const dx = proj.x - (t.x + ts * 0.5);
-      const dy = proj.y - (t.y + ts * 0.5);
+      const tcx = t.x + ts * 0.5;
+      const tcy = t.y + ts * 0.5;
+      const dx = proj.x - tcx;
+      const dy = proj.y - tcy;
       if (Math.hypot(dx, dy) < hitRadius) {
+        if (this.spells?.isPointInsideShell(tcx, tcy)) {
+          this.spells.addBlockXp(5);
+          this.activeThrow = null;
+          return;
+        }
         this.dealDamage(t, THROW_DAMAGE);
         t.damageFlash = 8;
         this.activeThrow = null;

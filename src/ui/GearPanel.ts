@@ -252,9 +252,6 @@ export class GearPanel {
       if (b.strength) lines.push(`+${b.strength} Strength`);
       if (b.intelligence) lines.push(`+${b.intelligence} Intelligence`);
     }
-    if (item.abilityId === 'protective_shell') {
-      lines.push('Ability: Protective Shell Spell');
-    }
     lines.push('');
     if (item.description) {
       // Word-wrap description at ~34 chars to fit inside the 230px tooltip box

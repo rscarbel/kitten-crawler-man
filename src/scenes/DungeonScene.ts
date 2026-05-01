@@ -42,6 +42,7 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { AbilityManager } from '../core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
+import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
 import { GoreSystem } from '../systems/GoreSystem';
 import { EventBus } from '../core/EventBus';
@@ -58,6 +59,7 @@ import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { randomInt, pointInRect } from '../utils';
+import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
@@ -240,6 +242,7 @@ export class DungeonScene extends GameplayScene {
     this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) => {
       this.mobs.push(mob);
       this.mobGrid.insert(mob);
+      mob.setSpells(this.spells);
     });
     this.arena = new ArenaSystem(
       this.gameMap,
@@ -248,11 +251,13 @@ export class DungeonScene extends GameplayScene {
       (mob) => {
         this.mobs.push(mob);
         this.mobGrid.insert(mob);
+        mob.setSpells(this.spells);
       },
       this.bossRoom,
     );
     this.dynamite = new DynamiteSystem(this.gameMap);
     this.spells = new SpellSystem();
+    for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
     this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
@@ -339,6 +344,7 @@ export class DungeonScene extends GameplayScene {
     // Ability leveling — carry across floors; register definitions fresh each time
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
     this.abilityManager.register(MAGIC_MISSILE_DEF);
+    this.abilityManager.register(PROTECTIVE_SHELL_DEF);
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     this.abilityLevelUpDialog = new AbilityLevelUpDialog(this.abilityManager);
@@ -346,6 +352,7 @@ export class DungeonScene extends GameplayScene {
       this.abilityLevelUpDialog.enqueue(id, newLevel);
     };
     this.cat.setAbilityManager(this.abilityManager);
+    this.human.setAbilityManager(this.abilityManager);
 
     this.onSaveProgress = options?.saveProgress;
     this.wireEventBus();
@@ -721,8 +728,11 @@ export class DungeonScene extends GameplayScene {
           hpRestored: active.hp - hpBefore,
         });
       }
-    } else if (slot?.abilityId === 'protective_shell') {
-      this.spells.triggerProtectiveShell(this.human, this.mobGrid);
+    } else if (slot?.abilityId === 'protective_shell' && this.human.isActive) {
+      const level = this.human.getProtectiveShellLevel();
+      if (this.spells.triggerProtectiveShell(this.human, this.cat, this.mobGrid, level)) {
+        this.abilityManager.addUsageXp('protective_shell');
+      }
     } else if (slot?.id === 'scroll_of_confusing_fog') {
       this.spells.castConfusingFog(active);
     } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
@@ -1213,6 +1223,7 @@ export class DungeonScene extends GameplayScene {
       safeRoom: this.safeRoom,
       bus: this.bus,
       abilityManager: this.abilityManager,
+      spells: this.spells,
       hitLanded: false,
     };
     resolvePlayerAttacks(combatCtx);
@@ -1266,6 +1277,56 @@ export class DungeonScene extends GameplayScene {
     // resolveKills emits mobKilled → listeners handle gore, loot, achievements,
     // grub spawns, BoS tuskling burst, Krakaren → Mongo unlock
     resolveKills(combatCtx);
+
+    // Shell touch XP (1 XP per unique mob pushed per cast)
+    const touchXp = this.spells.drainTouchXp();
+    if (touchXp > 0) {
+      this.abilityManager.addXp('protective_shell', touchXp);
+    }
+
+    // Shell block XP (per projectile/tongue deflected)
+    const blockXp = this.spells.drainBlockXp();
+    if (blockXp > 0) {
+      this.abilityManager.addXp('protective_shell', blockXp);
+    }
+
+    // Shell level-15 shockwave on expiry
+    const shockwave = this.spells.drainPendingShockwave();
+    if (shockwave !== null) {
+      this.spells.addShockwaveRipple(shockwave.x, shockwave.y, shockwave.radiusPx);
+      const nearBlast = this.mobGrid.queryCircle(
+        shockwave.x,
+        shockwave.y,
+        shockwave.radiusPx + TILE_SIZE * 2,
+      );
+      for (const mob of nearBlast) {
+        if (!mob.isAlive) continue;
+        const dx = mob.x + TILE_SIZE * 0.5 - shockwave.x;
+        const dy = mob.y + TILE_SIZE * 0.5 - shockwave.y;
+        if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * 2) {
+          mob.takeDamageFrom(4, this.human, 'shell');
+          mob.applyStatus(makeElectrified());
+        }
+      }
+    }
+
+    // Shell level-15 chain lightning origins (mobs that died inside the shell this frame)
+    const chainTargets = this.spells.drainChainLightningOrigins();
+    for (const target of chainTargets) {
+      const nearby = this.mobGrid.queryCircle(target.x, target.y, TILE_SIZE * 3);
+      let hits = 0;
+      for (const mob of nearby) {
+        if (!mob.isAlive || hits >= 3) continue;
+        mob.takeDamageFrom(2, this.human, 'shell');
+        this.spells.addChainLightningBolt(
+          target.x,
+          target.y,
+          mob.x + TILE_SIZE * 0.5,
+          mob.y + TILE_SIZE * 0.5,
+        );
+        hits++;
+      }
+    }
 
     // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(ctx);

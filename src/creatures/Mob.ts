@@ -3,6 +3,12 @@ import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
 
+/** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
+export interface ShellContext {
+  isPointInsideShell(cx: number, cy: number): boolean;
+  addBlockXp(amount: number): void;
+}
+
 export interface LootDrop {
   coins: number;
   items: Array<{ id: ItemId; quantity: number }>;
@@ -59,6 +65,9 @@ export abstract class Mob extends Player {
 
   protected map: GameMap | null = null;
 
+  /** Shell context injected by DungeonScene — used by subclasses to check shell state. */
+  protected spells: ShellContext | null = null;
+
   /** True for boss-tier mobs — used by DungeonScene to identify which mob belongs to which boss room. */
   isBoss = false;
   /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
@@ -108,7 +117,7 @@ export abstract class Mob extends Player {
   killedBy: Player | null = null;
 
   /** The type of attack that landed the killing blow. */
-  killType: 'melee' | 'missile' | null = null;
+  killType: 'melee' | 'missile' | 'shell' | null = null;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, maxHp);
@@ -165,6 +174,10 @@ export abstract class Mob extends Player {
 
   setMap(map: GameMap) {
     this.map = map;
+  }
+
+  setSpells(s: ShellContext): void {
+    this.spells = s;
   }
 
   /** Returns true if this mob and `target` occupy the same map tile. */
@@ -337,7 +350,7 @@ export abstract class Mob extends Player {
   takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' = 'melee',
   ) {
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - amount);
@@ -378,6 +391,7 @@ export abstract class Mob extends Player {
   tickTimers() {
     super.tickTimers();
     if (this.healthBarTimer > 0) this.healthBarTimer--;
+    if (this.hasStatus('electrified')) this.isSlowed = true;
   }
 
   /**

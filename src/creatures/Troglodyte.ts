@@ -167,6 +167,11 @@ export class Troglodyte extends Mob {
             const dot = (dx / dist) * this.facingX + (dy / dist) * this.facingY;
             if (dot < 0.5) continue; // outside ~60° half-angle
 
+            if (this.spells?.isPointInsideShell(t.x + ts * 0.5, t.y + ts * 0.5)) {
+              this.spells.addBlockXp(3);
+              continue;
+            }
+
             this.dealDamage(t, TONGUE_DAMAGE);
             if (Math.random() < POISON_CHANCE) {
               t.applyStatus(makePoison());

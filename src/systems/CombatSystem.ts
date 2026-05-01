@@ -7,6 +7,7 @@ import type { GameMap } from '../map/GameMap';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { EventBus } from '../core/EventBus';
 import type { AbilityManager } from '../core/AbilityManager';
+import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn } from '../core/StatusEffect';
 
 /** Shared context passed to combat resolution functions. */
@@ -19,6 +20,7 @@ export interface CombatContext {
   safeRoom: SafeRoomSystem;
   bus: EventBus;
   abilityManager: AbilityManager;
+  spells: SpellSystem;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -111,7 +113,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 }
 
 export function resolveKills(ctx: CombatContext): void {
-  const { mobs, human, cat, mobGrid, bus, abilityManager } = ctx;
+  const { mobs, human, cat, mobGrid, bus, abilityManager, spells } = ctx;
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
@@ -163,6 +165,16 @@ export function resolveKills(ctx: CombatContext): void {
             nearMob.applyStatus(makeMagicBurn());
           }
         }
+      }
+    }
+
+    // Protective shell kill XP + level-15 chain lightning
+    if (mob.killType === 'shell' && killer === human) {
+      abilityManager.addKillXp('protective_shell');
+
+      // Level-15 chain lightning: if mob died inside the active shell, queue origin
+      if (spells.activeShellLevel >= 15 && spells.isInsideShell(mob.x, mob.y)) {
+        spells.addChainLightningOrigin(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
       }
     }
 

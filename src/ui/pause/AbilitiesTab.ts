@@ -289,8 +289,9 @@ function renderDetailView(
   // Pre-pass: measure wrapped lines and row heights for each perk
   const perksLayout = def.perks.map((perk) => {
     const unlocked = currentLevel >= perk.level;
+    const displayText = unlocked ? perk.description : '???';
     ctx.font = `${unlocked ? 'bold ' : ''}10px monospace`;
-    const lines = wrapTextLines(ctx, perk.description, descMaxW);
+    const lines = wrapTextLines(ctx, displayText, descMaxW);
     const rowH = Math.max(
       DETAIL_PERK_ROW_H,
       DETAIL_PERK_VPAD * 2 + lines.length * DETAIL_PERK_LINE_H,

@@ -201,6 +201,9 @@ export class RenderPipeline {
     gore.renderParticles(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);
     spells.renderShell(ctx, camX, camY);
+    spells.renderCatMiniShell(ctx, camX, camY, pm.cat);
+    spells.renderChainLightning(ctx, camX, camY);
+    spells.renderShockwaveRipples(ctx, camX, camY);
     spells.renderFogs(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);

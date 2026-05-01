@@ -32,6 +32,8 @@ export interface InventoryItem {
   abilityId?: string;
   /** When true, hotbar slot renders with a lighter quest-item colour. */
   isQuestItem?: boolean;
+  /** Multiplier applied to the player's HP regen rate while this item is equipped. Stacks multiplicatively with other sources. */
+  regenMultiplier?: number;
 }
 
 export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
@@ -98,6 +100,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
     statBonus: { constitution: 3 },
+    regenMultiplier: 2.5,
     description:
       'The wearer of this shirt gains +7 to the Regeneration skill. In addition, ' +
       'all melee-based damage debuffs such as Stun, Knockback, Disarm, and ' +

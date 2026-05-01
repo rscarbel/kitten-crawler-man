@@ -6,7 +6,7 @@
  *   baseXpToLevel2 * 1.3^(N-1), except level 14→15 uses 1.8× the previous threshold.
  */
 
-export type AbilityId = 'magic_missile';
+export type AbilityId = 'magic_missile' | 'protective_shell';
 
 export interface AbilityPerkDef {
   level: number;
@@ -81,7 +81,7 @@ export class AbilityManager {
     }
   }
 
-  private addXp(id: AbilityId, amount: number): boolean {
+  private grantXp(id: AbilityId, amount: number): boolean {
     const state = this.states.get(id);
     const def = this.defs.get(id);
     if (!state || !def) return false;
@@ -106,16 +106,21 @@ export class AbilityManager {
     return leveled;
   }
 
+  /** Add raw XP directly to an ability (e.g. from per-touch or per-frame interactions). */
+  addXp(id: AbilityId, amount: number): boolean {
+    return this.grantXp(id, amount);
+  }
+
   addUsageXp(id: AbilityId): boolean {
     const def = this.defs.get(id);
     if (!def) return false;
-    return this.addXp(id, def.usageXp);
+    return this.grantXp(id, def.usageXp);
   }
 
   addKillXp(id: AbilityId): boolean {
     const def = this.defs.get(id);
     if (!def) return false;
-    return this.addXp(id, def.killXp);
+    return this.grantXp(id, def.killXp);
   }
 
   getState(id: AbilityId): AbilityState | null {

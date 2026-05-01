@@ -5,6 +5,8 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
+import { normalize } from '../utils';
 
 interface ActiveShell {
   x: number;
@@ -13,6 +15,34 @@ interface ActiveShell {
   framesRemaining: number;
   totalFrames: number;
   didInitialDamage: boolean;
+  abilityLevel: number;
+  catWasInside: boolean;
+  continuousDamageThrottle: number;
+  /** Mobs pushed at least once this cast (for touch-XP tracking). */
+  touchedMobIds: Set<Mob>;
+}
+
+interface MiniShell {
+  /** Center x in world pixels (follows cat). */
+  framesRemaining: number; // 180 frames = 3 seconds
+  radiusPx: number;
+}
+
+interface ChainLightningBolt {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  framesLeft: number;
+}
+
+interface ShockwaveRipple {
+  x: number;
+  y: number;
+  maxRadius: number;
+  currentRadius: number;
+  framesLeft: number;
+  totalFrames: number;
 }
 
 interface ActiveFog {
@@ -76,38 +106,155 @@ function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: numb
 export class SpellSystem implements GameSystem {
   private activeShell: ActiveShell | null = null;
   private _shellCooldown = 0;
+  private _shellCooldownMax = 7200;
   private activeFogs: ActiveFog[] = [];
   private shellOwner: HumanPlayer | null = null;
+  private catMiniShell: MiniShell | null = null;
+  private chainLightningBolts: ChainLightningBolt[] = [];
+  private shockwaveRipples: ShockwaveRipple[] = [];
+
+  /** Touch XP pending drain by DungeonScene (1 per unique mob pushed). */
+  private _pendingTouchXp = 0;
+
+  /** Block XP pending drain — incremented each time the shell deflects a projectile or tongue. */
+  private _pendingBlockXp = 0;
+
+  /** Pending shockwave event for level-15 shell expiry. */
+  private _pendingShockwave: { x: number; y: number; radiusPx: number } | null = null;
+
+  /** Pending chain lightning origin points (mob died inside shell). */
+  private _pendingChainLightningOrigins: Array<{ x: number; y: number }> = [];
 
   /** Reusable Set to avoid allocating per queryCircle call each frame. */
   private readonly _querySet = new Set<Mob>();
-
-  private readonly SHELL_COOLDOWN = 7200; // 2 min @ 60 fps
-  private readonly SHELL_DURATION = 1200; // 20 s  @ 60 fps
 
   get shellCooldown(): number {
     return this._shellCooldown;
   }
 
   get shellCooldownMax(): number {
-    return this.SHELL_COOLDOWN;
+    return this._shellCooldownMax;
   }
 
-  triggerProtectiveShell(human: HumanPlayer, mobGrid: SpatialGrid<Mob>): void {
-    if (this._shellCooldown > 0) return;
-    const radiusTiles = 3 + human.intelligence * 0.5;
-    const radiusPx = radiusTiles * TILE_SIZE;
+  get activeShellLevel(): number {
+    return this.activeShell?.abilityLevel ?? 0;
+  }
+
+  /** Returns true if the tile-top-left point (px, py) is inside the active shell. */
+  isInsideShell(px: number, py: number): boolean {
+    if (!this.activeShell) return false;
+    const { x, y, radiusPx } = this.activeShell;
+    const cx = px + TILE_SIZE * 0.5;
+    const cy = py + TILE_SIZE * 0.5;
+    return Math.hypot(cx - x, cy - y) < radiusPx;
+  }
+
+  drainTouchXp(): number {
+    const v = this._pendingTouchXp;
+    this._pendingTouchXp = 0;
+    return v;
+  }
+
+  /** True if the given center point (world pixels) is inside the active shell. */
+  isPointInsideShell(cx: number, cy: number): boolean {
+    if (!this.activeShell) return false;
+    return Math.hypot(cx - this.activeShell.x, cy - this.activeShell.y) < this.activeShell.radiusPx;
+  }
+
+  /** Called by mobs when the shell deflects one of their attacks. */
+  addBlockXp(amount: number): void {
+    this._pendingBlockXp += amount;
+  }
+
+  drainBlockXp(): number {
+    const v = this._pendingBlockXp;
+    this._pendingBlockXp = 0;
+    return v;
+  }
+
+  drainPendingShockwave(): { x: number; y: number; radiusPx: number } | null {
+    const v = this._pendingShockwave;
+    this._pendingShockwave = null;
+    return v;
+  }
+
+  drainChainLightningOrigins(): Array<{ x: number; y: number }> {
+    const v = this._pendingChainLightningOrigins;
+    this._pendingChainLightningOrigins = [];
+    return v;
+  }
+
+  /** Queue a chain lightning origin (called from DungeonScene when a mob dies inside the shell). */
+  addChainLightningOrigin(x: number, y: number): void {
+    this._pendingChainLightningOrigins.push({ x, y });
+  }
+
+  /** Add a visual bolt for the chain lightning effect. */
+  addChainLightningBolt(fromX: number, fromY: number, toX: number, toY: number): void {
+    this.chainLightningBolts.push({ fromX, fromY, toX, toY, framesLeft: 20 });
+  }
+
+  /** Add an expanding shockwave ring for visual effect. */
+  addShockwaveRipple(x: number, y: number, radiusPx: number): void {
+    this.shockwaveRipples.push({
+      x,
+      y,
+      maxRadius: radiusPx + TILE_SIZE * 2,
+      currentRadius: radiusPx * 0.5,
+      framesLeft: 40,
+      totalFrames: 40,
+    });
+  }
+
+  /**
+   * Attempt to activate the protective shell.
+   * @returns true if the shell was successfully triggered (i.e. not on cooldown).
+   */
+  triggerProtectiveShell(
+    human: HumanPlayer,
+    cat: CatPlayer,
+    mobGrid: SpatialGrid<Mob>,
+    abilityLevel: number,
+  ): boolean {
+    if (this._shellCooldown > 0) return false;
+
+    const stats = getProtectiveShellStats(abilityLevel);
+    const radiusPx = stats.radiusTiles * TILE_SIZE;
+    const shellX = human.x + TILE_SIZE * 0.5;
+    const shellY = human.y + TILE_SIZE * 0.5;
+
     this.activeShell = {
-      x: human.x + TILE_SIZE * 0.5,
-      y: human.y + TILE_SIZE * 0.5,
+      x: shellX,
+      y: shellY,
       radiusPx,
-      framesRemaining: this.SHELL_DURATION,
-      totalFrames: this.SHELL_DURATION,
+      framesRemaining: stats.durationFrames,
+      totalFrames: stats.durationFrames,
       didInitialDamage: false,
+      abilityLevel,
+      catWasInside: false,
+      continuousDamageThrottle: 0,
+      touchedMobIds: new Set<Mob>(),
     };
-    this._shellCooldown = this.SHELL_COOLDOWN;
+
+    this._shellCooldown = stats.cooldownFrames;
+    this._shellCooldownMax = stats.cooldownFrames;
     this.shellOwner = human;
-    this.pushMobsFromShell(mobGrid);
+
+    // Level 15: instant ally heal + clear status effects
+    if (stats.isFullPower) {
+      human.hp = human.maxHp;
+      human.statusEffects = [];
+      cat.hp = cat.maxHp;
+      cat.statusEffects = [];
+    }
+
+    const shell = this.activeShell;
+    const catDist = Math.hypot(cat.x + TILE_SIZE * 0.5 - shellX, cat.y + TILE_SIZE * 0.5 - shellY);
+    shell.catWasInside = catDist < radiusPx;
+
+    this.pushMobsFromShell(mobGrid, stats);
+
+    return true;
   }
 
   castConfusingFog(caster: HumanPlayer | CatPlayer): void {
@@ -129,26 +276,144 @@ export class SpellSystem implements GameSystem {
 
   /** Called every gameplay frame. Ticks cooldowns, pushes shell mobs, marks confused mobs. */
   update(ctx: SystemContext): void {
-    const { mobs, mobGrid } = ctx;
+    const { mobs, mobGrid, cat, human } = ctx;
+
     if (this._shellCooldown > 0) this._shellCooldown--;
+
     if (this.activeShell) {
-      this.activeShell.framesRemaining--;
-      this.pushMobsFromShell(mobGrid);
-      if (this.activeShell.framesRemaining <= 0) {
+      // Clear heal boost from previous frame; re-applied below if ally is still inside
+      cat.clearRegenModifier('shell');
+      human.clearRegenModifier('shell');
+
+      const shell = this.activeShell;
+      const stats = getProtectiveShellStats(shell.abilityLevel);
+
+      shell.framesRemaining--;
+
+      // Push mobs outward every frame
+      this.pushMobsFromShell(mobGrid, stats);
+
+      // Level 10+: boost healing for allies inside the shell
+      const catCx = cat.x + TILE_SIZE * 0.5;
+      const catCy = cat.y + TILE_SIZE * 0.5;
+      const catDist = Math.hypot(catCx - shell.x, catCy - shell.y);
+      const catIsInside = catDist < shell.radiusPx;
+      const humanDist = Math.hypot(
+        human.x + TILE_SIZE * 0.5 - shell.x,
+        human.y + TILE_SIZE * 0.5 - shell.y,
+      );
+      const humanIsInside = humanDist < shell.radiusPx;
+
+      if (stats.allyHealingMultiplier > 1) {
+        if (catIsInside) cat.setRegenModifier('shell', stats.allyHealingMultiplier);
+        if (humanIsInside) human.setRegenModifier('shell', stats.allyHealingMultiplier);
+      }
+
+      // Level 14+: mini-shield for cat when it exits the shell
+      if (stats.miniShieldEnabled) {
+        if (shell.catWasInside && !catIsInside) {
+          // Cat just left — give it a mini-shell
+          this.catMiniShell = { framesRemaining: 180, radiusPx: TILE_SIZE * 1.5 };
+        }
+        shell.catWasInside = catIsInside;
+      }
+
+      // Level 14+: continuous boundary damage (every 60 frames)
+      if (stats.continuousDamageEnabled) {
+        shell.continuousDamageThrottle++;
+        if (shell.continuousDamageThrottle >= 60) {
+          shell.continuousDamageThrottle = 0;
+          this._querySet.clear();
+          const boundaryMobs = mobGrid.queryCircle(
+            shell.x,
+            shell.y,
+            shell.radiusPx + TILE_SIZE,
+            this._querySet,
+          );
+          for (const mob of boundaryMobs) {
+            if (!mob.isAlive) continue;
+            const dx = mob.x + TILE_SIZE * 0.5 - shell.x;
+            const dy = mob.y + TILE_SIZE * 0.5 - shell.y;
+            const dist = Math.hypot(dx, dy);
+            // "On the boundary" = within 1 tile outside the shell edge
+            if (dist >= shell.radiusPx && dist < shell.radiusPx + TILE_SIZE) {
+              mob.takeDamageFrom(1, this.shellOwner, 'shell');
+            }
+          }
+        }
+      }
+
+      // Level 15+: magic protection — continuously clear magic-type status effects from human
+      if (stats.isFullPower) {
+        human.statusEffects = human.statusEffects.filter(
+          (e) => e.type !== 'magic_burn' && e.type !== 'electrified',
+        );
+      }
+
+      if (shell.framesRemaining <= 0) {
+        cat.clearRegenModifier('shell');
+        human.clearRegenModifier('shell');
+        if (stats.isFullPower) {
+          this._pendingShockwave = { x: shell.x, y: shell.y, radiusPx: shell.radiusPx };
+        }
         this.activeShell = null;
         this.shellOwner = null;
       }
     }
 
+    // Tick cat mini-shell
+    if (this.catMiniShell) {
+      this.catMiniShell.framesRemaining--;
+
+      // Push mobs away from cat center using the mini-shell
+      const miniRadius = this.catMiniShell.radiusPx;
+      this._querySet.clear();
+      const catCx = cat.x + TILE_SIZE * 0.5;
+      const catCy = cat.y + TILE_SIZE * 0.5;
+      const nearMobs = mobGrid.queryCircle(catCx, catCy, miniRadius + TILE_SIZE, this._querySet);
+      for (const mob of nearMobs) {
+        if (!mob.isAlive) continue;
+        const mcx = mob.x + TILE_SIZE * 0.5;
+        const mcy = mob.y + TILE_SIZE * 0.5;
+        const dx = mcx - catCx;
+        const dy = mcy - catCy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < miniRadius) {
+          const ox = mob.x;
+          const oy = mob.y;
+          const nx = dist > 0 ? dx / dist : 1;
+          const ny = dist > 0 ? dy / dist : 0;
+          const push = miniRadius - dist + 2;
+          mob.x += nx * push;
+          mob.y += ny * push;
+          mobGrid.move(mob, ox, oy);
+        }
+      }
+
+      if (this.catMiniShell.framesRemaining <= 0) {
+        this.catMiniShell = null;
+      }
+    }
+
+    // Tick chain lightning bolts (visual only) — iterate backwards to allow splice
+    this.chainLightningBolts = this.chainLightningBolts.filter((bolt) => {
+      bolt.framesLeft--;
+      return bolt.framesLeft > 0;
+    });
+
+    // Tick shockwave ripples (visual only)
+    this.shockwaveRipples = this.shockwaveRipples.filter((ripple) => {
+      ripple.framesLeft--;
+      ripple.currentRadius +=
+        (ripple.maxRadius - ripple.currentRadius) / Math.max(1, ripple.framesLeft);
+      return ripple.framesLeft > 0;
+    });
+
     // Reset confusion, then re-mark mobs inside active fogs
     for (const mob of mobs) mob.isConfused = false;
-    for (let fi = this.activeFogs.length - 1; fi >= 0; fi--) {
-      const fog = this.activeFogs[fi];
+    this.activeFogs = this.activeFogs.filter((fog) => {
       fog.framesLeft--;
-      if (fog.framesLeft <= 0) {
-        this.activeFogs.splice(fi, 1);
-        continue;
-      }
+      if (fog.framesLeft <= 0) return false;
       this._querySet.clear();
       const inFog = mobGrid.queryCircle(fog.x, fog.y, fog.radiusPx + TILE_SIZE, this._querySet);
       const rSq = fog.radiusPx * fog.radiusPx;
@@ -160,12 +425,15 @@ export class SpellSystem implements GameSystem {
           mob.isConfused = true;
         }
       }
-    }
+      return true;
+    });
   }
 
-  private pushMobsFromShell(mobGrid: SpatialGrid<Mob>): void {
+  private pushMobsFromShell(mobGrid: SpatialGrid<Mob>, stats: ProtectiveShellStats): void {
     if (!this.activeShell) return;
-    const { x, y, radiusPx } = this.activeShell;
+    const shell = this.activeShell;
+    const { x, y, radiusPx } = shell;
+
     this._querySet.clear();
     const nearShell = mobGrid.queryCircle(x, y, radiusPx + TILE_SIZE, this._querySet);
     for (const mob of nearShell) {
@@ -176,30 +444,49 @@ export class SpellSystem implements GameSystem {
       const dy = mcy - y;
       const dist = Math.hypot(dx, dy);
       if (dist < radiusPx) {
-        const ox = mob.x,
-          oy = mob.y;
+        const ox = mob.x;
+        const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
         const push = radiusPx - dist + 2;
         mob.x += nx * push;
         mob.y += ny * push;
-        if (this.shellOwner && !this.activeShell.didInitialDamage) {
-          mob.takeDamageFrom(3, this.shellOwner);
+
+        // Expansion damage: only on the very first push frame (initial cast)
+        if (!shell.didInitialDamage && stats.expandDamageEnabled) {
+          mob.takeDamageFrom(stats.expandDamage, this.shellOwner, 'shell');
         }
+
+        // Track unique mobs touched for XP
+        if (!shell.touchedMobIds.has(mob)) {
+          shell.touchedMobIds.add(mob);
+          this._pendingTouchXp++;
+        }
+
+        mobGrid.move(mob, ox, oy);
+      } else if (dist < radiusPx + 4) {
+        // Thin outer buffer: push mobs back so they can't re-enter from outside
+        const ox = mob.x;
+        const oy = mob.y;
+        const nx = dist > 0 ? dx / dist : 1;
+        const ny = dist > 0 ? dy / dist : 0;
+        mob.x += nx * (radiusPx + 4 - dist);
+        mob.y += ny * (radiusPx + 4 - dist);
         mobGrid.move(mob, ox, oy);
       }
     }
-    this.activeShell.didInitialDamage = true;
+    shell.didInitialDamage = true;
   }
 
   renderShell(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.activeShell) return;
-    const { x, y, radiusPx, framesRemaining, totalFrames } = this.activeShell;
+    const { x, y, radiusPx, framesRemaining, totalFrames, abilityLevel } = this.activeShell;
     const sx = x - camX;
     const sy = y - camY;
+    const isFullPower = abilityLevel >= 15;
 
     // Offscreen culling
-    const extent = radiusPx + 25; // 25 = max glow offset (i*5 at i=4 + lineWidth)
+    const extent = radiusPx + 25;
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
@@ -212,11 +499,15 @@ export class SpellSystem implements GameSystem {
     const fadeOut = Math.min(1, framesRemaining / 60);
     const alpha = Math.min(fadeIn, fadeOut);
 
+    const outerColor = isFullPower ? '#fbbf24' : '#93c5fd';
+    const mainColor = isFullPower ? '#ff8c00' : '#3b82f6';
+    const fillColor = isFullPower ? '#fd7c0a' : '#60a5fa';
+
     ctx.save();
 
     for (let i = 4; i >= 1; i--) {
       ctx.globalAlpha = alpha * (0.06 * i);
-      ctx.strokeStyle = '#93c5fd';
+      ctx.strokeStyle = outerColor;
       ctx.lineWidth = i * 3;
       ctx.beginPath();
       ctx.arc(sx, sy, radiusPx + i * 5, 0, Math.PI * 2);
@@ -225,26 +516,119 @@ export class SpellSystem implements GameSystem {
 
     const pulse = 0.7 + 0.3 * Math.sin(framesRemaining * 0.12);
     ctx.globalAlpha = alpha * pulse;
-    ctx.strokeStyle = '#3b82f6';
+    ctx.strokeStyle = mainColor;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.globalAlpha = alpha * 0.06;
-    ctx.fillStyle = '#60a5fa';
+    ctx.fillStyle = fillColor;
     ctx.beginPath();
     ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.globalAlpha = alpha * 0.8;
-    ctx.fillStyle = '#93c5fd';
+    ctx.fillStyle = isFullPower ? '#fbbf24' : '#93c5fd';
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
     const secs = Math.ceil(framesRemaining / 60);
     ctx.fillText(`${secs}s`, sx, sy - radiusPx - 6);
     ctx.textAlign = 'left';
 
+    ctx.restore();
+  }
+
+  renderCatMiniShell(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    cat: CatPlayer,
+  ): void {
+    if (!this.catMiniShell) return;
+    const { framesRemaining, radiusPx } = this.catMiniShell;
+    const sx = cat.x + TILE_SIZE * 0.5 - camX;
+    const sy = cat.y + TILE_SIZE * 0.5 - camY;
+
+    const fadeOut = Math.min(1, framesRemaining / 30);
+    const pulse = 0.6 + 0.4 * Math.sin(framesRemaining * 0.2);
+
+    ctx.save();
+    ctx.globalAlpha = fadeOut * pulse * 0.7;
+    ctx.strokeStyle = '#a78bfa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = fadeOut * 0.04;
+    ctx.fillStyle = '#c4b5fd';
+    ctx.beginPath();
+    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  renderChainLightning(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.chainLightningBolts.length === 0) return;
+    ctx.save();
+    for (const bolt of this.chainLightningBolts) {
+      const alpha = bolt.framesLeft / 20;
+      const fromSx = bolt.fromX - camX;
+      const fromSy = bolt.fromY - camY;
+      const toSx = bolt.toX - camX;
+      const toSy = bolt.toY - camY;
+
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      // Jittered midpoints simulate a non-linear lightning arc
+      const { x: perpX, y: perpY } = normalize(-(toSy - fromSy), toSx - fromSx);
+      const steps = 5;
+      ctx.moveTo(fromSx, fromSy);
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const mx = fromSx + (toSx - fromSx) * t;
+        const my = fromSy + (toSy - fromSy) * t;
+        const jitter = (Math.random() - 0.5) * 8;
+        ctx.lineTo(mx + perpX * jitter, my + perpY * jitter);
+      }
+      ctx.lineTo(toSx, toSy);
+      ctx.stroke();
+
+      // White core
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  renderShockwaveRipples(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.shockwaveRipples.length === 0) return;
+    ctx.save();
+    for (const ripple of this.shockwaveRipples) {
+      const sx = ripple.x - camX;
+      const sy = ripple.y - camY;
+      const alpha = (ripple.framesLeft / ripple.totalFrames) * 0.7;
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ff8c00';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sx, sy, ripple.currentRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy, ripple.currentRadius * 0.85, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

@@ -21,7 +21,7 @@ export interface GameEvents {
   mobKilled: {
     mob: Mob;
     killer: HumanPlayer | CatPlayer | null;
-    killType: 'melee' | 'missile' | null;
+    killType: 'melee' | 'missile' | 'shell' | null;
     topDamageDealer: HumanPlayer | CatPlayer | null;
   };
 

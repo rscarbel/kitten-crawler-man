@@ -66,6 +66,16 @@ export class EquipmentManager {
     return this.hasEquipped(itemId);
   }
 
+  /** Returns all currently equipped items (skipping any that can no longer be found). */
+  equippedItems(): InventoryItem[] {
+    const items: InventoryItem[] = [];
+    for (const id of this.equipped.values()) {
+      const item = this.findItem(id);
+      if (item) items.push(item);
+    }
+    return items;
+  }
+
   /** Sum all stat bonuses from currently equipped items. */
   getStatBonuses(): {
     constitution: number;

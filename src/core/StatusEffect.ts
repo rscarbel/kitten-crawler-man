@@ -36,3 +36,8 @@ export function makeSepsis(): StatusEffect {
 export function makeMagicBurn(): StatusEffect {
   return { type: 'magic_burn', ticksRemaining: 600, totalTicks: 600 };
 }
+
+/** Electrified: 10-second DoT + movement slow from level-15 shell shock wave. */
+export function makeElectrified(): StatusEffect {
+  return { type: 'electrified', ticksRemaining: 600, totalTicks: 600 };
+}

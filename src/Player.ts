@@ -41,6 +41,8 @@ export abstract class Player {
   statusEffects: StatusEffect[] = [];
   /** When true, mob AI treats this player as a defend target and will not attack other targets. */
   isDefendTarget?: boolean;
+  /** Named multipliers applied to HP regen rate. Each entry stacks multiplicatively. */
+  private readonly _regenModifiers = new Map<string, number>();
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
   tempStatMods: Array<{
     ticksRemaining: number;
@@ -176,16 +178,35 @@ export abstract class Player {
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % 60 === 0) {
         this.takeDamage(1);
       }
+      if (effect.type === 'electrified' && elapsed > 0 && elapsed % 60 === 0) {
+        this.takeDamage(1);
+      }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;
     });
   }
 
-  /** Returns the regen speed multiplier from equipped gear. */
+  /** Register (or overwrite) a named regen multiplier. Pass 1 to effectively disable it without removing. */
+  setRegenModifier(key: string, multiplier: number): void {
+    this._regenModifiers.set(key, multiplier);
+  }
+
+  /** Remove a named regen multiplier. No-op if the key was never set. */
+  clearRegenModifier(key: string): void {
+    this._regenModifiers.delete(key);
+  }
+
+  /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers. */
   get regenMultiplier(): number {
-    // Trollskin Shirt grants 2.5× health regeneration rate
-    if (this.inventory.hasEquipped('trollskin_shirt')) return 2.5;
-    return 1;
+    let result = 1;
+    for (const item of this.inventory.equippedItems()) {
+      const m = item.regenMultiplier;
+      if (m !== undefined) result *= m;
+    }
+    for (const m of this._regenModifiers.values()) {
+      result *= m;
+    }
+    return result;
   }
 
   tickTimers() {

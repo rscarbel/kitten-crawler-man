@@ -163,6 +163,11 @@ export class Inventory {
     return this.equipment.hasEquipped(itemId);
   }
 
+  /** Returns all currently equipped items. */
+  equippedItems(): InventoryItem[] {
+    return this.equipment.equippedItems();
+  }
+
   /** Sum all stat bonuses from currently equipped items. */
   getEquippedStatBonus(): {
     constitution: number;

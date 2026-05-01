@@ -1,6 +1,7 @@
 import { Player } from '../Player';
 import type { Mob } from './Mob';
 import { drawHumanSprite, drawHumanAttack } from '../sprites/humanSprite';
+import type { AbilityManager } from '../core/AbilityManager';
 
 /**
  * This is a playable character.
@@ -11,6 +12,8 @@ import { drawHumanSprite, drawHumanAttack } from '../sprites/humanSprite';
 export class HumanPlayer extends Player {
   /** Increases dynamite damage and throw distance. */
   explosivesHandling = 1;
+
+  private abilityManager: AbilityManager | null = null;
 
   private attackPhase: 'punch' | 'kick' | null = null;
   private attackTimer = 0;
@@ -29,6 +32,14 @@ export class HumanPlayer extends Player {
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
     const boxersSlot = this.inventory.bag.slots.find((s) => s?.id === 'enchanted_bigboi_boxers');
     if (boxersSlot) this.applyItemBonus(boxersSlot);
+  }
+
+  setAbilityManager(manager: AbilityManager): void {
+    this.abilityManager = manager;
+  }
+
+  getProtectiveShellLevel(): number {
+    return this.abilityManager?.getLevel('protective_shell') ?? 1;
   }
 
   spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
