@@ -8,6 +8,12 @@ import {
   FLOOR_GRATE,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
+import { getSpriteDef } from '../../core/SpriteLoader';
+import { drawSprite } from '../../core/SpriteRenderer';
+
+function tileHash(tx: number, ty: number): number {
+  return ((Math.imul(tx, 2246822519) ^ Math.imul(ty, 668265263)) >>> 0) % 65536;
+}
 
 export function drawSpecialFloorTile(
   ctx: CanvasRenderingContext2D,
@@ -41,28 +47,16 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Boss Room floor — grimy, trash-covered
+    // Hoarder Boss Room floor — organic grime texture from tileset
     case HORDER_BOSS_ROOM_FLOOR: {
-      // Dark yellowish-brown base with alternating grime variation
-      const bossBase = (tx + ty) % 2 === 0 ? '#2e2010' : '#281c0c';
-      ctx.fillStyle = bossBase;
-      ctx.fillRect(sx, sy, ts, ts);
-      // Dark cracked grout lines
-      ctx.fillStyle = '#1a1208';
-      ctx.fillRect(sx + ts - 1, sy, 1, ts);
-      ctx.fillRect(sx, sy + ts - 1, ts, 1);
-      // Puke/grime stain blotches scattered across floor
-      if ((tx * 3 + ty * 7) % 5 === 0) {
-        ctx.fillStyle = 'rgba(120,140,20,0.28)';
-        ctx.beginPath();
-        ctx.ellipse(sx + ts * 0.4, sy + ts * 0.5, ts * 0.35, ts * 0.22, 0.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      if ((tx * 5 + ty * 3) % 7 === 0) {
-        ctx.fillStyle = 'rgba(80,60,10,0.35)';
-        ctx.beginPath();
-        ctx.ellipse(sx + ts * 0.65, sy + ts * 0.35, ts * 0.2, ts * 0.14, -0.5, 0, Math.PI * 2);
-        ctx.fill();
+      const def = getSpriteDef('dungeon_tileset');
+      const frame = tileHash(tx, ty) % 8;
+      const stateDef = def?.states.get('floor_hoarder');
+      if (def && stateDef) {
+        drawSprite(ctx, def, stateDef, frame, sx, sy, ts);
+      } else {
+        ctx.fillStyle = '#281c0c';
+        ctx.fillRect(sx, sy, ts, ts);
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;

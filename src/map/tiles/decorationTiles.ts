@@ -1,6 +1,19 @@
 import type { TileContent } from '../tileTypes';
-import { FOUNTAIN, TORCH, WELL, GRASSY_WEED, DIRT_PATCH } from '../tileTypes';
-import { inferGroundColor } from './helpers';
+import {
+  FOUNTAIN,
+  TORCH,
+  WELL,
+  GRASSY_WEED,
+  DIRT_PATCH,
+  BARREL_SIDE,
+  CRATE,
+  BRAZIER,
+  BONES,
+} from '../tileTypes';
+import { inferFloorType } from './helpers';
+import { drawTerrainTile } from './terrainTiles';
+import { drawSpecialFloorTile } from './specialFloorTiles';
+import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
 import { frameTime } from '../../utils';
 
 export function drawDecorationTile(
@@ -13,15 +26,20 @@ export function drawDecorationTile(
   tx: number,
   ty: number,
   baseOnly = false,
+  tileTime?: number,
 ): boolean {
   if (baseOnly) {
     switch (type) {
       case TORCH:
       case WELL:
       case FOUNTAIN:
-        ctx.fillStyle = inferGroundColor(structure, tx, ty);
-        ctx.fillRect(sx, sy, ts, ts);
+      case BRAZIER: {
+        const floorType = inferFloorType(structure, tx, ty);
+        if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
+          drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
+        }
         return true;
+      }
       default:
         return false;
     }
@@ -35,7 +53,7 @@ export function drawDecorationTile(
       const isCenter = nN && nS && nE && nW;
       const fcx = sx + ts / 2;
       const fcy = sy + ts / 2;
-      const t = frameTime;
+      const t = tileTime ?? frameTime;
 
       if (isCenter) {
         // === WATER BASIN FLOOR ===
@@ -258,170 +276,90 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Torch — animated flame, pole not walkable
+    // Torch — animated PNG sprite with transparent background
     case TORCH: {
-      const t = frameTime;
-      const flicker = Math.sin(t * 11.3) * 0.6 + Math.sin(t * 7.1) * 0.4;
-
-      // Ground base — colour matches surrounding floor (road, cobblestone, or grass)
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-
-      // Stone footing at pole base (bottom-centre)
-      const footX = sx + Math.floor(ts / 2) - 4;
-      const footY = sy + Math.floor(ts * 0.72);
-      ctx.fillStyle = '#909090';
-      ctx.fillRect(footX, footY, 8, Math.floor(ts * 0.2));
-      ctx.fillStyle = '#b0b0b0';
-      ctx.fillRect(footX, footY, 8, 2);
-
-      // Pole (dark iron)
-      const poleX = sx + Math.floor(ts / 2) - 1;
-      ctx.fillStyle = '#2e2e2e';
-      ctx.fillRect(poleX, sy + Math.floor(ts * 0.22), 3, Math.floor(ts * 0.55));
-      // Pole sheen
-      ctx.fillStyle = '#484848';
-      ctx.fillRect(poleX, sy + Math.floor(ts * 0.22), 1, Math.floor(ts * 0.55));
-
-      // Torch head bracket
-      const headY = sy + Math.floor(ts * 0.18);
-      ctx.fillStyle = '#3a3020';
-      ctx.fillRect(sx + Math.floor(ts / 2) - 4, headY, 9, 5);
-      ctx.fillStyle = '#4e4030';
-      ctx.fillRect(sx + Math.floor(ts / 2) - 4, headY, 9, 2);
-
-      // Outer warm glow (radial gradient drawn as concentric filled arcs)
-      const glowX = sx + Math.floor(ts / 2);
-      const glowY = sy + Math.floor(ts * 0.12);
-      const glowR = ts * 0.34 + flicker * ts * 0.04;
-      ctx.fillStyle = `rgba(255,140,20,${0.18 + flicker * 0.05})`;
-      ctx.beginPath();
-      ctx.arc(glowX, glowY, glowR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,180,40,${0.22 + flicker * 0.06})`;
-      ctx.beginPath();
-      ctx.arc(glowX, glowY, glowR * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Flame body (animated oval)
-      const flameH = ts * 0.22 + flicker * ts * 0.04;
-      const flameW = ts * 0.14 + flicker * ts * 0.02;
-      ctx.fillStyle = `rgba(255,110,10,${0.9 + flicker * 0.08})`;
-      ctx.beginPath();
-      ctx.ellipse(glowX, glowY, flameW, flameH, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Flame mid layer
-      ctx.fillStyle = `rgba(255,200,40,${0.85 + flicker * 0.1})`;
-      ctx.beginPath();
-      ctx.ellipse(glowX, glowY + flameH * 0.08, flameW * 0.55, flameH * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Flame hot core
-      ctx.fillStyle = `rgba(255,255,200,${0.8 + flicker * 0.15})`;
-      ctx.beginPath();
-      ctx.arc(glowX, glowY + flameH * 0.1, flameW * 0.28, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Smoke wisps rising above the tile
-      const smokeBaseY = glowY - flameH - 2;
-      ctx.fillStyle = `rgba(180,180,180,${0.28 + Math.sin(t * 4.1) * 0.08})`;
-      ctx.beginPath();
-      ctx.arc(glowX + Math.sin(t * 2.2) * 2, smokeBaseY - ts * 0.05, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(150,150,150,${0.15 + Math.sin(t * 3.3) * 0.05})`;
-      ctx.beginPath();
-      ctx.arc(glowX + Math.sin(t * 2.9) * 3, smokeBaseY - ts * 0.15, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(120,120,120,0.08)`;
-      ctx.beginPath();
-      ctx.arc(glowX + Math.sin(t * 2.0) * 4, smokeBaseY - ts * 0.26, 4.5, 0, Math.PI * 2);
-      ctx.fill();
+      drawSpriteKey(ctx, 'torch', 'flicker', timeFrameIndex(frameTime, 8, 6), sx, sy, ts);
       return true;
     }
 
-    // Well — stone well with wooden crossbeam, not walkable
+    // Well — PNG sprite with transparent background
     case WELL: {
-      // Ground base — colour matches surrounding floor
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
+      drawSpriteKey(ctx, 'well', 'idle', 0, sx, sy, ts);
+      return true;
+    }
 
-      const wcx = sx + Math.floor(ts / 2);
-      const wcy = sy + Math.floor(ts * 0.55);
-      const outerR = Math.floor(ts * 0.4);
-      const innerR = Math.floor(ts * 0.27);
+    // Brazier — animated iron fire brazier, extends above tile
+    case BRAZIER: {
+      drawSpriteKey(ctx, 'brazier', 'flicker', timeFrameIndex(frameTime, 10, 4), sx, sy, ts);
+      return true;
+    }
 
-      // Stone ring — outer (shadow side)
-      ctx.fillStyle = '#6e6e6e';
-      ctx.beginPath();
-      ctx.arc(wcx + 2, wcy + 2, outerR, 0, Math.PI * 2);
-      ctx.fill();
-      // Stone ring — main
-      ctx.fillStyle = '#909090';
-      ctx.beginPath();
-      ctx.arc(wcx, wcy, outerR, 0, Math.PI * 2);
-      ctx.fill();
-      // Stone ring — lit top arc
-      ctx.fillStyle = '#b8b8b8';
-      ctx.beginPath();
-      ctx.arc(wcx, wcy, outerR, Math.PI * 1.1, Math.PI * 1.9);
-      ctx.fill();
-      ctx.fillStyle = '#909090'; // restore over the arc interior
-      ctx.beginPath();
-      ctx.arc(wcx, wcy, outerR - 3, Math.PI * 1.1, Math.PI * 1.9);
-      ctx.fill();
-      // Stone ring mortar lines (short radial dashes)
-      ctx.fillStyle = '#707070';
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const r0 = outerR - 2;
-        const r1 = outerR - 6;
-        const ax = Math.cos(angle);
-        const ay = Math.sin(angle);
-        ctx.fillRect(
-          wcx + ax * r1 - 0.5,
-          wcy + ay * r1 - 0.5,
-          Math.abs(ax) * (r0 - r1) + 1,
-          Math.abs(ay) * (r0 - r1) + 1,
-        );
+    // Barrel on its side — PNG sprite, draw floor first
+    case BARREL_SIDE: {
+      const barrelSideFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, barrelSideFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, barrelSideFloor, sx, sy, ts, tx, ty);
       }
+      drawSpriteKey(ctx, 'barrel_side', 'idle', 0, sx, sy, ts);
+      return true;
+    }
 
-      // Deep well interior
-      ctx.fillStyle = '#111828';
-      ctx.beginPath();
-      ctx.arc(wcx, wcy, innerR, 0, Math.PI * 2);
-      ctx.fill();
-      // Hint of water far below
-      ctx.fillStyle = '#1a3a52';
-      ctx.beginPath();
-      ctx.arc(wcx, wcy + innerR * 0.5, innerR * 0.55, 0, Math.PI * 2);
-      ctx.fill();
+    // Wooden crate — PNG sprite, draw floor first
+    case CRATE: {
+      const crateFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, crateFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, crateFloor, sx, sy, ts, tx, ty);
+      }
+      drawSpriteKey(ctx, 'crate', 'idle', 0, sx, sy, ts);
+      return true;
+    }
 
-      // Wooden support posts (left and right)
-      const postW = 4;
-      const postH = Math.floor(ts * 0.44);
-      const postTop = sy + Math.floor(ts * 0.08);
-      ctx.fillStyle = '#4a2e10';
-      ctx.fillRect(wcx - outerR - postW + 2, postTop, postW, postH);
-      ctx.fillRect(wcx + outerR - 2, postTop, postW, postH);
-      // Post highlights
-      ctx.fillStyle = '#6b4423';
-      ctx.fillRect(wcx - outerR - postW + 2, postTop, 1, postH);
-      ctx.fillRect(wcx + outerR - 2, postTop, 1, postH);
-
-      // Horizontal crossbeam
-      const beamY = postTop;
-      ctx.fillStyle = '#5a3818';
-      ctx.fillRect(wcx - outerR - postW + 2, beamY, outerR * 2 + postW * 2 - 4, 5);
-      ctx.fillStyle = '#7a5030';
-      ctx.fillRect(wcx - outerR - postW + 2, beamY, outerR * 2 + postW * 2 - 4, 2);
-
-      // Rope
-      ctx.fillStyle = '#c8a050';
-      ctx.fillRect(wcx - 1, beamY + 5, 2, innerR * 0.9);
-      // Tiny bucket at rope bottom
-      ctx.fillStyle = '#7a6040';
-      ctx.fillRect(wcx - 3, beamY + 5 + innerR * 0.9 - 1, 6, 4);
-      ctx.fillStyle = '#9a8060';
-      ctx.fillRect(wcx - 3, beamY + 5 + innerR * 0.9 - 1, 6, 1);
+    // Bones pile — walkable, procedural scattered bones drawn over floor
+    case BONES: {
+      const bonesFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, bonesFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, bonesFloor, sx, sy, ts, tx, ty);
+      }
+      // Deterministic layout per tile position
+      const bh1 = (tx * 37 + ty * 23) % 97;
+      const bh2 = (tx * 61 + ty * 47) % 89;
+      // Long bone 1 (femur/tibia shape — rounded ends, shaft)
+      const b1x = sx + 5 + (bh1 % (ts - 22));
+      const b1y = sy + 8 + (bh2 % (ts - 20));
+      const b1a = (bh1 % 6) * 0.5;
+      ctx.save();
+      ctx.translate(b1x + 9, b1y + 4);
+      ctx.rotate(b1a);
+      ctx.fillStyle = '#d8d0b8';
+      ctx.fillRect(-9, -2, 18, 4);           // shaft
+      ctx.beginPath(); ctx.arc(-9, 0, 4, 0, Math.PI * 2); ctx.fill();   // knob left
+      ctx.beginPath(); ctx.arc(9, 0, 3.5, 0, Math.PI * 2); ctx.fill(); // knob right
+      ctx.fillStyle = '#c0b8a0';
+      ctx.fillRect(-8, -1, 16, 1);           // highlight
+      ctx.restore();
+      // Long bone 2 (rotated opposite)
+      const b2x = sx + 8 + (bh2 % (ts - 24));
+      const b2y = sy + 12 + (bh1 % (ts - 24));
+      const b2a = b1a + 1.1;
+      ctx.save();
+      ctx.translate(b2x + 8, b2y + 3);
+      ctx.rotate(b2a);
+      ctx.fillStyle = '#ccc4a8';
+      ctx.fillRect(-7, -2, 14, 3);
+      ctx.beginPath(); ctx.arc(-7, 0, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(7, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // Small bone fragment / rib shard
+      const b3x = sx + 10 + (bh1 % (ts - 20));
+      const b3y = sy + 6 + (bh2 % (ts - 18));
+      ctx.save();
+      ctx.translate(b3x, b3y);
+      ctx.rotate(bh2 * 0.15);
+      ctx.fillStyle = '#e0d8c0';
+      ctx.fillRect(0, -1, 10, 2);
+      ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(10, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
       return true;
     }
 

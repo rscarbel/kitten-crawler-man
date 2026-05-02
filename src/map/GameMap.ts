@@ -25,6 +25,9 @@ import {
   BARREL,
   RUG,
   CHAIR,
+  BARREL_SIDE,
+  CRATE,
+  BRAZIER,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
@@ -33,6 +36,7 @@ import {
   renderDecorationsOverlay,
   drawDecorationTileFull,
   TileChunkCache,
+  OverlayTileCache,
 } from './TileRenderer';
 
 /** Options for GameMap construction. */
@@ -82,6 +86,7 @@ export class GameMap {
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
+  private _overlayCache: OverlayTileCache | null = null;
 
   constructor(opts: GameMapOptions = {}) {
     const {
@@ -588,8 +593,11 @@ export class GameMap {
       tile.type !== BED &&
       tile.type !== FIREPLACE &&
       tile.type !== BARREL &&
-      tile.type !== CHAIR
-      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37) are walkable
+      tile.type !== CHAIR &&
+      tile.type !== BARREL_SIDE &&
+      tile.type !== CRATE &&
+      tile.type !== BRAZIER
+      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43) are walkable
     );
   }
 
@@ -639,7 +647,17 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    renderDecorationsOverlay(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH);
+    this._overlayCache ??= new OverlayTileCache(this.structure, this.tileHeight);
+    renderDecorationsOverlay(
+      ctx,
+      this.structure,
+      this.tileHeight,
+      cameraX,
+      cameraY,
+      viewW,
+      viewH,
+      this._overlayCache,
+    );
   }
 
   /** Returns tile coords of all visible decoration tiles (TORCH, WELL, TREE, FOUNTAIN). */
@@ -664,6 +682,7 @@ export class GameMap {
           t === TREE ||
           t === TORCH ||
           t === WELL ||
+          t === BRAZIER ||
           t === FOUNTAIN ||
           t === BUILDING_WALL ||
           t === ROOF_THATCH ||
@@ -690,6 +709,16 @@ export class GameMap {
     camY: number,
   ): void {
     const ts = this.tileHeight;
-    drawDecorationTileFull(ctx, this.structure, tx, ty, tx * ts - camX, ty * ts - camY, ts);
+    this._overlayCache ??= new OverlayTileCache(this.structure, ts);
+    drawDecorationTileFull(
+      ctx,
+      this.structure,
+      tx,
+      ty,
+      tx * ts - camX,
+      ty * ts - camY,
+      ts,
+      this._overlayCache,
+    );
   }
 }

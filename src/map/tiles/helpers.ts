@@ -1,6 +1,7 @@
 import type { TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
+  VOID_TYPE,
   SAFE_ROOM_FLOOR,
   BUILDING_WALL,
   METAL_WALL,
@@ -16,12 +17,17 @@ import {
   TORCH,
   WELL,
   DIRT_PATCH,
+  GRASSY_WEED,
   TABLE,
   BOOKSHELF,
   BED,
   FIREPLACE,
   BARREL,
   CHAIR,
+  BARREL_SIDE,
+  CRATE,
+  BRAZIER,
+  BONES,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -31,7 +37,28 @@ const CARDINAL_DIRS: [number, number][] = [
   [1, 0],
 ];
 
+// Only architectural solids cast the wall-shadow strip on adjacent floor tiles.
+// Furniture and decorations (TORCH, BARREL, TABLE …) are excluded intentionally
+// to avoid ugly rectangular gray bands next to them.
 const SHADOW_TYPES = new Set([
+  FloorTypeValue.wall,
+  BUILDING_WALL,
+  METAL_WALL,
+  TREE,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+  FOUNTAIN,
+]);
+
+// Full set of non-floor tile types used when scanning neighbours for inferFloorType.
+// Includes all opaque decorations even though they no longer cast wall shadows.
+const NON_FLOOR_TYPES = new Set<number>([
+  VOID_TYPE,
   FloorTypeValue.wall,
   BUILDING_WALL,
   METAL_WALL,
@@ -52,12 +79,35 @@ const SHADOW_TYPES = new Set([
   FIREPLACE,
   BARREL,
   CHAIR,
+  BARREL_SIDE,
+  CRATE,
+  BRAZIER,
+  BONES,
 ]);
 
 /**
- * Infers the ground base colour for a decoration tile (TORCH, WELL, etc.) by
- * examining cardinal neighbours. Priority: road > safe-room cobblestone > grass.
+ * Infers the tile type of the floor beneath a decoration (TORCH, WELL, BARREL, etc.)
+ * by scanning cardinal neighbours for the first non-wall, non-decoration tile.
+ * Maps walkable decorations (GRASSY_WEED, DIRT_PATCH) to their underlying floor type.
+ * Falls back to FloorTypeValue.concrete (dungeon floor) when no floor neighbour is found.
  */
+export function inferFloorType(structure: TileContent[][], tx: number, ty: number): number {
+  for (const [dx, dy] of CARDINAL_DIRS) {
+    const ny = ty + dy;
+    const nx = tx + dx;
+    if (ny < 0 || ny >= structure.length) continue;
+    const row = structure[ny];
+    if (nx < 0 || nx >= row.length) continue;
+    const t = row[nx].type;
+    if (NON_FLOOR_TYPES.has(t)) continue;
+    if (t === GRASSY_WEED) return FloorTypeValue.grass;
+    if (t === DIRT_PATCH) return FloorTypeValue.road;
+    return t;
+  }
+  return FloorTypeValue.concrete;
+}
+
+// Keep for any callers that haven't been migrated yet.
 export function inferGroundColor(structure: TileContent[][], tx: number, ty: number): string {
   const dirs = CARDINAL_DIRS;
   let hasRoad = false;

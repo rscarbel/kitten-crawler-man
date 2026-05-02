@@ -16,7 +16,7 @@ export function drawTroglodyteSprite(
   tongueExtend = 0,
   mouthOpenAmt = 0,
   facingX = 1,
-  _facingY = 0,
+  facingY = 0,
 ): void {
   const flipX = facingX < 0;
 
@@ -32,17 +32,22 @@ export function drawTroglodyteSprite(
     drawSpriteKey(ctx, 'troglodyte', 'idle', 0, sx, sy, s, { flipX });
   }
 
-  // Tongue overlay — drawn on top of the body when extending.
+  // Tongue overlay — rotated to face the attack direction, anchored at the mouth.
+  // Mouth position derived from body sprite geometry: tileX=24, tileY=16, 128×128 at tileScale=64.
+  // Source mouth ≈ (64, 28) → screen offset = ((64-24)/64*s, (28-16)/64*s).
   if (tongueExtend > 0) {
+    const angle = Math.atan2(facingY, facingX);
+    const mouthX = sx + s * (40 / 64);
+    const mouthY = sy + s * (12 / 64);
     drawSpriteKey(
       ctx,
       'troglodyte_tongue',
       'extend',
       progressFrameIndex(tongueExtend, 6),
-      sx,
-      sy,
+      mouthX,
+      mouthY,
       s,
-      { flipX },
+      { rotation: angle },
     );
   }
 }

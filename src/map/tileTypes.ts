@@ -71,6 +71,14 @@ export const RUG = 37;
 export const CHAIR = 38;
 /** Tile type for a floor grate — walkable, metal grate enemies can spawn from. */
 export const FLOOR_GRATE = 39;
+/** Tile type for a barrel lying on its side — not walkable. */
+export const BARREL_SIDE = 40;
+/** Tile type for a wooden storage crate — not walkable. */
+export const CRATE = 41;
+/** Tile type for an iron floor brazier — animated flames, not walkable. */
+export const BRAZIER = 42;
+/** Tile type for a pile of bones — walkable, dungeon floor decoration. */
+export const BONES = 43;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 

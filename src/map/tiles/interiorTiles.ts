@@ -11,7 +11,10 @@ import {
   RUG,
   CHAIR,
 } from '../tileTypes';
-import { inferGroundColor, drawWallShadow } from './helpers';
+import { inferFloorType } from './helpers';
+import { drawTerrainTile } from './terrainTiles';
+import { drawSpecialFloorTile } from './specialFloorTiles';
+import { drawSpriteKey } from '../../core/SpriteRenderer';
 import { frameTime } from '../../utils';
 
 export function drawInteriorTile(
@@ -71,9 +74,10 @@ export function drawInteriorTile(
 
     // Table — context-aware: seamless horizontal surface across adjacent TABLE tiles
     case TABLE: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const tableFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, tableFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, tableFloor, sx, sy, ts, tx, ty);
+      }
 
       const tblLeft = structure[ty]?.[tx - 1]?.type === TABLE;
       const tblRight = structure[ty]?.[tx + 1]?.type === TABLE;
@@ -105,9 +109,10 @@ export function drawInteriorTile(
 
     // Bookshelf — tall wooden shelf with coloured book spines
     case BOOKSHELF: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const bsFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, bsFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, bsFloor, sx, sy, ts, tx, ty);
+      }
 
       const shelfInset = 2;
       // Shelf back panel
@@ -153,9 +158,10 @@ export function drawInteriorTile(
 
     // Bed — context-aware 2×2 block: top-left=pillow, top-right=pillow, bottom=blanket
     case BED: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const bedFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, bedFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, bedFloor, sx, sy, ts, tx, ty);
+      }
 
       const bedL = structure[ty]?.[tx - 1]?.type === BED;
       const bedR = structure[ty]?.[tx + 1]?.type === BED;
@@ -215,9 +221,10 @@ export function drawInteriorTile(
 
     // Fireplace — context-aware: spans 2 tiles wide as one hearth
     case FIREPLACE: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const fpFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, fpFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, fpFloor, sx, sy, ts, tx, ty);
+      }
 
       const fpLeft = structure[ty]?.[tx - 1]?.type === FIREPLACE;
       const fpRight = structure[ty]?.[tx + 1]?.type === FIREPLACE;
@@ -278,53 +285,23 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Barrel — wooden barrel with metal bands
+    // Barrel — PNG sprite with transparent background
     case BARREL: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
-
-      const cx2 = sx + ts / 2;
-      const cy2 = sy + ts / 2;
-      const rw = Math.floor(ts * 0.38);
-      const rh = Math.floor(ts * 0.42);
-      // Barrel body (oval)
-      ctx.fillStyle = '#8B5E3C';
-      ctx.beginPath();
-      ctx.ellipse(cx2, cy2, rw, rh, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Plank lines
-      ctx.strokeStyle = '#7a5030';
-      ctx.lineWidth = 1;
-      for (let dx = -rw + 4; dx < rw; dx += 5) {
-        ctx.beginPath();
-        ctx.moveTo(cx2 + dx, cy2 - rh + 2);
-        ctx.lineTo(cx2 + dx, cy2 + rh - 2);
-        ctx.stroke();
+      const barrelFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, barrelFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, barrelFloor, sx, sy, ts, tx, ty);
       }
-      // Metal bands
-      ctx.strokeStyle = '#8a8a8a';
-      ctx.lineWidth = 2;
-      for (const bandOff of [-0.3, 0, 0.3]) {
-        ctx.beginPath();
-        const bandY = cy2 + bandOff * rh;
-        ctx.ellipse(cx2, bandY, rw + 1, 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      // Top rim highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.beginPath();
-      ctx.ellipse(cx2, cy2 - rh + 1, rw - 1, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
+      drawSpriteKey(ctx, 'barrel', 'idle', 0, sx, sy, ts);
       return true;
     }
 
     // Rug — decorative woven rug (walkable)
     case RUG: {
       // Floor beneath first
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const rugFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, rugFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, rugFloor, sx, sy, ts, tx, ty);
+      }
 
       // Rug base — check if neighbors are also rugs for seamless pattern
       const rugLeft = structure[ty]?.[tx - 1]?.type === RUG;
@@ -360,9 +337,10 @@ export function drawInteriorTile(
 
     // Chair — small wooden chair
     case CHAIR: {
-      ctx.fillStyle = inferGroundColor(structure, tx, ty);
-      ctx.fillRect(sx, sy, ts, ts);
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      const chairFloor = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, chairFloor, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, chairFloor, sx, sy, ts, tx, ty);
+      }
 
       const chInset = Math.floor(ts * 0.2);
       // Chair back (top portion)

@@ -1536,9 +1536,9 @@
   "well": {
     "path": "environment/well.png",
     "frameWidth": 64,
-    "frameHeight": 96,
+    "frameHeight": 128,
     "tileX": 0,
-    "tileY": 32,
+    "tileY": 64,
     "tileScale": 64,
     "states": {
       "idle": {
@@ -1595,6 +1595,84 @@
         "row": 1,
         "frameCount": 1
       }
+    }
+  },
+  "barrel": {
+    "path": "environment/barrel.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "barrel_side": {
+    "path": "environment/barrel_side.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "crate": {
+    "path": "environment/crate.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "brazier": {
+    "path": "environment/brazier.png",
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "flicker": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "dungeon_tileset": {
+    "path": "environment/dungeon_tileset.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "floor_plain":   { "row": 0,  "frameCount": 8 },
+      "floor_worn":    { "row": 1,  "frameCount": 8 },
+      "floor_cracked": { "row": 2,  "frameCount": 8 },
+      "floor_mossy":   { "row": 3,  "frameCount": 8 },
+      "floor_wet":     { "row": 4,  "frameCount": 8 },
+      "floor_dark":    { "row": 5,  "frameCount": 8 },
+      "floor_ornate":  { "row": 6,  "frameCount": 8 },
+      "floor_hoarder": { "row": 7,  "frameCount": 8 },
+      "wall_plain":    { "row": 8,  "frameCount": 8 },
+      "wall_cracked":  { "row": 9,  "frameCount": 8 },
+      "wall_mossy":    { "row": 10, "frameCount": 8 },
+      "wall_dark":     { "row": 11, "frameCount": 8 }
     }
   }
 }
