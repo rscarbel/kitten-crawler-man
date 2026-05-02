@@ -259,12 +259,6 @@ export function renderMobileButtons(
   const btnY = canvas.height - SLOT_H - BOTTOM_MARGIN - BTN_H - 8;
 
   touch.switchBtnRect = { x: MARGIN, y: btnY, w: BTN_W, h: BTN_H };
-  touch.followBtnRect = {
-    x: canvas.width - MARGIN - BTN_W,
-    y: btnY,
-    w: BTN_W,
-    h: BTN_H,
-  };
 
   const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
   const rightX = canvas.width - 88;
@@ -311,7 +305,7 @@ export function renderMobileButtons(
 
   const humanActive = state.human.isActive;
   drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
-  drawBtn(touch.followBtnRect, '↩', 'Follow', state.companion.isFollowOverride);
+  renderFollowerButton(ctx, canvas, touch, state.companion, humanActive);
   drawSmallBtn(touch.gearBtnRect, 'Gear', state.gearPanel.isOpen);
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
@@ -329,4 +323,49 @@ export function renderMobileButtons(
   } else {
     touch.summonBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
   }
+}
+
+/** Render the Follower button and write its rect to touch (works on both mobile and desktop). */
+export function renderFollowerButton(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  touch: MobileTouchState,
+  companion: CompanionSystem,
+  humanIsActive: boolean,
+): void {
+  const BTN_W = 80;
+  const BTN_H = 52;
+  const SLOT_H = 52;
+  const BOTTOM_MARGIN = 12;
+  const MARGIN = 10;
+  const btnY = canvas.height - SLOT_H - BOTTOM_MARGIN - BTN_H - 8;
+  const r: Rect = { x: canvas.width - MARGIN - BTN_W, y: btnY, w: BTN_W, h: BTN_H };
+  touch.followBtnRect = r;
+
+  const anchored = companion.getMovementMode(humanIsActive) === 'anchored';
+  const passive = companion.getCombatStance(humanIsActive) === 'passive';
+  const nonDefault = anchored || passive;
+
+  ctx.fillStyle = nonDefault ? 'rgba(250,204,21,0.25)' : 'rgba(0,0,0,0.65)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = nonDefault ? '#facc15' : '#475569';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+
+  // Show which character is the companion
+  const companionEmoji = humanIsActive ? '🐱' : '🧍';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(companionEmoji, r.x + r.w / 2, r.y + 30);
+  ctx.textAlign = 'left';
+
+  drawText(ctx, 'Follower', {
+    x: r.x + r.w / 2,
+    y: r.y + r.h - 14,
+    size: 10,
+    bold: true,
+    color: nonDefault ? '#facc15' : '#94a3b8',
+    align: 'center',
+  });
 }

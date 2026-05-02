@@ -21,6 +21,18 @@ type Entity = {
   facingY: number;
 };
 
+export type MovementMode = 'follow' | 'anchored';
+export type CombatStance = 'aggressive' | 'passive';
+
+type CharStance = {
+  movementMode: MovementMode;
+  combatStance: CombatStance;
+  anchorX: number;
+  anchorY: number;
+};
+
+const ANCHOR_CHASE_RANGE = TILE_SIZE * 3;
+
 export class CompanionSystem implements GameSystem {
   private catWanderTargetX = 0;
   private catWanderTargetY = 0;
@@ -28,6 +40,20 @@ export class CompanionSystem implements GameSystem {
   private catKiteAngle = 0;
   private humanIdleFrames = 0;
   private _followOverride = false;
+
+  // Independent stance per character — used when that character is the companion (inactive).
+  private readonly humanStance: CharStance = {
+    movementMode: 'follow',
+    combatStance: 'aggressive',
+    anchorX: 0,
+    anchorY: 0,
+  };
+  private readonly catStance: CharStance = {
+    movementMode: 'follow',
+    combatStance: 'aggressive',
+    anchorX: 0,
+    anchorY: 0,
+  };
 
   private companionPaths = new Map<
     object,
@@ -58,6 +84,57 @@ export class CompanionSystem implements GameSystem {
 
   get humanIdle(): number {
     return this.humanIdleFrames;
+  }
+
+  /** Returns the stance struct for the companion (inactive character). */
+  private stanceFor(humanIsActive: boolean): CharStance {
+    return humanIsActive ? this.catStance : this.humanStance;
+  }
+
+  getMovementMode(humanIsActive: boolean): MovementMode {
+    return this.stanceFor(humanIsActive).movementMode;
+  }
+
+  getCombatStance(humanIsActive: boolean): CombatStance {
+    return this.stanceFor(humanIsActive).combatStance;
+  }
+
+  /** Recall the companion to the active player and resume following. */
+  setFollowMe(humanIsActive: boolean): void {
+    this.stanceFor(humanIsActive).movementMode = 'follow';
+    this._followOverride = true;
+  }
+
+  /** Anchor the companion at their current position; they will not follow the player. */
+  setDoNotMove(companion: { x: number; y: number }, humanIsActive: boolean): void {
+    const stance = this.stanceFor(humanIsActive);
+    stance.movementMode = 'anchored';
+    stance.anchorX = companion.x;
+    stance.anchorY = companion.y;
+    this._followOverride = false;
+  }
+
+  /** Companion attacks enemies on sight. */
+  setAggressive(humanIsActive: boolean): void {
+    this.stanceFor(humanIsActive).combatStance = 'aggressive';
+  }
+
+  /** Companion only retaliates when directly attacked. */
+  setPassive(humanIsActive: boolean): void {
+    this.stanceFor(humanIsActive).combatStance = 'passive';
+  }
+
+  /**
+   * Called when a character switches from active to companion.
+   * If they were anchored, their anchor updates to wherever they ended up,
+   * so any movement made while the player controlled them is preserved.
+   */
+  notifyBecameCompanion(char: { x: number; y: number }, charIsHuman: boolean): void {
+    const stance = charIsHuman ? this.humanStance : this.catStance;
+    if (stance.movementMode === 'anchored') {
+      stance.anchorX = char.x;
+      stance.anchorY = char.y;
+    }
   }
 
   /** Update both companion AI (auto-target) and companion follower movement. */
@@ -140,24 +217,36 @@ export class CompanionSystem implements GameSystem {
 
       // While companion is being recalled, don't auto-assign new targets
       if (!this._followOverride) {
-        // Only pull cat into combat if the mob is within range of the active player;
-        // prevents the companion chasing back to distant fights after a follow recall.
         const nearPlayerRange = HUMAN_ENGAGE_RANGE * 2.5;
-        const mobTargetingCat =
-          mobs.find(
-            (m) =>
-              m.isAlive &&
-              !m.avoidInstead &&
-              m.currentTarget === cat &&
-              Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
-          ) ?? null;
-        const mobTargetingHuman =
-          mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
+        if (this.catStance.combatStance === 'aggressive') {
+          // Only pull cat into combat if the mob is within range of the active player;
+          // prevents the companion chasing back to distant fights after a follow recall.
+          const mobTargetingCat =
+            mobs.find(
+              (m) =>
+                m.isAlive &&
+                !m.avoidInstead &&
+                m.currentTarget === cat &&
+                Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
+            ) ?? null;
+          const mobTargetingHuman =
+            mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
 
-        if (mobTargetingCat) {
-          cat.autoTarget = mobTargetingCat;
-        } else if (!cat.autoTarget && mobTargetingHuman) {
-          cat.autoTarget = mobTargetingHuman;
+          if (mobTargetingCat) {
+            cat.autoTarget = mobTargetingCat;
+          } else if (!cat.autoTarget && mobTargetingHuman) {
+            cat.autoTarget = mobTargetingHuman;
+          }
+        } else {
+          // Passive — only retaliate when a mob is actively targeting the cat
+          cat.autoTarget ??=
+            mobs.find(
+              (m) =>
+                m.isAlive &&
+                !m.avoidInstead &&
+                m.currentTarget === cat &&
+                Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
+            ) ?? null;
         }
       }
 
@@ -177,18 +266,24 @@ export class CompanionSystem implements GameSystem {
         human.autoTarget = null;
 
       if (!human.autoTarget) {
-        let closestDist = HUMAN_ENGAGE_RANGE;
-        let closest: Mob | null = null;
-        const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
-        for (const mob of nearHuman) {
-          if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
-          const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
-          if (dist < closestDist) {
-            closestDist = dist;
-            closest = mob;
+        if (this.humanStance.combatStance === 'aggressive') {
+          let closestDist = HUMAN_ENGAGE_RANGE;
+          let closest: Mob | null = null;
+          const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
+          for (const mob of nearHuman) {
+            if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+            const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
+            if (dist < closestDist) {
+              closestDist = dist;
+              closest = mob;
+            }
           }
+          human.autoTarget = closest;
+        } else {
+          // Passive — only retaliate when a mob is actively targeting the human
+          human.autoTarget =
+            mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
         }
-        human.autoTarget = closest;
       }
 
       if (human.autoTarget) {
@@ -255,6 +350,58 @@ export class CompanionSystem implements GameSystem {
     // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
     const companion = human.isActive ? cat : human;
     if (this.fleeFromAvoidMobs(companion, mobs, TILE_SIZE * 8)) return;
+
+    const stance = human.isActive ? this.catStance : this.humanStance;
+
+    if (stance.movementMode === 'anchored') {
+      if (human.isActive) {
+        // Cat anchored: hold at anchor position; fires from there via autoFireTick
+        if (!cat.autoTarget?.isAlive) {
+          this.companionFollow(
+            cat,
+            stance.anchorX,
+            stance.anchorY,
+            FOLLOWER_SPEED,
+            TILE_SIZE * 0.5,
+          );
+        }
+      } else {
+        // Human anchored: may pursue a target within ANCHOR_CHASE_RANGE of the anchor
+        if (human.autoTarget?.isAlive) {
+          const tDist = Math.hypot(
+            human.autoTarget.x - stance.anchorX,
+            human.autoTarget.y - stance.anchorY,
+          );
+          if (tDist <= ANCHOR_CHASE_RANGE) {
+            this.companionFollow(
+              human,
+              human.autoTarget.x,
+              human.autoTarget.y,
+              FOLLOWER_SPEED,
+              TILE_SIZE * 0.9,
+            );
+          } else {
+            human.autoTarget = null;
+            this.companionFollow(
+              human,
+              stance.anchorX,
+              stance.anchorY,
+              FOLLOWER_SPEED,
+              TILE_SIZE * 0.5,
+            );
+          }
+        } else {
+          this.companionFollow(
+            human,
+            stance.anchorX,
+            stance.anchorY,
+            FOLLOWER_SPEED,
+            TILE_SIZE * 0.5,
+          );
+        }
+      }
+      return;
+    }
 
     if (human.isActive) {
       if (cat.autoTarget?.isAlive) {

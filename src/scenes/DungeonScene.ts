@@ -42,6 +42,7 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { AbilityManager } from '../core/AbilityManager';
 import type { AbilityId, AbilityState } from '../core/AbilityManager';
+import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
@@ -152,6 +153,8 @@ export class DungeonScene extends GameplayScene {
   private floorEntryHumanAchievements!: AchievementManager;
   private floorEntryCatAchievements!: AchievementManager;
   private floorEntryAbilityManager!: AbilityManager;
+
+  private readonly followerMenu = new FollowerMenu();
 
   private _godModeSnapshot: null | {
     human: {
@@ -278,6 +281,20 @@ export class DungeonScene extends GameplayScene {
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
+    this.followerMenu.onFollowMe = () => {
+      this.companion.setFollowMe(this.human.isActive);
+      this.inactive().autoTarget = null;
+    };
+    this.followerMenu.onDoNotMove = () => {
+      this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+    };
+    this.followerMenu.onSetAggressive = () => {
+      this.companion.setAggressive(this.human.isActive);
+    };
+    this.followerMenu.onSetPassive = () => {
+      this.companion.setPassive(this.human.isActive);
+      this.inactive().autoTarget = null;
+    };
     this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
@@ -557,6 +574,7 @@ export class DungeonScene extends GameplayScene {
     this.inputHandler.bind({
       isSuppressed: () =>
         this.pauseMenu.isOpen ||
+        this.followerMenu.isOpen ||
         this.safeRoom.isSleeping ||
         this.defendQuest.isDialogOpen ||
         this.playerChat.isOpen,
@@ -583,6 +601,13 @@ export class DungeonScene extends GameplayScene {
       dismissBuilding: () => {
         if (this.building?.menuOpen) {
           this.building.closeMenu();
+          return true;
+        }
+        return false;
+      },
+      dismissFollowerMenu: () => {
+        if (this.followerMenu.isOpen) {
+          this.followerMenu.close();
           return true;
         }
         return false;
@@ -633,15 +658,19 @@ export class DungeonScene extends GameplayScene {
 
   private triggerSwitchCharacter(): void {
     this.safeRoom.mordecaiDialogOpen = false;
+    // Capture who is currently active before the switch
+    const wasHumanActive = this.human.isActive;
     this.pm.switchActive();
+    // The character that just became the companion: update their anchor to current position
+    const newCompanion = wasHumanActive ? this.human : this.cat;
+    this.companion.notifyBecameCompanion(newCompanion, wasHumanActive);
     this.cat.autoTarget = null;
     this.human.autoTarget = null;
     this.companion.isFollowOverride = false;
   }
 
   private triggerCompanionFollow(): void {
-    this.companion.isFollowOverride = true;
-    this.inactive().autoTarget = null;
+    this.followerMenu.open();
   }
 
   private triggerOpenChat(): void {
@@ -824,6 +853,20 @@ export class DungeonScene extends GameplayScene {
 
     // Achievement UI overlays (notification + loot box opener)
     if (this.achievementUI.handleClick(mx, my)) return;
+
+    // Follower menu click
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.handleClick(mx, my);
+      return;
+    }
+
+    // Desktop follower button click
+    if (!platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (pointInRect(mx, my, this.touch.followBtnRect)) {
+        this.triggerCompanionFollow();
+        return;
+      }
+    }
 
     // Desktop summon button click
     if (
@@ -1102,7 +1145,24 @@ export class DungeonScene extends GameplayScene {
           inventoryPanel: this.inventoryPanel,
           gearPanel: this.gearPanel,
         });
+      else
+        UIRenderer.renderFollowerButton(
+          ctx,
+          canvas,
+          this.touch,
+          this.companion,
+          this.human.isActive,
+        );
     }
+
+    if (this.followerMenu.isOpen)
+      this.followerMenu.render(
+        ctx,
+        canvas,
+        this.companion.getMovementMode(this.human.isActive),
+        this.companion.getCombatStance(this.human.isActive),
+        this.human.isActive,
+      );
 
     if (this.gameOver) {
       this.deathScreen.render(ctx, canvas);
@@ -1557,6 +1617,12 @@ export class DungeonScene extends GameplayScene {
             this.triggerMongoSummon();
           continue;
         }
+      }
+
+      // Follower menu tap (mobile)
+      if (platform.isMobile && this.followerMenu.isOpen) {
+        this.followerMenu.handleClick(x, y);
+        continue;
       }
 
       // Mobile action buttons (always checked first)

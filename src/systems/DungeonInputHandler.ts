@@ -16,6 +16,7 @@ export interface DungeonInputActions {
   dismissDialog(): boolean;
   dismissStairwell(): boolean;
   dismissBuilding(): boolean;
+  dismissFollowerMenu(): boolean;
   togglePause(): void;
   clearInput(): void;
 
@@ -51,6 +52,7 @@ export class DungeonInputHandler {
       if (actions.dismissDialog()) return;
       if (actions.dismissStairwell()) return;
       if (actions.dismissBuilding()) return;
+      if (actions.dismissFollowerMenu()) return;
       if (!actions.isGameOver()) {
         actions.togglePause();
       }
