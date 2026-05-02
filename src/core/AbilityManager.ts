@@ -3,7 +3,9 @@
  * Fully isolated from any specific ability — register AbilityDefs at startup.
  *
  * XP required to advance from level N → N+1:
- *   baseXpToLevel2 * 1.3^(N-1), except level 14→15 uses 1.8× the previous threshold.
+ *   baseXpToLevel2 * xpGrowthRate^(N-1),
+ *   except the final level transition uses finalLevelMultiplier instead of xpGrowthRate.
+ * Both fields have per-ability overrides; defaults are 1.3 and 1.8 respectively.
  */
 
 export type AbilityId = 'magic_missile' | 'protective_shell';
@@ -23,6 +25,16 @@ export interface AbilityDef {
   equipInstructions: string;
   /** XP needed to advance from level 1 → 2. Later thresholds are derived. */
   baseXpToLevel2: number;
+  /**
+   * Multiplier applied to the threshold each level. Defaults to 1.3.
+   * Higher = slower leveling at higher levels.
+   */
+  xpGrowthRate?: number;
+  /**
+   * Multiplier used for the final level transition (maxLevel-1 → maxLevel)
+   * instead of xpGrowthRate. Defaults to 1.8.
+   */
+  finalLevelMultiplier?: number;
   /** XP granted each time the ability is used. */
   usageXp: number;
   /** XP granted when the ability secures a kill. */
@@ -49,14 +61,33 @@ export interface AbilityState {
   xpToNextLevel: number;
 }
 
-function computeXpToNextLevel(currentLevel: number, baseXpToLevel2: number): number {
-  if (currentLevel >= 15) return Infinity;
+const DEFAULT_XP_GROWTH_RATE = 1.3;
+const DEFAULT_FINAL_LEVEL_MULTIPLIER = 1.8;
+
+function computeXpToNextLevel(
+  currentLevel: number,
+  baseXpToLevel2: number,
+  growthRate: number,
+  finalLevelMultiplier: number,
+  maxLevel: number,
+): number {
+  if (currentLevel >= maxLevel) return Infinity;
   let xp = baseXpToLevel2;
   for (let i = 1; i < currentLevel; i++) {
-    // Level 14 → 15 costs 80% more than 13 → 14 (instead of the normal 30% step)
-    xp = i === 14 ? Math.round(xp * 1.8) : Math.round(xp * 1.3);
+    // The final transition (maxLevel-1 → maxLevel) uses its own multiplier
+    xp = i === maxLevel - 2 ? Math.round(xp * finalLevelMultiplier) : Math.round(xp * growthRate);
   }
   return xp;
+}
+
+function xpToNextLevel(def: AbilityDef, currentLevel: number): number {
+  return computeXpToNextLevel(
+    currentLevel,
+    def.baseXpToLevel2,
+    def.xpGrowthRate ?? DEFAULT_XP_GROWTH_RATE,
+    def.finalLevelMultiplier ?? DEFAULT_FINAL_LEVEL_MULTIPLIER,
+    def.maxLevel,
+  );
 }
 
 export class AbilityManager {
@@ -76,7 +107,7 @@ export class AbilityManager {
         owner: def.owner,
         level: 1,
         xp: 0,
-        xpToNextLevel: computeXpToNextLevel(1, def.baseXpToLevel2),
+        xpToNextLevel: xpToNextLevel(def, 1),
       });
     }
   }
@@ -93,7 +124,7 @@ export class AbilityManager {
     while (state.level < def.maxLevel && state.xp >= state.xpToNextLevel) {
       state.xp -= state.xpToNextLevel;
       state.level++;
-      state.xpToNextLevel = computeXpToNextLevel(state.level, def.baseXpToLevel2);
+      state.xpToNextLevel = xpToNextLevel(def, state.level);
       this.onLevelUp?.(id, state.level);
       leveled = true;
     }

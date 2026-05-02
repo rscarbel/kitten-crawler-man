@@ -138,6 +138,8 @@ export const PROTECTIVE_SHELL_DEF: AbilityDef = {
   owner: 'human',
   equipInstructions: 'Switch to Human (Tab) then press E to cast',
   baseXpToLevel2: 120,
+  xpGrowthRate: 1.2,
+  finalLevelMultiplier: 1.5,
   usageXp: 3,
   killXp: 25,
   maxLevel: 15,

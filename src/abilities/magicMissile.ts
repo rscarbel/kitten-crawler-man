@@ -110,6 +110,8 @@ export const MAGIC_MISSILE_DEF: AbilityDef = {
   owner: 'cat',
   equipInstructions: 'Switch to Cat (Tab) then press Space to fire',
   baseXpToLevel2: 100,
+  xpGrowthRate: 1.7,
+  finalLevelMultiplier: 2.2,
   usageXp: 1,
   killXp: 20,
   maxLevel: 15,
