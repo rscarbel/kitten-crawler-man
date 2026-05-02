@@ -1,30 +1,117 @@
 export type GoblinWeapon = 'club' | 'hammer';
 
-/**
- * @param attackAnim  0–1 normalised swing progress (peaks at 0.5). Pass 0 when idle.
- */
-export function drawGoblinSprite(
+// Attack curve: 0 → +1.4 (overhead windup at t≈0.35) → -0.4 (past-neutral downswing) → 0
+// Positive = weapon/arm raised (up on screen), negative = below resting position
+function attackCurve(t: number): number {
+  if (t <= 0 || t >= 1) return 0;
+  if (t < 0.35) {
+    return (t / 0.35) * 1.4;
+  } else if (t < 0.62) {
+    const p = (t - 0.35) / 0.27;
+    return 1.4 - 1.8 * p; // 1.4 → -0.4
+  } else {
+    const p = (t - 0.62) / 0.38;
+    return -0.4 + 0.4 * p; // -0.4 → 0
+  }
+}
+
+// Weapon rotation angle (radians) during a swing.
+// REST (-0.87) ≈ atan2(-0.26, 0.22) — upper-right, matching idle position.
+// Windup sweeps 53° counterclockwise overhead; strike swings 120° clockwise down.
+// Uses linear 0→1 progress (not a sin-modulated value) so each phase fires once.
+function weaponAngleCurve(t: number): number {
+  const REST = -0.87;
+  if (t <= 0 || t >= 1) return REST;
+  if (t < 0.35) {
+    return REST - (t / 0.35) * 0.93; // -0.87 → -1.80 (sweep overhead, 53°)
+  } else if (t < 0.62) {
+    const p = (t - 0.35) / 0.27;
+    return -1.8 + p * 2.1; // -1.80 → +0.30 (downswing, 120°)
+  } else {
+    const p = (t - 0.62) / 0.38;
+    return 0.3 - p * 1.17; // +0.30 → -0.87 (recovery)
+  }
+}
+
+function _drawWeapon(
+  ctx: CanvasRenderingContext2D,
+  wx: number,
+  wy: number,
+  s: number,
+  weapon: GoblinWeapon,
+  weaponAngle: number,
+): void {
+  ctx.save();
+  ctx.translate(wx, wy);
+  ctx.rotate(weaponAngle);
+
+  if (weapon === 'club') {
+    // Handle
+    ctx.strokeStyle = '#7c4a1e';
+    ctx.lineWidth = s * 0.09;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(s * 0.34, 0);
+    ctx.stroke();
+
+    // Club head
+    ctx.fillStyle = '#5c3010';
+    ctx.beginPath();
+    ctx.arc(s * 0.34, 0, s * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#3a1e08';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Knob highlight
+    ctx.fillStyle = '#8b5030';
+    ctx.beginPath();
+    ctx.arc(s * 0.3, -s * 0.05, s * 0.058, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Handle
+    ctx.strokeStyle = '#7c4a1e';
+    ctx.lineWidth = s * 0.08;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(s * 0.38, 0);
+    ctx.stroke();
+
+    // Hammer head — perpendicular to handle (wide along Y, narrow along X)
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(s * 0.3, -s * 0.18, s * 0.12, s * 0.36);
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(s * 0.3, -s * 0.18, s * 0.12, s * 0.36);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(s * 0.31, -s * 0.15, s * 0.05, s * 0.11);
+  }
+
+  ctx.restore();
+}
+
+function _drawGoblinBody(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   s: number,
-  weapon: GoblinWeapon,
   skinColor: string,
   eyeColor: string,
-  walkFrame = 0,
-  isMoving = false,
-  attackAnim = 0,
-) {
-  // Walk cycle offsets
-  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.035 : 0;
-  const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.045 : 0;
-
+  bodyBob: number,
+  legSwing: number,
+  armSwing: number,
+  weaponRaise: number,
+  attackAnim: number,
+): void {
   // Feet
   ctx.fillStyle = '#2d1b00';
   ctx.fillRect(sx + s * 0.28, sy + s * 0.86 + bodyBob + legSwing, s * 0.17, s * 0.07);
   ctx.fillRect(sx + s * 0.53, sy + s * 0.86 + bodyBob - legSwing, s * 0.17, s * 0.07);
 
-  // Legs (dark brown trousers)
+  // Legs
   ctx.fillStyle = '#5c3a1e';
   ctx.fillRect(sx + s * 0.3, sy + s * 0.68 + bodyBob + legSwing, s * 0.15, s * 0.2);
   ctx.fillRect(sx + s * 0.53, sy + s * 0.68 + bodyBob - legSwing, s * 0.15, s * 0.2);
@@ -34,16 +121,10 @@ export function drawGoblinSprite(
   ctx.fillRect(sx + s * 0.27, sy + s * 0.44 + bodyBob, s * 0.46, s * 0.26);
 
   // Left arm — swings opposite to weapon arm during walk
-  const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.025 : 0;
   ctx.fillRect(sx + s * 0.13, sy + s * 0.46 + bodyBob + armSwing, s * 0.14, s * 0.12);
 
-  // Right arm — raised during attack swing
-  const weaponRaise = Math.sin(attackAnim * Math.PI) * s * 0.14;
-  const weaponExtend = Math.sin(attackAnim * Math.PI) * s * 0.12;
+  // Right arm — raised during attack windup / swing
   ctx.fillRect(sx + s * 0.73, sy + s * 0.46 + bodyBob - weaponRaise - armSwing, s * 0.14, s * 0.12);
-
-  // Weapon at end of right arm, lunges forward on attack
-  drawWeapon(ctx, sx + s * 0.87 + weaponExtend, sy + s * 0.5 - weaponRaise + bodyBob, s, weapon);
 
   // Head
   ctx.fillStyle = skinColor;
@@ -79,8 +160,8 @@ export function drawGoblinSprite(
   ctx.arc(sx + s * 0.537, sy + s * 0.343 + bodyBob, s * 0.018, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes — squint slightly during attack
-  const eyeSize = attackAnim > 0.3 ? s * 0.038 : s * 0.05;
+  // Eyes — squint during windup and strike
+  const eyeSize = attackAnim > 0.2 ? s * 0.038 : s * 0.05;
   ctx.fillStyle = eyeColor;
   ctx.beginPath();
   ctx.arc(sx + s * 0.415, sy + s * 0.275 + bodyBob, eyeSize, 0, Math.PI * 2);
@@ -99,66 +180,90 @@ export function drawGoblinSprite(
   ctx.fill();
 }
 
-function drawWeapon(
+/**
+ * Full goblin sprite with weapon.
+ * @param attackAnim 0–1 normalised swing progress (windup peaks at ~0.35, strike lands at ~0.62).
+ */
+export function drawGoblinSprite(
   ctx: CanvasRenderingContext2D,
-  wx: number,
-  wy: number,
+  sx: number,
+  sy: number,
   s: number,
   weapon: GoblinWeapon,
-) {
-  ctx.save();
+  skinColor: string,
+  eyeColor: string,
+  walkFrame = 0,
+  isMoving = false,
+  attackAnim = 0,
+): void {
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.035 : 0;
+  const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.045 : 0;
+  const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.025 : 0;
+  const weaponRaise = attackCurve(attackAnim) * s * 0.14;
+  const weaponAngle = weaponAngleCurve(attackAnim);
 
-  if (weapon === 'club') {
-    // Handle — diagonal stick angled up-right
-    ctx.strokeStyle = '#7c4a1e';
-    ctx.lineWidth = s * 0.09;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(wx, wy);
-    ctx.lineTo(wx + s * 0.22, wy - s * 0.26);
-    ctx.stroke();
+  _drawGoblinBody(
+    ctx,
+    sx,
+    sy,
+    s,
+    skinColor,
+    eyeColor,
+    bodyBob,
+    legSwing,
+    armSwing,
+    weaponRaise,
+    attackAnim,
+  );
+  _drawWeapon(ctx, sx + s * 0.87, sy + s * 0.5 - weaponRaise + bodyBob, s, weapon, weaponAngle);
+}
 
-    // Knobby club head
-    ctx.fillStyle = '#5c3010';
-    ctx.beginPath();
-    ctx.arc(wx + s * 0.22, wy - s * 0.26, s * 0.14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#3a1e08';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+/** Goblin body without weapon — for use as a compositing base layer. */
+export function drawGoblinBodyOnly(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  skinColor: string,
+  eyeColor: string,
+  walkFrame = 0,
+  isMoving = false,
+  attackAnim = 0,
+): void {
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.035 : 0;
+  const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.045 : 0;
+  const armSwing = isMoving ? -Math.sin(walkFrame) * s * 0.025 : 0;
+  const weaponRaise = attackCurve(attackAnim) * s * 0.14;
 
-    // Highlight knob on head
-    ctx.fillStyle = '#8b5030';
-    ctx.beginPath();
-    ctx.arc(wx + s * 0.18, wy - s * 0.3, s * 0.058, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    // Handle
-    ctx.strokeStyle = '#7c4a1e';
-    ctx.lineWidth = s * 0.08;
-    ctx.lineCap = 'round';
-    const tipX = wx + s * 0.18;
-    const tipY = wy - s * 0.34;
-    ctx.beginPath();
-    ctx.moveTo(wx, wy);
-    ctx.lineTo(tipX, tipY);
-    ctx.stroke();
+  _drawGoblinBody(
+    ctx,
+    sx,
+    sy,
+    s,
+    skinColor,
+    eyeColor,
+    bodyBob,
+    legSwing,
+    armSwing,
+    weaponRaise,
+    attackAnim,
+  );
+}
 
-    // Hammer head — grey rectangle perpendicular to handle
-    const angle = Math.atan2(tipY - wy, tipX - wx) - Math.PI / 2;
-    ctx.translate(tipX, tipY);
-    ctx.rotate(angle);
+/** Weapon only (no body) — pixel-aligned with drawGoblinBodyOnly for compositing. */
+export function drawGoblinWeaponOnly(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  weapon: GoblinWeapon,
+  walkFrame = 0,
+  isMoving = false,
+  attackAnim = 0,
+): void {
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.035 : 0;
+  const weaponRaise = attackCurve(attackAnim) * s * 0.14;
+  const weaponAngle = weaponAngleCurve(attackAnim);
 
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(-s * 0.18, -s * 0.06, s * 0.36, s * 0.12);
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(-s * 0.18, -s * 0.06, s * 0.36, s * 0.12);
-
-    // Metal sheen highlight
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillRect(-s * 0.15, -s * 0.05, s * 0.11, s * 0.04);
-  }
-
-  ctx.restore();
+  _drawWeapon(ctx, sx + s * 0.87, sy + s * 0.5 - weaponRaise + bodyBob, s, weapon, weaponAngle);
 }

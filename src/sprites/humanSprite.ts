@@ -22,16 +22,23 @@ export function drawHumanSprite(
   // Body bob — bounces up slightly twice per stride cycle
   const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.04 : 0;
 
-  // Leg offsets — left and right swing in opposite phases
+  // Leg offsets — whole leg+shoe block translates up/down, left and right in opposite phases
   const legSwing = isMoving ? Math.sin(walkFrame) * s * 0.05 : 0;
+  const legTop = sy + s * 0.72 + bodyBob;
+  const legH = s * 0.22;
 
-  // Bare legs (skin tone, no shoes)
+  // Bare legs (skin tone)
   ctx.fillStyle = '#fcd5ae';
-  // Left leg
-  ctx.fillRect(sx + s * 0.27, sy + s * 0.72 + bodyBob + legSwing, s * 0.18, s * 0.24 - legSwing);
+  ctx.fillRect(sx + s * 0.27, legTop + legSwing, s * 0.18, legH);
   if (!isKicking) {
-    // Right leg
-    ctx.fillRect(sx + s * 0.55, sy + s * 0.72 + bodyBob - legSwing, s * 0.18, s * 0.24 + legSwing);
+    ctx.fillRect(sx + s * 0.55, legTop - legSwing, s * 0.18, legH);
+  }
+
+  // Shoes — follow the leg they belong to
+  ctx.fillStyle = '#222222';
+  ctx.fillRect(sx + s * 0.24, legTop + legH + legSwing, s * 0.22, s * 0.065);
+  if (!isKicking) {
+    ctx.fillRect(sx + s * 0.52, legTop + legH - legSwing, s * 0.22, s * 0.065);
   }
 
   // Arm swing (opposite to legs)
@@ -109,6 +116,92 @@ export function drawHumanSprite(
   }
 }
 
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.arc(x + w - rr, y + rr, rr, -Math.PI / 2, 0);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.arc(x + w - rr, y + h - rr, rr, 0, Math.PI / 2);
+  ctx.lineTo(x + rr, y + h);
+  ctx.arc(x + rr, y + h - rr, rr, Math.PI / 2, Math.PI);
+  ctx.lineTo(x, y + rr);
+  ctx.arc(x + rr, y + rr, rr, Math.PI, -Math.PI / 2);
+  ctx.closePath();
+}
+
+function drawFist(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  angle: number,
+  s: number,
+): void {
+  const fw = s * 0.18;
+  const fh = s * 0.13;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  // Knuckle block
+  ctx.fillStyle = '#fcd5ae';
+  drawRoundRect(ctx, -fw * 0.2, -fh * 0.5, fw, fh, s * 0.035);
+  ctx.fill();
+  ctx.strokeStyle = '#c47a3a';
+  ctx.lineWidth = Math.max(0.8, s * 0.016);
+  ctx.stroke();
+
+  // Knuckle ridges
+  ctx.strokeStyle = '#b86a2e';
+  ctx.lineWidth = Math.max(0.6, s * 0.012);
+  for (let i = 1; i <= 2; i++) {
+    const kx = -fw * 0.2 + fw * (i / 3);
+    ctx.beginPath();
+    ctx.moveTo(kx, -fh * 0.42);
+    ctx.lineTo(kx, fh * 0.32);
+    ctx.stroke();
+  }
+
+  // Thumb bump (on top of fist, near the base)
+  ctx.fillStyle = '#fcd5ae';
+  ctx.beginPath();
+  ctx.arc(-fw * 0.05, -fh * 0.58, s * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#c47a3a';
+  ctx.lineWidth = Math.max(0.6, s * 0.012);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawKickShoe(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  angle: number,
+  s: number,
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = '#222222';
+  // Height s*0.18 covers the s*0.16 leg lineWidth; starts at -s*0.02 to overlap the flat butt end.
+  drawRoundRect(ctx, -s * 0.02, -s * 0.09, s * 0.26, s * 0.18, s * 0.04);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 export function drawHumanAttack(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -123,108 +216,142 @@ export function drawHumanAttack(
   const t = 1 - attackTimer / ATTACK_FRAMES; // 0→1
   const ext = Math.sin(t * Math.PI); // peaks at t=0.5
 
-  // Arm socket origin — always at shoulder height.
-  // When facing sideways the socket is on the forward shoulder;
-  // when facing up/down it's offset to the right arm socket so the fist
-  // doesn't appear to come from the belly or the back of the head.
-  const armOffsetX = Math.abs(facingX) > 0.2 ? facingX * s * 0.28 : s * 0.2;
+  // Arm socket — forward shoulder when sideways; right arm socket (sx+s*0.78) when facing up/down.
+  const armOffsetX = Math.abs(facingX) > 0.2 ? facingX * s * 0.28 : s * 0.28;
   const armOriginX = sx + s * 0.5 + armOffsetX;
   const armOriginY = sy + s * 0.42;
 
   ctx.save();
 
   if (attackPhase === 'punch') {
-    const reach = s * 0.55;
+    const reach = s * 0.52;
     const fistX = armOriginX + facingX * reach * ext;
     const fistY = armOriginY + facingY * reach * ext;
+    const fistAngle = Math.atan2(facingY, facingX);
 
-    // Motion trail
-    if (ext > 0.05) {
-      ctx.globalAlpha = ext * 0.4;
-      ctx.strokeStyle = '#fcd5ae';
-      ctx.lineWidth = s * 0.09;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(armOriginX, armOriginY);
-      ctx.lineTo(fistX, fistY);
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = 1;
-
-    // Fist
-    ctx.fillStyle = '#fcd5ae';
+    // Sleeve (black jacket arm)
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = s * 0.15;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(fistX, fistY, s * 0.13, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#c47a3a';
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(armOriginX, armOriginY);
+    ctx.lineTo(fistX, fistY);
     ctx.stroke();
 
-    // Impact burst near peak
-    if (ext > 0.75) {
-      const intensity = (ext - 0.75) / 0.25;
-      ctx.globalAlpha = intensity * 0.9;
-      ctx.strokeStyle = '#fffde7';
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 5; i++) {
-        const angle = (i / 5) * Math.PI * 2;
-        const r1 = s * 0.09;
-        const r2 = r1 + s * 0.14 * intensity;
-        ctx.beginPath();
-        ctx.moveTo(fistX + Math.cos(angle) * r1, fistY + Math.sin(angle) * r1);
-        ctx.lineTo(fistX + Math.cos(angle) * r2, fistY + Math.sin(angle) * r2);
-        ctx.stroke();
-      }
-    }
+    // Knuckled fist
+    drawFist(ctx, fistX, fistY, fistAngle, s);
   } else {
-    // Kick — bare leg swings from right hip in facing direction.
+    // Kick — right leg swings from hip in facing direction.
     // When facing up the foot would travel through the body, so redirect sideways.
     const kickFacingX = facingY < -0.5 ? (facingX >= 0 ? 1 : -1) : facingX;
     const kickFacingY = facingY < -0.5 ? 0 : facingY;
 
-    const hipX = sx + s * 0.55;
+    // Right leg centre: left edge sx+s*0.55, width s*0.18 → centre sx+s*0.64
+    const hipX = sx + s * 0.64;
     const hipY = sy + s * 0.78;
-    const reach = s * 0.55;
+    const reach = s * 0.52;
     const footX = hipX + kickFacingX * reach * ext;
     const footY = hipY + kickFacingY * reach * ext;
+    const footAngle = Math.atan2(kickFacingY, kickFacingX);
 
-    // Leg line from hip (skin tone — bare leg)
+    // Bare leg — butt cap at foot so the shoe covers the end cleanly
     ctx.strokeStyle = '#fcd5ae';
-    ctx.lineWidth = s * 0.15;
-    ctx.lineCap = 'round';
+    ctx.lineWidth = s * 0.16;
+    ctx.lineCap = 'butt';
     ctx.beginPath();
     ctx.moveTo(hipX, hipY);
     ctx.lineTo(footX, footY);
     ctx.stroke();
-
-    // Bare foot (skin tone ellipse)
-    const footAngle = Math.atan2(kickFacingY, kickFacingX);
+    // Round join at the hip end only
     ctx.fillStyle = '#fcd5ae';
     ctx.beginPath();
-    ctx.ellipse(footX, footY, s * 0.18, s * 0.09, footAngle, 0, Math.PI * 2);
+    ctx.arc(hipX, hipY, s * 0.08, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dust cloud at peak
-    if (ext > 0.65) {
-      const dustAmt = (ext - 0.65) / 0.35;
-      ctx.globalAlpha = dustAmt * 0.5;
-      ctx.fillStyle = '#c4a77d';
-      for (let i = 0; i < 3; i++) {
-        const angle = footAngle + (i - 1) * 0.8;
-        const dist = s * 0.28 * dustAmt;
-        ctx.beginPath();
-        ctx.arc(
-          footX + Math.cos(angle) * dist,
-          footY + Math.sin(angle) * dist,
-          s * 0.09,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    }
+    // Dark shoe — tall enough (s*0.18) to cover the full leg width (s*0.16)
+    drawKickShoe(ctx, footX, footY, footAngle, s);
   }
+
+  ctx.restore();
+}
+
+/**
+ * Punching arm only — black sleeve + knuckled fist — extending rightward (+X).
+ * Pixel-aligned with drawHumanSprite at the same anchor for compositing.
+ * t: 0→1 over the punch cycle; fist reaches full extension at t=0.5.
+ */
+export function drawHumanPunchArm(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  t: number,
+): void {
+  const ext = Math.sin(t * Math.PI);
+  if (ext < 0.02) return;
+
+  const shoulderX = sx + s * 0.78;
+  const shoulderY = sy + s * 0.42;
+  const fistX = shoulderX + s * 0.52 * ext;
+  const fistY = shoulderY;
+
+  ctx.save();
+
+  // Sleeve
+  ctx.strokeStyle = '#111827';
+  ctx.lineWidth = s * 0.15;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(shoulderX, shoulderY);
+  ctx.lineTo(fistX, fistY);
+  ctx.stroke();
+
+  // Knuckled fist (facing right, angle=0)
+  drawFist(ctx, fistX, fistY, 0, s);
+
+  ctx.restore();
+}
+
+/**
+ * Kicking leg only — bare leg + dark shoe — extending rightward (+X) with a slight upward arc.
+ * Pixel-aligned with drawHumanSprite(isKicking=true) at the same anchor for compositing.
+ * t: 0→1 over the kick cycle; foot reaches full extension at t=0.5.
+ */
+export function drawHumanKickLeg(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  t: number,
+): void {
+  const ext = Math.sin(t * Math.PI);
+  if (ext < 0.02) return;
+
+  const hipX = sx + s * 0.64; // right leg centre (left edge s*0.55 + half-width s*0.09)
+  const hipY = sy + s * 0.78;
+  const reach = s * 0.52;
+  const footX = hipX + reach * ext;
+  const footY = hipY - reach * 0.22 * ext; // slight upward arc
+  const footAngle = Math.atan2(footY - hipY, footX - hipX);
+
+  ctx.save();
+
+  // Bare leg — butt cap at foot so the shoe covers the end cleanly
+  ctx.strokeStyle = '#fcd5ae';
+  ctx.lineWidth = s * 0.16;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(hipX, hipY);
+  ctx.lineTo(footX, footY);
+  ctx.stroke();
+  // Round join at the hip end only
+  ctx.fillStyle = '#fcd5ae';
+  ctx.beginPath();
+  ctx.arc(hipX, hipY, s * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dark shoe
+  drawKickShoe(ctx, footX, footY, footAngle, s);
 
   ctx.restore();
 }

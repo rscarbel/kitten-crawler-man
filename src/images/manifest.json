@@ -1,0 +1,1600 @@
+{
+  "cat": {
+    "path": "characters/cat.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "human": {
+    "path": "characters/human.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "kick_body": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "human_punch_arm": {
+    "path": "characters/human_punch_arm.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "punch": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "human_kick_leg": {
+    "path": "characters/human_kick_leg.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "kick": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "goblin_base": {
+    "path": "enemies/goblin_base.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "goblin_weapon_club": {
+    "path": "enemies/goblin_weapon_club.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "goblin_weapon_hammer": {
+    "path": "enemies/goblin_weapon_hammer.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "rat": {
+    "path": "enemies/rat.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "llama": {
+    "path": "enemies/llama.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "spit": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "mongo": {
+    "path": "enemies/mongo.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "troglodyte": {
+    "path": "enemies/troglodyte.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 24,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "mouth_open": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "troglodyte_tongue": {
+    "path": "enemies/troglodyte_tongue.png",
+    "frameWidth": 220,
+    "frameHeight": 40,
+    "tileX": 8,
+    "tileY": 20,
+    "tileScale": 64,
+    "states": {
+      "extend": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "tuskling": {
+    "path": "enemies/tuskling.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 24,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "charge": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "brindle_grub": {
+    "path": "enemies/brindle_grub.png",
+    "frameWidth": 96,
+    "frameHeight": 80,
+    "tileX": 16,
+    "tileY": 12,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "cow_tailed_grub": {
+    "path": "enemies/cow_tailed_grub.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 12,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "brindled_vespa": {
+    "path": "enemies/brindled_vespa.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "hover": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "hover_left": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "hover_bob": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "hoarder": {
+    "path": "bosses/hoarder.png",
+    "frameWidth": 144,
+    "frameHeight": 160,
+    "tileX": 40,
+    "tileY": 20,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "enraged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "vomit": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "vomit_enraged": {
+        "row": 3,
+        "frameCount": 6
+      }
+    }
+  },
+  "juicer": {
+    "path": "bosses/juicer.png",
+    "frameWidth": 208,
+    "frameHeight": 224,
+    "tileX": 72,
+    "tileY": 24,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "throw": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "walk_enraged": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_enraged": {
+        "row": 4,
+        "frameCount": 1
+      }
+    }
+  },
+  "ball_of_swine": {
+    "path": "bosses/ball_of_swine.png",
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "tileX": 160,
+    "tileY": 160,
+    "tileScale": 64,
+    "states": {
+      "orbit": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "stopped": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "burst": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "krakaren": {
+    "path": "bosses/krakaren.png",
+    "frameWidth": 320,
+    "frameHeight": 320,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "attack": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "enraged": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "rat_kin": {
+    "path": "npcs/rat_kin.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_left": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "incubus": {
+    "path": "npcs/incubus.png",
+    "frameWidth": 160,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_left": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "bugaboo": {
+    "path": "npcs/bugaboo.png",
+    "frameWidth": 128,
+    "frameHeight": 144,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "sky_fowl_body": {
+    "path": "npcs/sky_fowl_body.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_pants_mask": {
+    "path": "npcs/sky_fowl_pants_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_vest_mask": {
+    "path": "npcs/sky_fowl_vest_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_trim_mask": {
+    "path": "npcs/sky_fowl_trim_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_hat_mask": {
+    "path": "npcs/sky_fowl_hat_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "quest_npc": {
+    "path": "npcs/quest_npc.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "hurt": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "idle_left": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "goblin_child": {
+    "path": "npcs/goblin_child.png",
+    "frameWidth": 64,
+    "frameHeight": 80,
+    "tileX": 8,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "magic_missile_projectile": {
+    "path": "effects/magic_missile_projectile.png",
+    "frameWidth": 176,
+    "frameHeight": 80,
+    "tileX": 140,
+    "tileY": 40,
+    "tileScale": 64,
+    "states": {
+      "standard": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "sub_missile": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "full_power": {
+        "row": 2,
+        "frameCount": 3
+      }
+    }
+  },
+  "magic_missile_explosion": {
+    "path": "effects/magic_missile_explosion.png",
+    "frameWidth": 224,
+    "frameHeight": 224,
+    "tileX": 112,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "standard": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "full_power": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell": {
+    "path": "effects/protective_shell.png",
+    "frameWidth": 400,
+    "frameHeight": 400,
+    "tileX": 200,
+    "tileY": 200,
+    "tileScale": 32,
+    "states": {
+      "active": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "full_power": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "appear": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "appear_full_power": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "expire": {
+        "row": 4,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell_mini": {
+    "path": "effects/protective_shell_mini.png",
+    "frameWidth": 192,
+    "frameHeight": 192,
+    "tileX": 96,
+    "tileY": 96,
+    "tileScale": 32,
+    "states": {
+      "active": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell_shockwave": {
+    "path": "effects/protective_shell_shockwave.png",
+    "frameWidth": 480,
+    "frameHeight": 480,
+    "tileX": 240,
+    "tileY": 240,
+    "tileScale": 32,
+    "states": {
+      "expand": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "blood_particle": {
+    "path": "effects/blood_particle.png",
+    "frameWidth": 24,
+    "frameHeight": 24,
+    "tileX": 12,
+    "tileY": 12,
+    "tileScale": 32,
+    "states": {
+      "drop": {
+        "row": 0,
+        "frameCount": 6
+      },
+      "tear": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "blood_puddle": {
+    "path": "effects/blood_puddle.png",
+    "frameWidth": 72,
+    "frameHeight": 48,
+    "tileX": 36,
+    "tileY": 24,
+    "tileScale": 32,
+    "states": {
+      "puddle": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "wall_cottage": {
+    "path": "environment/wall_cottage.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_tower": {
+    "path": "environment/wall_tower.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_merchant": {
+    "path": "environment/wall_merchant.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_stone": {
+    "path": "environment/wall_stone.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_circus_red": {
+    "path": "environment/wall_circus_red.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_circus_blue": {
+    "path": "environment/wall_circus_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_circus_purple": {
+    "path": "environment/wall_circus_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_metal": {
+    "path": "environment/wall_metal.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "default": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_thatch": {
+    "path": "environment/roof_thatch.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_slate": {
+    "path": "environment/roof_slate.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_red": {
+    "path": "environment/roof_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_green": {
+    "path": "environment/roof_green.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_red": {
+    "path": "environment/roof_circus_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_blue": {
+    "path": "environment/roof_circus_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_purple": {
+    "path": "environment/roof_circus_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_red": {
+    "path": "environment/circus_tent_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_blue": {
+    "path": "environment/circus_tent_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_purple": {
+    "path": "environment/circus_tent_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree": {
+    "path": "environment/tree.png",
+    "frameWidth": 64,
+    "frameHeight": 160,
+    "tileX": 0,
+    "tileY": 96,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "torch": {
+    "path": "environment/torch.png",
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "flicker": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "well": {
+    "path": "environment/well.png",
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "fountain": {
+    "path": "environment/fountain.png",
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "ripple": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "grassy_weed": {
+    "path": "environment/grassy_weed.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "variant_a": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "variant_b": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "dirt_patch": {
+    "path": "environment/dirt_patch.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "variant_a": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "variant_b": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  }
+}

@@ -13,8 +13,8 @@ const AGGRO_RANGE_TILES = 6;
 const ATTACK_RANGE_TILES = 1.2;
 /** Frames between attacks (~1.5 s at 60 fps) */
 const ATTACK_COOLDOWN = 90;
-/** Frames the attack swing animation plays */
-const ATTACK_ANIM_FRAMES = 18;
+/** Frames the attack swing animation plays (~0.6 s at 60 fps) */
+const ATTACK_ANIM_FRAMES = 36;
 
 export class Goblin extends Mob {
   readonly xpValue = 5;
@@ -146,11 +146,8 @@ export class Goblin extends Mob {
       ctx.strokeRect(sx, sy, tileSize, tileSize);
     }
 
-    // Normalise attack animation to 0–1 peak-at-midpoint curve
-    const attackAnim =
-      this.attackAnimTimer > 0
-        ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
-        : 0;
+    // Linear 0→1 progress so weaponAngleCurve sees a single clean sweep
+    const attackAnim = this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : 0;
 
     drawGoblinSprite(
       ctx,

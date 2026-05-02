@@ -435,3 +435,185 @@ export function drawSkyFowlSprite(
 
   ctx.restore();
 }
+
+// ---------------------------------------------------------------------------
+// Tint-mask helpers — each draws ONLY its clothing region in white on a
+// transparent background, for use with destination-in compositing at runtime.
+// All share the same tile origin and frame dimensions as sky_fowl_body.
+// ---------------------------------------------------------------------------
+
+export const SKY_FOWL_LEG_COLOR = '#c8a030';
+
+function _sfLayout(
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame: number,
+  isMoving: boolean,
+  peckAmt: number,
+) {
+  const cs = s * 1.08;
+  const cx = sx + s * 0.5;
+  const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.042 : 0;
+  const legSwing = isMoving ? Math.sin(walkFrame) * cs * 0.065 : 0;
+
+  const tarsusH = cs * 0.13;
+  const thighH = cs * 0.22;
+  const bodyH = cs * 0.27;
+  const bodyW = cs * 0.24;
+  const headR = cs * 0.17;
+
+  const footY = sy + s * 0.95 + bodyBob;
+  const ankleY = footY - tarsusH;
+  const hipY = ankleY - thighH;
+  const bodyBottomY = hipY + cs * 0.05;
+  const bodyTopY = bodyBottomY - bodyH;
+  const bodyCy = (bodyBottomY + bodyTopY) * 0.5;
+  const headCy = bodyTopY - headR * 0.75 + bodyBob * 0.3;
+  const hx = cx + peckAmt * cs * 0.1;
+
+  const leftHipX = cx - cs * 0.115 - legSwing * 0.7;
+  const rightHipX = cx + cs * 0.115 + legSwing * 0.7;
+  const leftAnkleX = leftHipX + cs * 0.04 + legSwing * 0.3;
+  const rightAnkleX = rightHipX + cs * 0.04 - legSwing * 0.3;
+
+  return {
+    cs,
+    cx,
+    ankleY,
+    hipY,
+    bodyCy,
+    bodyW,
+    bodyH,
+    headCy,
+    headR,
+    hx,
+    leftHipX,
+    rightHipX,
+    leftAnkleX,
+    rightAnkleX,
+  };
+}
+
+function _sfFlip(ctx: CanvasRenderingContext2D, cx: number, facingX: number): void {
+  if (facingX < -0.3) {
+    ctx.translate(cx, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-cx, 0);
+  }
+}
+
+/** White-on-transparent silhouette of the pants (thigh) region only. */
+export function drawSkyFowlPantsMask(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+  facingX = 1,
+): void {
+  const L = _sfLayout(sx, sy, s, walkFrame, isMoving, 0);
+  ctx.save();
+  _sfFlip(ctx, L.cx, facingX);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = L.cs * 0.115;
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(L.leftHipX, L.hipY);
+  ctx.lineTo(L.leftAnkleX, L.ankleY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(L.rightHipX, L.hipY);
+  ctx.lineTo(L.rightAnkleX, L.ankleY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** White-on-transparent silhouette of the vest region only. */
+export function drawSkyFowlVestMask(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+  peckAmt = 0,
+  facingX = 1,
+): void {
+  const L = _sfLayout(sx, sy, s, walkFrame, isMoving, peckAmt);
+  ctx.save();
+  _sfFlip(ctx, L.cx, facingX);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(L.cx + L.cs * 0.04, L.bodyCy, L.bodyW * 0.49, L.bodyH * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** White-on-transparent silhouette of the vest collar and buttons only. */
+export function drawSkyFowlTrimMask(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+  peckAmt = 0,
+  facingX = 1,
+): void {
+  const L = _sfLayout(sx, sy, s, walkFrame, isMoving, peckAmt);
+  ctx.save();
+  _sfFlip(ctx, L.cx, facingX);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = L.cs * 0.024;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(L.cx - L.cs * 0.04, L.bodyCy - L.bodyH * 0.28);
+  ctx.lineTo(L.cx + L.cs * 0.04, L.bodyCy - L.bodyH * 0.06);
+  ctx.lineTo(L.cx + L.cs * 0.1, L.bodyCy - L.bodyH * 0.28);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  for (let b = 0; b < 3; b++) {
+    ctx.beginPath();
+    ctx.arc(
+      L.cx + L.cs * 0.04,
+      L.bodyCy - L.cs * 0.055 + b * L.cs * 0.072,
+      L.cs * 0.017,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** White-on-transparent silhouette of the hat crown, brim, and band only. */
+export function drawSkyFowlHatMask(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+  peckAmt = 0,
+  facingX = 1,
+): void {
+  const L = _sfLayout(sx, sy, s, walkFrame, isMoving, peckAmt);
+  const brimY = L.headCy - L.headR * 0.58;
+  const crownH = L.headR * 0.58;
+  ctx.save();
+  _sfFlip(ctx, L.cx, facingX);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.rect(L.hx - L.headR * 0.68, brimY - crownH, L.headR * 1.36, crownH);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(L.hx, brimY - crownH, L.headR * 0.68, L.headR * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(L.hx, brimY, L.headR * 1.08, L.headR * 0.21, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(L.hx - L.headR * 0.68, brimY - L.headR * 0.34, L.headR * 1.36, L.headR * 0.17);
+  ctx.restore();
+}
