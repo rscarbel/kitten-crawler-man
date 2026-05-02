@@ -3,6 +3,7 @@ import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameStats } from '../../core/GameStats';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { drawText } from '../TextBox';
 
 /** Returns total content height so PauseMenu can clamp scroll. */
 export function renderStatsTab(
@@ -18,11 +19,14 @@ export function renderStatsTab(
   gameStats?: GameStats,
   scrollY = 0,
 ): number {
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 16px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('STATS', bx + bw / 2, by + 34);
-  ctx.textAlign = 'left';
+  drawText(ctx, 'STATS', {
+    x: bx + bw / 2,
+    y: by + 34 - 13,
+    bold: true,
+    size: 16,
+    color: '#f1f5f9',
+    align: 'center',
+  });
 
   const BACK_BTN_H = 52;
   const scrollTop = by + 50;
@@ -39,37 +43,51 @@ export function renderStatsTab(
   let y = 14;
 
   const statBlock = (p: Player): number => {
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#e2e8f0';
     const midStat =
       p instanceof HumanPlayer ? `EXP: ${p.explosivesHandling}` : `INT: ${p.intelligence}`;
-    ctx.fillText(
+    drawText(
+      ctx,
       `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}`,
-      bx + 20,
-      y,
+      { x: bx + 20, y: y - 9, size: 11, color: '#e2e8f0' },
     );
     y += 16;
-    ctx.fillStyle = '#64748b';
-    ctx.fillText(`XP: ${p.xp} / ${p.level * 10}`, bx + 20, y);
+    drawText(ctx, `XP: ${p.xp} / ${p.level * 10}`, {
+      x: bx + 20,
+      y: y - 9,
+      size: 11,
+      color: '#64748b',
+    });
     y += 16;
     if (p.unspentPoints > 0) {
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`Unspent skill pts: ${p.unspentPoints}`, bx + 20, y);
+      drawText(ctx, `Unspent skill pts: ${p.unspentPoints}`, {
+        x: bx + 20,
+        y: y - 9,
+        size: 11,
+        color: '#fbbf24',
+      });
       y += 16;
     }
     return y;
   };
 
-  ctx.fillStyle = '#93c5fd';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText(`Human  Lv ${human.level}`, bx + 20, y);
+  drawText(ctx, `Human  Lv ${human.level}`, {
+    x: bx + 20,
+    y: y - 10,
+    bold: true,
+    size: 12,
+    color: '#93c5fd',
+  });
   y += 16;
   statBlock(human);
   y += 10;
 
-  ctx.fillStyle = '#fb923c';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText(`Cat  Lv ${cat.level}`, bx + 20, y);
+  drawText(ctx, `Cat  Lv ${cat.level}`, {
+    x: bx + 20,
+    y: y - 10,
+    bold: true,
+    size: 12,
+    color: '#fb923c',
+  });
   y += 16;
   statBlock(cat);
 
@@ -83,22 +101,45 @@ export function renderStatsTab(
     ctx.stroke();
     y += 16;
 
-    ctx.font = 'bold 13px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('Total Kills:', bx + 20, y);
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText(`${gameStats.totalKills}`, bx + 140, y);
+    drawText(ctx, 'Total Kills:', {
+      x: bx + 20,
+      y: y - 10,
+      bold: true,
+      size: 13,
+      color: '#e2e8f0',
+    });
+    drawText(ctx, `${gameStats.totalKills}`, {
+      x: bx + 140,
+      y: y - 10,
+      bold: true,
+      size: 13,
+      color: '#fbbf24',
+    });
     y += 20;
 
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('Potions Used:', bx + 20, y);
-    ctx.fillStyle = '#86efac';
-    ctx.fillText(`${gameStats.potionsUsed}`, bx + 140, y);
+    drawText(ctx, 'Potions Used:', {
+      x: bx + 20,
+      y: y - 10,
+      bold: true,
+      size: 13,
+      color: '#e2e8f0',
+    });
+    drawText(ctx, `${gameStats.potionsUsed}`, {
+      x: bx + 140,
+      y: y - 10,
+      bold: true,
+      size: 13,
+      color: '#86efac',
+    });
     y += 24;
 
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText('BY ENEMY TYPE', bx + 20, y);
+    drawText(ctx, 'ENEMIES KILLED', {
+      x: bx + 20,
+      y: y - 9,
+      bold: true,
+      size: 11,
+      color: '#94a3b8',
+    });
     y += 6;
 
     ctx.strokeStyle = '#334155';
@@ -111,19 +152,18 @@ export function renderStatsTab(
 
     const entries = [...gameStats.killsByType.entries()].sort((a, b) => b[1] - a[1]);
     if (entries.length === 0) {
-      ctx.font = '11px monospace';
-      ctx.fillStyle = '#64748b';
-      ctx.fillText('No kills yet', bx + 20, y);
+      drawText(ctx, 'No kills yet', { x: bx + 20, y: y - 9, size: 11, color: '#64748b' });
       y += 17;
     } else {
-      ctx.font = '12px monospace';
       for (const [name, count] of entries) {
-        ctx.fillStyle = '#cbd5e1';
-        ctx.fillText(name, bx + 24, y);
-        ctx.fillStyle = '#fbbf24';
-        ctx.textAlign = 'right';
-        ctx.fillText(`${count}`, bx + bw - 24, y);
-        ctx.textAlign = 'left';
+        drawText(ctx, name, { x: bx + 24, y: y - 10, size: 12, color: '#cbd5e1' });
+        drawText(ctx, `${count}`, {
+          x: bx + bw - 24,
+          y: y - 10,
+          size: 12,
+          color: '#fbbf24',
+          align: 'right',
+        });
         y += 17;
       }
     }

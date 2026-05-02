@@ -6,6 +6,7 @@
  *  - Wood pile pickup
  *  - Wood barrier (with damage states)
  */
+import { drawText } from '../ui/TextBox';
 
 export function drawQuestNPCSprite(
   ctx: CanvasRenderingContext2D,
@@ -162,12 +163,18 @@ export function drawQuestNPCSprite(
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#ef4444';
-    ctx.font = `bold ${Math.floor(s * 0.2)}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Help!!!', bx + bw * 0.5, by + bh * 0.5);
-    ctx.textAlign = 'left';
+    // Text — midpoint y converted to top: drawText_y = mid - size/2
+    const helpFontSize = Math.floor(s * 0.2);
+    drawText(ctx, 'Help!!!', {
+      x: bx + bw * 0.5,
+      y: by + bh * 0.5 - helpFontSize / 2,
+      size: helpFontSize,
+      bold: true,
+      font: 'sans-serif',
+      color: '#ef4444',
+      alpha: bubbleAlpha,
+      align: 'center',
+    });
 
     ctx.restore();
   }
@@ -186,29 +193,25 @@ export function drawExclamationMark(
   const baseY = sy - s * 0.15 + bounce;
   const isQuestion = color === '#4ade80';
 
-  ctx.save();
-  ctx.font = `bold ${Math.floor(s * 0.45)}px monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
+  const glyphFontSize = Math.floor(s * 0.45);
   const glyph = isQuestion ? '?' : '!';
 
-  // Black outline
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 3;
-  ctx.lineJoin = 'round';
-  ctx.strokeText(glyph, cx, baseY);
-
-  // Glow
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = color;
-  ctx.fillText(glyph, cx, baseY);
-
-  // Second pass for brightness
-  ctx.shadowBlur = 3;
-  ctx.fillText(glyph, cx, baseY);
-
+  // Midpoint y converted to top: drawText_y = baseY - size/2
+  // outline (black stroke) + glow in one pass
+  ctx.save();
+  drawText(ctx, glyph, {
+    x: cx,
+    y: baseY - glyphFontSize / 2,
+    size: glyphFontSize,
+    bold: true,
+    font: 'monospace',
+    color,
+    align: 'center',
+    outline: '#000',
+    outlineWidth: 3,
+    glow: color,
+    glowBlur: 8,
+  });
   ctx.restore();
 }
 
@@ -340,16 +343,19 @@ export function drawWoodPileSprite(
   ctx.arc(sx + s * 0.43, sy + s * 0.495, s * 0.035, 0, Math.PI * 2);
   ctx.fill();
 
-  // "Boards" text
-  ctx.font = `bold ${Math.floor(s * 0.22)}px monospace`;
-  ctx.textAlign = 'center';
-  ctx.strokeStyle = '#3a2500';
-  ctx.lineWidth = 3;
-  ctx.lineJoin = 'round';
-  ctx.strokeText('WOOD', sx + s * 0.5, sy + s * 0.38);
-  ctx.fillStyle = '#fbbf24';
-  ctx.fillText('WOOD', sx + s * 0.5, sy + s * 0.38);
-  ctx.textAlign = 'left';
+  // "Boards" text — baseline_y converted to top: drawText_y = baseline - Math.round(size * 0.8)
+  const woodFontSize = Math.floor(s * 0.22);
+  drawText(ctx, 'WOOD', {
+    x: sx + s * 0.5,
+    y: sy + s * 0.38 - Math.round(woodFontSize * 0.8),
+    size: woodFontSize,
+    bold: true,
+    font: 'monospace',
+    color: '#fbbf24',
+    align: 'center',
+    outline: '#3a2500',
+    outlineWidth: 3,
+  });
 
   if (!showArrow) return;
 

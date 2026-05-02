@@ -1,6 +1,7 @@
 import type { AchievementManager } from '../../core/AchievementManager';
 import { ACHIEVEMENT_DEFS, isAchievementId } from '../../core/AchievementManager';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { drawText, TEXT_PRESETS } from '../TextBox';
 
 function tierColor(tier: string): string {
   switch (tier) {
@@ -32,9 +33,13 @@ function renderPlayerAchievements(
   inSafeRoom: boolean,
   onOpenBoxes?: () => void,
 ): void {
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText(label, bx + 16, startY + 12);
+  drawText(ctx, label, {
+    x: bx + 16,
+    y: startY + 12 - 10,
+    bold: true,
+    size: 12,
+    color: labelColor,
+  });
   let oy = startY + 20;
 
   const relevant = Object.keys(ACHIEVEMENT_DEFS)
@@ -46,9 +51,12 @@ function renderPlayerAchievements(
     });
 
   if (relevant.length === 0) {
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#374151';
-    ctx.fillText('No achievements yet...', bx + 18, oy + 13);
+    drawText(ctx, 'No achievements yet...', {
+      x: bx + 18,
+      y: oy + 13 - 8,
+      size: 10,
+      color: '#374151',
+    });
     oy += 20;
   }
 
@@ -58,20 +66,18 @@ function renderPlayerAchievements(
     ctx.fillStyle = 'rgba(250,204,21,0.06)';
     ctx.fillRect(bx + 12, oy, bw - 24, 18);
 
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#4ade80';
-    ctx.fillText('✓', bx + 18, oy + 13);
-
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = '#f1f5f9';
-    ctx.fillText(def.name, bx + 32, oy + 13);
+    drawText(ctx, '✓', { x: bx + 18, y: oy + 13 - 9, size: 11, color: '#4ade80' });
+    drawText(ctx, def.name, { x: bx + 32, y: oy + 13 - 8, bold: true, size: 10, color: '#f1f5f9' });
 
     if (def.lootBox) {
-      ctx.fillStyle = tierColor(def.lootBox.tier);
-      ctx.font = 'bold 9px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${def.lootBox.tier} ${def.lootBox.category}`, bx + bw - 14, oy + 13);
-      ctx.textAlign = 'left';
+      drawText(ctx, `${def.lootBox.tier} ${def.lootBox.category}`, {
+        x: bx + bw - 14,
+        y: oy + 13 - 7,
+        bold: true,
+        size: 9,
+        color: tierColor(def.lootBox.tier),
+        align: 'right',
+      });
     }
 
     oy += 20;
@@ -79,18 +85,18 @@ function renderPlayerAchievements(
 
   const boxCount = manager?.pendingBoxes.length ?? 0;
   if (boxCount > 0) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '10px monospace';
-    ctx.fillText(`Unopened boxes: ${boxCount}`, bx + 18, oy + 10);
+    drawText(ctx, `Unopened boxes: ${boxCount}`, {
+      x: bx + 18,
+      y: oy + 10 - 8,
+      ...TEXT_PRESETS.hint,
+    });
 
     if (onOpenBoxes) {
       const btnW = 100;
       const btnX = bx + bw - 20 - btnW;
       menuBtn(ctx, buttons, btnX, oy, btnW, 22, 'Open Boxes', onOpenBoxes, '#14532d', '#4ade80');
     } else if (!inSafeRoom) {
-      ctx.fillStyle = '#374151';
-      ctx.font = '9px monospace';
-      ctx.fillText('(safe room only)', bx + 140, oy + 10);
+      drawText(ctx, '(safe room only)', { x: bx + 140, y: oy + 10 - 7, size: 9, color: '#374151' });
     }
   }
 }
@@ -109,11 +115,14 @@ export function renderAchievementsTab(
   onOpenHumanBoxes?: () => void,
   onOpenCatBoxes?: () => void,
 ): void {
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 16px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('ACHIEVEMENTS', bx + bw / 2, by + 28);
-  ctx.textAlign = 'left';
+  drawText(ctx, 'ACHIEVEMENTS', {
+    x: bx + bw / 2,
+    y: by + 28 - 13,
+    bold: true,
+    size: 16,
+    color: '#f1f5f9',
+    align: 'center',
+  });
 
   let oy = by + 42;
 

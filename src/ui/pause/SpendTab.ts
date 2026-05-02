@@ -2,6 +2,7 @@ import { type Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { drawText } from '../TextBox';
 
 export function renderSpendTab(
   ctx: CanvasRenderingContext2D,
@@ -13,16 +14,32 @@ export function renderSpendTab(
   cat: CatPlayer,
   setTab: (tab: PauseTab) => void,
 ): void {
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 16px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('SPEND SKILL POINTS', bx + bw / 2, by + 34);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px monospace';
-  ctx.fillText('STR increases melee damage, CON increases max HP by 2.', bx + 20, by + 52);
-  ctx.fillText('Human: EXP increases dynamite damage and throw distance.', bx + 20, by + 64);
-  ctx.fillText('Cat: INT increases magic damage.', bx + 20, by + 76);
+  drawText(ctx, 'SPEND SKILL POINTS', {
+    x: bx + bw / 2,
+    y: by + 34 - 13,
+    bold: true,
+    size: 16,
+    color: '#f1f5f9',
+    align: 'center',
+  });
+  drawText(ctx, 'STR increases melee damage, CON increases max HP by 2.', {
+    x: bx + 20,
+    y: by + 52 - 8,
+    size: 10,
+    color: '#64748b',
+  });
+  drawText(ctx, 'Human: EXP increases dynamite damage and throw distance.', {
+    x: bx + 20,
+    y: by + 64 - 8,
+    size: 10,
+    color: '#64748b',
+  });
+  drawText(ctx, 'Cat: INT increases magic damage.', {
+    x: bx + 20,
+    y: by + 76 - 8,
+    size: 10,
+    color: '#64748b',
+  });
 
   let oy = by + 92;
   const bW = 76;
@@ -35,12 +52,10 @@ export function renderSpendTab(
 
   for (const [player, name] of players) {
     if (player.unspentPoints <= 0) continue;
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(
+    drawText(
+      ctx,
       `${name}  —  ${player.unspentPoints} pt${player.unspentPoints !== 1 ? 's' : ''}`,
-      bx + 20,
-      oy,
+      { x: bx + 20, y: oy - 10, bold: true, size: 12, color: '#e2e8f0' },
     );
     oy += 14;
     const totalBW = bW * 3 + gap * 2;
@@ -57,11 +72,13 @@ export function renderSpendTab(
   }
 
   if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) {
-    ctx.fillStyle = '#475569';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('No unspent points remaining.', bx + bw / 2, oy + 12);
-    ctx.textAlign = 'left';
+    drawText(ctx, 'No unspent points remaining.', {
+      x: bx + bw / 2,
+      y: oy + 12 - 10,
+      size: 12,
+      color: '#475569',
+      align: 'center',
+    });
     oy += 28;
   }
 

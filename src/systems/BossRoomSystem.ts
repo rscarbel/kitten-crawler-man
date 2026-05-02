@@ -9,6 +9,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
 interface BossRoomState {
   bounds: { x: number; y: number; w: number; h: number };
@@ -255,13 +256,17 @@ export class BossRoomSystem implements GameSystem {
     const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
-    ctx.save();
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = meta.color;
-    ctx.fillText('BOSS ROOM', bannerX, bannerY + ts * 0.65);
-    ctx.textAlign = 'left';
-    ctx.restore();
+    // "BOSS ROOM" world-space label
+    // size=10, old baseline = bannerY + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
+    drawText(ctx, 'BOSS ROOM', {
+      ...TEXT_PRESETS.label,
+      x: bannerX,
+      y: bannerY + ts * 0.65 - 8,
+      size: 10,
+      bold: true,
+      color: meta.color,
+      align: 'center',
+    });
 
     // Juicer's gym room — decoration handled by JuicerRoomSystem
     if (bossType === 'juicer') return;
@@ -480,15 +485,16 @@ export class BossRoomSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
 
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName,
-      canvas.width / 2,
-      barY - 6,
-    );
-    ctx.textAlign = 'left';
+    // Boss name label: size=11, old baseline = barY - 6; top = (barY-6) - round(11*0.8) = barY-6-9 = barY-15
+    const nameText = isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName;
+    drawText(ctx, nameText, {
+      x: canvas.width / 2,
+      y: barY - 15,
+      size: 11,
+      bold: true,
+      color: isEnraged ? '#ef4444' : meta.color,
+      align: 'center',
+    });
 
     ctx.fillStyle = '#0a0a12';
     ctx.fillRect(barX, barY, barW, barH);
@@ -507,21 +513,31 @@ export class BossRoomSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, barH);
 
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${boss.hp} / ${boss.maxHp}`, canvas.width / 2, barY + barH - 4);
-    ctx.textAlign = 'left';
+    ctx.restore();
+
+    // HP values inside bar: size=9, old baseline = barY + barH - 4
+    // top = (barY + barH - 4) - round(9*0.8) = (barY + barH - 4) - 7 = barY + barH - 11
+    drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
+      x: canvas.width / 2,
+      y: barY + barH - 11,
+      size: 9,
+      color: '#e2e8f0',
+      align: 'center',
+    });
 
     if (relevantState.defeated) {
-      ctx.font = 'bold 12px monospace';
-      ctx.fillStyle = '#4ade80';
-      ctx.textAlign = 'center';
-      ctx.fillText('DEFEATED', canvas.width / 2, barY + barH + 16);
-      ctx.textAlign = 'left';
+      // "DEFEATED" text: size=12, old baseline = barY + barH + 16
+      // top = (barY + barH + 16) - round(12*0.8) = (barY + barH + 16) - 10 = barY + barH + 6
+      drawText(ctx, 'DEFEATED', {
+        x: canvas.width / 2,
+        y: barY + barH + 6,
+        size: 12,
+        bold: true,
+        color: '#4ade80',
+        align: 'center',
+      });
     }
 
-    ctx.restore();
     void camX;
     void camY;
   }

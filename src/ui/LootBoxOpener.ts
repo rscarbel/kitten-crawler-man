@@ -1,6 +1,7 @@
 import type { LootBox, BoxContents } from '../core/AchievementManager';
 import { getBoxContents } from '../core/AchievementManager';
 import { randomFromArray, randomInt } from '../utils';
+import { drawText } from './TextBox';
 
 interface Particle {
   x: number;
@@ -199,21 +200,32 @@ export class LootBoxOpener {
     // Progress indicator (N of M)
     const total = this.queue.length;
     const current = this.queueIndex + 1;
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(`Box ${current} of ${total}`, bx + BOX_W - 12, by + 20);
+    drawText(ctx, `Box ${current} of ${total}`, {
+      x: bx + BOX_W - 12,
+      y: by + 20 - 9,
+      size: 11,
+      color: '#64748b',
+      align: 'right',
+    });
 
     // Title
-    ctx.fillStyle = tierColor;
-    ctx.font = 'bold 17px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${this.box.tier} ${this.box.category} Box`, cx, by + 36);
+    drawText(ctx, `${this.box.tier} ${this.box.category} Box`, {
+      x: cx,
+      y: by + 36 - 14,
+      bold: true,
+      size: 17,
+      color: tierColor,
+      align: 'center',
+    });
 
     // Player label
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px monospace';
-    ctx.fillText(`for ${this.playerName}`, cx, by + 52);
+    drawText(ctx, `for ${this.playerName}`, {
+      x: cx,
+      y: by + 52 - 9,
+      size: 11,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
     // Divider
     ctx.strokeStyle = `${tierColor}55`;
@@ -236,14 +248,13 @@ export class LootBoxOpener {
     }
 
     // Skip hint
-    ctx.fillStyle = '#475569';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      this.phase === 'done' ? 'Click to continue' : 'Click to skip',
-      cx,
-      by + BOX_H - 30,
-    );
+    drawText(ctx, this.phase === 'done' ? 'Click to continue' : 'Click to skip', {
+      x: cx,
+      y: by + BOX_H - 30 - 8,
+      size: 10,
+      color: '#475569',
+      align: 'center',
+    });
 
     // Auto-advance countdown bar (shown during 'done' phase)
     if (this.phase === 'done' && this.nextTimer > 0) {
@@ -260,10 +271,13 @@ export class LootBoxOpener {
 
       // "Next box…" or "Done!" label
       const isLast = this.queueIndex >= this.queue.length - 1;
-      ctx.fillStyle = '#64748b';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(isLast ? 'Done!' : 'Next box…', cx, barY - 4);
+      drawText(ctx, isLast ? 'Done!' : 'Next box…', {
+        x: cx,
+        y: barY - 4 - 8,
+        size: 10,
+        color: '#64748b',
+        align: 'center',
+      });
     }
 
     // Particles
@@ -277,7 +291,6 @@ export class LootBoxOpener {
     }
     ctx.globalAlpha = 1;
 
-    ctx.textAlign = 'left';
     ctx.restore();
   }
 
@@ -408,29 +421,41 @@ export class LootBoxOpener {
 
   private renderContents(ctx: CanvasRenderingContext2D, cx: number, y: number): void {
     if (!this.contents) return;
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillStyle = '#f1f5f9';
-    ctx.fillText(`${this.playerName} received:`, cx, y);
+    drawText(ctx, `${this.playerName} received:`, {
+      x: cx,
+      y: y - 10,
+      bold: true,
+      size: 13,
+      color: '#f1f5f9',
+      align: 'center',
+    });
     y += 18;
-    ctx.font = '12px monospace';
-    ctx.fillStyle = '#4ade80';
-    ctx.fillText(
+    drawText(
+      ctx,
       `+${this.contents.potions} Health Potion${this.contents.potions !== 1 ? 's' : ''}`,
-      cx,
-      y,
+      { x: cx, y: y - 10, size: 12, color: '#4ade80', align: 'center' },
     );
     y += 16;
     if (this.contents.coins > 0) {
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`+${this.contents.coins} Coins`, cx, y);
+      drawText(ctx, `+${this.contents.coins} Coins`, {
+        x: cx,
+        y: y - 10,
+        size: 12,
+        color: '#fbbf24',
+        align: 'center',
+      });
       y += 16;
     }
     if (this.contents.bonus) {
-      ctx.fillStyle = '#fb923c';
       const name = this.contents.bonus.id.replace(/_/g, ' ');
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
-      ctx.fillText(`+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, cx, y);
+      drawText(ctx, `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, {
+        x: cx,
+        y: y - 10,
+        size: 12,
+        color: '#fb923c',
+        align: 'center',
+      });
     }
   }
 

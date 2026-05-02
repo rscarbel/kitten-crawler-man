@@ -16,6 +16,7 @@ import type { MongoSystem } from './MongoSystem';
 import type { InventoryPanel } from '../ui/InventoryPanel';
 import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
+import { drawText } from '../ui/TextBox';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -44,11 +45,13 @@ export function drawPauseButton(
   ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1;
   ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = '12px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(platform.pauseButtonLabel, pb.x + pb.w / 2, pb.y + pb.h / 2 + 4);
-  ctx.textAlign = 'left';
+  drawText(ctx, platform.pauseButtonLabel, {
+    x: pb.x + pb.w / 2,
+    y: pb.y + pb.h / 2 + 4 - 10,
+    size: 12,
+    color: '#e2e8f0',
+    align: 'center',
+  });
 }
 
 export function renderHealthVignette(
@@ -120,15 +123,21 @@ export function renderLevelTimer(
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, w, h);
 
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '9px monospace';
-  ctx.fillText('TIME REMAINING', x + w / 2, y + 12);
-
-  ctx.fillStyle = urgent ? '#f87171' : warning ? '#fbbf24' : '#e2e8f0';
-  ctx.font = 'bold 17px monospace';
-  ctx.fillText(display, x + w / 2, y + 29);
-  ctx.textAlign = 'left';
+  drawText(ctx, 'TIME REMAINING', {
+    x: x + w / 2,
+    y: y + 12 - 7,
+    size: 9,
+    color: '#94a3b8',
+    align: 'center',
+  });
+  drawText(ctx, display, {
+    x: x + w / 2,
+    y: y + 29 - 14,
+    size: 17,
+    bold: true,
+    color: urgent ? '#f87171' : warning ? '#fbbf24' : '#e2e8f0',
+    align: 'center',
+  });
 }
 
 export function renderLevelUpFlash(
@@ -143,14 +152,15 @@ export function renderLevelUpFlash(
     const rise = (1 - alpha) * 28;
     const sx = p.x - camX + TILE_SIZE / 2;
     const sy = p.y - camY - 12 - rise;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#facc15';
-    ctx.fillText(`LEVEL UP! +${p.levelUpStat}`, sx, sy);
-    ctx.restore();
-    ctx.textAlign = 'left';
+    drawText(ctx, `LEVEL UP! +${p.levelUpStat}`, {
+      x: sx,
+      y: sy - 10,
+      size: 13,
+      bold: true,
+      color: '#facc15',
+      alpha,
+      align: 'center',
+    });
   }
 }
 
@@ -203,19 +213,26 @@ export function renderEntityTooltip(
   ctx.roundRect(tx, ty, boxW, boxH, 4);
   ctx.fill();
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  ctx.restore();
 
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillStyle = hovered.isHostile ? '#fca5a5' : '#86efac';
-  ctx.fillText(name, tx + PAD, ty + PAD + 12);
+  drawText(ctx, name, {
+    x: tx + PAD,
+    y: ty + PAD + 12 - 10,
+    size: 13,
+    bold: true,
+    font: 'sans-serif',
+    color: hovered.isHostile ? '#fca5a5' : '#86efac',
+  });
 
   if (desc) {
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = '#d1d5db';
-    ctx.fillText(desc, tx + PAD, ty + PAD + 12 + LINE_GAP + 11);
+    drawText(ctx, desc, {
+      x: tx + PAD,
+      y: ty + PAD + 12 + LINE_GAP + 11 - 9,
+      size: 11,
+      font: 'sans-serif',
+      color: '#d1d5db',
+    });
   }
-
-  ctx.restore();
 }
 
 export interface MobileButtonState {
@@ -267,10 +284,14 @@ export function renderMobileButtons(
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#e2e8f0';
     ctx.fillText(icon, r.x + r.w / 2, r.y + r.h / 2 + 2);
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(label, r.x + r.w / 2, r.y + r.h - 6);
     ctx.textAlign = 'left';
+    drawText(ctx, label, {
+      x: r.x + r.w / 2,
+      y: r.y + r.h - 6 - 7,
+      size: 9,
+      color: '#94a3b8',
+      align: 'center',
+    });
   };
 
   const drawSmallBtn = (r: Rect, label: string, active: boolean) => {
@@ -279,11 +300,13 @@ export function renderMobileButtons(
     ctx.strokeStyle = active ? '#3b82f6' : '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 4);
-    ctx.textAlign = 'left';
+    drawText(ctx, label, {
+      x: r.x + r.w / 2,
+      y: r.y + r.h / 2 + 4 - 10,
+      size: 12,
+      color: '#e2e8f0',
+      align: 'center',
+    });
   };
 
   const humanActive = state.human.isActive;

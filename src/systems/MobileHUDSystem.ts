@@ -6,6 +6,7 @@ import type { Inventory } from '../core/Inventory';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem } from './GameSystem';
 import { pointInRect } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -225,12 +226,14 @@ export class MobileHUDSystem implements GameSystem {
     ctx.strokeRect(mmX, mmY, mmSize, mmSize);
 
     // Expand hint
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
     const hint = platform.miniMapHint(this._miniMapExpanded);
-    ctx.fillText(hint, mmX + mmSize / 2, mmY + mmSize + 9);
-    ctx.textAlign = 'left';
+    drawText(ctx, hint, {
+      x: mmX + mmSize / 2,
+      y: mmY + mmSize + 9 - 6,
+      size: 8,
+      color: '#64748b',
+      align: 'center',
+    });
 
     return mmSize;
   }
@@ -353,10 +356,14 @@ export class MobileHUDSystem implements GameSystem {
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#e2e8f0';
     ctx.fillText(icon, r.x + r.w / 2, r.y + r.h / 2 + 2);
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(label, r.x + r.w / 2, r.y + r.h - 6);
     ctx.textAlign = 'left';
+    drawText(ctx, label, {
+      x: r.x + r.w / 2,
+      y: r.y + r.h - 6 - 7,
+      size: 9,
+      color: '#94a3b8',
+      align: 'center',
+    });
   }
 
   private drawSmallBtn(
@@ -370,11 +377,13 @@ export class MobileHUDSystem implements GameSystem {
     ctx.strokeStyle = active ? '#3b82f6' : '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 4);
-    ctx.textAlign = 'left';
+    drawText(ctx, label, {
+      x: r.x + r.w / 2,
+      y: r.y + r.h / 2 + 4 - 10,
+      size: 12,
+      color: '#e2e8f0',
+      align: 'center',
+    });
   }
 
   private hitRect(x: number, y: number, r: Rect): boolean {

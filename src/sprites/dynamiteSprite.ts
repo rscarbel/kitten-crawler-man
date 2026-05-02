@@ -5,6 +5,7 @@
  *  - Explosion animation
  *  - Throw charge bar
  */
+import { drawText } from '../ui/TextBox';
 
 // In-world floor/flying sprite
 
@@ -303,17 +304,46 @@ export function drawDynamiteChargeBar(
   // Flash every 8 frames when in danger
   const flashOn = !isDanger || Math.floor(chargeFrames / 8) % 2 === 0;
 
-  // Labels above bar
-  ctx.fillStyle = isDanger ? '#ef4444' : '#e2e8f0';
-  ctx.font = 'bold 10px monospace';
-  ctx.textAlign = 'center';
+  // Labels above bar — baseline_y converted to top_y: top = baseline - Math.round(size * 0.8)
   const labelX = barX + barW / 2;
   if (isDanger) {
-    ctx.fillText('⚠', labelX, barY - 18);
-    ctx.fillText('DANGER', labelX, barY - 6);
+    drawText(ctx, '⚠', {
+      x: labelX,
+      y: barY - 26,
+      size: 10,
+      bold: true,
+      font: 'monospace',
+      color: '#ef4444',
+      align: 'center',
+    });
+    drawText(ctx, 'DANGER', {
+      x: labelX,
+      y: barY - 14,
+      size: 10,
+      bold: true,
+      font: 'monospace',
+      color: '#ef4444',
+      align: 'center',
+    });
   } else {
-    ctx.fillText('THROW', labelX, barY - 14);
-    ctx.fillText('POWER', labelX, barY - 2);
+    drawText(ctx, 'THROW', {
+      x: labelX,
+      y: barY - 22,
+      size: 10,
+      bold: true,
+      font: 'monospace',
+      color: '#e2e8f0',
+      align: 'center',
+    });
+    drawText(ctx, 'POWER', {
+      x: labelX,
+      y: barY - 10,
+      size: 10,
+      bold: true,
+      font: 'monospace',
+      color: '#e2e8f0',
+      align: 'center',
+    });
   }
 
   // Background

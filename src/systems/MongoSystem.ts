@@ -6,6 +6,7 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawText } from '../ui/TextBox';
 
 /** Cooldown in frames: 90 seconds at 60 fps. */
 const COOLDOWN_FRAMES = 90 * 60; // 5400
@@ -195,23 +196,31 @@ export class MongoSystem implements GameSystem {
     drawMongoIcon(ctx, x + w / 2, y + h / 2 - 4, iconSize);
 
     // Label
-    ctx.textAlign = 'center';
-    ctx.font = '9px monospace';
-    ctx.fillStyle = canUse ? '#94a3b8' : '#64748b';
-    ctx.fillText(isActive ? 'Active' : 'Summon', x + w / 2, y + h - 5);
+    drawText(ctx, isActive ? 'Active' : 'Summon', {
+      x: x + w / 2,
+      y: y + h - 5 - 7,
+      size: 9,
+      color: canUse ? '#94a3b8' : '#64748b',
+      align: 'center',
+    });
 
     // Cooldown overlay
     if (this.cooldownFrames > 0) {
+      ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       const fillH = h * this.cooldownRatio;
       ctx.fillRect(x, y + h - fillH, w, fillH);
-
-      ctx.fillStyle = '#ef4444';
-      ctx.font = 'bold 12px monospace';
-      ctx.fillText(`${this.cooldownSeconds}s`, x + w / 2, y + h / 2 + 4);
+      ctx.restore();
+      drawText(ctx, `${this.cooldownSeconds}s`, {
+        x: x + w / 2,
+        y: y + h / 2 + 4 - 10,
+        size: 12,
+        bold: true,
+        color: '#ef4444',
+        align: 'center',
+      });
     }
 
-    ctx.textAlign = 'left';
     return rect;
   }
 
@@ -256,10 +265,15 @@ export class MongoSystem implements GameSystem {
     ctx.fill();
 
     // Text
-    ctx.fillStyle = '#e0f2fe';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, catScreenX + TILE_SIZE * 0.5, by + 15);
-    ctx.textAlign = 'left';
+    drawText(ctx, text, {
+      x: catScreenX + TILE_SIZE * 0.5,
+      y: by + 15 - 9,
+      size: 11,
+      bold: true,
+      color: '#e0f2fe',
+      align: 'center',
+      alpha,
+    });
 
     ctx.restore();
   }

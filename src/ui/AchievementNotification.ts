@@ -1,5 +1,6 @@
 import type { AchievementDef } from '../core/AchievementManager';
 import { randomFromArray, randomInt, pointInRect } from '../utils';
+import { drawText } from './TextBox';
 
 interface Sparkle {
   x: number;
@@ -119,49 +120,77 @@ export class AchievementNotification {
 
     // Header: NEW ACHIEVEMENT!
     const pulse = 0.85 + 0.15 * Math.sin(this.frame * 0.12);
-    ctx.globalAlpha = alpha * pulse;
-    ctx.font = 'bold 22px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffd700';
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 16;
-    ctx.fillText('NEW ACHIEVEMENT!', cw / 2, by + 40);
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = alpha;
+    drawText(ctx, 'NEW ACHIEVEMENT!', {
+      x: cw / 2,
+      y: by + 40 - 18,
+      bold: true,
+      size: 22,
+      color: '#ffd700',
+      align: 'center',
+      glow: '#ffd700',
+      glowBlur: 16,
+      alpha: alpha * pulse,
+    });
 
     // Divider line
+    ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.strokeStyle = 'rgba(255,215,0,0.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(bx + 24, by + 52);
     ctx.lineTo(bx + BOX_W - 24, by + 52);
     ctx.stroke();
+    ctx.restore();
 
     // Achievement name
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = 'bold 18px monospace';
-    ctx.fillText(achievement.name, cw / 2, by + 88);
+    drawText(ctx, achievement.name, {
+      x: cw / 2,
+      y: by + 88 - 14,
+      bold: true,
+      size: 18,
+      color: '#f1f5f9',
+      align: 'center',
+      alpha,
+    });
 
     // Awarded-to label
     const playerColor = player === 'Human' ? '#86efac' : '#93c5fd';
     const playerIcon = player === 'Human' ? '\u{1F9CD}' : '\u{1F431}';
-    ctx.fillStyle = playerColor;
-    ctx.font = '11px monospace';
-    ctx.fillText(`${playerIcon} Awarded to: ${player}`, cw / 2, by + 107);
+    drawText(ctx, `${playerIcon} Awarded to: ${player}`, {
+      x: cw / 2,
+      y: by + 107 - 9,
+      size: 11,
+      color: playerColor,
+      align: 'center',
+      alpha,
+    });
 
-    // Description
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    // Word-wrap the description
-    this.wrapText(ctx, achievement.description, cw / 2, by + 126, BOX_W - 64, 18);
+    // Description (word-wrapped)
+    drawText(ctx, achievement.description, {
+      x: cw / 2 - (BOX_W - 64) / 2,
+      y: by + 126 - 10,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+      width: BOX_W - 64,
+      lineHeight: 18,
+      alpha,
+    });
 
     // Loot box reward
     if (achievement.lootBox) {
       const { tier, category } = achievement.lootBox;
       const tierColor = this.tierColor(tier);
-      ctx.fillStyle = tierColor;
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(`REWARD: ${tier} ${category} Box`, cw / 2, by + 185);
+      drawText(ctx, `REWARD: ${tier} ${category} Box`, {
+        x: cw / 2,
+        y: by + 185 - 10,
+        bold: true,
+        size: 13,
+        color: tierColor,
+        align: 'center',
+        alpha,
+      });
 
       // Small box icon
       this.drawBoxIcon(ctx, cw / 2 - 12, by + 194, 24, tier);
@@ -172,17 +201,26 @@ export class AchievementNotification {
     const okY = by + BOX_H - OK_BTN_H - 18;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
 
+    ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = '#1e3a0f';
     ctx.fillRect(okX, okY, OK_BTN_W, OK_BTN_H);
     ctx.strokeStyle = '#4ade80';
     ctx.lineWidth = 2;
     ctx.strokeRect(okX, okY, OK_BTN_W, OK_BTN_H);
-    ctx.fillStyle = '#4ade80';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('OK!', cw / 2, okY + OK_BTN_H / 2 + 5);
+    ctx.restore();
+
+    drawText(ctx, 'OK!', {
+      x: cw / 2,
+      y: okY + OK_BTN_H / 2 + 5 - 11,
+      bold: true,
+      size: 14,
+      color: '#4ade80',
+      align: 'center',
+      alpha,
+    });
 
     // Sparkles
-    ctx.textAlign = 'left';
     for (const s of this.sparkles) {
       const lifeRatio = s.life / s.maxLife;
       ctx.globalAlpha = alpha * lifeRatio;
@@ -207,29 +245,6 @@ export class AchievementNotification {
   }
 
   // Helpers
-
-  private wrapText(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    cx: number,
-    y: number,
-    maxW: number,
-    lineH: number,
-  ): void {
-    const words = text.split(' ');
-    let line = '';
-    for (const word of words) {
-      const test = line ? `${line} ${word}` : word;
-      if (ctx.measureText(test).width > maxW && line) {
-        ctx.fillText(line, cx, y);
-        line = word;
-        y += lineH;
-      } else {
-        line = test;
-      }
-    }
-    if (line) ctx.fillText(line, cx, y);
-  }
 
   private tierColor(tier: string): string {
     switch (tier) {

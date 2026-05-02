@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import { drawText } from '../ui/TextBox';
 
 const BUBBLE_TTL = 300; // 5 s at 60 fps
 const BUBBLE_FADE = 60;
@@ -127,10 +128,14 @@ export class PlayerChatSystem {
     this.traceBubblePath(ctx, bx, by, boxW, boxH, 5, tailX, tailH);
     ctx.stroke();
 
-    ctx.fillStyle = '#18162a';
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], bx + pad, by + pad + (i + 1) * lineH - 3);
-    }
+    drawText(ctx, lines.join('\n'), {
+      x: bx + pad,
+      y: by + pad + lineH - 3 - 9,
+      size: 11,
+      color: '#18162a',
+      lineHeight: lineH,
+      alpha,
+    });
 
     ctx.restore();
   }
@@ -165,12 +170,12 @@ export class PlayerChatSystem {
 
   renderChatHint(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (!this._isOpen) return;
-    ctx.save();
-    ctx.font = '10px monospace';
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.75)';
-    ctx.textAlign = 'center';
-    ctx.fillText('[Enter] send  [Esc] cancel', canvas.width / 2, canvas.height - 54);
-    ctx.textAlign = 'left';
-    ctx.restore();
+    drawText(ctx, '[Enter] send  [Esc] cancel', {
+      x: canvas.width / 2,
+      y: canvas.height - 54 - 8,
+      size: 10,
+      color: 'rgba(167, 139, 250, 0.75)',
+      align: 'center',
+    });
   }
 }

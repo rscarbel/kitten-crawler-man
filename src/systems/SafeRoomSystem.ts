@@ -8,6 +8,7 @@ import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprit
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { randomFromArray, clamp } from '../utils';
+import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -232,18 +233,21 @@ export class SafeRoomSystem implements GameSystem {
       const b = e.bounds;
       const { offsetX, isWalking, facingX } = this.getWanderState(i);
 
-      // "SAFE ROOM" banner
+      // "SAFE ROOM" banner (world-space label above the room)
+      // size=10, old baseline = bsy + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
       const bannerTileY = b.y - 1;
       const bannerTileX = b.x + Math.floor(b.w / 2);
       const bsx = bannerTileX * ts - camX;
       const bsy = bannerTileY * ts - camY;
-      ctx.save();
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#f0e4c8';
-      ctx.fillText('SAFE ROOM', bsx, bsy + ts * 0.65);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      drawText(ctx, 'SAFE ROOM', {
+        ...TEXT_PRESETS.label,
+        x: bsx,
+        y: bsy + ts * 0.65 - 8,
+        size: 10,
+        bold: true,
+        color: '#f0e4c8',
+        align: 'center',
+      });
 
       // Bed
       const bedSx = e.bedTileX * ts - camX;
@@ -297,15 +301,18 @@ export class SafeRoomSystem implements GameSystem {
       }
     }
 
-    // "SAFE ROOM" HUD label when player is inside
+    // "~ Safe Room ~" HUD banner when player is inside
+    // size=12, old baseline = canvas.height - 18; top = baseline - round(12*0.8) = baseline - 10
     if (this.isEntityInSafeRoom(active)) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(240,228,200,0.85)';
-      ctx.font = 'bold 12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('~ Safe Room ~', canvas.width / 2, canvas.height - 18);
-      ctx.textAlign = 'left';
-      ctx.restore();
+      drawText(ctx, '~ Safe Room ~', {
+        x: canvas.width / 2,
+        y: canvas.height - 18 - 10,
+        size: 12,
+        bold: true,
+        color: '#f0e4c8',
+        alpha: 0.85,
+        align: 'center',
+      });
     }
   }
 
@@ -314,50 +321,54 @@ export class SafeRoomSystem implements GameSystem {
     const dw = Math.min(560, canvas.width - 40);
     const dx = (canvas.width - dw) / 2;
     const dy = canvas.height - dh - 20;
-    const maxLineWidth = dw - 28;
 
+    // Dialog background and border (drawn directly — not text)
     ctx.save();
     ctx.fillStyle = 'rgba(10,8,6,0.92)';
     ctx.fillRect(dx, dy, dw, dh);
     ctx.strokeStyle = '#c8a860';
     ctx.lineWidth = 2;
     ctx.strokeRect(dx, dy, dw, dh);
+    ctx.restore();
 
-    ctx.fillStyle = '#c8a860';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText('Mordecai', dx + 14, dy + 20);
+    // Speaker name: size=13, old baseline = dy+20; top = dy+20 - round(13*0.8) = dy+10
+    drawText(ctx, 'Mordecai', {
+      x: dx + 14,
+      y: dy + 10,
+      size: 13,
+      bold: true,
+      color: '#c8a860',
+    });
 
-    ctx.font = '12px monospace';
     if (this.mordecaiLoading) {
-      ctx.fillStyle = '#7a6e5a';
-      ctx.fillText('...', dx + 14, dy + 50);
+      // size=12, old baseline = dy+50; top = dy+50 - round(12*0.8) = dy+40
+      drawText(ctx, '...', {
+        x: dx + 14,
+        y: dy + 40,
+        size: 12,
+        color: '#7a6e5a',
+      });
     } else {
-      const text = this.mordecaiLine ?? '';
-      ctx.fillStyle = '#e8dfc8';
-      const words = text.split(' ');
-      const lines: string[] = [];
-      let current = '';
-      for (const word of words) {
-        const test = current ? `${current} ${word}` : word;
-        if (ctx.measureText(test).width > maxLineWidth && current) {
-          lines.push(current);
-          current = word;
-        } else {
-          current = test;
-        }
-      }
-      if (current) lines.push(current);
-      lines.slice(0, 5).forEach((line, i) => {
-        ctx.fillText(line, dx + 14, dy + 44 + i * 18);
+      // Speech text with built-in word-wrap; lineHeight=18 matches original spacing
+      // First line old baseline = dy+44; top = dy+44 - round(12*0.8) = dy+34
+      drawText(ctx, this.mordecaiLine ?? '', {
+        x: dx + 14,
+        y: dy + 34,
+        size: 12,
+        color: '#e8dfc8',
+        width: dw - 28,
+        lineHeight: 18,
       });
     }
 
-    ctx.fillStyle = '#7a6e5a';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('[Space / Esc] Close', dx + dw - 12, dy + dh - 10);
-    ctx.textAlign = 'left';
-    ctx.restore();
+    // Close hint: size=10, old baseline = dy+dh-10; top = dy+dh-10 - round(10*0.8) = dy+dh-18
+    drawText(ctx, '[Space / Esc] Close', {
+      x: dx + dw - 12,
+      y: dy + dh - 18,
+      size: 10,
+      color: '#7a6e5a',
+      align: 'right',
+    });
   }
 
   renderSleepOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -378,19 +389,29 @@ export class SafeRoomSystem implements GameSystem {
     ctx.globalAlpha = clamp(alpha, 0, 1);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
 
     if (t > fadeIn && t <= hold + fadeIn) {
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#e2e8f0';
-      ctx.font = 'bold 26px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Sleeping...', canvas.width / 2, canvas.height / 2 - 10);
-      ctx.font = '14px monospace';
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText('zZz', canvas.width / 2, canvas.height / 2 + 18);
-      ctx.textAlign = 'left';
+      // "Sleeping..." size=26, old baseline = canvas.height/2 - 10
+      // top = (canvas.height/2 - 10) - round(26*0.8) = (canvas.height/2 - 10) - 21
+      drawText(ctx, 'Sleeping...', {
+        x: canvas.width / 2,
+        y: canvas.height / 2 - 10 - 21,
+        size: 26,
+        bold: true,
+        color: '#e2e8f0',
+        align: 'center',
+      });
+      // "zZz" size=14, old baseline = canvas.height/2 + 18
+      // top = (canvas.height/2 + 18) - round(14*0.8) = (canvas.height/2 + 18) - 11
+      drawText(ctx, 'zZz', {
+        x: canvas.width / 2,
+        y: canvas.height / 2 + 18 - 11,
+        size: 14,
+        color: '#94a3b8',
+        align: 'center',
+      });
     }
-    ctx.restore();
   }
 
   private renderBed(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {

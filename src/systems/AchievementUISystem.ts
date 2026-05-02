@@ -12,6 +12,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
 import { isItemId } from '../core/ItemDefs';
+import { drawText } from '../ui/TextBox';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -231,17 +232,24 @@ export class AchievementUISystem {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffd700';
       ctx.fillText('🏆', x + w / 2, y + bounce + 34);
-
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = `rgba(134, 239, 172, ${0.75 + 0.25 * pulse})`;
-      ctx.fillText('ACHIEVEMENT!', x + w / 2, y + bounce + 54);
-
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(unread === 1 ? '1 new' : `${unread} new`, x + w / 2, y + bounce + 68);
-
       ctx.textAlign = 'left';
       ctx.restore();
+
+      drawText(ctx, 'ACHIEVEMENT!', {
+        x: x + w / 2,
+        y: y + bounce + 54 - 8,
+        size: 10,
+        bold: true,
+        color: `rgba(134, 239, 172, ${0.75 + 0.25 * pulse})`,
+        align: 'center',
+      });
+      drawText(ctx, unread === 1 ? '1 new' : `${unread} new`, {
+        x: x + w / 2,
+        y: y + bounce + 68 - 7,
+        size: 9,
+        color: '#94a3b8',
+        align: 'center',
+      });
     } else {
       const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
       const r = {
@@ -258,11 +266,14 @@ export class AchievementUISystem {
       ctx.strokeStyle = `rgba(134,239,172,${0.6 + 0.4 * pulse})`;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.fillStyle = '#86efac';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`🏆 NEW (${unread})`, r.x + r.w / 2, r.y + r.h / 2 + 4);
-      ctx.textAlign = 'left';
+      drawText(ctx, `🏆 NEW (${unread})`, {
+        x: r.x + r.w / 2,
+        y: r.y + r.h / 2 + 4 - 9,
+        size: 11,
+        bold: true,
+        color: '#86efac',
+        align: 'center',
+      });
     }
   }
 
@@ -317,16 +328,23 @@ export class AchievementUISystem {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffd700';
     ctx.fillText('📦', x + w / 2, y + bounce + 36);
-
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = `rgba(255, 215, 0, ${0.75 + 0.25 * pulse})`;
-    ctx.fillText('OPEN LOOT!', x + w / 2, y + bounce + 54);
-
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, x + w / 2, y + bounce + 68);
-
     ctx.textAlign = 'left';
     ctx.restore();
+
+    drawText(ctx, 'OPEN LOOT!', {
+      x: x + w / 2,
+      y: y + bounce + 54 - 8,
+      size: 10,
+      bold: true,
+      color: `rgba(255, 215, 0, ${0.75 + 0.25 * pulse})`,
+      align: 'center',
+    });
+    drawText(ctx, totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, {
+      x: x + w / 2,
+      y: y + bounce + 68 - 7,
+      size: 9,
+      color: '#94a3b8',
+      align: 'center',
+    });
   }
 }

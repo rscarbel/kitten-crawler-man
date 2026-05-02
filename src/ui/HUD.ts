@@ -3,6 +3,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { StatusEffect } from '../core/StatusEffect';
 import { platform } from '../core/Platform';
+import { drawText } from './TextBox';
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -36,23 +37,28 @@ export function drawHUD(
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(8, 8, 340, 190);
 
-  ctx.fillStyle = '#facc15';
-  ctx.font = 'bold 13px monospace';
-  ctx.fillText(`Playing as: ${activeLabel}`, 16, 28);
+  drawText(ctx, `Playing as: ${activeLabel}`, {
+    x: 16,
+    y: 18,
+    bold: true,
+    size: 13,
+    color: '#facc15',
+  });
 
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = '12px monospace';
   const [hintLine1, hintLine2] = platform.controlHints(atkLabel);
-  ctx.fillText(hintLine1, 16, 46);
-  ctx.fillText(hintLine2, 16, 62);
+  drawText(ctx, hintLine1, { x: 16, y: 36, size: 12, color: '#e2e8f0' });
+  drawText(ctx, hintLine2, { x: 16, y: 52, size: 12, color: '#e2e8f0' });
 
   drawHUDPlayerBlock(ctx, activeLabel, activePlayer, 16, 74);
   drawHUDPlayerBlock(ctx, inactiveLabel, inactivePlayer, 16, 128);
 
   // Coins row
-  ctx.fillStyle = '#fbbf24';
-  ctx.font = '11px monospace';
-  ctx.fillText(`\u{1FA99} ${human.coins + cat.coins}  coins`, 16, 185);
+  drawText(ctx, `\u{1FA99} ${human.coins + cat.coins}  coins`, {
+    x: 16,
+    y: 176,
+    size: 11,
+    color: '#fbbf24',
+  });
 
   renderNotification(ctx, human, cat, pulseRef);
 
@@ -64,11 +70,13 @@ export function drawHUD(
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('▲', toggleRect.x + toggleRect.w / 2, toggleRect.y + 15);
-    ctx.textAlign = 'left';
+    drawText(ctx, '▲', {
+      x: toggleRect.x + toggleRect.w / 2,
+      y: toggleRect.y + 6,
+      size: 11,
+      color: '#94a3b8',
+      align: 'center',
+    });
     return toggleRect;
   }
   return { x: -9999, y: 0, w: 0, h: 0 };
@@ -94,16 +102,13 @@ function drawHUDCollapsed(
   // Human HP
   const hHp = human.hp / human.maxHp;
   const cHp = cat.hp / cat.maxHp;
-  ctx.font = '10px monospace';
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText('\u{1F9CD}', x + 6, y + 17);
+  drawText(ctx, '\u{1F9CD}', { x: x + 6, y: y + 9, size: 10, color: '#94a3b8' });
   ctx.fillStyle = '#374151';
   ctx.fillRect(x + 22, y + 7, 60, 6);
   ctx.fillStyle = hHp > 0.5 ? '#4ade80' : hHp > 0.25 ? '#facc15' : '#ef4444';
   ctx.fillRect(x + 22, y + 7, Math.ceil(60 * hHp), 6);
 
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText('\u{1F431}', x + 90, y + 17);
+  drawText(ctx, '\u{1F431}', { x: x + 90, y: y + 9, size: 10, color: '#94a3b8' });
   ctx.fillStyle = '#374151';
   ctx.fillRect(x + 106, y + 7, 60, 6);
   ctx.fillStyle = cHp > 0.5 ? '#4ade80' : cHp > 0.25 ? '#facc15' : '#ef4444';
@@ -116,11 +121,13 @@ function drawHUDCollapsed(
   ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1;
   ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '11px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('▼', toggleRect.x + toggleRect.w / 2, toggleRect.y + 17);
-  ctx.textAlign = 'left';
+  drawText(ctx, '▼', {
+    x: toggleRect.x + toggleRect.w / 2,
+    y: toggleRect.y + 8,
+    size: 11,
+    color: '#94a3b8',
+    align: 'center',
+  });
 
   return toggleRect;
 }
@@ -138,44 +145,44 @@ export function drawHUDPlayerBlock(
 
   // HP bar
   const hpRatio = player.hp / player.maxHp;
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '10px monospace';
-  ctx.fillText(`${label} Lv${player.level}:`, x, y + barH);
+  drawText(ctx, `${label} Lv${player.level}:`, { x, y: y + barH - 8, size: 10, color: '#94a3b8' });
 
   ctx.fillStyle = '#374151';
   ctx.fillRect(barX, y, barW, barH);
   ctx.fillStyle = hpRatio > 0.5 ? '#4ade80' : hpRatio > 0.25 ? '#facc15' : '#ef4444';
   ctx.fillRect(barX, y, Math.ceil(barW * hpRatio), barH);
 
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = '10px monospace';
-  ctx.fillText(`${player.hp}/${player.maxHp}`, barX + barW + 4, y + barH);
+  drawText(ctx, `${player.hp}/${player.maxHp}`, {
+    x: barX + barW + 4,
+    y: y + barH - 8,
+    size: 10,
+    color: '#e2e8f0',
+  });
 
   // XP bar
   const xpNeeded = player.level * 10;
   const xpRatio = Math.min(1, player.xp / xpNeeded);
   const y2 = y + 14;
 
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px monospace';
-  ctx.fillText('XP:', x, y2 + barH);
+  drawText(ctx, 'XP:', { x, y: y2 + barH - 8, size: 10, color: '#64748b' });
 
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(barX, y2, barW, barH);
   ctx.fillStyle = '#818cf8';
   ctx.fillRect(barX, y2, Math.ceil(barW * xpRatio), barH);
 
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '10px monospace';
-  ctx.fillText(`${player.xp}/${xpNeeded}`, barX + barW + 4, y2 + barH);
+  drawText(ctx, `${player.xp}/${xpNeeded}`, {
+    x: barX + barW + 4,
+    y: y2 + barH - 8,
+    size: 10,
+    color: '#94a3b8',
+  });
 
   // Stats + potions
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '10px monospace';
-  ctx.fillText(
+  drawText(
+    ctx,
     `STR:${player.strength}  INT:${player.intelligence}  HP:${player.constitution}  🧪${player.healthPotions}`,
-    barX,
-    y2 + barH + 12,
+    { x: barX, y: y2 + barH + 4, size: 10, color: '#cbd5e1' },
   );
 
   // Status effect badges (Burn, Frozen, Paralyzed, …)
@@ -218,9 +225,7 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
   ctx.fillRect(x, y, pillW, pillH);
 
   // Label
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 7px monospace';
-  ctx.fillText(label, x + 2, y + 8);
+  drawText(ctx, label, { x: x + 2, y: y + 2, bold: true, size: 7, color: '#fff' });
 
   // Duration bar (white strip across the bottom of the pill)
   const ratio = effect.ticksRemaining / effect.totalTicks;
@@ -249,9 +254,6 @@ function renderNotification(
   ctx.strokeStyle = '#3b82f6';
   ctx.lineWidth = 1;
   ctx.strokeRect(8, 192, 340, 20);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#93c5fd';
-  ctx.font = '10px monospace';
-  ctx.fillText(platform.skillPointBanner, 14, 206);
   ctx.restore();
+  drawText(ctx, platform.skillPointBanner, { x: 14, y: 198, size: 10, color: '#93c5fd' });
 }

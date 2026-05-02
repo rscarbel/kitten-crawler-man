@@ -2,6 +2,7 @@ import { Player } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 /** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
 export interface ShellContext {
@@ -454,17 +455,17 @@ export abstract class Mob extends Player {
     if (!this.hasStatus('sepsis')) return;
     const t = Date.now();
     const pulse = 0.7 + 0.3 * Math.sin(t * 0.006);
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#bef264';
-    ctx.shadowColor = '#65a30d';
-    ctx.shadowBlur = 4;
-    ctx.fillText('Septic', sx + this.tileSize * 0.5, sy - 12);
-    ctx.shadowBlur = 0;
-    ctx.textAlign = 'left';
-    ctx.restore();
+    drawText(ctx, 'Septic', {
+      x: sx + this.tileSize * 0.5,
+      y: sy - 12 - 7,
+      size: 9,
+      bold: true,
+      color: '#bef264',
+      align: 'center',
+      alpha: pulse,
+      outline: '#65a30d',
+      outlineWidth: 2,
+    });
     // Render sepsis bubbles above mob
     this.renderStatusEffects(ctx, sx, sy);
   }

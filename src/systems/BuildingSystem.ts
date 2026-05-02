@@ -1,6 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawText } from '../ui/TextBox';
 
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
@@ -95,18 +96,24 @@ export class BuildingSystem implements GameSystem {
       if (sx < -ts || sx > canvas.width + ts || sy < -ts * 3 || sy > canvas.height + ts) continue;
 
       // Small glowing marker above the door
-      ctx.fillStyle = `rgba(250, 220, 80, ${pulse})`;
-      ctx.font = `bold ${Math.floor(ts * 0.55)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('▶', sx, sy - 4);
-      ctx.textAlign = 'left';
+      const arrowSize = Math.floor(ts * 0.55);
+      drawText(ctx, '▶', {
+        x: sx,
+        y: sy - 4 - Math.round(arrowSize * 0.8),
+        size: arrowSize,
+        bold: true,
+        color: `rgba(250, 220, 80, ${pulse})`,
+        align: 'center',
+      });
 
       // Building name label
-      ctx.fillStyle = `rgba(255,255,220,${pulse * 0.85})`;
-      ctx.font = `11px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText(entry.name, sx, sy - ts * 0.6 - 2);
-      ctx.textAlign = 'left';
+      drawText(ctx, entry.name, {
+        x: sx,
+        y: sy - ts * 0.6 - 2 - 9,
+        size: 11,
+        color: `rgba(255,255,220,${pulse * 0.85})`,
+        align: 'center',
+      });
     }
   }
 
@@ -131,10 +138,6 @@ export class BuildingSystem implements GameSystem {
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    ctx.textAlign = 'center';
-
-    ctx.fillStyle = '#d4edaa';
-    ctx.font = 'bold 18px monospace';
     const icon =
       entry.type === 'tower'
         ? '🏰'
@@ -143,15 +146,30 @@ export class BuildingSystem implements GameSystem {
           : entry.type === 'store'
             ? '🏪'
             : '🏠';
-    ctx.fillText(`${icon}  ${entry.name}  ${icon}`, cw / 2, panelY + 36);
+    drawText(ctx, `${icon}  ${entry.name}  ${icon}`, {
+      x: cw / 2,
+      y: panelY + 36 - 14,
+      size: 18,
+      bold: true,
+      color: '#d4edaa',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    ctx.fillText('Enter this building?', cw / 2, panelY + 68);
+    drawText(ctx, 'Enter this building?', {
+      x: cw / 2,
+      y: panelY + 68 - 10,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.fillText('(Esc or Leave to stay outside)', cw / 2, panelY + 88);
+    drawText(ctx, '(Esc or Leave to stay outside)', {
+      x: cw / 2,
+      y: panelY + 88 - 9,
+      size: 11,
+      color: '#64748b',
+      align: 'center',
+    });
 
     const rects = this.menuRects(canvas);
 
@@ -160,20 +178,28 @@ export class BuildingSystem implements GameSystem {
     ctx.strokeStyle = '#6aaa44';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.enter.x, rects.enter.y, rects.enter.w, rects.enter.h);
-    ctx.fillStyle = '#d4edaa';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Enter', rects.enter.x + rects.enter.w / 2, rects.enter.y + 27);
+    drawText(ctx, 'Enter', {
+      x: rects.enter.x + rects.enter.w / 2,
+      y: rects.enter.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#d4edaa',
+      align: 'center',
+    });
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Leave', rects.stay.x + rects.stay.w / 2, rects.stay.y + 27);
-
-    ctx.textAlign = 'left';
+    drawText(ctx, 'Leave', {
+      x: rects.stay.x + rects.stay.w / 2,
+      y: rects.stay.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#94a3b8',
+      align: 'center',
+    });
   }
 
   private menuRects(canvas: HTMLCanvasElement): {

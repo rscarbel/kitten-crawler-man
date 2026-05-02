@@ -1,3 +1,5 @@
+import { drawText } from '../TextBox';
+
 export type PauseTab = 'main' | 'inventory' | 'stats' | 'spend' | 'achievements' | 'abilities';
 
 export type ButtonRect = {
@@ -28,10 +30,13 @@ export function menuBtn(
   ctx.strokeStyle = '#334155';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, w, h);
-  ctx.fillStyle = fg;
-  ctx.font = 'bold 13px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(label, x + w / 2, y + h / 2 + 5);
-  ctx.textAlign = 'left';
+  drawText(ctx, label, {
+    x: x + w / 2,
+    y: y + h / 2 + 5 - 10,
+    bold: true,
+    size: 13,
+    color: fg,
+    align: 'center',
+  });
   buttons.push({ x, y, w, h, action });
 }

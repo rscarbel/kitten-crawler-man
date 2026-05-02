@@ -25,6 +25,7 @@ import {
   drawWoodBarrierSprite,
   drawChildSprite,
 } from '../sprites/questNPCSprite';
+import { drawText } from '../ui/TextBox';
 
 const QUEST_ID = 'defend_goblin_mother';
 
@@ -294,6 +295,9 @@ export class DefendQuestSystem implements GameSystem {
     if (this.failOverlayTimer > 0) this.failOverlayTimer--;
     if (this.xpFloatTimer > 0) this.xpFloatTimer--;
 
+    // Tick NPC timers so hurt-state visuals (red box, waving arms) fade naturally
+    if (this.npc?.isAlive) this.npc.tickTimers();
+
     if (this.phase === 'inactive' || this.phase === 'complete') return;
 
     if (this.npc && !this.npc.isAlive && this.phase !== 'failed') {
@@ -438,6 +442,10 @@ export class DefendQuestSystem implements GameSystem {
       }
     }
     this.questMobs = [];
+    this.barriers = [];
+    this.woodPileAvailable = false;
+    this.pendingBuild = null;
+    if (this.npc) this.npc.clearHurtState();
 
     this.phase = 'complete_pending';
     if (this.npc) {
@@ -666,18 +674,18 @@ export class DefendQuestSystem implements GameSystem {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    ctx.globalAlpha = 1;
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    const label = this.pendingBuild.isRepair ? 'REPAIRING...' : 'BUILDING...';
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(label, sx, sy + radius + 12);
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText(label, sx, sy + radius + 12);
-    ctx.textAlign = 'left';
     ctx.restore();
+
+    const label = this.pendingBuild.isRepair ? 'REPAIRING...' : 'BUILDING...';
+    drawText(ctx, label, {
+      x: sx,
+      y: sy + radius + 12 - 7,
+      size: 9,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+      outline: true,
+    });
   }
 
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -688,17 +696,25 @@ export class DefendQuestSystem implements GameSystem {
     // Approach countdown
     if (this.phase === 'countdown') {
       const secs = Math.ceil(this.approachTimer / 60);
-      ctx.save();
-      ctx.font = 'bold 18px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#fbbf24';
-      ctx.shadowColor = '#000';
-      ctx.shadowBlur = 4;
-      ctx.fillText('ENEMIES APPROACHING', cw / 2, 50);
-      ctx.font = 'bold 28px monospace';
-      ctx.fillStyle = '#ef4444';
-      ctx.fillText(`${secs}`, cw / 2, 80);
-      ctx.restore();
+      drawText(ctx, 'ENEMIES APPROACHING', {
+        x: cw / 2,
+        y: 50 - 14,
+        size: 18,
+        bold: true,
+        color: '#fbbf24',
+        align: 'center',
+        shadow: 'rgba(0,0,0,0.9)',
+        shadowBlurPx: 4,
+        shadowOffset: { x: 0, y: 0 },
+      });
+      drawText(ctx, `${secs}`, {
+        x: cw / 2,
+        y: 80 - 22,
+        size: 28,
+        bold: true,
+        color: '#ef4444',
+        align: 'center',
+      });
     }
 
     // Defense countdown
@@ -706,17 +722,25 @@ export class DefendQuestSystem implements GameSystem {
       const secs = Math.ceil(this.defenseTimer / 60);
       const mins = Math.floor(secs / 60);
       const s = secs % 60;
-      ctx.save();
-      ctx.font = 'bold 14px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.shadowColor = '#000';
-      ctx.shadowBlur = 4;
-      ctx.fillText('Child arrives in:', cw / 2, 38);
-      ctx.font = 'bold 24px monospace';
-      ctx.fillStyle = secs <= 30 ? '#4ade80' : '#fbbf24';
-      ctx.fillText(`${mins}:${s.toString().padStart(2, '0')}`, cw / 2, 65);
-      ctx.restore();
+      drawText(ctx, 'Child arrives in:', {
+        x: cw / 2,
+        y: 38 - 11,
+        size: 14,
+        bold: true,
+        color: '#e2e8f0',
+        align: 'center',
+        shadow: 'rgba(0,0,0,0.9)',
+        shadowBlurPx: 4,
+        shadowOffset: { x: 0, y: 0 },
+      });
+      drawText(ctx, `${mins}:${s.toString().padStart(2, '0')}`, {
+        x: cw / 2,
+        y: 65 - 19,
+        size: 24,
+        bold: true,
+        color: secs <= 30 ? '#4ade80' : '#fbbf24',
+        align: 'center',
+      });
     }
 
     if (this.phase === 'dialog') {
@@ -754,22 +778,30 @@ export class DefendQuestSystem implements GameSystem {
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;
     ctx.strokeRect(dx, dy, dw, dh);
+    ctx.restore();
 
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText('Goblin Mother', dx + 14, dy + 22);
+    drawText(ctx, 'Goblin Mother', {
+      x: dx + 14,
+      y: dy + 22 - 10,
+      size: 13,
+      bold: true,
+      color: '#fbbf24',
+    });
 
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '11px monospace';
-    const lines = [
+    const dialogLines = [
       'Please, you must help us! Monsters have',
       'been trying to get in through the floor',
       'grates. My child wandered off and knows',
       'to meet me here. I cannot leave. Will you',
       'stay and defend us until my child arrives?',
     ];
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], dx + 14, dy + 45 + i * 16);
+    for (let i = 0; i < dialogLines.length; i++) {
+      drawText(ctx, dialogLines[i], {
+        x: dx + 14,
+        y: dy + 45 + i * 16 - 9,
+        size: 11,
+        color: '#e2e8f0',
+      });
     }
 
     this.dialogButtons = [];
@@ -779,30 +811,41 @@ export class DefendQuestSystem implements GameSystem {
 
     // Yes button
     const yesX = dx + dw / 2 - btnW - 10;
+    ctx.save();
     ctx.fillStyle = '#166534';
     ctx.fillRect(yesX, btnY, btnW, btnH);
     ctx.strokeStyle = '#4ade80';
     ctx.lineWidth = 1;
     ctx.strokeRect(yesX, btnY, btnW, btnH);
-    ctx.fillStyle = '#4ade80';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Yes', yesX + btnW / 2, btnY + 20);
+    ctx.restore();
+    drawText(ctx, 'Yes', {
+      x: yesX + btnW / 2,
+      y: btnY + 20 - 10,
+      size: 12,
+      bold: true,
+      color: '#4ade80',
+      align: 'center',
+    });
     this.dialogButtons.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 
     // No button
     const noX = dx + dw / 2 + 10;
+    ctx.save();
     ctx.fillStyle = '#7f1d1d';
     ctx.fillRect(noX, btnY, btnW, btnH);
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 1;
     ctx.strokeRect(noX, btnY, btnW, btnH);
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText('No', noX + btnW / 2, btnY + 20);
-    this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
-
-    ctx.textAlign = 'left';
     ctx.restore();
+    drawText(ctx, 'No', {
+      x: noX + btnW / 2,
+      y: btnY + 20 - 10,
+      size: 12,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
+    this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
   }
 
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -814,39 +857,69 @@ export class DefendQuestSystem implements GameSystem {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-
     // Semi-transparent backdrop
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
+    ctx.restore();
 
     // Main text
     const pulse = 1 + 0.05 * Math.sin(performance.now() / 200);
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${Math.floor(36 * pulse)}px monospace`;
-    ctx.fillStyle = '#4ade80';
-    ctx.shadowColor = '#4ade80';
-    ctx.shadowBlur = 15;
-    ctx.fillText('QUEST COMPLETE!', cw / 2, ch / 2 - 30);
+    const pulsedSize = Math.floor(36 * pulse);
+    drawText(ctx, 'QUEST COMPLETE!', {
+      x: cw / 2,
+      y: ch / 2 - 30 - Math.round(pulsedSize * 0.8),
+      size: pulsedSize,
+      bold: true,
+      color: '#4ade80',
+      align: 'center',
+      alpha,
+      glow: '#4ade80',
+      glowBlur: 15,
+    });
 
     // Rewards
-    ctx.shadowBlur = 0;
-    ctx.font = 'bold 16px monospace';
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText('Rewards:', cw / 2, ch / 2 + 10);
-
-    ctx.font = '14px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('+500 EXP', cw / 2, ch / 2 + 35);
-    ctx.fillText('+50 Gold', cw / 2, ch / 2 + 55);
-    ctx.fillText('Loot Box (open in Safe Room)', cw / 2, ch / 2 + 75);
-
+    drawText(ctx, 'Rewards:', {
+      x: cw / 2,
+      y: ch / 2 + 10 - 13,
+      size: 16,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+      alpha,
+    });
+    drawText(ctx, '+500 EXP', {
+      x: cw / 2,
+      y: ch / 2 + 35 - 11,
+      size: 14,
+      color: '#e2e8f0',
+      align: 'center',
+      alpha,
+    });
+    drawText(ctx, '+50 Gold', {
+      x: cw / 2,
+      y: ch / 2 + 55 - 11,
+      size: 14,
+      color: '#e2e8f0',
+      align: 'center',
+      alpha,
+    });
+    drawText(ctx, 'Loot Box (open in Safe Room)', {
+      x: cw / 2,
+      y: ch / 2 + 75 - 11,
+      size: 14,
+      color: '#e2e8f0',
+      align: 'center',
+      alpha,
+    });
     // Dismiss hint
-    ctx.font = '12px monospace';
-    ctx.fillStyle = 'rgba(200,200,200,0.7)';
-    ctx.fillText('Click to dismiss', cw / 2, ch / 2 + 105);
-
-    ctx.textAlign = 'left';
-    ctx.restore();
+    drawText(ctx, 'Click to dismiss', {
+      x: cw / 2,
+      y: ch / 2 + 105 - 10,
+      size: 12,
+      color: 'rgba(200,200,200,0.7)',
+      align: 'center',
+      alpha,
+    });
   }
 
   private renderFailedOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -857,7 +930,6 @@ export class DefendQuestSystem implements GameSystem {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
 
@@ -874,22 +946,28 @@ export class DefendQuestSystem implements GameSystem {
     ctx.lineTo(cw / 2 - xSize, xCenterY + xSize);
     ctx.stroke();
     ctx.lineCap = 'butt';
-
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 36px monospace';
-    ctx.fillStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 15;
-    ctx.fillText('QUEST FAILED', cw / 2, ch / 2 + 50);
-
-    // Dismiss hint
-    ctx.shadowBlur = 0;
-    ctx.font = '12px monospace';
-    ctx.fillStyle = 'rgba(200,200,200,0.7)';
-    ctx.fillText('Click to dismiss', cw / 2, ch / 2 + 80);
-
-    ctx.textAlign = 'left';
     ctx.restore();
+
+    drawText(ctx, 'QUEST FAILED', {
+      x: cw / 2,
+      y: ch / 2 + 50 - 29,
+      size: 36,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+      alpha,
+      glow: '#ef4444',
+      glowBlur: 15,
+    });
+    // Dismiss hint
+    drawText(ctx, 'Click to dismiss', {
+      x: cw / 2,
+      y: ch / 2 + 80 - 10,
+      size: 12,
+      color: 'rgba(200,200,200,0.7)',
+      align: 'center',
+      alpha,
+    });
   }
 
   private renderXPFloat(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -897,16 +975,18 @@ export class DefendQuestSystem implements GameSystem {
     const alpha = Math.min(1, this.xpFloatTimer / 60);
     const yOffset = (180 - this.xpFloatTimer) * 0.5;
 
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 28px monospace';
-    ctx.fillStyle = '#4ade80';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 6;
-    ctx.fillText('+500 EXP', cw / 2, canvas.height / 2 - 80 - yOffset);
-    ctx.textAlign = 'left';
-    ctx.restore();
+    drawText(ctx, '+500 EXP', {
+      x: cw / 2,
+      y: canvas.height / 2 - 80 - yOffset - 22,
+      size: 28,
+      bold: true,
+      color: '#4ade80',
+      align: 'center',
+      alpha,
+      shadow: 'rgba(0,0,0,0.9)',
+      shadowBlurPx: 6,
+      shadowOffset: { x: 0, y: 0 },
+    });
   }
 
   private renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -937,10 +1017,14 @@ export class DefendQuestSystem implements GameSystem {
 
     // Title
     const titles = ['THE QUEST', 'BUILD BARRIERS', 'THE THREAT'];
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 15px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(titles[this.tutorialPage], dx + dw / 2, dy + 24);
+    drawText(ctx, titles[this.tutorialPage], {
+      x: dx + dw / 2,
+      y: dy + 24 - 12,
+      size: 15,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+    });
 
     // Page progress dots
     const dotGap = 14;
@@ -974,30 +1058,43 @@ export class DefendQuestSystem implements GameSystem {
       // Goblin mother + child with heart between them
       drawQuestNPCSprite(ctx, icx - s * 1.3, icy - s * 0.5, s);
       drawChildSprite(ctx, icx + s * 0.45, icy - s * 0.35, s * 0.72, 0, false, -1);
-      ctx.fillStyle = '#f87171';
-      ctx.font = `bold ${Math.floor(s * 0.38)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('♥', icx - s * 0.08, icy + s * 0.08);
+      const heartSize = Math.floor(s * 0.38);
+      drawText(ctx, '♥', {
+        x: icx - s * 0.08,
+        y: icy + s * 0.08 - Math.round(heartSize * 0.8),
+        size: heartSize,
+        bold: true,
+        color: '#f87171',
+        align: 'center',
+      });
     } else if (this.tutorialPage === 1) {
       // Wood pile → barrier diagram
       const hw = illW / 2;
       drawWoodPileSprite(ctx, illX + hw * 0.5 - s * 0.5, icy - s * 0.5, s);
-      ctx.fillStyle = '#fbbf24';
-      ctx.font = `bold ${Math.floor(s * 0.5)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('→', illX + hw, icy + s * 0.06);
+      const arrowSize = Math.floor(s * 0.5);
+      drawText(ctx, '→', {
+        x: illX + hw,
+        y: icy + s * 0.06 - Math.round(arrowSize * 0.8),
+        size: arrowSize,
+        bold: true,
+        color: '#fbbf24',
+        align: 'center',
+      });
       drawWoodBarrierSprite(ctx, illX + hw + hw * 0.5 - s * 0.5, icy - s * 0.5, s, 1.0);
-      ctx.font = 'bold 11px monospace';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      ctx.strokeText('[R] to build', illX + hw + hw * 0.5, icy + s * 0.68);
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText('[R] to build', illX + hw + hw * 0.5, icy + s * 0.68);
+      drawText(ctx, '[R] to build', {
+        x: illX + hw + hw * 0.5,
+        y: icy + s * 0.68 - 9,
+        size: 11,
+        bold: true,
+        color: '#fbbf24',
+        align: 'center',
+        outline: true,
+      });
     } else {
       // Damaged barrier showing monster threat
       drawWoodBarrierSprite(ctx, icx - s * 0.5, icy - s * 0.5, s, 0.18);
       // Upward arrow indicating enemies from below
+      ctx.save();
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2;
       ctx.setLineDash([3, 3]);
@@ -1012,10 +1109,15 @@ export class DefendQuestSystem implements GameSystem {
       ctx.lineTo(icx, icy + s * 0.58);
       ctx.lineTo(icx + 6, icy + s * 0.72);
       ctx.stroke();
-      ctx.fillStyle = '#ef4444';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('enemies spawn below!', icx, icy + s * 1.2);
+      ctx.restore();
+      drawText(ctx, 'enemies spawn below!', {
+        x: icx,
+        y: icy + s * 1.2 - 9,
+        size: 11,
+        bold: true,
+        color: '#ef4444',
+        align: 'center',
+      });
     }
 
     // Description text
@@ -1037,12 +1139,15 @@ export class DefendQuestSystem implements GameSystem {
       ],
     ];
 
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
     const textStartY = illY + illH + 20;
     for (let i = 0; i < descriptions[this.tutorialPage].length; i++) {
-      ctx.fillText(descriptions[this.tutorialPage][i], dx + dw / 2, textStartY + i * 18);
+      drawText(ctx, descriptions[this.tutorialPage][i], {
+        x: dx + dw / 2,
+        y: textStartY + i * 18 - 10,
+        size: 12,
+        color: '#cbd5e1',
+        align: 'center',
+      });
     }
 
     // Next / Let's Go button
@@ -1053,15 +1158,21 @@ export class DefendQuestSystem implements GameSystem {
     const btnY = dy + dh - 50;
     const isLast = this.tutorialPage === PAGES - 1;
 
+    ctx.save();
     ctx.fillStyle = isLast ? '#14532d' : '#1e3a5f';
     ctx.fillRect(btnX, btnY, btnW, btnH);
     ctx.strokeStyle = isLast ? '#4ade80' : '#60a5fa';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(btnX, btnY, btnW, btnH);
-    ctx.fillStyle = isLast ? '#4ade80' : '#93c5fd';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(isLast ? "Let's Go!" : 'Next  ›', btnX + btnW / 2, btnY + 20);
+    ctx.restore();
+    drawText(ctx, isLast ? "Let's Go!" : 'Next  ›', {
+      x: btnX + btnW / 2,
+      y: btnY + 20 - 10,
+      size: 12,
+      bold: true,
+      color: isLast ? '#4ade80' : '#93c5fd',
+      align: 'center',
+    });
     this.tutorialButtons.push({
       x: btnX,
       y: btnY,
@@ -1070,7 +1181,6 @@ export class DefendQuestSystem implements GameSystem {
       action: isLast ? 'go' : 'next',
     });
 
-    ctx.textAlign = 'left';
     ctx.restore();
   }
 

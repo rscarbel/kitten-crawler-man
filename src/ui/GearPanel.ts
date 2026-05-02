@@ -3,6 +3,7 @@ import { EQUIP_SUBSLOTS } from '../core/ItemDefs';
 import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { pointInRect } from '../utils';
+import { drawText } from './TextBox';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -78,11 +79,13 @@ export class GearPanel {
     ctx.strokeStyle = this.isOpen ? '#3b82f6' : '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Gear [G]', btn.x + btn.w / 2, btn.y + btn.h / 2 + 4);
-    ctx.textAlign = 'left';
+    drawText(ctx, 'Gear [G]', {
+      x: btn.x + btn.w / 2,
+      y: btn.y + btn.h / 2 + 4 - 10,
+      size: 12,
+      color: '#e2e8f0',
+      align: 'center',
+    });
   }
 
   private renderPanel(
@@ -101,20 +104,27 @@ export class GearPanel {
     ctx.strokeRect(p.x, p.y, p.w, p.h);
 
     // Header
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${playerName} Equipment`, p.x + PANEL_PAD, p.y + 25);
+    drawText(ctx, `${playerName} Equipment`, {
+      x: p.x + PANEL_PAD,
+      y: p.y + 25 - 10,
+      size: 12,
+      bold: true,
+      color: '#e2e8f0',
+    });
 
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
     ctx.fillStyle = '#374151';
     ctx.fillRect(closeX, closeY, 16, 16);
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('x', closeX + 8, closeY + 12);
-    ctx.textAlign = 'left';
+    drawText(ctx, 'x', {
+      x: closeX + 8,
+      y: closeY + 12 - 9,
+      size: 11,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
 
     // Divider
     ctx.strokeStyle = '#1e293b';
@@ -134,9 +144,13 @@ export class GearPanel {
       const slotsInfos = this.buildSlotInfos(slotName, subSlots, p.x, currentY, p.w);
 
       // Section label
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText(slotName.toUpperCase(), p.x + PANEL_PAD, currentY + SLOT_SIZE * 0.5 + 3);
+      drawText(ctx, slotName.toUpperCase(), {
+        x: p.x + PANEL_PAD,
+        y: currentY + SLOT_SIZE * 0.5 + 3 - 7,
+        size: 9,
+        bold: true,
+        color: '#64748b',
+      });
 
       // Find max row used
       let maxY = currentY;
@@ -210,9 +224,6 @@ export class GearPanel {
       ctx.fillRect(x + 2, y + 2, SLOT_SIZE - 4, 3);
 
       // Item name (truncated, 2 lines max)
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '7px monospace';
-      ctx.textAlign = 'center';
       const words = item.name.split(' ');
       let line1 = '';
       let line2 = '';
@@ -223,18 +234,26 @@ export class GearPanel {
           line2 = (line2 + ' ' + w).trim();
         }
       }
-      ctx.fillText(line1, x + SLOT_SIZE / 2, y + SLOT_SIZE * 0.42);
-      if (line2) ctx.fillText(line2, x + SLOT_SIZE / 2, y + SLOT_SIZE * 0.57);
-      ctx.textAlign = 'left';
+      const nameLine = line2 ? `${line1}\n${line2}` : line1;
+      drawText(ctx, nameLine, {
+        x: x + SLOT_SIZE / 2,
+        y: y + SLOT_SIZE * 0.42 - 6,
+        size: 7,
+        color: '#94a3b8',
+        align: 'center',
+        lineHeight: Math.round(SLOT_SIZE * 0.15),
+      });
     }
 
     // Sub-slot label at bottom
     const shortLabel = label.length > 7 ? label.substring(0, 7) : label;
-    ctx.fillStyle = '#475569';
-    ctx.font = '7px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(shortLabel, x + SLOT_SIZE / 2, y + SLOT_SIZE - 3);
-    ctx.textAlign = 'left';
+    drawText(ctx, shortLabel, {
+      x: x + SLOT_SIZE / 2,
+      y: y + SLOT_SIZE - 3 - 6,
+      size: 7,
+      color: '#475569',
+      align: 'center',
+    });
 
     ctx.restore();
   }
@@ -289,23 +308,34 @@ export class GearPanel {
     ctx.rect(tx + 2, ty + 2, tw - 4, th - 4);
     ctx.clip();
 
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(lines[0], tx + 6, ty + 14);
+    // Title line
+    drawText(ctx, lines[0] ?? '', {
+      x: tx + 6,
+      y: ty + 14 - 8,
+      size: 10,
+      bold: true,
+      color: '#e2e8f0',
+    });
 
-    ctx.font = '10px monospace';
+    // Body lines (each with per-line color)
     for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
+      const line = lines[i] ?? '';
+      let lineColor: string;
       if (line.startsWith('+')) {
-        ctx.fillStyle = '#4ade80';
+        lineColor = '#4ade80';
       } else if (line.startsWith('Ability:')) {
-        ctx.fillStyle = '#c084fc';
+        lineColor = '#c084fc';
       } else if (line.startsWith('[Click]')) {
-        ctx.fillStyle = '#64748b';
+        lineColor = '#64748b';
       } else {
-        ctx.fillStyle = '#94a3b8';
+        lineColor = '#94a3b8';
       }
-      ctx.fillText(line, tx + 6, ty + 14 + i * lineH);
+      drawText(ctx, line, {
+        x: tx + 6,
+        y: ty + 14 + i * lineH - 8,
+        size: 10,
+        color: lineColor,
+      });
     }
     ctx.restore();
   }

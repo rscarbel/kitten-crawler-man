@@ -17,6 +17,7 @@ import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
 import { aiAdapter } from '../ai/AIAdapter';
+import { drawText } from '../ui/TextBox';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -373,12 +374,15 @@ export class BuildingInteriorScene extends GameplayScene {
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, canvas.width, 28);
-    ctx.fillStyle = '#d4edaa';
-    ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'center';
     const floorSuffix = this.towerFloors.length > 0 ? ` (${FLOOR_LABELS[this.currentFloor]})` : '';
-    ctx.fillText(`Inside: ${this.entry.name}${floorSuffix}`, canvas.width / 2, 18);
-    ctx.textAlign = 'left';
+    drawText(ctx, `Inside: ${this.entry.name}${floorSuffix}`, {
+      x: canvas.width / 2,
+      y: 8,
+      size: 13,
+      bold: true,
+      color: '#d4edaa',
+      align: 'center',
+    });
 
     // Minimap + right-side buttons (pause, gear, bag)
     if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
@@ -430,14 +434,20 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
+    const arrowSize = Math.floor(TILE_SIZE * 0.5);
     for (const t of this.map._interiorExitTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      ctx.fillStyle = `rgba(250,220,80,${pulse})`;
-      ctx.font = `bold ${Math.floor(TILE_SIZE * 0.5)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('▼', sx, sy - 2);
-      ctx.textAlign = 'left';
+      // baseline was sy - 2; top = baseline - round(size * 0.8) = (sy - 2) - 13 = sy - 15
+      drawText(ctx, '▼', {
+        x: sx,
+        y: sy - 15,
+        size: arrowSize,
+        bold: true,
+        color: `rgba(250,220,80,1)`,
+        alpha: pulse,
+        align: 'center',
+      });
     }
   }
 
@@ -459,18 +469,30 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#d4edaa';
-    ctx.font = 'bold 18px monospace';
-    ctx.fillText('▼  Exit Building  ▼', cw / 2, panelY + 36);
+    drawText(ctx, '▼  Exit Building  ▼', {
+      x: cw / 2,
+      y: panelY + 22,
+      size: 18,
+      bold: true,
+      color: '#d4edaa',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    ctx.fillText(`Leave ${this.entry.name}?`, cw / 2, panelY + 68);
+    drawText(ctx, `Leave ${this.entry.name}?`, {
+      x: cw / 2,
+      y: panelY + 58,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.fillText('(Esc or Stay to remain inside)', cw / 2, panelY + 88);
+    drawText(ctx, '(Esc or Stay to remain inside)', {
+      x: cw / 2,
+      y: panelY + 79,
+      size: 11,
+      color: '#64748b',
+      align: 'center',
+    });
 
     const rects = this.menuRects(canvas);
 
@@ -479,18 +501,28 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.strokeStyle = '#6aaa44';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.exit.x, rects.exit.y, rects.exit.w, rects.exit.h);
-    ctx.fillStyle = '#d4edaa';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Exit', rects.exit.x + rects.exit.w / 2, rects.exit.y + 27);
+    drawText(ctx, 'Exit', {
+      x: rects.exit.x + rects.exit.w / 2,
+      y: rects.exit.y + 16,
+      size: 14,
+      bold: true,
+      color: '#d4edaa',
+      align: 'center',
+    });
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Stay', rects.stay.x + rects.stay.w / 2, rects.stay.y + 27);
+    drawText(ctx, 'Stay', {
+      x: rects.stay.x + rects.stay.w / 2,
+      y: rects.stay.y + 16,
+      size: 14,
+      bold: true,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
     ctx.textAlign = 'left';
   }

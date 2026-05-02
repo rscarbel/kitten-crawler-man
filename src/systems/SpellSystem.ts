@@ -7,6 +7,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
 import { normalize } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 interface ActiveShell {
   x: number;
@@ -528,15 +529,21 @@ export class SpellSystem implements GameSystem {
     ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.globalAlpha = alpha * 0.8;
-    ctx.fillStyle = isFullPower ? '#fbbf24' : '#93c5fd';
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    const secs = Math.ceil(framesRemaining / 60);
-    ctx.fillText(`${secs}s`, sx, sy - radiusPx - 6);
-    ctx.textAlign = 'left';
-
     ctx.restore();
+
+    // Timer countdown above shell: size=10, old baseline = sy - radiusPx - 6
+    // top = (sy - radiusPx - 6) - round(10*0.8) = (sy - radiusPx - 6) - 8 = sy - radiusPx - 14
+    const secs = Math.ceil(framesRemaining / 60);
+    const timerColor = isFullPower ? '#fbbf24' : '#93c5fd';
+    drawText(ctx, `${secs}s`, {
+      x: sx,
+      y: sy - radiusPx - 14,
+      size: 10,
+      bold: true,
+      color: timerColor,
+      alpha: alpha * 0.8,
+      align: 'center',
+    });
   }
 
   renderCatMiniShell(
@@ -657,15 +664,19 @@ export class SpellSystem implements GameSystem {
         fog.cachedSize * pulse,
         fog.cachedSize * pulse,
       );
-
-      ctx.globalAlpha = alpha * 0.8;
-      ctx.fillStyle = '#d0d0e0';
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.ceil(fog.framesLeft / 60)}s`, cx, cy - fog.radiusPx - 6);
-      ctx.textAlign = 'left';
-
       ctx.restore();
+
+      // Timer countdown above fog: size=10, old baseline = cy - fog.radiusPx - 6
+      // top = (cy - fog.radiusPx - 6) - round(10*0.8) = (cy - fog.radiusPx - 6) - 8 = cy - fog.radiusPx - 14
+      drawText(ctx, `${Math.ceil(fog.framesLeft / 60)}s`, {
+        x: cx,
+        y: cy - fog.radiusPx - 14,
+        size: 10,
+        bold: true,
+        color: '#d0d0e0',
+        alpha: alpha * 0.8,
+        align: 'center',
+      });
     }
   }
 }

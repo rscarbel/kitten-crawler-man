@@ -1,4 +1,5 @@
 import type { TileContent } from '../tileTypes';
+import { drawText } from '../../ui/TextBox';
 import {
   STAIRS_UP,
   STAIRS_DOWN,
@@ -56,11 +57,15 @@ export function drawInteriorTile(
       ctx.strokeRect(sx + 1, sy + 1, ts - 2, ts - 2);
 
       // Directional arrow
-      ctx.fillStyle = `rgba(255, 230, 140, ${stairPulse + 0.2})`;
-      ctx.font = `bold ${Math.floor(ts * 0.5)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText(isUp ? '\u25B2' : '\u25BC', sx + ts / 2, sy + ts * 0.65);
-      ctx.textAlign = 'left';
+      const arrowSize = Math.floor(ts * 0.5);
+      drawText(ctx, isUp ? '\u25B2' : '\u25BC', {
+        x: sx + ts / 2,
+        y: sy + ts * 0.65 - Math.round(arrowSize * 0.8),
+        bold: true,
+        size: arrowSize,
+        color: `rgba(255, 230, 140, ${stairPulse + 0.2})`,
+        align: 'center',
+      });
       return true;
     }
 

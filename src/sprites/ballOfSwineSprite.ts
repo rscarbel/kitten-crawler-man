@@ -1,3 +1,5 @@
+import { drawText } from '../ui/TextBox';
+
 /**
  * Sprite for the Ball of Swine — a rolling mass of body parts.
  * @param orbitAngle - current orbit angle (radians), drives rotation animation
@@ -167,13 +169,20 @@ export function drawBallOfSwineStoppedWarning(
   const cx = sx + ts * 0.5;
   const topY = sy - ts * 0.3;
   const pulse = 0.8 + 0.2 * Math.sin(Date.now() * 0.008);
+  const fontSize = Math.floor(ts * 0.32);
 
   ctx.save();
-  ctx.globalAlpha = pulse;
-  ctx.font = `bold ${Math.floor(ts * 0.32)}px monospace`;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#fde68a';
-  ctx.fillText('VULNERABLE', cx, topY);
+  // Text — baseline_y = topY, convert to top: drawText_y = topY - Math.round(size * 0.8)
+  drawText(ctx, 'VULNERABLE', {
+    x: cx,
+    y: topY - Math.round(fontSize * 0.8),
+    size: fontSize,
+    bold: true,
+    font: 'monospace',
+    color: '#fde68a',
+    alpha: pulse,
+    align: 'center',
+  });
 
   // Timer bar below text
   const barW = ts * 1.4;

@@ -10,6 +10,7 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
+import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
 
 // Layout constants
@@ -217,16 +218,16 @@ export class InventoryPanel {
     ctx.lineWidth = 1;
     ctx.strokeRect(mx, my, menuW, menuH);
 
-    ctx.font = '11px monospace';
     for (let i = 0; i < options.length; i++) {
       const oy = my + 2 + i * menuItemH;
       if (this.contextMenuHover === i) {
         ctx.fillStyle = 'rgba(59,130,246,0.3)';
         ctx.fillRect(mx + 1, oy, menuW - 2, menuItemH);
       }
-      ctx.fillStyle =
+      const color =
         options[i] === 'Equip' ? '#4ade80' : options[i] === 'Unequip' ? '#f87171' : '#e2e8f0';
-      ctx.fillText(options[i], mx + 8, oy + 15);
+      // baseline_y=oy+15, size=11 → top_y = oy+15-9 = oy+6
+      drawText(ctx, options[i], { x: mx + 8, y: oy + 6, size: 11, color });
     }
     ctx.restore();
   }
@@ -239,26 +240,13 @@ export class InventoryPanel {
     const popW = 280;
     const lineH = 15;
     const pad = 10;
-    const lines: string[] = [];
 
-    // Word-wrap description
-    if (item.description) {
-      const words = item.description.split(' ');
-      let cur = '';
-      for (const w of words) {
-        if ((cur + ' ' + w).trim().length <= 36) {
-          cur = (cur + ' ' + w).trim();
-        } else {
-          lines.push(cur);
-          cur = w;
-        }
-      }
-      if (cur) lines.push(cur);
-    } else {
-      lines.push('No description available.');
-    }
+    const descText = item.description ?? 'No description available.';
 
-    const popH = pad + lineH + pad * 0.5 + lines.length * lineH + pad;
+    // Estimate popup height: title line + divider space + description lines + hint
+    // Use a rough line estimate for pre-draw sizing (similar to original)
+    const approxDescLines = Math.ceil(descText.length / 36) || 1;
+    const popH = pad + lineH + pad * 0.5 + approxDescLines * lineH + pad;
     const px = Math.floor((canvas.width - popW) / 2);
     const py = Math.floor((canvas.height - popH) / 2);
 
@@ -269,10 +257,16 @@ export class InventoryPanel {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(px, py, popW, popH);
 
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(item.name, px + pad, py + pad + lineH - 3);
+    // Title: baseline_y = py+pad+lineH-3, size=11 → top_y = baseline_y - 9
+    drawText(ctx, item.name, {
+      x: px + pad,
+      y: py + pad + lineH - 3 - 9,
+      bold: true,
+      size: 11,
+      color: '#e2e8f0',
+    });
 
+    // Divider
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -280,17 +274,26 @@ export class InventoryPanel {
     ctx.lineTo(px + popW - 4, py + pad + lineH + 2);
     ctx.stroke();
 
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#94a3b8';
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], px + pad, py + pad * 1.5 + lineH * 2 + i * lineH - 3);
-    }
+    // Description with built-in word-wrap
+    // baseline_y = py+pad*1.5+lineH*2-3, size=10 → top_y = baseline_y - 8
+    drawText(ctx, descText, {
+      x: px + pad,
+      y: py + pad * 1.5 + lineH * 2 - 3 - 8,
+      size: 10,
+      color: '#94a3b8',
+      width: popW - pad * 2,
+      lineHeight: lineH,
+    });
 
-    ctx.fillStyle = '#475569';
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('[Click anywhere to close]', px + popW / 2, py + popH - 4);
-    ctx.textAlign = 'left';
+    // Close hint: baseline_y = py+popH-4, size=9 → top_y = baseline_y - 7
+    drawText(ctx, '[Click anywhere to close]', {
+      x: px + popW / 2,
+      y: py + popH - 4 - 7,
+      size: 9,
+      color: '#475569',
+      align: 'center',
+    });
+
     ctx.restore();
   }
 
@@ -310,18 +313,28 @@ export class InventoryPanel {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(dlgX, dlgY, dlgW, dlgH);
 
-    // Title
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Drop how many?', dlgX + dlgW / 2, dlgY + 22);
+    // Title: baseline_y=dlgY+22, size=11 → top_y = dlgY+22-9 = dlgY+13
+    drawText(ctx, 'Drop how many?', {
+      x: dlgX + dlgW / 2,
+      y: dlgY + 13,
+      size: 11,
+      bold: true,
+      color: '#e2e8f0',
+      align: 'center',
+    });
 
     // Cancel [X]
     ctx.fillStyle = '#374151';
     ctx.fillRect(dlgX + dlgW - 22, dlgY + 6, 16, 16);
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText('x', dlgX + dlgW - 14, dlgY + 18);
+    // baseline_y=dlgY+18, size=11 → top_y = dlgY+18-9 = dlgY+9
+    drawText(ctx, 'x', {
+      x: dlgX + dlgW - 14,
+      y: dlgY + 9,
+      size: 11,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
 
     // [-] button
     const minusBtnX = dlgX + 20;
@@ -331,8 +344,14 @@ export class InventoryPanel {
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(minusBtnX, minusBtnY, 24, 24);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('-', minusBtnX + 12, minusBtnY + 17);
+    // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+17-9 = minusBtnY+8
+    drawText(ctx, '-', {
+      x: minusBtnX + 12,
+      y: minusBtnY + 8,
+      size: 11,
+      color: '#e2e8f0',
+      align: 'center',
+    });
 
     // [+] button
     const plusBtnX = dlgX + dlgW - 44;
@@ -340,18 +359,32 @@ export class InventoryPanel {
     ctx.fillRect(plusBtnX, minusBtnY, 24, 24);
     ctx.strokeStyle = '#475569';
     ctx.strokeRect(plusBtnX, minusBtnY, 24, 24);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText('+', plusBtnX + 12, minusBtnY + 17);
+    // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+8
+    drawText(ctx, '+', {
+      x: plusBtnX + 12,
+      y: minusBtnY + 8,
+      size: 11,
+      color: '#e2e8f0',
+      align: 'center',
+    });
 
-    // Quantity display
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText(dd.selectedQty.toString(), dlgX + dlgW / 2, minusBtnY + 18);
+    // Quantity display: baseline_y=minusBtnY+18, size=16 → top_y = minusBtnY+18-13 = minusBtnY+5
+    drawText(ctx, dd.selectedQty.toString(), {
+      x: dlgX + dlgW / 2,
+      y: minusBtnY + 5,
+      size: 16,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+    });
 
-    // Max hint
-    ctx.fillStyle = '#64748b';
-    ctx.font = '9px monospace';
-    ctx.fillText(`/ ${dd.maxQty}`, dlgX + dlgW / 2 + 14, minusBtnY + 18);
+    // Max hint: baseline_y=minusBtnY+18, size=9 → top_y = minusBtnY+18-7 = minusBtnY+11
+    drawText(ctx, `/ ${dd.maxQty}`, {
+      x: dlgX + dlgW / 2 + 14,
+      y: minusBtnY + 11,
+      size: 9,
+      color: '#64748b',
+    });
 
     // [Drop] confirm button
     const confirmY = dlgY + dlgH - 28;
@@ -359,11 +392,16 @@ export class InventoryPanel {
     ctx.fillRect(dlgX + 20, confirmY, dlgW - 40, 22);
     ctx.strokeStyle = '#3b82f6';
     ctx.strokeRect(dlgX + 20, confirmY, dlgW - 40, 22);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText('Drop', dlgX + dlgW / 2, confirmY + 15);
+    // baseline_y=confirmY+15, size=11 → top_y = confirmY+15-9 = confirmY+6
+    drawText(ctx, 'Drop', {
+      x: dlgX + dlgW / 2,
+      y: confirmY + 6,
+      size: 11,
+      bold: true,
+      color: '#e2e8f0',
+      align: 'center',
+    });
 
-    ctx.textAlign = 'left';
     ctx.restore();
   }
 
@@ -376,11 +414,14 @@ export class InventoryPanel {
     ctx.strokeStyle = this.isOpen ? '#3b82f6' : '#475569';
     ctx.lineWidth = 1;
     ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Bag [I]', btn.x + btn.w / 2, btn.y + btn.h / 2 + 4);
-    ctx.textAlign = 'left';
+    // baseline_y = btn.y+btn.h/2+4, size=12 → top_y = baseline_y - 10
+    drawText(ctx, 'Bag [I]', {
+      x: btn.x + btn.w / 2,
+      y: btn.y + btn.h / 2 + 4 - 10,
+      size: 12,
+      color: '#e2e8f0',
+      align: 'center',
+    });
   }
 
   private renderHotbar(
@@ -409,11 +450,16 @@ export class InventoryPanel {
       }
 
       // Key label below slot — "Q" for quest slot, number for the rest
-      ctx.fillStyle = i === QUEST_SLOT_IDX ? '#fbbf24' : '#64748b';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(i === QUEST_SLOT_IDX ? 'Q' : (i + 1).toString(), r.x + r.w / 2, r.y + r.h + 11);
-      ctx.textAlign = 'left';
+      const keyLabel = i === QUEST_SLOT_IDX ? 'Q' : (i + 1).toString();
+      const keyColor = i === QUEST_SLOT_IDX ? '#fbbf24' : '#64748b';
+      // baseline_y = r.y+r.h+11, size=9 → top_y = baseline_y - 7 = r.y+r.h+4
+      drawText(ctx, keyLabel, {
+        x: r.x + r.w / 2,
+        y: r.y + r.h + 4,
+        size: 9,
+        color: keyColor,
+        align: 'center',
+      });
     }
   }
 
@@ -433,28 +479,38 @@ export class InventoryPanel {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(p.x, p.y, p.w, p.h);
 
-    // Header — player name
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 12px monospace';
-    ctx.fillText(`${playerName} Inventory`, p.x + PANEL_PAD, p.y + 25);
+    // Header — player name: baseline_y=p.y+25, size=12 → top_y = p.y+25-10 = p.y+15
+    drawText(ctx, `${playerName} Inventory`, {
+      x: p.x + PANEL_PAD,
+      y: p.y + 15,
+      bold: true,
+      size: 12,
+      color: '#e2e8f0',
+    });
 
-    // Coins — sits to the left of the close [X] button
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(`\u{1FA99} ${coins}`, p.x + p.w - 36, p.y + 25);
-    ctx.textAlign = 'left';
+    // Coins: baseline_y=p.y+25, size=11 → top_y = p.y+25-9 = p.y+16
+    drawText(ctx, `\u{1FA99} ${coins}`, {
+      x: p.x + p.w - 36,
+      y: p.y + 16,
+      size: 11,
+      color: '#fbbf24',
+      align: 'right',
+    });
 
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
     ctx.fillStyle = '#374151';
     ctx.fillRect(closeX, closeY, 16, 16);
-    ctx.fillStyle = '#ef4444';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('x', closeX + 8, closeY + 12);
-    ctx.textAlign = 'left';
+    // baseline_y=closeY+12, size=11 → top_y = closeY+12-9 = closeY+3
+    drawText(ctx, 'x', {
+      x: closeX + 8,
+      y: closeY + 3,
+      size: 11,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
 
     // Divider
     ctx.strokeStyle = '#1e293b';
@@ -486,20 +542,33 @@ export class InventoryPanel {
     // Pagination bar
     const pages = pageCount(inventory.bag.slots.length);
     const navY = p.y + p.h - NAV_H + 6;
-    ctx.fillStyle = '#475569';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'center';
+    // baseline_y=navY, size=11 → top_y = navY - 9
+    const navTopY = navY - 9;
     if (pages > 1) {
       // Prev arrow
-      ctx.fillStyle = this.page > 0 ? '#94a3b8' : '#374151';
-      ctx.fillText('< Prev', p.x + p.w * 0.25, navY);
+      drawText(ctx, '< Prev', {
+        x: p.x + p.w * 0.25,
+        y: navTopY,
+        size: 11,
+        color: this.page > 0 ? '#94a3b8' : '#374151',
+        align: 'center',
+      });
       // Next arrow
-      ctx.fillStyle = this.page < pages - 1 ? '#94a3b8' : '#374151';
-      ctx.fillText('Next >', p.x + p.w * 0.75, navY);
+      drawText(ctx, 'Next >', {
+        x: p.x + p.w * 0.75,
+        y: navTopY,
+        size: 11,
+        color: this.page < pages - 1 ? '#94a3b8' : '#374151',
+        align: 'center',
+      });
     }
-    ctx.fillStyle = '#64748b';
-    ctx.fillText(`${this.page + 1} / ${pages}`, p.x + p.w / 2, navY);
-    ctx.textAlign = 'left';
+    drawText(ctx, `${this.page + 1} / ${pages}`, {
+      x: p.x + p.w / 2,
+      y: navTopY,
+      size: 11,
+      color: '#64748b',
+      align: 'center',
+    });
   }
 
   private renderSlot(
@@ -550,13 +619,15 @@ export class InventoryPanel {
       ctx.lineTo(bx, by + badgeSize);
       ctx.closePath();
       ctx.fill();
-      // White "E" letter
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.floor(badgeSize * 0.55)}px monospace`;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('E', bx + 1, by + 1);
-      ctx.textBaseline = 'alphabetic';
+      // White "E" letter — original used textBaseline='top' so y=by+1 is already the top
+      drawText(ctx, 'E', {
+        x: bx + 1,
+        y: by + 1,
+        size: Math.floor(badgeSize * 0.55),
+        bold: true,
+        color: '#fff',
+        align: 'left',
+      });
       ctx.restore();
     }
 
@@ -571,11 +642,17 @@ export class InventoryPanel {
         ctx.globalAlpha = 1;
         // Remaining seconds
         const secs = Math.ceil(cd.current / 60);
-        ctx.fillStyle = '#e2e8f0';
-        ctx.font = `bold ${Math.floor(size * 0.28)}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.fillText(secs > 99 ? '…' : `${secs}`, x + size / 2, y + size / 2 + 4);
-        ctx.textAlign = 'left';
+        const cdFontSize = Math.floor(size * 0.28);
+        // baseline_y = y+size/2+4, cdFontSize → top_y = baseline_y - Math.round(cdFontSize*0.8)
+        const cdTopY = y + size / 2 + 4 - Math.round(cdFontSize * 0.8);
+        drawText(ctx, secs > 99 ? '…' : `${secs}`, {
+          x: x + size / 2,
+          y: cdTopY,
+          size: cdFontSize,
+          bold: true,
+          color: '#e2e8f0',
+          align: 'center',
+        });
       }
     }
 
@@ -675,7 +752,7 @@ export class InventoryPanel {
       ctx.lineTo(cx, y + size * 0.38);
       ctx.closePath();
       ctx.fill();
-      // Red hearts pattern
+      // Red hearts pattern — sprite icon text, leave as ctx.fillText
       ctx.fillStyle = '#ef4444';
       ctx.font = `bold ${Math.floor(size * 0.18)}px monospace`;
       ctx.textAlign = 'center';
@@ -724,7 +801,7 @@ export class InventoryPanel {
       ctx.beginPath();
       ctx.ellipse(cx, cy - size * 0.16, size * 0.1, size * 0.06, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Enchantment rune — golden fist symbol
+      // Enchantment rune — golden fist symbol (sprite icon text, leave as ctx.fillText)
       ctx.fillStyle = '#ffd700';
       ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
       ctx.textAlign = 'center';
@@ -795,7 +872,8 @@ export class InventoryPanel {
       drawTreadmillInventoryIcon(ctx, x, y, size);
     }
 
-    // Quantity badge (bottom-right)
+    // Quantity badge (bottom-right) — sprite icon text, leave as ctx.fillText
+    // Uses textAlign='right' where x is the RIGHT edge; dynamic font size
     if (item.quantity > 1) {
       const fontSize = Math.max(7, Math.floor(size * 0.22));
       ctx.font = `bold ${fontSize}px monospace`;

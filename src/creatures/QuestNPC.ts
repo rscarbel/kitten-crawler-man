@@ -61,6 +61,10 @@ export class QuestNPC extends Player {
     if (this.redBoxTimer > 0) this.redBoxTimer--;
   }
 
+  clearHurtState(): void {
+    this.redBoxTimer = 0;
+  }
+
   protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.redBoxTimer <= 0) return;
     ctx.save();

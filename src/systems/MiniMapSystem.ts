@@ -4,6 +4,7 @@ import type { Mob } from '../creatures/Mob';
 import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
@@ -223,25 +224,35 @@ export class MiniMapSystem implements GameSystem {
     }
 
     // Quest markers — yellow !, green ?, or red X
+    // size=8 bold; old baseline was qsy+3; top = (qsy+3) - round(8*0.8) = (qsy+3) - 6 = qsy-3
     for (const qm of questMarkers) {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
       const qsx = mmX + (qm.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const qsy = mmY + (qm.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const pulse = 0.7 + 0.3 * Math.sin(frameTime * 5);
-      ctx.globalAlpha = pulse;
       if (qm.type === 'exclamation') {
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('!', qsx, qsy + 3);
-        ctx.textAlign = 'left';
+        drawText(ctx, '!', {
+          x: qsx,
+          y: qsy - 3,
+          size: 8,
+          bold: true,
+          color: '#fbbf24',
+          alpha: pulse,
+          align: 'center',
+        });
       } else if (qm.type === 'question') {
-        ctx.fillStyle = '#4ade80';
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('?', qsx, qsy + 3);
-        ctx.textAlign = 'left';
+        drawText(ctx, '?', {
+          x: qsx,
+          y: qsy - 3,
+          size: 8,
+          bold: true,
+          color: '#4ade80',
+          alpha: pulse,
+          align: 'center',
+        });
       } else {
+        ctx.save();
+        ctx.globalAlpha = pulse;
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -250,8 +261,8 @@ export class MiniMapSystem implements GameSystem {
         ctx.moveTo(qsx + 3, qsy - 3);
         ctx.lineTo(qsx - 3, qsy + 3);
         ctx.stroke();
+        ctx.restore();
       }
-      ctx.globalAlpha = 1;
     }
 
     // Active player — green dot at centre
@@ -269,13 +280,16 @@ export class MiniMapSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX, mmY, mmSize, mmSize);
 
-    // Expand hint
-    ctx.fillStyle = '#64748b';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
+    // Expand hint below minimap
+    // size=8, old baseline = mmY + mmSize + 9; top = (mmY+mmSize+9) - round(8*0.8) = (mmY+mmSize+9) - 6 = mmY+mmSize+3
     const expandHint = platform.miniMapHint(expanded);
-    ctx.fillText(expandHint, mmX + mmSize / 2, mmY + mmSize + 9);
-    ctx.textAlign = 'left';
+    drawText(ctx, expandHint, {
+      x: mmX + mmSize / 2,
+      y: mmY + mmSize + 3,
+      size: 8,
+      color: '#64748b',
+      align: 'center',
+    });
   }
 
   private tileColor(type: number): string {

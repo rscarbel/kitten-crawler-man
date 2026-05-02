@@ -14,6 +14,7 @@ import { Tuskling } from '../creatures/Tuskling';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawText } from '../ui/TextBox';
 
 export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
@@ -146,15 +147,14 @@ export class ArenaSystem implements GameSystem {
       ctx.lineWidth = 1;
       ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
 
-      ctx.font = 'bold 11px monospace';
-      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName,
-        canvas.width / 2,
-        barY - 6,
-      );
-      ctx.textAlign = 'left';
+      drawText(ctx, bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName, {
+        x: canvas.width / 2,
+        y: barY - 6 - 9,
+        size: 11,
+        bold: true,
+        color: bos.isStopped ? '#fde68a' : meta.color,
+        align: 'center',
+      });
 
       ctx.fillStyle = '#0a0a12';
       ctx.fillRect(barX, barY, barW, barH);
@@ -165,28 +165,31 @@ export class ArenaSystem implements GameSystem {
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barW, barH);
 
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${bos.hp} / ${bos.maxHp}`, canvas.width / 2, barY + barH - 4);
-      ctx.textAlign = 'left';
+      drawText(ctx, `${bos.hp} / ${bos.maxHp}`, {
+        x: canvas.width / 2,
+        y: barY + barH - 4 - 7,
+        size: 9,
+        color: '#e2e8f0',
+        align: 'center',
+      });
       ctx.restore();
     }
 
     // Phase 2: show how many Tusklings remain
     if (this.arenaPhase2Active && !this.arenaStairwellUnlocked) {
       const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
-      ctx.save();
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = alive > 0 ? '#f87171' : '#4ade80';
-      ctx.fillText(
+      drawText(
+        ctx,
         alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
-        canvas.width / 2,
-        78,
+        {
+          x: canvas.width / 2,
+          y: 78 - 9,
+          size: 11,
+          bold: true,
+          color: alive > 0 ? '#f87171' : '#4ade80',
+          align: 'center',
+        },
       );
-      ctx.textAlign = 'left';
-      ctx.restore();
     }
   }
 }

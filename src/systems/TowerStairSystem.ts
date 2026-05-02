@@ -2,6 +2,7 @@ import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { pointInRect } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -105,21 +106,32 @@ export class TowerStairSystem implements GameSystem {
 
   renderStairHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
-    ctx.fillStyle = `rgba(255, 220, 80, ${pulse})`;
-    ctx.font = `bold ${Math.floor(TILE_SIZE * 0.45)}px monospace`;
-    ctx.textAlign = 'center';
+    const hintSize = Math.floor(TILE_SIZE * 0.45);
 
     for (const t of this.map._interiorStairUpTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      ctx.fillText('\u25B2 Up', sx, sy - 4);
+      drawText(ctx, '\u25B2 Up', {
+        x: sx,
+        y: sy - 4 - Math.round(hintSize * 0.8),
+        size: hintSize,
+        bold: true,
+        color: `rgba(255, 220, 80, ${pulse})`,
+        align: 'center',
+      });
     }
     for (const t of this.map._interiorStairDownTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      ctx.fillText('\u25BC Down', sx, sy - 4);
+      drawText(ctx, '\u25BC Down', {
+        x: sx,
+        y: sy - 4 - Math.round(hintSize * 0.8),
+        size: hintSize,
+        bold: true,
+        color: `rgba(255, 220, 80, ${pulse})`,
+        align: 'center',
+      });
     }
-    ctx.textAlign = 'left';
   }
 
   renderMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -146,20 +158,31 @@ export class TowerStairSystem implements GameSystem {
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    ctx.textAlign = 'center';
-
-    ctx.fillStyle = '#ffe8a0';
-    ctx.font = 'bold 20px monospace';
     const arrow = isUp ? '\u25B2' : '\u25BC';
-    ctx.fillText(`${arrow}  Staircase  ${arrow}`, cw / 2, panelY + 38);
+    drawText(ctx, `${arrow}  Staircase  ${arrow}`, {
+      x: cw / 2,
+      y: panelY + 38 - 16,
+      size: 20,
+      bold: true,
+      color: '#ffe8a0',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    ctx.fillText(`${isUp ? 'Ascend' : 'Descend'} to: ${targetLabel}?`, cw / 2, panelY + 68);
+    drawText(ctx, `${isUp ? 'Ascend' : 'Descend'} to: ${targetLabel}?`, {
+      x: cw / 2,
+      y: panelY + 68 - 10,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.fillText('(Esc or Stay to remain on this floor)', cw / 2, panelY + 88);
+    drawText(ctx, '(Esc or Stay to remain on this floor)', {
+      x: cw / 2,
+      y: panelY + 88 - 9,
+      size: 11,
+      color: '#64748b',
+      align: 'center',
+    });
 
     const rects = this.menuRects(canvas);
 
@@ -168,24 +191,28 @@ export class TowerStairSystem implements GameSystem {
     ctx.strokeStyle = '#d4a830';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
-    ctx.fillStyle = '#ffe8a0';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText(
-      isUp ? 'Ascend' : 'Descend',
-      rects.action.x + rects.action.w / 2,
-      rects.action.y + 27,
-    );
+    drawText(ctx, isUp ? 'Ascend' : 'Descend', {
+      x: rects.action.x + rects.action.w / 2,
+      y: rects.action.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#ffe8a0',
+      align: 'center',
+    });
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Stay', rects.stay.x + rects.stay.w / 2, rects.stay.y + 27);
-
-    ctx.textAlign = 'left';
+    drawText(ctx, 'Stay', {
+      x: rects.stay.x + rects.stay.w / 2,
+      y: rects.stay.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#94a3b8',
+      align: 'center',
+    });
   }
 
   private menuRects(canvas: HTMLCanvasElement) {

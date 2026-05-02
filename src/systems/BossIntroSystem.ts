@@ -5,6 +5,7 @@ import { drawHoarderSprite } from '../sprites/hoarderSprite';
 import { drawKrakarenSprite } from '../sprites/krakarenSprite';
 import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 import type { GameSystem } from './GameSystem';
+import { drawText } from '../ui/TextBox';
 
 type IntroState = {
   bossType: string;
@@ -85,12 +86,13 @@ export class BossIntroSystem implements GameSystem {
         const ch = fullText[i];
 
         // B's in yellow-gold, dashes in grey, rest of "OSS BATTLE!" in white
+        let charColor: string;
         if (ch === 'B') {
-          ctx.fillStyle = isLast ? `rgba(255,200,0,${0.7 + 0.3 * flashPulse})` : '#fbbf24';
+          charColor = isLast ? `rgba(255,200,0,${0.7 + 0.3 * flashPulse})` : '#fbbf24';
         } else if (ch === '-') {
-          ctx.fillStyle = '#94a3b8';
+          charColor = '#94a3b8';
         } else {
-          ctx.fillStyle = isLast ? `rgba(255,255,255,${0.7 + 0.3 * flashPulse})` : '#f1f5f9';
+          charColor = isLast ? `rgba(255,255,255,${0.7 + 0.3 * flashPulse})` : '#f1f5f9';
         }
 
         // Calculate x for each char
@@ -105,7 +107,16 @@ export class BossIntroSystem implements GameSystem {
         ctx.scale(scale, scale);
         ctx.shadowColor = '#fbbf24';
         ctx.shadowBlur = isLast ? 24 : 8;
-        ctx.fillText(ch, 0, 0);
+        // y=0 in this translated+scaled space is the baseline;
+        // drawText uses top so we shift up by size*0.8
+        drawText(ctx, ch, {
+          x: 0,
+          y: -Math.round(fontSize * 0.8),
+          size: fontSize,
+          bold: true,
+          color: charColor,
+          align: 'center',
+        });
         ctx.restore();
       }
 
@@ -114,13 +125,18 @@ export class BossIntroSystem implements GameSystem {
       if (charsShown >= titleLen) {
         const holdProgress = (intro.frame - titleLen * FPC) / BossIntroSystem.INTRO_HOLD_FRAMES;
         const alpha = Math.min(1, holdProgress * 3);
-        ctx.globalAlpha = alpha;
-        ctx.font = `bold ${Math.floor(fontSize * 0.4)}px monospace`;
-        ctx.fillStyle = '#ef4444';
-        ctx.shadowColor = '#ef4444';
-        ctx.shadowBlur = 10;
-        ctx.fillText('GET READY!', CX, CY + fontSize * 0.9);
-        ctx.globalAlpha = 1;
+        const subSize = Math.floor(fontSize * 0.4);
+        drawText(ctx, 'GET READY!', {
+          x: CX,
+          y: CY + fontSize * 0.9 - Math.round(subSize * 0.8),
+          size: subSize,
+          bold: true,
+          color: '#ef4444',
+          align: 'center',
+          alpha,
+          glow: '#ef4444',
+          glowBlur: 10,
+        });
       }
 
       ctx.restore();
@@ -152,14 +168,22 @@ export class BossIntroSystem implements GameSystem {
       drawCatSprite(ctx, leftX + panelW * 0.52, panelY + 20, 60, 0, false, 0);
       ctx.restore();
 
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#93c5fd';
-      ctx.fillText('TEAM CAT POSSE', leftX + panelW / 2, panelY + panelH - 28);
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#64748b';
-      ctx.fillText('Human + Cat', leftX + panelW / 2, panelY + panelH - 14);
       ctx.restore();
+      drawText(ctx, 'TEAM CAT POSSE', {
+        x: leftX + panelW / 2,
+        y: panelY + panelH - 28 - 9,
+        size: 11,
+        bold: true,
+        color: '#93c5fd',
+        align: 'center',
+      });
+      drawText(ctx, 'Human + Cat', {
+        x: leftX + panelW / 2,
+        y: panelY + panelH - 14 - 7,
+        size: 9,
+        color: '#64748b',
+        align: 'center',
+      });
 
       // Right panel — Boss
       const rightX = CX + 20 + (1 - eased) * CX;
@@ -218,40 +242,52 @@ export class BossIntroSystem implements GameSystem {
       }
       ctx.restore();
 
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = intro.bossColor;
-      ctx.fillText(intro.bossName, rightX + panelW / 2, panelY + panelH - 28);
-      ctx.font = '9px monospace';
-      ctx.fillStyle = '#64748b';
-      ctx.fillText('BOSS', rightX + panelW / 2, panelY + panelH - 14);
       ctx.restore();
+      drawText(ctx, intro.bossName, {
+        x: rightX + panelW / 2,
+        y: panelY + panelH - 28 - 9,
+        size: 11,
+        bold: true,
+        color: intro.bossColor,
+        align: 'center',
+      });
+      drawText(ctx, 'BOSS', {
+        x: rightX + panelW / 2,
+        y: panelY + panelH - 14 - 7,
+        size: 9,
+        color: '#64748b',
+        align: 'center',
+      });
 
       // VS in the centre
       const vsAlpha = Math.min(1, (t - 20) / 15);
       if (vsAlpha > 0) {
         const vsPulse = 1 + 0.06 * Math.sin(t * 0.15);
-        ctx.save();
-        ctx.globalAlpha = vsAlpha;
-        ctx.textAlign = 'center';
-        ctx.font = `bold ${Math.floor(48 * vsPulse)}px monospace`;
-        ctx.fillStyle = '#ef4444';
-        ctx.shadowColor = '#ef4444';
-        ctx.shadowBlur = 20;
-        ctx.fillText('VS', CX, CY + 18);
-        ctx.restore();
+        const vsSize = Math.floor(48 * vsPulse);
+        drawText(ctx, 'VS', {
+          x: CX,
+          y: CY + 18 - Math.round(vsSize * 0.8),
+          size: vsSize,
+          bold: true,
+          color: '#ef4444',
+          align: 'center',
+          alpha: vsAlpha,
+          glow: '#ef4444',
+          glowBlur: 20,
+        });
       }
 
       // Countdown hint at bottom
       const framesLeft = BossIntroSystem.INTRO_VERSUS_FRAMES - t;
       if (framesLeft < 90) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, (90 - framesLeft) / 20);
-        ctx.textAlign = 'center';
-        ctx.font = '10px monospace';
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText('FIGHT!', CX, CY + panelH / 2 + 40);
-        ctx.restore();
+        drawText(ctx, 'FIGHT!', {
+          x: CX,
+          y: CY + panelH / 2 + 40 - 8,
+          size: 10,
+          color: '#94a3b8',
+          align: 'center',
+          alpha: Math.min(1, (90 - framesLeft) / 20),
+        });
       }
     }
   }

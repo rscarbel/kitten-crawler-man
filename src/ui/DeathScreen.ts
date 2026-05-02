@@ -1,3 +1,5 @@
+import { drawText } from './TextBox';
+
 /**
  * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
  * button hit-testing. The caller is responsible for calling tick() each frame
@@ -48,39 +50,50 @@ export class DeathScreen {
     if (this.alpha < 0.45) return;
     const textAlpha = Math.min(1, (this.alpha - 0.45) / 0.37);
 
-    ctx.save();
-    ctx.globalAlpha = textAlpha;
-    ctx.textAlign = 'center';
-
     // "YOU DIED"
-    ctx.fillStyle = '#dc2626';
-    ctx.font = 'bold 72px monospace';
-    ctx.fillText('YOU DIED', w / 2, h / 2 - 52);
+    drawText(ctx, 'YOU DIED', {
+      x: w / 2,
+      y: h / 2 - 52 - 58,
+      bold: true,
+      size: 72,
+      color: '#dc2626',
+      align: 'center',
+      alpha: textAlpha,
+    });
 
     // Subtitle
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '15px monospace';
-    ctx.fillText(
-      'Respawning at floor start — progress from previous floors kept.',
-      w / 2,
-      h / 2 + 8,
-    );
+    drawText(ctx, 'Respawning at floor start — progress from previous floors kept.', {
+      x: w / 2,
+      y: h / 2 + 8 - 12,
+      size: 15,
+      color: '#94a3b8',
+      align: 'center',
+      alpha: textAlpha,
+    });
 
     // Restart button
     const btnW = 210;
     const btnH = 48;
     const btnX = w / 2 - btnW / 2;
     const btnY = h / 2 + 44;
+    ctx.save();
+    ctx.globalAlpha = textAlpha;
     ctx.fillStyle = '#991b1b';
     ctx.fillRect(btnX, btnY, btnW, btnH);
     ctx.strokeStyle = '#f87171';
     ctx.lineWidth = 2;
     ctx.strokeRect(btnX, btnY, btnW, btnH);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 17px monospace';
-    ctx.fillText('Restart Level', w / 2, btnY + 30);
-
     ctx.restore();
+
+    drawText(ctx, 'Restart Level', {
+      x: w / 2,
+      y: btnY + 30 - 14,
+      bold: true,
+      size: 17,
+      color: '#fff',
+      align: 'center',
+      alpha: textAlpha,
+    });
   }
 
   /**

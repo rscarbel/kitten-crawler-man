@@ -4,6 +4,7 @@ import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { pointInRect } from '../utils';
+import { drawText } from '../ui/TextBox';
 
 const SHOP_ITEMS: Array<{
   id: ItemId;
@@ -179,17 +180,20 @@ export class ShopSystem implements GameSystem {
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, _active: Player): void {
     if (this.feedbackTimer > 0) {
       const alpha = Math.min(1, this.feedbackTimer / 30);
-      ctx.save();
-      ctx.fillStyle = `rgba(10,8,4,${alpha * 0.85})`;
       const tw = 260;
       const th = 28;
+      ctx.save();
+      ctx.fillStyle = `rgba(10,8,4,${alpha * 0.85})`;
       ctx.fillRect(canvas.width / 2 - tw / 2, canvas.height - 68, tw, th);
-      ctx.fillStyle = `rgba(220,190,80,${alpha})`;
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(this.feedbackMsg, canvas.width / 2, canvas.height - 48);
-      ctx.textAlign = 'left';
       ctx.restore();
+      drawText(ctx, this.feedbackMsg, {
+        x: canvas.width / 2,
+        y: canvas.height - 48 - 10,
+        size: 12,
+        color: `rgba(220,190,80,${alpha})`,
+        align: 'center',
+        alpha,
+      });
     }
   }
 
@@ -219,12 +223,15 @@ export class ShopSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(panelX + 5, panelY + 5, panelW - 10, panelH - 10);
 
-    ctx.textAlign = 'center';
-
     // Title
-    ctx.fillStyle = '#f0d870';
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText('General Store', cw / 2, panelY + 26);
+    drawText(ctx, 'General Store', {
+      x: cw / 2,
+      y: panelY + 26 - 13,
+      size: 16,
+      bold: true,
+      color: '#f0d870',
+      align: 'center',
+    });
 
     // Separator
     ctx.strokeStyle = '#6a5420';
@@ -235,9 +242,13 @@ export class ShopSystem implements GameSystem {
     ctx.stroke();
 
     // Active player coins
-    ctx.fillStyle = '#d4c070';
-    ctx.font = '12px monospace';
-    ctx.fillText(`Coins: ${active.coins}`, cw / 2, panelY + 52);
+    drawText(ctx, `Coins: ${active.coins}`, {
+      x: cw / 2,
+      y: panelY + 52 - 10,
+      size: 12,
+      color: '#d4c070',
+      align: 'center',
+    });
 
     // Item rows
     this.buyRects = [];
@@ -251,21 +262,31 @@ export class ShopSystem implements GameSystem {
       ctx.fillRect(panelX + 8, rowY + 2, panelW - 16, itemH - 4);
 
       // Item name
-      ctx.textAlign = 'left';
-      ctx.fillStyle = canAfford ? '#e8d898' : '#6a5a40';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(item.label, panelX + 18, rowY + 20);
+      drawText(ctx, item.label, {
+        x: panelX + 18,
+        y: rowY + 20 - 10,
+        size: 13,
+        bold: true,
+        color: canAfford ? '#e8d898' : '#6a5a40',
+      });
 
       // Description
-      ctx.fillStyle = canAfford ? '#8a7a50' : '#4a3a28';
-      ctx.font = '10px monospace';
-      ctx.fillText(item.desc, panelX + 18, rowY + 36);
+      drawText(ctx, item.desc, {
+        x: panelX + 18,
+        y: rowY + 36 - 8,
+        size: 10,
+        color: canAfford ? '#8a7a50' : '#4a3a28',
+      });
 
       // Price
-      ctx.textAlign = 'right';
-      ctx.fillStyle = canAfford ? '#f0d040' : '#6a5820';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(`${item.price} coins`, panelX + panelW - 90, rowY + 20);
+      drawText(ctx, `${item.price} coins`, {
+        x: panelX + panelW - 90,
+        y: rowY + 20 - 10,
+        size: 13,
+        bold: true,
+        color: canAfford ? '#f0d040' : '#6a5820',
+        align: 'right',
+      });
 
       // Buy button
       const btnW = 68;
@@ -278,21 +299,26 @@ export class ShopSystem implements GameSystem {
       ctx.strokeStyle = canAfford ? '#5aaa34' : '#3a2020';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(btnX, btnY, btnW, btnH);
-      ctx.fillStyle = canAfford ? '#c8e890' : '#5a4040';
-      ctx.font = 'bold 12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Buy', btnX + btnW / 2, btnY + 21);
+      drawText(ctx, 'Buy', {
+        x: btnX + btnW / 2,
+        y: btnY + 21 - 10,
+        size: 12,
+        bold: true,
+        color: canAfford ? '#c8e890' : '#5a4040',
+        align: 'center',
+      });
 
       this.buyRects.push({ x: btnX, y: btnY, w: btnW, h: btnH });
     }
 
     // Close hint
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#5a4a30';
-    ctx.font = '10px monospace';
-    ctx.fillText('[Space / Esc]  Close', cw / 2, panelY + panelH - 12);
-
-    ctx.textAlign = 'left';
+    drawText(ctx, '[Space / Esc]  Close', {
+      x: cw / 2,
+      y: panelY + panelH - 12 - 8,
+      size: 10,
+      color: '#5a4a30',
+      align: 'center',
+    });
   }
 
   handleClick(mx: number, my: number, active: Player): void {

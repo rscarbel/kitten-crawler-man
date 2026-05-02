@@ -1,4 +1,5 @@
 import { drawDumbbellHeld } from './gymEquipmentSprite';
+import { drawText } from '../ui/TextBox';
 
 /**
  * Draw the Juicer boss sprite — a giant muscular bipedal lizard in black shorts.
@@ -514,13 +515,17 @@ export function drawJuicerSpeechBubble(
   ctx.lineTo(cx, bubbleY);
   ctx.stroke();
 
-  // Text
-  ctx.fillStyle = '#1a1a1a';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, cx, by + bh * 0.5);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
+  // Text — y converted from midpoint: drawText_y = mid - size/2
+  drawText(ctx, text, {
+    x: cx,
+    y: by + bh * 0.5 - 9 / 2,
+    size: 9,
+    bold: true,
+    font: 'monospace',
+    color: '#1a1a1a',
+    alpha,
+    align: 'center',
+  });
 
   ctx.restore();
 }

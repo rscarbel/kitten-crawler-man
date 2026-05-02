@@ -3,6 +3,7 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AchievementManager } from '../../core/AchievementManager';
 import { platform } from '../../core/Platform';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { drawText } from '../TextBox';
 
 export function renderMainTab(
   ctx: CanvasRenderingContext2D,
@@ -17,11 +18,14 @@ export function renderMainTab(
   humanAchievements?: AchievementManager,
   catAchievements?: AchievementManager,
 ): void {
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 18px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('PAUSED', bx + bw / 2, by + 34);
-  ctx.textAlign = 'left';
+  drawText(ctx, 'PAUSED', {
+    x: bx + bw / 2,
+    y: by + 34 - 14,
+    bold: true,
+    size: 18,
+    color: '#f1f5f9',
+    align: 'center',
+  });
 
   const bW = bw - 40;
   const bX = bx + 20;

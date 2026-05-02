@@ -3,6 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { LevelDef } from '../levels/types';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
+import { drawText } from '../ui/TextBox';
 
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
@@ -110,11 +111,15 @@ export class StairwellSystem implements GameSystem {
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 1, sy + 1, bw - 2, bh - 2);
 
-      ctx.fillStyle = `rgba(233, 213, 255, ${pulse})`;
-      ctx.font = `bold ${Math.floor(bh * 0.42)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillText('▼', sx + bw / 2, sy + bh * 0.67);
-      ctx.textAlign = 'left';
+      const arrowSize = Math.floor(bh * 0.42);
+      drawText(ctx, '▼', {
+        x: sx + bw / 2,
+        y: sy + bh * 0.67 - Math.round(arrowSize * 0.8),
+        size: arrowSize,
+        bold: true,
+        color: `rgba(233, 213, 255, ${pulse})`,
+        align: 'center',
+      });
     }
   }
 
@@ -136,21 +141,32 @@ export class StairwellSystem implements GameSystem {
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    ctx.textAlign = 'center';
-
-    ctx.fillStyle = '#e9d5ff';
-    ctx.font = 'bold 20px monospace';
-    ctx.fillText('▼  Stairwell  ▼', cw / 2, panelY + 38);
+    drawText(ctx, '▼  Stairwell  ▼', {
+      x: cw / 2,
+      y: panelY + 38 - 16,
+      size: 20,
+      bold: true,
+      color: '#e9d5ff',
+      align: 'center',
+    });
 
     const nextId = this.levelDef.nextLevelId;
     const nextName = nextId ? getLevelDef(nextId).name : 'Next Floor';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    ctx.fillText(`Descend to: ${nextName}?`, cw / 2, panelY + 68);
+    drawText(ctx, `Descend to: ${nextName}?`, {
+      x: cw / 2,
+      y: panelY + 68 - 10,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
-    ctx.fillStyle = '#64748b';
-    ctx.font = '11px monospace';
-    ctx.fillText('(Esc or Stay to remain on this floor)', cw / 2, panelY + 88);
+    drawText(ctx, '(Esc or Stay to remain on this floor)', {
+      x: cw / 2,
+      y: panelY + 88 - 9,
+      size: 11,
+      color: '#64748b',
+      align: 'center',
+    });
 
     const rects = this.menuRects(canvas);
 
@@ -159,20 +175,28 @@ export class StairwellSystem implements GameSystem {
     ctx.strokeStyle = '#a855f7';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
-    ctx.fillStyle = '#e9d5ff';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Descend', rects.descend.x + rects.descend.w / 2, rects.descend.y + 27);
+    drawText(ctx, 'Descend', {
+      x: rects.descend.x + rects.descend.w / 2,
+      y: rects.descend.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#e9d5ff',
+      align: 'center',
+    });
 
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     ctx.strokeStyle = '#475569';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('Stay', rects.stay.x + rects.stay.w / 2, rects.stay.y + 27);
-
-    ctx.textAlign = 'left';
+    drawText(ctx, 'Stay', {
+      x: rects.stay.x + rects.stay.w / 2,
+      y: rects.stay.y + 27 - 11,
+      size: 14,
+      bold: true,
+      color: '#94a3b8',
+      align: 'center',
+    });
   }
 
   private menuRects(canvas: HTMLCanvasElement): {

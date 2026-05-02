@@ -5,6 +5,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { drawText } from '../ui/TextBox';
 
 interface PendingLoot {
   x: number;
@@ -129,14 +130,14 @@ export class LootSystem implements GameSystem {
         }
       }
     }
-    // Decrement TTL for non-boss loot; boss loot never fades
+    // Decrement TTL for non-boss, non-player-dropped loot
     for (const loot of this.pendingLoots) {
-      if (!loot.isBossLoot && !loot.collected) {
+      if (!loot.isBossLoot && !loot.droppedByPlayer && !loot.collected) {
         loot.ttl--;
       }
     }
     this.pendingLoots = this.pendingLoots.filter(
-      (l) => !l.collected && ((l.isBossLoot ?? false) || l.ttl > 0),
+      (l) => !l.collected && ((l.isBossLoot ?? false) || (l.droppedByPlayer ?? false) || l.ttl > 0),
     );
   }
 
@@ -195,8 +196,8 @@ export class LootSystem implements GameSystem {
 
       ctx.save();
 
-      // Fade non-boss loot as TTL expires
-      if (!loot.isBossLoot && loot.ttl < 120) {
+      // Fade non-boss, non-player-dropped loot as TTL expires
+      if (!loot.isBossLoot && !loot.droppedByPlayer && loot.ttl < 120) {
         ctx.globalAlpha = Math.max(0.15, loot.ttl / 120);
       }
 
@@ -258,10 +259,12 @@ export class LootSystem implements GameSystem {
       ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#64748b';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(label, bx + 18, by + bh / 2 + 4);
+      drawText(ctx, label, {
+        x: bx + 18,
+        y: by + bh / 2 - 4,
+        size: 10,
+        color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#64748b',
+      });
 
       if (loot.owner === active) {
         const dist = Math.hypot(
@@ -269,10 +272,13 @@ export class LootSystem implements GameSystem {
           active.y + TILE_SIZE * 0.5 - loot.y,
         );
         if (dist <= TILE_SIZE * 3) {
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = '8px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText('[click]', sx, by - 3);
+          drawText(ctx, '[click]', {
+            x: sx,
+            y: by - 9,
+            size: 8,
+            color: '#94a3b8',
+            align: 'center',
+          });
         }
       }
 

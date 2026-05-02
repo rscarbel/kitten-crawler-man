@@ -1,4 +1,5 @@
 // Renders transient System AI messages as an overlay banner near the top of the screen.
+import { drawText } from '../ui/TextBox';
 
 interface AIMessage {
   text: string;
@@ -117,10 +118,15 @@ export class AIMessageDisplay {
     const scrolled = msg.scrollY;
 
     // "⚙ SYSTEM" label
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#a78bfa';
-    ctx.font = `bold 10px monospace`;
-    ctx.fillText('⚙ SYSTEM AI', bx + padding, by + padding + 4 - scrolled);
+    // baseline was by + padding + 4 - scrolled; top = baseline - round(10 * 0.8) = baseline - 8
+    drawText(ctx, '⚙ SYSTEM AI', {
+      x: bx + padding,
+      y: by + padding + 4 - scrolled - 8,
+      size: 10,
+      bold: true,
+      color: '#a78bfa',
+      alpha,
+    });
 
     // Separator line
     ctx.strokeStyle = '#3b1d7a';
@@ -132,15 +138,17 @@ export class AIMessageDisplay {
     ctx.stroke();
 
     // Message body
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#d4d4e8';
-    ctx.font = `${fontSize}px monospace`;
+    // baseline was by + padding + labelH + i * lineH + fontSize - 1 - scrolled
+    // top = baseline - round(fontSize * 0.8) = baseline - 10 (fontSize=13)
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(
-        lines[i],
-        bx + padding,
-        by + padding + labelH + i * lineH + fontSize - 1 - scrolled,
-      );
+      const baselineY = by + padding + labelH + i * lineH + fontSize - 1 - scrolled;
+      drawText(ctx, lines[i], {
+        x: bx + padding,
+        y: baselineY - 10,
+        size: fontSize,
+        color: '#d4d4e8',
+        alpha,
+      });
     }
 
     ctx.restore();
@@ -148,7 +156,7 @@ export class AIMessageDisplay {
     // Action notifications — bottom of screen
     if (this.actionNotifs.length > 0) {
       const notif = this.actionNotifs[this.actionNotifs.length - 1];
-      const alpha = notif.ttl < ACTION_FADE_TICKS ? notif.ttl / ACTION_FADE_TICKS : 1;
+      const actionAlpha = notif.ttl < ACTION_FADE_TICKS ? notif.ttl / ACTION_FADE_TICKS : 1;
       const pad = 8;
       const fsize = 11;
       ctx.save();
@@ -161,26 +169,35 @@ export class AIMessageDisplay {
       const px = Math.round((canvas.width - pillW) / 2);
       const py = canvas.height - pillH - 16;
 
-      ctx.globalAlpha = alpha * 0.88;
+      ctx.globalAlpha = actionAlpha * 0.88;
       ctx.fillStyle = '#0a0a0c';
       roundRect(ctx, px, py, pillW, pillH, pillH / 2);
       ctx.fill();
 
       ctx.strokeStyle = '#d97706';
       ctx.lineWidth = 1;
-      ctx.globalAlpha = alpha * 0.7;
+      ctx.globalAlpha = actionAlpha * 0.7;
       roundRect(ctx, px, py, pillW, pillH, pillH / 2);
       ctx.stroke();
 
-      ctx.globalAlpha = alpha;
+      // baseline was ty = py + pad + fsize - 1; top = baseline - round(11 * 0.8) = baseline - 9
       const ty = py + pad + fsize - 1;
-      ctx.fillStyle = '#fbbf24';
-      ctx.font = `bold ${fsize}px monospace`;
-      ctx.fillText(label, px + pad, ty);
+      drawText(ctx, label, {
+        x: px + pad,
+        y: ty - 9,
+        size: fsize,
+        bold: true,
+        color: '#fbbf24',
+        alpha: actionAlpha,
+      });
 
-      ctx.fillStyle = '#e5e5e5';
-      ctx.font = `${fsize}px monospace`;
-      ctx.fillText(notif.text, px + pad + labelW + 8, ty);
+      drawText(ctx, notif.text, {
+        x: px + pad + labelW + 8,
+        y: ty - 9,
+        size: fsize,
+        color: '#e5e5e5',
+        alpha: actionAlpha,
+      });
 
       ctx.restore();
     }

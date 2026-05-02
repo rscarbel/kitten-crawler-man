@@ -1,5 +1,6 @@
 import type { AbilityManager, AbilityId } from '../core/AbilityManager';
 import { wrapTextLines } from './canvasUtils';
+import { drawText } from './TextBox';
 
 interface QueuedLevelUp {
   id: AbilityId;
@@ -118,10 +119,14 @@ export class AbilityLevelUpDialog {
     ctx.strokeRect(bx, by, boxW, boxH);
 
     // Title
-    ctx.fillStyle = '#e9d5ff';
-    ctx.font = 'bold 16px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${def.name} Level Up!`, bx + boxW / 2, by + 30);
+    drawText(ctx, `${def.name} Level Up!`, {
+      x: bx + boxW / 2,
+      y: by + 30 - 13,
+      size: 16,
+      bold: true,
+      color: '#e9d5ff',
+      align: 'center',
+    });
 
     // Icon with power-up animation
     const iconSize = 56;
@@ -156,10 +161,13 @@ export class AbilityLevelUpDialog {
     const isCountingUp = this.phase === 'count_up';
     const progress = isCountingUp ? this.frame / this.COUNT_UP_FRAMES : 1;
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '13px monospace';
-    ctx.fillText('Level', bx + boxW / 2 - 18, levelY);
+    drawText(ctx, 'Level', {
+      x: bx + boxW / 2 - 18,
+      y: levelY - 10,
+      size: 13,
+      color: '#94a3b8',
+      align: 'center',
+    });
 
     // Animated level number: grows as it counts up
     const numScale = isCountingUp ? 1.0 + Math.sin(progress * Math.PI) * 0.5 : 1.0;
@@ -175,13 +183,16 @@ export class AbilityLevelUpDialog {
 
     // Perk for the new level
     if (this.phase === 'done' && perk) {
-      ctx.fillStyle = '#c4b5fd';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
       const descY = levelY + 22;
-      for (let i = 0; i < perkLines.length; i++) {
-        ctx.fillText(perkLines[i] ?? '', bx + boxW / 2, descY + i * 15);
-      }
+      drawText(ctx, perk.description, {
+        x: bx + 20,
+        y: descY - 9,
+        size: 11,
+        color: '#c4b5fd',
+        align: 'center',
+        width: boxW - 40,
+        lineHeight: 15,
+      });
     }
 
     // OK button (only shown when animation is complete)
@@ -197,12 +208,14 @@ export class AbilityLevelUpDialog {
       ctx.strokeStyle = '#a855f7';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(btnX, btnY, btnW, btnH);
-      ctx.fillStyle = '#ede9fe';
-      ctx.font = 'bold 13px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('OK', btnX + btnW / 2, btnY + btnH / 2 + 5);
+      drawText(ctx, 'OK', {
+        x: btnX + btnW / 2,
+        y: btnY + btnH / 2 + 5 - 10,
+        size: 13,
+        bold: true,
+        color: '#ede9fe',
+        align: 'center',
+      });
     }
-
-    ctx.textAlign = 'left';
   }
 }

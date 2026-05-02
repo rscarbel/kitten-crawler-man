@@ -8,6 +8,7 @@ import {
   drawBenchPressFloor,
   drawTreadmillFloor,
 } from '../sprites/gymEquipmentSprite';
+import { drawText } from '../ui/TextBox';
 
 export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
@@ -228,14 +229,16 @@ export class BarrierSystem implements GameSystem {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // Label
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#60a5fa';
-    ctx.font = 'bold 9px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('PLACING...', cx, cy + radius + 14);
-    ctx.textAlign = 'left';
-
     ctx.restore();
+
+    // Label
+    drawText(ctx, 'PLACING...', {
+      x: cx,
+      y: cy + radius + 14 - 7,
+      size: 9,
+      bold: true,
+      color: '#60a5fa',
+      align: 'center',
+    });
   }
 }

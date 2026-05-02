@@ -1,6 +1,6 @@
 import type { AbilityManager, AbilityDef, AbilityId } from '../../core/AbilityManager';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
-import { wrapTextLines } from '../canvasUtils';
+import { drawText, measureTextBox } from '../TextBox';
 
 type AbilitiesView = 'list' | AbilityId;
 
@@ -95,11 +95,14 @@ function renderListView(
   setTab: (tab: PauseTab) => void,
   abilityManager: AbilityManager,
 ): void {
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = 'bold 16px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('Abilities Unlocked', bx + bw / 2, by + 30);
-  ctx.textAlign = 'left';
+  drawText(ctx, 'Abilities Unlocked', {
+    x: bx + bw / 2,
+    y: by + 30 - 13,
+    bold: true,
+    size: 16,
+    color: '#f1f5f9',
+    align: 'center',
+  });
 
   const abilities = abilityManager.getAllRegistered();
   const listAreaTop = by + LIST_HEADER_H;
@@ -108,11 +111,13 @@ function renderListView(
   listContentH = abilities.length * LIST_ROW_H;
 
   if (abilities.length === 0) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '13px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('No abilities unlocked yet.', bx + bw / 2, listAreaTop + 20);
-    ctx.textAlign = 'left';
+    drawText(ctx, 'No abilities unlocked yet.', {
+      x: bx + bw / 2,
+      y: listAreaTop + 20 - 10,
+      size: 13,
+      color: '#64748b',
+      align: 'center',
+    });
   } else {
     ctx.save();
     ctx.beginPath();
@@ -133,22 +138,39 @@ function renderListView(
       const iconX = bx + 16;
       def.renderIcon(ctx, iconX, rowY + 2, iconSize, state.level);
 
-      ctx.fillStyle = '#e2e8f0';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(def.name, iconX + iconSize + 10, rowY + 16);
+      const textX = iconX + iconSize + 10;
+      drawText(ctx, def.name, {
+        x: textX,
+        y: rowY + 16 - 10,
+        bold: true,
+        size: 13,
+        color: '#e2e8f0',
+      });
 
       const ownerLabel = state.owner === 'cat' ? 'Cat' : 'Human';
       const ownerColor = state.owner === 'cat' ? '#38bdf8' : '#fb923c';
+
+      // Measure name width at bold 13px to position ownerLabel after it
+      ctx.save();
+      ctx.font = 'bold 13px monospace';
       const nameWidth = ctx.measureText(def.name).width;
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = ownerColor;
-      ctx.fillText(ownerLabel, iconX + iconSize + 10 + nameWidth + 8, rowY + 15);
+      ctx.restore();
 
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px monospace';
-      ctx.fillText(`Level ${state.level} / ${def.maxLevel}`, iconX + iconSize + 10, rowY + 30);
+      drawText(ctx, ownerLabel, {
+        x: textX + nameWidth + 8,
+        y: rowY + 15 - 8,
+        bold: true,
+        size: 10,
+        color: ownerColor,
+      });
+      drawText(ctx, `Level ${state.level} / ${def.maxLevel}`, {
+        x: textX,
+        y: rowY + 30 - 9,
+        size: 11,
+        color: '#94a3b8',
+      });
 
-      const barX = iconX + iconSize + 10;
+      const barX = textX;
       const barW = bw - iconSize - 90 - SCROLLBAR_W - 4;
       const barH = 6;
       const barY = rowY + 38;
@@ -214,34 +236,45 @@ function renderDetailView(
   const currentLevel = state.level;
 
   // Title
-  ctx.fillStyle = '#e9d5ff';
-  ctx.font = 'bold 15px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(def.name, bx + bw / 2, by + 24);
-  ctx.textAlign = 'left';
+  drawText(ctx, def.name, {
+    x: bx + bw / 2,
+    y: by + 24 - 12,
+    bold: true,
+    size: 15,
+    color: '#e9d5ff',
+    align: 'center',
+  });
 
   // Owner
   const ownerLabel = state.owner === 'cat' ? 'Cat' : 'Human';
   const ownerColor = state.owner === 'cat' ? '#38bdf8' : '#fb923c';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillStyle = ownerColor;
-  ctx.textAlign = 'center';
-  ctx.fillText(`Owner: ${ownerLabel}`, bx + bw / 2, by + 38);
-  ctx.textAlign = 'left';
+  drawText(ctx, `Owner: ${ownerLabel}`, {
+    x: bx + bw / 2,
+    y: by + 38 - 9,
+    bold: true,
+    size: 11,
+    color: ownerColor,
+    align: 'center',
+  });
 
   // Equip instructions
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`How to equip: ${def.equipInstructions}`, bx + bw / 2, by + 50);
-  ctx.textAlign = 'left';
+  drawText(ctx, `How to equip: ${def.equipInstructions}`, {
+    x: bx + bw / 2,
+    y: by + 50 - 8,
+    size: 10,
+    color: '#64748b',
+    align: 'center',
+  });
 
   let y = by + 64;
 
   // Level + XP bar
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '12px monospace';
-  ctx.fillText(`Current level: ${currentLevel}`, bx + 16, y);
+  drawText(ctx, `Current level: ${currentLevel}`, {
+    x: bx + 16,
+    y: y - 10,
+    size: 12,
+    color: '#94a3b8',
+  });
   y += 14;
 
   const barX = bx + 16;
@@ -255,13 +288,14 @@ function renderDetailView(
   y += barH + 14;
 
   if (currentLevel < def.maxLevel) {
-    ctx.fillStyle = '#64748b';
-    ctx.font = '10px monospace';
-    ctx.fillText(`XP to next level: ${state.xp} / ${state.xpToNextLevel}`, bx + 16, y);
+    drawText(ctx, `XP to next level: ${state.xp} / ${state.xpToNextLevel}`, {
+      x: bx + 16,
+      y: y - 8,
+      size: 10,
+      color: '#64748b',
+    });
   } else {
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 10px monospace';
-    ctx.fillText('MAX LEVEL', bx + 16, y);
+    drawText(ctx, 'MAX LEVEL', { x: bx + 16, y: y - 8, bold: true, size: 10, color: '#fbbf24' });
   }
   y += 14;
 
@@ -275,9 +309,7 @@ function renderDetailView(
   y += 10;
 
   // Perks heading
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText('Level Perks:', bx + 16, y);
+  drawText(ctx, 'Level Perks:', { x: bx + 16, y: y - 9, bold: true, size: 11, color: '#94a3b8' });
   y += 14;
 
   // Scrollable perks area
@@ -286,17 +318,18 @@ function renderDetailView(
   const perkAreaH = bh - (perkAreaTop - by) - backBtnH;
   const descMaxW = bw - 44 - SCROLLBAR_W - 4;
 
-  // Pre-pass: measure wrapped lines and row heights for each perk
+  // Pre-pass: measure row heights for each perk using measureTextBox
   const perksLayout = def.perks.map((perk) => {
     const unlocked = currentLevel >= perk.level;
     const displayText = unlocked ? perk.description : '???';
-    ctx.font = `${unlocked ? 'bold ' : ''}10px monospace`;
-    const lines = wrapTextLines(ctx, displayText, descMaxW);
-    const rowH = Math.max(
-      DETAIL_PERK_ROW_H,
-      DETAIL_PERK_VPAD * 2 + lines.length * DETAIL_PERK_LINE_H,
-    );
-    return { perk, lines, rowH, unlocked };
+    const { lineCount } = measureTextBox(ctx, displayText, {
+      size: 10,
+      bold: unlocked,
+      width: descMaxW,
+      lineHeight: DETAIL_PERK_LINE_H,
+    });
+    const rowH = Math.max(DETAIL_PERK_ROW_H, DETAIL_PERK_VPAD * 2 + lineCount * DETAIL_PERK_LINE_H);
+    return { perk, rowH, unlocked, displayText };
   });
 
   detailViewportH = perkAreaH;
@@ -308,7 +341,7 @@ function renderDetailView(
   ctx.clip();
 
   let perkY = perkAreaTop - detailScrollY;
-  for (const { perk, lines, rowH, unlocked } of perksLayout) {
+  for (const { perk, rowH, unlocked, displayText } of perksLayout) {
     const isNew = perk.level === currentLevel;
 
     if (isNew) {
@@ -320,20 +353,27 @@ function renderDetailView(
     const badgeY = perkY + Math.floor((rowH - 18) / 2);
     ctx.fillStyle = unlocked ? '#7c3aed' : '#334155';
     ctx.fillRect(bx + 10, badgeY, 22, 18);
-    ctx.fillStyle = unlocked ? '#ede9fe' : '#64748b';
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(perk.level), bx + 21, badgeY + 13);
-    ctx.textAlign = 'left';
+    drawText(ctx, String(perk.level), {
+      x: bx + 21,
+      y: badgeY + 13 - 8,
+      bold: true,
+      size: 10,
+      color: unlocked ? '#ede9fe' : '#64748b',
+      align: 'center',
+    });
 
-    // Description lines
-    ctx.fillStyle = unlocked ? '#e2e8f0' : '#475569';
-    ctx.font = `${unlocked ? 'bold ' : ''}10px monospace`;
+    // Description — word-wrapped via drawText
     const descX = bx + 38;
-    const firstLineBaseline = perkY + DETAIL_PERK_VPAD + DETAIL_PERK_LINE_H;
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i] ?? '', descX, firstLineBaseline + i * DETAIL_PERK_LINE_H);
-    }
+    const firstLineTop = perkY + DETAIL_PERK_VPAD;
+    drawText(ctx, displayText, {
+      x: descX,
+      y: firstLineTop,
+      size: 10,
+      bold: unlocked,
+      color: unlocked ? '#e2e8f0' : '#475569',
+      width: descMaxW,
+      lineHeight: DETAIL_PERK_LINE_H,
+    });
 
     perkY += rowH;
   }
@@ -354,11 +394,13 @@ function renderDetailView(
 
     // Scroll hint
     if (detailScrollY === 0) {
-      ctx.fillStyle = 'rgba(148,163,184,0.7)';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('scroll ↓', bx + bw - SCROLLBAR_W / 2 - 2, perkAreaTop + perkAreaH - 4);
-      ctx.textAlign = 'left';
+      drawText(ctx, 'scroll ↓', {
+        x: bx + bw - SCROLLBAR_W / 2 - 2,
+        y: perkAreaTop + perkAreaH - 4 - 7,
+        size: 9,
+        color: 'rgba(148,163,184,0.7)',
+        align: 'center',
+      });
     }
   }
 
