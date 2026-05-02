@@ -7,6 +7,7 @@ import { aiAdapter } from './ai/AIAdapter';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
+import { loadSprites } from './core/SpriteLoader';
 
 const input = new InputManager();
 const authClient = new AuthClient();
@@ -21,6 +22,8 @@ function launchGame(options?: DungeonSceneOptions): void {
 }
 
 (async () => {
+  await loadSprites();
+
   try {
     await authClient.getMe();
   } catch (err: unknown) {

@@ -117,7 +117,7 @@ export class Rat extends Mob {
         ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
         : 0;
 
-    drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim);
+    drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim, this.facingX);
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);

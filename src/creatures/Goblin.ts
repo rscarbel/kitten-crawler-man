@@ -155,11 +155,10 @@ export class Goblin extends Mob {
       sy,
       tileSize,
       this.weapon,
-      this.skinColor,
-      this.eyeColor,
       this.walkFrame,
       this.isMoving,
       attackAnim,
+      this.facingX,
     );
 
     this.renderMobHealthBar(ctx, sx, sy);

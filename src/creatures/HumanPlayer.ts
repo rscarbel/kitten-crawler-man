@@ -122,7 +122,17 @@ export class HumanPlayer extends Player {
     }
 
     const isKicking = this.attackTimer > 0 && this.attackPhase === 'kick';
-    drawHumanSprite(ctx, sx, sy, s, isKicking, this.walkFrame, this.isMoving, this.facingY);
+    drawHumanSprite(
+      ctx,
+      sx,
+      sy,
+      s,
+      isKicking,
+      this.walkFrame,
+      this.isMoving,
+      this.facingY,
+      this.facingX,
+    );
 
     if (this.attackTimer > 0 && this.attackPhase) {
       drawHumanAttack(

@@ -215,7 +215,7 @@ export class Llama extends Mob {
     const spitAnim =
       this.spitAnimTimer > 0 ? Math.sin((1 - this.spitAnimTimer / SPIT_ANIM_FRAMES) * Math.PI) : 0;
 
-    drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim);
+    drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim, this.facingX);
 
     this.renderMobHealthBar(ctx, sx, sy);
     this.renderDamageFlash(ctx, sx, sy);
