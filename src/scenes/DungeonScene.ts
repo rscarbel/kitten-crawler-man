@@ -41,6 +41,7 @@ import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSn
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { AbilityManager } from '../core/AbilityManager';
+import type { AbilityId, AbilityState } from '../core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
@@ -151,6 +152,24 @@ export class DungeonScene extends GameplayScene {
   private floorEntryHumanAchievements!: AchievementManager;
   private floorEntryCatAchievements!: AchievementManager;
   private floorEntryAbilityManager!: AbilityManager;
+
+  private _godModeSnapshot: null | {
+    human: {
+      strength: number;
+      intelligence: number;
+      constitution: number;
+      maxHp: number;
+      speedMultiplier: number;
+    };
+    cat: {
+      strength: number;
+      intelligence: number;
+      constitution: number;
+      maxHp: number;
+      speedMultiplier: number;
+    };
+    abilityLevels: Map<AbilityId, AbilityState>;
+  } = null;
 
   // Misc state
   private gameOver = false;
@@ -633,16 +652,58 @@ export class DungeonScene extends GameplayScene {
       `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`;
     this.playerChat.open(this.sceneManager.canvas, (text) => {
       if (text.trim() === '!god') {
-        for (const p of [this.human, this.cat]) {
-          p.strength = 300;
-          p.intelligence = 300;
-          p.constitution = 300;
-          p.maxHp = 300;
-          p.hp = 300;
-          p.godMode = true;
-          p.speedMultiplier = 2;
+        if (this._godModeSnapshot !== null) {
+          const { human: hs, cat: cs, abilityLevels } = this._godModeSnapshot;
+          this.human.strength = hs.strength;
+          this.human.intelligence = hs.intelligence;
+          this.human.constitution = hs.constitution;
+          this.human.maxHp = hs.maxHp;
+          this.human.hp = Math.min(this.human.hp, hs.maxHp);
+          this.human.speedMultiplier = hs.speedMultiplier;
+          this.cat.strength = cs.strength;
+          this.cat.intelligence = cs.intelligence;
+          this.cat.constitution = cs.constitution;
+          this.cat.maxHp = cs.maxHp;
+          this.cat.hp = Math.min(this.cat.hp, cs.maxHp);
+          this.cat.speedMultiplier = cs.speedMultiplier;
+          this.abilityManager.restoreStates(abilityLevels);
+          this._godModeSnapshot = null;
+          this.human.godMode = false;
+          this.cat.godMode = false;
+          this.playerChat.showBubble('⚡ GOD MODE OFF');
+        } else {
+          this._godModeSnapshot = {
+            human: {
+              strength: this.human.strength,
+              intelligence: this.human.intelligence,
+              constitution: this.human.constitution,
+              maxHp: this.human.maxHp,
+              speedMultiplier: this.human.speedMultiplier,
+            },
+            cat: {
+              strength: this.cat.strength,
+              intelligence: this.cat.intelligence,
+              constitution: this.cat.constitution,
+              maxHp: this.cat.maxHp,
+              speedMultiplier: this.cat.speedMultiplier,
+            },
+            abilityLevels: this.abilityManager.snapshotStates(),
+          };
+          for (const p of [this.human, this.cat]) {
+            p.strength += 300;
+            p.intelligence += 300;
+            p.constitution += 300;
+            p.maxHp += 300;
+            p.hp += 300;
+            p.godMode = true;
+            p.speedMultiplier = 2;
+          }
+          const godAbilityIds: AbilityId[] = ['magic_missile', 'protective_shell'];
+          for (const id of godAbilityIds) {
+            this.abilityManager.setLevel(id, 15);
+          }
+          this.playerChat.showBubble('⚡ GOD MODE ON');
         }
-        this.playerChat.showBubble('⚡ GOD MODE');
         return;
       }
       this.playerChat.showBubble(text);

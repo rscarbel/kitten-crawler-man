@@ -186,17 +186,18 @@ export abstract class Player {
     });
   }
 
-  /** Register (or overwrite) a named regen multiplier. Pass 1 to effectively disable it without removing. */
+  /** Register (or overwrite) a named regen bonus. Value is a multiplier where 1 = no effect; bonuses above 1 stack additively. */
   setRegenModifier(key: string, multiplier: number): void {
     this._regenModifiers.set(key, multiplier);
   }
 
-  /** Remove a named regen multiplier. No-op if the key was never set. */
+  /** Remove a named regen bonus. No-op if the key was never set. */
   clearRegenModifier(key: string): void {
     this._regenModifiers.delete(key);
   }
 
-  /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers. */
+  /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
+   *  Item modifiers stack multiplicatively; _regenModifiers bonuses (value − 1) stack additively on top. */
   get regenMultiplier(): number {
     let result = 1;
     for (const item of this.inventory.equippedItems()) {
@@ -204,7 +205,7 @@ export abstract class Player {
       if (m !== undefined) result *= m;
     }
     for (const m of this._regenModifiers.values()) {
-      result *= m;
+      result += m - 1;
     }
     return result;
   }

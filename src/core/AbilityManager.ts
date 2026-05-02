@@ -170,6 +170,33 @@ export class AbilityManager {
     return [...this.defs.values()];
   }
 
+  /** Directly set ability level, bypassing XP. Does not fire onLevelUp. */
+  setLevel(id: AbilityId, level: number): void {
+    const state = this.states.get(id);
+    const def = this.defs.get(id);
+    if (!state || !def) return;
+    const clamped = Math.max(1, Math.min(level, def.maxLevel));
+    state.level = clamped;
+    state.xp = 0;
+    state.xpToNextLevel = xpToNextLevel(def, clamped);
+  }
+
+  /** Snapshot current ability states for later restoration. */
+  snapshotStates(): Map<AbilityId, AbilityState> {
+    const snap = new Map<AbilityId, AbilityState>();
+    for (const [id, state] of this.states) {
+      snap.set(id, { ...state });
+    }
+    return snap;
+  }
+
+  /** Restore ability states from a snapshot produced by snapshotStates(). */
+  restoreStates(snap: Map<AbilityId, AbilityState>): void {
+    for (const [id, saved] of snap) {
+      this.states.set(id, { ...saved });
+    }
+  }
+
   /** Return a deep clone of this manager (used to snapshot ability state at floor entry). */
   clone(): AbilityManager {
     const copy = new AbilityManager();
