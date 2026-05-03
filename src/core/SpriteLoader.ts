@@ -1,8 +1,14 @@
 import manifestJson from '../images/manifest.json';
+import { TILE_SIZE } from './constants';
 
 export interface SpriteStateDef {
   readonly row: number;
   readonly frameCount: number;
+}
+
+export interface TileOffset {
+  readonly dx: number;
+  readonly dy: number;
 }
 
 export interface SpriteManifestEntry {
@@ -12,6 +18,10 @@ export interface SpriteManifestEntry {
   readonly tileX: number;
   readonly tileY: number;
   readonly tileScale: number;
+  /** Tile type ID this sprite represents (enables collision lookup via getBlockedTileOffsets). */
+  readonly tileTypeId?: number;
+  /** Tile offsets (relative to this sprite's tile) that should also be non-walkable. */
+  readonly blockedTileOffsets?: ReadonlyArray<TileOffset>;
   readonly states: Readonly<Record<string, SpriteStateDef>>;
 }
 
@@ -83,4 +93,37 @@ export async function loadSprites(base = 'src/images/'): Promise<void> {
 /** Returns the loaded SpriteDef for the given key, or undefined if not yet loaded. */
 export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
   return _defs.get(key);
+}
+
+// Both maps below are built synchronously from manifest JSON — no image loading required.
+
+const _tileBlockedOffsets = new Map<number, ReadonlyArray<TileOffset>>();
+const _tileSortYAnchorPx = new Map<number, number>();
+
+for (const entry of Object.values(_manifest)) {
+  if (entry.tileTypeId === undefined) continue;
+  if (entry.blockedTileOffsets !== undefined) {
+    _tileBlockedOffsets.set(entry.tileTypeId, entry.blockedTileOffsets);
+  }
+  // Sort Y anchor: how far below the tile's top edge the sprite's visual foot sits.
+  // Derived from manifest geometry so no extra field is needed.
+  const anchorPx = (entry.frameHeight - entry.tileY) * (TILE_SIZE / entry.tileScale);
+  _tileSortYAnchorPx.set(entry.tileTypeId, anchorPx);
+}
+
+/**
+ * Returns the extra blocked tile offsets (relative to a tile's own position)
+ * declared in the manifest for the given tile type ID. Empty array if none.
+ */
+export function getBlockedTileOffsets(tileTypeId: number): ReadonlyArray<TileOffset> {
+  return _tileBlockedOffsets.get(tileTypeId) ?? [];
+}
+
+/**
+ * Returns how many game-pixels below the tile's top edge the sprite's visual
+ * foot sits, used as the Y-sort anchor for the decoration overlay pass.
+ * Returns undefined for tile types not registered in the manifest.
+ */
+export function getSortYAnchorPx(tileTypeId: number): number | undefined {
+  return _tileSortYAnchorPx.get(tileTypeId);
 }

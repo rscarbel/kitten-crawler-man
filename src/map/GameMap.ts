@@ -31,6 +31,7 @@ import {
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
+import { getBlockedTileOffsets, getSortYAnchorPx } from '../core/SpriteLoader';
 import {
   renderCanvas,
   renderDecorationsOverlay,
@@ -85,6 +86,7 @@ export class GameMap {
   /** When true, the arena door gap tiles are treated as unwalkable. */
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
+  private extraBlockedTiles = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
   private _overlayCache: OverlayTileCache | null = null;
 
@@ -109,6 +111,7 @@ export class GameMap {
       hasArena,
       bossTypes,
     );
+    this.buildExtraBlockedTiles();
   }
 
   private generate(
@@ -577,6 +580,7 @@ export class GameMap {
     grid[h - 1][doorX + 1].type = 1;
 
     this.structure = grid;
+    this.buildExtraBlockedTiles();
     this.startTile = { x: Math.floor(w / 2), y: h - 2 };
     this.stairwellTiles = [];
     this.buildingEntries = [];
@@ -837,12 +841,26 @@ export class GameMap {
     return [];
   }
 
+  private buildExtraBlockedTiles(): void {
+    this.extraBlockedTiles.clear();
+    for (let ty = 0; ty < this.structure.length; ty++) {
+      const row = this.structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        const offsets = getBlockedTileOffsets(row[tx].type);
+        for (const { dx, dy } of offsets) {
+          this.extraBlockedTiles.add(`${tx + dx},${ty + dy}`);
+        }
+      }
+    }
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
     const row = this.structure[tileY];
     if (tileX >= row.length) return false;
     const tile = row[tileX];
     if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
+    if (this.extraBlockedTiles.has(`${tileX},${tileY}`)) return false;
     return (
       tile.type !== FloorTypeValue.wall &&
       tile.type !== FloorTypeValue.water &&
@@ -859,7 +877,6 @@ export class GameMap {
       tile.type !== ROOF_CIRCUS_PURPLE &&
       tile.type !== FOUNTAIN &&
       tile.type !== TORCH &&
-      tile.type !== WELL &&
       tile.type !== TABLE &&
       tile.type !== BOOKSHELF &&
       tile.type !== BED &&
@@ -938,7 +955,7 @@ export class GameMap {
     camY: number,
     viewW: number,
     viewH: number,
-  ): Array<{ tx: number; ty: number; isTree: boolean }> {
+  ): Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> {
     const ts = this.tileHeight;
     const rows = this.structure.length;
     const cols = this.structure[0]?.length ?? rows;
@@ -946,7 +963,7 @@ export class GameMap {
     const startY = Math.max(0, Math.floor(camY / ts));
     const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts));
     const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts));
-    const result: Array<{ tx: number; ty: number; isTree: boolean }> = [];
+    const result: Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> = [];
     for (let y = startY; y <= endY; y++) {
       for (let x = startX; x <= endX; x++) {
         const t = this.structure[y][x].type;
@@ -965,7 +982,12 @@ export class GameMap {
           t === ROOF_CIRCUS_BLUE ||
           t === ROOF_CIRCUS_PURPLE
         ) {
-          result.push({ tx: x, ty: y, isTree: t === TREE });
+          result.push({
+            tx: x,
+            ty: y,
+            isTree: t === TREE,
+            sortYAnchorPx: getSortYAnchorPx(t) ?? ts,
+          });
         }
       }
     }

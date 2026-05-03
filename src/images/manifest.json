@@ -622,7 +622,7 @@
   "quest_npc": {
     "path": "npcs/quest_npc.png",
     "frameWidth": 96,
-    "frameHeight": 128,
+    "frameHeight": 200,
     "tileX": 16,
     "tileY": 16,
     "tileScale": 64,
@@ -1619,11 +1619,13 @@
   },
   "well": {
     "path": "environment/well.png",
-    "frameWidth": 64,
-    "frameHeight": 128,
+    "frameWidth": 114,
+    "frameHeight": 125,
     "tileX": 0,
-    "tileY": 64,
+    "tileY": 114,
     "tileScale": 64,
+    "tileTypeId": 21,
+    "blockedTileOffsets": [{ "dx": 0, "dy": -1 }, { "dx": 1, "dy": -1 }],
     "states": {
       "idle": {
         "row": 0,
