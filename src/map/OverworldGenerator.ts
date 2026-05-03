@@ -168,52 +168,19 @@ export function generateOverworld(size: number): OverworldData {
     setRoad(storeDoorX + 1, ry);
   }
 
-  // 7. Small houses around town square
-  const rng = randomInt;
-  const houseAngles = [0, 36, 72, 108, 144, 180, 216, 252, 288, 324];
-  const houseRoofs = [
-    ROOF_THATCH,
-    ROOF_RED,
-    ROOF_GREEN,
-    ROOF_THATCH,
-    ROOF_RED,
-    ROOF_GREEN,
-    ROOF_THATCH,
-    ROOF_RED,
-    ROOF_THATCH,
-    ROOF_RED,
-    ROOF_GREEN,
-    ROOF_THATCH,
-  ];
-  const placedHouses: Array<{ x: number; y: number; w: number; h: number }> = [];
-  let houseIdx = 0;
-  for (let attempt = 0; attempt < 200 && houseIdx < 10; attempt++) {
-    const angle = (houseAngles[houseIdx] + rng(-15, 15)) * (Math.PI / 180);
-    const dist = rng(16, 40);
-    const hw = rng(5, 7);
-    const hh = rng(3, 4);
-    const hx = cx + Math.round(Math.cos(angle) * dist) - Math.floor(hw / 2);
-    const hy = cy + Math.round(Math.sin(angle) * dist) - Math.floor(hh / 2);
-    // Check bounds
-    if (hx < BORDER + 2 || hx + hw > size - BORDER - 2) continue;
-    if (hy < BORDER + 2 || hy + hh > size - BORDER - 2) continue;
-    // Collision check with existing buildings and roads near center
-    const pad = 3;
-    const overlaps = [...buildings, ...placedHouses].some(
-      (b) =>
-        hx < b.x + b.w + pad && hx + hw + pad > b.x && hy < b.y + b.h + pad && hy + hh + pad > b.y,
-    );
-    if (overlaps) continue;
-    placeBuilding(hx, hy, hw, hh, 'house', 'Enter', houseRoofs[houseIdx]);
-    placedHouses.push({ x: hx, y: hy, w: hw, h: hh });
+  // 7. Named village buildings at fixed positions
+  // placeStructure: non-enterable companion structure (shed, stable, barn, forge)
+  const placeStructure = (bx: number, by: number, bw: number, bh: number, roofTile: number) => {
+    for (let dy = 0; dy < bh; dy++)
+      for (let dx = 0; dx < bw; dx++)
+        set(bx + dx, by + dy, dy === 0 || dy === bh - 1 ? BUILDING_WALL : roofTile);
+    buildings.push({ x: bx, y: by, w: bw, h: bh });
+  };
 
-    // Minor branch road connecting house door to nearest main road (L-shape, 3 wide)
-    const doorX = hx + Math.floor(hw / 2) - 1;
-    const doorY = hy + hh - 1;
-    // Determine whether to route toward E-W or N-S road
-    const toEW = Math.abs(doorY - cy) < Math.abs(doorX - cx);
+  // connectToRoad: draw an L-shaped 2–3-tile-wide road from a door to the nearest main road
+  const connectToRoad = (doorX: number, doorY: number) => {
+    const toEW = Math.abs(doorY - cy) <= Math.abs(doorX - cx);
     if (toEW) {
-      // Go south/north to the E-W road
       const targetY = doorY < cy ? cy - 2 : cy + 4;
       const minY = Math.min(doorY, targetY);
       const maxY = Math.max(doorY, targetY);
@@ -223,7 +190,6 @@ export function generateOverworld(size: number): OverworldData {
         setRoad(doorX + 2, ry);
       }
     } else {
-      // Go east/west to the N-S road
       const targetX = doorX < cx ? cx - 2 : cx + 4;
       const minX = Math.min(doorX, targetX);
       const maxX = Math.max(doorX, targetX);
@@ -231,7 +197,6 @@ export function generateOverworld(size: number): OverworldData {
         setRoad(rx, doorY);
         setRoad(rx, doorY + 1);
       }
-      // Then jog to doorY
       const minY2 = Math.min(doorY, cy - 2);
       const maxY2 = Math.max(doorY, cy + 4);
       for (let ry = minY2; ry <= maxY2; ry++) {
@@ -239,9 +204,52 @@ export function generateOverworld(size: number): OverworldData {
         setRoad(doorX + 1, ry);
       }
     }
+  };
 
-    houseIdx++;
-  }
+  // ── Shepherd's Cabin — NW outskirts: cottage + hay-storage lean-to ──
+  placeBuilding(cx - 25, cy - 45, 10, 5, 'house', "Shepherd's Cabin", ROOF_THATCH);
+  placeStructure(cx - 14, cy - 44, 6, 4, ROOF_THATCH); // lean-to shed
+  connectToRoad(cx - 25 + 4, cy - 45 + 5 - 1);
+
+  // ── Blackwood Barracks — NE outskirts: wide hall, looks imposing ──
+  placeBuilding(cx + 18, cy - 36, 14, 6, 'house', 'Blackwood Barracks', ROOF_SLATE);
+  connectToRoad(cx + 18 + 6, cy - 36 + 6 - 1);
+
+  // ── Old Hilda's Cottage — W mid: mossy green witch cottage ──
+  placeBuilding(cx - 42, cy - 28, 10, 5, 'house', "Old Hilda's Cottage", ROOF_GREEN);
+  connectToRoad(cx - 42 + 4, cy - 28 + 5 - 1);
+
+  // ── Cartwright's Workshop — E mid: main shop + separate storage shed to north ──
+  placeStructure(cx + 30, cy - 28, 6, 5, ROOF_SLATE); // storage shed
+  placeBuilding(cx + 30, cy - 22, 12, 5, 'house', "Cartwright's Workshop", ROOF_SLATE);
+  connectToRoad(cx + 30 + 5, cy - 22 + 5 - 1);
+
+  // ── Herb & Remedy — W near-town: apothecary just west of south road ──
+  placeBuilding(cx - 30, cy + 14, 10, 5, 'house', 'Herb & Remedy', ROOF_GREEN);
+  connectToRoad(cx - 30 + 4, cy + 14 + 5 - 1);
+
+  // ── The Sleeping Cat Inn — S near-town: large inn + stable behind it ──
+  placeBuilding(cx - 18, cy + 16, 14, 6, 'house', 'The Sleeping Cat Inn', ROOF_THATCH);
+  placeStructure(cx - 18, cy + 23, 8, 5, ROOF_THATCH); // stable
+  connectToRoad(cx - 18 + 6, cy + 16 + 6 - 1);
+
+  // ── The Rusty Anvil — SE near-town: forge building + open-air work shed ──
+  placeBuilding(cx + 14, cy + 16, 12, 5, 'house', 'The Rusty Anvil', ROOF_RED);
+  placeStructure(cx + 27, cy + 16, 7, 5, ROOF_RED); // forge shed
+  connectToRoad(cx + 14 + 5, cy + 16 + 5 - 1);
+
+  // ── Miller's Farm — SW outskirts: farmhouse + large barn ──
+  placeBuilding(cx - 38, cy + 24, 10, 5, 'house', "Miller's Farm", ROOF_THATCH);
+  placeStructure(cx - 27, cy + 24, 8, 5, ROOF_THATCH); // barn
+  connectToRoad(cx - 38 + 4, cy + 24 + 5 - 1);
+
+  // ── The Wanderer's Rest — SE outskirts: plain roadside dormitory ──
+  placeBuilding(cx + 28, cy + 26, 10, 5, 'house', "The Wanderer's Rest", ROOF_THATCH);
+  connectToRoad(cx + 28 + 4, cy + 26 + 5 - 1);
+
+  // ── The Sunken Stump Pub — S central: large pub west of N-S road ──
+  placeBuilding(cx - 20, cy + 32, 14, 6, 'house', 'The Sunken Stump Pub', ROOF_RED);
+  connectToRoad(cx - 20 + 6, cy + 32 + 6 - 1);
 
   // 7b. Circus — cluster of tents 60+ tiles from town center
   {

@@ -265,8 +265,182 @@ export class GameMap {
       grid[3][10].type = BARREL;
     }
 
-    // ── House furniture (skip carnival Big Top) ──
-    if (isHouse && !isCarnival) {
+    // ── Named building interiors — each has a unique hand-crafted layout ──
+    const NAMED_BUILDINGS = [
+      "Shepherd's Cabin",
+      'Blackwood Barracks',
+      "Old Hilda's Cottage",
+      "Cartwright's Workshop",
+      'Herb & Remedy',
+      'The Sleeping Cat Inn',
+      'The Rusty Anvil',
+      "Miller's Farm",
+      "The Wanderer's Rest",
+      'The Sunken Stump Pub',
+    ] as const;
+    const isNamedBuilding = NAMED_BUILDINGS.some((n) => n === buildingName);
+
+    if (isHouse && isNamedBuilding) {
+      switch (buildingName) {
+        case "Shepherd's Cabin":
+          // Rustic shepherd's dwelling — hearth, simple cot, supply barrels
+          grid[1][4].type = FIREPLACE;
+          grid[1][5].type = FIREPLACE;
+          grid[2][14].type = BED; grid[2][15].type = BED;
+          grid[3][14].type = BED; grid[3][15].type = BED;
+          grid[4][1].type = BARREL; grid[5][1].type = BARREL; grid[6][1].type = BARREL;
+          grid[7][8].type = TABLE; grid[7][9].type = TABLE;
+          grid[8][8].type = CHAIR;
+          grid[11][1].type = CRATE; grid[11][2].type = CRATE;
+          grid[10][15].type = BARREL_SIDE;
+          break;
+
+        case 'Blackwood Barracks':
+          // Military barracks — rows of bunks, briefing table, crate storage
+          grid[2][1].type = BED;  grid[2][2].type = BED;
+          grid[3][1].type = BED;  grid[3][2].type = BED;
+          grid[5][1].type = BED;  grid[5][2].type = BED;
+          grid[6][1].type = BED;  grid[6][2].type = BED;
+          grid[2][14].type = BED; grid[2][15].type = BED;
+          grid[3][14].type = BED; grid[3][15].type = BED;
+          grid[5][14].type = BED; grid[5][15].type = BED;
+          grid[6][14].type = BED; grid[6][15].type = BED;
+          grid[7][7].type = TABLE; grid[7][8].type = TABLE; grid[7][9].type = TABLE;
+          grid[8][7].type = CHAIR; grid[8][9].type = CHAIR;
+          grid[10][1].type = CRATE;  grid[11][1].type = CRATE;
+          grid[10][15].type = CRATE; grid[11][15].type = CRATE;
+          grid[11][8].type = BARREL;
+          break;
+
+        case "Old Hilda's Cottage":
+          // Witch's lair — cauldron braziers, dense spell-book shelves, work table
+          grid[1][8].type = BRAZIER; grid[1][9].type = BRAZIER;
+          for (let ry = 2; ry <= 7; ry++) grid[ry][1].type = BOOKSHELF;
+          for (let ry = 2; ry <= 5; ry++) grid[ry][16].type = BOOKSHELF;
+          grid[5][7].type = TABLE; grid[5][8].type = TABLE;
+          grid[6][7].type = CHAIR;
+          grid[8][1].type = BARREL; grid[9][1].type = BARREL;
+          grid[9][8].type = BARREL_SIDE; grid[9][9].type = BARREL_SIDE;
+          grid[11][13].type = CRATE; grid[11][14].type = CRATE;
+          break;
+
+        case "Cartwright's Workshop":
+          // Builder's shop — dual north workbenches, raw material crates, scattered supplies
+          for (let rx = 3; rx <= 7; rx++)  grid[2][rx].type = TABLE;
+          for (let rx = 10; rx <= 14; rx++) grid[2][rx].type = TABLE;
+          for (let ry = 4; ry <= 7; ry++) grid[ry][1].type = CRATE;
+          for (let ry = 4; ry <= 6; ry++) grid[ry][16].type = BARREL;
+          grid[8][4].type = BARREL_SIDE; grid[8][5].type = BARREL_SIDE;
+          grid[8][11].type = BARREL_SIDE; grid[8][12].type = BARREL_SIDE;
+          grid[5][8].type = TABLE; grid[5][9].type = TABLE;
+          grid[6][8].type = CHAIR;
+          grid[11][1].type = BARREL; grid[11][2].type = BARREL;
+          grid[11][14].type = CRATE; grid[11][15].type = CRATE;
+          break;
+
+        case 'Herb & Remedy':
+          // Apothecary — counter, dense ingredient shelves, display table
+          for (let rx = 5; rx <= 13; rx++) grid[2][rx].type = FloorTypeValue.wall;
+          for (let ry = 3; ry <= 7; ry++) grid[ry][1].type = BOOKSHELF;
+          for (let ry = 3; ry <= 6; ry++) grid[ry][16].type = BOOKSHELF;
+          grid[3][14].type = BARREL; grid[3][15].type = BARREL;
+          grid[4][14].type = BARREL;
+          for (let rx = 4; rx <= 12; rx++) { grid[4][rx].type = RUG; grid[5][rx].type = RUG; }
+          grid[8][7].type = TABLE; grid[8][8].type = TABLE;
+          grid[8][3].type = BARREL_SIDE;
+          break;
+
+        case 'The Sleeping Cat Inn':
+          // Cozy inn — west & east guest rooms, common dining area, innkeeper desk
+          grid[1][8].type = FIREPLACE; grid[1][9].type = FIREPLACE;
+          grid[2][1].type = BED;  grid[2][2].type = BED;
+          grid[3][1].type = BED;  grid[3][2].type = BED;
+          grid[5][1].type = BED;  grid[5][2].type = BED;
+          grid[6][1].type = BED;  grid[6][2].type = BED;
+          grid[2][14].type = BED; grid[2][15].type = BED;
+          grid[3][14].type = BED; grid[3][15].type = BED;
+          grid[5][14].type = BED; grid[5][15].type = BED;
+          grid[6][14].type = BED; grid[6][15].type = BED;
+          for (let rx = 4; rx <= 13; rx++) grid[4][rx].type = RUG;
+          grid[7][4].type = TABLE; grid[7][5].type = TABLE;
+          grid[8][4].type = CHAIR; grid[8][5].type = CHAIR;
+          grid[7][11].type = TABLE; grid[7][12].type = TABLE;
+          grid[8][11].type = CHAIR; grid[8][12].type = CHAIR;
+          grid[6][7].type = TABLE; grid[6][8].type = TABLE; grid[6][9].type = TABLE;
+          grid[7][7].type = CHAIR;
+          grid[11][1].type = BARREL; grid[11][2].type = BARREL;
+          break;
+
+        case 'The Rusty Anvil':
+          // Blacksmith — twin forge braziers, anvil tables, raw material crates
+          grid[1][3].type = BRAZIER; grid[1][4].type = BRAZIER;
+          grid[1][13].type = BRAZIER; grid[1][14].type = BRAZIER;
+          grid[3][3].type = TABLE; grid[3][4].type = TABLE;
+          grid[3][13].type = TABLE; grid[3][14].type = TABLE;
+          for (let ry = 5; ry <= 9; ry++) grid[ry][1].type = CRATE;
+          grid[5][16].type = BARREL; grid[6][16].type = BARREL; grid[7][16].type = BARREL;
+          grid[5][7].type = BARREL_SIDE; grid[5][8].type = BARREL_SIDE;
+          grid[5][9].type = BARREL_SIDE; grid[5][10].type = BARREL_SIDE;
+          grid[4][7].type = CHAIR;
+          grid[11][1].type = CRATE; grid[11][2].type = CRATE;
+          grid[11][14].type = BARREL; grid[11][15].type = BARREL;
+          break;
+
+        case "Miller's Farm":
+          // Farmhouse — hearth, single bed, harvest crates along east wall
+          grid[1][2].type = FIREPLACE; grid[1][3].type = FIREPLACE;
+          grid[2][14].type = BED; grid[2][15].type = BED;
+          grid[3][14].type = BED; grid[3][15].type = BED;
+          grid[4][1].type = BARREL; grid[5][1].type = BARREL; grid[6][1].type = BARREL;
+          grid[4][16].type = CRATE; grid[5][16].type = CRATE;
+          grid[6][16].type = CRATE; grid[7][16].type = CRATE;
+          grid[8][7].type = TABLE; grid[8][8].type = TABLE;
+          grid[9][7].type = CHAIR; grid[9][8].type = CHAIR;
+          grid[10][1].type = BARREL_SIDE; grid[11][1].type = BARREL_SIDE;
+          break;
+
+        case "The Wanderer's Rest":
+          // Budget dormitory — wall-to-wall bunks, minimal communal table
+          grid[2][1].type = BED;  grid[2][2].type = BED;
+          grid[3][1].type = BED;  grid[3][2].type = BED;
+          grid[5][1].type = BED;  grid[5][2].type = BED;
+          grid[6][1].type = BED;  grid[6][2].type = BED;
+          grid[8][1].type = BED;  grid[8][2].type = BED;
+          grid[9][1].type = BED;  grid[9][2].type = BED;
+          grid[2][14].type = BED; grid[2][15].type = BED;
+          grid[3][14].type = BED; grid[3][15].type = BED;
+          grid[5][14].type = BED; grid[5][15].type = BED;
+          grid[6][14].type = BED; grid[6][15].type = BED;
+          grid[6][7].type = TABLE; grid[6][8].type = TABLE; grid[6][9].type = TABLE;
+          grid[7][7].type = CHAIR; grid[7][9].type = CHAIR;
+          grid[11][1].type = BARREL; grid[11][16].type = BARREL;
+          break;
+
+        case 'The Sunken Stump Pub':
+          // Village pub — bar counter, rows of drinking tables, large floor rug
+          for (let rx = 2; rx <= 7; rx++) grid[2][rx].type = FloorTypeValue.wall;
+          grid[3][1].type = BARREL; grid[3][2].type = BARREL;
+          grid[4][1].type = BARREL; grid[4][2].type = BARREL;
+          grid[1][14].type = FIREPLACE; grid[1][15].type = FIREPLACE;
+          grid[6][3].type = TABLE;  grid[6][4].type = TABLE;
+          grid[7][3].type = CHAIR;  grid[7][4].type = CHAIR;
+          grid[6][8].type = TABLE;  grid[6][9].type = TABLE;
+          grid[7][8].type = CHAIR;  grid[7][9].type = CHAIR;
+          grid[6][13].type = TABLE; grid[6][14].type = TABLE;
+          grid[7][13].type = CHAIR; grid[7][14].type = CHAIR;
+          grid[9][5].type = TABLE;  grid[9][6].type = TABLE;
+          grid[10][5].type = CHAIR; grid[10][6].type = CHAIR;
+          grid[9][11].type = TABLE; grid[9][12].type = TABLE;
+          grid[10][11].type = CHAIR; grid[10][12].type = CHAIR;
+          for (let rx = 3; rx <= 15; rx++) grid[5][rx].type = RUG;
+          grid[3][8].type = CHAIR;
+          grid[11][14].type = BARREL_SIDE; grid[11][15].type = BARREL_SIDE;
+          break;
+      }
+    }
+
+    // ── Generic house furniture (unnamed / unnamed overworld houses) ──
+    if (isHouse && !isCarnival && !isNamedBuilding) {
       // Fireplace centered on north wall
       grid[1][8].type = FIREPLACE;
       grid[1][9].type = FIREPLACE;

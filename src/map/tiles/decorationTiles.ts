@@ -11,7 +11,7 @@ import {
   BONES,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
-import { drawTerrainTile } from './terrainTiles';
+import { drawTerrainTile, drawOverworldSprite, overworldFrame, overworldRotation } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
 import { frameTime } from '../../utils';
@@ -377,9 +377,7 @@ export function drawDecorationTile(
 
     // Grassy weed — walkable grass tile with decorative tufts and occasional flowers
     case GRASSY_WEED: {
-      // Same bright grass base
-      ctx.fillStyle = '#6de89d';
-      ctx.fillRect(sx, sy, ts, ts);
+      drawOverworldSprite(ctx, sx, sy, ts, 'grass', overworldFrame(tx, ty), '#6de89d', overworldRotation(tx, ty));
 
       // Deterministic hash from tile position
       const h1 = (tx * 31 + ty * 17) % 97;
@@ -434,9 +432,7 @@ export function drawDecorationTile(
 
     // Dirt patch — walkable road tile with pebble and soil texture
     case DIRT_PATCH: {
-      // Same road base
-      ctx.fillStyle = '#bc926b';
-      ctx.fillRect(sx, sy, ts, ts);
+      drawOverworldSprite(ctx, sx, sy, ts, 'village_streets', overworldFrame(tx, ty), '#bc926b', overworldRotation(tx, ty));
 
       // Deterministic hash from tile position
       const h1 = (tx * 29 + ty * 19) % 97;

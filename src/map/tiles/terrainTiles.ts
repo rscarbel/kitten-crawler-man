@@ -15,7 +15,7 @@ import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
 import { drawSprite } from '../../core/SpriteRenderer';
 
-function tileHash2(tx: number, ty: number): number {
+export function tileHash2(tx: number, ty: number): number {
   return ((Math.imul(tx, 2246822519) ^ Math.imul(ty, 668265263)) >>> 0) % 65536;
 }
 
@@ -27,6 +27,61 @@ function dungeonFloorVariant(tx: number, ty: number): { state: string; frame: nu
 
 function dungeonWallVariant(tx: number, ty: number): { state: string; frame: number } {
   return { state: 'wall_plain', frame: tileHash2(tx, ty) % 8 };
+}
+
+// Weighted frame picker for the overworld tileset — columns 0 and 1 only, ~50/50.
+const OVERWORLD_FRAME_TABLE = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1] as const;
+
+export function overworldFrame(tx: number, ty: number): number {
+  return OVERWORLD_FRAME_TABLE[tileHash2(tx, ty) % OVERWORLD_FRAME_TABLE.length];
+}
+
+// Independent hash for rotation so it doesn't correlate with frame selection.
+export function overworldRotation(tx: number, ty: number): number {
+  const h = ((Math.imul(tx, 1664525) ^ Math.imul(ty, 1013904223)) >>> 0) % 4;
+  return h * (Math.PI / 2);
+}
+
+// Draw an overworld tileset sprite, falling back to a solid fill if not yet loaded.
+// Rotation (radians) is applied around the tile center; use overworldRotation() for variety.
+export function drawOverworldSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  state: string,
+  frame: number,
+  fallbackColor: string,
+  rotation = 0,
+): void {
+  const def = getSpriteDef('overworld_tileset');
+  if (!def) {
+    ctx.fillStyle = fallbackColor;
+    ctx.fillRect(sx, sy, ts, ts);
+    return;
+  }
+  const stateDef = def.states.get(state);
+  if (!stateDef) {
+    ctx.fillStyle = fallbackColor;
+    ctx.fillRect(sx, sy, ts, ts);
+    return;
+  }
+  const { img, frameWidth, frameHeight, tileScale } = def;
+  const scale = ts / tileScale;
+  const clampedFrame = Math.max(0, Math.min(Math.floor(frame), stateDef.frameCount - 1));
+  const srcX = clampedFrame * frameWidth;
+  const srcY = stateDef.row * frameHeight;
+  const dw = frameWidth * scale;
+  const dh = frameHeight * scale;
+  if (rotation === 0) {
+    ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, sx, sy, dw, dh);
+  } else {
+    ctx.save();
+    ctx.translate(sx + ts / 2, sy + ts / 2);
+    ctx.rotate(rotation);
+    ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+  }
 }
 
 // Draw a dungeon tileset sprite, falling back to a solid fill if not yet loaded.
@@ -74,13 +129,11 @@ export function drawTerrainTile(
 
     // Outdoors
     case FloorTypeValue.grass: {
-      ctx.fillStyle = '#6de89d';
-      ctx.fillRect(sx, sy, ts, ts);
+      drawOverworldSprite(ctx, sx, sy, ts, 'grass', overworldFrame(tx, ty), '#6de89d', overworldRotation(tx, ty));
       break;
     }
     case FloorTypeValue.road: {
-      ctx.fillStyle = '#bc926b';
-      ctx.fillRect(sx, sy, ts, ts);
+      drawOverworldSprite(ctx, sx, sy, ts, 'village_streets', overworldFrame(tx, ty), '#bc926b', overworldRotation(tx, ty));
       // Door threshold: roof interior immediately north + building wall on either side
       const rdN = structure[ty - 1]?.[tx]?.type;
       const isDoorTile =
