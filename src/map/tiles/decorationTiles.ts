@@ -11,6 +11,7 @@ import {
   CRATE,
   BRAZIER,
   BONES,
+  MAIN_TOWER,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import {
@@ -46,7 +47,8 @@ export function drawDecorationTile(
       case TORCH:
       case WELL:
       case FOUNTAIN:
-      case BRAZIER: {
+      case BRAZIER:
+      case MAIN_TOWER: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
           drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
@@ -552,6 +554,20 @@ export function drawDecorationTile(
         ctx.fillRect(crx, cry, 1, 5 + (h1 % 6));
         ctx.fillRect(crx, cry, 4 + (h2 % 5), 1);
       }
+      return true;
+    }
+
+    // Main overworld tower — large animated sprite, anchor at door-threshold level
+    case MAIN_TOWER: {
+      drawSpriteKey(
+        ctx,
+        'overworld_main_tower',
+        'normal',
+        timeFrameIndex(frameTime, 4, 4),
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 

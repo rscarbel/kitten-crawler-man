@@ -1073,6 +1073,9 @@ export class DungeonScene extends GameplayScene {
     // Player speech bubble (world-space, semi-transparent so enemies remain visible)
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
+    // Balcony railing overlay — drawn after entities so railings appear in front
+    this.renderPipeline.renderTowerBalconyOverlay(ctx, rc);
+
     // Layer 3: Effects (particles, barriers, spells, dynamite, speech bubbles)
     this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) =>
       UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm),

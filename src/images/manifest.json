@@ -1860,5 +1860,29 @@
         "frameCount": 12
       }
     }
+  },
+  "overworld_main_tower": {
+    "path": "environment/overworld_main_tower.png",
+    "frameWidth": 184,
+    "frameHeight": 700,
+    "tileX": 92,
+    "tileY": 688,
+    "tileScale": 32,
+    "tileTypeId": 44,
+    "blockedRegions": [
+      {"x1": 5, "y1": 656, "x2": 63, "y2": 698},
+      {"x1": 121, "y1": 656, "x2": 182, "y2": 698},
+      {"x1": 11, "y1": 632, "x2": 159, "y2": 655}
+    ],
+    "states": {
+      "normal": {
+        "row": 0,
+        "frameCount": 6
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
   }
 }

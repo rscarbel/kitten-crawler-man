@@ -79,6 +79,8 @@ export const CRATE = 41;
 export const BRAZIER = 42;
 /** Tile type for a pile of bones — walkable, dungeon floor decoration. */
 export const BONES = 43;
+/** Tile type for the overworld main tower — single anchor tile that triggers the full sprite render, walkable. */
+export const MAIN_TOWER = 44;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 

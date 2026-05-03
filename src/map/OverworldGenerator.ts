@@ -16,6 +16,7 @@ import {
   ROOF_CIRCUS_RED,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
+  MAIN_TOWER,
 } from './tileTypes';
 import { randomInt } from '../utils';
 
@@ -37,6 +38,7 @@ export interface OverworldData {
   mobSpawnPoints: Point[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
+  mainTowerAnchor: Point;
 }
 
 export function generateOverworld(size: number): OverworldData {
@@ -138,8 +140,15 @@ export function generateOverworld(size: number): OverworldData {
     });
   };
 
-  // 6. Town center tower (14×6, north of town square)
-  placeBuilding(cx - 7, cy - 21, 14, 6, 'tower', 'Town Center Tower', ROOF_SLATE);
+  // 6. Town center tower — footprint uses the underlying terrain tiles unchanged.
+  // Collision is provided by blockedTileOffsets on the MAIN_TOWER anchor tile in the manifest,
+  // so BUILDING_WALL / ROOF_SLATE tiles are not placed (they would show through transparent sprite areas).
+  buildings.push({ x: cx - 3, y: cy - 36, w: 6, h: 21 });
+  buildingEntries.push({
+    doorTile: { x: cx - 1, y: cy - 16 },
+    name: 'Town Center Tower',
+    type: 'tower',
+  });
 
   // 6b. The Restaurant — safe room building, east of town square, north of E-W road.
   //     Entering triggers a BuildingInteriorScene with a safe-room interior.
@@ -463,6 +472,10 @@ export function generateOverworld(size: number): OverworldData {
     }
   }
 
+  // Place MAIN_TOWER anchor after bypass routing so road stitching cannot overwrite it.
+  set(cx, cy - 15, MAIN_TOWER);
+  const mainTowerAnchor: Point = { x: cx, y: cy - 15 };
+
   // 10. Town decorations: fountain, torches, wells, ground scatter
   // Fountain — 3×3 block in the SE quadrant of the town square
   fill(cx + 4, cy + 4, 3, 3, FOUNTAIN);
@@ -512,5 +525,6 @@ export function generateOverworld(size: number): OverworldData {
     mobSpawnPoints: [],
     hallwaySpawnPoints: [],
     stairwellTiles: [],
+    mainTowerAnchor,
   };
 }

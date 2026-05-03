@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { drawSpriteKey } from '../core/SpriteRenderer';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -215,5 +216,19 @@ export class RenderPipeline {
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
+  }
+
+  /**
+   * Draws the tower balcony railing overlay on top of the Y-sorted entity pass.
+   * This keeps the railing in front of any entity standing on a balcony.
+   */
+  renderTowerBalconyOverlay(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
+    const { camX, camY, gameMap } = rc;
+    const anchor = gameMap.mainTowerAnchor;
+    if (!anchor) return;
+    const sx = anchor.x * TILE_SIZE - camX;
+    const sy = anchor.y * TILE_SIZE - camY;
+    // Frame 4 of the 'normal' state is the undamaged balcony railing overlay
+    drawSpriteKey(ctx, 'overworld_main_tower', 'normal', 4, sx, sy, TILE_SIZE);
   }
 }

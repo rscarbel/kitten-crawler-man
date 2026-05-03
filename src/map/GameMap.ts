@@ -28,6 +28,7 @@ import {
   BARREL_SIDE,
   CRATE,
   BRAZIER,
+  MAIN_TOWER,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
@@ -79,6 +80,8 @@ export class GameMap {
     name: string;
     type: 'house' | 'tower' | 'restaurant' | 'store';
   }> = [];
+  /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
+  mainTowerAnchor: { x: number; y: number } | undefined = undefined;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
   /** Arena circles generated in the dungeon (one per dungeon map). */
@@ -132,6 +135,7 @@ export class GameMap {
       this.mobSpawnPoints = [];
       this.hallwaySpawnPoints = data.hallwaySpawnPoints;
       this.stairwellTiles = data.stairwellTiles;
+      this.mainTowerAnchor = data.mainTowerAnchor;
       return data.grid;
     }
 
@@ -980,7 +984,8 @@ export class GameMap {
           t === ROOF_GREEN ||
           t === ROOF_CIRCUS_RED ||
           t === ROOF_CIRCUS_BLUE ||
-          t === ROOF_CIRCUS_PURPLE
+          t === ROOF_CIRCUS_PURPLE ||
+          t === MAIN_TOWER
         ) {
           result.push({
             tx: x,
