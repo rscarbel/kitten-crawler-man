@@ -58,10 +58,26 @@ export function drawJuicerSprite(
     // Vertical slit pupils (reptile)
     ctx.fillStyle = isEnraged ? '#f97316' : '#1a3a1a';
     ctx.beginPath();
-    ctx.ellipse(headX - eyeOffX + facingX * cs * 0.02, eyeY, cs * 0.02, cs * 0.05, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      headX - eyeOffX + facingX * cs * 0.02,
+      eyeY,
+      cs * 0.02,
+      cs * 0.05,
+      0,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(headX + eyeOffX + facingX * cs * 0.02, eyeY, cs * 0.02, cs * 0.05, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      headX + eyeOffX + facingX * cs * 0.02,
+      eyeY,
+      cs * 0.02,
+      cs * 0.05,
+      0,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
 
     // Heavy eyebrow ridges (angry V-shape)

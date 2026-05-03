@@ -1661,7 +1661,10 @@
     "tileY": 0,
     "tileScale": 64,
     "states": {
-      "default": { "row": 0, "frameCount": 1 }
+      "default": {
+        "row": 0,
+        "frameCount": 1
+      }
     }
   },
   "dungeon_tileset": {
@@ -1672,17 +1675,104 @@
     "tileY": 0,
     "tileScale": 64,
     "states": {
-      "floor_plain":   { "row": 0,  "frameCount": 8 },
-      "floor_worn":    { "row": 1,  "frameCount": 8 },
-      "floor_cracked": { "row": 2,  "frameCount": 8 },
-      "floor_mossy":   { "row": 3,  "frameCount": 8 },
-      "floor_wet":     { "row": 4,  "frameCount": 8 },
-      "floor_dark":    { "row": 5,  "frameCount": 8 },
-      "floor_ornate":  { "row": 6,  "frameCount": 8 },
-      "wall_plain":    { "row": 7,  "frameCount": 8 },
-      "wall_cracked":  { "row": 8,  "frameCount": 8 },
-      "wall_mossy":    { "row": 9,  "frameCount": 8 },
-      "wall_dark":     { "row": 10, "frameCount": 8 }
+      "floor_plain": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "floor_worn": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "floor_cracked": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "floor_mossy": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "floor_wet": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "floor_dark": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "floor_ornate": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "wall_plain": {
+        "row": 7,
+        "frameCount": 8
+      },
+      "wall_cracked": {
+        "row": 8,
+        "frameCount": 8
+      },
+      "wall_mossy": {
+        "row": 9,
+        "frameCount": 8
+      },
+      "wall_dark": {
+        "row": 10,
+        "frameCount": 8
+      }
+    }
+  },
+  "overworld_tileset": {
+    "path": "environment/overworld_tileset.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "grass": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "dirt": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "dirt_light_grass": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "village_streets": {
+        "row": 3,
+        "frameCount": 12
+      },
+      "sand": {
+        "row": 4,
+        "frameCount": 12
+      },
+      "gravel": {
+        "row": 5,
+        "frameCount": 12
+      },
+      "cobblestone": {
+        "row": 6,
+        "frameCount": 12
+      },
+      "tile": {
+        "row": 7,
+        "frameCount": 12
+      },
+      "overgrown": {
+        "row": 8,
+        "frameCount": 12
+      },
+      "stone": {
+        "row": 9,
+        "frameCount": 12
+      },
+      "concrete": {
+        "row": 10,
+        "frameCount": 12
+      }
     }
   }
 }

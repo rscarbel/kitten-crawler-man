@@ -331,11 +331,15 @@ export function drawDecorationTile(
       ctx.translate(b1x + 9, b1y + 4);
       ctx.rotate(b1a);
       ctx.fillStyle = '#d8d0b8';
-      ctx.fillRect(-9, -2, 18, 4);           // shaft
-      ctx.beginPath(); ctx.arc(-9, 0, 4, 0, Math.PI * 2); ctx.fill();   // knob left
-      ctx.beginPath(); ctx.arc(9, 0, 3.5, 0, Math.PI * 2); ctx.fill(); // knob right
+      ctx.fillRect(-9, -2, 18, 4); // shaft
+      ctx.beginPath();
+      ctx.arc(-9, 0, 4, 0, Math.PI * 2);
+      ctx.fill(); // knob left
+      ctx.beginPath();
+      ctx.arc(9, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill(); // knob right
       ctx.fillStyle = '#c0b8a0';
-      ctx.fillRect(-8, -1, 16, 1);           // highlight
+      ctx.fillRect(-8, -1, 16, 1); // highlight
       ctx.restore();
       // Long bone 2 (rotated opposite)
       const b2x = sx + 8 + (bh2 % (ts - 24));
@@ -346,8 +350,12 @@ export function drawDecorationTile(
       ctx.rotate(b2a);
       ctx.fillStyle = '#ccc4a8';
       ctx.fillRect(-7, -2, 14, 3);
-      ctx.beginPath(); ctx.arc(-7, 0, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(7, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-7, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(7, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       // Small bone fragment / rib shard
       const b3x = sx + 10 + (bh1 % (ts - 20));
@@ -357,8 +365,12 @@ export function drawDecorationTile(
       ctx.rotate(bh2 * 0.15);
       ctx.fillStyle = '#e0d8c0';
       ctx.fillRect(0, -1, 10, 2);
-      ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(10, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(10, 0, 1.5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       return true;
     }
