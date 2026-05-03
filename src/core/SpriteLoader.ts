@@ -124,6 +124,8 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
 const _tileBlockedOffsets = new Map<number, ReadonlyArray<TileOffset>>();
 const _tileSortYAnchorPx = new Map<number, number>();
 const _tileSpriteOverheadPx = new Map<number, number>();
+/** Per-sprite-key blocked tile offsets, for sprite buildings without a fixed tileTypeId. */
+const _spriteKeyBlockedOffsets = new Map<string, ReadonlyArray<TileOffset>>();
 
 function computeBlockedOffsetsFromRegions(
   regions: ReadonlyArray<{
@@ -168,6 +170,23 @@ function computeBlockedOffsetsFromRegions(
   return result;
 }
 
+// Build per-key blocked offsets for SPRITE_BUILDING variants (no tileTypeId required).
+for (const [key, entry] of Object.entries(_manifest)) {
+  if (entry.blockedTileOffsets !== undefined && entry.blockedTileOffsets.length > 0) {
+    _spriteKeyBlockedOffsets.set(key, entry.blockedTileOffsets);
+  } else if (entry.blockedRegions !== undefined && entry.blockedRegions.length > 0) {
+    _spriteKeyBlockedOffsets.set(
+      key,
+      computeBlockedOffsetsFromRegions(
+        entry.blockedRegions,
+        entry.tileX,
+        entry.tileY,
+        entry.tileScale,
+      ),
+    );
+  }
+}
+
 for (const entry of Object.values(_manifest)) {
   if (entry.tileTypeId === undefined) continue;
   const allBlockedOffsets: TileOffset[] = [];
@@ -201,6 +220,23 @@ for (const entry of Object.values(_manifest)) {
  */
 export function getBlockedTileOffsets(tileTypeId: number): ReadonlyArray<TileOffset> {
   return _tileBlockedOffsets.get(tileTypeId) ?? [];
+}
+
+/**
+ * Returns the SpriteDef for any manifest key by string lookup.
+ * Use this for runtime lookups where the key is not statically known (e.g. SPRITE_BUILDING).
+ * Returns undefined if the sprite has not been loaded yet.
+ */
+export function getSpriteDefByKey(key: string): SpriteDef | undefined {
+  return _defs.get(key);
+}
+
+/**
+ * Returns the blocked tile offsets for a sprite-building variant by manifest key.
+ * Used to compute collision for SPRITE_BUILDING tiles with per-variant footprints.
+ */
+export function getBlockedTileOffsetsByKey(key: string): ReadonlyArray<TileOffset> {
+  return _spriteKeyBlockedOffsets.get(key) ?? [];
 }
 
 /**

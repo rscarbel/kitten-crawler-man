@@ -12,6 +12,7 @@ import {
   BRAZIER,
   BONES,
   MAIN_TOWER,
+  SPRITE_BUILDING,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import {
@@ -21,7 +22,8 @@ import {
   overworldRotation,
 } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
-import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
+import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
+import { getSpriteDefByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
 
 export function drawDecorationTile(
@@ -48,7 +50,8 @@ export function drawDecorationTile(
       case WELL:
       case FOUNTAIN:
       case BRAZIER:
-      case MAIN_TOWER: {
+      case MAIN_TOWER:
+      case SPRITE_BUILDING: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
           drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
@@ -565,6 +568,19 @@ export function drawDecorationTile(
       if (glowFrame > 0) {
         drawSpriteKey(ctx, 'overworld_main_tower', 'normal', glowFrame, sx, sy, ts);
       }
+      return true;
+    }
+
+    // Sprite building — PNG-based building anchor tile.
+    // The spriteKey on this tile selects which house image to render.
+    case SPRITE_BUILDING: {
+      const spriteKey = structure[ty][tx].spriteKey;
+      if (spriteKey === undefined) return true;
+      const def = getSpriteDefByKey(spriteKey);
+      if (def === undefined) return true;
+      const stateDef = def.states.get('idle');
+      if (stateDef === undefined) return true;
+      drawSprite(ctx, def, stateDef, 0, sx, sy, ts);
       return true;
     }
 

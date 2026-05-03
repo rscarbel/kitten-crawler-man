@@ -81,6 +81,13 @@ export const BRAZIER = 42;
 export const BONES = 43;
 /** Tile type for the overworld main tower — single anchor tile that triggers the full sprite render, walkable. */
 export const MAIN_TOWER = 44;
+/**
+ * Anchor tile for a sprite-based building (e.g. a village house PNG).
+ * The tile carries a `spriteKey` that selects which image to render.
+ * Collision is derived from the sprite's `blockedTileOffsets` in the manifest.
+ * Not walkable.
+ */
+export const SPRITE_BUILDING = 45;
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 
@@ -98,4 +105,6 @@ export const FloorTypeValue = {
 export type TileContent = {
   tileId: string;
   type: number;
+  /** Set on SPRITE_BUILDING tiles to select which PNG sprite to render. */
+  spriteKey?: string;
 };

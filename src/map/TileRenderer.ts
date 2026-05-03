@@ -14,6 +14,7 @@ import {
   ROOF_CIRCUS_PURPLE,
   BRAZIER,
   MAIN_TOWER,
+  SPRITE_BUILDING,
 } from './tileTypes';
 import { frameTime } from '../utils';
 
@@ -46,6 +47,7 @@ const DECORATION_TYPES = new Set([
   ROOF_CIRCUS_PURPLE,
   BRAZIER,
   MAIN_TOWER,
+  SPRITE_BUILDING,
 ]);
 
 /**

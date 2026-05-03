@@ -17,6 +17,7 @@ import {
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   MAIN_TOWER,
+  SPRITE_BUILDING,
 } from './tileTypes';
 import { randomInt } from '../utils';
 
@@ -69,6 +70,7 @@ export function generateOverworld(size: number): OverworldData {
       t === ROOF_CIRCUS_RED ||
       t === ROOF_CIRCUS_BLUE ||
       t === ROOF_CIRCUS_PURPLE ||
+      t === SPRITE_BUILDING ||
       t === VOID_TYPE
     )
       return;
@@ -89,7 +91,8 @@ export function generateOverworld(size: number): OverworldData {
       t === ROOF_GREEN ||
       t === ROOF_CIRCUS_RED ||
       t === ROOF_CIRCUS_BLUE ||
-      t === ROOF_CIRCUS_PURPLE
+      t === ROOF_CIRCUS_PURPLE ||
+      t === SPRITE_BUILDING
     );
   };
 
@@ -177,6 +180,26 @@ export function generateOverworld(size: number): OverworldData {
     setRoad(storeDoorX + 1, ry);
   }
 
+  // 6d. Sprite-based house — renders a pre-made PNG instead of procedural tiles.
+  //     Footprint: 5 tiles wide × 4 tiles tall. Door at col 2, row 3 (anchor-relative).
+  const SPRITE_HOUSE_W = 5;
+  const SPRITE_HOUSE_H = 4;
+  const SPRITE_DOOR_DX = 2;
+  const SPRITE_DOOR_DY = 3;
+  const placeSpriteBuilding = (bx: number, by: number, spriteKey: string, name: string) => {
+    // Anchor tile carries the sprite key for rendering.
+    grid[by][bx].type = SPRITE_BUILDING;
+    grid[by][bx].spriteKey = spriteKey;
+    // Door tile — walkable entry point.
+    set(bx + SPRITE_DOOR_DX, by + SPRITE_DOOR_DY, ROAD);
+    buildings.push({ x: bx, y: by, w: SPRITE_HOUSE_W, h: SPRITE_HOUSE_H });
+    buildingEntries.push({
+      doorTile: { x: bx + SPRITE_DOOR_DX, y: by + SPRITE_DOOR_DY },
+      name,
+      type: 'house',
+    });
+  };
+
   // 7. Named village buildings at fixed positions
   // placeStructure: non-enterable companion structure (shed, stable, barn, forge)
   const placeStructure = (bx: number, by: number, bw: number, bh: number, roofTile: number) => {
@@ -216,49 +239,49 @@ export function generateOverworld(size: number): OverworldData {
   };
 
   // ── Shepherd's Cabin — NW outskirts: cottage + hay-storage lean-to ──
-  placeBuilding(cx - 25, cy - 45, 10, 5, 'house', "Shepherd's Cabin", ROOF_THATCH);
+  placeSpriteBuilding(cx - 25, cy - 45, 'village_house_1', "Shepherd's Cabin");
   placeStructure(cx - 14, cy - 44, 6, 4, ROOF_THATCH); // lean-to shed
-  connectToRoad(cx - 25 + 4, cy - 45 + 5 - 1);
+  connectToRoad(cx - 25 + SPRITE_DOOR_DX, cy - 45 + SPRITE_DOOR_DY);
 
   // ── Blackwood Barracks — NE outskirts: wide hall, looks imposing ──
-  placeBuilding(cx + 18, cy - 36, 14, 6, 'house', 'Blackwood Barracks', ROOF_SLATE);
-  connectToRoad(cx + 18 + 6, cy - 36 + 6 - 1);
+  placeSpriteBuilding(cx + 18, cy - 36, 'village_house_2', 'Blackwood Barracks');
+  connectToRoad(cx + 18 + SPRITE_DOOR_DX, cy - 36 + SPRITE_DOOR_DY);
 
   // ── Old Hilda's Cottage — W mid: mossy green witch cottage ──
-  placeBuilding(cx - 42, cy - 28, 10, 5, 'house', "Old Hilda's Cottage", ROOF_GREEN);
-  connectToRoad(cx - 42 + 4, cy - 28 + 5 - 1);
+  placeSpriteBuilding(cx - 42, cy - 28, 'village_house_3', "Old Hilda's Cottage");
+  connectToRoad(cx - 42 + SPRITE_DOOR_DX, cy - 28 + SPRITE_DOOR_DY);
 
   // ── Cartwright's Workshop — E mid: main shop + separate storage shed to north ──
   placeStructure(cx + 30, cy - 28, 6, 5, ROOF_SLATE); // storage shed
-  placeBuilding(cx + 30, cy - 22, 12, 5, 'house', "Cartwright's Workshop", ROOF_SLATE);
-  connectToRoad(cx + 30 + 5, cy - 22 + 5 - 1);
+  placeSpriteBuilding(cx + 30, cy - 22, 'village_house_4', "Cartwright's Workshop");
+  connectToRoad(cx + 30 + SPRITE_DOOR_DX, cy - 22 + SPRITE_DOOR_DY);
 
   // ── Herb & Remedy — W near-town: apothecary just west of south road ──
-  placeBuilding(cx - 30, cy + 14, 10, 5, 'house', 'Herb & Remedy', ROOF_GREEN);
-  connectToRoad(cx - 30 + 4, cy + 14 + 5 - 1);
+  placeSpriteBuilding(cx - 30, cy + 14, 'village_house_1', 'Herb & Remedy');
+  connectToRoad(cx - 30 + SPRITE_DOOR_DX, cy + 14 + SPRITE_DOOR_DY);
 
   // ── The Sleeping Cat Inn — S near-town: large inn + stable behind it ──
-  placeBuilding(cx - 18, cy + 16, 14, 6, 'house', 'The Sleeping Cat Inn', ROOF_THATCH);
+  placeSpriteBuilding(cx - 18, cy + 16, 'village_house_2', 'The Sleeping Cat Inn');
   placeStructure(cx - 18, cy + 23, 8, 5, ROOF_THATCH); // stable
-  connectToRoad(cx - 18 + 6, cy + 16 + 6 - 1);
+  connectToRoad(cx - 18 + SPRITE_DOOR_DX, cy + 16 + SPRITE_DOOR_DY);
 
   // ── The Rusty Anvil — SE near-town: forge building + open-air work shed ──
-  placeBuilding(cx + 14, cy + 16, 12, 5, 'house', 'The Rusty Anvil', ROOF_RED);
+  placeSpriteBuilding(cx + 14, cy + 16, 'village_house_3', 'The Rusty Anvil');
   placeStructure(cx + 27, cy + 16, 7, 5, ROOF_RED); // forge shed
-  connectToRoad(cx + 14 + 5, cy + 16 + 5 - 1);
+  connectToRoad(cx + 14 + SPRITE_DOOR_DX, cy + 16 + SPRITE_DOOR_DY);
 
   // ── Miller's Farm — SW outskirts: farmhouse + large barn ──
-  placeBuilding(cx - 38, cy + 24, 10, 5, 'house', "Miller's Farm", ROOF_THATCH);
+  placeSpriteBuilding(cx - 38, cy + 24, 'village_house_4', "Miller's Farm");
   placeStructure(cx - 27, cy + 24, 8, 5, ROOF_THATCH); // barn
-  connectToRoad(cx - 38 + 4, cy + 24 + 5 - 1);
+  connectToRoad(cx - 38 + SPRITE_DOOR_DX, cy + 24 + SPRITE_DOOR_DY);
 
   // ── The Wanderer's Rest — SE outskirts: plain roadside dormitory ──
-  placeBuilding(cx + 28, cy + 26, 10, 5, 'house', "The Wanderer's Rest", ROOF_THATCH);
-  connectToRoad(cx + 28 + 4, cy + 26 + 5 - 1);
+  placeSpriteBuilding(cx + 28, cy + 26, 'village_house_1', "The Wanderer's Rest");
+  connectToRoad(cx + 28 + SPRITE_DOOR_DX, cy + 26 + SPRITE_DOOR_DY);
 
   // ── The Sunken Stump Pub — S central: large pub west of N-S road ──
-  placeBuilding(cx - 20, cy + 32, 14, 6, 'house', 'The Sunken Stump Pub', ROOF_RED);
-  connectToRoad(cx - 20 + 6, cy + 32 + 6 - 1);
+  placeSpriteBuilding(cx - 20, cy + 32, 'village_house_2', 'The Sunken Stump Pub');
+  connectToRoad(cx - 20 + SPRITE_DOOR_DX, cy + 32 + SPRITE_DOOR_DY);
 
   // 7b. Circus — cluster of tents 60+ tiles from town center
   {

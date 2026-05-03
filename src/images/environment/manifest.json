@@ -1074,6 +1074,70 @@
       }
     }
   },
+  "village_house_1": {
+    "path": "environment/village-house-1.png",
+    "frameWidth": 139,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      {"x1":1,"y1":60,"x2":138,"y2":96},
+      {"x1":6,"y1":97,"x2":59,"y2":128},
+      {"x1":80,"y1":97,"x2":111,"y2":128}
+    ],
+    "states": {
+      "idle": {"row": 0, "frameCount": 1}
+    }
+  },
+  "village_house_2": {
+    "path": "environment/village-house-2.png",
+    "frameWidth": 150,
+    "frameHeight": 125,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      {"x1":1,"y1":44,"x2":150,"y2":87},
+      {"x1":5,"y1":88,"x2":65,"y2":126},
+      {"x1":85,"y1":88,"x2":146,"y2":121}
+    ],
+    "states": {
+      "idle": {"row": 0, "frameCount": 1}
+    }
+  },
+  "village_house_3": {
+    "path": "environment/village-house-3.png",
+    "frameWidth": 149,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      {"x1":1,"y1":57,"x2":150,"y2":100},
+      {"x1":4,"y1":93,"x2":71,"y2":128},
+      {"x1":92,"y1":93,"x2":147,"y2":128}
+    ],
+    "states": {
+      "idle": {"row": 0, "frameCount": 1}
+    }
+  },
+  "village_house_4": {
+    "path": "environment/village-house-4.png",
+    "frameWidth": 154,
+    "frameHeight": 133,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      {"x1":1,"y1":54,"x2":154,"y2":99},
+      {"x1":5,"y1":100,"x2":70,"y2":133},
+      {"x1":91,"y1":100,"x2":150,"y2":133}
+    ],
+    "states": {
+      "idle": {"row": 0, "frameCount": 1}
+    }
+  },
   "overworld_main_tower": {
     "path": "environment/overworld_main_tower.png",
     "frameWidth": 183.833,

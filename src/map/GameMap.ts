@@ -29,10 +29,17 @@ import {
   CRATE,
   BRAZIER,
   MAIN_TOWER,
+  SPRITE_BUILDING,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import { getBlockedTileOffsets, getSortYAnchorPx, getSpriteOverheadPx } from '../core/SpriteLoader';
+import {
+  getBlockedTileOffsets,
+  getBlockedTileOffsetsByKey,
+  getSpriteDefByKey,
+  getSortYAnchorPx,
+  getSpriteOverheadPx,
+} from '../core/SpriteLoader';
 import {
   renderCanvas,
   renderDecorationsOverlay,
@@ -850,7 +857,11 @@ export class GameMap {
     for (let ty = 0; ty < this.structure.length; ty++) {
       const row = this.structure[ty];
       for (let tx = 0; tx < row.length; tx++) {
-        const offsets = getBlockedTileOffsets(row[tx].type);
+        const tile = row[tx];
+        const offsets =
+          tile.type === SPRITE_BUILDING && tile.spriteKey !== undefined
+            ? getBlockedTileOffsetsByKey(tile.spriteKey)
+            : getBlockedTileOffsets(tile.type);
         for (const { dx, dy } of offsets) {
           this.extraBlockedTiles.add(`${tx + dx},${ty + dy}`);
         }
@@ -889,7 +900,8 @@ export class GameMap {
       tile.type !== CHAIR &&
       tile.type !== BARREL_SIDE &&
       tile.type !== CRATE &&
-      tile.type !== BRAZIER
+      tile.type !== BRAZIER &&
+      tile.type !== SPRITE_BUILDING
       // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43) are walkable
     );
   }
@@ -996,6 +1008,12 @@ export class GameMap {
             isTree: t === TREE,
             sortYAnchorPx: getSortYAnchorPx(t) ?? ts,
           });
+        } else if (t === SPRITE_BUILDING) {
+          const tile = this.structure[y][x];
+          const def = tile.spriteKey !== undefined ? getSpriteDefByKey(tile.spriteKey) : undefined;
+          const sortY =
+            def !== undefined ? (def.frameHeight - def.tileY) * (ts / def.tileScale) : ts;
+          result.push({ tx: x, ty: y, isTree: false, sortYAnchorPx: sortY });
         }
       }
     }
