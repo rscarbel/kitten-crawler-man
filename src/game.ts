@@ -2,7 +2,7 @@ import { InputManager } from './core/InputManager';
 import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
-import { level3 } from './levels/index';
+import { level1 } from './levels/index';
 import { aiAdapter } from './ai/AIAdapter';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
@@ -14,7 +14,7 @@ const authClient = new AuthClient();
 
 function launchGame(options?: DungeonSceneOptions): void {
   const sceneManager = new SceneManager();
-  sceneManager.replace(new DungeonScene(level3, input, sceneManager, options));
+  sceneManager.replace(new DungeonScene(level1, input, sceneManager, options));
   // Fire-and-forget: if the AI server isn't running the adapter stays silent.
   aiAdapter.initialize().catch(() => {
     void 0;
