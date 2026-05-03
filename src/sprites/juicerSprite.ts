@@ -17,7 +17,7 @@ export function drawJuicerSprite(
   isMoving: boolean,
   throwAnim: number,
   facingX: number,
-  _facingY: number,
+  facingY: number,
   isEnraged: boolean,
   _heldDumbbell: boolean,
 ): void {
@@ -25,16 +25,60 @@ export function drawJuicerSprite(
 
   if (throwAnim > 0) {
     drawSpriteKey(ctx, 'juicer', 'throw', progressFrameIndex(throwAnim, 6), sx, sy, s, { flipX });
-    return;
-  }
-
-  if (isMoving) {
+  } else if (isMoving) {
     const state = isEnraged ? 'walk_enraged' : 'walk';
     drawSpriteKey(ctx, 'juicer', state, walkFrameIndex(walkFrame, 8), sx, sy, s, { flipX });
-    return;
+  } else {
+    drawSpriteKey(ctx, 'juicer', isEnraged ? 'idle_enraged' : 'idle', 0, sx, sy, s, { flipX });
   }
 
-  drawSpriteKey(ctx, 'juicer', isEnraged ? 'idle_enraged' : 'idle', 0, sx, sy, s, { flipX });
+  // Eyes are not in the PNG — draw them procedurally on top.
+  // Hide only when clearly facing away (north = facingY < -0.5).
+  if (facingY > -0.5) {
+    const cs = s * 1.6;
+    const cx = sx + s * 0.5;
+    const cy = sy + s * 0.5;
+    const bodyBob = isMoving ? -Math.abs(Math.sin(walkFrame)) * s * 0.05 : 0;
+    const headX = cx + facingX * cs * 0.08;
+    const headY = cy - cs * 0.38 + bodyBob;
+    const eyeOffX = cs * 0.1;
+    const eyeY = headY - cs * 0.04;
+
+    ctx.save();
+
+    // White sclera
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(headX - eyeOffX, eyeY, cs * 0.075, cs * 0.065, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(headX + eyeOffX, eyeY, cs * 0.075, cs * 0.065, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Vertical slit pupils (reptile)
+    ctx.fillStyle = isEnraged ? '#f97316' : '#1a3a1a';
+    ctx.beginPath();
+    ctx.ellipse(headX - eyeOffX + facingX * cs * 0.02, eyeY, cs * 0.02, cs * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(headX + eyeOffX + facingX * cs * 0.02, eyeY, cs * 0.02, cs * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Heavy eyebrow ridges (angry V-shape)
+    ctx.strokeStyle = '#245a24';
+    ctx.lineWidth = cs * 0.03;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(headX - eyeOffX - cs * 0.065, eyeY - cs * 0.055);
+    ctx.lineTo(headX - eyeOffX + cs * 0.045, eyeY - cs * 0.07);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(headX + eyeOffX - cs * 0.045, eyeY - cs * 0.07);
+    ctx.lineTo(headX + eyeOffX + cs * 0.065, eyeY - cs * 0.055);
+    ctx.stroke();
+
+    ctx.restore();
+  }
 }
 
 // ---------------------------------------------------------------------------

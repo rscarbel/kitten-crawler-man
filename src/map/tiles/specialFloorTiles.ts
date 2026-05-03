@@ -9,10 +9,39 @@ import {
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
-import { drawSprite } from '../../core/SpriteRenderer';
 
-function tileHash(tx: number, ty: number): number {
-  return ((Math.imul(tx, 2246822519) ^ Math.imul(ty, 668265263)) >>> 0) % 65536;
+// Lazily computed bounding box of HORDER_BOSS_ROOM_FLOOR tiles for a given map structure.
+// Keyed on the structure array so it's automatically GC'd with the map.
+const _hoarderBoundsCache = new WeakMap<
+  TileContent[][],
+  { minX: number; minY: number; maxX: number; maxY: number } | null
+>();
+
+function findHoarderBounds(
+  structure: TileContent[][],
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const cached = _hoarderBoundsCache.get(structure);
+  if (cached !== undefined) return cached;
+
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (let y = 0; y < structure.length; y++) {
+    const row = structure[y];
+    for (let x = 0; x < row.length; x++) {
+      if (row[x].type === HORDER_BOSS_ROOM_FLOOR) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const result = isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+  _hoarderBoundsCache.set(structure, result);
+  return result;
 }
 
 export function drawSpecialFloorTile(
@@ -47,13 +76,19 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Hoarder Boss Room floor — organic grime texture from tileset
+    // Hoarder Boss Room floor — single room image UV-mapped across all floor tiles
     case HORDER_BOSS_ROOM_FLOOR: {
-      const def = getSpriteDef('dungeon_tileset');
-      const frame = tileHash(tx, ty) % 8;
-      const stateDef = def?.states.get('floor_hoarder');
-      if (def && stateDef) {
-        drawSprite(ctx, def, stateDef, frame, sx, sy, ts);
+      const def = getSpriteDef('hoarders_room');
+      const bounds = findHoarderBounds(structure);
+      if (def && bounds) {
+        const { img } = def;
+        const roomW = bounds.maxX - bounds.minX + 1;
+        const roomH = bounds.maxY - bounds.minY + 1;
+        const srcX = ((tx - bounds.minX) / roomW) * img.width;
+        const srcY = ((ty - bounds.minY) / roomH) * img.height;
+        const srcW = img.width / roomW;
+        const srcH = img.height / roomH;
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, sx, sy, ts, ts);
       } else {
         ctx.fillStyle = '#281c0c';
         ctx.fillRect(sx, sy, ts, ts);

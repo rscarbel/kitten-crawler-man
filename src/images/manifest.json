@@ -1653,6 +1653,17 @@
       }
     }
   },
+  "hoarders_room": {
+    "path": "environment/hoarders_room.png",
+    "frameWidth": 512,
+    "frameHeight": 512,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "default": { "row": 0, "frameCount": 1 }
+    }
+  },
   "dungeon_tileset": {
     "path": "environment/dungeon_tileset.png",
     "frameWidth": 64,
@@ -1668,11 +1679,10 @@
       "floor_wet":     { "row": 4,  "frameCount": 8 },
       "floor_dark":    { "row": 5,  "frameCount": 8 },
       "floor_ornate":  { "row": 6,  "frameCount": 8 },
-      "floor_hoarder": { "row": 7,  "frameCount": 8 },
-      "wall_plain":    { "row": 8,  "frameCount": 8 },
-      "wall_cracked":  { "row": 9,  "frameCount": 8 },
-      "wall_mossy":    { "row": 10, "frameCount": 8 },
-      "wall_dark":     { "row": 11, "frameCount": 8 }
+      "wall_plain":    { "row": 7,  "frameCount": 8 },
+      "wall_cracked":  { "row": 8,  "frameCount": 8 },
+      "wall_mossy":    { "row": 9,  "frameCount": 8 },
+      "wall_dark":     { "row": 10, "frameCount": 8 }
     }
   }
 }
