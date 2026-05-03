@@ -37,6 +37,13 @@ const CARDINAL_DIRS: [number, number][] = [
   [1, 0],
 ];
 
+const DIAGONAL_DIRS: [number, number][] = [
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+];
+
 // Only architectural solids cast the wall-shadow strip on adjacent floor tiles.
 // Furniture and decorations (TORCH, BARREL, TABLE …) are excluded intentionally
 // to avoid ugly rectangular gray bands next to them.
@@ -93,6 +100,19 @@ const NON_FLOOR_TYPES = new Set<number>([
  */
 export function inferFloorType(structure: TileContent[][], tx: number, ty: number): number {
   for (const [dx, dy] of CARDINAL_DIRS) {
+    const ny = ty + dy;
+    const nx = tx + dx;
+    if (ny < 0 || ny >= structure.length) continue;
+    const row = structure[ny];
+    if (nx < 0 || nx >= row.length) continue;
+    const t = row[nx].type;
+    if (NON_FLOOR_TYPES.has(t)) continue;
+    if (t === GRASSY_WEED) return FloorTypeValue.grass;
+    if (t === DIRT_PATCH) return FloorTypeValue.road;
+    return t;
+  }
+  // Diagonal fallback: handles tiles surrounded by other decorations (e.g. dense forest center)
+  for (const [dx, dy] of DIAGONAL_DIRS) {
     const ny = ty + dy;
     const nx = tx + dx;
     if (ny < 0 || ny >= structure.length) continue;

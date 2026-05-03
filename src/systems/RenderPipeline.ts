@@ -136,14 +136,17 @@ export class RenderPipeline {
     // Reset pool cursor (reuses existing objects)
     this._drawCount = 0;
 
-    for (const { tx, ty } of gameMap.getVisibleDecorationTiles(
+    for (const { tx, ty, isTree } of gameMap.getVisibleDecorationTiles(
       camX,
       camY,
       canvas.width,
       canvas.height,
     )) {
       const e = this._getEntry();
-      e.sortY = (ty + 1) * TILE_SIZE;
+      // Trees render before all entities (negative sortY) so entities stay on top.
+      // Within the tree pass, ascending ty keeps south trees rendering last so
+      // their canopies appear above north trees' trunks.
+      e.sortY = isTree ? ty - 100000 : (ty + 1) * TILE_SIZE;
       e.kind = DRAW_KIND_DECO;
       e.tx = tx;
       e.ty = ty;

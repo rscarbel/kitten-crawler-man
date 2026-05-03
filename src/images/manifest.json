@@ -1519,6 +1519,90 @@
       }
     }
   },
+  "tree_1": {
+    "path": "environment/Tree1.png",
+    "frameWidth": 32,
+    "frameHeight": 52,
+    "tileX": 0,
+    "tileY": 20,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree_2": {
+    "path": "environment/Tree2.png",
+    "frameWidth": 32,
+    "frameHeight": 52,
+    "tileX": 0,
+    "tileY": 20,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree_3": {
+    "path": "environment/Tree3.png",
+    "frameWidth": 32,
+    "frameHeight": 62,
+    "tileX": 0,
+    "tileY": 30,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree_4": {
+    "path": "environment/Tree4.png",
+    "frameWidth": 32,
+    "frameHeight": 49,
+    "tileX": 0,
+    "tileY": 17,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree_5": {
+    "path": "environment/Tree5.png",
+    "frameWidth": 32,
+    "frameHeight": 51,
+    "tileX": 0,
+    "tileY": 19,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "tree_6": {
+    "path": "environment/Tree6.png",
+    "frameWidth": 32,
+    "frameHeight": 55,
+    "tileX": 0,
+    "tileY": 23,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
   "torch": {
     "path": "environment/torch.png",
     "frameWidth": 64,

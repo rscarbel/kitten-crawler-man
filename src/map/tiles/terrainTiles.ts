@@ -129,11 +129,29 @@ export function drawTerrainTile(
 
     // Outdoors
     case FloorTypeValue.grass: {
-      drawOverworldSprite(ctx, sx, sy, ts, 'grass', overworldFrame(tx, ty), '#6de89d', overworldRotation(tx, ty));
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'grass',
+        overworldFrame(tx, ty),
+        '#6de89d',
+        overworldRotation(tx, ty),
+      );
       break;
     }
     case FloorTypeValue.road: {
-      drawOverworldSprite(ctx, sx, sy, ts, 'village_streets', overworldFrame(tx, ty), '#bc926b', overworldRotation(tx, ty));
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'village_streets',
+        overworldFrame(tx, ty),
+        '#bc926b',
+        overworldRotation(tx, ty),
+      );
       // Door threshold: roof interior immediately north + building wall on either side
       const rdN = structure[ty - 1]?.[tx]?.type;
       const isDoorTile =

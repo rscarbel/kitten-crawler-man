@@ -49,11 +49,10 @@ const DECORATION_TYPES = new Set([
 /**
  * Subset of DECORATION_TYPES whose rendering involves multiple canvas 2D API
  * calls per frame and therefore benefits from pre-rendering to an OffscreenCanvas.
- * PNG-sprite tiles (TORCH, BRAZIER, WELL) are excluded — they're already a
+ * PNG-sprite tiles (TREE, TORCH, BRAZIER, WELL) are excluded — they're already a
  * single drawImage call and gain nothing from an extra cache layer.
  */
 const CACHEABLE_OVERLAY_TYPES = new Set([
-  TREE,
   BUILDING_WALL,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -271,11 +270,10 @@ interface OverlayCacheEntry {
  * a single drawImage call instead of replaying all canvas operations.
  *
  * Cache sharing rules:
- *  - TREE: one canvas for all instances (visually identical regardless of position).
  *  - FOUNTAIN center: FOUNTAIN_ANIM_FRAMES canvases shared across all center tiles.
  *  - FOUNTAIN rim: one canvas per neighbor-mask × row-parity variant (≤ 32 total).
  *  - BUILDING_WALL, ROOF_*: one canvas per tile (tx, ty) — each has position-dependent details.
- *  - TORCH / BRAZIER / WELL: excluded — they already resolve to one drawImage call.
+ *  - TREE / TORCH / BRAZIER / WELL: excluded — they already resolve to one drawImage call.
  */
 export class OverlayTileCache {
   private readonly cache = new Map<string, OverlayCacheEntry>();
@@ -308,7 +306,6 @@ export class OverlayTileCache {
   }
 
   private cacheKey(type: number, tx: number, ty: number, frame: number): string {
-    if (type === TREE) return 'TREE';
     if (type === FOUNTAIN) {
       const { structure } = this;
       const nN = structure[ty - 1]?.[tx]?.type === FOUNTAIN ? 1 : 0;

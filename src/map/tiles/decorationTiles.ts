@@ -1,5 +1,7 @@
 import type { TileContent } from '../tileTypes';
 import {
+  FloorTypeValue,
+  TREE,
   FOUNTAIN,
   TORCH,
   WELL,
@@ -11,7 +13,12 @@ import {
   BONES,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
-import { drawTerrainTile, drawOverworldSprite, overworldFrame, overworldRotation } from './terrainTiles';
+import {
+  drawTerrainTile,
+  drawOverworldSprite,
+  overworldFrame,
+  overworldRotation,
+} from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, timeFrameIndex } from '../../core/SpriteRenderer';
 import { frameTime } from '../../utils';
@@ -30,6 +37,12 @@ export function drawDecorationTile(
 ): boolean {
   if (baseOnly) {
     switch (type) {
+      case TREE:
+        // Trees are always outdoor tiles — draw grass directly rather than
+        // inferring from neighbours, which fails for trees deep inside a
+        // dense forest blob where all neighbours are also trees.
+        drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
+        return true;
       case TORCH:
       case WELL:
       case FOUNTAIN:
@@ -45,6 +58,33 @@ export function drawDecorationTile(
     }
   }
   switch (type) {
+    case TREE: {
+      // Ground is already drawn by the baseOnly chunk-cache pass.
+      // Re-drawing it here would wipe out the canopy-overhead of any
+      // adjacent tree that already painted into this tile's space.
+      switch (((Math.imul(tx, 2654435761) ^ Math.imul(ty, 2246822519)) >>> 0) % 6) {
+        case 0:
+          drawSpriteKey(ctx, 'tree_1', 'idle', 0, sx, sy, ts);
+          break;
+        case 1:
+          drawSpriteKey(ctx, 'tree_2', 'idle', 0, sx, sy, ts);
+          break;
+        case 2:
+          drawSpriteKey(ctx, 'tree_3', 'idle', 0, sx, sy, ts);
+          break;
+        case 3:
+          drawSpriteKey(ctx, 'tree_4', 'idle', 0, sx, sy, ts);
+          break;
+        case 4:
+          drawSpriteKey(ctx, 'tree_5', 'idle', 0, sx, sy, ts);
+          break;
+        default:
+          drawSpriteKey(ctx, 'tree_6', 'idle', 0, sx, sy, ts);
+          break;
+      }
+      return true;
+    }
+
     case FOUNTAIN: {
       const nN = structure[ty - 1]?.[tx]?.type === FOUNTAIN;
       const nS = structure[ty + 1]?.[tx]?.type === FOUNTAIN;
@@ -377,7 +417,16 @@ export function drawDecorationTile(
 
     // Grassy weed — walkable grass tile with decorative tufts and occasional flowers
     case GRASSY_WEED: {
-      drawOverworldSprite(ctx, sx, sy, ts, 'grass', overworldFrame(tx, ty), '#6de89d', overworldRotation(tx, ty));
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'grass',
+        overworldFrame(tx, ty),
+        '#6de89d',
+        overworldRotation(tx, ty),
+      );
 
       // Deterministic hash from tile position
       const h1 = (tx * 31 + ty * 17) % 97;
@@ -432,7 +481,16 @@ export function drawDecorationTile(
 
     // Dirt patch — walkable road tile with pebble and soil texture
     case DIRT_PATCH: {
-      drawOverworldSprite(ctx, sx, sy, ts, 'village_streets', overworldFrame(tx, ty), '#bc926b', overworldRotation(tx, ty));
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'village_streets',
+        overworldFrame(tx, ty),
+        '#bc926b',
+        overworldRotation(tx, ty),
+      );
 
       // Deterministic hash from tile position
       const h1 = (tx * 29 + ty * 19) % 97;

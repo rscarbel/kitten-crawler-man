@@ -1,6 +1,5 @@
 import type { TileContent } from '../tileTypes';
 import {
-  TREE,
   BUILDING_WALL,
   ROOF_THATCH,
   ROOF_SLATE,
@@ -25,10 +24,6 @@ export function drawBuildingTile(
 ): boolean {
   if (baseOnly) {
     switch (type) {
-      case TREE:
-        ctx.fillStyle = '#5cc87a';
-        ctx.fillRect(sx, sy, ts, ts);
-        return true;
       case BUILDING_WALL:
       case ROOF_THATCH:
       case ROOF_SLATE:
@@ -49,45 +44,6 @@ export function drawBuildingTile(
     }
   }
   switch (type) {
-    // Outdoor tree — brown trunk, layered green canopy
-    case TREE: {
-      // Grass base underneath
-      ctx.fillStyle = '#5cc87a';
-      ctx.fillRect(sx, sy, ts, ts);
-      // Trunk
-      const trunkW = Math.max(3, Math.floor(ts * 0.16));
-      const trunkH = Math.floor(ts * 0.32);
-      const trunkX = sx + Math.floor((ts - trunkW) / 2);
-      const trunkY = sy + ts - trunkH;
-      ctx.fillStyle = '#5c3a1e';
-      ctx.fillRect(trunkX, trunkY, trunkW, trunkH);
-      // Dark green canopy shadow layer
-      const cr = Math.floor(ts * 0.38);
-      const ccx = sx + Math.floor(ts / 2);
-      const ccy = sy + Math.floor(ts * 0.44);
-      ctx.fillStyle = '#1e4d1e';
-      ctx.beginPath();
-      ctx.arc(ccx + 2, ccy + 2, cr, 0, Math.PI * 2);
-      ctx.fill();
-      // Main canopy
-      ctx.fillStyle = '#2d6a2d';
-      ctx.beginPath();
-      ctx.arc(ccx, ccy, cr, 0, Math.PI * 2);
-      ctx.fill();
-      // Highlight
-      ctx.fillStyle = '#3d8b3d';
-      ctx.beginPath();
-      ctx.arc(
-        ccx - Math.floor(cr * 0.35),
-        ccy - Math.floor(cr * 0.3),
-        Math.floor(cr * 0.45),
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      break;
-    }
-
     // Overworld building wall — context-aware facade rendering
     case BUILDING_WALL: {
       const isRoofTile = (t: number | undefined) =>
