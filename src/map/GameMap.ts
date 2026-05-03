@@ -32,7 +32,7 @@ import {
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
-import { getBlockedTileOffsets, getSortYAnchorPx } from '../core/SpriteLoader';
+import { getBlockedTileOffsets, getSortYAnchorPx, getSpriteOverheadPx } from '../core/SpriteLoader';
 import {
   renderCanvas,
   renderDecorationsOverlay,
@@ -966,7 +966,10 @@ export class GameMap {
     const startX = Math.max(0, Math.floor(camX / ts));
     const startY = Math.max(0, Math.floor(camY / ts));
     const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts));
-    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts));
+    // Expand endY so tall sprites (e.g. the tower) whose top is still on-screen
+    // aren't culled just because their anchor tile is south of the viewport.
+    const maxOverheadTiles = Math.ceil(getSpriteOverheadPx(MAIN_TOWER) / ts);
+    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts) + maxOverheadTiles);
     const result: Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> = [];
     for (let y = startY; y <= endY; y++) {
       for (let x = startX; x <= endX; x++) {

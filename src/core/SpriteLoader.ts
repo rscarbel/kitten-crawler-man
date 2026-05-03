@@ -109,6 +109,7 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
 
 const _tileBlockedOffsets = new Map<number, ReadonlyArray<TileOffset>>();
 const _tileSortYAnchorPx = new Map<number, number>();
+const _tileSpriteOverheadPx = new Map<number, number>();
 
 function computeBlockedOffsetsFromRegions(
   regions: ReadonlyArray<{
@@ -172,10 +173,12 @@ for (const entry of Object.values(_manifest)) {
   if (allBlockedOffsets.length > 0) {
     _tileBlockedOffsets.set(entry.tileTypeId, allBlockedOffsets);
   }
+  const scale = TILE_SIZE / entry.tileScale;
   // Sort Y anchor: how far below the tile's top edge the sprite's visual foot sits.
-  // Derived from manifest geometry so no extra field is needed.
-  const anchorPx = (entry.frameHeight - entry.tileY) * (TILE_SIZE / entry.tileScale);
+  const anchorPx = (entry.frameHeight - entry.tileY) * scale;
   _tileSortYAnchorPx.set(entry.tileTypeId, anchorPx);
+  // Overhead: how many game-pixels above the tile's top-left corner the sprite extends.
+  _tileSpriteOverheadPx.set(entry.tileTypeId, entry.tileY * scale);
 }
 
 /**
@@ -193,4 +196,15 @@ export function getBlockedTileOffsets(tileTypeId: number): ReadonlyArray<TileOff
  */
 export function getSortYAnchorPx(tileTypeId: number): number | undefined {
   return _tileSortYAnchorPx.get(tileTypeId);
+}
+
+/**
+ * Returns how many game-pixels above the tile's top-left corner the sprite
+ * extends. Used to expand viewport culling bounds so tall sprites (e.g. the
+ * tower) aren't culled when the player is north of the tile but the sprite
+ * top is still on screen.
+ * Returns 0 for tile types not registered in the manifest.
+ */
+export function getSpriteOverheadPx(tileTypeId: number): number {
+  return _tileSpriteOverheadPx.get(tileTypeId) ?? 0;
 }
