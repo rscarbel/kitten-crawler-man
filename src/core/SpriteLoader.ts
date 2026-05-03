@@ -1,5 +1,19 @@
-import manifestJson from '../images/manifest.json';
+import bossesManifest from '../images/bosses/manifest.json';
+import charactersManifest from '../images/characters/manifest.json';
+import effectsManifest from '../images/effects/manifest.json';
+import enemiesManifest from '../images/enemies/manifest.json';
+import environmentManifest from '../images/environment/manifest.json';
+import npcsManifest from '../images/npcs/manifest.json';
 import { TILE_SIZE } from './constants';
+
+const manifestJson = {
+  ...bossesManifest,
+  ...charactersManifest,
+  ...effectsManifest,
+  ...enemiesManifest,
+  ...environmentManifest,
+  ...npcsManifest,
+} as const;
 
 export interface SpriteStateDef {
   readonly row: number;

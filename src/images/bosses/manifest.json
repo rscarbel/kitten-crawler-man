@@ -1,0 +1,102 @@
+{
+  "hoarder": {
+    "path": "bosses/hoarder.png",
+    "frameWidth": 144,
+    "frameHeight": 160,
+    "tileX": 40,
+    "tileY": 20,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "enraged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "vomit": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "vomit_enraged": {
+        "row": 3,
+        "frameCount": 6
+      }
+    }
+  },
+  "juicer": {
+    "path": "bosses/juicer.png",
+    "frameWidth": 208,
+    "frameHeight": 224,
+    "tileX": 72,
+    "tileY": 24,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "throw": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "walk_enraged": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_enraged": {
+        "row": 4,
+        "frameCount": 1
+      }
+    }
+  },
+  "ball_of_swine": {
+    "path": "bosses/ball_of_swine.png",
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "tileX": 160,
+    "tileY": 160,
+    "tileScale": 64,
+    "states": {
+      "orbit": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "stopped": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "burst": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "krakaren": {
+    "path": "bosses/krakaren.png",
+    "frameWidth": 320,
+    "frameHeight": 320,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "attack": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "enraged": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  }
+}

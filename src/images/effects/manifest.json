@@ -1,0 +1,132 @@
+{
+  "magic_missile_projectile": {
+    "path": "effects/magic_missile_projectile.png",
+    "frameWidth": 176,
+    "frameHeight": 80,
+    "tileX": 140,
+    "tileY": 40,
+    "tileScale": 64,
+    "states": {
+      "standard": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "sub_missile": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "full_power": {
+        "row": 2,
+        "frameCount": 3
+      }
+    }
+  },
+  "magic_missile_explosion": {
+    "path": "effects/magic_missile_explosion.png",
+    "frameWidth": 224,
+    "frameHeight": 224,
+    "tileX": 112,
+    "tileY": 112,
+    "tileScale": 64,
+    "states": {
+      "standard": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "full_power": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell": {
+    "path": "effects/protective_shell.png",
+    "frameWidth": 400,
+    "frameHeight": 400,
+    "tileX": 200,
+    "tileY": 200,
+    "tileScale": 32,
+    "states": {
+      "active": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "full_power": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "appear": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "appear_full_power": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "expire": {
+        "row": 4,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell_mini": {
+    "path": "effects/protective_shell_mini.png",
+    "frameWidth": 192,
+    "frameHeight": 192,
+    "tileX": 96,
+    "tileY": 96,
+    "tileScale": 32,
+    "states": {
+      "active": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "protective_shell_shockwave": {
+    "path": "effects/protective_shell_shockwave.png",
+    "frameWidth": 480,
+    "frameHeight": 480,
+    "tileX": 240,
+    "tileY": 240,
+    "tileScale": 32,
+    "states": {
+      "expand": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "blood_particle": {
+    "path": "effects/blood_particle.png",
+    "frameWidth": 24,
+    "frameHeight": 24,
+    "tileX": 12,
+    "tileY": 12,
+    "tileScale": 32,
+    "states": {
+      "drop": {
+        "row": 0,
+        "frameCount": 6
+      },
+      "tear": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "blood_puddle": {
+    "path": "effects/blood_puddle.png",
+    "frameWidth": 72,
+    "frameHeight": 48,
+    "tileX": 36,
+    "tileY": 24,
+    "tileScale": 32,
+    "states": {
+      "puddle": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  }
+}

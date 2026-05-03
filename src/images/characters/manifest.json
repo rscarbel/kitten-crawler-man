@@ -1,0 +1,78 @@
+{
+  "cat": {
+    "path": "characters/cat.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "human": {
+    "path": "characters/human.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "kick_body": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "human_punch_arm": {
+    "path": "characters/human_punch_arm.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "punch": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "human_kick_leg": {
+    "path": "characters/human_kick_leg.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "kick": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  }
+}

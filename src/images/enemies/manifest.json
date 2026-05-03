@@ -1,0 +1,250 @@
+{
+  "goblin_base": {
+    "path": "enemies/goblin_base.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "goblin_weapon_club": {
+    "path": "enemies/goblin_weapon_club.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "goblin_weapon_hammer": {
+    "path": "enemies/goblin_weapon_hammer.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 16
+      }
+    }
+  },
+  "rat": {
+    "path": "enemies/rat.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "llama": {
+    "path": "enemies/llama.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "spit": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "mongo": {
+    "path": "enemies/mongo.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "troglodyte": {
+    "path": "enemies/troglodyte.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 24,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "mouth_open": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "troglodyte_tongue": {
+    "path": "enemies/troglodyte_tongue.png",
+    "frameWidth": 220,
+    "frameHeight": 40,
+    "tileX": 8,
+    "tileY": 20,
+    "tileScale": 64,
+    "states": {
+      "extend": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "tuskling": {
+    "path": "enemies/tuskling.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 24,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "charge": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "brindle_grub": {
+    "path": "enemies/brindle_grub.png",
+    "frameWidth": 96,
+    "frameHeight": 80,
+    "tileX": 16,
+    "tileY": 12,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "cow_tailed_grub": {
+    "path": "enemies/cow_tailed_grub.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 12,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "brindled_vespa": {
+    "path": "enemies/brindled_vespa.png",
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "hover": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "hover_left": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "hover_bob": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  }
+}

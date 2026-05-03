@@ -1,0 +1,238 @@
+{
+  "rat_kin": {
+    "path": "npcs/rat_kin.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_left": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "incubus": {
+    "path": "npcs/incubus.png",
+    "frameWidth": 160,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "walk_left": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
+  },
+  "bugaboo": {
+    "path": "npcs/bugaboo.png",
+    "frameWidth": 128,
+    "frameHeight": 144,
+    "tileX": 32,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "attack": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "sky_fowl_body": {
+    "path": "npcs/sky_fowl_body.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_pants_mask": {
+    "path": "npcs/sky_fowl_pants_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_vest_mask": {
+    "path": "npcs/sky_fowl_vest_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_trim_mask": {
+    "path": "npcs/sky_fowl_trim_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "sky_fowl_hat_mask": {
+    "path": "npcs/sky_fowl_hat_mask.png",
+    "frameWidth": 96,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "peck": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "aggressive": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "quest_npc": {
+    "path": "npcs/quest_npc.png",
+    "frameWidth": 96,
+    "frameHeight": 200,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "hurt": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "idle_left": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "goblin_child": {
+    "path": "npcs/goblin_child.png",
+    "frameWidth": 64,
+    "frameHeight": 80,
+    "tileX": 8,
+    "tileY": 8,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  }
+}
