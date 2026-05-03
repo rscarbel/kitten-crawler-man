@@ -557,17 +557,14 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Main overworld tower — large animated sprite, anchor at door-threshold level
+    // Main overworld tower — large animated sprite, anchor at door-threshold level.
+    // Frame 0 is the complete base tower; frames 1-3 are glow-only overlays composited on top.
     case MAIN_TOWER: {
-      drawSpriteKey(
-        ctx,
-        'overworld_main_tower',
-        'normal',
-        timeFrameIndex(frameTime, 4, 4),
-        sx,
-        sy,
-        ts,
-      );
+      drawSpriteKey(ctx, 'overworld_main_tower', 'normal', 0, sx, sy, ts);
+      const glowFrame = timeFrameIndex(frameTime, 4, 4);
+      if (glowFrame > 0) {
+        drawSpriteKey(ctx, 'overworld_main_tower', 'normal', glowFrame, sx, sy, ts);
+      }
       return true;
     }
 
