@@ -84,8 +84,6 @@ export const MAIN_TOWER = 44;
 /**
  * Anchor tile for a sprite-based building (e.g. a village house PNG).
  * The tile carries a `spriteKey` that selects which image to render.
- * Collision is derived from the sprite's `blockedTileOffsets` in the manifest.
- * Not walkable.
  */
 export const SPRITE_BUILDING = 45;
 

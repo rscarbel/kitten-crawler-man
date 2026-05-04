@@ -34,8 +34,6 @@ export interface SpriteManifestEntry {
   readonly tileScale: number;
   /** Tile type ID this sprite represents (enables collision lookup via getBlockedTileOffsets). */
   readonly tileTypeId?: number;
-  /** Tile offsets (relative to this sprite's tile) that should also be non-walkable. */
-  readonly blockedTileOffsets?: ReadonlyArray<TileOffset>;
   /**
    * Pixel-space rectangles (in sprite image coordinates) that should be non-walkable.
    * Converted to tile offsets at load time using ≥50% overlap threshold.
@@ -172,9 +170,7 @@ function computeBlockedOffsetsFromRegions(
 
 // Build per-key blocked offsets for SPRITE_BUILDING variants (no tileTypeId required).
 for (const [key, entry] of Object.entries(_manifest)) {
-  if (entry.blockedTileOffsets !== undefined && entry.blockedTileOffsets.length > 0) {
-    _spriteKeyBlockedOffsets.set(key, entry.blockedTileOffsets);
-  } else if (entry.blockedRegions !== undefined && entry.blockedRegions.length > 0) {
+  if (entry.blockedRegions !== undefined && entry.blockedRegions.length > 0) {
     _spriteKeyBlockedOffsets.set(
       key,
       computeBlockedOffsetsFromRegions(
@@ -190,9 +186,7 @@ for (const [key, entry] of Object.entries(_manifest)) {
 for (const entry of Object.values(_manifest)) {
   if (entry.tileTypeId === undefined) continue;
   const allBlockedOffsets: TileOffset[] = [];
-  if (entry.blockedTileOffsets !== undefined) {
-    allBlockedOffsets.push(...entry.blockedTileOffsets);
-  }
+
   if (entry.blockedRegions !== undefined) {
     allBlockedOffsets.push(
       ...computeBlockedOffsetsFromRegions(

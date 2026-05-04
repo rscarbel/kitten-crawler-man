@@ -143,8 +143,6 @@ export function generateOverworld(size: number): OverworldData {
     });
   };
 
-  // 6. Town center tower — footprint uses the underlying terrain tiles unchanged.
-  // Collision is provided by blockedTileOffsets on the MAIN_TOWER anchor tile in the manifest,
   // so BUILDING_WALL / ROOF_SLATE tiles are not placed (they would show through transparent sprite areas).
   buildings.push({ x: cx - 3, y: cy - 36, w: 6, h: 21 });
   buildingEntries.push({
