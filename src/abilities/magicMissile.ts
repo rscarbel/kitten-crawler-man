@@ -1,4 +1,5 @@
 import type { AbilityDef } from '../core/AbilityManager';
+import { drawSpriteKey } from '../core/SpriteRenderer';
 
 /** Runtime stats computed from the current ability level. */
 export interface MagicMissileStats {
@@ -69,39 +70,8 @@ function renderMagicMissileIcon(
   size: number,
   level: number,
 ): void {
-  const cx = x + size / 2;
-  const cy = y + size / 2;
-  const isFullPower = level >= 15;
-
-  if (isFullPower) {
-    // Level 15: orange beam
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.45);
-    grad.addColorStop(0, 'rgba(255, 220, 100, 1.0)');
-    grad.addColorStop(0.4, 'rgba(255, 120, 0, 0.8)');
-    grad.addColorStop(1, 'rgba(180, 40, 0, 0)');
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.45, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.fillStyle = '#fff8e0';
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    // Standard purple missile
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.45);
-    grad.addColorStop(0, 'rgba(230, 190, 255, 0.95)');
-    grad.addColorStop(0.5, 'rgba(150, 70, 240, 0.65)');
-    grad.addColorStop(1, 'rgba(80, 0, 180, 0)');
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.45, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.fillStyle = '#f0e0ff';
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  const state = level >= 15 ? 'full_power' : 'standard';
+  drawSpriteKey(ctx, 'magic_missile_icon', state, 0, x, y, size);
 }
 
 export const MAGIC_MISSILE_DEF: AbilityDef = {

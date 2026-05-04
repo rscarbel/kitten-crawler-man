@@ -8,6 +8,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
 import { normalize } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import type { SpriteStates } from '../core/SpriteLoader';
 
 interface ActiveShell {
   x: number;
@@ -496,43 +498,32 @@ export class SpellSystem implements GameSystem {
     )
       return;
 
+    const elapsed = (totalFrames - framesRemaining) / 60;
     const fadeIn = Math.min(1, (totalFrames - framesRemaining) / 30);
     const fadeOut = Math.min(1, framesRemaining / 60);
     const alpha = Math.min(fadeIn, fadeOut);
 
-    const outerColor = isFullPower ? '#fbbf24' : '#93c5fd';
-    const mainColor = isFullPower ? '#ff8c00' : '#3b82f6';
-    const fillColor = isFullPower ? '#fd7c0a' : '#60a5fa';
+    const appearing = totalFrames - framesRemaining < 30;
+    const expiring = framesRemaining < 60;
 
-    ctx.save();
-
-    for (let i = 4; i >= 1; i--) {
-      ctx.globalAlpha = alpha * (0.06 * i);
-      ctx.strokeStyle = outerColor;
-      ctx.lineWidth = i * 3;
-      ctx.beginPath();
-      ctx.arc(sx, sy, radiusPx + i * 5, 0, Math.PI * 2);
-      ctx.stroke();
+    let state: SpriteStates['protective_shell'];
+    let frame: number;
+    if (appearing) {
+      state = isFullPower ? 'appear_full_power' : 'appear';
+      frame = progressFrameIndex((totalFrames - framesRemaining) / 30, 8);
+    } else if (expiring) {
+      state = 'expire';
+      frame = progressFrameIndex(1 - framesRemaining / 60, 8);
+    } else {
+      state = isFullPower ? 'full_power' : 'active';
+      frame = timeFrameIndex(elapsed, 8, 8);
     }
 
-    const pulse = 0.7 + 0.3 * Math.sin(framesRemaining * 0.12);
-    ctx.globalAlpha = alpha * pulse;
-    ctx.strokeStyle = mainColor;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
-    ctx.stroke();
+    // tileSize chosen so frameWidth * (tileSize/tileScale) = radiusPx * 2
+    // protective_shell: frameWidth=400, tileScale=32 → tileSize = radiusPx * 64 / 400
+    const tileSize = (radiusPx * 64) / 400;
+    drawSpriteKey(ctx, 'protective_shell', state, frame, sx, sy, tileSize, { alpha });
 
-    ctx.globalAlpha = alpha * 0.06;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-
-    // Timer countdown above shell: size=10, old baseline = sy - radiusPx - 6
-    // top = (sy - radiusPx - 6) - round(10*0.8) = (sy - radiusPx - 6) - 8 = sy - radiusPx - 14
     const secs = Math.ceil(framesRemaining / 60);
     const timerColor = isFullPower ? '#fbbf24' : '#93c5fd';
     drawText(ctx, `${secs}s`, {
@@ -557,23 +548,15 @@ export class SpellSystem implements GameSystem {
     const sx = cat.x + TILE_SIZE * 0.5 - camX;
     const sy = cat.y + TILE_SIZE * 0.5 - camY;
 
+    const miniTotalFrames = 180;
+    const elapsed = (miniTotalFrames - framesRemaining) / 60;
     const fadeOut = Math.min(1, framesRemaining / 30);
-    const pulse = 0.6 + 0.4 * Math.sin(framesRemaining * 0.2);
+    const alpha = fadeOut * 0.7;
+    const frame = timeFrameIndex(elapsed, 8, 8);
 
-    ctx.save();
-    ctx.globalAlpha = fadeOut * pulse * 0.7;
-    ctx.strokeStyle = '#a78bfa';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = fadeOut * 0.04;
-    ctx.fillStyle = '#c4b5fd';
-    ctx.beginPath();
-    ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    // protective_shell_mini: frameWidth=192, tileScale=32 → tileSize = radiusPx * 64 / 192
+    const tileSize = (radiusPx * 64) / 192;
+    drawSpriteKey(ctx, 'protective_shell_mini', 'active', frame, sx, sy, tileSize, { alpha });
   }
 
   renderChainLightning(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -616,27 +599,20 @@ export class SpellSystem implements GameSystem {
 
   renderShockwaveRipples(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.shockwaveRipples.length === 0) return;
-    ctx.save();
     for (const ripple of this.shockwaveRipples) {
+      if (ripple.currentRadius < 1) continue;
       const sx = ripple.x - camX;
       const sy = ripple.y - camY;
       const alpha = (ripple.framesLeft / ripple.totalFrames) * 0.7;
+      const progress = 1 - ripple.framesLeft / ripple.totalFrames;
+      const frame = progressFrameIndex(progress, 8);
 
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = '#ff8c00';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(sx, sy, ripple.currentRadius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.globalAlpha = alpha * 0.4;
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(sx, sy, ripple.currentRadius * 0.85, 0, Math.PI * 2);
-      ctx.stroke();
+      // protective_shell_shockwave: frameWidth=480, tileScale=32 → tileSize = currentRadius * 64 / 480
+      const tileSize = (ripple.currentRadius * 64) / 480;
+      drawSpriteKey(ctx, 'protective_shell_shockwave', 'expand', frame, sx, sy, tileSize, {
+        alpha,
+      });
     }
-    ctx.restore();
   }
 
   renderFogs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
