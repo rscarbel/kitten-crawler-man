@@ -1,6 +1,7 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import {
+  bakeSkyFowlCanvas,
   drawSkyFowlSprite,
   SKY_FOWL_PALETTES,
   type SkyFowlClothColors,
@@ -33,6 +34,9 @@ export class SkyFowl extends Mob {
   /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
   readonly cloth: SkyFowlClothColors;
 
+  /** Pre-baked sprite canvas with this instance's palette composited onto the body. */
+  private readonly bakedCanvas: HTMLCanvasElement | null;
+
   private isAggressive = false;
 
   get isHostile(): boolean {
@@ -44,6 +48,7 @@ export class SkyFowl extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
     this.cloth = randomFromArray(SKY_FOWL_PALETTES);
+    this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
   }
 
   /** Sky Fowls are peaceful citizens — they carry no dungeon loot. */
@@ -102,6 +107,7 @@ export class SkyFowl extends Mob {
         this.wanderDx = nx * this.speed * 0.45;
         this.wanderDy = ny * this.speed * 0.45;
       }
+      if (this.wanderDx !== 0) this.facingX = this.wanderDx > 0 ? 1 : -1;
       this.moveWithCollision(this.wanderDx, this.wanderDy);
       this.isMoving = true;
     } else {
@@ -196,7 +202,7 @@ export class SkyFowl extends Mob {
       this.isAggressive,
       this.facingX,
       this.facingY,
-      this.cloth,
+      this.bakedCanvas,
       peckAmt,
     );
 
