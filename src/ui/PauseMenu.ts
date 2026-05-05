@@ -97,6 +97,8 @@ export class PauseMenu {
     onOpenCatBoxes?: () => void,
     gameStats?: GameStats,
     abilityManager?: AbilityManager,
+    mouseX?: number,
+    mouseY?: number,
   ): void {
     this.buttons = [];
 
@@ -183,7 +185,20 @@ export class PauseMenu {
         break;
       case 'abilities':
         if (abilityManager) {
-          renderAbilitiesTab(ctx, this.buttons, boxX, boxY, boxW, boxH, setTab, abilityManager);
+          renderAbilitiesTab(
+            ctx,
+            this.buttons,
+            boxX,
+            boxY,
+            boxW,
+            boxH,
+            setTab,
+            abilityManager,
+            human.inventory,
+            cat.inventory,
+            mouseX,
+            mouseY,
+          );
         }
         break;
     }

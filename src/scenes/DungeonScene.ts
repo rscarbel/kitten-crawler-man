@@ -818,6 +818,8 @@ export class DungeonScene extends GameplayScene {
           hpRestored: active.hp - hpBefore,
         });
       }
+    } else if (slot?.abilityId === 'magic_missile' && !this.human.isActive) {
+      this.cat.triggerMissile();
     } else if (slot?.abilityId === 'protective_shell' && this.human.isActive) {
       const level = this.human.getProtectiveShellLevel();
       if (this.spells.triggerProtectiveShell(this.human, this.cat, this.mobGrid, level)) {
@@ -1122,6 +1124,10 @@ export class DungeonScene extends GameplayScene {
         current: this.spells.shellCooldown,
         max: this.spells.shellCooldownMax,
       });
+      this.inventoryPanel.abilityCooldowns.set('magic_missile', {
+        current: this.cat.missileCooldownCurrent,
+        max: Math.max(1, this.cat.missileCooldownMax),
+      });
       this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
       this.gearPanel.render(ctx, canvas, active.inventory, name);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
@@ -1193,6 +1199,8 @@ export class DungeonScene extends GameplayScene {
         onOpenCat,
         this.gameStats,
         this.abilityManager,
+        this._mouseX,
+        this._mouseY,
       );
     }
 
@@ -1330,6 +1338,7 @@ export class DungeonScene extends GameplayScene {
     this.companion.update(ctx);
 
     this.human.updateAttack();
+    this.cat.updateAttack();
     this.cat.updateMissiles(this.mobs);
 
     // Spell system (resets confusion, ticks fogs/shell)

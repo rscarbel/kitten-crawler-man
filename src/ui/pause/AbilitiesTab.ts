@@ -1,10 +1,18 @@
 import type { AbilityManager, AbilityDef, AbilityId } from '../../core/AbilityManager';
+import type { Inventory } from '../../core/Inventory';
+import { HOTBAR_COUNT } from '../../core/ItemDefs';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 import { drawText, measureTextBox } from '../TextBox';
 
-type AbilitiesView = 'list' | AbilityId;
+function isAbilityId(id: string): id is AbilityId {
+  const ABILITY_IDS: ReadonlyArray<string> = ['magic_missile', 'protective_shell'];
+  return ABILITY_IDS.includes(id);
+}
+
+type AbilitiesView = 'list' | 'equipped_abilities' | AbilityId;
 
 let currentView: AbilitiesView = 'list';
+let equippedPlayer: 'human' | 'cat' = 'cat';
 
 // Scroll state — owned here, updated each render frame
 let listScrollY = 0;
@@ -66,9 +74,27 @@ export function renderAbilitiesTab(
   bh: number,
   setTab: (tab: PauseTab) => void,
   abilityManager: AbilityManager,
+  humanInventory?: Inventory,
+  catInventory?: Inventory,
+  mouseX?: number,
+  mouseY?: number,
 ): void {
   if (currentView === 'list') {
     renderListView(ctx, buttons, bx, by, bw, bh, setTab, abilityManager);
+  } else if (currentView === 'equipped_abilities') {
+    renderEquippedAbilitiesView(
+      ctx,
+      buttons,
+      bx,
+      by,
+      bw,
+      bh,
+      abilityManager,
+      humanInventory,
+      catInventory,
+      mouseX,
+      mouseY,
+    );
   } else {
     const def = abilityManager.getDef(currentView);
     if (def) {
@@ -81,7 +107,7 @@ export function renderAbilitiesTab(
 }
 
 const LIST_ROW_H = 54;
-const LIST_HEADER_H = 52;
+const LIST_HEADER_H = 82; // extra space for the Equipped Abilities button
 const LIST_FOOTER_H = 48;
 const SCROLLBAR_W = 6;
 
@@ -97,11 +123,15 @@ function renderListView(
 ): void {
   drawText(ctx, 'Abilities Unlocked', {
     x: bx + bw / 2,
-    y: by + 30 - 13,
+    y: by + 22 - 10,
     bold: true,
     size: 16,
     color: '#f1f5f9',
     align: 'center',
+  });
+
+  menuBtn(ctx, buttons, bx + 16, by + 34, bw - 32, 30, 'Equipped Abilities ▶', () => {
+    currentView = 'equipped_abilities';
   });
 
   const abilities = abilityManager.getAllRegistered();
@@ -213,6 +243,323 @@ function renderListView(
   menuBtn(ctx, buttons, bx + 20, backY, bw - 40, 34, '← Back', () => {
     currentView = 'list';
     setTab('main');
+  });
+}
+
+// Tooltip helper
+
+function drawTooltip(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  bx: number,
+  by: number,
+  bw: number,
+  _bh: number,
+): void {
+  ctx.save();
+  ctx.font = 'bold 11px monospace';
+  const tw = ctx.measureText(text).width;
+  const pad = 6;
+  const ttW = tw + pad * 2;
+  const ttH = 20;
+  let ttX = x + 8;
+  let ttY = y - ttH - 4;
+  if (ttX + ttW > bx + bw) ttX = bx + bw - ttW - 2;
+  if (ttY < by + 2) ttY = y + 16;
+  ctx.fillStyle = 'rgba(15,23,42,0.95)';
+  ctx.fillRect(ttX, ttY, ttW, ttH);
+  ctx.strokeStyle = '#7c3aed';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(ttX, ttY, ttW, ttH);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(text, ttX + pad, ttY + ttH - 5);
+  ctx.restore();
+}
+
+// Equipped Abilities View
+
+const EQ_SLOT_SIZE = 40;
+const EQ_SLOT_GAP = 6;
+const EQ_HEADER_H = 72;
+const EQ_FOOTER_H = 44;
+
+function renderEquippedAbilitiesView(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+  abilityManager: AbilityManager,
+  humanInventory: Inventory | undefined,
+  catInventory: Inventory | undefined,
+  mouseX: number | undefined,
+  mouseY: number | undefined,
+): void {
+  // Header
+  drawText(ctx, 'Equipped Abilities', {
+    x: bx + bw / 2,
+    y: by + 22 - 10,
+    bold: true,
+    size: 15,
+    color: '#e9d5ff',
+    align: 'center',
+  });
+
+  // Player toggle
+  const toggleY = by + 34;
+  const toggleW = (bw - 40) / 2;
+  const humanColor = equippedPlayer === 'human' ? '#fb923c' : '#475569';
+  const catColor = equippedPlayer === 'cat' ? '#38bdf8' : '#475569';
+
+  ctx.fillStyle = equippedPlayer === 'human' ? 'rgba(251,146,60,0.18)' : 'rgba(30,41,59,0.6)';
+  ctx.fillRect(bx + 16, toggleY, toggleW, 24);
+  drawText(ctx, 'Human', {
+    x: bx + 16 + toggleW / 2,
+    y: toggleY + 15 - 9,
+    bold: equippedPlayer === 'human',
+    size: 12,
+    color: humanColor,
+    align: 'center',
+  });
+  buttons.push({
+    x: bx + 16,
+    y: toggleY,
+    w: toggleW,
+    h: 24,
+    action: () => {
+      equippedPlayer = 'human';
+    },
+  });
+
+  ctx.fillStyle = equippedPlayer === 'cat' ? 'rgba(56,189,248,0.18)' : 'rgba(30,41,59,0.6)';
+  ctx.fillRect(bx + 24 + toggleW, toggleY, toggleW, 24);
+  drawText(ctx, 'Cat', {
+    x: bx + 24 + toggleW + toggleW / 2,
+    y: toggleY + 15 - 9,
+    bold: equippedPlayer === 'cat',
+    size: 12,
+    color: catColor,
+    align: 'center',
+  });
+  buttons.push({
+    x: bx + 24 + toggleW,
+    y: toggleY,
+    w: toggleW,
+    h: 24,
+    action: () => {
+      equippedPlayer = 'cat';
+    },
+  });
+
+  const inventory = equippedPlayer === 'human' ? humanInventory : catInventory;
+  const contentY = by + EQ_HEADER_H;
+  const contentH = bh - EQ_HEADER_H - EQ_FOOTER_H;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, contentY, bw, contentH);
+  ctx.clip();
+
+  //  Hotbar section
+  drawText(ctx, 'Hotbar Abilities', {
+    x: bx + 16,
+    y: contentY + 12 - 8,
+    bold: true,
+    size: 11,
+    color: '#94a3b8',
+  });
+
+  const slotRowY = contentY + 18;
+  const totalSlots = HOTBAR_COUNT - 1; // exclude quest slot
+  const rowW = totalSlots * (EQ_SLOT_SIZE + EQ_SLOT_GAP) - EQ_SLOT_GAP;
+  const rowX = bx + (bw - rowW) / 2;
+
+  for (let i = 0; i < totalSlots; i++) {
+    const sx = rowX + i * (EQ_SLOT_SIZE + EQ_SLOT_GAP);
+    const sy = slotRowY;
+    const slot = inventory?.actionBar.slots[i] ?? null;
+    const isAbilityTome = slot !== null && slot.canDrop === false && slot.abilityId !== undefined;
+
+    // Slot background
+    ctx.fillStyle = isAbilityTome ? 'rgba(124,58,237,0.25)' : 'rgba(30,41,59,0.7)';
+    ctx.fillRect(sx, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+    ctx.strokeStyle = isAbilityTome ? '#7c3aed' : '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+
+    // Slot label
+    drawText(ctx, String(i + 1), {
+      x: sx + 4,
+      y: sy + 9 - 7,
+      size: 8,
+      color: '#64748b',
+    });
+
+    if (slot !== null) {
+      if (isAbilityTome && slot.abilityId !== undefined && isAbilityId(slot.abilityId)) {
+        const abilityIdTyped = slot.abilityId;
+        const def = abilityManager.getDef(abilityIdTyped);
+        if (def) {
+          const iconPad = 4;
+          const iconSize = EQ_SLOT_SIZE - iconPad * 2;
+          def.renderIcon(
+            ctx,
+            sx + iconPad,
+            sy + iconPad,
+            iconSize,
+            abilityManager.getLevel(def.id),
+          );
+
+          // Hover tooltip
+          if (
+            mouseX !== undefined &&
+            mouseY !== undefined &&
+            mouseX >= sx &&
+            mouseX <= sx + EQ_SLOT_SIZE &&
+            mouseY >= sy &&
+            mouseY <= sy + EQ_SLOT_SIZE
+          ) {
+            drawTooltip(ctx, def.name, mouseX, mouseY, bx, by, bw, bh);
+          }
+
+          // Remove button
+          const rmY = sy + EQ_SLOT_SIZE + 3;
+          const slotCapture = slot;
+          menuBtn(ctx, buttons, sx, rmY, EQ_SLOT_SIZE, 16, '✕', () => {
+            if (!inventory) return;
+            const emptyIdx = inventory.bag.slots.indexOf(null);
+            if (emptyIdx !== -1) {
+              inventory.bag.slots[emptyIdx] = slotCapture;
+              inventory.actionBar.slots[i] = null;
+            }
+          });
+        }
+      } else {
+        // Non-ability item — show grayed indicator
+        ctx.fillStyle = 'rgba(100,116,139,0.35)';
+        ctx.fillRect(sx + 6, sy + 6, EQ_SLOT_SIZE - 12, EQ_SLOT_SIZE - 12);
+        drawText(ctx, 'item', {
+          x: sx + EQ_SLOT_SIZE / 2,
+          y: sy + EQ_SLOT_SIZE / 2 + 4,
+          size: 8,
+          color: '#475569',
+          align: 'center',
+        });
+      }
+    }
+  }
+
+  // Available abilities section
+  const availSectionY = slotRowY + EQ_SLOT_SIZE + 26;
+  drawText(ctx, 'Available Abilities', {
+    x: bx + 16,
+    y: availSectionY - 10,
+    bold: true,
+    size: 11,
+    color: '#94a3b8',
+  });
+
+  // Find ability tomes in the bag
+  const bagTomes: Array<{ bagIdx: number; abilityId: AbilityId }> = [];
+  if (inventory) {
+    for (let i = 0; i < inventory.bag.slots.length; i++) {
+      const s = inventory.bag.slots[i];
+      if (
+        s !== null &&
+        s.canDrop === false &&
+        s.abilityId !== undefined &&
+        isAbilityId(s.abilityId)
+      ) {
+        bagTomes.push({ bagIdx: i, abilityId: s.abilityId });
+      }
+    }
+  }
+
+  if (bagTomes.length === 0) {
+    drawText(ctx, 'No abilities in bag.', {
+      x: bx + bw / 2,
+      y: availSectionY + 16,
+      size: 11,
+      color: '#475569',
+      align: 'center',
+    });
+  } else {
+    let availX = rowX;
+    for (const { bagIdx, abilityId } of bagTomes) {
+      const def = abilityManager.getDef(abilityId);
+      if (!def) continue;
+      const sy = availSectionY;
+
+      ctx.fillStyle = 'rgba(30,41,59,0.7)';
+      ctx.fillRect(availX, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(availX, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+
+      const iconPad = 4;
+      def.renderIcon(
+        ctx,
+        availX + iconPad,
+        sy + iconPad,
+        EQ_SLOT_SIZE - iconPad * 2,
+        abilityManager.getLevel(def.id),
+      );
+
+      if (
+        mouseX !== undefined &&
+        mouseY !== undefined &&
+        mouseX >= availX &&
+        mouseX <= availX + EQ_SLOT_SIZE &&
+        mouseY >= sy &&
+        mouseY <= sy + EQ_SLOT_SIZE
+      ) {
+        drawTooltip(ctx, def.name, mouseX, mouseY, bx, by, bw, bh);
+      }
+
+      // Add button
+      const addBtnY = sy + EQ_SLOT_SIZE + 3;
+      const bagIdxCapture = bagIdx;
+      menuBtn(ctx, buttons, availX, addBtnY, EQ_SLOT_SIZE, 16, '+Add', () => {
+        if (!inventory) return;
+        const bagItem = inventory.bag.slots[bagIdxCapture];
+        if (!bagItem) return;
+        // Find first empty or non-ability hotbar slot (excluding quest slot)
+        let targetSlot = -1;
+        for (let i = 0; i < HOTBAR_COUNT - 1; i++) {
+          if (!inventory.actionBar.slots[i]) {
+            targetSlot = i;
+            break;
+          }
+        }
+        if (targetSlot === -1) {
+          // No empty slot — use slot 0, bumping any item to bag
+          targetSlot = 0;
+        }
+        const displaced = inventory.actionBar.slots[targetSlot];
+        if (displaced && displaced.canDrop !== false) {
+          // Move displaced item to first empty bag slot
+          const emptyBag = inventory.bag.slots.indexOf(null);
+          if (emptyBag !== -1) {
+            inventory.bag.slots[emptyBag] = displaced;
+          }
+        }
+        inventory.actionBar.slots[targetSlot] = bagItem;
+        inventory.bag.slots[bagIdxCapture] = null;
+      });
+
+      availX += EQ_SLOT_SIZE + EQ_SLOT_GAP;
+    }
+  }
+
+  ctx.restore();
+
+  // Back button
+  menuBtn(ctx, buttons, bx + 20, by + bh - EQ_FOOTER_H + 6, bw - 40, 34, '← Back', () => {
+    currentView = 'list';
+    touchStartY = null;
   });
 }
 

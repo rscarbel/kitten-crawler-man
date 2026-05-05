@@ -237,7 +237,7 @@ export class InventoryInteraction {
       const r = hotbarSlotRect(i, canvas);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
-        if (item) {
+        if (item && item.canDrop !== false) {
           this.drag = { source: 'hotbar', idx: i, item, mx, my };
           return;
         }
@@ -282,7 +282,7 @@ export class InventoryInteraction {
       const r = hotbarSlotRect(i, canvas);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
-        if (item) {
+        if (item && item.canDrop !== false) {
           this.contextMenu = { source: 'hotbar', slotIdx: i, x: mx, y: my, item };
           this.contextMenuHover = -1;
           return;

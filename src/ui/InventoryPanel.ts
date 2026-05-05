@@ -1,6 +1,7 @@
 import type { Inventory } from '../core/Inventory';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem } from '../core/ItemDefs';
+import { drawSpriteKey } from '../core/SpriteRenderer';
 import { platform } from '../core/Platform';
 import { drawDynamiteInventoryIcon } from '../sprites/dynamiteSprite';
 import {
@@ -727,6 +728,10 @@ export class InventoryPanel {
       ctx.beginPath();
       ctx.ellipse(cx, cy, sw * 0.45, sh * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    if (item.id === 'magic_missile_tome') {
+      drawSpriteKey(ctx, 'magic_missile_icon', 'standard', 0, x, y, size);
     }
 
     if (item.id === 'enchanted_bigboi_boxers') {

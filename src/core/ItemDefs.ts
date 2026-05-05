@@ -8,7 +8,8 @@ export type ItemId =
   | 'gym_dumbbell'
   | 'gym_bench_press'
   | 'gym_treadmill'
-  | 'quest_wood_board';
+  | 'quest_wood_board'
+  | 'magic_missile_tome';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -32,6 +33,12 @@ export interface InventoryItem {
   abilityId?: string;
   /** When true, hotbar slot renders with a lighter quest-item colour. */
   isQuestItem?: boolean;
+  /**
+   * When false, the item cannot be dragged out of the hotbar via normal
+   * inventory interaction or dropped on the ground. Only the Abilities UI
+   * can move it. Defaults to true when omitted.
+   */
+  canDrop?: boolean;
   /** Multiplier applied to the player's HP regen rate while this item is equipped. Stacks multiplicatively with other sources. */
   regenMultiplier?: number;
 }
@@ -120,6 +127,18 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'magical attacks, now have a 15% chance to inflict the Sepsis debuff. ' +
       'Sepsis is a health-sapping curse that slowly drains the life of its ' +
       'victim until they perish.',
+  },
+  magic_missile_tome: {
+    id: 'magic_missile_tome',
+    name: 'Magic Missile',
+    stackable: false,
+    canHotlist: true,
+    canDrop: false,
+    type: 'consumable',
+    abilityId: 'magic_missile',
+    description:
+      'Channels arcane energy into a bolt of pure magic. Only the Cat can fire it. ' +
+      'Place on the hotbar and press the assigned key to fire.',
   },
   quest_wood_board: {
     id: 'quest_wood_board',

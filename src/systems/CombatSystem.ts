@@ -58,6 +58,31 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     }
   }
 
+  if (cat.isAttackPeak() && !safeRoom.isEntityInSafeRoom(cat)) {
+    const cc = centerOf(cat);
+    const range = cat.getMeleeRange();
+    const damage = cat.getMeleeDamage();
+    const nearCat = mobGrid.queryCircle(cc.x, cc.y, range);
+    for (const mob of nearCat) {
+      if (!mob.isAlive || !mob.isHostile) continue;
+      const mc = centerOf(mob);
+      const dx = mc.x - cc.x;
+      const dy = mc.y - cc.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist === 0 || dist > range) continue;
+      if (dist > TILE_SIZE * 1.0) {
+        const dot = (dx / dist) * cat.facingX + (dy / dist) * cat.facingY;
+        if (dot <= 0.0) continue;
+      }
+      if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
+      mob.takeDamageFrom(damage, cat, 'melee');
+      ctx.hitLanded = true;
+      if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+        mob.applyStatus(makeSepsis());
+      }
+    }
+  }
+
   if (!safeRoom.isEntityInSafeRoom(cat)) {
     const missileLevel = cat.getMagicMissileLevel();
     const hitRadius = TILE_SIZE * 0.7;

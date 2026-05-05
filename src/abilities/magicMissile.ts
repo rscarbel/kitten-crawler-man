@@ -78,7 +78,7 @@ export const MAGIC_MISSILE_DEF: AbilityDef = {
   id: 'magic_missile',
   name: 'Magic Missile',
   owner: 'cat',
-  equipInstructions: 'Switch to Cat (Tab) then press Space to fire',
+  equipInstructions: 'Switch to Cat (Tab), place tome on hotbar, press key 1–7 to fire',
   baseXpToLevel2: 100,
   xpGrowthRate: 1.7,
   finalLevelMultiplier: 2.2,

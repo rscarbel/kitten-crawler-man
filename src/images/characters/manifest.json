@@ -21,6 +21,17 @@
       }
     }
   },
+  "cat_claw": {
+    "path": "characters/cat_claw.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "swipe": { "row": 0, "frameCount": 8 }
+    }
+  },
   "human": {
     "path": "characters/human.png",
     "frameWidth": 96,

@@ -50,6 +50,25 @@ export function drawCatSprite(
   drawSpriteKey(ctx, 'cat', 'idle', 0, sx, sy, s, { flipX });
 }
 
+/**
+ * Draw the cat claw swipe overlay. Extends rightward by default;
+ * flipX is applied for left-facing cats.
+ */
+export function drawCatClawSwipe(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  attackTimer: number,
+  ATTACK_FRAMES: number,
+  facingX: number,
+): void {
+  const t = 1 - attackTimer / ATTACK_FRAMES;
+  const frame = progressFrameIndex(t, 8);
+  const flipX = facingX < 0;
+  drawSpriteKey(ctx, 'cat_claw', 'swipe', frame, sx, sy, s, { flipX });
+}
+
 export function drawMissiles(
   ctx: CanvasRenderingContext2D,
   missiles: Missile[],

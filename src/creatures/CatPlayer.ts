@@ -1,17 +1,18 @@
 import { Player } from '../Player';
 import type { Mob } from './Mob';
 import type { Missile } from '../sprites/catSprite';
-import { drawCatSprite, drawMissiles } from '../sprites/catSprite';
+import { drawCatSprite, drawCatClawSwipe, drawMissiles } from '../sprites/catSprite';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import { TILE_SIZE } from '../core/constants';
+import { ITEM_DEF } from '../core/ItemDefs';
 
 /**
  * This is a playable character.
- * The cat has the power "magic missile"
- * which is a long range attack
+ * Primary attack (Space): claw swipe — short-range melee.
+ * Magic Missile: hotbar ability, fires an arcane projectile.
  */
 
 export class CatPlayer extends Player {
@@ -20,6 +21,9 @@ export class CatPlayer extends Player {
   private missileCooldown = 0;
   private map: GameMap | null = null;
   private abilityManager: AbilityManager | null = null;
+
+  private attackTimer = 0;
+  private readonly ATTACK_FRAMES = 18;
 
   /** Sub-missile spawns queued by CombatSystem this frame; flushed after resolvePlayerAttacks. */
   private pendingSubMissileSpawns: Array<{ x: number; y: number }> = [];
@@ -41,12 +45,22 @@ export class CatPlayer extends Player {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, 8);
+    // Initialize Magic Missile tome in hotbar slot 0
+    this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
   }
 
   getMissileDamage(): number {
     const base = 2 + this.intelligence;
     const stats = getMagicMissileStats(this.getMagicMissileLevel());
     return Math.round(base * stats.damageMultiplier);
+  }
+
+  getMeleeDamage(): number {
+    return 1 + this.strength;
+  }
+
+  getMeleeRange(): number {
+    return this.tileSize * 1.6;
   }
 
   get missileCooldownCurrent(): number {
@@ -83,11 +97,27 @@ export class CatPlayer extends Player {
     }
   }
 
+  /** Primary Space action: claw swipe (melee). */
   triggerAttack() {
+    if (this.attackTimer > 0) return;
+    this.attackTimer = this.ATTACK_FRAMES;
+  }
+
+  /** Hotbar-triggered magic missile fire. */
+  triggerMissile() {
     const cooldownMax = this.missileCooldownMax;
     if (this.missileCooldown > 0) return;
     this.fireMissile();
     this.missileCooldown = cooldownMax;
+  }
+
+  updateAttack() {
+    if (this.attackTimer > 0) this.attackTimer--;
+  }
+
+  /** Returns true on the single frame when the claw hits (peak of the swing). */
+  isAttackPeak(): boolean {
+    return this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
   }
 
   getMissiles(): Missile[] {
@@ -230,6 +260,9 @@ export class CatPlayer extends Player {
     }
 
     drawCatSprite(ctx, sx, sy, s, this.walkFrame, this.isMoving, this.facingY, this.facingX);
+    if (this.attackTimer > 0) {
+      drawCatClawSwipe(ctx, sx, sy, s, this.attackTimer, this.ATTACK_FRAMES, this.facingX);
+    }
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy);
