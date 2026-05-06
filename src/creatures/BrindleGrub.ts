@@ -115,6 +115,7 @@ export class BrindleGrub extends Mob {
     this.maxHp = STAGE3_HP;
     this.hp = STAGE3_HP;
     this.evolveTimer = -1; // no further evolution
+    this.isFlying = true;
     this.displayName = 'Brindled Vespa';
     this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
   }

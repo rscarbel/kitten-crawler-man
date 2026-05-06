@@ -77,6 +77,9 @@ export abstract class Mob extends Player {
   /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
   isSlowed = false;
 
+  /** True for airborne mobs that pass over ground mobs without physical collision. */
+  isFlying = false;
+
   /**
    * When set to a live Mob, this mob will chase and attack it as a priority target.
    * Used so that Brindled Vespa acid hits cause enemy mobs to retaliate.
@@ -468,6 +471,10 @@ export abstract class Mob extends Player {
     });
     // Render sepsis bubbles above mob
     this.renderStatusEffects(ctx, sx, sy);
+  }
+
+  applySeparation(dx: number, dy: number): void {
+    this.moveWithCollision(dx, dy);
   }
 
   abstract updateAI(targets: Player[]): void;
