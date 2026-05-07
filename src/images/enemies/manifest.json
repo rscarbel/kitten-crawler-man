@@ -1,11 +1,11 @@
 {
   "goblin_base": {
     "path": "enemies/goblin_base.png",
-    "frameWidth": 96,
-    "frameHeight": 128,
-    "tileX": 16,
-    "tileY": 16,
-    "tileScale": 64,
+    "frameWidth": 192,
+    "frameHeight": 256,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 128,
     "states": {
       "walk": {
         "row": 0,
