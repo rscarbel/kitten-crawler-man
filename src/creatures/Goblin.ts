@@ -22,6 +22,7 @@ export class Goblin extends Mob {
   protected coinDropMax = 3;
   displayName = 'Goblin';
   description = 'A scrappy little troublemaker armed with crude weapons.';
+  readonly bodyPartKey = 'goblin';
   readonly weapon: GoblinWeapon;
   readonly skinColor: string;
   readonly eyeColor: string;

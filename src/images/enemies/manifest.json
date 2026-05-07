@@ -18,6 +18,46 @@
       "attack": {
         "row": 2,
         "frameCount": 16
+      },
+      "gore_damaged_head": {
+        "row": 1,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_severed_arm_left": {
+        "row": 1,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_severed_arm_right": {
+        "row": 1,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_severed_leg_left": {
+        "row": 1,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_severed_leg_right": {
+        "row": 1,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_severed_torso": {
+        "row": 1,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_severed_head": {
+        "row": 1,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_severed_head_damaged": {
+        "row": 1,
+        "colOffset": 8,
+        "frameCount": 1
       }
     }
   },

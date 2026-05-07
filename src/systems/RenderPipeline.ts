@@ -14,6 +14,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GoreSystem } from './GoreSystem';
+import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { JuicerRoomSystem } from './JuicerRoomSystem';
@@ -58,6 +59,7 @@ export interface RenderContext {
 
   // Systems
   gore: GoreSystem;
+  bodyPartGore: BodyPartGoreSystem;
   safeRoom: SafeRoomSystem;
   bossRoom: BossRoomSystem;
   juicerRoom: JuicerRoomSystem;
@@ -112,6 +114,7 @@ export class RenderPipeline {
 
     gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
     gore.renderPuddles(ctx, camX, camY);
+    rc.bodyPartGore.renderSettled(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -202,9 +205,11 @@ export class RenderPipeline {
     rc: RenderContext,
     renderLevelUpFlash: (ctx: CanvasRenderingContext2D, camX: number, camY: number) => void,
   ): void {
-    const { camX, camY, gore, barriers, spells, dynamite, mongoSystem, active, pm } = rc;
+    const { camX, camY, gore, bodyPartGore, barriers, spells, dynamite, mongoSystem, active, pm } =
+      rc;
 
     gore.renderParticles(ctx, camX, camY);
+    bodyPartGore.renderFlying(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);
     spells.renderShell(ctx, camX, camY);
     spells.renderCatMiniShell(ctx, camX, camY, pm.cat);

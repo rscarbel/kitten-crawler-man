@@ -42,7 +42,8 @@ export function drawSprite(
 
   const scale = tileSize / tileScale;
   const clampedFrame = Math.max(0, Math.min(Math.floor(frame), stateDef.frameCount - 1));
-  const srcX = clampedFrame * frameWidth;
+  const colOffset = stateDef.colOffset ?? 0;
+  const srcX = (colOffset + clampedFrame) * frameWidth;
   const srcY = stateDef.row * frameHeight;
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;
@@ -79,6 +80,39 @@ export function drawSprite(
   }
 
   if (needsSave) ctx.restore();
+}
+
+/**
+ * Draw a sprite rotated around its visual center (pivot = center of the rendered frame).
+ * sx/sy are the screen-space world coordinates of the part (before camera offset removal).
+ * Intended for gore/debris parts that spin freely rather than directional effects.
+ */
+export function drawSpriteRotatedCenter(
+  ctx: CanvasRenderingContext2D,
+  def: SpriteDef,
+  stateDef: SpriteStateDef,
+  sx: number,
+  sy: number,
+  angle: number,
+  tileSize: number,
+  alpha: number,
+): void {
+  const { img, frameWidth, frameHeight, tileX, tileY, tileScale } = def;
+  const colOffset = stateDef.colOffset ?? 0;
+  const srcX = colOffset * frameWidth;
+  const srcY = stateDef.row * frameHeight;
+  const scale = tileSize / tileScale;
+  const dw = frameWidth * scale;
+  const dh = frameHeight * scale;
+  const pivotX = sx - tileX * scale + dw / 2;
+  const pivotY = sy - tileY * scale + dh / 2;
+
+  ctx.save();
+  if (alpha !== 1) ctx.globalAlpha = alpha;
+  ctx.translate(pivotX, pivotY);
+  ctx.rotate(angle);
+  ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, -dw / 2, -dh / 2, dw, dh);
+  ctx.restore();
 }
 
 /**

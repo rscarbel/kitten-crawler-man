@@ -47,6 +47,7 @@ import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
 import { GoreSystem } from '../systems/GoreSystem';
+import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
@@ -120,6 +121,7 @@ export class DungeonScene extends GameplayScene {
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
   private gore = new GoreSystem();
+  private bodyPartGore = new BodyPartGoreSystem();
   private playerTick = new PlayerTickSystem();
   private mongoSystem = new MongoSystem();
   private renderPipeline = new RenderPipeline();
@@ -414,8 +416,11 @@ export class DungeonScene extends GameplayScene {
       const cx = mob.x + TILE_SIZE * 0.5;
       const cy = mob.y + TILE_SIZE * 0.5;
 
-      // Gore via spawnGore event (decoupled from kill logic)
+      // Blood splatter gore
       bus.emit('spawnGore', { x: cx, y: cy });
+
+      // Body part gore for mobs that have part configs registered
+      this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE);
 
       // Corpse marker on minimap
       this.miniMap.addCorpseMarker(cx, cy);
@@ -1051,6 +1056,7 @@ export class DungeonScene extends GameplayScene {
       gameOver: this.gameOver,
       pauseMenuOpen: this.pauseMenu.isOpen,
       gore: this.gore,
+      bodyPartGore: this.bodyPartGore,
       safeRoom: this.safeRoom,
       bossRoom: this.bossRoom,
       juicerRoom: this.juicerRoom,
@@ -1473,6 +1479,7 @@ export class DungeonScene extends GameplayScene {
     this.speechBubblePulse++;
 
     this.gore.update();
+    this.bodyPartGore.update();
     this.dynamite.update(ctx);
 
     if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {

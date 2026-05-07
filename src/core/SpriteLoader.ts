@@ -17,6 +17,8 @@ const manifestJson = {
 
 export interface SpriteStateDef {
   readonly row: number;
+  /** Column start offset within the row (0-based). Defaults to 0. */
+  readonly colOffset?: number;
   readonly frameCount: number;
 }
 

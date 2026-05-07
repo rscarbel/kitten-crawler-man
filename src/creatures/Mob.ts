@@ -96,6 +96,9 @@ export abstract class Mob extends Player {
   /** Display name shown in hover tooltip. Subclasses should override. */
   displayName = 'Unknown';
 
+  /** Key into BodyPartGoreSystem's registry; null means no body-part gore for this mob. */
+  readonly bodyPartKey: string | null = null;
+
   /** Short description shown in hover tooltip. Subclasses should override. */
   description = '';
 
