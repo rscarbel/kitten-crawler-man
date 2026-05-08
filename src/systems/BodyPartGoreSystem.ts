@@ -31,8 +31,8 @@ const XY_SPEED_MAX = 0.8;
 // Very light air friction — parts glide while airborne
 const XY_FRICTION = 0.99;
 // Initial upward pop (screen pixels, treated as height above ground)
-const VZ_MIN = 3.0;
-const VZ_MAX = 6.0;
+const VZ_MIN = 2.0;
+const VZ_MAX = 4.0;
 // Downward pull applied to vz each frame
 const GRAVITY = 0.1;
 const SPIN_MIN = 0.04;

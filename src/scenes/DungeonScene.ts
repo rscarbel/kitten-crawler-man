@@ -22,7 +22,6 @@ import { InventoryPanel } from '../ui/InventoryPanel';
 import { GearPanel } from '../ui/GearPanel';
 import { SpatialGrid } from '../core/SpatialGrid';
 
-// Systems
 import { MiniMapSystem } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -128,28 +127,22 @@ export class DungeonScene extends GameplayScene {
   private mobLoop = new MobUpdateLoop();
   private bus = new EventBus();
 
-  // UI
   protected pauseMenu: PauseMenu;
   private deathScreen: DeathScreen;
   private inventoryPanel: InventoryPanel;
   private gearPanel: GearPanel;
 
-  // Achievement + loot box UI (notification queue, icons, opener)
   private achievementUI!: AchievementUISystem;
   private humanAchievements: AchievementManager;
   private catAchievements: AchievementManager;
 
-  // Boss battle intro
   private bossIntro = new BossIntroSystem();
 
-  // Ability leveling
   private readonly abilityManager: AbilityManager;
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
 
-  // Arena (Ball of Swine) — delegated to ArenaSystem
   private arena!: ArenaSystem;
 
-  // Floor entry snapshots (used to respawn players at floor-start state on death)
   private floorEntryHumanSnap!: PlayerSnapshot;
   private floorEntryCatSnap!: PlayerSnapshot;
   private floorEntryHumanAchievements!: AchievementManager;
@@ -176,7 +169,6 @@ export class DungeonScene extends GameplayScene {
     abilityLevels: Map<AbilityId, AbilityState>;
   } = null;
 
-  // Misc state
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
   private levelTimerFrames = 0;
@@ -184,11 +176,9 @@ export class DungeonScene extends GameplayScene {
   private safeRoomEntered = false;
   private speechBubblePulse = 0;
 
-  // Key handlers
   private readonly inputHandler = new DungeonInputHandler();
   private readonly playerChat = new PlayerChatSystem();
 
-  // Mobile touch state (encapsulated)
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
   private combatCooldownFrames = 0;
@@ -197,7 +187,6 @@ export class DungeonScene extends GameplayScene {
   private playerIdleFrames = 0;
   private gameStats = new GameStats();
 
-  // Mouse position in screen coords (updated by handleMouseMove)
   private _mouseX = -9999;
   private _mouseY = -9999;
 
@@ -231,21 +220,14 @@ export class DungeonScene extends GameplayScene {
     const { x: sx, y: sy } = spawn;
     this.pm = new PlayerManager(sx, sy);
 
-    // Restore player state if returning from a sub-scene (e.g. building interior)
     if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
     if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
-    // Re-apply spawn position (restorePlayer doesn't touch x/y)
     this.pm.setPositions(sx, sy);
 
-    // Capture floor-entry state for death respawn. If the caller already
-    // provides a floor-entry snap (i.e. we're respawning after death), reuse
-    // it so repeated deaths always reset to the same floor-start state.
     this.floorEntryHumanSnap = options?.floorEntryHumanSnap ?? snapPlayer(this.human);
     this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
-
-    // Data-driven extra spawns (troglodytes near boss rooms, BoS at arena, sky fowls, etc.)
     this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
 
     this.cat.setMap(this.gameMap);
@@ -253,7 +235,6 @@ export class DungeonScene extends GameplayScene {
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
-    // Systems
     this.miniMap = new MiniMapSystem(this.gameMap);
     this.safeRoom = new SafeRoomSystem(this.gameMap, sx, sy, this.levelDef.id);
     this.bossRoom = new BossRoomSystem(
@@ -349,17 +330,14 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
-    // UI
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
     this.inventoryPanel = new InventoryPanel();
     this.gearPanel = new GearPanel();
 
-    // Achievements — carry over from previous floor if provided
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
 
-    // Achievement + loot box UI system
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
@@ -367,19 +345,15 @@ export class DungeonScene extends GameplayScene {
       this.cat,
     );
 
-    // Snapshot achievement state at floor entry so death-restarts can rewind it,
-    // allowing players to re-earn achievements they unlocked during the failed run.
     this.floorEntryHumanAchievements =
       options?.floorEntryHumanAchievements ?? this.humanAchievements.clone();
     this.floorEntryCatAchievements =
       options?.floorEntryCatAchievements ?? this.catAchievements.clone();
 
-    // Mongo summon state — carry unlock across floors
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
     }
 
-    // Ability leveling — carry across floors; register definitions fresh each time
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
     this.abilityManager.register(MAGIC_MISSILE_DEF);
     this.abilityManager.register(PROTECTIVE_SHELL_DEF);
@@ -397,7 +371,6 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
 
-  /** Subscribe systems to EventBus events, replacing imperative orchestration. */
   private wireEventBus(): void {
     const bus = this.bus;
 
@@ -415,7 +388,6 @@ export class DungeonScene extends GameplayScene {
       const cx = mob.x + TILE_SIZE * 0.5;
       const cy = mob.y + TILE_SIZE * 0.5;
 
-      // Normalized direction from attacker to mob — drives gore directionality
       let impactDx = 0;
       let impactDy = 0;
       if (killer !== null) {
@@ -428,30 +400,21 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Blood splatter gore
       bus.emit('spawnGore', { x: cx, y: cy, impactDx, impactDy });
-
-      // Body part gore for mobs that have part configs registered
       this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
-
-      // Corpse marker on minimap
       this.miniMap.addCorpseMarker(cx, cy);
 
-      // Achievements — first_blood
       if (killer === this.human) this.humanAchievements.tryUnlock('first_blood');
       if (killer === this.cat) this.catAchievements.tryUnlock('first_blood');
 
-      // Achievements — smush (Human melee punch kill)
       if (killer === this.human && mob.killType === 'melee' && this.human.nextType === 'punch') {
         this.humanAchievements.tryUnlock('smush');
       }
 
-      // Achievements — magic_touch (Cat missile kill)
       if (killer === this.cat && mob.killType === 'missile') {
         this.catAchievements.tryUnlock('magic_touch');
       }
 
-      // Loot drop
       if (mob.droppedLoot && topDamageDealer) {
         const FORCED_TO_HUMAN = new Set(['trollskin_shirt']);
         const FORCED_TO_CAT = new Set(['enchanted_crown_sepsis_whore']);
@@ -478,7 +441,6 @@ export class DungeonScene extends GameplayScene {
         mob.droppedLoot = null;
       }
 
-      // Boss-specific effects (regular bosses managed by BossRoomSystem)
       if (mob.isBoss) {
         bus.emit('bossDefeated', {
           bossType: mob.constructor.name || 'unknown',
@@ -486,20 +448,16 @@ export class DungeonScene extends GameplayScene {
         });
       }
 
-      // Ball of Swine is an arena boss (isBoss=false), handle separately
       if (mob instanceof BallOfSwine) {
         bus.emit('bossDefeated', { bossType: 'ball_of_swine', mob });
       }
 
-      // Krakaren Clone — also not flagged as isBoss
       if (mob instanceof KrakarenClone) {
         bus.emit('bossDefeated', { bossType: 'krakaren_clone', mob });
       }
 
-      // Data-driven on-kill spawns (e.g. level 2 Brindle Grubs)
       if (this.levelDef.onMobKilledSpawns) {
         for (const rule of this.levelDef.onMobKilledSpawns) {
-          // Don't spawn grubs from grub deaths (prevents infinite chain)
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
@@ -522,10 +480,7 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
-    // ── bossDefeated: boss_slayer achievement, Krakaren → Mongo ──
-    // (BoS tuskling spawning is handled by ArenaSystem via its own bus subscription)
     bus.on('bossDefeated', (e) => {
-      // boss_slayer achievement for both players
       if (!this.humanAchievements.tryUnlock('boss_slayer')) {
         this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
       }
@@ -536,14 +491,12 @@ export class DungeonScene extends GameplayScene {
       this.humanAchievements.logRecentEvent(bossLabel);
       this.catAchievements.logRecentEvent(bossLabel);
 
-      // Krakaren Clone death → unlock Mongo
       if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
         this.krakarenKilled = true;
         this.mongoSystem.unlocked = true;
       }
     });
 
-    // ── playerLevelUp: log for Mordecai context ──
     bus.on('playerLevelUp', (e) => {
       const isHuman = e.player === this.human;
       const who = isHuman ? 'Human' : 'Cat';
@@ -551,7 +504,6 @@ export class DungeonScene extends GameplayScene {
       mgr.logRecentEvent(`${who} reached level ${e.newLevel}`);
     });
 
-    // ── safeRoomEntered: safe_haven achievement + progress autosave ──
     bus.on('safeRoomEntered', () => {
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
@@ -568,9 +520,7 @@ export class DungeonScene extends GameplayScene {
         if (def?.rewards.coins) {
           this.active().coins += def.rewards.coins;
         }
-        // Grant a loot box with quest rewards (opened in safe room)
         this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
-        // Clear quest items from both players' quest slots
         this.human.inventory.clearQuestSlot();
         this.cat.inventory.clearQuestSlot();
       }
@@ -578,14 +528,11 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('questFailed', (e) => {
       if (e.questId === 'defend_goblin_mother') {
-        // Clear quest items from both players' quest slots
         this.human.inventory.clearQuestSlot();
         this.cat.inventory.clearQuestSlot();
       }
     });
   }
-
-  // Scene lifecycle
 
   onEnter(): void {
     this.inputHandler.bind({
@@ -670,8 +617,6 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.unbindScene();
     this.bus.clear();
   }
-
-  // Shared action helpers (keyboard + touch)
 
   private triggerSwitchCharacter(): void {
     this.safeRoom.mordecaiDialogOpen = false;
@@ -864,22 +809,15 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
-    // Ability level-up dialog (highest priority — game is paused while showing)
     if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
-
-    // Quest dialog clicks
     if (this.defendQuest.handleClick(mx, my)) return;
-
-    // Achievement UI overlays (notification + loot box opener)
     if (this.achievementUI.handleClick(mx, my)) return;
 
-    // Follower menu click
     if (this.followerMenu.isOpen) {
       this.followerMenu.handleClick(mx, my);
       return;
     }
 
-    // Desktop follower button click
     if (!platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
       if (pointInRect(mx, my, this.touch.followBtnRect)) {
         this.triggerCompanionFollow();
@@ -887,7 +825,6 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    // Desktop summon button click
     if (
       !platform.isMobile &&
       !this.gameOver &&
@@ -1018,8 +955,6 @@ export class DungeonScene extends GameplayScene {
     if (this.pauseMenu.isOpen) this.pauseMenu.handleWheel(deltaY);
   }
 
-  // Main update / render
-
   update(): void {
     aiAdapter.update();
     this.playerChat.update();
@@ -1083,25 +1018,19 @@ export class DungeonScene extends GameplayScene {
       speechBubblePulse: this.speechBubblePulse,
     };
 
-    // Layer 1: World (map, gore puddles, room objects, door hints)
     this.renderPipeline.renderWorld(ctx, rc);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
 
-    // Layer 2: Entities (Y-sorted mobs, players, decorations)
     this.renderPipeline.renderEntities(ctx, rc);
 
-    // Player speech bubble (world-space, semi-transparent so enemies remain visible)
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
-    // Balcony railing overlay — drawn after entities so railings appear in front
     this.renderPipeline.renderTowerBalconyOverlay(ctx, rc);
 
-    // Layer 3: Effects (particles, barriers, spells, dynamite, speech bubbles)
     this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) =>
       UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm),
     );
 
-    // Layer 4: Screen-space UI
     UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
     this.renderHUD(ctx, canvas);
 
@@ -1151,7 +1080,6 @@ export class DungeonScene extends GameplayScene {
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
       this.defendQuest.renderUI(ctx, canvas);
-      // Mongo summon button (desktop: left side above hotbar, mobile: in renderMobileButtons)
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -1281,8 +1209,6 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
-  // Core gameplay update
-
   private buildSystemContext(): SystemContext {
     const active = this.active();
     return {
@@ -1308,7 +1234,6 @@ export class DungeonScene extends GameplayScene {
   private updateGameplay(): void {
     const player = this.active();
 
-    // Phase 1 & 2: Movement input → collision-checked position update
     const move = readMovement(
       this.input,
       this.touch.moveTarget,
@@ -1318,7 +1243,6 @@ export class DungeonScene extends GameplayScene {
     );
     applyMovement(player, move, this.gameMap);
 
-    // Safe room flags
     this.pm.updateProtection(this.safeRoom);
 
     if (!this.safeRoomEntered && this.pm.isAnySafe(this.safeRoom)) {
@@ -1326,16 +1250,12 @@ export class DungeonScene extends GameplayScene {
       this.bus.emit('safeRoomEntered', {});
     }
 
-    // Build shared context once — passed to every system update
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
     this.bossRoom.update(ctx);
-
-    // Arena system: door locking, phase transitions, stairwell unlock
     this.arena.update(ctx);
 
-    // Trigger boss battle intro on first room entry
     if (this.bossRoom.newlyLockedBossType !== null) {
       const bt = this.bossRoom.newlyLockedBossType;
       this.bossRoom.newlyLockedBossType = null;
@@ -1349,20 +1269,14 @@ export class DungeonScene extends GameplayScene {
 
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
-
-    // Juicer room gym pickups + Juicer AI coordination
     this.juicerRoom.update(ctx);
-
     this.companion.update(ctx);
 
     this.human.updateAttack();
     this.cat.updateAttack();
     this.cat.updateMissiles(this.mobs);
 
-    // Spell system (resets confusion, ticks fogs/shell)
     this.spells.update(ctx);
-
-    // Mob AI tick (activation radius, pathfinding, boss clamping)
     this.mobLoop.update(ctx);
 
     const combatCtx: CombatContext = {
@@ -1422,26 +1336,19 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    // Intercept Mongo lethal damage before resolveKills consumes justDied
     this.mongoSystem.checkHealth();
-
-    // resolveKills emits mobKilled → listeners handle gore, loot, achievements,
-    // grub spawns, BoS tuskling burst, Krakaren → Mongo unlock
     resolveKills(combatCtx);
 
-    // Shell touch XP (1 XP per unique mob pushed per cast)
     const touchXp = this.spells.drainTouchXp();
     if (touchXp > 0) {
       this.abilityManager.addXp('protective_shell', touchXp);
     }
 
-    // Shell block XP (per projectile/tongue deflected)
     const blockXp = this.spells.drainBlockXp();
     if (blockXp > 0) {
       this.abilityManager.addXp('protective_shell', blockXp);
     }
 
-    // Shell level-15 shockwave on expiry
     const shockwave = this.spells.drainPendingShockwave();
     if (shockwave !== null) {
       this.spells.addShockwaveRipple(shockwave.x, shockwave.y, shockwave.radiusPx);
@@ -1461,7 +1368,6 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    // Shell level-15 chain lightning origins (mobs that died inside the shell this frame)
     const chainTargets = this.spells.drainChainLightningOrigins();
     for (const target of chainTargets) {
       const nearby = this.mobGrid.queryCircle(target.x, target.y, TILE_SIZE * 3);
@@ -1479,17 +1385,11 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    // Update Mongo system (cooldown, recall, despawn)
     this.mongoSystem.update(ctx);
-
     this.pm.tickTimers();
-
     this.playerTick.update(ctx);
-
     this.loot.update(ctx);
-
     this.speechBubblePulse++;
-
     this.gore.update();
     this.bodyPartGore.update();
     this.dynamite.update(ctx);
@@ -1498,7 +1398,6 @@ export class DungeonScene extends GameplayScene {
       this.levelTimerFrames--;
     }
 
-    // Phase 8: Mini-map fog reveal
     revealMinimap(player, this.miniMap);
 
     const wasStairwellOpen = this.stairwell.menuOpen;
@@ -1508,7 +1407,6 @@ export class DungeonScene extends GameplayScene {
     }
     this.building?.detect(this.active());
 
-    // Phase 9: Death check
     if (
       !this.gameOver &&
       checkDeath(this.human, this.cat, !!this.levelDef.isSafeLevel, this.levelTimerFrames)
@@ -1518,8 +1416,6 @@ export class DungeonScene extends GameplayScene {
       this.deathScreen.activate();
     }
   }
-
-  // Inventory actions
 
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
     if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
@@ -1561,8 +1457,6 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
-  // AI integration
-
   private createAISceneContext(): AISceneContext {
     return {
       getHuman: () => this.human,
@@ -1585,8 +1479,6 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  // Camera
-
   private camera(): { x: number; y: number } {
     const player = this.active();
     const canvas = this.sceneManager.canvas;
@@ -1599,8 +1491,6 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  // Touch handlers (mobile)
-
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
     const canvas = this.sceneManager.canvas;
 
@@ -1608,7 +1498,6 @@ export class DungeonScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      // HUD collapse/expand toggle (mobile only)
       if (platform.isMobile) {
         const ht = this._hudToggleRect;
         if (pointInRect(x, y, ht)) {
@@ -1617,7 +1506,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Minimap tap to expand/collapse (mobile only)
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const mm = this.touch.miniMapRect;
         if (pointInRect(x, y, mm)) {
@@ -1626,7 +1514,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Gear / Bag buttons (mobile only)
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const gb = this.touch.gearBtnRect;
         if (pointInRect(x, y, gb)) {
@@ -1640,7 +1527,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Mobile Mongo summon button
       if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         const mb = this.touch.summonBtnRect;
         if (pointInRect(x, y, mb)) {
@@ -1650,13 +1536,11 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Follower menu tap (mobile)
       if (platform.isMobile && this.followerMenu.isOpen) {
         this.followerMenu.handleClick(x, y);
         continue;
       }
 
-      // Mobile action buttons (always checked first)
       if (platform.isMobile) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
@@ -1672,7 +1556,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Hotbar slot tap — defer activation until touch end so long-press can open context menu
       if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
         const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (hi >= 0) {
@@ -1690,7 +1573,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Modal / overlay states: route as click
       if (
         this.achievementUI.isBlocking ||
         this.stairwell.menuOpen ||
@@ -1702,7 +1584,6 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      // Dynamite charge start: hold hotbar slot to charge, release to throw
       if (this.human.isActive) {
         const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
         if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
@@ -1712,12 +1593,10 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Inventory panel drag start + long-press for context menu
       if (this.inventoryPanel.isOpen) {
         if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
           this.touch.inventoryDragTouchId ??= touch.identifier;
-          // Start long-press timer for context menu (Drop, etc.)
           this.clearInvLongPress();
           this.touch.longPressPos = { x, y };
           this.touch.longPressFired = false;
@@ -1730,7 +1609,6 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      // Game world touch: movement / tap tracking
       if (this.touch.moveTouchId === null) {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
@@ -1745,16 +1623,13 @@ export class DungeonScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      // Cancel long-press if finger moved too far
       if (this.touch.longPressPos) {
         const dist = Math.hypot(x - this.touch.longPressPos.x, y - this.touch.longPressPos.y);
         if (dist > 10) this.clearInvLongPress();
       }
 
-      // Update inventory drag
       this.handleMouseMove(x, y);
 
-      // Update movement target
       if (touch.identifier === this.touch.moveTouchId) {
         this.touch.moveTarget = { x, y };
         this.pauseMenu.touchScrollMove(y);
@@ -1769,7 +1644,6 @@ export class DungeonScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      // Dynamite charge release
       if (touch.identifier === this.touch.dynamiteTouchId) {
         const wasCharging = this.dynamite.isCharging;
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
@@ -1778,18 +1652,15 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      // Inventory / hotbar drag end
       if (touch.identifier === this.touch.inventoryDragTouchId) {
         const longPressFired = this.touch.longPressFired;
         this.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
-          // Short tap on hotbar slot → activate item
           const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
           if (hi >= 0 && !this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
             this.triggerHotbarActivation(hi);
           } else {
-            // Also fire click so slot interactions (equip, context menu) work
             this.handleClick(x, y);
           }
         }
@@ -1797,13 +1668,11 @@ export class DungeonScene extends GameplayScene {
         continue;
       }
 
-      // Game world touch end
       if (touch.identifier === this.touch.moveTouchId) {
         if (this.touch.tapStart) {
           const elapsed = Date.now() - this.touch.tapStart.time;
           const moved = Math.hypot(x - this.touch.tapStart.x, y - this.touch.tapStart.y);
           if (elapsed < 250 && moved < 20) {
-            // If dynamite is charging, tap anywhere to aim and throw
             if (
               this.dynamite.isCharging &&
               this.human.isActive &&
@@ -1822,7 +1691,6 @@ export class DungeonScene extends GameplayScene {
               this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
-              // Short tap: try UI click first, then space action
               this.handleClick(x, y);
               if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
                 this.triggerSpaceAction(x, y);
@@ -1836,7 +1704,5 @@ export class DungeonScene extends GameplayScene {
         this.touch.tapStart = null;
       }
     }
-
-    void canvas;
   }
 }
