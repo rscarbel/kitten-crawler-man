@@ -139,7 +139,8 @@ export class MobUpdateLoop implements GameSystem {
       }
     }
 
-    // Player-mob collision — symmetric half-push so neither party has privileged mass.
+    // Player-mob collision. Human-controlled: symmetric half-push (neither has privileged mass).
+    // AI-controlled follower: full push back onto the player only — mobs act as walls.
     for (const player of [human, cat]) {
       if (!player.isAlive) continue;
       for (const mob of seps) {
@@ -148,14 +149,19 @@ export class MobUpdateLoop implements GameSystem {
         const dy = player.y - mob.y;
         const dist = Math.hypot(dx, dy);
         if (dist > 0 && dist < SEP_DIST) {
-          const half = ((SEP_DIST - dist) * 0.5) / dist;
-          const px = dx * half;
-          const py = dy * half;
-          pushPlayerWithCollision(player, px, py, gameMap);
-          const mobOx = mob.x;
-          const mobOy = mob.y;
-          mob.applySeparation(-px, -py);
-          if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
+          if (player.isActive) {
+            const half = ((SEP_DIST - dist) * 0.5) / dist;
+            const px = dx * half;
+            const py = dy * half;
+            pushPlayerWithCollision(player, px, py, gameMap);
+            const mobOx = mob.x;
+            const mobOy = mob.y;
+            mob.applySeparation(-px, -py);
+            if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
+          } else {
+            const full = (SEP_DIST - dist) / dist;
+            pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
+          }
         }
       }
     }

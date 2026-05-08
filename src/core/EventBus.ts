@@ -38,7 +38,7 @@ export interface GameEvents {
   playerLevelUp: { player: Player; newLevel: number };
 
   /** Gore should be spawned at a position. */
-  spawnGore: { x: number; y: number };
+  spawnGore: { x: number; y: number; impactDx: number; impactDy: number };
 
   /** A loot drop should be created. */
   lootDrop: {

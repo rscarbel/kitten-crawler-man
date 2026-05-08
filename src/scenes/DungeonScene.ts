@@ -401,9 +401,8 @@ export class DungeonScene extends GameplayScene {
   private wireEventBus(): void {
     const bus = this.bus;
 
-    // ── spawnGore: decoupled so any system can trigger gore independently ──
     bus.on('spawnGore', (e) => {
-      this.gore.spawnGore(e.x, e.y);
+      this.gore.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
     });
 
     // ── stats tracking ──
@@ -416,11 +415,24 @@ export class DungeonScene extends GameplayScene {
       const cx = mob.x + TILE_SIZE * 0.5;
       const cy = mob.y + TILE_SIZE * 0.5;
 
+      // Normalized direction from attacker to mob — drives gore directionality
+      let impactDx = 0;
+      let impactDy = 0;
+      if (killer !== null) {
+        const dx = cx - (killer.x + TILE_SIZE * 0.5);
+        const dy = cy - (killer.y + TILE_SIZE * 0.5);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+          impactDx = dx / dist;
+          impactDy = dy / dist;
+        }
+      }
+
       // Blood splatter gore
-      bus.emit('spawnGore', { x: cx, y: cy });
+      bus.emit('spawnGore', { x: cx, y: cy, impactDx, impactDy });
 
       // Body part gore for mobs that have part configs registered
-      this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE);
+      this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
 
       // Corpse marker on minimap
       this.miniMap.addCorpseMarker(cx, cy);

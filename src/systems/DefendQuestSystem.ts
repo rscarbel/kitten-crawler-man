@@ -438,6 +438,8 @@ export class DefendQuestSystem implements GameSystem {
         this.bus.emit('spawnGore', {
           x: mob.x + TILE_SIZE * 0.5,
           y: mob.y + TILE_SIZE * 0.5,
+          impactDx: 0,
+          impactDy: 0,
         });
       }
     }

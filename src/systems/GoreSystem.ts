@@ -32,11 +32,23 @@ export class GoreSystem implements GameSystem {
   private particles: BloodParticle[] = [];
   private puddles: BloodPuddle[] = [];
 
-  spawnGore(cx: number, cy: number): void {
+  spawnGore(cx: number, cy: number, impactDx = 0, impactDy = 0): void {
+    const hasDir = impactDx !== 0 || impactDy !== 0;
+    const impactAngle = hasDir ? Math.atan2(impactDy, impactDx) : 0;
+
     const count = randomInt(20, 35);
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 1.5 + Math.random() * 3.5;
+      let angle: number;
+      let speedScale: number;
+      if (hasDir && Math.random() < 0.72) {
+        // Forward cone ±120° around impact direction
+        angle = impactAngle + (Math.random() * 2 - 1) * (Math.PI * (2 / 3));
+        speedScale = 1.3;
+      } else {
+        angle = Math.random() * Math.PI * 2;
+        speedScale = 1.0;
+      }
+      const speed = (1.5 + Math.random() * 3.5) * speedScale;
       this.particles.push({
         x: cx + (Math.random() - 0.5) * 6,
         y: cy + (Math.random() - 0.5) * 6,
@@ -52,8 +64,10 @@ export class GoreSystem implements GameSystem {
 
     const puddleCount = randomInt(1, 3);
     for (let i = 0; i < puddleCount; i++) {
-      const offX = (Math.random() - 0.5) * 14;
-      const offY = (Math.random() - 0.5) * 10;
+      // Puddles shift toward the impact direction when we know it
+      const scatter = hasDir ? 7 : 7;
+      const offX = impactDx * 6 * Math.random() + (Math.random() - 0.5) * scatter * 2;
+      const offY = impactDy * 6 * Math.random() + (Math.random() - 0.5) * scatter * 1.4;
       this.puddles.push({
         x: cx + offX,
         y: cy + offY,

@@ -66,23 +66,39 @@ export class BodyPartGoreSystem implements GameSystem {
   private readonly flying: FlyingPart[] = [];
   private readonly settled: SettledPart[] = [];
 
-  spawnParts(cx: number, cy: number, bodyPartKey: string | null, tileSize: number): void {
+  spawnParts(
+    cx: number,
+    cy: number,
+    bodyPartKey: string | null,
+    tileSize: number,
+    impactDx = 0,
+    impactDy = 0,
+  ): void {
     if (!bodyPartKey) return;
     const config = BODY_PART_REGISTRY.get(bodyPartKey);
     if (!config) return;
 
+    const hasDir = impactDx !== 0 || impactDy !== 0;
+    const impactAngle = hasDir ? Math.atan2(impactDy, impactDx) : 0;
+
     for (const stateName of config.parts) {
-      const speed = XY_SPEED_MIN + Math.random() * (XY_SPEED_MAX - XY_SPEED_MIN);
-      const angle = Math.random() * Math.PI * 2;
+      // When impact direction is known, parts fly in a ±100° cone away from the attacker
+      const angle = hasDir
+        ? impactAngle + (Math.random() * 2 - 1) * (Math.PI * (5 / 9))
+        : Math.random() * Math.PI * 2;
+      const speedMult = hasDir ? 1.6 : 1.0;
+      const speed = (XY_SPEED_MIN + Math.random() * (XY_SPEED_MAX - XY_SPEED_MIN)) * speedMult;
       const spinDir = Math.random() < 0.5 ? 1 : -1;
       const spin = spinDir * (SPIN_MIN + Math.random() * (SPIN_MAX - SPIN_MIN));
+      // Higher upward pop when there's a strong impact — parts burst higher
+      const vzBoost = hasDir ? 1.4 : 1.0;
       this.flying.push({
         x: cx,
         y: cy,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         z: 0,
-        vz: VZ_MIN + Math.random() * (VZ_MAX - VZ_MIN),
+        vz: (VZ_MIN + Math.random() * (VZ_MAX - VZ_MIN)) * vzBoost,
         angle: Math.random() * Math.PI * 2,
         spin,
         spriteKey: config.spriteKey,
