@@ -2,6 +2,7 @@ import type { AchievementManager } from '../../core/AchievementManager';
 import { ACHIEVEMENT_DEFS, isAchievementId } from '../../core/AchievementManager';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 import { drawText, TEXT_PRESETS } from '../TextBox';
+import { drawBox, drawDivider } from '../Box';
 
 function tierColor(tier: string): string {
   switch (tier) {
@@ -63,8 +64,7 @@ function renderPlayerAchievements(
   for (const id of relevant) {
     const def = ACHIEVEMENT_DEFS[id];
 
-    ctx.fillStyle = 'rgba(250,204,21,0.06)';
-    ctx.fillRect(bx + 12, oy, bw - 24, 18);
+    drawBox(ctx, { x: bx + 12, y: oy, width: bw - 24, height: 18, fill: 'rgba(250,204,21,0.06)' });
 
     drawText(ctx, '✓', { x: bx + 18, y: oy + 13 - 9, size: 11, color: '#4ade80' });
     drawText(ctx, def.name, { x: bx + 32, y: oy + 13 - 8, bold: true, size: 10, color: '#f1f5f9' });
@@ -142,12 +142,7 @@ export function renderAchievementsTab(
 
   oy += 130;
 
-  ctx.strokeStyle = '#1e293b';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bx + 16, oy - 4);
-  ctx.lineTo(bx + bw - 16, oy - 4);
-  ctx.stroke();
+  drawDivider(ctx, { x: bx + 16, y: oy - 4, length: bw - 32, color: '#1e293b' });
 
   renderPlayerAchievements(
     ctx,

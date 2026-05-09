@@ -4,6 +4,7 @@ import type { EquipSlot, InventoryItem } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { pointInRect } from '../utils';
 import { drawText } from './TextBox';
+import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -74,11 +75,15 @@ export class GearPanel {
     // On mobile the button is drawn by MobileHUDSystem instead
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
-    ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
-    ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.strokeStyle = this.isOpen ? '#3b82f6' : '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+    drawBox(ctx, {
+      x: btn.x,
+      y: btn.y,
+      width: btn.w,
+      height: btn.h,
+      fill: this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)',
+      border: this.isOpen ? '#3b82f6' : '#475569',
+      borderWidth: 1,
+    });
     drawText(ctx, 'Gear [G]', {
       x: btn.x + btn.w / 2,
       y: btn.y + btn.h / 2 + 4 - 10,
@@ -97,11 +102,15 @@ export class GearPanel {
     const p = this.panelRect(canvas);
 
     // Backdrop
-    ctx.fillStyle = 'rgba(8,10,20,0.93)';
-    ctx.fillRect(p.x, p.y, p.w, p.h);
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(p.x, p.y, p.w, p.h);
+    drawBox(ctx, {
+      x: p.x,
+      y: p.y,
+      width: p.w,
+      height: p.h,
+      fill: 'rgba(8,10,20,0.93)',
+      border: '#334155',
+      borderWidth: 1.5,
+    });
 
     // Header
     drawText(ctx, `${playerName} Equipment`, {
@@ -115,8 +124,7 @@ export class GearPanel {
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(closeX, closeY, 16, 16);
+    drawBox(ctx, { x: closeX, y: closeY, width: 16, height: 16, fill: '#374151' });
     drawText(ctx, 'x', {
       x: closeX + 8,
       y: closeY + 12 - 9,
@@ -127,12 +135,7 @@ export class GearPanel {
     });
 
     // Divider
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(p.x + 4, p.y + HEADER_H);
-    ctx.lineTo(p.x + p.w - 4, p.y + HEADER_H);
-    ctx.stroke();
+    drawDivider(ctx, { x: p.x + 4, y: p.y + HEADER_H, length: p.w - 8, color: '#1e293b' });
 
     // Render sections
     let currentY = p.y + HEADER_H + PANEL_PAD;
@@ -297,11 +300,7 @@ export class GearPanel {
     ty = Math.max(ty, 4);
 
     ctx.save();
-    ctx.fillStyle = 'rgba(8,10,20,0.96)';
-    ctx.fillRect(tx, ty, tw, th);
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(tx, ty, tw, th);
+    drawBox(ctx, { x: tx, y: ty, width: tw, height: th, ...BOX_PRESETS.tooltip });
 
     // Clip all text to the tooltip box so nothing overflows
     ctx.beginPath();

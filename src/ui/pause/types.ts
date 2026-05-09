@@ -1,4 +1,5 @@
 import { drawText } from '../TextBox';
+import { drawBox } from '../Box';
 
 export type PauseTab = 'main' | 'inventory' | 'stats' | 'spend' | 'achievements' | 'abilities';
 
@@ -25,11 +26,7 @@ export function menuBtn(
   bg = '#1e293b',
   fg = '#e2e8f0',
 ): void {
-  ctx.fillStyle = bg;
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x, y, w, h);
+  drawBox(ctx, { x, y, width: w, height: h, fill: bg, border: '#334155', borderWidth: 1.5 });
   drawText(ctx, label, {
     x: x + w / 2,
     y: y + h / 2 + 5 - 10,

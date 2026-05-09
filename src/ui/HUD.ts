@@ -4,6 +4,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { StatusEffect } from '../core/StatusEffect';
 import { platform } from '../core/Platform';
 import { drawText } from './TextBox';
+import { drawBox, drawProgressBar } from './Box';
 
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
@@ -34,8 +35,7 @@ export function drawHUD(
   const activePlayer = human.isActive ? human : cat;
   const inactivePlayer = human.isActive ? cat : human;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(8, 8, 340, 190);
+  drawBox(ctx, { x: 8, y: 8, width: 340, height: 190, fill: 'rgba(0,0,0,0.6)' });
 
   drawText(ctx, `Playing as: ${activeLabel}`, {
     x: 16,
@@ -65,11 +65,15 @@ export function drawHUD(
   if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
     const toggleRect = { x: 336, y: 8, w: 28, h: 22 };
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+    drawBox(ctx, {
+      x: toggleRect.x,
+      y: toggleRect.y,
+      width: toggleRect.w,
+      height: toggleRect.h,
+      fill: 'rgba(0,0,0,0.7)',
+      border: '#475569',
+      borderWidth: 1,
+    });
     drawText(ctx, '▲', {
       x: toggleRect.x + toggleRect.w / 2,
       y: toggleRect.y + 6,
@@ -93,34 +97,52 @@ function drawHUDCollapsed(
   const x = 8;
   const y = 8;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(x, y, BAR_W, BAR_H);
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, BAR_W, BAR_H);
+  drawBox(ctx, {
+    x,
+    y,
+    width: BAR_W,
+    height: BAR_H,
+    fill: 'rgba(0,0,0,0.7)',
+    border: '#475569',
+    borderWidth: 1,
+  });
 
   // Human HP
   const hHp = human.hp / human.maxHp;
   const cHp = cat.hp / cat.maxHp;
   drawText(ctx, '\u{1F9CD}', { x: x + 6, y: y + 9, size: 10, color: '#94a3b8' });
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(x + 22, y + 7, 60, 6);
-  ctx.fillStyle = hHp > 0.5 ? '#4ade80' : hHp > 0.25 ? '#facc15' : '#ef4444';
-  ctx.fillRect(x + 22, y + 7, Math.ceil(60 * hHp), 6);
+  drawProgressBar(ctx, {
+    x: x + 22,
+    y: y + 7,
+    width: 60,
+    height: 6,
+    value: hHp,
+    fill: hHp > 0.5 ? '#4ade80' : hHp > 0.25 ? '#facc15' : '#ef4444',
+    background: '#374151',
+  });
 
   drawText(ctx, '\u{1F431}', { x: x + 90, y: y + 9, size: 10, color: '#94a3b8' });
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(x + 106, y + 7, 60, 6);
-  ctx.fillStyle = cHp > 0.5 ? '#4ade80' : cHp > 0.25 ? '#facc15' : '#ef4444';
-  ctx.fillRect(x + 106, y + 7, Math.ceil(60 * cHp), 6);
+  drawProgressBar(ctx, {
+    x: x + 106,
+    y: y + 7,
+    width: 60,
+    height: 6,
+    value: cHp,
+    fill: cHp > 0.5 ? '#4ade80' : cHp > 0.25 ? '#facc15' : '#ef4444',
+    background: '#374151',
+  });
 
   // Expand toggle
   const toggleRect = { x: x + BAR_W, y, w: 26, h: BAR_H };
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(toggleRect.x, toggleRect.y, toggleRect.w, toggleRect.h);
+  drawBox(ctx, {
+    x: toggleRect.x,
+    y: toggleRect.y,
+    width: toggleRect.w,
+    height: toggleRect.h,
+    fill: 'rgba(0,0,0,0.7)',
+    border: '#475569',
+    borderWidth: 1,
+  });
   drawText(ctx, '▼', {
     x: toggleRect.x + toggleRect.w / 2,
     y: toggleRect.y + 8,
@@ -147,10 +169,15 @@ export function drawHUDPlayerBlock(
   const hpRatio = player.hp / player.maxHp;
   drawText(ctx, `${label} Lv${player.level}:`, { x, y: y + barH - 8, size: 10, color: '#94a3b8' });
 
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(barX, y, barW, barH);
-  ctx.fillStyle = hpRatio > 0.5 ? '#4ade80' : hpRatio > 0.25 ? '#facc15' : '#ef4444';
-  ctx.fillRect(barX, y, Math.ceil(barW * hpRatio), barH);
+  drawProgressBar(ctx, {
+    x: barX,
+    y,
+    width: barW,
+    height: barH,
+    value: hpRatio,
+    fill: hpRatio > 0.5 ? '#4ade80' : hpRatio > 0.25 ? '#facc15' : '#ef4444',
+    background: '#374151',
+  });
 
   drawText(ctx, `${player.hp}/${player.maxHp}`, {
     x: barX + barW + 4,
@@ -166,10 +193,15 @@ export function drawHUDPlayerBlock(
 
   drawText(ctx, 'XP:', { x, y: y2 + barH - 8, size: 10, color: '#64748b' });
 
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(barX, y2, barW, barH);
-  ctx.fillStyle = '#818cf8';
-  ctx.fillRect(barX, y2, Math.ceil(barW * xpRatio), barH);
+  drawProgressBar(ctx, {
+    x: barX,
+    y: y2,
+    width: barW,
+    height: barH,
+    value: xpRatio,
+    fill: '#818cf8',
+    background: '#1e293b',
+  });
 
   drawText(ctx, `${player.xp}/${xpNeeded}`, {
     x: barX + barW + 4,
@@ -221,18 +253,22 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
   }
 
   // Background pill
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(x, y, pillW, pillH);
+  drawBox(ctx, { x, y, width: pillW, height: pillH, fill: bgColor });
 
   // Label
   drawText(ctx, label, { x: x + 2, y: y + 2, bold: true, size: 7, color: '#fff' });
 
   // Duration bar (white strip across the bottom of the pill)
   const ratio = effect.ticksRemaining / effect.totalTicks;
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(x + 1, y + pillH - 3, pillW - 2, 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillRect(x + 1, y + pillH - 3, Math.ceil((pillW - 2) * ratio), 2);
+  drawProgressBar(ctx, {
+    x: x + 1,
+    y: y + pillH - 3,
+    width: pillW - 2,
+    height: 2,
+    value: ratio,
+    fill: 'rgba(255,255,255,0.85)',
+    background: 'rgba(0,0,0,0.4)',
+  });
 }
 
 /**
@@ -247,13 +283,15 @@ function renderNotification(
   if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) return;
   pulseRef.value = (pulseRef.value + 0.055) % (Math.PI * 2);
   const alpha = 0.65 + Math.sin(pulseRef.value) * 0.28;
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = '#1e3a5f';
-  ctx.fillRect(8, 192, 340, 20);
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(8, 192, 340, 20);
-  ctx.restore();
+  drawBox(ctx, {
+    x: 8,
+    y: 192,
+    width: 340,
+    height: 20,
+    fill: '#1e3a5f',
+    border: '#3b82f6',
+    borderWidth: 1,
+    alpha,
+  });
   drawText(ctx, platform.skillPointBanner, { x: 14, y: 198, size: 10, color: '#93c5fd' });
 }

@@ -18,6 +18,7 @@ import {
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
 import { pointInRect } from '../utils';
+import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -115,8 +116,7 @@ export class PauseMenu {
     const cw = canvas.width;
     const ch = canvas.height;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.68)';
-    ctx.fillRect(0, 0, cw, ch);
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
     const boxW = 380;
     const boxH =
@@ -127,14 +127,15 @@ export class PauseMenu {
           : this.tab === 'spend'
             ? SPEND_BOX_H
             : 380;
-    const boxX = cw / 2 - boxW / 2;
-    const boxY = ch / 2 - boxH / 2;
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(boxX, boxY, boxW, boxH);
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    const modal = drawModal(ctx, {
+      canvasWidth: cw,
+      canvasHeight: ch,
+      width: boxW,
+      height: boxH,
+      ...BOX_PRESETS.modal,
+    });
+    const boxX = modal.x;
+    const boxY = modal.y;
 
     const setTab = (t: PauseTab) => {
       if (t !== 'stats') this.statsScrollY = 0;

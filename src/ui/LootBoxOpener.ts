@@ -2,6 +2,7 @@ import type { LootBox, BoxContents } from '../core/AchievementManager';
 import { getBoxContents } from '../core/AchievementManager';
 import { randomFromArray, randomInt } from '../utils';
 import { drawText } from './TextBox';
+import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
 
 interface Particle {
   x: number;
@@ -180,22 +181,21 @@ export class LootBoxOpener {
     const cx = cw / 2;
 
     // Backdrop
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.globalAlpha = 1;
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
 
     // Panel
     const tierColor = this.tierColor(this.box.tier);
-    ctx.shadowColor = tierColor;
-    ctx.shadowBlur = 28;
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(bx, by, BOX_W, BOX_H);
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = tierColor;
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(bx, by, BOX_W, BOX_H);
+    drawBox(ctx, {
+      x: bx,
+      y: by,
+      width: BOX_W,
+      height: BOX_H,
+      fill: '#0f172a',
+      border: tierColor,
+      borderWidth: 2.5,
+      glow: tierColor,
+      glowBlur: 28,
+    });
 
     // Progress indicator (N of M)
     const total = this.queue.length;
@@ -228,12 +228,7 @@ export class LootBoxOpener {
     });
 
     // Divider
-    ctx.strokeStyle = `${tierColor}55`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + 24, by + 62);
-    ctx.lineTo(bx + BOX_W - 24, by + 62);
-    ctx.stroke();
+    drawDivider(ctx, { x: bx + 24, y: by + 62, length: BOX_W - 48, color: `${tierColor}55` });
 
     // Draw the animated box graphic
     this.drawAnimatedBox(ctx, cx, ch / 2 - 16, tierColor);
@@ -262,12 +257,16 @@ export class LootBoxOpener {
       const barW = BOX_W - 48;
       const barX = bx + 24;
       const barY = by + BOX_H - 18;
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(barX, barY, barW, 6);
-      ctx.fillStyle = tierColor;
-      ctx.globalAlpha = 0.7;
-      ctx.fillRect(barX, barY, barW * ratio, 6);
-      ctx.globalAlpha = 1;
+      drawProgressBar(ctx, {
+        x: barX,
+        y: barY,
+        width: barW,
+        height: 6,
+        value: ratio,
+        fill: tierColor,
+        background: '#1e293b',
+        alpha: 0.7,
+      });
 
       // "Next box…" or "Done!" label
       const isLast = this.queueIndex >= this.queue.length - 1;

@@ -3,6 +3,7 @@ import type { Inventory } from '../../core/Inventory';
 import { HOTBAR_COUNT } from '../../core/ItemDefs';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 import { drawText, measureTextBox } from '../TextBox';
+import { drawBox, drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
 function isAbilityId(id: string): id is AbilityId {
   const ABILITY_IDS: ReadonlyArray<string> = ['magic_missile', 'protective_shell'];
@@ -205,10 +206,15 @@ function renderListView(
       const barH = 6;
       const barY = rowY + 38;
       const xpFrac = state.xpToNextLevel === Infinity ? 1 : state.xp / state.xpToNextLevel;
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = '#7c3aed';
-      ctx.fillRect(barX, barY, Math.round(barW * Math.min(xpFrac, 1)), barH);
+      drawProgressBar(ctx, {
+        x: barX,
+        y: barY,
+        width: barW,
+        height: barH,
+        value: Math.min(xpFrac, 1),
+        fill: '#7c3aed',
+        background: '#1e293b',
+      });
 
       if (visible) {
         const btnW = 88;
@@ -226,17 +232,15 @@ function renderListView(
 
     ctx.restore();
 
-    if (listContentH > areaH) {
-      const trackX = bx + bw - SCROLLBAR_W - 2;
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(trackX, listAreaTop, SCROLLBAR_W, areaH);
-
-      const thumbH = Math.max(20, (areaH / listContentH) * areaH);
-      const maxScroll = listContentH - areaH;
-      const thumbY = listAreaTop + (listScrollY / maxScroll) * (areaH - thumbH);
-      ctx.fillStyle = '#7c3aed';
-      ctx.fillRect(trackX, thumbY, SCROLLBAR_W, thumbH);
-    }
+    drawScrollbar(ctx, {
+      x: bx + bw - SCROLLBAR_W - 2,
+      trackY: listAreaTop,
+      trackH: areaH,
+      contentH: listContentH,
+      scrollY: listScrollY,
+      width: SCROLLBAR_W,
+      thumbColor: '#7c3aed',
+    });
   }
 
   const backY = by + bh - LIST_FOOTER_H + 7;
@@ -268,11 +272,15 @@ function drawTooltip(
   let ttY = y - ttH - 4;
   if (ttX + ttW > bx + bw) ttX = bx + bw - ttW - 2;
   if (ttY < by + 2) ttY = y + 16;
-  ctx.fillStyle = 'rgba(15,23,42,0.95)';
-  ctx.fillRect(ttX, ttY, ttW, ttH);
-  ctx.strokeStyle = '#7c3aed';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(ttX, ttY, ttW, ttH);
+  drawBox(ctx, {
+    x: ttX,
+    y: ttY,
+    width: ttW,
+    height: ttH,
+    fill: 'rgba(15,23,42,0.95)',
+    border: '#7c3aed',
+    borderWidth: 1,
+  });
   ctx.fillStyle = '#e2e8f0';
   ctx.fillText(text, ttX + pad, ttY + ttH - 5);
   ctx.restore();
@@ -314,8 +322,13 @@ function renderEquippedAbilitiesView(
   const humanColor = equippedPlayer === 'human' ? '#fb923c' : '#475569';
   const catColor = equippedPlayer === 'cat' ? '#38bdf8' : '#475569';
 
-  ctx.fillStyle = equippedPlayer === 'human' ? 'rgba(251,146,60,0.18)' : 'rgba(30,41,59,0.6)';
-  ctx.fillRect(bx + 16, toggleY, toggleW, 24);
+  drawBox(ctx, {
+    x: bx + 16,
+    y: toggleY,
+    width: toggleW,
+    height: 24,
+    fill: equippedPlayer === 'human' ? 'rgba(251,146,60,0.18)' : 'rgba(30,41,59,0.6)',
+  });
   drawText(ctx, 'Human', {
     x: bx + 16 + toggleW / 2,
     y: toggleY + 15 - 9,
@@ -334,8 +347,13 @@ function renderEquippedAbilitiesView(
     },
   });
 
-  ctx.fillStyle = equippedPlayer === 'cat' ? 'rgba(56,189,248,0.18)' : 'rgba(30,41,59,0.6)';
-  ctx.fillRect(bx + 24 + toggleW, toggleY, toggleW, 24);
+  drawBox(ctx, {
+    x: bx + 24 + toggleW,
+    y: toggleY,
+    width: toggleW,
+    height: 24,
+    fill: equippedPlayer === 'cat' ? 'rgba(56,189,248,0.18)' : 'rgba(30,41,59,0.6)',
+  });
   drawText(ctx, 'Cat', {
     x: bx + 24 + toggleW + toggleW / 2,
     y: toggleY + 15 - 9,
@@ -384,11 +402,15 @@ function renderEquippedAbilitiesView(
     const isAbilityTome = slot !== null && slot.canDrop === false && slot.abilityId !== undefined;
 
     // Slot background
-    ctx.fillStyle = isAbilityTome ? 'rgba(124,58,237,0.25)' : 'rgba(30,41,59,0.7)';
-    ctx.fillRect(sx, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
-    ctx.strokeStyle = isAbilityTome ? '#7c3aed' : '#334155';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(sx, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+    drawBox(ctx, {
+      x: sx,
+      y: sy,
+      width: EQ_SLOT_SIZE,
+      height: EQ_SLOT_SIZE,
+      fill: isAbilityTome ? 'rgba(124,58,237,0.25)' : 'rgba(30,41,59,0.7)',
+      border: isAbilityTome ? '#7c3aed' : '#334155',
+      borderWidth: 1.5,
+    });
 
     // Slot label
     drawText(ctx, String(i + 1), {
@@ -439,8 +461,13 @@ function renderEquippedAbilitiesView(
         }
       } else {
         // Non-ability item — show grayed indicator
-        ctx.fillStyle = 'rgba(100,116,139,0.35)';
-        ctx.fillRect(sx + 6, sy + 6, EQ_SLOT_SIZE - 12, EQ_SLOT_SIZE - 12);
+        drawBox(ctx, {
+          x: sx + 6,
+          y: sy + 6,
+          width: EQ_SLOT_SIZE - 12,
+          height: EQ_SLOT_SIZE - 12,
+          fill: 'rgba(100,116,139,0.35)',
+        });
         drawText(ctx, 'item', {
           x: sx + EQ_SLOT_SIZE / 2,
           y: sy + EQ_SLOT_SIZE / 2 + 4,
@@ -493,11 +520,15 @@ function renderEquippedAbilitiesView(
       if (!def) continue;
       const sy = availSectionY;
 
-      ctx.fillStyle = 'rgba(30,41,59,0.7)';
-      ctx.fillRect(availX, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(availX, sy, EQ_SLOT_SIZE, EQ_SLOT_SIZE);
+      drawBox(ctx, {
+        x: availX,
+        y: sy,
+        width: EQ_SLOT_SIZE,
+        height: EQ_SLOT_SIZE,
+        fill: 'rgba(30,41,59,0.7)',
+        border: '#334155',
+        borderWidth: 1.5,
+      });
 
       const iconPad = 4;
       def.renderIcon(
@@ -628,10 +659,15 @@ function renderDetailView(
   const barW = bw - 32;
   const barH = 8;
   const xpFrac = state.xpToNextLevel === Infinity ? 1 : state.xp / state.xpToNextLevel;
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(barX, y, barW, barH);
-  ctx.fillStyle = '#7c3aed';
-  ctx.fillRect(barX, y, Math.round(barW * Math.min(xpFrac, 1)), barH);
+  drawProgressBar(ctx, {
+    x: barX,
+    y,
+    width: barW,
+    height: barH,
+    value: Math.min(xpFrac, 1),
+    fill: '#7c3aed',
+    background: '#1e293b',
+  });
   y += barH + 14;
 
   if (currentLevel < def.maxLevel) {
@@ -647,12 +683,7 @@ function renderDetailView(
   y += 14;
 
   // Separator
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bx + 16, y);
-  ctx.lineTo(bx + bw - 16, y);
-  ctx.stroke();
+  drawDivider(ctx, { x: bx + 16, y, length: bw - 32, color: '#334155' });
   y += 10;
 
   // Perks heading
@@ -692,14 +723,24 @@ function renderDetailView(
     const isNew = perk.level === currentLevel;
 
     if (isNew) {
-      ctx.fillStyle = 'rgba(109,40,217,0.18)';
-      ctx.fillRect(bx + 8, perkY - 2, bw - 16, rowH);
+      drawBox(ctx, {
+        x: bx + 8,
+        y: perkY - 2,
+        width: bw - 16,
+        height: rowH,
+        fill: 'rgba(109,40,217,0.18)',
+      });
     }
 
     // Level badge — vertically centered in row
     const badgeY = perkY + Math.floor((rowH - 18) / 2);
-    ctx.fillStyle = unlocked ? '#7c3aed' : '#334155';
-    ctx.fillRect(bx + 10, badgeY, 22, 18);
+    drawBox(ctx, {
+      x: bx + 10,
+      y: badgeY,
+      width: 22,
+      height: 18,
+      fill: unlocked ? '#7c3aed' : '#334155',
+    });
     drawText(ctx, String(perk.level), {
       x: bx + 21,
       y: badgeY + 13 - 8,
@@ -728,17 +769,16 @@ function renderDetailView(
   ctx.restore();
 
   // Scrollbar
+  drawScrollbar(ctx, {
+    x: bx + bw - SCROLLBAR_W - 2,
+    trackY: perkAreaTop,
+    trackH: perkAreaH,
+    contentH: detailContentH,
+    scrollY: detailScrollY,
+    width: SCROLLBAR_W,
+    thumbColor: '#7c3aed',
+  });
   if (detailContentH > perkAreaH) {
-    const trackX = bx + bw - SCROLLBAR_W - 2;
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(trackX, perkAreaTop, SCROLLBAR_W, perkAreaH);
-
-    const thumbH = Math.max(20, (perkAreaH / detailContentH) * perkAreaH);
-    const maxScroll = detailContentH - perkAreaH;
-    const thumbY = perkAreaTop + (detailScrollY / maxScroll) * (perkAreaH - thumbH);
-    ctx.fillStyle = '#7c3aed';
-    ctx.fillRect(trackX, thumbY, SCROLLBAR_W, thumbH);
-
     // Scroll hint
     if (detailScrollY === 0) {
       drawText(ctx, 'scroll ↓', {

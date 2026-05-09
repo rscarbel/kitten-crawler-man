@@ -1,6 +1,7 @@
 import type { AbilityManager, AbilityId } from '../core/AbilityManager';
 import { wrapTextLines } from './canvasUtils';
 import { drawText } from './TextBox';
+import { drawOverlay, drawBox } from './Box';
 
 interface QueuedLevelUp {
   id: AbilityId;
@@ -100,8 +101,7 @@ export class AbilityLevelUpDialog {
     const ch = canvas.height;
 
     // Dim background
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, 0, cw, ch);
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
     const boxW = 320;
     ctx.font = '11px monospace';
@@ -112,11 +112,15 @@ export class AbilityLevelUpDialog {
     const by = ch / 2 - boxH / 2;
 
     // Panel
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(bx, by, boxW, boxH);
-    ctx.strokeStyle = '#a855f7';
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(bx, by, boxW, boxH);
+    drawBox(ctx, {
+      x: bx,
+      y: by,
+      width: boxW,
+      height: boxH,
+      fill: '#0f172a',
+      border: '#a855f7',
+      borderWidth: 2.5,
+    });
 
     // Title
     drawText(ctx, `${def.name} Level Up!`, {
@@ -203,11 +207,15 @@ export class AbilityLevelUpDialog {
       const btnY = by + boxH - 50;
       this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-      ctx.fillStyle = '#6d28d9';
-      ctx.fillRect(btnX, btnY, btnW, btnH);
-      ctx.strokeStyle = '#a855f7';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(btnX, btnY, btnW, btnH);
+      drawBox(ctx, {
+        x: btnX,
+        y: btnY,
+        width: btnW,
+        height: btnH,
+        fill: '#6d28d9',
+        border: '#a855f7',
+        borderWidth: 1.5,
+      });
       drawText(ctx, 'OK', {
         x: btnX + btnW / 2,
         y: btnY + btnH / 2 + 5 - 10,

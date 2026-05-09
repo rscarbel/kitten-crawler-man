@@ -1,6 +1,7 @@
 import type { AchievementDef } from '../core/AchievementManager';
 import { randomFromArray, randomInt, pointInRect } from '../utils';
 import { drawText } from './TextBox';
+import { drawOverlay, drawBox, drawDivider, BOX_PRESETS } from './Box';
 
 interface Sparkle {
   x: number;
@@ -94,26 +95,17 @@ export class AchievementNotification {
     // Fade-in alpha
     const alpha = Math.min(1, this.frame / FADE_IN_FRAMES);
 
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: alpha * 0.55 });
     ctx.save();
-    ctx.globalAlpha = alpha * 0.55;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, cw, ch);
     ctx.globalAlpha = alpha;
 
     const bx = (cw - BOX_W) / 2;
     const by = (ch - BOX_H) / 2;
 
     // Main box — dark blue-gold gradient feel
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 32;
-    ctx.fillStyle = '#0a0a1a';
-    ctx.fillRect(bx, by, BOX_W, BOX_H);
-    ctx.shadowBlur = 0;
+    drawBox(ctx, { x: bx, y: by, width: BOX_W, height: BOX_H, ...BOX_PRESETS.achievement, alpha });
 
-    // Gold border — double ring
-    ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(bx, by, BOX_W, BOX_H);
+    // Gold border — double ring (inner decorative ring)
     ctx.strokeStyle = 'rgba(255,215,0,0.3)';
     ctx.lineWidth = 8;
     ctx.strokeRect(bx + 4, by + 4, BOX_W - 8, BOX_H - 8);
@@ -133,15 +125,13 @@ export class AchievementNotification {
     });
 
     // Divider line
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = 'rgba(255,215,0,0.4)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + 24, by + 52);
-    ctx.lineTo(bx + BOX_W - 24, by + 52);
-    ctx.stroke();
-    ctx.restore();
+    drawDivider(ctx, {
+      x: bx + 24,
+      y: by + 52,
+      length: BOX_W - 48,
+      color: 'rgba(255,215,0,0.4)',
+      alpha,
+    });
 
     // Achievement name
     drawText(ctx, achievement.name, {
@@ -201,14 +191,16 @@ export class AchievementNotification {
     const okY = by + BOX_H - OK_BTN_H - 18;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
 
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#1e3a0f';
-    ctx.fillRect(okX, okY, OK_BTN_W, OK_BTN_H);
-    ctx.strokeStyle = '#4ade80';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(okX, okY, OK_BTN_W, OK_BTN_H);
-    ctx.restore();
+    drawBox(ctx, {
+      x: okX,
+      y: okY,
+      width: OK_BTN_W,
+      height: OK_BTN_H,
+      fill: '#1e3a0f',
+      border: '#4ade80',
+      borderWidth: 2,
+      alpha,
+    });
 
     drawText(ctx, 'OK!', {
       x: cw / 2,

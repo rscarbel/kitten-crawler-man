@@ -1,8 +1,9 @@
 import { type Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import type { ButtonRect, PauseTab } from './types';
+import { menuBtn, type ButtonRect, type PauseTab } from './types';
 import { drawText } from '../TextBox';
+import { drawBox, drawDivider, drawScrollbar } from '../Box';
 
 type StatDef = {
   key: 'STR' | 'INT' | 'CON' | 'EXP';
@@ -148,11 +149,15 @@ function renderStatCard(
     const btnLocalY = localY + 40;
     const btnScreenY = btnLocalY + scrollTop - scrollY;
 
-    ctx.fillStyle = stat.cardBg;
-    ctx.fillRect(btnLocalX, btnLocalY, BTN_W, BTN_H);
-    ctx.strokeStyle = stat.accent;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(btnLocalX, btnLocalY, BTN_W, BTN_H);
+    drawBox(ctx, {
+      x: btnLocalX,
+      y: btnLocalY,
+      width: BTN_W,
+      height: BTN_H,
+      fill: stat.cardBg,
+      border: stat.accent,
+      borderWidth: 1.5,
+    });
     drawText(ctx, '+', {
       x: btnLocalX + BTN_W / 2,
       y: btnLocalY + (BTN_H - 14) / 2,
@@ -202,12 +207,7 @@ export function renderSpendTab(
     align: 'center',
   });
 
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bx + 20, by + 50);
-  ctx.lineTo(bx + bw - 20, by + 50);
-  ctx.stroke();
+  drawDivider(ctx, { x: bx + 20, y: by + 50, length: bw - 40 });
 
   const BACK_BTN_H = 52;
   const scrollTop = by + 56;
@@ -282,12 +282,7 @@ export function renderSpendTab(
 
     y += 14;
 
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + 20, y);
-    ctx.lineTo(bx + bw - 20, y);
-    ctx.stroke();
+    drawDivider(ctx, { x: bx + 20, y, length: bw - 40, color: '#1e293b' });
 
     y += 14;
   }
@@ -295,31 +290,17 @@ export function renderSpendTab(
   const contentHeight = y;
   ctx.restore();
 
-  if (contentHeight > scrollH) {
-    const thumbH = Math.max(20, (scrollH / contentHeight) * scrollH);
-    const maxScroll = contentHeight - scrollH;
-    const thumbY = scrollTop + (scrollY / maxScroll) * (scrollH - thumbH);
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(bx + bw - 7, scrollTop, 3, scrollH);
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(bx + bw - 7, thumbY, 3, thumbH);
-  }
+  drawScrollbar(ctx, {
+    x: bx + bw - 7,
+    trackY: scrollTop,
+    trackH: scrollH,
+    contentH: contentHeight,
+    scrollY,
+    width: 3,
+  });
 
   const btnY = by + bh - BACK_BTN_H + 8;
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(bx + 20, btnY, bw - 40, 36);
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx + 20, btnY, bw - 40, 36);
-  drawText(ctx, 'Back', {
-    x: bx + bw / 2,
-    y: btnY + (36 - 13) / 2,
-    bold: true,
-    size: 13,
-    color: '#e2e8f0',
-    align: 'center',
-  });
-  buttons.push({ x: bx + 20, y: btnY, w: bw - 40, h: 36, action: () => setTab('main') });
+  menuBtn(ctx, buttons, bx + 20, btnY, bw - 40, 36, 'Back', () => setTab('main'));
 
   return contentHeight;
 }

@@ -500,6 +500,57 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, opts: OverlayOptions)
   ctx.restore();
 }
 
+export interface ScrollbarOptions {
+  /** X position of the scrollbar. */
+  x: number;
+  /** Top y of the scroll track. */
+  trackY: number;
+  /** Visible height of the track (viewport height). */
+  trackH: number;
+  /** Total scrollable content height. */
+  contentH: number;
+  /** Current scroll offset in px. */
+  scrollY: number;
+  /** Track and thumb width in px. Default: 6 */
+  width?: number;
+  /** Track fill color. Default: '#1e293b' */
+  trackColor?: string;
+  /** Thumb fill color. Default: '#64748b' */
+  thumbColor?: string;
+  /** Minimum thumb height in px. Default: 20 */
+  minThumbH?: number;
+}
+
+/**
+ * Draw a vertical scrollbar (track + thumb). No-ops when contentH ≤ trackH.
+ */
+export function drawScrollbar(ctx: CanvasRenderingContext2D, opts: ScrollbarOptions): void {
+  const {
+    x,
+    trackY,
+    trackH,
+    contentH,
+    scrollY,
+    width = 6,
+    trackColor = '#1e293b',
+    thumbColor = '#64748b',
+    minThumbH = 20,
+  } = opts;
+
+  if (contentH <= trackH) return;
+
+  const thumbH = Math.max(minThumbH, (trackH / contentH) * trackH);
+  const maxScroll = contentH - trackH;
+  const thumbY = trackY + (scrollY / maxScroll) * (trackH - thumbH);
+
+  ctx.save();
+  ctx.fillStyle = trackColor;
+  ctx.fillRect(x, trackY, width, trackH);
+  ctx.fillStyle = thumbColor;
+  ctx.fillRect(x, thumbY, width, thumbH);
+  ctx.restore();
+}
+
 /**
  * Return the x that centers a child of `childWidth` inside a parent rect.
  *

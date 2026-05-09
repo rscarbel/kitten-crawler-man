@@ -1,4 +1,5 @@
 import { drawText } from './TextBox';
+import { drawOverlay, drawBox, BOX_PRESETS } from './Box';
 
 /**
  * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
@@ -44,8 +45,7 @@ export class DeathScreen {
     const w = canvas.width;
     const h = canvas.height;
 
-    ctx.fillStyle = `rgba(0,0,0,${this.alpha})`;
-    ctx.fillRect(0, 0, w, h);
+    drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
 
     if (this.alpha < 0.45) return;
     const textAlpha = Math.min(1, (this.alpha - 0.45) / 0.37);
@@ -76,14 +76,14 @@ export class DeathScreen {
     const btnH = 48;
     const btnX = w / 2 - btnW / 2;
     const btnY = h / 2 + 44;
-    ctx.save();
-    ctx.globalAlpha = textAlpha;
-    ctx.fillStyle = '#991b1b';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#f87171';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
-    ctx.restore();
+    drawBox(ctx, {
+      x: btnX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      ...BOX_PRESETS.buttonDanger,
+      alpha: textAlpha,
+    });
 
     drawText(ctx, 'Restart Level', {
       x: w / 2,

@@ -4,6 +4,7 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameStats } from '../../core/GameStats';
 import { menuBtn, type ButtonRect, type PauseTab } from './types';
 import { drawText } from '../TextBox';
+import { drawDivider, drawScrollbar } from '../Box';
 
 /** Returns total content height so PauseMenu can clamp scroll. */
 export function renderStatsTab(
@@ -93,12 +94,7 @@ export function renderStatsTab(
 
   if (gameStats) {
     y += 12;
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + 20, y);
-    ctx.lineTo(bx + bw - 20, y);
-    ctx.stroke();
+    drawDivider(ctx, { x: bx + 20, y, length: bw - 40 });
     y += 16;
 
     drawText(ctx, 'Total Kills:', {
@@ -142,12 +138,7 @@ export function renderStatsTab(
     });
     y += 6;
 
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(bx + 20, y);
-    ctx.lineTo(bx + bw - 20, y);
-    ctx.stroke();
+    drawDivider(ctx, { x: bx + 20, y, length: bw - 40 });
     y += 14;
 
     const entries = [...gameStats.killsByType.entries()].sort((a, b) => b[1] - a[1]);
@@ -174,15 +165,14 @@ export function renderStatsTab(
   ctx.restore();
 
   // Scrollbar
-  if (contentHeight > scrollH) {
-    const thumbH = Math.max(20, (scrollH / contentHeight) * scrollH);
-    const maxScroll = contentHeight - scrollH;
-    const thumbY = scrollTop + (scrollY / maxScroll) * (scrollH - thumbH);
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(bx + bw - 7, scrollTop, 3, scrollH);
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(bx + bw - 7, thumbY, 3, thumbH);
-  }
+  drawScrollbar(ctx, {
+    x: bx + bw - 7,
+    trackY: scrollTop,
+    trackH: scrollH,
+    contentH: contentHeight,
+    scrollY,
+    width: 3,
+  });
 
   menuBtn(ctx, buttons, bx + 20, by + bh - BACK_BTN_H + 8, bw - 40, 36, 'Back', () =>
     setTab('main'),

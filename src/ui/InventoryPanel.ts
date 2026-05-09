@@ -13,6 +13,7 @@ import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
 import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
+import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 
 // Layout constants
 const SLOT_SIZE = 54;
@@ -213,11 +214,15 @@ export class InventoryPanel {
     const my = Math.min(cm.y, canvas.height - menuH - 4);
 
     ctx.save();
-    ctx.fillStyle = 'rgba(10,14,30,0.97)';
-    ctx.fillRect(mx, my, menuW, menuH);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(mx, my, menuW, menuH);
+    drawBox(ctx, {
+      x: mx,
+      y: my,
+      width: menuW,
+      height: menuH,
+      fill: 'rgba(10,14,30,0.97)',
+      border: '#475569',
+      borderWidth: 1,
+    });
 
     for (let i = 0; i < options.length; i++) {
       const oy = my + 2 + i * menuItemH;
@@ -252,11 +257,14 @@ export class InventoryPanel {
     const py = Math.floor((canvas.height - popH) / 2);
 
     ctx.save();
-    ctx.fillStyle = 'rgba(8,10,20,0.97)';
-    ctx.fillRect(px, py, popW, popH);
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(px, py, popW, popH);
+    drawBox(ctx, {
+      x: px,
+      y: py,
+      width: popW,
+      height: popH,
+      ...BOX_PRESETS.tooltip,
+      borderWidth: 1.5,
+    });
 
     // Title: baseline_y = py+pad+lineH-3, size=11 → top_y = baseline_y - 9
     drawText(ctx, item.name, {
@@ -268,12 +276,7 @@ export class InventoryPanel {
     });
 
     // Divider
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(px + 4, py + pad + lineH + 2);
-    ctx.lineTo(px + popW - 4, py + pad + lineH + 2);
-    ctx.stroke();
+    drawDivider(ctx, { x: px + 4, y: py + pad + lineH + 2, length: popW - 8, color: '#1e293b' });
 
     // Description with built-in word-wrap
     // baseline_y = py+pad*1.5+lineH*2-3, size=10 → top_y = baseline_y - 8
@@ -308,11 +311,15 @@ export class InventoryPanel {
 
     ctx.save();
     // Background
-    ctx.fillStyle = 'rgba(8,10,20,0.97)';
-    ctx.fillRect(dlgX, dlgY, dlgW, dlgH);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(dlgX, dlgY, dlgW, dlgH);
+    drawBox(ctx, {
+      x: dlgX,
+      y: dlgY,
+      width: dlgW,
+      height: dlgH,
+      fill: 'rgba(8,10,20,0.97)',
+      border: '#475569',
+      borderWidth: 1.5,
+    });
 
     // Title: baseline_y=dlgY+22, size=11 → top_y = dlgY+22-9 = dlgY+13
     drawText(ctx, 'Drop how many?', {
@@ -325,8 +332,7 @@ export class InventoryPanel {
     });
 
     // Cancel [X]
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(dlgX + dlgW - 22, dlgY + 6, 16, 16);
+    drawBox(ctx, { x: dlgX + dlgW - 22, y: dlgY + 6, width: 16, height: 16, fill: '#374151' });
     // baseline_y=dlgY+18, size=11 → top_y = dlgY+18-9 = dlgY+9
     drawText(ctx, 'x', {
       x: dlgX + dlgW - 14,
@@ -340,11 +346,15 @@ export class InventoryPanel {
     // [-] button
     const minusBtnX = dlgX + 20;
     const minusBtnY = dlgY + 54;
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(minusBtnX, minusBtnY, 24, 24);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(minusBtnX, minusBtnY, 24, 24);
+    drawBox(ctx, {
+      x: minusBtnX,
+      y: minusBtnY,
+      width: 24,
+      height: 24,
+      fill: '#334155',
+      border: '#475569',
+      borderWidth: 1,
+    });
     // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+17-9 = minusBtnY+8
     drawText(ctx, '-', {
       x: minusBtnX + 12,
@@ -356,10 +366,15 @@ export class InventoryPanel {
 
     // [+] button
     const plusBtnX = dlgX + dlgW - 44;
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(plusBtnX, minusBtnY, 24, 24);
-    ctx.strokeStyle = '#475569';
-    ctx.strokeRect(plusBtnX, minusBtnY, 24, 24);
+    drawBox(ctx, {
+      x: plusBtnX,
+      y: minusBtnY,
+      width: 24,
+      height: 24,
+      fill: '#334155',
+      border: '#475569',
+      borderWidth: 1,
+    });
     // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+8
     drawText(ctx, '+', {
       x: plusBtnX + 12,
@@ -389,10 +404,15 @@ export class InventoryPanel {
 
     // [Drop] confirm button
     const confirmY = dlgY + dlgH - 28;
-    ctx.fillStyle = '#1d4ed8';
-    ctx.fillRect(dlgX + 20, confirmY, dlgW - 40, 22);
-    ctx.strokeStyle = '#3b82f6';
-    ctx.strokeRect(dlgX + 20, confirmY, dlgW - 40, 22);
+    drawBox(ctx, {
+      x: dlgX + 20,
+      y: confirmY,
+      width: dlgW - 40,
+      height: 22,
+      fill: '#1d4ed8',
+      border: '#3b82f6',
+      borderWidth: 1.5,
+    });
     // baseline_y=confirmY+15, size=11 → top_y = confirmY+15-9 = confirmY+6
     drawText(ctx, 'Drop', {
       x: dlgX + dlgW / 2,
@@ -410,11 +430,15 @@ export class InventoryPanel {
     // On mobile the button is drawn by MobileHUDSystem instead
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
-    ctx.fillStyle = this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)';
-    ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.strokeStyle = this.isOpen ? '#3b82f6' : '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+    drawBox(ctx, {
+      x: btn.x,
+      y: btn.y,
+      width: btn.w,
+      height: btn.h,
+      fill: this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)',
+      border: this.isOpen ? '#3b82f6' : '#475569',
+      borderWidth: 1,
+    });
     // baseline_y = btn.y+btn.h/2+4, size=12 → top_y = baseline_y - 10
     drawText(ctx, 'Bag [I]', {
       x: btn.x + btn.w / 2,
@@ -432,8 +456,13 @@ export class InventoryPanel {
   ): void {
     const hb = this.hotbarRect(canvas);
     // Background strip
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(hb.x - 6, hb.y - 6, hb.w + 12, hb.h + 18);
+    drawBox(ctx, {
+      x: hb.x - 6,
+      y: hb.y - 6,
+      width: hb.w + 12,
+      height: hb.h + 18,
+      fill: 'rgba(0,0,0,0.65)',
+    });
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
@@ -474,11 +503,15 @@ export class InventoryPanel {
     const p = this.panelRect(canvas);
 
     // Backdrop
-    ctx.fillStyle = 'rgba(8,10,20,0.93)';
-    ctx.fillRect(p.x, p.y, p.w, p.h);
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(p.x, p.y, p.w, p.h);
+    drawBox(ctx, {
+      x: p.x,
+      y: p.y,
+      width: p.w,
+      height: p.h,
+      fill: 'rgba(8,10,20,0.93)',
+      border: '#334155',
+      borderWidth: 1.5,
+    });
 
     // Header — player name: baseline_y=p.y+25, size=12 → top_y = p.y+25-10 = p.y+15
     drawText(ctx, `${playerName} Inventory`, {
@@ -501,8 +534,7 @@ export class InventoryPanel {
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(closeX, closeY, 16, 16);
+    drawBox(ctx, { x: closeX, y: closeY, width: 16, height: 16, fill: '#374151' });
     // baseline_y=closeY+12, size=11 → top_y = closeY+12-9 = closeY+3
     drawText(ctx, 'x', {
       x: closeX + 8,
@@ -514,12 +546,7 @@ export class InventoryPanel {
     });
 
     // Divider
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(p.x + 4, p.y + HEADER_H);
-    ctx.lineTo(p.x + p.w - 4, p.y + HEADER_H);
-    ctx.stroke();
+    drawDivider(ctx, { x: p.x + 4, y: p.y + HEADER_H, length: p.w - 8, color: '#1e293b' });
 
     // Inventory slots
     const pageStart = this.page * SLOTS_PER_PAGE;
