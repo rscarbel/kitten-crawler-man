@@ -1,8 +1,178 @@
 import { type Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import type { ButtonRect, PauseTab } from './types';
 import { drawText } from '../TextBox';
+
+type StatDef = {
+  key: 'STR' | 'INT' | 'CON' | 'EXP';
+  name: string;
+  description: string;
+  accent: string;
+  dimBorder: string;
+  cardBg: string;
+  getValue: (p: Player) => number;
+};
+
+const HUMAN_STAT_DEFS: StatDef[] = [
+  {
+    key: 'STR',
+    name: 'Strength',
+    description: 'Hit harder. Each point raises melee damage by 1.',
+    accent: '#f97316',
+    dimBorder: 'rgba(249,115,22,0.22)',
+    cardBg: '#160b02',
+    getValue: (p) => p.strength,
+  },
+  {
+    key: 'EXP',
+    name: 'Explosives Handling',
+    description: 'Bigger booms. Boosts dynamite damage & throw range.',
+    accent: '#fbbf24',
+    dimBorder: 'rgba(251,191,36,0.22)',
+    cardBg: '#16110a',
+    getValue: (p) => (p instanceof HumanPlayer ? p.explosivesHandling : 0),
+  },
+  {
+    key: 'CON',
+    name: 'Constitution',
+    description: 'Toughen up. Each point grants +2 maximum HP.',
+    accent: '#4ade80',
+    dimBorder: 'rgba(74,222,128,0.22)',
+    cardBg: '#031208',
+    getValue: (p) => p.constitution,
+  },
+];
+
+const CAT_STAT_DEFS: StatDef[] = [
+  {
+    key: 'STR',
+    name: 'Strength',
+    description: 'Sharper claws. Each point raises claw attack damage.',
+    accent: '#f97316',
+    dimBorder: 'rgba(249,115,22,0.22)',
+    cardBg: '#160b02',
+    getValue: (p) => p.strength,
+  },
+  {
+    key: 'INT',
+    name: 'Intelligence',
+    description: 'Think bigger. Amplifies magic missile power & range.',
+    accent: '#818cf8',
+    dimBorder: 'rgba(129,140,248,0.22)',
+    cardBg: '#08061a',
+    getValue: (p) => p.intelligence,
+  },
+  {
+    key: 'CON',
+    name: 'Constitution',
+    description: 'Nine lives. Each point grants +2 maximum HP.',
+    accent: '#4ade80',
+    dimBorder: 'rgba(74,222,128,0.22)',
+    cardBg: '#031208',
+    getValue: (p) => p.constitution,
+  },
+];
+
+const CARD_H = 70;
+const CARD_GAP = 6;
+const BTN_W = 32;
+const BTN_H = 26;
+
+function renderStatCard(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  localX: number,
+  localY: number,
+  scrollTop: number,
+  scrollY: number,
+  scrollH: number,
+  w: number,
+  stat: StatDef,
+  player: Player,
+  hasPoints: boolean,
+): void {
+  const BORDER_W = 3;
+  const PAD = 10;
+
+  ctx.fillStyle = hasPoints ? stat.cardBg : '#0c1118';
+  ctx.fillRect(localX, localY, w, CARD_H);
+
+  ctx.fillStyle = hasPoints ? stat.accent : '#475569';
+  ctx.fillRect(localX, localY, BORDER_W, CARD_H);
+
+  ctx.strokeStyle = hasPoints ? stat.dimBorder : 'rgba(51,65,85,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(localX, localY, w, CARD_H);
+
+  const textX = localX + BORDER_W + PAD;
+  const accentColor = hasPoints ? stat.accent : '#64748b';
+  const rightEdge = localX + w - 8;
+
+  drawText(ctx, stat.name.toUpperCase(), {
+    x: textX,
+    y: localY + 9,
+    bold: true,
+    size: 12,
+    color: accentColor,
+  });
+
+  drawText(ctx, 'Current level', {
+    x: rightEdge,
+    y: localY + 9,
+    size: 8,
+    color: hasPoints ? '#475569' : '#64748b',
+    align: 'right',
+  });
+
+  drawText(ctx, String(stat.getValue(player)), {
+    x: rightEdge,
+    y: localY + 22,
+    bold: true,
+    size: 13,
+    color: accentColor,
+    align: 'right',
+  });
+
+  const descMaxW = w - (BORDER_W + PAD) - (hasPoints ? BTN_W + 24 : PAD);
+  drawText(ctx, stat.description, {
+    x: textX,
+    y: localY + 40,
+    size: 10,
+    color: hasPoints ? '#64748b' : '#475569',
+    width: descMaxW,
+  });
+
+  if (hasPoints) {
+    const btnLocalX = localX + w - BTN_W - 8;
+    const btnLocalY = localY + 40;
+    const btnScreenY = btnLocalY + scrollTop - scrollY;
+
+    ctx.fillStyle = stat.cardBg;
+    ctx.fillRect(btnLocalX, btnLocalY, BTN_W, BTN_H);
+    ctx.strokeStyle = stat.accent;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(btnLocalX, btnLocalY, BTN_W, BTN_H);
+    drawText(ctx, '+', {
+      x: btnLocalX + BTN_W / 2,
+      y: btnLocalY + (BTN_H - 14) / 2,
+      bold: true,
+      size: 14,
+      color: stat.accent,
+      align: 'center',
+    });
+
+    if (btnLocalY + BTN_H > scrollY && btnLocalY < scrollY + scrollH) {
+      buttons.push({
+        x: btnLocalX,
+        y: btnScreenY,
+        w: BTN_W,
+        h: BTN_H,
+        action: () => player.spendPoint(stat.key),
+      });
+    }
+  }
+}
 
 export function renderSpendTab(
   ctx: CanvasRenderingContext2D,
@@ -10,77 +180,146 @@ export function renderSpendTab(
   bx: number,
   by: number,
   bw: number,
+  bh: number,
   human: HumanPlayer,
   cat: CatPlayer,
   setTab: (tab: PauseTab) => void,
-): void {
+  scrollY = 0,
+): number {
   drawText(ctx, 'SPEND SKILL POINTS', {
     x: bx + bw / 2,
-    y: by + 34 - 13,
+    y: by + 16,
     bold: true,
     size: 16,
     color: '#f1f5f9',
     align: 'center',
   });
-  drawText(ctx, 'STR increases melee damage, CON increases max HP by 2.', {
-    x: bx + 20,
-    y: by + 52 - 8,
+  drawText(ctx, 'Grow stronger between battles', {
+    x: bx + bw / 2,
+    y: by + 36,
     size: 10,
-    color: '#64748b',
-  });
-  drawText(ctx, 'Human: EXP increases dynamite damage and throw distance.', {
-    x: bx + 20,
-    y: by + 64 - 8,
-    size: 10,
-    color: '#64748b',
-  });
-  drawText(ctx, 'Cat: INT increases magic damage.', {
-    x: bx + 20,
-    y: by + 76 - 8,
-    size: 10,
-    color: '#64748b',
+    color: '#475569',
+    align: 'center',
   });
 
-  let oy = by + 92;
-  const bW = 76;
-  const bH = 32;
-  const gap = 10;
-  const players: [Player, string][] = [
-    [human, 'Human'],
-    [cat, 'Cat'],
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(bx + 20, by + 50);
+  ctx.lineTo(bx + bw - 20, by + 50);
+  ctx.stroke();
+
+  const BACK_BTN_H = 52;
+  const scrollTop = by + 56;
+  const scrollBot = by + bh - BACK_BTN_H;
+  const scrollH = scrollBot - scrollTop;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, scrollTop, bw, scrollH);
+  ctx.clip();
+  ctx.translate(0, scrollTop - scrollY);
+
+  let y = 8;
+
+  const pairs: [Player, string, StatDef[], string][] = [
+    [human, 'Human', HUMAN_STAT_DEFS, '#93c5fd'],
+    [cat, 'Cat', CAT_STAT_DEFS, '#fb923c'],
   ];
 
-  for (const [player, name] of players) {
-    if (player.unspentPoints <= 0) continue;
-    drawText(
-      ctx,
-      `${name}  —  ${player.unspentPoints} pt${player.unspentPoints !== 1 ? 's' : ''}`,
-      { x: bx + 20, y: oy - 10, bold: true, size: 12, color: '#e2e8f0' },
-    );
-    oy += 14;
-    const totalBW = bW * 3 + gap * 2;
-    const startX = bx + (bw - totalBW) / 2;
-    const midStat = player instanceof HumanPlayer ? '+EXP' : '+INT';
-    menuBtn(ctx, buttons, startX, oy, bW, bH, '+STR', () => player.spendPoint('STR'));
-    menuBtn(ctx, buttons, startX + bW + gap, oy, bW, bH, midStat, () =>
-      player.spendPoint(player instanceof HumanPlayer ? 'EXP' : 'INT'),
-    );
-    menuBtn(ctx, buttons, startX + (bW + gap) * 2, oy, bW, bH, '+CON', () =>
-      player.spendPoint('CON'),
-    );
-    oy += bH + 22;
-  }
+  for (const [player, charName, statDefs, nameColor] of pairs) {
+    const hasPoints = player.unspentPoints > 0;
 
-  if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) {
-    drawText(ctx, 'No unspent points remaining.', {
-      x: bx + bw / 2,
-      y: oy + 12 - 10,
-      size: 12,
-      color: '#475569',
-      align: 'center',
+    drawText(ctx, `${charName}  ·  Level ${player.level}`, {
+      x: bx + 20,
+      y: y,
+      bold: true,
+      size: 13,
+      color: nameColor,
     });
-    oy += 28;
+
+    if (hasPoints) {
+      const pts = player.unspentPoints;
+      const ptsLabel = `${pts} point${pts !== 1 ? 's' : ''} to spend`;
+      drawText(ctx, ptsLabel, {
+        x: bx + bw - 20,
+        y: y,
+        bold: true,
+        size: 11,
+        color: '#fbbf24',
+        align: 'right',
+      });
+    } else {
+      drawText(ctx, 'no points available', {
+        x: bx + bw - 20,
+        y: y + 1,
+        size: 10,
+        color: '#64748b',
+        align: 'right',
+      });
+    }
+
+    y += 20;
+
+    const cardX = bx + 16;
+    const cardW = bw - 32;
+    for (const stat of statDefs) {
+      renderStatCard(
+        ctx,
+        buttons,
+        cardX,
+        y,
+        scrollTop,
+        scrollY,
+        scrollH,
+        cardW,
+        stat,
+        player,
+        hasPoints,
+      );
+      y += CARD_H + CARD_GAP;
+    }
+
+    y += 14;
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bx + 20, y);
+    ctx.lineTo(bx + bw - 20, y);
+    ctx.stroke();
+
+    y += 14;
   }
 
-  menuBtn(ctx, buttons, bx + 20, oy + 8, bw - 40, 36, 'Back', () => setTab('main'));
+  const contentHeight = y;
+  ctx.restore();
+
+  if (contentHeight > scrollH) {
+    const thumbH = Math.max(20, (scrollH / contentHeight) * scrollH);
+    const maxScroll = contentHeight - scrollH;
+    const thumbY = scrollTop + (scrollY / maxScroll) * (scrollH - thumbH);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(bx + bw - 7, scrollTop, 3, scrollH);
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(bx + bw - 7, thumbY, 3, thumbH);
+  }
+
+  const btnY = by + bh - BACK_BTN_H + 8;
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(bx + 20, btnY, bw - 40, 36);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx + 20, btnY, bw - 40, 36);
+  drawText(ctx, 'Back', {
+    x: bx + bw / 2,
+    y: btnY + (36 - 13) / 2,
+    bold: true,
+    size: 13,
+    color: '#e2e8f0',
+    align: 'center',
+  });
+  buttons.push({ x: bx + 20, y: btnY, w: bw - 40, h: 36, action: () => setTab('main') });
+
+  return contentHeight;
 }

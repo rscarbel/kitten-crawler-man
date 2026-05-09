@@ -31,6 +31,8 @@ export class PauseMenu {
   private buttons: ButtonRect[] = [];
   private statsScrollY = 0;
   private statsContentH = 0;
+  private spendScrollY = 0;
+  private spendContentH = 0;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -59,6 +61,9 @@ export class PauseMenu {
     if (this.tab === 'stats') {
       const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
       this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + deltaY * 0.5));
+    } else if (this.tab === 'spend') {
+      const maxScroll = Math.max(0, this.spendContentH - this.spendScrollH);
+      this.spendScrollY = Math.max(0, Math.min(maxScroll, this.spendScrollY + deltaY * 0.5));
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -82,6 +87,11 @@ export class PauseMenu {
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - 50 - 52
     return STATS_BOX_H - 50 - 52;
+  }
+
+  private get spendScrollH(): number {
+    // Must match renderSpendTab: bh - 56 - 52
+    return SPEND_BOX_H - 56 - 52;
   }
 
   /** Render the full pause overlay. Only call when isOpen === true. */
@@ -114,7 +124,9 @@ export class PauseMenu {
         ? 440
         : this.tab === 'stats'
           ? STATS_BOX_H
-          : 380;
+          : this.tab === 'spend'
+            ? SPEND_BOX_H
+            : 380;
     const boxX = cw / 2 - boxW / 2;
     const boxY = ch / 2 - boxH / 2;
 
@@ -126,6 +138,7 @@ export class PauseMenu {
 
     const setTab = (t: PauseTab) => {
       if (t !== 'stats') this.statsScrollY = 0;
+      if (t !== 'spend') this.spendScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
       this.tab = t;
     };
@@ -165,7 +178,18 @@ export class PauseMenu {
         );
         break;
       case 'spend':
-        renderSpendTab(ctx, this.buttons, boxX, boxY, boxW, human, cat, setTab);
+        this.spendContentH = renderSpendTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          human,
+          cat,
+          setTab,
+          this.spendScrollY,
+        );
         break;
       case 'achievements':
         renderAchievementsTab(
@@ -220,3 +244,4 @@ export class PauseMenu {
 }
 
 const STATS_BOX_H = 420;
+const SPEND_BOX_H = 480;
