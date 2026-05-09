@@ -1,0 +1,41 @@
+import interfacesManifest from '../images/interfaces/manifest.json';
+import { drawOverlay } from '../ui/Box';
+
+const HOLD_FRAMES = 250;
+const FADE_OUT_FRAMES = 80;
+const TOTAL_FRAMES = HOLD_FRAMES + FADE_OUT_FRAMES;
+
+// Load once at module level — shared across scene transitions
+const _img = new Image();
+_img.src = 'src/images/' + interfacesManifest['find-the-stairwell'].path;
+
+export class DungeonIntroSystem {
+  private frame = 0;
+
+  get isActive(): boolean {
+    return this.frame < TOTAL_FRAMES;
+  }
+
+  tick(): void {
+    if (this.isActive) this.frame++;
+  }
+
+  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    if (!this.isActive || !_img.complete || _img.naturalWidth === 0) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    const alpha = this.frame < HOLD_FRAMES ? 1 : 1 - (this.frame - HOLD_FRAMES) / FADE_OUT_FRAMES;
+
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, color: '#000', alpha: alpha * 0.52 });
+
+    const imgW = Math.round(cw * 0.55);
+    const imgH = Math.round(imgW * (_img.naturalHeight / _img.naturalWidth));
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(_img, Math.round((cw - imgW) / 2), Math.round((ch - imgH) / 2), imgW, imgH);
+    ctx.restore();
+  }
+}

@@ -4,6 +4,7 @@ import type { LevelDef } from '../levels/types';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
+import { drawSpriteKey } from '../core/SpriteRenderer';
 
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
@@ -96,16 +97,7 @@ export class StairwellSystem implements GameSystem {
       const sy = y * ts - camY;
       if (sx < -bw || sx > canvas.width || sy < -bh || sy > canvas.height) continue;
 
-      ctx.fillStyle = '#0d0718';
-      ctx.fillRect(sx, sy, bw, bh);
-
-      const stepCount = 4;
-      const stepH = Math.floor(bh / stepCount);
-      for (let i = 0; i < stepCount; i++) {
-        const brightness = 180 - i * 35;
-        ctx.fillStyle = `rgb(${brightness}, ${Math.floor(brightness * 0.55)}, 0)`;
-        ctx.fillRect(sx + i * 6, sy + i * stepH, bw - i * 12, stepH + 1);
-      }
+      drawSpriteKey(ctx, 'stairwell', 'idle', 0, sx, sy, bw);
 
       ctx.strokeStyle = `rgba(168, 85, 247, ${pulse})`;
       ctx.lineWidth = 2;

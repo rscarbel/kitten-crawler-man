@@ -38,6 +38,7 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
+import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { AbilityManager } from '../core/AbilityManager';
 import type { AbilityId, AbilityState } from '../core/AbilityManager';
@@ -137,6 +138,7 @@ export class DungeonScene extends GameplayScene {
   private catAchievements: AchievementManager;
 
   private bossIntro = new BossIntroSystem();
+  private readonly dungeonIntro = new DungeonIntroSystem();
 
   private readonly abilityManager: AbilityManager;
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
@@ -961,6 +963,9 @@ export class DungeonScene extends GameplayScene {
     this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
 
+    // Ticks every frame but does not block gameplay — movement and menus still work
+    this.dungeonIntro.tick();
+
     if (this.bossIntro.isActive) {
       this.bossIntro.tick();
       return;
@@ -1187,6 +1192,8 @@ export class DungeonScene extends GameplayScene {
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx, canvas);
     }
+
+    this.dungeonIntro.render(ctx, canvas);
 
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);

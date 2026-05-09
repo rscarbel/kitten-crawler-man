@@ -1135,6 +1135,20 @@
       "idle": { "row": 0, "frameCount": 1 }
     }
   },
+  "stairwell": {
+    "path": "environment/stairwell.png",
+    "frameWidth": 75,
+    "frameHeight": 75,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 75,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
   "overworld_main_tower": {
     "path": "environment/overworld_main_tower.png",
     "frameWidth": 183.833,

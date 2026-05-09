@@ -294,13 +294,21 @@ export abstract class Mob extends Player {
       const tileXnext =
         dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
-      if (this.map.isWalkable(tileXnext, tileYcur)) this.x = nextX;
+      if (
+        this.map.isWalkable(tileXnext, tileYcur) &&
+        !this.map.isStairwellTile(tileXnext, tileYcur)
+      )
+        this.x = nextX;
     }
     if (dy !== 0) {
       const nextY = this.y + dy;
       const tileXcur = Math.floor((this.x + ts / 2) / ts);
       const tileYnext = Math.floor((nextY + ts / 2) / ts);
-      if (this.map.isWalkable(tileXcur, tileYnext)) this.y = nextY;
+      if (
+        this.map.isWalkable(tileXcur, tileYnext) &&
+        !this.map.isStairwellTile(tileXcur, tileYnext)
+      )
+        this.y = nextY;
     }
   }
 

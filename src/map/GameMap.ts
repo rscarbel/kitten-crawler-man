@@ -97,6 +97,7 @@ export class GameMap {
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
   private extraBlockedTiles = new Set<string>();
+  private stairwellBlockedSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
   private _overlayCache: OverlayTileCache | null = null;
 
@@ -142,6 +143,7 @@ export class GameMap {
       this.mobSpawnPoints = [];
       this.hallwaySpawnPoints = data.hallwaySpawnPoints;
       this.stairwellTiles = data.stairwellTiles;
+      this.buildStairwellBlockedSet(data.stairwellTiles);
       this.mainTowerAnchor = data.mainTowerAnchor;
       return data.grid;
     }
@@ -161,6 +163,7 @@ export class GameMap {
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;
+    this.buildStairwellBlockedSet(data.stairwellTiles);
     this.arenaExteriors = data.arenaExteriors;
     for (const arena of data.arenaExteriors) {
       const { x: doorX, y: doorY } = arena.doorTile;
@@ -194,6 +197,22 @@ export class GameMap {
       );
       if (!already) {
         this.stairwellTiles.push(arena.stairwellTile);
+        this.addToStairwellBlockedSet(arena.stairwellTile);
+      }
+    }
+  }
+
+  private buildStairwellBlockedSet(tiles: ReadonlyArray<{ x: number; y: number }>): void {
+    this.stairwellBlockedSet.clear();
+    for (const s of tiles) {
+      this.addToStairwellBlockedSet(s);
+    }
+  }
+
+  private addToStairwellBlockedSet(s: { x: number; y: number }): void {
+    for (let dy = 0; dy <= 1; dy++) {
+      for (let dx = 0; dx <= 1; dx++) {
+        this.stairwellBlockedSet.add(`${s.x + dx},${s.y + dy}`);
       }
     }
   }
@@ -904,6 +923,10 @@ export class GameMap {
       tile.type !== SPRITE_BUILDING
       // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43) are walkable
     );
+  }
+
+  isStairwellTile(tileX: number, tileY: number): boolean {
+    return this.stairwellBlockedSet.has(`${tileX},${tileY}`);
   }
 
   /**

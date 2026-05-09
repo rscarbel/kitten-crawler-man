@@ -322,101 +322,8 @@ export function generateDungeon(
     });
   }
 
-  // Place dungeon decorations in regular rooms for visual variety.
-  // Pattern cycles every 6 rooms to keep variety without repetition.
-  for (let i = regularRoomStart; i < rooms.length; i++) {
-    const r = rooms[i];
-    const cycle = (i - regularRoomStart) % 6;
-
-    // Torches always go in 2 diagonally-opposite corners (alternated by room index)
-    const corners =
-      i % 2 === 0
-        ? [
-            { x: r.x + 1, y: r.y + 1 },
-            { x: r.x + r.w - 2, y: r.y + r.h - 2 },
-          ]
-        : [
-            { x: r.x + r.w - 2, y: r.y + 1 },
-            { x: r.x + 1, y: r.y + r.h - 2 },
-          ];
-    for (const c of corners) {
-      if (grid[c.y]?.[c.x]?.type === r.floor) {
-        grid[c.y][c.x].type = TORCH;
-      }
-    }
-
-    // Cycle 0: upright barrels along top wall
-    if (cycle === 0 && r.w >= 10) {
-      const positions = [
-        { x: r.x + 2, y: r.y + 1 },
-        { x: r.x + r.w - 3, y: r.y + 1 },
-      ];
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor) grid[p.y][p.x].type = BARREL;
-      }
-    }
-
-    // Cycle 1: barrels on their sides (1 per corner near bottom wall)
-    if (cycle === 1 && r.w >= 8) {
-      const positions = [
-        { x: r.x + 2, y: r.y + r.h - 2 },
-        { x: r.x + r.w - 3, y: r.y + r.h - 2 },
-      ];
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor) grid[p.y][p.x].type = BARREL_SIDE;
-      }
-    }
-
-    // Cycle 2: wooden crates stacked near a corner
-    if (cycle === 2) {
-      const cx = i % 2 === 0 ? r.x + r.w - 2 : r.x + 1;
-      const cy = r.y + 1;
-      if (grid[cy]?.[cx]?.type === r.floor) grid[cy][cx].type = CRATE;
-      const cx2 = cx + (i % 2 === 0 ? -1 : 1);
-      if (grid[cy]?.[cx2]?.type === r.floor) grid[cy][cx2].type = CRATE;
-    }
-
-    // Cycle 3: brazier in centre of room for dramatic lighting
-    if (cycle === 3 && r.w >= 7 && r.h >= 7) {
-      const bx = Math.floor(r.x + r.w / 2);
-      const by = Math.floor(r.y + r.h / 2);
-      if (grid[by]?.[bx]?.type === r.floor) grid[by][bx].type = BRAZIER;
-    }
-
-    // Cycle 4: mixed barrel + crate grouping
-    if (cycle === 4 && r.w >= 9) {
-      const positions = [
-        { x: r.x + 1, y: r.y + 1, type: BARREL },
-        { x: r.x + 2, y: r.y + 1, type: CRATE },
-        { x: r.x + r.w - 2, y: r.y + 1, type: CRATE },
-      ];
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor) grid[p.y][p.x].type = p.type;
-      }
-    }
-
-    // Cycle 5: bones scattered near room edges
-    if (cycle === 5) {
-      const boneSpots = [
-        { x: r.x + 2, y: r.y + 2 },
-        { x: r.x + r.w - 3, y: r.y + 2 },
-        { x: r.x + 2, y: r.y + r.h - 3 },
-      ];
-      for (const p of boneSpots) {
-        if (grid[p.y]?.[p.x]?.type === r.floor) grid[p.y][p.x].type = BONES;
-      }
-    }
-  }
-
-  // Mob spawn points skip start, safe, boss, and quest rooms
-  const mobSpawnPoints = rooms.slice(regularRoomStart).map((r) => ({
-    x: Math.floor(r.x + r.w / 2),
-    y: Math.floor(r.y + r.h / 2),
-    w: r.w,
-    h: r.h,
-  }));
-
   // 7. Place stairwells: 1 per 50 regular rooms (min 1), in rooms far from start.
+  // Computed before decorations so the blocked footprint can exclude decoration placement.
   const stairwellTiles: Point[] = [];
   if (rooms.length > 0) {
     const startCenter = {
@@ -456,6 +363,117 @@ export function generateDungeon(
       });
     }
   }
+
+  // Each stairwell occupies a 2×2 tile footprint — block decorations from spawning there.
+  const stairwellBlockedSet = new Set<string>();
+  for (const s of stairwellTiles) {
+    for (let dy = 0; dy <= 1; dy++) {
+      for (let dx = 0; dx <= 1; dx++) {
+        stairwellBlockedSet.add(`${s.x + dx},${s.y + dy}`);
+      }
+    }
+  }
+
+  // Place dungeon decorations in regular rooms for visual variety.
+  // Pattern cycles every 6 rooms to keep variety without repetition.
+  for (let i = regularRoomStart; i < rooms.length; i++) {
+    const r = rooms[i];
+    const cycle = (i - regularRoomStart) % 6;
+
+    // Torches always go in 2 diagonally-opposite corners (alternated by room index)
+    const corners =
+      i % 2 === 0
+        ? [
+            { x: r.x + 1, y: r.y + 1 },
+            { x: r.x + r.w - 2, y: r.y + r.h - 2 },
+          ]
+        : [
+            { x: r.x + r.w - 2, y: r.y + 1 },
+            { x: r.x + 1, y: r.y + r.h - 2 },
+          ];
+    for (const c of corners) {
+      if (grid[c.y]?.[c.x]?.type === r.floor && !stairwellBlockedSet.has(`${c.x},${c.y}`)) {
+        grid[c.y][c.x].type = TORCH;
+      }
+    }
+
+    // Cycle 0: upright barrels along top wall
+    if (cycle === 0 && r.w >= 10) {
+      const positions = [
+        { x: r.x + 2, y: r.y + 1 },
+        { x: r.x + r.w - 3, y: r.y + 1 },
+      ];
+      for (const p of positions) {
+        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
+          grid[p.y][p.x].type = BARREL;
+      }
+    }
+
+    // Cycle 1: barrels on their sides (1 per corner near bottom wall)
+    if (cycle === 1 && r.w >= 8) {
+      const positions = [
+        { x: r.x + 2, y: r.y + r.h - 2 },
+        { x: r.x + r.w - 3, y: r.y + r.h - 2 },
+      ];
+      for (const p of positions) {
+        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
+          grid[p.y][p.x].type = BARREL_SIDE;
+      }
+    }
+
+    // Cycle 2: wooden crates stacked near a corner
+    if (cycle === 2) {
+      const cx = i % 2 === 0 ? r.x + r.w - 2 : r.x + 1;
+      const cy = r.y + 1;
+      if (grid[cy]?.[cx]?.type === r.floor && !stairwellBlockedSet.has(`${cx},${cy}`))
+        grid[cy][cx].type = CRATE;
+      const cx2 = cx + (i % 2 === 0 ? -1 : 1);
+      if (grid[cy]?.[cx2]?.type === r.floor && !stairwellBlockedSet.has(`${cx2},${cy}`))
+        grid[cy][cx2].type = CRATE;
+    }
+
+    // Cycle 3: brazier in centre of room for dramatic lighting
+    if (cycle === 3 && r.w >= 7 && r.h >= 7) {
+      const bx = Math.floor(r.x + r.w / 2);
+      const by = Math.floor(r.y + r.h / 2);
+      if (grid[by]?.[bx]?.type === r.floor && !stairwellBlockedSet.has(`${bx},${by}`))
+        grid[by][bx].type = BRAZIER;
+    }
+
+    // Cycle 4: mixed barrel + crate grouping
+    if (cycle === 4 && r.w >= 9) {
+      const positions = [
+        { x: r.x + 1, y: r.y + 1, type: BARREL },
+        { x: r.x + 2, y: r.y + 1, type: CRATE },
+        { x: r.x + r.w - 2, y: r.y + 1, type: CRATE },
+      ];
+      for (const p of positions) {
+        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
+          grid[p.y][p.x].type = p.type;
+      }
+    }
+
+    // Cycle 5: bones scattered near room edges
+    if (cycle === 5) {
+      const boneSpots = [
+        { x: r.x + 2, y: r.y + 2 },
+        { x: r.x + r.w - 3, y: r.y + 2 },
+        { x: r.x + 2, y: r.y + r.h - 3 },
+      ];
+      for (const p of boneSpots) {
+        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
+          grid[p.y][p.x].type = BONES;
+      }
+    }
+  }
+
+  // Mob spawn points skip start, safe, boss, and quest rooms
+  const mobSpawnPoints = rooms.slice(regularRoomStart).map((r) => ({
+    x: Math.floor(r.x + r.w / 2),
+    y: Math.floor(r.y + r.h / 2),
+    w: r.w,
+    h: r.h,
+  }));
 
   // 9. Pick rat spawn points: hallway tiles at least 5 tiles from every room centre.
   // Scale the max rat count proportionally to map area (same density as the base map).
