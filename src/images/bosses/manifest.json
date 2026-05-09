@@ -1,27 +1,81 @@
 {
   "hoarder": {
     "path": "bosses/hoarder.png",
-    "frameWidth": 144,
-    "frameHeight": 160,
-    "tileX": 40,
-    "tileY": 20,
+    "frameWidth": 158,
+    "frameHeight": 206,
+    "tileX": 44,
+    "tileY": 26,
     "tileScale": 64,
     "states": {
-      "idle": {
+      "walk": {
         "row": 0,
-        "frameCount": 1
+        "frameCount": 5
       },
-      "enraged": {
+      "vomit_windup": {
         "row": 1,
+        "frameCount": 3
+      },
+      "walk_back": {
+        "row": 2,
+        "frameCount": 5
+      },
+      "gore_head": {
+        "row": 3,
+        "colOffset": 0,
         "frameCount": 1
       },
-      "vomit": {
-        "row": 2,
-        "frameCount": 6
-      },
-      "vomit_enraged": {
+      "gore_right_arm": {
         "row": 3,
-        "frameCount": 6
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_left_arm": {
+        "row": 3,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_left_leg": {
+        "row": 3,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_right_leg": {
+        "row": 3,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 3,
+        "colOffset": 5,
+        "frameCount": 1
+      }
+    }
+  },
+  "hoarder_vomit_arc": {
+    "path": "bosses/hoarder_vomit.png",
+    "frameWidth": 52,
+    "frameHeight": 94,
+    "tileX": 0,
+    "tileY": 47,
+    "tileScale": 64,
+    "states": {
+      "arc": {
+        "row": 0,
+        "frameCount": 7
+      }
+    }
+  },
+  "hoarder_vomit_puddle": {
+    "path": "bosses/hoarder_vomit.png",
+    "frameWidth": 52,
+    "frameHeight": 94,
+    "tileX": 26,
+    "tileY": 47,
+    "tileScale": 64,
+    "states": {
+      "puddle": {
+        "row": 1,
+        "frameCount": 4
       }
     }
   },

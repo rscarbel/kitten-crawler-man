@@ -238,7 +238,18 @@ export class BossIntroSystem implements GameSystem {
         );
       } else {
         const hS = 80;
-        drawHoarderSprite(ctx, rightX + panelW / 2 - hS / 2, panelY + 18, hS, false, 0, 1, 0);
+        drawHoarderSprite(
+          ctx,
+          rightX + panelW / 2 - hS / 2,
+          panelY + 18,
+          hS,
+          0,
+          1,
+          0,
+          false,
+          false,
+          0,
+        );
       }
       ctx.restore();
 

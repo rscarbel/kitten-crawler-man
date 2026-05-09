@@ -1027,6 +1027,7 @@ export class DungeonScene extends GameplayScene {
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
 
     this.renderPipeline.renderEntities(ctx, rc);
+    this.bossRoom.renderProjectiles(ctx, camX, camY);
 
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 

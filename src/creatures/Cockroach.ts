@@ -17,6 +17,8 @@ export class Cockroach extends Mob {
   displayName = 'Cockroach';
   description = 'Scurries out of dark corners to overwhelm its prey.';
 
+  mass = 0.3;
+
   /** Frames until this cockroach despawns even if alive (30 s @ 60 fps). */
   ttl = 1800;
 

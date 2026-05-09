@@ -81,6 +81,12 @@ export abstract class Mob extends Player {
   isFlying = false;
 
   /**
+   * Physical mass used for separation weighting. Heavier mobs move less when bumped.
+   * Cockroaches (0.3) barely disturb anything; bosses (10) are nearly immovable.
+   */
+  mass = 1;
+
+  /**
    * When set to a live Mob, this mob will chase and attack it as a priority target.
    * Used so that Brindled Vespa acid hits cause enemy mobs to retaliate.
    * DungeonScene injects this mob into the mob's target list each frame.

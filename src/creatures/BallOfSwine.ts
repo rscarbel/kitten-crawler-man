@@ -39,6 +39,7 @@ export class BallOfSwine extends Mob {
   protected coinDropMin = 100;
   protected coinDropMax = 200;
   displayName = 'Ball of Swine';
+  mass = 10;
   description =
     'A wheel-like mass of fused body parts that zooms around in arcing circles. Contact is instantly lethal.';
 

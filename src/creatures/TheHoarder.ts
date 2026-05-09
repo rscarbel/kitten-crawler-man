@@ -9,32 +9,48 @@ const HOARDER_HP = 80;
 const HOARDER_SPEED = 0.45;
 const HOARDER_SPEED_ENRAGED = 0.75;
 const AGGRO_RANGE_PX = TILE_SIZE * 10;
-const ATTACK_RANGE_PX = TILE_SIZE * 1.8;
-const ATTACK_DAMAGE = 1;
-const ATTACK_COOLDOWN = 150;
-const VOMIT_INTERVAL = 480; // 8 s @ 60 fps
-const VOMIT_INTERVAL_ENRAGED = 240; // 4 s @ 60 fps
-const ENRAGE_THRESHOLD = 0.5; // below 50% HP
+const FLEE_RANGE_PX = TILE_SIZE * 8;
+const ENRAGE_THRESHOLD = 0.5;
+const VOMIT_INTERVAL = 480;
+const VOMIT_INTERVAL_ENRAGED = 240;
+const VOMIT_WINDUP_FRAMES = 80;
+const VOMIT_SPEED = 3.5;
+
+type HoarderState = 'fleeing' | 'vomit_windup';
 
 export class TheHoarder extends Mob {
   readonly xpValue = 500;
+  readonly bodyPartKey = 'hoarder';
   protected coinDropMin = 50;
   protected coinDropMax = 100;
   displayName = 'The Hoarder';
-  description = 'A hulking boss that guards its pile of junk with vile fury.';
+  description = 'A hulking boss that flees while vomiting cockroaches and acid bile.';
+  mass = 10;
 
-  private attackCooldown = 60;
-  private vomitTimer = VOMIT_INTERVAL;
   isEnraged = false;
 
-  /**
-   * Pending cockroach spawn positions. DungeonScene drains this each frame
-   * and creates Cockroach mobs at each position.
-   */
+  private hoarderState: HoarderState = 'fleeing';
+  private vomitTimer = VOMIT_INTERVAL;
+  private vomitWindupTimer = 0;
+  private vomitTargetX = 0;
+  private vomitTargetY = 0;
+
+  /** Set by BossRoomSystem each frame: true when cockroach cap is full. */
+  cockroachAtCap = false;
+
+  /** Pending cockroach spawn positions. BossRoomSystem drains this each frame. */
   cockroachSpawns: Array<{ x: number; y: number }> = [];
 
-  /** Vomit animation timer (frames remaining to show green glow). */
-  private vomitFlash = 0;
+  /** Set when vomit windup completes; BossRoomSystem reads and clears this each frame. */
+  pendingVomitProjectile: { x: number; y: number; dx: number; dy: number } | null = null;
+
+  get isWindingUp(): boolean {
+    return this.hoarderState === 'vomit_windup';
+  }
+
+  get vomitWindupProgress(): number {
+    return this.vomitWindupTimer > 0 ? 1 - this.vomitWindupTimer / VOMIT_WINDUP_FRAMES : 0;
+  }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HOARDER_HP, HOARDER_SPEED);
@@ -44,16 +60,35 @@ export class TheHoarder extends Mob {
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
-    // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
       this.speed = HOARDER_SPEED_ENRAGED;
     }
 
-    // Tick vomit flash
-    if (this.vomitFlash > 0) this.vomitFlash--;
+    if (this.hoarderState === 'vomit_windup') {
+      this.vomitWindupTimer--;
+      this.isMoving = false;
+      const dx = this.vomitTargetX - this.x;
+      const dy = this.vomitTargetY - this.y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        this.facingX = dx / len;
+        this.facingY = dy / len;
+      }
+      if (this.vomitWindupTimer <= 0) {
+        const ndx = len > 0 ? dx / len : 1;
+        const ndy = len > 0 ? dy / len : 0;
+        this.pendingVomitProjectile = {
+          x: this.x + TILE_SIZE * 0.5,
+          y: this.y + TILE_SIZE * 0.5,
+          dx: ndx * VOMIT_SPEED,
+          dy: ndy * VOMIT_SPEED,
+        };
+        this.hoarderState = 'fleeing';
+      }
+      return;
+    }
 
-    // Find nearest living target
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
@@ -66,18 +101,22 @@ export class TheHoarder extends Mob {
     }
 
     this.currentTarget = nearest;
-    if (this.attackCooldown > 0) this.attackCooldown--;
 
-    // Vomit timer ticks regardless of target
     this.vomitTimer--;
     const interval = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
     if (this.vomitTimer <= 0) {
       this.vomitTimer = interval;
-      this.triggerVomit();
+      if (this.cockroachAtCap && nearest !== null) {
+        this.vomitTargetX = nearest.x;
+        this.vomitTargetY = nearest.y;
+        this.hoarderState = 'vomit_windup';
+        this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
+      } else {
+        this.triggerVomit();
+      }
     }
 
     if (!nearest) {
-      // Guard the spawn — slowly return if far
       const toHome = Math.hypot(this.x - this.spawnX, this.y - this.spawnY);
       if (toHome > TILE_SIZE * 2) {
         this.followTargetCollide(this.spawnX, this.spawnY, this.speed * 0.6, TILE_SIZE);
@@ -89,28 +128,29 @@ export class TheHoarder extends Mob {
 
     this.updateLastKnown(nearest);
 
-    // Melee attack
-    if (nearestDist <= ATTACK_RANGE_PX && this.attackCooldown <= 0) {
-      this.dealDamage(nearest, ATTACK_DAMAGE);
-      nearest.damageFlash = 8;
-      this.attackCooldown = ATTACK_COOLDOWN;
+    if (nearestDist < FLEE_RANGE_PX) {
+      const dx = this.x - nearest.x;
+      const dy = this.y - nearest.y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) {
+        const fleeTargetX = this.x + (dx / len) * TILE_SIZE * 4;
+        const fleeTargetY = this.y + (dy / len) * TILE_SIZE * 4;
+        this.followTargetCollide(fleeTargetX, fleeTargetY, this.speed, 0);
+      } else {
+        const angle = Math.random() * Math.PI * 2;
+        this.followTargetCollide(
+          this.x + Math.cos(angle) * TILE_SIZE * 4,
+          this.y + Math.sin(angle) * TILE_SIZE * 4,
+          this.speed,
+          0,
+        );
+      }
+    } else {
       this.isMoving = false;
-      return;
     }
-
-    // Pursue via A*
-    this.followTargetAStar(
-      this.lastKnownTargetX,
-      this.lastKnownTargetY,
-      this.speed,
-      ATTACK_RANGE_PX * 0.9,
-      40,
-    );
   }
 
   private triggerVomit(): void {
-    this.vomitFlash = 40;
-    // Spawn 3–5 cockroaches in a scatter around the boss
     const count = randomInt(3, 5);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -124,7 +164,6 @@ export class TheHoarder extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    // Guaranteed boss drop: Enchanted Trollskin Shirt of Pummeling
     items.push({ id: 'trollskin_shirt', quantity: 1 });
     return items;
   }
@@ -135,7 +174,6 @@ export class TheHoarder extends Mob {
     const sy = this.y - camY;
 
     ctx.save();
-
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
     }
@@ -145,10 +183,12 @@ export class TheHoarder extends Mob {
       sx,
       sy,
       tileSize,
-      this.isEnraged,
       this.facingX,
       this.facingY,
-      this.vomitFlash,
+      this.walkFrame,
+      this.isMoving,
+      this.isWindingUp,
+      this.vomitWindupProgress,
     );
 
     ctx.filter = 'none';

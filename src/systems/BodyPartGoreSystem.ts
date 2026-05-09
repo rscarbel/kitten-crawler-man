@@ -20,7 +20,22 @@ const GOBLIN_CONFIG: MobBodyPartConfig = {
   ],
 };
 
-const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([['goblin', GOBLIN_CONFIG]]);
+const HOARDER_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'hoarder',
+  parts: [
+    'gore_head',
+    'gore_right_arm',
+    'gore_left_arm',
+    'gore_left_leg',
+    'gore_right_leg',
+    'gore_torso',
+  ],
+};
+
+const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
+  ['goblin', GOBLIN_CONFIG],
+  ['hoarder', HOARDER_CONFIG],
+]);
 
 const PART_LIFETIME = 6000; // 300s @ 60fps
 const PART_FADE_START = 3000; // start fading 50s before despawn

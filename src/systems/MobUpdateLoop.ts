@@ -15,6 +15,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 
 const AI_RADIUS = TILE_SIZE * 22;
 const SEP_DIST = TILE_SIZE;
+/** Effective mass used for players in separation calculations. */
+const PLAYER_MASS = 3;
 
 /**
  * Pushes a player by (dx, dy) with per-axis wall collision, mirroring
@@ -124,11 +126,11 @@ export class MobUpdateLoop implements GameSystem {
         const dy = a.y - b.y;
         const dist = Math.hypot(dx, dy);
         if (dist > 0 && dist < SEP_DIST) {
-          const factor = ((SEP_DIST - dist) * 0.3) / dist;
-          const px = dx * factor;
-          const py = dy * factor;
-          a.applySeparation(px, py);
-          b.applySeparation(-px, -py);
+          const base = ((SEP_DIST - dist) * 0.3) / dist;
+          const totalMass = a.mass + b.mass;
+          // Heavier mob moves less — force is proportional to the other mob's share of total mass.
+          a.applySeparation(dx * base * (b.mass / totalMass), dy * base * (b.mass / totalMass));
+          b.applySeparation(-dx * base * (a.mass / totalMass), -dy * base * (a.mass / totalMass));
         }
       }
     }
@@ -139,7 +141,8 @@ export class MobUpdateLoop implements GameSystem {
       }
     }
 
-    // Player-mob collision. Human-controlled: symmetric half-push (neither has privileged mass).
+    // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
+    // cockroaches are displaced proportionally to their mass relative to the player.
     // AI-controlled follower: full push back onto the player only — mobs act as walls.
     for (const player of [human, cat]) {
       if (!player.isAlive) continue;
@@ -150,13 +153,19 @@ export class MobUpdateLoop implements GameSystem {
         const dist = Math.hypot(dx, dy);
         if (dist > 0 && dist < SEP_DIST) {
           if (player.isActive) {
-            const half = ((SEP_DIST - dist) * 0.5) / dist;
-            const px = dx * half;
-            const py = dy * half;
-            pushPlayerWithCollision(player, px, py, gameMap);
+            const base = (SEP_DIST - dist) / dist;
+            const totalMass = PLAYER_MASS + mob.mass;
+            const playerShare = mob.mass / totalMass;
+            const mobShare = PLAYER_MASS / totalMass;
+            pushPlayerWithCollision(
+              player,
+              dx * base * playerShare,
+              dy * base * playerShare,
+              gameMap,
+            );
             const mobOx = mob.x;
             const mobOy = mob.y;
-            mob.applySeparation(-px, -py);
+            mob.applySeparation(-dx * base * mobShare, -dy * base * mobShare);
             if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
           } else {
             const full = (SEP_DIST - dist) / dist;

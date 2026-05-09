@@ -10,6 +10,22 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+
+interface VomitProjectile {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  ttl: number;
+  age: number;
+}
+
+interface AcidPuddle {
+  x: number;
+  y: number;
+  ttl: number;
+}
 
 interface BossRoomState {
   bounds: { x: number; y: number; w: number; h: number };
@@ -26,10 +42,23 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
   krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
 };
 
+const MAX_COCKROACHES = 3;
+const MAX_ACID_PUDDLES = 5;
+const PUDDLE_TTL = 600;
+const ACID_DAMAGE_INTERVAL = 30;
+const PROJECTILE_TTL = 90;
+const ACID_PUDDLE_RADIUS = TILE_SIZE * 1.5;
+
 export class BossRoomSystem implements GameSystem {
   private readonly states: BossRoomState[];
   private readonly bossTypes: string[];
   private readonly enteredRooms = new Set<number>();
+
+  private readonly vomitProjectiles: VomitProjectile[] = [];
+  private readonly acidPuddles: AcidPuddle[] = [];
+  private puddleClock = 0;
+  private humanAcidTick = 0;
+  private catAcidTick = 0;
 
   /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
   newlyLockedBossType: string | null = null;
@@ -131,13 +160,15 @@ export class BossRoomSystem implements GameSystem {
         state.defeated = true;
         state.defeatTimer = 300;
         this.miniMap.revealBossNeighborhood(state.bounds);
-        // Kill all cockroaches when boss is defeated
+        // Kill all cockroaches and clear acid hazards when boss is defeated
         for (const mob of mobs) {
           if (mob instanceof Cockroach && mob.isAlive) {
             mob.hp = 0;
             mob.justDied = true;
           }
         }
+        this.vomitProjectiles.length = 0;
+        this.acidPuddles.length = 0;
       }
 
       if (state.locked) {
@@ -148,6 +179,9 @@ export class BossRoomSystem implements GameSystem {
 
     this.spawnHoarderCockroaches(mobs, mobGrid);
     this.tickCockroachTTLs(mobs, mobGrid);
+    this.processVomitProjectiles();
+    this.tickAcidPuddles(human, cat);
+    this.puddleClock++;
   }
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
@@ -191,11 +225,28 @@ export class BossRoomSystem implements GameSystem {
   }
 
   private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
-    const MAX_COCKROACHES = 3;
+    const liveCount = mobs.filter((m) => m instanceof Cockroach && m.isAlive).length;
     for (const mob of mobs) {
       if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
+
+      // Tell the hoarder whether the cap is full so it can decide to vomit instead
+      mob.cockroachAtCap = liveCount >= MAX_COCKROACHES;
+
+      // Drain any pending vomit projectile
+      if (mob.pendingVomitProjectile !== null) {
+        const p = mob.pendingVomitProjectile;
+        mob.pendingVomitProjectile = null;
+        this.vomitProjectiles.push({
+          x: p.x,
+          y: p.y,
+          dx: p.dx,
+          dy: p.dy,
+          ttl: PROJECTILE_TTL,
+          age: 0,
+        });
+      }
+
       if (mob.cockroachSpawns.length === 0) continue;
-      const liveCount = mobs.filter((m) => m instanceof Cockroach && m.isAlive).length;
       let spawned = liveCount;
       for (const sp of mob.cockroachSpawns) {
         if (spawned >= MAX_COCKROACHES) break;
@@ -210,6 +261,67 @@ export class BossRoomSystem implements GameSystem {
         }
       }
       mob.cockroachSpawns = [];
+    }
+  }
+
+  private processVomitProjectiles(): void {
+    for (let i = this.vomitProjectiles.length - 1; i >= 0; i--) {
+      const proj = this.vomitProjectiles[i];
+      const newX = proj.x + proj.dx;
+      const newY = proj.y + proj.dy;
+      const tileX = Math.floor(newX / TILE_SIZE);
+      const tileY = Math.floor(newY / TILE_SIZE);
+      const hitWall = !this.gameMap.isWalkable(tileX, tileY);
+      if (hitWall || proj.ttl <= 0) {
+        this.vomitProjectiles.splice(i, 1);
+        if (this.acidPuddles.length < MAX_ACID_PUDDLES) {
+          this.acidPuddles.push({ x: proj.x, y: proj.y, ttl: PUDDLE_TTL });
+        }
+      } else {
+        proj.x = newX;
+        proj.y = newY;
+        proj.ttl--;
+        proj.age++;
+      }
+    }
+  }
+
+  private tickAcidPuddles(human: HumanPlayer, cat: CatPlayer): void {
+    for (let i = this.acidPuddles.length - 1; i >= 0; i--) {
+      const puddle = this.acidPuddles[i];
+      puddle.ttl--;
+      if (puddle.ttl <= 0) this.acidPuddles.splice(i, 1);
+    }
+
+    // Apply acid damage per player
+    const humanInAcid = this.acidPuddles.some(
+      (p) =>
+        Math.hypot(human.x + TILE_SIZE * 0.5 - p.x, human.y + TILE_SIZE * 0.5 - p.y) <
+        ACID_PUDDLE_RADIUS,
+    );
+    if (humanInAcid) {
+      this.humanAcidTick++;
+      if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
+        human.takeDamage(1);
+        human.damageFlash = 8;
+      }
+    } else {
+      this.humanAcidTick = 0;
+    }
+
+    const catInAcid = this.acidPuddles.some(
+      (p) =>
+        Math.hypot(cat.x + TILE_SIZE * 0.5 - p.x, cat.y + TILE_SIZE * 0.5 - p.y) <
+        ACID_PUDDLE_RADIUS,
+    );
+    if (catInAcid) {
+      this.catAcidTick++;
+      if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
+        cat.takeDamage(1);
+        cat.damageFlash = 8;
+      }
+    } else {
+      this.catAcidTick = 0;
     }
   }
 
@@ -240,6 +352,77 @@ export class BossRoomSystem implements GameSystem {
       const bossType = this.bossTypes[i] ?? 'the_hoarder';
       this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
     }
+    this.renderAcidPuddles(ctx, camX, camY);
+  }
+
+  renderProjectiles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.vomitProjectiles.length === 0) return;
+    ctx.save();
+    for (const proj of this.vomitProjectiles) {
+      const screenX = proj.x - camX;
+      const screenY = proj.y - camY;
+      const angle = Math.atan2(proj.dy, proj.dx);
+      const progress = proj.age / PROJECTILE_TTL;
+
+      // Procedural bile orb: bright green blob with inner glow
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(angle);
+      const r = TILE_SIZE * 0.35;
+      const len = r * (0.6 + progress * 1.4);
+      const grad = ctx.createLinearGradient(-len, 0, len, 0);
+      grad.addColorStop(0, 'rgba(80,200,20,0.9)');
+      grad.addColorStop(0.5, 'rgba(180,255,60,0.95)');
+      grad.addColorStop(1, 'rgba(40,140,10,0.4)');
+      ctx.shadowColor = '#a0ff40';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, len, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Overlay sprite if loaded
+      const frame = progressFrameIndex(progress, 7);
+      drawSpriteKey(ctx, 'hoarder_vomit_arc', 'arc', frame, screenX, screenY, TILE_SIZE, {
+        rotation: angle,
+      });
+    }
+    ctx.restore();
+  }
+
+  private renderAcidPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.acidPuddles.length === 0) return;
+    const frame = timeFrameIndex(this.puddleClock / 60, 6, 4);
+    const pulse = 0.7 + 0.3 * Math.sin(this.puddleClock * 0.12);
+    ctx.save();
+    for (const puddle of this.acidPuddles) {
+      const fadeAlpha = puddle.ttl < 120 ? puddle.ttl / 120 : 1;
+      const screenX = puddle.x - camX;
+      const screenY = puddle.y - camY;
+
+      // Procedural acid puddle: glowing green ellipse on the floor
+      ctx.save();
+      ctx.globalAlpha = fadeAlpha * 0.75 * pulse;
+      ctx.shadowColor = '#80ff20';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#4aad10';
+      ctx.beginPath();
+      ctx.ellipse(screenX, screenY, TILE_SIZE * 1.2, TILE_SIZE * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = fadeAlpha * 0.45;
+      ctx.fillStyle = '#a0ff40';
+      ctx.beginPath();
+      ctx.ellipse(screenX, screenY, TILE_SIZE * 0.7, TILE_SIZE * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Overlay sprite if loaded
+      drawSpriteKey(ctx, 'hoarder_vomit_puddle', 'puddle', frame, screenX, screenY, TILE_SIZE, {
+        alpha: fadeAlpha,
+      });
+    }
+    ctx.restore();
   }
 
   private renderSingleBossRoomObjects(

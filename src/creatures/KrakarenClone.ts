@@ -33,6 +33,7 @@ export class KrakarenClone extends Mob {
   protected coinDropMax = 150;
   displayName = 'Krakaren Clone';
   description = 'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
+  mass = 10;
 
   isEnraged = false;
 
