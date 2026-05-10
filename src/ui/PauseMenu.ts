@@ -36,6 +36,7 @@ export class PauseMenu {
   private statsContentH = 0;
   private spendScrollY = 0;
   private spendContentH = 0;
+  private touchScrollStartY: number | null = null;
 
   /** Set by the owning scene so the Settings tab can read/write volumes. */
   audio: AudioManager | null = null;
@@ -76,18 +77,37 @@ export class PauseMenu {
   }
 
   touchScrollStart(y: number): void {
-    if (!this._isOpen || this.tab !== 'abilities') return;
-    abilitiesTabTouchStart(y);
+    if (!this._isOpen) return;
+    if (this.tab === 'abilities') {
+      abilitiesTabTouchStart(y);
+    } else if (this.tab === 'spend' || this.tab === 'stats') {
+      this.touchScrollStartY = y;
+    }
   }
 
   touchScrollMove(y: number): void {
-    if (!this._isOpen || this.tab !== 'abilities') return;
-    abilitiesTabTouchMove(y);
+    if (!this._isOpen) return;
+    if (this.tab === 'abilities') {
+      abilitiesTabTouchMove(y);
+    } else if (this.touchScrollStartY !== null) {
+      const delta = this.touchScrollStartY - y;
+      this.touchScrollStartY = y;
+      if (this.tab === 'spend') {
+        const maxScroll = Math.max(0, this.spendContentH - this.spendScrollH);
+        this.spendScrollY = Math.max(0, Math.min(maxScroll, this.spendScrollY + delta));
+      } else if (this.tab === 'stats') {
+        const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
+        this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + delta));
+      }
+    }
   }
 
   touchScrollEnd(): void {
-    if (!this._isOpen || this.tab !== 'abilities') return;
-    abilitiesTabTouchEnd();
+    if (!this._isOpen) return;
+    if (this.tab === 'abilities') {
+      abilitiesTabTouchEnd();
+    }
+    this.touchScrollStartY = null;
   }
 
   private get statsScrollH(): number {

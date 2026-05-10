@@ -63,7 +63,16 @@ export class AudioManager {
     this.sfxGain.connect(this.masterGain);
     this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
   }
+
+  private readonly handleVisibilityChange = (): void => {
+    if (document.hidden) {
+      void this.ctx.suspend();
+    } else {
+      void this.ctx.resume();
+    }
+  };
 
   /** Resume the AudioContext. Must be called from a user-gesture handler. */
   resume(): void {
@@ -304,6 +313,7 @@ export class AudioManager {
 
   /** Stop music and release the AudioContext. Call when the page/game is torn down. */
   dispose(): void {
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.stopWalkingLoop();
     this.stopMusic(0);
     void this.ctx.close();

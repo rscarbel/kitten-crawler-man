@@ -1687,7 +1687,15 @@ export class DungeonScene extends GameplayScene {
         this.pauseMenu.isOpen ||
         this.safeRoom.mordecaiDialogOpen
       ) {
-        this.handleClick(x, y);
+        if (this.pauseMenu.isOpen) {
+          if (this.touch.pauseScrollTouchId === null) {
+            this.touch.pauseScrollTouchId = touch.identifier;
+            this.touch.pauseScrollTapStart = { x, y, time: Date.now() };
+            this.pauseMenu.touchScrollStart(y);
+          }
+        } else {
+          this.handleClick(x, y);
+        }
         continue;
       }
 
@@ -1741,6 +1749,10 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTarget = { x, y };
         this.pauseMenu.touchScrollMove(y);
       }
+
+      if (touch.identifier === this.touch.pauseScrollTouchId) {
+        this.pauseMenu.touchScrollMove(y);
+      }
     }
   }
 
@@ -1750,6 +1762,21 @@ export class DungeonScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      if (touch.identifier === this.touch.pauseScrollTouchId) {
+        this.pauseMenu.touchScrollEnd();
+        this.touch.pauseScrollTouchId = null;
+        const tapStart = this.touch.pauseScrollTapStart;
+        this.touch.pauseScrollTapStart = null;
+        if (tapStart !== null) {
+          const elapsed = Date.now() - tapStart.time;
+          const moved = Math.hypot(x - tapStart.x, y - tapStart.y);
+          if (elapsed < 250 && moved < 20) {
+            this.handleClick(x, y);
+          }
+        }
+        continue;
+      }
 
       if (touch.identifier === this.touch.dynamiteTouchId) {
         const wasCharging = this.dynamite.isCharging;
@@ -1761,13 +1788,22 @@ export class DungeonScene extends GameplayScene {
 
       if (touch.identifier === this.touch.inventoryDragTouchId) {
         const longPressFired = this.touch.longPressFired;
+        // longPressPos is cleared by move handler when finger travels > 10px — use it to
+        // distinguish a tap (pos still set) from a drag (pos already null).
+        const wasTap = this.touch.longPressPos !== null;
         this.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
           const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-          if (hi >= 0 && !this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+          if (
+            hi >= 0 &&
+            wasTap &&
+            !this.pauseMenu.isOpen &&
+            !this.safeRoom.isSleeping &&
+            !this.gameOver
+          ) {
             this.triggerHotbarActivation(hi);
-          } else {
+          } else if (wasTap) {
             this.handleClick(x, y);
           }
         }

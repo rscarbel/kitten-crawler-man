@@ -28,6 +28,10 @@ export class MobileTouchState {
   inventoryDragTouchId: number | null = null;
   /** Touch identifier for dynamite charge. */
   dynamiteTouchId: number | null = null;
+  /** Touch identifier for pause-menu scroll (separate from movement touch). */
+  pauseScrollTouchId: number | null = null;
+  /** Tap-start info for the pause-scroll touch (used to distinguish taps from scrolls). */
+  pauseScrollTapStart: { x: number; y: number; time: number } | null = null;
 
   /** Long-press timer for inventory context menu. */
   longPressTimer: ReturnType<typeof setTimeout> | null = null;
