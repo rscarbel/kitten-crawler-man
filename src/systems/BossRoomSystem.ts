@@ -44,10 +44,11 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
 
 const MAX_COCKROACHES = 3;
 const MAX_ACID_PUDDLES = 5;
-const PUDDLE_TTL = 600;
+const PUDDLE_TTL = 2700; // 45 seconds @ 60fps
 const ACID_DAMAGE_INTERVAL = 30;
 const PROJECTILE_TTL = 90;
 const ACID_PUDDLE_RADIUS = TILE_SIZE * 1.5;
+const PROJECTILE_HIT_RADIUS = TILE_SIZE * 0.8;
 
 export class BossRoomSystem implements GameSystem {
   private readonly states: BossRoomState[];
@@ -179,7 +180,7 @@ export class BossRoomSystem implements GameSystem {
 
     this.spawnHoarderCockroaches(mobs, mobGrid);
     this.tickCockroachTTLs(mobs, mobGrid);
-    this.processVomitProjectiles();
+    this.processVomitProjectiles(human, cat);
     this.tickAcidPuddles(human, cat);
     this.puddleClock++;
   }
@@ -264,7 +265,7 @@ export class BossRoomSystem implements GameSystem {
     }
   }
 
-  private processVomitProjectiles(): void {
+  private processVomitProjectiles(human: HumanPlayer, cat: CatPlayer): void {
     for (let i = this.vomitProjectiles.length - 1; i >= 0; i--) {
       const proj = this.vomitProjectiles[i];
       const newX = proj.x + proj.dx;
@@ -272,10 +273,22 @@ export class BossRoomSystem implements GameSystem {
       const tileX = Math.floor(newX / TILE_SIZE);
       const tileY = Math.floor(newY / TILE_SIZE);
       const hitWall = !this.gameMap.isWalkable(tileX, tileY);
-      if (hitWall || proj.ttl <= 0) {
+      const humanDist = Math.hypot(
+        newX - (human.x + TILE_SIZE * 0.5),
+        newY - (human.y + TILE_SIZE * 0.5),
+      );
+      const catDist = Math.hypot(
+        newX - (cat.x + TILE_SIZE * 0.5),
+        newY - (cat.y + TILE_SIZE * 0.5),
+      );
+      const hitPlayer = humanDist < PROJECTILE_HIT_RADIUS || catDist < PROJECTILE_HIT_RADIUS;
+      if (hitWall || proj.ttl <= 0 || hitPlayer) {
         this.vomitProjectiles.splice(i, 1);
         if (this.acidPuddles.length < MAX_ACID_PUDDLES) {
-          this.acidPuddles.push({ x: proj.x, y: proj.y, ttl: PUDDLE_TTL });
+          // For wall hits use the pre-move position; for player hits use the new position so the puddle lands on them
+          const puddleX = hitWall ? proj.x : newX;
+          const puddleY = hitWall ? proj.y : newY;
+          this.acidPuddles.push({ x: puddleX, y: puddleY, ttl: PUDDLE_TTL });
         }
       } else {
         proj.x = newX;
@@ -397,7 +410,7 @@ export class BossRoomSystem implements GameSystem {
     const pulse = 0.7 + 0.3 * Math.sin(this.puddleClock * 0.12);
     ctx.save();
     for (const puddle of this.acidPuddles) {
-      const fadeAlpha = puddle.ttl < 120 ? puddle.ttl / 120 : 1;
+      const fadeAlpha = puddle.ttl < 300 ? puddle.ttl / 300 : 1;
       const screenX = puddle.x - camX;
       const screenY = puddle.y - camY;
 

@@ -6,7 +6,7 @@ import { randomInt } from '../utils';
 const COCKROACH_HP = 4;
 const COCKROACH_SPEED = 2.2;
 const AGGRO_RANGE_PX = TILE_SIZE * 5;
-const ATTACK_RANGE_PX = TILE_SIZE * 0.85;
+const ATTACK_RANGE_PX = TILE_SIZE * 1.3;
 const ATTACK_DAMAGE = 1;
 const ATTACK_COOLDOWN = 90;
 

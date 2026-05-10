@@ -40,6 +40,7 @@ jobs:
           cp index.html _site/
           cp -r dist _site/
           cp -r src/images _site/src/images
+          cp -r src/audio _site/src/audio
           [ -f main.css ] && cp main.css _site/ || true
 
       - uses: actions/configure-pages@v5

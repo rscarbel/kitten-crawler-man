@@ -40,6 +40,11 @@ export class TheHoarder extends Mob {
   private fleeBias = 0;
   private fleeBiasSign = 1;
 
+  private stationaryFrames = 0;
+  private wanderTargetX = 0;
+  private wanderTargetY = 0;
+  private wanderActive = false;
+
   /** Set by BossRoomSystem each frame: true when cockroach cap is full. */
   cockroachAtCap = false;
 
@@ -147,6 +152,8 @@ export class TheHoarder extends Mob {
     }
 
     if (!nearest) {
+      this.stationaryFrames = 0;
+      this.wanderActive = false;
       const toHome = Math.hypot(this.x - this.spawnX, this.y - this.spawnY);
       if (toHome > TILE_SIZE * 2) {
         this.followTargetCollide(this.spawnX, this.spawnY, this.speed * 0.6, TILE_SIZE);
@@ -159,6 +166,8 @@ export class TheHoarder extends Mob {
     this.updateLastKnown(nearest);
 
     if (nearestDist < FLEE_RANGE_PX) {
+      this.stationaryFrames = 0;
+      this.wanderActive = false;
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
       const len = Math.hypot(dx, dy);
@@ -184,7 +193,38 @@ export class TheHoarder extends Mob {
         this.fleeBias *= 0.85;
       }
     } else {
-      this.isMoving = false;
+      // Player is in aggro range but outside flee range — wander if stationary too long
+      this.stationaryFrames++;
+      if (this.wanderActive) {
+        const preX = this.x;
+        const preY = this.y;
+        this.followTargetCollide(
+          this.wanderTargetX,
+          this.wanderTargetY,
+          this.speed * 0.6,
+          TILE_SIZE,
+        );
+        if (this.x !== preX || this.y !== preY) {
+          this.stationaryFrames = 0;
+        }
+        if (this.x === preX && this.y === preY) {
+          // Blocked — give up and pick a new target next cycle
+          this.wanderActive = false;
+        } else if (
+          Math.hypot(this.x - this.wanderTargetX, this.y - this.wanderTargetY) < TILE_SIZE
+        ) {
+          this.wanderActive = false;
+        }
+      } else if (this.stationaryFrames >= 300) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = TILE_SIZE * (3 + Math.random() * 3);
+        this.wanderTargetX = this.spawnX + Math.cos(angle) * dist;
+        this.wanderTargetY = this.spawnY + Math.sin(angle) * dist;
+        this.wanderActive = true;
+        this.stationaryFrames = 0;
+      } else {
+        this.isMoving = false;
+      }
     }
   }
 

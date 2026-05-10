@@ -166,7 +166,9 @@ export class CatPlayer extends Player {
       this.facingY = n.y;
     }
 
-    const cooldownMax = this.missileCooldownMax;
+    // AI fires at most as fast as an average human could (~3 shots/sec at 60fps).
+    const AI_MIN_COOLDOWN = 20;
+    const cooldownMax = Math.max(this.missileCooldownMax, AI_MIN_COOLDOWN);
     if (this.missileCooldown > 0) {
       this.missileCooldown--;
     } else {

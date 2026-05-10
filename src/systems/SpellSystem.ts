@@ -262,7 +262,11 @@ export class SpellSystem implements GameSystem {
 
   castConfusingFog(caster: HumanPlayer | CatPlayer): void {
     if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
-    const radiusPx = (3 + caster.intelligence * 0.5) * TILE_SIZE;
+    const MAX_FOG_RADIUS_TILES = 16; // 32-tile diameter cap
+    const radiusPx = Math.min(
+      (3 + caster.intelligence * 0.5) * TILE_SIZE,
+      MAX_FOG_RADIUS_TILES * TILE_SIZE,
+    );
     const totalFrames = caster.intelligence * 5 * 60;
     const { canvas, size } = bakeFogCloud(radiusPx);
     this.activeFogs.push({
