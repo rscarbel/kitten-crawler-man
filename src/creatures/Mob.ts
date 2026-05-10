@@ -118,7 +118,6 @@ export abstract class Mob extends Player {
   projectileSoundPending = false;
 
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style
   get isHostile(): boolean {
     return true;
   }
@@ -127,8 +126,16 @@ export abstract class Mob extends Player {
    * When true, the AI-controlled companion will flee from this mob instead of attacking it.
    * Override in subclasses for enemies that are temporarily untargetable or instakill on contact.
    */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style
   get avoidInstead(): boolean {
+    return false;
+  }
+
+  /**
+   * When true, the AI-controlled companion uses evasive movement (orbiting/circling)
+   * instead of standing still while fighting this mob. Set this on enemies whose attacks
+   * are telegraphed and dodgeable so the companion automatically sidesteps.
+   */
+  get requiresEvasion(): boolean {
     return false;
   }
 

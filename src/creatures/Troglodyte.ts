@@ -26,6 +26,10 @@ export class Troglodyte extends Mob {
   displayName = 'Troglodyte';
   description = 'A cave-dwelling predator with a venomous tongue lash.';
 
+  override get requiresEvasion(): boolean {
+    return true;
+  }
+
   /** 0–1: how far the tongue is currently extended (for sprite). */
   tongueExtend = 0;
   /** 0–1: how wide the mouth is open (0 = barely open, 1 = full windup). */

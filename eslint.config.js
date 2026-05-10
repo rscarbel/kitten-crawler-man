@@ -41,6 +41,7 @@ export default tseslint.config(
       ],
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/class-literal-property-style': 'off',
     },
   },
 );

@@ -96,6 +96,34 @@ export class BossRoomSystem implements GameSystem {
     return this.states.some((s) => this.isEntityInRoom(entity, s.bounds));
   }
 
+  /**
+   * If the given pixel position is inside an active acid puddle, returns the unit
+   * escape vector pointing away from the nearest puddle centre. Returns null when
+   * the position is not in any hazard.
+   */
+  getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
+    const cx = x + TILE_SIZE * 0.5;
+    const cy = y + TILE_SIZE * 0.5;
+    let closestDist = Infinity;
+    let closestPuddle: AcidPuddle | null = null;
+    for (const p of this.acidPuddles) {
+      const dist = Math.hypot(cx - p.x, cy - p.y);
+      if (dist < ACID_PUDDLE_RADIUS && dist < closestDist) {
+        closestDist = dist;
+        closestPuddle = p;
+      }
+    }
+    if (!closestPuddle) return null;
+    const ex = cx - closestPuddle.x;
+    const ey = cy - closestPuddle.y;
+    const len = Math.hypot(ex, ey);
+    if (len === 0) {
+      const angle = Math.random() * Math.PI * 2;
+      return { dx: Math.cos(angle), dy: Math.sin(angle) };
+    }
+    return { dx: ex / len, dy: ey / len };
+  }
+
   /** Returns true if any boss room is currently locked (players clamped inside). */
   get anyLocked(): boolean {
     return this.states.some((s) => s.locked);

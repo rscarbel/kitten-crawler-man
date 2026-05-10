@@ -11,6 +11,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { BossRoomSystem } from './BossRoomSystem';
 import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
@@ -32,6 +33,10 @@ type CharStance = {
 };
 
 const ANCHOR_CHASE_RANGE = TILE_SIZE * 3;
+/** Orbit radius for human companion evasion — just inside melee range so attacks still land. */
+const HUMAN_EVADE_ORBIT_RADIUS = TILE_SIZE * 1.5;
+/** Radians per frame the orbit angle advances during evasion. */
+const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 export class CompanionSystem implements GameSystem {
   private catWanderTargetX = 0;
@@ -40,6 +45,10 @@ export class CompanionSystem implements GameSystem {
   private catKiteAngle = 0;
   private humanIdleFrames = 0;
   private _followOverride = false;
+
+  private humanEvasionAngle = Math.random() * Math.PI * 2;
+  private humanEvasionClockwise = true;
+  private humanEvasionStuckFrames = 0;
 
   // Independent stance per character — used when that character is the companion (inactive).
   private readonly humanStance: CharStance = {
@@ -149,7 +158,7 @@ export class CompanionSystem implements GameSystem {
     }
 
     this.updateAutoAI(human, cat, mobs, mobGrid);
-    this.updateFollower(human, cat, mobs, mobGrid);
+    this.updateFollower(human, cat, mobs, mobGrid, ctx.bossRoom);
   }
 
   snapFacingToNearestMob(
@@ -328,11 +337,25 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
+  /** Move the companion out of any active hazard zone (acid puddles, etc.). Returns true if fleeing. */
+  private fleeFromHazards(companion: HumanPlayer | CatPlayer, bossRoom: BossRoomSystem): boolean {
+    const escape = bossRoom.getHazardEscapeVector(companion.x, companion.y);
+    if (!escape) return false;
+    this.entityMoveWithCollision(
+      companion,
+      escape.dx * FOLLOWER_SPEED * 1.5,
+      escape.dy * FOLLOWER_SPEED * 1.5,
+    );
+    companion.isMoving = true;
+    return true;
+  }
+
   private updateFollower(
     human: HumanPlayer,
     cat: CatPlayer,
     mobs: Mob[],
     _mobGrid: SpatialGrid<Mob>,
+    bossRoom: BossRoomSystem,
   ): void {
     if (this._followOverride) {
       const caster = human.isActive ? human : cat;
@@ -350,6 +373,7 @@ export class CompanionSystem implements GameSystem {
     // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
     const companion = human.isActive ? cat : human;
     if (this.fleeFromAvoidMobs(companion, mobs, TILE_SIZE * 8)) return;
+    if (this.fleeFromHazards(companion, bossRoom)) return;
 
     const stance = human.isActive ? this.catStance : this.humanStance;
 
@@ -409,7 +433,11 @@ export class CompanionSystem implements GameSystem {
         if (enemy.currentTarget === cat) {
           this.doCatKite(cat, enemy);
         } else if (enemy.currentTarget === human) {
-          this.doCatBehindHuman(cat, human, enemy);
+          if (enemy.requiresEvasion) {
+            this.doCatKite(cat, enemy);
+          } else {
+            this.doCatBehindHuman(cat, human, enemy);
+          }
         } else {
           this.companionFollow(cat, enemy.x, enemy.y, FOLLOWER_SPEED, TILE_SIZE * 2.5);
         }
@@ -443,13 +471,17 @@ export class CompanionSystem implements GameSystem {
       }
     } else {
       if (human.autoTarget?.isAlive) {
-        this.companionFollow(
-          human,
-          human.autoTarget.x,
-          human.autoTarget.y,
-          FOLLOWER_SPEED,
-          TILE_SIZE * 0.9,
-        );
+        if (human.autoTarget.requiresEvasion) {
+          this.doHumanEvasion(human, human.autoTarget);
+        } else {
+          this.companionFollow(
+            human,
+            human.autoTarget.x,
+            human.autoTarget.y,
+            FOLLOWER_SPEED,
+            TILE_SIZE * 0.9,
+          );
+        }
       } else {
         this.companionFollow(human, cat.x, cat.y, FOLLOWER_SPEED, TILE_SIZE * 1.8);
       }
@@ -463,7 +495,11 @@ export class CompanionSystem implements GameSystem {
     const cy = cat.y + TILE_SIZE * 0.5;
     const distToEnemy = Math.hypot(cx - ex, cy - ey);
 
-    this.catKiteAngle += 0.022;
+    // Evasion-flagged enemies get a faster, less predictable orbit angle.
+    const angleStep = enemy.requiresEvasion
+      ? 0.032 + Math.sin(this.catKiteAngle * 3.7) * 0.018
+      : 0.022;
+    this.catKiteAngle += angleStep;
 
     if (distToEnemy < CAT_KITE_DIST * 0.75) {
       if (distToEnemy > 0) {
@@ -496,6 +532,40 @@ export class CompanionSystem implements GameSystem {
     const targetX = hx + n.x * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
     const targetY = hy + n.y * CAT_BEHIND_HUMAN_OFFSET - TILE_SIZE * 0.5;
     this.companionFollow(cat, targetX, targetY, FOLLOWER_SPEED, TILE_SIZE * 0.5);
+  }
+
+  /**
+   * Human companion evasion against `requiresEvasion` enemies: orbits the enemy
+   * at melee range so attacks still connect while the human keeps moving.
+   * Reverses orbit direction when the companion is stuck against a wall.
+   */
+  private doHumanEvasion(human: HumanPlayer, enemy: Mob): void {
+    const ex = enemy.x + TILE_SIZE * 0.5;
+    const ey = enemy.y + TILE_SIZE * 0.5;
+
+    const dir = this.humanEvasionClockwise ? 1 : -1;
+    this.humanEvasionAngle += HUMAN_EVADE_ANGLE_SPEED * dir;
+
+    const targetX =
+      ex + Math.cos(this.humanEvasionAngle) * HUMAN_EVADE_ORBIT_RADIUS - TILE_SIZE * 0.5;
+    const targetY =
+      ey + Math.sin(this.humanEvasionAngle) * HUMAN_EVADE_ORBIT_RADIUS - TILE_SIZE * 0.5;
+
+    const prevX = human.x;
+    const prevY = human.y;
+    this.companionFollow(human, targetX, targetY, FOLLOWER_SPEED * 1.1, TILE_SIZE * 0.3);
+
+    if (human.x === prevX && human.y === prevY) {
+      this.humanEvasionStuckFrames++;
+      if (this.humanEvasionStuckFrames >= 8) {
+        this.humanEvasionClockwise = !this.humanEvasionClockwise;
+        this.humanEvasionStuckFrames = 0;
+        // Jump the angle ahead so the companion immediately moves to an unblocked point.
+        this.humanEvasionAngle += Math.PI * 0.3 * (this.humanEvasionClockwise ? 1 : -1);
+      }
+    } else {
+      this.humanEvasionStuckFrames = 0;
+    }
   }
 
   private companionFollow(
