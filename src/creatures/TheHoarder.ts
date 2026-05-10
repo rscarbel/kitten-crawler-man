@@ -34,6 +34,11 @@ export class TheHoarder extends Mob {
   private vomitWindupTimer = 0;
   private vomitTargetX = 0;
   private vomitTargetY = 0;
+  private vomitWindupTargets: Player[] = [];
+
+  private fleeStuckFrames = 0;
+  private fleeBias = 0;
+  private fleeBiasSign = 1;
 
   /** Set by BossRoomSystem each frame: true when cockroach cap is full. */
   cockroachAtCap = false;
@@ -66,10 +71,28 @@ export class TheHoarder extends Mob {
     }
 
     if (this.hoarderState === 'vomit_windup') {
+      // Track player movement during windup so the shot stays accurate
+      let nearestWindup: Player | null = null;
+      let nearestWindupDist = Infinity;
+      for (const t of this.vomitWindupTargets) {
+        if (!t.isAlive) continue;
+        const d = Math.hypot(t.x - this.x, t.y - this.y);
+        if (d < nearestWindupDist) {
+          nearestWindupDist = d;
+          nearestWindup = t;
+        }
+      }
+      if (nearestWindup !== null) {
+        this.vomitTargetX = nearestWindup.x + TILE_SIZE * 0.5;
+        this.vomitTargetY = nearestWindup.y + TILE_SIZE * 0.5;
+      }
+
       this.vomitWindupTimer--;
       this.isMoving = false;
-      const dx = this.vomitTargetX - this.x;
-      const dy = this.vomitTargetY - this.y;
+      const cx = this.x + TILE_SIZE * 0.5;
+      const cy = this.y + TILE_SIZE * 0.5;
+      const dx = this.vomitTargetX - cx;
+      const dy = this.vomitTargetY - cy;
       const len = Math.hypot(dx, dy);
       if (len > 0) {
         this.facingX = dx / len;
@@ -79,8 +102,8 @@ export class TheHoarder extends Mob {
         const ndx = len > 0 ? dx / len : 1;
         const ndy = len > 0 ? dy / len : 0;
         this.pendingVomitProjectile = {
-          x: this.x + TILE_SIZE * 0.5,
-          y: this.y + TILE_SIZE * 0.5,
+          x: cx,
+          y: cy,
           dx: ndx * VOMIT_SPEED,
           dy: ndy * VOMIT_SPEED,
         };
@@ -107,8 +130,9 @@ export class TheHoarder extends Mob {
     if (this.vomitTimer <= 0) {
       this.vomitTimer = interval;
       if (this.cockroachAtCap && nearest !== null) {
-        this.vomitTargetX = nearest.x;
-        this.vomitTargetY = nearest.y;
+        this.vomitTargetX = nearest.x + TILE_SIZE * 0.5;
+        this.vomitTargetY = nearest.y + TILE_SIZE * 0.5;
+        this.vomitWindupTargets = targets;
         this.hoarderState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
       } else {
@@ -132,18 +156,26 @@ export class TheHoarder extends Mob {
       const dx = this.x - nearest.x;
       const dy = this.y - nearest.y;
       const len = Math.hypot(dx, dy);
-      if (len > 0) {
-        const fleeTargetX = this.x + (dx / len) * TILE_SIZE * 4;
-        const fleeTargetY = this.y + (dy / len) * TILE_SIZE * 4;
-        this.followTargetCollide(fleeTargetX, fleeTargetY, this.speed, 0);
+      const baseAngle = len > 0 ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
+      const fleeAngle = baseAngle + this.fleeBias;
+      const fleeTargetX = this.x + Math.cos(fleeAngle) * TILE_SIZE * 4;
+      const fleeTargetY = this.y + Math.sin(fleeAngle) * TILE_SIZE * 4;
+      const preX = this.x;
+      const preY = this.y;
+      this.followTargetCollide(fleeTargetX, fleeTargetY, this.speed, 0);
+      if (this.x === preX && this.y === preY) {
+        this.fleeStuckFrames++;
+        if (this.fleeStuckFrames >= 8) {
+          this.fleeBias += (Math.PI / 4) * this.fleeBiasSign;
+          this.fleeStuckFrames = 0;
+          if (Math.abs(this.fleeBias) > Math.PI) {
+            this.fleeBiasSign *= -1;
+            this.fleeBias = 0;
+          }
+        }
       } else {
-        const angle = Math.random() * Math.PI * 2;
-        this.followTargetCollide(
-          this.x + Math.cos(angle) * TILE_SIZE * 4,
-          this.y + Math.sin(angle) * TILE_SIZE * 4,
-          this.speed,
-          0,
-        );
+        this.fleeStuckFrames = 0;
+        this.fleeBias *= 0.85;
       }
     } else {
       this.isMoving = false;
