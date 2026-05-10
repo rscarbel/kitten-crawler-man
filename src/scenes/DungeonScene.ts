@@ -176,11 +176,13 @@ export class DungeonScene extends GameplayScene {
     abilityLevels: Map<AbilityId, AbilityState>;
   } = null;
 
+  private _toughModeActive = false;
+
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
-  private safeRoomEntered = false;
+  private wasInSafeRoom = false;
   private speechBubblePulse = 0;
 
   private readonly inputHandler = new DungeonInputHandler();
@@ -692,6 +694,43 @@ export class DungeonScene extends GameplayScene {
           this.human.godMode = false;
           this.cat.godMode = false;
           this.playerChat.showBubble('⚡ GOD MODE OFF');
+        } else if (this._toughModeActive) {
+          for (const p of [this.human, this.cat]) {
+            p.godMode = false;
+            p.zeroDamage = false;
+          }
+          this._toughModeActive = false;
+          this.playerChat.showBubble('⚡ GOD MODE ON (disabled Tough Mode first)');
+          this._godModeSnapshot = {
+            human: {
+              strength: this.human.strength,
+              intelligence: this.human.intelligence,
+              constitution: this.human.constitution,
+              maxHp: this.human.maxHp,
+              speedMultiplier: this.human.speedMultiplier,
+            },
+            cat: {
+              strength: this.cat.strength,
+              intelligence: this.cat.intelligence,
+              constitution: this.cat.constitution,
+              maxHp: this.cat.maxHp,
+              speedMultiplier: this.cat.speedMultiplier,
+            },
+            abilityLevels: this.abilityManager.snapshotStates(),
+          };
+          for (const p of [this.human, this.cat]) {
+            p.strength += 300;
+            p.intelligence += 300;
+            p.constitution += 300;
+            p.maxHp += 300;
+            p.hp += 300;
+            p.godMode = true;
+            p.speedMultiplier = 2;
+          }
+          const godAbilityIdsOverride: AbilityId[] = ['magic_missile', 'protective_shell'];
+          for (const id of godAbilityIdsOverride) {
+            this.abilityManager.setLevel(id, 15);
+          }
         } else {
           this._godModeSnapshot = {
             human: {
@@ -724,6 +763,41 @@ export class DungeonScene extends GameplayScene {
             this.abilityManager.setLevel(id, 15);
           }
           this.playerChat.showBubble('⚡ GOD MODE ON');
+        }
+        return;
+      }
+      if (text.trim() === '!tough') {
+        if (this._toughModeActive) {
+          for (const p of [this.human, this.cat]) {
+            p.godMode = false;
+            p.zeroDamage = false;
+          }
+          this._toughModeActive = false;
+          this.playerChat.showBubble('🛡️ TOUGH MODE OFF');
+        } else {
+          if (this._godModeSnapshot !== null) {
+            const { human: hs, cat: cs, abilityLevels } = this._godModeSnapshot;
+            this.human.strength = hs.strength;
+            this.human.intelligence = hs.intelligence;
+            this.human.constitution = hs.constitution;
+            this.human.maxHp = hs.maxHp;
+            this.human.hp = Math.min(this.human.hp, hs.maxHp);
+            this.human.speedMultiplier = hs.speedMultiplier;
+            this.cat.strength = cs.strength;
+            this.cat.intelligence = cs.intelligence;
+            this.cat.constitution = cs.constitution;
+            this.cat.maxHp = cs.maxHp;
+            this.cat.hp = Math.min(this.cat.hp, cs.maxHp);
+            this.cat.speedMultiplier = cs.speedMultiplier;
+            this.abilityManager.restoreStates(abilityLevels);
+            this._godModeSnapshot = null;
+          }
+          for (const p of [this.human, this.cat]) {
+            p.godMode = true;
+            p.zeroDamage = true;
+          }
+          this._toughModeActive = true;
+          this.playerChat.showBubble('🛡️ TOUGH MODE ON');
         }
         return;
       }
@@ -1292,10 +1366,11 @@ export class DungeonScene extends GameplayScene {
 
     this.pm.updateProtection(this.safeRoom);
 
-    if (!this.safeRoomEntered && this.pm.isAnySafe(this.safeRoom)) {
-      this.safeRoomEntered = true;
+    const nowInSafeRoom = this.pm.isAnySafe(this.safeRoom);
+    if (!this.wasInSafeRoom && nowInSafeRoom) {
       this.bus.emit('safeRoomEntered', {});
     }
+    this.wasInSafeRoom = nowInSafeRoom;
 
     const ctx = this.buildSystemContext();
 
@@ -1450,7 +1525,7 @@ export class DungeonScene extends GameplayScene {
         const dx = mob.x + TILE_SIZE * 0.5 - shockwave.x;
         const dy = mob.y + TILE_SIZE * 0.5 - shockwave.y;
         if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * 2) {
-          mob.takeDamageFrom(4, this.human, 'shell');
+          if (!this.human.zeroDamage) mob.takeDamageFrom(4, this.human, 'shell');
           mob.applyStatus(makeElectrified());
         }
       }
@@ -1462,7 +1537,7 @@ export class DungeonScene extends GameplayScene {
       let hits = 0;
       for (const mob of nearby) {
         if (!mob.isAlive || hits >= 3) continue;
-        mob.takeDamageFrom(2, this.human, 'shell');
+        if (!this.human.zeroDamage) mob.takeDamageFrom(2, this.human, 'shell');
         this.spells.addChainLightningBolt(
           target.x,
           target.y,

@@ -137,10 +137,12 @@ export class DynamiteSystem implements GameSystem {
     const ts = TILE_SIZE;
     const damage = DYN_DAMAGE + (explosivesLevel - 1) * 2;
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
-    for (const mob of nearBlast) {
-      if (!mob.isAlive) continue;
-      if (Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS) {
-        mob.takeDamageFrom(damage, human);
+    if (!human.zeroDamage) {
+      for (const mob of nearBlast) {
+        if (!mob.isAlive) continue;
+        if (Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS) {
+          mob.takeDamageFrom(damage, human);
+        }
       }
     }
     void mobs;

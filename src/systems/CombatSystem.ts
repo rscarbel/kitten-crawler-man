@@ -51,11 +51,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
-      mob.takeDamageFrom(damage, human, 'melee');
-      ctx.hitLanded = true;
-      humanHit = true;
-      if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
-        mob.applyStatus(makeSepsis());
+      if (!human.zeroDamage) {
+        mob.takeDamageFrom(damage, human, 'melee');
+        ctx.hitLanded = true;
+        humanHit = true;
+        if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+          mob.applyStatus(makeSepsis());
+        }
       }
     }
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
@@ -79,11 +81,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
-      mob.takeDamageFrom(damage, cat, 'melee');
-      ctx.hitLanded = true;
-      catHit = true;
-      if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
-        mob.applyStatus(makeSepsis());
+      if (!cat.zeroDamage) {
+        mob.takeDamageFrom(damage, cat, 'melee');
+        ctx.hitLanded = true;
+        catHit = true;
+        if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+          mob.applyStatus(makeSepsis());
+        }
       }
     }
     ctx.bus.emit('catMeleeSwing', { hit: catHit });
@@ -103,36 +107,42 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const mc = centerOf(mob);
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
-          mob.takeDamageFrom(damage, cat, 'missile');
-          ctx.hitLanded = true;
-          ctx.bus.emit('missileImpact', {});
+          if (!cat.zeroDamage) {
+            mob.takeDamageFrom(damage, cat, 'missile');
+            ctx.hitLanded = true;
+            ctx.bus.emit('missileImpact', {});
 
-          if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
-            mob.applyStatus(makeSepsis());
-          }
+            if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+              mob.applyStatus(makeSepsis());
+            }
 
-          // Level 5+: AoE magic splash
-          if (missileLevel >= 5) {
-            const splashDamage = Math.max(1, Math.round(damage * 0.4));
-            const nearSplash = mobGrid.queryCircle(missile.x, missile.y, splashRadius + TILE_SIZE);
-            for (const splashMob of nearSplash) {
-              if (!splashMob.isAlive || splashMob === mob) continue;
-              const splashDx = splashMob.x + TILE_SIZE * 0.5 - missile.x;
-              const splashDy = splashMob.y + TILE_SIZE * 0.5 - missile.y;
-              if (Math.hypot(splashDx, splashDy) < splashRadius) {
-                splashMob.takeDamageFrom(splashDamage, cat, 'missile');
+            // Level 5+: AoE magic splash
+            if (missileLevel >= 5) {
+              const splashDamage = Math.max(1, Math.round(damage * 0.4));
+              const nearSplash = mobGrid.queryCircle(
+                missile.x,
+                missile.y,
+                splashRadius + TILE_SIZE,
+              );
+              for (const splashMob of nearSplash) {
+                if (!splashMob.isAlive || splashMob === mob) continue;
+                const splashDx = splashMob.x + TILE_SIZE * 0.5 - missile.x;
+                const splashDy = splashMob.y + TILE_SIZE * 0.5 - missile.y;
+                if (Math.hypot(splashDx, splashDy) < splashRadius) {
+                  splashMob.takeDamageFrom(splashDamage, cat, 'missile');
+                }
               }
             }
-          }
 
-          // Level 10+: queue sub-missiles from impact point (non-sub missiles only)
-          if (missileLevel >= 10 && !missile.isSubMissile) {
-            cat.queueSubMissileSpawn(missile.x, missile.y);
-          }
+            // Level 10+: queue sub-missiles from impact point (non-sub missiles only)
+            if (missileLevel >= 10 && !missile.isSubMissile) {
+              cat.queueSubMissileSpawn(missile.x, missile.y);
+            }
 
-          // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
-          if (missileLevel >= 15 && mob.isBoss) {
-            mob.isSlowed = true;
+            // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
+            if (missileLevel >= 15 && mob.isBoss) {
+              mob.isSlowed = true;
+            }
           }
 
           missile.hit = true;

@@ -37,6 +37,8 @@ export abstract class Player {
   isProtected = false;
   /** When true, incoming damage is ignored permanently (god mode). */
   godMode = false;
+  /** When true, all damage this player deals to mobs is suppressed. */
+  zeroDamage = false;
   /** Movement speed multiplier — 1 is normal, 2 is double speed. */
   speedMultiplier = 1;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */

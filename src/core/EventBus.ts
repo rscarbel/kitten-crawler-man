@@ -25,7 +25,7 @@ export interface GameEvents {
     topDamageDealer: HumanPlayer | CatPlayer | null;
   };
 
-  /** A player entered a safe room for the first time. */
+  /** A player entered a safe room (fires on each entry). */
   safeRoomEntered: Record<string, never>;
 
   /** A boss room was locked (player entered). */
