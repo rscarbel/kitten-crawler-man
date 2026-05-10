@@ -1,9 +1,5 @@
 import { updateFrameTime } from '../utils';
 
-/**
- * Abstract base for all game scenes. Scenes own their own update/render logic
- * and declare what action-key listeners they need via onEnter/onExit.
- */
 export abstract class Scene {
   abstract update(): void;
   abstract render(ctx: CanvasRenderingContext2D): void;
@@ -28,6 +24,9 @@ export class SceneManager {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   private current: Scene | null = null;
+  private lastTime = performance.now();
+  private accumulator = 0;
+  private readonly FIXED_DT = 1000 / 60;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -123,7 +122,7 @@ export class SceneManager {
     this.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
     this.canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
-    this.loop();
+    requestAnimationFrame((t) => this.loop(t));
   }
 
   /**
@@ -136,12 +135,24 @@ export class SceneManager {
     scene.onEnter?.();
   }
 
-  private loop(): void {
+  private loop(now: number): void {
+    // Keep frameTime current for smooth visual animations in render().
     updateFrameTime();
-    if (this.current) {
-      this.current.update();
-      this.current.render(this.ctx);
+
+    // Fixed-timestep accumulator: run update() at exactly 60 ticks/s regardless
+    // of the display refresh rate. Cap the elapsed time to prevent a "spiral of
+    // death" if the tab was backgrounded for a long time.
+    const elapsed = now - this.lastTime;
+    this.lastTime = now;
+    this.accumulator += Math.min(elapsed, this.FIXED_DT * 5);
+
+    while (this.accumulator >= this.FIXED_DT) {
+      this.current?.update();
+      this.accumulator -= this.FIXED_DT;
     }
-    requestAnimationFrame(() => this.loop());
+
+    this.current?.render(this.ctx);
+
+    requestAnimationFrame((t) => this.loop(t));
   }
 }
