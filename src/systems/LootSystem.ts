@@ -30,8 +30,16 @@ export interface FloorItem {
 export class LootSystem implements GameSystem {
   private pendingLoots: PendingLoot[] = [];
   readonly floorItems: FloorItem[] = [];
+  private _pickupsThisFrame = 0;
 
   constructor(private readonly gameMap: GameMap) {}
+
+  /** Returns and resets the number of items picked up since the last call. */
+  drainPickups(): number {
+    const n = this._pickupsThisFrame;
+    this._pickupsThisFrame = 0;
+    return n;
+  }
 
   addLoot(
     x: number,
@@ -74,6 +82,7 @@ export class LootSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     const { active, inactive: companion } = ctx;
+    this._pickupsThisFrame = 0;
     for (const loot of this.pendingLoots) {
       if (loot.collected) continue;
       if (loot.pickupDelay > 0) {
@@ -94,6 +103,7 @@ export class LootSystem implements GameSystem {
               player.inventory.addItem(it.id, it.quantity);
             }
             loot.collected = true;
+            this._pickupsThisFrame++;
           }
         }
         continue;
@@ -111,6 +121,7 @@ export class LootSystem implements GameSystem {
             active.inventory.addItem(it.id, it.quantity);
           }
           loot.collected = true;
+          this._pickupsThisFrame++;
         }
       }
       if (!loot.collected && loot.owner === companion) {
@@ -126,6 +137,7 @@ export class LootSystem implements GameSystem {
               companion.inventory.addItem(it.id, it.quantity);
             }
             loot.collected = true;
+            this._pickupsThisFrame++;
           }
         }
       }

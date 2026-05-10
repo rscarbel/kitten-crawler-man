@@ -84,6 +84,15 @@ export interface GameEvents {
 
   /** Active player has been standing still and doing nothing for another 5-second interval. */
   playerIdle: { totalIdleMs: number };
+
+  /** Human melee attack peak fired (swing animation peak). */
+  humanMeleeSwing: { hit: boolean };
+
+  /** Cat melee attack peak fired (claw swipe peak). */
+  catMeleeSwing: { hit: boolean };
+
+  /** A magic missile struck a mob. */
+  missileImpact: Record<string, never>;
 }
 
 type EventCallback<T> = (data: T) => void;

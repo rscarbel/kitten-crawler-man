@@ -58,6 +58,9 @@ export function renderMainTab(
   menuBtn(ctx, buttons, bX, bY, bW, bH, 'Abilities', () => setTab('abilities'));
   bY += 50;
 
+  menuBtn(ctx, buttons, bX, bY, bW, bH, 'Settings', () => setTab('settings'));
+  bY += 50;
+
   const totalPts = human.unspentPoints + cat.unspentPoints;
   if (totalPts > 0) {
     menuBtn(

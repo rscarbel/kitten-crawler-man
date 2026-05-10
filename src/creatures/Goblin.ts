@@ -23,6 +23,7 @@ export class Goblin extends Mob {
   displayName = 'Goblin';
   description = 'A scrappy little troublemaker armed with crude weapons.';
   readonly bodyPartKey = 'goblin';
+  override readonly audioTag = 'goblin';
   readonly weapon: GoblinWeapon;
   readonly skinColor: string;
   readonly eyeColor: string;
@@ -140,11 +141,8 @@ export class Goblin extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    // Red outline when aggro'd
     if (this.isAggro) {
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx, sy, tileSize, tileSize);
+      this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
     // Linear 0→1 progress so weaponAngleCurve sees a single clean sweep

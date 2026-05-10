@@ -67,6 +67,7 @@ import { aiAdapter } from '../ai/AIAdapter';
 import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
+import type { AudioManager } from '../audio/AudioManager';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -99,6 +100,8 @@ export interface DungeonSceneOptions {
     catSnap: PlayerSnapshot;
     levelId: string;
   }) => void;
+  /** Shared AudioManager instance — persists across scene transitions. */
+  audio?: AudioManager;
 }
 
 export class DungeonScene extends GameplayScene {
@@ -196,6 +199,8 @@ export class DungeonScene extends GameplayScene {
     | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
     | undefined;
 
+  private readonly audio: AudioManager | null;
+
   constructor(
     private readonly levelDef: LevelDef,
     input: InputManager,
@@ -267,16 +272,20 @@ export class DungeonScene extends GameplayScene {
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
     this.followerMenu.onFollowMe = () => {
+      this.audio?.play('menu_change_follower');
       this.companion.setFollowMe(this.human.isActive);
       this.inactive().autoTarget = null;
     };
     this.followerMenu.onDoNotMove = () => {
+      this.audio?.play('menu_change_follower');
       this.companion.setDoNotMove(this.inactive(), this.human.isActive);
     };
     this.followerMenu.onSetAggressive = () => {
+      this.audio?.play('menu_change_follower');
       this.companion.setAggressive(this.human.isActive);
     };
     this.followerMenu.onSetPassive = () => {
+      this.audio?.play('menu_change_follower');
       this.companion.setPassive(this.human.isActive);
       this.inactive().autoTarget = null;
     };
@@ -294,6 +303,7 @@ export class DungeonScene extends GameplayScene {
           mongoUnlocked: this.mongoSystem.unlocked,
           abilityManager: this.abilityManager,
           saveProgress: this.onSaveProgress,
+          audio: this.audio ?? undefined,
         }),
       );
     });
@@ -322,6 +332,7 @@ export class DungeonScene extends GameplayScene {
                   humanSnap: hSnap,
                   catSnap: cSnap,
                   existingMap: this.gameMap,
+                  audio: this.audio ?? undefined,
                 }),
               );
             },
@@ -369,6 +380,8 @@ export class DungeonScene extends GameplayScene {
     this.human.setAbilityManager(this.abilityManager);
 
     this.onSaveProgress = options?.saveProgress;
+    this.audio = options?.audio ?? null;
+    this.pauseMenu.audio = this.audio;
     this.wireEventBus();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
@@ -534,9 +547,14 @@ export class DungeonScene extends GameplayScene {
         this.cat.inventory.clearQuestSlot();
       }
     });
+
+    this.audio?.wireEvents(bus);
   }
 
   onEnter(): void {
+    this.audio?.resume();
+    this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
+
     this.inputHandler.bind({
       isSuppressed: () =>
         this.pauseMenu.isOpen ||
@@ -580,7 +598,8 @@ export class DungeonScene extends GameplayScene {
       },
       togglePause: () => {
         this.pauseMenu.toggle();
-        if (!this.pauseMenu.isOpen) this.input.clear();
+        if (this.pauseMenu.isOpen) this.audio?.play('menu_open');
+        else this.input.clear();
       },
       clearInput: () => this.input.clear(),
       switchCharacter: () => this.triggerSwitchCharacter(),
@@ -598,7 +617,10 @@ export class DungeonScene extends GameplayScene {
       toggleInventory: () => this.inventoryPanel.toggle(),
       toggleGear: () => this.gearPanel.toggle(),
       companionFollow: () => this.triggerCompanionFollow(),
-      toggleMiniMap: () => this.miniMap.toggle(),
+      toggleMiniMap: () => {
+        this.miniMap.toggle();
+        this.audio?.play('menu_expand_map');
+      },
       openChat: () => this.triggerOpenChat(),
       mongoSummon: () => this.triggerMongoSummon(),
       buildAction: () => this.triggerBuildAction(),
@@ -615,12 +637,14 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.audio?.stopMusic();
     this.inputHandler.unbind();
     aiAdapter.unbindScene();
     this.bus.clear();
   }
 
   private triggerSwitchCharacter(): void {
+    this.audio?.play('menu_change_follower');
     this.safeRoom.mordecaiDialogOpen = false;
     // Capture who is currently active before the switch
     const wasHumanActive = this.human.isActive;
@@ -783,11 +807,14 @@ export class DungeonScene extends GameplayScene {
         });
       }
     } else if (slot?.abilityId === 'magic_missile' && !this.human.isActive) {
-      this.cat.triggerMissile();
+      if (this.cat.triggerMissile()) {
+        this.audio?.play('cat_missile_fire');
+      }
     } else if (slot?.abilityId === 'protective_shell' && this.human.isActive) {
       const level = this.human.getProtectiveShellLevel();
       if (this.spells.triggerProtectiveShell(this.human, this.cat, this.mobGrid, level)) {
         this.abilityManager.addUsageXp('protective_shell');
+        this.audio?.play('human_protective_shell');
       }
     } else if (slot?.id === 'scroll_of_confusing_fog') {
       this.spells.castConfusingFog(active);
@@ -876,6 +903,7 @@ export class DungeonScene extends GameplayScene {
             abilityManager: this.floorEntryAbilityManager.clone(),
             floorEntryAbilityManager: this.floorEntryAbilityManager,
             mongoUnlocked: this.mongoSystem.unlocked,
+            audio: this.audio ?? undefined,
           }),
         );
       }
@@ -1279,6 +1307,10 @@ export class DungeonScene extends GameplayScene {
     this.defendQuest.update(ctx);
     this.juicerRoom.update(ctx);
     this.companion.update(ctx);
+    if (this.cat.pendingAutoFireSound) {
+      this.cat.pendingAutoFireSound = false;
+      this.audio?.play('cat_missile_fire', { volume: 0.5 });
+    }
 
     this.human.updateAttack();
     this.cat.updateAttack();
@@ -1286,6 +1318,29 @@ export class DungeonScene extends GameplayScene {
 
     this.spells.update(ctx);
     this.mobLoop.update(ctx);
+
+    for (const mob of this.mobs) {
+      if (mob.attackSoundPending) {
+        mob.attackSoundPending = false;
+        switch (mob.audioTag) {
+          case 'goblin':
+            this.audio?.playRandom(['goblin_1', 'goblin_2']);
+            break;
+          case 'rat':
+            this.audio?.playRandom(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3']);
+            break;
+          case 'llama':
+            this.audio?.play('llama_fireball_explosion');
+            break;
+        }
+      }
+      if (mob.projectileSoundPending) {
+        mob.projectileSoundPending = false;
+        if (mob.audioTag === 'llama') {
+          this.audio?.play('llama_fireball');
+        }
+      }
+    }
 
     const combatCtx: CombatContext = {
       human: this.human,
@@ -1397,6 +1452,9 @@ export class DungeonScene extends GameplayScene {
     this.pm.tickTimers();
     this.playerTick.update(ctx);
     this.loot.update(ctx);
+    if (this.loot.drainPickups() > 0) {
+      this.audio?.playRandom(['pickup_1', 'pickup_2']);
+    }
     this.speechBubblePulse++;
     this.gore.update();
     this.bodyPartGore.update();
@@ -1462,6 +1520,7 @@ export class DungeonScene extends GameplayScene {
       }
       active.inventory.removeItems(id, quantity);
       this.loot.addPlayerDrop(active.x, active.y, id, quantity, active);
+      this.audio?.play('menu_drop_item');
     }
   }
 

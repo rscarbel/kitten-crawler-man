@@ -38,6 +38,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
     const nearHuman = mobGrid.queryCircle(hc.x, hc.y, range);
+    let humanHit = false;
     for (const mob of nearHuman) {
       if (!mob.isAlive || !mob.isHostile) continue;
       const mc = centerOf(mob);
@@ -52,10 +53,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, human, 'melee');
       ctx.hitLanded = true;
+      humanHit = true;
       if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
         mob.applyStatus(makeSepsis());
       }
     }
+    ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
 
   if (cat.isAttackPeak() && !safeRoom.isEntityInSafeRoom(cat)) {
@@ -63,6 +66,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
     const nearCat = mobGrid.queryCircle(cc.x, cc.y, range);
+    let catHit = false;
     for (const mob of nearCat) {
       if (!mob.isAlive || !mob.isHostile) continue;
       const mc = centerOf(mob);
@@ -77,10 +81,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
       mob.takeDamageFrom(damage, cat, 'melee');
       ctx.hitLanded = true;
+      catHit = true;
       if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
         mob.applyStatus(makeSepsis());
       }
     }
+    ctx.bus.emit('catMeleeSwing', { hit: catHit });
   }
 
   if (!safeRoom.isEntityInSafeRoom(cat)) {
@@ -99,6 +105,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dist < hitRadius) {
           mob.takeDamageFrom(damage, cat, 'missile');
           ctx.hitLanded = true;
+          ctx.bus.emit('missileImpact', {});
 
           if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
             mob.applyStatus(makeSepsis());

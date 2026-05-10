@@ -146,9 +146,7 @@ export class Bugaboo extends Mob {
     const sy = this.y - camY;
 
     if (this.isAggro) {
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx, sy, tileSize, tileSize);
+      this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
     const attackAnim =

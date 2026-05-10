@@ -103,13 +103,16 @@ export class CatPlayer extends Player {
     this.attackTimer = this.ATTACK_FRAMES;
   }
 
-  /** Hotbar-triggered magic missile fire. */
-  triggerMissile() {
-    const cooldownMax = this.missileCooldownMax;
-    if (this.missileCooldown > 0) return;
+  /** Hotbar-triggered magic missile fire. Returns true if a missile was actually launched. */
+  triggerMissile(): boolean {
+    if (this.missileCooldown > 0) return false;
     this.fireMissile();
-    this.missileCooldown = cooldownMax;
+    this.missileCooldown = this.missileCooldownMax;
+    return true;
   }
+
+  /** True when the companion auto-fire launched a missile this frame. Cleared by the consumer. */
+  pendingAutoFireSound = false;
 
   updateAttack() {
     if (this.attackTimer > 0) this.attackTimer--;
@@ -171,6 +174,7 @@ export class CatPlayer extends Player {
       const offset = Math.random() < missChance ? (Math.random() - 0.5) * 2 * 0.44 : 0;
       this.fireMissile(offset);
       this.missileCooldown = cooldownMax;
+      this.pendingAutoFireSound = true;
     }
   }
 

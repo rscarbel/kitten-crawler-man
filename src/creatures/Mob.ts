@@ -108,6 +108,15 @@ export abstract class Mob extends Player {
   /** Short description shown in hover tooltip. Subclasses should override. */
   description = '';
 
+  /** Sound category key for attack audio (e.g. 'goblin', 'rat', 'llama'). Empty string = no sound. */
+  readonly audioTag: string = '';
+
+  /** Set to true when this mob deals damage; polled and cleared by the scene each frame. */
+  attackSoundPending = false;
+
+  /** Set to true when this mob fires a projectile; polled and cleared by the scene each frame. */
+  projectileSoundPending = false;
+
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   // eslint-disable-next-line @typescript-eslint/class-literal-property-style
   get isHostile(): boolean {
@@ -183,6 +192,7 @@ export abstract class Mob extends Player {
   protected dealDamage(target: Player, baseDamage: number) {
     const mult = 1 + (this.mobLevel - 1) * 0.2;
     target.takeDamage(Math.ceil(baseDamage * mult));
+    this.attackSoundPending = true;
   }
 
   setMap(map: GameMap) {
@@ -452,6 +462,24 @@ export abstract class Mob extends Player {
     } else {
       this.isMoving = false;
     }
+  }
+
+  protected renderAggroIndicator(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+  ) {
+    ctx.save();
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.strokeText('!', sx + tileSize / 2, sy - 3);
+    ctx.fillStyle = 'rgba(239, 68, 68, 1)';
+    ctx.fillText('!', sx + tileSize / 2, sy - 3);
+    ctx.restore();
   }
 
   /**

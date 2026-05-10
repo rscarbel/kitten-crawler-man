@@ -92,6 +92,7 @@ function renderStatCard(
   stat: StatDef,
   player: Player,
   hasPoints: boolean,
+  onSpend?: () => void,
 ): void {
   const BORDER_W = 3;
   const PAD = 10;
@@ -173,7 +174,10 @@ function renderStatCard(
         y: btnScreenY,
         w: BTN_W,
         h: BTN_H,
-        action: () => player.spendPoint(stat.key),
+        action: () => {
+          player.spendPoint(stat.key);
+          onSpend?.();
+        },
       });
     }
   }
@@ -190,6 +194,7 @@ export function renderSpendTab(
   cat: CatPlayer,
   setTab: (tab: PauseTab) => void,
   scrollY = 0,
+  onSpend?: () => void,
 ): number {
   drawText(ctx, 'SPEND SKILL POINTS', {
     x: bx + bw / 2,
@@ -276,6 +281,7 @@ export function renderSpendTab(
         stat,
         player,
         hasPoints,
+        onSpend,
       );
       y += CARD_H + CARD_GAP;
     }

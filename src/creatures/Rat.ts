@@ -5,7 +5,7 @@ import { drawRatSprite } from '../sprites/ratSprite';
 const RAT_HP = 3;
 const RAT_SPEED = 1.1;
 const AGGRO_RANGE_TILES = 3;
-const BITE_RANGE_TILES = 0.75;
+const BITE_RANGE_TILES = 1.1;
 /** Frames between bites (~2 s at 60 fps) */
 const ATTACK_COOLDOWN = 120;
 /** Frames the bite-lunge animation plays */
@@ -15,6 +15,7 @@ export class Rat extends Mob {
   readonly xpValue = 2;
   protected coinDropMin = 0;
   protected coinDropMax = 1;
+  override readonly audioTag = 'rat';
   displayName = 'Rat';
   description = 'A nimble rodent that bites when cornered.';
 
@@ -107,9 +108,7 @@ export class Rat extends Mob {
     const sy = this.y - camY;
 
     if (this.isAggro) {
-      ctx.strokeStyle = 'rgba(180, 40, 40, 0.60)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(sx, sy, tileSize, tileSize);
+      this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
     const attackAnim =

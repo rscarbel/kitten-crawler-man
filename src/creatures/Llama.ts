@@ -32,6 +32,7 @@ export class Llama extends Mob {
   readonly xpValue = 8;
   protected coinDropMin = 4;
   protected coinDropMax = 5;
+  override readonly audioTag = 'llama';
   displayName = 'Lava Llama';
   description = 'Spits balls of molten rock from a distance.';
   private lavaBalls: LavaBall[] = [];
@@ -68,6 +69,7 @@ export class Llama extends Mob {
         if (!this.map.isWalkable(tx, ty)) {
           ball.exploding = true;
           ball.explodeTick = EXPLODE_TICKS;
+          this.attackSoundPending = true;
           continue;
         }
       }
@@ -157,6 +159,7 @@ export class Llama extends Mob {
       });
       this.spitCooldown = SPIT_COOLDOWN;
       this.spitAnimTimer = SPIT_ANIM_FRAMES;
+      this.projectileSoundPending = true;
     }
   }
 
@@ -204,11 +207,8 @@ export class Llama extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    // Red outline when aggro'd
     if (this.isAggro) {
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.75)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx, sy, tileSize, tileSize);
+      this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
     // Normalise spit animation to 0–1 peak-at-midpoint curve

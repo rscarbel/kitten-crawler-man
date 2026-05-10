@@ -3,6 +3,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AchievementManager } from '../core/AchievementManager';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { GameStats } from '../core/GameStats';
+import type { AudioManager } from '../audio/AudioManager';
 import type { PauseTab, ButtonRect } from './pause/types';
 import { renderMainTab } from './pause/MainTab';
 import { renderInventoryTab } from './pause/InventoryTab';
@@ -17,6 +18,7 @@ import {
   abilitiesTabTouchMove,
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
+import { renderSettingsTab } from './pause/SettingsTab';
 import { pointInRect } from '../utils';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 
@@ -34,6 +36,9 @@ export class PauseMenu {
   private statsContentH = 0;
   private spendScrollY = 0;
   private spendContentH = 0;
+
+  /** Set by the owning scene so the Settings tab can read/write volumes. */
+  audio: AudioManager | null = null;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -119,6 +124,8 @@ export class PauseMenu {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
     const boxW = 380;
+    const mainBoxH =
+      this.tab === 'main' ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0) : 0;
     const boxH =
       this.tab === 'achievements' || this.tab === 'abilities'
         ? 440
@@ -126,7 +133,11 @@ export class PauseMenu {
           ? STATS_BOX_H
           : this.tab === 'spend'
             ? SPEND_BOX_H
-            : 380;
+            : this.tab === 'settings'
+              ? SETTINGS_BOX_H
+              : this.tab === 'main'
+                ? mainBoxH
+                : 380;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,
@@ -144,6 +155,11 @@ export class PauseMenu {
       this.tab = t;
     };
 
+    const setTabWithSound = (t: PauseTab) => {
+      this.audio?.play('menu_click');
+      setTab(t);
+    };
+
     switch (this.tab) {
       case 'main':
         renderMainTab(
@@ -154,14 +170,14 @@ export class PauseMenu {
           boxW,
           human,
           cat,
-          setTab,
+          setTabWithSound,
           () => this.close(),
           humanAchievements,
           catAchievements,
         );
         break;
       case 'inventory':
-        renderInventoryTab(ctx, this.buttons, boxX, boxY, boxW, human, cat, setTab);
+        renderInventoryTab(ctx, this.buttons, boxX, boxY, boxW, human, cat, setTabWithSound);
         break;
       case 'stats':
         this.statsContentH = renderStatsTab(
@@ -173,7 +189,7 @@ export class PauseMenu {
           boxH,
           human,
           cat,
-          setTab,
+          setTabWithSound,
           gameStats,
           this.statsScrollY,
         );
@@ -188,8 +204,9 @@ export class PauseMenu {
           boxH,
           human,
           cat,
-          setTab,
+          setTabWithSound,
           this.spendScrollY,
+          () => this.audio?.play('menu_skillpoint_spent'),
         );
         break;
       case 'achievements':
@@ -200,7 +217,7 @@ export class PauseMenu {
           boxY,
           boxW,
           boxH,
-          setTab,
+          setTabWithSound,
           humanAchievements,
           catAchievements,
           inSafeRoom ?? false,
@@ -217,7 +234,7 @@ export class PauseMenu {
             boxY,
             boxW,
             boxH,
-            setTab,
+            setTabWithSound,
             abilityManager,
             human.inventory,
             cat.inventory,
@@ -226,6 +243,13 @@ export class PauseMenu {
           );
         }
         break;
+      case 'settings': {
+        const audioRef = this.audio;
+        if (audioRef !== null) {
+          renderSettingsTab(ctx, this.buttons, boxX, boxY, boxW, boxH, audioRef, setTabWithSound);
+        }
+        break;
+      }
     }
   }
 
@@ -236,7 +260,11 @@ export class PauseMenu {
     if (!this._isOpen) return false;
     for (const btn of this.buttons) {
       if (pointInRect(mx, my, btn)) {
-        btn.action();
+        if (btn.positionedAction) {
+          btn.positionedAction(mx, my);
+        } else {
+          btn.action?.();
+        }
         return true;
       }
     }
@@ -246,3 +274,10 @@ export class PauseMenu {
 
 const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
+const SETTINGS_BOX_H = 300;
+
+// 52px header + N buttons × 50px + 28px bottom padding
+function mainTabHeight(hasSpendButton: boolean): number {
+  const buttonCount = hasSpendButton ? 7 : 6;
+  return 52 + buttonCount * 50 + 28;
+}

@@ -8,13 +8,17 @@ import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
 import { loadSprites } from './core/SpriteLoader';
+import { AudioManager } from './audio/AudioManager';
 
 const input = new InputManager();
 const authClient = new AuthClient();
+const audio = new AudioManager();
+// Begin decoding all audio assets in the background immediately.
+void audio.preload();
 
 function launchGame(options?: DungeonSceneOptions): void {
   const sceneManager = new SceneManager();
-  sceneManager.replace(new DungeonScene(level1, input, sceneManager, options));
+  sceneManager.replace(new DungeonScene(level1, input, sceneManager, { ...options, audio }));
   // Fire-and-forget: if the AI server isn't running the adapter stays silent.
   aiAdapter.initialize().catch(() => {
     void 0;
