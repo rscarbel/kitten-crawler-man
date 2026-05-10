@@ -43,11 +43,11 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
 };
 
 const MAX_COCKROACHES = 3;
-const MAX_ACID_PUDDLES = 5;
-const PUDDLE_TTL = 2700; // 45 seconds @ 60fps
-const ACID_DAMAGE_INTERVAL = 30;
+const MAX_ACID_PUDDLES = 15;
+const PUDDLE_TTL = 6000;
+const ACID_DAMAGE_INTERVAL = 20;
 const PROJECTILE_TTL = 90;
-const ACID_PUDDLE_RADIUS = TILE_SIZE * 1.5;
+const ACID_PUDDLE_RADIUS = TILE_SIZE * 2;
 const PROJECTILE_HIT_RADIUS = TILE_SIZE * 0.8;
 
 export class BossRoomSystem implements GameSystem {
