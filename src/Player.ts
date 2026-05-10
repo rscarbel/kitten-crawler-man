@@ -21,6 +21,8 @@ export abstract class Player {
   damageFlash = 0;
   isMoving = false;
   walkFrame = 0;
+  /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
+  effectDamageSoundPending = false;
   /** Shared inventory for this player (separate from the other player's). */
   readonly inventory = new Inventory();
   /** Gold coins collected — displayed in the inventory panel. */
@@ -168,18 +170,23 @@ export abstract class Player {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % 60 === 0) {
         this.takeDamage(1);
+        this.effectDamageSoundPending = true;
       }
       if (effect.type === 'poison' && elapsed > 0 && elapsed % 120 === 0) {
         this.takeDamage(1);
+        this.effectDamageSoundPending = true;
       }
       if (effect.type === 'sepsis' && elapsed > 0 && elapsed % 120 === 0) {
         this.takeDamage(1);
+        this.effectDamageSoundPending = true;
       }
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % 60 === 0) {
         this.takeDamage(1);
+        this.effectDamageSoundPending = true;
       }
       if (effect.type === 'electrified' && elapsed > 0 && elapsed % 60 === 0) {
         this.takeDamage(1);
+        this.effectDamageSoundPending = true;
       }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;

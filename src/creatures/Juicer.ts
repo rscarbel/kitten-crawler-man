@@ -77,6 +77,9 @@ export class Juicer extends Mob {
   private tauntIndex = 0;
   private tauntTimer = 0;
   currentTaunt: string | null = null;
+
+  /** Set when a dumbbell is thrown; DungeonScene reads and clears it to play the throw sound. */
+  throwSoundPending = false;
   private bubblePulse = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -283,6 +286,7 @@ export class Juicer extends Mob {
   }
 
   private throwDumbbell(target: Player): void {
+    this.throwSoundPending = true;
     const ts = this.tileSize;
     const ox = this.x + ts * 0.5;
     const oy = this.y + ts * 0.5;

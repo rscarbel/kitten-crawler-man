@@ -49,6 +49,11 @@ export class TheHoarder extends Mob {
   /** Set when vomit windup completes; BossRoomSystem reads and clears this each frame. */
   pendingVomitProjectile: { x: number; y: number; dx: number; dy: number } | null = null;
 
+  /** Set each time this boss takes damage; DungeonScene reads and clears it to play the hit sound. */
+  damageSoundPending = false;
+  /** Set when a vomit projectile fires; DungeonScene reads and clears it to play the vomit sound. */
+  vomitSoundPending = false;
+
   get isWindingUp(): boolean {
     return this.hoarderState === 'vomit_windup';
   }
@@ -107,6 +112,7 @@ export class TheHoarder extends Mob {
           dx: ndx * VOMIT_SPEED,
           dy: ndy * VOMIT_SPEED,
         };
+        this.vomitSoundPending = true;
         this.hoarderState = 'fleeing';
       }
       return;
@@ -192,6 +198,16 @@ export class TheHoarder extends Mob {
         y: this.y + TILE_SIZE * 0.5 + Math.sin(angle) * dist,
       });
     }
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: 'melee' | 'missile' | 'shell' = 'melee',
+  ): void {
+    const prevHp = this.hp;
+    super.takeDamageFrom(amount, attacker, damageType);
+    if (this.hp < prevHp) this.damageSoundPending = true;
   }
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {

@@ -38,6 +38,7 @@ export class AudioManager {
   private currentMusicSource: AudioBufferSourceNode | null = null;
   private currentMusicGain: GainNode | null = null;
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
+  private walkingSource: AudioBufferSourceNode | null = null;
 
   private masterVol = 1;
   private sfxVol = 1;
@@ -158,6 +159,33 @@ export class AudioManager {
     this.currentMusicGain = perTrackGain;
   }
 
+  /** Start a looping walking SFX. No-op if already playing or buffer not loaded. */
+  startWalkingLoop(): void {
+    if (this.walkingSource !== null) return;
+    const buffer = this.buffers.get('player_walking');
+    if (!buffer) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.25;
+    gain.connect(this.sfxGain);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+    this.walkingSource = source;
+  }
+
+  /** Stop the looping walking SFX. No-op if not playing. */
+  stopWalkingLoop(): void {
+    if (this.walkingSource === null) return;
+    try {
+      this.walkingSource.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.walkingSource = null;
+  }
+
   /**
    * Stop the currently-playing music track.
    * @param fadeMs - fade-out duration in ms (default: 500)
@@ -236,10 +264,47 @@ export class AudioManager {
         this.play('goblin_found_you');
       }
     });
+
+    bus.on('playerLevelUp', () => {
+      this.play('player_level_up');
+    });
+
+    bus.on('bossFightInitiated', (e) => {
+      const track =
+        e.bossType === 'the_hoarder'
+          ? 'boss_music_1'
+          : e.bossType === 'juicer'
+            ? 'boss_music_2'
+            : 'boss_music_3';
+      this.playMusic(track, { fadeInMs: 1500 });
+    });
+
+    bus.on('bossDefeated', () => {
+      this.playMusic('bg_level_1', { fadeInMs: 2000 });
+    });
+
+    bus.on('questStarted', (e) => {
+      if (e.questId === 'defend_goblin_mother') {
+        this.playMusic('defense_quest_music', { fadeInMs: 1000 });
+      }
+    });
+
+    bus.on('questCompleted', (e) => {
+      if (e.questId === 'defend_goblin_mother') {
+        this.playMusic('bg_level_1', { fadeInMs: 1500 });
+      }
+    });
+
+    bus.on('questFailed', (e) => {
+      if (e.questId === 'defend_goblin_mother') {
+        this.playMusic('bg_level_1', { fadeInMs: 1500 });
+      }
+    });
   }
 
   /** Stop music and release the AudioContext. Call when the page/game is torn down. */
   dispose(): void {
+    this.stopWalkingLoop();
     this.stopMusic(0);
     void this.ctx.close();
   }

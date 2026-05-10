@@ -61,6 +61,8 @@ import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
+import { TheHoarder } from '../creatures/TheHoarder';
+import { Juicer } from '../creatures/Juicer';
 import { randomInt, pointInRect } from '../utils';
 import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
@@ -375,6 +377,7 @@ export class DungeonScene extends GameplayScene {
     this.abilityLevelUpDialog = new AbilityLevelUpDialog(this.abilityManager);
     this.abilityManager.onLevelUp = (id, newLevel) => {
       this.abilityLevelUpDialog.enqueue(id, newLevel);
+      this.audio?.play('ability_level_up');
     };
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
@@ -637,6 +640,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.audio?.stopWalkingLoop();
     this.audio?.stopMusic();
     this.inputHandler.unbind();
     aiAdapter.unbindScene();
@@ -818,6 +822,7 @@ export class DungeonScene extends GameplayScene {
       }
     } else if (slot?.id === 'scroll_of_confusing_fog') {
       this.spells.castConfusingFog(active);
+      this.audio?.play('confusing_fog');
     } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
       if (this.dynamite.isCharging) {
         this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
@@ -1279,6 +1284,12 @@ export class DungeonScene extends GameplayScene {
     );
     applyMovement(player, move, this.gameMap);
 
+    if (player.isMoving) {
+      this.audio?.startWalkingLoop();
+    } else {
+      this.audio?.stopWalkingLoop();
+    }
+
     this.pm.updateProtection(this.safeRoom);
 
     if (!this.safeRoomEntered && this.pm.isAnySafe(this.safeRoom)) {
@@ -1339,6 +1350,20 @@ export class DungeonScene extends GameplayScene {
         if (mob.audioTag === 'llama') {
           this.audio?.play('llama_fireball');
         }
+      }
+      if (mob instanceof TheHoarder) {
+        if (mob.damageSoundPending) {
+          mob.damageSoundPending = false;
+          this.audio?.playRandom(['hoarder_damage_1', 'hoarder_damage_2', 'hoarder_damage_3']);
+        }
+        if (mob.vomitSoundPending) {
+          mob.vomitSoundPending = false;
+          this.audio?.play('hoarder_vomit');
+        }
+      }
+      if (mob instanceof Juicer && mob.throwSoundPending) {
+        mob.throwSoundPending = false;
+        this.audio?.play('juicer_throw');
       }
     }
 
@@ -1450,6 +1475,16 @@ export class DungeonScene extends GameplayScene {
 
     this.mongoSystem.update(ctx);
     this.pm.tickTimers();
+
+    if (this.human.effectDamageSoundPending) {
+      this.human.effectDamageSoundPending = false;
+      this.audio?.playRandom(['human_effect_damage_1', 'human_effect_damage_2']);
+    }
+    if (this.cat.effectDamageSoundPending) {
+      this.cat.effectDamageSoundPending = false;
+      this.audio?.playRandom(['cat_effect_damage_1', 'cat_effect_damage_2', 'cat_effect_damage_3']);
+    }
+
     this.playerTick.update(ctx);
     this.loot.update(ctx);
     if (this.loot.drainPickups() > 0) {
@@ -1459,6 +1494,11 @@ export class DungeonScene extends GameplayScene {
     this.gore.update();
     this.bodyPartGore.update();
     this.dynamite.update(ctx);
+
+    if (this.dynamite.explosionSoundPending) {
+      this.dynamite.explosionSoundPending = false;
+      this.audio?.play('dynamite_explosion');
+    }
 
     if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {
       this.levelTimerFrames--;

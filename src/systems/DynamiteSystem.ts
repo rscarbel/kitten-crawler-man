@@ -41,6 +41,8 @@ interface LiveDynamite {
 export class DynamiteSystem implements GameSystem {
   private _charging: { hotbarIdx: number; chargeFrames: number } | null = null;
   private liveDynamites: LiveDynamite[] = [];
+  /** Set each time a dynamite explodes; DungeonScene reads and clears it to play the explosion sound. */
+  explosionSoundPending = false;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -131,6 +133,7 @@ export class DynamiteSystem implements GameSystem {
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
   ): void {
+    this.explosionSoundPending = true;
     const ts = TILE_SIZE;
     const damage = DYN_DAMAGE + (explosivesLevel - 1) * 2;
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
