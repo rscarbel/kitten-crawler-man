@@ -34,8 +34,14 @@ export class KrakarenClone extends Mob {
   displayName = 'Krakaren Clone';
   description = 'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
   mass = 10;
+  override readonly audioTag = 'krakaren';
 
   isEnraged = false;
+
+  /** Set when the yell should play; DungeonScene clears it and plays the sound. */
+  yellSoundPending = false;
+  /** Counts down to the next yell. Starts at 0 so the first yell fires on first aggro. */
+  private yellTimer = 0;
 
   // State machine
   private state: KrakarenState = 'idle';
@@ -94,6 +100,14 @@ export class KrakarenClone extends Mob {
     this.currentTarget = nearest;
 
     if (nearest) {
+      // Periodic yell: fires immediately on first aggro, then every 15–20 seconds
+      if (this.yellTimer <= 0) {
+        this.yellSoundPending = true;
+        this.yellTimer = randomInt(900, 1200);
+      } else {
+        this.yellTimer--;
+      }
+
       // Face the target
       const dx = nearest.x - this.x;
       const dy = nearest.y - this.y;

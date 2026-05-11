@@ -1449,6 +1449,9 @@ export class DungeonScene extends GameplayScene {
           case 'mongo':
             this.audio?.play('mongo_slash');
             break;
+          case 'krakaren':
+            this.audio?.play('krakaren_ground_slam');
+            break;
         }
       }
       if (mob.projectileSoundPending) {
@@ -1474,6 +1477,10 @@ export class DungeonScene extends GameplayScene {
       if (mob instanceof BallOfSwine && mob.rollSoundPending) {
         mob.rollSoundPending = false;
         this.audio?.play('ball_of_swine_rolling');
+      }
+      if (mob instanceof KrakarenClone && mob.yellSoundPending) {
+        mob.yellSoundPending = false;
+        this.audio?.play('krakaren_yell');
       }
     }
 
