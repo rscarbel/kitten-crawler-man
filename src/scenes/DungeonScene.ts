@@ -63,6 +63,11 @@ import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Juicer } from '../creatures/Juicer';
+import {
+  GrotesqueSpider,
+  SLAM_AUDIO_OFFSET,
+  SCREECH_AUDIO_OFFSET,
+} from '../creatures/GrotesqueSpider';
 import { randomInt, pointInRect } from '../utils';
 import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
@@ -104,6 +109,25 @@ export interface DungeonSceneOptions {
   }) => void;
   /** Shared AudioManager instance — persists across scene transitions. */
   audio?: AudioManager;
+}
+
+/** Find a walkable tile at least minTileDist tiles from (fromTileX, fromTileY), anywhere on the map. */
+function findFarSpawnTile(
+  map: GameMap,
+  fromTileX: number,
+  fromTileY: number,
+  minTileDist: number,
+): { tx: number; ty: number } | null {
+  const rows = map.structure.length;
+  const cols = map.structure[0]?.length ?? rows;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const tx = Math.floor(Math.random() * (cols - 2)) + 1;
+    const ty = Math.floor(Math.random() * (rows - 2)) + 1;
+    if (!map.isWalkable(tx, ty)) continue;
+    if (Math.hypot(tx - fromTileX, ty - fromTileY) < minTileDist) continue;
+    return { tx, ty };
+  }
+  return null;
 }
 
 export class DungeonScene extends GameplayScene {
@@ -241,6 +265,15 @@ export class DungeonScene extends GameplayScene {
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
     this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
+
+    if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
+      const spiderTile = findFarSpawnTile(this.gameMap, sx, sy, 60);
+      if (spiderTile) {
+        const spider = new GrotesqueSpider(spiderTile.tx, spiderTile.ty, TILE_SIZE);
+        spider.setMap(this.gameMap);
+        this.mobs.push(spider);
+      }
+    }
 
     this.cat.setMap(this.gameMap);
 
@@ -1139,6 +1172,9 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderEntities(ctx, rc);
     this.bossRoom.renderProjectiles(ctx, camX, camY);
+    for (const mob of this.mobs) {
+      if (mob instanceof GrotesqueSpider) mob.renderSpitEffects(ctx, camX, camY, TILE_SIZE);
+    }
 
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
@@ -1481,6 +1517,32 @@ export class DungeonScene extends GameplayScene {
       if (mob instanceof KrakarenClone && mob.yellSoundPending) {
         mob.yellSoundPending = false;
         this.audio?.play('krakaren_yell');
+      }
+      if (mob instanceof GrotesqueSpider) {
+        if (mob.slamSoundPending) {
+          mob.slamSoundPending = false;
+          this.audio?.play('grotesque_spider_slam_attack', { startOffset: SLAM_AUDIO_OFFSET });
+        }
+        if (mob.screechSoundPending) {
+          mob.screechSoundPending = false;
+          this.audio?.play('grotesque_spider_screech_attack', {
+            startOffset: SCREECH_AUDIO_OFFSET,
+          });
+        }
+        if (mob.spitFireSoundPending) {
+          mob.spitFireSoundPending = false;
+          this.audio?.play('grotesque_spider_spit_attack');
+        }
+        if (mob.spitLandSoundPending) {
+          mob.spitLandSoundPending = false;
+          this.audio?.play('grotesque_spider_spit_landing');
+        }
+        const spiderDist = Math.hypot(mob.x - this.active().x, mob.y - this.active().y);
+        if (mob.isAlive && mob.isMoving && spiderDist < TILE_SIZE * 12) {
+          this.audio?.startSpiderWalkingLoop();
+        } else {
+          this.audio?.stopSpiderWalkingLoop();
+        }
       }
     }
 

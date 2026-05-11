@@ -7,6 +7,8 @@ export interface PlayOptions {
   volume?: number;
   /** Playback speed multiplier. Default: 1. */
   playbackRate?: number;
+  /** Start playback this many seconds into the buffer. Default: 0. */
+  startOffset?: number;
 }
 
 export interface MusicOptions {
@@ -39,6 +41,7 @@ export class AudioManager {
   private currentMusicGain: GainNode | null = null;
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
   private walkingSource: AudioBufferSourceNode | null = null;
+  private spiderWalkingSource: AudioBufferSourceNode | null = null;
 
   private masterVol = 1;
   private sfxVol = 1;
@@ -129,7 +132,7 @@ export class AudioManager {
       source.connect(this.sfxGain);
     }
 
-    source.start();
+    source.start(0, opts.startOffset ?? 0);
   }
 
   /** Pick one of the given IDs at random and play it. */
@@ -193,6 +196,33 @@ export class AudioManager {
       /* already stopped */
     }
     this.walkingSource = null;
+  }
+
+  /** Start a looping spider walking SFX. No-op if already playing or buffer not loaded. */
+  startSpiderWalkingLoop(): void {
+    if (this.spiderWalkingSource !== null) return;
+    const buffer = this.buffers.get('spider_walking');
+    if (!buffer) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.4;
+    gain.connect(this.sfxGain);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+    this.spiderWalkingSource = source;
+  }
+
+  /** Stop the looping spider walking SFX. No-op if not playing. */
+  stopSpiderWalkingLoop(): void {
+    if (this.spiderWalkingSource === null) return;
+    try {
+      this.spiderWalkingSource.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.spiderWalkingSource = null;
   }
 
   /**
@@ -328,6 +358,7 @@ export class AudioManager {
   dispose(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.stopWalkingLoop();
+    this.stopSpiderWalkingLoop();
     this.stopMusic(0);
     void this.ctx.close();
   }

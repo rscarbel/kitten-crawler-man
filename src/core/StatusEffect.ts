@@ -41,3 +41,13 @@ export function makeMagicBurn(): StatusEffect {
 export function makeElectrified(): StatusEffect {
   return { type: 'electrified', ticksRemaining: 600, totalTicks: 600 };
 }
+
+/** Spider spit: immobilises the target for 4 seconds (240 ticks at 60 fps). */
+export function makeStuck(): StatusEffect {
+  return { type: 'stuck', ticksRemaining: 240, totalTicks: 240 };
+}
+
+/** Spider spit venom: acid DoT applied alongside stuck — 1 damage every 40 ticks (~6 dmg over 4 s). */
+export function makeSpitVenom(): StatusEffect {
+  return { type: 'spit_venom', ticksRemaining: 240, totalTicks: 240 };
+}

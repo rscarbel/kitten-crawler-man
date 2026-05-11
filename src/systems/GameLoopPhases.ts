@@ -75,6 +75,11 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
   const mapPxH = gameMap.structure.length * TILE_SIZE;
 
+  if (player.hasStatus('stuck')) {
+    player.isMoving = false;
+    return;
+  }
+
   player.isMoving = dx !== 0 || dy !== 0;
 
   if (dx !== 0 || dy !== 0) {

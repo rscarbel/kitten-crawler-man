@@ -190,6 +190,10 @@ export abstract class Player {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
+      if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % 40 === 0) {
+        this.takeDamage(1);
+        this.effectDamageSoundPending = true;
+      }
       effect.ticksRemaining--;
       return effect.ticksRemaining >= 0;
     });
@@ -330,6 +334,50 @@ export abstract class Player {
           ctx.globalAlpha = 0.7 + 0.3 * Math.sin(phase);
           ctx.beginPath();
           ctx.arc(bx, by, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      }
+      if (effect.type === 'stuck') {
+        const t = Date.now();
+        const pulse = 0.65 + 0.35 * Math.sin(t * 0.008);
+        const cx2 = sx + this.tileSize / 2;
+        const cy2 = sy + this.tileSize / 2;
+        ctx.globalAlpha = pulse * 0.55;
+        ctx.strokeStyle = '#6a880e';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        // Six web strands radiating outward from the character centre
+        for (let s = 0; s < 6; s++) {
+          const angle = (s / 6) * Math.PI * 2 + t * 0.001;
+          const r1 = this.tileSize * 0.3;
+          const r2 = this.tileSize * 0.62 + Math.sin(angle * 3 + t * 0.006) * 3;
+          ctx.beginPath();
+          ctx.moveTo(cx2 + Math.cos(angle) * r1, cy2 + Math.sin(angle) * r1);
+          ctx.lineTo(cx2 + Math.cos(angle) * r2, cy2 + Math.sin(angle) * r2);
+          ctx.stroke();
+        }
+        // Cross-strand connecting the tips (one ring)
+        ctx.globalAlpha = pulse * 0.3;
+        ctx.beginPath();
+        ctx.arc(cx2, cy2, this.tileSize * 0.55, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (effect.type === 'spit_venom') {
+        const t = Date.now();
+        const cx2 = sx + this.tileSize / 2;
+        const cy2 = sy + this.tileSize;
+        ctx.shadowColor = '#8fb000';
+        ctx.shadowBlur = 4;
+        for (let d = 0; d < 5; d++) {
+          const phase = (t * 0.003 + d * 1.26) % (Math.PI * 2);
+          const dropX = cx2 + Math.sin(phase * 2.3 + d) * this.tileSize * 0.28;
+          const dropY = cy2 + ((t * 0.04 + d * 14) % 18);
+          const alpha = 0.5 + 0.5 * Math.sin(phase);
+          ctx.globalAlpha = alpha * 0.75;
+          ctx.fillStyle = d % 2 === 0 ? '#8fb000' : '#b5c800';
+          ctx.beginPath();
+          ctx.ellipse(dropX, dropY, 2.2, 3.5, 0, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.shadowBlur = 0;

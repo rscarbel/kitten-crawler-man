@@ -13,6 +13,7 @@ import { SkyFowl } from '../creatures/SkyFowl';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { Bugaboo } from '../creatures/Bugaboo';
+import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { randomFromArray, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
@@ -65,6 +66,7 @@ registerMob('ball_of_swine', (x, y) => new BallOfSwine(x, y, TILE_SIZE));
 registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
 registerMob('brindle_grub', (x, y) => new BrindleGrub(x, y, TILE_SIZE));
 registerMob('bugaboo', (x, y) => new Bugaboo(x, y, TILE_SIZE));
+registerMob('grotesque_spider', (x, y) => new GrotesqueSpider(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   const v = randomFromArray(GOBLIN_VARIANTS);
   return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);

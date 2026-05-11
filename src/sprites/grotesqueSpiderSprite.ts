@@ -257,7 +257,8 @@ function getLegTip(
   }
 
   if (state === 'walk') {
-    const cycle = Math.sin(time * leg.freq + leg.phase);
+    const walkTime = time * 3;
+    const cycle = Math.sin(walkTime * leg.freq + leg.phase);
     if (cycle > 0.25) {
       const liftT = (cycle - 0.25) / 0.75;
       const lift = Math.sin(liftT * Math.PI) * ts * 0.22;

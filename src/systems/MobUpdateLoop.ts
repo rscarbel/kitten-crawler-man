@@ -61,6 +61,14 @@ export class MobUpdateLoop implements GameSystem {
     const activeMobs = mobGrid.queryCircle(human.x, human.y, AI_RADIUS);
     mobGrid.queryCircle(cat.x, cat.y, AI_RADIUS, activeMobs);
 
+    // Mobs that require evasion (e.g. GrotesqueSpider) always run AI — they roam
+    // the full map and must tick even when far off-screen.
+    for (const mob of mobs) {
+      if (mob.isAlive && mob.requiresEvasion && !activeMobs.has(mob)) {
+        activeMobs.add(mob);
+      }
+    }
+
     const playerTargets: Player[] = [human, cat];
     if (extraTargets) {
       for (const t of extraTargets) {
