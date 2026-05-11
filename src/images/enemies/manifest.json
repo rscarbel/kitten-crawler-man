@@ -1,4 +1,74 @@
 {
+  "grotesque_spider_base": {
+    "path": "enemies/grotesque_spider_base.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle":      { "row": 0, "frameCount": 8 },
+      "walk_down": { "row": 1, "frameCount": 8 },
+      "walk_up":   { "row": 2, "frameCount": 8 },
+      "walk_side": { "row": 3, "frameCount": 8 }
+    }
+  },
+  "grotesque_spider_slam": {
+    "path": "enemies/grotesque_spider_slam.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_slam": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_screech": {
+    "path": "enemies/grotesque_spider_screech.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_screech": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_spit": {
+    "path": "enemies/grotesque_spider_spit.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_spit": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_spit_projectile": {
+    "path": "enemies/grotesque_spider_spit_projectile.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 48,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "fly": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "grotesque_spider_spit_trap": {
+    "path": "enemies/grotesque_spider_spit_trap.png",
+    "frameWidth": 256,
+    "frameHeight": 256,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "splat": { "row": 0, "frameCount": 8 },
+      "idle":  { "row": 1, "frameCount": 8 }
+    }
+  },
   "goblin_base": {
     "path": "enemies/goblin_base.png",
     "frameWidth": 192,
