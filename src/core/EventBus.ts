@@ -93,6 +93,12 @@ export interface GameEvents {
 
   /** A magic missile struck a mob. */
   missileImpact: Record<string, never>;
+
+  /** Player descended to the next floor via a stairwell. */
+  levelComplete: Record<string, never>;
+
+  /** A mission objective was completed (e.g. goblin child returned to mother). */
+  objectiveComplete: { objectiveId: string };
 }
 
 type EventCallback<T> = (data: T) => void;

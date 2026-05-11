@@ -34,6 +34,8 @@ const SHOP_ITEMS: Array<{
 
 export class ShopSystem implements GameSystem {
   shopOpen = false;
+  /** Set to true after a successful purchase; consuming scene clears it and plays the sound. */
+  purchasePending = false;
 
   private shopkeeperTileY = 1;
   private wanderX: number;
@@ -350,5 +352,6 @@ export class ShopSystem implements GameSystem {
     player.coins -= item.price;
     this.feedbackMsg = `Bought ${item.label}!`;
     this.feedbackTimer = 100;
+    this.purchasePending = true;
   }
 }

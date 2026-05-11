@@ -16,6 +16,7 @@ import { readMovement, applyMovement } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
+import type { AudioManager } from '../audio/AudioManager';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 
@@ -57,6 +58,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private currentFloor = 0;
   private towerStairs: TowerStairSystem | null = null;
 
+  private readonly audio: AudioManager | null;
+
   constructor(
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
@@ -66,8 +69,10 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly onExitCallback: (humanSnap: PlayerSnapshot, catSnap: PlayerSnapshot) => void,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
+    audio?: AudioManager,
   ) {
     super(input, sceneManager);
+    this.audio = audio ?? null;
 
     const isTower = entry.type === 'tower';
 
@@ -268,6 +273,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.cat.tickTimers();
     this.safeRoom?.updateWander();
     this.shop?.update();
+    if (this.shop?.purchasePending) {
+      this.shop.purchasePending = false;
+      this.audio?.play('purchase_success');
+    }
 
     // Exit tile detection
     const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);

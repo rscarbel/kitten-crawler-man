@@ -296,6 +296,7 @@ export class DungeonScene extends GameplayScene {
     this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
+      this.bus.emit('levelComplete', {});
       // Dismiss Mongo before floor transition
       this.mongoSystem.dismiss(this.mobs, this.mobGrid);
       this.sceneManager.replace(
@@ -342,6 +343,7 @@ export class DungeonScene extends GameplayScene {
             },
             this.humanAchievements,
             this.catAchievements,
+            this.audio ?? undefined,
           ),
         );
       });
@@ -817,6 +819,7 @@ export class DungeonScene extends GameplayScene {
     if (mongo) {
       this.mobs.push(mongo);
       this.mobGrid.insert(mongo);
+      this.audio?.play('mongo_released');
     }
   }
 
@@ -1418,6 +1421,23 @@ export class DungeonScene extends GameplayScene {
           case 'llama':
             this.audio?.play('llama_fireball_explosion');
             break;
+          case 'troglodyte':
+            this.audio?.play('troglodyte_tongue');
+            break;
+          case 'tuskling':
+            this.audio?.playRandom([
+              'tuskling_grunt_1',
+              'tuskling_grunt_2',
+              'tuskling_grunt_3',
+              'tuskling_grunt_4',
+            ]);
+            break;
+          case 'skyfowl':
+            this.audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
+            break;
+          case 'mongo':
+            this.audio?.play('mongo_slash');
+            break;
         }
       }
       if (mob.projectileSoundPending) {
@@ -1439,6 +1459,10 @@ export class DungeonScene extends GameplayScene {
       if (mob instanceof Juicer && mob.throwSoundPending) {
         mob.throwSoundPending = false;
         this.audio?.play('juicer_throw');
+      }
+      if (mob instanceof BallOfSwine && mob.rollSoundPending) {
+        mob.rollSoundPending = false;
+        this.audio?.play('ball_of_swine_rolling');
       }
     }
 

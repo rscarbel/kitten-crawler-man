@@ -29,6 +29,7 @@ export class Tuskling extends Mob {
   protected coinDropMax = 5;
   displayName = 'Tuskling';
   description = 'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
+  override readonly audioTag = 'tuskling';
 
   /** 0–1: charge windup progress (for sprite snort animation). */
   chargeWindup = 0;

@@ -25,6 +25,7 @@ export class Troglodyte extends Mob {
   protected coinDropMax = 0;
   displayName = 'Troglodyte';
   description = 'A cave-dwelling predator with a venomous tongue lash.';
+  override readonly audioTag = 'troglodyte';
 
   override get requiresEvasion(): boolean {
     return true;

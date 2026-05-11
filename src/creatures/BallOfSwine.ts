@@ -62,6 +62,8 @@ export class BallOfSwine extends Mob {
   burstTimer = 0;
   /** Set when hp hits 0; DungeonScene reads this to spawn Tusklings. */
   pendingBurst = false;
+  /** Set each time rolling begins; DungeonScene clears it and plays the sound. */
+  rollSoundPending = false;
 
   // Contact kill cooldowns per player
   private killCooldowns = new Map<Player, number>();
@@ -195,6 +197,7 @@ export class BallOfSwine extends Mob {
     if (nearest) {
       this.updateLastKnown(nearest);
       this.state = 'zooming';
+      this.rollSoundPending = true;
     }
   }
 
@@ -252,6 +255,7 @@ export class BallOfSwine extends Mob {
     this.stoppedTimer--;
     if (this.stoppedTimer <= 0) {
       this.state = 'zooming';
+      this.rollSoundPending = true;
       // Reverse direction each time it resumes for variety
       this.orbitSign *= -1;
     }

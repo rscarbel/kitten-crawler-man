@@ -59,6 +59,7 @@ export class Mongo extends Mob {
   protected coinDropMax = 0;
   displayName = 'Mongo';
   description = 'A loyal blue velociraptor with pink feathers.';
+  override readonly audioTag = 'mongo';
 
   /** The cat player who owns this summon. */
   owner: Player;
@@ -185,6 +186,7 @@ export class Mongo extends Mob {
       nearest.takeDamageFrom(this.biteDamage, this.owner, 'melee');
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
+      this.attackSoundPending = true;
     }
   }
 

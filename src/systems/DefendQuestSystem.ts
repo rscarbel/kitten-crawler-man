@@ -450,6 +450,7 @@ export class DefendQuestSystem implements GameSystem {
     if (this.npc) this.npc.clearHurtState();
 
     this.phase = 'complete_pending';
+    this.bus.emit('objectiveComplete', { objectiveId: 'goblin_child_returned' });
     if (this.npc) {
       this.npc.markerType = 'question';
     }

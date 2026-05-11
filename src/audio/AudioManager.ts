@@ -288,7 +288,11 @@ export class AudioManager {
       this.playMusic(track, { fadeInMs: 1500 });
     });
 
-    bus.on('bossDefeated', () => {
+    bus.on('bossDefeated', (e) => {
+      this.play('boss_defeated');
+      if (e.bossType === 'krakaren_clone') {
+        this.play('new_unlock');
+      }
       this.playMusic('bg_level_1', { fadeInMs: 2000 });
     });
 
@@ -300,8 +304,17 @@ export class AudioManager {
 
     bus.on('questCompleted', (e) => {
       if (e.questId === 'defend_goblin_mother') {
+        this.play('quest_complete');
         this.playMusic('bg_level_1', { fadeInMs: 1500 });
       }
+    });
+
+    bus.on('levelComplete', () => {
+      this.play('level_complete');
+    });
+
+    bus.on('objectiveComplete', () => {
+      this.play('objective_complete');
     });
 
     bus.on('questFailed', (e) => {

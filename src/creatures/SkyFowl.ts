@@ -30,6 +30,7 @@ export class SkyFowl extends Mob {
   protected coinDropMax = 2;
   displayName = 'Sky Fowl';
   description = 'A feathery wanderer that pecks at anything that gets too close.';
+  override readonly audioTag = 'skyfowl';
 
   /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
   readonly cloth: SkyFowlClothColors;
