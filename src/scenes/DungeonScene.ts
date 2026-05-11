@@ -1394,6 +1394,10 @@ export class DungeonScene extends GameplayScene {
 
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
+    if (this.defendQuest.hammerSoundPending) {
+      this.defendQuest.hammerSoundPending = false;
+      this.audio?.play('hammer_strike');
+    }
     this.juicerRoom.update(ctx);
     this.companion.update(ctx);
     if (this.cat.pendingAutoFireSound) {

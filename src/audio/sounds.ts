@@ -65,6 +65,7 @@ const SOUND_IDS_TUPLE = [
   'objective_complete',
   'purchase_success',
   'quest_complete',
+  'hammer_strike',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -140,4 +141,5 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   objective_complete: './src/audio/events/objective_complete.mp3',
   purchase_success: './src/audio/events/purchase_success.mp3',
   quest_complete: './src/audio/events/quest_complete.mp3',
+  hammer_strike: './src/audio/characters/human/hammer_strike.mp3',
 };

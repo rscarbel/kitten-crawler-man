@@ -83,6 +83,8 @@ export class DefendQuestSystem implements GameSystem {
   private woodPileAvailable = false;
   private barriers: WoodBarrier[] = [];
   private pendingBuild: PendingBuild | null = null;
+  /** Set every ~30 frames while building; DungeonScene clears it and plays the hammer sound. */
+  hammerSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
@@ -331,6 +333,10 @@ export class DefendQuestSystem implements GameSystem {
 
     // Tick pending build/repair
     if (this.pendingBuild && this.roomData) {
+      const elapsed = BUILD_FRAMES - this.pendingBuild.framesLeft;
+      if (elapsed % 30 === 0) {
+        this.hammerSoundPending = true;
+      }
       this.pendingBuild.framesLeft--;
       if (this.pendingBuild.framesLeft <= 0) {
         this.finishBuild(ctx.human);
