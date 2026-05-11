@@ -157,6 +157,12 @@ export class CompanionSystem implements GameSystem {
       this.humanIdleFrames = 0;
     }
 
+    const companion = human.isActive ? cat : human;
+    if (companion.isKnockedOut) {
+      companion.isMoving = false;
+      return;
+    }
+
     this.updateAutoAI(human, cat, mobs, mobGrid);
     this.updateFollower(human, cat, mobs, mobGrid, ctx.bossRoom);
   }

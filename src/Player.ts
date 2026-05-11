@@ -45,6 +45,12 @@ export abstract class Player {
   statusEffects: StatusEffect[] = [];
   /** When true, mob AI treats this player as a defend target and will not attack other targets. */
   isDefendTarget?: boolean;
+  /** When true, this player has been downed by a fatal blow and awaits revival. */
+  isKnockedOut = false;
+  /** Frames elapsed since this player was knocked out — used for the 90-second revival timer. */
+  knockedOutFrames = 0;
+  /** Frames of uninterrupted revival progress (0–300 = 5 seconds). Resets if the reviver moves away. */
+  reviveProgress = 0;
   /** Named multipliers applied to HP regen rate. Each entry stacks multiplicatively. */
   private readonly _regenModifiers = new Map<string, number>();
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
@@ -69,7 +75,7 @@ export abstract class Player {
   }
 
   takeDamage(amount: number) {
-    if (amount <= 0 || this.isProtected || this.godMode) return;
+    if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return;
     this.hp = Math.max(0, this.hp - amount);
     this.damageFlash = 8;
   }
@@ -403,6 +409,44 @@ export abstract class Player {
         ctx.shadowBlur = 0;
       }
     }
+    ctx.restore();
+  }
+
+  /** Draws an unconscious overlay when this player is in the knocked-out state. */
+  protected renderKnockedOutOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
+    if (!this.isKnockedOut) return;
+    const s = this.tileSize;
+    const cx = sx + s / 2;
+    const t = Date.now();
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.004);
+
+    ctx.save();
+
+    // Dark desaturating overlay
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(sx, sy, s, s);
+
+    // Pulsing red ring
+    ctx.globalAlpha = 0.45 + 0.3 * pulse;
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, sy + s / 2, s * (0.48 + 0.06 * pulse), 0, Math.PI * 2);
+    ctx.stroke();
+
+    // "KO" badge above the tile
+    const fontSize = Math.round(s * 0.38);
+    ctx.globalAlpha = 1;
+    ctx.font = `bold ${fontSize}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('KO', cx, sy - 2);
+    ctx.shadowBlur = 0;
+
     ctx.restore();
   }
 }

@@ -686,6 +686,10 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerSwitchCharacter(): void {
+    if (this.inactive().isKnockedOut) {
+      this.audio?.play('error');
+      return;
+    }
     this.audio?.play('menu_change_follower');
     this.safeRoom.mordecaiDialogOpen = false;
     // Capture who is currently active before the switch
@@ -697,6 +701,134 @@ export class DungeonScene extends GameplayScene {
     this.cat.autoTarget = null;
     this.human.autoTarget = null;
     this.companion.isFollowOverride = false;
+  }
+
+  private readonly REVIVE_RANGE_PX = TILE_SIZE * 0.8;
+  private readonly REVIVE_FRAMES = 300; // 5 seconds @ 60fps
+
+  /**
+   * Detects when the inactive companion drops to 0 HP and transitions them into
+   * the knocked-out state. Ticks the revival timer and progress while they're down.
+   */
+  private updateKnockoutState(): void {
+    const inactive = this.inactive();
+
+    // Companion just died → enter knocked-out state
+    if (!inactive.isAlive && !inactive.isKnockedOut) {
+      inactive.isKnockedOut = true;
+      inactive.knockedOutFrames = 0;
+      inactive.reviveProgress = 0;
+      inactive.statusEffects = [];
+      this.audio?.play(inactive === this.human ? 'human_knocked_out' : 'cat_knocked_out');
+    }
+
+    if (!inactive.isKnockedOut) return;
+
+    inactive.knockedOutFrames++;
+
+    const active = this.active();
+    const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
+
+    if (dist <= this.REVIVE_RANGE_PX) {
+      if (inactive.reviveProgress === 0) {
+        this.audio?.play('reviving_tone');
+      }
+      inactive.reviveProgress++;
+      if (inactive.reviveProgress >= this.REVIVE_FRAMES) {
+        // Revival complete
+        inactive.isKnockedOut = false;
+        inactive.knockedOutFrames = 0;
+        inactive.reviveProgress = 0;
+        inactive.hp = Math.max(1, Math.ceil(inactive.maxHp * 0.01));
+        this.audio?.play(inactive === this.human ? 'human_revived' : 'cat_revived');
+      }
+    } else {
+      inactive.reviveProgress = 0;
+    }
+  }
+
+  /** Renders the knocked-out warning banner, directional arrow, and revival progress bar. */
+  private renderKnockedOutUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const inactive = this.inactive();
+    if (!inactive.isKnockedOut) return;
+
+    const active = this.active();
+    const cx = canvas.width / 2;
+    const t = Date.now();
+
+    ctx.save();
+
+    // Pulsing "Revive your teammate!" banner
+    const pulse = 0.75 + 0.25 * Math.sin(t * 0.006);
+    ctx.globalAlpha = pulse;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.font = 'bold 22px monospace';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 7;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('Revive your teammate!', cx, 58);
+
+    const secondsLeft = Math.max(0, Math.ceil((5400 - inactive.knockedOutFrames) / 60));
+    ctx.font = 'bold 15px monospace';
+    ctx.fillStyle = secondsLeft <= 10 ? '#ef4444' : '#fbbf24';
+    ctx.fillText(`${secondsLeft}s`, cx, 80);
+
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
+
+    if (dist > this.REVIVE_RANGE_PX) {
+      // Arrow pointing from screen-centre toward the downed companion
+      const dx = inactive.x - active.x;
+      const dy = inactive.y - active.y;
+      const angle = Math.atan2(dy, dx);
+      const bounce = Math.sin(t * 0.005) * 4;
+      const arrowX = cx;
+      const arrowY = 106 + bounce;
+      const len = 22;
+
+      ctx.save();
+      ctx.translate(arrowX, arrowY);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#facc15';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(len, 0);
+      ctx.lineTo(-len * 0.45, -len * 0.5);
+      ctx.lineTo(-len * 0.1, 0);
+      ctx.lineTo(-len * 0.45, len * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else if (inactive.reviveProgress > 0) {
+      // Revive progress bar
+      const barW = 160;
+      const barH = 18;
+      const barX = cx - barW / 2;
+      const barY = 98;
+      const progress = inactive.reviveProgress / this.REVIVE_FRAMES;
+
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(barX, barY, Math.ceil(barW * progress), barH);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('REVIVING', cx, barY + barH / 2);
+    }
+
+    ctx.restore();
   }
 
   private triggerCompanionFollow(): void {
@@ -1186,6 +1318,10 @@ export class DungeonScene extends GameplayScene {
 
     UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
     this.renderHUD(ctx, canvas);
+
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      this.renderKnockedOutUI(ctx, canvas);
+    }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.miniMap.render(
@@ -1691,6 +1827,8 @@ export class DungeonScene extends GameplayScene {
       this.bus.emit('stairwellFound', {});
     }
     this.building?.detect(this.active());
+
+    this.updateKnockoutState();
 
     if (
       !this.gameOver &&

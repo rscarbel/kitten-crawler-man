@@ -76,6 +76,12 @@ const SOUND_IDS_TUPLE = [
   'grotesque_spider_spit_attack',
   'grotesque_spider_spit_landing',
   'spider_walking',
+  'cat_knocked_out',
+  'cat_revived',
+  'human_knocked_out',
+  'human_revived',
+  'reviving_tone',
+  'error',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -166,4 +172,10 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   grotesque_spider_spit_landing:
     './src/audio/enemies/grotesque_spider/grotesque_spider_spit_landing.mp3',
   spider_walking: './src/audio/enemies/grotesque_spider/spider_walking.mp3',
+  cat_knocked_out: './src/audio/characters/cat/cat_knocked_out.mp3',
+  cat_revived: './src/audio/characters/cat/cat_revived.mp3',
+  human_knocked_out: './src/audio/characters/human/human_knocked_out.mp3',
+  human_revived: './src/audio/characters/human/human_revived.mp3',
+  reviving_tone: './src/audio/characters/reviving_tone.mp3',
+  error: './src/audio/events/error.mp3',
 };

@@ -110,9 +110,17 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
 }
 
+/** 90 seconds at 60 fps — the revival window before the run ends. */
+const KNOCKOUT_TIMEOUT_FRAMES = 5400;
+
 /**
  * Phase 9: Check death conditions.
  * Returns true if the game should end.
+ *
+ * Rules:
+ * - Active player dying is always immediate game over.
+ * - Inactive player dying enters the knocked-out state (handled in DungeonScene before this call).
+ * - A knocked-out player has 90 seconds to be revived; expiry is game over.
  */
 export function checkDeath(
   human: HumanPlayer,
@@ -120,7 +128,15 @@ export function checkDeath(
   isSafeLevel: boolean,
   levelTimerFrames: number,
 ): boolean {
-  if (!human.isAlive || !cat.isAlive) return true;
+  // Active player death = immediate game over
+  if (human.isActive && !human.isAlive) return true;
+  if (cat.isActive && !cat.isAlive) return true;
+  // Inactive player died without being caught by the knockout handler = game over
+  if (!human.isActive && !human.isAlive && !human.isKnockedOut) return true;
+  if (!cat.isActive && !cat.isAlive && !cat.isKnockedOut) return true;
+  // Knocked-out timer expired
+  if (human.isKnockedOut && human.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
+  if (cat.isKnockedOut && cat.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
   if (!isSafeLevel && levelTimerFrames <= 0) return true;
   return false;
 }
