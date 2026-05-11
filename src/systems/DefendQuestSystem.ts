@@ -85,6 +85,8 @@ export class DefendQuestSystem implements GameSystem {
   private pendingBuild: PendingBuild | null = null;
   /** Set every ~30 frames while building; DungeonScene clears it and plays the hammer sound. */
   hammerSoundPending = false;
+  /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
+  woodBreakSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
@@ -284,6 +286,7 @@ export class DefendQuestSystem implements GameSystem {
     if (damage > 0) {
       barrier.hp -= damage;
       barrier.hitFlash = 12;
+      this.woodBreakSoundPending = true;
       if (barrier.hp <= 0) {
         this.barriers = this.barriers.filter((b) => b !== barrier);
       }

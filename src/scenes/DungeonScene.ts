@@ -190,6 +190,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
+  private woodBreakSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
   private catHealthLow = false;
@@ -1397,6 +1398,12 @@ export class DungeonScene extends GameplayScene {
     if (this.defendQuest.hammerSoundPending) {
       this.defendQuest.hammerSoundPending = false;
       this.audio?.play('hammer_strike');
+    }
+    if (this.defendQuest.woodBreakSoundPending) {
+      this.defendQuest.woodBreakSoundPending = false;
+      const sounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
+      this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
+      this.woodBreakSoundIdx++;
     }
     this.juicerRoom.update(ctx);
     this.companion.update(ctx);

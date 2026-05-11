@@ -66,6 +66,9 @@ const SOUND_IDS_TUPLE = [
   'purchase_success',
   'quest_complete',
   'hammer_strike',
+  'wood_breaking_1',
+  'wood_breaking_2',
+  'wood_breaking_3',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -142,4 +145,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   purchase_success: './src/audio/events/purchase_success.mp3',
   quest_complete: './src/audio/events/quest_complete.mp3',
   hammer_strike: './src/audio/characters/human/hammer_strike.mp3',
+  wood_breaking_1: './src/audio/effects/wood_breaking_1.mp3',
+  wood_breaking_2: './src/audio/effects/wood_breaking_2.mp3',
+  wood_breaking_3: './src/audio/effects/wood_breaking_3.mp3',
 };
