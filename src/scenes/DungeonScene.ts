@@ -339,30 +339,35 @@ export class DungeonScene extends GameplayScene {
       // Save progress immediately so the floor is recorded as complete even if
       // the player closes the browser during the celebration screen.
       this.onSaveProgress?.({
-        humanSnap: snapPlayer(this.human),
-        catSnap: snapPlayer(this.cat),
+        humanSnap: this._cleanSnapFor(this.human),
+        catSnap: this._cleanSnapFor(this.cat),
         levelId: levelDef.nextLevelId,
       });
 
       this.bus.emit('levelComplete', {});
 
       const nextDef = getLevelDef(levelDef.nextLevelId);
-      this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
-        // Dismiss Mongo before floor transition
-        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
-        this.sceneManager.replace(
-          new DungeonScene(nextDef, this.input, this.sceneManager, {
-            humanSnap: snapPlayer(this.human),
-            catSnap: snapPlayer(this.cat),
-            humanAchievements: this.humanAchievements,
-            catAchievements: this.catAchievements,
-            mongoUnlocked: this.mongoSystem.unlocked,
-            abilityManager: this.abilityManager,
-            saveProgress: this.onSaveProgress,
-            audio: this.audio ?? undefined,
-          }),
-        );
-      }, this.audio);
+      this.levelCompleteScreen.activate(
+        levelDef.name,
+        nextDef.name,
+        () => {
+          // Dismiss Mongo before floor transition
+          this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+          this.sceneManager.replace(
+            new DungeonScene(nextDef, this.input, this.sceneManager, {
+              humanSnap: this._cleanSnapFor(this.human),
+              catSnap: this._cleanSnapFor(this.cat),
+              humanAchievements: this.humanAchievements,
+              catAchievements: this.catAchievements,
+              mongoUnlocked: this.mongoSystem.unlocked,
+              abilityManager: this._cleanAbilityManager(),
+              saveProgress: this.onSaveProgress,
+              audio: this.audio ?? undefined,
+            }),
+          );
+        },
+        this.audio,
+      );
     });
 
     if (levelDef.isOverworld) {
@@ -373,8 +378,8 @@ export class DungeonScene extends GameplayScene {
           x: entry.doorTile.x,
           y: entry.doorTile.y + 1,
         };
-        const humanSnap = snapPlayer(this.human);
-        const catSnap = snapPlayer(this.cat);
+        const humanSnap = this._cleanSnapFor(this.human);
+        const catSnap = this._cleanSnapFor(this.cat);
         this.sceneManager.replace(
           new BuildingInteriorScene(
             entry,
@@ -582,8 +587,8 @@ export class DungeonScene extends GameplayScene {
       this.humanAchievements.tryUnlock('safe_haven');
       this.catAchievements.tryUnlock('safe_haven');
       this.onSaveProgress?.({
-        humanSnap: snapPlayer(this.human),
-        catSnap: snapPlayer(this.cat),
+        humanSnap: this._cleanSnapFor(this.human),
+        catSnap: this._cleanSnapFor(this.cat),
         levelId: this.levelDef.id,
       });
     });
@@ -922,6 +927,28 @@ export class DungeonScene extends GameplayScene {
     this.followerMenu.open();
   }
 
+  /** Snapshot a player, stripping god-mode stat boosts so they never persist across floors. */
+  private _cleanSnapFor(p: Player): PlayerSnapshot {
+    const snap = snapPlayer(p);
+    if (this._godModeSnapshot !== null) {
+      const pre = p === this.human ? this._godModeSnapshot.human : this._godModeSnapshot.cat;
+      snap.strength = pre.strength;
+      snap.intelligence = pre.intelligence;
+      snap.constitution = pre.constitution;
+      snap.maxHp = pre.maxHp;
+      snap.hp = Math.min(snap.hp, pre.maxHp);
+    }
+    return snap;
+  }
+
+  /** Return a clean ability manager: if god mode boosted abilities, restore pre-god levels. */
+  private _cleanAbilityManager(): AbilityManager {
+    if (this._godModeSnapshot === null) return this.abilityManager;
+    const clean = this.abilityManager.clone();
+    clean.restoreStates(this._godModeSnapshot.abilityLevels);
+    return clean;
+  }
+
   private triggerOpenChat(): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
     const context =
@@ -1058,7 +1085,9 @@ export class DungeonScene extends GameplayScene {
       }
       if (text.trim() === '!reveal') {
         this._revealStairwell = !this._revealStairwell;
-        this.playerChat.showBubble(this._revealStairwell ? '🧭 STAIRWELL REVEALED' : '🧭 STAIRWELL HIDDEN');
+        this.playerChat.showBubble(
+          this._revealStairwell ? '🧭 STAIRWELL REVEALED' : '🧭 STAIRWELL HIDDEN',
+        );
         return;
       }
       this.playerChat.showBubble(text);
