@@ -1,6 +1,7 @@
 import type { StatusEffect } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
+import { drawText } from './ui/TextBox';
 
 export abstract class Player {
   x: number;
@@ -435,17 +436,19 @@ export abstract class Player {
     ctx.arc(cx, sy + s / 2, s * (0.48 + 0.06 * pulse), 0, Math.PI * 2);
     ctx.stroke();
 
-    // "KO" badge above the tile
-    const fontSize = Math.round(s * 0.38);
-    ctx.globalAlpha = 1;
-    ctx.font = `bold ${fontSize}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 5;
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText('KO', cx, sy - 2);
-    ctx.shadowBlur = 0;
+    // Badge above the tile: "Reviving" while being revived, "KO" otherwise
+    const isReviving = this.reviveProgress > 0;
+    const label = isReviving ? 'Reviving' : 'KO';
+    const fontSize = Math.round(s * (isReviving ? 0.28 : 0.38));
+    drawText(ctx, label, {
+      x: cx,
+      y: sy - fontSize - 2,
+      align: 'center',
+      size: fontSize,
+      bold: true,
+      color: isReviving ? '#ffffff' : '#ef4444',
+      outline: true,
+    });
 
     ctx.restore();
   }

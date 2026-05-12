@@ -75,6 +75,8 @@ import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
+import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -755,28 +757,31 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const cx = canvas.width / 2;
     const t = Date.now();
-
-    ctx.save();
-
-    // Pulsing "Revive your teammate!" banner
     const pulse = 0.75 + 0.25 * Math.sin(t * 0.006);
-    ctx.globalAlpha = pulse;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
 
-    ctx.font = 'bold 22px monospace';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 7;
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText('Revive your teammate!', cx, 58);
+    // "Revive your teammate!" banner
+    drawText(ctx, 'Revive your teammate!', {
+      x: cx,
+      y: 44,
+      align: 'center',
+      ...TEXT_PRESETS.danger,
+      size: 22,
+      outline: true,
+      alpha: pulse,
+    });
 
+    // Countdown timer
     const secondsLeft = Math.max(0, Math.ceil((5400 - inactive.knockedOutFrames) / 60));
-    ctx.font = 'bold 15px monospace';
-    ctx.fillStyle = secondsLeft <= 10 ? '#ef4444' : '#fbbf24';
-    ctx.fillText(`${secondsLeft}s`, cx, 80);
-
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
+    drawText(ctx, `${secondsLeft}s`, {
+      x: cx,
+      y: 70,
+      align: 'center',
+      ...TEXT_PRESETS.danger,
+      size: 15,
+      color: secondsLeft <= 10 ? '#ef4444' : '#fbbf24',
+      outline: true,
+      alpha: pulse,
+    });
 
     const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
 
@@ -786,12 +791,10 @@ export class DungeonScene extends GameplayScene {
       const dy = inactive.y - active.y;
       const angle = Math.atan2(dy, dx);
       const bounce = Math.sin(t * 0.005) * 4;
-      const arrowX = cx;
-      const arrowY = 106 + bounce;
       const len = 22;
 
       ctx.save();
-      ctx.translate(arrowX, arrowY);
+      ctx.translate(cx, 100 + bounce);
       ctx.rotate(angle);
       ctx.fillStyle = '#facc15';
       ctx.strokeStyle = '#000';
@@ -806,29 +809,33 @@ export class DungeonScene extends GameplayScene {
       ctx.stroke();
       ctx.restore();
     } else if (inactive.reviveProgress > 0) {
-      // Revive progress bar
       const barW = 160;
       const barH = 18;
       const barX = cx - barW / 2;
-      const barY = 98;
-      const progress = inactive.reviveProgress / this.REVIVE_FRAMES;
+      const barY = 96;
 
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = '#22c55e';
-      ctx.fillRect(barX, barY, Math.ceil(barW * progress), barH);
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barW, barH);
+      drawProgressBar(ctx, {
+        x: barX,
+        y: barY,
+        width: barW,
+        height: barH,
+        value: inactive.reviveProgress / this.REVIVE_FRAMES,
+        ...PROGRESS_PRESETS.stamina,
+        border: '#ffffff',
+        borderWidth: 1,
+        radius: 2,
+      });
 
-      ctx.fillStyle = '#fff';
-      ctx.font = '11px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('REVIVING', cx, barY + barH / 2);
+      drawText(ctx, 'REVIVING', {
+        x: cx,
+        y: barY + 3,
+        align: 'center',
+        size: 11,
+        bold: true,
+        color: '#fff',
+        outline: true,
+      });
     }
-
-    ctx.restore();
   }
 
   private triggerCompanionFollow(): void {

@@ -16,6 +16,15 @@ Type safety is the highest priority in this codebase. The tsconfig has strict mo
 
 - if you discover a case of a violation of any of these rules, consider it in-scope to fix it, even if it is a pre-existing violation
 
+## Canvas UI Utilities
+
+Prefer the shared utilities in `src/ui/` over raw `ctx` calls:
+
+- **`src/ui/TextBox.ts`** — `drawText()` for all canvas text. Handles font, color, outline, glow, word-wrap, and alignment in one call. Use `TEXT_PRESETS` for common styles (`danger`, `heading`, `label`, `value`, etc.).
+- **`src/ui/Box.ts`** — `drawBox()` / `drawModal()` for panels, dialogs, and containers; `drawProgressBar()` for fill bars; `drawOverlay()` for full-screen tints. Use `BOX_PRESETS` (e.g. `panel`, `modal`, `danger`) and `PROGRESS_PRESETS` (e.g. `hp`, `stamina`) for consistent styling.
+
+Never reach for `ctx.fillText`, `ctx.strokeText`, `ctx.fillRect` for UI chrome when these utilities already handle the pattern — raw `ctx` calls are fine only for game-world rendering (sprites, particles, geometry) where the utilities don't apply.
+
 ## Validation Gates
 
 Before considering work complete, **both checks must pass**:
