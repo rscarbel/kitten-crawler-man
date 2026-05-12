@@ -750,7 +750,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   /** Renders the knocked-out warning banner, directional arrow, and revival progress bar. */
-  private renderKnockedOutUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderKnockedOutUI(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    camX: number,
+    camY: number,
+  ): void {
     const inactive = this.inactive();
     if (!inactive.isKnockedOut) return;
 
@@ -786,15 +791,19 @@ export class DungeonScene extends GameplayScene {
     const dist = Math.hypot(active.x - inactive.x, active.y - inactive.y);
 
     if (dist > this.REVIVE_RANGE_PX) {
-      // Arrow pointing from screen-centre toward the downed companion
+      // Arrow above the active player pointing toward the downed companion
       const dx = inactive.x - active.x;
       const dy = inactive.y - active.y;
       const angle = Math.atan2(dy, dx);
       const bounce = Math.sin(t * 0.005) * 4;
       const len = 22;
 
+      // Screen position: centre of active player's tile, 28px above the sprite
+      const arrowX = active.x - camX + TILE_SIZE / 2;
+      const arrowY = active.y - camY - 28 + bounce;
+
       ctx.save();
-      ctx.translate(cx, 100 + bounce);
+      ctx.translate(arrowX, arrowY);
       ctx.rotate(angle);
       ctx.fillStyle = '#facc15';
       ctx.strokeStyle = '#000';
@@ -1327,7 +1336,7 @@ export class DungeonScene extends GameplayScene {
     this.renderHUD(ctx, canvas);
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
-      this.renderKnockedOutUI(ctx, canvas);
+      this.renderKnockedOutUI(ctx, canvas, camX, camY);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {

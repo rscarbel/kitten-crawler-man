@@ -49,6 +49,7 @@ const COOLDOWN_MAX = 50;
 // After losing LOS the spider chases to the last known position. It gives up
 // once every living player is physically farther away than this distance.
 const CHASE_ABANDON_PX = TILE_SIZE * 12;
+const VISION_RANGE_PX = TILE_SIZE * 20;
 
 const TRAP_TTL = 3600; // persists 60 s
 const TRAP_SPLAT_TICKS_PER_FRAME = 6;
@@ -530,7 +531,7 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(8);
         return;
       }
-      this.dealDamage(target, randomInt(10, 15));
+      this.dealDamage(target, randomInt(8, 12));
       target.applyStatus(makeStuck());
       target.applyStatus(makeSpitVenom());
       this.dashTarget = target;
@@ -586,7 +587,7 @@ export class GrotesqueSpider extends Mob {
           this.activeProjectile = null;
           return;
         }
-        this.dealDamage(t, randomInt(10, 15));
+        this.dealDamage(t, randomInt(8, 12));
         t.applyStatus(makeStuck());
         t.applyStatus(makeSpitVenom());
         this.dashTarget = t;
@@ -683,6 +684,12 @@ export class GrotesqueSpider extends Mob {
       if (this.map.isWalkable(tx, ty)) return { tx, ty };
     }
     return null;
+  }
+
+  protected override hasLOS(target: Player): boolean {
+    const dist = Math.hypot(target.x - this.x, target.y - this.y);
+    if (dist > VISION_RANGE_PX) return false;
+    return super.hasLOS(target);
   }
 
   private faceToward(target: Player): void {
