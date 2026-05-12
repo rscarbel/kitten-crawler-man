@@ -16,6 +16,7 @@ import { spawnForLevel, spawnExtraMobs, createMob } from '../levels/spawner';
 import { getLevelDef } from '../levels';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
+import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
 import { AchievementManager } from '../core/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import { InventoryPanel } from '../ui/InventoryPanel';
@@ -161,6 +162,7 @@ export class DungeonScene extends GameplayScene {
 
   protected pauseMenu: PauseMenu;
   private deathScreen: DeathScreen;
+  private levelCompleteScreen = new LevelCompleteScreen();
   private inventoryPanel: InventoryPanel;
   private gearPanel: GearPanel;
 
@@ -203,6 +205,7 @@ export class DungeonScene extends GameplayScene {
   } = null;
 
   private _toughModeActive = false;
+  private _revealStairwell = false;
 
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
@@ -332,21 +335,34 @@ export class DungeonScene extends GameplayScene {
     this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
+
+      // Save progress immediately so the floor is recorded as complete even if
+      // the player closes the browser during the celebration screen.
+      this.onSaveProgress?.({
+        humanSnap: snapPlayer(this.human),
+        catSnap: snapPlayer(this.cat),
+        levelId: levelDef.nextLevelId,
+      });
+
       this.bus.emit('levelComplete', {});
-      // Dismiss Mongo before floor transition
-      this.mongoSystem.dismiss(this.mobs, this.mobGrid);
-      this.sceneManager.replace(
-        new DungeonScene(getLevelDef(levelDef.nextLevelId), this.input, this.sceneManager, {
-          humanSnap: snapPlayer(this.human),
-          catSnap: snapPlayer(this.cat),
-          humanAchievements: this.humanAchievements,
-          catAchievements: this.catAchievements,
-          mongoUnlocked: this.mongoSystem.unlocked,
-          abilityManager: this.abilityManager,
-          saveProgress: this.onSaveProgress,
-          audio: this.audio ?? undefined,
-        }),
-      );
+
+      const nextDef = getLevelDef(levelDef.nextLevelId);
+      this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
+        // Dismiss Mongo before floor transition
+        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+        this.sceneManager.replace(
+          new DungeonScene(nextDef, this.input, this.sceneManager, {
+            humanSnap: snapPlayer(this.human),
+            catSnap: snapPlayer(this.cat),
+            humanAchievements: this.humanAchievements,
+            catAchievements: this.catAchievements,
+            mongoUnlocked: this.mongoSystem.unlocked,
+            abilityManager: this.abilityManager,
+            saveProgress: this.onSaveProgress,
+            audio: this.audio ?? undefined,
+          }),
+        );
+      }, this.audio);
     });
 
     if (levelDef.isOverworld) {
@@ -596,6 +612,7 @@ export class DungeonScene extends GameplayScene {
 
   onEnter(): void {
     this.audio?.resume();
+    this.audio?.play('level_begins');
     this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
 
     this.inputHandler.bind({
@@ -847,6 +864,60 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  private renderStairwellRevealArrow(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    if (!this._revealStairwell) return;
+    const stairs = this.gameMap.stairwellTiles;
+    if (stairs.length === 0) return;
+
+    const player = this.active();
+    const px = player.x + TILE_SIZE / 2;
+    const py = player.y + TILE_SIZE / 2;
+
+    let nearest = stairs[0];
+    let nearestDist = Infinity;
+    for (const s of stairs) {
+      const sx = (s.x + 1) * TILE_SIZE;
+      const sy = (s.y + 1) * TILE_SIZE;
+      const d = Math.hypot(px - sx, py - sy);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = s;
+      }
+    }
+
+    const targetX = (nearest.x + 1) * TILE_SIZE;
+    const targetY = (nearest.y + 1) * TILE_SIZE;
+    const dx = targetX - px;
+    const dy = targetY - py;
+    const angle = Math.atan2(dy, dx);
+
+    const t = Date.now();
+    const bounce = Math.sin(t * 0.005) * 4;
+    const len = 22;
+    const arrowX = player.x - camX + TILE_SIZE / 2;
+    const arrowY = player.y - camY - 28 + bounce;
+
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#facc15';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(len, 0);
+    ctx.lineTo(-len * 0.45, -len * 0.5);
+    ctx.lineTo(-len * 0.1, 0);
+    ctx.lineTo(-len * 0.45, len * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private triggerCompanionFollow(): void {
     this.followerMenu.open();
   }
@@ -983,6 +1054,11 @@ export class DungeonScene extends GameplayScene {
           this._toughModeActive = true;
           this.playerChat.showBubble('🛡️ TOUGH MODE ON');
         }
+        return;
+      }
+      if (text.trim() === '!reveal') {
+        this._revealStairwell = !this._revealStairwell;
+        this.playerChat.showBubble(this._revealStairwell ? '🧭 STAIRWELL REVEALED' : '🧭 STAIRWELL HIDDEN');
         return;
       }
       this.playerChat.showBubble(text);
@@ -1142,6 +1218,11 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
+    if (this.levelCompleteScreen.isActive) {
+      this.levelCompleteScreen.handleClick(mx, my);
+      return;
+    }
+
     if (this.stairwell.menuOpen) {
       this.stairwell.handleClick(mx, my, this.sceneManager.canvas);
       return;
@@ -1268,6 +1349,7 @@ export class DungeonScene extends GameplayScene {
       this.abilityLevelUpDialog.isShowing ||
       this.pauseMenu.isOpen ||
       this.stairwell.menuOpen ||
+      this.levelCompleteScreen.isActive ||
       this.building?.menuOpen ||
       this.defendQuest.isDialogOpen ||
       this.playerChat.isOpen
@@ -1337,6 +1419,7 @@ export class DungeonScene extends GameplayScene {
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, canvas, camX, camY);
+      this.renderStairwellRevealArrow(ctx, camX, camY);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -1477,6 +1560,10 @@ export class DungeonScene extends GameplayScene {
       this.stairwell.renderMenu(ctx, canvas);
     }
 
+    if (this.levelCompleteScreen.isActive) {
+      this.levelCompleteScreen.render(ctx, canvas);
+    }
+
     if (this.building?.menuOpen) {
       this.building.renderMenu(ctx, canvas);
     }
@@ -1592,6 +1679,10 @@ export class DungeonScene extends GameplayScene {
       const sounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
       this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
       this.woodBreakSoundIdx++;
+    }
+    if (this.defendQuest.menuClickSoundPending) {
+      this.defendQuest.menuClickSoundPending = false;
+      this.audio?.play('menu_click');
     }
     this.juicerRoom.update(ctx);
     this.companion.update(ctx);

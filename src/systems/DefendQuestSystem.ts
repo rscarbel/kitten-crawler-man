@@ -87,6 +87,8 @@ export class DefendQuestSystem implements GameSystem {
   hammerSoundPending = false;
   /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
   woodBreakSoundPending = false;
+  /** Set when a help/dialog menu button is clicked; DungeonScene clears it and plays menu_click. */
+  menuClickSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
@@ -201,6 +203,7 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase === 'tutorial') {
       for (const btn of this.tutorialButtons) {
         if (pointInRect(mx, my, btn)) {
+          this.menuClickSoundPending = true;
           if (btn.action === 'next') {
             this.tutorialPage++;
           } else if (btn.action === 'go') {
@@ -217,6 +220,7 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase !== 'dialog') return false;
     for (const btn of this.dialogButtons) {
       if (pointInRect(mx, my, btn)) {
+        this.menuClickSoundPending = true;
         if (btn.action === 'accept') {
           this.acceptQuest();
         } else {
