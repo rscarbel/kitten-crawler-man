@@ -43,7 +43,10 @@ export class AudioManager {
   private walkingSource: AudioBufferSourceNode | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
 
+  // Sounds queued because their buffer wasn't decoded yet when requested.
   private readonly pendingSfx = new Map<SoundId, PlayOptions>();
+  // Sounds queued because the AudioContext was suspended when the buffer became ready.
+  private readonly pendingOnUnlock: Array<{ id: SoundId; opts: PlayOptions }> = [];
 
   private masterVol = 1;
   private sfxVol = 1;
@@ -69,6 +72,15 @@ export class AudioManager {
     this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    // Mobile browsers start AudioContext suspended and only allow resume() inside
+    // a direct user-gesture handler. Register capture-phase listeners so the very
+    // first touch/click/key unlocks audio before any scene handler runs.
+    window.addEventListener('touchstart', this.handleUnlockGesture, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener('click', this.handleUnlockGesture, { capture: true });
+    window.addEventListener('keydown', this.handleUnlockGesture, { capture: true });
   }
 
   private readonly handleVisibilityChange = (): void => {
@@ -78,6 +90,41 @@ export class AudioManager {
       void this.ctx.resume();
     }
   };
+
+  // Called on the first touchstart/click/keydown. Resumes the AudioContext from
+  // inside a user-gesture handler, then flushes any sounds that were queued while
+  // the context was suspended.
+  private readonly handleUnlockGesture = (): void => {
+    if (this.ctx.state === 'running') {
+      this.removeUnlockListeners();
+      return;
+    }
+    void this.ctx.resume().then(() => {
+      if (this.ctx.state === 'running') {
+        this.removeUnlockListeners();
+        this.onContextUnlocked();
+      }
+    });
+  };
+
+  private removeUnlockListeners(): void {
+    window.removeEventListener('touchstart', this.handleUnlockGesture, { capture: true });
+    window.removeEventListener('click', this.handleUnlockGesture, { capture: true });
+    window.removeEventListener('keydown', this.handleUnlockGesture, { capture: true });
+  }
+
+  private onContextUnlocked(): void {
+    for (const { id, opts } of this.pendingOnUnlock) {
+      this.play(id, opts);
+    }
+    this.pendingOnUnlock.length = 0;
+
+    if (this.pendingMusic !== null) {
+      const { id, opts } = this.pendingMusic;
+      this.pendingMusic = null;
+      this.playMusic(id, opts);
+    }
+  }
 
   /** Resume the AudioContext. Must be called from a user-gesture handler. */
   resume(): void {
@@ -124,6 +171,10 @@ export class AudioManager {
   play(id: SoundId, opts: PlayOptions = {}): void {
     const buffer = this.buffers.get(id);
     if (!buffer) return;
+    if (this.ctx.state !== 'running') {
+      this.pendingOnUnlock.push({ id, opts });
+      return;
+    }
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -168,7 +219,7 @@ export class AudioManager {
   playMusic(id: SoundId, opts: MusicOptions = {}): void {
     this.stopMusic(0);
     const buffer = this.buffers.get(id);
-    if (!buffer) {
+    if (!buffer || this.ctx.state !== 'running') {
       this.pendingMusic = { id, opts };
       return;
     }
@@ -377,6 +428,7 @@ export class AudioManager {
   /** Stop music and release the AudioContext. Call when the page/game is torn down. */
   dispose(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    this.removeUnlockListeners();
     this.stopWalkingLoop();
     this.stopSpiderWalkingLoop();
     this.stopMusic(0);
