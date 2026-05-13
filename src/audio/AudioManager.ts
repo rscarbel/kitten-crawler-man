@@ -43,6 +43,8 @@ export class AudioManager {
   private walkingSource: AudioBufferSourceNode | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
 
+  private readonly pendingSfx = new Map<SoundId, PlayOptions>();
+
   private masterVol = 1;
   private sfxVol = 1;
   private musicVol = 0.4;
@@ -100,6 +102,11 @@ export class AudioManager {
           const arrayBuffer = await response.arrayBuffer();
           const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
           this.buffers.set(id, audioBuffer);
+          const pendingOpts = this.pendingSfx.get(id);
+          if (pendingOpts !== undefined) {
+            this.pendingSfx.delete(id);
+            this.play(id, pendingOpts);
+          }
         } catch (err) {
           console.warn(`[AudioManager] Failed to load "${id}":`, err);
         }
@@ -133,6 +140,19 @@ export class AudioManager {
     }
 
     source.start(0, opts.startOffset ?? 0);
+  }
+
+  /**
+   * Play a one-shot sound as soon as its buffer is ready.
+   * If the buffer is already loaded, plays immediately (same as `play`).
+   * Otherwise queues it so the preload loop fires it the moment decoding finishes.
+   */
+  playWhenReady(id: SoundId, opts: PlayOptions = {}): void {
+    if (this.buffers.has(id)) {
+      this.play(id, opts);
+    } else {
+      this.pendingSfx.set(id, opts);
+    }
   }
 
   /** Pick one of the given IDs at random and play it. */

@@ -617,7 +617,7 @@ export class DungeonScene extends GameplayScene {
 
   onEnter(): void {
     this.audio?.resume();
-    this.audio?.play('level_begins');
+    this.audio?.playWhenReady('level_begins');
     this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
 
     this.inputHandler.bind({
