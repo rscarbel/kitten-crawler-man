@@ -1754,6 +1754,10 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.menuClickSoundPending = false;
       this.audio?.play('menu_click');
     }
+    if (this.defendQuest.menuOpenSoundPending) {
+      this.defendQuest.menuOpenSoundPending = false;
+      this.audio?.play('menu_open');
+    }
     this.juicerRoom.update(ctx);
     this.companion.update(ctx);
     if (this.cat.pendingAutoFireSound) {

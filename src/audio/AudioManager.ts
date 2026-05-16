@@ -476,10 +476,15 @@ export class AudioManager {
       }
     });
 
+    bus.on('objectiveComplete', (e) => {
+      if (e.objectiveId === 'goblin_child_returned') {
+        this.playMusic('bg_level_1', { fadeInMs: 1000 });
+      }
+    });
+
     bus.on('questCompleted', (e) => {
       if (e.questId === 'defend_goblin_mother') {
         this.play('quest_complete');
-        this.playMusic('bg_level_1', { fadeInMs: 1500 });
       }
     });
 

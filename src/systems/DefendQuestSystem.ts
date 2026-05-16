@@ -89,6 +89,8 @@ export class DefendQuestSystem implements GameSystem {
   woodBreakSoundPending = false;
   /** Set when a help/dialog menu button is clicked; DungeonScene clears it and plays menu_click. */
   menuClickSoundPending = false;
+  /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
+  menuOpenSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
@@ -180,6 +182,7 @@ export class DefendQuestSystem implements GameSystem {
 
     if (this.phase === 'npc_waiting') {
       this.phase = 'dialog';
+      this.menuOpenSoundPending = true;
       return true;
     }
     if (this.phase === 'complete_pending') {
@@ -525,6 +528,7 @@ export class DefendQuestSystem implements GameSystem {
     if (!tutorialSeen) {
       this.phase = 'tutorial';
       this.tutorialPage = 0;
+      this.menuOpenSoundPending = true;
       return;
     }
     this.startCountdown();
