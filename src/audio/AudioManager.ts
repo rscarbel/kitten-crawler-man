@@ -52,6 +52,13 @@ export class AudioManager {
   private sfxVol = 1;
   private musicVol = 0.4;
 
+  // True while the page is backgrounded (lock screen, app switch). Used to keep
+  // the master gain at 0 without clobbering the user's stored volume.
+  private backgrounded = false;
+
+  // Callbacks queued until the AudioContext first reaches 'running' state.
+  private readonly runningCallbacks: Array<() => void> = [];
+
   get masterVolume(): number {
     return this.masterVol;
   }
@@ -72,6 +79,10 @@ export class AudioManager {
     this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    // pagehide fires when the page enters the BFCache (lock screen / app switch on
+    // iOS) — more reliable than visibilitychange alone on some mobile browsers.
+    window.addEventListener('pagehide', this.handlePageHide);
+    window.addEventListener('pageshow', this.handlePageShow);
     // Mobile browsers start AudioContext suspended and only allow resume() inside
     // a direct user-gesture handler. Register capture-phase listeners so the very
     // first touch/click/key unlocks audio before any scene handler runs.
@@ -85,11 +96,44 @@ export class AudioManager {
 
   private readonly handleVisibilityChange = (): void => {
     if (document.hidden) {
-      void this.ctx.suspend();
+      this.muteForBackground();
     } else {
-      void this.ctx.resume();
+      this.unmuteFromBackground();
     }
   };
+
+  private readonly handlePageHide = (): void => {
+    this.muteForBackground();
+  };
+
+  private readonly handlePageShow = (e: PageTransitionEvent): void => {
+    // persisted=false means this is the initial page load, not a BFCache restore.
+    if (!e.persisted) return;
+    this.unmuteFromBackground();
+  };
+
+  private muteForBackground(): void {
+    if (this.backgrounded) return;
+    this.backgrounded = true;
+    // Zero gain immediately — ctx.suspend() is async and some mobile browsers
+    // don't honor it fast enough before the screen fully locks.
+    this.masterGain.gain.value = 0;
+    // Stop looping sources so they don't resume audibly on a buggy ctx.resume().
+    this.stopWalkingLoop();
+    this.stopSpiderWalkingLoop();
+    void this.ctx.suspend();
+  }
+
+  private unmuteFromBackground(): void {
+    if (!this.backgrounded) return;
+    this.backgrounded = false;
+    this.masterGain.gain.value = this.masterVol;
+    void this.ctx.resume().then(() => {
+      if (this.ctx.state === 'running') {
+        this.onContextUnlocked();
+      }
+    });
+  }
 
   // Called on the first touchstart/click/keydown. Resumes the AudioContext from
   // inside a user-gesture handler, then flushes any sounds that were queued while
@@ -107,6 +151,24 @@ export class AudioManager {
     });
   };
 
+  /** True when the AudioContext is actively processing audio. */
+  get isRunning(): boolean {
+    return this.ctx.state === 'running';
+  }
+
+  /**
+   * Call `cb` immediately if the AudioContext is already running, otherwise
+   * queue it to fire the first time the context reaches the running state.
+   * Each callback is called at most once.
+   */
+  onRunning(cb: () => void): void {
+    if (this.ctx.state === 'running') {
+      cb();
+    } else {
+      this.runningCallbacks.push(cb);
+    }
+  }
+
   private removeUnlockListeners(): void {
     window.removeEventListener('touchstart', this.handleUnlockGesture, { capture: true });
     window.removeEventListener('click', this.handleUnlockGesture, { capture: true });
@@ -114,10 +176,14 @@ export class AudioManager {
   }
 
   private onContextUnlocked(): void {
-    for (const { id, opts } of this.pendingOnUnlock) {
+    // Fire one-time callbacks registered via onRunning().
+    const callbacks = this.runningCallbacks.splice(0);
+    for (const cb of callbacks) cb();
+
+    const pending = this.pendingOnUnlock.splice(0);
+    for (const { id, opts } of pending) {
       this.play(id, opts);
     }
-    this.pendingOnUnlock.length = 0;
 
     if (this.pendingMusic !== null) {
       const { id, opts } = this.pendingMusic;
@@ -129,7 +195,11 @@ export class AudioManager {
   /** Resume the AudioContext. Must be called from a user-gesture handler. */
   resume(): void {
     if (this.ctx.state === 'suspended') {
-      void this.ctx.resume();
+      void this.ctx.resume().then(() => {
+        if (this.ctx.state === 'running') {
+          this.onContextUnlocked();
+        }
+      });
     }
   }
 
@@ -321,7 +391,10 @@ export class AudioManager {
   /** Set the overall master volume (0–1). */
   setMasterVolume(v: number): void {
     this.masterVol = v;
-    this.masterGain.gain.value = v;
+    // Don't restore the gain while backgrounded — the zero is intentional.
+    if (!this.backgrounded) {
+      this.masterGain.gain.value = v;
+    }
   }
 
   /** Set the SFX bus volume (0–1). */
@@ -428,6 +501,8 @@ export class AudioManager {
   /** Stop music and release the AudioContext. Call when the page/game is torn down. */
   dispose(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('pagehide', this.handlePageHide);
+    window.removeEventListener('pageshow', this.handlePageShow);
     this.removeUnlockListeners();
     this.stopWalkingLoop();
     this.stopSpiderWalkingLoop();

@@ -173,6 +173,8 @@ export class DungeonScene extends GameplayScene {
 
   private bossIntro = new BossIntroSystem();
   private readonly dungeonIntro = new DungeonIntroSystem();
+  // Becomes true once the AudioContext is running so intro ticks in sync with sound.
+  private introStarted = false;
 
   private readonly abilityManager: AbilityManager;
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
@@ -619,8 +621,19 @@ export class DungeonScene extends GameplayScene {
 
   onEnter(): void {
     this.audio?.resume();
-    this.audio?.playWhenReady('level_begins');
-    this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
+    // Delay intro ticking until the AudioContext is running so the intro sound
+    // plays in sync with the visual. On desktop this is nearly instant; on mobile
+    // it waits for the first user gesture and shows a "Tap to begin" prompt.
+    const startIntro = (): void => {
+      this.introStarted = true;
+      this.audio?.playWhenReady('level_begins');
+      this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
+    };
+    if (this.audio === null || this.audio.isRunning) {
+      startIntro();
+    } else {
+      this.audio.onRunning(startIntro);
+    }
 
     this.inputHandler.bind({
       isSuppressed: () =>
@@ -1371,8 +1384,10 @@ export class DungeonScene extends GameplayScene {
     this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
 
-    // Ticks every frame but does not block gameplay — movement and menus still work
-    this.dungeonIntro.tick();
+    // Only tick once audio is ready so the intro visual and sound start together.
+    if (this.introStarted) {
+      this.dungeonIntro.tick();
+    }
 
     if (this.bossIntro.isActive) {
       this.bossIntro.tick();
@@ -1622,6 +1637,20 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.dungeonIntro.render(ctx, canvas);
+
+    if (this.dungeonIntro.isActive && !this.introStarted) {
+      const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
+      drawText(ctx, hint, {
+        x: Math.round(canvas.width / 2),
+        y: Math.round(canvas.height * 0.78),
+        align: 'center',
+        size: 18,
+        bold: true,
+        color: '#ffffff',
+        outline: true,
+        glow: true,
+      });
+    }
 
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
