@@ -224,6 +224,33 @@ export class RenderPipeline {
   }
 
   /**
+   * Radial fog that blacks out everything beyond VISIBILITY_OUTER_TILES from the
+   * active player. Defeats the browser-zoom exploit without affecting normal play.
+   */
+  renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
+    const { canvas, camX, camY, active } = rc;
+
+    const INNER_TILES = 30;
+    const OUTER_TILES = 35;
+    const innerR = INNER_TILES * TILE_SIZE;
+    const outerR = OUTER_TILES * TILE_SIZE;
+
+    // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
+    const halfDiag = Math.hypot(canvas.width / 2, canvas.height / 2);
+    if (halfDiag <= innerR) return;
+
+    const cx = active.x + TILE_SIZE / 2 - camX;
+    const cy = active.y + TILE_SIZE / 2 - camY;
+
+    const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,1)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  /**
    * Draws the tower balcony railing overlay on top of the Y-sorted entity pass.
    * This keeps the railing in front of any entity standing on a balcony.
    */

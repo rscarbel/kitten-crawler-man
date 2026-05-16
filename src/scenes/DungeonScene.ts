@@ -1449,6 +1449,8 @@ export class DungeonScene extends GameplayScene {
       UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm),
     );
 
+    this.renderPipeline.renderVisibilityFog(ctx, rc);
+
     UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
     this.renderHUD(ctx, canvas);
 
