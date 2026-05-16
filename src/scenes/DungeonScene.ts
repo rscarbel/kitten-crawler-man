@@ -906,7 +906,7 @@ export class DungeonScene extends GameplayScene {
     const bounce = Math.sin(t * 0.005) * 4;
     const len = 22;
     const arrowX = player.x - camX + TILE_SIZE / 2;
-    const arrowY = player.y - camY - 28 + bounce;
+    const arrowY = player.y - camY - TILE_SIZE * 1.5 + bounce;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
