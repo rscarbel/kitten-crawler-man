@@ -8,7 +8,8 @@ import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { EventBus } from '../core/EventBus';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
-import { makeSepsis, makeMagicBurn } from '../core/StatusEffect';
+import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
+import { getSmushStats } from '../abilities/smush';
 
 /** Shared context passed to combat resolution functions. */
 export interface CombatContext {
@@ -91,6 +92,60 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
     }
     ctx.bus.emit('catMeleeSwing', { hit: catHit });
+  }
+
+  // ── Smush AoE stomp ──
+  if (human.isSmushPeak() && !safeRoom.isEntityInSafeRoom(human)) {
+    const smushLevel = ctx.abilityManager.getLevel('smush');
+    const stats = getSmushStats(smushLevel);
+    const hc = centerOf(human);
+    const baseDamage = human.getMeleeDamage();
+    const innerRadius = stats.innerBlastRadius * TILE_SIZE;
+    const outerRadius = stats.outerBlastRadius * TILE_SIZE;
+
+    let totalSmushDamage = 0;
+
+    // Query both rings in one pass using the outer radius
+    const nearSmush = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
+    for (const mob of nearSmush) {
+      if (!mob.isAlive || !mob.isHostile) continue;
+      const mc = centerOf(mob);
+      const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
+      if (dist > outerRadius) continue;
+      if (!human.zeroDamage) {
+        const isInner = dist <= innerRadius;
+        const mult = isInner ? stats.damageMultiplier : stats.outerDamageMultiplier;
+        const bossMult = mob.isBoss ? stats.bossDamageMultiplier : 1.0;
+        const damage = Math.max(1, Math.round(baseDamage * mult * bossMult));
+        mob.takeDamageFrom(damage, human, 'smush');
+        ctx.hitLanded = true;
+        totalSmushDamage += damage;
+
+        // Level 5+: stun non-boss enemies
+        if (isInner && stats.stunSmallEnemies && !mob.isBoss) {
+          mob.applyStatus(makeStun(150)); // 2.5s
+        }
+        // Level 14+: stun bosses at 25% chance
+        if (
+          isInner &&
+          stats.stunBossChance > 0 &&
+          mob.isBoss &&
+          Math.random() < stats.stunBossChance
+        ) {
+          mob.applyStatus(makeStun(150));
+        }
+      }
+    }
+
+    // Level 10+: 20% chance to heal human for 50% of total damage dealt
+    if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < 0.2) {
+      const healAmt = Math.round(totalSmushDamage * 0.5);
+      human.hp = Math.min(human.hp + healAmt, human.maxHp);
+    }
+
+    if (ctx.hitLanded) {
+      ctx.abilityManager.addUsageXp('smush');
+    }
   }
 
   if (!safeRoom.isEntityInSafeRoom(cat)) {
@@ -207,6 +262,20 @@ export function resolveKills(ctx: CombatContext): void {
             nearMob.applyStatus(makeMagicBurn());
           }
         }
+      }
+    }
+
+    // Smush kill XP + level 14 double gold
+    if (mob.killType === 'smush' && killer === human) {
+      abilityManager.addKillXp('smush');
+      const smushLevel = abilityManager.getLevel('smush');
+      if (
+        getSmushStats(smushLevel).doubleGoldOnKill &&
+        mob.droppedLoot !== null &&
+        !mob.droppedLoot.goldDoubled
+      ) {
+        mob.droppedLoot.coins = Math.round(mob.droppedLoot.coins * 2);
+        mob.droppedLoot.goldDoubled = true;
       }
     }
 

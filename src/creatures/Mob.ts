@@ -13,6 +13,7 @@ export interface ShellContext {
 export interface LootDrop {
   coins: number;
   items: Array<{ id: ItemId; quantity: number }>;
+  goldDoubled?: boolean;
 }
 
 /**
@@ -146,7 +147,7 @@ export abstract class Mob extends Player {
   killedBy: Player | null = null;
 
   /** The type of attack that landed the killing blow. */
-  killType: 'melee' | 'missile' | 'shell' | null = null;
+  killType: 'melee' | 'missile' | 'shell' | 'smush' | null = null;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, maxHp);
@@ -388,7 +389,7 @@ export abstract class Mob extends Player {
   takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
   ) {
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - amount);

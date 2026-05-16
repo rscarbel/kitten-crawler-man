@@ -46,6 +46,7 @@ import type { AbilityId, AbilityState } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
+import { SMUSH_DEF } from '../abilities/smush';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
@@ -433,6 +434,7 @@ export class DungeonScene extends GameplayScene {
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
     this.abilityManager.register(MAGIC_MISSILE_DEF);
     this.abilityManager.register(PROTECTIVE_SHELL_DEF);
+    this.abilityManager.register(SMUSH_DEF);
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     this.abilityLevelUpDialog = new AbilityLevelUpDialog(this.abilityManager);
@@ -486,7 +488,7 @@ export class DungeonScene extends GameplayScene {
       if (killer === this.human) this.humanAchievements.tryUnlock('first_blood');
       if (killer === this.cat) this.catAchievements.tryUnlock('first_blood');
 
-      if (killer === this.human && mob.killType === 'melee' && this.human.nextType === 'punch') {
+      if (killer === this.human && (mob.killType === 'melee' || mob.killType === 'smush')) {
         this.humanAchievements.tryUnlock('smush');
       }
 
@@ -1009,7 +1011,7 @@ export class DungeonScene extends GameplayScene {
             p.godMode = true;
             p.speedMultiplier = 2;
           }
-          const godAbilityIdsOverride: AbilityId[] = ['magic_missile', 'protective_shell'];
+          const godAbilityIdsOverride: AbilityId[] = ['magic_missile', 'protective_shell', 'smush'];
           for (const id of godAbilityIdsOverride) {
             this.abilityManager.setLevel(id, 15);
           }
@@ -1040,7 +1042,7 @@ export class DungeonScene extends GameplayScene {
             p.godMode = true;
             p.speedMultiplier = 2;
           }
-          const godAbilityIds: AbilityId[] = ['magic_missile', 'protective_shell'];
+          const godAbilityIds: AbilityId[] = ['magic_missile', 'protective_shell', 'smush'];
           for (const id of godAbilityIds) {
             this.abilityManager.setLevel(id, 15);
           }
@@ -1183,6 +1185,10 @@ export class DungeonScene extends GameplayScene {
       if (this.spells.triggerProtectiveShell(this.human, this.cat, this.mobGrid, level)) {
         this.abilityManager.addUsageXp('protective_shell');
         this.audio?.play('human_protective_shell');
+      }
+    } else if (slot?.abilityId === 'smush' && this.human.isActive) {
+      if (this.human.triggerSmush()) {
+        this.audio?.play('human_smush');
       }
     } else if (slot?.id === 'scroll_of_confusing_fog') {
       this.spells.castConfusingFog(active);
@@ -1491,6 +1497,10 @@ export class DungeonScene extends GameplayScene {
       this.inventoryPanel.abilityCooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
+      });
+      this.inventoryPanel.abilityCooldowns.set('smush', {
+        current: this.human.smushCooldown,
+        max: Math.max(1, this.human.getSmushCooldownMax()),
       });
       this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
       this.gearPanel.render(ctx, canvas, active.inventory, name);

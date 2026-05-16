@@ -81,6 +81,7 @@ const SOUND_IDS_TUPLE = [
   'cat_revived',
   'human_knocked_out',
   'human_revived',
+  'human_smush',
   'reviving_tone',
   'error',
 ] as const;
@@ -178,6 +179,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   cat_revived: './src/audio/characters/cat/cat_revived.mp3',
   human_knocked_out: './src/audio/characters/human/human_knocked_out.mp3',
   human_revived: './src/audio/characters/human/human_revived.mp3',
+  human_smush: './src/audio/characters/human/smush.mp3',
   reviving_tone: './src/audio/characters/reviving_tone.mp3',
   error: './src/audio/events/error.mp3',
 };

@@ -8,7 +8,7 @@
  * Both fields have per-ability overrides; defaults are 1.3 and 1.8 respectively.
  */
 
-export type AbilityId = 'magic_missile' | 'protective_shell';
+export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush';
 
 export interface AbilityPerkDef {
   level: number;

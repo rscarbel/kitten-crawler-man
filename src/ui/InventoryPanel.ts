@@ -761,6 +761,10 @@ export class InventoryPanel {
       drawSpriteKey(ctx, 'magic_missile_icon', 'standard', 0, x, y, size);
     }
 
+    if (item.id === 'smush_tome') {
+      drawSpriteKey(ctx, 'smush_icon', 'standard', 0, x, y, size);
+    }
+
     if (item.id === 'enchanted_bigboi_boxers') {
       const cx = x + size * 0.5;
       const cy = y + size * 0.56;

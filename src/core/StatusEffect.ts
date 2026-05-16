@@ -51,3 +51,8 @@ export function makeStuck(): StatusEffect {
 export function makeSpitVenom(): StatusEffect {
   return { type: 'spit_venom', ticksRemaining: 240, totalTicks: 240 };
 }
+
+/** Stun: immobilises the target for the given number of ticks. */
+export function makeStun(ticks: number): StatusEffect {
+  return { type: 'stun', ticksRemaining: ticks, totalTicks: ticks };
+}

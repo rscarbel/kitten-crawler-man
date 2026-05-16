@@ -1,4 +1,16 @@
 {
+  "smush_icon": {
+    "path": "effects/smush_icon.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "standard": { "row": 0, "frameCount": 1 },
+      "full_power": { "row": 1, "frameCount": 1 }
+    }
+  },
   "magic_missile_icon": {
     "path": "effects/magic_missile_icon.png",
     "frameWidth": 64,

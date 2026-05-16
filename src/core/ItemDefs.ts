@@ -9,7 +9,8 @@ export type ItemId =
   | 'gym_bench_press'
   | 'gym_treadmill'
   | 'quest_wood_board'
-  | 'magic_missile_tome';
+  | 'magic_missile_tome'
+  | 'smush_tome';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -150,6 +151,18 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     description:
       'Wooden boards scavenged from the wood pile. Place near floor grates to build ' +
       'barriers against Bugaboos. Only the Human can build or repair. Costs 4 boards.',
+  },
+  smush_tome: {
+    id: 'smush_tome',
+    name: 'Smush',
+    stackable: false,
+    canHotlist: true,
+    canDrop: false,
+    type: 'consumable',
+    abilityId: 'smush',
+    description:
+      'Use the crushing power of your bare feet to pound enemies into the ground with explosive force. ' +
+      'Only the Human can use it. Place on the hotbar and press the assigned key to activate.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',
