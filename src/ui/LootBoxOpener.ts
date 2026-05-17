@@ -180,8 +180,10 @@ export class LootBoxOpener {
 
     const cw = canvas.width;
     const ch = canvas.height;
-    const bx = (cw - BOX_W) / 2;
-    const by = (ch - BOX_H) / 2;
+    const boxW = Math.min(BOX_W, cw - 32);
+    const boxH = Math.min(BOX_H, ch - 32);
+    const bx = (cw - boxW) / 2;
+    const by = (ch - boxH) / 2;
     const cx = cw / 2;
 
     // Backdrop
@@ -192,8 +194,8 @@ export class LootBoxOpener {
     drawBox(ctx, {
       x: bx,
       y: by,
-      width: BOX_W,
-      height: BOX_H,
+      width: boxW,
+      height: boxH,
       fill: '#0f172a',
       border: tierColor,
       borderWidth: 2.5,
@@ -205,7 +207,7 @@ export class LootBoxOpener {
     const total = this.queue.length;
     const current = this.queueIndex + 1;
     drawText(ctx, `Box ${current} of ${total}`, {
-      x: bx + BOX_W - 12,
+      x: bx + boxW - 12,
       y: by + 20 - 9,
       size: 11,
       color: '#64748b',
@@ -232,24 +234,24 @@ export class LootBoxOpener {
     });
 
     // Divider
-    drawDivider(ctx, { x: bx + 24, y: by + 62, length: BOX_W - 48, color: `${tierColor}55` });
+    drawDivider(ctx, { x: bx + 24, y: by + 62, length: boxW - 48, color: `${tierColor}55` });
 
     // Draw the animated box graphic
-    this.drawAnimatedBox(ctx, cx, ch / 2 - 16, tierColor);
+    this.drawAnimatedBox(ctx, cx, by + boxH / 2 - 16, tierColor);
 
     // Content reveal
     if (this.phase === 'revealing' || this.phase === 'done') {
       const revealAlpha =
         this.phase === 'done' ? 1 : Math.min(1, this.frame / (REVEAL_FRAMES * 0.6));
       ctx.globalAlpha = revealAlpha;
-      this.renderContents(ctx, cx, by + 190);
+      this.renderContents(ctx, cx, by + Math.round(boxH * 0.633));
       ctx.globalAlpha = 1;
     }
 
     // Skip hint
     drawText(ctx, this.phase === 'done' ? 'Click to continue' : 'Click to skip', {
       x: cx,
-      y: by + BOX_H - 30 - 8,
+      y: by + boxH - 38,
       size: 10,
       color: '#475569',
       align: 'center',
@@ -258,9 +260,9 @@ export class LootBoxOpener {
     // Auto-advance countdown bar (shown during 'done' phase)
     if (this.phase === 'done' && this.nextTimer > 0) {
       const ratio = this.nextTimer / NEXT_DELAY;
-      const barW = BOX_W - 48;
+      const barW = boxW - 48;
       const barX = bx + 24;
-      const barY = by + BOX_H - 18;
+      const barY = by + boxH - 18;
       drawProgressBar(ctx, {
         x: barX,
         y: barY,

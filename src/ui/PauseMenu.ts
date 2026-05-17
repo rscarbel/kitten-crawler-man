@@ -117,14 +117,17 @@ export class PauseMenu {
     this.touchScrollStartY = null;
   }
 
+  private _lastStatsBoxH = STATS_BOX_H;
+  private _lastSpendBoxH = SPEND_BOX_H;
+
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - 50 - 52
-    return STATS_BOX_H - 50 - 52;
+    return this._lastStatsBoxH - 50 - 52;
   }
 
   private get spendScrollH(): number {
     // Must match renderSpendTab: bh - 56 - 52
-    return SPEND_BOX_H - 56 - 52;
+    return this._lastSpendBoxH - 56 - 52;
   }
 
   /** Render the full pause overlay. Only call when isOpen === true. */
@@ -150,10 +153,10 @@ export class PauseMenu {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
-    const boxW = 380;
+    const boxW = Math.min(380, cw - 16);
     const mainBoxH =
       this.tab === 'main' ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0) : 0;
-    const boxH =
+    const rawBoxH =
       this.tab === 'achievements' || this.tab === 'abilities'
         ? 440
         : this.tab === 'stats'
@@ -165,6 +168,9 @@ export class PauseMenu {
               : this.tab === 'main'
                 ? mainBoxH
                 : 380;
+    const boxH = Math.min(rawBoxH, ch - 16);
+    if (this.tab === 'stats') this._lastStatsBoxH = boxH;
+    if (this.tab === 'spend') this._lastSpendBoxH = boxH;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,

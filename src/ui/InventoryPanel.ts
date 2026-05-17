@@ -244,7 +244,7 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
     item: InventoryItem,
   ): void {
-    const popW = 280;
+    const popW = Math.min(280, canvas.width - 32);
     const lineH = 15;
     const pad = 10;
 
@@ -305,7 +305,7 @@ export class InventoryPanel {
   private renderDropDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const dd = this.dropDialog;
     if (!dd) return;
-    const dlgW = 200;
+    const dlgW = Math.min(200, canvas.width - 32);
     const dlgH = 110;
     const dlgX = Math.floor((canvas.width - dlgW) / 2);
     const dlgY = Math.floor((canvas.height - dlgH) / 2);

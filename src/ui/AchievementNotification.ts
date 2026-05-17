@@ -102,16 +102,18 @@ export class AchievementNotification {
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    const bx = (cw - BOX_W) / 2;
-    const by = (ch - BOX_H) / 2;
+    const boxW = Math.min(BOX_W, cw - 32);
+    const boxH = Math.min(BOX_H, ch - 32);
+    const bx = (cw - boxW) / 2;
+    const by = (ch - boxH) / 2;
 
     // Main box — dark blue-gold gradient feel
-    drawBox(ctx, { x: bx, y: by, width: BOX_W, height: BOX_H, ...BOX_PRESETS.achievement, alpha });
+    drawBox(ctx, { x: bx, y: by, width: boxW, height: boxH, ...BOX_PRESETS.achievement, alpha });
 
     // Gold border — double ring (inner decorative ring)
     ctx.strokeStyle = 'rgba(255,215,0,0.3)';
     ctx.lineWidth = 8;
-    ctx.strokeRect(bx + 4, by + 4, BOX_W - 8, BOX_H - 8);
+    ctx.strokeRect(bx + 4, by + 4, boxW - 8, boxH - 8);
 
     // Header: NEW ACHIEVEMENT!
     const pulse = 0.85 + 0.15 * Math.sin(this.frame * 0.12);
@@ -131,7 +133,7 @@ export class AchievementNotification {
     drawDivider(ctx, {
       x: bx + 24,
       y: by + 52,
-      length: BOX_W - 48,
+      length: boxW - 48,
       color: 'rgba(255,215,0,0.4)',
       alpha,
     });
@@ -161,12 +163,12 @@ export class AchievementNotification {
 
     // Description (word-wrapped)
     drawText(ctx, achievement.description, {
-      x: cw / 2 - (BOX_W - 64) / 2,
+      x: cw / 2 - (boxW - 64) / 2,
       y: by + 126 - 10,
       size: 13,
       color: '#94a3b8',
       align: 'center',
-      width: BOX_W - 64,
+      width: boxW - 64,
       lineHeight: 18,
       alpha,
     });
@@ -191,7 +193,7 @@ export class AchievementNotification {
 
     // OK button
     const okX = cw / 2 - OK_BTN_W / 2;
-    const okY = by + BOX_H - OK_BTN_H - 18;
+    const okY = by + boxH - OK_BTN_H - 18;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
 
     drawButton(ctx, {

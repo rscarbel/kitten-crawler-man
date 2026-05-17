@@ -66,12 +66,15 @@ export class DeathScreen {
     });
 
     // Subtitle
+    const subtitleW = Math.min(400, w - 32);
     drawText(ctx, 'Respawning at floor start — progress from previous floors kept.', {
-      x: w / 2,
+      x: w / 2 - subtitleW / 2,
       y: h / 2 + 8 - 12,
       size: 15,
       color: '#94a3b8',
       align: 'center',
+      width: subtitleW,
+      lineHeight: 20,
       alpha: textAlpha,
     });
 

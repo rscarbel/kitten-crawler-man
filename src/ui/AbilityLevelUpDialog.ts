@@ -107,11 +107,11 @@ export class AbilityLevelUpDialog {
     // Dim background
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
-    const boxW = 320;
+    const boxW = Math.min(320, cw - 32);
     ctx.font = '11px monospace';
     const perk = def.perks.find((p) => p.level === current.newLevel);
     const perkLines = perk ? wrapTextLines(ctx, perk.description, boxW - 40) : [];
-    const boxH = Math.max(280, 216 + perkLines.length * 15);
+    const boxH = Math.min(Math.max(280, 216 + perkLines.length * 15), ch - 32);
     const bx = cw / 2 - boxW / 2;
     const by = ch / 2 - boxH / 2;
 

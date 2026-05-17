@@ -112,8 +112,8 @@ export class ChestRewardDialog {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
 
-    const boxW = 380;
-    const boxH = 300;
+    const boxW = Math.min(380, cw - 32);
+    const boxH = Math.min(300, ch - 32);
     const boxX = Math.round(cw / 2 - boxW / 2);
     const boxY = Math.round(ch / 2 - boxH / 2);
 
