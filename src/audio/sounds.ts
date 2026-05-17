@@ -86,6 +86,11 @@ const SOUND_IDS_TUPLE = [
   'error',
   'opening_treasure_chest',
   'treasure_chest_reward',
+  'achievement_unlocked',
+  'achievement_awarded',
+  'chest_locked',
+  'chest_unlocked_in_treasure_room',
+  'opening_reward_box',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -186,4 +191,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   error: './src/audio/events/error.mp3',
   opening_treasure_chest: './src/audio/events/opening-treasure-chest.mp3',
   treasure_chest_reward: './src/audio/events/treasure-chest-reward.mp3',
+  achievement_unlocked: './src/audio/events/achievement_unlocked.mp3',
+  achievement_awarded: './src/audio/events/achievement_awarded.mp3',
+  chest_locked: './src/audio/events/chest_locked.mp3',
+  chest_unlocked_in_treasure_room: './src/audio/events/chest_unlocked_in_treasure_room.mp3',
+  opening_reward_box: './src/audio/events/opening_reward_box.mp3',
 };

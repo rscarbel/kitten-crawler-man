@@ -496,6 +496,10 @@ export class AudioManager {
       this.play('objective_complete');
     });
 
+    bus.on('achievementUnlocked', () => {
+      this.play('achievement_unlocked');
+    });
+
     bus.on('questFailed', (e) => {
       if (e.questId === 'defend_goblin_mother') {
         this.playMusic('bg_level_1', { fadeInMs: 1500 });

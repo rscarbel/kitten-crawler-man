@@ -483,6 +483,7 @@ export class DungeonScene extends GameplayScene {
       this.catAchievements,
       this.human,
       this.cat,
+      options?.audio ?? null,
     );
 
     this.floorEntryHumanAchievements =
@@ -551,6 +552,13 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('opening_treasure_chest');
     });
 
+    this.treasureChests.setOnLockedAttempt(() => {
+      this.audio?.play('chest_locked');
+    });
+    this.treasureChests.setOnWoodenChestUnlocked(() => {
+      this.audio?.play('chest_unlocked_in_treasure_room');
+    });
+
     this.wireEventBus();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
@@ -588,15 +596,23 @@ export class DungeonScene extends GameplayScene {
       this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
       this.miniMap.addCorpseMarker(cx, cy);
 
-      if (killer === this.human) this.humanAchievements.tryUnlock('first_blood');
-      if (killer === this.cat) this.catAchievements.tryUnlock('first_blood');
+      if (killer === this.human && this.humanAchievements.tryUnlock('first_blood')) {
+        bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
+      }
+      if (killer === this.cat && this.catAchievements.tryUnlock('first_blood')) {
+        bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Cat' });
+      }
 
       if (killer === this.human && (mob.killType === 'melee' || mob.killType === 'smush')) {
-        this.humanAchievements.tryUnlock('smush');
+        if (this.humanAchievements.tryUnlock('smush')) {
+          bus.emit('achievementUnlocked', { achievementId: 'smush', player: 'Human' });
+        }
       }
 
       if (killer === this.cat && mob.killType === 'missile') {
-        this.catAchievements.tryUnlock('magic_touch');
+        if (this.catAchievements.tryUnlock('magic_touch')) {
+          bus.emit('achievementUnlocked', { achievementId: 'magic_touch', player: 'Cat' });
+        }
       }
 
       if (mob.droppedLoot && topDamageDealer) {
@@ -684,10 +700,14 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('bossDefeated', (e) => {
-      if (!this.humanAchievements.tryUnlock('boss_slayer')) {
+      if (this.humanAchievements.tryUnlock('boss_slayer')) {
+        bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Human' });
+      } else {
         this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
       }
-      if (!this.catAchievements.tryUnlock('boss_slayer')) {
+      if (this.catAchievements.tryUnlock('boss_slayer')) {
+        bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Cat' });
+      } else {
         this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
       }
       const bossLabel = `Defeated boss: ${e.bossType.replace(/_/g, ' ')}`;
@@ -708,8 +728,12 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('safeRoomEntered', () => {
-      this.humanAchievements.tryUnlock('safe_haven');
-      this.catAchievements.tryUnlock('safe_haven');
+      if (this.humanAchievements.tryUnlock('safe_haven')) {
+        bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Human' });
+      }
+      if (this.catAchievements.tryUnlock('safe_haven')) {
+        bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
+      }
       this.onSaveProgress?.({
         humanSnap: this._cleanSnapFor(this.human),
         catSnap: this._cleanSnapFor(this.cat),

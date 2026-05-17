@@ -39,9 +39,19 @@ chestImage.src = 'src/images/environment/treasure_chests.png';
 export class TreasureChestSystem {
   private readonly chests: TreasureChest[] = [];
   private onChestOpened: ((chest: TreasureChest) => void) | null = null;
+  private onLockedAttempt: (() => void) | null = null;
+  private onWoodenChestUnlocked: (() => void) | null = null;
 
   setOnOpen(cb: (chest: TreasureChest) => void): void {
     this.onChestOpened = cb;
+  }
+
+  setOnLockedAttempt(cb: () => void): void {
+    this.onLockedAttempt = cb;
+  }
+
+  setOnWoodenChestUnlocked(cb: () => void): void {
+    this.onWoodenChestUnlocked = cb;
   }
 
   addBossChest(tileX: number, tileY: number, bossRoomIndex: number): void {
@@ -120,6 +130,7 @@ export class TreasureChestSystem {
 
     if (closestChest.state === 'locked' || closestChest.state === 'unlocking') {
       closestChest.tryLockedTimer = 60;
+      this.onLockedAttempt?.();
       return true;
     }
 
@@ -181,6 +192,7 @@ export class TreasureChestSystem {
         if (chest.hadMobs && liveMobsInRoom.length === 0) {
           const idx = this.chests.indexOf(chest);
           this.triggerUnlock(idx);
+          this.onWoodenChestUnlocked?.();
         }
       }
     }

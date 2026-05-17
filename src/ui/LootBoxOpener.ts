@@ -61,6 +61,7 @@ export class LootBoxOpener {
 
   private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null = null;
   private onAllDone: (() => void) | null = null;
+  private onEachBoxOpening: (() => void) | null = null;
 
   /** True while the opener is running through its queue. */
   get isOpen(): boolean {
@@ -104,6 +105,7 @@ export class LootBoxOpener {
     playerName: string,
     onBoxOpened: (box: LootBox, contents: BoxContents) => void,
     onAllDone: () => void,
+    onEachBoxOpening?: () => void,
   ): void {
     if (boxes.length === 0) return;
     this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0));
@@ -111,6 +113,7 @@ export class LootBoxOpener {
     this.playerName = playerName;
     this.onBoxOpened = onBoxOpened;
     this.onAllDone = onAllDone;
+    this.onEachBoxOpening = onEachBoxOpening ?? null;
     this.active = true;
     this.loadCurrent();
   }
@@ -135,6 +138,7 @@ export class LootBoxOpener {
           this.phase = 'opening';
           this.frame = 0;
           this.burstParticles(30);
+          this.onEachBoxOpening?.();
         }
         break;
       case 'opening':

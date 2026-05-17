@@ -11,6 +11,7 @@ import { LootBoxOpener } from '../ui/LootBoxOpener';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
+import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
 
@@ -34,6 +35,7 @@ export class AchievementUISystem {
     private readonly catAchievements: AchievementManager,
     private readonly human: HumanPlayer,
     private readonly cat: CatPlayer,
+    private readonly audio: AudioManager | null = null,
   ) {}
 
   /** True when a blocking overlay (notification or loot box opener) is active. */
@@ -115,6 +117,7 @@ export class AchievementUISystem {
     if (this._notifQueue.length > 0) {
       this._notifActive = true;
       this.achievementNotif.reset();
+      this.audio?.play('achievement_awarded');
     }
     return true;
   }
@@ -162,6 +165,9 @@ export class AchievementUISystem {
       },
       () => {
         void 0;
+      },
+      () => {
+        this.audio?.play('opening_reward_box');
       },
     );
   }
