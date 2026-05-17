@@ -33,6 +33,10 @@ interface BossRoomState {
   defeated: boolean;
   defeatTimer: number;
   pulse: number;
+  /** Frames remaining in the 30-second entry window after fight starts. */
+  entryWindowTimer: number;
+  /** True when boss is alive but no conscious players remain in the room (boss HP reset). */
+  fightAborted: boolean;
 }
 
 export const BOSS_META: Record<string, { displayName: string; color: string }> = {
@@ -41,6 +45,9 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
   ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
   krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
 };
+
+/** 30 seconds at 60 fps. */
+const ENTRY_WINDOW_FRAMES = 1800;
 
 const MAX_COCKROACHES = 3;
 const MAX_ACID_PUDDLES = 15;
@@ -61,6 +68,22 @@ export class BossRoomSystem implements GameSystem {
   private humanAcidTick = 0;
   private catAcidTick = 0;
 
+  /**
+   * Last known positions for each player while they were OUTSIDE a boss room.
+   * Used to push them back if they try to enter after the entry window closes.
+   * Indexed by boss room state index.
+   */
+  private humanLastOutside: Array<{ x: number; y: number } | null>;
+  private catLastOutside: Array<{ x: number; y: number } | null>;
+  /**
+   * Whether each player has legitimately entered each boss room (either was
+   * inside when the fight started or entered during the 30-second window).
+   * Only insiders are clamped in; non-insiders are pushed back when the
+   * entry window closes.
+   */
+  private humanIsInsider: boolean[];
+  private catIsInsider: boolean[];
+
   /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
   newlyLockedBossType: string | null = null;
 
@@ -76,7 +99,13 @@ export class BossRoomSystem implements GameSystem {
       defeated: false,
       defeatTimer: 0,
       pulse: 0,
+      entryWindowTimer: 0,
+      fightAborted: false,
     }));
+    this.humanLastOutside = gameMap.bossRooms.map(() => null);
+    this.catLastOutside = gameMap.bossRooms.map(() => null);
+    this.humanIsInsider = gameMap.bossRooms.map(() => false);
+    this.catIsInsider = gameMap.bossRooms.map(() => false);
   }
 
   getBossRoomStates(): BossRoomState[] {
@@ -142,54 +171,122 @@ export class BossRoomSystem implements GameSystem {
       if (state.locked || state.defeatTimer > 0) state.pulse++;
     }
 
-    for (const state of this.states) {
+    for (let i = 0; i < this.states.length; i++) {
+      const state = this.states[i];
       if (state.defeated) continue;
 
       const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, state.bounds));
-      const bossAlive = boss?.isAlive;
+      const bossAlive = boss?.isAlive ?? false;
 
-      if (
-        !state.locked &&
-        bossAlive &&
-        (this.isEntityInRoom(human, state.bounds) || this.isEntityInRoom(cat, state.bounds))
-      ) {
-        state.locked = true;
-        const idx = this.states.indexOf(state);
-        if (!this.enteredRooms.has(idx)) {
-          this.enteredRooms.add(idx);
-          this.newlyLockedBossType = this.bossTypes[idx] ?? 'the_hoarder';
-        }
-        // Teleport the other player in if they're within 5 tiles of the room
-        const b = state.bounds;
-        const roomCenterX = (b.x + b.w * 0.5) * TILE_SIZE;
-        const roomCenterY = (b.y + b.h * 0.5) * TILE_SIZE;
-        for (const player of [human, cat]) {
-          if (!this.isEntityInRoom(player, b)) {
-            const px = player.x + TILE_SIZE * 0.5;
-            const py = player.y + TILE_SIZE * 0.5;
-            // Distance from player center to nearest edge of room bounds (in tiles)
-            const roomMinX = b.x * TILE_SIZE;
-            const roomMinY = b.y * TILE_SIZE;
-            const roomMaxX = (b.x + b.w) * TILE_SIZE;
-            const roomMaxY = (b.y + b.h) * TILE_SIZE;
-            const dx = Math.max(roomMinX - px, 0, px - roomMaxX);
-            const dy = Math.max(roomMinY - py, 0, py - roomMaxY);
-            const distTiles = Math.hypot(dx, dy) / TILE_SIZE;
-            if (distTiles <= 5) {
-              // Teleport to room center
-              player.x = roomCenterX - TILE_SIZE * 0.5;
-              player.y = roomCenterY - TILE_SIZE * 0.5;
-            }
+      const humanInRoom = this.isEntityInRoom(human, state.bounds);
+      const catInRoom = this.isEntityInRoom(cat, state.bounds);
+
+      // Resolve fight-aborted state: boss alive but no conscious players were in room.
+      // If anyone re-enters, revive the knocked-out companion and restart the fight.
+      if (state.fightAborted) {
+        if (!bossAlive) {
+          // Boss died while aborted (e.g. ranged kill from hallway) — mark defeated.
+          state.fightAborted = false;
+          state.defeated = true;
+          state.defeatTimer = 300;
+          this.humanIsInsider[i] = false;
+          this.catIsInsider[i] = false;
+          this.miniMap.revealBossNeighborhood(state.bounds);
+          this.vomitProjectiles.length = 0;
+          this.acidPuddles.length = 0;
+        } else if (humanInRoom || catInRoom) {
+          // Player entered to revive companion — reset insider state, start fresh.
+          state.fightAborted = false;
+          this.humanIsInsider[i] = humanInRoom;
+          this.catIsInsider[i] = catInRoom;
+          if (!human.isAlive && humanInRoom) {
+            human.hp = Math.max(1, Math.floor(human.maxHp * 0.3));
+            human.isKnockedOut = false;
+            human.knockedOutFrames = 0;
+            human.reviveProgress = 0;
           }
+          if (!cat.isAlive && catInRoom) {
+            cat.hp = Math.max(1, Math.floor(cat.maxHp * 0.3));
+            cat.isKnockedOut = false;
+            cat.knockedOutFrames = 0;
+            cat.reviveProgress = 0;
+          }
+        }
+        continue;
+      }
+
+      // Start a new fight when a player enters a room with a living boss.
+      if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
+        state.locked = true;
+        state.entryWindowTimer = ENTRY_WINDOW_FRAMES;
+        this.humanIsInsider[i] = humanInRoom;
+        this.catIsInsider[i] = catInRoom;
+        if (!this.enteredRooms.has(i)) {
+          this.enteredRooms.add(i);
+          this.newlyLockedBossType = this.bossTypes[i] ?? 'the_hoarder';
         }
       }
 
-      if (state.locked && !bossAlive) {
+      if (!state.locked) {
+        // Room is open — track outside positions in case a fight starts next frame.
+        this.humanLastOutside[i] = { x: human.x, y: human.y };
+        this.catLastOutside[i] = { x: cat.x, y: cat.y };
+        continue;
+      }
+
+      // --- Fight in progress ---
+
+      // Tick the entry window.
+      if (state.entryWindowTimer > 0) state.entryWindowTimer--;
+
+      const entryWindowOpen = state.entryWindowTimer > 0;
+
+      // The inactive (AI-controlled) companion knocked out inside counts as an
+      // exception: the active player may enter at any time to revive them.
+      const inactivePlayer = human.isActive ? cat : human;
+      const companionDownInRoom =
+        !inactivePlayer.isAlive && this.isEntityInRoom(inactivePlayer, state.bounds);
+
+      // Handle each player's inside/outside status.
+      for (const [player, lastOutside, isInsider] of [
+        [human, this.humanLastOutside, 'humanIsInsider'] as const,
+        [cat, this.catLastOutside, 'catIsInsider'] as const,
+      ]) {
+        const inRoom = this.isEntityInRoom(player, state.bounds);
+        if (inRoom) {
+          if (this[isInsider][i]) {
+            // Already a legitimate insider — keep them clamped in.
+            this.clampToBossRoom(player, state.bounds);
+          } else if (entryWindowOpen || companionDownInRoom) {
+            // Entering during the window or companion-down exception — welcome them in.
+            this[isInsider][i] = true;
+            this.clampToBossRoom(player, state.bounds);
+          } else {
+            // Entry window closed, no exception — push back to last outside position.
+            const prev = lastOutside[i];
+            if (prev !== null) {
+              const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
+              const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+              if (this.gameMap.isWalkable(prevTx, prevTy)) {
+                player.x = prev.x;
+                player.y = prev.y;
+              }
+            }
+          }
+        } else {
+          // Outside the room — track position for potential push-back.
+          lastOutside[i] = { x: player.x, y: player.y };
+        }
+      }
+
+      // Boss defeated normally.
+      if (!bossAlive) {
         state.locked = false;
         state.defeated = true;
         state.defeatTimer = 300;
+        this.humanIsInsider[i] = false;
+        this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
-        // Kill all cockroaches and clear acid hazards when boss is defeated
         for (const mob of mobs) {
           if (mob instanceof Cockroach && mob.isAlive) {
             mob.hp = 0;
@@ -198,11 +295,21 @@ export class BossRoomSystem implements GameSystem {
         }
         this.vomitProjectiles.length = 0;
         this.acidPuddles.length = 0;
+        continue;
       }
 
-      if (state.locked) {
-        this.clampToBossRoom(human, state.bounds);
-        this.clampToBossRoom(cat, state.bounds);
+      // Fight abort: boss still alive but no conscious players remain in the room.
+      const humanConscious = humanInRoom && human.isAlive && !human.isKnockedOut;
+      const catConscious = catInRoom && cat.isAlive && !cat.isKnockedOut;
+      if (boss && !humanConscious && !catConscious) {
+        state.locked = false;
+        state.fightAborted = true;
+        this.humanIsInsider[i] = false;
+        this.catIsInsider[i] = false;
+        boss.hp = boss.maxHp;
+        this.vomitProjectiles.length = 0;
+        this.acidPuddles.length = 0;
+        continue;
       }
     }
 
@@ -651,7 +758,8 @@ export class BossRoomSystem implements GameSystem {
       ctx.save();
       const pulse = 0.55 + 0.25 * Math.sin(state.pulse * 0.12);
       ctx.globalAlpha = pulse;
-      ctx.strokeStyle = '#ef4444';
+      // Yellow border while entry window is open; red once it closes.
+      ctx.strokeStyle = state.entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
       ctx.lineWidth = 3;
       ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
       ctx.lineWidth = 2;
@@ -758,6 +866,19 @@ export class BossRoomSystem implements GameSystem {
         size: 12,
         bold: true,
         color: '#4ade80',
+        align: 'center',
+      });
+    }
+
+    // Entry window countdown — shown while fight is active and window is still open.
+    if (relevantState.locked && relevantState.entryWindowTimer > 0) {
+      const seconds = Math.ceil(relevantState.entryWindowTimer / 60);
+      drawText(ctx, `Entry closes in ${seconds}s`, {
+        x: canvas.width / 2,
+        y: barY + barH + 6,
+        size: 11,
+        bold: true,
+        color: '#fbbf24',
         align: 'center',
       });
     }

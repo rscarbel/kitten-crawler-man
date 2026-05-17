@@ -559,8 +559,41 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('chest_unlocked_in_treasure_room');
     });
 
+    this.spawnArenaEquipment();
     this.wireEventBus();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
+  }
+
+  private spawnArenaEquipment(): void {
+    if (this.gameMap.arenaExteriors.length === 0) return;
+    const arena = this.gameMap.arenaExteriors[0];
+    const door = arena.doorTile;
+    // Arena door is always at the south end (doorY = centreY + radius).
+    // Place gym items inside the arena near the entrance so players can
+    // collect and place barriers before the BoS fight starts.
+    const candidates: Array<{
+      x: number;
+      y: number;
+      id: 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
+    }> = [
+      { x: door.x - 2, y: door.y - 3, id: 'gym_dumbbell' },
+      { x: door.x + 1, y: door.y - 3, id: 'gym_dumbbell' },
+      { x: door.x - 2, y: door.y - 6, id: 'gym_dumbbell' },
+      { x: door.x + 1, y: door.y - 6, id: 'gym_dumbbell' },
+      { x: door.x - 1, y: door.y - 9, id: 'gym_bench_press' },
+      { x: door.x, y: door.y - 12, id: 'gym_treadmill' },
+    ];
+    for (const { x, y, id } of candidates) {
+      if (this.gameMap.isWalkable(x, y)) {
+        this.loot.addLoot(
+          x * TILE_SIZE,
+          y * TILE_SIZE,
+          { coins: 0, items: [{ id, quantity: 1 }] },
+          this.human,
+          true,
+        );
+      }
+    }
   }
 
   private wireEventBus(): void {

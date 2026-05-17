@@ -87,13 +87,21 @@ export class ArenaSystem implements GameSystem {
       const humanInside = Math.hypot(human.x - cx, human.y - cy) < innerRadius;
       const catInside = Math.hypot(cat.x - cx, cat.y - cy) < innerRadius;
 
-      if (!this.arenaLocked && bos.isAlive && (humanInside || catInside)) {
+      // Use hp > 0 (not isAlive) because BallOfSwine overrides isAlive to return
+      // true during its burst animation even after hp hits 0, which would
+      // re-lock the door every frame after the Tuskling phase unlocks it.
+      if (
+        !this.arenaLocked &&
+        bos.hp > 0 &&
+        !this.arenaStairwellUnlocked &&
+        (humanInside || catInside)
+      ) {
         this.arenaLocked = true;
         this.gameMap.lockArenaDoor();
         this.bossRoom.newlyLockedBossType = 'ball_of_swine';
       }
 
-      if (this.arenaLocked && !bos.isAlive && !this.arenaPhase2Active) {
+      if (this.arenaLocked && bos.hp === 0 && !this.arenaPhase2Active) {
         this.arenaLocked = false;
         this.gameMap.unlockArenaDoor();
       }
