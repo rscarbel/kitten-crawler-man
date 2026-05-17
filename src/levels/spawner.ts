@@ -1,5 +1,6 @@
 import { type GameMap } from '../map/GameMap';
 import { type Mob } from '../creatures/Mob';
+import type { TreasureRoomData } from '../map/DungeonGenerator';
 import { Goblin } from '../creatures/Goblin';
 import { Llama } from '../creatures/Llama';
 import { Rat } from '../creatures/Rat';
@@ -197,6 +198,48 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
     mobs.push(createMob(bossEntry.type, brData.centre.x, brData.centre.y, map));
+  }
+
+  return mobs;
+}
+
+/**
+ * Spawn extra mobs for rooms that contain a treasure chest.
+ * These rooms have slightly more enemies (3 extra) at a higher level to make the chest feel earned.
+ */
+export function spawnTreasureRoomMobs(
+  treasureRooms: TreasureRoomData[],
+  def: LevelDef,
+  map: GameMap,
+): Mob[] {
+  const mobs: Mob[] = [];
+  if (def.roomMobs.length === 0) return mobs;
+
+  for (const room of treasureRooms) {
+    const { x, y, w, h } = room.bounds;
+    const minTX = x + 1;
+    const minTY = y + 1;
+    const maxTX = x + w - 2;
+    const maxTY = y + h - 2;
+
+    for (let i = 0; i < 3; i++) {
+      const rule = pickRule(def.roomMobs);
+      let tx = room.centre.x;
+      let ty = room.centre.y;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const cx = randomInt(minTX, maxTX);
+        const cy = randomInt(minTY, maxTY);
+        if (map.isWalkable(cx, cy)) {
+          tx = cx;
+          ty = cy;
+          break;
+        }
+      }
+      const mob = createMob(rule.type, tx, ty, map);
+      const maxLevel = rule.maxLevel ?? rule.minLevel ?? 1;
+      mob.applyMobLevel(Math.min(maxLevel + 1, 20));
+      mobs.push(mob);
+    }
   }
 
   return mobs;

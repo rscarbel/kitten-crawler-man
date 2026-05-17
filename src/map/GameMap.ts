@@ -33,7 +33,12 @@ import {
   MODERN_DECORATION,
   WALKABLE_MODERN_DECORATION_VARIANTS,
 } from './tileTypes';
-import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
+import {
+  generateDungeon,
+  type ArenaExterior,
+  type QuestRoomData,
+  type TreasureRoomData,
+} from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
 import {
   getBlockedTileOffsets,
@@ -93,6 +98,8 @@ export class GameMap {
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
+  /** Treasure rooms generated in the dungeon (chest encounters). */
+  treasureRooms: TreasureRoomData[] = [];
   /** Arena circles generated in the dungeon (one per dungeon map). */
   arenaExteriors: ArenaExterior[] = [];
   /** When true, the arena door gap tiles are treated as unwalkable. */
@@ -162,6 +169,7 @@ export class GameMap {
     this.safeRooms = data.safeRooms;
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
+    this.treasureRooms = data.treasureRooms;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;

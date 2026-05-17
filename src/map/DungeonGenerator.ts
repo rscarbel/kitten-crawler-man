@@ -43,12 +43,18 @@ export interface QuestRoomData {
   woodPileTile: Point;
 }
 
+export interface TreasureRoomData {
+  bounds: { x: number; y: number; w: number; h: number };
+  centre: { x: number; y: number };
+}
+
 export interface DungeonData {
   grid: TileContent[][];
   startTile: Point;
   safeRooms: Array<{ bounds: Rect; centre: Point }>;
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   questRooms: QuestRoomData[];
+  treasureRooms: TreasureRoomData[];
   mobSpawnPoints: Array<Point & { w: number; h: number }>;
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
@@ -601,6 +607,57 @@ export function generateDungeon(
     carveHallway(fc.x, fc.y, tc.x, tc.y, kind, floorType);
   }
 
+  // ── Dead-end rescue connections ───────────────────────────────────────────
+  //
+  // Leaf rooms (MST degree 1) that are far from the start have only one exit.
+  // Walking in and hitting a dead end forces long backtracking through already-
+  // cleared areas. For each distant leaf we carve a narrow shortcut to the
+  // nearest other regular room, converting the dead end into a loop.
+
+  const mstDegree = new Array<number>(rooms.length).fill(0);
+  for (const edge of mstEdges) {
+    mstDegree[edge.from]++;
+    mstDegree[edge.to]++;
+  }
+  const mstParentOf = new Map<number, number>();
+  for (const edge of mstEdges) {
+    mstParentOf.set(edge.to, edge.from);
+  }
+
+  const DEADEND_MIN_DIST_FROM_START = 18;
+  const DEADEND_SHORTCUT_MIN = 10;
+  const DEADEND_SHORTCUT_MAX = 65;
+
+  for (let i = regularRoomStart; i < rooms.length; i++) {
+    if (mstDegree[i] !== 1) continue;
+    const r = rooms[i];
+    const rc = { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
+    if (Math.hypot(rc.x - sc.x, rc.y - sc.y) < DEADEND_MIN_DIST_FROM_START) continue;
+
+    const parent = mstParentOf.get(i);
+    let bestDist = Infinity;
+    let bestTargetIdx = -1;
+
+    for (let j = regularRoomStart; j < rooms.length; j++) {
+      if (j === i || j === parent) continue;
+      const tr = rooms[j];
+      const tc = { x: Math.floor(tr.x + tr.w / 2), y: Math.floor(tr.y + tr.h / 2) };
+      const dist = Math.hypot(rc.x - tc.x, rc.y - tc.y);
+      if (dist >= DEADEND_SHORTCUT_MIN && dist <= DEADEND_SHORTCUT_MAX && dist < bestDist) {
+        bestDist = dist;
+        bestTargetIdx = j;
+      }
+    }
+
+    if (bestTargetIdx !== -1) {
+      const tr = rooms[bestTargetIdx];
+      const tc = { x: Math.floor(tr.x + tr.w / 2), y: Math.floor(tr.y + tr.h / 2) };
+      const zone = getZone(tc, sc);
+      const floorType = corridorFloorForZone(zone);
+      carveHallway(rc.x, rc.y, tc.x, tc.y, 'narrow', floorType);
+    }
+  }
+
   // ── Extra loop connections ────────────────────────────────────────────────
   //
   // Adding ~20% more edges on top of the MST creates loops, giving the player
@@ -893,6 +950,30 @@ export function generateDungeon(
     h: r.h,
   }));
 
+  // Select treasure rooms from eligible regular rooms — 5% of total rooms, at least 1
+  const MIN_ROOM_SIZE = 7;
+  const treasureRoomTarget = Math.max(1, Math.round(regularRooms.length * 0.05));
+
+  const eligibleRegularRooms = regularRooms.filter(
+    (r) => r.w >= MIN_ROOM_SIZE && r.h >= MIN_ROOM_SIZE,
+  );
+  // Fisher-Yates shuffle for a uniform distribution
+  const shuffledEligible = [...eligibleRegularRooms];
+  for (let i = shuffledEligible.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledEligible[i], shuffledEligible[j]] = [shuffledEligible[j], shuffledEligible[i]];
+  }
+  const selectedTreasureRooms = shuffledEligible.slice(0, treasureRoomTarget);
+
+  const treasureRooms: TreasureRoomData[] = selectedTreasureRooms.map((r) => {
+    const cx = Math.floor(r.x + r.w / 2);
+    const cy = Math.floor(r.y + r.h / 2);
+    return {
+      bounds: { x: r.x, y: r.y, w: r.w, h: r.h },
+      centre: { x: cx, y: cy },
+    };
+  });
+
   // 10. Rat spawn points in hallway tiles
   const maxHallwaySpawns = Math.round(10 * (size / 100) ** 2);
   const roomCenters = rooms.map((r) => ({
@@ -1043,6 +1124,7 @@ export function generateDungeon(
     safeRooms,
     bossRooms,
     questRooms,
+    treasureRooms,
     mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,
     stairwellTiles: filteredStairwells,

@@ -1165,6 +1165,22 @@
       "row_5": { "row": 5, "frameCount": 10 }
     }
   },
+  "treasure_chests": {
+    "path": "environment/treasure_chests.png",
+    "frameWidth": 80,
+    "frameHeight": 80,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 80,
+    "states": {
+      "closed_wooden": { "row": 0, "frameCount": 1 },
+      "opened_wooden": { "row": 0, "frameCount": 1 },
+      "closed_silver": { "row": 0, "frameCount": 1 },
+      "opened_silver": { "row": 0, "frameCount": 1 },
+      "sparkle": { "row": 1, "frameCount": 6 },
+      "lock": { "row": 2, "frameCount": 6 }
+    }
+  },
   "overworld_main_tower": {
     "path": "environment/overworld_main_tower.png",
     "frameWidth": 183.833,

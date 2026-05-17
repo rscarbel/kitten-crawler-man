@@ -7,12 +7,12 @@ import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
-import { type Mob } from '../creatures/Mob';
+import { type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
-import { spawnForLevel, spawnExtraMobs, createMob } from '../levels/spawner';
+import { spawnForLevel, spawnExtraMobs, createMob, spawnTreasureRoomMobs } from '../levels/spawner';
 import { getLevelDef } from '../levels';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
@@ -35,6 +35,8 @@ import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
+import { TreasureChestSystem } from '../systems/TreasureChestSystem';
+import { ChestRewardDialog } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
@@ -134,6 +136,53 @@ function findFarSpawnTile(
   return null;
 }
 
+// Items with a designated owner — kept in sync with non-boss floor loot routing below
+const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
+const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
+
+function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
+  const humanItems: LootDrop['items'] = [];
+  const catItems: LootDrop['items'] = [];
+  const singlePool: LootDrop['items'] = [];
+
+  for (const item of loot.items) {
+    if (FORCED_TO_HUMAN.has(item.id)) {
+      humanItems.push({ ...item });
+    } else if (FORCED_TO_CAT.has(item.id)) {
+      catItems.push({ ...item });
+    } else if (item.quantity === 1) {
+      singlePool.push({ ...item });
+    } else {
+      // Split stacks evenly; extra goes to random player
+      const half = Math.floor(item.quantity / 2);
+      const extra = item.quantity - half * 2;
+      const humanGetsExtra = extra > 0 && Math.random() < 0.5;
+      humanItems.push({ id: item.id, quantity: half + (humanGetsExtra ? extra : 0) });
+      catItems.push({ id: item.id, quantity: half + (humanGetsExtra ? 0 : extra) });
+    }
+  }
+
+  // Fisher-Yates shuffle, then round-robin distribute single items
+  for (let i = singlePool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [singlePool[i], singlePool[j]] = [singlePool[j], singlePool[i]];
+  }
+  singlePool.forEach((item, i) => {
+    if (i % 2 === 0) humanItems.push(item);
+    else catItems.push(item);
+  });
+
+  // Split coins; odd coin goes to random player
+  const halfCoins = Math.floor(loot.coins / 2);
+  const extraCoin = loot.coins - halfCoins * 2;
+  const humanGetsExtraCoin = extraCoin > 0 && Math.random() < 0.5;
+
+  return {
+    humanLoot: { coins: halfCoins + (humanGetsExtraCoin ? extraCoin : 0), items: humanItems },
+    catLoot: { coins: halfCoins + (humanGetsExtraCoin ? 0 : extraCoin), items: catItems },
+  };
+}
+
 export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
   readonly pm: PlayerManager;
@@ -180,6 +229,8 @@ export class DungeonScene extends GameplayScene {
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
 
   private arena!: ArenaSystem;
+  private readonly treasureChests = new TreasureChestSystem();
+  private readonly chestRewardDialog = new ChestRewardDialog();
 
   private floorEntryHumanSnap!: PlayerSnapshot;
   private floorEntryCatSnap!: PlayerSnapshot;
@@ -273,6 +324,16 @@ export class DungeonScene extends GameplayScene {
 
     this.mobs = spawnForLevel(levelDef, this.gameMap);
     this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
+
+    // Treasure room mobs (extra enemies guarding wooden chests)
+    if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
+      const treasureMobs = spawnTreasureRoomMobs(
+        this.gameMap.treasureRooms,
+        levelDef,
+        this.gameMap,
+      );
+      this.mobs.push(...treasureMobs);
+    }
 
     if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
       const spiderTile = findFarSpawnTile(this.gameMap, sx, sy, 60);
@@ -450,6 +511,46 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.audio = options?.audio ?? null;
     this.pauseMenu.audio = this.audio;
+
+    // Boss chests — placed 2 tiles above each boss room centre
+    this.gameMap.bossRooms.forEach((br, i) => {
+      this.treasureChests.addBossChest(br.centre.x, br.centre.y - 2, i);
+    });
+
+    // Wooden chests for treasure rooms
+    for (const tr of this.gameMap.treasureRooms) {
+      const coins = randomInt(15, 50);
+      const items: Array<{ id: 'health_potion' | 'scroll_of_confusing_fog'; quantity: number }> =
+        [];
+      const roll = Math.random();
+      if (roll < 0.4) {
+        items.push({ id: 'health_potion', quantity: randomInt(1, 2) });
+      } else if (roll < 0.6) {
+        items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+      }
+      this.treasureChests.addWoodenChest(tr.centre.x, tr.centre.y, tr.bounds, {
+        coins,
+        items,
+      });
+    }
+
+    // Wire chest opened callback
+    this.treasureChests.setOnOpen((chest) => {
+      const split = chest.loot !== null ? splitChestLoot(chest.loot) : null;
+      if (split !== null) {
+        for (const item of split.humanLoot.items) {
+          this.human.inventory.addItem(item.id, item.quantity);
+        }
+        this.human.coins += split.humanLoot.coins;
+        for (const item of split.catLoot.items) {
+          this.cat.inventory.addItem(item.id, item.quantity);
+        }
+        this.cat.coins += split.catLoot.coins;
+      }
+      this.chestRewardDialog.open(chest, split);
+      this.audio?.play('opening_treasure_chest');
+    });
+
     this.wireEventBus();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
@@ -499,27 +600,46 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (mob.droppedLoot && topDamageDealer) {
-        const FORCED_TO_HUMAN = new Set(['trollskin_shirt']);
-        const FORCED_TO_CAT = new Set(['enchanted_crown_sepsis_whore']);
-        const mainItems = mob.droppedLoot.items.filter(
-          (it) => !FORCED_TO_HUMAN.has(it.id) && !FORCED_TO_CAT.has(it.id),
-        );
-        const humanItems = mob.droppedLoot.items.filter((it) => FORCED_TO_HUMAN.has(it.id));
-        const catItems = mob.droppedLoot.items.filter((it) => FORCED_TO_CAT.has(it.id));
-        if (mainItems.length > 0 || mob.droppedLoot.coins > 0) {
-          this.loot.addLoot(
-            cx,
-            cy,
-            { coins: mob.droppedLoot.coins, items: mainItems },
-            topDamageDealer,
-            mob.isBoss,
+        if (mob.isBoss) {
+          // Boss loot goes into the boss chest, not the floor
+          const mobTileX = Math.round(mob.x / TILE_SIZE);
+          const mobTileY = Math.round(mob.y / TILE_SIZE);
+          const bossRoomIdx = this.gameMap.bossRooms.findIndex(
+            (br) =>
+              mobTileX >= br.bounds.x &&
+              mobTileX < br.bounds.x + br.bounds.w &&
+              mobTileY >= br.bounds.y &&
+              mobTileY < br.bounds.y + br.bounds.h,
           );
-        }
-        if (humanItems.length > 0) {
-          this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, mob.isBoss);
-        }
-        if (catItems.length > 0) {
-          this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, mob.isBoss);
+          if (bossRoomIdx >= 0) {
+            this.treasureChests.receiveBossLoot(bossRoomIdx, mob.droppedLoot);
+          } else {
+            // Fallback: drop normally if no matching boss room
+            if (mob.droppedLoot.coins > 0 || mob.droppedLoot.items.length > 0) {
+              this.loot.addLoot(cx, cy, mob.droppedLoot, topDamageDealer, true);
+            }
+          }
+        } else {
+          const mainItems = mob.droppedLoot.items.filter(
+            (it) => !FORCED_TO_HUMAN.has(it.id) && !FORCED_TO_CAT.has(it.id),
+          );
+          const humanItems = mob.droppedLoot.items.filter((it) => FORCED_TO_HUMAN.has(it.id));
+          const catItems = mob.droppedLoot.items.filter((it) => FORCED_TO_CAT.has(it.id));
+          if (mainItems.length > 0 || mob.droppedLoot.coins > 0) {
+            this.loot.addLoot(
+              cx,
+              cy,
+              { coins: mob.droppedLoot.coins, items: mainItems },
+              topDamageDealer,
+              false,
+            );
+          }
+          if (humanItems.length > 0) {
+            this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, false);
+          }
+          if (catItems.length > 0) {
+            this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, false);
+          }
         }
         mob.droppedLoot = null;
       }
@@ -643,6 +763,7 @@ export class DungeonScene extends GameplayScene {
         this.defendQuest.isDialogOpen ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
+      dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
         if (this.playerChat.isOpen) {
           this.playerChat.cancel();
@@ -1149,6 +1270,10 @@ export class DungeonScene extends GameplayScene {
       }
       return;
     }
+    // Chest interaction
+    if (this.treasureChests.tryInteract(active)) {
+      return;
+    }
     if (this.defendQuest.tryInteract(active)) {
       return;
     }
@@ -1226,6 +1351,10 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
+    if (this.chestRewardDialog.isOpen) {
+      this.chestRewardDialog.handleClick(mx, my);
+      return;
+    }
     if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.achievementUI.handleClick(mx, my)) return;
@@ -1338,6 +1467,21 @@ export class DungeonScene extends GameplayScene {
     const { x: camX, y: camY } = this.camera();
     if (this.loot.tryCollectLootAt(mx, my, camX, camY, active)) return;
 
+    // Click on an unlocked chest in the world to open it
+    for (const chest of this.treasureChests.allChests) {
+      if (chest.state !== 'unlocked') continue;
+      const chestScreenX = chest.tileX * TILE_SIZE - camX;
+      const chestScreenY = chest.tileY * TILE_SIZE - camY;
+      if (
+        mx >= chestScreenX &&
+        mx <= chestScreenX + TILE_SIZE &&
+        my >= chestScreenY &&
+        my <= chestScreenY + TILE_SIZE
+      ) {
+        if (this.treasureChests.tryInteract(active)) return;
+      }
+    }
+
     const pb = UIRenderer.pauseButtonRect(this.sceneManager.canvas, this.miniMap);
     if (pointInRect(mx, my, pb)) {
       this.pauseMenu.toggle();
@@ -1383,6 +1527,11 @@ export class DungeonScene extends GameplayScene {
     this.playerChat.update();
     this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
+    this.chestRewardDialog.tick();
+    if (this.chestRewardDialog.rewardSoundPending) {
+      this.chestRewardDialog.rewardSoundPending = false;
+      this.audio?.play('treasure_chest_reward');
+    }
 
     // Only tick once audio is ready so the intro visual and sound start together.
     if (this.introStarted) {
@@ -1398,6 +1547,7 @@ export class DungeonScene extends GameplayScene {
       this.gameOver ||
       this.abilityLevelUpDialog.isShowing ||
       this.pauseMenu.isOpen ||
+      this.chestRewardDialog.isOpen ||
       this.stairwell.menuOpen ||
       this.levelCompleteScreen.isActive ||
       this.building?.menuOpen ||
@@ -1503,6 +1653,7 @@ export class DungeonScene extends GameplayScene {
     this.arena.render(ctx, canvas, this.active());
 
     this.loot.render(ctx, camX, camY, this.active());
+    this.treasureChests.render(ctx, camX, camY, this.active());
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const active = this.active();
@@ -1629,6 +1780,10 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.achievementUI.renderOverlays(ctx, canvas);
+
+    if (this.chestRewardDialog.isOpen) {
+      this.chestRewardDialog.render(ctx, canvas);
+    }
 
     this.abilityLevelUpDialog.render(ctx, canvas);
 
@@ -1983,6 +2138,7 @@ export class DungeonScene extends GameplayScene {
 
     this.playerTick.update(ctx);
     this.loot.update(ctx);
+    this.treasureChests.update(this.mobs);
     if (this.loot.drainPickups() > 0) {
       this.audio?.playRandom(['pickup_1', 'pickup_2']);
     }

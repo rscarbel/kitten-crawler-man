@@ -84,6 +84,8 @@ const SOUND_IDS_TUPLE = [
   'human_smush',
   'reviving_tone',
   'error',
+  'opening_treasure_chest',
+  'treasure_chest_reward',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -182,4 +184,6 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   human_smush: './src/audio/characters/human/smush.mp3',
   reviving_tone: './src/audio/characters/reviving_tone.mp3',
   error: './src/audio/events/error.mp3',
+  opening_treasure_chest: './src/audio/events/opening-treasure-chest.mp3',
+  treasure_chest_reward: './src/audio/events/treasure-chest-reward.mp3',
 };

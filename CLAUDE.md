@@ -33,3 +33,5 @@ Before considering work complete, **both checks must pass**:
 2. **Lint:** `npm run lint` — must exit 0 with no errors.
 
 Run these after making changes. If any gate fails, fix the issue before proceeding. Do not skip or ignore failures.
+
+In addition to the checks, make sure the code has been formatted: `npm run format`

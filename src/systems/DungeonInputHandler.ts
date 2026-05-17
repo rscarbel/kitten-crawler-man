@@ -13,6 +13,7 @@ export interface DungeonInputActions {
   isGameOver(): boolean;
 
   // Escape-level actions
+  dismissChestDialog(): boolean;
   dismissDialog(): boolean;
   dismissStairwell(): boolean;
   dismissBuilding(): boolean;
@@ -49,6 +50,7 @@ export class DungeonInputHandler {
     this.escHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
+      if (actions.dismissChestDialog()) return;
       if (actions.dismissDialog()) return;
       if (actions.dismissStairwell()) return;
       if (actions.dismissBuilding()) return;
@@ -59,6 +61,7 @@ export class DungeonInputHandler {
     };
 
     this.actionHandler = (e: KeyboardEvent) => {
+      if (!e.repeat && actions.dismissChestDialog()) return;
       if (actions.isSuppressed()) return;
 
       if (e.key === 'Enter' && !e.repeat) {
