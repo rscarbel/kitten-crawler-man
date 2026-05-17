@@ -3,6 +3,7 @@ import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawBox } from '../Box';
+import { platform } from '../../core/Platform';
 
 function renderVolumeSlider(
   ctx: CanvasRenderingContext2D,
@@ -70,6 +71,9 @@ export function renderSettingsTab(
   bh: number,
   audio: AudioManager,
   setTab: (tab: PauseTab) => void,
+  catMissileDefault: boolean,
+  setCatMissileDefault: (v: boolean) => void,
+  onOpenChat: (() => void) | null,
 ): void {
   void bh;
 
@@ -106,6 +110,60 @@ export function renderSettingsTab(
     audio.setSfxVolume(v),
   );
   y += 52;
+
+  if (platform.isMobile) {
+    drawText(ctx, 'Mobile Controls', {
+      x: bx + 20,
+      y: y + 16,
+      bold: true,
+      size: 12,
+      color: '#64748b',
+    });
+    y += 32;
+
+    drawText(ctx, 'Cat Tap', {
+      x: bx + 20,
+      y: y + 13,
+      size: 11,
+      color: '#94a3b8',
+    });
+    y += 26;
+
+    const halfW = Math.floor((sliderW - 8) / 2);
+
+    addButton(ctx, buttons, {
+      x: sliderX,
+      y,
+      width: halfW,
+      height: 36,
+      label: 'Scratch',
+      ...(!catMissileDefault ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      action: () => setCatMissileDefault(false),
+    });
+    addButton(ctx, buttons, {
+      x: sliderX + halfW + 8,
+      y,
+      width: halfW,
+      height: 36,
+      label: 'Magic Missile',
+      ...(catMissileDefault ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      action: () => setCatMissileDefault(true),
+    });
+    y += 48;
+
+    if (onOpenChat !== null) {
+      addButton(ctx, buttons, {
+        x: sliderX,
+        y,
+        width: sliderW,
+        height: 40,
+        label: 'Send Chat',
+        ...BUTTON_PRESETS.primary,
+        action: onOpenChat,
+      });
+      y += 52;
+    }
+  }
 
   addButton(ctx, buttons, {
     x: sliderX,

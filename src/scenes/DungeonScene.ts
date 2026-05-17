@@ -514,6 +514,10 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.audio = options?.audio ?? null;
     this.pauseMenu.audio = this.audio;
+    this.pauseMenu.onOpenChat = () => {
+      this.pauseMenu.close();
+      this.triggerOpenChat();
+    };
     this.deathScreen.audio = this.audio;
     this.abilityLevelUpDialog.audio = this.audio;
 
@@ -1363,7 +1367,11 @@ export class DungeonScene extends GameplayScene {
       this.human.triggerAttack();
     } else {
       this.companion.snapFacingToNearestMob(this.cat, TILE_SIZE * 5, this.mobGrid);
-      this.cat.triggerAttack();
+      if (this.pauseMenu.catMissileDefault && this.cat.triggerMissile()) {
+        this.audio?.play('cat_missile_fire');
+      } else {
+        this.cat.triggerAttack();
+      }
     }
   }
 

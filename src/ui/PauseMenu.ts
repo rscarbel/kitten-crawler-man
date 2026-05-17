@@ -21,6 +21,7 @@ import {
 import { renderSettingsTab } from './pause/SettingsTab';
 import { pointInRect } from '../utils';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
+import { platform } from '../core/Platform';
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -40,6 +41,12 @@ export class PauseMenu {
 
   /** Set by the owning scene so the Settings tab can read/write volumes. */
   audio: AudioManager | null = null;
+
+  /** On mobile: when true, tapping while cat is active fires magic missile instead of scratch. */
+  catMissileDefault = false;
+
+  /** On mobile: called by the "Send Chat" settings button to open the chat window. */
+  onOpenChat: (() => void) | null = null;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -266,7 +273,21 @@ export class PauseMenu {
       case 'settings': {
         const audioRef = this.audio;
         if (audioRef !== null) {
-          renderSettingsTab(ctx, this.buttons, boxX, boxY, boxW, boxH, audioRef, setTabWithSound);
+          renderSettingsTab(
+            ctx,
+            this.buttons,
+            boxX,
+            boxY,
+            boxW,
+            boxH,
+            audioRef,
+            setTabWithSound,
+            this.catMissileDefault,
+            (v) => {
+              this.catMissileDefault = v;
+            },
+            this.onOpenChat,
+          );
         }
         break;
       }
@@ -294,7 +315,7 @@ export class PauseMenu {
 
 const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
-const SETTINGS_BOX_H = 300;
+const SETTINGS_BOX_H = platform.isMobile ? 460 : 300;
 
 // 52px header + N buttons × 50px + 28px bottom padding
 function mainTabHeight(hasSpendButton: boolean): number {
