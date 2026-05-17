@@ -868,6 +868,10 @@ export class DungeonScene extends GameplayScene {
       spaceAction: () => this.triggerSpaceAction(),
       usePotion: () => {
         const active = this.human.isActive ? this.human : this.cat;
+        if (active.potionCooldownFrames > 0) {
+          this.audio?.play('error_taking_action');
+          return;
+        }
         const hpBefore = active.hp;
         if (active.usePotion()) {
           this.bus.emit('healingPotionUsed', {
@@ -1367,6 +1371,10 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
+      if (active.potionCooldownFrames > 0) {
+        this.audio?.play('error_taking_action');
+        return;
+      }
       const hpBefore = active.hp;
       if (active.usePotion()) {
         const playerName = active === this.human ? 'Human' : 'Cat';

@@ -3,6 +3,10 @@ import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
 
+const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75 as const;
+const DENOMINATOR_OFFSET = 30 as const;
+const NUMERATOR_ASYMPTOTE_SLOPE = 3 as const;
+
 export abstract class Player {
   x: number;
   y: number;
@@ -29,6 +33,8 @@ export abstract class Player {
   /** Gold coins collected — displayed in the inventory panel. */
   coins = 0;
   unspentPoints = 0;
+  /** Frames remaining before the next potion can be used. Zero means ready. */
+  potionCooldownFrames = 0;
 
   /** Computed count of health potions across inventory + hotbar. */
   get healthPotions(): number {
@@ -81,11 +87,22 @@ export abstract class Player {
     this.damageFlash = 8;
   }
 
-  /** Drink a health potion — heals 50 % of max HP. Returns false if none available. */
+  /** Returns the potion cooldown in frames for the current constitution level. */
+  computePotionCooldown(): number {
+    const rechargeNumerator = NUMERATOR_ASYMPTOTE_SLOPE * this.constitution;
+    const rechargeDenominator = this.constitution + DENOMINATOR_OFFSET;
+    const cooldownReduction = rechargeNumerator / rechargeDenominator;
+    const cooldownSeconds = DEFAULT_POTION_COOLDOWN_SECONDS - cooldownReduction;
+    return Math.round(cooldownSeconds * 60);
+  }
+
+  /** Drink a health potion — heals 50 % of max HP. Returns false if none available or on cooldown. */
   usePotion(): boolean {
     if (this.hp >= this.maxHp) return false;
+    if (this.potionCooldownFrames > 0) return false;
     if (!this.inventory.removeOne('health_potion')) return false;
     this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * 0.5));
+    this.potionCooldownFrames = this.computePotionCooldown();
     return true;
   }
 
@@ -233,6 +250,7 @@ export abstract class Player {
   tickTimers() {
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;
+    if (this.potionCooldownFrames > 0) this.potionCooldownFrames--;
     if (this.isMoving) {
       this.walkFrame = (this.walkFrame + 0.14) % (Math.PI * 2);
     } else {
