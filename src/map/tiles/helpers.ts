@@ -29,6 +29,7 @@ import {
   BRAZIER,
   BONES,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -92,6 +93,7 @@ const NON_FLOOR_TYPES = new Set<number>([
   BRAZIER,
   BONES,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
 ]);
 
 /**

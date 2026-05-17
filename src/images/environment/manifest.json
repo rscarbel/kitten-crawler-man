@@ -1149,6 +1149,22 @@
       }
     }
   },
+  "modern_decorations": {
+    "path": "environment/modern_decorations.png",
+    "frameWidth": 183,
+    "frameHeight": 183,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 183,
+    "states": {
+      "row_0": { "row": 0, "frameCount": 10 },
+      "row_1": { "row": 1, "frameCount": 10 },
+      "row_2": { "row": 2, "frameCount": 10 },
+      "row_3": { "row": 3, "frameCount": 10 },
+      "row_4": { "row": 4, "frameCount": 10 },
+      "row_5": { "row": 5, "frameCount": 10 }
+    }
+  },
   "overworld_main_tower": {
     "path": "environment/overworld_main_tower.png",
     "frameWidth": 183.833,

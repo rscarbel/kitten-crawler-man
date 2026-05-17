@@ -87,6 +87,39 @@ export const MAIN_TOWER = 44;
  */
 export const SPRITE_BUILDING = 45;
 
+/**
+ * A modern-era prop from the shared sprite sheet (modern_decorations.png).
+ * The tile carries a `decorationVariant` (row * 10 + col) that selects which
+ * item to render. Some variants are walkable (floor clutter), others are not.
+ */
+export const MODERN_DECORATION = 46;
+
+/**
+ * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
+ * that are walkable floor clutter — cables, rubble, flat debris, etc.
+ * All other variants are non-walkable furniture/equipment.
+ */
+export const WALKABLE_MODERN_DECORATION_VARIANTS = new Set([
+  1,
+  2,
+  3,
+  4,
+  5, // magazine stack, air vent, broken tiles, cable coil, cable bundle
+  13,
+  18,
+  19, // chair base, cable pile, power strip
+  29, // concrete rubble pile
+  36,
+  39, // open empty box, broken concrete chunks
+  43,
+  44,
+  47,
+  48,
+  49, // paper tray, newspaper stack, book stack, cable coil, white rubble
+  56,
+  57, // broken tile pile, rock debris pile
+]);
+
 export type FloorTile = (typeof FLOOR_TYPES)[number];
 
 export const FloorTypeValue = {
@@ -105,4 +138,6 @@ export type TileContent = {
   type: number;
   /** Set on SPRITE_BUILDING tiles to select which PNG sprite to render. */
   spriteKey?: string;
+  /** Set on MODERN_DECORATION tiles: row * 10 + col within modern_decorations.png. */
+  decorationVariant?: number;
 };

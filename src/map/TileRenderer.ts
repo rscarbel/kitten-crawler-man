@@ -15,6 +15,7 @@ import {
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
 } from './tileTypes';
 import { frameTime } from '../utils';
 
@@ -48,6 +49,7 @@ const DECORATION_TYPES = new Set([
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
 ]);
 
 /**

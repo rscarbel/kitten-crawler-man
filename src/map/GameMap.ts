@@ -30,6 +30,8 @@ import {
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
+  WALKABLE_MODERN_DECORATION_VARIANTS,
 } from './tileTypes';
 import { generateDungeon, type ArenaExterior, type QuestRoomData } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
@@ -895,6 +897,9 @@ export class GameMap {
     const tile = row[tileX];
     if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
     if (this.extraBlockedTiles.has(`${tileX},${tileY}`)) return false;
+    if (tile.type === MODERN_DECORATION) {
+      return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
+    }
     return (
       tile.type !== FloorTypeValue.wall &&
       tile.type !== FloorTypeValue.water &&
@@ -1037,6 +1042,9 @@ export class GameMap {
           const sortY =
             def !== undefined ? (def.frameHeight - def.tileY) * (ts / def.tileScale) : ts;
           result.push({ tx: x, ty: y, isTree: false, sortYAnchorPx: sortY });
+        } else if (t === MODERN_DECORATION) {
+          // modern_decorations: 183×183 at tileScale=183 → renders at 1 tile; anchor at bottom
+          result.push({ tx: x, ty: y, isTree: false, sortYAnchorPx: ts });
         }
       }
     }

@@ -13,6 +13,7 @@ import {
   BONES,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  MODERN_DECORATION,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import {
@@ -51,7 +52,8 @@ export function drawDecorationTile(
       case FOUNTAIN:
       case BRAZIER:
       case MAIN_TOWER:
-      case SPRITE_BUILDING: {
+      case SPRITE_BUILDING:
+      case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
           drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
@@ -581,6 +583,24 @@ export function drawDecorationTile(
       const stateDef = def.states.get('idle');
       if (stateDef === undefined) return true;
       drawSprite(ctx, def, stateDef, 0, sx, sy, ts);
+      return true;
+    }
+
+    // Modern prop from the shared modern_decorations sprite sheet.
+    // decorationVariant = row * 10 + col selects the specific item.
+    case MODERN_DECORATION: {
+      const variant = structure[ty][tx].decorationVariant ?? 0;
+      const row = Math.floor(variant / 10);
+      const col = variant % 10;
+      const def = getSpriteDefByKey('modern_decorations');
+      if (def === undefined) return true;
+      const stateDef = def.states.get(`row_${row}`);
+      if (stateDef === undefined) return true;
+      const floorType = inferFloorType(structure, tx, ty);
+      if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
+        drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
+      }
+      drawSprite(ctx, def, stateDef, col, sx, sy, ts);
       return true;
     }
 
