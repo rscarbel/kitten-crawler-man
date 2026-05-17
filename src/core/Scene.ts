@@ -9,6 +9,7 @@ export abstract class Scene {
   handleMouseDown?(mx: number, my: number): void;
   handleMouseMove?(mx: number, my: number): void;
   handleMouseUp?(mx: number, my: number): void;
+  handleMouseLeave?(): void;
   handleContextMenu?(mx: number, my: number): void;
   handleWheel?(deltaY: number): void;
   handleTouchStart?(e: TouchEvent, rect: DOMRect): void;
@@ -72,6 +73,10 @@ export class SceneManager {
       if (!this.current?.handleMouseUp) return;
       const { x, y } = getPos(e);
       this.current.handleMouseUp(x, y);
+    });
+
+    this.canvas.addEventListener('mouseleave', () => {
+      this.current?.handleMouseLeave?.();
     });
 
     this.canvas.addEventListener(

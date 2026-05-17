@@ -2,6 +2,7 @@ import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
@@ -173,32 +174,30 @@ export class BuildingSystem implements GameSystem {
 
     const rects = this.menuRects(canvas);
 
-    ctx.fillStyle = '#1a4d0d';
-    ctx.fillRect(rects.enter.x, rects.enter.y, rects.enter.w, rects.enter.h);
-    ctx.strokeStyle = '#6aaa44';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(rects.enter.x, rects.enter.y, rects.enter.w, rects.enter.h);
-    drawText(ctx, 'Enter', {
-      x: rects.enter.x + rects.enter.w / 2,
-      y: rects.enter.y + 27 - 11,
-      size: 14,
-      bold: true,
-      color: '#d4edaa',
-      align: 'center',
+    drawButton(ctx, {
+      x: rects.enter.x,
+      y: rects.enter.y,
+      width: rects.enter.w,
+      height: rects.enter.h,
+      label: 'Enter',
+      fill: '#1a4d0d',
+      border: '#6aaa44',
+      borderWidth: 1.5,
+      radius: 4,
+      labelSize: 14,
+      labelColor: '#d4edaa',
     });
 
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    drawText(ctx, 'Leave', {
-      x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + 27 - 11,
-      size: 14,
-      bold: true,
-      color: '#94a3b8',
-      align: 'center',
+    drawButton(ctx, {
+      x: rects.stay.x,
+      y: rects.stay.y,
+      width: rects.stay.w,
+      height: rects.stay.h,
+      label: 'Leave',
+      ...BUTTON_PRESETS.primary,
+      border: '#475569',
+      labelSize: 14,
+      labelColor: '#94a3b8',
     });
   }
 

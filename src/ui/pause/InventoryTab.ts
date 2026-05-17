@@ -1,6 +1,7 @@
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 
 export function renderInventoryTab(
@@ -38,5 +39,13 @@ export function renderInventoryTab(
     color: '#e2e8f0',
   });
 
-  menuBtn(ctx, buttons, bx + 20, by + 268, bw - 40, 36, 'Back', () => setTab('main'));
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: by + 268,
+    width: bw - 40,
+    height: 36,
+    label: 'Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('main'),
+  });
 }

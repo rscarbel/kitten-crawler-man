@@ -1,9 +1,10 @@
 import { type Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, drawButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
-import { drawBox, drawDivider, drawScrollbar } from '../Box';
+import { drawDivider, drawScrollbar } from '../Box';
 
 type StatDef = {
   key: 'STR' | 'INT' | 'CON' | 'EXP';
@@ -150,22 +151,18 @@ function renderStatCard(
     const btnLocalY = localY + 40;
     const btnScreenY = btnLocalY + scrollTop - scrollY;
 
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: btnLocalX,
       y: btnLocalY,
       width: BTN_W,
       height: BTN_H,
+      label: '+',
       fill: stat.cardBg,
       border: stat.accent,
       borderWidth: 1.5,
-    });
-    drawText(ctx, '+', {
-      x: btnLocalX + BTN_W / 2,
-      y: btnLocalY + (BTN_H - 14) / 2,
-      bold: true,
-      size: 14,
-      color: stat.accent,
-      align: 'center',
+      radius: 4,
+      labelSize: 14,
+      labelColor: stat.accent,
     });
 
     if (btnLocalY + BTN_H > scrollY && btnLocalY < scrollY + scrollH) {
@@ -306,7 +303,15 @@ export function renderSpendTab(
   });
 
   const btnY = by + bh - BACK_BTN_H + 8;
-  menuBtn(ctx, buttons, bx + 20, btnY, bw - 40, 36, 'Back', () => setTab('main'));
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: btnY,
+    width: bw - 40,
+    height: 36,
+    label: 'Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('main'),
+  });
 
   return contentHeight;
 }

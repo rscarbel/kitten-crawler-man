@@ -17,6 +17,7 @@ import type { InventoryPanel } from '../ui/InventoryPanel';
 import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
 import { drawText } from '../ui/TextBox';
+import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -40,17 +41,14 @@ export function drawPauseButton(
 ): void {
   if (gameOver || pauseOpen) return;
   const pb = pauseButtonRect(canvas, miniMap);
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(pb.x, pb.y, pb.w, pb.h);
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
-  drawText(ctx, platform.pauseButtonLabel, {
-    x: pb.x + pb.w / 2,
-    y: pb.y + pb.h / 2 + 4 - 10,
-    size: 12,
-    color: '#e2e8f0',
-    align: 'center',
+  drawButton(ctx, {
+    x: pb.x,
+    y: pb.y,
+    width: pb.w,
+    height: pb.h,
+    label: platform.pauseButtonLabel,
+    sound: 'menu_open',
+    ...BUTTON_PRESETS.toggle,
   });
 }
 
@@ -269,16 +267,21 @@ export function renderMobileButtons(
   touch.bagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
 
   const drawBtn = (r: Rect, icon: string, label: string, active: boolean) => {
-    ctx.fillStyle = active ? 'rgba(250,204,21,0.25)' : 'rgba(0,0,0,0.65)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = active ? '#facc15' : '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    drawButton(ctx, {
+      x: r.x,
+      y: r.y,
+      width: r.w,
+      height: r.h,
+      label: '',
+      ...(active ? BUTTON_PRESETS.mobileActive : BUTTON_PRESETS.mobile),
+    });
+    ctx.save();
     ctx.textAlign = 'center';
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#e2e8f0';
     ctx.fillText(icon, r.x + r.w / 2, r.y + r.h / 2 + 2);
     ctx.textAlign = 'left';
+    ctx.restore();
     drawText(ctx, label, {
       x: r.x + r.w / 2,
       y: r.y + r.h - 6 - 7,
@@ -289,17 +292,13 @@ export function renderMobileButtons(
   };
 
   const drawSmallBtn = (r: Rect, label: string, active: boolean) => {
-    ctx.fillStyle = active ? 'rgba(59,130,246,0.35)' : 'rgba(0,0,0,0.65)';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeStyle = active ? '#3b82f6' : '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
-    drawText(ctx, label, {
-      x: r.x + r.w / 2,
-      y: r.y + r.h / 2 + 4 - 10,
-      size: 12,
-      color: '#e2e8f0',
-      align: 'center',
+    drawButton(ctx, {
+      x: r.x,
+      y: r.y,
+      width: r.w,
+      height: r.h,
+      label,
+      ...(active ? BUTTON_PRESETS.mobileSmallActive : BUTTON_PRESETS.mobileSmall),
     });
   };
 
@@ -346,19 +345,24 @@ export function renderFollowerButton(
   const passive = companion.getCombatStance(humanIsActive) === 'passive';
   const nonDefault = anchored || passive;
 
-  ctx.fillStyle = nonDefault ? 'rgba(250,204,21,0.25)' : 'rgba(0,0,0,0.65)';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = nonDefault ? '#facc15' : '#475569';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
+  drawButton(ctx, {
+    x: r.x,
+    y: r.y,
+    width: r.w,
+    height: r.h,
+    label: '',
+    ...(nonDefault ? BUTTON_PRESETS.mobileActive : BUTTON_PRESETS.mobile),
+  });
 
   // Show which character is the companion
   const companionEmoji = humanIsActive ? '🐱' : '🧍';
+  ctx.save();
   ctx.textAlign = 'center';
   ctx.font = 'bold 22px monospace';
   ctx.fillStyle = '#e2e8f0';
   ctx.fillText(companionEmoji, r.x + r.w / 2, r.y + 30);
   ctx.textAlign = 'left';
+  ctx.restore();
 
   drawText(ctx, 'Follower', {
     x: r.x + r.w / 2,

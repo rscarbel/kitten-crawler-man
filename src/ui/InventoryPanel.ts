@@ -14,6 +14,7 @@ import { InventoryInteraction } from './InventoryInteraction';
 import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
 
 // Layout constants
 const SLOT_SIZE = 54;
@@ -332,56 +333,45 @@ export class InventoryPanel {
     });
 
     // Cancel [X]
-    drawBox(ctx, { x: dlgX + dlgW - 22, y: dlgY + 6, width: 16, height: 16, fill: '#374151' });
-    // baseline_y=dlgY+18, size=11 → top_y = dlgY+18-9 = dlgY+9
-    drawText(ctx, 'x', {
-      x: dlgX + dlgW - 14,
-      y: dlgY + 9,
-      size: 11,
-      bold: true,
-      color: '#ef4444',
-      align: 'center',
+    drawButton(ctx, {
+      x: dlgX + dlgW - 22,
+      y: dlgY + 6,
+      width: 16,
+      height: 16,
+      label: 'x',
+      fill: '#374151',
+      border: '#475569',
+      borderWidth: 1,
+      radius: 2,
+      labelSize: 11,
+      labelColor: '#ef4444',
     });
 
     // [-] button
     const minusBtnX = dlgX + 20;
     const minusBtnY = dlgY + 54;
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: minusBtnX,
       y: minusBtnY,
       width: 24,
       height: 24,
-      fill: '#334155',
+      label: '-',
+      ...BUTTON_PRESETS.primary,
       border: '#475569',
-      borderWidth: 1,
-    });
-    // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+17-9 = minusBtnY+8
-    drawText(ctx, '-', {
-      x: minusBtnX + 12,
-      y: minusBtnY + 8,
-      size: 11,
-      color: '#e2e8f0',
-      align: 'center',
+      labelSize: 11,
     });
 
     // [+] button
     const plusBtnX = dlgX + dlgW - 44;
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: plusBtnX,
       y: minusBtnY,
       width: 24,
       height: 24,
-      fill: '#334155',
+      label: '+',
+      ...BUTTON_PRESETS.primary,
       border: '#475569',
-      borderWidth: 1,
-    });
-    // baseline_y=minusBtnY+17, size=11 → top_y = minusBtnY+8
-    drawText(ctx, '+', {
-      x: plusBtnX + 12,
-      y: minusBtnY + 8,
-      size: 11,
-      color: '#e2e8f0',
-      align: 'center',
+      labelSize: 11,
     });
 
     // Quantity display: baseline_y=minusBtnY+18, size=16 → top_y = minusBtnY+18-13 = minusBtnY+5
@@ -404,23 +394,17 @@ export class InventoryPanel {
 
     // [Drop] confirm button
     const confirmY = dlgY + dlgH - 28;
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: dlgX + 20,
       y: confirmY,
       width: dlgW - 40,
       height: 22,
+      label: 'Drop',
       fill: '#1d4ed8',
       border: '#3b82f6',
       borderWidth: 1.5,
-    });
-    // baseline_y=confirmY+15, size=11 → top_y = confirmY+15-9 = confirmY+6
-    drawText(ctx, 'Drop', {
-      x: dlgX + dlgW / 2,
-      y: confirmY + 6,
-      size: 11,
-      bold: true,
-      color: '#e2e8f0',
-      align: 'center',
+      radius: 4,
+      labelSize: 11,
     });
 
     ctx.restore();
@@ -430,22 +414,13 @@ export class InventoryPanel {
     // On mobile the button is drawn by MobileHUDSystem instead
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: btn.x,
       y: btn.y,
       width: btn.w,
       height: btn.h,
-      fill: this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)',
-      border: this.isOpen ? '#3b82f6' : '#475569',
-      borderWidth: 1,
-    });
-    // baseline_y = btn.y+btn.h/2+4, size=12 → top_y = baseline_y - 10
-    drawText(ctx, 'Bag [I]', {
-      x: btn.x + btn.w / 2,
-      y: btn.y + btn.h / 2 + 4 - 10,
-      size: 12,
-      color: '#e2e8f0',
-      align: 'center',
+      label: 'Bag [I]',
+      ...(this.isOpen ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
     });
   }
 
@@ -534,15 +509,18 @@ export class InventoryPanel {
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
-    drawBox(ctx, { x: closeX, y: closeY, width: 16, height: 16, fill: '#374151' });
-    // baseline_y=closeY+12, size=11 → top_y = closeY+12-9 = closeY+3
-    drawText(ctx, 'x', {
-      x: closeX + 8,
-      y: closeY + 3,
-      size: 11,
-      bold: true,
-      color: '#ef4444',
-      align: 'center',
+    drawButton(ctx, {
+      x: closeX,
+      y: closeY,
+      width: 16,
+      height: 16,
+      label: 'x',
+      fill: '#374151',
+      border: '#475569',
+      borderWidth: 1,
+      radius: 2,
+      labelSize: 11,
+      labelColor: '#ef4444',
     });
 
     // Divider

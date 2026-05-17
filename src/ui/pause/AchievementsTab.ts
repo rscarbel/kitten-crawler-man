@@ -1,6 +1,7 @@
 import type { AchievementManager } from '../../core/AchievementManager';
 import { ACHIEVEMENT_DEFS, isAchievementId } from '../../core/AchievementManager';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, TEXT_PRESETS } from '../TextBox';
 import { drawBox, drawDivider } from '../Box';
 
@@ -94,7 +95,16 @@ function renderPlayerAchievements(
     if (onOpenBoxes) {
       const btnW = 100;
       const btnX = bx + bw - 20 - btnW;
-      menuBtn(ctx, buttons, btnX, oy, btnW, 22, 'Open Boxes', onOpenBoxes, '#14532d', '#4ade80');
+      addButton(ctx, buttons, {
+        x: btnX,
+        y: oy,
+        width: btnW,
+        height: 22,
+        label: 'Open Boxes',
+        ...BUTTON_PRESETS.success,
+        labelSize: 10,
+        action: onOpenBoxes,
+      });
     } else if (!inSafeRoom) {
       drawText(ctx, '(safe room only)', { x: bx + 140, y: oy + 10 - 7, size: 9, color: '#374151' });
     }
@@ -158,5 +168,13 @@ export function renderAchievementsTab(
     onOpenCatBoxes,
   );
 
-  menuBtn(ctx, buttons, bx + 20, by + bh - 44, bw - 40, 32, 'Back', () => setTab('main'));
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: by + bh - 44,
+    width: bw - 40,
+    height: 32,
+    label: 'Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('main'),
+  });
 }

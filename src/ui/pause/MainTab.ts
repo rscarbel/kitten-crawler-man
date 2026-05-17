@@ -2,7 +2,8 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AchievementManager } from '../../core/AchievementManager';
 import { platform } from '../../core/Platform';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 
 export function renderMainTab(
@@ -32,48 +33,85 @@ export function renderMainTab(
   const bH = 40;
   let bY = by + 52;
 
-  menuBtn(ctx, buttons, bX, bY, bW, bH, platform.resumeButtonLabel, close);
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: platform.resumeButtonLabel,
+    ...BUTTON_PRESETS.primary,
+    action: close,
+  });
   bY += 50;
-  menuBtn(ctx, buttons, bX, bY, bW, bH, 'Inventory', () => setTab('inventory'));
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: 'Inventory',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('inventory'),
+  });
   bY += 50;
-  menuBtn(ctx, buttons, bX, bY, bW, bH, 'Stats', () => setTab('stats'));
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: 'Stats',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('stats'),
+  });
   bY += 50;
 
   const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
   const achLabel = unread > 0 ? `Achievements  (${unread} new)` : 'Achievements';
-  menuBtn(
-    ctx,
-    buttons,
-    bX,
-    bY,
-    bW,
-    bH,
-    achLabel,
-    () => setTab('achievements'),
-    unread > 0 ? '#1a2a0a' : '#1e293b',
-    unread > 0 ? '#86efac' : '#e2e8f0',
-  );
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: achLabel,
+    ...BUTTON_PRESETS.primary,
+    ...(unread > 0 ? { fill: '#1a2a0a', labelColor: '#86efac' } : {}),
+    action: () => setTab('achievements'),
+  });
   bY += 50;
 
-  menuBtn(ctx, buttons, bX, bY, bW, bH, 'Abilities', () => setTab('abilities'));
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: 'Abilities',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('abilities'),
+  });
   bY += 50;
 
-  menuBtn(ctx, buttons, bX, bY, bW, bH, 'Settings', () => setTab('settings'));
+  addButton(ctx, buttons, {
+    x: bX,
+    y: bY,
+    width: bW,
+    height: bH,
+    label: 'Settings',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('settings'),
+  });
   bY += 50;
 
   const totalPts = human.unspentPoints + cat.unspentPoints;
   if (totalPts > 0) {
-    menuBtn(
-      ctx,
-      buttons,
-      bX,
-      bY,
-      bW,
-      bH,
-      `Spend Skill Points  (${totalPts})`,
-      () => setTab('spend'),
-      '#1e3a5f',
-      '#fbbf24',
-    );
+    addButton(ctx, buttons, {
+      x: bX,
+      y: bY,
+      width: bW,
+      height: bH,
+      label: `Spend Skill Points  (${totalPts})`,
+      ...BUTTON_PRESETS.primary,
+      fill: '#1e3a5f',
+      labelColor: '#fbbf24',
+      action: () => setTab('spend'),
+    });
   }
 }

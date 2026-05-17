@@ -2,6 +2,8 @@ import type { AchievementDef } from '../core/AchievementManager';
 import { randomFromArray, randomInt, pointInRect } from '../utils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, BOX_PRESETS } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
+import type { AudioManager } from '../audio/AudioManager';
 
 interface Sparkle {
   x: number;
@@ -35,6 +37,7 @@ export class AchievementNotification {
   private frame = 0;
   private sparkles: Sparkle[] = [];
   private okRect = { x: 0, y: 0, w: OK_BTN_W, h: OK_BTN_H };
+  audio: AudioManager | null = null;
 
   /** Call once per frame when a notification is visible to advance animation. */
   tick(): void {
@@ -191,24 +194,15 @@ export class AchievementNotification {
     const okY = by + BOX_H - OK_BTN_H - 18;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
 
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: okX,
       y: okY,
       width: OK_BTN_W,
       height: OK_BTN_H,
-      fill: '#1e3a0f',
-      border: '#4ade80',
-      borderWidth: 2,
-      alpha,
-    });
-
-    drawText(ctx, 'OK!', {
-      x: cw / 2,
-      y: okY + OK_BTN_H / 2 + 5 - 11,
-      bold: true,
-      size: 14,
-      color: '#4ade80',
-      align: 'center',
+      label: 'OK!',
+      ...BUTTON_PRESETS.success,
+      labelColor: '#4ade80',
+      labelSize: 14,
       alpha,
     });
 

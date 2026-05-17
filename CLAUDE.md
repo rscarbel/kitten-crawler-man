@@ -22,6 +22,7 @@ Prefer the shared utilities in `src/ui/` over raw `ctx` calls:
 
 - **`src/ui/TextBox.ts`** — `drawText()` for all canvas text. Handles font, color, outline, glow, word-wrap, and alignment in one call. Use `TEXT_PRESETS` for common styles (`danger`, `heading`, `label`, `value`, etc.).
 - **`src/ui/Box.ts`** — `drawBox()` / `drawModal()` for panels, dialogs, and containers; `drawProgressBar()` for fill bars; `drawOverlay()` for full-screen tints. Use `BOX_PRESETS` (e.g. `panel`, `modal`, `danger`) and `PROGRESS_PRESETS` (e.g. `hp`, `stamina`) for consistent styling.
+- **`src/ui/Button.ts`** — `drawButton()` for all canvas buttons. Handles fill, border, radius, hover brightening, press darkening, label rendering, word-wrap, glow, and shadow in one call. Use `BUTTON_PRESETS` for common styles (`primary`, `danger`, `success`, `gold`, `toggle`, `mobile`, etc.). Call `setButtonMouseState(mx, my)` once per render frame so hover/press state flows automatically to every button. Call `playButtonSound(audio)` from every `handleClick` that activates a button. Use `addButton()` (draw + register hit-rect in one call) for menu-style buttons with action callbacks. If a button needs a visual not covered by existing presets, add a new preset to `BUTTON_PRESETS` rather than hand-rolling the style inline.
 
 Never reach for `ctx.fillText`, `ctx.strokeText`, `ctx.fillRect` for UI chrome when these utilities already handle the pattern — raw `ctx` calls are fine only for game-world rendering (sprites, particles, geometry) where the utilities don't apply.
 

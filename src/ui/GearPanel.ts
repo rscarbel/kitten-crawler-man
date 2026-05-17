@@ -5,6 +5,7 @@ import { platform } from '../core/Platform';
 import { pointInRect } from '../utils';
 import { drawText } from './TextBox';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -75,21 +76,13 @@ export class GearPanel {
     // On mobile the button is drawn by MobileHUDSystem instead
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
-    drawBox(ctx, {
+    drawButton(ctx, {
       x: btn.x,
       y: btn.y,
       width: btn.w,
       height: btn.h,
-      fill: this.isOpen ? 'rgba(59,130,246,0.45)' : 'rgba(0,0,0,0.55)',
-      border: this.isOpen ? '#3b82f6' : '#475569',
-      borderWidth: 1,
-    });
-    drawText(ctx, 'Gear [G]', {
-      x: btn.x + btn.w / 2,
-      y: btn.y + btn.h / 2 + 4 - 10,
-      size: 12,
-      color: '#e2e8f0',
-      align: 'center',
+      label: 'Gear [G]',
+      ...(this.isOpen ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
     });
   }
 
@@ -124,14 +117,18 @@ export class GearPanel {
     // Close [X]
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
-    drawBox(ctx, { x: closeX, y: closeY, width: 16, height: 16, fill: '#374151' });
-    drawText(ctx, 'x', {
-      x: closeX + 8,
-      y: closeY + 12 - 9,
-      size: 11,
-      bold: true,
-      color: '#ef4444',
-      align: 'center',
+    drawButton(ctx, {
+      x: closeX,
+      y: closeY,
+      width: 16,
+      height: 16,
+      label: 'x',
+      fill: '#374151',
+      border: '#475569',
+      borderWidth: 1,
+      radius: 2,
+      labelSize: 11,
+      labelColor: '#ef4444',
     });
 
     // Divider

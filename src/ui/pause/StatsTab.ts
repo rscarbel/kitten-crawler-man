@@ -2,7 +2,8 @@ import type { Player } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameStats } from '../../core/GameStats';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawDivider, drawScrollbar } from '../Box';
 
@@ -174,9 +175,15 @@ export function renderStatsTab(
     width: 3,
   });
 
-  menuBtn(ctx, buttons, bx + 20, by + bh - BACK_BTN_H + 8, bw - 40, 36, 'Back', () =>
-    setTab('main'),
-  );
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: by + bh - BACK_BTN_H + 8,
+    width: bw - 40,
+    height: 36,
+    label: 'Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('main'),
+  });
 
   return contentHeight;
 }

@@ -1,6 +1,6 @@
 import { drawText } from './TextBox';
-import { drawBox, drawModal, drawOverlay, BOX_PRESETS } from './Box';
-import type { AudioManager } from '../audio/AudioManager';
+import { drawModal, drawOverlay } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
 
 interface Sparkle {
   x: number;
@@ -35,26 +35,19 @@ export class LevelCompleteScreen {
   private levelName = '';
   private nextLevelName: string | null = null;
   private onContinue: (() => void) | null = null;
-  private audio: AudioManager | null = null;
   private btnResult: { x: number; y: number; width: number; height: number } | null = null;
 
   get isActive(): boolean {
     return this._active;
   }
 
-  activate(
-    levelName: string,
-    nextLevelName: string | null,
-    onContinue: () => void,
-    audio: AudioManager | null,
-  ): void {
+  activate(levelName: string, nextLevelName: string | null, onContinue: () => void): void {
     this._active = true;
     this.frame = 0;
     this.sparkles = [];
     this.levelName = levelName;
     this.nextLevelName = nextLevelName;
     this.onContinue = onContinue;
-    this.audio = audio;
     this.btnResult = null;
   }
 
@@ -63,7 +56,6 @@ export class LevelCompleteScreen {
     const btn = this.btnResult;
     if (!btn) return false;
     if (mx >= btn.x && mx <= btn.x + btn.width && my >= btn.y && my <= btn.y + btn.height) {
-      this.audio?.play('menu_click');
       this._active = false;
       this.onContinue?.();
       return true;
@@ -267,34 +259,21 @@ export class LevelCompleteScreen {
       const btnX = panelCenterX - btnW / 2;
       const btnY = panel.y + panelH - (wraps ? 76 : 66);
 
-      const btn = drawBox(ctx, {
+      const btn = drawButton(ctx, {
         x: btnX,
         y: btnY,
         width: btnW,
         height: btnH,
-        ...BOX_PRESETS.achievement,
-        fill: '#2e1065',
-        border: '#ffd700',
-        borderWidth: 2,
-        radius: 8,
+        label: btnLabel,
+        ...BUTTON_PRESETS.gold,
+        labelSize: btnFontSize,
+        labelWrap: wraps,
+        glow: '#ffd700',
         glowBlur: 14,
         alpha: btnAlpha * alpha,
       });
 
       this.btnResult = { x: btn.x, y: btn.y, width: btn.width, height: btn.height };
-
-      drawText(ctx, btnLabel, {
-        x: panelCenterX,
-        y: btnY + (wraps ? 10 : 14),
-        bold: true,
-        size: btnFontSize,
-        color: '#fff',
-        align: 'center',
-        glow: '#ffd700',
-        glowBlur: 8,
-        alpha: btnAlpha * alpha,
-        ...(wraps ? { width: btnW - hPad * 2, lineHeight: 22 } : {}),
-      });
     }
   }
 }

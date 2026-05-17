@@ -1,7 +1,9 @@
 import type { AbilityManager, AbilityId } from '../core/AbilityManager';
+import type { AudioManager } from '../audio/AudioManager';
 import { wrapTextLines } from './canvasUtils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
 
 interface QueuedLevelUp {
   id: AbilityId;
@@ -31,8 +33,10 @@ export class AbilityLevelUpDialog {
   private iconPulse = 0;
   private okBtnRect = { x: 0, y: 0, w: 0, h: 0 };
 
-  private readonly POWER_UP_FRAMES = 60; // icon charging animation
-  private readonly COUNT_UP_FRAMES = 20; // level number increments
+  private readonly POWER_UP_FRAMES = 60;
+  private readonly COUNT_UP_FRAMES = 20;
+
+  audio: AudioManager | null = null;
 
   constructor(private readonly abilityManager: AbilityManager) {}
 
@@ -81,13 +85,13 @@ export class AbilityLevelUpDialog {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.phase !== 'done') return this.isShowing; // block clicks while animating
+    if (this.phase !== 'done') return this.isShowing;
     const { x, y, w, h } = this.okBtnRect;
     if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
       this.advance();
       return true;
     }
-    return true; // always consume clicks while showing
+    return true;
   }
 
   render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -207,22 +211,14 @@ export class AbilityLevelUpDialog {
       const btnY = by + boxH - 50;
       this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-      drawBox(ctx, {
+      drawButton(ctx, {
         x: btnX,
         y: btnY,
         width: btnW,
         height: btnH,
-        fill: '#6d28d9',
-        border: '#a855f7',
-        borderWidth: 1.5,
-      });
-      drawText(ctx, 'OK', {
-        x: btnX + btnW / 2,
-        y: btnY + btnH / 2 + 5 - 10,
-        size: 13,
-        bold: true,
-        color: '#ede9fe',
-        align: 'center',
+        label: 'OK',
+        ...BUTTON_PRESETS.purple,
+        labelColor: '#ede9fe',
       });
     }
   }

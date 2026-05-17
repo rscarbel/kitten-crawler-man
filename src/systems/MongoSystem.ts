@@ -7,6 +7,7 @@ import type { GameMap } from '../map/GameMap';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { drawButton } from '../ui/Button';
 
 /** Cooldown in frames: 90 seconds at 60 fps. */
 const COOLDOWN_FRAMES = 90 * 60; // 5400
@@ -178,18 +179,17 @@ export class MongoSystem implements GameSystem {
     const canUse = this.canSummon;
     const isActive = !!this.mongo;
 
-    // Background
-    ctx.fillStyle = isActive
-      ? 'rgba(37,99,235,0.30)'
-      : canUse
-        ? 'rgba(0,0,0,0.65)'
-        : 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x, y, w, h);
-
-    // Border
-    ctx.strokeStyle = isActive ? '#2563eb' : canUse ? '#475569' : '#334155';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x, y, w, h);
+    drawButton(ctx, {
+      x,
+      y,
+      width: w,
+      height: h,
+      label: '',
+      fill: isActive ? 'rgba(37,99,235,0.30)' : canUse ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)',
+      border: isActive ? '#2563eb' : canUse ? '#475569' : '#334155',
+      borderWidth: 1.5,
+      radius: 0,
+    });
 
     // Raptor icon
     const iconSize = Math.min(w, h) * 0.6;

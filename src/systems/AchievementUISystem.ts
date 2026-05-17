@@ -36,7 +36,9 @@ export class AchievementUISystem {
     private readonly human: HumanPlayer,
     private readonly cat: CatPlayer,
     private readonly audio: AudioManager | null = null,
-  ) {}
+  ) {
+    this.achievementNotif.audio = audio;
+  }
 
   /** True when a blocking overlay (notification or loot box opener) is active. */
   get isBlocking(): boolean {

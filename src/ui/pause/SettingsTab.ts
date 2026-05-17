@@ -1,5 +1,6 @@
 import type { AudioManager } from '../../audio/AudioManager';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawBox } from '../Box';
 
@@ -106,5 +107,13 @@ export function renderSettingsTab(
   );
   y += 52;
 
-  menuBtn(ctx, buttons, sliderX, y, sliderW, 40, '← Back', () => setTab('main'));
+  addButton(ctx, buttons, {
+    x: sliderX,
+    y,
+    width: sliderW,
+    height: 40,
+    label: '← Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('main'),
+  });
 }

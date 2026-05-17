@@ -1,7 +1,8 @@
 import type { AbilityManager, AbilityDef, AbilityId } from '../../core/AbilityManager';
 import type { Inventory } from '../../core/Inventory';
 import { HOTBAR_COUNT } from '../../core/ItemDefs';
-import { menuBtn, type ButtonRect, type PauseTab } from './types';
+import { type ButtonRect, type PauseTab } from './types';
+import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox } from '../TextBox';
 import { drawBox, drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
@@ -131,8 +132,16 @@ function renderListView(
     align: 'center',
   });
 
-  menuBtn(ctx, buttons, bx + 16, by + 34, bw - 32, 30, 'Equipped Abilities ▶', () => {
-    currentView = 'equipped_abilities';
+  addButton(ctx, buttons, {
+    x: bx + 16,
+    y: by + 34,
+    width: bw - 32,
+    height: 30,
+    label: 'Equipped Abilities ▶',
+    ...BUTTON_PRESETS.primary,
+    action: () => {
+      currentView = 'equipped_abilities';
+    },
   });
 
   const abilities = abilityManager.getAllRegistered();
@@ -220,10 +229,18 @@ function renderListView(
         const btnW = 88;
         const btnX = bx + bw - btnW - SCROLLBAR_W - 12;
         const detailId = def.id;
-        menuBtn(ctx, buttons, btnX, rowY + 4, btnW, 32, 'Details', () => {
-          currentView = detailId;
-          detailScrollY = 0;
-          touchStartY = null;
+        addButton(ctx, buttons, {
+          x: btnX,
+          y: rowY + 4,
+          width: btnW,
+          height: 32,
+          label: 'Details',
+          ...BUTTON_PRESETS.primary,
+          action: () => {
+            currentView = detailId;
+            detailScrollY = 0;
+            touchStartY = null;
+          },
         });
       }
 
@@ -244,9 +261,17 @@ function renderListView(
   }
 
   const backY = by + bh - LIST_FOOTER_H + 7;
-  menuBtn(ctx, buttons, bx + 20, backY, bw - 40, 34, '← Back', () => {
-    currentView = 'list';
-    setTab('main');
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: backY,
+    width: bw - 40,
+    height: 34,
+    label: '← Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => {
+      currentView = 'list';
+      setTab('main');
+    },
   });
 }
 
@@ -450,13 +475,22 @@ function renderEquippedAbilitiesView(
           // Remove button
           const rmY = sy + EQ_SLOT_SIZE + 3;
           const slotCapture = slot;
-          menuBtn(ctx, buttons, sx, rmY, EQ_SLOT_SIZE, 16, '✕', () => {
-            if (!inventory) return;
-            const emptyIdx = inventory.bag.slots.indexOf(null);
-            if (emptyIdx !== -1) {
-              inventory.bag.slots[emptyIdx] = slotCapture;
-              inventory.actionBar.slots[i] = null;
-            }
+          addButton(ctx, buttons, {
+            x: sx,
+            y: rmY,
+            width: EQ_SLOT_SIZE,
+            height: 16,
+            label: '✕',
+            ...BUTTON_PRESETS.danger,
+            labelSize: 10,
+            action: () => {
+              if (!inventory) return;
+              const emptyIdx = inventory.bag.slots.indexOf(null);
+              if (emptyIdx !== -1) {
+                inventory.bag.slots[emptyIdx] = slotCapture;
+                inventory.actionBar.slots[i] = null;
+              }
+            },
           });
         }
       } else {
@@ -553,32 +587,41 @@ function renderEquippedAbilitiesView(
       // Add button
       const addBtnY = sy + EQ_SLOT_SIZE + 3;
       const bagIdxCapture = bagIdx;
-      menuBtn(ctx, buttons, availX, addBtnY, EQ_SLOT_SIZE, 16, '+Add', () => {
-        if (!inventory) return;
-        const bagItem = inventory.bag.slots[bagIdxCapture];
-        if (!bagItem) return;
-        // Find first empty or non-ability hotbar slot (excluding quest slot)
-        let targetSlot = -1;
-        for (let i = 0; i < HOTBAR_COUNT - 1; i++) {
-          if (!inventory.actionBar.slots[i]) {
-            targetSlot = i;
-            break;
+      addButton(ctx, buttons, {
+        x: availX,
+        y: addBtnY,
+        width: EQ_SLOT_SIZE,
+        height: 16,
+        label: '+Add',
+        ...BUTTON_PRESETS.success,
+        labelSize: 9,
+        action: () => {
+          if (!inventory) return;
+          const bagItem = inventory.bag.slots[bagIdxCapture];
+          if (!bagItem) return;
+          // Find first empty or non-ability hotbar slot (excluding quest slot)
+          let targetSlot = -1;
+          for (let i = 0; i < HOTBAR_COUNT - 1; i++) {
+            if (!inventory.actionBar.slots[i]) {
+              targetSlot = i;
+              break;
+            }
           }
-        }
-        if (targetSlot === -1) {
-          // No empty slot — use slot 0, bumping any item to bag
-          targetSlot = 0;
-        }
-        const displaced = inventory.actionBar.slots[targetSlot];
-        if (displaced && displaced.canDrop !== false) {
-          // Move displaced item to first empty bag slot
-          const emptyBag = inventory.bag.slots.indexOf(null);
-          if (emptyBag !== -1) {
-            inventory.bag.slots[emptyBag] = displaced;
+          if (targetSlot === -1) {
+            // No empty slot — use slot 0, bumping any item to bag
+            targetSlot = 0;
           }
-        }
-        inventory.actionBar.slots[targetSlot] = bagItem;
-        inventory.bag.slots[bagIdxCapture] = null;
+          const displaced = inventory.actionBar.slots[targetSlot];
+          if (displaced && displaced.canDrop !== false) {
+            // Move displaced item to first empty bag slot
+            const emptyBag = inventory.bag.slots.indexOf(null);
+            if (emptyBag !== -1) {
+              inventory.bag.slots[emptyBag] = displaced;
+            }
+          }
+          inventory.actionBar.slots[targetSlot] = bagItem;
+          inventory.bag.slots[bagIdxCapture] = null;
+        },
       });
 
       availX += EQ_SLOT_SIZE + EQ_SLOT_GAP;
@@ -588,9 +631,17 @@ function renderEquippedAbilitiesView(
   ctx.restore();
 
   // Back button
-  menuBtn(ctx, buttons, bx + 20, by + bh - EQ_FOOTER_H + 6, bw - 40, 34, '← Back', () => {
-    currentView = 'list';
-    touchStartY = null;
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: by + bh - EQ_FOOTER_H + 6,
+    width: bw - 40,
+    height: 34,
+    label: '← Back',
+    ...BUTTON_PRESETS.primary,
+    action: () => {
+      currentView = 'list';
+      touchStartY = null;
+    },
   });
 }
 
@@ -792,8 +843,16 @@ function renderDetailView(
   }
 
   // Back button
-  menuBtn(ctx, buttons, bx + 20, by + bh - backBtnH + 6, bw - 40, 34, '← Back to Abilities', () => {
-    currentView = 'list';
-    touchStartY = null;
+  addButton(ctx, buttons, {
+    x: bx + 20,
+    y: by + bh - backBtnH + 6,
+    width: bw - 40,
+    height: 34,
+    label: '← Back to Abilities',
+    ...BUTTON_PRESETS.primary,
+    action: () => {
+      currentView = 'list';
+      touchStartY = null;
+    },
   });
 }

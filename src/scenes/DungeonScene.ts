@@ -81,6 +81,12 @@ import { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import {
+  setButtonMouseState,
+  setButtonAudio,
+  notifyButtonClick,
+  clearButtonMouseState,
+} from '../ui/Button';
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -282,6 +288,7 @@ export class DungeonScene extends GameplayScene {
 
   private _mouseX = -9999;
   private _mouseY = -9999;
+  private _mouseDown = false;
 
   private onSaveProgress:
     | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
@@ -411,27 +418,22 @@ export class DungeonScene extends GameplayScene {
       this.bus.emit('levelComplete', {});
 
       const nextDef = getLevelDef(levelDef.nextLevelId);
-      this.levelCompleteScreen.activate(
-        levelDef.name,
-        nextDef.name,
-        () => {
-          // Dismiss Mongo before floor transition
-          this.mongoSystem.dismiss(this.mobs, this.mobGrid);
-          this.sceneManager.replace(
-            new DungeonScene(nextDef, this.input, this.sceneManager, {
-              humanSnap: this._cleanSnapFor(this.human),
-              catSnap: this._cleanSnapFor(this.cat),
-              humanAchievements: this.humanAchievements,
-              catAchievements: this.catAchievements,
-              mongoUnlocked: this.mongoSystem.unlocked,
-              abilityManager: this._cleanAbilityManager(),
-              saveProgress: this.onSaveProgress,
-              audio: this.audio ?? undefined,
-            }),
-          );
-        },
-        this.audio,
-      );
+      this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
+        // Dismiss Mongo before floor transition
+        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+        this.sceneManager.replace(
+          new DungeonScene(nextDef, this.input, this.sceneManager, {
+            humanSnap: this._cleanSnapFor(this.human),
+            catSnap: this._cleanSnapFor(this.cat),
+            humanAchievements: this.humanAchievements,
+            catAchievements: this.catAchievements,
+            mongoUnlocked: this.mongoSystem.unlocked,
+            abilityManager: this._cleanAbilityManager(),
+            saveProgress: this.onSaveProgress,
+            audio: this.audio ?? undefined,
+          }),
+        );
+      });
     });
 
     if (levelDef.isOverworld) {
@@ -512,6 +514,8 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.audio = options?.audio ?? null;
     this.pauseMenu.audio = this.audio;
+    this.deathScreen.audio = this.audio;
+    this.abilityLevelUpDialog.audio = this.audio;
 
     // Boss chests — placed 2 tiles above each boss room centre
     this.gameMap.bossRooms.forEach((br, i) => {
@@ -1408,6 +1412,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
+    notifyButtonClick(mx, my);
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.handleClick(mx, my);
       return;
@@ -1468,7 +1473,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gameOver) {
-      if (this.deathScreen.handleClick(mx, my, this.sceneManager.canvas)) {
+      if (this.deathScreen.handleClick(mx, my)) {
         this.sceneManager.replace(
           new DungeonScene(this.levelDef, this.input, this.sceneManager, {
             humanSnap: this.floorEntryHumanSnap,
@@ -1554,6 +1559,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleMouseDown(mx: number, my: number): void {
+    this._mouseDown = true;
     if (this.gameOver || this.pauseMenu.isOpen) return;
     this.inventoryPanel.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
@@ -1566,8 +1572,14 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleMouseUp(mx: number, my: number): void {
+    this._mouseDown = false;
     if (this.gameOver || this.pauseMenu.isOpen) return;
     this.inventoryPanel.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
+  }
+
+  handleMouseLeave(): void {
+    this._mouseDown = false;
+    clearButtonMouseState();
   }
 
   handleContextMenu(mx: number, my: number): void {
@@ -1624,6 +1636,8 @@ export class DungeonScene extends GameplayScene {
 
   render(ctx: CanvasRenderingContext2D): void {
     const canvas = this.sceneManager.canvas;
+    setButtonAudio(this.audio);
+    setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
     const { x: camX, y: camY } = this.camera();
 
     const rc: RenderContext = {

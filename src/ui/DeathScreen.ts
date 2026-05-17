@@ -1,5 +1,7 @@
 import { drawText } from './TextBox';
-import { drawOverlay, drawBox, BOX_PRESETS } from './Box';
+import { drawOverlay } from './Box';
+import { drawButton, BUTTON_PRESETS } from './Button';
+import type { AudioManager } from '../audio/AudioManager';
 
 /**
  * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
@@ -9,6 +11,8 @@ import { drawOverlay, drawBox, BOX_PRESETS } from './Box';
 export class DeathScreen {
   private alpha = 0;
   private _active = false;
+  private _btnResult: { x: number; y: number; width: number; height: number } | null = null;
+  audio: AudioManager | null = null;
 
   /** Activate the death screen — begins the fade-in from alpha 0. */
   activate(): void {
@@ -76,22 +80,14 @@ export class DeathScreen {
     const btnH = 48;
     const btnX = w / 2 - btnW / 2;
     const btnY = h / 2 + 44;
-    drawBox(ctx, {
+    this._btnResult = drawButton(ctx, {
       x: btnX,
       y: btnY,
       width: btnW,
       height: btnH,
-      ...BOX_PRESETS.buttonDanger,
-      alpha: textAlpha,
-    });
-
-    drawText(ctx, 'Restart Level', {
-      x: w / 2,
-      y: btnY + 30 - 14,
-      bold: true,
-      size: 17,
-      color: '#fff',
-      align: 'center',
+      label: 'Restart Level',
+      ...BUTTON_PRESETS.danger,
+      labelSize: 17,
       alpha: textAlpha,
     });
   }
@@ -100,14 +96,12 @@ export class DeathScreen {
    * Returns true if the click landed on the restart button.
    * Only meaningful when isVisible === true.
    */
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (!this.isVisible) return false;
-    const w = canvas.width;
-    const h = canvas.height;
-    const btnW = 210,
-      btnH = 48;
-    const btnX = w / 2 - btnW / 2;
-    const btnY = h / 2 + 44;
-    return mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
+    const btn = this._btnResult;
+    if (btn && mx >= btn.x && mx <= btn.x + btn.width && my >= btn.y && my <= btn.y + btn.height) {
+      return true;
+    }
+    return false;
   }
 }
