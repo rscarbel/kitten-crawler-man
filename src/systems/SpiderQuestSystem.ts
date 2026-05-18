@@ -415,7 +415,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'hacking') {
       // Touch input for keyboard hero
       if (platform.isMobile) {
-        this.keyboardHero.handleTouchAt(mx, my, 800, 600);
+        this.keyboardHero.handleTouchAt(mx, my, window.innerWidth, window.innerHeight);
       }
       return true;
     }
