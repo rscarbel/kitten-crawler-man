@@ -23,14 +23,14 @@ const HIDDEN_RECT: HudRect = { x: -9999, y: 0, w: 0, h: 0 };
  */
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
-  _canvas: HTMLCanvasElement,
+  canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   pulseRef: { value: number },
   collapsed = false,
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
-    return drawHUDCollapsed(ctx, human, cat, pulseRef);
+    return drawHUDCollapsed(ctx, canvas, human, cat, pulseRef);
   }
 
   const activeLabel = human.isActive ? 'Human' : 'Cat';
@@ -65,7 +65,7 @@ export function drawHUD(
     color: '#fbbf24',
   });
 
-  const notifRect = renderNotification(ctx, human, cat, pulseRef);
+  const notifRect = renderNotification(ctx, canvas, human, cat, pulseRef);
 
   if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
@@ -94,6 +94,7 @@ export function drawHUD(
 /** Compact single-row HUD for mobile collapsed state. */
 function drawHUDCollapsed(
   ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   pulseRef: { value: number },
@@ -165,7 +166,9 @@ function drawHUDCollapsed(
 
   pulseRef.value = (pulseRef.value + 0.05) % (Math.PI * 2);
   const pulse = 0.5 + 0.5 * Math.sin(pulseRef.value);
-  const badgeRect: HudRect = { x, y: y + BAR_H + 5, w: BAR_W + toggleRect.w, h: 30 };
+  // Cap width so the badge doesn't overlap the minimap (160px + 8px right margin + 8px gap)
+  const badgeMaxW = Math.min(BAR_W + toggleRect.w, canvas.width - 8 - 160 - 16);
+  const badgeRect: HudRect = { x, y: y + BAR_H + 5, w: badgeMaxW, h: 30 };
 
   ctx.save();
   ctx.shadowColor = '#fbbf24';
@@ -314,6 +317,7 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
  */
 function renderNotification(
   ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
   human: Player,
   cat: Player,
   pulseRef: { value: number },
@@ -324,8 +328,13 @@ function renderNotification(
   const pulse = 0.5 + 0.5 * Math.sin(pulseRef.value);
   const bounceY = Math.round(Math.sin(pulseRef.value * 0.6) * 3);
 
+  // On mobile, cap width so the banner stays left of the minimap (160px + 8px right margin + 8px gap)
+  const notifW = platform.showHudCollapseToggle
+    ? Math.min(340, Math.max(180, canvas.width - 8 - 160 - 16))
+    : 340;
+
   // Stable rect for hit testing; draw at bounceY offset
-  const rect: HudRect = { x: 8, y: 202, w: 340, h: 52 };
+  const rect: HudRect = { x: 8, y: 202, w: notifW, h: 52 };
   const drawY = rect.y + bounceY;
 
   ctx.save();
