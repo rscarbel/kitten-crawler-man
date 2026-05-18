@@ -16,11 +16,23 @@ import { createMob } from '../levels/spawner';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 
+/** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
+const ENTRY_WINDOW_FRAMES = 1800;
+
 export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
   private arenaPhase2Active = false;
   private arenaStairwellUnlocked = false;
   private arenaLiveTusklings: Tuskling[] = [];
+
+  /** Frames remaining in the 30-second window after the fight starts. */
+  private entryWindowTimer = 0;
+  /**
+   * Which players are "insiders" (entered before or during the entry window).
+   * Insiders are pushed back if they reach the door during the window.
+   */
+  private humanIsInsider = false;
+  private catIsInsider = false;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -89,21 +101,52 @@ export class ArenaSystem implements GameSystem {
 
       // Use hp > 0 (not isAlive) because BallOfSwine overrides isAlive to return
       // true during its burst animation even after hp hits 0, which would
-      // re-lock the door every frame after the Tuskling phase unlocks it.
+      // re-trigger the fight-start logic after the Tuskling phase unlocks it.
       if (
         !this.arenaLocked &&
+        this.entryWindowTimer === 0 &&
         bos.hp > 0 &&
         !this.arenaStairwellUnlocked &&
         (humanInside || catInside)
       ) {
-        this.arenaLocked = true;
-        this.gameMap.lockArenaDoor();
+        this.entryWindowTimer = ENTRY_WINDOW_FRAMES;
+        this.humanIsInsider = humanInside;
+        this.catIsInsider = catInside;
         this.bossRoom.newlyLockedBossType = 'ball_of_swine';
       }
 
-      if (this.arenaLocked && bos.hp === 0 && !this.arenaPhase2Active) {
-        this.arenaLocked = false;
-        this.gameMap.unlockArenaDoor();
+      // Tick the entry window: keep the door open so the second player can enter,
+      // but clamp insiders so they cannot leave through the door.
+      if (this.entryWindowTimer > 0 && !this.arenaLocked) {
+        this.entryWindowTimer--;
+
+        // Any player who enters during the window becomes a locked-in insider.
+        if (humanInside) this.humanIsInsider = true;
+        if (catInside) this.catIsInsider = true;
+
+        // Prevent insiders from slipping back out through the door gap.
+        if (this.humanIsInsider) this.pushInsiderBackFromDoor(human, arena.doorTile);
+        if (this.catIsInsider) this.pushInsiderBackFromDoor(cat, arena.doorTile);
+
+        if (this.entryWindowTimer === 0) {
+          this.arenaLocked = true;
+          this.gameMap.lockArenaDoor();
+        }
+      }
+
+      // BoS defeated (hp check, not isAlive — see comment above).
+      if (
+        bos.hp === 0 &&
+        (this.arenaLocked || this.entryWindowTimer > 0) &&
+        !this.arenaPhase2Active
+      ) {
+        this.entryWindowTimer = 0;
+        this.humanIsInsider = false;
+        this.catIsInsider = false;
+        if (this.arenaLocked) {
+          this.arenaLocked = false;
+          this.gameMap.unlockArenaDoor();
+        }
       }
     }
 
@@ -121,6 +164,25 @@ export class ArenaSystem implements GameSystem {
         this.gameMap.unlockArenaDoor();
       }
     }
+  }
+
+  /**
+   * Prevents a locked-in player from leaving through the door gap while the
+   * entry window is still open. Snaps them two tiles north of the door, which
+   * is safely inside the arena.
+   */
+  private pushInsiderBackFromDoor(
+    player: { x: number; y: number },
+    doorTile: { x: number; y: number },
+  ): void {
+    const tx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    // Door tiles span x: [doorTile.x-1, doorTile.x], y: [doorTile.y-1, doorTile.y+1]
+    // (matches the set built in GameMap.loadFromData)
+    const onDoor =
+      tx >= doorTile.x - 1 && tx <= doorTile.x && ty >= doorTile.y - 1 && ty <= doorTile.y + 1;
+    if (!onDoor) return;
+    player.y = (doorTile.y - 2) * TILE_SIZE;
   }
 
   render(
@@ -180,6 +242,19 @@ export class ArenaSystem implements GameSystem {
         color: '#e2e8f0',
         align: 'center',
       });
+
+      if (this.entryWindowTimer > 0) {
+        const seconds = Math.ceil(this.entryWindowTimer / 60);
+        drawText(ctx, `Entry closes in ${seconds}s`, {
+          x: canvas.width / 2,
+          y: barY + barH + 6,
+          size: 11,
+          bold: true,
+          color: '#fbbf24',
+          align: 'center',
+        });
+      }
+
       ctx.restore();
     }
 
