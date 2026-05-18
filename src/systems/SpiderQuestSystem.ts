@@ -7,7 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { pointInRect } from '../utils';
+import { clamp, pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { platform } from '../core/Platform';
@@ -15,6 +15,8 @@ import type { GameMap } from '../map/GameMap';
 import type { SpiderLabRoomData } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
+import type { HumanPlayer } from '../creatures/HumanPlayer';
+import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
@@ -28,6 +30,9 @@ import { KeyboardHeroSystem } from './KeyboardHeroSystem';
 const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
 const COMPUTER_INTERACT_RANGE_PX = TILE_SIZE * 1.5;
 const HACK_START_DELAY_FRAMES = 60;
+
+// Room locking
+const SPIDER_ENTRY_WINDOW_FRAMES = 1800; // 30 seconds at 60 fps
 
 // Life machine cycle timing
 const IDLE_FRAMES = 120;
@@ -103,6 +108,7 @@ export class SpiderQuestSystem implements GameSystem {
   lifeMachinePoweringOnPending = false;
   menuClickSoundPending = false;
   menuOpenSoundPending = false;
+  explanationSoundPending = false;
   keyboardHeroMusicStartPending = false;
   keyboardHeroMusicStopPending = false;
   hackFailErrorSoundPending = false;
@@ -156,6 +162,16 @@ export class SpiderQuestSystem implements GameSystem {
 
   // Boss
   private _grotesqueSpider: GrotesqueSpider | null = null;
+
+  // Room locking (boss_fight phase)
+  private _roomLocked = false;
+  private _fightAborted = false;
+  private _entryWindowTimer = 0;
+  private _humanIsInsider = false;
+  private _catIsInsider = false;
+  private _humanLastOutside: { x: number; y: number } | null = null;
+  private _catLastOutside: { x: number; y: number } | null = null;
+  private _roomPulse = 0;
 
   // Dialog buttons
   private dialogButtons: ButtonRect[] = [];
@@ -245,6 +261,10 @@ export class SpiderQuestSystem implements GameSystem {
     };
   }
 
+  get roomLocked(): boolean {
+    return this._roomLocked;
+  }
+
   // ---------------------------------------------------------------------------
   // GameSystem interface
   // ---------------------------------------------------------------------------
@@ -325,7 +345,7 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, camX = 0, camY = 0): void {
     if (this.phase === 'inactive') return;
 
     if (this.phase === 'scientist_dialog') {
@@ -342,6 +362,10 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (this.phase === 'cutscene') {
       this._renderCutsceneUI(ctx, canvas);
+    }
+
+    if (this._roomLocked && this.roomData !== null) {
+      this._renderLockedRoomBorder(ctx, canvas, camX, camY);
     }
   }
 
@@ -407,6 +431,7 @@ export class SpiderQuestSystem implements GameSystem {
       if (dist > INTERACT_RANGE_PX) return false;
       this.phase = 'scientist_dialog';
       this.menuOpenSoundPending = true;
+      this.explanationSoundPending = true;
       return true;
     }
 
@@ -459,6 +484,10 @@ export class SpiderQuestSystem implements GameSystem {
     this.phase = 'complete';
     this.questCompletePending = true;
     this._playerLocked = false;
+    this._roomLocked = false;
+    this._fightAborted = false;
+    this._humanIsInsider = false;
+    this._catIsInsider = false;
     this._cameraOverrideTile = null;
     this._screenShakeIntensity = 0;
     this._screenShakeX = 0;
@@ -472,6 +501,151 @@ export class SpiderQuestSystem implements GameSystem {
     this.dialogButtons = [];
     this.hackFailedButtons = [];
     this._grotesqueSpider = null;
+  }
+
+  /**
+   * Called from DungeonScene.updateGameplay() after player movement has been
+   * applied.  Handles room locking, clamping insiders, fight-abort detection,
+   * and re-locking when a player re-enters after an abort.
+   */
+  applyRoomLock(human: HumanPlayer, cat: CatPlayer): void {
+    if (this.phase !== 'boss_fight') return;
+    if (this.roomData === null) return;
+    const spider = this._grotesqueSpider;
+    if (spider === null) return;
+    if (!spider.isAlive) return;
+
+    const b = this.roomData.bounds;
+    const humanInRoom = this._isInRoom(human, b);
+    const catInRoom = this._isInRoom(cat, b);
+
+    // Waiting for a player to re-enter after fight abort
+    if (this._fightAborted) {
+      if (!humanInRoom) this._humanLastOutside = { x: human.x, y: human.y };
+      if (!catInRoom) this._catLastOutside = { x: cat.x, y: cat.y };
+      if (humanInRoom || catInRoom) {
+        this._fightAborted = false;
+        this._roomLocked = true;
+        this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
+        this._humanIsInsider = humanInRoom;
+        this._catIsInsider = catInRoom;
+        if (!human.isAlive && humanInRoom) {
+          human.hp = Math.max(1, Math.floor(human.maxHp * 0.3));
+          human.isKnockedOut = false;
+          human.knockedOutFrames = 0;
+          human.reviveProgress = 0;
+        }
+        if (!cat.isAlive && catInRoom) {
+          cat.hp = Math.max(1, Math.floor(cat.maxHp * 0.3));
+          cat.isKnockedOut = false;
+          cat.knockedOutFrames = 0;
+          cat.reviveProgress = 0;
+        }
+      }
+      return;
+    }
+
+    // Initial lock when boss_fight phase first activates
+    if (!this._roomLocked) {
+      if (!humanInRoom) this._humanLastOutside = { x: human.x, y: human.y };
+      if (!catInRoom) this._catLastOutside = { x: cat.x, y: cat.y };
+      if (humanInRoom || catInRoom) {
+        this._roomLocked = true;
+        this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
+        this._humanIsInsider = humanInRoom;
+        this._catIsInsider = catInRoom;
+      } else {
+        // No player in room when fight started — abort immediately; resets when one enters
+        this._fightAborted = true;
+        spider.hp = spider.maxHp;
+      }
+      return;
+    }
+
+    // Fight in progress: tick pulse and entry window
+    this._roomPulse++;
+    if (this._entryWindowTimer > 0) this._entryWindowTimer--;
+    const windowOpen = this._entryWindowTimer > 0;
+
+    // Companion-down exception: active player may always enter to revive
+    const inactivePlayer = human.isActive ? cat : human;
+    const companionDownInRoom = !inactivePlayer.isAlive && this._isInRoom(inactivePlayer, b);
+
+    // Human
+    if (humanInRoom) {
+      if (this._humanIsInsider) {
+        this._clampToRoom(human, b);
+      } else if (windowOpen || companionDownInRoom) {
+        this._humanIsInsider = true;
+        this._clampToRoom(human, b);
+      } else {
+        const prev = this._humanLastOutside;
+        if (prev !== null) {
+          const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
+          const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+          if (this.gameMap.isWalkable(prevTx, prevTy)) {
+            human.x = prev.x;
+            human.y = prev.y;
+          }
+        }
+      }
+    } else {
+      this._humanLastOutside = { x: human.x, y: human.y };
+    }
+
+    // Cat
+    if (catInRoom) {
+      if (this._catIsInsider) {
+        this._clampToRoom(cat, b);
+      } else if (windowOpen || companionDownInRoom) {
+        this._catIsInsider = true;
+        this._clampToRoom(cat, b);
+      } else {
+        const prev = this._catLastOutside;
+        if (prev !== null) {
+          const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
+          const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+          if (this.gameMap.isWalkable(prevTx, prevTy)) {
+            cat.x = prev.x;
+            cat.y = prev.y;
+          }
+        }
+      }
+    } else {
+      this._catLastOutside = { x: cat.x, y: cat.y };
+    }
+
+    // Fight abort: spider still alive but no conscious player remains in the room
+    const humanConscious = humanInRoom && human.isAlive && !human.isKnockedOut;
+    const catConscious = catInRoom && cat.isAlive && !cat.isKnockedOut;
+    if (!humanConscious && !catConscious) {
+      this._roomLocked = false;
+      this._fightAborted = true;
+      this._humanIsInsider = false;
+      this._catIsInsider = false;
+      spider.hp = spider.maxHp;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private — room lock helpers
+  // ---------------------------------------------------------------------------
+
+  private _isInRoom(
+    entity: { x: number; y: number },
+    b: { x: number; y: number; w: number; h: number },
+  ): boolean {
+    const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    return tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h;
+  }
+
+  private _clampToRoom(
+    entity: { x: number; y: number },
+    b: { x: number; y: number; w: number; h: number },
+  ): void {
+    entity.x = clamp(entity.x, b.x * TILE_SIZE, (b.x + b.w - 1) * TILE_SIZE);
+    entity.y = clamp(entity.y, b.y * TILE_SIZE, (b.y + b.h - 1) * TILE_SIZE);
   }
 
   // ---------------------------------------------------------------------------
@@ -1139,6 +1313,54 @@ export class SpiderQuestSystem implements GameSystem {
   // ---------------------------------------------------------------------------
   // Private — UI rendering
   // ---------------------------------------------------------------------------
+
+  private _renderLockedRoomBorder(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    camX: number,
+    camY: number,
+  ): void {
+    if (this.roomData === null) return;
+    const b = this.roomData.bounds;
+    const ts = TILE_SIZE;
+
+    ctx.save();
+    const pulse = 0.55 + 0.25 * Math.sin(this._roomPulse * 0.12);
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = this._entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
+    ctx.lineWidth = 2;
+    const corners: [number, number][] = [
+      [b.x, b.y],
+      [b.x + b.w - 1, b.y],
+      [b.x, b.y + b.h - 1],
+      [b.x + b.w - 1, b.y + b.h - 1],
+    ];
+    for (const [ex, ey] of corners) {
+      const sx = ex * ts - camX;
+      const sy = ey * ts - camY;
+      ctx.beginPath();
+      ctx.moveTo(sx + 4, sy + 4);
+      ctx.lineTo(sx + ts - 4, sy + ts - 4);
+      ctx.moveTo(sx + ts - 4, sy + 4);
+      ctx.lineTo(sx + 4, sy + ts - 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (this._entryWindowTimer > 0) {
+      const seconds = Math.ceil(this._entryWindowTimer / 60);
+      drawText(ctx, `Entry closes in ${seconds}s`, {
+        x: Math.round(canvas.width / 2),
+        y: 74,
+        size: 11,
+        bold: true,
+        color: '#fbbf24',
+        align: 'center',
+      });
+    }
+  }
 
   private _renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;

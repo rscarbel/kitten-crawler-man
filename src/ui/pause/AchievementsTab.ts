@@ -68,7 +68,16 @@ function renderPlayerAchievements(
     drawBox(ctx, { x: bx + 12, y: oy, width: bw - 24, height: 18, fill: 'rgba(250,204,21,0.06)' });
 
     drawText(ctx, '✓', { x: bx + 18, y: oy + 13 - 9, size: 11, color: '#4ade80' });
-    drawText(ctx, def.name, { x: bx + 32, y: oy + 13 - 8, bold: true, size: 10, color: '#f1f5f9' });
+    const tierReserve = def.lootBox ? 110 : 0;
+    drawText(ctx, def.name, {
+      x: bx + 32,
+      y: oy + 13 - 8,
+      bold: true,
+      size: 10,
+      color: '#f1f5f9',
+      width: bw - 46 - tierReserve,
+      height: 18,
+    });
 
     if (def.lootBox) {
       drawText(ctx, `${def.lootBox.tier} ${def.lootBox.category}`, {

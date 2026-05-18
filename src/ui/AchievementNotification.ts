@@ -140,12 +140,13 @@ export class AchievementNotification {
 
     // Achievement name
     drawText(ctx, achievement.name, {
-      x: cw / 2,
+      x: bx + 24,
       y: by + 88 - 14,
       bold: true,
       size: 18,
       color: '#f1f5f9',
       align: 'center',
+      width: boxW - 48,
       alpha,
     });
 
@@ -178,12 +179,13 @@ export class AchievementNotification {
       const { tier, category } = achievement.lootBox;
       const tierColor = this.tierColor(tier);
       drawText(ctx, `REWARD: ${tier} ${category} Box`, {
-        x: cw / 2,
+        x: bx + 24,
         y: by + 185 - 10,
         bold: true,
         size: 13,
         color: tierColor,
         align: 'center',
+        width: boxW - 48,
         alpha,
       });
 

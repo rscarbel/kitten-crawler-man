@@ -2101,7 +2101,7 @@ export class DungeonScene extends GameplayScene {
 
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
-    this.spiderQuest.renderUI(ctx, canvas);
+    this.spiderQuest.renderUI(ctx, canvas, camX, camY);
 
     if (
       platform.showEntityTooltip &&
@@ -2175,6 +2175,7 @@ export class DungeonScene extends GameplayScene {
 
     this.safeRoom.update(ctx);
     this.bossRoom.update(ctx);
+    this.spiderQuest.applyRoomLock(this.human, this.cat);
     this.arena.update(ctx);
 
     if (this.bossRoom.newlyLockedBossType !== null) {
@@ -2504,6 +2505,10 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.menuOpenSoundPending) {
       this.spiderQuest.menuOpenSoundPending = false;
       this.audio?.play('menu_open');
+    }
+    if (this.spiderQuest.explanationSoundPending) {
+      this.spiderQuest.explanationSoundPending = false;
+      this.audio?.play('scientist_explaining_request');
     }
     if (this.spiderQuest.keyboardHeroMusicStartPending) {
       this.spiderQuest.keyboardHeroMusicStartPending = false;
