@@ -163,7 +163,7 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
-    this.updateAutoAI(human, cat, mobs, mobGrid);
+    this.updateAutoAI(human, cat, mobs, mobGrid, ctx.bossRoom);
     this.updateFollower(human, cat, mobs, mobGrid, ctx.bossRoom);
   }
 
@@ -224,11 +224,30 @@ export class CompanionSystem implements GameSystem {
     cat: CatPlayer,
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
+    bossRoom: BossRoomSystem,
   ): void {
+    // Returns true if a mob is inside a boss room that the active player hasn't entered,
+    // AND the mob hasn't initiated combat against either player.
+    // In that case the companion should not proactively target it.
+    const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean => {
+      for (const state of bossRoom.getBossRoomStates()) {
+        if (!bossRoom.isEntityInRoom(m, state.bounds)) continue;
+        // Mob is in a boss room — allow targeting only if the active player is also in that
+        // room or the mob has already attacked one of the players.
+        const playerInRoom = bossRoom.isEntityInRoom(activePlayer, state.bounds);
+        const hasAttackedPlayers = m.currentTarget === human || m.currentTarget === cat;
+        return !playerInRoom && !hasAttackedPlayers;
+      }
+      return false;
+    };
+
     if (human.isActive) {
       // Clear cat's target if it's dead or became an avoid-instead mob
       if (cat.autoTarget && (!cat.autoTarget.isAlive || cat.autoTarget.avoidInstead))
         cat.autoTarget = null;
+
+      // Also clear if the current target is in an untriggered boss room
+      if (cat.autoTarget && isUntriggeredBossRoomMob(cat.autoTarget, human)) cat.autoTarget = null;
 
       // While companion is being recalled, don't auto-assign new targets
       if (!this._followOverride) {
@@ -241,11 +260,18 @@ export class CompanionSystem implements GameSystem {
               (m) =>
                 m.isAlive &&
                 !m.avoidInstead &&
+                !isUntriggeredBossRoomMob(m, human) &&
                 m.currentTarget === cat &&
                 Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
             ) ?? null;
           const mobTargetingHuman =
-            mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
+            mobs.find(
+              (m) =>
+                m.isAlive &&
+                !m.avoidInstead &&
+                !isUntriggeredBossRoomMob(m, human) &&
+                m.currentTarget === human,
+            ) ?? null;
 
           if (mobTargetingCat) {
             cat.autoTarget = mobTargetingCat;
@@ -259,6 +285,7 @@ export class CompanionSystem implements GameSystem {
               (m) =>
                 m.isAlive &&
                 !m.avoidInstead &&
+                !isUntriggeredBossRoomMob(m, human) &&
                 m.currentTarget === cat &&
                 Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
             ) ?? null;
@@ -280,6 +307,10 @@ export class CompanionSystem implements GameSystem {
       if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
         human.autoTarget = null;
 
+      // Also clear if the current target is in an untriggered boss room
+      if (human.autoTarget && isUntriggeredBossRoomMob(human.autoTarget, cat))
+        human.autoTarget = null;
+
       if (!human.autoTarget) {
         if (this.humanStance.combatStance === 'aggressive') {
           let closestDist = HUMAN_ENGAGE_RANGE;
@@ -287,6 +318,7 @@ export class CompanionSystem implements GameSystem {
           const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
           for (const mob of nearHuman) {
             if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+            if (isUntriggeredBossRoomMob(mob, cat)) continue;
             const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
             if (dist < closestDist) {
               closestDist = dist;
@@ -297,7 +329,13 @@ export class CompanionSystem implements GameSystem {
         } else {
           // Passive — only retaliate when a mob is actively targeting the human
           human.autoTarget =
-            mobs.find((m) => m.isAlive && !m.avoidInstead && m.currentTarget === human) ?? null;
+            mobs.find(
+              (m) =>
+                m.isAlive &&
+                !m.avoidInstead &&
+                !isUntriggeredBossRoomMob(m, cat) &&
+                m.currentTarget === human,
+            ) ?? null;
         }
       }
 
