@@ -94,6 +94,9 @@ export const SPRITE_BUILDING = 45;
  */
 export const MODERN_DECORATION = 46;
 
+/** Tile type for the spider lab room floor — dark, web-covered laboratory tiles. */
+export const SPIDER_LAB_FLOOR = 47;
+
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
  * that are walkable floor clutter — cables, rubble, flat debris, etc.

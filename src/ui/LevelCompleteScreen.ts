@@ -63,6 +63,13 @@ export class LevelCompleteScreen {
     return false;
   }
 
+  handleSpaceBar(): boolean {
+    if (!this._active || this.frame < BTN_APPEAR_FRAMES) return false;
+    this._active = false;
+    this.onContinue?.();
+    return true;
+  }
+
   private spawnBurst(cx: number, cy: number, count: number): void {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;

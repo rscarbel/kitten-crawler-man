@@ -42,6 +42,7 @@ export const level2: LevelDef = {
   ],
   bossRooms: [{ type: 'krakaren_clone' }],
   hasArena: true,
+  hasSpiderLab: true,
   isSafeLevel: true,
   nextLevelId: 'level3',
   numStairwells: 2,

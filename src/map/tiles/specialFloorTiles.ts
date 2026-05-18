@@ -6,6 +6,7 @@ import {
   KRAKAREN_BOSS_ROOM_FLOOR,
   ARENA_FLOOR,
   FLOOR_GRATE,
+  SPIDER_LAB_FLOOR,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
@@ -41,6 +42,38 @@ function findHoarderBounds(
 
   const result = isFinite(minX) ? { minX, minY, maxX, maxY } : null;
   _hoarderBoundsCache.set(structure, result);
+  return result;
+}
+
+const _spiderLabBoundsCache = new WeakMap<
+  TileContent[][],
+  { minX: number; minY: number; maxX: number; maxY: number } | null
+>();
+
+function findSpiderLabBounds(
+  structure: TileContent[][],
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const cached = _spiderLabBoundsCache.get(structure);
+  if (cached !== undefined) return cached;
+
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (let y = 0; y < structure.length; y++) {
+    const row = structure[y];
+    for (let x = 0; x < row.length; x++) {
+      if (row[x].type === SPIDER_LAB_FLOOR) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const result = isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+  _spiderLabBoundsCache.set(structure, result);
   return result;
 }
 
@@ -248,6 +281,45 @@ export function drawSpecialFloorTile(
       ctx.strokeStyle = '#6a6a6a';
       ctx.lineWidth = 1;
       ctx.strokeRect(sx + ts * 0.08, sy + ts * 0.08, ts * 0.84, ts * 0.84);
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Spider Lab floor — UV-mapped spider_room_floor image across the entire room
+    case SPIDER_LAB_FLOOR: {
+      const def = getSpriteDef('spider_room_floor');
+      const bounds = findSpiderLabBounds(structure);
+      if (def && bounds) {
+        const { img } = def;
+        const roomW = bounds.maxX - bounds.minX + 1;
+        const roomH = bounds.maxY - bounds.minY + 1;
+        const srcX = ((tx - bounds.minX) / roomW) * img.width;
+        const srcY = ((ty - bounds.minY) / roomH) * img.height;
+        const srcW = img.width / roomW;
+        const srcH = img.height / roomH;
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, sx, sy, ts, ts);
+      } else {
+        // Fallback: dark tiled lab floor with subtle webbing
+        const base = (tx + ty) % 2 === 0 ? '#1a1610' : '#161208';
+        ctx.fillStyle = base;
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.strokeStyle = '#0d0a06';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(sx + ts - 1, sy, 1, ts);
+        ctx.strokeRect(sx, sy + ts - 1, ts, 1);
+        if ((tx * 5 + ty * 7) % 9 === 0) {
+          ctx.strokeStyle = 'rgba(80,60,20,0.2)';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(sx + ts * 0.2, sy + ts * 0.1);
+          ctx.lineTo(sx + ts * 0.8, sy + ts * 0.9);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(sx + ts * 0.8, sy + ts * 0.1);
+          ctx.lineTo(sx + ts * 0.2, sy + ts * 0.9);
+          ctx.stroke();
+        }
+      }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }

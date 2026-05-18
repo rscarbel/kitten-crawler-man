@@ -58,6 +58,7 @@ import { readMovement, applyMovement, checkDeath, revealMinimap } from '../syste
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
+import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -65,6 +66,7 @@ import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
+import { SmallSpider } from '../creatures/SmallSpider';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Juicer } from '../creatures/Juicer';
 import {
@@ -208,6 +210,8 @@ export class DungeonScene extends GameplayScene {
   private juicerRoom: JuicerRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
+  private spiderQuest!: SpiderQuestSystem;
+  private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
   private playerTick = new PlayerTickSystem();
@@ -266,6 +270,7 @@ export class DungeonScene extends GameplayScene {
 
   private _toughModeActive = false;
   private _revealStairwell = false;
+  private _revealSpiderLab = false;
 
   private gameOver = false;
   protected readonly notifPulse = { value: 0 };
@@ -315,6 +320,7 @@ export class DungeonScene extends GameplayScene {
         mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
         hasArena: levelDef.hasArena ?? false,
         bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
+        hasSpiderLab: levelDef.hasSpiderLab ?? false,
       });
     this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
@@ -366,6 +372,11 @@ export class DungeonScene extends GameplayScene {
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.barriers = new BarrierSystem(this.gameMap);
     this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) => {
+      this.mobs.push(mob);
+      this.mobGrid.insert(mob);
+      mob.setSpells(this.spells);
+    });
+    this.spiderQuest = new SpiderQuestSystem(this.gameMap, (mob) => {
       this.mobs.push(mob);
       this.mobGrid.insert(mob);
       mob.setSpells(this.spells);
@@ -719,6 +730,7 @@ export class DungeonScene extends GameplayScene {
       if (this.levelDef.onMobKilledSpawns) {
         for (const rule of this.levelDef.onMobKilledSpawns) {
           if (mob instanceof BrindleGrub && rule.type === 'brindle_grub') continue;
+          if (mob instanceof SmallSpider) continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
           const count = randomInt(rule.minCount, rule.maxCount);
@@ -820,12 +832,18 @@ export class DungeonScene extends GameplayScene {
       this.audio.onRunning(startIntro);
     }
 
+    this._spiderKeyHandler = (e: KeyboardEvent) => {
+      this.spiderQuest.handleKeyDown(e.key);
+    };
+    window.addEventListener('keydown', this._spiderKeyHandler);
+
     this.inputHandler.bind({
       isSuppressed: () =>
         this.pauseMenu.isOpen ||
         this.followerMenu.isOpen ||
         this.safeRoom.isSleeping ||
         this.defendQuest.isDialogOpen ||
+        this.spiderQuest.isDialogOpen ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
@@ -835,6 +853,7 @@ export class DungeonScene extends GameplayScene {
           return true;
         }
         if (this.defendQuest.dismissDialog()) return true;
+        if (this.spiderQuest.dismissDialog()) return true;
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -868,6 +887,7 @@ export class DungeonScene extends GameplayScene {
         else this.input.clear();
       },
       clearInput: () => this.input.clear(),
+      advanceDialog: () => this.defendQuest.advancePage(),
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       usePotion: () => {
@@ -908,8 +928,14 @@ export class DungeonScene extends GameplayScene {
 
   onExit(): void {
     this.audio?.stopWalkingLoop();
+    this.audio?.stopMachineryLoop();
     this.audio?.stopMusic();
     this.inputHandler.unbind();
+    if (this._spiderKeyHandler !== null) {
+      window.removeEventListener('keydown', this._spiderKeyHandler);
+      this._spiderKeyHandler = null;
+    }
+    this.spiderQuest.dispose();
     aiAdapter.unbindScene();
     this.bus.clear();
   }
@@ -1128,6 +1154,44 @@ export class DungeonScene extends GameplayScene {
     ctx.restore();
   }
 
+  private renderSpiderLabArrow(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this._revealSpiderLab) return;
+    const lab = this.gameMap.spiderLabRoom;
+    if (lab === null) return;
+
+    const player = this.active();
+    const px = player.x + TILE_SIZE / 2;
+    const py = player.y + TILE_SIZE / 2;
+    const targetX = lab.centre.x * TILE_SIZE;
+    const targetY = lab.centre.y * TILE_SIZE;
+
+    const dx = targetX - px;
+    const dy = targetY - py;
+    const angle = Math.atan2(dy, dx);
+
+    const t = Date.now();
+    const bounce = Math.sin(t * 0.005) * 4;
+    const len = 22;
+    const arrowX = player.x - camX + TILE_SIZE / 2;
+    const arrowY = player.y - camY - TILE_SIZE * 1.5 + bounce;
+
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(angle);
+    ctx.fillStyle = '#a855f7';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(len, 0);
+    ctx.lineTo(-len * 0.45, -len * 0.5);
+    ctx.lineTo(-len * 0.1, 0);
+    ctx.lineTo(-len * 0.45, len * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private triggerCompanionFollow(): void {
     this.followerMenu.open();
   }
@@ -1295,6 +1359,17 @@ export class DungeonScene extends GameplayScene {
         );
         return;
       }
+      if (text.trim() === '!spider') {
+        if (this.gameMap.spiderLabRoom === null) {
+          this.audio?.play('error');
+        } else {
+          this._revealSpiderLab = !this._revealSpiderLab;
+          this.playerChat.showBubble(
+            this._revealSpiderLab ? '🕷 SPIDER LAB REVEALED' : '🕷 SPIDER LAB HIDDEN',
+          );
+        }
+        return;
+      }
       this.playerChat.showBubble(text);
       void aiAdapter.chatWithSystem(text, context);
     });
@@ -1315,7 +1390,36 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  private restartAtFloorEntry(): void {
+    this.sceneManager.replace(
+      new DungeonScene(this.levelDef, this.input, this.sceneManager, {
+        humanSnap: this.floorEntryHumanSnap,
+        catSnap: this.floorEntryCatSnap,
+        floorEntryHumanSnap: this.floorEntryHumanSnap,
+        floorEntryCatSnap: this.floorEntryCatSnap,
+        humanAchievements: this.floorEntryHumanAchievements.clone(),
+        catAchievements: this.floorEntryCatAchievements.clone(),
+        floorEntryHumanAchievements: this.floorEntryHumanAchievements,
+        floorEntryAbilityManager: this.floorEntryAbilityManager,
+        floorEntryCatAchievements: this.floorEntryCatAchievements,
+        abilityManager: this.floorEntryAbilityManager.clone(),
+        mongoUnlocked: this.mongoSystem.unlocked,
+        audio: this.audio ?? undefined,
+      }),
+    );
+  }
+
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
+    // Space bar advances / dismisses achievement notifications and loot boxes
+    if (this.achievementUI.handleSpaceBar()) return;
+
+    if (this.abilityLevelUpDialog.handleSpaceBar()) return;
+    if (this.levelCompleteScreen.handleSpaceBar()) return;
+    if (this.gameOver && this.deathScreen.handleSpaceBar()) {
+      this.restartAtFloorEntry();
+      return;
+    }
+
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.mordecaiDialogOpen = false;
       return;
@@ -1344,6 +1448,9 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (this.defendQuest.tryInteract(active)) {
+      return;
+    }
+    if (this.spiderQuest.tryInteract(active)) {
       return;
     }
     if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
@@ -1435,6 +1542,7 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
+    if (this.spiderQuest.handleClick(mx, my)) return;
     if (this.achievementUI.handleClick(mx, my)) return;
 
     if (this.followerMenu.isOpen) {
@@ -1490,22 +1598,7 @@ export class DungeonScene extends GameplayScene {
 
     if (this.gameOver) {
       if (this.deathScreen.handleClick(mx, my)) {
-        this.sceneManager.replace(
-          new DungeonScene(this.levelDef, this.input, this.sceneManager, {
-            humanSnap: this.floorEntryHumanSnap,
-            catSnap: this.floorEntryCatSnap,
-            floorEntryHumanSnap: this.floorEntryHumanSnap,
-            floorEntryCatSnap: this.floorEntryCatSnap,
-            humanAchievements: this.floorEntryHumanAchievements.clone(),
-            catAchievements: this.floorEntryCatAchievements.clone(),
-            floorEntryHumanAchievements: this.floorEntryHumanAchievements,
-            floorEntryCatAchievements: this.floorEntryCatAchievements,
-            abilityManager: this.floorEntryAbilityManager.clone(),
-            floorEntryAbilityManager: this.floorEntryAbilityManager,
-            mongoUnlocked: this.mongoSystem.unlocked,
-            audio: this.audio ?? undefined,
-          }),
-        );
+        this.restartAtFloorEntry();
       }
       return;
     }
@@ -1611,6 +1704,10 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.update();
     this.playerChat.update();
     this.achievementUI.tick();
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      const inSafe = this.human.isProtected || this.cat.isProtected;
+      this.achievementUI.maybeAutoTrigger(inSafe);
+    }
     this.abilityLevelUpDialog.update();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
@@ -1628,6 +1725,22 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
+    // Spider quest ticks even while other systems are paused (keyboard hero must advance)
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      const sqCtx = this.buildSystemContext();
+      this.spiderQuest.update(sqCtx);
+      this._processSpiderQuestSounds();
+      if (this.spiderQuest.questCompletePending) {
+        this.spiderQuest.questCompletePending = false;
+        if (this.human.gainXp(2000)) {
+          this.bus.emit('playerLevelUp', { player: this.human, newLevel: this.human.level });
+        }
+        if (this.cat.gainXp(2000)) {
+          this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
+        }
+      }
+    }
+
     if (
       this.gameOver ||
       this.abilityLevelUpDialog.isShowing ||
@@ -1637,6 +1750,8 @@ export class DungeonScene extends GameplayScene {
       this.levelCompleteScreen.isActive ||
       this.building?.menuOpen ||
       this.defendQuest.isDialogOpen ||
+      this.spiderQuest.isDialogOpen ||
+      this.spiderQuest.isDungeonPaused ||
       this.playerChat.isOpen
     )
       return;
@@ -1686,6 +1801,7 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderWorld(ctx, rc);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
+    this.spiderQuest.render(ctx, camX, camY, this.active());
 
     this.renderPipeline.renderEntities(ctx, rc);
     this.bossRoom.renderProjectiles(ctx, camX, camY);
@@ -1709,6 +1825,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, canvas, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
+      this.renderSpiderLabArrow(ctx, camX, camY);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -1762,6 +1879,7 @@ export class DungeonScene extends GameplayScene {
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
       this.defendQuest.renderUI(ctx, canvas);
+      this.spiderQuest.renderUI(ctx, canvas);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -1947,7 +2065,9 @@ export class DungeonScene extends GameplayScene {
       player,
       this.camera(),
     );
-    applyMovement(player, move, this.gameMap);
+    if (!this.spiderQuest.playerLocked) {
+      applyMovement(player, move, this.gameMap);
+    }
 
     if (player.isMoving) {
       this.audio?.startWalkingLoop();
@@ -2264,6 +2384,53 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  private _processSpiderQuestSounds(): void {
+    if (this.spiderQuest.machineryStartPending) {
+      this.spiderQuest.machineryStartPending = false;
+      this.audio?.startMachineryLoop();
+    }
+    if (this.spiderQuest.machineryStopPending) {
+      this.spiderQuest.machineryStopPending = false;
+      this.audio?.stopMachineryLoop();
+    }
+    if (this.spiderQuest.poweringOffSoundPending) {
+      this.spiderQuest.poweringOffSoundPending = false;
+      this.audio?.play('powering_off');
+    }
+    if (this.spiderQuest.rumbleSoundPending) {
+      this.spiderQuest.rumbleSoundPending = false;
+      this.audio?.play('rumble');
+    }
+    if (this.spiderQuest.exclamationSoundPending) {
+      this.spiderQuest.exclamationSoundPending = false;
+      this.audio?.play('scientist_exclaiming_about_an_escape');
+    }
+    if (this.spiderQuest.lifeMachinePoweringOnPending) {
+      this.spiderQuest.lifeMachinePoweringOnPending = false;
+      this.audio?.play('life_machine_powering_on');
+    }
+    if (this.spiderQuest.menuClickSoundPending) {
+      this.spiderQuest.menuClickSoundPending = false;
+      this.audio?.play('menu_click');
+    }
+    if (this.spiderQuest.menuOpenSoundPending) {
+      this.spiderQuest.menuOpenSoundPending = false;
+      this.audio?.play('menu_open');
+    }
+    if (this.spiderQuest.keyboardHeroMusicStartPending) {
+      this.spiderQuest.keyboardHeroMusicStartPending = false;
+      this.audio?.startKeyboardHeroMusic();
+    }
+    if (this.spiderQuest.keyboardHeroMusicStopPending) {
+      this.spiderQuest.keyboardHeroMusicStopPending = false;
+      this.audio?.stopKeyboardHeroMusic();
+    }
+    if (this.spiderQuest.hackFailErrorSoundPending) {
+      this.spiderQuest.hackFailErrorSoundPending = false;
+      this.audio?.play('error');
+    }
+  }
+
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
     if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
       const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
@@ -2331,11 +2498,18 @@ export class DungeonScene extends GameplayScene {
     const player = this.active();
     const canvas = this.sceneManager.canvas;
     const mapPx = this.gameMap.structure.length * TILE_SIZE;
-    const camX = player.x + TILE_SIZE / 2 - canvas.width / 2;
-    const camY = player.y + TILE_SIZE / 2 - canvas.height / 2;
+
+    const targetOverride = this.spiderQuest.cameraTargetOverride;
+    const targetX = targetOverride !== null ? targetOverride.x : player.x;
+    const targetY = targetOverride !== null ? targetOverride.y : player.y;
+
+    const camX = targetX + TILE_SIZE / 2 - canvas.width / 2;
+    const camY = targetY + TILE_SIZE / 2 - canvas.height / 2;
+
+    const shakeOffset = this.spiderQuest.cameraOffset;
     return {
-      x: clamp(camX, 0, mapPx - canvas.width),
-      y: clamp(camY, 0, mapPx - canvas.height),
+      x: clamp(camX, 0, mapPx - canvas.width) + shakeOffset.x,
+      y: clamp(camY, 0, mapPx - canvas.height) + shakeOffset.y,
     };
   }
 

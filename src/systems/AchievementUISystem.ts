@@ -64,6 +64,89 @@ export class AchievementUISystem {
   }
 
   /**
+   * Auto-trigger achievement notifications in the safe room without requiring
+   * the player to click the trophy banner. Call once per frame.
+   */
+  maybeAutoTrigger(inSafeRoom: boolean): void {
+    if (!inSafeRoom) return;
+    if (this._notifActive || this.lootBoxOpener.isOpen) return;
+
+    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+    if (totalUnread === 0) {
+      // All achievements shown — auto-open pending boxes
+      const totalBoxes =
+        this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
+      if (totalBoxes > 0) {
+        if (this.humanAchievements.pendingBoxes.length > 0) {
+          this.openBoxQueue('human', () => void 0);
+        } else {
+          this.openBoxQueue('cat', () => void 0);
+        }
+      }
+      return;
+    }
+
+    // Start showing unread achievement notifications
+    this._notifQueue = [
+      ...this.humanAchievements.pendingNotifications.map((def) => ({
+        def,
+        mgr: this.humanAchievements,
+        player: 'Human' as const,
+      })),
+      ...this.catAchievements.pendingNotifications.map((def) => ({
+        def,
+        mgr: this.catAchievements,
+        player: 'Cat' as const,
+      })),
+    ];
+    if (this._notifQueue.length > 0) {
+      this._notifActive = true;
+      this.achievementNotif.reset();
+      this.audio?.play('achievement_awarded');
+    }
+  }
+
+  /**
+   * Handle a space-bar press as an OK/continue action.
+   * Returns true if the event was consumed.
+   */
+  handleSpaceBar(): boolean {
+    if (this.lootBoxOpener.isOpen) {
+      this.lootBoxOpener.skip();
+      return true;
+    }
+    if (this._notifActive) {
+      if (this.achievementNotif.handleSpaceBar()) {
+        this._advanceNotifQueue();
+      }
+      return true;
+    }
+    return false;
+  }
+
+  private _advanceNotifQueue(): void {
+    const shown = this._notifQueue.shift();
+    if (shown) {
+      const idx = shown.mgr.pendingNotifications.indexOf(shown.def);
+      if (idx >= 0) shown.mgr.pendingNotifications.splice(idx, 1);
+    }
+    if (this._notifQueue.length > 0) {
+      this.achievementNotif.reset();
+    } else {
+      this._notifActive = false;
+      // Chain directly into loot box opening
+      const inSafe = this.human.isProtected || this.cat.isProtected;
+      if (inSafe) {
+        if (this.humanAchievements.pendingBoxes.length > 0) {
+          this.openBoxQueue('human', () => void 0);
+        } else if (this.catAchievements.pendingBoxes.length > 0) {
+          this.openBoxQueue('cat', () => void 0);
+        }
+      }
+    }
+  }
+
+  /**
    * Handle a click. Returns true if the click was consumed by this system.
    */
   handleClick(mx: number, my: number): boolean {
@@ -76,16 +159,7 @@ export class AchievementUISystem {
     // Achievement notification overlay
     if (this._notifActive) {
       if (this.achievementNotif.handleClick(mx, my)) {
-        const shown = this._notifQueue.shift();
-        if (shown) {
-          const idx = shown.mgr.pendingNotifications.indexOf(shown.def);
-          if (idx >= 0) shown.mgr.pendingNotifications.splice(idx, 1);
-        }
-        if (this._notifQueue.length > 0) {
-          this.achievementNotif.reset();
-        } else {
-          this._notifActive = false;
-        }
+        this._advanceNotifQueue();
       }
       return true;
     }

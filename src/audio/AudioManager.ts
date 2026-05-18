@@ -42,6 +42,8 @@ export class AudioManager {
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
   private walkingSource: AudioBufferSourceNode | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
+  private machinerySource: AudioBufferSourceNode | null = null;
+  private keyboardHeroMusicSource: AudioBufferSourceNode | null = null;
 
   // Sounds queued because their buffer wasn't decoded yet when requested.
   private readonly pendingSfx = new Map<SoundId, PlayOptions>();
@@ -121,6 +123,8 @@ export class AudioManager {
     // Stop looping sources so they don't resume audibly on a buggy ctx.resume().
     this.stopWalkingLoop();
     this.stopSpiderWalkingLoop();
+    this.stopMachineryLoop();
+    this.stopKeyboardHeroMusic();
     void this.ctx.suspend();
   }
 
@@ -366,6 +370,60 @@ export class AudioManager {
     this.spiderWalkingSource = null;
   }
 
+  /** Start a looping ambient machinery SFX (spider lab). No-op if already playing or buffer not loaded. */
+  startMachineryLoop(): void {
+    if (this.machinerySource !== null) return;
+    const buffer = this.buffers.get('tech_machinery_running');
+    if (!buffer) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.35;
+    gain.connect(this.sfxGain);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+    this.machinerySource = source;
+  }
+
+  /** Stop the looping machinery SFX. No-op if not playing. */
+  stopMachineryLoop(): void {
+    if (this.machinerySource === null) return;
+    try {
+      this.machinerySource.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.machinerySource = null;
+  }
+
+  /** Play the keyboard hero music track (one-shot, stoppable). No-op if already playing. */
+  startKeyboardHeroMusic(): void {
+    if (this.keyboardHeroMusicSource !== null) return;
+    const buffer = this.buffers.get('keyboard_hero_music_track_1');
+    if (!buffer) return;
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = false;
+    source.connect(this.sfxGain);
+    source.start();
+    source.onended = () => {
+      this.keyboardHeroMusicSource = null;
+    };
+    this.keyboardHeroMusicSource = source;
+  }
+
+  /** Stop the keyboard hero music track early. No-op if not playing. */
+  stopKeyboardHeroMusic(): void {
+    if (this.keyboardHeroMusicSource === null) return;
+    try {
+      this.keyboardHeroMusicSource.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.keyboardHeroMusicSource = null;
+  }
+
   /**
    * Stop the currently-playing music track.
    * @param fadeMs - fade-out duration in ms (default: 500)
@@ -515,6 +573,8 @@ export class AudioManager {
     this.removeUnlockListeners();
     this.stopWalkingLoop();
     this.stopSpiderWalkingLoop();
+    this.stopMachineryLoop();
+    this.stopKeyboardHeroMusic();
     this.stopMusic(0);
     void this.ctx.close();
   }

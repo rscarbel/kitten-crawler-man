@@ -10,8 +10,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 export class PlayerTickSystem implements GameSystem {
   private humanRegenAccum = 0;
   private catRegenAccum = 0;
-  private readonly HUMAN_REGEN_FRAMES = 10800; // 3 min @ 60fps
-  private readonly CAT_REGEN_FRAMES = 14400; // 4 min @ 60fps
+  private readonly HUMAN_REGEN_FRAMES = 3600; // 1 min @ 60fps
+  private readonly CAT_REGEN_FRAMES = 4800; // 80s @ 60fps
 
   private humanAutoPotionCooldown = 0;
   private catAutoPotionCooldown = 0;

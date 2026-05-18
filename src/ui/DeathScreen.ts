@@ -107,4 +107,9 @@ export class DeathScreen {
     }
     return false;
   }
+
+  /** Space bar counts as clicking the restart button once the screen is visible. */
+  handleSpaceBar(): boolean {
+    return this.isVisible;
+  }
 }

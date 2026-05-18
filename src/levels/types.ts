@@ -14,7 +14,8 @@ export interface MobSpawnRule {
     | 'krakaren_clone'
     | 'brindle_grub'
     | 'sky_fowl'
-    | 'grotesque_spider';
+    | 'grotesque_spider'
+    | 'small_spider';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -90,6 +91,8 @@ export interface LevelDef {
   isOverworld?: boolean;
   /** Whether this level has a circular arena with the Ball of Swine boss. */
   hasArena?: boolean;
+  /** Whether this level has a spider lab room with the Grotesque Spider quest. */
+  hasSpiderLab?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */
   extraSpawns?: ExtraSpawnRule[];
   /** Mobs to spawn when another mob is killed (event-driven). */

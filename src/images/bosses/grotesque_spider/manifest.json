@@ -1,0 +1,265 @@
+{
+  "grotesque_spider_base": {
+    "path": "bosses/grotesque_spider/grotesque_spider_base.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle": { "row": 0, "frameCount": 8 },
+      "walk_down": { "row": 1, "frameCount": 8 },
+      "walk_up": { "row": 2, "frameCount": 8 },
+      "walk_side": { "row": 3, "frameCount": 8 }
+    }
+  },
+  "grotesque_spider_slam": {
+    "path": "bosses/grotesque_spider/grotesque_spider_slam.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_slam": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_screech": {
+    "path": "bosses/grotesque_spider/grotesque_spider_screech.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_screech": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_spit": {
+    "path": "bosses/grotesque_spider/grotesque_spider_spit.png",
+    "frameWidth": 320,
+    "frameHeight": 384,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "attack_spit": { "row": 0, "frameCount": 16 }
+    }
+  },
+  "grotesque_spider_spit_projectile": {
+    "path": "bosses/grotesque_spider/grotesque_spider_spit_projectile.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 48,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "fly": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "grotesque_spider_spit_trap": {
+    "path": "bosses/grotesque_spider/grotesque_spider_spit_trap.png",
+    "frameWidth": 256,
+    "frameHeight": 256,
+    "tileX": 128,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "splat": { "row": 0, "frameCount": 8 },
+      "idle": { "row": 1, "frameCount": 8 }
+    }
+  },
+  "keyboard_hero_buttons": {
+    "path": "bosses/grotesque_spider/keyboard_hero_buttons.png",
+    "frameWidth": 99,
+    "frameHeight": 99,
+    "tileX": 8,
+    "tileY": 8,
+    "tileScale": 33,
+    "states": {
+      "successfully_clicked": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "left_arrow": { "row": 0, "colOffset": 1, "frameCount": 1 },
+      "right_arrow": { "row": 0, "colOffset": 2, "frameCount": 1 },
+      "down_arrow": { "row": 0, "colOffset": 3, "frameCount": 1 },
+      "up_arrow": { "row": 0, "colOffset": 4, "frameCount": 1 }
+    }
+  },
+  "keyboard_hero_playing_field": {
+    "path": "bosses/grotesque_spider/keyboard_hero_playing_field.png",
+    "frameWidth": 426,
+    "frameHeight": 586,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 33,
+    "states": {
+      "base_container": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "column_2_error": { "row": 0, "colOffset": 1, "frameCount": 1 },
+      "column_1_error": { "row": 0, "colOffset": 2, "frameCount": 1 },
+      "column_4_error": { "row": 0, "colOffset": 3, "frameCount": 1 },
+      "column_3_error": { "row": 0, "colOffset": 4, "frameCount": 1 }
+    }
+  },
+  "lab_tables": {
+    "path": "bosses/grotesque_spider/lab_tables.png",
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "tileX": 0,
+    "tileY": 10,
+    "tileScale": 18,
+    "states": {
+      "lab_table_with_computer_on_top": {
+        "row": 0,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 10, "x2": 32, "y2": 32 }]
+      },
+      "empty_lab_table": {
+        "row": 0,
+        "colOffset": 1,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 10, "x2": 32, "y2": 32 }]
+      }
+    }
+  },
+  "life_machine": {
+    "path": "bosses/grotesque_spider/life_machine.png",
+    "frameWidth": 57.5,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 72,
+    "tileScale": 24,
+    "states": {
+      "life_machine_without_egg_sac": {
+        "row": 0,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_idle": {
+        "row": 0,
+        "colOffset": 1,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_warming": {
+        "row": 0,
+        "colOffset": 2,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_hot": {
+        "row": 0,
+        "colOffset": 3,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_active_1": {
+        "row": 0,
+        "colOffset": 4,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_active_2": {
+        "row": 1,
+        "frameCount": 3,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_with_open_egg_sac": {
+        "row": 1,
+        "colOffset": 3,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
+      },
+      "life_machine_green_lights": {
+        "row": 2,
+        "frameCount": 3
+      },
+      "life_machine_red_lights": {
+        "row": 2,
+        "colOffset": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "scientist": {
+    "path": "bosses/grotesque_spider/scientist.png",
+    "frameWidth": 44,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 },
+      "walking": { "row": 0, "colOffset": 1, "frameCount": 2 },
+      "speaking": { "row": 0, "colOffset": 3, "frameCount": 1 },
+      "gore_damaged_head": {
+        "row": 1,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_severed_arm_right": {
+        "row": 1,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_severed_leg_left": {
+        "row": 1,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_severed_leg_right": {
+        "row": 1,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_severed_torso": {
+        "row": 1,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_severed_head": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "spider_room_floor": {
+    "path": "bosses/grotesque_spider/spider_room_floor.jpg",
+    "frameWidth": 2000,
+    "frameHeight": 2071,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 83,
+    "states": {
+      "default": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "spider-egg": {
+    "path": "bosses/grotesque_spider/spider-egg.png",
+    "frameWidth": 79,
+    "frameHeight": 64,
+    "tileX": 15,
+    "tileY": 0,
+    "tileScale": 24,
+    "states": {
+      "whole": {
+        "row": 0,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 23, "y1": 58, "x2": 58, "y2": 64 }]
+      },
+      "opened": {
+        "row": 0,
+        "colOffset": 1,
+        "frameCount": 1,
+        "blockedRegions": [{ "x1": 23, "y1": 58, "x2": 58, "y2": 64 }]
+      }
+    }
+  }
+}

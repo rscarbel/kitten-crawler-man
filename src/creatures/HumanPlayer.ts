@@ -43,6 +43,9 @@ export class HumanPlayer extends Player {
     if (boxersSlot) this.applyItemBonus(boxersSlot);
     // Pre-equip Smush tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.smush_tome, quantity: 1 };
+    // Move starting potions from bag to hotbar slot 1 for quick access
+    this.inventory.removeItems('health_potion', 10);
+    this.inventory.actionBar.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
   }
 
   setAbilityManager(manager: AbilityManager): void {
@@ -152,11 +155,17 @@ export class HumanPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    // Active indicator — yellow tile outline
+    // Active indicator — larger yellow outline sized to the actual sprite extent.
+    // Human sprite: tileX=211, tileY=130, tileScale=128, frame 550×260 → at tileSize=32
+    //   scale=0.25, display 137.5×65, anchor at (sx−52.75, sy−32.5).
     if (this.isActive) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 2;
-      ctx.strokeRect(sx + 1, sy + 1, s - 2, s - 2);
+      // Box that covers the full sprite height (32px above tile) and roughly the sprite width
+      ctx.strokeRect(sx - 6, sy - 32, s + 12, s + 32);
+      ctx.restore();
     }
 
     drawHumanSprite(
@@ -175,7 +184,8 @@ export class HumanPlayer extends Player {
       this.facingX,
     );
 
-    this.renderHealthBar(ctx, sx, sy);
+    // Health bar above the sprite top (~32px above tile origin)
+    this.renderHealthBar(ctx, sx, sy - 30);
     this.renderDamageFlash(ctx, sx, sy);
     this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);

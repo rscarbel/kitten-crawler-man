@@ -4,10 +4,12 @@ import effectsManifest from '../images/effects/manifest.json';
 import enemiesManifest from '../images/enemies/manifest.json';
 import environmentManifest from '../images/environment/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
+import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
 import { TILE_SIZE } from './constants';
 
 const manifestJson = {
   ...bossesManifest,
+  ...grotesqueSpiderManifest,
   ...charactersManifest,
   ...effectsManifest,
   ...enemiesManifest,

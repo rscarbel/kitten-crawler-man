@@ -47,6 +47,9 @@ export class CatPlayer extends Player {
     super(tileX, tileY, tileSize, 8);
     // Initialize Magic Missile tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
+    // Move starting potions from bag to hotbar slot 1 for quick access
+    this.inventory.removeItems('health_potion', 10);
+    this.inventory.actionBar.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
   }
 
   getMissileDamage(): number {
@@ -258,11 +261,16 @@ export class CatPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    // Active indicator — yellow tile outline
+    // Active indicator — slightly larger yellow outline, 40% transparent.
+    // Cat sprite: tileX=16, tileY=8, tileScale=64, frame 96×96 → at tileSize=32
+    //   scale=0.5, display 48×48, anchor at (sx−8, sy−4).
     if (this.isActive) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 2;
-      ctx.strokeRect(sx + 1, sy + 1, s - 2, s - 2);
+      ctx.strokeRect(sx - 6, sy - 4, s + 12, s + 12);
+      ctx.restore();
     }
 
     drawCatSprite(ctx, sx, sy, s, this.walkFrame, this.isMoving, this.facingY, this.facingX);

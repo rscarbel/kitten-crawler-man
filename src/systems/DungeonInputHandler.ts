@@ -22,6 +22,8 @@ export interface DungeonInputActions {
   clearInput(): void;
 
   // Action key handlers
+  /** Called when Space is pressed while a suppressible dialog is open. Returns true if consumed. */
+  advanceDialog(): boolean;
   switchCharacter(): void;
   spaceAction(): void;
   usePotion(): void;
@@ -62,6 +64,10 @@ export class DungeonInputHandler {
 
     this.actionHandler = (e: KeyboardEvent) => {
       if (!e.repeat && actions.dismissChestDialog()) return;
+      if (e.key === ' ' && !e.repeat && actions.advanceDialog()) {
+        e.preventDefault();
+        return;
+      }
       if (actions.isSuppressed()) return;
 
       if (e.key === 'Enter' && !e.repeat) {

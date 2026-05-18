@@ -32,7 +32,7 @@ const SCREECH_WINDUP = 65;
 const SCREECH_EXECUTE = 25;
 
 const SLAM_DAMAGE_PROGRESS = 0.55;
-const SLAM_WINDUP = 70; // ~1.2s — enough frames to sidestep before legs crash
+const SLAM_WINDUP = 110; // ~1.8s — enough frames to sidestep before legs crash
 const SLAM_EXECUTE = 11;
 const SLAM_LOCK_FRAME = Math.floor(SLAM_WINDUP / 2);
 

@@ -16,6 +16,7 @@ import {
   BRAZIER,
   BONES,
   BOOKSHELF,
+  SPIDER_LAB_FLOOR,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
 
@@ -48,6 +49,21 @@ export interface TreasureRoomData {
   centre: { x: number; y: number };
 }
 
+export interface SpiderLabRoomData {
+  bounds: Rect;
+  centre: Point;
+  /** South-wall entrance tile (where hallways connect). */
+  entranceTile: Point;
+  /** Tile where the scientist NPC stands (near entrance). */
+  scientistTile: Point;
+  /** Tile where the lab computer table is placed. */
+  computerTile: Point;
+  /** Tile where the spider egg starts (centre of room). */
+  spiderEggTile: Point;
+  /** Tile positions of the life machines scattered through the room. */
+  lifeMachineTiles: Point[];
+}
+
 export interface DungeonData {
   grid: TileContent[][];
   startTile: Point;
@@ -55,6 +71,7 @@ export interface DungeonData {
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   questRooms: QuestRoomData[];
   treasureRooms: TreasureRoomData[];
+  spiderLabRoom: SpiderLabRoomData | null;
   mobSpawnPoints: Array<Point & { w: number; h: number }>;
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
@@ -318,6 +335,7 @@ export function generateDungeon(
   numStairwellsOverride?: number,
   hasArena = false,
   bossTypes: string[] = [],
+  hasSpiderLab = false,
 ): DungeonData {
   const BORDER = 5;
 
@@ -447,7 +465,8 @@ export function generateDungeon(
   const bossRoomStart = safeRoomEnd;
   const bossRoomEnd = safeRoomEnd + numBossRooms;
   const questRoomIdx = bossRoomEnd;
-  const regularRoomStart = questRoomIdx + 1;
+  const spiderLabRoomIdx = hasSpiderLab ? questRoomIdx + 1 : -1;
+  const regularRoomStart = hasSpiderLab ? questRoomIdx + 2 : questRoomIdx + 1;
 
   const maxRooms = Math.round(15 * (size / 100) ** 2);
   const maxAttempts = Math.max(maxRooms * 8, 80);
@@ -462,8 +481,9 @@ export function generateDungeon(
     const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
     const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
     const isQuestRoom = rooms.length === questRoomIdx;
-    const w = isBossRoom ? 22 : isQuestRoom ? 14 : randomInt(MIN_W, MAX_W);
-    const h = isBossRoom ? 18 : isQuestRoom ? 12 : randomInt(MIN_H, MAX_H);
+    const isSpiderLabRoom = spiderLabRoomIdx >= 0 && rooms.length === spiderLabRoomIdx;
+    const w = isBossRoom ? 22 : isQuestRoom ? 14 : isSpiderLabRoom ? 40 : randomInt(MIN_W, MAX_W);
+    const h = isBossRoom ? 18 : isQuestRoom ? 12 : isSpiderLabRoom ? 32 : randomInt(MIN_H, MAX_H);
     const x = randomInt(BORDER + 1, size - BORDER - w - 2);
     const y = randomInt(BORDER + 1, size - BORDER - h - 2);
 
@@ -489,20 +509,27 @@ export function generateDungeon(
       });
 
     const QUEST_MAX_DIST = 60;
+    const SPIDER_LAB_MIN_DIST = 30;
+    const SPIDER_LAB_MAX_DIST = 90;
     let tooFarFromStart = false;
     if (rooms.length > 0) {
       const sc = startCenter ?? {
         x: Math.floor(rooms[0].x + rooms[0].w / 2),
         y: Math.floor(rooms[0].y + rooms[0].h / 2),
       };
-      const maxDist = isSafeRoom
-        ? SAFE_MAX_DIST
-        : isBossRoom
-          ? BOSS_MAX_DIST
-          : isQuestRoom
-            ? QUEST_MAX_DIST
-            : Infinity;
-      if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
+      if (isSpiderLabRoom) {
+        const d = Math.hypot(cx - sc.x, cy - sc.y);
+        if (d < SPIDER_LAB_MIN_DIST || d > SPIDER_LAB_MAX_DIST) tooFarFromStart = true;
+      } else {
+        const maxDist = isSafeRoom
+          ? SAFE_MAX_DIST
+          : isBossRoom
+            ? BOSS_MAX_DIST
+            : isQuestRoom
+              ? QUEST_MAX_DIST
+              : Infinity;
+        if (Math.hypot(cx - sc.x, cy - sc.y) > maxDist) tooFarFromStart = true;
+      }
     }
 
     if (!overlaps && !tooCloseToBoss && !tooCloseToSafeRoom && !tooFarFromStart) {
@@ -516,7 +543,9 @@ export function generateDungeon(
           ? bossFloorForType(bossTypes[bossIdx] ?? '')
           : isQuestRoom
             ? FloorTypeValue.tile_floor
-            : randomFromArray(ZONE_FLOORS[zone]);
+            : isSpiderLabRoom
+              ? SPIDER_LAB_FLOOR
+              : randomFromArray(ZONE_FLOORS[zone]);
 
       rooms.push({ x, y, w, h, floor });
       if (rooms.length === 1) startCenter = { x: cx, y: cy };
@@ -546,6 +575,7 @@ export function generateDungeon(
   for (let i = safeRoomStart; i < safeRoomEnd; i++) specialRoomIdxSet.add(i);
   for (let i = bossRoomStart; i < bossRoomEnd; i++) specialRoomIdxSet.add(i);
   specialRoomIdxSet.add(questRoomIdx);
+  if (spiderLabRoomIdx >= 0) specialRoomIdxSet.add(spiderLabRoomIdx);
 
   type Edge = { from: number; to: number };
   const mstEdges: Edge[] = [];
@@ -740,6 +770,105 @@ export function generateDungeon(
       npcTile: { x: qcx, y: qcy },
       woodPileTile: { x: qr.x + 1, y: qr.y + 1 },
     });
+  }
+
+  // Spider lab room data
+  let spiderLabRoom: SpiderLabRoomData | null = null;
+  if (spiderLabRoomIdx >= 0 && rooms.length > spiderLabRoomIdx) {
+    const slr = rooms[spiderLabRoomIdx];
+    const slcx = Math.floor(slr.x + slr.w / 2);
+    const slcy = Math.floor(slr.y + slr.h / 2);
+
+    // Determine which wall the MST hallway enters from so we can place the
+    // scientist and computer near the entrance and push the egg + machines far away.
+    const slabEdge = mstEdges.find((e) => e.to === spiderLabRoomIdx);
+    let entranceWall: 'north' | 'south' | 'east' | 'west' = 'south';
+    if (slabEdge !== undefined) {
+      const otherRoom = rooms[slabEdge.from];
+      const oc = {
+        x: Math.floor(otherRoom.x + otherRoom.w / 2),
+        y: Math.floor(otherRoom.y + otherRoom.h / 2),
+      };
+      // L-shape: horizontal at y=oc.y → vertical at x=slcx.
+      // If oc.y is within the room's y range, the horizontal leg approaches
+      // from east or west.  Otherwise the vertical crosses north/south.
+      if (oc.y >= slr.y && oc.y <= slr.y + slr.h - 1) {
+        entranceWall = oc.x > slcx ? 'east' : 'west';
+      } else {
+        entranceWall = oc.y < slr.y ? 'north' : 'south';
+      }
+    }
+
+    let entranceTile: Point;
+    let scientistTile: Point;
+    let computerTile: Point;
+    let spiderEggTile: Point;
+    let lifeMachineTiles: Point[];
+
+    if (entranceWall === 'south') {
+      entranceTile = { x: slcx, y: slr.y + slr.h - 1 };
+      scientistTile = { x: slcx - 1, y: slr.y + slr.h - 3 };
+      computerTile = { x: slcx + 2, y: slr.y + slr.h - 4 };
+      spiderEggTile = { x: slcx, y: slr.y + 4 };
+      lifeMachineTiles = [
+        { x: slr.x + 2, y: slr.y + 2 },
+        { x: slr.x + slr.w - 3, y: slr.y + 2 },
+        { x: slcx - 10, y: slr.y + 12 },
+        { x: slcx + 10, y: slr.y + 12 },
+        { x: slr.x + 2, y: slr.y + 22 },
+        { x: slr.x + slr.w - 3, y: slr.y + 22 },
+      ];
+    } else if (entranceWall === 'north') {
+      entranceTile = { x: slcx, y: slr.y };
+      scientistTile = { x: slcx - 1, y: slr.y + 2 };
+      computerTile = { x: slcx + 2, y: slr.y + 3 };
+      spiderEggTile = { x: slcx, y: slr.y + slr.h - 5 };
+      lifeMachineTiles = [
+        { x: slr.x + 2, y: slr.y + slr.h - 3 },
+        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 3 },
+        { x: slcx - 10, y: slr.y + slr.h - 13 },
+        { x: slcx + 10, y: slr.y + slr.h - 13 },
+        { x: slr.x + 2, y: slr.y + slr.h - 23 },
+        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 23 },
+      ];
+    } else if (entranceWall === 'east') {
+      entranceTile = { x: slr.x + slr.w - 1, y: slcy };
+      scientistTile = { x: slr.x + slr.w - 3, y: slcy - 1 };
+      computerTile = { x: slr.x + slr.w - 5, y: slcy + 2 };
+      spiderEggTile = { x: slr.x + 4, y: slcy };
+      lifeMachineTiles = [
+        { x: slr.x + 2, y: slr.y + 2 },
+        { x: slr.x + 2, y: slr.y + slr.h - 3 },
+        { x: slr.x + 13, y: slcy - 10 },
+        { x: slr.x + 13, y: slcy + 10 },
+        { x: slr.x + 24, y: slr.y + 2 },
+        { x: slr.x + 24, y: slr.y + slr.h - 3 },
+      ];
+    } else {
+      // west
+      entranceTile = { x: slr.x, y: slcy };
+      scientistTile = { x: slr.x + 2, y: slcy - 1 };
+      computerTile = { x: slr.x + 4, y: slcy + 2 };
+      spiderEggTile = { x: slr.x + slr.w - 5, y: slcy };
+      lifeMachineTiles = [
+        { x: slr.x + slr.w - 3, y: slr.y + 2 },
+        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 3 },
+        { x: slr.x + slr.w - 14, y: slcy - 10 },
+        { x: slr.x + slr.w - 14, y: slcy + 10 },
+        { x: slr.x + slr.w - 25, y: slr.y + 2 },
+        { x: slr.x + slr.w - 25, y: slr.y + slr.h - 3 },
+      ];
+    }
+
+    spiderLabRoom = {
+      bounds: { x: slr.x, y: slr.y, w: slr.w, h: slr.h },
+      centre: { x: slcx, y: slcy },
+      entranceTile,
+      scientistTile,
+      computerTile,
+      spiderEggTile,
+      lifeMachineTiles,
+    };
   }
 
   // 7. Stairwells
@@ -1125,6 +1254,7 @@ export function generateDungeon(
     bossRooms,
     questRooms,
     treasureRooms,
+    spiderLabRoom,
     mobSpawnPoints: filteredMobSpawns,
     hallwaySpawnPoints,
     stairwellTiles: filteredStairwells,

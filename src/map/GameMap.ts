@@ -38,6 +38,7 @@ import {
   type ArenaExterior,
   type QuestRoomData,
   type TreasureRoomData,
+  type SpiderLabRoomData,
 } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
 import {
@@ -65,7 +66,10 @@ export interface GameMapOptions {
   mapType?: 'dungeon' | 'overworld';
   hasArena?: boolean;
   bossTypes?: string[];
+  hasSpiderLab?: boolean;
 }
+
+export type { SpiderLabRoomData };
 
 export class GameMap {
   structure: TileContent[][];
@@ -98,6 +102,8 @@ export class GameMap {
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
+  /** Spider lab room, if generated (spider quest boss encounter). */
+  spiderLabRoom: SpiderLabRoomData | null = null;
   /** Treasure rooms generated in the dungeon (chest encounters). */
   treasureRooms: TreasureRoomData[] = [];
   /** Arena circles generated in the dungeon (one per dungeon map). */
@@ -106,6 +112,7 @@ export class GameMap {
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
   private extraBlockedTiles = new Set<string>();
+  private permanentBlockedTiles = new Set<string>();
   private stairwellBlockedSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
   private _overlayCache: OverlayTileCache | null = null;
@@ -120,6 +127,7 @@ export class GameMap {
       mapType,
       hasArena = false,
       bossTypes = [],
+      hasSpiderLab = false,
     } = opts;
     this.tileHeight = tileHeight;
     this.structure = this.generate(
@@ -130,6 +138,7 @@ export class GameMap {
       mapType,
       hasArena,
       bossTypes,
+      hasSpiderLab,
     );
     this.buildExtraBlockedTiles();
   }
@@ -142,6 +151,7 @@ export class GameMap {
     mapType?: 'dungeon' | 'overworld',
     hasArena = false,
     bossTypes: string[] = [],
+    hasSpiderLab = false,
   ): TileContent[][] {
     if (mapType === 'overworld') {
       const data = generateOverworld(size);
@@ -164,12 +174,14 @@ export class GameMap {
       numStairwellsOverride,
       hasArena,
       bossTypes,
+      hasSpiderLab,
     );
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
     this.treasureRooms = data.treasureRooms;
+    this.spiderLabRoom = data.spiderLabRoom;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
     this.stairwellTiles = data.stairwellTiles;
@@ -898,6 +910,10 @@ export class GameMap {
     }
   }
 
+  blockTilePermanently(tileX: number, tileY: number): void {
+    this.permanentBlockedTiles.add(`${tileX},${tileY}`);
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
     const row = this.structure[tileY];
@@ -905,6 +921,7 @@ export class GameMap {
     const tile = row[tileX];
     if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
     if (this.extraBlockedTiles.has(`${tileX},${tileY}`)) return false;
+    if (this.permanentBlockedTiles.has(`${tileX},${tileY}`)) return false;
     if (tile.type === MODERN_DECORATION) {
       return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
     }

@@ -232,6 +232,11 @@ export class AchievementNotification {
     return pointInRect(mx, my, r);
   }
 
+  /** Space bar counts as OK once the notification has fully faded in. */
+  handleSpaceBar(): boolean {
+    return this.frame >= FADE_IN_FRAMES;
+  }
+
   // Helpers
 
   private tierColor(tier: string): string {

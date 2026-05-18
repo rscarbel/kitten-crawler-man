@@ -94,6 +94,12 @@ export class AbilityLevelUpDialog {
     return true;
   }
 
+  handleSpaceBar(): boolean {
+    if (!this.isShowing) return false;
+    if (this.phase === 'done') this.advance();
+    return true;
+  }
+
   render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     if (!this.isShowing || !this.current) return;
     const current = this.current;

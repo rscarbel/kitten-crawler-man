@@ -72,7 +72,10 @@ export class MobUpdateLoop implements GameSystem {
     const playerTargets: Player[] = [human, cat];
     if (extraTargets) {
       for (const t of extraTargets) {
-        if (t.isAlive) playerTargets.push(t);
+        // Defend-quest NPCs (e.g. Goblin Mother) are handled by Bugaboo's own
+        // defendTarget field — exclude them from the shared target list so regular
+        // enemies ignore them.
+        if (t.isAlive && !t.isDefendTarget) playerTargets.push(t);
       }
     }
 

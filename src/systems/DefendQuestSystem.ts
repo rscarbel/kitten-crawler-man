@@ -42,6 +42,7 @@ const ENTRANCE_SPAWN_CHANCE = 0.15;
 const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
 
 let tutorialSeen = false;
+const TUTORIAL_PAGES = 3;
 
 type QuestPhase =
   | 'inactive'
@@ -246,6 +247,31 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase === 'tutorial') {
       this.phase = 'npc_waiting';
       this.tutorialButtons = [];
+      return true;
+    }
+    return false;
+  }
+
+  /** Advance tutorial with Space (equivalent to clicking Next / Let's Go). */
+  advancePage(): boolean {
+    if (this.phase === 'tutorial') {
+      const isLast = this.tutorialPage === TUTORIAL_PAGES - 1;
+      this.menuClickSoundPending = true;
+      this.tutorialButtons = [];
+      if (isLast) {
+        tutorialSeen = true;
+        this.startCountdown();
+      } else {
+        this.tutorialPage++;
+      }
+      return true;
+    }
+    if (this.completeOverlayTimer > 0) {
+      this.completeOverlayTimer = 0;
+      return true;
+    }
+    if (this.failOverlayTimer > 0) {
+      this.failOverlayTimer = 0;
       return true;
     }
     return false;
@@ -1016,7 +1042,7 @@ export class DefendQuestSystem implements GameSystem {
     const dh = Math.min(410, ch - 60);
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
-    const PAGES = 3;
+    const PAGES = TUTORIAL_PAGES;
 
     ctx.save();
 
