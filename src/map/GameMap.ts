@@ -845,7 +845,7 @@ export class GameMap {
       { dx: -1, dy: -1, cost: 1.414 },
     ];
 
-    const MAX_NODES = 600;
+    const MAX_NODES = 2000;
     let expanded = 0;
 
     while (openMap.size > 0 && expanded < MAX_NODES) {

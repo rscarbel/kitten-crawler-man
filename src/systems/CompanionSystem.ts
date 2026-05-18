@@ -71,6 +71,7 @@ export class CompanionSystem implements GameSystem {
       timer: number;
       targetTX: number;
       targetTY: number;
+      stuckFrames: number;
     }
   >();
 
@@ -649,7 +650,7 @@ export class CompanionSystem implements GameSystem {
 
       let cached = this.companionPaths.get(entity);
       if (!cached) {
-        cached = { path: [], timer: 0, targetTX: -1, targetTY: -1 };
+        cached = { path: [], timer: 0, targetTX: -1, targetTY: -1, stuckFrames: 0 };
         this.companionPaths.set(entity, cached);
       }
 
@@ -662,6 +663,7 @@ export class CompanionSystem implements GameSystem {
         cached.timer = 30;
         cached.targetTX = goalTX;
         cached.targetTY = goalTY;
+        if (cached.path.length > 0) cached.stuckFrames = 0;
       }
 
       if (cached.path.length > 0) {
@@ -686,10 +688,38 @@ export class CompanionSystem implements GameSystem {
           moveNx = wpDx / wpDist;
           moveNy = wpDy / wpDist;
         }
+      } else if (dist > ts * 4) {
+        // Path search failed (exceeded node budget or no route). Count stuck frames
+        // and snap the companion to a tile near the player after ~2 seconds so it
+        // can't get permanently stranded on the far side of the dungeon.
+        cached.stuckFrames++;
+        if (cached.stuckFrames >= 120) {
+          let teleported = false;
+          for (let r = 0; r <= 4 && !teleported; r++) {
+            for (let ox = -r; ox <= r && !teleported; ox++) {
+              for (let oy = -r; oy <= r && !teleported; oy++) {
+                if (r > 0 && Math.abs(ox) !== r && Math.abs(oy) !== r) continue;
+                const tx = goalTX + ox;
+                const ty = goalTY + oy;
+                if (this.gameMap.isWalkable(tx, ty)) {
+                  entity.x = tx * ts;
+                  entity.y = ty * ts;
+                  cached.stuckFrames = 0;
+                  cached.path = [];
+                  cached.timer = 0;
+                  teleported = true;
+                }
+              }
+            }
+          }
+        }
       }
     } else {
       const cached = this.companionPaths.get(entity);
-      if (cached) cached.path = [];
+      if (cached) {
+        cached.path = [];
+        cached.stuckFrames = 0;
+      }
     }
 
     this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
