@@ -225,6 +225,8 @@ export class DungeonScene extends GameplayScene {
   private levelCompleteScreen = new LevelCompleteScreen();
   private inventoryPanel: InventoryPanel;
   private gearPanel: GearPanel;
+  /** When set, the inventory panel shows this player's inventory instead of the active player's. */
+  private _inventoryOverridePlayer: HumanPlayer | CatPlayer | null = null;
 
   private achievementUI!: AchievementUISystem;
   private humanAchievements: AchievementManager;
@@ -294,6 +296,9 @@ export class DungeonScene extends GameplayScene {
   private _mouseX = -9999;
   private _mouseY = -9999;
   private _mouseDown = false;
+  private _miniMapDragging = false;
+  private _miniMapDragLastX = 0;
+  private _miniMapDragLastY = 0;
 
   private onSaveProgress:
     | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
@@ -529,12 +534,33 @@ export class DungeonScene extends GameplayScene {
       this.pauseMenu.close();
       this.triggerOpenChat();
     };
+
+    const openInventoryFor = (player: HumanPlayer | CatPlayer) => {
+      this.pauseMenu.close();
+      this._inventoryOverridePlayer = player;
+      this.inventoryPanel.isOpen = true;
+      this.inventoryPanel.returnToMenuCallback = () => {
+        this._inventoryOverridePlayer = null;
+        this.inventoryPanel.isOpen = false;
+        this.pauseMenu.openToInventory();
+      };
+    };
+    this.pauseMenu.onManageHumanInventory = () => openInventoryFor(this.human);
+    this.pauseMenu.onManageCatInventory = () => openInventoryFor(this.cat);
+
+    this.inventoryPanel.onClose = () => {
+      this._inventoryOverridePlayer = null;
+    };
+
     this.deathScreen.audio = this.audio;
     this.abilityLevelUpDialog.audio = this.audio;
 
     // Boss chests — placed 2 tiles above each boss room centre
     this.gameMap.bossRooms.forEach((br, i) => {
-      this.treasureChests.addBossChest(br.centre.x, br.centre.y - 2, i);
+      const cx = br.centre.x;
+      const cy = br.centre.y - 2;
+      this.treasureChests.addBossChest(cx, cy, i);
+      this.gameMap.blockTilePermanently(cx, cy);
     });
 
     // Wooden chests for treasure rooms
@@ -552,6 +578,7 @@ export class DungeonScene extends GameplayScene {
         coins,
         items,
       });
+      this.gameMap.blockTilePermanently(tr.centre.x, tr.centre.y);
     }
 
     // Wire chest opened callback
@@ -1409,6 +1436,16 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
+  private hasNearbyEnemy(player: HumanPlayer | CatPlayer, range: number): boolean {
+    const px = player.x + TILE_SIZE * 0.5;
+    const py = player.y + TILE_SIZE * 0.5;
+    const nearby = this.mobGrid.queryCircle(px, py, range);
+    for (const mob of nearby) {
+      if (mob.isAlive) return true;
+    }
+    return false;
+  }
+
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
     // Space bar advances / dismisses achievement notifications and loot boxes
     if (this.achievementUI.handleSpaceBar()) return;
@@ -1443,18 +1480,24 @@ export class DungeonScene extends GameplayScene {
       }
       return;
     }
-    // Chest interaction
-    if (this.treasureChests.tryInteract(active)) {
-      return;
-    }
-    if (this.defendQuest.tryInteract(active)) {
-      return;
-    }
-    if (this.spiderQuest.tryInteract(active)) {
-      return;
-    }
-    if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
-      return;
+    // If an enemy is within attack range, prefer attacking over interacting
+    const attackRange = this.human.isActive ? TILE_SIZE * 3 : TILE_SIZE * 5;
+    if (this.hasNearbyEnemy(active, attackRange)) {
+      // fall through to attack logic below
+    } else {
+      // Chest interaction
+      if (this.treasureChests.tryInteract(active)) {
+        return;
+      }
+      if (this.defendQuest.tryInteract(active)) {
+        return;
+      }
+      if (this.spiderQuest.tryInteract(active)) {
+        return;
+      }
+      if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
+        return;
+      }
     }
     // On mobile tap: aim toward tap position before snapping to nearest mob
     if (tapScreenX !== undefined && tapScreenY !== undefined) {
@@ -1574,6 +1617,14 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       if (this.achievementUI.handleAchievIconClick(mx, my)) return;
       if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.pauseMenu.close())) return;
+      if (
+        (this.human.unspentPoints > 0 || this.cat.unspentPoints > 0) &&
+        pointInRect(mx, my, this._hudSkillBannerRect)
+      ) {
+        this.pauseMenu.openToSpend();
+        this.audio?.play('menu_open');
+        return;
+      }
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
@@ -1610,6 +1661,7 @@ export class DungeonScene extends GameplayScene {
 
     const canvas = this.sceneManager.canvas;
     const active = this.active();
+    const invPlayer = this.inventoryPlayer();
 
     const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
     if (gearResult) {
@@ -1618,20 +1670,25 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
-      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, canvas, active.inventory);
+      const slotIdx = this.inventoryPanel.getClickedInventorySlot(
+        mx,
+        my,
+        canvas,
+        invPlayer.inventory,
+      );
       if (slotIdx !== null) {
-        const item = active.inventory.bag.slots[slotIdx];
+        const item = invPlayer.inventory.bag.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-          const prev = active.inventory.equip(slotIdx);
-          if (prev) active.removeItemBonus(prev);
-          active.applyItemBonus(item);
+          const prev = invPlayer.inventory.equip(slotIdx);
+          if (prev) invPlayer.removeItemBonus(prev);
+          invPlayer.applyItemBonus(item);
           return;
         }
       }
     }
 
-    if (this.inventoryPanel.handleClick(mx, my, canvas, active.inventory)) {
-      this.resolvePendingInventoryAction(active);
+    if (this.inventoryPanel.handleClick(mx, my, canvas, invPlayer.inventory)) {
+      this.resolvePendingInventoryAction(invPlayer);
       return;
     }
 
@@ -1670,30 +1727,58 @@ export class DungeonScene extends GameplayScene {
   handleMouseDown(mx: number, my: number): void {
     this._mouseDown = true;
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
+    if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
+      this._miniMapDragging = true;
+      this._miniMapDragLastX = mx;
+      this._miniMapDragLastY = my;
+      return;
+    }
+    this.inventoryPanel.handleMouseDown(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.inventoryPlayer().inventory,
+    );
   }
 
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
+    if (this._miniMapDragging) {
+      this.miniMap.pan(mx - this._miniMapDragLastX, my - this._miniMapDragLastY);
+      this._miniMapDragLastX = mx;
+      this._miniMapDragLastY = my;
+    }
     this.inventoryPanel.handleMouseMove(mx, my);
     this.gearPanel.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
+    this._miniMapDragging = false;
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.inventoryPanel.handleMouseUp(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.inventoryPlayer().inventory,
+    );
   }
 
   handleMouseLeave(): void {
     this._mouseDown = false;
+    this._miniMapDragging = false;
     clearButtonMouseState();
   }
 
   handleContextMenu(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen) return;
-    this.inventoryPanel.openContextMenu(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.inventoryPanel.openContextMenu(
+      mx,
+      my,
+      this.sceneManager.canvas,
+      this.inventoryPlayer().inventory,
+    );
   }
 
   handleWheel(deltaY: number): void {
@@ -1794,6 +1879,7 @@ export class DungeonScene extends GameplayScene {
       spells: this.spells,
       dynamite: this.dynamite,
       loot: this.loot,
+      treasureChests: this.treasureChests,
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
       speechBubblePulse: this.speechBubblePulse,
@@ -1861,7 +1947,8 @@ export class DungeonScene extends GameplayScene {
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const active = this.active();
-      const name = this.human.isActive ? 'Human' : 'Cat';
+      const invPlayer = this.inventoryPlayer();
+      const invName = invPlayer === this.human ? 'Human' : 'Cat';
       this.inventoryPanel.abilityCooldowns.set('protective_shell', {
         current: this.spells.shellCooldown,
         max: this.spells.shellCooldownMax,
@@ -1874,12 +1961,12 @@ export class DungeonScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
-      this.inventoryPanel.render(ctx, canvas, active.inventory, name, active.coins);
-      this.gearPanel.render(ctx, canvas, active.inventory, name);
+      this.inventoryPanel.render(ctx, canvas, invPlayer.inventory, invName, invPlayer.coins);
+      const activeName = this.human.isActive ? 'Human' : 'Cat';
+      this.gearPanel.render(ctx, canvas, active.inventory, activeName);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
       this.defendQuest.renderUI(ctx, canvas);
-      this.spiderQuest.renderUI(ctx, canvas);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -2014,6 +2101,7 @@ export class DungeonScene extends GameplayScene {
 
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
+    this.spiderQuest.renderUI(ctx, canvas);
 
     if (
       platform.showEntityTooltip &&
@@ -2429,6 +2517,15 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.hackFailErrorSoundPending = false;
       this.audio?.play('error');
     }
+    if (this.spiderQuest.bossFightStartPending) {
+      this.spiderQuest.bossFightStartPending = false;
+      this.bossIntro.trigger('grotesque_spider', 'GROTESQUE SPIDER', '#22c55e');
+    }
+  }
+
+  /** Returns the player whose inventory the panel should display/interact with. */
+  private inventoryPlayer(): HumanPlayer | CatPlayer {
+    return this._inventoryOverridePlayer ?? this.active();
   }
 
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
@@ -2528,10 +2625,32 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
+      if (
+        platform.isMobile &&
+        !this.gameOver &&
+        !this.pauseMenu.isOpen &&
+        (this.human.unspentPoints > 0 || this.cat.unspentPoints > 0) &&
+        pointInRect(x, y, this._hudSkillBannerRect)
+      ) {
+        this.pauseMenu.openToSpend();
+        this.audio?.play('menu_open');
+        continue;
+      }
+
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
         const mm = this.touch.miniMapRect;
         if (pointInRect(x, y, mm)) {
-          this.miniMap.toggle();
+          if (!this.miniMap.isExpanded) {
+            this.miniMap.toggle();
+          } else {
+            // Track touch for drag-to-pan or tap-to-collapse
+            this.touch.miniMapTouchId = touch.identifier;
+            this.touch.miniMapTouchStartX = x;
+            this.touch.miniMapTouchStartY = y;
+            this.touch.miniMapTouchLastX = x;
+            this.touch.miniMapTouchLastY = y;
+            this.touch.miniMapDragged = false;
+          }
           continue;
         }
       }
@@ -2660,6 +2779,19 @@ export class DungeonScene extends GameplayScene {
 
       this.handleMouseMove(x, y);
 
+      if (touch.identifier === this.touch.miniMapTouchId) {
+        const dx = x - this.touch.miniMapTouchLastX;
+        const dy = y - this.touch.miniMapTouchLastY;
+        const totalDist = Math.hypot(
+          x - this.touch.miniMapTouchStartX,
+          y - this.touch.miniMapTouchStartY,
+        );
+        if (totalDist > 5) this.touch.miniMapDragged = true;
+        if (this.touch.miniMapDragged) this.miniMap.pan(dx, dy);
+        this.touch.miniMapTouchLastX = x;
+        this.touch.miniMapTouchLastY = y;
+      }
+
       if (touch.identifier === this.touch.moveTouchId) {
         this.touch.moveTarget = { x, y };
         this.pauseMenu.touchScrollMove(y);
@@ -2677,6 +2809,13 @@ export class DungeonScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
+
+      if (touch.identifier === this.touch.miniMapTouchId) {
+        if (!this.touch.miniMapDragged) this.miniMap.toggle();
+        this.touch.miniMapTouchId = null;
+        this.touch.miniMapDragged = false;
+        continue;
+      }
 
       if (touch.identifier === this.touch.pauseScrollTouchId) {
         this.pauseMenu.touchScrollEnd();

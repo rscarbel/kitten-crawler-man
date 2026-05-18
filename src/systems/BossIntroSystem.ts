@@ -4,6 +4,7 @@ import { drawJuicerSprite } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 import { drawKrakarenSprite } from '../sprites/krakarenSprite';
 import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
+import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
 import type { GameSystem } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 
@@ -235,6 +236,17 @@ export class BossIntroSystem implements GameSystem {
           0,
           true,
           false,
+          0,
+        );
+      } else if (intro.bossType === 'grotesque_spider') {
+        const spS = 80;
+        drawGrotesqueSpiderSprite(
+          ctx,
+          rightX + panelW / 2 - spS / 2,
+          panelY + 16,
+          spS,
+          t / 60,
+          -1,
           0,
         );
       } else {

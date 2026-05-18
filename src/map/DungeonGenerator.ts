@@ -1148,10 +1148,10 @@ export function generateDungeon(
       const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
 
       if (
-        acx - ARENA_RADIUS - 2 < BORDER ||
-        acx + ARENA_RADIUS + 2 >= size - BORDER ||
-        acy - ARENA_RADIUS - 2 < BORDER ||
-        acy + ARENA_RADIUS + 2 >= size - BORDER
+        acx - ARENA_RADIUS - 3 < BORDER ||
+        acx + ARENA_RADIUS + 3 >= size - BORDER ||
+        acy - ARENA_RADIUS - 3 < BORDER ||
+        acy + ARENA_RADIUS + 3 >= size - BORDER
       )
         continue;
 
@@ -1185,6 +1185,21 @@ export function generateDungeon(
         if (ty >= 0 && ty < size) {
           grid[ty][doorX - 1].type = FloorTypeValue.concrete;
           grid[ty][doorX].type = FloorTypeValue.concrete;
+        }
+      }
+
+      // Carve a 2-tile-wide walkable ring just outside the arena wall so the arena
+      // never severs existing corridors — every part of the dungeon stays reachable.
+      for (let ry = -(ARENA_RADIUS + 2); ry <= ARENA_RADIUS + 2; ry++) {
+        for (let rx = -(ARENA_RADIUS + 2); rx <= ARENA_RADIUS + 2; rx++) {
+          const rad = Math.hypot(rx, ry);
+          if (rad > ARENA_RADIUS && rad <= ARENA_RADIUS + 2) {
+            const gx = acx + rx;
+            const gy = acy + ry;
+            if (gy >= 0 && gy < size && gx >= 0 && gx < size) {
+              grid[gy][gx].type = FloorTypeValue.concrete;
+            }
+          }
         }
       }
 

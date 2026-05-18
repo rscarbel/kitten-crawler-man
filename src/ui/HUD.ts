@@ -6,15 +6,20 @@ import { platform } from '../core/Platform';
 import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
 
+type HudRect = { x: number; y: number; w: number; h: number };
+type HudResult = { toggleRect: HudRect; notifRect: HudRect };
+
+const HIDDEN_RECT: HudRect = { x: -9999, y: 0, w: 0, h: 0 };
+
 /**
  * Draws the top-left HUD panel: active-character label, control hints,
  * HP/XP bars for both characters, and the skill-point notification banner.
  *
+ * Returns `toggleRect` (mobile collapse/expand button, else hidden) and
+ * `notifRect` (skill-point banner or collapsed badge when visible, else hidden).
+ *
  * @param pulseRef - Mutable object holding the oscillation counter for the
  *   notification pulse. Pass `{ value: 0 }` from the scene and keep it stable.
- */
-/**
- * Returns the rect of the collapse/expand toggle button (mobile only).
  */
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
@@ -23,9 +28,9 @@ export function drawHUD(
   cat: CatPlayer,
   pulseRef: { value: number },
   collapsed = false,
-): { x: number; y: number; w: number; h: number } {
+): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
-    return drawHUDCollapsed(ctx, human, cat);
+    return drawHUDCollapsed(ctx, human, cat, pulseRef);
   }
 
   const activeLabel = human.isActive ? 'Human' : 'Cat';
@@ -60,7 +65,7 @@ export function drawHUD(
     color: '#fbbf24',
   });
 
-  renderNotification(ctx, human, cat, pulseRef);
+  const notifRect = renderNotification(ctx, human, cat, pulseRef);
 
   if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
@@ -81,9 +86,9 @@ export function drawHUD(
       color: '#94a3b8',
       align: 'center',
     });
-    return toggleRect;
+    return { toggleRect, notifRect };
   }
-  return { x: -9999, y: 0, w: 0, h: 0 };
+  return { toggleRect: HIDDEN_RECT, notifRect };
 }
 
 /** Compact single-row HUD for mobile collapsed state. */
@@ -91,7 +96,8 @@ function drawHUDCollapsed(
   ctx: CanvasRenderingContext2D,
   human: HumanPlayer,
   cat: CatPlayer,
-): { x: number; y: number; w: number; h: number } {
+  pulseRef: { value: number },
+): HudResult {
   const BAR_W = 180;
   const BAR_H = 26;
   const x = 8;
@@ -151,7 +157,37 @@ function drawHUDCollapsed(
     align: 'center',
   });
 
-  return toggleRect;
+  // Skill points badge — shown below the collapsed bar when points are unspent
+  const hasUnspent = human.unspentPoints > 0 || cat.unspentPoints > 0;
+  if (!hasUnspent) {
+    return { toggleRect, notifRect: HIDDEN_RECT };
+  }
+
+  pulseRef.value = (pulseRef.value + 0.05) % (Math.PI * 2);
+  const pulse = 0.5 + 0.5 * Math.sin(pulseRef.value);
+  const badgeRect: HudRect = { x, y: y + BAR_H + 5, w: BAR_W + toggleRect.w, h: 30 };
+
+  ctx.save();
+  ctx.shadowColor = '#fbbf24';
+  ctx.shadowBlur = 8 + 8 * pulse;
+  ctx.fillStyle = 'rgba(40,24,0,0.96)';
+  ctx.fillRect(badgeRect.x, badgeRect.y, badgeRect.w, badgeRect.h);
+  ctx.strokeStyle = `rgba(251,191,36,${0.65 + 0.35 * pulse})`;
+  ctx.lineWidth = 1.5 + pulse * 0.5;
+  ctx.strokeRect(badgeRect.x, badgeRect.y, badgeRect.w, badgeRect.h);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  drawText(ctx, '★ SKILL POINTS — Tap to spend', {
+    x: badgeRect.x + badgeRect.w / 2,
+    y: badgeRect.y + 10,
+    size: 10,
+    bold: true,
+    color: `rgba(251,191,36,${0.85 + 0.15 * pulse})`,
+    align: 'center',
+  });
+
+  return { toggleRect, notifRect: badgeRect };
 }
 
 export function drawHUDPlayerBlock(
@@ -272,26 +308,77 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
 }
 
 /**
- * Pulsing skill-point notification banner rendered below the HUD panel.
+ * Gold skill-point notification badge rendered below the HUD panel.
+ * Much larger and visually distinct from the panel above it.
+ * Returns the stable click rect if visible, else HIDDEN_RECT.
  */
 function renderNotification(
   ctx: CanvasRenderingContext2D,
   human: Player,
   cat: Player,
   pulseRef: { value: number },
-): void {
-  if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) return;
-  pulseRef.value = (pulseRef.value + 0.055) % (Math.PI * 2);
-  const alpha = 0.65 + Math.sin(pulseRef.value) * 0.28;
-  drawBox(ctx, {
-    x: 8,
-    y: 192,
-    width: 340,
-    height: 20,
-    fill: '#1e3a5f',
-    border: '#3b82f6',
-    borderWidth: 1,
-    alpha,
+): HudRect {
+  if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) return HIDDEN_RECT;
+
+  pulseRef.value = (pulseRef.value + 0.05) % (Math.PI * 2);
+  const pulse = 0.5 + 0.5 * Math.sin(pulseRef.value);
+  const bounceY = Math.round(Math.sin(pulseRef.value * 0.6) * 3);
+
+  // Stable rect for hit testing; draw at bounceY offset
+  const rect: HudRect = { x: 8, y: 202, w: 340, h: 52 };
+  const drawY = rect.y + bounceY;
+
+  ctx.save();
+  ctx.shadowColor = '#fbbf24';
+  ctx.shadowBlur = 14 + 12 * pulse;
+
+  // Dark amber background
+  ctx.fillStyle = 'rgba(40,24,0,0.96)';
+  ctx.fillRect(rect.x, drawY, rect.w, rect.h);
+
+  // Gold border — thicker when pulsing
+  ctx.strokeStyle = `rgba(251,191,36,${0.65 + 0.35 * pulse})`;
+  ctx.lineWidth = 2 + pulse;
+  ctx.strokeRect(rect.x, drawY, rect.w, rect.h);
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Large star icon
+  ctx.save();
+  ctx.font = 'bold 28px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `rgba(251,191,36,${0.8 + 0.2 * pulse})`;
+  ctx.fillText('★', rect.x + 28, drawY + 34);
+  ctx.textAlign = 'left';
+  ctx.restore();
+
+  // "SKILL POINTS AVAILABLE" header
+  drawText(ctx, 'SKILL POINTS AVAILABLE', {
+    x: rect.x + 52,
+    y: drawY + 14,
+    size: 13,
+    bold: true,
+    color: `rgba(251,191,36,${0.9 + 0.1 * pulse})`,
   });
-  drawText(ctx, platform.skillPointBanner, { x: 14, y: 198, size: 10, color: '#93c5fd' });
+
+  // Sub-label
+  drawText(ctx, platform.skillPointBanner, {
+    x: rect.x + 52,
+    y: drawY + 32,
+    size: 11,
+    color: `rgba(253,230,138,${0.75 + 0.25 * pulse})`,
+  });
+
+  // Clickable chevron
+  drawText(ctx, '▶', {
+    x: rect.x + rect.w - 14,
+    y: drawY + 22,
+    size: 14,
+    bold: true,
+    color: `rgba(251,191,36,${0.7 + 0.3 * pulse})`,
+    align: 'center',
+  });
+
+  return rect;
 }

@@ -6,7 +6,7 @@ import type { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
 import type { PauseTab, ButtonRect } from './pause/types';
 import { renderMainTab } from './pause/MainTab';
-import { renderInventoryTab } from './pause/InventoryTab';
+import { renderInventoryTab, INVENTORY_TAB_BOX_H } from './pause/InventoryTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
 import { renderAchievementsTab } from './pause/AchievementsTab';
@@ -48,6 +48,12 @@ export class PauseMenu {
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
 
+  /** Called when the player taps "Manage Human Inventory" in the inventory tab. */
+  onManageHumanInventory: (() => void) | null = null;
+
+  /** Called when the player taps "Manage Cat Inventory" in the inventory tab. */
+  onManageCatInventory: (() => void) | null = null;
+
   get isOpen(): boolean {
     return this._isOpen;
   }
@@ -68,6 +74,19 @@ export class PauseMenu {
   openToAchievements(): void {
     this._isOpen = true;
     this.tab = 'achievements';
+  }
+
+  /** Open directly to the inventory tab. */
+  openToInventory(): void {
+    this._isOpen = true;
+    this.tab = 'inventory';
+  }
+
+  /** Open directly to the skill spend tab. */
+  openToSpend(): void {
+    this._isOpen = true;
+    this.tab = 'spend';
+    this.spendScrollY = 0;
   }
 
   handleWheel(deltaY: number): void {
@@ -165,9 +184,9 @@ export class PauseMenu {
             ? SPEND_BOX_H
             : this.tab === 'settings'
               ? SETTINGS_BOX_H
-              : this.tab === 'main'
-                ? mainBoxH
-                : 380;
+              : this.tab === 'inventory'
+                ? INVENTORY_TAB_BOX_H
+                : mainBoxH;
     const boxH = Math.min(rawBoxH, ch - 16);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
@@ -210,7 +229,18 @@ export class PauseMenu {
         );
         break;
       case 'inventory':
-        renderInventoryTab(ctx, this.buttons, boxX, boxY, boxW, human, cat, setTabWithSound);
+        renderInventoryTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          human,
+          cat,
+          setTabWithSound,
+          this.onManageHumanInventory ?? (() => undefined),
+          this.onManageCatInventory ?? (() => undefined),
+        );
         break;
       case 'stats':
         this.statsContentH = renderStatsTab(

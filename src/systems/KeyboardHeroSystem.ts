@@ -4,8 +4,8 @@
  *
  * Four columns map to arrow keys / WASD. Notes fall from the top of the playing
  * field toward a green hit zone near the bottom. Hit a note while it's in the
- * zone to score; miss (press with nothing in zone, or let a note fall past) to
- * fail immediately.
+ * zone to score. One mistake is forgiven (red flash only); a second mistake ends
+ * the game after a short delay.
  *
  * Song duration: 71 758 ms. ~80 notes total.
  */
@@ -75,6 +75,9 @@ const SPAWN_INTERVAL_MAX_MS = 900;
 
 /** Never more than this many notes alive across all columns simultaneously. */
 const MAX_SIMULTANEOUS_NOTES = 4;
+
+/** Stop spawning new notes this many ms before the song ends. */
+const SPAWN_CUTOFF_MS = 1_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -223,13 +226,15 @@ export class KeyboardHeroSystem {
     for (const note of this._notes) {
       if (note.state === 'falling' && note.imgY > HIT_ZONE_CENTER_MAX) {
         note.state = 'missed';
-        this._triggerFail(note.column);
-        return;
+        const hardFail = this._recordMiss(note.column);
+        if (hardFail) return;
       }
     }
 
-    // Remove expired hit-flash notes
-    this._notes = this._notes.filter((n) => !(n.state === 'hit' && n.hitFlashTimer <= 0));
+    // Remove expired hit-flash notes and consumed missed notes
+    this._notes = this._notes.filter(
+      (n) => !(n.state === 'hit' && n.hitFlashTimer <= 0) && n.state !== 'missed',
+    );
 
     // Spawn notes
     this._maybeSpawnNote();
@@ -349,10 +354,13 @@ export class KeyboardHeroSystem {
     const scaleW = (canvasW * 0.9) / FIELD_IMG_W;
     const scale = Math.min(scaleH, scaleW);
     const dw = FIELD_IMG_W * scale;
+    const dh = FIELD_IMG_H * scale;
     const dx = (canvasW - dw) / 2;
+    const dy = (canvasH - dh) / 2;
 
-    // Check if touch is within the field horizontally
+    // Must be within the field image bounds
     if (x < dx || x > dx + dw) return;
+    if (y < dy || y > dy + dh) return;
 
     // Determine column from x position
     const relX = x - dx;
@@ -394,21 +402,30 @@ export class KeyboardHeroSystem {
       hitNote.hitFlashTimer = HIT_FLASH_FRAMES;
       this._hitCount++;
     } else {
-      // MISS — start fail delay so player can see the mistake
-      this._triggerFail(column);
+      // MISS — first miss is forgiven with a flash; second miss ends the game
+      this._recordMiss(column);
     }
   }
 
-  private _triggerFail(failedColumn: ColumnIndex): void {
-    if (this._failed) return;
-    this._failed = true;
+  /** Returns true if this miss triggered a hard fail (second mistake). */
+  private _recordMiss(failedColumn: ColumnIndex): boolean {
+    if (this._failed) return false;
     this._missCount++;
-    // Hold the failed column red for the full delay so the player can see the mistake.
-    this._columns[failedColumn].errorTimer = FAIL_DELAY_FRAMES;
-    this._failDelayTimer = FAIL_DELAY_FRAMES;
-    // Fire immediately so the caller can play the error sound right away.
+    // Always fire the immediate callback so the error sound plays for every mistake.
     this._onFailImmediate?.();
-    // _onFail fires after FAIL_DELAY_FRAMES via update() — isActive stays true until then.
+
+    if (this._missCount >= 2) {
+      // Second mistake — trigger the full fail sequence.
+      this._failed = true;
+      this._columns[failedColumn].errorTimer = FAIL_DELAY_FRAMES;
+      this._failDelayTimer = FAIL_DELAY_FRAMES;
+      // _onFail fires after FAIL_DELAY_FRAMES via update() — isActive stays true until then.
+      return true;
+    } else {
+      // First mistake — flash the column red but let play continue.
+      this._columns[failedColumn].errorTimer = ERROR_TIMER_FRAMES;
+      return false;
+    }
   }
 
   private _maybeSpawnNote(): void {
@@ -416,6 +433,9 @@ export class KeyboardHeroSystem {
 
     // Don't spawn if we've hit our target
     if (this._totalSpawned >= TARGET_NOTE_COUNT) return;
+
+    // Don't spawn in the last second of the song
+    if (this._elapsedMs >= SONG_DURATION_MS - SPAWN_CUTOFF_MS) return;
 
     // Don't spawn if max simultaneous notes reached
     const activeNotes = this._notes.filter((n) => n.state === 'falling').length;

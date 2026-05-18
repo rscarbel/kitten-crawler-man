@@ -38,6 +38,19 @@ export class InventoryPanel {
   isOpen = false;
   private page = 0;
 
+  /**
+   * When set, the panel's close button becomes a "Back to Menu" button.
+   * Clicking it calls this callback and clears the reference. Toggling the
+   * panel closed via keyboard/button clears it without calling the callback.
+   */
+  returnToMenuCallback: (() => void) | null = null;
+
+  /**
+   * Called whenever the panel is closed without returning to a menu — i.e.
+   * via toggle (keyboard / toolbar button) or plain close-X click.
+   */
+  onClose: (() => void) | null = null;
+
   /** Interaction handler — owns drag, context menu, and pending action state. */
   readonly interaction = new InventoryInteraction();
 
@@ -59,7 +72,13 @@ export class InventoryPanel {
   }
 
   toggle(): void {
-    this.isOpen = !this.isOpen;
+    if (this.isOpen) {
+      this.isOpen = false;
+      this.returnToMenuCallback = null;
+      this.onClose?.();
+    } else {
+      this.isOpen = true;
+    }
   }
 
   // Layout helpers
@@ -506,22 +525,38 @@ export class InventoryPanel {
       align: 'right',
     });
 
-    // Close [X]
+    // Close / Back button — always in the top-right corner
     const closeX = p.x + p.w - 20;
     const closeY = p.y + 8;
-    drawButton(ctx, {
-      x: closeX,
-      y: closeY,
-      width: 16,
-      height: 16,
-      label: 'x',
-      fill: '#374151',
-      border: '#475569',
-      borderWidth: 1,
-      radius: 2,
-      labelSize: 11,
-      labelColor: '#ef4444',
-    });
+    if (this.returnToMenuCallback !== null) {
+      drawButton(ctx, {
+        x: closeX,
+        y: closeY,
+        width: 16,
+        height: 16,
+        label: '←',
+        fill: '#1e3a5f',
+        border: '#3b82f6',
+        borderWidth: 1,
+        radius: 2,
+        labelSize: 11,
+        labelColor: '#93c5fd',
+      });
+    } else {
+      drawButton(ctx, {
+        x: closeX,
+        y: closeY,
+        width: 16,
+        height: 16,
+        label: 'x',
+        fill: '#374151',
+        border: '#475569',
+        borderWidth: 1,
+        radius: 2,
+        labelSize: 11,
+        labelColor: '#ef4444',
+      });
+    }
 
     // Divider
     drawDivider(ctx, { x: p.x + 4, y: p.y + HEADER_H, length: p.w - 8, color: '#1e293b' });
@@ -903,6 +938,8 @@ export class InventoryPanel {
   // Interaction
 
   handleClick(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): boolean {
+    const p = this.panelRect(canvas);
+
     return this.interaction.handleClick(
       mx,
       my,
@@ -911,13 +948,24 @@ export class InventoryPanel {
       this.isOpen,
       () => this.toggle(),
       this.toggleBtnRect(canvas),
-      this.panelRect(canvas),
+      p,
       this.page,
-      (p) => {
-        this.page = p;
+      (pg) => {
+        this.page = pg;
       },
       (o) => {
-        this.isOpen = o;
+        if (!o) {
+          if (this.returnToMenuCallback !== null) {
+            const cb = this.returnToMenuCallback;
+            this.returnToMenuCallback = null;
+            cb();
+          } else {
+            this.isOpen = false;
+            this.onClose?.();
+          }
+        } else {
+          this.isOpen = true;
+        }
       },
     );
   }

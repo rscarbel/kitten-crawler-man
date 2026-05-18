@@ -28,6 +28,13 @@ export class MobileTouchState {
   inventoryDragTouchId: number | null = null;
   /** Touch identifier for dynamite charge. */
   dynamiteTouchId: number | null = null;
+  /** Touch identifier for expanded minimap panning. */
+  miniMapTouchId: number | null = null;
+  miniMapTouchStartX = 0;
+  miniMapTouchStartY = 0;
+  miniMapTouchLastX = 0;
+  miniMapTouchLastY = 0;
+  miniMapDragged = false;
   /** Touch identifier for pause-menu scroll (separate from movement touch). */
   pauseScrollTouchId: number | null = null;
   /** Tap-start info for the pause-scroll touch (used to distinguish taps from scrolls). */

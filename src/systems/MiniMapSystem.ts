@@ -9,6 +9,8 @@ import { drawText } from '../ui/TextBox';
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
   private _expanded = false;
+  private _scrollTX = 0;
+  private _scrollTY = 0;
   private corpseMarkers: Array<{ x: number; y: number; ttl: number }> = [];
 
   private readonly REVEAL_RADIUS = 10;
@@ -49,6 +51,22 @@ export class MiniMapSystem implements GameSystem {
 
   toggle(): void {
     this._expanded = !this._expanded;
+    this._scrollTX = 0;
+    this._scrollTY = 0;
+  }
+
+  /**
+   * Pan the expanded minimap by a screen-pixel delta.
+   * Only has effect when expanded (1 px = 1 tile at that scale).
+   */
+  pan(deltaX: number, deltaY: number): void {
+    if (!this._expanded) return;
+    const mapSize = this.gameMap.structure.length;
+    // Dragging right moves the view left (standard map-pan convention)
+    this._scrollTX -= deltaX;
+    this._scrollTY -= deltaY;
+    this._scrollTX = Math.max(-mapSize, Math.min(mapSize, this._scrollTX));
+    this._scrollTY = Math.max(-mapSize, Math.min(mapSize, this._scrollTY));
   }
 
   revealAround(tileX: number, tileY: number): void {
@@ -130,6 +148,10 @@ export class MiniMapSystem implements GameSystem {
     const playerTX = Math.floor((active.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const playerTY = Math.floor((active.y + TILE_SIZE * 0.5) / TILE_SIZE);
 
+    // When expanded, honour scroll offset so the user can pan to explored areas.
+    const viewCenterTX = expanded ? playerTX + this._scrollTX : playerTX;
+    const viewCenterTY = expanded ? playerTY + this._scrollTY : playerTY;
+
     // Background
     ctx.fillStyle = 'rgba(0,0,0,0.82)';
     ctx.fillRect(mmX, mmY, mmSize, mmSize);
@@ -140,12 +162,12 @@ export class MiniMapSystem implements GameSystem {
     ctx.clip();
 
     // Tiles — blit from offscreen cache (1px per tile → scaled by pxPerTile)
-    const srcX = Math.max(0, playerTX - halfTiles);
-    const srcY = Math.max(0, playerTY - halfTiles);
+    const srcX = Math.max(0, Math.floor(viewCenterTX - halfTiles));
+    const srcY = Math.max(0, Math.floor(viewCenterTY - halfTiles));
     const srcW = Math.min(mapSize - srcX, tilesInView);
     const srcH = Math.min(mapSize - srcY, tilesInView);
-    const destOffX = (srcX - (playerTX - halfTiles)) * pxPerTile;
-    const destOffY = (srcY - (playerTY - halfTiles)) * pxPerTile;
+    const destOffX = (srcX - (viewCenterTX - halfTiles)) * pxPerTile;
+    const destOffY = (srcY - (viewCenterTY - halfTiles)) * pxPerTile;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
       this._tileCache,
@@ -163,8 +185,8 @@ export class MiniMapSystem implements GameSystem {
     // Stairwells — white squares (always visible if revealed)
     for (const st of this.gameMap.stairwellTiles) {
       if (!this.fogOfWar[st.y * mapSize + st.x]) continue;
-      const sx = mmX + (st.x - playerTX + halfTiles) * pxPerTile - 1;
-      const sy = mmY + (st.y - playerTY + halfTiles) * pxPerTile - 1;
+      const sx = mmX + (st.x - viewCenterTX + halfTiles) * pxPerTile - 1;
+      const sy = mmY + (st.y - viewCenterTY + halfTiles) * pxPerTile - 1;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
     }
@@ -176,8 +198,8 @@ export class MiniMapSystem implements GameSystem {
       const ctx2TX = Math.floor(corpse.x / TILE_SIZE);
       const ctx2TY = Math.floor(corpse.y / TILE_SIZE);
       if (!this.fogOfWar[ctx2TY * mapSize + ctx2TX]) continue;
-      const cx = mmX + (ctx2TX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const cy = mmY + (ctx2TY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const cx = mmX + (ctx2TX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const cy = mmY + (ctx2TY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.moveTo(cx - 2, cy - 2);
       ctx.lineTo(cx + 2, cy + 2);
@@ -195,18 +217,22 @@ export class MiniMapSystem implements GameSystem {
       const mobTX = Math.floor((mob.x + TILE_SIZE * 0.5) / TILE_SIZE);
       const mobTY = Math.floor((mob.y + TILE_SIZE * 0.5) / TILE_SIZE);
       if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;
-      const mx = mmX + (mobTX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const my = mmY + (mobTY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const mmDotX =
+        mmX + (mobTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const mmDotY =
+        mmY + (mobTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
-      ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+      ctx.arc(mmDotX, mmDotY, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Companion — blue dot
     const compTX = Math.floor((companion.x + TILE_SIZE * 0.5) / TILE_SIZE);
     const compTY = Math.floor((companion.y + TILE_SIZE * 0.5) / TILE_SIZE);
-    const compSX = mmX + (compTX - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-    const compSY = mmY + (compTY - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+    const compSX =
+      mmX + (compTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+    const compSY =
+      mmY + (compTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     ctx.fillStyle = '#60a5fa';
     ctx.beginPath();
     ctx.arc(compSX, compSY, 2, 0, Math.PI * 2);
@@ -216,8 +242,8 @@ export class MiniMapSystem implements GameSystem {
     ctx.fillStyle = '#ffffff';
     for (const pos of mordecaiPositions) {
       if (!this.fogOfWar[pos.y * mapSize + pos.x]) continue;
-      const msx = mmX + (pos.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const msy = mmY + (pos.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const msx = mmX + (pos.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const msy = mmY + (pos.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
       ctx.fill();
@@ -227,8 +253,8 @@ export class MiniMapSystem implements GameSystem {
     // size=8 bold; old baseline was qsy+3; top = (qsy+3) - round(8*0.8) = (qsy+3) - 6 = qsy-3
     for (const qm of questMarkers) {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
-      const qsx = mmX + (qm.x - playerTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const qsy = mmY + (qm.y - playerTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const qsx = mmX + (qm.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const qsy = mmY + (qm.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const pulse = 0.7 + 0.3 * Math.sin(frameTime * 5);
       if (qm.type === 'exclamation') {
         drawText(ctx, '!', {
@@ -265,9 +291,11 @@ export class MiniMapSystem implements GameSystem {
       }
     }
 
-    // Active player — green dot at centre
-    const playerSX = mmX + halfTiles * pxPerTile + Math.floor(pxPerTile / 2);
-    const playerSY = mmY + halfTiles * pxPerTile + Math.floor(pxPerTile / 2);
+    // Active player — green dot (at centre when unscrolled; offset when panned)
+    const playerSX =
+      mmX + (playerTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+    const playerSY =
+      mmY + (playerTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     ctx.fillStyle = '#4ade80';
     ctx.beginPath();
     ctx.arc(playerSX, playerSY, 2.5, 0, Math.PI * 2);

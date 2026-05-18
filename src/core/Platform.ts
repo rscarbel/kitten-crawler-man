@@ -29,14 +29,14 @@ class DesktopPlatform implements PlatformAdapter {
   readonly isMobile = false;
   readonly pauseButtonLabel = 'Pause (Esc)';
   readonly resumeButtonLabel = 'Resume Game  (Esc)';
-  readonly skillPointBanner = 'Skill points available! Open menu (Esc) to spend them.';
+  readonly skillPointBanner = 'Click to spend';
 
   controlHints(atkLabel: string): [string, string] {
     return ['WASD/Arrows: Move  |  Tab: Switch', `Space: ${atkLabel}  |  Q: Potion`];
   }
 
   miniMapHint(expanded: boolean): string {
-    return expanded ? 'M: collapse' : 'M: expand';
+    return expanded ? 'M: collapse  |  drag to scroll' : 'M: expand';
   }
 
   readonly initialHudCollapsed = false;
@@ -54,14 +54,14 @@ class MobilePlatform implements PlatformAdapter {
   readonly isMobile = true;
   readonly pauseButtonLabel = 'Pause';
   readonly resumeButtonLabel = 'Resume Game';
-  readonly skillPointBanner = 'Skill points available! Open Pause menu to spend them.';
+  readonly skillPointBanner = 'Tap to spend';
 
   controlHints(): [string, string] {
     return ['Hold: Move  |  Tap: Attack', 'Buttons: Switch / Follow'];
   }
 
   miniMapHint(expanded: boolean): string {
-    return expanded ? 'Tap: collapse' : 'Tap: expand';
+    return expanded ? 'drag to scroll  |  tap: collapse' : 'Tap: expand';
   }
 
   readonly initialHudCollapsed = true;

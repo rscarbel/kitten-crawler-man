@@ -743,14 +743,41 @@ export class GrotesqueSpider extends Mob {
 
     if (this.state === 'screech' && this.attackPhase === 'windup' && sp > 0.2) {
       const fade = Math.sin(((sp - 0.2) / 0.3) * Math.PI);
+      const cx2 = sx + tileSize * 0.5;
+      const cy2 = sy + tileSize * 0.5;
+      const r = SCREECH_RANGE_PX;
+
+      // Filled danger zone + hazard stripes clipped to circle
       ctx.save();
-      ctx.globalAlpha = fade * 0.45;
+      ctx.beginPath();
+      ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.globalAlpha = fade * 0.28;
+      ctx.fillStyle = '#ff1020';
+      ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
+      ctx.globalAlpha = fade * 0.14;
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 10;
+      ctx.setLineDash([]);
+      const screechStripeSpacing = 28;
+      const screechStripeOffset = (now / 120) % screechStripeSpacing;
+      for (let d = -r * 2 + screechStripeOffset; d < r * 2; d += screechStripeSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(cx2 + d - r, cy2 - r);
+        ctx.lineTo(cx2 + d + r, cy2 + r);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Animated dashed outline
+      ctx.save();
+      ctx.globalAlpha = fade * 0.7;
       ctx.strokeStyle = '#ff1020';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3;
       ctx.setLineDash([10, 10]);
       ctx.lineDashOffset = -(now / 25) % 20;
       ctx.beginPath();
-      ctx.arc(sx + tileSize * 0.5, sy + tileSize * 0.5, SCREECH_RANGE_PX, 0, Math.PI * 2);
+      ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -761,20 +788,47 @@ export class GrotesqueSpider extends Mob {
         this.slamFacingLocked ? this.lockedFacingY : this.facingY,
         this.slamFacingLocked ? this.lockedFacingX : this.facingX,
       );
+      const cx2 = sx + tileSize * 0.5;
+      const cy2 = sy + tileSize * 0.5;
+      const r = SLAM_RANGE_PX * 1.1;
+      const arcStart = facingAngle - Math.PI / 3;
+      const arcEnd = facingAngle + Math.PI / 3;
+
+      // Filled danger zone + hazard stripes clipped to pie-slice
       ctx.save();
-      ctx.globalAlpha = fade * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(cx2, cy2);
+      ctx.arc(cx2, cy2, r, arcStart, arcEnd);
+      ctx.closePath();
+      ctx.clip();
+      ctx.globalAlpha = fade * 0.28;
+      ctx.fillStyle = '#ff4010';
+      ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
+      ctx.globalAlpha = fade * 0.14;
+      ctx.strokeStyle = '#ff5010';
+      ctx.lineWidth = 10;
+      ctx.setLineDash([]);
+      const slamStripeSpacing = 28;
+      const slamStripeOffset = (now / 120) % slamStripeSpacing;
+      for (let d = -r * 2 + slamStripeOffset; d < r * 2; d += slamStripeSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(cx2 + d - r, cy2 - r);
+        ctx.lineTo(cx2 + d + r, cy2 + r);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Animated dashed outline (closed pie-slice)
+      ctx.save();
+      ctx.globalAlpha = fade * 0.7;
       ctx.strokeStyle = '#ff6020';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3;
       ctx.setLineDash([8, 8]);
       ctx.lineDashOffset = -(now / 20) % 16;
       ctx.beginPath();
-      ctx.arc(
-        sx + tileSize * 0.5,
-        sy + tileSize * 0.5,
-        SLAM_RANGE_PX,
-        facingAngle - Math.PI / 3,
-        facingAngle + Math.PI / 3,
-      );
+      ctx.moveTo(cx2, cy2);
+      ctx.arc(cx2, cy2, r, arcStart, arcEnd);
+      ctx.closePath();
       ctx.stroke();
       ctx.restore();
     }

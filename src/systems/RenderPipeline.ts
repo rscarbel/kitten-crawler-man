@@ -27,10 +27,12 @@ import type { LootSystem } from './LootSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
+import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 
 const DRAW_KIND_DECO = 0;
 const DRAW_KIND_MOB = 1;
 const DRAW_KIND_PLAYER = 2;
+const DRAW_KIND_CHEST = 3;
 
 /** A Y-sorted draw entry that avoids per-frame closure allocation. */
 interface DrawEntry {
@@ -41,6 +43,7 @@ interface DrawEntry {
   entity: {
     render(ctx: CanvasRenderingContext2D, camX: number, camY: number, ts: number): void;
   } | null;
+  chestRef: TreasureChest | null;
 }
 
 /** Everything the render pipeline needs, provided by the scene each frame. */
@@ -69,6 +72,7 @@ export interface RenderContext {
   spells: SpellSystem;
   dynamite: DynamiteSystem;
   loot: LootSystem;
+  treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
 
@@ -85,7 +89,7 @@ export class RenderPipeline {
     if (this._drawCount < this._drawPool.length) {
       return this._drawPool[this._drawCount++];
     }
-    const e: DrawEntry = { sortY: 0, kind: 0, tx: 0, ty: 0, entity: null };
+    const e: DrawEntry = { sortY: 0, kind: 0, tx: 0, ty: 0, entity: null, chestRef: null };
     this._drawPool.push(e);
     this._drawCount++;
     return e;
@@ -128,7 +132,7 @@ export class RenderPipeline {
    * so depth (north = behind, south = in front) is respected.
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { canvas, camX, camY, gameMap, mobGrid, active, inactive } = rc;
+    const { canvas, camX, camY, gameMap, mobGrid, active, inactive, treasureChests } = rc;
 
     const visibleMobs = mobGrid.queryRect(
       camX - TILE_SIZE,
@@ -157,6 +161,17 @@ export class RenderPipeline {
       e.tx = tx;
       e.ty = ty;
       e.entity = null;
+      e.chestRef = null;
+    }
+
+    // Chests are added before mobs/players so that at equal sortY the entity
+    // (added later) sorts in front of the chest — stable sort preserves insertion order.
+    for (const chest of treasureChests.allChests) {
+      const e = this._getEntry();
+      e.sortY = chest.tileY * TILE_SIZE + TILE_SIZE;
+      e.kind = DRAW_KIND_CHEST;
+      e.chestRef = chest;
+      e.entity = null;
     }
 
     for (const mob of visibleMobs) {
@@ -164,6 +179,7 @@ export class RenderPipeline {
       e.sortY = mob.y + TILE_SIZE;
       e.kind = DRAW_KIND_MOB;
       e.entity = mob;
+      e.chestRef = null;
     }
 
     {
@@ -171,12 +187,14 @@ export class RenderPipeline {
       e.sortY = inactive.y + TILE_SIZE;
       e.kind = DRAW_KIND_PLAYER;
       e.entity = inactive;
+      e.chestRef = null;
     }
     {
       const e = this._getEntry();
       e.sortY = active.y + TILE_SIZE;
       e.kind = DRAW_KIND_PLAYER;
       e.entity = active;
+      e.chestRef = null;
     }
 
     // Sort only the active portion of the pool
@@ -190,6 +208,11 @@ export class RenderPipeline {
       const item = items[i];
       if (item.kind === DRAW_KIND_DECO) {
         gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX, camY);
+      } else if (item.kind === DRAW_KIND_CHEST) {
+        const chest = item.chestRef;
+        if (chest !== null) {
+          treasureChests.renderSingle(ctx, camX, camY, active, chest);
+        }
       } else {
         item.entity?.render(ctx, camX, camY, TILE_SIZE);
       }

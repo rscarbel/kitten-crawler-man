@@ -29,6 +29,7 @@ export abstract class GameplayScene extends Scene {
 
   protected _hudCollapsed = platform.initialHudCollapsed;
   protected _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
+  protected _hudSkillBannerRect = { x: -9999, y: 0, w: 0, h: 0 };
 
   constructor(
     protected readonly input: InputManager,
@@ -102,14 +103,9 @@ export abstract class GameplayScene extends Scene {
   }
 
   protected renderHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this._hudToggleRect = drawHUD(
-      ctx,
-      canvas,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-    );
+    const hud = drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse, this._hudCollapsed);
+    this._hudToggleRect = hud.toggleRect;
+    this._hudSkillBannerRect = hud.notifRect;
   }
 
   protected handleHudToggleTap(x: number, y: number): boolean {

@@ -110,6 +110,9 @@ export class SpiderQuestSystem implements GameSystem {
   // Quest completion
   questCompletePending = false;
 
+  // Boss intro trigger — set when the cutscene ends and the fight begins
+  bossFightStartPending = false;
+
   // Camera
   private _screenShakeX = 0;
   private _screenShakeY = 0;
@@ -766,6 +769,7 @@ export class SpiderQuestSystem implements GameSystem {
       this._screenShakeY = 0;
       this._playerLocked = false;
       this.phase = 'boss_fight';
+      this.bossFightStartPending = true;
     }
 
     // Screen shake — active from frame 42 to 300

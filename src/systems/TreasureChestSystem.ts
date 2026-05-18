@@ -198,97 +198,104 @@ export class TreasureChestSystem {
     }
   }
 
+  /**
+   * Renders a single chest. Called from the Y-sorted entity pass in RenderPipeline
+   * so depth (north = behind, south = in front) is respected against players and mobs.
+   */
+  renderSingle(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Player,
+    chest: TreasureChest,
+  ): void {
+    const dx = chest.tileX * TILE_SIZE - camX;
+    const dy = chest.tileY * TILE_SIZE - camY;
+
+    if (chest.state === 'opened') {
+      const openedSrcX = chest.type === 'wooden' ? 80 : 240;
+      ctx.drawImage(chestImage, openedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
+      return;
+    }
+
+    const closedSrcX = chest.type === 'wooden' ? 0 : 160;
+    ctx.drawImage(chestImage, closedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
+
+    if (chest.state === 'unlocked') {
+      const sf = chest.sparkleFrame;
+      let sparkleSrcX = -1;
+      for (const [start, end, col] of SPARKLE_SCHEDULE) {
+        if (sf >= start && sf <= end) {
+          sparkleSrcX = col * 80;
+          break;
+        }
+      }
+      if (sparkleSrcX >= 0) {
+        const sparkleSize = 40;
+        const sparkleOffX = dx + (TILE_SIZE - sparkleSize) / 2;
+        const sparkleOffY = dy + (TILE_SIZE - sparkleSize) / 2;
+        ctx.drawImage(
+          chestImage,
+          sparkleSrcX,
+          80,
+          80,
+          80,
+          sparkleOffX,
+          sparkleOffY,
+          sparkleSize,
+          sparkleSize,
+        );
+      }
+    }
+
+    const lockSize = 36;
+    const lockX = dx + (TILE_SIZE - lockSize) / 2;
+    const lockY = dy - lockSize - 6;
+
+    if (chest.state === 'locked' && chest.tryLockedTimer > 0) {
+      ctx.drawImage(chestImage, 0, 160, 80, 80, lockX, lockY, lockSize, lockSize);
+    } else if (chest.state === 'unlocking') {
+      const uf = chest.unlockFrame;
+      ctx.save();
+
+      if (uf >= 142) {
+        const fadeProgress = (uf - 142) / 29;
+        ctx.globalAlpha = Math.max(0, 1 - fadeProgress);
+      }
+
+      let lockSrcX: number;
+      if (uf < 20) {
+        lockSrcX = 0;
+      } else if (uf < 28) {
+        lockSrcX = 80;
+      } else if (uf < 36) {
+        lockSrcX = 160;
+      } else if (uf < 44) {
+        lockSrcX = 240;
+      } else if (uf < 52) {
+        lockSrcX = 320;
+      } else {
+        lockSrcX = 400;
+      }
+
+      ctx.drawImage(chestImage, lockSrcX, 160, 80, 80, lockX, lockY, lockSize, lockSize);
+      ctx.restore();
+    }
+
+    if (chest.state === 'unlocked') {
+      const playerDist = Math.hypot(
+        active.x - chest.tileX * TILE_SIZE,
+        active.y - chest.tileY * TILE_SIZE,
+      );
+      if (playerDist < TILE_SIZE * 2.5) {
+        drawInteractionPrompt(ctx, dx, dy, TILE_SIZE, 'Open Chest');
+      }
+    }
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     for (const chest of this.chests) {
-      const dx = chest.tileX * TILE_SIZE - camX;
-      const dy = chest.tileY * TILE_SIZE - camY;
-
-      // Opened chests render the opened sprite and nothing else
-      if (chest.state === 'opened') {
-        const openedSrcX = chest.type === 'wooden' ? 80 : 240;
-        ctx.drawImage(chestImage, openedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
-        continue;
-      }
-
-      // All other states show the closed chest sprite — the dialog handles the opening animation
-      const closedSrcX = chest.type === 'wooden' ? 0 : 160;
-      ctx.drawImage(chestImage, closedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
-
-      // Draw sparkle overlay when unlocked
-      if (chest.state === 'unlocked') {
-        const sf = chest.sparkleFrame;
-        let sparkleSrcX = -1;
-        for (const [start, end, col] of SPARKLE_SCHEDULE) {
-          if (sf >= start && sf <= end) {
-            sparkleSrcX = col * 80;
-            break;
-          }
-        }
-        if (sparkleSrcX >= 0) {
-          const sparkleSize = 40;
-          const sparkleOffX = dx + (TILE_SIZE - sparkleSize) / 2;
-          const sparkleOffY = dy + (TILE_SIZE - sparkleSize) / 2;
-          ctx.drawImage(
-            chestImage,
-            sparkleSrcX,
-            80,
-            80,
-            80,
-            sparkleOffX,
-            sparkleOffY,
-            sparkleSize,
-            sparkleSize,
-          );
-        }
-      }
-
-      // Draw lock overlay — centered horizontally, floating above the chest
-      const lockSize = 36;
-      const lockX = dx + (TILE_SIZE - lockSize) / 2;
-      const lockY = dy - lockSize - 6;
-
-      if (chest.state === 'locked' && chest.tryLockedTimer > 0) {
-        // Red lock idle
-        ctx.drawImage(chestImage, 0, 160, 80, 80, lockX, lockY, lockSize, lockSize);
-      } else if (chest.state === 'unlocking') {
-        const uf = chest.unlockFrame;
-        ctx.save();
-
-        if (uf >= 142) {
-          // Fading out — frames 142-171 → alpha 1 to 0
-          const fadeProgress = (uf - 142) / 29;
-          ctx.globalAlpha = Math.max(0, 1 - fadeProgress);
-        }
-
-        let lockSrcX: number;
-        if (uf < 20) {
-          lockSrcX = 0; // red idle
-        } else if (uf < 28) {
-          lockSrcX = 80; // red shake 1
-        } else if (uf < 36) {
-          lockSrcX = 160; // red shake 2
-        } else if (uf < 44) {
-          lockSrcX = 240; // yellow shake 1
-        } else if (uf < 52) {
-          lockSrcX = 320; // yellow shake 2
-        } else {
-          lockSrcX = 400; // green unlocked (frames 52-171)
-        }
-
-        ctx.drawImage(chestImage, lockSrcX, 160, 80, 80, lockX, lockY, lockSize, lockSize);
-        ctx.restore();
-      }
-
-      // Draw interaction prompt for unlocked chests near the active player
-      if (chest.state === 'unlocked') {
-        const playerDist = Math.hypot(
-          active.x - chest.tileX * TILE_SIZE,
-          active.y - chest.tileY * TILE_SIZE,
-        );
-        if (playerDist < TILE_SIZE * 2.5) {
-          drawInteractionPrompt(ctx, dx, dy, TILE_SIZE, 'Open Chest');
-        }
-      }
+      this.renderSingle(ctx, camX, camY, active, chest);
     }
   }
 
