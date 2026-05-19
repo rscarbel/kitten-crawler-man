@@ -1040,9 +1040,15 @@ export class DungeonScene extends GameplayScene {
     if (!inactive.isKnockedOut) return;
 
     const active = this.active();
-    const cx = canvas.width / 2;
     const t = Date.now();
     const pulse = 0.75 + 0.25 * Math.sin(t * 0.006);
+
+    // On mobile, the minimap occupies the top-right corner — keep the banner in the
+    // available space to its left so the text doesn't slide behind it.
+    const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
+    const availW = platform.isMobile ? canvas.width - mmSz - 16 : canvas.width;
+    const cx = availW / 2;
+    const bannerSize = platform.isMobile ? 15 : 22;
 
     // "Revive your teammate!" banner
     drawText(ctx, 'Revive your teammate!', {
@@ -1050,16 +1056,17 @@ export class DungeonScene extends GameplayScene {
       y: 44,
       align: 'center',
       ...TEXT_PRESETS.danger,
-      size: 22,
+      size: bannerSize,
       outline: true,
       alpha: pulse,
+      width: availW - 16,
     });
 
     // Countdown timer
     const secondsLeft = Math.max(0, Math.ceil((5400 - inactive.knockedOutFrames) / 60));
     drawText(ctx, `${secondsLeft}s`, {
       x: cx,
-      y: 70,
+      y: platform.isMobile ? 62 : 70,
       align: 'center',
       ...TEXT_PRESETS.danger,
       size: 15,
@@ -1890,6 +1897,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.render(ctx, camX, camY, this.active());
 
     this.renderPipeline.renderEntities(ctx, rc);
+    this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
     for (const mob of this.mobs) {
       if (mob instanceof GrotesqueSpider) mob.renderSpitEffects(ctx, camX, camY, TILE_SIZE);
@@ -2724,7 +2732,8 @@ export class DungeonScene extends GameplayScene {
         this.stairwell.menuOpen ||
         this.gameOver ||
         this.pauseMenu.isOpen ||
-        this.safeRoom.mordecaiDialogOpen
+        this.safeRoom.mordecaiDialogOpen ||
+        this.spiderQuest.isDialogOpen
       ) {
         if (this.pauseMenu.isOpen) {
           if (this.touch.pauseScrollTouchId === null) {

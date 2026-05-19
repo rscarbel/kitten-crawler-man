@@ -222,6 +222,7 @@ export class LootBoxOpener {
       size: 17,
       color: tierColor,
       align: 'center',
+      width: boxW - 32,
     });
 
     // Player label
@@ -244,7 +245,7 @@ export class LootBoxOpener {
       const revealAlpha =
         this.phase === 'done' ? 1 : Math.min(1, this.frame / (REVEAL_FRAMES * 0.6));
       ctx.globalAlpha = revealAlpha;
-      this.renderContents(ctx, cx, by + Math.round(boxH * 0.633));
+      this.renderContents(ctx, cx, by + Math.round(boxH * 0.633), boxW - 40);
       ctx.globalAlpha = 1;
     }
 
@@ -424,7 +425,7 @@ export class LootBoxOpener {
     ctx.stroke();
   }
 
-  private renderContents(ctx: CanvasRenderingContext2D, cx: number, y: number): void {
+  private renderContents(ctx: CanvasRenderingContext2D, cx: number, y: number, maxW: number): void {
     if (!this.contents) return;
     drawText(ctx, `${this.playerName} received:`, {
       x: cx,
@@ -433,12 +434,13 @@ export class LootBoxOpener {
       size: 13,
       color: '#f1f5f9',
       align: 'center',
+      width: maxW,
     });
     y += 18;
     drawText(
       ctx,
       `+${this.contents.potions} Health Potion${this.contents.potions !== 1 ? 's' : ''}`,
-      { x: cx, y: y - 10, size: 12, color: '#4ade80', align: 'center' },
+      { x: cx, y: y - 10, size: 12, color: '#4ade80', align: 'center', width: maxW },
     );
     y += 16;
     if (this.contents.coins > 0) {
@@ -448,6 +450,7 @@ export class LootBoxOpener {
         size: 12,
         color: '#fbbf24',
         align: 'center',
+        width: maxW,
       });
       y += 16;
     }
@@ -460,6 +463,7 @@ export class LootBoxOpener {
         size: 12,
         color: '#fb923c',
         align: 'center',
+        width: maxW,
       });
     }
   }

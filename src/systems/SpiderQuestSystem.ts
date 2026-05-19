@@ -307,12 +307,23 @@ export class SpiderQuestSystem implements GameSystem {
   // Rendering
   // ---------------------------------------------------------------------------
 
+  /**
+   * Draws the table only when the active player is south of it (player renders after in the
+   * entity pass, so the player will appear on top). When the player is north of the table,
+   * skip it here — renderTableForeground() draws it after the entity pass so the table
+   * correctly appears in front.
+   */
   render(ctx2d: CanvasRenderingContext2D, camX: number, camY: number, active?: Player): void {
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
 
     this._renderLifeMachines(ctx2d, camX, camY);
-    this._renderComputerTable(ctx2d, camX, camY);
+    // Y-sort: only draw the table here when the player is at or south of the table foot.
+    // If the player is north, renderTableForeground() handles it after the entity pass.
+    const tableFoot = this.roomData.computerTile.y * TILE_SIZE;
+    if (active === undefined || active.y > tableFoot) {
+      this._renderComputerTable(ctx2d, camX, camY);
+    }
     this._renderSpiderEgg(ctx2d, camX, camY);
 
     if (!this.scientistDead) {
@@ -342,6 +353,21 @@ export class SpiderQuestSystem implements GameSystem {
         const sy = this.scientistY - camY;
         drawInteractionPrompt(ctx2d, sx, sy, TILE_SIZE, 'Talk');
       }
+    }
+  }
+
+  /** Draws the computer table on top of the entity pass when the player is north of it. */
+  renderTableForeground(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active?: Player,
+  ): void {
+    if (this.phase === 'inactive') return;
+    if (!this.roomData) return;
+    const tableFoot = this.roomData.computerTile.y * TILE_SIZE;
+    if (active !== undefined && active.y <= tableFoot) {
+      this._renderComputerTable(ctx, camX, camY);
     }
   }
 

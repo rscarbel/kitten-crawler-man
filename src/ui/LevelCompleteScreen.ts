@@ -198,13 +198,14 @@ export class LevelCompleteScreen {
     }
     ctx.restore();
 
-    // "LEVEL COMPLETE!" headline — pulsing gold glow
+    // "LEVEL COMPLETE!" headline — pulsing gold glow, capped so it fits the panel
     const headPulse = 0.97 + 0.03 * Math.sin(now * 2.4);
+    const headSize = Math.min(Math.round(44 * headPulse), Math.floor(panelW / 8));
     drawText(ctx, 'LEVEL COMPLETE!', {
       x: panelCenterX,
       y: panel.y + 36,
       bold: true,
-      size: Math.round(44 * headPulse),
+      size: headSize,
       color: '#ffd700',
       align: 'center',
       glow: '#ffd700',
@@ -212,18 +213,20 @@ export class LevelCompleteScreen {
       outline: '#1a0a00',
       outlineWidth: 3,
       alpha,
+      width: panelW - 32,
     });
 
     // Level name subtitle
     drawText(ctx, this.levelName, {
       x: panelCenterX,
       y: panel.y + 102,
-      size: 22,
+      size: Math.min(22, Math.floor(panelW / 12)),
       color: '#d8b4fe',
       align: 'center',
       glow: '#a855f7',
       glowBlur: 12,
       alpha: alpha * 0.95,
+      width: panelW - 32,
     });
 
     // Decorative divider
