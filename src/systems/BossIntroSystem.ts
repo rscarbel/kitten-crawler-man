@@ -160,14 +160,12 @@ export class BossIntroSystem implements GameSystem {
       ctx.lineWidth = 2;
       ctx.strokeRect(leftX, panelY, panelW, panelH);
 
-      // Human sprite — left portion of panel
       ctx.save();
       // idle pose — attackPhase=null and both timers=0, so the frame-divisor args (1,1) are never reached
-      drawHumanSprite(ctx, leftX + 14, panelY + 16, 72, null, 0, 1, 0, 1, 0, false, 0, 0);
+      drawHumanSprite(ctx, leftX + 14, panelY + 78, 72, null, 0, 1, 0, 1, 0, false, 0, 0);
       ctx.restore();
-      // Cat sprite — right portion of panel
       ctx.save();
-      drawCatSprite(ctx, leftX + panelW * 0.52, panelY + 20, 60, 0, false, 0);
+      drawCatSprite(ctx, leftX + panelW * 0.52, panelY + 66, 60, 0, false, 0);
       ctx.restore();
 
       ctx.restore();

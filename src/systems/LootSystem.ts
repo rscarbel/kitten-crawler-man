@@ -1,7 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { LootDrop } from '../creatures/Mob';
-import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -16,7 +16,6 @@ interface PendingLoot {
   ttl: number;
   pickupDelay: number;
   droppedByPlayer?: boolean;
-  /** Boss loot never fades and gets a special ground indicator. */
   isBossLoot?: boolean;
 }
 
@@ -34,7 +33,6 @@ export class LootSystem implements GameSystem {
 
   constructor(private readonly gameMap: GameMap) {}
 
-  /** Returns and resets the number of items picked up since the last call. */
   drainPickups(): number {
     const n = this._pickupsThisFrame;
     this._pickupsThisFrame = 0;
@@ -54,7 +52,7 @@ export class LootSystem implements GameSystem {
       loot,
       owner,
       collected: false,
-      ttl: 600,
+      ttl: 3600,
       pickupDelay: 0,
       isBossLoot,
     });
@@ -74,7 +72,7 @@ export class LootSystem implements GameSystem {
       loot: { coins: 0, items: [{ id, quantity }] },
       owner: dropper,
       collected: false,
-      ttl: 600,
+      ttl: 3600,
       pickupDelay: 0,
       droppedByPlayer: true,
     });
@@ -109,40 +107,24 @@ export class LootSystem implements GameSystem {
         continue;
       }
 
-      // Mob-dropped loot — attributed owner auto-collects on proximity
-      if (loot.owner === active) {
+      for (const player of [active, companion]) {
+        if (loot.collected) break;
+        if (player !== active && companion.autoTarget?.isAlive) continue;
         const dist = Math.hypot(
-          active.x + TILE_SIZE * 0.5 - loot.x,
-          active.y + TILE_SIZE * 0.5 - loot.y,
+          player.x + TILE_SIZE * 0.5 - loot.x,
+          player.y + TILE_SIZE * 0.5 - loot.y,
         );
         if (dist <= TILE_SIZE * 1.5) {
-          active.coins += loot.loot.coins;
+          loot.owner.coins += loot.loot.coins;
           for (const it of loot.loot.items) {
-            active.inventory.addItem(it.id, it.quantity);
+            loot.owner.inventory.addItem(it.id, it.quantity);
           }
           loot.collected = true;
           this._pickupsThisFrame++;
         }
       }
-      if (!loot.collected && loot.owner === companion) {
-        const outOfCombat = !companion.autoTarget?.isAlive;
-        if (outOfCombat) {
-          const dist = Math.hypot(
-            companion.x + TILE_SIZE * 0.5 - loot.x,
-            companion.y + TILE_SIZE * 0.5 - loot.y,
-          );
-          if (dist <= TILE_SIZE * 1.5) {
-            companion.coins += loot.loot.coins;
-            for (const it of loot.loot.items) {
-              companion.inventory.addItem(it.id, it.quantity);
-            }
-            loot.collected = true;
-            this._pickupsThisFrame++;
-          }
-        }
-      }
     }
-    // Decrement TTL for non-boss, non-player-dropped loot
+
     for (const loot of this.pendingLoots) {
       if (!loot.isBossLoot && !loot.droppedByPlayer && !loot.collected) {
         loot.ttl--;
@@ -161,7 +143,6 @@ export class LootSystem implements GameSystem {
     active: HumanPlayer | CatPlayer,
   ): boolean {
     for (const loot of this.pendingLoots) {
-      if (loot.owner !== active) continue;
       const dist = Math.hypot(
         active.x + TILE_SIZE * 0.5 - loot.x,
         active.y + TILE_SIZE * 0.5 - loot.y,
@@ -180,9 +161,10 @@ export class LootSystem implements GameSystem {
       const by = sy - 26;
 
       if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
-        active.coins += loot.loot.coins;
+        const recipient = loot.droppedByPlayer ? active : loot.owner;
+        recipient.coins += loot.loot.coins;
         for (const it of loot.loot.items) {
-          active.inventory.addItem(it.id, it.quantity);
+          recipient.inventory.addItem(it.id, it.quantity);
         }
         loot.collected = true;
         return true;
@@ -208,9 +190,8 @@ export class LootSystem implements GameSystem {
 
       ctx.save();
 
-      // Fade non-boss, non-player-dropped loot as TTL expires
-      if (!loot.isBossLoot && !loot.droppedByPlayer && loot.ttl < 120) {
-        ctx.globalAlpha = Math.max(0.15, loot.ttl / 120);
+      if (!loot.isBossLoot && !loot.droppedByPlayer && loot.ttl < 600) {
+        ctx.globalAlpha = Math.max(0.15, loot.ttl / 600);
       }
 
       const bw = Math.max(54, label.length * 7 + 16);
@@ -218,7 +199,6 @@ export class LootSystem implements GameSystem {
       const bx = sx - bw / 2;
       const by = sy - 26;
 
-      // Boss loot: pulsing golden glow on the ground beneath the pill
       if (loot.isBossLoot) {
         const t = performance.now() / 1000;
         const pulse = 0.5 + 0.5 * Math.sin(t * 3);
@@ -232,7 +212,6 @@ export class LootSystem implements GameSystem {
         ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Star sparkles
         ctx.fillStyle = '#fff';
         for (let i = 0; i < 4; i++) {
           const angle = t * 2 + i * (Math.PI / 2);
@@ -242,7 +221,6 @@ export class LootSystem implements GameSystem {
           const sparkSize = 1.5 + pulse;
           ctx.globalAlpha = 0.6 + pulse * 0.4;
           ctx.beginPath();
-          // 4-pointed star
           ctx.moveTo(sparkX, sparkY - sparkSize);
           ctx.lineTo(sparkX + sparkSize * 0.3, sparkY);
           ctx.lineTo(sparkX, sparkY + sparkSize);
@@ -260,38 +238,38 @@ export class LootSystem implements GameSystem {
         ctx.globalAlpha = 1;
       }
 
-      ctx.fillStyle = loot.owner === active ? 'rgba(15,23,42,0.85)' : 'rgba(15,23,42,0.45)';
+      ctx.fillStyle = 'rgba(15,23,42,0.85)';
       ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#475569';
+      ctx.strokeStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
       ctx.lineWidth = loot.isBossLoot ? 2 : 1;
       ctx.strokeRect(bx, by, bw, bh);
 
-      ctx.fillStyle = loot.isBossLoot ? '#ffd700' : '#fbbf24';
+      ctx.fillStyle = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
       ctx.beginPath();
       ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      drawText(ctx, label, {
+      const ownerLabel = loot.owner instanceof HumanPlayer ? 'Human' : 'Cat';
+      const ownerTag = !loot.droppedByPlayer && loot.owner !== active ? ` →${ownerLabel}` : '';
+      drawText(ctx, label + ownerTag, {
         x: bx + 18,
         y: by + bh / 2 - 4,
         size: 10,
-        color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#64748b',
+        color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#93c5fd',
       });
 
-      if (loot.owner === active) {
-        const dist = Math.hypot(
-          active.x + TILE_SIZE * 0.5 - loot.x,
-          active.y + TILE_SIZE * 0.5 - loot.y,
-        );
-        if (dist <= TILE_SIZE * 3) {
-          drawText(ctx, '[click]', {
-            x: sx,
-            y: by - 9,
-            size: 8,
-            color: '#94a3b8',
-            align: 'center',
-          });
-        }
+      const dist = Math.hypot(
+        active.x + TILE_SIZE * 0.5 - loot.x,
+        active.y + TILE_SIZE * 0.5 - loot.y,
+      );
+      if (dist <= TILE_SIZE * 3) {
+        drawText(ctx, '[click]', {
+          x: sx,
+          y: by - 9,
+          size: 8,
+          color: '#94a3b8',
+          align: 'center',
+        });
       }
 
       ctx.restore();

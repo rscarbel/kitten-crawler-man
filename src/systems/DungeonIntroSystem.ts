@@ -1,7 +1,7 @@
 import interfacesManifest from '../images/interfaces/manifest.json';
 import { drawOverlay } from '../ui/Box';
 
-const HOLD_FRAMES = 250;
+const HOLD_FRAMES = 125;
 const FADE_OUT_FRAMES = 80;
 const TOTAL_FRAMES = HOLD_FRAMES + FADE_OUT_FRAMES;
 
