@@ -19,7 +19,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { PauseMenu } from '../ui/PauseMenu';
-import { drawHUD } from '../ui/HUD';
+import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { platform } from '../core/Platform';
 
 export abstract class GameplayScene extends Scene {
@@ -105,7 +105,20 @@ export abstract class GameplayScene extends Scene {
   protected renderHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const hud = drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse, this._hudCollapsed);
     this._hudToggleRect = hud.toggleRect;
-    this._hudSkillBannerRect = hud.notifRect;
+    if (platform.isMobile) {
+      // Skill badge position can be overridden by subclasses that stack boss UI below
+      // the HUD bar. Default: place it immediately below the HUD panel.
+      this._hudSkillBannerRect = renderMobileSkillBadge(
+        ctx,
+        canvas,
+        this.human,
+        this.cat,
+        this.notifPulse,
+        hud.hudPanelBottom + 4,
+      );
+    } else {
+      this._hudSkillBannerRect = hud.notifRect;
+    }
   }
 
   protected handleHudToggleTap(x: number, y: number): boolean {

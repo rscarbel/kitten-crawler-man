@@ -341,7 +341,7 @@ export class SpiderQuestSystem implements GameSystem {
         active.y - this.roomData.computerTile.y * TILE_SIZE,
       );
       if (dist <= COMPUTER_INTERACT_RANGE_PX * 3) {
-        drawInteractionPrompt(ctx2d, compX, compY, TILE_SIZE, 'Hack Terminal');
+        drawInteractionPrompt(ctx2d, compX, compY - TILE_SIZE, TILE_SIZE, 'Hack Terminal');
       }
     }
 

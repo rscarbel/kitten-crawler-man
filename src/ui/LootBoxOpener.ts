@@ -214,9 +214,8 @@ export class LootBoxOpener {
       align: 'right',
     });
 
-    // Title
     drawText(ctx, `${this.box.tier} ${this.box.category} Box`, {
-      x: cx,
+      x: bx + 16,
       y: by + 36 - 14,
       bold: true,
       size: 17,
@@ -245,14 +244,15 @@ export class LootBoxOpener {
       const revealAlpha =
         this.phase === 'done' ? 1 : Math.min(1, this.frame / (REVEAL_FRAMES * 0.6));
       ctx.globalAlpha = revealAlpha;
-      this.renderContents(ctx, cx, by + Math.round(boxH * 0.633), boxW - 40);
+      // Pass left edge of content area so drawText centers within the dialog box
+      this.renderContents(ctx, bx + 20, by + Math.round(boxH * 0.633), boxW - 40);
       ctx.globalAlpha = 1;
     }
 
-    // Skip hint
+    // Skip hint — raised to avoid overlapping the countdown label
     drawText(ctx, this.phase === 'done' ? 'Click to continue' : 'Click to skip', {
       x: cx,
-      y: by + boxH - 38,
+      y: by + boxH - 52,
       size: 10,
       color: '#475569',
       align: 'center',
@@ -425,10 +425,21 @@ export class LootBoxOpener {
     ctx.stroke();
   }
 
-  private renderContents(ctx: CanvasRenderingContext2D, cx: number, y: number, maxW: number): void {
+  private renderContents(
+    ctx: CanvasRenderingContext2D,
+    leftX: number,
+    y: number,
+    maxW: number,
+  ): void {
     if (!this.contents) return;
+
+    // Count distinct reward lines so we can shrink text when there are 3+
+    const itemCount = 1 + (this.contents.coins > 0 ? 1 : 0) + (this.contents.bonus ? 1 : 0);
+    const itemFontSize = itemCount >= 3 ? 10 : 12;
+    const lineStep = itemFontSize <= 10 ? 14 : 16;
+
     drawText(ctx, `${this.playerName} received:`, {
-      x: cx,
+      x: leftX,
       y: y - 10,
       bold: true,
       size: 13,
@@ -440,27 +451,27 @@ export class LootBoxOpener {
     drawText(
       ctx,
       `+${this.contents.potions} Health Potion${this.contents.potions !== 1 ? 's' : ''}`,
-      { x: cx, y: y - 10, size: 12, color: '#4ade80', align: 'center', width: maxW },
+      { x: leftX, y: y - 10, size: itemFontSize, color: '#4ade80', align: 'center', width: maxW },
     );
-    y += 16;
+    y += lineStep;
     if (this.contents.coins > 0) {
       drawText(ctx, `+${this.contents.coins} Coins`, {
-        x: cx,
+        x: leftX,
         y: y - 10,
-        size: 12,
+        size: itemFontSize,
         color: '#fbbf24',
         align: 'center',
         width: maxW,
       });
-      y += 16;
+      y += lineStep;
     }
     if (this.contents.bonus) {
       const name = this.contents.bonus.id.replace(/_/g, ' ');
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
       drawText(ctx, `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`, {
-        x: cx,
+        x: leftX,
         y: y - 10,
-        size: 12,
+        size: itemFontSize,
         color: '#fb923c',
         align: 'center',
         width: maxW,

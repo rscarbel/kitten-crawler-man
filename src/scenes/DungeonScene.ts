@@ -26,6 +26,7 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import { MiniMapSystem } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
+import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import { CompanionSystem } from '../systems/CompanionSystem';
@@ -1914,7 +1915,21 @@ export class DungeonScene extends GameplayScene {
     this.renderPipeline.renderVisibilityFog(ctx, rc);
 
     UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
-    this.renderHUD(ctx, canvas);
+
+    // Render the HUD panel. On mobile the skill-points badge is NOT drawn here;
+    // it is stacked below the boss UI box further down in this method.
+    const hudResult = drawHUD(
+      ctx,
+      canvas,
+      this.human,
+      this.cat,
+      this.notifPulse,
+      this._hudCollapsed,
+    );
+    this._hudToggleRect = hudResult.toggleRect;
+    if (!platform.isMobile) {
+      this._hudSkillBannerRect = hudResult.notifRect;
+    }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, canvas, camX, camY);
@@ -1947,11 +1962,35 @@ export class DungeonScene extends GameplayScene {
       UIRenderer.renderLevelTimer(ctx, canvas, this.miniMap, this.levelTimerFrames);
     }
 
-    this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
+    if (platform.isMobile) {
+      // On mobile, stack the boss UI directly below the HUD bar and render the
+      // skill-points badge below that so nothing overlaps.
+      const mobileTopY = hudResult.hudPanelBottom + 4;
+      const bossBottom = this.bossRoom.renderUI(
+        ctx,
+        canvas,
+        camX,
+        camY,
+        this.mobs,
+        this.human,
+        this.cat,
+        mobileTopY,
+      );
+      const skillTopY = bossBottom !== null ? bossBottom + 4 : mobileTopY;
+      this._hudSkillBannerRect = renderMobileSkillBadge(
+        ctx,
+        canvas,
+        this.human,
+        this.cat,
+        this.notifPulse,
+        skillTopY,
+      );
+    } else {
+      this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
+    }
     this.arena.render(ctx, canvas, this.active());
 
     this.loot.render(ctx, camX, camY, this.active());
-    this.treasureChests.render(ctx, camX, camY, this.active());
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const active = this.active();
@@ -2904,7 +2943,17 @@ export class DungeonScene extends GameplayScene {
             } else {
               this.handleClick(x, y);
               if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
-                this.triggerSpaceAction(x, y);
+                const cam = this.camera();
+                const grateHandled = this.defendQuest.tryMobileTapOnGrate(
+                  x,
+                  y,
+                  cam.x,
+                  cam.y,
+                  this.human,
+                );
+                if (!grateHandled) {
+                  this.triggerSpaceAction(x, y);
+                }
               }
             }
           }

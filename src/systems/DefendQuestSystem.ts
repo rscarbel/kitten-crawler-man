@@ -9,6 +9,7 @@
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, pointInRect } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { platform } from '../core/Platform';
 import type { GameMap } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
@@ -308,6 +309,44 @@ export class DefendQuestSystem implements GameSystem {
       // Build new barrier
       this.pendingBuild = { framesLeft: BUILD_FRAMES, grateIdx: gi, isRepair: false };
       return true;
+    }
+    return false;
+  }
+
+  /**
+   * On mobile: returns true and triggers build/repair if the screen-space tap lands on a
+   * grate tile, the player is close enough, and has enough boards. Returns false so the
+   * caller can fall through to the normal attack.
+   */
+  tryMobileTapOnGrate(
+    screenX: number,
+    screenY: number,
+    camX: number,
+    camY: number,
+    human: HumanPlayer,
+  ): boolean {
+    if (this.phase !== 'defending' && this.phase !== 'countdown') return false;
+    if (this.pendingBuild) return false;
+    if (!this.roomData) return false;
+    if (human.inventory.countOf('quest_wood_board') < BOARDS_PER_BUILD) return false;
+
+    const tapTileX = Math.floor((screenX + camX) / TILE_SIZE);
+    const tapTileY = Math.floor((screenY + camY) / TILE_SIZE);
+
+    const ptx = Math.floor((human.x + TILE_SIZE * 0.5) / TILE_SIZE);
+    const pty = Math.floor((human.y + TILE_SIZE * 0.5) / TILE_SIZE);
+
+    for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
+      const g = this.roomData.grateTiles[gi];
+      if (g.x !== tapTileX || g.y !== tapTileY) continue;
+
+      const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
+      if (dist > 2) return false;
+
+      const existing = this.barriers.find((b) => b.grateIdx === gi);
+      if (existing && existing.hp >= existing.maxHp) return false;
+
+      return this.tryBuildBarrier(human);
     }
     return false;
   }
@@ -683,10 +722,17 @@ export class DefendQuestSystem implements GameSystem {
         if (dist > 2) continue;
         const existing = this.barriers.find((b) => b.grateIdx === gi);
         if (existing && existing.hp >= existing.maxHp) continue;
-        const label = existing ? 'Repair' : 'Build Barrier';
+        const label = platform.isMobile
+          ? existing
+            ? 'Tap to repair'
+            : 'Tap to construct'
+          : existing
+            ? 'Repair'
+            : 'Build Barrier';
+        const keyOverride = platform.isMobile ? undefined : 'R';
         const gx = g.x * TILE_SIZE - camX;
         const gy = g.y * TILE_SIZE - camY;
-        drawInteractionPrompt(ctx, gx, gy, TILE_SIZE, label, 'R');
+        drawInteractionPrompt(ctx, gx, gy, TILE_SIZE, label, keyOverride);
         break;
       }
     }

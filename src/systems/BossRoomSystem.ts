@@ -739,6 +739,16 @@ export class BossRoomSystem implements GameSystem {
     ctx.restore();
   }
 
+  /**
+   * Renders the boss-room UI overlay.
+   *
+   * On mobile pass `mobileTopY` (pixels from canvas top where the box should
+   * start). The method then returns the bottom Y of the rendered box so the
+   * caller can stack the skill-points badge below it.
+   *
+   * On desktop omit `mobileTopY` — the centred desktop layout is used and
+   * `null` is returned.
+   */
   renderUI(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
@@ -747,8 +757,9 @@ export class BossRoomSystem implements GameSystem {
     mobs: Mob[],
     human: HumanPlayer,
     cat: CatPlayer,
-  ): void {
-    if (this.states.length === 0) return;
+    mobileTopY?: number,
+  ): number | null {
+    if (this.states.length === 0) return null;
 
     // Barrier lines for locked rooms
     for (const state of this.states) {
@@ -792,32 +803,51 @@ export class BossRoomSystem implements GameSystem {
         this.isEntityInRoom(human, s.bounds) ||
         this.isEntityInRoom(cat, s.bounds),
     );
-    if (!relevantState) return;
+    if (!relevantState) return null;
 
     const relevantStateIdx = this.states.indexOf(relevantState);
     const bossType = this.bossTypes[relevantStateIdx] ?? 'the_hoarder';
     const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
 
     const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, relevantState.bounds));
-    if (!boss) return;
+    if (!boss) return null;
 
     const isEnraged = boss.isEnraged ?? false;
+    const hpFrac = Math.max(0, boss.hp / boss.maxHp);
 
+    if (mobileTopY !== undefined) {
+      return this.renderMobileBossBar(
+        ctx,
+        canvas,
+        boss,
+        relevantState,
+        meta,
+        isEnraged,
+        hpFrac,
+        mobileTopY,
+      );
+    }
+
+    // --- Desktop layout ---
     const barW = Math.min(360, canvas.width * 0.5);
     const barH = 18;
     const barX = Math.floor((canvas.width - barW) / 2);
     const barY = 48;
-    const hpFrac = Math.max(0, boss.hp / boss.maxHp);
+
+    const showSubText =
+      relevantState.defeated || (relevantState.locked && relevantState.entryWindowTimer > 0);
+    // Expand container height when sub-text (DEFEATED / countdown) is present so
+    // the text is not bisected by the box border.
+    const containerH = showSubText ? barH + 46 : barH + 30;
 
     ctx.save();
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(barX - 6, barY - 22, barW + 12, barH + 30);
+    ctx.fillRect(barX - 6, barY - 22, barW + 12, containerH);
     ctx.strokeStyle = meta.color;
     ctx.lineWidth = 1;
-    ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
+    ctx.strokeRect(barX - 6, barY - 22, barW + 12, containerH);
 
-    // Boss name label: size=11, old baseline = barY - 6; top = (barY-6) - round(11*0.8) = barY-6-9 = barY-15
     const nameText = isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName;
     drawText(ctx, nameText, {
       x: canvas.width / 2,
@@ -847,8 +877,6 @@ export class BossRoomSystem implements GameSystem {
 
     ctx.restore();
 
-    // HP values inside bar: size=9, old baseline = barY + barH - 4
-    // top = (barY + barH - 4) - round(9*0.8) = (barY + barH - 4) - 7 = barY + barH - 11
     drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
       x: canvas.width / 2,
       y: barY + barH - 11,
@@ -858,8 +886,6 @@ export class BossRoomSystem implements GameSystem {
     });
 
     if (relevantState.defeated) {
-      // "DEFEATED" text: size=12, old baseline = barY + barH + 16
-      // top = (barY + barH + 16) - round(12*0.8) = (barY + barH + 16) - 10 = barY + barH + 6
       drawText(ctx, 'DEFEATED', {
         x: canvas.width / 2,
         y: barY + barH + 6,
@@ -870,7 +896,6 @@ export class BossRoomSystem implements GameSystem {
       });
     }
 
-    // Entry window countdown — shown while fight is active and window is still open.
     if (relevantState.locked && relevantState.entryWindowTimer > 0) {
       const seconds = Math.ceil(relevantState.entryWindowTimer / 60);
       drawText(ctx, `Entry closes in ${seconds}s`, {
@@ -885,5 +910,108 @@ export class BossRoomSystem implements GameSystem {
 
     void camX;
     void camY;
+    return null;
+  }
+
+  private renderMobileBossBar(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    boss: Mob,
+    state: BossRoomState,
+    meta: { displayName: string; color: string },
+    isEnraged: boolean,
+    hpFrac: number,
+    topY: number,
+  ): number {
+    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
+    const BOX_X = 8;
+    // Leave 8px gap between the box's right edge and the minimap's left edge.
+    const boxW = canvas.width - (mmSize + 8) - BOX_X - 8;
+    const innerW = boxW - 12;
+    const innerX = BOX_X + 6;
+
+    const PAD_V = 6;
+    const NAME_H = 12;
+    const GAP = 4;
+    const BAR_H = 14;
+
+    const hasSubText = state.defeated || (state.locked && state.entryWindowTimer > 0);
+    const boxH = PAD_V + NAME_H + GAP + BAR_H + (hasSubText ? GAP + NAME_H : 0) + PAD_V;
+
+    // Container
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(BOX_X, topY, boxW, boxH);
+    ctx.strokeStyle = meta.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(BOX_X, topY, boxW, boxH);
+    ctx.restore();
+
+    // Boss name — no flanking ⚠ symbols; enraged state shown via red colour
+    const nameY = topY + PAD_V;
+    const nameText = isEnraged ? `${meta.displayName} [ENRAGED]` : meta.displayName;
+    drawText(ctx, nameText, {
+      x: innerX + innerW / 2,
+      y: nameY,
+      size: 10,
+      bold: true,
+      color: isEnraged ? '#ef4444' : meta.color,
+      align: 'center',
+    });
+
+    // HP bar
+    const barY = nameY + NAME_H + GAP;
+    ctx.save();
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillRect(innerX, barY, innerW, BAR_H);
+    ctx.fillStyle = isEnraged ? '#ef4444' : meta.color;
+    ctx.fillRect(innerX, barY, innerW * hpFrac, BAR_H);
+
+    ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(innerX + innerW * 0.5, barY);
+    ctx.lineTo(innerX + innerW * 0.5, barY + BAR_H);
+    ctx.stroke();
+
+    ctx.strokeStyle = meta.color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(innerX, barY, innerW, BAR_H);
+    ctx.restore();
+
+    drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
+      x: innerX + innerW / 2,
+      y: barY + Math.floor((BAR_H - 9) / 2),
+      size: 9,
+      color: '#e2e8f0',
+      align: 'center',
+    });
+
+    // Sub-text (DEFEATED or entry countdown)
+    if (hasSubText) {
+      const subY = barY + BAR_H + GAP;
+      if (state.defeated) {
+        drawText(ctx, 'DEFEATED', {
+          x: BOX_X + boxW / 2,
+          y: subY,
+          size: 10,
+          bold: true,
+          color: '#4ade80',
+          align: 'center',
+        });
+      } else if (state.locked && state.entryWindowTimer > 0) {
+        const seconds = Math.ceil(state.entryWindowTimer / 60);
+        drawText(ctx, `Entry closes in ${seconds}s`, {
+          x: BOX_X + boxW / 2,
+          y: subY,
+          size: 10,
+          bold: true,
+          color: '#fbbf24',
+          align: 'center',
+        });
+      }
+    }
+
+    return topY + boxH;
   }
 }

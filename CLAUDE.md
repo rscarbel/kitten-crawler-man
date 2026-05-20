@@ -26,6 +26,16 @@ Prefer the shared utilities in `src/ui/` over raw `ctx` calls:
 
 Never reach for `ctx.fillText`, `ctx.strokeText`, `ctx.fillRect` for UI chrome when these utilities already handle the pattern — raw `ctx` calls are fine only for game-world rendering (sprites, particles, geometry) where the utilities don't apply.
 
+## Code Clarity
+
+**Comments explain *why*, never *what*.** Well-named identifiers already say what code does — a comment restating that is noise. Only write a comment when something would surprise a reader: a hidden constraint, a subtle invariant, a non-obvious workaround, or a reason that can't be inferred from the names alone. If removing a comment wouldn't confuse a future reader, don't write it. When you encounter a pre-existing "what" comment while editing, remove it.
+
+**JSDoc is an exception.** Public functions and types benefit from JSDoc when it adds meaning beyond the signature — keep and write these freely.
+
+**Prefer named variables over comments and over terse one-liners.** If an expression is complex or its intent is unclear, extract it into a well-named variable rather than explaining it with a comment. Even if the variable doesn't affect performance and a one-liner would work, prefer the named variable when it makes the purpose obvious to a reader. More lines of obviously clear code is better than fewer lines of opaque code.
+
+**No magic numbers.** Every numeric literal whose meaning isn't self-evident must be extracted into a named constant. This codebase accumulates lots of numbers (frame counts, tile sizes, damage values, pixel offsets, timers) — unnamed literals make them all look the same and make future changes brittle. When you encounter a pre-existing magic number while editing, refactor it into a named constant as part of that edit. Name the constant after what the number *means*, not what it *is* (e.g. `TONGUE_STRIKE_FRAMES = 18`, not `FRAMES_18`).
+
 ## Validation Gates
 
 Before considering work complete, **both checks must pass**:

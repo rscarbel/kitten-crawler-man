@@ -151,9 +151,28 @@ export class LevelCompleteScreen {
 
     if (alpha < 0.2) return;
 
-    // Main panel — gold achievement style with vertical offset upward for button space
+    // Pre-compute button dimensions so the panel can grow to fit them
     const panelW = Math.min(560, w - 48);
-    const panelH = 270;
+    const btnLabel = this.nextLevelName ? `Descend to ${this.nextLevelName}` : 'Continue';
+    const btnFontSize = 16;
+    const hPad = 28;
+    const maxBtnW = panelW - 40;
+
+    ctx.save();
+    ctx.font = `bold ${btnFontSize}px monospace`;
+    const measuredW = ctx.measureText(btnLabel).width;
+    ctx.restore();
+
+    const naturalW = measuredW + hPad * 2;
+    const btnW = Math.min(Math.max(naturalW, 160), maxBtnW);
+    const wraps = naturalW > maxBtnW;
+    const btnH = wraps ? 68 : 46;
+
+    // Panel grows to fit content (last item ends ~178px from panel top) + button + margins
+    const contentBottom = 178;
+    const btnMarginTop = 20;
+    const btnMarginBottom = 16;
+    const panelH = Math.max(270, contentBottom + btnMarginTop + btnH + btnMarginBottom);
     const panelOffsetY = -30;
 
     const panel = drawModal(ctx, {
@@ -198,11 +217,12 @@ export class LevelCompleteScreen {
     }
     ctx.restore();
 
-    // "LEVEL COMPLETE!" headline — pulsing gold glow, capped so it fits the panel
+    // "LEVEL COMPLETE!" headline — pulsing gold glow
+    // Cap size so 15-char text never word-wraps: ~9.75 px per char, needs panelW-32 px total
     const headPulse = 0.97 + 0.03 * Math.sin(now * 2.4);
-    const headSize = Math.min(Math.round(44 * headPulse), Math.floor(panelW / 8));
+    const headSize = Math.min(Math.round(44 * headPulse), Math.floor((panelW - 32) / 10));
     drawText(ctx, 'LEVEL COMPLETE!', {
-      x: panelCenterX,
+      x: panel.x + 16,
       y: panel.y + 36,
       bold: true,
       size: headSize,
@@ -218,7 +238,7 @@ export class LevelCompleteScreen {
 
     // Level name subtitle
     drawText(ctx, this.levelName, {
-      x: panelCenterX,
+      x: panel.x + 16,
       y: panel.y + 102,
       size: Math.min(22, Math.floor(panelW / 12)),
       color: '#d8b4fe',
@@ -250,24 +270,10 @@ export class LevelCompleteScreen {
       alpha: alpha * 0.8,
     });
 
-    // Continue button — grows to fit label, word-wraps if needed
+    // Continue button — always positioned with consistent bottom margin inside the panel
     if (btnAlpha > 0) {
-      const btnLabel = this.nextLevelName ? `Descend to ${this.nextLevelName}` : 'Continue';
-      const btnFontSize = 16;
-      const hPad = 28;
-      const maxBtnW = panelW - 40;
-
-      ctx.save();
-      ctx.font = `bold ${btnFontSize}px monospace`;
-      const measuredW = ctx.measureText(btnLabel).width;
-      ctx.restore();
-
-      const naturalW = measuredW + hPad * 2;
-      const btnW = Math.min(Math.max(naturalW, 160), maxBtnW);
-      const wraps = naturalW > maxBtnW;
-      const btnH = wraps ? 68 : 46;
       const btnX = panelCenterX - btnW / 2;
-      const btnY = panel.y + panelH - (wraps ? 76 : 66);
+      const btnY = panel.y + panelH - btnH - btnMarginBottom;
 
       const btn = drawButton(ctx, {
         x: btnX,

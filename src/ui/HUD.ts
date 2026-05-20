@@ -7,7 +7,7 @@ import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
 
 type HudRect = { x: number; y: number; w: number; h: number };
-type HudResult = { toggleRect: HudRect; notifRect: HudRect };
+type HudResult = { toggleRect: HudRect; notifRect: HudRect; hudPanelBottom: number };
 
 const HIDDEN_RECT: HudRect = { x: -9999, y: 0, w: 0, h: 0 };
 
@@ -40,7 +40,9 @@ export function drawHUD(
   const activePlayer = human.isActive ? human : cat;
   const inactivePlayer = human.isActive ? cat : human;
 
-  drawBox(ctx, { x: 8, y: 8, width: 340, height: 190, fill: 'rgba(0,0,0,0.6)' });
+  const panelTopY = 8;
+  const panelHeight = 190;
+  drawBox(ctx, { x: 8, y: panelTopY, width: 340, height: panelHeight, fill: 'rgba(0,0,0,0.6)' });
 
   drawText(ctx, `Playing as: ${activeLabel}`, {
     x: 16,
@@ -66,6 +68,7 @@ export function drawHUD(
   });
 
   const notifRect = renderNotification(ctx, canvas, human, cat, pulseRef);
+  const hudPanelBottom = panelTopY + panelHeight;
 
   if (platform.showHudCollapseToggle) {
     // Collapse toggle — small "▲" button at top-right of panel
@@ -86,18 +89,18 @@ export function drawHUD(
       color: '#94a3b8',
       align: 'center',
     });
-    return { toggleRect, notifRect };
+    return { toggleRect, notifRect, hudPanelBottom };
   }
-  return { toggleRect: HIDDEN_RECT, notifRect };
+  return { toggleRect: HIDDEN_RECT, notifRect, hudPanelBottom };
 }
 
-/** Compact single-row HUD for mobile collapsed state. */
+/** Compact single-row HUD for mobile collapsed state. Does not render the skill badge. */
 function drawHUDCollapsed(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
+  _canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
-  pulseRef: { value: number },
+  _pulseRef: { value: number },
 ): HudResult {
   const BAR_W = 180;
   const BAR_H = 26;
@@ -158,17 +161,33 @@ function drawHUDCollapsed(
     align: 'center',
   });
 
-  // Skill points badge — shown below the collapsed bar when points are unspent
+  // Skill badge is rendered separately by the caller so it can be positioned
+  // below any boss UI that stacks below this bar.
+  return { toggleRect, notifRect: HIDDEN_RECT, hudPanelBottom: y + BAR_H };
+}
+
+/**
+ * Renders the mobile skill-points badge at the given `topY`.
+ * Call this after any boss/arena UI so the badge stacks below them.
+ * Returns the badge rect for hit-testing, or HIDDEN_RECT if no unspent points.
+ */
+export function renderMobileSkillBadge(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  human: HumanPlayer,
+  cat: CatPlayer,
+  pulseRef: { value: number },
+  topY: number,
+): HudRect {
   const hasUnspent = human.unspentPoints > 0 || cat.unspentPoints > 0;
-  if (!hasUnspent) {
-    return { toggleRect, notifRect: HIDDEN_RECT };
-  }
+  if (!hasUnspent) return HIDDEN_RECT;
 
   pulseRef.value = (pulseRef.value + 0.05) % (Math.PI * 2);
   const pulse = 0.5 + 0.5 * Math.sin(pulseRef.value);
+
   // Cap width so the badge doesn't overlap the minimap (160px + 8px right margin + 8px gap)
-  const badgeMaxW = Math.min(BAR_W + toggleRect.w, canvas.width - 8 - 160 - 16);
-  const badgeRect: HudRect = { x, y: y + BAR_H + 5, w: badgeMaxW, h: 30 };
+  const badgeMaxW = Math.min(206, canvas.width - 8 - 160 - 16);
+  const badgeRect: HudRect = { x: 8, y: topY, w: badgeMaxW, h: 44 };
 
   ctx.save();
   ctx.shadowColor = '#fbbf24';
@@ -181,16 +200,25 @@ function drawHUDCollapsed(
   ctx.shadowBlur = 0;
   ctx.restore();
 
-  drawText(ctx, '★ SKILL POINTS — Tap to spend', {
-    x: badgeRect.x + badgeRect.w / 2,
+  const cx = badgeRect.x + badgeRect.w / 2;
+  const goldColor = `rgba(251,191,36,${0.85 + 0.15 * pulse})`;
+  drawText(ctx, '★ SKILL POINTS', {
+    x: cx,
     y: badgeRect.y + 10,
-    size: 10,
+    size: 11,
     bold: true,
-    color: `rgba(251,191,36,${0.85 + 0.15 * pulse})`,
+    color: goldColor,
+    align: 'center',
+  });
+  drawText(ctx, 'Tap to spend', {
+    x: cx,
+    y: badgeRect.y + 27,
+    size: 10,
+    color: goldColor,
     align: 'center',
   });
 
-  return { toggleRect, notifRect: badgeRect };
+  return badgeRect;
 }
 
 export function drawHUDPlayerBlock(

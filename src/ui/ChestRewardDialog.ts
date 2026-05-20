@@ -113,7 +113,7 @@ export class ChestRewardDialog {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
 
     const boxW = Math.min(380, cw - 32);
-    const boxH = Math.min(300, ch - 32);
+    const boxH = Math.min(340, ch - 32);
     const boxX = Math.round(cw / 2 - boxW / 2);
     const boxY = Math.round(ch / 2 - boxH / 2);
 
@@ -235,22 +235,26 @@ export class ChestRewardDialog {
     lootStartY: number,
     split: ChestLootSplit,
   ): void {
-    const leftX = Math.round(boxX + boxW / 4);
-    const rightX = Math.round(boxX + (3 * boxW) / 4);
     const dividerX = boxX + boxW / 2;
+    const colPad = 6;
+    const colW = Math.floor(boxW / 2) - colPad * 2;
+    const leftColX = boxX + colPad;
+    const rightColX = dividerX + colPad;
 
     // Column headers
     drawText(ctx, 'Human', {
-      x: leftX,
+      x: leftColX,
       y: lootStartY,
+      width: colW,
       align: 'center',
       size: 11,
       bold: true,
       color: '#93c5fd',
     });
     drawText(ctx, 'Cat', {
-      x: rightX,
+      x: rightColX,
       y: lootStartY,
+      width: colW,
       align: 'center',
       size: 11,
       bold: true,
@@ -272,42 +276,70 @@ export class ChestRewardDialog {
 
     // Human loot
     if (split.humanLoot.coins > 0) {
-      drawText(ctx, `${split.humanLoot.coins} coins`, {
-        x: leftX,
+      const { totalHeight } = drawText(ctx, `${split.humanLoot.coins} coins`, {
+        x: leftColX,
         y: leftY,
+        width: colW,
         align: 'center',
         ...TEXT_PRESETS.value,
       });
-      leftY += 15;
+      leftY += totalHeight;
     }
     for (const entry of split.humanLoot.items) {
       const def = ITEM_DEF[entry.id];
       const label = entry.quantity > 1 ? `${entry.quantity}x ${def.name}` : def.name;
-      drawText(ctx, label, { x: leftX, y: leftY, align: 'center', size: 11, color: '#e2e8f0' });
-      leftY += 15;
+      const { totalHeight } = drawText(ctx, label, {
+        x: leftColX,
+        y: leftY,
+        width: colW,
+        align: 'center',
+        size: 11,
+        color: '#e2e8f0',
+      });
+      leftY += totalHeight;
     }
     if (split.humanLoot.coins === 0 && split.humanLoot.items.length === 0) {
-      drawText(ctx, '(empty)', { x: leftX, y: leftY, align: 'center', ...TEXT_PRESETS.hint });
+      drawText(ctx, '(empty)', {
+        x: leftColX,
+        y: leftY,
+        width: colW,
+        align: 'center',
+        ...TEXT_PRESETS.hint,
+      });
     }
 
     // Cat loot
     if (split.catLoot.coins > 0) {
-      drawText(ctx, `${split.catLoot.coins} coins`, {
-        x: rightX,
+      const { totalHeight } = drawText(ctx, `${split.catLoot.coins} coins`, {
+        x: rightColX,
         y: rightY,
+        width: colW,
         align: 'center',
         ...TEXT_PRESETS.value,
       });
-      rightY += 15;
+      rightY += totalHeight;
     }
     for (const entry of split.catLoot.items) {
       const def = ITEM_DEF[entry.id];
       const label = entry.quantity > 1 ? `${entry.quantity}x ${def.name}` : def.name;
-      drawText(ctx, label, { x: rightX, y: rightY, align: 'center', size: 11, color: '#e2e8f0' });
-      rightY += 15;
+      const { totalHeight } = drawText(ctx, label, {
+        x: rightColX,
+        y: rightY,
+        width: colW,
+        align: 'center',
+        size: 11,
+        color: '#e2e8f0',
+      });
+      rightY += totalHeight;
     }
     if (split.catLoot.coins === 0 && split.catLoot.items.length === 0) {
-      drawText(ctx, '(empty)', { x: rightX, y: rightY, align: 'center', ...TEXT_PRESETS.hint });
+      drawText(ctx, '(empty)', {
+        x: rightColX,
+        y: rightY,
+        width: colW,
+        align: 'center',
+        ...TEXT_PRESETS.hint,
+      });
     }
   }
 }
