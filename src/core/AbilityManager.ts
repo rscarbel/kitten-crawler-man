@@ -93,6 +93,12 @@ function xpToNextLevel(def: AbilityDef, currentLevel: number): number {
 export class AbilityManager {
   private readonly defs = new Map<AbilityId, AbilityDef>();
   private readonly states = new Map<AbilityId, AbilityState>();
+  /**
+   * When > 0, getLevel() returns max(realLevel, godModeMinLevel). XP and real
+   * levels still accumulate normally — this is a display/gameplay overlay only.
+   * Set to 0 to remove the overlay (e.g. when god mode is disabled).
+   */
+  private godModeMinLevel = 0;
 
   /** Called each time any ability levels up. Set by the owning scene. */
   onLevelUp: ((id: AbilityId, newLevel: number) => void) | null = null;
@@ -163,7 +169,13 @@ export class AbilityManager {
   }
 
   getLevel(id: AbilityId): number {
-    return this.states.get(id)?.level ?? 1;
+    const realLevel = this.states.get(id)?.level ?? 1;
+    return Math.max(realLevel, this.godModeMinLevel);
+  }
+
+  /** Override the effective level floor for all abilities (god mode). Pass 0 to clear. */
+  setGodModeMinLevel(minLevel: number): void {
+    this.godModeMinLevel = minLevel;
   }
 
   getAllRegistered(): AbilityDef[] {

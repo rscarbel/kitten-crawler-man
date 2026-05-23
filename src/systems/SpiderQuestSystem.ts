@@ -163,6 +163,9 @@ export class SpiderQuestSystem implements GameSystem {
   // Boss
   private _grotesqueSpider: GrotesqueSpider | null = null;
 
+  // Set when hacking completes — machines freeze at open_egg_sac with red lights
+  private _hackingDone = false;
+
   // Room locking (boss_fight phase)
   private _roomLocked = false;
   private _fightAborted = false;
@@ -317,7 +320,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
 
-    this._renderLifeMachines(ctx2d, camX, camY);
+    this._renderLifeMachines(ctx2d, camX, camY, active, false);
     // Y-sort: only draw the table here when the player is at or south of the table foot.
     // If the player is north, renderTableForeground() handles it after the entity pass.
     const tableFoot = this.roomData.computerTile.y * TILE_SIZE;
@@ -354,6 +357,18 @@ export class SpiderQuestSystem implements GameSystem {
         drawInteractionPrompt(ctx2d, sx, sy, TILE_SIZE, 'Talk');
       }
     }
+  }
+
+  /** Draws life machines on top of the entity pass when the player is north of a machine's base tile. */
+  renderLifeMachinesForeground(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active?: Player,
+  ): void {
+    if (this.phase === 'inactive') return;
+    if (!this.roomData) return;
+    this._renderLifeMachines(ctx, camX, camY, active, true);
   }
 
   /** Draws the computer table on top of the entity pass when the player is north of it. */
@@ -706,6 +721,10 @@ export class SpiderQuestSystem implements GameSystem {
 
   private _onHackComplete(): void {
     this.keyboardHeroMusicStopPending = true;
+    this._hackingDone = true;
+    for (const machine of this.lifeMachines) {
+      machine.state = 'open_egg_sac';
+    }
     this.phase = 'cutscene';
     this.cutsceneTimer = 0;
   }
@@ -1040,7 +1059,13 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  private _renderLifeMachines(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private _renderLifeMachines(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Player | undefined,
+    foreground: boolean,
+  ): void {
     const def = this._getSpriteDef('life_machine');
     if (def === undefined) return;
 
@@ -1049,6 +1074,12 @@ export class SpiderQuestSystem implements GameSystem {
     const drawW = drawH * aspect;
 
     for (const machine of this.lifeMachines) {
+      const machineBaseY = machine.tileY * TILE_SIZE;
+      const playerIsNorth = active !== undefined && active.y < machineBaseY;
+      // Background pass: render machines the player is in front of (player south of base).
+      // Foreground pass: render machines the player is behind (player north of base).
+      if (foreground ? !playerIsNorth : playerIsNorth) continue;
+
       const worldX = machine.tileX * TILE_SIZE;
       const worldY = machine.tileY * TILE_SIZE;
       const sx = worldX - camX - (drawW - TILE_SIZE) * 0.5;
@@ -1069,13 +1100,34 @@ export class SpiderQuestSystem implements GameSystem {
         this._drawSpriteFrame(ctx, 'life_machine', stateName, sx, sy, drawW, drawH);
       }
 
-      // Green lights overlay during idle, warming, hot, active phases
-      if (
+      if (this._hackingDone) {
+        // Red lights after hacking — machines are offline/shut down
+        const lightState = def.states.get('life_machine_red_lights');
+        if (lightState !== undefined) {
+          ctx.save();
+          ctx.globalAlpha = 0.75;
+          const lightSrcX = machine.lightAnimFrame * def.frameWidth;
+          const lightSrcY = lightState.row * def.frameHeight;
+          ctx.drawImage(
+            def.img,
+            lightSrcX,
+            lightSrcY,
+            def.frameWidth,
+            def.frameHeight,
+            sx,
+            sy,
+            drawW,
+            drawH,
+          );
+          ctx.restore();
+        }
+      } else if (
         machine.state === 'idle' ||
         machine.state === 'warming' ||
         machine.state === 'hot' ||
         machine.state === 'active'
       ) {
+        // Green lights overlay while machines are running
         const lightState = def.states.get('life_machine_green_lights');
         if (lightState !== undefined) {
           ctx.save();

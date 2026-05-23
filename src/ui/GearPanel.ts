@@ -5,7 +5,7 @@ import { platform } from '../core/Platform';
 import { pointInRect } from '../utils';
 import { drawText } from './TextBox';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
-import { drawButton, BUTTON_PRESETS } from './Button';
+import { drawButton } from './Button';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -72,18 +72,8 @@ export class GearPanel {
     }
   }
 
-  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    // On mobile the button is drawn by MobileHUDSystem instead
-    if (!platform.showDesktopToggleButtons) return;
-    const btn = this.toggleBtnRect(canvas);
-    drawButton(ctx, {
-      x: btn.x,
-      y: btn.y,
-      width: btn.w,
-      height: btn.h,
-      label: 'Gear [G]',
-      ...(this.isOpen ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
-    });
+  private renderToggleButton(_ctx: CanvasRenderingContext2D, _canvas: HTMLCanvasElement): void {
+    // Gear button removed — gear panel is accessible only from the pause menu
   }
 
   private renderPanel(
@@ -352,11 +342,6 @@ export class GearPanel {
     canvas: HTMLCanvasElement,
     inventory: Inventory,
   ): GearClickResult | null {
-    const btn = this.toggleBtnRect(canvas);
-    if (pointInRect(mx, my, btn)) {
-      this.toggle();
-      return { consumed: true };
-    }
     if (!this.isOpen) return null;
 
     const p = this.panelRect(canvas);

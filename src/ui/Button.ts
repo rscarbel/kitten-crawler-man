@@ -230,6 +230,8 @@ export const BUTTON_PRESETS = {
     borderWidth: 1,
     radius: 0,
   },
+  /** Informational / navigation — dark blue with blue border. */
+  blue: { fill: '#1e3a5f', border: '#60a5fa', borderWidth: 1.5, radius: 4 },
 } satisfies Record<string, ButtonPreset>;
 
 /** The default sound ID played on button click. */

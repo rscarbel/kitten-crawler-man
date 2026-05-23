@@ -77,7 +77,7 @@ const SPAWN_INTERVAL_MAX_MS = 900;
 const MAX_SIMULTANEOUS_NOTES = 4;
 
 /** Stop spawning new notes this many ms before the song ends. */
-const SPAWN_CUTOFF_MS = 1_000;
+const SPAWN_CUTOFF_MS = 3_000;
 
 // ---------------------------------------------------------------------------
 // Types

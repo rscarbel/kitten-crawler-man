@@ -12,7 +12,7 @@ import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
 import { normalize, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 
-const SPIDER_HP = 200;
+const SPIDER_HP = 1200;
 const SPIDER_SPEED = 2.5;
 const DASH_SPEED = SPIDER_SPEED * 2.5; // sprint toward stuck player
 
@@ -46,10 +46,12 @@ const ATTACK_CHANCE_PER_FRAME = 0.04;
 const COOLDOWN_MIN = 30;
 const COOLDOWN_MAX = 50;
 
-// After losing LOS the spider chases to the last known position. It gives up
-// once every living player is physically farther away than this distance.
-const CHASE_ABANDON_PX = TILE_SIZE * 12;
-const VISION_RANGE_PX = TILE_SIZE * 20;
+const SPIDER_LAB_ROOM_TILES_WIDE = 40;
+const SPIDER_LAB_ROOM_TILES_TALL = 32;
+const SPIDER_LAB_ROOM_DIAGONAL_PX =
+  TILE_SIZE * Math.ceil(Math.hypot(SPIDER_LAB_ROOM_TILES_WIDE, SPIDER_LAB_ROOM_TILES_TALL));
+const CHASE_ABANDON_PX = SPIDER_LAB_ROOM_DIAGONAL_PX;
+const VISION_RANGE_PX = SPIDER_LAB_ROOM_DIAGONAL_PX;
 
 const TRAP_TTL = 3600; // persists 60 s
 const TRAP_SPLAT_TICKS_PER_FRAME = 6;
@@ -84,7 +86,7 @@ interface SpitTrap {
 }
 
 export class GrotesqueSpider extends Mob {
-  readonly xpValue = 800;
+  readonly xpValue = 2000;
   protected coinDropMin = 50;
   protected coinDropMax = 100;
   displayName = 'Grotesque Spider';

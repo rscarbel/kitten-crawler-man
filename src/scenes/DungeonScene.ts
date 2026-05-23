@@ -45,7 +45,6 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { AbilityManager } from '../core/AbilityManager';
-import type { AbilityId, AbilityState } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
@@ -126,28 +125,13 @@ export interface DungeonSceneOptions {
   audio?: AudioManager;
 }
 
-/** Find a walkable tile at least minTileDist tiles from (fromTileX, fromTileY), anywhere on the map. */
-function findFarSpawnTile(
-  map: GameMap,
-  fromTileX: number,
-  fromTileY: number,
-  minTileDist: number,
-): { tx: number; ty: number } | null {
-  const rows = map.structure.length;
-  const cols = map.structure[0]?.length ?? rows;
-  for (let attempt = 0; attempt < 400; attempt++) {
-    const tx = Math.floor(Math.random() * (cols - 2)) + 1;
-    const ty = Math.floor(Math.random() * (rows - 2)) + 1;
-    if (!map.isWalkable(tx, ty)) continue;
-    if (Math.hypot(tx - fromTileX, ty - fromTileY) < minTileDist) continue;
-    return { tx, ty };
-  }
-  return null;
-}
-
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
+
+const GOD_MODE_STAT_BOOST = 300 as const;
+const GOD_MODE_SPEED_MULTIPLIER = 2 as const;
+const GOD_MODE_ABILITY_LEVEL = 15 as const;
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -255,20 +239,19 @@ export class DungeonScene extends GameplayScene {
 
   private _godModeSnapshot: null | {
     human: {
-      strength: number;
-      intelligence: number;
-      constitution: number;
-      maxHp: number;
-      speedMultiplier: number;
+      strengthBoost: number;
+      intelligenceBoost: number;
+      constitutionBoost: number;
+      maxHpBoost: number;
+      originalSpeedMultiplier: number;
     };
     cat: {
-      strength: number;
-      intelligence: number;
-      constitution: number;
-      maxHp: number;
-      speedMultiplier: number;
+      strengthBoost: number;
+      intelligenceBoost: number;
+      constitutionBoost: number;
+      maxHpBoost: number;
+      originalSpeedMultiplier: number;
     };
-    abilityLevels: Map<AbilityId, AbilityState>;
   } = null;
 
   private _toughModeActive = false;
@@ -297,6 +280,7 @@ export class DungeonScene extends GameplayScene {
   private _mouseX = -9999;
   private _mouseY = -9999;
   private _mouseDown = false;
+  private _companionErrorMsg: { text: string; framesLeft: number } | null = null;
   private _miniMapDragging = false;
   private _miniMapDragLastX = 0;
   private _miniMapDragLastY = 0;
@@ -354,15 +338,6 @@ export class DungeonScene extends GameplayScene {
       this.mobs.push(...treasureMobs);
     }
 
-    if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
-      const spiderTile = findFarSpawnTile(this.gameMap, sx, sy, 60);
-      if (spiderTile) {
-        const spider = new GrotesqueSpider(spiderTile.tx, spiderTile.ty, TILE_SIZE);
-        spider.setMap(this.gameMap);
-        this.mobs.push(spider);
-      }
-    }
-
     this.cat.setMap(this.gameMap);
 
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);
@@ -403,6 +378,35 @@ export class DungeonScene extends GameplayScene {
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(this.gameMap, sx, sy);
     this.followerMenu.onFollowMe = () => {
+      const companionIsCat = this.human.isActive;
+      const companion = companionIsCat ? this.cat : this.human;
+      const caster = companionIsCat ? this.human : this.cat;
+      const ts = TILE_SIZE;
+      const dist = Math.hypot(companion.x - caster.x, companion.y - caster.y);
+      const hasLOS =
+        dist < ts * 2.5 ||
+        this.gameMap.hasLineOfSight(
+          companion.x + ts * 0.5,
+          companion.y + ts * 0.5,
+          caster.x + ts * 0.5,
+          caster.y + ts * 0.5,
+        );
+      if (!hasLOS) {
+        const compTX = Math.floor((companion.x + ts * 0.5) / ts);
+        const compTY = Math.floor((companion.y + ts * 0.5) / ts);
+        const casterTX = Math.floor((caster.x + ts * 0.5) / ts);
+        const casterTY = Math.floor((caster.y + ts * 0.5) / ts);
+        const path = this.gameMap.findPath(compTX, compTY, casterTX, casterTY);
+        if (path.length === 0) {
+          this.audio?.play('error');
+          const companionName = companionIsCat ? 'cat' : 'human';
+          this._companionErrorMsg = {
+            text: `The ${companionName} is too far away.`,
+            framesLeft: 180,
+          };
+          return;
+        }
+      }
       this.audio?.play('menu_change_follower');
       this.companion.setFollowMe(this.human.isActive);
       this.inactive().autoTarget = null;
@@ -911,11 +915,20 @@ export class DungeonScene extends GameplayScene {
       },
       togglePause: () => {
         this.pauseMenu.toggle();
-        if (this.pauseMenu.isOpen) this.audio?.play('menu_open');
-        else this.input.clear();
+        if (this.pauseMenu.isOpen) {
+          this.inventoryPanel.isOpen = false;
+          this.gearPanel.isOpen = false;
+          this.audio?.play('menu_open');
+        } else {
+          this.input.clear();
+        }
       },
       clearInput: () => this.input.clear(),
-      advanceDialog: () => this.defendQuest.advancePage(),
+      advanceDialog: () => {
+        const handled = this.defendQuest.advancePage();
+        if (handled) this.audio?.play('menu_click');
+        return handled;
+      },
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       usePotion: () => {
@@ -932,8 +945,20 @@ export class DungeonScene extends GameplayScene {
           });
         }
       },
-      toggleInventory: () => this.inventoryPanel.toggle(),
-      toggleGear: () => this.gearPanel.toggle(),
+      toggleInventory: () => {
+        this.inventoryPanel.toggle();
+        if (this.inventoryPanel.isOpen) {
+          this.pauseMenu.close();
+          this.gearPanel.isOpen = false;
+        }
+      },
+      toggleGear: () => {
+        this.gearPanel.toggle();
+        if (this.gearPanel.isOpen) {
+          this.pauseMenu.close();
+          this.inventoryPanel.isOpen = false;
+        }
+      },
       companionFollow: () => this.triggerCompanionFollow(),
       toggleMiniMap: () => {
         this.miniMap.toggle();
@@ -1235,22 +1260,22 @@ export class DungeonScene extends GameplayScene {
   private _cleanSnapFor(p: Player): PlayerSnapshot {
     const snap = snapPlayer(p);
     if (this._godModeSnapshot !== null) {
-      const pre = p === this.human ? this._godModeSnapshot.human : this._godModeSnapshot.cat;
-      snap.strength = pre.strength;
-      snap.intelligence = pre.intelligence;
-      snap.constitution = pre.constitution;
-      snap.maxHp = pre.maxHp;
-      snap.hp = Math.min(snap.hp, pre.maxHp);
+      const boost = p === this.human ? this._godModeSnapshot.human : this._godModeSnapshot.cat;
+      snap.strength -= boost.strengthBoost;
+      snap.intelligence -= boost.intelligenceBoost;
+      snap.constitution -= boost.constitutionBoost;
+      snap.maxHp -= boost.maxHpBoost;
+      snap.hp = Math.min(snap.hp, snap.maxHp);
     }
     return snap;
   }
 
-  /** Return a clean ability manager: if god mode boosted abilities, restore pre-god levels. */
+  /**
+   * Return a clean ability manager for floor/scene transitions — godModeMinLevel
+   * is not carried across floors, so clone() (which leaves it at 0) is correct.
+   */
   private _cleanAbilityManager(): AbilityManager {
-    if (this._godModeSnapshot === null) return this.abilityManager;
-    const clean = this.abilityManager.clone();
-    clean.restoreStates(this._godModeSnapshot.abilityLevels);
-    return clean;
+    return this.abilityManager.clone();
   }
 
   private triggerOpenChat(): void {
@@ -1262,20 +1287,20 @@ export class DungeonScene extends GameplayScene {
     this.playerChat.open(this.sceneManager.canvas, (text) => {
       if (text.trim() === '!god') {
         if (this._godModeSnapshot !== null) {
-          const { human: hs, cat: cs, abilityLevels } = this._godModeSnapshot;
-          this.human.strength = hs.strength;
-          this.human.intelligence = hs.intelligence;
-          this.human.constitution = hs.constitution;
-          this.human.maxHp = hs.maxHp;
-          this.human.hp = Math.min(this.human.hp, hs.maxHp);
-          this.human.speedMultiplier = hs.speedMultiplier;
-          this.cat.strength = cs.strength;
-          this.cat.intelligence = cs.intelligence;
-          this.cat.constitution = cs.constitution;
-          this.cat.maxHp = cs.maxHp;
-          this.cat.hp = Math.min(this.cat.hp, cs.maxHp);
-          this.cat.speedMultiplier = cs.speedMultiplier;
-          this.abilityManager.restoreStates(abilityLevels);
+          const { human: hs, cat: cs } = this._godModeSnapshot;
+          this.human.strength -= hs.strengthBoost;
+          this.human.intelligence -= hs.intelligenceBoost;
+          this.human.constitution -= hs.constitutionBoost;
+          this.human.maxHp -= hs.maxHpBoost;
+          this.human.hp = Math.min(this.human.hp, this.human.maxHp);
+          this.human.speedMultiplier = hs.originalSpeedMultiplier;
+          this.cat.strength -= cs.strengthBoost;
+          this.cat.intelligence -= cs.intelligenceBoost;
+          this.cat.constitution -= cs.constitutionBoost;
+          this.cat.maxHp -= cs.maxHpBoost;
+          this.cat.hp = Math.min(this.cat.hp, this.cat.maxHp);
+          this.cat.speedMultiplier = cs.originalSpeedMultiplier;
+          this.abilityManager.setGodModeMinLevel(0);
           this._godModeSnapshot = null;
           this.human.godMode = false;
           this.cat.godMode = false;
@@ -1289,65 +1314,57 @@ export class DungeonScene extends GameplayScene {
           this.playerChat.showBubble('⚡ GOD MODE ON (disabled Tough Mode first)');
           this._godModeSnapshot = {
             human: {
-              strength: this.human.strength,
-              intelligence: this.human.intelligence,
-              constitution: this.human.constitution,
-              maxHp: this.human.maxHp,
-              speedMultiplier: this.human.speedMultiplier,
+              strengthBoost: GOD_MODE_STAT_BOOST,
+              intelligenceBoost: GOD_MODE_STAT_BOOST,
+              constitutionBoost: GOD_MODE_STAT_BOOST,
+              maxHpBoost: GOD_MODE_STAT_BOOST,
+              originalSpeedMultiplier: this.human.speedMultiplier,
             },
             cat: {
-              strength: this.cat.strength,
-              intelligence: this.cat.intelligence,
-              constitution: this.cat.constitution,
-              maxHp: this.cat.maxHp,
-              speedMultiplier: this.cat.speedMultiplier,
+              strengthBoost: GOD_MODE_STAT_BOOST,
+              intelligenceBoost: GOD_MODE_STAT_BOOST,
+              constitutionBoost: GOD_MODE_STAT_BOOST,
+              maxHpBoost: GOD_MODE_STAT_BOOST,
+              originalSpeedMultiplier: this.cat.speedMultiplier,
             },
-            abilityLevels: this.abilityManager.snapshotStates(),
           };
           for (const p of [this.human, this.cat]) {
-            p.strength += 300;
-            p.intelligence += 300;
-            p.constitution += 300;
-            p.maxHp += 300;
-            p.hp += 300;
+            p.strength += GOD_MODE_STAT_BOOST;
+            p.intelligence += GOD_MODE_STAT_BOOST;
+            p.constitution += GOD_MODE_STAT_BOOST;
+            p.maxHp += GOD_MODE_STAT_BOOST;
+            p.hp += GOD_MODE_STAT_BOOST;
             p.godMode = true;
-            p.speedMultiplier = 2;
+            p.speedMultiplier = GOD_MODE_SPEED_MULTIPLIER;
           }
-          const godAbilityIdsOverride: AbilityId[] = ['magic_missile', 'protective_shell', 'smush'];
-          for (const id of godAbilityIdsOverride) {
-            this.abilityManager.setLevel(id, 15);
-          }
+          this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
         } else {
           this._godModeSnapshot = {
             human: {
-              strength: this.human.strength,
-              intelligence: this.human.intelligence,
-              constitution: this.human.constitution,
-              maxHp: this.human.maxHp,
-              speedMultiplier: this.human.speedMultiplier,
+              strengthBoost: GOD_MODE_STAT_BOOST,
+              intelligenceBoost: GOD_MODE_STAT_BOOST,
+              constitutionBoost: GOD_MODE_STAT_BOOST,
+              maxHpBoost: GOD_MODE_STAT_BOOST,
+              originalSpeedMultiplier: this.human.speedMultiplier,
             },
             cat: {
-              strength: this.cat.strength,
-              intelligence: this.cat.intelligence,
-              constitution: this.cat.constitution,
-              maxHp: this.cat.maxHp,
-              speedMultiplier: this.cat.speedMultiplier,
+              strengthBoost: GOD_MODE_STAT_BOOST,
+              intelligenceBoost: GOD_MODE_STAT_BOOST,
+              constitutionBoost: GOD_MODE_STAT_BOOST,
+              maxHpBoost: GOD_MODE_STAT_BOOST,
+              originalSpeedMultiplier: this.cat.speedMultiplier,
             },
-            abilityLevels: this.abilityManager.snapshotStates(),
           };
           for (const p of [this.human, this.cat]) {
-            p.strength += 300;
-            p.intelligence += 300;
-            p.constitution += 300;
-            p.maxHp += 300;
-            p.hp += 300;
+            p.strength += GOD_MODE_STAT_BOOST;
+            p.intelligence += GOD_MODE_STAT_BOOST;
+            p.constitution += GOD_MODE_STAT_BOOST;
+            p.maxHp += GOD_MODE_STAT_BOOST;
+            p.hp += GOD_MODE_STAT_BOOST;
             p.godMode = true;
-            p.speedMultiplier = 2;
+            p.speedMultiplier = GOD_MODE_SPEED_MULTIPLIER;
           }
-          const godAbilityIds: AbilityId[] = ['magic_missile', 'protective_shell', 'smush'];
-          for (const id of godAbilityIds) {
-            this.abilityManager.setLevel(id, 15);
-          }
+          this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
           this.playerChat.showBubble('⚡ GOD MODE ON');
         }
         return;
@@ -1362,20 +1379,20 @@ export class DungeonScene extends GameplayScene {
           this.playerChat.showBubble('🛡️ TOUGH MODE OFF');
         } else {
           if (this._godModeSnapshot !== null) {
-            const { human: hs, cat: cs, abilityLevels } = this._godModeSnapshot;
-            this.human.strength = hs.strength;
-            this.human.intelligence = hs.intelligence;
-            this.human.constitution = hs.constitution;
-            this.human.maxHp = hs.maxHp;
-            this.human.hp = Math.min(this.human.hp, hs.maxHp);
-            this.human.speedMultiplier = hs.speedMultiplier;
-            this.cat.strength = cs.strength;
-            this.cat.intelligence = cs.intelligence;
-            this.cat.constitution = cs.constitution;
-            this.cat.maxHp = cs.maxHp;
-            this.cat.hp = Math.min(this.cat.hp, cs.maxHp);
-            this.cat.speedMultiplier = cs.speedMultiplier;
-            this.abilityManager.restoreStates(abilityLevels);
+            const { human: hs, cat: cs } = this._godModeSnapshot;
+            this.human.strength -= hs.strengthBoost;
+            this.human.intelligence -= hs.intelligenceBoost;
+            this.human.constitution -= hs.constitutionBoost;
+            this.human.maxHp -= hs.maxHpBoost;
+            this.human.hp = Math.min(this.human.hp, this.human.maxHp);
+            this.human.speedMultiplier = hs.originalSpeedMultiplier;
+            this.cat.strength -= cs.strengthBoost;
+            this.cat.intelligence -= cs.intelligenceBoost;
+            this.cat.constitution -= cs.constitutionBoost;
+            this.cat.maxHp -= cs.maxHpBoost;
+            this.cat.hp = Math.min(this.cat.hp, this.cat.maxHp);
+            this.cat.speedMultiplier = cs.originalSpeedMultiplier;
+            this.abilityManager.setGodModeMinLevel(0);
             this._godModeSnapshot = null;
           }
           for (const p of [this.human, this.cat]) {
@@ -1695,8 +1712,12 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
+    const wasInventoryOpen = this.inventoryPanel.isOpen;
     if (this.inventoryPanel.handleClick(mx, my, canvas, invPlayer.inventory)) {
       this.resolvePendingInventoryAction(invPlayer);
+      if (this.inventoryPanel.isOpen && !wasInventoryOpen) {
+        this.gearPanel.isOpen = false;
+      }
       return;
     }
 
@@ -1721,6 +1742,9 @@ export class DungeonScene extends GameplayScene {
     const pb = UIRenderer.pauseButtonRect(this.sceneManager.canvas, this.miniMap);
     if (pointInRect(mx, my, pb)) {
       this.pauseMenu.toggle();
+      this.inventoryPanel.isOpen = false;
+      this.gearPanel.isOpen = false;
+      this.input.clear();
     }
   }
 
@@ -1796,11 +1820,13 @@ export class DungeonScene extends GameplayScene {
   update(): void {
     aiAdapter.update();
     this.playerChat.update();
-    this.achievementUI.tick();
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
-      const inSafe = this.human.isProtected || this.cat.isProtected;
-      this.achievementUI.maybeAutoTrigger(inSafe);
+    if (this._companionErrorMsg !== null) {
+      this._companionErrorMsg.framesLeft--;
+      if (this._companionErrorMsg.framesLeft <= 0) {
+        this._companionErrorMsg = null;
+      }
     }
+    this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
@@ -1899,6 +1925,7 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderEntities(ctx, rc);
     this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
+    this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
     for (const mob of this.mobs) {
       if (mob instanceof GrotesqueSpider) mob.renderSpitEffects(ctx, camX, camY, TILE_SIZE);
@@ -2008,6 +2035,8 @@ export class DungeonScene extends GameplayScene {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
+      const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
+      this.inventoryPanel.mmSize = mmSz;
       this.inventoryPanel.render(ctx, canvas, invPlayer.inventory, invName, invPlayer.coins);
       const activeName = this.human.isActive ? 'Human' : 'Cat';
       this.gearPanel.render(ctx, canvas, active.inventory, activeName);
@@ -2126,10 +2155,6 @@ export class DungeonScene extends GameplayScene {
 
     this.abilityLevelUpDialog.render(ctx, canvas);
 
-    if (this.bossIntro.isActive) {
-      this.bossIntro.render(ctx, canvas);
-    }
-
     this.dungeonIntro.render(ctx, canvas);
 
     if (this.dungeonIntro.isActive && !this.introStarted) {
@@ -2146,9 +2171,29 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
+    if (this._companionErrorMsg !== null) {
+      const msg = this._companionErrorMsg;
+      const FADE_FRAMES = 30;
+      const alpha = Math.min(1, msg.framesLeft / FADE_FRAMES);
+      drawText(ctx, msg.text, {
+        x: Math.round(canvas.width / 2),
+        y: Math.round(canvas.height * 0.75),
+        align: 'center',
+        size: 18,
+        bold: true,
+        color: '#ff5555',
+        outline: true,
+        alpha,
+      });
+    }
+
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
     this.spiderQuest.renderUI(ctx, canvas, camX, camY);
+
+    if (this.bossIntro.isActive) {
+      this.bossIntro.render(ctx, canvas);
+    }
 
     if (
       platform.showEntityTooltip &&
@@ -2247,10 +2292,6 @@ export class DungeonScene extends GameplayScene {
       const sounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
       this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
       this.woodBreakSoundIdx++;
-    }
-    if (this.defendQuest.menuClickSoundPending) {
-      this.defendQuest.menuClickSoundPending = false;
-      this.audio?.play('menu_click');
     }
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
@@ -2708,14 +2749,12 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
-        const gb = this.touch.gearBtnRect;
-        if (pointInRect(x, y, gb)) {
-          this.gearPanel.toggle();
-          continue;
-        }
         const bb = this.touch.bagBtnRect;
         if (pointInRect(x, y, bb)) {
           this.inventoryPanel.toggle();
+          if (this.inventoryPanel.isOpen) {
+            this.gearPanel.isOpen = false;
+          }
           continue;
         }
       }

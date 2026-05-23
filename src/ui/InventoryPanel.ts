@@ -83,8 +83,26 @@ export class InventoryPanel {
 
   // Layout helpers
 
+  /**
+   * Current minimap rendered size — set by DungeonScene each frame before render/handleClick
+   * so the bag button can be positioned below the pause button, which itself sits below the minimap.
+   * Must match the DESKTOP_BTN_W / PAUSE_BTN_H constants in DungeonUIRenderer.ts.
+   */
+  mmSize = 240;
+
   toggleBtnRect(canvas: HTMLCanvasElement) {
-    return { x: canvas.width - 168, y: 8, w: 72, h: 28 };
+    // On mobile the button is handled via touch.bagBtnRect in renderMobileButtons.
+    // On desktop, sit below the pause button in the right column.
+    const DESKTOP_BTN_W = 104;
+    const RIGHT_COL_MARGIN = 8;
+    const PAUSE_BTN_H = 28;
+    const ROW_GAP = 6;
+    return {
+      x: canvas.width - RIGHT_COL_MARGIN - DESKTOP_BTN_W,
+      y: 8 + this.mmSize + 20 + PAUSE_BTN_H + ROW_GAP,
+      w: DESKTOP_BTN_W,
+      h: 28,
+    };
   }
 
   /**
@@ -430,7 +448,6 @@ export class InventoryPanel {
   }
 
   private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    // On mobile the button is drawn by MobileHUDSystem instead
     if (!platform.showDesktopToggleButtons) return;
     const btn = this.toggleBtnRect(canvas);
     drawButton(ctx, {

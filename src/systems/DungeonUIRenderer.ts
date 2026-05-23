@@ -21,14 +21,30 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
+const RIGHT_COL_MARGIN = 8;
+const MINIMAP_Y = 8;
+const BELOW_MAP_GAP = 20;
+const DESKTOP_BTN_W = 104;
+const MOBILE_BTN_W = 80;
+const PAUSE_BTN_H = 28;
+const TIMER_W = 96;
+const TIMER_H = 42;
+const TIMER_PAUSE_GAP = 8;
+
+/** Width of the right-column pause/bag buttons for the current platform. */
+function rightColBtnW(): number {
+  return platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
+}
+
 /** Compute the pause button rectangle based on minimap size. */
 export function pauseButtonRect(canvas: HTMLCanvasElement, miniMap: MiniMapSystem): Rect {
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+  const w = rightColBtnW();
   return {
-    x: canvas.width - 88,
-    y: 8 + mmSize + 20,
-    w: 80,
-    h: 28,
+    x: canvas.width - RIGHT_COL_MARGIN - w,
+    y: MINIMAP_Y + mmSize + BELOW_MAP_GAP,
+    w,
+    h: PAUSE_BTN_H,
   };
 }
 
@@ -103,11 +119,11 @@ export function renderLevelTimer(
   const urgent = totalSec <= 60;
   const warning = totalSec <= 300;
 
-  const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-  const w = 80;
-  const h = 28;
-  const x = canvas.width - w - 88;
-  const y = 8 + mmSize + 20;
+  const pauseBtn = pauseButtonRect(canvas, miniMap);
+  const w = TIMER_W;
+  const h = TIMER_H;
+  const x = pauseBtn.x - TIMER_PAUSE_GAP - w;
+  const y = pauseBtn.y;
 
   const urgentAlpha = urgent ? 0.85 + Math.sin(Date.now() / 160) * 0.12 : 0.75;
   ctx.fillStyle = urgent
@@ -121,16 +137,18 @@ export function renderLevelTimer(
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, w, h);
 
+  const labelTopPad = 5;
+  const displayTopOffset = 17;
   drawText(ctx, 'TIME REMAINING', {
     x: x + w / 2,
-    y: y + 12 - 7,
+    y: y + labelTopPad,
     size: 9,
     color: '#94a3b8',
     align: 'center',
   });
   drawText(ctx, display, {
     x: x + w / 2,
-    y: y + 29 - 14,
+    y: y + displayTopOffset,
     size: 17,
     bold: true,
     color: urgent ? '#f87171' : warning ? '#fbbf24' : '#e2e8f0',
@@ -259,12 +277,13 @@ export function renderMobileButtons(
   touch.switchBtnRect = { x: MARGIN, y: btnY, w: BTN_W, h: BTN_H };
 
   const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
-  const rightX = canvas.width - 88;
-  const pauseY = 8 + mmSize + 20;
-  const achieveY = pauseY + 28 + 6;
-  const gearY = achieveY + 26 + 6;
-  touch.gearBtnRect = { x: rightX, y: gearY, w: 80, h: 28 };
-  touch.bagBtnRect = { x: rightX, y: gearY + 34, w: 80, h: 28 };
+  const rightX = canvas.width - MOBILE_BTN_W - RIGHT_COL_MARGIN;
+  const pauseY = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
+  const achieveIconH = 26;
+  const achieveGap = 6;
+  const bagY = pauseY + PAUSE_BTN_H + achieveGap + achieveIconH + achieveGap;
+  touch.gearBtnRect = { x: -9999, y: 0, w: 0, h: 0 };
+  touch.bagBtnRect = { x: rightX, y: bagY, w: MOBILE_BTN_W, h: PAUSE_BTN_H };
 
   const drawBtn = (r: Rect, icon: string, label: string, active: boolean) => {
     drawButton(ctx, {
@@ -305,7 +324,6 @@ export function renderMobileButtons(
   const humanActive = state.human.isActive;
   drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
   renderFollowerButton(ctx, canvas, touch, state.companion, humanActive);
-  drawSmallBtn(touch.gearBtnRect, 'Gear', state.gearPanel.isOpen);
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
   // Mongo summon button — above the switch button when cat is active

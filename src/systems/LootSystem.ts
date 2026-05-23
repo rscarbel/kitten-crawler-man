@@ -194,7 +194,11 @@ export class LootSystem implements GameSystem {
         ctx.globalAlpha = Math.max(0.15, loot.ttl / 600);
       }
 
-      const bw = Math.max(54, label.length * 7 + 16);
+      const ownerLabel = loot.owner instanceof HumanPlayer ? 'Human' : 'Cat';
+      const ownerTag = !loot.droppedByPlayer && loot.owner !== active ? ` →${ownerLabel}` : '';
+      const fullLabel = label + ownerTag;
+
+      const bw = Math.max(54, fullLabel.length * 7 + 16);
       const bh = 20;
       const bx = sx - bw / 2;
       const by = sy - 26;
@@ -249,9 +253,7 @@ export class LootSystem implements GameSystem {
       ctx.arc(bx + 10, by + bh / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      const ownerLabel = loot.owner instanceof HumanPlayer ? 'Human' : 'Cat';
-      const ownerTag = !loot.droppedByPlayer && loot.owner !== active ? ` →${ownerLabel}` : '';
-      drawText(ctx, label + ownerTag, {
+      drawText(ctx, fullLabel, {
         x: bx + 18,
         y: by + bh / 2 - 4,
         size: 10,

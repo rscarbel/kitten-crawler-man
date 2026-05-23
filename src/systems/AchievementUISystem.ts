@@ -14,6 +14,7 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
+import { platform } from '../core/Platform';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -61,49 +62,6 @@ export class AchievementUISystem {
   tick(): void {
     if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
     if (this._notifActive) this.achievementNotif.tick();
-  }
-
-  /**
-   * Auto-trigger achievement notifications in the safe room without requiring
-   * the player to click the trophy banner. Call once per frame.
-   */
-  maybeAutoTrigger(inSafeRoom: boolean): void {
-    if (!inSafeRoom) return;
-    if (this._notifActive || this.lootBoxOpener.isOpen) return;
-
-    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-    if (totalUnread === 0) {
-      // All achievements shown — auto-open pending boxes
-      const totalBoxes =
-        this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
-      if (totalBoxes > 0) {
-        if (this.humanAchievements.pendingBoxes.length > 0) {
-          this.openBoxQueue('human', () => void 0);
-        } else {
-          this.openBoxQueue('cat', () => void 0);
-        }
-      }
-      return;
-    }
-
-    // Start showing unread achievement notifications
-    this._notifQueue = [
-      ...this.humanAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.humanAchievements,
-        player: 'Human' as const,
-      })),
-      ...this.catAchievements.pendingNotifications.map((def) => ({
-        def,
-        mgr: this.catAchievements,
-        player: 'Cat' as const,
-      })),
-    ];
-    if (this._notifQueue.length > 0) {
-      this._notifActive = true;
-      this.achievementNotif.reset();
-      this.audio?.play('achievement_awarded');
-    }
   }
 
   /**
@@ -220,7 +178,7 @@ export class AchievementUISystem {
     return false;
   }
 
-  /** Start opening loot box queue for a player. */
+  /** Start opening loot box queue for a player, then chain to the other player's boxes. */
   openBoxQueue(player: 'human' | 'cat', onClose: () => void): void {
     const mgr = player === 'human' ? this.humanAchievements : this.catAchievements;
     const target = player === 'human' ? this.human : this.cat;
@@ -240,7 +198,11 @@ export class AchievementUISystem {
         }
       },
       () => {
-        void 0;
+        const otherPlayer = player === 'human' ? 'cat' : 'human';
+        const otherMgr = player === 'human' ? this.catAchievements : this.humanAchievements;
+        if (otherMgr.pendingBoxes.length > 0) {
+          this.openBoxQueue(otherPlayer, () => void 0);
+        }
       },
       () => {
         this.audio?.play('opening_reward_box');
@@ -334,10 +296,14 @@ export class AchievementUISystem {
       });
     } else {
       const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+      // Position matches DungeonUIRenderer right column layout.
+      // On desktop: below bag button (pause h=28, gap=6, bag h=28, gap=6 = 68px offset).
+      // On mobile: same vertical slot but narrower button width.
+      const btnW = platform.isMobile ? 80 : 104;
       const r = {
-        x: canvas.width - 88,
-        y: 8 + mmSize + 20 + 28 + 6,
-        w: 80,
+        x: canvas.width - 8 - btnW,
+        y: 8 + mmSize + 20 + 28 + 6 + 28 + 6,
+        w: btnW,
         h: 26,
       };
       this._achievIconRect = r;

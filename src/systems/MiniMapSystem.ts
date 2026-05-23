@@ -308,14 +308,13 @@ export class MiniMapSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX, mmY, mmSize, mmSize);
 
-    // Expand hint below minimap
-    // size=8, old baseline = mmY + mmSize + 9; top = (mmY+mmSize+9) - round(8*0.8) = (mmY+mmSize+9) - 6 = mmY+mmSize+3
     const expandHint = platform.miniMapHint(expanded);
     drawText(ctx, expandHint, {
       x: mmX + mmSize / 2,
       y: mmY + mmSize + 3,
-      size: 8,
-      color: '#64748b',
+      size: 10,
+      color: '#ffffff',
+      outline: true,
       align: 'center',
     });
   }

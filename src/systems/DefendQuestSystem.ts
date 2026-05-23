@@ -27,6 +27,7 @@ import {
   drawChildSprite,
 } from '../sprites/questNPCSprite';
 import { drawText } from '../ui/TextBox';
+import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
 const QUEST_ID = 'defend_goblin_mother';
 
@@ -89,13 +90,12 @@ export class DefendQuestSystem implements GameSystem {
   hammerSoundPending = false;
   /** Set each time a barrier takes damage; DungeonScene clears it and cycles the wood-break sounds. */
   woodBreakSoundPending = false;
-  /** Set when a help/dialog menu button is clicked; DungeonScene clears it and plays menu_click. */
-  menuClickSoundPending = false;
   /** Set when a dialog box opens; DungeonScene clears it and plays menu_open. */
   menuOpenSoundPending = false;
   // Spawned Bugaboos (tracked separately for quest-end cleanup)
   private questMobs: Bugaboo[] = [];
 
+  private childVisible = false;
   private childAnimTimer = 0;
   private childX = 0;
   private childY = 0;
@@ -208,7 +208,6 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase === 'tutorial') {
       for (const btn of this.tutorialButtons) {
         if (pointInRect(mx, my, btn)) {
-          this.menuClickSoundPending = true;
           if (btn.action === 'next') {
             this.tutorialPage++;
           } else if (btn.action === 'go') {
@@ -225,7 +224,6 @@ export class DefendQuestSystem implements GameSystem {
     if (this.phase !== 'dialog') return false;
     for (const btn of this.dialogButtons) {
       if (pointInRect(mx, my, btn)) {
-        this.menuClickSoundPending = true;
         if (btn.action === 'accept') {
           this.acceptQuest();
         } else {
@@ -257,7 +255,6 @@ export class DefendQuestSystem implements GameSystem {
   advancePage(): boolean {
     if (this.phase === 'tutorial') {
       const isLast = this.tutorialPage === TUTORIAL_PAGES - 1;
-      this.menuClickSoundPending = true;
       this.tutorialButtons = [];
       if (isLast) {
         tutorialSeen = true;
@@ -537,9 +534,10 @@ export class DefendQuestSystem implements GameSystem {
     }
 
     if (this.roomData && this.npc) {
+      this.childVisible = true;
       this.childX = this.roomData.entranceTile.x * TILE_SIZE;
       this.childY = this.roomData.entranceTile.y * TILE_SIZE;
-      this.childTargetX = this.npc.x;
+      this.childTargetX = this.npc.x + TILE_SIZE;
       this.childTargetY = this.npc.y;
       this.childAnimTimer = 180; // 3 seconds for reunion walk
       this.childWalkFrame = 0;
@@ -693,12 +691,14 @@ export class DefendQuestSystem implements GameSystem {
       ctx.restore();
     }
 
-    // Child reunion animation
-    if (this.phase === 'complete_pending' && this.childAnimTimer > 0) {
+    // Child: walking to mother, then standing beside her permanently
+    if (this.childVisible && (this.phase === 'complete_pending' || this.phase === 'complete')) {
       const cx = this.childX - camX;
       const cy = this.childY - camY;
-      const facingX = this.childTargetX > this.childX ? 1 : -1;
-      drawChildSprite(ctx, cx, cy, TILE_SIZE, this.childWalkFrame, true, facingX);
+      const isWalking = this.childAnimTimer > 0;
+      // While walking, face toward target; once arrived, face toward mother (left, since child is to her right)
+      const facingX = isWalking ? (this.childTargetX > this.childX ? 1 : -1) : -1;
+      drawChildSprite(ctx, cx, cy, TILE_SIZE, this.childWalkFrame, isWalking, facingX);
     }
 
     if (this.pendingBuild) {
@@ -901,41 +901,27 @@ export class DefendQuestSystem implements GameSystem {
     const btnH = 30;
     const btnY = dy + dh - 45;
 
-    // Yes button
     const yesX = dx + dw / 2 - btnW - 10;
-    ctx.save();
-    ctx.fillStyle = '#166534';
-    ctx.fillRect(yesX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#4ade80';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(yesX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, 'Yes', {
-      x: yesX + btnW / 2,
-      y: btnY + 20 - 10,
-      size: 12,
-      bold: true,
-      color: '#4ade80',
-      align: 'center',
+    drawButton(ctx, {
+      x: yesX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'Yes',
+      ...BUTTON_PRESETS.success,
+      labelSize: 12,
     });
     this.dialogButtons.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 
-    // No button
     const noX = dx + dw / 2 + 10;
-    ctx.save();
-    ctx.fillStyle = '#7f1d1d';
-    ctx.fillRect(noX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(noX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, 'No', {
-      x: noX + btnW / 2,
-      y: btnY + 20 - 10,
-      size: 12,
-      bold: true,
-      color: '#ef4444',
-      align: 'center',
+    drawButton(ctx, {
+      x: noX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'No',
+      ...BUTTON_PRESETS.danger,
+      labelSize: 12,
     });
     this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
   }
@@ -1250,20 +1236,14 @@ export class DefendQuestSystem implements GameSystem {
     const btnY = dy + dh - 50;
     const isLast = this.tutorialPage === PAGES - 1;
 
-    ctx.save();
-    ctx.fillStyle = isLast ? '#14532d' : '#1e3a5f';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = isLast ? '#4ade80' : '#60a5fa';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, isLast ? "Let's Go!" : 'Next  ›', {
-      x: btnX + btnW / 2,
-      y: btnY + 20 - 10,
-      size: 12,
-      bold: true,
-      color: isLast ? '#4ade80' : '#93c5fd',
-      align: 'center',
+    drawButton(ctx, {
+      x: btnX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: isLast ? "Let's Go!" : 'Next  ›',
+      ...(isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue),
+      labelSize: 12,
     });
     this.tutorialButtons.push({
       x: btnX,
