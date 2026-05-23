@@ -10,8 +10,8 @@ import {
 } from '../sprites/juicerSprite';
 
 const JUICER_HP = 120;
-const JUICER_SPEED = 0.5;
-const JUICER_SPEED_ENRAGED = 0.85;
+const JUICER_SPEED = 1.0;
+const JUICER_SPEED_ENRAGED = 1.7;
 const AGGRO_RANGE_PX = TILE_SIZE * 10;
 const THROW_RANGE_MIN = TILE_SIZE * 4;
 const THROW_RANGE_MAX = TILE_SIZE * 9;
@@ -20,6 +20,7 @@ const THROW_DAMAGE = 3;
 const THROW_WINDUP_FRAMES = 60;
 const THROW_COOLDOWN_FRAMES = 90;
 const PROJECTILE_TTL = 240;
+const THROW_BOUNCE_DAMPING = 0.7;
 const ENRAGE_THRESHOLD = 0.4;
 const TAUNT_INTERVAL = 300;
 /** Frames without attacking before forcing an attack grab. */
@@ -329,23 +330,28 @@ export class Juicer extends Mob {
       const tileY = Math.floor(proj.y / ts);
 
       if (!this.map.isWalkable(tileX, tileY)) {
-        // Reflect: try each axis separately to determine bounce direction
         const prevX = proj.x - proj.vx;
         const prevY = proj.y - proj.vy;
+        const prevTX = Math.floor(prevX / ts);
+        const prevTY = Math.floor(prevY / ts);
 
-        const canMoveX = this.map.isWalkable(Math.floor((prevX + proj.vx) / ts), tileY);
-        const canMoveY = this.map.isWalkable(tileX, Math.floor((prevY + proj.vy) / ts));
+        // Test each axis from the previous (walkable) position so wall-tile
+        // coordinates don't corrupt the other axis's check.
+        const hitsWallOnX = !this.map.isWalkable(Math.floor((prevX + proj.vx) / ts), prevTY);
+        const hitsWallOnY = !this.map.isWalkable(prevTX, Math.floor((prevY + proj.vy) / ts));
 
-        if (!canMoveX) proj.vx *= -0.7;
-        if (!canMoveY) proj.vy *= -0.7;
+        if (hitsWallOnX) proj.vx *= -THROW_BOUNCE_DAMPING;
+        if (hitsWallOnY) proj.vy *= -THROW_BOUNCE_DAMPING;
+        // Corner hit: neither axis test caught it individually — reflect both.
+        if (!hitsWallOnX && !hitsWallOnY) {
+          proj.vx *= -THROW_BOUNCE_DAMPING;
+          proj.vy *= -THROW_BOUNCE_DAMPING;
+        }
 
         proj.x = prevX + proj.vx;
         proj.y = prevY + proj.vy;
 
-        // If still in a wall, just stop
-        const newTX = Math.floor(proj.x / ts);
-        const newTY = Math.floor(proj.y / ts);
-        if (!this.map.isWalkable(newTX, newTY)) {
+        if (!this.map.isWalkable(Math.floor(proj.x / ts), Math.floor(proj.y / ts))) {
           this.activeThrow = null;
           return;
         }

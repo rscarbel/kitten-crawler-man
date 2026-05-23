@@ -82,9 +82,9 @@
   "juicer": {
     "path": "bosses/juicer.png",
     "frameWidth": 208,
-    "frameHeight": 224,
+    "frameHeight": 256,
     "tileX": 72,
-    "tileY": 24,
+    "tileY": 50,
     "tileScale": 64,
     "states": {
       "walk": {
