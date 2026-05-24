@@ -28,6 +28,81 @@ const SPARKLE_COLORS = [
 const FADE_IN_FRAMES = 45;
 const BTN_APPEAR_FRAMES = 90; // button fades in after this frame
 
+// Magic number constants for LevelCompleteScreen
+const SPARKLE_MIN_SPEED = 1.5;
+const SPARKLE_MAX_SPEED_RANGE = 5.5;
+const SPARKLE_MIN_LIFE = 80;
+const SPARKLE_LIFE_RANGE = 80;
+const SPAWN_OFFSET_RANGE = 0.5;
+const BURST_SPAWN_OFFSET_PX = 60;
+const SPARKLE_MIN_SIZE = 1.5;
+const SPARKLE_MAX_SIZE_RANGE = 3.5;
+const GRAVITY = 0.06;
+const AIR_RESISTANCE = 0.98;
+const BURST_COUNT_INITIAL = 40;
+const BURST_INTERVAL_MAIN = 8;
+const BURST_RADIUS_MIN = 40;
+const BURST_RADIUS_MAX = 120;
+const BURST_COUNT_MAIN = 10;
+const BURST_INTERVAL_LATE = 20;
+const BURST_RADIUS_MIN_LATE = 60;
+const BURST_RADIUS_MAX_LATE = 100;
+const BURST_COUNT_LATE = 5;
+const BTN_FADE_IN_DURATION = 18;
+const OVERLAY_ALPHA_MULT = 0.8;
+const TWINKLE_MIN_INTENSITY = 0.55;
+const TWINKLE_MAX_INTENSITY = 0.45;
+const TWINKLE_FREQ = 6;
+const SPARKLE_GLOW_MULTIPLIER = 4;
+const PANEL_MAX_WIDTH = 560;
+const PANEL_HORIZONTAL_MARGIN = 48;
+const BTN_FONT_SIZE = 16;
+const BTN_HORIZONTAL_PADDING = 28;
+const BTN_MIN_WIDTH = 160;
+const BTN_WRAP_HEIGHT = 68;
+const BTN_NO_WRAP_HEIGHT = 46;
+const CONTENT_BOTTOM_Y = 178;
+const BTN_MARGIN_TOP = 20;
+const BTN_MARGIN_BOTTOM = 16;
+const PANEL_MIN_HEIGHT = 270;
+const PANEL_OFFSET_Y = -30;
+const RUNE_ALPHA_MIN = 0.3;
+const RUNE_ALPHA_RANGE = 0.2;
+const RUNE_PULSE_FREQ = 1.8;
+const RUNE_LINE_WIDTH = 1.5;
+const RUNE_CORNER_LEN = 18;
+const RUNE_OFFSET_FROM_CORNER = 10;
+const HEAD_PULSE_MIN = 0.97;
+const HEAD_PULSE_RANGE = 0.03;
+const HEAD_PULSE_FREQ = 2.4;
+const HEAD_BASE_SIZE = 44;
+const HEAD_CHAR_WIDTH_EST = 10;
+const HEAD_GLOW_BLUR = 22;
+const HEAD_OUTLINE_WIDTH = 3;
+const SUBTITLE_GLOW_BLUR = 12;
+const SUBTITLE_ALPHA_MULT = 0.95;
+const DIVIDER_ALPHA_MULT = 0.35;
+const DIVIDER_LINE_WIDTH = 1;
+const DIVIDER_X_OFFSET = 48;
+const CONFIRM_FONT_SIZE = 14;
+const CONFIRM_ALPHA_MULT = 0.8;
+const BTN_GLOW_BLUR = 14;
+const PANEL_BORDER_WIDTH = 2;
+const PANEL_RADIUS = 14;
+const PANEL_GLOW_BLUR = 28;
+const PANEL_PAD_VERTICAL = 16;
+const PANEL_PAD_HORIZONTAL = 32;
+const BURST_TRANSITION_FRAME = 240;
+const ALPHA_FADE_THRESHOLD = 0.2;
+const TEXT_Y_OFFSET_1 = 36;
+const TEXT_Y_OFFSET_2 = 102;
+const TEXT_Y_OFFSET_3 = 138;
+const TEXT_Y_OFFSET_4 = 158;
+const PERFORMANCE_TIME_DIVISOR = 1000;
+const SUBTITLE_Y_SIZE = 22;
+const SPARKLE_SHADOW_BLUR_DIV = 40;
+const BTN_MAX_WIDTH_MARGIN = 40;
+
 export class LevelCompleteScreen {
   private _active = false;
   private frame = 0;
@@ -73,16 +148,16 @@ export class LevelCompleteScreen {
   private spawnBurst(cx: number, cy: number, count: number): void {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 1.5 + Math.random() * 5.5;
-      const maxLife = 80 + Math.floor(Math.random() * 80);
+      const speed = SPARKLE_MIN_SPEED + Math.random() * SPARKLE_MAX_SPEED_RANGE;
+      const maxLife = SPARKLE_MIN_LIFE + Math.floor(Math.random() * SPARKLE_LIFE_RANGE);
       this.sparkles.push({
-        x: cx + (Math.random() - 0.5) * 60,
-        y: cy + (Math.random() - 0.5) * 60,
+        x: cx + (Math.random() - SPAWN_OFFSET_RANGE) * BURST_SPAWN_OFFSET_PX,
+        y: cy + (Math.random() - SPAWN_OFFSET_RANGE) * BURST_SPAWN_OFFSET_PX,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.5,
+        vy: Math.sin(angle) * speed - SPARKLE_MIN_SPEED,
         life: maxLife,
         maxLife,
-        size: 1.5 + Math.random() * 3.5,
+        size: SPARKLE_MIN_SIZE + Math.random() * SPARKLE_MAX_SIZE_RANGE,
         colorIdx: Math.floor(Math.random() * SPARKLE_COLORS.length),
         twinkleOffset: Math.random() * Math.PI * 2,
       });
@@ -91,25 +166,25 @@ export class LevelCompleteScreen {
 
   private tickSparkles(cx: number, cy: number): void {
     // Big burst on reveal
-    if (this.frame === 1) this.spawnBurst(cx, cy, 40);
+    if (this.frame === 1) this.spawnBurst(cx, cy, BURST_COUNT_INITIAL);
     // Sustained shower from random positions
-    if (this.frame < 240 && this.frame % 8 === 0) {
+    if (this.frame < BURST_TRANSITION_FRAME && this.frame % BURST_INTERVAL_MAIN === 0) {
       const angle = Math.random() * Math.PI * 2;
-      const r = 40 + Math.random() * 120;
-      this.spawnBurst(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 10);
+      const r = BURST_RADIUS_MIN + Math.random() * BURST_RADIUS_MAX;
+      this.spawnBurst(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, BURST_COUNT_MAIN);
     }
     // Gentle trickle after the main burst
-    if (this.frame >= 240 && this.frame % 20 === 0) {
+    if (this.frame >= BURST_TRANSITION_FRAME && this.frame % BURST_INTERVAL_LATE === 0) {
       const angle = Math.random() * Math.PI * 2;
-      const r = 60 + Math.random() * 100;
-      this.spawnBurst(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 5);
+      const r = BURST_RADIUS_MIN_LATE + Math.random() * BURST_RADIUS_MAX_LATE;
+      this.spawnBurst(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, BURST_COUNT_LATE);
     }
 
     for (const s of this.sparkles) {
       s.x += s.vx;
       s.y += s.vy;
-      s.vy += 0.06;
-      s.vx *= 0.98;
+      s.vy += GRAVITY;
+      s.vx *= AIR_RESISTANCE;
       s.life--;
     }
     this.sparkles = this.sparkles.filter((s) => s.life > 0);
@@ -127,21 +202,31 @@ export class LevelCompleteScreen {
     this.tickSparkles(cx, cy);
 
     const alpha = Math.min(1, this.frame / FADE_IN_FRAMES);
-    const btnAlpha = Math.max(0, Math.min(1, (this.frame - BTN_APPEAR_FRAMES) / 18));
+    const btnAlpha = Math.max(
+      0,
+      Math.min(1, (this.frame - BTN_APPEAR_FRAMES) / BTN_FADE_IN_DURATION),
+    );
 
     // Dark vignette overlay
-    drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, color: '#05000f', alpha: alpha * 0.8 });
+    drawOverlay(ctx, {
+      canvasWidth: w,
+      canvasHeight: h,
+      color: '#05000f',
+      alpha: alpha * OVERLAY_ALPHA_MULT,
+    });
 
     // Draw sparkles behind the panel
-    const now = performance.now() / 1000;
+    const now = performance.now() / PERFORMANCE_TIME_DIVISOR;
     ctx.save();
     for (const s of this.sparkles) {
       const lifeRatio = s.life / s.maxLife;
-      const twinkle = 0.55 + 0.45 * Math.sin(now * 6 + s.twinkleOffset);
+      const twinkle =
+        TWINKLE_MIN_INTENSITY +
+        TWINKLE_MAX_INTENSITY * Math.sin(now * TWINKLE_FREQ + s.twinkleOffset);
       ctx.globalAlpha = lifeRatio * twinkle * alpha;
       const color = SPARKLE_COLORS[s.colorIdx] ?? '#ffd700';
       ctx.shadowColor = color;
-      ctx.shadowBlur = s.size * 4;
+      ctx.shadowBlur = s.size * SPARKLE_GLOW_MULTIPLIER;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * lifeRatio, 0, Math.PI * 2);
@@ -149,65 +234,63 @@ export class LevelCompleteScreen {
     }
     ctx.restore();
 
-    if (alpha < 0.2) return;
+    if (alpha < ALPHA_FADE_THRESHOLD) return;
 
     // Pre-compute button dimensions so the panel can grow to fit them
-    const panelW = Math.min(560, w - 48);
+    const panelW = Math.min(PANEL_MAX_WIDTH, w - PANEL_HORIZONTAL_MARGIN);
     const btnLabel = this.nextLevelName ? `Descend to ${this.nextLevelName}` : 'Continue';
-    const btnFontSize = 16;
-    const hPad = 28;
-    const maxBtnW = panelW - 40;
+    const hPad = BTN_HORIZONTAL_PADDING;
+    const maxBtnW = panelW - BTN_MAX_WIDTH_MARGIN;
 
     ctx.save();
-    ctx.font = `bold ${btnFontSize}px monospace`;
+    ctx.font = `bold ${BTN_FONT_SIZE}px monospace`;
     const measuredW = ctx.measureText(btnLabel).width;
     ctx.restore();
 
     const naturalW = measuredW + hPad * 2;
-    const btnW = Math.min(Math.max(naturalW, 160), maxBtnW);
+    const btnW = Math.min(Math.max(naturalW, BTN_MIN_WIDTH), maxBtnW);
     const wraps = naturalW > maxBtnW;
-    const btnH = wraps ? 68 : 46;
+    const btnH = wraps ? BTN_WRAP_HEIGHT : BTN_NO_WRAP_HEIGHT;
 
     // Panel grows to fit content (last item ends ~178px from panel top) + button + margins
-    const contentBottom = 178;
-    const btnMarginTop = 20;
-    const btnMarginBottom = 16;
-    const panelH = Math.max(270, contentBottom + btnMarginTop + btnH + btnMarginBottom);
-    const panelOffsetY = -30;
+    const panelH = Math.max(
+      PANEL_MIN_HEIGHT,
+      CONTENT_BOTTOM_Y + BTN_MARGIN_TOP + btnH + BTN_MARGIN_BOTTOM,
+    );
 
     const panel = drawModal(ctx, {
       canvasWidth: w,
       canvasHeight: h,
       width: panelW,
       height: panelH,
-      offsetY: panelOffsetY,
+      offsetY: PANEL_OFFSET_Y,
       fill: '#08021a',
       border: '#ffd700',
-      borderWidth: 2,
-      radius: 14,
+      borderWidth: PANEL_BORDER_WIDTH,
+      radius: PANEL_RADIUS,
       glow: '#ffd700',
-      glowBlur: 28,
+      glowBlur: PANEL_GLOW_BLUR,
       alpha,
     });
 
     const panelCenterX = panel.x + panel.width / 2;
 
     // Animated corner rune marks
-    const runeAlpha = alpha * (0.3 + 0.2 * Math.sin(now * 1.8));
+    const runeAlpha = alpha * (RUNE_ALPHA_MIN + RUNE_ALPHA_RANGE * Math.sin(now * RUNE_PULSE_FREQ));
     ctx.save();
     ctx.globalAlpha = runeAlpha;
     ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 1.5;
-    const cornerLen = 18;
+    ctx.lineWidth = RUNE_LINE_WIDTH;
+    const cornerLen = RUNE_CORNER_LEN;
     const cr = panel.x;
     const ct = panel.y;
     const cw2 = panel.width;
     const ch2 = panel.height;
     for (const [sx, sy, dx, dy] of [
-      [cr + 10, ct + 10, 1, 1],
-      [cr + cw2 - 10, ct + 10, -1, 1],
-      [cr + 10, ct + ch2 - 10, 1, -1],
-      [cr + cw2 - 10, ct + ch2 - 10, -1, -1],
+      [cr + RUNE_OFFSET_FROM_CORNER, ct + RUNE_OFFSET_FROM_CORNER, 1, 1],
+      [cr + cw2 - RUNE_OFFSET_FROM_CORNER, ct + RUNE_OFFSET_FROM_CORNER, -1, 1],
+      [cr + RUNE_OFFSET_FROM_CORNER, ct + ch2 - RUNE_OFFSET_FROM_CORNER, 1, -1],
+      [cr + cw2 - RUNE_OFFSET_FROM_CORNER, ct + ch2 - RUNE_OFFSET_FROM_CORNER, -1, -1],
     ] as const) {
       ctx.beginPath();
       ctx.moveTo(sx, sy + dy * cornerLen);
@@ -219,61 +302,64 @@ export class LevelCompleteScreen {
 
     // "LEVEL COMPLETE!" headline — pulsing gold glow
     // Cap size so 15-char text never word-wraps: ~9.75 px per char, needs panelW-32 px total
-    const headPulse = 0.97 + 0.03 * Math.sin(now * 2.4);
-    const headSize = Math.min(Math.round(44 * headPulse), Math.floor((panelW - 32) / 10));
+    const headPulse = HEAD_PULSE_MIN + HEAD_PULSE_RANGE * Math.sin(now * HEAD_PULSE_FREQ);
+    const headSize = Math.min(
+      Math.round(HEAD_BASE_SIZE * headPulse),
+      Math.floor((panelW - PANEL_PAD_HORIZONTAL) / HEAD_CHAR_WIDTH_EST),
+    );
     drawText(ctx, 'LEVEL COMPLETE!', {
-      x: panel.x + 16,
-      y: panel.y + 36,
+      x: panel.x + PANEL_PAD_VERTICAL,
+      y: panel.y + TEXT_Y_OFFSET_1,
       bold: true,
       size: headSize,
       color: '#ffd700',
       align: 'center',
       glow: '#ffd700',
-      glowBlur: 22,
+      glowBlur: HEAD_GLOW_BLUR,
       outline: '#1a0a00',
-      outlineWidth: 3,
+      outlineWidth: HEAD_OUTLINE_WIDTH,
       alpha,
-      width: panelW - 32,
+      width: panelW - PANEL_PAD_HORIZONTAL,
     });
 
     // Level name subtitle
     drawText(ctx, this.levelName, {
-      x: panel.x + 16,
-      y: panel.y + 102,
-      size: Math.min(22, Math.floor(panelW / 12)),
+      x: panel.x + PANEL_PAD_VERTICAL,
+      y: panel.y + TEXT_Y_OFFSET_2,
+      size: Math.min(SUBTITLE_Y_SIZE, Math.floor(panelW / SPARKLE_SHADOW_BLUR_DIV)),
       color: '#d8b4fe',
       align: 'center',
       glow: '#a855f7',
-      glowBlur: 12,
-      alpha: alpha * 0.95,
-      width: panelW - 32,
+      glowBlur: SUBTITLE_GLOW_BLUR,
+      alpha: alpha * SUBTITLE_ALPHA_MULT,
+      width: panelW - PANEL_PAD_HORIZONTAL,
     });
 
     // Decorative divider
     ctx.save();
-    ctx.globalAlpha = alpha * 0.35;
+    ctx.globalAlpha = alpha * DIVIDER_ALPHA_MULT;
     ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = DIVIDER_LINE_WIDTH;
     ctx.beginPath();
-    ctx.moveTo(panel.x + 48, panel.y + 138);
-    ctx.lineTo(panel.x + panel.width - 48, panel.y + 138);
+    ctx.moveTo(panel.x + DIVIDER_X_OFFSET, panel.y + TEXT_Y_OFFSET_3);
+    ctx.lineTo(panel.x + panel.width - DIVIDER_X_OFFSET, panel.y + TEXT_Y_OFFSET_3);
     ctx.stroke();
     ctx.restore();
 
     // Progress-saved confirmation
     drawText(ctx, 'Floor cleared — progress saved.', {
       x: panelCenterX,
-      y: panel.y + 158,
-      size: 14,
+      y: panel.y + TEXT_Y_OFFSET_4,
+      size: CONFIRM_FONT_SIZE,
       color: '#94a3b8',
       align: 'center',
-      alpha: alpha * 0.8,
+      alpha: alpha * CONFIRM_ALPHA_MULT,
     });
 
     // Continue button — always positioned with consistent bottom margin inside the panel
     if (btnAlpha > 0) {
       const btnX = panelCenterX - btnW / 2;
-      const btnY = panel.y + panelH - btnH - btnMarginBottom;
+      const btnY = panel.y + panelH - btnH - BTN_MARGIN_BOTTOM;
 
       const btn = drawButton(ctx, {
         x: btnX,
@@ -282,10 +368,10 @@ export class LevelCompleteScreen {
         height: btnH,
         label: btnLabel,
         ...BUTTON_PRESETS.gold,
-        labelSize: btnFontSize,
+        labelSize: BTN_FONT_SIZE,
         labelWrap: wraps,
         glow: '#ffd700',
-        glowBlur: 14,
+        glowBlur: BTN_GLOW_BLUR,
         alpha: btnAlpha * alpha,
       });
 

@@ -5,6 +5,61 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, TEXT_PRESETS } from '../TextBox';
 import { drawBox, drawDivider } from '../Box';
 
+// Layout constants
+const ACH_LABEL_Y_ABOVE = 12;
+const ACH_LABEL_Y_BASELINE = 10;
+const ACH_LABEL_SIZE = 12;
+const ACH_FIRST_Y_OFFSET = 20;
+const ACH_EMPTY_X_OFFSET = 18;
+const ACH_EMPTY_Y_OFFSET = 13;
+const ACH_EMPTY_Y_BASELINE = 8;
+const ACH_EMPTY_TEXT_SIZE = 10;
+const ACH_EMPTY_Y_INCREMENT = 20;
+const ACH_BOX_X_OFFSET = 12;
+const ACH_BOX_WIDTH_OFFSET = 24;
+const ACH_BOX_HEIGHT = 18;
+const ACH_BOX_FILL = 'rgba(250,204,21,0.06)';
+const ACH_CHECKMARK_X_OFFSET = 18;
+const ACH_CHECKMARK_Y_ABOVE = 13;
+const ACH_CHECKMARK_Y_BASELINE = 9;
+const ACH_CHECKMARK_SIZE = 11;
+const ACH_CHECKMARK_COLOR = '#4ade80';
+const ACH_NAME_X_OFFSET = 32;
+const ACH_NAME_Y_ABOVE = 13;
+const ACH_NAME_Y_BASELINE = 8;
+const ACH_NAME_SIZE = 10;
+const ACH_NAME_WIDTH_OFFSET = 46;
+const ACH_TIER_RESERVE = 110;
+const ACH_TIER_X_OFFSET = 14;
+const ACH_TIER_Y_ABOVE = 13;
+const ACH_TIER_Y_BASELINE = 7;
+const ACH_TIER_SIZE = 9;
+const ACH_BOX_COUNT_X_OFFSET = 18;
+const ACH_BOX_COUNT_Y_BASELINE = 8;
+const ACH_BOX_COUNT_Y_OFFSET = 10;
+const OPEN_BOX_BTN_WIDTH = 100;
+const OPEN_BOX_BTN_X_OFFSET = 20;
+const OPEN_BOX_BTN_HEIGHT = 22;
+const OPEN_BOX_BTN_LABEL_SIZE = 10;
+const SAFE_ROOM_HINT_X_OFFSET = 140;
+const SAFE_ROOM_HINT_Y_BASELINE = 7;
+const SAFE_ROOM_HINT_SIZE = 9;
+const SAFE_ROOM_HINT_TEXT_Y_OFFSET = 10;
+const ACH_ROW_INCREMENT = 20;
+const ACH_LABEL_X_OFFSET = 16;
+const TAB_TITLE_Y_BASELINE = 13;
+const TAB_TITLE_SIZE = 16;
+const TAB_TITLE_Y_OFFSET = 28;
+const HUMAN_SECTION_Y_OFFSET = 42;
+const SECTION_GAP = 130;
+const DIVIDER_X_OFFSET = 16;
+const DIVIDER_WIDTH_OFFSET = 32;
+const DIVIDER_Y_OFFSET = 4;
+const BACK_BTN_Y_OFFSET = 44;
+const BACK_BTN_X_OFFSET = 20;
+const BACK_BTN_WIDTH_OFFSET = 40;
+const BACK_BTN_HEIGHT = 32;
+
 function tierColor(tier: string): string {
   switch (tier) {
     case 'Bronze':
@@ -36,13 +91,13 @@ function renderPlayerAchievements(
   onOpenBoxes?: () => void,
 ): void {
   drawText(ctx, label, {
-    x: bx + 16,
-    y: startY + 12 - 10,
+    x: bx + ACH_LABEL_X_OFFSET,
+    y: startY + ACH_LABEL_Y_ABOVE - ACH_LABEL_Y_BASELINE,
     bold: true,
-    size: 12,
+    size: ACH_LABEL_SIZE,
     color: labelColor,
   });
-  let oy = startY + 20;
+  let oy = startY + ACH_FIRST_Y_OFFSET;
 
   const relevant = Object.keys(ACHIEVEMENT_DEFS)
     .filter(isAchievementId)
@@ -54,68 +109,84 @@ function renderPlayerAchievements(
 
   if (relevant.length === 0) {
     drawText(ctx, 'No achievements yet...', {
-      x: bx + 18,
-      y: oy + 13 - 8,
-      size: 10,
+      x: bx + ACH_EMPTY_X_OFFSET,
+      y: oy + ACH_EMPTY_Y_OFFSET - ACH_EMPTY_Y_BASELINE,
+      size: ACH_EMPTY_TEXT_SIZE,
       color: '#374151',
     });
-    oy += 20;
+    oy += ACH_EMPTY_Y_INCREMENT;
   }
 
   for (const id of relevant) {
     const def = ACHIEVEMENT_DEFS[id];
 
-    drawBox(ctx, { x: bx + 12, y: oy, width: bw - 24, height: 18, fill: 'rgba(250,204,21,0.06)' });
+    drawBox(ctx, {
+      x: bx + ACH_BOX_X_OFFSET,
+      y: oy,
+      width: bw - ACH_BOX_WIDTH_OFFSET,
+      height: ACH_BOX_HEIGHT,
+      fill: ACH_BOX_FILL,
+    });
 
-    drawText(ctx, '✓', { x: bx + 18, y: oy + 13 - 9, size: 11, color: '#4ade80' });
-    const tierReserve = def.lootBox ? 110 : 0;
+    drawText(ctx, '✓', {
+      x: bx + ACH_CHECKMARK_X_OFFSET,
+      y: oy + ACH_CHECKMARK_Y_ABOVE - ACH_CHECKMARK_Y_BASELINE,
+      size: ACH_CHECKMARK_SIZE,
+      color: ACH_CHECKMARK_COLOR,
+    });
+    const tierReserve = def.lootBox ? ACH_TIER_RESERVE : 0;
     drawText(ctx, def.name, {
-      x: bx + 32,
-      y: oy + 13 - 8,
+      x: bx + ACH_NAME_X_OFFSET,
+      y: oy + ACH_NAME_Y_ABOVE - ACH_NAME_Y_BASELINE,
       bold: true,
-      size: 10,
+      size: ACH_NAME_SIZE,
       color: '#f1f5f9',
-      width: bw - 46 - tierReserve,
-      height: 18,
+      width: bw - ACH_NAME_WIDTH_OFFSET - tierReserve,
+      height: ACH_BOX_HEIGHT,
     });
 
     if (def.lootBox) {
       drawText(ctx, `${def.lootBox.tier} ${def.lootBox.category}`, {
-        x: bx + bw - 14,
-        y: oy + 13 - 7,
+        x: bx + bw - ACH_TIER_X_OFFSET,
+        y: oy + ACH_TIER_Y_ABOVE - ACH_TIER_Y_BASELINE,
         bold: true,
-        size: 9,
+        size: ACH_TIER_SIZE,
         color: tierColor(def.lootBox.tier),
         align: 'right',
       });
     }
 
-    oy += 20;
+    oy += ACH_ROW_INCREMENT;
   }
 
   const boxCount = manager?.pendingBoxes.length ?? 0;
   if (boxCount > 0) {
     drawText(ctx, `Unopened boxes: ${boxCount}`, {
-      x: bx + 18,
-      y: oy + 10 - 8,
+      x: bx + ACH_BOX_COUNT_X_OFFSET,
+      y: oy + ACH_BOX_COUNT_Y_OFFSET - ACH_BOX_COUNT_Y_BASELINE,
       ...TEXT_PRESETS.hint,
     });
 
     if (onOpenBoxes) {
-      const btnW = 100;
-      const btnX = bx + bw - 20 - btnW;
+      const btnW = OPEN_BOX_BTN_WIDTH;
+      const btnX = bx + bw - OPEN_BOX_BTN_X_OFFSET - btnW;
       addButton(ctx, buttons, {
         x: btnX,
         y: oy,
         width: btnW,
-        height: 22,
+        height: OPEN_BOX_BTN_HEIGHT,
         label: 'Open Boxes',
         ...BUTTON_PRESETS.success,
-        labelSize: 10,
+        labelSize: OPEN_BOX_BTN_LABEL_SIZE,
         action: onOpenBoxes,
       });
     } else if (!inSafeRoom) {
-      drawText(ctx, '(safe room only)', { x: bx + 140, y: oy + 10 - 7, size: 9, color: '#374151' });
+      drawText(ctx, '(safe room only)', {
+        x: bx + SAFE_ROOM_HINT_X_OFFSET,
+        y: oy + SAFE_ROOM_HINT_TEXT_Y_OFFSET - SAFE_ROOM_HINT_Y_BASELINE,
+        size: SAFE_ROOM_HINT_SIZE,
+        color: '#374151',
+      });
     }
   }
 }
@@ -136,14 +207,14 @@ export function renderAchievementsTab(
 ): void {
   drawText(ctx, 'ACHIEVEMENTS', {
     x: bx + bw / 2,
-    y: by + 28 - 13,
+    y: by + TAB_TITLE_Y_OFFSET - TAB_TITLE_Y_BASELINE,
     bold: true,
-    size: 16,
+    size: TAB_TITLE_SIZE,
     color: '#f1f5f9',
     align: 'center',
   });
 
-  let oy = by + 42;
+  let oy = by + HUMAN_SECTION_Y_OFFSET;
 
   renderPlayerAchievements(
     ctx,
@@ -159,9 +230,14 @@ export function renderAchievementsTab(
     onOpenHumanBoxes,
   );
 
-  oy += 130;
+  oy += SECTION_GAP;
 
-  drawDivider(ctx, { x: bx + 16, y: oy - 4, length: bw - 32, color: '#1e293b' });
+  drawDivider(ctx, {
+    x: bx + DIVIDER_X_OFFSET,
+    y: oy - DIVIDER_Y_OFFSET,
+    length: bw - DIVIDER_WIDTH_OFFSET,
+    color: '#1e293b',
+  });
 
   renderPlayerAchievements(
     ctx,
@@ -178,10 +254,10 @@ export function renderAchievementsTab(
   );
 
   addButton(ctx, buttons, {
-    x: bx + 20,
-    y: by + bh - 44,
-    width: bw - 40,
-    height: 32,
+    x: bx + BACK_BTN_X_OFFSET,
+    y: by + bh - BACK_BTN_Y_OFFSET,
+    width: bw - BACK_BTN_WIDTH_OFFSET,
+    height: BACK_BTN_HEIGHT,
     label: 'Back',
     ...BUTTON_PRESETS.primary,
     action: () => setTab('main'),

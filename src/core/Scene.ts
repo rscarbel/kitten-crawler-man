@@ -1,5 +1,17 @@
 import { updateFrameTime } from '../utils';
 
+/** Milliseconds per second. */
+const MS_PER_SECOND = 1000;
+
+/** Frame rate for fixed timestep (60 fps). */
+const FRAME_RATE = 60;
+
+/** Fixed timestep for game update loop in milliseconds. */
+const FIXED_DT_MS = MS_PER_SECOND / FRAME_RATE;
+
+/** Maximum accumulated time to process in one frame to prevent death spiral. */
+const MAX_ACCUMULATOR_MULTIPLIER = 5;
+
 export abstract class Scene {
   abstract update(): void;
   abstract render(ctx: CanvasRenderingContext2D): void;
@@ -27,7 +39,7 @@ export class SceneManager {
   private current: Scene | null = null;
   private lastTime = performance.now();
   private accumulator = 0;
-  private readonly FIXED_DT = 1000 / 60;
+  private readonly FIXED_DT = FIXED_DT_MS;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -149,7 +161,7 @@ export class SceneManager {
     // death" if the tab was backgrounded for a long time.
     const elapsed = now - this.lastTime;
     this.lastTime = now;
-    this.accumulator += Math.min(elapsed, this.FIXED_DT * 5);
+    this.accumulator += Math.min(elapsed, this.FIXED_DT * MAX_ACCUMULATOR_MULTIPLIER);
 
     while (this.accumulator >= this.FIXED_DT) {
       this.current?.update();

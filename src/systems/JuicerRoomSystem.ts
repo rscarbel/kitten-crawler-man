@@ -19,6 +19,11 @@ const RESPAWN: Record<GymItemId, number> = {
   gym_treadmill: 300, // 5 seconds
 };
 
+// Pickup detection
+const TILE_CENTER_OFFSET = 0.5;
+const PICKUP_COLLECT_RADIUS_RATIO = 1.2;
+const PICKUP_JUICER_DETECT_RADIUS = 1; // tiles
+
 interface GymPickup {
   relTileX: number; // relative to room origin (tile coords)
   relTileY: number;
@@ -50,6 +55,9 @@ const TREADMILL_POSITIONS = [
   { relTileX: 12, relTileY: 3 },
 ];
 
+// Room positioning
+const ROOM_NOT_FOUND_POS = -9999;
+
 export class JuicerRoomSystem implements GameSystem {
   private pickups: GymPickup[] = [];
   private readonly roomOriginX: number; // tile coords
@@ -58,8 +66,8 @@ export class JuicerRoomSystem implements GameSystem {
   constructor(bossRoomBounds: { x: number; y: number; w: number; h: number } | undefined) {
     // If no second boss room was generated, system is a no-op
     if (!bossRoomBounds) {
-      this.roomOriginX = -9999;
-      this.roomOriginY = -9999;
+      this.roomOriginX = ROOM_NOT_FOUND_POS;
+      this.roomOriginY = ROOM_NOT_FOUND_POS;
       return;
     }
 
@@ -97,15 +105,15 @@ export class JuicerRoomSystem implements GameSystem {
    * Returns true if an item was collected.
    */
   tryPickupNear(player: HumanPlayer | CatPlayer): boolean {
-    if (this.roomOriginX === -9999) return false;
+    if (this.roomOriginX === ROOM_NOT_FOUND_POS) return false;
     const ts = TILE_SIZE;
-    const collectRadius = ts * 1.2;
-    const pcx = player.x + ts * 0.5;
-    const pcy = player.y + ts * 0.5;
+    const collectRadius = ts * PICKUP_COLLECT_RADIUS_RATIO;
+    const pcx = player.x + ts * TILE_CENTER_OFFSET;
+    const pcy = player.y + ts * TILE_CENTER_OFFSET;
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
-      const wcx = pickup.worldX + ts * 0.5;
-      const wcy = pickup.worldY + ts * 0.5;
+      const wcx = pickup.worldX + ts * TILE_CENTER_OFFSET;
+      const wcy = pickup.worldY + ts * TILE_CENTER_OFFSET;
       if (Math.hypot(pcx - wcx, pcy - wcy) < collectRadius) {
         player.inventory.addItem(pickup.itemId, 1);
         pickup.active = false;
@@ -124,15 +132,15 @@ export class JuicerRoomSystem implements GameSystem {
     return this.pickups
       .filter((p) => p.active && p.itemId === 'gym_dumbbell')
       .map((p) => ({
-        x: p.worldX + TILE_SIZE * 0.5,
-        y: p.worldY + TILE_SIZE * 0.5,
+        x: p.worldX + TILE_SIZE * TILE_CENTER_OFFSET,
+        y: p.worldY + TILE_SIZE * TILE_CENTER_OFFSET,
       }));
   }
 
   update(ctx: SystemContext): void {
     const { mobs } = ctx;
     const juicer = mobs.find((m) => m instanceof Juicer) ?? null;
-    if (this.roomOriginX === -9999) return;
+    if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
 
     const ts = TILE_SIZE;
 
@@ -149,9 +157,9 @@ export class JuicerRoomSystem implements GameSystem {
       // Check Juicer pickup request
       if (juicer?.requestDumbbellAt && pickup.itemId === 'gym_dumbbell') {
         const req = juicer.requestDumbbellAt;
-        const wcx = pickup.worldX + ts * 0.5;
-        const wcy = pickup.worldY + ts * 0.5;
-        if (Math.hypot(req.x - wcx, req.y - wcy) < ts) {
+        const wcx = pickup.worldX + ts * TILE_CENTER_OFFSET;
+        const wcy = pickup.worldY + ts * TILE_CENTER_OFFSET;
+        if (Math.hypot(req.x - wcx, req.y - wcy) < ts * PICKUP_JUICER_DETECT_RADIUS) {
           pickup.active = false;
           pickup.respawnTimer = RESPAWN.gym_dumbbell;
           juicer.onDumbbellPickedUp();
@@ -163,8 +171,8 @@ export class JuicerRoomSystem implements GameSystem {
     if (juicer?.isAlive) {
       const positions = this.getActiveDumbbellPositions();
       if (positions.length > 0) {
-        const jcx = juicer.x + ts * 0.5;
-        const jcy = juicer.y + ts * 0.5;
+        const jcx = juicer.x + ts * TILE_CENTER_OFFSET;
+        const jcy = juicer.y + ts * TILE_CENTER_OFFSET;
         let nearest = positions[0];
         let nearestDist = Math.hypot(positions[0].x - jcx, positions[0].y - jcy);
         for (const pos of positions) {
@@ -187,10 +195,10 @@ export class JuicerRoomSystem implements GameSystem {
     camY: number,
     activePlayer?: HumanPlayer | CatPlayer,
   ): void {
-    if (this.roomOriginX === -9999) return;
+    if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
 
     const ts = TILE_SIZE;
-    const collectRadius = ts * 1.2;
+    const collectRadius = ts * PICKUP_COLLECT_RADIUS_RATIO;
 
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
@@ -211,10 +219,10 @@ export class JuicerRoomSystem implements GameSystem {
 
       // Show interaction prompt when player is nearby
       if (activePlayer) {
-        const pcx = activePlayer.x + ts * 0.5;
-        const pcy = activePlayer.y + ts * 0.5;
-        const wcx = pickup.worldX + ts * 0.5;
-        const wcy = pickup.worldY + ts * 0.5;
+        const pcx = activePlayer.x + ts * TILE_CENTER_OFFSET;
+        const pcy = activePlayer.y + ts * TILE_CENTER_OFFSET;
+        const wcx = pickup.worldX + ts * TILE_CENTER_OFFSET;
+        const wcy = pickup.worldY + ts * TILE_CENTER_OFFSET;
         if (Math.hypot(pcx - wcx, pcy - wcy) < collectRadius) {
           drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
         }

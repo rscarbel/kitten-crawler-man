@@ -1,5 +1,8 @@
 import type { PlayerSnapshot } from '../core/PlayerSnapshot';
 
+/** HTTP status code for server error (fallback for API errors). */
+const HTTP_SERVER_ERROR = 500;
+
 export interface AuthUser {
   id: number;
   username: string;
@@ -48,7 +51,7 @@ function extractUser(raw: unknown): AuthUser {
   ) {
     return { id: raw.id, username: raw.username };
   }
-  throw new ApiError('Invalid user response', 500);
+  throw new ApiError('Invalid user response', HTTP_SERVER_ERROR);
 }
 
 export class AuthClient {

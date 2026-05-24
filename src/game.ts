@@ -10,6 +10,9 @@ import { LoginUI } from './auth/LoginUI';
 import { loadSprites } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 
+/** HTTP status code for unauthorized. */
+const HTTP_UNAUTHORIZED = 401;
+
 const input = new InputManager();
 const authClient = new AuthClient();
 const audio = new AudioManager();
@@ -31,7 +34,12 @@ function launchGame(options?: DungeonSceneOptions): void {
   try {
     await authClient.getMe();
   } catch (err: unknown) {
-    if (typeof err === 'object' && err !== null && 'status' in err && err.status === 401) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'status' in err &&
+      err.status === HTTP_UNAUTHORIZED
+    ) {
       // Auth server is up but no session — show login/register screen.
       const ui = new LoginUI(authClient);
       await ui.show();

@@ -19,6 +19,20 @@ interface Moveable {
   facingY: number;
 }
 
+// Mobile input detection
+const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms
+const MOBILE_DISTANCE_THRESHOLD = 8; // px
+
+// Diagonal movement penalty
+const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
+
+// Wall collision offsets for leading_edge mode
+const LEADING_EDGE_FRONT = 0.72;
+const LEADING_EDGE_BACK = 0.28;
+
+// Wall collision offset for center mode
+const CENTER_COLLISION_OFFSET = 0.5;
+
 /**
  * Reads keyboard + mobile touch input and returns a raw direction vector.
  */
@@ -40,13 +54,13 @@ export function readMoveInput(
 
   let isMobileVector = false;
 
-  if (mobileTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
+  if (mobileTarget && touchHoldMs >= MOBILE_TOUCH_MIN_HOLD_TIME && dx === 0 && dy === 0) {
     const wx = mobileTarget.x + camX;
     const wy = mobileTarget.y + camY;
     const ddx = wx - playerCenterX;
     const ddy = wy - playerCenterY;
     const dist = Math.hypot(ddx, ddy);
-    if (dist > 8) {
+    if (dist > MOBILE_DISTANCE_THRESHOLD) {
       dx = ddx / dist;
       dy = ddy / dist;
       isMobileVector = true;
@@ -83,8 +97,8 @@ export function applyMovement(
 
   // Mobile touch already gives a unit vector — skip diagonal penalty
   if (!move.isMobileVector && dx !== 0 && dy !== 0) {
-    dx *= 0.7071;
-    dy *= 0.7071;
+    dx *= DIAGONAL_PENALTY;
+    dy *= DIAGONAL_PENALTY;
   }
   dx *= speed;
   dy *= speed;
@@ -94,16 +108,16 @@ export function applyMovement(
   if (collision === 'leading_edge') {
     tileXnext =
       dx >= 0
-        ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
-        : Math.floor((nextX + TILE_SIZE * 0.28) / TILE_SIZE);
+        ? Math.floor((nextX + TILE_SIZE * LEADING_EDGE_FRONT) / TILE_SIZE)
+        : Math.floor((nextX + TILE_SIZE * LEADING_EDGE_BACK) / TILE_SIZE);
   } else {
-    tileXnext = Math.floor((nextX + TILE_SIZE * 0.5) / TILE_SIZE);
+    tileXnext = Math.floor((nextX + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   }
-  const tileYcur = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+  const tileYcur = Math.floor((entity.y + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   if (map.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
 
   const nextY = clamp(entity.y + dy, 0, mapPxH - TILE_SIZE);
-  const tileXcur = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
-  const tileYnext = Math.floor((nextY + TILE_SIZE * 0.5) / TILE_SIZE);
+  const tileXcur = Math.floor((entity.x + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
+  const tileYnext = Math.floor((nextY + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   if (map.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
 }

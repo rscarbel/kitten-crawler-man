@@ -6,10 +6,12 @@ import { drawKrakarenSprite, drawSlamShadow, drawSlamImpact } from '../sprites/k
 
 const KRAKAREN_HP = 200;
 const KRAKAREN_SPEED = 0; // immobile
-const AGGRO_RANGE_PX = TILE_SIZE * 12;
+const AGGRO_RANGE_TILE_MULTIPLIER = 12;
+const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
 
 // Melee tentacle attack
-const MELEE_RANGE_PX = TILE_SIZE * 3;
+const MELEE_RANGE_TILE_MULTIPLIER = 3;
+const MELEE_RANGE_PX = TILE_SIZE * MELEE_RANGE_TILE_MULTIPLIER;
 const MELEE_DAMAGE = 3;
 const MELEE_WINDUP_FRAMES = 20;
 const MELEE_SWING_FRAMES = 15;
@@ -20,20 +22,32 @@ const SLAM_INTERVAL_BASE = 480; // 8 seconds
 const SLAM_INTERVAL_ENRAGED = 300; // 5 seconds
 const SLAM_SHADOW_FRAMES = 90; // 1.5 second warning shadow
 const SLAM_IMPACT_FRAMES = 20; // visual impact duration
-const SLAM_KILL_RADIUS_PX = TILE_SIZE * 1.5;
+const SLAM_KILL_RADIUS_TILE_MULTIPLIER = 1.5;
+const SLAM_KILL_RADIUS_PX = TILE_SIZE * SLAM_KILL_RADIUS_TILE_MULTIPLIER;
 const SLAM_DAMAGE = 9999; // instant kill
 
 const ENRAGE_THRESHOLD = 0.4; // 40% HP
+const COIN_DROP_MIN = 80;
+const COIN_DROP_MAX = 150;
+const MASS = 10;
+const YELL_INTERVAL_MIN = 900;
+const YELL_INTERVAL_MAX = 1200;
+const TENTACLE_COUNT = 10;
+const DAMAGE_FLASH_SLAM = 12;
+const DAMAGE_FLASH_SWING = 8;
+const CENTER_OFFSET = 0.5;
+const DUMMY_TARGET_INDEX = 0;
+const FRAMES_PER_SECOND = 60;
 
 type KrakarenState = 'idle' | 'melee_windup' | 'melee_swing' | 'melee_cooldown' | 'slam_charging';
 
 export class KrakarenClone extends Mob {
   readonly xpValue = 700;
-  protected coinDropMin = 80;
-  protected coinDropMax = 150;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Krakaren Clone';
   description = 'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
-  mass = 10;
+  mass = MASS;
   override readonly audioTag = 'krakaren';
 
   isEnraged = false;
@@ -78,7 +92,7 @@ export class KrakarenClone extends Mob {
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
-    this.animTime += 1 / 60;
+    this.animTime += 1 / FRAMES_PER_SECOND;
 
     // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
@@ -103,7 +117,7 @@ export class KrakarenClone extends Mob {
       // Periodic yell: fires immediately on first aggro, then every 15–20 seconds
       if (this.yellTimer <= 0) {
         this.yellSoundPending = true;
-        this.yellTimer = randomInt(900, 1200);
+        this.yellTimer = randomInt(YELL_INTERVAL_MIN, YELL_INTERVAL_MAX);
       } else {
         this.yellTimer--;
       }
@@ -172,7 +186,7 @@ export class KrakarenClone extends Mob {
     if (nearestDist <= MELEE_RANGE_PX) {
       this.state = 'melee_windup';
       this.meleeWindupTimer = MELEE_WINDUP_FRAMES;
-      this.attackTentacle = randomInt(0, 9);
+      this.attackTentacle = randomInt(DUMMY_TARGET_INDEX, TENTACLE_COUNT - 1);
       this.attackProgress = 0;
     }
   }
@@ -196,7 +210,7 @@ export class KrakarenClone extends Mob {
       const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
       if (dist <= MELEE_RANGE_PX) {
         this.dealDamage(nearest, MELEE_DAMAGE);
-        nearest.damageFlash = 8;
+        nearest.damageFlash = DAMAGE_FLASH_SWING;
       }
     }
 
@@ -215,7 +229,7 @@ export class KrakarenClone extends Mob {
       if (nearest && nearestDist <= MELEE_RANGE_PX) {
         this.state = 'melee_windup';
         this.meleeWindupTimer = MELEE_WINDUP_FRAMES;
-        this.attackTentacle = randomInt(0, 9);
+        this.attackTentacle = randomInt(DUMMY_TARGET_INDEX, TENTACLE_COUNT - 1);
       } else {
         this.state = 'idle';
       }
@@ -238,8 +252,8 @@ export class KrakarenClone extends Mob {
       }
     }
 
-    this.slamTargetX = slamTarget.x + ts * 0.5;
-    this.slamTargetY = slamTarget.y + ts * 0.5;
+    this.slamTargetX = slamTarget.x + ts * CENTER_OFFSET;
+    this.slamTargetY = slamTarget.y + ts * CENTER_OFFSET;
     this.slamShadowTimer = SLAM_SHADOW_FRAMES;
     this.slamActive = true;
     this.state = 'slam_charging';
@@ -256,11 +270,11 @@ export class KrakarenClone extends Mob {
     const ts = this.tileSize;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      const dx = t.x + ts * 0.5 - this.slamTargetX;
-      const dy = t.y + ts * 0.5 - this.slamTargetY;
+      const dx = t.x + ts * CENTER_OFFSET - this.slamTargetX;
+      const dy = t.y + ts * CENTER_OFFSET - this.slamTargetY;
       if (Math.hypot(dx, dy) < SLAM_KILL_RADIUS_PX) {
         this.dealDamage(t, SLAM_DAMAGE);
-        t.damageFlash = 12;
+        t.damageFlash = DAMAGE_FLASH_SLAM;
       }
     }
   }

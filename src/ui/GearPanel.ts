@@ -14,6 +14,68 @@ const PANEL_PAD = 12;
 const HEADER_H = 40;
 const SECTION_LABEL_W = 52;
 
+// Toggle button positioning
+const TOGGLE_BTN_X_OFFSET = 252;
+const TOGGLE_BTN_Y = 8;
+const TOGGLE_BTN_W = 76;
+const TOGGLE_BTN_H = 28;
+
+// Panel sizing
+const MAX_PANEL_HEIGHT = 420;
+const PANEL_HEIGHT_MARGIN = 16;
+const PANEL_X_MARGIN = 8;
+const MIN_PANEL_Y_OFFSET = 8;
+
+// Close button
+const CLOSE_BTN_W = 16;
+const CLOSE_BTN_H = 16;
+const CLOSE_BTN_LABEL_SIZE = 11;
+const CLOSE_BTN_X_OFFSET = 20;
+const CLOSE_BTN_Y_OFFSET = 8;
+
+// Equipment slot rendering
+const ITEM_COLOR_BAR_MARGIN = 4;
+const ITEM_COLOR_BAR_W = SLOT_SIZE - ITEM_COLOR_BAR_MARGIN;
+const ITEM_COLOR_BAR_H = 3;
+const ITEM_COLOR_BAR_X_OFFSET = 2;
+const ITEM_COLOR_BAR_Y_OFFSET = 2;
+const ITEM_NAME_Y_FRAC = 0.42;
+const ITEM_NAME_Y_OFFSET = 6;
+const ITEM_NAME_MAX_CHARS = 9;
+const ITEM_LABEL_Y_OFFSET = 3;
+const LABEL_MAX_CHARS = 7;
+const LABEL_SUBSTRING_LEN = 7;
+
+// Text rendering
+const HEADER_TEXT_Y_OFFSET = 10;
+const HEADER_TEXT_SIZE = 12;
+const SLOT_LABEL_Y_FRAC = 0.5;
+const SLOT_LABEL_Y_OFFSET = 7;
+const SLOT_LABEL_SIZE = 9;
+const TEXT_Y_BASELINE = 8;
+const SECTION_NAME_SIZE = 9;
+
+// Divider
+const DIVIDER_X_OFFSET = 4;
+const DIVIDER_WIDTH_OFFSET = 8;
+
+// Tooltip
+const TOOLTIP_WIDTH = 230;
+const TOOLTIP_LINE_HEIGHT = 14;
+const TOOLTIP_PAD = 12;
+const TOOLTIP_X_OFFSET = 10;
+const TOOLTIP_Y_OFFSET = 4;
+const TOOLTIP_MARGIN = 4;
+const TOOLTIP_MARGIN_SMALL = 2;
+const TOOLTIP_TEXT_INDENT = 6;
+const TOOLTIP_TITLE_Y_OFFSET = 8;
+const TOOLTIP_TITLE_SIZE = 10;
+const TOOLTIP_BODY_Y_OFFSET = 8;
+const TOOLTIP_BODY_SIZE = 10;
+const DESC_WRAP_CHARS = 34;
+const SECTION_PAD = 8;
+const ITEM_NAME_LINE_HEIGHT_FRAC = 0.15;
+
 const SLOT_ORDER: EquipSlot[] = ['Head', 'Torso', 'Legs', 'Hands', 'Feet'];
 
 /** Screen rect for a single equipment sub-slot given the panel origin and position. */
@@ -46,15 +108,20 @@ export class GearPanel {
   }
 
   toggleBtnRect(canvas: HTMLCanvasElement) {
-    return { x: canvas.width - 252, y: 8, w: 76, h: 28 };
+    return {
+      x: canvas.width - TOGGLE_BTN_X_OFFSET,
+      y: TOGGLE_BTN_Y,
+      w: TOGGLE_BTN_W,
+      h: TOGGLE_BTN_H,
+    };
   }
 
   private panelRect(canvas: HTMLCanvasElement) {
     const w = platform.gearPanelWidth(canvas.width);
-    const h = Math.min(420, canvas.height - 16);
+    const h = Math.min(MAX_PANEL_HEIGHT, canvas.height - PANEL_HEIGHT_MARGIN);
     const xOffset = platform.gearPanelXOffset;
-    const x = Math.max(8, Math.floor((canvas.width - w) / 2) + xOffset);
-    const y = Math.max(8, Math.floor((canvas.height - h) / 2));
+    const x = Math.max(PANEL_X_MARGIN, Math.floor((canvas.width - w) / 2) + xOffset);
+    const y = Math.max(MIN_PANEL_Y_OFFSET, Math.floor((canvas.height - h) / 2));
     return { x, y, w, h };
   }
 
@@ -98,31 +165,36 @@ export class GearPanel {
     // Header
     drawText(ctx, `${playerName} Equipment`, {
       x: p.x + PANEL_PAD,
-      y: p.y + 25 - 10,
-      size: 12,
+      y: p.y + HEADER_H - HEADER_TEXT_Y_OFFSET,
+      size: HEADER_TEXT_SIZE,
       bold: true,
       color: '#e2e8f0',
     });
 
     // Close [X]
-    const closeX = p.x + p.w - 20;
-    const closeY = p.y + 8;
+    const closeX = p.x + p.w - CLOSE_BTN_X_OFFSET;
+    const closeY = p.y + CLOSE_BTN_Y_OFFSET;
     drawButton(ctx, {
       x: closeX,
       y: closeY,
-      width: 16,
-      height: 16,
+      width: CLOSE_BTN_W,
+      height: CLOSE_BTN_H,
       label: 'x',
       fill: '#374151',
       border: '#475569',
       borderWidth: 1,
       radius: 2,
-      labelSize: 11,
+      labelSize: CLOSE_BTN_LABEL_SIZE,
       labelColor: '#ef4444',
     });
 
     // Divider
-    drawDivider(ctx, { x: p.x + 4, y: p.y + HEADER_H, length: p.w - 8, color: '#1e293b' });
+    drawDivider(ctx, {
+      x: p.x + DIVIDER_X_OFFSET,
+      y: p.y + HEADER_H,
+      length: p.w - DIVIDER_WIDTH_OFFSET,
+      color: '#1e293b',
+    });
 
     // Render sections
     let currentY = p.y + HEADER_H + PANEL_PAD;
@@ -136,8 +208,8 @@ export class GearPanel {
       // Section label
       drawText(ctx, slotName.toUpperCase(), {
         x: p.x + PANEL_PAD,
-        y: currentY + SLOT_SIZE * 0.5 + 3 - 7,
-        size: 9,
+        y: currentY + SLOT_SIZE * SLOT_LABEL_Y_FRAC + SLOT_LABEL_Y_OFFSET - SLOT_LABEL_SIZE,
+        size: SECTION_NAME_SIZE,
         bold: true,
         color: '#64748b',
       });
@@ -154,7 +226,7 @@ export class GearPanel {
         }
         maxY = Math.max(maxY, si.y + SLOT_SIZE);
       }
-      currentY = maxY + 8;
+      currentY = maxY + SECTION_PAD;
     }
 
     // Tooltip
@@ -211,35 +283,41 @@ export class GearPanel {
     if (item) {
       // Item color indicator at top
       ctx.fillStyle = '#3b82f6';
-      ctx.fillRect(x + 2, y + 2, SLOT_SIZE - 4, 3);
+      ctx.fillRect(
+        x + ITEM_COLOR_BAR_X_OFFSET,
+        y + ITEM_COLOR_BAR_Y_OFFSET,
+        ITEM_COLOR_BAR_W,
+        ITEM_COLOR_BAR_H,
+      );
 
       // Item name (truncated, 2 lines max)
       const words = item.name.split(' ');
       let line1 = '';
       let line2 = '';
       for (const w of words) {
-        if ((line1 + ' ' + w).trim().length <= 9) {
+        if ((line1 + ' ' + w).trim().length <= ITEM_NAME_MAX_CHARS) {
           line1 = (line1 + ' ' + w).trim();
-        } else if ((line2 + ' ' + w).trim().length <= 9) {
+        } else if ((line2 + ' ' + w).trim().length <= ITEM_NAME_MAX_CHARS) {
           line2 = (line2 + ' ' + w).trim();
         }
       }
       const nameLine = line2 ? `${line1}\n${line2}` : line1;
       drawText(ctx, nameLine, {
         x: x + SLOT_SIZE / 2,
-        y: y + SLOT_SIZE * 0.42 - 6,
+        y: y + SLOT_SIZE * ITEM_NAME_Y_FRAC - ITEM_NAME_Y_OFFSET,
         size: 7,
         color: '#94a3b8',
         align: 'center',
-        lineHeight: Math.round(SLOT_SIZE * 0.15),
+        lineHeight: Math.round(SLOT_SIZE * ITEM_NAME_LINE_HEIGHT_FRAC),
       });
     }
 
     // Sub-slot label at bottom
-    const shortLabel = label.length > 7 ? label.substring(0, 7) : label;
+    const shortLabel =
+      label.length > LABEL_MAX_CHARS ? label.substring(0, LABEL_SUBSTRING_LEN) : label;
     drawText(ctx, shortLabel, {
       x: x + SLOT_SIZE / 2,
-      y: y + SLOT_SIZE - 3 - 6,
+      y: y + SLOT_SIZE - ITEM_LABEL_Y_OFFSET - TEXT_Y_BASELINE,
       size: 7,
       color: '#475569',
       align: 'center',
@@ -263,11 +341,11 @@ export class GearPanel {
     }
     lines.push('');
     if (item.description) {
-      // Word-wrap description at ~34 chars to fit inside the 230px tooltip box
+      // Word-wrap description at ~34 chars to fit inside the tooltip box
       const words = item.description.split(' ');
       let cur = '';
       for (const w of words) {
-        if ((cur + ' ' + w).trim().length <= 34) {
+        if ((cur + ' ' + w).trim().length <= DESC_WRAP_CHARS) {
           cur = (cur + ' ' + w).trim();
         } else {
           lines.push(cur);
@@ -279,26 +357,31 @@ export class GearPanel {
     lines.push('');
     lines.push('[Click] Unequip');
 
-    const tw = 230;
-    const lineH = 14;
-    const th = lines.length * lineH + 12;
-    const tx = Math.min(this.tooltipMx + 10, canvas.width - tw - 4);
-    let ty = Math.min(this.tooltipMy - th / 2, canvas.height - th - 4);
-    ty = Math.max(ty, 4);
+    const tw = TOOLTIP_WIDTH;
+    const lineH = TOOLTIP_LINE_HEIGHT;
+    const th = lines.length * lineH + TOOLTIP_PAD;
+    const tx = Math.min(this.tooltipMx + TOOLTIP_X_OFFSET, canvas.width - tw - TOOLTIP_MARGIN);
+    let ty = Math.min(this.tooltipMy - th / 2, canvas.height - th - TOOLTIP_MARGIN);
+    ty = Math.max(ty, TOOLTIP_Y_OFFSET);
 
     ctx.save();
     drawBox(ctx, { x: tx, y: ty, width: tw, height: th, ...BOX_PRESETS.tooltip });
 
     // Clip all text to the tooltip box so nothing overflows
     ctx.beginPath();
-    ctx.rect(tx + 2, ty + 2, tw - 4, th - 4);
+    ctx.rect(
+      tx + TOOLTIP_MARGIN_SMALL,
+      ty + TOOLTIP_MARGIN_SMALL,
+      tw - TOOLTIP_MARGIN_SMALL * 2,
+      th - TOOLTIP_MARGIN_SMALL * 2,
+    );
     ctx.clip();
 
     // Title line
     drawText(ctx, lines[0] ?? '', {
-      x: tx + 6,
-      y: ty + 14 - 8,
-      size: 10,
+      x: tx + TOOLTIP_TEXT_INDENT,
+      y: ty + TOOLTIP_LINE_HEIGHT - TOOLTIP_TITLE_Y_OFFSET,
+      size: TOOLTIP_TITLE_SIZE,
       bold: true,
       color: '#e2e8f0',
     });
@@ -317,9 +400,9 @@ export class GearPanel {
         lineColor = '#94a3b8';
       }
       drawText(ctx, line, {
-        x: tx + 6,
-        y: ty + 14 + i * lineH - 8,
-        size: 10,
+        x: tx + TOOLTIP_TEXT_INDENT,
+        y: ty + TOOLTIP_LINE_HEIGHT + i * lineH - TOOLTIP_BODY_Y_OFFSET,
+        size: TOOLTIP_BODY_SIZE,
         color: lineColor,
       });
     }
@@ -347,8 +430,13 @@ export class GearPanel {
     const p = this.panelRect(canvas);
 
     // Close [X]
-    const closeX = p.x + p.w - 20;
-    if (mx >= closeX && mx <= closeX + 16 && my >= p.y + 8 && my <= p.y + 24) {
+    const closeX = p.x + p.w - CLOSE_BTN_X_OFFSET;
+    if (
+      mx >= closeX &&
+      mx <= closeX + CLOSE_BTN_W &&
+      my >= p.y + CLOSE_BTN_Y_OFFSET &&
+      my <= p.y + CLOSE_BTN_Y_OFFSET + CLOSE_BTN_H * 2
+    ) {
       this.isOpen = false;
       return { consumed: true };
     }
@@ -389,7 +477,7 @@ export class GearPanel {
         }
         maxY = Math.max(maxY, si.y + SLOT_SIZE);
       }
-      currentY = maxY + 8;
+      currentY = maxY + SECTION_PAD;
     }
     return null;
   }

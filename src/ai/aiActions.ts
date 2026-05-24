@@ -8,6 +8,14 @@ import { createMob } from '../levels/spawner';
 import { TILE_SIZE } from '../core/constants';
 import { isItemId } from '../core/ItemDefs';
 
+const NEAREST_WALKABLE_SEARCH_RADIUS = 15;
+const MOB_SPAWN_COUNT_MAX_LOCAL = 5;
+const MOB_SPAWN_ATTEMPTS = 30;
+const MOB_SPAWN_OFFSET_MULTIPLIER = 0.5;
+const MOB_SPAWN_OFFSET_RANGE = 8;
+const ITEM_QUANTITY_MAX = 99;
+const TEMP_STAT_MOD_TICKS = 1800;
+
 export interface AISceneContext {
   getHuman(): HumanPlayer;
   getCat(): CatPlayer;
@@ -54,7 +62,7 @@ function nearestWalkableTile(
   tileY: number,
 ): { x: number; y: number } | null {
   if (map.isWalkable(tileX, tileY)) return { x: tileX, y: tileY };
-  for (let r = 1; r <= 15; r++) {
+  for (let r = 1; r <= NEAREST_WALKABLE_SEARCH_RADIUS; r++) {
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
@@ -73,14 +81,18 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
           ? action.mob_type
           : 'goblin';
       const target = resolvePlayer(ctx, action.target_player);
-      const count = Math.min(Math.max(1, Number(action.count) || 1), 5);
+      const count = Math.min(Math.max(1, Number(action.count) || 1), MOB_SPAWN_COUNT_MAX_LOCAL);
       const map = ctx.getGameMap();
       const tileX = Math.floor(target.x / TILE_SIZE);
       const tileY = Math.floor(target.y / TILE_SIZE);
       let spawned = 0;
-      for (let attempt = 0; attempt < 30 && spawned < count; attempt++) {
-        const ox = Math.round((Math.random() - 0.5) * 8);
-        const oy = Math.round((Math.random() - 0.5) * 8);
+      for (let attempt = 0; attempt < MOB_SPAWN_ATTEMPTS && spawned < count; attempt++) {
+        const ox = Math.round(
+          (Math.random() - MOB_SPAWN_OFFSET_MULTIPLIER) * MOB_SPAWN_OFFSET_RANGE,
+        );
+        const oy = Math.round(
+          (Math.random() - MOB_SPAWN_OFFSET_MULTIPLIER) * MOB_SPAWN_OFFSET_RANGE,
+        );
         const tx = tileX + ox;
         const ty = tileY + oy;
         if (!map.isWalkable(tx, ty)) continue;
@@ -129,7 +141,7 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const player = resolvePlayer(ctx, action.target_player);
       const itemId = String(action.item_id);
       if (!VALID_ITEM_IDS.has(itemId) || !isItemId(itemId)) break;
-      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), 99);
+      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), ITEM_QUANTITY_MAX);
       player.inventory.addItem(itemId, qty);
       break;
     }
@@ -173,7 +185,7 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
         player.hp = Math.min(player.hp, player.maxHp);
       }
       // Revert after 30 seconds (1800 ticks at 60fps)
-      player.tempStatMods.push({ ticksRemaining: 1800, stat, delta });
+      player.tempStatMods.push({ ticksRemaining: TEMP_STAT_MOD_TICKS, stat, delta });
       break;
     }
   }

@@ -73,6 +73,11 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
 /** Number of discrete animation frames pre-rendered for the fountain center tile. */
 const FOUNTAIN_ANIM_FRAMES = 30;
 
+/** Gable roof overhead: extends 2.75 tile-heights above the back wall tile origin. */
+const GABLE_OVERHEAD_SCALE = 2.75;
+/** Fountain water jet overhead: extends 1.5 tile-heights above the center tile origin. */
+const FOUNTAIN_OVERHEAD_SCALE = 1.5;
+
 /**
  * Draws a single tile. Dispatches to category-specific renderers.
  *
@@ -330,7 +335,7 @@ export class OverlayTileCache {
     if (type === BUILDING_WALL) {
       // The gable roof (intS case) extends up to 2.5 × ts above the tile.
       const intS = ROOF_TILE_TYPES.has(structure[ty + 1]?.[tx]?.type ?? -1);
-      return intS ? Math.ceil(ts * 2.75) : 0;
+      return intS ? Math.ceil(ts * GABLE_OVERHEAD_SCALE) : 0;
     }
     if (type === FOUNTAIN) {
       const { structure: s } = this;
@@ -340,7 +345,7 @@ export class OverlayTileCache {
         s[ty]?.[tx + 1]?.type === FOUNTAIN &&
         s[ty]?.[tx - 1]?.type === FOUNTAIN;
       // Water jet extends ~1.25 × ts above center tile origin.
-      return isCenter ? Math.ceil(ts * 1.5) : 0;
+      return isCenter ? Math.ceil(ts * FOUNTAIN_OVERHEAD_SCALE) : 0;
     }
     return 0;
   }

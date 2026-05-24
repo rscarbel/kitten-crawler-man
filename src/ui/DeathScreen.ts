@@ -3,6 +3,25 @@ import { drawOverlay } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
 
+const ALPHA_VISIBILITY_THRESHOLD = 0.5;
+const ALPHA_MAX = 0.82;
+const ALPHA_INCREMENT_PER_FRAME = 0.018;
+const TEXT_ALPHA_START_THRESHOLD = 0.45;
+const TEXT_ALPHA_FADE_RANGE = 0.37;
+const YOU_DIED_OFFSET_Y_1 = 52;
+const YOU_DIED_OFFSET_Y_2 = 58;
+const SUBTITLE_MAX_WIDTH = 400;
+const SUBTITLE_PADDING = 32;
+const SUBTITLE_Y_OFFSET_1 = 8;
+const SUBTITLE_Y_OFFSET_2 = 12;
+const SUBTITLE_FONT_SIZE = 15;
+const SUBTITLE_LINE_HEIGHT = 20;
+const BUTTON_WIDTH = 210;
+const BUTTON_HEIGHT = 48;
+const BUTTON_Y_OFFSET = 44;
+const BUTTON_LABEL_SIZE = 17;
+const YOU_DIED_FONT_SIZE = 72;
+
 /**
  * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
  * button hit-testing. The caller is responsible for calling tick() each frame
@@ -32,13 +51,14 @@ export class DeathScreen {
 
   /** True once the overlay is opaque enough to show interactive elements. */
   get isVisible(): boolean {
-    return this._active && this.alpha >= 0.5;
+    return this._active && this.alpha >= ALPHA_VISIBILITY_THRESHOLD;
   }
 
   /** Advance the fade-in alpha by one frame. */
   tick(): void {
     if (!this._active) return;
-    if (this.alpha < 0.82) this.alpha = Math.min(0.82, this.alpha + 0.018);
+    if (this.alpha < ALPHA_MAX)
+      this.alpha = Math.min(ALPHA_MAX, this.alpha + ALPHA_INCREMENT_PER_FRAME);
   }
 
   render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -51,38 +71,41 @@ export class DeathScreen {
 
     drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
 
-    if (this.alpha < 0.45) return;
-    const textAlpha = Math.min(1, (this.alpha - 0.45) / 0.37);
+    if (this.alpha < TEXT_ALPHA_START_THRESHOLD) return;
+    const textAlpha = Math.min(
+      1,
+      (this.alpha - TEXT_ALPHA_START_THRESHOLD) / TEXT_ALPHA_FADE_RANGE,
+    );
 
     // "YOU DIED"
     drawText(ctx, 'YOU DIED', {
       x: w / 2,
-      y: h / 2 - 52 - 58,
+      y: h / 2 - YOU_DIED_OFFSET_Y_1 - YOU_DIED_OFFSET_Y_2,
       bold: true,
-      size: 72,
+      size: YOU_DIED_FONT_SIZE,
       color: '#dc2626',
       align: 'center',
       alpha: textAlpha,
     });
 
     // Subtitle
-    const subtitleW = Math.min(400, w - 32);
+    const subtitleW = Math.min(SUBTITLE_MAX_WIDTH, w - SUBTITLE_PADDING);
     drawText(ctx, 'Respawning at floor start — progress from previous floors kept.', {
       x: w / 2 - subtitleW / 2,
-      y: h / 2 + 8 - 12,
-      size: 15,
+      y: h / 2 + SUBTITLE_Y_OFFSET_1 - SUBTITLE_Y_OFFSET_2,
+      size: SUBTITLE_FONT_SIZE,
       color: '#94a3b8',
       align: 'center',
       width: subtitleW,
-      lineHeight: 20,
+      lineHeight: SUBTITLE_LINE_HEIGHT,
       alpha: textAlpha,
     });
 
     // Restart button
-    const btnW = 210;
-    const btnH = 48;
+    const btnW = BUTTON_WIDTH;
+    const btnH = BUTTON_HEIGHT;
     const btnX = w / 2 - btnW / 2;
-    const btnY = h / 2 + 44;
+    const btnY = h / 2 + BUTTON_Y_OFFSET;
     this._btnResult = drawButton(ctx, {
       x: btnX,
       y: btnY,
@@ -90,7 +113,7 @@ export class DeathScreen {
       height: btnH,
       label: 'Restart Level',
       ...BUTTON_PRESETS.danger,
-      labelSize: 17,
+      labelSize: BUTTON_LABEL_SIZE,
       alpha: textAlpha,
     });
   }

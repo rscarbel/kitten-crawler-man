@@ -27,11 +27,26 @@ const LAVA_BALL_SPEED = 1.3;
 const LAVA_BALL_DAMAGE = 2;
 const LAVA_BALL_RADIUS = 8;
 const EXPLODE_TICKS = 22;
+const COIN_DROP_MIN = 4;
+const COIN_DROP_MAX = 5;
+const CENTER_OFFSET = 0.5;
+const PLAYER_CENTER_RADIUS_RATIO = 0.35;
+const BURN_CHANCE = 0.15;
+const MOUTH_OFFSET_X = 0.22;
+const MOUTH_OFFSET_Y = 0.22;
+const FOLLOW_STOP_RANGE_TILES = 1.5;
+const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
+const EXPLOSION_EXPANSION = 2.2;
+const EXPLOSION_ALPHA = 0.75;
+const INNER_GLOW_ALPHA = 1.0;
+const GLOW_RADIUS_RATIO = 0.5;
+const BRIGHT_CORE_RATIO = 0.55;
+const HOT_CENTER_RATIO = 0.25;
 
 export class Llama extends Mob {
   readonly xpValue = 8;
-  protected coinDropMin = 4;
-  protected coinDropMax = 5;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'llama';
   displayName = 'Lava Llama';
   description = 'Spits balls of molten rock from a distance.';
@@ -77,11 +92,14 @@ export class Llama extends Mob {
       ball.y = nextY;
       for (const t of targets) {
         if (!t.isAlive) continue;
-        const cx = t.x + this.tileSize * 0.5;
-        const cy = t.y + this.tileSize * 0.5;
-        if (Math.hypot(ball.x - cx, ball.y - cy) < LAVA_BALL_RADIUS + this.tileSize * 0.35) {
+        const cx = t.x + this.tileSize * CENTER_OFFSET;
+        const cy = t.y + this.tileSize * CENTER_OFFSET;
+        if (
+          Math.hypot(ball.x - cx, ball.y - cy) <
+          LAVA_BALL_RADIUS + this.tileSize * PLAYER_CENTER_RADIUS_RATIO
+        ) {
           this.dealDamage(t, LAVA_BALL_DAMAGE);
-          if (Math.random() < 0.15) t.applyStatus(makeBurn());
+          if (Math.random() < BURN_CHANCE) t.applyStatus(makeBurn());
           ball.exploding = true;
           ball.explodeTick = EXPLODE_TICKS;
           break;
@@ -113,10 +131,10 @@ export class Llama extends Mob {
     }
     this.isAggro = true;
 
-    const mouthX = this.x + this.tileSize * 0.22;
-    const mouthY = this.y + this.tileSize * 0.22;
-    const targetCX = nearest.x + this.tileSize * 0.5;
-    const targetCY = nearest.y + this.tileSize * 0.5;
+    const mouthX = this.x + this.tileSize * MOUTH_OFFSET_X;
+    const mouthY = this.y + this.tileSize * MOUTH_OFFSET_Y;
+    const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
+    const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
 
     // Check line of sight from mouth to target centre
     const hasLOS = this.map ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY) : true;
@@ -134,11 +152,16 @@ export class Llama extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.tileSize * 1.5,
+        this.tileSize * FOLLOW_STOP_RANGE_TILES,
       );
     } else if (nearestDist > this.spitRangePx) {
       // Has LOS but too far — move closer
-      this.followTargetAStar(nearest.x, nearest.y, this.speed, this.spitRangePx * 0.85);
+      this.followTargetAStar(
+        nearest.x,
+        nearest.y,
+        this.speed,
+        this.spitRangePx * FOLLOW_CLOSE_RANGE_RATIO,
+      );
     } else {
       // In range with LOS — hold position
       this.isMoving = false;
@@ -173,17 +196,17 @@ export class Llama extends Mob {
 
       if (ball.exploding) {
         const progress = 1 - ball.explodeTick / EXPLODE_TICKS;
-        const r = LAVA_BALL_RADIUS * (1 + progress * 2.2);
+        const r = LAVA_BALL_RADIUS * (1 + progress * EXPLOSION_EXPANSION);
         const alpha = ball.explodeTick / EXPLODE_TICKS;
         // Outer burst
         ctx.beginPath();
         ctx.arc(bx, by, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 80, 0, ${alpha * 0.75})`;
+        ctx.fillStyle = `rgba(255, 80, 0, ${alpha * EXPLOSION_ALPHA})`;
         ctx.fill();
         // Inner glow
         ctx.beginPath();
-        ctx.arc(bx, by, r * 0.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
+        ctx.arc(bx, by, r * GLOW_RADIUS_RATIO, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 200, 0, ${alpha * INNER_GLOW_ALPHA})`;
         ctx.fill();
       } else {
         // Glowing lava ball — outer dark-orange shell
@@ -193,12 +216,12 @@ export class Llama extends Mob {
         ctx.fill();
         // Bright core
         ctx.beginPath();
-        ctx.arc(bx, by, LAVA_BALL_RADIUS * 0.55, 0, Math.PI * 2);
+        ctx.arc(bx, by, LAVA_BALL_RADIUS * BRIGHT_CORE_RATIO, 0, Math.PI * 2);
         ctx.fillStyle = '#ff8c00';
         ctx.fill();
         // Hot centre
         ctx.beginPath();
-        ctx.arc(bx, by, LAVA_BALL_RADIUS * 0.25, 0, Math.PI * 2);
+        ctx.arc(bx, by, LAVA_BALL_RADIUS * HOT_CENTER_RATIO, 0, Math.PI * 2);
         ctx.fillStyle = '#fff176';
         ctx.fill();
       }

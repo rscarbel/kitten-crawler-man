@@ -14,11 +14,15 @@ import { TILE_SIZE } from '../core/constants';
 
 const SPIDER_HP = 1200;
 const SPIDER_SPEED = 2.5;
-const DASH_SPEED = SPIDER_SPEED * 2.5; // sprint toward stuck player
+const DASH_SPEED_MULTIPLIER = 2.5;
+const DASH_SPEED = SPIDER_SPEED * DASH_SPEED_MULTIPLIER; // sprint toward stuck player
 
-const SCREECH_RANGE_PX = TILE_SIZE * 3;
-const SLAM_RANGE_PX = TILE_SIZE * 2;
-const TOUCHING_RANGE_PX = TILE_SIZE * 1.5;
+const SCREECH_RANGE_TILE_MULTIPLIER = 3;
+const SCREECH_RANGE_PX = TILE_SIZE * SCREECH_RANGE_TILE_MULTIPLIER;
+const SLAM_RANGE_TILE_MULTIPLIER = 2;
+const SLAM_RANGE_PX = TILE_SIZE * SLAM_RANGE_TILE_MULTIPLIER;
+const TOUCHING_RANGE_TILE_MULTIPLIER = 1.5;
+const TOUCHING_RANGE_PX = TILE_SIZE * TOUCHING_RANGE_TILE_MULTIPLIER;
 
 // Fire at stateProgress 0.58 (sprite windup/release boundary)
 const SPIT_FIRE_PROGRESS = 0.58;
@@ -38,8 +42,17 @@ const SLAM_LOCK_FRAME = Math.floor(SLAM_WINDUP / 2);
 
 // Audio timing offsets: how far into each sound file the audible impact occurs.
 // Subtract the windup duration so the sound starts early enough for the hit to align.
-export const SLAM_AUDIO_OFFSET = Math.max(0, 0.5 - SLAM_WINDUP / 60);
-export const SCREECH_AUDIO_OFFSET = Math.max(0, 1.05 - SCREECH_WINDUP / 60);
+const SLAM_AUDIO_IMPACT_TIME = 0.5;
+const SCREECH_AUDIO_IMPACT_TIME = 1.05;
+const FRAMES_PER_SECOND = 60;
+export const SLAM_AUDIO_OFFSET = Math.max(
+  0,
+  SLAM_AUDIO_IMPACT_TIME - SLAM_WINDUP / FRAMES_PER_SECOND,
+);
+export const SCREECH_AUDIO_OFFSET = Math.max(
+  0,
+  SCREECH_AUDIO_IMPACT_TIME - SCREECH_WINDUP / FRAMES_PER_SECOND,
+);
 
 const MIN_PURSUIT_FRAMES = 60;
 const ATTACK_CHANCE_PER_FRAME = 0.04;
@@ -85,13 +98,69 @@ interface SpitTrap {
   ttl: number;
 }
 
+const COIN_DROP_MIN = 50;
+const COIN_DROP_MAX = 100;
+const MASS = 6;
+
+/** Tile center offset (0.5 of tile size). */
+const TILE_CENTER = 0.5;
+
+// Screech damage constants
+const SCREECH_BLOCK_XP = 10;
+const SCREECH_HP_FRACTION = 0.9;
+const SCREECH_BONUS_DAMAGE = 3;
+
+// Slam damage constants
+const SLAM_HIT_RANGE_SCALE = 1.1;
+const SLAM_CONE_MIN_DOT = 0.5;
+const SLAM_BLOCK_XP = 8;
+const SLAM_DAMAGE_MIN = 10;
+const SLAM_DAMAGE_MAX = 15;
+
+// Spit projectile and trap constants
+const SHELL_BLOCK_XP = 8;
+const SPIT_DAMAGE_MIN = 8;
+const SPIT_DAMAGE_MAX = 12;
+const SPIT_HIT_RADIUS_FRACTION = 0.75;
+const TRAP_HIT_RADIUS_FRACTION = 0.9;
+const SPIT_ANIM_CYCLE = 8;
+
+// Roam behavior constants
+const ROAM_TIMER_MIN = 300;
+const ROAM_TIMER_MAX = 600;
+const ROAM_SPEED_FRACTION = 0.5;
+const ROAM_PICK_ATTEMPTS = 30;
+const ROAM_BORDER_MARGIN = 3;
+
+// Render: shared
+const MS_PER_SECOND = 1000;
+const DANGER_FILL_ALPHA = 0.28;
+const DANGER_STRIPE_ALPHA = 0.14;
+const STRIPE_ANIM_DIVISOR = 120;
+const DANGER_OUTLINE_ALPHA = 0.7;
+
+// Render: screech danger zone
+const SCREECH_SP_THRESHOLD = 0.2;
+const SCREECH_FADE_DIVISOR = 0.3;
+const SCREECH_DASH_SEGMENT = 10;
+const SCREECH_DASH_SPEED = 25;
+const SCREECH_DASH_MOD = 20;
+
+// Render: slam danger zone
+const SLAM_SP_THRESHOLD = 0.15;
+const SLAM_FADE_DIVISOR = 0.4;
+const SLAM_ARC_DIVISOR = 3;
+const SLAM_DASH_SEGMENT = 8;
+const SLAM_DASH_SPEED = 20;
+const SLAM_DASH_MOD = 16;
+
 export class GrotesqueSpider extends Mob {
   readonly xpValue = 2000;
-  protected coinDropMin = 50;
-  protected coinDropMax = 100;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Grotesque Spider';
   description = 'An enormous arachnid horror that roams the dungeon. Run.';
-  mass = 6;
+  mass = MASS;
   override readonly audioTag = 'grotesque_spider';
 
   slamSoundPending = false;
@@ -460,11 +529,16 @@ export class GrotesqueSpider extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       if (Math.hypot(t.x - this.x, t.y - this.y) > SCREECH_RANGE_PX) continue;
-      if (this.spells?.isPointInsideShell(t.x + TILE_SIZE * 0.5, t.y + TILE_SIZE * 0.5)) {
-        this.spells.addBlockXp(10);
+      if (
+        this.spells?.isPointInsideShell(
+          t.x + TILE_SIZE * TILE_CENTER,
+          t.y + TILE_SIZE * TILE_CENTER,
+        )
+      ) {
+        this.spells.addBlockXp(SCREECH_BLOCK_XP);
         continue;
       }
-      this.dealDamage(t, Math.ceil(t.maxHp * 0.9) + 3);
+      this.dealDamage(t, Math.ceil(t.maxHp * SCREECH_HP_FRACTION) + SCREECH_BONUS_DAMAGE);
     }
   }
 
@@ -474,15 +548,20 @@ export class GrotesqueSpider extends Mob {
       const dx = t.x - this.x;
       const dy = t.y - this.y;
       const dist = Math.hypot(dx, dy);
-      if (dist > SLAM_RANGE_PX * 1.1) continue;
+      if (dist > SLAM_RANGE_PX * SLAM_HIT_RANGE_SCALE) continue;
       const dot =
         dist > 0 ? (dx / dist) * this.lockedFacingX + (dy / dist) * this.lockedFacingY : 0;
-      if (dot < 0.5) continue;
-      if (this.spells?.isPointInsideShell(t.x + TILE_SIZE * 0.5, t.y + TILE_SIZE * 0.5)) {
-        this.spells.addBlockXp(8);
+      if (dot < SLAM_CONE_MIN_DOT) continue;
+      if (
+        this.spells?.isPointInsideShell(
+          t.x + TILE_SIZE * TILE_CENTER,
+          t.y + TILE_SIZE * TILE_CENTER,
+        )
+      ) {
+        this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
-      this.dealDamage(t, randomInt(10, 15));
+      this.dealDamage(t, randomInt(SLAM_DAMAGE_MIN, SLAM_DAMAGE_MAX));
     }
   }
 
@@ -503,8 +582,8 @@ export class GrotesqueSpider extends Mob {
 
   private fireSpitProjectile(target: Player | null, _targets: Player[]): void {
     const ts = this.tileSize;
-    const ox = this.x + ts * 0.5;
-    const oy = this.y + ts * 0.5;
+    const ox = this.x + ts * TILE_CENTER;
+    const oy = this.y + ts * TILE_CENTER;
 
     if (!target) {
       // No live target — fire in facing direction and it will land as a trap
@@ -521,8 +600,8 @@ export class GrotesqueSpider extends Mob {
       return;
     }
 
-    const tx = target.x + ts * 0.5;
-    const ty = target.y + ts * 0.5;
+    const tx = target.x + ts * TILE_CENTER;
+    const ty = target.y + ts * TILE_CENTER;
     const dx = tx - ox;
     const dy = ty - oy;
     const d = Math.hypot(dx, dy);
@@ -530,10 +609,10 @@ export class GrotesqueSpider extends Mob {
       // Already on top of target — drop a trap here
       this.spawnGroundTrap(ox, oy);
       if (this.spells?.isPointInsideShell(tx, ty)) {
-        this.spells.addBlockXp(8);
+        this.spells.addBlockXp(SHELL_BLOCK_XP);
         return;
       }
-      this.dealDamage(target, randomInt(8, 12));
+      this.dealDamage(target, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX));
       target.applyStatus(makeStuck());
       target.applyStatus(makeSpitVenom());
       this.dashTarget = target;
@@ -565,7 +644,7 @@ export class GrotesqueSpider extends Mob {
 
     proj.x += proj.vx;
     proj.y += proj.vy;
-    proj.animFrame = (proj.animFrame + 1) % 8;
+    proj.animFrame = (proj.animFrame + 1) % SPIT_ANIM_CYCLE;
 
     if (this.map) {
       const ts = this.tileSize;
@@ -577,19 +656,19 @@ export class GrotesqueSpider extends Mob {
     }
 
     const ts = this.tileSize;
-    const hitRadius = ts * 0.75;
+    const hitRadius = ts * SPIT_HIT_RADIUS_FRACTION;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      const tcx = t.x + ts * 0.5;
-      const tcy = t.y + ts * 0.5;
+      const tcx = t.x + ts * TILE_CENTER;
+      const tcy = t.y + ts * TILE_CENTER;
       if (Math.hypot(proj.x - tcx, proj.y - tcy) < hitRadius) {
         this.spawnGroundTrap(proj.x, proj.y);
         if (this.spells?.isPointInsideShell(tcx, tcy)) {
-          this.spells.addBlockXp(8);
+          this.spells.addBlockXp(SHELL_BLOCK_XP);
           this.activeProjectile = null;
           return;
         }
-        this.dealDamage(t, randomInt(8, 12));
+        this.dealDamage(t, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX));
         t.applyStatus(makeStuck());
         t.applyStatus(makeSpitVenom());
         this.dashTarget = t;
@@ -613,7 +692,7 @@ export class GrotesqueSpider extends Mob {
 
   private updateGroundTraps(targets: Player[]): void {
     const ts = this.tileSize;
-    const hitRadius = ts * 0.9;
+    const hitRadius = ts * TRAP_HIT_RADIUS_FRACTION;
 
     this.groundTraps = this.groundTraps.filter((trap) => {
       trap.ttl--;
@@ -623,12 +702,12 @@ export class GrotesqueSpider extends Mob {
       trap.frameTimer--;
       if (trap.frameTimer <= 0) {
         trap.animFrame++;
-        if (trap.phase === 'splat' && trap.animFrame >= 8) {
+        if (trap.phase === 'splat' && trap.animFrame >= SPIT_ANIM_CYCLE) {
           trap.phase = 'idle';
           trap.animFrame = 0;
           trap.frameTimer = TRAP_IDLE_TICKS_PER_FRAME;
         } else if (trap.phase === 'idle') {
-          trap.animFrame = trap.animFrame % 8;
+          trap.animFrame = trap.animFrame % SPIT_ANIM_CYCLE;
           trap.frameTimer = TRAP_IDLE_TICKS_PER_FRAME;
         } else {
           trap.frameTimer = TRAP_SPLAT_TICKS_PER_FRAME;
@@ -640,7 +719,9 @@ export class GrotesqueSpider extends Mob {
 
       for (const t of targets) {
         if (!t.isAlive || t.hasStatus('stuck')) continue;
-        if (Math.hypot(t.x + ts * 0.5 - trap.x, t.y + ts * 0.5 - trap.y) < hitRadius) {
+        if (
+          Math.hypot(t.x + ts * TILE_CENTER - trap.x, t.y + ts * TILE_CENTER - trap.y) < hitRadius
+        ) {
           t.applyStatus(makeStuck());
           t.applyStatus(makeSpitVenom());
           // Keep the trap — it can catch both players
@@ -656,13 +737,13 @@ export class GrotesqueSpider extends Mob {
     const ts = this.tileSize;
     if (this.map && (this.roamTimer <= 0 || !this.roamTarget || this.isNearRoamTarget())) {
       this.roamTarget = this.pickRoamTarget();
-      this.roamTimer = randomInt(300, 600);
+      this.roamTimer = randomInt(ROAM_TIMER_MIN, ROAM_TIMER_MAX);
     }
     if (this.roamTarget && this.map) {
       this.followTargetAStar(
         this.roamTarget.tx * ts,
         this.roamTarget.ty * ts,
-        this.speed * 0.5,
+        this.speed * ROAM_SPEED_FRACTION,
         ts * 1.0,
       );
     } else {
@@ -680,9 +761,9 @@ export class GrotesqueSpider extends Mob {
     if (!this.map) return null;
     const rows = this.map.structure.length;
     const cols = this.map.structure[0]?.length ?? rows;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const tx = randomInt(2, cols - 3);
-      const ty = randomInt(2, rows - 3);
+    for (let attempt = 0; attempt < ROAM_PICK_ATTEMPTS; attempt++) {
+      const tx = randomInt(2, cols - ROAM_BORDER_MARGIN);
+      const ty = randomInt(2, rows - ROAM_BORDER_MARGIN);
       if (this.map.isWalkable(tx, ty)) return { tx, ty };
     }
     return null;
@@ -741,12 +822,12 @@ export class GrotesqueSpider extends Mob {
     const sy = this.y - camY;
     const sp = this.stateProgress;
     const now = performance.now();
-    const time = now / 1000;
+    const time = now / MS_PER_SECOND;
 
-    if (this.state === 'screech' && this.attackPhase === 'windup' && sp > 0.2) {
-      const fade = Math.sin(((sp - 0.2) / 0.3) * Math.PI);
-      const cx2 = sx + tileSize * 0.5;
-      const cy2 = sy + tileSize * 0.5;
+    if (this.state === 'screech' && this.attackPhase === 'windup' && sp > SCREECH_SP_THRESHOLD) {
+      const fade = Math.sin(((sp - SCREECH_SP_THRESHOLD) / SCREECH_FADE_DIVISOR) * Math.PI);
+      const cx2 = sx + tileSize * TILE_CENTER;
+      const cy2 = sy + tileSize * TILE_CENTER;
       const r = SCREECH_RANGE_PX;
 
       // Filled danger zone + hazard stripes clipped to circle
@@ -754,15 +835,15 @@ export class GrotesqueSpider extends Mob {
       ctx.beginPath();
       ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
       ctx.clip();
-      ctx.globalAlpha = fade * 0.28;
+      ctx.globalAlpha = fade * DANGER_FILL_ALPHA;
       ctx.fillStyle = '#ff1020';
       ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
-      ctx.globalAlpha = fade * 0.14;
+      ctx.globalAlpha = fade * DANGER_STRIPE_ALPHA;
       ctx.strokeStyle = '#ff0000';
       ctx.lineWidth = 10;
       ctx.setLineDash([]);
       const screechStripeSpacing = 28;
-      const screechStripeOffset = (now / 120) % screechStripeSpacing;
+      const screechStripeOffset = (now / STRIPE_ANIM_DIVISOR) % screechStripeSpacing;
       for (let d = -r * 2 + screechStripeOffset; d < r * 2; d += screechStripeSpacing) {
         ctx.beginPath();
         ctx.moveTo(cx2 + d - r, cy2 - r);
@@ -773,28 +854,28 @@ export class GrotesqueSpider extends Mob {
 
       // Animated dashed outline
       ctx.save();
-      ctx.globalAlpha = fade * 0.7;
+      ctx.globalAlpha = fade * DANGER_OUTLINE_ALPHA;
       ctx.strokeStyle = '#ff1020';
       ctx.lineWidth = 3;
-      ctx.setLineDash([10, 10]);
-      ctx.lineDashOffset = -(now / 25) % 20;
+      ctx.setLineDash([SCREECH_DASH_SEGMENT, SCREECH_DASH_SEGMENT]);
+      ctx.lineDashOffset = -(now / SCREECH_DASH_SPEED) % SCREECH_DASH_MOD;
       ctx.beginPath();
       ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    if (this.state === 'slam' && this.attackPhase === 'windup' && sp > 0.15) {
-      const fade = Math.min((sp - 0.15) / 0.4, 1);
+    if (this.state === 'slam' && this.attackPhase === 'windup' && sp > SLAM_SP_THRESHOLD) {
+      const fade = Math.min((sp - SLAM_SP_THRESHOLD) / SLAM_FADE_DIVISOR, 1);
       const facingAngle = Math.atan2(
         this.slamFacingLocked ? this.lockedFacingY : this.facingY,
         this.slamFacingLocked ? this.lockedFacingX : this.facingX,
       );
-      const cx2 = sx + tileSize * 0.5;
-      const cy2 = sy + tileSize * 0.5;
-      const r = SLAM_RANGE_PX * 1.1;
-      const arcStart = facingAngle - Math.PI / 3;
-      const arcEnd = facingAngle + Math.PI / 3;
+      const cx2 = sx + tileSize * TILE_CENTER;
+      const cy2 = sy + tileSize * TILE_CENTER;
+      const r = SLAM_RANGE_PX * SLAM_HIT_RANGE_SCALE;
+      const arcStart = facingAngle - Math.PI / SLAM_ARC_DIVISOR;
+      const arcEnd = facingAngle + Math.PI / SLAM_ARC_DIVISOR;
 
       // Filled danger zone + hazard stripes clipped to pie-slice
       ctx.save();
@@ -803,15 +884,15 @@ export class GrotesqueSpider extends Mob {
       ctx.arc(cx2, cy2, r, arcStart, arcEnd);
       ctx.closePath();
       ctx.clip();
-      ctx.globalAlpha = fade * 0.28;
+      ctx.globalAlpha = fade * DANGER_FILL_ALPHA;
       ctx.fillStyle = '#ff4010';
       ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
-      ctx.globalAlpha = fade * 0.14;
+      ctx.globalAlpha = fade * DANGER_STRIPE_ALPHA;
       ctx.strokeStyle = '#ff5010';
       ctx.lineWidth = 10;
       ctx.setLineDash([]);
       const slamStripeSpacing = 28;
-      const slamStripeOffset = (now / 120) % slamStripeSpacing;
+      const slamStripeOffset = (now / STRIPE_ANIM_DIVISOR) % slamStripeSpacing;
       for (let d = -r * 2 + slamStripeOffset; d < r * 2; d += slamStripeSpacing) {
         ctx.beginPath();
         ctx.moveTo(cx2 + d - r, cy2 - r);
@@ -822,11 +903,11 @@ export class GrotesqueSpider extends Mob {
 
       // Animated dashed outline (closed pie-slice)
       ctx.save();
-      ctx.globalAlpha = fade * 0.7;
+      ctx.globalAlpha = fade * DANGER_OUTLINE_ALPHA;
       ctx.strokeStyle = '#ff6020';
       ctx.lineWidth = 3;
-      ctx.setLineDash([8, 8]);
-      ctx.lineDashOffset = -(now / 20) % 16;
+      ctx.setLineDash([SLAM_DASH_SEGMENT, SLAM_DASH_SEGMENT]);
+      ctx.lineDashOffset = -(now / SLAM_DASH_SPEED) % SLAM_DASH_MOD;
       ctx.beginPath();
       ctx.moveTo(cx2, cy2);
       ctx.arc(cx2, cy2, r, arcStart, arcEnd);
@@ -839,8 +920,8 @@ export class GrotesqueSpider extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
 
     // Sprite natural orientation faces south (+Y), so add π/2 to align facing direction
-    const cx = sx + tileSize * 0.5;
-    const cy = sy + tileSize * 0.5;
+    const cx = sx + tileSize * TILE_CENTER;
+    const cy = sy + tileSize * TILE_CENTER;
     const facingAngle = Math.atan2(this.facingY, this.facingX) + Math.PI / 2;
     ctx.translate(cx, cy);
     ctx.rotate(facingAngle);

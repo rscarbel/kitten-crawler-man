@@ -26,6 +26,13 @@ const ATTACK_ANIM_FRAMES = 12;
 
 // Leash: stays within this many tiles of the cat
 const LEASH_RADIUS_TILES = 12;
+const RECALL_THRESHOLD_RANGE = 1.5;
+const RECALL_SPEED_MULTIPLIER = 1.5;
+const RECALL_STOP_RANGE = 0.5;
+const CENTER_OFFSET = 0.5;
+const RETURN_STOP_RANGE = 1.0;
+const FOLLOW_STOP_RANGE_RATIO = 0.7;
+const BITE_TRIGGER_RANGE_RATIO = 1.2;
 
 export type MongoSize = 'small' | 'medium' | 'large';
 
@@ -37,11 +44,33 @@ export function mongoStatsForFloor(levelId: string): {
   size: MongoSize;
   scale: number;
 } {
+  const LEVEL3_HP = 35;
+  const LEVEL3_SPEED = 2.4;
+  const LEVEL3_DAMAGE = 4;
+  const LEVEL3_SCALE = 1.0;
+  const LEVEL4_HP = 60;
+  const LEVEL4_SPEED = 2.8;
+  const LEVEL4_DAMAGE = 7;
+  const LEVEL4_SCALE = 1.5;
+  const SMALL_SCALE = 0.7;
+
   if (levelId === 'level3') {
-    return { hp: 35, speed: 2.4, damage: 4, size: 'medium', scale: 1.0 };
+    return {
+      hp: LEVEL3_HP,
+      speed: LEVEL3_SPEED,
+      damage: LEVEL3_DAMAGE,
+      size: 'medium',
+      scale: LEVEL3_SCALE,
+    };
   }
   if (levelId >= 'level4') {
-    return { hp: 60, speed: 2.8, damage: 7, size: 'large', scale: 1.5 };
+    return {
+      hp: LEVEL4_HP,
+      speed: LEVEL4_SPEED,
+      damage: LEVEL4_DAMAGE,
+      size: 'large',
+      scale: LEVEL4_SCALE,
+    };
   }
   // level2 or default — small
   return {
@@ -49,7 +78,7 @@ export function mongoStatsForFloor(levelId: string): {
     speed: BASE_SPEED,
     damage: BASE_DAMAGE,
     size: 'small',
-    scale: 0.7,
+    scale: SMALL_SCALE,
   };
 }
 
@@ -120,25 +149,33 @@ export class Mongo extends Mob {
     // If recalling, run to cat and do nothing else
     if (this.recalling) {
       const dist = Math.hypot(this.owner.x - this.x, this.owner.y - this.y);
-      if (dist < TILE_SIZE * 1.5) {
+      if (dist < TILE_SIZE * RECALL_THRESHOLD_RANGE) {
         // Close enough — signal done
         this.hp = 0;
         return;
       }
-      this.followTargetAStar(this.owner.x, this.owner.y, this.speed * 1.5, TILE_SIZE * 0.5);
+      this.followTargetAStar(
+        this.owner.x,
+        this.owner.y,
+        this.speed * RECALL_SPEED_MULTIPLIER,
+        TILE_SIZE * RECALL_STOP_RANGE,
+      );
       return;
     }
 
     // Find nearest hostile mob within aggro range of the cat
-    const catCx = this.owner.x + TILE_SIZE * 0.5;
-    const catCy = this.owner.y + TILE_SIZE * 0.5;
+    const catCx = this.owner.x + TILE_SIZE * CENTER_OFFSET;
+    const catCy = this.owner.y + TILE_SIZE * CENTER_OFFSET;
     let nearest: Mob | null = null;
     let nearestDist = Infinity;
 
     for (const mob of this.allMobs) {
       if (mob === this || !mob.isAlive || !mob.isHostile) continue;
       // Must be within aggro radius of the cat
-      const dCat = Math.hypot(mob.x + TILE_SIZE * 0.5 - catCx, mob.y + TILE_SIZE * 0.5 - catCy);
+      const dCat = Math.hypot(
+        mob.x + TILE_SIZE * CENTER_OFFSET - catCx,
+        mob.y + TILE_SIZE * CENTER_OFFSET - catCy,
+      );
       if (dCat > this.aggroRangePx) continue;
       const d = Math.hypot(mob.x - this.x, mob.y - this.y);
       if (d < nearestDist) {
@@ -151,8 +188,13 @@ export class Mongo extends Mob {
     const distToCat = Math.hypot(this.x - this.owner.x, this.y - this.owner.y);
     if (!nearest || distToCat > this.leashPx) {
       // Return toward cat
-      if (distToCat > TILE_SIZE * 1.5) {
-        this.followTargetAStar(this.owner.x, this.owner.y, this.speed, TILE_SIZE * 1);
+      if (distToCat > TILE_SIZE * RECALL_THRESHOLD_RANGE) {
+        this.followTargetAStar(
+          this.owner.x,
+          this.owner.y,
+          this.speed,
+          TILE_SIZE * RETURN_STOP_RANGE,
+        );
       } else {
         this.isMoving = false;
         this.doWander();
@@ -167,7 +209,7 @@ export class Mongo extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.biteRangePx * 0.7,
+        this.biteRangePx * FOLLOW_STOP_RANGE_RATIO,
       );
     } else {
       this.isMoving = false;
@@ -182,7 +224,7 @@ export class Mongo extends Mob {
     }
 
     // Bite attack — deals damage directly to the mob, credited to the cat
-    if (nearestDist <= this.biteRangePx * 1.2 && this.attackCooldown === 0) {
+    if (nearestDist <= this.biteRangePx * BITE_TRIGGER_RANGE_RATIO && this.attackCooldown === 0) {
       nearest.takeDamageFrom(this.biteDamage, this.owner, 'melee');
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;

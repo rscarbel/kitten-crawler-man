@@ -11,6 +11,210 @@ import {
   METAL_WALL,
 } from '../tileTypes';
 
+const WALL_FOUNDATION_HEIGHT = 3;
+const WALL_CORNICE_SHADOW_DEPTH = 1;
+const WALL_LIT_TOP_HEIGHT = 2;
+
+// Half-timber facade fractions
+const TIMBER_BEAM_Y_FRACTION = 0.38;
+const TIMBER_VERT_X1_FRACTION = 0.28;
+const TIMBER_VERT_X2_FRACTION = 0.7;
+
+// Dressed stone facade fractions
+const STONE_MORTAR_Y1_FRACTION = 0.34;
+const STONE_MORTAR_Y2_FRACTION = 0.67;
+const STONE_MORTAR_OFFSET_FRACTION = 0.5;
+const STONE_MORTAR_SECTION_FRACTION = 0.33;
+const STONE_MORTAR_GAP = 4;
+
+// Merchant facade fractions
+const MERCHANT_TRIM_Y1_FRACTION = 0.14;
+const MERCHANT_TRIM_Y2_OFFSET = 6;
+const MERCHANT_TRIM_HEIGHT = 2;
+
+// Rough stone facade fractions
+const ROUGH_STONE_MORTAR_Y1_FRACTION = 0.38;
+const ROUGH_STONE_MORTAR_Y2_FRACTION = 0.72;
+const ROUGH_STONE_HASH_X = 7;
+const ROUGH_STONE_HASH_Y = 3;
+const ROUGH_STONE_HALF_FRACTION = 0.5;
+
+// Circus stripe
+const CIRCUS_STRIPE_MIN_WIDTH = 3;
+const CIRCUS_STRIPE_WIDTH_FRACTION = 0.25;
+
+// Window geometry fractions
+const WINDOW_WIDTH_FRACTION = 0.44;
+const WINDOW_HEIGHT_FRACTION = 0.3;
+const WINDOW_TOP_FRACTION = 0.2;
+
+// Cottage window
+const COTTAGE_MUNTINS_Y1_FRACTION = 0.33;
+const COTTAGE_MUNTINS_Y2_FRACTION = 0.67;
+const COTTAGE_GLAZING_FRACTION = 0.35;
+const COTTAGE_GLAZING_FRACTION2 = 0.7;
+const COTTAGE_SILL_INSET = 4;
+const COTTAGE_SILL_HEIGHT = 4;
+const COTTAGE_SILL_SHADOW_OFFSET = 3;
+const COTTAGE_FLOWER_STRIDE = 5;
+const COTTAGE_REFLECTION_WIDTH_FRACTION = 0.28;
+const COTTAGE_REFLECTION_ALPHA = 0.3;
+
+// Tower window
+const TOWER_ARCH_DIVISOR = 3;
+const TOWER_KEYSTONE_HALF = 2;
+const TOWER_KEYSTONE_WIDTH = 4;
+const TOWER_SILL_INSET = 3;
+const TOWER_SILL_HEIGHT = 4;
+const TOWER_SILL_WIDTH_EXTRA = 6;
+const TOWER_REFLECTION_WIDTH_FRACTION = 0.28;
+
+// Shuttered window
+const SHUTTER_INSET = 4;
+const SHUTTER_WIDTH = 3;
+const SHUTTER_SLAT_STRIDE = 4;
+const SHUTTER_SILL_INSET = 2;
+const SHUTTER_SILL_HEIGHT = 4;
+const SHUTTER_SILL_SHADOW_OFFSET = 3;
+const SHUTTER_SILL_WIDTH_EXTRA = 4;
+const SHUTTER_REFLECTION_WIDTH_FRACTION = 0.32;
+
+// Gable roof fractions
+const GABLE_PEAK_HEIGHT_FRACTION = 2.5;
+const GABLE_EAVE_SHADOW_HEIGHT = 3;
+const GABLE_EAVE_SHADOW_OFFSET = 2;
+const GABLE_RIDGE_DOT_HALF = 1;
+const GABLE_RIDGE_DOT_WIDTH = 3;
+const GABLE_RIDGE_DOT_HEIGHT = 4;
+
+// Thatch roof fractions
+const THATCH_EAVE_SHADOW_DEPTH = 6;
+const THATCH_BAND_STRIDE = 5;
+const THATCH_BAND_HEIGHT = 2;
+const THATCH_BUNDLE_HASH_X = 7;
+const THATCH_DRIP_FRINGE_INSET = 5;
+const THATCH_DRIP_FRINGE_HEIGHT = 2;
+const THATCH_SUN_SLOPE_FRACTION = 0.48;
+const THATCH_BACK_BAND_STRIDE = 5;
+const THATCH_BACK_BAND_START = 3;
+const THATCH_MID_BAND_STRIDE = 5;
+const THATCH_MID_BAND_START = 3;
+const THATCH_RIDGE_FRACTION = 0.46;
+const THATCH_RIDGE_VALLEY_HEIGHT = 3;
+const THATCH_RIDGE_VALLEY_OFFSET = 2;
+const THATCH_CHIMNEY_HASH_X = 11;
+const THATCH_CHIMNEY_HASH_Y = 7;
+const THATCH_CHIMNEY_STRIDE = 19;
+const THATCH_CHIMNEY_TARGET_MOD = 5;
+const THATCH_CHIMNEY_X_FRACTION = 0.48;
+const THATCH_CHIMNEY_Y_FRACTION = 0.28;
+const THATCH_CHIMNEY_INSET = 3;
+const THATCH_CHIMNEY_WIDTH = 7;
+const THATCH_CHIMNEY_HEIGHT = 9;
+const THATCH_CHIMNEY_DARK_SIDE_X = 5;
+const THATCH_CHIMNEY_DARK_SIDE_WIDTH = 2;
+const THATCH_CHIMNEY_CAP_WIDTH = 9;
+const THATCH_CHIMNEY_CAP_HEIGHT = 2;
+const THATCH_SMOKE_RADIUS = 3;
+const THATCH_SMOKE_Y_OFFSET = 3;
+
+// Slate roof fractions
+const SLATE_EAVE_SHADOW_DEPTH = 6;
+const SLATE_ROW_STRIDE = 6;
+const SLATE_ROW_START = 7;
+const SLATE_OFFSET_FRACTION = 0.5;
+const SLATE_GUTTER_INSET = 4;
+const SLATE_GUTTER_HEIGHT = 3;
+const SLATE_SHEEN_FRACTION = 0.4;
+const SLATE_BACK_ROW_STRIDE = 6;
+const SLATE_BACK_ROW_START = 4;
+const SLATE_MID_ROW_STRIDE = 6;
+const SLATE_MID_ROW_START = 4;
+const SLATE_RIDGE_FRACTION = 0.45;
+const SLATE_RIDGE_VALLEY_HEIGHT = 3;
+const SLATE_RIDGE_VALLEY_OFFSET = 2;
+const SLATE_CHIMNEY_HASH_X = 13;
+const SLATE_CHIMNEY_HASH_Y = 5;
+const SLATE_CHIMNEY_STRIDE = 23;
+const SLATE_CHIMNEY_TARGET = 7;
+const SLATE_CHIMNEY_X_FRACTION = 0.42;
+const SLATE_CHIMNEY_Y_FRACTION = 0.18;
+const SLATE_CHIMNEY_INSET = 4;
+const SLATE_CHIMNEY_WIDTH = 10;
+const SLATE_CHIMNEY_HEIGHT = 13;
+const SLATE_CHIMNEY_MORTAR_Y1 = 4;
+const SLATE_CHIMNEY_MORTAR_Y2 = 8;
+const SLATE_CHIMNEY_DARK_X = 8;
+const SLATE_CHIMNEY_DARK_W = 2;
+const SLATE_CHIMNEY_CAP_WIDTH = 12;
+const SLATE_CHIMNEY_CAP_HEIGHT = 3;
+
+// Red (terracotta) roof fractions
+const RED_TILE_STRIDE = 7;
+const RED_EAVE_SHADOW_DEPTH = 6;
+const RED_EAVE_ROW_START = 7;
+const RED_EAVE_HIGHLIGHT_OFFSET = 2;
+const RED_EAVE_SHADOW_OFFSET = 5;
+const RED_OFFSET_FRACTION = 0.5;
+const RED_SHEEN_FRACTION = 0.48;
+const RED_BACK_ROW_STRIDE = 7;
+const RED_BACK_ROW_START = 5;
+const RED_MID_ROW_STRIDE = 7;
+const RED_RIDGE_FRACTION = 0.44;
+const RED_RIDGE_VALLEY_HEIGHT = 3;
+const RED_RIDGE_VALLEY_OFFSET = 2;
+const RED_CHIMNEY_HASH_X = 9;
+const RED_CHIMNEY_HASH_Y = 11;
+const RED_CHIMNEY_STRIDE = 17;
+const RED_CHIMNEY_TARGET = 3;
+const RED_CHIMNEY_X_FRACTION = 0.54;
+const RED_CHIMNEY_Y_FRACTION = 0.22;
+const RED_CHIMNEY_INSET = 3;
+const RED_CHIMNEY_WIDTH = 8;
+const RED_CHIMNEY_HEIGHT = 10;
+const RED_CHIMNEY_MORTAR_Y1 = 3;
+const RED_CHIMNEY_MORTAR_Y2 = 6;
+const RED_CHIMNEY_DARK_X = 6;
+const RED_CHIMNEY_DARK_W = 2;
+const RED_CHIMNEY_DARK_SIDE_HEIGHT = 9;
+const RED_CHIMNEY_CAP_WIDTH = 10;
+const RED_CHIMNEY_CAP_HEIGHT = 2;
+const RED_SMOKE_RADIUS = 3;
+const RED_SMOKE_CX_OFFSET = 4;
+const RED_SMOKE_Y_OFFSET = 3;
+
+// Green (mossy) roof fractions
+const GREEN_EAVE_SHADOW_DEPTH = 6;
+const GREEN_TUFT_HASH_X = 7;
+const GREEN_TUFT_HASH_Y = 11;
+const GREEN_TUFT_STRIDE = 5;
+const GREEN_TUFT_X_FRACTION = 0.4;
+const GREEN_TUFT_Y_FRACTION = 0.55;
+const GREEN_TUFT_RADIUS_FRACTION = 0.28;
+const GREEN_HORIZONTAL_Y1_FRACTION = 0.4;
+const GREEN_HORIZONTAL_Y2_FRACTION = 0.7;
+const GREEN_MOSS_VERTICAL_STRIDE = 5;
+const GREEN_MOSS_INNER_OFFSET = 2;
+const GREEN_SHEEN_FRACTION = 0.48;
+const GREEN_BACK_X_FRACTION = 0.5;
+const GREEN_MID_TUFT_STRIDE = 5;
+const GREEN_MID_TUFT_X_FRACTION = 0.4;
+const GREEN_MID_TUFT_Y_FRACTION = 0.5;
+const GREEN_MID_TUFT_RADIUS_FRACTION = 0.3;
+const GREEN_MID_TUFT2_HASH_X = 3;
+const GREEN_MID_TUFT2_HASH_Y = 13;
+const GREEN_MID_TUFT2_STRIDE = 7;
+const GREEN_MID_TUFT2_X_FRACTION = 0.65;
+const GREEN_MID_TUFT2_Y_FRACTION = 0.3;
+const GREEN_MID_TUFT2_RADIUS_FRACTION = 0.22;
+const GREEN_RIDGE_FRACTION = 0.46;
+const GREEN_RIDGE_VALLEY_HEIGHT = 3;
+const GREEN_RIDGE_VALLEY_OFFSET = 2;
+
+// Circus tent fractions
+
+// Metal wall
+
 export function drawBuildingTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -92,38 +296,58 @@ export function drawBuildingTile(
         ctx.fillRect(sx, sy, ts, ts);
         // Foundation strip
         ctx.fillStyle = foundBase;
-        ctx.fillRect(sx, sy + ts - 3, ts, 3);
+        ctx.fillRect(sx, sy + ts - WALL_FOUNDATION_HEIGHT, ts, WALL_FOUNDATION_HEIGHT);
 
         if (isCottage) {
           // Half-timber: dark oak beams on plaster
           ctx.fillStyle = '#3e2410';
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.38), ts, 2);
-          ctx.fillRect(sx + Math.floor(ts * 0.28), sy, 2, ts - 3);
-          ctx.fillRect(sx + Math.floor(ts * 0.7), sy, 2, ts - 3);
+          ctx.fillRect(sx, sy + Math.floor(ts * TIMBER_BEAM_Y_FRACTION), ts, 2);
+          ctx.fillRect(
+            sx + Math.floor(ts * TIMBER_VERT_X1_FRACTION),
+            sy,
+            2,
+            ts - WALL_FOUNDATION_HEIGHT,
+          );
+          ctx.fillRect(
+            sx + Math.floor(ts * TIMBER_VERT_X2_FRACTION),
+            sy,
+            2,
+            ts - WALL_FOUNDATION_HEIGHT,
+          );
         } else if (isTower) {
           // Dressed stone: large regular blocks
           ctx.fillStyle = '#7a7268';
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.34), ts, 1);
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.67), ts, 1);
-          const bOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
-          ctx.fillRect(sx + ((Math.floor(ts * 0.5) + bOff) % ts), sy, 1, Math.floor(ts * 0.34));
+          ctx.fillRect(sx, sy + Math.floor(ts * STONE_MORTAR_Y1_FRACTION), ts, 1);
+          ctx.fillRect(sx, sy + Math.floor(ts * STONE_MORTAR_Y2_FRACTION), ts, 1);
+          const bOff = ty % 2 === 0 ? 0 : Math.floor(ts * STONE_MORTAR_OFFSET_FRACTION);
           ctx.fillRect(
-            sx + (bOff % ts),
-            sy + Math.floor(ts * 0.34) + 1,
+            sx + ((Math.floor(ts * STONE_MORTAR_OFFSET_FRACTION) + bOff) % ts),
+            sy,
             1,
-            Math.floor(ts * 0.33) - 1,
+            Math.floor(ts * STONE_MORTAR_Y1_FRACTION),
           );
           ctx.fillRect(
-            sx + ((Math.floor(ts * 0.5) + bOff) % ts),
-            sy + Math.floor(ts * 0.67) + 1,
+            sx + (bOff % ts),
+            sy + Math.floor(ts * STONE_MORTAR_Y1_FRACTION) + 1,
             1,
-            ts - Math.floor(ts * 0.67) - 4,
+            Math.floor(ts * STONE_MORTAR_SECTION_FRACTION) - 1,
+          );
+          ctx.fillRect(
+            sx + ((Math.floor(ts * STONE_MORTAR_OFFSET_FRACTION) + bOff) % ts),
+            sy + Math.floor(ts * STONE_MORTAR_Y2_FRACTION) + 1,
+            1,
+            ts - Math.floor(ts * STONE_MORTAR_Y2_FRACTION) - STONE_MORTAR_GAP,
           );
         } else if (isMerchant) {
           // Painted plaster: decorative trim bands
           ctx.fillStyle = '#b07848';
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.14), ts, 2);
-          ctx.fillRect(sx, sy + ts - 6, ts, 2);
+          ctx.fillRect(
+            sx,
+            sy + Math.floor(ts * MERCHANT_TRIM_Y1_FRACTION),
+            ts,
+            MERCHANT_TRIM_HEIGHT,
+          );
+          ctx.fillRect(sx, sy + ts - MERCHANT_TRIM_Y2_OFFSET, ts, MERCHANT_TRIM_HEIGHT);
         } else if (
           roofType === ROOF_CIRCUS_RED ||
           roofType === ROOF_CIRCUS_BLUE ||
@@ -136,38 +360,43 @@ export function drawBuildingTile(
               : roofType === ROOF_CIRCUS_BLUE
                 ? '#2244aa'
                 : '#7722aa';
-          const stripeW = Math.max(3, Math.floor(ts * 0.25));
+          const stripeW = Math.max(
+            CIRCUS_STRIPE_MIN_WIDTH,
+            Math.floor(ts * CIRCUS_STRIPE_WIDTH_FRACTION),
+          );
           for (let si = 0; si < ts; si += stripeW * 2) {
             ctx.fillStyle = stripeColor;
-            ctx.fillRect(sx + si, sy, stripeW, ts - 3);
+            ctx.fillRect(sx + si, sy, stripeW, ts - WALL_FOUNDATION_HEIGHT);
           }
           // Gold trim at top
           ctx.fillStyle = '#ffcc22';
-          ctx.fillRect(sx, sy, ts, 2);
+          ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
         } else {
           // Rough stone: irregular coursing
           ctx.fillStyle = '#7a7060';
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.38), ts, 1);
-          ctx.fillRect(sx, sy + Math.floor(ts * 0.72), ts, 1);
-          const rBx = (tx * 7 + ty * 3) % Math.floor(ts * 0.5);
-          ctx.fillRect(sx + rBx, sy, 1, Math.floor(ts * 0.38));
+          ctx.fillRect(sx, sy + Math.floor(ts * ROUGH_STONE_MORTAR_Y1_FRACTION), ts, 1);
+          ctx.fillRect(sx, sy + Math.floor(ts * ROUGH_STONE_MORTAR_Y2_FRACTION), ts, 1);
+          const rBx =
+            (tx * ROUGH_STONE_HASH_X + ty * ROUGH_STONE_HASH_Y) %
+            Math.floor(ts * ROUGH_STONE_HALF_FRACTION);
+          ctx.fillRect(sx + rBx, sy, 1, Math.floor(ts * ROUGH_STONE_MORTAR_Y1_FRACTION));
         }
 
         // Window on non-corner tiles
         const wallE2 = structure[ty]?.[tx + 1]?.type === BUILDING_WALL;
         const wallW2 = structure[ty]?.[tx - 1]?.type === BUILDING_WALL;
         if (wallE2 && wallW2 && tx % 2 === 1) {
-          const ww = Math.floor(ts * 0.44);
-          const wh = Math.floor(ts * 0.3);
+          const ww = Math.floor(ts * WINDOW_WIDTH_FRACTION);
+          const wh = Math.floor(ts * WINDOW_HEIGHT_FRACTION);
           const wx = sx + Math.floor((ts - ww) / 2);
-          const wy = sy + Math.floor(ts * 0.2);
+          const wy = sy + Math.floor(ts * WINDOW_TOP_FRACTION);
           if (isCottage) {
             // Arched leaded window
             // Outer stone frame
             ctx.fillStyle = '#3a2010';
-            ctx.fillRect(wx - 2, wy, ww + 4, wh);
+            ctx.fillRect(wx - COTTAGE_SILL_INSET, wy, ww + COTTAGE_SILL_HEIGHT * 2, wh);
             ctx.beginPath();
-            ctx.arc(wx + ww / 2, wy, ww / 2 + 2, Math.PI, 0);
+            ctx.arc(wx + ww / 2, wy, ww / 2 + COTTAGE_SILL_INSET, Math.PI, 0);
             ctx.fill();
             // Glass + warm interior glow
             ctx.fillStyle = '#90b8cc';
@@ -183,36 +412,46 @@ export function drawBuildingTile(
             // Lead muntins: vertical thirds + horizontal thirds
             ctx.fillStyle = '#4a3018';
             ctx.fillRect(
-              wx + Math.floor(ww * 0.33),
+              wx + Math.floor(ww * COTTAGE_MUNTINS_Y1_FRACTION),
               wy - Math.floor(ww / 2),
               1,
               wh + Math.floor(ww / 2),
             );
             ctx.fillRect(
-              wx + Math.floor(ww * 0.67),
+              wx + Math.floor(ww * COTTAGE_MUNTINS_Y2_FRACTION),
               wy - Math.floor(ww / 2),
               1,
               wh + Math.floor(ww / 2),
             );
-            ctx.fillRect(wx, wy + Math.floor(wh * 0.35), ww, 1);
-            ctx.fillRect(wx, wy + Math.floor(wh * 0.7), ww, 1);
+            ctx.fillRect(wx, wy + Math.floor(wh * COTTAGE_GLAZING_FRACTION), ww, 1);
+            ctx.fillRect(wx, wy + Math.floor(wh * COTTAGE_GLAZING_FRACTION2), ww, 1);
             // Glass reflection glint
-            ctx.fillStyle = 'rgba(255,255,255,0.30)';
-            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * 0.28), 1);
+            ctx.fillStyle = `rgba(255,255,255,${COTTAGE_REFLECTION_ALPHA})`;
+            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * COTTAGE_REFLECTION_WIDTH_FRACTION), 1);
             // Wide stone sill with perspective shadow
             ctx.fillStyle = '#c8a870';
-            ctx.fillRect(wx - 4, wy + wh, ww + 8, 4);
+            ctx.fillRect(
+              wx - COTTAGE_SILL_INSET,
+              wy + wh,
+              ww + COTTAGE_SILL_HEIGHT * 2,
+              COTTAGE_SILL_HEIGHT,
+            );
             ctx.fillStyle = '#a88858';
-            ctx.fillRect(wx - 4, wy + wh + 3, ww + 8, 1); // bottom shadow
+            ctx.fillRect(
+              wx - COTTAGE_SILL_INSET,
+              wy + wh + COTTAGE_SILL_SHADOW_OFFSET,
+              ww + COTTAGE_SILL_HEIGHT * 2,
+              1,
+            ); // bottom shadow
             ctx.fillStyle = '#e0c090';
-            ctx.fillRect(wx - 4, wy + wh, ww + 8, 1); // top highlight
+            ctx.fillRect(wx - COTTAGE_SILL_INSET, wy + wh, ww + COTTAGE_SILL_HEIGHT * 2, 1); // top highlight
           } else if (isTower) {
             // Stone arch with keystone
-            const archH = Math.floor(ww / 3);
+            const archH = Math.floor(ww / TOWER_ARCH_DIVISOR);
             ctx.fillStyle = '#888078';
-            ctx.fillRect(wx - 2, wy, ww + 4, wh);
+            ctx.fillRect(wx - COTTAGE_SILL_INSET, wy, ww + COTTAGE_SILL_HEIGHT * 2, wh);
             ctx.beginPath();
-            ctx.arc(wx + ww / 2, wy, ww / 2 + 2, Math.PI, 0);
+            ctx.arc(wx + ww / 2, wy, ww / 2 + COTTAGE_SILL_INSET, Math.PI, 0);
             ctx.fill();
             // Glass + warm glow
             ctx.fillStyle = '#7a8898';
@@ -227,30 +466,45 @@ export function drawBuildingTile(
             ctx.fill();
             // Keystone
             ctx.fillStyle = '#686058';
-            ctx.fillRect(wx + Math.floor(ww / 2) - 2, wy - archH, 4, archH);
+            ctx.fillRect(
+              wx + Math.floor(ww / 2) - TOWER_KEYSTONE_HALF,
+              wy - archH,
+              TOWER_KEYSTONE_WIDTH,
+              archH,
+            );
             // Mullion + horizontal bar
             ctx.fillStyle = '#8898a8';
             ctx.fillRect(wx + Math.floor(ww / 2), wy, 1, wh);
             ctx.fillRect(wx, wy + Math.floor(wh / 2), ww, 1);
             // Glass reflection
             ctx.fillStyle = 'rgba(255,255,255,0.20)';
-            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * 0.28), 1);
+            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * TOWER_REFLECTION_WIDTH_FRACTION), 1);
             // Stone sill with depth
             ctx.fillStyle = '#a0a098';
-            ctx.fillRect(wx - 3, wy + wh, ww + 6, 4);
+            ctx.fillRect(
+              wx - TOWER_SILL_INSET,
+              wy + wh,
+              ww + TOWER_SILL_WIDTH_EXTRA,
+              TOWER_SILL_HEIGHT,
+            );
             ctx.fillStyle = '#c0beb8';
-            ctx.fillRect(wx - 3, wy + wh, ww + 6, 1);
+            ctx.fillRect(wx - TOWER_SILL_INSET, wy + wh, ww + TOWER_SILL_WIDTH_EXTRA, 1);
             ctx.fillStyle = '#707068';
-            ctx.fillRect(wx - 3, wy + wh + 3, ww + 6, 1);
+            ctx.fillRect(
+              wx - TOWER_SILL_INSET,
+              wy + wh + TOWER_SILL_HEIGHT - 1,
+              ww + TOWER_SILL_WIDTH_EXTRA,
+              1,
+            );
           } else {
             // Shuttered window
             ctx.fillStyle = isMerchant ? '#5a3820' : '#4a3820';
-            ctx.fillRect(wx - 4, wy, 3, wh);
-            ctx.fillRect(wx + ww + 1, wy, 3, wh);
+            ctx.fillRect(wx - SHUTTER_INSET, wy, SHUTTER_WIDTH, wh);
+            ctx.fillRect(wx + ww + 1, wy, SHUTTER_WIDTH, wh);
             ctx.fillStyle = isMerchant ? '#7a4a28' : '#6a4a28';
-            for (let sl = wy + 2; sl < wy + wh; sl += 4) {
-              ctx.fillRect(wx - 4, sl, 3, 1);
-              ctx.fillRect(wx + ww + 1, sl, 3, 1);
+            for (let sl = wy + COTTAGE_SILL_INSET; sl < wy + wh; sl += SHUTTER_SLAT_STRIDE) {
+              ctx.fillRect(wx - SHUTTER_INSET, sl, SHUTTER_WIDTH, 1);
+              ctx.fillRect(wx + ww + 1, sl, SHUTTER_WIDTH, 1);
             }
             // Window frame border
             ctx.fillStyle = '#2a3a50';
@@ -266,34 +520,49 @@ export function drawBuildingTile(
             ctx.fillRect(wx, wy + Math.floor(wh / 2), ww, 1);
             // Glass reflection glint
             ctx.fillStyle = 'rgba(255,255,255,0.25)';
-            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * 0.32), 1);
+            ctx.fillRect(wx + 1, wy + 1, Math.floor(ww * SHUTTER_REFLECTION_WIDTH_FRACTION), 1);
             // Deep sill with perspective shadow + highlight
             ctx.fillStyle = isMerchant ? '#c09060' : '#b0a090';
-            ctx.fillRect(wx - 2, wy + wh, ww + 4, 4);
+            ctx.fillRect(
+              wx - SHUTTER_SILL_INSET,
+              wy + wh,
+              ww + SHUTTER_SILL_WIDTH_EXTRA,
+              SHUTTER_SILL_HEIGHT,
+            );
             ctx.fillStyle = 'rgba(0,0,0,0.28)';
-            ctx.fillRect(wx - 2, wy + wh + 3, ww + 4, 1); // sill bottom shadow
+            ctx.fillRect(
+              wx - SHUTTER_SILL_INSET,
+              wy + wh + SHUTTER_SILL_SHADOW_OFFSET,
+              ww + SHUTTER_SILL_WIDTH_EXTRA,
+              1,
+            ); // sill bottom shadow
             ctx.fillStyle = isMerchant ? '#e0c090' : '#d0c0a0';
-            ctx.fillRect(wx - 2, wy + wh, ww + 4, 1); // sill top highlight
+            ctx.fillRect(wx - SHUTTER_SILL_INSET, wy + wh, ww + SHUTTER_SILL_WIDTH_EXTRA, 1); // sill top highlight
             if (isMerchant) {
               // Flower box
               ctx.fillStyle = '#4a2810';
-              ctx.fillRect(wx - 2, wy + wh + 4, ww + 4, 3);
+              ctx.fillRect(
+                wx - SHUTTER_SILL_INSET,
+                wy + wh + SHUTTER_SILL_HEIGHT,
+                ww + SHUTTER_SILL_WIDTH_EXTRA,
+                WALL_FOUNDATION_HEIGHT,
+              );
               ctx.fillStyle = '#3a6820';
-              for (let fi = wx; fi < wx + ww; fi += 5) {
-                ctx.fillRect(fi + 1, wy + wh + 5, 2, 2);
+              for (let fi = wx; fi < wx + ww; fi += COTTAGE_FLOWER_STRIDE) {
+                ctx.fillRect(fi + 1, wy + wh + COTTAGE_FLOWER_STRIDE, 2, 2);
               }
               ctx.fillStyle = '#e04848';
-              ctx.fillRect(wx + 1, wy + wh + 4, 2, 2);
+              ctx.fillRect(wx + 1, wy + wh + SHUTTER_SILL_HEIGHT, 2, 2);
               ctx.fillStyle = '#e8b020';
-              ctx.fillRect(wx + Math.floor(ww / 2), wy + wh + 4, 2, 2);
+              ctx.fillRect(wx + Math.floor(ww / 2), wy + wh + SHUTTER_SILL_HEIGHT, 2, 2);
             }
           }
         }
         // Cornice (lit top edge + subtle shadow below)
         ctx.fillStyle = litTop;
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
         ctx.fillStyle = 'rgba(0,0,0,0.10)';
-        ctx.fillRect(sx, sy + 2, ts, 1);
+        ctx.fillRect(sx, sy + WALL_LIT_TOP_HEIGHT, ts, WALL_CORNICE_SHADOW_DEPTH);
       } else if (intS) {
         // North-facing back wall — draw wall base, then a peaked gable roof
         // extending ABOVE the tile into the screen space north of the building.
@@ -301,9 +570,9 @@ export function drawBuildingTile(
         ctx.fillStyle = '#5a5048';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#4a4038';
-        ctx.fillRect(sx, sy + Math.floor(ts * 0.5), ts, 1);
+        ctx.fillRect(sx, sy + Math.floor(ts * STONE_MORTAR_OFFSET_FRACTION), ts, 1);
         ctx.fillStyle = '#6a6058';
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
 
         // Roof material from south neighbour (interior tile)
         const innerType = structure[ty + 1]?.[tx]?.type;
@@ -364,7 +633,7 @@ export function drawBuildingTile(
 
         const wallPx = (rx - lx + 1) * ts; // building width in pixels
         const posInPx = (tx - lx) * ts; // this tile's left edge, building-local
-        const peakH = Math.floor(ts * 2.5); // gable peak height above wall top
+        const peakH = Math.floor(ts * GABLE_PEAK_HEIGHT_FRACTION); // gable peak height above wall top
 
         // Triangle height at pixel x from building left edge
         const triH = (x: number) =>
@@ -397,7 +666,12 @@ export function drawBuildingTile(
             ctx.fill();
             // Ridge dot at apex
             ctx.fillStyle = roofRidge;
-            ctx.fillRect(Math.round(peakSX) - 1, sy - peakH, 3, 4);
+            ctx.fillRect(
+              Math.round(peakSX) - GABLE_RIDGE_DOT_HALF,
+              sy - peakH,
+              GABLE_RIDGE_DOT_WIDTH,
+              GABLE_RIDGE_DOT_HEIGHT,
+            );
           } else {
             // Entire tile on one slope
             const isLeftSlope = peakSX >= sx + ts;
@@ -412,9 +686,9 @@ export function drawBuildingTile(
           }
           // Eave shadow line at the base of the gable face
           ctx.fillStyle = eaveColor;
-          ctx.fillRect(sx, sy - 3, ts, 3);
+          ctx.fillRect(sx, sy - GABLE_EAVE_SHADOW_HEIGHT, ts, GABLE_EAVE_SHADOW_HEIGHT);
           ctx.fillStyle = 'rgba(0,0,0,0.50)';
-          ctx.fillRect(sx, sy - 2, ts, 2);
+          ctx.fillRect(sx, sy - GABLE_EAVE_SHADOW_OFFSET, ts, GABLE_EAVE_SHADOW_OFFSET);
         }
       } else {
         // Fallback — plain stone (shouldn't appear with side-less buildings)
@@ -433,66 +707,89 @@ export function drawBuildingTile(
         ctx.fillStyle = '#c89840';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = 'rgba(40,20,0,0.50)';
-        ctx.fillRect(sx, sy, ts, 6); // eave overhang shadow
+        ctx.fillRect(sx, sy, ts, THATCH_EAVE_SHADOW_DEPTH); // eave overhang shadow
         ctx.fillStyle = '#a07820';
-        for (let gy = 7; gy < ts - 3; gy += 5) {
-          ctx.fillRect(sx, sy + gy, ts, 2); // straw bands
+        for (
+          let gy = THATCH_EAVE_SHADOW_DEPTH + 1;
+          gy < ts - THATCH_BACK_BAND_START;
+          gy += THATCH_BAND_STRIDE
+        ) {
+          ctx.fillRect(sx, sy + gy, ts, THATCH_BAND_HEIGHT); // straw bands
         }
         ctx.fillStyle = '#b08828';
-        const bxE = (((tx * 7) % ts) + ts) % ts;
-        ctx.fillRect(sx + bxE, sy + 6, 1, ts - 9); // straw bundle
+        const bxE = (((tx * THATCH_BUNDLE_HASH_X) % ts) + ts) % ts;
+        ctx.fillRect(sx + bxE, sy + THATCH_EAVE_SHADOW_DEPTH, 1, ts - THATCH_CHIMNEY_HEIGHT); // straw bundle
         ctx.fillStyle = '#907018'; // eave drip fringe
-        ctx.fillRect(sx, sy + ts - 5, ts, 2);
+        ctx.fillRect(sx, sy + ts - THATCH_DRIP_FRINGE_INSET, ts, THATCH_DRIP_FRINGE_HEIGHT);
         ctx.fillStyle = '#d0a838';
-        ctx.fillRect(sx, sy + ts - 3, ts, 2);
+        ctx.fillRect(sx, sy + ts - WALL_FOUNDATION_HEIGHT, ts, THATCH_DRIP_FRINGE_HEIGHT);
         ctx.fillStyle = 'rgba(255,220,80,0.18)'; // sun-lit slope
-        ctx.fillRect(sx, sy + 6, ts, Math.floor(ts * 0.48));
+        ctx.fillRect(
+          sx,
+          sy + THATCH_EAVE_SHADOW_DEPTH,
+          ts,
+          Math.floor(ts * THATCH_SUN_SLOPE_FRACTION),
+        );
       } else if (thN) {
         // Back slope — deep shadow
         ctx.fillStyle = '#6a4e14';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#503c0c';
-        for (let gy = 3; gy < ts; gy += 5) {
+        for (let gy = THATCH_BACK_BAND_START; gy < ts; gy += THATCH_BACK_BAND_STRIDE) {
           ctx.fillRect(sx, sy + gy, ts, 1);
         }
         ctx.fillStyle = '#8a6420'; // slight ridge highlight at top
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
       } else {
         // Middle / ridge zone
         ctx.fillStyle = '#b88830';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#9a7020';
-        for (let gy = 3; gy < ts; gy += 5) {
-          ctx.fillRect(sx, sy + gy, ts, 2);
+        for (let gy = THATCH_MID_BAND_START; gy < ts; gy += THATCH_MID_BAND_STRIDE) {
+          ctx.fillRect(sx, sy + gy, ts, THATCH_BAND_HEIGHT);
         }
         // Clean narrow ridge cap
-        const thRidgeY = sy + Math.floor(ts * 0.46);
+        const thRidgeY = sy + Math.floor(ts * THATCH_RIDGE_FRACTION);
         ctx.fillStyle = '#7a5a10'; // shadow valley above ridge
-        ctx.fillRect(sx, thRidgeY - 3, ts, 3);
+        ctx.fillRect(sx, thRidgeY - THATCH_RIDGE_VALLEY_HEIGHT, ts, THATCH_RIDGE_VALLEY_HEIGHT);
         ctx.fillStyle = '#7a5a10'; // shadow valley below ridge
-        ctx.fillRect(sx, thRidgeY + 2, ts, 3);
+        ctx.fillRect(sx, thRidgeY + THATCH_RIDGE_VALLEY_OFFSET, ts, THATCH_RIDGE_VALLEY_HEIGHT);
         ctx.fillStyle = '#ffe060'; // bright ridge line
-        ctx.fillRect(sx, thRidgeY, ts, 2);
+        ctx.fillRect(sx, thRidgeY, ts, THATCH_BAND_HEIGHT);
         ctx.fillStyle = '#fff088'; // apex highlight
         ctx.fillRect(sx, thRidgeY, ts, 1);
         ctx.fillStyle = '#c09838';
-        const bxM = (((tx * 7) % ts) + ts) % ts;
+        const bxM = (((tx * THATCH_BUNDLE_HASH_X) % ts) + ts) % ts;
         ctx.fillRect(sx + bxM, sy, 1, ts); // straw bundle
         ctx.fillStyle = 'rgba(255,220,80,0.10)';
         ctx.fillRect(sx, sy, ts, thRidgeY - sy); // lit front half
         // Chimney (deterministic placement)
-        if ((tx * 11 + ty * 7) % 19 === 5) {
-          const chx = sx + Math.floor(ts * 0.48) - 3;
-          const chy = sy + Math.floor(ts * 0.28);
+        if (
+          (tx * THATCH_CHIMNEY_HASH_X + ty * THATCH_CHIMNEY_HASH_Y) % THATCH_CHIMNEY_STRIDE ===
+          THATCH_CHIMNEY_TARGET_MOD
+        ) {
+          const chx = sx + Math.floor(ts * THATCH_CHIMNEY_X_FRACTION) - THATCH_CHIMNEY_INSET;
+          const chy = sy + Math.floor(ts * THATCH_CHIMNEY_Y_FRACTION);
           ctx.fillStyle = '#4a3828';
-          ctx.fillRect(chx, chy, 7, 9);
+          ctx.fillRect(chx, chy, THATCH_CHIMNEY_WIDTH, THATCH_CHIMNEY_HEIGHT);
           ctx.fillStyle = '#3a2818';
-          ctx.fillRect(chx + 5, chy + 1, 2, 8); // dark side
+          ctx.fillRect(
+            chx + THATCH_CHIMNEY_DARK_SIDE_X,
+            chy + 1,
+            THATCH_CHIMNEY_DARK_SIDE_WIDTH,
+            THATCH_CHIMNEY_HEIGHT - 1,
+          ); // dark side
           ctx.fillStyle = '#6a5840';
-          ctx.fillRect(chx - 1, chy, 9, 2); // cap
+          ctx.fillRect(chx - 1, chy, THATCH_CHIMNEY_CAP_WIDTH, THATCH_CHIMNEY_CAP_HEIGHT); // cap
           ctx.fillStyle = 'rgba(200,200,200,0.32)';
           ctx.beginPath();
-          ctx.arc(chx + 3, chy - 3, 3, 0, Math.PI * 2);
+          ctx.arc(
+            chx + THATCH_CHIMNEY_INSET,
+            chy - THATCH_SMOKE_Y_OFFSET,
+            THATCH_SMOKE_RADIUS,
+            0,
+            Math.PI * 2,
+          );
           ctx.fill(); // smoke puff
         }
       }
@@ -508,65 +805,78 @@ export function drawBuildingTile(
         ctx.fillStyle = '#627080';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = 'rgba(0,0,0,0.50)';
-        ctx.fillRect(sx, sy, ts, 6); // eave shadow
+        ctx.fillRect(sx, sy, ts, SLATE_EAVE_SHADOW_DEPTH); // eave shadow
         ctx.fillStyle = '#505e6e';
-        for (let gy = 7; gy < ts - 3; gy += 6) {
+        for (let gy = SLATE_ROW_START; gy < ts - THATCH_BACK_BAND_START; gy += SLATE_ROW_STRIDE) {
           ctx.fillRect(sx, sy + gy, ts, 1); // slate tile rows
         }
-        const sOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
+        const sOff = ty % 2 === 0 ? 0 : Math.floor(ts * SLATE_OFFSET_FRACTION);
         ctx.fillStyle = '#586878';
-        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + sOff) % ts), sy + 6, 1, ts - 9);
+        ctx.fillRect(
+          sx + ((Math.floor(ts * SLATE_OFFSET_FRACTION) + sOff) % ts),
+          sy + SLATE_EAVE_SHADOW_DEPTH,
+          1,
+          ts - THATCH_CHIMNEY_HEIGHT,
+        );
         ctx.fillStyle = '#404e5e'; // gutter at bottom
-        ctx.fillRect(sx, sy + ts - 4, ts, 3);
+        ctx.fillRect(sx, sy + ts - SLATE_GUTTER_INSET, ts, SLATE_GUTTER_HEIGHT);
         ctx.fillStyle = '#7888a0';
-        ctx.fillRect(sx, sy + ts - 4, ts, 1);
+        ctx.fillRect(sx, sy + ts - SLATE_GUTTER_INSET, ts, 1);
         ctx.fillStyle = 'rgba(180,220,255,0.09)'; // sheen
-        ctx.fillRect(sx, sy + 6, ts, Math.floor(ts * 0.4));
+        ctx.fillRect(sx, sy + SLATE_EAVE_SHADOW_DEPTH, ts, Math.floor(ts * SLATE_SHEEN_FRACTION));
       } else if (slN) {
         // Back slope — very dark
         ctx.fillStyle = '#343e4c';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#282e3a';
-        for (let gy = 4; gy < ts; gy += 6) {
+        for (let gy = SLATE_BACK_ROW_START; gy < ts; gy += SLATE_BACK_ROW_STRIDE) {
           ctx.fillRect(sx, sy + gy, ts, 1);
         }
         ctx.fillStyle = '#485868';
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
       } else {
         // Middle / ridge — lead flashing
         ctx.fillStyle = '#7a8898';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#606e80';
-        for (let gy = 4; gy < ts; gy += 6) {
+        for (let gy = SLATE_MID_ROW_START; gy < ts; gy += SLATE_MID_ROW_STRIDE) {
           ctx.fillRect(sx, sy + gy, ts, 1);
         }
         // Clean narrow ridge cap
-        const slRidgeY = sy + Math.floor(ts * 0.45);
+        const slRidgeY = sy + Math.floor(ts * SLATE_RIDGE_FRACTION);
         ctx.fillStyle = '#485868'; // shadow valleys
-        ctx.fillRect(sx, slRidgeY - 3, ts, 3);
-        ctx.fillRect(sx, slRidgeY + 2, ts, 3);
+        ctx.fillRect(sx, slRidgeY - SLATE_RIDGE_VALLEY_HEIGHT, ts, SLATE_RIDGE_VALLEY_HEIGHT);
+        ctx.fillRect(sx, slRidgeY + SLATE_RIDGE_VALLEY_OFFSET, ts, SLATE_RIDGE_VALLEY_HEIGHT);
         ctx.fillStyle = '#d8eeff'; // bright ridge
-        ctx.fillRect(sx, slRidgeY, ts, 2);
+        ctx.fillRect(sx, slRidgeY, ts, THATCH_BAND_HEIGHT);
         ctx.fillStyle = '#f0f8ff'; // apex highlight
         ctx.fillRect(sx, slRidgeY, ts, 1);
-        const sOff2 = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
+        const sOff2 = ty % 2 === 0 ? 0 : Math.floor(ts * SLATE_OFFSET_FRACTION);
         ctx.fillStyle = '#6a7888';
-        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + sOff2) % ts), sy, 1, ts);
+        ctx.fillRect(sx + ((Math.floor(ts * SLATE_OFFSET_FRACTION) + sOff2) % ts), sy, 1, ts);
         ctx.fillStyle = '#9aaabb';
-        ctx.fillRect(sx, sy, ts, 2); // lit top
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT); // lit top
         // Chimney (brick, tower-style)
-        if ((tx * 13 + ty * 5) % 23 === 7) {
-          const chx = sx + Math.floor(ts * 0.42) - 4;
-          const chy = sy + Math.floor(ts * 0.18);
+        if (
+          (tx * SLATE_CHIMNEY_HASH_X + ty * SLATE_CHIMNEY_HASH_Y) % SLATE_CHIMNEY_STRIDE ===
+          SLATE_CHIMNEY_TARGET
+        ) {
+          const chx = sx + Math.floor(ts * SLATE_CHIMNEY_X_FRACTION) - SLATE_CHIMNEY_INSET;
+          const chy = sy + Math.floor(ts * SLATE_CHIMNEY_Y_FRACTION);
           ctx.fillStyle = '#7a6858';
-          ctx.fillRect(chx, chy, 10, 13);
+          ctx.fillRect(chx, chy, SLATE_CHIMNEY_WIDTH, SLATE_CHIMNEY_HEIGHT);
           ctx.fillStyle = '#6a5848';
-          ctx.fillRect(chx, chy + 4, 10, 1);
-          ctx.fillRect(chx, chy + 8, 10, 1);
+          ctx.fillRect(chx, chy + SLATE_CHIMNEY_MORTAR_Y1, SLATE_CHIMNEY_WIDTH, 1);
+          ctx.fillRect(chx, chy + SLATE_CHIMNEY_MORTAR_Y2, SLATE_CHIMNEY_WIDTH, 1);
           ctx.fillStyle = '#5a4838';
-          ctx.fillRect(chx + 8, chy + 1, 2, 12); // dark side
+          ctx.fillRect(
+            chx + SLATE_CHIMNEY_DARK_X,
+            chy + 1,
+            SLATE_CHIMNEY_DARK_W,
+            SLATE_CHIMNEY_HEIGHT - 1,
+          ); // dark side
           ctx.fillStyle = '#908070';
-          ctx.fillRect(chx - 1, chy, 12, 3); // cap
+          ctx.fillRect(chx - 1, chy, SLATE_CHIMNEY_CAP_WIDTH, SLATE_CHIMNEY_CAP_HEIGHT); // cap
         }
       }
       break;
@@ -581,73 +891,97 @@ export function drawBuildingTile(
         ctx.fillStyle = '#9a3c2c';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = 'rgba(40,0,0,0.52)';
-        ctx.fillRect(sx, sy, ts, 6); // eave shadow
-        for (let gy = 7; gy < ts - 2; gy += 7) {
+        ctx.fillRect(sx, sy, ts, RED_EAVE_SHADOW_DEPTH); // eave shadow
+        for (let gy = RED_EAVE_ROW_START; gy < ts - 2; gy += RED_TILE_STRIDE) {
           ctx.fillStyle = 'rgba(255,200,160,0.22)';
-          ctx.fillRect(sx, sy + gy, ts, 2);
+          ctx.fillRect(sx, sy + gy, ts, THATCH_BAND_HEIGHT);
           ctx.fillStyle = 'rgba(0,0,0,0.20)';
-          ctx.fillRect(sx, sy + gy + 5, ts, 2);
+          ctx.fillRect(
+            sx,
+            sy + gy + RED_EAVE_HIGHLIGHT_OFFSET + THATCH_BACK_BAND_START,
+            ts,
+            THATCH_BAND_HEIGHT,
+          );
         }
-        const rOff2 = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
+        const rOff2 = ty % 2 === 0 ? 0 : Math.floor(ts * RED_OFFSET_FRACTION);
         ctx.fillStyle = '#721e18';
-        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + rOff2) % ts), sy + 6, 1, ts - 9);
+        ctx.fillRect(
+          sx + ((Math.floor(ts * RED_OFFSET_FRACTION) + rOff2) % ts),
+          sy + RED_EAVE_SHADOW_DEPTH,
+          1,
+          ts - THATCH_CHIMNEY_HEIGHT,
+        );
         ctx.fillStyle = '#5e1810'; // drip edge
-        ctx.fillRect(sx, sy + ts - 4, ts, 3);
+        ctx.fillRect(sx, sy + ts - SLATE_GUTTER_INSET, ts, SLATE_GUTTER_HEIGHT);
         ctx.fillStyle = '#b83830';
-        ctx.fillRect(sx, sy + ts - 4, ts, 1);
+        ctx.fillRect(sx, sy + ts - SLATE_GUTTER_INSET, ts, 1);
         ctx.fillStyle = 'rgba(255,140,60,0.16)'; // warm glow
-        ctx.fillRect(sx, sy + 6, ts, Math.floor(ts * 0.48));
+        ctx.fillRect(sx, sy + RED_EAVE_SHADOW_DEPTH, ts, Math.floor(ts * RED_SHEEN_FRACTION));
       } else if (rrN) {
         // Back slope — very dark red
         ctx.fillStyle = '#4e1412';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#380e0c';
-        for (let gy = 5; gy < ts; gy += 7) {
+        for (let gy = RED_BACK_ROW_START; gy < ts; gy += RED_BACK_ROW_STRIDE) {
           ctx.fillRect(sx, sy + gy, ts, 1);
         }
         ctx.fillStyle = '#622018';
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
       } else {
         // Middle / ridge — terracotta
         const redBase = ty % 2 === 0 ? '#b84838' : '#c05040';
         ctx.fillStyle = redBase;
         ctx.fillRect(sx, sy, ts, ts);
-        for (let gy = 0; gy < ts; gy += 7) {
+        for (let gy = 0; gy < ts; gy += RED_MID_ROW_STRIDE) {
           ctx.fillStyle = 'rgba(255,200,160,0.16)';
-          ctx.fillRect(sx, sy + gy, ts, 2);
+          ctx.fillRect(sx, sy + gy, ts, THATCH_BAND_HEIGHT);
           ctx.fillStyle = 'rgba(0,0,0,0.16)';
-          ctx.fillRect(sx, sy + gy + 5, ts, 2);
+          ctx.fillRect(sx, sy + gy + RED_EAVE_SHADOW_OFFSET, ts, THATCH_BAND_HEIGHT);
         }
         // Clean narrow ridge cap
-        const rrRidgeY = sy + Math.floor(ts * 0.44);
+        const rrRidgeY = sy + Math.floor(ts * RED_RIDGE_FRACTION);
         ctx.fillStyle = '#721e18'; // shadow valleys
-        ctx.fillRect(sx, rrRidgeY - 3, ts, 3);
-        ctx.fillRect(sx, rrRidgeY + 2, ts, 3);
+        ctx.fillRect(sx, rrRidgeY - RED_RIDGE_VALLEY_HEIGHT, ts, RED_RIDGE_VALLEY_HEIGHT);
+        ctx.fillRect(sx, rrRidgeY + RED_RIDGE_VALLEY_OFFSET, ts, RED_RIDGE_VALLEY_HEIGHT);
         ctx.fillStyle = '#ff8878'; // bright ridge
-        ctx.fillRect(sx, rrRidgeY, ts, 2);
+        ctx.fillRect(sx, rrRidgeY, ts, THATCH_BAND_HEIGHT);
         ctx.fillStyle = '#ffb0a0'; // apex highlight
         ctx.fillRect(sx, rrRidgeY, ts, 1);
         ctx.fillStyle = '#8a3028';
-        const rOff3 = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
-        ctx.fillRect(sx + ((Math.floor(ts * 0.5) + rOff3) % ts), sy, 1, ts);
+        const rOff3 = ty % 2 === 0 ? 0 : Math.floor(ts * RED_OFFSET_FRACTION);
+        ctx.fillRect(sx + ((Math.floor(ts * RED_OFFSET_FRACTION) + rOff3) % ts), sy, 1, ts);
         ctx.fillStyle = 'rgba(255,160,80,0.16)';
         ctx.fillRect(sx, sy, ts, rrRidgeY - sy);
         // Chimney
-        if ((tx * 9 + ty * 11) % 17 === 3) {
-          const chx = sx + Math.floor(ts * 0.54) - 3;
-          const chy = sy + Math.floor(ts * 0.22);
+        if (
+          (tx * RED_CHIMNEY_HASH_X + ty * RED_CHIMNEY_HASH_Y) % RED_CHIMNEY_STRIDE ===
+          RED_CHIMNEY_TARGET
+        ) {
+          const chx = sx + Math.floor(ts * RED_CHIMNEY_X_FRACTION) - RED_CHIMNEY_INSET;
+          const chy = sy + Math.floor(ts * RED_CHIMNEY_Y_FRACTION);
           ctx.fillStyle = '#7a5040';
-          ctx.fillRect(chx, chy, 8, 10);
+          ctx.fillRect(chx, chy, RED_CHIMNEY_WIDTH, RED_CHIMNEY_HEIGHT);
           ctx.fillStyle = '#6a3830';
-          ctx.fillRect(chx, chy + 3, 8, 1);
-          ctx.fillRect(chx, chy + 6, 8, 1);
+          ctx.fillRect(chx, chy + RED_CHIMNEY_MORTAR_Y1, RED_CHIMNEY_WIDTH, 1);
+          ctx.fillRect(chx, chy + RED_CHIMNEY_MORTAR_Y2, RED_CHIMNEY_WIDTH, 1);
           ctx.fillStyle = '#5a3020';
-          ctx.fillRect(chx + 6, chy + 1, 2, 9); // dark side
+          ctx.fillRect(
+            chx + RED_CHIMNEY_DARK_X,
+            chy + 1,
+            RED_CHIMNEY_DARK_W,
+            RED_CHIMNEY_DARK_SIDE_HEIGHT,
+          ); // dark side
           ctx.fillStyle = '#9a6050';
-          ctx.fillRect(chx - 1, chy, 10, 2); // cap
+          ctx.fillRect(chx - 1, chy, RED_CHIMNEY_CAP_WIDTH, RED_CHIMNEY_CAP_HEIGHT); // cap
           ctx.fillStyle = 'rgba(200,200,200,0.28)';
           ctx.beginPath();
-          ctx.arc(chx + 4, chy - 3, 3, 0, Math.PI * 2);
+          ctx.arc(
+            chx + RED_SMOKE_CX_OFFSET,
+            chy - RED_SMOKE_Y_OFFSET,
+            RED_SMOKE_RADIUS,
+            0,
+            Math.PI * 2,
+          );
           ctx.fill(); // smoke
         }
       }
@@ -663,72 +997,84 @@ export function drawBuildingTile(
         ctx.fillStyle = '#3a6030';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = 'rgba(0,20,0,0.52)';
-        ctx.fillRect(sx, sy, ts, 6); // eave shadow
-        if ((tx * 7 + ty * 11) % 5 === 0) {
+        ctx.fillRect(sx, sy, ts, GREEN_EAVE_SHADOW_DEPTH); // eave shadow
+        if ((tx * GREEN_TUFT_HASH_X + ty * GREEN_TUFT_HASH_Y) % GREEN_TUFT_STRIDE === 0) {
           ctx.fillStyle = '#2a4c22';
           ctx.beginPath();
           ctx.arc(
-            sx + Math.floor(ts * 0.4),
-            sy + Math.floor(ts * 0.55),
-            Math.floor(ts * 0.28),
+            sx + Math.floor(ts * GREEN_TUFT_X_FRACTION),
+            sy + Math.floor(ts * GREEN_TUFT_Y_FRACTION),
+            Math.floor(ts * GREEN_TUFT_RADIUS_FRACTION),
             0,
             Math.PI * 2,
           );
           ctx.fill();
         }
         ctx.fillStyle = '#2a4c22';
-        ctx.fillRect(sx, sy + Math.floor(ts * 0.4), ts, 1);
-        ctx.fillRect(sx, sy + Math.floor(ts * 0.7), ts, 1);
+        ctx.fillRect(sx, sy + Math.floor(ts * GREEN_HORIZONTAL_Y1_FRACTION), ts, 1);
+        ctx.fillRect(sx, sy + Math.floor(ts * GREEN_HORIZONTAL_Y2_FRACTION), ts, 1);
         ctx.fillStyle = '#1e4018'; // hanging moss fringe
-        for (let mx = sx + 2; mx < sx + ts - 1; mx += 5) {
-          ctx.fillRect(mx, sy + ts - 6, 1, 6);
-          ctx.fillRect(mx + 2, sy + ts - 4, 1, 4);
+        for (
+          let mx = sx + WALL_LIT_TOP_HEIGHT;
+          mx < sx + ts - 1;
+          mx += GREEN_MOSS_VERTICAL_STRIDE
+        ) {
+          ctx.fillRect(mx, sy + ts - GREEN_EAVE_SHADOW_DEPTH, 1, GREEN_EAVE_SHADOW_DEPTH);
+          ctx.fillRect(
+            mx + GREEN_MOSS_INNER_OFFSET,
+            sy + ts - SLATE_GUTTER_INSET,
+            1,
+            SLATE_GUTTER_INSET,
+          );
         }
         ctx.fillStyle = 'rgba(80,160,60,0.14)';
-        ctx.fillRect(sx, sy + 6, ts, Math.floor(ts * 0.48));
+        ctx.fillRect(sx, sy + GREEN_EAVE_SHADOW_DEPTH, ts, Math.floor(ts * GREEN_SHEEN_FRACTION));
       } else if (rgN) {
         // Back slope — very dark green
         ctx.fillStyle = '#1c3214';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#142810';
-        ctx.fillRect(sx, sy + Math.floor(ts * 0.5), ts, 1);
+        ctx.fillRect(sx, sy + Math.floor(ts * GREEN_BACK_X_FRACTION), ts, 1);
         ctx.fillStyle = '#284824';
-        ctx.fillRect(sx, sy, ts, 2);
+        ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
       } else {
         // Middle / ridge — moss
         ctx.fillStyle = '#4a7040';
         ctx.fillRect(sx, sy, ts, ts);
-        if ((tx * 7 + ty * 11) % 5 === 0) {
+        if ((tx * GREEN_TUFT_HASH_X + ty * GREEN_TUFT_HASH_Y) % GREEN_MID_TUFT_STRIDE === 0) {
           ctx.fillStyle = '#3a5c30';
           ctx.beginPath();
           ctx.arc(
-            sx + Math.floor(ts * 0.4),
-            sy + Math.floor(ts * 0.5),
-            Math.floor(ts * 0.3),
+            sx + Math.floor(ts * GREEN_MID_TUFT_X_FRACTION),
+            sy + Math.floor(ts * GREEN_MID_TUFT_Y_FRACTION),
+            Math.floor(ts * GREEN_MID_TUFT_RADIUS_FRACTION),
             0,
             Math.PI * 2,
           );
           ctx.fill();
         }
-        if ((tx * 3 + ty * 13) % 7 === 0) {
+        if (
+          (tx * GREEN_MID_TUFT2_HASH_X + ty * GREEN_MID_TUFT2_HASH_Y) % GREEN_MID_TUFT2_STRIDE ===
+          0
+        ) {
           ctx.fillStyle = '#5a8850';
           ctx.beginPath();
           ctx.arc(
-            sx + Math.floor(ts * 0.65),
-            sy + Math.floor(ts * 0.3),
-            Math.floor(ts * 0.22),
+            sx + Math.floor(ts * GREEN_MID_TUFT2_X_FRACTION),
+            sy + Math.floor(ts * GREEN_MID_TUFT2_Y_FRACTION),
+            Math.floor(ts * GREEN_MID_TUFT2_RADIUS_FRACTION),
             0,
             Math.PI * 2,
           );
           ctx.fill();
         }
         // Clean narrow ridge cap
-        const rgRidgeY = sy + Math.floor(ts * 0.46);
+        const rgRidgeY = sy + Math.floor(ts * GREEN_RIDGE_FRACTION);
         ctx.fillStyle = '#1e4018'; // shadow valleys
-        ctx.fillRect(sx, rgRidgeY - 3, ts, 3);
-        ctx.fillRect(sx, rgRidgeY + 2, ts, 3);
+        ctx.fillRect(sx, rgRidgeY - GREEN_RIDGE_VALLEY_HEIGHT, ts, GREEN_RIDGE_VALLEY_HEIGHT);
+        ctx.fillRect(sx, rgRidgeY + GREEN_RIDGE_VALLEY_OFFSET, ts, GREEN_RIDGE_VALLEY_HEIGHT);
         ctx.fillStyle = '#90d870'; // bright ridge
-        ctx.fillRect(sx, rgRidgeY, ts, 2);
+        ctx.fillRect(sx, rgRidgeY, ts, THATCH_BAND_HEIGHT);
         ctx.fillStyle = '#b0f090'; // apex highlight
         ctx.fillRect(sx, rgRidgeY, ts, 1);
         ctx.fillStyle = 'rgba(120,200,80,0.13)';

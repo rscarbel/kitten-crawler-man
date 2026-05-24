@@ -33,10 +33,6 @@ export function drawJuicerSprite(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Procedural helpers — no sprite sheet equivalent
-// ---------------------------------------------------------------------------
-
 export function drawThrownDumbbell(
   ctx: CanvasRenderingContext2D,
   wx: number,

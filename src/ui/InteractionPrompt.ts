@@ -1,5 +1,22 @@
 import { platform } from '../core/Platform';
 
+// InteractionPrompt layout constants
+const BOB_PERIOD = 400;
+const BOB_AMPLITUDE = 2;
+const KEY_PADDING = 10;
+const KEY_HEIGHT = 16;
+const LABEL_GAP = 4;
+const KEY_RADIUS = 3;
+const LABEL_Y_OFFSET = 12;
+const LABEL_X_OFFSET = 4;
+const KEY_CENTER_X = 0.5;
+const KEY_CENTER_Y = 0.5;
+const KEY_CENTER_Y_OFFSET = 0.5;
+const HALF_DIVISOR = 0.5;
+const HIGHLIGHT_OFFSET_X = 1;
+const HIGHLIGHT_OFFSET_Y = 2;
+const HIGHLIGHT_LINE_OFFSET = 1;
+
 /**
  * Draws a floating interaction prompt above an object in world-space.
  *
@@ -22,28 +39,28 @@ export function drawInteractionPrompt(
   keyOverride?: string,
 ): void {
   const keyText = keyOverride ?? (platform.isMobile ? 'TAP' : 'SPACE');
-  const bob = Math.sin(performance.now() / 400) * 2;
+  const bob = Math.sin(performance.now() / BOB_PERIOD) * BOB_AMPLITUDE;
 
   ctx.save();
   ctx.font = 'bold 9px monospace';
 
   const keyMetrics = ctx.measureText(keyText);
-  const keyW = keyMetrics.width + 10; // padding inside key cap
-  const keyH = 16;
+  const keyW = keyMetrics.width + KEY_PADDING;
+  const keyH = KEY_HEIGHT;
 
   let totalW = keyW;
   let labelW = 0;
   if (label) {
     labelW = ctx.measureText(label).width;
-    totalW += 4 + labelW; // gap + label text
+    totalW += LABEL_GAP + labelW;
   }
 
-  const cx = sx + objW * 0.5;
-  const baseY = sy - 12 + bob;
-  const x0 = cx - totalW * 0.5;
+  const cx = sx + objW * HALF_DIVISOR;
+  const baseY = sy - LABEL_Y_OFFSET + bob;
+  const x0 = cx - totalW * HALF_DIVISOR;
 
   // Key cap background
-  const r = 3;
+  const r = KEY_RADIUS;
   const kx = x0;
   const ky = baseY - keyH;
   ctx.beginPath();
@@ -67,8 +84,8 @@ export function drawInteractionPrompt(
 
   // Inner highlight (top edge of key cap)
   ctx.beginPath();
-  ctx.moveTo(kx + r + 1, ky + 2);
-  ctx.lineTo(kx + keyW - r - 1, ky + 2);
+  ctx.moveTo(kx + r + HIGHLIGHT_OFFSET_X, ky + HIGHLIGHT_OFFSET_Y);
+  ctx.lineTo(kx + keyW - r - HIGHLIGHT_LINE_OFFSET, ky + HIGHLIGHT_OFFSET_Y);
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
   ctx.lineWidth = 1;
   ctx.stroke();
@@ -77,7 +94,7 @@ export function drawInteractionPrompt(
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(keyText, kx + keyW * 0.5, ky + keyH * 0.5 + 0.5);
+  ctx.fillText(keyText, kx + keyW * KEY_CENTER_X, ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET);
 
   // Label
   if (label) {
@@ -86,9 +103,13 @@ export function drawInteractionPrompt(
     ctx.strokeStyle = 'rgba(0,0,0,0.85)';
     ctx.lineWidth = 3;
     ctx.lineJoin = 'round';
-    ctx.strokeText(label, kx + keyW + 4, ky + keyH * 0.5 + 0.5);
+    ctx.strokeText(
+      label,
+      kx + keyW + LABEL_X_OFFSET,
+      ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET,
+    );
     ctx.fillStyle = '#f0e8d0';
-    ctx.fillText(label, kx + keyW + 4, ky + keyH * 0.5 + 0.5);
+    ctx.fillText(label, kx + keyW + LABEL_X_OFFSET, ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET);
   }
 
   ctx.restore();

@@ -15,18 +15,35 @@ import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
 import { drawSprite } from '../../core/SpriteRenderer';
 
+const TILE_HASH2_MULTIPLIER_X = 2246822519;
+const TILE_HASH2_MULTIPLIER_Y = 668265263;
+const TILE_HASH2_MODULUS = 65536;
+
+/** Number of floor/wall sprite variants in the dungeon tileset. */
+const DUNGEON_TILE_VARIANT_COUNT = 8;
+
+/** Pixel depth of the door threshold shadow strip from the overhang above. */
+const DOOR_OVERHANG_SHADOW_DEPTH = 5;
+/** Inset from each edge for the recessed slab panel of the door threshold. */
+const DOOR_THRESHOLD_INSET = 2;
+/** Total size reduction (both sides) for the door threshold inset. */
+const DOOR_THRESHOLD_INSET_TOTAL = DOOR_THRESHOLD_INSET * 2;
+
 export function tileHash2(tx: number, ty: number): number {
-  return ((Math.imul(tx, 2246822519) ^ Math.imul(ty, 668265263)) >>> 0) % 65536;
+  return (
+    ((Math.imul(tx, TILE_HASH2_MULTIPLIER_X) ^ Math.imul(ty, TILE_HASH2_MULTIPLIER_Y)) >>> 0) %
+    TILE_HASH2_MODULUS
+  );
 }
 
 // The entire dungeon uses one floor type and one wall type for visual
 // consistency. Variety comes from which of the 8 variants is chosen per tile.
 function dungeonFloorVariant(tx: number, ty: number): { state: string; frame: number } {
-  return { state: 'floor_plain', frame: tileHash2(tx, ty) % 8 };
+  return { state: 'floor_plain', frame: tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT };
 }
 
 function dungeonWallVariant(tx: number, ty: number): { state: string; frame: number } {
-  return { state: 'wall_plain', frame: tileHash2(tx, ty) % 8 };
+  return { state: 'wall_plain', frame: tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT };
 }
 
 // Weighted frame picker for the overworld tileset — columns 0 and 1 only, ~50/50.
@@ -36,9 +53,17 @@ export function overworldFrame(tx: number, ty: number): number {
   return OVERWORLD_FRAME_TABLE[tileHash2(tx, ty) % OVERWORLD_FRAME_TABLE.length];
 }
 
+const OVERWORLD_ROTATION_MULTIPLIER_X = 1664525;
+const OVERWORLD_ROTATION_MULTIPLIER_Y = 1013904223;
+const OVERWORLD_ROTATION_STEPS = 4;
+
 // Independent hash for rotation so it doesn't correlate with frame selection.
 export function overworldRotation(tx: number, ty: number): number {
-  const h = ((Math.imul(tx, 1664525) ^ Math.imul(ty, 1013904223)) >>> 0) % 4;
+  const h =
+    ((Math.imul(tx, OVERWORLD_ROTATION_MULTIPLIER_X) ^
+      Math.imul(ty, OVERWORLD_ROTATION_MULTIPLIER_Y)) >>>
+      0) %
+    OVERWORLD_ROTATION_STEPS;
   return h * (Math.PI / 2);
 }
 
@@ -169,12 +194,17 @@ export function drawTerrainTile(
         ctx.fillStyle = '#9a8870';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = '#8a7860';
-        ctx.fillRect(sx + 2, sy + 2, ts - 4, ts - 4);
+        ctx.fillRect(
+          sx + DOOR_THRESHOLD_INSET,
+          sy + DOOR_THRESHOLD_INSET,
+          ts - DOOR_THRESHOLD_INSET_TOTAL,
+          ts - DOOR_THRESHOLD_INSET_TOTAL,
+        );
         ctx.fillStyle = '#b0a080'; // step edge highlight
         ctx.fillRect(sx, sy, ts, 2);
         ctx.fillRect(sx, sy, 2, ts);
         ctx.fillStyle = 'rgba(0,0,0,0.24)'; // shadow from overhang above
-        ctx.fillRect(sx, sy, ts, 5);
+        ctx.fillRect(sx, sy, ts, DOOR_OVERHANG_SHADOW_DEPTH);
       }
       break;
     }
@@ -203,21 +233,45 @@ export function drawTerrainTile(
 
     // Light polished stone — cleaner, lighter rooms
     case FloorTypeValue.tile_floor: {
-      drawDungeonSprite(ctx, sx, sy, ts, 'floor_worn', tileHash2(tx, ty) % 8, '#b0aaa0');
+      drawDungeonSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'floor_worn',
+        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
+        '#b0aaa0',
+      );
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 
     // Dark stone — atmospheric rooms
     case FloorTypeValue.carpet: {
-      drawDungeonSprite(ctx, sx, sy, ts, 'floor_dark', tileHash2(tx, ty) % 8, '#828490');
+      drawDungeonSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'floor_dark',
+        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
+        '#828490',
+      );
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 
     // Mossy stone — damp, older chambers
     case FloorTypeValue.wood: {
-      drawDungeonSprite(ctx, sx, sy, ts, 'floor_mossy', tileHash2(tx, ty) % 8, '#8a9088');
+      drawDungeonSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'floor_mossy',
+        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
+        '#8a9088',
+      );
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }

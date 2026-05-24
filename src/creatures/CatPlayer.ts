@@ -31,6 +31,34 @@ export class CatPlayer extends Player {
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Mob | null = null;
 
+  private static readonly CAT_STARTING_HP = 8;
+  private static readonly STARTING_POTIONS = 10;
+  private static readonly MELEE_RANGE_MULTIPLIER = 1.6;
+  private static readonly MISSILE_BASE_RANGE = 3.5;
+  private static readonly MISSILE_RANGE_INTELLIGENCE_MULTIPLIER = 0.5;
+  private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
+  private static readonly MISSILE_CENTER_OFFSET_X = 0.5;
+  private static readonly MISSILE_CENTER_OFFSET_Y = 0.5;
+  private static readonly SUBMISSILE_COUNT_BASE = 3;
+  private static readonly SUBMISSILE_COUNT_RANDOM_RANGE = 3;
+  private static readonly SUBMISSILE_ANGLE_VARIANCE = 0.4;
+  private static readonly MISSILE_HOMING_DISTANCE_TILES = 12;
+  private static readonly HOMING_CONE_DEGREES = 3;
+  private static readonly HOMING_CONE_HALF_ANGLE = Math.PI / CatPlayer.HOMING_CONE_DEGREES;
+  private static readonly HOMING_TURN_RATE = 0.08;
+  private static readonly MOB_CENTER_OFFSET_X = 0.5;
+  private static readonly MOB_CENTER_OFFSET_Y = 0.5;
+  private static readonly MISSILE_CENTER_OFFSET = 0.5;
+  private static readonly MISSILE_CENTER_OFFSET_2 = 0.5;
+  private static readonly ACTIVE_INDICATOR_OFFSET_X = 6;
+  private static readonly ACTIVE_INDICATOR_OFFSET_Y = 4;
+  private static readonly ACTIVE_INDICATOR_WIDTH = 12;
+  private static readonly ACTIVE_INDICATOR_HEIGHT = 12;
+  private static readonly AI_MIN_COOLDOWN = 20;
+  private static readonly MISS_OFFSET_FACTOR = 0.44;
+  private static readonly HOMING_LEVEL_THRESHOLD = 14;
+  private static readonly RANDOM_OFFSET_BASE = 0.5;
+
   setMap(map: GameMap) {
     this.map = map;
   }
@@ -44,12 +72,15 @@ export class CatPlayer extends Player {
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, 8);
+    super(tileX, tileY, tileSize, CatPlayer.CAT_STARTING_HP);
     // Initialize Magic Missile tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
     // Move starting potions from bag to hotbar slot 1 for quick access
-    this.inventory.removeItems('health_potion', 10);
-    this.inventory.actionBar.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
+    this.inventory.removeItems('health_potion', CatPlayer.STARTING_POTIONS);
+    this.inventory.actionBar.slots[1] = {
+      ...ITEM_DEF.health_potion,
+      quantity: CatPlayer.STARTING_POTIONS,
+    };
   }
 
   getMissileDamage(): number {
@@ -63,7 +94,7 @@ export class CatPlayer extends Player {
   }
 
   getMeleeRange(): number {
-    return this.tileSize * 1.6;
+    return this.tileSize * CatPlayer.MELEE_RANGE_MULTIPLIER;
   }
 
   get missileCooldownCurrent(): number {
@@ -78,12 +109,17 @@ export class CatPlayer extends Player {
     const level = this.getMagicMissileLevel();
     const stats = getMagicMissileStats(level);
     const baseAngle = Math.atan2(this.facingY, this.facingX) + angleOffset;
-    const baseRange = (3.5 + this.intelligence * 0.5) * this.tileSize;
-    const maxDist = isSubMissile ? this.tileSize * 1.8 : baseRange * stats.rangeMultiplier;
+    const baseRange =
+      (CatPlayer.MISSILE_BASE_RANGE +
+        this.intelligence * CatPlayer.MISSILE_RANGE_INTELLIGENCE_MULTIPLIER) *
+      this.tileSize;
+    const maxDist = isSubMissile
+      ? this.tileSize * CatPlayer.SUBMISSILE_MAX_DIST_TILES
+      : baseRange * stats.rangeMultiplier;
 
     this.missiles.push({
-      x: fromX ?? this.x + this.tileSize * 0.5,
-      y: fromY ?? this.y + this.tileSize * 0.5,
+      x: fromX ?? this.x + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET_X,
+      y: fromY ?? this.y + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET_Y,
       vx: Math.cos(baseAngle) * stats.speed,
       vy: Math.sin(baseAngle) * stats.speed,
       distTraveled: 0,
@@ -141,9 +177,12 @@ export class CatPlayer extends Player {
   /** Spawns any sub-missiles queued this frame. Call after resolvePlayerAttacks. */
   flushPendingSubMissiles(): void {
     for (const { x, y } of this.pendingSubMissileSpawns) {
-      const count = 3 + Math.floor(Math.random() * 3); // 3–5
+      const count =
+        CatPlayer.SUBMISSILE_COUNT_BASE +
+        Math.floor(Math.random() * CatPlayer.SUBMISSILE_COUNT_RANDOM_RANGE); // 3–5
       for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+        const angle =
+          (i / count) * Math.PI * 2 + Math.random() * CatPlayer.SUBMISSILE_ANGLE_VARIANCE;
         this.fireMissile(angle - Math.atan2(this.facingY, this.facingX), true, x, y);
       }
     }
@@ -161,8 +200,14 @@ export class CatPlayer extends Player {
       return;
     }
 
-    const dx = this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
-    const dy = this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
+    const dx =
+      this.autoTarget.x +
+      this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET -
+      (this.x + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET);
+    const dy =
+      this.autoTarget.y +
+      this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET -
+      (this.y + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET);
     if (dx !== 0 || dy !== 0) {
       const n = normalize(dx, dy);
       this.facingX = n.x;
@@ -170,13 +215,15 @@ export class CatPlayer extends Player {
     }
 
     // AI fires at most as fast as an average human could (~3 shots/sec at 60fps).
-    const AI_MIN_COOLDOWN = 20;
-    const cooldownMax = Math.max(this.missileCooldownMax, AI_MIN_COOLDOWN);
+    const cooldownMax = Math.max(this.missileCooldownMax, CatPlayer.AI_MIN_COOLDOWN);
     if (this.missileCooldown > 0) {
       this.missileCooldown--;
     } else {
       // Use the same shared cooldown as player-triggered shots
-      const offset = Math.random() < missChance ? (Math.random() - 0.5) * 2 * 0.44 : 0;
+      const offset =
+        Math.random() < missChance
+          ? (Math.random() - CatPlayer.RANDOM_OFFSET_BASE) * 2 * CatPlayer.MISS_OFFSET_FACTOR
+          : 0;
       this.fireMissile(offset);
       this.missileCooldown = cooldownMax;
       this.pendingAutoFireSound = true;
@@ -185,10 +232,10 @@ export class CatPlayer extends Player {
 
   updateMissiles(mobs?: ReadonlyArray<Mob>) {
     const level = this.getMagicMissileLevel();
-    const hasHoming = level >= 14;
-    const HOMING_RANGE_PX = TILE_SIZE * 12;
-    const CONE_HALF = Math.PI / 3; // ±60° = 120° total
-    const TURN_RATE = 0.08; // radians/frame
+    const hasHoming = level >= CatPlayer.HOMING_LEVEL_THRESHOLD;
+    const HOMING_RANGE_PX = TILE_SIZE * CatPlayer.MISSILE_HOMING_DISTANCE_TILES;
+    const CONE_HALF = CatPlayer.HOMING_CONE_HALF_ANGLE; // ±60° = 120° total
+    const TURN_RATE = CatPlayer.HOMING_TURN_RATE; // radians/frame
 
     if (this.missileCooldown > 0) this.missileCooldown--;
 
@@ -204,8 +251,8 @@ export class CatPlayer extends Player {
 
             for (const mob of mobs) {
               if (!mob.isAlive) continue;
-              const ddx = mob.x + TILE_SIZE * 0.5 - m.x;
-              const ddy = mob.y + TILE_SIZE * 0.5 - m.y;
+              const ddx = mob.x + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_X - m.x;
+              const ddy = mob.y + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_Y - m.y;
               const dist = Math.hypot(ddx, ddy);
               if (dist > HOMING_RANGE_PX || dist < 1) continue;
               const mobAngle = Math.atan2(ddy, ddx);
@@ -219,8 +266,8 @@ export class CatPlayer extends Player {
             }
 
             if (bestMob) {
-              const ddx = bestMob.x + TILE_SIZE * 0.5 - m.x;
-              const ddy = bestMob.y + TILE_SIZE * 0.5 - m.y;
+              const ddx = bestMob.x + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_X - m.x;
+              const ddy = bestMob.y + TILE_SIZE * CatPlayer.MISSILE_CENTER_OFFSET_2 - m.y;
               const targetAngle = Math.atan2(ddy, ddx);
               let diff = targetAngle - dirAngle;
               while (diff > Math.PI) diff -= Math.PI * 2;
@@ -269,7 +316,12 @@ export class CatPlayer extends Player {
       ctx.globalAlpha = 0.6;
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 2;
-      ctx.strokeRect(sx - 6, sy - 4, s + 12, s + 12);
+      ctx.strokeRect(
+        sx - CatPlayer.ACTIVE_INDICATOR_OFFSET_X,
+        sy - CatPlayer.ACTIVE_INDICATOR_OFFSET_Y,
+        s + CatPlayer.ACTIVE_INDICATOR_WIDTH,
+        s + CatPlayer.ACTIVE_INDICATOR_HEIGHT,
+      );
       ctx.restore();
     }
 

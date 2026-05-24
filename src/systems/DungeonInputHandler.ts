@@ -125,8 +125,9 @@ export class DungeonInputHandler {
         return;
       }
 
+      const HOTBAR_SLOT_COUNT = 8;
       const hotbarIdx = parseInt(e.key) - 1;
-      if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < 8) {
+      if (!e.repeat && hotbarIdx >= 0 && hotbarIdx < HOTBAR_SLOT_COUNT) {
         e.preventDefault();
         actions.hotbarActivation(hotbarIdx);
         return;
@@ -135,8 +136,9 @@ export class DungeonInputHandler {
 
     this.keyupHandler = (e: KeyboardEvent) => {
       if (actions.isSuppressed() || actions.isGameOver()) return;
+      const HOTBAR_SLOT_COUNT = 8;
       const idx = parseInt(e.key) - 1;
-      if (idx >= 0 && idx < 8) {
+      if (idx >= 0 && idx < HOTBAR_SLOT_COUNT) {
         actions.dynamiteRelease(idx);
       }
     };

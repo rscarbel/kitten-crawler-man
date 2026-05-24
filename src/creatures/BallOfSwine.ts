@@ -9,7 +9,8 @@ const BOS_HP = 280;
 const BOS_SPEED_BASE = 0; // movement is orbit-based, not collision-based
 
 // Orbit parameters
-const ORBIT_RADIUS_PX = TILE_SIZE * 5;
+const ORBIT_RADIUS_TILE_MULTIPLIER = 5;
+const ORBIT_RADIUS_PX = TILE_SIZE * ORBIT_RADIUS_TILE_MULTIPLIER;
 /** Angular velocity (radians per frame) while zooming. */
 const ANGULAR_SPEED_ZOOM = 0.037;
 /** Angular velocity while idle (slow spin). */
@@ -28,18 +29,26 @@ const STOPPING_FRAMES = 50; // deceleration before fully stopped
 const BURST_FRAMES = 70;
 
 // Contact kill distance (pixels from ball centre to player centre)
-const KILL_RADIUS = TILE_SIZE * 0.9;
+const KILL_RADIUS_TILE_MULTIPLIER = 0.9;
+const KILL_RADIUS = TILE_SIZE * KILL_RADIUS_TILE_MULTIPLIER;
 /** Cooldown between consecutive instant-kill contacts (prevent multi-kill on same player). */
 const KILL_COOLDOWN = 90;
+const COIN_DROP_MIN = 100;
+const COIN_DROP_MAX = 200;
+const MASS = 10;
+const ORBIT_CENTER_LERP = 0.02;
+const CENTER_OFFSET = 0.5;
+const INSTANT_KILL_DAMAGE = 9999;
+const ARENA_AGGRO_EXTEND_TILES = 3;
 
 type BosState = 'idle' | 'zooming' | 'stopping' | 'stopped' | 'bursting';
 
 export class BallOfSwine extends Mob {
   readonly xpValue = 1200;
-  protected coinDropMin = 100;
-  protected coinDropMax = 200;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Ball of Swine';
-  mass = 10;
+  mass = MASS;
   description =
     'A wheel-like mass of fused body parts that zooms around in arcing circles. Contact is instantly lethal.';
 
@@ -53,7 +62,7 @@ export class BallOfSwine extends Mob {
   private orbitCenterY = 0;
   private currentAngularSpeed = ANGULAR_SPEED_IDLE;
   /** Direction of orbit rotation: +1 or -1. */
-  private orbitSign = Math.random() < 0.5 ? 1 : -1;
+  private orbitSign = Math.random() < CENTER_OFFSET ? 1 : -1;
 
   // State machine
   private state: BosState = 'idle';
@@ -105,8 +114,6 @@ export class BallOfSwine extends Mob {
     return this.state === 'zooming' || this.state === 'stopping';
   }
 
-  // --- Damage override ---
-
   takeDamageFrom(
     amount: number,
     attacker: Player | null,
@@ -154,8 +161,6 @@ export class BallOfSwine extends Mob {
     return [{ id: 'health_potion', quantity: 3 }];
   }
 
-  // --- AI ---
-
   updateAI(targets: Player[]): void {
     // Tick kill cooldowns
     for (const [p, cd] of this.killCooldowns) {
@@ -190,8 +195,8 @@ export class BallOfSwine extends Mob {
     this.currentAngularSpeed = ANGULAR_SPEED_IDLE;
 
     // When idle (no target nearby), keep orbit centred on the arena
-    this.orbitCenterX += (this.arenaCenterPx.x - this.orbitCenterX) * 0.02;
-    this.orbitCenterY += (this.arenaCenterPx.y - this.orbitCenterY) * 0.02;
+    this.orbitCenterX += (this.arenaCenterPx.x - this.orbitCenterX) * ORBIT_CENTER_LERP;
+    this.orbitCenterY += (this.arenaCenterPx.y - this.orbitCenterY) * ORBIT_CENTER_LERP;
     this.advanceOrbit();
 
     if (nearest) {
@@ -228,10 +233,10 @@ export class BallOfSwine extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       if (this.killCooldowns.has(t)) continue;
-      const dx = t.x + TILE_SIZE * 0.5 - this.x;
-      const dy = t.y + TILE_SIZE * 0.5 - this.y;
+      const dx = t.x + TILE_SIZE * CENTER_OFFSET - this.x;
+      const dy = t.y + TILE_SIZE * CENTER_OFFSET - this.y;
       if (Math.hypot(dx, dy) < KILL_RADIUS) {
-        this.dealDamage(t, 9999);
+        this.dealDamage(t, INSTANT_KILL_DAMAGE);
         this.killCooldowns.set(t, KILL_COOLDOWN);
       }
     }
@@ -269,8 +274,6 @@ export class BallOfSwine extends Mob {
       this.pendingBurst = false;
     }
   }
-
-  // --- Orbit helpers ---
 
   /** Move the ball to its current orbit position. */
   private advanceOrbit(): void {
@@ -319,11 +322,9 @@ export class BallOfSwine extends Mob {
     }
   }
 
-  // --- Utilities ---
-
   /** Only target players that are inside (or very near) the arena. */
   private nearestLiving(targets: Player[]): Player | null {
-    const aggroRange = this.arenaInteriorPx + TILE_SIZE * 3;
+    const aggroRange = this.arenaInteriorPx + TILE_SIZE * ARENA_AGGRO_EXTEND_TILES;
     let best: Player | null = null;
     let bestDist = Infinity;
     for (const t of targets) {
@@ -351,8 +352,6 @@ export class BallOfSwine extends Mob {
   get burstFraction(): number {
     return 1 - this.burstTimer / BURST_FRAMES;
   }
-
-  // --- Render ---
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive && !this.pendingBurst && this.state !== 'bursting') return;

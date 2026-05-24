@@ -7,6 +7,15 @@
 
 import { IS_MOBILE } from './MobileDetect';
 
+/** Desktop/mobile panel width in pixels. */
+const GEAR_PANEL_WIDTH_PX = 340;
+
+/** Canvas padding for mobile gear panel. */
+const MOBILE_CANVAS_PADDING = 16;
+
+/** Desktop gear panel X offset. */
+const DESKTOP_GEAR_PANEL_OFFSET = -180;
+
 export interface PlatformAdapter {
   readonly isMobile: boolean;
 
@@ -41,9 +50,9 @@ class DesktopPlatform implements PlatformAdapter {
 
   readonly initialHudCollapsed = false;
   gearPanelWidth(): number {
-    return 340;
+    return GEAR_PANEL_WIDTH_PX;
   }
-  readonly gearPanelXOffset = -180;
+  readonly gearPanelXOffset = DESKTOP_GEAR_PANEL_OFFSET;
 
   readonly showEntityTooltip = true;
   readonly showDesktopToggleButtons = true;
@@ -66,7 +75,7 @@ class MobilePlatform implements PlatformAdapter {
 
   readonly initialHudCollapsed = true;
   gearPanelWidth(canvasWidth: number): number {
-    return Math.min(340, canvasWidth - 16);
+    return Math.min(GEAR_PANEL_WIDTH_PX, canvasWidth - MOBILE_CANVAS_PADDING);
   }
   readonly gearPanelXOffset = 0;
 

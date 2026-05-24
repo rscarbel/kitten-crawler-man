@@ -1,6 +1,36 @@
 import type { AbilityDef } from '../core/AbilityManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 
+const LEVEL_SLIGHT_COOLDOWN_REDUCTION = 2;
+const LEVEL_MODERATE_COOLDOWN_REDUCTION = 6;
+const LEVEL_SIGNIFICANT_COOLDOWN_REDUCTION = 9;
+const LEVEL_FAST_COOLDOWN = 11;
+const LEVEL_FULL_POWER = 15;
+const LEVEL_DAMAGE_BOOST_1 = 3;
+const LEVEL_DAMAGE_BOOST_2 = 7;
+const LEVEL_DAMAGE_BOOST_3 = 12;
+const LEVEL_RANGE_BOOST_1 = 4;
+const LEVEL_RANGE_BOOST_2 = 8;
+const LEVEL_RANGE_BOOST_3 = 13;
+const LEVEL_AOE_SPLASH = 5;
+const LEVEL_SUB_MISSILES = 10;
+const LEVEL_HOMING = 14;
+const COOLDOWN_VERY_FAST = 12;
+const COOLDOWN_FAST = 36;
+const COOLDOWN_MODERATE = 48;
+const COOLDOWN_MEDIUM = 60;
+const COOLDOWN_BASE = 72;
+const DAMAGE_MULT_SMALL = 1.05;
+const DAMAGE_MULT_MEDIUM = 1.1;
+const DAMAGE_MULT_LARGE = 1.5;
+const DAMAGE_MULT_FULL_POWER = 3.0;
+const RANGE_MULT_SMALL = 1.05;
+const RANGE_MULT_MEDIUM = 1.1;
+const RANGE_MULT_LARGE = 1.5;
+const RANGE_INFINITE = 9999;
+const SPEED_FULL_POWER = 9.0;
+const SPEED_BASE = 4.5;
+
 /** Runtime stats computed from the current ability level. */
 export interface MagicMissileStats {
   /** Frames between allowed player-triggered shots (0 = no cooldown). */
@@ -26,40 +56,40 @@ export function getMagicMissileStats(level: number): MagicMissileStats {
   //   Base: 72 (1.2 s)  L2: 60 (1.0 s)  L6: 48 (0.8 s)  L9: 36 (0.6 s)
   //   L11: 12 (0.2 s)   L15: 0 (no cooldown)
   let cooldownFrames: number;
-  if (level >= 15) cooldownFrames = 0;
-  else if (level >= 11) cooldownFrames = 12;
-  else if (level >= 9) cooldownFrames = 36;
-  else if (level >= 6) cooldownFrames = 48;
-  else if (level >= 2) cooldownFrames = 60;
-  else cooldownFrames = 72;
+  if (level >= LEVEL_FULL_POWER) cooldownFrames = 0;
+  else if (level >= LEVEL_FAST_COOLDOWN) cooldownFrames = COOLDOWN_VERY_FAST;
+  else if (level >= LEVEL_SIGNIFICANT_COOLDOWN_REDUCTION) cooldownFrames = COOLDOWN_FAST;
+  else if (level >= LEVEL_MODERATE_COOLDOWN_REDUCTION) cooldownFrames = COOLDOWN_MODERATE;
+  else if (level >= LEVEL_SLIGHT_COOLDOWN_REDUCTION) cooldownFrames = COOLDOWN_MEDIUM;
+  else cooldownFrames = COOLDOWN_BASE;
 
   // Cumulative damage multipliers (multiplicative stacking):
   //   L3: ×1.05   L7: ×1.10   L12: ×1.50   L15: ×3.00
   let damageMultiplier = 1.0;
-  if (level >= 3) damageMultiplier *= 1.05;
-  if (level >= 7) damageMultiplier *= 1.1;
-  if (level >= 12) damageMultiplier *= 1.5;
-  if (level >= 15) damageMultiplier *= 3.0;
+  if (level >= LEVEL_DAMAGE_BOOST_1) damageMultiplier *= DAMAGE_MULT_SMALL;
+  if (level >= LEVEL_DAMAGE_BOOST_2) damageMultiplier *= DAMAGE_MULT_MEDIUM;
+  if (level >= LEVEL_DAMAGE_BOOST_3) damageMultiplier *= DAMAGE_MULT_LARGE;
+  if (level >= LEVEL_FULL_POWER) damageMultiplier *= DAMAGE_MULT_FULL_POWER;
 
   // Cumulative range multipliers:
   //   L4: ×1.05   L8: ×1.10   L13: ×1.50   L15: effectively infinite
   let rangeMultiplier = 1.0;
-  if (level >= 4) rangeMultiplier *= 1.05;
-  if (level >= 8) rangeMultiplier *= 1.1;
-  if (level >= 13) rangeMultiplier *= 1.5;
-  if (level >= 15) rangeMultiplier = 9999;
+  if (level >= LEVEL_RANGE_BOOST_1) rangeMultiplier *= RANGE_MULT_SMALL;
+  if (level >= LEVEL_RANGE_BOOST_2) rangeMultiplier *= RANGE_MULT_MEDIUM;
+  if (level >= LEVEL_RANGE_BOOST_3) rangeMultiplier *= RANGE_MULT_LARGE;
+  if (level >= LEVEL_FULL_POWER) rangeMultiplier = RANGE_INFINITE;
 
-  const speed = level >= 15 ? 9.0 : 4.5;
+  const speed = level >= LEVEL_FULL_POWER ? SPEED_FULL_POWER : SPEED_BASE;
 
   return {
     cooldownFrames,
     damageMultiplier,
     rangeMultiplier,
     speed,
-    hasAoeSplash: level >= 5,
-    hasSubMissiles: level >= 10,
-    hasHoming: level >= 14,
-    isFullPower: level >= 15,
+    hasAoeSplash: level >= LEVEL_AOE_SPLASH,
+    hasSubMissiles: level >= LEVEL_SUB_MISSILES,
+    hasHoming: level >= LEVEL_HOMING,
+    isFullPower: level >= LEVEL_FULL_POWER,
   };
 }
 
@@ -70,7 +100,7 @@ function renderMagicMissileIcon(
   size: number,
   level: number,
 ): void {
-  const state = level >= 15 ? 'full_power' : 'standard';
+  const state = level >= LEVEL_FULL_POWER ? 'full_power' : 'standard';
   drawSpriteKey(ctx, 'magic_missile_icon', state, 0, x, y, size);
 }
 

@@ -84,6 +84,99 @@ export interface DungeonData {
 const ZONE_ENTRANCE_MAX = 30;
 const ZONE_MID_MAX = 60;
 
+// Corridor zone floor probabilities
+const MID_ZONE_CONCRETE_PROB = 0.5;
+const DEEP_ZONE_TILE_PROB = 0.55;
+
+// Hallway kind probability thresholds by zone
+const SPECIAL_CONN_STANDARD_PROB = 0.55;
+const ENTRANCE_NARROW_THRESH = 0.48;
+const ENTRANCE_STANDARD_THRESH = 0.88;
+const MID_NARROW_THRESH = 0.62;
+const MID_STANDARD_THRESH = 0.9;
+const DEEP_NARROW_THRESH = 0.76;
+const DEEP_STANDARD_THRESH = 0.93;
+
+// Room generation scaling: maxRooms ≈ ROOMS_SCALE_FACTOR * (size / SIZE_SCALE_BASE)²
+const ROOMS_SCALE_FACTOR = 15;
+const SIZE_SCALE_BASE = 100;
+const ATTEMPT_MULTIPLIER = 8;
+const MIN_PLACEMENT_ATTEMPTS = 80;
+
+// Special room fixed dimensions
+const BOSS_ROOM_W = 22;
+const BOSS_ROOM_H = 18;
+const QUEST_ROOM_W = 14;
+const QUEST_ROOM_H = 12;
+const SPIDER_LAB_W = 40;
+const SPIDER_LAB_H = 32;
+
+const BOSS_MIN_SEPARATION = 60;
+const FALLBACK_START_POS = 15;
+
+// Extra loop connections added on top of MST
+const EXTRA_LOOP_RATIO = 0.22;
+const LOOP_ATTEMPT_FACTOR = 10;
+const EXTRA_LOOP_MIN_DIST = 14;
+const EXTRA_LOOP_MAX_DIST = 40;
+
+const QUEST_GRATE_WALL_OFFSET = 3;
+
+// Spider lab furniture layout (room is SPIDER_LAB_W × SPIDER_LAB_H tiles)
+const LAB_WALL_OFFSET = 3; // items placed 3 tiles inside walls
+const LAB_EGG_NEAR_WALL = 4; // egg/computer offset near entrance
+const LAB_EGG_FAR_WALL = 5; // egg/computer offset far from entrance
+const LAB_MACHINE_SPREAD = 10; // life machine lateral spread from center
+const LAB_MACHINE_NS_NEAR_ROW = 12; // near life machine row (N/S entrance)
+const LAB_MACHINE_NS_NEAR_FROM_FAR = 13; // same, from far wall
+const LAB_MACHINE_EW_NEAR_FROM_FAR = 14; // near life machine col from far wall (E/W)
+const LAB_MACHINE_NS_FAR_ROW = 22; // far life machine row (N/S entrance)
+const LAB_MACHINE_NS_FAR_FROM_FAR = 23; // same, from far wall
+const LAB_MACHINE_EW_FAR_COL = 24; // far life machine column (E/W entrance)
+const LAB_MACHINE_EW_FAR_FROM_FAR = 25; // same, from far wall
+
+const ROOMS_PER_STAIRWELL = 50;
+
+// Room decoration placement
+const PILLAR_MIN_ROOM_W = 13;
+const PILLAR_MIN_ROOM_H = 10;
+const DECO_INNER_OFFSET = 3; // decor placed 3 tiles inside walls
+const DECO_NEAR_FAR_OFFSET = 4; // far-side column (r.w - DECO_NEAR_FAR_OFFSET)
+
+// Decoration cycle lengths by zone
+const ENTRANCE_CYCLE_LEN = 6;
+const STANDARD_CYCLE_LEN = 8;
+
+// Per-cycle thresholds and offsets
+const CYCLE0_MIN_W = 10;
+const CYCLE0_EXTRA_BARREL_MIN_W = 12;
+const CYCLE0_EXTRA_BARREL_DX = 5;
+const CYCLE1_MIN_W = 8;
+const CYCLE3_MIN_SIZE = 7;
+const CYCLE4_MIN_W = 9;
+const CYCLE5_BONE_COUNT = 3;
+const CYCLE5_DEEP_BONE_COUNT = 4;
+const CYCLE6_MIN_W = 10;
+const CYCLE6_SHELF_DX_END = 4;
+const DECO_CYCLE_BRAZIER = 3;
+const DECO_CYCLE_CORNER_MIX = 4;
+const DECO_CYCLE_BONES = 5;
+const DECO_CYCLE_SHELVES = 6;
+const DECO_CYCLE_CLUSTER = 7;
+
+const TREASURE_ROOM_RATIO = 0.05;
+
+// Hallway spawn point density: count ≈ HALLWAY_SPAWNS_SCALE * (size / SIZE_SCALE_BASE)²
+const HALLWAY_SPAWNS_SCALE = 10;
+const HALLWAY_SPAWN_MIN_GAP = 3;
+
+// Arena placement
+const ARENA_PLACEMENT_ATTEMPTS = 800;
+const ARENA_ANGLE_JITTER = 0.3;
+const ARENA_MIN_DIST = 20;
+const ARENA_DIST_VARIANCE = 70;
+const ARENA_CLEARANCE = 3;
+
 function getZone(point: Point, start: Point): Zone {
   const d = Math.hypot(point.x - start.x, point.y - start.y);
   if (d < ZONE_ENTRANCE_MAX) return 'entrance';
@@ -102,10 +195,12 @@ const ZONE_FLOORS: Record<Zone, number[]> = {
 function corridorFloorForZone(zone: Zone): number {
   if (zone === 'entrance') return FloorTypeValue.concrete;
   if (zone === 'mid') {
-    return Math.random() < 0.5 ? FloorTypeValue.concrete : FloorTypeValue.tile_floor;
+    return Math.random() < MID_ZONE_CONCRETE_PROB
+      ? FloorTypeValue.concrete
+      : FloorTypeValue.tile_floor;
   }
   // deep: darker, worn floors
-  return Math.random() < 0.55 ? FloorTypeValue.tile_floor : FloorTypeValue.wood;
+  return Math.random() < DEEP_ZONE_TILE_PROB ? FloorTypeValue.tile_floor : FloorTypeValue.wood;
 }
 
 // ── Vignette system ───────────────────────────────────────────────────────────
@@ -434,20 +529,20 @@ export function generateDungeon(
     if (isSpecial) {
       // Connections to/from safe rooms, boss rooms, and the first hub connections
       // get a wider passage so key areas feel accessible.
-      return Math.random() < 0.55 ? 'standard' : 'narrow';
+      return Math.random() < SPECIAL_CONN_STANDARD_PROB ? 'standard' : 'narrow';
     }
     const r = Math.random();
     if (zone === 'entrance') {
-      if (r < 0.48) return 'narrow';
-      if (r < 0.88) return 'standard';
+      if (r < ENTRANCE_NARROW_THRESH) return 'narrow';
+      if (r < ENTRANCE_STANDARD_THRESH) return 'standard';
       return 'nook';
     } else if (zone === 'mid') {
-      if (r < 0.62) return 'narrow';
-      if (r < 0.9) return 'standard';
+      if (r < MID_NARROW_THRESH) return 'narrow';
+      if (r < MID_STANDARD_THRESH) return 'standard';
       return 'nook';
     } else {
-      if (r < 0.76) return 'narrow';
-      if (r < 0.93) return 'standard';
+      if (r < DEEP_NARROW_THRESH) return 'narrow';
+      if (r < DEEP_STANDARD_THRESH) return 'standard';
       return 'nook';
     }
   };
@@ -468,8 +563,8 @@ export function generateDungeon(
   const spiderLabRoomIdx = hasSpiderLab ? questRoomIdx + 1 : -1;
   const regularRoomStart = hasSpiderLab ? questRoomIdx + 2 : questRoomIdx + 1;
 
-  const maxRooms = Math.round(15 * (size / 100) ** 2);
-  const maxAttempts = Math.max(maxRooms * 8, 80);
+  const maxRooms = Math.round(ROOMS_SCALE_FACTOR * (size / SIZE_SCALE_BASE) ** 2);
+  const maxAttempts = Math.max(maxRooms * ATTEMPT_MULTIPLIER, MIN_PLACEMENT_ATTEMPTS);
 
   const SAFE_MAX_DIST = 50;
   const BOSS_MAX_DIST = 80;
@@ -482,8 +577,20 @@ export function generateDungeon(
     const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
     const isQuestRoom = rooms.length === questRoomIdx;
     const isSpiderLabRoom = spiderLabRoomIdx >= 0 && rooms.length === spiderLabRoomIdx;
-    const w = isBossRoom ? 22 : isQuestRoom ? 14 : isSpiderLabRoom ? 40 : randomInt(MIN_W, MAX_W);
-    const h = isBossRoom ? 18 : isQuestRoom ? 12 : isSpiderLabRoom ? 32 : randomInt(MIN_H, MAX_H);
+    const w = isBossRoom
+      ? BOSS_ROOM_W
+      : isQuestRoom
+        ? QUEST_ROOM_W
+        : isSpiderLabRoom
+          ? SPIDER_LAB_W
+          : randomInt(MIN_W, MAX_W);
+    const h = isBossRoom
+      ? BOSS_ROOM_H
+      : isQuestRoom
+        ? QUEST_ROOM_H
+        : isSpiderLabRoom
+          ? SPIDER_LAB_H
+          : randomInt(MIN_H, MAX_H);
     const x = randomInt(BORDER + 1, size - BORDER - w - 2);
     const y = randomInt(BORDER + 1, size - BORDER - h - 2);
 
@@ -498,7 +605,7 @@ export function generateDungeon(
       isBossRoom &&
       rooms.slice(bossRoomStart, bossRoomEnd).some((r) => {
         const rc = { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
-        return Math.hypot(cx - rc.x, cy - rc.y) < 60;
+        return Math.hypot(cx - rc.x, cy - rc.y) < BOSS_MIN_SEPARATION;
       });
 
     const tooCloseToSafeRoom =
@@ -567,7 +674,10 @@ export function generateDungeon(
   // with several connections) and dead-end rooms (one connection), giving the
   // dungeon a real branching structure to explore.
 
-  const sc = startCenter ?? { x: rooms[0]?.x ?? 15, y: rooms[0]?.y ?? 15 };
+  const sc = startCenter ?? {
+    x: rooms[0]?.x ?? FALLBACK_START_POS,
+    y: rooms[0]?.y ?? FALLBACK_START_POS,
+  };
 
   // Track which rooms are "special" (safe, boss, quest) for corridor width decisions.
   const specialRoomIdxSet = new Set<number>();
@@ -695,9 +805,9 @@ export function generateDungeon(
   // mandatory backtracking through dead ends.
 
   const regularRooms = rooms.slice(regularRoomStart);
-  const extraTarget = Math.max(1, Math.floor(regularRooms.length * 0.22));
+  const extraTarget = Math.max(1, Math.floor(regularRooms.length * EXTRA_LOOP_RATIO));
   let extraAdded = 0;
-  const maxLoopAttempts = extraTarget * 10;
+  const maxLoopAttempts = extraTarget * LOOP_ATTEMPT_FACTOR;
 
   for (let attempt = 0; attempt < maxLoopAttempts && extraAdded < extraTarget; attempt++) {
     const r1Idx = randomInt(regularRoomStart, rooms.length - 1);
@@ -712,7 +822,7 @@ export function generateDungeon(
 
     // Target spatially nearby but not immediately adjacent rooms.
     // Corridors that are too short just look like alcoves; too long = big gray passages.
-    if (dist >= 14 && dist <= 40) {
+    if (dist >= EXTRA_LOOP_MIN_DIST && dist <= EXTRA_LOOP_MAX_DIST) {
       const zone = getZone(c2, sc);
       const floorType = corridorFloorForZone(zone);
       // Loop connections are always narrow — they're secondary routes, not main arteries.
@@ -754,8 +864,8 @@ export function generateDungeon(
     const grateTiles: Point[] = [
       { x: qr.x + 2, y: qcy - 2 },
       { x: qr.x + 2, y: qcy + 2 },
-      { x: qr.x + qr.w - 3, y: qcy - 2 },
-      { x: qr.x + qr.w - 3, y: qcy + 2 },
+      { x: qr.x + qr.w - QUEST_GRATE_WALL_OFFSET, y: qcy - 2 },
+      { x: qr.x + qr.w - QUEST_GRATE_WALL_OFFSET, y: qcy + 2 },
     ];
     for (const g of grateTiles) {
       if (g.y >= 0 && g.y < size && g.x >= 0 && g.x < size) {
@@ -807,56 +917,56 @@ export function generateDungeon(
 
     if (entranceWall === 'south') {
       entranceTile = { x: slcx, y: slr.y + slr.h - 1 };
-      scientistTile = { x: slcx - 1, y: slr.y + slr.h - 3 };
-      computerTile = { x: slcx + 2, y: slr.y + slr.h - 4 };
-      spiderEggTile = { x: slcx, y: slr.y + 4 };
+      scientistTile = { x: slcx - 1, y: slr.y + slr.h - LAB_WALL_OFFSET };
+      computerTile = { x: slcx + 2, y: slr.y + slr.h - LAB_EGG_NEAR_WALL };
+      spiderEggTile = { x: slcx, y: slr.y + LAB_EGG_NEAR_WALL };
       lifeMachineTiles = [
         { x: slr.x + 2, y: slr.y + 2 },
-        { x: slr.x + slr.w - 3, y: slr.y + 2 },
-        { x: slcx - 10, y: slr.y + 12 },
-        { x: slcx + 10, y: slr.y + 12 },
-        { x: slr.x + 2, y: slr.y + 22 },
-        { x: slr.x + slr.w - 3, y: slr.y + 22 },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + 2 },
+        { x: slcx - LAB_MACHINE_SPREAD, y: slr.y + LAB_MACHINE_NS_NEAR_ROW },
+        { x: slcx + LAB_MACHINE_SPREAD, y: slr.y + LAB_MACHINE_NS_NEAR_ROW },
+        { x: slr.x + 2, y: slr.y + LAB_MACHINE_NS_FAR_ROW },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + LAB_MACHINE_NS_FAR_ROW },
       ];
     } else if (entranceWall === 'north') {
       entranceTile = { x: slcx, y: slr.y };
       scientistTile = { x: slcx - 1, y: slr.y + 2 };
-      computerTile = { x: slcx + 2, y: slr.y + 3 };
-      spiderEggTile = { x: slcx, y: slr.y + slr.h - 5 };
+      computerTile = { x: slcx + 2, y: slr.y + LAB_WALL_OFFSET };
+      spiderEggTile = { x: slcx, y: slr.y + slr.h - LAB_EGG_FAR_WALL };
       lifeMachineTiles = [
-        { x: slr.x + 2, y: slr.y + slr.h - 3 },
-        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 3 },
-        { x: slcx - 10, y: slr.y + slr.h - 13 },
-        { x: slcx + 10, y: slr.y + slr.h - 13 },
-        { x: slr.x + 2, y: slr.y + slr.h - 23 },
-        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 23 },
+        { x: slr.x + 2, y: slr.y + slr.h - LAB_WALL_OFFSET },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + slr.h - LAB_WALL_OFFSET },
+        { x: slcx - LAB_MACHINE_SPREAD, y: slr.y + slr.h - LAB_MACHINE_NS_NEAR_FROM_FAR },
+        { x: slcx + LAB_MACHINE_SPREAD, y: slr.y + slr.h - LAB_MACHINE_NS_NEAR_FROM_FAR },
+        { x: slr.x + 2, y: slr.y + slr.h - LAB_MACHINE_NS_FAR_FROM_FAR },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + slr.h - LAB_MACHINE_NS_FAR_FROM_FAR },
       ];
     } else if (entranceWall === 'east') {
       entranceTile = { x: slr.x + slr.w - 1, y: slcy };
-      scientistTile = { x: slr.x + slr.w - 3, y: slcy - 1 };
-      computerTile = { x: slr.x + slr.w - 5, y: slcy + 2 };
-      spiderEggTile = { x: slr.x + 4, y: slcy };
+      scientistTile = { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slcy - 1 };
+      computerTile = { x: slr.x + slr.w - LAB_EGG_FAR_WALL, y: slcy + 2 };
+      spiderEggTile = { x: slr.x + LAB_EGG_NEAR_WALL, y: slcy };
       lifeMachineTiles = [
         { x: slr.x + 2, y: slr.y + 2 },
-        { x: slr.x + 2, y: slr.y + slr.h - 3 },
-        { x: slr.x + 13, y: slcy - 10 },
-        { x: slr.x + 13, y: slcy + 10 },
-        { x: slr.x + 24, y: slr.y + 2 },
-        { x: slr.x + 24, y: slr.y + slr.h - 3 },
+        { x: slr.x + 2, y: slr.y + slr.h - LAB_WALL_OFFSET },
+        { x: slr.x + LAB_MACHINE_NS_NEAR_FROM_FAR, y: slcy - LAB_MACHINE_SPREAD },
+        { x: slr.x + LAB_MACHINE_NS_NEAR_FROM_FAR, y: slcy + LAB_MACHINE_SPREAD },
+        { x: slr.x + LAB_MACHINE_EW_FAR_COL, y: slr.y + 2 },
+        { x: slr.x + LAB_MACHINE_EW_FAR_COL, y: slr.y + slr.h - LAB_WALL_OFFSET },
       ];
     } else {
       // west
       entranceTile = { x: slr.x, y: slcy };
       scientistTile = { x: slr.x + 2, y: slcy - 1 };
-      computerTile = { x: slr.x + 4, y: slcy + 2 };
-      spiderEggTile = { x: slr.x + slr.w - 5, y: slcy };
+      computerTile = { x: slr.x + LAB_EGG_NEAR_WALL, y: slcy + 2 };
+      spiderEggTile = { x: slr.x + slr.w - LAB_EGG_FAR_WALL, y: slcy };
       lifeMachineTiles = [
-        { x: slr.x + slr.w - 3, y: slr.y + 2 },
-        { x: slr.x + slr.w - 3, y: slr.y + slr.h - 3 },
-        { x: slr.x + slr.w - 14, y: slcy - 10 },
-        { x: slr.x + slr.w - 14, y: slcy + 10 },
-        { x: slr.x + slr.w - 25, y: slr.y + 2 },
-        { x: slr.x + slr.w - 25, y: slr.y + slr.h - 3 },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + 2 },
+        { x: slr.x + slr.w - LAB_WALL_OFFSET, y: slr.y + slr.h - LAB_WALL_OFFSET },
+        { x: slr.x + slr.w - LAB_MACHINE_EW_NEAR_FROM_FAR, y: slcy - LAB_MACHINE_SPREAD },
+        { x: slr.x + slr.w - LAB_MACHINE_EW_NEAR_FROM_FAR, y: slcy + LAB_MACHINE_SPREAD },
+        { x: slr.x + slr.w - LAB_MACHINE_EW_FAR_FROM_FAR, y: slr.y + 2 },
+        { x: slr.x + slr.w - LAB_MACHINE_EW_FAR_FROM_FAR, y: slr.y + slr.h - LAB_WALL_OFFSET },
       ];
     }
 
@@ -885,7 +995,7 @@ export function generateDungeon(
       return db - da;
     });
     const stairwellCount =
-      numStairwellsOverride ?? Math.max(1, Math.floor(regularRooms.length / 50));
+      numStairwellsOverride ?? Math.max(1, Math.floor(regularRooms.length / ROOMS_PER_STAIRWELL));
     const step = Math.max(1, Math.floor(farRooms.length / stairwellCount));
     for (let i = 0; i < stairwellCount; i++) {
       const r = farRooms[i * step];
@@ -934,10 +1044,10 @@ export function generateDungeon(
 
     // Large rooms get barrel pillars that create lanes and break up open space.
     // Placed near inner corners, 3 tiles from each wall.
-    if (r.w >= 13 && r.h >= 10) {
+    if (r.w >= PILLAR_MIN_ROOM_W && r.h >= PILLAR_MIN_ROOM_H) {
       const pillarPositions = [
-        { x: r.x + 3, y: r.y + 3 },
-        { x: r.x + r.w - 4, y: r.y + 3 },
+        { x: r.x + DECO_INNER_OFFSET, y: r.y + DECO_INNER_OFFSET },
+        { x: r.x + r.w - DECO_NEAR_FAR_OFFSET, y: r.y + DECO_INNER_OFFSET },
       ];
       for (const p of pillarPositions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`)) {
@@ -957,32 +1067,33 @@ export function generateDungeon(
     }
 
     // ── Cycle-based decoration (zone-aware) ──────────────────────────────
-    const cycleLen = zone === 'entrance' ? 6 : 8;
+    const cycleLen = zone === 'entrance' ? ENTRANCE_CYCLE_LEN : STANDARD_CYCLE_LEN;
     const cycle = (i - regularRoomStart) % cycleLen;
 
-    if (cycle === 0 && r.w >= 10) {
+    if (cycle === 0 && r.w >= CYCLE0_MIN_W) {
       const positions = [
         { x: r.x + 2, y: r.y + 1 },
-        { x: r.x + r.w - 3, y: r.y + 1 },
+        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 1 },
       ];
-      if (zone !== 'entrance' && r.w >= 12) positions.push({ x: r.x + 5, y: r.y + 1 });
+      if (zone !== 'entrance' && r.w >= CYCLE0_EXTRA_BARREL_MIN_W)
+        positions.push({ x: r.x + CYCLE0_EXTRA_BARREL_DX, y: r.y + 1 });
       for (const p of positions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
           grid[p.y][p.x].type = BARREL;
       }
     }
 
-    if (cycle === 1 && r.w >= 8) {
+    if (cycle === 1 && r.w >= CYCLE1_MIN_W) {
       const positions = [
         { x: r.x + 2, y: r.y + r.h - 2 },
-        { x: r.x + r.w - 3, y: r.y + r.h - 2 },
+        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + r.h - 2 },
       ];
       for (const p of positions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
           grid[p.y][p.x].type = BARREL_SIDE;
       }
       if (zone !== 'entrance') {
-        const bp = { x: r.x + 2, y: r.y + r.h - 3 };
+        const bp = { x: r.x + 2, y: r.y + r.h - DECO_INNER_OFFSET };
         if (grid[bp.y]?.[bp.x]?.type === r.floor && !stairwellBlockedSet.has(`${bp.x},${bp.y}`))
           grid[bp.y][bp.x].type = BONES;
       }
@@ -998,7 +1109,7 @@ export function generateDungeon(
         grid[cy2][cx3].type = CRATE;
     }
 
-    if (cycle === 3 && r.w >= 7 && r.h >= 7) {
+    if (cycle === DECO_CYCLE_BRAZIER && r.w >= CYCLE3_MIN_SIZE && r.h >= CYCLE3_MIN_SIZE) {
       const bx = Math.floor(r.x + r.w / 2);
       const by = Math.floor(r.y + r.h / 2);
       if (grid[by]?.[bx]?.type === r.floor && !stairwellBlockedSet.has(`${bx},${by}`))
@@ -1017,7 +1128,7 @@ export function generateDungeon(
       }
     }
 
-    if (cycle === 4 && r.w >= 9) {
+    if (cycle === DECO_CYCLE_CORNER_MIX && r.w >= CYCLE4_MIN_W) {
       const positions: Array<{ x: number; y: number; type: number }> = [
         { x: r.x + 1, y: r.y + 1, type: BARREL },
         { x: r.x + 2, y: r.y + 1, type: CRATE },
@@ -1029,13 +1140,13 @@ export function generateDungeon(
       }
     }
 
-    if (cycle === 5) {
-      const boneCount = zone === 'deep' ? 4 : 3;
+    if (cycle === DECO_CYCLE_BONES) {
+      const boneCount = zone === 'deep' ? CYCLE5_DEEP_BONE_COUNT : CYCLE5_BONE_COUNT;
       const spots = [
         { x: r.x + 2, y: r.y + 2 },
-        { x: r.x + r.w - 3, y: r.y + 2 },
-        { x: r.x + 2, y: r.y + r.h - 3 },
-        { x: r.x + r.w - 3, y: r.y + r.h - 3 },
+        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 2 },
+        { x: r.x + 2, y: r.y + r.h - DECO_INNER_OFFSET },
+        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + r.h - DECO_INNER_OFFSET },
       ].slice(0, boneCount);
       for (const p of spots) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
@@ -1043,15 +1154,15 @@ export function generateDungeon(
       }
     }
 
-    if (cycle === 6 && r.w >= 10) {
+    if (cycle === DECO_CYCLE_SHELVES && r.w >= CYCLE6_MIN_W) {
       const shelfY = r.y + 1;
-      for (let sx = r.x + 2; sx <= r.x + 4 && sx < r.x + r.w - 2; sx++) {
+      for (let sx = r.x + 2; sx <= r.x + CYCLE6_SHELF_DX_END && sx < r.x + r.w - 2; sx++) {
         if (grid[shelfY]?.[sx]?.type === r.floor && !stairwellBlockedSet.has(`${sx},${shelfY}`))
           grid[shelfY][sx].type = BOOKSHELF;
       }
     }
 
-    if (cycle === 7) {
+    if (cycle === DECO_CYCLE_CLUSTER) {
       const clusters: Array<Array<{ x: number; y: number; type: number }>> = [
         [
           { x: r.x + 1, y: r.y + r.h - 2, type: BARREL_SIDE },
@@ -1059,7 +1170,7 @@ export function generateDungeon(
         ],
         [
           { x: r.x + r.w - 2, y: r.y + 1, type: BARREL },
-          { x: r.x + r.w - 3, y: r.y + 1, type: BARREL_SIDE },
+          { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 1, type: BARREL_SIDE },
         ],
       ];
       for (const cluster of clusters) {
@@ -1081,7 +1192,7 @@ export function generateDungeon(
 
   // Select treasure rooms from eligible regular rooms — 5% of total rooms, at least 1
   const MIN_ROOM_SIZE = 7;
-  const treasureRoomTarget = Math.max(1, Math.round(regularRooms.length * 0.05));
+  const treasureRoomTarget = Math.max(1, Math.round(regularRooms.length * TREASURE_ROOM_RATIO));
 
   const eligibleRegularRooms = regularRooms.filter(
     (r) => r.w >= MIN_ROOM_SIZE && r.h >= MIN_ROOM_SIZE,
@@ -1104,7 +1215,7 @@ export function generateDungeon(
   });
 
   // 10. Rat spawn points in hallway tiles
-  const maxHallwaySpawns = Math.round(10 * (size / 100) ** 2);
+  const maxHallwaySpawns = Math.round(HALLWAY_SPAWNS_SCALE * (size / SIZE_SCALE_BASE) ** 2);
   const roomCenters = rooms.map((r) => ({
     x: Math.floor(r.x + r.w / 2),
     y: Math.floor(r.y + r.h / 2),
@@ -1128,7 +1239,8 @@ export function generateDungeon(
   const chosen: Array<{ x: number; y: number }> = [];
   for (const t of validHallway) {
     if (chosen.length >= maxHallwaySpawns) break;
-    if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= 3)) chosen.push(t);
+    if (chosen.every((c) => Math.hypot(t.x - c.x, t.y - c.y) >= HALLWAY_SPAWN_MIN_GAP))
+      chosen.push(t);
   }
   const hallwaySpawnPoints = chosen;
 
@@ -1141,17 +1253,18 @@ export function generateDungeon(
     const startCentre = sc;
     let arenaPlaced = false;
 
-    for (let attempt = 0; attempt < 800 && !arenaPlaced; attempt++) {
-      const angle = (attempt / 800) * Math.PI * 2 + Math.random() * 0.3;
-      const dist = 20 + Math.random() * 70;
+    for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS && !arenaPlaced; attempt++) {
+      const angle =
+        (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + Math.random() * ARENA_ANGLE_JITTER;
+      const dist = ARENA_MIN_DIST + Math.random() * ARENA_DIST_VARIANCE;
       const acx = Math.round(startCentre.x + Math.cos(angle) * dist);
       const acy = Math.round(startCentre.y + Math.sin(angle) * dist);
 
       if (
-        acx - ARENA_RADIUS - 3 < BORDER ||
-        acx + ARENA_RADIUS + 3 >= size - BORDER ||
-        acy - ARENA_RADIUS - 3 < BORDER ||
-        acy + ARENA_RADIUS + 3 >= size - BORDER
+        acx - ARENA_RADIUS - ARENA_CLEARANCE < BORDER ||
+        acx + ARENA_RADIUS + ARENA_CLEARANCE >= size - BORDER ||
+        acy - ARENA_RADIUS - ARENA_CLEARANCE < BORDER ||
+        acy + ARENA_RADIUS + ARENA_CLEARANCE >= size - BORDER
       )
         continue;
 
@@ -1159,7 +1272,7 @@ export function generateDungeon(
         if (!specialRoomIdxSet.has(idx)) return false;
         const closestX = clamp(acx, r.x, r.x + r.w - 1);
         const closestY = clamp(acy, r.y, r.y + r.h - 1);
-        return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + 3;
+        return Math.hypot(acx - closestX, acy - closestY) < ARENA_RADIUS + ARENA_CLEARANCE;
       });
       if (overlapsSpecial) continue;
 

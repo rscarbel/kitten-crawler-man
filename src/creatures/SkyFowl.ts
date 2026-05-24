@@ -23,6 +23,19 @@ const PECK_DAMAGE = 3;
 const PECK_COOLDOWN = 85;
 /** Frames the peck lunge animation plays. */
 const PECK_ANIM_FRAMES = 12;
+/** Probability of pausing during a wander cycle. */
+const WANDER_PAUSE_CHANCE = 0.35;
+/** Fraction of base speed used while wandering. */
+const WANDER_SPEED_FRACTION = 0.4;
+/** Min and max frames between direction changes when wandering. */
+const WANDER_TIMER_MIN = 110;
+const WANDER_TIMER_MAX = 309;
+/** Fraction of base speed used when pulling back toward spawn. */
+const WANDER_PULLBACK_FRACTION = 0.45;
+/** Fraction of peck range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.7;
+/** Fraction of peck range within which the peck attack is attempted. */
+const PECK_ENGAGE_FRACTION = 1.2;
 
 export class SkyFowl extends Mob {
   readonly xpValue = 8;
@@ -82,18 +95,17 @@ export class SkyFowl extends Mob {
     if (this.wanderTimer > 0) {
       this.wanderTimer--;
     } else {
-      if (Math.random() < 0.35) {
+      if (Math.random() < WANDER_PAUSE_CHANCE) {
         // Pause and look around
         this.wanderDx = 0;
         this.wanderDy = 0;
       } else {
         const angle = Math.random() * Math.PI * 2;
-        const spd = this.speed * 0.4;
+        const spd = this.speed * WANDER_SPEED_FRACTION;
         this.wanderDx = Math.cos(angle) * spd;
         this.wanderDy = Math.sin(angle) * spd;
       }
-      // Slightly longer pauses between direction changes than dungeon mobs
-      this.wanderTimer = randomInt(110, 309);
+      this.wanderTimer = randomInt(WANDER_TIMER_MIN, WANDER_TIMER_MAX);
     }
 
     if (this.wanderDx !== 0 || this.wanderDy !== 0) {
@@ -105,8 +117,8 @@ export class SkyFowl extends Mob {
       if (distToSpawn > maxPx) {
         const nx = dx / distToSpawn;
         const ny = dy / distToSpawn;
-        this.wanderDx = nx * this.speed * 0.45;
-        this.wanderDy = ny * this.speed * 0.45;
+        this.wanderDx = nx * this.speed * WANDER_PULLBACK_FRACTION;
+        this.wanderDy = ny * this.speed * WANDER_PULLBACK_FRACTION;
       }
       if (this.wanderDx !== 0) this.facingX = this.wanderDx > 0 ? 1 : -1;
       this.moveWithCollision(this.wanderDx, this.wanderDy);
@@ -154,7 +166,7 @@ export class SkyFowl extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         FOWL_SPEED_AGGRO,
-        peckRangePx * 0.7,
+        peckRangePx * FOLLOW_STOP_FRACTION,
       );
     } else {
       this.isMoving = false;
@@ -170,7 +182,7 @@ export class SkyFowl extends Mob {
 
     // Peck attack
     if (
-      nearestDist <= peckRangePx * 1.2 &&
+      nearestDist <= peckRangePx * PECK_ENGAGE_FRACTION &&
       this.peckCooldown === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {

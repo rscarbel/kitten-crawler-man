@@ -22,9 +22,18 @@ const DYN_SPEED_MAX = 21.0;
 const DYN_BOUNCE = 0.6; // velocity fraction kept after wall bounce
 const DYN_FRICTION = 0.88; // per-frame speed multiplier
 const DYN_STOP = 0.08; // px/frame below which dynamite is considered stopped
-const DYN_RADIUS = TILE_SIZE * 3; // AoE explosion radius (96 px)
+/** Speed (px/frame) below which dynamite transitions from flying to sliding. */
+const DYN_SLIDE_THRESHOLD = 1.5;
+/** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
+const HALF_TILE = TILE_SIZE / 2;
+const DYN_RADIUS_TILES = 3; // AoE explosion radius in tiles
+const DYN_RADIUS = TILE_SIZE * DYN_RADIUS_TILES; // AoE explosion radius (96 px)
 const DYN_DAMAGE = 8; // damage dealt to all entities in radius
 const DYN_ANIM_FRAMES = 45; // explosion animation duration
+/** Bonus speed per extra explosives handling level above 1. */
+const DYN_SPEED_PER_LEVEL = 4;
+/** Bonus damage per extra explosives handling level above 1. */
+const DYN_DAMAGE_PER_LEVEL = 2;
 
 interface LiveDynamite {
   x: number;
@@ -72,12 +81,12 @@ export class DynamiteSystem implements GameSystem {
     const isTap = chargeFrames < DYN_TAP;
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
     const expLvl = human.explosivesHandling;
-    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * 4;
+    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * DYN_SPEED_PER_LEVEL;
     const speed = isTap ? 0 : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
     this.liveDynamites.push({
-      x: human.x + TILE_SIZE * 0.5,
-      y: human.y + TILE_SIZE * 0.5,
+      x: human.x + HALF_TILE,
+      y: human.y + HALF_TILE,
       vx: human.facingX * speed,
       vy: human.facingY * speed,
       fuseFrames: DYN_FUSE,
@@ -109,8 +118,8 @@ export class DynamiteSystem implements GameSystem {
     mobGrid: SpatialGrid<Mob>,
   ): void {
     this._charging = null;
-    const cx = human.x + TILE_SIZE * 0.5;
-    const cy = human.y + TILE_SIZE * 0.5;
+    const cx = human.x + HALF_TILE;
+    const cy = human.y + HALF_TILE;
     this.triggerExplosion(cx, cy, human.explosivesHandling, human, cat, mobs, mobGrid);
     this.liveDynamites.push({
       x: cx,
@@ -135,21 +144,21 @@ export class DynamiteSystem implements GameSystem {
   ): void {
     this.explosionSoundPending = true;
     const ts = TILE_SIZE;
-    const damage = DYN_DAMAGE + (explosivesLevel - 1) * 2;
+    const damage = DYN_DAMAGE + (explosivesLevel - 1) * DYN_DAMAGE_PER_LEVEL;
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
     if (!human.zeroDamage) {
       for (const mob of nearBlast) {
         if (!mob.isAlive) continue;
-        if (Math.hypot(mob.x + ts * 0.5 - cx, mob.y + ts * 0.5 - cy) <= DYN_RADIUS) {
+        if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= DYN_RADIUS) {
           mob.takeDamageFrom(damage, human);
         }
       }
     }
     void mobs;
-    if (Math.hypot(human.x + ts * 0.5 - cx, human.y + ts * 0.5 - cy) <= DYN_RADIUS) {
+    if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= DYN_RADIUS) {
       human.takeDamage(damage);
     }
-    if (Math.hypot(cat.x + ts * 0.5 - cx, cat.y + ts * 0.5 - cy) <= DYN_RADIUS) {
+    if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= DYN_RADIUS) {
       cat.takeDamage(damage);
     }
   }
@@ -200,7 +209,7 @@ export class DynamiteSystem implements GameSystem {
           dyn.state = 'stopped';
           dyn.vx = 0;
           dyn.vy = 0;
-        } else if (spd < 1.5) {
+        } else if (spd < DYN_SLIDE_THRESHOLD) {
           dyn.state = 'sliding';
         }
       }
@@ -218,8 +227,8 @@ export class DynamiteSystem implements GameSystem {
       if (dyn.state !== 'exploding') {
         drawDynamiteFloorSprite(
           ctx,
-          sx - TILE_SIZE * 0.5,
-          sy - TILE_SIZE * 0.5,
+          sx - HALF_TILE,
+          sy - HALF_TILE,
           TILE_SIZE,
           dyn.fuseFrames,
           DYN_FUSE,

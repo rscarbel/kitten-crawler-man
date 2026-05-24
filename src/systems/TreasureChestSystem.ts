@@ -22,16 +22,63 @@ export interface TreasureChest {
   hadMobs: boolean;
 }
 
+// Sparkle animation constants
+const SPARKLE_FRAME_START_1 = 120;
+const SPARKLE_FRAME_END_1 = 127;
+const SPARKLE_COL_1 = 0;
+const SPARKLE_FRAME_START_2 = 128;
+const SPARKLE_FRAME_END_2 = 135;
+const SPARKLE_COL_2 = 1;
+const SPARKLE_FRAME_START_3 = 256;
+const SPARKLE_FRAME_END_3 = 263;
+const SPARKLE_COL_3 = 2;
+const SPARKLE_FRAME_START_4 = 264;
+const SPARKLE_FRAME_END_4 = 271;
+const SPARKLE_COL_4 = 3;
+const SPARKLE_FRAME_START_5 = 392;
+const SPARKLE_FRAME_END_5 = 399;
+const SPARKLE_COL_5 = 4;
+const SPARKLE_FRAME_START_6 = 400;
+const SPARKLE_FRAME_END_6 = 407;
+const SPARKLE_COL_6 = 5;
+
 // Sparkle schedule: [startFrame, endFrame, col] pairs
 const SPARKLE_SCHEDULE: ReadonlyArray<readonly [number, number, number]> = [
-  [120, 127, 0],
-  [128, 135, 1],
-  [256, 263, 2],
-  [264, 271, 3],
-  [392, 399, 4],
-  [400, 407, 5],
+  [SPARKLE_FRAME_START_1, SPARKLE_FRAME_END_1, SPARKLE_COL_1],
+  [SPARKLE_FRAME_START_2, SPARKLE_FRAME_END_2, SPARKLE_COL_2],
+  [SPARKLE_FRAME_START_3, SPARKLE_FRAME_END_3, SPARKLE_COL_3],
+  [SPARKLE_FRAME_START_4, SPARKLE_FRAME_END_4, SPARKLE_COL_4],
+  [SPARKLE_FRAME_START_5, SPARKLE_FRAME_END_5, SPARKLE_COL_5],
+  [SPARKLE_FRAME_START_6, SPARKLE_FRAME_END_6, SPARKLE_COL_6],
 ] as const;
 const SPARKLE_CYCLE = 408;
+
+// Chest interaction and rendering constants
+const INTERACTION_RANGE_TILE_MULTIPLIER = 2.5;
+const CHEST_INTERACTION_RANGE = TILE_SIZE * INTERACTION_RANGE_TILE_MULTIPLIER;
+const TRY_LOCKED_TIMER_FRAMES = 60;
+const UNLOCK_ANIMATION_COMPLETE_FRAME = 172;
+const CHEST_SPRITE_SIZE = 80;
+const WOODEN_CHEST_CLOSED_X = 0;
+const WOODEN_CHEST_OPEN_X = 80;
+const SILVER_CHEST_CLOSED_X = 160;
+const SILVER_CHEST_OPEN_X = 240;
+const SPARKLE_SIZE = 40;
+const LOCK_SIZE = 36;
+const LOCK_Y_OFFSET = 6;
+const LOCK_FADE_START_FRAME = 142;
+const LOCK_FADE_DURATION = 29;
+const LOCK_FRAME_PHASE_1 = 20;
+const LOCK_FRAME_PHASE_2 = 28;
+const LOCK_FRAME_PHASE_3 = 36;
+const LOCK_FRAME_PHASE_4 = 44;
+const LOCK_FRAME_PHASE_5 = 52;
+const LOCK_SRC_X_PHASE_0 = 0;
+const LOCK_SRC_X_PHASE_1 = 80;
+const LOCK_SRC_X_PHASE_2 = 160;
+const LOCK_SRC_X_PHASE_3 = 240;
+const LOCK_SRC_X_PHASE_4 = 320;
+const LOCK_SRC_X_PHASE_5 = 400;
 
 export const chestImage = new Image();
 chestImage.src = 'src/images/environment/treasure_chests.png';
@@ -112,7 +159,7 @@ export class TreasureChestSystem {
   tryInteract(player: HumanPlayer | CatPlayer): boolean {
     const px = player.x;
     const py = player.y;
-    const rangeThreshold = TILE_SIZE * 2.5;
+    const rangeThreshold = CHEST_INTERACTION_RANGE;
 
     let closestChest: TreasureChest | null = null;
     let closestDist = rangeThreshold;
@@ -129,7 +176,7 @@ export class TreasureChestSystem {
     if (closestChest === null) return false;
 
     if (closestChest.state === 'locked' || closestChest.state === 'unlocking') {
-      closestChest.tryLockedTimer = 60;
+      closestChest.tryLockedTimer = TRY_LOCKED_TIMER_FRAMES;
       this.onLockedAttempt?.();
       return true;
     }
@@ -155,8 +202,8 @@ export class TreasureChestSystem {
       // Advance unlock animation
       if (chest.state === 'unlocking') {
         chest.unlockFrame++;
-        // At frame 172+ transition to unlocked
-        if (chest.unlockFrame >= 172) {
+        // At frame UNLOCK_ANIMATION_COMPLETE_FRAME+ transition to unlocked
+        if (chest.unlockFrame >= UNLOCK_ANIMATION_COMPLETE_FRAME) {
           chest.state = 'unlocked';
           chest.sparkleFrame = 0;
         }
@@ -213,72 +260,111 @@ export class TreasureChestSystem {
     const dy = chest.tileY * TILE_SIZE - camY;
 
     if (chest.state === 'opened') {
-      const openedSrcX = chest.type === 'wooden' ? 80 : 240;
-      ctx.drawImage(chestImage, openedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
+      const openedSrcX = chest.type === 'wooden' ? WOODEN_CHEST_OPEN_X : SILVER_CHEST_OPEN_X;
+      ctx.drawImage(
+        chestImage,
+        openedSrcX,
+        0,
+        CHEST_SPRITE_SIZE,
+        CHEST_SPRITE_SIZE,
+        dx,
+        dy,
+        TILE_SIZE,
+        TILE_SIZE,
+      );
       return;
     }
 
-    const closedSrcX = chest.type === 'wooden' ? 0 : 160;
-    ctx.drawImage(chestImage, closedSrcX, 0, 80, 80, dx, dy, TILE_SIZE, TILE_SIZE);
+    const closedSrcX = chest.type === 'wooden' ? WOODEN_CHEST_CLOSED_X : SILVER_CHEST_CLOSED_X;
+    ctx.drawImage(
+      chestImage,
+      closedSrcX,
+      0,
+      CHEST_SPRITE_SIZE,
+      CHEST_SPRITE_SIZE,
+      dx,
+      dy,
+      TILE_SIZE,
+      TILE_SIZE,
+    );
 
     if (chest.state === 'unlocked') {
       const sf = chest.sparkleFrame;
       let sparkleSrcX = -1;
       for (const [start, end, col] of SPARKLE_SCHEDULE) {
         if (sf >= start && sf <= end) {
-          sparkleSrcX = col * 80;
+          sparkleSrcX = col * CHEST_SPRITE_SIZE;
           break;
         }
       }
       if (sparkleSrcX >= 0) {
-        const sparkleSize = 40;
-        const sparkleOffX = dx + (TILE_SIZE - sparkleSize) / 2;
-        const sparkleOffY = dy + (TILE_SIZE - sparkleSize) / 2;
+        const sparkleOffX = dx + (TILE_SIZE - SPARKLE_SIZE) / 2;
+        const sparkleOffY = dy + (TILE_SIZE - SPARKLE_SIZE) / 2;
         ctx.drawImage(
           chestImage,
           sparkleSrcX,
-          80,
-          80,
-          80,
+          CHEST_SPRITE_SIZE,
+          CHEST_SPRITE_SIZE,
+          CHEST_SPRITE_SIZE,
           sparkleOffX,
           sparkleOffY,
-          sparkleSize,
-          sparkleSize,
+          SPARKLE_SIZE,
+          SPARKLE_SIZE,
         );
       }
     }
 
-    const lockSize = 36;
+    const lockSize = LOCK_SIZE;
     const lockX = dx + (TILE_SIZE - lockSize) / 2;
-    const lockY = dy - lockSize - 6;
+    const lockY = dy - lockSize - LOCK_Y_OFFSET;
 
     if (chest.state === 'locked' && chest.tryLockedTimer > 0) {
-      ctx.drawImage(chestImage, 0, 160, 80, 80, lockX, lockY, lockSize, lockSize);
+      ctx.drawImage(
+        chestImage,
+        SILVER_CHEST_CLOSED_X,
+        SILVER_CHEST_CLOSED_X,
+        CHEST_SPRITE_SIZE,
+        CHEST_SPRITE_SIZE,
+        lockX,
+        lockY,
+        lockSize,
+        lockSize,
+      );
     } else if (chest.state === 'unlocking') {
       const uf = chest.unlockFrame;
       ctx.save();
 
-      if (uf >= 142) {
-        const fadeProgress = (uf - 142) / 29;
+      if (uf >= LOCK_FADE_START_FRAME) {
+        const fadeProgress = (uf - LOCK_FADE_START_FRAME) / LOCK_FADE_DURATION;
         ctx.globalAlpha = Math.max(0, 1 - fadeProgress);
       }
 
       let lockSrcX: number;
-      if (uf < 20) {
-        lockSrcX = 0;
-      } else if (uf < 28) {
-        lockSrcX = 80;
-      } else if (uf < 36) {
-        lockSrcX = 160;
-      } else if (uf < 44) {
-        lockSrcX = 240;
-      } else if (uf < 52) {
-        lockSrcX = 320;
+      if (uf < LOCK_FRAME_PHASE_1) {
+        lockSrcX = LOCK_SRC_X_PHASE_0;
+      } else if (uf < LOCK_FRAME_PHASE_2) {
+        lockSrcX = LOCK_SRC_X_PHASE_1;
+      } else if (uf < LOCK_FRAME_PHASE_3) {
+        lockSrcX = LOCK_SRC_X_PHASE_2;
+      } else if (uf < LOCK_FRAME_PHASE_4) {
+        lockSrcX = LOCK_SRC_X_PHASE_3;
+      } else if (uf < LOCK_FRAME_PHASE_5) {
+        lockSrcX = LOCK_SRC_X_PHASE_4;
       } else {
-        lockSrcX = 400;
+        lockSrcX = LOCK_SRC_X_PHASE_5;
       }
 
-      ctx.drawImage(chestImage, lockSrcX, 160, 80, 80, lockX, lockY, lockSize, lockSize);
+      ctx.drawImage(
+        chestImage,
+        lockSrcX,
+        SILVER_CHEST_CLOSED_X,
+        CHEST_SPRITE_SIZE,
+        CHEST_SPRITE_SIZE,
+        lockX,
+        lockY,
+        lockSize,
+        lockSize,
+      );
       ctx.restore();
     }
 
@@ -287,7 +373,7 @@ export class TreasureChestSystem {
         active.x - chest.tileX * TILE_SIZE,
         active.y - chest.tileY * TILE_SIZE,
       );
-      if (playerDist < TILE_SIZE * 2.5) {
+      if (playerDist < CHEST_INTERACTION_RANGE) {
         drawInteractionPrompt(ctx, dx, dy, TILE_SIZE, 'Open Chest');
       }
     }

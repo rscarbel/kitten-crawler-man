@@ -22,6 +22,12 @@ import type { PauseMenu } from '../ui/PauseMenu';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { platform } from '../core/Platform';
 
+const FOLLOW_DISTANCE_MULTIPLIER = 1.5;
+const COMPANION_FOLLOW_SPEED = 3.5;
+const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
+const COMPANION_MOVE_CHECK_OFFSET = 1.5;
+const HUD_SKILL_BADGE_GAP = 4;
+
 export abstract class GameplayScene extends Scene {
   abstract readonly pm: PlayerManager;
   protected abstract readonly pauseMenu: PauseMenu;
@@ -59,8 +65,8 @@ export abstract class GameplayScene extends Scene {
     const canvas = this.sceneManager.canvas;
     const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
     const mapPxH = map.structure.length * TILE_SIZE;
-    const cx = player.x + TILE_SIZE / 2 - canvas.width / 2;
-    const cy = player.y + TILE_SIZE / 2 - canvas.height / 2;
+    const cx = player.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.width / 2;
+    const cy = player.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.height / 2;
     return {
       x: mapPxW <= canvas.width ? (mapPxW - canvas.width) / 2 : clamp(cx, 0, mapPxW - canvas.width),
       y:
@@ -76,8 +82,8 @@ export abstract class GameplayScene extends Scene {
    */
   protected applyCompanionFollow(
     map: GameMap,
-    followDist = TILE_SIZE * 1.5,
-    followSpeed = 3.5,
+    followDist = TILE_SIZE * FOLLOW_DISTANCE_MULTIPLIER,
+    followSpeed = COMPANION_FOLLOW_SPEED,
   ): void {
     const player = this.active();
     const follower = this.inactive();
@@ -91,15 +97,25 @@ export abstract class GameplayScene extends Scene {
       const fmx = (fdx / fdist) * followSpeed;
       const fmy = (fdy / fdist) * followSpeed;
       const fnx = clamp(follower.x + fmx, 0, mapPxW - TILE_SIZE);
-      const ftxn = Math.floor((fnx + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (map.isWalkable(ftxn, Math.floor((follower.y + TILE_SIZE * 0.5) / TILE_SIZE)))
+      const ftxn = Math.floor((fnx + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER) / TILE_SIZE);
+      if (
+        map.isWalkable(
+          ftxn,
+          Math.floor((follower.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER) / TILE_SIZE),
+        )
+      )
         follower.x = fnx;
       const fny = clamp(follower.y + fmy, 0, mapPxH - TILE_SIZE);
-      const ftyn = Math.floor((fny + TILE_SIZE * 0.5) / TILE_SIZE);
-      if (map.isWalkable(Math.floor((follower.x + TILE_SIZE * 0.5) / TILE_SIZE), ftyn))
+      const ftyn = Math.floor((fny + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER) / TILE_SIZE);
+      if (
+        map.isWalkable(
+          Math.floor((follower.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER) / TILE_SIZE),
+          ftyn,
+        )
+      )
         follower.y = fny;
     }
-    follower.isMoving = fdist > TILE_SIZE * 1.5;
+    follower.isMoving = fdist > TILE_SIZE * COMPANION_MOVE_CHECK_OFFSET;
   }
 
   protected renderHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
@@ -114,7 +130,7 @@ export abstract class GameplayScene extends Scene {
         this.human,
         this.cat,
         this.notifPulse,
-        hud.hudPanelBottom + 4,
+        hud.hudPanelBottom + HUD_SKILL_BADGE_GAP,
       );
     } else {
       this._hudSkillBannerRect = hud.notifRect;

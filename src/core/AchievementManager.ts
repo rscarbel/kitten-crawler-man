@@ -1,5 +1,18 @@
 import { randomInt } from '../utils';
 
+const BRONZE_ADVENTURER_POTION_MIN = 1;
+const BRONZE_ADVENTURER_POTION_MAX = 2;
+const BRONZE_ADVENTURER_COIN_MIN = 5;
+const BRONZE_ADVENTURER_COIN_MAX = 10;
+const BRONZE_BOSS_POTION_MIN = 2;
+const BRONZE_BOSS_POTION_MAX = 3;
+const BRONZE_BOSS_COIN_MIN = 20;
+const BRONZE_BOSS_COIN_MAX = 25;
+const BRONZE_SPICY_POTION_RANDOM_MAX = 2;
+const BRONZE_SPICY_COINS = 15;
+const RECENT_EVENTS_MAX_CAP = 20;
+const EVENT_TIMESTAMP_MILLISECONDS_DIVISOR = 1000;
+
 export interface RecentEvent {
   label: string;
   timestamp: number;
@@ -88,11 +101,17 @@ export interface BoxContents {
 
 const BOX_CONTENTS = {
   Bronze: {
-    Adventurer: { potions: randomInt(1, 2), coins: randomInt(5, 10) },
-    Boss: { potions: randomInt(2, 3), coins: randomInt(20, 25) },
+    Adventurer: {
+      potions: randomInt(BRONZE_ADVENTURER_POTION_MIN, BRONZE_ADVENTURER_POTION_MAX),
+      coins: randomInt(BRONZE_ADVENTURER_COIN_MIN, BRONZE_ADVENTURER_COIN_MAX),
+    },
+    Boss: {
+      potions: randomInt(BRONZE_BOSS_POTION_MIN, BRONZE_BOSS_POTION_MAX),
+      coins: randomInt(BRONZE_BOSS_COIN_MIN, BRONZE_BOSS_COIN_MAX),
+    },
     Spicy: {
-      ...(randomInt(0, 2) ? { potions: 1 } : {}),
-      coins: 15,
+      ...(randomInt(0, BRONZE_SPICY_POTION_RANDOM_MAX) ? { potions: 1 } : {}),
+      coins: BRONZE_SPICY_COINS,
       bonus: { id: 'goblin_dynamite', quantity: 1 },
     },
   },
@@ -181,7 +200,7 @@ export class AchievementManager {
   /** Record a significant event (level-up, boss kill, etc.) for Mordecai's context. */
   logRecentEvent(label: string): void {
     this.recentEvents.unshift({ label, timestamp: Date.now() });
-    if (this.recentEvents.length > 20) this.recentEvents.pop();
+    if (this.recentEvents.length > RECENT_EVENTS_MAX_CAP) this.recentEvents.pop();
   }
 
   /** Return the N most recent events with elapsed time in seconds. */
@@ -189,7 +208,7 @@ export class AchievementManager {
     const now = Date.now();
     return this.recentEvents.slice(0, n).map((e) => ({
       label: e.label,
-      secondsAgo: Math.floor((now - e.timestamp) / 1000),
+      secondsAgo: Math.floor((now - e.timestamp) / EVENT_TIMESTAMP_MILLISECONDS_DIVISOR),
     }));
   }
 

@@ -32,6 +32,69 @@ export class SafeRoomSystem implements GameSystem {
   private readonly SLEEP_FADEIN = 30;
   private readonly SLEEP_HOLD = 90;
 
+  // Magic number constants
+  private static readonly HALFWIDTH_DIVISOR = 4;
+  private static readonly WANDER_PHASE_OFFSET = 210;
+  private static readonly WANDER_CYCLE = 500;
+  private static readonly WANDER_WALK_FRAMES = 150;
+  private static readonly WANDER_IDLE_DURATION = 100;
+  private static readonly WANDER_RETURN_FRAMES = 150;
+  private static readonly WANDER_MAX_OFFSET_TILES = 1.8;
+  private static readonly TILE_CENTER = 0.5;
+  private static readonly MORDECAI_NEAR_DISTANCE = 2.5;
+  private static readonly BED_NEAR_DISTANCE = 1.8;
+  private static readonly SLEEP_HEAL_TRIGGER = 5;
+  private static readonly SLEEP_FRAMES_DEDUCTED = 10800;
+  private static readonly BANNER_TEXT_SIZE = 10;
+  private static readonly BANNER_TILE_Y_OFFSET = -1;
+  private static readonly BANNER_Y_BASELINE_OFFSET = 0.65;
+  private static readonly BANNER_TEXT_TOP_OFFSET = 8;
+  private static readonly DIALOG_HEIGHT = 140;
+  private static readonly DIALOG_MAX_WIDTH = 560;
+  private static readonly DIALOG_HORIZONTAL_MARGIN = 40;
+  private static readonly DIALOG_VERTICAL_MARGIN = 20;
+  private static readonly DIALOG_PADDING = 14;
+  private static readonly DIALOG_LINE_WIDTH = 2;
+  private static readonly DIALOG_SPEAKER_SIZE = 13;
+  private static readonly DIALOG_SPEAKER_Y_TOP = 10;
+  private static readonly DIALOG_LOADING_SIZE = 12;
+  private static readonly DIALOG_LOADING_Y_TOP = 40;
+  private static readonly DIALOG_TEXT_SIZE = 12;
+  private static readonly DIALOG_TEXT_Y_TOP = 34;
+  private static readonly DIALOG_TEXT_WIDTH_OFFSET = 28;
+  private static readonly DIALOG_LINE_HEIGHT = 18;
+  private static readonly DIALOG_CLOSE_SIZE = 10;
+  private static readonly DIALOG_CLOSE_Y_OFFSET = 18;
+  private static readonly DIALOG_CLOSE_X_OFFSET = 12;
+  private static readonly HUD_BANNER_SIZE = 12;
+  private static readonly HUD_BANNER_Y_OFFSET = 18;
+  private static readonly HUD_BANNER_TEXT_TOP_OFFSET = 10;
+  private static readonly HUD_BANNER_ALPHA = 0.85;
+  private static readonly SLEEP_TEXT_Y_OFFSET = 10;
+  private static readonly SLEEP_TEXT_TOP_OFFSET = 21;
+  private static readonly SLEEP_VISION_ALPHA = 0.92;
+  private static readonly ZZZ_Y_OFFSET = 18;
+  private static readonly ZZZ_TEXT_TOP_OFFSET = 11;
+  private static readonly BED_FRAME_LEFT = 0.05;
+  private static readonly BED_FRAME_TOP = 0.12;
+  private static readonly BED_FRAME_WIDTH = 0.9;
+  private static readonly BED_FRAME_HEIGHT = 0.8;
+  private static readonly BED_PILLOW_LEFT = 0.1;
+  private static readonly BED_PILLOW_TOP = 0.18;
+  private static readonly BED_PILLOW_WIDTH = 0.8;
+  private static readonly BED_PILLOW_HEIGHT = 0.65;
+  private static readonly BED_SHEET_LEFT = 0.14;
+  private static readonly BED_SHEET_TOP = 0.21;
+  private static readonly BED_SHEET_WIDTH = 0.72;
+  private static readonly BED_SHEET_HEIGHT = 0.2;
+  private static readonly BED_BLANKET_LEFT = 0.1;
+  private static readonly BED_BLANKET_TOP = 0.41;
+  private static readonly BED_BLANKET_WIDTH = 0.8;
+  private static readonly BED_BLANKET_HEIGHT = 0.42;
+  private static readonly BED_BLANKET_FOLD_HEIGHT = 0.05;
+  private static readonly BED_EDGE_HEIGHT = 0.1;
+  private static readonly BED_EDGE_BOTTOM_TOP = 0.82;
+
   // Mordecai wander animation (shared timer, different phase per entry)
   private wanderTime = 0;
 
@@ -45,7 +108,7 @@ export class SafeRoomSystem implements GameSystem {
 
     if (gameMap.safeRooms.length > 0) {
       for (const sr of gameMap.safeRooms) {
-        const halfW = Math.floor(sr.bounds.w / 4);
+        const halfW = Math.floor(sr.bounds.w / SafeRoomSystem.HALFWIDTH_DIVISOR);
         this.entries.push({
           bounds: sr.bounds,
           mordecaiHomeTileX: sr.centre.x - halfW,
@@ -110,22 +173,31 @@ export class SafeRoomSystem implements GameSystem {
     facingX: number;
   } {
     // Each entry is out of phase with others so they don't walk in unison
-    const t = this.wanderTime + entryIdx * 210;
+    const t = this.wanderTime + entryIdx * SafeRoomSystem.WANDER_PHASE_OFFSET;
     // Cycle: 150f walk right, 100f idle, 150f walk left, 100f idle = 500f
-    const cycle = t % 500;
-    const maxOffset = TILE_SIZE * 1.8;
+    const cycle = t % SafeRoomSystem.WANDER_CYCLE;
+    const maxOffset = TILE_SIZE * SafeRoomSystem.WANDER_MAX_OFFSET_TILES;
 
-    if (cycle < 150) {
+    if (cycle < SafeRoomSystem.WANDER_WALK_FRAMES) {
       return {
-        offsetX: (cycle / 150) * maxOffset,
+        offsetX: (cycle / SafeRoomSystem.WANDER_WALK_FRAMES) * maxOffset,
         isWalking: true,
         facingX: 1,
       };
-    } else if (cycle < 250) {
+    } else if (cycle < SafeRoomSystem.WANDER_WALK_FRAMES + SafeRoomSystem.WANDER_IDLE_DURATION) {
       return { offsetX: maxOffset, isWalking: false, facingX: 1 };
-    } else if (cycle < 400) {
+    } else if (
+      cycle <
+      SafeRoomSystem.WANDER_WALK_FRAMES +
+        SafeRoomSystem.WANDER_IDLE_DURATION +
+        SafeRoomSystem.WANDER_RETURN_FRAMES
+    ) {
       return {
-        offsetX: maxOffset - ((cycle - 250) / 150) * maxOffset,
+        offsetX:
+          maxOffset -
+          ((cycle - SafeRoomSystem.WANDER_WALK_FRAMES - SafeRoomSystem.WANDER_IDLE_DURATION) /
+            SafeRoomSystem.WANDER_RETURN_FRAMES) *
+            maxOffset,
         isWalking: true,
         facingX: -1,
       };
@@ -138,8 +210,8 @@ export class SafeRoomSystem implements GameSystem {
 
   isEntityInSafeRoom(entity: { x: number; y: number }): boolean {
     const ts = TILE_SIZE;
-    const tx = Math.floor((entity.x + ts * 0.5) / ts);
-    const ty = Math.floor((entity.y + ts * 0.5) / ts);
+    const tx = Math.floor((entity.x + ts * SafeRoomSystem.TILE_CENTER) / ts);
+    const ty = Math.floor((entity.y + ts * SafeRoomSystem.TILE_CENTER) / ts);
     return this.entries.some(
       (e) =>
         tx >= e.bounds.x &&
@@ -154,7 +226,9 @@ export class SafeRoomSystem implements GameSystem {
       const { offsetX } = this.getWanderState(i);
       const mx = e.mordecaiHomeTileX * TILE_SIZE + offsetX;
       const my = e.mordecaiHomeTileY * TILE_SIZE;
-      return Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * 2.5;
+      return (
+        Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE
+      );
     });
   }
 
@@ -162,7 +236,9 @@ export class SafeRoomSystem implements GameSystem {
     return this.entries.some((e) => {
       const bx = e.bedTileX * TILE_SIZE;
       const by = e.bedTileY * TILE_SIZE;
-      return Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * 1.8;
+      return (
+        Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * SafeRoomSystem.BED_NEAR_DISTANCE
+      );
     });
   }
 
@@ -206,7 +282,10 @@ export class SafeRoomSystem implements GameSystem {
   updateSleep(human: HumanPlayer, cat: CatPlayer): number {
     this.sleepTimer--;
 
-    if (!this.sleepHealed && this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - 5) {
+    if (
+      !this.sleepHealed &&
+      this.sleepTimer <= this.SLEEP_HOLD + this.SLEEP_FADEIN - SafeRoomSystem.SLEEP_HEAL_TRIGGER
+    ) {
       human.hp = human.maxHp;
       cat.hp = cat.maxHp;
       this.sleepHealed = true;
@@ -214,7 +293,7 @@ export class SafeRoomSystem implements GameSystem {
 
     if (this.sleepTimer <= 0) {
       this._isSleeping = false;
-      return 10800; // 3 minutes at 60 fps
+      return SafeRoomSystem.SLEEP_FRAMES_DEDUCTED; // 3 minutes at 60 fps
     }
     return 0;
   }
@@ -235,15 +314,18 @@ export class SafeRoomSystem implements GameSystem {
 
       // "SAFE ROOM" banner (world-space label above the room)
       // size=10, old baseline = bsy + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
-      const bannerTileY = b.y - 1;
+      const bannerTileY = b.y + SafeRoomSystem.BANNER_TILE_Y_OFFSET;
       const bannerTileX = b.x + Math.floor(b.w / 2);
       const bsx = bannerTileX * ts - camX;
       const bsy = bannerTileY * ts - camY;
       drawText(ctx, 'SAFE ROOM', {
         ...TEXT_PRESETS.label,
         x: bsx,
-        y: bsy + ts * 0.65 - 8,
-        size: 10,
+        y:
+          bsy +
+          ts * SafeRoomSystem.BANNER_Y_BASELINE_OFFSET -
+          SafeRoomSystem.BANNER_TEXT_TOP_OFFSET,
+        size: SafeRoomSystem.BANNER_TEXT_SIZE,
         bold: true,
         color: '#f0e4c8',
         align: 'center',
@@ -293,7 +375,7 @@ export class SafeRoomSystem implements GameSystem {
           active.x - (e.mordecaiHomeTileX * TILE_SIZE + offsetX),
           active.y - e.mordecaiHomeTileY * TILE_SIZE,
         ) <
-          TILE_SIZE * 2.5 &&
+          TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE &&
         !this._mordecaiDialogOpen;
       if (nearThis) {
         drawInteractionPrompt(ctx, mx, my, TILE_SIZE, 'Talk');
@@ -306,36 +388,42 @@ export class SafeRoomSystem implements GameSystem {
     if (this.isEntityInSafeRoom(active)) {
       drawText(ctx, '~ Safe Room ~', {
         x: canvas.width / 2,
-        y: canvas.height - 18 - 10,
-        size: 12,
+        y:
+          canvas.height -
+          SafeRoomSystem.HUD_BANNER_Y_OFFSET -
+          SafeRoomSystem.HUD_BANNER_TEXT_TOP_OFFSET,
+        size: SafeRoomSystem.HUD_BANNER_SIZE,
         bold: true,
         color: '#f0e4c8',
-        alpha: 0.85,
+        alpha: SafeRoomSystem.HUD_BANNER_ALPHA,
         align: 'center',
       });
     }
   }
 
   renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const dh = 140;
-    const dw = Math.min(560, canvas.width - 40);
+    const dh = SafeRoomSystem.DIALOG_HEIGHT;
+    const dw = Math.min(
+      SafeRoomSystem.DIALOG_MAX_WIDTH,
+      canvas.width - SafeRoomSystem.DIALOG_HORIZONTAL_MARGIN,
+    );
     const dx = (canvas.width - dw) / 2;
-    const dy = canvas.height - dh - 20;
+    const dy = canvas.height - dh - SafeRoomSystem.DIALOG_VERTICAL_MARGIN;
 
     // Dialog background and border (drawn directly — not text)
     ctx.save();
-    ctx.fillStyle = 'rgba(10,8,6,0.92)';
+    ctx.fillStyle = `rgba(10,8,6,${SafeRoomSystem.SLEEP_VISION_ALPHA})`;
     ctx.fillRect(dx, dy, dw, dh);
     ctx.strokeStyle = '#c8a860';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = SafeRoomSystem.DIALOG_LINE_WIDTH;
     ctx.strokeRect(dx, dy, dw, dh);
     ctx.restore();
 
     // Speaker name: size=13, old baseline = dy+20; top = dy+20 - round(13*0.8) = dy+10
     drawText(ctx, 'Mordecai', {
-      x: dx + 14,
-      y: dy + 10,
-      size: 13,
+      x: dx + SafeRoomSystem.DIALOG_PADDING,
+      y: dy + SafeRoomSystem.DIALOG_SPEAKER_Y_TOP,
+      size: SafeRoomSystem.DIALOG_SPEAKER_SIZE,
       bold: true,
       color: '#c8a860',
     });
@@ -343,29 +431,29 @@ export class SafeRoomSystem implements GameSystem {
     if (this.mordecaiLoading) {
       // size=12, old baseline = dy+50; top = dy+50 - round(12*0.8) = dy+40
       drawText(ctx, '...', {
-        x: dx + 14,
-        y: dy + 40,
-        size: 12,
+        x: dx + SafeRoomSystem.DIALOG_PADDING,
+        y: dy + SafeRoomSystem.DIALOG_LOADING_Y_TOP,
+        size: SafeRoomSystem.DIALOG_LOADING_SIZE,
         color: '#7a6e5a',
       });
     } else {
       // Speech text with built-in word-wrap; lineHeight=18 matches original spacing
       // First line old baseline = dy+44; top = dy+44 - round(12*0.8) = dy+34
       drawText(ctx, this.mordecaiLine ?? '', {
-        x: dx + 14,
-        y: dy + 34,
-        size: 12,
+        x: dx + SafeRoomSystem.DIALOG_PADDING,
+        y: dy + SafeRoomSystem.DIALOG_TEXT_Y_TOP,
+        size: SafeRoomSystem.DIALOG_TEXT_SIZE,
         color: '#e8dfc8',
-        width: dw - 28,
-        lineHeight: 18,
+        width: dw - SafeRoomSystem.DIALOG_TEXT_WIDTH_OFFSET,
+        lineHeight: SafeRoomSystem.DIALOG_LINE_HEIGHT,
       });
     }
 
     // Close hint: size=10, old baseline = dy+dh-10; top = dy+dh-10 - round(10*0.8) = dy+dh-18
     drawText(ctx, '[Space / Esc] Close', {
-      x: dx + dw - 12,
-      y: dy + dh - 18,
-      size: 10,
+      x: dx + dw - SafeRoomSystem.DIALOG_CLOSE_X_OFFSET,
+      y: dy + dh - SafeRoomSystem.DIALOG_CLOSE_Y_OFFSET,
+      size: SafeRoomSystem.DIALOG_CLOSE_SIZE,
       color: '#7a6e5a',
       align: 'right',
     });
@@ -396,7 +484,10 @@ export class SafeRoomSystem implements GameSystem {
       // top = (canvas.height/2 - 10) - round(26*0.8) = (canvas.height/2 - 10) - 21
       drawText(ctx, 'Sleeping...', {
         x: canvas.width / 2,
-        y: canvas.height / 2 - 10 - 21,
+        y:
+          canvas.height / 2 -
+          SafeRoomSystem.SLEEP_TEXT_Y_OFFSET -
+          SafeRoomSystem.SLEEP_TEXT_TOP_OFFSET,
         size: 26,
         bold: true,
         color: '#e2e8f0',
@@ -406,7 +497,7 @@ export class SafeRoomSystem implements GameSystem {
       // top = (canvas.height/2 + 18) - round(14*0.8) = (canvas.height/2 + 18) - 11
       drawText(ctx, 'zZz', {
         x: canvas.width / 2,
-        y: canvas.height / 2 + 18 - 11,
+        y: canvas.height / 2 + SafeRoomSystem.ZZZ_Y_OFFSET - SafeRoomSystem.ZZZ_TEXT_TOP_OFFSET,
         size: 14,
         color: '#94a3b8',
         align: 'center',
@@ -416,25 +507,65 @@ export class SafeRoomSystem implements GameSystem {
 
   private renderBed(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {
     ctx.fillStyle = '#7a4e2c';
-    ctx.fillRect(sx + s * 0.05, sy + s * 0.12, s * 0.9, s * 0.8);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
+      sy + s * SafeRoomSystem.BED_FRAME_TOP,
+      s * SafeRoomSystem.BED_FRAME_WIDTH,
+      s * SafeRoomSystem.BED_FRAME_HEIGHT,
+    );
 
     ctx.fillStyle = '#f0e8d8';
-    ctx.fillRect(sx + s * 0.1, sy + s * 0.18, s * 0.8, s * 0.65);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_PILLOW_LEFT,
+      sy + s * SafeRoomSystem.BED_PILLOW_TOP,
+      s * SafeRoomSystem.BED_PILLOW_WIDTH,
+      s * SafeRoomSystem.BED_PILLOW_HEIGHT,
+    );
 
     ctx.fillStyle = '#fafaf8';
-    ctx.fillRect(sx + s * 0.14, sy + s * 0.21, s * 0.72, s * 0.2);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_SHEET_LEFT,
+      sy + s * SafeRoomSystem.BED_SHEET_TOP,
+      s * SafeRoomSystem.BED_SHEET_WIDTH,
+      s * SafeRoomSystem.BED_SHEET_HEIGHT,
+    );
     ctx.strokeStyle = '#d8d0c0';
     ctx.lineWidth = 0.5;
-    ctx.strokeRect(sx + s * 0.14, sy + s * 0.21, s * 0.72, s * 0.2);
+    ctx.strokeRect(
+      sx + s * SafeRoomSystem.BED_SHEET_LEFT,
+      sy + s * SafeRoomSystem.BED_SHEET_TOP,
+      s * SafeRoomSystem.BED_SHEET_WIDTH,
+      s * SafeRoomSystem.BED_SHEET_HEIGHT,
+    );
 
     ctx.fillStyle = '#3a6e8a';
-    ctx.fillRect(sx + s * 0.1, sy + s * 0.41, s * 0.8, s * 0.42);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_BLANKET_LEFT,
+      sy + s * SafeRoomSystem.BED_BLANKET_TOP,
+      s * SafeRoomSystem.BED_BLANKET_WIDTH,
+      s * SafeRoomSystem.BED_BLANKET_HEIGHT,
+    );
 
     ctx.fillStyle = '#2e5a74';
-    ctx.fillRect(sx + s * 0.1, sy + s * 0.41, s * 0.8, s * 0.05);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_BLANKET_LEFT,
+      sy + s * SafeRoomSystem.BED_BLANKET_TOP,
+      s * SafeRoomSystem.BED_BLANKET_WIDTH,
+      s * SafeRoomSystem.BED_BLANKET_FOLD_HEIGHT,
+    );
 
     ctx.fillStyle = '#5c3820';
-    ctx.fillRect(sx + s * 0.05, sy + s * 0.12, s * 0.9, s * 0.1);
-    ctx.fillRect(sx + s * 0.05, sy + s * 0.82, s * 0.9, s * 0.1);
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
+      sy + s * SafeRoomSystem.BED_FRAME_TOP,
+      s * SafeRoomSystem.BED_FRAME_WIDTH,
+      s * SafeRoomSystem.BED_EDGE_HEIGHT,
+    );
+    ctx.fillRect(
+      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
+      sy + s * SafeRoomSystem.BED_EDGE_BOTTOM_TOP,
+      s * SafeRoomSystem.BED_FRAME_WIDTH,
+      s * SafeRoomSystem.BED_EDGE_HEIGHT,
+    );
   }
 }

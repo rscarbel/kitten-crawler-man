@@ -29,6 +29,225 @@ const HOTBAR_SLOT_SIZE = 52;
 const HOTBAR_GAP = 4;
 const HOTBAR_BOTTOM_MARGIN = 12;
 
+// Toggle button dimensions
+const DESKTOP_BTN_W = 104;
+const RIGHT_COL_MARGIN = 8;
+const PAUSE_BTN_H = 28;
+const TOGGLE_BTN_H = 28;
+const BTN_ROW_GAP = 6;
+const PANEL_TOP_MARGIN = 20;
+
+// Hotbar hit margin
+const HOTBAR_HIT_MARGIN = 12;
+
+// Context menu layout
+const CONTEXT_MENU_W = 120;
+const CONTEXT_MENU_ITEM_H = 22;
+const CONTEXT_MENU_V_PAD = 4;
+const CONTEXT_MENU_MARGIN = 4;
+const CONTEXT_LABEL_OFFSET = 6;
+
+// Info popup
+const INFO_POPUP_MAX_W = 280;
+const INFO_POPUP_MARGIN = 32;
+const INFO_POPUP_LINE_H = 15;
+const INFO_POPUP_PAD = 10;
+const INFO_POPUP_DESC_CHARS_PER_LINE = 36;
+const INFO_TITLE_BOTTOM_OFFSET = 3;
+const INFO_DIVIDER_OFFSET_X = 4;
+const INFO_DIVIDER_MARGIN_X = 8;
+const INFO_LABEL_X_OFFSET = 8;
+
+// Drop dialog
+const DROP_DIALOG_MAX_W = 200;
+const DROP_DIALOG_MARGIN = 32;
+const DROP_DIALOG_H = 110;
+const DROP_TITLE_Y = 22;
+const DROP_TITLE_Y_CORRECTION = 9;
+const DROP_TITLE_SIZE = 11;
+const DROP_CLOSE_BTN_OFFSET_X = 22;
+const DROP_CLOSE_BTN_Y = 6;
+const DROP_CLOSE_BTN_W = 16;
+const DROP_CLOSE_BTN_H = 16;
+const DROP_MINUS_BTN_X_PAD = 20;
+const DROP_MINUS_BTN_Y = 54;
+const DROP_PM_BTN_SIZE = 24;
+const DROP_PLUS_BTN_OFFSET = 44;
+const DROP_QTY_FONT_SIZE = 16;
+const DROP_HINT_X_OFFSET = 14;
+const DROP_QTY_Y_OFFSET = 5;
+const DROP_HINT_Y_OFFSET = 11;
+const DROP_HINT_SIZE = 9;
+const DROP_CONFIRM_OFFSET = 28;
+const DROP_CONFIRM_BTN_H = 22;
+const DROP_CONFIRM_SIDE_PAD = 40;
+
+// Panel header
+const PANEL_HEADER_COINS_OFFSET = 36;
+const PANEL_CLOSE_OFFSET_X = 20;
+const PANEL_CLOSE_Y = 8;
+
+// Hotbar strip padding
+const HOTBAR_STRIP_PAD = 6;
+const HOTBAR_STRIP_EXTRA_H = 18;
+
+// Slot label
+const SLOT_LABEL_BELOW_OFFSET = 4;
+const SLOT_LABEL_SIZE = 9;
+
+// Slot equipped badge
+const SLOT_BADGE_LETTER_OPACITY = 0.55;
+
+// Drag icon opacity
+const DRAG_ICON_ALPHA = 0.75;
+
+// Default minimap size when not yet updated by scene
+const DEFAULT_MM_SIZE = 240;
+
+// Info popup text offsets
+const INFO_POPUP_PAD_HALF = 0.5;
+const INFO_POPUP_PAD_TIMES_1_5 = 1.5;
+const INFO_POPUP_DESC_BASELINE_OFFSET = 3;
+const INFO_POPUP_DESC_BASELINE_CORRECTION = 8;
+const INFO_POPUP_TITLE_CORRECTION = 9;
+const INFO_POPUP_HINT_BOTTOM = 4;
+const INFO_POPUP_HINT_CORRECTION = 7;
+const INFO_POPUP_HINT_SIZE = 9;
+const INFO_POPUP_TITLE_SIZE = 11;
+const INFO_POPUP_DESC_SIZE = 10;
+
+// Navagation bar
+const NAV_BAR_LEFT_QUARTER = 0.25;
+const NAV_BAR_RIGHT_QUARTER = 0.75;
+const NAV_BAR_SIZE = 11;
+
+// Panel header y-offsets
+const PANEL_NAME_Y = 15;
+const PANEL_COINS_Y = 16;
+
+// Cooldown seconds threshold
+const COOLDOWN_SECS_OVERFLOW = 99;
+
+// Quantity badge minimum font
+const QTY_BADGE_MIN_FONT = 7;
+const QTY_BADGE_FONT_SCALE = 0.22;
+const QTY_BADGE_MARGIN = 3;
+
+// Close/back button in panel header
+const CLOSE_BTN_W = 16;
+const CLOSE_BTN_H = 16;
+
+// Panel header text sizes
+const PANEL_HEADER_NAME_SIZE = 12;
+const PANEL_HEADER_COINS_SIZE = 11;
+
+// Nav bar layout
+const NAV_Y_ADJUST = 6;
+const NAV_BASELINE_CORRECTION = 9;
+
+// Cooldown
+const COOLDOWN_PER_SECOND = 60;
+
+// Health potion icon proportions
+const HP_POTION_CX = 0.5;
+const HP_POTION_CY = 0.58;
+const HP_POTION_R = 0.27;
+const HP_POTION_LIQUID_OFFSET = 0.15;
+const HP_POTION_LIQUID_SCALE = 0.78;
+const HP_POTION_NECK_X = 0.08;
+const HP_POTION_NECK_Y = 0.22;
+const HP_POTION_NECK_W = 0.16;
+const HP_POTION_NECK_H = 0.2;
+const HP_POTION_CORK_X = 0.1;
+const HP_POTION_CORK_Y = 0.17;
+const HP_POTION_CORK_W = 0.2;
+const HP_POTION_CORK_H = 0.08;
+const HP_POTION_SHINE_OFFSET = 0.3;
+const HP_POTION_SHINE_RX = 0.22;
+const HP_POTION_SHINE_RY = 0.13;
+const HP_POTION_SHINE_ROT = -0.7;
+
+// Scroll of confusing fog icon proportions
+const SCROLL_CX = 0.5;
+const SCROLL_CY = 0.55;
+const SCROLL_W = 0.52;
+const SCROLL_H = 0.42;
+const SCROLL_ROLL_OFFSET = 3;
+const SCROLL_ROLL_PAD = 2;
+const SCROLL_ROLL_H = 6;
+const SCROLL_ROLL_BOTTOM = 4;
+const SCROLL_SQUIGGLE_ROWS = 3;
+const SCROLL_SQUIGGLE_START_Y = 8;
+const SCROLL_SQUIGGLE_ROW_H = 9;
+const SCROLL_SQUIGGLE_AMP = 4;
+const SCROLL_SQUIGGLE_INNER = 0.35;
+const SCROLL_SQUIGGLE_CTRL = 0.1;
+const SCROLL_GLOW_W = 0.45;
+const SCROLL_GLOW_H = 0.35;
+
+// Boxers icon proportions
+const BOXERS_CX = 0.5;
+const BOXERS_CY = 0.56;
+const BOXERS_WAIST_X = 0.12;
+const BOXERS_WAIST_Y = 0.22;
+const BOXERS_WAIST_W = 0.76;
+const BOXERS_WAIST_H = 0.18;
+const BOXERS_LEG_INNER_X = 0.32;
+const BOXERS_LEG_INNER_VERT = 0.38;
+const BOXERS_LEG_OUTER_X = 0.38;
+const BOXERS_LEG_BOTTOM = 0.72;
+const BOXERS_LEG_CENTER = 0.05;
+const BOXERS_HEART_FONT = 0.18;
+const BOXERS_HEART_OFFSET = 0.16;
+const BOXERS_HEART_Y_OFFSET = 0.08;
+
+// Trollskin shirt icon proportions
+const SHIRT_CX = 0.5;
+const SHIRT_CY = 0.52;
+const SHIRT_BODY_X = 0.3;
+const SHIRT_BODY_TOP = 0.14;
+const SHIRT_BODY_SIDE = 0.28;
+const SHIRT_BODY_BOTTOM = 0.28;
+const SHIRT_SLEEVE_X1 = 0.3;
+const SHIRT_SLEEVE_X2 = 0.42;
+const SHIRT_SLEEVE_X3 = 0.32;
+const SHIRT_SLEEVE_X4 = 0.26;
+const SHIRT_SLEEVE_Y_TOP = 0.14;
+const SHIRT_SLEEVE_Y1 = 0.04;
+const SHIRT_SLEEVE_Y2 = 0.08;
+const SHIRT_SLEEVE_Y3 = 0.02;
+const SHIRT_COLLAR_RX = 0.1;
+const SHIRT_COLLAR_RY = 0.06;
+const SHIRT_COLLAR_Y = 0.16;
+const SHIRT_RUNE_FONT = 0.22;
+const SHIRT_RUNE_Y = 0.14;
+
+// Crown icon proportions
+const CROWN_CX = 0.5;
+const CROWN_CY = 0.48;
+const CROWN_BASE_Y = 0.08;
+const CROWN_BASE_RX = 0.34;
+const CROWN_BASE_RY = 0.1;
+const CROWN_BODY_X1 = 0.32;
+const CROWN_BODY_Y1 = 0.04;
+const CROWN_INNER_X1 = 0.28;
+const CROWN_INNER_Y1 = 0.18;
+const CROWN_INNER_X2 = 0.14;
+const CROWN_INNER_Y2 = 0.06;
+const CROWN_TIP_Y = 0.24;
+const CROWN_GEM_CENTER_Y = 0.16;
+const CROWN_GEM_CENTER_R = 0.06;
+const CROWN_GEM_SIDE_X = 0.2;
+const CROWN_GEM_SIDE_Y = 0.08;
+const CROWN_GEM_SIDE_R = 0.04;
+
+// Cooldown overlay opacity
+const COOLDOWN_OVERLAY_ALPHA = 0.65;
+const COOLDOWN_OVERLAY_DARK = 0.75;
+const COOLDOWN_Y_OFFSET = 4;
+const COOLDOWN_FONT_SCALE = 0.28;
+const COOLDOWN_FONT_BASELINE = 0.8;
+
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
@@ -88,20 +307,16 @@ export class InventoryPanel {
    * so the bag button can be positioned below the pause button, which itself sits below the minimap.
    * Must match the DESKTOP_BTN_W / PAUSE_BTN_H constants in DungeonUIRenderer.ts.
    */
-  mmSize = 240;
+  mmSize = DEFAULT_MM_SIZE;
 
   toggleBtnRect(canvas: HTMLCanvasElement) {
     // On mobile the button is handled via touch.bagBtnRect in renderMobileButtons.
     // On desktop, sit below the pause button in the right column.
-    const DESKTOP_BTN_W = 104;
-    const RIGHT_COL_MARGIN = 8;
-    const PAUSE_BTN_H = 28;
-    const ROW_GAP = 6;
     return {
       x: canvas.width - RIGHT_COL_MARGIN - DESKTOP_BTN_W,
-      y: 8 + this.mmSize + 20 + PAUSE_BTN_H + ROW_GAP,
+      y: RIGHT_COL_MARGIN + this.mmSize + PANEL_TOP_MARGIN + PAUSE_BTN_H + BTN_ROW_GAP,
       w: DESKTOP_BTN_W,
-      h: 28,
+      h: TOGGLE_BTN_H,
     };
   }
 
@@ -189,7 +404,7 @@ export class InventoryPanel {
   /** Returns hotbar slot index (0–7) if (mx, my) hits a slot, else -1. */
   getHotbarTappedIndex(mx: number, my: number, canvas: HTMLCanvasElement): number {
     const hb = this.hotbarRect(canvas);
-    if (my < hb.y - 12 || my > hb.y + hb.h + 12) return -1;
+    if (my < hb.y - HOTBAR_HIT_MARGIN || my > hb.y + hb.h + HOTBAR_HIT_MARGIN) return -1;
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
       if (mx >= r.x && mx <= r.x + r.w) return i;
@@ -226,7 +441,14 @@ export class InventoryPanel {
     // Dragged item floats on top of everything
     if (this.drag) {
       const s = SLOT_SIZE;
-      this.renderItemIcon(ctx, this.drag.item, this.drag.mx - s / 2, this.drag.my - s / 2, s, 0.75);
+      this.renderItemIcon(
+        ctx,
+        this.drag.item,
+        this.drag.mx - s / 2,
+        this.drag.my - s / 2,
+        s,
+        DRAG_ICON_ALPHA,
+      );
     }
 
     // Context menu and info popup render above everything else
@@ -245,11 +467,11 @@ export class InventoryPanel {
     const cm = this.contextMenu;
     if (!cm) return;
     const options = this.interaction.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
-    const menuW = 120;
-    const menuItemH = 22;
-    const menuH = options.length * menuItemH + 4;
-    const mx = Math.min(cm.x, canvas.width - menuW - 4);
-    const my = Math.min(cm.y, canvas.height - menuH - 4);
+    const menuW = CONTEXT_MENU_W;
+    const menuItemH = CONTEXT_MENU_ITEM_H;
+    const menuH = options.length * menuItemH + CONTEXT_MENU_V_PAD;
+    const mx = Math.min(cm.x, canvas.width - menuW - CONTEXT_MENU_MARGIN);
+    const my = Math.min(cm.y, canvas.height - menuH - CONTEXT_MENU_MARGIN);
 
     ctx.save();
     drawBox(ctx, {
@@ -271,7 +493,12 @@ export class InventoryPanel {
       const color =
         options[i] === 'Equip' ? '#4ade80' : options[i] === 'Unequip' ? '#f87171' : '#e2e8f0';
       // baseline_y=oy+15, size=11 → top_y = oy+15-9 = oy+6
-      drawText(ctx, options[i], { x: mx + 8, y: oy + 6, size: 11, color });
+      drawText(ctx, options[i], {
+        x: mx + INFO_LABEL_X_OFFSET,
+        y: oy + CONTEXT_LABEL_OFFSET,
+        size: 11,
+        color,
+      });
     }
     ctx.restore();
   }
@@ -281,16 +508,16 @@ export class InventoryPanel {
     canvas: HTMLCanvasElement,
     item: InventoryItem,
   ): void {
-    const popW = Math.min(280, canvas.width - 32);
-    const lineH = 15;
-    const pad = 10;
+    const popW = Math.min(INFO_POPUP_MAX_W, canvas.width - INFO_POPUP_MARGIN);
+    const lineH = INFO_POPUP_LINE_H;
+    const pad = INFO_POPUP_PAD;
 
     const descText = item.description ?? 'No description available.';
 
     // Estimate popup height: title line + divider space + description lines + hint
     // Use a rough line estimate for pre-draw sizing (similar to original)
-    const approxDescLines = Math.ceil(descText.length / 36) || 1;
-    const popH = pad + lineH + pad * 0.5 + approxDescLines * lineH + pad;
+    const approxDescLines = Math.ceil(descText.length / INFO_POPUP_DESC_CHARS_PER_LINE) || 1;
+    const popH = pad + lineH + pad * INFO_POPUP_PAD_HALF + approxDescLines * lineH + pad;
     const px = Math.floor((canvas.width - popW) / 2);
     const py = Math.floor((canvas.height - popH) / 2);
 
@@ -307,21 +534,31 @@ export class InventoryPanel {
     // Title: baseline_y = py+pad+lineH-3, size=11 → top_y = baseline_y - 9
     drawText(ctx, item.name, {
       x: px + pad,
-      y: py + pad + lineH - 3 - 9,
+      y: py + pad + lineH - INFO_TITLE_BOTTOM_OFFSET - INFO_POPUP_TITLE_CORRECTION,
       bold: true,
-      size: 11,
+      size: INFO_POPUP_TITLE_SIZE,
       color: '#e2e8f0',
     });
 
     // Divider
-    drawDivider(ctx, { x: px + 4, y: py + pad + lineH + 2, length: popW - 8, color: '#1e293b' });
+    drawDivider(ctx, {
+      x: px + INFO_DIVIDER_OFFSET_X,
+      y: py + pad + lineH + 2,
+      length: popW - INFO_DIVIDER_MARGIN_X,
+      color: '#1e293b',
+    });
 
     // Description with built-in word-wrap
     // baseline_y = py+pad*1.5+lineH*2-3, size=10 → top_y = baseline_y - 8
     drawText(ctx, descText, {
       x: px + pad,
-      y: py + pad * 1.5 + lineH * 2 - 3 - 8,
-      size: 10,
+      y:
+        py +
+        pad * INFO_POPUP_PAD_TIMES_1_5 +
+        lineH * 2 -
+        INFO_POPUP_DESC_BASELINE_OFFSET -
+        INFO_POPUP_DESC_BASELINE_CORRECTION,
+      size: INFO_POPUP_DESC_SIZE,
       color: '#94a3b8',
       width: popW - pad * 2,
       lineHeight: lineH,
@@ -330,8 +567,8 @@ export class InventoryPanel {
     // Close hint: baseline_y = py+popH-4, size=9 → top_y = baseline_y - 7
     drawText(ctx, '[Click anywhere to close]', {
       x: px + popW / 2,
-      y: py + popH - 4 - 7,
-      size: 9,
+      y: py + popH - INFO_POPUP_HINT_BOTTOM - INFO_POPUP_HINT_CORRECTION,
+      size: INFO_POPUP_HINT_SIZE,
       color: '#475569',
       align: 'center',
     });
@@ -342,8 +579,8 @@ export class InventoryPanel {
   private renderDropDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const dd = this.dropDialog;
     if (!dd) return;
-    const dlgW = Math.min(200, canvas.width - 32);
-    const dlgH = 110;
+    const dlgW = Math.min(DROP_DIALOG_MAX_W, canvas.width - DROP_DIALOG_MARGIN);
+    const dlgH = DROP_DIALOG_H;
     const dlgX = Math.floor((canvas.width - dlgW) / 2);
     const dlgY = Math.floor((canvas.height - dlgH) / 2);
 
@@ -362,8 +599,8 @@ export class InventoryPanel {
     // Title: baseline_y=dlgY+22, size=11 → top_y = dlgY+22-9 = dlgY+13
     drawText(ctx, 'Drop how many?', {
       x: dlgX + dlgW / 2,
-      y: dlgY + 13,
-      size: 11,
+      y: dlgY + DROP_TITLE_Y - DROP_TITLE_Y_CORRECTION,
+      size: DROP_TITLE_SIZE,
       bold: true,
       color: '#e2e8f0',
       align: 'center',
@@ -371,10 +608,10 @@ export class InventoryPanel {
 
     // Cancel [X]
     drawButton(ctx, {
-      x: dlgX + dlgW - 22,
-      y: dlgY + 6,
-      width: 16,
-      height: 16,
+      x: dlgX + dlgW - DROP_CLOSE_BTN_OFFSET_X,
+      y: dlgY + DROP_CLOSE_BTN_Y,
+      width: DROP_CLOSE_BTN_W,
+      height: DROP_CLOSE_BTN_H,
       label: 'x',
       fill: '#374151',
       border: '#475569',
@@ -385,13 +622,13 @@ export class InventoryPanel {
     });
 
     // [-] button
-    const minusBtnX = dlgX + 20;
-    const minusBtnY = dlgY + 54;
+    const minusBtnX = dlgX + DROP_MINUS_BTN_X_PAD;
+    const minusBtnY = dlgY + DROP_MINUS_BTN_Y;
     drawButton(ctx, {
       x: minusBtnX,
       y: minusBtnY,
-      width: 24,
-      height: 24,
+      width: DROP_PM_BTN_SIZE,
+      height: DROP_PM_BTN_SIZE,
       label: '-',
       ...BUTTON_PRESETS.primary,
       border: '#475569',
@@ -399,12 +636,12 @@ export class InventoryPanel {
     });
 
     // [+] button
-    const plusBtnX = dlgX + dlgW - 44;
+    const plusBtnX = dlgX + dlgW - DROP_PLUS_BTN_OFFSET;
     drawButton(ctx, {
       x: plusBtnX,
       y: minusBtnY,
-      width: 24,
-      height: 24,
+      width: DROP_PM_BTN_SIZE,
+      height: DROP_PM_BTN_SIZE,
       label: '+',
       ...BUTTON_PRESETS.primary,
       border: '#475569',
@@ -414,8 +651,8 @@ export class InventoryPanel {
     // Quantity display: baseline_y=minusBtnY+18, size=16 → top_y = minusBtnY+18-13 = minusBtnY+5
     drawText(ctx, dd.selectedQty.toString(), {
       x: dlgX + dlgW / 2,
-      y: minusBtnY + 5,
-      size: 16,
+      y: minusBtnY + DROP_QTY_Y_OFFSET,
+      size: DROP_QTY_FONT_SIZE,
       bold: true,
       color: '#fbbf24',
       align: 'center',
@@ -423,19 +660,19 @@ export class InventoryPanel {
 
     // Max hint: baseline_y=minusBtnY+18, size=9 → top_y = minusBtnY+18-7 = minusBtnY+11
     drawText(ctx, `/ ${dd.maxQty}`, {
-      x: dlgX + dlgW / 2 + 14,
-      y: minusBtnY + 11,
-      size: 9,
+      x: dlgX + dlgW / 2 + DROP_HINT_X_OFFSET,
+      y: minusBtnY + DROP_HINT_Y_OFFSET,
+      size: DROP_HINT_SIZE,
       color: '#64748b',
     });
 
     // [Drop] confirm button
-    const confirmY = dlgY + dlgH - 28;
+    const confirmY = dlgY + dlgH - DROP_CONFIRM_OFFSET;
     drawButton(ctx, {
-      x: dlgX + 20,
+      x: dlgX + DROP_MINUS_BTN_X_PAD,
       y: confirmY,
-      width: dlgW - 40,
-      height: 22,
+      width: dlgW - DROP_CONFIRM_SIDE_PAD,
+      height: DROP_CONFIRM_BTN_H,
       label: 'Drop',
       fill: '#1d4ed8',
       border: '#3b82f6',
@@ -468,10 +705,10 @@ export class InventoryPanel {
     const hb = this.hotbarRect(canvas);
     // Background strip
     drawBox(ctx, {
-      x: hb.x - 6,
-      y: hb.y - 6,
-      width: hb.w + 12,
-      height: hb.h + 18,
+      x: hb.x - HOTBAR_STRIP_PAD,
+      y: hb.y - HOTBAR_STRIP_PAD,
+      width: hb.w + HOTBAR_STRIP_PAD * 2,
+      height: hb.h + HOTBAR_STRIP_EXTRA_H,
       fill: 'rgba(0,0,0,0.65)',
     });
 
@@ -496,8 +733,8 @@ export class InventoryPanel {
       // baseline_y = r.y+r.h+11, size=9 → top_y = baseline_y - 7 = r.y+r.h+4
       drawText(ctx, keyLabel, {
         x: r.x + r.w / 2,
-        y: r.y + r.h + 4,
-        size: 9,
+        y: r.y + r.h + SLOT_LABEL_BELOW_OFFSET,
+        size: SLOT_LABEL_SIZE,
         color: keyColor,
         align: 'center',
       });
@@ -527,30 +764,30 @@ export class InventoryPanel {
     // Header — player name: baseline_y=p.y+25, size=12 → top_y = p.y+25-10 = p.y+15
     drawText(ctx, `${playerName} Inventory`, {
       x: p.x + PANEL_PAD,
-      y: p.y + 15,
+      y: p.y + PANEL_NAME_Y,
       bold: true,
-      size: 12,
+      size: PANEL_HEADER_NAME_SIZE,
       color: '#e2e8f0',
     });
 
     // Coins: baseline_y=p.y+25, size=11 → top_y = p.y+25-9 = p.y+16
     drawText(ctx, `\u{1FA99} ${coins}`, {
-      x: p.x + p.w - 36,
-      y: p.y + 16,
-      size: 11,
+      x: p.x + p.w - PANEL_HEADER_COINS_OFFSET,
+      y: p.y + PANEL_COINS_Y,
+      size: PANEL_HEADER_COINS_SIZE,
       color: '#fbbf24',
       align: 'right',
     });
 
     // Close / Back button — always in the top-right corner
-    const closeX = p.x + p.w - 20;
-    const closeY = p.y + 8;
+    const closeX = p.x + p.w - PANEL_CLOSE_OFFSET_X;
+    const closeY = p.y + PANEL_CLOSE_Y;
     if (this.returnToMenuCallback !== null) {
       drawButton(ctx, {
         x: closeX,
         y: closeY,
-        width: 16,
-        height: 16,
+        width: CLOSE_BTN_W,
+        height: CLOSE_BTN_H,
         label: '←',
         fill: '#1e3a5f',
         border: '#3b82f6',
@@ -563,8 +800,8 @@ export class InventoryPanel {
       drawButton(ctx, {
         x: closeX,
         y: closeY,
-        width: 16,
-        height: 16,
+        width: CLOSE_BTN_W,
+        height: CLOSE_BTN_H,
         label: 'x',
         fill: '#374151',
         border: '#475569',
@@ -576,7 +813,12 @@ export class InventoryPanel {
     }
 
     // Divider
-    drawDivider(ctx, { x: p.x + 4, y: p.y + HEADER_H, length: p.w - 8, color: '#1e293b' });
+    drawDivider(ctx, {
+      x: p.x + INFO_DIVIDER_OFFSET_X,
+      y: p.y + HEADER_H,
+      length: p.w - INFO_DIVIDER_MARGIN_X,
+      color: '#1e293b',
+    });
 
     // Inventory slots
     const pageStart = this.page * SLOTS_PER_PAGE;
@@ -599,23 +841,23 @@ export class InventoryPanel {
 
     // Pagination bar
     const pages = pageCount(inventory.bag.slots.length);
-    const navY = p.y + p.h - NAV_H + 6;
+    const navY = p.y + p.h - NAV_H + NAV_Y_ADJUST;
     // baseline_y=navY, size=11 → top_y = navY - 9
-    const navTopY = navY - 9;
+    const navTopY = navY - NAV_BASELINE_CORRECTION;
     if (pages > 1) {
       // Prev arrow
       drawText(ctx, '< Prev', {
-        x: p.x + p.w * 0.25,
+        x: p.x + p.w * NAV_BAR_LEFT_QUARTER,
         y: navTopY,
-        size: 11,
+        size: NAV_BAR_SIZE,
         color: this.page > 0 ? '#94a3b8' : '#374151',
         align: 'center',
       });
       // Next arrow
       drawText(ctx, 'Next >', {
-        x: p.x + p.w * 0.75,
+        x: p.x + p.w * NAV_BAR_RIGHT_QUARTER,
         y: navTopY,
-        size: 11,
+        size: NAV_BAR_SIZE,
         color: this.page < pages - 1 ? '#94a3b8' : '#374151',
         align: 'center',
       });
@@ -623,7 +865,7 @@ export class InventoryPanel {
     drawText(ctx, `${this.page + 1} / ${pages}`, {
       x: p.x + p.w / 2,
       y: navTopY,
-      size: 11,
+      size: NAV_BAR_SIZE,
       color: '#64748b',
       align: 'center',
     });
@@ -666,7 +908,8 @@ export class InventoryPanel {
     if (isEquipped && item && !dimmed) {
       ctx.save();
       ctx.globalAlpha = 1;
-      const badgeSize = Math.floor(size * 0.3);
+      const BADGE_SIZE_FRACTION = 0.3;
+      const badgeSize = Math.floor(size * BADGE_SIZE_FRACTION);
       const bx = x + 1;
       const by = y + 1;
       // Green badge background
@@ -681,7 +924,7 @@ export class InventoryPanel {
       drawText(ctx, 'E', {
         x: bx + 1,
         y: by + 1,
-        size: Math.floor(badgeSize * 0.55),
+        size: Math.floor(badgeSize * SLOT_BADGE_LETTER_OPACITY),
         bold: true,
         color: '#fff',
         align: 'left',
@@ -694,16 +937,17 @@ export class InventoryPanel {
       const cd = this.abilityCooldowns.get(item.abilityId);
       if (cd && cd.current > 0) {
         const frac = cd.current / cd.max;
-        ctx.globalAlpha = 0.65;
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.globalAlpha = COOLDOWN_OVERLAY_ALPHA;
+        ctx.fillStyle = `rgba(0,0,0,${COOLDOWN_OVERLAY_DARK})`;
         ctx.fillRect(x, y + size * (1 - frac), size, size * frac);
         ctx.globalAlpha = 1;
         // Remaining seconds
-        const secs = Math.ceil(cd.current / 60);
-        const cdFontSize = Math.floor(size * 0.28);
+        const secs = Math.ceil(cd.current / COOLDOWN_PER_SECOND);
+        const cdFontSize = Math.floor(size * COOLDOWN_FONT_SCALE);
         // baseline_y = y+size/2+4, cdFontSize → top_y = baseline_y - Math.round(cdFontSize*0.8)
-        const cdTopY = y + size / 2 + 4 - Math.round(cdFontSize * 0.8);
-        drawText(ctx, secs > 99 ? '…' : `${secs}`, {
+        const cdTopY =
+          y + size / 2 + COOLDOWN_Y_OFFSET - Math.round(cdFontSize * COOLDOWN_FONT_BASELINE);
+        drawText(ctx, secs > COOLDOWN_SECS_OVERFLOW ? '…' : `${secs}`, {
           x: x + size / 2,
           y: cdTopY,
           size: cdFontSize,
@@ -729,9 +973,9 @@ export class InventoryPanel {
     ctx.globalAlpha = ctx.globalAlpha * alpha;
 
     if (item.id === 'health_potion') {
-      const cx = x + size * 0.5;
-      const cy = y + size * 0.58;
-      const r = size * 0.27;
+      const cx = x + size * HP_POTION_CX;
+      const cy = y + size * HP_POTION_CY;
+      const r = size * HP_POTION_R;
       // Flask body
       ctx.fillStyle = '#c0392b';
       ctx.beginPath();
@@ -740,26 +984,45 @@ export class InventoryPanel {
       // Liquid fill
       ctx.fillStyle = '#ef4444';
       ctx.beginPath();
-      ctx.arc(cx, cy + r * 0.15, r * 0.78, 0, Math.PI * 2);
+      ctx.arc(cx, cy + r * HP_POTION_LIQUID_OFFSET, r * HP_POTION_LIQUID_SCALE, 0, Math.PI * 2);
       ctx.fill();
       // Flask neck
       ctx.fillStyle = '#7f1d1d';
-      ctx.fillRect(cx - size * 0.08, y + size * 0.22, size * 0.16, size * 0.2);
+      ctx.fillRect(
+        cx - size * HP_POTION_NECK_X,
+        y + size * HP_POTION_NECK_Y,
+        size * HP_POTION_NECK_W,
+        size * HP_POTION_NECK_H,
+      );
       // Cork stopper
       ctx.fillStyle = '#92400e';
-      ctx.fillRect(cx - size * 0.1, y + size * 0.17, size * 0.2, size * 0.08);
+      ctx.fillRect(
+        cx - size * HP_POTION_CORK_X,
+        y + size * HP_POTION_CORK_Y,
+        size * HP_POTION_CORK_W,
+        size * HP_POTION_CORK_H,
+      );
       // Shine highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      const SHINE_ALPHA = 0.45;
+      ctx.fillStyle = `rgba(255,255,255,${SHINE_ALPHA})`;
       ctx.beginPath();
-      ctx.ellipse(cx - r * 0.3, cy - r * 0.3, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx - r * HP_POTION_SHINE_OFFSET,
+        cy - r * HP_POTION_SHINE_OFFSET,
+        r * HP_POTION_SHINE_RX,
+        r * HP_POTION_SHINE_RY,
+        HP_POTION_SHINE_ROT,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
 
     if (item.id === 'scroll_of_confusing_fog') {
-      const cx = x + size * 0.5;
-      const cy = y + size * 0.55;
-      const sw = size * 0.52;
-      const sh = size * 0.42;
+      const cx = x + size * SCROLL_CX;
+      const cy = y + size * SCROLL_CY;
+      const sw = size * SCROLL_W;
+      const sh = size * SCROLL_H;
       // Parchment body
       ctx.fillStyle = '#d4b483';
       ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
@@ -768,22 +1031,40 @@ export class InventoryPanel {
       ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
       // Rolled top and bottom edges
       ctx.fillStyle = '#c49a40';
-      ctx.fillRect(cx - sw / 2 - 3, cy - sh / 2 - 2, sw + 6, 6);
-      ctx.fillRect(cx - sw / 2 - 3, cy + sh / 2 - 4, sw + 6, 6);
+      ctx.fillRect(
+        cx - sw / 2 - SCROLL_ROLL_OFFSET,
+        cy - sh / 2 - SCROLL_ROLL_PAD,
+        sw + SCROLL_ROLL_H,
+        SCROLL_ROLL_H,
+      );
+      ctx.fillRect(
+        cx - sw / 2 - SCROLL_ROLL_OFFSET,
+        cy + sh / 2 - SCROLL_ROLL_BOTTOM,
+        sw + SCROLL_ROLL_H,
+        SCROLL_ROLL_H,
+      );
       // Fog squiggle lines
       ctx.strokeStyle = '#1e3a5f';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let row = 0; row < 3; row++) {
-        const ly = cy - sh / 2 + 8 + row * 9;
-        ctx.moveTo(cx - sw * 0.35, ly);
-        ctx.bezierCurveTo(cx - sw * 0.1, ly - 4, cx + sw * 0.1, ly + 4, cx + sw * 0.35, ly);
+      for (let row = 0; row < SCROLL_SQUIGGLE_ROWS; row++) {
+        const ly = cy - sh / 2 + SCROLL_SQUIGGLE_START_Y + row * SCROLL_SQUIGGLE_ROW_H;
+        ctx.moveTo(cx - sw * SCROLL_SQUIGGLE_INNER, ly);
+        ctx.bezierCurveTo(
+          cx - sw * SCROLL_SQUIGGLE_CTRL,
+          ly - SCROLL_SQUIGGLE_AMP,
+          cx + sw * SCROLL_SQUIGGLE_CTRL,
+          ly + SCROLL_SQUIGGLE_AMP,
+          cx + sw * SCROLL_SQUIGGLE_INNER,
+          ly,
+        );
       }
       ctx.stroke();
       // Green fog tint glow
-      ctx.fillStyle = 'rgba(60,200,140,0.28)';
+      const SCROLL_GLOW_ALPHA = 0.28;
+      ctx.fillStyle = `rgba(60,200,140,${SCROLL_GLOW_ALPHA})`;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, sw * 0.45, sh * 0.35, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, sw * SCROLL_GLOW_W, sh * SCROLL_GLOW_H, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -796,35 +1077,40 @@ export class InventoryPanel {
     }
 
     if (item.id === 'enchanted_bigboi_boxers') {
-      const cx = x + size * 0.5;
-      const cy = y + size * 0.56;
+      const cx = x + size * BOXERS_CX;
+      const cy = y + size * BOXERS_CY;
       // Waistband — white/light grey
       ctx.fillStyle = '#eeeeee';
-      ctx.fillRect(x + size * 0.12, y + size * 0.22, size * 0.76, size * 0.18);
+      ctx.fillRect(
+        x + size * BOXERS_WAIST_X,
+        y + size * BOXERS_WAIST_Y,
+        size * BOXERS_WAIST_W,
+        size * BOXERS_WAIST_H,
+      );
       // Left leg — near-white
       ctx.fillStyle = '#f5f5f5';
       ctx.beginPath();
-      ctx.moveTo(cx - size * 0.32, y + size * 0.38);
-      ctx.lineTo(cx - size * 0.38, y + size * 0.72);
-      ctx.lineTo(cx - size * 0.05, y + size * 0.72);
-      ctx.lineTo(cx, y + size * 0.38);
+      ctx.moveTo(cx - size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
+      ctx.lineTo(cx - size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
+      ctx.lineTo(cx - size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
+      ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
       ctx.closePath();
       ctx.fill();
       // Right leg
       ctx.beginPath();
-      ctx.moveTo(cx + size * 0.32, y + size * 0.38);
-      ctx.lineTo(cx + size * 0.38, y + size * 0.72);
-      ctx.lineTo(cx + size * 0.05, y + size * 0.72);
-      ctx.lineTo(cx, y + size * 0.38);
+      ctx.moveTo(cx + size * BOXERS_LEG_INNER_X, y + size * BOXERS_LEG_INNER_VERT);
+      ctx.lineTo(cx + size * BOXERS_LEG_OUTER_X, y + size * BOXERS_LEG_BOTTOM);
+      ctx.lineTo(cx + size * BOXERS_LEG_CENTER, y + size * BOXERS_LEG_BOTTOM);
+      ctx.lineTo(cx, y + size * BOXERS_LEG_INNER_VERT);
       ctx.closePath();
       ctx.fill();
       // Red hearts pattern — sprite icon text, leave as ctx.fillText
       ctx.fillStyle = '#ef4444';
-      ctx.font = `bold ${Math.floor(size * 0.18)}px monospace`;
+      ctx.font = `bold ${Math.floor(size * BOXERS_HEART_FONT)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText('♥', cx - size * 0.16, cy - size * 0.08);
-      ctx.fillText('♥', cx + size * 0.16, cy - size * 0.08);
-      ctx.fillText('♥', cx, cy + size * 0.08);
+      ctx.fillText('♥', cx - size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
+      ctx.fillText('♥', cx + size * BOXERS_HEART_OFFSET, cy - size * BOXERS_HEART_Y_OFFSET);
+      ctx.fillText('♥', cx, cy + size * BOXERS_HEART_Y_OFFSET);
       ctx.textAlign = 'left';
       // Red border glow
       ctx.strokeStyle = '#f87171';
@@ -833,45 +1119,53 @@ export class InventoryPanel {
     }
 
     if (item.id === 'trollskin_shirt') {
-      const cx = x + size * 0.5;
-      const cy = y + size * 0.52;
+      const cx = x + size * SHIRT_CX;
+      const cy = y + size * SHIRT_CY;
       // Shirt body — mossy green (trollskin)
       ctx.fillStyle = '#4a7c59';
       ctx.beginPath();
-      ctx.moveTo(cx - size * 0.3, cy - size * 0.14);
-      ctx.lineTo(cx + size * 0.3, cy - size * 0.14);
-      ctx.lineTo(cx + size * 0.28, cy + size * 0.28);
-      ctx.lineTo(cx - size * 0.28, cy + size * 0.28);
+      ctx.moveTo(cx - size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
+      ctx.lineTo(cx + size * SHIRT_BODY_X, cy - size * SHIRT_BODY_TOP);
+      ctx.lineTo(cx + size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
+      ctx.lineTo(cx - size * SHIRT_BODY_SIDE, cy + size * SHIRT_BODY_BOTTOM);
       ctx.closePath();
       ctx.fill();
       // Sleeves
       ctx.fillStyle = '#3d6b4a';
       // Left sleeve
       ctx.beginPath();
-      ctx.moveTo(cx - size * 0.3, cy - size * 0.14);
-      ctx.lineTo(cx - size * 0.42, cy + size * 0.04);
-      ctx.lineTo(cx - size * 0.32, cy + size * 0.08);
-      ctx.lineTo(cx - size * 0.26, cy - size * 0.02);
+      ctx.moveTo(cx - size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
+      ctx.lineTo(cx - size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
+      ctx.lineTo(cx - size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
+      ctx.lineTo(cx - size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
       ctx.closePath();
       ctx.fill();
       // Right sleeve
       ctx.beginPath();
-      ctx.moveTo(cx + size * 0.3, cy - size * 0.14);
-      ctx.lineTo(cx + size * 0.42, cy + size * 0.04);
-      ctx.lineTo(cx + size * 0.32, cy + size * 0.08);
-      ctx.lineTo(cx + size * 0.26, cy - size * 0.02);
+      ctx.moveTo(cx + size * SHIRT_SLEEVE_X1, cy - size * SHIRT_SLEEVE_Y_TOP);
+      ctx.lineTo(cx + size * SHIRT_SLEEVE_X2, cy + size * SHIRT_SLEEVE_Y1);
+      ctx.lineTo(cx + size * SHIRT_SLEEVE_X3, cy + size * SHIRT_SLEEVE_Y2);
+      ctx.lineTo(cx + size * SHIRT_SLEEVE_X4, cy - size * SHIRT_SLEEVE_Y3);
       ctx.closePath();
       ctx.fill();
       // Collar
       ctx.fillStyle = '#2d5a3a';
       ctx.beginPath();
-      ctx.ellipse(cx, cy - size * 0.16, size * 0.1, size * 0.06, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx,
+        cy - size * SHIRT_COLLAR_Y,
+        size * SHIRT_COLLAR_RX,
+        size * SHIRT_COLLAR_RY,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       // Enchantment rune — golden fist symbol (sprite icon text, leave as ctx.fillText)
       ctx.fillStyle = '#ffd700';
-      ctx.font = `bold ${Math.floor(size * 0.22)}px monospace`;
+      ctx.font = `bold ${Math.floor(size * SHIRT_RUNE_FONT)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText('\u{270A}', cx, cy + size * 0.14);
+      ctx.fillText('\u{270A}', cx, cy + size * SHIRT_RUNE_Y);
       ctx.textAlign = 'left';
       // Golden border glow
       ctx.strokeStyle = '#ffd700';
@@ -880,42 +1174,64 @@ export class InventoryPanel {
     }
 
     if (item.id === 'enchanted_crown_sepsis_whore') {
-      const cx = x + size * 0.5;
-      const cy = y + size * 0.48;
+      const cx = x + size * CROWN_CX;
+      const cy = y + size * CROWN_CY;
       // Crown base band — deep purple
       ctx.fillStyle = '#581c87';
       ctx.beginPath();
-      ctx.ellipse(cx, cy + size * 0.08, size * 0.34, size * 0.1, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        cx,
+        cy + size * CROWN_BASE_Y,
+        size * CROWN_BASE_RX,
+        size * CROWN_BASE_RY,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       // Crown body — royal purple
       ctx.fillStyle = '#7c3aed';
       ctx.beginPath();
-      ctx.moveTo(cx - size * 0.32, cy + size * 0.04);
-      ctx.lineTo(cx - size * 0.28, cy - size * 0.18);
-      ctx.lineTo(cx - size * 0.14, cy - size * 0.06);
-      ctx.lineTo(cx, cy - size * 0.24);
-      ctx.lineTo(cx + size * 0.14, cy - size * 0.06);
-      ctx.lineTo(cx + size * 0.28, cy - size * 0.18);
-      ctx.lineTo(cx + size * 0.32, cy + size * 0.04);
+      ctx.moveTo(cx - size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
+      ctx.lineTo(cx - size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
+      ctx.lineTo(cx - size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
+      ctx.lineTo(cx, cy - size * CROWN_TIP_Y);
+      ctx.lineTo(cx + size * CROWN_INNER_X2, cy - size * CROWN_INNER_Y2);
+      ctx.lineTo(cx + size * CROWN_INNER_X1, cy - size * CROWN_INNER_Y1);
+      ctx.lineTo(cx + size * CROWN_BODY_X1, cy + size * CROWN_BODY_Y1);
       ctx.closePath();
       ctx.fill();
       // Crown rim highlight
+      const CROWN_RIM_LINE_W = 1.5;
       ctx.strokeStyle = '#a78bfa';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = CROWN_RIM_LINE_W;
       ctx.stroke();
       // Gems — sickly green (sepsis theme)
       ctx.fillStyle = '#bef264';
       ctx.shadowColor = '#65a30d';
-      ctx.shadowBlur = 4;
+      const CROWN_GEM_BLUR = 4;
+      ctx.shadowBlur = CROWN_GEM_BLUR;
       ctx.beginPath();
-      ctx.arc(cx, cy - size * 0.16, size * 0.06, 0, Math.PI * 2);
+      ctx.arc(cx, cy - size * CROWN_GEM_CENTER_Y, size * CROWN_GEM_CENTER_R, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#a3e635';
       ctx.beginPath();
-      ctx.arc(cx - size * 0.2, cy - size * 0.08, size * 0.04, 0, Math.PI * 2);
+      ctx.arc(
+        cx - size * CROWN_GEM_SIDE_X,
+        cy - size * CROWN_GEM_SIDE_Y,
+        size * CROWN_GEM_SIDE_R,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(cx + size * 0.2, cy - size * 0.08, size * 0.04, 0, Math.PI * 2);
+      ctx.arc(
+        cx + size * CROWN_GEM_SIDE_X,
+        cy - size * CROWN_GEM_SIDE_Y,
+        size * CROWN_GEM_SIDE_R,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.shadowBlur = 0;
       // Purple border glow
@@ -941,11 +1257,15 @@ export class InventoryPanel {
     // Quantity badge (bottom-right) — sprite icon text, leave as ctx.fillText
     // Uses textAlign='right' where x is the RIGHT edge; dynamic font size
     if (item.quantity > 1) {
-      const fontSize = Math.max(7, Math.floor(size * 0.22));
+      const fontSize = Math.max(QTY_BADGE_MIN_FONT, Math.floor(size * QTY_BADGE_FONT_SCALE));
       ctx.font = `bold ${fontSize}px monospace`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'right';
-      ctx.fillText(item.quantity.toString(), x + size - 3, y + size - 3);
+      ctx.fillText(
+        item.quantity.toString(),
+        x + size - QTY_BADGE_MARGIN,
+        y + size - QTY_BADGE_MARGIN,
+      );
       ctx.textAlign = 'left';
     }
 

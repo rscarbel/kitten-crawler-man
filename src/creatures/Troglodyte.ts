@@ -16,6 +16,16 @@ const POISON_CHANCE = 0.25;
 const WINDUP_FRAMES = 50; // slow, menacing windup
 const STRIKE_FRAMES = 18; // 9 frames out, 9 frames back
 const COOLDOWN_FRAMES = 150;
+/** Fraction of tongue range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.85;
+/** Extended range fraction for tongue hit detection (allows slight overreach). */
+const TONGUE_HIT_RANGE_FRACTION = 1.1;
+/** Minimum dot product for tongue cone (cos(60°) ≈ 0.5). */
+const TONGUE_CONE_MIN_DOT = 0.5;
+/** Tile center offset fraction. */
+const TILE_CENTER = 0.5;
+/** Shell XP per blocked tongue strike. */
+const TONGUE_BLOCK_XP = 3;
 
 type TrogState = 'idle' | 'stalking' | 'winding_up' | 'striking' | 'cooldown';
 
@@ -109,7 +119,7 @@ export class Troglodyte extends Mob {
             this.lastKnownTargetX,
             this.lastKnownTargetY,
             this.speed,
-            tongueRangePx * 0.85,
+            tongueRangePx * FOLLOW_STOP_FRACTION,
           );
         }
         break;
@@ -166,14 +176,13 @@ export class Troglodyte extends Mob {
             const dx = t.x - this.x;
             const dy = t.y - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > tongueRangePx * 1.1) continue;
+            if (dist > tongueRangePx * TONGUE_HIT_RANGE_FRACTION) continue;
 
-            // Only hit if target is within a ~60° cone of the locked facing
             const dot = (dx / dist) * this.facingX + (dy / dist) * this.facingY;
-            if (dot < 0.5) continue; // outside ~60° half-angle
+            if (dot < TONGUE_CONE_MIN_DOT) continue;
 
-            if (this.spells?.isPointInsideShell(t.x + ts * 0.5, t.y + ts * 0.5)) {
-              this.spells.addBlockXp(3);
+            if (this.spells?.isPointInsideShell(t.x + ts * TILE_CENTER, t.y + ts * TILE_CENTER)) {
+              this.spells.addBlockXp(TONGUE_BLOCK_XP);
               continue;
             }
 

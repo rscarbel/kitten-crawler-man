@@ -18,6 +18,38 @@ import { drawText } from '../ui/TextBox';
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
+/** Number of Tusklings to spawn when Ball of Swine is defeated. */
+const TUSKLING_SPAWN_COUNT = 8;
+/** Spawn radius in tiles for Tusklings around the arena center. */
+const TUSKLING_SPAWN_RADIUS_TILES = 3;
+/** Frames Tusklings remain dazed after spawning (10 seconds at 60 fps). */
+const TUSKLING_DAZE_FRAMES = 600;
+/** Display-bar width cap in pixels. */
+const HEALTH_BAR_MAX_W = 360;
+/** Display-bar height in pixels. */
+const HEALTH_BAR_H = 18;
+/** Vertical position of health bar from top of canvas. */
+const HEALTH_BAR_Y = 48;
+/** Padding around the health bar container box. */
+const HEALTH_BAR_PADDING = 6;
+/** Extra vertical space at the bottom of the container. */
+const HEALTH_BAR_BOTTOM_EXTRA = 30;
+/** Tile distance beyond arena radius at which the health bar is hidden. */
+const HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES = 5;
+/** Frames per second used for countdown display. */
+const DISPLAY_FPS = 60;
+/** Pixel inset for boss name label from bar top. */
+const LABEL_Y_INSET = 6;
+/** Pixel inset for HP text from bar bottom. */
+const HP_TEXT_INSET = 4;
+/** Y offset for Tuskling counter text below bar area. */
+const TUSKLINGS_LABEL_Y_OFFSET = 6;
+/** Phase-2 Tusklings label y relative to the bar y anchor. */
+const PHASE2_LABEL_Y = 78;
+/** Text y anchor adjustment for label rendering. */
+const LABEL_TEXT_ADJUST = 9;
+/** HP text adjust. */
+const HP_TEXT_ADJUST = 7;
 
 export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
@@ -69,14 +101,14 @@ export class ArenaSystem implements GameSystem {
       const acx = arena.centre.x;
       const acy = arena.centre.y;
 
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const r = 3;
+      for (let i = 0; i < TUSKLING_SPAWN_COUNT; i++) {
+        const angle = (i / TUSKLING_SPAWN_COUNT) * Math.PI * 2;
+        const r = TUSKLING_SPAWN_RADIUS_TILES;
         const tx = acx + Math.round(Math.cos(angle) * r);
         const ty = acy + Math.round(Math.sin(angle) * r);
         const mob = createMob('tuskling', tx, ty, this.gameMap);
         if (mob instanceof Tuskling) {
-          mob.dazeTimer = 600;
+          mob.dazeTimer = TUSKLING_DAZE_FRAMES;
           this.addMob(mob);
           this.arenaLiveTusklings.push(mob);
         }
@@ -175,8 +207,9 @@ export class ArenaSystem implements GameSystem {
     player: { x: number; y: number },
     doorTile: { x: number; y: number },
   ): void {
-    const tx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const ty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const tileCenter = 0.5;
+    const tx = Math.floor((player.x + TILE_SIZE * tileCenter) / TILE_SIZE);
+    const ty = Math.floor((player.y + TILE_SIZE * tileCenter) / TILE_SIZE);
     // Door tiles span x: [doorTile.x-1, doorTile.x], y: [doorTile.y-1, doorTile.y+1]
     // (matches the set built in GameMap.loadFromData)
     const onDoor =
@@ -201,25 +234,36 @@ export class ArenaSystem implements GameSystem {
         activePlayer.x - arena.centre.x * TILE_SIZE,
         activePlayer.y - arena.centre.y * TILE_SIZE,
       );
-      if (distToArena > (arena.radius + 5) * TILE_SIZE) return;
+      if (distToArena > (arena.radius + HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES) * TILE_SIZE) return;
 
       const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
-      const barW = Math.min(360, canvas.width * 0.5);
-      const barH = 18;
+      const BAR_WIDTH_FRACTION = 0.5;
+      const barW = Math.min(HEALTH_BAR_MAX_W, canvas.width * BAR_WIDTH_FRACTION);
+      const barH = HEALTH_BAR_H;
       const barX = Math.floor((canvas.width - barW) / 2);
-      const barY = 48;
+      const barY = HEALTH_BAR_Y;
       const hpFrac = Math.max(0, bos.hp / bos.maxHp);
 
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(barX - 6, barY - 22, barW + 12, barH + 30);
+      ctx.fillRect(
+        barX - HEALTH_BAR_PADDING,
+        barY - HEALTH_BAR_BOTTOM_EXTRA - HEALTH_BAR_PADDING + HEALTH_BAR_PADDING,
+        barW + HEALTH_BAR_PADDING * 2,
+        barH + HEALTH_BAR_BOTTOM_EXTRA,
+      );
       ctx.strokeStyle = meta.color;
       ctx.lineWidth = 1;
-      ctx.strokeRect(barX - 6, barY - 22, barW + 12, barH + 30);
+      ctx.strokeRect(
+        barX - HEALTH_BAR_PADDING,
+        barY - HEALTH_BAR_BOTTOM_EXTRA - HEALTH_BAR_PADDING + HEALTH_BAR_PADDING,
+        barW + HEALTH_BAR_PADDING * 2,
+        barH + HEALTH_BAR_BOTTOM_EXTRA,
+      );
 
       drawText(ctx, bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName, {
         x: canvas.width / 2,
-        y: barY - 6 - 9,
+        y: barY - LABEL_Y_INSET - LABEL_TEXT_ADJUST,
         size: 11,
         bold: true,
         color: bos.isStopped ? '#fde68a' : meta.color,
@@ -237,17 +281,17 @@ export class ArenaSystem implements GameSystem {
 
       drawText(ctx, `${bos.hp} / ${bos.maxHp}`, {
         x: canvas.width / 2,
-        y: barY + barH - 4 - 7,
+        y: barY + barH - HP_TEXT_INSET - HP_TEXT_ADJUST,
         size: 9,
         color: '#e2e8f0',
         align: 'center',
       });
 
       if (this.entryWindowTimer > 0) {
-        const seconds = Math.ceil(this.entryWindowTimer / 60);
+        const seconds = Math.ceil(this.entryWindowTimer / DISPLAY_FPS);
         drawText(ctx, `Entry closes in ${seconds}s`, {
           x: canvas.width / 2,
-          y: barY + barH + 6,
+          y: barY + barH + TUSKLINGS_LABEL_Y_OFFSET,
           size: 11,
           bold: true,
           color: '#fbbf24',
@@ -266,7 +310,7 @@ export class ArenaSystem implements GameSystem {
         alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
         {
           x: canvas.width / 2,
-          y: 78 - 9,
+          y: PHASE2_LABEL_Y - LABEL_TEXT_ADJUST,
           size: 11,
           bold: true,
           color: alive > 0 ? '#f87171' : '#4ade80',

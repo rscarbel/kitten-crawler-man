@@ -58,6 +58,16 @@ interface StoredCredentials {
 
 const ACTION_HISTORY_MAX = 20;
 const REPEAT_THRESHOLD = 3;
+const WS_CONNECT_TIMEOUT_MS = 5000;
+const NEARBY_MOBS_SEARCH_RADIUS = 15;
+const NEARBY_MOBS_MAX = 10;
+const NEARBY_MOBS_IMPORTANCE_BOSS = 5;
+const NEARBY_MOBS_IMPORTANCE_REGULAR = 1;
+const IDLE_TIME_MS_PER_SECOND = 1000;
+const IDLE_TIME_SECONDS_PER_MINUTE = 60;
+const RECENT_EVENTS_THRESHOLD_SECONDS = 60;
+const MOB_SPAWN_COUNT_MAX = 20;
+const ITEM_SPAWN_QUANTITY_MAX = 99;
 
 export class AIAdapter {
   readonly messages = new AIMessageDisplay();
@@ -139,7 +149,10 @@ export class AIAdapter {
 
       const ws = this.ws;
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('WS connect timeout')), 5_000);
+        const timeout = setTimeout(
+          () => reject(new Error('WS connect timeout')),
+          WS_CONNECT_TIMEOUT_MS,
+        );
         ws.addEventListener('open', () => {
           clearTimeout(timeout);
           this.connected = true;
@@ -310,8 +323,11 @@ export class AIAdapter {
         maxHp: m.maxHp,
         isBoss: m.isBoss,
       }))
-      .filter((m) => Math.hypot(m.tileX - activeTileX, m.tileY - activeTileY) <= 15)
-      .slice(0, 10);
+      .filter(
+        (m) =>
+          Math.hypot(m.tileX - activeTileX, m.tileY - activeTileY) <= NEARBY_MOBS_SEARCH_RADIUS,
+      )
+      .slice(0, NEARBY_MOBS_MAX);
 
     const map = ctx.getGameMap();
     const mapRows = map.structure.length;
@@ -351,7 +367,7 @@ export class AIAdapter {
             isBoss: e.mob.isBoss,
             killer: killerName,
           },
-          importance: e.mob.isBoss ? 5 : 1,
+          importance: e.mob.isBoss ? NEARBY_MOBS_IMPORTANCE_BOSS : NEARBY_MOBS_IMPORTANCE_REGULAR,
           summary: `${killerName} killed a ${mobName}`,
         });
       }),
@@ -501,7 +517,7 @@ export class AIAdapter {
       }),
 
       bus.on('playerIdle', (e) => {
-        const secs = Math.round(e.totalIdleMs / 1000);
+        const secs = Math.round(e.totalIdleMs / IDLE_TIME_MS_PER_SECOND);
         this.sendEvent({
           ts: Date.now(),
           type: 'player_idle',
@@ -618,7 +634,9 @@ export class AIAdapter {
 
     const contextLines = context.recentEvents.map((e) => {
       const ago =
-        e.secondsAgo < 60 ? `${e.secondsAgo}s ago` : `${Math.floor(e.secondsAgo / 60)}m ago`;
+        e.secondsAgo < RECENT_EVENTS_THRESHOLD_SECONDS
+          ? `${e.secondsAgo}s ago`
+          : `${Math.floor(e.secondsAgo / IDLE_TIME_SECONDS_PER_MINUTE)}m ago`;
       return `- ${e.label} (${ago})`;
     });
 
@@ -739,7 +757,7 @@ function toStr(value: unknown, fallback: string): string {
 function describeAction(action: AIAction): string {
   switch (action.type) {
     case 'spawn_mob': {
-      const count = Math.min(Math.max(1, Number(action.count) || 1), 20);
+      const count = Math.min(Math.max(1, Number(action.count) || 1), MOB_SPAWN_COUNT_MAX);
       const mob = toStr(action.mob_type, 'goblin').replace(/_/g, ' ');
       return `spawned ${count}x ${mob} near ${toStr(action.target_player, 'player')}`;
     }
@@ -750,7 +768,7 @@ function describeAction(action: AIAction): string {
     case 'remove_status':
       return `removed ${action.status} from ${toStr(action.target_player, 'player')}`;
     case 'give_item': {
-      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), 99);
+      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), ITEM_SPAWN_QUANTITY_MAX);
       const id = toStr(action.item_id, '').replace(/_/g, ' ');
       return `gave ${id} x${qty} to ${toStr(action.target_player, 'player')}`;
     }

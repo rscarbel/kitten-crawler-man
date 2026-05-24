@@ -25,6 +25,16 @@
  *   this.scrollOffset = Math.min(this.scrollOffset, scrollMax);
  */
 
+const DEFAULT_FONT_SIZE = 12;
+const DEFAULT_OUTLINE_WIDTH = 3;
+const DEFAULT_GLOW_BLUR = 12;
+const DEFAULT_SHADOW_OFFSET_X = 2;
+const DEFAULT_SHADOW_OFFSET_Y = 2;
+const DEFAULT_SHADOW_BLUR_PX = 4;
+const DEFAULT_BORDER_WIDTH = 1.5;
+const MIN_LINE_HEIGHT = 14;
+const LINE_HEIGHT_MULTIPLIER = 1.4;
+
 /** All options accepted by drawText. Only x and y are required. */
 export interface TextOptions {
   /** Left edge of the text anchor (standard canvas textAlign rules apply when no width is set). */
@@ -200,18 +210,18 @@ export function drawText(
   const {
     x,
     y,
-    size = 12,
+    size = DEFAULT_FONT_SIZE,
     bold = false,
     font = 'monospace',
     color = '#e2e8f0',
     alpha = 1,
     outline = false,
-    outlineWidth = 3,
+    outlineWidth = DEFAULT_OUTLINE_WIDTH,
     glow = false,
-    glowBlur = 12,
+    glowBlur = DEFAULT_GLOW_BLUR,
     shadow = false,
-    shadowOffset = { x: 2, y: 2 },
-    shadowBlurPx = 4,
+    shadowOffset = { x: DEFAULT_SHADOW_OFFSET_X, y: DEFAULT_SHADOW_OFFSET_Y },
+    shadowBlurPx = DEFAULT_SHADOW_BLUR_PX,
     align = 'left',
     width,
     padding = 0,
@@ -219,10 +229,11 @@ export function drawText(
     scrollY = 0,
     background,
     border,
-    borderWidth = 1.5,
+    borderWidth = DEFAULT_BORDER_WIDTH,
   } = opts;
 
-  const lineHeight = opts.lineHeight ?? Math.max(14, Math.ceil(size * 1.4));
+  const lineHeight =
+    opts.lineHeight ?? Math.max(MIN_LINE_HEIGHT, Math.ceil(size * LINE_HEIGHT_MULTIPLIER));
   const fontStr = buildFontString(size, bold, font);
 
   ctx.save();
@@ -325,10 +336,11 @@ export function measureTextBox(
   text: string,
   opts: Pick<TextOptions, 'size' | 'bold' | 'font' | 'width' | 'padding' | 'lineHeight' | 'height'>,
 ): TextResult {
-  const size = opts.size ?? 12;
+  const size = opts.size ?? DEFAULT_FONT_SIZE;
   const bold = opts.bold ?? false;
   const font = opts.font ?? 'monospace';
-  const lineHeight = opts.lineHeight ?? Math.max(14, Math.ceil(size * 1.4));
+  const lineHeight =
+    opts.lineHeight ?? Math.max(MIN_LINE_HEIGHT, Math.ceil(size * LINE_HEIGHT_MULTIPLIER));
   const padding = opts.padding ?? 0;
   const { width, height } = opts;
 

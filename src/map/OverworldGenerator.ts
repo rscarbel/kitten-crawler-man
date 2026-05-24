@@ -47,6 +47,92 @@ export function generateOverworld(size: number): OverworldData {
   const ROAD = FloorTypeValue.road;
   const GRASS = FloorTypeValue.grass;
 
+  // Road geometry
+  const ROAD_WIDTH = 5;
+  const ROAD_FAR_SIDE_OFFSET = 4;
+
+  // Town square
+  const TOWN_SQUARE_HALF = 11;
+  const TOWN_SQUARE_SIZE = 22;
+
+  // Tower sprite building footprint (no procedural tiles — sprite overlay)
+  const TOWER_SPRITE_DX = 3;
+  const TOWER_SPRITE_DY = 36;
+  const NORTH_BUILDINGS_Y_OFFSET = 16;
+
+  // Restaurant east of town square
+  const REST_X_OFFSET = 14;
+
+  // General Store west of town square
+  const STORE_X_OFFSET = 28;
+
+  // Village building positions (offset from town center cx, cy)
+  const SHEPHERDS_CABIN_DX = 25;
+  const SHEPHERDS_CABIN_DY = 45;
+  const SHEPHERDS_LEAN_TO_DX = 14;
+  const SHEPHERDS_LEAN_TO_DY = 44;
+  const SHEPHERDS_LEAN_TO_W = 6;
+  const SHEPHERDS_LEAN_TO_H = 4;
+  const BARRACKS_DX = 18;
+  const BARRACKS_DY = 36;
+  const HILDA_DX = 42;
+  const HILDA_DY = 28;
+  const CARTWRIGHT_DX = 30;
+  const CARTWRIGHT_SHED_DY = 28;
+  const CARTWRIGHT_SHED_W = 6;
+  const CARTWRIGHT_SHED_H = 5;
+  const CARTWRIGHT_DY = 22;
+  const HERB_DX = 30;
+  const HERB_DY = 14;
+  const SLEEPING_CAT_DX = 18;
+  const SLEEPING_CAT_DY = 16;
+  const SLEEPING_CAT_STABLE_DY = 23;
+  const SLEEPING_CAT_STABLE_W = 8;
+  const SLEEPING_CAT_STABLE_H = 5;
+  const RUSTY_ANVIL_DX = 14;
+  const RUSTY_ANVIL_DY = 16;
+  const RUSTY_ANVIL_FORGE_DX = 27;
+  const RUSTY_ANVIL_FORGE_W = 7;
+  const RUSTY_ANVIL_FORGE_H = 5;
+  const MILLERS_FARM_DX = 38;
+  const MILLERS_FARM_DY = 24;
+  const MILLERS_FARM_BARN_DX = 27;
+  const MILLERS_FARM_BARN_W = 8;
+  const MILLERS_FARM_BARN_H = 5;
+  const WANDERERS_REST_DX = 28;
+  const WANDERERS_REST_DY = 26;
+  const SUNKEN_STUMP_DX = 20;
+  const SUNKEN_STUMP_DY = 32;
+
+  // Circus placement
+  const CIRCUS_MIN_DIST = 70;
+  const CIRCUS_DIST_VARIANCE = 20;
+
+  // Torch angles (60° increments around a full circle)
+  const TORCH_STEP_DEG = 60;
+  const HALF_CIRCLE_DEG = 180;
+
+  // Forest blobs
+  const FOREST_MIN_DIST_TILES = 65;
+  const FOREST_EDGE_MARGIN = 75;
+  const FOREST_MIN_RADIUS = 8;
+  const FOREST_MAX_RADIUS = 21;
+  const FOREST_EDGE_NOISE_RADIUS = 0.7;
+  const FOREST_EDGE_SKIP_CHANCE = 0.45;
+
+  // Main tower tile north of town center
+  const MAIN_TOWER_NORTH_OFFSET = 15;
+
+  // Town square decorations
+  const FOUNTAIN_SE_OFFSET = 4;
+  const FOUNTAIN_SIZE = 3;
+  const GATE_TORCH_INNER_OFFSET = 3;
+  const WELL_DIAGONAL_OFFSET = 7;
+
+  // Ground cover probabilities
+  const GRASSY_WEED_DENSITY = 0.015;
+  const DIRT_PATCH_DENSITY = 0.06;
+
   // 1. Fill with grass
   const grid: TileContent[][] = Array.from({ length: size }, (_, y) =>
     Array.from({ length: size }, (_, x) => ({
@@ -105,11 +191,11 @@ export function generateOverworld(size: number): OverworldData {
   // 3. Main roads (cross through town)
   const cx = Math.floor(size / 2);
   const cy = Math.floor(size / 2);
-  fill(BORDER, cy - 2, size - BORDER * 2, 5, ROAD); // E-W
-  fill(cx - 2, BORDER, 5, size - BORDER * 2, ROAD); // N-S
+  fill(BORDER, cy - 2, size - BORDER * 2, ROAD_WIDTH, ROAD); // E-W
+  fill(cx - 2, BORDER, ROAD_WIDTH, size - BORDER * 2, ROAD); // N-S
 
   // 4. Town square
-  fill(cx - 11, cy - 11, 22, 22, ROAD);
+  fill(cx - TOWN_SQUARE_HALF, cy - TOWN_SQUARE_HALF, TOWN_SQUARE_SIZE, TOWN_SQUARE_SIZE, ROAD);
 
   // 5. Helper: place a building and register its door
   const buildings: Array<{ x: number; y: number; w: number; h: number }> = [];
@@ -144,9 +230,9 @@ export function generateOverworld(size: number): OverworldData {
   };
 
   // so BUILDING_WALL / ROOF_SLATE tiles are not placed (they would show through transparent sprite areas).
-  buildings.push({ x: cx - 3, y: cy - 36, w: 6, h: 21 });
+  buildings.push({ x: cx - TOWER_SPRITE_DX, y: cy - TOWER_SPRITE_DY, w: 6, h: 21 });
   buildingEntries.push({
-    doorTile: { x: cx - 1, y: cy - 16 },
+    doorTile: { x: cx - 1, y: cy - NORTH_BUILDINGS_Y_OFFSET },
     name: 'Town Center Tower',
     type: 'tower',
   });
@@ -155,8 +241,8 @@ export function generateOverworld(size: number): OverworldData {
   //     Entering triggers a BuildingInteriorScene with a safe-room interior.
   const restW = 14;
   const restH = 5;
-  const restX = cx + 14;
-  const restY = cy - 16; // bottom wall at cy-7, entirely above E-W road at cy-2
+  const restX = cx + REST_X_OFFSET;
+  const restY = cy - NORTH_BUILDINGS_Y_OFFSET;
   placeBuilding(restX, restY, restW, restH, 'restaurant', 'Safe Room', ROOF_RED);
   // Short road stub south from restaurant door to the E-W road
   const restDoorX = restX + Math.floor(restW / 2) - 1;
@@ -168,8 +254,8 @@ export function generateOverworld(size: number): OverworldData {
   // 6c. General Store — west of town square, mirroring the restaurant on the east side.
   const storeW = 14;
   const storeH = 5;
-  const storeX = cx - 28;
-  const storeY = cy - 16;
+  const storeX = cx - STORE_X_OFFSET;
+  const storeY = cy - NORTH_BUILDINGS_Y_OFFSET;
   placeBuilding(storeX, storeY, storeW, storeH, 'store', 'General Store', ROOF_GREEN);
   // Short road stub south from store door to the E-W road
   const storeDoorX = storeX + Math.floor(storeW / 2) - 1;
@@ -211,7 +297,7 @@ export function generateOverworld(size: number): OverworldData {
   const connectToRoad = (doorX: number, doorY: number) => {
     const toEW = Math.abs(doorY - cy) <= Math.abs(doorX - cx);
     if (toEW) {
-      const targetY = doorY < cy ? cy - 2 : cy + 4;
+      const targetY = doorY < cy ? cy - 2 : cy + ROAD_FAR_SIDE_OFFSET;
       const minY = Math.min(doorY, targetY);
       const maxY = Math.max(doorY, targetY);
       for (let ry = minY; ry <= maxY; ry++) {
@@ -220,7 +306,7 @@ export function generateOverworld(size: number): OverworldData {
         setRoad(doorX + 2, ry);
       }
     } else {
-      const targetX = doorX < cx ? cx - 2 : cx + 4;
+      const targetX = doorX < cx ? cx - 2 : cx + ROAD_FAR_SIDE_OFFSET;
       const minX = Math.min(doorX, targetX);
       const maxX = Math.max(doorX, targetX);
       for (let rx = minX; rx <= maxX; rx++) {
@@ -228,7 +314,7 @@ export function generateOverworld(size: number): OverworldData {
         setRoad(rx, doorY + 1);
       }
       const minY2 = Math.min(doorY, cy - 2);
-      const maxY2 = Math.max(doorY, cy + 4);
+      const maxY2 = Math.max(doorY, cy + ROAD_FAR_SIDE_OFFSET);
       for (let ry = minY2; ry <= maxY2; ry++) {
         setRoad(doorX, ry);
         setRoad(doorX + 1, ry);
@@ -237,55 +323,120 @@ export function generateOverworld(size: number): OverworldData {
   };
 
   // ── Shepherd's Cabin — NW outskirts: cottage + hay-storage lean-to ──
-  placeSpriteBuilding(cx - 25, cy - 45, 'village_house_1', "Shepherd's Cabin");
-  placeStructure(cx - 14, cy - 44, 6, 4, ROOF_THATCH); // lean-to shed
-  connectToRoad(cx - 25 + SPRITE_DOOR_DX, cy - 45 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx - SHEPHERDS_CABIN_DX,
+    cy - SHEPHERDS_CABIN_DY,
+    'village_house_1',
+    "Shepherd's Cabin",
+  );
+  placeStructure(
+    cx - SHEPHERDS_LEAN_TO_DX,
+    cy - SHEPHERDS_LEAN_TO_DY,
+    SHEPHERDS_LEAN_TO_W,
+    SHEPHERDS_LEAN_TO_H,
+    ROOF_THATCH,
+  ); // lean-to shed
+  connectToRoad(cx - SHEPHERDS_CABIN_DX + SPRITE_DOOR_DX, cy - SHEPHERDS_CABIN_DY + SPRITE_DOOR_DY);
 
   // ── Blackwood Barracks — NE outskirts: wide hall, looks imposing ──
-  placeSpriteBuilding(cx + 18, cy - 36, 'village_house_2', 'Blackwood Barracks');
-  connectToRoad(cx + 18 + SPRITE_DOOR_DX, cy - 36 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(cx + BARRACKS_DX, cy - BARRACKS_DY, 'village_house_2', 'Blackwood Barracks');
+  connectToRoad(cx + BARRACKS_DX + SPRITE_DOOR_DX, cy - BARRACKS_DY + SPRITE_DOOR_DY);
 
   // ── Old Hilda's Cottage — W mid: mossy green witch cottage ──
-  placeSpriteBuilding(cx - 42, cy - 28, 'village_house_3', "Old Hilda's Cottage");
-  connectToRoad(cx - 42 + SPRITE_DOOR_DX, cy - 28 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(cx - HILDA_DX, cy - HILDA_DY, 'village_house_3', "Old Hilda's Cottage");
+  connectToRoad(cx - HILDA_DX + SPRITE_DOOR_DX, cy - HILDA_DY + SPRITE_DOOR_DY);
 
   // ── Cartwright's Workshop — E mid: main shop + separate storage shed to north ──
-  placeStructure(cx + 30, cy - 28, 6, 5, ROOF_SLATE); // storage shed
-  placeSpriteBuilding(cx + 30, cy - 22, 'village_house_4', "Cartwright's Workshop");
-  connectToRoad(cx + 30 + SPRITE_DOOR_DX, cy - 22 + SPRITE_DOOR_DY);
+  placeStructure(
+    cx + CARTWRIGHT_DX,
+    cy - CARTWRIGHT_SHED_DY,
+    CARTWRIGHT_SHED_W,
+    CARTWRIGHT_SHED_H,
+    ROOF_SLATE,
+  ); // storage shed
+  placeSpriteBuilding(
+    cx + CARTWRIGHT_DX,
+    cy - CARTWRIGHT_DY,
+    'village_house_4',
+    "Cartwright's Workshop",
+  );
+  connectToRoad(cx + CARTWRIGHT_DX + SPRITE_DOOR_DX, cy - CARTWRIGHT_DY + SPRITE_DOOR_DY);
 
   // ── Herb & Remedy — W near-town: apothecary just west of south road ──
-  placeSpriteBuilding(cx - 30, cy + 14, 'village_house_1', 'Herb & Remedy');
-  connectToRoad(cx - 30 + SPRITE_DOOR_DX, cy + 14 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(cx - HERB_DX, cy + HERB_DY, 'village_house_1', 'Herb & Remedy');
+  connectToRoad(cx - HERB_DX + SPRITE_DOOR_DX, cy + HERB_DY + SPRITE_DOOR_DY);
 
   // ── The Sleeping Cat Inn — S near-town: large inn + stable behind it ──
-  placeSpriteBuilding(cx - 18, cy + 16, 'village_house_2', 'The Sleeping Cat Inn');
-  placeStructure(cx - 18, cy + 23, 8, 5, ROOF_THATCH); // stable
-  connectToRoad(cx - 18 + SPRITE_DOOR_DX, cy + 16 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx - SLEEPING_CAT_DX,
+    cy + SLEEPING_CAT_DY,
+    'village_house_2',
+    'The Sleeping Cat Inn',
+  );
+  placeStructure(
+    cx - SLEEPING_CAT_DX,
+    cy + SLEEPING_CAT_STABLE_DY,
+    SLEEPING_CAT_STABLE_W,
+    SLEEPING_CAT_STABLE_H,
+    ROOF_THATCH,
+  ); // stable
+  connectToRoad(cx - SLEEPING_CAT_DX + SPRITE_DOOR_DX, cy + SLEEPING_CAT_DY + SPRITE_DOOR_DY);
 
   // ── The Rusty Anvil — SE near-town: forge building + open-air work shed ──
-  placeSpriteBuilding(cx + 14, cy + 16, 'village_house_3', 'The Rusty Anvil');
-  placeStructure(cx + 27, cy + 16, 7, 5, ROOF_RED); // forge shed
-  connectToRoad(cx + 14 + SPRITE_DOOR_DX, cy + 16 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx + RUSTY_ANVIL_DX,
+    cy + RUSTY_ANVIL_DY,
+    'village_house_3',
+    'The Rusty Anvil',
+  );
+  placeStructure(
+    cx + RUSTY_ANVIL_FORGE_DX,
+    cy + RUSTY_ANVIL_DY,
+    RUSTY_ANVIL_FORGE_W,
+    RUSTY_ANVIL_FORGE_H,
+    ROOF_RED,
+  ); // forge shed
+  connectToRoad(cx + RUSTY_ANVIL_DX + SPRITE_DOOR_DX, cy + RUSTY_ANVIL_DY + SPRITE_DOOR_DY);
 
   // ── Miller's Farm — SW outskirts: farmhouse + large barn ──
-  placeSpriteBuilding(cx - 38, cy + 24, 'village_house_4', "Miller's Farm");
-  placeStructure(cx - 27, cy + 24, 8, 5, ROOF_THATCH); // barn
-  connectToRoad(cx - 38 + SPRITE_DOOR_DX, cy + 24 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx - MILLERS_FARM_DX,
+    cy + MILLERS_FARM_DY,
+    'village_house_4',
+    "Miller's Farm",
+  );
+  placeStructure(
+    cx - MILLERS_FARM_BARN_DX,
+    cy + MILLERS_FARM_DY,
+    MILLERS_FARM_BARN_W,
+    MILLERS_FARM_BARN_H,
+    ROOF_THATCH,
+  ); // barn
+  connectToRoad(cx - MILLERS_FARM_DX + SPRITE_DOOR_DX, cy + MILLERS_FARM_DY + SPRITE_DOOR_DY);
 
   // ── The Wanderer's Rest — SE outskirts: plain roadside dormitory ──
-  placeSpriteBuilding(cx + 28, cy + 26, 'village_house_1', "The Wanderer's Rest");
-  connectToRoad(cx + 28 + SPRITE_DOOR_DX, cy + 26 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx + WANDERERS_REST_DX,
+    cy + WANDERERS_REST_DY,
+    'village_house_1',
+    "The Wanderer's Rest",
+  );
+  connectToRoad(cx + WANDERERS_REST_DX + SPRITE_DOOR_DX, cy + WANDERERS_REST_DY + SPRITE_DOOR_DY);
 
   // ── The Sunken Stump Pub — S central: large pub west of N-S road ──
-  placeSpriteBuilding(cx - 20, cy + 32, 'village_house_2', 'The Sunken Stump Pub');
-  connectToRoad(cx - 20 + SPRITE_DOOR_DX, cy + 32 + SPRITE_DOOR_DY);
+  placeSpriteBuilding(
+    cx - SUNKEN_STUMP_DX,
+    cy + SUNKEN_STUMP_DY,
+    'village_house_2',
+    'The Sunken Stump Pub',
+  );
+  connectToRoad(cx - SUNKEN_STUMP_DX + SPRITE_DOOR_DX, cy + SUNKEN_STUMP_DY + SPRITE_DOOR_DY);
 
   // 7b. Circus — cluster of tents 60+ tiles from town center
   {
     // Pick a random angle and distance for circus placement
     const circusAngle = Math.random() * Math.PI * 2;
-    const circusDist = 70 + Math.random() * 20; // 60–80 tiles from center
+    const circusDist = CIRCUS_MIN_DIST + Math.random() * CIRCUS_DIST_VARIANCE;
     const circusCx = Math.round(cx + Math.cos(circusAngle) * circusDist);
     const circusCy = Math.round(cy + Math.sin(circusAngle) * circusDist);
 
@@ -352,7 +503,7 @@ export function generateOverworld(size: number): OverworldData {
     // Road connecting circus to the nearest main road
     // Route south/north to E-W road
     const circusDoorY = circusCy + circusRadius + 1;
-    const targetRoadY = circusDoorY < cy ? cy - 2 : cy + 4;
+    const targetRoadY = circusDoorY < cy ? cy - 2 : cy + ROAD_FAR_SIDE_OFFSET;
     const minRY = Math.min(circusDoorY, targetRoadY);
     const maxRY = Math.max(circusDoorY, targetRoadY);
     for (let ry = minRY; ry <= maxRY; ry++) {
@@ -361,7 +512,7 @@ export function generateOverworld(size: number): OverworldData {
       setRoad(circusCx + 1, ry);
     }
     // Also connect east/west to N-S road
-    const targetRoadX = circusCx < cx ? cx - 2 : cx + 4;
+    const targetRoadX = circusCx < cx ? cx - 2 : cx + ROAD_FAR_SIDE_OFFSET;
     const minRX = Math.min(circusCx, targetRoadX);
     const maxRX = Math.max(circusCx, targetRoadX);
     for (let rx = minRX; rx <= maxRX; rx++) {
@@ -370,9 +521,16 @@ export function generateOverworld(size: number): OverworldData {
     }
 
     // Torches around the circus perimeter
-    const torchAngles = [0, 60, 120, 180, 240, 300];
+    const torchAngles = [
+      0,
+      TORCH_STEP_DEG,
+      TORCH_STEP_DEG * 2,
+      HALF_CIRCLE_DEG,
+      HALF_CIRCLE_DEG + TORCH_STEP_DEG,
+      HALF_CIRCLE_DEG + TORCH_STEP_DEG * 2,
+    ];
     for (const deg of torchAngles) {
-      const a = (deg * Math.PI) / 180;
+      const a = (deg * Math.PI) / HALF_CIRCLE_DEG;
       const torchX = Math.round(circusCx + Math.cos(a) * (circusRadius - 1));
       const torchY = Math.round(circusCy + Math.sin(a) * (circusRadius - 1));
       if (
@@ -391,16 +549,17 @@ export function generateOverworld(size: number): OverworldData {
   const NUM_FORESTS = 30;
   for (let f = 0; f < NUM_FORESTS; f++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 65 + Math.random() * (size / 2 - 75);
+    const dist = FOREST_MIN_DIST_TILES + Math.random() * (size / 2 - FOREST_EDGE_MARGIN);
     const fx = Math.round(cx + Math.cos(angle) * dist);
     const fy = Math.round(cy + Math.sin(angle) * dist);
-    const radius = randomInt(8, 21);
+    const radius = randomInt(FOREST_MIN_RADIUS, FOREST_MAX_RADIUS);
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const d = Math.hypot(dx, dy);
         if (d > radius) continue;
         // Irregular edge via noise
-        if (d > radius * 0.7 && Math.random() < 0.45) continue;
+        if (d > radius * FOREST_EDGE_NOISE_RADIUS && Math.random() < FOREST_EDGE_SKIP_CHANCE)
+          continue;
         const tx = fx + dx;
         const ty = fy + dy;
         if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
@@ -494,37 +653,38 @@ export function generateOverworld(size: number): OverworldData {
   }
 
   // Place MAIN_TOWER anchor after bypass routing so road stitching cannot overwrite it.
-  set(cx, cy - 15, MAIN_TOWER);
-  const mainTowerAnchor: Point = { x: cx, y: cy - 15 };
+  set(cx, cy - MAIN_TOWER_NORTH_OFFSET, MAIN_TOWER);
+  const mainTowerAnchor: Point = { x: cx, y: cy - MAIN_TOWER_NORTH_OFFSET };
 
   // 10. Town decorations: fountain, torches, wells, ground scatter
   // Fountain — 3×3 block in the SE quadrant of the town square
-  fill(cx + 4, cy + 4, 3, 3, FOUNTAIN);
+  fill(cx + FOUNTAIN_SE_OFFSET, cy + FOUNTAIN_SE_OFFSET, FOUNTAIN_SIZE, FOUNTAIN_SIZE, FOUNTAIN);
   // Torches flanking each of the 4 main-road gates into the town square
-  set(cx - 3, cy - 11, TORCH);
-  set(cx + 3, cy - 11, TORCH); // North gate
-  set(cx - 3, cy + 11, TORCH);
-  set(cx + 3, cy + 11, TORCH); // South gate
-  set(cx - 11, cy - 3, TORCH);
-  set(cx - 11, cy + 3, TORCH); // West gate
-  set(cx + 11, cy - 3, TORCH);
-  set(cx + 11, cy + 3, TORCH); // East gate
+  set(cx - GATE_TORCH_INNER_OFFSET, cy - TOWN_SQUARE_HALF, TORCH);
+  set(cx + GATE_TORCH_INNER_OFFSET, cy - TOWN_SQUARE_HALF, TORCH); // North gate
+  set(cx - GATE_TORCH_INNER_OFFSET, cy + TOWN_SQUARE_HALF, TORCH);
+  set(cx + GATE_TORCH_INNER_OFFSET, cy + TOWN_SQUARE_HALF, TORCH); // South gate
+  set(cx - TOWN_SQUARE_HALF, cy - GATE_TORCH_INNER_OFFSET, TORCH);
+  set(cx - TOWN_SQUARE_HALF, cy + GATE_TORCH_INNER_OFFSET, TORCH); // West gate
+  set(cx + TOWN_SQUARE_HALF, cy - GATE_TORCH_INNER_OFFSET, TORCH);
+  set(cx + TOWN_SQUARE_HALF, cy + GATE_TORCH_INNER_OFFSET, TORCH); // East gate
   // Torches flanking the tower entrance (one row below the tower's south wall)
-  set(cx - 2, cy - 15, TORCH);
-  set(cx + 1, cy - 15, TORCH);
+  set(cx - 2, cy - MAIN_TOWER_NORTH_OFFSET, TORCH);
+  set(cx + 1, cy - MAIN_TOWER_NORTH_OFFSET, TORCH);
   // Wells — SW and NE quadrants of the town square
-  set(cx - 7, cy + 7, WELL);
-  set(cx + 7, cy - 7, WELL);
+  set(cx - WELL_DIAGONAL_OFFSET, cy + WELL_DIAGONAL_OFFSET, WELL);
+  set(cx + WELL_DIAGONAL_OFFSET, cy - WELL_DIAGONAL_OFFSET, WELL);
   // Scattered GRASSY_WEED on open grass tiles
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
-      if (grid[gy][gx].type === GRASS && Math.random() < 0.015) set(gx, gy, GRASSY_WEED);
+      if (grid[gy][gx].type === GRASS && Math.random() < GRASSY_WEED_DENSITY)
+        set(gx, gy, GRASSY_WEED);
     }
   }
   // DIRT_PATCH on road tiles for visual variety
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
-      if (grid[gy][gx].type === ROAD && Math.random() < 0.06) set(gx, gy, DIRT_PATCH);
+      if (grid[gy][gx].type === ROAD && Math.random() < DIRT_PATCH_DENSITY) set(gx, gy, DIRT_PATCH);
     }
   }
 

@@ -2,6 +2,14 @@ import type { EventBus } from '../core/EventBus';
 import type { SoundId } from './sounds';
 import { ALL_SOUND_IDS, SOUND_MANIFEST } from './sounds';
 
+const DEFAULT_MUSIC_VOLUME = 0.4;
+const WALKING_VOLUME = 0.25;
+const SPIDER_WALKING_VOLUME = 0.4;
+const MACHINERY_VOLUME = 0.35;
+const MS_PER_SECOND = 1000;
+const DEFAULT_STOP_MUSIC_FADE_MS = 500;
+const GOBLIN_ENCOUNTER_CHANCE = 0.15;
+
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
   volume?: number;
@@ -52,7 +60,7 @@ export class AudioManager {
 
   private masterVol = 1;
   private sfxVol = 1;
-  private musicVol = 0.4;
+  private musicVol = DEFAULT_MUSIC_VOLUME;
 
   // True while the page is backgrounded (lock screen, app switch). Used to keep
   // the master gain at 0 without clobbering the user's stored volume.
@@ -302,7 +310,7 @@ export class AudioManager {
     const fadeInMs = opts.fadeInMs ?? 0;
     if (fadeInMs > 0) {
       perTrackGain.gain.setValueAtTime(0, this.ctx.currentTime);
-      perTrackGain.gain.linearRampToValueAtTime(1, this.ctx.currentTime + fadeInMs / 1000);
+      perTrackGain.gain.linearRampToValueAtTime(1, this.ctx.currentTime + fadeInMs / MS_PER_SECOND);
     }
     perTrackGain.connect(this.musicGain);
 
@@ -322,7 +330,7 @@ export class AudioManager {
     const buffer = this.buffers.get('player_walking');
     if (!buffer) return;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.25;
+    gain.gain.value = WALKING_VOLUME;
     gain.connect(this.sfxGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -349,7 +357,7 @@ export class AudioManager {
     const buffer = this.buffers.get('spider_walking');
     if (!buffer) return;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.4;
+    gain.gain.value = SPIDER_WALKING_VOLUME;
     gain.connect(this.sfxGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -376,7 +384,7 @@ export class AudioManager {
     const buffer = this.buffers.get('tech_machinery_running');
     if (!buffer) return;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.35;
+    gain.gain.value = MACHINERY_VOLUME;
     gain.connect(this.sfxGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -428,7 +436,7 @@ export class AudioManager {
    * Stop the currently-playing music track.
    * @param fadeMs - fade-out duration in ms (default: 500)
    */
-  stopMusic(fadeMs = 500): void {
+  stopMusic(fadeMs = DEFAULT_STOP_MUSIC_FADE_MS): void {
     this.pendingMusic = null;
     const src = this.currentMusicSource;
     const gain = this.currentMusicGain;
@@ -439,8 +447,8 @@ export class AudioManager {
     if (fadeMs > 0) {
       const now = this.ctx.currentTime;
       gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0, now + fadeMs / 1000);
-      src.stop(now + fadeMs / 1000);
+      gain.gain.linearRampToValueAtTime(0, now + fadeMs / MS_PER_SECOND);
+      src.stop(now + fadeMs / MS_PER_SECOND);
     } else {
       src.stop();
     }
@@ -501,7 +509,7 @@ export class AudioManager {
     });
 
     bus.on('combatStarted', (e) => {
-      if (e.mobType === 'Goblin' && Math.random() < 0.15) {
+      if (e.mobType === 'Goblin' && Math.random() < GOBLIN_ENCOUNTER_CHANCE) {
         this.play('goblin_found_you');
       }
     });

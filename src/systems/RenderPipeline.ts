@@ -29,10 +29,32 @@ import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 
+/** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
+
+/** Draw kind for mobs. */
 const DRAW_KIND_MOB = 1;
+
+/** Draw kind for players. */
 const DRAW_KIND_PLAYER = 2;
+
+/** Draw kind for treasure chests. */
 const DRAW_KIND_CHEST = 3;
+
+/** Tree depth offset to keep trees rendered behind entities. */
+const TREE_SORT_DEPTH_OFFSET = 100000;
+
+/** Y-sort offset to account for sprite foot position. */
+const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
+
+/** Visibility inner radius in tiles. */
+const VISIBILITY_INNER_TILES = 30;
+
+/** Visibility outer radius in tiles. */
+const VISIBILITY_OUTER_TILES = 35;
+
+/** Frame index for tower balcony overlay. */
+const TOWER_BALCONY_OVERLAY_FRAME = 4;
 
 /** A Y-sorted draw entry that avoids per-frame closure allocation. */
 interface DrawEntry {
@@ -156,7 +178,7 @@ export class RenderPipeline {
       // their canopies appear above north trees' trunks.
       // For other decorations, sort by the sprite's visual foot position derived
       // from manifest geometry (ty * TILE_SIZE + sortYAnchorPx).
-      e.sortY = isTree ? ty - 100000 : ty * TILE_SIZE + sortYAnchorPx;
+      e.sortY = isTree ? ty - TREE_SORT_DEPTH_OFFSET : ty * TILE_SIZE + sortYAnchorPx;
       e.kind = DRAW_KIND_DECO;
       e.tx = tx;
       e.ty = ty;
@@ -168,7 +190,7 @@ export class RenderPipeline {
     // (added later) sorts in front of the chest — stable sort preserves insertion order.
     for (const chest of treasureChests.allChests) {
       const e = this._getEntry();
-      e.sortY = chest.tileY * TILE_SIZE + TILE_SIZE;
+      e.sortY = chest.tileY * TILE_SIZE + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_CHEST;
       e.chestRef = chest;
       e.entity = null;
@@ -176,7 +198,7 @@ export class RenderPipeline {
 
     for (const mob of visibleMobs) {
       const e = this._getEntry();
-      e.sortY = mob.y + TILE_SIZE;
+      e.sortY = mob.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_MOB;
       e.entity = mob;
       e.chestRef = null;
@@ -184,14 +206,14 @@ export class RenderPipeline {
 
     {
       const e = this._getEntry();
-      e.sortY = inactive.y + TILE_SIZE;
+      e.sortY = inactive.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_PLAYER;
       e.entity = inactive;
       e.chestRef = null;
     }
     {
       const e = this._getEntry();
-      e.sortY = active.y + TILE_SIZE;
+      e.sortY = active.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_PLAYER;
       e.entity = active;
       e.chestRef = null;
@@ -253,10 +275,8 @@ export class RenderPipeline {
   renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const { canvas, camX, camY, active } = rc;
 
-    const INNER_TILES = 30;
-    const OUTER_TILES = 35;
-    const innerR = INNER_TILES * TILE_SIZE;
-    const outerR = OUTER_TILES * TILE_SIZE;
+    const innerR = VISIBILITY_INNER_TILES * TILE_SIZE;
+    const outerR = VISIBILITY_OUTER_TILES * TILE_SIZE;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
     const halfDiag = Math.hypot(canvas.width / 2, canvas.height / 2);
@@ -284,6 +304,14 @@ export class RenderPipeline {
     const sx = anchor.x * TILE_SIZE - camX;
     const sy = anchor.y * TILE_SIZE - camY;
     // Frame 4 of the 'normal' state is the undamaged balcony railing overlay
-    drawSpriteKey(ctx, 'overworld_main_tower', 'normal', 4, sx, sy, TILE_SIZE);
+    drawSpriteKey(
+      ctx,
+      'overworld_main_tower',
+      'normal',
+      TOWER_BALCONY_OVERLAY_FRAME,
+      sx,
+      sy,
+      TILE_SIZE,
+    );
   }
 }

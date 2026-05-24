@@ -6,6 +6,16 @@ import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 
+// Main tab layout
+const TITLE_Y = 34;
+const TITLE_Y_ADJUST = 14;
+const TITLE_SIZE = 18;
+const BUTTON_WIDTH_MARGIN = 40;
+const BUTTON_X_OFFSET = 20;
+const BUTTON_HEIGHT = 40;
+const FIRST_BUTTON_Y = 52;
+const BUTTON_SPACING = 50;
+
 export function renderMainTab(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -21,17 +31,17 @@ export function renderMainTab(
 ): void {
   drawText(ctx, 'PAUSED', {
     x: bx + bw / 2,
-    y: by + 34 - 14,
+    y: by + TITLE_Y - TITLE_Y_ADJUST,
     bold: true,
-    size: 18,
+    size: TITLE_SIZE,
     color: '#f1f5f9',
     align: 'center',
   });
 
-  const bW = bw - 40;
-  const bX = bx + 20;
-  const bH = 40;
-  let bY = by + 52;
+  const bW = bw - BUTTON_WIDTH_MARGIN;
+  const bX = bx + BUTTON_X_OFFSET;
+  const bH = BUTTON_HEIGHT;
+  let bY = by + FIRST_BUTTON_Y;
 
   addButton(ctx, buttons, {
     x: bX,
@@ -42,7 +52,7 @@ export function renderMainTab(
     ...BUTTON_PRESETS.primary,
     action: close,
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
   addButton(ctx, buttons, {
     x: bX,
     y: bY,
@@ -52,7 +62,7 @@ export function renderMainTab(
     ...BUTTON_PRESETS.primary,
     action: () => setTab('inventory'),
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
   addButton(ctx, buttons, {
     x: bX,
     y: bY,
@@ -62,7 +72,7 @@ export function renderMainTab(
     ...BUTTON_PRESETS.primary,
     action: () => setTab('stats'),
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
 
   const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
   const achLabel = unread > 0 ? `Achievements  (${unread} new)` : 'Achievements';
@@ -76,7 +86,7 @@ export function renderMainTab(
     ...(unread > 0 ? { fill: '#1a2a0a', labelColor: '#86efac' } : {}),
     action: () => setTab('achievements'),
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
 
   addButton(ctx, buttons, {
     x: bX,
@@ -87,7 +97,7 @@ export function renderMainTab(
     ...BUTTON_PRESETS.primary,
     action: () => setTab('abilities'),
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
 
   addButton(ctx, buttons, {
     x: bX,
@@ -98,7 +108,7 @@ export function renderMainTab(
     ...BUTTON_PRESETS.primary,
     action: () => setTab('settings'),
   });
-  bY += 50;
+  bY += BUTTON_SPACING;
 
   const totalPts = human.unspentPoints + cat.unspentPoints;
   if (totalPts > 0) {

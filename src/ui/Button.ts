@@ -5,8 +5,25 @@ import { drawText } from './TextBox';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 
-let _mouseX = -99999;
-let _mouseY = -99999;
+const RESET_MOUSE_POSITION = -99999;
+const DEFAULT_BORDER_WIDTH = 1.5;
+const DEFAULT_RADIUS = 4;
+const DEFAULT_LABEL_SIZE = 13;
+const DEFAULT_GLOW_BLUR = 20;
+const DEFAULT_SHADOW_BLUR = 16;
+const DISABLED_ALPHA_MULTIPLIER = 0.45;
+const MIN_LINE_HEIGHT = 14;
+const LINE_HEIGHT_MULTIPLIER = 1.4;
+const BUTTON_LABEL_TOP_PAD = 8;
+const LABEL_WRAP_WIDTH_PAD = 12;
+const HOVER_GLOW_BLUR = 6;
+const PRESSED_OFFSET = 1;
+const PRESSED_WIDTH_REDUCTION = 2;
+const PRESSED_HEIGHT_REDUCTION = 2;
+const PRESS_DARKENING_ALPHA = 0.18;
+
+let _mouseX = RESET_MOUSE_POSITION;
+let _mouseY = RESET_MOUSE_POSITION;
 let _isDown = false;
 let _audioManager: AudioManager | null = null;
 
@@ -48,8 +65,8 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
  * Clear mouse state — call when the mouse leaves the canvas or on touch end.
  */
 export function clearButtonMouseState(): void {
-  _mouseX = -99999;
-  _mouseY = -99999;
+  _mouseX = RESET_MOUSE_POSITION;
+  _mouseY = RESET_MOUSE_POSITION;
   _isDown = false;
   _renderedButtons.length = 0;
 }
@@ -263,18 +280,18 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     alignY = 'top',
     fill = '#1e293b',
     border = '#334155',
-    borderWidth = 1.5,
-    radius = 4,
+    borderWidth = DEFAULT_BORDER_WIDTH,
+    radius = DEFAULT_RADIUS,
     alpha = 1,
-    labelSize = 13,
+    labelSize = DEFAULT_LABEL_SIZE,
     labelBold = true,
     labelColor = '#e2e8f0',
     labelFont = 'monospace',
     labelWrap = false,
     glow = false,
-    glowBlur = 20,
+    glowBlur = DEFAULT_GLOW_BLUR,
     shadow = false,
-    shadowBlur = 16,
+    shadowBlur = DEFAULT_SHADOW_BLUR,
     shadowOffset,
     disabled = false,
     sound = BUTTON_CLICK_SOUND,
@@ -292,7 +309,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     !disabled && _mouseX >= x && _mouseX <= x + width && _mouseY >= y && _mouseY <= y + height;
   const pressed = hovered && _isDown;
 
-  const effectiveAlpha = disabled ? alpha * 0.45 : alpha;
+  const effectiveAlpha = disabled ? alpha * DISABLED_ALPHA_MULTIPLIER : alpha;
 
   drawBox(ctx, {
     x,
@@ -323,27 +340,27 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
       radius,
       alpha: effectiveAlpha,
       glow: border,
-      glowBlur: 6,
+      glowBlur: HOVER_GLOW_BLUR,
     });
   }
 
   if (pressed) {
     drawBox(ctx, {
-      x: x + 1,
-      y: y + 1,
-      width: width - 2,
-      height: height - 2,
-      fill: 'rgba(0,0,0,0.18)',
-      radius: Math.max(0, radius - 1),
+      x: x + PRESSED_OFFSET,
+      y: y + PRESSED_OFFSET,
+      width: width - PRESSED_WIDTH_REDUCTION,
+      height: height - PRESSED_HEIGHT_REDUCTION,
+      fill: `rgba(0,0,0,${PRESS_DARKENING_ALPHA})`,
+      radius: Math.max(0, radius - PRESSED_OFFSET),
       alpha: effectiveAlpha,
     });
   }
 
-  const lineHeight = Math.max(14, Math.ceil(labelSize * 1.4));
-  const textY = labelWrap ? y + 8 : Math.round(y + (height - labelSize) / 2 + 1);
+  const lineHeight = Math.max(MIN_LINE_HEIGHT, Math.ceil(labelSize * LINE_HEIGHT_MULTIPLIER));
+  const textY = labelWrap ? y + BUTTON_LABEL_TOP_PAD : Math.round(y + (height - labelSize) / 2 + 1);
 
   drawText(ctx, label, {
-    x: labelWrap ? x + 6 : x + width / 2,
+    x: labelWrap ? x + LABEL_WRAP_WIDTH_PAD : x + width / 2,
     y: textY,
     size: labelSize,
     bold: labelBold,
@@ -351,7 +368,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     font: labelFont,
     align: 'center',
     alpha: effectiveAlpha,
-    ...(labelWrap ? { width: width - 12, lineHeight } : {}),
+    ...(labelWrap ? { width: width - LABEL_WRAP_WIDTH_PAD * 2, lineHeight } : {}),
   });
 
   const rx = x;

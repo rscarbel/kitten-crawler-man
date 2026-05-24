@@ -10,6 +10,8 @@ const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_COOLDOWN = 60;
 const ATTACK_ANIM_FRAMES = 14;
 const ATTACK_DAMAGE = 2;
+/** Fraction of attack range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.6;
 
 export class Bugaboo extends Mob {
   readonly xpValue = 3;
@@ -59,7 +61,12 @@ export class Bugaboo extends Mob {
         this.isBreakingIn = true;
         this.isAggro = true;
         if (distToBarrier > this.attackRangePx) {
-          this.followTargetCollide(barrierX, barrierY, this.speed, this.attackRangePx * 0.6);
+          this.followTargetCollide(
+            barrierX,
+            barrierY,
+            this.speed,
+            this.attackRangePx * FOLLOW_STOP_FRACTION,
+          );
         } else {
           this.isMoving = false;
           if (this.attackCooldown === 0) {
@@ -83,7 +90,7 @@ export class Bugaboo extends Mob {
           this.defendTarget.x,
           this.defendTarget.y,
           this.speed,
-          this.attackRangePx * 0.6,
+          this.attackRangePx * FOLLOW_STOP_FRACTION,
         );
       } else {
         this.isMoving = false;
@@ -125,7 +132,7 @@ export class Bugaboo extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.attackRangePx * 0.6,
+        this.attackRangePx * FOLLOW_STOP_FRACTION,
       );
     } else {
       this.isMoving = false;

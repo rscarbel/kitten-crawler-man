@@ -13,8 +13,23 @@ import { drawText } from '../ui/TextBox';
 export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
 const CONSTRUCT_FRAMES = 60; // 1 second at 60 fps
+/** Slow zone radius as a fraction of a tile. */
+const SLOW_RADIUS_TILE_FRACTION = 0.9;
 /** Tiles adjacent to a barrier that count as a slow zone (half-tile radius). */
-const SLOW_RADIUS_PX = TILE_SIZE * 0.9;
+const SLOW_RADIUS_PX = TILE_SIZE * SLOW_RADIUS_TILE_FRACTION;
+/** Fraction of tile size used as center offset for tile-center calculations. */
+const TILE_CENTER_FRACTION = 0.5;
+/** Progress arc radius multiplier relative to tile size. */
+const CONSTRUCT_ARC_RADIUS_MULT = 1.2;
+/** Label y offset above the arc radius. */
+const CONSTRUCT_LABEL_Y_OFFSET = 14;
+/** Label size adjustment for drawText. */
+const CONSTRUCT_LABEL_ADJUST = 7;
+/** Slow zone pulse ring alpha base and range. */
+const SLOW_PULSE_ALPHA_BASE = 0.18;
+const SLOW_PULSE_ALPHA_RANGE = 0.08;
+/** Pulse speed for slow zone ring animation. */
+const SLOW_PULSE_SPEED = 0.004;
 
 interface PlacedBarrier {
   tileX: number;
@@ -86,12 +101,12 @@ export class BarrierSystem implements GameSystem {
 
     // Apply slow effect to mobs near active barriers
     for (const barrier of this.barriers) {
-      const bwcx = barrier.worldX + TILE_SIZE * 0.5;
-      const bwcy = barrier.worldY + TILE_SIZE * 0.5;
+      const bwcx = barrier.worldX + TILE_SIZE * TILE_CENTER_FRACTION;
+      const bwcy = barrier.worldY + TILE_SIZE * TILE_CENTER_FRACTION;
       for (const mob of mobs) {
         if (!mob.isAlive) continue;
-        const mcx = mob.x + TILE_SIZE * 0.5;
-        const mcy = mob.y + TILE_SIZE * 0.5;
+        const mcx = mob.x + TILE_SIZE * TILE_CENTER_FRACTION;
+        const mcy = mob.y + TILE_SIZE * TILE_CENTER_FRACTION;
         if (Math.hypot(mcx - bwcx, mcy - bwcy) < SLOW_RADIUS_PX) {
           mob.isSlowed = true;
         }
@@ -105,8 +120,8 @@ export class BarrierSystem implements GameSystem {
     if (!removed) return; // Player lost the item before construction finished
 
     const ts = TILE_SIZE;
-    const px = c.player.x + ts * 0.5;
-    const py = c.player.y + ts * 0.5;
+    const px = c.player.x + ts * TILE_CENTER_FRACTION;
+    const py = c.player.y + ts * TILE_CENTER_FRACTION;
     const tileX = Math.floor(px / ts);
     const tileY = Math.floor(py / ts);
 
@@ -141,8 +156,8 @@ export class BarrierSystem implements GameSystem {
   tryPickupNear(player: Player): boolean {
     if (!player.isAlive) return false;
     const ts = TILE_SIZE;
-    const ptx = Math.floor((player.x + ts * 0.5) / ts);
-    const pty = Math.floor((player.y + ts * 0.5) / ts);
+    const ptx = Math.floor((player.x + ts * TILE_CENTER_FRACTION) / ts);
+    const pty = Math.floor((player.y + ts * TILE_CENTER_FRACTION) / ts);
     const idx = this.barriers.findIndex((b) => b.tileX === ptx && b.tileY === pty);
     if (idx !== -1) {
       const b = this.barriers[idx];
@@ -174,19 +189,26 @@ export class BarrierSystem implements GameSystem {
 
       // Slow zone pulse ring
       ctx.save();
-      ctx.globalAlpha = 0.18 + 0.08 * Math.sin(Date.now() * 0.004);
+      ctx.globalAlpha =
+        SLOW_PULSE_ALPHA_BASE + SLOW_PULSE_ALPHA_RANGE * Math.sin(Date.now() * SLOW_PULSE_SPEED);
       ctx.strokeStyle = '#60a5fa';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(sx + TILE_SIZE * 0.5, sy + TILE_SIZE * 0.5, SLOW_RADIUS_PX, 0, Math.PI * 2);
+      ctx.arc(
+        sx + TILE_SIZE * TILE_CENTER_FRACTION,
+        sy + TILE_SIZE * TILE_CENTER_FRACTION,
+        SLOW_RADIUS_PX,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
       ctx.restore();
 
       // Pickup prompt when player is on this tile
       if (activePlayer) {
         const ts = TILE_SIZE;
-        const ptx = Math.floor((activePlayer.x + ts * 0.5) / ts);
-        const pty = Math.floor((activePlayer.y + ts * 0.5) / ts);
+        const ptx = Math.floor((activePlayer.x + ts * TILE_CENTER_FRACTION) / ts);
+        const pty = Math.floor((activePlayer.y + ts * TILE_CENTER_FRACTION) / ts);
         if (ptx === b.tileX && pty === b.tileY) {
           drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
         }
@@ -202,11 +224,11 @@ export class BarrierSystem implements GameSystem {
     if (!this.pending) return;
 
     const ratio = 1 - this.pending.framesLeft / CONSTRUCT_FRAMES;
-    const cx = canvas.width * 0.5;
-    const cy = canvas.height * 0.5;
+    const cx = canvas.width * TILE_CENTER_FRACTION;
+    const cy = canvas.height * TILE_CENTER_FRACTION;
 
     // Small progress arc near screen center (represents player's feet area)
-    const radius = TILE_SIZE * 1.2;
+    const radius = TILE_SIZE * CONSTRUCT_ARC_RADIUS_MULT;
     const startAngle = -Math.PI / 2;
     const endAngle = startAngle + Math.PI * 2 * ratio;
 
@@ -234,7 +256,7 @@ export class BarrierSystem implements GameSystem {
     // Label
     drawText(ctx, 'PLACING...', {
       x: cx,
-      y: cy + radius + 14 - 7,
+      y: cy + radius + CONSTRUCT_LABEL_Y_OFFSET - CONSTRUCT_LABEL_ADJUST,
       size: 9,
       bold: true,
       color: '#60a5fa',

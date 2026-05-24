@@ -23,14 +23,12 @@ import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
-const COMPUTER_INTERACT_RANGE_PX = TILE_SIZE * 1.5;
+const SCIENTIST_INTERACT_RANGE_TILES = 2.5;
+const COMPUTER_INTERACT_RANGE_TILES = 1.5;
+const INTERACT_RANGE_PX = TILE_SIZE * SCIENTIST_INTERACT_RANGE_TILES;
+const COMPUTER_INTERACT_RANGE_PX = TILE_SIZE * COMPUTER_INTERACT_RANGE_TILES;
 const HACK_START_DELAY_FRAMES = 60;
-
+const COMPUTER_INTERACT_MULTIPLIER = 3;
 // Room locking
 const SPIDER_ENTRY_WINDOW_FRAMES = 1800; // 30 seconds at 60 fps
 
@@ -56,10 +54,116 @@ const CS_FIGHT_START_FRAME = 300;
 // Scientist wander timing
 const SCIENTIST_WANDER_FRAMES = 180;
 const SCIENTIST_WALK_ANIM_FRAMES = 8;
+const SCIENTIST_WALK_FRAME_COUNT = 4;
+const SCIENTIST_WANDER_SPREAD_TILES = 3;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Animation and physics
+const SPIDER_LAB_ENTRY_HP_THRESHOLD = 0.3;
+const FRAMES_PER_SECOND = 60;
+const MS_PER_SECOND = 1000;
+
+// Additional rendering constants
+const TILE_CENTER_OFFSET_PX = 0.5; // for tile/sprite centering
+const SCIENTIST_DIALOG_COL = 3;
+const SCIENTIST_WALK_COL_1 = 1;
+const SCIENTIST_WALK_COL_2 = 2;
+const SCIENTIST_WALK_COL_IDLE = 0;
+const SCIENTIST_EXCLAMATION_OFFSET_Y = 8;
+const EXCLAMATION_MARK_BOB_AMPLITUDE = 3;
+const EXCLAMATION_MARK_BOB_FREQUENCY = 350;
+const EXCLAMATION_MARK_FONT_SIZE = 16;
+const EXCLAMATION_MARK_STROKE_WIDTH = 3;
+const EXCLAMATION_MARK_VERTICAL_OFFSET = 16;
+const SPEECH_BUBBLE_PADDING = 8;
+const SPEECH_BUBBLE_FONT_SIZE = 9;
+const SPEECH_BUBBLE_HEIGHT = 22;
+const SPEECH_BUBBLE_OFFSET_Y = 8;
+const SPEECH_BUBBLE_TAIL_OFFSET = 5;
+const SPEECH_BUBBLE_TAIL_DROP = 6;
+const SPEECH_BUBBLE_CORNER_RADIUS = 4;
+const SPEECH_BUBBLE_STROKE_WIDTH = 1.5;
+const SCIENTIST_GORE_HEAD_OFFSET_X = 0.3;
+const SCIENTIST_GORE_HEAD_OFFSET_Y = 0.5;
+const SCIENTIST_GORE_TORSO_OFFSET_X = 0.1;
+const SCIENTIST_GORE_TORSO_OFFSET_Y = 0.1;
+const COMPUTER_TABLE_DRAW_HEIGHT = 2.0;
+const ARROW_ANIMATION_FREQUENCY = 3.5;
+const ARROW_SCALE_Y = 0.25;
+const ARROW_SCALE_X = 0.4;
+const ARROW_SCALE_Y_2 = 0.3;
+const ARROW_SCALE_X_2 = 0.2;
+const ARROW_SCALE_X_3 = 0.55;
+const SPIDER_EGG_DRAW_WIDTH = 1.5;
+const LOCKED_ROOM_BORDER_STROKE_WIDTH = 3;
+const LOCKED_ROOM_CORNER_STROKE_WIDTH = 2;
+const LOCKED_ROOM_CORNER_OFFSET = 4;
+const LOCKED_ROOM_CORNER_GAP = 4;
+const LOCKED_ROOM_ALPHA_MIN = 0.55;
+const LOCKED_ROOM_ALPHA_SWING = 0.25;
+const LOCKED_ROOM_PULSE_MULTIPLIER = 0.12;
+const LOCKED_ROOM_TEXT_OFFSET_Y = 74;
+const DIALOG_WIDTH_MIN = 440;
+const DIALOG_WIDTH_PADDING = 40;
+const DIALOG_HEIGHT = 220;
+const DIALOG_TITLE_OFFSET_X = 14;
+const DIALOG_TITLE_OFFSET_Y = 22;
+const DIALOG_TITLE_OFFSET_Y_ADJUSTMENT = 10;
+const DIALOG_TEXT_OFFSET_X = 14;
+const DIALOG_TEXT_START_Y = 48;
+const DIALOG_TEXT_LINE_HEIGHT = 16;
+const DIALOG_TEXT_SIZE_ADJUSTMENT = 9;
+const DIALOG_BUTTON_WIDTH = 110;
+const DIALOG_BUTTON_HEIGHT = 30;
+const DIALOG_BUTTON_OFFSET_BOTTOM = 46;
+const DIALOG_BUTTON_SPACING = 10;
+const DIALOG_BUTTON_TEXT_VERTICAL_OFFSET = 20;
+const FAILED_DIALOG_WIDTH_MIN = 400;
+const FAILED_DIALOG_HEIGHT = 160;
+const FAILED_DIALOG_TITLE_OFFSET_Y = 26;
+const FAILED_DIALOG_TITLE_SIZE_ADJUSTMENT = 12;
+const FAILED_DIALOG_TEXT_OFFSET_Y = 65;
+const FAILED_DIALOG_TEXT_SIZE_ADJUSTMENT = 10;
+const BUTTON_GAP = 10;
+const CUTSCENE_TEXT_OFFSET_Y = 20;
+const CUTSCENE_DARKNESS_ALPHA = 0.35;
+const LIGHTANIM_DELAY = 8;
+const LIGHTANIM_FRAME_COUNT = 3;
+const ACTIVE_ANIM_DELAY = 10;
+const ACTIVE_ANIM_FRAME_COUNT = 4;
+const LIFE_MACHINE_DRAW_HEIGHT = 3.0;
+const SCIENTIST_DRAW_HEIGHT = 1.5;
+const SCIENTIST_WALK_DIST_THRESHOLD = 2;
+const SCIENTIST_WALK_SPEED = 0.6;
+const SCIENTIST_WANDER_ATTEMPTS = 8;
+const LIFE_MACHINE_LIGHT_OPACITY = 0.75;
+const CUTSCENE_TEXT_GLOW_BLUR = 10;
+const CUTSCENE_SHAKE_INTENSITY = 6;
+const OFFSET_NORTH = 1;
+const OFFSET_SOUTH = -1;
+const OFFSET_EAST = 1;
+const OFFSET_WEST = -1;
+const OFFSET_FAR = 2;
+const OFFSET_FAR_NORTH = -2;
+const OFFSET_FAR_WEST = -2;
+
+const NEIGHBOR_OFFSETS_SMALL: Array<[number, number]> = [
+  [0, OFFSET_NORTH],
+  [0, OFFSET_SOUTH],
+  [OFFSET_EAST, 0],
+  [OFFSET_WEST, 0],
+];
+const NEIGHBOR_OFFSETS_DIAGONAL: Array<[number, number]> = [
+  [OFFSET_EAST, OFFSET_NORTH],
+  [OFFSET_WEST, OFFSET_NORTH],
+  [OFFSET_EAST, OFFSET_SOUTH],
+  [OFFSET_WEST, OFFSET_SOUTH],
+];
+const NEIGHBOR_OFFSETS_FAR: Array<[number, number]> = [
+  [0, OFFSET_FAR],
+  [0, OFFSET_FAR_NORTH],
+  [OFFSET_FAR, 0],
+  [OFFSET_FAR_WEST, 0],
+];
 
 type QuestPhase =
   | 'inactive'
@@ -93,10 +197,6 @@ interface ButtonRect {
   h: number;
   action: string;
 }
-
-// ---------------------------------------------------------------------------
-// SpiderQuestSystem
-// ---------------------------------------------------------------------------
 
 export class SpiderQuestSystem implements GameSystem {
   // Sound pending flags — DungeonScene checks and clears these
@@ -187,10 +287,6 @@ export class SpiderQuestSystem implements GameSystem {
   private addMob: (mob: Mob) => void;
   private gameMap: GameMap;
 
-  // ---------------------------------------------------------------------------
-  // Constructor
-  // ---------------------------------------------------------------------------
-
   constructor(gameMap: GameMap, addMob: (mob: Mob) => void) {
     this.gameMap = gameMap;
     this.addMob = addMob;
@@ -232,10 +328,6 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Public getters
-  // ---------------------------------------------------------------------------
-
   get isDialogOpen(): boolean {
     return this.phase === 'scientist_dialog' || this.phase === 'hacking_failed';
   }
@@ -267,10 +359,6 @@ export class SpiderQuestSystem implements GameSystem {
   get roomLocked(): boolean {
     return this._roomLocked;
   }
-
-  // ---------------------------------------------------------------------------
-  // GameSystem interface
-  // ---------------------------------------------------------------------------
 
   update(ctx: SystemContext): void {
     if (this.phase === 'inactive' || this.phase === 'complete') return;
@@ -306,10 +394,6 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Rendering
-  // ---------------------------------------------------------------------------
-
   /**
    * Draws the table only when the active player is south of it (player renders after in the
    * entity pass, so the player will appear on top). When the player is north of the table,
@@ -343,7 +427,7 @@ export class SpiderQuestSystem implements GameSystem {
         active.x - this.roomData.computerTile.x * TILE_SIZE,
         active.y - this.roomData.computerTile.y * TILE_SIZE,
       );
-      if (dist <= COMPUTER_INTERACT_RANGE_PX * 3) {
+      if (dist <= COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER) {
         drawInteractionPrompt(ctx2d, compX, compY - TILE_SIZE, TILE_SIZE, 'Hack Terminal');
       }
     }
@@ -481,7 +565,7 @@ export class SpiderQuestSystem implements GameSystem {
         active.x - this.roomData.computerTile.x * TILE_SIZE,
         active.y - this.roomData.computerTile.y * TILE_SIZE,
       );
-      if (dist > COMPUTER_INTERACT_RANGE_PX * 3) return false;
+      if (dist > COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER) return false;
       if (!this.hackStarting) {
         this.hackStarting = true;
         this.hackStartTimer = HACK_START_DELAY_FRAMES;
@@ -571,13 +655,13 @@ export class SpiderQuestSystem implements GameSystem {
         this._humanIsInsider = humanInRoom;
         this._catIsInsider = catInRoom;
         if (!human.isAlive && humanInRoom) {
-          human.hp = Math.max(1, Math.floor(human.maxHp * 0.3));
+          human.hp = Math.max(1, Math.floor(human.maxHp * SPIDER_LAB_ENTRY_HP_THRESHOLD));
           human.isKnockedOut = false;
           human.knockedOutFrames = 0;
           human.reviveProgress = 0;
         }
         if (!cat.isAlive && catInRoom) {
-          cat.hp = Math.max(1, Math.floor(cat.maxHp * 0.3));
+          cat.hp = Math.max(1, Math.floor(cat.maxHp * SPIDER_LAB_ENTRY_HP_THRESHOLD));
           cat.isKnockedOut = false;
           cat.knockedOutFrames = 0;
           cat.reviveProgress = 0;
@@ -622,8 +706,8 @@ export class SpiderQuestSystem implements GameSystem {
       } else {
         const prev = this._humanLastOutside;
         if (prev !== null) {
-          const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
-          const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+          const prevTx = Math.floor((prev.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
+          const prevTy = Math.floor((prev.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
           if (this.gameMap.isWalkable(prevTx, prevTy)) {
             human.x = prev.x;
             human.y = prev.y;
@@ -644,8 +728,8 @@ export class SpiderQuestSystem implements GameSystem {
       } else {
         const prev = this._catLastOutside;
         if (prev !== null) {
-          const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
-          const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+          const prevTx = Math.floor((prev.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
+          const prevTy = Math.floor((prev.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
           if (this.gameMap.isWalkable(prevTx, prevTy)) {
             cat.x = prev.x;
             cat.y = prev.y;
@@ -668,16 +752,12 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private — room lock helpers
-  // ---------------------------------------------------------------------------
-
   private _isInRoom(
     entity: { x: number; y: number },
     b: { x: number; y: number; w: number; h: number },
   ): boolean {
-    const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const tx = Math.floor((entity.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
     return tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h;
   }
 
@@ -688,10 +768,6 @@ export class SpiderQuestSystem implements GameSystem {
     entity.x = clamp(entity.x, b.x * TILE_SIZE, (b.x + b.w - 1) * TILE_SIZE);
     entity.y = clamp(entity.y, b.y * TILE_SIZE, (b.y + b.h - 1) * TILE_SIZE);
   }
-
-  // ---------------------------------------------------------------------------
-  // Private — hack start sequence
-  // ---------------------------------------------------------------------------
 
   private _updateHackStart(active: Player): void {
     if (!this.hackStarting) return;
@@ -734,10 +810,6 @@ export class SpiderQuestSystem implements GameSystem {
     this.phase = 'hacking_failed';
   }
 
-  // ---------------------------------------------------------------------------
-  // Private — machinery loop
-  // ---------------------------------------------------------------------------
-
   private _updateMachineryLoop(active: Player): void {
     if (!this.roomData) return;
 
@@ -755,10 +827,6 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private — life machines
-  // ---------------------------------------------------------------------------
-
   private _updateLifeMachines(): void {
     if (this.phase === 'cutscene' || this.phase === 'boss_fight' || this.phase === 'complete') {
       return;
@@ -768,16 +836,16 @@ export class SpiderQuestSystem implements GameSystem {
       // Tick light animation
       machine.lightAnimTimer--;
       if (machine.lightAnimTimer <= 0) {
-        machine.lightAnimTimer = 8;
-        machine.lightAnimFrame = (machine.lightAnimFrame + 1) % 3;
+        machine.lightAnimTimer = LIGHTANIM_DELAY;
+        machine.lightAnimFrame = (machine.lightAnimFrame + 1) % LIGHTANIM_FRAME_COUNT;
       }
 
       // Tick active animation
       if (machine.state === 'active') {
         machine.activeAnimTimer--;
         if (machine.activeAnimTimer <= 0) {
-          machine.activeAnimTimer = 10;
-          machine.activeAnimFrame = (machine.activeAnimFrame + 1) % 4;
+          machine.activeAnimTimer = ACTIVE_ANIM_DELAY;
+          machine.activeAnimFrame = (machine.activeAnimFrame + 1) % ACTIVE_ANIM_FRAME_COUNT;
         }
       }
 
@@ -843,19 +911,10 @@ export class SpiderQuestSystem implements GameSystem {
 
   private _spawnSmallSpider(tileX: number, tileY: number): void {
     // Life machine tiles are blocked — find the nearest walkable tile instead.
-    const offsets: Array<[number, number]> = [
-      [0, 1],
-      [0, -1],
-      [1, 0],
-      [-1, 0],
-      [1, 1],
-      [-1, 1],
-      [1, -1],
-      [-1, -1],
-      [0, 2],
-      [0, -2],
-      [2, 0],
-      [-2, 0],
+    const offsets = [
+      ...NEIGHBOR_OFFSETS_SMALL,
+      ...NEIGHBOR_OFFSETS_DIAGONAL,
+      ...NEIGHBOR_OFFSETS_FAR,
     ];
     let spawnX = tileX;
     let spawnY = tileY;
@@ -871,10 +930,6 @@ export class SpiderQuestSystem implements GameSystem {
     this.addMob(spider);
     this.smallSpiders.push(spider);
   }
-
-  // ---------------------------------------------------------------------------
-  // Private — scientist wander
-  // ---------------------------------------------------------------------------
 
   private _updateScientistWander(active: Player): void {
     if (!this.roomData) return;
@@ -894,10 +949,10 @@ export class SpiderQuestSystem implements GameSystem {
 
       const homeX = this.roomData.scientistTile.x * TILE_SIZE;
       const homeY = this.roomData.scientistTile.y * TILE_SIZE;
-      const spread = TILE_SIZE * 3;
+      const spread = TILE_SIZE * SCIENTIST_WANDER_SPREAD_TILES;
       let pickedX = homeX;
       let pickedY = homeY;
-      for (let attempt = 0; attempt < 8; attempt++) {
+      for (let attempt = 0; attempt < SCIENTIST_WANDER_ATTEMPTS; attempt++) {
         const tx = homeX + (Math.random() * 2 - 1) * spread;
         const ty = homeY + (Math.random() * 2 - 1) * spread;
         if (this.gameMap.isWalkable(Math.floor(tx / TILE_SIZE), Math.floor(ty / TILE_SIZE))) {
@@ -914,8 +969,8 @@ export class SpiderQuestSystem implements GameSystem {
     const dy = this.scientistTargetY - this.scientistY;
     const dist = Math.hypot(dx, dy);
 
-    if (dist > 2) {
-      const speed = 0.6;
+    if (dist > SCIENTIST_WALK_DIST_THRESHOLD) {
+      const speed = SCIENTIST_WALK_SPEED;
       const nextX = this.scientistX + (dx / dist) * speed;
       const nextY = this.scientistY + (dy / dist) * speed;
       if (!this.gameMap.isWalkable(Math.floor(nextX / TILE_SIZE), Math.floor(nextY / TILE_SIZE))) {
@@ -931,16 +986,12 @@ export class SpiderQuestSystem implements GameSystem {
       this.scientistWalkTimer++;
       if (this.scientistWalkTimer >= SCIENTIST_WALK_ANIM_FRAMES) {
         this.scientistWalkTimer = 0;
-        this.scientistWalkFrame = (this.scientistWalkFrame + 1) % 4;
+        this.scientistWalkFrame = (this.scientistWalkFrame + 1) % SCIENTIST_WALK_FRAME_COUNT;
       }
     } else {
       this.scientistIsWalking = false;
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Private — cutscene
-  // ---------------------------------------------------------------------------
 
   private _updateCutscene(ctx: SystemContext): void {
     this.cutsceneTimer++;
@@ -953,7 +1004,7 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (t === CS_RUMBLE_FRAME) {
       this.rumbleSoundPending = true;
-      this._screenShakeIntensity = 6;
+      this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY;
     }
 
     if (t === CS_EXCLAMATION_FRAME) {
@@ -997,19 +1048,15 @@ export class SpiderQuestSystem implements GameSystem {
       if (t >= CS_CAMERA_PAN_FRAME) {
         const rampFrames = CS_FIGHT_START_FRAME - CS_CAMERA_PAN_FRAME;
         const rampT = (t - CS_CAMERA_PAN_FRAME) / rampFrames;
-        this._screenShakeIntensity = 6 * (1 - rampT);
+        this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY * (1 - rampT);
       }
-      this._screenShakeX = (Math.random() - 0.5) * this._screenShakeIntensity * 2;
-      this._screenShakeY = (Math.random() - 0.5) * this._screenShakeIntensity * 2;
+      this._screenShakeX = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
+      this._screenShakeY = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
     }
 
     // Suppress unused ctx warning (cutscene doesn't need ctx here)
     void ctx;
   }
-
-  // ---------------------------------------------------------------------------
-  // Private — rendering helpers
-  // ---------------------------------------------------------------------------
 
   private _getSpriteDef(name: string) {
     return getSpriteDefByKey(name);
@@ -1069,7 +1116,7 @@ export class SpiderQuestSystem implements GameSystem {
     const def = this._getSpriteDef('life_machine');
     if (def === undefined) return;
 
-    const drawH = TILE_SIZE * 3.0;
+    const drawH = TILE_SIZE * LIFE_MACHINE_DRAW_HEIGHT;
     const aspect = def.frameWidth / def.frameHeight;
     const drawW = drawH * aspect;
 
@@ -1082,7 +1129,7 @@ export class SpiderQuestSystem implements GameSystem {
 
       const worldX = machine.tileX * TILE_SIZE;
       const worldY = machine.tileY * TILE_SIZE;
-      const sx = worldX - camX - (drawW - TILE_SIZE) * 0.5;
+      const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
       const sy = worldY - camY - (drawH - TILE_SIZE);
 
       const stateName = this._lifeMachineStateName(machine);
@@ -1105,7 +1152,7 @@ export class SpiderQuestSystem implements GameSystem {
         const lightState = def.states.get('life_machine_red_lights');
         if (lightState !== undefined) {
           ctx.save();
-          ctx.globalAlpha = 0.75;
+          ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
           const lightSrcX = machine.lightAnimFrame * def.frameWidth;
           const lightSrcY = lightState.row * def.frameHeight;
           ctx.drawImage(
@@ -1131,7 +1178,7 @@ export class SpiderQuestSystem implements GameSystem {
         const lightState = def.states.get('life_machine_green_lights');
         if (lightState !== undefined) {
           ctx.save();
-          ctx.globalAlpha = 0.75;
+          ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
           const lightSrcX = machine.lightAnimFrame * def.frameWidth;
           const lightSrcY = lightState.row * def.frameHeight;
           ctx.drawImage(
@@ -1155,11 +1202,11 @@ export class SpiderQuestSystem implements GameSystem {
     const def = this._getSpriteDef('scientist');
     if (def === undefined) return;
 
-    const drawH = TILE_SIZE * 1.5;
+    const drawH = TILE_SIZE * SCIENTIST_DRAW_HEIGHT;
     const aspect = def.frameWidth / def.frameHeight;
     const drawW = drawH * aspect;
 
-    const sx = this.scientistX - camX - drawW * 0.5;
+    const sx = this.scientistX - camX - drawW * TILE_CENTER_OFFSET_PX;
     const sy = this.scientistY - camY - drawH;
 
     let stateName: string;
@@ -1167,22 +1214,22 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (this.phase === 'scientist_dialog') {
       stateName = 'speaking';
-      colOffset = 3;
+      colOffset = SCIENTIST_DIALOG_COL;
     } else if (this.scientistIsWalking) {
       // Cycle: walk0 → idle → walk1 → idle (frames 0,2 are walk; 1,3 are idle)
       if (this.scientistWalkFrame === 0) {
         stateName = 'walking';
-        colOffset = 1;
+        colOffset = SCIENTIST_WALK_COL_1;
       } else if (this.scientistWalkFrame === 2) {
         stateName = 'walking';
-        colOffset = 2;
+        colOffset = SCIENTIST_WALK_COL_2;
       } else {
         stateName = 'idle';
-        colOffset = 0;
+        colOffset = SCIENTIST_WALK_COL_IDLE;
       }
     } else {
       stateName = 'idle';
-      colOffset = 0;
+      colOffset = SCIENTIST_WALK_COL_IDLE;
     }
 
     ctx.save();
@@ -1198,7 +1245,11 @@ export class SpiderQuestSystem implements GameSystem {
 
     // Exclamation marker when scientist_waiting
     if (this.phase === 'scientist_waiting') {
-      this._renderExclamationMark(ctx, sx + drawW * 0.5, sy - 8);
+      this._renderExclamationMark(
+        ctx,
+        sx + drawW * TILE_CENTER_OFFSET_PX,
+        sy - SCIENTIST_EXCLAMATION_OFFSET_Y,
+      );
     }
 
     // Scientist speech bubble during cutscene frames 102-162
@@ -1213,15 +1264,16 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _renderExclamationMark(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
-    const bob = Math.sin(performance.now() / 350) * 3;
-    const yy = cy - 16 + bob;
+    const bob =
+      Math.sin(performance.now() / EXCLAMATION_MARK_BOB_FREQUENCY) * EXCLAMATION_MARK_BOB_AMPLITUDE;
+    const yy = cy - EXCLAMATION_MARK_VERTICAL_OFFSET + bob;
     ctx.save();
     ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = `bold ${EXCLAMATION_MARK_FONT_SIZE}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = EXCLAMATION_MARK_STROKE_WIDTH;
     ctx.lineJoin = 'round';
     ctx.strokeText('!', cx, yy);
     ctx.fillText('!', cx, yy);
@@ -1236,36 +1288,36 @@ export class SpiderQuestSystem implements GameSystem {
     text: string,
     alpha: number,
   ): void {
-    const padding = 8;
+    const padding = SPEECH_BUBBLE_PADDING;
     ctx.save();
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = `bold ${SPEECH_BUBBLE_FONT_SIZE}px sans-serif`;
     const textW = ctx.measureText(text).width;
     const bubbleW = textW + padding * 2;
-    const bubbleH = 22;
-    const bx = sx + spriteW * 0.5 - bubbleW * 0.5;
-    const by = sy - bubbleH - 8;
+    const bubbleH = SPEECH_BUBBLE_HEIGHT;
+    const bx = sx + spriteW * TILE_CENTER_OFFSET_PX - bubbleW * TILE_CENTER_OFFSET_PX;
+    const by = sy - bubbleH - SPEECH_BUBBLE_OFFSET_Y;
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = SPEECH_BUBBLE_STROKE_WIDTH;
     ctx.beginPath();
-    ctx.roundRect(bx, by, bubbleW, bubbleH, 4);
+    ctx.roundRect(bx, by, bubbleW, bubbleH, SPEECH_BUBBLE_CORNER_RADIUS);
     ctx.fill();
     ctx.stroke();
 
     // Tail
     ctx.beginPath();
-    ctx.moveTo(sx + spriteW * 0.5 - 5, by + bubbleH);
-    ctx.lineTo(sx + spriteW * 0.5, by + bubbleH + 6);
-    ctx.lineTo(sx + spriteW * 0.5 + 5, by + bubbleH);
+    ctx.moveTo(sx + spriteW * TILE_CENTER_OFFSET_PX - SPEECH_BUBBLE_TAIL_OFFSET, by + bubbleH);
+    ctx.lineTo(sx + spriteW * TILE_CENTER_OFFSET_PX, by + bubbleH + SPEECH_BUBBLE_TAIL_DROP);
+    ctx.lineTo(sx + spriteW * TILE_CENTER_OFFSET_PX + SPEECH_BUBBLE_TAIL_OFFSET, by + bubbleH);
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.fill();
 
     ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, bx + bubbleW * 0.5, by + bubbleH * 0.5);
+    ctx.fillText(text, bx + bubbleW * TILE_CENTER_OFFSET_PX, by + bubbleH * TILE_CENTER_OFFSET_PX);
     ctx.restore();
   }
 
@@ -1291,8 +1343,8 @@ export class SpiderQuestSystem implements GameSystem {
         srcY,
         def.frameWidth,
         def.frameHeight,
-        bx - tileW * 0.3,
-        by - tileH * 0.5,
+        bx - tileW * SCIENTIST_GORE_HEAD_OFFSET_X,
+        by - tileH * SCIENTIST_GORE_HEAD_OFFSET_Y,
         tileW,
         tileH,
       );
@@ -1309,8 +1361,8 @@ export class SpiderQuestSystem implements GameSystem {
         srcY,
         def.frameWidth,
         def.frameHeight,
-        bx + tileW * 0.1,
-        by + tileH * 0.1,
+        bx + tileW * SCIENTIST_GORE_TORSO_OFFSET_X,
+        by + tileH * SCIENTIST_GORE_TORSO_OFFSET_Y,
         tileW,
         tileH,
       );
@@ -1323,11 +1375,11 @@ export class SpiderQuestSystem implements GameSystem {
     const worldY = this.roomData.computerTile.y * TILE_SIZE;
 
     const drawDef = this._getSpriteDef('lab_tables');
-    const drawH = TILE_SIZE * 2.0;
+    const drawH = TILE_SIZE * COMPUTER_TABLE_DRAW_HEIGHT;
     const aspect = drawDef !== undefined ? drawDef.frameWidth / drawDef.frameHeight : 1;
     const drawW = drawH * aspect;
 
-    const sx = worldX - camX - (drawW - TILE_SIZE) * 0.5;
+    const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
     const sy = worldY - camY - (drawH - TILE_SIZE);
 
     this._drawSpriteFrame(
@@ -1342,12 +1394,12 @@ export class SpiderQuestSystem implements GameSystem {
 
     // Bouncing objective arrow during awaiting_hacking phase
     if (this.phase === 'awaiting_hacking') {
-      const t = performance.now() / 1000;
-      const bounce = Math.abs(Math.sin(t * 3.5)) * TILE_SIZE * 0.25;
-      const ax = sx + drawW * 0.5;
-      const ay = sy - TILE_SIZE * 0.3 - bounce;
-      const aw = TILE_SIZE * 0.4;
-      const ah = TILE_SIZE * 0.3;
+      const t = performance.now() / MS_PER_SECOND;
+      const bounce = Math.abs(Math.sin(t * ARROW_ANIMATION_FREQUENCY)) * TILE_SIZE * ARROW_SCALE_Y;
+      const ax = sx + drawW * TILE_CENTER_OFFSET_PX;
+      const ay = sy - TILE_SIZE * ARROW_SCALE_Y_2 - bounce;
+      const aw = TILE_SIZE * ARROW_SCALE_X;
+      const ah = TILE_SIZE * ARROW_SCALE_Y_2;
 
       ctx.save();
       ctx.strokeStyle = '#000';
@@ -1355,12 +1407,12 @@ export class SpiderQuestSystem implements GameSystem {
       ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(ax, ay + ah);
-      ctx.lineTo(ax - aw * 0.5, ay);
-      ctx.lineTo(ax - aw * 0.2, ay);
-      ctx.lineTo(ax - aw * 0.2, ay - ah * 0.55);
-      ctx.lineTo(ax + aw * 0.2, ay - ah * 0.55);
-      ctx.lineTo(ax + aw * 0.2, ay);
-      ctx.lineTo(ax + aw * 0.5, ay);
+      ctx.lineTo(ax - aw * TILE_CENTER_OFFSET_PX, ay);
+      ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay);
+      ctx.lineTo(ax - aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
+      ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay - ah * ARROW_SCALE_X_3);
+      ctx.lineTo(ax + aw * ARROW_SCALE_X_2, ay);
+      ctx.lineTo(ax + aw * TILE_CENTER_OFFSET_PX, ay);
       ctx.closePath();
       ctx.stroke();
       ctx.fillStyle = '#facc15';
@@ -1375,22 +1427,18 @@ export class SpiderQuestSystem implements GameSystem {
     const def = this._getSpriteDef('spider-egg');
     if (def === undefined) return;
 
-    const drawW = TILE_SIZE * 1.5;
+    const drawW = TILE_SIZE * SPIDER_EGG_DRAW_WIDTH;
     const aspect = def.frameWidth / def.frameHeight;
     const drawH = drawW / aspect;
 
     const worldX = this.roomData.spiderEggTile.x * TILE_SIZE;
     const worldY = this.roomData.spiderEggTile.y * TILE_SIZE;
-    const sx = worldX - camX - (drawW - TILE_SIZE) * 0.5;
+    const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
     const sy = worldY - camY - (drawH - TILE_SIZE);
 
     const stateName = this.spiderEggOpened ? 'opened' : 'whole';
     this._drawSpriteFrame(ctx, 'spider-egg', stateName, sx, sy, drawW, drawH);
   }
-
-  // ---------------------------------------------------------------------------
-  // Private — UI rendering
-  // ---------------------------------------------------------------------------
 
   private _renderLockedRoomBorder(
     ctx: CanvasRenderingContext2D,
@@ -1403,12 +1451,14 @@ export class SpiderQuestSystem implements GameSystem {
     const ts = TILE_SIZE;
 
     ctx.save();
-    const pulse = 0.55 + 0.25 * Math.sin(this._roomPulse * 0.12);
+    const pulse =
+      LOCKED_ROOM_ALPHA_MIN +
+      LOCKED_ROOM_ALPHA_SWING * Math.sin(this._roomPulse * LOCKED_ROOM_PULSE_MULTIPLIER);
     ctx.globalAlpha = pulse;
     ctx.strokeStyle = this._entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = LOCKED_ROOM_BORDER_STROKE_WIDTH;
     ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = LOCKED_ROOM_CORNER_STROKE_WIDTH;
     const corners: [number, number][] = [
       [b.x, b.y],
       [b.x + b.w - 1, b.y],
@@ -1419,19 +1469,19 @@ export class SpiderQuestSystem implements GameSystem {
       const sx = ex * ts - camX;
       const sy = ey * ts - camY;
       ctx.beginPath();
-      ctx.moveTo(sx + 4, sy + 4);
-      ctx.lineTo(sx + ts - 4, sy + ts - 4);
-      ctx.moveTo(sx + ts - 4, sy + 4);
-      ctx.lineTo(sx + 4, sy + ts - 4);
+      ctx.moveTo(sx + LOCKED_ROOM_CORNER_OFFSET, sy + LOCKED_ROOM_CORNER_OFFSET);
+      ctx.lineTo(sx + ts - LOCKED_ROOM_CORNER_GAP, sy + ts - LOCKED_ROOM_CORNER_GAP);
+      ctx.moveTo(sx + ts - LOCKED_ROOM_CORNER_OFFSET, sy + LOCKED_ROOM_CORNER_OFFSET);
+      ctx.lineTo(sx + LOCKED_ROOM_CORNER_GAP, sy + ts - LOCKED_ROOM_CORNER_OFFSET);
       ctx.stroke();
     }
     ctx.restore();
 
     if (this._entryWindowTimer > 0) {
-      const seconds = Math.ceil(this._entryWindowTimer / 60);
+      const seconds = Math.ceil(this._entryWindowTimer / FRAMES_PER_SECOND);
       drawText(ctx, `Entry closes in ${seconds}s`, {
         x: Math.round(canvas.width / 2),
-        y: 74,
+        y: LOCKED_ROOM_TEXT_OFFSET_Y,
         size: 11,
         bold: true,
         color: '#fbbf24',
@@ -1443,8 +1493,8 @@ export class SpiderQuestSystem implements GameSystem {
   private _renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const dw = Math.min(440, cw - 40);
-    const dh = 220;
+    const dw = Math.min(DIALOG_WIDTH_MIN, cw - DIALOG_WIDTH_PADDING);
+    const dh = DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
 
@@ -1457,8 +1507,8 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
 
     drawText(ctx, 'Scientist', {
-      x: dx + 14,
-      y: dy + 22 - 10,
+      x: dx + DIALOG_TITLE_OFFSET_X,
+      y: dy + DIALOG_TITLE_OFFSET_Y - DIALOG_TITLE_OFFSET_Y_ADJUSTMENT,
       size: 13,
       bold: true,
       color: '#fbbf24',
@@ -1473,19 +1523,19 @@ export class SpiderQuestSystem implements GameSystem {
     ];
     for (let i = 0; i < lines.length; i++) {
       drawText(ctx, lines[i], {
-        x: dx + 14,
-        y: dy + 48 + i * 16 - 9,
+        x: dx + DIALOG_TEXT_OFFSET_X,
+        y: dy + DIALOG_TEXT_START_Y + i * DIALOG_TEXT_LINE_HEIGHT - DIALOG_TEXT_SIZE_ADJUSTMENT,
         size: 11,
         color: '#e2e8f0',
       });
     }
 
     this.dialogButtons = [];
-    const btnW = 110;
-    const btnH = 30;
-    const btnY = dy + dh - 46;
+    const btnW = DIALOG_BUTTON_WIDTH;
+    const btnH = DIALOG_BUTTON_HEIGHT;
+    const btnY = dy + dh - DIALOG_BUTTON_OFFSET_BOTTOM;
 
-    const helpX = dx + dw / 2 - btnW - 10;
+    const helpX = dx + dw / 2 - btnW - DIALOG_BUTTON_SPACING;
     ctx.save();
     ctx.fillStyle = '#14532d';
     ctx.fillRect(helpX, btnY, btnW, btnH);
@@ -1495,7 +1545,7 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
     drawText(ctx, "I'll help", {
       x: helpX + btnW / 2,
-      y: btnY + 20 - 10,
+      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
       size: 12,
       bold: true,
       color: '#4ade80',
@@ -1503,7 +1553,7 @@ export class SpiderQuestSystem implements GameSystem {
     });
     this.dialogButtons.push({ x: helpX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 
-    const notNowX = dx + dw / 2 + 10;
+    const notNowX = dx + dw / 2 + DIALOG_BUTTON_SPACING;
     ctx.save();
     ctx.fillStyle = '#7f1d1d';
     ctx.fillRect(notNowX, btnY, btnW, btnH);
@@ -1513,7 +1563,7 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
     drawText(ctx, 'Not now', {
       x: notNowX + btnW / 2,
-      y: btnY + 20 - 10,
+      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
       size: 12,
       bold: true,
       color: '#ef4444',
@@ -1525,8 +1575,8 @@ export class SpiderQuestSystem implements GameSystem {
   private _renderHackFailedDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const dw = Math.min(400, cw - 40);
-    const dh = 160;
+    const dw = Math.min(FAILED_DIALOG_WIDTH_MIN, cw - DIALOG_WIDTH_PADDING);
+    const dh = FAILED_DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
 
@@ -1540,7 +1590,7 @@ export class SpiderQuestSystem implements GameSystem {
 
     drawText(ctx, 'SYSTEM BREACH DETECTED', {
       x: dx + dw / 2,
-      y: dy + 26 - 12,
+      y: dy + FAILED_DIALOG_TITLE_OFFSET_Y - FAILED_DIALOG_TITLE_SIZE_ADJUSTMENT,
       size: 15,
       bold: true,
       color: '#ef4444',
@@ -1549,18 +1599,18 @@ export class SpiderQuestSystem implements GameSystem {
 
     drawText(ctx, 'The firewall rejected your intrusion.', {
       x: dx + dw / 2,
-      y: dy + 65 - 10,
+      y: dy + FAILED_DIALOG_TEXT_OFFSET_Y - FAILED_DIALOG_TEXT_SIZE_ADJUSTMENT,
       size: 12,
       color: '#e2e8f0',
       align: 'center',
     });
 
     this.hackFailedButtons = [];
-    const btnW = 110;
-    const btnH = 30;
-    const btnY = dy + dh - 46;
+    const btnW = DIALOG_BUTTON_WIDTH;
+    const btnH = DIALOG_BUTTON_HEIGHT;
+    const btnY = dy + dh - DIALOG_BUTTON_OFFSET_BOTTOM;
 
-    const retryX = dx + dw / 2 - btnW - 10;
+    const retryX = dx + dw / 2 - btnW - BUTTON_GAP;
     ctx.save();
     ctx.fillStyle = '#1e3a5f';
     ctx.fillRect(retryX, btnY, btnW, btnH);
@@ -1570,7 +1620,7 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
     drawText(ctx, 'Try Again', {
       x: retryX + btnW / 2,
-      y: btnY + 20 - 10,
+      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
       size: 12,
       bold: true,
       color: '#93c5fd',
@@ -1578,7 +1628,7 @@ export class SpiderQuestSystem implements GameSystem {
     });
     this.hackFailedButtons.push({ x: retryX, y: btnY, w: btnW, h: btnH, action: 'retry' });
 
-    const retreatX = dx + dw / 2 + 10;
+    const retreatX = dx + dw / 2 + BUTTON_GAP;
     ctx.save();
     ctx.fillStyle = '#374151';
     ctx.fillRect(retreatX, btnY, btnW, btnH);
@@ -1588,7 +1638,7 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
     drawText(ctx, 'Retreat', {
       x: retreatX + btnW / 2,
-      y: btnY + 20 - 10,
+      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
       size: 12,
       bold: true,
       color: '#d1d5db',
@@ -1607,20 +1657,20 @@ export class SpiderQuestSystem implements GameSystem {
       const alpha = Math.min(1, 1 - this.cutsceneTimer / HACK_START_DELAY_FRAMES);
       drawText(ctx, 'Initiating Shutdown Sequence...', {
         x: cw / 2,
-        y: ch / 2 - 20,
+        y: ch / 2 - CUTSCENE_TEXT_OFFSET_Y,
         size: 20,
         bold: true,
         color: '#fbbf24',
         align: 'center',
         alpha,
         glow: '#fbbf24',
-        glowBlur: 10,
+        glowBlur: CUTSCENE_TEXT_GLOW_BLUR,
       });
     }
 
     // Screen darkness tint during cutscene
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = CUTSCENE_DARKNESS_ALPHA;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();

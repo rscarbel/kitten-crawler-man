@@ -17,6 +17,31 @@ const SCROLL_SPEED = 0.6; // px per tick
 const ACTION_DISPLAY_TICKS = 210; // 3.5 seconds at 60 fps
 const ACTION_FADE_TICKS = 45;
 
+const MAX_ACTIONNOTIFS = 3;
+const MAX_BOX_WIDTH = 680;
+const BOX_PADDING = 14;
+const FONT_SIZE = 13;
+const LINE_HEIGHT = 5;
+const BOX_Y = 14;
+const BOX_MIN_HEIGHT = 20;
+const LABEL_HEIGHT = 18;
+const BOX_ALPHA_BACKGROUND = 0.93;
+const BORDER_RADIUS = 5;
+const BORDER_ALPHA = 0.8;
+const BORDER_WIDTH = 1.5;
+const SCROLL_START_DELAY_PX = 4;
+const LABEL_PADDING_BOTTOM = 2;
+const SEPARATOR_LINE_ALPHA = 0.5;
+const PADDING_BOTTOM = 20;
+const ACTION_PADDING = 8;
+const ACTION_FONT_SIZE = 11;
+const ACTION_ALPHA_BACKGROUND = 0.88;
+const ACTION_BORDER_WIDTH = 1;
+const ACTION_BORDER_ALPHA = 0.7;
+const ACTION_TEXT_Y_BASELINE_OFFSET = 1;
+const ACTION_TEXT_TOP_OFFSET = 9;
+const ACTION_TEXT_LABEL_GAP = 8;
+
 function calcTtl(text: string): number {
   const words = text.trim().split(/\s+/).length;
   return Math.max(MIN_DISPLAY_TICKS, words * TICKS_PER_WORD);
@@ -39,7 +64,7 @@ export class AIMessageDisplay {
       maxTtl: ACTION_DISPLAY_TICKS,
       scrollY: 0,
     });
-    if (this.actionNotifs.length > 3) {
+    if (this.actionNotifs.length > MAX_ACTIONNOTIFS) {
       this.actionNotifs.shift();
     }
   }
@@ -61,9 +86,9 @@ export class AIMessageDisplay {
     const msg = this.messages[this.messages.length - 1];
     const alpha = msg.ttl < FADE_TICKS ? msg.ttl / FADE_TICKS : 1;
 
-    const maxW = Math.min(canvas.width - 48, 680);
-    const padding = 14;
-    const fontSize = 13;
+    const maxW = Math.min(canvas.width - BOX_PADDING * 2, MAX_BOX_WIDTH);
+    const padding = BOX_PADDING;
+    const fontSize = FONT_SIZE;
 
     ctx.save();
     ctx.font = `${fontSize}px monospace`;
@@ -83,10 +108,10 @@ export class AIMessageDisplay {
     }
     if (line) lines.push(line);
 
-    const lineH = fontSize + 5;
-    const labelH = 18;
-    const by = 14;
-    const maxBoxH = canvas.height - by - 20;
+    const lineH = fontSize + LINE_HEIGHT;
+    const labelH = LABEL_HEIGHT;
+    const by = BOX_Y;
+    const maxBoxH = canvas.height - by - BOX_MIN_HEIGHT;
     const fullContentH = labelH + lines.length * lineH + padding * 2;
     const boxH = Math.min(fullContentH, maxBoxH);
     const boxW = maxW;
@@ -99,20 +124,20 @@ export class AIMessageDisplay {
     }
 
     // Background
-    ctx.globalAlpha = alpha * 0.93;
+    ctx.globalAlpha = alpha * BOX_ALPHA_BACKGROUND;
     ctx.fillStyle = '#0a0a0c';
-    roundRect(ctx, bx, by, boxW, boxH, 5);
+    roundRect(ctx, bx, by, boxW, boxH, BORDER_RADIUS);
     ctx.fill();
 
     // Border — purple glow
     ctx.strokeStyle = '#7c3aed';
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = alpha * 0.8;
-    roundRect(ctx, bx, by, boxW, boxH, 5);
+    ctx.lineWidth = BORDER_WIDTH;
+    ctx.globalAlpha = alpha * BORDER_ALPHA;
+    roundRect(ctx, bx, by, boxW, boxH, BORDER_RADIUS);
     ctx.stroke();
 
     // Clip all text to the box interior
-    roundRect(ctx, bx, by, boxW, boxH, 5);
+    roundRect(ctx, bx, by, boxW, boxH, BORDER_RADIUS);
     ctx.clip();
 
     const scrolled = msg.scrollY;
@@ -121,7 +146,7 @@ export class AIMessageDisplay {
     // baseline was by + padding + 4 - scrolled; top = baseline - round(10 * 0.8) = baseline - 8
     drawText(ctx, '⚙ SYSTEM AI', {
       x: bx + padding,
-      y: by + padding + 4 - scrolled - 8,
+      y: by + padding + SCROLL_START_DELAY_PX - scrolled - ACTION_TEXT_TOP_OFFSET,
       size: 10,
       bold: true,
       color: '#a78bfa',
@@ -131,20 +156,21 @@ export class AIMessageDisplay {
     // Separator line
     ctx.strokeStyle = '#3b1d7a';
     ctx.lineWidth = 1;
-    ctx.globalAlpha = alpha * 0.5;
+    ctx.globalAlpha = alpha * SEPARATOR_LINE_ALPHA;
     ctx.beginPath();
-    ctx.moveTo(bx + padding, by + padding + labelH - 2 - scrolled);
-    ctx.lineTo(bx + boxW - padding, by + padding + labelH - 2 - scrolled);
+    ctx.moveTo(bx + padding, by + padding + labelH - LABEL_PADDING_BOTTOM - scrolled);
+    ctx.lineTo(bx + boxW - padding, by + padding + labelH - LABEL_PADDING_BOTTOM - scrolled);
     ctx.stroke();
 
     // Message body
     // baseline was by + padding + labelH + i * lineH + fontSize - 1 - scrolled
     // top = baseline - round(fontSize * 0.8) = baseline - 10 (fontSize=13)
     for (let i = 0; i < lines.length; i++) {
-      const baselineY = by + padding + labelH + i * lineH + fontSize - 1 - scrolled;
+      const baselineY =
+        by + padding + labelH + i * lineH + fontSize - ACTION_TEXT_Y_BASELINE_OFFSET - scrolled;
       drawText(ctx, lines[i], {
         x: bx + padding,
-        y: baselineY - 10,
+        y: baselineY - ACTION_TEXT_TOP_OFFSET,
         size: fontSize,
         color: '#d4d4e8',
         alpha,
@@ -157,34 +183,34 @@ export class AIMessageDisplay {
     if (this.actionNotifs.length > 0) {
       const notif = this.actionNotifs[this.actionNotifs.length - 1];
       const actionAlpha = notif.ttl < ACTION_FADE_TICKS ? notif.ttl / ACTION_FADE_TICKS : 1;
-      const pad = 8;
-      const fsize = 11;
+      const pad = ACTION_PADDING;
+      const fsize = ACTION_FONT_SIZE;
       ctx.save();
       ctx.font = `${fsize}px monospace`;
       const label = '⚙ System AI';
       const labelW = ctx.measureText(label).width;
       const textW = ctx.measureText(notif.text).width;
-      const pillW = pad * 2 + labelW + 8 + textW;
+      const pillW = pad * 2 + labelW + ACTION_TEXT_LABEL_GAP + textW;
       const pillH = fsize + pad * 2;
       const px = Math.round((canvas.width - pillW) / 2);
-      const py = canvas.height - pillH - 16;
+      const py = canvas.height - pillH - PADDING_BOTTOM;
 
-      ctx.globalAlpha = actionAlpha * 0.88;
+      ctx.globalAlpha = actionAlpha * ACTION_ALPHA_BACKGROUND;
       ctx.fillStyle = '#0a0a0c';
       roundRect(ctx, px, py, pillW, pillH, pillH / 2);
       ctx.fill();
 
       ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = actionAlpha * 0.7;
+      ctx.lineWidth = ACTION_BORDER_WIDTH;
+      ctx.globalAlpha = actionAlpha * ACTION_BORDER_ALPHA;
       roundRect(ctx, px, py, pillW, pillH, pillH / 2);
       ctx.stroke();
 
       // baseline was ty = py + pad + fsize - 1; top = baseline - round(11 * 0.8) = baseline - 9
-      const ty = py + pad + fsize - 1;
+      const ty = py + pad + fsize - ACTION_TEXT_Y_BASELINE_OFFSET;
       drawText(ctx, label, {
         x: px + pad,
-        y: ty - 9,
+        y: ty - ACTION_TEXT_TOP_OFFSET,
         size: fsize,
         bold: true,
         color: '#fbbf24',
@@ -192,8 +218,8 @@ export class AIMessageDisplay {
       });
 
       drawText(ctx, notif.text, {
-        x: px + pad + labelW + 8,
-        y: ty - 9,
+        x: px + pad + labelW + ACTION_TEXT_LABEL_GAP,
+        y: ty - ACTION_TEXT_TOP_OFFSET,
         size: fsize,
         color: '#e5e5e5',
         alpha: actionAlpha,

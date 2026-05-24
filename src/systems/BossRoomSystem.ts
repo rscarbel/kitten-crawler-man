@@ -55,7 +55,174 @@ const PUDDLE_TTL = 6000;
 const ACID_DAMAGE_INTERVAL = 20;
 const PROJECTILE_TTL = 90;
 const ACID_PUDDLE_RADIUS = TILE_SIZE * 2;
-const PROJECTILE_HIT_RADIUS = TILE_SIZE * 0.8;
+const PROJECTILE_HIT_RADIUS_FRACTION = 0.8;
+const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
+
+// Rendering constants
+const BOSS_REVIVE_HP_FRACTION = 0.3;
+const DEFEAT_TIMER_FRAMES = 300;
+const ACID_DAMAGE_FLASH_FRAMES = 8;
+const COCKROACH_MOB_CLEANUP_THRESHOLD = 200;
+const ENTITY_TILE_CENTER_OFFSET = 0.5;
+
+// Vomit projectile render constants
+const VOMIT_BLOB_RADIUS_FRACTION = 0.35;
+const VOMIT_ELONGATION_MIN = 0.6;
+const VOMIT_ELONGATION_RANGE = 1.4;
+const VOMIT_BLOB_HEIGHT_FRACTION = 0.55;
+const VOMIT_SPRITE_FRAMES = 7;
+
+// Acid puddle render constants
+const PUDDLE_FADE_FRAMES = 300;
+const PUDDLE_ANIMATION_FPS = 60;
+const PUDDLE_FRAME_ROWS = 6;
+const PUDDLE_FRAME_COLS = 4;
+const PUDDLE_PULSE_SPEED = 0.12;
+const PUDDLE_BASE_ALPHA = 0.7;
+const PUDDLE_PULSE_AMP = 0.3;
+const PUDDLE_OUTER_ALPHA = 0.45;
+const PUDDLE_OUTER_RX_FRACTION = 1.2;
+const PUDDLE_OUTER_RY_FRACTION = 0.55;
+const PUDDLE_INNER_RX_FRACTION = 0.7;
+const PUDDLE_INNER_RY_FRACTION = 0.3;
+
+// Hoarder room decoration constants
+const GARBAGE_BAG_COUNT = 7;
+const CARDBOARD_BOX_COUNT = 4;
+const CRUSHED_CAN_COUNT = 8;
+const PUKE_STAIN_COUNT = 5;
+const PAPER_SCRAP_COUNT = 10;
+const DECORATION_SCATTER_FRACTION = 0.5;
+
+// Hoarder room: RNG seed factors
+const RNG_SEED_X_FACTOR = 31;
+const RNG_SEED_Y_FACTOR = 17;
+const RNG_NOISE_SCALE = 127.1;
+const RNG_NOISE_LARGE = 43758.5453;
+
+// Garbage bag render
+const GARBAGE_SCATTER_FRACTION = 0.7;
+const GARBAGE_BAG_W_MIN = 0.5;
+const GARBAGE_BAG_W_RANGE = 0.4;
+const GARBAGE_BAG_H_MIN = 0.35;
+const GARBAGE_BAG_H_RANGE = 0.25;
+const GARBAGE_KNOT_RADIUS = 0.08;
+
+// Cardboard box render
+const BOX_SCATTER_FRACTION = 0.65;
+const BOX_W_MIN = 0.4;
+const BOX_W_RANGE = 0.35;
+const BOX_H_MIN = 0.3;
+const BOX_H_RANGE = 0.25;
+
+// Crushed can render
+const CAN_SCATTER_FRACTION = 0.75;
+const CAN_RX_FRACTION = 0.1;
+const CAN_RY_FRACTION = 0.06;
+
+// Puke stain render
+const PUKE_SCATTER_FRACTION = 0.6;
+const PUKE_RX_MIN = 0.28;
+const PUKE_RX_RANGE = 0.2;
+const PUKE_RY_MIN = 0.14;
+const PUKE_RY_RANGE = 0.1;
+
+// Paper scrap render
+const PAPER_SCATTER_FRACTION = 0.8;
+const PAPER_COLOR_THRESHOLD = 0.5;
+const PAPER_HALF_W = 0.12;
+const PAPER_HALF_H = 0.07;
+
+// RNG offset groups for each decoration type
+const RNG_OFFSET_BAGS_10 = 10;
+const RNG_OFFSET_BAGS_20 = 20;
+const RNG_OFFSET_BAGS_30 = 30;
+const RNG_OFFSET_BAGS_40 = 40;
+const RNG_OFFSET_BAGS_5 = 5;
+const RNG_OFFSET_BOXES_50 = 50;
+const RNG_OFFSET_BOXES_60 = 60;
+const RNG_OFFSET_BOXES_70 = 70;
+const RNG_OFFSET_BOXES_80 = 80;
+const RNG_OFFSET_CANS_90 = 90;
+const RNG_OFFSET_CANS_100 = 100;
+const RNG_OFFSET_CANS_110 = 110;
+const RNG_OFFSET_PUKE_120 = 120;
+const RNG_OFFSET_PUKE_130 = 130;
+const RNG_OFFSET_PUKE_140 = 140;
+const RNG_OFFSET_PUKE_150 = 150;
+const RNG_OFFSET_PUKE_160 = 160;
+const RNG_OFFSET_PAPER_170 = 170;
+const RNG_OFFSET_PAPER_180 = 180;
+const RNG_OFFSET_PAPER_190 = 190;
+const RNG_OFFSET_PAPER_200 = 200;
+
+// Krakaren clone room decoration constants
+const WATER_PUDDLE_COUNT = 8;
+const SLIME_TRAIL_COUNT = 6;
+const WATER_SCATTER_FRACTION = 0.7;
+const WATER_PUDDLE_ALPHA = 0.2;
+const WATER_RX_MIN = 0.4;
+const WATER_RX_RANGE = 0.3;
+const WATER_RY_MIN = 0.2;
+const WATER_RY_RANGE = 0.15;
+const SLIME_SCATTER_FRACTION = 0.6;
+const SLIME_ALPHA = 0.25;
+const SLIME_RX_MIN = 0.15;
+const SLIME_RX_RANGE = 0.2;
+const SLIME_RY_MIN = 0.08;
+const SLIME_RY_RANGE = 0.1;
+
+// RNG offset groups for krakaren room
+const RNG_OFFSET_WATER_10 = 10;
+const RNG_OFFSET_WATER_20 = 20;
+const RNG_OFFSET_WATER_30 = 30;
+const RNG_OFFSET_WATER_40 = 40;
+const RNG_OFFSET_SLIME_50 = 50;
+const RNG_OFFSET_SLIME_60 = 60;
+const RNG_OFFSET_SLIME_70 = 70;
+const RNG_OFFSET_SLIME_80 = 80;
+const RNG_OFFSET_SLIME_90 = 90;
+
+// Boss HUD layout constants (desktop)
+const BOSS_BAR_MAX_WIDTH = 360;
+const BOSS_BAR_WIDTH_FRACTION = 0.5;
+const BOSS_BAR_HEIGHT = 18;
+const BOSS_BAR_TOP_Y = 48;
+const BOSS_CONTAINER_PAD_X = 6;
+const BOSS_CONTAINER_PAD_TOP = 22;
+const BOSS_CONTAINER_SUBTEXT_H = 46;
+const BOSS_CONTAINER_BASE_H = 30;
+const BOSS_NAME_Y_OFFSET = 15;
+const BOSS_HP_TEXT_OFFSET = 11;
+const BOSS_DEFEATED_TEXT_Y = 6;
+const BOSS_ENTRY_TEXT_Y = 6;
+const BOSS_MIDLINE_FRACTION = 0.5;
+const FRAMES_PER_SECOND = 60;
+const BOSS_LABEL_BASELINE_FRACTION = 0.65;
+const BOSS_LABEL_SIZE = 10;
+const BOSS_LABEL_ASCENT_OFFSET = 8;
+
+// Boss HUD layout constants (mobile)
+const MOBILE_BOX_MARGIN = 8;
+const MOBILE_BOX_GAP = 8;
+const MOBILE_INNER_W_INSET = 12;
+const MOBILE_INNER_X_OFFSET = 6;
+const MOBILE_PAD_V = 6;
+const MOBILE_NAME_H = 12;
+const MOBILE_GAP = 4;
+const MOBILE_BAR_H = 14;
+const MOBILE_NAME_SIZE = 10;
+const MOBILE_HP_SIZE = 9;
+const MOBILE_SUBTEXT_SIZE = 10;
+
+// Locked room border
+const BORDER_PULSE_SPEED = 0.12;
+const BORDER_PULSE_MIN = 0.55;
+const BORDER_PULSE_AMP = 0.25;
+const BORDER_LINE_WIDTH = 3;
+const BORDER_CROSS_OFFSET = 4;
+
+// Corner X markers
 
 export class BossRoomSystem implements GameSystem {
   private readonly states: BossRoomState[];
@@ -116,8 +283,8 @@ export class BossRoomSystem implements GameSystem {
     entity: { x: number; y: number },
     bounds: { x: number; y: number; w: number; h: number },
   ): boolean {
-    const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const tx = Math.floor((entity.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE);
     return tx >= bounds.x && tx < bounds.x + bounds.w && ty >= bounds.y && ty < bounds.y + bounds.h;
   }
 
@@ -131,8 +298,8 @@ export class BossRoomSystem implements GameSystem {
    * the position is not in any hazard.
    */
   getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
-    const cx = x + TILE_SIZE * 0.5;
-    const cy = y + TILE_SIZE * 0.5;
+    const cx = x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    const cy = y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
     let closestDist = Infinity;
     let closestPuddle: AcidPuddle | null = null;
     for (const p of this.acidPuddles) {
@@ -188,7 +355,7 @@ export class BossRoomSystem implements GameSystem {
           // Boss died while aborted (e.g. ranged kill from hallway) — mark defeated.
           state.fightAborted = false;
           state.defeated = true;
-          state.defeatTimer = 300;
+          state.defeatTimer = DEFEAT_TIMER_FRAMES;
           this.humanIsInsider[i] = false;
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
@@ -200,13 +367,13 @@ export class BossRoomSystem implements GameSystem {
           this.humanIsInsider[i] = humanInRoom;
           this.catIsInsider[i] = catInRoom;
           if (!human.isAlive && humanInRoom) {
-            human.hp = Math.max(1, Math.floor(human.maxHp * 0.3));
+            human.hp = Math.max(1, Math.floor(human.maxHp * BOSS_REVIVE_HP_FRACTION));
             human.isKnockedOut = false;
             human.knockedOutFrames = 0;
             human.reviveProgress = 0;
           }
           if (!cat.isAlive && catInRoom) {
-            cat.hp = Math.max(1, Math.floor(cat.maxHp * 0.3));
+            cat.hp = Math.max(1, Math.floor(cat.maxHp * BOSS_REVIVE_HP_FRACTION));
             cat.isKnockedOut = false;
             cat.knockedOutFrames = 0;
             cat.reviveProgress = 0;
@@ -233,8 +400,6 @@ export class BossRoomSystem implements GameSystem {
         this.catLastOutside[i] = { x: cat.x, y: cat.y };
         continue;
       }
-
-      // --- Fight in progress ---
 
       // Tick the entry window.
       if (state.entryWindowTimer > 0) state.entryWindowTimer--;
@@ -265,8 +430,12 @@ export class BossRoomSystem implements GameSystem {
             // Entry window closed, no exception — push back to last outside position.
             const prev = lastOutside[i];
             if (prev !== null) {
-              const prevTx = Math.floor((prev.x + TILE_SIZE * 0.5) / TILE_SIZE);
-              const prevTy = Math.floor((prev.y + TILE_SIZE * 0.5) / TILE_SIZE);
+              const prevTx = Math.floor(
+                (prev.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE,
+              );
+              const prevTy = Math.floor(
+                (prev.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE,
+              );
               if (this.gameMap.isWalkable(prevTx, prevTy)) {
                 player.x = prev.x;
                 player.y = prev.y;
@@ -283,7 +452,7 @@ export class BossRoomSystem implements GameSystem {
       if (!bossAlive) {
         state.locked = false;
         state.defeated = true;
-        state.defeatTimer = 300;
+        state.defeatTimer = DEFEAT_TIMER_FRAMES;
         this.humanIsInsider[i] = false;
         this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
@@ -333,12 +502,12 @@ export class BossRoomSystem implements GameSystem {
     // Mob outside all rooms (shouldn't normally happen): clamp to nearest by center.
     let bestState: BossRoomState | null = null;
     let bestDist = Infinity;
-    const mx = mob.x + TILE_SIZE * 0.5;
-    const my = mob.y + TILE_SIZE * 0.5;
+    const mx = mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    const my = mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
     for (const state of this.states) {
       const b = state.bounds;
-      const cx = (b.x + b.w * 0.5) * TILE_SIZE;
-      const cy = (b.y + b.h * 0.5) * TILE_SIZE;
+      const cx = (b.x + b.w * ENTITY_TILE_CENTER_OFFSET) * TILE_SIZE;
+      const cy = (b.y + b.h * ENTITY_TILE_CENTER_OFFSET) * TILE_SIZE;
       const d = Math.hypot(mx - cx, my - cy);
       if (d < bestDist) {
         bestDist = d;
@@ -409,12 +578,12 @@ export class BossRoomSystem implements GameSystem {
       const tileY = Math.floor(newY / TILE_SIZE);
       const hitWall = !this.gameMap.isWalkable(tileX, tileY);
       const humanDist = Math.hypot(
-        newX - (human.x + TILE_SIZE * 0.5),
-        newY - (human.y + TILE_SIZE * 0.5),
+        newX - (human.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
+        newY - (human.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
       );
       const catDist = Math.hypot(
-        newX - (cat.x + TILE_SIZE * 0.5),
-        newY - (cat.y + TILE_SIZE * 0.5),
+        newX - (cat.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
+        newY - (cat.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
       );
       const hitPlayer = humanDist < PROJECTILE_HIT_RADIUS || catDist < PROJECTILE_HIT_RADIUS;
       if (hitWall || proj.ttl <= 0 || hitPlayer) {
@@ -444,14 +613,16 @@ export class BossRoomSystem implements GameSystem {
     // Apply acid damage per player
     const humanInAcid = this.acidPuddles.some(
       (p) =>
-        Math.hypot(human.x + TILE_SIZE * 0.5 - p.x, human.y + TILE_SIZE * 0.5 - p.y) <
-        ACID_PUDDLE_RADIUS,
+        Math.hypot(
+          human.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.x,
+          human.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.y,
+        ) < ACID_PUDDLE_RADIUS,
     );
     if (humanInAcid) {
       this.humanAcidTick++;
       if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
         human.takeDamage(1);
-        human.damageFlash = 8;
+        human.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
       this.humanAcidTick = 0;
@@ -459,14 +630,16 @@ export class BossRoomSystem implements GameSystem {
 
     const catInAcid = this.acidPuddles.some(
       (p) =>
-        Math.hypot(cat.x + TILE_SIZE * 0.5 - p.x, cat.y + TILE_SIZE * 0.5 - p.y) <
-        ACID_PUDDLE_RADIUS,
+        Math.hypot(
+          cat.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.x,
+          cat.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.y,
+        ) < ACID_PUDDLE_RADIUS,
     );
     if (catInAcid) {
       this.catAcidTick++;
       if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
         cat.takeDamage(1);
-        cat.damageFlash = 8;
+        cat.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
       this.catAcidTick = 0;
@@ -482,7 +655,7 @@ export class BossRoomSystem implements GameSystem {
         mob.justDied = true;
       }
     }
-    if (mobs.length > 200) {
+    if (mobs.length > COCKROACH_MOB_CLEANUP_THRESHOLD) {
       for (const m of mobs) {
         if (!m.isAlive && m instanceof Cockroach) mobGrid.remove(m);
       }
@@ -516,22 +689,22 @@ export class BossRoomSystem implements GameSystem {
       ctx.save();
       ctx.translate(screenX, screenY);
       ctx.rotate(angle);
-      const r = TILE_SIZE * 0.35;
-      const len = r * (0.6 + progress * 1.4);
+      const r = TILE_SIZE * VOMIT_BLOB_RADIUS_FRACTION;
+      const len = r * (VOMIT_ELONGATION_MIN + progress * VOMIT_ELONGATION_RANGE);
       const grad = ctx.createLinearGradient(-len, 0, len, 0);
       grad.addColorStop(0, 'rgba(80,200,20,0.9)');
-      grad.addColorStop(0.5, 'rgba(180,255,60,0.95)');
+      grad.addColorStop(BOSS_MIDLINE_FRACTION, 'rgba(180,255,60,0.95)');
       grad.addColorStop(1, 'rgba(40,140,10,0.4)');
       ctx.shadowColor = '#a0ff40';
       ctx.shadowBlur = 10;
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(0, 0, len, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, len, r * VOMIT_BLOB_HEIGHT_FRACTION, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
       // Overlay sprite if loaded
-      const frame = progressFrameIndex(progress, 7);
+      const frame = progressFrameIndex(progress, VOMIT_SPRITE_FRAMES);
       drawSpriteKey(ctx, 'hoarder_vomit_arc', 'arc', frame, screenX, screenY, TILE_SIZE, {
         rotation: angle,
       });
@@ -541,27 +714,48 @@ export class BossRoomSystem implements GameSystem {
 
   private renderAcidPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.acidPuddles.length === 0) return;
-    const frame = timeFrameIndex(this.puddleClock / 60, 6, 4);
-    const pulse = 0.7 + 0.3 * Math.sin(this.puddleClock * 0.12);
+    const frame = timeFrameIndex(
+      this.puddleClock / PUDDLE_ANIMATION_FPS,
+      PUDDLE_FRAME_ROWS,
+      PUDDLE_FRAME_COLS,
+    );
+    const pulse =
+      1 - PUDDLE_PULSE_AMP + PUDDLE_PULSE_AMP * Math.sin(this.puddleClock * PUDDLE_PULSE_SPEED);
     ctx.save();
     for (const puddle of this.acidPuddles) {
-      const fadeAlpha = puddle.ttl < 300 ? puddle.ttl / 300 : 1;
+      const fadeAlpha = puddle.ttl < PUDDLE_FADE_FRAMES ? puddle.ttl / PUDDLE_FADE_FRAMES : 1;
       const screenX = puddle.x - camX;
       const screenY = puddle.y - camY;
 
       // Procedural acid puddle: glowing green ellipse on the floor
       ctx.save();
-      ctx.globalAlpha = fadeAlpha * 0.75 * pulse;
+      ctx.globalAlpha = fadeAlpha * PUDDLE_BASE_ALPHA * pulse;
       ctx.shadowColor = '#80ff20';
       ctx.shadowBlur = 14;
       ctx.fillStyle = '#4aad10';
       ctx.beginPath();
-      ctx.ellipse(screenX, screenY, TILE_SIZE * 1.2, TILE_SIZE * 0.55, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        screenX,
+        screenY,
+        TILE_SIZE * PUDDLE_OUTER_RX_FRACTION,
+        TILE_SIZE * PUDDLE_OUTER_RY_FRACTION,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
-      ctx.globalAlpha = fadeAlpha * 0.45;
+      ctx.globalAlpha = fadeAlpha * PUDDLE_OUTER_ALPHA;
       ctx.fillStyle = '#a0ff40';
       ctx.beginPath();
-      ctx.ellipse(screenX, screenY, TILE_SIZE * 0.7, TILE_SIZE * 0.3, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        screenX,
+        screenY,
+        TILE_SIZE * PUDDLE_INNER_RX_FRACTION,
+        TILE_SIZE * PUDDLE_INNER_RY_FRACTION,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.restore();
 
@@ -581,19 +775,19 @@ export class BossRoomSystem implements GameSystem {
     bossType: string,
   ): void {
     const ts = TILE_SIZE;
-    const cx = (b.x + b.w * 0.5) * ts - camX;
-    const cy = (b.y + b.h * 0.5) * ts - camY;
+    const cx = (b.x + b.w * ENTITY_TILE_CENTER_OFFSET) * ts - camX;
+    const cy = (b.y + b.h * ENTITY_TILE_CENTER_OFFSET) * ts - camY;
 
     const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
     // "BOSS ROOM" world-space label
-    // size=10, old baseline = bannerY + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
+    // size=BOSS_LABEL_SIZE, old baseline = bannerY + ts*BOSS_LABEL_BASELINE_FRACTION; top = baseline - BOSS_LABEL_ASCENT_OFFSET
     drawText(ctx, 'BOSS ROOM', {
       ...TEXT_PRESETS.label,
       x: bannerX,
-      y: bannerY + ts * 0.65 - 8,
-      size: 10,
+      y: bannerY + ts * BOSS_LABEL_BASELINE_FRACTION - BOSS_LABEL_ASCENT_OFFSET,
+      size: BOSS_LABEL_SIZE,
       bold: true,
       color: meta.color,
       align: 'center',
@@ -605,42 +799,57 @@ export class BossRoomSystem implements GameSystem {
     // Krakaren Clone lair — water puddles and slime
     if (bossType === 'krakaren_clone') {
       ctx.save();
-      const kseed = b.x * 31 + b.y * 17;
+      const kseed = b.x * RNG_SEED_X_FACTOR + b.y * RNG_SEED_Y_FACTOR;
       const krng = (n: number) => {
-        const sv = Math.sin(kseed + n * 127.1) * 43758.5453;
+        const sv = Math.sin(kseed + n * RNG_NOISE_SCALE) * RNG_NOISE_LARGE;
         return sv - Math.floor(sv);
       };
       // Water puddles
-      for (let i = 0; i < 8; i++) {
-        const px = cx + (krng(i) - 0.5) * b.w * ts * 0.7;
-        const py = cy + (krng(i + 10) - 0.5) * b.h * ts * 0.7;
-        ctx.globalAlpha = 0.2;
+      for (let i = 0; i < WATER_PUDDLE_COUNT; i++) {
+        const px = cx + (krng(i) - DECORATION_SCATTER_FRACTION) * b.w * ts * WATER_SCATTER_FRACTION;
+        const py =
+          cy +
+          (krng(i + RNG_OFFSET_WATER_10) - DECORATION_SCATTER_FRACTION) *
+            b.h *
+            ts *
+            WATER_SCATTER_FRACTION;
+        ctx.globalAlpha = WATER_PUDDLE_ALPHA;
         ctx.fillStyle = '#4080a0';
         ctx.beginPath();
         ctx.ellipse(
           px,
           py,
-          ts * (0.4 + krng(i + 20) * 0.3),
-          ts * (0.2 + krng(i + 30) * 0.15),
-          krng(i + 40) * Math.PI,
+          ts * (WATER_RX_MIN + krng(i + RNG_OFFSET_WATER_20) * WATER_RX_RANGE),
+          ts * (WATER_RY_MIN + krng(i + RNG_OFFSET_WATER_30) * WATER_RY_RANGE),
+          krng(i + RNG_OFFSET_WATER_40) * Math.PI,
           0,
           Math.PI * 2,
         );
         ctx.fill();
       }
       // Pink slime trails
-      for (let i = 0; i < 6; i++) {
-        const slx = cx + (krng(i + 50) - 0.5) * b.w * ts * 0.6;
-        const sly = cy + (krng(i + 60) - 0.5) * b.h * ts * 0.6;
-        ctx.globalAlpha = 0.25;
+      for (let i = 0; i < SLIME_TRAIL_COUNT; i++) {
+        const slx =
+          cx +
+          (krng(i + RNG_OFFSET_SLIME_50) - DECORATION_SCATTER_FRACTION) *
+            b.w *
+            ts *
+            SLIME_SCATTER_FRACTION;
+        const sly =
+          cy +
+          (krng(i + RNG_OFFSET_SLIME_60) - DECORATION_SCATTER_FRACTION) *
+            b.h *
+            ts *
+            SLIME_SCATTER_FRACTION;
+        ctx.globalAlpha = SLIME_ALPHA;
         ctx.fillStyle = '#d06888';
         ctx.beginPath();
         ctx.ellipse(
           slx,
           sly,
-          ts * (0.15 + krng(i + 70) * 0.2),
-          ts * (0.08 + krng(i + 80) * 0.1),
-          krng(i + 90) * Math.PI,
+          ts * (SLIME_RX_MIN + krng(i + RNG_OFFSET_SLIME_70) * SLIME_RX_RANGE),
+          ts * (SLIME_RY_MIN + krng(i + RNG_OFFSET_SLIME_80) * SLIME_RY_RANGE),
+          krng(i + RNG_OFFSET_SLIME_90) * Math.PI,
           0,
           Math.PI * 2,
         );
@@ -653,70 +862,131 @@ export class BossRoomSystem implements GameSystem {
 
     ctx.save();
 
-    const seed = b.x * 31 + b.y * 17;
+    const seed = b.x * RNG_SEED_X_FACTOR + b.y * RNG_SEED_Y_FACTOR;
     const rng = (n: number) => {
-      const s = Math.sin(seed + n * 127.1) * 43758.5453;
+      const s = Math.sin(seed + n * RNG_NOISE_SCALE) * RNG_NOISE_LARGE;
       return s - Math.floor(s);
     };
 
     // Garbage bags
-    for (let i = 0; i < 7; i++) {
-      const gx = cx + (rng(i) - 0.5) * b.w * ts * 0.7;
-      const gy = cy + (rng(i + 10) - 0.5) * b.h * ts * 0.7;
-      const gw = ts * (0.5 + rng(i + 20) * 0.4);
-      const gh = ts * (0.35 + rng(i + 30) * 0.25);
-      ctx.fillStyle = rng(i + 5) > 0.5 ? '#1a3018' : '#0f1f0e';
+    for (let i = 0; i < GARBAGE_BAG_COUNT; i++) {
+      const gx = cx + (rng(i) - DECORATION_SCATTER_FRACTION) * b.w * ts * GARBAGE_SCATTER_FRACTION;
+      const gy =
+        cy +
+        (rng(i + RNG_OFFSET_BAGS_10) - DECORATION_SCATTER_FRACTION) *
+          b.h *
+          ts *
+          GARBAGE_SCATTER_FRACTION;
+      const gw = ts * (GARBAGE_BAG_W_MIN + rng(i + RNG_OFFSET_BAGS_20) * GARBAGE_BAG_W_RANGE);
+      const gh = ts * (GARBAGE_BAG_H_MIN + rng(i + RNG_OFFSET_BAGS_30) * GARBAGE_BAG_H_RANGE);
+      ctx.fillStyle = rng(i + RNG_OFFSET_BAGS_5) > PAPER_COLOR_THRESHOLD ? '#1a3018' : '#0f1f0e';
       ctx.beginPath();
-      ctx.ellipse(gx, gy, gw * 0.5, gh * 0.5, rng(i + 40) * Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(
+        gx,
+        gy,
+        gw * DECORATION_SCATTER_FRACTION,
+        gh * DECORATION_SCATTER_FRACTION,
+        rng(i + RNG_OFFSET_BAGS_40) * Math.PI,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.fillStyle = '#4a7a40';
       ctx.beginPath();
-      ctx.arc(gx, gy - gh * 0.35, gw * 0.08, 0, Math.PI * 2);
+      ctx.arc(gx, gy - gh * GARBAGE_BAG_H_MIN, gw * GARBAGE_KNOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Cardboard boxes
-    for (let i = 0; i < 4; i++) {
-      const bx = cx + (rng(i + 50) - 0.5) * b.w * ts * 0.65;
-      const by = cy + (rng(i + 60) - 0.5) * b.h * ts * 0.65;
-      const bw = ts * (0.4 + rng(i + 70) * 0.35);
-      const bh = ts * (0.3 + rng(i + 80) * 0.25);
+    for (let i = 0; i < CARDBOARD_BOX_COUNT; i++) {
+      const bx =
+        cx +
+        (rng(i + RNG_OFFSET_BOXES_50) - DECORATION_SCATTER_FRACTION) *
+          b.w *
+          ts *
+          BOX_SCATTER_FRACTION;
+      const by =
+        cy +
+        (rng(i + RNG_OFFSET_BOXES_60) - DECORATION_SCATTER_FRACTION) *
+          b.h *
+          ts *
+          BOX_SCATTER_FRACTION;
+      const bw = ts * (BOX_W_MIN + rng(i + RNG_OFFSET_BOXES_70) * BOX_W_RANGE);
+      const bh = ts * (BOX_H_MIN + rng(i + RNG_OFFSET_BOXES_80) * BOX_H_RANGE);
       ctx.fillStyle = '#4a3010';
-      ctx.fillRect(bx - bw * 0.5, by - bh * 0.5, bw, bh);
+      ctx.fillRect(
+        bx - bw * DECORATION_SCATTER_FRACTION,
+        by - bh * DECORATION_SCATTER_FRACTION,
+        bw,
+        bh,
+      );
       ctx.strokeStyle = '#2a1a06';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(bx - bw * 0.5, by - bh * 0.5, bw, bh);
+      ctx.lineWidth = DECORATION_SCATTER_FRACTION;
+      ctx.strokeRect(
+        bx - bw * DECORATION_SCATTER_FRACTION,
+        by - bh * DECORATION_SCATTER_FRACTION,
+        bw,
+        bh,
+      );
       ctx.beginPath();
-      ctx.moveTo(bx, by - bh * 0.5);
-      ctx.lineTo(bx, by + bh * 0.5);
-      ctx.moveTo(bx - bw * 0.5, by);
-      ctx.lineTo(bx + bw * 0.5, by);
+      ctx.moveTo(bx, by - bh * DECORATION_SCATTER_FRACTION);
+      ctx.lineTo(bx, by + bh * DECORATION_SCATTER_FRACTION);
+      ctx.moveTo(bx - bw * DECORATION_SCATTER_FRACTION, by);
+      ctx.lineTo(bx + bw * DECORATION_SCATTER_FRACTION, by);
       ctx.stroke();
     }
 
     // Crushed cans
-    for (let i = 0; i < 8; i++) {
-      const canX = cx + (rng(i + 90) - 0.5) * b.w * ts * 0.75;
-      const canY = cy + (rng(i + 100) - 0.5) * b.h * ts * 0.75;
+    for (let i = 0; i < CRUSHED_CAN_COUNT; i++) {
+      const canX =
+        cx +
+        (rng(i + RNG_OFFSET_CANS_90) - DECORATION_SCATTER_FRACTION) *
+          b.w *
+          ts *
+          CAN_SCATTER_FRACTION;
+      const canY =
+        cy +
+        (rng(i + RNG_OFFSET_CANS_100) - DECORATION_SCATTER_FRACTION) *
+          b.h *
+          ts *
+          CAN_SCATTER_FRACTION;
       ctx.fillStyle = '#8a8888';
       ctx.beginPath();
-      ctx.ellipse(canX, canY, ts * 0.1, ts * 0.06, rng(i + 110) * Math.PI, 0, Math.PI * 2);
+      ctx.ellipse(
+        canX,
+        canY,
+        ts * CAN_RX_FRACTION,
+        ts * CAN_RY_FRACTION,
+        rng(i + RNG_OFFSET_CANS_110) * Math.PI,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
 
     // Puke stains
-    for (let i = 0; i < 5; i++) {
-      const px = cx + (rng(i + 120) - 0.5) * b.w * ts * 0.6;
-      const py = cy + (rng(i + 130) - 0.5) * b.h * ts * 0.6;
-      ctx.globalAlpha = 0.45;
+    for (let i = 0; i < PUKE_STAIN_COUNT; i++) {
+      const px =
+        cx +
+        (rng(i + RNG_OFFSET_PUKE_120) - DECORATION_SCATTER_FRACTION) *
+          b.w *
+          ts *
+          PUKE_SCATTER_FRACTION;
+      const py =
+        cy +
+        (rng(i + RNG_OFFSET_PUKE_130) - DECORATION_SCATTER_FRACTION) *
+          b.h *
+          ts *
+          PUKE_SCATTER_FRACTION;
+      ctx.globalAlpha = PUDDLE_OUTER_ALPHA;
       ctx.fillStyle = '#8fbc14';
       ctx.beginPath();
       ctx.ellipse(
         px,
         py,
-        ts * (0.28 + rng(i + 140) * 0.2),
-        ts * (0.14 + rng(i + 150) * 0.1),
-        rng(i + 160) * Math.PI,
+        ts * (PUKE_RX_MIN + rng(i + RNG_OFFSET_PUKE_140) * PUKE_RX_RANGE),
+        ts * (PUKE_RY_MIN + rng(i + RNG_OFFSET_PUKE_150) * PUKE_RY_RANGE),
+        rng(i + RNG_OFFSET_PUKE_160) * Math.PI,
         0,
         Math.PI * 2,
       );
@@ -725,14 +995,29 @@ export class BossRoomSystem implements GameSystem {
     ctx.globalAlpha = 1;
 
     // Paper scraps
-    for (let i = 0; i < 10; i++) {
-      const px = cx + (rng(i + 170) - 0.5) * b.w * ts * 0.8;
-      const py = cy + (rng(i + 180) - 0.5) * b.h * ts * 0.8;
+    for (let i = 0; i < PAPER_SCRAP_COUNT; i++) {
+      const px =
+        cx +
+        (rng(i + RNG_OFFSET_PAPER_170) - DECORATION_SCATTER_FRACTION) *
+          b.w *
+          ts *
+          PAPER_SCATTER_FRACTION;
+      const py =
+        cy +
+        (rng(i + RNG_OFFSET_PAPER_180) - DECORATION_SCATTER_FRACTION) *
+          b.h *
+          ts *
+          PAPER_SCATTER_FRACTION;
       ctx.save();
       ctx.translate(px, py);
-      ctx.rotate(rng(i + 190) * Math.PI);
-      ctx.fillStyle = rng(i + 200) > 0.5 ? '#c8c0a8' : '#d8d0b8';
-      ctx.fillRect(-ts * 0.12, -ts * 0.07, ts * 0.24, ts * 0.14);
+      ctx.rotate(rng(i + RNG_OFFSET_PAPER_190) * Math.PI);
+      ctx.fillStyle = rng(i + RNG_OFFSET_PAPER_200) > PAPER_COLOR_THRESHOLD ? '#c8c0a8' : '#d8d0b8';
+      ctx.fillRect(
+        -ts * PAPER_HALF_W,
+        -ts * PAPER_HALF_H,
+        ts * PAPER_HALF_W * 2,
+        ts * PAPER_HALF_H * 2,
+      );
       ctx.restore();
     }
 
@@ -767,11 +1052,12 @@ export class BossRoomSystem implements GameSystem {
       const b = state.bounds;
       const ts = TILE_SIZE;
       ctx.save();
-      const pulse = 0.55 + 0.25 * Math.sin(state.pulse * 0.12);
+      const pulse =
+        BORDER_PULSE_MIN + BORDER_PULSE_AMP * Math.sin(state.pulse * BORDER_PULSE_SPEED);
       ctx.globalAlpha = pulse;
       // Yellow border while entry window is open; red once it closes.
       ctx.strokeStyle = state.entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = BORDER_LINE_WIDTH;
       ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
       ctx.lineWidth = 2;
       const corners: [number, number][] = [
@@ -784,10 +1070,10 @@ export class BossRoomSystem implements GameSystem {
         const sx = ex * ts - camX;
         const sy = ey * ts - camY;
         ctx.beginPath();
-        ctx.moveTo(sx + 4, sy + 4);
-        ctx.lineTo(sx + ts - 4, sy + ts - 4);
-        ctx.moveTo(sx + ts - 4, sy + 4);
-        ctx.lineTo(sx + 4, sy + ts - 4);
+        ctx.moveTo(sx + BORDER_CROSS_OFFSET, sy + BORDER_CROSS_OFFSET);
+        ctx.lineTo(sx + ts - BORDER_CROSS_OFFSET, sy + ts - BORDER_CROSS_OFFSET);
+        ctx.moveTo(sx + ts - BORDER_CROSS_OFFSET, sy + BORDER_CROSS_OFFSET);
+        ctx.lineTo(sx + BORDER_CROSS_OFFSET, sy + ts - BORDER_CROSS_OFFSET);
         ctx.stroke();
       }
       ctx.restore();
@@ -828,30 +1114,39 @@ export class BossRoomSystem implements GameSystem {
       );
     }
 
-    // --- Desktop layout ---
-    const barW = Math.min(360, canvas.width * 0.5);
-    const barH = 18;
+    const barW = Math.min(BOSS_BAR_MAX_WIDTH, canvas.width * BOSS_BAR_WIDTH_FRACTION);
+    const barH = BOSS_BAR_HEIGHT;
     const barX = Math.floor((canvas.width - barW) / 2);
-    const barY = 48;
+    const barY = BOSS_BAR_TOP_Y;
 
     const showSubText =
       relevantState.defeated || (relevantState.locked && relevantState.entryWindowTimer > 0);
     // Expand container height when sub-text (DEFEATED / countdown) is present so
     // the text is not bisected by the box border.
-    const containerH = showSubText ? barH + 46 : barH + 30;
+    const containerH = showSubText ? barH + BOSS_CONTAINER_SUBTEXT_H : barH + BOSS_CONTAINER_BASE_H;
 
     ctx.save();
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(barX - 6, barY - 22, barW + 12, containerH);
+    ctx.fillRect(
+      barX - BOSS_CONTAINER_PAD_X,
+      barY - BOSS_CONTAINER_PAD_TOP,
+      barW + BOSS_CONTAINER_PAD_X * 2,
+      containerH,
+    );
     ctx.strokeStyle = meta.color;
     ctx.lineWidth = 1;
-    ctx.strokeRect(barX - 6, barY - 22, barW + 12, containerH);
+    ctx.strokeRect(
+      barX - BOSS_CONTAINER_PAD_X,
+      barY - BOSS_CONTAINER_PAD_TOP,
+      barW + BOSS_CONTAINER_PAD_X * 2,
+      containerH,
+    );
 
     const nameText = isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName;
     drawText(ctx, nameText, {
       x: canvas.width / 2,
-      y: barY - 15,
+      y: barY - BOSS_NAME_Y_OFFSET,
       size: 11,
       bold: true,
       color: isEnraged ? '#ef4444' : meta.color,
@@ -867,8 +1162,8 @@ export class BossRoomSystem implements GameSystem {
     ctx.strokeStyle = 'rgba(239,68,68,0.6)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(barX + barW * 0.5, barY);
-    ctx.lineTo(barX + barW * 0.5, barY + barH);
+    ctx.moveTo(barX + barW * BOSS_MIDLINE_FRACTION, barY);
+    ctx.lineTo(barX + barW * BOSS_MIDLINE_FRACTION, barY + barH);
     ctx.stroke();
 
     ctx.strokeStyle = meta.color;
@@ -879,7 +1174,7 @@ export class BossRoomSystem implements GameSystem {
 
     drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
       x: canvas.width / 2,
-      y: barY + barH - 11,
+      y: barY + barH - BOSS_HP_TEXT_OFFSET,
       size: 9,
       color: '#e2e8f0',
       align: 'center',
@@ -888,7 +1183,7 @@ export class BossRoomSystem implements GameSystem {
     if (relevantState.defeated) {
       drawText(ctx, 'DEFEATED', {
         x: canvas.width / 2,
-        y: barY + barH + 6,
+        y: barY + barH + BOSS_DEFEATED_TEXT_Y,
         size: 12,
         bold: true,
         color: '#4ade80',
@@ -897,10 +1192,10 @@ export class BossRoomSystem implements GameSystem {
     }
 
     if (relevantState.locked && relevantState.entryWindowTimer > 0) {
-      const seconds = Math.ceil(relevantState.entryWindowTimer / 60);
+      const seconds = Math.ceil(relevantState.entryWindowTimer / FRAMES_PER_SECOND);
       drawText(ctx, `Entry closes in ${seconds}s`, {
         x: canvas.width / 2,
-        y: barY + barH + 6,
+        y: barY + barH + BOSS_ENTRY_TEXT_Y,
         size: 11,
         bold: true,
         color: '#fbbf24',
@@ -924,16 +1219,16 @@ export class BossRoomSystem implements GameSystem {
     topY: number,
   ): number {
     const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const BOX_X = 8;
-    // Leave 8px gap between the box's right edge and the minimap's left edge.
-    const boxW = canvas.width - (mmSize + 8) - BOX_X - 8;
-    const innerW = boxW - 12;
-    const innerX = BOX_X + 6;
+    const BOX_X = MOBILE_BOX_MARGIN;
+    // Leave MOBILE_BOX_GAP px between the box's right edge and the minimap's left edge.
+    const boxW = canvas.width - (mmSize + MOBILE_BOX_GAP) - BOX_X - MOBILE_BOX_GAP;
+    const innerW = boxW - MOBILE_INNER_W_INSET;
+    const innerX = BOX_X + MOBILE_INNER_X_OFFSET;
 
-    const PAD_V = 6;
-    const NAME_H = 12;
-    const GAP = 4;
-    const BAR_H = 14;
+    const PAD_V = MOBILE_PAD_V;
+    const NAME_H = MOBILE_NAME_H;
+    const GAP = MOBILE_GAP;
+    const BAR_H = MOBILE_BAR_H;
 
     const hasSubText = state.defeated || (state.locked && state.entryWindowTimer > 0);
     const boxH = PAD_V + NAME_H + GAP + BAR_H + (hasSubText ? GAP + NAME_H : 0) + PAD_V;
@@ -953,7 +1248,7 @@ export class BossRoomSystem implements GameSystem {
     drawText(ctx, nameText, {
       x: innerX + innerW / 2,
       y: nameY,
-      size: 10,
+      size: MOBILE_NAME_SIZE,
       bold: true,
       color: isEnraged ? '#ef4444' : meta.color,
       align: 'center',
@@ -970,8 +1265,8 @@ export class BossRoomSystem implements GameSystem {
     ctx.strokeStyle = 'rgba(239,68,68,0.6)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(innerX + innerW * 0.5, barY);
-    ctx.lineTo(innerX + innerW * 0.5, barY + BAR_H);
+    ctx.moveTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY);
+    ctx.lineTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY + BAR_H);
     ctx.stroke();
 
     ctx.strokeStyle = meta.color;
@@ -981,8 +1276,8 @@ export class BossRoomSystem implements GameSystem {
 
     drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
       x: innerX + innerW / 2,
-      y: barY + Math.floor((BAR_H - 9) / 2),
-      size: 9,
+      y: barY + Math.floor((BAR_H - MOBILE_HP_SIZE) / 2),
+      size: MOBILE_HP_SIZE,
       color: '#e2e8f0',
       align: 'center',
     });
@@ -994,17 +1289,17 @@ export class BossRoomSystem implements GameSystem {
         drawText(ctx, 'DEFEATED', {
           x: BOX_X + boxW / 2,
           y: subY,
-          size: 10,
+          size: MOBILE_SUBTEXT_SIZE,
           bold: true,
           color: '#4ade80',
           align: 'center',
         });
       } else if (state.locked && state.entryWindowTimer > 0) {
-        const seconds = Math.ceil(state.entryWindowTimer / 60);
+        const seconds = Math.ceil(state.entryWindowTimer / FRAMES_PER_SECOND);
         drawText(ctx, `Entry closes in ${seconds}s`, {
           x: BOX_X + boxW / 2,
           y: subY,
-          size: 10,
+          size: MOBILE_SUBTEXT_SIZE,
           bold: true,
           color: '#fbbf24',
           align: 'center',

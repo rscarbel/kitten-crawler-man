@@ -40,6 +40,22 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
 const PART_LIFETIME = 6000; // 300s @ 60fps
 const PART_FADE_START = 3000; // start fading 50s before despawn
 const MAX_SETTLED_PARTS = 200;
+/** Fraction of PI used for cone spread in impact direction (~100 degrees). */
+const IMPACT_CONE_HALF_ANGLE_FRACTION = 0.5556;
+/** Speed multiplier applied to parts launched with a known impact direction. */
+const IMPACT_SPEED_MULT = 1.6;
+/** Speed multiplier applied to parts with no known impact direction. */
+const DEFAULT_SPEED_MULT = 1.0;
+/** Extra upward pop multiplier when impact direction is known. */
+const IMPACT_VZ_BOOST = 1.4;
+/** Shadow falloff: controls how shadow shrinks with height. */
+const SHADOW_HEIGHT_FALLOFF = 40;
+/** Shadow opacity multiplier. */
+const SHADOW_ALPHA = 0.2;
+/** Shadow ellipse x radius in px. */
+const SHADOW_ELLIPSE_RX = 10;
+/** Shadow ellipse y radius in px. */
+const SHADOW_ELLIPSE_RY = 5;
 // Horizontal spread (world pixels per frame)
 const XY_SPEED_MIN = 0.2;
 const XY_SPEED_MAX = 0.8;
@@ -99,14 +115,15 @@ export class BodyPartGoreSystem implements GameSystem {
     for (const stateName of config.parts) {
       // When impact direction is known, parts fly in a ±100° cone away from the attacker
       const angle = hasDir
-        ? impactAngle + (Math.random() * 2 - 1) * (Math.PI * (5 / 9))
+        ? impactAngle + (Math.random() * 2 - 1) * (Math.PI * IMPACT_CONE_HALF_ANGLE_FRACTION)
         : Math.random() * Math.PI * 2;
-      const speedMult = hasDir ? 1.6 : 1.0;
+      const speedMult = hasDir ? IMPACT_SPEED_MULT : DEFAULT_SPEED_MULT;
       const speed = (XY_SPEED_MIN + Math.random() * (XY_SPEED_MAX - XY_SPEED_MIN)) * speedMult;
-      const spinDir = Math.random() < 0.5 ? 1 : -1;
+      const SPIN_DIRECTION_THRESHOLD = 0.5;
+      const spinDir = Math.random() < SPIN_DIRECTION_THRESHOLD ? 1 : -1;
       const spin = spinDir * (SPIN_MIN + Math.random() * (SPIN_MAX - SPIN_MIN));
       // Higher upward pop when there's a strong impact — parts burst higher
-      const vzBoost = hasDir ? 1.4 : 1.0;
+      const vzBoost = hasDir ? IMPACT_VZ_BOOST : DEFAULT_SPEED_MULT;
       this.flying.push({
         x: cx,
         y: cy,
@@ -182,12 +199,21 @@ export class BodyPartGoreSystem implements GameSystem {
       const sy = p.y - camY;
 
       // Shadow at ground position — helps read the arc height
-      const shadowScale = Math.max(0.3, 1 - p.z / 40);
+      const SHADOW_MIN_SCALE = 0.3;
+      const shadowScale = Math.max(SHADOW_MIN_SCALE, 1 - p.z / SHADOW_HEIGHT_FALLOFF);
       ctx.save();
-      ctx.globalAlpha = 0.2 * shadowScale;
+      ctx.globalAlpha = SHADOW_ALPHA * shadowScale;
       ctx.fillStyle = '#000';
       ctx.beginPath();
-      ctx.ellipse(sx, sy, 10 * shadowScale, 5 * shadowScale, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        sx,
+        sy,
+        SHADOW_ELLIPSE_RX * shadowScale,
+        SHADOW_ELLIPSE_RY * shadowScale,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
       ctx.restore();
 

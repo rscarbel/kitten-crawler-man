@@ -12,9 +12,12 @@ import {
 const JUICER_HP = 120;
 const JUICER_SPEED = 1.0;
 const JUICER_SPEED_ENRAGED = 1.7;
-const AGGRO_RANGE_PX = TILE_SIZE * 10;
-const THROW_RANGE_MIN = TILE_SIZE * 4;
-const THROW_RANGE_MAX = TILE_SIZE * 9;
+const AGGRO_RANGE_TILE_MULTIPLIER = 10;
+const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
+const THROW_RANGE_MIN_TILES = 4;
+const THROW_RANGE_MIN = TILE_SIZE * THROW_RANGE_MIN_TILES;
+const THROW_RANGE_MAX_TILES = 9;
+const THROW_RANGE_MAX = TILE_SIZE * THROW_RANGE_MAX_TILES;
 const THROW_SPEED = 7;
 const THROW_DAMAGE = 3;
 const THROW_WINDUP_FRAMES = 60;
@@ -25,6 +28,21 @@ const ENRAGE_THRESHOLD = 0.4;
 const TAUNT_INTERVAL = 300;
 /** Frames without attacking before forcing an attack grab. */
 const FORCE_ATTACK_FRAMES = 300; // 5 seconds at 60 fps
+const COIN_DROP_MIN = 60;
+const COIN_DROP_MAX = 120;
+const MASS = 10;
+const DUMBBELL_PICKUP_RANGE_TILES = 1.2;
+const DUMBBELL_FOLLOW_STOP_RANGE_RATIO = 0.8;
+const DUMBBELL_SEEK_PATHFIND_MAX = 40;
+const NO_DUMBBELL_SPEED_RATIO = 0.7;
+const NO_DUMBBELL_STOP_RANGE_TILES = 3;
+const NO_DUMBBELL_PATHFIND_MAX = 40;
+const THROW_RANGE_FORCE_ATTACK_RATIO = 0.85;
+const THROW_PATHFIND_MAX = 40;
+const CENTER_OFFSET = 0.5;
+const HIT_RADIUS_TILES = 1.5;
+const DAMAGE_FLASH = 8;
+const BLOCK_XP = 5;
 
 const TAUNT_PHRASES = [
   'Bro',
@@ -48,11 +66,11 @@ interface Projectile {
 
 export class Juicer extends Mob {
   readonly xpValue = 600;
-  protected coinDropMin = 60;
-  protected coinDropMax = 120;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'The Juicer';
   description = 'A roided-up gym rat who hurls dumbbells with reckless abandon.';
-  mass = 10;
+  mass = MASS;
 
   isEnraged = false;
 
@@ -175,7 +193,7 @@ export class Juicer extends Mob {
         this.nearestDumbbellPos.x - this.x,
         this.nearestDumbbellPos.y - this.y,
       );
-      if (dist < TILE_SIZE * 1.2) {
+      if (dist < TILE_SIZE * DUMBBELL_PICKUP_RANGE_TILES) {
         // Close enough — request pickup
         this.requestDumbbellAt = {
           x: this.nearestDumbbellPos.x,
@@ -186,8 +204,8 @@ export class Juicer extends Mob {
           this.nearestDumbbellPos.x,
           this.nearestDumbbellPos.y,
           this.speed,
-          TILE_SIZE * 0.8,
-          40,
+          TILE_SIZE * DUMBBELL_FOLLOW_STOP_RANGE_RATIO,
+          DUMBBELL_SEEK_PATHFIND_MAX,
         );
       }
     } else {
@@ -196,9 +214,9 @@ export class Juicer extends Mob {
       this.followTargetAStar(
         this.lastKnownTargetX,
         this.lastKnownTargetY,
-        this.speed * 0.7,
-        TILE_SIZE * 3,
-        40,
+        this.speed * NO_DUMBBELL_SPEED_RATIO,
+        TILE_SIZE * NO_DUMBBELL_STOP_RANGE_TILES,
+        NO_DUMBBELL_PATHFIND_MAX,
       );
     }
   }
@@ -246,8 +264,8 @@ export class Juicer extends Mob {
       this.lastKnownTargetX,
       this.lastKnownTargetY,
       this.speed,
-      forceAttack ? TILE_SIZE : THROW_RANGE_MAX * 0.85,
-      40,
+      forceAttack ? TILE_SIZE : THROW_RANGE_MAX * THROW_RANGE_FORCE_ATTACK_RATIO,
+      THROW_PATHFIND_MAX,
     );
   }
 
@@ -289,10 +307,10 @@ export class Juicer extends Mob {
   private throwDumbbell(target: Player): void {
     this.throwSoundPending = true;
     const ts = this.tileSize;
-    const ox = this.x + ts * 0.5;
-    const oy = this.y + ts * 0.5;
-    const tx = target.x + ts * 0.5;
-    const ty = target.y + ts * 0.5;
+    const ox = this.x + ts * CENTER_OFFSET;
+    const oy = this.y + ts * CENTER_OFFSET;
+    const tx = target.x + ts * CENTER_OFFSET;
+    const ty = target.y + ts * CENTER_OFFSET;
     const d = Math.hypot(tx - ox, ty - oy);
     if (d > 0) {
       this.activeThrow = {
@@ -360,21 +378,21 @@ export class Juicer extends Mob {
 
     // Check player hit
     const ts = this.tileSize;
-    const hitRadius = ts * 1.5;
+    const hitRadius = ts * HIT_RADIUS_TILES;
     for (const t of targets) {
       if (!t.isAlive) continue;
-      const tcx = t.x + ts * 0.5;
-      const tcy = t.y + ts * 0.5;
+      const tcx = t.x + ts * CENTER_OFFSET;
+      const tcy = t.y + ts * CENTER_OFFSET;
       const dx = proj.x - tcx;
       const dy = proj.y - tcy;
       if (Math.hypot(dx, dy) < hitRadius) {
         if (this.spells?.isPointInsideShell(tcx, tcy)) {
-          this.spells.addBlockXp(5);
+          this.spells.addBlockXp(BLOCK_XP);
           this.activeThrow = null;
           return;
         }
         this.dealDamage(t, THROW_DAMAGE);
-        t.damageFlash = 8;
+        t.damageFlash = DAMAGE_FLASH;
         this.activeThrow = null;
         return;
       }

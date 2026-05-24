@@ -72,18 +72,65 @@ const CLOUD_BLOBS = [
   { dx: -0.42, dy: -0.42, sr: 0.25 },
 ];
 
+const MOBILE_FOG_BLOB_COUNT = 5;
 // On mobile, use fewer blobs to reduce the offscreen-canvas render cost
-const FOG_BLOBS = platform.isMobile ? CLOUD_BLOBS.slice(0, 5) : CLOUD_BLOBS;
+const FOG_BLOBS = platform.isMobile ? CLOUD_BLOBS.slice(0, MOBILE_FOG_BLOB_COUNT) : CLOUD_BLOBS;
+
+// Magic number constants for SpellSystem
+const TILE_CENTER_OFFSET = 0.5;
+const FOG_MARGIN = 4;
+const FOG_COLOR_STOP_1 = 0.55;
+const SHELL_COOLDOWN_FRAMES = 7200;
+const CHAIN_LIGHTNING_FRAMES = 20;
+const INITIAL_SHOCKWAVE_FRAMES = 40;
+const FOG_RADIUS_BASE = 3;
+const FOG_RADIUS_INT_MULTIPLIER = 0.5;
+const MAX_FOG_RADIUS_TILES = 16;
+const FOG_DURATION_INT_MULTIPLIER = 5;
+const FOG_DURATION_FRAME_MULTIPLIER = 60;
+const MINI_SHELL_FRAMES = 180;
+const MINI_SHELL_TILES = 1.5;
+const CONTINUOUS_DAMAGE_THROTTLE_FRAMES = 60;
+const SHELL_BUFFER_TILES = 1;
+const SHELL_OUTER_BUFFER_BASE = 4;
+const SHELL_EXPAND_BUFFER = 2;
+const SHOCKWAVE_FADE_IN_FRAMES = 30;
+const SHELL_FADE_OUT_FRAMES = 60;
+const SHELL_APPEAR_FRAMES = 30;
+const SPRITE_FRAME_COUNT = 8;
+const PROTECTIVE_SHELL_FRAME_WIDTH = 400;
+const PROTECTIVE_SHELL_FRAME_CALC_MULT = 64;
+const MINI_SHELL_FRAME_WIDTH = 192;
+const MINI_SHELL_FADE_OUT_FRAMES = 30;
+const MINI_SHELL_ALPHA_MULT = 0.7;
+const CHAIN_LIGHTNING_STEPS = 5;
+const CHAIN_LIGHTNING_JITTER_RANGE = 8;
+const CHAIN_LIGHTNING_ALPHA_FULL = 0.9;
+const CHAIN_LIGHTNING_CORE_ALPHA = 0.5;
+const CHAIN_LIGHTNING_CORE_WIDTH = 1;
+const CHAIN_LIGHTNING_WIDTH = 2;
+const SHOCKWAVE_FRAME_WIDTH = 480;
+const SHOCKWAVE_ALPHA_MULT = 0.7;
+const FOG_CACHE_SIZE_FACTOR = 2;
+const FOG_FADE_IN_FRAMES = 40;
+const FOG_FADE_OUT_FRAMES = 60;
+const FOG_PULSE_BASE = 0.92;
+const FOG_PULSE_RANGE = 0.08;
+const FOG_PULSE_FREQ = 0.04;
+const FOG_TIMER_ALPHA_MULT = 0.8;
+const TIMER_TEXT_SIZE = 10;
+const TIMER_Y_OFFSET = 14;
+const SHELL_RENDER_EXTENT = 25;
+const FULL_POWER_LEVEL = 15;
 
 /** Pre-render the fog cloud texture to an offscreen canvas (called once per fog). */
 function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: number } {
-  const margin = 4;
-  const size = Math.ceil(radiusPx * 2 + margin * 2);
+  const size = Math.ceil(radiusPx * FOG_CACHE_SIZE_FACTOR + FOG_MARGIN * FOG_CACHE_SIZE_FACTOR);
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const center = size * 0.5;
+  const center = size * TILE_CENTER_OFFSET;
 
   if (ctx === null) {
     throw new Error('2d context cannot be found');
@@ -95,7 +142,7 @@ function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: numb
     const br = blob.sr * radiusPx;
     const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br);
     grad.addColorStop(0, 'rgba(215, 215, 225, 0.72)');
-    grad.addColorStop(0.55, 'rgba(200, 200, 215, 0.45)');
+    grad.addColorStop(FOG_COLOR_STOP_1, 'rgba(200, 200, 215, 0.45)');
     grad.addColorStop(1, 'rgba(185, 185, 205, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -109,7 +156,7 @@ function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: numb
 export class SpellSystem implements GameSystem {
   private activeShell: ActiveShell | null = null;
   private _shellCooldown = 0;
-  private _shellCooldownMax = 7200;
+  private _shellCooldownMax = SHELL_COOLDOWN_FRAMES;
   private activeFogs: ActiveFog[] = [];
   private shellOwner: HumanPlayer | null = null;
   private catMiniShell: MiniShell | null = null;
@@ -147,8 +194,8 @@ export class SpellSystem implements GameSystem {
   isInsideShell(px: number, py: number): boolean {
     if (!this.activeShell) return false;
     const { x, y, radiusPx } = this.activeShell;
-    const cx = px + TILE_SIZE * 0.5;
-    const cy = py + TILE_SIZE * 0.5;
+    const cx = px + TILE_SIZE * TILE_CENTER_OFFSET;
+    const cy = py + TILE_SIZE * TILE_CENTER_OFFSET;
     return Math.hypot(cx - x, cy - y) < radiusPx;
   }
 
@@ -194,7 +241,7 @@ export class SpellSystem implements GameSystem {
 
   /** Add a visual bolt for the chain lightning effect. */
   addChainLightningBolt(fromX: number, fromY: number, toX: number, toY: number): void {
-    this.chainLightningBolts.push({ fromX, fromY, toX, toY, framesLeft: 20 });
+    this.chainLightningBolts.push({ fromX, fromY, toX, toY, framesLeft: CHAIN_LIGHTNING_FRAMES });
   }
 
   /** Add an expanding shockwave ring for visual effect. */
@@ -202,10 +249,10 @@ export class SpellSystem implements GameSystem {
     this.shockwaveRipples.push({
       x,
       y,
-      maxRadius: radiusPx + TILE_SIZE * 2,
-      currentRadius: radiusPx * 0.5,
-      framesLeft: 40,
-      totalFrames: 40,
+      maxRadius: radiusPx + TILE_SIZE * SHELL_BUFFER_TILES,
+      currentRadius: radiusPx * TILE_CENTER_OFFSET,
+      framesLeft: INITIAL_SHOCKWAVE_FRAMES,
+      totalFrames: INITIAL_SHOCKWAVE_FRAMES,
     });
   }
 
@@ -223,8 +270,8 @@ export class SpellSystem implements GameSystem {
 
     const stats = getProtectiveShellStats(abilityLevel);
     const radiusPx = stats.radiusTiles * TILE_SIZE;
-    const shellX = human.x + TILE_SIZE * 0.5;
-    const shellY = human.y + TILE_SIZE * 0.5;
+    const shellX = human.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    const shellY = human.y + TILE_SIZE * TILE_CENTER_OFFSET;
 
     this.activeShell = {
       x: shellX,
@@ -252,7 +299,10 @@ export class SpellSystem implements GameSystem {
     }
 
     const shell = this.activeShell;
-    const catDist = Math.hypot(cat.x + TILE_SIZE * 0.5 - shellX, cat.y + TILE_SIZE * 0.5 - shellY);
+    const catDist = Math.hypot(
+      cat.x + TILE_SIZE * TILE_CENTER_OFFSET - shellX,
+      cat.y + TILE_SIZE * TILE_CENTER_OFFSET - shellY,
+    );
     shell.catWasInside = catDist < radiusPx;
 
     this.pushMobsFromShell(mobGrid, stats);
@@ -262,17 +312,17 @@ export class SpellSystem implements GameSystem {
 
   castConfusingFog(caster: HumanPlayer | CatPlayer): void {
     if (!caster.inventory.removeOne('scroll_of_confusing_fog')) return;
-    const MAX_FOG_RADIUS_TILES = 16; // 32-tile diameter cap
     const radiusPx = Math.min(
-      (3 + caster.intelligence * 0.5) * TILE_SIZE,
+      (FOG_RADIUS_BASE + caster.intelligence * FOG_RADIUS_INT_MULTIPLIER) * TILE_SIZE,
       MAX_FOG_RADIUS_TILES * TILE_SIZE,
     );
-    const totalFrames = caster.intelligence * 5 * 60;
+    const totalFrames =
+      caster.intelligence * FOG_DURATION_INT_MULTIPLIER * FOG_DURATION_FRAME_MULTIPLIER;
     const { canvas, size } = bakeFogCloud(radiusPx);
     this.activeFogs.push({
       owner: caster,
-      x: caster.x + TILE_SIZE * 0.5,
-      y: caster.y + TILE_SIZE * 0.5,
+      x: caster.x + TILE_SIZE * TILE_CENTER_OFFSET,
+      y: caster.y + TILE_SIZE * TILE_CENTER_OFFSET,
       framesLeft: totalFrames,
       totalFrames,
       radiusPx,
@@ -301,13 +351,13 @@ export class SpellSystem implements GameSystem {
       this.pushMobsFromShell(mobGrid, stats);
 
       // Level 10+: boost healing for allies inside the shell
-      const catCx = cat.x + TILE_SIZE * 0.5;
-      const catCy = cat.y + TILE_SIZE * 0.5;
+      const catCx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET;
+      const catCy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET;
       const catDist = Math.hypot(catCx - shell.x, catCy - shell.y);
       const catIsInside = catDist < shell.radiusPx;
       const humanDist = Math.hypot(
-        human.x + TILE_SIZE * 0.5 - shell.x,
-        human.y + TILE_SIZE * 0.5 - shell.y,
+        human.x + TILE_SIZE * TILE_CENTER_OFFSET - shell.x,
+        human.y + TILE_SIZE * TILE_CENTER_OFFSET - shell.y,
       );
       const humanIsInside = humanDist < shell.radiusPx;
 
@@ -320,7 +370,10 @@ export class SpellSystem implements GameSystem {
       if (stats.miniShieldEnabled) {
         if (shell.catWasInside && !catIsInside) {
           // Cat just left — give it a mini-shell
-          this.catMiniShell = { framesRemaining: 180, radiusPx: TILE_SIZE * 1.5 };
+          this.catMiniShell = {
+            framesRemaining: MINI_SHELL_FRAMES,
+            radiusPx: TILE_SIZE * MINI_SHELL_TILES,
+          };
         }
         shell.catWasInside = catIsInside;
       }
@@ -328,7 +381,7 @@ export class SpellSystem implements GameSystem {
       // Level 14+: continuous boundary damage (every 60 frames)
       if (stats.continuousDamageEnabled) {
         shell.continuousDamageThrottle++;
-        if (shell.continuousDamageThrottle >= 60) {
+        if (shell.continuousDamageThrottle >= CONTINUOUS_DAMAGE_THROTTLE_FRAMES) {
           shell.continuousDamageThrottle = 0;
           this._querySet.clear();
           const boundaryMobs = mobGrid.queryCircle(
@@ -339,8 +392,8 @@ export class SpellSystem implements GameSystem {
           );
           for (const mob of boundaryMobs) {
             if (!mob.isAlive) continue;
-            const dx = mob.x + TILE_SIZE * 0.5 - shell.x;
-            const dy = mob.y + TILE_SIZE * 0.5 - shell.y;
+            const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shell.x;
+            const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shell.y;
             const dist = Math.hypot(dx, dy);
             // "On the boundary" = within 1 tile outside the shell edge
             if (dist >= shell.radiusPx && dist < shell.radiusPx + TILE_SIZE) {
@@ -375,13 +428,13 @@ export class SpellSystem implements GameSystem {
       // Push mobs away from cat center using the mini-shell
       const miniRadius = this.catMiniShell.radiusPx;
       this._querySet.clear();
-      const catCx = cat.x + TILE_SIZE * 0.5;
-      const catCy = cat.y + TILE_SIZE * 0.5;
+      const catCx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET;
+      const catCy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET;
       const nearMobs = mobGrid.queryCircle(catCx, catCy, miniRadius + TILE_SIZE, this._querySet);
       for (const mob of nearMobs) {
         if (!mob.isAlive) continue;
-        const mcx = mob.x + TILE_SIZE * 0.5;
-        const mcy = mob.y + TILE_SIZE * 0.5;
+        const mcx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
+        const mcy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET;
         const dx = mcx - catCx;
         const dy = mcy - catCy;
         const dist = Math.hypot(dx, dy);
@@ -390,7 +443,7 @@ export class SpellSystem implements GameSystem {
           const oy = mob.y;
           const nx = dist > 0 ? dx / dist : 1;
           const ny = dist > 0 ? dy / dist : 0;
-          const push = miniRadius - dist + 2;
+          const push = miniRadius - dist + SHELL_EXPAND_BUFFER;
           mob.x += nx * push;
           mob.y += ny * push;
           mobGrid.move(mob, ox, oy);
@@ -426,8 +479,8 @@ export class SpellSystem implements GameSystem {
       const rSq = fog.radiusPx * fog.radiusPx;
       for (const mob of inFog) {
         if (!mob.isAlive) continue;
-        const dx = mob.x + TILE_SIZE * 0.5 - fog.x;
-        const dy = mob.y + TILE_SIZE * 0.5 - fog.y;
+        const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - fog.x;
+        const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - fog.y;
         if (dx * dx + dy * dy <= rSq) {
           mob.isConfused = true;
         }
@@ -445,8 +498,8 @@ export class SpellSystem implements GameSystem {
     const nearShell = mobGrid.queryCircle(x, y, radiusPx + TILE_SIZE, this._querySet);
     for (const mob of nearShell) {
       if (!mob.isAlive) continue;
-      const mcx = mob.x + TILE_SIZE * 0.5;
-      const mcy = mob.y + TILE_SIZE * 0.5;
+      const mcx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
+      const mcy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET;
       const dx = mcx - x;
       const dy = mcy - y;
       const dist = Math.hypot(dx, dy);
@@ -455,7 +508,7 @@ export class SpellSystem implements GameSystem {
         const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
-        const push = radiusPx - dist + 2;
+        const push = radiusPx - dist + SHELL_EXPAND_BUFFER;
         mob.x += nx * push;
         mob.y += ny * push;
 
@@ -471,14 +524,14 @@ export class SpellSystem implements GameSystem {
         }
 
         mobGrid.move(mob, ox, oy);
-      } else if (dist < radiusPx + 4) {
+      } else if (dist < radiusPx + SHELL_OUTER_BUFFER_BASE) {
         // Thin outer buffer: push mobs back so they can't re-enter from outside
         const ox = mob.x;
         const oy = mob.y;
         const nx = dist > 0 ? dx / dist : 1;
         const ny = dist > 0 ? dy / dist : 0;
-        mob.x += nx * (radiusPx + 4 - dist);
-        mob.y += ny * (radiusPx + 4 - dist);
+        mob.x += nx * (radiusPx + SHELL_OUTER_BUFFER_BASE - dist);
+        mob.y += ny * (radiusPx + SHELL_OUTER_BUFFER_BASE - dist);
         mobGrid.move(mob, ox, oy);
       }
     }
@@ -490,10 +543,10 @@ export class SpellSystem implements GameSystem {
     const { x, y, radiusPx, framesRemaining, totalFrames, abilityLevel } = this.activeShell;
     const sx = x - camX;
     const sy = y - camY;
-    const isFullPower = abilityLevel >= 15;
+    const isFullPower = abilityLevel >= FULL_POWER_LEVEL;
 
     // Offscreen culling
-    const extent = radiusPx + 25;
+    const extent = radiusPx + SHELL_RENDER_EXTENT;
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
@@ -502,41 +555,44 @@ export class SpellSystem implements GameSystem {
     )
       return;
 
-    const elapsed = (totalFrames - framesRemaining) / 60;
-    const fadeIn = Math.min(1, (totalFrames - framesRemaining) / 30);
-    const fadeOut = Math.min(1, framesRemaining / 60);
+    const elapsed = (totalFrames - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
+    const fadeIn = Math.min(1, (totalFrames - framesRemaining) / SHOCKWAVE_FADE_IN_FRAMES);
+    const fadeOut = Math.min(1, framesRemaining / SHELL_FADE_OUT_FRAMES);
     const alpha = Math.min(fadeIn, fadeOut);
 
-    const appearing = totalFrames - framesRemaining < 30;
-    const expiring = framesRemaining < 60;
+    const appearing = totalFrames - framesRemaining < SHELL_APPEAR_FRAMES;
+    const expiring = framesRemaining < SHELL_FADE_OUT_FRAMES;
 
     let state: SpriteStates['protective_shell'];
     let frame: number;
     if (appearing) {
       state = isFullPower ? 'appear_full_power' : 'appear';
-      frame = progressFrameIndex((totalFrames - framesRemaining) / 30, 8);
+      frame = progressFrameIndex(
+        (totalFrames - framesRemaining) / SHELL_APPEAR_FRAMES,
+        SPRITE_FRAME_COUNT,
+      );
     } else if (expiring) {
       state = 'expire';
-      frame = progressFrameIndex(1 - framesRemaining / 60, 8);
+      frame = progressFrameIndex(1 - framesRemaining / SHELL_FADE_OUT_FRAMES, SPRITE_FRAME_COUNT);
     } else {
       state = isFullPower ? 'full_power' : 'active';
-      frame = timeFrameIndex(elapsed, 8, 8);
+      frame = timeFrameIndex(elapsed, SPRITE_FRAME_COUNT, SPRITE_FRAME_COUNT);
     }
 
     // tileSize chosen so frameWidth * (tileSize/tileScale) = radiusPx * 2
     // protective_shell: frameWidth=400, tileScale=32 → tileSize = radiusPx * 64 / 400
-    const tileSize = (radiusPx * 64) / 400;
+    const tileSize = (radiusPx * PROTECTIVE_SHELL_FRAME_CALC_MULT) / PROTECTIVE_SHELL_FRAME_WIDTH;
     drawSpriteKey(ctx, 'protective_shell', state, frame, sx, sy, tileSize, { alpha });
 
-    const secs = Math.ceil(framesRemaining / 60);
+    const secs = Math.ceil(framesRemaining / FOG_DURATION_FRAME_MULTIPLIER);
     const timerColor = isFullPower ? '#fbbf24' : '#93c5fd';
     drawText(ctx, `${secs}s`, {
       x: sx,
-      y: sy - radiusPx - 14,
-      size: 10,
+      y: sy - radiusPx - TIMER_Y_OFFSET,
+      size: TIMER_TEXT_SIZE,
       bold: true,
       color: timerColor,
-      alpha: alpha * 0.8,
+      alpha: alpha * FOG_TIMER_ALPHA_MULT,
       align: 'center',
     });
   }
@@ -549,17 +605,16 @@ export class SpellSystem implements GameSystem {
   ): void {
     if (!this.catMiniShell) return;
     const { framesRemaining, radiusPx } = this.catMiniShell;
-    const sx = cat.x + TILE_SIZE * 0.5 - camX;
-    const sy = cat.y + TILE_SIZE * 0.5 - camY;
+    const sx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET - camX;
+    const sy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET - camY;
 
-    const miniTotalFrames = 180;
-    const elapsed = (miniTotalFrames - framesRemaining) / 60;
-    const fadeOut = Math.min(1, framesRemaining / 30);
-    const alpha = fadeOut * 0.7;
-    const frame = timeFrameIndex(elapsed, 8, 8);
+    const elapsed = (MINI_SHELL_FRAMES - framesRemaining) / FOG_DURATION_FRAME_MULTIPLIER;
+    const fadeOut = Math.min(1, framesRemaining / MINI_SHELL_FADE_OUT_FRAMES);
+    const alpha = fadeOut * MINI_SHELL_ALPHA_MULT;
+    const frame = timeFrameIndex(elapsed, SPRITE_FRAME_COUNT, SPRITE_FRAME_COUNT);
 
     // protective_shell_mini: frameWidth=192, tileScale=32 → tileSize = radiusPx * 64 / 192
-    const tileSize = (radiusPx * 64) / 192;
+    const tileSize = (radiusPx * PROTECTIVE_SHELL_FRAME_CALC_MULT) / MINI_SHELL_FRAME_WIDTH;
     drawSpriteKey(ctx, 'protective_shell_mini', 'active', frame, sx, sy, tileSize, { alpha });
   }
 
@@ -567,35 +622,34 @@ export class SpellSystem implements GameSystem {
     if (this.chainLightningBolts.length === 0) return;
     ctx.save();
     for (const bolt of this.chainLightningBolts) {
-      const alpha = bolt.framesLeft / 20;
+      const alpha = bolt.framesLeft / CHAIN_LIGHTNING_FRAMES;
       const fromSx = bolt.fromX - camX;
       const fromSy = bolt.fromY - camY;
       const toSx = bolt.toX - camX;
       const toSy = bolt.toY - camY;
 
-      ctx.globalAlpha = alpha * 0.9;
+      ctx.globalAlpha = alpha * CHAIN_LIGHTNING_ALPHA_FULL;
       ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = CHAIN_LIGHTNING_WIDTH;
       ctx.beginPath();
 
       // Jittered midpoints simulate a non-linear lightning arc
       const { x: perpX, y: perpY } = normalize(-(toSy - fromSy), toSx - fromSx);
-      const steps = 5;
       ctx.moveTo(fromSx, fromSy);
-      for (let i = 1; i < steps; i++) {
-        const t = i / steps;
+      for (let i = 1; i < CHAIN_LIGHTNING_STEPS; i++) {
+        const t = i / CHAIN_LIGHTNING_STEPS;
         const mx = fromSx + (toSx - fromSx) * t;
         const my = fromSy + (toSy - fromSy) * t;
-        const jitter = (Math.random() - 0.5) * 8;
+        const jitter = (Math.random() - TILE_CENTER_OFFSET) * CHAIN_LIGHTNING_JITTER_RANGE;
         ctx.lineTo(mx + perpX * jitter, my + perpY * jitter);
       }
       ctx.lineTo(toSx, toSy);
       ctx.stroke();
 
       // White core
-      ctx.globalAlpha = alpha * 0.5;
+      ctx.globalAlpha = alpha * CHAIN_LIGHTNING_CORE_ALPHA;
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = CHAIN_LIGHTNING_CORE_WIDTH;
       ctx.stroke();
     }
     ctx.restore();
@@ -607,12 +661,13 @@ export class SpellSystem implements GameSystem {
       if (ripple.currentRadius < 1) continue;
       const sx = ripple.x - camX;
       const sy = ripple.y - camY;
-      const alpha = (ripple.framesLeft / ripple.totalFrames) * 0.7;
+      const alpha = (ripple.framesLeft / ripple.totalFrames) * SHOCKWAVE_ALPHA_MULT;
       const progress = 1 - ripple.framesLeft / ripple.totalFrames;
-      const frame = progressFrameIndex(progress, 8);
+      const frame = progressFrameIndex(progress, SPRITE_FRAME_COUNT);
 
       // protective_shell_shockwave: frameWidth=480, tileScale=32 → tileSize = currentRadius * 64 / 480
-      const tileSize = (ripple.currentRadius * 64) / 480;
+      const tileSize =
+        (ripple.currentRadius * PROTECTIVE_SHELL_FRAME_CALC_MULT) / SHOCKWAVE_FRAME_WIDTH;
       drawSpriteKey(ctx, 'protective_shell_shockwave', 'expand', frame, sx, sy, tileSize, {
         alpha,
       });
@@ -625,15 +680,15 @@ export class SpellSystem implements GameSystem {
     for (const fog of this.activeFogs) {
       const cx = fog.x - camX;
       const cy = fog.y - camY;
-      const half = fog.cachedSize * 0.5;
+      const half = fog.cachedSize * TILE_CENTER_OFFSET;
 
       // Offscreen culling
       if (cx + half < 0 || cy + half < 0 || cx - half > cw || cy - half > ch) continue;
 
-      const fadeIn = Math.min(1, (fog.totalFrames - fog.framesLeft) / 40);
-      const fadeOut = Math.min(1, fog.framesLeft / 60);
+      const fadeIn = Math.min(1, (fog.totalFrames - fog.framesLeft) / FOG_FADE_IN_FRAMES);
+      const fadeOut = Math.min(1, fog.framesLeft / FOG_FADE_OUT_FRAMES);
       const alpha = Math.min(fadeIn, fadeOut);
-      const pulse = 0.92 + 0.08 * Math.sin(fog.framesLeft * 0.04);
+      const pulse = FOG_PULSE_BASE + FOG_PULSE_RANGE * Math.sin(fog.framesLeft * FOG_PULSE_FREQ);
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -648,13 +703,13 @@ export class SpellSystem implements GameSystem {
 
       // Timer countdown above fog: size=10, old baseline = cy - fog.radiusPx - 6
       // top = (cy - fog.radiusPx - 6) - round(10*0.8) = (cy - fog.radiusPx - 6) - 8 = cy - fog.radiusPx - 14
-      drawText(ctx, `${Math.ceil(fog.framesLeft / 60)}s`, {
+      drawText(ctx, `${Math.ceil(fog.framesLeft / FOG_DURATION_FRAME_MULTIPLIER)}s`, {
         x: cx,
-        y: cy - fog.radiusPx - 14,
-        size: 10,
+        y: cy - fog.radiusPx - TIMER_Y_OFFSET,
+        size: TIMER_TEXT_SIZE,
         bold: true,
         color: '#d0d0e0',
-        alpha: alpha * 0.8,
+        alpha: alpha * FOG_TIMER_ALPHA_MULT,
         align: 'center',
       });
     }

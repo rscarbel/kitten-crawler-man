@@ -42,6 +42,24 @@ export default tseslint.config(
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/class-literal-property-style': 'off',
+      '@typescript-eslint/no-magic-numbers': [
+        'error',
+        {
+          ignore: [0, 1, -1, 2],
+          ignoreReadonlyClassProperties: true,
+          ignoreEnums: true,
+          ignoreNumericLiteralTypes: true,
+          ignoreTypeIndexes: true,
+        },
+      ],
+    },
+  },
+  {
+    // Pixel-art sprite and tile drawing functions are coordinate-heavy by nature.
+    // The numbers there are art geometry, not semantic game constants.
+    files: ['src/sprites/**/*.ts', 'src/map/tiles/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-magic-numbers': 'off',
     },
   },
 );

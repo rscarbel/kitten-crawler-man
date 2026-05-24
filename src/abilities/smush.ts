@@ -1,6 +1,35 @@
 import type { AbilityDef } from '../core/AbilityManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 
+const SMUSH_BASE_COOLDOWN = 600;
+const SMUSH_COOLDOWN_DECREMENT = 60;
+const SMUSH_LEVEL_COOLDOWN_2 = 2;
+const SMUSH_LEVEL_COOLDOWN_3 = 6;
+const SMUSH_LEVEL_COOLDOWN_4 = 9;
+const SMUSH_LEVEL_COOLDOWN_5 = 11;
+const SMUSH_BASE_DAMAGE_MULT = 5.0;
+const SMUSH_LEVEL_DAMAGE_BOOST_1 = 3;
+const SMUSH_LEVEL_DAMAGE_BOOST_2 = 7;
+const SMUSH_LEVEL_DAMAGE_BOOST_3 = 12;
+const SMUSH_LEVEL_FULL_POWER = 15;
+const SMUSH_DAMAGE_MULT_L3 = 1.1;
+const SMUSH_DAMAGE_MULT_L7 = 1.2;
+const SMUSH_DAMAGE_MULT_L12 = 1.5;
+const SMUSH_DAMAGE_MULT_L15 = 3.0;
+const SMUSH_OUTER_DAMAGE_MULT = 3.0;
+const SMUSH_BASE_INNER_RADIUS = 2.5;
+const SMUSH_LEVEL_RADIUS_BOOST_1 = 8;
+const SMUSH_LEVEL_RADIUS_BOOST_2 = 13;
+const SMUSH_RADIUS_INCREMENT = 0.5;
+const SMUSH_RADIUS_FULL_POWER_MULT = 2.0;
+const SMUSH_OUTER_RADIUS_OFFSET = 1.0;
+const SMUSH_LEVEL_BOSS_DAMAGE = 4;
+const SMUSH_BOSS_DAMAGE_FACTOR = 1.2;
+const SMUSH_LEVEL_STUN_SMALL = 5;
+const SMUSH_LEVEL_HEAL_ON_HIT = 10;
+const SMUSH_LEVEL_DOUBLE_GOLD = 14;
+const SMUSH_STUN_BOSS_CHANCE = 0.25;
+
 export interface SmushStats {
   cooldownFrames: number;
   damageMultiplier: number;
@@ -16,34 +45,28 @@ export interface SmushStats {
 }
 
 export function getSmushStats(level: number): SmushStats {
-  // Cooldown: 10s base (600 frames), -1s at levels 2, 6, 9, 11
-  let cooldownFrames = 600;
-  if (level >= 2) cooldownFrames -= 60;
-  if (level >= 6) cooldownFrames -= 60;
-  if (level >= 9) cooldownFrames -= 60;
-  if (level >= 11) cooldownFrames -= 60;
+  let cooldownFrames = SMUSH_BASE_COOLDOWN;
+  if (level >= SMUSH_LEVEL_COOLDOWN_2) cooldownFrames -= SMUSH_COOLDOWN_DECREMENT;
+  if (level >= SMUSH_LEVEL_COOLDOWN_3) cooldownFrames -= SMUSH_COOLDOWN_DECREMENT;
+  if (level >= SMUSH_LEVEL_COOLDOWN_4) cooldownFrames -= SMUSH_COOLDOWN_DECREMENT;
+  if (level >= SMUSH_LEVEL_COOLDOWN_5) cooldownFrames -= SMUSH_COOLDOWN_DECREMENT;
 
-  // Base damage = 5× melee; multiplied by cumulative perks
-  let damageMultiplier = 5.0;
-  if (level >= 3) damageMultiplier *= 1.1;
-  if (level >= 7) damageMultiplier *= 1.2;
-  if (level >= 12) damageMultiplier *= 1.5;
-  if (level >= 15) damageMultiplier *= 3.0;
+  let damageMultiplier = SMUSH_BASE_DAMAGE_MULT;
+  if (level >= SMUSH_LEVEL_DAMAGE_BOOST_1) damageMultiplier *= SMUSH_DAMAGE_MULT_L3;
+  if (level >= SMUSH_LEVEL_DAMAGE_BOOST_2) damageMultiplier *= SMUSH_DAMAGE_MULT_L7;
+  if (level >= SMUSH_LEVEL_DAMAGE_BOOST_3) damageMultiplier *= SMUSH_DAMAGE_MULT_L12;
+  if (level >= SMUSH_LEVEL_FULL_POWER) damageMultiplier *= SMUSH_DAMAGE_MULT_L15;
 
-  // Outer ring: 3× melee base (unchanged by level perks)
-  const outerDamageMultiplier = 3.0;
+  const outerDamageMultiplier = SMUSH_OUTER_DAMAGE_MULT;
 
-  // Blast radius: 2.5 tiles inner, +0.5 at L8, +0.5 at L13, ×2 at L15
-  let innerBlastRadius = 2.5;
-  if (level >= 8) innerBlastRadius += 0.5;
-  if (level >= 13) innerBlastRadius += 0.5;
-  if (level >= 15) innerBlastRadius *= 2.0;
+  let innerBlastRadius = SMUSH_BASE_INNER_RADIUS;
+  if (level >= SMUSH_LEVEL_RADIUS_BOOST_1) innerBlastRadius += SMUSH_RADIUS_INCREMENT;
+  if (level >= SMUSH_LEVEL_RADIUS_BOOST_2) innerBlastRadius += SMUSH_RADIUS_INCREMENT;
+  if (level >= SMUSH_LEVEL_FULL_POWER) innerBlastRadius *= SMUSH_RADIUS_FULL_POWER_MULT;
 
-  // Outer ring is 1 tile beyond inner radius
-  const outerBlastRadius = innerBlastRadius + 1.0;
+  const outerBlastRadius = innerBlastRadius + SMUSH_OUTER_RADIUS_OFFSET;
 
-  // Level 4: +20% damage vs bosses
-  const bossDamageMultiplier = level >= 4 ? 1.2 : 1.0;
+  const bossDamageMultiplier = level >= SMUSH_LEVEL_BOSS_DAMAGE ? SMUSH_BOSS_DAMAGE_FACTOR : 1.0;
 
   return {
     cooldownFrames,
@@ -52,11 +75,11 @@ export function getSmushStats(level: number): SmushStats {
     innerBlastRadius,
     outerBlastRadius,
     bossDamageMultiplier,
-    stunSmallEnemies: level >= 5,
-    healOnHit: level >= 10,
-    doubleGoldOnKill: level >= 14,
-    stunBossChance: level >= 14 ? 0.25 : 0,
-    isFullPower: level >= 15,
+    stunSmallEnemies: level >= SMUSH_LEVEL_STUN_SMALL,
+    healOnHit: level >= SMUSH_LEVEL_HEAL_ON_HIT,
+    doubleGoldOnKill: level >= SMUSH_LEVEL_DOUBLE_GOLD,
+    stunBossChance: level >= SMUSH_LEVEL_DOUBLE_GOLD ? SMUSH_STUN_BOSS_CHANCE : 0,
+    isFullPower: level >= SMUSH_LEVEL_FULL_POWER,
   };
 }
 
@@ -67,7 +90,7 @@ function renderSmushIcon(
   size: number,
   level: number,
 ): void {
-  const state = level >= 15 ? 'full_power' : 'standard';
+  const state = level >= SMUSH_LEVEL_FULL_POWER ? 'full_power' : 'standard';
   drawSpriteKey(ctx, 'smush_icon', state, 0, x, y, size);
 }
 

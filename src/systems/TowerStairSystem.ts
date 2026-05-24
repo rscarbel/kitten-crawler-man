@@ -6,6 +6,51 @@ import { drawText } from '../ui/TextBox';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
+// Collision detection
+const TILE_CENTER_OFFSET = 0.5;
+
+// UI constants
+const STAIR_PULSE_CENTER = 0.6;
+const STAIR_PULSE_AMPLITUDE = 0.3;
+const STAIR_PULSE_SPEED = 500; // ms
+const STAIR_HINT_SIZE_RATIO = 0.45;
+const STAIR_HINT_Y_OFFSET = 4;
+const STAIR_HINT_Y_SCALE = 0.8;
+
+// Menu constants
+const MENU_OVERLAY_ALPHA = 0.55;
+const MENU_PANEL_WIDTH = 340;
+const MENU_PANEL_HEIGHT = 190;
+const MENU_TITLE_Y_OFFSET = 38;
+const MENU_TITLE_Y_ADJUST = 16;
+const MENU_TITLE_SIZE = 20;
+const MENU_PROMPT_Y_OFFSET = 68;
+const MENU_PROMPT_Y_ADJUST = 10;
+const MENU_PROMPT_SIZE = 13;
+const MENU_HINT_Y_OFFSET = 88;
+const MENU_HINT_Y_ADJUST = 9;
+const MENU_HINT_SIZE = 11;
+const MENU_ACTION_BG_COLOR = '#5c3d0a';
+const MENU_ACTION_BORDER_COLOR = '#d4a830';
+const MENU_ACTION_TEXT_COLOR = '#ffe8a0';
+const MENU_ACTION_BUTTON_WIDTH = 120;
+const MENU_ACTION_BUTTON_HEIGHT = 42;
+const MENU_ACTION_BUTTON_Y_OFFSET = 110;
+const MENU_ACTION_BUTTON_X_SPACING = 8;
+const MENU_ACTION_TEXT_Y_OFFSET = 27;
+const MENU_ACTION_TEXT_Y_ADJUST = 11;
+const MENU_ACTION_TEXT_SIZE = 14;
+const MENU_STAY_BG_COLOR = '#1e293b';
+const MENU_STAY_BORDER_COLOR = '#475569';
+const MENU_STAY_TEXT_COLOR = '#94a3b8';
+const MENU_BORDER_WIDTH = 1.5;
+const MENU_BORDER_WIDTH_THIN = 2;
+const MENU_PANEL_BG_COLOR = '#1a1408';
+const MENU_PANEL_BORDER_COLOR = '#d4a830';
+const MENU_TITLE_TEXT_COLOR = '#ffe8a0';
+const MENU_PROMPT_TEXT_COLOR = '#94a3b8';
+const MENU_HINT_TEXT_COLOR = '#64748b';
+
 export class TowerStairSystem implements GameSystem {
   private onUpStair = false;
   private onDownStair = false;
@@ -52,8 +97,8 @@ export class TowerStairSystem implements GameSystem {
   }
 
   detect(active: { x: number; y: number }): void {
-    const tx = Math.floor((active.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const ty = Math.floor((active.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const tx = Math.floor((active.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ty = Math.floor((active.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
     // Up stairs
     const wasOnUp = this.onUpStair;
@@ -105,15 +150,16 @@ export class TowerStairSystem implements GameSystem {
   }
 
   renderStairHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
-    const hintSize = Math.floor(TILE_SIZE * 0.45);
+    const pulse =
+      STAIR_PULSE_CENTER + Math.sin(Date.now() / STAIR_PULSE_SPEED) * STAIR_PULSE_AMPLITUDE;
+    const hintSize = Math.floor(TILE_SIZE * STAIR_HINT_SIZE_RATIO);
 
     for (const t of this.map._interiorStairUpTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      drawText(ctx, '\u25B2 Up', {
+      drawText(ctx, '▲ Up', {
         x: sx,
-        y: sy - 4 - Math.round(hintSize * 0.8),
+        y: sy - STAIR_HINT_Y_OFFSET - Math.round(hintSize * STAIR_HINT_Y_SCALE),
         size: hintSize,
         bold: true,
         color: `rgba(255, 220, 80, ${pulse})`,
@@ -123,9 +169,9 @@ export class TowerStairSystem implements GameSystem {
     for (const t of this.map._interiorStairDownTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      drawText(ctx, '\u25BC Down', {
+      drawText(ctx, '▼ Down', {
         x: sx,
-        y: sy - 4 - Math.round(hintSize * 0.8),
+        y: sy - STAIR_HINT_Y_OFFSET - Math.round(hintSize * STAIR_HINT_Y_SCALE),
         size: hintSize,
         bold: true,
         color: `rgba(255, 220, 80, ${pulse})`,
@@ -144,73 +190,73 @@ export class TowerStairSystem implements GameSystem {
     const cw = canvas.width;
     const ch = canvas.height;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = `rgba(0,0,0,${MENU_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
 
-    const panelW = 340;
-    const panelH = 190;
+    const panelW = MENU_PANEL_WIDTH;
+    const panelH = MENU_PANEL_HEIGHT;
     const panelX = cw / 2 - panelW / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = '#1a1408';
+    ctx.fillStyle = MENU_PANEL_BG_COLOR;
     ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#d4a830';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = MENU_PANEL_BORDER_COLOR;
+    ctx.lineWidth = MENU_BORDER_WIDTH_THIN;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    const arrow = isUp ? '\u25B2' : '\u25BC';
+    const arrow = isUp ? '▲' : '▼';
     drawText(ctx, `${arrow}  Staircase  ${arrow}`, {
       x: cw / 2,
-      y: panelY + 38 - 16,
-      size: 20,
+      y: panelY + MENU_TITLE_Y_OFFSET - MENU_TITLE_Y_ADJUST,
+      size: MENU_TITLE_SIZE,
       bold: true,
-      color: '#ffe8a0',
+      color: MENU_TITLE_TEXT_COLOR,
       align: 'center',
     });
 
     drawText(ctx, `${isUp ? 'Ascend' : 'Descend'} to: ${targetLabel}?`, {
       x: cw / 2,
-      y: panelY + 68 - 10,
-      size: 13,
-      color: '#94a3b8',
+      y: panelY + MENU_PROMPT_Y_OFFSET - MENU_PROMPT_Y_ADJUST,
+      size: MENU_PROMPT_SIZE,
+      color: MENU_PROMPT_TEXT_COLOR,
       align: 'center',
     });
 
     drawText(ctx, '(Esc or Stay to remain on this floor)', {
       x: cw / 2,
-      y: panelY + 88 - 9,
-      size: 11,
-      color: '#64748b',
+      y: panelY + MENU_HINT_Y_OFFSET - MENU_HINT_Y_ADJUST,
+      size: MENU_HINT_SIZE,
+      color: MENU_HINT_TEXT_COLOR,
       align: 'center',
     });
 
     const rects = this.menuRects(canvas);
 
-    ctx.fillStyle = '#5c3d0a';
+    ctx.fillStyle = MENU_ACTION_BG_COLOR;
     ctx.fillRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
-    ctx.strokeStyle = '#d4a830';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = MENU_ACTION_BORDER_COLOR;
+    ctx.lineWidth = MENU_BORDER_WIDTH;
     ctx.strokeRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
     drawText(ctx, isUp ? 'Ascend' : 'Descend', {
       x: rects.action.x + rects.action.w / 2,
-      y: rects.action.y + 27 - 11,
-      size: 14,
+      y: rects.action.y + MENU_ACTION_TEXT_Y_OFFSET - MENU_ACTION_TEXT_Y_ADJUST,
+      size: MENU_ACTION_TEXT_SIZE,
       bold: true,
-      color: '#ffe8a0',
+      color: MENU_ACTION_TEXT_COLOR,
       align: 'center',
     });
 
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = MENU_STAY_BG_COLOR;
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = MENU_STAY_BORDER_COLOR;
+    ctx.lineWidth = MENU_BORDER_WIDTH;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     drawText(ctx, 'Stay', {
       x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + 27 - 11,
-      size: 14,
+      y: rects.stay.y + MENU_ACTION_TEXT_Y_OFFSET - MENU_ACTION_TEXT_Y_ADJUST,
+      size: MENU_ACTION_TEXT_SIZE,
       bold: true,
-      color: '#94a3b8',
+      color: MENU_STAY_TEXT_COLOR,
       align: 'center',
     });
   }
@@ -218,14 +264,14 @@ export class TowerStairSystem implements GameSystem {
   private menuRects(canvas: HTMLCanvasElement) {
     const cw = canvas.width;
     const ch = canvas.height;
-    const panelH = 190;
+    const panelH = MENU_PANEL_HEIGHT;
     const panelY = ch / 2 - panelH / 2;
-    const btnW = 120;
-    const btnH = 42;
-    const btnY = panelY + 110;
+    const btnW = MENU_ACTION_BUTTON_WIDTH;
+    const btnH = MENU_ACTION_BUTTON_HEIGHT;
+    const btnY = panelY + MENU_ACTION_BUTTON_Y_OFFSET;
     return {
-      action: { x: cw / 2 - btnW - 8, y: btnY, w: btnW, h: btnH },
-      stay: { x: cw / 2 + 8, y: btnY, w: btnW, h: btnH },
+      action: { x: cw / 2 - btnW - MENU_ACTION_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
+      stay: { x: cw / 2 + MENU_ACTION_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
     };
   }
 

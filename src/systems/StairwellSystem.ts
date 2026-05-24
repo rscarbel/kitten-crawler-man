@@ -6,6 +6,51 @@ import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 
+const TILE_CENTER_OFFSET = 0.5;
+// Stairwell rendering
+const STAIRWELL_SCALE = 2;
+const STAIRWELL_PULSE_CENTER = 0.7;
+const STAIRWELL_PULSE_AMPLITUDE = 0.2;
+const STAIRWELL_PULSE_SPEED = 500; // ms
+const STAIRWELL_BORDER_WIDTH = 2;
+const STAIRWELL_ICON_SIZE_RATIO = 0.42;
+const STAIRWELL_ICON_Y_RATIO = 0.67;
+const STAIRWELL_ICON_Y_ADJUST = 0.8;
+const STAIRWELL_OFFSCREEN_MARGIN = 2; // measured in stairwell-widths
+
+// Menu rendering
+const STAIRWELL_MENU_OVERLAY_ALPHA = 0.55;
+const STAIRWELL_MENU_PANEL_WIDTH = 340;
+const STAIRWELL_MENU_PANEL_HEIGHT = 190;
+const STAIRWELL_MENU_TITLE_Y_OFFSET = 38;
+const STAIRWELL_MENU_TITLE_Y_ADJUST = 16;
+const STAIRWELL_MENU_TITLE_SIZE = 20;
+const STAIRWELL_MENU_PROMPT_Y_OFFSET = 68;
+const STAIRWELL_MENU_PROMPT_Y_ADJUST = 10;
+const STAIRWELL_MENU_PROMPT_SIZE = 13;
+const STAIRWELL_MENU_HINT_Y_OFFSET = 88;
+const STAIRWELL_MENU_HINT_Y_ADJUST = 9;
+const STAIRWELL_MENU_HINT_SIZE = 11;
+const STAIRWELL_MENU_BUTTON_WIDTH = 120;
+const STAIRWELL_MENU_BUTTON_HEIGHT = 42;
+const STAIRWELL_MENU_BUTTON_Y_OFFSET = 110;
+const STAIRWELL_MENU_BUTTON_X_SPACING = 8;
+const STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET = 27;
+const STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST = 11;
+const STAIRWELL_MENU_BUTTON_TEXT_SIZE = 14;
+const STAIRWELL_MENU_BG_COLOR = '#0d0920';
+const STAIRWELL_MENU_BORDER_COLOR = '#a855f7';
+const STAIRWELL_MENU_BORDER_WIDTH = 2;
+const STAIRWELL_MENU_BUTTON_BG_COLOR = '#4c1d95';
+const STAIRWELL_MENU_BUTTON_BORDER_WIDTH = 1.5;
+const STAIRWELL_MENU_BUTTON_TEXT_COLOR = '#e9d5ff';
+const STAIRWELL_MENU_STAY_BG_COLOR = '#1e293b';
+const STAIRWELL_MENU_STAY_BORDER_COLOR = '#475569';
+const STAIRWELL_MENU_STAY_TEXT_COLOR = '#94a3b8';
+const STAIRWELL_MENU_TITLE_TEXT_COLOR = '#e9d5ff';
+const STAIRWELL_MENU_PROMPT_TEXT_COLOR = '#94a3b8';
+const STAIRWELL_MENU_HINT_TEXT_COLOR = '#64748b';
+
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
@@ -49,8 +94,8 @@ export class StairwellSystem implements GameSystem {
   }
 
   isEntityOnStairwell(entity: { x: number; y: number }): boolean {
-    const tx = Math.floor((entity.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const ty = Math.floor((entity.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const tx = Math.floor((entity.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ty = Math.floor((entity.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
     return this.gameMap.stairwellTiles.some(
       (s) => (tx === s.x || tx === s.x + 1) && (ty === s.y || ty === s.y + 1),
     );
@@ -89,24 +134,32 @@ export class StairwellSystem implements GameSystem {
   ): void {
     if (!this.levelDef.nextLevelId) return;
     const ts = TILE_SIZE;
-    const bw = ts * 2;
-    const bh = ts * 2;
-    const pulse = 0.7 + Math.sin(Date.now() / 500) * 0.2;
+    const bw = ts * STAIRWELL_SCALE;
+    const bh = ts * STAIRWELL_SCALE;
+    const pulse =
+      STAIRWELL_PULSE_CENTER +
+      Math.sin(Date.now() / STAIRWELL_PULSE_SPEED) * STAIRWELL_PULSE_AMPLITUDE;
     for (const { x, y } of this.gameMap.stairwellTiles) {
       const sx = x * ts - camX;
       const sy = y * ts - camY;
-      if (sx < -bw || sx > canvas.width || sy < -bh || sy > canvas.height) continue;
+      if (
+        sx < -bw * STAIRWELL_OFFSCREEN_MARGIN ||
+        sx > canvas.width ||
+        sy < -bh * STAIRWELL_OFFSCREEN_MARGIN ||
+        sy > canvas.height
+      )
+        continue;
 
       drawSpriteKey(ctx, 'stairwell', 'idle', 0, sx, sy, bw);
 
       ctx.strokeStyle = `rgba(168, 85, 247, ${pulse})`;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = STAIRWELL_BORDER_WIDTH;
       ctx.strokeRect(sx + 1, sy + 1, bw - 2, bh - 2);
 
-      const arrowSize = Math.floor(bh * 0.42);
+      const arrowSize = Math.floor(bh * STAIRWELL_ICON_SIZE_RATIO);
       drawText(ctx, '▼', {
         x: sx + bw / 2,
-        y: sy + bh * 0.67 - Math.round(arrowSize * 0.8),
+        y: sy + bh * STAIRWELL_ICON_Y_RATIO - Math.round(arrowSize * STAIRWELL_ICON_Y_ADJUST),
         size: arrowSize,
         bold: true,
         color: `rgba(233, 213, 255, ${pulse})`,
@@ -119,26 +172,26 @@ export class StairwellSystem implements GameSystem {
     const cw = canvas.width;
     const ch = canvas.height;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = `rgba(0,0,0,${STAIRWELL_MENU_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
 
-    const panelW = 340;
-    const panelH = 190;
+    const panelW = STAIRWELL_MENU_PANEL_WIDTH;
+    const panelH = STAIRWELL_MENU_PANEL_HEIGHT;
     const panelX = cw / 2 - panelW / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = '#0d0920';
+    ctx.fillStyle = STAIRWELL_MENU_BG_COLOR;
     ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#a855f7';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = STAIRWELL_MENU_BORDER_COLOR;
+    ctx.lineWidth = STAIRWELL_MENU_BORDER_WIDTH;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
     drawText(ctx, '▼  Stairwell  ▼', {
       x: cw / 2,
-      y: panelY + 38 - 16,
-      size: 20,
+      y: panelY + STAIRWELL_MENU_TITLE_Y_OFFSET - STAIRWELL_MENU_TITLE_Y_ADJUST,
+      size: STAIRWELL_MENU_TITLE_SIZE,
       bold: true,
-      color: '#e9d5ff',
+      color: STAIRWELL_MENU_TITLE_TEXT_COLOR,
       align: 'center',
     });
 
@@ -146,47 +199,48 @@ export class StairwellSystem implements GameSystem {
     const nextName = nextId ? getLevelDef(nextId).name : 'Next Floor';
     drawText(ctx, `Descend to: ${nextName}?`, {
       x: cw / 2,
-      y: panelY + 68 - 10,
-      size: 13,
-      color: '#94a3b8',
+      y: panelY + STAIRWELL_MENU_PROMPT_Y_OFFSET - STAIRWELL_MENU_PROMPT_Y_ADJUST,
+      size: STAIRWELL_MENU_PROMPT_SIZE,
+      color: STAIRWELL_MENU_PROMPT_TEXT_COLOR,
       align: 'center',
     });
 
     drawText(ctx, '(Esc or Stay to remain on this floor)', {
       x: cw / 2,
-      y: panelY + 88 - 9,
-      size: 11,
-      color: '#64748b',
+      y: panelY + STAIRWELL_MENU_HINT_Y_OFFSET - STAIRWELL_MENU_HINT_Y_ADJUST,
+      size: STAIRWELL_MENU_HINT_SIZE,
+      color: STAIRWELL_MENU_HINT_TEXT_COLOR,
       align: 'center',
     });
 
     const rects = this.menuRects(canvas);
 
-    ctx.fillStyle = '#4c1d95';
+    ctx.fillStyle = STAIRWELL_MENU_BUTTON_BG_COLOR;
     ctx.fillRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
-    ctx.strokeStyle = '#a855f7';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = STAIRWELL_MENU_BORDER_COLOR;
+    ctx.lineWidth = STAIRWELL_MENU_BUTTON_BORDER_WIDTH;
     ctx.strokeRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
     drawText(ctx, 'Descend', {
       x: rects.descend.x + rects.descend.w / 2,
-      y: rects.descend.y + 27 - 11,
-      size: 14,
+      y:
+        rects.descend.y + STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET - STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST,
+      size: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
       bold: true,
-      color: '#e9d5ff',
+      color: STAIRWELL_MENU_BUTTON_TEXT_COLOR,
       align: 'center',
     });
 
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = STAIRWELL_MENU_STAY_BG_COLOR;
     ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = STAIRWELL_MENU_STAY_BORDER_COLOR;
+    ctx.lineWidth = STAIRWELL_MENU_BUTTON_BORDER_WIDTH;
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     drawText(ctx, 'Stay', {
       x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + 27 - 11,
-      size: 14,
+      y: rects.stay.y + STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET - STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST,
+      size: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
       bold: true,
-      color: '#94a3b8',
+      color: STAIRWELL_MENU_STAY_TEXT_COLOR,
       align: 'center',
     });
   }
@@ -197,14 +251,14 @@ export class StairwellSystem implements GameSystem {
   } {
     const cw = canvas.width;
     const ch = canvas.height;
-    const panelH = 190;
+    const panelH = STAIRWELL_MENU_PANEL_HEIGHT;
     const panelY = ch / 2 - panelH / 2;
-    const btnW = 120;
-    const btnH = 42;
-    const btnY = panelY + 110;
+    const btnW = STAIRWELL_MENU_BUTTON_WIDTH;
+    const btnH = STAIRWELL_MENU_BUTTON_HEIGHT;
+    const btnY = panelY + STAIRWELL_MENU_BUTTON_Y_OFFSET;
     return {
-      descend: { x: cw / 2 - btnW - 8, y: btnY, w: btnW, h: btnH },
-      stay: { x: cw / 2 + 8, y: btnY, w: btnW, h: btnH },
+      descend: { x: cw / 2 - btnW - STAIRWELL_MENU_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
+      stay: { x: cw / 2 + STAIRWELL_MENU_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
     };
   }
 }

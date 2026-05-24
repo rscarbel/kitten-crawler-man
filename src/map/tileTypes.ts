@@ -102,25 +102,42 @@ export const SPIDER_LAB_FLOOR = 47;
  * that are walkable floor clutter — cables, rubble, flat debris, etc.
  * All other variants are non-walkable furniture/equipment.
  */
+const WALKABLE_VARIANT_CABLE_PILE = 3;
+const WALKABLE_VARIANT_CABLE_COIL = 4;
+const WALKABLE_VARIANT_CABLE_BUNDLE = 5;
+const WALKABLE_VARIANT_CHAIR_BASE = 13;
+const WALKABLE_VARIANT_CABLE_PILE_2 = 18;
+const WALKABLE_VARIANT_POWER_STRIP = 19;
+const WALKABLE_VARIANT_CONCRETE_RUBBLE = 29;
+const WALKABLE_VARIANT_OPEN_BOX = 36;
+const WALKABLE_VARIANT_BROKEN_CONCRETE = 39;
+const WALKABLE_VARIANT_PAPER_TRAY = 43;
+const WALKABLE_VARIANT_NEWSPAPER_STACK = 44;
+const WALKABLE_VARIANT_BOOK_STACK = 47;
+const WALKABLE_VARIANT_CABLE_COIL_2 = 48;
+const WALKABLE_VARIANT_WHITE_RUBBLE = 49;
+const WALKABLE_VARIANT_BROKEN_TILE_PILE = 56;
+const WALKABLE_VARIANT_ROCK_DEBRIS = 57;
+
 export const WALKABLE_MODERN_DECORATION_VARIANTS = new Set([
   1,
   2,
-  3,
-  4,
-  5, // magazine stack, air vent, broken tiles, cable coil, cable bundle
-  13,
-  18,
-  19, // chair base, cable pile, power strip
-  29, // concrete rubble pile
-  36,
-  39, // open empty box, broken concrete chunks
-  43,
-  44,
-  47,
-  48,
-  49, // paper tray, newspaper stack, book stack, cable coil, white rubble
-  56,
-  57, // broken tile pile, rock debris pile
+  WALKABLE_VARIANT_CABLE_PILE,
+  WALKABLE_VARIANT_CABLE_COIL,
+  WALKABLE_VARIANT_CABLE_BUNDLE, // magazine stack, air vent, broken tiles, cable coil, cable bundle
+  WALKABLE_VARIANT_CHAIR_BASE,
+  WALKABLE_VARIANT_CABLE_PILE_2,
+  WALKABLE_VARIANT_POWER_STRIP, // chair base, cable pile, power strip
+  WALKABLE_VARIANT_CONCRETE_RUBBLE, // concrete rubble pile
+  WALKABLE_VARIANT_OPEN_BOX,
+  WALKABLE_VARIANT_BROKEN_CONCRETE, // open empty box, broken concrete chunks
+  WALKABLE_VARIANT_PAPER_TRAY,
+  WALKABLE_VARIANT_NEWSPAPER_STACK,
+  WALKABLE_VARIANT_BOOK_STACK,
+  WALKABLE_VARIANT_CABLE_COIL_2,
+  WALKABLE_VARIANT_WHITE_RUBBLE, // paper tray, newspaper stack, book stack, cable coil, white rubble
+  WALKABLE_VARIANT_BROKEN_TILE_PILE,
+  WALKABLE_VARIANT_ROCK_DEBRIS, // broken tile pile, rock debris pile
 ]);
 
 export type FloorTile = (typeof FLOOR_TYPES)[number];

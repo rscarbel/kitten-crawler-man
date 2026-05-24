@@ -3,9 +3,127 @@ import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
 
-const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75 as const;
-const DENOMINATOR_OFFSET = 30 as const;
-const NUMERATOR_ASYMPTOTE_SLOPE = 3 as const;
+const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
+const DENOMINATOR_OFFSET = 30;
+const NUMERATOR_ASYMPTOTE_SLOPE = 3;
+
+const INITIAL_HEALTH_POTIONS = 10;
+const DEFAULT_MAX_HP = 10;
+const DAMAGE_FLASH_FRAMES = 8;
+const LEVEL_UP_FLASH_FRAMES = 120;
+const SPEND_POINT_FLASH_FRAMES = 60;
+const XP_PER_LEVEL_MULTIPLIER = 10;
+const CON_HP_BONUS_PER_POINT = 2;
+const POTION_HEAL_FRACTION = 0.5;
+const FRAMES_PER_SECOND = 60;
+
+/** Tick intervals (in ticks) for each status effect type */
+const BURN_TICK_INTERVAL = 60;
+const POISON_TICK_INTERVAL = 120;
+const SEPSIS_TICK_INTERVAL = 120;
+const MAGIC_BURN_TICK_INTERVAL = 60;
+const ELECTRIFIED_TICK_INTERVAL = 60;
+const SPIT_VENOM_TICK_INTERVAL = 40;
+
+/** Walk animation speed constant */
+const WALK_FRAME_SPEED = 0.14;
+
+/** Health bar display thresholds */
+const HP_BAR_GREEN_THRESHOLD = 0.5;
+const HP_BAR_YELLOW_THRESHOLD = 0.25;
+const HP_BAR_HEIGHT = 4;
+const HP_BAR_Y_OFFSET = 7;
+
+/** Damage flash visual parameters */
+const DAMAGE_FLASH_ALPHA_MULTIPLIER = 0.55;
+
+/** Burn visual parameters */
+const BURN_OUTER_FLAME_Y_OFFSET = 7;
+const BURN_OUTER_FLAME_RADIUS_X = 5;
+const BURN_OUTER_FLAME_RADIUS_Y = 7;
+const BURN_INNER_FLAME_Y_OFFSET = 11;
+const BURN_INNER_FLAME_RADIUS_X = 3;
+const BURN_INNER_FLAME_RADIUS_Y = 4;
+const BURN_PULSE_SPEED = 0.009;
+const BURN_FLICKER_SPEED = 0.022;
+const BURN_FLICKER_AMP = 2.5;
+const BURN_ALPHA_BASE = 0.75;
+const BURN_ALPHA_RANGE = 0.25;
+const BURN_GLOW_MIN_SIZE = 6;
+const BURN_GLOW_PULSE_RANGE = 5;
+const BURN_INNER_X_FRACTION = 0.5;
+
+/** Poison visual parameters */
+const POISON_DRIFT_SPEED = 0.025;
+const POISON_BUBBLE_COUNT = 3;
+const POISON_PHASE_SPACING = 2.09;
+const POISON_ORBIT_RADIUS = 4.5;
+const POISON_Y_OFFSET = 7;
+const POISON_Y_STEP = 4.5;
+const POISON_RETRACT_SPEED = 0.5;
+const POISON_MAX_RADIUS = 2.8;
+const POISON_RADIUS_SHRINK = 0.5;
+const POISON_ALPHA_BASE = 0.7;
+const POISON_ALPHA_RANGE = 0.3;
+const POISON_SHADOW_BLUR = 5;
+const POISON_WAVE_AMP = 3;
+
+/** Stuck visual parameters */
+const STUCK_PULSE_BASE = 0.65;
+const STUCK_PULSE_RANGE = 0.35;
+const STUCK_ALPHA_PULSE_SPEED = 0.008;
+const STUCK_STRAND_COUNT = 6;
+const STUCK_LINE_WIDTH = 1.5;
+const STUCK_INNER_RING_ALPHA = 0.3;
+const STUCK_RING_FRACTION = 0.55;
+const STUCK_WAVE_SPEED = 0.006;
+const STUCK_INNER_RADIUS = 0.3;
+const STUCK_OUTER_BASE_FRACTION = 0.62;
+const STUCK_WAVE_AMP = 3;
+const STUCK_ORBIT_SPEED = 0.001;
+
+/** Spit venom visual parameters */
+const SPIT_DROP_COUNT = 5;
+const SPIT_DRIFT_SPEED = 0.003;
+const SPIT_PHASE_STEP = 1.26;
+const SPIT_WAVE_X_FREQ = 2.3;
+const SPIT_ORBIT_FRACTION = 0.28;
+const SPIT_DROP_SCROLL_SPEED = 0.04;
+const SPIT_DROP_SPACING = 14;
+const SPIT_DROP_SCROLL_RANGE = 18;
+const SPIT_ALPHA_BASE = 0.5;
+const SPIT_ALPHA_RANGE = 0.5;
+const SPIT_ALPHA_OUTER = 0.75;
+const SPIT_RADIUS_X = 2.2;
+const SPIT_RADIUS_Y = 3.5;
+
+/** Sepsis visual parameters */
+const SEPSIS_DRIFT_SPEED = 0.02;
+const SEPSIS_BUBBLE_COUNT = 4;
+const SEPSIS_PHASE_SPACING = 1.57;
+const SEPSIS_ORBIT_RADIUS = 5.5;
+const SEPSIS_Y_OFFSET = 6;
+const SEPSIS_Y_STEP = 3.5;
+const SEPSIS_RETRACT_SPEED = 0.7;
+const SEPSIS_MAX_RADIUS = 2.5;
+const SEPSIS_RADIUS_SHRINK = 0.35;
+const SEPSIS_PULSE_SPEED = 0.005;
+const SEPSIS_ALPHA_BASE = 0.6;
+const SEPSIS_ALPHA_RANGE = 0.4;
+const SEPSIS_SHADOW_BLUR = 4;
+
+/** KO overlay parameters */
+const KO_OVERLAY_ALPHA = 0.55;
+const KO_RING_ALPHA_BASE = 0.45;
+const KO_RING_ALPHA_RANGE = 0.3;
+const KO_RING_LINE_WIDTH = 2;
+const KO_RING_BASE_FRACTION = 0.48;
+const KO_RING_PULSE_FRACTION = 0.06;
+const KO_PULSE_SPEED = 0.004;
+const HALF = 0.5;
+const KO_FONT_REVIVING_FRACTION = 0.28;
+const KO_FONT_KO_FRACTION = 0.38;
+const KO_LABEL_Y_PADDING = 2;
 
 export abstract class Player {
   x: number;
@@ -68,13 +186,13 @@ export abstract class Player {
   }> = [];
   protected tileSize: number;
 
-  constructor(tileX: number, tileY: number, tileSize: number, maxHp = 10) {
+  constructor(tileX: number, tileY: number, tileSize: number, maxHp = DEFAULT_MAX_HP) {
     this.x = tileX * tileSize;
     this.y = tileY * tileSize;
     this.tileSize = tileSize;
     this.maxHp = maxHp;
     this.hp = maxHp;
-    this.inventory.addItem('health_potion', 10);
+    this.inventory.addItem('health_potion', INITIAL_HEALTH_POTIONS);
   }
 
   get isAlive() {
@@ -84,7 +202,7 @@ export abstract class Player {
   takeDamage(amount: number) {
     if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return;
     this.hp = Math.max(0, this.hp - amount);
-    this.damageFlash = 8;
+    this.damageFlash = DAMAGE_FLASH_FRAMES;
   }
 
   /** Returns the potion cooldown in frames for the current constitution level. */
@@ -93,7 +211,7 @@ export abstract class Player {
     const rechargeDenominator = this.constitution + DENOMINATOR_OFFSET;
     const cooldownReduction = rechargeNumerator / rechargeDenominator;
     const cooldownSeconds = DEFAULT_POTION_COOLDOWN_SECONDS - cooldownReduction;
-    return Math.round(cooldownSeconds * 60);
+    return Math.round(cooldownSeconds * FRAMES_PER_SECOND);
   }
 
   /** Drink a health potion — heals 50 % of max HP. Returns false if none available or on cooldown. */
@@ -101,7 +219,7 @@ export abstract class Player {
     if (this.hp >= this.maxHp) return false;
     if (this.potionCooldownFrames > 0) return false;
     if (!this.inventory.removeOne('health_potion')) return false;
-    this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * 0.5));
+    this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * POTION_HEAL_FRACTION));
     this.potionCooldownFrames = this.computePotionCooldown();
     return true;
   }
@@ -109,13 +227,13 @@ export abstract class Player {
   gainXp(amount: number): boolean {
     if (amount <= 0) return false;
     this.xp += amount;
-    const xpNeeded = this.level * 10;
+    const xpNeeded = this.level * XP_PER_LEVEL_MULTIPLIER;
     if (this.xp >= xpNeeded) {
       this.xp -= xpNeeded;
       this.level++;
       this.unspentPoints++;
       this.levelUpStat = 'POINT';
-      this.levelUpFlash = 120;
+      this.levelUpFlash = LEVEL_UP_FLASH_FRAMES;
       return true;
     }
     return false;
@@ -132,11 +250,11 @@ export abstract class Player {
       this.levelUpStat = 'INT';
     } else {
       this.constitution++;
-      this.maxHp += 2;
-      this.hp = Math.min(this.hp + 2, this.maxHp);
+      this.maxHp += CON_HP_BONUS_PER_POINT;
+      this.hp = Math.min(this.hp + CON_HP_BONUS_PER_POINT, this.maxHp);
       this.levelUpStat = 'CON';
     }
-    this.levelUpFlash = 60;
+    this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
   }
 
   /** Apply stat bonuses from an item being equipped. */
@@ -145,8 +263,8 @@ export abstract class Player {
     if (!b) return;
     if (b.constitution) {
       this.constitution += b.constitution;
-      this.maxHp += b.constitution * 2;
-      this.hp = Math.min(this.hp + b.constitution * 2, this.maxHp);
+      this.maxHp += b.constitution * CON_HP_BONUS_PER_POINT;
+      this.hp = Math.min(this.hp + b.constitution * CON_HP_BONUS_PER_POINT, this.maxHp);
     }
     if (b.strength) this.strength += b.strength;
     if (b.intelligence) this.intelligence += b.intelligence;
@@ -158,7 +276,7 @@ export abstract class Player {
     if (!b) return;
     if (b.constitution) {
       this.constitution -= b.constitution;
-      this.maxHp -= b.constitution * 2;
+      this.maxHp -= b.constitution * CON_HP_BONUS_PER_POINT;
       this.hp = Math.min(this.hp, this.maxHp);
     }
     if (b.strength) this.strength -= b.strength;
@@ -194,27 +312,31 @@ export abstract class Player {
   private tickStatusEffects() {
     this.statusEffects = this.statusEffects.filter((effect) => {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
-      if (effect.type === 'burn' && elapsed > 0 && elapsed % 60 === 0) {
+      if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
-      if (effect.type === 'poison' && elapsed > 0 && elapsed % 120 === 0) {
+      if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
-      if (effect.type === 'sepsis' && elapsed > 0 && elapsed % 120 === 0) {
+      if (effect.type === 'sepsis' && elapsed > 0 && elapsed % SEPSIS_TICK_INTERVAL === 0) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
-      if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % 60 === 0) {
+      if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
-      if (effect.type === 'electrified' && elapsed > 0 && elapsed % 60 === 0) {
+      if (
+        effect.type === 'electrified' &&
+        elapsed > 0 &&
+        elapsed % ELECTRIFIED_TICK_INTERVAL === 0
+      ) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
-      if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % 40 === 0) {
+      if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
         this.takeDamage(1);
         this.effectDamageSoundPending = true;
       }
@@ -252,7 +374,7 @@ export abstract class Player {
     if (this.damageFlash > 0) this.damageFlash--;
     if (this.potionCooldownFrames > 0) this.potionCooldownFrames--;
     if (this.isMoving) {
-      this.walkFrame = (this.walkFrame + 0.14) % (Math.PI * 2);
+      this.walkFrame = (this.walkFrame + WALK_FRAME_SPEED) % (Math.PI * 2);
     } else {
       this.walkFrame = 0;
     }
@@ -302,18 +424,23 @@ export abstract class Player {
 
   protected renderHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     const barW = this.tileSize;
-    const barH = 4;
+    const barH = HP_BAR_HEIGHT;
     const ratio = this.hp / this.maxHp;
     ctx.fillStyle = '#1e293b';
-    ctx.fillRect(sx, sy - 7, barW, barH);
-    ctx.fillStyle = ratio > 0.5 ? '#4ade80' : ratio > 0.25 ? '#facc15' : '#ef4444';
-    ctx.fillRect(sx, sy - 7, Math.ceil(barW * ratio), barH);
+    ctx.fillRect(sx, sy - HP_BAR_Y_OFFSET, barW, barH);
+    ctx.fillStyle =
+      ratio > HP_BAR_GREEN_THRESHOLD
+        ? '#4ade80'
+        : ratio > HP_BAR_YELLOW_THRESHOLD
+          ? '#facc15'
+          : '#ef4444';
+    ctx.fillRect(sx, sy - HP_BAR_Y_OFFSET, Math.ceil(barW * ratio), barH);
   }
 
   protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.damageFlash <= 0) return;
     ctx.save();
-    ctx.globalAlpha = (this.damageFlash / 8) * 0.55;
+    ctx.globalAlpha = (this.damageFlash / DAMAGE_FLASH_FRAMES) * DAMAGE_FLASH_ALPHA_MULTIPLIER;
     ctx.fillStyle = '#ff1f1f';
     ctx.fillRect(sx, sy, this.tileSize, this.tileSize);
     ctx.restore();
@@ -327,36 +454,56 @@ export abstract class Player {
     for (const effect of this.statusEffects) {
       if (effect.type === 'burn') {
         const t = Date.now();
-        const pulse = 0.5 + 0.5 * Math.sin(t * 0.009);
-        const flicker = Math.sin(t * 0.022) * 2.5;
-        ctx.globalAlpha = 0.75 + 0.25 * pulse;
+        const pulse = HALF + HALF * Math.sin(t * BURN_PULSE_SPEED);
+        const flicker = Math.sin(t * BURN_FLICKER_SPEED) * BURN_FLICKER_AMP;
+        ctx.globalAlpha = BURN_ALPHA_BASE + BURN_ALPHA_RANGE * pulse;
         ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = 6 + 5 * pulse;
+        ctx.shadowBlur = BURN_GLOW_MIN_SIZE + BURN_GLOW_PULSE_RANGE * pulse;
         // Outer flame
         ctx.fillStyle = '#f97316';
         ctx.beginPath();
-        ctx.ellipse(cx + flicker, sy - 10, 5, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          cx + flicker,
+          sy - BURN_OUTER_FLAME_Y_OFFSET,
+          BURN_OUTER_FLAME_RADIUS_X,
+          BURN_OUTER_FLAME_RADIUS_Y,
+          0,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
         // Inner flame
         ctx.fillStyle = '#fbbf24';
         ctx.beginPath();
-        ctx.ellipse(cx + flicker * 0.5, sy - 11, 3, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          cx + flicker * BURN_INNER_X_FRACTION,
+          sy - BURN_INNER_FLAME_Y_OFFSET,
+          BURN_INNER_FLAME_RADIUS_X,
+          BURN_INNER_FLAME_RADIUS_Y,
+          0,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
         ctx.shadowBlur = 0;
       }
       if (effect.type === 'poison') {
         const t = Date.now();
-        const drift = (t * 0.025) % (Math.PI * 2);
+        const drift = (t * POISON_DRIFT_SPEED) % (Math.PI * 2);
         ctx.shadowColor = '#4ade80';
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = POISON_SHADOW_BLUR;
         ctx.fillStyle = '#22c55e';
         // Three staggered green drips rising above the character
-        for (let b = 0; b < 3; b++) {
-          const phase = drift + b * 2.09; // 2π/3 apart
-          const bx = cx + Math.sin(phase) * 4.5;
-          const by = sy - 7 - b * 4.5 - Math.abs(Math.sin(phase * 0.5)) * 3;
-          const r = 2.8 - b * 0.5;
-          ctx.globalAlpha = 0.7 + 0.3 * Math.sin(phase);
+        for (let b = 0; b < POISON_BUBBLE_COUNT; b++) {
+          const phase = drift + b * POISON_PHASE_SPACING; // 2π/3 apart
+          const bx = cx + Math.sin(phase) * POISON_ORBIT_RADIUS;
+          const by =
+            sy -
+            POISON_Y_OFFSET -
+            b * POISON_Y_STEP -
+            Math.abs(Math.sin(phase * POISON_RETRACT_SPEED)) * POISON_WAVE_AMP;
+          const r = POISON_MAX_RADIUS - b * POISON_RADIUS_SHRINK;
+          ctx.globalAlpha = POISON_ALPHA_BASE + POISON_ALPHA_RANGE * Math.sin(phase);
           ctx.beginPath();
           ctx.arc(bx, by, r, 0, Math.PI * 2);
           ctx.fill();
@@ -365,27 +512,29 @@ export abstract class Player {
       }
       if (effect.type === 'stuck') {
         const t = Date.now();
-        const pulse = 0.65 + 0.35 * Math.sin(t * 0.008);
+        const pulse = STUCK_PULSE_BASE + STUCK_PULSE_RANGE * Math.sin(t * STUCK_ALPHA_PULSE_SPEED);
         const cx2 = sx + this.tileSize / 2;
         const cy2 = sy + this.tileSize / 2;
-        ctx.globalAlpha = pulse * 0.55;
+        ctx.globalAlpha = pulse * STUCK_RING_FRACTION;
         ctx.strokeStyle = '#6a880e';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = STUCK_LINE_WIDTH;
         ctx.lineCap = 'round';
         // Six web strands radiating outward from the character centre
-        for (let s = 0; s < 6; s++) {
-          const angle = (s / 6) * Math.PI * 2 + t * 0.001;
-          const r1 = this.tileSize * 0.3;
-          const r2 = this.tileSize * 0.62 + Math.sin(angle * 3 + t * 0.006) * 3;
+        for (let s = 0; s < STUCK_STRAND_COUNT; s++) {
+          const angle = (s / STUCK_STRAND_COUNT) * Math.PI * 2 + t * STUCK_ORBIT_SPEED;
+          const r1 = this.tileSize * STUCK_INNER_RADIUS;
+          const r2 =
+            this.tileSize * STUCK_OUTER_BASE_FRACTION +
+            Math.sin((angle * STUCK_STRAND_COUNT) / 2 + t * STUCK_WAVE_SPEED) * STUCK_WAVE_AMP;
           ctx.beginPath();
           ctx.moveTo(cx2 + Math.cos(angle) * r1, cy2 + Math.sin(angle) * r1);
           ctx.lineTo(cx2 + Math.cos(angle) * r2, cy2 + Math.sin(angle) * r2);
           ctx.stroke();
         }
         // Cross-strand connecting the tips (one ring)
-        ctx.globalAlpha = pulse * 0.3;
+        ctx.globalAlpha = pulse * STUCK_INNER_RING_ALPHA;
         ctx.beginPath();
-        ctx.arc(cx2, cy2, this.tileSize * 0.55, 0, Math.PI * 2);
+        ctx.arc(cx2, cy2, this.tileSize * STUCK_RING_FRACTION, 0, Math.PI * 2);
         ctx.stroke();
       }
       if (effect.type === 'spit_venom') {
@@ -393,32 +542,39 @@ export abstract class Player {
         const cx2 = sx + this.tileSize / 2;
         const cy2 = sy + this.tileSize;
         ctx.shadowColor = '#8fb000';
-        ctx.shadowBlur = 4;
-        for (let d = 0; d < 5; d++) {
-          const phase = (t * 0.003 + d * 1.26) % (Math.PI * 2);
-          const dropX = cx2 + Math.sin(phase * 2.3 + d) * this.tileSize * 0.28;
-          const dropY = cy2 + ((t * 0.04 + d * 14) % 18);
-          const alpha = 0.5 + 0.5 * Math.sin(phase);
-          ctx.globalAlpha = alpha * 0.75;
+        ctx.shadowBlur = SEPSIS_SHADOW_BLUR;
+        for (let d = 0; d < SPIT_DROP_COUNT; d++) {
+          const phase = (t * SPIT_DRIFT_SPEED + d * SPIT_PHASE_STEP) % (Math.PI * 2);
+          const dropX =
+            cx2 + Math.sin(phase * SPIT_WAVE_X_FREQ + d) * this.tileSize * SPIT_ORBIT_FRACTION;
+          const dropY =
+            cy2 + ((t * SPIT_DROP_SCROLL_SPEED + d * SPIT_DROP_SPACING) % SPIT_DROP_SCROLL_RANGE);
+          const alpha = SPIT_ALPHA_BASE + SPIT_ALPHA_RANGE * Math.sin(phase);
+          ctx.globalAlpha = alpha * SPIT_ALPHA_OUTER;
           ctx.fillStyle = d % 2 === 0 ? '#8fb000' : '#b5c800';
           ctx.beginPath();
-          ctx.ellipse(dropX, dropY, 2.2, 3.5, 0, 0, Math.PI * 2);
+          ctx.ellipse(dropX, dropY, SPIT_RADIUS_X, SPIT_RADIUS_Y, 0, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.shadowBlur = 0;
       }
       if (effect.type === 'sepsis') {
         const t = Date.now();
-        const drift = (t * 0.02) % (Math.PI * 2);
+        const drift = (t * SEPSIS_DRIFT_SPEED) % (Math.PI * 2);
         // Sickly yellow-green bubbles + dripping effect
         ctx.shadowColor = '#a3e635';
-        ctx.shadowBlur = 4;
-        for (let b = 0; b < 4; b++) {
-          const phase = drift + b * 1.57; // π/2 apart
-          const bx = cx + Math.sin(phase) * 5.5;
-          const by = sy - 6 - b * 3.5 - Math.abs(Math.sin(phase * 0.7)) * 4;
-          const r = 2.5 - b * 0.35;
-          const pulse = 0.6 + 0.4 * Math.sin(phase + t * 0.005);
+        ctx.shadowBlur = SEPSIS_SHADOW_BLUR;
+        for (let b = 0; b < SEPSIS_BUBBLE_COUNT; b++) {
+          const phase = drift + b * SEPSIS_PHASE_SPACING; // π/2 apart
+          const bx = cx + Math.sin(phase) * SEPSIS_ORBIT_RADIUS;
+          const by =
+            sy -
+            SEPSIS_Y_OFFSET -
+            b * SEPSIS_Y_STEP -
+            Math.abs(Math.sin(phase * SEPSIS_RETRACT_SPEED)) * SEPSIS_SHADOW_BLUR;
+          const r = SEPSIS_MAX_RADIUS - b * SEPSIS_RADIUS_SHRINK;
+          const pulse =
+            SEPSIS_ALPHA_BASE + SEPSIS_ALPHA_RANGE * Math.sin(phase + t * SEPSIS_PULSE_SPEED);
           ctx.globalAlpha = pulse;
           ctx.fillStyle = b % 2 === 0 ? '#bef264' : '#a3e635';
           ctx.beginPath();
@@ -437,30 +593,36 @@ export abstract class Player {
     const s = this.tileSize;
     const cx = sx + s / 2;
     const t = Date.now();
-    const pulse = 0.5 + 0.5 * Math.sin(t * 0.004);
+    const pulse = HALF + HALF * Math.sin(t * KO_PULSE_SPEED);
 
     ctx.save();
 
     // Dark desaturating overlay
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = KO_OVERLAY_ALPHA;
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(sx, sy, s, s);
 
     // Pulsing red ring
-    ctx.globalAlpha = 0.45 + 0.3 * pulse;
+    ctx.globalAlpha = KO_RING_ALPHA_BASE + KO_RING_ALPHA_RANGE * pulse;
     ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = KO_RING_LINE_WIDTH;
     ctx.beginPath();
-    ctx.arc(cx, sy + s / 2, s * (0.48 + 0.06 * pulse), 0, Math.PI * 2);
+    ctx.arc(
+      cx,
+      sy + s / 2,
+      s * (KO_RING_BASE_FRACTION + KO_RING_PULSE_FRACTION * pulse),
+      0,
+      Math.PI * 2,
+    );
     ctx.stroke();
 
     // Badge above the tile: "Reviving" while being revived, "KO" otherwise
     const isReviving = this.reviveProgress > 0;
     const label = isReviving ? 'Reviving' : 'KO';
-    const fontSize = Math.round(s * (isReviving ? 0.28 : 0.38));
+    const fontSize = Math.round(s * (isReviving ? KO_FONT_REVIVING_FRACTION : KO_FONT_KO_FRACTION));
     drawText(ctx, label, {
       x: cx,
-      y: sy - fontSize - 2,
+      y: sy - fontSize - KO_LABEL_Y_PADDING,
       align: 'center',
       size: fontSize,
       bold: true,

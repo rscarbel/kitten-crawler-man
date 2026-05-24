@@ -34,8 +34,20 @@ export class HumanPlayer extends Player {
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
 
+  private static readonly HUMAN_STARTING_HP = 10;
+  private static readonly STARTING_POTIONS = 10;
+  private static readonly FACING_Y_THRESHOLD = 0.5;
+  private static readonly MELEE_RANGE_MULTIPLIER = 1.95;
+  private static readonly SPRITE_OFFSET_X = 6;
+  private static readonly SPRITE_OFFSET_Y = 32;
+  private static readonly SPRITE_OUTLINE_WIDTH = 12;
+  private static readonly SPRITE_OUTLINE_HEIGHT = 32;
+  private static readonly HEALTH_BAR_Y_OFFSET = 30;
+  private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
+  private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
+
   constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, 10);
+    super(tileX, tileY, tileSize, HumanPlayer.HUMAN_STARTING_HP);
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
@@ -44,8 +56,11 @@ export class HumanPlayer extends Player {
     // Pre-equip Smush tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.smush_tome, quantity: 1 };
     // Move starting potions from bag to hotbar slot 1 for quick access
-    this.inventory.removeItems('health_potion', 10);
-    this.inventory.actionBar.slots[1] = { ...ITEM_DEF.health_potion, quantity: 10 };
+    this.inventory.removeItems('health_potion', HumanPlayer.STARTING_POTIONS);
+    this.inventory.actionBar.slots[1] = {
+      ...ITEM_DEF.health_potion,
+      quantity: HumanPlayer.STARTING_POTIONS,
+    };
   }
 
   setAbilityManager(manager: AbilityManager): void {
@@ -82,7 +97,7 @@ export class HumanPlayer extends Player {
 
   triggerAttack() {
     if (this.attackTimer > 0 || this.smushTimer > 0) return;
-    if (Math.abs(this.facingY) > 0.5) {
+    if (Math.abs(this.facingY) > HumanPlayer.FACING_Y_THRESHOLD) {
       this.attackPhase = this.facingY < 0 ? 'punch_up' : 'kick_down';
     } else {
       this.attackPhase = this.nextSideType;
@@ -119,7 +134,7 @@ export class HumanPlayer extends Player {
   }
 
   getMeleeRange(): number {
-    return this.tileSize * 1.95;
+    return this.tileSize * HumanPlayer.MELEE_RANGE_MULTIPLIER;
   }
 
   /**
@@ -132,8 +147,14 @@ export class HumanPlayer extends Player {
       return;
     }
 
-    const dx = this.autoTarget.x + this.tileSize * 0.5 - (this.x + this.tileSize * 0.5);
-    const dy = this.autoTarget.y + this.tileSize * 0.5 - (this.y + this.tileSize * 0.5);
+    const dx =
+      this.autoTarget.x +
+      this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET -
+      (this.x + this.tileSize * HumanPlayer.SPRITE_HORIZONTAL_OFFSET);
+    const dy =
+      this.autoTarget.y +
+      this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET -
+      (this.y + this.tileSize * HumanPlayer.SPRITE_VERTICAL_OFFSET);
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       this.facingX = dx / dist;
@@ -164,7 +185,12 @@ export class HumanPlayer extends Player {
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 2;
       // Box that covers the full sprite height (32px above tile) and roughly the sprite width
-      ctx.strokeRect(sx - 6, sy - 32, s + 12, s + 32);
+      ctx.strokeRect(
+        sx - HumanPlayer.SPRITE_OFFSET_X,
+        sy - HumanPlayer.SPRITE_OFFSET_Y,
+        s + HumanPlayer.SPRITE_OUTLINE_WIDTH,
+        s + HumanPlayer.SPRITE_OUTLINE_HEIGHT,
+      );
       ctx.restore();
     }
 
@@ -185,7 +211,7 @@ export class HumanPlayer extends Player {
     );
 
     // Health bar above the sprite top (~32px above tile origin)
-    this.renderHealthBar(ctx, sx, sy - 30);
+    this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
     this.renderDamageFlash(ctx, sx, sy);
     this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);

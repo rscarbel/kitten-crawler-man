@@ -4,6 +4,83 @@ import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
 import { drawText } from '../ui/TextBox';
 
+/** Stagger range for initial wander timer so mobs don't change direction together. */
+const WANDER_TIMER_STAGGER_MAX = 119;
+
+/** Per-level HP scaling multiplier increment (+30% per level above 1). */
+const MOB_LEVEL_HP_SCALE = 0.3;
+/** Per-level speed scaling multiplier increment (+8% per level above 1). */
+const MOB_LEVEL_SPEED_SCALE = 0.08;
+/** Per-level coin scaling multiplier increment (+25% per level above 1). */
+const MOB_LEVEL_COIN_SCALE = 0.25;
+/** Per-level XP scaling multiplier increment (+25% per level above 1). */
+const MOB_LEVEL_XP_SCALE = 0.25;
+/** Per-level damage scaling multiplier increment (+20% per level). */
+const MOB_LEVEL_DAMAGE_SCALE = 0.2;
+
+/** Fraction of tile for center offset used in same-tile and LOS checks. */
+const MOB_TILE_CENTER = 0.5;
+
+/** Waypoint proximity threshold: pop when within this fraction of a tile. */
+const ASTAR_WAYPOINT_CLOSE_FRACTION = 0.55;
+
+/** Default A* path refresh interval in frames. */
+const ASTAR_DEFAULT_REFRESH = 30;
+
+/** How many stuck frames before flipping the perpendicular steer direction. */
+const STUCK_FLIP_FRAMES = 50;
+
+/** Speed multiplier while mob is slowed. */
+const MOB_SLOWED_SPEED_FRACTION = 0.35;
+
+/** Tile edge fractions for wall collision (leading edge ahead/behind). */
+const MOB_COLLISION_FRONT_FRACTION = 0.72;
+const MOB_COLLISION_BACK_FRACTION = 0.28;
+
+/** Frames to show the health bar after taking damage (~3 seconds at 60 fps). */
+const HEALTH_BAR_VISIBLE_FRAMES = 180;
+/** Frame count for damage flash. */
+const MOB_DAMAGE_FLASH_FRAMES = 8;
+/** Frames at which health bar starts fading out. */
+const HEALTH_BAR_FADE_FRAMES = 40;
+
+/** Wander: probability of pausing instead of walking. */
+const WANDER_PAUSE_CHANCE = 0.3;
+/** Wander: speed fraction for random direction walks. */
+const WANDER_SPEED_FRACTION = 0.35;
+/** Wander: timer range between direction changes (frames). */
+const WANDER_TIMER_MIN = 90;
+const WANDER_TIMER_MAX = 219;
+/** Wander: max radius from spawn before pulling back. */
+const WANDER_MAX_RADIUS_TILES = 4;
+/** Wander: speed fraction for pull-back-to-spawn movement. */
+const WANDER_PULLBACK_SPEED_FRACTION = 0.4;
+
+/** Default health potion drop chance. */
+const DEFAULT_POTION_DROP_CHANCE = 0.25;
+/** Default scroll of confusing fog drop chance. */
+const DEFAULT_FOG_SCROLL_DROP_CHANCE = 0.05;
+
+/** Aggro indicator font size. */
+const AGGRO_INDICATOR_FONT_SIZE = 18;
+/** Aggro indicator stroke line width. */
+const AGGRO_INDICATOR_LINE_WIDTH = 3;
+/** Aggro indicator Y offset above mob. */
+const AGGRO_INDICATOR_Y_OFFSET = 3;
+
+/** Septic label Y offset above health bar. */
+const SEPTIC_LABEL_Y_OFFSET = 12;
+/** Septic label secondary Y offset. */
+const SEPTIC_LABEL_Y2_OFFSET = 7;
+/** Septic label font size. */
+const SEPTIC_LABEL_SIZE = 9;
+/** Septic pulse amplitude (fraction added to base brightness). */
+const SEPTIC_PULSE_AMP = 0.3;
+/** Septic pulse base brightness. */
+const SEPTIC_PULSE_BASE = 0.7;
+/** Septic pulse oscillation speed. */
+const SEPTIC_PULSE_SPEED = 0.006;
+
 /** Minimal shell API exposed to mobs — avoids a circular import with SpellSystem. */
 export interface ShellContext {
   isPointInsideShell(cx: number, cy: number): boolean;
@@ -157,7 +234,7 @@ export abstract class Mob extends Player {
     this.lastKnownTargetX = this.spawnX;
     this.lastKnownTargetY = this.spawnY;
     // Stagger wander timers so mobs don't all change direction together
-    this.wanderTimer = randomInt(0, 119);
+    this.wanderTimer = randomInt(0, WANDER_TIMER_STAGGER_MAX);
   }
 
   /**
@@ -175,22 +252,22 @@ export abstract class Mob extends Player {
     const extra = level - 1;
 
     // HP
-    const hpMult = 1 + extra * 0.3;
+    const hpMult = 1 + extra * MOB_LEVEL_HP_SCALE;
     this.maxHp = Math.ceil(this.maxHp * hpMult);
     this.hp = this.maxHp;
 
     // Speed
-    this.speed = this.speed * (1 + extra * 0.08);
+    this.speed = this.speed * (1 + extra * MOB_LEVEL_SPEED_SCALE);
 
     // Coins
-    this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * 0.25));
-    this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * 0.25));
+    this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * MOB_LEVEL_COIN_SCALE));
+    this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * MOB_LEVEL_COIN_SCALE));
   }
 
   /** Returns XP value scaled by mob level. */
   get scaledXpValue(): number {
     if (this.mobLevel <= 1) return this.xpValue;
-    return Math.ceil(this.xpValue * (1 + (this.mobLevel - 1) * 0.25));
+    return Math.ceil(this.xpValue * (1 + (this.mobLevel - 1) * MOB_LEVEL_XP_SCALE));
   }
 
   /**
@@ -198,7 +275,7 @@ export abstract class Mob extends Player {
    * target.takeDamage() directly so damage scales with mob level.
    */
   protected dealDamage(target: Player, baseDamage: number) {
-    const mult = 1 + (this.mobLevel - 1) * 0.2;
+    const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
     target.takeDamage(Math.ceil(baseDamage * mult));
     this.attackSoundPending = true;
   }
@@ -215,8 +292,10 @@ export abstract class Mob extends Player {
   protected onSameTile(target: Player): boolean {
     const ts = this.tileSize;
     return (
-      Math.floor((this.x + ts * 0.5) / ts) === Math.floor((target.x + ts * 0.5) / ts) &&
-      Math.floor((this.y + ts * 0.5) / ts) === Math.floor((target.y + ts * 0.5) / ts)
+      Math.floor((this.x + ts * MOB_TILE_CENTER) / ts) ===
+        Math.floor((target.x + ts * MOB_TILE_CENTER) / ts) &&
+      Math.floor((this.y + ts * MOB_TILE_CENTER) / ts) ===
+        Math.floor((target.y + ts * MOB_TILE_CENTER) / ts)
     );
   }
 
@@ -237,20 +316,20 @@ export abstract class Mob extends Player {
     targetPixelY: number,
     speed: number,
     minDist: number,
-    refreshInterval = 30,
+    refreshInterval = ASTAR_DEFAULT_REFRESH,
   ) {
     if (!this.map) {
       this.followTargetCollide(targetPixelX, targetPixelY, speed, minDist);
       return;
     }
     const ts = this.tileSize;
-    const goalTileX = Math.floor((targetPixelX + ts * 0.5) / ts);
-    const goalTileY = Math.floor((targetPixelY + ts * 0.5) / ts);
+    const goalTileX = Math.floor((targetPixelX + ts * MOB_TILE_CENTER) / ts);
+    const goalTileY = Math.floor((targetPixelY + ts * MOB_TILE_CENTER) / ts);
 
     // Refresh path on a timer
     if (this.astarTimer <= 0) {
-      const myTileX = Math.floor((this.x + ts * 0.5) / ts);
-      const myTileY = Math.floor((this.y + ts * 0.5) / ts);
+      const myTileX = Math.floor((this.x + ts * MOB_TILE_CENTER) / ts);
+      const myTileY = Math.floor((this.y + ts * MOB_TILE_CENTER) / ts);
       this.astarPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
       // Drop the first waypoint — that's the tile we're already on
       if (this.astarPath.length > 0) this.astarPath.shift();
@@ -259,10 +338,10 @@ export abstract class Mob extends Player {
       this.astarTimer--;
     }
 
-    // Pop waypoints that are already close enough (within 0.55 tiles)
+    // Pop waypoints that are already close enough
     while (this.astarPath.length > 0) {
       const wp = this.astarPath[0];
-      if (Math.hypot(wp.x * ts - this.x, wp.y * ts - this.y) < ts * 0.55) {
+      if (Math.hypot(wp.x * ts - this.x, wp.y * ts - this.y) < ts * ASTAR_WAYPOINT_CLOSE_FRACTION) {
         this.astarPath.shift();
       } else {
         break;
@@ -284,10 +363,10 @@ export abstract class Mob extends Player {
     if (!this.map) return true;
     const ts = this.tileSize;
     return this.map.hasLineOfSight(
-      this.x + ts * 0.5,
-      this.y + ts * 0.5,
-      target.x + ts * 0.5,
-      target.y + ts * 0.5,
+      this.x + ts * MOB_TILE_CENTER,
+      this.y + ts * MOB_TILE_CENTER,
+      target.x + ts * MOB_TILE_CENTER,
+      target.y + ts * MOB_TILE_CENTER,
     );
   }
 
@@ -316,7 +395,9 @@ export abstract class Mob extends Player {
     if (dx !== 0) {
       const nextX = this.x + dx;
       const tileXnext =
-        dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
+        dx >= 0
+          ? Math.floor((nextX + ts * MOB_COLLISION_FRONT_FRACTION) / ts)
+          : Math.floor((nextX + ts * MOB_COLLISION_BACK_FRACTION) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
       if (
         this.map.isWalkable(tileXnext, tileYcur) &&
@@ -350,7 +431,7 @@ export abstract class Mob extends Player {
       this.isMoving = false;
       return;
     }
-    const effectiveSpeed = this.isSlowed ? speed * 0.35 : speed;
+    const effectiveSpeed = this.isSlowed ? speed * MOB_SLOWED_SPEED_FRACTION : speed;
     const step = Math.min(effectiveSpeed, dist - minDist);
     const nx = dx / dist;
     const ny = dy / dist;
@@ -368,7 +449,7 @@ export abstract class Mob extends Player {
       this.moveWithCollision(perpX * step, perpY * step);
       if (this.x === preX && this.y === preY) {
         this.stuckFrames++;
-        if (this.stuckFrames > 50) {
+        if (this.stuckFrames > STUCK_FLIP_FRAMES) {
           this.steerSign *= -1;
           this.stuckFrames = 0;
         }
@@ -395,8 +476,8 @@ export abstract class Mob extends Player {
     this.hp = Math.max(0, this.hp - amount);
     const actual = prev - this.hp;
     if (actual > 0) {
-      this.damageFlash = 8;
-      this.healthBarTimer = 180; // show health bar for ~3 seconds
+      this.damageFlash = MOB_DAMAGE_FLASH_FRAMES;
+      this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
       if (attacker) {
         this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
       }
@@ -421,8 +502,10 @@ export abstract class Mob extends Player {
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     void killer; // available for subclasses
     const items: LootDrop['items'] = [];
-    if (Math.random() < 0.25) items.push({ id: 'health_potion', quantity: 1 });
-    if (Math.random() < 0.05) items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+    if (Math.random() < DEFAULT_POTION_DROP_CHANCE)
+      items.push({ id: 'health_potion', quantity: 1 });
+    if (Math.random() < DEFAULT_FOG_SCROLL_DROP_CHANCE)
+      items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
     return items;
   }
 
@@ -441,16 +524,16 @@ export abstract class Mob extends Player {
     if (this.wanderTimer > 0) {
       this.wanderTimer--;
     } else {
-      if (Math.random() < 0.3) {
+      if (Math.random() < WANDER_PAUSE_CHANCE) {
         // Pause for a moment
         this.wanderDx = 0;
         this.wanderDy = 0;
       } else {
         const angle = Math.random() * Math.PI * 2;
-        this.wanderDx = Math.cos(angle) * this.speed * 0.35;
-        this.wanderDy = Math.sin(angle) * this.speed * 0.35;
+        this.wanderDx = Math.cos(angle) * this.speed * WANDER_SPEED_FRACTION;
+        this.wanderDy = Math.sin(angle) * this.speed * WANDER_SPEED_FRACTION;
       }
-      this.wanderTimer = randomInt(90, 219);
+      this.wanderTimer = randomInt(WANDER_TIMER_MIN, WANDER_TIMER_MAX);
     }
 
     if (this.wanderDx !== 0 || this.wanderDy !== 0) {
@@ -458,12 +541,12 @@ export abstract class Mob extends Player {
       const dx = this.spawnX - this.x;
       const dy = this.spawnY - this.y;
       const distToSpawn = Math.hypot(dx, dy);
-      const MAX_WANDER_PX = this.tileSize * 4;
+      const MAX_WANDER_PX = this.tileSize * WANDER_MAX_RADIUS_TILES;
       if (distToSpawn > MAX_WANDER_PX) {
         const nx = dx / distToSpawn;
         const ny = dy / distToSpawn;
-        this.wanderDx = nx * this.speed * 0.4;
-        this.wanderDy = ny * this.speed * 0.4;
+        this.wanderDx = nx * this.speed * WANDER_PULLBACK_SPEED_FRACTION;
+        this.wanderDy = ny * this.speed * WANDER_PULLBACK_SPEED_FRACTION;
       }
       this.moveWithCollision(this.wanderDx, this.wanderDy);
       this.isMoving = true;
@@ -479,14 +562,14 @@ export abstract class Mob extends Player {
     tileSize: number,
   ) {
     ctx.save();
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = `bold ${AGGRO_INDICATOR_FONT_SIZE}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = AGGRO_INDICATOR_LINE_WIDTH;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.strokeText('!', sx + tileSize / 2, sy - 3);
+    ctx.strokeText('!', sx + tileSize / 2, sy - AGGRO_INDICATOR_Y_OFFSET);
     ctx.fillStyle = 'rgba(239, 68, 68, 1)';
-    ctx.fillText('!', sx + tileSize / 2, sy - 3);
+    ctx.fillText('!', sx + tileSize / 2, sy - AGGRO_INDICATOR_Y_OFFSET);
     ctx.restore();
   }
 
@@ -497,7 +580,10 @@ export abstract class Mob extends Player {
   protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.healthBarTimer <= 0 && !this.hasStatus('sepsis')) return;
     if (this.healthBarTimer > 0) {
-      const alpha = this.healthBarTimer < 40 ? this.healthBarTimer / 40 : 1;
+      const alpha =
+        this.healthBarTimer < HEALTH_BAR_FADE_FRAMES
+          ? this.healthBarTimer / HEALTH_BAR_FADE_FRAMES
+          : 1;
       ctx.save();
       ctx.globalAlpha = alpha;
       this.renderHealthBar(ctx, sx, sy);
@@ -510,11 +596,11 @@ export abstract class Mob extends Player {
   private renderMobStatusLabels(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.hasStatus('sepsis')) return;
     const t = Date.now();
-    const pulse = 0.7 + 0.3 * Math.sin(t * 0.006);
+    const pulse = SEPTIC_PULSE_BASE + SEPTIC_PULSE_AMP * Math.sin(t * SEPTIC_PULSE_SPEED);
     drawText(ctx, 'Septic', {
-      x: sx + this.tileSize * 0.5,
-      y: sy - 12 - 7,
-      size: 9,
+      x: sx + this.tileSize * MOB_TILE_CENTER,
+      y: sy - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
+      size: SEPTIC_LABEL_SIZE,
       bold: true,
       color: '#bef264',
       align: 'center',

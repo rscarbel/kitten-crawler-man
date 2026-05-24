@@ -1,3 +1,6 @@
+/** Maximum cell coordinate value (safely supports grids up to 100,000 x 100,000). */
+const MAX_CELL_COORD = 100000;
+
 /** Generic spatial hash grid. T needs x, y in pixel-space. */
 export class SpatialGrid<T extends { x: number; y: number }> {
   private readonly cs: number; // cell size in pixels
@@ -10,7 +13,7 @@ export class SpatialGrid<T extends { x: number; y: number }> {
   // Pack two non-negative cell coords into a single integer key.
   // Supports cell coords 0–99,999 (safely beyond any map we'll ever build).
   private key(cx: number, cy: number): number {
-    return cx * 100000 + cy;
+    return cx * MAX_CELL_COORD + cy;
   }
 
   private cellOf(x: number, y: number): [number, number] {

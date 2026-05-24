@@ -20,13 +20,22 @@ const CHARGE_WINDUP_FRAMES = 35;
 const CHARGE_DURATION = 22;
 const CHARGE_COOLDOWN = 180;
 const CHARGE_SPEED = 5;
+const COIN_DROP_MAX = 5;
+/** Fraction of melee range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.8;
+/** Minimum pixel movement to detect a non-wall step. */
+const MIN_MOVEMENT_PX = 0.05;
+/** Extra cooldown frames added when a charge hits a wall. */
+const WALL_BONK_PENALTY_FRAMES = 40;
+/** Tile fraction of charge hit detection range. */
+const CHARGE_HIT_RANGE_TILES = 1.4;
 
 type TuskState = 'idle' | 'stalking' | 'charge_windup' | 'charging' | 'cooldown';
 
 export class Tuskling extends Mob {
   readonly xpValue = 18;
   protected coinDropMin = 2;
-  protected coinDropMax = 5;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Tuskling';
   description = 'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
   override readonly audioTag = 'tuskling';
@@ -136,7 +145,7 @@ export class Tuskling extends Mob {
           this.lastKnownTargetX,
           this.lastKnownTargetY,
           this.speed,
-          meleeRangePx * 0.8,
+          meleeRangePx * FOLLOW_STOP_FRACTION,
         );
         break;
       }
@@ -168,14 +177,14 @@ export class Tuskling extends Mob {
         this.moveWithCollision(this.chargeDx * CHARGE_SPEED, this.chargeDy * CHARGE_SPEED);
 
         // Hit wall detection: if neither axis moved at all, the charge is blocked
-        const movedX = Math.abs(this.x - prevX) > 0.05;
-        const movedY = Math.abs(this.y - prevY) > 0.05;
+        const movedX = Math.abs(this.x - prevX) > MIN_MOVEMENT_PX;
+        const movedY = Math.abs(this.y - prevY) > MIN_MOVEMENT_PX;
         const wallHit = !movedX && !movedY;
 
         if (wallHit) {
           // Bonk — stagger into cooldown
           this.state = 'cooldown';
-          this.cooldownTimer = CHARGE_COOLDOWN + 40; // extra penalty for hitting a wall
+          this.cooldownTimer = CHARGE_COOLDOWN + WALL_BONK_PENALTY_FRAMES;
           this.isMoving = false;
           break;
         }
@@ -183,7 +192,7 @@ export class Tuskling extends Mob {
         // Damage any target we're close enough to (once per charge)
         if (!this.chargeHitDealt && nearest) {
           const distNow = Math.hypot(nearest.x - this.x, nearest.y - this.y);
-          if (distNow <= this.tileSize * 1.4) {
+          if (distNow <= this.tileSize * CHARGE_HIT_RANGE_TILES) {
             this.dealDamage(nearest, CHARGE_DAMAGE);
             this.chargeHitDealt = true;
           }

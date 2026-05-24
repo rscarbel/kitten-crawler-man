@@ -26,6 +26,21 @@ import type { CatPlayer } from '../creatures/CatPlayer';
  *   9. checkDeath       — game over conditions
  */
 
+/** 90 seconds at 60 fps — the revival window before the run ends. */
+const KNOCKOUT_TIMEOUT_FRAMES = 5400;
+
+// Mobile input constants
+const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms
+const MOBILE_DISTANCE_THRESHOLD = 8; // px
+
+// Diagonal movement penalty
+const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
+
+// Wall collision offsets
+const LEADING_EDGE_FRONT = 0.72;
+const LEADING_EDGE_BACK = 0.28;
+const CENTER_COLLISION_OFFSET = 0.5;
+
 export interface MovementInput {
   dx: number;
   dy: number;
@@ -51,13 +66,19 @@ export function readMovement(
 
   let isMobile = false;
   const touchHoldMs = mobileTapStart ? Date.now() - mobileTapStart.time : 0;
-  if (platform.isMobile && mobileMoveTarget && touchHoldMs >= 150 && dx === 0 && dy === 0) {
+  if (
+    platform.isMobile &&
+    mobileMoveTarget &&
+    touchHoldMs >= MOBILE_TOUCH_MIN_HOLD_TIME &&
+    dx === 0 &&
+    dy === 0
+  ) {
     const wx = mobileMoveTarget.x + camera.x;
     const wy = mobileMoveTarget.y + camera.y;
     const ddx = wx - (player.x + TILE_SIZE / 2);
     const ddy = wy - (player.y + TILE_SIZE / 2);
     const dist = Math.hypot(ddx, ddy);
-    if (dist > 8) {
+    if (dist > MOBILE_DISTANCE_THRESHOLD) {
       dx = ddx / dist;
       dy = ddy / dist;
       isMobile = true;
@@ -90,8 +111,8 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
 
   // Mobile touch already gives a unit vector — skip diagonal penalty
   if (!move.isMobile && dx !== 0 && dy !== 0) {
-    dx *= 0.7071;
-    dy *= 0.7071;
+    dx *= DIAGONAL_PENALTY;
+    dy *= DIAGONAL_PENALTY;
   }
   dx *= PLAYER_SPEED * player.speedMultiplier;
   dy *= PLAYER_SPEED * player.speedMultiplier;
@@ -99,8 +120,8 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
   const tileXnext =
     dx >= 0
-      ? Math.floor((nextX + TILE_SIZE * 0.72) / TILE_SIZE)
-      : Math.floor((nextX + TILE_SIZE * 0.28) / TILE_SIZE);
+      ? Math.floor((nextX + TILE_SIZE * LEADING_EDGE_FRONT) / TILE_SIZE)
+      : Math.floor((nextX + TILE_SIZE * LEADING_EDGE_BACK) / TILE_SIZE);
   const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
 
@@ -109,9 +130,6 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
 }
-
-/** 90 seconds at 60 fps — the revival window before the run ends. */
-const KNOCKOUT_TIMEOUT_FRAMES = 5400;
 
 /**
  * Phase 9: Check death conditions.
@@ -148,8 +166,8 @@ export function revealMinimap(
   player: Player,
   miniMap: { revealAround(tx: number, ty: number): void; tickCorpseMarkers(): void },
 ): void {
-  const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-  const pty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
+  const ptx = Math.floor((player.x + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
+  const pty = Math.floor((player.y + TILE_SIZE * CENTER_COLLISION_OFFSET) / TILE_SIZE);
   miniMap.revealAround(ptx, pty);
   miniMap.tickCorpseMarkers();
 }

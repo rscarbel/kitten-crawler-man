@@ -22,6 +22,31 @@ import { drawText } from '../ui/TextBox';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
+const TOWER_FLOOR_COUNT = 4;
+const MAX_TOWER_FLOOR_INDEX = 3;
+const DEFAULT_MAP_FALLBACK_WIDTH = 18;
+const TOWER_MAP_FALLBACK_WIDTH = 30;
+const COMPANION_FOLLOW_OVERRIDE_RATIO = 0.8;
+const COMPANION_FOLLOW_NORMAL_RATIO = 1.5;
+const RECENT_EVENTS_LIMIT = 5;
+const TILE_CENTER_RATIO = 0.5;
+const SAFE_ROOM_PULSE_BASE = 0.6;
+const SAFE_ROOM_PULSE_PERIOD_MS = 600;
+const PULSE_SWING = 0.3;
+const INTERIOR_LABEL_BAR_HEIGHT = 28;
+const INTERIOR_TOP_MARGIN = 8;
+const MM_TO_PAUSE_BTN_SPACING = 20;
+const GEAR_BTN_SPACING = 34;
+const MOBILE_BUTTONS_EXTRA_Y = 52;
+const EXIT_HINT_PULSE_PERIOD_MS = 500;
+const EXIT_ARROW_Y_OFFSET = 15;
+const EXIT_MENU_TITLE_Y = 22;
+const EXIT_MENU_QUESTION_Y = 58;
+const EXIT_MENU_HINT_Y = 79;
+const EXIT_BTN_TEXT_Y = 16;
+const EXIT_BTN_Y_OFFSET = 110;
+const EXIT_BTN_GAP = 8;
+
 export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
   readonly pm: PlayerManager;
@@ -78,7 +103,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     if (isTower) {
       // Generate 4 tower floors
-      for (let f = 0; f < 4; f++) {
+      for (let f = 0; f < TOWER_FLOOR_COUNT; f++) {
         const floorMap = new GameMap({
           mapSize: 0,
           tileHeight: TILE_SIZE,
@@ -100,7 +125,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.map.generateInterior(entry.type, 0, entry.name);
     }
 
-    this.mapW = this.map.structure[0]?.length ?? 18;
+    this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
 
     const { x: sx, y: sy } = this.map.startTile;
     this.pm = new PlayerManager(sx, sy);
@@ -129,11 +154,11 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private changeFloor(newFloor: number): void {
-    if (newFloor < 0 || newFloor > 3) return;
+    if (newFloor < 0 || newFloor > MAX_TOWER_FLOOR_INDEX) return;
     const goingUp = newFloor > this.currentFloor;
     this.currentFloor = newFloor;
     this.map = this.towerFloors[newFloor];
-    this.mapW = this.map.structure[0]?.length ?? 30;
+    this.mapW = this.map.structure[0]?.length ?? TOWER_MAP_FALLBACK_WIDTH;
     this.cat.setMap(this.map);
     this.towerStairs?.setMap(this.map, newFloor);
 
@@ -228,7 +253,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.computeCamera(this.map),
     );
     applyMovement(player, move, this.map);
-    const followDist = this.isFollowOverride ? TILE_SIZE * 0.8 : TILE_SIZE * 1.5;
+    const followDist = this.isFollowOverride
+      ? TILE_SIZE * COMPANION_FOLLOW_OVERRIDE_RATIO
+      : TILE_SIZE * COMPANION_FOLLOW_NORMAL_RATIO;
     this.applyCompanionFollow(this.map, followDist);
 
     // Tab: switch active player
@@ -243,11 +270,11 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.safeRoom.isNearBed(player)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(player)) {
-        const humanEvents = this.humanAchievements?.getTopRecentEvents(5) ?? [];
-        const catEvents = this.catAchievements?.getTopRecentEvents(5) ?? [];
+        const humanEvents = this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
+        const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
         const merged = [...humanEvents, ...catEvents]
           .sort((a, b) => a.secondsAgo - b.secondsAgo)
-          .slice(0, 5);
+          .slice(0, RECENT_EVENTS_LIMIT);
         const responsePromise = aiAdapter.chatWithMordecai({
           recentEvents: merged,
           humanLevel: this.human.level,
@@ -279,8 +306,8 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     // Exit tile detection
-    const ptx = Math.floor((player.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const pty = Math.floor((player.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ptx = Math.floor((player.x + TILE_SIZE * TILE_CENTER_RATIO) / TILE_SIZE);
+    const pty = Math.floor((player.y + TILE_SIZE * TILE_CENTER_RATIO) / TILE_SIZE);
     const wasOnExit = this.onExitTile;
     this.onExitTile = this.map._interiorExitTiles.some((t) => t.x === ptx && t.y === pty);
     if (!this.onExitTile) {
@@ -364,7 +391,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.active().render(ctx, camX, camY, TILE_SIZE);
 
     if (this.safeRoom) {
-      const pulse = 0.6 + Math.sin(Date.now() / 600) * 0.3;
+      const pulse =
+        SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / SAFE_ROOM_PULSE_PERIOD_MS) * PULSE_SWING;
       this.safeRoom.renderObjects(ctx, camX, camY, this.active(), pulse);
     }
 
@@ -382,7 +410,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, canvas.width, 28);
+    ctx.fillRect(0, 0, canvas.width, INTERIOR_LABEL_BAR_HEIGHT);
     const floorSuffix = this.towerFloors.length > 0 ? ` (${FLOOR_LABELS[this.currentFloor]})` : '';
     drawText(ctx, `Inside: ${this.entry.name}${floorSuffix}`, {
       x: canvas.width / 2,
@@ -402,9 +430,9 @@ export class BuildingInteriorScene extends GameplayScene {
         this.active(),
         this.inactive(),
       );
-      const pauseY = 8 + mmSize + 20;
+      const pauseY = INTERIOR_TOP_MARGIN + mmSize + MM_TO_PAUSE_BTN_SPACING;
       this.mobileHUD.renderPauseButton(ctx, canvas, pauseY);
-      const gearY = pauseY + 34;
+      const gearY = pauseY + GEAR_BTN_SPACING;
 
       const active = this.active();
       const name = this.human.isActive ? 'Human' : 'Cat';
@@ -418,7 +446,14 @@ export class BuildingInteriorScene extends GameplayScene {
             active: this.isFollowOverride,
           },
         ];
-        this.mobileHUD.renderButtons(ctx, canvas, this.human.isActive, extraButtons, 52, gearY);
+        this.mobileHUD.renderButtons(
+          ctx,
+          canvas,
+          this.human.isActive,
+          extraButtons,
+          MOBILE_BUTTONS_EXTRA_Y,
+          gearY,
+        );
       }
     }
 
@@ -442,15 +477,16 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const pulse = 0.6 + Math.sin(Date.now() / 500) * 0.3;
-    const arrowSize = Math.floor(TILE_SIZE * 0.5);
+    const pulse =
+      SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / EXIT_HINT_PULSE_PERIOD_MS) * PULSE_SWING;
+    const arrowSize = Math.floor(TILE_SIZE * TILE_CENTER_RATIO);
     for (const t of this.map._interiorExitTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
       // baseline was sy - 2; top = baseline - round(size * 0.8) = (sy - 2) - 13 = sy - 15
       drawText(ctx, '▼', {
         x: sx,
-        y: sy - 15,
+        y: sy - EXIT_ARROW_Y_OFFSET,
         size: arrowSize,
         bold: true,
         color: `rgba(250,220,80,1)`,
@@ -480,7 +516,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     drawText(ctx, '▼  Exit Building  ▼', {
       x: cw / 2,
-      y: panelY + 22,
+      y: panelY + EXIT_MENU_TITLE_Y,
       size: 18,
       bold: true,
       color: '#d4edaa',
@@ -489,7 +525,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     drawText(ctx, `Leave ${this.entry.name}?`, {
       x: cw / 2,
-      y: panelY + 58,
+      y: panelY + EXIT_MENU_QUESTION_Y,
       size: 13,
       color: '#94a3b8',
       align: 'center',
@@ -497,7 +533,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     drawText(ctx, '(Esc or Stay to remain inside)', {
       x: cw / 2,
-      y: panelY + 79,
+      y: panelY + EXIT_MENU_HINT_Y,
       size: 11,
       color: '#64748b',
       align: 'center',
@@ -512,7 +548,7 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.strokeRect(rects.exit.x, rects.exit.y, rects.exit.w, rects.exit.h);
     drawText(ctx, 'Exit', {
       x: rects.exit.x + rects.exit.w / 2,
-      y: rects.exit.y + 16,
+      y: rects.exit.y + EXIT_BTN_TEXT_Y,
       size: 14,
       bold: true,
       color: '#d4edaa',
@@ -526,7 +562,7 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
     drawText(ctx, 'Stay', {
       x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + 16,
+      y: rects.stay.y + EXIT_BTN_TEXT_Y,
       size: 14,
       bold: true,
       color: '#94a3b8',
@@ -543,10 +579,10 @@ export class BuildingInteriorScene extends GameplayScene {
     const panelY = ch / 2 - panelH / 2;
     const btnW = 120;
     const btnH = 42;
-    const btnY = panelY + 110;
+    const btnY = panelY + EXIT_BTN_Y_OFFSET;
     return {
-      exit: { x: cw / 2 - btnW - 8, y: btnY, w: btnW, h: btnH },
-      stay: { x: cw / 2 + 8, y: btnY, w: btnW, h: btnH },
+      exit: { x: cw / 2 - btnW - EXIT_BTN_GAP, y: btnY, w: btnW, h: btnH },
+      stay: { x: cw / 2 + EXIT_BTN_GAP, y: btnY, w: btnW, h: btnH },
     };
   }
 
@@ -692,11 +728,12 @@ export class BuildingInteriorScene extends GameplayScene {
             if (this.safeRoom.isNearBed(player)) {
               this.safeRoom.startSleep();
             } else if (this.safeRoom.isNearMordecai(player)) {
-              const humanEvents = this.humanAchievements?.getTopRecentEvents(5) ?? [];
-              const catEvents = this.catAchievements?.getTopRecentEvents(5) ?? [];
+              const humanEvents =
+                this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
+              const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
               const merged = [...humanEvents, ...catEvents]
                 .sort((a, b) => a.secondsAgo - b.secondsAgo)
-                .slice(0, 5);
+                .slice(0, RECENT_EVENTS_LIMIT);
               const responsePromise = aiAdapter.chatWithMordecai({
                 recentEvents: merged,
                 humanLevel: this.human.level,

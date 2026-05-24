@@ -9,10 +9,6 @@ import {
   drawAcidSpit,
 } from '../sprites/brindleGrubSprite';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const STAGE1_HP = 4;
 const STAGE2_HP = 10;
 const STAGE3_HP = 30;
@@ -35,10 +31,17 @@ const VESPA_SPIT_DAMAGE = 3;
 const VESPA_SPIT_COOLDOWN = 100; // ~1.7 s
 const VESPA_SPIT_TTL = 220;
 const VESPA_HIT_FADE = 5; // TTL decrease per frame once hit
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const XP_STAGE3 = 22;
+const XP_STAGE2 = 2;
+const STAGE_VESPA = 3;
+const CENTER_OFFSET = 0.5;
+const PLAYER_HITBOX_RADIUS_RATIO = 0.52;
+const STAGE2_AGGRO_TILES = 5;
+const STAGE2_ATTACK_RANGE_MULTIPLIER = 1.1;
+const STAGE2_FOLLOW_STOP_RANGE_RATIO = 0.8;
+const STAGE2_BITE_DAMAGE = 1;
+const STAGE2_BITE_COOLDOWN = 80;
+const VESPA_FOLLOW_STOP_RANGE_RATIO = 0.8;
 
 export type GrubStage = 1 | 2 | 3;
 
@@ -50,10 +53,6 @@ export interface AcidSpit {
   ttl: number;
   hit: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// BrindleGrub
-// ---------------------------------------------------------------------------
 
 /**
  * Three-stage lifecycle mob that spawns from enemy deaths on level 2.
@@ -80,7 +79,7 @@ export class BrindleGrub extends Mob {
 
   // XP is stage-dependent — implemented as a getter to satisfy the abstract.
   get xpValue(): number {
-    return this.stage === 3 ? 22 : this.stage === 2 ? 2 : 0;
+    return this.stage === STAGE_VESPA ? XP_STAGE3 : this.stage === 2 ? XP_STAGE2 : 0;
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -94,10 +93,6 @@ export class BrindleGrub extends Mob {
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [];
   }
-
-  // ---------------------------------------------------------------------------
-  // Evolution
-  // ---------------------------------------------------------------------------
 
   private evolveToStage2(): void {
     this.stage = 2;
@@ -120,16 +115,12 @@ export class BrindleGrub extends Mob {
     this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
   }
 
-  // ---------------------------------------------------------------------------
-  // AI
-  // ---------------------------------------------------------------------------
-
   /**
    * Ticks the evolution timer regardless of whether the grub is in the active
    * AI radius. Called every frame for all alive BrindleGrubs in DungeonScene.
    */
   tickEvolve(): void {
-    if (!this.isAlive || this.stage >= 3) return;
+    if (!this.isAlive || this.stage >= STAGE_VESPA) return;
     this.evolveTimer--;
     if (this.evolveTimer <= 0) {
       if (this.stage === 1) this.evolveToStage2();
@@ -140,7 +131,7 @@ export class BrindleGrub extends Mob {
   updateAI(playerTargets: Player[]): void {
     if (!this.isAlive) return;
 
-    if (this.stage < 3) {
+    if (this.stage < STAGE_VESPA) {
       // evolveTimer is ticked by tickEvolve() separately (works off-screen too)
 
       if (this.stage === 1) {
@@ -157,14 +148,10 @@ export class BrindleGrub extends Mob {
     this.updateVespaAI(playerTargets);
   }
 
-  // ---------------------------------------------------------------------------
-  // Stage 2 AI — slow weak melee
-  // ---------------------------------------------------------------------------
-
   private updateStage2AI(playerTargets: Player[]): void {
     const ts = this.tileSize;
-    const aggroRange = ts * 5;
-    const attackRange = ts * 1.1;
+    const aggroRange = ts * STAGE2_AGGRO_TILES;
+    const attackRange = ts * STAGE2_ATTACK_RANGE_MULTIPLIER;
 
     let nearest: Player | null = null;
     let nearestDist = Infinity;
@@ -190,22 +177,18 @@ export class BrindleGrub extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        attackRange * 0.8,
+        attackRange * STAGE2_FOLLOW_STOP_RANGE_RATIO,
       );
     } else {
       this.isMoving = false;
       if (this.spitCooldown <= 0) {
-        this.dealDamage(nearest, 1); // very weak bite
-        this.spitCooldown = 80;
+        this.dealDamage(nearest, STAGE2_BITE_DAMAGE); // very weak bite
+        this.spitCooldown = STAGE2_BITE_COOLDOWN;
       }
     }
 
     if (this.spitCooldown > 0) this.spitCooldown--;
   }
-
-  // ---------------------------------------------------------------------------
-  // Stage 3 AI — Vespa acid spit
-  // ---------------------------------------------------------------------------
 
   private updateVespaAI(playerTargets: Player[]): void {
     const ts = this.tileSize;
@@ -232,9 +215,9 @@ export class BrindleGrub extends Mob {
       const mobTargets = this.allMobs.filter((m) => m !== this && m.isAlive);
       for (const t of [...playerTargets, ...mobTargets]) {
         if (!t.isAlive) continue;
-        const cx = t.x + ts * 0.5;
-        const cy = t.y + ts * 0.5;
-        if (Math.hypot(spit.x - cx, spit.y - cy) < ts * 0.52) {
+        const cx = t.x + ts * CENTER_OFFSET;
+        const cy = t.y + ts * CENTER_OFFSET;
+        if (Math.hypot(spit.x - cx, spit.y - cy) < ts * PLAYER_HITBOX_RADIUS_RATIO) {
           if (t instanceof Mob) {
             t.takeDamageFrom(VESPA_SPIT_DAMAGE, this, 'missile');
             // Mark mob to retaliate against this Vespa
@@ -292,7 +275,7 @@ export class BrindleGrub extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        spitRange * 0.8,
+        spitRange * VESPA_FOLLOW_STOP_RANGE_RATIO,
       );
     } else {
       this.isMoving = false;
@@ -301,10 +284,10 @@ export class BrindleGrub extends Mob {
 
     // Fire acid spit
     if (nearestDist <= spitRange && this.spitCooldown === 0 && this.hasLOS(nearest)) {
-      const cx = this.x + ts * 0.5;
-      const cy = this.y + ts * 0.5;
-      const tx = nearest.x + ts * 0.5;
-      const ty = nearest.y + ts * 0.5;
+      const cx = this.x + ts * CENTER_OFFSET;
+      const cy = this.y + ts * CENTER_OFFSET;
+      const tx = nearest.x + ts * CENTER_OFFSET;
+      const ty = nearest.y + ts * CENTER_OFFSET;
       const dx = tx - cx;
       const dy = ty - cy;
       const n = normalize(dx, dy);
@@ -330,17 +313,13 @@ export class BrindleGrub extends Mob {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
 
     // Render acid spits (behind mob sprite for Vespa)
-    if (this.stage === 3) {
+    if (this.stage === STAGE_VESPA) {
       for (const spit of this.spits) {
         drawAcidSpit(ctx, spit.x - camX, spit.y - camY, spit.hit);
       }
@@ -356,7 +335,7 @@ export class BrindleGrub extends Mob {
       case 2:
         drawCowTailedGrubSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
         break;
-      case 3:
+      case STAGE_VESPA:
         drawBrindledVespaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, this.facingX);
         break;
     }

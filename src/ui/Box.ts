@@ -30,6 +30,16 @@
  *   const [titleY, descY, btnY] = stackV(modal.inner.y, 12, 28, 64, 40);
  */
 
+// Box defaults
+const DEFAULT_BORDER_WIDTH = 1.5;
+const DEFAULT_GLOW_BLUR = 20;
+const DEFAULT_SHADOW_BLUR = 16;
+const DEFAULT_SHADOW_OFFSET_X = 4;
+const DEFAULT_SHADOW_OFFSET_Y = 4;
+const DEFAULT_OVERLAY_ALPHA = 0.6;
+const DEFAULT_SCROLLBAR_WIDTH = 6;
+const DEFAULT_SCROLLBAR_MIN_THUMB_HEIGHT = 20;
+
 export type Padding = number | { top?: number; right?: number; bottom?: number; left?: number };
 
 /** All options accepted by drawBox. x, y, width, height are required. */
@@ -83,7 +93,7 @@ export interface BoxOptions {
   shadow?: boolean | string;
   /** Shadow blur radius in px. Default: 16 */
   shadowBlur?: number;
-  /** Shadow pixel offset. Default: { x: 4, y: 4 } */
+  /** Shadow pixel offset. Default: { x: DEFAULT_SHADOW_OFFSET_X, y: DEFAULT_SHADOW_OFFSET_Y } */
   shadowOffset?: { readonly x: number; readonly y: number };
 
   /**
@@ -312,14 +322,14 @@ export function drawBox(ctx: CanvasRenderingContext2D, opts: BoxOptions): BoxRes
     alignY = 'top',
     fill,
     border,
-    borderWidth = 1.5,
+    borderWidth = DEFAULT_BORDER_WIDTH,
     radius = 0,
     alpha = 1,
     glow = false,
-    glowBlur = 20,
+    glowBlur = DEFAULT_GLOW_BLUR,
     shadow = false,
-    shadowBlur = 16,
-    shadowOffset = { x: 4, y: 4 },
+    shadowBlur = DEFAULT_SHADOW_BLUR,
+    shadowOffset = { x: DEFAULT_SHADOW_OFFSET_X, y: DEFAULT_SHADOW_OFFSET_Y },
     padding,
   } = opts;
 
@@ -492,7 +502,7 @@ export function drawDivider(ctx: CanvasRenderingContext2D, opts: DividerOptions)
  * Call before drawing modal dialogs or death / pause screens.
  */
 export function drawOverlay(ctx: CanvasRenderingContext2D, opts: OverlayOptions): void {
-  const { canvasWidth, canvasHeight, color = '#000', alpha = 0.6 } = opts;
+  const { canvasWidth, canvasHeight, color = '#000', alpha = DEFAULT_OVERLAY_ALPHA } = opts;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = color;
@@ -531,10 +541,10 @@ export function drawScrollbar(ctx: CanvasRenderingContext2D, opts: ScrollbarOpti
     trackH,
     contentH,
     scrollY,
-    width = 6,
+    width = DEFAULT_SCROLLBAR_WIDTH,
     trackColor = '#1e293b',
     thumbColor = '#64748b',
-    minThumbH = 20,
+    minThumbH = DEFAULT_SCROLLBAR_MIN_THUMB_HEIGHT,
   } = opts;
 
   if (contentH <= trackH) return;

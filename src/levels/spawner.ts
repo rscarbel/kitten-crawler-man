@@ -22,6 +22,24 @@ import type { MobSpawnRule, LevelDef } from './types';
 
 type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
 
+/** Maximum attempts to find a walkable spawn position. */
+const MAX_SPAWN_ATTEMPTS = 20;
+
+/** Extra mobs spawned in treasure rooms for difficulty. */
+const TREASURE_ROOM_EXTRA_MOBS = 3;
+
+/** Treasure room mob level boost. */
+const TREASURE_ROOM_LEVEL_BOOST = 1;
+
+/** Maximum mob level cap. */
+const MAX_MOB_LEVEL = 20;
+
+/** Room boundary inset (1 tile from wall). */
+const ROOM_BOUNDARY_INSET = 1;
+
+/** Room max bounds offset. */
+const ROOM_BOUNDS_OFFSET = 3;
+
 export const GOBLIN_VARIANTS: GoblinVariant[] = [
   { weapon: 'club', skin: '#3d6b32', eye: '#ef4444' },
   { weapon: 'hammer', skin: '#4f8a3e', eye: '#fbbf24' },
@@ -162,14 +180,14 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
       const max = rule.maxCount ?? 1;
       const count = randomInt(min, max);
       // Interior tile range: 1-tile inset from walls on each side
-      const minTX = x - Math.floor(w / 2) + 1;
-      const minTY = y - Math.floor(h / 2) + 1;
-      const maxTX = minTX + w - 3;
-      const maxTY = minTY + h - 3;
+      const minTX = x - Math.floor(w / 2) + ROOM_BOUNDARY_INSET;
+      const minTY = y - Math.floor(h / 2) + ROOM_BOUNDARY_INSET;
+      const maxTX = minTX + w - ROOM_BOUNDS_OFFSET;
+      const maxTY = minTY + h - ROOM_BOUNDS_OFFSET;
       for (let i = 0; i < count; i++) {
         let tx = x;
         let ty = y;
-        for (let attempt = 0; attempt < 20; attempt++) {
+        for (let attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; attempt++) {
           const cx = randomInt(minTX, maxTX);
           const cy = randomInt(minTY, maxTY);
           if (map.isWalkable(cx, cy)) {
@@ -219,16 +237,16 @@ export function spawnTreasureRoomMobs(
 
   for (const room of treasureRooms) {
     const { x, y, w, h } = room.bounds;
-    const minTX = x + 1;
-    const minTY = y + 1;
+    const minTX = x + ROOM_BOUNDARY_INSET;
+    const minTY = y + ROOM_BOUNDARY_INSET;
     const maxTX = x + w - 2;
     const maxTY = y + h - 2;
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < TREASURE_ROOM_EXTRA_MOBS; i++) {
       const rule = pickRule(def.roomMobs);
       let tx = room.centre.x;
       let ty = room.centre.y;
-      for (let attempt = 0; attempt < 20; attempt++) {
+      for (let attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; attempt++) {
         const cx = randomInt(minTX, maxTX);
         const cy = randomInt(minTY, maxTY);
         if (map.isWalkable(cx, cy)) {
@@ -239,7 +257,7 @@ export function spawnTreasureRoomMobs(
       }
       const mob = createMob(rule.type, tx, ty, map);
       const maxLevel = rule.maxLevel ?? rule.minLevel ?? 1;
-      mob.applyMobLevel(Math.min(maxLevel + 1, 20));
+      mob.applyMobLevel(Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL));
       mobs.push(mob);
     }
   }

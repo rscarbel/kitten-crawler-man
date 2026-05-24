@@ -7,6 +7,90 @@
  */
 import { drawText } from '../ui/TextBox';
 
+const FLOOR_CX_OFFSET = 0.5;
+const FLOOR_CY_OFFSET = 0.55;
+const FLOOR_BODY_WIDTH = 0.18;
+const FLOOR_BODY_HEIGHT = 0.44;
+const HALO_FUSE_THRESHOLD = 0.4; // fuse ratio below which halo activates
+const HALO_PULSE_FREQ = 0.012;
+const HALO_RADIUS = 0.36;
+const BAND_UPPER_Y = 0.15;
+const BAND_LOWER_Y = 0.12;
+const BAND_THICKNESS_SCALE = 0.025;
+const LABEL_STRIPE_HEIGHT = 0.05;
+const LABEL_STRIPE_Y_OFFSET = 0.025;
+const FUSE_CTRL_X_OFFSET = 0.1;
+const FUSE_CTRL_Y_OFFSET = 0.12;
+const FUSE_END_X_OFFSET = 0.06;
+const FUSE_END_Y_OFFSET = 0.22;
+const FUSE_LINEWIDTH = 0.03;
+const SPARK_FAST_BLINK_INTERVAL = 80;
+const SPARK_SLOW_BLINK_INTERVAL = 160;
+const SPARK_FAST_FUSE_THRESHOLD = 0.07;
+const SPARK_DISAPPEAR_THRESHOLD = 0.2;
+const SPARK_GLOW_R = 0.07;
+const SPARK_CORE_R = 0.035;
+const SPARK_CENTER_R = 0.015;
+
+const EXPLOSION_SHOCKWAVE_THRESHOLD = 0.55;
+const EXPLOSION_RING_LINE_SCALE = 0.06;
+const EXPLOSION_RING_SHRINK = 0.5;
+const EXPLOSION_FIRE_SCALE = 0.75;
+const EXPLOSION_FIRE_FADE = 1.3;
+const EXPLOSION_CORE_THRESHOLD = 0.35;
+const EXPLOSION_CORE_SCALE = 0.25;
+const EXPLOSION_CORE_ALPHA = 0.9;
+const EXPLOSION_SPARK_THRESHOLD = 0.45;
+const EXPLOSION_SPARK_REACH = 0.9;
+const EXPLOSION_SPARK_LINEWIDTH = 0.04;
+const EXPLOSION_SPARK_COUNT = 12;
+const EXPLOSION_SPARK_START_FRAC = 0.15;
+const EXPLOSION_SECONDARY_SPARK_COUNT = 6;
+const EXPLOSION_SECONDARY_LINEWIDTH = 0.025;
+const EXPLOSION_SECONDARY_REACH_SCALE = 0.6;
+const EXPLOSION_SECONDARY_ALPHA_SCALE = 0.7;
+const EXPLOSION_SMOKE_THRESHOLD = 0.3;
+const EXPLOSION_SMOKE_SCALE = 0.32;
+const EXPLOSION_SMOKE_GROW = 0.8;
+const EXPLOSION_SMOKE_ALPHA = 0.65;
+const EXPLOSION_SMOKE_SQUASH = 0.75;
+const EXPLOSION_PUFF_SPREAD_SCALE = 0.5;
+const EXPLOSION_FIRE_GRADIENT_MID1 = 0.3;
+const EXPLOSION_FIRE_GRADIENT_MID2 = 0.7;
+
+const ICON_CX_OFFSET = 0.5;
+const ICON_CY_OFFSET = 0.58;
+const ICON_BODY_WIDTH = 0.22;
+const ICON_BODY_HEIGHT = 0.48;
+const ICON_BAND_UPPER_Y = 0.15;
+const ICON_BAND_LOWER_Y = 0.1;
+const ICON_BAND_THICKNESS = 0.028;
+const ICON_HIGHLIGHT_Y = 0.22;
+const ICON_HIGHLIGHT_WIDTH = 0.4;
+const ICON_HIGHLIGHT_HEIGHT = 0.38;
+const ICON_FUSE_CTRL_X = 0.09;
+const ICON_FUSE_CTRL_Y = 0.08;
+const ICON_FUSE_END_X = 0.05;
+const ICON_FUSE_END_Y = 0.18;
+const ICON_FUSE_LINEWIDTH = 0.03;
+const ICON_SPARK_R = 0.04;
+const ICON_SPARK_CENTER_R = 0.02;
+
+const CHARGE_BAR_WIDTH = 20;
+const CHARGE_BAR_HEIGHT = 150;
+const CHARGE_BAR_RIGHT_MARGIN = 16;
+const CHARGE_BAR_BORDER = 2;
+const CHARGE_BAR_BORDER_TOTAL = 4;
+const CHARGE_BAR_FLASH_DIVISOR = 8;
+const CHARGE_BAR_LABEL_Y_DANGER_TOP = 26;
+const CHARGE_BAR_LABEL_Y_DANGER_BOT = 14;
+const CHARGE_BAR_LABEL_Y_THROW_TOP = 22;
+const CHARGE_BAR_LABEL_Y_THROW_BOT = 10;
+const CHARGE_BAR_HIGH_POWER_THRESHOLD = 0.85;
+const CHARGE_BAR_TICK_QUARTER = 0.25;
+const CHARGE_BAR_TICK_HALF = 0.5;
+const CHARGE_BAR_TICK_THREE_QUARTER = 0.75;
+
 // In-world floor/flying sprite
 
 /**
@@ -27,18 +111,21 @@ export function drawDynamiteFloorSprite(
 ): void {
   ctx.save();
 
-  const cx = sx + s * 0.5;
-  const cy = sy + s * 0.55;
-  const bw = s * 0.18; // body width
-  const bh = s * 0.44; // body height
+  const cx = sx + s * FLOOR_CX_OFFSET;
+  const cy = sy + s * FLOOR_CY_OFFSET;
+  const bw = s * FLOOR_BODY_WIDTH; // body width
+  const bh = s * FLOOR_BODY_HEIGHT; // body height
 
   // Pulsing red halo when fuse < 40% (120 frames)
   const fuseRatio = fuseFrames / fuseTotal;
-  if (fuseRatio < 0.4) {
-    const pulse = Math.sin(Date.now() * 0.012) * 0.5 + 0.5;
-    const haloAlpha = (1 - fuseRatio / 0.4) * 0.55 * (0.5 + pulse * 0.5);
+  if (fuseRatio < HALO_FUSE_THRESHOLD) {
+    const pulse = Math.sin(Date.now() * HALO_PULSE_FREQ) * FLOOR_CX_OFFSET + FLOOR_CX_OFFSET;
+    const haloAlpha =
+      (1 - fuseRatio / HALO_FUSE_THRESHOLD) *
+      FLOOR_CY_OFFSET *
+      (FLOOR_CX_OFFSET + pulse * FLOOR_CX_OFFSET);
     ctx.beginPath();
-    ctx.arc(cx, cy, s * 0.36, 0, Math.PI * 2);
+    ctx.arc(cx, cy, s * HALO_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(239, 68, 68, ${haloAlpha})`;
     ctx.fill();
   }
@@ -49,42 +136,56 @@ export function drawDynamiteFloorSprite(
 
   // Black bands
   ctx.fillStyle = '#1a0000';
-  ctx.fillRect(cx - bw / 2, cy - bh * 0.15, bw, s * 0.025);
-  ctx.fillRect(cx - bw / 2, cy + bh * 0.12, bw, s * 0.025);
+  ctx.fillRect(cx - bw / 2, cy - bh * BAND_UPPER_Y, bw, s * BAND_THICKNESS_SCALE);
+  ctx.fillRect(cx - bw / 2, cy + bh * BAND_LOWER_Y, bw, s * BAND_THICKNESS_SCALE);
 
   // Label stripe (white stripe at center)
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(cx - bw / 2 + 1, cy - s * 0.025, bw - 2, s * 0.05);
+  ctx.fillRect(cx - bw / 2 + 1, cy - s * LABEL_STRIPE_Y_OFFSET, bw - 2, s * LABEL_STRIPE_HEIGHT);
 
   // Fuse rope (curved line from top)
   ctx.strokeStyle = '#6b3a1f';
-  ctx.lineWidth = s * 0.03;
+  ctx.lineWidth = s * FUSE_LINEWIDTH;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx, cy - bh / 2);
-  ctx.quadraticCurveTo(cx + s * 0.1, cy - bh / 2 - s * 0.12, cx + s * 0.06, cy - bh / 2 - s * 0.22);
+  ctx.quadraticCurveTo(
+    cx + s * FUSE_CTRL_X_OFFSET,
+    cy - bh / 2 - s * FUSE_CTRL_Y_OFFSET,
+    cx + s * FUSE_END_X_OFFSET,
+    cy - bh / 2 - s * FUSE_END_Y_OFFSET,
+  );
   ctx.stroke();
 
   // Fuse tip spark — blinks faster as fuse runs low
   const sparkVisible =
-    fuseRatio > 0.2 ? true : Math.floor(Date.now() / (fuseRatio < 0.07 ? 80 : 160)) % 2 === 0;
+    fuseRatio > SPARK_DISAPPEAR_THRESHOLD
+      ? true
+      : Math.floor(
+          Date.now() /
+            (fuseRatio < SPARK_FAST_FUSE_THRESHOLD
+              ? SPARK_FAST_BLINK_INTERVAL
+              : SPARK_SLOW_BLINK_INTERVAL),
+        ) %
+          2 ===
+        0;
 
   if (sparkVisible) {
-    const sparkX = cx + s * 0.06;
-    const sparkY = cy - bh / 2 - s * 0.22;
+    const sparkX = cx + s * FUSE_END_X_OFFSET;
+    const sparkY = cy - bh / 2 - s * FUSE_END_Y_OFFSET;
     // Glow
     ctx.beginPath();
-    ctx.arc(sparkX, sparkY, s * 0.07, 0, Math.PI * 2);
+    ctx.arc(sparkX, sparkY, s * SPARK_GLOW_R, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255, 140, 0, 0.45)';
     ctx.fill();
     // Core spark
     ctx.beginPath();
-    ctx.arc(sparkX, sparkY, s * 0.035, 0, Math.PI * 2);
+    ctx.arc(sparkX, sparkY, s * SPARK_CORE_R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffdd00';
     ctx.fill();
     // Tiny bright center
     ctx.beginPath();
-    ctx.arc(sparkX, sparkY, s * 0.015, 0, Math.PI * 2);
+    ctx.arc(sparkX, sparkY, s * SPARK_CENTER_R, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
   }
@@ -117,25 +218,28 @@ export function drawDynamiteExplosion(
   const t = 1 - timer / totalFrames; // 0 = just started, 1 = finished
 
   // 1. Shockwave ring — expands fast, fades early
-  if (t < 0.55) {
-    const ringProgress = t / 0.55;
+  if (t < EXPLOSION_SHOCKWAVE_THRESHOLD) {
+    const ringProgress = t / EXPLOSION_SHOCKWAVE_THRESHOLD;
     const ringR = explosionRadius * ringProgress;
     const ringAlpha = 1 - ringProgress;
     ctx.beginPath();
     ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha * 0.85})`;
-    ctx.lineWidth = s * 0.06 * (1 - ringProgress * 0.5);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${ringAlpha * EXPLOSION_CORE_ALPHA})`;
+    ctx.lineWidth = s * EXPLOSION_RING_LINE_SCALE * (1 - ringProgress * EXPLOSION_RING_SHRINK);
     ctx.stroke();
   }
 
   // 2. Fire fill — grows then shrinks
-  const fireR = explosionRadius * 0.75 * Math.sin(t * Math.PI);
-  const fireAlpha = Math.max(0, 1 - t * 1.3);
+  const fireR = explosionRadius * EXPLOSION_FIRE_SCALE * Math.sin(t * Math.PI);
+  const fireAlpha = Math.max(0, 1 - t * EXPLOSION_FIRE_FADE);
   if (fireR > 0 && fireAlpha > 0) {
     const fireGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, fireR);
     fireGrad.addColorStop(0, `rgba(255, 255, 200, ${fireAlpha})`);
-    fireGrad.addColorStop(0.3, `rgba(255, 160, 0, ${fireAlpha})`);
-    fireGrad.addColorStop(0.7, `rgba(220, 60, 0, ${fireAlpha * 0.85})`);
+    fireGrad.addColorStop(EXPLOSION_FIRE_GRADIENT_MID1, `rgba(255, 160, 0, ${fireAlpha})`);
+    fireGrad.addColorStop(
+      EXPLOSION_FIRE_GRADIENT_MID2,
+      `rgba(220, 60, 0, ${fireAlpha * EXPLOSION_CORE_ALPHA})`,
+    );
     fireGrad.addColorStop(1, `rgba(100, 20, 0, 0)`);
     ctx.beginPath();
     ctx.arc(sx, sy, fireR, 0, Math.PI * 2);
@@ -144,27 +248,27 @@ export function drawDynamiteExplosion(
   }
 
   // 3. Hot bright core — early, shrinks fast
-  if (t < 0.35) {
-    const coreT = t / 0.35;
-    const coreR = explosionRadius * 0.25 * (1 - coreT);
+  if (t < EXPLOSION_CORE_THRESHOLD) {
+    const coreT = t / EXPLOSION_CORE_THRESHOLD;
+    const coreR = explosionRadius * EXPLOSION_CORE_SCALE * (1 - coreT);
     const coreAlpha = 1 - coreT;
     ctx.beginPath();
     ctx.arc(sx, sy, coreR, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${coreAlpha * 0.9})`;
+    ctx.fillStyle = `rgba(255, 255, 255, ${coreAlpha * EXPLOSION_CORE_ALPHA})`;
     ctx.fill();
   }
 
   // 4. Spark rays — 12 lines, early phase only
-  if (t < 0.45) {
-    const sparkT = t / 0.45;
-    const sparkLen = explosionRadius * 0.9 * sparkT;
+  if (t < EXPLOSION_SPARK_THRESHOLD) {
+    const sparkT = t / EXPLOSION_SPARK_THRESHOLD;
+    const sparkLen = explosionRadius * EXPLOSION_SPARK_REACH * sparkT;
     const sparkAlpha = 1 - sparkT;
     ctx.strokeStyle = `rgba(255, 220, 50, ${sparkAlpha})`;
-    ctx.lineWidth = s * 0.04;
+    ctx.lineWidth = s * EXPLOSION_SPARK_LINEWIDTH;
     ctx.lineCap = 'round';
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
-      const startR = explosionRadius * 0.15;
+    for (let i = 0; i < EXPLOSION_SPARK_COUNT; i++) {
+      const angle = (i / EXPLOSION_SPARK_COUNT) * Math.PI * 2;
+      const startR = explosionRadius * EXPLOSION_SPARK_START_FRAC;
       ctx.beginPath();
       ctx.moveTo(sx + Math.cos(angle) * startR, sy + Math.sin(angle) * startR);
       ctx.lineTo(
@@ -174,39 +278,58 @@ export function drawDynamiteExplosion(
       ctx.stroke();
     }
     // 6 shorter secondary sparks at offset angles
-    ctx.lineWidth = s * 0.025;
-    ctx.strokeStyle = `rgba(255, 140, 0, ${sparkAlpha * 0.7})`;
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
-      const startR = explosionRadius * 0.1;
+    ctx.lineWidth = s * EXPLOSION_SECONDARY_LINEWIDTH;
+    ctx.strokeStyle = `rgba(255, 140, 0, ${sparkAlpha * EXPLOSION_SECONDARY_ALPHA_SCALE})`;
+    for (let i = 0; i < EXPLOSION_SECONDARY_SPARK_COUNT; i++) {
+      const angle =
+        (i / EXPLOSION_SECONDARY_SPARK_COUNT) * Math.PI * 2 +
+        Math.PI / EXPLOSION_SECONDARY_SPARK_COUNT;
+      const startR = (explosionRadius * CHARGE_BAR_TICK_QUARTER) / FLOOR_CX_OFFSET;
       ctx.beginPath();
       ctx.moveTo(sx + Math.cos(angle) * startR, sy + Math.sin(angle) * startR);
       ctx.lineTo(
-        sx + Math.cos(angle) * (startR + sparkLen * 0.6),
-        sy + Math.sin(angle) * (startR + sparkLen * 0.6),
+        sx + Math.cos(angle) * (startR + sparkLen * EXPLOSION_SECONDARY_REACH_SCALE),
+        sy + Math.sin(angle) * (startR + sparkLen * EXPLOSION_SECONDARY_REACH_SCALE),
       );
       ctx.stroke();
     }
   }
 
   // 5. Smoke puffs — 6 dark ellipses, appear later and fade out
-  if (t > 0.3) {
-    const smokeT = (t - 0.3) / 0.7;
-    const smokeAlpha = Math.max(0, (1 - smokeT) * 0.65);
+  if (t > EXPLOSION_SMOKE_THRESHOLD) {
+    const smokeT = (t - EXPLOSION_SMOKE_THRESHOLD) / (1 - EXPLOSION_SMOKE_THRESHOLD);
+    const smokeAlpha = Math.max(0, (1 - smokeT) * EXPLOSION_SMOKE_ALPHA);
     const puffPositions = [
-      { dx: -0.4, dy: -0.5 },
-      { dx: 0.4, dy: -0.5 },
-      { dx: -0.55, dy: 0.1 },
-      { dx: 0.55, dy: 0.1 },
-      { dx: -0.2, dy: 0.5 },
-      { dx: 0.2, dy: 0.5 },
+      { dx: -0.4, dy: -FLOOR_CX_OFFSET },
+      { dx: 0.4, dy: -FLOOR_CX_OFFSET },
+      {
+        dx: -EXPLOSION_SHOCKWAVE_THRESHOLD,
+        dy: EXPLOSION_SMOKE_THRESHOLD / EXPLOSION_SMOKE_THRESHOLD,
+      },
+      {
+        dx: EXPLOSION_SHOCKWAVE_THRESHOLD,
+        dy: EXPLOSION_SMOKE_THRESHOLD / EXPLOSION_SMOKE_THRESHOLD,
+      },
+      { dx: -0.2, dy: FLOOR_CX_OFFSET },
+      { dx: 0.2, dy: FLOOR_CX_OFFSET },
     ];
     for (const pos of puffPositions) {
-      const puffR = explosionRadius * 0.32 * (0.6 + smokeT * 0.8);
-      const puffX = sx + pos.dx * explosionRadius * (0.5 + smokeT * 0.5);
-      const puffY = sy + pos.dy * explosionRadius * (0.5 + smokeT * 0.5);
+      const puffR =
+        explosionRadius *
+        EXPLOSION_SMOKE_SCALE *
+        (EXPLOSION_SECONDARY_REACH_SCALE + smokeT * EXPLOSION_SMOKE_GROW);
+      const puffX =
+        sx +
+        pos.dx *
+          explosionRadius *
+          (EXPLOSION_PUFF_SPREAD_SCALE + smokeT * EXPLOSION_PUFF_SPREAD_SCALE);
+      const puffY =
+        sy +
+        pos.dy *
+          explosionRadius *
+          (EXPLOSION_PUFF_SPREAD_SCALE + smokeT * EXPLOSION_PUFF_SPREAD_SCALE);
       ctx.beginPath();
-      ctx.ellipse(puffX, puffY, puffR, puffR * 0.75, 0, 0, Math.PI * 2);
+      ctx.ellipse(puffX, puffY, puffR, puffR * EXPLOSION_SMOKE_SQUASH, 0, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(60, 50, 50, ${smokeAlpha})`;
       ctx.fill();
     }
@@ -228,10 +351,10 @@ export function drawDynamiteInventoryIcon(
 ): void {
   ctx.save();
 
-  const cx = x + size * 0.5;
-  const cy = y + size * 0.58;
-  const bw = size * 0.22;
-  const bh = size * 0.48;
+  const cx = x + size * ICON_CX_OFFSET;
+  const cy = y + size * ICON_CY_OFFSET;
+  const bw = size * ICON_BODY_WIDTH;
+  const bh = size * ICON_BODY_HEIGHT;
 
   // Body
   ctx.fillStyle = '#cc1a1a';
@@ -239,36 +362,41 @@ export function drawDynamiteInventoryIcon(
 
   // Bands
   ctx.fillStyle = '#1a0000';
-  ctx.fillRect(cx - bw / 2, cy - bh * 0.15, bw, size * 0.028);
-  ctx.fillRect(cx - bw / 2, cy + bh * 0.1, bw, size * 0.028);
+  ctx.fillRect(cx - bw / 2, cy - bh * ICON_BAND_UPPER_Y, bw, size * ICON_BAND_THICKNESS);
+  ctx.fillRect(cx - bw / 2, cy + bh * ICON_BAND_LOWER_Y, bw, size * ICON_BAND_THICKNESS);
 
   // Highlight
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.fillRect(cx - bw / 2 + 1, cy - bh * 0.22, bw * 0.4, bh * 0.38);
+  ctx.fillRect(
+    cx - bw / 2 + 1,
+    cy - bh * ICON_HIGHLIGHT_Y,
+    bw * ICON_HIGHLIGHT_WIDTH,
+    bh * ICON_HIGHLIGHT_HEIGHT,
+  );
 
   // Fuse
   ctx.strokeStyle = '#6b3a1f';
-  ctx.lineWidth = size * 0.03;
+  ctx.lineWidth = size * ICON_FUSE_LINEWIDTH;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(cx, cy - bh / 2);
   ctx.quadraticCurveTo(
-    cx + size * 0.09,
-    cy - bh / 2 - size * 0.08,
-    cx + size * 0.05,
-    cy - bh / 2 - size * 0.18,
+    cx + size * ICON_FUSE_CTRL_X,
+    cy - bh / 2 - size * ICON_FUSE_CTRL_Y,
+    cx + size * ICON_FUSE_END_X,
+    cy - bh / 2 - size * ICON_FUSE_END_Y,
   );
   ctx.stroke();
 
   // Spark tip
-  const sparkX = cx + size * 0.05;
-  const sparkY = cy - bh / 2 - size * 0.18;
+  const sparkX = cx + size * ICON_FUSE_END_X;
+  const sparkY = cy - bh / 2 - size * ICON_FUSE_END_Y;
   ctx.beginPath();
-  ctx.arc(sparkX, sparkY, size * 0.04, 0, Math.PI * 2);
+  ctx.arc(sparkX, sparkY, size * ICON_SPARK_R, 0, Math.PI * 2);
   ctx.fillStyle = '#ffaa00';
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(sparkX, sparkY, size * 0.02, 0, Math.PI * 2);
+  ctx.arc(sparkX, sparkY, size * ICON_SPARK_CENTER_R, 0, Math.PI * 2);
   ctx.fillStyle = '#ffffff';
   ctx.fill();
 
@@ -295,21 +423,21 @@ export function drawDynamiteChargeBar(
 ): void {
   ctx.save();
 
-  const barW = 20;
-  const barH = 150;
-  const barX = canvasW - barW - 16;
+  const barW = CHARGE_BAR_WIDTH;
+  const barH = CHARGE_BAR_HEIGHT;
+  const barX = canvasW - barW - CHARGE_BAR_RIGHT_MARGIN;
   const barY = (canvasH - barH) / 2;
 
   const isDanger = chargeFrames >= dangerFrames;
   // Flash every 8 frames when in danger
-  const flashOn = !isDanger || Math.floor(chargeFrames / 8) % 2 === 0;
+  const flashOn = !isDanger || Math.floor(chargeFrames / CHARGE_BAR_FLASH_DIVISOR) % 2 === 0;
 
   // Labels above bar — baseline_y converted to top_y: top = baseline - Math.round(size * 0.8)
   const labelX = barX + barW / 2;
   if (isDanger) {
     drawText(ctx, '⚠', {
       x: labelX,
-      y: barY - 26,
+      y: barY - CHARGE_BAR_LABEL_Y_DANGER_TOP,
       size: 10,
       bold: true,
       font: 'monospace',
@@ -318,7 +446,7 @@ export function drawDynamiteChargeBar(
     });
     drawText(ctx, 'DANGER', {
       x: labelX,
-      y: barY - 14,
+      y: barY - CHARGE_BAR_LABEL_Y_DANGER_BOT,
       size: 10,
       bold: true,
       font: 'monospace',
@@ -328,7 +456,7 @@ export function drawDynamiteChargeBar(
   } else {
     drawText(ctx, 'THROW', {
       x: labelX,
-      y: barY - 22,
+      y: barY - CHARGE_BAR_LABEL_Y_THROW_TOP,
       size: 10,
       bold: true,
       font: 'monospace',
@@ -337,7 +465,7 @@ export function drawDynamiteChargeBar(
     });
     drawText(ctx, 'POWER', {
       x: labelX,
-      y: barY - 10,
+      y: barY - CHARGE_BAR_LABEL_Y_THROW_BOT,
       size: 10,
       bold: true,
       font: 'monospace',
@@ -348,22 +476,40 @@ export function drawDynamiteChargeBar(
 
   // Background
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
-  ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+  ctx.fillRect(
+    barX - CHARGE_BAR_BORDER,
+    barY - CHARGE_BAR_BORDER,
+    barW + CHARGE_BAR_BORDER_TOTAL,
+    barH + CHARGE_BAR_BORDER_TOTAL,
+  );
   ctx.strokeStyle = isDanger ? '#ef4444' : '#475569';
   ctx.lineWidth = 1;
-  ctx.strokeRect(barX - 2, barY - 2, barW + 4, barH + 4);
+  ctx.strokeRect(
+    barX - CHARGE_BAR_BORDER,
+    barY - CHARGE_BAR_BORDER,
+    barW + CHARGE_BAR_BORDER_TOTAL,
+    barH + CHARGE_BAR_BORDER_TOTAL,
+  );
 
   // Fill — grows from bottom upward
   if (flashOn) {
     const fillH = Math.ceil(barH * ratio);
-    ctx.fillStyle = isDanger ? '#ef4444' : ratio > 0.85 ? '#facc15' : '#4ade80';
+    ctx.fillStyle = isDanger
+      ? '#ef4444'
+      : ratio > CHARGE_BAR_HIGH_POWER_THRESHOLD
+        ? '#facc15'
+        : '#4ade80';
     ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
   }
 
   // Tick marks at 25%, 50%, 75% (horizontal lines)
   ctx.strokeStyle = 'rgba(255,255,255,0.25)';
   ctx.lineWidth = 1;
-  for (const pct of [0.25, 0.5, 0.75]) {
+  for (const pct of [
+    CHARGE_BAR_TICK_QUARTER,
+    CHARGE_BAR_TICK_HALF,
+    CHARGE_BAR_TICK_THREE_QUARTER,
+  ]) {
     const ty = barY + barH * (1 - pct);
     ctx.beginPath();
     ctx.moveTo(barX, ty);

@@ -9,11 +9,44 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawButton } from '../ui/Button';
 
+/** Cooldown in seconds. */
+const COOLDOWN_SECONDS = 90;
+
+/** Frames per second. */
+const FPS = 60;
+
 /** Cooldown in frames: 90 seconds at 60 fps. */
-const COOLDOWN_FRAMES = 90 * 60; // 5400
+const COOLDOWN_FRAMES = COOLDOWN_SECONDS * FPS; // 5400
 
 /** Duration speech bubble stays visible (frames). */
 const SPEECH_DURATION = 150; // 2.5 seconds
+
+// Rendering constants
+const MONGO_BUTTON_ICON_SIZE_RATIO = 0.6;
+const MONGO_BUTTON_LABEL_Y_OFFSET = 5;
+const MONGO_BUTTON_LABEL_OFFSET = 7;
+const MONGO_BUTTON_LABEL_SIZE = 9;
+const MONGO_COOLDOWN_TEXT_Y_OFFSET_UP = 10;
+const MONGO_COOLDOWN_TEXT_Y_OFFSET_DOWN = 4;
+const MONGO_COOLDOWN_TEXT_SIZE = 12;
+const MONGO_COOLDOWN_OVERLAY_ALPHA = 0.6;
+const MONGO_ICON_Y_OFFSET = 4;
+
+// Speech bubble rendering
+const SPEECH_BUBBLE_ALPHA_DECAY_TIME = 30; // frames
+const SPEECH_BUBBLE_FONT_SIZE = 11;
+const SPEECH_BUBBLE_BOLD_FONT = 'bold 11px monospace';
+const SPEECH_BUBBLE_OFFSET_X_RATIO = 0.5;
+const SPEECH_BUBBLE_OFFSET_Y = 28;
+const SPEECH_BUBBLE_PADDING = 16;
+const SPEECH_BUBBLE_PADDING_CORNERS = 6;
+const SPEECH_BUBBLE_BG_ALPHA = 0.8;
+const SPEECH_BUBBLE_BORDER_WIDTH = 1;
+const SPEECH_BUBBLE_BORDER_COLOR = '#60a5fa';
+const SPEECH_BUBBLE_POINTER_SIZE = 5;
+const SPEECH_BUBBLE_POINTER_HEIGHT = 6;
+const SPEECH_BUBBLE_TEXT_Y_OFFSET = 15;
+const SPEECH_BUBBLE_TEXT_Y_ADJUST = 9;
 
 export class MongoSystem implements GameSystem {
   /** Whether the player has unlocked Mongo by defeating the Krakaren Clone. */
@@ -158,7 +191,7 @@ export class MongoSystem implements GameSystem {
 
   /** Returns cooldown in whole seconds for display. */
   get cooldownSeconds(): number {
-    return Math.ceil(this.cooldownFrames / 60);
+    return Math.ceil(this.cooldownFrames / FPS);
   }
 
   /**
@@ -192,14 +225,14 @@ export class MongoSystem implements GameSystem {
     });
 
     // Raptor icon
-    const iconSize = Math.min(w, h) * 0.6;
-    drawMongoIcon(ctx, x + w / 2, y + h / 2 - 4, iconSize);
+    const iconSize = Math.min(w, h) * MONGO_BUTTON_ICON_SIZE_RATIO;
+    drawMongoIcon(ctx, x + w / 2, y + h / 2 - MONGO_ICON_Y_OFFSET, iconSize);
 
     // Label
     drawText(ctx, isActive ? 'Active' : 'Summon', {
       x: x + w / 2,
-      y: y + h - 5 - 7,
-      size: 9,
+      y: y + h - MONGO_BUTTON_LABEL_Y_OFFSET - MONGO_BUTTON_LABEL_OFFSET,
+      size: MONGO_BUTTON_LABEL_SIZE,
       color: canUse ? '#94a3b8' : '#64748b',
       align: 'center',
     });
@@ -207,14 +240,14 @@ export class MongoSystem implements GameSystem {
     // Cooldown overlay
     if (this.cooldownFrames > 0) {
       ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillStyle = `rgba(0,0,0,${MONGO_COOLDOWN_OVERLAY_ALPHA})`;
       const fillH = h * this.cooldownRatio;
       ctx.fillRect(x, y + h - fillH, w, fillH);
       ctx.restore();
       drawText(ctx, `${this.cooldownSeconds}s`, {
         x: x + w / 2,
-        y: y + h / 2 + 4 - 10,
-        size: 12,
+        y: y + h / 2 + MONGO_COOLDOWN_TEXT_Y_OFFSET_DOWN - MONGO_COOLDOWN_TEXT_Y_OFFSET_UP,
+        size: MONGO_COOLDOWN_TEXT_SIZE,
         bold: true,
         color: '#ef4444',
         align: 'center',
@@ -230,45 +263,54 @@ export class MongoSystem implements GameSystem {
   renderSpeechBubble(ctx: CanvasRenderingContext2D, catScreenX: number, catScreenY: number): void {
     if (!this.speechText || this.speechTimer <= 0) return;
 
-    const alpha = Math.min(1, this.speechTimer / 30); // fade out in last 0.5s
+    const alpha = Math.min(1, this.speechTimer / SPEECH_BUBBLE_ALPHA_DECAY_TIME);
     const text = this.speechText;
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = 'bold 11px monospace';
+    ctx.font = SPEECH_BUBBLE_BOLD_FONT;
     const tw = ctx.measureText(text).width;
-    const bw = tw + 16;
+    const bw = tw + SPEECH_BUBBLE_PADDING;
     const bh = 22;
-    const bx = catScreenX + TILE_SIZE * 0.5 - bw / 2;
-    const by = catScreenY - 28;
+    const bx = catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO - bw / 2;
+    const by = catScreenY - SPEECH_BUBBLE_OFFSET_Y;
 
     // Bubble background
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`;
     ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 6);
+    ctx.roundRect(bx, by, bw, bh, SPEECH_BUBBLE_PADDING_CORNERS);
     ctx.fill();
 
     // Bubble border
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = SPEECH_BUBBLE_BORDER_COLOR;
+    ctx.lineWidth = SPEECH_BUBBLE_BORDER_WIDTH;
     ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, 6);
+    ctx.roundRect(bx, by, bw, bh, SPEECH_BUBBLE_PADDING_CORNERS);
     ctx.stroke();
 
     // Pointer triangle
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`;
     ctx.beginPath();
-    ctx.moveTo(catScreenX + TILE_SIZE * 0.5 - 5, by + bh);
-    ctx.lineTo(catScreenX + TILE_SIZE * 0.5, by + bh + 6);
-    ctx.lineTo(catScreenX + TILE_SIZE * 0.5 + 5, by + bh);
+    ctx.moveTo(
+      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO - SPEECH_BUBBLE_POINTER_SIZE,
+      by + bh,
+    );
+    ctx.lineTo(
+      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO,
+      by + bh + SPEECH_BUBBLE_POINTER_HEIGHT,
+    );
+    ctx.lineTo(
+      catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO + SPEECH_BUBBLE_POINTER_SIZE,
+      by + bh,
+    );
     ctx.closePath();
     ctx.fill();
 
     // Text
     drawText(ctx, text, {
-      x: catScreenX + TILE_SIZE * 0.5,
-      y: by + 15 - 9,
-      size: 11,
+      x: catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO,
+      y: by + SPEECH_BUBBLE_TEXT_Y_OFFSET - SPEECH_BUBBLE_TEXT_Y_ADJUST,
+      size: SPEECH_BUBBLE_FONT_SIZE,
       bold: true,
       color: '#e0f2fe',
       align: 'center',

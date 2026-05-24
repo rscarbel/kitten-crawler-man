@@ -28,9 +28,16 @@ export class DungeonIntroSystem {
 
     const alpha = this.frame < HOLD_FRAMES ? 1 : 1 - (this.frame - HOLD_FRAMES) / FADE_OUT_FRAMES;
 
-    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, color: '#000', alpha: alpha * 0.52 });
+    const OVERLAY_ALPHA_MULT = 0.52;
+    const IMAGE_WIDTH_FRACTION = 0.55;
+    drawOverlay(ctx, {
+      canvasWidth: cw,
+      canvasHeight: ch,
+      color: '#000',
+      alpha: alpha * OVERLAY_ALPHA_MULT,
+    });
 
-    const imgW = Math.round(cw * 0.55);
+    const imgW = Math.round(cw * IMAGE_WIDTH_FRACTION);
     const imgH = Math.round(imgW * (_img.naturalHeight / _img.naturalWidth));
 
     ctx.save();

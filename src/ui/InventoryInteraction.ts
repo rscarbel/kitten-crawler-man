@@ -3,6 +3,44 @@ import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import { pointInRect } from '../utils';
 
+// Drop dialog layout dimensions
+const DROP_DIALOG_WIDTH = 200;
+const DROP_DIALOG_HEIGHT = 110;
+const DROP_DIALOG_CLOSE_BTN_RIGHT = 22;
+const DROP_DIALOG_CLOSE_BTN_LEFT = 6;
+const DROP_DIALOG_CLOSE_BTN_TOP = 6;
+const DROP_DIALOG_CLOSE_BTN_HEIGHT = 22;
+const DROP_DIALOG_BUTTON_WIDTH = 24;
+const DROP_DIALOG_BUTTON_HEIGHT = 24;
+const DROP_DIALOG_MINUS_BTN_X = 20;
+const DROP_DIALOG_MINUS_BTN_Y = 54;
+const DROP_DIALOG_PLUS_BTN_X_OFFSET = 44;
+const DROP_DIALOG_PLUS_BTN_Y = 54;
+const DROP_DIALOG_CONFIRM_X = 20;
+const DROP_DIALOG_CONFIRM_Y_OFFSET = 28;
+const DROP_DIALOG_CONFIRM_WIDTH_MARGIN = 40;
+const DROP_DIALOG_CONFIRM_HEIGHT = 22;
+
+// Context menu layout
+const CONTEXT_MENU_WIDTH = 120;
+const CONTEXT_MENU_ITEM_HEIGHT = 22;
+const CONTEXT_MENU_PADDING = 4;
+const CONTEXT_MENU_MARGIN = 4;
+const CONTEXT_MENU_ITEM_Y_OFFSET = 2;
+
+// Panel interaction
+const CLOSE_BTN_RIGHT_OFFSET = 20;
+const CLOSE_BTN_WIDTH = 16;
+const CLOSE_BTN_TOP = 8;
+const CLOSE_BTN_HEIGHT = 24;
+
+// Navigation
+const INVENTORY_NAV_HEIGHT = 28;
+const INVENTORY_NAV_Y_OFFSET = 6;
+const INVENTORY_NAV_HOVER_TOP_OFFSET = 12;
+const INVENTORY_NAV_HOVER_BOTTOM_OFFSET = 4;
+const INVENTORY_NAV_HALF = 0.5;
+
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
@@ -93,30 +131,50 @@ export class InventoryInteraction {
     // Drop quantity dialog takes priority
     if (this.dropDialog) {
       const dd = this.dropDialog;
-      const dlgW = 200;
-      const dlgH = 110;
+      const dlgW = DROP_DIALOG_WIDTH;
+      const dlgH = DROP_DIALOG_HEIGHT;
       const dlgX = Math.floor((canvas.width - dlgW) / 2);
       const dlgY = Math.floor((canvas.height - dlgH) / 2);
 
-      if (mx >= dlgX + dlgW - 22 && mx <= dlgX + dlgW - 6 && my >= dlgY + 6 && my <= dlgY + 22) {
+      if (
+        mx >= dlgX + dlgW - DROP_DIALOG_CLOSE_BTN_RIGHT &&
+        mx <= dlgX + dlgW - DROP_DIALOG_CLOSE_BTN_LEFT &&
+        my >= dlgY + DROP_DIALOG_CLOSE_BTN_TOP &&
+        my <= dlgY + DROP_DIALOG_CLOSE_BTN_HEIGHT
+      ) {
         this.dropDialog = null;
         return true;
       }
-      const minusBtnX = dlgX + 20;
-      const minusBtnY = dlgY + 54;
-      if (mx >= minusBtnX && mx <= minusBtnX + 24 && my >= minusBtnY && my <= minusBtnY + 24) {
+      const minusBtnX = dlgX + DROP_DIALOG_MINUS_BTN_X;
+      const minusBtnY = dlgY + DROP_DIALOG_MINUS_BTN_Y;
+      if (
+        mx >= minusBtnX &&
+        mx <= minusBtnX + DROP_DIALOG_BUTTON_WIDTH &&
+        my >= minusBtnY &&
+        my <= minusBtnY + DROP_DIALOG_BUTTON_HEIGHT
+      ) {
         this.dropDialog = { ...dd, selectedQty: Math.max(1, dd.selectedQty - 1) };
         return true;
       }
-      const plusBtnX = dlgX + dlgW - 44;
-      const plusBtnY = dlgY + 54;
-      if (mx >= plusBtnX && mx <= plusBtnX + 24 && my >= plusBtnY && my <= plusBtnY + 24) {
+      const plusBtnX = dlgX + dlgW - DROP_DIALOG_PLUS_BTN_X_OFFSET;
+      const plusBtnY = dlgY + DROP_DIALOG_PLUS_BTN_Y;
+      if (
+        mx >= plusBtnX &&
+        mx <= plusBtnX + DROP_DIALOG_BUTTON_WIDTH &&
+        my >= plusBtnY &&
+        my <= plusBtnY + DROP_DIALOG_BUTTON_HEIGHT
+      ) {
         this.dropDialog = { ...dd, selectedQty: Math.min(dd.maxQty, dd.selectedQty + 1) };
         return true;
       }
-      const confirmX = dlgX + 20;
-      const confirmY = dlgY + dlgH - 28;
-      if (mx >= confirmX && mx <= confirmX + dlgW - 40 && my >= confirmY && my <= confirmY + 22) {
+      const confirmX = dlgX + DROP_DIALOG_CONFIRM_X;
+      const confirmY = dlgY + dlgH - DROP_DIALOG_CONFIRM_Y_OFFSET;
+      if (
+        mx >= confirmX &&
+        mx <= confirmX + dlgW - DROP_DIALOG_CONFIRM_WIDTH_MARGIN &&
+        my >= confirmY &&
+        my <= confirmY + DROP_DIALOG_CONFIRM_HEIGHT
+      ) {
         this.pendingDropItem = { id: dd.id, quantity: dd.selectedQty };
         this.dropDialog = null;
         return true;
@@ -136,13 +194,13 @@ export class InventoryInteraction {
     if (this.contextMenu) {
       const cm = this.contextMenu;
       const options = this.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
-      const menuW = 120;
-      const menuItemH = 22;
-      const menuH = options.length * menuItemH + 4;
-      const cmx = Math.min(cm.x, canvas.width - menuW - 4);
-      const cmy = Math.min(cm.y, canvas.height - menuH - 4);
+      const menuW = CONTEXT_MENU_WIDTH;
+      const menuItemH = CONTEXT_MENU_ITEM_HEIGHT;
+      const menuH = options.length * menuItemH + CONTEXT_MENU_PADDING;
+      const cmx = Math.min(cm.x, canvas.width - menuW - CONTEXT_MENU_MARGIN);
+      const cmy = Math.min(cm.y, canvas.height - menuH - CONTEXT_MENU_MARGIN);
       if (mx >= cmx && mx <= cmx + menuW && my >= cmy && my <= cmy + menuH) {
-        const idx = Math.floor((my - cmy - 2) / menuItemH);
+        const idx = Math.floor((my - cmy - CONTEXT_MENU_ITEM_Y_OFFSET) / menuItemH);
         if (idx >= 0 && idx < options.length) {
           const action = options[idx];
           if (action === 'Equip') {
@@ -186,22 +244,30 @@ export class InventoryInteraction {
     if (!isOpen) return false;
 
     const p = panelRect;
-    const closeX = p.x + p.w - 20;
-    if (mx >= closeX && mx <= closeX + 16 && my >= p.y + 8 && my <= p.y + 24) {
+    const closeX = p.x + p.w - CLOSE_BTN_RIGHT_OFFSET;
+    if (
+      mx >= closeX &&
+      mx <= closeX + CLOSE_BTN_WIDTH &&
+      my >= p.y + CLOSE_BTN_TOP &&
+      my <= p.y + CLOSE_BTN_HEIGHT
+    ) {
       setOpen(false);
       return true;
     }
 
     const pages = pageCount(inventory.bag.slots.length);
     if (pages > 1) {
-      const NAV_H = 28;
-      const navY = p.y + p.h - NAV_H + 6;
-      if (my >= navY - 12 && my <= navY + 4) {
-        if (mx < p.x + p.w * 0.5 && page > 0) {
+      const NAV_H = INVENTORY_NAV_HEIGHT;
+      const navY = p.y + p.h - NAV_H + INVENTORY_NAV_Y_OFFSET;
+      if (
+        my >= navY - INVENTORY_NAV_HOVER_TOP_OFFSET &&
+        my <= navY + INVENTORY_NAV_HOVER_BOTTOM_OFFSET
+      ) {
+        if (mx < p.x + p.w * INVENTORY_NAV_HALF && page > 0) {
           setPage(page - 1);
           return true;
         }
-        if (mx >= p.x + p.w * 0.5 && page < pages - 1) {
+        if (mx >= p.x + p.w * INVENTORY_NAV_HALF && page < pages - 1) {
           setPage(page + 1);
           return true;
         }
@@ -326,11 +392,16 @@ export class InventoryInteraction {
         this.contextMenu.source,
         this.contextMenu.isEquipped,
       );
-      const menuItemH = 22;
+      const menuItemH = CONTEXT_MENU_ITEM_HEIGHT;
       const cmx = this.contextMenu.x;
       const cmy = this.contextMenu.y;
-      if (mx >= cmx && mx <= cmx + 120 && my >= cmy && my <= cmy + options.length * menuItemH + 4) {
-        this.contextMenuHover = Math.floor((my - cmy - 2) / menuItemH);
+      if (
+        mx >= cmx &&
+        mx <= cmx + CONTEXT_MENU_WIDTH &&
+        my >= cmy &&
+        my <= cmy + options.length * menuItemH + CONTEXT_MENU_PADDING
+      ) {
+        this.contextMenuHover = Math.floor((my - cmy - CONTEXT_MENU_ITEM_Y_OFFSET) / menuItemH);
       } else {
         this.contextMenuHover = -1;
       }

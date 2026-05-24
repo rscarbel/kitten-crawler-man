@@ -13,10 +13,18 @@ import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 
-const AI_RADIUS = TILE_SIZE * 22;
+const AI_RADIUS_TILES = 22;
+const AI_RADIUS = TILE_SIZE * AI_RADIUS_TILES;
 const SEP_DIST = TILE_SIZE;
 /** Effective mass used for players in separation calculations. */
 const PLAYER_MASS = 3;
+
+// Separation physics
+const SEPARATION_BASE_MULTIPLIER = 0.3;
+const SEPARATION_POSITION_TOLERANCE = 0;
+const LEADING_EDGE_FRONT = 0.72;
+const LEADING_EDGE_BACK = 0.28;
+const TILE_CENTER_OFFSET = 0.5;
 
 /**
  * Pushes a player by (dx, dy) with per-axis wall collision, mirroring
@@ -32,14 +40,16 @@ function pushPlayerWithCollision(
   if (dx !== 0) {
     const nextX = player.x + dx;
     const tileXnext =
-      dx >= 0 ? Math.floor((nextX + ts * 0.72) / ts) : Math.floor((nextX + ts * 0.28) / ts);
-    const tileYcur = Math.floor((player.y + ts * 0.5) / ts);
+      dx >= 0
+        ? Math.floor((nextX + ts * LEADING_EDGE_FRONT) / ts)
+        : Math.floor((nextX + ts * LEADING_EDGE_BACK) / ts);
+    const tileYcur = Math.floor((player.y + ts * TILE_CENTER_OFFSET) / ts);
     if (map.isWalkable(tileXnext, tileYcur)) player.x = nextX;
   }
   if (dy !== 0) {
     const nextY = player.y + dy;
-    const tileXcur = Math.floor((player.x + ts * 0.5) / ts);
-    const tileYnext = Math.floor((nextY + ts * 0.5) / ts);
+    const tileXcur = Math.floor((player.x + ts * TILE_CENTER_OFFSET) / ts);
+    const tileYnext = Math.floor((nextY + ts * TILE_CENTER_OFFSET) / ts);
     if (map.isWalkable(tileXcur, tileYnext)) player.y = nextY;
   }
 }
@@ -136,8 +146,8 @@ export class MobUpdateLoop implements GameSystem {
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         const dist = Math.hypot(dx, dy);
-        if (dist > 0 && dist < SEP_DIST) {
-          const base = ((SEP_DIST - dist) * 0.3) / dist;
+        if (dist > SEPARATION_POSITION_TOLERANCE && dist < SEP_DIST) {
+          const base = ((SEP_DIST - dist) * SEPARATION_BASE_MULTIPLIER) / dist;
           const totalMass = a.mass + b.mass;
           // Heavier mob moves less — force is proportional to the other mob's share of total mass.
           a.applySeparation(dx * base * (b.mass / totalMass), dy * base * (b.mass / totalMass));
@@ -162,7 +172,7 @@ export class MobUpdateLoop implements GameSystem {
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
         const dist = Math.hypot(dx, dy);
-        if (dist > 0 && dist < SEP_DIST) {
+        if (dist > SEPARATION_POSITION_TOLERANCE && dist < SEP_DIST) {
           if (player.isActive) {
             const base = (SEP_DIST - dist) / dist;
             const totalMass = PLAYER_MASS + mob.mass;

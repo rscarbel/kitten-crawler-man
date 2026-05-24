@@ -11,6 +11,37 @@ import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
 
+/** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
+const HALF_TILE = TILE_SIZE / 2;
+/** Sepsis proc chance per hit when enchanted crown is equipped. */
+const SEPSIS_PROC_CHANCE = 0.15;
+/** Melee hit cone: mobs within this range ignore the facing-dot check. */
+const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
+/** Fraction of total kill XP awarded to the top damage dealer. */
+const XP_TOP_DEALER_FRACTION = 0.85;
+/** Minimum missile level to trigger AoE splash damage. */
+const MISSILE_SPLASH_LEVEL = 5;
+/** Splash damage as a fraction of direct missile damage. */
+const MISSILE_SPLASH_DAMAGE_FRACTION = 0.4;
+/** Minimum missile level to spawn sub-missiles on impact. */
+const MISSILE_SUB_MISSILE_LEVEL = 10;
+/** Minimum missile level to slow bosses. */
+const MISSILE_SLOW_BOSS_LEVEL = 15;
+/** Shockwave radius in tiles for level-15 missile kill. */
+const MISSILE_SHOCKWAVE_RADIUS_TILES = 5;
+/** Minimum shell level for chain lightning to trigger on kill. */
+const SHELL_CHAIN_LIGHTNING_LEVEL = 15;
+/** Missile collision hit radius as a fraction of TILE_SIZE. */
+const MISSILE_HIT_RADIUS_FRACTION = 0.7;
+/** Boss stun duration in frames when smush lands in the inner blast zone. */
+const SMUSH_BOSS_STUN_FRAMES = 150;
+/** Smush heal-on-hit chance (10th-level+). */
+const SMUSH_HEAL_CHANCE = 0.2;
+/** Smush heal fraction of total damage dealt. */
+const SMUSH_HEAL_FRACTION = 0.5;
+/** Stun duration in frames for smush non-boss stun. */
+const SMUSH_STUN_FRAMES = 150;
+
 /** Shared context passed to combat resolution functions. */
 export interface CombatContext {
   human: HumanPlayer;
@@ -30,8 +61,8 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   const { human, cat, mobGrid, gameMap, safeRoom } = ctx;
   ctx.hitLanded = false;
   const centerOf = (e: { x: number; y: number }) => ({
-    x: e.x + TILE_SIZE * 0.5,
-    y: e.y + TILE_SIZE * 0.5,
+    x: e.x + HALF_TILE,
+    y: e.y + HALF_TILE,
   });
 
   if (human.isAttackPeak() && !safeRoom.isEntityInSafeRoom(human)) {
@@ -47,7 +78,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const dy = mc.y - hc.y;
       const dist = Math.hypot(dx, dy);
       if (dist === 0 || dist > range) continue;
-      if (dist > TILE_SIZE * 1.0) {
+      if (dist > MELEE_POINT_BLANK_RANGE) {
         const dot = (dx / dist) * human.facingX + (dy / dist) * human.facingY;
         if (dot <= 0.0) continue;
       }
@@ -56,7 +87,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         mob.takeDamageFrom(damage, human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
-        if (human.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+        if (
+          human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+          Math.random() < SEPSIS_PROC_CHANCE
+        ) {
           mob.applyStatus(makeSepsis());
         }
       }
@@ -77,7 +111,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       const dy = mc.y - cc.y;
       const dist = Math.hypot(dx, dy);
       if (dist === 0 || dist > range) continue;
-      if (dist > TILE_SIZE * 1.0) {
+      if (dist > MELEE_POINT_BLANK_RANGE) {
         const dot = (dx / dist) * cat.facingX + (dy / dist) * cat.facingY;
         if (dot <= 0.0) continue;
       }
@@ -86,7 +120,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         mob.takeDamageFrom(damage, cat, 'melee');
         ctx.hitLanded = true;
         catHit = true;
-        if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+        if (
+          cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+          Math.random() < SEPSIS_PROC_CHANCE
+        ) {
           mob.applyStatus(makeSepsis());
         }
       }
@@ -123,7 +160,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
         // Level 5+: stun non-boss enemies
         if (isInner && stats.stunSmallEnemies && !mob.isBoss) {
-          mob.applyStatus(makeStun(150)); // 2.5s
+          mob.applyStatus(makeStun(SMUSH_STUN_FRAMES));
         }
         // Level 14+: stun bosses at 25% chance
         if (
@@ -132,14 +169,14 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           mob.isBoss &&
           Math.random() < stats.stunBossChance
         ) {
-          mob.applyStatus(makeStun(150));
+          mob.applyStatus(makeStun(SMUSH_BOSS_STUN_FRAMES));
         }
       }
     }
 
     // Level 10+: 20% chance to heal human for 50% of total damage dealt
-    if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < 0.2) {
-      const healAmt = Math.round(totalSmushDamage * 0.5);
+    if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < SMUSH_HEAL_CHANCE) {
+      const healAmt = Math.round(totalSmushDamage * SMUSH_HEAL_FRACTION);
       human.hp = Math.min(human.hp + healAmt, human.maxHp);
     }
 
@@ -150,8 +187,8 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
   if (!safeRoom.isEntityInSafeRoom(cat)) {
     const missileLevel = cat.getMagicMissileLevel();
-    const hitRadius = TILE_SIZE * 0.7;
-    const splashRadius = TILE_SIZE * 1.5; // AoE splash radius at level 5+
+    const hitRadius = TILE_SIZE * MISSILE_HIT_RADIUS_FRACTION;
+    const splashRadius = TILE_SIZE + HALF_TILE; // AoE splash radius at level 5+
 
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit) continue;
@@ -167,13 +204,16 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
             ctx.hitLanded = true;
             ctx.bus.emit('missileImpact', {});
 
-            if (cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') && Math.random() < 0.15) {
+            if (
+              cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+              Math.random() < SEPSIS_PROC_CHANCE
+            ) {
               mob.applyStatus(makeSepsis());
             }
 
             // Level 5+: AoE magic splash
-            if (missileLevel >= 5) {
-              const splashDamage = Math.max(1, Math.round(damage * 0.4));
+            if (missileLevel >= MISSILE_SPLASH_LEVEL) {
+              const splashDamage = Math.max(1, Math.round(damage * MISSILE_SPLASH_DAMAGE_FRACTION));
               const nearSplash = mobGrid.queryCircle(
                 missile.x,
                 missile.y,
@@ -181,8 +221,8 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
               );
               for (const splashMob of nearSplash) {
                 if (!splashMob.isAlive || splashMob === mob) continue;
-                const splashDx = splashMob.x + TILE_SIZE * 0.5 - missile.x;
-                const splashDy = splashMob.y + TILE_SIZE * 0.5 - missile.y;
+                const splashDx = splashMob.x + HALF_TILE - missile.x;
+                const splashDy = splashMob.y + HALF_TILE - missile.y;
                 if (Math.hypot(splashDx, splashDy) < splashRadius) {
                   splashMob.takeDamageFrom(splashDamage, cat, 'missile');
                 }
@@ -190,12 +230,12 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
             }
 
             // Level 10+: queue sub-missiles from impact point (non-sub missiles only)
-            if (missileLevel >= 10 && !missile.isSubMissile) {
+            if (missileLevel >= MISSILE_SUB_MISSILE_LEVEL && !missile.isSubMissile) {
               cat.queueSubMissileSpawn(missile.x, missile.y);
             }
 
             // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
-            if (missileLevel >= 15 && mob.isBoss) {
+            if (missileLevel >= MISSILE_SLOW_BOSS_LEVEL && mob.isBoss) {
               mob.isSlowed = true;
             }
           }
@@ -231,7 +271,7 @@ export function resolveKills(ctx: CombatContext): void {
     const otherPlayer = topPlayer === human ? cat : human;
 
     const totalXp = mob.scaledXpValue;
-    const topXp = Math.max(1, Math.round(totalXp * 0.85));
+    const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
     const shareXp = Math.max(1, totalXp - topXp);
     if (topPlayer?.gainXp(topXp)) {
       bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
@@ -249,15 +289,15 @@ export function resolveKills(ctx: CombatContext): void {
     if (mob.killType === 'missile' && killer === cat) {
       abilityManager.addKillXp('magic_missile');
 
-      if (cat.getMagicMissileLevel() >= 15) {
-        const shockwaveRadius = TILE_SIZE * 5;
-        const cx = mob.x + TILE_SIZE * 0.5;
-        const cy = mob.y + TILE_SIZE * 0.5;
+      if (cat.getMagicMissileLevel() >= MISSILE_SLOW_BOSS_LEVEL) {
+        const shockwaveRadius = TILE_SIZE * MISSILE_SHOCKWAVE_RADIUS_TILES;
+        const cx = mob.x + HALF_TILE;
+        const cy = mob.y + HALF_TILE;
         const nearShock = mobGrid.queryCircle(cx, cy, shockwaveRadius);
         for (const nearMob of nearShock) {
           if (!nearMob.isAlive) continue;
-          const sdx = nearMob.x + TILE_SIZE * 0.5 - cx;
-          const sdy = nearMob.y + TILE_SIZE * 0.5 - cy;
+          const sdx = nearMob.x + HALF_TILE - cx;
+          const sdy = nearMob.y + HALF_TILE - cy;
           if (Math.hypot(sdx, sdy) < shockwaveRadius) {
             nearMob.applyStatus(makeMagicBurn());
           }
@@ -284,8 +324,11 @@ export function resolveKills(ctx: CombatContext): void {
       abilityManager.addKillXp('protective_shell');
 
       // Level-15 chain lightning: if mob died inside the active shell, queue origin
-      if (spells.activeShellLevel >= 15 && spells.isInsideShell(mob.x, mob.y)) {
-        spells.addChainLightningOrigin(mob.x + TILE_SIZE * 0.5, mob.y + TILE_SIZE * 0.5);
+      if (
+        spells.activeShellLevel >= SHELL_CHAIN_LIGHTNING_LEVEL &&
+        spells.isInsideShell(mob.x, mob.y)
+      ) {
+        spells.addChainLightningOrigin(mob.x + HALF_TILE, mob.y + HALF_TILE);
       }
     }
 

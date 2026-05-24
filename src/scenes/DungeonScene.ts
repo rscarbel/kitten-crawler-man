@@ -129,9 +129,113 @@ export interface DungeonSceneOptions {
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
 
-const GOD_MODE_STAT_BOOST = 300 as const;
-const GOD_MODE_SPEED_MULTIPLIER = 2 as const;
-const GOD_MODE_ABILITY_LEVEL = 15 as const;
+const GOD_MODE_STAT_BOOST = 300;
+const GOD_MODE_SPEED_MULTIPLIER = 2;
+const GOD_MODE_ABILITY_LEVEL = 15;
+
+// Companion/Follower system
+const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
+const TILE_CENTER_OFFSET = 0.5;
+const COMPANION_ERROR_DISPLAY_FRAMES = 180;
+
+// Spatial grid sizing
+const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
+
+// Dumbbell room positioning (relative to door)
+const DUMBBELL_OFFSET_1_X = -2;
+const DUMBBELL_OFFSET_1_Y = -3;
+const DUMBBELL_OFFSET_2_X = 1;
+const DUMBBELL_OFFSET_2_Y = -3;
+const DUMBBELL_OFFSET_3_X = -2;
+const DUMBBELL_OFFSET_3_Y = -6;
+const DUMBBELL_OFFSET_4_X = 1;
+const DUMBBELL_OFFSET_4_Y = -6;
+const BENCH_PRESS_OFFSET_X = -1;
+const BENCH_PRESS_OFFSET_Y = -9;
+const TREADMILL_OFFSET_X = 0;
+const TREADMILL_OFFSET_Y = -12;
+
+// Loot and drop rates
+const LOOT_SPLIT_THRESHOLD = 0.5;
+const LOW_HP_LOOT_CHANCE = 0.4;
+const MED_HP_LOOT_CHANCE = 0.6;
+const MIN_COIN_DROP = 15;
+const MAX_COIN_DROP = 50;
+const SPIT_PLACEMENT_ATTEMPTS = 8;
+const SPIT_PLACEMENT_RANDOMNESS = 0.5;
+
+// Health and revival system
+const KNOCKDOWN_FRAMES = 5400;
+const HP_RECOVERY_THRESHOLD = 0.01;
+const CRITICAL_HP_WARNING_SECONDS = 10;
+
+// Health status pulsing
+const HEALTH_PULSE_BASE = 0.75;
+const HEALTH_PULSE_AMPLITUDE = 0.25;
+const HEALTH_PULSE_FREQUENCY = 0.006;
+
+// UI positioning and sizing
+const UI_SIDEBAR_WIDTH = 16;
+const REVIVE_BANNER_MARGIN = 16;
+const MINIMAP_MARGIN = 8;
+const MOBILE_UI_SPACING = 4;
+const REVIVE_TEXT_VERTICAL_OFFSET = 3;
+const HEALTH_INDICATOR_SIZE = 15;
+const HEALTH_INDICATOR_SIZE_DESKTOP = 22;
+const KNOCKDOWN_UI_Y_MOBILE = 62;
+const KNOCKDOWN_UI_Y_DESKTOP = 70;
+const IDLE_TEXT_SIZE = 28;
+const IDLE_TEXT_BOUNCE_AMPLITUDE = 4;
+const IDLE_TEXT_BOUNCE_FREQUENCY = 0.005;
+
+// UI button positioning (Mongo/Gear/Bag etc)
+const SUMMON_BUTTON_X = 10;
+const SUMMON_BUTTON_WIDTH = 80;
+const SUMMON_BUTTON_HEIGHT = 48;
+const SUMMON_BUTTON_Y_OFFSET_1 = 52;
+const SUMMON_BUTTON_Y_OFFSET_2 = 12;
+const SUMMON_BUTTON_Y_OFFSET_3 = 52;
+const SUMMON_BUTTON_Y_OFFSET_4 = 8;
+
+// Music and animation timing
+const MUSIC_FADE_IN_MS = 2000;
+const LONGPRESS_TIMEOUT_MS = 500;
+const MENU_TAP_DURATION_MS = 250;
+const MENU_TAP_MAX_DISTANCE = 20;
+const TOUCH_DRAG_THRESHOLD = 10;
+const MINIMAP_DRAG_THRESHOLD = 5;
+
+// Health visual feedback
+const HEALTH_BAR_COLOR_THRESHOLD = 0.78;
+const HEALTH_BAR_WARNING_THRESHOLD = 0.75;
+
+// Combat and interaction
+const HUMAN_ATTACK_RANGE_TILES = 3;
+const CAT_ATTACK_RANGE_TILES = 5;
+const ACHIEVEMENT_RECENT_EVENTS_LIMIT = 5;
+const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
+const SPIDER_QUEST_COMPLETION_XP = 2000;
+const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
+const COMBAT_COOLDOWN_FRAMES = 300;
+const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
+const LOW_HEALTH_THRESHOLD = 0.25;
+const FRAMES_PER_SECOND = 60;
+const MS_PER_SECOND = 1000;
+const SHOCKWAVE_DAMAGE = 4;
+const CHAIN_LIGHTNING_RANGE_TILES = 3;
+const CHAIN_LIGHTNING_MAX_TARGETS = 3;
+const CHAIN_LIGHTNING_DAMAGE = 2;
+
+// Revive arrow positioning and animation
+const ARROW_HEIGHT_ABOVE_PLAYER = 28;
+const ARROW_LENGTH_MULTIPLIER_BASE2 = 0.45;
+const ARROW_LENGTH_MULTIPLIER_HEIGHT = 0.5;
+const ARROW_LENGTH_MULTIPLIER_CENTER = 0.1;
+const ARROW_BOUNCE_FREQUENCY = 0.005;
+const ARROW_BOUNCE_AMPLITUDE = 4;
+const ARROW_LENGTH_PIXELS = 22;
+const ARROW_LINE_WIDTH = 1.5;
+const ARROW_VERTICAL_OFFSET_TILES = 1.5;
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -149,7 +253,7 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
       // Split stacks evenly; extra goes to random player
       const half = Math.floor(item.quantity / 2);
       const extra = item.quantity - half * 2;
-      const humanGetsExtra = extra > 0 && Math.random() < 0.5;
+      const humanGetsExtra = extra > 0 && Math.random() < LOOT_SPLIT_THRESHOLD;
       humanItems.push({ id: item.id, quantity: half + (humanGetsExtra ? extra : 0) });
       catItems.push({ id: item.id, quantity: half + (humanGetsExtra ? 0 : extra) });
     }
@@ -168,7 +272,7 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
   // Split coins; odd coin goes to random player
   const halfCoins = Math.floor(loot.coins / 2);
   const extraCoin = loot.coins - halfCoins * 2;
-  const humanGetsExtraCoin = extraCoin > 0 && Math.random() < 0.5;
+  const humanGetsExtraCoin = extraCoin > 0 && Math.random() < LOOT_SPLIT_THRESHOLD;
 
   return {
     humanLoot: { coins: halfCoins + (humanGetsExtraCoin ? extraCoin : 0), items: humanItems },
@@ -277,8 +381,8 @@ export class DungeonScene extends GameplayScene {
   private playerIdleFrames = 0;
   private gameStats = new GameStats();
 
-  private _mouseX = -9999;
-  private _mouseY = -9999;
+  private _mouseX = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
+  private _mouseY = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
   private _mouseDown = false;
   private _companionErrorMsg: { text: string; framesLeft: number } | null = null;
   private _miniMapDragging = false;
@@ -340,7 +444,7 @@ export class DungeonScene extends GameplayScene {
 
     this.cat.setMap(this.gameMap);
 
-    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * 4);
+    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     this.miniMap = new MiniMapSystem(this.gameMap);
@@ -384,25 +488,25 @@ export class DungeonScene extends GameplayScene {
       const ts = TILE_SIZE;
       const dist = Math.hypot(companion.x - caster.x, companion.y - caster.y);
       const hasLOS =
-        dist < ts * 2.5 ||
+        dist < ts * FOLLOWER_FOLLOW_RANGE_TILES ||
         this.gameMap.hasLineOfSight(
-          companion.x + ts * 0.5,
-          companion.y + ts * 0.5,
-          caster.x + ts * 0.5,
-          caster.y + ts * 0.5,
+          companion.x + ts * TILE_CENTER_OFFSET,
+          companion.y + ts * TILE_CENTER_OFFSET,
+          caster.x + ts * TILE_CENTER_OFFSET,
+          caster.y + ts * TILE_CENTER_OFFSET,
         );
       if (!hasLOS) {
-        const compTX = Math.floor((companion.x + ts * 0.5) / ts);
-        const compTY = Math.floor((companion.y + ts * 0.5) / ts);
-        const casterTX = Math.floor((caster.x + ts * 0.5) / ts);
-        const casterTY = Math.floor((caster.y + ts * 0.5) / ts);
+        const compTX = Math.floor((companion.x + ts * TILE_CENTER_OFFSET) / ts);
+        const compTY = Math.floor((companion.y + ts * TILE_CENTER_OFFSET) / ts);
+        const casterTX = Math.floor((caster.x + ts * TILE_CENTER_OFFSET) / ts);
+        const casterTY = Math.floor((caster.y + ts * TILE_CENTER_OFFSET) / ts);
         const path = this.gameMap.findPath(compTX, compTY, casterTX, casterTY);
         if (path.length === 0) {
           this.audio?.play('error');
           const companionName = companionIsCat ? 'cat' : 'human';
           this._companionErrorMsg = {
             text: `The ${companionName} is too far away.`,
-            framesLeft: 180,
+            framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
           };
           return;
         }
@@ -570,13 +674,13 @@ export class DungeonScene extends GameplayScene {
 
     // Wooden chests for treasure rooms
     for (const tr of this.gameMap.treasureRooms) {
-      const coins = randomInt(15, 50);
+      const coins = randomInt(MIN_COIN_DROP, MAX_COIN_DROP);
       const items: Array<{ id: 'health_potion' | 'scroll_of_confusing_fog'; quantity: number }> =
         [];
       const roll = Math.random();
-      if (roll < 0.4) {
+      if (roll < LOW_HP_LOOT_CHANCE) {
         items.push({ id: 'health_potion', quantity: randomInt(1, 2) });
-      } else if (roll < 0.6) {
+      } else if (roll < MED_HP_LOOT_CHANCE) {
         items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
       }
       this.treasureChests.addWoodenChest(tr.centre.x, tr.centre.y, tr.bounds, {
@@ -627,12 +731,12 @@ export class DungeonScene extends GameplayScene {
       y: number;
       id: 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
     }> = [
-      { x: door.x - 2, y: door.y - 3, id: 'gym_dumbbell' },
-      { x: door.x + 1, y: door.y - 3, id: 'gym_dumbbell' },
-      { x: door.x - 2, y: door.y - 6, id: 'gym_dumbbell' },
-      { x: door.x + 1, y: door.y - 6, id: 'gym_dumbbell' },
-      { x: door.x - 1, y: door.y - 9, id: 'gym_bench_press' },
-      { x: door.x, y: door.y - 12, id: 'gym_treadmill' },
+      { x: door.x + DUMBBELL_OFFSET_1_X, y: door.y + DUMBBELL_OFFSET_1_Y, id: 'gym_dumbbell' },
+      { x: door.x + DUMBBELL_OFFSET_2_X, y: door.y + DUMBBELL_OFFSET_2_Y, id: 'gym_dumbbell' },
+      { x: door.x + DUMBBELL_OFFSET_3_X, y: door.y + DUMBBELL_OFFSET_3_Y, id: 'gym_dumbbell' },
+      { x: door.x + DUMBBELL_OFFSET_4_X, y: door.y + DUMBBELL_OFFSET_4_Y, id: 'gym_dumbbell' },
+      { x: door.x + BENCH_PRESS_OFFSET_X, y: door.y + BENCH_PRESS_OFFSET_Y, id: 'gym_bench_press' },
+      { x: door.x + TREADMILL_OFFSET_X, y: door.y + TREADMILL_OFFSET_Y, id: 'gym_treadmill' },
     ];
     for (const { x, y, id } of candidates) {
       if (this.gameMap.isWalkable(x, y)) {
@@ -661,14 +765,14 @@ export class DungeonScene extends GameplayScene {
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
       const { mob, killer, topDamageDealer } = e;
-      const cx = mob.x + TILE_SIZE * 0.5;
-      const cy = mob.y + TILE_SIZE * 0.5;
+      const cx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
+      const cy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET;
 
       let impactDx = 0;
       let impactDy = 0;
       if (killer !== null) {
-        const dx = cx - (killer.x + TILE_SIZE * 0.5);
-        const dy = cy - (killer.y + TILE_SIZE * 0.5);
+        const dx = cx - (killer.x + TILE_SIZE * TILE_CENTER_OFFSET);
+        const dy = cy - (killer.y + TILE_SIZE * TILE_CENTER_OFFSET);
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0) {
           impactDx = dx / dist;
@@ -768,9 +872,13 @@ export class DungeonScene extends GameplayScene {
           const count = randomInt(rule.minCount, rule.maxCount);
           for (let i = 0; i < count; i++) {
             let placed = false;
-            for (let attempt = 0; attempt < 8 && !placed; attempt++) {
-              const ox = Math.floor((Math.random() - 0.5) * rule.spreadRadius * 2);
-              const oy = Math.floor((Math.random() - 0.5) * rule.spreadRadius * 2);
+            for (let attempt = 0; attempt < SPIT_PLACEMENT_ATTEMPTS && !placed; attempt++) {
+              const ox = Math.floor(
+                (Math.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
+              );
+              const oy = Math.floor(
+                (Math.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
+              );
               const gtx = tx + ox;
               const gty = ty + oy;
               if (!this.gameMap.isWalkable(gtx, gty)) continue;
@@ -856,7 +964,7 @@ export class DungeonScene extends GameplayScene {
     const startIntro = (): void => {
       this.introStarted = true;
       this.audio?.playWhenReady('level_begins');
-      this.audio?.playMusic('bg_level_1', { fadeInMs: 2000 });
+      this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
     };
     if (this.audio === null || this.audio.isRunning) {
       startIntro();
@@ -1011,6 +1119,7 @@ export class DungeonScene extends GameplayScene {
     this.companion.isFollowOverride = false;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-magic-numbers
   private readonly REVIVE_RANGE_PX = TILE_SIZE * 0.8;
   private readonly REVIVE_FRAMES = 300; // 5 seconds @ 60fps
 
@@ -1047,7 +1156,7 @@ export class DungeonScene extends GameplayScene {
         inactive.isKnockedOut = false;
         inactive.knockedOutFrames = 0;
         inactive.reviveProgress = 0;
-        inactive.hp = Math.max(1, Math.ceil(inactive.maxHp * 0.01));
+        inactive.hp = Math.max(1, Math.ceil(inactive.maxHp * HP_RECOVERY_THRESHOLD));
         this.audio?.play(inactive === this.human ? 'human_revived' : 'cat_revived');
       }
     } else {
@@ -1067,14 +1176,14 @@ export class DungeonScene extends GameplayScene {
 
     const active = this.active();
     const t = Date.now();
-    const pulse = 0.75 + 0.25 * Math.sin(t * 0.006);
+    const pulse = HEALTH_PULSE_BASE + HEALTH_PULSE_AMPLITUDE * Math.sin(t * HEALTH_PULSE_FREQUENCY);
 
     // On mobile, the minimap occupies the top-right corner — keep the banner in the
     // available space to its left so the text doesn't slide behind it.
     const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const availW = platform.isMobile ? canvas.width - mmSz - 16 : canvas.width;
+    const availW = platform.isMobile ? canvas.width - mmSz - UI_SIDEBAR_WIDTH : canvas.width;
     const cx = availW / 2;
-    const bannerSize = platform.isMobile ? 15 : 22;
+    const bannerSize = platform.isMobile ? HEALTH_INDICATOR_SIZE : HEALTH_INDICATOR_SIZE_DESKTOP;
 
     // "Revive your teammate!" banner
     drawText(ctx, 'Revive your teammate!', {
@@ -1085,18 +1194,21 @@ export class DungeonScene extends GameplayScene {
       size: bannerSize,
       outline: true,
       alpha: pulse,
-      width: availW - 16,
+      width: availW - REVIVE_BANNER_MARGIN,
     });
 
     // Countdown timer
-    const secondsLeft = Math.max(0, Math.ceil((5400 - inactive.knockedOutFrames) / 60));
+    const secondsLeft = Math.max(
+      0,
+      Math.ceil((KNOCKDOWN_FRAMES - inactive.knockedOutFrames) / FRAMES_PER_SECOND),
+    );
     drawText(ctx, `${secondsLeft}s`, {
       x: cx,
-      y: platform.isMobile ? 62 : 70,
+      y: platform.isMobile ? KNOCKDOWN_UI_Y_MOBILE : KNOCKDOWN_UI_Y_DESKTOP,
       align: 'center',
       ...TEXT_PRESETS.danger,
-      size: 15,
-      color: secondsLeft <= 10 ? '#ef4444' : '#fbbf24',
+      size: HEALTH_INDICATOR_SIZE,
+      color: secondsLeft <= CRITICAL_HP_WARNING_SECONDS ? '#ef4444' : '#fbbf24',
       outline: true,
       alpha: pulse,
     });
@@ -1108,24 +1220,24 @@ export class DungeonScene extends GameplayScene {
       const dx = inactive.x - active.x;
       const dy = inactive.y - active.y;
       const angle = Math.atan2(dy, dx);
-      const bounce = Math.sin(t * 0.005) * 4;
-      const len = 22;
+      const bounce = Math.sin(t * IDLE_TEXT_BOUNCE_FREQUENCY) * IDLE_TEXT_BOUNCE_AMPLITUDE;
+      const len = IDLE_TEXT_SIZE;
 
-      // Screen position: centre of active player's tile, 28px above the sprite
+      // Screen position: centre of active player's tile, above the sprite
       const arrowX = active.x - camX + TILE_SIZE / 2;
-      const arrowY = active.y - camY - 28 + bounce;
+      const arrowY = active.y - camY - ARROW_HEIGHT_ABOVE_PLAYER + bounce;
 
       ctx.save();
       ctx.translate(arrowX, arrowY);
       ctx.rotate(angle);
       ctx.fillStyle = '#facc15';
       ctx.strokeStyle = '#000';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = ARROW_LINE_WIDTH;
       ctx.beginPath();
       ctx.moveTo(len, 0);
-      ctx.lineTo(-len * 0.45, -len * 0.5);
-      ctx.lineTo(-len * 0.1, 0);
-      ctx.lineTo(-len * 0.45, len * 0.5);
+      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
+      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
+      ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -1150,7 +1262,7 @@ export class DungeonScene extends GameplayScene {
 
       drawText(ctx, 'REVIVING', {
         x: cx,
-        y: barY + 3,
+        y: barY + REVIVE_TEXT_VERTICAL_OFFSET,
         align: 'center',
         size: 11,
         bold: true,
@@ -1192,22 +1304,22 @@ export class DungeonScene extends GameplayScene {
     const angle = Math.atan2(dy, dx);
 
     const t = Date.now();
-    const bounce = Math.sin(t * 0.005) * 4;
-    const len = 22;
+    const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
+    const len = ARROW_LENGTH_PIXELS;
     const arrowX = player.x - camX + TILE_SIZE / 2;
-    const arrowY = player.y - camY - TILE_SIZE * 1.5 + bounce;
+    const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
     ctx.rotate(angle);
     ctx.fillStyle = '#facc15';
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = ARROW_LINE_WIDTH;
     ctx.beginPath();
     ctx.moveTo(len, 0);
-    ctx.lineTo(-len * 0.45, -len * 0.5);
-    ctx.lineTo(-len * 0.1, 0);
-    ctx.lineTo(-len * 0.45, len * 0.5);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -1230,22 +1342,22 @@ export class DungeonScene extends GameplayScene {
     const angle = Math.atan2(dy, dx);
 
     const t = Date.now();
-    const bounce = Math.sin(t * 0.005) * 4;
-    const len = 22;
+    const bounce = Math.sin(t * ARROW_BOUNCE_FREQUENCY) * ARROW_BOUNCE_AMPLITUDE;
+    const len = ARROW_LENGTH_PIXELS;
     const arrowX = player.x - camX + TILE_SIZE / 2;
-    const arrowY = player.y - camY - TILE_SIZE * 1.5 + bounce;
+    const arrowY = player.y - camY - TILE_SIZE * ARROW_VERTICAL_OFFSET_TILES + bounce;
 
     ctx.save();
     ctx.translate(arrowX, arrowY);
     ctx.rotate(angle);
     ctx.fillStyle = '#a855f7';
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = ARROW_LINE_WIDTH;
     ctx.beginPath();
     ctx.moveTo(len, 0);
-    ctx.lineTo(-len * 0.45, -len * 0.5);
-    ctx.lineTo(-len * 0.1, 0);
-    ctx.lineTo(-len * 0.45, len * 0.5);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, -len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_CENTER, 0);
+    ctx.lineTo(-len * ARROW_LENGTH_MULTIPLIER_BASE2, len * ARROW_LENGTH_MULTIPLIER_HEIGHT);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -1462,8 +1574,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   private hasNearbyEnemy(player: HumanPlayer | CatPlayer, range: number): boolean {
-    const px = player.x + TILE_SIZE * 0.5;
-    const py = player.y + TILE_SIZE * 0.5;
+    const px = player.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    const py = player.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const nearby = this.mobGrid.queryCircle(px, py, range);
     for (const mob of nearby) {
       if (mob.isAlive) return true;
@@ -1491,11 +1603,13 @@ export class DungeonScene extends GameplayScene {
       if (this.safeRoom.isNearBed(active)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(active)) {
-        const humanEvents = this.humanAchievements.getTopRecentEvents(5);
-        const catEvents = this.catAchievements.getTopRecentEvents(5);
+        const humanEvents = this.humanAchievements.getTopRecentEvents(
+          ACHIEVEMENT_RECENT_EVENTS_LIMIT,
+        );
+        const catEvents = this.catAchievements.getTopRecentEvents(ACHIEVEMENT_RECENT_EVENTS_LIMIT);
         const merged = [...humanEvents, ...catEvents]
           .sort((a, b) => a.secondsAgo - b.secondsAgo)
-          .slice(0, 5);
+          .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
         const responsePromise = aiAdapter.chatWithMordecai({
           recentEvents: merged,
           humanLevel: this.human.level,
@@ -1506,7 +1620,9 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     // If an enemy is within attack range, prefer attacking over interacting
-    const attackRange = this.human.isActive ? TILE_SIZE * 3 : TILE_SIZE * 5;
+    const attackRange = this.human.isActive
+      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
+      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
     if (this.hasNearbyEnemy(active, attackRange)) {
       // fall through to attack logic below
     } else {
@@ -1538,10 +1654,18 @@ export class DungeonScene extends GameplayScene {
       }
     }
     if (this.human.isActive) {
-      this.companion.snapFacingToNearestMob(this.human, TILE_SIZE * 3, this.mobGrid);
+      this.companion.snapFacingToNearestMob(
+        this.human,
+        TILE_SIZE * HUMAN_ATTACK_RANGE_TILES,
+        this.mobGrid,
+      );
       this.human.triggerAttack();
     } else {
-      this.companion.snapFacingToNearestMob(this.cat, TILE_SIZE * 5, this.mobGrid);
+      this.companion.snapFacingToNearestMob(
+        this.cat,
+        TILE_SIZE * CAT_ATTACK_RANGE_TILES,
+        this.mobGrid,
+      );
       if (this.pauseMenu.catMissileDefault && this.cat.triggerMissile()) {
         this.audio?.play('cat_missile_fire');
       } else {
@@ -1851,10 +1975,10 @@ export class DungeonScene extends GameplayScene {
       this._processSpiderQuestSounds();
       if (this.spiderQuest.questCompletePending) {
         this.spiderQuest.questCompletePending = false;
-        if (this.human.gainXp(2000)) {
+        if (this.human.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
           this.bus.emit('playerLevelUp', { player: this.human, newLevel: this.human.level });
         }
-        if (this.cat.gainXp(2000)) {
+        if (this.cat.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
           this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
         }
       }
@@ -1976,8 +2100,8 @@ export class DungeonScene extends GameplayScene {
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
-        x: canvas.width - mmSz - 8,
-        y: 8,
+        x: canvas.width - mmSz - MINIMAP_MARGIN,
+        y: MINIMAP_MARGIN,
         w: mmSz,
         h: mmSz,
       };
@@ -1992,7 +2116,7 @@ export class DungeonScene extends GameplayScene {
     if (platform.isMobile) {
       // On mobile, stack the boss UI directly below the HUD bar and render the
       // skill-points badge below that so nothing overlaps.
-      const mobileTopY = hudResult.hudPanelBottom + 4;
+      const mobileTopY = hudResult.hudPanelBottom + MOBILE_UI_SPACING;
       const bossBottom = this.bossRoom.renderUI(
         ctx,
         canvas,
@@ -2003,7 +2127,7 @@ export class DungeonScene extends GameplayScene {
         this.cat,
         mobileTopY,
       );
-      const skillTopY = bossBottom !== null ? bossBottom + 4 : mobileTopY;
+      const skillTopY = bossBottom !== null ? bossBottom + MOBILE_UI_SPACING : mobileTopY;
       this._hudSkillBannerRect = renderMobileSkillBadge(
         ctx,
         canvas,
@@ -2046,10 +2170,14 @@ export class DungeonScene extends GameplayScene {
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
-          10,
-          canvas.height - 52 - 12 - 52 - 8,
-          80,
-          48,
+          SUMMON_BUTTON_X,
+          canvas.height -
+            SUMMON_BUTTON_Y_OFFSET_1 -
+            SUMMON_BUTTON_Y_OFFSET_2 -
+            SUMMON_BUTTON_Y_OFFSET_3 -
+            SUMMON_BUTTON_Y_OFFSET_4,
+          SUMMON_BUTTON_WIDTH,
+          SUMMON_BUTTON_HEIGHT,
           this.cat.isActive,
         );
       }
@@ -2161,7 +2289,7 @@ export class DungeonScene extends GameplayScene {
       const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
       drawText(ctx, hint, {
         x: Math.round(canvas.width / 2),
-        y: Math.round(canvas.height * 0.78),
+        y: Math.round(canvas.height * HEALTH_BAR_COLOR_THRESHOLD),
         align: 'center',
         size: 18,
         bold: true,
@@ -2177,7 +2305,7 @@ export class DungeonScene extends GameplayScene {
       const alpha = Math.min(1, msg.framesLeft / FADE_FRAMES);
       drawText(ctx, msg.text, {
         x: Math.round(canvas.width / 2),
-        y: Math.round(canvas.height * 0.75),
+        y: Math.round(canvas.height * HEALTH_BAR_WARNING_THRESHOLD),
         align: 'center',
         size: 18,
         bold: true,
@@ -2394,7 +2522,11 @@ export class DungeonScene extends GameplayScene {
           this.audio?.play('grotesque_spider_spit_landing');
         }
         const spiderDist = Math.hypot(mob.x - this.active().x, mob.y - this.active().y);
-        if (mob.isAlive && mob.isMoving && spiderDist < TILE_SIZE * 12) {
+        if (
+          mob.isAlive &&
+          mob.isMoving &&
+          spiderDist < TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES
+        ) {
           this.audio?.startSpiderWalkingLoop();
         } else {
           this.audio?.stopSpiderWalkingLoop();
@@ -2425,7 +2557,7 @@ export class DungeonScene extends GameplayScene {
           mobType: hitMob?.constructor.name ?? 'Unknown',
         });
       }
-      this.combatCooldownFrames = 300;
+      this.combatCooldownFrames = COMBAT_COOLDOWN_FRAMES;
     } else if (this.combatCooldownFrames > 0) {
       this.combatCooldownFrames--;
     }
@@ -2434,9 +2566,9 @@ export class DungeonScene extends GameplayScene {
       this.playerIdleFrames = 0;
     } else {
       this.playerIdleFrames++;
-      if (this.playerIdleFrames % 300 === 0) {
+      if (this.playerIdleFrames % PLAYER_IDLE_REPORT_INTERVAL_FRAMES === 0) {
         this.bus.emit('playerIdle', {
-          totalIdleMs: Math.round((this.playerIdleFrames / 60) * 1000),
+          totalIdleMs: Math.round((this.playerIdleFrames / FRAMES_PER_SECOND) * MS_PER_SECOND),
         });
       }
     }
@@ -2445,7 +2577,7 @@ export class DungeonScene extends GameplayScene {
       [this.human, 'Human'],
       [this.cat, 'Cat'],
     ] as const) {
-      const isLow = player.hp / player.maxHp < 0.25;
+      const isLow = player.hp / player.maxHp < LOW_HEALTH_THRESHOLD;
       if (name === 'Human') {
         if (isLow && !this.humanHealthLow) {
           this.bus.emit('healthLow', { player: 'Human', hp: player.hp, maxHp: player.maxHp });
@@ -2482,10 +2614,10 @@ export class DungeonScene extends GameplayScene {
       );
       for (const mob of nearBlast) {
         if (!mob.isAlive) continue;
-        const dx = mob.x + TILE_SIZE * 0.5 - shockwave.x;
-        const dy = mob.y + TILE_SIZE * 0.5 - shockwave.y;
+        const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.x;
+        const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.y;
         if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * 2) {
-          if (!this.human.zeroDamage) mob.takeDamageFrom(4, this.human, 'shell');
+          if (!this.human.zeroDamage) mob.takeDamageFrom(SHOCKWAVE_DAMAGE, this.human, 'shell');
           mob.applyStatus(makeElectrified());
         }
       }
@@ -2493,16 +2625,20 @@ export class DungeonScene extends GameplayScene {
 
     const chainTargets = this.spells.drainChainLightningOrigins();
     for (const target of chainTargets) {
-      const nearby = this.mobGrid.queryCircle(target.x, target.y, TILE_SIZE * 3);
+      const nearby = this.mobGrid.queryCircle(
+        target.x,
+        target.y,
+        TILE_SIZE * CHAIN_LIGHTNING_RANGE_TILES,
+      );
       let hits = 0;
       for (const mob of nearby) {
-        if (!mob.isAlive || hits >= 3) continue;
-        if (!this.human.zeroDamage) mob.takeDamageFrom(2, this.human, 'shell');
+        if (!mob.isAlive || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
+        if (!this.human.zeroDamage) mob.takeDamageFrom(CHAIN_LIGHTNING_DAMAGE, this.human, 'shell');
         this.spells.addChainLightningBolt(
           target.x,
           target.y,
-          mob.x + TILE_SIZE * 0.5,
-          mob.y + TILE_SIZE * 0.5,
+          mob.x + TILE_SIZE * TILE_CENTER_OFFSET,
+          mob.y + TILE_SIZE * TILE_CENTER_OFFSET,
         );
         hits++;
       }
@@ -2800,7 +2936,7 @@ export class DungeonScene extends GameplayScene {
             this.touch.longPressFired = true;
             this.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
-          }, 500);
+          }, LONGPRESS_TIMEOUT_MS);
           continue;
         }
       }
@@ -2845,7 +2981,7 @@ export class DungeonScene extends GameplayScene {
             this.touch.longPressFired = true;
             this.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
-          }, 500);
+          }, LONGPRESS_TIMEOUT_MS);
           continue;
         }
       }
@@ -2866,7 +3002,7 @@ export class DungeonScene extends GameplayScene {
 
       if (this.touch.longPressPos) {
         const dist = Math.hypot(x - this.touch.longPressPos.x, y - this.touch.longPressPos.y);
-        if (dist > 10) this.clearInvLongPress();
+        if (dist > TOUCH_DRAG_THRESHOLD) this.clearInvLongPress();
       }
 
       this.handleMouseMove(x, y);
@@ -2878,7 +3014,7 @@ export class DungeonScene extends GameplayScene {
           x - this.touch.miniMapTouchStartX,
           y - this.touch.miniMapTouchStartY,
         );
-        if (totalDist > 5) this.touch.miniMapDragged = true;
+        if (totalDist > MINIMAP_DRAG_THRESHOLD) this.touch.miniMapDragged = true;
         if (this.touch.miniMapDragged) this.miniMap.pan(dx, dy);
         this.touch.miniMapTouchLastX = x;
         this.touch.miniMapTouchLastY = y;
@@ -2917,7 +3053,7 @@ export class DungeonScene extends GameplayScene {
         if (tapStart !== null) {
           const elapsed = Date.now() - tapStart.time;
           const moved = Math.hypot(x - tapStart.x, y - tapStart.y);
-          if (elapsed < 250 && moved < 20) {
+          if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
             this.handleClick(x, y);
           }
         }
@@ -2961,7 +3097,7 @@ export class DungeonScene extends GameplayScene {
         if (this.touch.tapStart) {
           const elapsed = Date.now() - this.touch.tapStart.time;
           const moved = Math.hypot(x - this.touch.tapStart.x, y - this.touch.tapStart.y);
-          if (elapsed < 250 && moved < 20) {
+          if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
             if (
               this.dynamite.isCharging &&
               this.human.isActive &&

@@ -14,10 +14,6 @@ import { getSpriteDef } from '../core/SpriteLoader';
 import { platform } from '../core/Platform';
 import { drawText } from '../ui/TextBox';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 /** Song length in milliseconds. */
 const SONG_DURATION_MS = 71_758;
 
@@ -27,8 +23,11 @@ const FALL_SPEED_IMG_PX_PER_SEC = 480;
 /** Frames per second (used for elapsedMs accumulation). */
 const FPS = 60;
 
+/** Milliseconds per second. */
+const MS_PER_SECOND = 1_000;
+
 /** MS added per frame. */
-const MS_PER_FRAME = 1_000 / FPS;
+const MS_PER_FRAME = MS_PER_SECOND / FPS;
 
 /** Playing-field image dimensions (from manifest). */
 const FIELD_IMG_W = 426;
@@ -79,9 +78,34 @@ const MAX_SIMULTANEOUS_NOTES = 4;
 /** Stop spawning new notes this many ms before the song ends. */
 const SPAWN_CUTOFF_MS = 3_000;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Render constants
+const RENDER_OVERLAY_ALPHA = 0.82;
+const RENDER_FIELD_HEIGHT_RATIO = 0.85;
+const RENDER_FIELD_WIDTH_RATIO = 0.9;
+const RENDER_HIT_ZONE_ALPHA = 0.18;
+const RENDER_COLUMN_COUNT = 4;
+const RENDER_MOBILE_BOTTOM_OFFSET = 28;
+const RENDER_TIMER_Y_OFFSET = 8;
+
+// Bitwise constants for xorshift32
+const XORSHIFT_LEFT_SHIFT_1 = 13;
+const XORSHIFT_RIGHT_SHIFT_1 = 17;
+const XORSHIFT_LEFT_SHIFT_2 = 5;
+
+// RNG constants
+const RNG_SEED = 0x12345678;
+const RNG_UPPER_BITS_SHIFT = 8;
+const RNG_UPPER_BITS_DIVISOR = 0xffffff;
+
+// Spawn scheduling
+const SPAWN_RESCHEDULE_DELAY_ACTIVE = 100;
+const SPAWN_RESCHEDULE_DELAY_EMPTY = 80;
+
+// Column indices as constants
+const COL_LEFT = 0;
+const COL_UP = 1;
+const COL_DOWN = 2;
+const COL_RIGHT = 3;
 
 type ColumnIndex = 0 | 1 | 2 | 3;
 
@@ -99,30 +123,18 @@ interface ColumnState {
   errorTimer: number;
 }
 
-// ---------------------------------------------------------------------------
-// Seeded PRNG (xorshift32) — deterministic pseudo-random for note scheduling
-// ---------------------------------------------------------------------------
-
 function xorshift32(state: number): number {
   let s = state;
-  s ^= s << 13;
-  s ^= s >>> 17;
-  s ^= s << 5;
+  s ^= s << XORSHIFT_LEFT_SHIFT_1;
+  s ^= s >>> XORSHIFT_RIGHT_SHIFT_1;
+  s ^= s << XORSHIFT_LEFT_SHIFT_2;
   // Ensure unsigned 32-bit
   return s >>> 0;
 }
 
-// ---------------------------------------------------------------------------
-// Type guard
-// ---------------------------------------------------------------------------
-
 function isColumnIndex(n: number): n is ColumnIndex {
-  return n === 0 || n === 1 || n === 2 || n === 3;
+  return n === COL_LEFT || n === COL_UP || n === COL_DOWN || n === COL_RIGHT;
 }
-
-// ---------------------------------------------------------------------------
-// KeyboardHeroSystem
-// ---------------------------------------------------------------------------
 
 export class KeyboardHeroSystem {
   isActive = false;
@@ -150,13 +162,9 @@ export class KeyboardHeroSystem {
   private _failDelayTimer = 0;
 
   // Note scheduling
-  private _rngState = 0x12345678;
+  private _rngState = RNG_SEED;
   private _nextSpawnMs = 0;
   private _totalSpawned = 0;
-
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
 
   start(onComplete: () => void, onFail: () => void, onFailImmediate?: () => void): void {
     this._onComplete = onComplete;
@@ -170,7 +178,7 @@ export class KeyboardHeroSystem {
     this._failed = false;
     this._completed = false;
     this._failDelayTimer = 0;
-    this._rngState = 0x12345678;
+    this._rngState = RNG_SEED;
     this._totalSpawned = 0;
     this._nextSpawnMs = this._nextSpawnInterval();
     this.isActive = true;
@@ -252,12 +260,12 @@ export class KeyboardHeroSystem {
 
     // 1. Semi-transparent black overlay over entire canvas
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.82)';
+    ctx.fillStyle = `rgba(0, 0, 0, ${RENDER_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 2. Calculate display dimensions
-    const scaleH = (canvas.height * 0.85) / FIELD_IMG_H;
-    const scaleW = (canvas.width * 0.9) / FIELD_IMG_W;
+    const scaleH = (canvas.height * RENDER_FIELD_HEIGHT_RATIO) / FIELD_IMG_H;
+    const scaleW = (canvas.width * RENDER_FIELD_WIDTH_RATIO) / FIELD_IMG_W;
     const scale = Math.min(scaleH, scaleW);
     const dw = FIELD_IMG_W * scale;
     const dh = FIELD_IMG_H * scale;
@@ -274,7 +282,7 @@ export class KeyboardHeroSystem {
       'column_3_error',
       'column_4_error',
     ];
-    const allColumnIndices: readonly ColumnIndex[] = [0, 1, 2, 3];
+    const allColumnIndices: readonly ColumnIndex[] = [COL_LEFT, COL_UP, COL_DOWN, COL_RIGHT];
     for (const col of allColumnIndices) {
       const colState = this._columns[col];
       if (colState.errorTimer > 0) {
@@ -288,7 +296,7 @@ export class KeyboardHeroSystem {
     const hitZoneScreenTop = dy + HIT_ZONE_IMG_TOP * scale;
     const hitZoneScreenH = (HIT_ZONE_IMG_BOTTOM - HIT_ZONE_IMG_TOP) * scale;
     ctx.save();
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = RENDER_HIT_ZONE_ALPHA;
     ctx.fillStyle = '#22c55e';
     ctx.fillRect(dx, hitZoneScreenTop, dw, hitZoneScreenH);
     ctx.restore();
@@ -300,13 +308,13 @@ export class KeyboardHeroSystem {
 
     // 7. Song timer overlay
     const remainingMs = Math.max(0, SONG_DURATION_MS - this._elapsedMs);
-    const remainingSec = Math.floor(remainingMs / 1_000);
-    const mm = Math.floor(remainingSec / 60);
-    const ss = remainingSec % 60;
+    const remainingSec = Math.floor(remainingMs / MS_PER_SECOND);
+    const mm = Math.floor(remainingSec / FPS);
+    const ss = remainingSec % FPS;
     const timeStr = `Song: ${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')} remaining`;
     drawText(ctx, timeStr, {
       x: dx + dw / 2,
-      y: dy + 8,
+      y: dy + RENDER_TIMER_Y_OFFSET,
       size: 13,
       bold: true,
       color: '#e2e8f0',
@@ -318,7 +326,7 @@ export class KeyboardHeroSystem {
     if (platform.isMobile) {
       drawText(ctx, 'Tap each column to hit notes!', {
         x: dx + dw / 2,
-        y: dy + dh - 28,
+        y: dy + dh - RENDER_MOBILE_BOTTOM_OFFSET,
         size: 10,
         color: '#94a3b8',
         align: 'center',
@@ -327,7 +335,7 @@ export class KeyboardHeroSystem {
     } else {
       drawText(ctx, 'WASD / Arrow Keys', {
         x: dx + dw / 2,
-        y: dy + dh - 28,
+        y: dy + dh - RENDER_MOBILE_BOTTOM_OFFSET,
         size: 10,
         color: '#94a3b8',
         align: 'center',
@@ -350,8 +358,8 @@ export class KeyboardHeroSystem {
     if (!this.isActive) return;
 
     // Recalculate display bounds (same as render)
-    const scaleH = (canvasH * 0.85) / FIELD_IMG_H;
-    const scaleW = (canvasW * 0.9) / FIELD_IMG_W;
+    const scaleH = (canvasH * RENDER_FIELD_HEIGHT_RATIO) / FIELD_IMG_H;
+    const scaleW = (canvasW * RENDER_FIELD_WIDTH_RATIO) / FIELD_IMG_W;
     const scale = Math.min(scaleH, scaleW);
     const dw = FIELD_IMG_W * scale;
     const dh = FIELD_IMG_H * scale;
@@ -364,23 +372,19 @@ export class KeyboardHeroSystem {
 
     // Determine column from x position
     const relX = x - dx;
-    const colWidth = dw / 4;
+    const colWidth = dw / RENDER_COLUMN_COUNT;
     const colIndex = Math.floor(relX / colWidth);
     if (!isColumnIndex(colIndex)) return;
 
     this._processColumnInput(colIndex);
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
   private _keyToColumn(key: string): ColumnIndex | null {
     const lower = key.toLowerCase();
-    if (lower === 'arrowleft' || lower === 'a') return 0;
-    if (lower === 'arrowup' || lower === 'w') return 1;
-    if (lower === 'arrowdown' || lower === 's') return 2;
-    if (lower === 'arrowright' || lower === 'd') return 3;
+    if (lower === 'arrowleft' || lower === 'a') return COL_LEFT;
+    if (lower === 'arrowup' || lower === 'w') return COL_UP;
+    if (lower === 'arrowdown' || lower === 's') return COL_DOWN;
+    if (lower === 'arrowright' || lower === 'd') return COL_RIGHT;
     return null;
   }
 
@@ -441,13 +445,13 @@ export class KeyboardHeroSystem {
     const activeNotes = this._notes.filter((n) => n.state === 'falling').length;
     if (activeNotes >= MAX_SIMULTANEOUS_NOTES) {
       // Reschedule slightly later
-      this._nextSpawnMs = this._elapsedMs + 100;
+      this._nextSpawnMs = this._elapsedMs + SPAWN_RESCHEDULE_DELAY_ACTIVE;
       return;
     }
 
     // Find eligible columns (no note near or in the zone for that column)
     const eligibleColumns: ColumnIndex[] = [];
-    for (const colIdx of [0, 1, 2, 3] as const) {
+    for (const colIdx of [COL_LEFT, COL_UP, COL_DOWN, COL_RIGHT] as const) {
       const blocked = this._notes.some(
         (n) =>
           n.state === 'falling' &&
@@ -460,7 +464,7 @@ export class KeyboardHeroSystem {
     }
 
     if (eligibleColumns.length === 0) {
-      this._nextSpawnMs = this._elapsedMs + 80;
+      this._nextSpawnMs = this._elapsedMs + SPAWN_RESCHEDULE_DELAY_EMPTY;
       return;
     }
 
@@ -493,7 +497,7 @@ export class KeyboardHeroSystem {
     this._rngState = xorshift32(this._rngState);
     const range = SPAWN_INTERVAL_MAX_MS - SPAWN_INTERVAL_MIN_MS;
     // Use upper bits for better distribution
-    const rand = (this._rngState >>> 8) / 0xffffff;
+    const rand = (this._rngState >>> RNG_UPPER_BITS_SHIFT) / RNG_UPPER_BITS_DIVISOR;
     return SPAWN_INTERVAL_MIN_MS + rand * range;
   }
 
@@ -552,7 +556,7 @@ export class KeyboardHeroSystem {
     const screenY = fieldDy + note.imgY * scale - (def.frameHeight * scale) / 2;
 
     // Column center x in screen coords
-    const colWidth = fieldDw / 4;
+    const colWidth = fieldDw / RENDER_COLUMN_COUNT;
     const colCenterX = fieldDx + note.column * colWidth + colWidth / 2;
     const buttonW = def.frameWidth * scale;
     const buttonH = def.frameHeight * scale;
@@ -586,13 +590,13 @@ export class KeyboardHeroSystem {
 
     // Map column index to arrow direction
     switch (note.column) {
-      case 0:
+      case COL_LEFT:
         return 'left_arrow';
-      case 1:
+      case COL_UP:
         return 'up_arrow';
-      case 2:
+      case COL_DOWN:
         return 'down_arrow';
-      case 3:
+      case COL_RIGHT:
         return 'right_arrow';
     }
   }

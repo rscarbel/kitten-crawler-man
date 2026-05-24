@@ -15,11 +15,18 @@ const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_COOLDOWN = 90;
 /** Frames the attack swing animation plays (~0.6 s at 60 fps) */
 const ATTACK_ANIM_FRAMES = 36;
+const COIN_DROP_MAX = 3;
+/** Fraction of attack range used as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.8;
+/** Drop chance for dynamite when killed by human. */
+const DYNAMITE_DROP_CHANCE_HUMAN = 0.2;
+/** Drop chance for dynamite when killed by cat. */
+const DYNAMITE_DROP_CHANCE_CAT = 0.05;
 
 export class Goblin extends Mob {
   readonly xpValue = 5;
   protected coinDropMin = 1;
-  protected coinDropMax = 3;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'Goblin';
   description = 'A scrappy little troublemaker armed with crude weapons.';
   readonly bodyPartKey = 'goblin';
@@ -60,7 +67,12 @@ export class Goblin extends Mob {
 
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
-    const chance = killer instanceof HumanPlayer ? 0.2 : killer instanceof CatPlayer ? 0.05 : 0;
+    const chance =
+      killer instanceof HumanPlayer
+        ? DYNAMITE_DROP_CHANCE_HUMAN
+        : killer instanceof CatPlayer
+          ? DYNAMITE_DROP_CHANCE_CAT
+          : 0;
     if (chance > 0 && Math.random() < chance) {
       items.push({ id: 'goblin_dynamite', quantity: 1 });
     }
@@ -107,7 +119,7 @@ export class Goblin extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.attackRangePx * 0.8,
+        this.attackRangePx * FOLLOW_STOP_FRACTION,
       );
     } else {
       this.isMoving = false;

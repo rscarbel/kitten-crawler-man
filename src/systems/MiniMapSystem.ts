@@ -6,6 +6,43 @@ import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
 import { drawText } from '../ui/TextBox';
 
+/** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
+const HALF_TILE = TILE_SIZE / 2;
+/** Radar range for showing enemy dots on the minimap (in pixels). */
+const MOB_RADAR_TILES = 20;
+/** Pixels per tile in expanded mode. */
+const EXPANDED_PX_PER_TILE = 1;
+/** Pixels per tile in normal mode. */
+const NORMAL_PX_PER_TILE = 2;
+/** Player dot radius on minimap. */
+const PLAYER_DOT_RADIUS = 2.5;
+/** Companion dot radius on minimap. */
+const COMPANION_DOT_RADIUS = 2;
+/** Mob dot radius on minimap. */
+const MOB_DOT_RADIUS = 1.5;
+/** Mordecai dot radius on minimap. */
+const MORDECAI_DOT_RADIUS = 1.5;
+/** Quest marker pulse speed (radians per frame-time unit). */
+const QUEST_MARKER_PULSE_SPEED = 5;
+/** Quest marker X line arm length (pixels). */
+const QUEST_MARKER_X_ARM = 3;
+/** X marker line width. */
+const QUEST_MARKER_LINE_WIDTH = 1.5;
+/** Stairwell icon half-size (extra pixels beyond pxPerTile). */
+const STAIRWELL_ICON_HALF_EXTRA = 1;
+/** Pixels above minimap to render the expand hint text. */
+const MINIMAP_HINT_OFFSET_Y = 3;
+/** Margin from the canvas edge for minimap placement (pixels). */
+const MINIMAP_MARGIN = 8;
+/** Minimap hint font size. */
+const MINIMAP_HINT_FONT_SIZE = 10;
+/** Extra tiles revealed around boss room bounds. */
+const BOSS_REVEAL_EXTRA_TILES = 15;
+/** Corpse marker arm length (pixels). */
+const CORPSE_MARKER_ARM = 2;
+/** Corpse marker TTL in frames. */
+const CORPSE_MARKER_TTL = 1800;
+
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
   private _expanded = false;
@@ -94,7 +131,7 @@ export class MiniMapSystem implements GameSystem {
 
   revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
     const mapSize = this.gameMap.structure.length;
-    const extra = 15;
+    const extra = BOSS_REVEAL_EXTRA_TILES;
     const x1 = Math.max(0, bounds.x - extra);
     const y1 = Math.max(0, bounds.y - extra);
     const x2 = Math.min(mapSize - 1, bounds.x + bounds.w + extra);
@@ -114,7 +151,7 @@ export class MiniMapSystem implements GameSystem {
   }
 
   addCorpseMarker(x: number, y: number): void {
-    this.corpseMarkers.push({ x, y, ttl: 1800 });
+    this.corpseMarkers.push({ x, y, ttl: CORPSE_MARKER_TTL });
   }
 
   tickCorpseMarkers(): void {
@@ -138,15 +175,15 @@ export class MiniMapSystem implements GameSystem {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
     const mmSize = expanded ? this.EXPANDED_SIZE : this.NORMAL_SIZE;
-    const pxPerTile = expanded ? 1 : 2;
+    const pxPerTile = expanded ? EXPANDED_PX_PER_TILE : NORMAL_PX_PER_TILE;
     const tilesInView = Math.floor(mmSize / pxPerTile);
     const halfTiles = Math.floor(tilesInView / 2);
 
-    const mmX = canvas.width - mmSize - 8;
-    const mmY = 8;
+    const mmX = canvas.width - mmSize - MINIMAP_MARGIN;
+    const mmY = MINIMAP_MARGIN;
 
-    const playerTX = Math.floor((active.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const playerTY = Math.floor((active.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const playerTX = Math.floor((active.x + HALF_TILE) / TILE_SIZE);
+    const playerTY = Math.floor((active.y + HALF_TILE) / TILE_SIZE);
 
     // When expanded, honour scroll offset so the user can pan to explored areas.
     const viewCenterTX = expanded ? playerTX + this._scrollTX : playerTX;
@@ -185,8 +222,8 @@ export class MiniMapSystem implements GameSystem {
     // Stairwells — white squares (always visible if revealed)
     for (const st of this.gameMap.stairwellTiles) {
       if (!this.fogOfWar[st.y * mapSize + st.x]) continue;
-      const sx = mmX + (st.x - viewCenterTX + halfTiles) * pxPerTile - 1;
-      const sy = mmY + (st.y - viewCenterTY + halfTiles) * pxPerTile - 1;
+      const sx = mmX + (st.x - viewCenterTX + halfTiles) * pxPerTile - STAIRWELL_ICON_HALF_EXTRA;
+      const sy = mmY + (st.y - viewCenterTY + halfTiles) * pxPerTile - STAIRWELL_ICON_HALF_EXTRA;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
     }
@@ -201,41 +238,41 @@ export class MiniMapSystem implements GameSystem {
       const cx = mmX + (ctx2TX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const cy = mmY + (ctx2TY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
-      ctx.moveTo(cx - 2, cy - 2);
-      ctx.lineTo(cx + 2, cy + 2);
-      ctx.moveTo(cx + 2, cy - 2);
-      ctx.lineTo(cx - 2, cy + 2);
+      ctx.moveTo(cx - CORPSE_MARKER_ARM, cy - CORPSE_MARKER_ARM);
+      ctx.lineTo(cx + CORPSE_MARKER_ARM, cy + CORPSE_MARKER_ARM);
+      ctx.moveTo(cx + CORPSE_MARKER_ARM, cy - CORPSE_MARKER_ARM);
+      ctx.lineTo(cx - CORPSE_MARKER_ARM, cy + CORPSE_MARKER_ARM);
       ctx.stroke();
     }
 
-    // Mobs — red dots (only within 20-tile radar range)
-    const MOB_RADAR_PX = TILE_SIZE * 20;
+    // Mobs — red dots (only within radar range)
+    const MOB_RADAR_PX = TILE_SIZE * MOB_RADAR_TILES;
     ctx.fillStyle = '#ef4444';
     for (const mob of mobs) {
       if (!mob.isAlive) continue;
       if (Math.hypot(mob.x - active.x, mob.y - active.y) > MOB_RADAR_PX) continue;
-      const mobTX = Math.floor((mob.x + TILE_SIZE * 0.5) / TILE_SIZE);
-      const mobTY = Math.floor((mob.y + TILE_SIZE * 0.5) / TILE_SIZE);
+      const mobTX = Math.floor((mob.x + HALF_TILE) / TILE_SIZE);
+      const mobTY = Math.floor((mob.y + HALF_TILE) / TILE_SIZE);
       if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;
       const mmDotX =
         mmX + (mobTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const mmDotY =
         mmY + (mobTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
-      ctx.arc(mmDotX, mmDotY, 1.5, 0, Math.PI * 2);
+      ctx.arc(mmDotX, mmDotY, MOB_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Companion — blue dot
-    const compTX = Math.floor((companion.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const compTY = Math.floor((companion.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const compTX = Math.floor((companion.x + HALF_TILE) / TILE_SIZE);
+    const compTY = Math.floor((companion.y + HALF_TILE) / TILE_SIZE);
     const compSX =
       mmX + (compTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     const compSY =
       mmY + (compTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     ctx.fillStyle = '#60a5fa';
     ctx.beginPath();
-    ctx.arc(compSX, compSY, 2, 0, Math.PI * 2);
+    ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     // Mordecai — white dot per safe room if revealed
@@ -245,7 +282,7 @@ export class MiniMapSystem implements GameSystem {
       const msx = mmX + (pos.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const msy = mmY + (pos.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
-      ctx.arc(msx, msy, 1.5, 0, Math.PI * 2);
+      ctx.arc(msx, msy, MORDECAI_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -255,11 +292,14 @@ export class MiniMapSystem implements GameSystem {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
       const qsx = mmX + (qm.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const qsy = mmY + (qm.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const pulse = 0.7 + 0.3 * Math.sin(frameTime * 5);
+      const questPulseBase = 0.7;
+      const questPulseRange = 0.3;
+      const pulse =
+        questPulseBase + questPulseRange * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
       if (qm.type === 'exclamation') {
         drawText(ctx, '!', {
           x: qsx,
-          y: qsy - 3,
+          y: qsy - QUEST_MARKER_X_ARM,
           size: 8,
           bold: true,
           color: '#fbbf24',
@@ -269,7 +309,7 @@ export class MiniMapSystem implements GameSystem {
       } else if (qm.type === 'question') {
         drawText(ctx, '?', {
           x: qsx,
-          y: qsy - 3,
+          y: qsy - QUEST_MARKER_X_ARM,
           size: 8,
           bold: true,
           color: '#4ade80',
@@ -280,12 +320,12 @@ export class MiniMapSystem implements GameSystem {
         ctx.save();
         ctx.globalAlpha = pulse;
         ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = QUEST_MARKER_LINE_WIDTH;
         ctx.beginPath();
-        ctx.moveTo(qsx - 3, qsy - 3);
-        ctx.lineTo(qsx + 3, qsy + 3);
-        ctx.moveTo(qsx + 3, qsy - 3);
-        ctx.lineTo(qsx - 3, qsy + 3);
+        ctx.moveTo(qsx - QUEST_MARKER_X_ARM, qsy - QUEST_MARKER_X_ARM);
+        ctx.lineTo(qsx + QUEST_MARKER_X_ARM, qsy + QUEST_MARKER_X_ARM);
+        ctx.moveTo(qsx + QUEST_MARKER_X_ARM, qsy - QUEST_MARKER_X_ARM);
+        ctx.lineTo(qsx - QUEST_MARKER_X_ARM, qsy + QUEST_MARKER_X_ARM);
         ctx.stroke();
         ctx.restore();
       }
@@ -298,7 +338,7 @@ export class MiniMapSystem implements GameSystem {
       mmY + (playerTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     ctx.fillStyle = '#4ade80';
     ctx.beginPath();
-    ctx.arc(playerSX, playerSY, 2.5, 0, Math.PI * 2);
+    ctx.arc(playerSX, playerSY, PLAYER_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -311,8 +351,8 @@ export class MiniMapSystem implements GameSystem {
     const expandHint = platform.miniMapHint(expanded);
     drawText(ctx, expandHint, {
       x: mmX + mmSize / 2,
-      y: mmY + mmSize + 3,
-      size: 10,
+      y: mmY + mmSize + MINIMAP_HINT_OFFSET_Y,
+      size: MINIMAP_HINT_FONT_SIZE,
       color: '#ffffff',
       outline: true,
       align: 'center',
@@ -320,28 +360,39 @@ export class MiniMapSystem implements GameSystem {
   }
 
   private tileColor(type: number): string {
+    const TILE_VOID = 9;
+    const TILE_WALL = 2;
+    const TILE_GRASS = 0;
+    const TILE_ROAD = 1;
+    const TILE_WATER = 4;
+    const TILE_CONCRETE = 5;
+    const TILE_FLOOR = 6;
+    const TILE_CARPET = 7;
+    const TILE_WOOD = 8;
+    const TILE_SAFE_ROOM = 10;
+    const TILE_BOSS_ROOM = 11;
     switch (type) {
-      case 9:
+      case TILE_VOID:
         return '#000000'; // void border
-      case 2:
+      case TILE_WALL:
         return '#3a3028'; // wall
-      case 0:
+      case TILE_GRASS:
         return '#3a7040'; // grass
-      case 1:
+      case TILE_ROAD:
         return '#6a5040'; // road
-      case 4:
+      case TILE_WATER:
         return '#1a6880'; // water
-      case 5:
+      case TILE_CONCRETE:
         return '#606060'; // concrete (hallway)
-      case 6:
+      case TILE_FLOOR:
         return '#707070'; // tile floor
-      case 7:
+      case TILE_CARPET:
         return '#503030'; // carpet
-      case 8:
+      case TILE_WOOD:
         return '#704030'; // wood
-      case 10:
+      case TILE_SAFE_ROOM:
         return '#8a7040'; // safe room floor
-      case 11:
+      case TILE_BOSS_ROOM:
         return '#2a1808'; // boss room floor
       default:
         return '#555555';

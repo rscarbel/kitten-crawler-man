@@ -6,26 +6,47 @@ import { randomInt } from '../utils';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 
 const HOARDER_HP = 80;
+const HOARDER_MASS = 10;
 const HOARDER_SPEED = 0.45;
 const HOARDER_SPEED_ENRAGED = 0.75;
-const AGGRO_RANGE_PX = TILE_SIZE * 10;
-const FLEE_RANGE_PX = TILE_SIZE * 8;
+const AGGRO_RANGE_TILE_MULTIPLIER = 10;
+const FLEE_RANGE_TILE_MULTIPLIER = 8;
+const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
+const FLEE_RANGE_PX = TILE_SIZE * FLEE_RANGE_TILE_MULTIPLIER;
 const ENRAGE_THRESHOLD = 0.5;
 const VOMIT_INTERVAL = 480;
 const VOMIT_INTERVAL_ENRAGED = 240;
 const VOMIT_WINDUP_FRAMES = 80;
 const VOMIT_SPEED = 3.5;
+const CENTER_OFFSET = 0.5;
+const RETURN_TO_SPAWN_THRESHOLD_TILES = 2;
+const RETURN_TO_SPAWN_SPEED_MULTIPLIER = 0.6;
+const FLEE_DISTANCE_TILES = 4;
+const FLEE_STUCK_THRESHOLD = 8;
+const FLEE_ANGLE_CHANGE_DIVISOR = 4;
+const FLEE_ANGLE_CHANGE = Math.PI / FLEE_ANGLE_CHANGE_DIVISOR;
+const FLEE_BIAS_DECAY = 0.85;
+const WANDER_STATIONERY_THRESHOLD = 300;
+const WANDER_DISTANCE_TILES_MIN = 3;
+const WANDER_DISTANCE_TILES_RANGE = 3;
+const WANDER_SPEED_MULTIPLIER = 0.6;
+const VOMIT_SPAWN_RANGE_TILES_MIN = 0.5;
+const VOMIT_SPAWN_RANGE_TILES_RANGE = 1.5;
+const VOMIT_COUNT_MIN = 3;
+const VOMIT_COUNT_MAX = 5;
+const COIN_DROP_MIN = 50;
+const COIN_DROP_MAX = 100;
 
 type HoarderState = 'fleeing' | 'vomit_windup';
 
 export class TheHoarder extends Mob {
   readonly xpValue = 500;
   readonly bodyPartKey = 'hoarder';
-  protected coinDropMin = 50;
-  protected coinDropMax = 100;
+  protected coinDropMin = COIN_DROP_MIN;
+  protected coinDropMax = COIN_DROP_MAX;
   displayName = 'The Hoarder';
   description = 'A hulking boss that flees while vomiting cockroaches and acid bile.';
-  mass = 10;
+  mass = HOARDER_MASS;
 
   isEnraged = false;
 
@@ -93,14 +114,14 @@ export class TheHoarder extends Mob {
         }
       }
       if (nearestWindup !== null) {
-        this.vomitTargetX = nearestWindup.x + TILE_SIZE * 0.5;
-        this.vomitTargetY = nearestWindup.y + TILE_SIZE * 0.5;
+        this.vomitTargetX = nearestWindup.x + TILE_SIZE * CENTER_OFFSET;
+        this.vomitTargetY = nearestWindup.y + TILE_SIZE * CENTER_OFFSET;
       }
 
       this.vomitWindupTimer--;
       this.isMoving = false;
-      const cx = this.x + TILE_SIZE * 0.5;
-      const cy = this.y + TILE_SIZE * 0.5;
+      const cx = this.x + TILE_SIZE * CENTER_OFFSET;
+      const cy = this.y + TILE_SIZE * CENTER_OFFSET;
       const dx = this.vomitTargetX - cx;
       const dy = this.vomitTargetY - cy;
       const len = Math.hypot(dx, dy);
@@ -141,8 +162,8 @@ export class TheHoarder extends Mob {
     if (this.vomitTimer <= 0) {
       this.vomitTimer = interval;
       if (this.cockroachAtCap && nearest !== null) {
-        this.vomitTargetX = nearest.x + TILE_SIZE * 0.5;
-        this.vomitTargetY = nearest.y + TILE_SIZE * 0.5;
+        this.vomitTargetX = nearest.x + TILE_SIZE * CENTER_OFFSET;
+        this.vomitTargetY = nearest.y + TILE_SIZE * CENTER_OFFSET;
         this.vomitWindupTargets = targets;
         this.hoarderState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
@@ -155,8 +176,13 @@ export class TheHoarder extends Mob {
       this.stationaryFrames = 0;
       this.wanderActive = false;
       const toHome = Math.hypot(this.x - this.spawnX, this.y - this.spawnY);
-      if (toHome > TILE_SIZE * 2) {
-        this.followTargetCollide(this.spawnX, this.spawnY, this.speed * 0.6, TILE_SIZE);
+      if (toHome > TILE_SIZE * RETURN_TO_SPAWN_THRESHOLD_TILES) {
+        this.followTargetCollide(
+          this.spawnX,
+          this.spawnY,
+          this.speed * RETURN_TO_SPAWN_SPEED_MULTIPLIER,
+          TILE_SIZE,
+        );
       } else {
         this.isMoving = false;
       }
@@ -173,15 +199,15 @@ export class TheHoarder extends Mob {
       const len = Math.hypot(dx, dy);
       const baseAngle = len > 0 ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
       const fleeAngle = baseAngle + this.fleeBias;
-      const fleeTargetX = this.x + Math.cos(fleeAngle) * TILE_SIZE * 4;
-      const fleeTargetY = this.y + Math.sin(fleeAngle) * TILE_SIZE * 4;
+      const fleeTargetX = this.x + Math.cos(fleeAngle) * TILE_SIZE * FLEE_DISTANCE_TILES;
+      const fleeTargetY = this.y + Math.sin(fleeAngle) * TILE_SIZE * FLEE_DISTANCE_TILES;
       const preX = this.x;
       const preY = this.y;
       this.followTargetCollide(fleeTargetX, fleeTargetY, this.speed, 0);
       if (this.x === preX && this.y === preY) {
         this.fleeStuckFrames++;
-        if (this.fleeStuckFrames >= 8) {
-          this.fleeBias += (Math.PI / 4) * this.fleeBiasSign;
+        if (this.fleeStuckFrames >= FLEE_STUCK_THRESHOLD) {
+          this.fleeBias += FLEE_ANGLE_CHANGE * this.fleeBiasSign;
           this.fleeStuckFrames = 0;
           if (Math.abs(this.fleeBias) > Math.PI) {
             this.fleeBiasSign *= -1;
@@ -190,7 +216,7 @@ export class TheHoarder extends Mob {
         }
       } else {
         this.fleeStuckFrames = 0;
-        this.fleeBias *= 0.85;
+        this.fleeBias *= FLEE_BIAS_DECAY;
       }
     } else {
       // Player is in aggro range but outside flee range — wander if stationary too long
@@ -201,7 +227,7 @@ export class TheHoarder extends Mob {
         this.followTargetCollide(
           this.wanderTargetX,
           this.wanderTargetY,
-          this.speed * 0.6,
+          this.speed * WANDER_SPEED_MULTIPLIER,
           TILE_SIZE,
         );
         if (this.x !== preX || this.y !== preY) {
@@ -215,9 +241,10 @@ export class TheHoarder extends Mob {
         ) {
           this.wanderActive = false;
         }
-      } else if (this.stationaryFrames >= 300) {
+      } else if (this.stationaryFrames >= WANDER_STATIONERY_THRESHOLD) {
         const angle = Math.random() * Math.PI * 2;
-        const dist = TILE_SIZE * (3 + Math.random() * 3);
+        const dist =
+          TILE_SIZE * (WANDER_DISTANCE_TILES_MIN + Math.random() * WANDER_DISTANCE_TILES_RANGE);
         this.wanderTargetX = this.spawnX + Math.cos(angle) * dist;
         this.wanderTargetY = this.spawnY + Math.sin(angle) * dist;
         this.wanderActive = true;
@@ -229,13 +256,14 @@ export class TheHoarder extends Mob {
   }
 
   private triggerVomit(): void {
-    const count = randomInt(3, 5);
+    const count = randomInt(VOMIT_COUNT_MIN, VOMIT_COUNT_MAX);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = TILE_SIZE * (0.5 + Math.random() * 1.5);
+      const dist =
+        TILE_SIZE * (VOMIT_SPAWN_RANGE_TILES_MIN + Math.random() * VOMIT_SPAWN_RANGE_TILES_RANGE);
       this.cockroachSpawns.push({
-        x: this.x + TILE_SIZE * 0.5 + Math.cos(angle) * dist,
-        y: this.y + TILE_SIZE * 0.5 + Math.sin(angle) * dist,
+        x: this.x + TILE_SIZE * CENTER_OFFSET + Math.cos(angle) * dist,
+        y: this.y + TILE_SIZE * CENTER_OFFSET + Math.sin(angle) * dist,
       });
     }
   }

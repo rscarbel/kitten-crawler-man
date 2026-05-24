@@ -2,6 +2,13 @@ import { platform } from './Platform';
 import { TILE_SIZE } from './constants';
 import { pointInRect } from '../utils';
 
+const TOUCH_HOLD_THRESHOLD_MS = 150;
+const MOVEMENT_SNAP_DISTANCE_PX = 8;
+const TAP_DURATION_MS = 250;
+const TAP_MOVEMENT_THRESHOLD_PX = 20;
+const LONG_PRESS_TIMER_MS = 500;
+const LONG_PRESS_MOVEMENT_THRESHOLD_PX = 10;
+
 export interface Rect {
   x: number;
   y: number;
@@ -81,7 +88,7 @@ export class MobileTouchState {
     if (!platform.isMobile || !this.moveTarget) return { dx: 0, dy: 0, isMobile: false };
 
     const touchHoldMs = this.tapStart ? Date.now() - this.tapStart.time : 0;
-    if (touchHoldMs < 150) return { dx: 0, dy: 0, isMobile: false };
+    if (touchHoldMs < TOUCH_HOLD_THRESHOLD_MS) return { dx: 0, dy: 0, isMobile: false };
 
     const wx = this.moveTarget.x + cameraX;
     const wy = this.moveTarget.y + cameraY;
@@ -89,7 +96,7 @@ export class MobileTouchState {
     const ddy = wy - (playerY + TILE_SIZE / 2);
     const dist = Math.hypot(ddx, ddy);
 
-    if (dist <= 8) return { dx: 0, dy: 0, isMobile: false };
+    if (dist <= MOVEMENT_SNAP_DISTANCE_PX) return { dx: 0, dy: 0, isMobile: false };
 
     return { dx: ddx / dist, dy: ddy / dist, isMobile: true };
   }
@@ -101,7 +108,7 @@ export class MobileTouchState {
     if (!this.tapStart) return false;
     const elapsed = Date.now() - this.tapStart.time;
     const moved = Math.hypot(x - this.tapStart.x, y - this.tapStart.y);
-    return elapsed < 250 && moved < 20;
+    return elapsed < TAP_DURATION_MS && moved < TAP_MOVEMENT_THRESHOLD_PX;
   }
 
   /** Start tracking a movement touch. */
@@ -142,14 +149,14 @@ export class MobileTouchState {
     this.longPressTimer = setTimeout(() => {
       this.longPressFired = true;
       onFire();
-    }, 500);
+    }, LONG_PRESS_TIMER_MS);
   }
 
   /** Cancel long-press if finger moved too far from start. */
   checkLongPressMove(x: number, y: number): void {
     if (this.longPressPos) {
       const dist = Math.hypot(x - this.longPressPos.x, y - this.longPressPos.y);
-      if (dist > 10) this.clearLongPress();
+      if (dist > LONG_PRESS_MOVEMENT_THRESHOLD_PX) this.clearLongPress();
     }
   }
 }

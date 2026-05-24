@@ -5,10 +5,33 @@ import { randomInt } from '../utils';
 
 const COCKROACH_HP = 4;
 const COCKROACH_SPEED = 2.2;
-const AGGRO_RANGE_PX = TILE_SIZE * 5;
-const ATTACK_RANGE_PX = TILE_SIZE * 1.3;
+const AGGRO_RANGE_TILE_MULTIPLIER = 5;
+const ATTACK_RANGE_TILE_MULTIPLIER = 1.3;
+const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
+const ATTACK_RANGE_PX = TILE_SIZE * ATTACK_RANGE_TILE_MULTIPLIER;
 const ATTACK_DAMAGE = 1;
 const ATTACK_COOLDOWN = 90;
+const COCKROACH_DESPAWN_TTL = 1800;
+const MASS = 0.3;
+const FOLLOW_STOP_RANGE_MULTIPLIER = 0.8;
+const FOLLOW_STOP_RANGE_TILES = 20;
+const DAMAGE_FLASH_ALPHA_OFFSET = 0.5;
+const DAMAGE_FLASH_FREQUENCY = 0.8;
+const BODY_WIDTH_MULTIPLIER = 0.5;
+const BODY_HEIGHT_MULTIPLIER = 0.3;
+const BODY_ELLIPSE_WIDTH = 0.5;
+const BODY_ELLIPSE_HEIGHT = 0.5;
+const HEAD_OFFSET_MULTIPLIER = 0.38;
+const HEAD_WIDTH = 0.2;
+const HEAD_HEIGHT = 0.2;
+const ANTENNA_LINE_WIDTH = 0.6;
+const ANTENNA_BASE_OFFSET = 0.45;
+const ANTENNA_LENGTH_X = 0.3;
+const ANTENNA_ANGLE_OFFSET = 0.25;
+const LEG_LINE_WIDTH = 0.7;
+const LEG_BASE_SPACING = 0.22;
+const LEG_LENGTH = 0.45;
+const CENTER_OFFSET = 0.5;
 
 export class Cockroach extends Mob {
   readonly xpValue = 2;
@@ -17,10 +40,10 @@ export class Cockroach extends Mob {
   displayName = 'Cockroach';
   description = 'Scurries out of dark corners to overwhelm its prey.';
 
-  mass = 0.3;
+  mass = MASS;
 
   /** Frames until this cockroach despawns even if alive (30 s @ 60 fps). */
-  ttl = 1800;
+  ttl = COCKROACH_DESPAWN_TTL;
 
   private attackCooldown = randomInt(0, ATTACK_COOLDOWN - 1);
 
@@ -65,8 +88,8 @@ export class Cockroach extends Mob {
       this.lastKnownTargetX,
       this.lastKnownTargetY,
       COCKROACH_SPEED,
-      ATTACK_RANGE_PX * 0.8,
-      20,
+      ATTACK_RANGE_PX * FOLLOW_STOP_RANGE_MULTIPLIER,
+      FOLLOW_STOP_RANGE_TILES,
     );
   }
 
@@ -77,29 +100,31 @@ export class Cockroach extends Mob {
 
     ctx.save();
     if (this.damageFlash > 0) {
-      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(this.damageFlash * 0.8);
+      ctx.globalAlpha =
+        DAMAGE_FLASH_ALPHA_OFFSET +
+        DAMAGE_FLASH_ALPHA_OFFSET * Math.sin(this.damageFlash * DAMAGE_FLASH_FREQUENCY);
       ctx.filter = 'brightness(3)';
     }
 
-    const w = tileSize * 0.5;
-    const h = tileSize * 0.3;
-    const cx = sx + tileSize * 0.5;
-    const cy = sy + tileSize * 0.5;
+    const w = tileSize * BODY_WIDTH_MULTIPLIER;
+    const h = tileSize * BODY_HEIGHT_MULTIPLIER;
+    const cx = sx + tileSize * CENTER_OFFSET;
+    const cy = sy + tileSize * CENTER_OFFSET;
 
     // Body — dark brown oval
     ctx.fillStyle = '#4a2c0a';
     ctx.beginPath();
-    ctx.ellipse(cx, cy, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, w * BODY_ELLIPSE_WIDTH, h * BODY_ELLIPSE_HEIGHT, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Head — slightly lighter, rounder
     ctx.fillStyle = '#5a3810';
     ctx.beginPath();
     ctx.ellipse(
-      cx + w * 0.38 * this.facingX,
-      cy + h * 0.38 * this.facingY,
-      w * 0.2,
-      h * 0.2,
+      cx + w * HEAD_OFFSET_MULTIPLIER * this.facingX,
+      cy + h * HEAD_OFFSET_MULTIPLIER * this.facingY,
+      w * HEAD_WIDTH,
+      h * HEAD_HEIGHT,
       0,
       0,
       Math.PI * 2,
@@ -108,21 +133,21 @@ export class Cockroach extends Mob {
 
     // Antennae
     ctx.strokeStyle = '#3a1e06';
-    ctx.lineWidth = 0.6;
-    const hx = cx + w * 0.45 * this.facingX;
-    const hy = cy + h * 0.45 * this.facingY;
+    ctx.lineWidth = ANTENNA_LINE_WIDTH;
+    const hx = cx + w * ANTENNA_BASE_OFFSET * this.facingX;
+    const hy = cy + h * ANTENNA_BASE_OFFSET * this.facingY;
     ctx.beginPath();
     ctx.moveTo(hx, hy);
     ctx.lineTo(
-      hx + w * 0.3 * this.facingX - h * 0.25 * this.facingY,
-      hy + h * 0.3 * this.facingY + w * 0.25 * this.facingX,
+      hx + w * ANTENNA_LENGTH_X * this.facingX - h * ANTENNA_ANGLE_OFFSET * this.facingY,
+      hy + h * ANTENNA_LENGTH_X * this.facingY + w * ANTENNA_ANGLE_OFFSET * this.facingX,
     );
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(hx, hy);
     ctx.lineTo(
-      hx + w * 0.3 * this.facingX + h * 0.25 * this.facingY,
-      hy + h * 0.3 * this.facingY - w * 0.25 * this.facingX,
+      hx + w * ANTENNA_LENGTH_X * this.facingX + h * ANTENNA_ANGLE_OFFSET * this.facingY,
+      hy + h * ANTENNA_LENGTH_X * this.facingY - w * ANTENNA_ANGLE_OFFSET * this.facingX,
     );
     ctx.stroke();
 
@@ -130,21 +155,21 @@ export class Cockroach extends Mob {
     const perpX = -this.facingY;
     const perpY = this.facingX;
     ctx.strokeStyle = '#3a1e06';
-    ctx.lineWidth = 0.7;
+    ctx.lineWidth = LEG_LINE_WIDTH;
     for (let i = -1; i <= 1; i++) {
       const legBase = {
-        x: cx + i * w * 0.22 * this.facingX,
-        y: cy + i * w * 0.22 * this.facingY,
+        x: cx + i * w * LEG_BASE_SPACING * this.facingX,
+        y: cy + i * w * LEG_BASE_SPACING * this.facingY,
       };
       // Left leg
       ctx.beginPath();
       ctx.moveTo(legBase.x, legBase.y);
-      ctx.lineTo(legBase.x - perpX * w * 0.45, legBase.y - perpY * w * 0.45);
+      ctx.lineTo(legBase.x - perpX * w * LEG_LENGTH, legBase.y - perpY * w * LEG_LENGTH);
       ctx.stroke();
       // Right leg
       ctx.beginPath();
       ctx.moveTo(legBase.x, legBase.y);
-      ctx.lineTo(legBase.x + perpX * w * 0.45, legBase.y + perpY * w * 0.45);
+      ctx.lineTo(legBase.x + perpX * w * LEG_LENGTH, legBase.y + perpY * w * LEG_LENGTH);
       ctx.stroke();
     }
 

@@ -161,6 +161,9 @@ export function inferGroundColor(structure: TileContent[][], tx: number, ty: num
   return '#6de89d';
 }
 
+const SHADOW_TOP_DEPTH = 8;
+const SHADOW_SIDE_DEPTH = 6;
+
 /** Draws a shadow strip on floor tiles directly below or right of a wall/building/tree. */
 export function drawWallShadow(
   ctx: CanvasRenderingContext2D,
@@ -173,10 +176,10 @@ export function drawWallShadow(
 ) {
   if (ty > 0 && SHADOW_TYPES.has(structure[ty - 1][tx].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.40)';
-    ctx.fillRect(sx, sy, ts, 8);
+    ctx.fillRect(sx, sy, ts, SHADOW_TOP_DEPTH);
   }
   if (tx > 0 && SHADOW_TYPES.has(structure[ty][tx - 1].type)) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.fillRect(sx, sy, 6, ts);
+    ctx.fillRect(sx, sy, SHADOW_SIDE_DEPTH, ts);
   }
 }

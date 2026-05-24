@@ -5,6 +5,69 @@ import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawShopkeeper } from '../sprites/shopkeeperSprite';
+
+const WANDER_MIN_TILE_OFFSET = 3;
+const WANDER_MAX_TILE_INSET = 4;
+const WANDER_DIR_CHANGE_INTERVAL = 200;
+const WANDER_DIR_FLIP_CHANCE = 0.5;
+const WANDER_SPEED = 0.4;
+const SHOPKEEPER_HALF_TILE = 0.5;
+const SHOPKEEPER_INTERACT_RANGE = 3.5;
+
+const FEEDBACK_FADE_FRAMES = 30;
+const FEEDBACK_TIMER_FRAMES = 100;
+const FEEDBACK_BG_ALPHA = 0.85;
+const FEEDBACK_Y_FROM_BOTTOM = 68;
+const FEEDBACK_TEXT_Y_FROM_BOTTOM = 48;
+const FEEDBACK_TEXT_Y_OFFSET = 10;
+const FEEDBACK_BOX_W = 260;
+const FEEDBACK_BOX_H = 28;
+const FEEDBACK_TEXT_SIZE = 12;
+
+const PANEL_OVERLAY_ALPHA = 0.62;
+const PANEL_W = 400;
+const PANEL_ITEM_H = 56;
+const PANEL_HEADER_H = 72;
+const PANEL_FOOTER_H = 32;
+const PANEL_INNER_INSET = 5;
+const PANEL_INNER_SIZE_REDUCTION = 10;
+const PANEL_TITLE_Y = 26;
+const PANEL_TITLE_BASELINE = 13;
+const PANEL_TITLE_SIZE = 16;
+const PANEL_SEPARATOR_X_MARGIN = 20;
+const PANEL_SEPARATOR_Y = 34;
+const PANEL_COINS_Y = 52;
+const PANEL_COINS_BASELINE = 10;
+const PANEL_COINS_TEXT_SIZE = 12;
+const PANEL_FIRST_ROW_Y = 66;
+const PANEL_ROW_BG_INSET_X = 8;
+const PANEL_ROW_BG_INSET_W = 16;
+const PANEL_ROW_BG_INSET_H = 4;
+const PANEL_ROW_EVEN_ALPHA = 0.04;
+const PANEL_ROW_ALT_ALPHA = 0.18;
+const PANEL_ITEM_X_MARGIN = 18;
+const PANEL_ITEM_NAME_Y = 20;
+const PANEL_ITEM_NAME_BASELINE = 10;
+const PANEL_ITEM_NAME_SIZE = 13;
+const PANEL_ITEM_DESC_Y = 36;
+const PANEL_ITEM_DESC_BASELINE = 8;
+const PANEL_DESC_SIZE = 10;
+const PANEL_PRICE_X_FROM_RIGHT = 90;
+const PANEL_BTN_W = 68;
+const PANEL_BTN_H = 32;
+const PANEL_BTN_BORDER_W = 1.5;
+const PANEL_BTN_X_MARGIN = 12;
+const PANEL_BTN_TEXT_Y = 21;
+const PANEL_BTN_TEXT_BASELINE = 10;
+const PANEL_BTN_TEXT_SIZE = 12;
+const PANEL_CLOSE_Y_FROM_BOTTOM = 12;
+const PANEL_CLOSE_BASELINE = 8;
+const PANEL_CLOSE_SIZE = 10;
+
+const HEALTH_POTION_PRICE = 5;
+const GOBLIN_DYNAMITE_PRICE = 10;
+const CONFUSING_FOG_PRICE = 15;
 
 const SHOP_ITEMS: Array<{
   id: ItemId;
@@ -15,19 +78,19 @@ const SHOP_ITEMS: Array<{
   {
     id: 'health_potion',
     label: 'Health Potion',
-    price: 5,
+    price: HEALTH_POTION_PRICE,
     desc: 'Restores 50% max HP',
   },
   {
     id: 'goblin_dynamite',
     label: 'Goblin Dynamite',
-    price: 10,
+    price: GOBLIN_DYNAMITE_PRICE,
     desc: 'Throw for AoE damage',
   },
   {
     id: 'scroll_of_confusing_fog',
     label: 'Scroll of Confusing Fog',
-    price: 15,
+    price: CONFUSING_FOG_PRICE,
     desc: 'Blinds nearby enemies',
   },
 ];
@@ -50,16 +113,16 @@ export class ShopSystem implements GameSystem {
 
   constructor(interiorWidth: number) {
     this.wanderX = Math.floor(interiorWidth / 2) * TILE_SIZE;
-    this.wanderMinX = 3 * TILE_SIZE;
-    this.wanderMaxX = (interiorWidth - 4) * TILE_SIZE;
+    this.wanderMinX = WANDER_MIN_TILE_OFFSET * TILE_SIZE;
+    this.wanderMaxX = (interiorWidth - WANDER_MAX_TILE_INSET) * TILE_SIZE;
   }
 
   update(): void {
     this.wanderTime++;
-    if (this.wanderTime % 200 === 0) {
-      this.wanderDir = Math.random() < 0.5 ? -1 : 1;
+    if (this.wanderTime % WANDER_DIR_CHANGE_INTERVAL === 0) {
+      this.wanderDir = Math.random() < WANDER_DIR_FLIP_CHANCE ? -1 : 1;
     }
-    this.wanderX += this.wanderDir * 0.4;
+    this.wanderX += this.wanderDir * WANDER_SPEED;
     if (this.wanderX < this.wanderMinX) {
       this.wanderX = this.wanderMinX;
       this.wanderDir = 1;
@@ -72,11 +135,14 @@ export class ShopSystem implements GameSystem {
   }
 
   isNearShopkeeper(player: Player): boolean {
-    const skPx = this.wanderX + TILE_SIZE * 0.5;
-    const skPy = this.shopkeeperTileY * TILE_SIZE + TILE_SIZE * 0.5;
+    const skPx = this.wanderX + TILE_SIZE * SHOPKEEPER_HALF_TILE;
+    const skPy = this.shopkeeperTileY * TILE_SIZE + TILE_SIZE * SHOPKEEPER_HALF_TILE;
     return (
-      Math.hypot(player.x + TILE_SIZE * 0.5 - skPx, player.y + TILE_SIZE * 0.5 - skPy) <
-      TILE_SIZE * 3.5
+      Math.hypot(
+        player.x + TILE_SIZE * SHOPKEEPER_HALF_TILE - skPx,
+        player.y + TILE_SIZE * SHOPKEEPER_HALF_TILE - skPy,
+      ) <
+      TILE_SIZE * SHOPKEEPER_INTERACT_RANGE
     );
   }
 
@@ -84,114 +150,29 @@ export class ShopSystem implements GameSystem {
     const ts = TILE_SIZE;
     const sx = this.wanderX - camX;
     const sy = this.shopkeeperTileY * ts - camY;
-    this.drawShopkeeper(ctx, sx, sy, ts, this.wanderTime, this.wanderDir);
+    drawShopkeeper(ctx, sx, sy, ts, this.wanderTime, this.wanderDir);
 
-    // Interaction prompt when player is near and shop is closed
     if (!this.shopOpen && this.isNearShopkeeper(active)) {
       drawInteractionPrompt(ctx, sx, sy, ts, 'Shop');
     }
   }
 
-  private drawShopkeeper(
-    ctx: CanvasRenderingContext2D,
-    sx: number,
-    sy: number,
-    s: number,
-    walkTime: number,
-    facingX: number,
-  ): void {
-    ctx.save();
-    const bob = Math.sin(walkTime * 0.08) * s * 0.02;
-    const bsy = sy + bob;
-    const cx = sx + s * 0.5;
-
-    if (facingX < 0) {
-      ctx.translate(sx + s * 0.5, 0);
-      ctx.scale(-1, 1);
-      ctx.translate(-(sx + s * 0.5), 0);
-    }
-
-    // Legs
-    ctx.fillStyle = '#3d2a0e';
-    ctx.fillRect(cx - s * 0.18, bsy + s * 0.78, s * 0.14, s * 0.18);
-    ctx.fillRect(cx + s * 0.04, bsy + s * 0.78, s * 0.14, s * 0.18);
-
-    // Body coat (warm brown)
-    ctx.fillStyle = '#6b4423';
-    ctx.fillRect(cx - s * 0.23, bsy + s * 0.36, s * 0.46, s * 0.46);
-
-    // Apron (cream)
-    ctx.fillStyle = '#e4d8b0';
-    ctx.fillRect(cx - s * 0.13, bsy + s * 0.38, s * 0.26, s * 0.4);
-
-    // Arms
-    ctx.fillStyle = '#6b4423';
-    ctx.fillRect(cx - s * 0.34, bsy + s * 0.38, s * 0.11, s * 0.28);
-    ctx.fillRect(cx + s * 0.23, bsy + s * 0.38, s * 0.11, s * 0.28);
-
-    // Hands
-    ctx.fillStyle = '#c89068';
-    ctx.beginPath();
-    ctx.ellipse(cx - s * 0.285, bsy + s * 0.68, s * 0.07, s * 0.07, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + s * 0.285, bsy + s * 0.68, s * 0.07, s * 0.07, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Neck
-    ctx.fillStyle = '#c89068';
-    ctx.fillRect(cx - s * 0.07, bsy + s * 0.24, s * 0.14, s * 0.13);
-
-    // Head
-    ctx.fillStyle = '#c89068';
-    ctx.beginPath();
-    ctx.ellipse(cx, bsy + s * 0.16, s * 0.15, s * 0.17, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Hat brim
-    ctx.fillStyle = '#1e1208';
-    ctx.fillRect(cx - s * 0.24, bsy + s * 0.04, s * 0.48, s * 0.05);
-
-    // Hat crown
-    ctx.fillRect(cx - s * 0.16, bsy - s * 0.1, s * 0.32, s * 0.15);
-
-    // Hatband
-    ctx.fillStyle = '#8b6914';
-    ctx.fillRect(cx - s * 0.16, bsy + s * 0.03, s * 0.32, s * 0.03);
-
-    // Eyes
-    ctx.fillStyle = '#1a0e04';
-    ctx.fillRect(cx - s * 0.08, bsy + s * 0.12, s * 0.04, s * 0.04);
-    ctx.fillRect(cx + s * 0.04, bsy + s * 0.12, s * 0.04, s * 0.04);
-
-    // Smile
-    ctx.strokeStyle = '#7a4a2a';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, bsy + s * 0.2, s * 0.06, 0.2, Math.PI - 0.2);
-    ctx.stroke();
-
-    // Apron pocket
-    ctx.strokeStyle = '#c8b880';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(cx - s * 0.08, bsy + s * 0.56, s * 0.16, s * 0.12);
-
-    ctx.restore();
-  }
-
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, _active: Player): void {
     if (this.feedbackTimer > 0) {
-      const alpha = Math.min(1, this.feedbackTimer / 30);
-      const tw = 260;
-      const th = 28;
+      const alpha = Math.min(1, this.feedbackTimer / FEEDBACK_FADE_FRAMES);
       ctx.save();
-      ctx.fillStyle = `rgba(10,8,4,${alpha * 0.85})`;
-      ctx.fillRect(canvas.width / 2 - tw / 2, canvas.height - 68, tw, th);
+      ctx.fillStyle = `rgba(10,8,4,${alpha * FEEDBACK_BG_ALPHA})`;
+      ctx.fillRect(
+        canvas.width / 2 - FEEDBACK_BOX_W / 2,
+        canvas.height - FEEDBACK_Y_FROM_BOTTOM,
+        FEEDBACK_BOX_W,
+        FEEDBACK_BOX_H,
+      );
       ctx.restore();
       drawText(ctx, this.feedbackMsg, {
         x: canvas.width / 2,
-        y: canvas.height - 48 - 10,
-        size: 12,
+        y: canvas.height - FEEDBACK_TEXT_Y_FROM_BOTTOM - FEEDBACK_TEXT_Y_OFFSET,
+        size: FEEDBACK_TEXT_SIZE,
         color: `rgba(220,190,80,${alpha})`,
         align: 'center',
         alpha,
@@ -204,120 +185,117 @@ export class ShopSystem implements GameSystem {
     const cw = canvas.width;
     const ch = canvas.height;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillStyle = `rgba(0,0,0,${PANEL_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
 
-    const panelW = 400;
-    const itemH = 56;
-    const panelH = 72 + SHOP_ITEMS.length * itemH + 32;
-    const panelX = cw / 2 - panelW / 2;
+    const panelH = PANEL_HEADER_H + SHOP_ITEMS.length * PANEL_ITEM_H + PANEL_FOOTER_H;
+    const panelX = cw / 2 - PANEL_W / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    // Panel
     ctx.fillStyle = '#120d04';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.fillRect(panelX, panelY, PANEL_W, panelH);
     ctx.strokeStyle = '#c8a840';
     ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    ctx.strokeRect(panelX, panelY, PANEL_W, panelH);
 
-    // Inner decorative line
     ctx.strokeStyle = '#6a5420';
     ctx.lineWidth = 1;
-    ctx.strokeRect(panelX + 5, panelY + 5, panelW - 10, panelH - 10);
+    ctx.strokeRect(
+      panelX + PANEL_INNER_INSET,
+      panelY + PANEL_INNER_INSET,
+      PANEL_W - PANEL_INNER_SIZE_REDUCTION,
+      panelH - PANEL_INNER_SIZE_REDUCTION,
+    );
 
-    // Title
     drawText(ctx, 'General Store', {
       x: cw / 2,
-      y: panelY + 26 - 13,
-      size: 16,
+      y: panelY + PANEL_TITLE_Y - PANEL_TITLE_BASELINE,
+      size: PANEL_TITLE_SIZE,
       bold: true,
       color: '#f0d870',
       align: 'center',
     });
 
-    // Separator
     ctx.strokeStyle = '#6a5420';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(panelX + 20, panelY + 34);
-    ctx.lineTo(panelX + panelW - 20, panelY + 34);
+    ctx.moveTo(panelX + PANEL_SEPARATOR_X_MARGIN, panelY + PANEL_SEPARATOR_Y);
+    ctx.lineTo(panelX + PANEL_W - PANEL_SEPARATOR_X_MARGIN, panelY + PANEL_SEPARATOR_Y);
     ctx.stroke();
 
-    // Active player coins
     drawText(ctx, `Coins: ${active.coins}`, {
       x: cw / 2,
-      y: panelY + 52 - 10,
-      size: 12,
+      y: panelY + PANEL_COINS_Y - PANEL_COINS_BASELINE,
+      size: PANEL_COINS_TEXT_SIZE,
       color: '#d4c070',
       align: 'center',
     });
 
-    // Item rows
     this.buyRects = [];
     for (let i = 0; i < SHOP_ITEMS.length; i++) {
       const item = SHOP_ITEMS[i];
-      const rowY = panelY + 66 + i * itemH;
+      const rowY = panelY + PANEL_FIRST_ROW_Y + i * PANEL_ITEM_H;
       const canAfford = active.coins >= item.price;
 
-      // Row background
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,245,200,0.04)' : 'rgba(0,0,0,0.18)';
-      ctx.fillRect(panelX + 8, rowY + 2, panelW - 16, itemH - 4);
+      ctx.fillStyle =
+        i % 2 === 0
+          ? `rgba(255,245,200,${PANEL_ROW_EVEN_ALPHA})`
+          : `rgba(0,0,0,${PANEL_ROW_ALT_ALPHA})`;
+      ctx.fillRect(
+        panelX + PANEL_ROW_BG_INSET_X,
+        rowY + 2,
+        PANEL_W - PANEL_ROW_BG_INSET_W,
+        PANEL_ITEM_H - PANEL_ROW_BG_INSET_H,
+      );
 
-      // Item name
       drawText(ctx, item.label, {
-        x: panelX + 18,
-        y: rowY + 20 - 10,
-        size: 13,
+        x: panelX + PANEL_ITEM_X_MARGIN,
+        y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
+        size: PANEL_ITEM_NAME_SIZE,
         bold: true,
         color: canAfford ? '#e8d898' : '#6a5a40',
       });
 
-      // Description
       drawText(ctx, item.desc, {
-        x: panelX + 18,
-        y: rowY + 36 - 8,
-        size: 10,
+        x: panelX + PANEL_ITEM_X_MARGIN,
+        y: rowY + PANEL_ITEM_DESC_Y - PANEL_ITEM_DESC_BASELINE,
+        size: PANEL_DESC_SIZE,
         color: canAfford ? '#8a7a50' : '#4a3a28',
       });
 
-      // Price
       drawText(ctx, `${item.price} coins`, {
-        x: panelX + panelW - 90,
-        y: rowY + 20 - 10,
-        size: 13,
+        x: panelX + PANEL_W - PANEL_PRICE_X_FROM_RIGHT,
+        y: rowY + PANEL_ITEM_NAME_Y - PANEL_ITEM_NAME_BASELINE,
+        size: PANEL_ITEM_NAME_SIZE,
         bold: true,
         color: canAfford ? '#f0d040' : '#6a5820',
         align: 'right',
       });
 
-      // Buy button
-      const btnW = 68;
-      const btnH = 32;
-      const btnX = panelX + panelW - btnW - 12;
-      const btnY = rowY + (itemH - btnH) / 2;
+      const btnX = panelX + PANEL_W - PANEL_BTN_W - PANEL_BTN_X_MARGIN;
+      const btnY = rowY + (PANEL_ITEM_H - PANEL_BTN_H) / 2;
 
       ctx.fillStyle = canAfford ? '#14400a' : '#281818';
-      ctx.fillRect(btnX, btnY, btnW, btnH);
+      ctx.fillRect(btnX, btnY, PANEL_BTN_W, PANEL_BTN_H);
       ctx.strokeStyle = canAfford ? '#5aaa34' : '#3a2020';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(btnX, btnY, btnW, btnH);
+      ctx.lineWidth = PANEL_BTN_BORDER_W;
+      ctx.strokeRect(btnX, btnY, PANEL_BTN_W, PANEL_BTN_H);
       drawText(ctx, 'Buy', {
-        x: btnX + btnW / 2,
-        y: btnY + 21 - 10,
-        size: 12,
+        x: btnX + PANEL_BTN_W / 2,
+        y: btnY + PANEL_BTN_TEXT_Y - PANEL_BTN_TEXT_BASELINE,
+        size: PANEL_BTN_TEXT_SIZE,
         bold: true,
         color: canAfford ? '#c8e890' : '#5a4040',
         align: 'center',
       });
 
-      this.buyRects.push({ x: btnX, y: btnY, w: btnW, h: btnH });
+      this.buyRects.push({ x: btnX, y: btnY, w: PANEL_BTN_W, h: PANEL_BTN_H });
     }
 
-    // Close hint
     drawText(ctx, '[Space / Esc]  Close', {
       x: cw / 2,
-      y: panelY + panelH - 12 - 8,
-      size: 10,
+      y: panelY + panelH - PANEL_CLOSE_Y_FROM_BOTTOM - PANEL_CLOSE_BASELINE,
+      size: PANEL_CLOSE_SIZE,
       color: '#5a4a30',
       align: 'center',
     });
@@ -337,21 +315,20 @@ export class ShopSystem implements GameSystem {
     const item = SHOP_ITEMS[itemIdx];
     if (player.coins < item.price) {
       this.feedbackMsg = 'Not enough coins!';
-      this.feedbackTimer = 100;
+      this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
     const before = player.inventory.countOf(item.id);
     player.inventory.addItem(item.id, 1);
     const after = player.inventory.countOf(item.id);
     if (after <= before) {
-      // Inventory full — refund not needed since we haven't deducted yet
       this.feedbackMsg = 'Inventory is full!';
-      this.feedbackTimer = 100;
+      this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
       return;
     }
     player.coins -= item.price;
     this.feedbackMsg = `Bought ${item.label}!`;
-    this.feedbackTimer = 100;
+    this.feedbackTimer = FEEDBACK_TIMER_FRAMES;
     this.purchasePending = true;
   }
 }

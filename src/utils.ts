@@ -1,5 +1,11 @@
 import { TILE_SIZE } from './core/constants';
 
+/** Tile center offset as a fraction of tile size. */
+const TILE_CENTER_OFFSET = 0.5;
+
+/** Milliseconds per second. */
+const MS_PER_SECOND = 1000;
+
 /** Return a random integer in the inclusive range [min, max]. */
 export const randomInt = (min: number, max: number) =>
   min + Math.floor(Math.random() * (max - min + 1));
@@ -24,7 +30,8 @@ export const normalize = (dx: number, dy: number) => {
 };
 
 /** Convert a pixel coordinate to a tile index (using the tile center). */
-export const pixelToTile = (px: number) => Math.floor((px + TILE_SIZE * 0.5) / TILE_SIZE);
+export const pixelToTile = (px: number) =>
+  Math.floor((px + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
 /** Convert a tile index to the pixel coordinate of its left/top edge. */
 export const tileToPixel = (tx: number) => tx * TILE_SIZE;
@@ -34,7 +41,7 @@ export const tileToPixel = (tx: number) => tx * TILE_SIZE;
  * at the start of the render loop; read `frameTime` anywhere to avoid
  * redundant `performance.now()` calls in hot paths.
  */
-export let frameTime = performance.now() / 1000;
+export let frameTime = performance.now() / MS_PER_SECOND;
 export function updateFrameTime(): void {
-  frameTime = performance.now() / 1000;
+  frameTime = performance.now() / MS_PER_SECOND;
 }

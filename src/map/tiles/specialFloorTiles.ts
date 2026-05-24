@@ -11,6 +11,79 @@ import {
 import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
 
+const SAFE_ROOM_GLOW_TILE_STRIDE = 4;
+const SAFE_ROOM_GLOW_RADIUS_FRACTION = 0.3;
+
+const GYM_RUBBER_DOT_TILE_STRIDE = 3;
+const GYM_RUBBER_DOT_ALPHA = 0.04;
+const GYM_RUBBER_DOT_RADIUS_FRACTION = 0.18;
+const GYM_RUBBER_DOT_CENTER_FRACTION = 0.5;
+const GYM_LINE_TILE_STRIDE = 4;
+const GYM_LINE_ALPHA = 0.18;
+
+const KRAKAREN_WET_SHEEN_HASH_X = 7;
+const KRAKAREN_WET_SHEEN_HASH_Y = 13;
+const KRAKAREN_WET_SHEEN_STRIDE = 5;
+const KRAKAREN_ELLIPSE_MAJOR_FRACTION = 0.35;
+const KRAKAREN_ELLIPSE_MINOR_FRACTION = 0.25;
+const KRAKAREN_CRACK_HASH_X = 1;
+const KRAKAREN_CRACK_HASH_Y = 3;
+const KRAKAREN_CRACK_STRIDE = 7;
+const KRAKAREN_CRACK_START_X_FRACTION = 0.2;
+const KRAKAREN_CRACK_START_Y_FRACTION = 0.3;
+const KRAKAREN_CRACK_END_X_FRACTION = 0.8;
+const KRAKAREN_CRACK_END_Y_FRACTION = 0.7;
+const KRAKAREN_SLIME_HASH_X = 11;
+const KRAKAREN_SLIME_HASH_Y = 5;
+const KRAKAREN_SLIME_STRIDE = 9;
+const KRAKAREN_SLIME_CENTER_X_FRACTION = 0.6;
+const KRAKAREN_SLIME_CENTER_Y_FRACTION = 0.4;
+const KRAKAREN_SLIME_MAJOR_FRACTION = 0.12;
+const KRAKAREN_SLIME_MINOR_FRACTION = 0.08;
+
+const ARENA_GRID_DIVISIONS = 4;
+const ARENA_HASH_X = 7;
+const ARENA_RIVET_RADIUS = 1.2;
+const ARENA_BLOOD_MODULUS = 3571;
+const ARENA_BLOOD_Y_MODULUS = 1237;
+const ARENA_BLOOD_SEED_MASK = 0xffff;
+const ARENA_BLOOD_TILE_STRIDE = 11;
+const ARENA_BLOOD_ALPHA_BASE = 0.18;
+const ARENA_BLOOD_ALPHA_SCALE = 0.03;
+const ARENA_BLOOD_SEED_MODULUS_7 = 7;
+const ARENA_BLOOD_POSITION_OFFSET = 4;
+const ARENA_BLOOD_SHIFT_BITS = 4;
+const ARENA_BLOOD_MAJOR_BASE = 0.2;
+const ARENA_BLOOD_MAJOR_SCALE = 0.04;
+const ARENA_BLOOD_MAJOR_MODULUS = 5;
+const ARENA_BLOOD_MINOR_BASE = 0.12;
+const ARENA_BLOOD_MINOR_SCALE = 0.03;
+const ARENA_BLOOD_MINOR_MODULUS = 4;
+const ARENA_BLOOD_ROTATION_MODULUS = 16;
+const ARENA_BLOOD_ROTATION_SCALE = 0.4;
+
+const GRATE_BASE_FILL_FRACTION = 0.06;
+const GRATE_GAP_DIVISIONS = 6;
+const GRATE_HORIZONTAL_INSET_FRACTION = 0.1;
+const GRATE_HORIZONTAL_WIDTH_FRACTION = 0.8;
+const GRATE_FRAME_OUTER_FRACTION = 0.08;
+const GRATE_FRAME_THICKNESS_FRACTION = 0.04;
+const GRATE_FRAME_HEIGHT_FRACTION = 0.84;
+const GRATE_VOID_INSET_FRACTION = 0.14;
+const GRATE_VOID_SIZE_FRACTION = 0.72;
+const GRATE_RIM_OUTER_FRACTION = 0.08;
+const GRATE_RIM_SIZE_FRACTION = 0.84;
+
+const SPIDER_WEB_HASH_X = 5;
+const SPIDER_WEB_HASH_Y = 7;
+const SPIDER_WEB_STRIDE = 9;
+const SPIDER_WEB_START_X_FRACTION = 0.2;
+const SPIDER_WEB_START_Y_FRACTION = 0.1;
+const SPIDER_WEB_END_X_FRACTION = 0.8;
+const SPIDER_WEB_END_Y_FRACTION = 0.9;
+const SPIDER_WEB_ALT_START_X_FRACTION = 0.8;
+const SPIDER_WEB_ALT_END_X_FRACTION = 0.2;
+
 // Lazily computed bounding box of HORDER_BOSS_ROOM_FLOOR tiles for a given map structure.
 // Keyed on the structure array so it's automatically GC'd with the map.
 const _hoarderBoundsCache = new WeakMap<
@@ -99,10 +172,10 @@ export function drawSpecialFloorTile(
       ctx.fillRect(sx + ts - 1, sy, 1, ts);
       ctx.fillRect(sx, sy + ts - 1, ts, 1);
       // Subtle warm glow dot at tile corners
-      if (tx % 4 === 0 && ty % 4 === 0) {
+      if (tx % SAFE_ROOM_GLOW_TILE_STRIDE === 0 && ty % SAFE_ROOM_GLOW_TILE_STRIDE === 0) {
         ctx.fillStyle = 'rgba(255,200,80,0.25)';
         ctx.beginPath();
-        ctx.arc(sx, sy, ts * 0.3, 0, Math.PI * 2);
+        ctx.arc(sx, sy, ts * SAFE_ROOM_GLOW_RADIUS_FRACTION, 0, Math.PI * 2);
         ctx.fill();
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
@@ -140,19 +213,25 @@ export function drawSpecialFloorTile(
       ctx.fillRect(sx + ts - 1, sy, 1, ts);
       ctx.fillRect(sx, sy + ts - 1, ts, 1);
       // Rubber texture dots (deterministic pattern)
-      if ((tx + ty) % 3 === 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      if ((tx + ty) % GYM_RUBBER_DOT_TILE_STRIDE === 0) {
+        ctx.fillStyle = `rgba(255,255,255,${GYM_RUBBER_DOT_ALPHA})`;
         ctx.beginPath();
-        ctx.arc(sx + ts * 0.5, sy + ts * 0.5, ts * 0.18, 0, Math.PI * 2);
+        ctx.arc(
+          sx + ts * GYM_RUBBER_DOT_CENTER_FRACTION,
+          sy + ts * GYM_RUBBER_DOT_CENTER_FRACTION,
+          ts * GYM_RUBBER_DOT_RADIUS_FRACTION,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
       }
       // Orange gym line markings every 4 tiles
-      if (tx % 4 === 0) {
-        ctx.fillStyle = 'rgba(249,115,22,0.18)';
+      if (tx % GYM_LINE_TILE_STRIDE === 0) {
+        ctx.fillStyle = `rgba(249,115,22,${GYM_LINE_ALPHA})`;
         ctx.fillRect(sx, sy, 2, ts);
       }
-      if (ty % 4 === 0) {
-        ctx.fillStyle = 'rgba(249,115,22,0.18)';
+      if (ty % GYM_LINE_TILE_STRIDE === 0) {
+        ctx.fillStyle = `rgba(249,115,22,${GYM_LINE_ALPHA})`;
         ctx.fillRect(sx, sy, ts, 2);
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
@@ -166,34 +245,52 @@ export function drawSpecialFloorTile(
       ctx.fillStyle = cavBase;
       ctx.fillRect(sx, sy, ts, ts);
       // Wet sheen patches
-      if ((tx * 7 + ty * 13) % 5 === 0) {
+      if (
+        (tx * KRAKAREN_WET_SHEEN_HASH_X + ty * KRAKAREN_WET_SHEEN_HASH_Y) %
+          KRAKAREN_WET_SHEEN_STRIDE ===
+        0
+      ) {
         ctx.fillStyle = 'rgba(100,140,180,0.08)';
         ctx.beginPath();
         ctx.ellipse(
-          sx + ts * 0.5,
-          sy + ts * 0.5,
-          ts * 0.35,
-          ts * 0.25,
-          (tx + ty) * 0.5,
+          sx + ts * GYM_RUBBER_DOT_CENTER_FRACTION,
+          sy + ts * GYM_RUBBER_DOT_CENTER_FRACTION,
+          ts * KRAKAREN_ELLIPSE_MAJOR_FRACTION,
+          ts * KRAKAREN_ELLIPSE_MINOR_FRACTION,
+          (tx + ty) * GYM_RUBBER_DOT_CENTER_FRACTION,
           0,
           Math.PI * 2,
         );
         ctx.fill();
       }
       // Crack lines
-      if ((tx + ty * 3) % 7 === 0) {
+      if ((tx * KRAKAREN_CRACK_HASH_X + ty * KRAKAREN_CRACK_HASH_Y) % KRAKAREN_CRACK_STRIDE === 0) {
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
         ctx.lineWidth = 0.5;
         ctx.beginPath();
-        ctx.moveTo(sx + ts * 0.2, sy + ts * 0.3);
-        ctx.lineTo(sx + ts * 0.8, sy + ts * 0.7);
+        ctx.moveTo(
+          sx + ts * KRAKAREN_CRACK_START_X_FRACTION,
+          sy + ts * KRAKAREN_CRACK_START_Y_FRACTION,
+        );
+        ctx.lineTo(
+          sx + ts * KRAKAREN_CRACK_END_X_FRACTION,
+          sy + ts * KRAKAREN_CRACK_END_Y_FRACTION,
+        );
         ctx.stroke();
       }
       // Pink slime drips (hints at the Krakaren)
-      if ((tx * 11 + ty * 5) % 9 === 0) {
+      if ((tx * KRAKAREN_SLIME_HASH_X + ty * KRAKAREN_SLIME_HASH_Y) % KRAKAREN_SLIME_STRIDE === 0) {
         ctx.fillStyle = 'rgba(220,100,140,0.15)';
         ctx.beginPath();
-        ctx.ellipse(sx + ts * 0.6, sy + ts * 0.4, ts * 0.12, ts * 0.08, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          sx + ts * KRAKAREN_SLIME_CENTER_X_FRACTION,
+          sy + ts * KRAKAREN_SLIME_CENTER_Y_FRACTION,
+          ts * KRAKAREN_SLIME_MAJOR_FRACTION,
+          ts * KRAKAREN_SLIME_MINOR_FRACTION,
+          0,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
@@ -209,8 +306,8 @@ export function drawSpecialFloorTile(
       // Grating crosshatch lines
       ctx.strokeStyle = '#23262e';
       ctx.lineWidth = 1;
-      const gridStep = Math.floor(ts / 4);
-      for (let i = 1; i < 4; i++) {
+      const gridStep = Math.floor(ts / ARENA_GRID_DIVISIONS);
+      for (let i = 1; i < ARENA_GRID_DIVISIONS; i++) {
         ctx.beginPath();
         ctx.moveTo(sx + i * gridStep, sy);
         ctx.lineTo(sx + i * gridStep, sy + ts);
@@ -222,14 +319,13 @@ export function drawSpecialFloorTile(
       }
 
       // Rivet dots at grid intersections
-      const h2 = tx * 7 + ty * 13;
       if ((tx + ty) % 2 === 0) {
         ctx.fillStyle = '#2e323c';
-        for (let iy = 1; iy < 4; iy++) {
-          for (let ix = 1; ix < 4; ix++) {
+        for (let iy = 1; iy < ARENA_GRID_DIVISIONS; iy++) {
+          for (let ix = 1; ix < ARENA_GRID_DIVISIONS; ix++) {
             if ((ix + iy) % 2 === 0) {
               ctx.beginPath();
-              ctx.arc(sx + ix * gridStep, sy + iy * gridStep, 1.2, 0, Math.PI * 2);
+              ctx.arc(sx + ix * gridStep, sy + iy * gridStep, ARENA_RIVET_RADIUS, 0, Math.PI * 2);
               ctx.fill();
             }
           }
@@ -237,24 +333,34 @@ export function drawSpecialFloorTile(
       }
 
       // Subtle blood stain on some tiles
-      const bloodSeed = (tx * 3571 + ty * 1237) & 0xffff;
-      if (bloodSeed % 11 === 0) {
-        ctx.globalAlpha = 0.18 + (bloodSeed % 7) * 0.03;
+      const bloodSeed =
+        (tx * ARENA_BLOOD_MODULUS + ty * ARENA_BLOOD_Y_MODULUS) & ARENA_BLOOD_SEED_MASK;
+      if (bloodSeed % ARENA_BLOOD_TILE_STRIDE === 0) {
+        ctx.globalAlpha =
+          ARENA_BLOOD_ALPHA_BASE +
+          (bloodSeed % ARENA_BLOOD_SEED_MODULUS_7) * ARENA_BLOOD_ALPHA_SCALE;
         ctx.fillStyle = '#6b1a1a';
         ctx.beginPath();
         ctx.ellipse(
-          sx + ts * 0.5 + ((bloodSeed % 8) - 4),
-          sy + ts * 0.5 + (((bloodSeed >> 4) % 8) - 4),
-          ts * (0.2 + (bloodSeed % 5) * 0.04),
-          ts * (0.12 + (bloodSeed % 4) * 0.03),
-          (bloodSeed % 16) * 0.4,
+          sx +
+            ts * GYM_RUBBER_DOT_CENTER_FRACTION +
+            ((bloodSeed % ARENA_HASH_X) - ARENA_BLOOD_POSITION_OFFSET),
+          sy +
+            ts * GYM_RUBBER_DOT_CENTER_FRACTION +
+            (((bloodSeed >> ARENA_BLOOD_SHIFT_BITS) % ARENA_HASH_X) - ARENA_BLOOD_POSITION_OFFSET),
+          ts *
+            (ARENA_BLOOD_MAJOR_BASE +
+              (bloodSeed % ARENA_BLOOD_MAJOR_MODULUS) * ARENA_BLOOD_MAJOR_SCALE),
+          ts *
+            (ARENA_BLOOD_MINOR_BASE +
+              (bloodSeed % ARENA_BLOOD_MINOR_MODULUS) * ARENA_BLOOD_MINOR_SCALE),
+          (bloodSeed % ARENA_BLOOD_ROTATION_MODULUS) * ARENA_BLOOD_ROTATION_SCALE,
           0,
           Math.PI * 2,
         );
         ctx.fill();
         ctx.globalAlpha = 1;
       }
-      void h2;
       break;
     }
 
@@ -265,22 +371,47 @@ export function drawSpecialFloorTile(
       ctx.fillRect(sx, sy, ts, ts);
       // Grate bars — horizontal slits
       ctx.fillStyle = '#2a2a2a';
-      const barH = Math.max(2, ts * 0.06);
-      const gap = ts / 6;
-      for (let i = 1; i < 6; i++) {
-        ctx.fillRect(sx + ts * 0.1, sy + gap * i - barH / 2, ts * 0.8, barH);
+      const barH = Math.max(2, ts * GRATE_BASE_FILL_FRACTION);
+      const gap = ts / GRATE_GAP_DIVISIONS;
+      for (let i = 1; i < GRATE_GAP_DIVISIONS; i++) {
+        ctx.fillRect(
+          sx + ts * GRATE_HORIZONTAL_INSET_FRACTION,
+          sy + gap * i - barH / 2,
+          ts * GRATE_HORIZONTAL_WIDTH_FRACTION,
+          barH,
+        );
       }
       // Vertical frame bars
       ctx.fillStyle = '#3a3a3a';
-      ctx.fillRect(sx + ts * 0.08, sy + ts * 0.08, ts * 0.04, ts * 0.84);
-      ctx.fillRect(sx + ts * 0.88, sy + ts * 0.08, ts * 0.04, ts * 0.84);
+      ctx.fillRect(
+        sx + ts * GRATE_FRAME_OUTER_FRACTION,
+        sy + ts * GRATE_FRAME_OUTER_FRACTION,
+        ts * GRATE_FRAME_THICKNESS_FRACTION,
+        ts * GRATE_FRAME_HEIGHT_FRACTION,
+      );
+      ctx.fillRect(
+        sx + ts * (1 - GRATE_FRAME_OUTER_FRACTION - GRATE_FRAME_THICKNESS_FRACTION),
+        sy + ts * GRATE_FRAME_OUTER_FRACTION,
+        ts * GRATE_FRAME_THICKNESS_FRACTION,
+        ts * GRATE_FRAME_HEIGHT_FRACTION,
+      );
       // Dark centre void below grate
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(sx + ts * 0.14, sy + ts * 0.14, ts * 0.72, ts * 0.72);
+      ctx.fillRect(
+        sx + ts * GRATE_VOID_INSET_FRACTION,
+        sy + ts * GRATE_VOID_INSET_FRACTION,
+        ts * GRATE_VOID_SIZE_FRACTION,
+        ts * GRATE_VOID_SIZE_FRACTION,
+      );
       // Metallic rim highlight
       ctx.strokeStyle = '#6a6a6a';
       ctx.lineWidth = 1;
-      ctx.strokeRect(sx + ts * 0.08, sy + ts * 0.08, ts * 0.84, ts * 0.84);
+      ctx.strokeRect(
+        sx + ts * GRATE_RIM_OUTER_FRACTION,
+        sy + ts * GRATE_RIM_OUTER_FRACTION,
+        ts * GRATE_RIM_SIZE_FRACTION,
+        ts * GRATE_RIM_SIZE_FRACTION,
+      );
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
@@ -307,16 +438,19 @@ export function drawSpecialFloorTile(
         ctx.lineWidth = 0.5;
         ctx.strokeRect(sx + ts - 1, sy, 1, ts);
         ctx.strokeRect(sx, sy + ts - 1, ts, 1);
-        if ((tx * 5 + ty * 7) % 9 === 0) {
+        if ((tx * SPIDER_WEB_HASH_X + ty * SPIDER_WEB_HASH_Y) % SPIDER_WEB_STRIDE === 0) {
           ctx.strokeStyle = 'rgba(80,60,20,0.2)';
           ctx.lineWidth = 0.5;
           ctx.beginPath();
-          ctx.moveTo(sx + ts * 0.2, sy + ts * 0.1);
-          ctx.lineTo(sx + ts * 0.8, sy + ts * 0.9);
+          ctx.moveTo(sx + ts * SPIDER_WEB_START_X_FRACTION, sy + ts * SPIDER_WEB_START_Y_FRACTION);
+          ctx.lineTo(sx + ts * SPIDER_WEB_END_X_FRACTION, sy + ts * SPIDER_WEB_END_Y_FRACTION);
           ctx.stroke();
           ctx.beginPath();
-          ctx.moveTo(sx + ts * 0.8, sy + ts * 0.1);
-          ctx.lineTo(sx + ts * 0.2, sy + ts * 0.9);
+          ctx.moveTo(
+            sx + ts * SPIDER_WEB_ALT_START_X_FRACTION,
+            sy + ts * SPIDER_WEB_START_Y_FRACTION,
+          );
+          ctx.lineTo(sx + ts * SPIDER_WEB_ALT_END_X_FRACTION, sy + ts * SPIDER_WEB_END_Y_FRACTION);
           ctx.stroke();
         }
       }

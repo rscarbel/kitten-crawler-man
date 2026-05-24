@@ -6,6 +6,148 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText, measureTextBox } from '../TextBox';
 import { drawBox, drawDivider, drawProgressBar, drawScrollbar } from '../Box';
 
+// Layout constants
+const SCROLL_SPEED_MULTIPLIER = 0.5;
+const LIST_ROW_H = 54;
+const LIST_HEADER_H = 82; // extra space for the Equipped Abilities button
+const LIST_FOOTER_H = 48;
+const SCROLLBAR_W = 6;
+const EQ_SLOT_SIZE = 40;
+const EQ_SLOT_GAP = 6;
+const EQ_HEADER_H = 72;
+const EQ_FOOTER_H = 44;
+const DETAIL_PERK_ROW_H = 24;
+const DETAIL_PERK_LINE_H = 12;
+const DETAIL_PERK_VPAD = 5;
+
+// UI positioning (list view)
+const LIST_TITLE_Y_OFFSET = 22;
+const LIST_TITLE_Y_ADJUST = 10;
+const LIST_BUTTON_Y_OFFSET = 34;
+const LIST_BUTTON_HEIGHT = 30;
+const LIST_BUTTON_MARGIN = 32;
+const ICON_SIZE_LIST = 36;
+const ICON_MARGIN_LEFT = 16;
+const TEXT_X_OFFSET_FROM_ICON = 10;
+const OWNER_LABEL_X_OFFSET = 8;
+const OWNER_LABEL_Y_OFFSET = 15;
+const OWNER_LABEL_Y_ADJUST = 8;
+const OWNER_LABEL_SIZE = 10;
+const LEVEL_TEXT_Y_OFFSET = 30;
+const LEVEL_TEXT_Y_ADJUST = 9;
+const LEVEL_TEXT_SIZE = 11;
+const BAR_H_LIST = 6;
+const BAR_Y_OFFSET = 38;
+const BACK_BUTTON_Y_OFFSET = 7;
+const BACK_BUTTON_HEIGHT = 34;
+const BACK_BUTTON_MARGIN = 40;
+
+// UI positioning (equipped abilities view)
+const EQUIPPED_TITLE_Y_OFFSET = 22;
+const EQUIPPED_TITLE_Y_ADJUST = 10;
+const EQUIPPED_TITLE_SIZE = 15;
+const TOGGLE_Y_OFFSET = 34;
+const TOGGLE_W_DIVISOR = 2;
+const TOGGLE_H = 24;
+const TOGGLE_MARGIN = 16;
+const TOGGLE_MARGIN_2 = 24;
+const HOTBAR_LABEL_Y_OFFSET = 12;
+const HOTBAR_LABEL_Y_ADJUST = 8;
+const HOTBAR_LABEL_SIZE = 11;
+const SLOT_ROW_Y_OFFSET = 18;
+const SLOT_LABEL_OFFSET = 4;
+const SLOT_LABEL_Y_OFFSET = 9;
+const SLOT_LABEL_Y_ADJUST = 7;
+const SLOT_LABEL_SIZE = 8;
+const ICON_PAD_SLOT = 4;
+const TOOLTIP_PAD = 6;
+const TOOLTIP_H = 20;
+const TOOLTIP_X_OFFSET = 8;
+const TOOLTIP_Y_OFFSET = 4;
+const REMOVE_BUTTON_Y_OFFSET = 3;
+const REMOVE_BUTTON_HEIGHT = 16;
+const REMOVE_BUTTON_LABEL_SIZE = 10;
+const ITEM_INDICATOR_OFFSET = 6;
+const ITEM_INDICATOR_TEXT_Y_OFFSET = 4;
+const ITEM_INDICATOR_TEXT_SIZE = 8;
+const AVAIL_SECTION_Y_OFFSET = 26;
+const ADD_BUTTON_Y_OFFSET = 3;
+const ADD_BUTTON_HEIGHT = 16;
+const ADD_BUTTON_LABEL_SIZE = 9;
+const TOOLTIP_TEXT_Y_OFFSET = 5;
+
+// UI positioning (detail view)
+const DETAIL_TITLE_Y_OFFSET = 24;
+const DETAIL_TITLE_Y_ADJUST = 12;
+const DETAIL_TITLE_SIZE = 15;
+const DETAIL_OWNER_Y_OFFSET = 38;
+const DETAIL_OWNER_Y_ADJUST = 9;
+const DETAIL_OWNER_SIZE = 11;
+const DETAIL_EQUIP_Y_OFFSET = 50;
+const DETAIL_EQUIP_Y_ADJUST = 8;
+const DETAIL_EQUIP_SIZE = 10;
+const DETAIL_CONTENT_Y_OFFSET = 64;
+const DETAIL_LEVEL_Y_ADJUST = 10;
+const DETAIL_LEVEL_SIZE = 12;
+const DETAIL_LEVEL_SPACING = 14;
+const DETAIL_BAR_X_OFFSET = 16;
+const DETAIL_BAR_H = 8;
+const DETAIL_BAR_SPACING = 14;
+const DETAIL_XP_SIZE = 10;
+const DETAIL_DIVIDER_X_OFFSET = 16;
+const DETAIL_DIVIDER_LENGTH_MARGIN = 32;
+const DETAIL_DIVIDER_Y_OFFSET = 10;
+const PERK_HEADING_Y_OFFSET = 9;
+const PERK_HEADING_SIZE = 11;
+const PERK_HEADING_Y_SPACING = 14;
+const PERK_AREA_BACK_BTN_H = 44;
+const DESC_MAX_W_OFFSET = 44;
+const PERK_LEVEL_BADGE_W = 22;
+const PERK_LEVEL_BADGE_H = 18;
+const PERK_LEVEL_BADGE_X_OFFSET = 10;
+const PERK_LEVEL_BADGE_CENTER_X = 21;
+const PERK_DESC_X_OFFSET = 38;
+const PERK_DESC_FIRST_LINE_TOP_OFFSET = DETAIL_PERK_VPAD;
+const PERK_DESC_SIZE = 10;
+const SCROLL_HINT_Y_OFFSET = 4;
+const SCROLL_HINT_Y_ADJUST = 7;
+const SCROLL_HINT_SIZE = 9;
+const SCROLL_HINT_X_OFFSET = 2;
+
+// Colors
+const TOOLTIP_BG_COLOR = 'rgba(15,23,42,0.95)';
+const TOOLTIP_BORDER_COLOR = '#7c3aed';
+
+// Additional layout constants
+const ICON_Y_OFFSET_LIST = 2;
+const TITLE_Y_OFFSET_LIST = 16;
+const DETAILS_BUTTON_WIDTH = 88;
+const DETAILS_BUTTON_X_OFFSET = 12;
+const DETAILS_BUTTON_Y_OFFSET = 4;
+const DETAILS_BUTTON_H = 32;
+const NO_ABILITIES_Y_OFFSET = 20;
+const HUMAN_TOGGLE_LABEL_Y_OFFSET = 15;
+const CAT_TOGGLE_LABEL_Y_OFFSET = 15;
+const DETAIL_SLOT_ICON_PAD = 4;
+const DETAIL_ITEM_INDICATOR_W_MARGIN = 12;
+const DETAIL_ITEM_INDICATOR_H_MARGIN = 12;
+const BUTTON_X_MARGIN_LEFT = 20;
+const BUTTON_X_MARGIN_RIGHT_CALC = 40;
+const BACK_BTN_X = 20;
+const BAR_WIDTH_MARGIN_1 = 90;
+const BAR_WIDTH_MARGIN_2 = 4;
+const AVAILABLE_SECTION_Y_PADDING = 20;
+const PERK_NEW_BOX_X_OFFSET = 4;
+const PERK_NEW_BOX_Y_OFFSET = 2;
+const PERK_NEW_BOX_WIDTH_MARGIN = 8;
+const PERK_AREA_BACK_BTN_Y_OFFSET = 6;
+
+// Additional magic numbers
+const TOOLTIP_DRAW_Y_OFFSET = 16;
+const TOGGLE_W_WIDTH_MARGIN = 40;
+const PERK_BADGE_CENTER_Y_OFFSET = 13;
+const DESC_MAX_W_SCROLLBAR_MARGIN = 4;
+
 function isAbilityId(id: string): id is AbilityId {
   const ABILITY_IDS: ReadonlyArray<string> = ['magic_missile', 'protective_shell'];
   return ABILITY_IDS.includes(id);
@@ -38,10 +180,13 @@ export function resetAbilitiesTab(): void {
 export function scrollAbilitiesTab(deltaY: number): void {
   if (currentView === 'list') {
     const maxScroll = Math.max(0, listContentH - listViewportH);
-    listScrollY = Math.max(0, Math.min(maxScroll, listScrollY + deltaY * 0.5));
+    listScrollY = Math.max(0, Math.min(maxScroll, listScrollY + deltaY * SCROLL_SPEED_MULTIPLIER));
   } else {
     const maxScroll = Math.max(0, detailContentH - detailViewportH);
-    detailScrollY = Math.max(0, Math.min(maxScroll, detailScrollY + deltaY * 0.5));
+    detailScrollY = Math.max(
+      0,
+      Math.min(maxScroll, detailScrollY + deltaY * SCROLL_SPEED_MULTIPLIER),
+    );
   }
 }
 
@@ -108,11 +253,6 @@ export function renderAbilitiesTab(
   }
 }
 
-const LIST_ROW_H = 54;
-const LIST_HEADER_H = 82; // extra space for the Equipped Abilities button
-const LIST_FOOTER_H = 48;
-const SCROLLBAR_W = 6;
-
 function renderListView(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -125,7 +265,7 @@ function renderListView(
 ): void {
   drawText(ctx, 'Abilities Unlocked', {
     x: bx + bw / 2,
-    y: by + 22 - 10,
+    y: by + LIST_TITLE_Y_OFFSET - LIST_TITLE_Y_ADJUST,
     bold: true,
     size: 16,
     color: '#f1f5f9',
@@ -133,10 +273,10 @@ function renderListView(
   });
 
   addButton(ctx, buttons, {
-    x: bx + 16,
-    y: by + 34,
-    width: bw - 32,
-    height: 30,
+    x: bx + ICON_MARGIN_LEFT,
+    y: by + LIST_BUTTON_Y_OFFSET,
+    width: bw - LIST_BUTTON_MARGIN,
+    height: LIST_BUTTON_HEIGHT,
     label: 'Equipped Abilities ▶',
     ...BUTTON_PRESETS.primary,
     action: () => {
@@ -152,8 +292,8 @@ function renderListView(
 
   if (abilities.length === 0) {
     drawText(ctx, 'No abilities unlocked yet.', {
-      x: bx + bw / 2,
-      y: listAreaTop + 20 - 10,
+      x: bx + bw / TOGGLE_W_DIVISOR,
+      y: listAreaTop + NO_ABILITIES_Y_OFFSET - LIST_TITLE_Y_ADJUST,
       size: 13,
       color: '#64748b',
       align: 'center',
@@ -174,14 +314,14 @@ function renderListView(
 
       const visible = rowY + LIST_ROW_H > listAreaTop && rowY < listAreaTop + areaH;
 
-      const iconSize = 36;
-      const iconX = bx + 16;
-      def.renderIcon(ctx, iconX, rowY + 2, iconSize, state.level);
+      const iconSize = ICON_SIZE_LIST;
+      const iconX = bx + ICON_MARGIN_LEFT;
+      def.renderIcon(ctx, iconX, rowY + ICON_Y_OFFSET_LIST, iconSize, state.level);
 
-      const textX = iconX + iconSize + 10;
+      const textX = iconX + iconSize + TEXT_X_OFFSET_FROM_ICON;
       drawText(ctx, def.name, {
         x: textX,
-        y: rowY + 16 - 10,
+        y: rowY + TITLE_Y_OFFSET_LIST - LIST_TITLE_Y_ADJUST,
         bold: true,
         size: 13,
         color: '#e2e8f0',
@@ -197,23 +337,23 @@ function renderListView(
       ctx.restore();
 
       drawText(ctx, ownerLabel, {
-        x: textX + nameWidth + 8,
-        y: rowY + 15 - 8,
+        x: textX + nameWidth + OWNER_LABEL_X_OFFSET,
+        y: rowY + OWNER_LABEL_Y_OFFSET - OWNER_LABEL_Y_ADJUST,
         bold: true,
-        size: 10,
+        size: OWNER_LABEL_SIZE,
         color: ownerColor,
       });
       drawText(ctx, `Level ${state.level} / ${def.maxLevel}`, {
         x: textX,
-        y: rowY + 30 - 9,
-        size: 11,
+        y: rowY + LEVEL_TEXT_Y_OFFSET - LEVEL_TEXT_Y_ADJUST,
+        size: LEVEL_TEXT_SIZE,
         color: '#94a3b8',
       });
 
       const barX = textX;
-      const barW = bw - iconSize - 90 - SCROLLBAR_W - 4;
-      const barH = 6;
-      const barY = rowY + 38;
+      const barW = bw - iconSize - BAR_WIDTH_MARGIN_1 - SCROLLBAR_W - BAR_WIDTH_MARGIN_2;
+      const barH = BAR_H_LIST;
+      const barY = rowY + BAR_Y_OFFSET;
       const xpFrac = state.xpToNextLevel === Infinity ? 1 : state.xp / state.xpToNextLevel;
       drawProgressBar(ctx, {
         x: barX,
@@ -226,14 +366,14 @@ function renderListView(
       });
 
       if (visible) {
-        const btnW = 88;
-        const btnX = bx + bw - btnW - SCROLLBAR_W - 12;
+        const btnW = DETAILS_BUTTON_WIDTH;
+        const btnX = bx + bw - btnW - SCROLLBAR_W - DETAILS_BUTTON_X_OFFSET;
         const detailId = def.id;
         addButton(ctx, buttons, {
           x: btnX,
-          y: rowY + 4,
+          y: rowY + DETAILS_BUTTON_Y_OFFSET,
           width: btnW,
-          height: 32,
+          height: DETAILS_BUTTON_H,
           label: 'Details',
           ...BUTTON_PRESETS.primary,
           action: () => {
@@ -260,12 +400,12 @@ function renderListView(
     });
   }
 
-  const backY = by + bh - LIST_FOOTER_H + 7;
+  const backY = by + bh - LIST_FOOTER_H + BACK_BUTTON_Y_OFFSET;
   addButton(ctx, buttons, {
-    x: bx + 20,
+    x: bx + BUTTON_X_MARGIN_LEFT,
     y: backY,
-    width: bw - 40,
-    height: 34,
+    width: bw - BUTTON_X_MARGIN_RIGHT_CALC,
+    height: BACK_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
     action: () => {
@@ -290,33 +430,28 @@ function drawTooltip(
   ctx.save();
   ctx.font = 'bold 11px monospace';
   const tw = ctx.measureText(text).width;
-  const pad = 6;
+  const pad = TOOLTIP_PAD;
   const ttW = tw + pad * 2;
-  const ttH = 20;
-  let ttX = x + 8;
-  let ttY = y - ttH - 4;
+  const ttH = TOOLTIP_H;
+  let ttX = x + TOOLTIP_X_OFFSET;
+  let ttY = y - ttH - TOOLTIP_Y_OFFSET;
   if (ttX + ttW > bx + bw) ttX = bx + bw - ttW - 2;
-  if (ttY < by + 2) ttY = y + 16;
+  if (ttY < by + 2) ttY = y + TOOLTIP_DRAW_Y_OFFSET;
   drawBox(ctx, {
     x: ttX,
     y: ttY,
     width: ttW,
     height: ttH,
-    fill: 'rgba(15,23,42,0.95)',
-    border: '#7c3aed',
+    fill: TOOLTIP_BG_COLOR,
+    border: TOOLTIP_BORDER_COLOR,
     borderWidth: 1,
   });
   ctx.fillStyle = '#e2e8f0';
-  ctx.fillText(text, ttX + pad, ttY + ttH - 5);
+  ctx.fillText(text, ttX + pad, ttY + ttH - TOOLTIP_TEXT_Y_OFFSET);
   ctx.restore();
 }
 
 // Equipped Abilities View
-
-const EQ_SLOT_SIZE = 40;
-const EQ_SLOT_GAP = 6;
-const EQ_HEADER_H = 72;
-const EQ_FOOTER_H = 44;
 
 function renderEquippedAbilitiesView(
   ctx: CanvasRenderingContext2D,
@@ -334,64 +469,64 @@ function renderEquippedAbilitiesView(
   // Header
   drawText(ctx, 'Equipped Abilities', {
     x: bx + bw / 2,
-    y: by + 22 - 10,
+    y: by + EQUIPPED_TITLE_Y_OFFSET - EQUIPPED_TITLE_Y_ADJUST,
     bold: true,
-    size: 15,
+    size: EQUIPPED_TITLE_SIZE,
     color: '#e9d5ff',
     align: 'center',
   });
 
   // Player toggle
-  const toggleY = by + 34;
-  const toggleW = (bw - 40) / 2;
+  const toggleY = by + TOGGLE_Y_OFFSET;
+  const toggleW = (bw - TOGGLE_W_WIDTH_MARGIN) / TOGGLE_W_DIVISOR;
   const humanColor = equippedPlayer === 'human' ? '#fb923c' : '#475569';
   const catColor = equippedPlayer === 'cat' ? '#38bdf8' : '#475569';
 
   drawBox(ctx, {
-    x: bx + 16,
+    x: bx + TOGGLE_MARGIN,
     y: toggleY,
     width: toggleW,
-    height: 24,
+    height: TOGGLE_H,
     fill: equippedPlayer === 'human' ? 'rgba(251,146,60,0.18)' : 'rgba(30,41,59,0.6)',
   });
   drawText(ctx, 'Human', {
-    x: bx + 16 + toggleW / 2,
-    y: toggleY + 15 - 9,
+    x: bx + TOGGLE_MARGIN + toggleW / TOGGLE_W_DIVISOR,
+    y: toggleY + HUMAN_TOGGLE_LABEL_Y_OFFSET - LIST_TITLE_Y_ADJUST,
     bold: equippedPlayer === 'human',
     size: 12,
     color: humanColor,
     align: 'center',
   });
   buttons.push({
-    x: bx + 16,
+    x: bx + TOGGLE_MARGIN,
     y: toggleY,
     w: toggleW,
-    h: 24,
+    h: TOGGLE_H,
     action: () => {
       equippedPlayer = 'human';
     },
   });
 
   drawBox(ctx, {
-    x: bx + 24 + toggleW,
+    x: bx + TOGGLE_MARGIN_2 + toggleW,
     y: toggleY,
     width: toggleW,
-    height: 24,
+    height: TOGGLE_H,
     fill: equippedPlayer === 'cat' ? 'rgba(56,189,248,0.18)' : 'rgba(30,41,59,0.6)',
   });
   drawText(ctx, 'Cat', {
-    x: bx + 24 + toggleW + toggleW / 2,
-    y: toggleY + 15 - 9,
+    x: bx + TOGGLE_MARGIN_2 + toggleW + toggleW / TOGGLE_W_DIVISOR,
+    y: toggleY + CAT_TOGGLE_LABEL_Y_OFFSET - LIST_TITLE_Y_ADJUST,
     bold: equippedPlayer === 'cat',
     size: 12,
     color: catColor,
     align: 'center',
   });
   buttons.push({
-    x: bx + 24 + toggleW,
+    x: bx + TOGGLE_MARGIN_2 + toggleW,
     y: toggleY,
     w: toggleW,
-    h: 24,
+    h: TOGGLE_H,
     action: () => {
       equippedPlayer = 'cat';
     },
@@ -408,17 +543,17 @@ function renderEquippedAbilitiesView(
 
   //  Hotbar section
   drawText(ctx, 'Hotbar Abilities', {
-    x: bx + 16,
-    y: contentY + 12 - 8,
+    x: bx + ICON_MARGIN_LEFT,
+    y: contentY + HOTBAR_LABEL_Y_OFFSET - HOTBAR_LABEL_Y_ADJUST,
     bold: true,
-    size: 11,
+    size: HOTBAR_LABEL_SIZE,
     color: '#94a3b8',
   });
 
-  const slotRowY = contentY + 18;
+  const slotRowY = contentY + SLOT_ROW_Y_OFFSET;
   const totalSlots = HOTBAR_COUNT - 1; // exclude quest slot
   const rowW = totalSlots * (EQ_SLOT_SIZE + EQ_SLOT_GAP) - EQ_SLOT_GAP;
-  const rowX = bx + (bw - rowW) / 2;
+  const rowX = bx + (bw - rowW) / TOGGLE_W_DIVISOR;
 
   for (let i = 0; i < totalSlots; i++) {
     const sx = rowX + i * (EQ_SLOT_SIZE + EQ_SLOT_GAP);
@@ -439,9 +574,9 @@ function renderEquippedAbilitiesView(
 
     // Slot label
     drawText(ctx, String(i + 1), {
-      x: sx + 4,
-      y: sy + 9 - 7,
-      size: 8,
+      x: sx + SLOT_LABEL_OFFSET,
+      y: sy + SLOT_LABEL_Y_OFFSET - SLOT_LABEL_Y_ADJUST,
+      size: SLOT_LABEL_SIZE,
       color: '#64748b',
     });
 
@@ -450,8 +585,8 @@ function renderEquippedAbilitiesView(
         const abilityIdTyped = slot.abilityId;
         const def = abilityManager.getDef(abilityIdTyped);
         if (def) {
-          const iconPad = 4;
-          const iconSize = EQ_SLOT_SIZE - iconPad * 2;
+          const iconPad = ICON_PAD_SLOT;
+          const iconSize = EQ_SLOT_SIZE - iconPad * TOGGLE_W_DIVISOR;
           def.renderIcon(
             ctx,
             sx + iconPad,
@@ -473,16 +608,16 @@ function renderEquippedAbilitiesView(
           }
 
           // Remove button
-          const rmY = sy + EQ_SLOT_SIZE + 3;
+          const rmY = sy + EQ_SLOT_SIZE + REMOVE_BUTTON_Y_OFFSET;
           const slotCapture = slot;
           addButton(ctx, buttons, {
             x: sx,
             y: rmY,
             width: EQ_SLOT_SIZE,
-            height: 16,
+            height: REMOVE_BUTTON_HEIGHT,
             label: '✕',
             ...BUTTON_PRESETS.danger,
-            labelSize: 10,
+            labelSize: REMOVE_BUTTON_LABEL_SIZE,
             action: () => {
               if (!inventory) return;
               const emptyIdx = inventory.bag.slots.indexOf(null);
@@ -496,16 +631,16 @@ function renderEquippedAbilitiesView(
       } else {
         // Non-ability item — show grayed indicator
         drawBox(ctx, {
-          x: sx + 6,
-          y: sy + 6,
-          width: EQ_SLOT_SIZE - 12,
-          height: EQ_SLOT_SIZE - 12,
+          x: sx + ITEM_INDICATOR_OFFSET,
+          y: sy + ITEM_INDICATOR_OFFSET,
+          width: EQ_SLOT_SIZE - DETAIL_ITEM_INDICATOR_W_MARGIN,
+          height: EQ_SLOT_SIZE - DETAIL_ITEM_INDICATOR_H_MARGIN,
           fill: 'rgba(100,116,139,0.35)',
         });
         drawText(ctx, 'item', {
-          x: sx + EQ_SLOT_SIZE / 2,
-          y: sy + EQ_SLOT_SIZE / 2 + 4,
-          size: 8,
+          x: sx + EQ_SLOT_SIZE / TOGGLE_W_DIVISOR,
+          y: sy + EQ_SLOT_SIZE / TOGGLE_W_DIVISOR + ITEM_INDICATOR_TEXT_Y_OFFSET,
+          size: ITEM_INDICATOR_TEXT_SIZE,
           color: '#475569',
           align: 'center',
         });
@@ -514,12 +649,12 @@ function renderEquippedAbilitiesView(
   }
 
   // Available abilities section
-  const availSectionY = slotRowY + EQ_SLOT_SIZE + 26;
+  const availSectionY = slotRowY + EQ_SLOT_SIZE + AVAIL_SECTION_Y_OFFSET;
   drawText(ctx, 'Available Abilities', {
-    x: bx + 16,
-    y: availSectionY - 10,
+    x: bx + ICON_MARGIN_LEFT,
+    y: availSectionY - LIST_TITLE_Y_ADJUST,
     bold: true,
-    size: 11,
+    size: HOTBAR_LABEL_SIZE,
     color: '#94a3b8',
   });
 
@@ -541,8 +676,8 @@ function renderEquippedAbilitiesView(
 
   if (bagTomes.length === 0) {
     drawText(ctx, 'No abilities in bag.', {
-      x: bx + bw / 2,
-      y: availSectionY + 16,
+      x: bx + bw / TOGGLE_W_DIVISOR,
+      y: availSectionY + AVAILABLE_SECTION_Y_PADDING,
       size: 11,
       color: '#475569',
       align: 'center',
@@ -564,12 +699,12 @@ function renderEquippedAbilitiesView(
         borderWidth: 1.5,
       });
 
-      const iconPad = 4;
+      const iconPad = DETAIL_SLOT_ICON_PAD;
       def.renderIcon(
         ctx,
         availX + iconPad,
         sy + iconPad,
-        EQ_SLOT_SIZE - iconPad * 2,
+        EQ_SLOT_SIZE - iconPad * TOGGLE_W_DIVISOR,
         abilityManager.getLevel(def.id),
       );
 
@@ -585,16 +720,16 @@ function renderEquippedAbilitiesView(
       }
 
       // Add button
-      const addBtnY = sy + EQ_SLOT_SIZE + 3;
+      const addBtnY = sy + EQ_SLOT_SIZE + ADD_BUTTON_Y_OFFSET;
       const bagIdxCapture = bagIdx;
       addButton(ctx, buttons, {
         x: availX,
         y: addBtnY,
         width: EQ_SLOT_SIZE,
-        height: 16,
+        height: ADD_BUTTON_HEIGHT,
         label: '+Add',
         ...BUTTON_PRESETS.success,
-        labelSize: 9,
+        labelSize: ADD_BUTTON_LABEL_SIZE,
         action: () => {
           if (!inventory) return;
           const bagItem = inventory.bag.slots[bagIdxCapture];
@@ -632,10 +767,10 @@ function renderEquippedAbilitiesView(
 
   // Back button
   addButton(ctx, buttons, {
-    x: bx + 20,
-    y: by + bh - EQ_FOOTER_H + 6,
-    width: bw - 40,
-    height: 34,
+    x: bx + BACK_BTN_X,
+    y: by + bh - EQ_FOOTER_H + BACK_BUTTON_Y_OFFSET,
+    width: bw - BACK_BUTTON_MARGIN,
+    height: BACK_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
     action: () => {
@@ -644,10 +779,6 @@ function renderEquippedAbilitiesView(
     },
   });
 }
-
-const DETAIL_PERK_ROW_H = 24;
-const DETAIL_PERK_LINE_H = 12;
-const DETAIL_PERK_VPAD = 5;
 
 function renderDetailView(
   ctx: CanvasRenderingContext2D,
@@ -666,10 +797,10 @@ function renderDetailView(
 
   // Title
   drawText(ctx, def.name, {
-    x: bx + bw / 2,
-    y: by + 24 - 12,
+    x: bx + bw / TOGGLE_W_DIVISOR,
+    y: by + DETAIL_TITLE_Y_OFFSET - DETAIL_TITLE_Y_ADJUST,
     bold: true,
-    size: 15,
+    size: DETAIL_TITLE_SIZE,
     color: '#e9d5ff',
     align: 'center',
   });
@@ -678,37 +809,37 @@ function renderDetailView(
   const ownerLabel = state.owner === 'cat' ? 'Cat' : 'Human';
   const ownerColor = state.owner === 'cat' ? '#38bdf8' : '#fb923c';
   drawText(ctx, `Owner: ${ownerLabel}`, {
-    x: bx + bw / 2,
-    y: by + 38 - 9,
+    x: bx + bw / TOGGLE_W_DIVISOR,
+    y: by + DETAIL_OWNER_Y_OFFSET - DETAIL_OWNER_Y_ADJUST,
     bold: true,
-    size: 11,
+    size: DETAIL_OWNER_SIZE,
     color: ownerColor,
     align: 'center',
   });
 
   // Equip instructions
   drawText(ctx, `How to equip: ${def.equipInstructions}`, {
-    x: bx + bw / 2,
-    y: by + 50 - 8,
-    size: 10,
+    x: bx + bw / TOGGLE_W_DIVISOR,
+    y: by + DETAIL_EQUIP_Y_OFFSET - DETAIL_EQUIP_Y_ADJUST,
+    size: DETAIL_EQUIP_SIZE,
     color: '#64748b',
     align: 'center',
   });
 
-  let y = by + 64;
+  let y = by + DETAIL_CONTENT_Y_OFFSET;
 
   // Level + XP bar
   drawText(ctx, `Current level: ${currentLevel}`, {
-    x: bx + 16,
-    y: y - 10,
-    size: 12,
+    x: bx + DETAIL_BAR_X_OFFSET,
+    y: y - DETAIL_LEVEL_Y_ADJUST,
+    size: DETAIL_LEVEL_SIZE,
     color: '#94a3b8',
   });
-  y += 14;
+  y += DETAIL_LEVEL_SPACING;
 
-  const barX = bx + 16;
-  const barW = bw - 32;
-  const barH = 8;
+  const barX = bx + DETAIL_BAR_X_OFFSET;
+  const barW = bw - DETAIL_DIVIDER_LENGTH_MARGIN;
+  const barH = DETAIL_BAR_H;
   const xpFrac = state.xpToNextLevel === Infinity ? 1 : state.xp / state.xpToNextLevel;
   drawProgressBar(ctx, {
     x: barX,
@@ -719,33 +850,50 @@ function renderDetailView(
     fill: '#7c3aed',
     background: '#1e293b',
   });
-  y += barH + 14;
+  y += barH + DETAIL_BAR_SPACING;
 
   if (currentLevel < def.maxLevel) {
     drawText(ctx, `XP to next level: ${state.xp} / ${state.xpToNextLevel}`, {
-      x: bx + 16,
-      y: y - 8,
-      size: 10,
+      x: bx + DETAIL_BAR_X_OFFSET,
+      y: y - DETAIL_EQUIP_Y_ADJUST,
+      size: DETAIL_XP_SIZE,
       color: '#64748b',
     });
   } else {
-    drawText(ctx, 'MAX LEVEL', { x: bx + 16, y: y - 8, bold: true, size: 10, color: '#fbbf24' });
+    drawText(ctx, 'MAX LEVEL', {
+      x: bx + DETAIL_BAR_X_OFFSET,
+      y: y - DETAIL_EQUIP_Y_ADJUST,
+      bold: true,
+      size: DETAIL_XP_SIZE,
+      color: '#fbbf24',
+    });
   }
-  y += 14;
+  y += DETAIL_LEVEL_SPACING;
 
   // Separator
-  drawDivider(ctx, { x: bx + 16, y, length: bw - 32, color: '#334155' });
-  y += 10;
+  drawDivider(ctx, {
+    x: bx + DETAIL_DIVIDER_X_OFFSET,
+    y,
+    length: bw - DETAIL_DIVIDER_LENGTH_MARGIN,
+    color: '#334155',
+  });
+  y += DETAIL_DIVIDER_Y_OFFSET;
 
   // Perks heading
-  drawText(ctx, 'Level Perks:', { x: bx + 16, y: y - 9, bold: true, size: 11, color: '#94a3b8' });
-  y += 14;
+  drawText(ctx, 'Level Perks:', {
+    x: bx + DETAIL_BAR_X_OFFSET,
+    y: y - PERK_HEADING_Y_OFFSET,
+    bold: true,
+    size: PERK_HEADING_SIZE,
+    color: '#94a3b8',
+  });
+  y += PERK_HEADING_Y_SPACING;
 
   // Scrollable perks area
-  const backBtnH = 44;
+  const backBtnH = PERK_AREA_BACK_BTN_H;
   const perkAreaTop = y;
   const perkAreaH = bh - (perkAreaTop - by) - backBtnH;
-  const descMaxW = bw - 44 - SCROLLBAR_W - 4;
+  const descMaxW = bw - DESC_MAX_W_OFFSET - SCROLLBAR_W - DESC_MAX_W_SCROLLBAR_MARGIN;
 
   // Pre-pass: measure row heights for each perk using measureTextBox
   const perksLayout = def.perks.map((perk) => {
@@ -775,39 +923,39 @@ function renderDetailView(
 
     if (isNew) {
       drawBox(ctx, {
-        x: bx + 8,
-        y: perkY - 2,
-        width: bw - 16,
+        x: bx + PERK_NEW_BOX_X_OFFSET,
+        y: perkY - PERK_NEW_BOX_Y_OFFSET,
+        width: bw - PERK_NEW_BOX_WIDTH_MARGIN,
         height: rowH,
         fill: 'rgba(109,40,217,0.18)',
       });
     }
 
     // Level badge — vertically centered in row
-    const badgeY = perkY + Math.floor((rowH - 18) / 2);
+    const badgeY = perkY + Math.floor((rowH - PERK_LEVEL_BADGE_H) / TOGGLE_W_DIVISOR);
     drawBox(ctx, {
-      x: bx + 10,
+      x: bx + PERK_LEVEL_BADGE_X_OFFSET,
       y: badgeY,
-      width: 22,
-      height: 18,
+      width: PERK_LEVEL_BADGE_W,
+      height: PERK_LEVEL_BADGE_H,
       fill: unlocked ? '#7c3aed' : '#334155',
     });
     drawText(ctx, String(perk.level), {
-      x: bx + 21,
-      y: badgeY + 13 - 8,
+      x: bx + PERK_LEVEL_BADGE_CENTER_X,
+      y: badgeY + PERK_BADGE_CENTER_Y_OFFSET - DETAIL_OWNER_Y_ADJUST,
       bold: true,
-      size: 10,
+      size: DETAIL_XP_SIZE,
       color: unlocked ? '#ede9fe' : '#64748b',
       align: 'center',
     });
 
     // Description — word-wrapped via drawText
-    const descX = bx + 38;
-    const firstLineTop = perkY + DETAIL_PERK_VPAD;
+    const descX = bx + PERK_DESC_X_OFFSET;
+    const firstLineTop = perkY + PERK_DESC_FIRST_LINE_TOP_OFFSET;
     drawText(ctx, displayText, {
       x: descX,
       y: firstLineTop,
-      size: 10,
+      size: PERK_DESC_SIZE,
       bold: unlocked,
       color: unlocked ? '#e2e8f0' : '#475569',
       width: descMaxW,
@@ -833,9 +981,9 @@ function renderDetailView(
     // Scroll hint
     if (detailScrollY === 0) {
       drawText(ctx, 'scroll ↓', {
-        x: bx + bw - SCROLLBAR_W / 2 - 2,
-        y: perkAreaTop + perkAreaH - 4 - 7,
-        size: 9,
+        x: bx + bw - SCROLLBAR_W / TOGGLE_W_DIVISOR - SCROLL_HINT_X_OFFSET,
+        y: perkAreaTop + perkAreaH - SCROLL_HINT_Y_OFFSET - SCROLL_HINT_Y_ADJUST,
+        size: SCROLL_HINT_SIZE,
         color: 'rgba(148,163,184,0.7)',
         align: 'center',
       });
@@ -844,10 +992,10 @@ function renderDetailView(
 
   // Back button
   addButton(ctx, buttons, {
-    x: bx + 20,
-    y: by + bh - backBtnH + 6,
-    width: bw - 40,
-    height: 34,
+    x: bx + BACK_BTN_X,
+    y: by + bh - backBtnH + PERK_AREA_BACK_BTN_Y_OFFSET,
+    width: bw - BACK_BUTTON_MARGIN,
+    height: BACK_BUTTON_HEIGHT,
     label: '← Back to Abilities',
     ...BUTTON_PRESETS.primary,
     action: () => {

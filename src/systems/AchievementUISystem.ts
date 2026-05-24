@@ -250,73 +250,108 @@ export class AchievementUISystem {
     const inSafeRoom = this.human.isProtected || this.cat.isProtected;
 
     if (inSafeRoom) {
-      const w = 96;
-      const h = 88;
-      const x = 12;
+      const BANNER_W = 96;
+      const BANNER_H = 88;
+      const BANNER_LEFT = 12;
+      const TROPHY_ICON_Y_OFFSET = 34;
+      const LABEL_Y_OFFSET = 54;
+      const LABEL_Y_ADJUST = 8;
+      const COUNT_Y_OFFSET = 68;
+      const COUNT_Y_ADJUST = 7;
+      const PULSE_BASE = 0.5;
+      const PULSE_AMPLITUDE = 0.5;
+      const PULSE_PERIOD = 220;
+      const BOUNCE_PERIOD = 400;
+      const BOUNCE_AMPLITUDE = 3;
+      const SHADOW_BASE = 18;
+      const SHADOW_RANGE = 14;
+      const BORDER_BASE_WIDTH = 2;
+      const STROKE_MIN = 0.55;
+      const STROKE_RANGE = 0.45;
+      const LABEL_ALPHA_BASE = 0.75;
+      const LABEL_ALPHA_RANGE = 0.25;
+      const FONT_SIZE = 28;
+
+      const w = BANNER_W;
+      const h = BANNER_H;
+      const x = BANNER_LEFT;
       const y = canvas.height / 2 - h / 2;
       this._achievIconRect = { x, y, w, h };
 
       const t = Date.now();
-      const pulse = 0.5 + 0.5 * Math.sin(t / 220);
-      const bounce = Math.sin(t / 400) * 3;
+      const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(t / PULSE_PERIOD);
+      const bounce = Math.sin(t / BOUNCE_PERIOD) * BOUNCE_AMPLITUDE;
 
       ctx.save();
       ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 18 + 14 * pulse;
+      ctx.shadowBlur = SHADOW_BASE + SHADOW_RANGE * pulse;
 
       ctx.fillStyle = 'rgba(10, 20, 0, 0.92)';
       ctx.fillRect(x, y + bounce, w, h);
 
-      ctx.strokeStyle = `rgba(134, 239, 172, ${0.55 + 0.45 * pulse})`;
-      ctx.lineWidth = 2 + pulse;
+      ctx.strokeStyle = `rgba(134, 239, 172, ${STROKE_MIN + STROKE_RANGE * pulse})`;
+      ctx.lineWidth = BORDER_BASE_WIDTH + pulse;
       ctx.strokeRect(x, y + bounce, w, h);
       ctx.shadowBlur = 0;
 
-      ctx.font = 'bold 28px monospace';
+      ctx.font = `bold ${FONT_SIZE}px monospace`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffd700';
-      ctx.fillText('🏆', x + w / 2, y + bounce + 34);
+      ctx.fillText('🏆', x + w / 2, y + bounce + TROPHY_ICON_Y_OFFSET);
       ctx.textAlign = 'left';
       ctx.restore();
 
       drawText(ctx, 'ACHIEVEMENT!', {
         x: x + w / 2,
-        y: y + bounce + 54 - 8,
+        y: y + bounce + LABEL_Y_OFFSET - LABEL_Y_ADJUST,
         size: 10,
         bold: true,
-        color: `rgba(134, 239, 172, ${0.75 + 0.25 * pulse})`,
+        color: `rgba(134, 239, 172, ${LABEL_ALPHA_BASE + LABEL_ALPHA_RANGE * pulse})`,
         align: 'center',
       });
       drawText(ctx, unread === 1 ? '1 new' : `${unread} new`, {
         x: x + w / 2,
-        y: y + bounce + 68 - 7,
+        y: y + bounce + COUNT_Y_OFFSET - COUNT_Y_ADJUST,
         size: 9,
         color: '#94a3b8',
         align: 'center',
       });
     } else {
+      const BELOW_MAP_Y = 8;
+      const BELOW_MAP_GAP = 20;
+      const BTN_H = 28;
+      const BTN_GAP = 6;
+      const RIGHT_MARGIN = 8;
+      const PULSE_PERIOD = 300;
+      const PULSE_BASE = 0.5;
+      const PULSE_AMPLITUDE = 0.5;
+      const STROKE_BASE = 0.6;
+      const STROKE_RANGE = 0.4;
+      const ICON_Y_OFFSET = 4;
+      const ICON_Y_ADJUST = 9;
+      const ICON_H = 26;
+      const MOBILE_BTN_W = 80;
+      const DESKTOP_BTN_W = 104;
+
       const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-      // Position matches DungeonUIRenderer right column layout.
-      // On desktop: below bag button (pause h=28, gap=6, bag h=28, gap=6 = 68px offset).
-      // On mobile: same vertical slot but narrower button width.
-      const btnW = platform.isMobile ? 80 : 104;
+      const btnW = platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
       const r = {
-        x: canvas.width - 8 - btnW,
-        y: 8 + mmSize + 20 + 28 + 6 + 28 + 6,
+        x: canvas.width - RIGHT_MARGIN - btnW,
+        y: BELOW_MAP_Y + mmSize + BELOW_MAP_GAP + BTN_H + BTN_GAP + BTN_H + BTN_GAP,
         w: btnW,
-        h: 26,
+        h: ICON_H,
       };
       this._achievIconRect = r;
 
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+      const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(Date.now() / PULSE_PERIOD);
       ctx.fillStyle = 'rgba(26,42,10,0.9)';
       ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = `rgba(134,239,172,${0.6 + 0.4 * pulse})`;
+      ctx.strokeStyle = `rgba(134,239,172,${STROKE_BASE + STROKE_RANGE * pulse})`;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(r.x, r.y, r.w, r.h);
       drawText(ctx, `🏆 NEW (${unread})`, {
         x: r.x + r.w / 2,
-        y: r.y + r.h / 2 + 4 - 9,
+        y: r.y + r.h / 2 + ICON_Y_OFFSET - ICON_Y_ADJUST,
         size: 11,
         bold: true,
         color: '#86efac',
@@ -350,46 +385,68 @@ export class AchievementUISystem {
       return;
     }
 
-    const w = 96;
-    const h = 88;
-    const x = 12;
+    const BANNER_W = 96;
+    const BANNER_H = 88;
+    const BANNER_LEFT = 12;
+    const BOX_ICON_Y_OFFSET = 36;
+    const LABEL_Y_OFFSET = 54;
+    const LABEL_Y_ADJUST = 8;
+    const COUNT_Y_OFFSET = 68;
+    const COUNT_Y_ADJUST = 7;
+    const PULSE_BASE = 0.5;
+    const PULSE_AMPLITUDE = 0.5;
+    const PULSE_PERIOD = 220;
+    const BOUNCE_PERIOD = 400;
+    const BOUNCE_AMPLITUDE = 3;
+    const SHADOW_BASE = 18;
+    const SHADOW_RANGE = 14;
+    const BORDER_BASE_WIDTH = 2;
+    const STROKE_MIN = 0.55;
+    const STROKE_RANGE = 0.45;
+    const LABEL_ALPHA_BASE = 0.75;
+    const LABEL_ALPHA_RANGE = 0.25;
+    const FONT_SIZE = 30;
+
+    const w = BANNER_W;
+    const h = BANNER_H;
+    const x = BANNER_LEFT;
     const y = canvas.height / 2 - h / 2;
     this._lootBoxIconRect = { x, y, w, h };
 
     const t = Date.now();
-    const pulse = 0.5 + 0.5 * Math.sin(t / 220);
-    const bounce = Math.sin(t / 400) * 3;
+    const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(t / PULSE_PERIOD);
+    const bounce = Math.sin(t / BOUNCE_PERIOD) * BOUNCE_AMPLITUDE;
 
     ctx.save();
     ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 18 + 14 * pulse;
+    ctx.shadowBlur = SHADOW_BASE + SHADOW_RANGE * pulse;
 
     ctx.fillStyle = 'rgba(20, 14, 0, 0.92)';
     ctx.fillRect(x, y + bounce, w, h);
 
-    ctx.strokeStyle = `rgba(255, 215, 0, ${0.55 + 0.45 * pulse})`;
-    ctx.lineWidth = 2 + pulse;
+    ctx.strokeStyle = `rgba(255, 215, 0, ${STROKE_MIN + STROKE_RANGE * pulse})`;
+    ctx.lineWidth = BORDER_BASE_WIDTH + pulse;
     ctx.strokeRect(x, y + bounce, w, h);
     ctx.shadowBlur = 0;
 
-    ctx.font = 'bold 30px monospace';
+    ctx.font = `bold ${FONT_SIZE}px monospace`;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffd700';
-    ctx.fillText('📦', x + w / 2, y + bounce + 36);
+    ctx.fillText('📦', x + w / 2, y + bounce + BOX_ICON_Y_OFFSET);
     ctx.textAlign = 'left';
     ctx.restore();
 
     drawText(ctx, 'OPEN LOOT!', {
       x: x + w / 2,
-      y: y + bounce + 54 - 8,
+      y: y + bounce + LABEL_Y_OFFSET - LABEL_Y_ADJUST,
       size: 10,
       bold: true,
-      color: `rgba(255, 215, 0, ${0.75 + 0.25 * pulse})`,
+      color: `rgba(255, 215, 0, ${LABEL_ALPHA_BASE + LABEL_ALPHA_RANGE * pulse})`,
       align: 'center',
     });
     drawText(ctx, totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, {
       x: x + w / 2,
-      y: y + bounce + 68 - 7,
+      y: y + bounce + COUNT_Y_OFFSET - COUNT_Y_ADJUST,
       size: 9,
       color: '#94a3b8',
       align: 'center',

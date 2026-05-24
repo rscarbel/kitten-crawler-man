@@ -2,6 +2,14 @@ import { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { drawQuestNPCSprite, drawExclamationMark } from '../sprites/questNPCSprite';
 
+const NPC_MAX_HP = 40;
+/** Initial health potion count to remove (NPC has no use for potions). */
+const INITIAL_POTION_COUNT = 10;
+/** Frames over which the red damage box fades out. */
+const RED_BOX_FADE_FRAMES = 8;
+/** Alpha multiplier for the damage box overlay. */
+const RED_BOX_ALPHA_MAX = 0.9;
+
 export type NPCMarkerType = 'exclamation' | 'question' | 'none';
 
 /**
@@ -20,10 +28,9 @@ export class QuestNPC extends Player {
   private redBoxTimer = 0;
 
   constructor(tileX: number, tileY: number, questId: string) {
-    super(tileX, tileY, TILE_SIZE, 40);
+    super(tileX, tileY, TILE_SIZE, NPC_MAX_HP);
     this.questId = questId;
-    // Clear the default 10 health potions — NPC doesn't use potions
-    this.inventory.removeItems('health_potion', 10);
+    this.inventory.removeItems('health_potion', INITIAL_POTION_COUNT);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
@@ -68,7 +75,7 @@ export class QuestNPC extends Player {
   protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.redBoxTimer <= 0) return;
     ctx.save();
-    ctx.globalAlpha = Math.min(1, this.redBoxTimer / 8) * 0.9;
+    ctx.globalAlpha = Math.min(1, this.redBoxTimer / RED_BOX_FADE_FRAMES) * RED_BOX_ALPHA_MAX;
     ctx.strokeStyle = '#ff1f1f';
     ctx.lineWidth = 3;
     ctx.strokeRect(sx + 1, sy + 1, this.tileSize - 2, this.tileSize - 2);

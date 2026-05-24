@@ -6,6 +6,12 @@ import {
   type SpriteStateDef,
 } from './SpriteLoader';
 
+/** Default alpha for full opacity. */
+const DEFAULT_ALPHA = 1;
+
+/** Tile center offset as a fraction of tile size. */
+const TILE_CENTER_OFFSET = 0.5;
+
 export interface DrawSpriteOpts {
   /** Mirror the sprite horizontally around its tile-horizontal center. */
   flipX?: boolean;
@@ -48,9 +54,10 @@ export function drawSprite(
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;
 
-  const needsSave = flipX || rotation !== undefined || (alpha !== undefined && alpha !== 1);
+  const needsSave =
+    flipX || rotation !== undefined || (alpha !== undefined && alpha !== DEFAULT_ALPHA);
   if (needsSave) ctx.save();
-  if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+  if (alpha !== undefined && alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
 
   if (rotation !== undefined) {
     // Rotate around the anchor point (x, y) then draw with tileX/tileY offset.
@@ -61,7 +68,7 @@ export function drawSprite(
   } else {
     if (flipX) {
       // Flip around the horizontal center of the tile.
-      const cx = x + tileSize * 0.5;
+      const cx = x + tileSize * TILE_CENTER_OFFSET;
       ctx.translate(cx, 0);
       ctx.scale(-1, 1);
       ctx.translate(-cx, 0);
@@ -108,7 +115,7 @@ export function drawSpriteRotatedCenter(
   const pivotY = sy - tileY * scale + dh / 2;
 
   ctx.save();
-  if (alpha !== 1) ctx.globalAlpha = alpha;
+  if (alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
   ctx.translate(pivotX, pivotY);
   ctx.rotate(angle);
   ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, -dw / 2, -dh / 2, dw, dh);
@@ -135,10 +142,6 @@ export function drawSpriteKey<K extends SpriteKey>(
   if (!stateDef) return;
   drawSprite(ctx, def, stateDef, frame, x, y, tileSize, opts);
 }
-
-// ---------------------------------------------------------------------------
-// Frame index helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Convert a continuous walk angle (0–2π cycle) to a clamped frame index.

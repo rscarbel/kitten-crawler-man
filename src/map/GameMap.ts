@@ -56,6 +56,50 @@ import {
   OverlayTileCache,
 } from './TileRenderer';
 
+// ── Default map construction options ──────────────────────────────────────────
+const DEFAULT_MAP_SIZE = 100;
+const DEFAULT_TILE_HEIGHT = 10;
+
+// ── Interior building dimensions (width × height in tiles) ────────────────────
+const TOWER_INTERIOR_W = 30;
+const TOWER_INTERIOR_H = 24;
+const RESTAURANT_INTERIOR_W = 22;
+const RESTAURANT_INTERIOR_H = 16;
+const STORE_INTERIOR_W = 20;
+const STORE_INTERIOR_H = 12;
+const HOUSE_INTERIOR_W = 18;
+const HOUSE_INTERIOR_H = 14;
+
+// ── Floor tile type values used in interior generation ────────────────────────
+/** Carpet floor tile (used in tower interiors). */
+const CARPET_FLOOR = 7;
+/** Wood floor tile (used in house / store interiors). */
+const WOOD_FLOOR = 8;
+/** Wall tile value, used when filling the outer ring or sealing doors. */
+const WALL_TILE = 2;
+/** Road tile value (walkable threshold), used for interior exit doors. */
+const ROAD_TILE = 1;
+
+// ── Tower stair placement ─────────────────────────────────────────────────────
+/** X offset from the east wall for the "stairs up" tile in tower floors. */
+const TOWER_STAIR_UP_X_OFFSET = 5;
+/** Y row for both stair tiles (near the north wall). */
+const TOWER_STAIR_ROW = 2;
+/** X column for the "stairs down" tile (near the west wall). */
+const TOWER_STAIR_DOWN_COL = 3;
+/** Maximum tower floor index — floors 0..3, so the cap is 3. */
+const TOWER_TOP_FLOOR = 3;
+
+// ── A* pathfinding constants ──────────────────────────────────────────────────
+/** Movement cost for a diagonal step (√2 approximated to 3 decimal places). */
+const DIAGONAL_MOVE_COST = 1.414;
+/** Maximum A* node expansions per call — keeps per-frame cost bounded. */
+const ASTAR_MAX_NODE_EXPANSIONS = 2000;
+
+// ── Line-of-sight sampling ────────────────────────────────────────────────────
+/** Fraction of a tile used as the LOS step size (sample every half-tile). */
+const LOS_HALF_TILE_FRACTION = 0.5;
+
 /** Options for GameMap construction. */
 export interface GameMapOptions {
   mapSize?: number;
@@ -119,8 +163,8 @@ export class GameMap {
 
   constructor(opts: GameMapOptions = {}) {
     const {
-      mapSize = 100,
-      tileHeight = 10,
+      mapSize = DEFAULT_MAP_SIZE,
+      tileHeight = DEFAULT_TILE_HEIGHT,
       numBossRooms = 1,
       numSafeRooms = 2,
       numStairwellsOverride,
@@ -251,14 +295,26 @@ export class GameMap {
     const isStore = buildingType === 'store';
     const isHouse = buildingType === 'house';
     const isCarnival = buildingName === 'Big Top';
-    const w = isTower ? 30 : isRestaurant ? 22 : isStore ? 20 : 18;
-    const h = isTower ? 24 : isRestaurant ? 16 : isStore ? 12 : 14;
-    const floorType = isTower ? 7 /* carpet */ : isRestaurant ? SAFE_ROOM_FLOOR : 8; /* wood */
+    const w = isTower
+      ? TOWER_INTERIOR_W
+      : isRestaurant
+        ? RESTAURANT_INTERIOR_W
+        : isStore
+          ? STORE_INTERIOR_W
+          : HOUSE_INTERIOR_W;
+    const h = isTower
+      ? TOWER_INTERIOR_H
+      : isRestaurant
+        ? RESTAURANT_INTERIOR_H
+        : isStore
+          ? STORE_INTERIOR_H
+          : HOUSE_INTERIOR_H;
+    const floorType = isTower ? CARPET_FLOOR : isRestaurant ? SAFE_ROOM_FLOOR : WOOD_FLOOR;
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
         tileId: `${x}#${y}`,
-        type: 2, // wall
+        type: WALL_TILE,
       })),
     );
 
@@ -266,58 +322,88 @@ export class GameMap {
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
     if (isStore && !isCarnival) {
+      const storeCounterRow = 2;
+      const storeBehindCounterRow = 3;
+      const storeShelfStartRow = 4;
+      const storeShelfEndRow = 6;
+      const storeRugStartCol = 5;
+      const storeRugEndCol = 8;
+      // w - STORE_EAST_WALL_INSET = second column from east inner wall
+      const STORE_EAST_WALL_INSET = 3;
+      // h - STORE_ENTRANCE_ROW_INSET = rows before the south wall
+      const STORE_ENTRANCE_ROW_INSET = 3;
       // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
-      for (let x = 2; x <= w - 3; x++) grid[2][x].type = FloorTypeValue.wall;
-      // Shelving behind counter (row 1 is wall, so place barrels in row 1 area — skip)
+      for (let x = 2; x <= w - STORE_EAST_WALL_INSET; x++)
+        grid[storeCounterRow][x].type = FloorTypeValue.wall;
       // Barrels behind counter on east side
-      grid[3][w - 3].type = BARREL;
-      grid[3][w - 4].type = BARREL;
-      grid[4][w - 3].type = BARREL;
+      grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET].type = BARREL;
+      grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1].type = BARREL;
+      grid[storeShelfStartRow][w - STORE_EAST_WALL_INSET].type = BARREL;
       // Bookshelf (display shelf) on west wall
-      grid[4][1].type = BOOKSHELF;
-      grid[5][1].type = BOOKSHELF;
-      grid[6][1].type = BOOKSHELF;
+      grid[storeShelfStartRow][1].type = BOOKSHELF;
+      grid[storeShelfStartRow + 1][1].type = BOOKSHELF;
+      grid[storeShelfEndRow][1].type = BOOKSHELF;
       // Barrel cluster near entrance
-      grid[h - 3][1].type = BARREL;
-      grid[h - 3][w - 2].type = BARREL;
+      grid[h - STORE_ENTRANCE_ROW_INSET][1].type = BARREL;
+      grid[h - STORE_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
       // Small rug in front of counter
-      for (let x = 5; x <= 8; x++) grid[4][x].type = RUG;
-      for (let x = 5; x <= 8; x++) grid[5][x].type = RUG;
+      for (let x = storeRugStartCol; x <= storeRugEndCol; x++)
+        grid[storeShelfStartRow][x].type = RUG;
+      for (let x = storeRugStartCol; x <= storeRugEndCol; x++)
+        grid[storeShelfStartRow + 1][x].type = RUG;
     }
 
     if (isRestaurant) {
+      const restaurantCounterRow = 2;
+      const restaurantCounterEndCol = 8;
+      const restaurantTableRowA = 5;
+      const restaurantChairRowA = 6;
+      const restaurantTableCol1 = 2;
+      const restaurantTableCol2 = 3;
+      const restaurantTableCol3 = 5;
+      const restaurantTableCol4 = 6;
+      const restaurantEastTableCol1 = 14;
+      const restaurantEastTableCol2 = 15;
+      const restaurantEastTableCol3 = 17;
+      const restaurantEastTableCol4 = 18;
+      const restaurantTableRowB = 9;
+      const restaurantChairRowB = 10;
+      const restaurantBarrelRow = 3;
+      const restaurantBarrelCol1 = 9;
+      const restaurantBarrelCol2 = 10;
       // Counter along the north wall (row 2, cols 2–8) — non-walkable wall tiles
-      for (let x = 2; x <= 8; x++) grid[2][x].type = FloorTypeValue.wall;
+      for (let x = 2; x <= restaurantCounterEndCol; x++)
+        grid[restaurantCounterRow][x].type = FloorTypeValue.wall;
       // Two 2×1 tables in the dining area (rows 5–6, cols 2–3 and 5–6)
-      grid[5][2].type = TABLE;
-      grid[5][3].type = TABLE;
-      grid[6][2].type = CHAIR;
-      grid[6][3].type = CHAIR;
-      grid[5][5].type = TABLE;
-      grid[5][6].type = TABLE;
-      grid[6][5].type = CHAIR;
-      grid[6][6].type = CHAIR;
+      grid[restaurantTableRowA][restaurantTableCol1].type = TABLE;
+      grid[restaurantTableRowA][restaurantTableCol2].type = TABLE;
+      grid[restaurantChairRowA][restaurantTableCol1].type = CHAIR;
+      grid[restaurantChairRowA][restaurantTableCol2].type = CHAIR;
+      grid[restaurantTableRowA][restaurantTableCol3].type = TABLE;
+      grid[restaurantTableRowA][restaurantTableCol4].type = TABLE;
+      grid[restaurantChairRowA][restaurantTableCol3].type = CHAIR;
+      grid[restaurantChairRowA][restaurantTableCol4].type = CHAIR;
       // Two more tables on the east side (rows 5–6, cols 14–15 and 17–18)
-      grid[5][14].type = TABLE;
-      grid[5][15].type = TABLE;
-      grid[6][14].type = CHAIR;
-      grid[6][15].type = CHAIR;
-      grid[5][17].type = TABLE;
-      grid[5][18].type = TABLE;
-      grid[6][17].type = CHAIR;
-      grid[6][18].type = CHAIR;
+      grid[restaurantTableRowA][restaurantEastTableCol1].type = TABLE;
+      grid[restaurantTableRowA][restaurantEastTableCol2].type = TABLE;
+      grid[restaurantChairRowA][restaurantEastTableCol1].type = CHAIR;
+      grid[restaurantChairRowA][restaurantEastTableCol2].type = CHAIR;
+      grid[restaurantTableRowA][restaurantEastTableCol3].type = TABLE;
+      grid[restaurantTableRowA][restaurantEastTableCol4].type = TABLE;
+      grid[restaurantChairRowA][restaurantEastTableCol3].type = CHAIR;
+      grid[restaurantChairRowA][restaurantEastTableCol4].type = CHAIR;
       // Two more tables deeper in (rows 9–10)
-      grid[9][2].type = TABLE;
-      grid[9][3].type = TABLE;
-      grid[10][2].type = CHAIR;
-      grid[10][3].type = CHAIR;
-      grid[9][5].type = TABLE;
-      grid[9][6].type = TABLE;
-      grid[10][5].type = CHAIR;
-      grid[10][6].type = CHAIR;
+      grid[restaurantTableRowB][restaurantTableCol1].type = TABLE;
+      grid[restaurantTableRowB][restaurantTableCol2].type = TABLE;
+      grid[restaurantChairRowB][restaurantTableCol1].type = CHAIR;
+      grid[restaurantChairRowB][restaurantTableCol2].type = CHAIR;
+      grid[restaurantTableRowB][restaurantTableCol3].type = TABLE;
+      grid[restaurantTableRowB][restaurantTableCol4].type = TABLE;
+      grid[restaurantChairRowB][restaurantTableCol3].type = CHAIR;
+      grid[restaurantChairRowB][restaurantTableCol4].type = CHAIR;
       // Barrel near kitchen counter
-      grid[3][9].type = BARREL;
-      grid[3][10].type = BARREL;
+      grid[restaurantBarrelRow][restaurantBarrelCol1].type = BARREL;
+      grid[restaurantBarrelRow][restaurantBarrelCol2].type = BARREL;
     }
 
     // ── Named building interiors — each has a unique hand-crafted layout ──
@@ -337,299 +423,512 @@ export class GameMap {
 
     if (isHouse && isNamedBuilding) {
       switch (buildingName) {
-        case "Shepherd's Cabin":
+        case "Shepherd's Cabin": {
           // Rustic shepherd's dwelling — hearth, simple cot, supply barrels
-          grid[1][4].type = FIREPLACE;
-          grid[1][5].type = FIREPLACE;
-          grid[2][14].type = BED;
-          grid[2][15].type = BED;
-          grid[3][14].type = BED;
-          grid[3][15].type = BED;
-          grid[4][1].type = BARREL;
-          grid[5][1].type = BARREL;
-          grid[6][1].type = BARREL;
-          grid[7][8].type = TABLE;
-          grid[7][9].type = TABLE;
-          grid[8][8].type = CHAIR;
-          grid[11][1].type = CRATE;
-          grid[11][2].type = CRATE;
-          grid[10][15].type = BARREL_SIDE;
+          const cabinHearth1 = 4;
+          const cabinHearth2 = 5;
+          const cabinBedNorthRow = 2;
+          const cabinBedSouthRow = 3;
+          const cabinBedWestCol = 14;
+          const cabinBedEastCol = 15;
+          const cabinBarrelEndRow = 6;
+          const cabinTableRow = 7;
+          const cabinTableCol1 = 8;
+          const cabinTableCol2 = 9;
+          const cabinChairRow = 8;
+          const cabinSouthRow = 11;
+          const cabinBarrelSideRow = 10;
+          grid[1][cabinHearth1].type = FIREPLACE;
+          grid[1][cabinHearth2].type = FIREPLACE;
+          grid[cabinBedNorthRow][cabinBedWestCol].type = BED;
+          grid[cabinBedNorthRow][cabinBedEastCol].type = BED;
+          grid[cabinBedSouthRow][cabinBedWestCol].type = BED;
+          grid[cabinBedSouthRow][cabinBedEastCol].type = BED;
+          grid[cabinHearth1][1].type = BARREL;
+          grid[cabinHearth2][1].type = BARREL;
+          grid[cabinBarrelEndRow][1].type = BARREL;
+          grid[cabinTableRow][cabinTableCol1].type = TABLE;
+          grid[cabinTableRow][cabinTableCol2].type = TABLE;
+          grid[cabinChairRow][cabinTableCol1].type = CHAIR;
+          grid[cabinSouthRow][1].type = CRATE;
+          grid[cabinSouthRow][2].type = CRATE;
+          grid[cabinBarrelSideRow][cabinBedEastCol].type = BARREL_SIDE;
           break;
+        }
 
-        case 'Blackwood Barracks':
+        case 'Blackwood Barracks': {
           // Military barracks — rows of bunks, briefing table, crate storage
-          grid[2][1].type = BED;
-          grid[2][2].type = BED;
-          grid[3][1].type = BED;
-          grid[3][2].type = BED;
-          grid[5][1].type = BED;
-          grid[5][2].type = BED;
-          grid[6][1].type = BED;
-          grid[6][2].type = BED;
-          grid[2][14].type = BED;
-          grid[2][15].type = BED;
-          grid[3][14].type = BED;
-          grid[3][15].type = BED;
-          grid[5][14].type = BED;
-          grid[5][15].type = BED;
-          grid[6][14].type = BED;
-          grid[6][15].type = BED;
-          grid[7][7].type = TABLE;
-          grid[7][8].type = TABLE;
-          grid[7][9].type = TABLE;
-          grid[8][7].type = CHAIR;
-          grid[8][9].type = CHAIR;
-          grid[10][1].type = CRATE;
-          grid[11][1].type = CRATE;
-          grid[10][15].type = CRATE;
-          grid[11][15].type = CRATE;
-          grid[11][8].type = BARREL;
+          const barracksBunkRow1 = 2;
+          const barracksBunkRow2 = 3;
+          const barracksBunkRow3 = 5;
+          const barracksBunkRow4 = 6;
+          const barracksEastBedCol1 = 14;
+          const barracksEastBedCol2 = 15;
+          const barracksBriefingRow = 7;
+          const barracksBriefingTableCol1 = 7;
+          const barracksBriefingTableCol2 = 8;
+          const barracksBriefingTableCol3 = 9;
+          const barracksChairRow = 8;
+          const barracksCrateRow1 = 10;
+          const barracksCrateRow2 = 11;
+          grid[barracksBunkRow1][1].type = BED;
+          grid[barracksBunkRow1][2].type = BED;
+          grid[barracksBunkRow2][1].type = BED;
+          grid[barracksBunkRow2][2].type = BED;
+          grid[barracksBunkRow3][1].type = BED;
+          grid[barracksBunkRow3][2].type = BED;
+          grid[barracksBunkRow4][1].type = BED;
+          grid[barracksBunkRow4][2].type = BED;
+          grid[barracksBunkRow1][barracksEastBedCol1].type = BED;
+          grid[barracksBunkRow1][barracksEastBedCol2].type = BED;
+          grid[barracksBunkRow2][barracksEastBedCol1].type = BED;
+          grid[barracksBunkRow2][barracksEastBedCol2].type = BED;
+          grid[barracksBunkRow3][barracksEastBedCol1].type = BED;
+          grid[barracksBunkRow3][barracksEastBedCol2].type = BED;
+          grid[barracksBunkRow4][barracksEastBedCol1].type = BED;
+          grid[barracksBunkRow4][barracksEastBedCol2].type = BED;
+          grid[barracksBriefingRow][barracksBriefingTableCol1].type = TABLE;
+          grid[barracksBriefingRow][barracksBriefingTableCol2].type = TABLE;
+          grid[barracksBriefingRow][barracksBriefingTableCol3].type = TABLE;
+          grid[barracksChairRow][barracksBriefingTableCol1].type = CHAIR;
+          grid[barracksChairRow][barracksBriefingTableCol3].type = CHAIR;
+          grid[barracksCrateRow1][1].type = CRATE;
+          grid[barracksCrateRow2][1].type = CRATE;
+          grid[barracksCrateRow1][barracksEastBedCol2].type = CRATE;
+          grid[barracksCrateRow2][barracksEastBedCol2].type = CRATE;
+          grid[barracksCrateRow2][barracksBriefingTableCol2].type = BARREL;
           break;
+        }
 
-        case "Old Hilda's Cottage":
+        case "Old Hilda's Cottage": {
           // Witch's lair — cauldron braziers, dense spell-book shelves, work table
-          grid[1][8].type = BRAZIER;
-          grid[1][9].type = BRAZIER;
-          for (let ry = 2; ry <= 7; ry++) grid[ry][1].type = BOOKSHELF;
-          for (let ry = 2; ry <= 5; ry++) grid[ry][16].type = BOOKSHELF;
-          grid[5][7].type = TABLE;
-          grid[5][8].type = TABLE;
-          grid[6][7].type = CHAIR;
-          grid[8][1].type = BARREL;
-          grid[9][1].type = BARREL;
-          grid[9][8].type = BARREL_SIDE;
-          grid[9][9].type = BARREL_SIDE;
-          grid[11][13].type = CRATE;
-          grid[11][14].type = CRATE;
+          const hildaBrazierCol1 = 8;
+          const hildaBrazierCol2 = 9;
+          const hildaWestShelfStartRow = 2;
+          const hildaWestShelfEndRow = 7;
+          const hildaEastShelfEndRow = 5;
+          const hildaEastShelfCol = HOUSE_INTERIOR_W - 2;
+          const hildaTableRow = 5;
+          const hildaTableCol1 = 7;
+          const hildaTableCol2 = 8;
+          const hildaChairRow = 6;
+          const hildaBarrelRow1 = 8;
+          const hildaBarrelRow2 = 9;
+          const hildaCrateRow = 11;
+          const hildaCrateCol1 = 13;
+          const hildaCrateCol2 = 14;
+          grid[1][hildaBrazierCol1].type = BRAZIER;
+          grid[1][hildaBrazierCol2].type = BRAZIER;
+          for (let ry = hildaWestShelfStartRow; ry <= hildaWestShelfEndRow; ry++)
+            grid[ry][1].type = BOOKSHELF;
+          for (let ry = hildaWestShelfStartRow; ry <= hildaEastShelfEndRow; ry++)
+            grid[ry][hildaEastShelfCol].type = BOOKSHELF;
+          grid[hildaTableRow][hildaTableCol1].type = TABLE;
+          grid[hildaTableRow][hildaTableCol2].type = TABLE;
+          grid[hildaChairRow][hildaTableCol1].type = CHAIR;
+          grid[hildaBarrelRow1][1].type = BARREL;
+          grid[hildaBarrelRow2][1].type = BARREL;
+          grid[hildaBarrelRow2][hildaTableCol2].type = BARREL_SIDE;
+          grid[hildaBarrelRow2][hildaBrazierCol2].type = BARREL_SIDE;
+          grid[hildaCrateRow][hildaCrateCol1].type = CRATE;
+          grid[hildaCrateRow][hildaCrateCol2].type = CRATE;
           break;
+        }
 
-        case "Cartwright's Workshop":
+        case "Cartwright's Workshop": {
           // Builder's shop — dual north workbenches, raw material crates, scattered supplies
-          for (let rx = 3; rx <= 7; rx++) grid[2][rx].type = TABLE;
-          for (let rx = 10; rx <= 14; rx++) grid[2][rx].type = TABLE;
-          for (let ry = 4; ry <= 7; ry++) grid[ry][1].type = CRATE;
-          for (let ry = 4; ry <= 6; ry++) grid[ry][16].type = BARREL;
-          grid[8][4].type = BARREL_SIDE;
-          grid[8][5].type = BARREL_SIDE;
-          grid[8][11].type = BARREL_SIDE;
-          grid[8][12].type = BARREL_SIDE;
-          grid[5][8].type = TABLE;
-          grid[5][9].type = TABLE;
-          grid[6][8].type = CHAIR;
-          grid[11][1].type = BARREL;
-          grid[11][2].type = BARREL;
-          grid[11][14].type = CRATE;
-          grid[11][15].type = CRATE;
+          const cartwrightBenchRow = 2;
+          const cartwrightBench1StartCol = 3;
+          const cartwrightBench1EndCol = 7;
+          const cartwrightBench2StartCol = 10;
+          const cartwrightBench2EndCol = 14;
+          const cartwrightCrateStartRow = 4;
+          const cartwrightCrateEndRow = 7;
+          const cartwrightEastWallCol = HOUSE_INTERIOR_W - 2;
+          const cartwrightBarrelRow = 8;
+          const cartwrightBarrelCol1 = 4;
+          const cartwrightBarrelCol2 = 5;
+          const cartwrightBarrelCol3 = 11;
+          const cartwrightBarrelCol4 = 12;
+          const cartwrightTableRow = 5;
+          const cartwrightTableCol1 = 8;
+          const cartwrightTableCol2 = 9;
+          const cartwrightSouthRow = 11;
+          const cartwrightSouthCrateCol1 = 14;
+          const cartwrightSouthCrateCol2 = 15;
+          for (let rx = cartwrightBench1StartCol; rx <= cartwrightBench1EndCol; rx++)
+            grid[cartwrightBenchRow][rx].type = TABLE;
+          for (let rx = cartwrightBench2StartCol; rx <= cartwrightBench2EndCol; rx++)
+            grid[cartwrightBenchRow][rx].type = TABLE;
+          for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow; ry++)
+            grid[ry][1].type = CRATE;
+          for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow - 1; ry++)
+            grid[ry][cartwrightEastWallCol].type = BARREL;
+          grid[cartwrightBarrelRow][cartwrightBarrelCol1].type = BARREL_SIDE;
+          grid[cartwrightBarrelRow][cartwrightBarrelCol2].type = BARREL_SIDE;
+          grid[cartwrightBarrelRow][cartwrightBarrelCol3].type = BARREL_SIDE;
+          grid[cartwrightBarrelRow][cartwrightBarrelCol4].type = BARREL_SIDE;
+          grid[cartwrightTableRow][cartwrightTableCol1].type = TABLE;
+          grid[cartwrightTableRow][cartwrightTableCol2].type = TABLE;
+          grid[cartwrightTableRow + 1][cartwrightTableCol1].type = CHAIR;
+          grid[cartwrightSouthRow][1].type = BARREL;
+          grid[cartwrightSouthRow][2].type = BARREL;
+          grid[cartwrightSouthRow][cartwrightSouthCrateCol1].type = CRATE;
+          grid[cartwrightSouthRow][cartwrightSouthCrateCol2].type = CRATE;
           break;
+        }
 
-        case 'Herb & Remedy':
+        case 'Herb & Remedy': {
           // Apothecary — counter, dense ingredient shelves, display table
-          for (let rx = 5; rx <= 13; rx++) grid[2][rx].type = FloorTypeValue.wall;
-          for (let ry = 3; ry <= 7; ry++) grid[ry][1].type = BOOKSHELF;
-          for (let ry = 3; ry <= 6; ry++) grid[ry][16].type = BOOKSHELF;
-          grid[3][14].type = BARREL;
-          grid[3][15].type = BARREL;
-          grid[4][14].type = BARREL;
-          for (let rx = 4; rx <= 12; rx++) {
-            grid[4][rx].type = RUG;
-            grid[5][rx].type = RUG;
+          const herbCounterRow = 2;
+          const herbCounterStartCol = 5;
+          const herbCounterEndCol = 13;
+          const herbShelfStartRow = 3;
+          const herbWestShelfEndRow = 7;
+          const herbEastShelfEndRow = 6;
+          const herbEastShelfCol = HOUSE_INTERIOR_W - 2;
+          const herbBarrelRow1 = 3;
+          const herbBarrelRow2 = 4;
+          const herbBarrelCol1 = 14;
+          const herbBarrelCol2 = 15;
+          const herbRugStartCol = 4;
+          const herbRugEndCol = 12;
+          const herbTableRow = 8;
+          const herbTableCol1 = 7;
+          const herbTableCol2 = 8;
+          const herbBarrelSideCol = 3;
+          for (let rx = herbCounterStartCol; rx <= herbCounterEndCol; rx++)
+            grid[herbCounterRow][rx].type = FloorTypeValue.wall;
+          for (let ry = herbShelfStartRow; ry <= herbWestShelfEndRow; ry++)
+            grid[ry][1].type = BOOKSHELF;
+          for (let ry = herbShelfStartRow; ry <= herbEastShelfEndRow; ry++)
+            grid[ry][herbEastShelfCol].type = BOOKSHELF;
+          grid[herbBarrelRow1][herbBarrelCol1].type = BARREL;
+          grid[herbBarrelRow1][herbBarrelCol2].type = BARREL;
+          grid[herbBarrelRow2][herbBarrelCol1].type = BARREL;
+          for (let rx = herbRugStartCol; rx <= herbRugEndCol; rx++) {
+            grid[herbBarrelRow2][rx].type = RUG;
+            grid[herbBarrelRow2 + 1][rx].type = RUG;
           }
-          grid[8][7].type = TABLE;
-          grid[8][8].type = TABLE;
-          grid[8][3].type = BARREL_SIDE;
+          grid[herbTableRow][herbTableCol1].type = TABLE;
+          grid[herbTableRow][herbTableCol2].type = TABLE;
+          grid[herbTableRow][herbBarrelSideCol].type = BARREL_SIDE;
           break;
+        }
 
-        case 'The Sleeping Cat Inn':
+        case 'The Sleeping Cat Inn': {
           // Cozy inn — west & east guest rooms, common dining area, innkeeper desk
-          grid[1][8].type = FIREPLACE;
-          grid[1][9].type = FIREPLACE;
-          grid[2][1].type = BED;
-          grid[2][2].type = BED;
-          grid[3][1].type = BED;
-          grid[3][2].type = BED;
-          grid[5][1].type = BED;
-          grid[5][2].type = BED;
-          grid[6][1].type = BED;
-          grid[6][2].type = BED;
-          grid[2][14].type = BED;
-          grid[2][15].type = BED;
-          grid[3][14].type = BED;
-          grid[3][15].type = BED;
-          grid[5][14].type = BED;
-          grid[5][15].type = BED;
-          grid[6][14].type = BED;
-          grid[6][15].type = BED;
-          for (let rx = 4; rx <= 13; rx++) grid[4][rx].type = RUG;
-          grid[7][4].type = TABLE;
-          grid[7][5].type = TABLE;
-          grid[8][4].type = CHAIR;
-          grid[8][5].type = CHAIR;
-          grid[7][11].type = TABLE;
-          grid[7][12].type = TABLE;
-          grid[8][11].type = CHAIR;
-          grid[8][12].type = CHAIR;
-          grid[6][7].type = TABLE;
-          grid[6][8].type = TABLE;
-          grid[6][9].type = TABLE;
-          grid[7][7].type = CHAIR;
-          grid[11][1].type = BARREL;
-          grid[11][2].type = BARREL;
+          const innFireplaceCol1 = 8;
+          const innFireplaceCol2 = 9;
+          const innBunkRow1 = 2;
+          const innBunkRow2 = 3;
+          const innBunkRow3 = 5;
+          const innBunkRow4 = 6;
+          const innEastBedCol1 = 14;
+          const innEastBedCol2 = 15;
+          const innRugRow = 4;
+          const innRugStartCol = 4;
+          const innRugEndCol = 13;
+          const innDiningRow = 7;
+          const innDiningChairRow = 8;
+          const innWestTableCol1 = 4;
+          const innWestTableCol2 = 5;
+          const innEastTableCol1 = 11;
+          const innEastTableCol2 = 12;
+          const innCenterTableRow = 6;
+          const innCenterTableCol1 = 7;
+          const innCenterTableCol2 = 8;
+          const innCenterTableCol3 = 9;
+          const innSouthRow = 11;
+          grid[1][innFireplaceCol1].type = FIREPLACE;
+          grid[1][innFireplaceCol2].type = FIREPLACE;
+          grid[innBunkRow1][1].type = BED;
+          grid[innBunkRow1][2].type = BED;
+          grid[innBunkRow2][1].type = BED;
+          grid[innBunkRow2][2].type = BED;
+          grid[innBunkRow3][1].type = BED;
+          grid[innBunkRow3][2].type = BED;
+          grid[innBunkRow4][1].type = BED;
+          grid[innBunkRow4][2].type = BED;
+          grid[innBunkRow1][innEastBedCol1].type = BED;
+          grid[innBunkRow1][innEastBedCol2].type = BED;
+          grid[innBunkRow2][innEastBedCol1].type = BED;
+          grid[innBunkRow2][innEastBedCol2].type = BED;
+          grid[innBunkRow3][innEastBedCol1].type = BED;
+          grid[innBunkRow3][innEastBedCol2].type = BED;
+          grid[innBunkRow4][innEastBedCol1].type = BED;
+          grid[innBunkRow4][innEastBedCol2].type = BED;
+          for (let rx = innRugStartCol; rx <= innRugEndCol; rx++) grid[innRugRow][rx].type = RUG;
+          grid[innDiningRow][innWestTableCol1].type = TABLE;
+          grid[innDiningRow][innWestTableCol2].type = TABLE;
+          grid[innDiningChairRow][innWestTableCol1].type = CHAIR;
+          grid[innDiningChairRow][innWestTableCol2].type = CHAIR;
+          grid[innDiningRow][innEastTableCol1].type = TABLE;
+          grid[innDiningRow][innEastTableCol2].type = TABLE;
+          grid[innDiningChairRow][innEastTableCol1].type = CHAIR;
+          grid[innDiningChairRow][innEastTableCol2].type = CHAIR;
+          grid[innCenterTableRow][innCenterTableCol1].type = TABLE;
+          grid[innCenterTableRow][innCenterTableCol2].type = TABLE;
+          grid[innCenterTableRow][innCenterTableCol3].type = TABLE;
+          grid[innDiningRow][innCenterTableCol1].type = CHAIR;
+          grid[innSouthRow][1].type = BARREL;
+          grid[innSouthRow][2].type = BARREL;
           break;
+        }
 
-        case 'The Rusty Anvil':
+        case 'The Rusty Anvil': {
           // Blacksmith — twin forge braziers, anvil tables, raw material crates
-          grid[1][3].type = BRAZIER;
-          grid[1][4].type = BRAZIER;
-          grid[1][13].type = BRAZIER;
-          grid[1][14].type = BRAZIER;
-          grid[3][3].type = TABLE;
-          grid[3][4].type = TABLE;
-          grid[3][13].type = TABLE;
-          grid[3][14].type = TABLE;
-          for (let ry = 5; ry <= 9; ry++) grid[ry][1].type = CRATE;
-          grid[5][16].type = BARREL;
-          grid[6][16].type = BARREL;
-          grid[7][16].type = BARREL;
-          grid[5][7].type = BARREL_SIDE;
-          grid[5][8].type = BARREL_SIDE;
-          grid[5][9].type = BARREL_SIDE;
-          grid[5][10].type = BARREL_SIDE;
-          grid[4][7].type = CHAIR;
-          grid[11][1].type = CRATE;
-          grid[11][2].type = CRATE;
-          grid[11][14].type = BARREL;
-          grid[11][15].type = BARREL;
+          const anvilWestForgeCol1 = 3;
+          const anvilWestForgeCol2 = 4;
+          const anvilEastForgeCol1 = 13;
+          const anvilEastForgeCol2 = 14;
+          const anvilTableRow = 3;
+          const anvilCrateStartRow = 5;
+          const anvilCrateEndRow = 9;
+          const anvilEastWallCol = HOUSE_INTERIOR_W - 2;
+          const anvilBarrelSideRow = 5;
+          const anvilBarrelSideCol1 = 7;
+          const anvilBarrelSideCol2 = 8;
+          const anvilBarrelSideCol3 = 9;
+          const anvilBarrelSideCol4 = 10;
+          const anvilChairRow = 4;
+          const anvilSouthRow = 11;
+          grid[1][anvilWestForgeCol1].type = BRAZIER;
+          grid[1][anvilWestForgeCol2].type = BRAZIER;
+          grid[1][anvilEastForgeCol1].type = BRAZIER;
+          grid[1][anvilEastForgeCol2].type = BRAZIER;
+          grid[anvilTableRow][anvilWestForgeCol1].type = TABLE;
+          grid[anvilTableRow][anvilWestForgeCol2].type = TABLE;
+          grid[anvilTableRow][anvilEastForgeCol1].type = TABLE;
+          grid[anvilTableRow][anvilEastForgeCol2].type = TABLE;
+          for (let ry = anvilCrateStartRow; ry <= anvilCrateEndRow; ry++) grid[ry][1].type = CRATE;
+          grid[anvilCrateStartRow][anvilEastWallCol].type = BARREL;
+          grid[anvilCrateStartRow + 1][anvilEastWallCol].type = BARREL;
+          grid[anvilCrateStartRow + 2][anvilEastWallCol].type = BARREL;
+          grid[anvilBarrelSideRow][anvilBarrelSideCol1].type = BARREL_SIDE;
+          grid[anvilBarrelSideRow][anvilBarrelSideCol2].type = BARREL_SIDE;
+          grid[anvilBarrelSideRow][anvilBarrelSideCol3].type = BARREL_SIDE;
+          grid[anvilBarrelSideRow][anvilBarrelSideCol4].type = BARREL_SIDE;
+          grid[anvilChairRow][anvilBarrelSideCol1].type = CHAIR;
+          grid[anvilSouthRow][1].type = CRATE;
+          grid[anvilSouthRow][2].type = CRATE;
+          grid[anvilSouthRow][anvilEastForgeCol2].type = BARREL;
+          grid[anvilSouthRow][anvilEastWallCol - 1].type = BARREL;
           break;
+        }
 
-        case "Miller's Farm":
+        case "Miller's Farm": {
           // Farmhouse — hearth, single bed, harvest crates along east wall
-          grid[1][2].type = FIREPLACE;
-          grid[1][3].type = FIREPLACE;
-          grid[2][14].type = BED;
-          grid[2][15].type = BED;
-          grid[3][14].type = BED;
-          grid[3][15].type = BED;
-          grid[4][1].type = BARREL;
-          grid[5][1].type = BARREL;
-          grid[6][1].type = BARREL;
-          grid[4][16].type = CRATE;
-          grid[5][16].type = CRATE;
-          grid[6][16].type = CRATE;
-          grid[7][16].type = CRATE;
-          grid[8][7].type = TABLE;
-          grid[8][8].type = TABLE;
-          grid[9][7].type = CHAIR;
-          grid[9][8].type = CHAIR;
-          grid[10][1].type = BARREL_SIDE;
-          grid[11][1].type = BARREL_SIDE;
+          const farmHearth1 = 2;
+          const farmHearth2 = 3;
+          const farmBedNorthRow = 2;
+          const farmBedSouthRow = 3;
+          const farmBedWestCol = 14;
+          const farmBedEastCol = 15;
+          const farmEastWallCol = HOUSE_INTERIOR_W - 2;
+          const farmCrateStartRow = 4;
+          const farmCrateEndRow = 7;
+          const farmTableRow = 8;
+          const farmTableCol1 = 7;
+          const farmTableCol2 = 8;
+          const farmBarrelSideRow1 = 10;
+          const farmBarrelSideRow2 = 11;
+          grid[1][farmHearth1].type = FIREPLACE;
+          grid[1][farmHearth2].type = FIREPLACE;
+          grid[farmBedNorthRow][farmBedWestCol].type = BED;
+          grid[farmBedNorthRow][farmBedEastCol].type = BED;
+          grid[farmBedSouthRow][farmBedWestCol].type = BED;
+          grid[farmBedSouthRow][farmBedEastCol].type = BED;
+          grid[farmCrateStartRow][1].type = BARREL;
+          grid[farmCrateStartRow + 1][1].type = BARREL;
+          grid[farmCrateStartRow + 2][1].type = BARREL;
+          grid[farmCrateStartRow][farmEastWallCol].type = CRATE;
+          grid[farmCrateStartRow + 1][farmEastWallCol].type = CRATE;
+          grid[farmCrateStartRow + 2][farmEastWallCol].type = CRATE;
+          grid[farmCrateEndRow][farmEastWallCol].type = CRATE;
+          grid[farmTableRow][farmTableCol1].type = TABLE;
+          grid[farmTableRow][farmTableCol2].type = TABLE;
+          grid[farmTableRow + 1][farmTableCol1].type = CHAIR;
+          grid[farmTableRow + 1][farmTableCol2].type = CHAIR;
+          grid[farmBarrelSideRow1][1].type = BARREL_SIDE;
+          grid[farmBarrelSideRow2][1].type = BARREL_SIDE;
           break;
+        }
 
-        case "The Wanderer's Rest":
+        case "The Wanderer's Rest": {
           // Budget dormitory — wall-to-wall bunks, minimal communal table
-          grid[2][1].type = BED;
-          grid[2][2].type = BED;
-          grid[3][1].type = BED;
-          grid[3][2].type = BED;
-          grid[5][1].type = BED;
-          grid[5][2].type = BED;
-          grid[6][1].type = BED;
-          grid[6][2].type = BED;
-          grid[8][1].type = BED;
-          grid[8][2].type = BED;
-          grid[9][1].type = BED;
-          grid[9][2].type = BED;
-          grid[2][14].type = BED;
-          grid[2][15].type = BED;
-          grid[3][14].type = BED;
-          grid[3][15].type = BED;
-          grid[5][14].type = BED;
-          grid[5][15].type = BED;
-          grid[6][14].type = BED;
-          grid[6][15].type = BED;
-          grid[6][7].type = TABLE;
-          grid[6][8].type = TABLE;
-          grid[6][9].type = TABLE;
-          grid[7][7].type = CHAIR;
-          grid[7][9].type = CHAIR;
-          grid[11][1].type = BARREL;
-          grid[11][16].type = BARREL;
+          const wandererBunkRow1 = 2;
+          const wandererBunkRow2 = 3;
+          const wandererBunkRow3 = 5;
+          const wandererBunkRow4 = 6;
+          const wandererBunkRow5 = 8;
+          const wandererBunkRow6 = 9;
+          const wandererEastBedCol1 = 14;
+          const wandererEastBedCol2 = 15;
+          const wandererTableRow = 6;
+          const wandererTableCol1 = 7;
+          const wandererTableCol2 = 8;
+          const wandererTableCol3 = 9;
+          const wandererChairRow = 7;
+          const wandererSouthRow = 11;
+          const wandererSouthEastBarrelCol = HOUSE_INTERIOR_W - 2;
+          grid[wandererBunkRow1][1].type = BED;
+          grid[wandererBunkRow1][2].type = BED;
+          grid[wandererBunkRow2][1].type = BED;
+          grid[wandererBunkRow2][2].type = BED;
+          grid[wandererBunkRow3][1].type = BED;
+          grid[wandererBunkRow3][2].type = BED;
+          grid[wandererBunkRow4][1].type = BED;
+          grid[wandererBunkRow4][2].type = BED;
+          grid[wandererBunkRow5][1].type = BED;
+          grid[wandererBunkRow5][2].type = BED;
+          grid[wandererBunkRow6][1].type = BED;
+          grid[wandererBunkRow6][2].type = BED;
+          grid[wandererBunkRow1][wandererEastBedCol1].type = BED;
+          grid[wandererBunkRow1][wandererEastBedCol2].type = BED;
+          grid[wandererBunkRow2][wandererEastBedCol1].type = BED;
+          grid[wandererBunkRow2][wandererEastBedCol2].type = BED;
+          grid[wandererBunkRow3][wandererEastBedCol1].type = BED;
+          grid[wandererBunkRow3][wandererEastBedCol2].type = BED;
+          grid[wandererBunkRow4][wandererEastBedCol1].type = BED;
+          grid[wandererBunkRow4][wandererEastBedCol2].type = BED;
+          grid[wandererTableRow][wandererTableCol1].type = TABLE;
+          grid[wandererTableRow][wandererTableCol2].type = TABLE;
+          grid[wandererTableRow][wandererTableCol3].type = TABLE;
+          grid[wandererChairRow][wandererTableCol1].type = CHAIR;
+          grid[wandererChairRow][wandererTableCol3].type = CHAIR;
+          grid[wandererSouthRow][1].type = BARREL;
+          grid[wandererSouthRow][wandererSouthEastBarrelCol].type = BARREL;
           break;
+        }
 
-        case 'The Sunken Stump Pub':
+        case 'The Sunken Stump Pub': {
           // Village pub — bar counter, rows of drinking tables, large floor rug
-          for (let rx = 2; rx <= 7; rx++) grid[2][rx].type = FloorTypeValue.wall;
-          grid[3][1].type = BARREL;
-          grid[3][2].type = BARREL;
-          grid[4][1].type = BARREL;
-          grid[4][2].type = BARREL;
-          grid[1][14].type = FIREPLACE;
-          grid[1][15].type = FIREPLACE;
-          grid[6][3].type = TABLE;
-          grid[6][4].type = TABLE;
-          grid[7][3].type = CHAIR;
-          grid[7][4].type = CHAIR;
-          grid[6][8].type = TABLE;
-          grid[6][9].type = TABLE;
-          grid[7][8].type = CHAIR;
-          grid[7][9].type = CHAIR;
-          grid[6][13].type = TABLE;
-          grid[6][14].type = TABLE;
-          grid[7][13].type = CHAIR;
-          grid[7][14].type = CHAIR;
-          grid[9][5].type = TABLE;
-          grid[9][6].type = TABLE;
-          grid[10][5].type = CHAIR;
-          grid[10][6].type = CHAIR;
-          grid[9][11].type = TABLE;
-          grid[9][12].type = TABLE;
-          grid[10][11].type = CHAIR;
-          grid[10][12].type = CHAIR;
-          for (let rx = 3; rx <= 15; rx++) grid[5][rx].type = RUG;
-          grid[3][8].type = CHAIR;
-          grid[11][14].type = BARREL_SIDE;
-          grid[11][15].type = BARREL_SIDE;
+          const pubCounterRow = 2;
+          const pubCounterEndCol = 7;
+          const pubBarrelRow1 = 3;
+          const pubBarrelRow2 = 4;
+          const pubFireplaceCol1 = 14;
+          const pubFireplaceCol2 = 15;
+          const pubFrontTableRow = 6;
+          const pubFrontChairRow = 7;
+          const pubWestTableCol1 = 3;
+          const pubWestTableCol2 = 4;
+          const pubCenterTableCol1 = 8;
+          const pubCenterTableCol2 = 9;
+          const pubEastFrontTableCol1 = 13;
+          const pubEastFrontTableCol2 = 14;
+          const pubBackTableRow = 9;
+          const pubBackChairRow = 10;
+          const pubBackWestTableCol1 = 5;
+          const pubBackWestTableCol2 = 6;
+          const pubBackEastTableCol1 = 11;
+          const pubBackEastTableCol2 = 12;
+          const pubRugRow = 5;
+          const pubRugStartCol = 3;
+          const pubRugEndCol = 15;
+          const pubBarChairCol = 8;
+          const pubSouthRow = 11;
+          for (let rx = 2; rx <= pubCounterEndCol; rx++)
+            grid[pubCounterRow][rx].type = FloorTypeValue.wall;
+          grid[pubBarrelRow1][1].type = BARREL;
+          grid[pubBarrelRow1][2].type = BARREL;
+          grid[pubBarrelRow2][1].type = BARREL;
+          grid[pubBarrelRow2][2].type = BARREL;
+          grid[1][pubFireplaceCol1].type = FIREPLACE;
+          grid[1][pubFireplaceCol2].type = FIREPLACE;
+          grid[pubFrontTableRow][pubWestTableCol1].type = TABLE;
+          grid[pubFrontTableRow][pubWestTableCol2].type = TABLE;
+          grid[pubFrontChairRow][pubWestTableCol1].type = CHAIR;
+          grid[pubFrontChairRow][pubWestTableCol2].type = CHAIR;
+          grid[pubFrontTableRow][pubCenterTableCol1].type = TABLE;
+          grid[pubFrontTableRow][pubCenterTableCol2].type = TABLE;
+          grid[pubFrontChairRow][pubCenterTableCol1].type = CHAIR;
+          grid[pubFrontChairRow][pubCenterTableCol2].type = CHAIR;
+          grid[pubFrontTableRow][pubEastFrontTableCol1].type = TABLE;
+          grid[pubFrontTableRow][pubEastFrontTableCol2].type = TABLE;
+          grid[pubFrontChairRow][pubEastFrontTableCol1].type = CHAIR;
+          grid[pubFrontChairRow][pubEastFrontTableCol2].type = CHAIR;
+          grid[pubBackTableRow][pubBackWestTableCol1].type = TABLE;
+          grid[pubBackTableRow][pubBackWestTableCol2].type = TABLE;
+          grid[pubBackChairRow][pubBackWestTableCol1].type = CHAIR;
+          grid[pubBackChairRow][pubBackWestTableCol2].type = CHAIR;
+          grid[pubBackTableRow][pubBackEastTableCol1].type = TABLE;
+          grid[pubBackTableRow][pubBackEastTableCol2].type = TABLE;
+          grid[pubBackChairRow][pubBackEastTableCol1].type = CHAIR;
+          grid[pubBackChairRow][pubBackEastTableCol2].type = CHAIR;
+          for (let rx = pubRugStartCol; rx <= pubRugEndCol; rx++) grid[pubRugRow][rx].type = RUG;
+          grid[pubBarrelRow1][pubBarChairCol].type = CHAIR;
+          grid[pubSouthRow][pubFireplaceCol1].type = BARREL_SIDE;
+          grid[pubSouthRow][pubFireplaceCol2].type = BARREL_SIDE;
           break;
+        }
       }
     }
 
     // ── Generic house furniture (unnamed / unnamed overworld houses) ──
     if (isHouse && !isCarnival && !isNamedBuilding) {
+      const genericFireplaceCol1 = 8;
+      const genericFireplaceCol2 = 9;
+      const genericRugStartCol = 7;
+      const genericRugEndCol = 10;
+      const genericBedNorthRow = 2;
+      const genericBedSouthRow = 3;
+      // HOUSE_INTERIOR_W=18: east col=16, second-from-east=15
+      const HOUSE_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
+      const HOUSE_SECOND_EAST_COL = HOUSE_INTERIOR_W - 2 - 1;
+      // HOUSE_INTERIOR_H=14: south row index=13, pre-south=11, two-before-south=10
+      const HOUSE_PRE_SOUTH_ROW = HOUSE_INTERIOR_H - 2 - 1;
+      const HOUSE_BARREL_ROW = HOUSE_INTERIOR_H - 2 - 2;
+      const genericBedWestCol = HOUSE_SECOND_EAST_COL;
+      const genericBedEastCol = HOUSE_EAST_WALL_COL;
+      const genericShelfStartRow = 3;
+      const genericShelfEndRow = 5;
+      const genericTableRow = 7;
+      const genericTableCol1 = 7;
+      const genericTableCol2 = 8;
+      const genericTableCol3 = 9;
+      const genericChairRow = 8;
+      const genericSouthRow = HOUSE_PRE_SOUTH_ROW;
+      const genericEastWallCol = HOUSE_EAST_WALL_COL;
+      const genericEastBarrelRow = HOUSE_BARREL_ROW;
+      const genericEastChairRow = 6;
       // Fireplace centered on north wall
-      grid[1][8].type = FIREPLACE;
-      grid[1][9].type = FIREPLACE;
+      grid[1][genericFireplaceCol1].type = FIREPLACE;
+      grid[1][genericFireplaceCol2].type = FIREPLACE;
       // Rug in front of fireplace
-      for (let x = 7; x <= 10; x++) {
+      for (let x = genericRugStartCol; x <= genericRugEndCol; x++) {
         grid[2][x].type = RUG;
-        grid[3][x].type = RUG;
+        grid[genericBedSouthRow][x].type = RUG;
       }
       // Bed in NE corner
-      grid[2][15].type = BED;
-      grid[2][16].type = BED;
-      grid[3][15].type = BED;
-      grid[3][16].type = BED;
+      grid[genericBedNorthRow][genericBedWestCol].type = BED;
+      grid[genericBedNorthRow][genericBedEastCol].type = BED;
+      grid[genericBedSouthRow][genericBedWestCol].type = BED;
+      grid[genericBedSouthRow][genericBedEastCol].type = BED;
       // Bookshelf on west wall
-      grid[3][1].type = BOOKSHELF;
-      grid[4][1].type = BOOKSHELF;
-      grid[5][1].type = BOOKSHELF;
+      grid[genericShelfStartRow][1].type = BOOKSHELF;
+      grid[genericShelfStartRow + 1][1].type = BOOKSHELF;
+      grid[genericShelfEndRow][1].type = BOOKSHELF;
       // Dining table with chairs in center-south area
-      grid[7][7].type = TABLE;
-      grid[7][8].type = TABLE;
-      grid[7][9].type = TABLE;
-      grid[8][7].type = CHAIR;
-      grid[8][9].type = CHAIR;
+      grid[genericTableRow][genericTableCol1].type = TABLE;
+      grid[genericTableRow][genericTableCol2].type = TABLE;
+      grid[genericTableRow][genericTableCol3].type = TABLE;
+      grid[genericChairRow][genericTableCol1].type = CHAIR;
+      grid[genericChairRow][genericTableCol3].type = CHAIR;
       // Barrel in SW corner
-      grid[11][1].type = BARREL;
-      grid[11][2].type = BARREL;
+      grid[genericSouthRow][1].type = BARREL;
+      grid[genericSouthRow][2].type = BARREL;
       // Barrel in SE area
-      grid[10][16].type = BARREL;
+      grid[genericEastBarrelRow][genericEastWallCol].type = BARREL;
       // Chair by east wall
-      grid[6][16].type = CHAIR;
+      grid[genericEastChairRow][genericEastWallCol].type = CHAIR;
     }
 
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
     const doorX = Math.floor(w / 2) - 1;
-    grid[h - 1][doorX].type = 1; // road (walkable, acts as exit threshold)
-    grid[h - 1][doorX + 1].type = 1;
+    grid[h - 1][doorX].type = ROAD_TILE;
+    grid[h - 1][doorX + 1].type = ROAD_TILE;
 
     this.structure = grid;
     this.buildExtraBlockedTiles();
@@ -642,8 +941,8 @@ export class GameMap {
     // Only ground floor (towerFloor 0) or non-tower buildings have exit doors
     if (isTower && towerFloor > 0) {
       // Upper floors: wall off the door gap (no exit)
-      grid[h - 1][doorX].type = 2;
-      grid[h - 1][doorX + 1].type = 2;
+      grid[h - 1][doorX].type = WALL_TILE;
+      grid[h - 1][doorX + 1].type = WALL_TILE;
       this._interiorExitTiles = [];
     } else {
       this._interiorExitTiles = [
@@ -657,13 +956,13 @@ export class GameMap {
     this._interiorStairDownTiles = [];
     if (isTower) {
       // Stairs up: upper-right area (2 tiles wide)
-      const upX = w - 5;
-      const upY = 2;
+      const upX = w - TOWER_STAIR_UP_X_OFFSET;
+      const upY = TOWER_STAIR_ROW;
       // Stairs down: upper-left area (2 tiles wide)
-      const dnX = 3;
-      const dnY = 2;
+      const dnX = TOWER_STAIR_DOWN_COL;
+      const dnY = TOWER_STAIR_ROW;
 
-      const hasUp = towerFloor < 3;
+      const hasUp = towerFloor < TOWER_TOP_FLOOR;
       const hasDown = towerFloor > 0;
 
       if (hasUp) {
@@ -677,104 +976,174 @@ export class GameMap {
 
       // ── Tower floor furniture (30×24, carpet) ──
       // Avoid stair tiles at (upX=25,upY=2) and (dnX=3,dnY=2)
+      // TOWER_ENTRANCE_ROW_INSET: h - this value = second-to-last interior row (barrel/entrance row)
+      const TOWER_ENTRANCE_ROW_INSET = 3;
+      const towerFireplaceCol1 = 14;
+      const towerFireplaceCol2 = 15;
+      const towerShelfStartRow = 4;
       if (towerFloor === 0) {
         // Ground floor: reception hall — large rug, tables, bookshelves, fireplace
+        const groundFloorRugStartRow = 8;
+        const groundFloorRugEndRow = 13;
+        const groundFloorRugStartCol = 10;
+        const groundFloorRugEndCol = 19;
+        const groundFloorShelfEndRow = 10;
+        const groundFloorReceptionRow = 10;
+        const groundFloorChairRow = 11;
+        const groundFloorReceptionTableCol1 = 6;
+        const groundFloorReceptionTableCol2 = 7;
+        const groundFloorReceptionTableCol3 = 8;
+        const groundFloorEastBarrelRow = 5;
         // Fireplace centered on north wall
-        grid[1][14].type = FIREPLACE;
-        grid[1][15].type = FIREPLACE;
+        grid[1][towerFireplaceCol1].type = FIREPLACE;
+        grid[1][towerFireplaceCol2].type = FIREPLACE;
         // Large rug in center
-        for (let ry = 8; ry <= 13; ry++) for (let rx = 10; rx <= 19; rx++) grid[ry][rx].type = RUG;
+        for (let ry = groundFloorRugStartRow; ry <= groundFloorRugEndRow; ry++) {
+          for (let rx = groundFloorRugStartCol; rx <= groundFloorRugEndCol; rx++)
+            grid[ry][rx].type = RUG;
+        }
         // Bookshelves along west wall
-        for (let ry = 4; ry <= 10; ry++) grid[ry][1].type = BOOKSHELF;
+        for (let ry = towerShelfStartRow; ry <= groundFloorShelfEndRow; ry++)
+          grid[ry][1].type = BOOKSHELF;
         // Reception table with chairs
-        grid[10][6].type = TABLE;
-        grid[10][7].type = TABLE;
-        grid[10][8].type = TABLE;
-        grid[11][6].type = CHAIR;
-        grid[11][8].type = CHAIR;
-        grid[9][7].type = CHAIR;
+        grid[groundFloorReceptionRow][groundFloorReceptionTableCol1].type = TABLE;
+        grid[groundFloorReceptionRow][groundFloorReceptionTableCol2].type = TABLE;
+        grid[groundFloorReceptionRow][groundFloorReceptionTableCol3].type = TABLE;
+        grid[groundFloorChairRow][groundFloorReceptionTableCol1].type = CHAIR;
+        grid[groundFloorChairRow][groundFloorReceptionTableCol3].type = CHAIR;
+        grid[groundFloorReceptionRow - 1][groundFloorReceptionTableCol2].type = CHAIR;
         // Barrels near entrance
-        grid[h - 3][1].type = BARREL;
-        grid[h - 3][2].type = BARREL;
-        grid[h - 3][w - 2].type = BARREL;
+        grid[h - TOWER_ENTRANCE_ROW_INSET][1].type = BARREL;
+        grid[h - TOWER_ENTRANCE_ROW_INSET][2].type = BARREL;
+        grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
         // Torch-style decoration on east wall (use barrel as substitute)
-        grid[5][w - 2].type = BARREL;
+        grid[groundFloorEastBarrelRow][w - 2].type = BARREL;
       } else if (towerFloor === 1) {
         // 2nd floor: library — lots of bookshelves + reading tables
+        const libraryShelfEndRow = 14;
+        const libraryIslandRow = 6;
+        const libraryIsland1StartCol = 10;
+        const libraryIsland1EndCol = 13;
+        const libraryIsland2StartCol = 16;
+        const libraryIsland2EndCol = 19;
+        const libraryReadingRow = 10;
+        const libraryChairRow = 11;
+        const libraryWestTableCol1 = 8;
+        const libraryWestTableCol2 = 9;
+        const libraryEastTableCol1 = 16;
+        const libraryEastTableCol2 = 17;
+        const libraryRugStartCol = 11;
+        const libraryRugEndCol = 14;
         // Bookshelves along west wall
-        for (let ry = 4; ry <= 14; ry++) grid[ry][1].type = BOOKSHELF;
+        for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
+          grid[ry][1].type = BOOKSHELF;
         // Bookshelves along east wall
-        for (let ry = 4; ry <= 14; ry++) grid[ry][w - 2].type = BOOKSHELF;
+        for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
+          grid[ry][w - 2].type = BOOKSHELF;
         // Center bookshelf island
-        for (let rx = 10; rx <= 13; rx++) grid[6][rx].type = BOOKSHELF;
-        for (let rx = 16; rx <= 19; rx++) grid[6][rx].type = BOOKSHELF;
+        for (let rx = libraryIsland1StartCol; rx <= libraryIsland1EndCol; rx++)
+          grid[libraryIslandRow][rx].type = BOOKSHELF;
+        for (let rx = libraryIsland2StartCol; rx <= libraryIsland2EndCol; rx++)
+          grid[libraryIslandRow][rx].type = BOOKSHELF;
         // Reading tables
-        grid[10][8].type = TABLE;
-        grid[10][9].type = TABLE;
-        grid[11][8].type = CHAIR;
-        grid[11][9].type = CHAIR;
-        grid[10][16].type = TABLE;
-        grid[10][17].type = TABLE;
-        grid[11][16].type = CHAIR;
-        grid[11][17].type = CHAIR;
+        grid[libraryReadingRow][libraryWestTableCol1].type = TABLE;
+        grid[libraryReadingRow][libraryWestTableCol2].type = TABLE;
+        grid[libraryChairRow][libraryWestTableCol1].type = CHAIR;
+        grid[libraryChairRow][libraryWestTableCol2].type = CHAIR;
+        grid[libraryReadingRow][libraryEastTableCol1].type = TABLE;
+        grid[libraryReadingRow][libraryEastTableCol2].type = TABLE;
+        grid[libraryChairRow][libraryEastTableCol1].type = CHAIR;
+        grid[libraryChairRow][libraryEastTableCol2].type = CHAIR;
         // Rug between tables
-        for (let rx = 11; rx <= 14; rx++) {
-          grid[10][rx].type = RUG;
-          grid[11][rx].type = RUG;
+        for (let rx = libraryRugStartCol; rx <= libraryRugEndCol; rx++) {
+          grid[libraryReadingRow][rx].type = RUG;
+          grid[libraryChairRow][rx].type = RUG;
         }
       } else if (towerFloor === 2) {
         // 3rd floor: living quarters — beds, tables, personal items
+        const quartersNorthBedRow1 = 5;
+        const quartersNorthBedRow2 = 6;
+        const quartersSouthBedRow1 = 9;
+        const quartersSouthBedRow2 = 10;
+        const quartersShelfRow1 = 7;
+        const quartersShelfRow2 = 8;
+        const quartersEastTableRow = 8;
+        const quartersEastTableCol1 = w - TOWER_STAIR_UP_X_OFFSET;
+        const quartersEastTableCol2 = w - TOWER_STAIR_UP_X_OFFSET + 1;
+        const quartersEastTableCol3 = w - TOWER_STAIR_UP_X_OFFSET + 2;
+        const quartersBarrelRow1 = 12;
+        const quartersBarrelRow2 = 13;
+        const quartersRugStartCol = 4;
+        const quartersRugEndCol = 6;
         // Two beds along west wall
-        grid[5][1].type = BED;
-        grid[5][2].type = BED;
-        grid[6][1].type = BED;
-        grid[6][2].type = BED;
-        grid[9][1].type = BED;
-        grid[9][2].type = BED;
-        grid[10][1].type = BED;
-        grid[10][2].type = BED;
+        grid[quartersNorthBedRow1][1].type = BED;
+        grid[quartersNorthBedRow1][2].type = BED;
+        grid[quartersNorthBedRow2][1].type = BED;
+        grid[quartersNorthBedRow2][2].type = BED;
+        grid[quartersSouthBedRow1][1].type = BED;
+        grid[quartersSouthBedRow1][2].type = BED;
+        grid[quartersSouthBedRow2][1].type = BED;
+        grid[quartersSouthBedRow2][2].type = BED;
         // Bookshelf between beds
-        grid[7][1].type = BOOKSHELF;
-        grid[8][1].type = BOOKSHELF;
+        grid[quartersShelfRow1][1].type = BOOKSHELF;
+        grid[quartersShelfRow2][1].type = BOOKSHELF;
         // Table and chairs on east side
-        grid[8][w - 5].type = TABLE;
-        grid[8][w - 4].type = TABLE;
-        grid[8][w - 3].type = TABLE;
-        grid[9][w - 5].type = CHAIR;
-        grid[9][w - 3].type = CHAIR;
+        grid[quartersEastTableRow][quartersEastTableCol1].type = TABLE;
+        grid[quartersEastTableRow][quartersEastTableCol2].type = TABLE;
+        grid[quartersEastTableRow][quartersEastTableCol3].type = TABLE;
+        grid[quartersEastTableRow + 1][quartersEastTableCol1].type = CHAIR;
+        grid[quartersEastTableRow + 1][quartersEastTableCol3].type = CHAIR;
         // Barrel storage
-        grid[12][w - 2].type = BARREL;
-        grid[13][w - 2].type = BARREL;
+        grid[quartersBarrelRow1][w - 2].type = BARREL;
+        grid[quartersBarrelRow2][w - 2].type = BARREL;
         // Rug by beds
-        for (let rx = 4; rx <= 6; rx++) {
-          grid[6][rx].type = RUG;
-          grid[7][rx].type = RUG;
-          grid[8][rx].type = RUG;
-          grid[9][rx].type = RUG;
+        for (let rx = quartersRugStartCol; rx <= quartersRugEndCol; rx++) {
+          grid[quartersNorthBedRow2][rx].type = RUG;
+          grid[quartersShelfRow1][rx].type = RUG;
+          grid[quartersShelfRow2][rx].type = RUG;
+          grid[quartersSouthBedRow1][rx].type = RUG;
         }
         // Fireplace on north wall
-        grid[1][14].type = FIREPLACE;
-        grid[1][15].type = FIREPLACE;
+        grid[1][towerFireplaceCol1].type = FIREPLACE;
+        grid[1][towerFireplaceCol2].type = FIREPLACE;
       } else {
         // Top floor: study/throne room — desk, bookshelves, large rug
+        const studyShelfEndRow = 12;
+        const studyDeskRow = towerShelfStartRow;
+        const studyDeskCol1 = 12;
+        const studyDeskCol2 = 13;
+        const studyDeskCol3 = towerFireplaceCol1;
+        const studyDeskCol4 = towerFireplaceCol2;
+        const studyDeskCol5 = 16;
+        const studyChairRow = towerShelfStartRow + 1;
+        const studyRugStartRow = 8;
+        const studyRugEndRow = 15;
+        const studyRugStartCol = 8;
+        const studyRugEndCol = 21;
+        const studyFireplaceCol1 = 10;
+        const studyFireplaceCol2 = 11;
         // Bookshelves along both walls
-        for (let ry = 4; ry <= 12; ry++) grid[ry][1].type = BOOKSHELF;
-        for (let ry = 4; ry <= 12; ry++) grid[ry][w - 2].type = BOOKSHELF;
+        for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
+          grid[ry][1].type = BOOKSHELF;
+        for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
+          grid[ry][w - 2].type = BOOKSHELF;
         // Grand desk at north end
-        grid[4][12].type = TABLE;
-        grid[4][13].type = TABLE;
-        grid[4][14].type = TABLE;
-        grid[4][15].type = TABLE;
-        grid[4][16].type = TABLE;
-        grid[5][14].type = CHAIR;
+        grid[studyDeskRow][studyDeskCol1].type = TABLE;
+        grid[studyDeskRow][studyDeskCol2].type = TABLE;
+        grid[studyDeskRow][studyDeskCol3].type = TABLE;
+        grid[studyDeskRow][studyDeskCol4].type = TABLE;
+        grid[studyDeskRow][studyDeskCol5].type = TABLE;
+        grid[studyChairRow][studyDeskCol3].type = CHAIR;
         // Large rug in center
-        for (let ry = 8; ry <= 15; ry++) for (let rx = 8; rx <= 21; rx++) grid[ry][rx].type = RUG;
+        for (let ry = studyRugStartRow; ry <= studyRugEndRow; ry++) {
+          for (let rx = studyRugStartCol; rx <= studyRugEndCol; rx++) grid[ry][rx].type = RUG;
+        }
         // Fireplace on north wall
-        grid[1][10].type = FIREPLACE;
-        grid[1][11].type = FIREPLACE;
+        grid[1][studyFireplaceCol1].type = FIREPLACE;
+        grid[1][studyFireplaceCol2].type = FIREPLACE;
         // Barrel in corners
-        grid[h - 3][1].type = BARREL;
-        grid[h - 3][w - 2].type = BARREL;
+        grid[h - TOWER_ENTRANCE_ROW_INSET][1].type = BARREL;
+        grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
       }
     }
 
@@ -839,13 +1208,13 @@ export class GameMap {
       { dx: -1, dy: 0, cost: 1 },
       { dx: 0, dy: 1, cost: 1 },
       { dx: 0, dy: -1, cost: 1 },
-      { dx: 1, dy: 1, cost: 1.414 },
-      { dx: 1, dy: -1, cost: 1.414 },
-      { dx: -1, dy: 1, cost: 1.414 },
-      { dx: -1, dy: -1, cost: 1.414 },
+      { dx: 1, dy: 1, cost: DIAGONAL_MOVE_COST },
+      { dx: 1, dy: -1, cost: DIAGONAL_MOVE_COST },
+      { dx: -1, dy: 1, cost: DIAGONAL_MOVE_COST },
+      { dx: -1, dy: -1, cost: DIAGONAL_MOVE_COST },
     ];
 
-    const MAX_NODES = 2000;
+    const MAX_NODES = ASTAR_MAX_NODE_EXPANSIONS;
     let expanded = 0;
 
     while (openMap.size > 0 && expanded < MAX_NODES) {
@@ -968,7 +1337,7 @@ export class GameMap {
     const ts = this.tileHeight;
     const dist = Math.hypot(x2 - x1, y2 - y1);
     if (dist === 0) return true;
-    const steps = Math.ceil(dist / (ts * 0.5));
+    const steps = Math.ceil(dist / (ts * LOS_HALF_TILE_FRACTION));
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       const tx = Math.floor((x1 + (x2 - x1) * t) / ts);

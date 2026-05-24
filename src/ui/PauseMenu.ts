@@ -19,9 +19,25 @@ import {
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
 import { renderSettingsTab } from './pause/SettingsTab';
-import { pointInRect } from '../utils';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 import { platform } from '../core/Platform';
+
+// Constants for magic numbers
+const SCROLL_MULTIPLIER = 0.5;
+const STATS_BOX_TOP_MARGIN = 50;
+const STATS_BOX_BOTTOM_MARGIN = 52;
+const SPEND_BOX_TOP_MARGIN = 56;
+const SPEND_BOX_BOTTOM_MARGIN = 52;
+const ABILITIES_ACHIEVEMENTS_BOX_H = 440;
+const MODAL_PADDING = 16;
+const MODAL_BOX_WIDTH = 380;
+const SETTINGS_BOX_H_MOBILE = 460;
+const SETTINGS_BOX_H_DESKTOP = 300;
+const MAIN_TAB_BUTTON_COUNT_WITH_SPEND = 7;
+const MAIN_TAB_BUTTON_COUNT_NO_SPEND = 6;
+const MAIN_TAB_HEADER_H = 52;
+const MAIN_TAB_BUTTON_H = 50;
+const MAIN_TAB_FOOTER_H = 28;
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -48,10 +64,10 @@ export class PauseMenu {
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
 
-  /** Called when the player taps "Manage Human Inventory" in the inventory tab. */
+  /** Called when the inventory tab's "Manage Human" button is pressed. */
   onManageHumanInventory: (() => void) | null = null;
 
-  /** Called when the player taps "Manage Cat Inventory" in the inventory tab. */
+  /** Called when the inventory tab's "Manage Cat" button is pressed. */
   onManageCatInventory: (() => void) | null = null;
 
   get isOpen(): boolean {
@@ -62,41 +78,42 @@ export class PauseMenu {
     this._isOpen = true;
     this.tab = 'main';
   }
-  close(): void {
-    this._isOpen = false;
-    resetAbilitiesTab();
-  }
-  toggle(): void {
-    if (this._isOpen) this.close();
-    else this.open();
-  }
-  /** Open directly to the achievements tab. */
-  openToAchievements(): void {
-    this._isOpen = true;
-    this.tab = 'achievements';
-  }
 
-  /** Open directly to the inventory tab. */
   openToInventory(): void {
     this._isOpen = true;
     this.tab = 'inventory';
   }
 
-  /** Open directly to the skill spend tab. */
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
-    this.spendScrollY = 0;
+  }
+
+  close(): void {
+    this._isOpen = false;
+  }
+
+  toggle(): void {
+    this._isOpen = !this._isOpen;
+    if (this._isOpen) {
+      this.tab = 'main';
+    }
   }
 
   handleWheel(deltaY: number): void {
     if (!this._isOpen) return;
     if (this.tab === 'stats') {
       const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
-      this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + deltaY * 0.5));
+      this.statsScrollY = Math.max(
+        0,
+        Math.min(maxScroll, this.statsScrollY + deltaY * SCROLL_MULTIPLIER),
+      );
     } else if (this.tab === 'spend') {
       const maxScroll = Math.max(0, this.spendContentH - this.spendScrollH);
-      this.spendScrollY = Math.max(0, Math.min(maxScroll, this.spendScrollY + deltaY * 0.5));
+      this.spendScrollY = Math.max(
+        0,
+        Math.min(maxScroll, this.spendScrollY + deltaY * SCROLL_MULTIPLIER),
+      );
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -140,13 +157,13 @@ export class PauseMenu {
   private _lastSpendBoxH = SPEND_BOX_H;
 
   private get statsScrollH(): number {
-    // Must match the scroll area computed in renderStatsTab: bh - 50 - 52
-    return this._lastStatsBoxH - 50 - 52;
+    // Must match the scroll area computed in renderStatsTab: bh - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN
+    return this._lastStatsBoxH - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN;
   }
 
   private get spendScrollH(): number {
-    // Must match renderSpendTab: bh - 56 - 52
-    return this._lastSpendBoxH - 56 - 52;
+    // Must match renderSpendTab: bh - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN
+    return this._lastSpendBoxH - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN;
   }
 
   /** Render the full pause overlay. Only call when isOpen === true. */
@@ -172,12 +189,12 @@ export class PauseMenu {
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
-    const boxW = Math.min(380, cw - 16);
+    const boxW = Math.min(MODAL_BOX_WIDTH, cw - MODAL_PADDING);
     const mainBoxH =
       this.tab === 'main' ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0) : 0;
     const rawBoxH =
       this.tab === 'achievements' || this.tab === 'abilities'
-        ? 440
+        ? ABILITIES_ACHIEVEMENTS_BOX_H
         : this.tab === 'stats'
           ? STATS_BOX_H
           : this.tab === 'spend'
@@ -187,7 +204,7 @@ export class PauseMenu {
               : this.tab === 'inventory'
                 ? INVENTORY_TAB_BOX_H
                 : mainBoxH;
-    const boxH = Math.min(rawBoxH, ch - 16);
+    const boxH = Math.min(rawBoxH, ch - MODAL_PADDING);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
     const modal = drawModal(ctx, {
@@ -238,8 +255,8 @@ export class PauseMenu {
           human,
           cat,
           setTabWithSound,
-          this.onManageHumanInventory ?? (() => undefined),
-          this.onManageCatInventory ?? (() => undefined),
+          this.onManageHumanInventory ?? (() => setTabWithSound('main')),
+          this.onManageCatInventory ?? (() => setTabWithSound('main')),
         );
         break;
       case 'stats':
@@ -289,7 +306,7 @@ export class PauseMenu {
         );
         break;
       case 'abilities':
-        if (abilityManager) {
+        if (abilityManager !== undefined) {
           renderAbilitiesTab(
             ctx,
             this.buttons,
@@ -306,9 +323,8 @@ export class PauseMenu {
           );
         }
         break;
-      case 'settings': {
-        const audioRef = this.audio;
-        if (audioRef !== null) {
+      case 'settings':
+        if (this.audio !== null) {
           renderSettingsTab(
             ctx,
             this.buttons,
@@ -316,7 +332,7 @@ export class PauseMenu {
             boxY,
             boxW,
             boxH,
-            audioRef,
+            this.audio,
             setTabWithSound,
             this.catMissileDefault,
             (v) => {
@@ -326,21 +342,18 @@ export class PauseMenu {
           );
         }
         break;
-      }
     }
   }
 
-  /**
-   * Returns true if the click was consumed (hit a button or blocked by overlay).
-   */
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
     for (const btn of this.buttons) {
-      if (pointInRect(mx, my, btn)) {
+      const { x, y, w, h } = btn;
+      if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
         if (btn.positionedAction) {
           btn.positionedAction(mx, my);
-        } else {
-          btn.action?.();
+        } else if (btn.action) {
+          btn.action();
         }
         return true;
       }
@@ -351,10 +364,12 @@ export class PauseMenu {
 
 const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
-const SETTINGS_BOX_H = platform.isMobile ? 460 : 300;
+const SETTINGS_BOX_H = platform.isMobile ? SETTINGS_BOX_H_MOBILE : SETTINGS_BOX_H_DESKTOP;
 
-// 52px header + N buttons × 50px + 28px bottom padding
+// MAIN_TAB_HEADER_H + N buttons × MAIN_TAB_BUTTON_H + MAIN_TAB_FOOTER_H
 function mainTabHeight(hasSpendButton: boolean): number {
-  const buttonCount = hasSpendButton ? 7 : 6;
-  return 52 + buttonCount * 50 + 28;
+  const buttonCount = hasSpendButton
+    ? MAIN_TAB_BUTTON_COUNT_WITH_SPEND
+    : MAIN_TAB_BUTTON_COUNT_NO_SPEND;
+  return MAIN_TAB_HEADER_H + buttonCount * MAIN_TAB_BUTTON_H + MAIN_TAB_FOOTER_H;
 }

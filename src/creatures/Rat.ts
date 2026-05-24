@@ -10,6 +10,10 @@ const BITE_RANGE_TILES = 1.1;
 const ATTACK_COOLDOWN = 120;
 /** Frames the bite-lunge animation plays */
 const ATTACK_ANIM_FRAMES = 14;
+/** Fraction of bite range to use as follow stop distance. */
+const FOLLOW_STOP_FRACTION = 0.8;
+/** Fraction of bite range to check engagement for first-bite windup. */
+const ENGAGE_RANGE_FRACTION = 1.15;
 
 export class Rat extends Mob {
   readonly xpValue = 2;
@@ -74,14 +78,14 @@ export class Rat extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        this.biteRangePx * 0.8,
+        this.biteRangePx * FOLLOW_STOP_FRACTION,
       );
     } else {
       this.isMoving = false;
     }
 
     // Short windup before the first bite of each engagement
-    const inRange = nearestDist <= this.biteRangePx * 1.15;
+    const inRange = nearestDist <= this.biteRangePx * ENGAGE_RANGE_FRACTION;
     if (inRange && this.firstBitePending && this.firstBiteWindup === 0) {
       this.firstBiteWindup = 10;
       this.firstBitePending = false;

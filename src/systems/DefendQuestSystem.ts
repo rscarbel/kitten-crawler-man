@@ -31,17 +31,171 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
 const QUEST_ID = 'defend_goblin_mother';
 
-const APPROACH_TIMER_FRAMES = 25 * 60; // 25 seconds
-const DEFENSE_TIMER_FRAMES = 60 * 60; // 60 seconds
-const WOOD_RESPAWN_FRAMES = 6 * 60; // 6 seconds
+const APPROACH_SECONDS = 25;
+const DEFENSE_SECONDS = 60;
+const WOOD_RESPAWN_SECONDS = 6;
+const FIRST_WAVE_DELAY_SECONDS = 1;
+const FRAMES_PER_SECOND = 60;
+const APPROACH_TIMER_FRAMES = APPROACH_SECONDS * FRAMES_PER_SECOND;
+const DEFENSE_TIMER_FRAMES = DEFENSE_SECONDS * FRAMES_PER_SECOND;
+const WOOD_RESPAWN_FRAMES = WOOD_RESPAWN_SECONDS * FRAMES_PER_SECOND;
 const WOOD_PER_PICKUP = 8;
 const BOARDS_PER_BUILD = 4;
-const BUILD_FRAMES = 2 * 60; // 2 seconds
+const BUILD_SECONDS = 2;
+const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
 const BARRIER_MAX_HP = 36;
 const SPAWN_INTERVAL_MIN = 180; // 3 seconds
 const SPAWN_INTERVAL_MAX = 300; // 5 seconds
 const ENTRANCE_SPAWN_CHANCE = 0.15;
-const INTERACT_RANGE_PX = TILE_SIZE * 2.5;
+const INTERACT_RANGE_TILES = 2.5;
+const INTERACT_RANGE_PX = TILE_SIZE * INTERACT_RANGE_TILES;
+
+// Rendering / UI constants
+const FIRST_WAVE_DELAY_FRAMES = FIRST_WAVE_DELAY_SECONDS * FRAMES_PER_SECOND;
+const CHILD_REUNION_WALK_FRAMES = 180; // 3 seconds for child walk-to-mother animation
+const XP_FLOAT_FRAMES = 180;
+const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds
+const QUEST_FAILED_DISPLAY_FRAMES = 420; // 7 seconds
+const OVERLAY_FADE_FRAMES = 90;
+const TEXT_HEIGHT_FACTOR = 0.8;
+const SECS_LOW_THRESHOLD = 30;
+const PICKUP_PROXIMITY_FRACTION = 1.2;
+const HAMMER_SOUND_INTERVAL = 30;
+const BUILD_PROGRESS_RADIUS_FRACTION = 0.6;
+const BUILD_PROGRESS_TRACK_ALPHA = 0.5;
+const BUILD_PROGRESS_ARC_ALPHA = 0.9;
+const TILE_CENTER_OFFSET = 0.5;
+const BUILD_PROGRESS_LINE_WIDTH = 3;
+const BUILD_PROGRESS_LABEL_OFFSET = 12;
+const BUILD_PROGRESS_LABEL_ASCENT = 7;
+const NPC_DEAD_X_LINE_WIDTH = 4;
+const NPC_DEAD_X_MARGIN_FRACTION = 0.2;
+const NPC_DEAD_X_END_FRACTION = 0.8;
+const BARRIER_HIT_FLASH_FRAMES = 12;
+const BARRIER_HIT_ALPHA_FRACTION = 0.45;
+
+// Dialog layout constants
+const DIALOG_MAX_WIDTH = 420;
+const DIALOG_HEIGHT = 200;
+const DIALOG_TITLE_X_OFFSET = 14;
+const DIALOG_TITLE_Y_OFFSET = 22;
+const DIALOG_TITLE_ASCENT = 10;
+const DIALOG_LINE_START_Y = 45;
+const DIALOG_LINE_SPACING = 16;
+const DIALOG_LINE_ASCENT = 9;
+const DIALOG_BTN_W = 100;
+const DIALOG_BTN_H = 30;
+const DIALOG_BTN_Y_FROM_BOTTOM = 45;
+const DIALOG_BTN_HALF_GAP = 10;
+const DIALOG_TITLE_SIZE = 13;
+const DIALOG_LINE_SIZE = 11;
+const DIALOG_BTN_LABEL_SIZE = 12;
+
+// Overlay layout constants
+const OVERLAY_PULSE_SPEED = 200;
+const OVERLAY_PULSE_AMP = 0.05;
+const OVERLAY_BASE_TEXT_SIZE = 36;
+const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
+const OVERLAY_REWARDS_Y_OFFSET = 10;
+const OVERLAY_REWARDS_Y_ASCENT = 13;
+const OVERLAY_REWARD_1_Y_OFFSET = 35;
+const OVERLAY_REWARD_1_ASCENT = 11;
+const OVERLAY_REWARD_2_Y_OFFSET = 55;
+const OVERLAY_REWARD_3_Y_OFFSET = 75;
+const OVERLAY_DISMISS_Y_OFFSET = 105;
+const OVERLAY_DISMISS_ASCENT = 10;
+const OVERLAY_REWARDS_SIZE = 16;
+const OVERLAY_REWARD_SIZE = 14;
+const OVERLAY_DISMISS_SIZE = 12;
+
+// Failed overlay constants
+const OVERLAY_X_SIZE = 60;
+const OVERLAY_X_CENTER_Y_OFFSET = 60;
+const OVERLAY_X_LINE_WIDTH = 8;
+const OVERLAY_FAIL_TITLE_Y_OFFSET = 50;
+const OVERLAY_FAIL_TITLE_ASCENT = 29;
+const OVERLAY_FAIL_DISMISS_Y_OFFSET = 80;
+const OVERLAY_FAIL_TEXT_SIZE = 36;
+
+// XP float constants
+const XP_FLOAT_ALPHA_FRAMES = 60;
+const XP_FLOAT_RISE_SPEED = 0.5;
+const XP_FLOAT_Y_OFFSET = 80;
+const XP_FLOAT_ASCENT = 22;
+const XP_FLOAT_SIZE = 28;
+
+// Tutorial layout constants
+const TUTORIAL_MAX_WIDTH = 500;
+const TUTORIAL_MAX_HEIGHT = 410;
+const TUTORIAL_CANVAS_PADDING_Y = 60;
+const DIALOG_CANVAS_PADDING = 40;
+const TUTORIAL_PAD = 16;
+const TUTORIAL_HEADER_H = 36;
+const TUTORIAL_HEADER_FILL_INSET = 2;
+const TUTORIAL_TITLE_Y = 24;
+const TUTORIAL_TITLE_ASCENT = 12;
+const TUTORIAL_DOT_GAP = 14;
+const TUTORIAL_DOT_BOTTOM = 16;
+const TUTORIAL_DOT_RADIUS = 4;
+const TUTORIAL_ILL_HEIGHT_FRACTION = 0.43;
+const TUTORIAL_SPRITE_MIN_FRACTION = 0.8;
+const TUTORIAL_SPRITE_MAX_HEIGHT = 72;
+const TUTORIAL_TEXT_LINE_SPACING = 18;
+const TUTORIAL_TEXT_LINE_ASCENT = 10;
+const TUTORIAL_TEXT_LINE_SIZE = 12;
+const TUTORIAL_BTN_W = 130;
+const TUTORIAL_BTN_H = 30;
+const TUTORIAL_BTN_Y_FROM_BOTTOM = 50;
+const TUTORIAL_BTN_LABEL_SIZE = 12;
+const TUTORIAL_HEADER_Y = 46;
+const TUTORIAL_TEXT_Y_GAP = 20;
+
+// Tutorial page 0 sprite offsets
+const T0_NPC_X_FACTOR = 1.3;
+const T0_NPC_Y_FACTOR = 0.5;
+const T0_CHILD_X_FACTOR = 0.45;
+const T0_CHILD_Y_FACTOR = 0.35;
+const T0_CHILD_SIZE_FACTOR = 0.72;
+const T0_HEART_X_FACTOR = 0.08;
+const T0_HEART_Y_FACTOR = 0.08;
+const T0_HEART_SIZE_FACTOR = 0.38;
+
+// Tutorial page 1 sprite offsets
+const T1_PANEL_CENTER_FRACTION = 0.5;
+const T1_ARROW_Y_FACTOR = 0.06;
+const T1_ARROW_SIZE_FACTOR = 0.5;
+const T1_BUILD_LABEL_Y_FACTOR = 0.68;
+const T1_BUILD_LABEL_ASCENT = 9;
+const T1_BUILD_LABEL_SIZE = 11;
+
+// Tutorial page 2 sprite offsets
+const T2_BARRIER_DAMAGE = 0.18;
+const T2_ARROW_BOTTOM_FACTOR = 1.05;
+const T2_ARROW_MID_FACTOR = 0.65;
+const T2_ARROWHEAD_OUTER_Y = 0.72;
+const T2_ARROWHEAD_TIP_Y = 0.58;
+const T2_ENEMY_LABEL_Y_FACTOR = 1.2;
+const T2_ENEMY_LABEL_ASCENT = 9;
+const T2_ENEMY_LABEL_SIZE = 11;
+const T2_ARROW_NOTCH_OFFSET = 6;
+const T2_DASH_LENGTH = 3;
+const T2_DASH_GAP = 3;
+
+// Countdown UI layout
+const COUNTDOWN_TITLE_Y = 50;
+const COUNTDOWN_TITLE_ASCENT = 14;
+const COUNTDOWN_TITLE_SIZE = 18;
+const COUNTDOWN_NUMBER_Y = 80;
+const COUNTDOWN_NUMBER_ASCENT = 22;
+const COUNTDOWN_NUMBER_SIZE = 28;
+
+// Defense timer UI layout
+const DEFENSE_LABEL_Y = 38;
+const DEFENSE_LABEL_ASCENT = 11;
+const DEFENSE_LABEL_SIZE = 14;
+const DEFENSE_TIMER_Y = 65;
+const DEFENSE_TIMER_ASCENT = 19;
+const DEFENSE_TIMER_SIZE = 24;
 
 let tutorialSeen = false;
 const TUTORIAL_PAGES = 3;
@@ -284,8 +438,8 @@ export class DefendQuestSystem implements GameSystem {
     const boardCount = human.inventory.countOf('quest_wood_board');
     if (boardCount < BOARDS_PER_BUILD) return false;
 
-    const ptx = Math.floor((human.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const pty = Math.floor((human.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
     // Check if standing on or adjacent to a grate tile
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
@@ -330,8 +484,8 @@ export class DefendQuestSystem implements GameSystem {
     const tapTileX = Math.floor((screenX + camX) / TILE_SIZE);
     const tapTileY = Math.floor((screenY + camY) / TILE_SIZE);
 
-    const ptx = Math.floor((human.x + TILE_SIZE * 0.5) / TILE_SIZE);
-    const pty = Math.floor((human.y + TILE_SIZE * 0.5) / TILE_SIZE);
+    const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
       const g = this.roomData.grateTiles[gi];
@@ -354,7 +508,7 @@ export class DefendQuestSystem implements GameSystem {
     if (!barrier) return false;
     if (damage > 0) {
       barrier.hp -= damage;
-      barrier.hitFlash = 12;
+      barrier.hitFlash = BARRIER_HIT_FLASH_FRAMES;
       this.woodBreakSoundPending = true;
       if (barrier.hp <= 0) {
         this.barriers = this.barriers.filter((b) => b !== barrier);
@@ -406,7 +560,7 @@ export class DefendQuestSystem implements GameSystem {
     // Tick pending build/repair
     if (this.pendingBuild && this.roomData) {
       const elapsed = BUILD_FRAMES - this.pendingBuild.framesLeft;
-      if (elapsed % 30 === 0) {
+      if (elapsed % HAMMER_SOUND_INTERVAL === 0) {
         this.hammerSoundPending = true;
       }
       this.pendingBuild.framesLeft--;
@@ -429,7 +583,7 @@ export class DefendQuestSystem implements GameSystem {
     if (this.approachTimer <= 0) {
       this.phase = 'defending';
       this.defenseTimer = DEFENSE_TIMER_FRAMES;
-      this.spawnTimer = 60; // First wave after 1 second
+      this.spawnTimer = FIRST_WAVE_DELAY_FRAMES;
     }
   }
 
@@ -466,7 +620,7 @@ export class DefendQuestSystem implements GameSystem {
       const wpy = this.roomData.woodPileTile.y * TILE_SIZE;
       const checkPickup = (p: Player) => {
         const dist = Math.hypot(p.x - wpx, p.y - wpy);
-        if (dist < TILE_SIZE * 1.2) {
+        if (dist < TILE_SIZE * PICKUP_PROXIMITY_FRACTION) {
           p.inventory.addItem('quest_wood_board', WOOD_PER_PICKUP);
           this.woodPileAvailable = false;
           this.woodRespawnTimer = WOOD_RESPAWN_FRAMES;
@@ -514,8 +668,8 @@ export class DefendQuestSystem implements GameSystem {
         mob.hp = 0;
         mob.justDied = true;
         this.bus.emit('spawnGore', {
-          x: mob.x + TILE_SIZE * 0.5,
-          y: mob.y + TILE_SIZE * 0.5,
+          x: mob.x + TILE_SIZE * TILE_CENTER_OFFSET,
+          y: mob.y + TILE_SIZE * TILE_CENTER_OFFSET,
           impactDx: 0,
           impactDy: 0,
         });
@@ -539,7 +693,7 @@ export class DefendQuestSystem implements GameSystem {
       this.childY = this.roomData.entranceTile.y * TILE_SIZE;
       this.childTargetX = this.npc.x + TILE_SIZE;
       this.childTargetY = this.npc.y;
-      this.childAnimTimer = 180; // 3 seconds for reunion walk
+      this.childAnimTimer = CHILD_REUNION_WALK_FRAMES;
       this.childWalkFrame = 0;
     }
   }
@@ -551,7 +705,7 @@ export class DefendQuestSystem implements GameSystem {
 
     // Lerp child toward NPC
     const rd = this.roomData;
-    const t = 1 - this.childAnimTimer / 180;
+    const t = 1 - this.childAnimTimer / CHILD_REUNION_WALK_FRAMES;
     this.childX =
       rd.entranceTile.x * TILE_SIZE + (this.childTargetX - rd.entranceTile.x * TILE_SIZE) * t;
     this.childY =
@@ -566,16 +720,16 @@ export class DefendQuestSystem implements GameSystem {
     const def = this.questManager.getDef(QUEST_ID);
     if (!def) return;
     active.gainXp(def.rewards.xp);
-    this.xpFloatTimer = 180; // 3 seconds
+    this.xpFloatTimer = XP_FLOAT_FRAMES;
 
     this.bus.emit('questCompleted', { questId: QUEST_ID });
-    this.completeOverlayTimer = 420; // 7 seconds
+    this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
   }
 
   private triggerQuestFailed(): void {
     this.phase = 'failed';
     this.questManager.failQuest(QUEST_ID);
-    this.failOverlayTimer = 420; // 7 seconds
+    this.failOverlayTimer = QUEST_FAILED_DISPLAY_FRAMES;
 
     // Clear Bugaboo defend targets so they go after players
     for (const mob of this.questMobs) {
@@ -655,7 +809,7 @@ export class DefendQuestSystem implements GameSystem {
       drawWoodBarrierSprite(ctx, bx, by, TILE_SIZE, b.hp / b.maxHp);
       if (b.hitFlash > 0) {
         ctx.save();
-        ctx.globalAlpha = (b.hitFlash / 12) * 0.45;
+        ctx.globalAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
         ctx.fillStyle = '#ef4444';
         ctx.fillRect(bx, by, TILE_SIZE, TILE_SIZE);
         ctx.restore();
@@ -681,12 +835,24 @@ export class DefendQuestSystem implements GameSystem {
       const sy = this.npc.y - camY;
       ctx.save();
       ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = NPC_DEAD_X_LINE_WIDTH;
       ctx.beginPath();
-      ctx.moveTo(sx + TILE_SIZE * 0.2, sy + TILE_SIZE * 0.2);
-      ctx.lineTo(sx + TILE_SIZE * 0.8, sy + TILE_SIZE * 0.8);
-      ctx.moveTo(sx + TILE_SIZE * 0.8, sy + TILE_SIZE * 0.2);
-      ctx.lineTo(sx + TILE_SIZE * 0.2, sy + TILE_SIZE * 0.8);
+      ctx.moveTo(
+        sx + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
+        sy + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
+      );
+      ctx.lineTo(
+        sx + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
+        sy + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
+      );
+      ctx.moveTo(
+        sx + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
+        sy + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
+      );
+      ctx.lineTo(
+        sx + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
+        sy + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
+      );
       ctx.stroke();
       ctx.restore();
     }
@@ -714,8 +880,8 @@ export class DefendQuestSystem implements GameSystem {
       this.roomData &&
       human.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
     ) {
-      const ptx = Math.floor((human.x + TILE_SIZE * 0.5) / TILE_SIZE);
-      const pty = Math.floor((human.y + TILE_SIZE * 0.5) / TILE_SIZE);
+      const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
       for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
         const g = this.roomData.grateTiles[gi];
         const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
@@ -741,25 +907,25 @@ export class DefendQuestSystem implements GameSystem {
   private renderBuildProgress(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.pendingBuild || !this.roomData) return;
     const grate = this.roomData.grateTiles[this.pendingBuild.grateIdx];
-    const sx = grate.x * TILE_SIZE - camX + TILE_SIZE * 0.5;
-    const sy = grate.y * TILE_SIZE - camY + TILE_SIZE * 0.5;
+    const sx = grate.x * TILE_SIZE - camX + TILE_SIZE * TILE_CENTER_OFFSET;
+    const sy = grate.y * TILE_SIZE - camY + TILE_SIZE * TILE_CENTER_OFFSET;
 
     const ratio = 1 - this.pendingBuild.framesLeft / BUILD_FRAMES;
-    const radius = TILE_SIZE * 0.6;
+    const radius = TILE_SIZE * BUILD_PROGRESS_RADIUS_FRACTION;
     const startAngle = -Math.PI / 2;
     const endAngle = startAngle + Math.PI * 2 * ratio;
 
     ctx.save();
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = BUILD_PROGRESS_TRACK_ALPHA;
     ctx.strokeStyle = '#4b5563';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = BUILD_PROGRESS_LINE_WIDTH;
     ctx.beginPath();
     ctx.arc(sx, sy, radius, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = BUILD_PROGRESS_ARC_ALPHA;
     ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = BUILD_PROGRESS_LINE_WIDTH;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.arc(sx, sy, radius, startAngle, endAngle);
@@ -771,7 +937,7 @@ export class DefendQuestSystem implements GameSystem {
     const label = this.pendingBuild.isRepair ? 'REPAIRING...' : 'BUILDING...';
     drawText(ctx, label, {
       x: sx,
-      y: sy + radius + 12 - 7,
+      y: sy + radius + BUILD_PROGRESS_LABEL_OFFSET - BUILD_PROGRESS_LABEL_ASCENT,
       size: 9,
       bold: true,
       color: '#fbbf24',
@@ -787,11 +953,11 @@ export class DefendQuestSystem implements GameSystem {
 
     // Approach countdown
     if (this.phase === 'countdown') {
-      const secs = Math.ceil(this.approachTimer / 60);
+      const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
       drawText(ctx, 'ENEMIES APPROACHING', {
         x: cw / 2,
-        y: 50 - 14,
-        size: 18,
+        y: COUNTDOWN_TITLE_Y - COUNTDOWN_TITLE_ASCENT,
+        size: COUNTDOWN_TITLE_SIZE,
         bold: true,
         color: '#fbbf24',
         align: 'center',
@@ -801,8 +967,8 @@ export class DefendQuestSystem implements GameSystem {
       });
       drawText(ctx, `${secs}`, {
         x: cw / 2,
-        y: 80 - 22,
-        size: 28,
+        y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
+        size: COUNTDOWN_NUMBER_SIZE,
         bold: true,
         color: '#ef4444',
         align: 'center',
@@ -811,13 +977,13 @@ export class DefendQuestSystem implements GameSystem {
 
     // Defense countdown
     if (this.phase === 'defending') {
-      const secs = Math.ceil(this.defenseTimer / 60);
-      const mins = Math.floor(secs / 60);
-      const s = secs % 60;
+      const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
+      const mins = Math.floor(secs / DEFENSE_SECONDS);
+      const s = secs % DEFENSE_SECONDS;
       drawText(ctx, 'Child arrives in:', {
         x: cw / 2,
-        y: 38 - 11,
-        size: 14,
+        y: DEFENSE_LABEL_Y - DEFENSE_LABEL_ASCENT,
+        size: DEFENSE_LABEL_SIZE,
         bold: true,
         color: '#e2e8f0',
         align: 'center',
@@ -827,10 +993,10 @@ export class DefendQuestSystem implements GameSystem {
       });
       drawText(ctx, `${mins}:${s.toString().padStart(2, '0')}`, {
         x: cw / 2,
-        y: 65 - 19,
-        size: 24,
+        y: DEFENSE_TIMER_Y - DEFENSE_TIMER_ASCENT,
+        size: DEFENSE_TIMER_SIZE,
         bold: true,
-        color: secs <= 30 ? '#4ade80' : '#fbbf24',
+        color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
         align: 'center',
       });
     }
@@ -859,8 +1025,8 @@ export class DefendQuestSystem implements GameSystem {
   private renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const dw = Math.min(420, cw - 40);
-    const dh = 200;
+    const dw = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
+    const dh = DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
 
@@ -873,9 +1039,9 @@ export class DefendQuestSystem implements GameSystem {
     ctx.restore();
 
     drawText(ctx, 'Goblin Mother', {
-      x: dx + 14,
-      y: dy + 22 - 10,
-      size: 13,
+      x: dx + DIALOG_TITLE_X_OFFSET,
+      y: dy + DIALOG_TITLE_Y_OFFSET - DIALOG_TITLE_ASCENT,
+      size: DIALOG_TITLE_SIZE,
       bold: true,
       color: '#fbbf24',
     });
@@ -889,19 +1055,19 @@ export class DefendQuestSystem implements GameSystem {
     ];
     for (let i = 0; i < dialogLines.length; i++) {
       drawText(ctx, dialogLines[i], {
-        x: dx + 14,
-        y: dy + 45 + i * 16 - 9,
-        size: 11,
+        x: dx + DIALOG_TITLE_X_OFFSET,
+        y: dy + DIALOG_LINE_START_Y + i * DIALOG_LINE_SPACING - DIALOG_LINE_ASCENT,
+        size: DIALOG_LINE_SIZE,
         color: '#e2e8f0',
       });
     }
 
     this.dialogButtons = [];
-    const btnW = 100;
-    const btnH = 30;
-    const btnY = dy + dh - 45;
+    const btnW = DIALOG_BTN_W;
+    const btnH = DIALOG_BTN_H;
+    const btnY = dy + dh - DIALOG_BTN_Y_FROM_BOTTOM;
 
-    const yesX = dx + dw / 2 - btnW - 10;
+    const yesX = dx + dw / 2 - btnW - DIALOG_BTN_HALF_GAP;
     drawButton(ctx, {
       x: yesX,
       y: btnY,
@@ -909,11 +1075,11 @@ export class DefendQuestSystem implements GameSystem {
       height: btnH,
       label: 'Yes',
       ...BUTTON_PRESETS.success,
-      labelSize: 12,
+      labelSize: DIALOG_BTN_LABEL_SIZE,
     });
     this.dialogButtons.push({ x: yesX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 
-    const noX = dx + dw / 2 + 10;
+    const noX = dx + dw / 2 + DIALOG_BTN_HALF_GAP;
     drawButton(ctx, {
       x: noX,
       y: btnY,
@@ -921,7 +1087,7 @@ export class DefendQuestSystem implements GameSystem {
       height: btnH,
       label: 'No',
       ...BUTTON_PRESETS.danger,
-      labelSize: 12,
+      labelSize: DIALOG_BTN_LABEL_SIZE,
     });
     this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
   }
@@ -929,23 +1095,22 @@ export class DefendQuestSystem implements GameSystem {
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const FADE_FRAMES = 90;
     const alpha =
-      this.completeOverlayTimer < FADE_FRAMES ? this.completeOverlayTimer / FADE_FRAMES : 1;
+      this.completeOverlayTimer < OVERLAY_FADE_FRAMES
+        ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
+        : 1;
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    // Semi-transparent backdrop
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
     ctx.restore();
 
-    // Main text
-    const pulse = 1 + 0.05 * Math.sin(performance.now() / 200);
-    const pulsedSize = Math.floor(36 * pulse);
+    const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
+    const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
     drawText(ctx, 'QUEST COMPLETE!', {
       x: cw / 2,
-      y: ch / 2 - 30 - Math.round(pulsedSize * 0.8),
+      y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
       size: pulsedSize,
       bold: true,
       color: '#4ade80',
@@ -955,11 +1120,10 @@ export class DefendQuestSystem implements GameSystem {
       glowBlur: 15,
     });
 
-    // Rewards
     drawText(ctx, 'Rewards:', {
       x: cw / 2,
-      y: ch / 2 + 10 - 13,
-      size: 16,
+      y: ch / 2 + OVERLAY_REWARDS_Y_OFFSET - OVERLAY_REWARDS_Y_ASCENT,
+      size: OVERLAY_REWARDS_SIZE,
       bold: true,
       color: '#fbbf24',
       align: 'center',
@@ -967,33 +1131,32 @@ export class DefendQuestSystem implements GameSystem {
     });
     drawText(ctx, '+500 EXP', {
       x: cw / 2,
-      y: ch / 2 + 35 - 11,
-      size: 14,
+      y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
+      size: OVERLAY_REWARD_SIZE,
       color: '#e2e8f0',
       align: 'center',
       alpha,
     });
     drawText(ctx, '+50 Gold', {
       x: cw / 2,
-      y: ch / 2 + 55 - 11,
-      size: 14,
+      y: ch / 2 + OVERLAY_REWARD_2_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
+      size: OVERLAY_REWARD_SIZE,
       color: '#e2e8f0',
       align: 'center',
       alpha,
     });
     drawText(ctx, 'Loot Box (open in Safe Room)', {
       x: cw / 2,
-      y: ch / 2 + 75 - 11,
-      size: 14,
+      y: ch / 2 + OVERLAY_REWARD_3_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
+      size: OVERLAY_REWARD_SIZE,
       color: '#e2e8f0',
       align: 'center',
       alpha,
     });
-    // Dismiss hint
     drawText(ctx, 'Click to dismiss', {
       x: cw / 2,
-      y: ch / 2 + 105 - 10,
-      size: 12,
+      y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
+      size: OVERLAY_DISMISS_SIZE,
       color: 'rgba(200,200,200,0.7)',
       align: 'center',
       alpha,
@@ -1003,33 +1166,31 @@ export class DefendQuestSystem implements GameSystem {
   private renderFailedOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const FADE_FRAMES = 90;
-    const alpha = this.failOverlayTimer < FADE_FRAMES ? this.failOverlayTimer / FADE_FRAMES : 1;
+    const alpha =
+      this.failOverlayTimer < OVERLAY_FADE_FRAMES ? this.failOverlayTimer / OVERLAY_FADE_FRAMES : 1;
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, cw, ch);
 
-    // Big red X (above text)
-    const xSize = 60;
-    const xCenterY = ch / 2 - 60;
+    const xCenterY = ch / 2 - OVERLAY_X_CENTER_Y_OFFSET;
     ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = OVERLAY_X_LINE_WIDTH;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cw / 2 - xSize, xCenterY - xSize);
-    ctx.lineTo(cw / 2 + xSize, xCenterY + xSize);
-    ctx.moveTo(cw / 2 + xSize, xCenterY - xSize);
-    ctx.lineTo(cw / 2 - xSize, xCenterY + xSize);
+    ctx.moveTo(cw / 2 - OVERLAY_X_SIZE, xCenterY - OVERLAY_X_SIZE);
+    ctx.lineTo(cw / 2 + OVERLAY_X_SIZE, xCenterY + OVERLAY_X_SIZE);
+    ctx.moveTo(cw / 2 + OVERLAY_X_SIZE, xCenterY - OVERLAY_X_SIZE);
+    ctx.lineTo(cw / 2 - OVERLAY_X_SIZE, xCenterY + OVERLAY_X_SIZE);
     ctx.stroke();
     ctx.lineCap = 'butt';
     ctx.restore();
 
     drawText(ctx, 'QUEST FAILED', {
       x: cw / 2,
-      y: ch / 2 + 50 - 29,
-      size: 36,
+      y: ch / 2 + OVERLAY_FAIL_TITLE_Y_OFFSET - OVERLAY_FAIL_TITLE_ASCENT,
+      size: OVERLAY_FAIL_TEXT_SIZE,
       bold: true,
       color: '#ef4444',
       align: 'center',
@@ -1037,11 +1198,10 @@ export class DefendQuestSystem implements GameSystem {
       glow: '#ef4444',
       glowBlur: 15,
     });
-    // Dismiss hint
     drawText(ctx, 'Click to dismiss', {
       x: cw / 2,
-      y: ch / 2 + 80 - 10,
-      size: 12,
+      y: ch / 2 + OVERLAY_FAIL_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
+      size: OVERLAY_DISMISS_SIZE,
       color: 'rgba(200,200,200,0.7)',
       align: 'center',
       alpha,
@@ -1050,13 +1210,13 @@ export class DefendQuestSystem implements GameSystem {
 
   private renderXPFloat(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
-    const alpha = Math.min(1, this.xpFloatTimer / 60);
-    const yOffset = (180 - this.xpFloatTimer) * 0.5;
+    const alpha = Math.min(1, this.xpFloatTimer / XP_FLOAT_ALPHA_FRAMES);
+    const yOffset = (XP_FLOAT_FRAMES - this.xpFloatTimer) * XP_FLOAT_RISE_SPEED;
 
     drawText(ctx, '+500 EXP', {
       x: cw / 2,
-      y: canvas.height / 2 - 80 - yOffset - 22,
-      size: 28,
+      y: canvas.height / 2 - XP_FLOAT_Y_OFFSET - yOffset - XP_FLOAT_ASCENT,
+      size: XP_FLOAT_SIZE,
       bold: true,
       color: '#4ade80',
       align: 'center',
@@ -1070,57 +1230,54 @@ export class DefendQuestSystem implements GameSystem {
   private renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const cw = canvas.width;
     const ch = canvas.height;
-    const dw = Math.min(500, cw - 40);
-    const dh = Math.min(410, ch - 60);
+    const dw = Math.min(TUTORIAL_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
+    const dh = Math.min(TUTORIAL_MAX_HEIGHT, ch - TUTORIAL_CANVAS_PADDING_Y);
     const dx = Math.floor((cw - dw) / 2);
     const dy = Math.floor((ch - dh) / 2);
     const PAGES = TUTORIAL_PAGES;
 
     ctx.save();
 
-    // Dim backdrop
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
     ctx.fillRect(0, 0, cw, ch);
 
-    // Panel background
     ctx.fillStyle = '#0b1220';
     ctx.fillRect(dx, dy, dw, dh);
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;
     ctx.strokeRect(dx, dy, dw, dh);
 
-    // Header bar
     ctx.fillStyle = '#1e3a5f';
-    ctx.fillRect(dx + 2, dy + 2, dw - 4, 36);
+    ctx.fillRect(
+      dx + TUTORIAL_HEADER_FILL_INSET,
+      dy + TUTORIAL_HEADER_FILL_INSET,
+      dw - TUTORIAL_HEADER_FILL_INSET * 2,
+      TUTORIAL_HEADER_H,
+    );
 
-    // Title
     const titles = ['THE QUEST', 'BUILD BARRIERS', 'THE THREAT'];
     drawText(ctx, titles[this.tutorialPage], {
       x: dx + dw / 2,
-      y: dy + 24 - 12,
+      y: dy + TUTORIAL_TITLE_Y - TUTORIAL_TITLE_ASCENT,
       size: 15,
       bold: true,
       color: '#fbbf24',
       align: 'center',
     });
 
-    // Page progress dots
-    const dotGap = 14;
-    const dotsX = dx + dw / 2 - ((PAGES - 1) * dotGap) / 2;
-    const dotsY = dy + dh - 16;
+    const dotsX = dx + dw / 2 - ((PAGES - 1) * TUTORIAL_DOT_GAP) / 2;
+    const dotsY = dy + dh - TUTORIAL_DOT_BOTTOM;
     for (let i = 0; i < PAGES; i++) {
       ctx.beginPath();
-      ctx.arc(dotsX + i * dotGap, dotsY, 4, 0, Math.PI * 2);
+      ctx.arc(dotsX + i * TUTORIAL_DOT_GAP, dotsY, TUTORIAL_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = i === this.tutorialPage ? '#fbbf24' : '#334155';
       ctx.fill();
     }
 
-    // Illustration box
-    const pad = 16;
-    const illX = dx + pad;
-    const illY = dy + 46;
-    const illW = dw - pad * 2;
-    const illH = Math.floor(dh * 0.43);
+    const illX = dx + TUTORIAL_PAD;
+    const illY = dy + TUTORIAL_HEADER_Y;
+    const illW = dw - TUTORIAL_PAD * 2;
+    const illH = Math.floor(dh * TUTORIAL_ILL_HEIGHT_FRACTION);
 
     ctx.fillStyle = '#111827';
     ctx.fillRect(illX, illY, illW, illH);
@@ -1128,77 +1285,97 @@ export class DefendQuestSystem implements GameSystem {
     ctx.lineWidth = 1;
     ctx.strokeRect(illX, illY, illW, illH);
 
-    const s = Math.min(illH * 0.8, 72);
+    const s = Math.min(illH * TUTORIAL_SPRITE_MIN_FRACTION, TUTORIAL_SPRITE_MAX_HEIGHT);
     const icx = illX + illW / 2;
     const icy = illY + illH / 2;
 
     if (this.tutorialPage === 0) {
-      // Goblin mother + child with heart between them
-      drawQuestNPCSprite(ctx, icx - s * 1.3, icy - s * 0.5, s);
-      drawChildSprite(ctx, icx + s * 0.45, icy - s * 0.35, s * 0.72, 0, false, -1);
-      const heartSize = Math.floor(s * 0.38);
+      drawQuestNPCSprite(ctx, icx - s * T0_NPC_X_FACTOR, icy - s * T0_NPC_Y_FACTOR, s);
+      drawChildSprite(
+        ctx,
+        icx + s * T0_CHILD_X_FACTOR,
+        icy - s * T0_CHILD_Y_FACTOR,
+        s * T0_CHILD_SIZE_FACTOR,
+        0,
+        false,
+        -1,
+      );
+      const heartSize = Math.floor(s * T0_HEART_SIZE_FACTOR);
       drawText(ctx, '♥', {
-        x: icx - s * 0.08,
-        y: icy + s * 0.08 - Math.round(heartSize * 0.8),
+        x: icx - s * T0_HEART_X_FACTOR,
+        y: icy + s * T0_HEART_Y_FACTOR - Math.round(heartSize * TEXT_HEIGHT_FACTOR),
         size: heartSize,
         bold: true,
         color: '#f87171',
         align: 'center',
       });
     } else if (this.tutorialPage === 1) {
-      // Wood pile → barrier diagram
       const hw = illW / 2;
-      drawWoodPileSprite(ctx, illX + hw * 0.5 - s * 0.5, icy - s * 0.5, s);
-      const arrowSize = Math.floor(s * 0.5);
+      drawWoodPileSprite(
+        ctx,
+        illX + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
+        icy - s * TILE_CENTER_OFFSET,
+        s,
+      );
+      const arrowSize = Math.floor(s * T1_ARROW_SIZE_FACTOR);
       drawText(ctx, '→', {
         x: illX + hw,
-        y: icy + s * 0.06 - Math.round(arrowSize * 0.8),
+        y: icy + s * T1_ARROW_Y_FACTOR - Math.round(arrowSize * TEXT_HEIGHT_FACTOR),
         size: arrowSize,
         bold: true,
         color: '#fbbf24',
         align: 'center',
       });
-      drawWoodBarrierSprite(ctx, illX + hw + hw * 0.5 - s * 0.5, icy - s * 0.5, s, 1.0);
+      drawWoodBarrierSprite(
+        ctx,
+        illX + hw + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
+        icy - s * TILE_CENTER_OFFSET,
+        s,
+        1.0,
+      );
       drawText(ctx, '[R] to build', {
-        x: illX + hw + hw * 0.5,
-        y: icy + s * 0.68 - 9,
-        size: 11,
+        x: illX + hw + hw * T1_PANEL_CENTER_FRACTION,
+        y: icy + s * T1_BUILD_LABEL_Y_FACTOR - T1_BUILD_LABEL_ASCENT,
+        size: T1_BUILD_LABEL_SIZE,
         bold: true,
         color: '#fbbf24',
         align: 'center',
         outline: true,
       });
     } else {
-      // Damaged barrier showing monster threat
-      drawWoodBarrierSprite(ctx, icx - s * 0.5, icy - s * 0.5, s, 0.18);
-      // Upward arrow indicating enemies from below
+      drawWoodBarrierSprite(
+        ctx,
+        icx - s * TILE_CENTER_OFFSET,
+        icy - s * TILE_CENTER_OFFSET,
+        s,
+        T2_BARRIER_DAMAGE,
+      );
       ctx.save();
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2;
-      ctx.setLineDash([3, 3]);
+      ctx.setLineDash([T2_DASH_LENGTH, T2_DASH_GAP]);
       ctx.beginPath();
-      ctx.moveTo(icx, icy + s * 1.05);
-      ctx.lineTo(icx, icy + s * 0.65);
+      ctx.moveTo(icx, icy + s * T2_ARROW_BOTTOM_FACTOR);
+      ctx.lineTo(icx, icy + s * T2_ARROW_MID_FACTOR);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(icx - 6, icy + s * 0.72);
-      ctx.lineTo(icx, icy + s * 0.58);
-      ctx.lineTo(icx + 6, icy + s * 0.72);
+      ctx.moveTo(icx - T2_ARROW_NOTCH_OFFSET, icy + s * T2_ARROWHEAD_OUTER_Y);
+      ctx.lineTo(icx, icy + s * T2_ARROWHEAD_TIP_Y);
+      ctx.lineTo(icx + T2_ARROW_NOTCH_OFFSET, icy + s * T2_ARROWHEAD_OUTER_Y);
       ctx.stroke();
       ctx.restore();
       drawText(ctx, 'enemies spawn below!', {
         x: icx,
-        y: icy + s * 1.2 - 9,
-        size: 11,
+        y: icy + s * T2_ENEMY_LABEL_Y_FACTOR - T2_ENEMY_LABEL_ASCENT,
+        size: T2_ENEMY_LABEL_SIZE,
         bold: true,
         color: '#ef4444',
         align: 'center',
       });
     }
 
-    // Description text
     const descriptions = [
       [
         'A goblin mother needs you to protect her.',
@@ -1217,39 +1394,36 @@ export class DefendQuestSystem implements GameSystem {
       ],
     ];
 
-    const textStartY = illY + illH + 20;
+    const textStartY = illY + illH + TUTORIAL_TEXT_Y_GAP;
     for (let i = 0; i < descriptions[this.tutorialPage].length; i++) {
       drawText(ctx, descriptions[this.tutorialPage][i], {
         x: dx + dw / 2,
-        y: textStartY + i * 18 - 10,
-        size: 12,
+        y: textStartY + i * TUTORIAL_TEXT_LINE_SPACING - TUTORIAL_TEXT_LINE_ASCENT,
+        size: TUTORIAL_TEXT_LINE_SIZE,
         color: '#cbd5e1',
         align: 'center',
       });
     }
 
-    // Next / Let's Go button
     this.tutorialButtons = [];
-    const btnW = 130;
-    const btnH = 30;
-    const btnX = dx + dw - pad - btnW;
-    const btnY = dy + dh - 50;
+    const btnX = dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W;
+    const btnY = dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM;
     const isLast = this.tutorialPage === PAGES - 1;
 
     drawButton(ctx, {
       x: btnX,
       y: btnY,
-      width: btnW,
-      height: btnH,
+      width: TUTORIAL_BTN_W,
+      height: TUTORIAL_BTN_H,
       label: isLast ? "Let's Go!" : 'Next  ›',
       ...(isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue),
-      labelSize: 12,
+      labelSize: TUTORIAL_BTN_LABEL_SIZE,
     });
     this.tutorialButtons.push({
       x: btnX,
       y: btnY,
-      w: btnW,
-      h: btnH,
+      w: TUTORIAL_BTN_W,
+      h: TUTORIAL_BTN_H,
       action: isLast ? 'go' : 'next',
     });
 
