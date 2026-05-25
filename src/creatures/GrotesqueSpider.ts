@@ -26,13 +26,14 @@ const TOUCHING_RANGE_PX = TILE_SIZE * TOUCHING_RANGE_TILE_MULTIPLIER;
 
 // Fire at stateProgress 0.58 (sprite windup/release boundary)
 const SPIT_FIRE_PROGRESS = 0.58;
-const SPIT_SPEED_PX = 8;
+export const SPIT_SPEED_PX = 8;
+export const SPIT_WINDUP = 90; // ~1.7s — telegraphed enough to dodge
+export const SPIT_EXECUTE = 21;
+export const SPIT_ANIM_CYCLE_FRAMES = 8;
 const SPIT_TTL = 110; // halved to keep same max range at double speed
-const SPIT_WINDUP = 90; // ~1.7s — telegraphed enough to dodge
-const SPIT_EXECUTE = 21;
 
 const SCREECH_DAMAGE_PROGRESS = 0.5;
-const SCREECH_WINDUP = 65;
+const SCREECH_WINDUP = 120; // ~2s — enough time to see the circle and walk clear
 const SCREECH_EXECUTE = 25;
 
 const SLAM_DAMAGE_PROGRESS = 0.55;
@@ -123,7 +124,7 @@ const SPIT_DAMAGE_MIN = 8;
 const SPIT_DAMAGE_MAX = 12;
 const SPIT_HIT_RADIUS_FRACTION = 0.75;
 const TRAP_HIT_RADIUS_FRACTION = 0.9;
-const SPIT_ANIM_CYCLE = 8;
+const SPIT_ANIM_CYCLE = SPIT_ANIM_CYCLE_FRAMES;
 
 // Roam behavior constants
 const ROAM_TIMER_MIN = 300;
@@ -140,8 +141,9 @@ const STRIPE_ANIM_DIVISOR = 120;
 const DANGER_OUTLINE_ALPHA = 0.7;
 
 // Render: screech danger zone
-const SCREECH_SP_THRESHOLD = 0.2;
-const SCREECH_FADE_DIVISOR = 0.3;
+// Circle appears at 5% of windup (~0.1s in) and fades out exactly when damage fires at sp=0.5
+const SCREECH_SP_THRESHOLD = 0.05;
+const SCREECH_FADE_DIVISOR = 0.45;
 const SCREECH_DASH_SEGMENT = 10;
 const SCREECH_DASH_SPEED = 25;
 const SCREECH_DASH_MOD = 20;
@@ -679,9 +681,13 @@ export class GrotesqueSpider extends Mob {
   }
 
   private spawnGroundTrap(x: number, y: number): void {
+    // Snap to tile center so puddles don't visually bleed into wall sprites
+    const ts = this.tileSize;
+    const snappedX = (Math.floor(x / ts) + TILE_CENTER) * ts;
+    const snappedY = (Math.floor(y / ts) + TILE_CENTER) * ts;
     this.groundTraps.push({
-      x,
-      y,
+      x: snappedX,
+      y: snappedY,
       phase: 'splat',
       frameTimer: TRAP_SPLAT_TICKS_PER_FRAME,
       animFrame: 0,
@@ -786,11 +792,48 @@ export class GrotesqueSpider extends Mob {
   }
 
   /**
-   * Renders the spit projectile and ground traps independently of the spider's
-   * screen position, so they remain visible even when the spider is off-screen.
-   * Called every frame from DungeonScene regardless of mob grid visibility.
+   * Aims the spider toward the given world-space direction and enters the spit
+   * windup state. Called from SpiderQuestSystem to drive the cutscene spit visual.
    */
-  renderSpitEffects(
+  prepareCutsceneSpit(facingX: number, facingY: number): void {
+    this.state = 'spit';
+    this.attackPhase = 'windup';
+    this.windupTimer = SPIT_WINDUP;
+    this.windupTotal = SPIT_WINDUP;
+    this.executeTimer = SPIT_EXECUTE;
+    this.executeTotal = SPIT_EXECUTE;
+    this.facingX = facingX;
+    this.facingY = facingY;
+  }
+
+  /**
+   * Advances the spit animation by one frame.
+   * Returns true the frame the execute phase begins — the projectile should fire at that point.
+   * Called from SpiderQuestSystem._updateCutscene() instead of the normal AI path.
+   */
+  tickCutsceneSpit(): boolean {
+    if (this.state !== 'spit') return false;
+    if (this.attackPhase === 'windup') {
+      this.windupTimer--;
+      if (this.windupTimer <= 0) {
+        this.attackPhase = 'execute';
+        return true;
+      }
+      return false;
+    }
+    this.executeTimer--;
+    if (this.executeTimer <= 0) {
+      this.state = 'cooldown';
+      this.cooldownTimer = COOLDOWN_MIN;
+    }
+    return false;
+  }
+
+  /**
+   * Renders only the ground spit traps (puddles).
+   * Must be called BEFORE entity rendering so players/mobs appear on top.
+   */
+  renderSpitGroundTraps(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
@@ -805,15 +848,25 @@ export class GrotesqueSpider extends Mob {
         drawSpitTrapIdle(ctx, tx, ty, tileSize, trap.animFrame);
       }
     }
+  }
 
-    if (this.activeProjectile) {
-      const proj = this.activeProjectile;
-      ctx.save();
-      ctx.translate(proj.x - camX, proj.y - camY);
-      ctx.rotate(proj.angle);
-      drawSpitProjectile(ctx, 0, 0, tileSize, proj.animFrame);
-      ctx.restore();
-    }
+  /**
+   * Renders only the active in-flight spit projectile.
+   * Must be called AFTER entity rendering so the projectile flies over mobs/players.
+   */
+  renderSpitProjectile(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
+    if (!this.activeProjectile) return;
+    const proj = this.activeProjectile;
+    ctx.save();
+    ctx.translate(proj.x - camX, proj.y - camY);
+    ctx.rotate(proj.angle);
+    drawSpitProjectile(ctx, 0, 0, tileSize, proj.animFrame);
+    ctx.restore();
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {

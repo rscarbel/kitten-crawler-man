@@ -284,6 +284,7 @@ export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
   readonly pm: PlayerManager;
   private mobs: Mob[];
+  private grotesqueSpiders: GrotesqueSpider[] = [];
   private mobGrid!: SpatialGrid<Mob>;
 
   // Systems
@@ -441,6 +442,10 @@ export class DungeonScene extends GameplayScene {
       );
       this.mobs.push(...treasureMobs);
     }
+
+    this.grotesqueSpiders = this.mobs.filter(
+      (m): m is GrotesqueSpider => m instanceof GrotesqueSpider,
+    );
 
     this.cat.setMap(this.gameMap);
 
@@ -2046,14 +2051,20 @@ export class DungeonScene extends GameplayScene {
     this.renderPipeline.renderWorld(ctx, rc);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
     this.spiderQuest.render(ctx, camX, camY, this.active());
+    // Puddles render before entities so players/mobs always appear on top of them
+    for (const spider of this.grotesqueSpiders) {
+      spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
+    }
 
     this.renderPipeline.renderEntities(ctx, rc);
     this.spiderQuest.renderTableForeground(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.bossRoom.renderProjectiles(ctx, camX, camY);
-    for (const mob of this.mobs) {
-      if (mob instanceof GrotesqueSpider) mob.renderSpitEffects(ctx, camX, camY, TILE_SIZE);
+    // Projectile renders after entities so it flies visually over mobs/players
+    for (const spider of this.grotesqueSpiders) {
+      spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
+    this.spiderQuest.renderCutsceneProjectile(ctx, camX, camY);
 
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
@@ -2502,35 +2513,36 @@ export class DungeonScene extends GameplayScene {
         mob.yellSoundPending = false;
         this.audio?.play('krakaren_yell');
       }
-      if (mob instanceof GrotesqueSpider) {
-        if (mob.slamSoundPending) {
-          mob.slamSoundPending = false;
-          this.audio?.play('grotesque_spider_slam_attack', { startOffset: SLAM_AUDIO_OFFSET });
-        }
-        if (mob.screechSoundPending) {
-          mob.screechSoundPending = false;
-          this.audio?.play('grotesque_spider_screech_attack', {
-            startOffset: SCREECH_AUDIO_OFFSET,
-          });
-        }
-        if (mob.spitFireSoundPending) {
-          mob.spitFireSoundPending = false;
-          this.audio?.play('grotesque_spider_spit_attack');
-        }
-        if (mob.spitLandSoundPending) {
-          mob.spitLandSoundPending = false;
-          this.audio?.play('grotesque_spider_spit_landing');
-        }
-        const spiderDist = Math.hypot(mob.x - this.active().x, mob.y - this.active().y);
-        if (
-          mob.isAlive &&
-          mob.isMoving &&
-          spiderDist < TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES
-        ) {
-          this.audio?.startSpiderWalkingLoop();
-        } else {
-          this.audio?.stopSpiderWalkingLoop();
-        }
+    }
+
+    for (const spider of this.grotesqueSpiders) {
+      if (spider.slamSoundPending) {
+        spider.slamSoundPending = false;
+        this.audio?.play('grotesque_spider_slam_attack', { startOffset: SLAM_AUDIO_OFFSET });
+      }
+      if (spider.screechSoundPending) {
+        spider.screechSoundPending = false;
+        this.audio?.play('grotesque_spider_screech_attack', {
+          startOffset: SCREECH_AUDIO_OFFSET,
+        });
+      }
+      if (spider.spitFireSoundPending) {
+        spider.spitFireSoundPending = false;
+        this.audio?.play('grotesque_spider_spit_attack');
+      }
+      if (spider.spitLandSoundPending) {
+        spider.spitLandSoundPending = false;
+        this.audio?.play('grotesque_spider_spit_landing');
+      }
+      const spiderDist = Math.hypot(spider.x - this.active().x, spider.y - this.active().y);
+      if (
+        spider.isAlive &&
+        spider.isMoving &&
+        spiderDist < TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES
+      ) {
+        this.audio?.startSpiderWalkingLoop();
+      } else {
+        this.audio?.stopSpiderWalkingLoop();
       }
     }
 
@@ -2732,7 +2744,8 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.spiderQuest.explanationSoundPending) {
       this.spiderQuest.explanationSoundPending = false;
-      this.audio?.play('scientist_explaining_request');
+      // Boosted volume: this audio was recorded significantly quieter than other SFX
+      this.audio?.play('scientist_explaining_request', { volume: 3.5 });
     }
     if (this.spiderQuest.keyboardHeroMusicStartPending) {
       this.spiderQuest.keyboardHeroMusicStartPending = false;

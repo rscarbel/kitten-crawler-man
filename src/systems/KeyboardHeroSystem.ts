@@ -7,7 +7,9 @@
  * zone to score. One mistake is forgiven (red flash only); a second mistake ends
  * the game after a short delay.
  *
- * Song duration: 71 758 ms. ~80 notes total.
+ * Song duration: 71 758 ms. ~80 notes total. The final SPAWN_CUTOFF_MS (3 s) spawn
+ * no new notes so the song winds down naturally — the audio should be left to end on
+ * its own after the game completes (do NOT stop it on success).
  */
 
 import { getSpriteDef } from '../core/SpriteLoader';
@@ -15,7 +17,7 @@ import { platform } from '../core/Platform';
 import { drawText } from '../ui/TextBox';
 
 /** Song length in milliseconds. */
-const SONG_DURATION_MS = 71_758;
+const SONG_DURATION_MS = 38_803;
 
 /** How many image-pixels per second a note falls. */
 const FALL_SPEED_IMG_PX_PER_SEC = 480;
@@ -76,7 +78,7 @@ const SPAWN_INTERVAL_MAX_MS = 900;
 const MAX_SIMULTANEOUS_NOTES = 4;
 
 /** Stop spawning new notes this many ms before the song ends. */
-const SPAWN_CUTOFF_MS = 3_000;
+const SPAWN_CUTOFF_MS = 4_000;
 
 // Render constants
 const RENDER_OVERLAY_ALPHA = 0.82;

@@ -20,8 +20,11 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
-import { getSpriteDefByKey } from '../core/SpriteLoader';
+import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
+import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
+import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
+import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
 
 const SCIENTIST_INTERACT_RANGE_TILES = 2.5;
 const COMPUTER_INTERACT_RANGE_TILES = 1.5;
@@ -42,14 +45,21 @@ const WITHOUT_EGG_SAC_FRAMES = 120;
 
 const MAX_SMALL_SPIDERS = 10;
 
-// Cutscene timing
+// Cutscene timing (all in frames at 60 FPS)
 const CS_LOCK_FRAME = 0;
 const CS_RUMBLE_FRAME = 42;
 const CS_EXCLAMATION_FRAME = 102;
 const CS_DIALOG_FADE_FRAME = 162;
+// Camera begins lerping toward the egg; spider spawns and starts spit windup
 const CS_CAMERA_PAN_FRAME = 240;
-const CS_SPIDER_SPIT_FRAME = 270;
-const CS_FIGHT_START_FRAME = 300;
+// Camera lerp completes — now locked on egg until projectile fires
+const CS_PAN_END_FRAME = 275;
+// Frames the camera waits on gore before handing control back (fight start)
+const CS_FIGHT_DELAY_FRAMES = 50;
+// Max distance (px) for projectile–scientist hit detection
+const CS_SPIT_HIT_RADIUS_PX = 24;
+// Safety TTL for cutscene projectile in case scientist tile is very close
+const CS_SPIT_MIN_TTL = 30;
 
 // Scientist wander timing
 const SCIENTIST_WANDER_FRAMES = 180;
@@ -146,6 +156,64 @@ const OFFSET_FAR = 2;
 const OFFSET_FAR_NORTH = -2;
 const OFFSET_FAR_WEST = -2;
 
+// Tutorial layout constants
+const TUTORIAL_PAGES = 2;
+const TUTORIAL_W = 520;
+const TUTORIAL_H = 500;
+const TUTORIAL_HEADER_H = 76;
+const TUTORIAL_PAD = 18;
+const TUTORIAL_ILL_H_FRACTION = 0.38;
+const TUTORIAL_DOT_GAP = 14;
+const TUTORIAL_DOT_RADIUS = 4;
+const TUTORIAL_DOT_BOTTOM = 32;
+const TUTORIAL_BTN_W = 120;
+const TUTORIAL_BTN_H = 34;
+const TUTORIAL_BTN_Y_FROM_BOTTOM = 14;
+const TUTORIAL_BTN_LABEL_SIZE = 13;
+const TUTORIAL_SCREEN_MARGIN = 16;
+const TUTORIAL_MAIN_HEADING_Y = 24;
+const TUTORIAL_SUB_HEADING_Y = 54;
+const TUTORIAL_TEXT_LINE_H = 18;
+const TUTORIAL_TEXT_SIZE = 11;
+const TUTORIAL_HIT_ZONE_FRACTION = 0.22;
+const TUTORIAL_COL_COUNT = 4;
+const TUTORIAL_NOTE_CYCLE_MS = 1800;
+const TUTORIAL_NOTE_H_FRACTION = 0.18;
+const TUTORIAL_NOTE_W_FRACTION = 0.85;
+const TUTORIAL_KEY_ICON_SIZE = 28;
+const TUTORIAL_KEY_ICON_TOP_PAD = 8;
+const TUTORIAL_KEY_ICON_BOTTOM_PAD = 10;
+const TUTORIAL_NOTE_SHADOW_BLUR = 6;
+const TUTORIAL_NOTE_IN_ZONE_SHADOW_BLUR = 10;
+const TUTORIAL_HIT_LABEL_Y_OFFSET = 0.12;
+const TUTORIAL_MISS_LABEL_Y_OFFSET = 0.12;
+const TUTORIAL_PANEL_DIVIDER_ALPHA = 0.3;
+const TUTORIAL_PULSE_MID = 0.5;
+const TUTORIAL_PULSE_AMP = 0.5;
+const TUTORIAL_PULSE_FREQ_MS = 300;
+const TUTORIAL_HIT_ZONE_ALPHA_BASE = 0.15;
+const TUTORIAL_HIT_ZONE_ALPHA_SCALE = 0.12;
+const TUTORIAL_HIT_FLASH_ALPHA_BASE = 0.2;
+const TUTORIAL_HIT_FLASH_ALPHA_SCALE = 0.15;
+const TUTORIAL_BORDER_INNER_OFFSET = 4;
+const TUTORIAL_LABEL_Y_NUDGE = 4;
+const TUTORIAL_DIVIDER_DASH = 4;
+const TUTORIAL_MISS_PULSE_FREQ_MS = 250;
+const TUTORIAL_MISS_FLASH_ALPHA_BASE = 0.25;
+const TUTORIAL_MISS_FLASH_ALPHA_SCALE = 0.2;
+const TUTORIAL_MISS_NOTE_GAP = 4;
+const TUTORIAL_WARN_LABEL_Y_FRACTION = 0.35;
+const TUTORIAL_WARN_LABEL_2_GAP = 14;
+const TUTORIAL_HIT_GLOW_BLUR = 8;
+const TUTORIAL_HIT_LABEL_SIZE = 13;
+const TUTORIAL_HIT_GLOW_SHADOW_BLUR = 12;
+const TUTORIAL_WARN_LABEL_SIZE = 9;
+
+// Cutscene spit projectile constants
+const CS_SPIT_TTL_MARGIN = 20;
+const CS_SHAKE_RAMP_FACTOR = 0.67;
+const CS_SHAKE_REDUCED_FRACTION = 0.33;
+
 const NEIGHBOR_OFFSETS_SMALL: Array<[number, number]> = [
   [0, OFFSET_NORTH],
   [0, OFFSET_SOUTH],
@@ -165,12 +233,16 @@ const NEIGHBOR_OFFSETS_FAR: Array<[number, number]> = [
   [OFFSET_FAR_WEST, 0],
 ];
 
+// Resets on page reload — tutorial plays once per session, not on retries.
+let keyboardHeroTutorialSeen = false;
+
 type QuestPhase =
   | 'inactive'
   | 'scientist_waiting'
   | 'scientist_dialog'
   | 'awaiting_hacking'
   | 'hacking'
+  | 'keyboard_hero_tutorial'
   | 'hacking_failed'
   | 'cutscene'
   | 'boss_fight'
@@ -280,6 +352,32 @@ export class SpiderQuestSystem implements GameSystem {
   private dialogButtons: ButtonRect[] = [];
   private hackFailedButtons: ButtonRect[] = [];
 
+  // Tutorial
+  private _tutorialPage = 0;
+  private _tutorialButtons: ButtonRect[] = [];
+
+  // Tracks whether machinery was force-stopped when hacking began
+  private _machineryForcedOff = false;
+
+  // Cutscene camera lerp state
+  private _cutsceneCamFromX = 0;
+  private _cutsceneCamFromY = 0;
+  private _cutsceneCamLerpProgress = 0;
+
+  // Cutscene-specific spit projectile (separate from boss AI's projectile)
+  private _cutsceneProjectile: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    angle: number;
+    animFrame: number;
+    ttl: number;
+  } | null = null;
+
+  // Counts down after the cutscene spit hits; fight starts when it reaches 0
+  private _cutsceneFightStartTimer = 0;
+
   // Keyboard hero
   private keyboardHero: KeyboardHeroSystem;
 
@@ -329,11 +427,19 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   get isDialogOpen(): boolean {
-    return this.phase === 'scientist_dialog' || this.phase === 'hacking_failed';
+    return (
+      this.phase === 'scientist_dialog' ||
+      this.phase === 'hacking_failed' ||
+      this.phase === 'keyboard_hero_tutorial'
+    );
   }
 
   get isDungeonPaused(): boolean {
-    return this.phase === 'hacking' || this.phase === 'cutscene';
+    return (
+      this.phase === 'hacking' ||
+      this.phase === 'keyboard_hero_tutorial' ||
+      this.phase === 'cutscene'
+    );
   }
 
   get playerLocked(): boolean {
@@ -350,10 +456,25 @@ export class SpiderQuestSystem implements GameSystem {
 
   get cameraTargetOverride(): { x: number; y: number } | null {
     if (this._cameraOverrideTile === null) return null;
-    return {
-      x: this._cameraOverrideTile.x * TILE_SIZE,
-      y: this._cameraOverrideTile.y * TILE_SIZE,
-    };
+
+    // Camera follows the cutscene spit projectile while it's in flight
+    if (this._cutsceneProjectile !== null) {
+      return { x: this._cutsceneProjectile.x, y: this._cutsceneProjectile.y };
+    }
+
+    const targetX = this._cameraOverrideTile.x * TILE_SIZE;
+    const targetY = this._cameraOverrideTile.y * TILE_SIZE;
+
+    // Lerp from player position toward the egg tile
+    if (this._cutsceneCamLerpProgress < 1) {
+      const t = this._cutsceneCamLerpProgress;
+      return {
+        x: this._cutsceneCamFromX + (targetX - this._cutsceneCamFromX) * t,
+        y: this._cutsceneCamFromY + (targetY - this._cutsceneCamFromY) * t,
+      };
+    }
+
+    return { x: targetX, y: targetY };
   }
 
   get roomLocked(): boolean {
@@ -485,6 +606,10 @@ export class SpiderQuestSystem implements GameSystem {
       this._renderHackFailedDialog(ctx, canvas);
     }
 
+    if (this.phase === 'keyboard_hero_tutorial') {
+      this._renderTutorial(ctx, canvas);
+    }
+
     if (this.phase === 'cutscene') {
       this._renderCutsceneUI(ctx, canvas);
     }
@@ -511,24 +636,38 @@ export class SpiderQuestSystem implements GameSystem {
       return true; // consume all clicks while dialog open
     }
 
+    if (this.phase === 'keyboard_hero_tutorial') {
+      for (const btn of this._tutorialButtons) {
+        if (pointInRect(mx, my, btn)) {
+          // Button rects are in screen space; drawButton's auto-sound doesn't fire through the
+          // scale transform, so trigger it manually here instead.
+          this.menuClickSoundPending = true;
+          if (btn.action === 'next') {
+            this._tutorialPage++;
+            this._tutorialButtons = [];
+          } else {
+            // "Let's Go" — tutorial complete
+            keyboardHeroTutorialSeen = true;
+            this._tutorialButtons = [];
+            this._startHacking();
+          }
+          return true;
+        }
+      }
+      return true;
+    }
+
     if (this.phase === 'hacking_failed') {
       for (const btn of this.hackFailedButtons) {
         if (pointInRect(mx, my, btn)) {
           this.menuClickSoundPending = true;
           if (btn.action === 'retry') {
-            this.phase = 'hacking';
-            this.keyboardHeroMusicStartPending = true;
-            this.keyboardHero.start(
-              () => this._onHackComplete(),
-              () => this._onHackFail(),
-              () => {
-                this.hackFailErrorSoundPending = true;
-              },
-            );
+            this._startHacking();
           } else {
             this.phase = 'awaiting_hacking';
             this.hackStarting = false;
             this.hackStartTimer = 0;
+            this._machineryForcedOff = false;
           }
           this.hackFailedButtons = [];
           return true;
@@ -582,11 +721,20 @@ export class SpiderQuestSystem implements GameSystem {
       this.dialogButtons = [];
       return true;
     }
+    if (this.phase === 'keyboard_hero_tutorial') {
+      // Escape from tutorial → retreat to awaiting_hacking
+      this.phase = 'awaiting_hacking';
+      this._tutorialButtons = [];
+      this.hackStarting = false;
+      this.hackStartTimer = 0;
+      return true;
+    }
     if (this.phase === 'hacking_failed') {
       this.phase = 'awaiting_hacking';
       this.hackFailedButtons = [];
       this.hackStarting = false;
       this.hackStartTimer = 0;
+      this._machineryForcedOff = false;
       return true;
     }
     return false;
@@ -595,6 +743,20 @@ export class SpiderQuestSystem implements GameSystem {
   handleKeyDown(key: string): void {
     if (this.phase === 'hacking') {
       this.keyboardHero.handleKeyDown(key);
+    }
+    if (this.phase === 'keyboard_hero_tutorial') {
+      const isAdvance = key === ' ' || key === 'Enter';
+      if (isAdvance) {
+        const isLast = this._tutorialPage === TUTORIAL_PAGES - 1;
+        if (isLast) {
+          keyboardHeroTutorialSeen = true;
+          this._tutorialButtons = [];
+          this._startHacking();
+        } else {
+          this._tutorialPage++;
+          this._tutorialButtons = [];
+        }
+      }
     }
   }
 
@@ -769,6 +931,23 @@ export class SpiderQuestSystem implements GameSystem {
     entity.y = clamp(entity.y, b.y * TILE_SIZE, (b.y + b.h - 1) * TILE_SIZE);
   }
 
+  private _startHacking(): void {
+    this.phase = 'hacking';
+    if (this.machineryLoopActive) {
+      this.machineryLoopActive = false;
+      this.machineryStopPending = true;
+    }
+    this._machineryForcedOff = true;
+    this.keyboardHeroMusicStartPending = true;
+    this.keyboardHero.start(
+      () => this._onHackComplete(),
+      () => this._onHackFail(),
+      () => {
+        this.hackFailErrorSoundPending = true;
+      },
+    );
+  }
+
   private _updateHackStart(active: Player): void {
     if (!this.hackStarting) return;
 
@@ -776,27 +955,18 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.hackStartTimer <= 0) {
       this.hackStarting = false;
       this.hackStartTimer = 0;
-      this.phase = 'hacking';
-      // Stop machinery ambient while keyboard hero music plays
-      if (this.machineryLoopActive) {
-        this.machineryLoopActive = false;
-        this.machineryStopPending = true;
+      if (!keyboardHeroTutorialSeen) {
+        this.phase = 'keyboard_hero_tutorial';
+        this._tutorialPage = 0;
+        this._tutorialButtons = [];
+      } else {
+        this._startHacking();
       }
-      this.keyboardHeroMusicStartPending = true;
-      this.keyboardHero.start(
-        () => this._onHackComplete(),
-        () => this._onHackFail(),
-        () => {
-          this.hackFailErrorSoundPending = true;
-        },
-      );
     }
-    // Suppress unused warning — active is read in tryInteract
     void active;
   }
 
   private _onHackComplete(): void {
-    this.keyboardHeroMusicStopPending = true;
     this._hackingDone = true;
     for (const machine of this.lifeMachines) {
       machine.state = 'open_egg_sac';
@@ -812,6 +982,8 @@ export class SpiderQuestSystem implements GameSystem {
 
   private _updateMachineryLoop(active: Player): void {
     if (!this.roomData) return;
+    // Machinery was explicitly stopped when hacking began; don't restart it
+    if (this._machineryForcedOff) return;
 
     const r = this.roomData.bounds;
     const px = active.x / TILE_SIZE;
@@ -994,6 +1166,44 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _updateCutscene(ctx: SystemContext): void {
+    // ── Fight start countdown (after projectile hits) ──────────────────────
+    if (this._cutsceneFightStartTimer > 0) {
+      this._cutsceneFightStartTimer--;
+      if (this._cutsceneFightStartTimer === 0) {
+        this._cameraOverrideTile = null;
+        this._cutsceneProjectile = null;
+        this._screenShakeIntensity = 0;
+        this._screenShakeX = 0;
+        this._screenShakeY = 0;
+        this._playerLocked = false;
+        this.phase = 'boss_fight';
+        this.bossFightStartPending = true;
+      }
+      return;
+    }
+
+    // ── Advance the in-flight cutscene spit projectile ─────────────────────
+    if (this._cutsceneProjectile !== null) {
+      const proj = this._cutsceneProjectile;
+      proj.x += proj.vx;
+      proj.y += proj.vy;
+      proj.animFrame = (proj.animFrame + 1) % SPIT_ANIM_CYCLE_FRAMES;
+      proj.ttl--;
+
+      const hitSci =
+        Math.hypot(proj.x - this.scientistX, proj.y - this.scientistY) < CS_SPIT_HIT_RADIUS_PX;
+      if (hitSci || proj.ttl <= 0) {
+        this.scientistDead = true;
+        this._cutsceneProjectile = null;
+        this._screenShakeIntensity = 0;
+        this._screenShakeX = 0;
+        this._screenShakeY = 0;
+        this._cutsceneFightStartTimer = CS_FIGHT_DELAY_FRAMES;
+      }
+      return;
+    }
+
+    // ── Main timer-driven cutscene ─────────────────────────────────────────
     this.cutsceneTimer++;
     const t = this.cutsceneTimer;
 
@@ -1020,42 +1230,76 @@ export class SpiderQuestSystem implements GameSystem {
       this._cameraOverrideTile = this.roomData.spiderEggTile;
       this.spiderEggOpened = true;
 
-      // Spawn Grotesque Spider 2 tiles south of the egg
+      // Record current camera position as pan start (center on active player)
+      this._cutsceneCamFromX = ctx.active.x + TILE_SIZE / 2;
+      this._cutsceneCamFromY = ctx.active.y + TILE_SIZE / 2;
+      this._cutsceneCamLerpProgress = 0;
+
+      // Spawn Grotesque Spider 2 tiles south of the egg, facing the scientist
       const eggTile = this.roomData.spiderEggTile;
+      const spiderWorldX = eggTile.x * TILE_SIZE;
+      const spiderWorldY = (eggTile.y + 2) * TILE_SIZE;
       const spider = new GrotesqueSpider(eggTile.x, eggTile.y + 2, TILE_SIZE);
       spider.setMap(this.gameMap);
       this._grotesqueSpider = spider;
       this.addMob(spider);
+
+      // Aim at scientist and start spit windup so the sprite animation begins immediately
+      const dxToSci = this.scientistX - (spiderWorldX + TILE_SIZE / 2);
+      const dyToSci = this.scientistY - (spiderWorldY + TILE_SIZE / 2);
+      const distToSci = Math.hypot(dxToSci, dyToSci);
+      spider.prepareCutsceneSpit(
+        distToSci > 0 ? dxToSci / distToSci : 0,
+        distToSci > 0 ? dyToSci / distToSci : 1,
+      );
     }
 
-    if (t === CS_SPIDER_SPIT_FRAME) {
-      this.scientistDead = true;
+    // Camera lerp: player → egg (CS_CAMERA_PAN_FRAME…CS_PAN_END_FRAME)
+    if (t > CS_CAMERA_PAN_FRAME && t <= CS_PAN_END_FRAME) {
+      const panFrames = CS_PAN_END_FRAME - CS_CAMERA_PAN_FRAME;
+      this._cutsceneCamLerpProgress = (t - CS_CAMERA_PAN_FRAME) / panFrames;
+    } else if (t > CS_PAN_END_FRAME) {
+      this._cutsceneCamLerpProgress = 1;
     }
 
-    if (t === CS_FIGHT_START_FRAME) {
-      this._cameraOverrideTile = null;
-      this._screenShakeIntensity = 0;
-      this._screenShakeX = 0;
-      this._screenShakeY = 0;
-      this._playerLocked = false;
-      this.phase = 'boss_fight';
-      this.bossFightStartPending = true;
+    // Advance spider spit windup each frame after it spawns
+    if (t > CS_CAMERA_PAN_FRAME && this._grotesqueSpider !== null) {
+      const fired = this._grotesqueSpider.tickCutsceneSpit();
+      if (fired) {
+        // Projectile fires — launch it toward the scientist's current world position
+        const spider = this._grotesqueSpider;
+        // spider.x/y are already in world pixels (set by Player constructor as tileX * tileSize)
+        const originX = spider.x + TILE_SIZE / 2;
+        const originY = spider.y + TILE_SIZE / 2;
+        const dxToSci = this.scientistX - originX;
+        const dyToSci = this.scientistY - originY;
+        const dist = Math.hypot(dxToSci, dyToSci);
+        const spitAngle = Math.atan2(dyToSci, dxToSci);
+        this._cutsceneProjectile = {
+          x: originX,
+          y: originY,
+          vx: dist > 0 ? (dxToSci / dist) * SPIT_SPEED_PX : 0,
+          vy: dist > 0 ? (dyToSci / dist) * SPIT_SPEED_PX : SPIT_SPEED_PX,
+          angle: spitAngle,
+          animFrame: 0,
+          ttl: Math.max(CS_SPIT_MIN_TTL, Math.ceil(dist / SPIT_SPEED_PX) + CS_SPIT_TTL_MARGIN),
+        };
+      }
     }
 
-    // Screen shake — active from frame 42 to 300
-    if (t >= CS_RUMBLE_FRAME && t < CS_FIGHT_START_FRAME) {
-      // Ramp intensity down from 6 to 0 over frames 240-300
-      if (t >= CS_CAMERA_PAN_FRAME) {
-        const rampFrames = CS_FIGHT_START_FRAME - CS_CAMERA_PAN_FRAME;
-        const rampT = (t - CS_CAMERA_PAN_FRAME) / rampFrames;
-        this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY * (1 - rampT);
+    // Screen shake — constant from CS_RUMBLE_FRAME, ramps down slightly during pan, stops after
+    if (t >= CS_RUMBLE_FRAME) {
+      if (t >= CS_CAMERA_PAN_FRAME && t <= CS_PAN_END_FRAME) {
+        const rampT = (t - CS_CAMERA_PAN_FRAME) / (CS_PAN_END_FRAME - CS_CAMERA_PAN_FRAME);
+        // Ramp from full intensity down to ~33% while camera pans
+        this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY * (1 - rampT * CS_SHAKE_RAMP_FACTOR);
+      } else if (t > CS_PAN_END_FRAME) {
+        // Subtle tremor while spider winds up
+        this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY * CS_SHAKE_REDUCED_FRACTION;
       }
       this._screenShakeX = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
       this._screenShakeY = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
     }
-
-    // Suppress unused ctx warning (cutscene doesn't need ctx here)
-    void ctx;
   }
 
   private _getSpriteDef(name: string) {
@@ -1645,6 +1889,437 @@ export class SpiderQuestSystem implements GameSystem {
       align: 'center',
     });
     this.hackFailedButtons.push({ x: retreatX, y: btnY, w: btnW, h: btnH, action: 'retreat' });
+  }
+
+  /** Draw a single frame from the keyboard_hero_buttons sprite sheet at arbitrary screen size. */
+  private _drawKeyButtonSprite(
+    ctx: CanvasRenderingContext2D,
+    stateName: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    alpha = 1,
+  ): void {
+    const def = getSpriteDef('keyboard_hero_buttons');
+    if (def === undefined) return;
+    const state = def.states.get(stateName);
+    if (state === undefined) return;
+    const colOff = state.colOffset ?? 0;
+    const srcX = colOff * def.frameWidth;
+    const srcY = state.row * def.frameHeight;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(def.img, srcX, srcY, def.frameWidth, def.frameHeight, x, y, w, h);
+    ctx.restore();
+  }
+
+  private _renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    // Scale down uniformly so the modal always fits on small screens (landscape mobile)
+    const modalScale = Math.min(
+      1,
+      (cw - TUTORIAL_SCREEN_MARGIN * 2) / TUTORIAL_W,
+      (ch - TUTORIAL_SCREEN_MARGIN * 2) / TUTORIAL_H,
+    );
+    const scaledW = Math.round(TUTORIAL_W * modalScale);
+    const scaledH = Math.round(TUTORIAL_H * modalScale);
+    const offsetX = Math.floor((cw - scaledW) / 2);
+    const offsetY = Math.floor((ch - scaledH) / 2);
+
+    ctx.save();
+
+    // Full-screen overlay drawn in screen space before the modal transform
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Shift into the modal's virtual coordinate space (TUTORIAL_W × TUTORIAL_H)
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(modalScale, modalScale);
+
+    const dx = 0;
+    const dy = 0;
+    const dw = TUTORIAL_W;
+    const dh = TUTORIAL_H;
+
+    // Modal box
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(dx, dy, dw, dh);
+
+    // Header fill
+    ctx.fillStyle = '#1a2540';
+    ctx.fillRect(dx + 2, dy + 2, dw - TUTORIAL_BORDER_INNER_OFFSET, TUTORIAL_HEADER_H);
+
+    // "HOW TO PLAY" main heading
+    drawText(ctx, 'HOW TO PLAY', {
+      x: dx + dw / 2,
+      y: dy + TUTORIAL_MAIN_HEADING_Y,
+      size: 17,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+    });
+
+    // Sub-heading showing which concept this page covers
+    const subTitles = ['Falling Notes', 'Hit vs. Miss'];
+    drawText(ctx, subTitles[this._tutorialPage] ?? '', {
+      x: dx + dw / 2,
+      y: dy + TUTORIAL_SUB_HEADING_Y,
+      size: 12,
+      bold: false,
+      color: '#93c5fd',
+      align: 'center',
+    });
+
+    // Page dots
+    const dotsX = dx + dw / 2 - ((TUTORIAL_PAGES - 1) * TUTORIAL_DOT_GAP) / 2;
+    const dotsY = dy + dh - TUTORIAL_DOT_BOTTOM;
+    for (let i = 0; i < TUTORIAL_PAGES; i++) {
+      ctx.beginPath();
+      ctx.arc(dotsX + i * TUTORIAL_DOT_GAP, dotsY, TUTORIAL_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = i === this._tutorialPage ? '#fbbf24' : '#334155';
+      ctx.fill();
+    }
+
+    // Illustration area
+    const illX = dx + TUTORIAL_PAD;
+    const illY = dy + TUTORIAL_HEADER_H + TUTORIAL_PAD;
+    const illW = dw - TUTORIAL_PAD * 2;
+    const illH = Math.floor(dh * TUTORIAL_ILL_H_FRACTION);
+
+    ctx.fillStyle = '#0d1626';
+    ctx.fillRect(illX, illY, illW, illH);
+    ctx.strokeStyle = '#1e3050';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(illX, illY, illW, illH);
+
+    if (this._tutorialPage === 0) {
+      this._renderTutorialPage0(ctx, illX, illY, illW, illH);
+    } else {
+      this._renderTutorialPage1(ctx, illX, illY, illW, illH);
+    }
+
+    // Key icon row: real button sprites scaled down, one per column (page 0 desktop only)
+    const iconRowY = illY + illH + TUTORIAL_KEY_ICON_TOP_PAD;
+    if (this._tutorialPage === 0) {
+      const colW = illW / TUTORIAL_COL_COUNT;
+      const colStates = ['left_arrow', 'up_arrow', 'down_arrow', 'right_arrow'] as const;
+      for (let c = 0; c < TUTORIAL_COL_COUNT; c++) {
+        const iconX = illX + c * colW + (colW - TUTORIAL_KEY_ICON_SIZE) / 2;
+        if (platform.isMobile) {
+          const mobileLabels = ['Col 1', 'Col 2', 'Col 3', 'Col 4'];
+          drawText(ctx, mobileLabels[c] ?? '', {
+            x: illX + c * colW + colW / 2,
+            y: iconRowY + TUTORIAL_KEY_ICON_SIZE / 2,
+            size: 8,
+            bold: true,
+            color: '#64748b',
+            align: 'center',
+          });
+        } else {
+          this._drawKeyButtonSprite(
+            ctx,
+            colStates[c],
+            iconX,
+            iconRowY,
+            TUTORIAL_KEY_ICON_SIZE,
+            TUTORIAL_KEY_ICON_SIZE,
+          );
+        }
+      }
+    }
+
+    // Description text (below key icon row so both pages align consistently)
+    const textStartY = iconRowY + TUTORIAL_KEY_ICON_SIZE + TUTORIAL_KEY_ICON_BOTTOM_PAD;
+    const descriptions = [
+      [
+        'Notes fall from the top of each column.',
+        'Press the matching key when a note enters the green zone.',
+        platform.isMobile
+          ? 'Tap the matching column to score!'
+          : 'Keys: A / ← · W / ↑ · S / ↓ · D / →',
+      ],
+      [
+        'One miss gives a red warning flash — keep playing.',
+        'A second miss ends the hack and you must try again.',
+        'Hit all notes before the song ends to succeed!',
+      ],
+    ];
+    const pageDescs = descriptions[this._tutorialPage] ?? [];
+    for (let i = 0; i < pageDescs.length; i++) {
+      drawText(ctx, pageDescs[i] ?? '', {
+        x: dx + dw / 2,
+        y: textStartY + i * TUTORIAL_TEXT_LINE_H,
+        size: TUTORIAL_TEXT_SIZE,
+        color: '#cbd5e1',
+        align: 'center',
+      });
+    }
+
+    // Button — drawButton handles hover/press visuals and auto-registers for click sound
+    this._tutorialButtons = [];
+    const isLast = this._tutorialPage === TUTORIAL_PAGES - 1;
+    const btnX = dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W;
+    const btnY = dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM - TUTORIAL_BTN_H;
+    const btnPreset = isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue;
+    const btnResult = drawButton(ctx, {
+      ...btnPreset,
+      x: btnX,
+      y: btnY,
+      width: TUTORIAL_BTN_W,
+      height: TUTORIAL_BTN_H,
+      label: isLast ? "Let's Go!" : 'Next  ›',
+      labelSize: TUTORIAL_BTN_LABEL_SIZE,
+      labelColor: isLast ? '#4ade80' : '#93c5fd',
+    });
+    // Button rects must be in screen coordinates for handleClick hit detection.
+    // The rest of the modal draws in virtual space (before scale is applied),
+    // so we must transform back to screen space here.
+    this._tutorialButtons.push({
+      x: btnResult.x * modalScale + offsetX,
+      y: btnResult.y * modalScale + offsetY,
+      w: btnResult.width * modalScale,
+      h: btnResult.height * modalScale,
+      action: isLast ? 'go' : 'next',
+    });
+
+    ctx.restore();
+  }
+
+  private _renderTutorialPage0(
+    ctx: CanvasRenderingContext2D,
+    illX: number,
+    illY: number,
+    illW: number,
+    illH: number,
+  ): void {
+    const now = performance.now();
+    const colW = illW / TUTORIAL_COL_COUNT;
+    const hitZoneH = illH * TUTORIAL_HIT_ZONE_FRACTION;
+    const hitZoneY = illY + illH - hitZoneH;
+
+    // Clip so falling notes don't overflow into the key icon row below
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(illX, illY, illW, illH);
+    ctx.clip();
+
+    // Column backgrounds
+    const colColors = ['#1e2a45', '#1a2840', '#1e2a45', '#1a2840'];
+    for (let c = 0; c < TUTORIAL_COL_COUNT; c++) {
+      ctx.fillStyle = colColors[c];
+      ctx.fillRect(illX + c * colW, illY, colW, illH);
+      if (c > 0) {
+        ctx.strokeStyle = '#0d1626';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(illX + c * colW, illY);
+        ctx.lineTo(illX + c * colW, illY + illH);
+        ctx.stroke();
+      }
+    }
+
+    // Green hit zone
+    ctx.fillStyle = 'rgba(34,197,94,0.15)';
+    ctx.fillRect(illX, hitZoneY, illW, hitZoneH);
+    ctx.strokeStyle = 'rgba(34,197,94,0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(illX, hitZoneY);
+    ctx.lineTo(illX + illW, hitZoneY);
+    ctx.stroke();
+
+    // Animate TWO notes falling using real button sprites
+    const noteH = illH * TUTORIAL_NOTE_H_FRACTION;
+    const noteSprite = Math.min(colW * TUTORIAL_NOTE_W_FRACTION, noteH);
+    const noteProgress = (now % TUTORIAL_NOTE_CYCLE_MS) / TUTORIAL_NOTE_CYCLE_MS;
+
+    const noteConfigs: Array<{ col: number; offset: number }> = [
+      { col: 1, offset: 0 },
+      { col: 3, offset: 0.45 },
+    ];
+
+    for (const { col, offset } of noteConfigs) {
+      const p = (noteProgress + offset) % 1;
+      const noteY = illY + p * (illH + noteH) - noteH;
+      const inZone = noteY + noteH >= hitZoneY && noteY <= hitZoneY + hitZoneH;
+      const nx = illX + col * colW + (colW - noteSprite) / 2;
+      const stateName =
+        col === 0
+          ? 'left_arrow'
+          : col === 1
+            ? 'up_arrow'
+            : col === 2
+              ? 'down_arrow'
+              : 'right_arrow';
+
+      ctx.save();
+      ctx.shadowColor = inZone ? 'rgba(34,197,94,0.7)' : 'rgba(59,130,246,0.4)';
+      ctx.shadowBlur = inZone ? TUTORIAL_NOTE_IN_ZONE_SHADOW_BLUR : TUTORIAL_NOTE_SHADOW_BLUR;
+      this._drawKeyButtonSprite(ctx, stateName, nx, noteY, noteSprite, noteSprite);
+      ctx.restore();
+    }
+
+    ctx.restore(); // end clip
+  }
+
+  private _renderTutorialPage1(
+    ctx: CanvasRenderingContext2D,
+    illX: number,
+    illY: number,
+    illW: number,
+    illH: number,
+  ): void {
+    const now = performance.now();
+    const halfW = illW / 2;
+    const colW = halfW / TUTORIAL_COL_COUNT;
+    const hitZoneH = illH * TUTORIAL_HIT_ZONE_FRACTION;
+    const hitZoneY = illY + illH - hitZoneH;
+    const noteH = illH * TUTORIAL_NOTE_H_FRACTION;
+    // Square sprite sized to fit the note area
+    const noteSprite = Math.min(colW * TUTORIAL_NOTE_W_FRACTION, noteH);
+
+    // ── Left panel: HIT ──────────────────────────────────────────────────────
+    for (let c = 0; c < TUTORIAL_COL_COUNT; c++) {
+      ctx.fillStyle = c % 2 === 0 ? '#1e2a45' : '#1a2840';
+      ctx.fillRect(illX + c * colW, illY, colW, illH);
+      if (c > 0) {
+        ctx.strokeStyle = '#0d1626';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(illX + c * colW, illY);
+        ctx.lineTo(illX + c * colW, illY + illH);
+        ctx.stroke();
+      }
+    }
+
+    // Green zone with stronger pulse
+    const pulse = TUTORIAL_PULSE_MID + TUTORIAL_PULSE_AMP * Math.sin(now / TUTORIAL_PULSE_FREQ_MS);
+    ctx.fillStyle = `rgba(34,197,94,${TUTORIAL_HIT_ZONE_ALPHA_BASE + pulse * TUTORIAL_HIT_ZONE_ALPHA_SCALE})`;
+    ctx.fillRect(illX, hitZoneY, halfW, hitZoneH);
+    ctx.strokeStyle = 'rgba(34,197,94,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(illX, hitZoneY);
+    ctx.lineTo(illX + halfW, hitZoneY);
+    ctx.stroke();
+
+    // Green flash overlay (simulating just-hit)
+    ctx.fillStyle = `rgba(34,197,94,${TUTORIAL_HIT_FLASH_ALPHA_BASE + pulse * TUTORIAL_HIT_FLASH_ALPHA_SCALE})`;
+    ctx.fillRect(illX + colW, illY, colW, illH);
+
+    // Note inside the zone (column 1 = W/↑) — real up_arrow sprite
+    const hitNoteY = hitZoneY + (hitZoneH - noteSprite) / 2;
+    const hitNoteX = illX + colW + (colW - noteSprite) / 2;
+    ctx.save();
+    ctx.shadowColor = 'rgba(34,197,94,0.8)';
+    ctx.shadowBlur = TUTORIAL_HIT_GLOW_SHADOW_BLUR;
+    this._drawKeyButtonSprite(ctx, 'up_arrow', hitNoteX, hitNoteY, noteSprite, noteSprite);
+    ctx.restore();
+
+    drawText(ctx, '✓  HIT!', {
+      x: illX + halfW / 2,
+      y: illY + illH * TUTORIAL_HIT_LABEL_Y_OFFSET + TUTORIAL_LABEL_Y_NUDGE,
+      size: TUTORIAL_HIT_LABEL_SIZE,
+      bold: true,
+      color: '#22c55e',
+      align: 'center',
+      glow: '#22c55e',
+      glowBlur: TUTORIAL_HIT_GLOW_BLUR,
+    });
+
+    // ── Divider ──────────────────────────────────────────────────────────────
+    ctx.save();
+    ctx.globalAlpha = TUTORIAL_PANEL_DIVIDER_ALPHA;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([TUTORIAL_DIVIDER_DASH, TUTORIAL_DIVIDER_DASH]);
+    ctx.beginPath();
+    ctx.moveTo(illX + halfW, illY);
+    ctx.lineTo(illX + halfW, illY + illH);
+    ctx.stroke();
+    ctx.restore();
+
+    // ── Right panel: MISS ─────────────────────────────────────────────────────
+    const rX = illX + halfW;
+    for (let c = 0; c < TUTORIAL_COL_COUNT; c++) {
+      ctx.fillStyle = c % 2 === 0 ? '#1e2a45' : '#1a2840';
+      ctx.fillRect(rX + c * colW, illY, colW, illH);
+      if (c > 0) {
+        ctx.strokeStyle = '#0d1626';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(rX + c * colW, illY);
+        ctx.lineTo(rX + c * colW, illY + illH);
+        ctx.stroke();
+      }
+    }
+
+    // Green zone (dimmer on miss panel)
+    ctx.fillStyle = 'rgba(34,197,94,0.08)';
+    ctx.fillRect(rX, hitZoneY, halfW, hitZoneH);
+    ctx.strokeStyle = 'rgba(34,197,94,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(rX, hitZoneY);
+    ctx.lineTo(rX + halfW, hitZoneY);
+    ctx.stroke();
+
+    // Red error flash on column 2 of right panel
+    const missFlash =
+      TUTORIAL_PULSE_MID +
+      TUTORIAL_PULSE_AMP * Math.sin(now / TUTORIAL_MISS_PULSE_FREQ_MS + Math.PI);
+    ctx.fillStyle = `rgba(239,68,68,${TUTORIAL_MISS_FLASH_ALPHA_BASE + missFlash * TUTORIAL_MISS_FLASH_ALPHA_SCALE})`;
+    ctx.fillRect(rX + colW * 2, illY, colW, illH);
+
+    // Note zoomed past the zone (below hit zone bottom) — real down_arrow sprite
+    const missNoteY = hitZoneY + hitZoneH + TUTORIAL_MISS_NOTE_GAP;
+    const missNoteX = rX + colW * 2 + (colW - noteSprite) / 2;
+    this._drawKeyButtonSprite(ctx, 'down_arrow', missNoteX, missNoteY, noteSprite, noteSprite);
+
+    drawText(ctx, '✗  MISS!', {
+      x: rX + halfW / 2,
+      y: illY + illH * TUTORIAL_MISS_LABEL_Y_OFFSET + TUTORIAL_LABEL_Y_NUDGE,
+      size: TUTORIAL_HIT_LABEL_SIZE,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
+
+    // Warning label
+    drawText(ctx, '1st: flash only', {
+      x: rX + halfW / 2,
+      y: illY + illH * TUTORIAL_WARN_LABEL_Y_FRACTION,
+      size: TUTORIAL_WARN_LABEL_SIZE,
+      color: '#f97316',
+      align: 'center',
+    });
+    drawText(ctx, '2nd: hack fails', {
+      x: rX + halfW / 2,
+      y: illY + illH * TUTORIAL_WARN_LABEL_Y_FRACTION + TUTORIAL_WARN_LABEL_2_GAP,
+      size: TUTORIAL_WARN_LABEL_SIZE,
+      color: '#ef4444',
+      align: 'center',
+    });
+  }
+
+  /**
+   * Draws the cutscene spit projectile in world space.
+   * Called from DungeonScene after entity rendering so it flies over mobs/players.
+   */
+  renderCutsceneProjectile(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this._cutsceneProjectile === null) return;
+    const proj = this._cutsceneProjectile;
+    ctx.save();
+    ctx.translate(proj.x - camX, proj.y - camY);
+    ctx.rotate(proj.angle);
+    drawSpitProjectile(ctx, 0, 0, TILE_SIZE, proj.animFrame);
+    ctx.restore();
   }
 
   private _renderCutsceneUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
