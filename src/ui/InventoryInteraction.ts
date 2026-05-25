@@ -75,8 +75,12 @@ export class InventoryInteraction {
 
   /** Set by context-menu "Equip" selection; DungeonScene reads and clears this. */
   pendingEquipSlot: number | null = null;
+  /** Which container the pending equip slot refers to. */
+  pendingEquipSource: 'inv' | 'hotbar' | null = null;
   /** Set by context-menu "Unequip" selection; DungeonScene reads and clears this. */
   pendingUnequipSlot: number | null = null;
+  /** Which container the pending unequip slot refers to. */
+  pendingUnequipSource: 'inv' | 'hotbar' | null = null;
   /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
   pendingInfoItem: InventoryItem | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
@@ -103,6 +107,10 @@ export class InventoryInteraction {
     isEquipped?: boolean,
   ): string[] {
     if (source === 'hotbar') {
+      if (item.type === 'armor') {
+        const label = isEquipped ? 'Unequip' : 'Equip';
+        return [label, 'Move to Bag', 'Name', 'Description', 'Drop'];
+      }
       return ['Move to Bag', 'Name', 'Description', 'Drop'];
     }
     if (item.type === 'armor') {
@@ -205,8 +213,10 @@ export class InventoryInteraction {
           const action = options[idx];
           if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
+            this.pendingEquipSource = cm.source;
           } else if (action === 'Unequip') {
             this.pendingUnequipSlot = cm.slotIdx;
+            this.pendingUnequipSource = cm.source;
           } else if (action === 'Move to Bag') {
             inventory.moveHotbarToFirstEmptySlot(cm.slotIdx);
           } else if (action === 'Drop') {
@@ -349,7 +359,14 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item && item.canDrop !== false) {
-          this.contextMenu = { source: 'hotbar', slotIdx: i, x: mx, y: my, item };
+          this.contextMenu = {
+            source: 'hotbar',
+            slotIdx: i,
+            x: mx,
+            y: my,
+            item,
+            isEquipped: inventory.hasEquipped(item.id),
+          };
           this.contextMenuHover = -1;
           return;
         }

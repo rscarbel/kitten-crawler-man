@@ -134,6 +134,17 @@ export class Inventory {
     return this.equipment.equip(item);
   }
 
+  /**
+   * Equip the item at `hotbarIdx` in the action bar. The item stays in the
+   * hotbar; equipped state is tracked by item ID, not slot location.
+   * Returns the previously equipped item in that sub-slot (or null).
+   */
+  equipHotbarSlot(hotbarIdx: number): InventoryItem | null {
+    const item = this.actionBar.slots[hotbarIdx];
+    if (!item) return null;
+    return this.equipment.equip(item);
+  }
+
   /** Equip the first instance of `itemId` found in bag slots. */
   equipByItemId(itemId: ItemId): InventoryItem | null {
     const idx = this.bag.slots.findIndex((s) => s?.id === itemId);

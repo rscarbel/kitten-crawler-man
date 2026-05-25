@@ -715,7 +715,17 @@ export class InventoryPanel {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       const r = this.hotbarSlotRect(i, canvas);
       const isDragged = this.drag?.source === 'hotbar' && this.drag.idx === i;
-      this.renderSlot(ctx, r.x, r.y, r.w, inventory.actionBar.slots[i], isDragged, true);
+      const hotbarItem = inventory.actionBar.slots[i];
+      this.renderSlot(
+        ctx,
+        r.x,
+        r.y,
+        r.w,
+        hotbarItem,
+        isDragged,
+        true,
+        hotbarItem !== null && inventory.hasEquipped(hotbarItem.id),
+      );
 
       // Separator line before quest slot
       if (i === QUEST_SLOT_IDX) {

@@ -32,14 +32,6 @@ const LAST_SLIDER_SPACING = 52;
 const MOBILE_SECTION_LABEL_Y_OFFSET = 16;
 const MOBILE_SECTION_LABEL_SIZE = 12;
 const MOBILE_SECTION_Y_SPACING = 32;
-const CAT_TAP_LABEL_Y_OFFSET = 13;
-const CAT_TAP_LABEL_SIZE = 11;
-const CAT_TAP_Y_SPACING = 26;
-const BUTTON_SPACING_GAP = 8;
-const BUTTON_HALF_DIVISOR = 2;
-const BUTTON_HALF_WIDTH_MARGIN = 8;
-const BUTTON_HEIGHT = 36;
-const CAT_TAP_BUTTON_Y_SPACING = 48;
 const CHAT_BUTTON_HEIGHT = 40;
 const CHAT_BUTTON_Y_SPACING = 52;
 
@@ -113,8 +105,6 @@ export function renderSettingsTab(
   bh: number,
   audio: AudioManager,
   setTab: (tab: PauseTab) => void,
-  catMissileDefault: boolean,
-  setCatMissileDefault: (v: boolean) => void,
   onOpenChat: (() => void) | null,
 ): void {
   void bh;
@@ -162,36 +152,6 @@ export function renderSettingsTab(
       color: '#64748b',
     });
     y += MOBILE_SECTION_Y_SPACING;
-
-    drawText(ctx, 'Cat Tap', {
-      x: bx + AUDIO_LABEL_X,
-      y: y + CAT_TAP_LABEL_Y_OFFSET,
-      size: CAT_TAP_LABEL_SIZE,
-      color: '#94a3b8',
-    });
-    y += CAT_TAP_Y_SPACING;
-
-    const halfW = Math.floor((sliderW - BUTTON_HALF_WIDTH_MARGIN) / BUTTON_HALF_DIVISOR);
-
-    addButton(ctx, buttons, {
-      x: sliderX,
-      y,
-      width: halfW,
-      height: BUTTON_HEIGHT,
-      label: 'Scratch',
-      ...(!catMissileDefault ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
-      action: () => setCatMissileDefault(false),
-    });
-    addButton(ctx, buttons, {
-      x: sliderX + halfW + BUTTON_SPACING_GAP,
-      y,
-      width: halfW,
-      height: BUTTON_HEIGHT,
-      label: 'Magic Missile',
-      ...(catMissileDefault ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
-      action: () => setCatMissileDefault(true),
-    });
-    y += CAT_TAP_BUTTON_Y_SPACING;
 
     if (onOpenChat !== null) {
       addButton(ctx, buttons, {

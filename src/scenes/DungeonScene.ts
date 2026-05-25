@@ -1671,7 +1671,10 @@ export class DungeonScene extends GameplayScene {
         TILE_SIZE * CAT_ATTACK_RANGE_TILES,
         this.mobGrid,
       );
-      if (this.pauseMenu.catMissileDefault && this.cat.triggerMissile()) {
+      const hasMissileTome = this.cat.inventory.actionBar.slots.some(
+        (s) => s?.abilityId === 'magic_missile',
+      );
+      if (hasMissileTome && this.cat.triggerMissile()) {
         this.audio?.play('cat_missile_fire');
       } else {
         this.cat.triggerAttack();
@@ -2773,10 +2776,18 @@ export class DungeonScene extends GameplayScene {
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
     if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
       const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
+      const source = this.inventoryPanel.interaction.pendingEquipSource;
       this.inventoryPanel.interaction.pendingEquipSlot = null;
-      const item = active.inventory.bag.slots[slotIdx];
+      this.inventoryPanel.interaction.pendingEquipSource = null;
+      const item =
+        source === 'hotbar'
+          ? active.inventory.actionBar.slots[slotIdx]
+          : active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-        const prev = active.inventory.equip(slotIdx);
+        const prev =
+          source === 'hotbar'
+            ? active.inventory.equipHotbarSlot(slotIdx)
+            : active.inventory.equip(slotIdx);
         if (prev) active.removeItemBonus(prev);
         active.applyItemBonus(item);
       }
@@ -2784,8 +2795,13 @@ export class DungeonScene extends GameplayScene {
 
     if (this.inventoryPanel.interaction.pendingUnequipSlot !== null) {
       const slotIdx = this.inventoryPanel.interaction.pendingUnequipSlot;
+      const source = this.inventoryPanel.interaction.pendingUnequipSource;
       this.inventoryPanel.interaction.pendingUnequipSlot = null;
-      const item = active.inventory.bag.slots[slotIdx];
+      this.inventoryPanel.interaction.pendingUnequipSource = null;
+      const item =
+        source === 'hotbar'
+          ? active.inventory.actionBar.slots[slotIdx]
+          : active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
         active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
         active.removeItemBonus(item);

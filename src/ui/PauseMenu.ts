@@ -58,9 +58,6 @@ export class PauseMenu {
   /** Set by the owning scene so the Settings tab can read/write volumes. */
   audio: AudioManager | null = null;
 
-  /** On mobile: when true, tapping while cat is active fires magic missile instead of scratch. */
-  catMissileDefault = false;
-
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
 
@@ -334,10 +331,6 @@ export class PauseMenu {
             boxH,
             this.audio,
             setTabWithSound,
-            this.catMissileDefault,
-            (v) => {
-              this.catMissileDefault = v;
-            },
             this.onOpenChat,
           );
         }
