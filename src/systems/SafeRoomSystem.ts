@@ -16,6 +16,7 @@ interface SafeRoomEntry {
   mordecaiHomeTileY: number;
   bedTileX: number;
   bedTileY: number;
+  showBed: boolean;
 }
 
 export class SafeRoomSystem implements GameSystem {
@@ -115,6 +116,7 @@ export class SafeRoomSystem implements GameSystem {
           mordecaiHomeTileY: sr.centre.y,
           bedTileX: sr.centre.x + halfW,
           bedTileY: sr.centre.y,
+          showBed: sr.showBed ?? true,
         });
       }
     }
@@ -234,6 +236,7 @@ export class SafeRoomSystem implements GameSystem {
 
   isNearBed(entity: { x: number; y: number }): boolean {
     return this.entries.some((e) => {
+      if (!e.showBed) return false;
       const bx = e.bedTileX * TILE_SIZE;
       const by = e.bedTileY * TILE_SIZE;
       return (
@@ -332,9 +335,11 @@ export class SafeRoomSystem implements GameSystem {
       });
 
       // Bed
-      const bedSx = e.bedTileX * ts - camX;
-      const bedSy = e.bedTileY * ts - camY;
-      this.renderBed(ctx, bedSx, bedSy, ts);
+      if (e.showBed) {
+        const bedSx = e.bedTileX * ts - camX;
+        const bedSy = e.bedTileY * ts - camY;
+        this.renderBed(ctx, bedSx, bedSy, ts);
+      }
 
       // Mordecai (wandered position)
       const msx = e.mordecaiHomeTileX * ts + offsetX - camX;
@@ -359,7 +364,12 @@ export class SafeRoomSystem implements GameSystem {
       const { offsetX } = this.getWanderState(i);
 
       // Sleep prompt near bed
-      if (this.isEntityInSafeRoom(active) && this.isNearBed(active) && !this._isSleeping) {
+      if (
+        e.showBed &&
+        this.isEntityInSafeRoom(active) &&
+        this.isNearBed(active) &&
+        !this._isSleeping
+      ) {
         const bsx = e.bedTileX * TILE_SIZE - camX;
         const bsy = e.bedTileY * TILE_SIZE - camY;
         drawInteractionPrompt(ctx, bsx, bsy, TILE_SIZE, 'Sleep');

@@ -134,6 +134,7 @@ export class GameMap {
   safeRooms: Array<{
     bounds: { x: number; y: number; w: number; h: number };
     centre: { x: number; y: number };
+    showBed?: boolean;
   }> = [];
   /** All boss rooms generated on this map (bounds + centre in tile coords). */
   bossRooms: Array<{

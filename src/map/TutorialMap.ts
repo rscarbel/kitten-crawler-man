@@ -223,6 +223,7 @@ export class TutorialMap extends GameMap {
       {
         bounds: { x: SAFE_ROOM_X1, y: SAFE_ROOM_Y1, w: SAFE_W, h: SAFE_H },
         centre: { x: SAFE_CENTRE_X, y: SAFE_CENTRE_Y },
+        showBed: false,
       },
     ];
 
