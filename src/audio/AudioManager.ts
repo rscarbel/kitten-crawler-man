@@ -9,6 +9,7 @@ const MACHINERY_VOLUME = 0.35;
 const MS_PER_SECOND = 1000;
 const DEFAULT_STOP_MUSIC_FADE_MS = 500;
 const GOBLIN_ENCOUNTER_CHANCE = 0.15;
+const MENU_MUSIC_FADE_MS = 200;
 
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
@@ -432,11 +433,35 @@ export class AudioManager {
     this.keyboardHeroMusicSource = null;
   }
 
+  private musicPaused = false;
+
+  /** Fade music out quickly (e.g. when a menu opens). Idempotent. */
+  pauseMusic(): void {
+    if (this.musicPaused) return;
+    this.musicPaused = true;
+    const now = this.ctx.currentTime;
+    this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
+    this.musicGain.gain.linearRampToValueAtTime(0, now + MENU_MUSIC_FADE_MS / MS_PER_SECOND);
+  }
+
+  /** Fade music back in (e.g. when a menu closes). Idempotent. */
+  resumeMusic(): void {
+    if (!this.musicPaused) return;
+    this.musicPaused = false;
+    const now = this.ctx.currentTime;
+    this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
+    this.musicGain.gain.linearRampToValueAtTime(
+      this.musicVol,
+      now + MENU_MUSIC_FADE_MS / MS_PER_SECOND,
+    );
+  }
+
   /**
    * Stop the currently-playing music track.
    * @param fadeMs - fade-out duration in ms (default: 500)
    */
   stopMusic(fadeMs = DEFAULT_STOP_MUSIC_FADE_MS): void {
+    this.musicPaused = false;
     this.pendingMusic = null;
     const src = this.currentMusicSource;
     const gain = this.currentMusicGain;

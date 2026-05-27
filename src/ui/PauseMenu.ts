@@ -87,27 +87,34 @@ export class PauseMenu {
   open(): void {
     this._isOpen = true;
     this.tab = 'main';
+    this.audio?.pauseMusic();
   }
 
   openToInventory(): void {
     this._isOpen = true;
     this.tab = 'inventory';
+    this.audio?.pauseMusic();
   }
 
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
+    this.audio?.pauseMusic();
   }
 
   close(): void {
     this._isOpen = false;
     this._showResetConfirm = false;
+    this.audio?.resumeMusic();
   }
 
   toggle(): void {
     this._isOpen = !this._isOpen;
     if (this._isOpen) {
       this.tab = 'main';
+      this.audio?.pauseMusic();
+    } else {
+      this.audio?.resumeMusic();
     }
   }
 
