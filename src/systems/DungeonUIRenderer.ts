@@ -343,6 +343,8 @@ export interface MobileButtonState {
   mongoSystem: MongoSystem;
   inventoryPanel: InventoryPanel;
   gearPanel: GearPanel;
+  hideSwitchButton?: boolean;
+  hideFollowerButton?: boolean;
 }
 
 export function renderMobileButtons(
@@ -406,8 +408,12 @@ export function renderMobileButtons(
   };
 
   const humanActive = state.human.isActive;
-  drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
-  renderFollowerButton(ctx, canvas, touch, state.companion, humanActive);
+  if (!state.hideSwitchButton) {
+    drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
+  }
+  if (!state.hideFollowerButton) {
+    renderFollowerButton(ctx, canvas, touch, state.companion, humanActive);
+  }
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
   // Mongo summon button — above the switch button when cat is active

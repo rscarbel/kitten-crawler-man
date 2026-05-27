@@ -27,7 +27,7 @@ export type AchievementId =
   | 'quest_defend_npc';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
-export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy';
+export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
 export type PlayerTarget = 'human' | 'cat' | 'both';
 
 export interface LootBox {
@@ -97,6 +97,12 @@ export interface BoxContents {
   coins: number;
   /** Optional extra item id and quantity. */
   bonus?: { id: string; quantity: number };
+  /**
+   * When present, overrides the default reward-line rendering in LootBoxOpener.
+   * Use for boxes whose actual item grants are handled outside the normal path
+   * (e.g. tutorial rewards delivered by TutorialController).
+   */
+  displayLines?: ReadonlyArray<string>;
 }
 
 const BOX_CONTENTS = {
@@ -114,6 +120,7 @@ const BOX_CONTENTS = {
       coins: BRONZE_SPICY_COINS,
       bonus: { id: 'goblin_dynamite', quantity: 1 },
     },
+    Tutorial: { coins: 0 },
   },
   Silver: {
     Adventurer: { potions: 3, coins: 20 },
@@ -123,6 +130,7 @@ const BOX_CONTENTS = {
       coins: 25,
       bonus: { id: 'goblin_dynamite', quantity: 2 },
     },
+    Tutorial: { coins: 0 },
   },
   Gold: {
     Adventurer: { potions: 4, coins: 35 },
@@ -131,6 +139,10 @@ const BOX_CONTENTS = {
       potions: 3,
       coins: 40,
       bonus: { id: 'goblin_dynamite', quantity: 3 },
+    },
+    Tutorial: {
+      coins: 0,
+      displayLines: ['+1 Smush Ability', '+10 Health Potions', '+1 Enchanted BigBoi Boxers'],
     },
   },
   Legendary: {
@@ -141,6 +153,7 @@ const BOX_CONTENTS = {
       coins: 60,
       bonus: { id: 'goblin_dynamite', quantity: 4 },
     },
+    Tutorial: { coins: 0 },
   },
   Celestial: {
     Adventurer: { potions: 6, coins: 100 },
@@ -150,6 +163,7 @@ const BOX_CONTENTS = {
       coins: 80,
       bonus: { id: 'goblin_dynamite', quantity: 5 },
     },
+    Tutorial: { coins: 0 },
   },
 } as const satisfies Record<BoxTier, Record<BoxCategory, BoxContents>>;
 

@@ -62,6 +62,9 @@ const MENU_FOOTER_Y_OFFSET = 18;
 const MENU_FOOTER_SIZE = 11;
 const MENU_FOOTER_COLOR = '#4a6680';
 
+// Overlay constants for restricted buttons
+const RESTRICTED_DIM_ALPHA = 0.7;
+
 export class FollowerMenu {
   private _isOpen = false;
   private _buttonRects: Rect[] = [];
@@ -70,6 +73,12 @@ export class FollowerMenu {
   onDoNotMove: (() => void) | null = null;
   onSetAggressive: (() => void) | null = null;
   onSetPassive: (() => void) | null = null;
+
+  /**
+   * When non-null, only the button at this index is clickable.
+   * All other buttons are dimmed to indicate they are unavailable.
+   */
+  restrictedToButtonIndex: number | null = null;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -89,6 +98,9 @@ export class FollowerMenu {
     for (let i = 0; i < this._buttonRects.length; i++) {
       const r = this._buttonRects[i];
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        if (this.restrictedToButtonIndex !== null && i !== this.restrictedToButtonIndex) {
+          return true; // Consume click but do nothing — button is restricted
+        }
         this._isOpen = false;
         callbacks[i]?.();
         return true;
@@ -181,11 +193,18 @@ export class FollowerMenu {
         this._buttonRects[item.idx] = r;
 
         // Button fill + border
+        const isRestricted =
+          this.restrictedToButtonIndex !== null && item.idx !== this.restrictedToButtonIndex;
         ctx.fillStyle = item.active ? BUTTON_ACTIVE_BG : BUTTON_INACTIVE_BG;
         ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.strokeStyle = item.active ? BUTTON_ACTIVE_BORDER : BUTTON_INACTIVE_BORDER;
         ctx.lineWidth = item.active ? BUTTON_ACTIVE_BORDER_WIDTH : BUTTON_INACTIVE_BORDER_WIDTH;
         ctx.strokeRect(r.x, r.y, r.w, r.h);
+
+        if (isRestricted) {
+          ctx.fillStyle = `rgba(0, 0, 0, ${RESTRICTED_DIM_ALPHA})`;
+          ctx.fillRect(r.x, r.y, r.w, r.h);
+        }
 
         // Icon (large, left side)
         ctx.font = `bold ${BUTTON_ICON_FONT_SIZE}px monospace`;

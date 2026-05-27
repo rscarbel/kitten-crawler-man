@@ -37,7 +37,7 @@ import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
 import { TreasureChestSystem } from '../systems/TreasureChestSystem';
-import { ChestRewardDialog } from '../ui/ChestRewardDialog';
+import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
@@ -64,6 +64,10 @@ import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
 import { DungeonInputHandler } from '../systems/DungeonInputHandler';
 import { GameplayScene } from './GameplayScene';
+import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
+import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
+import { TutorialInventoryInteraction } from '../ui/TutorialInventoryInteraction';
+import { ITEM_DEF } from '../core/ItemDefs';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
@@ -123,6 +127,8 @@ export interface DungeonSceneOptions {
   }) => void;
   /** Shared AudioManager instance — persists across scene transitions. */
   audio?: AudioManager;
+  /** When provided, the scene runs in tutorial mode using a hand-crafted map and guided state machine. */
+  tutorialController?: TutorialController;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -395,6 +401,7 @@ export class DungeonScene extends GameplayScene {
     | undefined;
 
   private readonly audio: AudioManager | null;
+  private readonly tutorial: TutorialController | null = null;
 
   constructor(
     private readonly levelDef: LevelDef,
@@ -404,43 +411,80 @@ export class DungeonScene extends GameplayScene {
   ) {
     super(input, sceneManager);
 
-    this.gameMap =
-      options?.existingMap ??
-      new GameMap({
-        mapSize: levelDef.mapSize,
-        tileHeight: TILE_SIZE,
-        numBossRooms: levelDef.bossRooms?.length ?? 1,
-        numSafeRooms: 2,
-        numStairwellsOverride: levelDef.numStairwells,
-        mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-        hasArena: levelDef.hasArena ?? false,
-        bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
-        hasSpiderLab: levelDef.hasSpiderLab ?? false,
-      });
-    this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
+    const tutorialController = options?.tutorialController ?? null;
+    let spawnTileX = 0;
+    let spawnTileY = 0;
 
-    const spawn = options?.spawnAt ?? this.gameMap.startTile;
-    const { x: sx, y: sy } = spawn;
-    this.pm = new PlayerManager(sx, sy);
+    if (tutorialController !== null) {
+      const tutMap = new TutorialMap();
+      this.gameMap = tutMap;
+      this.tutorial = tutorialController;
+      this.levelTimerFrames = this.LEVEL_TIME_LIMIT;
 
-    if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
-    if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
-    this.pm.setPositions(sx, sy);
+      spawnTileX = tutMap.humanStartTile.x;
+      spawnTileY = tutMap.humanStartTile.y;
+      this.pm = new PlayerManager(spawnTileX, spawnTileY);
+      // Place cat at its own spawn room, separated from the human
+      this.pm.cat.x = tutMap.catStartTile.x * TILE_SIZE;
+      this.pm.cat.y = tutMap.catStartTile.y * TILE_SIZE;
 
-    this.floorEntryHumanSnap = options?.floorEntryHumanSnap ?? snapPlayer(this.human);
-    this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
+      tutorialController.initializePlayers(this.human, this.cat);
+      this.floorEntryHumanSnap = snapPlayer(this.human);
+      this.floorEntryCatSnap = snapPlayer(this.cat);
 
-    this.mobs = spawnForLevel(levelDef, this.gameMap);
-    this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
-
-    // Treasure room mobs (extra enemies guarding wooden chests)
-    if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
-      const treasureMobs = spawnTreasureRoomMobs(
-        this.gameMap.treasureRooms,
-        levelDef,
-        this.gameMap,
+      this.mobs = [...tutorialController.allMobs];
+      for (const mob of this.mobs) {
+        mob.setMap(tutMap);
+      }
+      // Tutorial chest — unlocked immediately since there are no mob guards
+      this.treasureChests.addWoodenChest(
+        TUTORIAL_CHEST_POS.x,
+        TUTORIAL_CHEST_POS.y,
+        TUTORIAL_TREASURE_ROOM_BOUNDS,
+        { coins: 0, items: [] },
+        false,
       );
-      this.mobs.push(...treasureMobs);
+      this.gameMap.blockTilePermanently(TUTORIAL_CHEST_POS.x, TUTORIAL_CHEST_POS.y);
+    } else {
+      this.gameMap =
+        options?.existingMap ??
+        new GameMap({
+          mapSize: levelDef.mapSize,
+          tileHeight: TILE_SIZE,
+          numBossRooms: levelDef.bossRooms?.length ?? 1,
+          numSafeRooms: 2,
+          numStairwellsOverride: levelDef.numStairwells,
+          mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
+          hasArena: levelDef.hasArena ?? false,
+          bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
+          hasSpiderLab: levelDef.hasSpiderLab ?? false,
+        });
+      this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
+
+      const spawn = options?.spawnAt ?? this.gameMap.startTile;
+      spawnTileX = spawn.x;
+      spawnTileY = spawn.y;
+      this.pm = new PlayerManager(spawnTileX, spawnTileY);
+
+      if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
+      if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
+      this.pm.setPositions(spawnTileX, spawnTileY);
+
+      this.floorEntryHumanSnap = options?.floorEntryHumanSnap ?? snapPlayer(this.human);
+      this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
+
+      this.mobs = spawnForLevel(levelDef, this.gameMap);
+      this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
+
+      // Treasure room mobs (extra enemies guarding wooden chests)
+      if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
+        const treasureMobs = spawnTreasureRoomMobs(
+          this.gameMap.treasureRooms,
+          levelDef,
+          this.gameMap,
+        );
+        this.mobs.push(...treasureMobs);
+      }
     }
 
     this.grotesqueSpiders = this.mobs.filter(
@@ -453,7 +497,7 @@ export class DungeonScene extends GameplayScene {
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     this.miniMap = new MiniMapSystem(this.gameMap);
-    this.safeRoom = new SafeRoomSystem(this.gameMap, sx, sy, this.levelDef.id);
+    this.safeRoom = new SafeRoomSystem(this.gameMap, spawnTileX, spawnTileY, this.levelDef.id);
     this.bossRoom = new BossRoomSystem(
       this.gameMap,
       this.miniMap,
@@ -485,7 +529,16 @@ export class DungeonScene extends GameplayScene {
     this.dynamite = new DynamiteSystem(this.gameMap);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
-    this.companion = new CompanionSystem(this.gameMap, sx, sy);
+    this.companion = new CompanionSystem(this.gameMap, spawnTileX, spawnTileY);
+
+    if (tutorialController !== null) {
+      // Both players start anchored in the tutorial so neither chases the other
+      // across separated spawn rooms. Players can opt into follow later via the
+      // follower menu once the tutorial unlocks it.
+      this.companion.setDoNotMove(this.cat, true);
+      this.companion.setDoNotMove(this.human, false);
+    }
+
     this.followerMenu.onFollowMe = () => {
       const companionIsCat = this.human.isActive;
       const companion = companionIsCat ? this.cat : this.human;
@@ -519,6 +572,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_change_follower');
       this.companion.setFollowMe(this.human.isActive);
       this.inactive().autoTarget = null;
+      this.tutorial?.onFollowMeSelected();
     };
     this.followerMenu.onDoNotMove = () => {
       this.audio?.play('menu_change_follower');
@@ -604,7 +658,16 @@ export class DungeonScene extends GameplayScene {
 
     this.pauseMenu = new PauseMenu();
     this.deathScreen = new DeathScreen();
-    this.inventoryPanel = new InventoryPanel();
+
+    if (tutorialController !== null) {
+      const tutInteraction = new TutorialInventoryInteraction();
+      tutInteraction.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
+      tutInteraction.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
+      this.inventoryPanel = new InventoryPanel(tutInteraction);
+    } else {
+      this.inventoryPanel = new InventoryPanel();
+    }
+
     this.gearPanel = new GearPanel();
 
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
@@ -617,6 +680,13 @@ export class DungeonScene extends GameplayScene {
       this.cat,
       options?.audio ?? null,
     );
+
+    if (tutorialController !== null) {
+      const tut = tutorialController;
+      this.achievementUI.onAllBoxesOpened = () => {
+        tut.onHumanRewardDialogDismissed(this.human);
+      };
+    }
 
     this.floorEntryHumanAchievements =
       options?.floorEntryHumanAchievements ?? this.humanAchievements.clone();
@@ -697,6 +767,26 @@ export class DungeonScene extends GameplayScene {
 
     // Wire chest opened callback
     this.treasureChests.setOnOpen((chest) => {
+      const tutorial = this.tutorial;
+      if (tutorial !== null && tutorial.state === 'CAT_INSIDE_TREASURE_ROOM') {
+        const catRewardSplit: ChestLootSplit = {
+          humanLoot: { coins: 0, items: [] },
+          catLoot: {
+            coins: 0,
+            items: [
+              { id: 'magic_missile_tome', quantity: 1 },
+              { id: 'health_potion', quantity: 10 },
+            ],
+          },
+          displayLabels: { magic_missile_tome: 'Magic Missile Ability' },
+        };
+        this.chestRewardDialog.open(chest, catRewardSplit, () => {
+          tutorial.onCatRewardDialogDismissed(this.cat);
+        });
+        this.audio?.play('opening_treasure_chest');
+        return;
+      }
+
       const split = chest.loot !== null ? splitChestLoot(chest.loot) : null;
       if (split !== null) {
         for (const item of split.humanLoot.items) {
@@ -708,6 +798,7 @@ export class DungeonScene extends GameplayScene {
         }
         this.cat.coins += split.catLoot.coins;
       }
+      this.tutorial?.onChestOpened();
       this.chestRewardDialog.open(chest, split);
       this.audio?.play('opening_treasure_chest');
     });
@@ -791,18 +882,31 @@ export class DungeonScene extends GameplayScene {
 
       if (killer === this.human && this.humanAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Human' });
+        if (this.tutorial !== null) {
+          this.humanAchievements.grantBox('Gold', 'Tutorial', 'first_blood');
+        }
       }
       if (killer === this.cat && this.catAchievements.tryUnlock('first_blood')) {
         bus.emit('achievementUnlocked', { achievementId: 'first_blood', player: 'Cat' });
+        if (this.tutorial !== null) {
+          const emptySlot = this.cat.inventory.bag.slots.findIndex((s) => s === null);
+          if (emptySlot >= 0) {
+            this.cat.inventory.bag.slots[emptySlot] = { ...ITEM_DEF.health_potion, quantity: 10 };
+          }
+        }
       }
 
-      if (killer === this.human && (mob.killType === 'melee' || mob.killType === 'smush')) {
+      if (
+        this.tutorial === null &&
+        killer === this.human &&
+        (mob.killType === 'melee' || mob.killType === 'smush')
+      ) {
         if (this.humanAchievements.tryUnlock('smush')) {
           bus.emit('achievementUnlocked', { achievementId: 'smush', player: 'Human' });
         }
       }
 
-      if (killer === this.cat && mob.killType === 'missile') {
+      if (this.tutorial === null && killer === this.cat && mob.killType === 'missile') {
         if (this.catAchievements.tryUnlock('magic_touch')) {
           bus.emit('achievementUnlocked', { achievementId: 'magic_touch', player: 'Cat' });
         }
@@ -898,15 +1002,17 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('bossDefeated', (e) => {
-      if (this.humanAchievements.tryUnlock('boss_slayer')) {
-        bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Human' });
-      } else {
-        this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
-      }
-      if (this.catAchievements.tryUnlock('boss_slayer')) {
-        bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Cat' });
-      } else {
-        this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+      if (this.tutorial === null) {
+        if (this.humanAchievements.tryUnlock('boss_slayer')) {
+          bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Human' });
+        } else {
+          this.humanAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+        }
+        if (this.catAchievements.tryUnlock('boss_slayer')) {
+          bus.emit('achievementUnlocked', { achievementId: 'boss_slayer', player: 'Cat' });
+        } else {
+          this.catAchievements.grantBox('Bronze', 'Boss', 'boss_slayer');
+        }
       }
       const bossLabel = `Defeated boss: ${e.bossType.replace(/_/g, ' ')}`;
       this.humanAchievements.logRecentEvent(bossLabel);
@@ -926,10 +1032,10 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('safeRoomEntered', () => {
-      if (this.humanAchievements.tryUnlock('safe_haven')) {
+      if (this.tutorial === null && this.humanAchievements.tryUnlock('safe_haven')) {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Human' });
       }
-      if (this.catAchievements.tryUnlock('safe_haven')) {
+      if (this.tutorial === null && this.catAchievements.tryUnlock('safe_haven')) {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
       }
       this.onSaveProgress?.({
@@ -966,10 +1072,16 @@ export class DungeonScene extends GameplayScene {
     // Delay intro ticking until the AudioContext is running so the intro sound
     // plays in sync with the visual. On desktop this is nearly instant; on mobile
     // it waits for the first user gesture and shows a "Tap to begin" prompt.
+    const TUTORIAL_MUSIC_VOLUME = 0.25;
     const startIntro = (): void => {
       this.introStarted = true;
-      this.audio?.playWhenReady('level_begins');
-      this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
+      if (this.tutorial !== null) {
+        this.audio?.setMusicVolume(TUTORIAL_MUSIC_VOLUME);
+        this.audio?.playMusic('tutorial_island', { fadeInMs: MUSIC_FADE_IN_MS });
+      } else {
+        this.audio?.playWhenReady('level_begins');
+        this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
+      }
     };
     if (this.audio === null || this.audio.isRunning) {
       startIntro();
@@ -1052,6 +1164,7 @@ export class DungeonScene extends GameplayScene {
         }
         const hpBefore = active.hp;
         if (active.usePotion()) {
+          this.tutorial?.onPotionUsed();
           this.bus.emit('healingPotionUsed', {
             player: active === this.human ? 'Human' : 'Cat',
             hpRestored: active.hp - hpBefore,
@@ -1106,7 +1219,11 @@ export class DungeonScene extends GameplayScene {
     this.bus.clear();
   }
 
-  private triggerSwitchCharacter(): void {
+  private triggerSwitchCharacter(force = false): void {
+    if (!force && this.tutorial !== null && !this.tutorial.canSwitchCharacter) {
+      this.audio?.play('error');
+      return;
+    }
     if (this.inactive().isKnockedOut) {
       this.audio?.play('error');
       return;
@@ -1370,6 +1487,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerCompanionFollow(): void {
+    if (this.tutorial !== null && !this.tutorial.showFollowerButton) return;
     this.followerMenu.open();
   }
 
@@ -1574,6 +1692,8 @@ export class DungeonScene extends GameplayScene {
         abilityManager: this.floorEntryAbilityManager.clone(),
         mongoUnlocked: this.mongoSystem.unlocked,
         audio: this.audio ?? undefined,
+        tutorialController:
+          this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
       }),
     );
   }
@@ -1599,6 +1719,21 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
+    if (this.tutorial?.showNearGoblinDialog === true) {
+      this.tutorial.dismissNearGoblinDialog();
+      return;
+    }
+
+    if (this.tutorial?.showTutorialMordecaiDialog === true) {
+      this.tutorial.advanceTutorialMordecaiDialog();
+      return;
+    }
+
+    if (this.tutorial?.showMordecaiReminderDialog === true) {
+      this.tutorial.advanceMordecaiReminderDialog();
+      return;
+    }
+
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.mordecaiDialogOpen = false;
       return;
@@ -1608,19 +1743,24 @@ export class DungeonScene extends GameplayScene {
       if (this.safeRoom.isNearBed(active)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(active)) {
-        const humanEvents = this.humanAchievements.getTopRecentEvents(
-          ACHIEVEMENT_RECENT_EVENTS_LIMIT,
-        );
-        const catEvents = this.catAchievements.getTopRecentEvents(ACHIEVEMENT_RECENT_EVENTS_LIMIT);
-        const merged = [...humanEvents, ...catEvents]
-          .sort((a, b) => a.secondsAgo - b.secondsAgo)
-          .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
-        const responsePromise = aiAdapter.chatWithMordecai({
-          recentEvents: merged,
-          humanLevel: this.human.level,
-          catLevel: this.cat.level,
-        });
-        this.safeRoom.openMordecaiDialog(responsePromise);
+        const tutorialHandled = this.tutorial?.onMordecaiInteracted() ?? false;
+        if (!tutorialHandled) {
+          const humanEvents = this.humanAchievements.getTopRecentEvents(
+            ACHIEVEMENT_RECENT_EVENTS_LIMIT,
+          );
+          const catEvents = this.catAchievements.getTopRecentEvents(
+            ACHIEVEMENT_RECENT_EVENTS_LIMIT,
+          );
+          const merged = [...humanEvents, ...catEvents]
+            .sort((a, b) => a.secondsAgo - b.secondsAgo)
+            .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
+          const responsePromise = aiAdapter.chatWithMordecai({
+            recentEvents: merged,
+            humanLevel: this.human.level,
+            catLevel: this.cat.level,
+          });
+          this.safeRoom.openMordecaiDialog(responsePromise);
+        }
       }
       return;
     }
@@ -1645,6 +1785,8 @@ export class DungeonScene extends GameplayScene {
         return;
       }
     }
+    if (this.tutorial !== null && !this.tutorial.canAttack) return;
+
     // On mobile tap: aim toward tap position before snapping to nearest mob
     if (tapScreenX !== undefined && tapScreenY !== undefined) {
       const cam = this.camera();
@@ -1685,6 +1827,14 @@ export class DungeonScene extends GameplayScene {
   private triggerHotbarActivation(hotbarIdx: number): void {
     const active = this.active();
     const slot = active.inventory.actionBar.slots[hotbarIdx];
+    if (this.tutorial?.blockBoxersActivation === true && slot?.id === 'enchanted_bigboi_boxers') {
+      this.audio?.play('error');
+      this._companionErrorMsg = {
+        text: 'The boxers are already doing their job — just equip them!',
+        framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
+      };
+      return;
+    }
     if (slot?.id === 'health_potion') {
       if (active.potionCooldownFrames > 0) {
         this.audio?.play('error_taking_action');
@@ -1692,6 +1842,7 @@ export class DungeonScene extends GameplayScene {
       }
       const hpBefore = active.hp;
       if (active.usePotion()) {
+        this.tutorial?.onPotionUsed();
         const playerName = active === this.human ? 'Human' : 'Cat';
         this.bus.emit('healingPotionUsed', {
           player: playerName,
@@ -1736,6 +1887,21 @@ export class DungeonScene extends GameplayScene {
 
   handleClick(mx: number, my: number): void {
     notifyButtonClick(mx, my);
+    if (this.tutorial?.showNearGoblinDialog === true) {
+      this.tutorial.dismissNearGoblinDialog();
+      return;
+    }
+
+    if (this.tutorial?.showTutorialMordecaiDialog === true) {
+      this.tutorial.advanceTutorialMordecaiDialog();
+      return;
+    }
+
+    if (this.tutorial?.showMordecaiReminderDialog === true) {
+      this.tutorial.advanceMordecaiReminderDialog();
+      return;
+    }
+
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.handleClick(mx, my);
       return;
@@ -1746,6 +1912,7 @@ export class DungeonScene extends GameplayScene {
     if (this.achievementUI.handleClick(mx, my)) return;
 
     if (this.followerMenu.isOpen) {
+      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.handleClick(mx, my);
       return;
     }
@@ -1812,6 +1979,22 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.pauseMenu.isOpen) {
+      const allowedLabel = this.tutorial?.getAllowedMenuButtonLabel(this.pauseMenu.currentTab);
+      if (allowedLabel !== undefined && allowedLabel !== null) {
+        // Tutorial is guiding: only permit the highlighted button to be clicked
+        const btn = this.pauseMenu.renderedButtons.find((b) => b.label === allowedLabel);
+        if (btn !== undefined) {
+          const { x, y, w, h } = btn;
+          if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+            if (btn.positionedAction !== undefined) {
+              btn.positionedAction(mx, my);
+            } else {
+              btn.action?.();
+            }
+          }
+        }
+        return;
+      }
       this.pauseMenu.handleClick(mx, my);
       return;
     }
@@ -1967,7 +2150,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     // Only tick once audio is ready so the intro visual and sound start together.
-    if (this.introStarted) {
+    if (this.introStarted && this.tutorial === null) {
       this.dungeonIntro.tick();
     }
 
@@ -2013,6 +2196,9 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
+    if (this.tutorial?.showNearGoblinDialog === true) return;
+    if (this.tutorial?.showTutorialMordecaiDialog === true) return;
+
     this.updateGameplay();
   }
 
@@ -2052,6 +2238,7 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
+    this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
     this.spiderQuest.render(ctx, camX, camY, this.active());
     // Puddles render before entities so players/mobs always appear on top of them
@@ -2123,7 +2310,7 @@ export class DungeonScene extends GameplayScene {
       this.touch.miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
 
-    if (!this.levelDef.isSafeLevel && !this.gameOver) {
+    if (!this.levelDef.isSafeLevel && !this.gameOver && this.tutorial === null) {
       UIRenderer.renderLevelTimer(ctx, canvas, this.miniMap, this.levelTimerFrames);
     }
 
@@ -2204,8 +2391,10 @@ export class DungeonScene extends GameplayScene {
           mongoSystem: this.mongoSystem,
           inventoryPanel: this.inventoryPanel,
           gearPanel: this.gearPanel,
+          hideSwitchButton: this.tutorial !== null && !this.tutorial.showSwitchButton,
+          hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
         });
-      else
+      else if (this.tutorial === null || this.tutorial.showFollowerButton)
         UIRenderer.renderFollowerButton(
           ctx,
           canvas,
@@ -2215,7 +2404,8 @@ export class DungeonScene extends GameplayScene {
         );
     }
 
-    if (this.followerMenu.isOpen)
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.render(
         ctx,
         canvas,
@@ -2223,6 +2413,7 @@ export class DungeonScene extends GameplayScene {
         this.companion.getCombatStance(this.human.isActive),
         this.human.isActive,
       );
+    }
 
     if (this.gameOver) {
       this.deathScreen.render(ctx, canvas);
@@ -2256,14 +2447,17 @@ export class DungeonScene extends GameplayScene {
     }
 
     UIRenderer.drawPauseButton(ctx, canvas, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
-    this.achievementUI.drawAchievementIcon(
-      ctx,
-      canvas,
-      this.miniMap,
-      this.gameOver,
-      this.pauseMenu.isOpen,
-    );
-    this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
+    const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
+    if (showAchievUI) {
+      this.achievementUI.drawAchievementIcon(
+        ctx,
+        canvas,
+        this.miniMap,
+        this.gameOver,
+        this.pauseMenu.isOpen,
+      );
+      this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
+    }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
@@ -2297,20 +2491,22 @@ export class DungeonScene extends GameplayScene {
 
     this.abilityLevelUpDialog.render(ctx, canvas);
 
-    this.dungeonIntro.render(ctx, canvas);
+    if (this.tutorial === null) {
+      this.dungeonIntro.render(ctx, canvas);
 
-    if (this.dungeonIntro.isActive && !this.introStarted) {
-      const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
-      drawText(ctx, hint, {
-        x: Math.round(canvas.width / 2),
-        y: Math.round(canvas.height * HEALTH_BAR_COLOR_THRESHOLD),
-        align: 'center',
-        size: 18,
-        bold: true,
-        color: '#ffffff',
-        outline: true,
-        glow: true,
-      });
+      if (this.dungeonIntro.isActive && !this.introStarted) {
+        const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
+        drawText(ctx, hint, {
+          x: Math.round(canvas.width / 2),
+          y: Math.round(canvas.height * HEALTH_BAR_COLOR_THRESHOLD),
+          align: 'center',
+          size: 18,
+          bold: true,
+          color: '#ffffff',
+          outline: true,
+          glow: true,
+        });
+      }
     }
 
     if (this._companionErrorMsg !== null) {
@@ -2353,6 +2549,54 @@ export class DungeonScene extends GameplayScene {
         this.mobs,
       );
     }
+
+    if (this.tutorial !== null) {
+      const { x: tutCamX, y: tutCamY } = this.camera();
+      const activePlayer = this.active();
+      const pb = UIRenderer.pauseButtonRect(canvas, this.miniMap);
+      const invPlayer = this.inventoryPlayer();
+      const bagSlots = invPlayer.inventory.bag.slots;
+      const smushIdx = bagSlots.findIndex((s) => s?.id === 'smush_tome');
+      const potionIdx = bagSlots.findIndex((s) => s?.id === 'health_potion');
+      const boxersIdx = bagSlots.findIndex((s) => s?.id === 'enchanted_bigboi_boxers');
+      const missileIdx = bagSlots.findIndex((s) => s?.id === 'magic_missile_tome');
+      const HOTBAR_SLOT_COUNT = 8;
+      const tutRenderCtx: TutorialRenderContext = {
+        isPlayerInSafeRoom: this.safeRoom.isEntityInSafeRoom(activePlayer),
+        pauseMenuOpen: this.pauseMenu.isOpen,
+        pauseMenuTab: this.pauseMenu.isOpen ? this.pauseMenu.currentTab : null,
+        pauseMenuButtons: this.pauseMenu.renderedButtons,
+        inventoryPanelOpen: this.inventoryPanel.isOpen,
+        gearPanelOpen: this.gearPanel.isOpen,
+        pauseButtonRect: { x: pb.x, y: pb.y, w: pb.w, h: pb.h },
+        bagItemRects: {
+          smush_tome:
+            smushIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(smushIdx, canvas) ?? null) : null,
+          health_potion:
+            potionIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(potionIdx, canvas) ?? null) : null,
+          enchanted_bigboi_boxers:
+            boxersIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(boxersIdx, canvas) ?? null) : null,
+          magic_missile_tome:
+            missileIdx >= 0
+              ? (this.inventoryPanel.getBagSlotRect(missileIdx, canvas) ?? null)
+              : null,
+        },
+        hotbarSlotRects: Array.from({ length: HOTBAR_SLOT_COUNT }, (_, i) =>
+          this.inventoryPanel.getHotbarSlotRect(i, canvas),
+        ),
+        isDragActive: this.inventoryPanel.interaction.isDragging,
+        isAchievementNotifActive: this.achievementUI.notifActive,
+      };
+      this.tutorial.renderOverlay(
+        ctx,
+        canvas,
+        tutCamX,
+        tutCamY,
+        activePlayer.x,
+        activePlayer.y,
+        tutRenderCtx,
+      );
+    }
   }
 
   private buildSystemContext(): SystemContext {
@@ -2387,9 +2631,13 @@ export class DungeonScene extends GameplayScene {
       player,
       this.camera(),
     );
-    if (!this.spiderQuest.playerLocked) {
+    const catMoveBlocked = this.tutorial !== null && !this.tutorial.canCatMove && this.cat.isActive;
+    if (!this.spiderQuest.playerLocked && !catMoveBlocked) {
       applyMovement(player, move, this.gameMap);
     }
+
+    // Tutorial gate and ledge constraints — applied after movement
+    this.tutorial?.applyGateConstraints(this.human, this.cat);
 
     if (player.isMoving) {
       this.audio?.startWalkingLoop();
@@ -2402,6 +2650,7 @@ export class DungeonScene extends GameplayScene {
     const nowInSafeRoom = this.pm.isAnySafe(this.safeRoom);
     if (!this.wasInSafeRoom && nowInSafeRoom) {
       this.bus.emit('safeRoomEntered', {});
+      this.tutorial?.onSafeRoomEntered();
     }
     this.wasInSafeRoom = nowInSafeRoom;
 
@@ -2440,6 +2689,44 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_open');
     }
     this.juicerRoom.update(ctx);
+    // Advance tutorial state machine; anchor companion when tutorial requires it
+    if (this.tutorial !== null) {
+      this.tutorial.update(this.human, this.cat);
+      if (this.tutorial.consumeGateSound()) {
+        this.audio?.play('gate_opening');
+      }
+      if (this.tutorial.needsSwitchToCat) {
+        this.tutorial.needsSwitchToCat = false;
+        this.triggerSwitchCharacter(true);
+      } else if (this.tutorial.needsSwitchToHuman) {
+        this.tutorial.needsSwitchToHuman = false;
+        this.triggerSwitchCharacter(true);
+      }
+      if (this.tutorial.shouldAnchorCurrentCompanion) {
+        this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+      }
+
+      if (this.tutorial.needsCameraPanStart) {
+        this.tutorial.needsCameraPanStart = false;
+        const canvas = this.sceneManager.canvas;
+        const mapPx = this.gameMap.structure.length * TILE_SIZE;
+        const halfW = canvas.width / 2;
+        const halfH = canvas.height / 2;
+        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPx - canvas.width);
+        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPx - canvas.height);
+        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPx - canvas.width);
+        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPx - canvas.height);
+        this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
+      }
+
+      if (this.tutorial.needsAutoCloseMenus) {
+        this.tutorial.needsAutoCloseMenus = false;
+        this.pauseMenu.close();
+        this.inventoryPanel.isOpen = false;
+        this._inventoryOverridePlayer = null;
+        this.gearPanel.isOpen = false;
+      }
+    }
     this.companion.update(ctx);
     if (this.cat.pendingAutoFireSound) {
       this.cat.pendingAutoFireSound = false;
@@ -2671,7 +2958,12 @@ export class DungeonScene extends GameplayScene {
       this.audio?.playRandom(['cat_effect_damage_1', 'cat_effect_damage_2', 'cat_effect_damage_3']);
     }
 
-    this.playerTick.update(ctx);
+    if (this.tutorial?.suppressCatRegen === true) {
+      this.playerTick.tickRegenHumanOnly(this.human);
+      this.playerTick.tickAutoPotion(this.human, this.cat);
+    } else {
+      this.playerTick.update(ctx);
+    }
     this.loot.update(ctx);
     this.treasureChests.update(this.mobs);
     if (this.loot.drainPickups() > 0) {
@@ -2697,6 +2989,9 @@ export class DungeonScene extends GameplayScene {
     this.stairwell.detect(this.active());
     if (!wasStairwellOpen && this.stairwell.menuOpen) {
       this.bus.emit('stairwellFound', {});
+    }
+    if (this.stairwell.menuOpen && this.tutorial !== null && !this.tutorial.canUseStairwell) {
+      this.stairwell.closeMenu();
     }
     this.building?.detect(this.active());
 
@@ -2850,6 +3145,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   private camera(): { x: number; y: number } {
+    const tutorialCam = this.tutorial?.cameraOverride;
+    if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
+
     const player = this.active();
     const canvas = this.sceneManager.canvas;
     const mapPx = this.gameMap.structure.length * TILE_SIZE;
@@ -2934,6 +3232,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (platform.isMobile && this.followerMenu.isOpen) {
+        this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
         this.followerMenu.handleClick(x, y);
         continue;
       }
@@ -2976,7 +3275,9 @@ export class DungeonScene extends GameplayScene {
         this.gameOver ||
         this.pauseMenu.isOpen ||
         this.safeRoom.mordecaiDialogOpen ||
-        this.spiderQuest.isDialogOpen
+        this.spiderQuest.isDialogOpen ||
+        this.tutorial?.showTutorialMordecaiDialog === true ||
+        this.tutorial?.showMordecaiReminderDialog === true
       ) {
         if (this.pauseMenu.isOpen) {
           if (this.touch.pauseScrollTouchId === null) {

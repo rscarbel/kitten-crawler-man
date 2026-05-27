@@ -71,6 +71,14 @@ export class PauseMenu {
     return this._isOpen;
   }
 
+  get currentTab(): PauseTab {
+    return this.tab;
+  }
+
+  get renderedButtons(): ReadonlyArray<ButtonRect> {
+    return this.buttons;
+  }
+
   open(): void {
     this._isOpen = true;
     this.tab = 'main';

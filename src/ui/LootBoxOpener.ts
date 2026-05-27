@@ -570,13 +570,6 @@ export class LootBoxOpener {
   ): void {
     if (!this.contents) return;
 
-    // Count distinct reward lines so we can shrink text when there are 3+
-    const itemCount = 1 + (this.contents.coins > 0 ? 1 : 0) + (this.contents.bonus ? 1 : 0);
-    const itemFontSize =
-      itemCount >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
-    const lineStep =
-      itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
-
     drawText(ctx, `${this.playerName} received:`, {
       x: leftX,
       y: y - CONTENT_RECEIVED_Y_OFFSET,
@@ -587,19 +580,47 @@ export class LootBoxOpener {
       width: maxW,
     });
     y += CONTENT_ADVANCE_Y;
-    drawText(
-      ctx,
-      `+${this.contents.potions} Health Potion${this.contents.potions !== 1 ? 's' : ''}`,
-      {
+
+    if (this.contents.displayLines !== undefined) {
+      const lines = this.contents.displayLines;
+      const itemFontSize =
+        lines.length >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
+      const lineStep =
+        itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
+      for (const line of lines) {
+        drawText(ctx, line, {
+          x: leftX,
+          y: y - CONTENT_ITEM_Y_OFFSET,
+          size: itemFontSize,
+          color: '#4ade80',
+          align: 'center',
+          width: maxW,
+        });
+        y += lineStep;
+      }
+      return;
+    }
+
+    // Count distinct reward lines so we can shrink text when there are 3+
+    const potionCount = this.contents.potions ?? 0;
+    const itemCount =
+      (potionCount > 0 ? 1 : 0) + (this.contents.coins > 0 ? 1 : 0) + (this.contents.bonus ? 1 : 0);
+    const itemFontSize =
+      itemCount >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
+    const lineStep =
+      itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
+
+    if (potionCount > 0) {
+      drawText(ctx, `+${potionCount} Health Potion${potionCount !== 1 ? 's' : ''}`, {
         x: leftX,
         y: y - CONTENT_ITEM_Y_OFFSET,
         size: itemFontSize,
         color: '#4ade80',
         align: 'center',
         width: maxW,
-      },
-    );
-    y += lineStep;
+      });
+      y += lineStep;
+    }
     if (this.contents.coins > 0) {
       drawText(ctx, `+${this.contents.coins} Coins`, {
         x: leftX,

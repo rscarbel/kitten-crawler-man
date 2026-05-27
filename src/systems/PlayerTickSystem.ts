@@ -83,6 +83,20 @@ export class PlayerTickSystem implements GameSystem {
     }
   }
 
+  /** Regen the human only — used during tutorial phases when cat regen is suppressed. */
+  tickRegenHumanOnly(human: HumanPlayer): void {
+    if (human.isAlive && human.hp < human.maxHp) {
+      this.humanRegenAccum += (human.maxHp / this.HUMAN_REGEN_FRAMES) * human.regenMultiplier;
+      const heal = Math.floor(this.humanRegenAccum);
+      if (heal >= 1) {
+        human.hp = Math.min(human.maxHp, human.hp + heal);
+        this.humanRegenAccum -= heal;
+      }
+    } else {
+      this.humanRegenAccum = 0;
+    }
+  }
+
   /** Convenience: tick both regen and auto-potion. */
   update(ctx: SystemContext): void {
     this.tickRegen(ctx.human, ctx.cat);

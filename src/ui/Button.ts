@@ -407,7 +407,14 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
  */
 export function addButton(
   ctx: CanvasRenderingContext2D,
-  buttons: Array<{ x: number; y: number; w: number; h: number; action?: () => void }>,
+  buttons: Array<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    action?: () => void;
+    label?: string;
+  }>,
   opts: ButtonOptions & { action: () => void },
 ): ButtonResult {
   const result = drawButton(ctx, opts);
@@ -417,6 +424,7 @@ export function addButton(
     w: result.width,
     h: result.height,
     action: opts.action,
+    label: opts.label,
   });
   return result;
 }

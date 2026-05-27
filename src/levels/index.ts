@@ -2,8 +2,10 @@ import type { LevelDef } from './types';
 import { level1 } from './level1';
 import { level2 } from './level2';
 import { level3 } from './level3';
+import { tutorialLevel } from './tutorial';
 
 const registry = new Map<string, LevelDef>([
+  ['tutorial', tutorialLevel],
   ['level1', level1],
   ['level2', level2],
   ['level3', level3],
@@ -16,5 +18,5 @@ export function getLevelDef(id: string): LevelDef {
   return def;
 }
 
-export { level1, level2, level3 };
+export { tutorialLevel, level1, level2, level3 };
 export type { LevelDef, MobSpawnRule } from './types';

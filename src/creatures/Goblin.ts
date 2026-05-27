@@ -79,6 +79,60 @@ export class Goblin extends Mob {
     return items;
   }
 
+  /**
+   * AI update that keeps the goblin stationary but still attacks targets in melee range.
+   * Intended for use by subclasses (e.g. TutorialGoblin defense-only mode).
+   */
+  protected updateAIStandAndFight(targets: Player[]): void {
+    if (!this.isAlive) return;
+
+    if (this.attackCooldown > 0) this.attackCooldown--;
+    if (this.attackAnimTimer > 0) this.attackAnimTimer--;
+
+    let nearest: Player | null = null;
+    let nearestDist = Infinity;
+    for (const t of targets) {
+      if (!t.isAlive) continue;
+      const dist = Math.hypot(t.x - this.x, t.y - this.y);
+      if (dist < this.attackRangePx && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = t;
+      }
+    }
+
+    this.currentTarget = nearest;
+
+    if (nearest === null) {
+      this.isAggro = false;
+      this.firstHitPending = true;
+      this.attackWindupTimer = 0;
+      this.isMoving = false;
+      return;
+    }
+
+    this.isAggro = true;
+    this.updateLastKnown(nearest);
+    this.isMoving = false;
+
+    const inRange = nearestDist <= this.attackRangePx;
+    if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
+      this.attackWindupTimer = 15;
+      this.firstHitPending = false;
+    }
+    if (this.attackWindupTimer > 0) this.attackWindupTimer--;
+
+    if (
+      inRange &&
+      this.attackCooldown === 0 &&
+      this.attackWindupTimer === 0 &&
+      (this.hasLOS(nearest) || this.onSameTile(nearest))
+    ) {
+      this.dealDamage(nearest, this.attackDamage);
+      this.attackCooldown = ATTACK_COOLDOWN;
+      this.attackAnimTimer = ATTACK_ANIM_FRAMES;
+    }
+  }
+
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 

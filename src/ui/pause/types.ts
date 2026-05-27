@@ -12,6 +12,7 @@ export type ButtonRect = {
   y: number;
   w: number;
   h: number;
+  label?: string;
   /** Called on click unless positionedAction is provided. */
   action?: () => void;
   /** When present, called instead of action — receives the exact click coordinates. */

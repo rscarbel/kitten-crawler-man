@@ -2,7 +2,8 @@ import { InputManager } from './core/InputManager';
 import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
-import { level1 } from './levels/index';
+import { PostSignupScene } from './scenes/PostSignupScene';
+import { tutorialLevel } from './levels/index';
 import { aiAdapter } from './ai/AIAdapter';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
@@ -21,8 +22,16 @@ void audio.preload();
 
 function launchGame(options?: DungeonSceneOptions): void {
   const sceneManager = new SceneManager();
-  sceneManager.replace(new DungeonScene(level1, input, sceneManager, { ...options, audio }));
+  sceneManager.replace(new DungeonScene(tutorialLevel, input, sceneManager, { ...options, audio }));
   // Fire-and-forget: if the AI server isn't running the adapter stays silent.
+  aiAdapter.initialize().catch(() => {
+    void 0;
+  });
+}
+
+function launchPostSignup(baseOptions: DungeonSceneOptions): void {
+  const sceneManager = new SceneManager();
+  sceneManager.replace(new PostSignupScene(input, sceneManager, baseOptions));
   aiAdapter.initialize().catch(() => {
     void 0;
   });
@@ -63,11 +72,12 @@ function launchGame(options?: DungeonSceneOptions): void {
     });
   };
 
-  const options: DungeonSceneOptions = { saveProgress };
+  const options: DungeonSceneOptions = { saveProgress, audio };
   if (progress) {
     options.humanSnap = progress.humanSnap;
     options.catSnap = progress.catSnap;
+    launchGame(options);
+  } else {
+    launchPostSignup(options);
   }
-
-  launchGame(options);
 })().catch(console.error);

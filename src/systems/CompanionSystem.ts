@@ -45,6 +45,8 @@ const TILE_CENTER_OFFSET = 0.5;
 const DOT_PRODUCT_THRESHOLD = 0.25;
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
+const COLLISION_BOX_BOTTOM_FRACTION = 0.8;
+const COLLISION_BOX_TOP_FRACTION = 0.2;
 const NEARBY_PLAYER_RANGE_MULTIPLIER = 2.5;
 const CAT_EVADE_ANGLE_MIN = 0.032;
 const CAT_EVADE_ANGLE_SIN_FACTOR = 3.7;
@@ -245,22 +247,38 @@ export class CompanionSystem implements GameSystem {
   }
 
   entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
-    const mapPx = this.gameMap.structure.length * TILE_SIZE;
+    const mapPxW = (this.gameMap.structure[0]?.length ?? this.gameMap.structure.length) * TILE_SIZE;
+    const mapPxH = this.gameMap.structure.length * TILE_SIZE;
     const ts = TILE_SIZE;
     if (dx !== 0) {
-      const nextX = clamp(entity.x + dx, 0, mapPx - ts);
+      const nextX = clamp(entity.x + dx, 0, mapPxW - ts);
       const tileXnext =
         dx >= 0
           ? Math.floor((nextX + ts * COLLISION_BOX_RIGHT_FRACTION) / ts)
           : Math.floor((nextX + ts * COLLISION_BOX_LEFT_FRACTION) / ts);
-      const tileYcur = Math.floor((entity.y + ts * TILE_CENTER_OFFSET) / ts);
-      if (this.gameMap.isWalkable(tileXnext, tileYcur)) entity.x = nextX;
+      const tileYtop = Math.floor((entity.y + ts * COLLISION_BOX_TOP_FRACTION) / ts);
+      const tileYbot = Math.floor((entity.y + ts * COLLISION_BOX_BOTTOM_FRACTION) / ts);
+      if (
+        this.gameMap.isWalkable(tileXnext, tileYtop) &&
+        this.gameMap.isWalkable(tileXnext, tileYbot)
+      ) {
+        entity.x = nextX;
+      }
     }
     if (dy !== 0) {
-      const nextY = clamp(entity.y + dy, 0, mapPx - ts);
-      const tileXcur = Math.floor((entity.x + ts * TILE_CENTER_OFFSET) / ts);
-      const tileYnext = Math.floor((nextY + ts * TILE_CENTER_OFFSET) / ts);
-      if (this.gameMap.isWalkable(tileXcur, tileYnext)) entity.y = nextY;
+      const nextY = clamp(entity.y + dy, 0, mapPxH - ts);
+      const tileYnext =
+        dy >= 0
+          ? Math.floor((nextY + ts * COLLISION_BOX_BOTTOM_FRACTION) / ts)
+          : Math.floor((nextY + ts * COLLISION_BOX_TOP_FRACTION) / ts);
+      const tileXleft = Math.floor((entity.x + ts * COLLISION_BOX_LEFT_FRACTION) / ts);
+      const tileXright = Math.floor((entity.x + ts * COLLISION_BOX_RIGHT_FRACTION) / ts);
+      if (
+        this.gameMap.isWalkable(tileXleft, tileYnext) &&
+        this.gameMap.isWalkable(tileXright, tileYnext)
+      ) {
+        entity.y = nextY;
+      }
     }
   }
 

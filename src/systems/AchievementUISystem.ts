@@ -31,6 +31,13 @@ export class AchievementUISystem {
   private _achievIconRect = { x: 0, y: 0, w: 80, h: 28 };
   private _lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
 
+  /**
+   * When set, called once after every pending loot box queue has been fully opened.
+   * Cleared after first call. Used by the tutorial to give tutorial items and advance
+   * state immediately after the normal loot box opener finishes.
+   */
+  onAllBoxesOpened: (() => void) | null = null;
+
   constructor(
     private readonly humanAchievements: AchievementManager,
     private readonly catAchievements: AchievementManager,
@@ -202,6 +209,10 @@ export class AchievementUISystem {
         const otherMgr = player === 'human' ? this.catAchievements : this.humanAchievements;
         if (otherMgr.pendingBoxes.length > 0) {
           this.openBoxQueue(otherPlayer, () => void 0);
+        } else {
+          const cb = this.onAllBoxesOpened;
+          this.onAllBoxesOpened = null;
+          cb?.();
         }
       },
       () => {

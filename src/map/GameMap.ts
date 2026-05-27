@@ -111,6 +111,12 @@ export interface GameMapOptions {
   hasArena?: boolean;
   bossTypes?: string[];
   hasSpiderLab?: boolean;
+  /**
+   * Supply a fully-built tile grid to skip procedural generation entirely.
+   * When provided, the caller is responsible for manually setting startTile,
+   * safeRooms, stairwellTiles, etc. after construction.
+   */
+  prebuiltStructure?: TileContent[][];
 }
 
 export type { SpiderLabRoomData };
@@ -172,18 +178,23 @@ export class GameMap {
       hasArena = false,
       bossTypes = [],
       hasSpiderLab = false,
+      prebuiltStructure,
     } = opts;
     this.tileHeight = tileHeight;
-    this.structure = this.generate(
-      mapSize,
-      numBossRooms,
-      numSafeRooms,
-      numStairwellsOverride,
-      mapType,
-      hasArena,
-      bossTypes,
-      hasSpiderLab,
-    );
+    if (prebuiltStructure) {
+      this.structure = prebuiltStructure;
+    } else {
+      this.structure = this.generate(
+        mapSize,
+        numBossRooms,
+        numSafeRooms,
+        numStairwellsOverride,
+        mapType,
+        hasArena,
+        bossTypes,
+        hasSpiderLab,
+      );
+    }
     this.buildExtraBlockedTiles();
   }
 

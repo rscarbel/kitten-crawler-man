@@ -271,7 +271,11 @@ export class InventoryPanel {
   onClose: (() => void) | null = null;
 
   /** Interaction handler — owns drag, context menu, and pending action state. */
-  readonly interaction = new InventoryInteraction();
+  readonly interaction: InventoryInteraction;
+
+  constructor(interaction: InventoryInteraction = new InventoryInteraction()) {
+    this.interaction = interaction;
+  }
 
   private get drag() {
     return this.interaction.drag;
@@ -422,6 +426,30 @@ export class InventoryPanel {
   /** True while an item is being dragged. */
   get isDragging(): boolean {
     return this.drag !== null;
+  }
+
+  /**
+   * Returns the screen rect of the given bag slot index if the inventory panel
+   * is open and the slot is on the currently-visible page, otherwise null.
+   */
+  getBagSlotRect(
+    slotIdx: number,
+    canvas: HTMLCanvasElement,
+  ): { x: number; y: number; w: number; h: number } | null {
+    if (!this.isOpen) return null;
+    const pageStart = this.page * SLOTS_PER_PAGE;
+    const pageEnd = pageStart + SLOTS_PER_PAGE;
+    if (slotIdx < pageStart || slotIdx >= pageEnd) return null;
+    const p = this.panelRect(canvas);
+    return this.invSlotRect(slotIdx - pageStart, p);
+  }
+
+  /** Returns the screen rect of the given hotbar slot index. */
+  getHotbarSlotRect(
+    slotIdx: number,
+    canvas: HTMLCanvasElement,
+  ): { x: number; y: number; w: number; h: number } {
+    return this.hotbarSlotRect(slotIdx, canvas);
   }
 
   // Render

@@ -75,6 +75,8 @@ interface Particle {
 export interface ChestLootSplit {
   humanLoot: LootDrop;
   catLoot: LootDrop;
+  /** Override display names for specific item IDs (keyed by item id string). */
+  displayLabels?: Record<string, string>;
 }
 
 export class ChestRewardDialog {
@@ -341,7 +343,8 @@ export class ChestRewardDialog {
     }
     for (const entry of split.humanLoot.items) {
       const def = ITEM_DEF[entry.id];
-      const label = entry.quantity > 1 ? `${entry.quantity}x ${def.name}` : def.name;
+      const baseName = split.displayLabels?.[entry.id] ?? def.name;
+      const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
       const { totalHeight } = drawText(ctx, label, {
         x: leftColX,
         y: leftY,
@@ -375,7 +378,8 @@ export class ChestRewardDialog {
     }
     for (const entry of split.catLoot.items) {
       const def = ITEM_DEF[entry.id];
-      const label = entry.quantity > 1 ? `${entry.quantity}x ${def.name}` : def.name;
+      const baseName = split.displayLabels?.[entry.id] ?? def.name;
+      const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
       const { totalHeight } = drawText(ctx, label, {
         x: rightColX,
         y: rightY,
