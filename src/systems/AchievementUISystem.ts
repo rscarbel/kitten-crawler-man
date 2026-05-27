@@ -15,6 +15,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
 import { platform } from '../core/Platform';
+import { pauseButtonRect } from './DungeonUIRenderer';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -328,8 +329,6 @@ export class AchievementUISystem {
         align: 'center',
       });
     } else {
-      const BELOW_MAP_Y = 8;
-      const BELOW_MAP_GAP = 20;
       const BTN_H = 28;
       const BTN_GAP = 6;
       const RIGHT_MARGIN = 8;
@@ -344,11 +343,11 @@ export class AchievementUISystem {
       const MOBILE_BTN_W = 80;
       const DESKTOP_BTN_W = 104;
 
-      const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
       const btnW = platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
+      const pb = pauseButtonRect(canvas, miniMap);
       const r = {
         x: canvas.width - RIGHT_MARGIN - btnW,
-        y: BELOW_MAP_Y + mmSize + BELOW_MAP_GAP + BTN_H + BTN_GAP + BTN_H + BTN_GAP,
+        y: pb.y + BTN_H + BTN_GAP + BTN_H + BTN_GAP,
         w: btnW,
         h: ICON_H,
       };

@@ -71,6 +71,7 @@ export class SceneManager {
 
     this.canvas.addEventListener('mousedown', (e) => {
       if (!this.current?.handleMouseDown) return;
+      if (e.button !== 0) return;
       const { x, y } = getPos(e);
       this.current.handleMouseDown(x, y);
     });

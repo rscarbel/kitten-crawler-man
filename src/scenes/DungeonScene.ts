@@ -669,6 +669,8 @@ export class DungeonScene extends GameplayScene {
       const tutInteraction = new TutorialInventoryInteraction();
       tutInteraction.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
       tutInteraction.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
+      tutInteraction.getBlockedDragItemId = () => tutorialController.tutorialBlockedDragItemId;
+      tutInteraction.onBlockedDragAttempt = () => this.audio?.play('error');
       this.inventoryPanel = new InventoryPanel(tutInteraction);
     } else {
       this.inventoryPanel = new InventoryPanel();
@@ -722,6 +724,10 @@ export class DungeonScene extends GameplayScene {
     this.audio = options?.audio ?? null;
     this.pauseMenu.audio = this.audio;
     this.pauseMenu.onResetGame = this.onResetGameCallback;
+    this.pauseMenu.skipMusicPause = () =>
+      this.tutorial !== null &&
+      (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
+        this.tutorial.state === 'CAT_OPENED_TREASURE_BOX');
     this.pauseMenu.onOpenChat = () => {
       this.pauseMenu.close();
       this.triggerOpenChat();
@@ -2468,7 +2474,12 @@ export class DungeonScene extends GameplayScene {
       this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
     }
 
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    const anyMenuOpen =
+      this.pauseMenu.isOpen ||
+      this.inventoryPanel.isOpen ||
+      this.gearPanel.isOpen ||
+      this.followerMenu.isOpen;
+    if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
     }
 
@@ -2595,6 +2606,7 @@ export class DungeonScene extends GameplayScene {
         ),
         isDragActive: this.inventoryPanel.interaction.isDragging,
         isAchievementNotifActive: this.achievementUI.notifActive,
+        isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
       };
       this.tutorial.renderOverlay(
         ctx,

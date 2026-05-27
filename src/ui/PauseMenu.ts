@@ -58,6 +58,15 @@ export class PauseMenu {
   /** Set by the owning scene so the Settings tab can read/write volumes. */
   audio: AudioManager | null = null;
 
+  /**
+   * When provided, called before pausing music on open. If it returns true the
+   * music pause (and matching resume on close) are skipped for that open/close
+   * cycle — useful for tutorial-guided menu phases where music should keep playing.
+   */
+  skipMusicPause: (() => boolean) | null = null;
+
+  private _didPauseMusic = false;
+
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
 
@@ -87,33 +96,49 @@ export class PauseMenu {
   open(): void {
     this._isOpen = true;
     this.tab = 'main';
-    this.audio?.pauseMusic();
+    this._applyMusicPause();
   }
 
   openToInventory(): void {
     this._isOpen = true;
     this.tab = 'inventory';
-    this.audio?.pauseMusic();
+    this._applyMusicPause();
   }
 
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
-    this.audio?.pauseMusic();
+    this._applyMusicPause();
   }
 
   close(): void {
     this._isOpen = false;
     this._showResetConfirm = false;
-    this.audio?.resumeMusic();
+    this._applyMusicResume();
   }
 
   toggle(): void {
     this._isOpen = !this._isOpen;
     if (this._isOpen) {
       this.tab = 'main';
-      this.audio?.pauseMusic();
+      this._applyMusicPause();
     } else {
+      this._applyMusicResume();
+    }
+  }
+
+  private _applyMusicPause(): void {
+    if (this.skipMusicPause?.() === true) {
+      this._didPauseMusic = false;
+    } else {
+      this._didPauseMusic = true;
+      this.audio?.pauseMusic();
+    }
+  }
+
+  private _applyMusicResume(): void {
+    if (this._didPauseMusic) {
+      this._didPauseMusic = false;
       this.audio?.resumeMusic();
     }
   }

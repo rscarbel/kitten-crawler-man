@@ -51,11 +51,13 @@ const BUTTON_LABEL_SIZE = 16;
 const BUTTON_LABEL_ACTIVE_COLOR = '#ffffff';
 const BUTTON_LABEL_INACTIVE_COLOR = '#b8cfe4';
 
-// Checkmark styling
-const BUTTON_CHECKMARK_FONT_SIZE = 16;
-const BUTTON_CHECKMARK_X_OFFSET = 14;
-const BUTTON_CHECKMARK_Y_ADJUST = 6;
-const BUTTON_CHECKMARK_COLOR = '#5a8fc5';
+// Radio button styling
+const RADIO_X_OFFSET = 22;
+const RADIO_OUTER_RADIUS = 7;
+const RADIO_INNER_RADIUS = 4;
+const RADIO_ACTIVE_COLOR = '#5a8fc5';
+const RADIO_INACTIVE_COLOR = '#334155';
+const RADIO_OUTER_BORDER_WIDTH = 2;
 
 // Footer
 const MENU_FOOTER_Y_OFFSET = 18;
@@ -226,17 +228,19 @@ export class FollowerMenu {
           color: item.active ? BUTTON_LABEL_ACTIVE_COLOR : BUTTON_LABEL_INACTIVE_COLOR,
         });
 
-        // Active checkmark on the right
+        // Radio button indicator on the right (always rendered; filled when active)
+        const radioCx = r.x + r.w - RADIO_X_OFFSET;
+        const radioCy = r.y + Math.round(r.h / 2);
+        ctx.beginPath();
+        ctx.arc(radioCx, radioCy, RADIO_OUTER_RADIUS, 0, Math.PI * 2);
+        ctx.strokeStyle = item.active ? RADIO_ACTIVE_COLOR : RADIO_INACTIVE_COLOR;
+        ctx.lineWidth = RADIO_OUTER_BORDER_WIDTH;
+        ctx.stroke();
         if (item.active) {
-          ctx.font = `bold ${BUTTON_CHECKMARK_FONT_SIZE}px monospace`;
-          ctx.textAlign = 'right';
-          ctx.fillStyle = BUTTON_CHECKMARK_COLOR;
-          ctx.fillText(
-            '✓',
-            r.x + r.w - BUTTON_CHECKMARK_X_OFFSET,
-            r.y + Math.round(r.h / 2) + BUTTON_CHECKMARK_Y_ADJUST,
-          );
-          ctx.textAlign = 'left';
+          ctx.beginPath();
+          ctx.arc(radioCx, radioCy, RADIO_INNER_RADIUS, 0, Math.PI * 2);
+          ctx.fillStyle = RADIO_ACTIVE_COLOR;
+          ctx.fill();
         }
 
         currentY += btnH + MENU_BUTTON_SPACING;

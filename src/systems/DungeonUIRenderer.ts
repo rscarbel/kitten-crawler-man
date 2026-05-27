@@ -113,9 +113,10 @@ function rightColBtnW(): number {
 export function pauseButtonRect(canvas: HTMLCanvasElement, miniMap: MiniMapSystem): Rect {
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
   const w = rightColBtnW();
+  const followerOffset = platform.isMobile ? MOBILE_BTN_H + MOBILE_BUTTON_GAP : 0;
   return {
     x: canvas.width - RIGHT_COL_MARGIN - w,
-    y: MINIMAP_Y + mmSize + BELOW_MAP_GAP,
+    y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + followerOffset,
     w,
     h: PAUSE_BTN_H,
   };
@@ -360,7 +361,9 @@ export function renderMobileButtons(
 
   const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
   const rightX = canvas.width - MOBILE_BTN_W - RIGHT_COL_MARGIN;
-  const pauseY = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
+  const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
+  const followerRect: Rect = { x: rightX, y: followerY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
+  const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
   const bagY =
     pauseY + PAUSE_BTN_H + MOBILE_ACHIEVE_GAP + MOBILE_ACHIEVE_ICON_H + MOBILE_ACHIEVE_GAP;
   touch.gearBtnRect = {
@@ -412,7 +415,7 @@ export function renderMobileButtons(
     drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
   }
   if (!state.hideFollowerButton) {
-    renderFollowerButton(ctx, canvas, touch, state.companion, humanActive);
+    renderFollowerButton(ctx, canvas, touch, state.companion, humanActive, followerRect);
   }
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
@@ -444,10 +447,11 @@ export function renderFollowerButton(
   touch: MobileTouchState,
   companion: CompanionSystem,
   humanIsActive: boolean,
+  overrideRect?: Rect,
 ): void {
   const btnY =
     canvas.height - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
-  const r: Rect = {
+  const r: Rect = overrideRect ?? {
     x: canvas.width - MOBILE_BTN_MARGIN - MOBILE_BTN_W,
     y: btnY,
     w: MOBILE_BTN_W,

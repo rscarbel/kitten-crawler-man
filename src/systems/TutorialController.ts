@@ -215,6 +215,14 @@ const TILE_FRACTION_CENTER = 0.5;
 const PULSE_NORMALIZE = 0.5;
 const PULSE_SPEED = 0.004;
 
+// ── Drag hint text constants (oscillating label below item icons) ─────────────
+
+const DRAG_HINT_TEXT_SIZE = 11;
+const DRAG_HINT_TEXT_GAP = 4;
+const DRAG_HINT_TEXT_SPEED = 0.06;
+const DRAG_HINT_TEXT_MIN_ALPHA = 0.35;
+const DRAG_HINT_TEXT_MAX_ALPHA = 0.9;
+
 // Hint text per state
 
 const HINT_TEXTS_DESKTOP: Record<TutorialState, string> = {
@@ -361,6 +369,8 @@ export interface TutorialRenderContext {
   isDragActive: boolean;
   /** True when an achievement notification overlay is currently displayed. */
   isAchievementNotifActive: boolean;
+  /** True when the inventory context menu (right-click options) is currently open. */
+  isContextMenuOpen: boolean;
 }
 
 export interface TutorialMobs {
@@ -574,6 +584,17 @@ export class TutorialController {
     if (this._state === 'CAT_OPENED_TREASURE_BOX') {
       if (this._catMenuGuideStep === 'drag_missile') return 0;
       if (this._catMenuGuideStep === 'drag_potions') return 1;
+    }
+    return null;
+  }
+
+  /**
+   * The item ID the player must NOT drag during the current step (causes an error
+   * sound when attempted). DungeonScene passes this to TutorialInventoryInteraction.
+   */
+  get tutorialBlockedDragItemId(): ItemId | null {
+    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT' && this._menuGuideStep === 'equip_boxers') {
+      return 'enchanted_bigboi_boxers';
     }
     return null;
   }
@@ -1583,6 +1604,11 @@ export class TutorialController {
           const itemRect = renderCtx.bagItemRects.smush_tome;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
+            this.renderHintLabel(
+              ctx,
+              itemRect,
+              platform.isMobile ? 'Hold and drag' : 'Click and drag',
+            );
           }
         } else {
           const dragHint = platform.isMobile
@@ -1597,6 +1623,11 @@ export class TutorialController {
           const itemRect = renderCtx.bagItemRects.health_potion;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
+            this.renderHintLabel(
+              ctx,
+              itemRect,
+              platform.isMobile ? 'Hold and drag' : 'Click and drag',
+            );
           }
         }
 
@@ -1651,6 +1682,13 @@ export class TutorialController {
         const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
         if (itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
+          if (!renderCtx.isContextMenuOpen) {
+            this.renderHintLabel(
+              ctx,
+              itemRect,
+              platform.isMobile ? 'Press and hold to open options' : 'Right click to open options',
+            );
+          }
         }
         return;
       }
@@ -1717,6 +1755,11 @@ export class TutorialController {
         const itemRect = renderCtx.bagItemRects.magic_missile_tome;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
+          this.renderHintLabel(
+            ctx,
+            itemRect,
+            platform.isMobile ? 'Hold and drag' : 'Click and drag',
+          );
         }
       } else {
         const dragHint = platform.isMobile
@@ -1731,6 +1774,11 @@ export class TutorialController {
         const itemRect = renderCtx.bagItemRects.health_potion;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
+          this.renderHintLabel(
+            ctx,
+            itemRect,
+            platform.isMobile ? 'Hold and drag' : 'Click and drag',
+          );
         }
       }
 
@@ -1844,6 +1892,29 @@ export class TutorialController {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+  }
+
+  /** Renders an oscillating hint label centred below the given item rect. */
+  private renderHintLabel(
+    ctx: CanvasRenderingContext2D,
+    itemRect: { x: number; y: number; w: number; h: number },
+    label: string,
+  ): void {
+    const textAlpha =
+      DRAG_HINT_TEXT_MIN_ALPHA +
+      (Math.sin(this.animFrame * DRAG_HINT_TEXT_SPEED) + 1) *
+        PULSE_NORMALIZE *
+        (DRAG_HINT_TEXT_MAX_ALPHA - DRAG_HINT_TEXT_MIN_ALPHA);
+    drawText(ctx, label, {
+      x: itemRect.x + itemRect.w / 2,
+      y: itemRect.y + itemRect.h + DRAG_HINT_TEXT_GAP,
+      size: DRAG_HINT_TEXT_SIZE,
+      color: '#ffffff',
+      alpha: textAlpha,
+      align: 'center',
+      bold: true,
+      outline: true,
+    });
   }
 
   /** Renders the directional arrow above the active player pointing toward the target. */
