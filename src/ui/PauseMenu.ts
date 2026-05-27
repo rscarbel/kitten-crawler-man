@@ -31,8 +31,8 @@ const SPEND_BOX_BOTTOM_MARGIN = 52;
 const ABILITIES_ACHIEVEMENTS_BOX_H = 440;
 const MODAL_PADDING = 16;
 const MODAL_BOX_WIDTH = 380;
-const SETTINGS_BOX_H_MOBILE = 460;
-const SETTINGS_BOX_H_DESKTOP = 300;
+const SETTINGS_BOX_H_MOBILE = 520;
+const SETTINGS_BOX_H_DESKTOP = 390;
 const MAIN_TAB_BUTTON_COUNT_WITH_SPEND = 7;
 const MAIN_TAB_BUTTON_COUNT_NO_SPEND = 6;
 const MAIN_TAB_HEADER_H = 52;
@@ -60,6 +60,11 @@ export class PauseMenu {
 
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
+
+  /** Called when the player confirms Reset Game in the settings tab. */
+  onResetGame: (() => void) | null = null;
+
+  private _showResetConfirm = false;
 
   /** Called when the inventory tab's "Manage Human" button is pressed. */
   onManageHumanInventory: (() => void) | null = null;
@@ -96,6 +101,7 @@ export class PauseMenu {
 
   close(): void {
     this._isOpen = false;
+    this._showResetConfirm = false;
   }
 
   toggle(): void {
@@ -226,6 +232,7 @@ export class PauseMenu {
       if (t !== 'stats') this.statsScrollY = 0;
       if (t !== 'spend') this.spendScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
+      if (t !== 'settings') this._showResetConfirm = false;
       this.tab = t;
     };
 
@@ -340,6 +347,19 @@ export class PauseMenu {
             this.audio,
             setTabWithSound,
             this.onOpenChat,
+            this._showResetConfirm,
+            () => {
+              this._showResetConfirm = true;
+            },
+            () => {
+              this._showResetConfirm = false;
+            },
+            this.onResetGame !== null
+              ? () => {
+                  this._showResetConfirm = false;
+                  this.onResetGame?.();
+                }
+              : null,
           );
         }
         break;

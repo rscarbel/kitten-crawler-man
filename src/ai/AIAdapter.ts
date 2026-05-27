@@ -82,6 +82,20 @@ export class AIAdapter {
   private snapshotTimer: ReturnType<typeof setInterval> | null = null;
   private actionHistory: AIAction[] = [];
 
+  /** Returns true if the game-ai-server is reachable; does not mutate adapter state. */
+  async checkServerAvailable(): Promise<boolean> {
+    const SERVER_CHECK_TIMEOUT_MS = 2000;
+    try {
+      await fetch(SERVER_URL, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(SERVER_CHECK_TIMEOUT_MS),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async initialize(): Promise<void> {
     try {
       const creds = await this.getOrRegisterCredentials();

@@ -2,7 +2,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import { type ButtonRect, type PauseTab } from './types';
 import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
-import { drawBox } from '../Box';
+import { drawBox, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
 
 // Volume slider constants
@@ -34,6 +34,25 @@ const MOBILE_SECTION_LABEL_SIZE = 12;
 const MOBILE_SECTION_Y_SPACING = 32;
 const CHAT_BUTTON_HEIGHT = 40;
 const CHAT_BUTTON_Y_SPACING = 52;
+
+// Reset Game button
+const RESET_BUTTON_HEIGHT = 40;
+const RESET_BUTTON_Y_SPACING = 52;
+const SECTION_LABEL_Y_SPACING = 32;
+const SECTION_LABEL_SIZE = 12;
+
+// Confirmation dialog
+const CONFIRM_DIALOG_H = 170;
+const CONFIRM_DIALOG_H_MARGIN = 20;
+const CONFIRM_TITLE_Y_OFFSET = 28;
+const CONFIRM_TITLE_SIZE = 16;
+const CONFIRM_BODY_Y_OFFSET = 58;
+const CONFIRM_BODY_SIZE = 13;
+const CONFIRM_BTN_Y_OFFSET = 116;
+const CONFIRM_BTN_H = 38;
+const CONFIRM_BTN_SIDE_MARGIN = 12;
+const CONFIRM_BTN_GAP = 8;
+const CONFIRM_OVERLAY_ALPHA = 0.65;
 
 function renderVolumeSlider(
   ctx: CanvasRenderingContext2D,
@@ -96,6 +115,82 @@ function renderVolumeSlider(
   });
 }
 
+function renderResetConfirmDialog(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+  onCancel: () => void,
+  onConfirm: (() => void) | null,
+): void {
+  // Dim the settings content behind the dialog
+  ctx.save();
+  ctx.globalAlpha = CONFIRM_OVERLAY_ALPHA;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.restore();
+
+  const dialogW = bw - CONFIRM_DIALOG_H_MARGIN * 2;
+  const dialogX = bx + CONFIRM_DIALOG_H_MARGIN;
+  const dialogY = by + Math.floor((bh - CONFIRM_DIALOG_H) / 2);
+
+  drawBox(ctx, {
+    x: dialogX,
+    y: dialogY,
+    width: dialogW,
+    height: CONFIRM_DIALOG_H,
+    ...BOX_PRESETS.danger,
+    radius: 6,
+  });
+
+  drawText(ctx, 'Reset Game?', {
+    x: dialogX + dialogW / 2,
+    y: dialogY + CONFIRM_TITLE_Y_OFFSET,
+    size: CONFIRM_TITLE_SIZE,
+    bold: true,
+    color: '#fca5a5',
+    align: 'center',
+  });
+
+  drawText(ctx, 'All your progress will be erased. Are you sure?', {
+    x: dialogX + CONFIRM_BTN_SIDE_MARGIN,
+    y: dialogY + CONFIRM_BODY_Y_OFFSET,
+    size: CONFIRM_BODY_SIZE,
+    color: '#e2e8f0',
+    align: 'center',
+    width: dialogW - CONFIRM_BTN_SIDE_MARGIN * 2,
+  });
+
+  const btnY = dialogY + CONFIRM_BTN_Y_OFFSET;
+  const btnW = Math.floor((dialogW - CONFIRM_BTN_SIDE_MARGIN * 2 - CONFIRM_BTN_GAP) / 2);
+  const yesBtnX = dialogX + CONFIRM_BTN_SIDE_MARGIN;
+  const cancelBtnX = yesBtnX + btnW + CONFIRM_BTN_GAP;
+
+  if (onConfirm !== null) {
+    addButton(ctx, buttons, {
+      x: yesBtnX,
+      y: btnY,
+      width: btnW,
+      height: CONFIRM_BTN_H,
+      label: 'Yes, Reset',
+      ...BUTTON_PRESETS.danger,
+      action: onConfirm,
+    });
+  }
+
+  addButton(ctx, buttons, {
+    x: cancelBtnX,
+    y: btnY,
+    width: btnW,
+    height: CONFIRM_BTN_H,
+    label: 'Cancel',
+    ...BUTTON_PRESETS.primary,
+    action: onCancel,
+  });
+}
+
 export function renderSettingsTab(
   ctx: CanvasRenderingContext2D,
   buttons: ButtonRect[],
@@ -106,9 +201,11 @@ export function renderSettingsTab(
   audio: AudioManager,
   setTab: (tab: PauseTab) => void,
   onOpenChat: (() => void) | null,
+  showResetConfirm: boolean,
+  onRequestReset: () => void,
+  onCancelReset: () => void,
+  onConfirmReset: (() => void) | null,
 ): void {
-  void bh;
-
   drawText(ctx, 'SETTINGS', {
     x: bx + bw / 2,
     y: by + SETTINGS_TITLE_Y,
@@ -167,6 +264,26 @@ export function renderSettingsTab(
     }
   }
 
+  drawText(ctx, 'Game', {
+    x: bx + AUDIO_LABEL_X,
+    y: y + MOBILE_SECTION_LABEL_Y_OFFSET,
+    bold: true,
+    size: SECTION_LABEL_SIZE,
+    color: '#64748b',
+  });
+  y += SECTION_LABEL_Y_SPACING;
+
+  addButton(ctx, buttons, {
+    x: sliderX,
+    y,
+    width: sliderW,
+    height: RESET_BUTTON_HEIGHT,
+    label: 'Reset Game',
+    ...BUTTON_PRESETS.danger,
+    action: onRequestReset,
+  });
+  y += RESET_BUTTON_Y_SPACING;
+
   addButton(ctx, buttons, {
     x: sliderX,
     y,
@@ -176,4 +293,8 @@ export function renderSettingsTab(
     ...BUTTON_PRESETS.primary,
     action: () => setTab('main'),
   });
+
+  if (showResetConfirm) {
+    renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
+  }
 }

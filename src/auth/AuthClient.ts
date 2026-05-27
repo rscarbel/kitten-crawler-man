@@ -99,4 +99,8 @@ export class AuthClient {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return raw.data as GameProgress;
   }
+
+  async deleteProgress(): Promise<void> {
+    await apiFetch('/api/progress', { method: 'DELETE' });
+  }
 }

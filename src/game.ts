@@ -20,25 +20,20 @@ const audio = new AudioManager();
 // Begin decoding all audio assets in the background immediately.
 void audio.preload();
 
-function launchGame(options?: DungeonSceneOptions): void {
-  const sceneManager = new SceneManager();
-  sceneManager.replace(new DungeonScene(tutorialLevel, input, sceneManager, { ...options, audio }));
-  // Fire-and-forget: if the AI server isn't running the adapter stays silent.
-  aiAdapter.initialize().catch(() => {
-    void 0;
-  });
-}
-
-function launchPostSignup(baseOptions: DungeonSceneOptions): void {
-  const sceneManager = new SceneManager();
-  sceneManager.replace(new PostSignupScene(input, sceneManager, baseOptions));
-  aiAdapter.initialize().catch(() => {
-    void 0;
-  });
-}
-
 (async () => {
   await loadSprites();
+
+  const aiServerRunning = await aiAdapter.checkServerAvailable();
+
+  if (!aiServerRunning) {
+    // No AI server — skip auth and start fresh without save/load capability.
+    const sceneManager = new SceneManager();
+    const onResetGame = () => {
+      sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
+    };
+    sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
+    return;
+  }
 
   try {
     await authClient.getMe();
@@ -52,15 +47,14 @@ function launchPostSignup(baseOptions: DungeonSceneOptions): void {
       // Auth server is up but no session — show login/register screen.
       const ui = new LoginUI(authClient);
       await ui.show();
-    } else {
-      // Server unavailable — start immediately without authentication.
-      launchGame();
-      return;
     }
+    // Any other error: server had an issue — proceed without forcing login.
   }
 
   // Load any previously saved progress for this user.
   const progress = await authClient.loadProgress().catch(() => null);
+
+  const sceneManager = new SceneManager();
 
   const saveProgress = (data: {
     humanSnap: GameProgress['humanSnap'];
@@ -72,12 +66,25 @@ function launchPostSignup(baseOptions: DungeonSceneOptions): void {
     });
   };
 
-  const options: DungeonSceneOptions = { saveProgress, audio };
+  const onResetGame = () => {
+    authClient.deleteProgress().catch(() => void 0);
+    sceneManager.replace(
+      new PostSignupScene(input, sceneManager, { audio, saveProgress, onResetGame }),
+    );
+  };
+
+  const options: DungeonSceneOptions = { saveProgress, audio, onResetGame };
+
   if (progress) {
     options.humanSnap = progress.humanSnap;
     options.catSnap = progress.catSnap;
-    launchGame(options);
+    sceneManager.replace(new DungeonScene(tutorialLevel, input, sceneManager, options));
   } else {
-    launchPostSignup(options);
+    sceneManager.replace(new PostSignupScene(input, sceneManager, options));
   }
+
+  // Fire-and-forget: if the AI server isn't running the adapter stays silent.
+  aiAdapter.initialize().catch(() => {
+    void 0;
+  });
 })().catch(console.error);

@@ -129,6 +129,8 @@ export interface DungeonSceneOptions {
   audio?: AudioManager;
   /** When provided, the scene runs in tutorial mode using a hand-crafted map and guided state machine. */
   tutorialController?: TutorialController;
+  /** Called when the player confirms Reset Game — should wipe progress and return to the start screen. */
+  onResetGame?: () => void;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -400,6 +402,8 @@ export class DungeonScene extends GameplayScene {
     | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
     | undefined;
 
+  private readonly onResetGameCallback: (() => void) | null;
+
   private readonly audio: AudioManager | null;
   private readonly tutorial: TutorialController | null = null;
 
@@ -615,6 +619,7 @@ export class DungeonScene extends GameplayScene {
             abilityManager: this._cleanAbilityManager(),
             saveProgress: this.onSaveProgress,
             audio: this.audio ?? undefined,
+            onResetGame: this.onResetGameCallback ?? undefined,
           }),
         );
       });
@@ -645,6 +650,7 @@ export class DungeonScene extends GameplayScene {
                   catSnap: cSnap,
                   existingMap: this.gameMap,
                   audio: this.audio ?? undefined,
+                  onResetGame: this.onResetGameCallback ?? undefined,
                 }),
               );
             },
@@ -712,8 +718,10 @@ export class DungeonScene extends GameplayScene {
     this.human.setAbilityManager(this.abilityManager);
 
     this.onSaveProgress = options?.saveProgress;
+    this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
     this.pauseMenu.audio = this.audio;
+    this.pauseMenu.onResetGame = this.onResetGameCallback;
     this.pauseMenu.onOpenChat = () => {
       this.pauseMenu.close();
       this.triggerOpenChat();
@@ -1694,6 +1702,7 @@ export class DungeonScene extends GameplayScene {
         audio: this.audio ?? undefined,
         tutorialController:
           this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
+        onResetGame: this.onResetGameCallback ?? undefined,
       }),
     );
   }
