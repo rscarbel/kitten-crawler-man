@@ -86,6 +86,7 @@ const DETAIL_OWNER_SIZE = 11;
 const DETAIL_EQUIP_Y_OFFSET = 50;
 const DETAIL_EQUIP_Y_ADJUST = 8;
 const DETAIL_EQUIP_SIZE = 10;
+const DETAIL_EQUIP_H_PAD = 16;
 const DETAIL_CONTENT_Y_OFFSET = 64;
 const DETAIL_LEVEL_Y_ADJUST = 10;
 const DETAIL_LEVEL_SIZE = 12;
@@ -819,11 +820,12 @@ function renderDetailView(
 
   // Equip instructions
   drawText(ctx, `How to equip: ${def.equipInstructions}`, {
-    x: bx + bw / TOGGLE_W_DIVISOR,
+    x: bx + DETAIL_EQUIP_H_PAD,
     y: by + DETAIL_EQUIP_Y_OFFSET - DETAIL_EQUIP_Y_ADJUST,
     size: DETAIL_EQUIP_SIZE,
     color: '#64748b',
     align: 'center',
+    width: bw - DETAIL_EQUIP_H_PAD * 2,
   });
 
   let y = by + DETAIL_CONTENT_Y_OFFSET;
