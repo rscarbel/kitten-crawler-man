@@ -1313,7 +1313,9 @@ export class TutorialController {
     // Suppress world-space arrows while an achievement notification is covering the screen.
     if (renderCtx.isAchievementNotifActive) return;
 
-    // Fixed arrow above goblin C during the magic missile step, instead of a navigation arrow
+    // Fixed arrow above goblin B during the magic missile step.
+    // Also shows a navigation arrow above the cat pointing toward goblin B when the cat is
+    // far from gate G2 — goblin B is behind G2 and may be off-screen on small displays.
     if (this._state === 'CAT_EQUIPPED_MAGIC_MISSILE' && this.goblinB.hp > 0) {
       drawBouncingArrowAboveEntity(
         ctx,
@@ -1323,6 +1325,20 @@ export class TutorialController {
         camY,
         '#f59e0b',
       );
+
+      const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_LEDGE_THRESHOLD_PX;
+      if (!catNearGate) {
+        drawArrowAbovePlayer(
+          ctx,
+          activePlayerX,
+          activePlayerY,
+          (GOBLIN_B_POS.x + TILE_FRACTION_CENTER) * TILE_SIZE,
+          (GOBLIN_B_POS.y + TILE_FRACTION_CENTER) * TILE_SIZE,
+          camX,
+          camY,
+          '#f59e0b',
+        );
+      }
     }
 
     const target = STATE_ARROW_TARGETS[this._state];

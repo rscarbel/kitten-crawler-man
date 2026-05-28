@@ -2377,26 +2377,9 @@ export class DungeonScene extends GameplayScene {
       });
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.inventoryPanel.mmSize = mmSz;
-      this.inventoryPanel.render(ctx, canvas, invPlayer.inventory, invName, invPlayer.coins);
-      const activeName = this.human.isActive ? 'Human' : 'Cat';
-      this.gearPanel.render(ctx, canvas, active.inventory, activeName);
-      this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
-      this.barriers.renderConstructUI(ctx, canvas);
-      this.defendQuest.renderUI(ctx, canvas);
-      if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
-        this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
-          ctx,
-          SUMMON_BUTTON_X,
-          canvas.height -
-            SUMMON_BUTTON_Y_OFFSET_1 -
-            SUMMON_BUTTON_Y_OFFSET_2 -
-            SUMMON_BUTTON_Y_OFFSET_3 -
-            SUMMON_BUTTON_Y_OFFSET_4,
-          SUMMON_BUTTON_WIDTH,
-          SUMMON_BUTTON_HEIGHT,
-          this.cat.isActive,
-        );
-      }
+
+      // Render persistent HUD buttons before panels so open menus and context menus paint over them.
+      UIRenderer.drawPauseButton(ctx, canvas, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
       if (platform.isMobile)
         UIRenderer.renderMobileButtons(ctx, canvas, this.touch, {
           human: this.human,
@@ -2417,6 +2400,27 @@ export class DungeonScene extends GameplayScene {
           this.companion,
           this.human.isActive,
         );
+
+      this.inventoryPanel.render(ctx, canvas, invPlayer.inventory, invName, invPlayer.coins);
+      const activeName = this.human.isActive ? 'Human' : 'Cat';
+      this.gearPanel.render(ctx, canvas, active.inventory, activeName);
+      this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
+      this.barriers.renderConstructUI(ctx, canvas);
+      this.defendQuest.renderUI(ctx, canvas);
+      if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
+        this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
+          ctx,
+          SUMMON_BUTTON_X,
+          canvas.height -
+            SUMMON_BUTTON_Y_OFFSET_1 -
+            SUMMON_BUTTON_Y_OFFSET_2 -
+            SUMMON_BUTTON_Y_OFFSET_3 -
+            SUMMON_BUTTON_Y_OFFSET_4,
+          SUMMON_BUTTON_WIDTH,
+          SUMMON_BUTTON_HEIGHT,
+          this.cat.isActive,
+        );
+      }
     }
 
     if (this.followerMenu.isOpen) {
@@ -2461,7 +2465,6 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    UIRenderer.drawPauseButton(ctx, canvas, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
     const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
     if (showAchievUI) {
       this.achievementUI.drawAchievementIcon(
