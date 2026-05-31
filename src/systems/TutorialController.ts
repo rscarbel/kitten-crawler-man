@@ -356,6 +356,10 @@ export interface TutorialRenderContext {
   gearPanelOpen: boolean;
   /** Screen-space rect of the pause button. */
   pauseButtonRect: { x: number; y: number; w: number; h: number } | null;
+  /** Screen-space rect of the follower button, or null if not yet positioned. */
+  followerButtonRect: { x: number; y: number; w: number; h: number } | null;
+  /** True while the follower menu is open — hides the guide arrow pointing at the button. */
+  followerMenuOpen: boolean;
   /** Screen rects of specific items in the inventory bag (null if not visible). */
   bagItemRects: {
     smush_tome: { x: number; y: number; w: number; h: number } | null;
@@ -1308,6 +1312,16 @@ export class TutorialController {
           ? SWITCHED_TO_HUMAN_MOBILE_HINT_RAISE_PX
           : 0;
       this.renderHintBox(ctx, canvas, hint, extraYOffset);
+    }
+
+    if (
+      this._state === 'SWITCHED_TO_HUMAN' &&
+      renderCtx.followerButtonRect !== null &&
+      !renderCtx.followerMenuOpen
+    ) {
+      const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
+      const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
+      this.renderGuideArrowAt(ctx, renderCtx.followerButtonRect, alpha);
     }
 
     // Suppress world-space arrows while an achievement notification is covering the screen.

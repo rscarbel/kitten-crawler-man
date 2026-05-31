@@ -113,7 +113,9 @@ function rightColBtnW(): number {
 export function pauseButtonRect(canvas: HTMLCanvasElement, miniMap: MiniMapSystem): Rect {
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
   const w = rightColBtnW();
-  const followerOffset = platform.isMobile ? MOBILE_BTN_H + MOBILE_BUTTON_GAP : 0;
+  const followerOffset = platform.isMobile
+    ? TIMER_H + MOBILE_BUTTON_GAP + MOBILE_BTN_H + MOBILE_BUTTON_GAP
+    : 0;
   return {
     x: canvas.width - RIGHT_COL_MARGIN - w,
     y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + followerOffset,
@@ -198,11 +200,19 @@ export function renderLevelTimer(
   const urgent = totalSec <= URGENT_SECONDS_THRESHOLD;
   const warning = totalSec <= WARNING_SECONDS_THRESHOLD;
 
-  const pauseBtn = pauseButtonRect(canvas, miniMap);
   const w = TIMER_W;
   const h = TIMER_H;
-  const x = pauseBtn.x - TIMER_PAUSE_GAP - w;
-  const y = pauseBtn.y;
+  let x: number;
+  let y: number;
+  if (platform.isMobile) {
+    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+    x = canvas.width - RIGHT_COL_MARGIN - w;
+    y = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
+  } else {
+    const pauseBtn = pauseButtonRect(canvas, miniMap);
+    x = pauseBtn.x - TIMER_PAUSE_GAP - w;
+    y = pauseBtn.y;
+  }
 
   const urgentAlpha = urgent
     ? URGENT_OPACITY + Math.sin(Date.now() / URGENT_WAVE_PERIOD) * URGENT_WAVE_AMP
@@ -361,7 +371,7 @@ export function renderMobileButtons(
 
   const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
   const rightX = canvas.width - MOBILE_BTN_W - RIGHT_COL_MARGIN;
-  const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
+  const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP;
   const followerRect: Rect = { x: rightX, y: followerY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
   const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
   const bagY =

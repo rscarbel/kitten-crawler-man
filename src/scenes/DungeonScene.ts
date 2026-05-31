@@ -2423,17 +2423,6 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
-      this.followerMenu.render(
-        ctx,
-        canvas,
-        this.companion.getMovementMode(this.human.isActive),
-        this.companion.getCombatStance(this.human.isActive),
-        this.human.isActive,
-      );
-    }
-
     if (this.gameOver) {
       this.deathScreen.render(ctx, canvas);
     }
@@ -2513,6 +2502,17 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.abilityLevelUpDialog.render(ctx, canvas);
+
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
+      this.followerMenu.render(
+        ctx,
+        canvas,
+        this.companion.getMovementMode(this.human.isActive),
+        this.companion.getCombatStance(this.human.isActive),
+        this.human.isActive,
+      );
+    }
 
     if (this.tutorial === null) {
       this.dungeonIntro.render(ctx, canvas);
@@ -2610,6 +2610,8 @@ export class DungeonScene extends GameplayScene {
         isDragActive: this.inventoryPanel.interaction.isDragging,
         isAchievementNotifActive: this.achievementUI.notifActive,
         isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
+        followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
+        followerMenuOpen: this.followerMenu.isOpen,
       };
       this.tutorial.renderOverlay(
         ctx,
