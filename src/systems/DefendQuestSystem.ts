@@ -124,6 +124,24 @@ const XP_FLOAT_Y_OFFSET = 80;
 const XP_FLOAT_ASCENT = 22;
 const XP_FLOAT_SIZE = 28;
 
+// Mobile quest timer layout constants
+const MOBILE_QUEST_BOX_X = 8;
+const MOBILE_QUEST_BOX_GAP = 8;
+const MOBILE_QUEST_MINIMAP_W = 176; // normal minimap (160) + margin (8) + gap (8)
+const MOBILE_QUEST_PAD_V = 6;
+const MOBILE_QUEST_PAD_H = 6;
+const MOBILE_QUEST_TITLE_SIZE = 10;
+const MOBILE_QUEST_VALUE_SIZE = 16;
+const MOBILE_QUEST_TITLE_H = 14;
+const MOBILE_QUEST_GAP = 4;
+const MOBILE_QUEST_VALUE_H = 22;
+const MOBILE_QUEST_BOX_H =
+  MOBILE_QUEST_PAD_V +
+  MOBILE_QUEST_TITLE_H +
+  MOBILE_QUEST_GAP +
+  MOBILE_QUEST_VALUE_H +
+  MOBILE_QUEST_PAD_V;
+
 // Tutorial layout constants
 const TUTORIAL_MAX_WIDTH = 500;
 const TUTORIAL_MAX_HEIGHT = 410;
@@ -946,59 +964,67 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mobileTopY?: number): void {
     if (this.phase === 'inactive') return;
 
     const cw = canvas.width;
 
     // Approach countdown
     if (this.phase === 'countdown') {
-      const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
-      drawText(ctx, 'ENEMIES APPROACHING', {
-        x: cw / 2,
-        y: COUNTDOWN_TITLE_Y - COUNTDOWN_TITLE_ASCENT,
-        size: COUNTDOWN_TITLE_SIZE,
-        bold: true,
-        color: '#fbbf24',
-        align: 'center',
-        shadow: 'rgba(0,0,0,0.9)',
-        shadowBlurPx: 4,
-        shadowOffset: { x: 0, y: 0 },
-      });
-      drawText(ctx, `${secs}`, {
-        x: cw / 2,
-        y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
-        size: COUNTDOWN_NUMBER_SIZE,
-        bold: true,
-        color: '#ef4444',
-        align: 'center',
-      });
+      if (platform.isMobile && mobileTopY !== undefined) {
+        this.renderMobileCountdown(ctx, canvas, mobileTopY);
+      } else {
+        const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
+        drawText(ctx, 'ENEMIES APPROACHING', {
+          x: cw / 2,
+          y: COUNTDOWN_TITLE_Y - COUNTDOWN_TITLE_ASCENT,
+          size: COUNTDOWN_TITLE_SIZE,
+          bold: true,
+          color: '#fbbf24',
+          align: 'center',
+          shadow: 'rgba(0,0,0,0.9)',
+          shadowBlurPx: 4,
+          shadowOffset: { x: 0, y: 0 },
+        });
+        drawText(ctx, `${secs}`, {
+          x: cw / 2,
+          y: COUNTDOWN_NUMBER_Y - COUNTDOWN_NUMBER_ASCENT,
+          size: COUNTDOWN_NUMBER_SIZE,
+          bold: true,
+          color: '#ef4444',
+          align: 'center',
+        });
+      }
     }
 
     // Defense countdown
     if (this.phase === 'defending') {
-      const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
-      const mins = Math.floor(secs / DEFENSE_SECONDS);
-      const s = secs % DEFENSE_SECONDS;
-      drawText(ctx, 'Child arrives in:', {
-        x: cw / 2,
-        y: DEFENSE_LABEL_Y - DEFENSE_LABEL_ASCENT,
-        size: DEFENSE_LABEL_SIZE,
-        bold: true,
-        color: '#e2e8f0',
-        align: 'center',
-        shadow: 'rgba(0,0,0,0.9)',
-        shadowBlurPx: 4,
-        shadowOffset: { x: 0, y: 0 },
-      });
-      drawText(ctx, `${mins}:${s.toString().padStart(2, '0')}`, {
-        x: cw / 2,
-        y: DEFENSE_TIMER_Y - DEFENSE_TIMER_ASCENT,
-        size: DEFENSE_TIMER_SIZE,
-        bold: true,
-        color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
-        align: 'center',
-      });
+      if (platform.isMobile && mobileTopY !== undefined) {
+        this.renderMobileDefenseTimer(ctx, canvas, mobileTopY);
+      } else {
+        const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
+        const mins = Math.floor(secs / DEFENSE_SECONDS);
+        const s = secs % DEFENSE_SECONDS;
+        drawText(ctx, 'Child arrives in:', {
+          x: cw / 2,
+          y: DEFENSE_LABEL_Y - DEFENSE_LABEL_ASCENT,
+          size: DEFENSE_LABEL_SIZE,
+          bold: true,
+          color: '#e2e8f0',
+          align: 'center',
+          shadow: 'rgba(0,0,0,0.9)',
+          shadowBlurPx: 4,
+          shadowOffset: { x: 0, y: 0 },
+        });
+        drawText(ctx, `${mins}:${s.toString().padStart(2, '0')}`, {
+          x: cw / 2,
+          y: DEFENSE_TIMER_Y - DEFENSE_TIMER_ASCENT,
+          size: DEFENSE_TIMER_SIZE,
+          bold: true,
+          color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
+          align: 'center',
+        });
+      }
     }
 
     if (this.phase === 'dialog') {
@@ -1020,6 +1046,81 @@ export class DefendQuestSystem implements GameSystem {
     if (this.xpFloatTimer > 0) {
       this.renderXPFloat(ctx, canvas);
     }
+  }
+
+  private renderMobileCountdown(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    topY: number,
+  ): void {
+    const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
+    const boxX = MOBILE_QUEST_BOX_X;
+    const boxW = canvas.width - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
+    const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,10,20,0.85)';
+    ctx.fillRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
+    ctx.restore();
+
+    drawText(ctx, 'ENEMIES APPROACHING', {
+      x: centerX,
+      y: topY + MOBILE_QUEST_PAD_V,
+      size: MOBILE_QUEST_TITLE_SIZE,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+    });
+    drawText(ctx, `${secs}`, {
+      x: centerX,
+      y: topY + MOBILE_QUEST_PAD_V + MOBILE_QUEST_TITLE_H + MOBILE_QUEST_GAP,
+      size: MOBILE_QUEST_VALUE_SIZE,
+      bold: true,
+      color: '#ef4444',
+      align: 'center',
+    });
+  }
+
+  private renderMobileDefenseTimer(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    topY: number,
+  ): void {
+    const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
+    const mins = Math.floor(secs / DEFENSE_SECONDS);
+    const s = secs % DEFENSE_SECONDS;
+    const timerStr = `${mins}:${s.toString().padStart(2, '0')}`;
+    const boxX = MOBILE_QUEST_BOX_X;
+    const boxW = canvas.width - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
+    const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,10,20,0.85)';
+    ctx.fillRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX, topY, boxW, MOBILE_QUEST_BOX_H);
+    ctx.restore();
+
+    drawText(ctx, 'Child arrives in:', {
+      x: centerX,
+      y: topY + MOBILE_QUEST_PAD_V,
+      size: MOBILE_QUEST_TITLE_SIZE,
+      bold: true,
+      color: '#e2e8f0',
+      align: 'center',
+    });
+    drawText(ctx, timerStr, {
+      x: centerX,
+      y: topY + MOBILE_QUEST_PAD_V + MOBILE_QUEST_TITLE_H + MOBILE_QUEST_GAP,
+      size: MOBILE_QUEST_VALUE_SIZE,
+      bold: true,
+      color: secs <= SECS_LOW_THRESHOLD ? '#4ade80' : '#fbbf24',
+      align: 'center',
+    });
   }
 
   private renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {

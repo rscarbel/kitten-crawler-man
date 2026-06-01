@@ -1208,6 +1208,8 @@ export function generateDungeon(
   const treasureRooms: TreasureRoomData[] = selectedTreasureRooms.map((r) => {
     const cx = Math.floor(r.x + r.w / 2);
     const cy = Math.floor(r.y + r.h / 2);
+    // Clear the chest tile so decorations stamped earlier don't overlap the chest.
+    grid[cy][cx].type = r.floor;
     return {
       bounds: { x: r.x, y: r.y, w: r.w, h: r.h },
       centre: { x: cx, y: cy },

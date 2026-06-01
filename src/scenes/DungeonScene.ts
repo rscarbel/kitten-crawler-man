@@ -587,13 +587,30 @@ export class DungeonScene extends GameplayScene {
         const casterTY = Math.floor((caster.y + ts * TILE_CENTER_OFFSET) / ts);
         const path = this.gameMap.findPath(compTX, compTY, casterTX, casterTY);
         if (path.length === 0) {
-          this.audio?.play('error');
-          const companionName = companionIsCat ? 'cat' : 'human';
-          this._companionErrorMsg = {
-            text: `The ${companionName} is too far away.`,
-            framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
-          };
-          return;
+          const adjacentOffsets = [
+            { dx: 1, dy: 0 },
+            { dx: -1, dy: 0 },
+            { dx: 0, dy: 1 },
+            { dx: 0, dy: -1 },
+            { dx: 1, dy: 1 },
+            { dx: -1, dy: 1 },
+            { dx: 1, dy: -1 },
+            { dx: -1, dy: -1 },
+          ];
+          const teleportTile = adjacentOffsets
+            .map(({ dx, dy }) => ({ x: casterTX + dx, y: casterTY + dy }))
+            .find(({ x, y }) => this.gameMap.isWalkable(x, y));
+          if (teleportTile === undefined) {
+            this.audio?.play('error');
+            const companionName = companionIsCat ? 'cat' : 'human';
+            this._companionErrorMsg = {
+              text: `The ${companionName} is too far away.`,
+              framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
+            };
+            return;
+          }
+          companion.x = teleportTile.x * ts;
+          companion.y = teleportTile.y * ts;
         }
       }
       this.audio?.play('menu_change_follower');
@@ -693,7 +710,10 @@ export class DungeonScene extends GameplayScene {
       tutInteraction.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
       tutInteraction.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
       tutInteraction.getBlockedDragItemId = () => tutorialController.tutorialBlockedDragItemId;
-      tutInteraction.onBlockedDragAttempt = () => this.audio?.play('error');
+      tutInteraction.onBlockedDragAttempt = () => {
+        this.audio?.play('error');
+        tutorialController.triggerBoxersDragHint();
+      };
       this.inventoryPanel = new InventoryPanel(tutInteraction);
     } else {
       this.inventoryPanel = new InventoryPanel();
@@ -2397,6 +2417,7 @@ export class DungeonScene extends GameplayScene {
       UIRenderer.renderLevelTimer(ctx, canvas, this.miniMap, this.levelTimerFrames);
     }
 
+    let mobileQuestTopY: number | undefined;
     if (platform.isMobile) {
       // On mobile, stack the boss UI directly below the HUD bar and render the
       // skill-points badge below that so nothing overlaps.
@@ -2420,12 +2441,29 @@ export class DungeonScene extends GameplayScene {
         this.notifPulse,
         skillTopY,
       );
+      const skillBadgeBottom =
+        this._hudSkillBannerRect.w > 0
+          ? this._hudSkillBannerRect.y + this._hudSkillBannerRect.h
+          : skillTopY;
+      mobileQuestTopY = skillBadgeBottom + MOBILE_UI_SPACING;
     } else {
       this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
     }
     this.arena.render(ctx, canvas, this.active());
 
     this.loot.render(ctx, camX, camY, this.active());
+
+    const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
+    if (showAchievUI) {
+      this.achievementUI.drawAchievementIcon(
+        ctx,
+        canvas,
+        this.miniMap,
+        this.gameOver,
+        this.pauseMenu.isOpen,
+      );
+      this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
+    }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       const active = this.active();
@@ -2474,7 +2512,7 @@ export class DungeonScene extends GameplayScene {
       this.gearPanel.render(ctx, canvas, active.inventory, activeName);
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
-      this.defendQuest.renderUI(ctx, canvas);
+      this.defendQuest.renderUI(ctx, canvas, mobileQuestTopY);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -2522,18 +2560,6 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
-    if (showAchievUI) {
-      this.achievementUI.drawAchievementIcon(
-        ctx,
-        canvas,
-        this.miniMap,
-        this.gameOver,
-        this.pauseMenu.isOpen,
-      );
-      this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
-    }
-
     const anyMenuOpen =
       this.pauseMenu.isOpen ||
       this.inventoryPanel.isOpen ||
@@ -2542,6 +2568,8 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
     }
+
+    this.achievementUI.renderOverlays(ctx, canvas);
 
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.renderMordecaiDialog(ctx, canvas);
@@ -2562,8 +2590,6 @@ export class DungeonScene extends GameplayScene {
     if (this.safeRoom.isSleeping) {
       this.safeRoom.renderSleepOverlay(ctx, canvas);
     }
-
-    this.achievementUI.renderOverlays(ctx, canvas);
 
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.render(ctx, canvas);

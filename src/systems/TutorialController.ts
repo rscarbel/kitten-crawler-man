@@ -120,6 +120,13 @@ const HINT_BOX_LINE_WIDTH = 2;
 const HINT_BOX_ALPHA = 0.88;
 const HINT_TEXT_SIZE = 13;
 
+// ── Boxers drag flash hint (shown when player tries to drag boxers to hotbar) ─
+const BOXERS_DRAG_HINT_TEXT = 'You can add this to your hotlist later!';
+const BOXERS_DRAG_HINT_DURATION_FRAMES = 240;
+const BOXERS_DRAG_HINT_FADE_FRAMES = 20;
+const BOXERS_DRAG_HINT_BORDER_COLOR = '#38bdf8';
+const BOXERS_DRAG_HINT_TEXT_COLOR = '#e0f2fe';
+
 // ── Near-goblin dialog constants ──────────────────────────────────────────────
 
 const DIALOG_WIDTH = 420;
@@ -427,6 +434,9 @@ export class TutorialController {
   // Menu-guide step for HUMAN_OPENED_ACHIEVEMENT phase
   private _menuGuideStep: MenuGuideStep = 'drag_smush';
 
+  // Countdown timer for the transient boxers-drag flash hint (0 = not showing)
+  private _boxersDragHintTimer = 0;
+
   // Menu-guide step for CAT_OPENED_TREASURE_BOX phase
   private _catMenuGuideStep: CatMenuGuideStep = 'drag_missile';
 
@@ -603,6 +613,11 @@ export class TutorialController {
     return null;
   }
 
+  /** Shows the "You can add this to your hotlist later!" flash hint for a few seconds. */
+  triggerBoxersDragHint(): void {
+    this._boxersDragHintTimer = BOXERS_DRAG_HINT_DURATION_FRAMES;
+  }
+
   get isG1Open(): boolean {
     return this.atOrPast('CAMERA_PAN_TO_CAT');
   }
@@ -718,6 +733,9 @@ export class TutorialController {
   update(human: HumanPlayer, cat: CatPlayer): void {
     this.stateFrames++;
     this.animFrame++;
+    if (this._boxersDragHintTimer > 0) {
+      this._boxersDragHintTimer--;
+    }
 
     switch (this._state) {
       case 'SEPARATE_ROOMS':
@@ -1304,6 +1322,8 @@ export class TutorialController {
       return;
     }
 
+    if (renderCtx.pauseMenuOpen) return;
+
     const hints = platform.isMobile ? HINT_TEXTS_MOBILE : HINT_TEXTS_DESKTOP;
     const hint = hints[this._state];
     if (hint) {
@@ -1382,17 +1402,21 @@ export class TutorialController {
     canvas: HTMLCanvasElement,
     text: string,
     extraYOffset = 0,
+    overrides: { alpha?: number; borderColor?: string; textColor?: string } = {},
   ): void {
     const boxW = Math.min(canvas.width - HINT_BOX_HORIZONTAL_MARGIN * 2, HINT_BOX_MAX_WIDTH);
     const boxX = (canvas.width - boxW) / 2;
     const hotbarTop = canvas.height - HOTBAR_SLOT_SIZE_MIRROR - HOTBAR_BOTTOM_MARGIN_MIRROR;
     const boxY = hotbarTop - HINT_BOX_HEIGHT - HINT_BOX_GAP_ABOVE_HOTBAR - extraYOffset;
     const r = HINT_BOX_CORNER_RADIUS;
+    const boxAlpha = overrides.alpha ?? HINT_BOX_ALPHA;
+    const borderColor = overrides.borderColor ?? '#f59e0b';
+    const textColor = overrides.textColor ?? '#fde68a';
 
     ctx.save();
-    ctx.globalAlpha = HINT_BOX_ALPHA;
+    ctx.globalAlpha = boxAlpha;
     ctx.fillStyle = '#0d1117';
-    ctx.strokeStyle = '#f59e0b';
+    ctx.strokeStyle = borderColor;
     ctx.lineWidth = HINT_BOX_LINE_WIDTH;
     ctx.beginPath();
     ctx.moveTo(boxX + r, boxY);
@@ -1413,7 +1437,8 @@ export class TutorialController {
       x: boxX + HINT_BOX_PADDING,
       y: boxY + HINT_BOX_PADDING,
       size: HINT_TEXT_SIZE,
-      color: '#fde68a',
+      color: textColor,
+      alpha: boxAlpha,
       bold: true,
       outline: true,
       align: 'center',
@@ -1705,10 +1730,25 @@ export class TutorialController {
     if (step === 'equip_boxers') {
       // Inventory panel is open: point at the boxers item in the bag
       if (renderCtx.inventoryPanelOpen) {
-        const hint = platform.isMobile
-          ? 'Press and hold the Enchanted BigBoi Boxers to equip them.'
-          : 'Right-click the Enchanted BigBoi Boxers to equip them.';
-        this.renderHintBox(ctx, canvas, hint);
+        if (this._boxersDragHintTimer > 0) {
+          const elapsed = BOXERS_DRAG_HINT_DURATION_FRAMES - this._boxersDragHintTimer;
+          const fadeIn =
+            Math.min(elapsed, BOXERS_DRAG_HINT_FADE_FRAMES) / BOXERS_DRAG_HINT_FADE_FRAMES;
+          const fadeOut =
+            Math.min(this._boxersDragHintTimer, BOXERS_DRAG_HINT_FADE_FRAMES) /
+            BOXERS_DRAG_HINT_FADE_FRAMES;
+          const flashAlpha = HINT_BOX_ALPHA * Math.min(fadeIn, fadeOut);
+          this.renderHintBox(ctx, canvas, BOXERS_DRAG_HINT_TEXT, 0, {
+            alpha: flashAlpha,
+            borderColor: BOXERS_DRAG_HINT_BORDER_COLOR,
+            textColor: BOXERS_DRAG_HINT_TEXT_COLOR,
+          });
+        } else {
+          const hint = platform.isMobile
+            ? 'Press and hold the Enchanted BigBoi Boxers to equip them.'
+            : 'Right-click the Enchanted BigBoi Boxers to equip them.';
+          this.renderHintBox(ctx, canvas, hint);
+        }
         const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
         if (itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
