@@ -62,7 +62,7 @@ import { readMovement, applyMovement, checkDeath, revealMinimap } from '../syste
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
-import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
+import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -71,7 +71,7 @@ import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { TutorialInventoryInteraction } from '../ui/TutorialInventoryInteraction';
-import { ITEM_DEF } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
@@ -89,6 +89,7 @@ import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import {
@@ -149,6 +150,8 @@ const GOD_MODE_ABILITY_LEVEL = 15;
 const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
 const TILE_CENTER_OFFSET = 0.5;
 const COMPANION_ERROR_DISPLAY_FRAMES = 180;
+/** Frames between playing potion_drink and the potion's secondary effect sound. */
+const POTION_EFFECT_SOUND_DELAY = 45;
 
 // Spatial grid sizing
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
@@ -159,6 +162,17 @@ const LOW_HP_LOOT_CHANCE = 0.4;
 const MED_HP_LOOT_CHANCE = 0.6;
 const MIN_COIN_DROP = 15;
 const MAX_COIN_DROP = 50;
+
+// Chest potion weights — proportional to original mob drop rates (8:8:4:1.5 scaled to integers)
+const CHEST_POTION_SPEED_FIZZ_WEIGHT = 16;
+const CHEST_POTION_JUGG_JUICE_WEIGHT = 16;
+const CHEST_POTION_COOLDOWN_CRISP_WEIGHT = 8;
+const CHEST_POTION_STAT_BOOST_WEIGHT = 3;
+const CHEST_POTION_TOTAL_WEIGHT =
+  CHEST_POTION_SPEED_FIZZ_WEIGHT +
+  CHEST_POTION_JUGG_JUICE_WEIGHT +
+  CHEST_POTION_COOLDOWN_CRISP_WEIGHT +
+  CHEST_POTION_STAT_BOOST_WEIGHT;
 const SPIT_PLACEMENT_ATTEMPTS = 8;
 const SPIT_PLACEMENT_RANDOMNESS = 0.5;
 
@@ -212,7 +226,6 @@ const HUMAN_ATTACK_RANGE_TILES = 3;
 const CAT_ATTACK_RANGE_TILES = 5;
 const ACHIEVEMENT_RECENT_EVENTS_LIMIT = 5;
 const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
-const SPIDER_QUEST_COMPLETION_XP = 2000;
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
@@ -276,6 +289,21 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
     humanLoot: { coins: halfCoins + (humanGetsExtraCoin ? extraCoin : 0), items: humanItems },
     catLoot: { coins: halfCoins + (humanGetsExtraCoin ? 0 : extraCoin), items: catItems },
   };
+}
+
+/** Picks a potion type for a chest using the relative rarity weights. */
+function rollChestPotion(): ItemId {
+  const r = Math.random() * CHEST_POTION_TOTAL_WEIGHT;
+  if (r < CHEST_POTION_SPEED_FIZZ_WEIGHT) return 'speed_fizz';
+  if (r < CHEST_POTION_SPEED_FIZZ_WEIGHT + CHEST_POTION_JUGG_JUICE_WEIGHT) return 'jugg_juice';
+  if (
+    r <
+    CHEST_POTION_SPEED_FIZZ_WEIGHT +
+      CHEST_POTION_JUGG_JUICE_WEIGHT +
+      CHEST_POTION_COOLDOWN_CRISP_WEIGHT
+  )
+    return 'cooldown_crisp';
+  return 'stat_boost_potion';
 }
 
 export class DungeonScene extends GameplayScene {
@@ -387,6 +415,7 @@ export class DungeonScene extends GameplayScene {
   private _mouseY = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
   private _mouseDown = false;
   private _companionErrorMsg: { text: string; framesLeft: number } | null = null;
+  private _delayedSounds: Array<{ id: SoundId; framesLeft: number }> = [];
   private _miniMapDragging = false;
   private _miniMapDragLastX = 0;
   private _miniMapDragLastY = 0;
@@ -508,7 +537,7 @@ export class DungeonScene extends GameplayScene {
       this.mobGrid.insert(mob);
       mob.setSpells(this.spells);
     });
-    this.spiderQuest = new SpiderQuestSystem(this.gameMap, (mob) => {
+    this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
       this.mobs.push(mob);
       this.mobGrid.insert(mob);
       mob.setSpells(this.spells);
@@ -762,14 +791,14 @@ export class DungeonScene extends GameplayScene {
     // Wooden chests for treasure rooms
     for (const tr of this.gameMap.treasureRooms) {
       const coins = randomInt(MIN_COIN_DROP, MAX_COIN_DROP);
-      const items: Array<{ id: 'health_potion' | 'scroll_of_confusing_fog'; quantity: number }> =
-        [];
+      const items: LootDrop['items'] = [];
       const roll = Math.random();
       if (roll < LOW_HP_LOOT_CHANCE) {
         items.push({ id: 'health_potion', quantity: randomInt(1, 2) });
       } else if (roll < MED_HP_LOOT_CHANCE) {
         items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
       }
+      items.push({ id: rollChestPotion(), quantity: 1 });
       this.treasureChests.addWoodenChest(tr.centre.x, tr.centre.y, tr.bounds, {
         coins,
         items,
@@ -1060,6 +1089,14 @@ export class DungeonScene extends GameplayScene {
         this.human.inventory.clearQuestSlot();
         this.cat.inventory.clearQuestSlot();
       }
+      if (e.questId === 'grotesque_spider') {
+        if (this.human.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
+          this.bus.emit('playerLevelUp', { player: this.human, newLevel: this.human.level });
+        }
+        if (this.cat.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
+          this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
+        }
+      }
     });
 
     bus.on('questFailed', (e) => {
@@ -1262,7 +1299,7 @@ export class DungeonScene extends GameplayScene {
       inactive.isKnockedOut = true;
       inactive.knockedOutFrames = 0;
       inactive.reviveProgress = 0;
-      inactive.statusEffects = [];
+      inactive.clearStatusEffects();
       this.audio?.play(inactive === this.human ? 'human_knocked_out' : 'cat_knocked_out');
     }
 
@@ -1558,14 +1595,14 @@ export class DungeonScene extends GameplayScene {
               intelligenceBoost: GOD_MODE_STAT_BOOST,
               constitutionBoost: GOD_MODE_STAT_BOOST,
               maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.human.speedMultiplier,
+              originalSpeedMultiplier: this.human.baseSpeedMultiplier,
             },
             cat: {
               strengthBoost: GOD_MODE_STAT_BOOST,
               intelligenceBoost: GOD_MODE_STAT_BOOST,
               constitutionBoost: GOD_MODE_STAT_BOOST,
               maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.cat.speedMultiplier,
+              originalSpeedMultiplier: this.cat.baseSpeedMultiplier,
             },
           };
           for (const p of [this.human, this.cat]) {
@@ -1585,14 +1622,14 @@ export class DungeonScene extends GameplayScene {
               intelligenceBoost: GOD_MODE_STAT_BOOST,
               constitutionBoost: GOD_MODE_STAT_BOOST,
               maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.human.speedMultiplier,
+              originalSpeedMultiplier: this.human.baseSpeedMultiplier,
             },
             cat: {
               strengthBoost: GOD_MODE_STAT_BOOST,
               intelligenceBoost: GOD_MODE_STAT_BOOST,
               constitutionBoost: GOD_MODE_STAT_BOOST,
               maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.cat.speedMultiplier,
+              originalSpeedMultiplier: this.cat.baseSpeedMultiplier,
             },
           };
           for (const p of [this.human, this.cat]) {
@@ -1893,6 +1930,38 @@ export class DungeonScene extends GameplayScene {
       this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
     } else if (slot?.id === 'quest_wood_board' && this.human.isActive) {
       this.defendQuest.tryBuildBarrier(this.human);
+    } else if (slot?.id === 'speed_fizz') {
+      if (active.hasStatus('speed_fizz')) {
+        this.audio?.play('error_taking_action');
+        return;
+      }
+      if (!active.inventory.removeOne('speed_fizz')) return;
+      active.activateSpeedFizz();
+      this.audio?.play('potion_drink');
+      this._delayedSounds.push({ id: 'speed_fizz', framesLeft: POTION_EFFECT_SOUND_DELAY });
+    } else if (slot?.id === 'jugg_juice') {
+      if (active.hasStatus('jugg_juice')) {
+        this.audio?.play('error_taking_action');
+        return;
+      }
+      if (!active.inventory.removeOne('jugg_juice')) return;
+      active.activateJuggJuice();
+      this.audio?.play('potion_drink');
+      this._delayedSounds.push({ id: 'jugg_juice', framesLeft: POTION_EFFECT_SOUND_DELAY });
+    } else if (slot?.id === 'cooldown_crisp') {
+      if (active.hasStatus('cooldown_crisp')) {
+        this.audio?.play('error_taking_action');
+        return;
+      }
+      if (!active.inventory.removeOne('cooldown_crisp')) return;
+      active.activateCooldownCrisp();
+      this.audio?.play('potion_drink');
+      this._delayedSounds.push({ id: 'cooldown_crisp', framesLeft: POTION_EFFECT_SOUND_DELAY });
+    } else if (slot?.id === 'stat_boost_potion') {
+      if (!active.inventory.removeOne('stat_boost_potion')) return;
+      active.applyStatBoost();
+      this.audio?.play('potion_drink');
+      this._delayedSounds.push({ id: 'stat_boost', framesLeft: POTION_EFFECT_SOUND_DELAY });
     }
   }
 
@@ -2153,6 +2222,14 @@ export class DungeonScene extends GameplayScene {
         this._companionErrorMsg = null;
       }
     }
+    this._delayedSounds = this._delayedSounds.filter((s) => {
+      s.framesLeft--;
+      if (s.framesLeft <= 0) {
+        this.audio?.play(s.id);
+        return false;
+      }
+      return true;
+    });
     this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
     this.rewardGrantedDialog.update();
@@ -2177,15 +2254,6 @@ export class DungeonScene extends GameplayScene {
       const sqCtx = this.buildSystemContext();
       this.spiderQuest.update(sqCtx);
       this._processSpiderQuestSounds();
-      if (this.spiderQuest.questCompletePending) {
-        this.spiderQuest.questCompletePending = false;
-        if (this.human.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
-          this.bus.emit('playerLevelUp', { player: this.human, newLevel: this.human.level });
-        }
-        if (this.cat.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
-          this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
-        }
-      }
     }
 
     if (

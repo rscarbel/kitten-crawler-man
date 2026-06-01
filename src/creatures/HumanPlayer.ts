@@ -114,7 +114,7 @@ export class HumanPlayer extends Player {
 
   updateAttack() {
     if (this.attackTimer > 0) this.attackTimer--;
-    if (this.smushCooldown > 0) this.smushCooldown--;
+    this.smushCooldown = this.tickCooldown(this.smushCooldown);
     if (this.smushTimer > 0) {
       this.smushTimer--;
       if (this.smushTimer === 0) {

@@ -215,10 +215,9 @@ export class CatPlayer extends Player {
     }
 
     // AI fires at most as fast as an average human could (~3 shots/sec at 60fps).
+    // Cooldown is decremented by updateMissiles each frame — don't decrement here too.
     const cooldownMax = Math.max(this.missileCooldownMax, CatPlayer.AI_MIN_COOLDOWN);
-    if (this.missileCooldown > 0) {
-      this.missileCooldown--;
-    } else {
+    if (this.missileCooldown === 0) {
       // Use the same shared cooldown as player-triggered shots
       const offset =
         Math.random() < missChance
@@ -237,7 +236,7 @@ export class CatPlayer extends Player {
     const CONE_HALF = CatPlayer.HOMING_CONE_HALF_ANGLE; // ±60° = 120° total
     const TURN_RATE = CatPlayer.HOMING_TURN_RATE; // radians/frame
 
-    if (this.missileCooldown > 0) this.missileCooldown--;
+    this.missileCooldown = this.tickCooldown(this.missileCooldown);
 
     for (const m of this.missiles) {
       if (m.state === 'flying') {

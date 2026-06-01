@@ -1,4 +1,5 @@
 import type { StatusEffect } from './core/StatusEffect';
+import { makeSpeedFizz, makeJuggJuice, makeCooldownCrisp } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
@@ -27,6 +28,14 @@ const SPIT_VENOM_TICK_INTERVAL = 40;
 
 /** Walk animation speed constant */
 const WALK_FRAME_SPEED = 0.14;
+
+/** Potion effect constants */
+const SPEED_FIZZ_MULTIPLIER = 2;
+const JUGG_JUICE_HP_MULTIPLIER_BONUS = 0.5;
+const JUGG_JUICE_FLAT_BONUS = 5;
+const STAT_BOOST_MIN = 2;
+const STAT_BOOST_RANGE = 3;
+const STAT_BOOST_STAT_COUNT = 3;
 
 /** Health bar display thresholds */
 const HP_BAR_GREEN_THRESHOLD = 0.5;
@@ -164,8 +173,23 @@ export abstract class Player {
   godMode = false;
   /** When true, all damage this player deals to mobs is suppressed. */
   zeroDamage = false;
-  /** Movement speed multiplier — 1 is normal, 2 is double speed. */
-  speedMultiplier = 1;
+  /** Base speed multiplier (set by god mode, etc.). Combined with potion boost in the getter. */
+  private _baseSpeedMultiplier = 1;
+  /** Speed multiplier contributed by active Speed Fizz. Reset to 1 on expiry. */
+  private _potionSpeedBoost = 1;
+  /** Movement speed multiplier — product of base and any active potion boost. */
+  get speedMultiplier(): number {
+    return this._baseSpeedMultiplier * this._potionSpeedBoost;
+  }
+  set speedMultiplier(v: number) {
+    this._baseSpeedMultiplier = v;
+  }
+  /** The base speed multiplier before any potion boost is applied. Snapshot this (not speedMultiplier) to avoid baking an active potion boost into the restored base. */
+  get baseSpeedMultiplier(): number {
+    return this._baseSpeedMultiplier;
+  }
+  /** The maxHp added by an active Jugg Juice effect — reversed on expiry. */
+  private _juggJuiceHpBoost = 0;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
   statusEffects: StatusEffect[] = [];
   /** When true, mob AI treats this player as a defend target and will not attack other targets. */
@@ -341,8 +365,36 @@ export abstract class Player {
         this.effectDamageSoundPending = true;
       }
       effect.ticksRemaining--;
+      const justExpired = effect.ticksRemaining < 0;
+      if (justExpired && effect.type === 'speed_fizz') {
+        this._potionSpeedBoost = 1;
+      }
+      if (justExpired && effect.type === 'jugg_juice') {
+        this.maxHp = Math.max(1, this.maxHp - this._juggJuiceHpBoost);
+        this._juggJuiceHpBoost = 0;
+        this.hp = Math.min(this.hp, this.maxHp);
+      }
       return effect.ticksRemaining >= 0;
     });
+  }
+
+  /**
+   * Clears all active status effects, running any necessary expiry cleanup first.
+   * Use this instead of assigning statusEffects = [] directly so that effects like
+   * Jugg Juice (which mutates maxHp) are properly reversed.
+   */
+  clearStatusEffects(): void {
+    for (const effect of this.statusEffects) {
+      if (effect.type === 'speed_fizz') {
+        this._potionSpeedBoost = 1;
+      }
+      if (effect.type === 'jugg_juice') {
+        this.maxHp = Math.max(1, this.maxHp - this._juggJuiceHpBoost);
+        this._juggJuiceHpBoost = 0;
+        this.hp = Math.min(this.hp, this.maxHp);
+      }
+    }
+    this.statusEffects = [];
   }
 
   /** Register (or overwrite) a named regen bonus. Value is a multiplier where 1 = no effect; bonuses above 1 stack additively. */
@@ -369,10 +421,68 @@ export abstract class Player {
     return result;
   }
 
+  /**
+   * How many extra cooldown ticks to consume per frame.
+   * Returns 2 while Cooldown Crisp is active (halving effective cooldown time), 1 normally.
+   */
+  get abilitySpeedMultiplier(): number {
+    return this.hasStatus('cooldown_crisp') ? 2 : 1;
+  }
+
+  /**
+   * Decrement a cooldown counter by one tick per frame, or by two if Cooldown Crisp is active.
+   * Use this instead of manual `counter--` wherever ability speed should affect the timer.
+   */
+  tickCooldown(current: number): number {
+    if (current <= 0) return current;
+    const decremented = current - 1;
+    return this.abilitySpeedMultiplier > 1 && decremented > 0 ? decremented - 1 : decremented;
+  }
+
+  /** Activate Speed Fizz: doubles movement speed for 25 seconds. */
+  activateSpeedFizz(): void {
+    this._potionSpeedBoost = SPEED_FIZZ_MULTIPLIER;
+    this.applyStatus(makeSpeedFizz());
+  }
+
+  /** Activate Jugg Juice: boosts max HP by 50% + 5 and heals to full for 30 seconds. */
+  activateJuggJuice(): void {
+    const boost = Math.round(this.maxHp * JUGG_JUICE_HP_MULTIPLIER_BONUS + JUGG_JUICE_FLAT_BONUS);
+    this._juggJuiceHpBoost = boost;
+    this.maxHp += boost;
+    this.hp = this.maxHp;
+    this.applyStatus(makeJuggJuice());
+  }
+
+  /** Activate Cooldown Crisp: halves all ability cooldowns for 25 seconds. */
+  activateCooldownCrisp(): void {
+    this.applyStatus(makeCooldownCrisp());
+  }
+
+  /** Permanently boost a randomly chosen stat by 2–4 points. */
+  applyStatBoost(): void {
+    const stats = ['strength', 'intelligence', 'constitution'] as const;
+    const stat = stats[Math.floor(Math.random() * STAT_BOOST_STAT_COUNT)];
+    const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
+    if (stat === 'strength') {
+      this.strength += amount;
+      this.levelUpStat = 'STR';
+    } else if (stat === 'intelligence') {
+      this.intelligence += amount;
+      this.levelUpStat = 'INT';
+    } else {
+      this.constitution += amount;
+      this.maxHp += amount * CON_HP_BONUS_PER_POINT;
+      this.hp = Math.min(this.hp + amount * CON_HP_BONUS_PER_POINT, this.maxHp);
+      this.levelUpStat = 'CON';
+    }
+    this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
+  }
+
   tickTimers() {
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;
-    if (this.potionCooldownFrames > 0) this.potionCooldownFrames--;
+    this.potionCooldownFrames = this.tickCooldown(this.potionCooldownFrames);
     if (this.isMoving) {
       this.walkFrame = (this.walkFrame + WALK_FRAME_SPEED) % (Math.PI * 2);
     } else {

@@ -1,5 +1,9 @@
 export type ItemId =
   | 'health_potion'
+  | 'speed_fizz'
+  | 'jugg_juice'
+  | 'cooldown_crisp'
+  | 'stat_boost_potion'
   | 'enchanted_bigboi_boxers'
   | 'trollskin_shirt'
   | 'enchanted_crown_sepsis_whore'
@@ -60,6 +64,43 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+  },
+  speed_fizz: {
+    id: 'speed_fizz',
+    name: 'Speed Fizz',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'Doubles your movement speed for 25 seconds. Cannot be stacked while a previous Speed Fizz is active.',
+  },
+  jugg_juice: {
+    id: 'jugg_juice',
+    name: 'Jugg Juice',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'Temporarily boosts your max HP by 50% + 5 and heals you to full for 30 seconds. ' +
+      'When the effect expires, max HP returns to normal.',
+  },
+  cooldown_crisp: {
+    id: 'cooldown_crisp',
+    name: 'Cooldown Crisp',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'Halves all ability cooldown timers for 25 seconds. Cannot be stacked while a previous Cooldown Crisp is active.',
+  },
+  stat_boost_potion: {
+    id: 'stat_boost_potion',
+    name: 'Stat Boost',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'Permanently increases one randomly chosen stat (STR, INT, or CON) by 2 to 4 points.',
   },
   goblin_dynamite: {
     id: 'goblin_dynamite',

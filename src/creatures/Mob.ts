@@ -60,6 +60,14 @@ const WANDER_PULLBACK_SPEED_FRACTION = 0.4;
 const DEFAULT_POTION_DROP_CHANCE = 0.25;
 /** Default scroll of confusing fog drop chance. */
 const DEFAULT_FOG_SCROLL_DROP_CHANCE = 0.05;
+/** Speed Fizz drop chance from mobs (very rare — primary source is chests). */
+const SPEED_FIZZ_DROP_CHANCE = 0.005;
+/** Jugg Juice drop chance from mobs (very rare — primary source is chests). */
+const JUGG_JUICE_DROP_CHANCE = 0.005;
+/** Cooldown Crisp drop chance from mobs (very rare — primary source is chests). */
+const COOLDOWN_CRISP_DROP_CHANCE = 0.003;
+/** Stat Boost Potion drop chance from mobs (extremely rare — primary source is chests). */
+const STAT_BOOST_DROP_CHANCE = 0.001;
 
 /** Aggro indicator font size. */
 const AGGRO_INDICATOR_FONT_SIZE = 18;
@@ -506,6 +514,12 @@ export abstract class Mob extends Player {
       items.push({ id: 'health_potion', quantity: 1 });
     if (Math.random() < DEFAULT_FOG_SCROLL_DROP_CHANCE)
       items.push({ id: 'scroll_of_confusing_fog', quantity: 1 });
+    if (Math.random() < SPEED_FIZZ_DROP_CHANCE) items.push({ id: 'speed_fizz', quantity: 1 });
+    if (Math.random() < JUGG_JUICE_DROP_CHANCE) items.push({ id: 'jugg_juice', quantity: 1 });
+    if (Math.random() < COOLDOWN_CRISP_DROP_CHANCE)
+      items.push({ id: 'cooldown_crisp', quantity: 1 });
+    if (Math.random() < STAT_BOOST_DROP_CHANCE)
+      items.push({ id: 'stat_boost_potion', quantity: 1 });
     return items;
   }
 

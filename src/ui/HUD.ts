@@ -498,6 +498,15 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
   } else if (effect.type === 'paralyzed') {
     bgColor = '#a855f7';
     label = 'PARA';
+  } else if (effect.type === 'speed_fizz') {
+    bgColor = '#0284c7';
+    label = 'FIZZ';
+  } else if (effect.type === 'jugg_juice') {
+    bgColor = '#ea580c';
+    label = 'JUGG';
+  } else if (effect.type === 'cooldown_crisp') {
+    bgColor = '#059669';
+    label = 'CRSP';
   }
 
   // Background pill

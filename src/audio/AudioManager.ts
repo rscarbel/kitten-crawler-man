@@ -574,7 +574,7 @@ export class AudioManager {
     });
 
     bus.on('questCompleted', (e) => {
-      if (e.questId === 'defend_goblin_mother') {
+      if (e.questId === 'defend_goblin_mother' || e.questId === 'grotesque_spider') {
         this.play('quest_complete');
       }
     });

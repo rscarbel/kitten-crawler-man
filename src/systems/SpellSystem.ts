@@ -293,9 +293,9 @@ export class SpellSystem implements GameSystem {
     // Level 15: instant ally heal + clear status effects
     if (stats.isFullPower) {
       human.hp = human.maxHp;
-      human.statusEffects = [];
+      human.clearStatusEffects();
       cat.hp = cat.maxHp;
-      cat.statusEffects = [];
+      cat.clearStatusEffects();
     }
 
     const shell = this.activeShell;
@@ -335,7 +335,7 @@ export class SpellSystem implements GameSystem {
   update(ctx: SystemContext): void {
     const { mobs, mobGrid, cat, human } = ctx;
 
-    if (this._shellCooldown > 0) this._shellCooldown--;
+    this._shellCooldown = human.tickCooldown(this._shellCooldown);
 
     if (this.activeShell) {
       // Clear heal boost from previous frame; re-applied below if ally is still inside

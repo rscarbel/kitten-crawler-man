@@ -60,7 +60,7 @@ export interface GameEvents {
   questStarted: { questId: string };
 
   /** A quest was completed. */
-  questCompleted: { questId: string };
+  questCompleted: { questId: string; difficulty?: 'easy' | 'medium' | 'hard' };
 
   /** A quest was failed. */
   questFailed: { questId: string };

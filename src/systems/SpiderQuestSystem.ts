@@ -18,6 +18,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { EventBus } from '../core/EventBus';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
@@ -25,6 +26,9 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
+
+export const SPIDER_QUEST_ID = 'grotesque_spider';
+export const SPIDER_QUEST_COMPLETION_XP = 2000;
 
 const SCIENTIST_INTERACT_RANGE_TILES = 2.5;
 const COMPUTER_INTERACT_RANGE_TILES = 1.5;
@@ -214,6 +218,24 @@ const CS_SPIT_TTL_MARGIN = 20;
 const CS_SHAKE_RAMP_FACTOR = 0.67;
 const CS_SHAKE_REDUCED_FRACTION = 0.33;
 
+// Quest complete overlay constants
+const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds at 60 fps
+const OVERLAY_FADE_FRAMES = 90;
+const TEXT_HEIGHT_FACTOR = 0.8;
+const OVERLAY_PULSE_SPEED = 200;
+const OVERLAY_PULSE_AMP = 0.05;
+const OVERLAY_BASE_TEXT_SIZE = 36;
+const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
+const OVERLAY_REWARDS_Y_OFFSET = 10;
+const OVERLAY_REWARDS_Y_ASCENT = 13;
+const OVERLAY_REWARD_1_Y_OFFSET = 35;
+const OVERLAY_REWARD_1_ASCENT = 11;
+const OVERLAY_DISMISS_Y_OFFSET = 65;
+const OVERLAY_DISMISS_ASCENT = 10;
+const OVERLAY_REWARDS_SIZE = 16;
+const OVERLAY_REWARD_SIZE = 14;
+const OVERLAY_DISMISS_SIZE = 12;
+
 const NEIGHBOR_OFFSETS_SMALL: Array<[number, number]> = [
   [0, OFFSET_NORTH],
   [0, OFFSET_SOUTH],
@@ -286,7 +308,7 @@ export class SpiderQuestSystem implements GameSystem {
   hackFailErrorSoundPending = false;
 
   // Quest completion
-  questCompletePending = false;
+  completeOverlayTimer = 0;
 
   // Boss intro trigger — set when the cutscene ends and the fight begins
   bossFightStartPending = false;
@@ -384,9 +406,11 @@ export class SpiderQuestSystem implements GameSystem {
   // Callbacks
   private addMob: (mob: Mob) => void;
   private gameMap: GameMap;
+  private bus: EventBus;
 
-  constructor(gameMap: GameMap, addMob: (mob: Mob) => void) {
+  constructor(gameMap: GameMap, bus: EventBus, addMob: (mob: Mob) => void) {
     this.gameMap = gameMap;
+    this.bus = bus;
     this.addMob = addMob;
     this.keyboardHero = new KeyboardHeroSystem();
 
@@ -482,6 +506,9 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
+    // Overlay timer ticks even after quest ends
+    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
+
     if (this.phase === 'inactive' || this.phase === 'complete') return;
     if (!this.roomData) return;
 
@@ -617,15 +644,25 @@ export class SpiderQuestSystem implements GameSystem {
     if (this._roomLocked && this.roomData !== null) {
       this._renderLockedRoomBorder(ctx, canvas, camX, camY);
     }
+
+    if (this.completeOverlayTimer > 0) {
+      this._renderCompleteOverlay(ctx, canvas);
+    }
   }
 
   handleClick(mx: number, my: number): boolean {
+    if (this.completeOverlayTimer > 0) {
+      this.completeOverlayTimer = 0;
+      return true;
+    }
+
     if (this.phase === 'scientist_dialog') {
       for (const btn of this.dialogButtons) {
         if (pointInRect(mx, my, btn)) {
           this.menuClickSoundPending = true;
           if (btn.action === 'accept') {
             this.phase = 'awaiting_hacking';
+            this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
           } else {
             this.phase = 'scientist_waiting';
           }
@@ -769,7 +806,7 @@ export class SpiderQuestSystem implements GameSystem {
   onBossKilled(): void {
     if (this.phase === 'complete') return;
     this.phase = 'complete';
-    this.questCompletePending = true;
+    this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
     this._playerLocked = false;
     this._roomLocked = false;
     this._fightAborted = false;
@@ -779,6 +816,7 @@ export class SpiderQuestSystem implements GameSystem {
     this._screenShakeIntensity = 0;
     this._screenShakeX = 0;
     this._screenShakeY = 0;
+    this.bus.emit('questCompleted', { questId: SPIDER_QUEST_ID, difficulty: 'medium' });
   }
 
   dispose(): void {
@@ -1195,6 +1233,7 @@ export class SpiderQuestSystem implements GameSystem {
       if (hitSci || proj.ttl <= 0) {
         this.scientistDead = true;
         this._cutsceneProjectile = null;
+        this._cameraOverrideTile = null;
         this._screenShakeIntensity = 0;
         this._screenShakeX = 0;
         this._screenShakeY = 0;
@@ -2320,6 +2359,61 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.rotate(proj.angle);
     drawSpitProjectile(ctx, 0, 0, TILE_SIZE, proj.animFrame);
     ctx.restore();
+  }
+
+  private _renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const alpha =
+      this.completeOverlayTimer < OVERLAY_FADE_FRAMES
+        ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
+        : 1;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.restore();
+
+    const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
+    const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
+    drawText(ctx, 'QUEST COMPLETE!', {
+      x: cw / 2,
+      y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
+      size: pulsedSize,
+      bold: true,
+      color: '#4ade80',
+      align: 'center',
+      alpha,
+      glow: '#4ade80',
+      glowBlur: 15,
+    });
+
+    drawText(ctx, 'Rewards:', {
+      x: cw / 2,
+      y: ch / 2 + OVERLAY_REWARDS_Y_OFFSET - OVERLAY_REWARDS_Y_ASCENT,
+      size: OVERLAY_REWARDS_SIZE,
+      bold: true,
+      color: '#fbbf24',
+      align: 'center',
+      alpha,
+    });
+    drawText(ctx, `+${SPIDER_QUEST_COMPLETION_XP.toLocaleString()} EXP (each)`, {
+      x: cw / 2,
+      y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
+      size: OVERLAY_REWARD_SIZE,
+      color: '#e2e8f0',
+      align: 'center',
+      alpha,
+    });
+    drawText(ctx, 'Click to dismiss', {
+      x: cw / 2,
+      y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
+      size: OVERLAY_DISMISS_SIZE,
+      color: 'rgba(200,200,200,0.7)',
+      align: 'center',
+      alpha,
+    });
   }
 
   private _renderCutsceneUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {

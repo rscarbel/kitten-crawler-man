@@ -56,3 +56,18 @@ export function makeSpitVenom(): StatusEffect {
 export function makeStun(ticks: number): StatusEffect {
   return { type: 'stun', ticksRemaining: ticks, totalTicks: ticks };
 }
+
+/** Speed Fizz: doubles movement speed for 25 seconds (1500 ticks at 60 fps). */
+export function makeSpeedFizz(): StatusEffect {
+  return { type: 'speed_fizz', ticksRemaining: 1500, totalTicks: 1500 };
+}
+
+/** Jugg Juice: temporarily boosts max HP by 50% + 5 for 30 seconds (1800 ticks at 60 fps). */
+export function makeJuggJuice(): StatusEffect {
+  return { type: 'jugg_juice', ticksRemaining: 1800, totalTicks: 1800 };
+}
+
+/** Cooldown Crisp: halves all ability cooldowns for 25 seconds (1500 ticks at 60 fps). */
+export function makeCooldownCrisp(): StatusEffect {
+  return { type: 'cooldown_crisp', ticksRemaining: 1500, totalTicks: 1500 };
+}

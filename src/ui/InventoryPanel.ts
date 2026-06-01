@@ -241,6 +241,84 @@ const CROWN_GEM_SIDE_X = 0.2;
 const CROWN_GEM_SIDE_Y = 0.08;
 const CROWN_GEM_SIDE_R = 0.04;
 
+// Shared potion flask liquid-fill proportions
+const POTION_LIQUID_Y_SHIFT = 0.15;
+const POTION_LIQUID_R_SCALE = 0.78;
+const POTION_SHINE_ALPHA = 0.4;
+
+// Jugg Juice wide-flask uses an ellipse; needs its own RX scale
+const JUGG_LIQUID_RX_SCALE = 0.82;
+
+// Lightning bolt polygon geometry (fractions of bolt base size bs)
+const BOLT_TIP_Y = 1.8;
+const BOLT_NOTCH_X = 0.3;
+const BOLT_NOTCH_Y = 0.1;
+const BOLT_INNER_X = 0.5;
+
+// Heart bezier geometry (fractions of heart size hs)
+const HEART_APEX_Y = 0.3;
+const HEART_TOP_CTRL = 0.3;
+const HEART_MID_Y = 0.5;
+const HEART_BOTTOM = 1.1;
+
+// Clock hour hand angle: π/6 = 30° puts the short hand at 2 o'clock
+const CLOCK_HOUR_ANGLE_DIVS = 6;
+
+// Star centre Y shift (fraction of flask radius r)
+const STAR_CY_SHIFT = 0.05;
+
+// Shared geometry for round-flask potions (speed_fizz, cooldown_crisp, stat_boost)
+const FLASK_CX = 0.5;
+const FLASK_R = 0.25;
+const FLASK_NECK_X = 0.07;
+const FLASK_NECK_W = 0.14;
+const FLASK_NECK_H = 0.18;
+const FLASK_CORK_X = 0.09;
+const FLASK_CORK_W = 0.18;
+const FLASK_CORK_H = 0.08;
+const FLASK_SHINE_OFFSET = 0.28;
+const FLASK_SHINE_RX = 0.2;
+const FLASK_SHINE_RY = 0.11;
+const FLASK_SHINE_ROT = -0.7;
+
+// Speed Fizz symbol geometry
+const SPEED_FIZZ_BOLT_CX = 0.5;
+const SPEED_FIZZ_BOLT_CY = 0.62;
+const SPEED_FIZZ_BOLT_SCALE = 0.13;
+
+// Jugg Juice flask geometry (wide ellipse — different from the round-flask defaults)
+const JUGG_CY = 0.61;
+const JUGG_RX = 0.3;
+const JUGG_RY = 0.25;
+const JUGG_NECK_X = 0.09;
+const JUGG_NECK_Y = 0.26;
+const JUGG_NECK_W = 0.18;
+const JUGG_NECK_H = 0.14;
+const JUGG_CORK_X = 0.11;
+const JUGG_CORK_Y = 0.2;
+const JUGG_CORK_W = 0.22;
+const JUGG_HEART_SIZE = 0.12;
+const JUGG_HEART_Y = 0.6;
+const JUGG_SHINE_OFFSET = 0.25;
+
+// Standard round-flask Y positions (speed_fizz and stat_boost share these)
+const ROUND_FLASK_CY = 0.58;
+const ROUND_FLASK_NECK_Y = 0.24;
+const ROUND_FLASK_CORK_Y = 0.18;
+
+// Cooldown Crisp clock symbol geometry — flask sits slightly higher to fit the clock face
+const COOL_CRISP_CY = 0.55;
+const COOL_CRISP_NECK_Y = 0.22;
+const COOL_CRISP_CORK_Y = 0.16;
+const COOL_CRISP_CLOCK_R = 0.14;
+const COOL_CRISP_HAND_LONG = 0.11;
+const COOL_CRISP_HAND_SHORT = 0.07;
+
+// Stat Boost Potion star symbol geometry
+const STAT_BOOST_STAR_R_OUTER = 0.17;
+const STAT_BOOST_STAR_R_INNER = 0.08;
+const STAT_BOOST_STAR_POINTS = 5;
+
 // Cooldown overlay opacity
 const COOLDOWN_OVERLAY_ALPHA = 0.65;
 const COOLDOWN_OVERLAY_DARK = 0.75;
@@ -251,6 +329,70 @@ const COOLDOWN_FONT_BASELINE = 0.8;
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
+}
+
+/**
+ * Draws the shared parts of a round-flask potion icon: body circle, liquid fill,
+ * neck rect, cork rect, and shine highlight. Returns the computed centre and radius
+ * so the caller can draw the symbol inside.
+ */
+function drawRoundFlask(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  cyFrac: number,
+  neckYFrac: number,
+  corkYFrac: number,
+  bodyColor: string,
+  liquidColor: string,
+  neckColor: string,
+  corkColor: string,
+): { cx: number; cy: number; r: number } {
+  const cx = x + size * FLASK_CX;
+  const cy = y + size * cyFrac;
+  const r = size * FLASK_R;
+
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = liquidColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy + r * POTION_LIQUID_Y_SHIFT, r * POTION_LIQUID_R_SCALE, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = neckColor;
+  ctx.fillRect(
+    cx - size * FLASK_NECK_X,
+    y + size * neckYFrac,
+    size * FLASK_NECK_W,
+    size * FLASK_NECK_H,
+  );
+
+  ctx.fillStyle = corkColor;
+  ctx.fillRect(
+    cx - size * FLASK_CORK_X,
+    y + size * corkYFrac,
+    size * FLASK_CORK_W,
+    size * FLASK_CORK_H,
+  );
+
+  ctx.fillStyle = `rgba(255,255,255,${POTION_SHINE_ALPHA})`;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx - r * FLASK_SHINE_OFFSET,
+    cy - r * FLASK_SHINE_OFFSET,
+    r * FLASK_SHINE_RX,
+    r * FLASK_SHINE_RY,
+    FLASK_SHINE_ROT,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+
+  return { cx, cy, r };
 }
 
 export class InventoryPanel {
@@ -1280,6 +1422,179 @@ export class InventoryPanel {
 
     if (item.id === 'quest_wood_board') {
       drawWoodPileSprite(ctx, x, y, size, false);
+    }
+
+    if (item.id === 'speed_fizz') {
+      drawRoundFlask(
+        ctx,
+        x,
+        y,
+        size,
+        ROUND_FLASK_CY,
+        ROUND_FLASK_NECK_Y,
+        ROUND_FLASK_CORK_Y,
+        '#0284c7',
+        '#38bdf8',
+        '#075985',
+        '#92400e',
+      );
+      const bx = x + size * SPEED_FIZZ_BOLT_CX;
+      const by = y + size * SPEED_FIZZ_BOLT_CY;
+      const bs = size * SPEED_FIZZ_BOLT_SCALE;
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.moveTo(bx + bs, by - bs * BOLT_TIP_Y);
+      ctx.lineTo(bx - bs * BOLT_NOTCH_X, by - bs * BOLT_NOTCH_Y);
+      ctx.lineTo(bx + bs * BOLT_INNER_X, by - bs * BOLT_NOTCH_Y);
+      ctx.lineTo(bx - bs, by + bs * BOLT_TIP_Y);
+      ctx.lineTo(bx + bs * BOLT_NOTCH_X, by + bs * BOLT_NOTCH_Y);
+      ctx.lineTo(bx - bs * BOLT_INNER_X, by + bs * BOLT_NOTCH_Y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    if (item.id === 'jugg_juice') {
+      const cx = x + size * FLASK_CX;
+      const cy = y + size * JUGG_CY;
+      const rx = size * JUGG_RX;
+      const ry = size * JUGG_RY;
+      ctx.fillStyle = '#c2410c';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fb923c';
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        cy + ry * POTION_LIQUID_Y_SHIFT,
+        rx * JUGG_LIQUID_RX_SCALE,
+        ry * POTION_LIQUID_R_SCALE,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.fillStyle = '#7c2d12';
+      ctx.fillRect(
+        cx - size * JUGG_NECK_X,
+        y + size * JUGG_NECK_Y,
+        size * JUGG_NECK_W,
+        size * JUGG_NECK_H,
+      );
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(
+        cx - size * JUGG_CORK_X,
+        y + size * JUGG_CORK_Y,
+        size * JUGG_CORK_W,
+        size * FLASK_CORK_H,
+      );
+      const hx = cx;
+      const hy = y + size * JUGG_HEART_Y;
+      const hs = size * JUGG_HEART_SIZE;
+      ctx.fillStyle = '#fda4af';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy + hs * HEART_APEX_Y);
+      ctx.bezierCurveTo(
+        hx,
+        hy - hs * HEART_TOP_CTRL,
+        hx - hs,
+        hy - hs * HEART_TOP_CTRL,
+        hx - hs,
+        hy,
+      );
+      ctx.bezierCurveTo(hx - hs, hy + hs * HEART_MID_Y, hx, hy + hs, hx, hy + hs * HEART_BOTTOM);
+      ctx.bezierCurveTo(hx, hy + hs, hx + hs, hy + hs * HEART_MID_Y, hx + hs, hy);
+      ctx.bezierCurveTo(
+        hx + hs,
+        hy - hs * HEART_TOP_CTRL,
+        hx,
+        hy - hs * HEART_TOP_CTRL,
+        hx,
+        hy + hs * HEART_APEX_Y,
+      );
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${POTION_SHINE_ALPHA})`;
+      ctx.beginPath();
+      ctx.ellipse(
+        cx - rx * JUGG_SHINE_OFFSET,
+        cy - ry * JUGG_SHINE_OFFSET,
+        rx * FLASK_SHINE_RX,
+        ry * FLASK_SHINE_RY,
+        FLASK_SHINE_ROT,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+
+    if (item.id === 'cooldown_crisp') {
+      const { cx, cy } = drawRoundFlask(
+        ctx,
+        x,
+        y,
+        size,
+        COOL_CRISP_CY,
+        COOL_CRISP_NECK_Y,
+        COOL_CRISP_CORK_Y,
+        '#059669',
+        '#34d399',
+        '#065f46',
+        '#92400e',
+      );
+      const clockR = size * COOL_CRISP_CLOCK_R;
+      ctx.fillStyle = '#d1fae5';
+      ctx.beginPath();
+      ctx.arc(cx, cy, clockR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#059669';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      const longR = size * COOL_CRISP_HAND_LONG;
+      const shortR = size * COOL_CRISP_HAND_SHORT;
+      ctx.strokeStyle = '#064e3b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(-Math.PI / 2) * longR, cy + Math.sin(-Math.PI / 2) * longR);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(
+        cx + Math.cos(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
+        cy + Math.sin(Math.PI / CLOCK_HOUR_ANGLE_DIVS) * shortR,
+      );
+      ctx.stroke();
+    }
+
+    if (item.id === 'stat_boost_potion') {
+      const { cx, cy, r } = drawRoundFlask(
+        ctx,
+        x,
+        y,
+        size,
+        ROUND_FLASK_CY,
+        ROUND_FLASK_NECK_Y,
+        ROUND_FLASK_CORK_Y,
+        '#7e22ce',
+        '#c084fc',
+        '#581c87',
+        '#d97706',
+      );
+      const outerR = size * STAT_BOOST_STAR_R_OUTER;
+      const innerR = size * STAT_BOOST_STAR_R_INNER;
+      const starCY = cy + r * STAR_CY_SHIFT;
+      ctx.fillStyle = '#fde68a';
+      ctx.beginPath();
+      for (let i = 0; i < STAT_BOOST_STAR_POINTS * 2; i++) {
+        const angle = (i * Math.PI) / STAT_BOOST_STAR_POINTS - Math.PI / 2;
+        const rad = i % 2 === 0 ? outerR : innerR;
+        const px = cx + Math.cos(angle) * rad;
+        const py = starCY + Math.sin(angle) * rad;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
     }
 
     if (item.id === 'goblin_dynamite') {
