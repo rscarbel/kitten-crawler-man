@@ -61,6 +61,7 @@ const SCROLLBAR_WIDTH = 3;
 const BACK_BTN_X_MARGIN = 20;
 const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_MARGIN = 40;
+const BACK_BTN_CONTENT_H = 36;
 
 type StatDef = {
   key: 'STR' | 'INT' | 'CON' | 'EXP';
@@ -361,7 +362,7 @@ export function renderSpendTab(
     x: bx + BACK_BTN_X_MARGIN,
     y: btnY,
     width: bw - BACK_BTN_WIDTH_MARGIN,
-    height: BACK_BTN_HEIGHT,
+    height: BACK_BTN_CONTENT_H,
     label: 'Back',
     ...BUTTON_PRESETS.primary,
     action: () => setTab('main'),

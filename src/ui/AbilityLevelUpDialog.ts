@@ -1,6 +1,6 @@
 import type { AbilityManager, AbilityId } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
-import { wrapTextLines } from './canvasUtils';
+import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
@@ -17,16 +17,6 @@ const DIALOG_TITLE_Y_OFFSET = 30;
 const DIALOG_TITLE_OVERLAP = 13;
 const DIALOG_ICON_Y = 48;
 const DIALOG_LEVEL_Y_OFFSET = 28;
-
-// Icon animation
-const ICON_PULSE_FREQUENCY = 6;
-const ICON_PULSE_AMPLITUDE = 0.3;
-const ICON_PULSE_BASE = 1.0;
-const ICON_GLOW_ALPHA = 0.6;
-const ICON_GLOW_BASE_RADIUS = 0.5;
-const ICON_GLOW_ANIMATION_RANGE = 24;
-const ICON_GLOW_SINE_FREQUENCY = 8;
-const ICON_GLOW_SINE_AMPLITUDE = 0.5;
 
 // Level display
 const LEVEL_TEXT_X_OFFSET = 18;
@@ -193,36 +183,9 @@ export class AbilityLevelUpDialog {
     const iconSize = 56;
     const iconX = bx + boxW / 2 - iconSize / 2;
     const iconY = by + DIALOG_ICON_Y;
-    const pulse =
-      this.phase === 'power_up'
-        ? Math.sin(this.iconPulse * Math.PI * ICON_PULSE_FREQUENCY) * ICON_PULSE_AMPLITUDE +
-          ICON_PULSE_BASE
-        : ICON_PULSE_BASE;
-
-    ctx.save();
-    ctx.translate(iconX + iconSize / 2, iconY + iconSize / 2);
-    ctx.scale(pulse, pulse);
-    ctx.translate(-(iconX + iconSize / 2), -(iconY + iconSize / 2));
-
-    if (this.phase === 'power_up') {
-      // Charging glow rings
-      const glowAlpha = this.iconPulse * ICON_GLOW_ALPHA;
-      const glowRadius =
-        iconSize * ICON_GLOW_BASE_RADIUS + this.iconPulse * ICON_GLOW_ANIMATION_RANGE;
-      ctx.globalAlpha =
-        glowAlpha *
-        (ICON_GLOW_SINE_AMPLITUDE +
-          ICON_GLOW_SINE_AMPLITUDE * Math.sin(this.iconPulse * Math.PI * ICON_GLOW_SINE_FREQUENCY));
-      ctx.strokeStyle = '#c084fc';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(iconX + iconSize / 2, iconY + iconSize / 2, glowRadius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
-    def.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
-    ctx.restore();
+    drawPowerUpIcon(ctx, iconX, iconY, iconSize, this.iconPulse, this.phase === 'power_up', () => {
+      def.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
+    });
 
     // Level display
     const levelY = iconY + iconSize + DIALOG_LEVEL_Y_OFFSET;

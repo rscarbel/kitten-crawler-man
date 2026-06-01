@@ -24,8 +24,8 @@ export class Inventory {
       this.addToQuestSlot(id, quantity);
       return;
     }
-    if (this.bag.stackInto(id, quantity)) return;
     if (this.actionBar.stackInto(id, quantity)) return;
+    if (this.bag.stackInto(id, quantity)) return;
     this.bag.addToEmpty(id, quantity);
   }
 

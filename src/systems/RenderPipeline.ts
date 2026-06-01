@@ -18,6 +18,7 @@ import type { BodyPartGoreSystem } from './BodyPartGoreSystem';
 import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { BossRoomSystem } from './BossRoomSystem';
 import type { JuicerRoomSystem } from './JuicerRoomSystem';
+import type { ArenaRoomSystem } from './ArenaRoomSystem';
 import type { StairwellSystem } from './StairwellSystem';
 import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
@@ -88,6 +89,7 @@ export interface RenderContext {
   safeRoom: SafeRoomSystem;
   bossRoom: BossRoomSystem;
   juicerRoom: JuicerRoomSystem;
+  arenaRoom: ArenaRoomSystem;
   stairwell: StairwellSystem;
   building: BuildingSystem | null;
   barriers: BarrierSystem;
@@ -130,6 +132,7 @@ export class RenderPipeline {
       safeRoom,
       bossRoom,
       juicerRoom,
+      arenaRoom,
       stairwell,
       building,
       speechBubblePulse,
@@ -145,6 +148,7 @@ export class RenderPipeline {
     safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
     bossRoom.renderObjects(ctx, camX, camY);
     juicerRoom.render(ctx, camX, camY, active);
+    arenaRoom.render(ctx, camX, camY, active);
     stairwell.renderStairwells(ctx, camX, camY, canvas);
     building?.renderDoorHints(ctx, camX, camY, canvas);
   }

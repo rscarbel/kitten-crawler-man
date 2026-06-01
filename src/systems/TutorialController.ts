@@ -243,7 +243,7 @@ const HINT_TEXTS_DESKTOP: Record<TutorialState, string> = {
   CAMERA_PAN_TO_CAT: 'Your partner has been waiting patiently...',
   SWITCHED_TO_CAT: platform.isMobile
     ? "Oh no! The cat's health is low. Tap the health potion to restore her health."
-    : "Oh no! The cat's health is low. Press 1 to use the health potion.",
+    : "Oh no! The cat's health is low. Press Q or 1 to use the health potion.",
   CAT_MOVED: '',
   USED_HEALTH_POTION: 'Good! Now head south to the treasure room.',
   CAT_INSIDE_TREASURE_ROOM: 'A treasure chest! Press spacebar to open it.',

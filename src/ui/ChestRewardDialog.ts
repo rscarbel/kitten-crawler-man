@@ -77,6 +77,8 @@ export interface ChestLootSplit {
   catLoot: LootDrop;
   /** Override display names for specific item IDs (keyed by item id string). */
   displayLabels?: Record<string, string>;
+  /** Extra display-only lines appended to the cat column (not real inventory items). */
+  customCatEntries?: string[];
 }
 
 export class ChestRewardDialog {
@@ -390,7 +392,23 @@ export class ChestRewardDialog {
       });
       rightY += totalHeight;
     }
-    if (split.catLoot.coins === 0 && split.catLoot.items.length === 0) {
+    for (const label of split.customCatEntries ?? []) {
+      const { totalHeight } = drawText(ctx, label, {
+        x: rightColX,
+        y: rightY,
+        width: colW,
+        align: 'center',
+        size: LOOT_ITEM_SIZE,
+        color: '#e2e8f0',
+      });
+      rightY += totalHeight;
+    }
+
+    const catIsEmpty =
+      split.catLoot.coins === 0 &&
+      split.catLoot.items.length === 0 &&
+      (split.customCatEntries?.length ?? 0) === 0;
+    if (catIsEmpty) {
       drawText(ctx, '(empty)', {
         x: rightColX,
         y: rightY,

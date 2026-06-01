@@ -15,6 +15,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
+import type { GrantedReward } from './GrantedReward';
 
 export interface GameEvents {
   /** A mob was just killed. */
@@ -99,6 +100,9 @@ export interface GameEvents {
 
   /** A mission objective was completed (e.g. goblin child returned to mother). */
   objectiveComplete: { objectiveId: string };
+
+  /** An award screen was dismissed and contains ability or special unlocks to announce. */
+  rewardGranted: { rewards: GrantedReward[] };
 }
 
 type EventCallback<T> = (data: T) => void;

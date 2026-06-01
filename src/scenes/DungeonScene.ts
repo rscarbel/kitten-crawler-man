@@ -34,6 +34,7 @@ import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
+import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
 import { ArenaSystem } from '../systems/ArenaSystem';
 import { TreasureChestSystem } from '../systems/TreasureChestSystem';
@@ -44,12 +45,15 @@ import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSn
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
-import { AbilityManager } from '../core/AbilityManager';
+import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
 import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
+import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
+import type { GrantedReward } from '../core/GrantedReward';
+import { drawMongoSprite } from '../sprites/mongoSprite';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
@@ -148,20 +152,6 @@ const COMPANION_ERROR_DISPLAY_FRAMES = 180;
 
 // Spatial grid sizing
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
-
-// Dumbbell room positioning (relative to door)
-const DUMBBELL_OFFSET_1_X = -2;
-const DUMBBELL_OFFSET_1_Y = -3;
-const DUMBBELL_OFFSET_2_X = 1;
-const DUMBBELL_OFFSET_2_Y = -3;
-const DUMBBELL_OFFSET_3_X = -2;
-const DUMBBELL_OFFSET_3_Y = -6;
-const DUMBBELL_OFFSET_4_X = 1;
-const DUMBBELL_OFFSET_4_Y = -6;
-const BENCH_PRESS_OFFSET_X = -1;
-const BENCH_PRESS_OFFSET_Y = -9;
-const TREADMILL_OFFSET_X = 0;
-const TREADMILL_OFFSET_Y = -12;
 
 // Loot and drop rates
 const LOOT_SPLIT_THRESHOLD = 0.5;
@@ -306,6 +296,7 @@ export class DungeonScene extends GameplayScene {
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
   private juicerRoom: JuicerRoomSystem;
+  private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
   private spiderQuest!: SpiderQuestSystem;
@@ -337,6 +328,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly abilityManager: AbilityManager;
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
+  private readonly rewardGrantedDialog = new RewardGrantedDialog();
 
   private arena!: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
@@ -383,6 +375,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
+  private krakarenBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
@@ -508,6 +501,7 @@ export class DungeonScene extends GameplayScene {
       levelDef.bossRooms?.map((b) => b.type) ?? [],
     );
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
+    this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
     this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) => {
       this.mobs.push(mob);
@@ -693,6 +687,9 @@ export class DungeonScene extends GameplayScene {
       const tut = tutorialController;
       this.achievementUI.onAllBoxesOpened = () => {
         tut.onHumanRewardDialogDismissed(this.human);
+        this.bus.emit('rewardGranted', {
+          rewards: [this._makeAbilityReward('smush'), this._makeAbilityReward('protective_shell')],
+        });
       };
     }
 
@@ -752,6 +749,7 @@ export class DungeonScene extends GameplayScene {
 
     this.deathScreen.audio = this.audio;
     this.abilityLevelUpDialog.audio = this.audio;
+    this.rewardGrantedDialog.audio = this.audio;
 
     // Boss chests — placed 2 tiles above each boss room centre
     this.gameMap.bossRooms.forEach((br, i) => {
@@ -796,22 +794,34 @@ export class DungeonScene extends GameplayScene {
         };
         this.chestRewardDialog.open(chest, catRewardSplit, () => {
           tutorial.onCatRewardDialogDismissed(this.cat);
+          this.bus.emit('rewardGranted', {
+            rewards: [this._makeAbilityReward('magic_missile')],
+          });
+        });
+        this.audio?.play('opening_treasure_chest');
+        return;
+      }
+
+      // Krakaren boss chest: append "Mongo (pet)" to the cat column and trigger the reward dialog
+      if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.krakarenBossRoomIdx) {
+        const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
+        this._grantChestLootSplit(baseSplit);
+        this.tutorial?.onChestOpened();
+        const krakarenSplit: ChestLootSplit = {
+          humanLoot: baseSplit?.humanLoot ?? { coins: 0, items: [] },
+          catLoot: baseSplit?.catLoot ?? { coins: 0, items: [] },
+          customCatEntries: ['Mongo (pet)'],
+        };
+        this.chestRewardDialog.open(chest, krakarenSplit, () => {
+          this.mongoSystem.unlocked = true;
+          this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
         });
         this.audio?.play('opening_treasure_chest');
         return;
       }
 
       const split = chest.loot !== null ? splitChestLoot(chest.loot) : null;
-      if (split !== null) {
-        for (const item of split.humanLoot.items) {
-          this.human.inventory.addItem(item.id, item.quantity);
-        }
-        this.human.coins += split.humanLoot.coins;
-        for (const item of split.catLoot.items) {
-          this.cat.inventory.addItem(item.id, item.quantity);
-        }
-        this.cat.coins += split.catLoot.coins;
-      }
+      this._grantChestLootSplit(split);
       this.tutorial?.onChestOpened();
       this.chestRewardDialog.open(chest, split);
       this.audio?.play('opening_treasure_chest');
@@ -824,41 +834,8 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('chest_unlocked_in_treasure_room');
     });
 
-    this.spawnArenaEquipment();
     this.wireEventBus();
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
-  }
-
-  private spawnArenaEquipment(): void {
-    if (this.gameMap.arenaExteriors.length === 0) return;
-    const arena = this.gameMap.arenaExteriors[0];
-    const door = arena.doorTile;
-    // Arena door is always at the south end (doorY = centreY + radius).
-    // Place gym items inside the arena near the entrance so players can
-    // collect and place barriers before the BoS fight starts.
-    const candidates: Array<{
-      x: number;
-      y: number;
-      id: 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
-    }> = [
-      { x: door.x + DUMBBELL_OFFSET_1_X, y: door.y + DUMBBELL_OFFSET_1_Y, id: 'gym_dumbbell' },
-      { x: door.x + DUMBBELL_OFFSET_2_X, y: door.y + DUMBBELL_OFFSET_2_Y, id: 'gym_dumbbell' },
-      { x: door.x + DUMBBELL_OFFSET_3_X, y: door.y + DUMBBELL_OFFSET_3_Y, id: 'gym_dumbbell' },
-      { x: door.x + DUMBBELL_OFFSET_4_X, y: door.y + DUMBBELL_OFFSET_4_Y, id: 'gym_dumbbell' },
-      { x: door.x + BENCH_PRESS_OFFSET_X, y: door.y + BENCH_PRESS_OFFSET_Y, id: 'gym_bench_press' },
-      { x: door.x + TREADMILL_OFFSET_X, y: door.y + TREADMILL_OFFSET_Y, id: 'gym_treadmill' },
-    ];
-    for (const { x, y, id } of candidates) {
-      if (this.gameMap.isWalkable(x, y)) {
-        this.loot.addLoot(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          { coins: 0, items: [{ id, quantity: 1 }] },
-          this.human,
-          true,
-        );
-      }
-    }
   }
 
   private wireEventBus(): void {
@@ -1034,7 +1011,21 @@ export class DungeonScene extends GameplayScene {
 
       if (e.bossType === 'krakaren_clone' && !this.krakarenKilled) {
         this.krakarenKilled = true;
-        this.mongoSystem.unlocked = true;
+        const mobTileX = Math.round(e.mob.x / TILE_SIZE);
+        const mobTileY = Math.round(e.mob.y / TILE_SIZE);
+        this.krakarenBossRoomIdx = this.gameMap.bossRooms.findIndex(
+          (br) =>
+            mobTileX >= br.bounds.x &&
+            mobTileX < br.bounds.x + br.bounds.w &&
+            mobTileY >= br.bounds.y &&
+            mobTileY < br.bounds.y + br.bounds.h,
+        );
+      }
+    });
+
+    bus.on('rewardGranted', (e) => {
+      for (const reward of e.rewards) {
+        this.rewardGrantedDialog.enqueue(reward);
       }
     });
 
@@ -1728,6 +1719,7 @@ export class DungeonScene extends GameplayScene {
     if (this.achievementUI.handleSpaceBar()) return;
 
     if (this.abilityLevelUpDialog.handleSpaceBar()) return;
+    if (this.rewardGrantedDialog.handleSpaceBar()) return;
     if (this.levelCompleteScreen.handleSpaceBar()) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.restartAtFloorEntry();
@@ -1796,7 +1788,11 @@ export class DungeonScene extends GameplayScene {
       if (this.spiderQuest.tryInteract(active)) {
         return;
       }
-      if (this.juicerRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
+      if (
+        this.juicerRoom.tryPickupNear(active) ||
+        this.arenaRoom.tryPickupNear(active) ||
+        this.barriers.tryPickupNear(active)
+      ) {
         return;
       }
     }
@@ -1922,6 +1918,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
+    if (this.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my)) return;
     if (this.achievementUI.handleClick(mx, my)) return;
@@ -2158,6 +2155,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.achievementUI.tick();
     this.abilityLevelUpDialog.update();
+    this.rewardGrantedDialog.update();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
       this.chestRewardDialog.rewardSoundPending = false;
@@ -2193,6 +2191,7 @@ export class DungeonScene extends GameplayScene {
     if (
       this.gameOver ||
       this.abilityLevelUpDialog.isShowing ||
+      this.rewardGrantedDialog.isShowing ||
       this.pauseMenu.isOpen ||
       this.chestRewardDialog.isOpen ||
       this.stairwell.menuOpen ||
@@ -2240,6 +2239,7 @@ export class DungeonScene extends GameplayScene {
       safeRoom: this.safeRoom,
       bossRoom: this.bossRoom,
       juicerRoom: this.juicerRoom,
+      arenaRoom: this.arenaRoom,
       stairwell: this.stairwell,
       building: this.building,
       barriers: this.barriers,
@@ -2502,6 +2502,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.abilityLevelUpDialog.render(ctx, canvas);
+    this.rewardGrantedDialog.render(ctx, canvas);
 
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
@@ -2715,6 +2716,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_open');
     }
     this.juicerRoom.update(ctx);
+    this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
     if (this.tutorial !== null) {
       this.tutorial.update(this.human, this.cat);
@@ -3495,5 +3497,44 @@ export class DungeonScene extends GameplayScene {
         this.touch.tapStart = null;
       }
     }
+  }
+
+  private _makeAbilityReward(abilityId: AbilityId): GrantedReward {
+    const def = this.abilityManager.getDef(abilityId);
+    const name = def?.name ?? abilityId;
+    const description =
+      def?.perks.find((p) => p.level === 1)?.description ?? 'A new ability has been granted!';
+    const renderIcon =
+      def !== null
+        ? (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) =>
+            def.renderIcon(ctx, x, y, size, 1)
+        : (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+            ctx.fillStyle = '#a855f7';
+            ctx.fillRect(x, y, size, size);
+          };
+    return { name, description, renderIcon };
+  }
+
+  private _grantChestLootSplit(split: { humanLoot: LootDrop; catLoot: LootDrop } | null): void {
+    if (split === null) return;
+    for (const item of split.humanLoot.items) {
+      this.human.inventory.addItem(item.id, item.quantity);
+    }
+    this.human.coins += split.humanLoot.coins;
+    for (const item of split.catLoot.items) {
+      this.cat.inventory.addItem(item.id, item.quantity);
+    }
+    this.cat.coins += split.catLoot.coins;
+  }
+
+  private _makeMongoReward(): GrantedReward {
+    return {
+      name: 'Mongo',
+      description:
+        'A loyal velociraptor companion. Summon Mongo to fight alongside the Cat in battle!',
+      renderIcon: (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+        drawMongoSprite(ctx, x, y, size);
+      },
+    };
   }
 }
