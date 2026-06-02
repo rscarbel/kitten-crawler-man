@@ -213,6 +213,10 @@ const MORDECAI_REMINDER_TEXTS: Partial<Record<TutorialState, string>> = {
 // so the text does not overlap the Follower button (height 52 + bottom offset 8 + gap 8).
 const SWITCHED_TO_HUMAN_MOBILE_HINT_RAISE_PX = 68;
 
+// How far to raise the hint box on mobile when pointing at the health potion hotbar slot,
+// so the arrow drawn above the slot does not overlap the text.
+const SWITCHED_TO_CAT_MOBILE_HINT_RAISE_PX = 52;
+
 //  Smoothstep animation
 
 const SMOOTHSTEP_FACTOR = 3;
@@ -382,6 +386,18 @@ export interface TutorialRenderContext {
   isAchievementNotifActive: boolean;
   /** True when the inventory context menu (right-click options) is currently open. */
   isContextMenuOpen: boolean;
+  /** Screen-space rects for each option in the currently open context menu, or null. */
+  contextMenuOptionRects: ReadonlyArray<{
+    label: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> | null;
+  /** True while the ability level-up dialog is showing. */
+  isAbilityDialogShowing: boolean;
+  /** Screen-space rect of the "Follow me" button inside the open follower menu, or null. */
+  followerMenuFollowMeRect: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface TutorialMobs {
@@ -1330,22 +1346,36 @@ export class TutorialController {
       const extraYOffset =
         this._state === 'SWITCHED_TO_HUMAN' && platform.isMobile
           ? SWITCHED_TO_HUMAN_MOBILE_HINT_RAISE_PX
-          : 0;
+          : this._state === 'SWITCHED_TO_CAT' && platform.isMobile
+            ? SWITCHED_TO_CAT_MOBILE_HINT_RAISE_PX
+            : 0;
       this.renderHintBox(ctx, canvas, hint, extraYOffset);
     }
 
-    if (
-      this._state === 'SWITCHED_TO_HUMAN' &&
-      renderCtx.followerButtonRect !== null &&
-      !renderCtx.followerMenuOpen
-    ) {
-      const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
-      const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
-      this.renderGuideArrowAt(ctx, renderCtx.followerButtonRect, alpha);
+    // Suppress all guide arrows while an achievement notification or ability level-up dialog
+    // is covering the screen — those overlays take full priority.
+    if (renderCtx.isAchievementNotifActive || renderCtx.isAbilityDialogShowing) return;
+
+    const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
+    const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
+
+    if (this._state === 'SWITCHED_TO_HUMAN') {
+      if (!renderCtx.followerMenuOpen && renderCtx.followerButtonRect !== null) {
+        this.renderGuideArrowAt(ctx, renderCtx.followerButtonRect, alpha);
+      } else if (renderCtx.followerMenuOpen && renderCtx.followerMenuFollowMeRect !== null) {
+        this.renderGuideArrowAt(ctx, renderCtx.followerMenuFollowMeRect, alpha);
+      }
     }
 
-    // Suppress world-space arrows while an achievement notification is covering the screen.
-    if (renderCtx.isAchievementNotifActive) return;
+    // On mobile, show an arrow over the Smush hotbar slot during the Smush step.
+    if (this._state === 'HUMAN_EQUIPPED_SMUSH' && platform.isMobile) {
+      this.renderGuideArrowAt(ctx, renderCtx.hotbarSlotRects[0], alpha);
+    }
+
+    // On mobile, show an arrow over the health potion hotbar slot during the cat heal step.
+    if (this._state === 'SWITCHED_TO_CAT' && platform.isMobile) {
+      this.renderGuideArrowAt(ctx, renderCtx.hotbarSlotRects[0], alpha);
+    }
 
     // Fixed arrow above goblin B during the magic missile step.
     // Also shows a navigation arrow above the cat pointing toward goblin B when the cat is
@@ -1730,6 +1760,23 @@ export class TutorialController {
     if (step === 'equip_boxers') {
       // Inventory panel is open: point at the boxers item in the bag
       if (renderCtx.inventoryPanelOpen) {
+        // Context menu is open — guide the player to click Equip
+        if (renderCtx.isContextMenuOpen && renderCtx.contextMenuOptionRects !== null) {
+          ctx.save();
+          ctx.fillStyle = `rgba(0, 0, 0, ${GUIDE_DIM_ALPHA})`;
+          for (const r of renderCtx.contextMenuOptionRects) {
+            if (r.label !== 'Equip') {
+              ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
+          }
+          ctx.restore();
+          const equipRect = renderCtx.contextMenuOptionRects.find((r) => r.label === 'Equip');
+          if (equipRect !== undefined) {
+            this.renderGuideArrowAt(ctx, equipRect, alpha);
+          }
+          return;
+        }
+
         if (this._boxersDragHintTimer > 0) {
           const elapsed = BOXERS_DRAG_HINT_DURATION_FRAMES - this._boxersDragHintTimer;
           const fadeIn =
@@ -1752,13 +1799,11 @@ export class TutorialController {
         const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
         if (itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
-          if (!renderCtx.isContextMenuOpen) {
-            this.renderHintLabel(
-              ctx,
-              itemRect,
-              platform.isMobile ? 'Press and hold to open options' : 'Right click to open options',
-            );
-          }
+          this.renderHintLabel(
+            ctx,
+            itemRect,
+            platform.isMobile ? 'Press and hold to open options' : 'Right click to open options',
+          );
         }
         return;
       }

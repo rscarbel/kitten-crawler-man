@@ -86,6 +86,11 @@ export class FollowerMenu {
     return this._isOpen;
   }
 
+  /** Screen-space rect of the "Follow me" button, or null if not yet rendered. */
+  get followMeButtonRect(): Rect | null {
+    return this._buttonRects[0] ?? null;
+  }
+
   open(): void {
     this._isOpen = true;
   }

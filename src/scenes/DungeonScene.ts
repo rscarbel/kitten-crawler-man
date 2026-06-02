@@ -2705,8 +2705,13 @@ export class DungeonScene extends GameplayScene {
         isDragActive: this.inventoryPanel.interaction.isDragging,
         isAchievementNotifActive: this.achievementUI.notifActive,
         isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
+        contextMenuOptionRects: this.inventoryPanel.contextMenuOptionRects,
+        isAbilityDialogShowing: this.abilityLevelUpDialog.isShowing,
         followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
         followerMenuOpen: this.followerMenu.isOpen,
+        followerMenuFollowMeRect: this.followerMenu.isOpen
+          ? this.followerMenu.followMeButtonRect
+          : null,
       };
       this.tutorial.renderOverlay(
         ctx,

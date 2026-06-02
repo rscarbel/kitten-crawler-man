@@ -88,8 +88,6 @@ const BOTTOM_MARGIN = 12;
 const MOBILE_BTN_H = 52;
 const MOBILE_BTN_MARGIN = 10;
 const MOBILE_BTN_BOTTOM_OFFSET = 8;
-const MOBILE_ACHIEVE_ICON_H = 26;
-const MOBILE_ACHIEVE_GAP = 6;
 const MOBILE_INVALID_X = -9999;
 const MOBILE_GEAR_BTN_RECT_Y = 0;
 const MOBILE_GEAR_BTN_RECT_W = 0;
@@ -374,8 +372,7 @@ export function renderMobileButtons(
   const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP;
   const followerRect: Rect = { x: rightX, y: followerY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
   const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
-  const bagY =
-    pauseY + PAUSE_BTN_H + MOBILE_ACHIEVE_GAP + MOBILE_ACHIEVE_ICON_H + MOBILE_ACHIEVE_GAP;
+  const bagY = pauseY + PAUSE_BTN_H + MOBILE_BUTTON_GAP;
   touch.gearBtnRect = {
     x: MOBILE_INVALID_X,
     y: MOBILE_GEAR_BTN_RECT_Y,

@@ -436,6 +436,19 @@ export class InventoryPanel {
     this.interaction.cancelDrag();
   }
 
+  /**
+   * Screen-space rects for every option in the currently open context menu, or null when
+   * no context menu is open. Set by renderContextMenu each frame so the tutorial can read
+   * authoritative positions without recomputing the layout independently.
+   */
+  contextMenuOptionRects: ReadonlyArray<{
+    label: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> | null = null;
+
   toggle(): void {
     if (this.isOpen) {
       this.isOpen = false;
@@ -621,7 +634,9 @@ export class InventoryPanel {
       );
     }
 
-    // Context menu and info popup render above everything else
+    // Context menu and info popup render above everything else.
+    // Reset each frame so contextMenuOptionRects is never stale.
+    this.contextMenuOptionRects = null;
     if (this.contextMenu) {
       this.renderContextMenu(ctx, canvas);
     }
@@ -642,6 +657,14 @@ export class InventoryPanel {
     const menuH = options.length * menuItemH + CONTEXT_MENU_V_PAD;
     const mx = Math.min(cm.x, canvas.width - menuW - CONTEXT_MENU_MARGIN);
     const my = Math.min(cm.y, canvas.height - menuH - CONTEXT_MENU_MARGIN);
+
+    this.contextMenuOptionRects = options.map((label, i) => ({
+      label,
+      x: mx,
+      y: my + 2 + i * menuItemH,
+      w: menuW,
+      h: menuItemH,
+    }));
 
     ctx.save();
     drawBox(ctx, {
