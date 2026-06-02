@@ -7,14 +7,14 @@
   "display": "fullscreen",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
-  "orientation": "landscape-primary",
+  "orientation": "portrait",
   "categories": ["games"],
   "icons": [
     {
-      "src": "src/images/website/goblin-icon.jpg",
+      "src": "src/images/website/icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
