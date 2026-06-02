@@ -2,6 +2,7 @@ import esbuild from 'esbuild';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { generateServiceWorker } from './generate-sw.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -27,5 +28,8 @@ if (serve) {
     .then((ctx) => ctx.serve({ servedir: '.', port: 8080 }))
     .catch(() => process.exit(1));
 } else {
-  esbuild.build(opts).catch(() => process.exit(1));
+  esbuild
+    .build(opts)
+    .then(() => generateServiceWorker())
+    .catch(() => process.exit(1));
 }

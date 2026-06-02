@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Download — Kitten Crawler Man</title>
+    <meta
+      name="description"
+      content="Download Kitten Crawler Man for offline play on mobile or desktop."
+    />
+    <meta name="theme-color" content="#1a1a2e" />
+    <link rel="icon" type="image/x-icon" href="../src/images/website/goblin-icon.ico" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg:        #0d0d1a;
+        --surface:   #14142a;
+        --border:    #2a2a4a;
+        --gold:      #d4a537;
+        --gold-dim:  #8a6820;
+        --text:      #c8c8e8;
+        --text-dim:  #7070a0;
+        --green:     #4caf7d;
+        --blue:      #4a90d9;
+        --radius:    12px;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, sans-serif;
+        min-height: 100vh;
+        padding: 24px 16px 48px;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+
+      /* ── Back link ── */
+      .back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-dim);
+        text-decoration: none;
+        font-size: 0.875rem;
+        margin-bottom: 32px;
+        transition: color 0.15s;
+      }
+      .back:hover { color: var(--text); }
+      .back::before { content: '←'; }
+
+      /* ── Hero ── */
+      .hero {
+        text-align: center;
+        margin-bottom: 48px;
+      }
+      .hero h1 {
+        font-size: clamp(1.8rem, 5vw, 2.8rem);
+        color: var(--gold);
+        letter-spacing: 0.02em;
+        margin-bottom: 12px;
+      }
+      .hero p {
+        color: var(--text-dim);
+        font-size: 1rem;
+        max-width: 560px;
+        margin: 0 auto;
+      }
+
+      /* ── Cards grid ── */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 24px;
+        margin-bottom: 40px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 28px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .card-icon {
+        font-size: 2rem;
+        line-height: 1;
+      }
+      .card h2 {
+        font-size: 1.2rem;
+        color: var(--gold);
+      }
+      .card-badge {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 99px;
+        background: rgba(76, 175, 125, 0.15);
+        color: var(--green);
+        border: 1px solid rgba(76, 175, 125, 0.3);
+      }
+      .card p {
+        color: var(--text-dim);
+        font-size: 0.9rem;
+      }
+
+      /* ── Steps ── */
+      .steps {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .steps li {
+        display: flex;
+        gap: 12px;
+        font-size: 0.9rem;
+        color: var(--text);
+      }
+      .step-num {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--gold-dim);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 2px;
+      }
+      .steps li strong { color: var(--gold); }
+
+      /* ── Tabs (iOS / Android) ── */
+      .tabs {
+        display: flex;
+        gap: 4px;
+        background: rgba(255,255,255,0.04);
+        border-radius: 8px;
+        padding: 3px;
+      }
+      .tab-btn {
+        flex: 1;
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .tab-btn.active {
+        background: var(--border);
+        color: var(--text);
+      }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+
+      /* ── Buttons ── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        border: none;
+        transition: filter 0.15s, transform 0.1s;
+      }
+      .btn:hover  { filter: brightness(1.15); }
+      .btn:active { transform: scale(0.97); }
+
+      .btn-gold {
+        background: var(--gold);
+        color: #1a1000;
+        width: 100%;
+        margin-top: 4px;
+      }
+      .btn-outline {
+        background: transparent;
+        color: var(--blue);
+        border: 1px solid var(--blue);
+        width: 100%;
+        margin-top: 4px;
+      }
+
+      /* ── Code block ── */
+      code {
+        font-family: 'Menlo', 'Consolas', monospace;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--border);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        color: #a0e8a0;
+      }
+
+      /* ── Divider / tip ── */
+      .tip {
+        background: rgba(74, 144, 217, 0.08);
+        border: 1px solid rgba(74, 144, 217, 0.2);
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 0.85rem;
+        color: var(--text-dim);
+      }
+      .tip strong { color: var(--blue); }
+
+      /* ── FAQ ── */
+      .faq { margin-top: 40px; }
+      .faq h3 {
+        color: var(--gold);
+        font-size: 1rem;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 8px;
+      }
+      .faq-item { margin-bottom: 20px; }
+      .faq-item dt {
+        color: var(--text);
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .faq-item dd { color: var(--text-dim); font-size: 0.9rem; }
+
+      /* ── Footer ── */
+      footer {
+        margin-top: 48px;
+        text-align: center;
+        color: var(--text-dim);
+        font-size: 0.8rem;
+      }
+      footer a { color: var(--gold-dim); text-decoration: none; }
+      footer a:hover { color: var(--gold); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+
+      <a class="back" href="/kitten-crawler-man/">Play online</a>
+
+      <div class="hero">
+        <h1>Play Offline</h1>
+        <p>
+          Install Kitten Crawler Man as an app on your phone or download a local
+          copy for your computer — no internet required after setup.
+        </p>
+      </div>
+
+      <div class="cards">
+
+        <!-- ── Mobile card ─────────────────────────────────── -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">📱</span>
+            <div>
+              <h2>Mobile</h2>
+              <span class="card-badge">Recommended</span>
+            </div>
+          </div>
+
+          <p>
+            Install directly from your browser — no app store needed. Works on
+            iPhone, iPad, and Android. Plays offline once installed.
+          </p>
+
+          <div class="tabs" id="mobile-tabs">
+            <button class="tab-btn active" data-tab="ios">iPhone / iPad</button>
+            <button class="tab-btn" data-tab="android">Android</button>
+          </div>
+
+          <div class="tab-panel active" id="tab-ios">
+            <ol class="steps">
+              <li>
+                <span class="step-num">1</span>
+                <span>Open <strong>ryanscarbel.com/kitten-crawler-man</strong> in <strong>Safari</strong></span>
+              </li>
+              <li>
+                <span class="step-num">2</span>
+                <span>Tap the <strong>Share</strong> button (box with arrow) at the bottom of the screen</span>
+              </li>
+              <li>
+                <span class="step-num">3</span>
+                <span>Scroll down and tap <strong>"Add to Home Screen"</strong></span>
+              </li>
+              <li>
+                <span class="step-num">4</span>
+                <span>Tap <strong>Add</strong> — the game icon appears on your home screen</span>
+              </li>
+              <li>
+                <span class="step-num">5</span>
+                <span>Open it once while online. After that, it works <strong>offline</strong>.</span>
+              </li>
+            </ol>
+          </div>
+
+          <div class="tab-panel" id="tab-android">
+            <ol class="steps">
+              <li>
+                <span class="step-num">1</span>
+                <span>Open <strong>ryanscarbel.com/kitten-crawler-man</strong> in <strong>Chrome</strong></span>
+              </li>
+              <li>
+                <span class="step-num">2</span>
+                <span>Tap the <strong>⋮ menu</strong> (top-right) and choose <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></span>
+              </li>
+              <li>
+                <span class="step-num">3</span>
+                <span>Tap <strong>Install</strong></span>
+              </li>
+              <li>
+                <span class="step-num">4</span>
+                <span>Open it once while online. After that, it works <strong>offline</strong>.</span>
+              </li>
+            </ol>
+          </div>
+
+          <div class="tip">
+            <strong>How it works:</strong> Your browser downloads the entire game
+            (~30 MB of images and audio) in the background on first visit. After
+            that, everything runs from your device — no internet required.
+          </div>
+        </div>
+
+        <!-- ── Desktop card ────────────────────────────────── -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-icon">🖥️</span>
+            <h2>Desktop</h2>
+          </div>
+
+          <p>
+            Download the full game as a ZIP file and run it locally on your Mac,
+            Windows PC, or Linux machine.
+          </p>
+
+          <a class="btn btn-gold" href="/kitten-crawler-man/kitten-crawler-man.zip" download>
+            ⬇ Download ZIP (~30 MB)
+          </a>
+
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <span>Download and <strong>unzip</strong> the file</span>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <span>
+                <strong>Mac:</strong> double-click <code>start.command</code><br>
+                <strong>Windows:</strong> double-click <code>start.bat</code><br>
+                <strong>Linux:</strong> run <code>python3 -m http.server 8080</code>
+              </span>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <span>The game opens automatically in your browser at <code>localhost:8080</code></span>
+            </li>
+          </ol>
+
+          <div class="tip">
+            <strong>Why a server?</strong> The game's audio engine uses browser
+            fetch(), which is blocked on local files for security reasons.
+            The launcher script starts a tiny local server that takes care of this.
+            Python 3 is pre-installed on Mac; Windows users can get it at
+            <strong>python.org</strong>.
+          </div>
+
+          <a class="btn btn-outline" href="/kitten-crawler-man/">
+            Or play in the browser →
+          </a>
+        </div>
+
+      </div><!-- .cards -->
+
+      <!-- ── Also: PWA on desktop ── -->
+      <div class="tip" style="margin-bottom: 40px;">
+        <strong>Chrome / Edge on desktop?</strong> You can also install the game
+        as a desktop app — look for the install icon (⊕) in the address bar after
+        visiting the game, or use the browser menu → "Install Kitten Crawler Man".
+        It works offline just like the mobile version.
+      </div>
+
+      <!-- ── FAQ ── -->
+      <div class="faq">
+        <h3>Common questions</h3>
+        <dl>
+          <div class="faq-item">
+            <dt>Will my progress be saved?</dt>
+            <dd>
+              Progress is saved in your browser's local storage. It persists between
+              sessions as long as you don't clear your browser data. The installed app
+              and the browser version share separate save files.
+            </dd>
+          </div>
+          <div class="faq-item">
+            <dt>Does the offline version get updates?</dt>
+            <dd>
+              The installed PWA checks for updates automatically in the background
+              whenever you have internet. The ZIP download is a fixed snapshot — re-download
+              it to get updates.
+            </dd>
+          </div>
+          <div class="faq-item">
+            <dt>The Mac launcher is blocked by macOS security</dt>
+            <dd>
+              Right-click (or Control-click) <code>start.command</code> and choose
+              <strong>Open</strong>, then click <strong>Open</strong> again in the
+              dialog. You only need to do this once.
+            </dd>
+          </div>
+          <div class="faq-item">
+            <dt>The game doesn't load audio on Windows</dt>
+            <dd>
+              Make sure you're launching with <code>start.bat</code> (not by opening
+              <code>index.html</code> directly). If Python isn't installed, download
+              it from <strong>python.org</strong> and run the installer.
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <footer>
+        <a href="/kitten-crawler-man/">← Back to game</a>
+      </footer>
+
+    </div><!-- .container -->
+
+    <script>
+      // Tab switcher for iOS / Android instructions
+      document.getElementById('mobile-tabs').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-tab]');
+        if (!btn) return;
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+      });
+    </script>
+  </body>
+</html>

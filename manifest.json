@@ -1,0 +1,20 @@
+{
+  "name": "Kitten Crawler Man",
+  "short_name": "Kitten Crawler",
+  "description": "A browser-based dungeon crawler where a human and their cat fight through increasingly dangerous floors.",
+  "start_url": "/kitten-crawler-man/",
+  "scope": "/kitten-crawler-man/",
+  "display": "fullscreen",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "landscape-primary",
+  "categories": ["games"],
+  "icons": [
+    {
+      "src": "src/images/website/goblin-icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
