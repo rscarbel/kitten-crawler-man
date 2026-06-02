@@ -17,6 +17,7 @@ const opts = {
   define: {
     __AI_CLIENT_ID__: JSON.stringify(process.env.AI_CLIENT_ID ?? ''),
     __AI_CLIENT_SECRET__: JSON.stringify(process.env.AI_CLIENT_SECRET ?? ''),
+    __AI_ENABLED__: process.env.AI_ENABLED === 'true' ? 'true' : 'false',
   },
 };
 

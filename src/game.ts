@@ -11,11 +11,12 @@ import { LoginUI } from './auth/LoginUI';
 import { loadSprites } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 
+declare const __AI_ENABLED__: boolean;
+
 /** HTTP status code for unauthorized. */
 const HTTP_UNAUTHORIZED = 401;
 
 const input = new InputManager();
-const authClient = new AuthClient();
 const audio = new AudioManager();
 // Begin decoding all audio assets in the background immediately.
 void audio.preload();
@@ -23,10 +24,8 @@ void audio.preload();
 (async () => {
   await loadSprites();
 
-  const aiServerRunning = await aiAdapter.checkServerAvailable();
-
-  if (!aiServerRunning) {
-    // No AI server — skip auth and start fresh without save/load capability.
+  if (!__AI_ENABLED__) {
+    // AI/backend disabled at build time — run as a pure static game with no server calls.
     const sceneManager = new SceneManager();
     const onResetGame = () => {
       sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
@@ -34,6 +33,8 @@ void audio.preload();
     sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     return;
   }
+
+  const authClient = new AuthClient();
 
   try {
     await authClient.getMe();
