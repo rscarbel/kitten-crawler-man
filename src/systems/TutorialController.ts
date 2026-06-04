@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import { getSmushStats } from '../abilities/smush';
 import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -80,6 +81,7 @@ const STATE_ORDER: ReadonlyArray<TutorialState> = [
 
 // ── Timing constants
 
+const TUTORIAL_SMUSH_LEVEL = 1;
 const CAMERA_PAN_DURATION_FRAMES = 180;
 const MOVEMENT_DETECT_TILES = 2;
 const MOVEMENT_DETECT_PX = MOVEMENT_DETECT_TILES * TILE_SIZE;
@@ -1367,8 +1369,13 @@ export class TutorialController {
       }
     }
 
-    // On mobile, show an arrow over the Smush hotbar slot during the Smush step.
-    if (this._state === 'HUMAN_EQUIPPED_SMUSH' && platform.isMobile) {
+    // On mobile, show an arrow over the Smush hotbar slot during the Smush step,
+    // but only once the player is close enough that casting would actually hit both guards.
+    if (
+      this._state === 'HUMAN_EQUIPPED_SMUSH' &&
+      platform.isMobile &&
+      this.isWithinSmushRangeOfBothGuards(activePlayerX, activePlayerY)
+    ) {
       this.renderGuideArrowAt(ctx, renderCtx.hotbarSlotRects[0], alpha);
     }
 
@@ -1980,6 +1987,21 @@ export class TutorialController {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+  }
+
+  private isWithinSmushRangeOfBothGuards(playerX: number, playerY: number): boolean {
+    const { outerBlastRadius } = getSmushStats(TUTORIAL_SMUSH_LEVEL);
+    const outerRadiusPxSq = (outerBlastRadius * TILE_SIZE) ** 2;
+    const halfTile = TILE_SIZE / 2;
+    const humanCx = playerX + halfTile;
+    const humanCy = playerY + halfTile;
+    const g1Cx = this.smushGuard1.x + halfTile;
+    const g1Cy = this.smushGuard1.y + halfTile;
+    const g2Cx = this.smushGuard2.x + halfTile;
+    const g2Cy = this.smushGuard2.y + halfTile;
+    const dist1Sq = (humanCx - g1Cx) ** 2 + (humanCy - g1Cy) ** 2;
+    const dist2Sq = (humanCx - g2Cx) ** 2 + (humanCy - g2Cy) ** 2;
+    return dist1Sq <= outerRadiusPxSq && dist2Sq <= outerRadiusPxSq;
   }
 
   /** Draws a downward pointing arrow above the given rect (for pointing at UI buttons). */
