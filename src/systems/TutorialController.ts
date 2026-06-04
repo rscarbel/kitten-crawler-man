@@ -1680,6 +1680,8 @@ export class TutorialController {
     canvas: HTMLCanvasElement,
     renderCtx: TutorialRenderContext,
   ): void {
+    if (renderCtx.isRewardGrantedDialogShowing) return;
+
     const step = this._menuGuideStep;
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
@@ -1862,6 +1864,8 @@ export class TutorialController {
     canvas: HTMLCanvasElement,
     renderCtx: TutorialRenderContext,
   ): void {
+    if (renderCtx.isRewardGrantedDialogShowing) return;
+
     const step = this._catMenuGuideStep;
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
