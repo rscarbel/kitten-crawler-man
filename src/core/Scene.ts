@@ -43,19 +43,18 @@ export class SceneManager {
 
   constructor() {
     this.canvas = document.createElement('canvas');
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
     const gameEl = document.getElementById('game');
     if (!gameEl) throw new Error('#game element not found');
     gameEl.appendChild(this.canvas);
-    // Read layout dimensions after appending so CSS (100% width/height) is resolved.
-    this.canvas.width = this.canvas.offsetWidth;
-    this.canvas.height = this.canvas.offsetHeight;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('Failed to get 2D context');
     this.ctx = ctx;
 
     window.addEventListener('resize', () => {
-      this.canvas.width = this.canvas.offsetWidth;
-      this.canvas.height = this.canvas.offsetHeight;
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
     });
 
     const getPos = (e: MouseEvent) => {
