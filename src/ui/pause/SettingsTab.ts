@@ -295,6 +295,7 @@ export function renderSettingsTab(
   });
 
   if (showResetConfirm) {
+    buttons.length = 0;
     renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
   }
 }

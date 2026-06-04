@@ -398,6 +398,8 @@ export interface TutorialRenderContext {
   }> | null;
   /** True while the ability level-up dialog is showing. */
   isAbilityDialogShowing: boolean;
+  /** True while the "New Ability!" reward dialog is showing. */
+  isRewardGrantedDialogShowing: boolean;
   /** Screen-space rect of the "Follow me" button inside the open follower menu, or null. */
   followerMenuFollowMeRect: { x: number; y: number; w: number; h: number } | null;
 }
@@ -1354,9 +1356,14 @@ export class TutorialController {
       this.renderHintBox(ctx, canvas, hint, extraYOffset);
     }
 
-    // Suppress all guide arrows while an achievement notification or ability level-up dialog
-    // is covering the screen — those overlays take full priority.
-    if (renderCtx.isAchievementNotifActive || renderCtx.isAbilityDialogShowing) return;
+    // Suppress all guide arrows while an achievement notification, ability level-up dialog,
+    // or reward granted dialog is covering the screen — those overlays take full priority.
+    if (
+      renderCtx.isAchievementNotifActive ||
+      renderCtx.isAbilityDialogShowing ||
+      renderCtx.isRewardGrantedDialogShowing
+    )
+      return;
 
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;

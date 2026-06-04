@@ -2707,6 +2707,7 @@ export class DungeonScene extends GameplayScene {
         isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
         contextMenuOptionRects: this.inventoryPanel.contextMenuOptionRects,
         isAbilityDialogShowing: this.abilityLevelUpDialog.isShowing,
+        isRewardGrantedDialogShowing: this.rewardGrantedDialog.isShowing,
         followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
         followerMenuOpen: this.followerMenu.isOpen,
         followerMenuFollowMeRect: this.followerMenu.isOpen
