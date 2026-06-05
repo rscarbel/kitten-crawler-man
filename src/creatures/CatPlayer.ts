@@ -50,10 +50,16 @@ export class CatPlayer extends Player {
   private static readonly MOB_CENTER_OFFSET_Y = 0.5;
   private static readonly MISSILE_CENTER_OFFSET = 0.5;
   private static readonly MISSILE_CENTER_OFFSET_2 = 0.5;
-  private static readonly ACTIVE_INDICATOR_OFFSET_X = 6;
-  private static readonly ACTIVE_INDICATOR_OFFSET_Y = 4;
-  private static readonly ACTIVE_INDICATOR_WIDTH = 12;
-  private static readonly ACTIVE_INDICATOR_HEIGHT = 12;
+  private static readonly ACTIVE_SPHERE_RADIUS = 4;
+  /** Distance above the sprite top where the sphere centre sits. */
+  private static readonly ACTIVE_SPHERE_GAP = 3;
+  /** How far above the tile anchor the cat sprite extends. */
+  private static readonly ACTIVE_SPHERE_SPRITE_TOP = 4;
+  /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
+  private static readonly HEALTH_BAR_RAISE = 16;
+  private static readonly SPHERE_HIGHLIGHT_OFFSET = 0.3;
+  private static readonly SPHERE_INNER_RADIUS_RATIO = 0.1;
+  private static readonly SPHERE_MID_STOP = 0.4;
   private static readonly AI_MIN_COOLDOWN = 20;
   private static readonly MISS_OFFSET_FACTOR = 0.44;
   private static readonly HOMING_LEVEL_THRESHOLD = 14;
@@ -307,20 +313,28 @@ export class CatPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    // Active indicator — slightly larger yellow outline, 40% transparent.
-    // Cat sprite: tileX=16, tileY=8, tileScale=64, frame 96×96 → at tileSize=32
-    //   scale=0.5, display 48×48, anchor at (sx−8, sy−4).
     if (this.isActive) {
+      const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
+      const sphereCX = sx + s * CatPlayer.MISSILE_CENTER_OFFSET;
+      const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
       ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        sx - CatPlayer.ACTIVE_INDICATOR_OFFSET_X,
-        sy - CatPlayer.ACTIVE_INDICATOR_OFFSET_Y,
-        s + CatPlayer.ACTIVE_INDICATOR_WIDTH,
-        s + CatPlayer.ACTIVE_INDICATOR_HEIGHT,
+      const highlightOffset = r * CatPlayer.SPHERE_HIGHLIGHT_OFFSET;
+      const grad = ctx.createRadialGradient(
+        sphereCX - highlightOffset,
+        sphereCY - highlightOffset,
+        r * CatPlayer.SPHERE_INNER_RADIUS_RATIO,
+        sphereCX,
+        sphereCY,
+        r,
       );
+      grad.addColorStop(0, '#e9d5ff');
+      grad.addColorStop(CatPlayer.SPHERE_MID_STOP, '#a855f7');
+      grad.addColorStop(1, '#6b21a8');
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sphereCX, sphereCY, r, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
@@ -330,7 +344,7 @@ export class CatPlayer extends Player {
     }
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
-    this.renderHealthBar(ctx, sx, sy);
+    this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
     this.renderDamageFlash(ctx, sx, sy);
     this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);

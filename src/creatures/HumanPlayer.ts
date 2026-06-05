@@ -38,10 +38,14 @@ export class HumanPlayer extends Player {
   private static readonly STARTING_POTIONS = 10;
   private static readonly FACING_Y_THRESHOLD = 0.5;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.95;
-  private static readonly SPRITE_OFFSET_X = 6;
-  private static readonly SPRITE_OFFSET_Y = 32;
-  private static readonly SPRITE_OUTLINE_WIDTH = 12;
-  private static readonly SPRITE_OUTLINE_HEIGHT = 32;
+  private static readonly ACTIVE_SPHERE_RADIUS = 4;
+  /** Distance above the sprite so the sphere sits just below the health bar. */
+  private static readonly ACTIVE_SPHERE_GAP = 3;
+  /** Offset from tile anchor so sphere sits in the gap between head top and health bar bottom. */
+  private static readonly ACTIVE_SPHERE_SPRITE_TOP = 19;
+  private static readonly SPHERE_HIGHLIGHT_OFFSET = 0.3;
+  private static readonly SPHERE_INNER_RADIUS_RATIO = 0.1;
+  private static readonly SPHERE_MID_STOP = 0.4;
   private static readonly HEALTH_BAR_Y_OFFSET = 30;
   private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
@@ -176,21 +180,29 @@ export class HumanPlayer extends Player {
     const sy = this.y - camY;
     const s = tileSize;
 
-    // Active indicator — larger yellow outline sized to the actual sprite extent.
-    // Human sprite: tileX=211, tileY=130, tileScale=128, frame 550×260 → at tileSize=32
-    //   scale=0.25, display 137.5×65, anchor at (sx−52.75, sy−32.5).
     if (this.isActive) {
+      const r = HumanPlayer.ACTIVE_SPHERE_RADIUS;
+      const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
+      const sphereCY =
+        sy - HumanPlayer.ACTIVE_SPHERE_SPRITE_TOP - HumanPlayer.ACTIVE_SPHERE_GAP - r;
       ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 2;
-      // Box that covers the full sprite height (32px above tile) and roughly the sprite width
-      ctx.strokeRect(
-        sx - HumanPlayer.SPRITE_OFFSET_X,
-        sy - HumanPlayer.SPRITE_OFFSET_Y,
-        s + HumanPlayer.SPRITE_OUTLINE_WIDTH,
-        s + HumanPlayer.SPRITE_OUTLINE_HEIGHT,
+      const highlightOffset = r * HumanPlayer.SPHERE_HIGHLIGHT_OFFSET;
+      const grad = ctx.createRadialGradient(
+        sphereCX - highlightOffset,
+        sphereCY - highlightOffset,
+        r * HumanPlayer.SPHERE_INNER_RADIUS_RATIO,
+        sphereCX,
+        sphereCY,
+        r,
       );
+      grad.addColorStop(0, '#e9d5ff');
+      grad.addColorStop(HumanPlayer.SPHERE_MID_STOP, '#a855f7');
+      grad.addColorStop(1, '#6b21a8');
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sphereCX, sphereCY, r, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
