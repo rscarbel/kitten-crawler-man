@@ -520,6 +520,11 @@ export class TutorialController {
     return this.atOrPast('CAMERA_PAN_TO_CAT');
   }
 
+  /** Human cannot move during the guards-defeated pause and camera pan to the cat. */
+  get canHumanMove(): boolean {
+    return this._state !== 'HUMAN_SMUSHED_GUARDS' && this._state !== 'CAMERA_PAN_TO_CAT';
+  }
+
   /** Cat cannot move until after potion is used. */
   get canCatMove(): boolean {
     return this.atOrPast('USED_HEALTH_POTION');

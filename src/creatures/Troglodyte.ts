@@ -4,6 +4,7 @@ import { drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { makePoison } from '../core/StatusEffect';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
+import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const TROG_HP = 22;
 const TROG_SPEED = 0.7;
@@ -73,12 +74,14 @@ export class Troglodyte extends Mob {
     const tongueRangePx = ts * TONGUE_RANGE_TILES;
 
     // Find nearest living target within aggro range
+    const aggroScanRange =
+      this.state !== 'idle' ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < aggroRangePx && d < nearestDist) {
+      if (d < aggroScanRange && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }

@@ -267,6 +267,7 @@ export class RenderPipeline {
     spells.renderFogs(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
+    dynamite.renderThrowPath(ctx, camX, camY, pm.human);
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);

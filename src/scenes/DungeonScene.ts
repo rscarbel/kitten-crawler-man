@@ -2777,7 +2777,9 @@ export class DungeonScene extends GameplayScene {
       this.camera(),
     );
     const catMoveBlocked = this.tutorial !== null && !this.tutorial.canCatMove && this.cat.isActive;
-    if (!this.spiderQuest.playerLocked && !catMoveBlocked) {
+    const humanMoveBlocked =
+      this.tutorial !== null && !this.tutorial.canHumanMove && this.human.isActive;
+    if (!this.spiderQuest.playerLocked && !catMoveBlocked && !humanMoveBlocked) {
       applyMovement(player, move, this.gameMap);
     }
 

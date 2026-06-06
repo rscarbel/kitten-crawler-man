@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 import { randomInt } from '../utils';
 
 const COCKROACH_HP = 4;
@@ -55,12 +55,15 @@ export class Cockroach extends Mob {
     if (!this.isAlive) return;
 
     // Find nearest living target
+    const aggroScanRange = this.currentTarget?.isAlive
+      ? AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER
+      : AGGRO_RANGE_PX;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < AGGRO_RANGE_PX && d < nearestDist) {
+      if (d < aggroScanRange && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }

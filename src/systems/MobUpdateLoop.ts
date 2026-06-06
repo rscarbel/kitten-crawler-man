@@ -98,7 +98,9 @@ export class MobUpdateLoop implements GameSystem {
         mob.currentTarget = null;
         mob.doWander();
       } else {
-        if (mob.isBoss) mob.forceAggro = bossRoom.isBossInLockedRoom(mob);
+        if (mob.isBoss)
+          mob.forceAggro =
+            bossRoom.isBossInLockedRoom(mob) || bossRoom.isAnyPlayerInBossRoom(mob, playerTargets);
 
         // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
         if (mob instanceof BrindleGrub) {

@@ -238,6 +238,11 @@ export class LootBoxOpener {
           this.frame = 0;
           this.burstParticles(BURST_COUNT_OPEN);
           this.onEachBoxOpening?.();
+          // Grant reward as soon as the box starts opening
+          if (!this.rewardGranted && this.onBoxOpened && this.contents) {
+            this.rewardGranted = true;
+            this.onBoxOpened(this.box, this.contents);
+          }
         }
         break;
       case 'opening':
@@ -253,11 +258,6 @@ export class LootBoxOpener {
           this.phase = 'done';
           this.frame = 0;
           this.nextTimer = NEXT_DELAY;
-          // Grant reward exactly once per box
-          if (!this.rewardGranted && this.onBoxOpened && this.contents) {
-            this.rewardGranted = true;
-            this.onBoxOpened(this.box, this.contents);
-          }
         }
         break;
       case 'done':

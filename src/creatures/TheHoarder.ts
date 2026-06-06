@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 import { randomInt } from '../utils';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 
@@ -144,12 +144,14 @@ export class TheHoarder extends Mob {
       return;
     }
 
+    const aggroScanRange =
+      this.currentTarget !== null ? AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER : AGGRO_RANGE_PX;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if ((this.forceAggro || d < AGGRO_RANGE_PX) && d < nearestDist) {
+      if ((this.forceAggro || d < aggroScanRange) && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }

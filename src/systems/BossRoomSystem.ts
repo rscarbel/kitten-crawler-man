@@ -330,6 +330,19 @@ export class BossRoomSystem implements GameSystem {
     return this.states.some((s) => s.locked && this.isEntityInRoom(mob, s.bounds));
   }
 
+  /** Returns true when any alive player is inside the same locked boss room as this mob. */
+  isAnyPlayerInBossRoom(
+    mob: Mob,
+    players: ReadonlyArray<{ x: number; y: number; isAlive: boolean }>,
+  ): boolean {
+    for (const state of this.states) {
+      if (state.locked && this.isEntityInRoom(mob, state.bounds)) {
+        return players.some((p) => p.isAlive && this.isEntityInRoom(p, state.bounds));
+      }
+    }
+    return false;
+  }
+
   update(ctx: SystemContext): void {
     const { mobs, mobGrid, human, cat } = ctx;
     // Tick defeat timers and pulse

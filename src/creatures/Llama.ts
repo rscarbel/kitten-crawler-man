@@ -3,6 +3,7 @@ import { Mob } from './Mob';
 import { drawLlamaSprite } from '../sprites/llamaSprite';
 import { makeBurn } from '../core/StatusEffect';
 import { normalize } from '../utils';
+import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 interface LavaBall {
   x: number;
@@ -110,12 +111,15 @@ export class Llama extends Mob {
     this.lavaBalls = this.lavaBalls.filter((b) => !b.exploding || b.explodeTick > 0);
 
     // Find nearest target
+    const aggroScanRange = this.isAggro
+      ? this.aggroRangePx * AGGRO_PERSIST_MULTIPLIER
+      : this.aggroRangePx;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < this.aggroRangePx && dist < nearestDist) {
+      if (dist < aggroScanRange && dist < nearestDist) {
         nearestDist = dist;
         nearest = t;
       }

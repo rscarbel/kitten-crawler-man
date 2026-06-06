@@ -36,3 +36,10 @@ export const CAT_KITE_DIST = TILE_SIZE * CAT_KITE_DIST_TILES;
  */
 const CAT_BEHIND_HUMAN_OFFSET_TILES = 2.2;
 export const CAT_BEHIND_HUMAN_OFFSET = TILE_SIZE * CAT_BEHIND_HUMAN_OFFSET_TILES;
+
+/**
+ * Once a mob has aggroed a target, it uses this multiplier on its normal aggro
+ * range before giving up the chase. Keeps enemies on the player longer once
+ * combat has started.
+ */
+export const AGGRO_PERSIST_MULTIPLIER = 2;

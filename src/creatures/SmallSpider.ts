@@ -1,7 +1,7 @@
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const SPIDER_HP = 20;
 const SPIDER_SPEED = 3.8;
@@ -185,12 +185,14 @@ export class SmallSpider extends Mob {
     if (!this.isAlive) return;
 
     // Find nearest living target with LOS within aggro range.
+    const aggroScanRange =
+      this.state !== 'idle' ? AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER : AGGRO_RANGE_PX;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < AGGRO_RANGE_PX && d < nearestDist && this.hasLOS(t)) {
+      if (d < aggroScanRange && d < nearestDist && this.hasLOS(t)) {
         nearestDist = d;
         nearest = t;
       }

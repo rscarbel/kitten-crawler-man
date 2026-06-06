@@ -91,6 +91,19 @@ const CHARGE_BAR_TICK_QUARTER = 0.25;
 const CHARGE_BAR_TICK_HALF = 0.5;
 const CHARGE_BAR_TICK_THREE_QUARTER = 0.75;
 
+// Throw path preview overlay constants
+const THROW_PATH_DOT_RADIUS = 2.5;
+const THROW_PATH_DOT_SPACING = 12; // pixels between dots along the path
+const THROW_PATH_DOT_ALPHA = 0.3;
+const THROW_PATH_MARCH_SPEED = 6; // px/sec — very slow drift for golf-simulator feel
+const THROW_PATH_IMPACT_BASE_RADIUS = 11; // base radius of the impact ring
+const THROW_PATH_IMPACT_PULSE_AMP = 3; // radius oscillation in pixels
+const THROW_PATH_IMPACT_PULSE_FREQ = 0.7; // Hz — slow breathe
+const THROW_PATH_IMPACT_ALPHA = 0.4;
+const THROW_PATH_IMPACT_LINE_WIDTH = 1.5;
+const THROW_PATH_IMPACT_CENTER_RADIUS = 3;
+const THROW_PATH_MIN_SEGMENT_LEN = 0.001;
+
 // In-world floor/flying sprite
 
 /**
@@ -398,6 +411,90 @@ export function drawDynamiteInventoryIcon(
   ctx.beginPath();
   ctx.arc(sparkX, sparkY, size * ICON_SPARK_CENTER_R, 0, Math.PI * 2);
   ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// Throw path preview overlay
+
+type PathPoint = { x: number; y: number };
+
+function getPositionAtDistance(
+  points: PathPoint[],
+  cumDists: number[],
+  targetDist: number,
+): PathPoint {
+  if (targetDist <= 0) return points[0];
+  const last = points.length - 1;
+  const totalLen = cumDists[last];
+  if (targetDist >= totalLen) return points[last];
+
+  for (let i = 1; i <= last; i++) {
+    if (cumDists[i] >= targetDist) {
+      const segLen = cumDists[i] - cumDists[i - 1];
+      if (segLen < THROW_PATH_MIN_SEGMENT_LEN) return points[i - 1];
+      const t = (targetDist - cumDists[i - 1]) / segLen;
+      return {
+        x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+        y: points[i - 1].y + (points[i].y - points[i - 1].y) * t,
+      };
+    }
+  }
+  return points[last];
+}
+
+/**
+ * Draws the throw-path overlay in golf-simulator style: a slowly drifting red dotted
+ * line along the predicted trajectory, with a pulsing target circle at the impact point.
+ */
+export function drawDynamiteThrowPath(
+  ctx: CanvasRenderingContext2D,
+  screenPoints: PathPoint[],
+): void {
+  if (screenPoints.length < 2) return;
+
+  const cumDists: number[] = [0];
+  for (let i = 1; i < screenPoints.length; i++) {
+    const dx = screenPoints[i].x - screenPoints[i - 1].x;
+    const dy = screenPoints[i].y - screenPoints[i - 1].y;
+    cumDists.push(cumDists[i - 1] + Math.hypot(dx, dy));
+  }
+  const totalLength = cumDists[cumDists.length - 1];
+  if (totalLength < 1) return;
+
+  ctx.save();
+
+  const nowSec = performance.now() / 1000;
+
+  // Slowly drifting dot offset — barely perceptible movement
+  const marchOffset = (nowSec * THROW_PATH_MARCH_SPEED) % THROW_PATH_DOT_SPACING;
+
+  // Uniform red dots along the entire path
+  let dist = marchOffset;
+  while (dist < totalLength) {
+    const pos = getPositionAtDistance(screenPoints, cumDists, dist);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, THROW_PATH_DOT_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(220, 40, 40, ${THROW_PATH_DOT_ALPHA})`;
+    ctx.fill();
+    dist += THROW_PATH_DOT_SPACING;
+  }
+
+  // Pulsing target ring at the impact (landing) point only
+  const impact = screenPoints[screenPoints.length - 1];
+  const pulse = Math.sin(nowSec * THROW_PATH_IMPACT_PULSE_FREQ * Math.PI * 2);
+  const impactRadius = THROW_PATH_IMPACT_BASE_RADIUS + pulse * THROW_PATH_IMPACT_PULSE_AMP;
+
+  ctx.beginPath();
+  ctx.arc(impact.x, impact.y, impactRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(220, 40, 40, ${THROW_PATH_IMPACT_ALPHA})`;
+  ctx.lineWidth = THROW_PATH_IMPACT_LINE_WIDTH;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(impact.x, impact.y, THROW_PATH_IMPACT_CENTER_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(220, 40, 40, ${THROW_PATH_IMPACT_ALPHA * 0.8})`;
   ctx.fill();
 
   ctx.restore();

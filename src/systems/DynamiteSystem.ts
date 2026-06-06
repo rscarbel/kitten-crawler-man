@@ -8,6 +8,7 @@ import {
   drawDynamiteFloorSprite,
   drawDynamiteExplosion,
   drawDynamiteChargeBar,
+  drawDynamiteThrowPath,
 } from '../sprites/dynamiteSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 
@@ -18,7 +19,7 @@ const DYN_EXPLODE_HAND = 300; // 5 s → boom in hand
 const DYN_FUSE = 300; // 5 s fuse after thrown/dropped
 const DYN_TAP = 8; // frames: release faster than this = tap (drop at feet)
 const DYN_SPEED_MIN = 2.0;
-const DYN_SPEED_MAX = 21.0;
+const DYN_SPEED_MAX = 23.1;
 const DYN_BOUNCE = 0.6; // velocity fraction kept after wall bounce
 const DYN_FRICTION = 0.88; // per-frame speed multiplier
 const DYN_STOP = 0.08; // px/frame below which dynamite is considered stopped
@@ -34,6 +35,10 @@ const DYN_ANIM_FRAMES = 45; // explosion animation duration
 const DYN_SPEED_PER_LEVEL = 4;
 /** Bonus damage per extra explosives handling level above 1. */
 const DYN_DAMAGE_PER_LEVEL = 2;
+/** Max frames to simulate for the throw path preview (covers full fuse duration). */
+const TRAJECTORY_MAX_FRAMES = 300;
+/** Collect a path point every N simulated frames to keep screen-point count manageable. */
+const TRAJECTORY_SAMPLE_INTERVAL = 3;
 
 interface LiveDynamite {
   x: number;
@@ -52,6 +57,9 @@ export class DynamiteSystem implements GameSystem {
   private liveDynamites: LiveDynamite[] = [];
   /** Set each time a dynamite explodes; DungeonScene reads and clears it to play the explosion sound. */
   explosionSoundPending = false;
+
+  private _trajectoryCache: Array<{ x: number; y: number }> | null = null;
+  private _trajCacheKey = '';
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -251,5 +259,76 @@ export class DynamiteSystem implements GameSystem {
     if (!this._charging) return;
     const ratio = Math.min(1, this._charging.chargeFrames / DYN_MAX_CHARGE);
     drawDynamiteChargeBar(ctx, canvasW, canvasH, ratio, this._charging.chargeFrames, DYN_DANGER);
+  }
+
+  private simulateTrajectory(human: HumanPlayer): Array<{ x: number; y: number }> {
+    const chargeFrames = this._charging?.chargeFrames ?? 0;
+    if (chargeFrames < DYN_TAP) return [];
+
+    const cacheKey = `${chargeFrames}|${human.facingX}|${human.facingY}|${Math.round(human.x)}|${Math.round(human.y)}|${human.explosivesHandling}`;
+    if (this._trajectoryCache !== null && this._trajCacheKey === cacheKey) {
+      return this._trajectoryCache;
+    }
+
+    const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
+    const expLvl = human.explosivesHandling;
+    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * DYN_SPEED_PER_LEVEL;
+    const speed = DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
+
+    const points: Array<{ x: number; y: number }> = [];
+    let x = human.x + HALF_TILE;
+    let y = human.y + HALF_TILE;
+    let vx = human.facingX * speed;
+    let vy = human.facingY * speed;
+
+    points.push({ x, y });
+
+    for (let frame = 0; frame < TRAJECTORY_MAX_FRAMES; frame++) {
+      const nextX = x + vx;
+      const txX = Math.floor(nextX / TILE_SIZE);
+      const ty = Math.floor(y / TILE_SIZE);
+      if (!this.gameMap.isWalkable(txX, ty)) {
+        vx = -vx * DYN_BOUNCE;
+      } else {
+        x = nextX;
+      }
+
+      const nextY = y + vy;
+      const tx = Math.floor(x / TILE_SIZE);
+      const tyY = Math.floor(nextY / TILE_SIZE);
+      if (!this.gameMap.isWalkable(tx, tyY)) {
+        vy = -vy * DYN_BOUNCE;
+      } else {
+        y = nextY;
+      }
+
+      vx *= DYN_FRICTION;
+      vy *= DYN_FRICTION;
+
+      if (frame % TRAJECTORY_SAMPLE_INTERVAL === 0) {
+        points.push({ x, y });
+      }
+
+      if (Math.hypot(vx, vy) < DYN_STOP) break;
+    }
+
+    this._trajectoryCache = points;
+    this._trajCacheKey = cacheKey;
+    return points;
+  }
+
+  renderThrowPath(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    human: HumanPlayer,
+  ): void {
+    if (!this._charging) return;
+
+    const worldPoints = this.simulateTrajectory(human);
+    if (worldPoints.length < 2) return;
+
+    const screenPoints = worldPoints.map((p) => ({ x: p.x - camX, y: p.y - camY }));
+    drawDynamiteThrowPath(ctx, screenPoints);
   }
 }

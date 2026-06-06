@@ -1,6 +1,7 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { drawRatSprite } from '../sprites/ratSprite';
+import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const RAT_HP = 3;
 const RAT_SPEED = 1.1;
@@ -45,12 +46,15 @@ export class Rat extends Mob {
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
 
     // Find nearest living target within aggro range
+    const aggroScanRange = this.isAggro
+      ? this.aggroRangePx * AGGRO_PERSIST_MULTIPLIER
+      : this.aggroRangePx;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < this.aggroRangePx && dist < nearestDist) {
+      if (dist < aggroScanRange && dist < nearestDist) {
         nearestDist = dist;
         nearest = t;
       }

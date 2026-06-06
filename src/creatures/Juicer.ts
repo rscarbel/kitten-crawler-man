@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { Mob } from './Mob';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 import { normalize } from '../utils';
 import {
   drawJuicerSprite,
@@ -121,12 +121,15 @@ export class Juicer extends Mob {
     this.updateProjectile(targets);
 
     // Find nearest living target
+    const aggroScanRange = this.currentTarget?.isAlive
+      ? AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER
+      : AGGRO_RANGE_PX;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if ((this.forceAggro || d < AGGRO_RANGE_PX) && d < nearestDist) {
+      if ((this.forceAggro || d < aggroScanRange) && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }

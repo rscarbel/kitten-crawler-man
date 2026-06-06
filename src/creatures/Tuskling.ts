@@ -3,6 +3,7 @@ import type { Player } from '../Player';
 import { drawTusklingSprite } from '../sprites/tusklingSprite';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
+import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const TUSK_HP = 30;
 const TUSK_SPEED = 1.0;
@@ -88,12 +89,14 @@ export class Tuskling extends Mob {
     if (this.meleeCooldown > 0) this.meleeCooldown--;
 
     // Find nearest living target
+    const aggroScanRange =
+      this.state !== 'idle' ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
     let nearest: Player | null = null;
     let nearestDist = Infinity;
     for (const t of targets) {
       if (!t.isAlive) continue;
       const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < aggroRangePx && d < nearestDist) {
+      if (d < aggroScanRange && d < nearestDist) {
         nearestDist = d;
         nearest = t;
       }
