@@ -4,6 +4,16 @@ import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
 
+/**
+ * Describes what caused a damage event. Stored as `lastDamageSource` on the player
+ * so the death screen can explain how the player died.
+ */
+export type DamageSource =
+  | { readonly kind: 'mob'; readonly mobType: string; readonly attackType?: string }
+  | { readonly kind: 'status'; readonly effectType: string }
+  | { readonly kind: 'dynamite' }
+  | { readonly kind: 'environmental' };
+
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
 const DENOMINATOR_OFFSET = 30;
 const NUMERATOR_ASYMPTOTE_SLOPE = 3;
@@ -194,6 +204,8 @@ export abstract class Player {
   statusEffects: StatusEffect[] = [];
   /** When true, mob AI treats this player as a defend target and will not attack other targets. */
   isDefendTarget?: boolean;
+  /** The last damage source that reduced this player's HP — used to explain the cause of death. */
+  lastDamageSource: DamageSource | null = null;
   /** When true, this player has been downed by a fatal blow and awaits revival. */
   isKnockedOut = false;
   /** Frames elapsed since this player was knocked out — used for the 90-second revival timer. */
@@ -223,10 +235,11 @@ export abstract class Player {
     return this.hp > 0;
   }
 
-  takeDamage(amount: number) {
+  takeDamage(amount: number, source?: DamageSource) {
     if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return;
     this.hp = Math.max(0, this.hp - amount);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
+    if (source !== undefined) this.lastDamageSource = source;
   }
 
   /** Returns the potion cooldown in frames for the current constitution level. */
@@ -337,19 +350,19 @@ export abstract class Player {
     this.statusEffects = this.statusEffects.filter((effect) => {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'burn' });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'poison' });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'sepsis' && elapsed > 0 && elapsed % SEPSIS_TICK_INTERVAL === 0) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'sepsis' });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'magic_burn' });
         this.effectDamageSoundPending = true;
       }
       if (
@@ -357,11 +370,11 @@ export abstract class Player {
         elapsed > 0 &&
         elapsed % ELECTRIFIED_TICK_INTERVAL === 0
       ) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'electrified' });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
-        this.takeDamage(1);
+        this.takeDamage(1, { kind: 'status', effectType: 'spit_venom' });
         this.effectDamageSoundPending = true;
       }
       effect.ticksRemaining--;

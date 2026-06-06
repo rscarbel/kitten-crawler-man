@@ -1,4 +1,5 @@
 import { Player } from '../Player';
+import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
@@ -197,6 +198,14 @@ export abstract class Mob extends Player {
   /** Sound category key for attack audio (e.g. 'goblin', 'rat', 'llama'). Empty string = no sound. */
   readonly audioTag: string = '';
 
+  /**
+   * Identifies this mob's type for death-cause tracking. Returns the class name by default;
+   * subclasses with multiple stages or variants should override this.
+   */
+  get mobType(): string {
+    return this.constructor.name;
+  }
+
   /** Set to true when this mob deals damage; polled and cleared by the scene each frame. */
   attackSoundPending = false;
 
@@ -281,10 +290,14 @@ export abstract class Mob extends Player {
   /**
    * Deal level-scaled damage to a target. Mobs should call this instead of
    * target.takeDamage() directly so damage scales with mob level.
+   *
+   * Pass `attackType` for special named attacks (e.g. 'slam', 'screech') so the
+   * death screen can describe the specific ability that killed the player.
    */
-  protected dealDamage(target: Player, baseDamage: number) {
+  protected dealDamage(target: Player, baseDamage: number, attackType?: string) {
     const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
-    target.takeDamage(Math.ceil(baseDamage * mult));
+    const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
+    target.takeDamage(Math.ceil(baseDamage * mult), source);
     this.attackSoundPending = true;
   }
 

@@ -621,7 +621,7 @@ export class BossRoomSystem implements GameSystem {
     if (humanInAcid) {
       this.humanAcidTick++;
       if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        human.takeDamage(1);
+        human.takeDamage(1, { kind: 'mob', mobType: 'TheHoarder', attackType: 'acid_puddle' });
         human.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
@@ -638,7 +638,7 @@ export class BossRoomSystem implements GameSystem {
     if (catInAcid) {
       this.catAcidTick++;
       if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        cat.takeDamage(1);
+        cat.takeDamage(1, { kind: 'mob', mobType: 'TheHoarder', attackType: 'acid_puddle' });
         cat.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {

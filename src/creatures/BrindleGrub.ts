@@ -33,6 +33,7 @@ const VESPA_SPIT_TTL = 220;
 const VESPA_HIT_FADE = 5; // TTL decrease per frame once hit
 const XP_STAGE3 = 22;
 const XP_STAGE2 = 2;
+const STAGE_COW_TAILED = 2;
 const STAGE_VESPA = 3;
 const CENTER_OFFSET = 0.5;
 const PLAYER_HITBOX_RADIUS_RATIO = 0.52;
@@ -79,7 +80,7 @@ export class BrindleGrub extends Mob {
 
   // XP is stage-dependent — implemented as a getter to satisfy the abstract.
   get xpValue(): number {
-    return this.stage === STAGE_VESPA ? XP_STAGE3 : this.stage === 2 ? XP_STAGE2 : 0;
+    return this.stage === STAGE_VESPA ? XP_STAGE3 : this.stage === STAGE_COW_TAILED ? XP_STAGE2 : 0;
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -87,6 +88,12 @@ export class BrindleGrub extends Mob {
     this.evolveTimer = randomInt(STAGE1_EVOLVE_MIN, STAGE1_EVOLVE_MAX);
     this.displayName = 'Brindle Grub';
     this.description = 'A harmless wriggling larva. It seems to be growing...';
+  }
+
+  override get mobType(): string {
+    if (this.stage === STAGE_VESPA) return 'BrindledVespa';
+    if (this.stage === STAGE_COW_TAILED) return 'CowTailedGrub';
+    return 'BrindleGrub';
   }
 
   /** Grubs drop nothing. */
@@ -223,7 +230,7 @@ export class BrindleGrub extends Mob {
             // Mark mob to retaliate against this Vespa
             t.retaliateMob = this;
           } else {
-            t.takeDamage(VESPA_SPIT_DAMAGE);
+            this.dealDamage(t, VESPA_SPIT_DAMAGE, 'spit');
           }
           spit.hit = true;
           break;

@@ -59,6 +59,8 @@ import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
+import { resolveDeathCause } from '../systems/DeathCauseSystem';
+import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
@@ -1740,6 +1742,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private restartAtFloorEntry(): void {
+    this.audio?.stopSound('death_sequence');
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
         humanSnap: this.floorEntryHumanSnap,
@@ -3131,7 +3134,13 @@ export class DungeonScene extends GameplayScene {
     ) {
       this.gameOver = true;
       this.barriers.cancelConstruct();
-      this.deathScreen.activate();
+      const deathCause = resolveDeathCause(
+        this.human,
+        this.cat,
+        !!this.levelDef.isSafeLevel,
+        this.levelTimerFrames,
+      );
+      this.deathScreen.activate(pickDeathExplanation(deathCause));
     }
   }
 

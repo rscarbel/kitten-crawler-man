@@ -58,6 +58,12 @@ export class AudioManager {
   private readonly pendingSfx = new Map<SoundId, PlayOptions>();
   // Sounds queued because the AudioContext was suspended when the buffer became ready.
   private readonly pendingOnUnlock: Array<{ id: SoundId; opts: PlayOptions }> = [];
+  // Tracks the most recently started source node (and optional per-sound gain node)
+  // per sound id for stoppable one-shots.
+  private readonly activeSources = new Map<
+    SoundId,
+    { source: AudioBufferSourceNode; gain: GainNode | null }
+  >();
 
   private masterVol = 1;
   private sfxVol = 1;
@@ -264,8 +270,9 @@ export class AudioManager {
     source.playbackRate.value = opts.playbackRate ?? 1;
 
     const { volume } = opts;
+    let perSoundGain: GainNode | null = null;
     if (volume !== undefined && volume !== 1) {
-      const perSoundGain = this.ctx.createGain();
+      perSoundGain = this.ctx.createGain();
       perSoundGain.gain.value = volume;
       source.connect(perSoundGain);
       perSoundGain.connect(this.sfxGain);
@@ -273,7 +280,29 @@ export class AudioManager {
       source.connect(this.sfxGain);
     }
 
+    this.activeSources.set(id, { source, gain: perSoundGain });
+    source.onended = () => {
+      const current = this.activeSources.get(id);
+      if (current?.source === source) {
+        current.gain?.disconnect();
+        this.activeSources.delete(id);
+      }
+    };
+
     source.start(0, opts.startOffset ?? 0);
+  }
+
+  /** Stop a currently-playing one-shot sound immediately. No-op if it already finished. */
+  stopSound(id: SoundId): void {
+    const entry = this.activeSources.get(id);
+    if (!entry) return;
+    try {
+      entry.source.stop();
+    } catch {
+      // already stopped
+    }
+    entry.gain?.disconnect();
+    this.activeSources.delete(id);
   }
 
   /**

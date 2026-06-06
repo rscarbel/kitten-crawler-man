@@ -156,10 +156,10 @@ export class DynamiteSystem implements GameSystem {
     }
     void mobs;
     if (Math.hypot(human.x + HALF_TILE - cx, human.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      human.takeDamage(damage);
+      human.takeDamage(damage, { kind: 'dynamite' });
     }
     if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= DYN_RADIUS) {
-      cat.takeDamage(damage);
+      cat.takeDamage(damage, { kind: 'dynamite' });
     }
   }
 

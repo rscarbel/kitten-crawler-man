@@ -209,7 +209,7 @@ export class KrakarenClone extends Mob {
     if (this.meleeSwingTimer === Math.floor(MELEE_SWING_FRAMES / 2) && nearest?.isAlive) {
       const dist = Math.hypot(nearest.x - this.x, nearest.y - this.y);
       if (dist <= MELEE_RANGE_PX) {
-        this.dealDamage(nearest, MELEE_DAMAGE);
+        this.dealDamage(nearest, MELEE_DAMAGE, 'melee');
         nearest.damageFlash = DAMAGE_FLASH_SWING;
       }
     }
@@ -273,7 +273,7 @@ export class KrakarenClone extends Mob {
       const dx = t.x + ts * CENTER_OFFSET - this.slamTargetX;
       const dy = t.y + ts * CENTER_OFFSET - this.slamTargetY;
       if (Math.hypot(dx, dy) < SLAM_KILL_RADIUS_PX) {
-        this.dealDamage(t, SLAM_DAMAGE);
+        this.dealDamage(t, SLAM_DAMAGE, 'slam');
         t.damageFlash = DAMAGE_FLASH_SLAM;
       }
     }

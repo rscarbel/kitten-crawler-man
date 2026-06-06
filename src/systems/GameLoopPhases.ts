@@ -27,7 +27,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
  */
 
 /** 90 seconds at 60 fps — the revival window before the run ends. */
-const KNOCKOUT_TIMEOUT_FRAMES = 5400;
+export const KNOCKOUT_TIMEOUT_FRAMES = 5400;
 
 // Mobile input constants
 const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms

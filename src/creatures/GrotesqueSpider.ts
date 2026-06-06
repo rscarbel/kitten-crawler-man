@@ -540,7 +540,11 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SCREECH_BLOCK_XP);
         continue;
       }
-      this.dealDamage(t, Math.ceil(t.maxHp * SCREECH_HP_FRACTION) + SCREECH_BONUS_DAMAGE);
+      this.dealDamage(
+        t,
+        Math.ceil(t.maxHp * SCREECH_HP_FRACTION) + SCREECH_BONUS_DAMAGE,
+        'screech',
+      );
     }
   }
 
@@ -563,7 +567,7 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
-      this.dealDamage(t, randomInt(SLAM_DAMAGE_MIN, SLAM_DAMAGE_MAX));
+      this.dealDamage(t, randomInt(SLAM_DAMAGE_MIN, SLAM_DAMAGE_MAX), 'slam');
     }
   }
 
@@ -614,7 +618,7 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SHELL_BLOCK_XP);
         return;
       }
-      this.dealDamage(target, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX));
+      this.dealDamage(target, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit');
       target.applyStatus(makeStuck());
       target.applyStatus(makeSpitVenom());
       this.dashTarget = target;
@@ -670,7 +674,7 @@ export class GrotesqueSpider extends Mob {
           this.activeProjectile = null;
           return;
         }
-        this.dealDamage(t, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX));
+        this.dealDamage(t, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit');
         t.applyStatus(makeStuck());
         t.applyStatus(makeSpitVenom());
         this.dashTarget = t;
