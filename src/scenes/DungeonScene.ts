@@ -525,7 +525,13 @@ export class DungeonScene extends GameplayScene {
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     this.miniMap = new MiniMapSystem(this.gameMap);
-    this.safeRoom = new SafeRoomSystem(this.gameMap, spawnTileX, spawnTileY, this.levelDef.id);
+    this.safeRoom = new SafeRoomSystem(
+      this.gameMap,
+      spawnTileX,
+      spawnTileY,
+      this.levelDef.id,
+      options?.audio ?? null,
+    );
     this.bossRoom = new BossRoomSystem(
       this.gameMap,
       this.miniMap,
@@ -770,6 +776,12 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
+    if (this.tutorial !== null && this.audio !== null) {
+      this.tutorial.setAudio(this.audio);
+    }
+    if (this.audio !== null) {
+      aiAdapter.messages.setAudio(this.audio);
+    }
     this.pauseMenu.audio = this.audio;
     this.pauseMenu.onResetGame = this.onResetGameCallback;
     this.pauseMenu.skipMusicPause = () =>
@@ -1802,7 +1814,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
-      this.safeRoom.mordecaiDialogOpen = false;
+      this.safeRoom.advanceMordecaiDialog();
       return;
     }
     const active = this.active();
@@ -2056,7 +2068,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
-      this.safeRoom.mordecaiDialogOpen = false;
+      this.safeRoom.advanceMordecaiDialog();
       return;
     }
 
@@ -2302,7 +2314,10 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.tutorial?.showNearGoblinDialog === true) return;
-    if (this.tutorial?.showTutorialMordecaiDialog === true) return;
+    if (this.tutorial?.showTutorialMordecaiDialog === true) {
+      this.tutorial.tickDialog();
+      return;
+    }
 
     this.updateGameplay();
   }

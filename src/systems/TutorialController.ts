@@ -21,6 +21,8 @@ import {
 import { drawText } from '../ui/TextBox';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { DialogBox } from '../ui/DialogBox';
+import type { AudioManager } from '../audio/AudioManager';
 import { drawArrowAbovePlayer, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import type { ItemId } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
@@ -165,26 +167,6 @@ const GUIDE_HIGHLIGHT_BORDER_WIDTH = 3;
 const GUIDE_ARROW_SIZE = 14;
 const GUIDE_ARROW_BOUNCE = 8;
 const GUIDE_ARROW_SPEED = 0.05;
-
-// ── Tutorial Mordecai multi-page dialog constants ─────────────────────────────
-
-const MORDECAI_DIALOG_HEIGHT = 175;
-const MORDECAI_DIALOG_MAX_WIDTH = 560;
-const MORDECAI_DIALOG_SIDE_MARGIN = 20;
-const MORDECAI_DIALOG_GAP_ABOVE_HOTBAR = 8;
-const MORDECAI_DIALOG_PADDING = 14;
-const MORDECAI_DIALOG_SPEAKER_Y_TOP = 10;
-const MORDECAI_DIALOG_TEXT_Y_TOP = 34;
-const MORDECAI_DIALOG_LINE_HEIGHT = 18;
-const MORDECAI_DIALOG_TEXT_SIZE = 12;
-const MORDECAI_DIALOG_SPEAKER_SIZE = 13;
-const MORDECAI_DIALOG_FOOTER_Y_OFFSET = 18;
-const MORDECAI_DIALOG_BORDER_COLOR = '#c8a860';
-const MORDECAI_DIALOG_BG = 'rgba(10,8,6,0.92)';
-const MORDECAI_DIALOG_BORDER_WIDTH = 2;
-const MORDECAI_DIALOG_TEXT_COLOR = '#e8dfc8';
-const MORDECAI_DIALOG_SPEAKER_COLOR = '#c8a860';
-const MORDECAI_DIALOG_HINT_COLOR = '#7a6e5a';
 
 const MORDECAI_TUTORIAL_PAGES: ReadonlyArray<string> = [
   'Welcome, adventurer! I am Mordecai, a changeling, and your guide through these dungeons. My form may shift from room to room, but I will be with you every step of your journey.',
@@ -451,6 +433,9 @@ export class TutorialController {
   // Tutorial Mordecai multi-page dialog state; null when not open
   private _tutorialMordecaiPage: number | null = null;
 
+  // Shared dialog box — created once audio is available via setAudio()
+  private _dialogBox: DialogBox | null = null;
+
   // Menu-guide step for HUMAN_OPENED_ACHIEVEMENT phase
   private _menuGuideStep: MenuGuideStep = 'drag_smush';
 
@@ -502,6 +487,11 @@ export class TutorialController {
   /** Convenience factory: creates mobs and controller in one call. */
   static createForTutorial(): TutorialController {
     return new TutorialController(TutorialController.createMobs(TILE_SIZE));
+  }
+
+  /** Wire in audio so the Mordecai dialog box can play typing sounds. */
+  setAudio(audio: AudioManager): void {
+    this._dialogBox = new DialogBox(audio, { speakerName: 'Mordecai', revealMode: 'sentence' });
   }
 
   // ── Public state accessors ────────────────────────────────────────────────
@@ -707,10 +697,18 @@ export class TutorialController {
   /** Close the current reminder page, or advance to the next page if multi-page. */
   advanceMordecaiReminderDialog(): void {
     if (this._mordecaiReminderPage === null) return;
+
+    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
+      this._dialogBox.skipToEnd();
+      return;
+    }
+
     if (this._mordecaiReminderPage < this._mordecaiReminderPages.length - 1) {
       this._mordecaiReminderPage++;
+      this._dialogBox?.show(this._mordecaiReminderPages[this._mordecaiReminderPage] ?? '');
     } else {
       this._mordecaiReminderPage = null;
+      this._dialogBox?.hide();
     }
   }
 
@@ -718,11 +716,20 @@ export class TutorialController {
   advanceTutorialMordecaiDialog(): void {
     if (this._tutorialMordecaiPage === null) return;
 
+    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
+      this._dialogBox.skipToEnd();
+      return;
+    }
+
     const pages = this._inFarewellDialog ? MORDECAI_FAREWELL_PAGES : MORDECAI_TUTORIAL_PAGES;
     if (this._tutorialMordecaiPage < pages.length - 1) {
       this._tutorialMordecaiPage++;
+      this._dialogBox?.show(pages[this._tutorialMordecaiPage] ?? '', {
+        pageIndicator: { current: this._tutorialMordecaiPage + 1, total: pages.length },
+      });
     } else {
       this._tutorialMordecaiPage = null;
+      this._dialogBox?.hide();
       if (this._inFarewellDialog) {
         this._inFarewellDialog = false;
         this.advance('TALKED_TO_MORDECAI_AGAIN');
@@ -748,9 +755,15 @@ export class TutorialController {
     player.inventory.equipment.equipped.clear();
   }
 
-  // ── Per-frame update ──────────────────────────────────────────────────────
+  /** Tick the dialog animation without running the full state machine update. */
+  tickDialog(): void {
+    this._dialogBox?.update();
+  }
+
+  // ── Per-frame update
 
   update(human: HumanPlayer, cat: CatPlayer): void {
+    this._dialogBox?.update();
     this.stateFrames++;
     this.animFrame++;
     if (this._boxersDragHintTimer > 0) {
@@ -873,11 +886,17 @@ export class TutorialController {
   onMordecaiInteracted(): boolean {
     if (this._state === 'HUMAN_GETS_TO_SAFE_ROOM') {
       this._tutorialMordecaiPage = 0;
+      this._dialogBox?.show(MORDECAI_TUTORIAL_PAGES[0] ?? '', {
+        pageIndicator: { current: 1, total: MORDECAI_TUTORIAL_PAGES.length },
+      });
       return true;
     }
     if (this._state === 'CAT_ARRIVED') {
       this._inFarewellDialog = true;
       this._tutorialMordecaiPage = 0;
+      this._dialogBox?.show(MORDECAI_FAREWELL_PAGES[0] ?? '', {
+        pageIndicator: { current: 1, total: MORDECAI_FAREWELL_PAGES.length },
+      });
       return true;
     }
     // For all other tutorial states, show a short reminder instead of the regular AI dialog.
@@ -885,6 +904,7 @@ export class TutorialController {
     if (reminderText !== undefined) {
       this._mordecaiReminderPages = [reminderText];
       this._mordecaiReminderPage = 0;
+      this._dialogBox?.show(reminderText);
       return true;
     }
     return false;
@@ -1315,20 +1335,8 @@ export class TutorialController {
       return;
     }
 
-    if (this.showTutorialMordecaiDialog) {
-      const tutPages = this._inFarewellDialog ? MORDECAI_FAREWELL_PAGES : MORDECAI_TUTORIAL_PAGES;
-      const tutPage = this._tutorialMordecaiPage;
-      if (tutPage !== null) {
-        this.renderTutorialMordecaiDialog(ctx, canvas, tutPages, tutPage);
-      }
-      return;
-    }
-
-    if (this.showMordecaiReminderDialog) {
-      const reminderPage = this._mordecaiReminderPage;
-      if (reminderPage !== null) {
-        this.renderTutorialMordecaiDialog(ctx, canvas, this._mordecaiReminderPages, reminderPage);
-      }
+    if (this.showTutorialMordecaiDialog || this.showMordecaiReminderDialog) {
+      this._dialogBox?.render(ctx, canvas);
       return;
     }
 
@@ -1562,65 +1570,6 @@ export class TutorialController {
       align: 'center',
       size: DIALOG_SPACE_HINT_SIZE,
       color: '#64748b',
-    });
-  }
-
-  private renderTutorialMordecaiDialog(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    pages: ReadonlyArray<string>,
-    page: number,
-  ): void {
-    const text = pages[page];
-    const totalPages = pages.length;
-
-    const hotbarTop = canvas.height - HOTBAR_SLOT_SIZE_MIRROR - HOTBAR_BOTTOM_MARGIN_MIRROR;
-    const dh = MORDECAI_DIALOG_HEIGHT;
-    const dw = Math.min(MORDECAI_DIALOG_MAX_WIDTH, canvas.width - MORDECAI_DIALOG_SIDE_MARGIN * 2);
-    const dx = (canvas.width - dw) / 2;
-    const dy = hotbarTop - MORDECAI_DIALOG_GAP_ABOVE_HOTBAR - dh;
-
-    ctx.save();
-    ctx.fillStyle = MORDECAI_DIALOG_BG;
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = MORDECAI_DIALOG_BORDER_COLOR;
-    ctx.lineWidth = MORDECAI_DIALOG_BORDER_WIDTH;
-    ctx.strokeRect(dx, dy, dw, dh);
-    ctx.restore();
-
-    drawText(ctx, 'Mordecai', {
-      x: dx + MORDECAI_DIALOG_PADDING,
-      y: dy + MORDECAI_DIALOG_SPEAKER_Y_TOP,
-      size: MORDECAI_DIALOG_SPEAKER_SIZE,
-      bold: true,
-      color: MORDECAI_DIALOG_SPEAKER_COLOR,
-    });
-
-    drawText(ctx, text, {
-      x: dx + MORDECAI_DIALOG_PADDING,
-      y: dy + MORDECAI_DIALOG_TEXT_Y_TOP,
-      size: MORDECAI_DIALOG_TEXT_SIZE,
-      color: MORDECAI_DIALOG_TEXT_COLOR,
-      width: dw - MORDECAI_DIALOG_PADDING * 2,
-      lineHeight: MORDECAI_DIALOG_LINE_HEIGHT,
-    });
-
-    const pageLabel = `${page + 1} / ${totalPages}`;
-    drawText(ctx, pageLabel, {
-      x: dx + MORDECAI_DIALOG_PADDING,
-      y: dy + dh - MORDECAI_DIALOG_FOOTER_Y_OFFSET,
-      size: DIALOG_SPACE_HINT_SIZE,
-      color: MORDECAI_DIALOG_HINT_COLOR,
-    });
-
-    const isLastPage = page === totalPages - 1;
-    const hintText = isLastPage ? '[Space / Click] Close' : '[Space / Click] Continue';
-    drawText(ctx, hintText, {
-      x: dx + dw - MORDECAI_DIALOG_PADDING,
-      y: dy + dh - MORDECAI_DIALOG_FOOTER_Y_OFFSET,
-      size: DIALOG_SPACE_HINT_SIZE,
-      color: MORDECAI_DIALOG_HINT_COLOR,
-      align: 'right',
     });
   }
 

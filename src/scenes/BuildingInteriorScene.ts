@@ -138,7 +138,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pm.setPositions(sx, sy);
 
     this.safeRoom =
-      entry.type === 'restaurant' ? new SafeRoomSystem(this.map, sx, sy, 'level3') : null;
+      entry.type === 'restaurant'
+        ? new SafeRoomSystem(this.map, sx, sy, 'level3', this.audio)
+        : null;
 
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
 
@@ -225,9 +227,10 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
     if (this.safeRoom?.mordecaiDialogOpen) {
+      this.safeRoom.tickDialog();
       if (this.input.has(' ')) {
         this.input.clear();
-        this.safeRoom.mordecaiDialogOpen = false;
+        this.safeRoom.advanceMordecaiDialog();
       }
       return;
     }

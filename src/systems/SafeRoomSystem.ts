@@ -9,6 +9,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { randomFromArray, clamp } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { DialogBox } from '../ui/DialogBox';
+import type { AudioManager } from '../audio/AudioManager';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
@@ -23,8 +25,8 @@ export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
   private _mordecaiDialogOpen = false;
-  private mordecaiLine: string | null = null;
-  private mordecaiLoading = false;
+  private _awaitingResponse = false;
+  private readonly _dialogBox: DialogBox | null;
   private _isSleeping = false;
   private sleepTimer = 0;
   private sleepHealed = false;
@@ -50,30 +52,12 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly BANNER_TILE_Y_OFFSET = -1;
   private static readonly BANNER_Y_BASELINE_OFFSET = 0.65;
   private static readonly BANNER_TEXT_TOP_OFFSET = 8;
-  private static readonly DIALOG_HEIGHT = 140;
-  private static readonly DIALOG_MAX_WIDTH = 560;
-  private static readonly DIALOG_HORIZONTAL_MARGIN = 40;
-  private static readonly DIALOG_VERTICAL_MARGIN = 20;
-  private static readonly DIALOG_PADDING = 14;
-  private static readonly DIALOG_LINE_WIDTH = 2;
-  private static readonly DIALOG_SPEAKER_SIZE = 13;
-  private static readonly DIALOG_SPEAKER_Y_TOP = 10;
-  private static readonly DIALOG_LOADING_SIZE = 12;
-  private static readonly DIALOG_LOADING_Y_TOP = 40;
-  private static readonly DIALOG_TEXT_SIZE = 12;
-  private static readonly DIALOG_TEXT_Y_TOP = 34;
-  private static readonly DIALOG_TEXT_WIDTH_OFFSET = 28;
-  private static readonly DIALOG_LINE_HEIGHT = 18;
-  private static readonly DIALOG_CLOSE_SIZE = 10;
-  private static readonly DIALOG_CLOSE_Y_OFFSET = 18;
-  private static readonly DIALOG_CLOSE_X_OFFSET = 12;
   private static readonly HUD_BANNER_SIZE = 12;
   private static readonly HUD_BANNER_Y_OFFSET = 18;
   private static readonly HUD_BANNER_TEXT_TOP_OFFSET = 10;
   private static readonly HUD_BANNER_ALPHA = 0.85;
   private static readonly SLEEP_TEXT_Y_OFFSET = 10;
   private static readonly SLEEP_TEXT_TOP_OFFSET = 21;
-  private static readonly SLEEP_VISION_ALPHA = 0.92;
   private static readonly ZZZ_Y_OFFSET = 18;
   private static readonly ZZZ_TEXT_TOP_OFFSET = 11;
   private static readonly BED_FRAME_LEFT = 0.05;
@@ -104,7 +88,12 @@ export class SafeRoomSystem implements GameSystem {
     _startTileX: number,
     _startTileY: number,
     private readonly levelId = 'level1',
+    audio?: AudioManager | null,
   ) {
+    this._dialogBox =
+      audio !== null && audio !== undefined
+        ? new DialogBox(audio, { speakerName: 'Mordecai', revealMode: 'sentence' })
+        : null;
     this.entries = [];
 
     if (gameMap.safeRooms.length > 0) {
@@ -141,23 +130,46 @@ export class SafeRoomSystem implements GameSystem {
   set mordecaiDialogOpen(v: boolean) {
     this._mordecaiDialogOpen = v;
     if (!v) {
-      this.mordecaiLine = null;
-      this.mordecaiLoading = false;
+      this._awaitingResponse = false;
+      this._dialogBox?.hide();
     }
   }
 
   /** Open the dialog and populate it with the async AI response. */
   openMordecaiDialog(responsePromise: Promise<string>): void {
     this._mordecaiDialogOpen = true;
-    this.mordecaiLine = null;
-    this.mordecaiLoading = true;
+    this._awaitingResponse = true;
+    this._dialogBox?.show('...');
     void responsePromise.then((text) => {
-      this.mordecaiLine = text;
-      this.mordecaiLoading = false;
+      this._awaitingResponse = false;
+      if (this._mordecaiDialogOpen) {
+        this._dialogBox?.show(text);
+      }
     });
   }
 
+  /**
+   * Skip the typing animation if in progress, or close the dialog if already
+   * fully revealed. Call from Space / click handlers.
+   * While the AI response is still loading, Space does nothing.
+   */
+  advanceMordecaiDialog(): void {
+    if (!this._mordecaiDialogOpen) return;
+    if (this._awaitingResponse) return;
+    if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
+      this._dialogBox.skipToEnd();
+    } else {
+      this.mordecaiDialogOpen = false;
+    }
+  }
+
+  /** Advance the dialog animation without requiring a full SystemContext. */
+  tickDialog(): void {
+    this._dialogBox?.update();
+  }
+
   update(ctx: SystemContext): void {
+    this._dialogBox?.update();
     this.evictMobs(ctx.mobs, ctx.mobGrid);
     this.updateWander();
   }
@@ -412,61 +424,7 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const dh = SafeRoomSystem.DIALOG_HEIGHT;
-    const dw = Math.min(
-      SafeRoomSystem.DIALOG_MAX_WIDTH,
-      canvas.width - SafeRoomSystem.DIALOG_HORIZONTAL_MARGIN,
-    );
-    const dx = (canvas.width - dw) / 2;
-    const dy = canvas.height - dh - SafeRoomSystem.DIALOG_VERTICAL_MARGIN;
-
-    // Dialog background and border (drawn directly — not text)
-    ctx.save();
-    ctx.fillStyle = `rgba(10,8,6,${SafeRoomSystem.SLEEP_VISION_ALPHA})`;
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = '#c8a860';
-    ctx.lineWidth = SafeRoomSystem.DIALOG_LINE_WIDTH;
-    ctx.strokeRect(dx, dy, dw, dh);
-    ctx.restore();
-
-    // Speaker name: size=13, old baseline = dy+20; top = dy+20 - round(13*0.8) = dy+10
-    drawText(ctx, 'Mordecai', {
-      x: dx + SafeRoomSystem.DIALOG_PADDING,
-      y: dy + SafeRoomSystem.DIALOG_SPEAKER_Y_TOP,
-      size: SafeRoomSystem.DIALOG_SPEAKER_SIZE,
-      bold: true,
-      color: '#c8a860',
-    });
-
-    if (this.mordecaiLoading) {
-      // size=12, old baseline = dy+50; top = dy+50 - round(12*0.8) = dy+40
-      drawText(ctx, '...', {
-        x: dx + SafeRoomSystem.DIALOG_PADDING,
-        y: dy + SafeRoomSystem.DIALOG_LOADING_Y_TOP,
-        size: SafeRoomSystem.DIALOG_LOADING_SIZE,
-        color: '#7a6e5a',
-      });
-    } else {
-      // Speech text with built-in word-wrap; lineHeight=18 matches original spacing
-      // First line old baseline = dy+44; top = dy+44 - round(12*0.8) = dy+34
-      drawText(ctx, this.mordecaiLine ?? '', {
-        x: dx + SafeRoomSystem.DIALOG_PADDING,
-        y: dy + SafeRoomSystem.DIALOG_TEXT_Y_TOP,
-        size: SafeRoomSystem.DIALOG_TEXT_SIZE,
-        color: '#e8dfc8',
-        width: dw - SafeRoomSystem.DIALOG_TEXT_WIDTH_OFFSET,
-        lineHeight: SafeRoomSystem.DIALOG_LINE_HEIGHT,
-      });
-    }
-
-    // Close hint: size=10, old baseline = dy+dh-10; top = dy+dh-10 - round(10*0.8) = dy+dh-18
-    drawText(ctx, '[Space / Esc] Close', {
-      x: dx + dw - SafeRoomSystem.DIALOG_CLOSE_X_OFFSET,
-      y: dy + dh - SafeRoomSystem.DIALOG_CLOSE_Y_OFFSET,
-      size: SafeRoomSystem.DIALOG_CLOSE_SIZE,
-      color: '#7a6e5a',
-      align: 'right',
-    });
+    this._dialogBox?.render(ctx, canvas);
   }
 
   renderSleepOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
