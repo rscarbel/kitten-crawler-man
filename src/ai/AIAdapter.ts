@@ -59,6 +59,8 @@ interface StoredCredentials {
 const ACTION_HISTORY_MAX = 20;
 const REPEAT_THRESHOLD = 3;
 const WS_CONNECT_TIMEOUT_MS = 5000;
+const TOKEN_REFRESH_BUFFER_MS = 60_000;
+const MS_PER_SECOND = 1000;
 const NEARBY_MOBS_SEARCH_RADIUS = 15;
 const NEARBY_MOBS_MAX = 10;
 const NEARBY_MOBS_IMPORTANCE_BOSS = 5;
@@ -75,6 +77,8 @@ export class AIAdapter {
   private ws: WebSocket | null = null;
   private connected = false;
   private authToken: string | null = null;
+  private tokenExpiresAt = 0;
+  private creds: StoredCredentials | null = null;
 
   private sceneCtx: AISceneContext | null = null;
   private sceneBus: EventBus | null = null;
@@ -100,24 +104,10 @@ export class AIAdapter {
     try {
       const creds = await this.getOrRegisterCredentials();
       if (!creds) return;
+      this.creds = creds;
 
-      // Fetch auth token using browser-native btoa (avoids Node.js Buffer dependency)
-      const b64 = btoa(`${creds.clientId}:${creds.clientSecret}`);
-      const tokenRes = await fetch(`${SERVER_URL}/api/auth/token`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${b64}` },
-      });
-      if (!tokenRes.ok) return;
-      const rawToken: unknown = await tokenRes.json();
-      if (
-        typeof rawToken !== 'object' ||
-        rawToken === null ||
-        !('token' in rawToken) ||
-        typeof rawToken.token !== 'string'
-      )
-        return;
-      const token = rawToken.token;
-      this.authToken = token;
+      const token = await this.fetchNewToken();
+      if (!token) return;
 
       // Register tool vocabulary and init the System character (idempotent)
       const headers = {
@@ -561,14 +551,15 @@ export class AIAdapter {
   }
 
   private async notifyImportantEvent(trigger: string, context: string): Promise<void> {
-    if (!this.authToken) return;
+    const token = await this.ensureValidToken();
+    if (!token) return;
     try {
       const res = await fetch(
         `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.authToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -599,14 +590,15 @@ export class AIAdapter {
    * Safe to call when disconnected — silently no-ops.
    */
   async chatWithSystem(message: string, additionalContext: string): Promise<void> {
-    if (!this.authToken) return;
+    const token = await this.ensureValidToken();
+    if (!token) return;
     try {
       const res = await fetch(
         `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.authToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -644,7 +636,8 @@ export class AIAdapter {
       "Kill things, level up, find the stairwell. That's how you survive. Every floor, " +
       "every time. You'd be surprised how many crawlers can't manage even that.";
 
-    if (!this.authToken) return fallback;
+    const token = await this.ensureValidToken();
+    if (!token) return fallback;
 
     const contextLines = context.recentEvents.map((e) => {
       const ago =
@@ -666,7 +659,7 @@ export class AIAdapter {
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.authToken}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -689,6 +682,44 @@ export class AIAdapter {
     } catch {
       return fallback;
     }
+  }
+
+  /** Fetches a fresh JWT from stored credentials, caching it with its expiry. Returns null on failure. */
+  private async fetchNewToken(): Promise<string | null> {
+    if (!this.creds) return null;
+    try {
+      // Browser-native btoa (avoids Node.js Buffer dependency)
+      const b64 = btoa(`${this.creds.clientId}:${this.creds.clientSecret}`);
+      const tokenRes = await fetch(`${SERVER_URL}/api/auth/token`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${b64}` },
+      });
+      if (!tokenRes.ok) return null;
+      const rawToken: unknown = await tokenRes.json();
+      if (
+        typeof rawToken !== 'object' ||
+        rawToken === null ||
+        !('token' in rawToken) ||
+        typeof rawToken.token !== 'string' ||
+        !('expires_in' in rawToken) ||
+        typeof rawToken.expires_in !== 'number'
+      )
+        return null;
+
+      this.authToken = rawToken.token;
+      this.tokenExpiresAt = Date.now() + rawToken.expires_in * MS_PER_SECOND;
+      return this.authToken;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Returns a non-expired JWT, transparently refreshing it if it's missing or about to expire. */
+  private async ensureValidToken(): Promise<string | null> {
+    if (this.authToken && Date.now() < this.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
+      return this.authToken;
+    }
+    return this.fetchNewToken();
   }
 
   private async getOrRegisterCredentials(): Promise<StoredCredentials | null> {
