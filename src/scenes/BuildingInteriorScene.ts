@@ -29,11 +29,14 @@ import { EventBus } from '../core/EventBus';
 import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
+import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import { BigTopBossSystem } from '../systems/BigTopBossSystem';
+import { CultHideoutSystem } from '../systems/CultHideoutSystem';
+import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { DeathScreen } from '../ui/DeathScreen';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import type { SystemContext } from '../systems/GameSystem';
@@ -65,10 +68,20 @@ const EXIT_BTN_TEXT_Y = 16;
 const EXIT_BTN_Y_OFFSET = 110;
 const EXIT_BTN_GAP = 8;
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
-/** Fraction of max HP both players are revived to after falling in the Big Top. */
-const BIGTOP_REVIVE_HP_FRACTION = 0.5;
+/** Fraction of max HP both players are revived to after falling in an interior fight. */
+const INTERIOR_REVIVE_HP_FRACTION = 0.5;
+/** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
+const TOWER_CONFRONTATION_FLOOR = 3;
 
-/** The combat stack instantiated only for the Big Top boss encounter. */
+/** A quest encounter that runs inside a building (Big Top boss, cult hideout, tower fight). */
+interface InteriorEncounter {
+  update(ctx: SystemContext): void;
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void;
+  /** Death-screen message when the players fall during this encounter. */
+  readonly defeatMessage: string;
+}
+
+/** The combat stack instantiated only for interiors hosting a quest encounter. */
 interface InteriorCombat {
   bus: EventBus;
   mobs: Mob[];
@@ -79,7 +92,9 @@ interface InteriorCombat {
   mobLoop: MobUpdateLoop;
   deathScreen: DeathScreen;
   abilityManager: AbilityManager;
-  boss: BigTopBossSystem;
+  encounter: InteriorEncounter;
+  /** Tower floor the encounter lives on (0 for single-floor interiors) — combat only runs there. */
+  floor: number;
 }
 
 export class BuildingInteriorScene extends GameplayScene {
@@ -120,9 +135,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private readonly audio: AudioManager | null;
 
-  // Big Top boss encounter (null in every other building)
-  private readonly combat: InteriorCombat | null;
+  // Quest-encounter combat stack (null in buildings without a live encounter)
+  private combat: InteriorCombat | null;
   private gameOver = false;
+  /** Kept for encounters created after construction (the tower's top-floor fight). */
+  private readonly encounterAbilityManager: AbilityManager | null;
 
   constructor(
     private readonly entry: BuildingEntry,
@@ -136,9 +153,11 @@ export class BuildingInteriorScene extends GameplayScene {
     audio?: AudioManager,
     abilityManager?: AbilityManager,
     circusQuestProgress?: CircusQuestProgress,
+    private readonly murderQuestProgress?: MurderQuestProgress,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
+    this.encounterAbilityManager = abilityManager ?? null;
 
     const isTower = entry.type === 'tower';
 
@@ -187,20 +206,43 @@ export class BuildingInteriorScene extends GameplayScene {
       );
     }
 
-    this.combat = this.initBigTopCombat(abilityManager, circusQuestProgress);
+    this.combat = this.initEntryEncounter(abilityManager, circusQuestProgress);
   }
 
   /**
-   * The Big Top hosts the Grimaldi boss fight when the circus quest has
-   * unlocked it — the only interior with a live combat stack.
+   * Encounters that are live from the moment the building is entered: the
+   * Big Top's Grimaldi fight and the Blackwood Barracks cult hideout. The
+   * tower's Quill confrontation is created later, on reaching the top floor.
    */
-  private initBigTopCombat(
+  private initEntryEncounter(
     abilityManager: AbilityManager | undefined,
-    progress: CircusQuestProgress | undefined,
+    circusProgress: CircusQuestProgress | undefined,
   ): InteriorCombat | null {
-    if (this.entry.name !== 'Big Top') return null;
-    if (!abilityManager || progress?.stage !== 'bigtop_ready') return null;
+    if (!abilityManager) return null;
 
+    if (this.entry.name === 'Big Top' && circusProgress?.stage === 'bigtop_ready') {
+      return this.createCombatStack(abilityManager, this.map, 0, (bus, addMob) => {
+        return new BigTopBossSystem(this.map, bus, addMob, circusProgress, this.audio);
+      });
+    }
+
+    const murderProgress = this.murderQuestProgress;
+    if (this.entry.name === 'Blackwood Barracks' && murderProgress?.stage === 'cult_hideout') {
+      return this.createCombatStack(abilityManager, this.map, 0, (bus, addMob) => {
+        return new CultHideoutSystem(this.map, bus, addMob, murderProgress, this.audio);
+      });
+    }
+
+    return null;
+  }
+
+  /** Builds the shared interior combat stack around a quest encounter. */
+  private createCombatStack(
+    abilityManager: AbilityManager,
+    map: GameMap,
+    floor: number,
+    makeEncounter: (bus: EventBus, addMob: (mob: Mob) => void) => InteriorEncounter,
+  ): InteriorCombat {
     const bus = new EventBus();
     const mobs: Mob[] = [];
     const mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
@@ -214,6 +256,7 @@ export class BuildingInteriorScene extends GameplayScene {
       mobs.push(mob);
       mobGrid.insert(mob);
       mob.setSpells(spells);
+      mob.setMap(map);
     };
 
     bus.on('spawnGore', (e) => {
@@ -245,7 +288,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.play('player_level_up');
     });
 
-    const boss = new BigTopBossSystem(this.map, bus, addMob, progress, this.audio);
+    const encounter = makeEncounter(bus, addMob);
 
     return {
       bus,
@@ -257,8 +300,31 @@ export class BuildingInteriorScene extends GameplayScene {
       mobLoop: new MobUpdateLoop(),
       deathScreen,
       abilityManager,
-      boss,
+      encounter,
+      floor,
     };
+  }
+
+  /**
+   * The Quill confrontation spawns the first time the players reach the
+   * tower's top floor while the murder quest is at its confrontation stage.
+   */
+  private maybeStartTowerConfrontation(): void {
+    if (this.combat !== null) return;
+    if (this.entry.type !== 'tower' || this.currentFloor !== TOWER_CONFRONTATION_FLOOR) return;
+    const murderProgress = this.murderQuestProgress;
+    if (murderProgress?.stage !== 'confrontation') return;
+    if (!this.encounterAbilityManager) return;
+
+    const floorMap = this.map;
+    this.combat = this.createCombatStack(
+      this.encounterAbilityManager,
+      floorMap,
+      TOWER_CONFRONTATION_FLOOR,
+      (bus, addMob) => {
+        return new QuillConfrontationSystem(floorMap, bus, addMob, murderProgress, this.audio);
+      },
+    );
   }
 
   private changeFloor(newFloor: number): void {
@@ -284,6 +350,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.onExitTile = false;
     this.exitMenuOpen = false;
     this.exitDismissed = false;
+
+    this.maybeStartTowerConfrontation();
   }
 
   onEnter(): void {
@@ -435,14 +503,16 @@ export class BuildingInteriorScene extends GameplayScene {
     // Tower stair detection
     this.towerStairs?.detect(player);
 
-    if (this.combat) this.updateCombat();
+    // Combat only runs on the floor hosting the encounter — mobs on the
+    // tower's top floor must not tick against another floor's map.
+    if (this.currentFloor === this.combat?.floor) this.updateCombat();
   }
 
   private updateCombat(): void {
     const combat = this.combat;
     if (!combat) return;
 
-    // Space attacks — Big Top interiors have no safe room or shop competing for the key.
+    // Space attacks — encounter interiors have no safe room or shop competing for the key.
     if (this.input.has(' ')) {
       this.input.clear();
       triggerPlayerAttack(this.human, this.cat, combat.mobGrid, this.map, this.audio);
@@ -466,7 +536,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     combat.spells.update(ctx);
     combat.mobLoop.update(ctx);
-    combat.boss.update(ctx);
+    combat.encounter.update(ctx);
     playMobAudioCues(combat.mobs, this.audio);
 
     const combatCtx: CombatContext = {
@@ -490,14 +560,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
     if (!active.isAlive) {
       this.gameOver = true;
-      combat.deathScreen.activate('The show went on without you.');
+      combat.deathScreen.activate(combat.encounter.defeatMessage);
     }
   }
 
-  /** Death inside the Big Top: patch both crawlers up and put them back outside; the fight resets on re-entry. */
+  /** Death inside an encounter: patch both crawlers up and put them back outside; the fight resets on re-entry. */
   private reviveAndExit(): void {
     for (const player of [this.human, this.cat]) {
-      player.hp = Math.max(player.hp, Math.ceil(player.maxHp * BIGTOP_REVIVE_HP_FRACTION));
+      player.hp = Math.max(player.hp, Math.ceil(player.maxHp * INTERIOR_REVIVE_HP_FRACTION));
     }
     this.gameOver = false;
     this.doExit();
@@ -574,7 +644,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.map.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
 
-    if (this.combat) {
+    const combatOnThisFloor = this.combat !== null && this.currentFloor === this.combat.floor;
+    if (this.combat && combatOnThisFloor) {
       const combat = this.combat;
       combat.gore.renderPuddles(ctx, camX, camY);
       combat.bodyPartGore.renderSettled(ctx, camX, camY);
@@ -676,7 +747,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop.renderShopPanel(ctx, canvas, this.active());
     }
 
-    if (this.combat) this.combat.boss.renderUI(ctx, canvas);
+    if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);

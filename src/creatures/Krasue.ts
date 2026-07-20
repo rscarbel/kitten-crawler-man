@@ -34,6 +34,12 @@ export class Krasue extends Mob {
   description = 'A disembodied head trailing entrails, drifting erratically through the ruins.';
   override isFlying = true;
   override readonly audioTag = 'krasue';
+  /**
+   * Ambient krasue respect the town safe zone; quest systems set this true on
+   * scripted spawns (the night-attack swarm, Quill's summons) so those hunt
+   * players inside town streets and interiors.
+   */
+  ignoresTownSafeZone = false;
 
   private attackCooldown = 0;
   private attackAnimTimer = 0;
@@ -64,7 +70,7 @@ export class Krasue extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       // Krasue won't pursue targets sheltering inside the town safe zone.
-      if (this.map?.isInTownSafeZone(t.x, t.y)) continue;
+      if (!this.ignoresTownSafeZone && this.map?.isInTownSafeZone(t.x, t.y)) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
       if (dist < aggroScanRange && dist < nearestDist) {
         nearestDist = dist;

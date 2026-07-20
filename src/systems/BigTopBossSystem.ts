@@ -99,6 +99,9 @@ function makePerformer(type: PerformerType, x: number, y: number): Mob {
 }
 
 export class BigTopBossSystem implements GameSystem {
+  /** Shown by BuildingInteriorScene if the players fall here. */
+  readonly defeatMessage = 'The show went on without you.';
+
   private grimaldi: RingmasterGrimaldi | null = null;
   private roots: VineTendril[] = [];
   private performers: TrackedPerformer[] = [];

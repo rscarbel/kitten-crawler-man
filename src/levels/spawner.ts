@@ -24,6 +24,7 @@ import { FatClown } from '../creatures/FatClown';
 import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { RingmasterGrimaldi } from '../creatures/RingmasterGrimaldi';
+import { CityElfCultist } from '../creatures/CityElfCultist';
 import { randomFromArray, randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
@@ -104,6 +105,7 @@ registerMob('fat_clown', (x, y) => new FatClown(x, y, TILE_SIZE));
 registerMob('mold_lion', (x, y) => new MoldLion(x, y, TILE_SIZE));
 registerMob('terror_the_clown', (x, y) => new TerrorTheClown(x, y, TILE_SIZE));
 registerMob('ringmaster_grimaldi', (x, y) => new RingmasterGrimaldi(x, y, TILE_SIZE));
+registerMob('city_elf_cultist', (x, y) => new CityElfCultist(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   const v = randomFromArray(GOBLIN_VARIANTS);
   return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);

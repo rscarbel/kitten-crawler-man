@@ -4,12 +4,9 @@
  * Pure data; CircusQuestSystem owns pagination and rendering.
  */
 
-export interface DialogPage {
-  title: string;
-  lines: string[];
-  /** Label for the advance button on this page. */
-  button: string;
-}
+import type { DialogPage } from '../ui/QuestDialog';
+
+export type { DialogPage };
 
 const SIGNET = 'Tsarina Signet';
 

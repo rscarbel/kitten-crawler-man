@@ -74,43 +74,51 @@ export function generateOverworld(size: number): OverworldData {
   // General Store west of town square
   const STORE_X_OFFSET = 28;
 
-  // Village building positions (offset from town center cx, cy)
-  const SHEPHERDS_CABIN_DX = 25;
-  const SHEPHERDS_CABIN_DY = 45;
-  const SHEPHERDS_LEAN_TO_DX = 14;
-  const SHEPHERDS_LEAN_TO_DY = 44;
+  // Village building positions (offset from town center cx, cy).
+  // The town is intentionally compact: buildings form two tight streets
+  // ringing the square (rows ~±14–30 tiles from centre) so it reads as a
+  // lived-in town rather than scattered homesteads. Placements dodge the
+  // square (±11), the main road bands (±2 around each axis road), the tower
+  // footprint (x −3..+2, y −36..−16), and the store/restaurant rows
+  // (y −16..−12), and every door's L-road to a main road stays unblocked.
+  const SHEPHERDS_CABIN_DX = 16;
+  const SHEPHERDS_CABIN_DY = 30;
+  const SHEPHERDS_LEAN_TO_DX = 23;
+  const SHEPHERDS_LEAN_TO_DY = 30;
   const SHEPHERDS_LEAN_TO_W = 6;
   const SHEPHERDS_LEAN_TO_H = 4;
-  const BARRACKS_DX = 18;
-  const BARRACKS_DY = 36;
-  const HILDA_DX = 42;
-  const HILDA_DY = 28;
-  const CARTWRIGHT_DX = 30;
-  const CARTWRIGHT_SHED_DY = 28;
+  const BARRACKS_DX = 6;
+  const BARRACKS_DY = 24;
+  const HILDA_DX = 10;
+  const HILDA_DY = 24;
+  const CARTWRIGHT_DX = 16;
+  const CARTWRIGHT_SHED_DX = 22;
+  const CARTWRIGHT_SHED_DY = 10;
   const CARTWRIGHT_SHED_W = 6;
   const CARTWRIGHT_SHED_H = 5;
-  const CARTWRIGHT_DY = 22;
-  const HERB_DX = 30;
-  const HERB_DY = 14;
-  const SLEEPING_CAT_DX = 18;
-  const SLEEPING_CAT_DY = 16;
-  const SLEEPING_CAT_STABLE_DY = 23;
+  const CARTWRIGHT_DY = 10;
+  const HERB_DX = 16;
+  const HERB_DY = 6;
+  const SLEEPING_CAT_DX = 16;
+  const SLEEPING_CAT_DY = 14;
+  const SLEEPING_CAT_STABLE_DY = 21;
   const SLEEPING_CAT_STABLE_W = 8;
   const SLEEPING_CAT_STABLE_H = 5;
   const RUSTY_ANVIL_DX = 14;
-  const RUSTY_ANVIL_DY = 16;
-  const RUSTY_ANVIL_FORGE_DX = 27;
+  const RUSTY_ANVIL_DY = 14;
+  const RUSTY_ANVIL_FORGE_DX = 21;
   const RUSTY_ANVIL_FORGE_W = 7;
   const RUSTY_ANVIL_FORGE_H = 5;
-  const MILLERS_FARM_DX = 38;
-  const MILLERS_FARM_DY = 24;
-  const MILLERS_FARM_BARN_DX = 27;
+  const MILLERS_FARM_DX = 24;
+  const MILLERS_FARM_DY = 14;
+  const MILLERS_FARM_BARN_DX = 25;
+  const MILLERS_FARM_BARN_DY = 20;
   const MILLERS_FARM_BARN_W = 8;
   const MILLERS_FARM_BARN_H = 5;
-  const WANDERERS_REST_DX = 28;
-  const WANDERERS_REST_DY = 26;
-  const SUNKEN_STUMP_DX = 20;
-  const SUNKEN_STUMP_DY = 32;
+  const WANDERERS_REST_DX = 16;
+  const WANDERERS_REST_DY = 6;
+  const SUNKEN_STUMP_DX = 10;
+  const SUNKEN_STUMP_DY = 14;
 
   // Circus placement
   const CIRCUS_MIN_DIST = 70;
@@ -345,7 +353,7 @@ export function generateOverworld(size: number): OverworldData {
     }
   };
 
-  // ── Shepherd's Cabin — NW outskirts: cottage + hay-storage lean-to ──
+  // ── Shepherd's Cabin — north street, second row: cottage + hay-storage lean-to ──
   placeSpriteBuilding(
     cx - SHEPHERDS_CABIN_DX,
     cy - SHEPHERDS_CABIN_DY,
@@ -361,17 +369,17 @@ export function generateOverworld(size: number): OverworldData {
   ); // lean-to shed
   connectToRoad(cx - SHEPHERDS_CABIN_DX + SPRITE_DOOR_DX, cy - SHEPHERDS_CABIN_DY + SPRITE_DOOR_DY);
 
-  // ── Blackwood Barracks — NE outskirts: wide hall, looks imposing ──
+  // ── Blackwood Barracks — north street, between the tower and restaurant ──
   placeSpriteBuilding(cx + BARRACKS_DX, cy - BARRACKS_DY, 'village_house_2', 'Blackwood Barracks');
   connectToRoad(cx + BARRACKS_DX + SPRITE_DOOR_DX, cy - BARRACKS_DY + SPRITE_DOOR_DY);
 
-  // ── Old Hilda's Cottage — W mid: mossy green witch cottage ──
+  // ── Old Hilda's Cottage — north street, between the store and tower ──
   placeSpriteBuilding(cx - HILDA_DX, cy - HILDA_DY, 'village_house_3', "Old Hilda's Cottage");
   connectToRoad(cx - HILDA_DX + SPRITE_DOOR_DX, cy - HILDA_DY + SPRITE_DOOR_DY);
 
-  // ── Cartwright's Workshop — E mid: main shop + separate storage shed to north ──
+  // ── Cartwright's Workshop — east of the square: main shop + storage shed beside it ──
   placeStructure(
-    cx + CARTWRIGHT_DX,
+    cx + CARTWRIGHT_SHED_DX,
     cy - CARTWRIGHT_SHED_DY,
     CARTWRIGHT_SHED_W,
     CARTWRIGHT_SHED_H,
@@ -385,11 +393,11 @@ export function generateOverworld(size: number): OverworldData {
   );
   connectToRoad(cx + CARTWRIGHT_DX + SPRITE_DOOR_DX, cy - CARTWRIGHT_DY + SPRITE_DOOR_DY);
 
-  // ── Herb & Remedy — W near-town: apothecary just west of south road ──
+  // ── Herb & Remedy — apothecary fronting the square's west edge ──
   placeSpriteBuilding(cx - HERB_DX, cy + HERB_DY, 'village_house_1', 'Herb & Remedy');
   connectToRoad(cx - HERB_DX + SPRITE_DOOR_DX, cy + HERB_DY + SPRITE_DOOR_DY);
 
-  // ── The Sleeping Cat Inn — S near-town: large inn + stable behind it ──
+  // ── The Sleeping Cat Inn — south street: inn + stable behind it ──
   placeSpriteBuilding(
     cx - SLEEPING_CAT_DX,
     cy + SLEEPING_CAT_DY,
@@ -405,7 +413,7 @@ export function generateOverworld(size: number): OverworldData {
   ); // stable
   connectToRoad(cx - SLEEPING_CAT_DX + SPRITE_DOOR_DX, cy + SLEEPING_CAT_DY + SPRITE_DOOR_DY);
 
-  // ── The Rusty Anvil — SE near-town: forge building + open-air work shed ──
+  // ── The Rusty Anvil — south street, east side: forge building + work shed ──
   placeSpriteBuilding(
     cx + RUSTY_ANVIL_DX,
     cy + RUSTY_ANVIL_DY,
@@ -421,7 +429,7 @@ export function generateOverworld(size: number): OverworldData {
   ); // forge shed
   connectToRoad(cx + RUSTY_ANVIL_DX + SPRITE_DOOR_DX, cy + RUSTY_ANVIL_DY + SPRITE_DOOR_DY);
 
-  // ── Miller's Farm — SW outskirts: farmhouse + large barn ──
+  // ── Miller's Farm — south street, west end: farmhouse + large barn behind it ──
   placeSpriteBuilding(
     cx - MILLERS_FARM_DX,
     cy + MILLERS_FARM_DY,
@@ -430,14 +438,14 @@ export function generateOverworld(size: number): OverworldData {
   );
   placeStructure(
     cx - MILLERS_FARM_BARN_DX,
-    cy + MILLERS_FARM_DY,
+    cy + MILLERS_FARM_BARN_DY,
     MILLERS_FARM_BARN_W,
     MILLERS_FARM_BARN_H,
     ROOF_THATCH,
   ); // barn
   connectToRoad(cx - MILLERS_FARM_DX + SPRITE_DOOR_DX, cy + MILLERS_FARM_DY + SPRITE_DOOR_DY);
 
-  // ── The Wanderer's Rest — SE outskirts: plain roadside dormitory ──
+  // ── The Wanderer's Rest — dormitory fronting the square's east edge ──
   placeSpriteBuilding(
     cx + WANDERERS_REST_DX,
     cy + WANDERERS_REST_DY,
@@ -446,7 +454,7 @@ export function generateOverworld(size: number): OverworldData {
   );
   connectToRoad(cx + WANDERERS_REST_DX + SPRITE_DOOR_DX, cy + WANDERERS_REST_DY + SPRITE_DOOR_DY);
 
-  // ── The Sunken Stump Pub — S central: large pub west of N-S road ──
+  // ── The Sunken Stump Pub — south street: pub in the alley row beside the inn ──
   placeSpriteBuilding(
     cx - SUNKEN_STUMP_DX,
     cy + SUNKEN_STUMP_DY,

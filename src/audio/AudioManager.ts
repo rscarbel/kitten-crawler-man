@@ -602,7 +602,7 @@ export class AudioManager {
       if (e.questId === 'defend_goblin_mother') {
         this.playMusic('defense_quest_music', { fadeInMs: 1000 });
       }
-      if (e.questId === 'the_show_must_go_on') {
+      if (e.questId === 'the_show_must_go_on' || e.questId === 'krasue_murders') {
         this.play('menu_open');
       }
     });
@@ -617,7 +617,8 @@ export class AudioManager {
       if (
         e.questId === 'defend_goblin_mother' ||
         e.questId === 'grotesque_spider' ||
-        e.questId === 'the_show_must_go_on'
+        e.questId === 'the_show_must_go_on' ||
+        e.questId === 'krasue_murders'
       ) {
         this.play('quest_complete');
       }

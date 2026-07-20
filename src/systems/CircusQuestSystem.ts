@@ -15,7 +15,6 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { pointInRect } from '../utils';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
@@ -36,12 +35,15 @@ import { HeatherTheBear, HEATHER_LEVEL } from '../creatures/HeatherTheBear';
 import { InkMarauder } from '../creatures/InkMarauder';
 import type { MongoSystem } from './MongoSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
-import { drawText } from '../ui/TextBox';
-import { drawButton, playButtonSound, BUTTON_PRESETS } from '../ui/Button';
-import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { QuestDialog } from '../ui/QuestDialog';
 import {
-  type DialogPage,
+  drawQuestBanner,
+  drawQuestCompleteOverlay,
+  QUEST_BANNER_FRAMES,
+  QUEST_COMPLETE_OVERLAY_FRAMES,
+} from '../ui/QuestBanners';
+import {
   INTRO_DIALOG,
   buildRitualFailedDialog,
   HEATHER_RETURN_DIALOG,
@@ -50,8 +52,6 @@ import {
 } from './circusQuestDialogs';
 
 const QUEST_ID = 'the_show_must_go_on';
-
-const FRAMES_PER_SECOND = 60;
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
@@ -70,41 +70,6 @@ const FIZZLE_MARAUDER_LIFESPAN_FRAMES = 80;
 const BATTLE_MUSIC_FADE_IN_MS = 1000;
 /** Blocks Mongo's summon button while Signet holds him as collateral. */
 const MONGO_KIDNAP_LOCK_FRAMES = 999999;
-
-/** Banner display time. */
-const BANNER_SECONDS = 4;
-const BANNER_FRAMES = BANNER_SECONDS * FRAMES_PER_SECOND;
-const BANNER_FADE_FRAMES = 60;
-const BANNER_TITLE_Y = 70;
-const BANNER_TITLE_SIZE = 30;
-const BANNER_GLOW_BLUR = 12;
-
-const QUEST_COMPLETE_DISPLAY_SECONDS = 7;
-const QUEST_COMPLETE_DISPLAY_FRAMES = QUEST_COMPLETE_DISPLAY_SECONDS * FRAMES_PER_SECOND;
-const OVERLAY_FADE_FRAMES = 90;
-const OVERLAY_DIM_ALPHA = 0.6;
-const OVERLAY_TITLE_Y_OFFSET = 30;
-const OVERLAY_TITLE_SIZE = 26;
-const OVERLAY_GLOW_BLUR = 15;
-const OVERLAY_DISMISS_Y_OFFSET = 30;
-const OVERLAY_DISMISS_SIZE = 12;
-
-// Dialog layout
-const DIALOG_WIDTH = 460;
-const DIALOG_CANVAS_PADDING = 40;
-const DIALOG_BASE_HEIGHT = 72;
-const DIALOG_BUTTON_AREA_HEIGHT = 52;
-const DIALOG_LINE_SPACING = 17;
-const DIALOG_PAD_X = 18;
-const DIALOG_TITLE_Y_OFFSET = 14;
-const DIALOG_TITLE_SIZE = 14;
-const DIALOG_LINE_START_Y = 40;
-const DIALOG_LINE_SIZE = 12;
-const DIALOG_BTN_W = 150;
-const DIALOG_BTN_H = 30;
-const DIALOG_BTN_Y_FROM_BOTTOM = 42;
-const DIALOG_BTN_LABEL_SIZE = 12;
-const DIALOG_PAGE_COUNTER_SIZE = 10;
 
 type CircusQuestPhase =
   | 'awaiting_intro'
@@ -167,12 +132,6 @@ const ASSAULT_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   [{ dx: 0, dy: -8, make: (x, y) => new TerrorTheClown(x, y, TILE_SIZE) }],
 ];
 
-interface ActiveDialog {
-  pages: ReadonlyArray<DialogPage>;
-  pageIndex: number;
-  onComplete: (active: Player) => void;
-}
-
 export class CircusQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
 
@@ -188,8 +147,7 @@ export class CircusQuestSystem implements GameSystem {
   private waveIndex = 0;
   private waveMobs: Mob[] = [];
 
-  private activeDialog: ActiveDialog | null = null;
-  private dialogButton: { x: number; y: number; w: number; h: number } | null = null;
+  private readonly dialog: QuestDialog;
 
   private bannerTimer = 0;
   private bannerText = '';
@@ -220,6 +178,7 @@ export class CircusQuestSystem implements GameSystem {
         coins: 100,
       },
     });
+    this.dialog = new QuestDialog(audio ?? null);
 
     if (gameMap.circusCentre && gameMap.circusRadiusTiles !== undefined) {
       this.circusCentre = gameMap.circusCentre;
@@ -392,7 +351,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   get isDialogOpen(): boolean {
-    return this.activeDialog !== null;
+    return this.dialog.isOpen;
   }
 
   /** Returns quest markers for the minimap. */
@@ -433,78 +392,55 @@ export class CircusQuestSystem implements GameSystem {
     );
   }
 
-  private dialogForCurrentPhase(): ActiveDialog | null {
+  private openDialogForCurrentPhase(active: Player): boolean {
     switch (this.phase) {
       case 'awaiting_intro':
-        return { pages: INTRO_DIALOG, pageIndex: 0, onComplete: () => this.startRitualDefense() };
+        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense());
+        return true;
       case 'awaiting_ritual_failed':
-        return {
-          pages: buildRitualFailedDialog((this.mongoSystem?.mongo ?? null) !== null),
-          pageIndex: 0,
-          onComplete: () => this.startHeatherHunt(),
-        };
+        this.dialog.open(buildRitualFailedDialog((this.mongoSystem?.mongo ?? null) !== null), () =>
+          this.startHeatherHunt(),
+        );
+        return true;
       case 'awaiting_heather_return':
-        return {
-          pages: HEATHER_RETURN_DIALOG,
-          pageIndex: 0,
-          onComplete: () => this.startAssault(),
-        };
+        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
+        return true;
       case 'bigtop_ready':
-        return {
-          pages: BIGTOP_READY_DIALOG,
-          pageIndex: 0,
-          onComplete: () => undefined,
-        };
+        this.dialog.open(BIGTOP_READY_DIALOG, () => undefined);
+        return true;
       case 'awaiting_resolution':
-        return {
-          pages: buildResolutionDialog(this.progress.mongoKidnapped),
-          pageIndex: 0,
-          onComplete: (active) => this.finishQuest(active),
-        };
+        this.dialog.open(buildResolutionDialog(this.progress.mongoKidnapped), () =>
+          this.finishQuest(active),
+        );
+        return true;
       case 'ritual_defense':
       case 'heather_hunt':
       case 'assault':
       case 'complete':
-        return null;
+        return false;
     }
   }
 
   /** Space-key interaction: opens Signet's dialog for the current stage when in range. */
   tryInteract(active: Player): boolean {
-    if (this.activeDialog !== null) return false;
+    if (this.dialog.isOpen) return false;
     if (!this.signet?.isAlive || !this.hasPendingDialog()) return false;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
     if (dist > TILE_SIZE * INTERACT_RANGE_TILES) return false;
-    this.activeDialog = this.dialogForCurrentPhase();
-    return this.activeDialog !== null;
+    return this.openDialogForCurrentPhase(active);
   }
 
   /** Esc closes an open dialog without advancing the quest. Returns true if handled. */
   dismissDialog(): boolean {
-    if (this.activeDialog === null) return false;
-    this.activeDialog = null;
-    return true;
+    return this.dialog.dismiss();
   }
 
-  handleClick(mx: number, my: number, active: Player): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (this.completeOverlayTimer > 0) {
       this.completeOverlayTimer = 0;
       return true;
     }
-    const dialog = this.activeDialog;
-    if (dialog === null) return false;
-
-    if (this.dialogButton && pointInRect(mx, my, this.dialogButton)) {
-      playButtonSound(this.audio);
-      if (dialog.pageIndex < dialog.pages.length - 1) {
-        dialog.pageIndex++;
-      } else {
-        this.activeDialog = null;
-        this.dialogButton = null;
-        dialog.onComplete(active);
-      }
-    }
-    return true; // dialogs are modal — consume every click while open
+    return this.dialog.handleClick(mx, my);
   }
 
   // ── Phase transitions ─────────────────────────────────────────────────────
@@ -562,7 +498,7 @@ export class CircusQuestSystem implements GameSystem {
     }
 
     this.bus.emit('questCompleted', { questId: QUEST_ID });
-    this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
+    this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;
   }
 
   // ── Frame update ──────────────────────────────────────────────────────────
@@ -648,7 +584,7 @@ export class CircusQuestSystem implements GameSystem {
     this.phase = 'bigtop_ready';
     this.progress.stage = 'bigtop_ready';
     this.bannerText = 'THE BIG TOP AWAITS';
-    this.bannerTimer = BANNER_FRAMES;
+    this.bannerTimer = QUEST_BANNER_FRAMES;
     // Signet moves ahead to wait by the Big Top door.
     this.repositionSignetToBigTopDoor();
   }
@@ -685,7 +621,7 @@ export class CircusQuestSystem implements GameSystem {
 
   /** World-space rendering: the "Talk" prompt over Signet. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
-    if (!this.signet?.isAlive || this.activeDialog !== null) return;
+    if (!this.signet?.isAlive || this.dialog.isOpen) return;
     if (!this.hasPendingDialog()) return;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
     if (dist > TILE_SIZE * INTERACT_RANGE_TILES) return;
@@ -693,120 +629,13 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    if (this.activeDialog !== null) {
-      this.renderDialog(ctx, canvas, this.activeDialog);
-    }
-
-    if (this.bannerTimer > 0) {
-      const alpha =
-        this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
-      drawText(ctx, this.bannerText, {
-        x: canvas.width / 2,
-        y: BANNER_TITLE_Y,
-        size: BANNER_TITLE_SIZE,
-        bold: true,
-        color: '#a8f070',
-        align: 'center',
-        alpha,
-        glow: '#3a6a2a',
-        glowBlur: BANNER_GLOW_BLUR,
-      });
-    }
-
-    if (this.completeOverlayTimer > 0) {
-      this.renderCompleteOverlay(ctx, canvas);
-    }
-  }
-
-  private renderDialog(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    dialog: ActiveDialog,
-  ): void {
-    const page = dialog.pages[dialog.pageIndex];
-    const dw = Math.min(DIALOG_WIDTH, canvas.width - DIALOG_CANVAS_PADDING);
-    const dh =
-      DIALOG_BASE_HEIGHT + page.lines.length * DIALOG_LINE_SPACING + DIALOG_BUTTON_AREA_HEIGHT;
-
-    const box = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-      width: dw,
-      height: dh,
-      ...BOX_PRESETS.modal,
-    });
-
-    drawText(ctx, page.title, {
-      x: box.x + DIALOG_PAD_X,
-      y: box.y + DIALOG_TITLE_Y_OFFSET,
-      size: DIALOG_TITLE_SIZE,
-      bold: true,
-      color: '#8ae0d0',
-    });
-
-    for (let i = 0; i < page.lines.length; i++) {
-      drawText(ctx, page.lines[i], {
-        x: box.x + DIALOG_PAD_X,
-        y: box.y + DIALOG_LINE_START_Y + i * DIALOG_LINE_SPACING,
-        size: DIALOG_LINE_SIZE,
-        color: '#e2e8f0',
-      });
-    }
-
-    if (dialog.pages.length > 1) {
-      drawText(ctx, `${dialog.pageIndex + 1} / ${dialog.pages.length}`, {
-        x: box.x + dw - DIALOG_PAD_X,
-        y: box.y + DIALOG_TITLE_Y_OFFSET,
-        size: DIALOG_PAGE_COUNTER_SIZE,
-        color: 'rgba(200,200,200,0.6)',
-        align: 'right',
-      });
-    }
-
-    const btnX = box.x + dw / 2 - DIALOG_BTN_W / 2;
-    const btnY = box.y + dh - DIALOG_BTN_Y_FROM_BOTTOM;
-    drawButton(ctx, {
-      x: btnX,
-      y: btnY,
-      width: DIALOG_BTN_W,
-      height: DIALOG_BTN_H,
-      label: page.button,
-      ...BUTTON_PRESETS.primary,
-      labelSize: DIALOG_BTN_LABEL_SIZE,
-    });
-    this.dialogButton = { x: btnX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
-  }
-
-  private renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const alpha =
-      this.completeOverlayTimer < OVERLAY_FADE_FRAMES
-        ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
-        : 1;
-
-    drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-      alpha: alpha * OVERLAY_DIM_ALPHA,
-    });
-
-    drawText(ctx, 'THE SHOW MUST GO ON — COMPLETE', {
-      x: canvas.width / 2,
-      y: canvas.height / 2 - OVERLAY_TITLE_Y_OFFSET,
-      size: OVERLAY_TITLE_SIZE,
-      bold: true,
-      color: '#4ade80',
-      align: 'center',
-      alpha,
-      glow: '#4ade80',
-      glowBlur: OVERLAY_GLOW_BLUR,
-    });
-    drawText(ctx, 'Click to dismiss', {
-      x: canvas.width / 2,
-      y: canvas.height / 2 + OVERLAY_DISMISS_Y_OFFSET,
-      size: OVERLAY_DISMISS_SIZE,
-      color: 'rgba(200,200,200,0.7)',
-      align: 'center',
-      alpha,
-    });
+    this.dialog.render(ctx, canvas);
+    drawQuestBanner(ctx, canvas, this.bannerText, this.bannerTimer);
+    drawQuestCompleteOverlay(
+      ctx,
+      canvas,
+      'THE SHOW MUST GO ON — COMPLETE',
+      this.completeOverlayTimer,
+    );
   }
 }

@@ -51,7 +51,7 @@ import {
   getBlockedTileOffsetsByKey,
   getSpriteDefByKey,
   getSortYAnchorPx,
-  getSpriteOverheadPx,
+  getMapSpriteExtentsPx,
 } from '../core/SpriteLoader';
 import {
   renderCanvas,
@@ -1508,13 +1508,15 @@ export class GameMap {
     const ts = this.tileHeight;
     const rows = this.structure.length;
     const cols = this.structure[0]?.length ?? rows;
-    const startX = Math.max(0, Math.floor(camX / ts));
-    const startY = Math.max(0, Math.floor(camY / ts));
-    const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts));
-    // Expand endY so tall sprites (e.g. the tower) whose top is still on-screen
-    // aren't culled just because their anchor tile is south of the viewport.
-    const maxOverheadTiles = Math.ceil(getSpriteOverheadPx(MAIN_TOWER) / ts);
-    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts) + maxOverheadTiles);
+    // Widen the scan by the worst-case sprite overhang in each direction:
+    // an off-screen anchor tile can still own on-screen pixels (sprite houses
+    // extend right/down of their anchor, the tower extends up and left), so
+    // culling by anchor alone makes whole buildings vanish at screen edges.
+    const extents = getMapSpriteExtentsPx();
+    const startX = Math.max(0, Math.floor(camX / ts) - Math.ceil(extents.right / ts));
+    const startY = Math.max(0, Math.floor(camY / ts) - Math.ceil(extents.down / ts));
+    const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts) + Math.ceil(extents.left / ts));
+    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts) + Math.ceil(extents.up / ts));
     const result: Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> = [];
     for (let y = startY; y <= endY; y++) {
       for (let x = startX; x <= endX; x++) {

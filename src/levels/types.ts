@@ -23,7 +23,8 @@ export interface MobSpawnRule {
     | 'fat_clown'
     | 'mold_lion'
     | 'terror_the_clown'
-    | 'ringmaster_grimaldi';
+    | 'ringmaster_grimaldi'
+    | 'city_elf_cultist';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.

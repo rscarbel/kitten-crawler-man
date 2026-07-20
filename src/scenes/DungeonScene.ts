@@ -70,6 +70,7 @@ import {
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { createCircusQuestProgress, type CircusQuestProgress } from '../core/CircusQuestProgress';
+import { createMurderQuestProgress, type MurderQuestProgress } from '../core/MurderQuestProgress';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
@@ -77,6 +78,7 @@ import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
+import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -152,6 +154,8 @@ export interface DungeonSceneOptions {
   onResetGame?: () => void;
   /** Circus questline state, threaded by reference across building/scene transitions. */
   circusQuestProgress?: CircusQuestProgress;
+  /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
+  murderQuestProgress?: MurderQuestProgress;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
@@ -347,8 +351,10 @@ export class DungeonScene extends GameplayScene {
   private defendQuest!: DefendQuestSystem;
   private spiderQuest!: SpiderQuestSystem;
   private circusQuest!: CircusQuestSystem;
+  private murderQuest!: MurderMysteryQuestSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
+  private readonly murderQuestProgress: MurderQuestProgress;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
@@ -586,6 +592,7 @@ export class DungeonScene extends GameplayScene {
       mob.setSpells(this.spells);
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
+    this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -744,6 +751,7 @@ export class DungeonScene extends GameplayScene {
                   audio: this.audio ?? undefined,
                   onResetGame: this.onResetGameCallback ?? undefined,
                   circusQuestProgress: this.circusQuestProgress,
+                  murderQuestProgress: this.murderQuestProgress,
                   skipIntro: true,
                 }),
               );
@@ -753,6 +761,7 @@ export class DungeonScene extends GameplayScene {
             this.audio ?? undefined,
             this.abilityManager,
             this.circusQuestProgress,
+            this.murderQuestProgress,
           ),
         );
       });
@@ -842,6 +851,18 @@ export class DungeonScene extends GameplayScene {
       },
       this.mongoSystem,
       this.circusQuestProgress,
+      this.overworldMusic,
+      this.audio,
+    );
+    this.murderQuest = new MurderMysteryQuestSystem(
+      this.gameMap,
+      this.bus,
+      (mob) => {
+        this.mobs.push(mob);
+        this.mobGrid.insert(mob);
+        mob.setSpells(this.spells);
+      },
+      this.murderQuestProgress,
       this.overworldMusic,
       this.audio,
     );
@@ -1200,8 +1221,14 @@ export class DungeonScene extends GameplayScene {
           this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
         }
       }
-      if (e.questId === 'vengeance_of_the_daughter') {
+      if (e.questId === 'the_show_must_go_on') {
         const def = this.circusQuest.questManager.getDef(e.questId);
+        if (def?.rewards.coins) {
+          this.active().coins += def.rewards.coins;
+        }
+      }
+      if (e.questId === MURDER_QUEST_ID) {
+        const def = this.murderQuest.questManager.getDef(e.questId);
         if (def?.rewards.coins) {
           this.active().coins += def.rewards.coins;
         }
@@ -1256,6 +1283,7 @@ export class DungeonScene extends GameplayScene {
         this.defendQuest.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
+        this.murderQuest.isDialogOpen ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
@@ -1267,6 +1295,7 @@ export class DungeonScene extends GameplayScene {
         if (this.defendQuest.dismissDialog()) return true;
         if (this.spiderQuest.dismissDialog()) return true;
         if (this.circusQuest.dismissDialog()) return true;
+        if (this.murderQuest.dismissDialog()) return true;
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -1944,6 +1973,9 @@ export class DungeonScene extends GameplayScene {
       if (this.circusQuest.tryInteract(active)) {
         return;
       }
+      if (this.murderQuest.tryInteract(active)) {
+        return;
+      }
       if (
         this.juicerRoom.tryPickupNear(active) ||
         this.arenaRoom.tryPickupNear(active) ||
@@ -2088,7 +2120,8 @@ export class DungeonScene extends GameplayScene {
     if (this.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my)) return;
-    if (this.circusQuest.handleClick(mx, my, this.active())) return;
+    if (this.circusQuest.handleClick(mx, my)) return;
+    if (this.murderQuest.handleClick(mx, my)) return;
     if (this.achievementUI.handleClick(mx, my)) return;
 
     if (this.followerMenu.isOpen) {
@@ -2368,6 +2401,7 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.isDialogOpen ||
       this.spiderQuest.isDungeonPaused ||
       this.circusQuest.isDialogOpen ||
+      this.murderQuest.isDialogOpen ||
       this.playerChat.isOpen
     )
       return;
@@ -2428,6 +2462,7 @@ export class DungeonScene extends GameplayScene {
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
+    this.murderQuest.render(ctx, camX, camY, this.active());
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -2484,7 +2519,11 @@ export class DungeonScene extends GameplayScene {
         this.inactive(),
         this.mobs,
         this.safeRoom.mordecaiPositions,
-        [...this.defendQuest.questMarkers, ...this.circusQuest.questMarkers],
+        [
+          ...this.defendQuest.questMarkers,
+          ...this.circusQuest.questMarkers,
+          ...this.murderQuest.questMarkers,
+        ],
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -2598,6 +2637,7 @@ export class DungeonScene extends GameplayScene {
       this.barriers.renderConstructUI(ctx, canvas);
       this.defendQuest.renderUI(ctx, canvas, mobileQuestTopY);
       this.circusQuest.renderUI(ctx, canvas);
+      this.murderQuest.renderUI(ctx, canvas);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -2903,6 +2943,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('menu_open');
     }
     this.circusQuest.update(ctx);
+    this.murderQuest.update(ctx);
     this.overworldMusic?.update(ctx);
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);
@@ -3325,6 +3366,7 @@ export class DungeonScene extends GameplayScene {
         (this.building?.menuOpen ?? false) ||
         this.defendQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
+        this.murderQuest.isDialogOpen ||
         this.playerChat.isOpen,
     };
   }
@@ -3462,6 +3504,7 @@ export class DungeonScene extends GameplayScene {
         this.safeRoom.mordecaiDialogOpen ||
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
+        this.murderQuest.isDialogOpen ||
         this.tutorial?.showTutorialMordecaiDialog === true ||
         this.tutorial?.showMordecaiReminderDialog === true
       ) {

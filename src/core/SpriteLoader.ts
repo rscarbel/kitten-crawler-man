@@ -256,3 +256,36 @@ export function getSortYAnchorPx(tileTypeId: number): number | undefined {
 export function getSpriteOverheadPx(tileTypeId: number): number {
   return _tileSpriteOverheadPx.get(tileTypeId) ?? 0;
 }
+
+/** How far (game-pixels) map sprites can extend beyond their anchor tile's square, per direction. */
+export interface MapSpriteExtentsPx {
+  left: number;
+  right: number;
+  up: number;
+  down: number;
+}
+
+// Worst-case overhang of any environment sprite beyond its anchor tile.
+// drawSprite renders at (anchor - tileX·scale, anchor - tileY·scale) with size
+// (frameWidth·scale, frameHeight·scale), so a sprite can overhang in all four
+// directions — viewport culling must widen its tile scan by these amounts or
+// buildings pop out of existence when their anchor tile leaves the screen.
+const _mapSpriteExtentsPx: MapSpriteExtentsPx = { left: 0, right: 0, up: 0, down: 0 };
+for (const entry of Object.values(environmentManifest)) {
+  const scale = TILE_SIZE / entry.tileScale;
+  _mapSpriteExtentsPx.left = Math.max(_mapSpriteExtentsPx.left, entry.tileX * scale);
+  _mapSpriteExtentsPx.up = Math.max(_mapSpriteExtentsPx.up, entry.tileY * scale);
+  _mapSpriteExtentsPx.right = Math.max(
+    _mapSpriteExtentsPx.right,
+    (entry.frameWidth - entry.tileX) * scale - TILE_SIZE,
+  );
+  _mapSpriteExtentsPx.down = Math.max(
+    _mapSpriteExtentsPx.down,
+    (entry.frameHeight - entry.tileY) * scale - TILE_SIZE,
+  );
+}
+
+/** Returns the worst-case sprite overhang beyond an anchor tile, for culling margins. */
+export function getMapSpriteExtentsPx(): Readonly<MapSpriteExtentsPx> {
+  return _mapSpriteExtentsPx;
+}

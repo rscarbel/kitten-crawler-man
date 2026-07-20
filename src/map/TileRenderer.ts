@@ -18,6 +18,7 @@ import {
   MODERN_DECORATION,
 } from './tileTypes';
 import { frameTime } from '../utils';
+import { getMapSpriteExtentsPx } from '../core/SpriteLoader';
 
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
@@ -404,10 +405,13 @@ export function renderDecorationsOverlay(
   const rows = structure.length;
   const cols = structure[0]?.length ?? rows;
   const ts = tileHeight;
-  const startX = Math.max(0, Math.floor(cameraX / ts));
-  const startY = Math.max(0, Math.floor(cameraY / ts));
-  const endX = Math.min(cols - 1, Math.ceil((cameraX + viewW) / ts));
-  const endY = Math.min(rows - 1, Math.ceil((cameraY + viewH) / ts));
+  // Widen the scan by the worst-case sprite overhang so decorations whose
+  // anchor tile is just off-screen don't pop out of existence at the edges.
+  const extents = getMapSpriteExtentsPx();
+  const startX = Math.max(0, Math.floor(cameraX / ts) - Math.ceil(extents.right / ts));
+  const startY = Math.max(0, Math.floor(cameraY / ts) - Math.ceil(extents.down / ts));
+  const endX = Math.min(cols - 1, Math.ceil((cameraX + viewW) / ts) + Math.ceil(extents.left / ts));
+  const endY = Math.min(rows - 1, Math.ceil((cameraY + viewH) / ts) + Math.ceil(extents.up / ts));
 
   for (let y = startY; y <= endY; y++) {
     for (let x = startX; x <= endX; x++) {
