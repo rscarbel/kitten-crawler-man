@@ -109,6 +109,10 @@ export const CIRCUS_RING_EDGE = 51;
 export const TENT_POLE = 52;
 /** Tile type for wooden bleacher benches along the big top walls — not walkable. */
 export const BLEACHER = 53;
+/** Tile type for the Desperado Club interior floor — dark, polished art-deco stone, walkable. */
+export const CLUB_FLOOR = 54;
+/** Tile type for the club's central dance floor — dark reflective panels lit by pulsing overlay lights, walkable. */
+export const DANCE_FLOOR = 55;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

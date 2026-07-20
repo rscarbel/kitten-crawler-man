@@ -37,7 +37,15 @@ import {
   CIRCUS_RING_EDGE,
   TENT_POLE,
   BLEACHER,
+  CLUB_FLOOR,
+  DANCE_FLOOR,
 } from './tileTypes';
+import {
+  CLUB_INTERIOR_W,
+  CLUB_INTERIOR_H,
+  CLUB_DANCE_FLOOR,
+  CLUB_DIVIDER_WALLS,
+} from '../core/clubLayout';
 import {
   generateDungeon,
   type ArenaExterior,
@@ -163,7 +171,7 @@ export class GameMap {
   buildingEntries: Array<{
     doorTile: { x: number; y: number };
     name: string;
-    type: 'house' | 'tower' | 'restaurant' | 'store';
+    type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
   }> = [];
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
@@ -330,13 +338,14 @@ export class GameMap {
   /** Generates a small interior room for a building (called externally after construction).
    *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. */
   generateInterior(
-    buildingType: 'house' | 'tower' | 'restaurant' | 'store',
+    buildingType: 'house' | 'tower' | 'restaurant' | 'store' | 'club',
     towerFloor = 0,
     buildingName = '',
   ): void {
     const isTower = buildingType === 'tower';
     const isRestaurant = buildingType === 'restaurant';
     const isStore = buildingType === 'store';
+    const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
     const isCarnival = buildingName === 'Big Top';
     const w = isCarnival
@@ -347,7 +356,9 @@ export class GameMap {
           ? RESTAURANT_INTERIOR_W
           : isStore
             ? STORE_INTERIOR_W
-            : HOUSE_INTERIOR_W;
+            : isClub
+              ? CLUB_INTERIOR_W
+              : HOUSE_INTERIOR_W;
     const h = isCarnival
       ? BIGTOP_INTERIOR_H
       : isTower
@@ -356,14 +367,18 @@ export class GameMap {
           ? RESTAURANT_INTERIOR_H
           : isStore
             ? STORE_INTERIOR_H
-            : HOUSE_INTERIOR_H;
+            : isClub
+              ? CLUB_INTERIOR_H
+              : HOUSE_INTERIOR_H;
     const floorType = isCarnival
       ? SAWDUST_FLOOR
       : isTower
         ? CARPET_FLOOR
         : isRestaurant
           ? SAFE_ROOM_FLOOR
-          : WOOD_FLOOR;
+          : isClub
+            ? CLUB_FLOOR
+            : WOOD_FLOOR;
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -458,6 +473,16 @@ export class GameMap {
       // Barrel near kitchen counter
       grid[restaurantBarrelRow][restaurantBarrelCol1].type = BARREL;
       grid[restaurantBarrelRow][restaurantBarrelCol2].type = BARREL;
+    }
+
+    if (isClub) {
+      // Central dance floor
+      for (let y = CLUB_DANCE_FLOOR.y0; y <= CLUB_DANCE_FLOOR.y1; y++)
+        for (let x = CLUB_DANCE_FLOOR.x0; x <= CLUB_DANCE_FLOOR.x1; x++)
+          grid[y][x].type = DANCE_FLOOR;
+      // Alcove divider walls (never seal a region — the dance-floor rows stay open)
+      for (const wall of CLUB_DIVIDER_WALLS)
+        for (let y = wall.y0; y <= wall.y1; y++) grid[y][wall.x].type = WALL_TILE;
     }
 
     // ── Named building interiors — each has a unique hand-crafted layout ──

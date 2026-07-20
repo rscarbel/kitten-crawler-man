@@ -29,7 +29,7 @@ type Rect = { x: number; y: number; w: number; h: number };
 export interface BuildingEntry {
   doorTile: Point;
   name: string;
-  type: 'house' | 'tower' | 'restaurant' | 'store';
+  type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
 }
 
 export interface OverworldData {
@@ -75,6 +75,14 @@ export function generateOverworld(size: number): OverworldData {
 
   // General Store west of town square
   const STORE_X_OFFSET = 28;
+
+  // Desperado Club — art-deco nightclub south of the square, west wall against the N-S road.
+  const CLUB_X_OFFSET = 3;
+  const CLUB_Y_OFFSET = 19;
+  const CLUB_W = 16;
+  const CLUB_H = 6;
+  // Half-width of the 5-tile main roads (their near edge sits this many tiles off the centre line).
+  const ROAD_HALF = Math.floor(ROAD_WIDTH / 2);
 
   // Village building positions (offset from town center cx, cy).
   // The town is intentionally compact: buildings form two tight streets
@@ -242,7 +250,7 @@ export function generateOverworld(size: number): OverworldData {
     by: number,
     bw: number,
     bh: number,
-    type: 'house' | 'tower' | 'restaurant' | 'store',
+    type: 'house' | 'tower' | 'restaurant' | 'store' | 'club',
     name: string,
     roofTile: number,
   ) => {
@@ -299,6 +307,18 @@ export function generateOverworld(size: number): OverworldData {
   for (let ry = storeY + storeH; ry <= cy - 2; ry++) {
     setRoad(storeDoorX, ry);
     setRoad(storeDoorX + 1, ry);
+  }
+
+  // 6d. The Desperado Club — a prominent art-deco club at the town's south edge.
+  const clubX = cx + CLUB_X_OFFSET;
+  const clubY = cy + CLUB_Y_OFFSET;
+  placeBuilding(clubX, clubY, CLUB_W, CLUB_H, 'club', 'The Desperado Club', ROOF_SLATE);
+  // Connector: run a road from below the south-facing door west to the N-S main road.
+  const clubDoorX = clubX + Math.floor(CLUB_W / 2) - 1;
+  const clubConnectorRow = clubY + CLUB_H;
+  for (let rx = cx - ROAD_HALF; rx <= clubDoorX + 1; rx++) {
+    setRoad(rx, clubConnectorRow);
+    setRoad(rx, clubConnectorRow + 1);
   }
 
   // 6d. Sprite-based house — renders a pre-made PNG instead of procedural tiles.

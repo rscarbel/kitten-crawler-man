@@ -7,6 +7,8 @@ import {
   ARENA_FLOOR,
   FLOOR_GRATE,
   SPIDER_LAB_FLOOR,
+  CLUB_FLOOR,
+  DANCE_FLOOR,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { getSpriteDef } from '../../core/SpriteLoader';
@@ -83,6 +85,13 @@ const SPIDER_WEB_END_X_FRACTION = 0.8;
 const SPIDER_WEB_END_Y_FRACTION = 0.9;
 const SPIDER_WEB_ALT_START_X_FRACTION = 0.8;
 const SPIDER_WEB_ALT_END_X_FRACTION = 0.2;
+
+const CLUB_SUNBURST_TILE_STRIDE = 6;
+const CLUB_SUNBURST_RAY_COUNT = 8;
+const CLUB_SUNBURST_RADIUS_FRACTION = 0.32;
+const CLUB_SUNBURST_CENTER_FRACTION = 0.5;
+const DANCE_PANEL_INSET_FRACTION = 0.12;
+const DANCE_PANEL_SIZE_FRACTION = 0.76;
 
 // Lazily computed bounding box of HORDER_BOSS_ROOM_FLOOR tiles for a given map structure.
 // Keyed on the structure array so it's automatically GC'd with the map.
@@ -455,6 +464,50 @@ export function drawSpecialFloorTile(
         }
       }
       drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Desperado Club floor — dark polished art-deco stone with gold grout
+    case CLUB_FLOOR: {
+      const clubBase = (tx + ty) % 2 === 0 ? '#1a1420' : '#161019';
+      ctx.fillStyle = clubBase;
+      ctx.fillRect(sx, sy, ts, ts);
+      ctx.fillStyle = 'rgba(198,168,64,0.28)';
+      ctx.fillRect(sx + ts - 1, sy, 1, ts);
+      ctx.fillRect(sx, sy + ts - 1, ts, 1);
+      // Sparse art-deco sunburst inlay
+      if (tx % CLUB_SUNBURST_TILE_STRIDE === 0 && ty % CLUB_SUNBURST_TILE_STRIDE === 0) {
+        const cx = sx + ts * CLUB_SUNBURST_CENTER_FRACTION;
+        const cy = sy + ts * CLUB_SUNBURST_CENTER_FRACTION;
+        ctx.strokeStyle = 'rgba(198,168,64,0.22)';
+        ctx.lineWidth = 1;
+        for (let r = 0; r < CLUB_SUNBURST_RAY_COUNT; r++) {
+          const ang = (r / CLUB_SUNBURST_RAY_COUNT) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(
+            cx + Math.cos(ang) * ts * CLUB_SUNBURST_RADIUS_FRACTION,
+            cy + Math.sin(ang) * ts * CLUB_SUNBURST_RADIUS_FRACTION,
+          );
+          ctx.stroke();
+        }
+      }
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Dance floor — dark reflective panels; the pulsing coloured lights are drawn
+    // as a per-frame overlay by DesperadoClubSystem (the static tile cache can't animate).
+    case DANCE_FLOOR: {
+      ctx.fillStyle = '#0b0810';
+      ctx.fillRect(sx, sy, ts, ts);
+      ctx.fillStyle = (tx + ty) % 2 === 0 ? '#1d1526' : '#150f1e';
+      ctx.fillRect(
+        sx + ts * DANCE_PANEL_INSET_FRACTION,
+        sy + ts * DANCE_PANEL_INSET_FRACTION,
+        ts * DANCE_PANEL_SIZE_FRACTION,
+        ts * DANCE_PANEL_SIZE_FRACTION,
+      );
       break;
     }
 

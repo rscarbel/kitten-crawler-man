@@ -31,6 +31,8 @@ import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
+import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
@@ -74,6 +76,8 @@ const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 /** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
 const TOWER_CONFRONTATION_FLOOR = 3;
+/** Fade-in for the Desperado Club's music when the interior is entered. */
+const CLUB_MUSIC_FADE_IN_MS = 800;
 
 /** A quest encounter that runs inside a building (Big Top boss, cult hideout, tower fight). */
 interface InteriorEncounter {
@@ -114,6 +118,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Shop (store only)
   private readonly shop: ShopSystem | null;
+
+  // Desperado Club (club only)
+  private readonly clubMembership: ClubMembership;
+  private readonly club: DesperadoClubSystem | null;
 
   // Key handler cleanup
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -165,12 +173,14 @@ export class BuildingInteriorScene extends GameplayScene {
     circusQuestProgress?: CircusQuestProgress,
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
+    clubMembership?: ClubMembership,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
     this.encounterAbilityManager = abilityManager ?? null;
     this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
     this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
+    this.clubMembership = clubMembership ?? createClubMembership();
 
     const isTower = entry.type === 'tower';
 
@@ -208,6 +218,9 @@ export class BuildingInteriorScene extends GameplayScene {
         : null;
 
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
+
+    this.club =
+      entry.type === 'club' ? new DesperadoClubSystem(this.clubMembership, this.audio) : null;
 
     // Tower stair system
     if (isTower) {
@@ -375,6 +388,12 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onEnter(): void {
+    // Override the overworld's persisted music with the club's own theme; the
+    // overworld's zone music (OverworldMusicSystem) restores itself on exit.
+    if (this.entry.type === 'club') {
+      this.audio?.playMusic('desperado_club', { fadeInMs: CLUB_MUSIC_FADE_IN_MS });
+    }
+
     this.escHandler = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -393,6 +412,10 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       if (this.shop?.shopOpen) {
         this.shop.shopOpen = false;
+        return;
+      }
+      if (this.club?.modalOpen) {
+        this.club.closeModals();
         return;
       }
       if (this.towerStairs?.menuOpen) {
@@ -459,6 +482,13 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.shop?.shopOpen) return;
+    if (this.club?.modalOpen) {
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.club.dismissModal();
+      }
+      return;
+    }
 
     // Sleep tick
     if (this.safeRoom?.isSleeping) {
@@ -522,11 +552,18 @@ export class BuildingInteriorScene extends GameplayScene {
       }
     }
 
+    // Club: talk to a station NPC (the Sledge, bar, casino, …) with Space
+    if (this.club && this.input.has(' ')) {
+      this.input.clear();
+      this.club.handleInteract(player);
+    }
+
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
     this.safeRoom?.updateWander();
     this.shop?.update();
+    this.club?.update();
     if (this.shop?.purchasePending) {
       this.shop.purchasePending = false;
       this.audio?.play('purchase_success');
@@ -639,6 +676,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop.handleClick(mx, my, this.active());
       return;
     }
+    if (this.club?.modalOpen) {
+      this.club.handleClick();
+      return;
+    }
     if (!this.exitMenuOpen) return;
     const canvas = this.sceneManager.canvas;
     const rects = this.menuRects(canvas);
@@ -728,6 +769,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop.renderObjects(ctx, camX, camY, this.active());
     }
 
+    if (this.club) {
+      this.club.renderObjects(ctx, camX, camY, this.active());
+    }
+
     // Exit hint above door
     this.renderExitHint(ctx, camX, camY);
 
@@ -794,6 +839,10 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.shop) {
       this.shop.renderUI(ctx, canvas, this.active());
       this.shop.renderShopPanel(ctx, canvas, this.active());
+    }
+
+    if (this.club) {
+      this.club.renderUI(ctx, canvas);
     }
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
@@ -936,7 +985,8 @@ export class BuildingInteriorScene extends GameplayScene {
         this.exitMenuOpen ||
         this.towerStairs?.menuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
-        this.shop?.shopOpen
+        this.shop?.shopOpen ||
+        this.club?.modalOpen
       ) {
         this.handleClick(x, y);
         continue;
@@ -1081,6 +1131,9 @@ export class BuildingInteriorScene extends GameplayScene {
             if (this.shop.isNearShopkeeper(this.active())) {
               this.shop.shopOpen = true;
             }
+          }
+          if (this.club && !this.exitMenuOpen && !this.club.modalOpen) {
+            this.club.handleInteract(this.active());
           }
         }
         this.mobileHUD.clearMovement();

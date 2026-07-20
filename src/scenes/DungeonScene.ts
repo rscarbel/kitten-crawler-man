@@ -80,6 +80,7 @@ import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/Spider
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
+import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
@@ -160,6 +161,8 @@ export interface DungeonSceneOptions {
   murderQuestProgress?: MurderQuestProgress;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
   doomsdayQuestProgress?: DoomsdayProgress;
+  /** Desperado Club membership, threaded by reference across building/scene transitions. */
+  clubMembership?: ClubMembership;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
@@ -361,6 +364,7 @@ export class DungeonScene extends GameplayScene {
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
+  private readonly clubMembership: ClubMembership;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
@@ -600,6 +604,7 @@ export class DungeonScene extends GameplayScene {
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
+    this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -760,6 +765,7 @@ export class DungeonScene extends GameplayScene {
                   circusQuestProgress: this.circusQuestProgress,
                   murderQuestProgress: this.murderQuestProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
+                  clubMembership: this.clubMembership,
                   skipIntro: true,
                 }),
               );
@@ -771,6 +777,7 @@ export class DungeonScene extends GameplayScene {
             this.circusQuestProgress,
             this.murderQuestProgress,
             this.doomsdayQuestProgress,
+            this.clubMembership,
           ),
         );
       });
@@ -1898,6 +1905,7 @@ export class DungeonScene extends GameplayScene {
         circusQuestProgress: this.circusQuestProgress,
         murderQuestProgress: this.murderQuestProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
+        clubMembership: this.clubMembership,
       }),
     );
   }

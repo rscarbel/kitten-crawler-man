@@ -33,6 +33,7 @@ const SOUND_IDS_TUPLE = [
   'cooldown_crisp',
   'death_sequence',
   'defense_quest_music',
+  'desperado_club',
   'dynamite_explosion',
   'entered_safe_room',
   'error_taking_action',
@@ -170,6 +171,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   cooldown_crisp: './src/audio/effects/cooldown_crisp_effect.mp3',
   death_sequence: './src/audio/events/death_sequence.mp3',
   defense_quest_music: './src/audio/background_music/defense_quest_music.mp3',
+  // Placeholder asset: reuses the lively circus track until a bespoke 1920s-jazz
+  // club theme is produced (a Phase 5 audio task). The SoundId is already correct.
+  desperado_club: './src/audio/background_music/circus_theme.mp3',
   dynamite_explosion: './src/audio/effects/dynamite_explosion.mp3',
   entered_safe_room: './src/audio/events/entered_safe_room.mp3',
   error_taking_action: './src/audio/events/error_taking_action.mp3',

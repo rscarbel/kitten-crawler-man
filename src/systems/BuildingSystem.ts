@@ -7,7 +7,7 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
   name: string;
-  type: 'house' | 'tower' | 'restaurant' | 'store';
+  type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
 };
 
 /** Tile center fraction for player position calculation. */
@@ -202,7 +202,9 @@ export class BuildingSystem implements GameSystem {
           ? '🍽'
           : entry.type === 'store'
             ? '🏪'
-            : '🏠';
+            : entry.type === 'club'
+              ? '🔪'
+              : '🏠';
     drawText(ctx, `${icon}  ${entry.name}  ${icon}`, {
       x: cw / 2,
       y: panelY + MENU_TITLE_Y - MENU_TITLE_ADJUST,
