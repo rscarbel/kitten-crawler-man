@@ -10,6 +10,10 @@ import {
   BARREL,
   RUG,
   CHAIR,
+  SAWDUST_FLOOR,
+  CIRCUS_RING_EDGE,
+  TENT_POLE,
+  BLEACHER,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -365,7 +369,112 @@ export function drawInteriorTile(
       return true;
     }
 
+    // Sawdust floor — packed tan arena ground with speckled shavings
+    case SAWDUST_FLOOR: {
+      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // Painted circus ring border — weathered red band over the sawdust
+    case CIRCUS_RING_EDGE: {
+      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
+      const bandInset = Math.floor(ts * RING_BAND_INSET_FRACTION);
+      ctx.fillStyle = '#a83430';
+      ctx.fillRect(sx, sy + bandInset, ts, ts - bandInset * 2);
+      ctx.fillStyle = '#e8e2d4';
+      ctx.fillRect(sx, sy + bandInset, ts, RING_STRIPE_HEIGHT);
+      ctx.fillRect(sx, sy + ts - bandInset - RING_STRIPE_HEIGHT, ts, RING_STRIPE_HEIGHT);
+      // Paint wear — sawdust-coloured chips scraped through the band
+      const wearHash = (tx * 41 + ty * 29) % 97;
+      ctx.fillStyle = '#c9a86a';
+      for (let i = 0; i < RING_WEAR_CHIP_COUNT; i++) {
+        const px = sx + ((wearHash * (i * 7 + 3)) % (ts - 3));
+        const py = sy + bandInset + ((wearHash * (i * 5 + 2)) % (ts - bandInset * 2 - 2));
+        ctx.fillRect(px, py, 2, 2);
+      }
+      return true;
+    }
+
+    // Central tent pole — thick timber column with rope wraps
+    case TENT_POLE: {
+      drawSawdustBase(ctx, sx, sy, ts, tx, ty);
+      const poleInset = Math.floor(ts * POLE_INSET_FRACTION);
+      ctx.fillStyle = '#4a3520';
+      ctx.fillRect(sx + poleInset, sy, ts - poleInset * 2, ts);
+      // Wood grain
+      ctx.fillStyle = '#3a2915';
+      ctx.fillRect(sx + poleInset + 2, sy, 1, ts);
+      ctx.fillRect(sx + ts - poleInset - 4, sy, 1, ts);
+      // Lit edge
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(sx + poleInset, sy, 2, ts);
+      // Rope wraps
+      ctx.strokeStyle = '#a8874e';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < POLE_ROPE_WRAP_COUNT; i++) {
+        const ry = sy + Math.floor(((i + 1) * ts) / (POLE_ROPE_WRAP_COUNT + 1));
+        ctx.beginPath();
+        ctx.moveTo(sx + poleInset, ry);
+        ctx.lineTo(sx + ts - poleInset, ry - 2);
+        ctx.stroke();
+      }
+      return true;
+    }
+
+    // Bleacher — stacked wooden bench planks facing the ring
+    case BLEACHER: {
+      ctx.fillStyle = '#2a2118';
+      ctx.fillRect(sx, sy, ts, ts);
+      const plankHeight = Math.floor(ts / BLEACHER_PLANK_COUNT);
+      for (let i = 0; i < BLEACHER_PLANK_COUNT; i++) {
+        const py = sy + i * plankHeight;
+        ctx.fillStyle = i % 2 === 0 ? '#7a5a34' : '#6b4e2c';
+        ctx.fillRect(sx, py + 1, ts, plankHeight - 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(sx, py + 1, ts, 1);
+      }
+      // Support post shadow on alternating tiles
+      if ((tx + ty) % 2 === 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(sx + Math.floor(ts / 2) - 1, sy, 2, ts);
+      }
+      return true;
+    }
+
     default:
       return false;
+  }
+}
+
+const RING_BAND_INSET_FRACTION = 0.25;
+const RING_STRIPE_HEIGHT = 2;
+const RING_WEAR_CHIP_COUNT = 3;
+const POLE_INSET_FRACTION = 0.28;
+const POLE_ROPE_WRAP_COUNT = 3;
+const BLEACHER_PLANK_COUNT = 4;
+const SAWDUST_SPECK_COUNT = 6;
+
+/** Packed-sawdust ground shared by the big top floor, ring, and pole tiles. */
+function drawSawdustBase(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  ctx.fillStyle = '#b8985e';
+  ctx.fillRect(sx, sy, ts, ts);
+  const h1 = (tx * 31 + ty * 17) % 97;
+  const h2 = (tx * 53 + ty * 41) % 89;
+  // Darker trodden patch
+  ctx.fillStyle = 'rgba(138,111,66,0.35)';
+  ctx.fillRect(sx + (h1 % (ts / 2)), sy + (h2 % (ts / 2)), Math.floor(ts / 2), Math.floor(ts / 2));
+  // Shaving specks
+  for (let i = 0; i < SAWDUST_SPECK_COUNT; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#d4b87c' : '#8a6f42';
+    const px = sx + ((h1 * (i * 13 + 5)) % ts);
+    const py = sy + ((h2 * (i * 7 + 3)) % ts);
+    ctx.fillRect(px, py, 1, 1);
   }
 }

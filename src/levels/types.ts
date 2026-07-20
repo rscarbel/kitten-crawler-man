@@ -15,7 +15,15 @@ export interface MobSpawnRule {
     | 'brindle_grub'
     | 'sky_fowl'
     | 'grotesque_spider'
-    | 'small_spider';
+    | 'small_spider'
+    | 'ruins_ghoul'
+    | 'krasue'
+    | 'circus_lemur'
+    | 'stilt_clown'
+    | 'fat_clown'
+    | 'mold_lion'
+    | 'terror_the_clown'
+    | 'ringmaster_grimaldi';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.

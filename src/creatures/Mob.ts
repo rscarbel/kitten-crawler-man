@@ -212,6 +212,9 @@ export abstract class Mob extends Player {
   /** Set to true when this mob fires a projectile; polled and cleared by the scene each frame. */
   projectileSoundPending = false;
 
+  /** Set to true when this mob takes damage worth a pain cue; polled and cleared by the scene each frame. */
+  damageSoundPending = false;
+
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   get isHostile(): boolean {
     return true;

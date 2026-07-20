@@ -18,6 +18,8 @@ import {
   ROOF_CIRCUS_PURPLE,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  RUINED_WALL,
+  RUBBLE,
 } from './tileTypes';
 import { randomInt } from '../utils';
 
@@ -40,6 +42,12 @@ export interface OverworldData {
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
   mainTowerAnchor: Point;
+  /** Tiles from map centre inside which the town is safe — no hostile spawns, mobs deaggro. */
+  townSafeRadiusTiles: number;
+  /** Centre of the circus, in tile coordinates. */
+  circusCentre: Point;
+  /** Radius (tiles) of the circus grounds around `circusCentre`. */
+  circusRadiusTiles: number;
 }
 
 export function generateOverworld(size: number): OverworldData {
@@ -107,6 +115,21 @@ export function generateOverworld(size: number): OverworldData {
   // Circus placement
   const CIRCUS_MIN_DIST = 70;
   const CIRCUS_DIST_VARIANCE = 20;
+
+  // Town safe zone — inside this radius (tiles from map centre) no hostile mobs
+  // spawn and hostile mobs won't target players. Comfortably covers every named
+  // village building while leaving a ruins buffer before the circus footprint.
+  const TOWN_SAFE_RADIUS_TILES = 55;
+  // Ruins ambient-mob spawn scatter
+  const RUINS_SPAWN_ATTEMPTS = 220;
+  const RUINS_EDGE_MARGIN = 12;
+  const RUINS_CIRCUS_BUFFER = 12;
+  // Ruined-wall shell scatter
+  const NUM_RUIN_SHELLS = 26;
+  const RUIN_SHELL_MIN_SIZE = 4;
+  const RUIN_SHELL_SIZE_RANGE = 5;
+  const RUIN_SHELL_BREAK_CHANCE = 0.4;
+  const RUBBLE_DENSITY = 0.05;
 
   // Torch angles (60° increments around a full circle)
   const TORCH_STEP_DEG = 60;
@@ -433,15 +456,17 @@ export function generateOverworld(size: number): OverworldData {
   connectToRoad(cx - SUNKEN_STUMP_DX + SPRITE_DOOR_DX, cy + SUNKEN_STUMP_DY + SPRITE_DOOR_DY);
 
   // 7b. Circus — cluster of tents 60+ tiles from town center
+  let circusCx = cx;
+  let circusCy = cy;
+  const circusRadius = 14;
   {
     // Pick a random angle and distance for circus placement
     const circusAngle = Math.random() * Math.PI * 2;
     const circusDist = CIRCUS_MIN_DIST + Math.random() * CIRCUS_DIST_VARIANCE;
-    const circusCx = Math.round(cx + Math.cos(circusAngle) * circusDist);
-    const circusCy = Math.round(cy + Math.sin(circusAngle) * circusDist);
+    circusCx = Math.round(cx + Math.cos(circusAngle) * circusDist);
+    circusCy = Math.round(cy + Math.sin(circusAngle) * circusDist);
 
     // Circus ground: a roughly circular dirt/road area
-    const circusRadius = 14;
     for (let dy = -circusRadius; dy <= circusRadius; dy++) {
       for (let dx = -circusRadius; dx <= circusRadius; dx++) {
         if (Math.hypot(dx, dy) > circusRadius) continue;
@@ -568,6 +593,89 @@ export function generateOverworld(size: number): OverworldData {
         grid[ty][tx].type = TREE;
       }
     }
+  }
+
+  // 8b. Ruins decoration — broken wall shells scattered beyond the town safe zone,
+  // reading as the remains of a destroyed city rather than open countryside.
+  const RUIN_SHELL_INTERIOR_RUBBLE_CHANCE = 0.5;
+  const isRuinsGround = (tx: number, ty: number) =>
+    tx > BORDER &&
+    tx < size - BORDER &&
+    ty > BORDER &&
+    ty < size - BORDER &&
+    grid[ty][tx].type === GRASS;
+
+  // Shells can be up to RUIN_SHELL_MIN_SIZE + RUIN_SHELL_SIZE_RANGE tiles wide, so
+  // start sampling that far past the safe radius to keep their footprint fully outside it.
+  const RUIN_SHELL_SAFE_ZONE_CLEARANCE = RUIN_SHELL_MIN_SIZE + RUIN_SHELL_SIZE_RANGE;
+  for (let i = 0; i < NUM_RUIN_SHELLS; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist =
+      TOWN_SAFE_RADIUS_TILES +
+      RUIN_SHELL_SAFE_ZONE_CLEARANCE +
+      Math.random() *
+        (size / 2 -
+          BORDER -
+          RUINS_EDGE_MARGIN -
+          TOWN_SAFE_RADIUS_TILES -
+          RUIN_SHELL_SAFE_ZONE_CLEARANCE);
+    const shellCx = Math.round(cx + Math.cos(angle) * dist);
+    const shellCy = Math.round(cy + Math.sin(angle) * dist);
+    if (Math.hypot(shellCx - circusCx, shellCy - circusCy) < circusRadius + RUINS_CIRCUS_BUFFER)
+      continue;
+
+    const w = RUIN_SHELL_MIN_SIZE + randomInt(0, RUIN_SHELL_SIZE_RANGE);
+    const h = RUIN_SHELL_MIN_SIZE + randomInt(0, RUIN_SHELL_SIZE_RANGE);
+    const shellX = shellCx - Math.floor(w / 2);
+    const shellY = shellCy - Math.floor(h / 2);
+
+    // Jagged perimeter outline — random tiles knocked out for a "broken" look.
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const isPerimeter = dy === 0 || dy === h - 1 || dx === 0 || dx === w - 1;
+        if (!isPerimeter || Math.random() < RUIN_SHELL_BREAK_CHANCE) continue;
+        const tx = shellX + dx;
+        const ty = shellY + dy;
+        if (!isRuinsGround(tx, ty)) continue;
+        grid[ty][tx].type = RUINED_WALL;
+      }
+    }
+    // Rubble-strewn interior
+    for (let dy = 1; dy < h - 1; dy++) {
+      for (let dx = 1; dx < w - 1; dx++) {
+        if (Math.random() >= RUIN_SHELL_INTERIOR_RUBBLE_CHANCE) continue;
+        const tx = shellX + dx;
+        const ty = shellY + dy;
+        if (!isRuinsGround(tx, ty)) continue;
+        grid[ty][tx].type = RUBBLE;
+      }
+    }
+  }
+
+  // Loose rubble scattered across the whole ruins band, outside any shell
+  for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
+    for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
+      if (grid[gy][gx].type !== GRASS) continue;
+      if (Math.hypot(gx - cx, gy - cy) <= TOWN_SAFE_RADIUS_TILES) continue;
+      if (Math.random() < RUBBLE_DENSITY) grid[gy][gx].type = RUBBLE;
+    }
+  }
+
+  // 8c. Ambient ruins-mob spawn points — scattered outside the town safe zone
+  // and the circus footprint (the circus questline gates its own mobs separately).
+  const hallwaySpawnPoints: Point[] = [];
+  for (let i = 0; i < RUINS_SPAWN_ATTEMPTS; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist =
+      TOWN_SAFE_RADIUS_TILES +
+      Math.random() * (size / 2 - BORDER - RUINS_EDGE_MARGIN - TOWN_SAFE_RADIUS_TILES);
+    const tx = Math.round(cx + Math.cos(angle) * dist);
+    const ty = Math.round(cy + Math.sin(angle) * dist);
+    if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;
+    if (Math.hypot(tx - circusCx, ty - circusCy) < circusRadius + RUINS_CIRCUS_BUFFER) continue;
+    const t = grid[ty][tx].type;
+    if (t !== GRASS && t !== ROAD && t !== RUBBLE) continue;
+    hallwaySpawnPoints.push({ x: tx, y: ty });
   }
 
   // 9. Road bypass routing — buildings that sit between two road segments get a detour
@@ -704,8 +812,11 @@ export function generateOverworld(size: number): OverworldData {
     buildingEntries,
     bossRooms: [],
     mobSpawnPoints: [],
-    hallwaySpawnPoints: [],
+    hallwaySpawnPoints,
     stairwellTiles: [],
     mainTowerAnchor,
+    townSafeRadiusTiles: TOWN_SAFE_RADIUS_TILES,
+    circusCentre: { x: circusCx, y: circusCy },
+    circusRadiusTiles: circusRadius,
   };
 }

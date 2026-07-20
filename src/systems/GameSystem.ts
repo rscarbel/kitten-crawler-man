@@ -25,8 +25,8 @@ export interface SystemContext {
   mobs: Mob[];
   mobGrid: SpatialGrid<Mob>;
   gameMap: GameMap;
-  /** Boss room system reference — used by MobUpdateLoop for clamping. */
-  bossRoom: BossRoomSystem;
+  /** Boss room system reference — used by MobUpdateLoop for clamping. Absent in scenes without boss rooms (e.g. building interiors). */
+  bossRoom?: BossRoomSystem;
   /** Additional player-like targets (e.g. Mongo). Used by MobUpdateLoop. */
   extraTargets?: Player[];
 }

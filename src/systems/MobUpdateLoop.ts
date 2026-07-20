@@ -98,7 +98,9 @@ export class MobUpdateLoop implements GameSystem {
         mob.currentTarget = null;
         mob.doWander();
       } else {
-        if (mob.isBoss)
+        // Without a boss-room system (building interiors), leave forceAggro to
+        // whatever the hosting scene's boss system decided.
+        if (mob.isBoss && bossRoom)
           mob.forceAggro =
             bossRoom.isBossInLockedRoom(mob) || bossRoom.isAnyPlayerInBossRoom(mob, playerTargets);
 
@@ -118,7 +120,7 @@ export class MobUpdateLoop implements GameSystem {
       }
 
       // Keep bosses (specifically the Juicer) confined to their room
-      if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom.clampBossToRoom(mob);
+      if (mob.isBoss && !(mob instanceof BallOfSwine)) bossRoom?.clampBossToRoom(mob);
       mob.tickTimers();
       mobGrid.move(mob, ox, oy);
     }

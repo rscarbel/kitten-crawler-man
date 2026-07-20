@@ -3,7 +3,8 @@ import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
-import { tutorialLevel } from './levels/index';
+import { tutorialLevel, getLevelDef } from './levels/index';
+import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
 import { aiAdapter } from './ai/AIAdapter';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
@@ -15,6 +16,52 @@ declare const __AI_ENABLED__: boolean;
 
 /** HTTP status code for unauthorized. */
 const HTTP_UNAUTHORIZED = 401;
+
+const CIRCUS_STAGES: ReadonlyArray<CircusQuestStage> = [
+  'not_started',
+  'ritual_defense',
+  'heather_hunt',
+  'assault',
+  'bigtop_ready',
+  'grimaldi_slain',
+  'complete',
+];
+
+/**
+ * Dev-only bootstrap: `?level=level3&quest=bigtop_ready` jumps straight to a
+ * level (optionally seeding circus-quest state) so quest stages can be
+ * iterated on without replaying earlier floors. Localhost only.
+ */
+function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions): boolean {
+  const isLocalDev =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isLocalDev) return false;
+  const params = new URLSearchParams(window.location.search);
+  const levelId = params.get('level');
+  if (levelId === null) return false;
+
+  const questStage = params.get('quest');
+  if (questStage !== null && CIRCUS_STAGES.some((s) => s === questStage)) {
+    const progress = createCircusQuestProgress();
+    // The check above proves membership; find() re-derives the narrow type.
+    const stage = CIRCUS_STAGES.find((s) => s === questStage);
+    if (stage !== undefined) progress.stage = stage;
+    if (stage === 'heather_hunt' && params.get('heatherSlain') === '1') {
+      progress.heatherSlain = true;
+    }
+    options.circusQuestProgress = progress;
+  }
+
+  if (params.get('spawn') === 'circus') options.spawnAtCircus = true;
+
+  try {
+    const levelDef = getLevelDef(levelId);
+    sceneManager.replace(new DungeonScene(levelDef, input, sceneManager, options));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const input = new InputManager();
 const audio = new AudioManager();
@@ -30,6 +77,7 @@ void audio.preload();
     const onResetGame = () => {
       sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     };
+    if (devBootScene(sceneManager, { audio, onResetGame })) return;
     sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     return;
   }
@@ -75,6 +123,8 @@ void audio.preload();
   };
 
   const options: DungeonSceneOptions = { saveProgress, audio, onResetGame };
+
+  if (devBootScene(sceneManager, options)) return;
 
   if (progress) {
     options.humanSnap = progress.humanSnap;

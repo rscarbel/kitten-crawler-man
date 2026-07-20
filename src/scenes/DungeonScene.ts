@@ -58,13 +58,25 @@ import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
-import { readMovement, applyMovement, checkDeath, revealMinimap } from '../systems/GameLoopPhases';
+import {
+  readMovement,
+  applyMovement,
+  checkDeath,
+  revealMinimap,
+  triggerPlayerAttack,
+  playMobAudioCues,
+  HUMAN_ATTACK_RANGE_TILES,
+  CAT_ATTACK_RANGE_TILES,
+} from '../systems/GameLoopPhases';
+import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
+import { createCircusQuestProgress, type CircusQuestProgress } from '../core/CircusQuestProgress';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
+import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -138,6 +150,12 @@ export interface DungeonSceneOptions {
   tutorialController?: TutorialController;
   /** Called when the player confirms Reset Game — should wipe progress and return to the start screen. */
   onResetGame?: () => void;
+  /** Circus questline state, threaded by reference across building/scene transitions. */
+  circusQuestProgress?: CircusQuestProgress;
+  /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
+  spawnAtCircus?: boolean;
+  /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
+  skipIntro?: boolean;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -224,8 +242,6 @@ const HEALTH_BAR_COLOR_THRESHOLD = 0.78;
 const HEALTH_BAR_WARNING_THRESHOLD = 0.75;
 
 // Combat and interaction
-const HUMAN_ATTACK_RANGE_TILES = 3;
-const CAT_ATTACK_RANGE_TILES = 5;
 const ACHIEVEMENT_RECENT_EVENTS_LIMIT = 5;
 const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
@@ -330,6 +346,9 @@ export class DungeonScene extends GameplayScene {
   private barriers: BarrierSystem;
   private defendQuest!: DefendQuestSystem;
   private spiderQuest!: SpiderQuestSystem;
+  private circusQuest!: CircusQuestSystem;
+  private overworldMusic: OverworldMusicSystem | null = null;
+  private readonly circusQuestProgress: CircusQuestProgress;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
@@ -355,6 +374,9 @@ export class DungeonScene extends GameplayScene {
   private readonly dungeonIntro = new DungeonIntroSystem();
   // Becomes true once the AudioContext is running so intro ticks in sync with sound.
   private introStarted = false;
+  private readonly skipIntro: boolean;
+  /** Set just before swapping into a building so onExit leaves the music running. */
+  private musicPersistsAcrossExit = false;
 
   private readonly abilityManager: AbilityManager;
   private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
@@ -489,7 +511,20 @@ export class DungeonScene extends GameplayScene {
         });
       this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
-      const spawn = options?.spawnAt ?? this.gameMap.startTile;
+      // Dev bootstrap: spawn on the southern circus grounds so quest stages
+      // can be exercised without the walk from town.
+      const CIRCUS_SPAWN_EDGE_INSET_TILES = 3;
+      const circusSpawn =
+        options?.spawnAtCircus === true && this.gameMap.circusCentre
+          ? {
+              x: this.gameMap.circusCentre.x,
+              y:
+                this.gameMap.circusCentre.y +
+                (this.gameMap.circusRadiusTiles ?? 0) -
+                CIRCUS_SPAWN_EDGE_INSET_TILES,
+            }
+          : null;
+      const spawn = circusSpawn ?? options?.spawnAt ?? this.gameMap.startTile;
       spawnTileX = spawn.x;
       spawnTileY = spawn.y;
       this.pm = new PlayerManager(spawnTileX, spawnTileY);
@@ -550,6 +585,7 @@ export class DungeonScene extends GameplayScene {
       this.mobGrid.insert(mob);
       mob.setSpells(this.spells);
     });
+    this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -681,6 +717,9 @@ export class DungeonScene extends GameplayScene {
           x: entry.doorTile.x,
           y: entry.doorTile.y + 1,
         };
+        // Mongo can't follow indoors — dismiss so he isn't stranded in a stale mob list.
+        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+        this.musicPersistsAcrossExit = true;
         const humanSnap = this._cleanSnapFor(this.human);
         const catSnap = this._cleanSnapFor(this.cat);
         this.sceneManager.replace(
@@ -697,14 +736,23 @@ export class DungeonScene extends GameplayScene {
                   humanSnap: hSnap,
                   catSnap: cSnap,
                   existingMap: this.gameMap,
+                  humanAchievements: this.humanAchievements,
+                  catAchievements: this.catAchievements,
+                  mongoUnlocked: this.mongoSystem.unlocked,
+                  abilityManager: this._cleanAbilityManager(),
+                  saveProgress: this.onSaveProgress,
                   audio: this.audio ?? undefined,
                   onResetGame: this.onResetGameCallback ?? undefined,
+                  circusQuestProgress: this.circusQuestProgress,
+                  skipIntro: true,
                 }),
               );
             },
             this.humanAchievements,
             this.catAchievements,
             this.audio ?? undefined,
+            this.abilityManager,
+            this.circusQuestProgress,
           ),
         );
       });
@@ -776,6 +824,27 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
+    this.skipIntro = options?.skipIntro ?? false;
+    if (this.skipIntro) this.dungeonIntro.skip();
+    this.overworldMusic =
+      levelDef.isOverworld && this.audio !== null
+        ? new OverworldMusicSystem(this.gameMap, this.audio)
+        : null;
+    // Constructed after audio/music so the quest can drive battle tracks;
+    // stage re-entry may spawn mobs immediately.
+    this.circusQuest = new CircusQuestSystem(
+      this.gameMap,
+      this.bus,
+      (mob) => {
+        this.mobs.push(mob);
+        this.mobGrid.insert(mob);
+        mob.setSpells(this.spells);
+      },
+      this.mongoSystem,
+      this.circusQuestProgress,
+      this.overworldMusic,
+      this.audio,
+    );
     if (this.tutorial !== null && this.audio !== null) {
       this.tutorial.setAudio(this.audio);
     }
@@ -1131,6 +1200,12 @@ export class DungeonScene extends GameplayScene {
           this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
         }
       }
+      if (e.questId === 'vengeance_of_the_daughter') {
+        const def = this.circusQuest.questManager.getDef(e.questId);
+        if (def?.rewards.coins) {
+          this.active().coins += def.rewards.coins;
+        }
+      }
     });
 
     bus.on('questFailed', (e) => {
@@ -1155,8 +1230,11 @@ export class DungeonScene extends GameplayScene {
         this.audio?.setMusicVolume(TUTORIAL_MUSIC_VOLUME);
         this.audio?.playMusic('tutorial_island', { fadeInMs: MUSIC_FADE_IN_MS });
       } else {
-        this.audio?.playWhenReady('level_begins');
-        this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
+        if (!this.skipIntro) this.audio?.playWhenReady('level_begins');
+        // Overworld music is zone-driven (town/wilds/circus) by OverworldMusicSystem.
+        if (this.overworldMusic === null && this.audio?.currentMusicId !== 'bg_level_1') {
+          this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
+        }
       }
     };
     if (this.audio === null || this.audio.isRunning) {
@@ -1177,6 +1255,7 @@ export class DungeonScene extends GameplayScene {
         this.safeRoom.isSleeping ||
         this.defendQuest.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
+        this.circusQuest.isDialogOpen ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
@@ -1187,6 +1266,7 @@ export class DungeonScene extends GameplayScene {
         }
         if (this.defendQuest.dismissDialog()) return true;
         if (this.spiderQuest.dismissDialog()) return true;
+        if (this.circusQuest.dismissDialog()) return true;
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -1284,7 +1364,7 @@ export class DungeonScene extends GameplayScene {
   onExit(): void {
     this.audio?.stopWalkingLoop();
     this.audio?.stopMachineryLoop();
-    this.audio?.stopMusic();
+    if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     if (this._spiderKeyHandler !== null) {
       window.removeEventListener('keydown', this._spiderKeyHandler);
@@ -1781,7 +1861,8 @@ export class DungeonScene extends GameplayScene {
     const py = player.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const nearby = this.mobGrid.queryCircle(px, py, range);
     for (const mob of nearby) {
-      if (mob.isAlive) return true;
+      // Allies (Signet, Ink Marauders) must not force attack-priority over talking.
+      if (mob.isAlive && mob.isHostile) return true;
     }
     return false;
   }
@@ -1860,6 +1941,9 @@ export class DungeonScene extends GameplayScene {
       if (this.spiderQuest.tryInteract(active)) {
         return;
       }
+      if (this.circusQuest.tryInteract(active)) {
+        return;
+      }
       if (
         this.juicerRoom.tryPickupNear(active) ||
         this.arenaRoom.tryPickupNear(active) ||
@@ -1883,28 +1967,7 @@ export class DungeonScene extends GameplayScene {
         active.facingY = ddy / d;
       }
     }
-    if (this.human.isActive) {
-      this.companion.snapFacingToNearestMob(
-        this.human,
-        TILE_SIZE * HUMAN_ATTACK_RANGE_TILES,
-        this.mobGrid,
-      );
-      this.human.triggerAttack();
-    } else {
-      this.companion.snapFacingToNearestMob(
-        this.cat,
-        TILE_SIZE * CAT_ATTACK_RANGE_TILES,
-        this.mobGrid,
-      );
-      const hasMissileTome = this.cat.inventory.actionBar.slots.some(
-        (s) => s?.abilityId === 'magic_missile',
-      );
-      if (hasMissileTome && this.cat.triggerMissile()) {
-        this.audio?.play('cat_missile_fire');
-      } else {
-        this.cat.triggerAttack();
-      }
-    }
+    triggerPlayerAttack(this.human, this.cat, this.mobGrid, this.gameMap, this.audio);
   }
 
   private triggerHotbarActivation(hotbarIdx: number): void {
@@ -2025,6 +2088,7 @@ export class DungeonScene extends GameplayScene {
     if (this.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my)) return;
+    if (this.circusQuest.handleClick(mx, my, this.active())) return;
     if (this.achievementUI.handleClick(mx, my)) return;
 
     if (this.followerMenu.isOpen) {
@@ -2303,6 +2367,7 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.isDialogOpen ||
       this.spiderQuest.isDialogOpen ||
       this.spiderQuest.isDungeonPaused ||
+      this.circusQuest.isDialogOpen ||
       this.playerChat.isOpen
     )
       return;
@@ -2362,6 +2427,7 @@ export class DungeonScene extends GameplayScene {
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
     this.spiderQuest.render(ctx, camX, camY, this.active());
+    this.circusQuest.render(ctx, camX, camY, this.active());
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -2418,7 +2484,7 @@ export class DungeonScene extends GameplayScene {
         this.inactive(),
         this.mobs,
         this.safeRoom.mordecaiPositions,
-        this.defendQuest.questMarkers,
+        [...this.defendQuest.questMarkers, ...this.circusQuest.questMarkers],
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -2531,6 +2597,7 @@ export class DungeonScene extends GameplayScene {
       this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
       this.barriers.renderConstructUI(ctx, canvas);
       this.defendQuest.renderUI(ctx, canvas, mobileQuestTopY);
+      this.circusQuest.renderUI(ctx, canvas);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -2835,6 +2902,8 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.menuOpenSoundPending = false;
       this.audio?.play('menu_open');
     }
+    this.circusQuest.update(ctx);
+    this.overworldMusic?.update(ctx);
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
@@ -2888,47 +2957,8 @@ export class DungeonScene extends GameplayScene {
     this.spells.update(ctx);
     this.mobLoop.update(ctx);
 
+    playMobAudioCues(this.mobs, this.audio);
     for (const mob of this.mobs) {
-      if (mob.attackSoundPending) {
-        mob.attackSoundPending = false;
-        switch (mob.audioTag) {
-          case 'goblin':
-            this.audio?.playRandom(['goblin_1', 'goblin_2']);
-            break;
-          case 'rat':
-            this.audio?.playRandom(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3']);
-            break;
-          case 'llama':
-            this.audio?.play('llama_fireball_explosion');
-            break;
-          case 'troglodyte':
-            this.audio?.play('troglodyte_tongue');
-            break;
-          case 'tuskling':
-            this.audio?.playRandom([
-              'tuskling_grunt_1',
-              'tuskling_grunt_2',
-              'tuskling_grunt_3',
-              'tuskling_grunt_4',
-            ]);
-            break;
-          case 'skyfowl':
-            this.audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
-            break;
-          case 'mongo':
-            this.audio?.play('mongo_slash');
-            break;
-          case 'krakaren':
-            this.audio?.play('krakaren_ground_slam');
-            break;
-        }
-      }
-      if (mob.projectileSoundPending) {
-        mob.projectileSoundPending = false;
-        if (mob.audioTag === 'llama') {
-          this.audio?.play('llama_fireball');
-        }
-      }
       if (mob instanceof TheHoarder) {
         if (mob.damageSoundPending) {
           mob.damageSoundPending = false;
@@ -3294,6 +3324,7 @@ export class DungeonScene extends GameplayScene {
         this.stairwell.menuOpen ||
         (this.building?.menuOpen ?? false) ||
         this.defendQuest.isDialogOpen ||
+        this.circusQuest.isDialogOpen ||
         this.playerChat.isOpen,
     };
   }
@@ -3430,6 +3461,7 @@ export class DungeonScene extends GameplayScene {
         this.pauseMenu.isOpen ||
         this.safeRoom.mordecaiDialogOpen ||
         this.spiderQuest.isDialogOpen ||
+        this.circusQuest.isDialogOpen ||
         this.tutorial?.showTutorialMordecaiDialog === true ||
         this.tutorial?.showMordecaiReminderDialog === true
       ) {

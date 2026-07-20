@@ -97,6 +97,19 @@ export const MODERN_DECORATION = 46;
 /** Tile type for the spider lab room floor — dark, web-covered laboratory tiles. */
 export const SPIDER_LAB_FLOOR = 47;
 
+/** Tile type for a ruined city wall fragment — jagged broken stone, not walkable. */
+export const RUINED_WALL = 48;
+/** Tile type for scattered rubble — walkable ground decoration in the ruined-city zone. */
+export const RUBBLE = 49;
+/** Tile type for the big top interior floor — packed sawdust, walkable. */
+export const SAWDUST_FLOOR = 50;
+/** Tile type for the painted circus ring border — walkable sawdust with a red ring stripe. */
+export const CIRCUS_RING_EDGE = 51;
+/** Tile type for the big top's central tent pole — not walkable. */
+export const TENT_POLE = 52;
+/** Tile type for wooden bleacher benches along the big top walls — not walkable. */
+export const BLEACHER = 53;
+
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
  * that are walkable floor clutter — cables, rubble, flat debris, etc.

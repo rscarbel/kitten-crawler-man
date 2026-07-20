@@ -9,7 +9,9 @@ import {
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   METAL_WALL,
+  RUINED_WALL,
 } from '../tileTypes';
+import { drawOverworldSprite, overworldFrame, overworldRotation } from './terrainTiles';
 
 const WALL_FOUNDATION_HEIGHT = 3;
 const WALL_CORNICE_SHADOW_DEPTH = 1;
@@ -42,6 +44,27 @@ const ROUGH_STONE_HALF_FRACTION = 0.5;
 // Circus stripe
 const CIRCUS_STRIPE_MIN_WIDTH = 3;
 const CIRCUS_STRIPE_WIDTH_FRACTION = 0.25;
+
+// Ruined wall fractions
+const RUIN_HASH_X = 31;
+const RUIN_HASH_Y = 17;
+const RUIN_HASH_X2 = 53;
+const RUIN_HASH_Y2 = 41;
+const RUIN_NOTCH_MIN_WIDTH = 4;
+const RUIN_NOTCH_WIDTH_RANGE = 10;
+const RUIN_NOTCH_MIN_HEIGHT = 3;
+const RUIN_NOTCH_HEIGHT_RANGE = 9;
+/** Extra depth at the notch centre, making the break a jagged V rather than a box. */
+const RUIN_NOTCH_MID_DIP = 3;
+/** How far the notch walls slope inward before reaching full depth. */
+const RUIN_NOTCH_SLOPE_FRACTION = 0.25;
+const RUIN_CRACK_MID_FRACTION = 0.5;
+const RUIN_RUBBLE_BASE_HEIGHT = 5;
+const RUIN_RUBBLE_CHUNK_COUNT = 4;
+const RUIN_RUBBLE_CHUNK_STRIDE = 7;
+const RUIN_REBAR_STRIDE = 5;
+const RUIN_REBAR_X_FRACTION = 0.35;
+const RUIN_REBAR_OVERHANG = 5;
 
 // Window geometry fractions
 const WINDOW_WIDTH_FRACTION = 0.44;
@@ -241,6 +264,10 @@ export function drawBuildingTile(
         return true;
       case METAL_WALL:
         ctx.fillStyle = '#1a1e22';
+        ctx.fillRect(sx, sy, ts, ts);
+        return true;
+      case RUINED_WALL:
+        ctx.fillStyle = '#5c564c';
         ctx.fillRect(sx, sy, ts, ts);
         return true;
       default:
@@ -1219,6 +1246,80 @@ export function drawBuildingTile(
       // Subtle sheen on left edge
       ctx.fillStyle = 'rgba(255,255,255,0.04)';
       ctx.fillRect(sx, sy, 2, ts);
+      break;
+    }
+
+    // Ruined city wall — broken stone fragment left standing in the Over City's ruins.
+    case RUINED_WALL: {
+      // The real grass sprite shows through the broken top, so the fragment
+      // blends with the lawn instead of reading as a solid square.
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'grass',
+        overworldFrame(tx, ty),
+        '#6de89d',
+        overworldRotation(tx, ty),
+      );
+
+      // Deterministic per-tile hash drives the jagged top silhouette and crack pattern.
+      const h1 = (tx * RUIN_HASH_X + ty * RUIN_HASH_Y) % 97;
+      const h2 = (tx * RUIN_HASH_X2 + ty * RUIN_HASH_Y2) % 89;
+
+      // Stone body drawn as a silhouette with a broken-notch bite taken out of
+      // the top edge; the grass base stays visible inside the notch.
+      const notchW = RUIN_NOTCH_MIN_WIDTH + (h1 % RUIN_NOTCH_WIDTH_RANGE);
+      const notchH = RUIN_NOTCH_MIN_HEIGHT + (h2 % RUIN_NOTCH_HEIGHT_RANGE);
+      const notchX = sx + (h1 % Math.max(1, ts - notchW));
+      const notchMidDip = notchH + RUIN_NOTCH_MID_DIP;
+      ctx.fillStyle = '#5c564c';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(notchX, sy);
+      ctx.lineTo(notchX + notchW * RUIN_NOTCH_SLOPE_FRACTION, sy + notchH);
+      ctx.lineTo(notchX + notchW / 2, sy + notchMidDip);
+      ctx.lineTo(notchX + notchW * (1 - RUIN_NOTCH_SLOPE_FRACTION), sy + notchH);
+      ctx.lineTo(notchX + notchW, sy);
+      ctx.lineTo(sx + ts, sy);
+      ctx.lineTo(sx + ts, sy + ts);
+      ctx.lineTo(sx, sy + ts);
+      ctx.closePath();
+      ctx.fill();
+
+      // Mortar cracks
+      ctx.strokeStyle = '#39352e';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx + (h1 % ts), sy + notchH + 2);
+      ctx.lineTo(sx + ((h1 + h2) % ts), sy + ts * RUIN_CRACK_MID_FRACTION);
+      ctx.lineTo(sx + (h2 % ts), sy + ts - 2);
+      ctx.stroke();
+
+      // Rubble scree at the base
+      ctx.fillStyle = '#403c34';
+      ctx.fillRect(sx, sy + ts - RUIN_RUBBLE_BASE_HEIGHT, ts, RUIN_RUBBLE_BASE_HEIGHT);
+      ctx.fillStyle = '#4c473e';
+      for (let i = 0; i < RUIN_RUBBLE_CHUNK_COUNT; i++) {
+        const rx = sx + ((h1 * (i + 1) * RUIN_RUBBLE_CHUNK_STRIDE) % (ts - 6));
+        const ry = sy + ts - RUIN_RUBBLE_BASE_HEIGHT + (i % 3);
+        ctx.fillRect(rx, ry, 4, 3);
+      }
+
+      // Exposed rebar poking through a broken corner
+      if ((tx + ty) % RUIN_REBAR_STRIDE === 0) {
+        ctx.strokeStyle = '#8a7a5c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(sx + ts * RUIN_REBAR_X_FRACTION, sy + notchH);
+        ctx.lineTo(sx + ts * RUIN_REBAR_X_FRACTION + 3, sy - RUIN_REBAR_OVERHANG);
+        ctx.stroke();
+      }
+
+      // Lit top edge on the remaining (non-notched) stone
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
       break;
     }
 

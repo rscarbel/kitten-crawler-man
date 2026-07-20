@@ -6,6 +6,9 @@ import { type GameMap } from '../map/GameMap';
 import { type Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
+import type { AudioManager } from '../audio/AudioManager';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -157,6 +160,166 @@ export function checkDeath(
   if (cat.isKnockedOut && cat.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
   if (!isSafeLevel && levelTimerFrames <= 0) return true;
   return false;
+}
+
+/** Melee reach of the human player, in tiles. */
+export const HUMAN_ATTACK_RANGE_TILES = 3;
+/** Attack reach of the cat player (missiles included), in tiles. */
+export const CAT_ATTACK_RANGE_TILES = 5;
+/** Minimum facing-direction dot product for a mob to count as "in front". */
+const SNAP_DOT_PRODUCT_THRESHOLD = 0.25;
+const SNAP_TILE_CENTER_OFFSET = 0.5;
+
+/**
+ * Rotate the player to face the nearest live mob in their front cone with
+ * line of sight, within `range` pixels. No-op when nothing qualifies.
+ */
+export function snapFacingToNearestMob(
+  player: HumanPlayer | CatPlayer,
+  range: number,
+  mobGrid: SpatialGrid<Mob>,
+  gameMap: GameMap,
+): void {
+  const px = player.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
+  const py = player.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET;
+  let bestDist = range;
+  let bestMob: Mob | null = null;
+  const nearPlayer = mobGrid.queryCircle(px, py, range);
+  for (const mob of nearPlayer) {
+    if (!mob.isAlive) continue;
+    const dx = mob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - px;
+    const dy = mob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
+    const dist = Math.hypot(dx, dy);
+    if (dist > range || dist === 0) continue;
+    const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
+    if (dot < SNAP_DOT_PRODUCT_THRESHOLD) continue;
+    if (
+      !gameMap.hasLineOfSight(
+        px,
+        py,
+        mob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET,
+        mob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET,
+      )
+    )
+      continue;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestMob = mob;
+    }
+  }
+  if (bestMob) {
+    const dx = bestMob.x + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - px;
+    const dy = bestMob.y + TILE_SIZE * SNAP_TILE_CENTER_OFFSET - py;
+    const n = normalize(dx, dy);
+    player.facingX = n.x;
+    player.facingY = n.y;
+  }
+}
+
+/**
+ * Aim the active player at the nearest mob and start their attack — the cat
+ * prefers a magic missile when the tome is on the action bar. Shared by
+ * DungeonScene's space action and interior-scene combat.
+ */
+export function triggerPlayerAttack(
+  human: HumanPlayer,
+  cat: CatPlayer,
+  mobGrid: SpatialGrid<Mob>,
+  gameMap: GameMap,
+  audio: AudioManager | null,
+): void {
+  if (human.isActive) {
+    snapFacingToNearestMob(human, TILE_SIZE * HUMAN_ATTACK_RANGE_TILES, mobGrid, gameMap);
+    human.triggerAttack();
+  } else {
+    snapFacingToNearestMob(cat, TILE_SIZE * CAT_ATTACK_RANGE_TILES, mobGrid, gameMap);
+    const hasMissileTome = cat.inventory.actionBar.slots.some(
+      (s) => s?.abilityId === 'magic_missile',
+    );
+    if (hasMissileTome && cat.triggerMissile()) {
+      audio?.play('cat_missile_fire');
+    } else {
+      cat.triggerAttack();
+    }
+  }
+}
+
+/**
+ * Play queued per-mob combat audio cues (attack + projectile), keyed by each
+ * mob's audioTag. Shared by DungeonScene and interior combat scenes; clears
+ * the pending flags even when audio is unavailable so cues never backlog.
+ */
+export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void {
+  for (const mob of mobs) {
+    if (mob.attackSoundPending) {
+      mob.attackSoundPending = false;
+      switch (mob.audioTag) {
+        case 'goblin':
+          audio?.playRandom(['goblin_1', 'goblin_2']);
+          break;
+        case 'rat':
+          audio?.playRandom(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3']);
+          break;
+        case 'llama':
+          audio?.play('llama_fireball_explosion');
+          break;
+        case 'troglodyte':
+          audio?.play('troglodyte_tongue');
+          break;
+        case 'tuskling':
+          audio?.playRandom([
+            'tuskling_grunt_1',
+            'tuskling_grunt_2',
+            'tuskling_grunt_3',
+            'tuskling_grunt_4',
+          ]);
+          break;
+        case 'skyfowl':
+          audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
+          break;
+        case 'mongo':
+          audio?.play('mongo_slash');
+          break;
+        case 'krakaren':
+          audio?.play('krakaren_ground_slam');
+          break;
+        case 'lemur':
+          audio?.play('circus_lemur_attack');
+          break;
+        case 'clown':
+          audio?.playRandom(['clown_laughing_1', 'clown_laughing_2', 'clown_horn', 'clown_burp']);
+          break;
+        case 'krasue':
+          audio?.play('krasue_attack');
+          break;
+        case 'bear':
+          audio?.play('bear_big_attack');
+          break;
+        case 'grimaldi':
+          audio?.playRandom([
+            'grimaldi_plant_moving_1',
+            'grimaldi_plant_moving_2',
+            'grimaldi_plant_moving_3',
+          ]);
+          break;
+      }
+    }
+    if (mob.projectileSoundPending) {
+      mob.projectileSoundPending = false;
+      if (mob.audioTag === 'llama') audio?.play('llama_fireball');
+      if (mob.audioTag === 'lemur') audio?.play('circus_lemur_sound');
+    }
+    // Only tags handled here consume the flag — TheHoarder's damage cue is
+    // scene-specific and polled separately by DungeonScene.
+    if (mob.damageSoundPending && mob.audioTag === 'grimaldi') {
+      mob.damageSoundPending = false;
+      audio?.play('grimaldi_vine_taking_damage');
+    }
+    if (mob.damageSoundPending && mob.audioTag === 'bear') {
+      mob.damageSoundPending = false;
+      audio?.play('bear_growl_1');
+    }
+  }
 }
 
 /**

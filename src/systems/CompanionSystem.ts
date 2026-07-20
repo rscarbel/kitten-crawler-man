@@ -42,7 +42,6 @@ const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 // Magic number constants
 const TILE_CENTER_OFFSET = 0.5;
-const DOT_PRODUCT_THRESHOLD = 0.25;
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
 const COLLISION_BOX_BOTTOM_FRACTION = 0.8;
@@ -205,47 +204,6 @@ export class CompanionSystem implements GameSystem {
     this.updateFollower(human, cat, mobs, mobGrid, ctx.bossRoom);
   }
 
-  snapFacingToNearestMob(
-    player: HumanPlayer | CatPlayer,
-    range: number,
-    mobGrid: SpatialGrid<Mob>,
-  ): void {
-    const px = player.x + TILE_SIZE * TILE_CENTER_OFFSET;
-    const py = player.y + TILE_SIZE * TILE_CENTER_OFFSET;
-    let bestDist = range;
-    let bestMob: Mob | null = null;
-    const nearPlayer = mobGrid.queryCircle(px, py, range);
-    for (const mob of nearPlayer) {
-      if (!mob.isAlive) continue;
-      const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - px;
-      const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - py;
-      const dist = Math.hypot(dx, dy);
-      if (dist > range || dist === 0) continue;
-      const dot = (dx / dist) * player.facingX + (dy / dist) * player.facingY;
-      if (dot < DOT_PRODUCT_THRESHOLD) continue;
-      if (
-        !this.gameMap.hasLineOfSight(
-          px,
-          py,
-          mob.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          mob.y + TILE_SIZE * TILE_CENTER_OFFSET,
-        )
-      )
-        continue;
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestMob = mob;
-      }
-    }
-    if (bestMob) {
-      const dx = bestMob.x + TILE_SIZE * TILE_CENTER_OFFSET - px;
-      const dy = bestMob.y + TILE_SIZE * TILE_CENTER_OFFSET - py;
-      const n = normalize(dx, dy);
-      player.facingX = n.x;
-      player.facingY = n.y;
-    }
-  }
-
   entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
     const mapPxW = (this.gameMap.structure[0]?.length ?? this.gameMap.structure.length) * TILE_SIZE;
     const mapPxH = this.gameMap.structure.length * TILE_SIZE;
@@ -287,12 +245,13 @@ export class CompanionSystem implements GameSystem {
     cat: CatPlayer,
     mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
-    bossRoom: BossRoomSystem,
+    bossRoom: BossRoomSystem | undefined,
   ): void {
     // Returns true if a mob is inside a boss room that the active player hasn't entered,
     // AND the mob hasn't initiated combat against either player.
     // In that case the companion should not proactively target it.
     const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean => {
+      if (!bossRoom) return false;
       for (const state of bossRoom.getBossRoomStates()) {
         if (!bossRoom.isEntityInRoom(m, state.bounds)) continue;
         // Mob is in a boss room — allow targeting only if the active player is also in that
@@ -451,8 +410,11 @@ export class CompanionSystem implements GameSystem {
   }
 
   /** Move the companion out of any active hazard zone (acid puddles, etc.). Returns true if fleeing. */
-  private fleeFromHazards(companion: HumanPlayer | CatPlayer, bossRoom: BossRoomSystem): boolean {
-    const escape = bossRoom.getHazardEscapeVector(companion.x, companion.y);
+  private fleeFromHazards(
+    companion: HumanPlayer | CatPlayer,
+    bossRoom: BossRoomSystem | undefined,
+  ): boolean {
+    const escape = bossRoom?.getHazardEscapeVector(companion.x, companion.y);
     if (!escape) return false;
     this.entityMoveWithCollision(
       companion,
@@ -468,7 +430,7 @@ export class CompanionSystem implements GameSystem {
     cat: CatPlayer,
     mobs: Mob[],
     _mobGrid: SpatialGrid<Mob>,
-    bossRoom: BossRoomSystem,
+    bossRoom: BossRoomSystem | undefined,
   ): void {
     if (this._followOverride) {
       const caster = human.isActive ? human : cat;

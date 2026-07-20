@@ -49,7 +49,8 @@ export interface CombatContext {
   mobs: Mob[];
   mobGrid: SpatialGrid<Mob>;
   gameMap: GameMap;
-  safeRoom: SafeRoomSystem;
+  /** Null in scenes without safe rooms (e.g. building interiors) — attacks always resolve. */
+  safeRoom: Pick<SafeRoomSystem, 'isEntityInSafeRoom'> | null;
   bus: EventBus;
   abilityManager: AbilityManager;
   spells: SpellSystem;
@@ -64,8 +65,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     x: e.x + HALF_TILE,
     y: e.y + HALF_TILE,
   });
+  const inSafeRoom = (entity: HumanPlayer | CatPlayer): boolean =>
+    safeRoom?.isEntityInSafeRoom(entity) ?? false;
 
-  if (human.isAttackPeak() && !safeRoom.isEntityInSafeRoom(human)) {
+  if (human.isAttackPeak() && !inSafeRoom(human)) {
     const hc = centerOf(human);
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
@@ -98,7 +101,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
 
-  if (cat.isAttackPeak() && !safeRoom.isEntityInSafeRoom(cat)) {
+  if (cat.isAttackPeak() && !inSafeRoom(cat)) {
     const cc = centerOf(cat);
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
@@ -132,7 +135,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   }
 
   // ── Smush AoE stomp ──
-  if (human.isSmushPeak() && !safeRoom.isEntityInSafeRoom(human)) {
+  if (human.isSmushPeak() && !inSafeRoom(human)) {
     const smushLevel = ctx.abilityManager.getLevel('smush');
     const stats = getSmushStats(smushLevel);
     const hc = centerOf(human);
@@ -185,7 +188,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     }
   }
 
-  if (!safeRoom.isEntityInSafeRoom(cat)) {
+  if (!inSafeRoom(cat)) {
     const missileLevel = cat.getMagicMissileLevel();
     const hitRadius = TILE_SIZE * MISSILE_HIT_RADIUS_FRACTION;
     const splashRadius = TILE_SIZE + HALF_TILE; // AoE splash radius at level 5+

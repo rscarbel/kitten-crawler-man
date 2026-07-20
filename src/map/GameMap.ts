@@ -32,6 +32,11 @@ import {
   SPRITE_BUILDING,
   MODERN_DECORATION,
   WALKABLE_MODERN_DECORATION_VARIANTS,
+  RUINED_WALL,
+  SAWDUST_FLOOR,
+  CIRCUS_RING_EDGE,
+  TENT_POLE,
+  BLEACHER,
 } from './tileTypes';
 import {
   generateDungeon,
@@ -69,6 +74,17 @@ const STORE_INTERIOR_W = 20;
 const STORE_INTERIOR_H = 12;
 const HOUSE_INTERIOR_W = 18;
 const HOUSE_INTERIOR_H = 14;
+/** The big top interior is a boss arena — much larger than any other interior. */
+const BIGTOP_INTERIOR_W = 34;
+const BIGTOP_INTERIOR_H = 26;
+
+// ── Big top interior layout ───────────────────────────────────────────────────
+/** Radius of the painted performance ring, in tiles. */
+const BIGTOP_RING_RADIUS = 8;
+/** The ring centre sits this many rows above the map centre, leaving an entrance apron. */
+const BIGTOP_RING_NORTH_SHIFT = 2;
+/** Rows of bleacher benches hugging the north/west/east walls. */
+const BIGTOP_BLEACHER_DEPTH = 2;
 
 // ── Floor tile type values used in interior generation ────────────────────────
 /** Carpet floor tile (used in tower interiors). */
@@ -151,6 +167,16 @@ export class GameMap {
   }> = [];
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
+  /** Centre of the circus, in tile coords. Undefined on non-overworld maps. */
+  circusCentre: { x: number; y: number } | undefined = undefined;
+  /** Radius (tiles) of the circus grounds around `circusCentre`. Undefined on non-overworld maps. */
+  circusRadiusTiles: number | undefined = undefined;
+  /**
+   * Radius (in tiles, from map centre) inside which the overworld town is
+   * considered safe — no hostile ambient spawns, and hostile mobs won't
+   * target players standing inside it. Null on non-overworld maps.
+   */
+  private townSafeRadiusTiles: number | null = null;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
   /** Spider lab room, if generated (spider quest boss encounter). */
@@ -220,6 +246,9 @@ export class GameMap {
       this.stairwellTiles = data.stairwellTiles;
       this.buildStairwellBlockedSet(data.stairwellTiles);
       this.mainTowerAnchor = data.mainTowerAnchor;
+      this.townSafeRadiusTiles = data.townSafeRadiusTiles;
+      this.circusCentre = data.circusCentre;
+      this.circusRadiusTiles = data.circusRadiusTiles;
       return data.grid;
     }
 
@@ -307,21 +336,31 @@ export class GameMap {
     const isStore = buildingType === 'store';
     const isHouse = buildingType === 'house';
     const isCarnival = buildingName === 'Big Top';
-    const w = isTower
-      ? TOWER_INTERIOR_W
-      : isRestaurant
-        ? RESTAURANT_INTERIOR_W
-        : isStore
-          ? STORE_INTERIOR_W
-          : HOUSE_INTERIOR_W;
-    const h = isTower
-      ? TOWER_INTERIOR_H
-      : isRestaurant
-        ? RESTAURANT_INTERIOR_H
-        : isStore
-          ? STORE_INTERIOR_H
-          : HOUSE_INTERIOR_H;
-    const floorType = isTower ? CARPET_FLOOR : isRestaurant ? SAFE_ROOM_FLOOR : WOOD_FLOOR;
+    const w = isCarnival
+      ? BIGTOP_INTERIOR_W
+      : isTower
+        ? TOWER_INTERIOR_W
+        : isRestaurant
+          ? RESTAURANT_INTERIOR_W
+          : isStore
+            ? STORE_INTERIOR_W
+            : HOUSE_INTERIOR_W;
+    const h = isCarnival
+      ? BIGTOP_INTERIOR_H
+      : isTower
+        ? TOWER_INTERIOR_H
+        : isRestaurant
+          ? RESTAURANT_INTERIOR_H
+          : isStore
+            ? STORE_INTERIOR_H
+            : HOUSE_INTERIOR_H;
+    const floorType = isCarnival
+      ? SAWDUST_FLOOR
+      : isTower
+        ? CARPET_FLOOR
+        : isRestaurant
+          ? SAFE_ROOM_FLOOR
+          : WOOD_FLOOR;
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -937,6 +976,41 @@ export class GameMap {
       grid[genericEastChairRow][genericEastWallCol].type = CHAIR;
     }
 
+    if (isCarnival) {
+      // Big top boss arena: painted performance ring, central tent pole
+      // cluster, and bleachers hugging the north/west/east walls.
+      const ringCx = Math.floor(w / 2);
+      const ringCy = Math.floor(h / 2) - BIGTOP_RING_NORTH_SHIFT;
+
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const dist = Math.hypot(x - ringCx, y - ringCy);
+          if (Math.round(dist) === BIGTOP_RING_RADIUS) grid[y][x].type = CIRCUS_RING_EDGE;
+        }
+      }
+
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dx = 0; dx <= 1; dx++) {
+          grid[ringCy - dy][ringCx - dx].type = TENT_POLE;
+        }
+      }
+
+      const bleacherSouthLimit = h - BIGTOP_RING_RADIUS + 1;
+      for (let depth = 1; depth <= BIGTOP_BLEACHER_DEPTH; depth++) {
+        for (let x = 1 + BIGTOP_BLEACHER_DEPTH; x < w - 1 - BIGTOP_BLEACHER_DEPTH; x++) {
+          grid[depth][x].type = BLEACHER;
+        }
+        for (let y = 1 + BIGTOP_BLEACHER_DEPTH; y < bleacherSouthLimit; y++) {
+          grid[y][depth].type = BLEACHER;
+          grid[y][w - 1 - depth].type = BLEACHER;
+        }
+      }
+
+      this._bigtopRingCentre = { x: ringCx, y: ringCy };
+    } else {
+      this._bigtopRingCentre = null;
+    }
+
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
     const doorX = Math.floor(w / 2) - 1;
     grid[h - 1][doorX].type = ROAD_TILE;
@@ -1174,6 +1248,12 @@ export class GameMap {
 
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
   _interiorExitTiles: Array<{ x: number; y: number }> = [];
+  /** Centre of the big top's performance ring — set only for the Big Top interior. */
+  private _bigtopRingCentre: { x: number; y: number } | null = null;
+
+  get bigtopRingCentre(): { x: number; y: number } | null {
+    return this._bigtopRingCentre;
+  }
   /** Interior stair-up tile positions (tower floors). */
   _interiorStairUpTiles: Array<{ x: number; y: number }> = [];
   /** Interior stair-down tile positions (tower floors). */
@@ -1295,6 +1375,21 @@ export class GameMap {
     this.permanentBlockedTiles.add(`${tileX},${tileY}`);
   }
 
+  /**
+   * True when the given world-pixel position falls inside the overworld town's
+   * safe radius. Always false on non-overworld maps (townSafeRadiusTiles is null).
+   */
+  isInTownSafeZone(worldX: number, worldY: number): boolean {
+    if (this.townSafeRadiusTiles === null) return false;
+    const size = this.structure.length;
+    const centerTile = Math.floor(size / 2);
+    const dxTiles = worldX / this.tileHeight - centerTile;
+    const dyTiles = worldY / this.tileHeight - centerTile;
+    return (
+      dxTiles * dxTiles + dyTiles * dyTiles <= this.townSafeRadiusTiles * this.townSafeRadiusTiles
+    );
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
     const row = this.structure[tileY];
@@ -1331,8 +1426,12 @@ export class GameMap {
       tile.type !== BARREL_SIDE &&
       tile.type !== CRATE &&
       tile.type !== BRAZIER &&
-      tile.type !== SPRITE_BUILDING
-      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43) are walkable
+      tile.type !== SPRITE_BUILDING &&
+      tile.type !== RUINED_WALL &&
+      tile.type !== TENT_POLE &&
+      tile.type !== BLEACHER
+      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43),
+      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51) are walkable
     );
   }
 

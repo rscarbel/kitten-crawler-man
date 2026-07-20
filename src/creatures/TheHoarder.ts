@@ -76,7 +76,6 @@ export class TheHoarder extends Mob {
   pendingVomitProjectile: { x: number; y: number; dx: number; dy: number } | null = null;
 
   /** Set each time this boss takes damage; DungeonScene reads and clears it to play the hit sound. */
-  damageSoundPending = false;
   /** Set when a vomit projectile fires; DungeonScene reads and clears it to play the vomit sound. */
   vomitSoundPending = false;
 

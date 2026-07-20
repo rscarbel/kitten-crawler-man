@@ -48,6 +48,7 @@ export class AudioManager {
   private readonly buffers = new Map<SoundId, AudioBuffer>();
   private currentMusicSource: AudioBufferSourceNode | null = null;
   private currentMusicGain: GainNode | null = null;
+  private _currentMusicId: SoundId | null = null;
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
   private walkingSource: AudioBufferSourceNode | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
@@ -324,12 +325,18 @@ export class AudioManager {
     this.play(ids[Math.floor(Math.random() * ids.length)], opts);
   }
 
+  /** The looping track currently playing (or pending), if any. */
+  get currentMusicId(): SoundId | null {
+    return this._currentMusicId;
+  }
+
   /**
    * Start a looping background music track.
    * Immediately stops any currently-playing track.
    */
   playMusic(id: SoundId, opts: MusicOptions = {}): void {
     this.stopMusic(0);
+    this._currentMusicId = id;
     const buffer = this.buffers.get(id);
     if (!buffer || this.ctx.state !== 'running') {
       this.pendingMusic = { id, opts };
@@ -492,6 +499,7 @@ export class AudioManager {
   stopMusic(fadeMs = DEFAULT_STOP_MUSIC_FADE_MS): void {
     this.musicPaused = false;
     this.pendingMusic = null;
+    this._currentMusicId = null;
     const src = this.currentMusicSource;
     const gain = this.currentMusicGain;
     if (src === null || gain === null) return;
@@ -594,6 +602,9 @@ export class AudioManager {
       if (e.questId === 'defend_goblin_mother') {
         this.playMusic('defense_quest_music', { fadeInMs: 1000 });
       }
+      if (e.questId === 'the_show_must_go_on') {
+        this.play('menu_open');
+      }
     });
 
     bus.on('objectiveComplete', (e) => {
@@ -603,7 +614,11 @@ export class AudioManager {
     });
 
     bus.on('questCompleted', (e) => {
-      if (e.questId === 'defend_goblin_mother' || e.questId === 'grotesque_spider') {
+      if (
+        e.questId === 'defend_goblin_mother' ||
+        e.questId === 'grotesque_spider' ||
+        e.questId === 'the_show_must_go_on'
+      ) {
         this.play('quest_complete');
       }
     });

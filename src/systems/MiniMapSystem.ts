@@ -28,6 +28,13 @@ const QUEST_MARKER_PULSE_SPEED = 5;
 const QUEST_MARKER_X_ARM = 3;
 /** X marker line width. */
 const QUEST_MARKER_LINE_WIDTH = 1.5;
+/** Radius of the elite marker's white circle (pixels). */
+const ELITE_MARKER_RADIUS = 4;
+/** Half-length of the elite marker's black cross arms (pixels). */
+const ELITE_MARKER_CROSS_ARM = 2.5;
+
+/** Minimap quest-marker glyphs; 'elite' is the book's black-cross-in-white-circle elite mark. */
+export type QuestMarkerType = 'exclamation' | 'question' | 'red_x' | 'elite';
 /** Stairwell icon half-size (extra pixels beyond pxPerTile). */
 const STAIRWELL_ICON_HALF_EXTRA = 1;
 /** Pixels above minimap to render the expand hint text. */
@@ -170,7 +177,7 @@ export class MiniMapSystem implements GameSystem {
     companion: { x: number; y: number },
     mobs: Mob[],
     mordecaiPositions: Array<{ x: number; y: number }>,
-    questMarkers: Array<{ x: number; y: number; type: 'exclamation' | 'question' | 'red_x' }> = [],
+    questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
@@ -316,6 +323,22 @@ export class MiniMapSystem implements GameSystem {
           alpha: pulse,
           align: 'center',
         });
+      } else if (qm.type === 'elite') {
+        // The book's elite marker: a black cross inside a white circle.
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(qsx, qsy, ELITE_MARKER_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = QUEST_MARKER_LINE_WIDTH;
+        ctx.beginPath();
+        ctx.moveTo(qsx - ELITE_MARKER_CROSS_ARM, qsy);
+        ctx.lineTo(qsx + ELITE_MARKER_CROSS_ARM, qsy);
+        ctx.moveTo(qsx, qsy - ELITE_MARKER_CROSS_ARM);
+        ctx.lineTo(qsx, qsy + ELITE_MARKER_CROSS_ARM);
+        ctx.stroke();
+        ctx.restore();
       } else {
         ctx.save();
         ctx.globalAlpha = pulse;

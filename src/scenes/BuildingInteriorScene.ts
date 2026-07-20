@@ -12,13 +12,31 @@ import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
 import { platform } from '../core/Platform';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
-import { readMovement, applyMovement } from '../systems/GameLoopPhases';
+import {
+  readMovement,
+  applyMovement,
+  triggerPlayerAttack,
+  playMobAudioCues,
+} from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
+import type { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
+import { EventBus } from '../core/EventBus';
+import { SpatialGrid } from '../core/SpatialGrid';
+import type { Mob } from '../creatures/Mob';
+import type { CircusQuestProgress } from '../core/CircusQuestProgress';
+import { SpellSystem } from '../systems/SpellSystem';
+import { GoreSystem } from '../systems/GoreSystem';
+import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
+import { MobUpdateLoop } from '../systems/MobUpdateLoop';
+import { BigTopBossSystem } from '../systems/BigTopBossSystem';
+import { DeathScreen } from '../ui/DeathScreen';
+import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
+import type { SystemContext } from '../systems/GameSystem';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -46,6 +64,23 @@ const EXIT_MENU_HINT_Y = 79;
 const EXIT_BTN_TEXT_Y = 16;
 const EXIT_BTN_Y_OFFSET = 110;
 const EXIT_BTN_GAP = 8;
+const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
+/** Fraction of max HP both players are revived to after falling in the Big Top. */
+const BIGTOP_REVIVE_HP_FRACTION = 0.5;
+
+/** The combat stack instantiated only for the Big Top boss encounter. */
+interface InteriorCombat {
+  bus: EventBus;
+  mobs: Mob[];
+  mobGrid: SpatialGrid<Mob>;
+  spells: SpellSystem;
+  gore: GoreSystem;
+  bodyPartGore: BodyPartGoreSystem;
+  mobLoop: MobUpdateLoop;
+  deathScreen: DeathScreen;
+  abilityManager: AbilityManager;
+  boss: BigTopBossSystem;
+}
 
 export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
@@ -85,6 +120,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   private readonly audio: AudioManager | null;
 
+  // Big Top boss encounter (null in every other building)
+  private readonly combat: InteriorCombat | null;
+  private gameOver = false;
+
   constructor(
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
@@ -95,33 +134,27 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
     audio?: AudioManager,
+    abilityManager?: AbilityManager,
+    circusQuestProgress?: CircusQuestProgress,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
 
     const isTower = entry.type === 'tower';
 
+    // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
+    // crash the generator); generateInterior() builds the real room next.
     if (isTower) {
       // Generate 4 tower floors
       for (let f = 0; f < TOWER_FLOOR_COUNT; f++) {
-        const floorMap = new GameMap({
-          mapSize: 0,
-          tileHeight: TILE_SIZE,
-          numBossRooms: 0,
-          numSafeRooms: 0,
-        });
+        const floorMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
         floorMap.generateInterior('tower', f, entry.name);
         this.towerFloors.push(floorMap);
       }
       this.map = this.towerFloors[0];
     } else {
       // Build single interior map
-      this.map = new GameMap({
-        mapSize: 0,
-        tileHeight: TILE_SIZE,
-        numBossRooms: 0,
-        numSafeRooms: 0,
-      });
+      this.map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
       this.map.generateInterior(entry.type, 0, entry.name);
     }
 
@@ -153,6 +186,79 @@ export class BuildingInteriorScene extends GameplayScene {
         () => this.changeFloor(this.currentFloor - 1),
       );
     }
+
+    this.combat = this.initBigTopCombat(abilityManager, circusQuestProgress);
+  }
+
+  /**
+   * The Big Top hosts the Grimaldi boss fight when the circus quest has
+   * unlocked it — the only interior with a live combat stack.
+   */
+  private initBigTopCombat(
+    abilityManager: AbilityManager | undefined,
+    progress: CircusQuestProgress | undefined,
+  ): InteriorCombat | null {
+    if (this.entry.name !== 'Big Top') return null;
+    if (!abilityManager || progress?.stage !== 'bigtop_ready') return null;
+
+    const bus = new EventBus();
+    const mobs: Mob[] = [];
+    const mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
+    const spells = new SpellSystem();
+    const gore = new GoreSystem();
+    const bodyPartGore = new BodyPartGoreSystem();
+    const deathScreen = new DeathScreen();
+    deathScreen.audio = this.audio;
+
+    const addMob = (mob: Mob): void => {
+      mobs.push(mob);
+      mobGrid.insert(mob);
+      mob.setSpells(spells);
+    };
+
+    bus.on('spawnGore', (e) => {
+      gore.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
+    });
+    bus.on('mobKilled', (e) => {
+      const cx = e.mob.x + TILE_SIZE * TILE_CENTER_RATIO;
+      const cy = e.mob.y + TILE_SIZE * TILE_CENTER_RATIO;
+      let impactDx = 0;
+      let impactDy = 0;
+      if (e.killer !== null) {
+        const dx = cx - (e.killer.x + TILE_SIZE * TILE_CENTER_RATIO);
+        const dy = cy - (e.killer.y + TILE_SIZE * TILE_CENTER_RATIO);
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+          impactDx = dx / dist;
+          impactDy = dy / dist;
+        }
+      }
+      gore.spawnGore(cx, cy, impactDx, impactDy);
+      bodyPartGore.spawnParts(cx, cy, e.mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
+      this.audio?.playRandom(['splat_1', 'splat_2', 'splat_3']);
+      // No floor-loot system indoors — coin drops go straight to the killer.
+      if (e.killer !== null && e.mob.droppedLoot !== null) {
+        e.killer.coins += e.mob.droppedLoot.coins;
+      }
+    });
+    bus.on('playerLevelUp', () => {
+      this.audio?.play('player_level_up');
+    });
+
+    const boss = new BigTopBossSystem(this.map, bus, addMob, progress, this.audio);
+
+    return {
+      bus,
+      mobs,
+      mobGrid,
+      spells,
+      gore,
+      bodyPartGore,
+      mobLoop: new MobUpdateLoop(),
+      deathScreen,
+      abilityManager,
+      boss,
+    };
   }
 
   private changeFloor(newFloor: number): void {
@@ -223,6 +329,13 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   update(): void {
+    if (this.gameOver && this.combat) {
+      if (this.input.has(' ')) {
+        this.input.clear();
+        if (this.combat.deathScreen.handleSpaceBar()) this.reviveAndExit();
+      }
+      return;
+    }
     if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
@@ -321,9 +434,80 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Tower stair detection
     this.towerStairs?.detect(player);
+
+    if (this.combat) this.updateCombat();
+  }
+
+  private updateCombat(): void {
+    const combat = this.combat;
+    if (!combat) return;
+
+    // Space attacks — Big Top interiors have no safe room or shop competing for the key.
+    if (this.input.has(' ')) {
+      this.input.clear();
+      triggerPlayerAttack(this.human, this.cat, combat.mobGrid, this.map, this.audio);
+    }
+
+    const active = this.active();
+    const ctx: SystemContext = {
+      human: this.human,
+      cat: this.cat,
+      active,
+      inactive: this.inactive(),
+      activeIsMoving: active.isMoving,
+      mobs: combat.mobs,
+      mobGrid: combat.mobGrid,
+      gameMap: this.map,
+    };
+
+    this.human.updateAttack();
+    this.cat.updateAttack();
+    this.cat.updateMissiles(combat.mobs);
+
+    combat.spells.update(ctx);
+    combat.mobLoop.update(ctx);
+    combat.boss.update(ctx);
+    playMobAudioCues(combat.mobs, this.audio);
+
+    const combatCtx: CombatContext = {
+      human: this.human,
+      cat: this.cat,
+      mobs: combat.mobs,
+      mobGrid: combat.mobGrid,
+      gameMap: this.map,
+      safeRoom: null,
+      bus: combat.bus,
+      abilityManager: combat.abilityManager,
+      spells: combat.spells,
+      hitLanded: false,
+    };
+    resolvePlayerAttacks(combatCtx);
+    this.cat.flushPendingSubMissiles();
+    resolveKills(combatCtx);
+
+    combat.gore.update();
+    combat.bodyPartGore.update();
+
+    if (!active.isAlive) {
+      this.gameOver = true;
+      combat.deathScreen.activate('The show went on without you.');
+    }
+  }
+
+  /** Death inside the Big Top: patch both crawlers up and put them back outside; the fight resets on re-entry. */
+  private reviveAndExit(): void {
+    for (const player of [this.human, this.cat]) {
+      player.hp = Math.max(player.hp, Math.ceil(player.maxHp * BIGTOP_REVIVE_HP_FRACTION));
+    }
+    this.gameOver = false;
+    this.doExit();
   }
 
   handleClick(mx: number, my: number): void {
+    if (this.gameOver && this.combat) {
+      if (this.combat.deathScreen.handleClick(mx, my)) this.reviveAndExit();
+      return;
+    }
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleClick(mx, my);
       return;
@@ -390,8 +574,29 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.map.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
 
-    this.inactive().render(ctx, camX, camY, TILE_SIZE);
-    this.active().render(ctx, camX, camY, TILE_SIZE);
+    if (this.combat) {
+      const combat = this.combat;
+      combat.gore.renderPuddles(ctx, camX, camY);
+      combat.bodyPartGore.renderSettled(ctx, camX, camY);
+
+      const entities: Array<{
+        y: number;
+        render(c: CanvasRenderingContext2D, cx: number, cy: number, ts: number): void;
+      }> = [...combat.mobs.filter((m) => m.isAlive), this.inactive(), this.active()];
+      entities.sort((a, b) => a.y - b.y);
+      for (const entity of entities) entity.render(ctx, camX, camY, TILE_SIZE);
+
+      combat.gore.renderParticles(ctx, camX, camY);
+      combat.bodyPartGore.renderFlying(ctx, camX, camY);
+      combat.spells.renderShell(ctx, camX, camY);
+      combat.spells.renderCatMiniShell(ctx, camX, camY, this.cat);
+      combat.spells.renderChainLightning(ctx, camX, camY);
+      combat.spells.renderShockwaveRipples(ctx, camX, camY);
+      combat.spells.renderFogs(ctx, camX, camY);
+    } else {
+      this.inactive().render(ctx, camX, camY, TILE_SIZE);
+      this.active().render(ctx, camX, camY, TILE_SIZE);
+    }
 
     if (this.safeRoom) {
       const pulse =
@@ -471,11 +676,17 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop.renderShopPanel(ctx, canvas, this.active());
     }
 
+    if (this.combat) this.combat.boss.renderUI(ctx, canvas);
+
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
 
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
+    }
+
+    if (this.gameOver && this.combat) {
+      this.combat.deathScreen.render(ctx, canvas);
     }
   }
 

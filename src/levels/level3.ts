@@ -53,12 +53,28 @@ const SKYF_12_Y = -4;
  * An outdoor world with grass, forests, roads, and a town.
  * The town has a large tower and many smaller buildings that can be entered.
  */
+/** Ruins ghoul level range — common shambler encountered outside town. */
+const RUINS_GHOUL_MIN_LEVEL = 5;
+const RUINS_GHOUL_MAX_LEVEL = 8;
+
+/** Krasue level range — uncommon, faster and more dangerous than a ghoul. */
+const KRASUE_MIN_LEVEL = 6;
+const KRASUE_MAX_LEVEL = 9;
+
 export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
   mapSize: 280,
   roomMobs: [],
-  hallwayMobs: [],
+  hallwayMobs: [
+    {
+      type: 'ruins_ghoul',
+      chance: 0.75,
+      minLevel: RUINS_GHOUL_MIN_LEVEL,
+      maxLevel: RUINS_GHOUL_MAX_LEVEL,
+    },
+    { type: 'krasue', chance: 0.25, minLevel: KRASUE_MIN_LEVEL, maxLevel: KRASUE_MAX_LEVEL },
+  ],
   bossRooms: [],
   isSafeLevel: true,
   isOverworld: true,

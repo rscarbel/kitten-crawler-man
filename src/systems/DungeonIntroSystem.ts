@@ -16,6 +16,11 @@ export class DungeonIntroSystem {
     return this.frame < TOTAL_FRAMES;
   }
 
+  /** Ends the banner immediately — used when re-entering a level that was already introduced (e.g. leaving a building). */
+  skip(): void {
+    this.frame = TOTAL_FRAMES;
+  }
+
   tick(): void {
     if (this.isActive) this.frame++;
   }

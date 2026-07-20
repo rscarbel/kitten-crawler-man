@@ -14,6 +14,7 @@ import {
   MAIN_TOWER,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  RUBBLE,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import {
@@ -26,6 +27,22 @@ import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
 import { getSpriteDefByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
+
+/** Number of broken-stone chunks drawn per RUBBLE tile. */
+const RUBBLE_CHUNK_COUNT = 4;
+/** Number of fine grit specks per RUBBLE tile. */
+const RUBBLE_GRIT_COUNT = 6;
+/** Number of grass tufts drawn over the rubble so it blends into the lawn. */
+const RUBBLE_TUFT_COUNT = 3;
+const RUBBLE_TUFT_HEIGHT = 6;
+/** Margin keeping the dirt patch off the tile edges so grass rings the debris. */
+const RUBBLE_PATCH_INSET = 4;
+/** Per-tile jitter applied to the dirt-patch position. */
+const RUBBLE_PATCH_JITTER = 5;
+/** Extra horizontal radius making the dirt patch an oval rather than a circle. */
+const RUBBLE_PATCH_RX_EXTRA = 3;
+const RUBBLE_CHUNK_MIN_SIZE = 3;
+const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
@@ -558,6 +575,75 @@ export function drawDecorationTile(
         const cry = sy + 5 + (h2 % (ts - 14));
         ctx.fillRect(crx, cry, 1, 5 + (h1 % 6));
         ctx.fillRect(crx, cry, 4 + (h2 % 5), 1);
+      }
+      return true;
+    }
+
+    // Rubble — walkable ground clutter scattered across the Over City's ruined
+    // outskirts. Drawn over the real grass sprite (like GRASSY_WEED) so the
+    // debris dissolves into the surrounding lawn instead of reading as an
+    // opaque square.
+    case RUBBLE: {
+      drawOverworldSprite(
+        ctx,
+        sx,
+        sy,
+        ts,
+        'grass',
+        overworldFrame(tx, ty),
+        '#6de89d',
+        overworldRotation(tx, ty),
+      );
+
+      const h1 = (tx * 37 + ty * 23) % 97;
+      const h2 = (tx * 59 + ty * 43) % 89;
+
+      // A faint dirt patch under the debris cluster — smaller than the tile so
+      // grass stays visible around every edge.
+      const patchX = sx + RUBBLE_PATCH_INSET + (h1 % RUBBLE_PATCH_JITTER);
+      const patchY = sy + RUBBLE_PATCH_INSET + (h2 % RUBBLE_PATCH_JITTER);
+      const patchSize = ts - RUBBLE_PATCH_INSET * 2 - RUBBLE_PATCH_JITTER;
+      ctx.fillStyle = 'rgba(74,70,62,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(
+        patchX + patchSize / 2,
+        patchY + patchSize / 2,
+        patchSize / 2 + RUBBLE_PATCH_RX_EXTRA,
+        patchSize / 2,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+
+      // Broken-stone chunks clustered on the dirt patch, varied sizes.
+      for (let i = 0; i < RUBBLE_CHUNK_COUNT; i++) {
+        const cx = patchX + ((h1 * (i + 1) * 7) % patchSize);
+        const cy = patchY + ((h2 * (i + 1) * 5) % patchSize);
+        const cw = RUBBLE_CHUNK_MIN_SIZE + ((h1 * (i + 3)) % RUBBLE_CHUNK_SIZE_VARIANCE);
+        const chHeight = RUBBLE_CHUNK_MIN_SIZE + ((h2 * (i + 2)) % RUBBLE_CHUNK_SIZE_VARIANCE);
+        ctx.fillStyle = i % 2 === 0 ? '#6a655a' : '#7a6f5e';
+        ctx.fillRect(cx, cy, cw, chHeight);
+        ctx.fillStyle = '#847e70';
+        ctx.fillRect(cx, cy, cw, 1);
+      }
+
+      // Grass blades poking up between and over the chunk edges, so the
+      // debris reads as half-swallowed by the lawn.
+      ctx.fillStyle = '#3aac6a';
+      for (let i = 0; i < RUBBLE_TUFT_COUNT; i++) {
+        const gx = sx + 2 + ((h2 * (i * 13 + 5)) % (ts - 6));
+        const gy = sy + 3 + ((h1 * (i * 9 + 7)) % (ts - 10));
+        ctx.fillRect(gx, gy, 2, RUBBLE_TUFT_HEIGHT);
+        ctx.fillRect(gx + 3, gy + 2, 2, RUBBLE_TUFT_HEIGHT - 2);
+      }
+
+      // Fine grit
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let i = 0; i < RUBBLE_GRIT_COUNT; i++) {
+        const px = patchX + ((h1 * (i * 11 + 3)) % patchSize);
+        const py = patchY + ((h2 * (i * 7 + 5)) % patchSize);
+        ctx.fillRect(px, py, 1, 1);
       }
       return true;
     }

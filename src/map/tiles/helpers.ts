@@ -30,6 +30,8 @@ import {
   BONES,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  RUINED_WALL,
+  RUBBLE,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -62,6 +64,7 @@ const SHADOW_TYPES = new Set([
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   FOUNTAIN,
+  RUINED_WALL,
 ]);
 
 // Full set of non-floor tile types used when scanning neighbours for inferFloorType.
@@ -94,6 +97,7 @@ const NON_FLOOR_TYPES = new Set<number>([
   BONES,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  RUINED_WALL,
 ]);
 
 /**
@@ -111,7 +115,7 @@ export function inferFloorType(structure: TileContent[][], tx: number, ty: numbe
     if (nx < 0 || nx >= row.length) continue;
     const t = row[nx].type;
     if (NON_FLOOR_TYPES.has(t)) continue;
-    if (t === GRASSY_WEED) return FloorTypeValue.grass;
+    if (t === GRASSY_WEED || t === RUBBLE) return FloorTypeValue.grass;
     if (t === DIRT_PATCH) return FloorTypeValue.road;
     return t;
   }
@@ -124,7 +128,7 @@ export function inferFloorType(structure: TileContent[][], tx: number, ty: numbe
     if (nx < 0 || nx >= row.length) continue;
     const t = row[nx].type;
     if (NON_FLOOR_TYPES.has(t)) continue;
-    if (t === GRASSY_WEED) return FloorTypeValue.grass;
+    if (t === GRASSY_WEED || t === RUBBLE) return FloorTypeValue.grass;
     if (t === DIRT_PATCH) return FloorTypeValue.road;
     return t;
   }
