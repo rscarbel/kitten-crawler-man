@@ -14,7 +14,8 @@ export type ItemId =
   | 'gym_treadmill'
   | 'quest_wood_board'
   | 'magic_missile_tome'
-  | 'smush_tome';
+  | 'smush_tome'
+  | 'doomsday_scenario';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -222,6 +223,17 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'required to wear enchanted, self-sizing items lest they wish to turn the dungeon ' +
       'into a nudist colony when they transform. That means everything they wear requires ' +
       'an enchantment. Everything, including their naughty little undies.',
+  },
+  doomsday_scenario: {
+    id: 'doomsday_scenario',
+    name: "Carl's Doomsday Scenario",
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      'A soul crystal on the verge of levelling a city, sealed inside an enchanted glass ' +
+      'display case and stuffed into your inventory. Not a weapon. Not yet, anyway.',
   },
 };
 

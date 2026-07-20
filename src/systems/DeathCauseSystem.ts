@@ -29,6 +29,7 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
 
 function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
+  if (source.kind === 'doomsday') return 'doomsdayExplosion';
 
   if (source.kind === 'status') {
     const { effectType } = source;

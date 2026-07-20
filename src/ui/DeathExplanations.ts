@@ -33,6 +33,7 @@ export type DeathCause =
   | 'cowTailedGrub'
   | 'brindledVespa'
   | 'explosiveFriendlyFire'
+  | 'doomsdayExplosion'
   | 'unknown';
 
 export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
@@ -173,6 +174,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     "Your own dynamite got you. That's a one-way ticket.",
     'You blew yourself up. No one else to blame here.',
     'Self-inflicted dynamite death. At least you took the blast personally.',
+  ],
+  doomsdayExplosion: [
+    'You were standing next to a city-sized bomb.',
+    'The soul crystal went off before you cleared the blast radius.',
+    'The Over City came down around you. You should have run faster.',
   ],
   unknown: [
     'Something in the dungeon killed you. Better luck next time.',

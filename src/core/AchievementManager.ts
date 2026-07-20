@@ -24,7 +24,9 @@ export type AchievementId =
   | 'smush'
   | 'safe_haven'
   | 'magic_touch'
-  | 'quest_defend_npc';
+  | 'quest_defend_npc'
+  | 'doomsday_contained'
+  | 'city_evacuated';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
@@ -88,6 +90,20 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Successfully defend the Goblin Mother and reunite her with her child.',
     playerType: 'both',
     lootBox: { tier: 'Silver', category: 'Adventurer' },
+  },
+  doomsday_contained: {
+    id: 'doomsday_contained',
+    name: "Carl's Doomsday Scenario",
+    description: 'Contain the destabilizing soul crystal before it levels the city.',
+    playerType: 'both',
+    lootBox: { tier: 'Gold', category: 'Adventurer' },
+  },
+  city_evacuated: {
+    id: 'city_evacuated',
+    name: 'The Over City Falls',
+    description: 'Escape the Over City before the soul crystal countdown ran out.',
+    playerType: 'both',
+    lootBox: { tier: 'Legendary', category: 'Adventurer' },
   },
 };
 

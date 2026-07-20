@@ -42,6 +42,8 @@ export interface OverworldData {
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
   mainTowerAnchor: Point;
+  /** Tile where the town's escape route out appears once the Doomsday finale's escape phase begins. */
+  doomsdayEscapeTile: Point;
   /** Tiles from map centre inside which the town is safe — no hostile spawns, mobs deaggro. */
   townSafeRadiusTiles: number;
   /** Centre of the circus, in tile coordinates. */
@@ -159,6 +161,10 @@ export function generateOverworld(size: number): OverworldData {
   const FOUNTAIN_SIZE = 3;
   const GATE_TORCH_INNER_OFFSET = 3;
   const WELL_DIAGONAL_OFFSET = 7;
+
+  // Escape stairwell — the way down off the floor once the soul crystal goes
+  // critical. Sits just inside the town square, south of the tower door.
+  const STAIRWELL_SOUTH_OF_TOWER_DOOR = 6;
 
   // Ground cover probabilities
   const GRASSY_WEED_DENSITY = 0.015;
@@ -772,6 +778,15 @@ export function generateOverworld(size: number): OverworldData {
   set(cx, cy - MAIN_TOWER_NORTH_OFFSET, MAIN_TOWER);
   const mainTowerAnchor: Point = { x: cx, y: cy - MAIN_TOWER_NORTH_OFFSET };
 
+  // Not added to `stairwellTiles` — that array feeds StairwellSystem/MiniMapSystem,
+  // which would expose and pathing-block this tile floor-wide before the finale
+  // even starts. DoomsdayEscapeSystem reads this dedicated field instead.
+  const doomsdayEscapeTile: Point = {
+    x: cx - 1,
+    y: cy - NORTH_BUILDINGS_Y_OFFSET + STAIRWELL_SOUTH_OF_TOWER_DOOR,
+  };
+  set(doomsdayEscapeTile.x, doomsdayEscapeTile.y, ROAD);
+
   // 10. Town decorations: fountain, torches, wells, ground scatter
   // Fountain — 3×3 block in the SE quadrant of the town square
   fill(cx + FOUNTAIN_SE_OFFSET, cy + FOUNTAIN_SE_OFFSET, FOUNTAIN_SIZE, FOUNTAIN_SIZE, FOUNTAIN);
@@ -823,6 +838,7 @@ export function generateOverworld(size: number): OverworldData {
     hallwaySpawnPoints,
     stairwellTiles: [],
     mainTowerAnchor,
+    doomsdayEscapeTile,
     townSafeRadiusTiles: TOWN_SAFE_RADIUS_TILES,
     circusCentre: { x: circusCx, y: circusCy },
     circusRadiusTiles: circusRadius,

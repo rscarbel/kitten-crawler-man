@@ -169,6 +169,8 @@ export class GameMap {
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
   /** Centre of the circus, in tile coords. Undefined on non-overworld maps. */
   circusCentre: { x: number; y: number } | undefined = undefined;
+  /** Where the town's escape route out appears once the Doomsday finale's escape phase begins. Undefined on non-overworld maps. */
+  doomsdayEscapeTile: { x: number; y: number } | undefined = undefined;
   /** Radius (tiles) of the circus grounds around `circusCentre`. Undefined on non-overworld maps. */
   circusRadiusTiles: number | undefined = undefined;
   /**
@@ -249,6 +251,7 @@ export class GameMap {
       this.townSafeRadiusTiles = data.townSafeRadiusTiles;
       this.circusCentre = data.circusCentre;
       this.circusRadiusTiles = data.circusRadiusTiles;
+      this.doomsdayEscapeTile = data.doomsdayEscapeTile;
       return data.grid;
     }
 

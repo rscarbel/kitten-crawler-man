@@ -30,6 +30,7 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
@@ -37,6 +38,7 @@ import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import { BigTopBossSystem } from '../systems/BigTopBossSystem';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
 import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
+import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
 import { DeathScreen } from '../ui/DeathScreen';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import type { SystemContext } from '../systems/GameSystem';
@@ -141,6 +143,14 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Kept for encounters created after construction (the tower's top-floor fight). */
   private readonly encounterAbilityManager: AbilityManager | null;
 
+  private readonly doomsdayProgress: DoomsdayProgress;
+  /**
+   * Ticked every frame regardless of floor/building — the containment
+   * deadline must keep being checked even if the player leaves the crystal's
+   * floor, or the tower, before containing it. See SoulCrystalSystem's doc.
+   */
+  private readonly soulCrystal: SoulCrystalSystem;
+
   constructor(
     private readonly entry: BuildingEntry,
     humanSnap: PlayerSnapshot,
@@ -154,10 +164,13 @@ export class BuildingInteriorScene extends GameplayScene {
     abilityManager?: AbilityManager,
     circusQuestProgress?: CircusQuestProgress,
     private readonly murderQuestProgress?: MurderQuestProgress,
+    doomsdayQuestProgress?: DoomsdayProgress,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
     this.encounterAbilityManager = abilityManager ?? null;
+    this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
+    this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
 
     const isTower = entry.type === 'tower';
 
@@ -322,7 +335,14 @@ export class BuildingInteriorScene extends GameplayScene {
       floorMap,
       TOWER_CONFRONTATION_FLOOR,
       (bus, addMob) => {
-        return new QuillConfrontationSystem(floorMap, bus, addMob, murderProgress, this.audio);
+        return new QuillConfrontationSystem(
+          floorMap,
+          bus,
+          addMob,
+          murderProgress,
+          this.audio,
+          this.doomsdayProgress,
+        );
       },
     );
   }
@@ -404,6 +424,29 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       return;
     }
+
+    // Ticked unconditionally (any floor, any building) — the containment/
+    // escape deadline must keep being checked wherever the players are.
+    const isOnCrystalFloor =
+      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
+    this.soulCrystal.update(this.human, this.cat, this.active(), isOnCrystalFloor);
+    if (this.soulCrystal.crystalContainedPending) {
+      this.soulCrystal.crystalContainedPending = false;
+      this.humanAchievements?.tryUnlock('doomsday_contained');
+      this.catAchievements?.tryUnlock('doomsday_contained');
+    }
+
+    // A doomsday-timeout death outside an active boss encounter has no local
+    // death screen to show (most buildings never construct one) — hand off
+    // to the overworld immediately so DungeonScene's own death pipeline
+    // picks it up with the correct cause/flavor text, instead of leaving the
+    // player wandering around at 0 hp until they happen to exit on their own.
+    const combatOnCurrentFloor = this.combat !== null && this.currentFloor === this.combat.floor;
+    if (!combatOnCurrentFloor && (!this.human.isAlive || !this.cat.isAlive)) {
+      this.doExit();
+      return;
+    }
+
     if (this.pauseMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
@@ -669,6 +712,12 @@ export class BuildingInteriorScene extends GameplayScene {
       this.active().render(ctx, camX, camY, TILE_SIZE);
     }
 
+    // Independent of `combat` — the crystal must still be visible/containable
+    // if the player returns to this floor after the encounter was torn down.
+    const isOnCrystalFloor =
+      this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
+    this.soulCrystal.render(ctx, camX, camY, this.active(), isOnCrystalFloor);
+
     if (this.safeRoom) {
       const pulse =
         SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / SAFE_ROOM_PULSE_PERIOD_MS) * PULSE_SWING;
@@ -748,6 +797,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
+    this.soulCrystal.renderUI(ctx, canvas);
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);

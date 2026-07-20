@@ -12,7 +12,8 @@ export type DamageSource =
   | { readonly kind: 'mob'; readonly mobType: string; readonly attackType?: string }
   | { readonly kind: 'status'; readonly effectType: string }
   | { readonly kind: 'dynamite' }
-  | { readonly kind: 'environmental' };
+  | { readonly kind: 'environmental' }
+  | { readonly kind: 'doomsday' };
 
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;
 const DENOMINATOR_OFFSET = 30;

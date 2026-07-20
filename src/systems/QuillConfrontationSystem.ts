@@ -5,6 +5,13 @@
  * she answers every intrusion with soul bolts and summoned krasue. Owned by
  * BuildingInteriorScene (top floor only); quest state crosses scenes via
  * MurderQuestProgress.
+ *
+ * Her death immediately destabilizes the city's soul crystal (Carl's
+ * Doomsday Scenario): this system only fires that one-time reveal — writing
+ * the crystal's position and a containment deadline into DoomsdayProgress —
+ * and hands off to SoulCrystalSystem, which ticks independently of this
+ * encounter's lifecycle (it must keep checking the countdown even if the
+ * player leaves this floor, or the tower, before containing the crystal).
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -14,6 +21,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
+import type { DoomsdayProgress } from '../core/DoomsdayProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { MissQuill } from '../creatures/MissQuill';
 import { Remex } from '../creatures/Remex';
@@ -54,6 +62,13 @@ const BANNER_FADE_FRAMES = 60;
 const BOSS_MUSIC_FADE_IN_MS = 1500;
 const VICTORY_MUSIC_FADE_IN_MS = 2000;
 
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
+const CONTAINMENT_MINUTES = 7;
+/** Time to reach and contain the crystal before it levels the city. */
+const CONTAINMENT_DURATION_MS = CONTAINMENT_MINUTES * MS_PER_MINUTE;
+
 export class QuillConfrontationSystem implements GameSystem {
   /** Shown by BuildingInteriorScene if the players fall here. */
   readonly defeatMessage = 'Miss Quill filed your souls under K.';
@@ -70,6 +85,7 @@ export class QuillConfrontationSystem implements GameSystem {
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: MurderQuestProgress,
     private readonly audio: AudioManager | null,
+    private readonly doomsdayProgress: DoomsdayProgress,
   ) {
     this.spawnEncounter();
     this.bus.emit('bossFightInitiated', { bossType: 'miss_quill' });
@@ -125,6 +141,11 @@ export class QuillConfrontationSystem implements GameSystem {
       this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill });
       this.audio?.play('boss_defeated');
       this.audio?.playMusic('village_square', { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
+
+      this.doomsdayProgress.crystalTile = { x: quill.x, y: quill.y };
+      this.doomsdayProgress.stage = 'containment';
+      this.doomsdayProgress.deadlineAt = Date.now() + CONTAINMENT_DURATION_MS;
+      this.audio?.play('rumble');
     }
   }
 

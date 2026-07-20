@@ -79,6 +79,8 @@ import { DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
+import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
+import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
@@ -156,6 +158,8 @@ export interface DungeonSceneOptions {
   circusQuestProgress?: CircusQuestProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
   murderQuestProgress?: MurderQuestProgress;
+  /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
+  doomsdayQuestProgress?: DoomsdayProgress;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
@@ -352,9 +356,11 @@ export class DungeonScene extends GameplayScene {
   private spiderQuest!: SpiderQuestSystem;
   private circusQuest!: CircusQuestSystem;
   private murderQuest!: MurderMysteryQuestSystem;
+  private doomsdayEscape!: DoomsdayEscapeSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
+  private readonly doomsdayQuestProgress: DoomsdayProgress;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
@@ -593,6 +599,7 @@ export class DungeonScene extends GameplayScene {
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
+    this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -752,6 +759,7 @@ export class DungeonScene extends GameplayScene {
                   onResetGame: this.onResetGameCallback ?? undefined,
                   circusQuestProgress: this.circusQuestProgress,
                   murderQuestProgress: this.murderQuestProgress,
+                  doomsdayQuestProgress: this.doomsdayQuestProgress,
                   skipIntro: true,
                 }),
               );
@@ -762,6 +770,7 @@ export class DungeonScene extends GameplayScene {
             this.abilityManager,
             this.circusQuestProgress,
             this.murderQuestProgress,
+            this.doomsdayQuestProgress,
           ),
         );
       });
@@ -866,6 +875,7 @@ export class DungeonScene extends GameplayScene {
       this.overworldMusic,
       this.audio,
     );
+    this.doomsdayEscape = new DoomsdayEscapeSystem(this.gameMap, this.doomsdayQuestProgress);
     if (this.tutorial !== null && this.audio !== null) {
       this.tutorial.setAudio(this.audio);
     }
@@ -1881,6 +1891,13 @@ export class DungeonScene extends GameplayScene {
         tutorialController:
           this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
         onResetGame: this.onResetGameCallback ?? undefined,
+        // Preserved rather than reset — a death restart shouldn't force-replay an
+        // already-completed boss fight (Grimaldi/Quill), and for the doomsday
+        // timer specifically, resetting it here would let a player cancel a
+        // lethal countdown for free by simply dying to anything else.
+        circusQuestProgress: this.circusQuestProgress,
+        murderQuestProgress: this.murderQuestProgress,
+        doomsdayQuestProgress: this.doomsdayQuestProgress,
       }),
     );
   }
@@ -2463,6 +2480,7 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
+    this.doomsdayEscape.render(ctx, camX, camY);
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -2638,6 +2656,7 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.renderUI(ctx, canvas, mobileQuestTopY);
       this.circusQuest.renderUI(ctx, canvas);
       this.murderQuest.renderUI(ctx, canvas);
+      this.doomsdayEscape.renderUI(ctx, canvas);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
@@ -2944,6 +2963,13 @@ export class DungeonScene extends GameplayScene {
     }
     this.circusQuest.update(ctx);
     this.murderQuest.update(ctx);
+    this.doomsdayEscape.update(ctx);
+    if (this.doomsdayEscape.floorEscapedPending) {
+      this.doomsdayEscape.floorEscapedPending = false;
+      this.audio?.play('quest_complete');
+      this.humanAchievements.tryUnlock('city_evacuated');
+      this.catAchievements.tryUnlock('city_evacuated');
+    }
     this.overworldMusic?.update(ctx);
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);

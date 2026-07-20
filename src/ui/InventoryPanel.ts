@@ -241,6 +241,16 @@ const CROWN_GEM_SIDE_X = 0.2;
 const CROWN_GEM_SIDE_Y = 0.08;
 const CROWN_GEM_SIDE_R = 0.04;
 
+// Doomsday Scenario: glass display case with a destabilizing soul crystal
+const DOOMSDAY_CASE_INSET = 0.16;
+const DOOMSDAY_CASE_TOP = 0.2;
+const DOOMSDAY_CASE_BOTTOM = 0.9;
+const DOOMSDAY_CRYSTAL_CX = 0.5;
+const DOOMSDAY_CRYSTAL_CY = 0.56;
+const DOOMSDAY_CRYSTAL_W = 0.16;
+const DOOMSDAY_CRYSTAL_H = 0.3;
+const DOOMSDAY_CRYSTAL_GLOW_BLUR = 5;
+
 // Shared potion flask liquid-fill proportions
 const POTION_LIQUID_Y_SHIFT = 0.15;
 const POTION_LIQUID_R_SCALE = 0.78;
@@ -1445,6 +1455,34 @@ export class InventoryPanel {
 
     if (item.id === 'quest_wood_board') {
       drawWoodPileSprite(ctx, x, y, size, false);
+    }
+
+    if (item.id === 'doomsday_scenario') {
+      const caseX = x + size * DOOMSDAY_CASE_INSET;
+      const caseY = y + size * DOOMSDAY_CASE_TOP;
+      const caseW = size - size * DOOMSDAY_CASE_INSET * 2;
+      const caseH = size * DOOMSDAY_CASE_BOTTOM - size * DOOMSDAY_CASE_TOP;
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
+      ctx.fillRect(caseX, caseY, caseW, caseH);
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(caseX, caseY, caseW, caseH);
+
+      const cx = x + size * DOOMSDAY_CRYSTAL_CX;
+      const cy = y + size * DOOMSDAY_CRYSTAL_CY;
+      const hw = size * DOOMSDAY_CRYSTAL_W;
+      const hh = size * DOOMSDAY_CRYSTAL_H;
+      ctx.fillStyle = '#a855f7';
+      ctx.shadowColor = '#f43f5e';
+      ctx.shadowBlur = DOOMSDAY_CRYSTAL_GLOW_BLUR;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - hh);
+      ctx.lineTo(cx + hw, cy);
+      ctx.lineTo(cx, cy + hh);
+      ctx.lineTo(cx - hw, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
 
     if (item.id === 'speed_fizz') {
