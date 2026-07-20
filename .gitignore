@@ -1,6 +1,6 @@
 node_modules
 dist
-.claude
+.claude/settings.local.json
 memory
 .port_sessions
 .env
