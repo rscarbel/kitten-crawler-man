@@ -57,8 +57,12 @@ const INTERACT_RANGE_TILES = 2.2;
 /** Passing this close to the alley triggers the corpse discovery. */
 const BODY_DISCOVERY_RANGE_TILES = 5;
 
-/** GumGum loiters this far east of the pub door. */
+/** GumGum loiters this far east of the pub door (the fallback hook location). */
 const GUMGUM_DOOR_OFFSET = { dx: 3, dy: 0 };
+/** GumGum loiters this far south of the club door when the hook meets there. */
+const GUMGUM_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
+/** The club building whose entrance hosts GumGum's book-accurate approach. */
+const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
 /** The alley where his body turns up — west of the pub, against the wall. */
 const ALLEY_DOOR_OFFSET = { dx: -4, dy: 2 };
 /** The shrine of moulted feathers sits just south of the tower door. */
@@ -150,8 +154,18 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.dialog = new QuestDialog(this.audio ?? null);
 
     const pubDoor = this.doorTileOf('The Sunken Stump Pub');
-    this.gumgumTile = pubDoor
-      ? this.findSpawnTile(pubDoor.x + GUMGUM_DOOR_OFFSET.dx, pubDoor.y + GUMGUM_DOOR_OFFSET.dy)
+    // Book-accurate hook: GumGum approaches at the Desperado Club when it exists
+    // on this floor, else the pub (Carl's Doomsday Scenario). Gated on the pub
+    // too, so the alley/body anchor and the "is this quest viable?" check below
+    // still resolve exactly as before on a pub-less map. To force the pub hook,
+    // drop this club lookup — the rest of the quest is untouched.
+    const clubDoor = pubDoor ? this.doorTileOf(GUMGUM_HOOK_CLUB_NAME) : null;
+    // His body still turns up in the alley behind the pub, so the hook and the
+    // corpse anchor separately.
+    const hookDoor = clubDoor ?? pubDoor;
+    const hookOffset = clubDoor ? GUMGUM_CLUB_DOOR_OFFSET : GUMGUM_DOOR_OFFSET;
+    this.gumgumTile = hookDoor
+      ? this.findSpawnTile(hookDoor.x + hookOffset.dx, hookDoor.y + hookOffset.dy)
       : null;
     this.alleyTile = pubDoor
       ? this.findSpawnTile(pubDoor.x + ALLEY_DOOR_OFFSET.dx, pubDoor.y + ALLEY_DOOR_OFFSET.dy)

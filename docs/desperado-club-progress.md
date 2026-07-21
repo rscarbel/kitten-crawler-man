@@ -245,11 +245,97 @@ resolution — Mongo avoids this via `MongoSystem.checkHealth()` running before
 it immediately before `resolveKills`. The re-review traced both death paths and
 the full lifecycle and confirmed the fix is correct with **no new issues**.
 
-## Next: Phase 5 — VIP Lounge & Polish
-Paid heal/buff + Sledge/Bomo bodyguard escort (free if `coinsWageredThisVisit`
-exceeds the price), achievements, dev-URL jump, AI banter, the neon-knife sprite
-building, and the optional GumGum relocation. See implementation §5.
+## Phase 5 — VIP Lounge & Polish (in progress)
+
+### 5a. VIP Lounge (done)
+
+Walking to the **vip** station opens the VIP Lounge — the tasteful adaptation of
+the book's members-only back room (plan §3.7). Three coin sinks:
+
+- **Full Recovery** (`VIP_HEAL_PRICE = 40`) — heals to full; disabled at full HP.
+- **VIP Cocktail** (`VIP_COCKTAIL_PRICE = 60`) — applies Speed Fizz + Cooldown
+  Crisp (reusing `Player.activateSpeedFizz`/`activateCooldownCrisp`); disabled
+  only when **both** are already active (a partial re-buy refreshes the missing
+  half — deliberate).
+- **Private Escort** (`BODYGUARD_PAIR_PRICE = 500`) — hires the Sledge + Bomo as
+  two **cosmetic** Cretins that lerp-follow the player around the club (no
+  combat — the club is a safe zone). **Free** when
+  `coinsWageredThisVisit > BODYGUARD_PAIR_PRICE` (the canon "spend enough at the
+  tables and security is free" perk — strictly-greater, matching the docs).
+
+#### Files added
+- `src/systems/ClubVipLoungeSystem.ts` — the panel (drawModal/drawButton/drawText,
+  click-routed like `MercenaryGuildSystem`). Owns `escortHired` + `wageredAtOpen`;
+  exposes `escortActive` for the host to render the escort. Not a `GameSystem` —
+  driven by the club's open/close flags, like the casino and guild.
+
+#### Files changed
+- `src/systems/DesperadoClubSystem.ts` — owns a `ClubVipLoungeSystem`; `vip`
+  dropped from the (now-removed) `STATION_COMING_SOON`; `promptLabel` returns
+  `Enter` for it. `handleInteract` opens the lounge with the live
+  `coinsWageredThisVisit`; `modalOpen`/`dismissModal`/`handleClick`/`renderUI`
+  branch on `vip.open` alongside the shops, casino, and guild. New `renderEscort`
+  lazily seeds two `EscortFollower`s and eases them toward flanking offsets behind
+  the active player each frame.
+- `src/sprites/clubNpcSprite.ts` — new `bomo` Cretin variant (Sledge's friend).
+
+#### Scope decisions
+- **Escort is cosmetic**, per plan §3.7 — no `Mob`, no targeting, no combat; it
+  only renders + follows, preserving the safe-zone invariant.
+- **Per-visit reset is free**: `escortHired`/`wageredAtOpen` live on the vip
+  instance and `escortFollowers` on the club, both reconstructed on every club
+  entry (fresh scene → fresh club), like the casino's `coinsWageredThisVisit`.
+- **`wageredAtOpen` snapshots on `openPanel`** — gambling can't happen while the
+  modal is open, so the free-escort gate is stable within a panel session and
+  refreshes on the next entry.
+
+#### Review
+Independent code review (general-purpose agent): **no substantive defects** —
+coin math, per-visit state isolation, free-escort gate, click/modal routing, and
+the safe-zone invariant all verified against the sibling systems. One actionable
+item — the free-escort gate used `>=` while both docs say "exceeds"/"more than" —
+was fixed to strictly-greater (`>`). The partial-cocktail re-buy was judged a
+deliberate design choice, not a bug.
+
+### 5b. Achievements (done)
+
+Four club achievements via `AchievementManager` (`AchievementId` + defs), all
+`playerType: 'both'`, each with a loot box:
+
+- `desperado_member` "Made the Cut" — take the Desperado Pass (Bronze Adventurer).
+- `merc_hired` "Hired Muscle" — first Meat Shields contract (Silver Adventurer).
+- `casino_jackpot` "High Roller" — win a top-tier (`WAGER_LARGE`) casino wager
+  (Silver Spicy).
+- `club_bodyguards` "Personal Security" — hire the VIP escort (Bronze Adventurer).
+
+`DesperadoClubSystem` now takes optional `humanAchievements`/`catAchievements`
+managers (threaded from `BuildingInteriorScene`) and a private
+`unlockAchievement(id)` that calls `tryUnlock` on **both** (mirroring how
+`doomsday_contained` unlocks). Membership unlocks in `dismissModal` (greeting
+grant) + the constructor (returning member). The other three fire off **pending
+flags** — `casino.jackpotPending`, `guild.hirePending`, `vip.escortPending` —
+set at the triggering click and consumed in `club.update()`. This matches the
+existing `purchasePending` pattern: sub-panels freeze `club.update()` while open
+(scene early-returns on `modalOpen`), so the flag is read the frame the panel
+closes. Movement + exit are gated behind the same freeze, so a flag can never be
+set-but-never-consumed before leaving. Independent review: no defects.
+
+### 5c. GumGum hook relocation (done, optional/reversible)
+
+`MurderMysteryQuestSystem` — GumGum's opening approach now anchors on the
+Desperado Club door (`doorTileOf('The Desperado Club')` + `GUMGUM_CLUB_DOOR_OFFSET`)
+instead of the pub, book-accurate to *Carl's Doomsday Scenario*. **Gated on the
+pub also existing**, so the alley/body anchor and the `gumgumTile ? … : 'complete'`
+viability check resolve exactly as before on a pub-less map; pub-only maps fall
+back to `GUMGUM_DOOR_OFFSET`. Only his *approach* point moves — his body still
+turns up in the pub alley, and HOOK_DIALOG already says "meet behind the Sunken
+Stump," so it stays coherent. Reverting is one line (drop the club lookup); the
+rest of the questline is untouched. Independent review: no regression.
+
+### 5d. Remaining polish (not started)
+Dev-URL jump into the club, AI-driven NPC banter, and the neon-knife sprite
+building. See implementation §5.
 
 ## Validation
 `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build` all clean
-as of Phase 4 completion.
+as of the Phase 5c (achievements + GumGum relocation) completion.

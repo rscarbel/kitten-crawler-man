@@ -4,6 +4,7 @@ import type { GameSystem } from './GameSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
+import type { AchievementManager, AchievementId } from '../core/AchievementManager';
 import {
   CLUB_STATIONS,
   CLUB_DANCE_FLOOR,
@@ -20,9 +21,25 @@ import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
+import { ClubVipLoungeSystem } from './ClubVipLoungeSystem';
 
 const STATION_INTERACT_RANGE = 2.6;
 const TILE_HALF = 0.5;
+
+// VIP bodyguard escort: two Cretins that trail the player around the club (cosmetic — the club is a safe zone).
+const ESCORT_FOLLOW_LERP = 0.12;
+const ESCORT_OFFSET_X_TILES = 0.9;
+const ESCORT_OFFSET_Y_TILES = 0.7;
+const ESCORT_OFFSET_X = TILE_SIZE * ESCORT_OFFSET_X_TILES;
+const ESCORT_OFFSET_Y = TILE_SIZE * ESCORT_OFFSET_Y_TILES;
+
+interface EscortFollower {
+  variant: ClubNpcVariant;
+  offsetX: number;
+  offsetY: number;
+  x: number;
+  y: number;
+}
 
 // Dance-floor light overlay
 const DANCE_LIGHT_COLORS = ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'];
@@ -55,14 +72,6 @@ const GREETING_LINES: ReadonlyArray<string> = [
 
 const GREETING_TITLE = '🔪  The Desperado Club  🔪';
 const SLEDGE_WELCOME = '"Back again? Good. Enjoy yourself — and mind the rules."';
-
-/** Flavour shown for stations whose feature ships in a later phase. */
-const STATION_COMING_SOON: Record<
-  Exclude<ClubStationId, 'sledge' | 'bar' | 'market' | 'casino' | 'mercenary'>,
-  string
-> = {
-  vip: 'A velvet rope bars the VIP Lounge. "Members-only back room... opening soon."',
-};
 
 // Bar drinks — the club's buff consumables, priced as premium members' pours.
 const SPEED_FIZZ_PRICE = 20;
@@ -144,7 +153,7 @@ function promptLabel(station: ClubStation): string {
   if (station.id === 'bar' || station.id === 'market') return 'Shop';
   if (station.id === 'casino') return 'Play';
   if (station.id === 'mercenary') return 'Hire';
-  return station.label;
+  return 'Enter';
 }
 
 /**
@@ -161,19 +170,34 @@ export class DesperadoClubSystem implements GameSystem {
   private readonly marketShop: ShopSystem;
   private readonly casino: ClubCasinoSystem;
   private readonly guild: MercenaryGuildSystem;
+  private readonly vip: ClubVipLoungeSystem;
+
+  /** Escort Cretins trailing the player once hired from the VIP Lounge; lazily positioned on first render. */
+  private escortFollowers: EscortFollower[] | null = null;
 
   constructor(
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
+    private readonly humanAchievements?: AchievementManager,
+    private readonly catAchievements?: AchievementManager,
   ) {
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
     this.casino = new ClubCasinoSystem(audio);
     this.guild = new MercenaryGuildSystem(roster, audio);
-    if (!membership.hasDesperadoPass) {
+    this.vip = new ClubVipLoungeSystem(audio);
+    if (membership.hasDesperadoPass) {
+      this.unlockAchievement('desperado_member');
+    } else {
       this.openGreeting();
     }
+  }
+
+  /** Unlock a club achievement for both crawlers (idempotent), mirroring the doomsday-containment pattern. */
+  private unlockAchievement(id: AchievementId): void {
+    this.humanAchievements?.tryUnlock(id);
+    this.catAchievements?.tryUnlock(id);
   }
 
   /** Coins staked at the casino since entering the club — the free-security perk hook (Phase 5). */
@@ -189,7 +213,13 @@ export class DesperadoClubSystem implements GameSystem {
   }
 
   get modalOpen(): boolean {
-    return this.modal !== null || this.activeShop() !== null || this.casino.open || this.guild.open;
+    return (
+      this.modal !== null ||
+      this.activeShop() !== null ||
+      this.casino.open ||
+      this.guild.open ||
+      this.vip.open
+    );
   }
 
   update(): void {
@@ -200,6 +230,20 @@ export class DesperadoClubSystem implements GameSystem {
       this.barShop.purchasePending = false;
       this.marketShop.purchasePending = false;
       this.audio?.play('purchase_success');
+    }
+    // Sub-panels freeze this update() while open, so pending achievement flags set
+    // during a hire/win/hire-escort are consumed here once the panel closes.
+    if (this.guild.hirePending) {
+      this.guild.hirePending = false;
+      this.unlockAchievement('merc_hired');
+    }
+    if (this.casino.jackpotPending) {
+      this.casino.jackpotPending = false;
+      this.unlockAchievement('casino_jackpot');
+    }
+    if (this.vip.escortPending) {
+      this.vip.escortPending = false;
+      this.unlockAchievement('club_bodyguards');
     }
   }
 
@@ -226,11 +270,16 @@ export class DesperadoClubSystem implements GameSystem {
       this.guild.close();
       return;
     }
+    if (this.vip.open) {
+      this.vip.close();
+      return;
+    }
     const modal = this.modal;
     if (!modal) return;
     this.modal = null;
     if (modal.isGreeting && !this.membership.hasDesperadoPass) {
       this.membership.hasDesperadoPass = true;
+      this.unlockAchievement('desperado_member');
       this.audio?.play('achievement_awarded');
     }
   }
@@ -279,7 +328,7 @@ export class DesperadoClubSystem implements GameSystem {
       this.guild.openPanel();
       return;
     }
-    this.openFlavor(station.label, STATION_COMING_SOON[station.id]);
+    this.vip.openPanel(this.coinsWageredThisVisit);
   }
 
   /** Route clicks to an open shop panel's buy buttons, else advance the modal; returns true when a modal/shop was open. */
@@ -297,6 +346,10 @@ export class DesperadoClubSystem implements GameSystem {
       this.guild.handleClick(mx, my, active);
       return true;
     }
+    if (this.vip.open) {
+      this.vip.handleClick(mx, my, active);
+      return true;
+    }
     if (!this.modal) return false;
     this.dismissModal();
     return true;
@@ -309,6 +362,7 @@ export class DesperadoClubSystem implements GameSystem {
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     this.renderDanceFloorLights(ctx, camX, camY);
     this.renderNpcs(ctx, camX, camY);
+    this.renderEscort(ctx, camX, camY, active);
 
     if (this.modalOpen) return;
     const station = this.nearestStation(active);
@@ -348,6 +402,48 @@ export class DesperadoClubSystem implements GameSystem {
       }
     }
     ctx.restore();
+  }
+
+  /** Once the VIP escort is hired, two Cretins ease toward flanking offsets behind the player. */
+  private renderEscort(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Player,
+  ): void {
+    if (!this.vip.escortActive) return;
+    this.escortFollowers ??= [
+      {
+        variant: 'sledge',
+        offsetX: -ESCORT_OFFSET_X,
+        offsetY: ESCORT_OFFSET_Y,
+        x: active.x - ESCORT_OFFSET_X,
+        y: active.y + ESCORT_OFFSET_Y,
+      },
+      {
+        variant: 'bomo',
+        offsetX: ESCORT_OFFSET_X,
+        offsetY: ESCORT_OFFSET_Y,
+        x: active.x + ESCORT_OFFSET_X,
+        y: active.y + ESCORT_OFFSET_Y,
+      },
+    ];
+    for (const follower of this.escortFollowers) {
+      const targetX = active.x + follower.offsetX;
+      const targetY = active.y + follower.offsetY;
+      follower.x += (targetX - follower.x) * ESCORT_FOLLOW_LERP;
+      follower.y += (targetY - follower.y) * ESCORT_FOLLOW_LERP;
+      const facingX = follower.offsetX < 0 ? -1 : 1;
+      drawClubNpc(
+        ctx,
+        follower.x - camX,
+        follower.y - camY,
+        TILE_SIZE,
+        follower.variant,
+        this.animTime,
+        facingX,
+      );
+    }
   }
 
   private renderNpcs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -396,6 +492,11 @@ export class DesperadoClubSystem implements GameSystem {
 
     if (this.guild.open) {
       this.guild.renderPanel(ctx, canvas, active);
+      return;
+    }
+
+    if (this.vip.open) {
+      this.vip.renderPanel(ctx, canvas, active);
       return;
     }
 

@@ -79,6 +79,9 @@ interface GuildButton {
 export class MercenaryGuildSystem {
   open = false;
 
+  /** Set when a contract is signed; the host clears it after firing the first-hire achievement. */
+  hirePending = false;
+
   /** Transient status line (e.g. "Not enough coins"); cleared on the next valid action. */
   private feedbackMsg = '';
   private buttons: GuildButton[] = [];
@@ -111,6 +114,7 @@ export class MercenaryGuildSystem {
     }
     player.coins -= template.price;
     this.roster.active = { id: template.id, name: template.name };
+    this.hirePending = true;
     this.feedbackMsg = `${template.name} signs on. Meet them outside.`;
     this.audio?.play('purchase_success');
   }

@@ -225,7 +225,13 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.club =
       entry.type === 'club'
-        ? new DesperadoClubSystem(this.clubMembership, this.mercenaryRoster, this.audio)
+        ? new DesperadoClubSystem(
+            this.clubMembership,
+            this.mercenaryRoster,
+            this.audio,
+            this.humanAchievements,
+            this.catAchievements,
+          )
         : null;
 
     // Tower stair system

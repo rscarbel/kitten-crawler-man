@@ -26,7 +26,11 @@ export type AchievementId =
   | 'magic_touch'
   | 'quest_defend_npc'
   | 'doomsday_contained'
-  | 'city_evacuated';
+  | 'city_evacuated'
+  | 'desperado_member'
+  | 'merc_hired'
+  | 'casino_jackpot'
+  | 'club_bodyguards';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
@@ -104,6 +108,34 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Escape the Over City before the soul crystal countdown ran out.',
     playerType: 'both',
     lootBox: { tier: 'Legendary', category: 'Adventurer' },
+  },
+  desperado_member: {
+    id: 'desperado_member',
+    name: 'Made the Cut',
+    description: 'Take the Desperado Pass and join the club.',
+    playerType: 'both',
+    lootBox: { tier: 'Bronze', category: 'Adventurer' },
+  },
+  merc_hired: {
+    id: 'merc_hired',
+    name: 'Hired Muscle',
+    description: 'Sign your first Meat Shields mercenary contract.',
+    playerType: 'both',
+    lootBox: { tier: 'Silver', category: 'Adventurer' },
+  },
+  casino_jackpot: {
+    id: 'casino_jackpot',
+    name: 'High Roller',
+    description: 'Win a top-tier wager at the Desperado Club casino.',
+    playerType: 'both',
+    lootBox: { tier: 'Silver', category: 'Spicy' },
+  },
+  club_bodyguards: {
+    id: 'club_bodyguards',
+    name: 'Personal Security',
+    description: 'Hire the Sledge & Bomo as your VIP escort.',
+    playerType: 'both',
+    lootBox: { tier: 'Bronze', category: 'Adventurer' },
   },
 };
 

@@ -104,6 +104,8 @@ export class ClubCasinoSystem {
   open = false;
   /** Total coins staked since entering the club — the free-security perk hook. */
   coinsWageredThisVisit = 0;
+  /** Set when a top-tier wager wins; the host clears it after firing the jackpot achievement. */
+  jackpotPending = false;
 
   private currentCard = drawRandomCard();
   private nextCard: number | null = null;
@@ -167,6 +169,7 @@ export class ClubCasinoSystem {
 
     if (won) {
       player.coins += this.wager * WIN_PAYOUT_MULTIPLIER;
+      if (this.wager === WAGER_LARGE) this.jackpotPending = true;
       this.audio?.play('treasure_chest_reward');
     } else {
       this.audio?.play('powering_off');

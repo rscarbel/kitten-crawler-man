@@ -7,6 +7,7 @@
 
 export type ClubNpcVariant =
   | 'sledge'
+  | 'bomo'
   | 'dj'
   | 'dancer'
   | 'bartender'
@@ -27,6 +28,7 @@ interface ClubNpcStyle {
 
 const STYLES: Record<ClubNpcVariant, ClubNpcStyle> = {
   sledge: { skin: '#8b8f96', outfit: '#14141a', accent: '#c8a840', stocky: true },
+  bomo: { skin: '#9a8f82', outfit: '#171410', accent: '#b8863c', stocky: true },
   dj: { skin: '#e8e6de', outfit: '#2a1a3a', accent: '#e0407a', skeleton: true },
   dancer: { skin: '#d8a878', outfit: '#c0307a', accent: '#40d0e0' },
   bartender: { skin: '#c89068', outfit: '#3a1f14', accent: '#e4d8b0' },
