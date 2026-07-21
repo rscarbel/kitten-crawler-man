@@ -888,6 +888,7 @@ export class DungeonScene extends GameplayScene {
       this.circusQuestProgress,
       this.overworldMusic,
       this.audio,
+      this.active(),
     );
     this.murderQuest = new MurderMysteryQuestSystem(
       this.gameMap,

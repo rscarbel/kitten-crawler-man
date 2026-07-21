@@ -9,9 +9,9 @@ const KRASUE_SPEED = 2.0;
 
 const AGGRO_RANGE_TILES = 8;
 const ATTACK_RANGE_TILES = 0.9;
-const ATTACK_DAMAGE = 8;
-/** Frames between contact strikes (~1.1 s at 60 fps) — fast and punishing. */
-const ATTACK_COOLDOWN = 65;
+const ATTACK_DAMAGE = 6;
+/** Frames between contact strikes (~1.3 s at 60 fps) — fast but no longer punishing. */
+const ATTACK_COOLDOWN = 78;
 const ATTACK_ANIM_FRAMES = 22;
 /** Fraction of attack range within which the strike is attempted. */
 const ATTACK_ENGAGE_FRACTION = 1.15;

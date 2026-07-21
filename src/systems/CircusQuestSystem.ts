@@ -59,8 +59,12 @@ const SPAWN_SEARCH_RADIUS_TILES = 6;
 const SIGNET_ANCHOR_INSET_TILES = 3;
 /** How close the player must be to Signet to talk. */
 const INTERACT_RANGE_TILES = 2.2;
-/** Heather's den sits this far past the circus edge, on the town side. */
-const HEATHER_DEN_BEYOND_RADIUS_TILES = 8;
+/**
+ * Heather spawns this many tiles from the player — inside her own aggro
+ * range (see HeatherTheBear's AGGRO_RANGE_TILES) so she notices immediately
+ * and visibly walks up rather than appearing right on top of the player.
+ */
+const HEATHER_SPAWN_OFFSET_TILES = 6;
 /** Signet waits this far south of the Big Top door for the finale stages. */
 const SIGNET_DOOR_OFFSET_TILES = 2;
 /** Blood-fueled summon cadence during the assault (~5 s at 60 fps). */
@@ -139,7 +143,6 @@ export class CircusQuestSystem implements GameSystem {
   private readonly circusCentre: { x: number; y: number } | null;
   private readonly circusRadiusTiles: number;
   private readonly bigTopDoorTile: { x: number; y: number } | null;
-  private readonly heatherDenTile: { x: number; y: number } | null;
 
   private signet: Signet | null = null;
   private heather: HeatherTheBear | null = null;
@@ -163,6 +166,7 @@ export class CircusQuestSystem implements GameSystem {
     private readonly progress: CircusQuestProgress,
     private readonly overworldMusic: OverworldMusicSystem | null = null,
     private readonly audio: AudioManager | null = null,
+    initialActivePlayer: Player,
   ) {
     this.questManager = new QuestManager();
     this.questManager.register({
@@ -189,15 +193,14 @@ export class CircusQuestSystem implements GameSystem {
     }
     this.bigTopDoorTile =
       gameMap.buildingEntries.find((b) => b.name === 'Big Top')?.doorTile ?? null;
-    this.heatherDenTile = this.computeHeatherDenTile();
 
-    if (this.circusCentre) this.enterStageFromProgress();
+    if (this.circusCentre) this.enterStageFromProgress(initialActivePlayer);
   }
 
   // ── Stage-idempotent construction ─────────────────────────────────────────
 
   /** Rebuild the phase state the cross-scene progress object describes. */
-  private enterStageFromProgress(): void {
+  private enterStageFromProgress(active: Player): void {
     if (this.progress.mongoKidnapped && this.mongoSystem) {
       this.mongoSystem.cooldownFrames = MONGO_KIDNAP_LOCK_FRAMES;
     }
@@ -212,7 +215,7 @@ export class CircusQuestSystem implements GameSystem {
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
         this.startBattleMusic();
-        this.spawnWave(RITUAL_WAVES, 0, this.signetTile());
+        this.spawnWave(RITUAL_WAVES, 0, this.originFromPlayer(active));
         break;
       case 'heather_hunt':
         this.spawnSignetAtLookout();
@@ -221,14 +224,14 @@ export class CircusQuestSystem implements GameSystem {
           this.phase = 'awaiting_heather_return';
         } else {
           this.phase = 'heather_hunt';
-          this.spawnHeather();
+          this.spawnHeather(active);
         }
         break;
       case 'assault':
         this.phase = 'assault';
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
-        this.beginAssaultCombat();
+        this.beginAssaultCombat(active);
         break;
       case 'bigtop_ready':
         this.phase = 'bigtop_ready';
@@ -246,21 +249,15 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
-  private computeHeatherDenTile(): { x: number; y: number } | null {
-    if (!this.circusCentre) return null;
-    const mapCentre = this.gameMap.structure.length / 2;
-    const dx = mapCentre - this.circusCentre.x;
-    const dy = mapCentre - this.circusCentre.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    const denDist = this.circusRadiusTiles + HEATHER_DEN_BEYOND_RADIUS_TILES;
-    return {
-      x: Math.round(this.circusCentre.x + (dx / dist) * denDist),
-      y: Math.round(this.circusCentre.y + (dy / dist) * denDist),
-    };
-  }
-
   private findSpawnTile(tileX: number, tileY: number): { x: number; y: number } | null {
     return findNearbyWalkableTile(this.gameMap, tileX, tileY, SPAWN_SEARCH_RADIUS_TILES);
+  }
+
+  private originFromPlayer(active: Player): { x: number; y: number } {
+    return {
+      x: Math.round(active.x / TILE_SIZE),
+      y: Math.round(active.y / TILE_SIZE),
+    };
   }
 
   private signetTile(): { x: number; y: number } {
@@ -299,9 +296,9 @@ export class CircusQuestSystem implements GameSystem {
     this.spawnSignetAt(door.x + SIGNET_DOOR_OFFSET_TILES, door.y + SIGNET_DOOR_OFFSET_TILES);
   }
 
-  private spawnHeather(): void {
-    if (!this.heatherDenTile) return;
-    const tile = this.findSpawnTile(this.heatherDenTile.x, this.heatherDenTile.y);
+  private spawnHeather(active: Player): void {
+    const origin = this.originFromPlayer(active);
+    const tile = this.findSpawnTile(origin.x + HEATHER_SPAWN_OFFSET_TILES, origin.y);
     if (!tile) return;
     const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
     heather.setMap(this.gameMap);
@@ -367,7 +364,7 @@ export class CircusQuestSystem implements GameSystem {
       }
     }
 
-    if (this.phase === 'heather_hunt' && this.heather?.isAlive && this.heatherDenTile) {
+    if (this.phase === 'heather_hunt' && this.heather?.isAlive && this.circusCentre) {
       markers.push({
         x: Math.round(this.heather.x / TILE_SIZE),
         y: Math.round(this.heather.y / TILE_SIZE),
@@ -395,15 +392,15 @@ export class CircusQuestSystem implements GameSystem {
   private openDialogForCurrentPhase(active: Player): boolean {
     switch (this.phase) {
       case 'awaiting_intro':
-        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense());
+        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense(active));
         return true;
       case 'awaiting_ritual_failed':
         this.dialog.open(buildRitualFailedDialog((this.mongoSystem?.mongo ?? null) !== null), () =>
-          this.startHeatherHunt(),
+          this.startHeatherHunt(active),
         );
         return true;
       case 'awaiting_heather_return':
-        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
+        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault(active));
         return true;
       case 'bigtop_ready':
         this.dialog.open(BIGTOP_READY_DIALOG, () => undefined);
@@ -445,16 +442,16 @@ export class CircusQuestSystem implements GameSystem {
 
   // ── Phase transitions ─────────────────────────────────────────────────────
 
-  private startRitualDefense(): void {
+  private startRitualDefense(active: Player): void {
     this.phase = 'ritual_defense';
     this.progress.stage = 'ritual_defense';
     this.questManager.startQuest(QUEST_ID);
     this.bus.emit('questStarted', { questId: QUEST_ID });
     this.startBattleMusic();
-    this.spawnWave(RITUAL_WAVES, 0, this.signetTile());
+    this.spawnWave(RITUAL_WAVES, 0, this.originFromPlayer(active));
   }
 
-  private startHeatherHunt(): void {
+  private startHeatherHunt(active: Player): void {
     // The book's collateral beat — Signet takes Mongo until the job is done.
     if (this.mongoSystem?.mongo && this.lastCtx) {
       this.mongoSystem.dismiss(this.lastCtx.mobs, this.lastCtx.mobGrid);
@@ -465,23 +462,23 @@ export class CircusQuestSystem implements GameSystem {
     }
     this.phase = 'heather_hunt';
     this.progress.stage = 'heather_hunt';
-    this.spawnHeather();
+    this.spawnHeather(active);
   }
 
-  private startAssault(): void {
+  private startAssault(active: Player): void {
     this.phase = 'assault';
     this.progress.stage = 'assault';
-    this.beginAssaultCombat();
+    this.beginAssaultCombat(active);
   }
 
   /** Shared by startAssault and mid-assault scene re-entry. */
-  private beginAssaultCombat(): void {
+  private beginAssaultCombat(active: Player): void {
     if (this.signet) {
       this.signet.allyModeActive = true;
       this.signet.summonCooldownFrames = BLOOD_FUELED_SUMMON_FRAMES;
     }
     this.startBattleMusic();
-    if (this.circusCentre) this.spawnWave(ASSAULT_WAVES, 0, this.circusCentre);
+    this.spawnWave(ASSAULT_WAVES, 0, this.originFromPlayer(active));
   }
 
   private finishQuest(active: Player): void {
@@ -516,7 +513,7 @@ export class CircusQuestSystem implements GameSystem {
 
     switch (this.phase) {
       case 'ritual_defense':
-        this.updateRitualDefense();
+        this.updateRitualDefense(ctx.active);
         break;
       case 'heather_hunt':
         this.updateHeatherHunt();
@@ -524,7 +521,7 @@ export class CircusQuestSystem implements GameSystem {
       case 'assault':
         this.clampToCircus(ctx.human);
         this.clampToCircus(ctx.cat);
-        this.updateAssault();
+        this.updateAssault(ctx.active);
         break;
       case 'awaiting_intro':
       case 'awaiting_ritual_failed':
@@ -536,11 +533,11 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
-  private updateRitualDefense(): void {
+  private updateRitualDefense(active: Player): void {
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     if (this.waveIndex + 1 < RITUAL_WAVES.length) {
-      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.signetTile());
+      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.originFromPlayer(active));
       return;
     }
 
@@ -571,12 +568,12 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
-  private updateAssault(): void {
+  private updateAssault(active: Player): void {
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     this.bus.emit('objectiveComplete', { objectiveId: 'circus_sideshow_cleared' });
     if (this.waveIndex + 1 < ASSAULT_WAVES.length) {
-      if (this.circusCentre) this.spawnWave(ASSAULT_WAVES, this.waveIndex + 1, this.circusCentre);
+      this.spawnWave(ASSAULT_WAVES, this.waveIndex + 1, this.originFromPlayer(active));
       return;
     }
 

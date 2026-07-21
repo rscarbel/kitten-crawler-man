@@ -190,6 +190,7 @@ export class BuildingInteriorScene extends GameplayScene {
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
+    this.pauseMenu.audio = this.audio;
     this.encounterAbilityManager = abilityManager ?? null;
     this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
     this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);

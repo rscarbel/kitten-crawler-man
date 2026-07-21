@@ -9,6 +9,9 @@ import { normalize } from '../utils';
 const SIGNET_HP = 80;
 const SIGNET_SPEED = 1.6;
 const CENTER_OFFSET = 0.5;
+/** Feedback timers for hits that never actually reduce her hp — she's unkillable. */
+const SIGNET_HIT_FLASH_FRAMES = 8;
+const SIGNET_HIT_HEALTHBAR_FRAMES = 180;
 
 /** Ally-mode combat tuning — mirrors Mongo's chase/bite shape. */
 const AGGRO_RANGE_TILES = 10;
@@ -67,6 +70,21 @@ export class Signet extends Mob {
 
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [];
+  }
+
+  /**
+   * Signet is quest-critical and must never die — some hostile AI (e.g. the
+   * Vespa-stage BrindleGrub) targets any mob in range regardless of
+   * hostility, bypassing the `isHostile` check that protects her from the
+   * player. Still flash for hit feedback, but never reduce hp.
+   */
+  override takeDamageFrom(
+    _amount: number,
+    _attacker: Player | null,
+    _damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+  ): void {
+    this.damageFlash = SIGNET_HIT_FLASH_FRAMES;
+    this.healthBarTimer = SIGNET_HIT_HEALTHBAR_FRAMES;
   }
 
   updateAI(_targets: Player[]): void {

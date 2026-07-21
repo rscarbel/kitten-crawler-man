@@ -409,12 +409,23 @@ export function drawBox(ctx: CanvasRenderingContext2D, opts: BoxOptions): BoxRes
  *
  * Identical to drawBox except x/y are derived from the canvas dimensions —
  * saves you from manually computing Math.round(cw / 2 - boxW / 2) every time.
+ *
+ * `width` is clamped to `canvasWidth` as a last-resort safety net so a modal
+ * can never render wider than the viewport (a recurring mobile bug — fixed
+ * pixel widths that overflow a narrow phone canvas). This is a floor, not a
+ * design choice: for a nicer side margin, clamp your own ideal width against
+ * `canvasWidth` before calling (e.g. `Math.min(IDEAL_WIDTH, canvasWidth - 40)`)
+ * — see `QuestDialog.ts`. Either way, read the returned `width`/`inner.width`
+ * for any further layout math (centering child content, card widths, etc.);
+ * reusing the original unclamped constant is the mistake that reintroduces
+ * the overflow one line down even when the box itself was clamped correctly.
  */
 export function drawModal(ctx: CanvasRenderingContext2D, opts: ModalOptions): BoxResult {
   const { canvasWidth, canvasHeight, width, height, offsetX = 0, offsetY = 0, ...rest } = opts;
-  const x = Math.round(canvasWidth / 2 - width / 2) + offsetX;
+  const clampedWidth = Math.min(width, canvasWidth);
+  const x = Math.round(canvasWidth / 2 - clampedWidth / 2) + offsetX;
   const y = Math.round(canvasHeight / 2 - height / 2) + offsetY;
-  return drawBox(ctx, { x, y, width, height, ...rest });
+  return drawBox(ctx, { x, y, width: clampedWidth, height, ...rest });
 }
 
 /**
