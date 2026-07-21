@@ -32,6 +32,7 @@ import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
@@ -121,6 +122,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Desperado Club (club only)
   private readonly clubMembership: ClubMembership;
+  private readonly mercenaryRoster: MercenaryRoster;
   private readonly club: DesperadoClubSystem | null;
 
   // Key handler cleanup
@@ -174,6 +176,7 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
     clubMembership?: ClubMembership,
+    mercenaryRoster?: MercenaryRoster,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -181,6 +184,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
     this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
     this.clubMembership = clubMembership ?? createClubMembership();
+    this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
 
     const isTower = entry.type === 'tower';
 
@@ -220,7 +224,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
 
     this.club =
-      entry.type === 'club' ? new DesperadoClubSystem(this.clubMembership, this.audio) : null;
+      entry.type === 'club'
+        ? new DesperadoClubSystem(this.clubMembership, this.mercenaryRoster, this.audio)
+        : null;
 
     // Tower stair system
     if (isTower) {
@@ -677,7 +683,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.club?.modalOpen) {
-      this.club.handleClick();
+      this.club.handleClick(mx, my, this.active());
       return;
     }
     if (!this.exitMenuOpen) return;
@@ -842,7 +848,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.club) {
-      this.club.renderUI(ctx, canvas);
+      this.club.renderUI(ctx, canvas, this.active());
     }
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);

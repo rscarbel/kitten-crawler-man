@@ -81,6 +81,8 @@ import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
+import { MercenarySystem } from '../systems/MercenarySystem';
 import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
@@ -163,6 +165,8 @@ export interface DungeonSceneOptions {
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
   clubMembership?: ClubMembership;
+  /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
+  mercenaryRoster?: MercenaryRoster;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
@@ -365,11 +369,13 @@ export class DungeonScene extends GameplayScene {
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
+  private readonly mercenaryRoster: MercenaryRoster;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
   private playerTick = new PlayerTickSystem();
   private mongoSystem = new MongoSystem();
+  private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private mobLoop = new MobUpdateLoop();
   private bus = new EventBus();
@@ -605,6 +611,8 @@ export class DungeonScene extends GameplayScene {
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
+    this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
+    this.mercenarySystem = new MercenarySystem(this.mercenaryRoster);
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -710,8 +718,9 @@ export class DungeonScene extends GameplayScene {
 
       const nextDef = getLevelDef(levelDef.nextLevelId);
       this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
-        // Dismiss Mongo before floor transition
+        // Dismiss Mongo and any hired merc before floor transition
         this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+        this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
         this.sceneManager.replace(
           new DungeonScene(nextDef, this.input, this.sceneManager, {
             humanSnap: this._cleanSnapFor(this.human),
@@ -736,8 +745,11 @@ export class DungeonScene extends GameplayScene {
           x: entry.doorTile.x,
           y: entry.doorTile.y + 1,
         };
-        // Mongo can't follow indoors — dismiss so he isn't stranded in a stale mob list.
+        // Neither Mongo nor a hired merc can follow indoors — dismiss so they
+        // aren't stranded in a stale mob list (the merc respawns from the
+        // roster when the player returns to the overworld).
         this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+        this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
         this.musicPersistsAcrossExit = true;
         const humanSnap = this._cleanSnapFor(this.human);
         const catSnap = this._cleanSnapFor(this.cat);
@@ -766,6 +778,7 @@ export class DungeonScene extends GameplayScene {
                   murderQuestProgress: this.murderQuestProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
+                  mercenaryRoster: this.mercenaryRoster,
                   skipIntro: true,
                 }),
               );
@@ -778,6 +791,7 @@ export class DungeonScene extends GameplayScene {
             this.murderQuestProgress,
             this.doomsdayQuestProgress,
             this.clubMembership,
+            this.mercenaryRoster,
           ),
         );
       });
@@ -1906,6 +1920,7 @@ export class DungeonScene extends GameplayScene {
         murderQuestProgress: this.murderQuestProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
+        mercenaryRoster: this.mercenaryRoster,
       }),
     );
   }
@@ -2893,6 +2908,7 @@ export class DungeonScene extends GameplayScene {
       extraTargets: (() => {
         const targets: Player[] = [];
         if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
+        if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
         const npc = this.defendQuest.questNPC;
         if (npc?.isAlive) targets.push(npc);
         return targets.length > 0 ? targets : undefined;
@@ -3147,6 +3163,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.mongoSystem.checkHealth();
+    this.mercenarySystem.checkHealth(this.mobs, this.mobGrid);
     resolveKills(combatCtx);
 
     const touchXp = this.spells.drainTouchXp();
@@ -3200,6 +3217,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.mongoSystem.update(ctx);
+    this.mercenarySystem.update(ctx);
     this.pm.tickTimers();
 
     if (this.human.effectDamageSoundPending) {

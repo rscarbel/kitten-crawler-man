@@ -69,12 +69,22 @@ const HEALTH_POTION_PRICE = 5;
 const GOBLIN_DYNAMITE_PRICE = 10;
 const CONFUSING_FOG_PRICE = 15;
 
-const SHOP_ITEMS: Array<{
+const DEFAULT_SHOP_TITLE = 'General Store';
+
+export interface ShopItem {
   id: ItemId;
   label: string;
   price: number;
   desc: string;
-}> = [
+}
+
+/** Optional overrides that turn the default General Store into a bespoke vendor (bar, market, …). */
+export interface ShopConfig {
+  title: string;
+  items: ReadonlyArray<ShopItem>;
+}
+
+const SHOP_ITEMS: ReadonlyArray<ShopItem> = [
   {
     id: 'health_potion',
     label: 'Health Potion',
@@ -111,7 +121,12 @@ export class ShopSystem implements GameSystem {
   private feedbackTimer = 0;
   private buyRects: Array<{ x: number; y: number; w: number; h: number }> = [];
 
-  constructor(interiorWidth: number) {
+  private readonly title: string;
+  private readonly items: ReadonlyArray<ShopItem>;
+
+  constructor(interiorWidth: number, config?: ShopConfig) {
+    this.title = config?.title ?? DEFAULT_SHOP_TITLE;
+    this.items = config?.items ?? SHOP_ITEMS;
     this.wanderX = Math.floor(interiorWidth / 2) * TILE_SIZE;
     this.wanderMinX = WANDER_MIN_TILE_OFFSET * TILE_SIZE;
     this.wanderMaxX = (interiorWidth - WANDER_MAX_TILE_INSET) * TILE_SIZE;
@@ -188,7 +203,7 @@ export class ShopSystem implements GameSystem {
     ctx.fillStyle = `rgba(0,0,0,${PANEL_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
 
-    const panelH = PANEL_HEADER_H + SHOP_ITEMS.length * PANEL_ITEM_H + PANEL_FOOTER_H;
+    const panelH = PANEL_HEADER_H + this.items.length * PANEL_ITEM_H + PANEL_FOOTER_H;
     const panelX = cw / 2 - PANEL_W / 2;
     const panelY = ch / 2 - panelH / 2;
 
@@ -207,7 +222,7 @@ export class ShopSystem implements GameSystem {
       panelH - PANEL_INNER_SIZE_REDUCTION,
     );
 
-    drawText(ctx, 'General Store', {
+    drawText(ctx, this.title, {
       x: cw / 2,
       y: panelY + PANEL_TITLE_Y - PANEL_TITLE_BASELINE,
       size: PANEL_TITLE_SIZE,
@@ -232,8 +247,8 @@ export class ShopSystem implements GameSystem {
     });
 
     this.buyRects = [];
-    for (let i = 0; i < SHOP_ITEMS.length; i++) {
-      const item = SHOP_ITEMS[i];
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i];
       const rowY = panelY + PANEL_FIRST_ROW_Y + i * PANEL_ITEM_H;
       const canAfford = active.coins >= item.price;
 
@@ -312,7 +327,7 @@ export class ShopSystem implements GameSystem {
   }
 
   private tryBuy(itemIdx: number, player: Player): void {
-    const item = SHOP_ITEMS[itemIdx];
+    const item = this.items[itemIdx];
     if (player.coins < item.price) {
       this.feedbackMsg = 'Not enough coins!';
       this.feedbackTimer = FEEDBACK_TIMER_FRAMES;

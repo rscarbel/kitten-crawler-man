@@ -4,7 +4,7 @@ Living status log for the multi-phase Desperado Club feature. See
 [desperado-club-plan.md](desperado-club-plan.md) (design) and
 [desperado-club-implementation.md](desperado-club-implementation.md) (step-by-step).
 
-## Status: Phase 1 COMPLETE ✅ · Phases 2–5 not started
+## Status: Phases 1–4 COMPLETE ✅ · Phase 5 not started
 
 ---
 
@@ -72,11 +72,184 @@ with real UIs as each phase lands (`STATION_COMING_SOON` map in the system).
 
 ---
 
-## Next: Phase 2 — Bar & Market (vendors)
-Generalize `ShopSystem` to be config-driven (backward-compatible with the General
-Store), then attach a bartender (buff drinks) and market (club-exclusive gear) to
-the `bar`/`market` stations in `DesperadoClubSystem`. See implementation §2.
+---
+
+## Phase 2 — Bar & Market (done)
+
+Walking to the **bar** opens a drinks shop; the **market** opens a gear shop.
+Purchases spend `player.coins` and grant items. The village General Store is
+unaffected (identical behaviour).
+
+### Files changed
+- `src/systems/ShopSystem.ts` — now **config-driven**. New optional
+  `constructor(interiorWidth, config?: ShopConfig)`; exported `ShopItem` and
+  `ShopConfig` types. `config` omitted reproduces the General Store exactly
+  (`DEFAULT_SHOP_TITLE`, module-level `SHOP_ITEMS` fallback). Internal reads now
+  use `this.title` / `this.items`.
+- `src/systems/DesperadoClubSystem.ts` — owns two `ShopSystem` instances
+  (`barShop`, `marketShop`) built from `BAR_SHOP_CONFIG` / `MARKET_SHOP_CONFIG`.
+  `activeShop()` returns whichever panel is open; `modalOpen` widened to include
+  an open shop (this is what gates scene movement/render). `handleInteract`
+  opens the shop for the `bar`/`market` stations; `dismissModal`/`handleClick`/
+  `renderUI`/`renderObjects` all branch on the open shop first. `update()`
+  ticks both shops and plays `purchase_success` on a pending buy.
+- `src/scenes/BuildingInteriorScene.ts` — two call sites forward `this.active()`
+  now (`club.renderUI(ctx, canvas, active)`, `club.handleClick(mx, my, active)`).
+  No other scene wiring needed: the existing `this.club?.modalOpen` guards
+  (movement freeze, esc-close, touch routing, mobile-control freeze) already
+  cover the shop panels through the widened getter.
+
+### Scope decisions
+- **No new items.** The bar sells the existing buff consumables
+  (`speed_fizz`, `cooldown_crisp`, `jugg_juice`) — already fully wired as
+  drink/buff mechanics — at premium prices. The market sells existing
+  club-exclusive gear otherwise only won off dangerous foes
+  (`stat_boost_potion`, `trollskin_shirt`, `enchanted_crown_sepsis_whore`).
+  This satisfies the Phase 2 DoD without the large surface of brand-new
+  use-behaviour (DungeonScene use logic, HUD icons, InventoryPanel art, sprites).
+  All prices are named constants in `DesperadoClubSystem.ts`.
+- **Shopkeeper render reuse:** the club draws its own fixed station NPC, so the
+  two club `ShopSystem` instances' wandering-shopkeeper render + `isNearShopkeeper`
+  are never used — only their buy panel + `tryBuy` logic. Their `update()` wander
+  is invisible and harmless.
+- **Purchase sound** is deferred until the panel closes (the `modalOpen`
+  early-return in `update()` skips shop ticking while open) — identical to the
+  existing General Store baseline, not a regression.
+
+### Review
+Independent code review (general-purpose agent) found **no substantive issues**:
+backward compatible, CLAUDE.md-clean (no `as`/`!`/`any`, prices as constants),
+consistent with the existing store wiring.
+
+## Phase 3 — Casino (done)
+
+Walking to the **casino** station opens a high-low coin-wager minigame. The
+dealer shows a card (A–K); the player picks a wager tier and bets whether the
+next card is **Higher** or **Lower**. A win pays 1:1; **ties pay the house**.
+
+### Files added
+- `src/systems/ClubCasinoSystem.ts` — the high-low game. Owns its own panel
+  (`drawModal`/`drawButton`/`drawText`), card/wager/guess state machine, coin
+  math, and click routing. Exposes `coinsWageredThisVisit` for the Phase 5
+  free-security perk. Deliberately **not** a `GameSystem` — it has no per-frame
+  lifecycle and is driven entirely by the club (like the two `ShopSystem`
+  instances are driven by their open/close flags).
+
+### Files changed
+- `src/systems/DesperadoClubSystem.ts` — owns a `ClubCasinoSystem` instance.
+  `casino` dropped from `STATION_COMING_SOON`; `promptLabel` returns `Play` for
+  it. `modalOpen` now includes `casino.open`; `handleInteract` opens the table
+  (`openTable(player)`); `dismissModal`/`handleClick`/`renderUI` branch on the
+  casino before the flavour modal. A `coinsWageredThisVisit` getter forwards the
+  casino's running total.
+- No `BuildingInteriorScene` changes needed — the existing `club.modalOpen` /
+  `handleClick(mx,my,active)` / `renderUI(...,active)` wiring already routes the
+  casino panel through the widened `modalOpen` getter, exactly as it does the
+  shops.
+
+### Scope decisions
+- **Rules as named constants:** wager tiers (`WAGER_SMALL/MEDIUM/LARGE` = 10/50/
+  100), `WIN_PAYOUT_MULTIPLIER = 2` (stake back + 1:1), 13-card deck, tie-loses.
+- **Per-visit reset is free:** `coinsWageredThisVisit` lives on the casino
+  instance, which is reconstructed on every club entry (fresh scene → fresh
+  club → fresh casino), so it resets to 0 each visit with no explicit teardown.
+- **Wager persistence:** the chosen tier carries across rounds ("Deal Again"),
+  stepping down only when the player can no longer afford it.
+- **Feedback is a persistent string**, not a timed fade: the scene freezes
+  `club.update()` while any club modal is open, so a frame-counted fade could
+  never tick down. The casino instead shows a plain error line cleared on the
+  next valid action.
+- **Sounds:** win → `treasure_chest_reward`, loss → `powering_off`, selection/
+  deal → `menu_click`. All pre-existing SoundIds.
+
+### Review
+Independent code review (general-purpose agent), two rounds. First pass found
+two genuine defects — a `dealAgain` clamp that silently reset the wager to the
+minimum every round, and dead timed-fade code that could never tick while the
+panel was open. Both were fixed; the re-review confirmed the coin math, tie
+rule, wager persistence, and all club delegation are correct with **no new
+issues**.
+
+## Phase 4 — Mercenaries Guild ("Meat Shields") (done)
+
+Walking to the **mercenary** station opens Rosemarie's hire panel. Hiring one of
+three archetypes spends `player.coins` and records the contract on a persisted
+roster; back in the overworld the mercenary spawns, follows the active player,
+and auto-attacks nearby hostiles (Mongo-pattern). It dies for good in combat
+(clearing the roster), and is dismissed on building/floor transitions — then
+respawns from the roster when you return.
+
+### Files added
+- `src/core/mercenaryTemplates.ts` — the template table (id union +
+  `MercenaryTemplate`: name, title, blurb, price, hp, speed, damage) and
+  `getMercenaryTemplate`. Single source of truth for merc price + stats, shared
+  by the creature, the roster, and the hire panel. Three melee archetypes:
+  `bruiser` (tank), `enforcer` (balanced), `berserker` (glass cannon).
+- `src/core/MercenaryRoster.ts` — `{ active: HiredMercenary | null }` progress
+  object + factory (one active hire at a time), threaded like `ClubMembership`.
+- `src/creatures/Mercenary.ts` — a friendly `Mob` subclass (`isHostile=false`,
+  no loot, `xpValue=0`). AI copied from `Mongo` (chase nearest hostile within
+  aggro range of the owner, leash back) but **no recall** — it fights to the
+  death. `owner` is reassigned each frame to the active player. Renders via the
+  existing `drawClubNpc` (a distinct club figure per archetype).
+- `src/systems/MercenarySystem.ts` — the overworld manager (modelled on
+  `MongoSystem`). Lazy-spawns from the roster on the first frame, maintains
+  `owner`/`allMobs`, exposes `activeMerc` for `extraTargets`, `dismiss()` for
+  transitions, and `checkHealth(mobs, mobGrid)` for death (see below).
+- `src/systems/MercenaryGuildSystem.ts` — Rosemarie's hire panel
+  (`drawModal`/`drawButton`/`drawText`, click-routed like `ClubCasinoSystem`).
+  Lists the templates; **Hire** deducts coins and sets `roster.active`; a second
+  hire is blocked until the current contract is dismissed (an in-panel button).
+
+### Files changed
+- `src/systems/DesperadoClubSystem.ts` — owns a `MercenaryGuildSystem` (built
+  with the roster + audio); ctor takes the roster. `mercenary` dropped from
+  `STATION_COMING_SOON`; `promptLabel` returns `Hire` for it. `handleInteract`
+  opens the panel; `modalOpen`/`dismissModal`/`handleClick`/`renderUI` branch on
+  `guild.open` alongside the shops and casino.
+- `src/scenes/BuildingInteriorScene.ts` — new `mercenaryRoster` ctor param +
+  field + default, passed into `DesperadoClubSystem`.
+- `src/scenes/DungeonScene.ts` — `mercenaryRoster` option/field/default; a
+  `MercenarySystem` field constructed from it. Threaded into
+  `BuildingInteriorScene` and every `DungeonScene` reconstruction that already
+  threads `clubMembership` (building-exit + death-restart). `mercenarySystem`
+  is ticked beside `mongoSystem` in the update loop, dismissed at the same two
+  transition sites, its merc added to `extraTargets`, and `checkHealth` called
+  right before `resolveKills`.
+- `src/systems/GameLoopPhases.ts` — a `mercenary` audio-tag case plays
+  `sword_attack_1` on a strike.
+
+### Scope decisions
+- **Melee-only archetypes.** All three templates are Mongo-pattern melee with
+  distinct hp/speed/damage profiles. A true ranged class (bolts, projectile
+  rendering, hit detection) is a much larger surface and is deferred — this
+  keeps the marquee cross-scene ally lifecycle robust, as the plan advises.
+- **Merc art reuses `drawClubNpc`** (a per-archetype club figure) rather than a
+  bespoke walking sprite sheet — consistent with the Phase 1 placeholder-art
+  deferral; a real merc sprite is Phase 5 polish.
+- **Death is permanent.** Unlike Mongo (auto-recall at low HP), a merc has no
+  recall: it dies in the field and clears the roster — a coin sink with stakes.
+- **Roster persistence** matches `ClubMembership` exactly (threaded by
+  reference, not backend-serialized). The floor-complete transition drops it
+  like `clubMembership`, but that path is unreachable with a merc active (the
+  club is on `level3`, an overworld with no `nextLevelId`).
+
+### Review
+Independent code review (general-purpose agent), two rounds. First pass found
+one genuine defect: the merc's death was consumed by `resolveKills` as an enemy
+kill (spurious human XP, a kill-stat, gore + minimap corpse, an enemy-death
+sound, and an AI kill report) because nothing intercepted it before combat
+resolution — Mongo avoids this via `MongoSystem.checkHealth()` running before
+`resolveKills`. Fixed by adding `MercenarySystem.checkHealth(mobs, mobGrid)`
+(splices the fallen merc out of `mobs` + grid and clears the roster) and calling
+it immediately before `resolveKills`. The re-review traced both death paths and
+the full lifecycle and confirmed the fix is correct with **no new issues**.
+
+## Next: Phase 5 — VIP Lounge & Polish
+Paid heal/buff + Sledge/Bomo bodyguard escort (free if `coinsWageredThisVisit`
+exceeds the price), achievements, dev-URL jump, AI banter, the neon-knife sprite
+building, and the optional GumGum relocation. See implementation §5.
 
 ## Validation
 `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build` all clean
-as of Phase 1 completion.
+as of Phase 4 completion.

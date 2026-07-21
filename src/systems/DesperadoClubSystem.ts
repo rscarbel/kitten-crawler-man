@@ -3,11 +3,13 @@ import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
+import type { MercenaryRoster } from '../core/MercenaryRoster';
 import {
   CLUB_STATIONS,
   CLUB_DANCE_FLOOR,
   CLUB_DJ_TILE,
   CLUB_DANCER_TILES,
+  CLUB_INTERIOR_W,
   type ClubStation,
   type ClubStationId,
 } from '../core/clubLayout';
@@ -15,6 +17,9 @@ import { drawText } from '../ui/TextBox';
 import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
+import { ShopSystem, type ShopConfig } from './ShopSystem';
+import { ClubCasinoSystem } from './ClubCasinoSystem';
+import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 
 const STATION_INTERACT_RANGE = 2.6;
 const TILE_HALF = 0.5;
@@ -52,12 +57,69 @@ const GREETING_TITLE = '🔪  The Desperado Club  🔪';
 const SLEDGE_WELCOME = '"Back again? Good. Enjoy yourself — and mind the rules."';
 
 /** Flavour shown for stations whose feature ships in a later phase. */
-const STATION_COMING_SOON: Record<Exclude<ClubStationId, 'sledge'>, string> = {
-  bar: 'The bartender wipes down the counter. "Bar\'s not pouring just yet — soon."',
-  casino: 'A dealer shuffles an empty deck. "Tables aren\'t open tonight, friend."',
-  market: 'A vendor stacks crates. "Stock\'s still on the truck. Nothing to sell yet."',
-  mercenary: 'A gruff voice from behind the desk: "Meat Shields ain\'t hiring here yet."',
+const STATION_COMING_SOON: Record<
+  Exclude<ClubStationId, 'sledge' | 'bar' | 'market' | 'casino' | 'mercenary'>,
+  string
+> = {
   vip: 'A velvet rope bars the VIP Lounge. "Members-only back room... opening soon."',
+};
+
+// Bar drinks — the club's buff consumables, priced as premium members' pours.
+const SPEED_FIZZ_PRICE = 20;
+const COOLDOWN_CRISP_PRICE = 25;
+const JUGG_JUICE_PRICE = 30;
+
+const BAR_SHOP_CONFIG: ShopConfig = {
+  title: 'The Bar',
+  items: [
+    {
+      id: 'speed_fizz',
+      label: 'Speed Fizz',
+      price: SPEED_FIZZ_PRICE,
+      desc: 'Double move speed, 25s',
+    },
+    {
+      id: 'cooldown_crisp',
+      label: 'Cooldown Crisp',
+      price: COOLDOWN_CRISP_PRICE,
+      desc: 'Halve ability cooldowns, 25s',
+    },
+    {
+      id: 'jugg_juice',
+      label: 'Jugg Juice',
+      price: JUGG_JUICE_PRICE,
+      desc: '+50% max HP & full heal, 30s',
+    },
+  ],
+};
+
+// Market gear — club-exclusive equipment otherwise only won off dangerous foes.
+const STAT_BOOST_PRICE = 80;
+const TROLLSKIN_SHIRT_PRICE = 120;
+const SEPSIS_CROWN_PRICE = 150;
+
+const MARKET_SHOP_CONFIG: ShopConfig = {
+  title: 'The Market',
+  items: [
+    {
+      id: 'stat_boost_potion',
+      label: 'Stat Boost',
+      price: STAT_BOOST_PRICE,
+      desc: '+2-4 to a random stat, permanent',
+    },
+    {
+      id: 'trollskin_shirt',
+      label: 'Trollskin Shirt',
+      price: TROLLSKIN_SHIRT_PRICE,
+      desc: '+3 CON, 2.5x regen, negates melee debuffs',
+    },
+    {
+      id: 'enchanted_crown_sepsis_whore',
+      label: 'Crown of the Sepsis Whore',
+      price: SEPSIS_CROWN_PRICE,
+      desc: '+5 INT, attacks can inflict Sepsis',
+    },
+  ],
 };
 
 /** Which sprite each station NPC uses. */
@@ -76,6 +138,15 @@ interface ClubModal {
   isGreeting: boolean;
 }
 
+/** Proximity-prompt verb for a station: "Talk" to the Sledge, "Shop" at the vendors, "Play" at the casino, else the room name. */
+function promptLabel(station: ClubStation): string {
+  if (station.id === 'sledge') return 'Talk';
+  if (station.id === 'bar' || station.id === 'market') return 'Shop';
+  if (station.id === 'casino') return 'Play';
+  if (station.id === 'mercenary') return 'Hire';
+  return station.label;
+}
+
 /**
  * Host system for the Desperado Club interior (the analog of SafeRoomSystem /
  * ShopSystem). Phase 1: the Sledge's greeting + membership gate, cosmetic
@@ -86,21 +157,50 @@ export class DesperadoClubSystem implements GameSystem {
   private modal: ClubModal | null = null;
   private animTime = 0;
 
+  private readonly barShop: ShopSystem;
+  private readonly marketShop: ShopSystem;
+  private readonly casino: ClubCasinoSystem;
+  private readonly guild: MercenaryGuildSystem;
+
   constructor(
     private readonly membership: ClubMembership,
+    roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
   ) {
+    this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
+    this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
+    this.casino = new ClubCasinoSystem(audio);
+    this.guild = new MercenaryGuildSystem(roster, audio);
     if (!membership.hasDesperadoPass) {
       this.openGreeting();
     }
   }
 
+  /** Coins staked at the casino since entering the club — the free-security perk hook (Phase 5). */
+  get coinsWageredThisVisit(): number {
+    return this.casino.coinsWageredThisVisit;
+  }
+
+  /** The bar/market shop whose buy panel is currently open, if any. */
+  private activeShop(): ShopSystem | null {
+    if (this.barShop.shopOpen) return this.barShop;
+    if (this.marketShop.shopOpen) return this.marketShop;
+    return null;
+  }
+
   get modalOpen(): boolean {
-    return this.modal !== null;
+    return this.modal !== null || this.activeShop() !== null || this.casino.open || this.guild.open;
   }
 
   update(): void {
     this.animTime++;
+    this.barShop.update();
+    this.marketShop.update();
+    if (this.barShop.purchasePending || this.marketShop.purchasePending) {
+      this.barShop.purchasePending = false;
+      this.marketShop.purchasePending = false;
+      this.audio?.play('purchase_success');
+    }
   }
 
   private openGreeting(): void {
@@ -111,8 +211,21 @@ export class DesperadoClubSystem implements GameSystem {
     this.modal = { title, lines: [line], isGreeting: false };
   }
 
-  /** Advance/close the open modal. Dismissing the greeting grants the Desperado Pass. */
+  /** Close the open shop panel, or advance/close the open modal. Dismissing the greeting grants the Desperado Pass. */
   dismissModal(): void {
+    const shop = this.activeShop();
+    if (shop) {
+      shop.shopOpen = false;
+      return;
+    }
+    if (this.casino.open) {
+      this.casino.close();
+      return;
+    }
+    if (this.guild.open) {
+      this.guild.close();
+      return;
+    }
     const modal = this.modal;
     if (!modal) return;
     this.modal = null;
@@ -150,11 +263,40 @@ export class DesperadoClubSystem implements GameSystem {
       else this.openGreeting();
       return;
     }
+    if (station.id === 'bar') {
+      this.barShop.shopOpen = true;
+      return;
+    }
+    if (station.id === 'market') {
+      this.marketShop.shopOpen = true;
+      return;
+    }
+    if (station.id === 'casino') {
+      this.casino.openTable(player);
+      return;
+    }
+    if (station.id === 'mercenary') {
+      this.guild.openPanel();
+      return;
+    }
     this.openFlavor(station.label, STATION_COMING_SOON[station.id]);
   }
 
-  /** Clicks are consumed to advance the modal; returns true when a modal was open. */
-  handleClick(): boolean {
+  /** Route clicks to an open shop panel's buy buttons, else advance the modal; returns true when a modal/shop was open. */
+  handleClick(mx: number, my: number, active: Player): boolean {
+    const shop = this.activeShop();
+    if (shop) {
+      shop.handleClick(mx, my, active);
+      return true;
+    }
+    if (this.casino.open) {
+      this.casino.handleClick(mx, my, active);
+      return true;
+    }
+    if (this.guild.open) {
+      this.guild.handleClick(mx, my, active);
+      return true;
+    }
     if (!this.modal) return false;
     this.dismissModal();
     return true;
@@ -168,13 +310,12 @@ export class DesperadoClubSystem implements GameSystem {
     this.renderDanceFloorLights(ctx, camX, camY);
     this.renderNpcs(ctx, camX, camY);
 
-    if (this.modal) return;
+    if (this.modalOpen) return;
     const station = this.nearestStation(active);
     if (station) {
       const sx = station.tile.x * TILE_SIZE - camX;
       const sy = station.tile.y * TILE_SIZE - camY;
-      const label = station.id === 'sledge' ? 'Talk' : station.label;
-      drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, label);
+      drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, promptLabel(station));
     }
   }
 
@@ -240,7 +381,24 @@ export class DesperadoClubSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+    const shop = this.activeShop();
+    if (shop) {
+      shop.renderUI(ctx, canvas, active);
+      shop.renderShopPanel(ctx, canvas, active);
+      return;
+    }
+
+    if (this.casino.open) {
+      this.casino.renderPanel(ctx, canvas, active);
+      return;
+    }
+
+    if (this.guild.open) {
+      this.guild.renderPanel(ctx, canvas, active);
+      return;
+    }
+
     const modal = this.modal;
     if (!modal) return;
 

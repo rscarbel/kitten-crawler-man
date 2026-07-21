@@ -280,6 +280,9 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'mongo':
           audio?.play('mongo_slash');
           break;
+        case 'mercenary':
+          audio?.play('sword_attack_1');
+          break;
         case 'krakaren':
           audio?.play('krakaren_ground_slam');
           break;
