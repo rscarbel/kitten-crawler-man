@@ -37,9 +37,14 @@ const FEEDBACK_Y_FROM_BOTTOM = 40;
 const CLOSE_HINT_SIZE = 10;
 const CLOSE_HINT_Y_FROM_BOTTOM = 18;
 
-const ACCENT = '#c8a840';
-const GOLD_TEXT = '#f0d870';
-const MUTED_TEXT = '#a89a70';
+const ACCENT = '#e6c65a';
+const GOLD_TEXT = '#f6e08a';
+const MUTED_TEXT = '#cbb98a';
+// Velvet VIP dressing — a wine-dark panel and card fills instead of the default blue-grey modal.
+const VELVET_PANEL = '#1c0f16';
+const VELVET_CARD = 'rgba(74,26,44,0.55)';
+const VELVET_CARD_BORDER = '#7a3a52';
+const BODY_TEXT = '#e8dcbe';
 
 /** Prices for the VIP back-room services (canon-flavoured coin sinks). */
 const VIP_HEAL_PRICE = 40;
@@ -221,21 +226,26 @@ export class ClubVipLoungeSystem {
       height: PANEL_H,
       padding: PANEL_PADDING,
       ...BOX_PRESETS.modal,
+      fill: VELVET_PANEL,
       border: ACCENT,
+      borderWidth: 3,
+      glow: ACCENT,
+      glowBlur: 22,
     });
 
     const centerX = panel.x + PANEL_W / 2;
 
-    drawText(ctx, '🥂  VIP Lounge', {
+    drawText(ctx, '✦  VIP  LOUNGE  ✦', {
       x: centerX,
       y: panel.inner.y,
       size: TITLE_SIZE,
       bold: true,
       color: GOLD_TEXT,
       align: 'center',
+      glow: ACCENT,
     });
 
-    drawText(ctx, 'A hush-quiet back room, velvet and privacy bubbles. Spend well.', {
+    drawText(ctx, 'A hush-quiet back room — velvet, privacy, and comped luxury.', {
       x: centerX,
       y: panel.inner.y + SUBTITLE_GAP,
       size: SUBTITLE_SIZE,
@@ -267,7 +277,7 @@ export class ClubVipLoungeSystem {
       x: centerX,
       y: panel.y + PANEL_H - CLOSE_HINT_Y_FROM_BOTTOM,
       size: CLOSE_HINT_SIZE,
-      color: '#5a4a30',
+      color: '#9a8452',
       align: 'center',
     });
   }
@@ -288,11 +298,13 @@ export class ClubVipLoungeSystem {
         y,
         width: w,
         height: CARD_H,
-        fill: 'rgba(30,26,18,0.7)',
-        border: '#5a4a30',
+        fill: VELVET_CARD,
+        border: VELVET_CARD_BORDER,
         borderWidth: 1.5,
         radius: 8,
       });
+      // Gold accent bar down the left edge of each service card.
+      drawBox(ctx, { x, y, width: 4, height: CARD_H, fill: ACCENT, radius: 2 });
 
       drawText(ctx, service.name, {
         x: x + CARD_PAD,
@@ -306,7 +318,7 @@ export class ClubVipLoungeSystem {
         x: x + CARD_PAD,
         y: y + CARD_DESC_Y,
         size: CARD_DESC_SIZE,
-        color: '#c8bc98',
+        color: BODY_TEXT,
         align: 'left',
       });
 

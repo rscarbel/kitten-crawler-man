@@ -336,6 +336,37 @@ rest of the questline is untouched. Independent review: no regression.
 Dev-URL jump into the club, AI-driven NPC banter, and the neon-knife sprite
 building. See implementation §5.
 
+### 5e. Visual & audio polish pass (done)
+
+A round of look/feel fixes across the club:
+
+- **Music is real & rotating.** The four `desperado_club_1..4.mp3` tracks are now
+  registered SoundIds (`CLUB_MUSIC_TRACKS` in `audio/sounds.ts`); the placeholder
+  `desperado_club` id (which reused `circus_theme`) is gone. `AudioManager` gained
+  `playMusicPlaylist(ids, opts)` — a shuffled, gapless-advancing, wrapping playlist
+  built on a shared `startMusicTrack` used by both `playMusic` (loop) and the
+  playlist (loop=false + onended advance). `stopMusic` clears the playlist;
+  `stopCurrentMusicSource` swaps tracks without doing so; suspended-context resume
+  restarts the current slot. `onEnter` plays the playlist.
+- **Rock-golem bouncers.** Sledge/Bomo render as cracked-granite tuxedo bruisers
+  (boulder shoulders, rubble torso, glowing eyes, gold lapel/bow tie) via a
+  dedicated `drawStoneGolem` path in `clubNpcSprite.ts`, not the grey humanoid.
+- **Pose-driven crowd + dancing.** `clubNpcSprite.ts` is rebuilt around one
+  pose-driven humanoid: arms swing, legs step, hips sway. Four dance routines are
+  picked per dancer by a stable `seed`; a new `patron` variant + varied
+  skin/outfit/hair pools make the crowd look distinct. `DesperadoClubSystem` seeds
+  8 dancers and spawns 6 wandering patrons (`CLUB_PATRON_AREA`) that stroll the
+  entrance floor.
+- **Distinct, decorated areas.** New `sprites/clubDecor.ts` draws a themed rug,
+  label, and props per station from `CLUB_ZONES` (bar counter + bottles + stools,
+  casino felt table + chips, market awning + crates, weapon rack + banner, VIP
+  velvet couch + rope stanchions). Zones are larger than the single station tile.
+- **Greeting modal** height is now derived from the wrapped body (`measureTextBox`)
+  so text never overflows or collides with the Continue hint.
+- **Casino & VIP panels** got contrast + spacing fixes (casino wager label no
+  longer overlaps the card captions; VIP is re-dressed in velvet + gold with
+  higher-contrast body text).
+
 ## Validation
 `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build` all clean
-as of the Phase 5c (achievements + GumGum relocation) completion.
+as of the Phase 5e (visual & audio polish) completion.

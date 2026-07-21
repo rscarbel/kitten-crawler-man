@@ -61,10 +61,50 @@ export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
 /** Doctor Bones the skeleton DJ — cosmetic, spins records just north of the dance floor. */
 export const CLUB_DJ_TILE = { x: 12, y: 5 } as const;
 
-/** Cosmetic dancers that bob in place on the dance floor. */
+/** Cosmetic dancers that dance in place across the dance floor. */
 export const CLUB_DANCER_TILES: ReadonlyArray<{ x: number; y: number }> = [
-  { x: 10, y: 8 },
-  { x: 13, y: 8 },
-  { x: 11, y: 10 },
-  { x: 13, y: 10 },
+  { x: 9, y: 7 },
+  { x: 11, y: 7 },
+  { x: 13, y: 7 },
+  { x: 10, y: 9 },
+  { x: 12, y: 9 },
+  { x: 14, y: 9 },
+  { x: 11, y: 11 },
+  { x: 13, y: 11 },
 ];
+
+/**
+ * A decorated floor region for each station — larger than the single station
+ * tile so the areas read as distinct rooms. Bounds are inclusive tile indices
+ * that stay clear of the border walls and the central dance floor.
+ */
+export interface ClubZone {
+  id: ClubStationId;
+  label: string;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** Theme accent used for the zone rug, label, and prop trim. */
+  color: string;
+}
+
+export const CLUB_ZONES: ReadonlyArray<ClubZone> = [
+  { id: 'bar', label: 'THE BAR', x0: 1, y0: 1, x1: 5, y1: 6, color: '#e0b060' },
+  { id: 'market', label: 'THE MARKET', x0: 1, y0: 11, x1: 5, y1: 16, color: '#c07ad8' },
+  { id: 'casino', label: 'CASINO', x0: 18, y0: 1, x1: 22, y1: 6, color: '#40c878' },
+  { id: 'mercenary', label: 'MEAT SHIELDS', x0: 18, y0: 11, x1: 22, y1: 16, color: '#e06040' },
+  { id: 'vip', label: 'VIP LOUNGE', x0: 7, y0: 1, x1: 16, y1: 3, color: '#d8c050' },
+];
+
+/**
+ * Open floor near the entrance where cosmetic patrons mill about — clear of the
+ * dance floor, the alcove dividers, and the walls, so wandering never clips.
+ */
+export const CLUB_PATRON_AREA: { x0: number; y0: number; x1: number; y1: number } = {
+  x0: 8,
+  y0: 12,
+  x1: 15,
+  y1: 16,
+};
+export const CLUB_PATRON_COUNT = 6;

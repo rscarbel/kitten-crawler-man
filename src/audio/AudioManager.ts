@@ -25,6 +25,16 @@ export interface MusicOptions {
   fadeInMs?: number;
 }
 
+/** Fisher–Yates shuffle into a fresh array (leaves the source untouched). */
+function shuffleTracks(ids: ReadonlyArray<SoundId>): SoundId[] {
+  const arr = [...ids];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 /**
  * Web Audio API manager for the game.
  *
@@ -50,6 +60,9 @@ export class AudioManager {
   private currentMusicGain: GainNode | null = null;
   private _currentMusicId: SoundId | null = null;
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
+  // Shuffled track list when a playlist is active (advances on each track's end); null for a single looping track.
+  private musicPlaylist: SoundId[] | null = null;
+  private musicPlaylistPos = 0;
   private walkingSource: AudioBufferSourceNode | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
   private machinerySource: AudioBufferSourceNode | null = null;
@@ -208,7 +221,7 @@ export class AudioManager {
     if (this.pendingMusic !== null) {
       const { id, opts } = this.pendingMusic;
       this.pendingMusic = null;
-      this.playMusic(id, opts);
+      this.resumePendingMusic(id, opts);
     }
   }
 
@@ -253,7 +266,7 @@ export class AudioManager {
     if (this.pendingMusic !== null) {
       const { id, opts } = this.pendingMusic;
       this.pendingMusic = null;
-      this.playMusic(id, opts);
+      this.resumePendingMusic(id, opts);
     }
   }
 
@@ -332,10 +345,44 @@ export class AudioManager {
 
   /**
    * Start a looping background music track.
-   * Immediately stops any currently-playing track.
+   * Immediately stops any currently-playing track (and cancels any active playlist).
    */
   playMusic(id: SoundId, opts: MusicOptions = {}): void {
-    this.stopMusic(0);
+    this.musicPlaylist = null;
+    this.startMusicTrack(id, opts, true, null);
+  }
+
+  /**
+   * Play a shuffled playlist of tracks as one continuous set: each track plays
+   * once (no per-track loop), the next starts when it ends, and the list wraps
+   * after the last. Immediately replaces any current track or playlist.
+   */
+  playMusicPlaylist(ids: ReadonlyArray<SoundId>, opts: MusicOptions = {}): void {
+    if (ids.length === 0) return;
+    this.musicPlaylist = shuffleTracks(ids);
+    this.musicPlaylistPos = 0;
+    this.startPlaylistTrack(opts.fadeInMs ?? 0);
+  }
+
+  private startPlaylistTrack(fadeInMs: number): void {
+    const playlist = this.musicPlaylist;
+    if (playlist === null) return;
+    const id = playlist[this.musicPlaylistPos];
+    this.startMusicTrack(id, { fadeInMs }, false, () => {
+      // Ignore the end event if the playlist was swapped or stopped meanwhile.
+      if (this.musicPlaylist !== playlist) return;
+      this.musicPlaylistPos = (this.musicPlaylistPos + 1) % playlist.length;
+      this.startPlaylistTrack(0);
+    });
+  }
+
+  private startMusicTrack(
+    id: SoundId,
+    opts: MusicOptions,
+    loop: boolean,
+    onEnded: (() => void) | null,
+  ): void {
+    this.stopCurrentMusicSource(0);
     this._currentMusicId = id;
     const buffer = this.buffers.get(id);
     if (!buffer || this.ctx.state !== 'running') {
@@ -353,8 +400,9 @@ export class AudioManager {
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
-    source.loop = true;
+    source.loop = loop;
     source.connect(perTrackGain);
+    if (onEnded !== null) source.onended = onEnded;
     source.start();
 
     this.currentMusicSource = source;
@@ -493,10 +541,16 @@ export class AudioManager {
   }
 
   /**
-   * Stop the currently-playing music track.
+   * Stop the currently-playing music track (and cancel any active playlist).
    * @param fadeMs - fade-out duration in ms (default: 500)
    */
   stopMusic(fadeMs = DEFAULT_STOP_MUSIC_FADE_MS): void {
+    this.musicPlaylist = null;
+    this.stopCurrentMusicSource(fadeMs);
+  }
+
+  /** Stop just the active music source without touching the playlist (used when swapping tracks). */
+  private stopCurrentMusicSource(fadeMs: number): void {
     this.musicPaused = false;
     this.pendingMusic = null;
     this._currentMusicId = null;
@@ -505,14 +559,33 @@ export class AudioManager {
     if (src === null || gain === null) return;
     this.currentMusicSource = null;
     this.currentMusicGain = null;
+    // Detach the advance handler so a deliberate swap/stop never triggers the next playlist track.
+    src.onended = null;
 
     if (fadeMs > 0) {
       const now = this.ctx.currentTime;
       gain.gain.setValueAtTime(gain.gain.value, now);
       gain.gain.linearRampToValueAtTime(0, now + fadeMs / MS_PER_SECOND);
-      src.stop(now + fadeMs / MS_PER_SECOND);
+      try {
+        src.stop(now + fadeMs / MS_PER_SECOND);
+      } catch {
+        /* already stopped */
+      }
     } else {
-      src.stop();
+      try {
+        src.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+  }
+
+  /** Restart whatever music was pending (a single track or the current playlist slot) once the context unlocks. */
+  private resumePendingMusic(id: SoundId, opts: MusicOptions): void {
+    if (this.musicPlaylist !== null) {
+      this.startPlaylistTrack(opts.fadeInMs ?? 0);
+    } else {
+      this.playMusic(id, opts);
     }
   }
 

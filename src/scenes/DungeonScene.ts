@@ -82,6 +82,14 @@ import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMyst
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
+import {
+  createGodModeState,
+  applyGodModeToPlayer,
+  removeGodModeFromPlayer,
+  stripGodModeFromSnapshot,
+  GOD_MODE_ABILITY_LEVEL,
+  type GodModeState,
+} from '../core/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
 import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
@@ -167,6 +175,8 @@ export interface DungeonSceneOptions {
   clubMembership?: ClubMembership;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
   mercenaryRoster?: MercenaryRoster;
+  /** `!god` / `!tough` cheat state, threaded by reference so it survives scene transitions. */
+  godModeState?: GodModeState;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
@@ -176,10 +186,6 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
-
-const GOD_MODE_STAT_BOOST = 300;
-const GOD_MODE_SPEED_MULTIPLIER = 2;
-const GOD_MODE_ABILITY_LEVEL = 15;
 
 // Companion/Follower system
 const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
@@ -370,6 +376,7 @@ export class DungeonScene extends GameplayScene {
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
   private readonly mercenaryRoster: MercenaryRoster;
+  private readonly godModeState: GodModeState;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
   private bodyPartGore = new BodyPartGoreSystem();
@@ -417,20 +424,8 @@ export class DungeonScene extends GameplayScene {
   private readonly followerMenu = new FollowerMenu();
 
   private _godModeSnapshot: null | {
-    human: {
-      strengthBoost: number;
-      intelligenceBoost: number;
-      constitutionBoost: number;
-      maxHpBoost: number;
-      originalSpeedMultiplier: number;
-    };
-    cat: {
-      strengthBoost: number;
-      intelligenceBoost: number;
-      constitutionBoost: number;
-      maxHpBoost: number;
-      originalSpeedMultiplier: number;
-    };
+    human: { originalSpeedMultiplier: number };
+    cat: { originalSpeedMultiplier: number };
   } = null;
 
   private _toughModeActive = false;
@@ -612,6 +607,7 @@ export class DungeonScene extends GameplayScene {
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
+    this.godModeState = options?.godModeState ?? createGodModeState();
     this.mercenarySystem = new MercenarySystem(this.mercenaryRoster);
     this.arena = new ArenaSystem(
       this.gameMap,
@@ -732,6 +728,7 @@ export class DungeonScene extends GameplayScene {
             saveProgress: this.onSaveProgress,
             audio: this.audio ?? undefined,
             onResetGame: this.onResetGameCallback ?? undefined,
+            godModeState: this.godModeState,
           }),
         );
       });
@@ -779,6 +776,7 @@ export class DungeonScene extends GameplayScene {
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
                   mercenaryRoster: this.mercenaryRoster,
+                  godModeState: this.godModeState,
                   skipIntro: true,
                 }),
               );
@@ -792,6 +790,7 @@ export class DungeonScene extends GameplayScene {
             this.doomsdayQuestProgress,
             this.clubMembership,
             this.mercenaryRoster,
+            this.godModeState,
           ),
         );
       });
@@ -859,6 +858,12 @@ export class DungeonScene extends GameplayScene {
     };
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
+
+    // Re-apply cheat overlays carried in from the previous scene. Player
+    // snapshots are stripped of god-mode boosts on every transition, so an
+    // active cheat has to be rebuilt here rather than surviving in the stats.
+    if (this.godModeState.active) this.enableGodMode();
+    else if (this.godModeState.toughActive) this.enableToughMode();
 
     this.onSaveProgress = options?.saveProgress;
     this.onResetGameCallback = options?.onResetGame ?? null;
@@ -1707,17 +1712,51 @@ export class DungeonScene extends GameplayScene {
     this.followerMenu.open();
   }
 
+  /** Enable `!god`: apply the stat/speed/ability overlay and mark the shared cheat state active. */
+  private enableGodMode(): void {
+    this._godModeSnapshot = {
+      human: { originalSpeedMultiplier: this.human.baseSpeedMultiplier },
+      cat: { originalSpeedMultiplier: this.cat.baseSpeedMultiplier },
+    };
+    applyGodModeToPlayer(this.human);
+    applyGodModeToPlayer(this.cat);
+    this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
+    this.godModeState.active = true;
+  }
+
+  private disableGodMode(): void {
+    if (this._godModeSnapshot === null) return;
+    removeGodModeFromPlayer(this.human, this._godModeSnapshot.human.originalSpeedMultiplier);
+    removeGodModeFromPlayer(this.cat, this._godModeSnapshot.cat.originalSpeedMultiplier);
+    this.abilityManager.setGodModeMinLevel(0);
+    this._godModeSnapshot = null;
+    this.godModeState.active = false;
+  }
+
+  /** Enable `!tough`: damage immunity + zero outgoing damage. Mutually exclusive with god mode. */
+  private enableToughMode(): void {
+    this.disableGodMode();
+    for (const p of [this.human, this.cat]) {
+      p.godMode = true;
+      p.zeroDamage = true;
+    }
+    this._toughModeActive = true;
+    this.godModeState.toughActive = true;
+  }
+
+  private disableToughMode(): void {
+    for (const p of [this.human, this.cat]) {
+      p.godMode = false;
+      p.zeroDamage = false;
+    }
+    this._toughModeActive = false;
+    this.godModeState.toughActive = false;
+  }
+
   /** Snapshot a player, stripping god-mode stat boosts so they never persist across floors. */
   private _cleanSnapFor(p: Player): PlayerSnapshot {
     const snap = snapPlayer(p);
-    if (this._godModeSnapshot !== null) {
-      const boost = p === this.human ? this._godModeSnapshot.human : this._godModeSnapshot.cat;
-      snap.strength -= boost.strengthBoost;
-      snap.intelligence -= boost.intelligenceBoost;
-      snap.constitution -= boost.constitutionBoost;
-      snap.maxHp -= boost.maxHpBoost;
-      snap.hp = Math.min(snap.hp, snap.maxHp);
-    }
+    if (this._godModeSnapshot !== null) stripGodModeFromSnapshot(snap);
     return snap;
   }
 
@@ -1738,119 +1777,24 @@ export class DungeonScene extends GameplayScene {
     this.playerChat.open(this.sceneManager.canvas, (text) => {
       if (text.trim() === '!god') {
         if (this._godModeSnapshot !== null) {
-          const { human: hs, cat: cs } = this._godModeSnapshot;
-          this.human.strength -= hs.strengthBoost;
-          this.human.intelligence -= hs.intelligenceBoost;
-          this.human.constitution -= hs.constitutionBoost;
-          this.human.maxHp -= hs.maxHpBoost;
-          this.human.hp = Math.min(this.human.hp, this.human.maxHp);
-          this.human.speedMultiplier = hs.originalSpeedMultiplier;
-          this.cat.strength -= cs.strengthBoost;
-          this.cat.intelligence -= cs.intelligenceBoost;
-          this.cat.constitution -= cs.constitutionBoost;
-          this.cat.maxHp -= cs.maxHpBoost;
-          this.cat.hp = Math.min(this.cat.hp, this.cat.maxHp);
-          this.cat.speedMultiplier = cs.originalSpeedMultiplier;
-          this.abilityManager.setGodModeMinLevel(0);
-          this._godModeSnapshot = null;
-          this.human.godMode = false;
-          this.cat.godMode = false;
+          this.disableGodMode();
           this.playerChat.showBubble('⚡ GOD MODE OFF');
         } else if (this._toughModeActive) {
-          for (const p of [this.human, this.cat]) {
-            p.godMode = false;
-            p.zeroDamage = false;
-          }
-          this._toughModeActive = false;
+          this.disableToughMode();
+          this.enableGodMode();
           this.playerChat.showBubble('⚡ GOD MODE ON (disabled Tough Mode first)');
-          this._godModeSnapshot = {
-            human: {
-              strengthBoost: GOD_MODE_STAT_BOOST,
-              intelligenceBoost: GOD_MODE_STAT_BOOST,
-              constitutionBoost: GOD_MODE_STAT_BOOST,
-              maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.human.baseSpeedMultiplier,
-            },
-            cat: {
-              strengthBoost: GOD_MODE_STAT_BOOST,
-              intelligenceBoost: GOD_MODE_STAT_BOOST,
-              constitutionBoost: GOD_MODE_STAT_BOOST,
-              maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.cat.baseSpeedMultiplier,
-            },
-          };
-          for (const p of [this.human, this.cat]) {
-            p.strength += GOD_MODE_STAT_BOOST;
-            p.intelligence += GOD_MODE_STAT_BOOST;
-            p.constitution += GOD_MODE_STAT_BOOST;
-            p.maxHp += GOD_MODE_STAT_BOOST;
-            p.hp += GOD_MODE_STAT_BOOST;
-            p.godMode = true;
-            p.speedMultiplier = GOD_MODE_SPEED_MULTIPLIER;
-          }
-          this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
         } else {
-          this._godModeSnapshot = {
-            human: {
-              strengthBoost: GOD_MODE_STAT_BOOST,
-              intelligenceBoost: GOD_MODE_STAT_BOOST,
-              constitutionBoost: GOD_MODE_STAT_BOOST,
-              maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.human.baseSpeedMultiplier,
-            },
-            cat: {
-              strengthBoost: GOD_MODE_STAT_BOOST,
-              intelligenceBoost: GOD_MODE_STAT_BOOST,
-              constitutionBoost: GOD_MODE_STAT_BOOST,
-              maxHpBoost: GOD_MODE_STAT_BOOST,
-              originalSpeedMultiplier: this.cat.baseSpeedMultiplier,
-            },
-          };
-          for (const p of [this.human, this.cat]) {
-            p.strength += GOD_MODE_STAT_BOOST;
-            p.intelligence += GOD_MODE_STAT_BOOST;
-            p.constitution += GOD_MODE_STAT_BOOST;
-            p.maxHp += GOD_MODE_STAT_BOOST;
-            p.hp += GOD_MODE_STAT_BOOST;
-            p.godMode = true;
-            p.speedMultiplier = GOD_MODE_SPEED_MULTIPLIER;
-          }
-          this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
+          this.enableGodMode();
           this.playerChat.showBubble('⚡ GOD MODE ON');
         }
         return;
       }
       if (text.trim() === '!tough') {
         if (this._toughModeActive) {
-          for (const p of [this.human, this.cat]) {
-            p.godMode = false;
-            p.zeroDamage = false;
-          }
-          this._toughModeActive = false;
+          this.disableToughMode();
           this.playerChat.showBubble('🛡️ TOUGH MODE OFF');
         } else {
-          if (this._godModeSnapshot !== null) {
-            const { human: hs, cat: cs } = this._godModeSnapshot;
-            this.human.strength -= hs.strengthBoost;
-            this.human.intelligence -= hs.intelligenceBoost;
-            this.human.constitution -= hs.constitutionBoost;
-            this.human.maxHp -= hs.maxHpBoost;
-            this.human.hp = Math.min(this.human.hp, this.human.maxHp);
-            this.human.speedMultiplier = hs.originalSpeedMultiplier;
-            this.cat.strength -= cs.strengthBoost;
-            this.cat.intelligence -= cs.intelligenceBoost;
-            this.cat.constitution -= cs.constitutionBoost;
-            this.cat.maxHp -= cs.maxHpBoost;
-            this.cat.hp = Math.min(this.cat.hp, this.cat.maxHp);
-            this.cat.speedMultiplier = cs.originalSpeedMultiplier;
-            this.abilityManager.setGodModeMinLevel(0);
-            this._godModeSnapshot = null;
-          }
-          for (const p of [this.human, this.cat]) {
-            p.godMode = true;
-            p.zeroDamage = true;
-          }
-          this._toughModeActive = true;
+          this.enableToughMode();
           this.playerChat.showBubble('🛡️ TOUGH MODE ON');
         }
         return;
@@ -1921,6 +1865,7 @@ export class DungeonScene extends GameplayScene {
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
         mercenaryRoster: this.mercenaryRoster,
+        godModeState: this.godModeState,
       }),
     );
   }

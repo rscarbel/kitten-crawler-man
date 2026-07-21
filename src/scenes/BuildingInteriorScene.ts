@@ -23,6 +23,7 @@ import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
+import { CLUB_MUSIC_TRACKS } from '../audio/sounds';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
@@ -33,6 +34,13 @@ import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
+import {
+  createGodModeState,
+  applyGodModeToPlayer,
+  GOD_MODE_ABILITY_LEVEL,
+  stripGodModeFromSnapshot,
+  type GodModeState,
+} from '../core/GodMode';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
@@ -123,6 +131,7 @@ export class BuildingInteriorScene extends GameplayScene {
   // Desperado Club (club only)
   private readonly clubMembership: ClubMembership;
   private readonly mercenaryRoster: MercenaryRoster;
+  private readonly godModeState: GodModeState;
   private readonly club: DesperadoClubSystem | null;
 
   // Key handler cleanup
@@ -177,6 +186,7 @@ export class BuildingInteriorScene extends GameplayScene {
     doomsdayQuestProgress?: DoomsdayProgress,
     clubMembership?: ClubMembership,
     mercenaryRoster?: MercenaryRoster,
+    godModeState?: GodModeState,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -185,6 +195,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.soulCrystal = new SoulCrystalSystem(this.doomsdayProgress, this.audio);
     this.clubMembership = clubMembership ?? createClubMembership();
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
+    this.godModeState = godModeState ?? createGodModeState();
 
     const isTower = entry.type === 'tower';
 
@@ -212,6 +223,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     restorePlayer(this.human, humanSnap);
     restorePlayer(this.cat, catSnap);
+    this.applyCheatOverlay();
 
     // Re-position after restore (restore doesn't set x/y).
     this.pm.setPositions(sx, sy);
@@ -403,7 +415,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Override the overworld's persisted music with the club's own theme; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     if (this.entry.type === 'club') {
-      this.audio?.playMusic('desperado_club', { fadeInMs: CLUB_MUSIC_FADE_IN_MS });
+      this.audio?.playMusicPlaylist(CLUB_MUSIC_TRACKS, { fadeInMs: CLUB_MUSIC_FADE_IN_MS });
     }
 
     this.escHandler = (e: KeyboardEvent) => {
@@ -725,9 +737,33 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mobileHUD.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
+  /**
+   * Re-apply an active `!god` / `!tough` cheat to this scene's players. Incoming
+   * snapshots are stripped of god-mode boosts on transition, so the overlay has
+   * to be rebuilt here for the cheat to persist while inside the building.
+   */
+  private applyCheatOverlay(): void {
+    if (this.godModeState.active) {
+      applyGodModeToPlayer(this.human);
+      applyGodModeToPlayer(this.cat);
+      this.encounterAbilityManager?.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
+    } else if (this.godModeState.toughActive) {
+      for (const p of [this.human, this.cat]) {
+        p.godMode = true;
+        p.zeroDamage = true;
+      }
+    }
+  }
+
   private doExit(): void {
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
+    // The overworld scene re-applies god mode from the shared state, so hand it
+    // clean stats rather than boosts baked in on top of the overlay it will add.
+    if (this.godModeState.active) {
+      stripGodModeFromSnapshot(humanSnap);
+      stripGodModeFromSnapshot(catSnap);
+    }
     this.onExitCallback(humanSnap, catSnap);
   }
 

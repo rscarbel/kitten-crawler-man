@@ -11,13 +11,16 @@ import {
   CLUB_DJ_TILE,
   CLUB_DANCER_TILES,
   CLUB_INTERIOR_W,
+  CLUB_PATRON_AREA,
+  CLUB_PATRON_COUNT,
   type ClubStation,
   type ClubStationId,
 } from '../core/clubLayout';
-import { drawText } from '../ui/TextBox';
+import { drawText, measureTextBox } from '../ui/TextBox';
 import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
+import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
@@ -41,6 +44,27 @@ interface EscortFollower {
   y: number;
 }
 
+// Wandering patrons — cosmetic figures that stroll near the entrance so the floor feels alive.
+const PATRON_SPEED_MIN = 0.5;
+const PATRON_SPEED_MAX = 1.0;
+const PATRON_ARRIVE_DIST = 4;
+const PATRON_PAUSE_MIN = 24;
+const PATRON_PAUSE_MAX = 120;
+// Spread patron appearance seeds apart so adjacent patrons don't share a look.
+const PATRON_SEED_STRIDE = 7;
+const PATRON_SEED_OFFSET = 3;
+
+interface Patron {
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  speed: number;
+  seed: number;
+  facingX: number;
+  pause: number;
+}
+
 // Dance-floor light overlay
 const DANCE_LIGHT_COLORS = ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'];
 const DANCE_LIGHT_PERIOD_MS = 900;
@@ -51,16 +75,18 @@ const DANCE_LIGHT_ALPHA_SWING = 0.22;
 const DANCE_LIGHT_CENTER_FRACTION = 0.5;
 const DANCE_LIGHT_RADIUS_FRACTION = 0.62;
 
-// Modal layout
-const MODAL_W = 440;
-const MODAL_H = 240;
-const MODAL_PADDING = 22;
+// Modal layout — the box height is derived from the wrapped body so the text
+// never overflows the panel or collides with the Continue hint.
+const MODAL_W = 480;
+const MODAL_PADDING = 24;
 const MODAL_TITLE_SIZE = 18;
 const MODAL_LINE_SIZE = 13;
-const MODAL_LINE_HEIGHT = 26;
-const MODAL_TITLE_GAP = 16;
+const MODAL_LINE_HEIGHT = 24;
+/** Gap from the panel's inner top (where the title sits) down to the first body line. */
+const MODAL_TITLE_TO_BODY = 40;
+/** Gap from the last body line down to the Continue hint. */
+const MODAL_BODY_TO_HINT = 24;
 const MODAL_HINT_SIZE = 11;
-const MODAL_HINT_FROM_BOTTOM = 26;
 
 /** The Sledge's welcome + house rules, shown once and granting the Desperado Pass on dismiss. */
 const GREETING_LINES: ReadonlyArray<string> = [
@@ -175,6 +201,9 @@ export class DesperadoClubSystem implements GameSystem {
   /** Escort Cretins trailing the player once hired from the VIP Lounge; lazily positioned on first render. */
   private escortFollowers: EscortFollower[] | null = null;
 
+  /** Cosmetic patrons that wander the entrance floor; lazily seeded on first update. */
+  private patrons: Patron[] | null = null;
+
   constructor(
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
@@ -224,6 +253,7 @@ export class DesperadoClubSystem implements GameSystem {
 
   update(): void {
     this.animTime++;
+    this.updatePatrons();
     this.barShop.update();
     this.marketShop.update();
     if (this.barShop.purchasePending || this.marketShop.purchasePending) {
@@ -244,6 +274,57 @@ export class DesperadoClubSystem implements GameSystem {
     if (this.vip.escortPending) {
       this.vip.escortPending = false;
       this.unlockAchievement('club_bodyguards');
+    }
+  }
+
+  private randomPatronPoint(): { x: number; y: number } {
+    const tx = CLUB_PATRON_AREA.x0 + Math.random() * (CLUB_PATRON_AREA.x1 - CLUB_PATRON_AREA.x0);
+    const ty = CLUB_PATRON_AREA.y0 + Math.random() * (CLUB_PATRON_AREA.y1 - CLUB_PATRON_AREA.y0);
+    return { x: tx * TILE_SIZE, y: ty * TILE_SIZE };
+  }
+
+  private ensurePatrons(): void {
+    if (this.patrons !== null) return;
+    const patrons: Patron[] = [];
+    for (let i = 0; i < CLUB_PATRON_COUNT; i++) {
+      const start = this.randomPatronPoint();
+      const target = this.randomPatronPoint();
+      patrons.push({
+        x: start.x,
+        y: start.y,
+        targetX: target.x,
+        targetY: target.y,
+        speed: PATRON_SPEED_MIN + Math.random() * (PATRON_SPEED_MAX - PATRON_SPEED_MIN),
+        seed: i * PATRON_SEED_STRIDE + PATRON_SEED_OFFSET,
+        facingX: 1,
+        pause: Math.floor(Math.random() * PATRON_PAUSE_MAX),
+      });
+    }
+    this.patrons = patrons;
+  }
+
+  private updatePatrons(): void {
+    this.ensurePatrons();
+    if (this.patrons === null) return;
+    for (const p of this.patrons) {
+      if (p.pause > 0) {
+        p.pause--;
+        continue;
+      }
+      const dx = p.targetX - p.x;
+      const dy = p.targetY - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < PATRON_ARRIVE_DIST) {
+        const target = this.randomPatronPoint();
+        p.targetX = target.x;
+        p.targetY = target.y;
+        p.pause =
+          PATRON_PAUSE_MIN + Math.floor(Math.random() * (PATRON_PAUSE_MAX - PATRON_PAUSE_MIN));
+        continue;
+      }
+      p.x += (dx / dist) * p.speed;
+      p.y += (dy / dist) * p.speed;
+      if (Math.abs(dx) > 1) p.facingX = dx < 0 ? -1 : 1;
     }
   }
 
@@ -360,6 +441,7 @@ export class DesperadoClubSystem implements GameSystem {
   }
 
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+    drawClubDecor(ctx, camX, camY);
     this.renderDanceFloorLights(ctx, camX, camY);
     this.renderNpcs(ctx, camX, camY);
     this.renderEscort(ctx, camX, camY, active);
@@ -447,16 +529,18 @@ export class DesperadoClubSystem implements GameSystem {
   }
 
   private renderNpcs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    for (const dancer of CLUB_DANCER_TILES) {
+    CLUB_DANCER_TILES.forEach((dancer, i) => {
       drawClubNpc(
         ctx,
         dancer.x * TILE_SIZE - camX,
         dancer.y * TILE_SIZE - camY,
         TILE_SIZE,
         'dancer',
-        this.animTime + dancer.x * dancer.y,
+        this.animTime,
+        i % 2 === 0 ? 1 : -1,
+        i + 1,
       );
-    }
+    });
     drawClubNpc(
       ctx,
       CLUB_DJ_TILE.x * TILE_SIZE - camX,
@@ -465,6 +549,7 @@ export class DesperadoClubSystem implements GameSystem {
       'dj',
       this.animTime,
     );
+    this.renderPatrons(ctx, camX, camY);
     for (const station of CLUB_STATIONS) {
       drawClubNpc(
         ctx,
@@ -473,6 +558,22 @@ export class DesperadoClubSystem implements GameSystem {
         TILE_SIZE,
         STATION_VARIANT[station.id],
         this.animTime + station.tile.x,
+      );
+    }
+  }
+
+  private renderPatrons(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.patrons === null) return;
+    for (const p of this.patrons) {
+      drawClubNpc(
+        ctx,
+        p.x - camX,
+        p.y - camY,
+        TILE_SIZE,
+        'patron',
+        this.animTime,
+        p.facingX,
+        p.seed,
       );
     }
   }
@@ -503,12 +604,23 @@ export class DesperadoClubSystem implements GameSystem {
     const modal = this.modal;
     if (!modal) return;
 
+    const bodyText = modal.lines.join('\n');
+    const innerWidth = MODAL_W - MODAL_PADDING * 2;
+    const body = measureTextBox(ctx, bodyText, {
+      size: MODAL_LINE_SIZE,
+      width: innerWidth,
+      lineHeight: MODAL_LINE_HEIGHT,
+    });
+    const contentHeight =
+      MODAL_TITLE_TO_BODY + body.totalHeight + MODAL_BODY_TO_HINT + MODAL_HINT_SIZE;
+    const modalHeight = contentHeight + MODAL_PADDING * 2;
+
     drawOverlay(ctx, { canvasWidth: canvas.width, canvasHeight: canvas.height, alpha: 0.55 });
     const box = drawModal(ctx, {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
       width: MODAL_W,
-      height: MODAL_H,
+      height: modalHeight,
       padding: MODAL_PADDING,
       ...BOX_PRESETS.modal,
       border: '#c8a840',
@@ -523,11 +635,12 @@ export class DesperadoClubSystem implements GameSystem {
       align: 'center',
     });
 
-    drawText(ctx, modal.lines.join('\n'), {
+    const bodyY = box.inner.y + MODAL_TITLE_TO_BODY;
+    drawText(ctx, bodyText, {
       x: box.inner.x,
-      y: box.inner.y + MODAL_TITLE_GAP + MODAL_LINE_HEIGHT,
+      y: bodyY,
       size: MODAL_LINE_SIZE,
-      color: '#d8d2c0',
+      color: '#e4dcc4',
       align: 'center',
       width: box.inner.width,
       lineHeight: MODAL_LINE_HEIGHT,
@@ -535,9 +648,9 @@ export class DesperadoClubSystem implements GameSystem {
 
     drawText(ctx, '[Space / Click]  Continue', {
       x: canvas.width / 2,
-      y: box.inner.y + box.inner.height - MODAL_HINT_FROM_BOTTOM,
+      y: bodyY + body.totalHeight + MODAL_BODY_TO_HINT,
       size: MODAL_HINT_SIZE,
-      color: '#8a7a50',
+      color: '#a89550',
       align: 'center',
     });
   }

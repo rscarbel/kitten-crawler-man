@@ -19,50 +19,54 @@ const CARD_LABELS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q'
 
 // Panel geometry
 const PANEL_W = 460;
-const PANEL_H = 396;
+const PANEL_H = 456;
 const PANEL_PADDING = 24;
-const OVERLAY_ALPHA = 0.6;
+const OVERLAY_ALPHA = 0.68;
 
 const TITLE_SIZE = 18;
 const SUBTITLE_SIZE = 11;
-const SUBTITLE_GAP = 20;
+const SUBTITLE_GAP = 22;
 const COINS_SIZE = 12;
 const COINS_GAP = 24;
 
 // Card display
-const CARD_W = 78;
-const CARD_H = 108;
+const CARD_W = 76;
+const CARD_H = 102;
 const CARD_ROW_GAP = 44;
-const CARD_AREA_TOP = 88;
+const CARD_AREA_TOP = 96;
 const CARD_RANK_SIZE = 40;
-const CARD_RANK_Y_FROM_TOP = 42;
-const CARD_CAPTION_SIZE = 10;
-const CARD_CAPTION_GAP = 8;
+const CARD_RANK_Y_FROM_TOP = 40;
+const CARD_CAPTION_SIZE = 11;
+const CARD_CAPTION_GAP = 10;
 const CARD_ARROW_SIZE = 26;
 
-// Button rows
-const WAGER_ROW_Y = 216;
+// Button rows — spaced so the wager label clears the card captions and the rows never collide.
+const WAGER_LABEL_Y = 232;
+const WAGER_ROW_Y = 250;
 const WAGER_BTN_W = 118;
 const WAGER_BTN_H = 40;
 const WAGER_BTN_GAP = 10;
-const WAGER_LABEL_Y = 200;
-const WAGER_LABEL_SIZE = 11;
+const WAGER_LABEL_SIZE = 12;
 
-const GUESS_ROW_Y = 284;
+const GUESS_ROW_Y = 308;
 const GUESS_BTN_W = 182;
 const GUESS_BTN_H = 48;
 const GUESS_BTN_GAP = 16;
 
-const RESULT_MSG_SIZE = 16;
-const RESULT_MSG_Y = 272;
+const RESULT_MSG_SIZE = 17;
+const RESULT_MSG_Y = 258;
 const DEAL_BTN_W = 200;
-const DEAL_BTN_H = 44;
-const DEAL_ROW_Y = 296;
+const DEAL_BTN_H = 46;
+const DEAL_ROW_Y = 300;
 
 const FEEDBACK_SIZE = 12;
-const FEEDBACK_Y_FROM_BOTTOM = 40;
-const CLOSE_HINT_SIZE = 10;
-const CLOSE_HINT_Y_FROM_BOTTOM = 18;
+const FEEDBACK_Y_FROM_BOTTOM = 60;
+const CLOSE_HINT_SIZE = 11;
+const CLOSE_HINT_Y_FROM_BOTTOM = 26;
+
+// Higher-contrast text than the previous muted browns.
+const SECONDARY_TEXT = '#cbbf98';
+const HINT_TEXT = '#8a7648';
 
 const WIN_MSG = 'Winner!';
 const LOSE_MSG = 'House wins.';
@@ -241,7 +245,7 @@ export class ClubCasinoSystem {
       x: centerX,
       y: panel.inner.y + SUBTITLE_GAP,
       size: SUBTITLE_SIZE,
-      color: '#a89a70',
+      color: SECONDARY_TEXT,
       align: 'center',
     });
 
@@ -276,7 +280,7 @@ export class ClubCasinoSystem {
       x: centerX,
       y: panel.y + PANEL_H - CLOSE_HINT_Y_FROM_BOTTOM,
       size: CLOSE_HINT_SIZE,
-      color: '#5a4a30',
+      color: HINT_TEXT,
       align: 'center',
     });
   }
@@ -330,7 +334,7 @@ export class ClubCasinoSystem {
       x: x + CARD_W / 2,
       y: y + CARD_H + CARD_CAPTION_GAP,
       size: CARD_CAPTION_SIZE,
-      color: '#a89a70',
+      color: SECONDARY_TEXT,
       align: 'center',
     });
   }
@@ -345,7 +349,7 @@ export class ClubCasinoSystem {
       x: centerX,
       y: panelY + WAGER_LABEL_Y,
       size: WAGER_LABEL_SIZE,
-      color: '#a89a70',
+      color: SECONDARY_TEXT,
       align: 'center',
     });
 
