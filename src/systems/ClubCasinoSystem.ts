@@ -22,6 +22,8 @@ const PANEL_W = 460;
 const PANEL_H = 456;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.68;
+/** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
+const PANEL_CANVAS_SIDE_MARGIN = 40;
 
 const TITLE_SIZE = 18;
 const SUBTITLE_SIZE = 11;
@@ -220,17 +222,18 @@ export class ClubCasinoSystem {
       canvasHeight: canvas.height,
       alpha: OVERLAY_ALPHA,
     });
+    const panelW = Math.min(PANEL_W, canvas.width - PANEL_CANVAS_SIDE_MARGIN);
     const panel = drawModal(ctx, {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
-      width: PANEL_W,
+      width: panelW,
       height: PANEL_H,
       padding: PANEL_PADDING,
       ...BOX_PRESETS.modal,
       border: '#c8a840',
     });
 
-    const centerX = panel.x + PANEL_W / 2;
+    const centerX = panel.x + panelW / 2;
 
     drawText(ctx, '🎲  The Casino — High or Low', {
       x: centerX,

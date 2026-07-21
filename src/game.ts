@@ -3,6 +3,7 @@ import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
+import { PersonPreviewScene } from './scenes/PersonPreviewScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
 import { aiAdapter } from './ai/AIAdapter';
@@ -37,6 +38,12 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (!isLocalDev) return false;
   const params = new URLSearchParams(window.location.search);
+
+  if (params.get('people') !== null) {
+    sceneManager.replace(new PersonPreviewScene(sceneManager));
+    return true;
+  }
+
   const levelId = params.get('level');
   if (levelId === null) return false;
 

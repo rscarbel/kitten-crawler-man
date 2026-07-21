@@ -14,7 +14,7 @@ import { drawModal, BOX_PRESETS } from './Box';
 /** One page of quest dialog: a speaker/heading, body lines, and a button label. */
 export interface DialogPage {
   title: string;
-  lines: string[];
+  lines: ReadonlyArray<string>;
   /** Label for the advance button on this page. */
   button: string;
 }
@@ -56,6 +56,7 @@ export class QuestDialog {
     this.pages = pages;
     this.pageIndex = 0;
     this.onComplete = onComplete;
+    this.audio?.play('typing_click');
   }
 
   /** Esc: closes without firing `onComplete`. Returns true if a dialog was open. */
@@ -72,18 +73,31 @@ export class QuestDialog {
     this.buttonRect = null;
   }
 
+  /**
+   * Advances past the current page as if its button were clicked — pagination
+   * and completion logic shared by mouse clicks and keyboard/tap "interact"
+   * callers that have no pointer coordinates to hit-test against.
+   * Returns true if a dialog was open to advance.
+   */
+  advance(): boolean {
+    if (!this.isOpen) return false;
+    playButtonSound(this.audio);
+    if (this.pageIndex < this.pages.length - 1) {
+      this.pageIndex++;
+      this.audio?.play('typing_click');
+    } else {
+      const done = this.onComplete;
+      this.close();
+      done?.();
+    }
+    return true;
+  }
+
   /** Returns true when the click was consumed — dialogs are modal while open. */
   handleClick(mx: number, my: number): boolean {
     if (!this.isOpen) return false;
     if (this.buttonRect && pointInRect(mx, my, this.buttonRect)) {
-      playButtonSound(this.audio);
-      if (this.pageIndex < this.pages.length - 1) {
-        this.pageIndex++;
-      } else {
-        const done = this.onComplete;
-        this.close();
-        done?.();
-      }
+      this.advance();
     }
     return true;
   }

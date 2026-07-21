@@ -5,6 +5,8 @@ description: Add or modify a sprite in Kitten Crawler Man — PNG sprite sheets,
 
 # Add a Sprite
 
+> **Human NPCs / townsfolk / crowds are NOT sprite sheets** — they're drawn procedurally at runtime from a seed. Use the `add-person` skill for those, not this pipeline.
+
 Runtime rendering uses **PNG sprite sheets described by JSON manifests** under `src/images/<category>/` (`enemies/`, `bosses/`, `characters/`, `npcs/`, `effects/`, `environment/`). The sheets themselves are produced offline by procedural generator scripts in `scripts/` — though many are hand-drawn image assets.
 
 ## Pipeline

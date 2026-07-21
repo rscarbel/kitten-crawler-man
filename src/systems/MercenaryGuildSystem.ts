@@ -16,6 +16,8 @@ const PANEL_W = 540;
 const PANEL_H = 508;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.6;
+/** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
+const PANEL_CANVAS_SIDE_MARGIN = 40;
 
 const TITLE_SIZE = 18;
 const SUBTITLE_SIZE = 11;
@@ -154,17 +156,18 @@ export class MercenaryGuildSystem {
       canvasHeight: canvas.height,
       alpha: OVERLAY_ALPHA,
     });
+    const panelW = Math.min(PANEL_W, canvas.width - PANEL_CANVAS_SIDE_MARGIN);
     const panel = drawModal(ctx, {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
-      width: PANEL_W,
+      width: panelW,
       height: PANEL_H,
       padding: PANEL_PADDING,
       ...BOX_PRESETS.modal,
       border: ACCENT,
     });
 
-    const centerX = panel.x + PANEL_W / 2;
+    const centerX = panel.x + panelW / 2;
 
     drawText(ctx, '🗡  Meat Shields — Mercenaries Guild', {
       x: centerX,
@@ -192,8 +195,8 @@ export class MercenaryGuildSystem {
     });
 
     const hasContract = this.roster.active !== null;
-    if (hasContract) this.renderActiveBanner(ctx, panel.x, panel.y);
-    this.renderHireCards(ctx, panel.x, panel.y, player, hasContract);
+    if (hasContract) this.renderActiveBanner(ctx, panel.x, panel.y, panelW);
+    this.renderHireCards(ctx, panel.x, panel.y, panelW, player, hasContract);
 
     if (this.feedbackMsg !== '') {
       drawText(ctx, this.feedbackMsg, {
@@ -214,14 +217,19 @@ export class MercenaryGuildSystem {
     });
   }
 
-  private renderActiveBanner(ctx: CanvasRenderingContext2D, panelX: number, panelY: number): void {
+  private renderActiveBanner(
+    ctx: CanvasRenderingContext2D,
+    panelX: number,
+    panelY: number,
+    panelW: number,
+  ): void {
     const active = this.roster.active;
     if (active === null) return;
     const template = getMercenaryTemplate(active.id);
 
     const x = panelX + PANEL_PADDING;
     const y = panelY + BANNER_TOP;
-    const w = PANEL_W - PANEL_PADDING * 2;
+    const w = panelW - PANEL_PADDING * 2;
     drawBox(ctx, {
       x,
       y,
@@ -265,11 +273,12 @@ export class MercenaryGuildSystem {
     ctx: CanvasRenderingContext2D,
     panelX: number,
     panelY: number,
+    panelW: number,
     player: Player,
     hasContract: boolean,
   ): void {
     const x = panelX + PANEL_PADDING;
-    const w = PANEL_W - PANEL_PADDING * 2;
+    const w = panelW - PANEL_PADDING * 2;
     let y = panelY + CARDS_TOP;
 
     for (const template of MERCENARY_TEMPLATES) {

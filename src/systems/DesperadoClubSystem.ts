@@ -16,9 +16,8 @@ import {
   type ClubStation,
   type ClubStationId,
 } from '../core/clubLayout';
-import { drawText, measureTextBox } from '../ui/TextBox';
-import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { QuestDialog } from '../ui/QuestDialog';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
@@ -74,19 +73,6 @@ const DANCE_LIGHT_ALPHA_BASE = 0.16;
 const DANCE_LIGHT_ALPHA_SWING = 0.22;
 const DANCE_LIGHT_CENTER_FRACTION = 0.5;
 const DANCE_LIGHT_RADIUS_FRACTION = 0.62;
-
-// Modal layout — the box height is derived from the wrapped body so the text
-// never overflows the panel or collides with the Continue hint.
-const MODAL_W = 480;
-const MODAL_PADDING = 24;
-const MODAL_TITLE_SIZE = 18;
-const MODAL_LINE_SIZE = 13;
-const MODAL_LINE_HEIGHT = 24;
-/** Gap from the panel's inner top (where the title sits) down to the first body line. */
-const MODAL_TITLE_TO_BODY = 40;
-/** Gap from the last body line down to the Continue hint. */
-const MODAL_BODY_TO_HINT = 24;
-const MODAL_HINT_SIZE = 11;
 
 /** The Sledge's welcome + house rules, shown once and granting the Desperado Pass on dismiss. */
 const GREETING_LINES: ReadonlyArray<string> = [
@@ -167,12 +153,6 @@ const STATION_VARIANT: Record<ClubStationId, ClubNpcVariant> = {
   vip: 'vip',
 };
 
-interface ClubModal {
-  title: string;
-  lines: ReadonlyArray<string>;
-  isGreeting: boolean;
-}
-
 /** Proximity-prompt verb for a station: "Talk" to the Sledge, "Shop" at the vendors, "Play" at the casino, else the room name. */
 function promptLabel(station: ClubStation): string {
   if (station.id === 'sledge') return 'Talk';
@@ -189,7 +169,7 @@ function promptLabel(station: ClubStation): string {
  * Later phases attach the bar/market shops, the casino, and the mercenary guild.
  */
 export class DesperadoClubSystem implements GameSystem {
-  private modal: ClubModal | null = null;
+  private readonly dialog: QuestDialog;
   private animTime = 0;
 
   private readonly barShop: ShopSystem;
@@ -211,6 +191,7 @@ export class DesperadoClubSystem implements GameSystem {
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
   ) {
+    this.dialog = new QuestDialog(audio);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
     this.casino = new ClubCasinoSystem(audio);
@@ -243,7 +224,7 @@ export class DesperadoClubSystem implements GameSystem {
 
   get modalOpen(): boolean {
     return (
-      this.modal !== null ||
+      this.dialog.isOpen ||
       this.activeShop() !== null ||
       this.casino.open ||
       this.guild.open ||
@@ -328,15 +309,24 @@ export class DesperadoClubSystem implements GameSystem {
     }
   }
 
+  /** Grants the Desperado Pass once the greeting dialog is taken to its final page. */
   private openGreeting(): void {
-    this.modal = { title: GREETING_TITLE, lines: GREETING_LINES, isGreeting: true };
+    this.dialog.open(
+      [{ title: GREETING_TITLE, lines: GREETING_LINES, button: 'Take the Pass' }],
+      () => {
+        if (this.membership.hasDesperadoPass) return;
+        this.membership.hasDesperadoPass = true;
+        this.unlockAchievement('desperado_member');
+        this.audio?.play('achievement_awarded');
+      },
+    );
   }
 
   private openFlavor(title: string, line: string): void {
-    this.modal = { title, lines: [line], isGreeting: false };
+    this.dialog.open([{ title, lines: [line], button: 'Continue' }], () => undefined);
   }
 
-  /** Close the open shop panel, or advance/close the open modal. Dismissing the greeting grants the Desperado Pass. */
+  /** Close the open shop panel, or advance the open sub-panel/dialog. */
   dismissModal(): void {
     const shop = this.activeShop();
     if (shop) {
@@ -355,14 +345,7 @@ export class DesperadoClubSystem implements GameSystem {
       this.vip.close();
       return;
     }
-    const modal = this.modal;
-    if (!modal) return;
-    this.modal = null;
-    if (modal.isGreeting && !this.membership.hasDesperadoPass) {
-      this.membership.hasDesperadoPass = true;
-      this.unlockAchievement('desperado_member');
-      this.audio?.play('achievement_awarded');
-    }
+    this.dialog.advance();
   }
 
   private isNear(tile: { x: number; y: number }, player: Player): boolean {
@@ -382,8 +365,8 @@ export class DesperadoClubSystem implements GameSystem {
 
   /** Space/tap interaction: dismiss a modal, or open the station the player stands beside. */
   handleInteract(player: Player): void {
-    if (this.modal) {
-      this.dismissModal();
+    if (this.dialog.isOpen) {
+      this.dialog.advance();
       return;
     }
     const station = this.nearestStation(player);
@@ -431,8 +414,8 @@ export class DesperadoClubSystem implements GameSystem {
       this.vip.handleClick(mx, my, active);
       return true;
     }
-    if (!this.modal) return false;
-    this.dismissModal();
+    if (!this.dialog.isOpen) return false;
+    this.dialog.handleClick(mx, my);
     return true;
   }
 
@@ -601,57 +584,6 @@ export class DesperadoClubSystem implements GameSystem {
       return;
     }
 
-    const modal = this.modal;
-    if (!modal) return;
-
-    const bodyText = modal.lines.join('\n');
-    const innerWidth = MODAL_W - MODAL_PADDING * 2;
-    const body = measureTextBox(ctx, bodyText, {
-      size: MODAL_LINE_SIZE,
-      width: innerWidth,
-      lineHeight: MODAL_LINE_HEIGHT,
-    });
-    const contentHeight =
-      MODAL_TITLE_TO_BODY + body.totalHeight + MODAL_BODY_TO_HINT + MODAL_HINT_SIZE;
-    const modalHeight = contentHeight + MODAL_PADDING * 2;
-
-    drawOverlay(ctx, { canvasWidth: canvas.width, canvasHeight: canvas.height, alpha: 0.55 });
-    const box = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-      width: MODAL_W,
-      height: modalHeight,
-      padding: MODAL_PADDING,
-      ...BOX_PRESETS.modal,
-      border: '#c8a840',
-    });
-
-    drawText(ctx, modal.title, {
-      x: canvas.width / 2,
-      y: box.inner.y,
-      size: MODAL_TITLE_SIZE,
-      bold: true,
-      color: '#f0d870',
-      align: 'center',
-    });
-
-    const bodyY = box.inner.y + MODAL_TITLE_TO_BODY;
-    drawText(ctx, bodyText, {
-      x: box.inner.x,
-      y: bodyY,
-      size: MODAL_LINE_SIZE,
-      color: '#e4dcc4',
-      align: 'center',
-      width: box.inner.width,
-      lineHeight: MODAL_LINE_HEIGHT,
-    });
-
-    drawText(ctx, '[Space / Click]  Continue', {
-      x: canvas.width / 2,
-      y: bodyY + body.totalHeight + MODAL_BODY_TO_HINT,
-      size: MODAL_HINT_SIZE,
-      color: '#a89550',
-      align: 'center',
-    });
+    this.dialog.render(ctx, canvas);
   }
 }
