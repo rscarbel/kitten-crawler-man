@@ -20,6 +20,7 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
+import { stepWander, type WanderParams } from '../creatures/townWander';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
@@ -52,6 +53,8 @@ const PATRON_PAUSE_MAX = 120;
 // Spread patron appearance seeds apart so adjacent patrons don't share a look.
 const PATRON_SEED_STRIDE = 7;
 const PATRON_SEED_OFFSET = 3;
+// Minimum horizontal drift toward the target before a patron flips which way it faces.
+const PATRON_FACING_DEADZONE = 1;
 
 interface Patron {
   x: number;
@@ -184,6 +187,14 @@ export class DesperadoClubSystem implements GameSystem {
   /** Cosmetic patrons that wander the entrance floor; lazily seeded on first update. */
   private patrons: Patron[] | null = null;
 
+  /** Shared wander tuning for the patrons (open floor, so no walkability gate). */
+  private readonly patronWander: WanderParams = {
+    pickTarget: () => this.randomPatronPoint(),
+    arriveDist: PATRON_ARRIVE_DIST,
+    pauseMin: PATRON_PAUSE_MIN,
+    pauseMax: PATRON_PAUSE_MAX,
+  };
+
   constructor(
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
@@ -288,24 +299,10 @@ export class DesperadoClubSystem implements GameSystem {
     this.ensurePatrons();
     if (this.patrons === null) return;
     for (const p of this.patrons) {
-      if (p.pause > 0) {
-        p.pause--;
-        continue;
+      const step = stepWander(p, this.patronWander);
+      if (step.moving && Math.abs(step.dx) > PATRON_FACING_DEADZONE) {
+        p.facingX = step.dx < 0 ? -1 : 1;
       }
-      const dx = p.targetX - p.x;
-      const dy = p.targetY - p.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < PATRON_ARRIVE_DIST) {
-        const target = this.randomPatronPoint();
-        p.targetX = target.x;
-        p.targetY = target.y;
-        p.pause =
-          PATRON_PAUSE_MIN + Math.floor(Math.random() * (PATRON_PAUSE_MAX - PATRON_PAUSE_MIN));
-        continue;
-      }
-      p.x += (dx / dist) * p.speed;
-      p.y += (dy / dist) * p.speed;
-      if (Math.abs(dx) > 1) p.facingX = dx < 0 ? -1 : 1;
     }
   }
 

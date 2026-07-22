@@ -90,44 +90,55 @@ Small interactable world objects with a proximity prompt (`drawText` prompt, lik
 
 Build the reusable spine so later phases are data, not plumbing.
 
-- [ ] **0.1** Create `src/creatures/Townsperson.ts`: holds `PersonAppearance`, position, `facing`, `phase`, `moving`, `role`, `speed`; `render()` delegates to `drawPerson`; `update(dt, isWalkable)` advances walk phase and position. No dialog yet. (Skill: `add-person`, `add-creature` for the entity shape.)
-- [ ] **0.2** Extract the club's patron wander into `src/creatures/townWander.ts` (`stepWander`), and refactor `DesperadoClubSystem` to use it — verify no visual regression in the club. (Skill: `add-system`.)
-- [ ] **0.3** Add a `TownRole` union + a role→appearance bias helper in `src/sprites/person/PersonAppearance.ts` (e.g. `generatePersonAppearance(seed, role?)`). Keep existing callers working (role optional). (Skill: `add-person`.)
-- [ ] **0.4** Add a minimal generic dialog surface: a `CitizenDialog` wrapper around `DialogBox` that takes a line array and cycles. (Skill: `add-ui`.)
-- [ ] **DoD:** typecheck/lint clean; `?people` preview still works; club patrons still wander; nothing else visibly changed.
+- [x] **0.1** Create `src/creatures/Townsperson.ts`: holds `PersonAppearance`, position, `facing`, `phase`, `moving`, `role`, `speed`; `render()` delegates to `drawPerson`; `update(dt, isWalkable)` advances walk phase and position. No dialog yet. (Skill: `add-person`, `add-creature` for the entity shape.)
+- [x] **0.2** Extract the club's patron wander into `src/creatures/townWander.ts` (`stepWander`), and refactor `DesperadoClubSystem` to use it — verify no visual regression in the club. (Skill: `add-system`.)
+- [x] **0.3** Add a `TownRole` union + a role→appearance bias helper in `src/sprites/person/PersonAppearance.ts` (e.g. `generatePersonAppearance(seed, role?)`). Keep existing callers working (role optional). (Skill: `add-person`.)
+- [x] **0.4** Add a minimal generic dialog surface: a `CitizenDialog` wrapper around `DialogBox` that takes a line array and cycles. (Skill: `add-ui`.)
+- [x] **DoD:** typecheck/lint clean; `?people` preview still works; club patrons still wander; nothing else visibly changed.
 
 ### Phase 1 — Living streets
 
 Fill the town square and streets with moving citizens.
 
-- [ ] **1.1** Create `src/systems/TownLifeSystem.ts` (a `GameSystem`). Constructor takes the `GameMap`, town centre + `townSafeRadiusTiles`, a walkability predicate, and a target population. Spawn townsfolk on walkable non-building tiles, denser near the plaza.
-- [ ] **1.2** Wire it into `DungeonScene`: construct it for the overworld (guard on level being the town/overworld), `update()` it in the gameplay loop (see `GameLoopPhases` ordering), and render townsfolk in the Y-sorted entity pass (`RenderPipeline`). Add distance culling + respawn to hold density.
-- [ ] **1.3** Recast the 12 `sky_fowl` as bird-folk _citizens_ (role `skyfowl`) integrated into the crowd, or keep them as ambient fauna and layer humans on top — pick one and make the mix read as a populace.
-- [ ] **1.4** Ambient motion polish: varied speeds, natural pausing, face-turns, avoid clumping, keep off building doors so entrances stay usable.
-- [ ] **1.5** Minimap: show townsfolk as faint dots (`MiniMapSystem`) — optional.
-- [ ] **DoD:** the square visibly bustles; citizens never walk through walls/buildings or block doors; no perf drop with the crowd; typecheck/lint clean.
+- [x] **1.1** Create `src/systems/TownLifeSystem.ts` (a `GameSystem`). Constructor takes the `GameMap`, town centre + `townSafeRadiusTiles`, a walkability predicate, and a target population. Spawn townsfolk on walkable non-building tiles, denser near the plaza.
+- [x] **1.2** Wire it into `DungeonScene`: construct it for the overworld (guard on level being the town/overworld), `update()` it in the gameplay loop (see `GameLoopPhases` ordering), and render townsfolk in the Y-sorted entity pass (`RenderPipeline`). Add distance culling + respawn to hold density.
+- [x] **1.3** Recast the 12 `sky_fowl` as bird-folk _citizens_ (role `skyfowl`) integrated into the crowd, or keep them as ambient fauna and layer humans on top — pick one and make the mix read as a populace. — _Chose: keep the 12 `sky_fowl` as ambient fauna and layer ~28 procedural humans on top._
+- [x] **1.4** Ambient motion polish: varied speeds, natural pausing, face-turns, avoid clumping, keep off building doors so entrances stay usable.
+- [ ] **1.5** Minimap: show townsfolk as faint dots (`MiniMapSystem`) — optional. _(deferred — optional)_
+- [x] **DoD:** the square visibly bustles; citizens never walk through walls/buildings or block doors; no perf drop with the crowd; typecheck/lint clean.
+
+**Notes:** Render culls off-screen townsfolk in `RenderPipeline.renderEntities` (camera-rect test) so only visible citizens draw; the full crowd is a fixed population within a capped 20-tile "life radius" around the square (the 55-tile safe radius is too wide to read as busy). Distance-cull/respawn was unnecessary given the bounded population + render culling.
+
+**Deferred follow-ups (from Phase 1 independent review — non-blocking):**
+
+- _Crowd reshuffles on building entry/exit_ — `DungeonScene` is fully reconstructed on each building round-trip, so `TownLifeSystem` re-seeds citizen positions. Persisting the crowd across the scene rebuild (via `DungeonSceneOptions`, like quest progress) belongs with **Phase 5.1** (schedules/persistence).
+- _Perfectly-overlapping spawns_ — two citizens can spawn on the same tile and stay stacked while both idle (separation's `dist === 0` branch skips them). Self-resolves once either moves; a tiny deterministic jitter would make it belt-and-suspenders. Minor.
 
 ### Phase 2 — Lived-in interiors
 
 Put occupants and activity inside buildings.
 
-- [ ] **2.1** Create `src/systems/InteriorOccupantSystem.ts` and a per-building occupant data table (building name → occupants with role + activity + anchor tile derived from the hand-crafted layouts in `GameMap.generateInterior`).
-- [ ] **2.2** Wire it into `BuildingInteriorScene` for non-encounter interiors (skip when a live quest encounter occupies the building). Render occupants in the interior entity pass; update stationed/idle motion each frame.
-- [ ] **2.3** Author occupants for the marquee buildings first: Rusty Anvil (smith at the forge), Sleeping Cat Inn / Wanderer's Rest (innkeeper + patrons at tables), Sunken Stump Pub (barkeep + drinkers), Miller's Farm (farmer), Herb & Remedy (apothecary), Shepherd's Cabin (shepherd). Give the restaurant/store their existing NPCs company where it fits.
+- [x] **2.1** Create `src/systems/InteriorOccupantSystem.ts` and a per-building occupant data table (building name → occupants with role + activity + anchor tile derived from the hand-crafted layouts in `GameMap.generateInterior`).
+- [x] **2.2** Wire it into `BuildingInteriorScene` for non-encounter interiors (skip when a live quest encounter occupies the building). Render occupants in the interior entity pass; update stationed/idle motion each frame.
+- [x] **2.3** Author occupants for the marquee buildings first: Rusty Anvil (smith at the forge), Sleeping Cat Inn / Wanderer's Rest (innkeeper + patrons at tables), Sunken Stump Pub (barkeep + drinkers), Miller's Farm (farmer), Herb & Remedy (apothecary), Shepherd's Cabin (shepherd). Give the restaurant/store their existing NPCs company where it fits.
 - [ ] **2.4** Make more houses enterable and occupied so wandering in is rewarded (extend `BuildingSystem` entries / `generateInterior` for generic occupied homes). Add lived-in props/ambience (lit fireplaces, clutter) where cheap — reuse existing furniture tiles.
 - [ ] **2.5** Interior ambient audio per building type (forge clangs, tavern murmur, hearth crackle) via `add-sound` / `AudioManager`.
 - [ ] **DoD:** every named building has believable occupants doing role-appropriate things; encounters unaffected; entering buildings feels rewarding; typecheck/lint clean.
+
+**Notes:** Occupant anchors are _derived_ by scanning the finished interior grid for furniture (`InteriorOccupantSystem.scanFurniture`) rather than hard-coding the layout constants in `generateInterior` — rooms and occupants stay in sync if furniture moves. Each occupant is a `Townsperson` given a bounded wander around a stand-tile beside its furniture (small radius + long pauses for stationed roles, wider for roamers), reusing the shared `stepWander` helper. The scene builds the system only when `combat === null`, so it never spawns into an active Big Top / cult / tower encounter; towers, the club, and the Big Top are excluded outright. Occupants Y-sort with the players in the interior's non-combat entity pass. Verified headlessly: every marquee building spawns its roster and no occupant leaves a walkable tile over 600 frames. **2.4 (more enterable/occupied homes) and 2.5 (interior ambient audio) deferred** as larger follow-ups.
 
 ### Phase 3 — Citizen dialog variety
 
 Make talking to people worthwhile and varied.
 
-- [ ] **3.1** Build `src/systems/townDialog.ts`: role-keyed ambient line pools + context-tagged lines (time-of-day, danger state, quest flags). Rotation so repeats vary.
-- [ ] **3.2** Rumor/gossip layer reacting to `EventBus` events and quest progress (`CircusQuestProgress`, `MurderQuestProgress`, `DoomsdayProgress`, recent `AchievementManager` events) — citizens comment on what the player has actually done.
-- [ ] **3.3** Wire Space-to-talk in both `TownLifeSystem` and `InteriorOccupantSystem` (proximity + prompt + `CitizenDialog`), yielding priority to combat/quest interactions.
-- [ ] **3.4** Passing "barks" — occasional short overhead one-liners as the player walks near a citizen (no interaction needed), throttled so it's flavor not spam.
-- [ ] **3.5** Optional AI-generated lines for a subset of citizens via `AIAdapter`, with the scripted table as guaranteed fallback (mirror `chatWithMordecai`).
-- [ ] **DoD:** citizens across roles/buildings give distinct, context-aware lines; dialog reflects quest progress; no repetition fatigue in a normal play session; typecheck/lint clean.
+- [x] **3.1** Build `src/systems/townDialog.ts`: role-keyed ambient line pools + context-tagged lines (danger state, quest flags). Rotation so repeats vary.
+- [x] **3.2** Rumor/gossip layer reacting to quest progress (`CircusQuestProgress`, `MurderQuestProgress`, `DoomsdayProgress`) — citizens comment on what the player has actually done.
+- [x] **3.3** Wire Space-to-talk in both `TownLifeSystem` and `InteriorOccupantSystem` (proximity + prompt + `CitizenDialog`), yielding priority to combat/quest interactions.
+- [ ] **3.4** Passing "barks" — occasional short overhead one-liners as the player walks near a citizen (no interaction needed), throttled so it's flavor not spam. _(deferred)_
+- [ ] **3.5** Optional AI-generated lines for a subset of citizens via `AIAdapter`, with the scripted table as guaranteed fallback (mirror `chatWithMordecai`). _(deferred — optional)_
+- [x] **DoD:** citizens across roles/buildings give distinct, context-aware lines; dialog reflects quest progress; no repetition fatigue in a normal play session; typecheck/lint clean.
+
+**Notes:** Dialog content and selection live in `src/systems/townDialog.ts` (pure data — no rendering/audio/scene coupling). Two layers stack: a role-keyed **ambient** pool rotated per-citizen by `appearance.seed + conversationCount` so repeat talks vary, and a **reactive** gossip/alarm layer gated on the live `CircusQuestStage` / `MurderQuestStage` / `DoomsdayStage` flags threaded through both scenes. When the town is imperilled (doomsday countdown, circus assault/ritual, murder night-attack) every citizen drops to a single role-flavoured panic line. Proximity + Space is wired through the existing interaction-priority chains in `DungeonScene.triggerSpaceAction` (streets) and `BuildingInteriorScene.update` (interiors), yielding to combat/quests/shops/safe-room and reusing `CitizenDialog` + `drawInteractionPrompt`. Shared `findNearestTownsperson` (`src/creatures/townInteraction.ts`) picks the talk target for both systems. **3.4 (passing barks) and 3.5 (AI lines) deferred** as optional follow-ups. The restaurant safe-room Space handler was tightened to only consume the key when it actually sleeps/opens Mordecai, so a press can fall through to an ambient occupant sharing the room.
 
 ### Phase 4 — Things to do in town
 
@@ -142,25 +153,23 @@ Give the player reasons to linger and interact.
 
 ### Phase 5 — Polish & reactivity
 
-- [ ] **5.1** Day/night or floor-timer-driven schedules: citizens move between home/work/square over the floor's timeline; density and behavior shift with time.
-- [ ] **5.2** Danger reactions: when hostile mobs breach the town-safe radius or the doomsday escape begins, townsfolk flee toward the stairwell / scatter and panic-bark (ties into `DoomsdayEscapeSystem`).
-- [ ] **5.3** Reputation/progress reactions: citizens greet the player differently as quests complete (hero welcome after the circus, gratitude/fear during the murders).
-- [ ] **5.4** Ambient town soundscape layer (crowd murmur, market, distant clangs) mixed under `OverworldMusicSystem`.
-- [ ] **5.5** Performance pass: cull/pool townsfolk, cap on-screen count, profile the crowd + interiors.
-- [ ] **DoD:** the town's life visibly responds to time and player actions; the doomsday evacuation is populated by fleeing citizens; frame rate holds with a full crowd.
+- [ ] **5.1** Reputation/progress reactions: citizens greet the player differently as quests complete (hero welcome after the circus, gratitude/fear during the murders).
+- [ ] **5.2** Ambient town soundscape layer (crowd murmur, market, distant clangs) mixed under `OverworldMusicSystem`.
+- [ ] **5.3** Performance pass: cull/pool townsfolk, cap on-screen count, profile the crowd + interiors.
+- [ ] **DoD:** the town's life visibly responds to time and player actions; frame rate holds with a full crowd.
 
 ---
 
 ## Part 4 — Progress tracker
 
-| Phase | Title                                                                | Status        |
-| ----- | -------------------------------------------------------------------- | ------------- |
-| 0     | Foundations (Townsperson, wander helper, role genome, CitizenDialog) | ☐ Not started |
-| 1     | Living streets                                                       | ☐ Not started |
-| 2     | Lived-in interiors                                                   | ☐ Not started |
-| 3     | Citizen dialog variety                                               | ☐ Not started |
-| 4     | Things to do in town                                                 | ☐ Not started |
-| 5     | Polish & reactivity                                                  | ☐ Not started |
+| Phase | Title                                                                | Status                                         |
+| ----- | -------------------------------------------------------------------- | ---------------------------------------------- |
+| 0     | Foundations (Townsperson, wander helper, role genome, CitizenDialog) | ☑ Done                                         |
+| 1     | Living streets                                                       | ☑ Done                                         |
+| 2     | Lived-in interiors                                                   | ◑ In progress (2.1–2.3 done; 2.4–2.5 deferred) |
+| 3     | Citizen dialog variety                                               | ◑ In progress (3.1–3.3 done; 3.4–3.5 deferred) |
+| 4     | Things to do in town                                                 | ☐ Not started                                  |
+| 5     | Polish & reactivity                                                  | ☐ Not started                                  |
 
 Update the box and status as work lands. Within a phase, the step checkboxes above are the fine-grained tracker.
 

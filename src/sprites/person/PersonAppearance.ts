@@ -10,7 +10,7 @@
  * size.
  */
 
-import { mulberry32, range, centered, pick, chance, type Rng } from './rng';
+import { mulberry32, range, centered, pick, chance, subSeed, type Rng } from './rng';
 import {
   SKIN_TONES,
   HAIR_COLORS,
@@ -116,6 +116,27 @@ export interface PersonAppearance {
   outfit: PersonOutfit;
   gait: PersonGaitTraits;
 }
+
+/**
+ * A citizen's occupation in the Over City. Passed to `generatePersonAppearance`
+ * to nudge a seeded genome toward a role's look (a guard's livery, a farmer's
+ * hat, a child's smaller stature) without discarding the underlying variety.
+ * `commoner` applies no bias — a plain seeded person.
+ */
+export type TownRole =
+  | 'guard'
+  | 'merchant'
+  | 'farmer'
+  | 'smith'
+  | 'innkeeper'
+  | 'priest'
+  | 'child'
+  | 'drunk'
+  | 'noble'
+  | 'beggar'
+  | 'laborer'
+  | 'skyfowl'
+  | 'commoner';
 
 const HEIGHT_MIN = 0.86;
 const HEIGHT_MAX = 1.14;
@@ -252,15 +273,99 @@ function generateGait(rng: Rng): PersonGaitTraits {
   };
 }
 
-/** Builds a complete, reproducible appearance from `seed`. */
-export function generatePersonAppearance(seed: number): PersonAppearance {
+// Role-biased palettes: livery, work clothes, and finery that read at a glance.
+const GUARD_TOP_COLORS = ['#3a4a6a', '#42506a', '#4a5560', '#5a6070'] as const;
+const GUARD_BOTTOM_COLORS = ['#2a2a34', '#2c3040', '#34383e'] as const;
+const FARMER_TOP_COLORS = ['#6a5a3a', '#556b2f', '#7a6a4a', '#5a4a2a'] as const;
+const FARMER_BOTTOM_COLORS = ['#4a3a2a', '#5a4a38', '#6a5a3a'] as const;
+const SMITH_TOP_COLORS = ['#3a2a22', '#2a2420', '#4a3020'] as const;
+const INNKEEPER_TOP_COLORS = ['#a0522d', '#8a5a2c', '#7a4a2a'] as const;
+const INNKEEPER_ACCENTS = ['#e0d0c0', '#f0f0f0'] as const;
+const PRIEST_TOP_COLORS = ['#2a2430', '#3a3040', '#d0d3d4'] as const;
+const NOBLE_TOP_COLORS = ['#5a2a5a', '#7a2a3a', '#2a3a6a', '#4a2a6a'] as const;
+const NOBLE_ACCENTS = ['#e0c060', '#e0d0c0'] as const;
+const MERCHANT_TOP_COLORS = ['#8e44ad', '#c0447a', '#16a085', '#d68910'] as const;
+const DRAB_TOP_COLORS = ['#5a5a5a', '#4a4a4a', '#6a5a4a', '#3a3a3a'] as const;
+const DRAB_BOTTOM_COLORS = ['#3a3a3a', '#2a2a2e', '#4a3a2a'] as const;
+const SKYFOWL_TOP_COLORS = ['#2c6ba0', '#27824f', '#c0392b', '#d68910', '#8e44ad'] as const;
+
+const CHILD_HEIGHT_FACTOR = 0.62;
+const CHILD_BUILD = 0.15;
+const SMITH_BUILD_FLOOR = 0.6;
+const LABORER_BUILD_FLOOR = 0.45;
+
+const ROLE_BIAS_SALT = 0x00b1a5;
+
+/**
+ * How a role tugs a genome away from the neutral seed. Every field is optional
+ * so a role only overrides the traits that make it recognizable, leaving the
+ * rest to the seed.
+ */
+interface RoleBias {
+  heightFactor?: number;
+  build?: number;
+  buildFloor?: number;
+  topColors?: ReadonlyArray<string>;
+  bottomColors?: ReadonlyArray<string>;
+  accentColors?: ReadonlyArray<string>;
+  /** Force this hat; `'none'` bares the head. */
+  hat?: HatStyle;
+  suppressFacialHair?: boolean;
+}
+
+const ROLE_BIASES: Partial<Record<TownRole, RoleBias>> = {
+  guard: { topColors: GUARD_TOP_COLORS, bottomColors: GUARD_BOTTOM_COLORS, hat: 'brimmed' },
+  merchant: { topColors: MERCHANT_TOP_COLORS },
+  farmer: { topColors: FARMER_TOP_COLORS, bottomColors: FARMER_BOTTOM_COLORS, hat: 'brimmed' },
+  smith: { topColors: SMITH_TOP_COLORS, buildFloor: SMITH_BUILD_FLOOR, hat: 'none' },
+  innkeeper: { topColors: INNKEEPER_TOP_COLORS, accentColors: INNKEEPER_ACCENTS },
+  priest: { topColors: PRIEST_TOP_COLORS, hat: 'none', suppressFacialHair: true },
+  child: {
+    heightFactor: CHILD_HEIGHT_FACTOR,
+    build: CHILD_BUILD,
+    suppressFacialHair: true,
+    hat: 'none',
+  },
+  drunk: { topColors: DRAB_TOP_COLORS, hat: 'none' },
+  noble: { topColors: NOBLE_TOP_COLORS, accentColors: NOBLE_ACCENTS, hat: 'brimmed' },
+  beggar: { topColors: DRAB_TOP_COLORS, bottomColors: DRAB_BOTTOM_COLORS, hat: 'none' },
+  laborer: { topColors: DRAB_TOP_COLORS, buildFloor: LABORER_BUILD_FLOOR },
+  skyfowl: { topColors: SKYFOWL_TOP_COLORS },
+};
+
+/**
+ * Applies a role's bias in place. Uses its own seeded stream (`ROLE_BIAS_SALT`)
+ * so the neutral genome above is untouched — an identical seed with no role
+ * still yields the identical person.
+ */
+function applyRoleBias(app: PersonAppearance, role: TownRole): void {
+  const bias = ROLE_BIASES[role];
+  if (!bias) return;
+  const rng = mulberry32(subSeed(app.seed, ROLE_BIAS_SALT));
+
+  if (bias.heightFactor !== undefined) app.body.heightScale *= bias.heightFactor;
+  if (bias.build !== undefined) app.body.build = bias.build;
+  if (bias.buildFloor !== undefined) app.body.build = Math.max(app.body.build, bias.buildFloor);
+  if (bias.topColors) app.outfit.topColor = pick(rng, bias.topColors);
+  if (bias.bottomColors) app.outfit.bottomColor = pick(rng, bias.bottomColors);
+  if (bias.accentColors) app.outfit.topAccent = pick(rng, bias.accentColors);
+  if (bias.hat !== undefined) app.outfit.hat = bias.hat;
+  if (bias.suppressFacialHair) app.hair.facial = 'none';
+}
+
+/**
+ * Builds a complete, reproducible appearance from `seed`. An optional `role`
+ * biases the look toward an occupation (see {@link TownRole}) without losing
+ * the seed's variety; omit it (or pass `'commoner'`) for a neutral citizen.
+ */
+export function generatePersonAppearance(seed: number, role?: TownRole): PersonAppearance {
   const rng = mulberry32(seed);
   // Drawn first so it can bias hair/facial-hair without correlating other traits.
   const masc = rng();
   const skin = pick(rng, SKIN_TONES);
   const skinShadow = shade(skin, SKIN_SHADOW_AMOUNT);
 
-  return {
+  const appearance: PersonAppearance = {
     seed,
     body: generateBody(rng),
     head: {
@@ -273,4 +378,7 @@ export function generatePersonAppearance(seed: number): PersonAppearance {
     outfit: generateOutfit(rng),
     gait: generateGait(rng),
   };
+
+  if (role !== undefined && role !== 'commoner') applyRoleBias(appearance, role);
+  return appearance;
 }

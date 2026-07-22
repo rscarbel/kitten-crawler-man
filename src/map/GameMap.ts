@@ -1407,6 +1407,16 @@ export class GameMap {
    * True when the given world-pixel position falls inside the overworld town's
    * safe radius. Always false on non-overworld maps (townSafeRadiusTiles is null).
    */
+  /** Number of tiles along one edge of the (square) map grid. */
+  get gridSize(): number {
+    return this.structure.length;
+  }
+
+  /** Town safe-zone radius in tiles, or null off the overworld. */
+  get townSafeRadius(): number | null {
+    return this.townSafeRadiusTiles;
+  }
+
   isInTownSafeZone(worldX: number, worldY: number): boolean {
     if (this.townSafeRadiusTiles === null) return false;
     const size = this.structure.length;

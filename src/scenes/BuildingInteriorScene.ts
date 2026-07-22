@@ -42,6 +42,14 @@ import {
   type GodModeState,
 } from '../core/GodMode';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
+import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
+import {
+  buildCitizenConversation,
+  roleDisplayName,
+  type TownDialogContext,
+} from '../systems/townDialog';
+import { CitizenDialog } from '../ui/CitizenDialog';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
@@ -158,6 +166,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Quest-encounter combat stack (null in buildings without a live encounter)
   private combat: InteriorCombat | null;
+  // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
+  private readonly occupants: InteriorOccupantSystem | null;
+  // Talk surface for ambient occupants; null when there are no occupants or no audio.
+  private readonly citizenDialog: CitizenDialog | null;
   private gameOver = false;
   /** Kept for encounters created after construction (the tower's top-floor fight). */
   private readonly encounterAbilityManager: AbilityManager | null;
@@ -181,7 +193,7 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly catAchievements?: AchievementManager,
     audio?: AudioManager,
     abilityManager?: AbilityManager,
-    circusQuestProgress?: CircusQuestProgress,
+    private readonly circusQuestProgress?: CircusQuestProgress,
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
     clubMembership?: ClubMembership,
@@ -258,6 +270,15 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.combat = this.initEntryEncounter(abilityManager, circusQuestProgress);
+
+    // Ambient occupants only where no live encounter owns the room; the tower's
+    // confrontation can start after entry, so towers are excluded outright.
+    this.occupants =
+      this.combat === null
+        ? InteriorOccupantSystem.forBuilding(this.map, entry.type, entry.name)
+        : null;
+    this.citizenDialog =
+      this.occupants !== null && this.audio !== null ? new CitizenDialog(this.audio) : null;
   }
 
   /**
@@ -514,6 +535,14 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       return;
     }
+    if (this.citizenDialog?.isOpen === true) {
+      this.citizenDialog.update();
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.citizenDialog.advance();
+      }
+      return;
+    }
 
     // Sleep tick
     if (this.safeRoom?.isSleeping) {
@@ -546,12 +575,15 @@ export class BuildingInteriorScene extends GameplayScene {
       this.pm.switchActive();
     }
 
-    // Safe room: sleep / talk to Mordecai
+    // Safe room: sleep / talk to Mordecai. Only consume Space when actually
+    // acting, so an unrelated press can still fall through to talking to an
+    // ambient occupant sharing the room.
     if (this.safeRoom && this.input.has(' ')) {
-      this.input.clear();
       if (this.safeRoom.isNearBed(player)) {
+        this.input.clear();
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(player)) {
+        this.input.clear();
         const humanEvents = this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
         const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
         const merged = [...humanEvents, ...catEvents]
@@ -583,12 +615,32 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.handleInteract(player);
     }
 
+    // Ambient occupants: talk to the nearest one with Space
+    if (this.citizenDialog !== null && this.occupants !== null && this.input.has(' ')) {
+      const target = this.occupants.findTalkTarget(player.x, player.y);
+      if (target !== null) {
+        this.input.clear();
+        target.faceToward(player.x, player.y);
+        this.citizenDialog.open(
+          roleDisplayName(target.role),
+          buildCitizenConversation(
+            target.role,
+            target.appearance.seed,
+            target.conversationCount,
+            this.townDialogContext(),
+          ),
+        );
+        target.conversationCount++;
+      }
+    }
+
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
     this.safeRoom?.updateWander();
     this.shop?.update();
     this.club?.update();
+    this.occupants?.update();
     if (this.shop?.purchasePending) {
       this.shop.purchasePending = false;
       this.audio?.play('purchase_success');
@@ -705,6 +757,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.handleClick(mx, my, this.active());
       return;
     }
+    if (this.citizenDialog?.isOpen === true) {
+      this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
+      return;
+    }
     if (!this.exitMenuOpen) return;
     const canvas = this.sceneManager.canvas;
     const rects = this.menuRects(canvas);
@@ -768,6 +824,37 @@ export class BuildingInteriorScene extends GameplayScene {
     this.onExitCallback(humanSnap, catSnap);
   }
 
+  private townDialogContext(): TownDialogContext {
+    const circus = this.circusQuestProgress;
+    const murder = this.murderQuestProgress;
+    return {
+      circus: circus?.stage ?? 'not_started',
+      murder: murder?.stage ?? 'not_started',
+      doomsday: this.doomsdayProgress.stage,
+      heatherSlain: circus?.heatherSlain ?? false,
+      quillNamed: murder?.quillNamed ?? false,
+    };
+  }
+
+  /** Floats a "Talk" prompt over the nearest occupant when one is in range. */
+  private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.citizenDialog === null || this.occupants === null) return;
+    if (this.citizenDialog.isOpen) return;
+    if (
+      this.pauseMenu.isOpen ||
+      this.exitMenuOpen ||
+      this.shop?.shopOpen === true ||
+      this.safeRoom?.mordecaiDialogOpen === true ||
+      this.safeRoom?.isSleeping === true
+    ) {
+      return;
+    }
+    const active = this.active();
+    const target = this.occupants.findTalkTarget(active.x, active.y);
+    if (target === null) return;
+    drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     const canvas = this.sceneManager.canvas;
     const { x: camX, y: camY } = this.computeCamera(this.map);
@@ -798,8 +885,13 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.spells.renderShockwaveRipples(ctx, camX, camY);
       combat.spells.renderFogs(ctx, camX, camY);
     } else {
-      this.inactive().render(ctx, camX, camY, TILE_SIZE);
-      this.active().render(ctx, camX, camY, TILE_SIZE);
+      const entities: Array<{
+        y: number;
+        render(c: CanvasRenderingContext2D, cx: number, cy: number, ts: number): void;
+      }> = [this.inactive(), this.active(), ...(this.occupants?.people ?? [])];
+      entities.sort((a, b) => a.y - b.y);
+      for (const entity of entities) entity.render(ctx, camX, camY, TILE_SIZE);
+      this.renderCitizenPrompt(ctx, camX, camY);
     }
 
     // Independent of `combat` — the crystal must still be visible/containable
@@ -893,6 +985,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.club) {
       this.club.renderUI(ctx, canvas, this.active());
     }
+
+    this.citizenDialog?.render(ctx, canvas);
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
     this.soulCrystal.renderUI(ctx, canvas);

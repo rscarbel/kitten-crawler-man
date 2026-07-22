@@ -29,6 +29,7 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
+import type { Townsperson } from '../creatures/Townsperson';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -41,6 +42,9 @@ const DRAW_KIND_PLAYER = 2;
 
 /** Draw kind for treasure chests. */
 const DRAW_KIND_CHEST = 3;
+
+/** Draw kind for ambient townsfolk (rendered like entities via their own render()). */
+const DRAW_KIND_TOWNSPERSON = 4;
 
 /** Tree depth offset to keep trees rendered behind entities. */
 const TREE_SORT_DEPTH_OFFSET = 100000;
@@ -80,6 +84,8 @@ export interface RenderContext {
   inactive: HumanPlayer | CatPlayer;
   mobs: Mob[];
   mobGrid: SpatialGrid<Mob>;
+  /** Ambient overworld citizens; empty/absent off the town map. */
+  townsfolk?: ReadonlyArray<Townsperson>;
   gameOver: boolean;
   pauseMenuOpen: boolean;
 
@@ -158,7 +164,8 @@ export class RenderPipeline {
    * so depth (north = behind, south = in front) is respected.
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { canvas, camX, camY, gameMap, mobGrid, active, inactive, treasureChests } = rc;
+    const { canvas, camX, camY, gameMap, mobGrid, active, inactive, treasureChests, townsfolk } =
+      rc;
 
     const visibleMobs = mobGrid.queryRect(
       camX - TILE_SIZE,
@@ -221,6 +228,21 @@ export class RenderPipeline {
       e.kind = DRAW_KIND_PLAYER;
       e.entity = active;
       e.chestRef = null;
+    }
+
+    if (townsfolk !== undefined) {
+      const minX = camX - TILE_SIZE;
+      const minY = camY - TILE_SIZE;
+      const maxX = camX + canvas.width + TILE_SIZE;
+      const maxY = camY + canvas.height + TILE_SIZE;
+      for (const person of townsfolk) {
+        if (person.x < minX || person.x > maxX || person.y < minY || person.y > maxY) continue;
+        const e = this._getEntry();
+        e.sortY = person.y + ENTITY_SORT_Y_OFFSET;
+        e.kind = DRAW_KIND_TOWNSPERSON;
+        e.entity = person;
+        e.chestRef = null;
+      }
     }
 
     // Sort only the active portion of the pool

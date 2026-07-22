@@ -33,6 +33,14 @@ import { CompanionSystem } from '../systems/CompanionSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
+import { TownLifeSystem } from '../systems/TownLifeSystem';
+import {
+  buildCitizenConversation,
+  roleDisplayName,
+  type TownDialogContext,
+} from '../systems/townDialog';
+import { CitizenDialog } from '../ui/CitizenDialog';
+import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
@@ -362,6 +370,8 @@ export class DungeonScene extends GameplayScene {
   private loot: LootSystem;
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
+  private townLife: TownLifeSystem | null = null;
+  private citizenDialog: CitizenDialog | null = null;
   private juicerRoom: JuicerRoomSystem;
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
@@ -794,6 +804,7 @@ export class DungeonScene extends GameplayScene {
           ),
         );
       });
+      this.townLife = new TownLifeSystem(this.gameMap);
     }
 
     this.pauseMenu = new PauseMenu();
@@ -868,6 +879,9 @@ export class DungeonScene extends GameplayScene {
     this.onSaveProgress = options?.saveProgress;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
+    if (this.townLife !== null && this.audio !== null) {
+      this.citizenDialog = new CitizenDialog(this.audio);
+    }
     this.skipIntro = options?.skipIntro ?? false;
     if (this.skipIntro) this.dungeonIntro.skip();
     this.overworldMusic =
@@ -1321,6 +1335,7 @@ export class DungeonScene extends GameplayScene {
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
+        this.citizenDialog?.isOpen === true ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
@@ -1333,6 +1348,10 @@ export class DungeonScene extends GameplayScene {
         if (this.spiderQuest.dismissDialog()) return true;
         if (this.circusQuest.dismissDialog()) return true;
         if (this.murderQuest.dismissDialog()) return true;
+        if (this.citizenDialog?.isOpen === true) {
+          this.citizenDialog.close();
+          return true;
+        }
         if (this.safeRoom.mordecaiDialogOpen) {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
@@ -1372,6 +1391,10 @@ export class DungeonScene extends GameplayScene {
       },
       clearInput: () => this.input.clear(),
       advanceDialog: () => {
+        if (this.citizenDialog?.isOpen === true) {
+          this.citizenDialog.advance();
+          return true;
+        }
         const handled = this.defendQuest.advancePage();
         if (handled) this.audio?.play('menu_click');
         return handled;
@@ -1882,6 +1905,48 @@ export class DungeonScene extends GameplayScene {
     return false;
   }
 
+  private townDialogContext(): TownDialogContext {
+    return {
+      circus: this.circusQuestProgress.stage,
+      murder: this.murderQuestProgress.stage,
+      doomsday: this.doomsdayQuestProgress.stage,
+      heatherSlain: this.circusQuestProgress.heatherSlain,
+      quillNamed: this.murderQuestProgress.quillNamed,
+    };
+  }
+
+  /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
+  private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.citizenDialog === null || this.townLife === null) return;
+    if (this.citizenDialog.isOpen) return;
+    const active = this.active();
+    const attackRange = this.human.isActive
+      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
+      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
+    if (this.hasNearbyEnemy(active, attackRange)) return;
+    const target = this.townLife.findTalkTarget(active.x, active.y);
+    if (target === null) return;
+    drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+  }
+
+  /** Opens a conversation with the nearest street citizen, if one is in range. */
+  private tryTalkToCitizen(active: Player): boolean {
+    const dialog = this.citizenDialog;
+    if (dialog === null || this.townLife === null) return false;
+    const target = this.townLife.findTalkTarget(active.x, active.y);
+    if (target === null) return false;
+    target.faceToward(active.x, active.y);
+    const lines = buildCitizenConversation(
+      target.role,
+      target.appearance.seed,
+      target.conversationCount,
+      this.townDialogContext(),
+    );
+    dialog.open(roleDisplayName(target.role), lines);
+    target.conversationCount++;
+    return true;
+  }
+
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
     // Space bar advances / dismisses achievement notifications and loot boxes
     if (this.achievementUI.handleSpaceBar()) return;
@@ -1889,6 +1954,11 @@ export class DungeonScene extends GameplayScene {
     if (this.abilityLevelUpDialog.handleSpaceBar()) return;
     if (this.rewardGrantedDialog.handleSpaceBar()) return;
     if (this.levelCompleteScreen.handleSpaceBar()) return;
+    // The keyboard path advances the citizen dialog earlier, in `advanceDialog`
+    // (which runs before the input-suppression gate); this guards the mobile
+    // tap path, where `handleClick` already advanced it, from re-opening a
+    // fresh conversation or falling through to an attack.
+    if (this.citizenDialog?.isOpen === true) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.restartAtFloorEntry();
       return;
@@ -1967,6 +2037,9 @@ export class DungeonScene extends GameplayScene {
         this.arenaRoom.tryPickupNear(active) ||
         this.barriers.tryPickupNear(active)
       ) {
+        return;
+      }
+      if (this.tryTalkToCitizen(active)) {
         return;
       }
     }
@@ -2108,6 +2181,10 @@ export class DungeonScene extends GameplayScene {
     if (this.spiderQuest.handleClick(mx, my)) return;
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
+    if (this.citizenDialog?.isOpen === true) {
+      this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
+      return;
+    }
     if (this.achievementUI.handleClick(mx, my)) return;
 
     if (this.followerMenu.isOpen) {
@@ -2388,9 +2465,12 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.isDungeonPaused ||
       this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
+      this.citizenDialog?.isOpen === true ||
       this.playerChat.isOpen
-    )
+    ) {
+      this.citizenDialog?.update();
       return;
+    }
 
     if (this.safeRoom.isSleeping) {
       const deduct = this.safeRoom.updateSleep(this.human, this.cat);
@@ -2423,6 +2503,7 @@ export class DungeonScene extends GameplayScene {
       inactive: this.inactive(),
       mobs: this.mobs,
       mobGrid: this.mobGrid,
+      townsfolk: this.townLife?.people,
       gameOver: this.gameOver,
       pauseMenuOpen: this.pauseMenu.isOpen,
       gore: this.gore,
@@ -2680,6 +2761,7 @@ export class DungeonScene extends GameplayScene {
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
+      this.renderCitizenPrompt(ctx, camX, camY);
     }
 
     this.achievementUI.renderOverlays(ctx, canvas);
@@ -2687,6 +2769,8 @@ export class DungeonScene extends GameplayScene {
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.renderMordecaiDialog(ctx, canvas);
     }
+
+    this.citizenDialog?.render(ctx, canvas);
 
     if (this.stairwell.menuOpen) {
       this.stairwell.renderMenu(ctx, canvas);
@@ -2941,6 +3025,7 @@ export class DungeonScene extends GameplayScene {
       this.catAchievements.tryUnlock('city_evacuated');
     }
     this.overworldMusic?.update(ctx);
+    this.townLife?.update();
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
@@ -3365,6 +3450,7 @@ export class DungeonScene extends GameplayScene {
         this.defendQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
+        this.citizenDialog?.isOpen === true ||
         this.playerChat.isOpen,
     };
   }
@@ -3503,6 +3589,7 @@ export class DungeonScene extends GameplayScene {
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
+        this.citizenDialog?.isOpen === true ||
         this.tutorial?.showTutorialMordecaiDialog === true ||
         this.tutorial?.showMordecaiReminderDialog === true
       ) {
