@@ -1429,13 +1429,32 @@ export class GameMap {
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
+    if (this.permanentBlockedTiles.has(`${tileX},${tileY}`)) return false;
+    return this.isWalkableIgnoringPermanent(tileX, tileY);
+  }
+
+  /**
+   * Walkability ignoring only the *permanent* block set. Locked arena doors,
+   * building/sprite footprints (`extraBlockedTiles`), and tile type are all still
+   * honored — this differs from `isWalkable` only in that a tile the game blocked
+   * permanently still reads as walkable.
+   *
+   * Use for deterministic prop placement on a map instance that is reused across
+   * scene reconstructions: `extraBlockedTiles` is rebuilt from the (stable)
+   * structure each time, but `permanentBlockedTiles` only ever grows, so a prop's
+   * own permanent block would otherwise make placement drift to — and leak — a
+   * fresh blocked tile on every pass. Ignoring it keeps re-placement idempotent.
+   */
+  isWalkableIgnoringPermanent(tileX: number, tileY: number): boolean {
     if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
     const row = this.structure[tileY];
     if (tileX >= row.length) return false;
-    const tile = row[tileX];
     if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
     if (this.extraBlockedTiles.has(`${tileX},${tileY}`)) return false;
-    if (this.permanentBlockedTiles.has(`${tileX},${tileY}`)) return false;
+    return this.isWalkableTileType(row[tileX]);
+  }
+
+  private isWalkableTileType(tile: TileContent): boolean {
     if (tile.type === MODERN_DECORATION) {
       return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
     }

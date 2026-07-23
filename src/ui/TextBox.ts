@@ -161,6 +161,15 @@ function buildFontString(size: number, bold: boolean, font: string): string {
   return `${bold ? 'bold ' : ''}${size}px ${font}`;
 }
 
+/**
+ * Word-wrap `text` to `maxWidth` under the ctx's current font, honoring explicit
+ * `\n` breaks. Set the font before calling. Useful for measuring how tall a block
+ * of text will be (line count) so a container can be sized before it's drawn.
+ */
+export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  return computeWrappedLines(ctx, text, maxWidth);
+}
+
 function computeWrappedLines(
   ctx: CanvasRenderingContext2D,
   text: string,

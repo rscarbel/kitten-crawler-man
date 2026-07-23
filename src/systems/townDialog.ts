@@ -198,6 +198,77 @@ function gossipLine(ctx: TownDialogContext): string | null {
   return null;
 }
 
+/**
+ * How the town regards the player, once quests resolve. Unlike `gossipLine`
+ * (third-person "the town's talking"), these greet the player directly — a hero's
+ * welcome once threats are behind them, wary hope while the killer still walks.
+ * Tiers are ordered most-momentous first; `savior` (doomsday survived) subsumes
+ * the earlier victories, since the finale only starts after the killer falls.
+ */
+type ReputationTier = 'savior' | 'double_hero' | 'circus_hero' | 'murder_hero' | 'murder_wary';
+
+const REPUTATION_GREETINGS: Record<ReputationTier, ReadonlyArray<string>> = {
+  savior: [
+    'You held back the doom in that tower. We are alive because of you.',
+    'The whole city would be ash if not for you. We won’t forget it.',
+    'They’ll tell your tale for generations — the one who saved us all.',
+  ],
+  double_hero: [
+    'The circus freed and the killer dead — is there anything you can’t do?',
+    'Two shadows lifted off this town, both by your hand. Bless you.',
+    'Folk walk easy day and night again. That’s your doing, friend.',
+  ],
+  circus_hero: [
+    'You’re the one who freed the circus folk! The whole town’s grateful.',
+    'They say you broke the ringmaster’s grip. Well done, truly.',
+    'The performers walk free thanks to you. First round’s on us!',
+  ],
+  murder_hero: [
+    'The night-killer’s dead because of you. We can breathe again.',
+    'You ended the murders. My family sleeps easy now — thank you.',
+    'No more bodies by the well. The town owes you a debt.',
+  ],
+  murder_wary: [
+    'You’re looking into the killings, aren’t you? ...Watch your back.',
+    'Careful who you trust — the killer wears a friendly face.',
+    'If anyone can stop these murders, maybe it’s you. Gods speed.',
+  ],
+};
+
+function reputationTier(ctx: TownDialogContext): ReputationTier | null {
+  if (ctx.doomsday === 'complete') return 'savior';
+  const circusDone = isCircusResolved(ctx.circus);
+  const murderDone = isMurderResolved(ctx.murder);
+  if (circusDone && murderDone) return 'double_hero';
+  if (circusDone) return 'circus_hero';
+  if (murderDone) return 'murder_hero';
+  if (isMurderActive(ctx.murder)) return 'murder_wary';
+  return null;
+}
+
+// How often a citizen who could greet the player by their deeds instead voices
+// ambient gossip — a 1-in-N chance. MUST stay coprime to every reputation pool's
+// length (all 3 today): the gossip gate and `rotate`'s index are both keyed on
+// `seed + turn`, so if this modulus shared a factor with the pool length the gate
+// would always divert the same rotation index, permanently hiding that line.
+// Coprime moduli make the diverted index sweep the whole pool over successive
+// talks, so every greeting line still gets shown.
+const GOSSIP_OVER_GREETING_MODULUS = 5;
+
+/**
+ * The reactive line a citizen leads with. Once the player has earned a reputation
+ * they're mostly greeted by their deeds (more alive than overheard rumor), but
+ * ambient gossip still surfaces now and then so the town's reaction has variety.
+ * With no reputation yet, it's pure gossip.
+ */
+function reactiveLead(ctx: TownDialogContext, seed: number, turn: number): string | null {
+  const tier = reputationTier(ctx);
+  const gossip = gossipLine(ctx);
+  if (tier === null) return gossip;
+  if (gossip !== null && (seed + turn) % GOSSIP_OVER_GREETING_MODULUS === 0) return gossip;
+  return rotate(REPUTATION_GREETINGS[tier], seed, turn);
+}
+
 function isCircusActive(stage: CircusQuestStage): boolean {
   return (
     stage === 'ritual_defense' ||
@@ -230,6 +301,10 @@ export function isTownInDanger(ctx: TownDialogContext): boolean {
   );
 }
 
+// Show the reactive lead (reputation greeting / gossip) on every other talk, so
+// citizens react to the world without every single one leading with a headline.
+const REACTIVE_LEAD_MODULUS = 2;
+
 /** Deterministically pick from a pool, advancing with each conversation so repeats vary. */
 function rotate(pool: ReadonlyArray<string>, seed: number, turn: number): string {
   const index = ((((seed % pool.length) + turn) % pool.length) + pool.length) % pool.length;
@@ -257,11 +332,9 @@ export function buildCitizenConversation(
   }
 
   const lines: string[] = [];
-  const gossip = gossipLine(ctx);
-  // Fold gossip in on every other conversation so citizens react to the world
-  // without every single one leading with the same headline.
-  if (gossip !== null && (seed + turn) % 2 === 0) {
-    lines.push(gossip);
+  const lead = reactiveLead(ctx, seed, turn);
+  if (lead !== null && (seed + turn) % REACTIVE_LEAD_MODULUS === 0) {
+    lines.push(lead);
   }
   lines.push(rotate(AMBIENT_LINES[role], seed, turn));
   return lines;

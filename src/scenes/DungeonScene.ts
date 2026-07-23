@@ -34,12 +34,18 @@ import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
+import { TownPropSystem } from '../systems/TownPropSystem';
 import {
   buildCitizenConversation,
   roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
+import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
+import type { StallStock } from '../systems/townMarket';
 import { CitizenDialog } from '../ui/CitizenDialog';
+import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
+import { MarketStallPanel } from '../ui/MarketStallPanel';
+import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
@@ -371,7 +377,11 @@ export class DungeonScene extends GameplayScene {
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
+  private townProps: TownPropSystem | null = null;
   private citizenDialog: CitizenDialog | null = null;
+  private noticeBoard: NoticeBoardPanel | null = null;
+  private marketStall: MarketStallPanel | null = null;
+  private fortuneTeller: FortuneTellerPanel | null = null;
   private juicerRoom: JuicerRoomSystem;
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
@@ -804,6 +814,18 @@ export class DungeonScene extends GameplayScene {
           ),
         );
       });
+      this.noticeBoard = new NoticeBoardPanel();
+      this.marketStall = new MarketStallPanel();
+      this.fortuneTeller = new FortuneTellerPanel();
+      // Built before TownLifeSystem so props' blocked tiles are excluded from the
+      // citizen spawn candidates.
+      this.townProps = new TownPropSystem(
+        this.gameMap,
+        () => this.openNoticeBoard(),
+        (stock) => this.openMarketStall(stock),
+        () => this.openFortuneTeller(),
+        () => this.audio,
+      );
       this.townLife = new TownLifeSystem(this.gameMap);
     }
 
@@ -1336,6 +1358,9 @@ export class DungeonScene extends GameplayScene {
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
+        this.noticeBoard?.isOpen === true ||
+        this.marketStall?.isOpen === true ||
+        this.fortuneTeller?.isOpen === true ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
@@ -1350,6 +1375,18 @@ export class DungeonScene extends GameplayScene {
         if (this.murderQuest.dismissDialog()) return true;
         if (this.citizenDialog?.isOpen === true) {
           this.citizenDialog.close();
+          return true;
+        }
+        if (this.noticeBoard?.isOpen === true) {
+          this.noticeBoard.close();
+          return true;
+        }
+        if (this.marketStall?.isOpen === true) {
+          this.marketStall.close();
+          return true;
+        }
+        if (this.fortuneTeller?.isOpen === true) {
+          this.fortuneTeller.close();
           return true;
         }
         if (this.safeRoom.mordecaiDialogOpen) {
@@ -1391,6 +1428,21 @@ export class DungeonScene extends GameplayScene {
       },
       clearInput: () => this.input.clear(),
       advanceDialog: () => {
+        if (this.noticeBoard?.isOpen === true) {
+          this.noticeBoard.close();
+          this.audio?.play('menu_click');
+          return true;
+        }
+        if (this.marketStall?.isOpen === true) {
+          this.marketStall.close();
+          this.audio?.play('menu_click');
+          return true;
+        }
+        if (this.fortuneTeller?.isOpen === true) {
+          this.fortuneTeller.close();
+          this.audio?.play('menu_click');
+          return true;
+        }
         if (this.citizenDialog?.isOpen === true) {
           this.citizenDialog.advance();
           return true;
@@ -1915,6 +1967,59 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
+  private townNoticeContext(): TownNoticeContext {
+    const murder = this.murderQuestProgress;
+    const cluesFound = [murder.wellClueFound, murder.homeClueFound, murder.roostClueFound].filter(
+      Boolean,
+    ).length;
+    return {
+      circus: this.circusQuestProgress.stage,
+      heatherSlain: this.circusQuestProgress.heatherSlain,
+      murder: murder.stage,
+      murderCluesFound: cluesFound,
+      doomsday: this.doomsdayQuestProgress.stage,
+    };
+  }
+
+  /** Opens the town notice board panel, populated with the current postings. */
+  private openNoticeBoard(): void {
+    if (this.noticeBoard === null) return;
+    this.noticeBoard.openWith(buildTownNotices(this.townNoticeContext()));
+    this.audio?.play('menu_open');
+  }
+
+  /** Opens a market stall's buy panel with the given stock. */
+  private openMarketStall(stock: StallStock): void {
+    if (this.marketStall === null) return;
+    this.marketStall.open(stock);
+    this.audio?.play('menu_open');
+  }
+
+  /** Opens the fortune teller's panel, seeded with the current quest state. */
+  private openFortuneTeller(): void {
+    if (this.fortuneTeller === null) return;
+    this.fortuneTeller.openWith(this.townDialogContext());
+    this.audio?.play('menu_open');
+  }
+
+  /** Floats a SPACE prompt over the nearest interactive town prop, when actionable. */
+  private renderPropPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (this.townProps === null) return;
+    if (
+      this.noticeBoard?.isOpen === true ||
+      this.marketStall?.isOpen === true ||
+      this.fortuneTeller?.isOpen === true
+    ) {
+      return;
+    }
+    const active = this.active();
+    const attackRange = this.human.isActive
+      ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
+      : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
+    if (this.hasNearbyEnemy(active, attackRange)) return;
+    this.townProps.renderPrompt(ctx, camX, camY, active);
+  }
+
   /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.citizenDialog === null || this.townLife === null) return;
@@ -1959,6 +2064,9 @@ export class DungeonScene extends GameplayScene {
     // tap path, where `handleClick` already advanced it, from re-opening a
     // fresh conversation or falling through to an attack.
     if (this.citizenDialog?.isOpen === true) return;
+    if (this.noticeBoard?.isOpen === true) return;
+    if (this.marketStall?.isOpen === true) return;
+    if (this.fortuneTeller?.isOpen === true) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.restartAtFloorEntry();
       return;
@@ -2037,6 +2145,9 @@ export class DungeonScene extends GameplayScene {
         this.arenaRoom.tryPickupNear(active) ||
         this.barriers.tryPickupNear(active)
       ) {
+        return;
+      }
+      if (this.townProps?.tryInteract(active) === true) {
         return;
       }
       if (this.tryTalkToCitizen(active)) {
@@ -2183,6 +2294,18 @@ export class DungeonScene extends GameplayScene {
     if (this.murderQuest.handleClick(mx, my)) return;
     if (this.citizenDialog?.isOpen === true) {
       this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
+      return;
+    }
+    if (this.noticeBoard?.isOpen === true) {
+      this.noticeBoard.handleClick();
+      return;
+    }
+    if (this.marketStall?.isOpen === true) {
+      this.marketStall.handleClick(mx, my, this.active());
+      return;
+    }
+    if (this.fortuneTeller?.isOpen === true) {
+      this.fortuneTeller.handleClick(mx, my, this.active());
       return;
     }
     if (this.achievementUI.handleClick(mx, my)) return;
@@ -2466,9 +2589,13 @@ export class DungeonScene extends GameplayScene {
       this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
       this.citizenDialog?.isOpen === true ||
+      this.noticeBoard?.isOpen === true ||
+      this.marketStall?.isOpen === true ||
+      this.fortuneTeller?.isOpen === true ||
       this.playerChat.isOpen
     ) {
       this.citizenDialog?.update();
+      this.marketStall?.update();
       return;
     }
 
@@ -2504,6 +2631,7 @@ export class DungeonScene extends GameplayScene {
       mobs: this.mobs,
       mobGrid: this.mobGrid,
       townsfolk: this.townLife?.people,
+      townProps: this.townProps?.props,
       gameOver: this.gameOver,
       pauseMenuOpen: this.pauseMenu.isOpen,
       gore: this.gore,
@@ -2762,6 +2890,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
       this.renderCitizenPrompt(ctx, camX, camY);
+      this.renderPropPrompt(ctx, camX, camY);
     }
 
     this.achievementUI.renderOverlays(ctx, canvas);
@@ -2771,6 +2900,9 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.citizenDialog?.render(ctx, canvas);
+    this.noticeBoard?.render(ctx, canvas);
+    this.marketStall?.render(ctx, canvas, this.active());
+    this.fortuneTeller?.render(ctx, canvas, this.active());
 
     if (this.stairwell.menuOpen) {
       this.stairwell.renderMenu(ctx, canvas);
@@ -3026,6 +3158,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.overworldMusic?.update(ctx);
     this.townLife?.update();
+    this.townProps?.update();
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it
@@ -3484,6 +3617,19 @@ export class DungeonScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
+      // A full-screen town modal (notice board, market stall, fortune teller)
+      // owns every tap while it's open — route to it before any HUD button, so a
+      // tap landing on a now-hidden control (e.g. Switch, which would change whose
+      // wallet a shop charges) can't leak through underneath the overlay.
+      if (
+        this.noticeBoard?.isOpen === true ||
+        this.marketStall?.isOpen === true ||
+        this.fortuneTeller?.isOpen === true
+      ) {
+        this.handleClick(x, y);
+        continue;
+      }
+
       if (platform.isMobile) {
         const ht = this._hudToggleRect;
         if (pointInRect(x, y, ht)) {
@@ -3590,6 +3736,8 @@ export class DungeonScene extends GameplayScene {
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
+        // Town modals (notice board / market stall / fortune teller) are handled
+        // by the early full-screen-modal gate at the top of this loop.
         this.tutorial?.showTutorialMordecaiDialog === true ||
         this.tutorial?.showMordecaiReminderDialog === true
       ) {

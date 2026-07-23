@@ -48,6 +48,8 @@ import {
   roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
+import { PUB_DRINK_PRICE, pubServeLine } from '../systems/townPub';
+import type { TownRole } from '../sprites/person/PersonAppearance';
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
@@ -616,22 +618,8 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     // Ambient occupants: talk to the nearest one with Space
-    if (this.citizenDialog !== null && this.occupants !== null && this.input.has(' ')) {
-      const target = this.occupants.findTalkTarget(player.x, player.y);
-      if (target !== null) {
-        this.input.clear();
-        target.faceToward(player.x, player.y);
-        this.citizenDialog.open(
-          roleDisplayName(target.role),
-          buildCitizenConversation(
-            target.role,
-            target.appearance.seed,
-            target.conversationCount,
-            this.townDialogContext(),
-          ),
-        );
-        target.conversationCount++;
-      }
+    if (this.input.has(' ') && this.tryTalkToOccupant(player)) {
+      this.input.clear();
     }
 
     // Update walk animation
@@ -822,6 +810,52 @@ export class BuildingInteriorScene extends GameplayScene {
       stripGodModeFromSnapshot(catSnap);
     }
     this.onExitCallback(humanSnap, catSnap);
+  }
+
+  /**
+   * If the talk target is an innkeeper the player can be served (has the coin and
+   * isn't already peppy), charges for a drink, applies the Speed Fizz buff, and
+   * returns the barkeep's serving line. Returns null otherwise, so the caller
+   * falls back to ordinary chatter — meaning innkeepers still gossip when the
+   * player can't drink.
+   */
+  private tryServeDrink(
+    role: TownRole,
+    player: ReturnType<BuildingInteriorScene['active']>,
+    turn: number,
+  ): string[] | null {
+    if (role !== 'innkeeper') return null;
+    if (player.coins < PUB_DRINK_PRICE || player.hasStatus('speed_fizz')) return null;
+    player.coins -= PUB_DRINK_PRICE;
+    player.activateSpeedFizz();
+    this.audio?.play('purchase_success');
+    return [pubServeLine(turn)];
+  }
+
+  /**
+   * Opens a conversation with the nearest ambient occupant in range (serving an
+   * innkeeper a drink first, if eligible). Returns whether a conversation opened,
+   * so the caller can consume the triggering input. Shared by the desktop Space
+   * path and the mobile tap path so occupants are talkable on both.
+   */
+  private tryTalkToOccupant(player: ReturnType<BuildingInteriorScene['active']>): boolean {
+    if (this.citizenDialog === null || this.occupants === null) return false;
+    const target = this.occupants.findTalkTarget(player.x, player.y);
+    if (target === null) return false;
+    target.faceToward(player.x, player.y);
+    const serve = this.tryServeDrink(target.role, player, target.conversationCount);
+    const chatter = buildCitizenConversation(
+      target.role,
+      target.appearance.seed,
+      target.conversationCount,
+      this.townDialogContext(),
+    );
+    // A served innkeeper leads with the drink, then still chats — so buying a
+    // round never robs the barkeep of their gossip/greeting.
+    const lines = serve !== null ? [...serve, ...chatter] : chatter;
+    this.citizenDialog.open(roleDisplayName(target.role), lines);
+    target.conversationCount++;
+    return true;
   }
 
   private townDialogContext(): TownDialogContext {
@@ -1249,6 +1283,10 @@ export class BuildingInteriorScene extends GameplayScene {
       // Game world touch end
       if (touch.identifier === this.mobileHUD.moveTouchId) {
         if (this.mobileHUD.isTap(x, y)) {
+          // Capture before handleClick, which may advance/close an open dialog —
+          // guarding the talk trigger below against reopening a fresh one in the
+          // same tap (the close-then-reopen trap).
+          const dialogWasOpen = this.citizenDialog?.isOpen === true;
           this.handleClick(x, y);
           // Trigger space-equivalent actions
           if (this.safeRoom && !this.exitMenuOpen) {
@@ -1277,6 +1315,21 @@ export class BuildingInteriorScene extends GameplayScene {
           }
           if (this.club && !this.exitMenuOpen && !this.club.modalOpen) {
             this.club.handleInteract(this.active());
+          }
+          // Talk to a nearby occupant only when nothing else claimed the tap: no
+          // dialog was already open (handleClick would have advanced it), no
+          // shop/club panel is up (the store has both a shop and shelf-browsers),
+          // and the safe room didn't just sleep or open Mordecai (a restaurant has
+          // both Mordecai/bed and ambient occupants within one tap's reach).
+          if (
+            !this.exitMenuOpen &&
+            !dialogWasOpen &&
+            this.shop?.shopOpen !== true &&
+            this.club?.modalOpen !== true &&
+            this.safeRoom?.isSleeping !== true &&
+            this.safeRoom?.mordecaiDialogOpen !== true
+          ) {
+            this.tryTalkToOccupant(this.active());
           }
         }
         this.mobileHUD.clearMovement();

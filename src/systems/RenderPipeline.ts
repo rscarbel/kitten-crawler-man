@@ -30,6 +30,7 @@ import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
+import type { TownPropRenderable } from './TownPropSystem';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -45,6 +46,9 @@ const DRAW_KIND_CHEST = 3;
 
 /** Draw kind for ambient townsfolk (rendered like entities via their own render()). */
 const DRAW_KIND_TOWNSPERSON = 4;
+
+/** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
+const DRAW_KIND_TOWN_PROP = 5;
 
 /** Tree depth offset to keep trees rendered behind entities. */
 const TREE_SORT_DEPTH_OFFSET = 100000;
@@ -86,6 +90,8 @@ export interface RenderContext {
   mobGrid: SpatialGrid<Mob>;
   /** Ambient overworld citizens; empty/absent off the town map. */
   townsfolk?: ReadonlyArray<Townsperson>;
+  /** Interactive town props (notice board, etc.); empty/absent off the town map. */
+  townProps?: ReadonlyArray<TownPropRenderable>;
   gameOver: boolean;
   pauseMenuOpen: boolean;
 
@@ -164,8 +170,18 @@ export class RenderPipeline {
    * so depth (north = behind, south = in front) is respected.
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { canvas, camX, camY, gameMap, mobGrid, active, inactive, treasureChests, townsfolk } =
-      rc;
+    const {
+      canvas,
+      camX,
+      camY,
+      gameMap,
+      mobGrid,
+      active,
+      inactive,
+      treasureChests,
+      townsfolk,
+      townProps,
+    } = rc;
 
     const visibleMobs = mobGrid.queryRect(
       camX - TILE_SIZE,
@@ -241,6 +257,21 @@ export class RenderPipeline {
         e.sortY = person.y + ENTITY_SORT_Y_OFFSET;
         e.kind = DRAW_KIND_TOWNSPERSON;
         e.entity = person;
+        e.chestRef = null;
+      }
+    }
+
+    if (townProps !== undefined) {
+      const minX = camX - TILE_SIZE;
+      const minY = camY - TILE_SIZE;
+      const maxX = camX + canvas.width + TILE_SIZE;
+      const maxY = camY + canvas.height + TILE_SIZE;
+      for (const prop of townProps) {
+        if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
+        const e = this._getEntry();
+        e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;
+        e.kind = DRAW_KIND_TOWN_PROP;
+        e.entity = prop;
         e.chestRef = null;
       }
     }

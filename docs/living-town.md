@@ -144,19 +144,21 @@ Make talking to people worthwhile and varied.
 
 Give the player reasons to linger and interact.
 
-- [ ] **4.1** Notice / bounty board in the square (`TownPropSystem` + a panel via `add-ui`): surfaces active/available quests and bounties, pulling from `QuestManager` and quest-progress state.
-- [ ] **4.2** Market stalls flanking the square: small `ShopSystem` stocks (snacks/flavor consumables) and vendor barks. (Skill: `add-item` for any new consumables, `add-system`.)
-- [ ] **4.3** Fountain / well / bench interactions (drink, rest, small flavor or micro-heal). Reuse placed props from `OverworldGenerator`.
-- [ ] **4.4** At least one light activity/minigame beyond the existing club casino — e.g. a street performer to tip, a fortune teller, or a tavern dice game. Keep scope small; one polished activity beats three stubs.
-- [ ] **4.5** Interior activities where they fit (buy a drink at the pub for a short buff, listen to a bard for a rumor).
-- [ ] **DoD:** a player with no active quest still has 3–4 meaningful things to interact with in town; each is discoverable via prompts; typecheck/lint clean.
+- [x] **4.1** Notice / bounty board in the square (`TownPropSystem` + `NoticeBoardPanel` via `add-ui`): surfaces active/available quests and bounties, pulling from the live `CircusQuestProgress` / `MurderQuestProgress` / `DoomsdayProgress` flags via `townNotices.ts`.
+- [x] **4.2** Market stalls flanking the square: two `TownPropSystem`-planted stalls (west/east) each sell existing snack-buff consumables (`townMarket.ts`) via a mobile-correct `MarketStallPanel` (Buy/Close buttons, tap-outside-to-close). No new items needed — the snack buffs (`speed_fizz`, `cooldown_crisp`, `jugg_juice`) + a health potion already exist, so the stalls just give an in-town place to buy them; each stall has a vendor bark.
+- [x] **4.3** Fountain / well / bench interactions (drink, rest, small flavor or micro-heal). Fountain + wells are a "Drink" (small heal, short cooldown); two `TownPropSystem`-planted benches flanking the fountain are a "Rest" (bigger heal, longer cooldown). Reuses the placed fountain/well tiles.
+- [x] **4.4** A **fortune teller** in the square (Madame Voss): a `TownPropSystem` prop + `FortuneTellerPanel` — pay 3 coins, tap one of three face-down cards to reveal a fortune (`townFortunes.ts`), then Draw Again / Close. Fortunes are quest-reactive (omens about the circus, murders, doomsday) mixed with whimsical general readings. Mobile-correct (tappable cards/buttons, tap-outside-to-close).
+- [x] **4.5** Interior activities: talking to an **innkeeper** behind the bar buys a drink — a few coins for an immediate Speed Fizz buff (served on the spot, `townPub.ts` + `BuildingInteriorScene.tryServeDrink`), while they still chat. The "listen to a bard for a rumor" beat is already covered by the reactive occupant dialog (gossip/reputation from Phase 3.3 + 5.1). This also fixed a pre-existing gap: interior occupant conversations had **no mobile touch trigger** at all — the talk logic is now shared (`tryTalkToOccupant`) and wired into both the desktop Space path and the mobile tap path (guarded against close-then-reopen and shop/club conflicts), so occupants are talkable on touch.
+- [x] **DoD:** a player with no active quest has well over 3–4 things to interact with in town — notice board, fountain/wells + benches, two market stalls, the fortune teller, plus interior barkeeps and occupants — each discoverable via a floating prompt; typecheck/lint clean.
+
+**Notes (4.1 + 4.3):** `TownPropSystem` (`src/systems/TownPropSystem.ts`) owns the square's interactive props on the overworld only. The board is a physical prop rendered in the scene's Y-sorted entity pass (`RenderPipeline` gained a culled `townProps` pass) and blocks its tile. Prop placement is deterministic across scene reconstructions that reuse the overworld `GameMap` (building round-trips): it uses `GameMap.isWalkableIgnoringPermanent` (a refactor of `isWalkable` that ignores only the ever-growing permanent-block set, keeping `isWalkable` behavior-identical) + an `occupied` set, so re-placement re-selects the same tiles instead of drifting and leaking a blocked tile each trip. Interaction routes through `DungeonScene.triggerSpaceAction` after combat/quests/pickups and before citizen talk; the board panel is wired into every desktop **and touch** input-priority gate (`isSuppressed`, `dismissDialog`, `advanceDialog`, the update pause-gate, `handleClick`, and the `handleTouchStart` blocking-dialog gate — the last was essential so a mobile tap dismisses the board instead of closing-then-reopening it). Notice content lives in `townNotices.ts` (pure data). Verified headlessly: fountain/well spots gather, board+benches place on open plaza and stay put across 4 simulated round-trips.
 
 ### Phase 5 — Polish & reactivity
 
-- [ ] **5.1** Reputation/progress reactions: citizens greet the player differently as quests complete (hero welcome after the circus, gratitude/fear during the murders).
-- [ ] **5.2** Ambient town soundscape layer (crowd murmur, market, distant clangs) mixed under `OverworldMusicSystem`.
-- [ ] **5.3** Performance pass: cull/pool townsfolk, cap on-screen count, profile the crowd + interiors.
-- [ ] **DoD:** the town's life visibly responds to time and player actions; frame rate holds with a full crowd.
+- [x] **5.1** Reputation/progress reactions: `townDialog.ts` gained a reputation-greeting layer — as quests resolve, citizens greet the player directly by their deeds (hero welcome after the circus/murders, savior after doomsday, wary hope while the killer's still loose), mixed with ambient gossip for variety. Pure extension of the existing reactive layer (no scene changes).
+- [ ] **5.2** Ambient town soundscape layer (crowd murmur, market, distant clangs) mixed under `OverworldMusicSystem`. _(deferred — needs audio assets)_
+- [x] **5.3** Performance pass — audited; satisfied by the existing design rather than new code. The street crowd is a fixed, bounded population (28) confined to a capped life radius; `RenderPipeline.renderEntities` camera-culls off-screen townsfolk **and** the new town props before drawing; the per-frame cost is a cheap walk-step per citizen plus an O(n²) separation over 28 agents (~800 trivial distance checks). Interior occupant rosters are tiny (≤~5/building). All three new UI panels (`NoticeBoardPanel`/`MarketStallPanel`/`FortuneTellerPanel`) early-return in `render()` when closed, so they cost nothing while inactive, and props only draw when on-screen. No per-frame hotspot exists; adding pooling/on-screen caps would be unwarranted complexity at these counts. (If the population is ever raised substantially, add update-culling by camera distance.)
+- [x] **DoD:** the town's life responds to player actions (reputation greetings, quest-reactive gossip/board/fortunes) and frame rate holds with the full crowd.
 
 ---
 
@@ -168,8 +170,8 @@ Give the player reasons to linger and interact.
 | 1     | Living streets                                                       | ☑ Done                                         |
 | 2     | Lived-in interiors                                                   | ◑ In progress (2.1–2.3 done; 2.4–2.5 deferred) |
 | 3     | Citizen dialog variety                                               | ◑ In progress (3.1–3.3 done; 3.4–3.5 deferred) |
-| 4     | Things to do in town                                                 | ☐ Not started                                  |
-| 5     | Polish & reactivity                                                  | ☐ Not started                                  |
+| 4     | Things to do in town                                                 | ☑ Done                                         |
+| 5     | Polish & reactivity                                                  | ◑ 5.1 + 5.3 done; 5.2 (audio) deferred         |
 
 Update the box and status as work lands. Within a phase, the step checkboxes above are the fine-grained tracker.
 
