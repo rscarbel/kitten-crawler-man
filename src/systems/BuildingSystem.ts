@@ -10,6 +10,26 @@ export type BuildingEntry = {
   type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
 };
 
+/** Entry-menu icon per building type. */
+const BUILDING_TYPE_ICONS: Record<BuildingEntry['type'], string> = {
+  tower: '🏰',
+  restaurant: '🍽',
+  store: '🏪',
+  club: '🔪',
+  house: '🏠',
+};
+
+/** Per-building overrides for buildings whose type icon reads wrong. */
+const BUILDING_NAME_ICONS: Record<string, string> = {
+  'The Barracks': '⚔️',
+  'Temple of the Sky': '🕊',
+  "Signet's Ink": '💀',
+  'The Sunken Stump Pub': '🍺',
+  'The Horned Flagon': '🍺',
+  'The Sleeping Cat Inn': '🛏',
+  'The Rusty Anvil': '🔨',
+};
+
 /** Tile center fraction for player position calculation. */
 const TILE_CENTER_FRAC = 0.5;
 /** Opacity of the dim backdrop behind the entry menu. */
@@ -195,16 +215,7 @@ export class BuildingSystem implements GameSystem {
     ctx.lineWidth = 2;
     ctx.strokeRect(panelX, panelY, panelW, panelH);
 
-    const icon =
-      entry.type === 'tower'
-        ? '🏰'
-        : entry.type === 'restaurant'
-          ? '🍽'
-          : entry.type === 'store'
-            ? '🏪'
-            : entry.type === 'club'
-              ? '🔪'
-              : '🏠';
+    const icon = BUILDING_NAME_ICONS[entry.name] ?? BUILDING_TYPE_ICONS[entry.type];
     drawText(ctx, `${icon}  ${entry.name}  ${icon}`, {
       x: cw / 2,
       y: panelY + MENU_TITLE_Y - MENU_TITLE_ADJUST,

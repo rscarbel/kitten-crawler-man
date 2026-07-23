@@ -96,7 +96,7 @@ export class HumanPlayer extends Player {
   }
 
   getMeleeDamage(): number {
-    return 1 + this.strength;
+    return 1 + this.strength + this.drunkDamageBonus;
   }
 
   triggerAttack() {

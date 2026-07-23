@@ -37,6 +37,7 @@ import {
 } from '../map/tileTypes';
 import type { BuildingEntry } from './BuildingSystem';
 import type { GameSystem } from './GameSystem';
+import { safeRoomAnchorTiles } from './SafeRoomSystem';
 
 /** Which furniture a role stations beside; resolved to concrete tiles by scanning the room. */
 type AnchorKind = 'forge' | 'hearth' | 'table' | 'shelf' | 'counter' | 'crate';
@@ -102,21 +103,35 @@ const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
       { role: 'laborer', activity: 'idle', anchor: 'crate' },
     ],
     'The Sleeping Cat Inn': [
-      { role: 'innkeeper', activity: 'idle', anchor: 'hearth' },
+      { role: 'innkeeper', activity: 'tend_counter', anchor: 'counter' },
       { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
       { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
-      { role: 'child', activity: 'wander', anchor: 'table' },
-    ],
-    "The Wanderer's Rest": [
       { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'child', activity: 'wander', anchor: 'table' },
+      { role: 'commoner', activity: 'idle', anchor: 'hearth' },
+    ],
+    // The mead hall: a full house down both sides of the feast table.
+    'The Horned Flagon': [
+      { role: 'innkeeper', activity: 'tend_counter', anchor: 'counter' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
       { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'noble', activity: 'sit_at_table', anchor: 'table' },
       { role: 'beggar', activity: 'wander', anchor: 'table' },
     ],
+    // The dive: rowdier and drunker than the mead hall, packed into a smaller room.
     'The Sunken Stump Pub': [
       { role: 'innkeeper', activity: 'tend_counter', anchor: 'counter' },
       { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
       { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'drunk', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'laborer', activity: 'sit_at_table', anchor: 'table' },
       { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'noble', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'beggar', activity: 'wander', anchor: 'table' },
     ],
     "Miller's Farm": [
       { role: 'farmer', activity: 'idle', anchor: 'hearth' },
@@ -132,7 +147,26 @@ const BUILDING_OCCUPANTS = new Map<string, ReadonlyArray<OccupantSpec>>(
       { role: 'laborer', activity: 'idle', anchor: 'crate' },
     ],
     "Old Hilda's Cottage": [{ role: 'priest', activity: 'browse_shelf', anchor: 'shelf' }],
-    'Blackwood Barracks': [
+    // The priest stands at the altar (the room's only TABLE) so the blessing is
+    // offered where the player naturally walks up the aisle.
+    'Temple of the Sky': [
+      { role: 'priest', activity: 'tend_counter', anchor: 'table' },
+      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf' },
+      { role: 'commoner', activity: 'idle', anchor: 'forge' },
+    ],
+    "Signet's Ink": [
+      { role: 'merchant', activity: 'work_forge', anchor: 'table' },
+      { role: 'commoner', activity: 'browse_shelf', anchor: 'shelf' },
+    ],
+    // The overworld safe room. Mordecai already lives here, so the roster is the
+    // guild's off-duty company around him rather than a full crowd.
+    'The Barracks': [
+      { role: 'guard', activity: 'idle', anchor: 'forge' },
+      { role: 'guard', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'commoner', activity: 'sit_at_table', anchor: 'table' },
+      { role: 'laborer', activity: 'idle', anchor: 'crate' },
+    ],
+    'Blackwood Lodge': [
       { role: 'guard', activity: 'idle', anchor: 'table' },
       { role: 'guard', activity: 'wander', anchor: 'crate' },
     ],
@@ -261,6 +295,9 @@ export class InteriorOccupantSystem implements GameSystem {
     const start = this.map.startTile;
     reserved.add(tileKey(start.x, start.y));
     reserved.add(tileKey(start.x + CAT_SPAWN_TILE_OFFSET_X, start.y));
+    // Mordecai and the sleeping bed own their tiles in a safe-room interior.
+    for (const anchor of safeRoomAnchorTiles(this.map.safeRooms))
+      reserved.add(tileKey(anchor.x, anchor.y));
     return reserved;
   }
 

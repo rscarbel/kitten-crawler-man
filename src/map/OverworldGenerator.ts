@@ -22,6 +22,7 @@ import {
   RUBBLE,
 } from './tileTypes';
 import { randomInt } from '../utils';
+import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../core/SpriteLoader';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -46,6 +47,10 @@ export interface OverworldData {
   doomsdayEscapeTile: Point;
   /** Tiles from map centre inside which the town is safe — no hostile spawns, mobs deaggro. */
   townSafeRadiusTiles: number;
+  /** Centre of the town square, in tile coordinates. */
+  townSquareCentre: Point;
+  /** Centre tile of the 3×3 town fountain. */
+  fountainCentre: Point;
   /** Centre of the circus, in tile coordinates. */
   circusCentre: Point;
   /** Radius (tiles) of the circus grounds around `circusCentre`. */
@@ -70,65 +75,41 @@ export function generateOverworld(size: number): OverworldData {
   const TOWER_SPRITE_DY = 36;
   const NORTH_BUILDINGS_Y_OFFSET = 16;
 
-  // Restaurant east of town square
-  const REST_X_OFFSET = 14;
-
-  // General Store west of town square
-  const STORE_X_OFFSET = 28;
-
-  // Desperado Club — art-deco nightclub south of the square, west wall against the N-S road.
-  const CLUB_X_OFFSET = 3;
-  const CLUB_Y_OFFSET = 19;
-  const CLUB_W = 16;
-  const CLUB_H = 6;
   // Half-width of the 5-tile main roads (their near edge sits this many tiles off the centre line).
   const ROAD_HALF = Math.floor(ROAD_WIDTH / 2);
 
-  // Village building positions (offset from town center cx, cy).
-  // The town is intentionally compact: buildings form two tight streets
-  // ringing the square (rows ~±14–30 tiles from centre) so it reads as a
-  // lived-in town rather than scattered homesteads. Placements dodge the
-  // square (±11), the main road bands (±2 around each axis road), the tower
-  // footprint (x −3..+2, y −36..−16), and the store/restaurant rows
-  // (y −16..−12), and every door's L-road to a main road stays unblocked.
-  const SHEPHERDS_CABIN_DX = 16;
-  const SHEPHERDS_CABIN_DY = 30;
-  const SHEPHERDS_LEAN_TO_DX = 23;
-  const SHEPHERDS_LEAN_TO_DY = 30;
-  const SHEPHERDS_LEAN_TO_W = 6;
-  const SHEPHERDS_LEAN_TO_H = 4;
-  const BARRACKS_DX = 6;
-  const BARRACKS_DY = 24;
-  const HILDA_DX = 10;
-  const HILDA_DY = 24;
-  const CARTWRIGHT_DX = 16;
-  const CARTWRIGHT_SHED_DX = 22;
-  const CARTWRIGHT_SHED_DY = 10;
-  const CARTWRIGHT_SHED_W = 6;
-  const CARTWRIGHT_SHED_H = 5;
-  const CARTWRIGHT_DY = 10;
-  const HERB_DX = 16;
-  const HERB_DY = 6;
-  const SLEEPING_CAT_DX = 16;
-  const SLEEPING_CAT_DY = 14;
-  const SLEEPING_CAT_STABLE_DY = 21;
-  const SLEEPING_CAT_STABLE_W = 8;
-  const SLEEPING_CAT_STABLE_H = 5;
-  const RUSTY_ANVIL_DX = 14;
-  const RUSTY_ANVIL_DY = 14;
-  const RUSTY_ANVIL_FORGE_DX = 21;
-  const RUSTY_ANVIL_FORGE_W = 7;
-  const RUSTY_ANVIL_FORGE_H = 5;
-  const MILLERS_FARM_DX = 24;
-  const MILLERS_FARM_DY = 14;
-  const MILLERS_FARM_BARN_DX = 25;
-  const MILLERS_FARM_BARN_DY = 20;
-  const MILLERS_FARM_BARN_W = 8;
-  const MILLERS_FARM_BARN_H = 5;
-  const WANDERERS_REST_DX = 16;
-  const WANDERERS_REST_DY = 6;
-  const SUNKEN_STUMP_DX = 10;
-  const SUNKEN_STUMP_DY = 14;
+  // Building anchor positions, as signed tile offsets from the town centre (cx, cy).
+  // Every sprite building's own footprint and door are derived from its art (see
+  // placeSpriteBuilding), so these are just the top-left corner of each PNG.
+  //
+  // The town reads as two streets ringing the square: the north street carries the
+  // store, barracks and cottages, the south street the club, taverns and inn. Every
+  // placement dodges the square (±11), the main road bands (±2 around each axis
+  // road) and the tower footprint (x −3..+2, y −36..−16), and every door's road
+  // stub runs clear of its neighbours.
+  const SHEPHERDS_CABIN = { dx: -16, dy: -30 };
+  const SHEPHERDS_LEAN_TO = { dx: -23, dy: -30, w: 6, h: 4 };
+  const BLACKWOOD_LODGE = { dx: 6, dy: -24 };
+  const HILDA_COTTAGE = { dx: -10, dy: -24 };
+  const GENERAL_STORE = { dx: -26, dy: -20 };
+  const THE_BARRACKS = { dx: 13, dy: -20 };
+  const CARTWRIGHT_WORKSHOP = { dx: 34, dy: -20 };
+  const CARTWRIGHT_SHED = { dx: 27, dy: -20, w: 6, h: 5 };
+  const HERB_AND_REMEDY = { dx: -20, dy: -11 };
+  const HORNED_FLAGON = { dx: 20, dy: -10 };
+  const TEMPLE_OF_THE_SKY = { dx: -25, dy: 4 };
+  const RUSTY_ANVIL = { dx: 21, dy: 6 };
+  const SLEEPING_CAT_INN = { dx: -32, dy: 15 };
+  const SLEEPING_CAT_STABLE = { dx: -42, dy: 15, w: 8, h: 5 };
+  const SUNKEN_STUMP_PUB = { dx: -19, dy: 15 };
+  const DESPERADO_CLUB = { dx: 3, dy: 16 };
+  const MILLERS_FARM = { dx: -30, dy: 27 };
+  const MILLERS_BARN = { dx: -24, dy: 34, w: 8, h: 5 };
+  const SIGNETS_INK = { dx: 21, dy: 31 };
+
+  // Widest road stub drawn in front of a door — wider doorways (the mead hall's
+  // five-tile front) would otherwise read as a plaza rather than a street.
+  const DOOR_ROAD_MAX_WIDTH = 3;
 
   // Circus placement
   const CIRCUS_MIN_DIST = 70;
@@ -282,212 +263,146 @@ export function generateOverworld(size: number): OverworldData {
     type: 'tower',
   });
 
-  // 6b. The Restaurant — safe room building, east of town square, north of E-W road.
-  //     Entering triggers a BuildingInteriorScene with a safe-room interior.
-  const restW = 14;
-  const restH = 5;
-  const restX = cx + REST_X_OFFSET;
-  const restY = cy - NORTH_BUILDINGS_Y_OFFSET;
-  placeBuilding(restX, restY, restW, restH, 'restaurant', 'Safe Room', ROOF_RED);
-  // Short road stub south from restaurant door to the E-W road
-  const restDoorX = restX + Math.floor(restW / 2) - 1;
-  for (let ry = restY + restH; ry <= cy - 2; ry++) {
-    setRoad(restDoorX, ry);
-    setRoad(restDoorX + 1, ry);
+  // 6b. Sprite-based building — renders a pre-made PNG instead of procedural tiles.
+  //     Footprint and doorway are both derived from the sprite's manifest entry
+  //     (frame size and `blockedRegions`), so any art size drops in as data.
+  //     Tiles under the art are reserved so ground scatter doesn't paint beneath it.
+  interface SpritePlacement {
+    doorTile: Point;
+    doorwayWidth: number;
+    rect: Rect;
   }
-
-  // 6c. General Store — west of town square, mirroring the restaurant on the east side.
-  const storeW = 14;
-  const storeH = 5;
-  const storeX = cx - STORE_X_OFFSET;
-  const storeY = cy - NORTH_BUILDINGS_Y_OFFSET;
-  placeBuilding(storeX, storeY, storeW, storeH, 'store', 'General Store', ROOF_GREEN);
-  // Short road stub south from store door to the E-W road
-  const storeDoorX = storeX + Math.floor(storeW / 2) - 1;
-  for (let ry = storeY + storeH; ry <= cy - 2; ry++) {
-    setRoad(storeDoorX, ry);
-    setRoad(storeDoorX + 1, ry);
-  }
-
-  // 6d. The Desperado Club — a prominent art-deco club at the town's south edge.
-  const clubX = cx + CLUB_X_OFFSET;
-  const clubY = cy + CLUB_Y_OFFSET;
-  placeBuilding(clubX, clubY, CLUB_W, CLUB_H, 'club', 'The Desperado Club', ROOF_SLATE);
-  // Connector: run a road from below the south-facing door west to the N-S main road.
-  const clubDoorX = clubX + Math.floor(CLUB_W / 2) - 1;
-  const clubConnectorRow = clubY + CLUB_H;
-  for (let rx = cx - ROAD_HALF; rx <= clubDoorX + 1; rx++) {
-    setRoad(rx, clubConnectorRow);
-    setRoad(rx, clubConnectorRow + 1);
-  }
-
-  // 6d. Sprite-based house — renders a pre-made PNG instead of procedural tiles.
-  //     Footprint: 5 tiles wide × 4 tiles tall. Door at col 2, row 3 (anchor-relative).
-  const SPRITE_HOUSE_W = 5;
-  const SPRITE_HOUSE_H = 4;
-  const SPRITE_DOOR_DX = 2;
-  const SPRITE_DOOR_DY = 3;
-  const placeSpriteBuilding = (bx: number, by: number, spriteKey: string, name: string) => {
+  const spriteFootprints: Rect[] = [];
+  const placeSpriteBuilding = (
+    anchor: { dx: number; dy: number },
+    spriteKey: string,
+    name: string,
+    type: BuildingEntry['type'] = 'house',
+  ): SpritePlacement => {
+    const bx = cx + anchor.dx;
+    const by = cy + anchor.dy;
     // Anchor tile carries the sprite key for rendering.
     grid[by][bx].type = SPRITE_BUILDING;
     grid[by][bx].spriteKey = spriteKey;
-    // Door tile — walkable entry point.
-    set(bx + SPRITE_DOOR_DX, by + SPRITE_DOOR_DY, ROAD);
-    buildings.push({ x: bx, y: by, w: SPRITE_HOUSE_W, h: SPRITE_HOUSE_H });
-    buildingEntries.push({
-      doorTile: { x: bx + SPRITE_DOOR_DX, y: by + SPRITE_DOOR_DY },
-      name,
-      type: 'house',
-    });
+    const footprint = getSpriteFootprintByKey(spriteKey);
+    const doorway = getSpriteDoorwayByKey(spriteKey);
+    if (footprint === undefined || doorway === undefined) {
+      throw new Error(`Sprite building '${spriteKey}' is missing a footprint or a doorway`);
+    }
+    const doorTile: Point = { x: bx + doorway.dx, y: by + doorway.dy };
+    set(doorTile.x, doorTile.y, ROAD);
+    const rect: Rect = {
+      x: bx + footprint.dx,
+      y: by + footprint.dy,
+      w: footprint.w,
+      h: footprint.h,
+    };
+    buildings.push(rect);
+    spriteFootprints.push(rect);
+    buildingEntries.push({ doorTile, name, type });
+    return { doorTile, doorwayWidth: doorway.width, rect };
+  };
+  const isUnderSpriteBuilding = (tx: number, ty: number) =>
+    spriteFootprints.some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h);
+
+  // 6c. Non-enterable companion structure (shed, stable, barn)
+  const placeStructure = (
+    anchor: { dx: number; dy: number; w: number; h: number },
+    roofTile: number,
+  ) => {
+    const bx = cx + anchor.dx;
+    const by = cy + anchor.dy;
+    for (let dy = 0; dy < anchor.h; dy++)
+      for (let dx = 0; dx < anchor.w; dx++)
+        set(bx + dx, by + dy, dy === 0 || dy === anchor.h - 1 ? BUILDING_WALL : roofTile);
+    buildings.push({ x: bx, y: by, w: anchor.w, h: anchor.h });
   };
 
-  // 7. Named village buildings at fixed positions
-  // placeStructure: non-enterable companion structure (shed, stable, barn, forge)
-  const placeStructure = (bx: number, by: number, bw: number, bh: number, roofTile: number) => {
-    for (let dy = 0; dy < bh; dy++)
-      for (let dx = 0; dx < bw; dx++)
-        set(bx + dx, by + dy, dy === 0 || dy === bh - 1 ? BUILDING_WALL : roofTile);
-    buildings.push({ x: bx, y: by, w: bw, h: bh });
-  };
-
-  // connectToRoad: draw an L-shaped 2–3-tile-wide road from a door to the nearest main road
-  const connectToRoad = (doorX: number, doorY: number) => {
-    const toEW = Math.abs(doorY - cy) <= Math.abs(doorX - cx);
-    if (toEW) {
-      const targetY = doorY < cy ? cy - 2 : cy + ROAD_FAR_SIDE_OFFSET;
-      const minY = Math.min(doorY, targetY);
-      const maxY = Math.max(doorY, targetY);
-      for (let ry = minY; ry <= maxY; ry++) {
-        setRoad(doorX, ry);
-        setRoad(doorX + 1, ry);
-        setRoad(doorX + 2, ry);
-      }
-    } else {
-      const targetX = doorX < cx ? cx - 2 : cx + ROAD_FAR_SIDE_OFFSET;
-      const minX = Math.min(doorX, targetX);
-      const maxX = Math.max(doorX, targetX);
-      for (let rx = minX; rx <= maxX; rx++) {
-        setRoad(rx, doorY);
-        setRoad(rx, doorY + 1);
-      }
-      const minY2 = Math.min(doorY, cy - 2);
-      const maxY2 = Math.max(doorY, cy + ROAD_FAR_SIDE_OFFSET);
-      for (let ry = minY2; ry <= maxY2; ry++) {
-        setRoad(doorX, ry);
-        setRoad(doorX + 1, ry);
-      }
+  /**
+   * Draw the street a sprite building's door opens onto. Every building sprite
+   * faces south, so the stub always leaves the doorway southward until it clears
+   * the art, then either continues to the E-W road (buildings sitting north of it)
+   * or turns along the building's frontage to reach the N-S road (buildings south
+   * of it). Routing out of the footprint first is what keeps road tiles from being
+   * painted through a building's own silhouette.
+   */
+  const connectDoorToRoad = (placement: SpritePlacement) => {
+    const width = Math.min(placement.doorwayWidth, DOOR_ROAD_MAX_WIDTH);
+    const startX = placement.doorTile.x - Math.floor((width - 1) / 2);
+    const drawRow = (ry: number) => {
+      for (let i = 0; i < width; i++) setRoad(startX + i, ry);
+    };
+    const frontRow = placement.rect.y + placement.rect.h;
+    const northRoadEdge = cy - ROAD_HALF;
+    const southRoadEdge = cy + ROAD_FAR_SIDE_OFFSET;
+    const stubEnd = frontRow < northRoadEdge ? northRoadEdge : frontRow;
+    for (let ry = placement.doorTile.y; ry <= stubEnd; ry++) drawRow(ry);
+    if (frontRow <= southRoadEdge) return;
+    const targetX = placement.doorTile.x < cx ? cx - ROAD_HALF : cx + ROAD_HALF;
+    const minX = Math.min(startX, targetX);
+    const maxX = Math.max(startX + width - 1, targetX);
+    for (let rx = minX; rx <= maxX; rx++) {
+      setRoad(rx, frontRow);
+      setRoad(rx, frontRow + 1);
     }
   };
 
-  // ── Shepherd's Cabin — north street, second row: cottage + hay-storage lean-to ──
-  placeSpriteBuilding(
-    cx - SHEPHERDS_CABIN_DX,
-    cy - SHEPHERDS_CABIN_DY,
-    'village_house_1',
-    "Shepherd's Cabin",
+  // 7. Named town buildings at fixed positions.
+  //    Order is north street → square ring → south street, so the layout below
+  //    reads top-to-bottom the way the town does on screen.
+
+  // ── Shepherd's Cabin — north street, outer row: cottage + hay-storage lean-to ──
+  connectDoorToRoad(placeSpriteBuilding(SHEPHERDS_CABIN, 'village_house_1', "Shepherd's Cabin"));
+  placeStructure(SHEPHERDS_LEAN_TO, ROOF_THATCH);
+
+  // ── Blackwood Lodge — north street, the cult hideout between tower and barracks ──
+  connectDoorToRoad(placeSpriteBuilding(BLACKWOOD_LODGE, 'village_house_2', 'Blackwood Lodge'));
+
+  // ── Old Hilda's Cottage — north street, between the store and the tower ──
+  connectDoorToRoad(placeSpriteBuilding(HILDA_COTTAGE, 'village_house_3', "Old Hilda's Cottage"));
+
+  // ── General Store — north-west, the town's supply shop ──
+  connectDoorToRoad(placeSpriteBuilding(GENERAL_STORE, 'shop', 'General Store', 'store'));
+
+  // ── The Barracks — north-east crawler guildhall; the overworld safe room ──
+  connectDoorToRoad(placeSpriteBuilding(THE_BARRACKS, 'barracks', 'The Barracks', 'restaurant'));
+
+  // ── Cartwright's Workshop — far east of the north street: shop + storage shed ──
+  placeStructure(CARTWRIGHT_SHED, ROOF_SLATE);
+  connectDoorToRoad(
+    placeSpriteBuilding(CARTWRIGHT_WORKSHOP, 'village_house_4', "Cartwright's Workshop"),
   );
-  placeStructure(
-    cx - SHEPHERDS_LEAN_TO_DX,
-    cy - SHEPHERDS_LEAN_TO_DY,
-    SHEPHERDS_LEAN_TO_W,
-    SHEPHERDS_LEAN_TO_H,
-    ROOF_THATCH,
-  ); // lean-to shed
-  connectToRoad(cx - SHEPHERDS_CABIN_DX + SPRITE_DOOR_DX, cy - SHEPHERDS_CABIN_DY + SPRITE_DOOR_DY);
 
-  // ── Blackwood Barracks — north street, between the tower and restaurant ──
-  placeSpriteBuilding(cx + BARRACKS_DX, cy - BARRACKS_DY, 'village_house_2', 'Blackwood Barracks');
-  connectToRoad(cx + BARRACKS_DX + SPRITE_DOOR_DX, cy - BARRACKS_DY + SPRITE_DOOR_DY);
+  // ── Herb & Remedy — apothecary just north-west of the square ──
+  connectDoorToRoad(placeSpriteBuilding(HERB_AND_REMEDY, 'village_house_1', 'Herb & Remedy'));
 
-  // ── Old Hilda's Cottage — north street, between the store and tower ──
-  placeSpriteBuilding(cx - HILDA_DX, cy - HILDA_DY, 'village_house_3', "Old Hilda's Cottage");
-  connectToRoad(cx - HILDA_DX + SPRITE_DOOR_DX, cy - HILDA_DY + SPRITE_DOOR_DY);
+  // ── The Horned Flagon — mead hall fronting the square's east approach ──
+  connectDoorToRoad(placeSpriteBuilding(HORNED_FLAGON, 'tavern_2', 'The Horned Flagon'));
 
-  // ── Cartwright's Workshop — east of the square: main shop + storage shed beside it ──
-  placeStructure(
-    cx + CARTWRIGHT_SHED_DX,
-    cy - CARTWRIGHT_SHED_DY,
-    CARTWRIGHT_SHED_W,
-    CARTWRIGHT_SHED_H,
-    ROOF_SLATE,
-  ); // storage shed
-  placeSpriteBuilding(
-    cx + CARTWRIGHT_DX,
-    cy - CARTWRIGHT_DY,
-    'village_house_4',
-    "Cartwright's Workshop",
+  // ── Temple of the Sky — west of the square, facing the plaza ──
+  connectDoorToRoad(placeSpriteBuilding(TEMPLE_OF_THE_SKY, 'temple', 'Temple of the Sky'));
+
+  // ── The Rusty Anvil — smithy east of the square; its forges burn in the art ──
+  connectDoorToRoad(placeSpriteBuilding(RUSTY_ANVIL, 'blacksmith', 'The Rusty Anvil'));
+
+  // ── The Sleeping Cat Inn — south street, west end: inn + stable beside it ──
+  placeStructure(SLEEPING_CAT_STABLE, ROOF_THATCH);
+  connectDoorToRoad(placeSpriteBuilding(SLEEPING_CAT_INN, 'small_inn', 'The Sleeping Cat Inn'));
+
+  // ── The Sunken Stump Pub — south street, the cramped dive next to the inn ──
+  connectDoorToRoad(placeSpriteBuilding(SUNKEN_STUMP_PUB, 'tavern_1', 'The Sunken Stump Pub'));
+
+  // ── The Desperado Club — the town's south landmark, west wall against the N-S road ──
+  connectDoorToRoad(
+    placeSpriteBuilding(DESPERADO_CLUB, 'desperado_club', 'The Desperado Club', 'club'),
   );
-  connectToRoad(cx + CARTWRIGHT_DX + SPRITE_DOOR_DX, cy - CARTWRIGHT_DY + SPRITE_DOOR_DY);
 
-  // ── Herb & Remedy — apothecary fronting the square's west edge ──
-  placeSpriteBuilding(cx - HERB_DX, cy + HERB_DY, 'village_house_1', 'Herb & Remedy');
-  connectToRoad(cx - HERB_DX + SPRITE_DOOR_DX, cy + HERB_DY + SPRITE_DOOR_DY);
+  // ── Miller's Farm — south street, outer row: farmhouse + large barn behind it ──
+  connectDoorToRoad(placeSpriteBuilding(MILLERS_FARM, 'village_house_4', "Miller's Farm"));
+  placeStructure(MILLERS_BARN, ROOF_THATCH);
 
-  // ── The Sleeping Cat Inn — south street: inn + stable behind it ──
-  placeSpriteBuilding(
-    cx - SLEEPING_CAT_DX,
-    cy + SLEEPING_CAT_DY,
-    'village_house_2',
-    'The Sleeping Cat Inn',
-  );
-  placeStructure(
-    cx - SLEEPING_CAT_DX,
-    cy + SLEEPING_CAT_STABLE_DY,
-    SLEEPING_CAT_STABLE_W,
-    SLEEPING_CAT_STABLE_H,
-    ROOF_THATCH,
-  ); // stable
-  connectToRoad(cx - SLEEPING_CAT_DX + SPRITE_DOOR_DX, cy + SLEEPING_CAT_DY + SPRITE_DOOR_DY);
-
-  // ── The Rusty Anvil — south street, east side: forge building + work shed ──
-  placeSpriteBuilding(
-    cx + RUSTY_ANVIL_DX,
-    cy + RUSTY_ANVIL_DY,
-    'village_house_3',
-    'The Rusty Anvil',
-  );
-  placeStructure(
-    cx + RUSTY_ANVIL_FORGE_DX,
-    cy + RUSTY_ANVIL_DY,
-    RUSTY_ANVIL_FORGE_W,
-    RUSTY_ANVIL_FORGE_H,
-    ROOF_RED,
-  ); // forge shed
-  connectToRoad(cx + RUSTY_ANVIL_DX + SPRITE_DOOR_DX, cy + RUSTY_ANVIL_DY + SPRITE_DOOR_DY);
-
-  // ── Miller's Farm — south street, west end: farmhouse + large barn behind it ──
-  placeSpriteBuilding(
-    cx - MILLERS_FARM_DX,
-    cy + MILLERS_FARM_DY,
-    'village_house_4',
-    "Miller's Farm",
-  );
-  placeStructure(
-    cx - MILLERS_FARM_BARN_DX,
-    cy + MILLERS_FARM_BARN_DY,
-    MILLERS_FARM_BARN_W,
-    MILLERS_FARM_BARN_H,
-    ROOF_THATCH,
-  ); // barn
-  connectToRoad(cx - MILLERS_FARM_DX + SPRITE_DOOR_DX, cy + MILLERS_FARM_DY + SPRITE_DOOR_DY);
-
-  // ── The Wanderer's Rest — dormitory fronting the square's east edge ──
-  placeSpriteBuilding(
-    cx + WANDERERS_REST_DX,
-    cy + WANDERERS_REST_DY,
-    'village_house_1',
-    "The Wanderer's Rest",
-  );
-  connectToRoad(cx + WANDERERS_REST_DX + SPRITE_DOOR_DX, cy + WANDERERS_REST_DY + SPRITE_DOOR_DY);
-
-  // ── The Sunken Stump Pub — south street: pub in the alley row beside the inn ──
-  placeSpriteBuilding(
-    cx - SUNKEN_STUMP_DX,
-    cy + SUNKEN_STUMP_DY,
-    'village_house_2',
-    'The Sunken Stump Pub',
-  );
-  connectToRoad(cx - SUNKEN_STUMP_DX + SPRITE_DOOR_DX, cy + SUNKEN_STUMP_DY + SPRITE_DOOR_DY);
+  // ── Signet's Ink — tattoo parlor south of the club, deepest in the nightlife district ──
+  connectDoorToRoad(placeSpriteBuilding(SIGNETS_INK, 'tattoo_parlor', "Signet's Ink"));
 
   // 7b. Circus — cluster of tents 60+ tiles from town center
   let circusCx = cx;
@@ -828,6 +743,7 @@ export function generateOverworld(size: number): OverworldData {
   // Scattered GRASSY_WEED on open grass tiles
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
+      if (isUnderSpriteBuilding(gx, gy)) continue;
       if (grid[gy][gx].type === GRASS && Math.random() < GRASSY_WEED_DENSITY)
         set(gx, gy, GRASSY_WEED);
     }
@@ -835,6 +751,7 @@ export function generateOverworld(size: number): OverworldData {
   // DIRT_PATCH on road tiles for visual variety
   for (let gy = BORDER + 1; gy < size - BORDER - 1; gy++) {
     for (let gx = BORDER + 1; gx < size - BORDER - 1; gx++) {
+      if (isUnderSpriteBuilding(gx, gy)) continue;
       if (grid[gy][gx].type === ROAD && Math.random() < DIRT_PATCH_DENSITY) set(gx, gy, DIRT_PATCH);
     }
   }
@@ -860,6 +777,11 @@ export function generateOverworld(size: number): OverworldData {
     mainTowerAnchor,
     doomsdayEscapeTile,
     townSafeRadiusTiles: TOWN_SAFE_RADIUS_TILES,
+    townSquareCentre: { x: cx, y: cy },
+    fountainCentre: {
+      x: cx + FOUNTAIN_SE_OFFSET + Math.floor(FOUNTAIN_SIZE / 2),
+      y: cy + FOUNTAIN_SE_OFFSET + Math.floor(FOUNTAIN_SIZE / 2),
+    },
     circusCentre: { x: circusCx, y: circusCy },
     circusRadiusTiles: circusRadius,
   };

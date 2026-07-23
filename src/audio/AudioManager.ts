@@ -10,6 +10,8 @@ const MS_PER_SECOND = 1000;
 const DEFAULT_STOP_MUSIC_FADE_MS = 500;
 const GOBLIN_ENCOUNTER_CHANCE = 0.15;
 const MENU_MUSIC_FADE_MS = 200;
+/** Ramp time applied to ambient-loop volume changes, short enough to track the player. */
+const AMBIENT_RAMP_MS = 100;
 
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
@@ -67,6 +69,12 @@ export class AudioManager {
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
   private machinerySource: AudioBufferSourceNode | null = null;
   private keyboardHeroMusicSource: AudioBufferSourceNode | null = null;
+  // Distance-attenuated ambient loops, keyed by sound id so several emitters of
+  // the same sound (every hearth in a building) share one voice.
+  private readonly ambientLoops = new Map<
+    SoundId,
+    { source: AudioBufferSourceNode; gain: GainNode }
+  >();
 
   // Sounds queued because their buffer wasn't decoded yet when requested.
   private readonly pendingSfx = new Map<SoundId, PlayOptions>();
@@ -154,6 +162,7 @@ export class AudioManager {
     this.stopSpiderWalkingLoop();
     this.stopMachineryLoop();
     this.stopKeyboardHeroMusic();
+    this.stopAllAmbientLoops();
     void this.ctx.suspend();
   }
 
@@ -490,6 +499,86 @@ export class AudioManager {
     this.machinerySource = null;
   }
 
+  /**
+   * Start a positional ambient loop at `volume`. No-op if the loop is already
+   * running, the buffer hasn't decoded, or the AudioContext is still locked —
+   * callers drive these from a per-frame distance calculation, so the next frame
+   * simply retries once audio unlocks rather than needing a queue.
+   */
+  startAmbientLoop(id: SoundId, volume: number): void {
+    if (this.ambientLoops.has(id)) return;
+    if (!this.isRunning) return;
+    const buffer = this.buffers.get(id);
+    if (!buffer) return;
+    const gain = this.ctx.createGain();
+    // Fade in rather than snapping to `volume`: a room-wide bed starts at full
+    // gain the instant you walk in, and an instant step would click.
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(volume, now + AMBIENT_RAMP_MS / MS_PER_SECOND);
+    gain.connect(this.sfxGain);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+    this.ambientLoops.set(id, { source, gain });
+  }
+
+  /**
+   * Whether an ambient loop is actually playing. Callers drive these from a
+   * per-frame distance calculation and `startAmbientLoop` silently declines while
+   * the context is locked or the buffer is still decoding — so the truth has to
+   * live here rather than in a caller-side "I started it" flag that would go
+   * stale (a backgrounded tab stops every loop without telling anyone).
+   */
+  isAmbientLoopRunning(id: SoundId): boolean {
+    return this.ambientLoops.has(id);
+  }
+
+  /**
+   * Ramp a running ambient loop to `volume`. Ramping rather than assigning is
+   * what keeps a loop that tracks the player's distance from zippering.
+   */
+  setAmbientLoopVolume(id: SoundId, volume: number): void {
+    const loop = this.ambientLoops.get(id);
+    if (loop === undefined) return;
+    const now = this.ctx.currentTime;
+    loop.gain.gain.cancelScheduledValues(now);
+    loop.gain.gain.setValueAtTime(loop.gain.gain.value, now);
+    loop.gain.gain.linearRampToValueAtTime(volume, now + AMBIENT_RAMP_MS / MS_PER_SECOND);
+  }
+
+  /**
+   * Stop an ambient loop. No-op if it isn't running. The voice is ramped to zero
+   * before it is torn down, so stopping a loop that is still audible — leaving a
+   * tavern mid-murmur — doesn't cut the waveform dead and click. The map entry is
+   * dropped immediately so re-entering can start a fresh voice at once.
+   */
+  stopAmbientLoop(id: SoundId): void {
+    const loop = this.ambientLoops.get(id);
+    if (loop === undefined) return;
+    this.ambientLoops.delete(id);
+    const now = this.ctx.currentTime;
+    const rampSeconds = AMBIENT_RAMP_MS / MS_PER_SECOND;
+    try {
+      loop.gain.gain.cancelScheduledValues(now);
+      loop.gain.gain.setValueAtTime(loop.gain.gain.value, now);
+      loop.gain.gain.linearRampToValueAtTime(0, now + rampSeconds);
+      loop.source.stop(now + rampSeconds);
+    } catch {
+      /* already stopped */
+    }
+    loop.source.onended = () => {
+      loop.gain.disconnect();
+    };
+  }
+
+  /** Stop every ambient loop. Call on scene swap and teardown. */
+  stopAllAmbientLoops(): void {
+    for (const id of [...this.ambientLoops.keys()]) this.stopAmbientLoop(id);
+  }
+
   /** Play the keyboard hero music track (one-shot, stoppable). No-op if already playing. */
   startKeyboardHeroMusic(): void {
     if (this.keyboardHeroMusicSource !== null) return;
@@ -726,6 +815,7 @@ export class AudioManager {
     this.stopSpiderWalkingLoop();
     this.stopMachineryLoop();
     this.stopKeyboardHeroMusic();
+    this.stopAllAmbientLoops();
     this.stopMusic(0);
     void this.ctx.close();
   }

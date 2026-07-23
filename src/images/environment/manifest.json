@@ -1135,6 +1135,151 @@
       "idle": { "row": 0, "frameCount": 1 }
     }
   },
+  "barracks": {
+    "path": "environment/barracks.png",
+    "frameWidth": 322,
+    "frameHeight": 255,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 148, "x2": 321, "y2": 178 },
+      { "x1": 1, "y1": 178, "x2": 128, "y2": 255 },
+      { "x1": 200, "y1": 178, "x2": 321, "y2": 255 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "blacksmith": {
+    "path": "environment/blacksmith.png",
+    "frameWidth": 200,
+    "frameHeight": 122,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 60, "x2": 199, "y2": 68 },
+      { "x1": 1, "y1": 68, "x2": 103, "y2": 122 },
+      { "x1": 138, "y1": 68, "x2": 199, "y2": 122 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 },
+      "flame": { "row": 0, "colOffset": 1, "frameCount": 5, "colsPerRow": 3 }
+    }
+  },
+  "desperado_club": {
+    "path": "environment/desperado_club.png",
+    "frameWidth": 500,
+    "frameHeight": 437,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 300, "x2": 499, "y2": 330 },
+      { "x1": 1, "y1": 330, "x2": 198, "y2": 437 },
+      { "x1": 275, "y1": 330, "x2": 499, "y2": 437 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "shop": {
+    "path": "environment/shop.png",
+    "frameWidth": 346,
+    "frameHeight": 204,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 95, "x2": 345, "y2": 112 },
+      { "x1": 1, "y1": 112, "x2": 110, "y2": 204 },
+      { "x1": 185, "y1": 112, "x2": 345, "y2": 204 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "small_inn": {
+    "path": "environment/small_inn.png",
+    "frameWidth": 346,
+    "frameHeight": 269,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 185, "x2": 345, "y2": 198 },
+      { "x1": 1, "y1": 198, "x2": 113, "y2": 269 },
+      { "x1": 168, "y1": 198, "x2": 345, "y2": 269 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "tattoo_parlor": {
+    "path": "environment/tattoo_parlor.png",
+    "frameWidth": 330,
+    "frameHeight": 218,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 110, "x2": 329, "y2": 120 },
+      { "x1": 1, "y1": 120, "x2": 85, "y2": 218 },
+      { "x1": 150, "y1": 120, "x2": 329, "y2": 218 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "tavern_1": {
+    "path": "environment/tavern_1.png",
+    "frameWidth": 348,
+    "frameHeight": 211,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 125, "x2": 347, "y2": 135 },
+      { "x1": 1, "y1": 135, "x2": 68, "y2": 211 },
+      { "x1": 130, "y1": 135, "x2": 347, "y2": 211 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "tavern_2": {
+    "path": "environment/tavern_2.png",
+    "frameWidth": 357,
+    "frameHeight": 208,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 110, "x2": 356, "y2": 120 },
+      { "x1": 1, "y1": 120, "x2": 120, "y2": 208 },
+      { "x1": 250, "y1": 120, "x2": 356, "y2": 208 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "temple": {
+    "path": "environment/temple.png",
+    "frameWidth": 323,
+    "frameHeight": 282,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 32,
+    "blockedRegions": [
+      { "x1": 1, "y1": 150, "x2": 322, "y2": 163 },
+      { "x1": 1, "y1": 163, "x2": 113, "y2": 230 },
+      { "x1": 193, "y1": 163, "x2": 322, "y2": 230 }
+    ],
+    "states": {
+      "idle": { "row": 0, "frameCount": 1 }
+    }
+  },
   "stairwell": {
     "path": "environment/stairwell.png",
     "frameWidth": 75,

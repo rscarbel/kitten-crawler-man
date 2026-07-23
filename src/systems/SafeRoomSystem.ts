@@ -21,6 +21,26 @@ interface SafeRoomEntry {
   showBed: boolean;
 }
 
+/** How far off-centre Mordecai and the bed sit: a quarter of the room's width. */
+const SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR = 4;
+
+/**
+ * The tiles SafeRoomSystem parks Mordecai and the sleeping bed on, for each safe
+ * room. Exported so interior layouts and occupant placement can keep clear of
+ * them instead of duplicating the offset maths.
+ */
+export function safeRoomAnchorTiles(
+  safeRooms: ReadonlyArray<{ bounds: { w: number }; centre: { x: number; y: number } }>,
+): Array<{ x: number; y: number }> {
+  const tiles: Array<{ x: number; y: number }> = [];
+  for (const sr of safeRooms) {
+    const halfW = Math.floor(sr.bounds.w / SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR);
+    tiles.push({ x: sr.centre.x - halfW, y: sr.centre.y });
+    tiles.push({ x: sr.centre.x + halfW, y: sr.centre.y });
+  }
+  return tiles;
+}
+
 export class SafeRoomSystem implements GameSystem {
   private readonly entries: SafeRoomEntry[];
 
@@ -36,7 +56,6 @@ export class SafeRoomSystem implements GameSystem {
   private readonly SLEEP_HOLD = 90;
 
   // Magic number constants
-  private static readonly HALFWIDTH_DIVISOR = 4;
   private static readonly WANDER_PHASE_OFFSET = 210;
   private static readonly WANDER_CYCLE = 500;
   private static readonly WANDER_WALK_FRAMES = 150;
@@ -98,7 +117,7 @@ export class SafeRoomSystem implements GameSystem {
 
     if (gameMap.safeRooms.length > 0) {
       for (const sr of gameMap.safeRooms) {
-        const halfW = Math.floor(sr.bounds.w / SafeRoomSystem.HALFWIDTH_DIVISOR);
+        const halfW = Math.floor(sr.bounds.w / SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR);
         this.entries.push({
           bounds: sr.bounds,
           mordecaiHomeTileX: sr.centre.x - halfW,

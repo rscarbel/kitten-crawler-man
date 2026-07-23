@@ -153,7 +153,6 @@ export class ClubCasinoSystem {
     }
     this.wager = amount;
     this.feedbackMsg = '';
-    this.audio?.play('menu_click');
   }
 
   private placeGuess(direction: GuessDirection, player: Player): void {
@@ -189,7 +188,6 @@ export class ClubCasinoSystem {
     this.feedbackMsg = '';
     // Keep the player's chosen wager across rounds, only stepping down if they can no longer afford it.
     if (player.coins < this.wager) this.wager = this.defaultWager(player);
-    this.audio?.play('menu_click');
   }
 
   handleClick(mx: number, my: number, player: Player): void {

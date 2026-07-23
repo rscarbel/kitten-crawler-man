@@ -62,7 +62,7 @@ The interior analog, owned by `BuildingInteriorScene`. Populates a building's in
 - Occupants mostly stay near their anchor with small idle motion (face-turns, occasional short steps); some (patrons, kids) wander a bounded area.
 - Reuse `Townsperson` + `drawPerson`; render in the interior's entity pass (the scene already Y-sorts entities in `render()`).
 - Interaction: Space near an occupant → interior `DialogBox` line. The forge smith / innkeeper / shopkeeper can double as flavor or hooks.
-- **Do not** add occupants to the live quest-encounter interiors (Big Top boss, Blackwood Barracks cult, tower confrontation) while those encounters are active — gate on the same progress flags `initEntryEncounter` checks.
+- **Do not** add occupants to the live quest-encounter interiors (Big Top boss, Blackwood Lodge cult, tower confrontation) while those encounters are active — gate on the same progress flags `initEntryEncounter` checks.
 
 ### 2.4 Citizen roles & dialog — `src/systems/townDialog.ts` (+ `TownRole`)
 
@@ -120,12 +120,12 @@ Put occupants and activity inside buildings.
 
 - [x] **2.1** Create `src/systems/InteriorOccupantSystem.ts` and a per-building occupant data table (building name → occupants with role + activity + anchor tile derived from the hand-crafted layouts in `GameMap.generateInterior`).
 - [x] **2.2** Wire it into `BuildingInteriorScene` for non-encounter interiors (skip when a live quest encounter occupies the building). Render occupants in the interior entity pass; update stationed/idle motion each frame.
-- [x] **2.3** Author occupants for the marquee buildings first: Rusty Anvil (smith at the forge), Sleeping Cat Inn / Wanderer's Rest (innkeeper + patrons at tables), Sunken Stump Pub (barkeep + drinkers), Miller's Farm (farmer), Herb & Remedy (apothecary), Shepherd's Cabin (shepherd). Give the restaurant/store their existing NPCs company where it fits.
+- [x] **2.3** Author occupants for the marquee buildings first: Rusty Anvil (smith at the forge), Sleeping Cat Inn / The Horned Flagon (formerly The Wanderer's Rest) (innkeeper + patrons at tables), Sunken Stump Pub (barkeep + drinkers), Miller's Farm (farmer), Herb & Remedy (apothecary), Shepherd's Cabin (shepherd). Give the restaurant/store their existing NPCs company where it fits.
 - [ ] **2.4** Make more houses enterable and occupied so wandering in is rewarded (extend `BuildingSystem` entries / `generateInterior` for generic occupied homes). Add lived-in props/ambience (lit fireplaces, clutter) where cheap — reuse existing furniture tiles.
-- [ ] **2.5** Interior ambient audio per building type (forge clangs, tavern murmur, hearth crackle) via `add-sound` / `AudioManager`.
+- [x] **2.5** Interior ambient audio per building type (forge clangs, tavern murmur, hearth crackle) — **superseded and delivered by [town-remake.md](town-remake.md) Phase 2**: `AmbientSoundSystem` emits `ambient_fire_crackling` from every `FIREPLACE`/`BRAZIER` tile in a generated interior, plus constant `ambient_bar_crowd` / `ambient_magic_shop` beds per building.
 - [ ] **DoD:** every named building has believable occupants doing role-appropriate things; encounters unaffected; entering buildings feels rewarding; typecheck/lint clean.
 
-**Notes:** Occupant anchors are _derived_ by scanning the finished interior grid for furniture (`InteriorOccupantSystem.scanFurniture`) rather than hard-coding the layout constants in `generateInterior` — rooms and occupants stay in sync if furniture moves. Each occupant is a `Townsperson` given a bounded wander around a stand-tile beside its furniture (small radius + long pauses for stationed roles, wider for roamers), reusing the shared `stepWander` helper. The scene builds the system only when `combat === null`, so it never spawns into an active Big Top / cult / tower encounter; towers, the club, and the Big Top are excluded outright. Occupants Y-sort with the players in the interior's non-combat entity pass. Verified headlessly: every marquee building spawns its roster and no occupant leaves a walkable tile over 600 frames. **2.4 (more enterable/occupied homes) and 2.5 (interior ambient audio) deferred** as larger follow-ups.
+**Notes:** Occupant anchors are _derived_ by scanning the finished interior grid for furniture (`InteriorOccupantSystem.scanFurniture`) rather than hard-coding the layout constants in `generateInterior` — rooms and occupants stay in sync if furniture moves. Each occupant is a `Townsperson` given a bounded wander around a stand-tile beside its furniture (small radius + long pauses for stationed roles, wider for roamers), reusing the shared `stepWander` helper. The scene builds the system only when `combat === null`, so it never spawns into an active Big Top / cult / tower encounter; towers, the club, and the Big Top are excluded outright. Occupants Y-sort with the players in the interior's non-combat entity pass. Verified headlessly: every marquee building spawns its roster and no occupant leaves a walkable tile over 600 frames. **2.4 (more enterable/occupied homes) deferred** as a larger follow-up; **2.5 (interior ambient audio) was picked up by [town-remake.md](town-remake.md) Phase 2**. Note that town-remake also renamed two buildings: "Blackwood Barracks" → "Blackwood Lodge" (the safe room is now "The Barracks") and "The Wanderer's Rest" → "The Horned Flagon".
 
 ### Phase 3 — Citizen dialog variety
 
@@ -156,7 +156,7 @@ Give the player reasons to linger and interact.
 ### Phase 5 — Polish & reactivity
 
 - [x] **5.1** Reputation/progress reactions: `townDialog.ts` gained a reputation-greeting layer — as quests resolve, citizens greet the player directly by their deeds (hero welcome after the circus/murders, savior after doomsday, wary hope while the killer's still loose), mixed with ambient gossip for variety. Pure extension of the existing reactive layer (no scene changes).
-- [ ] **5.2** Ambient town soundscape layer (crowd murmur, market, distant clangs) mixed under `OverworldMusicSystem`. _(deferred — needs audio assets)_
+- [x] **5.2** Ambient town soundscape layer — **superseded and delivered by [town-remake.md](town-remake.md) Phase 2**: distance-attenuated `ambient_fountain`, `ambient_town_square_crowd` and `ambient_fire_crackling` (the Rusty Anvil's forges) emitters, mixed under `OverworldMusicSystem` via `AudioManager`'s ambient-loop bus.
 - [x] **5.3** Performance pass — audited; satisfied by the existing design rather than new code. The street crowd is a fixed, bounded population (28) confined to a capped life radius; `RenderPipeline.renderEntities` camera-culls off-screen townsfolk **and** the new town props before drawing; the per-frame cost is a cheap walk-step per citizen plus an O(n²) separation over 28 agents (~800 trivial distance checks). Interior occupant rosters are tiny (≤~5/building). All three new UI panels (`NoticeBoardPanel`/`MarketStallPanel`/`FortuneTellerPanel`) early-return in `render()` when closed, so they cost nothing while inactive, and props only draw when on-screen. No per-frame hotspot exists; adding pooling/on-screen caps would be unwarranted complexity at these counts. (If the population is ever raised substantially, add update-culling by camera distance.)
 - [x] **DoD:** the town's life responds to player actions (reputation greetings, quest-reactive gossip/board/fortunes) and frame rate holds with the full crowd.
 
@@ -168,10 +168,10 @@ Give the player reasons to linger and interact.
 | ----- | -------------------------------------------------------------------- | ---------------------------------------------- |
 | 0     | Foundations (Townsperson, wander helper, role genome, CitizenDialog) | ☑ Done                                         |
 | 1     | Living streets                                                       | ☑ Done                                         |
-| 2     | Lived-in interiors                                                   | ◑ In progress (2.1–2.3 done; 2.4–2.5 deferred) |
+| 2     | Lived-in interiors                                                   | ◑ 2.1–2.3 done; 2.5 delivered by town-remake; 2.4 deferred |
 | 3     | Citizen dialog variety                                               | ◑ In progress (3.1–3.3 done; 3.4–3.5 deferred) |
 | 4     | Things to do in town                                                 | ☑ Done                                         |
-| 5     | Polish & reactivity                                                  | ◑ 5.1 + 5.3 done; 5.2 (audio) deferred         |
+| 5     | Polish & reactivity                                                  | ✅ 5.1 + 5.3 done; 5.2 delivered by town-remake |
 
 Update the box and status as work lands. Within a phase, the step checkboxes above are the fine-grained tracker.
 

@@ -49,6 +49,8 @@ const BOSS_REVEAL_EXTRA_TILES = 15;
 const CORPSE_MARKER_ARM = 2;
 /** Corpse marker TTL in frames. */
 const CORPSE_MARKER_TTL = 1800;
+/** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
+const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
 
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
@@ -128,7 +130,7 @@ export class MiniMapSystem implements GameSystem {
           if (this.fogOfWar[idx] === 0) {
             this.fogOfWar[idx] = 1;
             const tile = this.gameMap.structure[ty][tx];
-            cctx.fillStyle = this.tileColor(tile.type);
+            cctx.fillStyle = this.minimapColorAt(tx, ty, tile.type);
             cctx.fillRect(tx, ty, 1, 1);
           }
         }
@@ -150,7 +152,7 @@ export class MiniMapSystem implements GameSystem {
         if (this.fogOfWar[idx] === 0) {
           this.fogOfWar[idx] = 1;
           const tile = this.gameMap.structure[ty][tx];
-          cctx.fillStyle = this.tileColor(tile.type);
+          cctx.fillStyle = this.minimapColorAt(tx, ty, tile.type);
           cctx.fillRect(tx, ty, 1, 1);
         }
       }
@@ -380,6 +382,17 @@ export class MiniMapSystem implements GameSystem {
       outline: true,
       align: 'center',
     });
+  }
+
+  /**
+   * Colour for one minimap pixel. Sprite buildings only mark their anchor tile
+   * with SPRITE_BUILDING, so the whole footprint is resolved via the map rather
+   * than the tile type — otherwise the town's biggest landmarks would each show
+   * up as a single dot.
+   */
+  private minimapColorAt(tx: number, ty: number, type: number): string {
+    if (this.gameMap.isSpriteBuildingTile(tx, ty)) return SPRITE_BUILDING_MINIMAP_COLOR;
+    return this.tileColor(type);
   }
 
   private tileColor(type: number): string {

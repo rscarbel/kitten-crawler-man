@@ -176,6 +176,10 @@ export class GameMap {
   }> = [];
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
+  /** Centre of the town square, in tile coords. Undefined on non-overworld maps. */
+  townSquareCentre: { x: number; y: number } | undefined = undefined;
+  /** Centre tile of the town fountain. Undefined on non-overworld maps. */
+  fountainCentre: { x: number; y: number } | undefined = undefined;
   /** Centre of the circus, in tile coords. Undefined on non-overworld maps. */
   circusCentre: { x: number; y: number } | undefined = undefined;
   /** Where the town's escape route out appears once the Doomsday finale's escape phase begins. Undefined on non-overworld maps. */
@@ -200,6 +204,17 @@ export class GameMap {
   arenaDoorLocked = false;
   private arenaDoorTileSet = new Set<string>();
   private extraBlockedTiles = new Set<string>();
+  /**
+   * Tiles covered by a SPRITE_BUILDING's art. Only the anchor tile carries the
+   * SPRITE_BUILDING type, so anything that reads the map by tile type — the
+   * minimap most visibly — needs this to see a building rather than one pixel.
+   */
+  private readonly spriteBuildingTiles = new Set<string>();
+
+  /** True when (tileX, tileY) is covered by a sprite building's artwork. */
+  isSpriteBuildingTile(tileX: number, tileY: number): boolean {
+    return this.spriteBuildingTiles.has(`${tileX},${tileY}`);
+  }
   private permanentBlockedTiles = new Set<string>();
   private stairwellBlockedSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
@@ -258,6 +273,8 @@ export class GameMap {
       this.buildStairwellBlockedSet(data.stairwellTiles);
       this.mainTowerAnchor = data.mainTowerAnchor;
       this.townSafeRadiusTiles = data.townSafeRadiusTiles;
+      this.townSquareCentre = data.townSquareCentre;
+      this.fountainCentre = data.fountainCentre;
       this.circusCentre = data.circusCentre;
       this.circusRadiusTiles = data.circusRadiusTiles;
       this.doomsdayEscapeTile = data.doomsdayEscapeTile;
@@ -424,56 +441,73 @@ export class GameMap {
     }
 
     if (isRestaurant) {
-      const restaurantCounterRow = 2;
-      const restaurantCounterEndCol = 8;
-      const restaurantTableRowA = 5;
-      const restaurantChairRowA = 6;
-      const restaurantTableCol1 = 2;
-      const restaurantTableCol2 = 3;
-      const restaurantTableCol3 = 5;
-      const restaurantTableCol4 = 6;
-      const restaurantEastTableCol1 = 14;
-      const restaurantEastTableCol2 = 15;
-      const restaurantEastTableCol3 = 17;
-      const restaurantEastTableCol4 = 18;
-      const restaurantTableRowB = 9;
-      const restaurantChairRowB = 10;
-      const restaurantBarrelRow = 3;
-      const restaurantBarrelCol1 = 9;
-      const restaurantBarrelCol2 = 10;
-      // Counter along the north wall (row 2, cols 2–8) — non-walkable wall tiles
-      for (let x = 2; x <= restaurantCounterEndCol; x++)
-        grid[restaurantCounterRow][x].type = FloorTypeValue.wall;
-      // Two 2×1 tables in the dining area (rows 5–6, cols 2–3 and 5–6)
-      grid[restaurantTableRowA][restaurantTableCol1].type = TABLE;
-      grid[restaurantTableRowA][restaurantTableCol2].type = TABLE;
-      grid[restaurantChairRowA][restaurantTableCol1].type = CHAIR;
-      grid[restaurantChairRowA][restaurantTableCol2].type = CHAIR;
-      grid[restaurantTableRowA][restaurantTableCol3].type = TABLE;
-      grid[restaurantTableRowA][restaurantTableCol4].type = TABLE;
-      grid[restaurantChairRowA][restaurantTableCol3].type = CHAIR;
-      grid[restaurantChairRowA][restaurantTableCol4].type = CHAIR;
-      // Two more tables on the east side (rows 5–6, cols 14–15 and 17–18)
-      grid[restaurantTableRowA][restaurantEastTableCol1].type = TABLE;
-      grid[restaurantTableRowA][restaurantEastTableCol2].type = TABLE;
-      grid[restaurantChairRowA][restaurantEastTableCol1].type = CHAIR;
-      grid[restaurantChairRowA][restaurantEastTableCol2].type = CHAIR;
-      grid[restaurantTableRowA][restaurantEastTableCol3].type = TABLE;
-      grid[restaurantTableRowA][restaurantEastTableCol4].type = TABLE;
-      grid[restaurantChairRowA][restaurantEastTableCol3].type = CHAIR;
-      grid[restaurantChairRowA][restaurantEastTableCol4].type = CHAIR;
-      // Two more tables deeper in (rows 9–10)
-      grid[restaurantTableRowB][restaurantTableCol1].type = TABLE;
-      grid[restaurantTableRowB][restaurantTableCol2].type = TABLE;
-      grid[restaurantChairRowB][restaurantTableCol1].type = CHAIR;
-      grid[restaurantChairRowB][restaurantTableCol2].type = CHAIR;
-      grid[restaurantTableRowB][restaurantTableCol3].type = TABLE;
-      grid[restaurantTableRowB][restaurantTableCol4].type = TABLE;
-      grid[restaurantChairRowB][restaurantTableCol3].type = CHAIR;
-      grid[restaurantChairRowB][restaurantTableCol4].type = CHAIR;
-      // Barrel near kitchen counter
-      grid[restaurantBarrelRow][restaurantBarrelCol1].type = BARREL;
-      grid[restaurantBarrelRow][restaurantBarrelCol2].type = BARREL;
+      // The Barracks — the overworld safe room, laid out as a crawler guild
+      // bunkhouse. SafeRoomSystem derives Mordecai's spot and the sleeping bed
+      // from the room's centre, so the room's centre row is deliberately left
+      // clear of furniture — the bunk rows below skip it.
+      const BARRACKS_HEARTH_COL_1 = 10;
+      const BARRACKS_HEARTH_COL_2 = 11;
+      const BARRACKS_FIRST_BUNK_ROW = 3;
+      const BARRACKS_BUNK_ROW_PITCH = 3;
+      const BARRACKS_BUNK_STACKS_PER_WALL = 3;
+      const BARRACKS_BUNK_DEPTH = 2;
+      const BARRACKS_MESS_ROW = 6;
+      const BARRACKS_MESS_START_COL = 7;
+      const BARRACKS_MESS_END_COL = 11;
+      // Benches sit every other column, offset by one between the two sides so
+      // diners face the gaps opposite them rather than each other's shoulders.
+      const BARRACKS_BENCH_PITCH = 2;
+      const BARRACKS_SUPPLY_TOP_ROW = 12;
+      const BARRACKS_SUPPLY_BOTTOM_ROW = 13;
+      const BARRACKS_BRAZIER_WEST_COL = 8;
+      const BARRACKS_BRAZIER_EAST_COL = 13;
+      const BARRACKS_BRAZIER_ROW = 13;
+      const BARRACKS_RUG_START_COL = 9;
+      const BARRACKS_RUG_END_COL = 12;
+      const BARRACKS_EAST_WALL_COL = w - 2;
+      const BARRACKS_SECOND_EAST_COL = w - 2 - 1;
+
+      grid[1][BARRACKS_HEARTH_COL_1].type = FIREPLACE;
+      grid[1][BARRACKS_HEARTH_COL_2].type = FIREPLACE;
+
+      // Bunk pairs stacked along both side walls, two tiles deep each.
+      for (let stack = 0; stack < BARRACKS_BUNK_STACKS_PER_WALL; stack++) {
+        const bunkTopRow = BARRACKS_FIRST_BUNK_ROW + stack * BARRACKS_BUNK_ROW_PITCH;
+        for (let d = 0; d < BARRACKS_BUNK_DEPTH; d++) {
+          grid[bunkTopRow + d][1].type = BED;
+          grid[bunkTopRow + d][2].type = BED;
+          grid[bunkTopRow + d][BARRACKS_SECOND_EAST_COL].type = BED;
+          grid[bunkTopRow + d][BARRACKS_EAST_WALL_COL].type = BED;
+        }
+      }
+
+      // Long mess table with benches on both sides, kept west of centre so the
+      // corridor to the hearth stays walkable.
+      for (let x = BARRACKS_MESS_START_COL; x <= BARRACKS_MESS_END_COL; x++)
+        grid[BARRACKS_MESS_ROW][x].type = TABLE;
+      for (
+        let x = BARRACKS_MESS_START_COL + 1;
+        x <= BARRACKS_MESS_END_COL;
+        x += BARRACKS_BENCH_PITCH
+      )
+        grid[BARRACKS_MESS_ROW - 1][x].type = CHAIR;
+      for (let x = BARRACKS_MESS_START_COL; x <= BARRACKS_MESS_END_COL; x += BARRACKS_BENCH_PITCH)
+        grid[BARRACKS_MESS_ROW + 1][x].type = CHAIR;
+
+      // Supply stacks in the two southern corners.
+      for (let ry = BARRACKS_SUPPLY_TOP_ROW; ry <= BARRACKS_SUPPLY_BOTTOM_ROW; ry++) {
+        grid[ry][1].type = CRATE;
+        grid[ry][BARRACKS_EAST_WALL_COL].type = BARREL;
+      }
+      grid[BARRACKS_SUPPLY_TOP_ROW][2].type = CRATE;
+      grid[BARRACKS_SUPPLY_TOP_ROW][BARRACKS_SECOND_EAST_COL].type = BARREL;
+
+      // Braziers flanking the entry rug.
+      grid[BARRACKS_BRAZIER_ROW][BARRACKS_BRAZIER_WEST_COL].type = BRAZIER;
+      grid[BARRACKS_BRAZIER_ROW][BARRACKS_BRAZIER_EAST_COL].type = BRAZIER;
+      for (let ry = BARRACKS_SUPPLY_TOP_ROW; ry <= BARRACKS_SUPPLY_BOTTOM_ROW; ry++)
+        for (let rx = BARRACKS_RUG_START_COL; rx <= BARRACKS_RUG_END_COL; rx++)
+          grid[ry][rx].type = RUG;
     }
 
     if (isClub) {
@@ -492,15 +526,17 @@ export class GameMap {
     // ── Named building interiors — each has a unique hand-crafted layout ──
     const NAMED_BUILDINGS = [
       "Shepherd's Cabin",
-      'Blackwood Barracks',
+      'Blackwood Lodge',
       "Old Hilda's Cottage",
       "Cartwright's Workshop",
       'Herb & Remedy',
       'The Sleeping Cat Inn',
       'The Rusty Anvil',
       "Miller's Farm",
-      "The Wanderer's Rest",
+      'The Horned Flagon',
       'The Sunken Stump Pub',
+      'Temple of the Sky',
+      "Signet's Ink",
     ] as const;
     const isNamedBuilding = NAMED_BUILDINGS.some((n) => n === buildingName);
 
@@ -539,7 +575,7 @@ export class GameMap {
           break;
         }
 
-        case 'Blackwood Barracks': {
+        case 'Blackwood Lodge': {
           // Military barracks — rows of bunks, briefing table, crate storage
           const barracksBunkRow1 = 2;
           const barracksBunkRow2 = 3;
@@ -723,6 +759,14 @@ export class GameMap {
           const innCenterTableCol2 = 8;
           const innCenterTableCol3 = 9;
           const innSouthRow = 11;
+          // Reception bar in the south-east: gives the innkeeper a post to work
+          // (the occupant system stations `tend_counter` roles at interior walls)
+          // and gives the common room somewhere to be served a drink.
+          const innBarRow = 10;
+          const innBarStartCol = 10;
+          const innBarEndCol = HOUSE_INTERIOR_W - 2;
+          const innBarStoolRow = 11;
+          const innBarStoolPitch = 2;
           grid[1][innFireplaceCol1].type = FIREPLACE;
           grid[1][innFireplaceCol2].type = FIREPLACE;
           grid[innBunkRow1][1].type = BED;
@@ -756,6 +800,10 @@ export class GameMap {
           grid[innDiningRow][innCenterTableCol1].type = CHAIR;
           grid[innSouthRow][1].type = BARREL;
           grid[innSouthRow][2].type = BARREL;
+          for (let rx = innBarStartCol; rx <= innBarEndCol; rx++)
+            grid[innBarRow][rx].type = FloorTypeValue.wall;
+          for (let rx = innBarStartCol + 1; rx <= innBarEndCol; rx += innBarStoolPitch)
+            grid[innBarStoolRow][rx].type = CHAIR;
           break;
         }
 
@@ -838,112 +886,192 @@ export class GameMap {
           break;
         }
 
-        case "The Wanderer's Rest": {
-          // Budget dormitory — wall-to-wall bunks, minimal communal table
-          const wandererBunkRow1 = 2;
-          const wandererBunkRow2 = 3;
-          const wandererBunkRow3 = 5;
-          const wandererBunkRow4 = 6;
-          const wandererBunkRow5 = 8;
-          const wandererBunkRow6 = 9;
-          const wandererEastBedCol1 = 14;
-          const wandererEastBedCol2 = 15;
-          const wandererTableRow = 6;
-          const wandererTableCol1 = 7;
-          const wandererTableCol2 = 8;
-          const wandererTableCol3 = 9;
-          const wandererChairRow = 7;
-          const wandererSouthRow = 11;
-          const wandererSouthEastBarrelCol = HOUSE_INTERIOR_W - 2;
-          grid[wandererBunkRow1][1].type = BED;
-          grid[wandererBunkRow1][2].type = BED;
-          grid[wandererBunkRow2][1].type = BED;
-          grid[wandererBunkRow2][2].type = BED;
-          grid[wandererBunkRow3][1].type = BED;
-          grid[wandererBunkRow3][2].type = BED;
-          grid[wandererBunkRow4][1].type = BED;
-          grid[wandererBunkRow4][2].type = BED;
-          grid[wandererBunkRow5][1].type = BED;
-          grid[wandererBunkRow5][2].type = BED;
-          grid[wandererBunkRow6][1].type = BED;
-          grid[wandererBunkRow6][2].type = BED;
-          grid[wandererBunkRow1][wandererEastBedCol1].type = BED;
-          grid[wandererBunkRow1][wandererEastBedCol2].type = BED;
-          grid[wandererBunkRow2][wandererEastBedCol1].type = BED;
-          grid[wandererBunkRow2][wandererEastBedCol2].type = BED;
-          grid[wandererBunkRow3][wandererEastBedCol1].type = BED;
-          grid[wandererBunkRow3][wandererEastBedCol2].type = BED;
-          grid[wandererBunkRow4][wandererEastBedCol1].type = BED;
-          grid[wandererBunkRow4][wandererEastBedCol2].type = BED;
-          grid[wandererTableRow][wandererTableCol1].type = TABLE;
-          grid[wandererTableRow][wandererTableCol2].type = TABLE;
-          grid[wandererTableRow][wandererTableCol3].type = TABLE;
-          grid[wandererChairRow][wandererTableCol1].type = CHAIR;
-          grid[wandererChairRow][wandererTableCol3].type = CHAIR;
-          grid[wandererSouthRow][1].type = BARREL;
-          grid[wandererSouthRow][wandererSouthEastBarrelCol].type = BARREL;
+        case 'The Horned Flagon': {
+          // A mead hall: one long central feast table with benches down both
+          // sides, a serving bar in the north-east corner, symmetric side tables.
+          const FLAGON_BAR_ROW = 2;
+          const FLAGON_BAR_START_COL = 11;
+          const FLAGON_BAR_RETURN_ROW = 3;
+          const FLAGON_STOOL_ROW = 3;
+          const FLAGON_STOOL_PITCH = 2;
+          const FLAGON_HEARTH_COL_1 = 3;
+          const FLAGON_HEARTH_COL_2 = 4;
+          const FLAGON_FEAST_ROW = 7;
+          const FLAGON_FEAST_START_COL = 5;
+          const FLAGON_FEAST_END_COL = 12;
+          const FLAGON_BENCH_PITCH = 2;
+          const FLAGON_SIDE_TABLES = [
+            { col: 2, row: 10 },
+            { col: 14, row: 10 },
+          ];
+          const FLAGON_RUG_ROW = 5;
+          const FLAGON_RUG_START_COL = 3;
+          const FLAGON_RUG_END_COL = 14;
+          const FLAGON_BARREL_TILES = [
+            { x: 1, y: 4 },
+            { x: 1, y: 5 },
+            { x: 16, y: 6 },
+          ];
+          const FLAGON_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
+          for (let rx = FLAGON_BAR_START_COL; rx <= FLAGON_EAST_WALL_COL; rx++)
+            grid[FLAGON_BAR_ROW][rx].type = FloorTypeValue.wall;
+          grid[FLAGON_BAR_RETURN_ROW][FLAGON_BAR_START_COL].type = FloorTypeValue.wall;
+          for (
+            let rx = FLAGON_BAR_START_COL + 1;
+            rx <= FLAGON_EAST_WALL_COL;
+            rx += FLAGON_STOOL_PITCH
+          )
+            grid[FLAGON_STOOL_ROW][rx].type = CHAIR;
+          grid[1][FLAGON_HEARTH_COL_1].type = FIREPLACE;
+          grid[1][FLAGON_HEARTH_COL_2].type = FIREPLACE;
+          for (let rx = FLAGON_FEAST_START_COL; rx <= FLAGON_FEAST_END_COL; rx++)
+            grid[FLAGON_FEAST_ROW][rx].type = TABLE;
+          for (let rx = FLAGON_FEAST_START_COL; rx < FLAGON_FEAST_END_COL; rx += FLAGON_BENCH_PITCH)
+            grid[FLAGON_FEAST_ROW - 1][rx].type = CHAIR;
+          for (
+            let rx = FLAGON_FEAST_START_COL + 1;
+            rx <= FLAGON_FEAST_END_COL;
+            rx += FLAGON_BENCH_PITCH
+          )
+            grid[FLAGON_FEAST_ROW + 1][rx].type = CHAIR;
+          for (const side of FLAGON_SIDE_TABLES) {
+            grid[side.row][side.col].type = TABLE;
+            grid[side.row][side.col + 1].type = TABLE;
+            grid[side.row + 1][side.col].type = CHAIR;
+            grid[side.row + 1][side.col + 1].type = CHAIR;
+          }
+          for (let rx = FLAGON_RUG_START_COL; rx <= FLAGON_RUG_END_COL; rx++)
+            grid[FLAGON_RUG_ROW][rx].type = RUG;
+          for (const t of FLAGON_BARREL_TILES) grid[t.y][t.x].type = BARREL;
+          break;
+        }
+
+        case 'Temple of the Sky': {
+          // A hushed hall: altar under the north wall flanked by braziers, pew
+          // rows facing it, a rug aisle down the middle, scripture on both walls.
+          const TEMPLE_ALTAR_ROW = 1;
+          const TEMPLE_ALTAR_START_COL = 7;
+          const TEMPLE_ALTAR_END_COL = 10;
+          const TEMPLE_BRAZIER_WEST_COL = 5;
+          const TEMPLE_BRAZIER_EAST_COL = 12;
+          const TEMPLE_FIRST_PEW_ROW = 4;
+          const TEMPLE_PEW_ROW_PITCH = 2;
+          const TEMPLE_PEW_ROWS = 3;
+          const TEMPLE_WEST_PEW_START_COL = 3;
+          const TEMPLE_WEST_PEW_END_COL = 7;
+          const TEMPLE_EAST_PEW_START_COL = 10;
+          const TEMPLE_EAST_PEW_END_COL = 14;
+          const TEMPLE_AISLE_START_COL = 8;
+          const TEMPLE_AISLE_END_COL = 9;
+          const TEMPLE_AISLE_START_ROW = 3;
+          const TEMPLE_AISLE_END_ROW = 10;
+          const TEMPLE_SCRIPTURE_START_ROW = 2;
+          const TEMPLE_SCRIPTURE_END_ROW = 4;
+          const TEMPLE_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
+          for (let rx = TEMPLE_ALTAR_START_COL; rx <= TEMPLE_ALTAR_END_COL; rx++)
+            grid[TEMPLE_ALTAR_ROW][rx].type = TABLE;
+          grid[TEMPLE_ALTAR_ROW][TEMPLE_BRAZIER_WEST_COL].type = BRAZIER;
+          grid[TEMPLE_ALTAR_ROW][TEMPLE_BRAZIER_EAST_COL].type = BRAZIER;
+          for (let pew = 0; pew < TEMPLE_PEW_ROWS; pew++) {
+            const pewRow = TEMPLE_FIRST_PEW_ROW + pew * TEMPLE_PEW_ROW_PITCH;
+            for (let rx = TEMPLE_WEST_PEW_START_COL; rx <= TEMPLE_WEST_PEW_END_COL; rx++)
+              grid[pewRow][rx].type = CHAIR;
+            for (let rx = TEMPLE_EAST_PEW_START_COL; rx <= TEMPLE_EAST_PEW_END_COL; rx++)
+              grid[pewRow][rx].type = CHAIR;
+          }
+          for (let ry = TEMPLE_AISLE_START_ROW; ry <= TEMPLE_AISLE_END_ROW; ry++)
+            for (let rx = TEMPLE_AISLE_START_COL; rx <= TEMPLE_AISLE_END_COL; rx++)
+              grid[ry][rx].type = RUG;
+          for (let ry = TEMPLE_SCRIPTURE_START_ROW; ry <= TEMPLE_SCRIPTURE_END_ROW; ry++) {
+            grid[ry][1].type = BOOKSHELF;
+            grid[ry][TEMPLE_EAST_WALL_COL].type = BOOKSHELF;
+          }
+          break;
+        }
+
+        case "Signet's Ink": {
+          // One work station under a wall of flash art, needle fire beside it,
+          // supplies stacked in the back and a rug where the customer waits.
+          const INK_STATION_ROW = 4;
+          const INK_STATION_COL_1 = 7;
+          const INK_STATION_COL_2 = 8;
+          const INK_CUSTOMER_CHAIR_ROW = 5;
+          const INK_NEEDLE_FIRE_COL = 11;
+          const INK_FLASH_ART_START_ROW = 2;
+          const INK_FLASH_ART_END_ROW = 6;
+          const INK_RUG_START_ROW = 7;
+          const INK_RUG_END_ROW = 8;
+          const INK_RUG_START_COL = 6;
+          const INK_RUG_END_COL = 11;
+          const INK_SUPPLY_ROW = 10;
+          const INK_BARREL_ROW_1 = 2;
+          const INK_BARREL_ROW_2 = 3;
+          const INK_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
+          grid[INK_STATION_ROW][INK_STATION_COL_1].type = TABLE;
+          grid[INK_STATION_ROW][INK_STATION_COL_2].type = TABLE;
+          grid[INK_CUSTOMER_CHAIR_ROW][INK_STATION_COL_1].type = CHAIR;
+          grid[INK_CUSTOMER_CHAIR_ROW][INK_STATION_COL_2].type = CHAIR;
+          grid[INK_STATION_ROW][INK_NEEDLE_FIRE_COL].type = BRAZIER;
+          for (let ry = INK_FLASH_ART_START_ROW; ry <= INK_FLASH_ART_END_ROW; ry++)
+            grid[ry][1].type = BOOKSHELF;
+          for (let ry = INK_RUG_START_ROW; ry <= INK_RUG_END_ROW; ry++)
+            for (let rx = INK_RUG_START_COL; rx <= INK_RUG_END_COL; rx++) grid[ry][rx].type = RUG;
+          grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL].type = CRATE;
+          grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL - 1].type = CRATE;
+          grid[INK_BARREL_ROW_1][INK_EAST_WALL_COL].type = BARREL;
+          grid[INK_BARREL_ROW_2][INK_EAST_WALL_COL].type = BARREL;
           break;
         }
 
         case 'The Sunken Stump Pub': {
-          // Village pub — bar counter, rows of drinking tables, large floor rug
-          const pubCounterRow = 2;
-          const pubCounterEndCol = 7;
-          const pubBarrelRow1 = 3;
-          const pubBarrelRow2 = 4;
-          const pubFireplaceCol1 = 14;
-          const pubFireplaceCol2 = 15;
-          const pubFrontTableRow = 6;
-          const pubFrontChairRow = 7;
-          const pubWestTableCol1 = 3;
-          const pubWestTableCol2 = 4;
-          const pubCenterTableCol1 = 8;
-          const pubCenterTableCol2 = 9;
-          const pubEastFrontTableCol1 = 13;
-          const pubEastFrontTableCol2 = 14;
-          const pubBackTableRow = 9;
-          const pubBackChairRow = 10;
-          const pubBackWestTableCol1 = 5;
-          const pubBackWestTableCol2 = 6;
-          const pubBackEastTableCol1 = 11;
-          const pubBackEastTableCol2 = 12;
-          const pubRugRow = 5;
-          const pubRugStartCol = 3;
-          const pubRugEndCol = 15;
-          const pubBarChairCol = 8;
-          const pubSouthRow = 11;
-          for (let rx = 2; rx <= pubCounterEndCol; rx++)
-            grid[pubCounterRow][rx].type = FloorTypeValue.wall;
-          grid[pubBarrelRow1][1].type = BARREL;
-          grid[pubBarrelRow1][2].type = BARREL;
-          grid[pubBarrelRow2][1].type = BARREL;
-          grid[pubBarrelRow2][2].type = BARREL;
-          grid[1][pubFireplaceCol1].type = FIREPLACE;
-          grid[1][pubFireplaceCol2].type = FIREPLACE;
-          grid[pubFrontTableRow][pubWestTableCol1].type = TABLE;
-          grid[pubFrontTableRow][pubWestTableCol2].type = TABLE;
-          grid[pubFrontChairRow][pubWestTableCol1].type = CHAIR;
-          grid[pubFrontChairRow][pubWestTableCol2].type = CHAIR;
-          grid[pubFrontTableRow][pubCenterTableCol1].type = TABLE;
-          grid[pubFrontTableRow][pubCenterTableCol2].type = TABLE;
-          grid[pubFrontChairRow][pubCenterTableCol1].type = CHAIR;
-          grid[pubFrontChairRow][pubCenterTableCol2].type = CHAIR;
-          grid[pubFrontTableRow][pubEastFrontTableCol1].type = TABLE;
-          grid[pubFrontTableRow][pubEastFrontTableCol2].type = TABLE;
-          grid[pubFrontChairRow][pubEastFrontTableCol1].type = CHAIR;
-          grid[pubFrontChairRow][pubEastFrontTableCol2].type = CHAIR;
-          grid[pubBackTableRow][pubBackWestTableCol1].type = TABLE;
-          grid[pubBackTableRow][pubBackWestTableCol2].type = TABLE;
-          grid[pubBackChairRow][pubBackWestTableCol1].type = CHAIR;
-          grid[pubBackChairRow][pubBackWestTableCol2].type = CHAIR;
-          grid[pubBackTableRow][pubBackEastTableCol1].type = TABLE;
-          grid[pubBackTableRow][pubBackEastTableCol2].type = TABLE;
-          grid[pubBackChairRow][pubBackEastTableCol1].type = CHAIR;
-          grid[pubBackChairRow][pubBackEastTableCol2].type = CHAIR;
-          for (let rx = pubRugStartCol; rx <= pubRugEndCol; rx++) grid[pubRugRow][rx].type = RUG;
-          grid[pubBarrelRow1][pubBarChairCol].type = CHAIR;
-          grid[pubSouthRow][pubFireplaceCol1].type = BARREL_SIDE;
-          grid[pubSouthRow][pubFireplaceCol2].type = BARREL_SIDE;
+          // A cramped, dark dive: L-shaped bar penning in a barkeep alley,
+          // stools along its front, tight table clusters and barrels everywhere.
+          const STUMP_BAR_ROW = 3;
+          const STUMP_BAR_END_COL = 9;
+          const STUMP_BAR_RETURN_ROW = 2;
+          const STUMP_STOOL_ROW = 4;
+          const STUMP_FIRST_STOOL_COL = 2;
+          const STUMP_STOOL_PITCH = 2;
+          const STUMP_HEARTH_COL_1 = 14;
+          const STUMP_HEARTH_COL_2 = 15;
+          const STUMP_TABLE_CLUSTERS = [
+            { col: 2, row: 7 },
+            { col: 6, row: 7 },
+            { col: 11, row: 6 },
+            { col: 2, row: 10 },
+            { col: 12, row: 10 },
+          ];
+          const STUMP_RUG_ROW = 9;
+          const STUMP_RUG_START_COL = 5;
+          const STUMP_RUG_END_COL = 10;
+          const STUMP_BARREL_TILES = [
+            { x: 16, y: 4 },
+            { x: 16, y: 5 },
+            { x: 15, y: 4 },
+          ];
+          const STUMP_BARREL_SIDE_TILES = [
+            { x: 1, y: 11 },
+            { x: 16, y: 11 },
+          ];
+          // The bar's long run plus its return arm; the gap east of the return is
+          // the only way in or out of the alley, so the barkeep stays put.
+          for (let rx = 1; rx <= STUMP_BAR_END_COL; rx++)
+            grid[STUMP_BAR_ROW][rx].type = FloorTypeValue.wall;
+          grid[STUMP_BAR_RETURN_ROW][STUMP_BAR_END_COL].type = FloorTypeValue.wall;
+          for (let rx = STUMP_FIRST_STOOL_COL; rx < STUMP_BAR_END_COL; rx += STUMP_STOOL_PITCH)
+            grid[STUMP_STOOL_ROW][rx].type = CHAIR;
+          grid[1][STUMP_HEARTH_COL_1].type = FIREPLACE;
+          grid[1][STUMP_HEARTH_COL_2].type = FIREPLACE;
+          for (const cluster of STUMP_TABLE_CLUSTERS) {
+            grid[cluster.row][cluster.col].type = TABLE;
+            grid[cluster.row][cluster.col + 1].type = TABLE;
+            grid[cluster.row + 1][cluster.col].type = CHAIR;
+            grid[cluster.row + 1][cluster.col + 1].type = CHAIR;
+          }
+          for (let rx = STUMP_RUG_START_COL; rx <= STUMP_RUG_END_COL; rx++)
+            grid[STUMP_RUG_ROW][rx].type = RUG;
+          for (const t of STUMP_BARREL_TILES) grid[t.y][t.x].type = BARREL;
+          for (const t of STUMP_BARREL_SIDE_TILES) grid[t.y][t.x].type = BARREL_SIDE;
           break;
         }
       }
@@ -1388,17 +1516,22 @@ export class GameMap {
 
   private buildExtraBlockedTiles(): void {
     this.extraBlockedTiles.clear();
+    this.spriteBuildingTiles.clear();
     for (let ty = 0; ty < this.structure.length; ty++) {
       const row = this.structure[ty];
       for (let tx = 0; tx < row.length; tx++) {
         const tile = row[tx];
+        const isSpriteBuilding = tile.type === SPRITE_BUILDING && tile.spriteKey !== undefined;
         const offsets =
-          tile.type === SPRITE_BUILDING && tile.spriteKey !== undefined
+          isSpriteBuilding && tile.spriteKey !== undefined
             ? getBlockedTileOffsetsByKey(tile.spriteKey)
             : getBlockedTileOffsets(tile.type);
         for (const { dx, dy } of offsets) {
-          this.extraBlockedTiles.add(`${tx + dx},${ty + dy}`);
+          const key = `${tx + dx},${ty + dy}`;
+          this.extraBlockedTiles.add(key);
+          if (isSpriteBuilding) this.spriteBuildingTiles.add(key);
         }
+        if (isSpriteBuilding) this.spriteBuildingTiles.add(`${tx},${ty}`);
       }
     }
   }

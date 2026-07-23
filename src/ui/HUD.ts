@@ -507,6 +507,9 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
   } else if (effect.type === 'cooldown_crisp') {
     bgColor = '#059669';
     label = 'CRSP';
+  } else if (effect.type === 'drunk') {
+    bgColor = '#b45309';
+    label = 'DRNK';
   }
 
   // Background pill

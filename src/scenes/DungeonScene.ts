@@ -2,7 +2,7 @@ import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
-import { clamp } from '../utils';
+import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
@@ -87,6 +87,8 @@ import {
   CAT_ATTACK_RANGE_TILES,
 } from '../systems/GameLoopPhases';
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
+import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
+import { drunkCameraOffset } from '../core/DrunkEffect';
 import { createCircusQuestProgress, type CircusQuestProgress } from '../core/CircusQuestProgress';
 import { createMurderQuestProgress, type MurderQuestProgress } from '../core/MurderQuestProgress';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
@@ -204,6 +206,17 @@ export interface DungeonSceneOptions {
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
+/** Building whose forge fires supply the town's fire-crackle ambience. */
+const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
+/** Distance-attenuated ambience tuning for the overworld town. */
+const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
+const FOUNTAIN_AMBIENT_VOLUME = 0.5;
+const FORGE_AMBIENT_RADIUS_TILES = 8;
+const FORGE_AMBIENT_VOLUME = 0.45;
+/** The square's murmur is a wide, quiet bed rather than a wall of crowd noise. */
+const TOWN_SQUARE_AMBIENT_RADIUS_TILES = 18;
+const TOWN_SQUARE_AMBIENT_VOLUME = 0.28;
+
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
 
@@ -397,6 +410,7 @@ export class DungeonScene extends GameplayScene {
   private murderQuest!: MurderMysteryQuestSystem;
   private doomsdayEscape!: DoomsdayEscapeSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
+  private ambientSound: AmbientSoundSystem | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
@@ -926,6 +940,10 @@ export class DungeonScene extends GameplayScene {
     this.overworldMusic =
       levelDef.isOverworld && this.audio !== null
         ? new OverworldMusicSystem(this.gameMap, this.audio)
+        : null;
+    this.ambientSound =
+      levelDef.isOverworld && this.audio !== null
+        ? new AmbientSoundSystem(this.audio, this.buildTownAmbientEmitters())
         : null;
     // Constructed after audio/music so the quest can drive battle tracks;
     // stage re-entry may spawn mobs immediately.
@@ -1522,6 +1540,9 @@ export class DungeonScene extends GameplayScene {
   onExit(): void {
     this.audio?.stopWalkingLoop();
     this.audio?.stopMachineryLoop();
+    // Ambient loops are positional, so they always die with the scene — unlike
+    // music, which may deliberately survive a building round-trip.
+    this.ambientSound?.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     if (this._spiderKeyHandler !== null) {
@@ -1531,6 +1552,45 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.dispose();
     aiAdapter.unbindScene();
     this.bus.clear();
+  }
+
+  /**
+   * Ambient emitters for the overworld town: the fountain and the smithy's forges
+   * swell as you approach them, and a quiet crowd bed fills the square.
+   */
+  private buildTownAmbientEmitters(): AmbientEmitter[] {
+    const emitters: AmbientEmitter[] = [];
+    const fountain = this.gameMap.fountainCentre;
+    if (fountain !== undefined) {
+      emitters.push({
+        soundId: 'ambient_fountain',
+        x: fountain.x,
+        y: fountain.y,
+        radiusTiles: FOUNTAIN_AMBIENT_RADIUS_TILES,
+        maxVolume: FOUNTAIN_AMBIENT_VOLUME,
+      });
+    }
+    const squareCentre = this.gameMap.townSquareCentre;
+    if (squareCentre !== undefined) {
+      emitters.push({
+        soundId: 'ambient_town_square_crowd',
+        x: squareCentre.x,
+        y: squareCentre.y,
+        radiusTiles: TOWN_SQUARE_AMBIENT_RADIUS_TILES,
+        maxVolume: TOWN_SQUARE_AMBIENT_VOLUME,
+      });
+    }
+    const smithy = this.gameMap.buildingEntries.find((e) => e.name === RUSTY_ANVIL_BUILDING_NAME);
+    if (smithy !== undefined) {
+      emitters.push({
+        soundId: 'ambient_fire_crackling',
+        x: smithy.doorTile.x,
+        y: smithy.doorTile.y,
+        radiusTiles: FORGE_AMBIENT_RADIUS_TILES,
+        maxVolume: FORGE_AMBIENT_VOLUME,
+      });
+    }
+    return emitters;
   }
 
   private triggerSwitchCharacter(force = false): void {
@@ -3175,6 +3235,7 @@ export class DungeonScene extends GameplayScene {
       this.catAchievements.tryUnlock('city_evacuated');
     }
     this.overworldMusic?.update(ctx);
+    this.ambientSound?.update(ctx);
     this.townLife?.update();
     this.townProps?.update();
     this.juicerRoom.update(ctx);
@@ -3622,9 +3683,12 @@ export class DungeonScene extends GameplayScene {
     const camY = targetY + TILE_SIZE / 2 - canvas.height / 2;
 
     const shakeOffset = this.spiderQuest.cameraOffset;
+    // Applied after the clamp so the sway can drift past the map edge rather than
+    // being flattened to nothing whenever the camera is already against a border.
+    const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: clamp(camX, 0, mapPx - canvas.width) + shakeOffset.x,
-      y: clamp(camY, 0, mapPx - canvas.height) + shakeOffset.y,
+      x: clamp(camX, 0, mapPx - canvas.width) + shakeOffset.x + sway.x,
+      y: clamp(camY, 0, mapPx - canvas.height) + shakeOffset.y + sway.y,
     };
   }
 

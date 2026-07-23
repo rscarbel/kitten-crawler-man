@@ -1,4 +1,5 @@
-import type { Player } from '../Player';
+import type { PermanentStat, Player } from '../Player';
+import type { StatusEffect } from './StatusEffect';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { InventoryItem, ItemId } from './ItemDefs';
 
@@ -20,6 +21,11 @@ export interface PlayerSnapshot {
   inventoryHotbar: (InventoryItem | null)[];
   equippedEntries: [string, ItemId][];
   explosivesHandling?: number;
+  tattooStat: PermanentStat | null;
+  /** Active buffs and DoTs, so a drink or a poison survives a building round-trip. */
+  statusEffects: StatusEffect[];
+  /** Max-HP loaned by an active Jugg Juice, so it is still repaid on the far side. */
+  juggJuiceHpBoost: number;
 }
 
 export function snapPlayer(p: Player): PlayerSnapshot {
@@ -38,6 +44,9 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     inventorySlots: p.inventory.bag.slots.map((s) => (s ? { ...s } : null)),
     inventoryHotbar: p.inventory.actionBar.slots.map((s) => (s ? { ...s } : null)),
     equippedEntries: [...p.inventory.equipment.equipped.entries()],
+    tattooStat: p.tattooStat,
+    statusEffects: p.statusEffects.map((e) => ({ ...e })),
+    juggJuiceHpBoost: p.juggJuiceHpBoost,
   };
   if (p instanceof HumanPlayer) {
     snap.explosivesHandling = p.explosivesHandling;
@@ -57,6 +66,8 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.coins = snap.coins;
   p.facingX = snap.facingX;
   p.facingY = snap.facingY;
+  p.tattooStat = snap.tattooStat;
+  p.restoreStatusEffects(snap.statusEffects, snap.juggJuiceHpBoost);
   if (p instanceof HumanPlayer && snap.explosivesHandling !== undefined) {
     p.explosivesHandling = snap.explosivesHandling;
   }

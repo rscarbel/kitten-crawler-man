@@ -9,6 +9,8 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { AudioManager } from '../audio/AudioManager';
+import { applyDrunkWalkWobble } from '../core/DrunkEffect';
+import { frameTime } from '../utils';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -105,6 +107,12 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
   }
 
   player.isMoving = dx !== 0 || dy !== 0;
+
+  if (player.hasStatus('drunk')) {
+    const wobbled = applyDrunkWalkWobble(dx, dy, frameTime);
+    dx = wobbled.dx;
+    dy = wobbled.dy;
+  }
 
   if (dx !== 0 || dy !== 0) {
     const n = normalize(dx, dy);

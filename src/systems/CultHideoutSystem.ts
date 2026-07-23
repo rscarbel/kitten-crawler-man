@@ -1,5 +1,5 @@
 /**
- * CultHideoutSystem — the Blackwood Barracks beat of "The Krasue Murders",
+ * CultHideoutSystem — the Blackwood Lodge beat of "The Krasue Murders",
  * fought inside the barracks interior. The cult's nest: clear every city elf
  * cultist to find the letter that names Miss Quill. Owned by
  * BuildingInteriorScene, which supplies the combat stack; quest state

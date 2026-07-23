@@ -249,6 +249,8 @@ export class DesperadoClubSystem implements GameSystem {
     this.barShop.update();
     this.marketShop.update();
     if (this.barShop.purchasePending || this.marketShop.purchasePending) {
+      // A round at the bar pours; gear off the market rack does not.
+      if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
       this.barShop.purchasePending = false;
       this.marketShop.purchasePending = false;
       this.audio?.play('purchase_success');

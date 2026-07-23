@@ -67,6 +67,15 @@ export function makeJuggJuice(): StatusEffect {
   return { type: 'jugg_juice', ticksRemaining: 1800, totalTicks: 1800 };
 }
 
+/**
+ * Drunk: 30 seconds (1800 ticks at 60 fps) of swaying camera, a wandering walk and
+ * a little extra melee damage. Re-drinking refreshes rather than stacks, which is
+ * the intended "keep the round going" loop. See `src/core/DrunkEffect.ts`.
+ */
+export function makeDrunk(): StatusEffect {
+  return { type: 'drunk', ticksRemaining: 1800, totalTicks: 1800 };
+}
+
 /** Cooldown Crisp: halves all ability cooldowns for 25 seconds (1500 ticks at 60 fps). */
 export function makeCooldownCrisp(): StatusEffect {
   return { type: 'cooldown_crisp', ticksRemaining: 1500, totalTicks: 1500 };

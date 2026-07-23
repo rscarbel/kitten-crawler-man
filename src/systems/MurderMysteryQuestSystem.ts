@@ -170,7 +170,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.alleyTile = pubDoor
       ? this.findSpawnTile(pubDoor.x + ALLEY_DOOR_OFFSET.dx, pubDoor.y + ALLEY_DOOR_OFFSET.dy)
       : null;
-    this.hideoutDoorTile = this.doorTileOf('Blackwood Barracks');
+    this.hideoutDoorTile = this.doorTileOf('Blackwood Lodge');
     this.towerDoorTile = this.doorTileOf('Town Center Tower');
 
     const wellTile = this.findWellTile();

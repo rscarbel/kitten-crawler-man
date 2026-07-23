@@ -12,6 +12,26 @@ const DEFAULT_ALPHA = 1;
 /** Tile center offset as a fraction of tile size. */
 const TILE_CENTER_OFFSET = 0.5;
 
+/**
+ * Resolve the sheet-pixel origin (srcX, srcY) of a frame, wrapping onto
+ * subsequent rows once `colsPerRow` is exceeded (see SpriteStateDef.colsPerRow).
+ */
+function frameOrigin(
+  stateDef: SpriteStateDef,
+  frameWidth: number,
+  frameHeight: number,
+  clampedFrame: number,
+): { srcX: number; srcY: number } {
+  const colOffset = stateDef.colOffset ?? 0;
+  const totalCol = colOffset + clampedFrame;
+  if (stateDef.colsPerRow === undefined) {
+    return { srcX: totalCol * frameWidth, srcY: stateDef.row * frameHeight };
+  }
+  const row = stateDef.row + Math.floor(totalCol / stateDef.colsPerRow);
+  const col = totalCol % stateDef.colsPerRow;
+  return { srcX: col * frameWidth, srcY: row * frameHeight };
+}
+
 export interface DrawSpriteOpts {
   /** Mirror the sprite horizontally around its tile-horizontal center. */
   flipX?: boolean;
@@ -48,9 +68,7 @@ export function drawSprite(
 
   const scale = tileSize / tileScale;
   const clampedFrame = Math.max(0, Math.min(Math.floor(frame), stateDef.frameCount - 1));
-  const colOffset = stateDef.colOffset ?? 0;
-  const srcX = (colOffset + clampedFrame) * frameWidth;
-  const srcY = stateDef.row * frameHeight;
+  const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, clampedFrame);
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;
 
@@ -105,9 +123,7 @@ export function drawSpriteRotatedCenter(
   alpha: number,
 ): void {
   const { img, frameWidth, frameHeight, tileX, tileY, tileScale } = def;
-  const colOffset = stateDef.colOffset ?? 0;
-  const srcX = colOffset * frameWidth;
-  const srcY = stateDef.row * frameHeight;
+  const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, 0);
   const scale = tileSize / tileScale;
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;

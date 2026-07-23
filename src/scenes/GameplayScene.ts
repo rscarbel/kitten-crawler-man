@@ -13,7 +13,8 @@ import type { SceneManager } from '../core/Scene';
 import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
-import { clamp, pointInRect } from '../utils';
+import { clamp, frameTime, pointInRect } from '../utils';
+import { drunkCameraOffset } from '../core/DrunkEffect';
 import type { GameMap } from '../map/GameMap';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -67,12 +68,18 @@ export abstract class GameplayScene extends Scene {
     const mapPxH = map.structure.length * TILE_SIZE;
     const cx = player.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.width / 2;
     const cy = player.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.height / 2;
+    // Applied after the clamp so the sway still reads in a room smaller than the
+    // viewport, where the camera is pinned and every clamped offset would vanish.
+    const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: mapPxW <= canvas.width ? (mapPxW - canvas.width) / 2 : clamp(cx, 0, mapPxW - canvas.width),
+      x:
+        (mapPxW <= canvas.width
+          ? (mapPxW - canvas.width) / 2
+          : clamp(cx, 0, mapPxW - canvas.width)) + sway.x,
       y:
-        mapPxH <= canvas.height
+        (mapPxH <= canvas.height
           ? (mapPxH - canvas.height) / 2
-          : clamp(cy, 0, mapPxH - canvas.height),
+          : clamp(cy, 0, mapPxH - canvas.height)) + sway.y,
     };
   }
 

@@ -25,7 +25,7 @@ import {
 } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
-import { getSpriteDefByKey } from '../../core/SpriteLoader';
+import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
 
 /** Number of broken-stone chunks drawn per RUBBLE tile. */
@@ -43,6 +43,9 @@ const RUBBLE_PATCH_JITTER = 5;
 const RUBBLE_PATCH_RX_EXTRA = 3;
 const RUBBLE_CHUNK_MIN_SIZE = 3;
 const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
+
+/** Playback rate of animated overlay states composited onto sprite buildings. */
+const SPRITE_BUILDING_OVERLAY_FPS = 8;
 
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
@@ -669,6 +672,15 @@ export function drawDecorationTile(
       const stateDef = def.states.get('idle');
       if (stateDef === undefined) return true;
       drawSprite(ctx, def, stateDef, 0, sx, sy, ts);
+      // Any extra state is an animated overlay authored in the same frame-local
+      // space as `idle` (e.g. the blacksmith's forge flames), so it composites on
+      // top of the facade at the same anchor rather than replacing it.
+      for (const overlayState of getSpriteOverlayStatesByKey(spriteKey)) {
+        const overlayDef = def.states.get(overlayState);
+        if (overlayDef === undefined) continue;
+        const frame = timeFrameIndex(frameTime, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
+        drawSprite(ctx, def, overlayDef, frame, sx, sy, ts);
+      }
       return true;
     }
 

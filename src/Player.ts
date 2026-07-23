@@ -3,6 +3,11 @@ import { makeSpeedFizz, makeJuggJuice, makeCooldownCrisp } from './core/StatusEf
 import { Inventory } from './core/Inventory';
 import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
+import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
+
+/** The three stats a permanent boost (potion or tattoo) can raise. */
+export const PERMANENT_STATS = ['strength', 'intelligence', 'constitution'] as const;
+export type PermanentStat = (typeof PERMANENT_STATS)[number];
 
 /**
  * Describes what caused a damage event. Stored as `lastDamageSource` on the player
@@ -119,6 +124,20 @@ const SPIT_RADIUS_Y = 3.5;
 
 /** Sepsis visual parameters */
 const SEPSIS_DRIFT_SPEED = 0.02;
+/** Drunk: amber bubbles orbiting the head while the `drunk` status is active. */
+const DRUNK_BUBBLE_COUNT = 3;
+const DRUNK_BUBBLE_DRIFT_SPEED = 0.0022;
+const DRUNK_BUBBLE_PHASE_SPACING = (Math.PI * 2) / DRUNK_BUBBLE_COUNT;
+const DRUNK_BUBBLE_ORBIT_RADIUS = 9;
+const DRUNK_BUBBLE_Y_OFFSET = 6;
+const DRUNK_BUBBLE_RISE_AMP = 3;
+const DRUNK_BUBBLE_RADIUS = 2;
+const DRUNK_BUBBLE_SHADOW_BLUR = 5;
+const DRUNK_BUBBLE_ALPHA_BASE = 0.5;
+const DRUNK_BUBBLE_ALPHA_RANGE = 0.3;
+/** Bubbles twinkle twice per orbit, so no two are at the same brightness. */
+const DRUNK_BUBBLE_TWINKLE_RATE = 2;
+
 const SEPSIS_BUBBLE_COUNT = 4;
 const SEPSIS_PHASE_SPACING = 1.57;
 const SEPSIS_ORBIT_RADIUS = 5.5;
@@ -170,6 +189,12 @@ export abstract class Player {
   readonly inventory = new Inventory();
   /** Gold coins collected — displayed in the inventory panel. */
   coins = 0;
+  /**
+   * Which stat Signet's ink raised, or null if this crawler is still unmarked.
+   * One tattoo per character, permanent — carried through building round-trips by
+   * PlayerSnapshot so it can't be re-bought by stepping outside and back in.
+   */
+  tattooStat: PermanentStat | null = null;
   unspentPoints = 0;
   /** Frames remaining before the next potion can be used. Zero means ready. */
   potionCooldownFrames = 0;
@@ -321,6 +346,11 @@ export abstract class Player {
     if (b.intelligence) this.intelligence -= b.intelligence;
   }
 
+  /** Liquid courage: a drunk crawler swings harder even as the room tilts. */
+  get drunkDamageBonus(): number {
+    return this.hasStatus('drunk') ? DRUNK_MELEE_DAMAGE_BONUS : 0;
+  }
+
   /** Returns true if the player currently has the given status active. */
   hasStatus(type: string): boolean {
     return this.statusEffects.some((e) => e.type === type);
@@ -390,6 +420,25 @@ export abstract class Player {
       }
       return effect.ticksRemaining >= 0;
     });
+  }
+
+  /** Extra max HP the active Jugg Juice is contributing, or 0 when none is active. */
+  get juggJuiceHpBoost(): number {
+    return this._juggJuiceHpBoost;
+  }
+
+  /**
+   * Reinstate serialised status effects on a freshly-built player (see
+   * `PlayerSnapshot`). The two effects that hold state outside the effect record —
+   * Speed Fizz's speed multiplier and Jugg Juice's max-HP loan — are re-derived
+   * here, because without them the buff would either do nothing or, worse, never
+   * be paid back when it expires.
+   */
+  restoreStatusEffects(effects: ReadonlyArray<StatusEffect>, juggJuiceHpBoost: number): void {
+    this.clearStatusEffects();
+    for (const effect of effects) this.statusEffects.push({ ...effect });
+    this._potionSpeedBoost = this.hasStatus('speed_fizz') ? SPEED_FIZZ_MULTIPLIER : 1;
+    this._juggJuiceHpBoost = this.hasStatus('jugg_juice') ? juggJuiceHpBoost : 0;
   }
 
   /**
@@ -473,11 +522,11 @@ export abstract class Player {
     this.applyStatus(makeCooldownCrisp());
   }
 
-  /** Permanently boost a randomly chosen stat by 2–4 points. */
-  applyStatBoost(): void {
-    const stats = ['strength', 'intelligence', 'constitution'] as const;
-    const stat = stats[Math.floor(Math.random() * STAT_BOOST_STAT_COUNT)];
-    const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
+  /**
+   * Permanently raise one stat, flashing the same feedback a spent level-up point
+   * does. Shared by the stat-boost potion and Signet's tattoos.
+   */
+  applyPermanentStat(stat: PermanentStat, amount: number): void {
     if (stat === 'strength') {
       this.strength += amount;
       this.levelUpStat = 'STR';
@@ -491,6 +540,13 @@ export abstract class Player {
       this.levelUpStat = 'CON';
     }
     this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
+  }
+
+  /** Permanently boost a randomly chosen stat by 2–4 points. */
+  applyStatBoost(): void {
+    const stat = PERMANENT_STATS[Math.floor(Math.random() * STAT_BOOST_STAT_COUNT)];
+    const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
+    this.applyPermanentStat(stat, amount);
   }
 
   tickTimers() {
@@ -678,6 +734,26 @@ export abstract class Player {
           ctx.fillStyle = d % 2 === 0 ? '#8fb000' : '#b5c800';
           ctx.beginPath();
           ctx.ellipse(dropX, dropY, SPIT_RADIUS_X, SPIT_RADIUS_Y, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+      }
+      if (effect.type === 'drunk') {
+        const t = Date.now();
+        const drift = (t * DRUNK_BUBBLE_DRIFT_SPEED) % (Math.PI * 2);
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = DRUNK_BUBBLE_SHADOW_BLUR;
+        ctx.fillStyle = '#fde68a';
+        // Amber bubbles circling the head, tracing the same lazy loop as the camera.
+        for (let b = 0; b < DRUNK_BUBBLE_COUNT; b++) {
+          const phase = drift + b * DRUNK_BUBBLE_PHASE_SPACING;
+          const bx = cx + Math.sin(phase) * DRUNK_BUBBLE_ORBIT_RADIUS;
+          const by = sy - DRUNK_BUBBLE_Y_OFFSET + Math.cos(phase) * DRUNK_BUBBLE_RISE_AMP;
+          ctx.globalAlpha =
+            DRUNK_BUBBLE_ALPHA_BASE +
+            DRUNK_BUBBLE_ALPHA_RANGE * Math.sin(phase * DRUNK_BUBBLE_TWINKLE_RATE);
+          ctx.beginPath();
+          ctx.arc(bx, by, DRUNK_BUBBLE_RADIUS, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.shadowBlur = 0;

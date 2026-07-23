@@ -70,6 +70,8 @@ const AMBIENT_LINES: Record<TownRole, ReadonlyArray<string>> = {
     'Trade’s been slow with the roads so dangerous.',
     'A discerning eye! I like that in a customer.',
     "Everything's for sale if the price is right.",
+    'Signet’s ink moves on the skin, you know. Mine’s been asleep for weeks.',
+    'One mark per crawler. Any more and they start arguing with each other.',
   ],
   farmer: [
     'Weather’s held. Should be a fair harvest.',
@@ -98,6 +100,8 @@ const AMBIENT_LINES: Record<TownRole, ReadonlyArray<string>> = {
     'The ruins hunger, but hope endures.',
     'A quiet word of prayer costs nothing.',
     'Peace be with you, traveller.',
+    'The skyfowl are not birds. They are watchers, and they are patient.',
+    'Come to the temple when you are broken. That is what it is for.',
   ],
   child: [
     'Wanna see me hop the whole square? Watch!',
@@ -142,6 +146,9 @@ const AMBIENT_LINES: Record<TownRole, ReadonlyArray<string>> = {
     'Ruffle my feathers and we’ll have words, friend.',
   ],
   commoner: [
+    'Have you seen the new temple? Whole dome went up in a season.',
+    'There’s a tattooist by the club now. My cousin got one. It winked at me.',
+    'The Barracks takes anyone off a floor. Warm bunk, no questions.',
     'Fine day, isn’t it? For now, anyway.',
     'You’re not from around here, are you?',
     'Heard the market’s got fresh stock. Worth a look.',

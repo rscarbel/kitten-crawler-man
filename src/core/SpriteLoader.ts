@@ -22,6 +22,12 @@ export interface SpriteStateDef {
   /** Column start offset within the row (0-based). Defaults to 0. */
   readonly colOffset?: number;
   readonly frameCount: number;
+  /**
+   * Total columns per row in the sheet. When set, frames past the last column
+   * wrap onto the following row(s) instead of reading past the row's edge —
+   * lets an animation's frames span multiple rows of the sprite sheet.
+   */
+  readonly colsPerRow?: number;
 }
 
 export interface TileOffset {
@@ -126,6 +132,8 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
 const _tileBlockedOffsets = new Map<number, ReadonlyArray<TileOffset>>();
 const _tileSortYAnchorPx = new Map<number, number>();
 const _tileSpriteOverheadPx = new Map<number, number>();
+/** Per-sprite-key tiles the authored `blockedRegions` cover, before the footprint is filled in. */
+const _spriteKeyRegionBlockedOffsets = new Map<string, ReadonlyArray<TileOffset>>();
 /** Per-sprite-key blocked tile offsets, for sprite buildings without a fixed tileTypeId. */
 const _spriteKeyBlockedOffsets = new Map<string, ReadonlyArray<TileOffset>>();
 
@@ -172,10 +180,11 @@ function computeBlockedOffsetsFromRegions(
   return result;
 }
 
-// Build per-key blocked offsets for SPRITE_BUILDING variants (no tileTypeId required).
+// Build per-key region-derived offsets for SPRITE_BUILDING variants (no tileTypeId
+// required). The exported blocked set is widened to the whole footprint further down.
 for (const [key, entry] of Object.entries(_manifest)) {
   if (entry.blockedRegions !== undefined && entry.blockedRegions.length > 0) {
-    _spriteKeyBlockedOffsets.set(
+    _spriteKeyRegionBlockedOffsets.set(
       key,
       computeBlockedOffsetsFromRegions(
         entry.blockedRegions,
@@ -232,9 +241,145 @@ export function getSpriteDefByKey(key: string): SpriteDef | undefined {
 /**
  * Returns the blocked tile offsets for a sprite-building variant by manifest key.
  * Used to compute collision for SPRITE_BUILDING tiles with per-variant footprints.
+ *
+ * This is the sprite's whole footprint minus its doorway, not just the tiles its
+ * `blockedRegions` cover: the art is opaque across the full frame, so any tile
+ * under it that stayed walkable would be a pocket the player and townsfolk can
+ * vanish into behind the facade.
  */
 export function getBlockedTileOffsetsByKey(key: string): ReadonlyArray<TileOffset> {
   return _spriteKeyBlockedOffsets.get(key) ?? [];
+}
+
+/** Tile-space rectangle a map sprite occupies, relative to its anchor tile. */
+export interface SpriteFootprint {
+  readonly dx: number;
+  readonly dy: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** A sprite building's entrance: the gap its facade leaves in its blocked base row. */
+export interface SpriteDoorway extends TileOffset {
+  /** Leftmost column of the gap; `dx` is its centre. */
+  readonly dx0: number;
+  /** How many tiles wide the gap is, so road stubs can match the opening. */
+  readonly width: number;
+}
+
+const _spriteKeyFootprints = new Map<string, SpriteFootprint>();
+const _spriteKeyDoorways = new Map<string, SpriteDoorway>();
+
+for (const [key, entry] of Object.entries(_manifest)) {
+  // The anchor tile's top-left corner sits at (tileX, tileY) in sprite pixels, so
+  // the art can extend both above/left of the anchor and below/right of it.
+  const dx = -Math.ceil(entry.tileX / entry.tileScale);
+  const dy = -Math.ceil(entry.tileY / entry.tileScale);
+  const right = Math.ceil((entry.frameWidth - entry.tileX) / entry.tileScale);
+  const bottom = Math.ceil((entry.frameHeight - entry.tileY) / entry.tileScale);
+  _spriteKeyFootprints.set(key, { dx, dy, w: right - dx, h: bottom - dy });
+}
+
+/**
+ * Derive a sprite building's doorway from the gap its `blockedRegions` leave in the
+ * base of the facade: take the bottom-most blocked row, find the longest run of
+ * unblocked columns inside the building's overall column span, and use its centre.
+ *
+ * The doorway is then pushed down to the sprite's front row. Decorations Y-sort on
+ * `tileY * TILE_SIZE + frameHeight` while players sort on `y + TILE_SIZE`, so a
+ * door tile above the sprite's visual foot would draw the player *behind* the
+ * facade they are standing in front of.
+ *
+ * Sprites without blocked regions get no doorway.
+ */
+function computeDoorway(
+  offsets: ReadonlyArray<TileOffset>,
+  footprintBottomDy: number,
+): SpriteDoorway | undefined {
+  if (offsets.length === 0) return undefined;
+  let minDx = offsets[0].dx;
+  let maxDx = offsets[0].dx;
+  let maxDy = offsets[0].dy;
+  for (const o of offsets) {
+    if (o.dx < minDx) minDx = o.dx;
+    if (o.dx > maxDx) maxDx = o.dx;
+    if (o.dy > maxDy) maxDy = o.dy;
+  }
+  const blockedInBaseRow = new Set<number>();
+  for (const o of offsets) {
+    if (o.dy === maxDy) blockedInBaseRow.add(o.dx);
+  }
+  let bestStart = -1;
+  let bestLength = 0;
+  let runStart = -1;
+  for (let dx = minDx; dx <= maxDx + 1; dx++) {
+    const isGap = dx <= maxDx && !blockedInBaseRow.has(dx);
+    if (isGap) {
+      if (runStart === -1) runStart = dx;
+      continue;
+    }
+    if (runStart !== -1) {
+      const runLength = dx - runStart;
+      if (runLength > bestLength) {
+        bestLength = runLength;
+        bestStart = runStart;
+      }
+      runStart = -1;
+    }
+  }
+  if (bestLength === 0) return undefined;
+  return {
+    dx: bestStart + Math.floor((bestLength - 1) / 2),
+    dx0: bestStart,
+    dy: Math.max(maxDy, footprintBottomDy),
+    width: bestLength,
+  };
+}
+
+for (const [key, regionOffsets] of _spriteKeyRegionBlockedOffsets) {
+  const footprint = _spriteKeyFootprints.get(key);
+  if (footprint === undefined) continue;
+  const doorway = computeDoorway(regionOffsets, footprint.dy + footprint.h - 1);
+  if (doorway === undefined) continue;
+  _spriteKeyDoorways.set(key, doorway);
+
+  const blocked: TileOffset[] = [];
+  for (let dy = footprint.dy; dy < footprint.dy + footprint.h; dy++) {
+    for (let dx = footprint.dx; dx < footprint.dx + footprint.w; dx++) {
+      const isDoorway = dy === doorway.dy && dx >= doorway.dx0 && dx < doorway.dx0 + doorway.width;
+      if (!isDoorway) blocked.push({ dx, dy });
+    }
+  }
+  _spriteKeyBlockedOffsets.set(key, blocked);
+}
+
+/** Returns the tile-space rectangle a map sprite covers, relative to its anchor tile. */
+export function getSpriteFootprintByKey(key: string): SpriteFootprint | undefined {
+  return _spriteKeyFootprints.get(key);
+}
+
+/**
+ * Returns the anchor-relative doorway a sprite building's facade leaves in its
+ * blocked base row. Undefined when the sprite declares no blocked regions or its
+ * base row is fully blocked.
+ */
+export function getSpriteDoorwayByKey(key: string): SpriteDoorway | undefined {
+  return _spriteKeyDoorways.get(key);
+}
+
+/** Names of every non-`idle` animation state a sprite declares, in manifest order. */
+const _spriteKeyOverlayStates = new Map<string, ReadonlyArray<string>>();
+for (const [key, entry] of Object.entries(_manifest)) {
+  const overlays = Object.keys(entry.states).filter((name) => name !== 'idle');
+  if (overlays.length > 0) _spriteKeyOverlayStates.set(key, overlays);
+}
+
+/**
+ * Returns the non-`idle` states of a sprite building, which the map renderer
+ * composites on top of the base facade (e.g. the blacksmith's forge flames).
+ */
+export function getSpriteOverlayStatesByKey(key: string): ReadonlyArray<string> {
+  return _spriteKeyOverlayStates.get(key) ?? [];
 }
 
 /**

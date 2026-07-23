@@ -2,6 +2,8 @@ import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap } from '../map/GameMap';
+import type { TownRole } from '../sprites/person/PersonAppearance';
+import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
@@ -23,7 +25,7 @@ import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
-import { CLUB_MUSIC_TRACKS } from '../audio/sounds';
+import { CLUB_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
@@ -49,13 +51,22 @@ import {
 } from '../core/GodMode';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
+import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
   buildCitizenConversation,
   roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
-import { PUB_DRINK_PRICE, pubServeLine } from '../systems/townPub';
-import type { TownRole } from '../sprites/person/PersonAppearance';
+import { buildTavernMenu, serveDrink } from '../systems/townPub';
+import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
+import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
+import { ServiceMenuPanel, type ServicePurchaseHandler } from '../ui/ServiceMenuPanel';
+import {
+  setButtonMouseState,
+  setButtonAudio,
+  notifyButtonClick,
+  clearButtonMouseState,
+} from '../ui/Button';
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
@@ -71,6 +82,42 @@ import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../syste
 import type { SystemContext } from '../systems/GameSystem';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
+
+/** Parks the cursor outside any button until a real mouse move reports a position. */
+const OFFSCREEN_CURSOR_POS = -9999;
+
+/** Anything the interior's Y-sorted pass can draw: players, mobs, occupants. */
+interface InteriorRenderable {
+  y: number;
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
+}
+
+/** Every hearth and brazier in a room emits its own fire crackle at this reach. */
+const HEARTH_AMBIENT_RADIUS_TILES = 7;
+const HEARTH_AMBIENT_VOLUME = 0.4;
+/** Volume of a room-wide crowd/shop bed, quiet enough to sit under dialog and music. */
+const BAR_CROWD_AMBIENT_VOLUME = 0.35;
+const MAGIC_SHOP_AMBIENT_VOLUME = 0.3;
+/**
+ * Buildings that offer a priced service, and the occupant role that sells it —
+ * talking to that role opens the service menu instead of ordinary chatter.
+ */
+const SERVICE_NPC_ROLES = new Map<string, TownRole>([
+  ['The Sunken Stump Pub', 'innkeeper'],
+  ['The Horned Flagon', 'innkeeper'],
+  ['The Sleeping Cat Inn', 'innkeeper'],
+  ['Temple of the Sky', 'priest'],
+  ["Signet's Ink", 'merchant'],
+]);
+
+/** Rooms that hum with their own constant ambience regardless of where you stand. */
+const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number }>([
+  ['The Sunken Stump Pub', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['The Horned Flagon', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['The Desperado Club', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
+  ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
+]);
 
 const TOWER_FLOOR_COUNT = 4;
 const MAX_TOWER_FLOOR_INDEX = 3;
@@ -135,6 +182,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Exit menu state
   private onExitTile = false;
+  // Cursor state fed to the shared Button module each frame so hover/press works
+  // on the interior's panels. Parked far off-screen until the mouse actually moves.
+  private _mouseX = OFFSCREEN_CURSOR_POS;
+  private _mouseY = OFFSCREEN_CURSOR_POS;
+  private _mouseDown = false;
   private exitMenuOpen = false;
   private exitDismissed = false;
 
@@ -183,6 +235,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private combat: InteriorCombat | null;
   // Ambient occupants (null in encounter interiors, towers, the club, and unpopulated buildings)
   private readonly occupants: InteriorOccupantSystem | null;
+  private readonly ambientSound: AmbientSoundSystem | null;
+  /** Priced-service menu for this room's NPC (drinks, blessing, ink); null where none is offered. */
+  private readonly servicePanel: ServiceMenuPanel | null;
   // Talk surface for ambient occupants; null when there are no occupants or no audio.
   private readonly citizenDialog: CitizenDialog | null;
   private gameOver = false;
@@ -303,11 +358,51 @@ export class BuildingInteriorScene extends GameplayScene {
         : null;
     this.citizenDialog =
       this.occupants !== null && this.audio !== null ? new CitizenDialog(this.audio) : null;
+
+    this.ambientSound =
+      this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
+
+    this.servicePanel = SERVICE_NPC_ROLES.has(entry.name) ? new ServiceMenuPanel() : null;
+  }
+
+  /**
+   * Ambience for the room the player just walked into: every hearth and brazier
+   * in the generated layout crackles from where it stands, and rooms that should
+   * sound busy get a constant crowd or shop bed on top.
+   */
+  private buildAmbientEmitters(): AmbientEmitter[] {
+    const emitters: AmbientEmitter[] = [];
+    for (let ty = 0; ty < this.map.structure.length; ty++) {
+      const row = this.map.structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        const type = row[tx].type;
+        if (type !== FIREPLACE && type !== BRAZIER) continue;
+        emitters.push({
+          soundId: 'ambient_fire_crackling',
+          x: tx,
+          y: ty,
+          radiusTiles: HEARTH_AMBIENT_RADIUS_TILES,
+          maxVolume: HEARTH_AMBIENT_VOLUME,
+        });
+      }
+    }
+    const roomBed = INTERIOR_AMBIENT_BEDS.get(this.entry.name);
+    if (roomBed !== undefined) {
+      emitters.push({
+        soundId: roomBed.soundId,
+        x: 0,
+        y: 0,
+        radiusTiles: 0,
+        maxVolume: roomBed.volume,
+        constant: true,
+      });
+    }
+    return emitters;
   }
 
   /**
    * Encounters that are live from the moment the building is entered: the
-   * Big Top's Grimaldi fight and the Blackwood Barracks cult hideout. The
+   * Big Top's Grimaldi fight and the Blackwood Lodge cult hideout. The
    * tower's Quill confrontation is created later, on reaching the top floor.
    */
   private initEntryEncounter(
@@ -323,7 +418,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     const murderProgress = this.murderQuestProgress;
-    if (this.entry.name === 'Blackwood Barracks' && murderProgress?.stage === 'cult_hideout') {
+    if (this.entry.name === 'Blackwood Lodge' && murderProgress?.stage === 'cult_hideout') {
       return this.createCombatStack(abilityManager, this.map, 0, (bus, addMob) => {
         return new CultHideoutSystem(this.map, bus, addMob, murderProgress, this.audio);
       });
@@ -454,6 +549,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.exitMenuOpen = false;
     this.exitDismissed = false;
 
+    // Emitters were scanned from the previous floor's grid — every hearth on it
+    // would otherwise keep crackling from coordinates that mean nothing here.
+    this.ambientSound?.setEmitters(this.buildAmbientEmitters());
+
     this.maybeStartTowerConfrontation();
   }
 
@@ -498,6 +597,10 @@ export class BuildingInteriorScene extends GameplayScene {
         this.club.closeModals();
         return;
       }
+      if (this.servicePanel?.isOpen === true) {
+        this.servicePanel.close();
+        return;
+      }
       if (this.towerStairs?.menuOpen) {
         this.towerStairs.closeMenu();
         return;
@@ -513,6 +616,9 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.ambientSound?.dispose();
+    // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
+    clearButtonMouseState();
     if (this.escHandler) {
       window.removeEventListener('keydown', this.escHandler);
       this.escHandler = null;
@@ -530,6 +636,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.safeRoom?.isSleeping === true ||
       this.shop?.shopOpen === true ||
       this.club?.modalOpen === true ||
+      this.servicePanel?.isOpen === true ||
       this.citizenDialog?.isOpen === true
     );
   }
@@ -603,6 +710,14 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.input.has(' ')) {
         this.input.clear();
         this.club.dismissModal();
+      }
+      return;
+    }
+    if (this.servicePanel?.isOpen === true) {
+      this.servicePanel.update();
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.servicePanel.close();
       }
       return;
     }
@@ -703,6 +818,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.shop?.update();
     this.club?.update();
     this.occupants?.update();
+    this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop?.purchasePending) {
       this.shop.purchasePending = false;
       this.audio?.play('purchase_success');
@@ -793,6 +909,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   handleClick(mx: number, my: number): void {
+    notifyButtonClick(mx, my);
     if (this.gameOver && this.combat) {
       if (this.combat.deathScreen.handleClick(mx, my)) this.reviveAndExit();
       return;
@@ -823,6 +940,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club.handleClick(mx, my, this.active());
       return;
     }
+    if (this.servicePanel?.isOpen === true) {
+      this.servicePanel.handleClick(mx, my, this.active());
+      return;
+    }
     if (this.citizenDialog?.isOpen === true) {
       this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
       return;
@@ -849,15 +970,32 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   handleMouseDown(mx: number, my: number): void {
+    this._mouseX = mx;
+    this._mouseY = my;
+    this._mouseDown = true;
     this.mobileHUD.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
+    this._mouseX = mx;
+    this._mouseY = my;
     this.mobileHUD.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
+    this._mouseX = mx;
+    this._mouseY = my;
+    this._mouseDown = false;
     this.mobileHUD.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
+  }
+
+  /**
+   * `mouseup` only fires on the canvas, so a press that is released off it would
+   * otherwise leave a button stuck in its held state forever.
+   */
+  handleMouseLeave(): void {
+    this._mouseDown = false;
+    clearButtonMouseState();
   }
 
   /**
@@ -891,49 +1029,69 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * If the talk target is an innkeeper the player can be served (has the coin and
-   * isn't already peppy), charges for a drink, applies the Speed Fizz buff, and
-   * returns the barkeep's serving line. Returns null otherwise, so the caller
-   * falls back to ordinary chatter — meaning innkeepers still gossip when the
-   * player can't drink.
-   */
-  private tryServeDrink(
-    role: TownRole,
-    player: ReturnType<BuildingInteriorScene['active']>,
-    turn: number,
-  ): string[] | null {
-    if (role !== 'innkeeper') return null;
-    if (player.coins < PUB_DRINK_PRICE || player.hasStatus('speed_fizz')) return null;
-    player.coins -= PUB_DRINK_PRICE;
-    player.activateSpeedFizz();
-    this.audio?.play('purchase_success');
-    return [pubServeLine(turn)];
-  }
-
-  /**
-   * Opens a conversation with the nearest ambient occupant in range (serving an
-   * innkeeper a drink first, if eligible). Returns whether a conversation opened,
-   * so the caller can consume the triggering input. Shared by the desktop Space
-   * path and the mobile tap path so occupants are talkable on both.
+   * Opens a conversation with the nearest ambient occupant in range — or the
+   * drink menu, when that occupant is the barkeep of a room that serves. Returns
+   * whether something opened, so the caller can consume the triggering input.
+   * Shared by the desktop Space path and the mobile tap path so occupants are
+   * talkable on both.
    */
   private tryTalkToOccupant(player: ReturnType<BuildingInteriorScene['active']>): boolean {
     if (this.citizenDialog === null || this.occupants === null) return false;
     const target = this.occupants.findTalkTarget(player.x, player.y);
     if (target === null) return false;
     target.faceToward(player.x, player.y);
-    const serve = this.tryServeDrink(target.role, player, target.conversationCount);
-    const chatter = buildCitizenConversation(
+    if (this.servicePanel !== null && target.role === SERVICE_NPC_ROLES.get(this.entry.name)) {
+      this.openServiceMenu(this.servicePanel, target.conversationCount, player);
+      this.audio?.play('menu_open');
+      target.conversationCount++;
+      return true;
+    }
+    const lines = buildCitizenConversation(
       target.role,
       target.appearance.seed,
       target.conversationCount,
       this.townDialogContext(),
     );
-    // A served innkeeper leads with the drink, then still chats — so buying a
-    // round never robs the barkeep of their gossip/greeting.
-    const lines = serve !== null ? [...serve, ...chatter] : chatter;
     this.citizenDialog.open(roleDisplayName(target.role), lines);
     target.conversationCount++;
     return true;
+  }
+
+  /**
+   * Fill the service panel with whatever this building sells. Each builder returns
+   * both the rows and the handler that performs the service, so the two can never
+   * drift apart.
+   */
+  private openServiceMenu(
+    panel: ServiceMenuPanel,
+    turn: number,
+    player: ReturnType<BuildingInteriorScene['active']>,
+  ): void {
+    const party = [this.human, this.cat];
+    // Every service confirms with the same purchase chime; the tavern layers its
+    // pour underneath so a round sounds like a round.
+    const confirmed = (handler: ServicePurchaseHandler, pour: boolean): ServicePurchaseHandler => {
+      return (option, buyer) => {
+        const line = handler(option, buyer);
+        if (pour) this.audio?.play('ambient_pouring_a_drink');
+        this.audio?.play('purchase_success');
+        return line;
+      };
+    };
+
+    if (this.entry.name === 'Temple of the Sky') {
+      panel.open(
+        () => buildBlessingMenu(party, turn),
+        confirmed(() => grantBlessing(party, turn), false),
+      );
+      return;
+    }
+    if (this.entry.name === "Signet's Ink") {
+      // Rebuilt per purchase, so inking one design marks the other two as spent.
+      panel.open(() => buildTattooMenu(player, turn), confirmed(inkTattoo, false));
+      return;
+    }
+    panel.open(() => buildTavernMenu(this.entry.name, turn), confirmed(serveDrink, true));
   }
 
   private townDialogContext(): TownDialogContext {
@@ -967,9 +1125,47 @@ export class BuildingInteriorScene extends GameplayScene {
     drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
   }
 
+  /**
+   * Y-sorted pass over the room's occupants and its decoration tiles. Decorations
+   * (braziers, hearth props) are drawn base-only by `renderCanvas`, which expects
+   * a later overlay pass — without this they simply never appear indoors. Sorting
+   * them in with the entities rather than blanket-drawing them on top is what lets
+   * a player walk in front of a brazier and occlude it.
+   */
+  private renderSortedEntities(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    entities: ReadonlyArray<InteriorRenderable>,
+  ): void {
+    const canvas = this.sceneManager.canvas;
+    const drawables: Array<{ sortY: number; draw: () => void }> = entities.map((entity) => ({
+      sortY: entity.y + TILE_SIZE,
+      draw: () => entity.render(ctx, camX, camY, TILE_SIZE),
+    }));
+    for (const deco of this.map.getVisibleDecorationTiles(
+      camX,
+      camY,
+      canvas.width,
+      canvas.height,
+    )) {
+      drawables.push({
+        sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
+        draw: () => this.map.drawDecorationAt(ctx, deco.tx, deco.ty, camX, camY),
+      });
+    }
+    drawables.sort((a, b) => a.sortY - b.sortY);
+    for (const drawable of drawables) drawable.draw();
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     const canvas = this.sceneManager.canvas;
     const { x: camX, y: camY } = this.computeCamera(this.map);
+
+    // Drive the shared Button module before anything draws a button: it clears
+    // last frame's hit-rects and resolves hover/press for this one.
+    setButtonAudio(this.audio);
+    setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -982,12 +1178,11 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.gore.renderPuddles(ctx, camX, camY);
       combat.bodyPartGore.renderSettled(ctx, camX, camY);
 
-      const entities: Array<{
-        y: number;
-        render(c: CanvasRenderingContext2D, cx: number, cy: number, ts: number): void;
-      }> = [...combat.mobs.filter((m) => m.isAlive), this.inactive(), this.active()];
-      entities.sort((a, b) => a.y - b.y);
-      for (const entity of entities) entity.render(ctx, camX, camY, TILE_SIZE);
+      this.renderSortedEntities(ctx, camX, camY, [
+        ...combat.mobs.filter((m) => m.isAlive),
+        this.inactive(),
+        this.active(),
+      ]);
 
       combat.gore.renderParticles(ctx, camX, camY);
       combat.bodyPartGore.renderFlying(ctx, camX, camY);
@@ -997,12 +1192,11 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.spells.renderShockwaveRipples(ctx, camX, camY);
       combat.spells.renderFogs(ctx, camX, camY);
     } else {
-      const entities: Array<{
-        y: number;
-        render(c: CanvasRenderingContext2D, cx: number, cy: number, ts: number): void;
-      }> = [this.inactive(), this.active(), ...(this.occupants?.people ?? [])];
-      entities.sort((a, b) => a.y - b.y);
-      for (const entity of entities) entity.render(ctx, camX, camY, TILE_SIZE);
+      this.renderSortedEntities(ctx, camX, camY, [
+        this.inactive(),
+        this.active(),
+        ...(this.occupants?.people ?? []),
+      ]);
       this.renderCitizenPrompt(ctx, camX, camY);
     }
 
@@ -1099,6 +1293,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.citizenDialog?.render(ctx, canvas);
+    this.servicePanel?.render(ctx, canvas, this.active());
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
     this.soulCrystal.renderUI(ctx, canvas);
@@ -1250,7 +1445,8 @@ export class BuildingInteriorScene extends GameplayScene {
         this.towerStairs?.menuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
         this.shop?.shopOpen ||
-        this.club?.modalOpen
+        this.club?.modalOpen ||
+        this.servicePanel?.isOpen === true
       ) {
         this.handleClick(x, y);
         continue;
@@ -1373,7 +1569,8 @@ export class BuildingInteriorScene extends GameplayScene {
           // Capture before handleClick, which may advance/close an open dialog —
           // guarding the talk trigger below against reopening a fresh one in the
           // same tap (the close-then-reopen trap).
-          const dialogWasOpen = this.citizenDialog?.isOpen === true;
+          const dialogWasOpen =
+            this.citizenDialog?.isOpen === true || this.servicePanel?.isOpen === true;
           this.handleClick(x, y);
           // Trigger space-equivalent actions
           if (this.safeRoom && !this.exitMenuOpen) {
@@ -1404,7 +1601,9 @@ export class BuildingInteriorScene extends GameplayScene {
             this.club.handleInteract(this.active());
           }
           // Talk to a nearby occupant only when nothing else claimed the tap: no
-          // dialog was already open (handleClick would have advanced it), no
+          // dialog or drink menu was already open (handleClick would have
+          // advanced or closed it, and reopening it in the same tap is the
+          // close-then-reopen trap), no
           // shop/club panel is up (the store has both a shop and shelf-browsers),
           // and the safe room didn't just sleep or open Mordecai (a restaurant has
           // both Mordecai/bed and ambient occupants within one tap's reach).
