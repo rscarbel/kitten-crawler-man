@@ -9,6 +9,8 @@
  * golems in tuxedos instead of the humanoid.
  */
 
+import { scaleHumanoidBox } from './humanoidScale';
+
 export type ClubNpcVariant =
   | 'sledge'
   | 'bomo'
@@ -263,6 +265,10 @@ export function drawClubNpc(
   seed = 0,
 ): void {
   ctx.save();
+  const box = scaleHumanoidBox(sx, sy, s);
+  sx = box.sx;
+  sy = box.sy;
+  s = box.s;
   const cx = sx + s * 0.5;
   if (facingX < 0) {
     ctx.translate(cx, 0);

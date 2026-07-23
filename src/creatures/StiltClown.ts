@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawStiltClownSprite } from '../sprites/stiltClownSprite';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const CLOWN_HP = 14;
@@ -136,11 +137,12 @@ export class StiltClown extends Mob {
     const windupProgress = this.windupTimer > 0 ? 1 - this.windupTimer / WINDUP_FRAMES : 0;
     const lungeProgress = this.lungeTimer > 0 ? 1 - this.lungeTimer / LUNGE_FRAMES : 0;
 
+    const box = scaleHumanoidBox(sx, sy, tileSize);
     drawStiltClownSprite(
       ctx,
-      sx,
-      sy,
-      tileSize,
+      box.sx,
+      box.sy,
+      box.s,
       this.walkFrame,
       this.isMoving,
       windupProgress,

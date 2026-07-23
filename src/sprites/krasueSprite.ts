@@ -1,8 +1,5 @@
 /** Head geometry (fractions of tile size). */
 const KRASUE_HEAD_R = 0.2;
-const KRASUE_HAIR_STRAND_COUNT = 6;
-const KRASUE_HAIR_LENGTH = 0.34;
-const KRASUE_HAIR_SPREAD = 0.22;
 
 /** Dangling viscera below the head. */
 const KRASUE_ENTRAIL_COUNT = 8;
@@ -45,8 +42,7 @@ const KRASUE_FANG_LENGTH = 0.04;
 /**
  * Draw a krasue — a disembodied flying female head trailing an organ sac and
  * dangling entrails, one of the Over City's ruins-monsters. Bobs and drifts
- * erratically; hair streams back behind it in flight so only viscera hangs
- * below.
+ * erratically, only viscera hanging below the severed neck.
  *
  * @param floatPhase continuously increasing phase (radians) driving bob + entrail sway.
  * @param isAggressive true once the krasue has been provoked — brightens the glow.
@@ -183,25 +179,6 @@ export function drawKrasueSprite(
     Math.PI * 2,
   );
   ctx.fill();
-
-  // Hair streams backward and upward behind the head — flight trail, not legs
-  ctx.strokeStyle = '#1a1418';
-  ctx.lineWidth = Math.max(1, s * 0.015);
-  for (let i = 0; i < KRASUE_HAIR_STRAND_COUNT; i++) {
-    const t = i / (KRASUE_HAIR_STRAND_COUNT - 1);
-    const rootY = (t - 0.5) * KRASUE_HAIR_SPREAD * s - KRASUE_HEAD_R * s * 0.4;
-    const sway = Math.sin(floatPhase * 1.2 + i) * KRASUE_ENTRAIL_SWAY_AMP * s * 0.6;
-    const len = KRASUE_HAIR_LENGTH * s * (0.7 + 0.3 * t);
-    ctx.beginPath();
-    ctx.moveTo(-KRASUE_HEAD_R * s * 0.5, rootY);
-    ctx.quadraticCurveTo(
-      -KRASUE_HEAD_R * s - len * 0.5,
-      rootY - len * 0.25 + sway,
-      -KRASUE_HEAD_R * s - len,
-      rootY - len * 0.45 + sway,
-    );
-    ctx.stroke();
-  }
 
   // Head
   ctx.fillStyle = '#7a5a58';

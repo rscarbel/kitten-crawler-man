@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawFatClownSprite } from '../sprites/fatClownSprite';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const CLOWN_HP = 30;
@@ -113,11 +114,12 @@ export class FatClown extends Mob {
 
     const attackAnim = this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : 0;
 
+    const box = scaleHumanoidBox(sx, sy, tileSize);
     drawFatClownSprite(
       ctx,
-      sx,
-      sy,
-      tileSize,
+      box.sx,
+      box.sy,
+      box.s,
       this.walkFrame,
       this.isMoving,
       attackAnim,

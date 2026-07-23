@@ -582,19 +582,51 @@ class StallProp implements TownPropRenderable {
   }
 }
 
-// Fortune-teller sprite geometry: a hooded seer seated behind a small table with
-// a glowing crystal orb. Stands on its tile; the tile is the foot for Y-sorting.
-const SEER_TABLE_TOP_FRACTION = 0.62;
-const SEER_TABLE_HEIGHT = 5;
-const SEER_TABLE_INSET = 3;
-const SEER_ROBE_WIDTH = 14;
-const SEER_ROBE_HEIGHT = 16;
-const SEER_HOOD_RADIUS = 5;
-const SEER_ORB_RADIUS = 4;
-const SEER_ORB_LIFT = 3;
+// Fortune-teller sprite geometry: Madame Voss, a hooded seer seated behind a
+// small table, hands framing a glowing crystal orb. Every measure is a fraction
+// of tile size so she reads as a person, not a robe-blob. The tile is her foot
+// for Y-sorting.
+const SEER_TWO_PI = Math.PI * 2;
+const SEER_BASE_FRACTION = 0.96; // seat/base line
+const SEER_SHOULDER_FRACTION = 0.44; // shoulder line
+const SEER_TABLE_TOP_FRACTION = 0.66;
+const SEER_TABLE_HEIGHT_FRACTION = 0.13;
+const SEER_TABLE_INSET_FRACTION = 0.05;
+const SEER_SHOULDER_HALF = 0.28; // half shoulder width
+const SEER_HEM_HALF = 0.42; // half robe hem width at the seat
+const SEER_ROBE_SEAM_WIDTH = 0.02;
+const SEER_HEAD_CY_FRACTION = 0.27;
+const SEER_HOOD_R = 0.19;
+const SEER_HOOD_LIFT = 0.03; // hood peak above the face center
+const SEER_FACE_RX = 0.085;
+const SEER_FACE_RY = 0.11;
+const SEER_FACE_DROP = 0.02; // face sits below the hood center so the cowl frames it
+const SEER_BROW_SHADOW_RY = 0.045;
+const SEER_EYE_DX = 0.038;
+const SEER_EYE_CY_FRACTION = 0.28;
+const SEER_EYE_R = 0.018;
+const SEER_ARM_WIDTH = 0.085;
+const SEER_HAND_DX = 0.17;
+const SEER_HAND_R = 0.045;
+const SEER_ORB_RADIUS_FRACTION = 0.09;
+const SEER_ORB_LIFT_FRACTION = 0.05;
+const SEER_COWL_SIDE_FRACTION = 0.9; // where the cowl meets the head, as a fraction of hood radius
+const SEER_COWL_SHOULDER_DROP = 0.02; // how far the cowl laps over the shoulders
+const SEER_BROW_SHADOW_RISE = 0.5; // brow shadow center above the face center, as a fraction of face RY
+const SEER_EYE_GLOW_BLUR = 0.08;
+const SEER_HAND_REST_LIFT = 0.01; // hands sit just above the table surface
+const SEER_ARM_ROOT_SPREAD = 0.7; // arm root spacing as a fraction of shoulder half-width
+const SEER_ARM_ROOT_DROP = 0.03; // arm root below the shoulder line
+const SEER_ARM_ELBOW_DX = 0.24; // elbow bow-out from center
+const SEER_ARM_ELBOW_LIFT = 0.04; // elbow above the table surface
 
 const SEER_ROBE = '#3b2f5e';
-const SEER_HOOD = '#2a2140';
+const SEER_ROBE_SEAM = '#2c2247';
+const SEER_HOOD = '#241b38';
+const SEER_FACE = '#c9a781';
+const SEER_BROW_SHADOW = '#5a3f4a';
+const SEER_EYE = '#fff2c4';
+const SEER_EYE_GLOW = '#a855f7';
 const SEER_ORB = '#c9b8f0';
 const SEER_ORB_GLOW = '#a855f7';
 
@@ -609,38 +641,121 @@ class FortuneTellerProp implements TownPropRenderable {
     return this.tile.y * TILE_SIZE;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const sx = this.tile.x * tileSize - camX;
-    const sy = this.tile.y * tileSize - camY;
-    const cx = sx + tileSize / 2;
-    const tableTop = sy + tileSize * SEER_TABLE_TOP_FRACTION;
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, s: number): void {
+    const sx = this.tile.x * s - camX;
+    const sy = this.tile.y * s - camY;
+    const cx = sx + s / 2;
+    const baseY = sy + s * SEER_BASE_FRACTION;
+    const shoulderY = sy + s * SEER_SHOULDER_FRACTION;
+    const tableTop = sy + s * SEER_TABLE_TOP_FRACTION;
+    const headCY = sy + s * SEER_HEAD_CY_FRACTION;
 
-    ctx.fillStyle = SEER_ROBE;
-    ctx.fillRect(
-      cx - SEER_ROBE_WIDTH / 2,
-      tableTop - SEER_ROBE_HEIGHT,
-      SEER_ROBE_WIDTH,
-      SEER_ROBE_HEIGHT,
-    );
+    // Cowl draping from the head down to the shoulders — sits behind the body.
     ctx.fillStyle = SEER_HOOD;
     ctx.beginPath();
-    ctx.arc(cx, tableTop - SEER_ROBE_HEIGHT, SEER_HOOD_RADIUS, 0, Math.PI * 2);
+    ctx.moveTo(cx - s * SEER_HOOD_R * SEER_COWL_SIDE_FRACTION, headCY);
+    ctx.lineTo(cx - s * SEER_SHOULDER_HALF, shoulderY + s * SEER_COWL_SHOULDER_DROP);
+    ctx.lineTo(cx + s * SEER_SHOULDER_HALF, shoulderY + s * SEER_COWL_SHOULDER_DROP);
+    ctx.lineTo(cx + s * SEER_HOOD_R * SEER_COWL_SIDE_FRACTION, headCY);
+    ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(
-      sx + SEER_TABLE_INSET,
-      tableTop,
-      tileSize - SEER_TABLE_INSET * 2,
-      SEER_TABLE_HEIGHT,
+    // Robe body: a trapezoid from the shoulders to a wide hem at the seat.
+    ctx.fillStyle = SEER_ROBE;
+    ctx.beginPath();
+    ctx.moveTo(cx - s * SEER_SHOULDER_HALF, shoulderY);
+    ctx.lineTo(cx + s * SEER_SHOULDER_HALF, shoulderY);
+    ctx.lineTo(cx + s * SEER_HEM_HALF, baseY);
+    ctx.lineTo(cx - s * SEER_HEM_HALF, baseY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = SEER_ROBE_SEAM;
+    ctx.lineWidth = Math.max(1, s * SEER_ROBE_SEAM_WIDTH);
+    ctx.beginPath();
+    ctx.moveTo(cx, shoulderY);
+    ctx.lineTo(cx, baseY);
+    ctx.stroke();
+
+    // Head: hood cowl behind, skin face inset, a shaded brow, and glowing eyes.
+    ctx.fillStyle = SEER_HOOD;
+    ctx.beginPath();
+    ctx.arc(cx, headCY - s * SEER_HOOD_LIFT, s * SEER_HOOD_R, 0, SEER_TWO_PI);
+    ctx.fill();
+
+    const faceCY = headCY + s * SEER_FACE_DROP;
+    ctx.fillStyle = SEER_FACE;
+    ctx.beginPath();
+    ctx.ellipse(cx, faceCY, s * SEER_FACE_RX, s * SEER_FACE_RY, 0, 0, SEER_TWO_PI);
+    ctx.fill();
+
+    ctx.fillStyle = SEER_BROW_SHADOW;
+    ctx.beginPath();
+    ctx.ellipse(
+      cx,
+      faceCY - s * SEER_FACE_RY * SEER_BROW_SHADOW_RISE,
+      s * SEER_FACE_RX,
+      s * SEER_BROW_SHADOW_RY,
+      0,
+      0,
+      SEER_TWO_PI,
     );
+    ctx.fill();
 
     ctx.save();
+    ctx.shadowColor = SEER_EYE_GLOW;
+    ctx.shadowBlur = s * SEER_EYE_GLOW_BLUR;
+    ctx.fillStyle = SEER_EYE;
+    const eyeY = sy + s * SEER_EYE_CY_FRACTION;
+    ctx.beginPath();
+    ctx.arc(cx - s * SEER_EYE_DX, eyeY, s * SEER_EYE_R, 0, SEER_TWO_PI);
+    ctx.arc(cx + s * SEER_EYE_DX, eyeY, s * SEER_EYE_R, 0, SEER_TWO_PI);
+    ctx.fill();
+    ctx.restore();
+
+    // Table in front of her lower body.
+    const inset = s * SEER_TABLE_INSET_FRACTION;
+    ctx.fillStyle = WOOD_DARK;
+    ctx.fillRect(sx + inset, tableTop, s - inset * 2, s * SEER_TABLE_HEIGHT_FRACTION);
+
+    // Sleeved arms resting on the table, hands framing the orb.
+    const handY = tableTop - s * SEER_HAND_REST_LIFT;
+    ctx.strokeStyle = SEER_ROBE;
+    ctx.lineWidth = s * SEER_ARM_WIDTH;
+    ctx.lineCap = 'round';
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(
+        cx + dir * s * SEER_SHOULDER_HALF * SEER_ARM_ROOT_SPREAD,
+        shoulderY + s * SEER_ARM_ROOT_DROP,
+      );
+      ctx.quadraticCurveTo(
+        cx + dir * s * SEER_ARM_ELBOW_DX,
+        tableTop - s * SEER_ARM_ELBOW_LIFT,
+        cx + dir * s * SEER_HAND_DX,
+        handY,
+      );
+      ctx.stroke();
+    }
+    ctx.fillStyle = SEER_FACE;
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(cx + dir * s * SEER_HAND_DX, handY, s * SEER_HAND_R, 0, SEER_TWO_PI);
+      ctx.fill();
+    }
+
+    // Crystal orb between her hands.
+    ctx.save();
     ctx.shadowColor = SEER_ORB_GLOW;
-    ctx.shadowBlur = SEER_ORB_RADIUS * 2;
+    ctx.shadowBlur = s * SEER_ORB_RADIUS_FRACTION * 2;
     ctx.fillStyle = SEER_ORB;
     ctx.beginPath();
-    ctx.arc(cx, tableTop - SEER_ORB_LIFT, SEER_ORB_RADIUS, 0, Math.PI * 2);
+    ctx.arc(
+      cx,
+      tableTop - s * SEER_ORB_LIFT_FRACTION,
+      s * SEER_ORB_RADIUS_FRACTION,
+      0,
+      SEER_TWO_PI,
+    );
     ctx.fill();
     ctx.restore();
   }

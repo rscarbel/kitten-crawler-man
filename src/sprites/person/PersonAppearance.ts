@@ -142,16 +142,18 @@ const HEIGHT_MIN = 0.86;
 const HEIGHT_MAX = 1.14;
 const BUILD_MIN = 0;
 const BUILD_MAX = 1;
-const SHOULDER_MIN = 0.15;
-const SHOULDER_MAX = 0.2;
-const HIP_MIN = 0.12;
-const HIP_MAX = 0.17;
+const SHOULDER_MIN = 0.098;
+const SHOULDER_MAX = 0.122;
+const HIP_MIN = 0.086;
+const HIP_MAX = 0.108;
 const TORSO_MIN = 0.26;
 const TORSO_MAX = 0.32;
 const LEG_MIN = 0.34;
 const LEG_MAX = 0.42;
 const ARM_MIN = 0.3;
 const ARM_MAX = 0.36;
+/** Extra shoulder/hip half-width a fully heavy build adds, as a fraction of draw size. */
+const BUILD_WIDTH_BONUS = 0.014;
 
 const HEAD_WIDTH_MIN = 0.15;
 const HEAD_WIDTH_MAX = 0.19;
@@ -214,8 +216,8 @@ function generateBody(rng: Rng): PersonBody {
   return {
     heightScale: centered(rng, HEIGHT_MIN, HEIGHT_MAX),
     build,
-    shoulderWidth: range(rng, SHOULDER_MIN, SHOULDER_MAX) + build * 0.03,
-    hipWidth: range(rng, HIP_MIN, HIP_MAX) + build * 0.03,
+    shoulderWidth: range(rng, SHOULDER_MIN, SHOULDER_MAX) + build * BUILD_WIDTH_BONUS,
+    hipWidth: range(rng, HIP_MIN, HIP_MAX) + build * BUILD_WIDTH_BONUS,
     torsoLength: centered(rng, TORSO_MIN, TORSO_MAX),
     legLength: centered(rng, LEG_MIN, LEG_MAX),
     armLength: centered(rng, ARM_MIN, ARM_MAX),

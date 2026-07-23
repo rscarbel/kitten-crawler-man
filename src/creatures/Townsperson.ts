@@ -13,6 +13,7 @@ import {
   type TownRole,
 } from '../sprites/person/PersonAppearance';
 import { drawPerson } from '../sprites/person/drawPerson';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState } from './townWander';
 
@@ -97,15 +98,7 @@ export class Townsperson implements WanderState {
   /** Draws the citizen in world space. Y-sorted by the caller against `y`. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const drawSize = tileSize > 0 ? tileSize : PERSON_DRAW_SIZE;
-    drawPerson(
-      ctx,
-      this.x - camX,
-      this.y - camY,
-      drawSize,
-      this.appearance,
-      this.phase,
-      this.facing,
-      this.moving,
-    );
+    const box = scaleHumanoidBox(this.x - camX, this.y - camY, drawSize);
+    drawPerson(ctx, box.sx, box.sy, box.s, this.appearance, this.phase, this.facing, this.moving);
   }
 }

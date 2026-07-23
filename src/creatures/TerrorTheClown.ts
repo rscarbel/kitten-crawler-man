@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawTerrorTheClownSprite } from '../sprites/terrorTheClownSprite';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const TERROR_HP = 60;
@@ -152,11 +153,12 @@ export class TerrorTheClown extends Mob {
     const windupProgress = this.windupTimer > 0 ? 1 - this.windupTimer / windupFrames : 0;
     const swingProgress = this.swingTimer > 0 ? 1 - this.swingTimer / SWING_FRAMES : 0;
 
+    const box = scaleHumanoidBox(sx, sy, tileSize);
     drawTerrorTheClownSprite(
       ctx,
-      sx,
-      sy,
-      tileSize,
+      box.sx,
+      box.sy,
+      box.s,
       this.walkFrame,
       this.isMoving,
       windupProgress,

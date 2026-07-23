@@ -29,6 +29,16 @@ const FOOT_LEN = 0.12;
 const FOOT_HEIGHT = 0.05;
 const NECK_WIDTH = 0.052;
 
+// Torso silhouette: rather than a flat shoulder-to-hip trapezoid (which reads as
+// a wide box), the body curves in at the waist and the shoulder line lifts
+// slightly at center for a trapezius slope, so the figure reads as a person.
+const TORSO_MIN_SHOULDER_HALF = 0.07; // keeps an edge-on profile torso from vanishing
+const TORSO_MIN_HIP_HALF = 0.055;
+const TORSO_HIP_DRAW_FACTOR = 0.9; // draw hips a touch inside the leg roots so thighs read
+const TORSO_WAIST_Y_FRAC = 0.55; // waist height between shoulders (0) and hips (1)
+const TORSO_WAIST_PINCH = 0.8; // waist half-width as a fraction of the narrower of shoulder/hip
+const TORSO_SHOULDER_RISE = 0.025; // how far the shoulder line lifts at center
+
 /** Top styles whose sleeves cover the arms in the shirt color. */
 const SLEEVED_TOPS: ReadonlySet<string> = new Set(['longsleeve', 'jacket', 'hoodie']);
 
@@ -105,15 +115,26 @@ function drawTorso(dc: DrawContext, skel: Skeleton): void {
   const outfit = app.outfit;
 
   // Give a thin profile torso a little depth so the body doesn't vanish edge-on.
-  const shHalf = Math.max(shoulderHalf, s * 0.08);
-  const hpHalf = Math.max(hipHalf * 0.85, s * 0.06);
+  const shHalf = Math.max(shoulderHalf, s * TORSO_MIN_SHOULDER_HALF);
+  const hpHalf = Math.max(hipHalf * TORSO_HIP_DRAW_FACTOR, s * TORSO_MIN_HIP_HALF);
 
+  const topY = shoulderCenter.y;
+  const hipY = hipCenter.y;
+  const waistHalf = Math.min(shHalf, hpHalf) * TORSO_WAIST_PINCH;
+  const waistY = topY + (hipY - topY) * TORSO_WAIST_Y_FRAC;
+  const sxc = shoulderCenter.x;
+  const hxc = hipCenter.x;
+  const waistX = sxc + (hxc - sxc) * TORSO_WAIST_Y_FRAC;
+
+  // Curved sides pinch through the waist (single quadratic per side pulled toward
+  // the narrower waist point); the top edge lifts at center for sloped shoulders.
   ctx.fillStyle = outfit.topColor;
   ctx.beginPath();
-  ctx.moveTo(shoulderCenter.x - shHalf, shoulderCenter.y);
-  ctx.lineTo(shoulderCenter.x + shHalf, shoulderCenter.y);
-  ctx.lineTo(hipCenter.x + hpHalf, hipCenter.y);
-  ctx.lineTo(hipCenter.x - hpHalf, hipCenter.y);
+  ctx.moveTo(sxc - shHalf, topY);
+  ctx.quadraticCurveTo(waistX - waistHalf, waistY, hxc - hpHalf, hipY);
+  ctx.lineTo(hxc + hpHalf, hipY);
+  ctx.quadraticCurveTo(waistX + waistHalf, waistY, sxc + shHalf, topY);
+  ctx.quadraticCurveTo(sxc, topY - s * TORSO_SHOULDER_RISE, sxc - shHalf, topY);
   ctx.closePath();
   ctx.fill();
 

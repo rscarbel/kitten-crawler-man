@@ -29,7 +29,11 @@ import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
 import { SpellSystem } from '../systems/SpellSystem';
-import { CompanionSystem } from '../systems/CompanionSystem';
+import {
+  CompanionSystem,
+  createCompanionStanceState,
+  type CompanionStanceState,
+} from '../systems/CompanionSystem';
 import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
@@ -189,6 +193,8 @@ export interface DungeonSceneOptions {
   clubMembership?: ClubMembership;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
   mercenaryRoster?: MercenaryRoster;
+  /** Companion combat stance, threaded by reference so passive/aggressive survives building/floor transitions. */
+  companionStance?: CompanionStanceState;
   /** `!god` / `!tough` cheat state, threaded by reference so it survives scene transitions. */
   godModeState?: GodModeState;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
@@ -396,6 +402,8 @@ export class DungeonScene extends GameplayScene {
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
   private readonly mercenaryRoster: MercenaryRoster;
+  /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
+  private readonly companionStance: CompanionStanceState;
   private readonly godModeState: GodModeState;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
@@ -627,6 +635,7 @@ export class DungeonScene extends GameplayScene {
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
+    this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
     this.mercenarySystem = new MercenarySystem(this.mercenaryRoster);
     this.arena = new ArenaSystem(
@@ -643,7 +652,12 @@ export class DungeonScene extends GameplayScene {
     this.dynamite = new DynamiteSystem(this.gameMap);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
-    this.companion = new CompanionSystem(this.gameMap, spawnTileX, spawnTileY);
+    this.companion = new CompanionSystem(
+      this.gameMap,
+      spawnTileX,
+      spawnTileY,
+      this.companionStance,
+    );
 
     if (tutorialController !== null) {
       // Both players start anchored in the tutorial so neither chases the other
@@ -749,6 +763,7 @@ export class DungeonScene extends GameplayScene {
             audio: this.audio ?? undefined,
             onResetGame: this.onResetGameCallback ?? undefined,
             godModeState: this.godModeState,
+            companionStance: this.companionStance,
           }),
         );
       });
@@ -797,6 +812,7 @@ export class DungeonScene extends GameplayScene {
                   clubMembership: this.clubMembership,
                   mercenaryRoster: this.mercenaryRoster,
                   godModeState: this.godModeState,
+                  companionStance: this.companionStance,
                   skipIntro: true,
                 }),
               );
@@ -1942,6 +1958,7 @@ export class DungeonScene extends GameplayScene {
         clubMembership: this.clubMembership,
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
+        companionStance: this.companionStance,
       }),
     );
   }

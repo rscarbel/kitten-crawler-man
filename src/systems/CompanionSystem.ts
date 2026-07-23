@@ -25,6 +25,22 @@ type Entity = {
 export type MovementMode = 'follow' | 'anchored';
 export type CombatStance = 'aggressive' | 'passive';
 
+/**
+ * Combat stance that survives scene transitions. Threaded by reference through
+ * scene options (like club membership) so choosing "passive" persists when the
+ * players duck into a building and come back — unlike the movement mode, which
+ * intentionally resets to "follow" so the companion reappears at the player's
+ * side rather than anchored in another map.
+ */
+export interface CompanionStanceState {
+  human: CombatStance;
+  cat: CombatStance;
+}
+
+export function createCompanionStanceState(): CompanionStanceState {
+  return { human: 'aggressive', cat: 'aggressive' };
+}
+
 type CharStance = {
   movementMode: MovementMode;
   combatStance: CombatStance;
@@ -101,6 +117,9 @@ export class CompanionSystem implements GameSystem {
     anchorY: 0,
   };
 
+  /** Cross-scene combat-stance store; combat stance mirrors into it so it persists. */
+  private readonly stanceState: CompanionStanceState;
+
   private companionPaths = new Map<
     object,
     {
@@ -115,9 +134,13 @@ export class CompanionSystem implements GameSystem {
     private readonly gameMap: GameMap,
     startTileX: number,
     startTileY: number,
+    stanceState: CompanionStanceState = createCompanionStanceState(),
   ) {
     this.catWanderTargetX = (startTileX + 1) * TILE_SIZE;
     this.catWanderTargetY = startTileY * TILE_SIZE;
+    this.stanceState = stanceState;
+    this.humanStance.combatStance = stanceState.human;
+    this.catStance.combatStance = stanceState.cat;
   }
 
   get isFollowOverride(): boolean {
@@ -163,11 +186,19 @@ export class CompanionSystem implements GameSystem {
   /** Companion attacks enemies on sight. */
   setAggressive(humanIsActive: boolean): void {
     this.stanceFor(humanIsActive).combatStance = 'aggressive';
+    this.syncStanceState();
   }
 
   /** Companion only retaliates when directly attacked. */
   setPassive(humanIsActive: boolean): void {
     this.stanceFor(humanIsActive).combatStance = 'passive';
+    this.syncStanceState();
+  }
+
+  /** Mirror both characters' combat stance into the cross-scene store. */
+  private syncStanceState(): void {
+    this.stanceState.human = this.humanStance.combatStance;
+    this.stanceState.cat = this.catStance.combatStance;
   }
 
   /**

@@ -7,7 +7,7 @@
 
 import { pointInRect } from '../utils';
 import type { AudioManager } from '../audio/AudioManager';
-import { drawText } from './TextBox';
+import { drawText, measureTextBox } from './TextBox';
 import { drawButton, playButtonSound, BUTTON_PRESETS } from './Button';
 import { drawModal, BOX_PRESETS } from './Box';
 
@@ -106,8 +106,17 @@ export class QuestDialog {
     if (!this.isOpen) return;
     const page = this.pages[this.pageIndex];
     const dw = Math.min(DIALOG_WIDTH, canvas.width - DIALOG_CANVAS_PADDING);
-    const dh =
-      DIALOG_BASE_HEIGHT + page.lines.length * DIALOG_LINE_SPACING + DIALOG_BUTTON_AREA_HEIGHT;
+
+    // Wrap the body to the box's inner width and size the box from the resulting
+    // line count so long lines stay inside the panel instead of running past it.
+    const contentWidth = dw - DIALOG_PAD_X * 2;
+    const body = page.lines.join('\n');
+    const { lineCount } = measureTextBox(ctx, body, {
+      width: contentWidth,
+      size: DIALOG_LINE_SIZE,
+      lineHeight: DIALOG_LINE_SPACING,
+    });
+    const dh = DIALOG_BASE_HEIGHT + lineCount * DIALOG_LINE_SPACING + DIALOG_BUTTON_AREA_HEIGHT;
 
     const box = drawModal(ctx, {
       canvasWidth: canvas.width,
@@ -125,14 +134,14 @@ export class QuestDialog {
       color: '#8ae0d0',
     });
 
-    for (let i = 0; i < page.lines.length; i++) {
-      drawText(ctx, page.lines[i], {
-        x: box.x + DIALOG_PAD_X,
-        y: box.y + DIALOG_LINE_START_Y + i * DIALOG_LINE_SPACING,
-        size: DIALOG_LINE_SIZE,
-        color: '#e2e8f0',
-      });
-    }
+    drawText(ctx, body, {
+      x: box.x + DIALOG_PAD_X,
+      y: box.y + DIALOG_LINE_START_Y,
+      width: contentWidth,
+      lineHeight: DIALOG_LINE_SPACING,
+      size: DIALOG_LINE_SIZE,
+      color: '#e2e8f0',
+    });
 
     if (this.pages.length > 1) {
       drawText(ctx, `${this.pageIndex + 1} / ${this.pages.length}`, {

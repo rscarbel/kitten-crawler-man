@@ -15,13 +15,13 @@ import type { Facing, Pose } from './skeleton';
 const WALK_CYCLE_SPEED = 0.14;
 
 const LEG_SWING_PROFILE = 0.52;
-const LEG_SWING_FRONT = 0.13;
+const LEG_SWING_FRONT = 0.22;
 const KNEE_BASE = 0.06;
 const KNEE_AMP_PROFILE = 0.7;
-const KNEE_AMP_FRONT = 0.95;
+const KNEE_AMP_FRONT = 0.48;
 
 const ARM_SWING_PROFILE = 0.42;
-const ARM_SWING_FRONT = 0.12;
+const ARM_SWING_FRONT = 0.16;
 const ARM_BEND_BASE = 0.16;
 const ARM_BEND_AMP = 0.3;
 

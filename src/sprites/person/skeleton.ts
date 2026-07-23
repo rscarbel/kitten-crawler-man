@@ -75,6 +75,11 @@ const UPPER_ARM_SHARE = 0.48;
 // view seen edge-on.
 const PROFILE_LATERAL_FACTOR = 0.28;
 
+// Legs root well inboard of the hip joints so the thighs come together under the
+// torso instead of splaying out at the full hip width — a person stands with
+// their legs close, not planted at shoulder width.
+const LEG_STANCE_FACTOR = 0.55;
+
 // Head-on, a limb swings in the plane perpendicular to the screen, so its
 // fore/aft motion should mostly foreshorten (lift the foot/hand) rather than
 // slide sideways. Squashing the horizontal component of the FK for front/back
@@ -139,8 +144,9 @@ export function buildSkeleton(
   const upperArm = armLen * UPPER_ARM_SHARE;
   const foreArm = armLen * (1 - UPPER_ARM_SHARE);
 
-  const leftHip: Point = { x: cx - hipHalf, y: hipY };
-  const rightHip: Point = { x: cx + hipHalf, y: hipY };
+  const legRootHalf = hipHalf * LEG_STANCE_FACTOR;
+  const leftHip: Point = { x: cx - legRootHalf, y: hipY };
+  const rightHip: Point = { x: cx + legRootHalf, y: hipY };
   const leftShoulder: Point = { x: shoulderCX - shoulderHalf, y: shoulderY };
   const rightShoulder: Point = { x: shoulderCX + shoulderHalf, y: shoulderY };
 

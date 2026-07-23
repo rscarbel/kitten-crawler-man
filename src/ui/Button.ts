@@ -16,6 +16,10 @@ const MIN_LINE_HEIGHT = 14;
 const LINE_HEIGHT_MULTIPLIER = 1.4;
 const BUTTON_LABEL_TOP_PAD = 8;
 const LABEL_WRAP_WIDTH_PAD = 12;
+/** Horizontal breathing room kept between a single-line label and the button edges. */
+const LABEL_SIDE_PAD = 10;
+/** Never shrink an auto-fit label below this, even if it still overflows. */
+const MIN_FITTED_LABEL_SIZE = 8;
 const HOVER_GLOW_BLUR = 6;
 const PRESSED_OFFSET = 1;
 const PRESSED_WIDTH_REDUCTION = 2;
@@ -266,6 +270,28 @@ export function playButtonSound(
 }
 
 /**
+ * Largest font size ≤ `baseSize` at which `label` fits within `maxWidth` on one
+ * line, floored at {@link MIN_FITTED_LABEL_SIZE}. Returns `baseSize` unchanged
+ * when the label already fits or `maxWidth` is non-positive.
+ */
+function fitLabelSize(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  baseSize: number,
+  bold: boolean,
+  font: string,
+  maxWidth: number,
+): number {
+  if (maxWidth <= 0) return baseSize;
+  ctx.save();
+  ctx.font = `${bold ? 'bold ' : ''}${baseSize}px ${font}`;
+  const textWidth = ctx.measureText(label).width;
+  ctx.restore();
+  if (textWidth <= maxWidth) return baseSize;
+  return Math.max(MIN_FITTED_LABEL_SIZE, Math.floor(baseSize * (maxWidth / textWidth)));
+}
+
+/**
  * Draw a button on a 2D canvas context.
  *
  * Saves and restores all ctx state — zero side effects.
@@ -357,12 +383,20 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   }
 
   const lineHeight = Math.max(MIN_LINE_HEIGHT, Math.ceil(labelSize * LINE_HEIGHT_MULTIPLIER));
-  const textY = labelWrap ? y + BUTTON_LABEL_TOP_PAD : Math.round(y + (height - labelSize) / 2 + 1);
+
+  // Single-line labels shrink to fit within the button so a long label (e.g.
+  // "Close  [Space / Esc]") never runs to the edges. Wrapped labels flow instead.
+  const fittedLabelSize = labelWrap
+    ? labelSize
+    : fitLabelSize(ctx, label, labelSize, labelBold, labelFont, width - LABEL_SIDE_PAD * 2);
+  const textY = labelWrap
+    ? y + BUTTON_LABEL_TOP_PAD
+    : Math.round(y + (height - fittedLabelSize) / 2 + 1);
 
   drawText(ctx, label, {
     x: labelWrap ? x + LABEL_WRAP_WIDTH_PAD : x + width / 2,
     y: textY,
-    size: labelSize,
+    size: fittedLabelSize,
     bold: labelBold,
     color: disabled ? '#475569' : labelColor,
     font: labelFont,
