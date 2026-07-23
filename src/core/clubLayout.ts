@@ -58,6 +58,40 @@ export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
   { id: 'vip', tile: { x: 12, y: 2 }, label: 'VIP Lounge' },
 ];
 
+/**
+ * Solid furniture footprints inside the club. Blocked for collision so players
+ * and companions can't walk through the bar counter, casino table, market
+ * stall, weapon rack, or VIP couch. Every tile stays clear of a station's
+ * approach (stations interact from up to 2.6 tiles away), so the Sledge and the
+ * vendors remain reachable. Collision only — the visuals come from
+ * `drawClubDecor`, so these tiles still render as ordinary club floor.
+ */
+export const CLUB_FURNITURE_TILES: ReadonlyArray<{ x: number; y: number }> = [
+  // The Bar — the counter the bartender works behind (station at (3,3)).
+  { x: 2, y: 4 },
+  { x: 3, y: 4 },
+  { x: 4, y: 4 },
+  // The Casino — the felt table (dealer at (20,3), reachable from the north).
+  { x: 19, y: 4 },
+  { x: 20, y: 4 },
+  { x: 21, y: 4 },
+  { x: 19, y: 5 },
+  { x: 20, y: 5 },
+  { x: 21, y: 5 },
+  // The Market — crates along the stall front (vendor at (3,14)).
+  { x: 2, y: 15 },
+  { x: 3, y: 15 },
+  { x: 4, y: 15 },
+  // Meat Shields — the weapon rack (recruiter at (20,14)).
+  { x: 19, y: 15 },
+  { x: 20, y: 15 },
+  { x: 21, y: 15 },
+  // VIP Lounge — the velvet couch (host at (12,2)).
+  { x: 11, y: 3 },
+  { x: 12, y: 3 },
+  { x: 13, y: 3 },
+];
+
 /** Doctor Bones the skeleton DJ — cosmetic, spins records just north of the dance floor. */
 export const CLUB_DJ_TILE = { x: 12, y: 5 } as const;
 

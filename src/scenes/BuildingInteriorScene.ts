@@ -33,6 +33,12 @@ import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
+import { FollowerMenu } from '../systems/FollowerMenu';
+import {
+  CompanionSystem,
+  createCompanionStanceState,
+  type CompanionStanceState,
+} from '../systems/CompanionSystem';
 import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
 import {
   createGodModeState,
@@ -153,8 +159,15 @@ export class BuildingInteriorScene extends GameplayScene {
   // Pause menu
   protected readonly pauseMenu = new PauseMenu();
 
-  // Companion follow override (mobile follow button)
+  // Companion follow override (recall) — set when the player picks "Follow me".
   private isFollowOverride = false;
+
+  // Companion command state + menu, mirrored from the overworld so movement mode
+  // and combat stance carry into buildings. The stance is threaded by reference
+  // so passive/aggressive chosen here persists back out to the overworld.
+  private readonly companionStance: CompanionStanceState;
+  private readonly companion: CompanionSystem;
+  private readonly followerMenu = new FollowerMenu();
 
   // Notif pulse (unused but needed for HUD signature)
   protected readonly notifPulse = { value: 0 };
@@ -201,6 +214,7 @@ export class BuildingInteriorScene extends GameplayScene {
     clubMembership?: ClubMembership,
     mercenaryRoster?: MercenaryRoster,
     godModeState?: GodModeState,
+    companionStance?: CompanionStanceState,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
@@ -211,6 +225,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.clubMembership = clubMembership ?? createClubMembership();
     this.mercenaryRoster = mercenaryRoster ?? createMercenaryRoster();
     this.godModeState = godModeState ?? createGodModeState();
+    this.companionStance = companionStance ?? createCompanionStanceState();
 
     const isTower = entry.type === 'tower';
 
@@ -242,6 +257,13 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Re-position after restore (restore doesn't set x/y).
     this.pm.setPositions(sx, sy);
+
+    // Companion command state holder + menu, sharing the overworld stance so
+    // movement mode and combat stance are consistent everywhere. Used only as a
+    // state store here (buildings drive the follow directly via
+    // applyCompanionFollow), so its combat/pathing update is never ticked.
+    this.companion = new CompanionSystem(this.map, sx, sy, this.companionStance);
+    this.wireFollowerMenu();
 
     this.safeRoom =
       entry.type === 'restaurant'
@@ -452,8 +474,18 @@ export class BuildingInteriorScene extends GameplayScene {
         this.mobileHUD.toggleMiniMap();
         return;
       }
+      if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
+        e.preventDefault();
+        if (!this.followerMenu.isOpen && this.canOpenFollowerMenu()) this.followerMenu.open();
+        else if (this.followerMenu.isOpen) this.followerMenu.close();
+        return;
+      }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
+      if (this.followerMenu.isOpen) {
+        this.followerMenu.close();
+        return;
+      }
       if (this.safeRoom?.mordecaiDialogOpen) {
         this.safeRoom.mordecaiDialogOpen = false;
         return;
@@ -485,6 +517,42 @@ export class BuildingInteriorScene extends GameplayScene {
       window.removeEventListener('keydown', this.escHandler);
       this.escHandler = null;
     }
+  }
+
+  /** True when no other modal owns the screen, so the follower menu may open. */
+  private canOpenFollowerMenu(): boolean {
+    return !(
+      this.gameOver ||
+      this.pauseMenu.isOpen ||
+      this.exitMenuOpen ||
+      this.towerStairs?.menuOpen === true ||
+      this.safeRoom?.mordecaiDialogOpen === true ||
+      this.safeRoom?.isSleeping === true ||
+      this.shop?.shopOpen === true ||
+      this.club?.modalOpen === true ||
+      this.citizenDialog?.isOpen === true
+    );
+  }
+
+  /** Hook the shared follower menu to the companion's commands (same set as the overworld). */
+  private wireFollowerMenu(): void {
+    this.followerMenu.onFollowMe = () => {
+      this.audio?.play('menu_click');
+      this.companion.setFollowMe(this.human.isActive);
+      this.isFollowOverride = true;
+    };
+    this.followerMenu.onDoNotMove = () => {
+      this.audio?.play('menu_click');
+      this.companion.setDoNotMove(this.inactive(), this.human.isActive);
+    };
+    this.followerMenu.onSetAggressive = () => {
+      this.audio?.play('menu_click');
+      this.companion.setAggressive(this.human.isActive);
+    };
+    this.followerMenu.onSetPassive = () => {
+      this.audio?.play('menu_click');
+      this.companion.setPassive(this.human.isActive);
+    };
   }
 
   update(): void {
@@ -519,6 +587,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.pauseMenu.isOpen) return;
+    if (this.followerMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
     if (this.safeRoom?.mordecaiDialogOpen) {
@@ -569,7 +638,12 @@ export class BuildingInteriorScene extends GameplayScene {
     const followDist = this.isFollowOverride
       ? TILE_SIZE * COMPANION_FOLLOW_OVERRIDE_RATIO
       : TILE_SIZE * COMPANION_FOLLOW_NORMAL_RATIO;
-    this.applyCompanionFollow(this.map, followDist);
+    // "Do not move" holds the companion in place; otherwise it trails the player.
+    if (this.companion.getMovementMode(this.human.isActive) === 'follow') {
+      this.applyCompanionFollow(this.map, followDist);
+    } else {
+      this.inactive().isMoving = false;
+    }
 
     // Tab: switch active player
     if (this.input.has('Tab')) {
@@ -725,6 +799,10 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleClick(mx, my);
+      return;
+    }
+    if (this.followerMenu.isOpen) {
+      this.followerMenu.handleClick(mx, my);
       return;
     }
     // Pause button (works on desktop + mobile)
@@ -991,7 +1069,7 @@ export class BuildingInteriorScene extends GameplayScene {
             id: 'follow',
             icon: '↩',
             label: 'Follow',
-            active: this.isFollowOverride,
+            active: this.companion.getMovementMode(this.human.isActive) === 'anchored',
           },
         ];
         this.mobileHUD.renderButtons(
@@ -1031,6 +1109,14 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
     }
+
+    this.followerMenu.render(
+      ctx,
+      canvas,
+      this.companion.getMovementMode(this.human.isActive),
+      this.companion.getCombatStance(this.human.isActive),
+      this.human.isActive,
+    );
 
     if (this.gameOver && this.combat) {
       this.combat.deathScreen.render(ctx, canvas);
@@ -1159,6 +1245,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // Route to click for modals
       if (
         this.pauseMenu.isOpen ||
+        this.followerMenu.isOpen ||
         this.exitMenuOpen ||
         this.towerStairs?.menuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
@@ -1203,7 +1290,7 @@ export class BuildingInteriorScene extends GameplayScene {
           continue;
         }
         if (btn === 'follow') {
-          this.isFollowOverride = !this.isFollowOverride;
+          if (this.canOpenFollowerMenu()) this.followerMenu.open();
           continue;
         }
       }

@@ -827,6 +827,7 @@ export class DungeonScene extends GameplayScene {
             this.clubMembership,
             this.mercenaryRoster,
             this.godModeState,
+            this.companionStance,
           ),
         );
       });

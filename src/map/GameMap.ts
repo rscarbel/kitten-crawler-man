@@ -45,6 +45,7 @@ import {
   CLUB_INTERIOR_H,
   CLUB_DANCE_FLOOR,
   CLUB_DIVIDER_WALLS,
+  CLUB_FURNITURE_TILES,
 } from '../core/clubLayout';
 import {
   generateDungeon,
@@ -483,6 +484,9 @@ export class GameMap {
       // Alcove divider walls (never seal a region — the dance-floor rows stay open)
       for (const wall of CLUB_DIVIDER_WALLS)
         for (let y = wall.y0; y <= wall.y1; y++) grid[y][wall.x].type = WALL_TILE;
+      // Furniture collision — solid props that still render as floor (the club's
+      // visuals are drawn by drawClubDecor, not tile sprites), so block them here.
+      for (const t of CLUB_FURNITURE_TILES) this.blockTilePermanently(t.x, t.y);
     }
 
     // ── Named building interiors — each has a unique hand-crafted layout ──

@@ -99,7 +99,8 @@ const BAR_COUNTER_TOP = '#2a1c12';
 const BOTTLE_COLORS = ['#5ac0e0', '#e05a7a', '#7ae05a', '#e0c05a', '#c05ae0', '#e0905a'] as const;
 
 function drawBarProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string): void {
-  // Back shelf with a row of bottles along the top of the alcove.
+  // Back shelf with a row of bottles along the top of the alcove, behind the
+  // bartender who stands at tile (3,3).
   const shelfY = s.y + TS * 0.9;
   const shelfX = s.x + TS * 0.5;
   const shelfW = s.w - TS;
@@ -114,10 +115,12 @@ function drawBarProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string):
     ctx.fillRect(bx + TS * 0.03, shelfY - TS * 0.56, TS * 0.04, TS * 0.16);
   }
 
-  // Wood bar counter with a dark polished top.
-  const counterY = s.y + s.h - TS * 1.5;
-  const counterX = s.x + TS * 0.5;
-  const counterW = s.w - TS;
+  // Wood bar counter directly in front of the bartender (tile row y4, cols 2–4),
+  // so the seating sits right at the bar rather than across the room. Its tiles
+  // are blocked in CLUB_FURNITURE_TILES.
+  const counterY = s.y + TS * 3.05;
+  const counterX = s.x + TS;
+  const counterW = s.w - TS * 2;
   ctx.fillStyle = BAR_WOOD;
   ctx.fillRect(counterX, counterY, counterW, TS * 0.8);
   ctx.fillStyle = BAR_COUNTER_TOP;
@@ -125,8 +128,8 @@ function drawBarProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string):
   ctx.fillStyle = hexToRgba(accent, 0.6);
   ctx.fillRect(counterX, counterY + TS * 0.2, counterW, 2);
 
-  // Stools in front of the counter.
-  const stoolY = counterY + TS * 1.05;
+  // Stools in the row just in front of the counter (tile row y5).
+  const stoolY = counterY + TS * 1.15;
   const stools = 3;
   for (let i = 0; i < stools; i++) {
     const stoolX = counterX + (counterW / stools) * (i + 0.5);
