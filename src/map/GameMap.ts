@@ -1540,10 +1540,6 @@ export class GameMap {
     this.permanentBlockedTiles.add(`${tileX},${tileY}`);
   }
 
-  /**
-   * True when the given world-pixel position falls inside the overworld town's
-   * safe radius. Always false on non-overworld maps (townSafeRadiusTiles is null).
-   */
   /** Number of tiles along one edge of the (square) map grid. */
   get gridSize(): number {
     return this.structure.length;
@@ -1554,6 +1550,10 @@ export class GameMap {
     return this.townSafeRadiusTiles;
   }
 
+  /**
+   * True when the given world-pixel position falls inside the overworld town's
+   * safe radius. Always false on non-overworld maps (townSafeRadiusTiles is null).
+   */
   isInTownSafeZone(worldX: number, worldY: number): boolean {
     if (this.townSafeRadiusTiles === null) return false;
     const size = this.structure.length;

@@ -221,6 +221,13 @@ const FORGE_AMBIENT_VOLUME = 0.45;
 /** The square's murmur is a wide, quiet bed rather than a wall of crowd noise. */
 const TOWN_SQUARE_AMBIENT_RADIUS_TILES = 18;
 const TOWN_SQUARE_AMBIENT_VOLUME = 0.28;
+/**
+ * The city chatter spans the whole town so it reaches silence exactly where the
+ * town ends. Its radius tracks the safe-zone radius; the fallback only matters on
+ * an overworld map that somehow reports no safe zone.
+ */
+const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 55;
+const CITY_CROWD_AMBIENT_VOLUME = 0.35;
 
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
@@ -1581,7 +1588,8 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * Ambient emitters for the overworld town: the fountain and the smithy's forges
-   * swell as you approach them, and a quiet crowd bed fills the square.
+   * swell as you approach them, a quiet crowd bed fills the square, and city
+   * chatter carries across the whole town, fading out at its edge.
    */
   private buildTownAmbientEmitters(): AmbientEmitter[] {
     const emitters: AmbientEmitter[] = [];
@@ -1603,6 +1611,15 @@ export class DungeonScene extends GameplayScene {
         y: squareCentre.y,
         radiusTiles: TOWN_SQUARE_AMBIENT_RADIUS_TILES,
         maxVolume: TOWN_SQUARE_AMBIENT_VOLUME,
+      });
+      const cityCrowdRadiusTiles =
+        this.gameMap.townSafeRadius ?? CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES;
+      emitters.push({
+        soundId: 'ambient_city_crowd_chatting',
+        x: squareCentre.x,
+        y: squareCentre.y,
+        radiusTiles: cityCrowdRadiusTiles,
+        maxVolume: CITY_CROWD_AMBIENT_VOLUME,
       });
     }
     const smithy = this.gameMap.buildingEntries.find((e) => e.name === RUSTY_ANVIL_BUILDING_NAME);
