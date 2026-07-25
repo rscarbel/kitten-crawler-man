@@ -1,6 +1,6 @@
 # Market Square Vendors — Refactor Plan
 
-**Status:** planned, not started
+**Status:** implemented — see `market-square-vendors-progress.md` for what landed and where it deviated
 **Audience:** implementing agent (Sonnet). Read `CLAUDE.md` first — every rule there applies (no `as`, no `!`, no `any`, no magic numbers, `src/ui/*` helpers for chrome, comments explain *why*).
 **Skills worth loading:** `game-architecture`, `add-person`, `add-ui`, `add-sound`, `add-system`.
 

@@ -1,12 +1,14 @@
 /**
- * A modal menu of priced services offered by an NPC you're standing in front of:
- * the tavern's drinks, the temple's blessing, the tattooist's ink. Each row is a
- * label, a short description, a price and a Buy button — disabled when the player
- * can't afford it or the service is already spent.
+ * A modal menu of priced things offered by whoever you're standing in front of:
+ * the tavern's drinks, the temple's blessing, the tattooist's ink, a market
+ * stall's stock. Each row is a label, a short description, a price and a Buy
+ * button — disabled when the player can't afford it or the row is unavailable
+ * (already spent, sold out).
  *
- * Unlike `MarketStallPanel`, nothing here goes into the inventory: the panel takes
- * the coins and hands off to the caller's `onPurchase`, which performs the service
- * and returns the line to echo back at the player.
+ * The panel owns the coins; the caller's `onPurchase` owns the effect, whether
+ * that's a service performed on the spot or an item pushed into the inventory. A
+ * handler that can fail (a full inventory) returns `ok: false` and the panel
+ * leaves the player's purse alone — the money moves only when the goods do.
  *
  * Built on the shared `Button`/`Box`/`TextBox` utilities so hover, press, and
  * touch all work: every button is a hit-tested rect, a tap outside the modal
@@ -21,30 +23,48 @@ import { drawButton, BUTTON_PRESETS, type ButtonResult } from './Button';
 import { drawText } from './TextBox';
 import type { Player } from '../Player';
 
-export interface ServiceOption {
-  /** Stable identifier for the service, so a handler can act on a rebuilt row. */
+export interface PricedOption {
+  /** Stable identifier for the row, so a handler can act on a rebuilt menu. */
   key: string;
   label: string;
   price: number;
   desc: string;
-  /** When set, the row is disabled and shows this instead of a price (e.g. "Already inked"). */
+  /** When set, the row is disabled and shows this instead of a price (e.g. "Already inked", "Sold out"). */
   unavailable?: string;
 }
 
-export interface ServiceMenu {
+export interface PricedMenu {
   title: string;
   /** The NPC's opening line, shown until a purchase replaces it with feedback. */
   bark: string;
-  options: ReadonlyArray<ServiceOption>;
+  /**
+   * Who is selling, attributed under the bark on a line of its own. Omit where
+   * the room itself is the seller and a name would just repeat the title (the
+   * tavern, the temple, the parlour) — the header shrinks back when absent.
+   */
+  byline?: string;
+  options: ReadonlyArray<PricedOption>;
 }
 
-/** Performs the purchased service. Coins are already deducted; returns the line to echo. */
-export type ServicePurchaseHandler = (option: ServiceOption, player: Player) => string;
+/** What a handler did: whether the purchase went through, and the line to echo. */
+export interface PricedPurchaseResult {
+  ok: boolean;
+  line: string;
+}
+
+/**
+ * Performs the purchase. Runs *before* the coins are taken, so a handler that
+ * can't deliver (a full inventory) can reject with `ok: false` and leave the
+ * player uncharged.
+ */
+export type PricedPurchaseHandler = (option: PricedOption, player: Player) => PricedPurchaseResult;
 
 /** Builds the current menu. Re-run after every purchase so availability stays honest. */
-export type ServiceMenuBuilder = () => ServiceMenu;
+export type PricedMenuBuilder = () => PricedMenu;
 
-const PANEL_WIDTH = 400;
+const PANEL_MAX_WIDTH = 400;
+/** Gap kept between the panel and the screen edges on phones narrower than the ideal width. */
+const PANEL_SIDE_MARGIN = 10;
 const PANEL_PADDING = 18;
 const TITLE_SIZE = 17;
 const BARK_SIZE = 11;
@@ -55,33 +75,42 @@ const OPTION_NAME_SIZE = 13;
 const OPTION_DESC_SIZE = 10;
 const OPTION_DESC_GAP = 16;
 const PRICE_SIZE = 12;
+const BYLINE_SIZE = 11;
+const BYLINE_GAP = 5;
+const BYLINE_LINE_HEIGHT = BYLINE_SIZE + BYLINE_GAP;
 
 const BUY_BTN_WIDTH = 78;
 const BUY_BTN_HEIGHT = 30;
 const BUY_BTN_Y_LIFT = 2;
 const BUY_LABEL_SIZE = 12;
 const CLOSE_BTN_WIDTH = 120;
+/** Narrower on touch, where the label is bare "Close" and the purse shares the footer. */
+const CLOSE_BTN_MOBILE_WIDTH = 88;
 const CLOSE_BTN_HEIGHT = 30;
 const CLOSE_LABEL_SIZE = 11;
 const BARK_GAP = 6;
 const PRICE_BTN_GAP = 12;
 const ROW_TEXT_TOP_PAD = 2;
-/**
- * Width the label/description column gets before word-wrap kicks in — the row's
- * full width minus the price and Buy button on the right. Without the cap, a long
- * description runs underneath the button.
- */
-const OPTION_TEXT_MAX_WIDTH = PANEL_WIDTH - PANEL_PADDING * 2 - BUY_BTN_WIDTH - PRICE_BTN_GAP * 2;
 
 const FEEDBACK_FRAMES = 110;
 const FEEDBACK_FADE_FRAMES = 25;
 const PANEL_RADIUS = 8;
 const OVERLAY_ALPHA = 0.55;
 
-export class ServiceMenuPanel {
-  private menu: ServiceMenu | null = null;
-  private buildMenu: ServiceMenuBuilder | null = null;
-  private onPurchase: ServicePurchaseHandler | null = null;
+/**
+ * Width the label/description column gets before word-wrap kicks in — the row's
+ * content width minus the price and Buy button on the right. Without the cap, a
+ * long description runs underneath the button.
+ */
+function optionTextMaxWidth(contentWidth: number): number {
+  return contentWidth - BUY_BTN_WIDTH - PRICE_BTN_GAP * 2;
+}
+
+export class PricedMenuPanel {
+  private menu: PricedMenu | null = null;
+  private buildMenu: PricedMenuBuilder | null = null;
+  private onPurchase: PricedPurchaseHandler | null = null;
+  private onBlocked: (() => void) | null = null;
   private feedback = '';
   private feedbackTimer = 0;
   private buyButtons: ButtonResult[] = [];
@@ -92,10 +121,20 @@ export class ServiceMenuPanel {
     return this.menu !== null;
   }
 
-  open(buildMenu: ServiceMenuBuilder, onPurchase: ServicePurchaseHandler): void {
+  /**
+   * @param onBlocked Called when the player taps a Buy button the panel refuses
+   *   — unaffordable or unavailable. A disabled button is otherwise silent, so
+   *   callers that want an audible "no" pass one; the rest stay quiet.
+   */
+  open(
+    buildMenu: PricedMenuBuilder,
+    onPurchase: PricedPurchaseHandler,
+    onBlocked?: () => void,
+  ): void {
     this.buildMenu = buildMenu;
     this.menu = buildMenu();
     this.onPurchase = onPurchase;
+    this.onBlocked = onBlocked ?? null;
     this.feedbackTimer = 0;
   }
 
@@ -103,6 +142,7 @@ export class ServiceMenuPanel {
     this.menu = null;
     this.buildMenu = null;
     this.onPurchase = null;
+    this.onBlocked = null;
     this.buyButtons = [];
     this.closeButton = null;
     this.modalContains = null;
@@ -116,16 +156,21 @@ export class ServiceMenuPanel {
     const menu = this.menu;
     if (menu === null) return;
 
-    const height = HEADER_HEIGHT + menu.options.length * ROW_HEIGHT + FOOTER_HEIGHT;
+    // A byline claims its own line under the bark, so the header grows for it
+    // rather than the name being squeezed alongside the centred title, where a
+    // long name and a long title would silently overlap.
+    const headerHeight = HEADER_HEIGHT + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
+    const height = headerHeight + menu.options.length * ROW_HEIGHT + FOOTER_HEIGHT;
     drawOverlay(ctx, {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
       alpha: OVERLAY_ALPHA,
     });
+    const panelWidth = Math.min(PANEL_MAX_WIDTH, canvas.width - PANEL_SIDE_MARGIN * 2);
     const modal = drawModal(ctx, {
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
-      width: PANEL_WIDTH,
+      width: panelWidth,
       height,
       radius: PANEL_RADIUS,
       shadow: true,
@@ -133,10 +178,17 @@ export class ServiceMenuPanel {
     });
     this.modalContains = (px, py) => modal.contains(px, py);
 
-    const centerX = modal.x + PANEL_WIDTH / 2;
+    // Everything inside lays out against the *drawn* width, never PANEL_MAX_WIDTH:
+    // on a phone narrower than the ideal width the panel shrinks, and measuring
+    // from the constant pushes the prices and Buy buttons past the screen edge.
+    const contentLeft = modal.x + PANEL_PADDING;
+    const contentRight = modal.x + modal.width - PANEL_PADDING;
+    const contentWidth = modal.width - PANEL_PADDING * 2;
+    const centerX = modal.x + modal.width / 2;
+
     drawText(ctx, menu.title, {
       x: centerX,
-      y: modal.inner.y + PANEL_PADDING,
+      y: modal.y + PANEL_PADDING,
       size: TITLE_SIZE,
       bold: true,
       color: '#f0d870',
@@ -145,33 +197,37 @@ export class ServiceMenuPanel {
     });
     drawText(ctx, this.feedbackLine(menu), {
       x: centerX,
-      y: modal.inner.y + PANEL_PADDING + TITLE_SIZE + BARK_GAP,
+      y: modal.y + PANEL_PADDING + TITLE_SIZE + BARK_GAP,
       size: BARK_SIZE,
       color: this.feedbackColor(),
       align: 'center',
     });
-    drawText(ctx, `Coins: ${active.coins}`, {
-      x: modal.x + PANEL_WIDTH - PANEL_PADDING,
-      y: modal.inner.y + PANEL_PADDING,
-      size: PRICE_SIZE,
-      bold: true,
-      color: '#d4c070',
-      align: 'right',
-    });
+    if (menu.byline !== undefined) {
+      // `x` is the box's left edge whenever `width` is set — `drawText` centres
+      // within the box, so passing `centerX` here would shift it half a panel right.
+      drawText(ctx, `— ${menu.byline}`, {
+        x: contentLeft,
+        y: modal.y + PANEL_PADDING + TITLE_SIZE + BARK_GAP + BARK_SIZE + BYLINE_GAP,
+        size: BYLINE_SIZE,
+        color: '#8f7f5a',
+        align: 'center',
+        width: contentWidth,
+      });
+    }
 
     this.buyButtons = [];
-    const left = modal.inner.x + PANEL_PADDING;
-    let rowY = modal.inner.y + HEADER_HEIGHT;
+    let rowY = modal.y + headerHeight;
     for (const option of menu.options) {
-      this.renderRow(ctx, option, active, left, rowY, modal.x + PANEL_WIDTH - PANEL_PADDING);
+      this.renderRow(ctx, option, active, contentLeft, rowY, contentRight, contentWidth);
       rowY += ROW_HEIGHT;
     }
 
+    const footerCenterY = modal.y + height - FOOTER_HEIGHT / 2;
     const closeHint = platform.isMobile ? 'Close' : 'Close  [Space / Esc]';
     this.closeButton = drawButton(ctx, {
       x: centerX,
-      y: modal.y + height - FOOTER_HEIGHT / 2,
-      width: CLOSE_BTN_WIDTH,
+      y: footerCenterY,
+      width: platform.isMobile ? CLOSE_BTN_MOBILE_WIDTH : CLOSE_BTN_WIDTH,
       height: CLOSE_BTN_HEIGHT,
       alignX: 'center',
       alignY: 'middle',
@@ -179,15 +235,26 @@ export class ServiceMenuPanel {
       labelSize: CLOSE_LABEL_SIZE,
       ...BUTTON_PRESETS.primary,
     });
+    // The purse shares the footer rather than the header: a centred title on a
+    // narrow phone panel grows into the top-right corner and hides it.
+    drawText(ctx, `Coins: ${active.coins}`, {
+      x: contentRight,
+      y: footerCenterY - PRICE_SIZE / 2,
+      size: PRICE_SIZE,
+      bold: true,
+      color: '#d4c070',
+      align: 'right',
+    });
   }
 
   private renderRow(
     ctx: CanvasRenderingContext2D,
-    option: ServiceOption,
+    option: PricedOption,
     active: Player,
     left: number,
     rowY: number,
     right: number,
+    contentWidth: number,
   ): void {
     drawText(ctx, option.label, {
       x: left,
@@ -201,7 +268,7 @@ export class ServiceMenuPanel {
       y: rowY + OPTION_DESC_GAP,
       size: OPTION_DESC_SIZE,
       color: '#94a3b8',
-      width: OPTION_TEXT_MAX_WIDTH,
+      width: optionTextMaxWidth(contentWidth),
     });
 
     const canAfford = active.coins >= option.price;
@@ -256,17 +323,23 @@ export class ServiceMenuPanel {
     return true;
   }
 
-  private tryBuy(option: ServiceOption, active: Player): void {
+  private tryBuy(option: PricedOption, active: Player): void {
     const purchase = this.onPurchase;
     if (purchase === null) return;
-    if (option.unavailable !== undefined) return;
-    if (active.coins < option.price) return;
-    active.coins -= option.price;
-    const line = purchase(option, active);
+    if (option.unavailable !== undefined || active.coins < option.price) {
+      this.onBlocked?.();
+      return;
+    }
+    // Deduct only on success: a stall handler can refuse a sale it can't deliver
+    // (no room in the inventory), and the player must not be charged for goods
+    // they never receive.
+    const result = purchase(option, active);
+    if (result.ok) active.coins -= option.price;
     // A purchase can change what's still on offer — the last tattoo, the last
-    // wound worth healing — so the rows are rebuilt before the next frame draws.
+    // wound worth healing, the last unit in stock — so the rows are rebuilt
+    // before the next frame draws.
     this.menu = this.buildMenu?.() ?? this.menu;
-    this.showFeedback(line);
+    this.showFeedback(result.line);
   }
 
   private showFeedback(msg: string): void {
@@ -274,7 +347,7 @@ export class ServiceMenuPanel {
     this.feedbackTimer = FEEDBACK_FRAMES;
   }
 
-  private feedbackLine(menu: ServiceMenu): string {
+  private feedbackLine(menu: PricedMenu): string {
     return this.feedbackTimer > 0 ? this.feedback : menu.bark;
   }
 

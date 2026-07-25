@@ -1,13 +1,13 @@
 /**
  * The tavern round. Talking to a barkeep opens a short drink menu: a few coins
  * for something served on the spot rather than sold as an item the way the market
- * stalls do. Pure data + effect application here; `ServiceMenuPanel` owns the UI
+ * stalls do. Pure data + effect application here; `PricedMenuPanel` owns the UI
  * and `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import { makeDrunk } from '../core/StatusEffect';
 import type { Player } from '../Player';
-import type { ServiceMenu, ServiceOption, ServicePurchaseHandler } from '../ui/ServiceMenuPanel';
+import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
 
 /** What a drink does to whoever downs it. */
 type DrinkEffect = 'drunk' | 'drunk_and_heal' | 'speed';
@@ -18,7 +18,7 @@ const SPEED_FIZZ_PRICE = 10;
 /** Fraction of max HP a Boozy Milk restores on top of getting you drunk. */
 const BOOZY_MILK_HEAL_FRACTION = 0.25;
 
-const DRINKS: ReadonlyArray<ServiceOption & { effect: DrinkEffect }> = [
+const DRINKS: ReadonlyArray<PricedOption & { effect: DrinkEffect }> = [
   {
     key: 'ale',
     label: 'Mug of Ale',
@@ -67,7 +67,7 @@ function pourDrink(effect: DrinkEffect, player: Player): void {
 }
 
 /** The drink menu for a tavern. */
-export function buildTavernMenu(title: string, turn: number): ServiceMenu {
+export function buildTavernMenu(title: string, turn: number): PricedMenu {
   return {
     title,
     bark: pubServeLine(turn),
@@ -81,9 +81,9 @@ export function buildTavernMenu(title: string, turn: number): ServiceMenu {
 }
 
 /** Serve whichever drink the player bought and return the barkeep's line. */
-export const serveDrink: ServicePurchaseHandler = (option, player) => {
+export const serveDrink: PricedPurchaseHandler = (option, player) => {
   const drink = DRINKS.find((d) => d.key === option.key);
-  if (drink === undefined) return 'The barkeep shrugs.';
+  if (drink === undefined) return { ok: false, line: 'The barkeep shrugs.' };
   pourDrink(drink.effect, player);
-  return `${option.label} — down the hatch!`;
+  return { ok: true, line: `${option.label} — down the hatch!` };
 };

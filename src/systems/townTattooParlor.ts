@@ -3,12 +3,12 @@
  * permanent, and strictly one per character (`Player.tattooStat`), so the choice
  * of which stat it raises is the whole decision.
  *
- * Pure data + line selection; `ServiceMenuPanel` owns the UI and
+ * Pure data + line selection; `PricedMenuPanel` owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { PermanentStat, Player } from '../Player';
-import type { ServiceMenu, ServiceOption, ServicePurchaseHandler } from '../ui/ServiceMenuPanel';
+import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
 
 const TATTOO_PRICE = 100;
 /** Stat points a tattoo grants. Small, but it never goes away. */
@@ -53,13 +53,13 @@ function tattooistBark(turn: number): string {
 }
 
 /** The tattoo menu for `player` — every row disabled once they already carry a mark. */
-export function buildTattooMenu(player: Player, turn: number): ServiceMenu {
+export function buildTattooMenu(player: Player, turn: number): PricedMenu {
   const existing = player.tattooStat;
   return {
     title: "Signet's Ink",
     bark: tattooistBark(turn),
     options: TATTOO_DESIGNS.map((design) => {
-      const option: ServiceOption = {
+      const option: PricedOption = {
         key: design.key,
         label: design.label,
         price: TATTOO_PRICE,
@@ -74,10 +74,10 @@ export function buildTattooMenu(player: Player, turn: number): ServiceMenu {
 }
 
 /** Ink the chosen design onto the buyer and return the tattooist's line. */
-export const inkTattoo: ServicePurchaseHandler = (option, buyer) => {
+export const inkTattoo: PricedPurchaseHandler = (option, buyer) => {
   const design = TATTOO_DESIGNS.find((d) => d.key === option.key);
-  if (design === undefined) return 'The tattooist frowns at the design.';
+  if (design === undefined) return { ok: false, line: 'The tattooist frowns at the design.' };
   buyer.applyPermanentStat(design.stat, TATTOO_STAT_POINTS);
   buyer.tattooStat = design.stat;
-  return `${option.label} is yours. It’s already moving.`;
+  return { ok: true, line: `${option.label} is yours. It’s already moving.` };
 };

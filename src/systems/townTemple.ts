@@ -7,12 +7,12 @@
  * hurt: an unhurt party has nothing to buy, which is a gate that survives walking
  * out of the building and back in, unlike a scene-local timer would.
  *
- * Pure data + line selection; `ServiceMenuPanel` owns the UI and
+ * Pure data + line selection; `PricedMenuPanel` owns the UI and
  * `BuildingInteriorScene` owns the sounds.
  */
 
 import type { Player } from '../Player';
-import type { ServiceMenu, ServiceOption } from '../ui/ServiceMenuPanel';
+import type { PricedMenu, PricedOption } from '../ui/PricedMenuPanel';
 
 const BLESSING_PRICE = 25;
 
@@ -40,8 +40,8 @@ function graceLine(turn: number): string {
 }
 
 /** The blessing menu for `party`, disabled while nobody in it is wounded. */
-export function buildBlessingMenu(party: ReadonlyArray<Player>, turn: number): ServiceMenu {
-  const option: ServiceOption = {
+export function buildBlessingMenu(party: ReadonlyArray<Player>, turn: number): PricedMenu {
+  const option: PricedOption = {
     key: 'blessing',
     label: 'Blessing of the Sky',
     price: BLESSING_PRICE,

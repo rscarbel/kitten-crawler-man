@@ -60,7 +60,7 @@ import {
 import { buildTavernMenu, serveDrink } from '../systems/townPub';
 import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
 import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
-import { ServiceMenuPanel, type ServicePurchaseHandler } from '../ui/ServiceMenuPanel';
+import { PricedMenuPanel, type PricedPurchaseHandler } from '../ui/PricedMenuPanel';
 import {
   setButtonMouseState,
   setButtonAudio,
@@ -237,7 +237,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly occupants: InteriorOccupantSystem | null;
   private readonly ambientSound: AmbientSoundSystem | null;
   /** Priced-service menu for this room's NPC (drinks, blessing, ink); null where none is offered. */
-  private readonly servicePanel: ServiceMenuPanel | null;
+  private readonly servicePanel: PricedMenuPanel | null;
   // Talk surface for ambient occupants; null when there are no occupants or no audio.
   private readonly citizenDialog: CitizenDialog | null;
   private gameOver = false;
@@ -362,7 +362,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.ambientSound =
       this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
 
-    this.servicePanel = SERVICE_NPC_ROLES.has(entry.name) ? new ServiceMenuPanel() : null;
+    this.servicePanel = SERVICE_NPC_ROLES.has(entry.name) ? new PricedMenuPanel() : null;
   }
 
   /**
@@ -1063,26 +1063,27 @@ export class BuildingInteriorScene extends GameplayScene {
    * drift apart.
    */
   private openServiceMenu(
-    panel: ServiceMenuPanel,
+    panel: PricedMenuPanel,
     turn: number,
     player: ReturnType<BuildingInteriorScene['active']>,
   ): void {
     const party = [this.human, this.cat];
     // Every service confirms with the same purchase chime; the tavern layers its
     // pour underneath so a round sounds like a round.
-    const confirmed = (handler: ServicePurchaseHandler, pour: boolean): ServicePurchaseHandler => {
+    const confirmed = (handler: PricedPurchaseHandler, pour: boolean): PricedPurchaseHandler => {
       return (option, buyer) => {
-        const line = handler(option, buyer);
+        const result = handler(option, buyer);
+        if (!result.ok) return result;
         if (pour) this.audio?.play('ambient_pouring_a_drink');
         this.audio?.play('purchase_success');
-        return line;
+        return result;
       };
     };
 
     if (this.entry.name === 'Temple of the Sky') {
       panel.open(
         () => buildBlessingMenu(party, turn),
-        confirmed(() => grantBlessing(party, turn), false),
+        confirmed(() => ({ ok: true, line: grantBlessing(party, turn) }), false),
       );
       return;
     }

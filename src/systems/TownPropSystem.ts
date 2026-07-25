@@ -22,20 +22,14 @@
 
 import { TILE_SIZE } from '../core/constants';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
+import { PARCHMENT, WOOD, WOOD_DARK } from '../sprites/townPalette';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { MARKET_STALLS, type StallStock } from './townMarket';
+import { tileKey } from './tileKey';
 import type { GameMap } from '../map/GameMap';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem } from './GameSystem';
-
-/** A world object drawn in the scene's Y-sorted entity pass. */
-export interface TownPropRenderable {
-  /** World-pixel top-left, for camera culling and depth sorting. */
-  x: number;
-  y: number;
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
-}
+import type { TownPropRenderable } from './townPropRenderable';
 
 // How close (tile centre to tile centre) the player must be to a prop to act on
 // it. Just over a diagonal step so standing on any adjacent tile counts.
@@ -62,9 +56,6 @@ const FOUNTAIN_FLANK_ROW_OFFSET = 5;
 const BENCH_WEST_COL_OFFSET = 3;
 const BENCH_EAST_COL_OFFSET = 7;
 
-// Market stalls flank the square on its west and east sides, on the centre row.
-const STALL_FLANK_OFFSET = 8;
-
 // The fortune teller sits in the square's southwest, clear of the tower (north),
 // the board (due south), the stalls (flanks), and the fountain (southeast).
 const FORTUNE_DX = -4;
@@ -87,15 +78,9 @@ interface HealSpot {
   tiles: TileXY[];
 }
 
-interface Stall {
-  tile: TileXY;
-  stock: StallStock;
-}
-
 export class TownPropSystem implements GameSystem {
   private readonly healSpots: HealSpot[] = [];
   private readonly renderables: TownPropRenderable[] = [];
-  private readonly stalls: Stall[] = [];
   private board: NoticeBoardProp | null = null;
   private fortuneTile: TileXY | null = null;
   private healCooldown = 0;
@@ -104,14 +89,18 @@ export class TownPropSystem implements GameSystem {
   constructor(
     private readonly gameMap: GameMap,
     private readonly onReadBoard: () => void,
-    private readonly onBrowseStall: (stock: StallStock) => void,
     private readonly onConsultFortune: () => void,
     // An accessor, not the manager itself: props are placed before the scene's
     // audio field is assigned, so the sound source is resolved lazily at use time.
     private readonly getAudio: () => AudioManager | null,
+    /**
+     * Tiles another system has already claimed — the market's stall footprints.
+     * Needed because prop placement tests `isWalkableIgnoringPermanent`, which by
+     * design ignores the permanent blocks those systems set.
+     */
+    private readonly claimedElsewhere: ReadonlySet<string> = new Set(),
   ) {
     this.placeBoard();
-    this.placeStalls();
     this.placeFortuneTeller();
     this.gatherWaterSpots();
     this.placeBenches();
@@ -135,11 +124,6 @@ export class TownPropSystem implements GameSystem {
       this.onReadBoard();
       return true;
     }
-    const stall = this.nearestStall(active);
-    if (stall !== null) {
-      this.onBrowseStall(stall.stock);
-      return true;
-    }
     if (this.fortuneTile !== null && this.tileWithinReach(active, this.fortuneTile)) {
       this.onConsultFortune();
       return true;
@@ -158,11 +142,6 @@ export class TownPropSystem implements GameSystem {
   renderPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     if (this.board !== null && this.tileWithinReach(active, this.board.tile)) {
       this.drawPromptAt(ctx, this.board.tile, camX, camY, 'Read');
-      return;
-    }
-    const stall = this.nearestStall(active);
-    if (stall !== null) {
-      this.drawPromptAt(ctx, stall.tile, camX, camY, 'Browse');
       return;
     }
     if (this.fortuneTile !== null && this.tileWithinReach(active, this.fortuneTile)) {
@@ -236,29 +215,6 @@ export class TownPropSystem implements GameSystem {
     this.renderables.push(this.board);
   }
 
-  private placeStalls(): void {
-    const center = Math.floor(this.gameMap.gridSize / 2);
-    const preferred: TileXY[] = [
-      { x: center - STALL_FLANK_OFFSET, y: center },
-      { x: center + STALL_FLANK_OFFSET, y: center },
-    ];
-    const count = Math.min(MARKET_STALLS.length, preferred.length);
-    for (let i = 0; i < count; i++) {
-      const tile = this.findFreeTile(preferred[i]);
-      if (tile === null) continue;
-      this.reserve(tile);
-      this.stalls.push({ tile, stock: MARKET_STALLS[i] });
-      this.renderables.push(new StallProp(tile, i));
-    }
-  }
-
-  private nearestStall(active: Player): Stall | null {
-    for (const stall of this.stalls) {
-      if (this.tileWithinReach(active, stall.tile)) return stall;
-    }
-    return null;
-  }
-
   private placeFortuneTeller(): void {
     const center = Math.floor(this.gameMap.gridSize / 2);
     const tile = this.findFreeTile({ x: center + FORTUNE_DX, y: center + FORTUNE_DY });
@@ -312,7 +268,8 @@ export class TownPropSystem implements GameSystem {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
           const tx = preferred.x + dx;
           const ty = preferred.y + dy;
-          if (this.occupied.has(tileKey(tx, ty))) continue;
+          const key = tileKey(tx, ty);
+          if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
           if (this.gameMap.isWalkableIgnoringPermanent(tx, ty)) return { x: tx, y: ty };
         }
       }
@@ -349,13 +306,6 @@ export class TownPropSystem implements GameSystem {
   }
 }
 
-function tileKey(tx: number, ty: number): string {
-  return `${tx},${ty}`;
-}
-
-const WOOD = '#6b4a2b';
-const WOOD_DARK = '#4a3018';
-const PARCHMENT = '#e8d9a0';
 const HEADER = '#8a5a2b';
 
 // Notice-board sprite geometry, drawn with primitives (no art asset). The board
@@ -481,104 +431,6 @@ class BenchProp implements TownPropRenderable {
       BENCH_LEG_WIDTH,
       BENCH_LEG_HEIGHT,
     );
-  }
-}
-
-// Market-stall sprite geometry: a counter under a striped awning on two posts,
-// with a vendor peeking over the counter and goods on top. The stall stands on
-// its tile and rises upward; the tile is the foot for Y-sorting.
-const STALL_OVERHANG = 4;
-const STALL_AWNING_TOP_FRACTION = 0.75;
-const STALL_AWNING_HEIGHT = 8;
-const STALL_STRIPE_WIDTH = 5;
-const STALL_POST_WIDTH = 3;
-const STALL_COUNTER_TOP_FRACTION = 0.55;
-const STALL_COUNTER_HEIGHT = 6;
-const STALL_VENDOR_HEAD_RADIUS = 3;
-const STALL_VENDOR_BODY_WIDTH = 8;
-const STALL_VENDOR_BODY_HEIGHT = 7;
-const STALL_GOOD_SIZE = 3;
-const STALL_GOOD_GAP = 5;
-const STALL_GOOD_COUNT = 3;
-
-const STALL_AWNING_COLORS = ['#3f8f4f', '#b2402f'] as const;
-const STALL_AWNING_STRIPE = '#f0e8d0';
-const STALL_VENDOR_SKIN = '#c98a5a';
-const STALL_VENDOR_BODY = '#5a4a7a';
-const STALL_GOOD_COLORS = ['#e0b040', '#c05050', '#60a0c0'] as const;
-
-class StallProp implements TownPropRenderable {
-  constructor(
-    readonly tile: TileXY,
-    private readonly variant: number,
-  ) {}
-
-  get x(): number {
-    return this.tile.x * TILE_SIZE;
-  }
-
-  get y(): number {
-    return this.tile.y * TILE_SIZE;
-  }
-
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const sx = this.tile.x * tileSize - camX;
-    const sy = this.tile.y * tileSize - camY;
-    const left = sx - STALL_OVERHANG;
-    const width = tileSize + STALL_OVERHANG * 2;
-    const counterTop = sy + tileSize * STALL_COUNTER_TOP_FRACTION;
-    const awningTop = sy - tileSize * STALL_AWNING_TOP_FRACTION;
-
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(left + STALL_OVERHANG, awningTop, STALL_POST_WIDTH, counterTop - awningTop);
-    ctx.fillRect(
-      left + width - STALL_OVERHANG - STALL_POST_WIDTH,
-      awningTop,
-      STALL_POST_WIDTH,
-      counterTop - awningTop,
-    );
-
-    const vendorCx = sx + tileSize / 2;
-    ctx.fillStyle = STALL_VENDOR_SKIN;
-    ctx.beginPath();
-    ctx.arc(
-      vendorCx,
-      counterTop - STALL_VENDOR_BODY_HEIGHT - STALL_VENDOR_HEAD_RADIUS,
-      STALL_VENDOR_HEAD_RADIUS,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    ctx.fillStyle = STALL_VENDOR_BODY;
-    ctx.fillRect(
-      vendorCx - STALL_VENDOR_BODY_WIDTH / 2,
-      counterTop - STALL_VENDOR_BODY_HEIGHT,
-      STALL_VENDOR_BODY_WIDTH,
-      STALL_VENDOR_BODY_HEIGHT,
-    );
-
-    ctx.fillStyle = WOOD;
-    ctx.fillRect(left, counterTop, width, STALL_COUNTER_HEIGHT);
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(left, counterTop + STALL_COUNTER_HEIGHT - 1, width, 1);
-
-    const goodsRowY = counterTop - STALL_GOOD_SIZE;
-    const goodsStartX = vendorCx - ((STALL_GOOD_COUNT - 1) * STALL_GOOD_GAP) / 2;
-    for (let i = 0; i < STALL_GOOD_COUNT; i++) {
-      ctx.fillStyle = STALL_GOOD_COLORS[i % STALL_GOOD_COLORS.length];
-      ctx.fillRect(goodsStartX + i * STALL_GOOD_GAP, goodsRowY, STALL_GOOD_SIZE, STALL_GOOD_SIZE);
-    }
-
-    const awningColor = STALL_AWNING_COLORS[this.variant % STALL_AWNING_COLORS.length];
-    let stripeX = left;
-    let stripe = 0;
-    while (stripeX < left + width) {
-      const w = Math.min(STALL_STRIPE_WIDTH, left + width - stripeX);
-      ctx.fillStyle = stripe % 2 === 0 ? awningColor : STALL_AWNING_STRIPE;
-      ctx.fillRect(stripeX, awningTop, w, STALL_AWNING_HEIGHT);
-      stripeX += STALL_STRIPE_WIDTH;
-      stripe++;
-    }
   }
 }
 

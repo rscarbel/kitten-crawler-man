@@ -30,7 +30,7 @@ import type { MongoSystem } from './MongoSystem';
 import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
-import type { TownPropRenderable } from './TownPropSystem';
+import type { TownPropRenderable } from './townPropRenderable';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -55,6 +55,15 @@ const TREE_SORT_DEPTH_OFFSET = 100000;
 
 /** Y-sort offset to account for sprite foot position. */
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
+
+/**
+ * Town props are billboards anchored by one corner but drawn well outside their
+ * own tile — a market stall is two tiles wide and its canopy rises three tiles
+ * above its Y-sort edge. A one-tile margin would pop those off at the screen
+ * edge while part of them was still visible.
+ */
+const PROP_CULL_MARGIN_TILES = 4;
+const PROP_CULL_MARGIN = TILE_SIZE * PROP_CULL_MARGIN_TILES;
 
 /** Visibility inner radius in tiles. */
 const VISIBILITY_INNER_TILES = 30;
@@ -262,10 +271,10 @@ export class RenderPipeline {
     }
 
     if (townProps !== undefined) {
-      const minX = camX - TILE_SIZE;
-      const minY = camY - TILE_SIZE;
-      const maxX = camX + canvas.width + TILE_SIZE;
-      const maxY = camY + canvas.height + TILE_SIZE;
+      const minX = camX - PROP_CULL_MARGIN;
+      const minY = camY - PROP_CULL_MARGIN;
+      const maxX = camX + canvas.width + PROP_CULL_MARGIN;
+      const maxY = camY + canvas.height + PROP_CULL_MARGIN;
       for (const prop of townProps) {
         if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
         const e = this._getEntry();

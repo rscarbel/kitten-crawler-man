@@ -40,16 +40,18 @@ import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import { TownPropSystem } from '../systems/TownPropSystem';
+import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
+import type { TownPropRenderable } from '../systems/townPropRenderable';
+import { createMarketStock, type MarketStock } from '../systems/market/MarketStock';
 import {
   buildCitizenConversation,
   roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
 import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
-import type { StallStock } from '../systems/townMarket';
 import { CitizenDialog } from '../ui/CitizenDialog';
 import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
-import { MarketStallPanel } from '../ui/MarketStallPanel';
+import { PricedMenuPanel } from '../ui/PricedMenuPanel';
 import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { JuicerRoomSystem } from '../systems/JuicerRoomSystem';
@@ -194,6 +196,8 @@ export interface DungeonSceneOptions {
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
   clubMembership?: ClubMembership;
+  /** Market-stall stock, threaded by reference so a shop trip can't restock a stall. */
+  marketStock?: MarketStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
   mercenaryRoster?: MercenaryRoster;
   /** Companion combat stance, threaded by reference so passive/aggressive survives building/floor transitions. */
@@ -398,11 +402,17 @@ export class DungeonScene extends GameplayScene {
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
   private townProps: TownPropSystem | null = null;
+  private market: MarketSystem | null = null;
+  /**
+   * Every town fixture in one Y-sort list. Built once, since both owning systems
+   * fill their prop arrays in their constructors and never add to them.
+   */
+  private townPropRenderables: ReadonlyArray<TownPropRenderable> | null = null;
   private citizenDialog: CitizenDialog | null = null;
   /** Citizen currently frozen mid-conversation; unfrozen once `citizenDialog` closes. */
   private citizenDialogTarget: Townsperson | null = null;
   private noticeBoard: NoticeBoardPanel | null = null;
-  private marketStall: MarketStallPanel | null = null;
+  private marketPanel: PricedMenuPanel | null = null;
   private fortuneTeller: FortuneTellerPanel | null = null;
   private juicerRoom: JuicerRoomSystem;
   private arenaRoom: ArenaRoomSystem;
@@ -418,6 +428,7 @@ export class DungeonScene extends GameplayScene {
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
+  private readonly marketStock: MarketStock;
   private readonly mercenaryRoster: MercenaryRoster;
   /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
   private readonly companionStance: CompanionStanceState;
@@ -651,6 +662,7 @@ export class DungeonScene extends GameplayScene {
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
+    this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
@@ -827,6 +839,7 @@ export class DungeonScene extends GameplayScene {
                   murderQuestProgress: this.murderQuestProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
+                  marketStock: this.marketStock,
                   mercenaryRoster: this.mercenaryRoster,
                   godModeState: this.godModeState,
                   companionStance: this.companionStance,
@@ -849,17 +862,26 @@ export class DungeonScene extends GameplayScene {
         );
       });
       this.noticeBoard = new NoticeBoardPanel();
-      this.marketStall = new MarketStallPanel();
+      this.marketPanel = new PricedMenuPanel();
       this.fortuneTeller = new FortuneTellerPanel();
-      // Built before TownLifeSystem so props' blocked tiles are excluded from the
-      // citizen spawn candidates.
+      // Both built before TownLifeSystem so their blocked tiles are excluded from
+      // the citizen spawn candidates — and the market first, so the other props
+      // can steer clear of the stall footprints it claims.
+      this.market = new MarketSystem(
+        this.gameMap,
+        this.marketStock,
+        (browse) => this.openMarketStall(browse),
+        () => this.marketPanel?.isOpen === true,
+        () => this.audio,
+      );
       this.townProps = new TownPropSystem(
         this.gameMap,
         () => this.openNoticeBoard(),
-        (stock) => this.openMarketStall(stock),
         () => this.openFortuneTeller(),
         () => this.audio,
+        this.market.reservedTiles,
       );
+      this.townPropRenderables = [...this.market.props, ...this.townProps.props];
       this.townLife = new TownLifeSystem(this.gameMap);
     }
 
@@ -1397,7 +1419,7 @@ export class DungeonScene extends GameplayScene {
         this.murderQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
         this.noticeBoard?.isOpen === true ||
-        this.marketStall?.isOpen === true ||
+        this.marketPanel?.isOpen === true ||
         this.fortuneTeller?.isOpen === true ||
         this.playerChat.isOpen,
       isGameOver: () => this.gameOver,
@@ -1419,8 +1441,8 @@ export class DungeonScene extends GameplayScene {
           this.noticeBoard.close();
           return true;
         }
-        if (this.marketStall?.isOpen === true) {
-          this.marketStall.close();
+        if (this.marketPanel?.isOpen === true) {
+          this.marketPanel.close();
           return true;
         }
         if (this.fortuneTeller?.isOpen === true) {
@@ -1471,8 +1493,8 @@ export class DungeonScene extends GameplayScene {
           this.audio?.play('menu_click');
           return true;
         }
-        if (this.marketStall?.isOpen === true) {
-          this.marketStall.close();
+        if (this.marketPanel?.isOpen === true) {
+          this.marketPanel.close();
           this.audio?.play('menu_click');
           return true;
         }
@@ -2020,6 +2042,7 @@ export class DungeonScene extends GameplayScene {
         murderQuestProgress: this.murderQuestProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
+        marketStock: this.marketStock,
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
@@ -2069,10 +2092,10 @@ export class DungeonScene extends GameplayScene {
     this.audio?.play('menu_open');
   }
 
-  /** Opens a market stall's buy panel with the given stock. */
-  private openMarketStall(stock: StallStock): void {
-    if (this.marketStall === null) return;
-    this.marketStall.open(stock);
+  /** Opens a market stall's buy panel on the rows the market system built. */
+  private openMarketStall(browse: MarketBrowse): void {
+    if (this.marketPanel === null) return;
+    this.marketPanel.open(browse.buildMenu, browse.purchase, browse.onBlocked);
     this.audio?.play('menu_open');
   }
 
@@ -2085,10 +2108,10 @@ export class DungeonScene extends GameplayScene {
 
   /** Floats a SPACE prompt over the nearest interactive town prop, when actionable. */
   private renderPropPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.townProps === null) return;
+    if (this.townProps === null && this.market === null) return;
     if (
       this.noticeBoard?.isOpen === true ||
-      this.marketStall?.isOpen === true ||
+      this.marketPanel?.isOpen === true ||
       this.fortuneTeller?.isOpen === true
     ) {
       return;
@@ -2098,7 +2121,10 @@ export class DungeonScene extends GameplayScene {
       ? TILE_SIZE * HUMAN_ATTACK_RANGE_TILES
       : TILE_SIZE * CAT_ATTACK_RANGE_TILES;
     if (this.hasNearbyEnemy(active, attackRange)) return;
-    this.townProps.renderPrompt(ctx, camX, camY, active);
+    // Same order as the Space chain in `tryInteract`, so the prompt always names
+    // the thing that press would actually reach.
+    if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
+    this.townProps?.renderPrompt(ctx, camX, camY, active);
   }
 
   /** Floats a "Talk" prompt over the nearest citizen when one is in range and idle. */
@@ -2148,7 +2174,7 @@ export class DungeonScene extends GameplayScene {
     // fresh conversation or falling through to an attack.
     if (this.citizenDialog?.isOpen === true) return;
     if (this.noticeBoard?.isOpen === true) return;
-    if (this.marketStall?.isOpen === true) return;
+    if (this.marketPanel?.isOpen === true) return;
     if (this.fortuneTeller?.isOpen === true) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.restartAtFloorEntry();
@@ -2228,6 +2254,9 @@ export class DungeonScene extends GameplayScene {
         this.arenaRoom.tryPickupNear(active) ||
         this.barriers.tryPickupNear(active)
       ) {
+        return;
+      }
+      if (this.market?.tryInteract(active) === true) {
         return;
       }
       if (this.townProps?.tryInteract(active) === true) {
@@ -2383,8 +2412,8 @@ export class DungeonScene extends GameplayScene {
       this.noticeBoard.handleClick();
       return;
     }
-    if (this.marketStall?.isOpen === true) {
-      this.marketStall.handleClick(mx, my, this.active());
+    if (this.marketPanel?.isOpen === true) {
+      this.marketPanel.handleClick(mx, my, this.active());
       return;
     }
     if (this.fortuneTeller?.isOpen === true) {
@@ -2667,6 +2696,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
       this.townLife?.update();
       this.townProps?.update();
+      this.market?.update();
     }
 
     if (
@@ -2685,12 +2715,12 @@ export class DungeonScene extends GameplayScene {
       this.murderQuest.isDialogOpen ||
       this.citizenDialog?.isOpen === true ||
       this.noticeBoard?.isOpen === true ||
-      this.marketStall?.isOpen === true ||
+      this.marketPanel?.isOpen === true ||
       this.fortuneTeller?.isOpen === true ||
       this.playerChat.isOpen
     ) {
       this.citizenDialog?.update();
-      this.marketStall?.update();
+      this.marketPanel?.update();
       return;
     }
 
@@ -2726,7 +2756,7 @@ export class DungeonScene extends GameplayScene {
       mobs: this.mobs,
       mobGrid: this.mobGrid,
       townsfolk: this.townLife?.people,
-      townProps: this.townProps?.props,
+      townProps: this.townPropRenderables ?? undefined,
       gameOver: this.gameOver,
       pauseMenuOpen: this.pauseMenu.isOpen,
       gore: this.gore,
@@ -2996,7 +3026,7 @@ export class DungeonScene extends GameplayScene {
 
     this.citizenDialog?.render(ctx, canvas);
     this.noticeBoard?.render(ctx, canvas);
-    this.marketStall?.render(ctx, canvas, this.active());
+    this.marketPanel?.render(ctx, canvas, this.active());
     this.fortuneTeller?.render(ctx, canvas, this.active());
 
     if (this.stairwell.menuOpen) {
@@ -3720,7 +3750,7 @@ export class DungeonScene extends GameplayScene {
       // wallet a shop charges) can't leak through underneath the overlay.
       if (
         this.noticeBoard?.isOpen === true ||
-        this.marketStall?.isOpen === true ||
+        this.marketPanel?.isOpen === true ||
         this.fortuneTeller?.isOpen === true
       ) {
         this.handleClick(x, y);
