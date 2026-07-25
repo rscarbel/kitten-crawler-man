@@ -140,5 +140,124 @@
         "frameCount": 10
       }
     }
+  },
+  "ground_overworld": {
+    "path": "environment/tilesets/ground_overworld.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "grass": {
+        "row": 0,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Field grass"
+      },
+      "verge": {
+        "row": 1,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Verge (grass giving way to stone)"
+      },
+      "dirt": {
+        "row": 2,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Packed dirt / alley"
+      },
+      "gravel": {
+        "row": 3,
+        "frameCount": 12,
+        "patchTiles": 2,
+        "label": "Gravel yard"
+      },
+      "lane": {
+        "row": 4,
+        "frameCount": 48,
+        "patchTiles": 4,
+        "label": "Village lane"
+      },
+      "cobble": {
+        "row": 5,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Main street cobble"
+      },
+      "plaza": {
+        "row": 6,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Plaza flagstone"
+      }
+    }
+  },
+  "ground_dungeon": {
+    "path": "environment/tilesets/ground_dungeon.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "dungeon_plain": {
+        "row": 0,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Dungeon stone (calm, no joints)"
+      },
+      "dungeon_flagstone": {
+        "row": 1,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Dungeon flagstone (large slabs)"
+      },
+      "dungeon_worn": {
+        "row": 2,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Dungeon stone, worn & chipped"
+      },
+      "dungeon_mossy": {
+        "row": 3,
+        "frameCount": 48,
+        "patchTiles": 4,
+        "label": "Dungeon stone, mossy"
+      },
+      "dungeon_wet": {
+        "row": 4,
+        "frameCount": 48,
+        "patchTiles": 4,
+        "label": "Dungeon stone, wet"
+      },
+      "dungeon_rubble": {
+        "row": 5,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Collapsed rubble"
+      },
+      "dungeon_wall": {
+        "row": 6,
+        "frameCount": 8,
+        "patchTiles": 2,
+        "label": "Dungeon wall"
+      }
+    }
+  },
+  "ground_masks": {
+    "path": "environment/tilesets/ground_masks.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "corner": {
+        "row": 0,
+        "frameCount": 16,
+        "label": "Corner transition masks"
+      }
+    }
   }
 }

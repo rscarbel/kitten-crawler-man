@@ -4,6 +4,7 @@ import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
 import { PersonPreviewScene } from './scenes/PersonPreviewScene';
+import { TilePreviewScene } from './scenes/TilePreviewScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
 import { aiAdapter } from './ai/AIAdapter';
@@ -41,6 +42,11 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
 
   if (params.get('people') !== null) {
     sceneManager.replace(new PersonPreviewScene(sceneManager));
+    return true;
+  }
+
+  if (params.get('tiles') !== null) {
+    sceneManager.replace(new TilePreviewScene(sceneManager));
     return true;
   }
 

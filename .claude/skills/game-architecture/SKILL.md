@@ -49,6 +49,7 @@ See the `add-system` skill for the recipe.
 | New item / loot / shop stock | `add-item` |
 | New ability / spell | `add-ability` |
 | New level / tile type | `add-level` |
+| New ground/floor texture | `add-ground-tile` |
 | New quest | `add-quest` |
 | New sound / music | `add-sound` |
 | New gameplay mechanic | `add-system` |

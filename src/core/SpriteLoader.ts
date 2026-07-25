@@ -42,6 +42,16 @@ export interface SpriteStateDef {
    * lets an animation's frames span multiple rows of the sprite sheet.
    */
   readonly colsPerRow?: number;
+  /**
+   * For generated ground materials: how many tiles across one seamless patch is.
+   * Frames are ordered variant-major then row-major within the patch, so the
+   * frame for map tile (tx, ty) is
+   * `variant * patchTiles² + (ty mod patchTiles) * patchTiles + (tx mod patchTiles)`.
+   * Absent or 1 means every frame stands alone.
+   */
+  readonly patchTiles?: number;
+  /** Human-readable name, shown by the `?tiles` dev review route. */
+  readonly label?: string;
 }
 
 export interface TileOffset {
