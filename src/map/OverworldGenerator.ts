@@ -86,25 +86,22 @@ export function generateOverworld(size: number): OverworldData {
   // store, barracks and cottages, the south street the club, taverns and inn. Every
   // placement dodges the square (±11), the main road bands (±2 around each axis
   // road) and the tower footprint (x −3..+2, y −36..−16), and every door's road
-  // stub runs clear of its neighbours.
-  const SHEPHERDS_CABIN = { dx: -16, dy: -30 };
-  const SHEPHERDS_LEAN_TO = { dx: -23, dy: -30, w: 6, h: 4 };
-  const BLACKWOOD_LODGE = { dx: 6, dy: -24 };
-  const HILDA_COTTAGE = { dx: -10, dy: -24 };
+  // stub runs clear of its neighbours. Footprints scale with each sprite's manifest
+  // `tileScale`, so changing a building's on-screen size re-spaces its neighbours too.
+  const SHEPHERDS_CABIN = { dx: -20, dy: -30 };
+  const BLACKWOOD_LODGE = { dx: 4, dy: -24 };
+  const HILDA_COTTAGE = { dx: -12, dy: -24 };
   const GENERAL_STORE = { dx: -26, dy: -20 };
   const THE_BARRACKS = { dx: 13, dy: -20 };
   const CARTWRIGHT_WORKSHOP = { dx: 34, dy: -20 };
-  const CARTWRIGHT_SHED = { dx: 27, dy: -20, w: 6, h: 5 };
   const HERB_AND_REMEDY = { dx: -20, dy: -11 };
   const HORNED_FLAGON = { dx: 20, dy: -10 };
   const TEMPLE_OF_THE_SKY = { dx: -25, dy: 4 };
   const RUSTY_ANVIL = { dx: 21, dy: 6 };
   const SLEEPING_CAT_INN = { dx: -32, dy: 15 };
-  const SLEEPING_CAT_STABLE = { dx: -42, dy: 15, w: 8, h: 5 };
   const SUNKEN_STUMP_PUB = { dx: -19, dy: 15 };
   const DESPERADO_CLUB = { dx: 3, dy: 16 };
   const MILLERS_FARM = { dx: -30, dy: 27 };
-  const MILLERS_BARN = { dx: -24, dy: 34, w: 8, h: 5 };
   const SIGNETS_INK = { dx: 21, dy: 31 };
 
   // Widest road stub drawn in front of a door — wider doorways (the mead hall's
@@ -305,19 +302,6 @@ export function generateOverworld(size: number): OverworldData {
   const isUnderSpriteBuilding = (tx: number, ty: number) =>
     spriteFootprints.some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h);
 
-  // 6c. Non-enterable companion structure (shed, stable, barn)
-  const placeStructure = (
-    anchor: { dx: number; dy: number; w: number; h: number },
-    roofTile: number,
-  ) => {
-    const bx = cx + anchor.dx;
-    const by = cy + anchor.dy;
-    for (let dy = 0; dy < anchor.h; dy++)
-      for (let dx = 0; dx < anchor.w; dx++)
-        set(bx + dx, by + dy, dy === 0 || dy === anchor.h - 1 ? BUILDING_WALL : roofTile);
-    buildings.push({ x: bx, y: by, w: anchor.w, h: anchor.h });
-  };
-
   /**
    * Draw the street a sprite building's door opens onto. Every building sprite
    * faces south, so the stub always leaves the doorway southward until it clears
@@ -351,9 +335,8 @@ export function generateOverworld(size: number): OverworldData {
   //    Order is north street → square ring → south street, so the layout below
   //    reads top-to-bottom the way the town does on screen.
 
-  // ── Shepherd's Cabin — north street, outer row: cottage + hay-storage lean-to ──
+  // ── Shepherd's Cabin — north street, outer row ──
   connectDoorToRoad(placeSpriteBuilding(SHEPHERDS_CABIN, 'village_house_1', "Shepherd's Cabin"));
-  placeStructure(SHEPHERDS_LEAN_TO, ROOF_THATCH);
 
   // ── Blackwood Lodge — north street, the cult hideout between tower and barracks ──
   connectDoorToRoad(placeSpriteBuilding(BLACKWOOD_LODGE, 'village_house_2', 'Blackwood Lodge'));
@@ -367,8 +350,7 @@ export function generateOverworld(size: number): OverworldData {
   // ── The Barracks — north-east crawler guildhall; the overworld safe room ──
   connectDoorToRoad(placeSpriteBuilding(THE_BARRACKS, 'barracks', 'The Barracks', 'restaurant'));
 
-  // ── Cartwright's Workshop — far east of the north street: shop + storage shed ──
-  placeStructure(CARTWRIGHT_SHED, ROOF_SLATE);
+  // ── Cartwright's Workshop — far east end of the north street ──
   connectDoorToRoad(
     placeSpriteBuilding(CARTWRIGHT_WORKSHOP, 'village_house_4', "Cartwright's Workshop"),
   );
@@ -385,8 +367,7 @@ export function generateOverworld(size: number): OverworldData {
   // ── The Rusty Anvil — smithy east of the square; its forges burn in the art ──
   connectDoorToRoad(placeSpriteBuilding(RUSTY_ANVIL, 'blacksmith', 'The Rusty Anvil'));
 
-  // ── The Sleeping Cat Inn — south street, west end: inn + stable beside it ──
-  placeStructure(SLEEPING_CAT_STABLE, ROOF_THATCH);
+  // ── The Sleeping Cat Inn — south street, west end ──
   connectDoorToRoad(placeSpriteBuilding(SLEEPING_CAT_INN, 'small_inn', 'The Sleeping Cat Inn'));
 
   // ── The Sunken Stump Pub — south street, the cramped dive next to the inn ──
@@ -397,9 +378,8 @@ export function generateOverworld(size: number): OverworldData {
     placeSpriteBuilding(DESPERADO_CLUB, 'desperado_club', 'The Desperado Club', 'club'),
   );
 
-  // ── Miller's Farm — south street, outer row: farmhouse + large barn behind it ──
+  // ── Miller's Farm — south street, outer row ──
   connectDoorToRoad(placeSpriteBuilding(MILLERS_FARM, 'village_house_4', "Miller's Farm"));
-  placeStructure(MILLERS_BARN, ROOF_THATCH);
 
   // ── Signet's Ink — tattoo parlor south of the club, deepest in the nightlife district ──
   connectDoorToRoad(placeSpriteBuilding(SIGNETS_INK, 'tattoo_parlor', "Signet's Ink"));

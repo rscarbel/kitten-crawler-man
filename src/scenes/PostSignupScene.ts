@@ -140,7 +140,7 @@ export class PostSignupScene extends Scene {
   }
 
   private launchLevel1(): void {
-    const level1Def = getLevelDef('level3');
+    const level1Def = getLevelDef('level1');
     this.sceneManager.replace(
       new DungeonScene(level1Def, this.input, this.sceneManager, this.baseOptions),
     );

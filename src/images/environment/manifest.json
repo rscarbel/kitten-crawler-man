@@ -1077,7 +1077,7 @@
     "frameHeight": 128,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 21.5,
     "blockedRegions": [
       { "x1": 1, "y1": 60, "x2": 138, "y2": 96 },
       { "x1": 6, "y1": 97, "x2": 59, "y2": 128 },
@@ -1093,7 +1093,7 @@
     "frameHeight": 125,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 21.5,
     "blockedRegions": [
       { "x1": 1, "y1": 44, "x2": 150, "y2": 87 },
       { "x1": 5, "y1": 88, "x2": 65, "y2": 126 },
@@ -1109,7 +1109,7 @@
     "frameHeight": 128,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 21.5,
     "blockedRegions": [
       { "x1": 1, "y1": 57, "x2": 150, "y2": 100 },
       { "x1": 4, "y1": 93, "x2": 71, "y2": 128 },
@@ -1125,7 +1125,7 @@
     "frameHeight": 133,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 21.5,
     "blockedRegions": [
       { "x1": 1, "y1": 54, "x2": 154, "y2": 99 },
       { "x1": 5, "y1": 100, "x2": 70, "y2": 133 },
@@ -1141,7 +1141,7 @@
     "frameHeight": 255,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 148, "x2": 321, "y2": 178 },
       { "x1": 1, "y1": 178, "x2": 128, "y2": 255 },
@@ -1157,7 +1157,7 @@
     "frameHeight": 122,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 25,
     "blockedRegions": [
       { "x1": 1, "y1": 60, "x2": 199, "y2": 68 },
       { "x1": 1, "y1": 68, "x2": 103, "y2": 122 },
@@ -1174,7 +1174,7 @@
     "frameHeight": 437,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 300, "x2": 499, "y2": 330 },
       { "x1": 1, "y1": 330, "x2": 198, "y2": 437 },
@@ -1190,7 +1190,7 @@
     "frameHeight": 204,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 95, "x2": 345, "y2": 112 },
       { "x1": 1, "y1": 112, "x2": 110, "y2": 204 },
@@ -1206,7 +1206,7 @@
     "frameHeight": 269,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 185, "x2": 345, "y2": 198 },
       { "x1": 1, "y1": 198, "x2": 113, "y2": 269 },
@@ -1222,7 +1222,7 @@
     "frameHeight": 218,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 110, "x2": 329, "y2": 120 },
       { "x1": 1, "y1": 120, "x2": 85, "y2": 218 },
@@ -1238,7 +1238,7 @@
     "frameHeight": 211,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 125, "x2": 347, "y2": 135 },
       { "x1": 1, "y1": 135, "x2": 68, "y2": 211 },
@@ -1254,7 +1254,7 @@
     "frameHeight": 208,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 110, "x2": 356, "y2": 120 },
       { "x1": 1, "y1": 120, "x2": 120, "y2": 208 },
@@ -1270,7 +1270,7 @@
     "frameHeight": 282,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 32,
+    "tileScale": 45,
     "blockedRegions": [
       { "x1": 1, "y1": 150, "x2": 322, "y2": 163 },
       { "x1": 1, "y1": 163, "x2": 113, "y2": 230 },
