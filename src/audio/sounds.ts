@@ -131,6 +131,8 @@ const SOUND_IDS_TUPLE = [
   'tavern_music_1',
   'tavern_music_2',
   'tech_machinery_running',
+  'town_music_1',
+  'town_music_2',
   'treasure_chest_reward',
   'troglodyte_tongue',
   'tuskling_grunt_1',
@@ -139,7 +141,6 @@ const SOUND_IDS_TUPLE = [
   'tuskling_grunt_4',
   'tutorial_island',
   'typing_click',
-  'village_square',
   'wood_breaking_1',
   'wood_breaking_2',
   'wood_breaking_3',
@@ -291,6 +292,8 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   tavern_music_1: './src/audio/background_music/tavern_music_1.mp3',
   tavern_music_2: './src/audio/background_music/tavern_music_2.mp3',
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
+  town_music_1: './src/audio/background_music/town_music_1.mp3',
+  town_music_2: './src/audio/background_music/town_music_2.mp3',
   treasure_chest_reward: './src/audio/events/treasure-chest-reward.mp3',
   troglodyte_tongue: './src/audio/enemies/troglodyte/troglodyte_tongue.mp3',
   tuskling_grunt_1: './src/audio/enemies/tuskling/tuskling_grunt_1.mp3',
@@ -299,7 +302,6 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   tuskling_grunt_4: './src/audio/enemies/tuskling/tuskling_grunt_4.mp3',
   tutorial_island: './src/audio/background_music/tutorial_island.mp3',
   typing_click: './src/audio/effects/typing_click.mp3',
-  village_square: './src/audio/background_music/village_square.mp3',
   wood_breaking_1: './src/audio/effects/wood_breaking_1.mp3',
   wood_breaking_2: './src/audio/effects/wood_breaking_2.mp3',
   wood_breaking_3: './src/audio/effects/wood_breaking_3.mp3',
@@ -312,6 +314,9 @@ export const CLUB_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'desperado_club_3',
   'desperado_club_4',
 ];
+
+/** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
+export const TOWN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['town_music_1', 'town_music_2'];
 
 /** The town taverns' rotating soundtrack — shuffled and looping while the player is inside. */
 export const TAVERN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['tavern_music_1', 'tavern_music_2'];

@@ -15,6 +15,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
@@ -140,7 +141,7 @@ export class QuillConfrontationSystem implements GameSystem {
       this.victoryTimer = VICTORY_BANNER_FRAMES;
       this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill });
       this.audio?.play('boss_defeated');
-      this.audio?.playMusic('village_square', { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
+      this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
 
       this.doomsdayProgress.crystalTile = { x: quill.x, y: quill.y };
       this.doomsdayProgress.stage = 'containment';

@@ -1,23 +1,24 @@
 /**
  * OverworldMusicSystem — zone-based background music for the Over City
- * overworld: village_square inside the town safe zone, circus_theme on the
- * circus grounds, forest_path in the wilds between. Quest systems set
+ * overworld: a shuffled town playlist inside the town safe zone, circus_theme
+ * on the circus grounds, forest_path in the wilds between. Quest systems set
  * `battleMusicActive` while they own the track (e.g. circus_battle during
  * circus fights); zone switching pauses until it clears.
  */
 
 import { TILE_SIZE } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
+import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { SoundId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 type MusicZone = 'town' | 'wilds' | 'circus';
 
-const ZONE_TRACKS: Record<MusicZone, SoundId> = {
-  town: 'village_square',
-  wilds: 'forest_path',
-  circus: 'circus_theme',
+const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<SoundId>> = {
+  town: TOWN_MUSIC_TRACKS,
+  wilds: ['forest_path'],
+  circus: ['circus_theme'],
 };
 
 const ZONE_FADE_MS = 1500;
@@ -44,10 +45,13 @@ export class OverworldMusicSystem implements GameSystem {
     const zone = this.zoneAt(ctx.active.x, ctx.active.y);
     if (zone === this.currentZone) return;
     this.currentZone = zone;
-    // The right track may already be running — e.g. it survived a building
-    // round-trip — and restarting it from the top would be jarring.
-    if (this.audio.currentMusicId === ZONE_TRACKS[zone]) return;
-    this.audio.playMusic(ZONE_TRACKS[zone], { fadeInMs: ZONE_FADE_MS });
+    const zoneTracks = ZONE_TRACKS[zone];
+    const currentMusicId = this.audio.currentMusicId;
+    // A track from this zone may already be running — e.g. it survived a
+    // building round-trip — and restarting it from the top would be jarring.
+    const zoneAlreadyPlaying = currentMusicId !== null && zoneTracks.includes(currentMusicId);
+    if (zoneAlreadyPlaying) return;
+    this.audio.playMusicPlaylist(zoneTracks, { fadeInMs: ZONE_FADE_MS });
   }
 
   private zoneAt(worldX: number, worldY: number): MusicZone {
