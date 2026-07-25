@@ -57,6 +57,8 @@ export class Townsperson implements WanderState {
   moving = false;
   /** How many times the player has talked to this citizen — rotates their dialog. */
   conversationCount = 0;
+  /** True while this citizen is mid-conversation — holds them in place facing the player. */
+  frozen = false;
 
   private readonly wander: WanderParams;
 
@@ -75,6 +77,7 @@ export class Townsperson implements WanderState {
 
   /** Advances one frame of wander, facing, and animation. */
   update(): void {
+    if (this.frozen) return;
     const step = stepWander(this, this.wander);
     this.moving = step.moving;
     this.phase += PHASE_STEP;

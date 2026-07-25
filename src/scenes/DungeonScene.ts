@@ -38,6 +38,7 @@ import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
+import type { Townsperson } from '../creatures/Townsperson';
 import { TownPropSystem } from '../systems/TownPropSystem';
 import {
   buildCitizenConversation,
@@ -398,6 +399,8 @@ export class DungeonScene extends GameplayScene {
   private townLife: TownLifeSystem | null = null;
   private townProps: TownPropSystem | null = null;
   private citizenDialog: CitizenDialog | null = null;
+  /** Citizen currently frozen mid-conversation; unfrozen once `citizenDialog` closes. */
+  private citizenDialogTarget: Townsperson | null = null;
   private noticeBoard: NoticeBoardPanel | null = null;
   private marketStall: MarketStallPanel | null = null;
   private fortuneTeller: FortuneTellerPanel | null = null;
@@ -2119,6 +2122,8 @@ export class DungeonScene extends GameplayScene {
     const target = this.townLife.findTalkTarget(active.x, active.y);
     if (target === null) return false;
     target.faceToward(active.x, active.y);
+    target.frozen = true;
+    this.citizenDialogTarget = target;
     const lines = buildCitizenConversation(
       target.role,
       target.appearance.seed,
@@ -2610,6 +2615,10 @@ export class DungeonScene extends GameplayScene {
   }
 
   update(): void {
+    if (this.citizenDialogTarget !== null && this.citizenDialog?.isOpen !== true) {
+      this.citizenDialogTarget.frozen = false;
+      this.citizenDialogTarget = null;
+    }
     aiAdapter.update();
     this.playerChat.update();
     if (this._companionErrorMsg !== null) {
@@ -2650,6 +2659,14 @@ export class DungeonScene extends GameplayScene {
       const sqCtx = this.buildSystemContext();
       this.spiderQuest.update(sqCtx);
       this._processSpiderQuestSounds();
+    }
+
+    // Town keeps living through citizen chats and other overlay dialogs — only a
+    // hard stop (game over, the pause menu, or the level-complete screen) should
+    // freeze the streets.
+    if (!this.gameOver && !this.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
+      this.townLife?.update();
+      this.townProps?.update();
     }
 
     if (
@@ -3236,8 +3253,6 @@ export class DungeonScene extends GameplayScene {
     }
     this.overworldMusic?.update(ctx);
     this.ambientSound?.update(ctx);
-    this.townLife?.update();
-    this.townProps?.update();
     this.juicerRoom.update(ctx);
     this.arenaRoom.update(ctx);
     // Advance tutorial state machine; anchor companion when tutorial requires it

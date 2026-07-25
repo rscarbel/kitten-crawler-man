@@ -2,6 +2,7 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawGumGumSprite } from '../sprites/gumGumSprite';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
 
 const GUMGUM_HP = 30;
 const GUMGUM_SPEED = 0;
@@ -38,14 +39,7 @@ export class GumGum extends Mob {
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
-    drawGumGumSprite(
-      ctx,
-      this.x - camX,
-      this.y - camY,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      this.facingX,
-    );
+    const box = scaleHumanoidBox(this.x - camX, this.y - camY, tileSize);
+    drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
   }
 }
