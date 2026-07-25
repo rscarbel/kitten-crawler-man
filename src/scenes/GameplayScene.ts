@@ -61,13 +61,28 @@ export abstract class GameplayScene extends Scene {
     return this.pm.inactive();
   }
 
+  /**
+   * Height of the band at the bottom of the screen that opaque on-screen UI
+   * covers, which {@link computeCamera} treats as outside the viewport so world
+   * content can't end up hidden behind it. Reserves nothing by default: it only
+   * earns its keep where the map's bottom edge holds something the player must
+   * see, so a scene that scrolls freely there overlaps the bar harmlessly.
+   *
+   * Note this binds only scenes that camera through {@link computeCamera};
+   * DungeonScene runs its own camera and ignores this.
+   */
+  protected viewportBottomInset(): number {
+    return 0;
+  }
+
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
     const canvas = this.sceneManager.canvas;
     const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
     const mapPxH = map.structure.length * TILE_SIZE;
+    const viewportH = canvas.height - this.viewportBottomInset();
     const cx = player.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.width / 2;
-    const cy = player.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.height / 2;
+    const cy = player.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - viewportH / 2;
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
@@ -77,9 +92,8 @@ export abstract class GameplayScene extends Scene {
           ? (mapPxW - canvas.width) / 2
           : clamp(cx, 0, mapPxW - canvas.width)) + sway.x,
       y:
-        (mapPxH <= canvas.height
-          ? (mapPxH - canvas.height) / 2
-          : clamp(cy, 0, mapPxH - canvas.height)) + sway.y,
+        (mapPxH <= viewportH ? (mapPxH - viewportH) / 2 : clamp(cy, 0, mapPxH - viewportH)) +
+        sway.y,
     };
   }
 

@@ -1,7 +1,7 @@
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
-import { GameMap } from '../map/GameMap';
+import { GameMap, TOWER_INTERIOR_W } from '../map/GameMap';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
@@ -135,7 +135,6 @@ const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
 const TOWER_FLOOR_COUNT = 4;
 const MAX_TOWER_FLOOR_INDEX = 3;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
-const TOWER_MAP_FALLBACK_WIDTH = 30;
 const COMPANION_FOLLOW_OVERRIDE_RATIO = 0.8;
 const COMPANION_FOLLOW_NORMAL_RATIO = 1.5;
 const RECENT_EVENTS_LIMIT = 5;
@@ -543,7 +542,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const goingUp = newFloor > this.currentFloor;
     this.currentFloor = newFloor;
     this.map = this.towerFloors[newFloor];
-    this.mapW = this.map.structure[0]?.length ?? TOWER_MAP_FALLBACK_WIDTH;
+    this.mapW = this.map.structure[0]?.length ?? TOWER_INTERIOR_W;
     this.cat.setMap(this.map);
     this.towerStairs?.setMap(this.map, newFloor);
 
@@ -1184,6 +1183,17 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     drawables.sort((a, b) => a.sortY - b.sortY);
     for (const drawable of drawables) drawable.draw();
+  }
+
+  /**
+   * Interiors are only a few screens across and their exit door sits in the
+   * bottom wall, so the hotbar strip would otherwise cover the one tile the
+   * player needs to see to leave. Reserving its band lifts the whole room above
+   * it — on mobile, where the strip is opaque and the room is centred, this is
+   * the difference between a visible door and none at all.
+   */
+  protected override viewportBottomInset(): number {
+    return this.mobileHUD.inventoryPanel.hotbarBandHeight(this.sceneManager.canvas);
   }
 
   render(ctx: CanvasRenderingContext2D): void {

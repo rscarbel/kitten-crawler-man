@@ -32,12 +32,17 @@ import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 
 const SPAWN_SEARCH_RADIUS_TILES = 6;
-/** Quill holds the far end of the office from the stairs. */
-const QUILL_OFFSET = { dx: 0, dy: -2 };
-const REMEX_OFFSET = { dx: 4, dy: -2 };
+/**
+ * Quill holds the south end of the office, away from the north-west stairs the
+ * player climbs in by. The gap is deliberate: every offset here has to keep the
+ * whole party outside its own aggro/cast range of the arrival tile, or the
+ * fight opens with a soul bolt already in the air over the intro banner.
+ */
+const QUILL_OFFSET = { dx: 0, dy: 3 };
+const REMEX_OFFSET = { dx: 4, dy: 3 };
 const GUARD_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
-  { dx: -3, dy: 1 },
-  { dx: 3, dy: 1 },
+  { dx: -3, dy: 3 },
+  { dx: 3, dy: 3 },
 ];
 const GUARD_LEVEL = 7;
 

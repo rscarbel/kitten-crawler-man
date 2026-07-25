@@ -609,6 +609,15 @@ export class InventoryPanel {
     return this.invSlotRect(slotIdx - pageStart, p);
   }
 
+  /**
+   * Height of the screen band the hotbar strip occupies, measured up from the
+   * bottom of the canvas. Scenes use it to keep world content clear of the bar.
+   */
+  hotbarBandHeight(canvas: HTMLCanvasElement): number {
+    const hb = this.hotbarRect(canvas);
+    return canvas.height - (hb.y - HOTBAR_STRIP_PAD);
+  }
+
   /** Returns the screen rect of the given hotbar slot index. */
   getHotbarSlotRect(
     slotIdx: number,

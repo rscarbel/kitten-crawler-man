@@ -9,6 +9,7 @@
     "build": "node scripts/build.js",
     "build:zip": "npm run build && node scripts/build-zip.js",
     "serve": "node scripts/build.js --serve",
+    "kill": "node scripts/free-port.js",
     "lint": "eslint src",
     "server": "tsx server/index.ts",
     "dev": "npm run build && npm run server",

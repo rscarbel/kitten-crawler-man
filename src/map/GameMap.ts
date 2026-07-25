@@ -75,8 +75,8 @@ const DEFAULT_MAP_SIZE = 100;
 const DEFAULT_TILE_HEIGHT = 10;
 
 // ── Interior building dimensions (width × height in tiles) ────────────────────
-const TOWER_INTERIOR_W = 30;
-const TOWER_INTERIOR_H = 24;
+export const TOWER_INTERIOR_W = 20;
+const TOWER_INTERIOR_H = 16;
 const RESTAURANT_INTERIOR_W = 22;
 const RESTAURANT_INTERIOR_H = 16;
 const STORE_INTERIOR_W = 20;
@@ -1220,26 +1220,26 @@ export class GameMap {
         this._interiorStairDownTiles = [{ x: dnX, y: dnY }];
       }
 
-      // ── Tower floor furniture (30×24, carpet) ──
-      // Avoid stair tiles at (upX=25,upY=2) and (dnX=3,dnY=2)
+      // ── Tower floor furniture (20×16, carpet) ──
+      // Avoid stair tiles at (upX=15,upY=2) and (dnX=3,dnY=2)
       // TOWER_ENTRANCE_ROW_INSET: h - this value = second-to-last interior row (barrel/entrance row)
       const TOWER_ENTRANCE_ROW_INSET = 3;
-      const towerFireplaceCol1 = 14;
-      const towerFireplaceCol2 = 15;
-      const towerShelfStartRow = 4;
+      const towerFireplaceCol1 = 9;
+      const towerFireplaceCol2 = 10;
+      const towerShelfStartRow = 3;
       if (towerFloor === 0) {
         // Ground floor: reception hall — large rug, tables, bookshelves, fireplace
-        const groundFloorRugStartRow = 8;
-        const groundFloorRugEndRow = 13;
-        const groundFloorRugStartCol = 10;
-        const groundFloorRugEndCol = 19;
-        const groundFloorShelfEndRow = 10;
-        const groundFloorReceptionRow = 10;
-        const groundFloorChairRow = 11;
-        const groundFloorReceptionTableCol1 = 6;
-        const groundFloorReceptionTableCol2 = 7;
-        const groundFloorReceptionTableCol3 = 8;
-        const groundFloorEastBarrelRow = 5;
+        const groundFloorRugStartRow = 6;
+        const groundFloorRugEndRow = 9;
+        const groundFloorRugStartCol = 7;
+        const groundFloorRugEndCol = 13;
+        const groundFloorShelfEndRow = 7;
+        const groundFloorReceptionRow = 7;
+        const groundFloorChairRow = 8;
+        const groundFloorReceptionTableCol1 = 4;
+        const groundFloorReceptionTableCol2 = 5;
+        const groundFloorReceptionTableCol3 = 6;
+        const groundFloorEastBarrelRow = 4;
         // Fireplace centered on north wall
         grid[1][towerFireplaceCol1].type = FIREPLACE;
         grid[1][towerFireplaceCol2].type = FIREPLACE;
@@ -1266,20 +1266,20 @@ export class GameMap {
         grid[groundFloorEastBarrelRow][w - 2].type = BARREL;
       } else if (towerFloor === 1) {
         // 2nd floor: library — lots of bookshelves + reading tables
-        const libraryShelfEndRow = 14;
-        const libraryIslandRow = 6;
-        const libraryIsland1StartCol = 10;
-        const libraryIsland1EndCol = 13;
-        const libraryIsland2StartCol = 16;
-        const libraryIsland2EndCol = 19;
-        const libraryReadingRow = 10;
-        const libraryChairRow = 11;
-        const libraryWestTableCol1 = 8;
-        const libraryWestTableCol2 = 9;
-        const libraryEastTableCol1 = 16;
-        const libraryEastTableCol2 = 17;
-        const libraryRugStartCol = 11;
-        const libraryRugEndCol = 14;
+        const libraryShelfEndRow = 9;
+        const libraryIslandRow = 4;
+        const libraryIsland1StartCol = 7;
+        const libraryIsland1EndCol = 9;
+        const libraryIsland2StartCol = 11;
+        const libraryIsland2EndCol = 13;
+        const libraryReadingRow = 7;
+        const libraryChairRow = 8;
+        const libraryWestTableCol1 = 5;
+        const libraryWestTableCol2 = 6;
+        const libraryEastTableCol1 = 11;
+        const libraryEastTableCol2 = 12;
+        const libraryRugStartCol = 7;
+        const libraryRugEndCol = 10;
         // Bookshelves along west wall
         for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
           grid[ry][1].type = BOOKSHELF;
@@ -1307,20 +1307,20 @@ export class GameMap {
         }
       } else if (towerFloor === 2) {
         // 3rd floor: living quarters — beds, tables, personal items
-        const quartersNorthBedRow1 = 5;
-        const quartersNorthBedRow2 = 6;
-        const quartersSouthBedRow1 = 9;
-        const quartersSouthBedRow2 = 10;
-        const quartersShelfRow1 = 7;
-        const quartersShelfRow2 = 8;
-        const quartersEastTableRow = 8;
+        const quartersNorthBedRow1 = 3;
+        const quartersNorthBedRow2 = 4;
+        const quartersSouthBedRow1 = 7;
+        const quartersSouthBedRow2 = 8;
+        const quartersShelfRow1 = 5;
+        const quartersShelfRow2 = 6;
+        const quartersEastTableRow = 6;
         const quartersEastTableCol1 = w - TOWER_STAIR_UP_X_OFFSET;
         const quartersEastTableCol2 = w - TOWER_STAIR_UP_X_OFFSET + 1;
         const quartersEastTableCol3 = w - TOWER_STAIR_UP_X_OFFSET + 2;
-        const quartersBarrelRow1 = 12;
-        const quartersBarrelRow2 = 13;
-        const quartersRugStartCol = 4;
-        const quartersRugEndCol = 6;
+        const quartersBarrelRow1 = 10;
+        const quartersBarrelRow2 = 11;
+        const quartersRugStartCol = 3;
+        const quartersRugEndCol = 4;
         // Two beds along west wall
         grid[quartersNorthBedRow1][1].type = BED;
         grid[quartersNorthBedRow1][2].type = BED;
@@ -1354,32 +1354,27 @@ export class GameMap {
         grid[1][towerFireplaceCol2].type = FIREPLACE;
       } else {
         // Top floor: study/throne room — desk, bookshelves, large rug
-        const studyShelfEndRow = 12;
+        const studyShelfEndRow = 8;
         const studyDeskRow = towerShelfStartRow;
-        const studyDeskCol1 = 12;
-        const studyDeskCol2 = 13;
-        const studyDeskCol3 = towerFireplaceCol1;
-        const studyDeskCol4 = towerFireplaceCol2;
-        const studyDeskCol5 = 16;
+        const studyDeskStartCol = 8;
+        const studyDeskEndCol = 11;
+        const studyDeskCentreCol = Math.floor((studyDeskStartCol + studyDeskEndCol) / 2);
         const studyChairRow = towerShelfStartRow + 1;
-        const studyRugStartRow = 8;
-        const studyRugEndRow = 15;
-        const studyRugStartCol = 8;
-        const studyRugEndCol = 21;
-        const studyFireplaceCol1 = 10;
-        const studyFireplaceCol2 = 11;
+        const studyRugStartRow = 5;
+        const studyRugEndRow = 10;
+        const studyRugStartCol = 5;
+        const studyRugEndCol = 14;
+        const studyFireplaceCol1 = 6;
+        const studyFireplaceCol2 = 7;
         // Bookshelves along both walls
         for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
           grid[ry][1].type = BOOKSHELF;
         for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
           grid[ry][w - 2].type = BOOKSHELF;
         // Grand desk at north end
-        grid[studyDeskRow][studyDeskCol1].type = TABLE;
-        grid[studyDeskRow][studyDeskCol2].type = TABLE;
-        grid[studyDeskRow][studyDeskCol3].type = TABLE;
-        grid[studyDeskRow][studyDeskCol4].type = TABLE;
-        grid[studyDeskRow][studyDeskCol5].type = TABLE;
-        grid[studyChairRow][studyDeskCol3].type = CHAIR;
+        for (let dx = studyDeskStartCol; dx <= studyDeskEndCol; dx++)
+          grid[studyDeskRow][dx].type = TABLE;
+        grid[studyChairRow][studyDeskCentreCol].type = CHAIR;
         // Large rug in center
         for (let ry = studyRugStartRow; ry <= studyRugEndRow; ry++) {
           for (let rx = studyRugStartCol; rx <= studyRugEndCol; rx++) grid[ry][rx].type = RUG;

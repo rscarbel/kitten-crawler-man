@@ -3322,13 +3322,13 @@ export class DungeonScene extends GameplayScene {
       if (this.tutorial.needsCameraPanStart) {
         this.tutorial.needsCameraPanStart = false;
         const canvas = this.sceneManager.canvas;
-        const mapPx = this.gameMap.structure.length * TILE_SIZE;
+        const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
         const halfW = canvas.width / 2;
         const halfH = canvas.height / 2;
-        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPx - canvas.width);
-        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPx - canvas.height);
-        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPx - canvas.width);
-        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPx - canvas.height);
+        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - canvas.width);
+        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPxH - canvas.height);
+        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - canvas.width);
+        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - canvas.height);
         this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
       }
 
@@ -3729,13 +3729,26 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
+  /**
+   * Pixel extents of the current map: the row count gives the height, a row's
+   * length the width. Every camera clamp needs both — deriving one axis from the
+   * other silently works only for as long as maps stay square.
+   */
+  private mapExtentsPx(): { w: number; h: number } {
+    const rows = this.gameMap.structure;
+    return {
+      w: (rows[0]?.length ?? rows.length) * TILE_SIZE,
+      h: rows.length * TILE_SIZE,
+    };
+  }
+
   private camera(): { x: number; y: number } {
     const tutorialCam = this.tutorial?.cameraOverride;
     if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
 
     const player = this.active();
     const canvas = this.sceneManager.canvas;
-    const mapPx = this.gameMap.structure.length * TILE_SIZE;
+    const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
 
     const targetOverride = this.spiderQuest.cameraTargetOverride;
     const targetX = targetOverride !== null ? targetOverride.x : player.x;
@@ -3749,8 +3762,8 @@ export class DungeonScene extends GameplayScene {
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: clamp(camX, 0, mapPx - canvas.width) + shakeOffset.x + sway.x,
-      y: clamp(camY, 0, mapPx - canvas.height) + shakeOffset.y + sway.y,
+      x: clamp(camX, 0, mapPxW - canvas.width) + shakeOffset.x + sway.x,
+      y: clamp(camY, 0, mapPxH - canvas.height) + shakeOffset.y + sway.y,
     };
   }
 
