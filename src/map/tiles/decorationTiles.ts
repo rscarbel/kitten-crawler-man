@@ -25,6 +25,7 @@ import {
 } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
+import { drawFountainTileSlice } from '../../sprites/fountainSprite';
 import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
 
@@ -57,7 +58,6 @@ export function drawDecorationTile(
   tx: number,
   ty: number,
   baseOnly = false,
-  tileTime?: number,
 ): boolean {
   if (baseOnly) {
     switch (type) {
@@ -113,233 +113,14 @@ export function drawDecorationTile(
     }
 
     case FOUNTAIN: {
-      const nN = structure[ty - 1]?.[tx]?.type === FOUNTAIN;
-      const nS = structure[ty + 1]?.[tx]?.type === FOUNTAIN;
-      const nE = structure[ty]?.[tx + 1]?.type === FOUNTAIN;
-      const nW = structure[ty]?.[tx - 1]?.type === FOUNTAIN;
-      const isCenter = nN && nS && nE && nW;
-      const fcx = sx + ts / 2;
-      const fcy = sy + ts / 2;
-      const t = tileTime ?? frameTime;
-
-      if (isCenter) {
-        // === WATER BASIN FLOOR ===
-        ctx.fillStyle = '#0d4a73';
-        ctx.fillRect(sx, sy, ts, ts);
-        ctx.fillStyle = '#155f8f';
-        ctx.fillRect(sx + 2, sy + 2, ts - 4, ts - 4);
-
-        // Animated water shimmer glints
-        for (let i = 0; i < 3; i++) {
-          const gx = sx + 5 + ((i * 9 + Math.sin(t * 1.3 + i * 2.0) * 5 + 10) % (ts - 10));
-          const gy = sy + 6 + ((Math.cos(t * 1.1 + i * 1.6) * 4 + 5 + i * 6) % (ts - 12));
-          const ga = 0.18 + Math.sin(t * 2.5 + i) * 0.1;
-          ctx.fillStyle = `rgba(120,210,255,${ga})`;
-          ctx.fillRect(Math.floor(gx), Math.floor(gy), 5, 2);
-        }
-
-        // Expanding ripple rings — 3 staggered, continuously cycling
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(sx, sy, ts, ts);
-        ctx.clip();
-        for (let i = 0; i < 3; i++) {
-          const phase = (t * 1.4 + i * (1 / 3)) % 1;
-          const rAlpha = (1 - phase) * 0.55;
-          const rRadius = phase * ts * 0.44;
-          if (rAlpha > 0.03) {
-            ctx.strokeStyle = `rgba(160,230,255,${rAlpha})`;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(fcx, fcy, rRadius, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-
-        // === CENTRAL PEDESTAL ===
-        const pedW = Math.floor(ts * 0.26);
-        const pedH = Math.floor(ts * 0.38);
-        const pedX = Math.floor(fcx - pedW / 2);
-        const pedTop = Math.floor(fcy - pedH / 2);
-
-        // Pedestal base slab (wider)
-        ctx.fillStyle = '#7a7268';
-        ctx.fillRect(
-          Math.floor(fcx - pedW * 0.75),
-          Math.floor(fcy + pedH * 0.28),
-          Math.floor(pedW * 1.5),
-          Math.floor(ts * 0.18),
-        );
-        ctx.fillStyle = '#a09888';
-        ctx.fillRect(
-          Math.floor(fcx - pedW * 0.75),
-          Math.floor(fcy + pedH * 0.28),
-          Math.floor(pedW * 1.5),
-          3,
-        );
-
-        // Pedestal column
-        ctx.fillStyle = '#948c82';
-        ctx.fillRect(pedX, pedTop, pedW, pedH);
-        // Left highlight, right shadow
-        ctx.fillStyle = '#b0a898';
-        ctx.fillRect(pedX, pedTop, 3, pedH);
-        ctx.fillStyle = '#706860';
-        ctx.fillRect(pedX + pedW - 3, pedTop, 3, pedH);
-
-        // Pedestal capital (wide cap)
-        const capY = pedTop - 6;
-        ctx.fillStyle = '#7a7268';
-        ctx.fillRect(Math.floor(fcx - pedW * 0.6), capY, Math.floor(pedW * 1.2), 8);
-        ctx.fillStyle = '#b0a898';
-        ctx.fillRect(Math.floor(fcx - pedW * 0.6), capY, Math.floor(pedW * 1.2), 2);
-
-        // === VERTICAL WATER JET ===
-        const jetPulse = Math.sin(t * 4.2) * 0.12;
-        const jetH = Math.floor(ts * 1.1 + jetPulse * ts * 0.15);
-        const jetTipY = capY - jetH;
-
-        // Soft outer glow
-        for (let g = 0; g < 3; g++) {
-          const gw = 3 - g;
-          const ga = 0.12 - g * 0.03;
-          ctx.fillStyle = `rgba(120,200,255,${ga})`;
-          ctx.fillRect(Math.floor(fcx - gw - 2), jetTipY, gw * 2 + 4, jetH);
-        }
-        // Core stream (white-blue, slightly tapering)
-        ctx.fillStyle = `rgba(230,248,255,0.90)`;
-        ctx.fillRect(Math.floor(fcx - 2), jetTipY + 4, 4, jetH - 4);
-        // Bright tip
-        ctx.fillStyle = `rgba(255,255,255,0.95)`;
-        ctx.fillRect(Math.floor(fcx - 1), jetTipY, 3, 7);
-
-        // === ARCING WATER STREAMS (4 directions) ===
-        const numArcs = 4;
-        const arcRadius = ts * 0.38;
-        for (let i = 0; i < numArcs; i++) {
-          const angle = (i / numArcs) * Math.PI * 2 + Math.PI * 0.25;
-          // Bezier control point: outward and slightly up from jet tip
-          const ctrlX = fcx + Math.cos(angle) * ts * 0.18;
-          const ctrlY = jetTipY + Math.floor(ts * 0.1);
-          const endX = fcx + Math.cos(angle) * arcRadius;
-          const endY = fcy - 3;
-
-          const numDrops = 9;
-          for (let d = 0; d < numDrops; d++) {
-            const dp = (d / numDrops + t * 1.0 + i * 0.28) % 1;
-            // Quadratic bezier position
-            const bx = (1 - dp) * (1 - dp) * fcx + 2 * (1 - dp) * dp * ctrlX + dp * dp * endX;
-            const by = (1 - dp) * (1 - dp) * jetTipY + 2 * (1 - dp) * dp * ctrlY + dp * dp * endY;
-            const dAlpha = 0.5 + dp * 0.4;
-            const dSize = Math.ceil(1 + dp * 1.8);
-            ctx.fillStyle = `rgba(190,238,255,${dAlpha})`;
-            ctx.fillRect(Math.floor(bx - dSize / 2), Math.floor(by), dSize, dSize);
-          }
-        }
-
-        // === SPLASH at arc landing points ===
-        for (let i = 0; i < numArcs; i++) {
-          const angle = (i / numArcs) * Math.PI * 2 + Math.PI * 0.25;
-          const lx = fcx + Math.cos(angle) * arcRadius;
-          const ly = fcy - 3;
-          const sp = (t * 1.0 + i * 0.28 + 0.85) % 1;
-          const sa = sp < 0.25 ? (sp / 0.25) * 0.6 : ((1 - sp) / 0.75) * 0.5;
-          if (sa > 0.05) {
-            ctx.fillStyle = `rgba(210,245,255,${sa})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 1.5 + sp * 3.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      } else {
-        // === STONE BASIN RIM ===
-        // Outer stone face
-        ctx.fillStyle = '#8a8272';
-        ctx.fillRect(sx, sy, ts, ts);
-
-        // Top and left highlights (lit face)
-        ctx.fillStyle = '#b0a890';
-        ctx.fillRect(sx, sy, ts, 4);
-        ctx.fillStyle = '#a09880';
-        ctx.fillRect(sx, sy, 3, ts);
-        // Bottom and right shadow
-        ctx.fillStyle = '#686058';
-        ctx.fillRect(sx, sy + ts - 3, ts, 3);
-        ctx.fillRect(sx + ts - 3, sy, 3, ts);
-
-        // Stone block mortar seam lines
-        ctx.fillStyle = '#706860';
-        ctx.fillRect(sx, sy + Math.floor(ts * 0.5), ts, 1);
-        const bOff = ty % 2 === 0 ? 0 : Math.floor(ts * 0.5);
-        ctx.fillRect(sx + (bOff % ts), sy, 1, Math.floor(ts * 0.5));
-        ctx.fillRect(
-          sx + ((bOff + Math.floor(ts * 0.5)) % ts),
-          sy + Math.floor(ts * 0.5) + 1,
-          1,
-          ts - Math.floor(ts * 0.5) - 1,
-        );
-
-        // Inner basin faces — show stone depth + water behind
-        const innerD = 8;
-        if (nS) {
-          // North rim tile: inner face on south side
-          ctx.fillStyle = '#506878';
-          ctx.fillRect(sx, sy + ts - innerD, ts, innerD);
-          ctx.fillStyle = '#1a5f8a';
-          ctx.fillRect(sx, sy + ts - 3, ts, 3); // water surface glimpse
-          ctx.fillStyle = '#3a3228';
-          ctx.fillRect(sx, sy + ts - innerD, ts, 2); // rim top shadow
-        }
-        if (nN) {
-          // South rim tile: inner face on north side
-          ctx.fillStyle = '#506878';
-          ctx.fillRect(sx, sy, ts, innerD);
-          ctx.fillStyle = '#1a5f8a';
-          ctx.fillRect(sx, sy, ts, 3);
-          ctx.fillStyle = '#3a3228';
-          ctx.fillRect(sx, sy + innerD - 2, ts, 2);
-        }
-        if (nE) {
-          // West rim tile: inner face on east side
-          ctx.fillStyle = '#506878';
-          ctx.fillRect(sx + ts - innerD, sy, innerD, ts);
-          ctx.fillStyle = '#1a5f8a';
-          ctx.fillRect(sx + ts - 3, sy, 3, ts);
-          ctx.fillStyle = '#3a3228';
-          ctx.fillRect(sx + ts - innerD, sy, 2, ts);
-        }
-        if (nW) {
-          // East rim tile: inner face on west side
-          ctx.fillStyle = '#506878';
-          ctx.fillRect(sx, sy, innerD, ts);
-          ctx.fillStyle = '#1a5f8a';
-          ctx.fillRect(sx, sy, 3, ts);
-          ctx.fillStyle = '#3a3228';
-          ctx.fillRect(sx + innerD - 2, sy, 2, ts);
-        }
-
-        // Corner ornament: stone column posts at outer corners
-        const neighborCount = [nN, nS, nE, nW].filter(Boolean).length;
-        if (neighborCount <= 2) {
-          // Post body
-          ctx.fillStyle = '#7a7268';
-          ctx.beginPath();
-          ctx.arc(fcx, fcy, ts * 0.3, 0, Math.PI * 2);
-          ctx.fill();
-          // Post cap ring
-          ctx.strokeStyle = '#585048';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(fcx, fcy, ts * 0.27, 0, Math.PI * 2);
-          ctx.stroke();
-          // Post highlight
-          ctx.fillStyle = '#c0b8a8';
-          ctx.beginPath();
-          ctx.arc(fcx - ts * 0.08, fcy - ts * 0.08, ts * 0.11, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      // Walk to the block's origin instead of testing the four neighbours: the
+      // composition is authored for a 3×3 block, so a differently-sized
+      // fountain clamps into it rather than drawing nine wrong slices.
+      let blockX = 0;
+      while (structure[ty]?.[tx - blockX - 1]?.type === FOUNTAIN) blockX++;
+      let blockY = 0;
+      while (structure[ty - blockY - 1]?.[tx]?.type === FOUNTAIN) blockY++;
+      drawFountainTileSlice(ctx, sx, sy, ts, blockX, blockY, frameTime);
       return true;
     }
 
