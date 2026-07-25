@@ -55,8 +55,8 @@ const POOL_EDGE_COLOR = 'rgba(70, 8, 10, 0.85)';
 
 /**
  * Draw GumGum — a small, hunched street elf clutching a patched coat, ears
- * too big for his head, eyes darting for the Watch. The Over City's most
- * ignorable resident, which is exactly why the cult picked his friends.
+ * too big for her head, eyes darting for the Watch. The Over City's most
+ * ignorable resident, which is exactly why the cult picked her friends.
  */
 export function drawGumGumSprite(
   ctx: CanvasRenderingContext2D,

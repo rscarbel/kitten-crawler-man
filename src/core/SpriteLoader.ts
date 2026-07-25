@@ -2,10 +2,24 @@ import bossesManifest from '../images/bosses/manifest.json';
 import charactersManifest from '../images/characters/manifest.json';
 import effectsManifest from '../images/effects/manifest.json';
 import enemiesManifest from '../images/enemies/manifest.json';
-import environmentManifest from '../images/environment/manifest.json';
+import environmentBuildingsManifest from '../images/environment/buildings/manifest.json';
+import environmentCircusManifest from '../images/environment/circus/manifest.json';
+import environmentNatureManifest from '../images/environment/nature/manifest.json';
+import environmentPropsManifest from '../images/environment/props/manifest.json';
+import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
+import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
 import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
 import { TILE_SIZE } from './constants';
+
+const environmentManifest = {
+  ...environmentBuildingsManifest,
+  ...environmentCircusManifest,
+  ...environmentNatureManifest,
+  ...environmentPropsManifest,
+  ...environmentTilesetsManifest,
+  ...environmentWallsRoofsManifest,
+} as const;
 
 const manifestJson = {
   ...bossesManifest,

@@ -1,0 +1,157 @@
+{
+  "torch": {
+    "path": "environment/props/torch.png",
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "flicker": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "well": {
+    "path": "environment/props/well.png",
+    "frameWidth": 114,
+    "frameHeight": 125,
+    "tileX": 0,
+    "tileY": 114,
+    "tileScale": 64,
+    "tileTypeId": 21,
+    "blockedRegions": [
+      {
+        "x1": 8,
+        "y1": 50,
+        "x2": 96,
+        "y2": 114
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "fountain": {
+    "path": "environment/props/fountain.png",
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "ripple": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "barrel": {
+    "path": "environment/props/barrel.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "barrel_side": {
+    "path": "environment/props/barrel_side.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "crate": {
+    "path": "environment/props/crate.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "brazier": {
+    "path": "environment/props/brazier.png",
+    "frameWidth": 64,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "flicker": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "treasure_chests": {
+    "path": "environment/props/treasure_chests.png",
+    "frameWidth": 80,
+    "frameHeight": 80,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 80,
+    "states": {
+      "closed_wooden": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "opened_wooden": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "closed_silver": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "opened_silver": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "sparkle": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "lock": {
+        "row": 2,
+        "frameCount": 6
+      }
+    }
+  },
+  "stairwell": {
+    "path": "environment/props/stairwell.png",
+    "frameWidth": 75,
+    "frameHeight": 75,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 75,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  }
+}

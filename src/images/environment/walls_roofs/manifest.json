@@ -1,0 +1,400 @@
+{
+  "wall_cottage": {
+    "path": "environment/walls_roofs/wall_cottage.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_tower": {
+    "path": "environment/walls_roofs/wall_tower.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_merchant": {
+    "path": "environment/walls_roofs/wall_merchant.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_stone": {
+    "path": "environment/walls_roofs/wall_stone.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade_window": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "facade_plain": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_metal": {
+    "path": "environment/walls_roofs/wall_metal.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "default": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_thatch": {
+    "path": "environment/walls_roofs/roof_thatch.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_slate": {
+    "path": "environment/walls_roofs/roof_slate.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_red": {
+    "path": "environment/walls_roofs/roof_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_green": {
+    "path": "environment/walls_roofs/roof_green.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "hip_corner_fl": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "hip_corner_fr": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "hip_corner_bl": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "hip_corner_br": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "hip_side_l": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "hip_side_r": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "gable_end_l": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "gable_end_r": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "valley_fl": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "valley_fr": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "flat": {
+        "row": 13,
+        "frameCount": 1
+      },
+      "ridge_end_l": {
+        "row": 14,
+        "frameCount": 1
+      },
+      "ridge_end_r": {
+        "row": 15,
+        "frameCount": 1
+      }
+    }
+  }
+}

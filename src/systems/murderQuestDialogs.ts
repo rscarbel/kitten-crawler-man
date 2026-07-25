@@ -46,7 +46,7 @@ export const BODY_FOUND_DIALOG: ReadonlyArray<DialogPage> = [
     title: 'The Alley',
     lines: [
       'GumGum lies crumpled behind the pub, a day cold at least.',
-      'Whatever he saw, someone made certain he’d never tell it.',
+      'Whatever she saw, someone made certain she’d never tell it.',
       'The body ends at the shoulders. There is no head.',
     ],
     button: 'Continue',

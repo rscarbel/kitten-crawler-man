@@ -1,0 +1,320 @@
+{
+  "wall_circus_red": {
+    "path": "environment/circus/wall_circus_red.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_circus_blue": {
+    "path": "environment/circus/wall_circus_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "wall_circus_purple": {
+    "path": "environment/circus/wall_circus_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 192,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "facade": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "back_gable": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_red": {
+    "path": "environment/circus/roof_circus_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_blue": {
+    "path": "environment/circus/roof_circus_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "roof_circus_purple": {
+    "path": "environment/circus/roof_circus_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "eaves": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "middle": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "back": {
+        "row": 2,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_red": {
+    "path": "environment/circus/circus_tent_red.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_blue": {
+    "path": "environment/circus/circus_tent_blue.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  },
+  "circus_tent_purple": {
+    "path": "environment/circus/circus_tent_purple.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "peak": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "slope_s": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "slope_n": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "slope_e": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "slope_w": {
+        "row": 4,
+        "frameCount": 1
+      },
+      "slope_c": {
+        "row": 5,
+        "frameCount": 1
+      },
+      "corner_se": {
+        "row": 6,
+        "frameCount": 1
+      },
+      "corner_sw": {
+        "row": 7,
+        "frameCount": 1
+      },
+      "corner_ne": {
+        "row": 8,
+        "frameCount": 1
+      },
+      "corner_nw": {
+        "row": 9,
+        "frameCount": 1
+      },
+      "scallop_s": {
+        "row": 10,
+        "frameCount": 1
+      },
+      "scallop_n": {
+        "row": 11,
+        "frameCount": 1
+      },
+      "scallop_e": {
+        "row": 12,
+        "frameCount": 1
+      },
+      "scallop_w": {
+        "row": 13,
+        "frameCount": 1
+      }
+    }
+  }
+}

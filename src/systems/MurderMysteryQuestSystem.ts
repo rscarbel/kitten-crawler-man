@@ -2,7 +2,7 @@
  * MurderMysteryQuestSystem — the overworld half of "The Krasue Murders",
  * the town's dialog-driven murder mystery:
  *
- *   GumGum's plea (Mordecai warns you off) → his headless body turns up in
+ *   GumGum's plea (Mordecai warns you off) → her headless body turns up in
  *   the alley behind the Sunken Stump → three clue points around town (the
  *   well, Old Hilda's cottage, the tower plaza shrine) → a krasue swarm hits
  *   the streets at nightfall → the trail leads to the cult nest in Blackwood
@@ -63,7 +63,7 @@ const GUMGUM_DOOR_OFFSET = { dx: 3, dy: 0 };
 const GUMGUM_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
 /** The club building whose entrance hosts GumGum's book-accurate approach. */
 const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
-/** The alley where his body turns up — west of the pub, against the wall. */
+/** The alley where her body turns up — west of the pub, against the wall. */
 const ALLEY_DOOR_OFFSET = { dx: -4, dy: 2 };
 /** The shrine of moulted feathers sits just south of the tower door. */
 const ROOST_DOOR_OFFSET = { dx: 0, dy: 3 };
@@ -160,7 +160,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     // still resolve exactly as before on a pub-less map. To force the pub hook,
     // drop this club lookup — the rest of the quest is untouched.
     const clubDoor = pubDoor ? this.doorTileOf(GUMGUM_HOOK_CLUB_NAME) : null;
-    // His body still turns up in the alley behind the pub, so the hook and the
+    // Her body still turns up in the alley behind the pub, so the hook and the
     // corpse anchor separately.
     const hookDoor = clubDoor ?? pubDoor;
     const hookOffset = clubDoor ? GUMGUM_CLUB_DOOR_OFFSET : GUMGUM_DOOR_OFFSET;
@@ -402,7 +402,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   // ── Phase transitions ─────────────────────────────────────────────────────
 
   private finishHook(): void {
-    // GumGum slips away into the crowd — the next time anyone sees him is the alley.
+    // GumGum slips away into the crowd — the next time anyone sees her is the alley.
     if (this.gumgum && this.lastCtx) {
       const idx = this.lastCtx.mobs.indexOf(this.gumgum);
       if (idx >= 0) this.lastCtx.mobs.splice(idx, 1);
@@ -568,6 +568,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     if (this.dialog.isOpen) return;
 
     if (this.phase === 'gumgum_waiting' && this.gumgum && this.gumgumTile) {
+      this.gumgum.renderQuestMarker(ctx, camX, camY, TILE_SIZE);
       if (this.distToTile(active, this.gumgumTile) <= TILE_SIZE * INTERACT_RANGE_TILES) {
         drawInteractionPrompt(ctx, this.gumgum.x - camX, this.gumgum.y - camY, TILE_SIZE, 'Talk');
       }

@@ -81,7 +81,7 @@ const LOCK_SRC_X_PHASE_4 = 320;
 const LOCK_SRC_X_PHASE_5 = 400;
 
 export const chestImage = new Image();
-chestImage.src = 'src/images/environment/treasure_chests.png';
+chestImage.src = 'src/images/environment/props/treasure_chests.png';
 
 export class TreasureChestSystem {
   private readonly chests: TreasureChest[] = [];
