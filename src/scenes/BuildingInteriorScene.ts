@@ -25,7 +25,13 @@ import { pointInRect } from '../utils';
 import type { AchievementManager } from '../core/AchievementManager';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
-import { CLUB_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
+import {
+  CLUB_MUSIC_TRACKS,
+  DEFAULT_BUILDING_MUSIC_TRACKS,
+  TAVERN_MUSIC_TRACKS,
+  TOWER_MUSIC_TRACKS,
+  type SoundId,
+} from '../audio/sounds';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
@@ -119,6 +125,13 @@ const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number
   ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
 ]);
 
+/** The town's drinking houses, which share the rotating tavern soundtrack. */
+const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
+  'The Sunken Stump Pub',
+  'The Horned Flagon',
+  'The Sleeping Cat Inn',
+]);
+
 const TOWER_FLOOR_COUNT = 4;
 const MAX_TOWER_FLOOR_INDEX = 3;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
@@ -148,8 +161,8 @@ const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 /** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
 const TOWER_CONFRONTATION_FLOOR = 3;
-/** Fade-in for the Desperado Club's music when the interior is entered. */
-const CLUB_MUSIC_FADE_IN_MS = 800;
+/** Fade-in for an interior's own music when the building is entered. */
+const INTERIOR_MUSIC_FADE_IN_MS = 800;
 
 /** A quest encounter that runs inside a building (Big Top boss, cult hideout, tower fight). */
 interface InteriorEncounter {
@@ -556,11 +569,25 @@ export class BuildingInteriorScene extends GameplayScene {
     this.maybeStartTowerConfrontation();
   }
 
+  /**
+   * The soundtrack this interior owns: a rotating playlist in the club and the
+   * taverns, the tower's own theme, and a shared default in every other room.
+   * Null where an entry encounter already started its own battle music.
+   */
+  private interiorMusicTracks(): ReadonlyArray<SoundId> | null {
+    if (this.combat !== null) return null;
+    if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
+    if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
+    if (TAVERN_BUILDING_NAMES.has(this.entry.name)) return TAVERN_MUSIC_TRACKS;
+    return DEFAULT_BUILDING_MUSIC_TRACKS;
+  }
+
   onEnter(): void {
-    // Override the overworld's persisted music with the club's own theme; the
+    // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
-    if (this.entry.type === 'club') {
-      this.audio?.playMusicPlaylist(CLUB_MUSIC_TRACKS, { fadeInMs: CLUB_MUSIC_FADE_IN_MS });
+    const musicTracks = this.interiorMusicTracks();
+    if (musicTracks !== null) {
+      this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
     }
 
     this.escHandler = (e: KeyboardEvent) => {

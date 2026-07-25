@@ -13,10 +13,12 @@ const SOUND_IDS_TUPLE = [
   'bear_big_attack',
   'bear_growl_1',
   'bg_level_1',
+  'big_tower_music',
   'boss_defeated',
   'boss_music_1',
   'boss_music_2',
   'boss_music_3',
+  'building_default_music_1',
   'cat_effect_damage_1',
   'cat_effect_damage_2',
   'cat_effect_damage_3',
@@ -126,6 +128,8 @@ const SOUND_IDS_TUPLE = [
   'splat_3',
   'stat_boost',
   'sword_attack_1',
+  'tavern_music_1',
+  'tavern_music_2',
   'tech_machinery_running',
   'treasure_chest_reward',
   'troglodyte_tongue',
@@ -162,10 +166,12 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   bear_big_attack: './src/audio/enemies/bear/bear_big_attack.mp3',
   bear_growl_1: './src/audio/enemies/bear/bear_growl_1.mp3',
   bg_level_1: './src/audio/background_music/background_music_level_1.mp3',
+  big_tower_music: './src/audio/background_music/big_tower_music.mp3',
   boss_defeated: './src/audio/bosses/boss_defeated.mp3',
   boss_music_1: './src/audio/background_music/boss_music_1.mp3',
   boss_music_2: './src/audio/background_music/boss_music_2.mp3',
   boss_music_3: './src/audio/background_music/boss_music_3.mp3',
+  building_default_music_1: './src/audio/background_music/building_default_music_1.mp3',
   cat_effect_damage_1: './src/audio/characters/cat/cat_taking_effect_damage_1.mp3',
   cat_effect_damage_2: './src/audio/characters/cat/cat_taking_effect_damage_2.mp3',
   cat_effect_damage_3: './src/audio/characters/cat/cat_taking_effect_damage_3.mp3',
@@ -282,6 +288,8 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   splat_3: './src/audio/enemies/splat_3.mp3',
   stat_boost: './src/audio/effects/stat_boost_effect.mp3',
   sword_attack_1: './src/audio/sword_attack_1.mp3',
+  tavern_music_1: './src/audio/background_music/tavern_music_1.mp3',
+  tavern_music_2: './src/audio/background_music/tavern_music_2.mp3',
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
   treasure_chest_reward: './src/audio/events/treasure-chest-reward.mp3',
   troglodyte_tongue: './src/audio/enemies/troglodyte/troglodyte_tongue.mp3',
@@ -304,3 +312,12 @@ export const CLUB_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'desperado_club_3',
   'desperado_club_4',
 ];
+
+/** The town taverns' rotating soundtrack — shuffled and looping while the player is inside. */
+export const TAVERN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['tavern_music_1', 'tavern_music_2'];
+
+/** The Town Center Tower's own theme, playing on every floor until the Quill confrontation takes over. */
+export const TOWER_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['big_tower_music'];
+
+/** Fallback interior music for buildings with no soundtrack of their own. */
+export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
