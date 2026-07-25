@@ -55,6 +55,7 @@ import {
   type SpiderLabRoomData,
 } from './DungeonGenerator';
 import { generateOverworld } from './OverworldGenerator';
+import type { BuildingKind } from './town/townPlan';
 import {
   getBlockedTileOffsets,
   getBlockedTileOffsetsByKey,
@@ -104,6 +105,22 @@ const WOOD_FLOOR = 8;
 const WALL_TILE = 2;
 /** Road tile value (walkable threshold), used for interior exit doors. */
 const ROAD_TILE = 1;
+
+/** Interior shell per building kind. Exhaustive, so a new kind cannot ship unsized. */
+const INTERIOR_BY_KIND: Record<BuildingKind, { w: number; h: number; floorType: number }> = {
+  tower: { w: TOWER_INTERIOR_W, h: TOWER_INTERIOR_H, floorType: CARPET_FLOOR },
+  restaurant: { w: RESTAURANT_INTERIOR_W, h: RESTAURANT_INTERIOR_H, floorType: SAFE_ROOM_FLOOR },
+  store: { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: WOOD_FLOOR },
+  club: { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR },
+  house: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: WOOD_FLOOR },
+};
+
+/** The Big Top is registered as a `house`, so its interior is keyed by name instead. */
+const BIGTOP_INTERIOR = {
+  w: BIGTOP_INTERIOR_W,
+  h: BIGTOP_INTERIOR_H,
+  floorType: SAWDUST_FLOOR,
+};
 
 // ── Tower stair placement ─────────────────────────────────────────────────────
 /** X offset from the east wall for the "stairs up" tile in tower floors. */
@@ -172,7 +189,7 @@ export class GameMap {
   buildingEntries: Array<{
     doorTile: { x: number; y: number };
     name: string;
-    type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
+    type: BuildingKind;
   }> = [];
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
@@ -355,48 +372,14 @@ export class GameMap {
 
   /** Generates a small interior room for a building (called externally after construction).
    *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. */
-  generateInterior(
-    buildingType: 'house' | 'tower' | 'restaurant' | 'store' | 'club',
-    towerFloor = 0,
-    buildingName = '',
-  ): void {
+  generateInterior(buildingType: BuildingKind, towerFloor = 0, buildingName = ''): void {
     const isTower = buildingType === 'tower';
     const isRestaurant = buildingType === 'restaurant';
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
     const isCarnival = buildingName === 'Big Top';
-    const w = isCarnival
-      ? BIGTOP_INTERIOR_W
-      : isTower
-        ? TOWER_INTERIOR_W
-        : isRestaurant
-          ? RESTAURANT_INTERIOR_W
-          : isStore
-            ? STORE_INTERIOR_W
-            : isClub
-              ? CLUB_INTERIOR_W
-              : HOUSE_INTERIOR_W;
-    const h = isCarnival
-      ? BIGTOP_INTERIOR_H
-      : isTower
-        ? TOWER_INTERIOR_H
-        : isRestaurant
-          ? RESTAURANT_INTERIOR_H
-          : isStore
-            ? STORE_INTERIOR_H
-            : isClub
-              ? CLUB_INTERIOR_H
-              : HOUSE_INTERIOR_H;
-    const floorType = isCarnival
-      ? SAWDUST_FLOOR
-      : isTower
-        ? CARPET_FLOOR
-        : isRestaurant
-          ? SAFE_ROOM_FLOOR
-          : isClub
-            ? CLUB_FLOOR
-            : WOOD_FLOOR;
+    const { w, h, floorType } = isCarnival ? BIGTOP_INTERIOR : INTERIOR_BY_KIND[buildingType];
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({

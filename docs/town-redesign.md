@@ -393,7 +393,7 @@ legend:  # plaza   + civic terrace   = main street   : lane   , alley
 
 ## 5. Code architecture
 
-`generateOverworld` is a single 768-line function holding street geometry, building
+`generateOverworld` is a single 709-line function holding street geometry, building
 anchors, decoration, spawn scatter and metadata. Adding a real street plan to it in
 place will not end well. Extract a declarative layer:
 

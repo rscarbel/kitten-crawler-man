@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import type { BuildingKind } from '../map/town/townPlan';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
@@ -7,11 +8,11 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
   name: string;
-  type: 'house' | 'tower' | 'restaurant' | 'store' | 'club';
+  type: BuildingKind;
 };
 
-/** Entry-menu icon per building type. */
-const BUILDING_TYPE_ICONS: Record<BuildingEntry['type'], string> = {
+/** Entry-menu icon per building type. Exhaustive over `BuildingKind` by construction. */
+const BUILDING_TYPE_ICONS: Record<BuildingKind, string> = {
   tower: '🏰',
   restaurant: '🍽',
   store: '🏪',
