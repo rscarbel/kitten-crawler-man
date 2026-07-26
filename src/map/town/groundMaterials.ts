@@ -179,9 +179,15 @@ export function groundFrameIndex(
  * well, a building anchor — is not listed, because outdoors and in a dungeon it
  * stands on different things. `groundMaterialUnder` infers those.
  *
- * Only `grass` and `lane` are produced today. The other five materials arrive
+ * Only `grass` and `dirt` are produced today. The other five materials arrive
  * with the street plan in Phase 3 of the town redesign; the renderer already
  * blends all seven.
+ *
+ * Roads render as `dirt` rather than the jointed `lane` sett pattern: laid
+ * across every road tile in town (not just an edge or threshold), the setts'
+ * joints and weed scatter read as a busy grid rather than a street. `dirt` is
+ * the calm, jointless material built for exactly this — long stretches of
+ * loose ground with nothing to tile against.
  */
 export function groundMaterialForTileType(type: number): GroundMaterial | undefined {
   switch (type) {
@@ -193,7 +199,7 @@ export function groundMaterialForTileType(type: number): GroundMaterial | undefi
       return 'grass';
     case FloorTypeValue.road:
     case DIRT_PATCH:
-      return 'lane';
+      return 'dirt';
     default:
       return undefined;
   }
