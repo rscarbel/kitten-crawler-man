@@ -164,6 +164,7 @@ src/
 │   ├── ArenaSystem.ts         ← Ball of Swine arena encounters
 │   ├── DynamiteSystem.ts      ← charge, throw, bounce, explode
 │   ├── SpellSystem.ts         ← protective shell, confusing fog
+│   ├── DestructiblePropSystem.ts ← smashable barrels/crates, splinters, coin drops
 │   ├── BarrierSystem.ts       ← gym item placement, mob slow zones
 │   ├── JuicerRoomSystem.ts    ← gym equipment spawns + Juicer coordination
 │   ├── LootSystem.ts          ← item drops, TTL, auto-collect
