@@ -20,12 +20,17 @@
 
 import type { SpriteStateDef, SpriteStates } from '../../core/SpriteLoader';
 import {
+  COBBLE_STREET,
   DIRT_PATCH,
   FloorTypeValue,
   GRASSY_WEED,
+  LANE_STREET,
+  PLAZA_STONE,
   RUBBLE,
   RUINED_WALL,
   TREE,
+  VERGE_GRASS,
+  YARD_GRAVEL,
   type TileContent,
 } from '../tileTypes';
 
@@ -166,9 +171,12 @@ export function groundFrameIndex(
  * outdoor ground at all (dungeon floors, water, void, building interiors).
  *
  * Walkable ground decorations report the material they are painted over, not
- * the material they *depict*: a `DIRT_PATCH` is a worn patch drawn on top of a
- * lane, and calling it `dirt` here would let the surrounding lane bleed over it
- * through the corner masks until nothing of the patch was left.
+ * the material they *depict*. A `DIRT_PATCH` is a worn patch of the packed-earth
+ * track it is scattered on, so it reports `dirt` — the track's own material — and
+ * blends into it invisibly. Give a decoration a material of its own and whatever
+ * surrounds it wins all four of its corners and the masks erase it: which is what
+ * happened when the scatter pass put `GRASSY_WEED`, whose material is `grass`,
+ * onto the town's verge.
  *
  * `TREE` is listed for the same reason `RUBBLE` and `RUINED_WALL` are — it only
  * ever stands outdoors, on grass — and because it is the one type that must not
@@ -179,15 +187,13 @@ export function groundFrameIndex(
  * well, a building anchor — is not listed, because outdoors and in a dungeon it
  * stands on different things. `groundMaterialUnder` infers those.
  *
- * Only `grass` and `dirt` are produced today. The other five materials arrive
- * with the street plan in Phase 3 of the town redesign; the renderer already
- * blends all seven.
- *
- * Roads render as `dirt` rather than the jointed `lane` sett pattern: laid
- * across every road tile in town (not just an edge or threshold), the setts'
- * joints and weed scatter read as a busy grid rather than a street. `dirt` is
- * the calm, jointless material built for exactly this — long stretches of
- * loose ground with nothing to tile against.
+ * `FloorTypeValue.road` is the generic packed-earth surface — alleys inside the
+ * walls and every track outside them — and renders as `dirt`, not as the jointed
+ * `lane` setts. Laid across a long approach road the setts' joints read as a busy
+ * grid rather than a street; `dirt` is the calm, jointless material built for
+ * exactly that. The town's paved streets carry their own tile types instead, so
+ * a lane, a main street and the plaza are different surfaces on the map rather
+ * than one surface the renderer guesses at.
  */
 export function groundMaterialForTileType(type: number): GroundMaterial | undefined {
   switch (type) {
@@ -197,9 +203,19 @@ export function groundMaterialForTileType(type: number): GroundMaterial | undefi
     case RUINED_WALL:
     case TREE:
       return 'grass';
+    case VERGE_GRASS:
+      return 'verge';
     case FloorTypeValue.road:
     case DIRT_PATCH:
       return 'dirt';
+    case YARD_GRAVEL:
+      return 'gravel';
+    case LANE_STREET:
+      return 'lane';
+    case COBBLE_STREET:
+      return 'cobble';
+    case PLAZA_STONE:
+      return 'plaza';
     default:
       return undefined;
   }

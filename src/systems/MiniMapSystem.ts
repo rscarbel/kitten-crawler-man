@@ -5,6 +5,18 @@ import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
 import { drawText } from '../ui/TextBox';
+import {
+  COBBLE_STREET,
+  FloorTypeValue,
+  HORDER_BOSS_ROOM_FLOOR,
+  LANE_STREET,
+  PLAZA_STONE,
+  SAFE_ROOM_FLOOR,
+  TOWN_WALL,
+  VERGE_GRASS,
+  VOID_TYPE,
+  YARD_GRAVEL,
+} from '../map/tileTypes';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -396,40 +408,41 @@ export class MiniMapSystem implements GameSystem {
   }
 
   private tileColor(type: number): string {
-    const TILE_VOID = 9;
-    const TILE_WALL = 2;
-    const TILE_GRASS = 0;
-    const TILE_ROAD = 1;
-    const TILE_WATER = 4;
-    const TILE_CONCRETE = 5;
-    const TILE_FLOOR = 6;
-    const TILE_CARPET = 7;
-    const TILE_WOOD = 8;
-    const TILE_SAFE_ROOM = 10;
-    const TILE_BOSS_ROOM = 11;
     switch (type) {
-      case TILE_VOID:
+      case VOID_TYPE:
         return '#000000'; // void border
-      case TILE_WALL:
+      case FloorTypeValue.wall:
         return '#3a3028'; // wall
-      case TILE_GRASS:
+      case FloorTypeValue.grass:
         return '#3a7040'; // grass
-      case TILE_ROAD:
+      case FloorTypeValue.road:
         return '#6a5040'; // road
-      case TILE_WATER:
+      case FloorTypeValue.water:
         return '#1a6880'; // water
-      case TILE_CONCRETE:
+      case FloorTypeValue.concrete:
         return '#606060'; // concrete (hallway)
-      case TILE_FLOOR:
+      case FloorTypeValue.tile_floor:
         return '#707070'; // tile floor
-      case TILE_CARPET:
+      case FloorTypeValue.carpet:
         return '#503030'; // carpet
-      case TILE_WOOD:
+      case FloorTypeValue.wood:
         return '#704030'; // wood
-      case TILE_SAFE_ROOM:
+      case SAFE_ROOM_FLOOR:
         return '#8a7040'; // safe room floor
-      case TILE_BOSS_ROOM:
+      case HORDER_BOSS_ROOM_FLOOR:
         return '#2a1808'; // boss room floor
+      case TOWN_WALL:
+        return '#8a8175'; // the town's wall ring
+      case VERGE_GRASS:
+        return '#4c6338'; // street verge — greener than a street, duller than field grass
+      case YARD_GRAVEL:
+        return '#6e685e';
+      case LANE_STREET:
+        return '#7a6448';
+      case COBBLE_STREET:
+        return '#8e7a5c'; // the two main streets, lighter so the spine reads at a glance
+      case PLAZA_STONE:
+        return '#a89c86';
       default:
         return '#555555';
     }

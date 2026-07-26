@@ -58,6 +58,12 @@ import {
   SPRITE_BUILDING,
   RUINED_WALL,
   RUBBLE,
+  TOWN_WALL,
+  VERGE_GRASS,
+  YARD_GRAVEL,
+  LANE_STREET,
+  COBBLE_STREET,
+  PLAZA_STONE,
 } from '../map/tileTypes';
 
 const BG_COLOR = '#0b0e14';
@@ -65,6 +71,8 @@ const LABEL_COLOR = '#e2e8f0';
 const HINT_COLOR = '#94a3b8';
 const METRIC_LABEL_COLOR = '#9aa7bd';
 const FOOTPRINT_STROKE = 'rgba(255, 214, 102, 0.85)';
+/** A sprite's art beyond the ground it occupies — today only the tower's spire. */
+const OVERHANG_STROKE = 'rgba(255, 214, 102, 0.28)';
 const DOOR_MARKER_COLOR = '#ff5d8f';
 const SAFE_RADIUS_STROKE = 'rgba(94, 234, 212, 0.7)';
 const CIRCUS_STROKE = 'rgba(196, 132, 252, 0.8)';
@@ -95,6 +103,14 @@ const TILE_COLORS = new Map<number, string>([
   [WELL, '#6f6250'],
   [MAIN_TOWER, '#d8c9a8'],
   [SPRITE_BUILDING, '#d8c9a8'],
+  // Darker than any street so the ring reads at a glance, which is the one thing
+  // this view exists to show. The wall's in-game stone is much lighter.
+  [TOWN_WALL, '#4b4640'],
+  [VERGE_GRASS, '#5e7345'],
+  [YARD_GRAVEL, '#7d7568'],
+  [LANE_STREET, '#9c8768'],
+  [COBBLE_STREET, '#a89880'],
+  [PLAZA_STONE, '#c0b49c'],
 ]);
 
 /** Header band above the map viewport. */
@@ -344,8 +360,25 @@ export class TownMapScene extends Scene {
     ctx.stroke();
 
     ctx.lineWidth = FOOTPRINT_LINE_WIDTH;
-    ctx.strokeStyle = FOOTPRINT_STROKE;
     for (const plot of this.plots) {
+      // The tower's art is 23 tiles tall over a 2-row base, so its overhang is
+      // outlined separately: the solid box is the ground it occupies (what the
+      // metrics measure), the faint one is what the sprite covers.
+      const hasOverhang =
+        plot.artRect.x !== plot.rect.x ||
+        plot.artRect.y !== plot.rect.y ||
+        plot.artRect.w !== plot.rect.w ||
+        plot.artRect.h !== plot.rect.h;
+      if (hasOverhang) {
+        ctx.strokeStyle = OVERHANG_STROKE;
+        ctx.strokeRect(
+          plot.artRect.x * px,
+          plot.artRect.y * px,
+          plot.artRect.w * px,
+          plot.artRect.h * px,
+        );
+      }
+      ctx.strokeStyle = FOOTPRINT_STROKE;
       ctx.strokeRect(plot.rect.x * px, plot.rect.y * px, plot.rect.w * px, plot.rect.h * px);
       ctx.fillStyle = DOOR_MARKER_COLOR;
       const doorSize = DOOR_MARKER_TILES * px;

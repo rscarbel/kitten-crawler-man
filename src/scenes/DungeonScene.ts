@@ -218,15 +218,19 @@ const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
 const FORGE_AMBIENT_RADIUS_TILES = 8;
 const FORGE_AMBIENT_VOLUME = 0.45;
-/** The square's murmur is a wide, quiet bed rather than a wall of crowd noise. */
-const TOWN_SQUARE_AMBIENT_RADIUS_TILES = 18;
+/**
+ * The plaza's murmur is a wide, quiet bed rather than a wall of crowd noise —
+ * wide enough to carry a little way up every lane off the 17 x 16 slab, which is
+ * what 12 tiles from its centre reaches.
+ */
+const TOWN_SQUARE_AMBIENT_RADIUS_TILES = 12;
 const TOWN_SQUARE_AMBIENT_VOLUME = 0.28;
 /**
  * The city chatter spans the whole town so it reaches silence exactly where the
  * town ends. Its radius tracks the safe-zone radius; the fallback only matters on
  * an overworld map that somehow reports no safe zone.
  */
-const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 55;
+const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 40;
 const CITY_CROWD_AMBIENT_VOLUME = 0.35;
 
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);

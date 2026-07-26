@@ -10,6 +10,11 @@ import {
   ROOF_CIRCUS_RED,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
+  COBBLE_STREET,
+  LANE_STREET,
+  PLAZA_STONE,
+  VERGE_GRASS,
+  YARD_GRAVEL,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { drawGroundTile } from './groundTiles';
@@ -90,8 +95,15 @@ export function drawTerrainTile(
       break;
     }
 
-    // Outdoors
-    case FloorTypeValue.grass: {
+    // Outdoors. Every one of these is a ground *material* and nothing more — the
+    // material a tile draws comes from its type via `groundMaterialForTileType`,
+    // so a new paving surface is one case here and one line there.
+    case FloorTypeValue.grass:
+    case VERGE_GRASS:
+    case YARD_GRAVEL:
+    case LANE_STREET:
+    case COBBLE_STREET:
+    case PLAZA_STONE: {
       drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }

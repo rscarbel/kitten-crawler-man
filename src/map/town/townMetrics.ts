@@ -12,7 +12,16 @@
  */
 
 import type { TileContent } from '../tileTypes';
-import { FloorTypeValue, MAIN_TOWER, SPRITE_BUILDING } from '../tileTypes';
+import {
+  COBBLE_STREET,
+  FloorTypeValue,
+  LANE_STREET,
+  MAIN_TOWER,
+  PLAZA_STONE,
+  SPRITE_BUILDING,
+  VERGE_GRASS,
+  YARD_GRAVEL,
+} from '../tileTypes';
 import { getSpriteDoorwayByKey, getSpriteFootprintByKey } from '../../core/SpriteLoader';
 import type { BuildingKind, TilePoint, TileRect } from './townPlan';
 
@@ -23,7 +32,20 @@ const MAIN_TOWER_SPRITE_KEY = 'overworld_main_tower';
 const GROUND_MATERIAL_TYPES: ReadonlySet<number> = new Set([
   FloorTypeValue.grass,
   FloorTypeValue.road,
+  VERGE_GRASS,
+  YARD_GRAVEL,
+  LANE_STREET,
+  COBBLE_STREET,
+  PLAZA_STONE,
 ]);
+
+/**
+ * The tower's blocking base, as tile offsets from its anchor: the manifest
+ * blocks the two rows above the anchor and nothing else, so those two rows are
+ * the only ground the tower actually occupies.
+ */
+const TOWER_BASE_NORTH_OFFSET = 2;
+const TOWER_BASE_ROWS = 2;
 
 /** The parts of a generated overworld this module needs to measure it. */
 export interface MeasurableOverworld {
@@ -37,9 +59,22 @@ export interface MeasurableOverworld {
   readonly townSafeRadiusTiles: number;
 }
 
-/** A named building together with the ground its art covers and the door into it. */
+/** A named building together with the ground it occupies and the door into it. */
 export interface BuildingPlot {
+  /**
+   * Ground the building occupies, which the bounding-box and density metrics
+   * measure. For every sprite building this is its whole art rect, because the
+   * art is opaque across the frame. For the **tower** it is only its two
+   * blocking rows: the other 21 rows of the spire hang over the fields north of
+   * the wall, so counting them would make a town measured at 55 x 40 report
+   * itself as 61 tall and would attribute 138 tiles of ground to a building whose
+   * base is a 6 x 2 rectangle — of which the manifest actually blocks 8 tiles, the
+   * rest being its doorway and the gaps beside it. See the tracker's Phase 3 note
+   * for both figures.
+   */
   readonly rect: TileRect;
+  /** The full sprite art rect, including any overhang, for the `?townmap` view. */
+  readonly artRect: TileRect;
   readonly name: string;
   readonly doorTile: TilePoint;
 }
@@ -53,7 +88,14 @@ export interface TownMetrics {
   readonly density: number;
   readonly farthestDoorTiles: number;
   readonly farthestDoorName: string;
-  /** Distinct ground materials appearing inside the bounding box. */
+  /**
+   * Distinct ground materials appearing inside the building bounding box.
+   *
+   * That box is inside the walls, so this can never count `grass`: the street
+   * plan puts a made surface on every tile within the ring and leaves field grass
+   * to the country outside it, which is design principle 3 of the redesign rather
+   * than a gap. Six is therefore the ceiling, not seven.
+   */
   readonly groundTypeCount: number;
   readonly buildingCount: number;
 }
@@ -63,6 +105,7 @@ const EMPTY_RECT: TileRect = { x: 0, y: 0, w: 0, h: 0 };
 /** A building's art on the map, before it has been matched to its named entry. */
 interface PlacedBuilding {
   readonly rect: TileRect;
+  readonly artRect: TileRect;
   /**
    * Door the placement rule derives from the sprite, or undefined for the tower
    * — its door comes from the plan rather than from its art.
@@ -84,14 +127,23 @@ function findPlacedBuildings(grid: MeasurableOverworld['grid']): PlacedBuilding[
       const footprint = getSpriteFootprintByKey(spriteKey);
       if (footprint === undefined) continue;
       const doorway = getSpriteDoorwayByKey(spriteKey);
+      const artRect: TileRect = {
+        x: x + footprint.dx,
+        y: y + footprint.dy,
+        w: footprint.w,
+        h: footprint.h,
+      };
       placed.push({
         isTower,
-        rect: {
-          x: x + footprint.dx,
-          y: y + footprint.dy,
-          w: footprint.w,
-          h: footprint.h,
-        },
+        artRect,
+        rect: isTower
+          ? {
+              x: artRect.x,
+              y: y - TOWER_BASE_NORTH_OFFSET,
+              w: artRect.w,
+              h: TOWER_BASE_ROWS,
+            }
+          : artRect,
         spriteDoorTile:
           isTower || doorway === undefined ? undefined : { x: x + doorway.dx, y: y + doorway.dy },
       });
@@ -132,7 +184,12 @@ export function collectBuildingPlots(data: MeasurableOverworld): BuildingPlot[] 
     }
     claimedEntries.add(index);
     const entry = data.buildingEntries[index];
-    plots.push({ name: entry.name, doorTile: entry.doorTile, rect: building.rect });
+    plots.push({
+      name: entry.name,
+      doorTile: entry.doorTile,
+      rect: building.rect,
+      artRect: building.artRect,
+    });
   }
   return plots;
 }
@@ -214,7 +271,7 @@ export function metricRows(
       'Farthest door',
       `${metrics.farthestDoorTiles.toFixed(DISTANCE_DECIMALS)} (${metrics.farthestDoorName})`,
     ],
-    ['Ground materials in town', `${metrics.groundTypeCount}`],
+    ['Ground materials in the walls', `${metrics.groundTypeCount}`],
     ['Town safe radius', `${data.townSafeRadiusTiles}`],
   ];
 }

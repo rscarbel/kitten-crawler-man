@@ -31,6 +31,7 @@ import {
   MODERN_DECORATION,
   RUINED_WALL,
   RUBBLE,
+  TOWN_WALL,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -72,6 +73,7 @@ const SHADOW_TYPES = new Set([
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   RUINED_WALL,
+  TOWN_WALL,
 ]);
 
 // Full set of non-floor tile types used when scanning neighbours for inferFloorType.
@@ -105,6 +107,7 @@ const NON_FLOOR_TYPES = new Set<number>([
   SPRITE_BUILDING,
   MODERN_DECORATION,
   RUINED_WALL,
+  TOWN_WALL,
 ]);
 
 /**

@@ -39,6 +39,7 @@ import {
   BLEACHER,
   CLUB_FLOOR,
   DANCE_FLOOR,
+  TOWN_WALL,
 } from './tileTypes';
 import {
   CLUB_INTERIOR_W,
@@ -1534,10 +1535,16 @@ export class GameMap {
    */
   isInTownSafeZone(worldX: number, worldY: number): boolean {
     if (this.townSafeRadiusTiles === null) return false;
-    const size = this.structure.length;
-    const centerTile = Math.floor(size / 2);
-    const dxTiles = worldX / this.tileHeight - centerTile;
-    const dyTiles = worldY / this.tileHeight - centerTile;
+    // Measured from the plaza, not from `gridSize / 2`. The two coincide today only
+    // because the plaza happens to be centred on the map. This is what tells the
+    // ruins ghouls and the krasue to break off a chase, and what switches the
+    // overworld music between town and wilderness, so it should follow the town.
+    // (Spawn *placement* is a separate thing: `scatterRuinsSpawnPoints` filters
+    // against `plan.centre` at generation time and never calls this.)
+    const mapCentre = Math.floor(this.structure.length / 2);
+    const centre = this.townSquareCentre ?? { x: mapCentre, y: mapCentre };
+    const dxTiles = worldX / this.tileHeight - centre.x;
+    const dyTiles = worldY / this.tileHeight - centre.y;
     return (
       dxTiles * dxTiles + dyTiles * dyTiles <= this.townSafeRadiusTiles * this.townSafeRadiusTiles
     );
@@ -1601,9 +1608,11 @@ export class GameMap {
       tile.type !== SPRITE_BUILDING &&
       tile.type !== RUINED_WALL &&
       tile.type !== TENT_POLE &&
-      tile.type !== BLEACHER
+      tile.type !== BLEACHER &&
+      tile.type !== TOWN_WALL
       // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43),
-      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51) are walkable
+      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51) and the town's street
+      // materials (VERGE_GRASS 57 … PLAZA_STONE 61) are walkable
     );
   }
 

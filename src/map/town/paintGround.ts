@@ -26,10 +26,23 @@ export function paintVoidBorder(grid: TileGrid, borderTiles: number): void {
 }
 
 /**
- * Scatters weeds over open grass and dirt patches over open street.
+ * Scatters weeds over open grass and worn patches over the packed-earth tracks.
  *
  * The two passes sweep the map separately rather than deciding both in one
  * sweep so each keeps its own independent density.
+ *
+ * **The verge gets no scatter**, though it is the town's soft ground and looks
+ * like the obvious place for weeds. `GRASSY_WEED` reports `grass` as the material
+ * under its tufts — correctly, since that is what it is scattered on outdoors —
+ * so painted onto a verge it draws the *field grass* row instead of the verge row,
+ * and because grass is the softest material in the blend order it also becomes an
+ * island the surrounding verge bleeds into through the corner masks, eroding the
+ * tuft the tile exists to show. It put about four tiles of the wrong material
+ * inside the walls per generation and falsified the redesign's third principle in
+ * the only place that matters, which is what gets drawn. The verge material
+ * already depicts grass invaded by stone and weeds, so nothing is lost; planting
+ * inside the walls is Phase 4/5's job, and a decoration for it needs its own tile
+ * type mapping to `verge` rather than a reuse of the outdoor one.
  */
 export function scatterGroundCover(
   grid: TileGrid,
@@ -54,5 +67,9 @@ export function scatterGroundCover(
   };
 
   scatter(FloorTypeValue.grass, GRASSY_WEED, plan.groundCover.weedDensityOnGrass);
+  // Only the packed-earth track takes worn patches. The town's paved materials are
+  // broken up by the renderer's own world-space tone and by the fringe where they
+  // meet, and a scatter of worn dirt across cobble would read as neglect on a
+  // street that is supposed to be the town's spine.
   scatter(FloorTypeValue.road, DIRT_PATCH, plan.groundCover.dirtPatchDensityOnRoad);
 }

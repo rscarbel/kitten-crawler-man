@@ -20,6 +20,12 @@ import {
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   SPRITE_BUILDING,
+  TOWN_WALL,
+  COBBLE_STREET,
+  DIRT_PATCH,
+  LANE_STREET,
+  PLAZA_STONE,
+  YARD_GRAVEL,
 } from '../tileTypes';
 import type { TileRect } from './townPlan';
 
@@ -38,6 +44,26 @@ const SOLID_TILE_TYPES: ReadonlySet<number> = new Set([
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   SPRITE_BUILDING,
+  TOWN_WALL,
+]);
+
+/**
+ * Every surface a route may run over — six of them: the packed-earth track used
+ * for alleys and for everything outside the walls, the town's four made surfaces
+ * (yard, lane, main street and plaza), and `DIRT_PATCH`, a worn patch *of* a track
+ * that therefore does not sever one.
+ *
+ * `VERGE_GRASS` is deliberately absent. It is the town's soft ground — the thing
+ * a street is laid *on* — so treating it as paving would make every garden and
+ * every wall base count as a route.
+ */
+const PAVED_TILE_TYPES: ReadonlySet<number> = new Set([
+  FloorTypeValue.road,
+  DIRT_PATCH,
+  YARD_GRAVEL,
+  LANE_STREET,
+  COBBLE_STREET,
+  PLAZA_STONE,
 ]);
 
 export class TileGrid {
@@ -89,13 +115,21 @@ export class TileGrid {
     return SOLID_TILE_TYPES.has(type);
   }
 
-  /** Paves a road tile unless something solid already stands there. */
-  setRoad(x: number, y: number): void {
+  /** Lays a paving material unless something solid already stands there. */
+  setPaved(x: number, y: number, type: number): void {
     if (this.isSolid(x, y)) return;
-    this.set(x, y, FloorTypeValue.road);
+    this.set(x, y, type);
   }
 
-  isRoad(x: number, y: number): boolean {
-    return this.typeAt(x, y) === FloorTypeValue.road;
+  /**
+   * True on any of the town's street materials or on an out-of-town track.
+   *
+   * The bypass router asks this rather than "is this the road type", because
+   * under a street plan a route runs over any of the six surfaces above, and a
+   * lane severed by a tent is severed just the same as a track would be.
+   */
+  isPaved(x: number, y: number): boolean {
+    const type = this.typeAt(x, y);
+    return type !== undefined && PAVED_TILE_TYPES.has(type);
   }
 }

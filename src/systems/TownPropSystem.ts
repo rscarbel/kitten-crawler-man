@@ -44,28 +44,37 @@ const DRINK_COOLDOWN_FRAMES = 90;
 const REST_HEAL_FRACTION = 0.25;
 const REST_COOLDOWN_FRAMES = 360;
 
-// Preferred board placement: a few tiles south of the square centre — the player
-// spawns at centre and the tower fills the north, so south is the open plaza.
-// Searched outward for the first free tile clear of building/sprite footprints.
-const BOARD_SOUTH_OFFSET = 4;
+// Preferred board placement: the plaza's north-west quadrant. It used to be due
+// south of centre on the rationale that "the tower fills the north" — the tower
+// now stands in the north wall and the terrace approach runs down the centre
+// line, so the open quarters are the corners, and due south is the arrival
+// sightline from the south gate. Searched outward for the first free tile clear
+// of building/sprite footprints.
+const BOARD_OFFSET: TileOffset = { dx: -4, dy: -4 };
 const PROP_SEARCH_RADIUS = 4;
 
-// Benches flank the fountain (a 3×3 block in the SE quadrant of the square): one
-// to its west, one to its east, on the fountain's middle row.
-const FOUNTAIN_FLANK_ROW_OFFSET = 5;
-const BENCH_WEST_COL_OFFSET = 3;
-const BENCH_EAST_COL_OFFSET = 7;
+// Benches flank the fountain, one either side, on its middle row. Derived from
+// the fountain's own tiles rather than from a copy of its plan offsets: those
+// offsets moved with the plaza in Phase 3, and a bench row hard-coded to the old
+// fountain would have sat in open flagstone with nothing to face.
+const BENCH_COLUMN_GAP = 2;
 
-// The fortune teller sits in the square's southwest, clear of the tower (north),
-// the board (due south), the stalls (flanks), and the fountain (southeast).
-const FORTUNE_DX = -4;
-const FORTUNE_DY = 2;
+// The fortune teller sits in the plaza's north-east quadrant, clear of the
+// terrace mouth (centre north), the board (north-west), the stalls (flanks on
+// the centre row) and the fountain (south-east).
+const FORTUNE_OFFSET: TileOffset = { dx: 4, dy: -4 };
 
 const CENTER_OFFSET = TILE_SIZE / 2;
 
 interface TileXY {
   x: number;
   y: number;
+}
+
+/** Signed tile offset from the plaza centre. */
+interface TileOffset {
+  readonly dx: number;
+  readonly dy: number;
 }
 
 type HealKind = 'fountain' | 'well' | 'bench';
@@ -207,8 +216,11 @@ export class TownPropSystem implements GameSystem {
   }
 
   private placeBoard(): void {
-    const center = Math.floor(this.gameMap.gridSize / 2);
-    const tile = this.findFreeTile({ x: center, y: center + BOARD_SOUTH_OFFSET });
+    const centre = this.plazaCentre();
+    const tile = this.findFreeTile({
+      x: centre.x + BOARD_OFFSET.dx,
+      y: centre.y + BOARD_OFFSET.dy,
+    });
     if (tile === null) return;
     this.reserve(tile);
     this.board = new NoticeBoardProp(tile);
@@ -216,8 +228,11 @@ export class TownPropSystem implements GameSystem {
   }
 
   private placeFortuneTeller(): void {
-    const center = Math.floor(this.gameMap.gridSize / 2);
-    const tile = this.findFreeTile({ x: center + FORTUNE_DX, y: center + FORTUNE_DY });
+    const centre = this.plazaCentre();
+    const tile = this.findFreeTile({
+      x: centre.x + FORTUNE_OFFSET.dx,
+      y: centre.y + FORTUNE_OFFSET.dy,
+    });
     if (tile === null) return;
     this.reserve(tile);
     this.fortuneTile = tile;
@@ -225,11 +240,11 @@ export class TownPropSystem implements GameSystem {
   }
 
   private placeBenches(): void {
-    const center = Math.floor(this.gameMap.gridSize / 2);
-    const row = center + FOUNTAIN_FLANK_ROW_OFFSET;
+    const fountain = this.gameMap.fountainCentre;
+    if (fountain === undefined) return;
     const preferred: TileXY[] = [
-      { x: center + BENCH_WEST_COL_OFFSET, y: row },
-      { x: center + BENCH_EAST_COL_OFFSET, y: row },
+      { x: fountain.x - BENCH_COLUMN_GAP, y: fountain.y },
+      { x: fountain.x + BENCH_COLUMN_GAP, y: fountain.y },
     ];
     for (const want of preferred) {
       const tile = this.findFreeTile(want);
@@ -245,6 +260,20 @@ export class TownPropSystem implements GameSystem {
         tiles: [tile],
       });
     }
+  }
+
+  /**
+   * Centre of the market plaza. Read from the map rather than recomputed as
+   * `gridSize / 2`, which was only ever right because the plaza happened to be
+   * centred on the map.
+   */
+  private plazaCentre(): TileXY {
+    return (
+      this.gameMap.townSquareCentre ?? {
+        x: Math.floor(this.gameMap.gridSize / 2),
+        y: Math.floor(this.gameMap.gridSize / 2),
+      }
+    );
   }
 
   private reserve(tile: TileXY): void {

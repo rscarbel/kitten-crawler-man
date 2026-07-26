@@ -177,11 +177,16 @@ export class MarketSystem implements GameSystem {
   }
 
   private placeStalls(): void {
-    const center = Math.floor(this.gameMap.gridSize / 2);
+    // Read from the map rather than recomputed as `gridSize / 2`, which was only
+    // ever right because the plaza happened to be centred on the map.
+    const centre = this.gameMap.townSquareCentre ?? {
+      x: Math.floor(this.gameMap.gridSize / 2),
+      y: Math.floor(this.gameMap.gridSize / 2),
+    };
     for (const def of MARKET_VENDORS) {
       const span = this.findFreeSpan({
-        x: center + def.placement.dx,
-        y: center + def.placement.dy,
+        x: centre.x + def.placement.dx,
+        y: centre.y + def.placement.dy,
       });
       if (span === null) continue;
       for (const tile of [...span, ...vendorRowTiles(span)]) {

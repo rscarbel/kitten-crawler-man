@@ -114,6 +114,27 @@ export const CLUB_FLOOR = 54;
 /** Tile type for the club's central dance floor — dark reflective panels lit by pulsing overlay lights, walkable. */
 export const DANCE_FLOOR = 55;
 
+// The town's outdoor surfaces, one tile type per ground material.
+//
+// `groundMaterialForTileType` maps each of these to a row of the generated
+// `ground_overworld` sheet, so the material a street is paved in is a property of
+// the map rather than of the renderer. `FloorTypeValue.road` stays the generic
+// packed-earth surface — alleys inside the walls, and every track outside them —
+// so there is no separate alley type.
+
+/** Tile type for the town's wall ring — coursed stone rampart, not walkable. */
+export const TOWN_WALL = 56;
+/** Tile type for a street verge — grass invaded by stone and weeds, walkable. */
+export const VERGE_GRASS = 57;
+/** Tile type for a workyard or gate apron — loose gravel chip, walkable. */
+export const YARD_GRAVEL = 58;
+/** Tile type for a side lane or building frontage — small mixed setts, walkable. */
+export const LANE_STREET = 59;
+/** Tile type for a main street — rounded cobble setts with cart ruts, walkable. */
+export const COBBLE_STREET = 60;
+/** Tile type for the market plaza and civic terrace — large cut flagstones, walkable. */
+export const PLAZA_STONE = 61;
+
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
  * that are walkable floor clutter — cables, rubble, flat debris, etc.

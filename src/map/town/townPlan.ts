@@ -1,14 +1,33 @@
 /**
- * Declarative description of the overworld town: where its streets run, which
- * building stands on which plot, and what props furnish the square.
+ * Declarative description of the overworld town: where its wall stands, where
+ * its streets run, which building stands on which plot, and what props furnish
+ * the square.
  *
  * `generateOverworld` consumes a plan rather than holding the layout inline, so
  * moving a building is a data edit in one place instead of a code edit spread
  * across street rasterisation, door stubs and decoration offsets. Everything
  * here is tile-space geometry only — nothing in this module touches a grid.
  *
- * See `docs/town-redesign.md` §5 for how the plan and the painters divide up.
+ * **The town is a walled market village, not a crossroads.** Streets come first
+ * and buildings hang off street frontages: every building band is bounded below
+ * by a street, and every building's south face — which is where
+ * every sprite puts its door — sits on the band's own bottom row, so its door
+ * opens directly onto the street below it. That is what removed the old
+ * per-building road stub entirely: a stub only exists because a building was
+ * dropped in open space and had to be connected back to a road afterwards.
+ *
+ * See `docs/town-redesign.md` §3.2 and §4 for the street hierarchy and the
+ * reference layout these coordinates realise.
  */
+
+import {
+  COBBLE_STREET,
+  FloorTypeValue,
+  LANE_STREET,
+  PLAZA_STONE,
+  VERGE_GRASS,
+  YARD_GRAVEL,
+} from '../tileTypes';
 
 /** Tile-space point. */
 export interface TilePoint {
@@ -34,36 +53,89 @@ export interface TownOffset {
 export type BuildingKind = 'house' | 'tower' | 'restaurant' | 'store' | 'club';
 
 /**
+ * One paved or planted region of the town.
+ *
+ * Surfaces are painted in the order the plan lists them and later ones win, so
+ * the hierarchy is expressed by ordering rather than by priority numbers: soft
+ * ground first, then alleys, lanes, main streets, and finally the plaza's
+ * flagstone. Overlapping a lane across the plaza and letting the plaza win is
+ * how junctions come out right without any junction-fillet code.
+ */
+export interface PlannedSurface {
+  /**
+   * Human-readable label, so the list below reads as a description of the town
+   * and so `assertTownPlanIsSane` can say which surface is wrong. Nothing on a
+   * render path reads it.
+   */
+  readonly name: string;
+  readonly bounds: TileRect;
+  readonly tileType: number;
+}
+
+/** An opening in the wall ring, and the road that leaves through it. */
+export interface PlannedGate {
+  /** Label only, as `PlannedSurface.name` is. */
+  readonly name: string;
+  /** The opening itself — a slice of the wall ring, paved with `tileType`. */
+  readonly bounds: TileRect;
+  readonly tileType: number;
+  /**
+   * Loose gravel outside the gate, wider than the opening, so the joint between
+   * street and open road reads as a mouth rather than as a butt edge.
+   *
+   * It is *flanks* of gravel, not a gravel slab: `paintGateHighways` runs after the
+   * apron is painted and paves the gate's own width of track straight through the
+   * middle of it, which leaves roughly a third to a half of each apron as gravel
+   * either side of the road.
+   */
+  readonly apron: TileRect;
+  /**
+   * Where a road leaving this gate meets open country: the centre of the gate,
+   * one tile outside the wall. Outlying sites (the circus) route to the nearest
+   * of these rather than to the town centre.
+   */
+  readonly exit: TilePoint;
+  /** Unit direction the gate's highway runs, away from the town. */
+  readonly outward: TownOffset;
+}
+
+/**
  * A building rendered from a PNG. Its footprint and doorway both come from the
  * sprite manifest at paint time, so the plan only has to say where the art's
  * anchor tile goes.
  */
 export interface PlannedBuilding {
-  readonly anchor: TownOffset;
+  /** West edge of the plot, as a column offset from the town centre. */
+  readonly west: number;
+  /**
+   * Row the building's front (south) face stands on — always its band's last
+   * row, so the street below is the street its door opens onto.
+   *
+   * Stated instead of an anchor row so the plan never repeats a sprite's height.
+   * `placeSpriteBuilding` derives the anchor by bottom-aligning the manifest
+   * footprint to this row, which means re-scaling a building's art keeps its
+   * frontage on the street and grows it northward into its own plot.
+   */
+  readonly frontRow: number;
   readonly spriteKey: string;
   readonly name: string;
   readonly kind: BuildingKind;
 }
 
 /**
- * The town's main tower. Unlike the sprite buildings its plot is stated
- * explicitly, because the art is 23 tiles tall while only its base blocks
- * movement, so the rectangle differs from the manifest footprint.
+ * The town's main tower. Unlike the sprite buildings its door is stated
+ * explicitly rather than derived, because the art is 23 tiles tall while only
+ * its bottom two rows block movement, so the manifest's "front row" rule that
+ * every other building's doorway comes from does not apply to it.
+ *
+ * The tower stands *in* the north wall: its two blocking rows are the wall row
+ * and the row below, and the other 21 rows of spire overhang the fields outside
+ * the town. That is what recovers the 6 x 22 dead corridor the tower used to
+ * sterilise in the town centre.
  */
 export interface PlannedTower {
   /** Tile carrying the `MAIN_TOWER` type that triggers the sprite render. */
   readonly anchor: TownOffset;
-  /**
-   * The spire's ground, relative to the town centre — used *only* so street
-   * bypass routing treats the tower as a structure to route around.
-   *
-   * It reserves nothing else, despite the name: the N-S main road band spans
-   * `cx − 2 … cx + 2` and the plot spans `cx − 3 … cx + 2`, so the road runs
-   * straight through it (98 of its 126 tiles are road), and ground scatter is
-   * only suppressed over sprite footprints, so weeds and dirt land under the
-   * spire too — about 7 tiles' worth per generation.
-   */
-  readonly plot: { readonly offset: TownOffset; readonly w: number; readonly h: number };
   readonly door: TownOffset;
   readonly name: string;
   readonly kind: BuildingKind;
@@ -83,41 +155,21 @@ export interface GroundCoverPlan {
 
 export interface TownPlan {
   readonly centre: TilePoint;
-  /** Width of both arms of the main crossroads, in tiles. */
-  readonly mainRoadWidth: number;
+  /** The wall ring, as the rectangle its stone occupies. */
+  readonly wall: TileRect;
   /**
-   * Row (or column) where a road approaching the crossroads from the south or
-   * east stops, as an offset from the centre line.
+   * Everything strictly inside the wall — the ring inset by one on every side.
    *
-   * **This currently overshoots the road's far kerb, so an approach taking the
-   * far-side branch stops short of the junction** — with a 5-wide road the band
-   * ends at +2 and the approach starts at +4, leaving row +3 (southward) or
-   * column +3 (eastward) unpaved. The near-side branch has no such gap: it
-   * targets `−floor(mainRoadWidth / 2)`, a tile on the band itself.
-   *
-   * So the circus is only actually cut off from the town's paved network when it
-   * lies south *and* east: roughly 45% of the seeds in that quadrant, ~11% of all
-   * seeds, and zero in the other three quadrants — measured over 2000 seeds at
-   * size 280, and reproduced independently. Even in that quadrant the skipped tile is
-   * often paved anyway by the plaza slab or a nearby door stub. Grass is
-   * walkable, so it reads as sloppy rather than breaking anything, and it is
-   * preserved verbatim from the pre-refactor generator; Phase 3 should set this to
-   * `Math.floor(mainRoadWidth / 2)` — the kerb row itself. It must stay an
-   * integer: it is used directly as a loop bound, and a fractional tile
-   * coordinate passes `TileGrid.inBounds` and then throws on the row lookup.
+   * Stated rather than left to callers to derive. Four separate checks in the
+   * generator want it, and four hand-written `wall.x + 1` / `wall.w - 2` pairs is
+   * four chances to write one of them as `wall.w - 1`.
    */
-  readonly approachRoadStopOffset: number;
-  /**
-   * How far south of the centre line a building's frontage must reach before
-   * its door stub turns along that frontage to meet the N-S road.
-   *
-   * Numerically equal to `approachRoadStopOffset` today, and it was one shared
-   * constant before the refactor, but it is a different quantity — a threshold
-   * on a building's position, not a target a road is paved to — and the two are
-   * free to move independently.
-   */
-  readonly frontageTurnThreshold: number;
-  readonly square: TileRect;
+  readonly interior: TileRect;
+  readonly gates: ReadonlyArray<PlannedGate>;
+  /** Every surface of the town, in paint order — later entries win. */
+  readonly surfaces: ReadonlyArray<PlannedSurface>;
+  /** The market plaza slab, which is also what `townSquareCentre` is the centre of. */
+  readonly plaza: TileRect;
   readonly tower: PlannedTower;
   readonly buildings: ReadonlyArray<PlannedBuilding>;
   readonly props: ReadonlyArray<PlannedProp>;
@@ -128,61 +180,165 @@ export interface TownPlan {
   readonly groundCover: GroundCoverPlan;
 }
 
-// ── Street and square geometry ───────────────────────────────────────────────
-
-/** Both arms of the main crossroads are this wide. */
-const MAIN_ROAD_WIDTH = 5;
+// ── The town's frame ─────────────────────────────────────────────────────────
 
 /**
- * Tiles past the main road's kerb that both `approachRoadStopOffset` and
- * `frontageTurnThreshold` sit at. One shared value only because that is what
- * the pre-refactor generator used for both; see their docs.
+ * The wall ring, as offsets from the plaza centre. The stone stands on these
+ * lines; the interior is everything strictly inside them.
+ *
+ * 55 x 43 of interior. The 15 sprite buildings span rows -18..21, so their bounding
+ * box is exactly the 55 x 40 the redesign targets; the three interior rows none of
+ * them stands on are Low Street's, 22..24.
+ *
+ * The band structure is not symmetric about the plaza, which is worth knowing before
+ * reasoning about distances from it: Garrison Row starts on `INTERIOR_NORTH`, so the
+ * northernmost buildings abut the wall's inner face directly, while in the south
+ * Low Street's three rows separate the last building from it. The interior runs 18
+ * rows north of the plaza and 24 south, so a plot in a north corner is a good deal
+ * closer to the centre than one in a south corner.
+ *
+ * `townMetrics` reports **41** rows, one more than 40, because the tower's base
+ * course stands *on* the wall line at row -19 — deliberately, since the tower is
+ * part of the wall.
  */
-const MAIN_ROAD_KERB_MARGIN = 2;
+const WALL_WEST = -28;
+const WALL_EAST = 28;
+const WALL_NORTH = -19;
+const WALL_SOUTH = 25;
 
-/** The plaza is a square slab of road tiles centred on the town centre. */
-const TOWN_SQUARE_HALF = 11;
-const TOWN_SQUARE_SIZE = TOWN_SQUARE_HALF * 2;
+const INTERIOR_WEST = WALL_WEST + 1;
+const INTERIOR_EAST = WALL_EAST - 1;
+const INTERIOR_NORTH = WALL_NORTH + 1;
+const INTERIOR_SOUTH = WALL_SOUTH - 1;
+
+/**
+ * Band boundaries, north to south. Each building band is bounded below by a
+ * street, and every building in it is bottom-aligned to the band's last row so
+ * its door lands on that street.
+ */
+const GARRISON_TOP = INTERIOR_NORTH;
+const GARRISON_BOTTOM = -12;
+const UPPER_LANE_TOP = -11;
+const UPPER_LANE_BOTTOM = -9;
+const PLAZA_RING_TOP = -8;
+const PLAZA_RING_BOTTOM = -2;
+const CROSS_LANE_TOP = -1;
+const CROSS_LANE_BOTTOM = 1;
+const MARKET_ROW_TOP = 2;
+const MARKET_ROW_BOTTOM = 7;
+const MARKET_STREET_TOP = 8;
+const MARKET_STREET_BOTTOM = 11;
+const LOW_QUARTER_TOP = 12;
+const LOW_QUARTER_BOTTOM = 21;
+const LOW_STREET_TOP = 22;
+const LOW_STREET_BOTTOM = INTERIOR_SOUTH;
+
+/** Column boundaries. The plaza splits the town's east and west building bands. */
+const PLAZA_WEST = -8;
+const PLAZA_EAST = 8;
+/** The civic terrace runs from the tower's foot down into the plaza. */
+const TERRACE_WEST = -6;
+const TERRACE_EAST = 5;
+
+const WEST_LANE_WEST = -19;
+const WEST_LANE_EAST = -17;
+const EAST_LANE_WEST = 17;
+const EAST_LANE_EAST = 19;
+
+/**
+ * West edge of each building plot. The east and west bands are each cut as an
+ * 8-tile plot, a 3-tile lane and another 8-tile plot, which is exactly what the
+ * widest building sprites need.
+ *
+ * Garrison Row is the exception on its **west** side only: the West Lane starts
+ * at the Upper Lane, because the rows above it are the dead-end alley and the
+ * Lodge that fronts it, so the band's two 7-tile cottages pack side by side from
+ * the wall instead. The East Lane runs the full height of the town and does cross
+ * Garrison Row.
+ */
+const PLOT_WIDTH = 8;
+const COTTAGE_WIDTH = 7;
+const OUTER_WEST_PLOT = INTERIOR_WEST;
+const INNER_WEST_PLOT = -16;
+const INNER_EAST_PLOT = PLAZA_EAST + 1;
+const OUTER_EAST_PLOT = EAST_LANE_EAST + 1;
+const GARRISON_SECOND_COTTAGE = INTERIOR_WEST + COTTAGE_WIDTH;
+/** The Barracks stands one tile of drill yard east of the terrace. */
+const BARRACKS_PLOT_WEST = TERRACE_EAST + 2;
+
+/** King's Road: the arrival axis, south gate to Market Street. */
+const KINGS_ROAD_WEST = -3;
+const KINGS_ROAD_EAST = 0;
+
+/** Two-wide alleys through the Low Quarter's block. */
+const SERVICE_ALLEY_WEST = 1;
+const SERVICE_ALLEY_EAST = 2;
+const MURDER_ALLEY_WEST = 15;
+const MURDER_ALLEY_EAST = 16;
+
+/**
+ * The dead-end alley Blackwood Lodge fronts. It runs west off the West Lane along
+ * the Garrison band's south face and stops at the wall, and the Lodge is the only
+ * building on it — which is the cult hideout the plan asks for (§3.3) rather than a
+ * lodge on a main lane. (Its door is at the alley's middle, not its end: the alley
+ * runs three tiles further west to the wall.)
+ */
+const LODGE_ALLEY_TOP = UPPER_LANE_TOP;
+const LODGE_ALLEY_BOTTOM = -10;
+
+/**
+ * Miller's Farm stands on the southern end of the Low Quarter band, so the crop
+ * rows in front of it fill the band's first three rows. Purely cosmetic if the
+ * farm's art grows: the surplus gravel or verge ends up under its roof.
+ */
+const FARM_YARD_BOTTOM = LOW_QUARTER_TOP + 2;
+
+/** Gate geometry. Aprons are wider than their opening so the joint reads as a mouth. */
+const GATE_APRON_DEPTH = 3;
+const GATE_APRON_OVERHANG = 2;
 
 // ── Tower ────────────────────────────────────────────────────────────────────
 
 /**
- * The tower's plot is taller and set further north than its blocking base
- * because the art's 22-tile spire overhangs the ground to the north — anything
- * placed under it would be hidden. See `docs/town-redesign.md` §1.5.
+ * The tower stands in the north wall. Its anchor is two rows inside the wall
+ * line because the manifest blocks the two rows *above* the anchor — those two
+ * are the wall row and the row below it, which is where the door falls.
  */
-const TOWER_PLOT_WEST_OFFSET = 3;
-const TOWER_PLOT_NORTH_OFFSET = 36;
-const TOWER_PLOT_WIDTH = 6;
-const TOWER_PLOT_HEIGHT = 21;
-
-/** Row of the tower's anchor tile, north of the town centre. */
-const TOWER_ANCHOR_NORTH_OFFSET = 15;
-/** Row of the tower's doorway, one further north than the anchor. */
-const TOWER_DOOR_NORTH_OFFSET = 16;
+const TOWER_ANCHOR_NORTH_OFFSET = 17;
+const TOWER_DOOR_NORTH_OFFSET = 18;
 const TOWER_DOOR_WEST_OFFSET = 1;
 
 /**
- * The escape stairwell sits this far south of the tower door — inside the
- * square, clear of the tower's own footprint.
+ * The escape stairwell sits this far south of the tower door — on the terrace,
+ * clear of the tower's own blocking rows and of the Upper Lane junction.
  */
-const STAIRWELL_SOUTH_OF_TOWER_DOOR = 6;
+const STAIRWELL_SOUTH_OF_TOWER_DOOR = 5;
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
-/** The fountain block sits diagonally out from the centre, in the square's SE quadrant. */
-const FOUNTAIN_SE_OFFSET = 4;
+/** The fountain block sits in the plaza's south-east quadrant, off the arrival axis. */
+const FOUNTAIN_WEST_COLUMN = 3;
+const FOUNTAIN_NORTH_ROW = 2;
 const FOUNTAIN_SIZE = 3;
 
-/** Gate torches stand this far to either side of each of the square's four entrances. */
-const GATE_TORCH_INNER_OFFSET = 3;
+/** Wells on the plaza's south-west and north-east diagonals. */
+const WELL_SOUTH_WEST: TownOffset = { dx: -5, dy: 4 };
+const WELL_NORTH_EAST: TownOffset = { dx: 5, dy: -5 };
 
-/** Wells sit on the square's SW and NE diagonals. */
-const WELL_DIAGONAL_OFFSET = 7;
+/** Torches flanking the tower's foot, clear of the art's own 6-tile width. */
+const TOWER_TORCH_WEST_OFFSET = 4;
+const TOWER_TORCH_EAST_OFFSET = 3;
+const TOWER_TORCH_ROW_OFFSET = 16;
 
-/** Torches flanking the tower entrance, on the anchor's row. */
-const TOWER_TORCH_WEST_OFFSET = 2;
-const TOWER_TORCH_EAST_OFFSET = 1;
+/** Torches marking where the terrace opens onto the plaza. */
+const TERRACE_MOUTH_ROW = UPPER_LANE_BOTTOM;
+
+/** Torches inside the south gate, in the outer row of Low Street. */
+const SOUTH_GATE_TORCH_WEST = KINGS_ROAD_WEST - 1;
+const SOUTH_GATE_TORCH_EAST = KINGS_ROAD_EAST + 1;
+
+/** Torches inside the side gates, in the band below Market Street. */
+const SIDE_GATE_TORCH_ROW = LOW_QUARTER_TOP;
 
 // ── Ground cover ─────────────────────────────────────────────────────────────
 
@@ -192,120 +348,368 @@ const DIRT_PATCH_DENSITY = 0.06;
 // ── Safe zone ────────────────────────────────────────────────────────────────
 
 /**
- * Comfortably covers every named village building while leaving a ruins buffer
- * before the circus footprint.
+ * Covers the whole walled town with a margin — the farthest wall corners are
+ * (+-28, -19) and (+-28, +25), i.e. 33.9 and 37.5 tiles out — while leaving a
+ * wide ruins band before the circus, which is placed 70-90 tiles from the centre.
  */
-const TOWN_SAFE_RADIUS_TILES = 55;
+const TOWN_SAFE_RADIUS_TILES = 40;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** A rectangle from inclusive edge offsets, which is how the bands are stated. */
+function span(west: number, north: number, east: number, south: number): TileRect {
+  return { x: west, y: north, w: east - west + 1, h: south - north + 1 };
+}
+
+function shift(rect: TileRect, centre: TilePoint): TileRect {
+  return { x: rect.x + centre.x, y: rect.y + centre.y, w: rect.w, h: rect.h };
+}
+
+// ── Surfaces ─────────────────────────────────────────────────────────────────
+
+/**
+ * Every surface in the town, in paint order, as centre-relative rectangles.
+ *
+ * Read this as four passes. The whole interior goes down as verge first, so
+ * every tile inside the walls that nothing else claims is a kept, weed-invaded
+ * surface rather than open field — which is design principle 3 of the redesign:
+ * bare default grass exists only outside the walls. Then the yards, then alleys,
+ * lanes and the two main streets in order of importance, so a junction takes the
+ * material of the more important street without any special case. The plaza and
+ * terrace go last, which is what lets the Upper and Cross Lanes be stated as
+ * full-width bands that simply disappear where the plaza takes over.
+ */
+const PLANNED_SURFACES: ReadonlyArray<PlannedSurface> = [
+  {
+    name: 'town interior',
+    bounds: span(INTERIOR_WEST, INTERIOR_NORTH, INTERIOR_EAST, INTERIOR_SOUTH),
+    tileType: VERGE_GRASS,
+  },
+
+  // Working yards: the loose gravel of a place that gets used.
+  {
+    name: 'Barracks drill yard (west)',
+    bounds: span(TERRACE_EAST + 1, GARRISON_TOP, BARRACKS_PLOT_WEST - 1, GARRISON_BOTTOM),
+    tileType: YARD_GRAVEL,
+  },
+  {
+    name: 'Barracks drill yard (east)',
+    bounds: span(
+      BARRACKS_PLOT_WEST + PLOT_WIDTH,
+      GARRISON_TOP,
+      EAST_LANE_WEST - 1,
+      GARRISON_BOTTOM,
+    ),
+    tileType: YARD_GRAVEL,
+  },
+  /**
+   * The open block east of the East Lane, level with Market Row.
+   *
+   * Named for what it is, not for the smithy: plan §3.3 wants The Rusty Anvil's
+   * coal, anvil and quench trough in a yard, and this band is the only gravel in
+   * the row — but the Anvil fills columns 9..16 and the East Lane separates it
+   * from here, so nothing in this band adjoins the forge. Phase 4/5 has to either
+   * put the smithy's props on the Anvil's own Market Street frontage or re-cut
+   * this block; it must not just drop an anvil here and call it the forge's yard.
+   */
+  {
+    name: 'Market Row east yard',
+    bounds: span(EAST_LANE_EAST + 1, MARKET_ROW_TOP, INTERIOR_EAST, MARKET_ROW_BOTTOM),
+    tileType: YARD_GRAVEL,
+  },
+  {
+    name: 'South Green crop rows',
+    bounds: span(EAST_LANE_EAST + 1, LOW_QUARTER_TOP, INTERIOR_EAST, FARM_YARD_BOTTOM),
+    tileType: YARD_GRAVEL,
+  },
+
+  // Alleys — packed earth, the lowest rung of the street hierarchy.
+  {
+    name: 'Blackwood alley (dead end)',
+    bounds: span(INTERIOR_WEST, LODGE_ALLEY_TOP, WEST_LANE_EAST, LODGE_ALLEY_BOTTOM),
+    tileType: FloorTypeValue.road,
+  },
+  {
+    name: 'club service alley',
+    bounds: span(SERVICE_ALLEY_WEST, LOW_QUARTER_TOP, SERVICE_ALLEY_EAST, LOW_QUARTER_BOTTOM),
+    tileType: FloorTypeValue.road,
+  },
+  {
+    name: 'murder alley',
+    bounds: span(MURDER_ALLEY_WEST, LOW_QUARTER_TOP, MURDER_ALLEY_EAST, LOW_QUARTER_BOTTOM),
+    tileType: FloorTypeValue.road,
+  },
+
+  // Lanes — the three-wide side streets that define the building bands.
+  {
+    name: 'Upper Lane',
+    bounds: span(WEST_LANE_EAST + 1, UPPER_LANE_TOP, INTERIOR_EAST, UPPER_LANE_BOTTOM),
+    tileType: LANE_STREET,
+  },
+  {
+    name: 'Cross Lane',
+    bounds: span(INTERIOR_WEST, CROSS_LANE_TOP, INTERIOR_EAST, CROSS_LANE_BOTTOM),
+    tileType: LANE_STREET,
+  },
+  {
+    name: 'Low Street',
+    bounds: span(INTERIOR_WEST, LOW_STREET_TOP, INTERIOR_EAST, LOW_STREET_BOTTOM),
+    tileType: LANE_STREET,
+  },
+  {
+    name: 'West Lane',
+    bounds: span(WEST_LANE_WEST, UPPER_LANE_TOP, WEST_LANE_EAST, LOW_STREET_BOTTOM),
+    tileType: LANE_STREET,
+  },
+  {
+    name: 'East Lane',
+    bounds: span(EAST_LANE_WEST, GARRISON_TOP, EAST_LANE_EAST, LOW_STREET_BOTTOM),
+    tileType: LANE_STREET,
+  },
+
+  // Main streets — cobble, four wide, and the only two that reach a gate.
+  {
+    name: 'Market Street',
+    bounds: span(INTERIOR_WEST, MARKET_STREET_TOP, INTERIOR_EAST, MARKET_STREET_BOTTOM),
+    tileType: COBBLE_STREET,
+  },
+  {
+    name: "King's Road",
+    bounds: span(KINGS_ROAD_WEST, LOW_QUARTER_TOP, KINGS_ROAD_EAST, INTERIOR_SOUTH),
+    tileType: COBBLE_STREET,
+  },
+
+  // Flagstone last: the plaza and the terrace that carries the tower's axis into it.
+  {
+    name: 'Market Plaza',
+    bounds: span(PLAZA_WEST, PLAZA_RING_TOP, PLAZA_EAST, MARKET_ROW_BOTTOM),
+    tileType: PLAZA_STONE,
+  },
+  {
+    name: 'Civic Terrace',
+    bounds: span(TERRACE_WEST, GARRISON_TOP, TERRACE_EAST, UPPER_LANE_BOTTOM),
+    tileType: PLAZA_STONE,
+  },
+];
+
+/** The plaza slab, restated so consumers do not have to search `surfaces` by name. */
+const PLAZA_BOUNDS = span(PLAZA_WEST, PLAZA_RING_TOP, PLAZA_EAST, MARKET_ROW_BOTTOM);
+
+// ── Gates ────────────────────────────────────────────────────────────────────
+
+interface GateTemplate {
+  readonly name: string;
+  readonly bounds: TileRect;
+  readonly apron: TileRect;
+  readonly exit: TownOffset;
+  readonly outward: TownOffset;
+}
+
+const GATE_TEMPLATES: ReadonlyArray<GateTemplate> = [
+  {
+    name: 'south gate',
+    bounds: span(KINGS_ROAD_WEST, WALL_SOUTH, KINGS_ROAD_EAST, WALL_SOUTH),
+    apron: span(
+      KINGS_ROAD_WEST - GATE_APRON_OVERHANG,
+      WALL_SOUTH + 1,
+      KINGS_ROAD_EAST + GATE_APRON_OVERHANG,
+      WALL_SOUTH + GATE_APRON_DEPTH,
+    ),
+    exit: { dx: Math.floor((KINGS_ROAD_WEST + KINGS_ROAD_EAST) / 2), dy: WALL_SOUTH + 1 },
+    outward: { dx: 0, dy: 1 },
+  },
+  {
+    name: 'west gate',
+    bounds: span(WALL_WEST, MARKET_STREET_TOP, WALL_WEST, MARKET_STREET_BOTTOM),
+    apron: span(
+      WALL_WEST - GATE_APRON_DEPTH,
+      MARKET_STREET_TOP - GATE_APRON_OVERHANG,
+      WALL_WEST - 1,
+      MARKET_STREET_BOTTOM + GATE_APRON_OVERHANG,
+    ),
+    exit: { dx: WALL_WEST - 1, dy: Math.floor((MARKET_STREET_TOP + MARKET_STREET_BOTTOM) / 2) },
+    outward: { dx: -1, dy: 0 },
+  },
+  {
+    name: 'east gate',
+    bounds: span(WALL_EAST, MARKET_STREET_TOP, WALL_EAST, MARKET_STREET_BOTTOM),
+    apron: span(
+      WALL_EAST + 1,
+      MARKET_STREET_TOP - GATE_APRON_OVERHANG,
+      WALL_EAST + GATE_APRON_DEPTH,
+      MARKET_STREET_BOTTOM + GATE_APRON_OVERHANG,
+    ),
+    exit: { dx: WALL_EAST + 1, dy: Math.floor((MARKET_STREET_TOP + MARKET_STREET_BOTTOM) / 2) },
+    outward: { dx: 1, dy: 0 },
+  },
+];
 
 // ── Building plots ───────────────────────────────────────────────────────────
 
 /**
  * Building anchors, as signed tile offsets from the town centre.
  *
- * The town reads as two streets ringing the square: the north street carries the
- * store, barracks and cottages, the south street the club, taverns and inn. Every
- * placement dodges the square, the main road bands and the tower plot, and every
- * door's road stub runs clear of its neighbours. Footprints scale with each
- * sprite's manifest `tileScale`, so changing a building's on-screen size
- * re-spaces its neighbours too.
- *
- * Listed north street → square ring → south street, so the table reads
- * top-to-bottom the way the town does on screen.
+ * Listed north to south, band by band. Within a band every building is
+ * bottom-aligned to the band's last row, which is what puts its door on the
+ * street below, and the columns are packed shoulder to shoulder against the
+ * lanes: the west band is an 8-tile plot, the West Lane, and an 8-tile plot;
+ * the east band is the mirror of it. Widths come from each sprite's manifest
+ * footprint, so a re-scaled building re-spaces its own band and the overlap
+ * assertion in `generateOverworld` catches it if it no longer fits.
  */
 const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
+  // Garrison Row — the north band, either side of the civic terrace.
   {
-    anchor: { dx: -20, dy: -30 },
-    spriteKey: 'village_house_1',
-    name: "Shepherd's Cabin",
-    kind: 'house',
-  },
-  {
-    anchor: { dx: 4, dy: -24 },
+    west: OUTER_WEST_PLOT,
+    frontRow: GARRISON_BOTTOM,
     spriteKey: 'village_house_2',
     name: 'Blackwood Lodge',
     kind: 'house',
   },
   {
-    anchor: { dx: -12, dy: -24 },
-    spriteKey: 'village_house_3',
-    name: "Old Hilda's Cottage",
+    west: GARRISON_SECOND_COTTAGE,
+    frontRow: GARRISON_BOTTOM,
+    spriteKey: 'village_house_1',
+    name: "Shepherd's Cabin",
     kind: 'house',
   },
-  { anchor: { dx: -26, dy: -20 }, spriteKey: 'shop', name: 'General Store', kind: 'store' },
-  { anchor: { dx: 13, dy: -20 }, spriteKey: 'barracks', name: 'The Barracks', kind: 'restaurant' },
   {
-    anchor: { dx: 34, dy: -20 },
+    west: BARRACKS_PLOT_WEST,
+    frontRow: GARRISON_BOTTOM,
+    spriteKey: 'barracks',
+    name: 'The Barracks',
+    kind: 'restaurant',
+  },
+  {
+    west: OUTER_EAST_PLOT,
+    frontRow: GARRISON_BOTTOM,
     spriteKey: 'village_house_4',
     name: "Cartwright's Workshop",
     kind: 'house',
   },
+
+  // Plaza Ring — faith, medicine, supplies and beds around the square.
   {
-    anchor: { dx: -20, dy: -11 },
+    west: OUTER_WEST_PLOT,
+    frontRow: PLAZA_RING_BOTTOM,
+    spriteKey: 'temple',
+    name: 'Temple of the Sky',
+    kind: 'house',
+  },
+  {
+    west: INNER_WEST_PLOT,
+    frontRow: PLAZA_RING_BOTTOM,
     spriteKey: 'village_house_1',
     name: 'Herb & Remedy',
     kind: 'house',
   },
-  { anchor: { dx: 20, dy: -10 }, spriteKey: 'tavern_2', name: 'The Horned Flagon', kind: 'house' },
-  { anchor: { dx: -25, dy: 4 }, spriteKey: 'temple', name: 'Temple of the Sky', kind: 'house' },
-  { anchor: { dx: 21, dy: 6 }, spriteKey: 'blacksmith', name: 'The Rusty Anvil', kind: 'house' },
   {
-    anchor: { dx: -32, dy: 15 },
+    west: INNER_EAST_PLOT,
+    frontRow: PLAZA_RING_BOTTOM,
+    spriteKey: 'shop',
+    name: 'General Store',
+    kind: 'store',
+  },
+  {
+    west: OUTER_EAST_PLOT,
+    frontRow: PLAZA_RING_BOTTOM,
     spriteKey: 'small_inn',
     name: 'The Sleeping Cat Inn',
     kind: 'house',
   },
+
+  // Market Row — the trades, fronting Market Street.
   {
-    anchor: { dx: -19, dy: 15 },
+    west: OUTER_WEST_PLOT,
+    frontRow: MARKET_ROW_BOTTOM,
+    spriteKey: 'tavern_2',
+    name: 'The Horned Flagon',
+    kind: 'house',
+  },
+  {
+    west: INNER_WEST_PLOT,
+    frontRow: MARKET_ROW_BOTTOM,
+    spriteKey: 'village_house_3',
+    name: "Old Hilda's Cottage",
+    kind: 'house',
+  },
+  {
+    west: INNER_EAST_PLOT,
+    frontRow: MARKET_ROW_BOTTOM,
+    spriteKey: 'blacksmith',
+    name: 'The Rusty Anvil',
+    kind: 'house',
+  },
+
+  // Low Quarter — nightlife, and the alleys that serve it.
+  {
+    west: OUTER_WEST_PLOT,
+    frontRow: LOW_QUARTER_BOTTOM,
     spriteKey: 'tavern_1',
     name: 'The Sunken Stump Pub',
     kind: 'house',
   },
   {
-    anchor: { dx: 3, dy: 16 },
+    west: INNER_WEST_PLOT,
+    frontRow: LOW_QUARTER_BOTTOM,
+    spriteKey: 'tattoo_parlor',
+    name: "Signet's Ink",
+    kind: 'house',
+  },
+  {
+    west: SERVICE_ALLEY_EAST + 1,
+    frontRow: LOW_QUARTER_BOTTOM,
     spriteKey: 'desperado_club',
     name: 'The Desperado Club',
     kind: 'club',
   },
+
+  // South Green — the farm, against the south-east wall.
   {
-    anchor: { dx: -30, dy: 27 },
+    west: OUTER_EAST_PLOT,
+    frontRow: LOW_QUARTER_BOTTOM,
     spriteKey: 'village_house_4',
     name: "Miller's Farm",
-    kind: 'house',
-  },
-  {
-    anchor: { dx: 21, dy: 31 },
-    spriteKey: 'tattoo_parlor',
-    name: "Signet's Ink",
     kind: 'house',
   },
 ];
 
 function planProps(centre: TilePoint): ReadonlyArray<PlannedProp> {
   const { x: cx, y: cy } = centre;
-  const towerRow = cy - TOWER_ANCHOR_NORTH_OFFSET;
+  const towerTorchRow = cy - TOWER_TORCH_ROW_OFFSET;
+  const at = (dx: number, dy: number): TilePoint => ({ x: cx + dx, y: cy + dy });
   return [
     {
       kind: 'fountain',
       bounds: {
-        x: cx + FOUNTAIN_SE_OFFSET,
-        y: cy + FOUNTAIN_SE_OFFSET,
+        x: cx + FOUNTAIN_WEST_COLUMN,
+        y: cy + FOUNTAIN_NORTH_ROW,
         w: FOUNTAIN_SIZE,
         h: FOUNTAIN_SIZE,
       },
     },
-    // Two torches flanking each of the square's four road gates.
-    { kind: 'torch', tile: { x: cx - GATE_TORCH_INNER_OFFSET, y: cy - TOWN_SQUARE_HALF } },
-    { kind: 'torch', tile: { x: cx + GATE_TORCH_INNER_OFFSET, y: cy - TOWN_SQUARE_HALF } },
-    { kind: 'torch', tile: { x: cx - GATE_TORCH_INNER_OFFSET, y: cy + TOWN_SQUARE_HALF } },
-    { kind: 'torch', tile: { x: cx + GATE_TORCH_INNER_OFFSET, y: cy + TOWN_SQUARE_HALF } },
-    { kind: 'torch', tile: { x: cx - TOWN_SQUARE_HALF, y: cy - GATE_TORCH_INNER_OFFSET } },
-    { kind: 'torch', tile: { x: cx - TOWN_SQUARE_HALF, y: cy + GATE_TORCH_INNER_OFFSET } },
-    { kind: 'torch', tile: { x: cx + TOWN_SQUARE_HALF, y: cy - GATE_TORCH_INNER_OFFSET } },
-    { kind: 'torch', tile: { x: cx + TOWN_SQUARE_HALF, y: cy + GATE_TORCH_INNER_OFFSET } },
-    { kind: 'torch', tile: { x: cx - TOWER_TORCH_WEST_OFFSET, y: towerRow } },
-    { kind: 'torch', tile: { x: cx + TOWER_TORCH_EAST_OFFSET, y: towerRow } },
-    { kind: 'well', tile: { x: cx - WELL_DIAGONAL_OFFSET, y: cy + WELL_DIAGONAL_OFFSET } },
-    { kind: 'well', tile: { x: cx + WELL_DIAGONAL_OFFSET, y: cy - WELL_DIAGONAL_OFFSET } },
+    // The plaza's four corners.
+    { kind: 'torch', tile: at(PLAZA_WEST, PLAZA_RING_TOP) },
+    { kind: 'torch', tile: at(PLAZA_EAST, PLAZA_RING_TOP) },
+    // One row in from the plaza's south corners, not on them: a prop takes the
+    // material of the first real floor south of it, and the slab's last row has
+    // Market Street's cobble below, so a torch on the corner itself drew cobble
+    // ground in the middle of the flagstone — and dragged the neighbouring tiles'
+    // blend toward cobble with it.
+    { kind: 'torch', tile: at(PLAZA_WEST, MARKET_ROW_BOTTOM - 1) },
+    { kind: 'torch', tile: at(PLAZA_EAST, MARKET_ROW_BOTTOM - 1) },
+    // Where the terrace opens onto the plaza, and the tower's own foot.
+    { kind: 'torch', tile: at(TERRACE_WEST, TERRACE_MOUTH_ROW) },
+    { kind: 'torch', tile: at(TERRACE_EAST, TERRACE_MOUTH_ROW) },
+    { kind: 'torch', tile: { x: cx - TOWER_TORCH_WEST_OFFSET, y: towerTorchRow } },
+    { kind: 'torch', tile: { x: cx + TOWER_TORCH_EAST_OFFSET, y: towerTorchRow } },
+    // Just inside each gate.
+    { kind: 'torch', tile: at(SOUTH_GATE_TORCH_WEST, INTERIOR_SOUTH) },
+    { kind: 'torch', tile: at(SOUTH_GATE_TORCH_EAST, INTERIOR_SOUTH) },
+    { kind: 'torch', tile: at(INTERIOR_WEST, SIDE_GATE_TORCH_ROW) },
+    { kind: 'torch', tile: at(INTERIOR_EAST, SIDE_GATE_TORCH_ROW) },
+    { kind: 'well', tile: at(WELL_SOUTH_WEST.dx, WELL_SOUTH_WEST.dy) },
+    { kind: 'well', tile: at(WELL_NORTH_EAST.dx, WELL_NORTH_EAST.dy) },
   ];
 }
 
@@ -316,22 +720,24 @@ export function createTownPlan(size: number): TownPlan {
 
   return {
     centre,
-    mainRoadWidth: MAIN_ROAD_WIDTH,
-    approachRoadStopOffset: Math.floor(MAIN_ROAD_WIDTH / 2) + MAIN_ROAD_KERB_MARGIN,
-    frontageTurnThreshold: Math.floor(MAIN_ROAD_WIDTH / 2) + MAIN_ROAD_KERB_MARGIN,
-    square: {
-      x: cx - TOWN_SQUARE_HALF,
-      y: cy - TOWN_SQUARE_HALF,
-      w: TOWN_SQUARE_SIZE,
-      h: TOWN_SQUARE_SIZE,
-    },
+    wall: shift(span(WALL_WEST, WALL_NORTH, WALL_EAST, WALL_SOUTH), centre),
+    interior: shift(span(INTERIOR_WEST, INTERIOR_NORTH, INTERIOR_EAST, INTERIOR_SOUTH), centre),
+    gates: GATE_TEMPLATES.map((gate) => ({
+      name: gate.name,
+      bounds: shift(gate.bounds, centre),
+      tileType: COBBLE_STREET,
+      apron: shift(gate.apron, centre),
+      exit: { x: cx + gate.exit.dx, y: cy + gate.exit.dy },
+      outward: gate.outward,
+    })),
+    surfaces: PLANNED_SURFACES.map((surface) => ({
+      name: surface.name,
+      bounds: shift(surface.bounds, centre),
+      tileType: surface.tileType,
+    })),
+    plaza: shift(PLAZA_BOUNDS, centre),
     tower: {
       anchor: { dx: 0, dy: -TOWER_ANCHOR_NORTH_OFFSET },
-      plot: {
-        offset: { dx: -TOWER_PLOT_WEST_OFFSET, dy: -TOWER_PLOT_NORTH_OFFSET },
-        w: TOWER_PLOT_WIDTH,
-        h: TOWER_PLOT_HEIGHT,
-      },
       door: { dx: -TOWER_DOOR_WEST_OFFSET, dy: -TOWER_DOOR_NORTH_OFFSET },
       name: 'Town Center Tower',
       kind: 'tower',

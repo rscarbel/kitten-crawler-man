@@ -55,10 +55,14 @@ const SPEED_FIZZ_PRICE = 12;
 const COOLDOWN_CRISP_PRICE = 15;
 const JUGG_JUICE_PRICE = 22;
 
-// The stalls flank the square on its west and east sides, on the centre row —
-// the same layout the single-tile stalls used before they grew to two tiles.
-const WEST_STALL_DX = -8;
-const EAST_STALL_DX = 8;
+// The stalls flank the plaza on its west and east sides, on the centre row. Each
+// is two tiles wide from its `DX`, with the vendor standing on the row behind it.
+// The plaza spans x -8..+8 from centre, so -7 and +6 put both stall tiles and the
+// vendor's row on flagstone with a tile of slab still outside them on each side —
+// the pair is symmetric about the centre, which +7 was not: it would have put the
+// east stall's outer tile on the plaza's last column with the Cross Lane beyond.
+const WEST_STALL_DX = -7;
+const EAST_STALL_DX = 6;
 const STALL_ROW_DY = 0;
 
 // Appearance seeds are hand-picked and far apart so the two vendors don't share

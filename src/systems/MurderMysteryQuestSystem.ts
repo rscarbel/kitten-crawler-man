@@ -63,8 +63,18 @@ const GUMGUM_DOOR_OFFSET = { dx: 3, dy: 0 };
 const GUMGUM_CLUB_DOOR_OFFSET = { dx: 0, dy: 2 };
 /** The club building whose entrance hosts GumGum's book-accurate approach. */
 const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
-/** The alley where her body turns up — west of the pub, against the wall. */
-const ALLEY_DOOR_OFFSET = { dx: -4, dy: 2 };
+/**
+ * The alley where her body turns up.
+ *
+ * Preferred: the two-wide alley running down the Desperado Club's east flank,
+ * reached from the club door by walking east along Low Street — the "murder
+ * alley" the town's street plan exists to provide (`docs/town-redesign.md` §3.2).
+ * The fallback offset from the pub door is kept for a map with no club: it used
+ * to be the primary, and on the compacted town it now points four tiles west of
+ * a pub that stands *against* the west wall, i.e. outside the town.
+ */
+const CLUB_ALLEY_DOOR_OFFSET = { dx: 8, dy: 0 };
+const PUB_ALLEY_DOOR_OFFSET = { dx: -4, dy: 2 };
 /** The shrine of moulted feathers sits just south of the tower door. */
 const ROOST_DOOR_OFFSET = { dx: 0, dy: 3 };
 
@@ -160,15 +170,17 @@ export class MurderMysteryQuestSystem implements GameSystem {
     // still resolve exactly as before on a pub-less map. To force the pub hook,
     // drop this club lookup — the rest of the quest is untouched.
     const clubDoor = pubDoor ? this.doorTileOf(GUMGUM_HOOK_CLUB_NAME) : null;
-    // Her body still turns up in the alley behind the pub, so the hook and the
-    // corpse anchor separately.
+    // The hook and the corpse anchor separately: she is last seen at the club's
+    // door and found in the alley beside it.
     const hookDoor = clubDoor ?? pubDoor;
     const hookOffset = clubDoor ? GUMGUM_CLUB_DOOR_OFFSET : GUMGUM_DOOR_OFFSET;
     this.gumgumTile = hookDoor
       ? this.findSpawnTile(hookDoor.x + hookOffset.dx, hookDoor.y + hookOffset.dy)
       : null;
-    this.alleyTile = pubDoor
-      ? this.findSpawnTile(pubDoor.x + ALLEY_DOOR_OFFSET.dx, pubDoor.y + ALLEY_DOOR_OFFSET.dy)
+    const alleyDoor = clubDoor ?? pubDoor;
+    const alleyOffset = clubDoor ? CLUB_ALLEY_DOOR_OFFSET : PUB_ALLEY_DOOR_OFFSET;
+    this.alleyTile = alleyDoor
+      ? this.findSpawnTile(alleyDoor.x + alleyOffset.dx, alleyDoor.y + alleyOffset.dy)
       : null;
     this.hideoutDoorTile = this.doorTileOf('Blackwood Lodge');
     this.towerDoorTile = this.doorTileOf('Town Center Tower');
@@ -242,17 +254,24 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return findNearbyWalkableTile(this.gameMap, tileX, tileY, SPAWN_SEARCH_RADIUS_TILES);
   }
 
-  /** Locates the town well nearest the map centre by scanning the tile grid. */
+  /**
+   * Locates the town well nearest the plaza by scanning the tile grid.
+   *
+   * Measured from `townSquareCentre` rather than from `gridSize / 2`: the two
+   * coincide today only because the plaza happens to be centred on the map, and
+   * which well hosts this clue is decided by whichever is nearer.
+   */
   private findWellTile(): { x: number; y: number } | null {
     const size = this.gameMap.structure.length;
-    const centre = size / 2;
+    const mapCentre = Math.floor(size / 2);
+    const centre = this.gameMap.townSquareCentre ?? { x: mapCentre, y: mapCentre };
     let best: { x: number; y: number } | null = null;
     let bestDist = Infinity;
     for (let y = 0; y < size; y++) {
       const row = this.gameMap.structure[y];
       for (let x = 0; x < row.length; x++) {
         if (row[x].type !== WELL) continue;
-        const dist = Math.hypot(x - centre, y - centre);
+        const dist = Math.hypot(x - centre.x, y - centre.y);
         if (dist < bestDist) {
           bestDist = dist;
           best = { x, y };

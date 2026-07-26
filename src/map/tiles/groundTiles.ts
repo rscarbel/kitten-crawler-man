@@ -35,6 +35,7 @@ import {
   ROOF_SLATE,
   ROOF_THATCH,
   RUINED_WALL,
+  TOWN_WALL,
 } from '../tileTypes';
 import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../../core/SpriteLoader';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
@@ -231,12 +232,63 @@ const DUAL_CELL_CORNERS = [
 ] as const;
 
 /**
+ * Least-recently-used surface cache with a hard entry cap.
+ *
+ * Both surface caches below are content-addressed, so neither can ever hold a
+ * stale entry — but "bounded" is not the same as "small". The bound on masked
+ * quarters is `material frames x mask frames x 4 quadrants`, which with the two
+ * materials the overworld used before the street plan measured at 3,636 entries
+ * (~3.6 MB) and across all seven works out at 176 x 144 x 4 = **101,376** (~97 MB
+ * of pixel data, at roughly 1 KB a quarter). That is why this exists: the caches were fine until the town
+ * actually started using its materials.
+ *
+ * Eviction is safe against a bake in flight because every caller draws the
+ * surface it just fetched before asking for another one, so a surface dropped
+ * from the map is still referenced by the caller that is using it.
+ *
+ * LRU rather than FIFO. A chunk bake reuses the same few frames for hundreds of
+ * tiles, so FIFO on a full cache would evict exactly the entries about to be
+ * asked for again. The cost is one `delete` plus one `set` per hit, against a
+ * `drawImage` per miss.
+ */
+class SurfaceCache {
+  private readonly entries = new Map<string, CanvasSurface>();
+
+  constructor(private readonly maxEntries: number) {}
+
+  get(key: string): CanvasSurface | undefined {
+    const surface = this.entries.get(key);
+    if (surface === undefined) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, surface);
+    return surface;
+  }
+
+  set(key: string, surface: CanvasSurface): void {
+    this.entries.set(key, surface);
+    while (this.entries.size > this.maxEntries) {
+      const oldest = this.entries.keys().next();
+      if (oldest.done === true) break;
+      this.entries.delete(oldest.value);
+    }
+  }
+}
+
+/**
+ * Caps chosen so a single chunk bake never evicts anything it still needs — a
+ * 16x16 chunk touches at most 256 tiles x 4 quadrants x a handful of layers —
+ * while holding the whole working set of a screenful of mixed materials.
+ */
+const OVERLAY_CACHE_MAX_ENTRIES = 12000;
+const STENCIL_CACHE_MAX_ENTRIES = 4000;
+
+/**
  * Masked material quarters, keyed by material, material frame, mask frame,
  * quadrant and tile size. The mask frame carries both the corner combination and
  * the position within the warp patch, so the key is the whole of what the surface
- * depends on and the cache is bounded by what a map actually draws.
+ * depends on.
  */
-const overlayCache = new Map<string, CanvasSurface>();
+const overlayCache = new SurfaceCache(OVERLAY_CACHE_MAX_ENTRIES);
 
 interface MaskSheet {
   readonly def: SpriteDef;
@@ -443,7 +495,7 @@ function maskedOverlayQuarter(
 }
 
 /** Weight stencils, keyed by the mask stack, quadrant and tile size. */
-const stencilCache = new Map<string, CanvasSurface>();
+const stencilCache = new SurfaceCache(STENCIL_CACHE_MAX_ENTRIES);
 
 /**
  * The stencil a layer with others above it is painted through.
@@ -1000,6 +1052,7 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   ROOF_CIRCUS_RED,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
+  TOWN_WALL,
 ]);
 
 /**

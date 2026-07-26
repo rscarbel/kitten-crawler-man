@@ -10,9 +10,12 @@ import {
   ROOF_CIRCUS_PURPLE,
   METAL_WALL,
   RUINED_WALL,
+  TOWN_WALL,
+  FloorTypeValue,
+  VERGE_GRASS,
 } from '../tileTypes';
 import { drawGroundTile } from './groundTiles';
-import { GROUND_FALLBACK_COLOR } from '../town/groundMaterials';
+import { GROUND_FALLBACK_COLOR, positiveMod } from '../town/groundMaterials';
 
 const WALL_FOUNDATION_HEIGHT = 3;
 const WALL_CORNICE_SHADOW_DEPTH = 1;
@@ -66,6 +69,50 @@ const RUIN_RUBBLE_CHUNK_STRIDE = 7;
 const RUIN_REBAR_STRIDE = 5;
 const RUIN_REBAR_X_FRACTION = 0.35;
 const RUIN_REBAR_OVERHANG = 5;
+
+// Town wall (the ring around the overworld town)
+const TOWN_WALL_STONE = '#8a8175';
+const TOWN_WALL_STONE_DARK = '#726a5f';
+const TOWN_WALL_MORTAR = '#615a50';
+const TOWN_WALL_PLINTH = '#6b6459';
+const TOWN_WALL_CAP = '#a1988a';
+const TOWN_WALL_CAP_LIT = '#b8ae9e';
+const TOWN_WALL_MOSS = 'rgba(92,107,58,0.35)';
+/** Height of the plinth course along the wall's base, in game pixels. */
+const TOWN_WALL_PLINTH_HEIGHT = 5;
+/** Height of the parapet cap drawn along an exposed north face. */
+const TOWN_WALL_CAP_HEIGHT = 8;
+/** Pixels of lit stone along the cap's own top edge. */
+const TOWN_WALL_CAP_LIT_HEIGHT = 2;
+/**
+ * Crenellation period and merlon width, in game pixels. Phased off the tile's
+ * *world* pixel column so the battlement runs continuously across tile edges
+ * instead of restarting at every tile — the same reason the ground materials
+ * wrap over a patch rather than a tile.
+ */
+const TOWN_WALL_CRENEL_PERIOD = 8;
+const TOWN_WALL_MERLON_WIDTH = 5;
+/** Masonry course height, so a 32px tile shows three full courses and a plinth. */
+const TOWN_WALL_COURSE_HEIGHT = 9;
+/** Alternate courses shift their vertical joints by half a block. */
+const TOWN_WALL_BLOCK_WIDTH = 11;
+const TOWN_WALL_JOINT_OFFSET = 5;
+/** Per-tile hash multipliers for block weathering. */
+const TOWN_WALL_HASH_X = 41;
+const TOWN_WALL_HASH_Y = 23;
+const TOWN_WALL_HASH_MODULUS = 89;
+/** One block in this many reads as a darker, damper stone. */
+const TOWN_WALL_DARK_BLOCK_STRIDE = 5;
+/** Depth of the shading that gives an east-west run its thickness. */
+const TOWN_WALL_EDGE_SHADE_WIDTH = 3;
+/** Mortar joints and the merlon columns are laid down a pixel at a time. */
+const TOWN_WALL_MORTAR_WIDTH = 1;
+const MERLON_COLUMN_WIDTH = 1;
+/** The coping band capping the wall face, and the shadow it casts below itself. */
+const TOWN_WALL_COPING_HEIGHT = 2;
+const TOWN_WALL_COPING_SHADOW_HEIGHT = 2;
+/** A weathered block lands on one of the top two courses. */
+const TOWN_WALL_DARK_BLOCK_COURSES = 2;
 
 // Window geometry fractions
 const WINDOW_WIDTH_FRACTION = 0.44;
@@ -1320,8 +1367,130 @@ export function drawBuildingTile(
       break;
     }
 
+    // The town's wall ring — maintained coursed stone, unlike RUINED_WALL's
+    // broken shells outside it.
+    case TOWN_WALL: {
+      drawTownWallTile(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
     default:
       return false;
   }
   return true;
+}
+
+/**
+ * One tile of the town's wall ring.
+ *
+ * Everything is drawn strictly inside the tile's own rect, so the wall bakes
+ * into the chunk cache like any other static tile and cannot be clipped at a
+ * chunk boundary the way `RUINED_WALL`'s rebar is.
+ *
+ * The tile is context-aware in one respect only: a tile in an **east-west run**
+ * is seen face-on and gets a crenellated parapet, with the ground showing through
+ * each crenel; a tile in a north-south run gets plain masonry, because a crenel
+ * there would open a hole onto the wall standing behind it.
+ *
+ * "In an east-west run" means it has a wall to its east or west, which is not the
+ * same as "has no wall to its north" — the first cut used that instead and got two
+ * cases wrong: the south-west and south-east **corner** tiles have the last tile
+ * of a vertical run directly above them, so they lost their battlement in the
+ * middle of an otherwise crenellated south face; and the tile directly **below a
+ * side gate** has the gate's cobble above it, so it grew a battlement in the
+ * middle of a vertical run — the exact case the rule exists to prevent. A corner
+ * belongs to both runs, and taking the horizontal one is right: it is the end of a
+ * face, not the end of a flank.
+ */
+function drawTownWallTile(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  // The crenels are gaps, so the ground behind them has to be drawn first.
+  drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+
+  const isWall = (x: number, y: number) => structure[y]?.[x]?.type === TOWN_WALL;
+  const inEastWestRun = isWall(tx - 1, ty) || isWall(tx + 1, ty);
+  const stoneTop = sy + (inEastWestRun ? TOWN_WALL_CAP_HEIGHT : 0);
+
+  ctx.fillStyle = TOWN_WALL_STONE;
+  ctx.fillRect(sx, stoneTop, ts, sy + ts - stoneTop);
+
+  // Coursed masonry: horizontal beds, with vertical joints offset every other
+  // course so the blocks read as bonded rather than stacked.
+  ctx.fillStyle = TOWN_WALL_MORTAR;
+  const bodyBottom = sy + ts - TOWN_WALL_PLINTH_HEIGHT;
+  let courseIndex = 0;
+  for (let bedY = stoneTop; bedY < bodyBottom; bedY += TOWN_WALL_COURSE_HEIGHT) {
+    if (bedY > stoneTop) ctx.fillRect(sx, bedY, ts, TOWN_WALL_MORTAR_WIDTH);
+    const jointPhase = courseIndex % 2 === 0 ? 0 : TOWN_WALL_JOINT_OFFSET;
+    const courseBottom = Math.min(bedY + TOWN_WALL_COURSE_HEIGHT, bodyBottom);
+    for (let i = 0; i < ts; i++) {
+      const worldPx = tx * ts + i;
+      if (positiveMod(worldPx + jointPhase, TOWN_WALL_BLOCK_WIDTH) !== 0) continue;
+      ctx.fillRect(sx + i, bedY, TOWN_WALL_MORTAR_WIDTH, courseBottom - bedY);
+    }
+    courseIndex++;
+  }
+
+  // A scattering of damper, darker blocks so a long run is not one flat colour.
+  const weathering = (tx * TOWN_WALL_HASH_X + ty * TOWN_WALL_HASH_Y) % TOWN_WALL_HASH_MODULUS;
+  if (weathering % TOWN_WALL_DARK_BLOCK_STRIDE === 0) {
+    ctx.fillStyle = TOWN_WALL_STONE_DARK;
+    const course = weathering % TOWN_WALL_DARK_BLOCK_COURSES;
+    const blockY = stoneTop + course * TOWN_WALL_COURSE_HEIGHT + TOWN_WALL_MORTAR_WIDTH;
+    ctx.fillRect(
+      sx + (weathering % Math.max(1, ts - TOWN_WALL_BLOCK_WIDTH)),
+      blockY,
+      TOWN_WALL_BLOCK_WIDTH - TOWN_WALL_MORTAR_WIDTH,
+      TOWN_WALL_COURSE_HEIGHT - TOWN_WALL_MORTAR_WIDTH,
+    );
+  }
+
+  // Plinth: a wider, darker base course, mossy where it meets open ground.
+  ctx.fillStyle = TOWN_WALL_PLINTH;
+  ctx.fillRect(sx, bodyBottom, ts, TOWN_WALL_PLINTH_HEIGHT);
+  const southType = structure[ty + 1]?.[tx]?.type;
+  if (southType === FloorTypeValue.grass || southType === VERGE_GRASS) {
+    ctx.fillStyle = TOWN_WALL_MOSS;
+    ctx.fillRect(sx, bodyBottom, ts, TOWN_WALL_PLINTH_HEIGHT);
+  }
+
+  // Thickness: a face-on run gets its west edge shaded so the stone reads as
+  // having depth rather than as a flat band.
+  if (inEastWestRun) {
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.fillRect(sx, stoneTop, TOWN_WALL_EDGE_SHADE_WIDTH, sy + ts - stoneTop);
+  } else {
+    // A flank is seen from the side: no parapet, just light catching its top.
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(sx, sy, ts, WALL_LIT_TOP_HEIGHT);
+    return;
+  }
+
+  // Parapet: merlons on the tile's world-pixel phase, so the battlement is
+  // continuous along the whole run.
+  for (let i = 0; i < ts; i++) {
+    const worldPx = tx * ts + i;
+    if (positiveMod(worldPx, TOWN_WALL_CRENEL_PERIOD) >= TOWN_WALL_MERLON_WIDTH) continue;
+    ctx.fillStyle = TOWN_WALL_CAP;
+    ctx.fillRect(sx + i, sy, MERLON_COLUMN_WIDTH, TOWN_WALL_CAP_HEIGHT);
+    ctx.fillStyle = TOWN_WALL_CAP_LIT;
+    ctx.fillRect(sx + i, sy, MERLON_COLUMN_WIDTH, TOWN_WALL_CAP_LIT_HEIGHT);
+  }
+  // Coping band under the merlons, tying them into the wall face.
+  ctx.fillStyle = TOWN_WALL_CAP;
+  ctx.fillRect(
+    sx,
+    sy + TOWN_WALL_CAP_HEIGHT - TOWN_WALL_COPING_HEIGHT,
+    ts,
+    TOWN_WALL_COPING_HEIGHT,
+  );
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(sx, sy + TOWN_WALL_CAP_HEIGHT, ts, TOWN_WALL_COPING_SHADOW_HEIGHT);
 }

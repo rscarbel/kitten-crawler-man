@@ -19,33 +19,66 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import { DIRT_PATCH, FloorTypeValue } from '../map/tileTypes';
+import {
+  COBBLE_STREET,
+  DIRT_PATCH,
+  FloorTypeValue,
+  LANE_STREET,
+  PLAZA_STONE,
+} from '../map/tileTypes';
+
 import { Townsperson } from '../creatures/Townsperson';
 import { findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem } from './GameSystem';
 
+/** The made surfaces of the town, which citizens treat as public space. */
+const STREET_TILE_TYPES: ReadonlySet<number> = new Set([
+  FloorTypeValue.road,
+  DIRT_PATCH,
+  LANE_STREET,
+  COBBLE_STREET,
+  PLAZA_STONE,
+]);
+
 // Spread appearance seeds far apart so neighbors don't share a look.
 const SEED_STRIDE = 101;
 const SEED_BASE = 1301;
 
-// The town's safe radius (55 tiles) reaches far into the approach roads. Two
-// nested zones carve that into the areas worth populating: the plaza (square
-// plus the streets feeding it) and the district (every named building's plot,
-// out to the farthest of them).
-const PLAZA_RADIUS_TILES = 20;
-const DISTRICT_RADIUS_TILES = 48;
+// The town's safe radius (40 tiles) reaches past the wall into the gate roads.
+// Two nested zones carve that into the areas worth populating: the plaza (the
+// flagstone slab and the lanes feeding it) and the district (every named
+// building's plot, out to the farthest of them).
+//
+// Both are sized against the compacted town, not the old sprawl. The plaza slab
+// is 17 x 16, so its corners sit at (±8, -8) and (±8, +7) from its centre —
+// hypot(8, 8) = 11.31 tiles, and `withinRadius` is a strict circular test, so 11
+// would leave all four corners outside the crowd's own plaza. The farthest door —
+// The Sunken Stump Pub, in the south-west corner of the walls — is 33.4 tiles out,
+// so the district radius carries a couple of tiles of margin rather than sitting on
+// that figure: `districtDoors` filters by it, and a radius of 34 would drop the pub
+// out of the town's life entirely on any layout tweak that moved it half a tile.
+const PLAZA_RADIUS_TILES = 12;
+const DISTRICT_RADIUS_TILES = 36;
 
 // Tiles around a door that count as its building's frontage — roughly its
-// doorstep and the street stub in front of it.
-const FRONTAGE_RADIUS_TILES = 5;
+// doorstep and the width of the street in front of it.
+//
+// Buildings now stand shoulder to shoulder, so this cannot be large. Measured
+// against the real grid it is small enough: **no pair of doors in the town shares
+// a single frontage tile.** The closest pair is Blackwood Lodge's door and
+// Shepherd's Cabin's, 7 tiles apart, whose radius-4 circles do overlap on two
+// tiles — but both of those sit under the buildings' own facade rows and are not
+// walkable, so `gatherFrontageTiles` discards them. A wider bubble would start
+// merging frontages along the whole of Garrison Row.
+const FRONTAGE_RADIUS_TILES = 4;
 const FRONTAGE_RADIUS = TILE_SIZE * FRONTAGE_RADIUS_TILES;
 
 // A paved tile only counts as a street once it is this close to some building's
-// door; beyond that the main roads are just the empty highway out of town, which
-// travelers have no reason to walk.
-const STREET_NEAR_DOOR_TILES = 14;
+// door; beyond that the streets are just the empty highway out of the gates,
+// which travelers have no reason to walk.
+const STREET_NEAR_DOOR_TILES = 10;
 
 const PLAZA_POPULATION = 18;
 const TRAVELER_POPULATION = 12;
@@ -157,14 +190,18 @@ export class TownLifeSystem implements GameSystem {
   private readonly plazaTiles: TileXY[];
   private readonly streetTiles: TileXY[];
   private readonly districtDoors: TileXY[];
-  private readonly centerTile: number;
+  private readonly centre: TileXY;
   private readonly plazaRadius: number;
   private readonly districtRadius: number;
   private readonly plazaWander: WanderParams;
   private seedCount = 0;
 
   constructor(private readonly gameMap: GameMap) {
-    this.centerTile = Math.floor(gameMap.gridSize / 2);
+    // Read from the map, not recomputed as `gridSize / 2`, which is only ever
+    // right because the plaza happens to be centred on the map — and kept as a
+    // point rather than one number, which quietly assumed it sits on the diagonal.
+    const mapCentre = Math.floor(gameMap.gridSize / 2);
+    this.centre = gameMap.townSquareCentre ?? { x: mapCentre, y: mapCentre };
     const safeRadius = gameMap.townSafeRadius ?? 0;
     this.plazaRadius = Math.min(safeRadius, PLAZA_RADIUS_TILES);
     this.districtRadius = Math.min(safeRadius, DISTRICT_RADIUS_TILES);
@@ -174,7 +211,10 @@ export class TownLifeSystem implements GameSystem {
     this.districtDoors = gameMap.buildingEntries
       .map((entry) => entry.doorTile)
       .filter((door) => this.withinRadius(door.x, door.y, this.districtRadius));
-    this.plazaTiles = this.gatherTiles(this.plazaRadius, () => true);
+    // Paved only: the plaza slab and the lane mouths opening onto it. Accepting
+    // every walkable tile in the radius let the crowd spill onto the verge and
+    // through the Plaza Ring's front gardens.
+    this.plazaTiles = this.gatherTiles(this.plazaRadius, (tx, ty) => this.isPaved(tx, ty));
     this.streetTiles = this.gatherTiles(
       this.districtRadius,
       (tx, ty) => this.isPaved(tx, ty) && this.isNearAnyDoor(tx, ty),
@@ -212,11 +252,13 @@ export class TownLifeSystem implements GameSystem {
   /** Enumerate every walkable, non-door tile inside `radius` that `accept` allows. */
   private gatherTiles(radius: number, accept: (tx: number, ty: number) => boolean): TileXY[] {
     if (radius <= 0) return [];
-    const min = this.centerTile - radius;
-    const max = this.centerTile + radius;
+    const minX = this.centre.x - radius;
+    const maxX = this.centre.x + radius;
+    const minY = this.centre.y - radius;
+    const maxY = this.centre.y + radius;
     const tiles: TileXY[] = [];
-    for (let ty = min; ty <= max; ty++) {
-      for (let tx = min; tx <= max; tx++) {
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
         if (this.doorTiles.has(tileKey(tx, ty))) continue;
         if (!this.withinRadius(tx, ty, radius)) continue;
         if (!this.gameMap.isWalkable(tx, ty)) continue;
@@ -229,17 +271,26 @@ export class TownLifeSystem implements GameSystem {
 
   /** True when tile (tx, ty) lies inside `radius` tiles of the town centre. */
   private withinRadius(tx: number, ty: number, radius: number): boolean {
-    const dx = tx - this.centerTile;
-    const dy = ty - this.centerTile;
+    const dx = tx - this.centre.x;
+    const dy = ty - this.centre.y;
     return dx * dx + dy * dy <= radius * radius;
   }
 
-  /** True for road-family ground — the paved surfaces citizens read as streets. */
+  /**
+   * True for the surfaces citizens read as public space: the lanes, the two main
+   * streets, the plaza, the packed-earth alleys and tracks, and worn patches of
+   * those tracks.
+   *
+   * Verge and yard are excluded even though both are walkable and both are paving
+   * of a sort. Biasing wander targets onto *streets* is what stops townsfolk
+   * drifting across the gardens, drying greens and crop rows the street plan put
+   * between the blocks — and a yard belongs to the building it serves, not to the
+   * public.
+   */
   private isPaved(tx: number, ty: number): boolean {
     const size = this.gameMap.gridSize;
     if (tx < 0 || ty < 0 || tx >= size || ty >= size) return false;
-    const tileType = this.gameMap.structure[ty][tx].type;
-    return tileType === FloorTypeValue.road || tileType === DIRT_PATCH;
+    return STREET_TILE_TYPES.has(this.gameMap.structure[ty][tx].type);
   }
 
   private isNearAnyDoor(tx: number, ty: number): boolean {
@@ -366,7 +417,7 @@ export class TownLifeSystem implements GameSystem {
 
   /** A random plaza tile, biased toward the square by keeping the more central of two draws. */
   private centerBiasedTile(): TileXY {
-    const center = { x: this.centerTile, y: this.centerTile };
+    const center = this.centre;
     let best = randomTile(this.plazaTiles);
     let bestDist = tileDistSq(best, center);
     for (let s = 1; s < CENTER_BIAS_SAMPLES; s++) {

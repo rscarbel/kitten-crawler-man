@@ -6,9 +6,11 @@ the fastest way to tell whether the redesign is actually working.
 
 **Status legend:** ☐ not started · ◐ in progress · ☑ done · ⊘ dropped (say why)
 
-**Overall status:** ◐ In progress — Phases 0, 1 and 2 done 2026-07-25. The town now
-draws from the generated tileset with blended material boundaries, world-space tone and
-ambient occlusion. Next up is Phase 3, compaction and the street plan.
+**Overall status:** ◐ In progress — Phases 0, 1 and 2 done 2026-07-25; Phase 3's code is
+in and under review. The town now draws from the generated tileset with blended material
+boundaries, world-space tone and ambient occlusion, and it is a walled market village
+laid out street-first instead of buildings on a lawn. Next up is Phase 4, plots and
+frontage.
 
 ---
 
@@ -18,17 +20,17 @@ Re-measure after each phase (Phase 0 gives you the tooling to do it in one comma
 
 | Metric                              | Baseline      | Target      | Current                                             |
 | ----------------------------------- | ------------- | ----------- | --------------------------------------------------- |
-| Town bounding box (tiles)           | 74 × 73       | 55 × 40     | 74 × 73                                             |
-| Town area (tiles)                   | 5402          | 2200        | 5402                                                |
-| Built density                       | 16.5%         | 40.5%       | 16.5%                                               |
-| Farthest building door from plaza   | 42.6          | ~28         | 42.6                                                |
-| Ground materials used in town       | 2             | 7           | 2                                                   |
+| Town bounding box (tiles)           | 74 × 73       | 55 × 40     | **55 × 41**                                         |
+| Town area (tiles)                   | 5402          | 2200        | **2255**                                            |
+| Built density                       | 16.5%         | 40.5%       | **33.9%** — see the Phase 3 accounting note         |
+| Farthest building door from plaza   | 42.6          | ~28         | **33.4** (target unreachable — see Phase 3 notes)   |
+| Ground materials used in town       | 2             | 7           | **6** (the ceiling — see Phase 3)                   |
 | Ground materials available          | 2 usable      | 14          | **14**                                              |
 | Worst joint-to-interior ratio       | never wrapped | ≤1.15       | **1.11**                                            |
 | Tiles before a visible repeat       | 1             | 4+          | **4–7 (patch); variant choice has no period to 96** |
 | Distinct outdoor prop types         | 3             | 15+         | 3                                                   |
-| Town safe radius (tiles)            | 55            | ~40         | 55                                                  |
-| Overworld frame time                | unchanged     | no regress. | **unchanged**                                       |
+| Town safe radius (tiles)            | 55            | ~40         | **40**                                              |
+| Overworld frame time                | unchanged     | no regress. | **8.3ms mean / 9.8ms max in the plaza**             |
 | Chunk bake (256 tiles, node-canvas) | 1.13ms        | no hitch    | **2.26ms**                                          |
 | Tile-grid amplitude on open ground  | n/a           | invisible   | **1.4/255**                                         |
 
@@ -804,34 +806,449 @@ Known and accepted, with reasons:
 
 ---
 
-## Phase 3 — Compaction & street plan ☐
+## Phase 3 — Compaction & street plan ◐
 
-- [ ] Wall ring (~55 × 40 inside) with south / west / east gates
-- [ ] King's Road (4 wide, south gate → Market Street)
-- [ ] Market Street (4 wide, west gate ↔ east gate)
-- [ ] Upper Lane, Cross Lane, Low Street (3 wide)
-- [ ] West Lane, East Lane (3 wide)
-- [ ] Alleys (2 wide): west dead-end at Blackwood Lodge, club service alley, murder alley
-- [ ] Market Plaza (flagstone) + civic terrace at the tower foot
-- [ ] **Tower moved to the town's north edge** — verify nothing sits under the spire
-- [ ] All 16 buildings re-anchored per plan §4; verify zero overlaps
-- [ ] Cap or evict `overlayCache` in `groundTiles.ts` before placing the other five
-      materials — it is content-addressed and never evicted, which is 3.6 MB with two
-      materials and roughly 97 MB of pixel data at full spread
-- [ ] Re-tune `market/vendorDefs.ts` stall offsets
-- [ ] Re-tune `TownPropSystem` board / bench / fortune-teller offsets
-- [ ] Re-tune `TOWN_SAFE_RADIUS_TILES` (55 → ~40) and verify circus + ruins buffers
-- [ ] Move `TownPlan.approachRoadStopOffset` down to `Math.floor(mainRoadWidth / 2)` — the
-      kerb row — so the circus approach roads actually reach the crossroads instead of
-      stopping a tile short of them. The value must stay an integer: it is a loop bound, and
-      `mainRoadWidth / 2` is 2.5, which passes `TileGrid.inBounds` and then throws. Leave
-      `frontageTurnThreshold` alone; it is a separate quantity (found in Phase 1, see notes).
-- [ ] `startTile`, `townSquareCentre`, `fountainCentre`, `mainTowerAnchor`,
-      `doomsdayEscapeTile` all re-derived from the plan
-- [ ] Grep every building name; confirm no quest hard-codes a position
-- [ ] typecheck / lint / format clean
+- [x] Wall ring (55 × 43 inside) with south / west / east gates
+- [x] King's Road (4 wide, south gate → Market Street)
+- [x] Market Street (4 wide, west gate ↔ east gate)
+- [x] Upper Lane, Cross Lane, Low Street (3 wide)
+- [x] West Lane, East Lane (3 wide)
+- [x] Alleys (2 wide): west dead-end at Blackwood Lodge, club service alley, murder alley
+- [x] Market Plaza (17 × 16 flagstone) + civic terrace from the tower foot into the plaza
+- [x] **Tower moved into the north wall** — its two blocking rows are the wall row and the
+      row below it, and the other 21 rows of spire overhang the fields outside the town
+- [x] All 16 buildings re-anchored; zero overlaps, asserted at generation time
+- [x] Cap or evict `overlayCache` in `groundTiles.ts` — now a `SurfaceCache` (LRU, 12k
+      masked quarters / 4k stencils) shared by both surface caches
+- [x] Re-tune `market/vendorDefs.ts` stall offsets (±8 → −7 and +6, symmetric on the 17-wide plaza)
+- [x] Re-tune `TownPropSystem` board / bench / fortune-teller offsets
+- [x] Re-tune `TOWN_SAFE_RADIUS_TILES` (55 → 40) and verify circus + ruins buffers
+- [x] ~~Move `TownPlan.approachRoadStopOffset` down to `Math.floor(mainRoadWidth / 2)`~~ —
+      **superseded, and the prescription would still have been wrong.** See the note below.
+- [x] `startTile`, `townSquareCentre`, `fountainCentre`, `doomsdayEscapeTile` all re-derived
+      from the plan; `mainTowerAnchor` was already
+- [x] Grep every building name; confirm no quest hard-codes a position — two did, both fixed
+- [x] typecheck / lint / format clean
+- [x] Independent review round 1
+- [x] Independent review round 2
+- [x] Independent review round 3
+- [x] Independent review round 4
+- [x] Independent review round 5
+- [x] Independent review round 6 — **no code defects found**
 
 **Notes:**
+
+2026-07-25 — the town is now a walled market village. `?townmap` is the fastest way to see
+it; the numbers below come from a headless `generateOverworld(280)`.
+
+**The layout, north to south.** Interior 55 × 43 inside a wall ring at ±28 / −19 / +25 from
+the plaza centre. Bands, each bounded below by the street its buildings' doors open onto:
+Garrison Row (−18…−12), Upper Lane (−11…−9), Plaza Ring (−8…−2), Cross Lane (−1…+1), Market
+Row (+2…+7), Market Street (+8…+11), Low Quarter (+12…+21), Low Street (+22…+24). East and
+west of the 17-wide plaza each band is cut as an 8-tile plot, a 3-tile lane, and another
+8-tile plot, which is exactly what the widest sprites need.
+
+**The per-building road stub is gone, not re-tuned.** Every building is bottom-aligned to its
+band, so the row below its door _is_ the band's street — there is nothing to connect. The old
+`connectDoorToStreet`, its `DOOR_STREET_MAX_WIDTH` clamp and its frontage-turn branch were
+all consequences of buildings being dropped on a lawn. What replaced it is `paintDoorApron`,
+which paves the doorway across its full width: the sprite leaves a four-tile gap in The Horned
+Flagon's facade and a three-tile gap in the General Store's, and the old code paved only the
+centre tile of each, so two of the town's doors were a single flagstone in a lawn.
+
+**The plan states plots, not anchors.** `PlannedBuilding` carries a west column and a front
+row; `placeSpriteBuilding` derives the anchor by aligning the manifest footprint to them. The
+plan therefore never restates a sprite's size, and re-scaling a building keeps its frontage on
+the street and grows it northward into its own plot. `assertTownPlotsDoNotOverlap` fails
+generation if two plots collide or one leaves the wall — overlapping art is invisible in a
+screenshot (the later sprite just draws over the earlier one) and what you notice weeks later
+is a door opening into a wall.
+
+**Bypass routing no longer runs over the town.** It fires on a structure with paving on both
+its north and south sides, which under a street plan is _every_ town building by design — it
+would have detoured around all fifteen, paving a column through the gardens and lanes the plan
+just laid out. It still runs over the circus, whose tents are scattered at generation time and
+whose approach road is painted afterwards, so a tent there genuinely can sever the road.
+
+**The Phase 3 prescription this tracker carried for four review rounds is now moot, and it
+was still wrong.** The mechanism it wanted to adjust — `approachRoadStopOffset` — does not
+exist any more: the circus routes to the nearest **gate exit**, a tile the gate's own highway
+paves, so the joint cannot miss. But the prescription also assumed the fix was a smaller
+target on the same crossroads, and the crossroads is gone. Worth recording as one more
+instance of the lesson at the end of Phase 1: a prescription is a claim about code that does
+not exist yet.
+
+**Two quest anchors were genuinely broken by the move, and were caught by testing tiles rather
+than by reading.** `MurderMysteryQuestSystem`'s `ALLEY_DOOR_OFFSET` put GumGum's body four
+tiles west of The Sunken Stump Pub's door — and the pub now stands _against_ the west wall, so
+that resolved outside the town, to be nudged somewhere arbitrary by the 6-tile walkable
+search. It is anchored to the Desperado Club's murder alley now, which is where §4 and the
+Phase 7 checklist both say it belongs. `TownPropSystem`'s notice board sat due south of centre
+on the rationale that "the tower fills the north" — which stopped being true the moment the
+tower moved, and due south is now the arrival sightline from the south gate; it is in the
+plaza's north-west quadrant. The benches no longer carry a copy of the fountain's plan offsets
+at all: they derive from `gameMap.fountainCentre`.
+
+**Verified as tiles, not reasoned about.** Every system anchor that was a hard-coded offset
+was checked against the generated grid: notice board, fortune teller, both benches, all four
+stall tiles and their vendor row, GumGum's hook and body, the roost clue, the cat's spawn, the
+Doomsday escape tile, and the well the murder quest picks (the south-west one, 6.40 tiles from
+centre against the north-east one's 7.07 — no tie to break). All 16 doors are reachable from
+the plaza centre over paved tiles by flood fill, the circus with them, and every door's
+`doorTile + (0, +1)` — the tile `DungeonScene` returns you to on leaving a building — is
+street.
+
+**Where the metrics landed, including where they did not.**
+
+| Metric                   | Target  | Actual  | Note                                                                                                                   |
+| ------------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Bounding box             | 55 × 40 | 55 × 41 | The 15 sprite buildings are exactly 55 × 40; the extra row is the tower's base course, which stands _on_ the wall line |
+| Area                     | 2200    | 2255    |                                                                                                                        |
+| Built density            | 40.5%   | 33.9%   | **See below — this is an accounting difference, not a layout shortfall**                                               |
+| Farthest door            | ~28     | 33.4    | **Not reachable in a 55 × 40 town — see below**                                                                        |
+| Ground materials in town | 7       | 6       | Six is the ceiling: the metric samples inside the walls, and `grass` exists only outside them by design                |
+
+The **density** gap is entirely how the tower is counted, and the arithmetic is worth stating
+carefully because it is easy to quote a number no code would print. The 15 sprite buildings
+occupy 752 tiles either way. The plan's target of 890 built tiles counted the tower's whole
+6 × 23 art (752 + 138 = 890), which was right when the tower stood in the middle of town and is
+not now that 21 of those rows hang over the fields north of the wall. `townMetrics` counts its
+6 × 2 base instead: **764 tiles in a 55 × 41 box = 33.9%**. Counting the spire is not an alternative
+reading that yields 40.5%: it moves the numerator _and_ the denominator, because the bounding box
+grows to 55 × 61 = 3355 — so it reads **26.5%**. The 40.5% figure is 890 / 2200, the plan's own
+_target_ area, which no measurement of this layout produces. The honest summary is that the same
+fifteen buildings are packed as tightly as the plan intended and the tower's overhang is not
+ground; there is no accounting under which this town prints 40.5%.
+`BuildingPlot` now carries both rects (`rect` = occupied ground, `artRect` = the sprite), and
+`?townmap` outlines the overhang faintly so the spire is still visible in the plan view.
+
+The **farthest door** target of ~28 was arithmetically impossible and should be retired. The
+corner of a 55 × 40 rectangle is 34 tiles from its centre, so _any_ building on a corner plot
+is a long way out. The bands are not symmetric about the plaza either — the interior runs 18
+rows north of it against 24 south — so it is the two _south_ corners that are far: measured, the
+corner-plot doors are Cartwright's Workshop 25.9, Blackwood Lodge 26.8, Miller's Farm 31.1 and
+The Sunken Stump Pub 33.4. §4's own reference layout puts the pub's door at about 30.
+33.4 is the pub in the south-west corner; it is down from 42.6, and the acceptance criterion
+that actually matters (plaza → any door under 12 s at `PLAYER_SPEED`, ≈ 4.7 tiles/s) has ~8 s
+of headroom even routing round the blocks.
+
+**The Blackwood Lodge alley is a real dead end.** Doors face south, always, so a building can
+only front whatever lies south of its band — which means an alley frontage has to be made by
+turning _that_ row into an alley, not by setting the building back. The Upper Lane therefore
+starts at x = −16; west of the West Lane its place is taken by a two-row alley that runs to
+the west wall and stops, and the Lodge's door is the last thing on it.
+
+**Frame time, standing in the plaza.** 180 consecutive `requestAnimationFrame` deltas with
+the full crowd, both stalls, the fountain and four buildings on screen: mean **8.33 ms**,
+median 8.30, p95 9.40, **max 9.80** — no frame over 10 ms, so nothing in the five new
+materials or the wall costs anything per frame, which is the point of baking them into the
+chunk cache. Measured in-page rather than under node-canvas; the chunks in view were already
+baked, so this is steady-state cost, not first-sight cost. Cold-bake cost still wants
+measuring while panning into new chunks (Phase 7).
+
+**Review round 1 (independent), fixes applied:**
+
+- **A road was paved straight through the middle of the town, and the circus was left with
+  none.** There is no north gate, so a circus north of the walls routes to a _side_ gate,
+  whose exit sits beside Market Street — 9 rows below the centre line, well inside the town's
+  north-south extent. `connectSiteToNearestGate` turned along the circus's own column first,
+  which paved 3 tiles of packed earth from the circus down through the Civic Terrace, the
+  plaza and Market Street's cobble; `TOWN_WALL` being solid then cut the run at the wall, so
+  the circus finished with no road connection at all. Measured over 300 seeds: **10% of maps
+  had the slash, 13% had the circus disconnected, and every one of them had the circus to the
+  north.** The fix runs along the gate's outward axis _first_, so the corner lands on the
+  gate's standoff line one tile outside the wall and the perpendicular segment travels along
+  that line, outside the town by construction. Re-measured over **400 seeds: zero track tiles
+  added inside the wall, zero disconnected circuses**, quadrants uniform (N 107 / S 100 /
+  E 99 / W 94), so the northern cases that used to break are well represented.
+- **This is the third time a wilderness pass has damaged the town's paving**, counting the two
+  `approachRoadStopOffset` rounds, so it now has a standing check rather than another comment:
+  `assertNoTracksInsideTown` counts packed-earth tiles inside the wall before the wilderness
+  passes and after, and warns if the number moved. (Round 2 replaced it with the broader
+  `assertTownInteriorIsIntact`; the name survives here only as the record of what round 1 did.) It warns rather than throws because the
+  circus's position is random. `connectSiteToNearestGate` also takes a keep-out rectangle, so
+  a wrong route would leave a gap rather than a scar.
+- `assertTownPlanIsSane` was added for a mistake made _while writing this phase_: every
+  surface is `span(west, north, east, south)` over inclusive edges, which reads well and
+  silently yields a degenerate rectangle if two edges are given the wrong way round. A
+  zero-width surface paints nothing and shows whatever was underneath it — invisible
+  afterwards. It also asserts every surface stays inside the wall, which is what makes "bare
+  grass exists only outside the walls" a property of the plan.
+- **The wall's parapet rule was wrong in two places.** `facesNorth = !isWall(tx, ty - 1)`
+  reads plausibly and is not the same thing as "in an east-west run": the **south-west and
+  south-east corner tiles** have the last tile of a vertical run directly above them, so they
+  lost their battlement in the middle of an otherwise crenellated south face, and the tile
+  **directly below each side gate** has the gate's cobble above it, so it grew a battlement
+  mid-flank — the exact case the rule exists to prevent. It now tests for a wall to the east
+  or west. Verified against the grid: **188 wall tiles, zero rule violations**, and both
+  previously-wrong cases confirmed flipped.
+- The east market stall was at `+7`, so its outer tile was the plaza's last column with the
+  Cross Lane beyond it, while the comment claimed a tile of slab outside both stalls. `+6`
+  makes the pair symmetric about the centre and the claim true.
+- `PLAZA_RADIUS_TILES` was 11 with a comment saying 11 reaches the plaza's corners. They are
+  at (±8, −8) and (±8, +7), i.e. `hypot(8, 8) = 11.31`, and `withinRadius` is a strict
+  circular test — so all four corners of the crowd's own plaza fell outside it. Now 12.
+- Two yards were **named for buildings they do not adjoin**: the gravel at columns 15..16
+  flanks the Barracks, not Cartwright's Workshop across the East Lane, and the band at 20..27
+  is three tiles and a lane away from The Rusty Anvil. Renamed to what they are, and the
+  second carries a note that §3.3's smithy yard _cannot_ be satisfied in this band — the
+  Anvil fills 9..16 and the lane separates it — so Phase 4/5 must either put the forge's props
+  on its own Market Street frontage or re-cut the block, not drop an anvil in the wrong yard.
+- Removed `PlannedBuilding.district` and the `TownDistrict` union. Their JSDoc claimed the
+  minimap and a review tool read them; nothing did, and the minimap's district labels are a
+  Phase 6 item — they come back with their consumer. `PlannedSurface.name` and
+  `PlannedGate.name` stayed but now earn their keep: they are what `assertTownPlanIsSane`
+  names, and their docs say they are labels rather than claiming render-path consumers.
+- Four more claims corrected: the bounding box is **41** rows, not 40 (the tower's base course
+  stands _on_ the wall line — the sprite buildings alone are exactly 55 × 40), and the three
+  interior rows no building occupies are Low Street's, not "the wall verge and the Low Street";
+  the farthest wall corner is 37.5 tiles out, not 38.3; "Garrison Row has no lane crossing it"
+  is true of the West Lane only, since the East Lane runs the town's full height; and two
+  separate doc blocks said "the town's five street materials" over sets holding four and three
+  of them, one of them contradicting itself two lines later.
+- `?townmap` drew the wall in a tan within 20 levels of the lanes, in the one view whose job
+  is to make the layout legible. It is dark stone there now, unrelated to the in-game colour.
+- Also: an orphaned JSDoc block in `tileTypes.ts` documented nothing (same defect class Phase 2
+  round 4 recorded); the bare `1`s and `2`s in `drawTownWallTile` are named constants; and
+  `STREET_TILE_TYPES` no longer sits between two import blocks.
+
+**Review round 2 (independent), fixes applied.** Round 1's fixes were re-tested and none
+regressed: 20,000 synthetic circus positions on the 70–90 ring touch the town interior **0**
+times under the new route order against **11.7%** under the old one, which substantiates the
+~10% figure recorded above from a different measurement; 188 wall tiles, 110 parapet / 78 flank,
+**0** disagreements with the geometric rule; both stalls and both vendor rows on flagstone and
+symmetric; all four plaza corners inside the 12-tile radius; no orphaned consumer of the removed
+`district` field. Three genuine defects remained:
+
+- **Weeds scattered onto the verge rendered as field grass.** `GRASSY_WEED` reports `grass` as
+  the material beneath its tufts — correctly, since that is what it is scattered on outdoors —
+  so on a verge it drew the wrong sheet row, and being the _softest_ material in the blend order
+  it also became an island the surrounding verge bled into through the corner masks, eroding the
+  tuft the tile exists to show. About **4 tiles per generation** inside the walls, and it
+  falsified the redesign's third principle in the only place that counts, which is what is
+  drawn. The scatter is gone: the verge material already depicts grass invaded by stone and
+  weeds, so nothing is lost, and planting inside the walls is Phase 4/5's job with a decoration
+  of its own that maps to `verge`.
+- **`assertTownPlanIsSane`'s doc claimed a guarantee it does not give.** It checks that no
+  surface _escapes_ the interior, and the note said that was what made "everything inside the
+  walls is a made surface" a property of the plan. Containment is not coverage: delete the plan's
+  one `town interior` entry and the check still passes while the whole interior reverts to the
+  grid's bare grass. That property is now actually held, by `assertTownInteriorIsIntact` over the
+  finished grid — every interior tile must be one of the town's six surfaces, a worn patch, or
+  something standing on them, so field grass, `GRASSY_WEED`, `TREE`, `RUBBLE` and `RUINED_WALL`
+  are all faults. It subsumes the round-1 track tripwire and runs _after_ the scatter pass,
+  because the scatter pass is itself something that put the wrong material inside the walls.
+  **The tripwire was tested by re-introducing the verge scatter**: it reported "6 tiles inside
+  the town wall are not a town surface — first type 22", and is silent once reverted. A standing
+  check nobody has seen fire is not a check.
+- **The plaza's two south-corner torches drew cobble ground.** `inferFloorType` scans cardinals
+  south first, and the slab's last row has Market Street below it, so a prop on the corner took
+  the street's material into the middle of the flagstone and dragged its neighbours' blend with
+  it. Moved one row in. All 14 town props were then checked individually; the other 12 infer
+  their own material correctly.
+
+Round 2's nits were taken too, since this file's whole purpose is to not accumulate plausible
+falsehoods: the tower's base is a 6 × 2 _rectangle_ of which the manifest blocks 8 tiles, not
+"stands on 12"; `DIRT_PATCH` is scattered on the track and never on a lane, so the comment's
+example was of a case that does not occur; the frontage radius does _not_ separate every pair of
+doors — Blackwood Lodge's and Shepherd's Cabin's bubbles overlap on two tiles of lane, which is
+now stated rather than implied away; "every offset in §6 re-tuned" overstated it, since the
+fountain radius, forest distance and ruins bands were already right at the new scale; the
+"890 / 40.5%" figure is the plan's target area, not this layout's, and no code would print it;
+and `?townmap` now compares the whole rect rather than just its size when deciding whether a
+sprite has overhang. `assertTownPlanIsSane` also checks that a gate opens _through_ the ring and
+that its apron lies _outside_ it, and the Doomsday escape guard now sees props and the tower
+anchor rather than only solid tile types.
+
+**Review round 3 (independent), fixes applied.** Round 2's other fixes all re-verified — the
+verge weed count is 0, `TOWN_INTERIOR_TILE_TYPES` is complete against a full interior census
+(`VERGE_GRASS` 980, `LANE_STREET` 554, `PLAZA_STONE` 372, `COBBLE_STREET` 272, `YARD_GRAVEL` 92,
+road 52, `SPRITE_BUILDING` 15, `TORCH` 12, `FOUNTAIN` 9, `DIRT_PATCH` 4, `WELL` 2, `MAIN_TOWER`
+1, nothing else) with 0 false positives over 400 seeds, and both new gate checks throw when
+fault-injected. Four things were still wrong, and the first was introduced by round 2:
+
+- **Round 2's widened Doomsday escape guard could not fire.** It tests the tile against `TORCH`,
+  `WELL` and `FOUNTAIN` — and `paintTownProps`, the only pass that writes any of them inside the
+  town, ran _after_ it. All three branches were dead code, and round 2's note here claimed the
+  guard "now sees props". Proved by moving a well onto the escape tile: generation **succeeded**
+  with the finale's stairwell on a non-walkable well. The guard is now a named function running
+  after the prop pass, and the same injection makes it throw `Doomsday escape tile at 139,127 is
+blocked (tile type 21)`. Two rounds running, a check was added and not watched fire; that is
+  now the standing habit for this phase — inject the fault, see the message, revert.
+- **"40.5% counting the tower's spire" is arithmetic that no code produces**, and it was in the
+  metrics table, in the plan doc, and contradicted by this file's own detailed note 900 lines
+  down. Counting the spire moves the _denominator_ too: the bounding box grows to 55 × 61 = 3355,
+  so it reads **26.5%**. 40.5% is 890 / 2200 — the plan's target area. Corrected everywhere.
+- **"~8 s of headroom" on the 12-second walk criterion was the travel time misread as the
+  margin.** Measured by shortest path over the real blocking set: worst door **8.31 s**
+  eight-directionally, **10.45 s** four-directionally, so the headroom is **1.6–3.7 s**. The
+  criterion passes; the margin is thin enough that Phase 4's plots should not lengthen a route.
+- **The frontage-overlap claim round 2 added was false in both its material and its
+  consequence.** It said Blackwood Lodge's and Shepherd's Cabin's bubbles share two tiles of
+  lane. The two tiles are `VERGE_GRASS` under the buildings' own facade rows and are **not
+  walkable**, so `gatherFrontageTiles` discards them: measured across all 16 pairwise
+  combinations, **no pair of doors in the town shares a single frontage tile.** The comment now
+  says that.
+
+Round 3's nits were taken as well. `structures` and `circusStructures` had become the same array
+written twice, with a comment claiming the town pushed into one of them when it pushed into
+neither — one array now, named for what it holds. `TownPlan` exports its `interior` rect instead
+of four separate hand-derived `wall.x + 1` / `wall.w - 2` pairs. `assertTownPlotsDoNotOverlap`
+takes named plots and now includes the tower's base, which is what its doc always claimed; the
+gate apron is checked against the _wall_ rather than the interior, since an apron is painted
+after the stone and one overlapping the ring would punch a gravel hole in it; the track warning
+is phrased as a change rather than an addition, because its baseline predates the prop pass;
+`DISTRICT_RADIUS_TILES` went 34 → 36, since 34 left 0.58 tiles before `districtDoors` would
+silently drop the farthest building out of the town's life; and `TownLifeSystem` stopped
+recomputing the town centre as `gridSize / 2` — it reads `townSquareCentre` now, and holds it as
+a point rather than as one number that quietly assumed the centre sits on the map's diagonal.
+(This note originally called that the "third and last" such site. Round 4 found four more; see
+its note below.)
+
+**Review round 4 (independent), fixes applied.** Round 3's other fixes verified: the escape
+guard fires on every branch, the collapsed structure list is behaviourally identical (over
+200,000 synthetic circus placements the closest any tent comes to any town building is **17 tiles
+on its nearer axis**, against a `TENT_CLEARANCE` of 1, so the town could never have been seen by
+that test — an earlier draft of this line said 14, which is the gap to the _wall rectangle_
+rather than to a building, and the wall was never in that list), the
+`interior` field has exactly four consumers and all agree, and both gate injections throw. Two
+real defects, one of them introduced by round 3, plus a false alarm worth recording.
+
+- **Round 3's own fix silently disabled the containment check for all sixteen plots.** Admitting
+  the tower's base — which legitimately stands _on_ the wall line — was written as "inside the
+  interior **or** inside the wall ring". The interior is the ring inset by one, so it _implies_
+  the ring: the disjunction reduced to the loose test, and a sprite building whose art landed on
+  the stone passed. One tile from mattering — `village_house_2` growing a single row would put
+  Blackwood Lodge's back wall on the wall line. Each plot now carries the rectangle it must fit
+  inside, and only the tower is given the ring. Verified by injection: pushing a plot onto the
+  wall now throws `Town plot 'Blackwood Lodge' at 112,123 7x6 does not stand on the town's
+interior` (round 5 reworded that message), where before it generated cleanly with 8 non-wall
+  tiles on the west wall line.
+- **A comment named a standing check that does not exist.** `paintStreets.ts` still pointed at
+  `assertNoTracksInsideTown`, which round 2 replaced with `assertTownInteriorIsIntact` — the
+  documented defect class of this project, in a comment about a check.
+- **"`TownLifeSystem` was the third and last place recomputing the town centre as
+  `gridSize / 2`" was false.** Four more sites. Two are on the overworld and are now fixed:
+  `GameMap.isInTownSafeZone`, which decides where hostiles spawn and where they deaggro, and
+  `MurderMysteryQuestSystem.findWellTile`, which decides which of the two wells hosts a clue. The
+  other two — `CultHideoutSystem` and `QuillConfrontationSystem` — run on _interior_ floor maps
+  that have no `townSquareCentre`, so `gridSize / 2` is the right centre there and they are left
+  alone.
+
+**One finding was a false positive, and checking it was worth the five minutes.** Round 4
+reported that Phase 3's fountain had landed on the Miss Quill encounter's spawn anchors, with a
+measurement showing `REMEX 144 143 FOUNTAIN walkable false`. Those offsets are relative to the
+**tower's interior floor map**, not the overworld: `BuildingInteriorScene` passes `floorMap` into
+`QuillConfrontationSystem`, and the interior is 20 × 16 with its own centre at 10,8. Generated
+it and checked all four anchors — every one is walkable carpet, and there is **not one FOUNTAIN
+tile anywhere in that map**. An agent's measurement can be real, reproducible and still against
+the wrong object.
+
+Round 4's nits taken: the escape guard now also rejects the tower's own base rectangle (only its
+anchor carries the `MAIN_TOWER` type, so a tile one column over reads as flagstone while being
+blocked); the cache bound is the computed 176 × 144 × 4 = 101,376 rather than "near
+99,000"; the two counts of the paved-surface set inside `tileGrid.ts` now agree; and
+the Lodge's door is the _only building_ on its alley rather than "the last thing on it" — the
+alley runs three tiles further west to the wall.
+
+**Review round 5 (independent), fixes applied.** Round 4's three fixes all verified under
+injection, including that the tower's base is now compared against sprite plots (moving the tower
+12 columns east throws `Town plots 'Town Center Tower' and 'The Barracks' overlap at 147,123`),
+that the `underTower` branch is not dead code, and that every consumer of `isInTownSafeZone`
+passes world pixels so the centre change is behaviour-neutral. One code defect and four false
+statements:
+
+- **The tower's containment bound was vacuous — the same defect as round 3's, scoped smaller.**
+  `'wall ring'` was implemented as "inside `plan.wall`", and `plan.wall` is the wall's whole
+  _bounding rectangle_, which contains the interior. So the one plot advertised as "the only plot
+  allowed on the ring" was not constrained to the ring at all: with the tower's base moved 15
+  rows into the middle of the town, containment passed and only the overlap half objected. A ring
+  plot now has to be inside the wall rectangle **and** touch one of its four lines. Verified:
+  moving the base two rows off the ring throws `Town plot 'Town Center Tower' at 137,123 6x2 does
+not stand on the town's wall ring`. Twice now the bug has been a bound that reads tighter than
+  it is, which is worth naming as a pattern rather than fixing a third time by luck.
+- **`isInTownSafeZone`'s new comment claimed it decides where hostiles spawn.** It has exactly
+  three consumers — the ruins ghoul's and the krasue's deaggro, and the overworld music's
+  town/wilderness zone. Spawn _placement_ is `scatterRuinsSpawnPoints`, which filters against
+  `plan.centre` at generation time and never calls it.
+- **A fix this file claimed round 4 had made was never applied.** The note said "any corner
+  plot's door is ≥ 30 tiles out" had been corrected to 28–34. The original text was still in both
+  documents, and _both_ figures were wrong. The cause is a wrong premise rather than a wrong
+  measurement: the "corner of a 55 × 40 box is 34 from its centre" argument assumes the plaza is
+  the box's centre, and it is not — the interior runs 18 rows north of it against 24 south, so the
+  north corners are much closer. Measured, the corner-plot doors are Cartwright's Workshop 25.9,
+  Blackwood Lodge 26.8, Miller's Farm 31.1, The Sunken Stump Pub 33.4. Both documents now say
+  that, and `townPlan`'s wall comment states the asymmetry so the next person does not re-derive
+  the wrong premise.
+- **"Minimum gap between any tent and any town plot is 14 tiles" was not reproducible**, and
+  round 5 measured 17. Re-measured both ways: against the town's _buildings_ — which is what the
+  tent-overlap list actually held — the closest approach over 200,000 placements is **17 tiles on
+  the nearer axis**; the 14 was the gap to the **wall rectangle**, which was never in that list.
+  The conclusion is unaffected (17 ≫ a clearance of 1) but the number was measuring a different
+  object, which is the third time in this phase a real measurement has been taken against the
+  wrong thing.
+- **A sentence in `townPlan`'s wall comment contradicted itself.** It said buildings abut the
+  wall's inner face "on both the north and the south" one clause after saying the three
+  unoccupied interior rows are Low Street's. True on the north, false on the south.
+
+Round 5's nits taken: "one pass over fifteen rectangles" is sixteen; "checking is a dozen
+rectangles" is 17 surfaces plus each gate's opening and apron; and `PlannedGate.apron`'s doc now
+says what the apron actually ends up as — flanks of gravel either side of the track, because
+`paintGateHighways` paves through its middle afterwards.
+
+**Review round 6 (independent) — the code came back clean.** Round 5's containment fix verified
+under three injections; every number in round 5's note reproduced exactly (the corner-plot doors,
+"18 rows north against 24 south", the 17-tile tent separation against buildings, the 17 surfaces,
+the injection strings, and the apron's gravel fraction — deterministically 50% per apron, and
+"roughly a third to a half" holds for 98.7% of the sampled ones). Also confirmed independently:
+zero `assertTownInteriorIsIntact` warnings over 300 consecutive generations, and all five
+plan-sanity guards firing under injection. What it did find:
+
+- **A stray debug edit in the working tree that was not part of this phase.** `PostSignupScene`'s
+  "Skip to Level 1" had been repointed at `level3` — a shortcut for looking at the town in-game,
+  left behind by one of the review agents rather than by the phase. It would have shipped new
+  players into the overworld. Reverted; the change set is 25 files again.
+- **One of _my own_ round-5 verification claims did not reproduce.** The note said moving the
+  tower 12 columns east throws an overlap against The Barracks. It generates cleanly: the tower's
+  base is rows 121–122 and the Barracks is rows 123–128, so they cannot overlap at any `dx`. The
+  only Garrison Row plot reaching row 122 is Cartwright's Workshop, so the real injection is
+  `dx = 23` — which does throw, `Town plots 'Town Center Tower' and 'Cartwright's Workshop'
+overlap at 160,122`. I had quoted the previous round's report instead of running it, which is
+  the failure this tracker exists to stop; the claim is now the one I ran.
+- Two contradictory counts in one JSDoc ("sixteen rectangles" and "fifteen rectangles" a few lines
+  apart — it is sixteen), and round 4's quoted error string, which round 5's rewording had made
+  stale.
+
+Round 6's tightening nit was worth taking, because it is **the same defect a third time**:
+`touchesWallRing` admitted a plot with one column on the _west_ wall and its base sitting in the
+Cross Lane — verified, `dx −25 / dy 1` passed. Every comment and §3.2 mean the _north_ wall, so
+that is now what the check says: a ring plot's own north edge must be on the wall's north line.
+Re-verified over four injections — the real layout generates cleanly, and the Cross Lane
+placement, the off-the-ring row and the overlap case all throw.
+
+**One tooling gap closed.** `?tiles` previewed `grass↔lane`, `grass↔dirt`, `lane↔cobble` and
+`dirt↔gravel` — none of which are the joints the new street plan actually draws most of. The
+route now previews `verge↔lane` (every frontage and wall base), `verge↔plaza` (the ring around
+the market square), `lane↔plaza` (every lane mouth) and `gravel↔lane` (every workyard edge), so
+the acceptance route for ground work covers the ground the town is made of.
+
+**Signed off deliberately, not overlooked.** §6 says "tower base must stay adjacent to the
+plaza". Its base is now 10 rows from the plaza's north edge rather than on it. §3.2 and the
+decision log both mandate the north-edge move, and what the invariant protects — the
+magistrate's office and the tower stairs being reachable from the square — holds: the tower
+door opens onto an unbroken flagstone terrace that runs into the plaza, and the walk is 10
+tiles. Recorded here rather than left as a silent deviation.
+
+**`groundTypeCount` can never read 7**, which the target row implies it should.
+`measureTown` samples the building bounding box, which is inside the walls, and the street
+plan puts a made surface on every tile in the ring — field grass exists only outside it, which
+is design principle 3 rather than a gap. Six is the ceiling; the metric's label and JSDoc now
+say so.
+
+**Open questions closed.** Miller's Farm is inside the south-east wall (plan §4's compact
+option) with its crop rows in front of it. The plaza came out 17 × 16 rather than 19 × 13 —
+still worth reassessing once the stalls, board, fountain and crowd are in place, which is the
+Phase 4/5 review, but it is 272 tiles against the old square's 484.
 
 ---
 
@@ -925,13 +1342,22 @@ Known and accepted, with reasons:
 
 ## Open questions
 
-- [ ] Should Miller's Farm sit **inside** the SE wall (compact, per plan §4) or
-      **outside** the south gate with real crop fields (better story beat, +8 tiles of
-      bounding box)? Decide before Phase 3.
-- [ ] Is the 19 × 13 plaza too large once compacted? Reassess after Phase 3 with the
-      stalls, fountain, board and crowd in place; shrinking it is cheap.
-- [ ] Do the town walls need real art (§7), or can they be procedural like the ruined
-      wall tiles? Decide after Phase 3's first screenshot.
+- [x] ~~Should Miller's Farm sit inside the SE wall or outside the south gate?~~ **Inside**,
+      per plan §4's compact option, with its crop rows filling the band in front of it.
+- [ ] Is the plaza too large? It came out **17 × 16** (272 tiles, against the old square's
+      484). Reassess with the stalls, fountain, board and crowd in place — that is the
+      Phase 4/5 review, and shrinking it is still cheap.
+- [ ] **§9's first acceptance criterion looks geometrically unreachable and needs a decision
+      before Phase 7.** "Standing at the south gate, the tower, Market Street and the plaza are
+      all visible in one frame": the south gate is row +25 and the tower's base is row −19, 44
+      tiles apart, which is 1408 px against a ~720 px window. Either the criterion means the
+      tower's _spire_ (which rises 22 tiles above its base and would be visible from much
+      further south), or the town has to be shorter, or the criterion goes. Nothing in Phase 3
+      claimed it.
+- [ ] Do the town walls need real art (§7)? Phase 3 shipped them procedural —
+      `drawTownWallTile` in `buildingTiles.ts`: coursed ashlar with a crenellated parapet on
+      any run's exposed north face, phased off the tile's world-pixel column so the
+      battlement is continuous. Judge it from a screenshot before commissioning anything.
 - [ ] Switch the **dungeon** over to `ground_dungeon.png`? The seven dungeon materials
       are generated, audited and reviewable at `?tiles`, but nothing draws them: Phase 2
       wired the overworld only, and `dungeon_tileset.png` (same ChatGPT provenance, never
@@ -960,5 +1386,12 @@ Known and accepted, with reasons:
 | 2026-07-25 | `groundMaterials.ts` deferred from Phase 1 to Phase 2             | It maps a `GroundMaterial` to a sheet row and frame — a renderer concern with nothing to hold until the enum exists. Creating it empty in Phase 1 would have been a stub, not a module.                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 2026-07-25 | One warp seed for all 16 corner masks                             | Neighbouring tiles across a boundary usually hold different corner combinations, so a per-combination seed tears the shared edge by the full alpha range (measured 1.000 → 0.094).                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 2026-07-25 | Ground tone is black-at-varying-alpha, not a `multiply` grey      | Identical arithmetic, but `multiply` leaves the compositor's fast path and cost more than the other four ground passes put together.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 2026-07-25 | One tile type per ground material, not one road type              | A street's material becomes a property of the map rather than something the renderer infers. `FloorTypeValue.road` stays the generic packed-earth track — alleys, and everything outside the walls — so no separate alley type is needed, and the five new types make lane, main street, plaza, yard and verge all distinguishable to walkability, the minimap, `?townmap` and the townsfolk's wander bias.                                                                                                                                                                                                      |
+| 2026-07-25 | Surfaces are painted in plan order, later ones winning            | The street hierarchy is then the _order of a list_, not a priority number or a junction-fillet pass: the Upper and Cross Lanes are stated as full-width bands and vanish where the plaza takes over, and a lane meeting a main street takes the main street's material with no special case.                                                                                                                                                                                                                                                                                                                     |
+| 2026-07-25 | The wall is painted after the streets, then its gates re-cut      | Lets every street be a plain rectangle spanning the interior, with nothing able to pave over the wall. Clipping each street to the interior instead would put the wall's geometry into every street's definition.                                                                                                                                                                                                                                                                                                                                                                                                |
+| 2026-07-25 | The plan states plots (west column, front row), not anchors       | Heights and widths come from the sprite manifest, so the plan never repeats a sprite's size and a re-scaled building keeps its frontage on the street. `assertTownPlotsDoNotOverlap` covers what that gives up: overlapping art is invisible in a screenshot, because the later sprite simply draws over the earlier one.                                                                                                                                                                                                                                                                                        |
+| 2026-07-25 | Bypass routing runs over the circus only, not the town            | It fires on a structure with paving north _and_ south, which under a street plan is every town building by design; it would have paved a detour column through the gardens and lanes the plan just laid out.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 2026-07-25 | The circus routes to the nearest **gate**, not the town centre    | A gate exit is a tile the gate's own highway paves, so the joint cannot miss. This retires the four-round `approachRoadStopOffset` saga rather than adjusting it.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 2026-07-25 | `townMetrics` counts the tower by its base, not its whole art     | 21 of the spire's 23 rows now overhang the fields north of the wall. Counting them would report a town measured at 55 × 40 as 61 tall and attribute 138 tiles of ground to a building standing on 12. Both rects are kept (`rect` / `artRect`) and `?townmap` draws the overhang faintly.                                                                                                                                                                                                                                                                                                                        |
 | 2026-07-25 | `DIRT_PATCH` renders as `lane`, not as the `dirt` material        | It is a decoration drawn over a road. As its own material the surrounding lane wins all four corners and the mask erases it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-25 | Dropped `overworld_tileset` from the manifest                     | Nothing draws it once the four call sites move to the generated sheet, and it was a 1 MB image loaded at every startup. The PNG stays on disk — the generated palettes were sampled from it.                                                                                                                                                                                                                                                                                                                                                                                                                     |
