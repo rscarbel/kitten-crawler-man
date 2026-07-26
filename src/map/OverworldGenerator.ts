@@ -27,6 +27,7 @@ import { TileGrid } from './town/tileGrid';
 import {
   createTownPlan,
   type BuildingKind,
+  type ShopSignEmblem,
   type TilePoint,
   type TileRect,
   type TownPlan,
@@ -54,10 +55,47 @@ export interface BuildingEntry {
   doorTile: TilePoint;
   name: string;
   type: BuildingKind;
+  /**
+   * Device on the shop sign hanging over this door, when the building has one.
+   *
+   * Optional because two entries are not shop fronts: the main tower, and the
+   * circus's Big Top out beyond the walls. Carried on the entry rather than
+   * re-derived by name in the renderer, so the sign is stated once — in the plan
+   * — and a building added without one is a compile error there rather than a
+   * silently missing sign here.
+   */
+  sign?: ShopSignEmblem;
+  /**
+   * Width of the opening in the facade, in tiles.
+   *
+   * Doorways are **not** all one tile: measured across the thirteen sprites the
+   * town uses, six are one tile, five are two, the General Store is three and
+   * The Horned Flagon is four. Anything hung beside a door has to know, because
+   * `computeDoorway` reports the *centre* of the opening — so for a four-tile
+   * front, the tile immediately west of `doorTile` is still doorway.
+   *
+   * Optional alongside `sign`, and for the same two entries: the tower's door is
+   * stated by the plan rather than derived from a manifest, and the Big Top's is
+   * a two-tile gap cut into a tile-built tent.
+   */
+  doorwayWidth?: number;
 }
 
 export interface OverworldData {
   grid: TileContent[][];
+  /**
+   * The plan the town was generated from.
+   *
+   * Handed back rather than kept private because the town's *systems* need its
+   * geometry too — which streets are streets, where the yards and gates are —
+   * and every one that has re-derived a coordinate instead has eventually
+   * drifted from it: the murder quest anchored a body four tiles west of a door
+   * that later stood against the west wall, and the notice board sat due south
+   * of centre on a rationale about a tower that had moved. The plan is pure data
+   * and already the single source of truth for the layout; a second copy of a
+   * coordinate is a second thing to keep in step.
+   */
+  townPlan: TownPlan;
   startTile: TilePoint;
   safeRooms: Array<{ bounds: TileRect; centre: TilePoint }>;
   buildingEntries: BuildingEntry[];
@@ -179,6 +217,8 @@ export function generateOverworld(size: number): OverworldData {
       doorTile: placement.doorTile,
       name: planned.name,
       type: planned.kind,
+      sign: planned.sign,
+      doorwayWidth: placement.doorwayWidth,
     });
     paintDoorApron(grid, placement);
   }
@@ -237,6 +277,7 @@ export function generateOverworld(size: number): OverworldData {
 
   return {
     grid: grid.cells,
+    townPlan: plan,
     // The player arrives in the middle of the plaza, looking down King's Road at
     // the south gate with the tower behind them.
     startTile: townSquareCentre,

@@ -63,6 +63,11 @@ const BOSS_REVEAL_EXTRA_TILES = 15;
 const CORPSE_MARKER_ARM = 2;
 /** Corpse marker TTL in frames. */
 const CORPSE_MARKER_TTL = 1800;
+/** District names on the expanded minimap: small, warm, and outlined so they read over any tile. */
+const DISTRICT_LABEL_FONT_SIZE = 9;
+const DISTRICT_LABEL_COLOR = '#e8d9a0';
+const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
+
 /** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
 const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
 
@@ -183,6 +188,44 @@ export class MiniMapSystem implements GameSystem {
         this.corpseMarkers[i] = this.corpseMarkers[this.corpseMarkers.length - 1];
         this.corpseMarkers.pop();
       }
+    }
+  }
+
+  /**
+   * The town's quarters, written across the expanded minimap.
+   *
+   * Expanded only. At the normal size the map is 160 px across and two pixels a
+   * tile, so it shows 80 tiles — barely wider than the 55-tile town — and the
+   * captions would cover most of it. Expanded is one pixel a tile over 240, which
+   * is where a name is a caption rather than an obstruction.
+   *
+   * Each label waits for its own tile to come out of the fog, so the map names
+   * the parts of town you have actually walked into.
+   */
+  private renderDistrictLabels(
+    ctx: CanvasRenderingContext2D,
+    expanded: boolean,
+    mmX: number,
+    mmY: number,
+    pxPerTile: number,
+    viewCenterTX: number,
+    viewCenterTY: number,
+    halfTiles: number,
+  ): void {
+    if (!expanded) return;
+    const districts = this.gameMap.townPlan?.districts;
+    if (districts === undefined) return;
+    const mapSize = this.gameMap.structure.length;
+    for (const district of districts) {
+      if (!this.fogOfWar[district.label.y * mapSize + district.label.x]) continue;
+      drawText(ctx, district.name, {
+        x: mmX + (district.label.x - viewCenterTX + halfTiles) * pxPerTile,
+        y: mmY + (district.label.y - viewCenterTY + halfTiles) * pxPerTile,
+        size: DISTRICT_LABEL_FONT_SIZE,
+        color: DISTRICT_LABEL_COLOR,
+        outline: DISTRICT_LABEL_OUTLINE_COLOR,
+        align: 'center',
+      });
     }
   }
 
@@ -308,6 +351,17 @@ export class MiniMapSystem implements GameSystem {
       ctx.arc(msx, msy, MORDECAI_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    this.renderDistrictLabels(
+      ctx,
+      expanded,
+      mmX,
+      mmY,
+      pxPerTile,
+      viewCenterTX,
+      viewCenterTY,
+      halfTiles,
+    );
 
     // Quest markers — yellow !, green ?, or red X
     // size=8 bold; old baseline was qsy+3; top = (qsy+3) - round(8*0.8) = (qsy+3) - 6 = qsy-3

@@ -1271,6 +1271,17 @@ function buildFootprintIndex(structure: TileContent[][]): ReadonlySet<number> {
   return covered;
 }
 
+/**
+ * True when (tx, ty) lies inside a building's declared footprint.
+ *
+ * Built from `getBlockedTileOffsets*`, which is the manifest footprint minus the
+ * doorway — and the footprint is the sprite's whole *frame*, so this includes
+ * the transparent sky above a roof and any transparent columns beside it. Good
+ * enough for the occlusion pass, which only needs to know that the ground here
+ * is under a structure rather than beside one; **not** an opacity test, and a
+ * Phase 5 attempt to reuse it as one for the fence renderer anchored three rails
+ * into pixels under 2% opaque.
+ */
 function underSpriteArt(structure: TileContent[][], tx: number, ty: number): boolean {
   let covered = spriteFootprintTiles.get(structure);
   if (covered === undefined) {

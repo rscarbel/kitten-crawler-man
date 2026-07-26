@@ -10,7 +10,7 @@
  * in one sweep would make the fence's continuity depend on a dice roll.
  */
 
-import { FENCE, GARDEN_PLANTING, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
+import { GARDEN_PLANTING, VERGE_GRASS, YARD_GRAVEL } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { PlannedYard, TileRect, TownPlan, YardKind } from './townPlan';
 
@@ -153,10 +153,11 @@ export function paintYardFences(
         if (containedByAny(buildingArt, x, y)) continue;
         if (grid.typeAt(x, y) !== surface) continue;
         if (!facesOpenGround(x, y, yard.bounds)) continue;
-        // `setStanding`, not `set`: the fence has to remember the surface it was
-        // driven into, or the renderer infers one from its first cardinal
-        // neighbour and a southern perimeter takes the street outside the yard.
-        grid.setStanding(x, y, FENCE);
+        // `setFence`, which is `setStanding` plus the style: the fence has to
+        // remember the surface it was driven into, or the renderer infers one
+        // from its first cardinal neighbour and a southern perimeter takes the
+        // street outside the yard.
+        grid.setFence(x, y, yard.fence);
       }
     }
   }

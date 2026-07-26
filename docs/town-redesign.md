@@ -399,7 +399,7 @@ See the Phase 3 notes in the progress tracker.
 | Town bounding box                 | 74 × 73             | **55 × 40**                  |
 | Area                              | 5402                | **2200**                     |
 | Built density                     | 16.5%               | **40.5%**                    |
-| Farthest building door from plaza | ~48 tiles           | **~28** — see note           |
+| Farthest building door from plaza | ~48 tiles           | ⊘ retired — see note         |
 | Ground materials in town          | 2                   | **7** — see note             |
 | Usable variants per material      | 2–3 (hand-repaired) | **12–48 frames (generated)** |
 | Worst joint-to-interior ratio     | n/a (never wrapped) | **1.11 (limit 1.15)**        |
@@ -616,13 +616,20 @@ the ground.
 
 The redesign is done when all of these hold:
 
-- [ ] Standing at the south gate, the tower, Market Street and the plaza are all
-      visible in one frame.
+- [ ] Standing at the south gate, the arrival view frames the gate arch, King's Road
+      and the Low Quarter. (This replaces "the tower, Market Street and the plaza are
+      all visible in one frame", which was measured and is impossible: the camera is
+      centred on the player and a 1080 px window shows 16.9 tiles either side, while
+      the gate and the tower's base are 42 rows apart.)
 - [ ] Any two adjacent buildings are either sharing a party line or separated by a
       _purposeful_ space (yard, alley, garden) — never bare grass.
 - [ ] No visible tile grid on any large ground area at 1× zoom.
 - [ ] Every named building is identifiable without walking to its door.
-- [ ] Walking plaza → any building door takes under 12 seconds at `PLAYER_SPEED`.
+- ⊘ ~~Walking plaza → any building door takes under 12 seconds at `PLAYER_SPEED`.~~
+      Dropped 2026-07-26 at Ryan's request — not a property he cares about. Recorded
+      rather than silently deleted, and worth noting it would have passed: the
+      farthest door is 33.4 tiles out and `PLAYER_SPEED` is ~4.7 tiles/s, so ~7 s
+      straight-line.
 - [ ] All 16 buildings enterable; every quest that references a building still starts,
       progresses and completes.
 - [ ] Circus quest, murder mystery, cult hideout, club, market, mercenary guild and the

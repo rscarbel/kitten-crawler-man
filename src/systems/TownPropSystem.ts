@@ -119,6 +119,17 @@ export class TownPropSystem implements GameSystem {
     if (this.healCooldown > 0) this.healCooldown--;
   }
 
+  /**
+   * Tiles this system's props stand on, for the systems built after it. Same
+   * contract and same reason as `MarketSystem.reservedTiles`: placement tests
+   * `isWalkableIgnoringPermanent`, which by design ignores the permanent blocks
+   * these props set, so a later system would otherwise put a lamp inside the
+   * notice board.
+   */
+  get reservedTiles(): ReadonlySet<string> {
+    return this.occupied;
+  }
+
   /** Renderable props for the scene's Y-sorted entity pass. */
   get props(): ReadonlyArray<TownPropRenderable> {
     return this.renderables;
@@ -365,6 +376,7 @@ class NoticeBoardProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    ctx.save();
     const sx = this.tile.x * tileSize - camX;
     const sy = this.tile.y * tileSize - camY;
 
@@ -408,6 +420,7 @@ class NoticeBoardProp implements TownPropRenderable {
       ctx.fillRect(noteX, noteY, noteW, NOTE_HEIGHT);
       noteY += NOTE_HEIGHT + NOTE_GAP;
     }
+    ctx.restore();
   }
 }
 
@@ -432,6 +445,7 @@ class BenchProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    ctx.save();
     const sx = this.tile.x * tileSize - camX;
     const sy = this.tile.y * tileSize - camY;
     const left = sx + BENCH_SIDE_INSET;
@@ -460,6 +474,7 @@ class BenchProp implements TownPropRenderable {
       BENCH_LEG_WIDTH,
       BENCH_LEG_HEIGHT,
     );
+    ctx.restore();
   }
 }
 
@@ -523,6 +538,11 @@ class FortuneTellerProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, s: number): void {
+    // The seer sets `lineWidth` and `lineCap` for her arms and never put them
+    // back. Props render back to back with no reset between them, and this scene
+    // now sorts the town's decor into the same list — so a leak here reaches the
+    // cart shafts, wheel spokes and laundry ropes drawn after her.
+    ctx.save();
     const sx = this.tile.x * s - camX;
     const sy = this.tile.y * s - camY;
     const cx = sx + s / 2;
@@ -638,6 +658,7 @@ class FortuneTellerProp implements TownPropRenderable {
       SEER_TWO_PI,
     );
     ctx.fill();
+    ctx.restore();
     ctx.restore();
   }
 }

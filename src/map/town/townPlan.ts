@@ -20,6 +20,7 @@
  * reference layout these coordinates realise.
  */
 
+import type { FenceStyle } from '../tileTypes';
 import {
   COBBLE_STREET,
   FloorTypeValue,
@@ -100,6 +101,32 @@ export interface PlannedGate {
 }
 
 /**
+ * The device painted on a building's hanging shop sign.
+ *
+ * Declared here rather than in the sprite that draws it because it is part of
+ * what the plan *states* about a building — the trade it carries on — and every
+ * plot must name one, which `PlannedBuilding.sign` being required enforces. The
+ * painter for each device lives in `src/sprites/shopSign.ts`, keyed by this
+ * union, so a device with no art is a compile error rather than a blank board.
+ */
+export type ShopSignEmblem =
+  | 'moon'
+  | 'fleece'
+  | 'shield'
+  | 'wheel'
+  | 'sun'
+  | 'mortar'
+  | 'barrel'
+  | 'bed'
+  | 'horn'
+  | 'cauldron'
+  | 'hammer'
+  | 'tankard'
+  | 'quill'
+  | 'cards'
+  | 'sheaf';
+
+/**
  * A building rendered from a PNG. Its footprint and doorway both come from the
  * sprite manifest at paint time, so the plan only has to say where the art's
  * anchor tile goes.
@@ -130,6 +157,8 @@ export interface PlannedBuilding {
   readonly spriteKey: string;
   readonly name: string;
   readonly kind: BuildingKind;
+  /** Device on the shop sign hung over this building's door. */
+  readonly sign: ShopSignEmblem;
 }
 
 /**
@@ -178,9 +207,20 @@ export interface PlannedYard {
   readonly bounds: TileRect;
   readonly kind: YardKind;
   /**
-   * Whether the yard gets a post-and-rail perimeter. Strips one tile deep are
-   * planted but never fenced: a fence around them would be all perimeter and no
-   * inside, and the town would read as a stockade rather than as a place.
+   * How the enclosure is built, for the fenced ones. Stated per yard rather than
+   * derived from `kind` because the two are different questions: a workyard is
+   * always post-and-rail, but a garden by the plaza and a kitchen garden against
+   * the wall are both gardens and would not be fenced the same way.
+   *
+   * Required even on unfenced strips, so that fencing a strip later is a
+   * one-word edit rather than a field that has to be added back.
+   */
+  readonly fence: FenceStyle;
+  /**
+   * Whether the yard gets a fenced perimeter, built in its `fence` style. Strips
+   * one tile deep are planted but never fenced: a fence around them would be all
+   * perimeter and no inside, and the town would read as a stockade rather than as
+   * a place.
    */
   readonly fenced: boolean;
   /**
@@ -189,6 +229,25 @@ export interface PlannedYard {
    * painter needs and what a reviewer can check against the map.
    */
   readonly gates: ReadonlyArray<TileRect>;
+}
+
+/**
+ * A named quarter of the town, and where its name is written on the minimap.
+ *
+ * Only a name and a label anchor, because that is all anything asks for. An
+ * earlier draft of this plan carried a `district` on every building and a
+ * `TownDistrict` union, and the Phase 3 review removed both: their docs claimed
+ * the minimap read them, and nothing did. They come back here with their
+ * consumer, and no wider than it needs.
+ *
+ * The anchors are spread by hand rather than computed as band centres. Three of
+ * the bands are centred on the same column as the plaza, so their computed
+ * anchors would stack within a few pixels of each other at the minimap's one
+ * pixel per tile.
+ */
+export interface PlannedDistrict {
+  readonly name: string;
+  readonly label: TilePoint;
 }
 
 /** A prop placed as tiles on the plan's ground, before any scatter runs. */
@@ -227,6 +286,8 @@ export interface TownPlan {
   /** Block interiors: back gardens, drying greens, planted strips and workyards. */
   readonly yards: ReadonlyArray<PlannedYard>;
   readonly props: ReadonlyArray<PlannedProp>;
+  /** Named quarters, for the minimap's labels. */
+  readonly districts: ReadonlyArray<PlannedDistrict>;
   /** Where the Doomsday finale's escape stairwell appears, just south of the tower door. */
   readonly doomsdayEscapeTile: TilePoint;
   /** Tiles from the centre inside which no hostile spawns and mobs deaggro. */
@@ -387,9 +448,19 @@ const TOWER_TORCH_ROW_OFFSET = 16;
 /** Torches marking where the terrace opens onto the plaza. */
 const TERRACE_MOUTH_ROW = UPPER_LANE_BOTTOM;
 
-/** Torches inside the south gate, in the outer row of Low Street. */
-const SOUTH_GATE_TORCH_WEST = KINGS_ROAD_WEST - 1;
-const SOUTH_GATE_TORCH_EAST = KINGS_ROAD_EAST + 1;
+/**
+ * Torches inside the south gate, in the outer row of Low Street.
+ *
+ * **Two columns clear of the road, not one.** The gate arch's piers stand on the
+ * wall tiles immediately flanking the opening and are 0.7 of a tile wide, so they
+ * cover the outer 70% of the first column either side — which is where these
+ * torches used to be, and both were about 70% painted over whichever row the arch
+ * was anchored on. Measured against a render with no gateway: at one column out,
+ * 69.6% and 71.9% overpainted at the two anchor rows that were tried; at two, the
+ * piers do not touch them at all.
+ */
+const SOUTH_GATE_TORCH_WEST = KINGS_ROAD_WEST - 2;
+const SOUTH_GATE_TORCH_EAST = KINGS_ROAD_EAST + 2;
 
 /** Torches inside the side gates, in the band below Market Street. */
 const SIDE_GATE_TORCH_ROW = LOW_QUARTER_TOP;
@@ -633,6 +704,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_2',
     name: 'Blackwood Lodge',
     kind: 'house',
+    sign: 'moon',
   },
   {
     west: GARRISON_SECOND_COTTAGE,
@@ -641,6 +713,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_1',
     name: "Shepherd's Cabin",
     kind: 'house',
+    sign: 'fleece',
   },
   {
     west: BARRACKS_PLOT_WEST,
@@ -649,6 +722,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'barracks',
     name: 'The Barracks',
     kind: 'restaurant',
+    sign: 'shield',
   },
   {
     west: OUTER_EAST_PLOT,
@@ -657,6 +731,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_4',
     name: "Cartwright's Workshop",
     kind: 'house',
+    sign: 'wheel',
   },
 
   // Plaza Ring — faith, medicine, supplies and beds around the square.
@@ -667,6 +742,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'temple',
     name: 'Temple of the Sky',
     kind: 'house',
+    sign: 'sun',
   },
   {
     west: INNER_WEST_PLOT,
@@ -675,6 +751,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_1',
     name: 'Herb & Remedy',
     kind: 'house',
+    sign: 'mortar',
   },
   {
     west: INNER_EAST_PLOT,
@@ -683,6 +760,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'shop',
     name: 'General Store',
     kind: 'store',
+    sign: 'barrel',
   },
   {
     west: OUTER_EAST_PLOT,
@@ -691,6 +769,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'small_inn',
     name: 'The Sleeping Cat Inn',
     kind: 'house',
+    sign: 'bed',
   },
 
   // Market Row — the trades, fronting Market Street.
@@ -701,6 +780,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'tavern_2',
     name: 'The Horned Flagon',
     kind: 'house',
+    sign: 'horn',
   },
   {
     west: INNER_WEST_PLOT,
@@ -709,6 +789,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_3',
     name: "Old Hilda's Cottage",
     kind: 'house',
+    sign: 'cauldron',
   },
   {
     west: INNER_EAST_PLOT,
@@ -717,6 +798,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'blacksmith',
     name: 'The Rusty Anvil',
     kind: 'house',
+    sign: 'hammer',
   },
 
   // Low Quarter — nightlife, and the alleys that serve it.
@@ -727,6 +809,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'tavern_1',
     name: 'The Sunken Stump Pub',
     kind: 'house',
+    sign: 'tankard',
   },
   {
     west: INNER_WEST_PLOT,
@@ -735,6 +818,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'tattoo_parlor',
     name: "Signet's Ink",
     kind: 'house',
+    sign: 'quill',
   },
   {
     west: SERVICE_ALLEY_EAST + 1,
@@ -743,6 +827,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'desperado_club',
     name: 'The Desperado Club',
     kind: 'club',
+    sign: 'cards',
   },
 
   // South Green — the farm, against the south-east wall.
@@ -753,6 +838,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'village_house_4',
     name: "Miller's Farm",
     kind: 'house',
+    sign: 'sheaf',
   },
 ];
 
@@ -815,6 +901,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Garrison Green',
     bounds: span(GARRISON_GREEN_WEST, GARRISON_GREEN_TOP, GARRISON_GREEN_EAST, GARRISON_BOTTOM),
     kind: 'garden',
+    fence: 'picket',
     fenced: true,
     // Onto the Upper Lane, which is the only side of it that is not a building,
     // the terrace or the wall.
@@ -831,6 +918,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Sunken Stump back garden',
     bounds: span(INTERIOR_WEST, BACK_GARDEN_TOP, WEST_LANE_WEST - 1, BACK_GARDEN_BOTTOM),
     kind: 'garden',
+    fence: 'wattle',
     fenced: true,
     gates: [
       span(
@@ -852,6 +940,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: "Signet's back garden",
     bounds: span(INNER_WEST_PLOT, BACK_GARDEN_TOP, KINGS_ROAD_WEST - 1, LOW_QUARTER_BOTTOM),
     kind: 'garden',
+    fence: 'picket',
     fenced: true,
     gates: [
       span(
@@ -872,6 +961,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: "Miller's kitchen garden",
     bounds: span(OUTER_EAST_PLOT, LOW_QUARTER_TOP, INTERIOR_EAST, FARM_YARD_BOTTOM),
     kind: 'garden',
+    fence: 'wattle',
     fenced: true,
     gates: [
       span(
@@ -886,6 +976,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Market Row east workyard',
     bounds: span(OUTER_EAST_PLOT, MARKET_ROW_TOP, INTERIOR_EAST, MARKET_ROW_BOTTOM),
     kind: 'workyard',
+    fence: 'post_and_rail',
     fenced: true,
     gates: [
       span(
@@ -903,6 +994,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Garrison back strip',
     bounds: span(INTERIOR_WEST, GARRISON_TOP, TERRACE_WEST - 1, GARRISON_TOP),
     kind: 'garden',
+    fence: 'wattle',
     fenced: false,
     gates: [],
   },
@@ -910,6 +1002,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Herb & Remedy back strip',
     bounds: span(INNER_WEST_PLOT, PLAZA_RING_TOP, PLAZA_WEST - 1, PLAZA_RING_TOP),
     kind: 'garden',
+    fence: 'picket',
     fenced: false,
     gates: [],
   },
@@ -917,6 +1010,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Herb & Remedy side strip',
     bounds: span(PLAZA_WEST - 1, PLAZA_RING_TOP + 1, PLAZA_WEST - 1, PLAZA_RING_BOTTOM),
     kind: 'garden',
+    fence: 'picket',
     fenced: false,
     gates: [],
   },
@@ -924,6 +1018,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'General Store back strip',
     bounds: span(INNER_EAST_PLOT, PLAZA_RING_TOP, INNER_EAST_PLOT + PLOT_WIDTH - 1, PLAZA_RING_TOP),
     kind: 'garden',
+    fence: 'picket',
     fenced: false,
     gates: [],
   },
@@ -931,6 +1026,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Sleeping Cat back strip',
     bounds: span(OUTER_EAST_PLOT, PLAZA_RING_TOP, INTERIOR_EAST, PLAZA_RING_TOP),
     kind: 'garden',
+    fence: 'picket',
     fenced: false,
     gates: [],
   },
@@ -938,6 +1034,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Horned Flagon back strip',
     bounds: span(INTERIOR_WEST, MARKET_ROW_TOP, WEST_LANE_WEST - 1, MARKET_ROW_TOP),
     kind: 'garden',
+    fence: 'wattle',
     fenced: false,
     gates: [],
   },
@@ -945,6 +1042,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: "Old Hilda's side strip",
     bounds: span(PLAZA_WEST - 1, MARKET_ROW_TOP, PLAZA_WEST - 1, MARKET_ROW_BOTTOM),
     kind: 'garden',
+    fence: 'wattle',
     fenced: false,
     gates: [],
   },
@@ -952,9 +1050,32 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     name: 'Rusty Anvil back strip',
     bounds: span(INNER_EAST_PLOT, MARKET_ROW_TOP, INNER_EAST_PLOT + PLOT_WIDTH - 1, MARKET_ROW_TOP),
     kind: 'garden',
+    fence: 'post_and_rail',
     fenced: false,
     gates: [],
   },
+];
+
+/**
+ * The quarters §3.3 names, with an anchor each.
+ *
+ * **Four, not five, and stacked vertically.** The expanded minimap draws one
+ * pixel per tile, so the whole 55-tile town is 55 px across — and one of these
+ * captions is *wider than that* at the 9 px it is drawn: measured through the
+ * real text path, their ink boxes run 62–68 px. Two labels therefore cannot share
+ * a row at any size worth reading, and at 11 px of line height only four fit in
+ * the town's 43 rows. Market Row lost its label to that arithmetic; it is the
+ * band between the plaza and Market Street and reads as the plaza's own orbit.
+ *
+ * The anchors are hand-placed rather than computed as band centres for the same
+ * reason: three of the bands are centred on the plaza's own column, so computed
+ * anchors would stack on top of each other.
+ */
+const DISTRICT_LABELS: ReadonlyArray<{ name: string; label: TownOffset }> = [
+  { name: 'Garrison Row', label: { dx: -6, dy: -15 } },
+  { name: 'Market Plaza', label: { dx: 0, dy: 0 } },
+  { name: 'Low Quarter', label: { dx: -13, dy: 12 } },
+  { name: 'South Green', label: { dx: 23, dy: 23 } },
 ];
 
 function planProps(centre: TilePoint): ReadonlyArray<PlannedProp> {
@@ -1030,10 +1151,15 @@ export function createTownPlan(size: number): TownPlan {
       name: yard.name,
       bounds: shift(yard.bounds, centre),
       kind: yard.kind,
+      fence: yard.fence,
       fenced: yard.fenced,
       gates: yard.gates.map((gate) => shift(gate, centre)),
     })),
     props: planProps(centre),
+    districts: DISTRICT_LABELS.map((district) => ({
+      name: district.name,
+      label: { x: cx + district.label.dx, y: cy + district.label.dy },
+    })),
     doomsdayEscapeTile: {
       x: cx - TOWER_DOOR_WEST_OFFSET,
       y: cy - TOWER_DOOR_NORTH_OFFSET + STAIRWELL_SOUTH_OF_TOWER_DOOR,

@@ -39,6 +39,7 @@ import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
+import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
 import type { TownPropRenderable } from '../systems/townPropRenderable';
@@ -413,6 +414,7 @@ export class DungeonScene extends GameplayScene {
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
   private townProps: TownPropSystem | null = null;
+  private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
    * Every town fixture in one Y-sort list. Built once, since both owning systems
@@ -892,7 +894,15 @@ export class DungeonScene extends GameplayScene {
         () => this.audio,
         this.market.reservedTiles,
       );
-      this.townPropRenderables = [...this.market.props, ...this.townProps.props];
+      this.townDecor = new TownDecorSystem(
+        this.gameMap,
+        new Set([...this.market.reservedTiles, ...this.townProps.reservedTiles]),
+      );
+      this.townPropRenderables = [
+        ...this.market.props,
+        ...this.townProps.props,
+        ...this.townDecor.props,
+      ];
       this.townLife = new TownLifeSystem(this.gameMap);
     }
 
@@ -2717,6 +2727,7 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
       this.townLife?.update();
       this.townProps?.update();
+      this.townDecor?.update();
       this.market?.update();
     }
 

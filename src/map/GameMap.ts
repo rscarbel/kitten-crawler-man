@@ -56,8 +56,8 @@ import {
   type TreasureRoomData,
   type SpiderLabRoomData,
 } from './DungeonGenerator';
-import { generateOverworld } from './OverworldGenerator';
-import type { BuildingKind } from './town/townPlan';
+import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
+import type { BuildingKind, TownPlan } from './town/townPlan';
 import {
   getBlockedTileOffsets,
   getBlockedTileOffsetsByKey,
@@ -188,11 +188,9 @@ export class GameMap {
   /** Tile-space centres of rooms that contain a stairwell (descent point). */
   stairwellTiles: Array<{ x: number; y: number }> = [];
   /** Door positions for enterable buildings (overworld only). */
-  buildingEntries: Array<{
-    doorTile: { x: number; y: number };
-    name: string;
-    type: BuildingKind;
-  }> = [];
+  buildingEntries: BuildingEntry[] = [];
+  /** The plan the overworld town was generated from. Undefined on other maps. */
+  townPlan: TownPlan | undefined = undefined;
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
   /** Centre of the town square, in tile coords. Undefined on non-overworld maps. */
@@ -285,6 +283,7 @@ export class GameMap {
       this.startTile = data.startTile;
       this.safeRooms = data.safeRooms;
       this.buildingEntries = data.buildingEntries;
+      this.townPlan = data.townPlan;
       this.bossRooms = data.bossRooms;
       this.mobSpawnPoints = [];
       this.hallwaySpawnPoints = data.hallwaySpawnPoints;

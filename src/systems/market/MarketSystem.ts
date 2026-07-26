@@ -306,6 +306,10 @@ class StallProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    // Props render back to back with no reset between them, so each leaves the
+    // context as it found it. The stall's own painters only set fill styles, but
+    // "only a fill style" is how every state leak in this pass has started.
+    ctx.save();
     const { def, vendor, phase } = this.stall;
     const sx = this.stall.tiles[0].x * tileSize - camX;
     const sy = this.stall.tiles[0].y * tileSize - camY;
@@ -313,5 +317,6 @@ class StallProp implements TownPropRenderable {
     vendor.render(ctx, camX, camY, tileSize);
     drawStallFront(ctx, sx, sy, tileSize, def.style, def.motif);
     drawStallCanopy(ctx, sx, sy, tileSize, def.style, phase);
+    ctx.restore();
   }
 }

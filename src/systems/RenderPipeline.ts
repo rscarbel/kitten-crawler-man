@@ -271,11 +271,15 @@ export class RenderPipeline {
     }
 
     if (townProps !== undefined) {
-      const minX = camX - PROP_CULL_MARGIN;
-      const minY = camY - PROP_CULL_MARGIN;
-      const maxX = camX + canvas.width + PROP_CULL_MARGIN;
-      const maxY = camY + canvas.height + PROP_CULL_MARGIN;
       for (const prop of townProps) {
+        // Per-prop, because the props differ by an order of magnitude in reach:
+        // a shop sign is half a tile wide and a bunting span is sixteen.
+        const margin =
+          prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
+        const minX = camX - margin;
+        const minY = camY - margin;
+        const maxX = camX + canvas.width + margin;
+        const maxY = camY + canvas.height + margin;
         if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
         const e = this._getEntry();
         e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;

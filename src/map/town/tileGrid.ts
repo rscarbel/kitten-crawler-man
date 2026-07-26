@@ -7,7 +7,7 @@
  * at every call site.
  */
 
-import type { TileContent } from '../tileTypes';
+import type { FenceStyle, TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
   VOID_TYPE,
@@ -140,6 +140,19 @@ export class TileGrid {
     // `TORCH` as a tile's ground would be worse than not recording anything.
     cell.groundType ??= cell.type;
     cell.type = type;
+  }
+
+  /**
+   * A fence, together with the style it is built in.
+   *
+   * `setStanding` for the reason that method documents — a fence has to remember
+   * the surface it was driven into — plus the style, which the renderer reads off
+   * the tile because it is handed a grid and a position, not a plan.
+   */
+  setFence(x: number, y: number, style: FenceStyle): void {
+    if (!this.inBounds(x, y)) return;
+    this.setStanding(x, y, FENCE);
+    this.cells[y][x].fenceStyle = style;
   }
 
   /** `setStanding` over a rectangle, for props that occupy more than one tile. */

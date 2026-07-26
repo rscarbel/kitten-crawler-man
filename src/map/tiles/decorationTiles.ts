@@ -1,4 +1,4 @@
-import type { TileContent } from '../tileTypes';
+import type { FenceStyle, TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
   TREE,
@@ -54,22 +54,30 @@ const SPRITE_BUILDING_OVERLAY_FPS = 8;
  * planted tile puts its furrows at the same heights, so a run of them across a
  * garden lines up into continuous beds instead of reading as scattered tufts.
  */
-const PLANTING_FURROW_FRACTIONS = [0.22, 0.5, 0.78] as const;
-/** Index of the furrow a crop head sits on — the middle one. */
-const PLANTING_MIDDLE_FURROW = 1;
-const PLANTING_FURROW_HEIGHT_PX = 3;
-const PLANTING_SHOOTS_PER_FURROW = 4;
-const PLANTING_SHOOT_HEIGHT_PX = 5;
-const PLANTING_SHOOT_WIDTH_PX = 2;
-/** Puts a shoot in the middle of its slot rather than on the slot's edge. */
+const PLANTING_FURROW_FRACTIONS = [0.32, 0.68] as const;
+/** Index of the furrow a crop head sits on — the lower of the two. */
+const PLANTING_CROP_HEAD_FURROW = 1;
+const PLANTING_FURROW_HEIGHT_PX = 2;
+/**
+ * Three wide clumps a furrow, not four narrow ticks: at 32 px a tile, a mark has
+ * to be several pixels across in both directions before it reads as a plant.
+ */
+const PLANTING_CLUMPS_PER_FURROW = 3;
+const PLANTING_CLUMP_RX_PX = 4;
+const PLANTING_CLUMP_RY_PX = 3;
+/** Sits the clump on the furrow rather than centred in it. */
+const PLANTING_CLUMP_LIFT_PX = 2;
+const PLANTING_CLUMP_HIGHLIGHT_LIFT_PX = 1;
+const PLANTING_CLUMP_HIGHLIGHT_INSET_PX = 1;
+/** Puts a clump in the middle of its slot rather than on the slot's edge. */
 const PLANTING_SLOT_CENTRE = 0.5;
-/** About one planted tile in five carries a full head rather than shoots. */
+/** About one planted tile in five carries a full head rather than clumps alone. */
 const PLANTING_CROP_HEAD_PERIOD = 5;
 const PLANTING_CROP_HEAD_RADIUS_PX = 4;
 const PLANTING_CROP_HEART_RADIUS_PX = 2;
 
 /**
- * Per-tile jitter for the shoots, so a bed does not read as graph paper.
+ * Per-tile jitter for the clumps, so a bed does not read as graph paper.
  *
  * Small odd multipliers and a prime modulus: this is decoration, not the ground
  * variant hash, so it needs to look unpatterned rather than to survive an
@@ -79,7 +87,7 @@ const PLANTING_JITTER_HASH_X = 31;
 const PLANTING_JITTER_HASH_Y = 17;
 const PLANTING_JITTER_MODULUS = 97;
 const PLANTING_WOBBLE_FURROW_STEP = 7;
-const PLANTING_WOBBLE_SHOOT_STEP = 3;
+const PLANTING_WOBBLE_CLUMP_STEP = 3;
 /** Wobble lands in [-1, 1] px: span 3 offset by 1. */
 const PLANTING_WOBBLE_SPAN = 3;
 const PLANTING_WOBBLE_CENTRE = 1;
@@ -91,7 +99,7 @@ const PLANTING_HEAD_HASH_Y = 13;
  * by eye — the recurring defect of this rendering work has been a colour written
  * from memory of the retired tileset, which put mint tufts on an olive lawn.
  */
-const PLANTING_SOIL_COLOR = 'rgba(58,42,24,0.42)';
+const PLANTING_SOIL_COLOR = 'rgba(58,42,24,0.24)';
 const PLANTING_LEAF_COLOR = '#7c8f3e';
 const PLANTING_LEAF_DARK_COLOR = '#556228';
 
@@ -113,6 +121,87 @@ const FENCE_POST_COLOR = '#6a5334';
 const FENCE_POST_SHADE_COLOR = '#4c3b24';
 const FENCE_RAIL_COLOR = '#7e6642';
 const FENCE_RAIL_HIGHLIGHT_COLOR = '#967d54';
+
+/** Sawn pale colours, a shade paler than the round timber they hang on. */
+const PICKET_PALE_COLOR = '#9a805a';
+const PICKET_PALE_SHADE_COLOR = '#6f5a3b';
+/**
+ * A picket's rails are lighter than a stock fence's: the pales carry the load and
+ * the rails only have to hold them.
+ */
+const PICKET_RAIL_THICKNESS_PX = 2;
+const PICKET_PALE_WIDTH_PX = 3;
+const PICKET_PALE_GAP_PX = 3;
+const PICKET_PALE_TOP_FRACTION = 0.2;
+const PICKET_PALE_BOTTOM_FRACTION = 0.8;
+/** Height of the pointed head above the pale's shoulder. */
+const PICKET_TIP_HEIGHT_PX = 3;
+
+/** Woven hazel: greener and greyer than sawn timber, and never highlighted. */
+const WATTLE_WEAVE_COLOR = '#8b7c55';
+const WATTLE_WEAVE_DARK_COLOR = '#5f5438';
+const WATTLE_STAKE_COLOR = '#6b5f3f';
+const WATTLE_WEAVE_THICKNESS_PX = 3;
+const WATTLE_WEAVE_FRACTIONS = [0.34, 0.52, 0.7] as const;
+/** Width of one over-under segment of the weave. */
+const WATTLE_SEGMENT_PX = 6;
+const WATTLE_STAKE_WIDTH_PX = 2;
+const WATTLE_STAKE_STEP_PX = 12;
+
+interface FenceStyleSpec {
+  /** Fractions of a tile at which horizontal timbers run. */
+  readonly railFractions: ReadonlyArray<number>;
+  readonly railThicknessPx: number;
+  readonly railColor: string;
+  readonly railHighlightColor: string | null;
+  readonly postColor: string;
+  readonly postShadeColor: string;
+  /** Drawn between the posts after the rails, for the styles that have infill. */
+  readonly infill: 'none' | 'pales' | 'weave';
+}
+
+const FENCE_STYLE_SPECS: Record<FenceStyle, FenceStyleSpec> = {
+  post_and_rail: {
+    railFractions: FENCE_RAIL_FRACTIONS,
+    railThicknessPx: FENCE_RAIL_THICKNESS_PX,
+    railColor: FENCE_RAIL_COLOR,
+    railHighlightColor: FENCE_RAIL_HIGHLIGHT_COLOR,
+    postColor: FENCE_POST_COLOR,
+    postShadeColor: FENCE_POST_SHADE_COLOR,
+    infill: 'none',
+  },
+  picket: {
+    railFractions: FENCE_RAIL_FRACTIONS,
+    railThicknessPx: PICKET_RAIL_THICKNESS_PX,
+    railColor: FENCE_RAIL_COLOR,
+    railHighlightColor: null,
+    postColor: FENCE_POST_COLOR,
+    postShadeColor: FENCE_POST_SHADE_COLOR,
+    infill: 'pales',
+  },
+  wattle: {
+    railFractions: WATTLE_WEAVE_FRACTIONS,
+    railThicknessPx: WATTLE_WEAVE_THICKNESS_PX,
+    railColor: WATTLE_WEAVE_COLOR,
+    railHighlightColor: null,
+    postColor: WATTLE_STAKE_COLOR,
+    postShadeColor: WATTLE_WEAVE_DARK_COLOR,
+    infill: 'weave',
+  },
+};
+
+/**
+ * The style a fence tile is drawn in. Recorded on the tile by `paintYardFences`
+ * from its yard's plan entry.
+ *
+ * The fallback is unreachable on any generated map — `TileGrid.setFence` is the
+ * only writer of `FENCE` and always sets a style — and exists because the field is
+ * optional on `TileContent`, which it must be: every other tile type has no style.
+ */
+function fenceStyleAt(structure: TileContent[][], tx: number, ty: number): FenceStyleSpec {
+  const style = structure[ty]?.[tx]?.fenceStyle;
+  return FENCE_STYLE_SPECS[style ?? 'post_and_rail'];
+}
 /** Ground shadow cast by the fence onto its own tile. */
 const FENCE_SHADOW_COLOR = 'rgba(0,0,0,0.22)';
 const FENCE_SHADOW_HEIGHT_PX = 3;
@@ -138,11 +227,17 @@ const FENCE_HIGHLIGHT_PX = 1;
  * facade were untouched, because a facade tile carries the *plan's* surface type
  * rather than `SPRITE_BUILDING`.
  *
- * Closing those 43 properly needs the sprite footprints — the same question
- * `underSpriteArt` answers for the occlusion pass — but a footprint is not opacity
- * either: it includes the transparent rows above a roof, which is exactly what
- * produced the two bad anchors. That is a Phase 5 job with the signage work, not a
- * set membership.
+ * **Phase 5 tried to close those sides through the sprite footprints and backed
+ * the change out.** `getBlockedTileOffsetsByKey` is not an opacity test either:
+ * `SpriteLoader` derives a footprint from the frame's whole width and height and
+ * blocks all of it bar the doorway, so transparent sky and transparent side
+ * columns are "blocked" exactly as solid wall is. Measured over the real grid,
+ * routing `anchorsRailAt` through it gained **6** anchored sides, not the 43 this
+ * note used to predict — and alpha-scanning the art at those six found three
+ * anchoring into pixels that are 0.0%, 0.0% and 1.1% opaque, which is the same
+ * rail-into-open-verge defect the paragraph above records. Closing them properly
+ * needs a per-tile opacity index built from the loaded images, and the measured
+ * prize for building one is three fence tiles.
  */
 export const FENCE_ANCHOR_TYPES: ReadonlySet<number> = new Set<number>([
   FENCE,
@@ -188,6 +283,7 @@ function drawFence(
   tx: number,
   ty: number,
 ): void {
+  const style = fenceStyleAt(structure, tx, ty);
   const hasWest = anchorsRailAt(structure, tx - 1, ty);
   const hasEast = anchorsRailAt(structure, tx + 1, ty);
   const hasNorth = anchorsRailAt(structure, tx, ty - 1);
@@ -244,18 +340,24 @@ function drawFence(
   ctx.fill();
 
   if (runsEastWest) {
-    for (const railFraction of FENCE_RAIL_FRACTIONS) {
+    for (const railFraction of style.railFractions) {
       const railY = sy + Math.round(ts * railFraction);
-      ctx.fillStyle = FENCE_RAIL_COLOR;
-      ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_RAIL_THICKNESS_PX);
-      ctx.fillStyle = FENCE_RAIL_HIGHLIGHT_COLOR;
-      ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_HIGHLIGHT_PX);
+      ctx.fillStyle = style.railColor;
+      ctx.fillRect(westEdge, railY, eastEdge - westEdge, style.railThicknessPx);
+      if (style.railHighlightColor !== null) {
+        ctx.fillStyle = style.railHighlightColor;
+        ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_HIGHLIGHT_PX);
+      }
     }
+    drawFenceInfill(ctx, style, sx, sy, ts, westEdge, eastEdge);
   }
   if (runsNorthSouth) {
-    ctx.fillStyle = FENCE_RAIL_COLOR;
+    // An end-on run is foreshortened to one line of timber whatever the style —
+    // there is no infill to see edge-on — so it takes the style's colour and
+    // nothing else.
+    ctx.fillStyle = style.railColor;
     ctx.fillRect(railX, northEdge, FENCE_RAIL_THICKNESS_PX, southEdge - northEdge);
-    ctx.fillStyle = FENCE_RAIL_HIGHLIGHT_COLOR;
+    ctx.fillStyle = style.railHighlightColor ?? style.postShadeColor;
     ctx.fillRect(railX, northEdge, FENCE_HIGHLIGHT_PX, southEdge - northEdge);
   }
 
@@ -264,9 +366,9 @@ function drawFence(
   // side-on: it has an east-west rail to carry, so it needs the upright.
   const top = runsEastWest || !runsNorthSouth ? postTop : centreY - FENCE_POST_WIDTH_PX;
   const bottom = runsEastWest || !runsNorthSouth ? postBottom : centreY + FENCE_POST_WIDTH_PX;
-  ctx.fillStyle = FENCE_POST_COLOR;
+  ctx.fillStyle = style.postColor;
   ctx.fillRect(postX, top, FENCE_POST_WIDTH_PX, bottom - top);
-  ctx.fillStyle = FENCE_POST_SHADE_COLOR;
+  ctx.fillStyle = style.postShadeColor;
   ctx.fillRect(
     postX + FENCE_POST_WIDTH_PX - FENCE_HIGHLIGHT_PX,
     top,
@@ -275,7 +377,91 @@ function drawFence(
   );
 }
 
-/** A bed of tilled rows with shoots, and now and then a full crop head. */
+/**
+ * The infill between a side-on run's posts: sawn pales, or a hazel weave.
+ *
+ * Every mark is clipped to the run's own span rather than to the tile, so a run
+ * that stops at its tile's centre (an end, or a corner) does not spill pales into
+ * open ground — the same rule the rails follow, for the same reason.
+ */
+function drawFenceInfill(
+  ctx: CanvasRenderingContext2D,
+  style: FenceStyleSpec,
+  sx: number,
+  sy: number,
+  ts: number,
+  westEdge: number,
+  eastEdge: number,
+): void {
+  if (style.infill === 'none') return;
+
+  if (style.infill === 'pales') {
+    const paleTop = sy + Math.round(ts * PICKET_PALE_TOP_FRACTION);
+    const paleBottom = sy + Math.round(ts * PICKET_PALE_BOTTOM_FRACTION);
+    const step = PICKET_PALE_WIDTH_PX + PICKET_PALE_GAP_PX;
+    // Phased off `sx` so pales line up across a tile joint instead of restarting
+    // at every tile edge. `sx` is chunk-local on the baked path, so the run of
+    // pales does restart at a 16-tile chunk seam — invisible at a 3-tile pale
+    // period, but it is not the world column and the comment used to say it was.
+    const phase = ((sx % step) + step) % step;
+    for (let x = westEdge - phase; x < eastEdge; x += step) {
+      const left = Math.max(x, westEdge);
+      const width = Math.min(x + PICKET_PALE_WIDTH_PX, eastEdge) - left;
+      if (width <= 0) continue;
+      ctx.fillStyle = PICKET_PALE_COLOR;
+      ctx.fillRect(left, paleTop, width, paleBottom - paleTop);
+      ctx.fillStyle = PICKET_PALE_SHADE_COLOR;
+      ctx.fillRect(left, paleTop, width, PICKET_TIP_HEIGHT_PX);
+    }
+    return;
+  }
+
+  const weaveTop = sy + Math.round(ts * WATTLE_WEAVE_FRACTIONS[0]);
+  const weaveBottom =
+    sy + Math.round(ts * WATTLE_WEAVE_FRACTIONS[WATTLE_WEAVE_FRACTIONS.length - 1]);
+  ctx.fillStyle = WATTLE_STAKE_COLOR;
+  const stakePhase = ((sx % WATTLE_STAKE_STEP_PX) + WATTLE_STAKE_STEP_PX) % WATTLE_STAKE_STEP_PX;
+  for (let x = westEdge - stakePhase; x < eastEdge; x += WATTLE_STAKE_STEP_PX) {
+    const left = Math.max(x, westEdge);
+    const width = Math.min(x + WATTLE_STAKE_WIDTH_PX, eastEdge) - left;
+    if (width <= 0) continue;
+    ctx.fillRect(left, weaveTop, width, weaveBottom - weaveTop + WATTLE_WEAVE_THICKNESS_PX);
+  }
+  // The weave itself: alternate segments darkened so each course reads as passing
+  // behind a stake and back in front of the next one.
+  for (let course = 0; course < WATTLE_WEAVE_FRACTIONS.length; course++) {
+    const y = sy + Math.round(ts * WATTLE_WEAVE_FRACTIONS[course]);
+    const segmentPhase = ((sx % WATTLE_SEGMENT_PX) + WATTLE_SEGMENT_PX) % WATTLE_SEGMENT_PX;
+    let segment = 0;
+    for (let x = westEdge - segmentPhase; x < eastEdge; x += WATTLE_SEGMENT_PX) {
+      const left = Math.max(x, westEdge);
+      const width = Math.min(x + WATTLE_SEGMENT_PX, eastEdge) - left;
+      segment++;
+      if (width <= 0) continue;
+      ctx.fillStyle = (segment + course) % 2 === 0 ? WATTLE_WEAVE_COLOR : WATTLE_WEAVE_DARK_COLOR;
+      ctx.fillRect(left, y, width, WATTLE_WEAVE_THICKNESS_PX);
+    }
+  }
+}
+
+/**
+ * A planted bed: two soft furrows of turned soil with leafy clumps growing along
+ * them, and now and then a full crop head.
+ *
+ * **Foliage first, rows second.** The first version drew three hard full-width
+ * soil bars per tile with 2 x 5 px shoots standing on them, and two review rounds
+ * independently reported the same thing: at 1x a garden of them reads as lines of
+ * text, not as planting. The diagnosis is that the ruled dark lines carried the
+ * silhouette and the green did not — twelve tick marks a tile is a lot of marks
+ * and none of them is big enough to be a plant.
+ *
+ * So the marks are now clumps rather than ticks: fewer, wider than they are tall,
+ * two tones, and drawn *over* the furrow so the green wins. The furrows survive,
+ * at two per tile instead of three and at about half the contrast, because they
+ * are what makes a run of planted tiles read as one bed rather than as scattered
+ * tufts — which is the failure the fixed fractions were chosen to avoid, and
+ * still the right call.
+ */
 function drawGardenPlanting(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -292,19 +478,34 @@ function drawGardenPlanting(
     ctx.fillStyle = PLANTING_SOIL_COLOR;
     ctx.fillRect(sx, rowY, ts, PLANTING_FURROW_HEIGHT_PX);
 
-    for (let shoot = 0; shoot < PLANTING_SHOOTS_PER_FURROW; shoot++) {
-      const slot = Math.round((ts * (shoot + PLANTING_SLOT_CENTRE)) / PLANTING_SHOOTS_PER_FURROW);
-      const wobbleSeed = furrow * PLANTING_WOBBLE_FURROW_STEP + shoot * PLANTING_WOBBLE_SHOOT_STEP;
+    for (let clump = 0; clump < PLANTING_CLUMPS_PER_FURROW; clump++) {
+      const slot = Math.round((ts * (clump + PLANTING_SLOT_CENTRE)) / PLANTING_CLUMPS_PER_FURROW);
+      const wobbleSeed = furrow * PLANTING_WOBBLE_FURROW_STEP + clump * PLANTING_WOBBLE_CLUMP_STEP;
       const wobble = ((jitter * (wobbleSeed + 1)) % PLANTING_WOBBLE_SPAN) - PLANTING_WOBBLE_CENTRE;
-      const shootX = sx + slot + wobble;
-      if (shootX < sx || shootX + PLANTING_SHOOT_WIDTH_PX > sx + ts) continue;
-      ctx.fillStyle = (shoot + furrow) % 2 === 0 ? PLANTING_LEAF_COLOR : PLANTING_LEAF_DARK_COLOR;
-      ctx.fillRect(
-        shootX,
-        rowY - PLANTING_SHOOT_HEIGHT_PX,
-        PLANTING_SHOOT_WIDTH_PX,
-        PLANTING_SHOOT_HEIGHT_PX,
+      const clumpCX = sx + slot + wobble;
+      const clumpCY = rowY + PLANTING_FURROW_HEIGHT_PX / 2 - PLANTING_CLUMP_LIFT_PX;
+      // Clamped rather than skipped: a clump dropped for overhanging its tile is
+      // a gap in the bed, and the gaps were the other half of the dashed look.
+      const cx = Math.min(
+        Math.max(clumpCX, sx + PLANTING_CLUMP_RX_PX),
+        sx + ts - PLANTING_CLUMP_RX_PX,
       );
+      ctx.fillStyle = PLANTING_LEAF_DARK_COLOR;
+      ctx.beginPath();
+      ctx.ellipse(cx, clumpCY, PLANTING_CLUMP_RX_PX, PLANTING_CLUMP_RY_PX, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PLANTING_LEAF_COLOR;
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        clumpCY - PLANTING_CLUMP_HIGHLIGHT_LIFT_PX,
+        PLANTING_CLUMP_RX_PX - PLANTING_CLUMP_HIGHLIGHT_INSET_PX,
+        PLANTING_CLUMP_RY_PX - PLANTING_CLUMP_HIGHLIGHT_INSET_PX,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
     }
   }
 
@@ -312,8 +513,8 @@ function drawGardenPlanting(
     (tx * PLANTING_HEAD_HASH_X + ty * PLANTING_HEAD_HASH_Y) % PLANTING_CROP_HEAD_PERIOD === 0;
   if (!carriesHead) return;
   const headX = sx + Math.round(ts / 2);
-  const middleFurrow = PLANTING_FURROW_FRACTIONS[PLANTING_MIDDLE_FURROW];
-  const headY = sy + Math.round(ts * middleFurrow) - PLANTING_CROP_HEAD_RADIUS_PX;
+  const headFurrow = PLANTING_FURROW_FRACTIONS[PLANTING_CROP_HEAD_FURROW];
+  const headY = sy + Math.round(ts * headFurrow) - PLANTING_CROP_HEAD_RADIUS_PX;
   ctx.fillStyle = PLANTING_LEAF_COLOR;
   ctx.beginPath();
   ctx.arc(headX, headY, PLANTING_CROP_HEAD_RADIUS_PX, 0, Math.PI * 2);

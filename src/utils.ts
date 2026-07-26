@@ -13,6 +13,18 @@ export const randomInt = (min: number, max: number) =>
 /** Pick a uniformly random element from a non-empty array. */
 export const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
+const GOLDEN_RATIO_RADICAND = 5;
+const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(GOLDEN_RATIO_RADICAND) - 1) / 2;
+/**
+ * The golden angle: a full turn times φ⁻¹.
+ *
+ * Stepping a phase by this is how you spread N repeats of the same animation
+ * without any two of them landing together, for every N. A round-looking stride
+ * does not do that — 0.7 rad puts the 1st and 10th of a series within 0.3% of a
+ * period of each other, close enough that the two render identically.
+ */
+export const GOLDEN_ANGLE_RAD = Math.PI * 2 * GOLDEN_RATIO_CONJUGATE;
+
 /** Clamp `v` to the range [lo, hi]. */
 export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 

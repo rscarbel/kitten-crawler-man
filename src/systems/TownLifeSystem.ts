@@ -3,16 +3,19 @@
  * reads as inhabited rather than an empty stage. Owned by `DungeonScene` and
  * active only on the overworld.
  *
- * The crowd is seeded as three cohorts so life spreads across the whole village
+ * The crowd is seeded as four cohorts so life spreads across the whole village
  * instead of pooling in the square:
  *  - the **plaza crowd** mills around the square and its immediate streets;
  *  - **frontage loiterers** are anchored to a building's door and only ever
  *    potter about its doorstep, so every shop and cottage has someone outside it;
  *  - **travelers** walk long hops between distant street tiles, giving the roads
- *    a steady trickle of people going somewhere.
+ *    a steady trickle of people going somewhere;
+ *  - **activity anchors** stand at a named fixture — a well, the smithy door,
+ *    the fountain steps, the club door — and barely move, so the town's props
+ *    look used rather than placed. Plan §3.6.
  *
  * Each cohort strolls via the shared wander helper (respecting walls and keeping
- * clear of building doors) and all three are exposed as one crowd for the scene's
+ * clear of building doors) and all four are exposed as one crowd for the scene's
  * Y-sorted render pass. Combat, mobs, and the player are untouched — these
  * figures are pure ambience.
  */
@@ -25,6 +28,7 @@ import {
   FloorTypeValue,
   LANE_STREET,
   PLAZA_STONE,
+  WELL,
 } from '../map/tileTypes';
 
 import { Townsperson } from '../creatures/Townsperson';
@@ -108,6 +112,42 @@ const FRONTAGE_PAUSE_MAX = 420;
 const TRAVELER_PAUSE_MIN = 10;
 const TRAVELER_PAUSE_MAX = 90;
 const MAX_INITIAL_PAUSE = 180;
+
+/**
+ * How far an anchored citizen strays from the fixture they belong to. One tile:
+ * far enough that they shuffle rather than stand frozen, close enough that they
+ * still read as being *at* the well rather than near it.
+ */
+const ANCHOR_RADIUS_TILES = 1;
+/**
+ * The fountain needs two, because it is not one tile: it is a solid 3 x 3, so a
+ * radius-1 circle around its centre admits only that centre and its four
+ * cardinals — all five of them fountain. The bubble came back empty and the two
+ * children were silently dropped. The first walkable ring is at distance 2.
+ */
+const FOUNTAIN_ANCHOR_RADIUS_TILES = 2;
+const WELL_DRAWERS_PER_WELL = 1;
+const FOUNTAIN_CHILDREN = 2;
+const DOORSTEP_ANCHORS_PER_BUILDING = 1;
+/**
+ * The doorways worth posting someone permanently on, and who stands there.
+ *
+ * Keyed by building name, which is what `buildingEntries` carries — and matched
+ * by lookup rather than by index, so a building the plan drops simply loses its
+ * anchor instead of giving the next building in the list a bouncer.
+ */
+const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole]> = [
+  ['The Rusty Anvil', 'smith'],
+  ['The Desperado Club', 'guard'],
+  ['The Sleeping Cat Inn', 'innkeeper'],
+  ['Temple of the Sky', 'priest'],
+];
+// Anchored citizens barely move and mostly stand: the slowest speeds and the
+// longest pauses of any cohort.
+const ANCHOR_SPEED_MIN = 0.2;
+const ANCHOR_SPEED_MAX = 0.4;
+const ANCHOR_PAUSE_MIN = 180;
+const ANCHOR_PAUSE_MAX = 600;
 
 // Candidate destinations sampled per traveler retarget; the farthest from where
 // they stand wins, so a hop crosses town instead of shuffling one street over.
@@ -230,6 +270,7 @@ export class TownLifeSystem implements GameSystem {
     this.spawnPlazaCrowd();
     this.spawnFrontageLoiterers();
     this.spawnTravelers();
+    this.spawnActivityAnchors();
   }
 
   /** The current crowd, for the scene's Y-sorted entity render pass. */
@@ -365,6 +406,106 @@ export class TownLifeSystem implements GameSystem {
     }
   }
 
+  /**
+   * Someone at every fixture worth being at: a drawer at each well,
+   * the smith outside his forge, children on the fountain steps, and a bouncer on
+   * the Desperado Club's door.
+   *
+   * Anchors are derived from the map — well tiles are found by type, the smithy
+   * and the club by their `buildingEntries` — rather than from copied offsets.
+   * Both of those coordinates have already moved once in this redesign, and the
+   * two systems that had copied them (the murder quest's body, the notice board)
+   * are exactly what broke.
+   *
+   * An anchor is a wander with a one-tile bubble and a long pause, not a fixed
+   * position: standing perfectly still beside a well reads as a statue, and the
+   * separation pass would push a motionless figure off its spot with nothing to
+   * bring it back.
+   */
+  private spawnActivityAnchors(): void {
+    for (const well of this.findTilesOfType(WELL)) {
+      this.addAnchoredCitizen(well, 'commoner', WELL_DRAWERS_PER_WELL, ANCHOR_RADIUS_TILES);
+    }
+    const fountain = this.gameMap.fountainCentre;
+    if (fountain !== undefined) {
+      this.addAnchoredCitizen(fountain, 'child', FOUNTAIN_CHILDREN, FOUNTAIN_ANCHOR_RADIUS_TILES);
+    }
+    for (const [buildingName, role] of DOORSTEP_ANCHOR_ROLES) {
+      const entry = this.gameMap.buildingEntries.find((e) => e.name === buildingName);
+      if (entry === undefined) continue;
+      this.addAnchoredCitizen(
+        entry.doorTile,
+        role,
+        DOORSTEP_ANCHORS_PER_BUILDING,
+        ANCHOR_RADIUS_TILES,
+      );
+    }
+  }
+
+  /**
+   * `count` citizens who stay within `ANCHOR_RADIUS_TILES` of `fixture`.
+   *
+   * The fixture itself is solid — a well, a fountain, a doorway — so the ring
+   * around it is gathered rather than assumed: an anchor whose bubble contained
+   * no walkable tile would spawn its citizens inside the prop.
+   */
+  private addAnchoredCitizen(
+    fixture: TileXY,
+    role: TownRole,
+    count: number,
+    radiusTiles: number,
+  ): void {
+    const radius = TILE_SIZE * radiusTiles;
+    const spots = this.gatherAnchorTiles(fixture, radiusTiles);
+    if (spots.length === 0) return;
+    const wander: WanderParams = {
+      pickTarget: () => randomTilePoint(spots),
+      arriveDist: ARRIVE_DIST,
+      pauseMin: ANCHOR_PAUSE_MIN,
+      pauseMax: ANCHOR_PAUSE_MAX,
+      // `isWalkableSpot` already excludes doorways, which matters here: four of
+      // the seven anchor sites are doorsteps, and without it a bouncer could drift
+      // into the door he is standing beside.
+      isWalkable: (x, y) => this.isWalkableSpot(x, y) && withinTiles(x, y, fixture, radius),
+    };
+    for (let i = 0; i < count; i++) {
+      this.addCitizen(
+        randomTile(spots),
+        roleTable([{ role, weight: 1 }]),
+        ANCHOR_SPEED_MIN,
+        ANCHOR_SPEED_MAX,
+        wander,
+      );
+    }
+  }
+
+  /** Walkable, non-door tiles inside an anchor's bubble. */
+  private gatherAnchorTiles(fixture: TileXY, radiusTiles: number): TileXY[] {
+    const tiles: TileXY[] = [];
+    const radius = TILE_SIZE * radiusTiles;
+    for (let ty = fixture.y - radiusTiles; ty <= fixture.y + radiusTiles; ty++) {
+      for (let tx = fixture.x - radiusTiles; tx <= fixture.x + radiusTiles; tx++) {
+        if (this.doorTiles.has(tileKey(tx, ty))) continue;
+        if (!withinTiles(tx * TILE_SIZE, ty * TILE_SIZE, fixture, radius)) continue;
+        if (!this.gameMap.isWalkable(tx, ty)) continue;
+        tiles.push({ x: tx, y: ty });
+      }
+    }
+    return tiles;
+  }
+
+  private findTilesOfType(type: number): TileXY[] {
+    const found: TileXY[] = [];
+    const structure = this.gameMap.structure;
+    for (let ty = 0; ty < structure.length; ty++) {
+      const row = structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        if (row[tx].type === type) found.push({ x: tx, y: ty });
+      }
+    }
+    return found;
+  }
+
   private addCitizen(
     tile: TileXY,
     roles: RoleTable,
@@ -482,6 +623,13 @@ function tileDistSq(a: TileXY, b: TileXY): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return dx * dx + dy * dy;
+}
+
+/** True when a world point is inside `radius` pixels of a fixture's tile origin. */
+function withinTiles(worldX: number, worldY: number, fixture: TileXY, radius: number): boolean {
+  const dx = worldX - fixture.x * TILE_SIZE;
+  const dy = worldY - fixture.y * TILE_SIZE;
+  return dx * dx + dy * dy <= radius * radius;
 }
 
 /** True when a world point is inside the frontage bubble around `door`. */

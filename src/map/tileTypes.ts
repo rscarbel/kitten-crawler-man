@@ -208,9 +208,32 @@ export const FloorTypeValue = {
   wood: 8,
 } as const satisfies Record<FloorTile, number>;
 
+/**
+ * The three fencing types plan §3.5 asks for, as the differences that actually
+ * survive at 32 px: how the infill between the posts is made.
+ *
+ * `post_and_rail` is two long rails and nothing between them — a working yard's
+ * fence, which only has to stop a cart. `picket` fills the span with sawn pales,
+ * which is what a garden by the plaza would be enclosed in. `wattle` is woven
+ * hazel on driven stakes: no posts to speak of, and the cheapest thing a kitchen
+ * garden out by the wall would have.
+ *
+ * Declared beside the tile it decorates rather than in the renderer that draws
+ * it, so the dependency runs from the renderer to the data and not back.
+ */
+export type FenceStyle = 'post_and_rail' | 'picket' | 'wattle';
+
 export type TileContent = {
   tileId: string;
   type: number;
+  /**
+   * Set on `FENCE` tiles: which of the three fencing types to draw.
+   *
+   * Carried on the tile rather than looked up from the yard at draw time because
+   * the renderer is handed a grid and a position, not a plan — the same reason
+   * `spriteKey` and `groundType` live here.
+   */
+  fenceStyle?: FenceStyle;
   /** Set on SPRITE_BUILDING tiles to select which PNG sprite to render. */
   spriteKey?: string;
   /** Set on MODERN_DECORATION tiles: row * 10 + col within modern_decorations.png. */

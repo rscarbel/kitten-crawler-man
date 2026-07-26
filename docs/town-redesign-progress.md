@@ -6,11 +6,13 @@ the fastest way to tell whether the redesign is actually working.
 
 **Status legend:** ☐ not started · ◐ in progress · ☑ done · ⊘ dropped (say why)
 
-**Overall status:** ◐ In progress — Phases 0, 1 and 2 done 2026-07-25; Phase 3's code is
-in and under review. The town now draws from the generated tileset with blended material
-boundaries, world-space tone and ambient occlusion, and it is a walled market village
-laid out street-first instead of buildings on a lawn. Next up is Phase 4, plots and
-frontage.
+**Overall status:** ◐ In progress — Phases 0–4 done; Phase 5's tiers 1 and 2 and Phase 6
+landed 2026-07-26 and are through their first review round. The town now draws from the
+generated tileset with blended material boundaries, world-space tone and ambient
+occlusion; it is a walled market village laid out street-first; and it is furnished —
+fifteen hanging shop signs, lit lamps down the main streets and both alleys, carts,
+crates, troughs and yard gear, washing across the alleys, and someone standing at every
+well, forge and club door. Remaining: Phase 5 tier 3 (wayfinding), and Phase 7.
 
 ---
 
@@ -23,12 +25,12 @@ Re-measure after each phase (Phase 0 gives you the tooling to do it in one comma
 | Town bounding box (tiles)           | 74 × 73       | 55 × 40     | **55 × 41**                                         |
 | Town area (tiles)                   | 5402          | 2200        | **2255**                                            |
 | Built density                       | 16.5%         | 40.5%       | **33.9%** — see the Phase 3 accounting note         |
-| Farthest building door from plaza   | 42.6          | ~28         | **33.4** (target unreachable — see Phase 3 notes)   |
+| Farthest building door from plaza   | 42.6          | ⊘ retired   | **33.4** — target was geometrically unreachable; see Phase 3 |
 | Ground materials used in town       | 2             | 7           | **6** (the ceiling — see Phase 3)                   |
 | Ground materials available          | 2 usable      | 14          | **14**                                              |
 | Worst joint-to-interior ratio       | never wrapped | ≤1.15       | **1.11**                                            |
 | Tiles before a visible repeat       | 1             | 4+          | **4–7 (patch); variant choice has no period to 96** |
-| Distinct outdoor prop types         | 3             | 15+         | 3                                                   |
+| Distinct outdoor prop types         | 3             | 15+         | **30** — 5 tile props, the 4 it already had, 15 clutter pieces, sign, lamp, laundry line, signpost, gateway, bunting (the sign carries 15 devices) |
 | Town safe radius (tiles)            | 55            | ~40         | **40**                                              |
 | Overworld frame time                | unchanged     | no regress. | **8.3ms mean / 9.8ms max in the plaza**             |
 | Chunk bake (256 tiles, node-canvas) | 1.13ms        | no hitch    | **2.26ms**                                          |
@@ -834,6 +836,10 @@ Known and accepted, with reasons:
 - [x] Independent review round 3
 - [x] Independent review round 4
 - [x] Independent review round 5
+- [x] Independent review round 6 — **no high-severity findings**
+- [x] Independent review round 3
+- [x] Independent review round 4
+- [x] Independent review round 5
 - [x] Independent review round 6 — **no code defects found**
 
 **Notes:**
@@ -928,9 +934,10 @@ is a long way out. The bands are not symmetric about the plaza either — the in
 rows north of it against 24 south — so it is the two _south_ corners that are far: measured, the
 corner-plot doors are Cartwright's Workshop 25.9, Blackwood Lodge 26.8, Miller's Farm 31.1 and
 The Sunken Stump Pub 33.4. §4's own reference layout puts the pub's door at about 30.
-33.4 is the pub in the south-west corner; it is down from 42.6, and the acceptance criterion
-that actually matters (plaza → any door under 12 s at `PLAYER_SPEED`, ≈ 4.7 tiles/s) has ~8 s
-of headroom even routing round the blocks.
+33.4 is the pub in the south-west corner, down from 42.6. The walk-time criterion this note
+originally leaned on has since been dropped from §9 — Ryan does not care about it — so the
+farthest-door number stands on its own: a corner plot is far from the centre because that is
+what a corner is, and there is no target left for it to miss.
 
 **The Blackwood Lodge alley is a real dead end.** Doors face south, always, so a building can
 only front whatever lies south of its band — which means an alley frontage has to be made by
@@ -1805,45 +1812,501 @@ in Phase 5.
 
 ---
 
-## Phase 5 — Props & signage ☐
+## Phase 5 — Props & signage ◐
 
 **Tier 1 — sells "town" immediately**
 
-- [ ] Hanging shop signs on brackets over all 15 named doors
-- [ ] Fences and gates (picket / post-and-rail / wattle)
-- [ ] Lampposts and hanging lanterns (Market Street + Low Quarter), lit
-- [ ] Street kerbs (if not already landed in Phase 4)
+- [x] Hanging shop signs on brackets over all 15 named doors
+- [x] Fences in three types (picket / post-and-rail / wattle), stated per yard
+- [x] Lampposts, lit, on Market Street, Low Street, King's Road and both alleys
+- [x] ~~Street kerbs~~ — landed in Phase 4
+- [x] Gates as art — arches and gatehouses over all three, in Tier 3 below. (The
+      four *yard* gate cheeks are still lone posts; that is a different gate.)
 
 **Tier 2 — clutter and life**
 
-- [ ] Handcarts, wagons, leaning wagon wheels
-- [ ] Crate / barrel stacks, sacks, hay bales
-- [ ] Laundry lines across alleys
-- [ ] Planters, window boxes, herb beds, vegetable rows
-- [ ] Water trough, hitching post, chicken coop
-- [ ] Smithy yard: anvil, coal pile, quench barrel, tool rack
-- [ ] Garden wells / pumps
+- [x] Handcart, leaning wagon wheel
+- [x] Crate / barrel stacks, sacks, hay bales
+- [x] Laundry lines across both Low Quarter alleys
+- [x] Planters; herb beds and vegetable rows redrawn (see below)
+- [x] Water trough, hitching post, chicken coop
+- [x] Smithy gear: anvil, coal pile, quench barrel, tool rack
+- [x] Garden pumps
+- [ ] Window boxes (they need a facade to hang on, which is sprite art)
 
 **Tier 3 — wayfinding**
 
-- [ ] Signposts at gates and junctions with district names
-- [ ] Gate arches
-- [ ] Banners / bunting on the civic terrace and Market Street
+- [x] Fingerposts inside all three gates
+- [x] Gate arches over all three gates
+- [x] Bunting on the civic terrace and across the plaza's Market Street frontage
+
+- [x] typecheck / lint / format clean
+- [x] Independent review round 1
+- [x] Independent review round 2
 
 **Notes:**
+
+2026-07-26 — four new sprite modules (`shopSign.ts`, `streetLamp.ts`,
+`townClutter.ts`, `townWayfinding.ts`), one new system (`TownDecorSystem`), and
+**a committed headless render harness** (`scripts/render-town.ts`).
+
+**68 decorative props.** Measured over 30 generations with every system's blocks
+in place — market, props, decor: walkable 1477, reachable 1477, **0 stranded
+tiles**, every building's exit tile reachable and all three gates still passable.
+
+**The harness is the important part.** Phase 4's review round 1 built one, found
+two defects with the first image it rendered, and left it in a scratch file —
+which this file then recorded as a lesson and promptly repeated. It is
+`scripts/render-town.ts` now: node-canvas plus the real sprite sheets, the real
+`renderCanvas`, the real decoration overlay and the real `TownPropRenderable`s
+from the real systems, Y-sorted the way `RenderPipeline` sorts them. Every defect
+below was found by looking at its output.
+
+**Signs.** `ShopSignEmblem` is a required field on `PlannedBuilding`, so a
+fifteenth building without a device is a compile error in the plan, and
+`EMBLEM_PAINTERS` is a `Record` over the same union, so a device without art is a
+compile error in the sprite. The board hangs off a wrought bracket projecting
+**west** of the doorway. Four emblems were redrawn after the first contact sheet:
+the moon rendered as an eclipse (even-odd over two discs fills the symmetric
+difference, which is *both* limbs — a crescent is a subtraction and needs a clip),
+the anvil and the scales both read as the letter T, and the quill read as a ruler.
+
+**Doorways are not all one tile wide**, which the sign geometry originally
+assumed. Measured over the thirteen sprites: six openings are one tile, five are
+two, the General Store is three and The Horned Flagon is four. `computeDoorway`
+reports the *centre*, so on a four-tile front the tile west of `doorTile` is still
+doorway and the sign hung across the opening. `BuildingEntry.doorwayWidth` carries
+the width and `signWestShiftTiles` turns it into a shift, which gives every
+building the same geometry relative to its opening's **west edge**.
+
+**Lamps block their tile, and a prop system blocks tiles *after* generation** —
+where none of the generator's seven standing assertions can see it.
+`assertTownIsFullyReachable` exists because one well-meant fence post stranded
+fourteen walkable tiles with nothing about the map looking wrong, so every lamp
+and every piece of clutter is checked against the same property before it is
+placed: `leavesTownConnected` flood-fills the wall's interior with the candidate
+blocked and requires the reachable count to drop by exactly one. The measurement is
+recorded once, at the top of these notes, rather than twice — an earlier draft
+quoted 1480 here and 1477 twenty lines above, both framed as "with every system's
+blocks in place". 1480 was the pre-signpost figure; review round 2 caught it.
+
+**Planting was redrawn, and it was a real defect.** Two Phase 4 review rounds
+independently reported that the gardens read as lines of text at 1x. The cause was
+that the ruled soil bars carried the silhouette and the greenery did not — three
+full-width dark furrows a tile with twelve 2x5 px ticks standing on them. It is
+two furrows at half the contrast now, with three wide two-tone clumps each drawn
+*over* the furrow. The fixed furrow heights stay: they are what makes a run of
+planted tiles read as one bed rather than as scattered tufts, which was the
+failure the original design was avoiding.
+
+**The `TownPlan` is now on `OverworldData` and `GameMap`.** Systems need the
+town's geometry — which streets are streets, where the yards are — and every one
+that has re-derived a coordinate instead has drifted from it eventually: the
+murder quest anchored a body four tiles west of a door that later stood against
+the west wall, and the notice board sat due south of centre on a rationale about a
+tower that had moved.
+
+**Review round 1 (independent), fixes applied.** Round 1 found six genuine
+defects. The high-severity one is worth recording in full, because it is the Phase
+1 lesson in all three of its kinds at once:
+
+- **The fence-abutment fix was reverted.** Phase 4's round 4 deferred closing "the
+  43 fence sides that genuinely abut a facade" to Phase 5, and said the fix needed
+  the sprite footprints. It does not: `SpriteLoader` derives a footprint from the
+  frame's whole width and height and blocks all of it bar the doorway, so
+  transparent sky and transparent side columns are "blocked" exactly as solid wall
+  is. Routing `anchorsRailAt` through it gained **6** anchored sides, not 43
+  (133 → 139 over the real grid) — and alpha-scanning the art at those six found
+  three anchoring into pixels **0.0%, 0.0% and 1.1% opaque**, which is verbatim the
+  rail-into-open-verge defect that Phase 4 round 4 measured and rejected. The count
+  was written from reasoning, the mechanism was explained from reasoning, and the
+  result reintroduced the defect its own comment claimed to avoid. Reverted to the
+  tile-type set; the comment now records the measurement and states what closing
+  those sides would actually need (a per-tile opacity index built from the loaded
+  images) and what it would buy (three fence tiles).
+- **Three doc claims were measured and wrong, and are now measured and right.**
+  The sign's clearance ("a tile and a half above the street, over the player's
+  head" — the board's lowest ink is 10 px above the anchor), the eaves range ("one
+  tile up, the smithy" — the minimum is four, shared by five sprites), and the
+  lamp's reach ("about 2.3 tiles" — 2.63, because the flame's halo is a
+  `shadowBlur` and blur is not in the geometry). Every figure in these modules is
+  now a number the harness printed. Two of the *corrections* were themselves wrong
+  on the first pass and were caught by running the measurement rather than by
+  re-reading it: the sign reaches 1.03 tiles west, not 1.53, and the lamp a
+  quarter of a tile past each side, not 1.28.
+- **The sway phase stride was a lie of the kind that is true and useless.**
+  "Irrational relative to 2π, so no two signs land in phase" — nine steps of 0.7 rad
+  come within 0.017 rad of a full turn, so signs 0 and 9 differ by **0.03 px** of
+  board travel and render identically. It is the golden angle now (`GOLDEN_ANGLE_RAD`
+  in `utils.ts`, shared with the lamps' flicker): closest pair of fifteen **3.44%**
+  of a period apart, against 0.27%.
+- `FenceStyle` moved from `tiles/decorationTiles.ts` to `tileTypes.ts`. A leaf data
+  module type-depending on a renderer is backwards, even at zero runtime cost.
+- The picket rail thickness was a bare `2` among named constants.
+
+Round 1 also verified clean, by measurement: the lamp connectivity check's
+baseline/candidate comparison (an unreachable candidate and a blocked plaza centre
+both fail safe); no runtime import cycle — every new edge is `import type`; and
+200/200 generations passing all seven standing assertions.
+
+Two of its sign-offs did **not** survive later rounds, and are recorded here struck
+rather than left standing, because a stale clean bill is worse than none:
+
+- ~~"No new prop can pop at the screen edge, the worst overhang being 2.63 tiles
+  against a 4-tile cull margin."~~ True of the props that existed when it was
+  written; **round 2 measured 16.5 tiles** on a bunting span added afterwards.
+- ~~"Nothing blocks tiles after this system on the overworld … `SpiderQuestSystem`
+  is constructed before the town systems."~~ The conclusion holds; the mechanism
+  does not. **Round 5** found it is gated on a null lab room, not on construction
+  order — see the round-5 note.
+
+**Review round 2 (independent), fixes applied.** Round 2 verified all four of round
+1's fixes correct by measurement — the `anchorsRailAt` revert is byte-identical to
+`HEAD`, `signWestShiftTiles` is provably exact (it is literally the same expression
+`computeDoorway` uses, so `doorTile − shift == the opening's west edge` for all 15
+buildings), and both golden-angle figures reproduce. It then found fourteen defects
+in the parts round 1 had not seen. The two that mattered:
+
+- **Two of the three gate arches were rotated 90°, with a stone pier standing in
+  the carriageway.** `drawGateArch` only ever drew face-on, west pier to east pier.
+  The south gate is a four-tile opening in an **east–west** wall, so that is right;
+  the side gates are four-tile openings in **north–south** walls, and `max(w, h)`
+  happily returned 4 for those too — so their arches were drawn spanning four tiles
+  *along Market Street*, covering one row of a four-row opening, with the vault
+  arcing across The Horned Flagon's facade and over its shop sign. The fix is not a
+  rotation: the wall renderer itself draws east–west runs face-on and north–south
+  runs top-down (`drawTownWallTile` only crenellates a run's exposed north face), so
+  a gateway has to match the wall it is cut into. `across` is the arch you look
+  through; `along` is a gatehouse seen from above — piers beyond each end of the
+  opening and the gate's own roof over the wall's single column of paving.
+- **Culling is on the anchor alone, and three prop types reach far past it.**
+  `PROP_CULL_MARGIN_TILES` is 4; measured east reach is **16.5 tiles** for the
+  longest bunting span, 11.5 for the other two and 4.69 for a gateway. Walking five
+  tiles east of a bunting anchor made the whole sixteen-tile string vanish in one
+  frame. This also falsified round 1's own sign-off — "no new prop can pop at the
+  screen edge, the worst overhang being 2.63 tiles" — which was true of the props
+  that existed when it was written and not of the ones added afterwards.
+  `TownPropRenderable` carries an optional `cullMarginTiles` now, so a prop that
+  spans real distance declares it. Re-measured over all 68: **0 that pop**, and the
+  tightest is the long bunting at 16.50 against its declared 17.
+
+The rest, each measured:
+
+- **The two fountain children never spawned.** The fountain is a solid 3 × 3 and
+  the anchor bubble was a radius-1 circle, which admits the centre and four
+  cardinals — all five of them fountain. The bubble came back empty and
+  `addAnchoredCitizen` silently returned. The radius is per-anchor now and the
+  fountain's is 2, which is where its first walkable ring is. Townsfolk 60 → 62.
+- **Four painters leaked canvas state into the same render pass.** Props render
+  back to back with no reset between them, and `strokeRound` leaves
+  `lineCap='round'`, `lineJoin='round'` and `lineWidth=2` behind — inherited by the
+  clutter on the same building's frontage, which sorts immediately after its sign.
+  `drawSignpost` also leaked `ctx.font`, and hand-reset `textAlign` to `'left'` when
+  the canvas default is `'start'`. Every new painter is wrapped in `save`/`restore`.
+- **Five district labels cannot fit on the expanded minimap.** It draws one pixel
+  per tile, so the whole 55-tile town is 55 px across — and a 9 px caption is 48–55
+  px wide on its own. Two labels cannot share a row at any readable size, and at 11
+  px of line height only four fit in the town's 43 rows. Market Row lost its label
+  to that arithmetic. Re-measured: **no overlapping pairs**.
+- **The anvil emblem still read as a capital T**, which round 1's redraw had
+  claimed to fix. A symmetric face over a symmetric base is a T whatever happens in
+  between, and a horn drawn as a bulge off the face's own line disappears into it.
+  It is a separate tapering beak below the face line with a splayed foot now — the
+  silhouette is lopsided, which is the only cue that survives at 26 px.
+- `WHEEL_DIAMETER_COUNT` — the loop strokes full diameters, so `6` was twelve
+  spokes, not six. Renamed rather than halved; twelve looks right.
+- Four false claims in comments and in this file: "a **pair** drawing water at each
+  well" (it is one), the district anchors "chosen to sit on open ground" (three of
+  five sat inside a sprite footprint), "§3.5's **two** named sites" over a table of
+  three spans, and **1480 vs 1477** for the same measurement in two paragraphs of
+  this section — 1480 was the pre-signpost figure. The settled numbers are **68
+  props, walkable 1477, reachable 1477, 0 stranded over 30 generations**.
+- Also: the golden-angle JSDoc had been inserted between `clamp`'s docstring and
+  `clamp`, so the clamp doc was documenting a radicand.
+
+Round 2 verified clean: `findFreeTile`'s per-candidate connectivity check (correct,
+fails safe, **69 ms once** at map load over 90 fills and 134,794 tile visits); all
+68 prop positions (no clutter or signpost on a door apron — minimum Chebyshev
+distance to any door is **3** — none in a gate throat, none outside the town); the
+four doorstep anchor names all matching `buildingEntries`; no anchor able to spawn
+on a tile a prop later blocks (`TownDecorSystem` is constructed before
+`TownLifeSystem` and blocks permanently); labels unable to run off the minimap
+(`renderDistrictLabels` is inside its `ctx.clip()`); no `as`/`!`/`any`; balanced
+`save`/`restore` on every path; and no per-frame allocation in any prop's `render`.
+
+**Review round 3 (independent), fixes applied.** Round 3 was pointed at round 2's
+own fixes, because round 2 had found two high-severity defects and this file's
+history says a fix is where the next defect hides. It found seven, two of them
+high — and **both were in round 2's fixes**:
+
+- **`drawLaundryLine` had an unbalanced `ctx.save()`.** Round 2's note says "every
+  new painter is wrapped in `save`/`restore`" and its clean list says "balanced
+  `save`/`restore` on every path". The `save` went in; the matching `restore` did
+  not. Two consequences, both real: every prop sorting after a laundry line
+  inherited its `lineWidth` and `strokeStyle` — the exact defect round 2 was
+  fixing — and, worse, four lines × 60 fps pushed **240 un-popped saves a second**
+  onto the canvas state stack for as long as the player stayed on the overworld.
+  Nothing in `RenderPipeline` or `Scene` restores at frame scope.
+- **The top-down gatehouse was drawn on the road, one tile off the wall.** The
+  inset that puts a face-on arch *in front of* the rampart moves a top-down roof
+  *off* it. Measured at the west gate: the roof covered (113, 148…151) — four tiles
+  of walkable `COBBLE_STREET` — while the gate's own column at x = 112 was left
+  bare and the piers came down on a verge tile and a torch. Its own JSDoc said the
+  opposite. The inset is per-form now (`ARCH_INSET_BY_AXIS`), and re-measured: both
+  piers land on `TOWN_WALL` at both side gates and the roof covers the gate column.
+
+The rest:
+
+- **The anvil emblem read as a capital T at 32 px** — still, after two redraws, one
+  of which this file claimed had fixed it. **The scales did too**, which round 1 had
+  also claimed to fix and round 2 had not re-checked. Both claims were made from
+  renders at 6×; at the size the game actually draws them, a beam over a stem is a
+  T no matter what is between them, and every line of a balance scale is two pixels
+  wide. Rather than a third iteration on the same two motifs, they became a
+  **hammer** and a **barrel** — one bold asymmetric mass each, which is the only
+  thing that survives an 18 px emblem box. Verified by rendering all fifteen at
+  `ts = 32` and magnifying nearest-neighbour, which is what they look like in play.
+- Three prop docstrings described the world before round 2's own cull-margin fix,
+  crediting the 4-tile default that the same change had overridden — and quoted 2.7
+  and 4.69 tiles where the measurement is 2.84 and 4.72/4.81.
+- The golden-angle JSDoc, which round 2 recorded *fixing*, had been moved onto
+  `GOLDEN_RATIO_RADICAND` instead of onto `GOLDEN_ANGLE_RAD`. Fixed properly.
+- Per-frame `[-1, 1]` array literals in six painters, against round 2's "no
+  per-frame allocation in any prop's `render`". Hoisted.
+- Four more numbers that did not reproduce: the sign's lowest ink is **9 px** above
+  its anchor, not 10; a 9 px minimap caption's ink box is **62–68 px** wide, not
+  48–55 (which strengthens the point — it is wider than the whole town); "townsfolk
+  60 → 62" quoted a stochastic crowd size as if it were fixed; and the second
+  bunting span sat **five rows inside the plaza** rather than on the civic terrace
+  it was documented as crossing. Also `PlannedYard.fenced` still said "post-and-rail"
+  after the same change set gave every yard a `fence` style.
+
+Round 3 verified clean by measurement: the cull margins in **all four directions**
+(round 2 had only checked eastward) — 0 of 74 props pop, tightest is the long
+bunting; the fountain children now spawning on walkable plaza stone with the well
+and doorstep anchors untouched; the four district labels colliding on **0 pixels**
+through the real text path; `WHEEL_DIAMETER_COUNT` and the laundry `controlY`
+renames inert; and 40 generations with all seven standing assertions passing, 68
+props, walkable 1477, reachable 1477, 0 stranded. (Its `TownDecorSystem`
+construction figure was corrected by round 4 — see below; the cost is not paid
+once.)
+
+**Post-fix re-verification**, since three of these fixes were to fixes: a
+state-leak and save-depth audit over all 68 props — **0 leaks, 0 unbalanced
+saves**; gateway piers on `TOWN_WALL` at both side gates; **0 of 74 props pop**;
+and all fifteen emblems legible at the game's own tile size.
+
+**Review round 4 (independent), fixes applied.** Round 4 was pointed at round 3's
+fixes, for the reason round 3 existed: two rounds running, the new defect had been
+*in the previous round's fix*. It happened a third time. Both high-severity
+findings were in code round 3 had touched, and both were missed the same way —
+**the fix was verified as data and never executed**.
+
+- **Every street lamp vanished after the player left a building, and the blocked
+  set grew without bound.** `canStandOn` asks `isWalkableIgnoringPermanent`, and
+  its comment explains exactly why: `DungeonScene` hands the *same* `GameMap` back
+  on exit, `permanentBlockedTiles` only grows, and a prop that honoured it would
+  drift to a new tile every trip. The connectivity fill added in round 1 asked
+  plain `isWalkable` — so on the second visit it saw the first visit's props as
+  walls, every lamp candidate was already unreachable, the count came out equal
+  instead of one less, and the check rejected all twelve. Measured on one reused
+  map: **12 lamps on the first visit, 0 on every visit after**, their tiles left
+  behind as invisible walls on the lit kerbs, and construction climbing **68 ms →
+  307 ms by the fifth trip**. The guard was written on one of the two paths that
+  needed it. The fill now reconstructs the blocked set from `occupied` and
+  `claimedElsewhere` instead, which makes the whole placement idempotent:
+  **5 consecutive constructions on one map, byte-identical prop sets, 35–43 ms and
+  not growing.** The baseline is memoised too — it only changes when a tile is
+  reserved, and recomputing it per candidate was half the system's cost.
+- **The top-down gatehouse painted opaque stone over all four walkable gate tiles.**
+  Round 3 was right about everything it measured — piers on `TOWN_WALL`, roof over
+  the gate column — and wrong about the thing it never rendered: the roof *is* the
+  gate column, so the west gate read as an unbroken six-tile grey slab with no
+  visible opening and a lantern floating in it. It also sorted two ways at once, a
+  player on the roof's anchor row hidden under it and one row south drawn over it.
+  The face-on form states the rule this broke in its own docstring — an arch that
+  narrows its opening is a wall with a hole in it. The `along` form is two piers
+  and their lanterns now, and nothing crosses the throat.
+
+The rest:
+
+- **The face-on arch's one-tile inset was justified by a mechanism that does not
+  exist** — "it would sort behind the rampart's own art". `TOWN_WALL` is a ground
+  tile baked into the chunk cache; a prop in the Y-sorted pass is over it whatever
+  its anchor row. The inset bought nothing and cost the two south-gate torches,
+  whose tiles the piers landed on and occluded almost completely. Both forms anchor
+  on the wall now, and all six piers land on `TOWN_WALL`.
+- **"68 ms once at load" was wrong in kind, not just in value.** A `DungeonScene` is
+  built on every building exit, so it is paid on every exit — which is what made the
+  growth above a freeze rather than a curiosity.
+- **"No clutter on a door apron" was a true number with a false conclusion.**
+  Minimum Chebyshev distance from a door *centre* is 3, and The Horned Flagon's
+  doorway is four tiles wide — a fact recorded two sections above in this same
+  file — so its apron reaches three tiles east of centre and a barrel stack stood on
+  the last tile of its own doorstep in 40/40 generations. Moved to +4; re-measured
+  against every apron rectangle rather than against door centres: **0 blocking props
+  on any apron**.
+- **The laundry lines' docstring claimed the alleys are narrow enough that a line
+  reads as crossing them rather than trailing off** — measured, all eight ends land
+  on verge or street with the nearest building about three tiles away.
+  `drawLaundryLine` stands its own poles now, so the claim is true by construction
+  instead of by assertion.
+- Also: `drawSignpost` rebuilt its font string and allocated a closure per arm per
+  frame; a comment still named the retired `anvil` emblem; `PlannedDistrict` was
+  exported with no importer; `fenceStyleAt`'s fallback carried a false rationale;
+  and both the Phase 6 note and `MiniMapSystem` still said "five labels" after the
+  count became four.
+
+Round 4 verified clean by measurement, and more thoroughly than round 3 had: the
+save/restore audit extended from 74 props to **194 painter cases** — every clutter
+kind, every emblem across every doorway shift and sway frame, both gate axes, the
+market stalls and the pre-existing props — **0 leaks, 0 unbalanced**. Every figure
+round 3 wrote reproduced: gateway reaches 2.84 / 4.72 / 4.81, sign clearance 9 px,
+0 of 74 props pop in all four directions, caption ink boxes 61.4–67.5 px against
+the stated 62–68, and 40 generations byte-identical at 68 props / 1477 walkable /
+1477 reachable / 0 stranded. The emblem swap is consistent across all three places
+that must agree, with no orphaned painters or constants. The `PLANTING_CROP_HEAD_FURROW`
+rename turned out to be load-bearing rather than cosmetic — the furrow list went
+from three entries to two in the same change, so index 1 moved from 0.5 to 0.68 and
+"middle" had become a lie about a two-element array.
+
+**Review round 6 (independent) — the pattern broke.** Round 6 was pointed at round
+5's fixes and told to render rather than read, and for the first time in five rounds
+the highest-severity finding was **not** a defect introduced by the previous round's
+fix. All five of round 5's fixes verified correct by execution: the torches
+pixel-diff to **0 px of overpaint** against a no-gateway baseline (they were ~88% of
+their own ink before), all six signpost arms fit their planks with margin and reach
+1.94 tiles against a 4-tile margin, the state audit over 74 props × 3 frames tracking
+15 context properties *and the transform* comes back **0 leaks, 0 unbalanced**, and
+the laundry poles are arithmetically identical to the loop they replaced. Every other
+figure in the round-5 note reproduced.
+
+Its five findings were all low-severity, and the first is the one worth recording:
+
+- **A stale round-1 sign-off had drifted to the end of the round-5 block and read as
+  a round-5 conclusion** — reinstating two claims this same document disproves 200
+  lines above ("no new prop can pop … worst overhang 2.63 tiles", which round 2
+  measured at 16.5; and "`SpiderQuestSystem` is constructed before the town
+  systems", which the paragraph immediately above it corrects). Five rounds of
+  prepending each new note had pushed it there. It is back inside round 1 now, with
+  both claims struck and pointed at the rounds that disproved them. **This is the
+  Phase 1 lesson's third failure mode**, the one its own round 8 caught: a rewrite
+  resurrecting something already shown to be false.
+- The overpaint figures round 5 recorded, 69.6% and 71.9%, were tile-*area* coverage
+  reported as ink coverage; measured against the torch's own ink it is ~88% both
+  ways. The conclusion and the fix were right, the magnitude was not.
+- "Four of the six anchors stand on a doorstep" — there are **seven** anchor sites
+  and eight citizens; neither number was six.
+- `scripts/render-town.ts` claimed three shims and installs two: a `performance`
+  field was declared and never assigned, and nothing failed because Node provides
+  `performance` as a global already.
+- Six signpost arms over five distinct labels, described as five in one place and six
+  in another.
+
+Round 6's own closing measurement: 1477 walkable / 1477 reachable / 0 stranded at map
+sizes 200, 240, 280 and 320; 43 reservations with the memo invariant recomputed after
+each and **0 violations**; five constructions on one reused map, byte-identical, 33–37
+ms; 0 of 74 props popping.
+
+**Review round 5 (independent), fixes applied.** The pattern held a fourth time:
+the top finding was again in the previous round's fix, and again it had been
+verified as coordinates and never rendered.
+
+- **Moving the arch's anchor did not save the south-gate torches — it occluded
+  them slightly more.** Round 4 removed the one-tile inset on the grounds that it
+  "cost the two south-gate torches, whose tiles the arch's piers landed on". The
+  premise was right and the remedy was not: a pier is 3.35 tiles tall and 0.7 wide,
+  so it covers the outer 70% of the first column either side of the opening
+  *whatever row its foot is on*. Measured by rendering both anchor rows against a
+  no-gateway baseline and diffing the torch's own ink against the pier's:
+  **87.5%/88.9% overpainted at inset 1, 88.9%/88.8% at inset 0** — round 5 first
+  recorded 69.6% and 71.9%, which is the pier's *width* as a fraction of a tile
+  column reported as if it were ink coverage, and round 6 re-measured it. The fix
+  belongs at the torch end. `SOUTH_GATE_TORCH_WEST/EAST` are two
+  columns clear of King's Road now instead of one, and both torches burn in the
+  open beside the arch.
+- **Every signpost label overflowed its arm.** At a 32 px tile the arm's board is
+  24.3 px and the labels measured 26.7 to **55.4 px** — "The Desperado Club" put a
+  full tile of text out past the end of the plank. Nothing clamped, wrapped or
+  sized to fit, and four review rounds had looked at the fingerposts without
+  measuring one. The arm's length now comes from `measureText` on the label, with
+  the old fixed length as a floor, and the longest label was shortened to
+  "The Club". Re-measured: all six arms fit their planks with margin — six arms
+  over five distinct strings, since "Market Plaza" is signed from both side gates.
+- **"194 painter cases, 0 leaks, 0 unbalanced" was false on the leak half**, and
+  false about exactly the props it named. `StallProp`, `NoticeBoardProp` and
+  `BenchProp` contain no `save`/`restore` at all, and `FortuneTellerProp` leaks
+  `lineWidth`, `lineCap` and both styles — which is verbatim the defect class
+  rounds 2 and 3 fixed for the new props. It was latent before this phase and is
+  not now: `DungeonScene` concatenates the decor into the same sorted list, so the
+  seer's `lineWidth` reaches the cart shafts, wheel spokes and laundry ropes drawn
+  after her. All four are wrapped. Re-audited over **74 props: 0 leaks, 0
+  unbalanced.**
+- A comment described a fourth signpost at the Market Street / King's Road junction
+  that does not exist; round 4's "five labels" doc fix had been applied by grepping
+  the phrase rather than the count, so two more instances survived; the end-poles
+  round 4 added to `drawLaundryLine` reintroduced the per-frame array literal round
+  3 had hoisted out of six painters; and two JSDoc blocks had been mangled by
+  earlier edits.
+
+Round 5 verified clean, and went further than round 4 had: the memo invariant was
+checked by recomputing the true baseline after **each of the 43 reservations —
+0 violations** — and on every branch (rejected candidate, drifted candidate,
+candidate equal to the plaza centre, undefined centre, all fail safe); the new
+fill's answer was compared against a ground-truth flood fill through the real
+`GameMap.isWalkable` and agrees exactly (1477 / 1477 / 0 stranded); idempotence
+reproduced at 34.6–41.0 ms over five constructions; and the seven standing
+assertions passed over **200 generations at four map sizes**, with 68 props / 1477
+walkable / 1477 reachable / 0 stranded at *every* size — so those are properties of
+the town, not of one map size.
+
+It also recorded something worth keeping: the fill's blindness to
+`permanentBlockedTiles` is safe today **by accident**. `SpiderQuestSystem`'s blocks
+are gated on a null lab room rather than on the construction order round 4 credited,
+and the boss and treasure blocks run after the town systems over empty arrays. The
+equivalence rests on an unstated invariant, and the next system that blocks a town
+tile outside `claimedElsewhere` breaks it silently.
 
 ---
 
-## Phase 6 — Life & navigation ☐
+## Phase 6 — Life & navigation ◐
 
-- [ ] `TownLifeSystem`: `PLAZA_RADIUS_TILES` 20 → ~11, `DISTRICT_RADIUS_TILES` 48 → ~26
-- [ ] Wander targets biased to street tiles (no more drifting across gardens)
-- [ ] Activity anchors: well-drawer, smith, hawker, fountain kids, club bouncer
-- [ ] Ambient audio radii re-tuned in `DungeonScene.buildTownAmbientEmitters`
-- [ ] District labels on the minimap (`MiniMapSystem`)
-- [ ] typecheck / lint / format clean
+- [x] `TownLifeSystem` radii — landed with Phase 3's compaction, not here: 12 and 36,
+      each with a stated reason (the plaza's corners are 11.31 tiles out, and the
+      farthest door is 33.4)
+- [x] Wander targets biased to street tiles — also landed in Phase 3, `isPaved`
+- [x] Activity anchors: a drawer at each well, children on the fountain, and the
+      smith, the bouncer, the innkeeper and the priest on their own doorsteps
+- [x] Ambient audio radii — already tuned to the compact town (square 12, city
+      chatter tracking the 40-tile safe radius)
+- [x] District labels on the minimap (`MiniMapSystem`), expanded view only
+- [x] typecheck / lint / format clean
+- [ ] Independent review
 
 **Notes:**
+
+2026-07-26 — three of the six items were already done, having landed alongside
+Phase 3's compaction with the reasoning recorded in the constants themselves. The
+checklist had never been ticked. Verified rather than assumed: `PLAZA_RADIUS_TILES`
+is 12, `DISTRICT_RADIUS_TILES` 36, `TOWN_SQUARE_AMBIENT_RADIUS_TILES` 12 and the
+city-chatter emitter tracks `gameMap.townSafeRadius`.
+
+**Activity anchors** are a fourth cohort in `TownLifeSystem`: a one-tile wander
+bubble and the longest pauses of any cohort, so a figure shuffles at a fixture
+rather than standing frozen — a motionless citizen would also be pushed off its
+spot by the separation pass with nothing to bring it back. Wells are found by tile
+type and the four doorstep anchors by building name through `buildingEntries`,
+never by copied offsets: both of those coordinates have moved once already in this
+redesign, and the two systems that had copied them are exactly what broke.
+
+**District labels** brought back `PlannedDistrict` with its consumer, which is
+what the Phase 3 review said would happen when `PlannedBuilding.district` and the
+`TownDistrict` union were removed for having none. It is a name and a label anchor
+and nothing else. The four anchors are placed by hand rather than computed as band
+centres: three of the bands are centred on the plaza's own column, so computed
+anchors would stack within a few pixels of each other at the minimap's one pixel
+per tile. Expanded view only — at the normal size the map is two pixels a tile
+over 160 and the captions would cover most of it.
 
 ---
 
@@ -1851,11 +2314,13 @@ in Phase 5.
 
 **Acceptance criteria (from plan §9)**
 
-- [ ] South gate frames the tower, Market Street and the plaza in one view
+- [x] ~~South gate frames the tower, Market Street and the plaza in one view~~ —
+      **measured impossible, reworded**; see the note below
+- [ ] The arrival view from the south gate frames the gate arch, King's Road and the
+      Low Quarter
 - [ ] No two buildings separated by bare grass
 - [ ] No visible tile grid on large ground areas at 1× zoom
 - [ ] Every named building identifiable without walking to its door
-- [ ] Plaza → any door in under 12 seconds at `PLAYER_SPEED`
 - [ ] Before/after screenshots captured
 
 **Regression sweep**
@@ -1876,6 +2341,24 @@ in Phase 5.
 
 **Notes:**
 
+2026-07-26 — **the first acceptance criterion was measured rather than argued about,
+and it is unreachable.** `DungeonScene` centres the camera on the player
+(`camX = targetX + TILE_SIZE / 2 - canvas.width / 2`) and the canvas is the window,
+so at 1920 x 1080 the view is 60 x 33.75 tiles and spans 16.9 rows either side of
+the player. Standing in the south gate at row 165 that is rows **148 to 182**. The
+plaza's *south* edge is row 147 and the tower's base course is row 123 — and the
+spire rises above its base, not below, so "the tower" under the generous reading is
+further off screen still, not nearer. Rendered at exactly that framing through
+`scripts/render-town.ts --x=108 --y=148 --w=60 --h=34`: the shot contains the wall,
+the gate arch, King's Road, all four Low Quarter buildings, the bunting, the washing
+and two fingerposts, and the first row of Market Street at the very top edge. No
+plaza, no tower.
+
+No layout change can fix it — 42 rows is 1344 px against a 1080 px window — so the
+criterion is reworded to describe the arrival shot the town actually has. The tower
+is instead visible from the north half of the town: from Garrison Row at row 128 the
+view spans rows 111–145, and the spire occupies roughly 101–124.
+
 ---
 
 ## Open questions
@@ -1885,13 +2368,10 @@ in Phase 5.
 - [ ] Is the plaza too large? It came out **17 × 16** (272 tiles, against the old square's
       484). Reassess with the stalls, fountain, board and crowd in place — that is the
       Phase 4/5 review, and shrinking it is still cheap.
-- [ ] **§9's first acceptance criterion looks geometrically unreachable and needs a decision
-      before Phase 7.** "Standing at the south gate, the tower, Market Street and the plaza are
-      all visible in one frame": the south gate is row +25 and the tower's base is row −19, 44
-      tiles apart, which is 1408 px against a ~720 px window. Either the criterion means the
-      tower's _spire_ (which rises 22 tiles above its base and would be visible from much
-      further south), or the town has to be shorter, or the criterion goes. Nothing in Phase 3
-      claimed it.
+- [x] ~~**§9's first acceptance criterion looks geometrically unreachable.**~~ **Confirmed
+      unreachable and reworded 2026-07-26** — see the Phase 7 note. The spire reading does not
+      rescue it: a spire rises *above* its base, which is the wrong direction. Retired in favour
+      of a criterion describing the arrival view the town actually has.
 - [ ] Do the town walls need real art (§7)? Phase 3 shipped them procedural —
       `drawTownWallTile` in `buildingTiles.ts`: coursed ashlar with a crenellated parapet on
       any run's exposed north face, phased off the tile's world-pixel column so the
@@ -1930,6 +2410,7 @@ in Phase 5.
 | 2026-07-25 | The plan states plots (west column, front row), not anchors       | Heights and widths come from the sprite manifest, so the plan never repeats a sprite's size and a re-scaled building keeps its frontage on the street. `assertTownPlotsDoNotOverlap` covers what that gives up: overlapping art is invisible in a screenshot, because the later sprite simply draws over the earlier one.                                                                                                                                                                                                                                                                                        |
 | 2026-07-25 | Bypass routing runs over the circus only, not the town            | It fires on a structure with paving north _and_ south, which under a street plan is every town building by design; it would have paved a detour column through the gardens and lanes the plan just laid out.                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-25 | The circus routes to the nearest **gate**, not the town centre    | A gate exit is a tile the gate's own highway paves, so the joint cannot miss. This retires the four-round `approachRoadStopOffset` saga rather than adjusting it.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 2026-07-26 | Dropped the "plaza → any door in under 12 s" acceptance criterion      | Ryan does not care about it. It was also the last consumer of the farthest-door metric, whose own target of ~28 the Phase 3 review had already shown to be geometrically unreachable in a 55 × 40 town — the corner of that rectangle is 34 tiles from its centre. Both are retired rather than left failing.                                                                                                                                                                                          |
 | 2026-07-25 | `townMetrics` counts the tower by its base, not its whole art     | 21 of the spire's 23 rows now overhang the fields north of the wall. Counting them would report a town measured at 55 × 40 as 61 tall and attribute 138 tiles of ground to a building standing on 12. Both rects are kept (`rect` / `artRect`) and `?townmap` draws the overhang faintly.                                                                                                                                                                                                                                                                                                                        |
 | 2026-07-25 | `DIRT_PATCH` renders as `lane`, not as the `dirt` material        | It is a decoration drawn over a road. As its own material the surrounding lane wins all four corners and the mask erases it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 2026-07-25 | Dropped `overworld_tileset` from the manifest                     | Nothing draws it once the four call sites move to the generated sheet, and it was a 1 MB image loaded at every startup. The PNG stays on disk — the generated palettes were sampled from it.                                                                                                                                                                                                                                                                                                                                                                                                                     |
