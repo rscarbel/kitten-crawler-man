@@ -8,13 +8,23 @@
  *
  * The in-game `?tiles` route is the reviewable version; this exists so a seam can
  * be checked without a browser.
+ *
+ * It judges the mask *art*, not the renderer's use of it: the blob view classifies
+ * corners on the tile grid, one whole-tile mask per tile, where the game
+ * classifies on the dual grid and composites four quarters. Boundaries here sit
+ * half a tile off where the game puts them. Use `?tiles` to judge placement.
  */
 import { createCanvas, type CanvasRenderingContext2D as NodeCtx } from 'canvas';
 import { writeFileSync } from 'fs';
 import { Surface, TILE_PX } from './tilegen/raster.js';
 import { MATERIALS, getMaterial, paintPatch } from './tilegen/materials.js';
 import { slicePatch } from './tilegen/sheet.js';
-import { buildCornerMask, CORNER_MASK_COUNT, CORNER_ALL } from './tilegen/masks.js';
+import {
+  buildCornerMask,
+  CORNER_MASK_COUNT,
+  CORNER_ALL,
+  MASK_PATCH_TILES,
+} from './tilegen/masks.js';
 
 const REPEAT = 4;
 const LABEL_HEIGHT = 18;
@@ -46,8 +56,8 @@ function paintTiles(materialId: string): TileSet {
 function frameFor(set: TileSet, tx: number, ty: number): Surface {
   const n = set.patchTiles;
   const variant =
-    (((Math.imul(Math.floor(tx / n), 73856093) ^ Math.imul(Math.floor(ty / n), 19349663)) >>> 0) %
-      set.variants);
+    ((Math.imul(Math.floor(tx / n), 73856093) ^ Math.imul(Math.floor(ty / n), 19349663)) >>> 0) %
+    set.variants;
   const phase = (((ty % n) + n) % n) * n + (((tx % n) + n) % n);
   return set.tiles[variant * n * n + phase];
 }
@@ -102,7 +112,7 @@ function renderTransitions(): void {
     for (let bits = 0; bits < CORNER_MASK_COUNT; bits++) {
       const composed = base.clone();
       if (bits === CORNER_ALL) composed.fill((x, y) => over.get(x, y));
-      else if (bits !== 0) composed.compositeMasked(over, buildCornerMask(bits, SEED + bits));
+      else if (bits !== 0) composed.compositeMasked(over, buildCornerMask(bits, SEED));
       drawSurface(
         ctx,
         composed,
@@ -153,9 +163,19 @@ function renderBlob(): void {
         const top = frameFor(over, tx, ty);
         composed.fill((x, y) => top.get(x, y));
       } else if (bits !== 0) {
-        // Mask seed must depend only on `bits`, never on tile position, or the
-        // warped boundary would differ between neighbours and tear.
-        composed.compositeMasked(frameFor(over, tx, ty), buildCornerMask(bits, SEED + bits));
+        // One warp seed for every combination, and the patch phase from the tile's
+        // position — the two things the shipped masks depend on. Seeding per
+        // combination, as this tool used to, tears the boundary wherever two
+        // neighbours hold different combinations.
+        composed.compositeMasked(
+          frameFor(over, tx, ty),
+          buildCornerMask(
+            bits,
+            SEED,
+            ((tx % MASK_PATCH_TILES) + MASK_PATCH_TILES) % MASK_PATCH_TILES,
+            ((ty % MASK_PATCH_TILES) + MASK_PATCH_TILES) % MASK_PATCH_TILES,
+          ),
+        );
       }
       drawSurface(ctx, composed, tx * TILE_PX, ty * TILE_PX);
     }

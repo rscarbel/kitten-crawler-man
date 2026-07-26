@@ -11,7 +11,8 @@ import {
   METAL_WALL,
   RUINED_WALL,
 } from '../tileTypes';
-import { drawOverworldSprite, overworldFrame, overworldRotation } from './terrainTiles';
+import { drawGroundTile } from './groundTiles';
+import { GROUND_FALLBACK_COLOR } from '../town/groundMaterials';
 
 const WALL_FOUNDATION_HEIGHT = 3;
 const WALL_CORNICE_SHADOW_DEPTH = 1;
@@ -259,8 +260,13 @@ export function drawBuildingTile(
       case ROOF_CIRCUS_RED:
       case ROOF_CIRCUS_BLUE:
       case ROOF_CIRCUS_PURPLE:
-        ctx.fillStyle = '#6de89d';
+        // The ground a building stands on, for wherever its art is transparent.
+        // The flat fill underneath is a backstop: a tile buried deep enough
+        // inside a building for `drawGroundTile` to find no material would
+        // otherwise leave the chunk canvas untouched, i.e. transparent.
+        ctx.fillStyle = GROUND_FALLBACK_COLOR.grass;
         ctx.fillRect(sx, sy, ts, ts);
+        drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
         return true;
       case METAL_WALL:
         ctx.fillStyle = '#1a1e22';
@@ -1253,16 +1259,7 @@ export function drawBuildingTile(
     case RUINED_WALL: {
       // The real grass sprite shows through the broken top, so the fragment
       // blends with the lawn instead of reading as a solid square.
-      drawOverworldSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'grass',
-        overworldFrame(tx, ty),
-        '#6de89d',
-        overworldRotation(tx, ty),
-      );
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
 
       // Deterministic per-tile hash drives the jagged top silhouette and crack pattern.
       const h1 = (tx * RUIN_HASH_X + ty * RUIN_HASH_Y) % 97;

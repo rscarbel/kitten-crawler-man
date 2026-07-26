@@ -291,7 +291,10 @@ const gravel: Material = {
   id: 'gravel',
   label: 'Gravel yard',
   patchTiles: 2,
-  variants: 3,
+  // Four, not three: the eye finds a repeat after patchTiles * sqrt(variants)
+  // tiles, and three variants of a 2x2 patch gives 3.5 — under the four the
+  // town's ground is held to, and gravel is a yard material, laid in stretches.
+  variants: 4,
   paint: (ctx) => {
     paintNoiseGround(ctx, { ...GRAVEL_RAMP, mid: GRAVEL_RAMP.shadow }, GRAVEL_SUBSTRATE);
     const cells = GRAVEL_CELLS_PER_TILE * (ctx.size / TILE_PX);
@@ -364,7 +367,10 @@ function paintSetts(ctx: PaintContext, options: SettOptions): void {
       ) -
         0.5) *
       SETT_FACE_GRAIN_STRENGTH;
-    const face = sampleRamp(options.ramp, SETT_TONE_FLOOR + cell.cellHash * SETT_TONE_SPREAD + faceGrain);
+    const face = sampleRamp(
+      options.ramp,
+      SETT_TONE_FLOOR + cell.cellHash * SETT_TONE_SPREAD + faceGrain,
+    );
     const lit = shade(face, reliefFactor(cell.offsetX, cell.offsetY, options.reliefStrength));
 
     return mix(lit, sampleRamp(options.jointRamp, cell.cellHash * SETT_TONE_SPREAD), jointBlend);
@@ -400,7 +406,8 @@ const lane: Material = {
       const y = hashLattice(i, 22, ctx.detail) * ctx.size;
       // Weeds only where a joint actually is, so growth follows the stonework.
       const cell = ctx.noise.worley(x, y, cells, ctx.structure, 0.85);
-      if (cell.secondNearest - cell.nearest > LANE_JOINT_WIDTH * LANE_JOINT_WEED_THRESHOLD) continue;
+      if (cell.secondNearest - cell.nearest > LANE_JOINT_WIDTH * LANE_JOINT_WEED_THRESHOLD)
+        continue;
       wrappedStroke(
         ctx.surface,
         x,
@@ -681,11 +688,15 @@ const dungeonRubble: Material = {
   patchTiles: 2,
   variants: 4,
   paint: (ctx) => {
-    paintNoiseGround(ctx, { ...DUNGEON_STONE_RAMP, mid: DUNGEON_STONE_RAMP.shadow }, {
-      patchPeriod: 8,
-      patchWeight: 0.4,
-      contrast: 1,
-    });
+    paintNoiseGround(
+      ctx,
+      { ...DUNGEON_STONE_RAMP, mid: DUNGEON_STONE_RAMP.shadow },
+      {
+        patchPeriod: 8,
+        patchWeight: 0.4,
+        contrast: 1,
+      },
+    );
     paintSpeckles(ctx, ctx.detail + 79, {
       count: 160,
       minRadius: 0.7,

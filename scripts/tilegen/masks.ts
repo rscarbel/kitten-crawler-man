@@ -21,16 +21,37 @@
  * and no adjacency rules.
  *
  * The organic wobble is added by a torus-wrapped noise field (see noise.ts). Being
- * wrapped and shared by every tile, the perturbation a tile applies at x = 63 is
- * the value its neighbour applies at x = 0 — the same continuity argument as the
- * base textures. So the boundary wanders without ever tearing at a tile edge.
+ * wrapped and shared by every mask, the perturbation one tile applies at the end
+ * of the field is the value its neighbour applies at the start — the same
+ * continuity argument as the base textures. So the boundary wanders without ever
+ * tearing at a tile edge.
  */
 
 import { TILE_PX } from './raster.js';
 import { NoiseField } from './noise.js';
 
-/** Masks are classified per game tile, so they always wrap at one tile. */
-const maskNoise = new NoiseField(TILE_PX);
+/**
+ * Tiles across one mask patch.
+ *
+ * The classification is per tile, but the *warp* must not be. Wrapped at a single
+ * tile it gives every boundary in the world the same 64px profile, so a street
+ * edge scallops on a fixed tile rhythm — the grid this tileset exists to remove,
+ * and exactly the trap the ground generator's first rule warns about. The warp is
+ * therefore sampled from a patch-sized wrapped field and sliced, as the materials
+ * are, and a boundary only repeats every `MASK_PATCH_TILES` tiles.
+ *
+ * Three keeps the sheet one row of 144 frames — 9216px, well inside any canvas
+ * dimension limit — and lets the warp carry features up to 48px across, which one
+ * tile of wrap cannot hold.
+ */
+export const MASK_PATCH_TILES = 3;
+
+const MASK_PATCH_PX = MASK_PATCH_TILES * TILE_PX;
+
+/** Frames per corner combination: one per position of a tile within the patch. */
+export const MASK_PHASE_COUNT = MASK_PATCH_TILES * MASK_PATCH_TILES;
+
+const maskNoise = new NoiseField(MASK_PATCH_PX);
 
 /** Corner bits. A set bit means that corner belongs to the upper material. */
 export const CORNER_NW = 1;
@@ -38,7 +59,7 @@ export const CORNER_NE = 2;
 export const CORNER_SE = 4;
 export const CORNER_SW = 8;
 
-/** Number of distinct corner combinations, i.e. frames in a transition row. */
+/** Number of distinct corner combinations. */
 export const CORNER_MASK_COUNT = 16;
 
 /** Every corner set — the upper material covers the tile completely. */
@@ -58,17 +79,80 @@ const COVERAGE_THRESHOLD = 0.5;
  */
 const EDGE_FEATHER = 0.07;
 
-/** How far the noise field may push the boundary, in field units. */
-const BOUNDARY_WARP_AMPLITUDE = 0.34;
-const BOUNDARY_WARP_OCTAVES = 3;
-const BOUNDARY_WARP_BASE_PERIOD = 2;
+/**
+ * How far the noise field may push the boundary, in field units.
+ *
+ * Raising it eventually pulls a corner whose value is a full 1 back under the
+ * threshold, punching holes through a tile that is supposed to be entirely the
+ * upper material. Where that happens depends on the realised field — it is not
+ * `2 * (COVERAGE_THRESHOLD - EDGE_FEATHER)`, which assumes a warp symmetric about
+ * zero, and a mean-centred field is not — so `buildMaskSet`'s own assertion is
+ * the check that matters, not arithmetic here.
+ *
+ * The octave periods must divide the patch size (see noise.ts): 4, 8, 16 and 32
+ * all divide 192.
+ */
+const BOUNDARY_WARP_AMPLITUDE = 0.65;
+const BOUNDARY_WARP_OCTAVES = 4;
+const BOUNDARY_WARP_BASE_PERIOD = 4;
 
 /**
  * Bilinear interpolation puts a flat 0.5 ridge along the anti-diagonal when the
  * two set corners are opposite, which the warp would then dissolve into noise.
  * Pushing the field down keeps the two corners reading as separate wedges.
+ *
+ * Applied through `interiorWindow`, never flat: a constant bias would sit the
+ * whole diagonal mask 0.18 below a neighbour that shares its two corners, and
+ * their shared edge would tear by the full alpha range.
  */
 const DIAGONAL_SEPARATION_BIAS = 0.18;
+
+/**
+ * Weight that is 1 at the tile centre and 0 all round its border, so anything
+ * multiplied by it can shape the tile's interior without moving the boundary
+ * where a neighbour has to agree with it.
+ */
+function interiorWindow(u: number, v: number): number {
+  const acrossTile = 4 * u * (1 - u);
+  const downTile = 4 * v * (1 - v);
+  return acrossTile * downTile;
+}
+
+/** One warp field per seed — every combination and every phase shares it. */
+const warpFields = new Map<number, Float64Array>();
+
+/**
+ * The boundary displacement, per pixel of a whole patch, centred on zero.
+ *
+ * Centring is not tidiness. `fbm` averages 0.5 across many realisations but not
+ * across one finite field, and whatever the realised mean happens to be biases
+ * *every* boundary in *every* mask the same way — a systematic erosion of one
+ * material rather than a wander. Subtracting the field's own mean removes the
+ * dependence on that luck, and because the mean is a single number shared by
+ * every frame it cannot reintroduce a seam.
+ */
+function boundaryWarpField(seed: number): Float64Array {
+  const cached = warpFields.get(seed);
+  if (cached !== undefined) return cached;
+
+  const field = new Float64Array(MASK_PATCH_PX * MASK_PATCH_PX);
+  let total = 0;
+  for (let y = 0; y < MASK_PATCH_PX; y++) {
+    for (let x = 0; x < MASK_PATCH_PX; x++) {
+      const sample = maskNoise.fbm(x, y, seed, BOUNDARY_WARP_OCTAVES, BOUNDARY_WARP_BASE_PERIOD);
+      field[y * MASK_PATCH_PX + x] = sample;
+      total += sample;
+    }
+  }
+
+  const mean = total / field.length;
+  for (let index = 0; index < field.length; index++) {
+    field[index] = (field[index] - mean) * BOUNDARY_WARP_AMPLITUDE;
+  }
+
+  warpFields.set(seed, field);
+  return field;
+}
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
   const t = (value - edge0) / (edge1 - edge0);
@@ -81,10 +165,11 @@ function cornerValue(bits: number, corner: number): number {
 }
 
 /**
- * Builds the per-pixel coverage of the upper material for one corner combination.
- * Returns alpha in [0, 1], row-major, TILE_PX x TILE_PX.
+ * Builds the per-pixel coverage of the upper material for one corner combination
+ * at one position within the warp patch. Returns alpha in [0, 1], row-major,
+ * TILE_PX x TILE_PX.
  */
-export function buildCornerMask(bits: number, seed: number): Float64Array {
+export function buildCornerMask(bits: number, seed: number, phaseX = 0, phaseY = 0): Float64Array {
   const mask = new Float64Array(TILE_PX * TILE_PX);
 
   const northWest = cornerValue(bits, CORNER_NW);
@@ -93,6 +178,7 @@ export function buildCornerMask(bits: number, seed: number): Float64Array {
   const southWest = cornerValue(bits, CORNER_SW);
 
   const isDiagonal = bits === DIAGONAL_NW_SE || bits === DIAGONAL_NE_SW;
+  const warp = boundaryWarpField(seed);
 
   for (let y = 0; y < TILE_PX; y++) {
     // Sample at pixel centres so the field is symmetric across the tile.
@@ -104,17 +190,13 @@ export function buildCornerMask(bits: number, seed: number): Float64Array {
       const bottom = southWest + (southEast - southWest) * u;
       let field = top + (bottom - top) * v;
 
-      if (isDiagonal) field -= DIAGONAL_SEPARATION_BIAS;
+      if (isDiagonal) field -= DIAGONAL_SEPARATION_BIAS * interiorWindow(u, v);
 
-      const warp =
-        (maskNoise.fbm(x, y, seed, BOUNDARY_WARP_OCTAVES, BOUNDARY_WARP_BASE_PERIOD) -
-          COVERAGE_THRESHOLD) *
-        BOUNDARY_WARP_AMPLITUDE;
-
+      const warpIndex = (phaseY * TILE_PX + y) * MASK_PATCH_PX + (phaseX * TILE_PX + x);
       mask[y * TILE_PX + x] = smoothstep(
         COVERAGE_THRESHOLD - EDGE_FEATHER,
         COVERAGE_THRESHOLD + EDGE_FEATHER,
-        field + warp,
+        field + warp[warpIndex],
       );
     }
   }
@@ -136,23 +218,158 @@ export function boundaryProximity(mask: Float64Array): Float64Array {
   return proximity;
 }
 
+/** A mask that should be solid must be solid; anything less shows as a hole. */
+const SOLID_ALPHA = 1;
+
+/** Which of a mask's four corners each edge of the tile is interpolated from. */
+const EDGE_CORNERS = {
+  north: [CORNER_NW, CORNER_NE],
+  south: [CORNER_SW, CORNER_SE],
+  west: [CORNER_NW, CORNER_SW],
+  east: [CORNER_NE, CORNER_SE],
+} as const;
+
+function shares(a: number, b: number, cornersA: readonly number[], cornersB: readonly number[]) {
+  return cornersA.every((corner, index) => ((a & corner) !== 0) === ((b & cornersB[index]) !== 0));
+}
+
+export interface MaskSeamReport {
+  /** Worst alpha step across the joint between two masks that can be adjacent. */
+  readonly joint: number;
+  /** Worst alpha step between neighbouring pixels *inside* a mask. */
+  readonly interior: number;
+  /** Above 1 the joint is the hardest line in the set, which reads as a tear. */
+  readonly ratio: number;
+}
+
 /**
- * The full mask set, in corner-bit order.
+ * Measures the joint between every pair of masks that can end up side by side
+ * against the masks' own strongest internal step.
+ *
+ * The absolute step is the wrong yardstick, for the same reason it is on the
+ * material patches: a mask legitimately contains a hard line — that is what a
+ * material boundary is — and the joint may land on one. What must not happen is
+ * the joint being *harder* than anything inside, which is what a discontinuous
+ * warp produces. Seeding each combination separately scores far above 1 here;
+ * one shared field scores comfortably below it.
+ */
+export function auditMaskSeams(masks: ReadonlyArray<Float64Array>): MaskSeamReport {
+  const frameAt = (bits: number, phaseX: number, phaseY: number): Float64Array => {
+    const px = ((phaseX % MASK_PATCH_TILES) + MASK_PATCH_TILES) % MASK_PATCH_TILES;
+    const py = ((phaseY % MASK_PATCH_TILES) + MASK_PATCH_TILES) % MASK_PATCH_TILES;
+    return masks[bits * MASK_PHASE_COUNT + py * MASK_PATCH_TILES + px];
+  };
+
+  // Measured per axis and combined at the end: a vertical joint has to be judged
+  // against vertical steps. Mixing them flatters whichever axis is smoother.
+  let jointAcross = 0;
+  let jointDown = 0;
+  let interiorAcross = 0;
+  let interiorDown = 0;
+
+  for (let phaseX = 0; phaseX < MASK_PATCH_TILES; phaseX++) {
+    for (let phaseY = 0; phaseY < MASK_PATCH_TILES; phaseY++) {
+      for (let bits = 0; bits < CORNER_MASK_COUNT; bits++) {
+        const frame = frameAt(bits, phaseX, phaseY);
+        for (let y = 0; y < TILE_PX; y++) {
+          for (let x = 0; x < TILE_PX; x++) {
+            if (x < TILE_PX - 1) {
+              interiorAcross = Math.max(
+                interiorAcross,
+                Math.abs(frame[y * TILE_PX + x] - frame[y * TILE_PX + x + 1]),
+              );
+            }
+            if (y < TILE_PX - 1) {
+              interiorDown = Math.max(
+                interiorDown,
+                Math.abs(frame[y * TILE_PX + x] - frame[(y + 1) * TILE_PX + x]),
+              );
+            }
+          }
+        }
+
+        for (let other = 0; other < CORNER_MASK_COUNT; other++) {
+          if (shares(bits, other, EDGE_CORNERS.east, EDGE_CORNERS.west)) {
+            const right = frameAt(other, phaseX + 1, phaseY);
+            for (let y = 0; y < TILE_PX; y++) {
+              jointAcross = Math.max(
+                jointAcross,
+                Math.abs(frame[y * TILE_PX + TILE_PX - 1] - right[y * TILE_PX]),
+              );
+            }
+          }
+          if (shares(bits, other, EDGE_CORNERS.south, EDGE_CORNERS.north)) {
+            const below = frameAt(other, phaseX, phaseY + 1);
+            for (let x = 0; x < TILE_PX; x++) {
+              jointDown = Math.max(
+                jointDown,
+                Math.abs(frame[(TILE_PX - 1) * TILE_PX + x] - below[x]),
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const joint = Math.max(jointAcross, jointDown);
+  const interior = Math.max(interiorAcross, interiorDown);
+  const ratio = Math.max(jointAcross / interiorAcross, jointDown / interiorDown);
+  return { joint, interior, ratio };
+}
+
+/**
+ * The full mask set: every corner combination at every phase of the warp patch.
  *
  * Shipped as its own sheet rather than baked into per-pair transition tiles.
  * Baking would need one row per material pair *per patch phase*, which explodes
  * once materials are generated as multi-tile patches — and it would fix at build
  * time which pairs a level is allowed to blend. Compositing at load instead means
- * any material can meet any other, on any floor, at any patch alignment, from
- * sixteen 64x64 frames.
+ * any material can meet any other, on any floor, at any patch alignment.
  *
- * Every mask uses a seed derived only from its corner bits: two neighbouring
- * tiles must perturb their shared boundary identically or the edge tears.
+ * Every frame shares one warp field. Two tiles either side of a boundary rarely
+ * hold the same corner combination — a straight edge that turns a corner puts a
+ * half mask next to a wedge — and the continuity argument above only holds while
+ * both perturb their shared edge identically, which a per-combination seed does
+ * not do: measured over every adjacent pair on both axes, one seed per mask tears
+ * by the full alpha range.
+ *
+ * Frames are ordered combination-major, then row-major within the patch — the
+ * convention the material sheets use, with the sixteen combinations in the role
+ * of variants — so the frame for a dual cell at (cx, cy) is
+ * `bits * MASK_PHASE_COUNT + (cy mod n) * n + (cx mod n)`.
  */
 export function buildMaskSet(seedBase: number): Float64Array[] {
   const masks: Float64Array[] = [];
   for (let bits = 0; bits < CORNER_MASK_COUNT; bits++) {
-    masks.push(buildCornerMask(bits, seedBase + bits));
+    for (let phaseY = 0; phaseY < MASK_PATCH_TILES; phaseY++) {
+      for (let phaseX = 0; phaseX < MASK_PATCH_TILES; phaseX++) {
+        masks.push(buildCornerMask(bits, seedBase, phaseX, phaseY));
+      }
+    }
   }
+
+  // The warp is centred, not symmetric, so the amplitude's headroom cannot be
+  // derived — it has to be checked. A hole in the solid mask would show the
+  // lower material through the middle of a region.
+  const solidStart = CORNER_ALL * MASK_PHASE_COUNT;
+  for (let phase = 0; phase < MASK_PHASE_COUNT; phase++) {
+    const solid = masks[solidStart + phase];
+    for (const alpha of solid) {
+      if (alpha < SOLID_ALPHA) {
+        throw new Error(
+          `BOUNDARY_WARP_AMPLITUDE ${BOUNDARY_WARP_AMPLITUDE} punches holes in the solid mask`,
+        );
+      }
+    }
+    for (const alpha of masks[phase]) {
+      if (alpha > 0) {
+        throw new Error(
+          `BOUNDARY_WARP_AMPLITUDE ${BOUNDARY_WARP_AMPLITUDE} leaks coverage into the empty mask`,
+        );
+      }
+    }
+  }
+
   return masks;
 }

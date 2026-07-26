@@ -66,13 +66,13 @@ usable. Three independent measurements confirm this.
 luminance — a tileable texture scores ~0, a framed illustration scores strongly
 negative:
 
-| row               | c0        | c1        | c2        | c3    | c4    | c6    | c11   |
-| ----------------- | --------- | --------- | --------- | ----- | ----- | ----- | ----- |
-| r0 `grass`        | **+2.7**  | **+1.4**  | **+0.4**  | −21.6 | −33.7 | −24.4 | −15.3 |
-| r3 `village_streets` | **+1.8** | **+0.1** | **+2.7**  | −35.0 | −49.5 | −39.2 | −26.5 |
-| r4 `sand`         | −26.8     | −34.7     | −40.1     | −58.2 | −61.0 | −60.4 | −49.8 |
-| r6 `cobblestone`  | −15.8     | −24.9     | −26.6     | −40.8 | −41.5 | −25.8 | −17.5 |
-| r7 `tile`         | −26.8     | −40.0     | −39.5     | −51.0 | −49.4 | −42.8 | −40.7 |
+| row                  | c0       | c1       | c2       | c3    | c4    | c6    | c11   |
+| -------------------- | -------- | -------- | -------- | ----- | ----- | ----- | ----- |
+| r0 `grass`           | **+2.7** | **+1.4** | **+0.4** | −21.6 | −33.7 | −24.4 | −15.3 |
+| r3 `village_streets` | **+1.8** | **+0.1** | **+2.7** | −35.0 | −49.5 | −39.2 | −26.5 |
+| r4 `sand`            | −26.8    | −34.7    | −40.1    | −58.2 | −61.0 | −60.4 | −49.8 |
+| r6 `cobblestone`     | −15.8    | −24.9    | −26.6    | −40.8 | −41.5 | −25.8 | −17.5 |
+| r7 `tile`            | −26.8    | −40.0    | −39.5    | −51.0 | −49.4 | −42.8 | −40.7 |
 
 Only **row 0 cols 0–2** and **row 3 cols 0–2** are frame-free — exactly the tiles that
 were hand-repaired, and exactly the ones the game draws. Every other tile would paint
@@ -82,16 +82,16 @@ stone, concrete) are unusable in their entirety**, column 0 included.
 **(b) Even the repaired tiles don't truly tile.** Wrap error at the joint (a genuinely
 seamless tile scores 0–3):
 
-| Tile                       | left↔right | top↔bottom |
-| -------------------------- | ---------- | ---------- |
-| grass col0                 | 6.3        | 5.8        |
-| grass col1                 | 3.3        | **9.8**    |
-| grass col2                 | 4.3        | **9.2**    |
-| grass 3-wide strip as a whole | 7.1     | 8.3        |
-| streets col0               | **10.2**   | 0.2        |
-| streets col1               | **10.8**   | 0.2        |
+| Tile                          | left↔right | top↔bottom |
+| ----------------------------- | ---------- | ---------- |
+| grass col0                    | 6.3        | 5.8        |
+| grass col1                    | 3.3        | **9.8**    |
+| grass col2                    | 4.3        | **9.2**    |
+| grass 3-wide strip as a whole | 7.1        | 8.3        |
+| streets col0                  | **10.2**   | 0.2        |
+| streets col1                  | **10.8**   | 0.2        |
 
-The repair work made the strip blend *left-to-right within itself*, but nothing
+The repair work made the strip blend _left-to-right within itself_, but nothing
 wraps. The street tiles happen to be vertically seamless (0.2) and horizontally
 broken (~10) — which is why the ground reads as **squares if you don't rotate, and
 crosses if you do**. Rotation doesn't fix a discontinuity, it just changes which axis
@@ -105,9 +105,10 @@ sliced out of a generated image on a non-integer grid.
 **Consequence:** the ground art has to be replaced, not re-used harder. See §7 — this
 is the foundation the rest of the visual work sits on.
 
-The `overworldRotation` call in `src/map/tiles/terrainTiles.ts` is still worth
-deleting (it inflates seam error from ~6 to ~19–31 on tiles that were repaired to butt
-together horizontally), but on its own it only trades one artifact for another.
+`overworldRotation` in `src/map/tiles/terrainTiles.ts` inflated seam error from ~6 to
+~19–31 on tiles that had been repaired to butt together horizontally. Deleted in Phase
+2 along with the rest of this sheet's use — on its own it would only have traded one
+artifact for another.
 
 ### 1.4 Buildings are stickers on a lawn
 
@@ -120,7 +121,7 @@ stands on, and no two buildings share a frontage line.
 
 `overworld_main_tower` is 6 × 23 tiles of art but only blocks its bottom two rows. Its
 spire overhangs 22 tiles of ground to the north, so anything placed there is hidden
-behind it. Placing the tower in the *middle* of town (current anchor `cy − 15`) sterilises
+behind it. Placing the tower in the _middle_ of town (current anchor `cy − 15`) sterilises
 a 6 × 22 corridor through the town centre and pushes the north buildings outward. This
 is a large, non-obvious driver of the current spread.
 
@@ -175,15 +176,15 @@ hand-repair.
 **C. Expand from 2 materials to 7.** Introduce a `GroundMaterial` enum. Each material
 becomes a row of the new sheet:
 
-| Material      | Used for                                | Notes                                    |
-| ------------- | --------------------------------------- | ---------------------------------------- |
-| `PLAZA_FLAG`  | market plaza, temple terrace            | large cut slabs, worn joints             |
-| `MAIN_COBBLE` | Market Street, King's Road              | rounded setts, cart ruts, wheel polish   |
-| `LANE_STREET` | side lanes, building frontages          | smaller mixed setts, mud between stones  |
-| `YARD_GRAVEL` | workyards, stableyard, gate aprons      | loose chip, scattered larger stones      |
-| `ALLEY_DIRT`  | alleys, back paths, farm tracks         | packed earth, puddles, footprints        |
-| `VERGE`       | street verges, wall bases, garden edges | grass invaded by stone and weeds         |
-| `FIELD_GRASS` | outside the walls, gardens, greens      | the PoC in §7                            |
+| Material      | Used for                                | Notes                                   |
+| ------------- | --------------------------------------- | --------------------------------------- |
+| `PLAZA_FLAG`  | market plaza, temple terrace            | large cut slabs, worn joints            |
+| `MAIN_COBBLE` | Market Street, King's Road              | rounded setts, cart ruts, wheel polish  |
+| `LANE_STREET` | side lanes, building frontages          | smaller mixed setts, mud between stones |
+| `YARD_GRAVEL` | workyards, stableyard, gate aprons      | loose chip, scattered larger stones     |
+| `ALLEY_DIRT`  | alleys, back paths, farm tracks         | packed earth, puddles, footprints       |
+| `VERGE`       | street verges, wall bases, garden edges | grass invaded by stone and weeds        |
+| `FIELD_GRASS` | outside the walls, gardens, greens      | the PoC in §7                           |
 
 **D. Soften every material boundary.** Two cheap techniques, both computed inside the
 existing 16-tile chunk cache (`TileRenderer`) so there is no per-frame cost:
@@ -198,7 +199,7 @@ existing 16-tile chunk cache (`TileRenderer`) so there is no per-frame cost:
 noise (wavelength ~24 tiles, ±6% brightness) multiplied over ground tiles, sampled in
 **world space** so it does not repeat per tile.
 
-This is the one artifact per-tile seamlessness does *not* solve: if each tile carries
+This is the one artifact per-tile seamlessness does _not_ solve: if each tile carries
 its own large-scale tonal pattern, the variants themselves read as blocks even though
 the edges are perfect. The §7 proof of concept shows exactly this — the grass is
 flawless, the dirt shows faint tonal blocking. A world-space layer on top is the fix,
@@ -229,21 +230,21 @@ Replace the `+` crossroads with a hierarchy:
   its north side.
 
 **Move the tower to the town's north edge.** Its 22-tile spire then rises over the
-*wall and the fields beyond*, hiding nothing, and becomes a skyline landmark visible
+_wall and the fields beyond_, hiding nothing, and becomes a skyline landmark visible
 from the south gate. This alone recovers a 6 × 22 dead corridor from the town centre.
 
 ### 3.3 Districts
 
-| District          | Where            | Buildings                                                        | Character                                                      |
-| ----------------- | ---------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| **Civic Terrace** | north of plaza   | Town Center Tower                                                | Raised stone, banners, braziers, guards. Magistrate's seat.     |
-| **Garrison Row**  | north band       | The Barracks, Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge | Training posts, weapon racks, cart wheels. Blackwood Lodge sits at the end of a **dead-end alley** — the cult hideout it should always have been. |
-| **Market Plaza**  | centre           | —                                                                 | Fountain, stalls, notice board, fortune teller, benches, well, a shade tree, crates and crowd. |
-| **Plaza Ring**    | flanking plaza   | Temple of the Sky, Herb & Remedy, General Store, Sleeping Cat Inn | The four things a market square always has: faith, medicine, supplies, beds. |
-| **Market Row**    | south of plaza   | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil           | Smithy workyard with coal, anvil, quench trough; mead hall spilling benches onto the street. |
-| **Low Quarter**   | south band       | The Desperado Club, Signet's Ink, The Sunken Stump Pub            | Darker cobble, lanterns, a service alley, a bouncer's queue. Nightlife. |
-| **South Green**   | inside SE wall   | Miller's Farm                                                     | Fenced kitchen garden, hay bales, crop rows against the wall. |
-| **The Ruins**     | outside walls    | —                                                                 | Unchanged: ruin shells, rubble, ghouls, and the circus 70–90 tiles out. |
+| District          | Where          | Buildings                                                              | Character                                                                                                                                         |
+| ----------------- | -------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Civic Terrace** | north of plaza | Town Center Tower                                                      | Raised stone, banners, braziers, guards. Magistrate's seat.                                                                                       |
+| **Garrison Row**  | north band     | The Barracks, Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge | Training posts, weapon racks, cart wheels. Blackwood Lodge sits at the end of a **dead-end alley** — the cult hideout it should always have been. |
+| **Market Plaza**  | centre         | —                                                                      | Fountain, stalls, notice board, fortune teller, benches, well, a shade tree, crates and crowd.                                                    |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, Sleeping Cat Inn      | The four things a market square always has: faith, medicine, supplies, beds.                                                                      |
+| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                | Smithy workyard with coal, anvil, quench trough; mead hall spilling benches onto the street.                                                      |
+| **Low Quarter**   | south band     | The Desperado Club, Signet's Ink, The Sunken Stump Pub                 | Darker cobble, lanterns, a service alley, a bouncer's queue. Nightlife.                                                                           |
+| **South Green**   | inside SE wall | Miller's Farm                                                          | Fenced kitchen garden, hay bales, crop rows against the wall.                                                                                     |
+| **The Ruins**     | outside walls  | —                                                                      | Unchanged: ruin shells, rubble, ghouls, and the circus 70–90 tiles out.                                                                           |
 
 ### 3.4 Plots and frontage
 
@@ -356,38 +357,38 @@ legend:  # plaza   + civic terrace   = main street   : lane   , alley
 ~~WWWWWWWWWWWWWWWWWWWWWWWWWWGGGGWWWWWWWWWWWWWWWWWWWWWWWWWWW~~   south gate
 ```
 
-| Key | Building              | Sprite                 | Tiles (relative to plaza centre) |
-| --- | --------------------- | ---------------------- | -------------------------------- |
+| Key | Building              | Sprite                 | Tiles (relative to plaza centre)    |
+| --- | --------------------- | ---------------------- | ----------------------------------- |
 | T   | Town Center Tower     | `overworld_main_tower` | x −4..1, y −35..−13 (base −14..−13) |
-| a   | Shepherd's Cabin      | `village_house_1`      | x −25..−19, y −15..−10           |
-| b   | Blackwood Lodge       | `village_house_2`      | x −17..−11, y −15..−10           |
-| e   | The Barracks          | `barracks`             | x 9..16, y −15..−10              |
-| f   | Cartwright's Workshop | `village_house_4`      | x 18..25, y −16..−10             |
-| i   | Temple of the Sky     | `temple`               | x −25..−18, y −9..−3             |
-| g   | Herb & Remedy         | `village_house_1`      | x −16..−10, y −8..−3             |
-| d   | General Store         | `shop`                 | x 10..17, y −7..−3               |
-| k   | The Sleeping Cat Inn  | `small_inn`            | x 19..26, y −8..−3               |
-| c   | Old Hilda's Cottage   | `village_house_3`      | x −25..−19, y −2..3              |
-| h   | The Horned Flagon     | `tavern_2`             | x −18..−11, y −1..3              |
-| j   | The Rusty Anvil       | `blacksmith`           | x 10..17, y −1..3                |
-| l   | The Sunken Stump Pub  | `tavern_1`             | x −25..−18, y 14..18             |
-| o   | Signet's Ink          | `tattoo_parlor`        | x −16..−9, y 14..18              |
-| m   | The Desperado Club    | `desperado_club`       | x 3..14, y 9..18                 |
-| n   | Miller's Farm         | `village_house_4`      | x 16..23, y 12..18               |
+| a   | Shepherd's Cabin      | `village_house_1`      | x −25..−19, y −15..−10              |
+| b   | Blackwood Lodge       | `village_house_2`      | x −17..−11, y −15..−10              |
+| e   | The Barracks          | `barracks`             | x 9..16, y −15..−10                 |
+| f   | Cartwright's Workshop | `village_house_4`      | x 18..25, y −16..−10                |
+| i   | Temple of the Sky     | `temple`               | x −25..−18, y −9..−3                |
+| g   | Herb & Remedy         | `village_house_1`      | x −16..−10, y −8..−3                |
+| d   | General Store         | `shop`                 | x 10..17, y −7..−3                  |
+| k   | The Sleeping Cat Inn  | `small_inn`            | x 19..26, y −8..−3                  |
+| c   | Old Hilda's Cottage   | `village_house_3`      | x −25..−19, y −2..3                 |
+| h   | The Horned Flagon     | `tavern_2`             | x −18..−11, y −1..3                 |
+| j   | The Rusty Anvil       | `blacksmith`           | x 10..17, y −1..3                   |
+| l   | The Sunken Stump Pub  | `tavern_1`             | x −25..−18, y 14..18                |
+| o   | Signet's Ink          | `tattoo_parlor`        | x −16..−9, y 14..18                 |
+| m   | The Desperado Club    | `desperado_club`       | x 3..14, y 9..18                    |
+| n   | Miller's Farm         | `village_house_4`      | x 16..23, y 12..18                  |
 
 ### Target metrics
 
-| Metric                            | Today     | Target      |
-| --------------------------------- | --------- | ----------- |
-| Town bounding box                 | 74 × 73   | **55 × 40** |
-| Area                              | 5402      | **2200**    |
-| Built density                     | 16.5%     | **40.5%**   |
-| Farthest building door from plaza | ~48 tiles | **~28**     |
-| Ground materials in town          | 2         | **7**       |
+| Metric                            | Today               | Target                       |
+| --------------------------------- | ------------------- | ---------------------------- |
+| Town bounding box                 | 74 × 73             | **55 × 40**                  |
+| Area                              | 5402                | **2200**                     |
+| Built density                     | 16.5%               | **40.5%**                    |
+| Farthest building door from plaza | ~48 tiles           | **~28**                      |
+| Ground materials in town          | 2                   | **7**                        |
 | Usable variants per material      | 2–3 (hand-repaired) | **12–48 frames (generated)** |
-| Worst joint-to-interior ratio      | n/a (never wrapped) | **1.11 (limit 1.15)** |
-| Distinct outdoor prop types       | 3         | **15+**     |
-| Town safe radius                  | 55        | **~40**     |
+| Worst joint-to-interior ratio     | n/a (never wrapped) | **1.11 (limit 1.15)**        |
+| Distinct outdoor prop types       | 3                   | **15+**                      |
+| Town safe radius                  | 55                  | **~40**                      |
 
 ---
 
@@ -444,13 +445,13 @@ these strings across ~20 files.
 
 **Centre-relative offsets that must be re-tuned, not left stale.**
 
-| Consumer                    | Constants                                                            |
-| --------------------------- | -------------------------------------------------------------------- |
-| `market/vendorDefs.ts`      | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                      |
-| `TownPropSystem`            | `BOARD_SOUTH_OFFSET`, `FOUNTAIN_FLANK_ROW_OFFSET`, `BENCH_*_COL_OFFSET`, `FORTUNE_DX/DY` |
-| `TownLifeSystem`            | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES` |
-| `DungeonScene`              | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*` |
-| `OverworldGenerator`        | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`         |
+| Consumer               | Constants                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `market/vendorDefs.ts` | `WEST_STALL_DX`, `EAST_STALL_DX`, `STALL_ROW_DY`                                         |
+| `TownPropSystem`       | `BOARD_SOUTH_OFFSET`, `FOUNTAIN_FLANK_ROW_OFFSET`, `BENCH_*_COL_OFFSET`, `FORTUNE_DX/DY` |
+| `TownLifeSystem`       | `PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`                   |
+| `DungeonScene`         | `FOUNTAIN_AMBIENT_RADIUS_TILES`, `TOWN_SQUARE_AMBIENT_RADIUS_TILES`, `CITY_CROWD_*`      |
+| `OverworldGenerator`   | `TOWN_SAFE_RADIUS_TILES`, `RUINS_*`, `FOREST_MIN_DIST_TILES`                             |
 
 **Performance.** Ground transitions, scatter, noise and AO must be baked into the
 16-tile chunk cache in `TileRenderer`, never computed per frame. Overlay/decoration
@@ -468,7 +469,7 @@ this repo**, not prompted from an image model.
 Tileability is not an aesthetic property, it is a **mathematical** one: the pixels at
 x = 63 must be the neighbours of the pixels at x = 0. An image model has no mechanism
 to satisfy that constraint, which is why §1.3 measures what it measures, and why
-hand-repairing each tile is expensive and only ever gets you *close*.
+hand-repairing each tile is expensive and only ever gets you _close_.
 
 Sampling noise on a **torus** — a lattice whose coordinates wrap modulo the tile size —
 makes seamlessness true by construction. There is nothing to repair, nothing to check,
@@ -484,10 +485,10 @@ their manifest entries. Review in-game at `localhost:8080/?tiles`. The
 
 Fourteen materials ship today:
 
-| Sheet      | Materials                                                                                     |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| overworld  | grass, verge, dirt, gravel, lane, cobble, plaza                                                 |
-| dungeon    | plain (calm, jointless), flagstone, worn, mossy, wet, rubble, wall                               |
+| Sheet     | Materials                                                          |
+| --------- | ------------------------------------------------------------------ |
+| overworld | grass, verge, dirt, gravel, lane, cobble, plaza                    |
+| dungeon   | plain (calm, jointless), flagstone, worn, mossy, wet, rubble, wall |
 
 ### Method
 
@@ -537,14 +538,25 @@ upper material. Corners rather than edges is what buys diagonals: a tile with on
 its NW corner set draws a curved wedge, not an axis-aligned half.
 
 The masks ship as one shared sheet and are composited at load, not baked per
-material pair — baking would need a row per pair *per patch phase*, and would fix
+material pair — baking would need a row per pair _per patch phase_, and would fix
 at build time which pairs a level may blend. Compositing instead means any
-material can meet any other, on any floor, at any patch alignment, from sixteen
-64x64 frames.
+material can meet any other, on any floor, at any patch alignment, from one sheet
+of 64x64 frames — sixteen corner combinations at each of the warp patch's nine
+phases.
 
-The mask seed depends only on the corner bits, never on tile position: two
-neighbouring tiles must perturb their shared boundary identically or the edge
-tears.
+Two constraints on the warp, both found by measurement in Phase 2 and both
+counter-intuitive:
+
+- It must be **one field shared by every mask**, not seeded per combination. Two
+  tiles either side of a boundary usually hold _different_ corner combinations —
+  a straight edge that turns a corner puts a half mask beside a wedge — so a
+  per-combination seed tears the shared edge.
+- It must wrap over a **multi-tile patch**, exactly as the materials do. Wrapped
+  at one tile, every boundary in the world draws the same 64px contour and a
+  street edge scallops on the tile pitch.
+
+The generator audits both, on the same joint-to-interior yardstick as the
+material patches.
 
 ### Risk, stated honestly
 
@@ -571,16 +583,16 @@ deliberately first among the visible changes because it is the highest ratio of
 visual payoff to layout risk — and because everything else in the town sits on top of
 the ground.
 
-| Phase | Name                        | Outcome                                                                 |
-| ----- | --------------------------- | ----------------------------------------------------------------------- |
-| **0** | Instrumentation             | `?townmap` dev route rendering the whole town to one canvas, plus a `?tiles` route tiling every ground material 8 × 8. Makes every later phase reviewable in one screenshot. |
-| **1** | Layout module extraction    | `src/map/town/` created; `generateOverworld` refactored to consume a `TownPlan` that reproduces the **current** layout byte-for-byte. Pure refactor, zero visual change. |
-| **2** | New ground tileset + rendering | Generator **done** (§7): 14 materials, patch-based, corner masks, seam audit, `?tiles` route. Remaining: wire into `terrainTiles.ts`/`TileRenderer` — `GroundMaterial` enum, delete `overworldRotation`, world-space noise, edge scatter, ambient occlusion, chunk-cache baking. |
-| **3** | Compaction & street plan    | Wall ring, three gates, street hierarchy, districts, tower moved north, buildings re-anchored per §4. Re-tune every offset in §6. |
-| **4** | Plots & frontage            | Aprons, doorsteps, contact shadows, yards, party lines, back gardens, kerbs. |
-| **5** | Props & signage             | Tier 1 props (signs, fences, lamps, kerbs), then Tier 2 clutter, then Tier 3 wayfinding. |
-| **6** | Life & navigation           | TownLife radii, street-biased wander, activity anchors, safe radius, ambient audio, minimap district labels. |
-| **7** | Polish & validation         | Screenshot pass, perf check, full validation gates, playtest checklist. |
+| Phase | Name                           | Outcome                                                                                                                                                                                                                                                                                  |
+| ----- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | Instrumentation                | `?townmap` dev route rendering the whole town to one canvas, plus a `?tiles` route tiling every ground material 8 × 8. Makes every later phase reviewable in one screenshot.                                                                                                             |
+| **1** | Layout module extraction       | `src/map/town/` created; `generateOverworld` refactored to consume a `TownPlan` that reproduces the **current** layout byte-for-byte. Pure refactor, zero visual change.                                                                                                                 |
+| **2** | New ground tileset + rendering | **Done.** Generator (§7): 14 materials, patch-based, corner masks, two seam audits, `?tiles` route. Renderer: `GroundMaterial`, dual-grid mask fringe, world-space tone, edge scatter, ambient occlusion, all baked into the chunk cache; `overworldRotation` and the old sheet deleted. |
+| **3** | Compaction & street plan       | Wall ring, three gates, street hierarchy, districts, tower moved north, buildings re-anchored per §4. Re-tune every offset in §6.                                                                                                                                                        |
+| **4** | Plots & frontage               | Aprons, doorsteps, contact shadows, yards, party lines, back gardens, kerbs.                                                                                                                                                                                                             |
+| **5** | Props & signage                | Tier 1 props (signs, fences, lamps, kerbs), then Tier 2 clutter, then Tier 3 wayfinding.                                                                                                                                                                                                 |
+| **6** | Life & navigation              | TownLife radii, street-biased wander, activity anchors, safe radius, ambient audio, minimap district labels.                                                                                                                                                                             |
+| **7** | Polish & validation            | Screenshot pass, perf check, full validation gates, playtest checklist.                                                                                                                                                                                                                  |
 
 ---
 
@@ -591,7 +603,7 @@ The redesign is done when all of these hold:
 - [ ] Standing at the south gate, the tower, Market Street and the plaza are all
       visible in one frame.
 - [ ] Any two adjacent buildings are either sharing a party line or separated by a
-      *purposeful* space (yard, alley, garden) — never bare grass.
+      _purposeful_ space (yard, alley, garden) — never bare grass.
 - [ ] No visible tile grid on any large ground area at 1× zoom.
 - [ ] Every named building is identifiable without walking to its door.
 - [ ] Walking plaza → any building door takes under 12 seconds at `PLAYER_SPEED`.
@@ -606,13 +618,13 @@ The redesign is done when all of these hold:
 
 ## 10. Risks
 
-| Risk                                                            | Mitigation                                                                 |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| A stale centre-relative offset drops a stall/bench/board into a wall | Phase 1 refactor first; §6 table is the checklist; `?townmap` shows it instantly |
-| Quest scripts assume a building's old position, not just its name | Grep every name before Phase 3; run each questline in Phase 7               |
-| Denser town = more sprites on screen = frame drops                | Everything static bakes into the chunk cache; measure in Phase 7            |
-| Ground transitions blow up chunk-cache rebuild cost              | Transitions depend only on the 4-neighbourhood; cache invalidation unchanged |
-| Compaction crowds the club's 12 × 10 footprint and its queue     | Club gets the whole Low Quarter block plus the service alley                |
-| Generated ground looks sterile next to the hand-repaired grass    | `?tiles` review route; palettes sampled from the existing art; hard checkpoint in §7 — if generated grass loses a side-by-side, keep the old grass row and generate only the missing materials |
-| Generator drifts out of sync with `manifest.json`                | The same script emits both the PNG and the manifest entry; seeds committed |
-| Scope creep into commissioning object art                        | §7 is binding: generation for ground only. Walls/gates/stalls/fences are the only sanctioned drawn-art asks |
+| Risk                                                                 | Mitigation                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A stale centre-relative offset drops a stall/bench/board into a wall | Phase 1 refactor first; §6 table is the checklist; `?townmap` shows it instantly                                                                                                               |
+| Quest scripts assume a building's old position, not just its name    | Grep every name before Phase 3; run each questline in Phase 7                                                                                                                                  |
+| Denser town = more sprites on screen = frame drops                   | Everything static bakes into the chunk cache; measure in Phase 7                                                                                                                               |
+| Ground transitions blow up chunk-cache rebuild cost                  | A tile's transitions read the dual cells at `tx±1, ty±1`, and the material under a decoration is inferred from up to three rings out; cache invalidation unchanged                             |
+| Compaction crowds the club's 12 × 10 footprint and its queue         | Club gets the whole Low Quarter block plus the service alley                                                                                                                                   |
+| Generated ground looks sterile next to the hand-repaired grass       | `?tiles` review route; palettes sampled from the existing art; hard checkpoint in §7 — if generated grass loses a side-by-side, keep the old grass row and generate only the missing materials |
+| Generator drifts out of sync with `manifest.json`                    | The same script emits both the PNG and the manifest entry; seeds committed                                                                                                                     |
+| Scope creep into commissioning object art                            | §7 is binding: generation for ground only. Walls/gates/stalls/fences are the only sanctioned drawn-art asks                                                                                    |

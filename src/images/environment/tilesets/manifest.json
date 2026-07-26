@@ -53,60 +53,6 @@
       }
     }
   },
-  "overworld_tileset": {
-    "path": "environment/tilesets/overworld_tileset.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 64,
-    "states": {
-      "grass": {
-        "row": 0,
-        "frameCount": 12
-      },
-      "dirt": {
-        "row": 1,
-        "frameCount": 12
-      },
-      "dirt_light_grass": {
-        "row": 2,
-        "frameCount": 12
-      },
-      "village_streets": {
-        "row": 3,
-        "frameCount": 12
-      },
-      "sand": {
-        "row": 4,
-        "frameCount": 12
-      },
-      "gravel": {
-        "row": 5,
-        "frameCount": 12
-      },
-      "cobblestone": {
-        "row": 6,
-        "frameCount": 12
-      },
-      "tile": {
-        "row": 7,
-        "frameCount": 12
-      },
-      "overgrown": {
-        "row": 8,
-        "frameCount": 12
-      },
-      "stone": {
-        "row": 9,
-        "frameCount": 12
-      },
-      "concrete": {
-        "row": 10,
-        "frameCount": 12
-      }
-    }
-  },
   "modern_decorations": {
     "path": "environment/tilesets/modern_decorations.png",
     "frameWidth": 183,
@@ -169,7 +115,7 @@
       },
       "gravel": {
         "row": 3,
-        "frameCount": 12,
+        "frameCount": 16,
         "patchTiles": 2,
         "label": "Gravel yard"
       },
@@ -255,7 +201,8 @@
     "states": {
       "corner": {
         "row": 0,
-        "frameCount": 16,
+        "frameCount": 144,
+        "patchTiles": 3,
         "label": "Corner transition masks"
       }
     }

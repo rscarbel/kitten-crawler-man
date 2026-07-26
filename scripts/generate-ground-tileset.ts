@@ -5,7 +5,7 @@
  * Outputs to src/images/environment/tilesets/:
  *   ground_overworld.png   town and field materials
  *   ground_dungeon.png     dungeon materials
- *   ground_masks.png       the 16 corner-transition masks, shared by every pair
+ *   ground_masks.png       the corner-transition masks, shared by every pair
  * and merges the manifest entries for all three.
  *
  * Run: npx tsx scripts/generate-ground-tileset.ts
@@ -23,7 +23,12 @@
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { paintPatch, getMaterial } from './tilegen/materials.js';
-import { buildMaskSet, CORNER_MASK_COUNT } from './tilegen/masks.js';
+import {
+  auditMaskSeams,
+  buildMaskSet,
+  CORNER_MASK_COUNT,
+  MASK_PATCH_TILES,
+} from './tilegen/masks.js';
 import {
   writeSheet,
   writeMaskSheet,
@@ -31,6 +36,7 @@ import {
   measureWrapError,
   slicePatch,
   type SheetRow,
+  type SheetSpec,
   type ManifestEntry,
 } from './tilegen/sheet.js';
 
@@ -43,6 +49,12 @@ const SEED_BASE = 20260725;
 const MATERIAL_SEED_STRIDE = 9973;
 const VARIANT_SEED_STRIDE = 131;
 const MASK_SEED = SEED_BASE + 5501;
+/**
+ * A mask joint must never be a harder line than the masks' own interiors. Written
+ * as `!(ratio <= limit)` at the call site so a NaN ratio — an all-flat mask set,
+ * which would divide by a zero interior — fails rather than slipping through.
+ */
+const MASK_SEAM_RATIO_LIMIT = 1;
 
 /**
  * Largest acceptable ratio of joint difference to the patch's own strongest
@@ -79,6 +91,7 @@ const SHEETS: ReadonlyArray<SheetConfig> = [
 ];
 
 const manifestEntries: Record<string, ManifestEntry> = {};
+const sheetPlans: SheetSpec[] = [];
 let worstRatio = 0;
 let worstRatioLabel = '';
 
@@ -88,8 +101,7 @@ SHEETS.forEach((config, sheetIndex) => {
 
   config.materials.forEach((materialId, materialIndex) => {
     const material = getMaterial(materialId);
-    const structure =
-      SEED_BASE + (sheetIndex * 100 + materialIndex) * MATERIAL_SEED_STRIDE;
+    const structure = SEED_BASE + (sheetIndex * 100 + materialIndex) * MATERIAL_SEED_STRIDE;
 
     const frames = [];
     for (let variant = 0; variant < material.variants; variant++) {
@@ -117,13 +129,33 @@ SHEETS.forEach((config, sheetIndex) => {
     );
   });
 
-  manifestEntries[config.key] = writeSheet(
-    { key: config.key, path: `${TILESET_DIR}/${config.file}`, rows },
-    IMAGES_ROOT,
-  );
+  sheetPlans.push({ key: config.key, path: `${TILESET_DIR}/${config.file}`, rows });
 });
 
+// Nothing is written until every patch has passed. A gate that runs after the
+// write leaves a torn sheet and a refreshed manifest on disk describing it.
+if (!(worstRatio <= SEAMLESS_RATIO_LIMIT)) {
+  console.error(
+    `\nFAIL: a patch joint is more than ${SEAMLESS_RATIO_LIMIT}x the patch's own strongest\n` +
+      `internal edge, which means a visible seam. Something in a painter is sampling an\n` +
+      `unwrapped coordinate — check every Math.floor and % against a warped position, and\n` +
+      `make sure geometry uses ctx.structure rather than ctx.detail.`,
+  );
+  console.error(`worst joint-to-interior ratio: ${worstRatio.toFixed(2)} (${worstRatioLabel})`);
+  process.exit(1);
+}
+
+for (const plan of sheetPlans) {
+  manifestEntries[plan.key] = writeSheet(plan, IMAGES_ROOT);
+}
+
 const masks = buildMaskSet(MASK_SEED);
+const maskSeams = auditMaskSeams(masks);
+if (!(maskSeams.ratio <= MASK_SEAM_RATIO_LIMIT)) {
+  throw new Error(
+    `corner masks tear: joint-to-interior ratio ${maskSeams.ratio.toFixed(2)} exceeds ${MASK_SEAM_RATIO_LIMIT}`,
+  );
+}
 writeMaskSheet(masks, `${IMAGES_ROOT}/${TILESET_DIR}/${MASK_FILE}`);
 manifestEntries.ground_masks = {
   path: `${TILESET_DIR}/${MASK_FILE}`,
@@ -132,20 +164,20 @@ manifestEntries.ground_masks = {
   tileX: 0,
   tileY: 0,
   tileScale: 64,
-  states: { corner: { row: 0, frameCount: CORNER_MASK_COUNT, label: 'Corner transition masks' } },
+  states: {
+    corner: {
+      row: 0,
+      frameCount: masks.length,
+      patchTiles: MASK_PATCH_TILES,
+      label: 'Corner transition masks',
+    },
+  },
 };
-console.log(`\n${MASK_FILE}  ${CORNER_MASK_COUNT} corner masks (shared by every material pair)`);
+console.log(
+  `\n${MASK_FILE}  ${CORNER_MASK_COUNT} corner masks x ${MASK_PATCH_TILES}x${MASK_PATCH_TILES} patch phases = ${masks.length} frames` +
+    `  joint-to-interior ${maskSeams.ratio.toFixed(2)}`,
+);
 
 updateManifest(MANIFEST_PATH, manifestEntries);
 console.log(`\nmanifest updated: ${MANIFEST_PATH}`);
 console.log(`worst joint-to-interior ratio: ${worstRatio.toFixed(2)} (${worstRatioLabel})`);
-
-if (worstRatio > SEAMLESS_RATIO_LIMIT) {
-  console.error(
-    `\nFAIL: a patch joint is more than ${SEAMLESS_RATIO_LIMIT}x the patch's own strongest\n` +
-      `internal edge, which means a visible seam. Something in a painter is sampling an\n` +
-      `unwrapped coordinate — check every Math.floor and % against a warped position, and\n` +
-      `make sure geometry uses ctx.structure rather than ctx.detail.`,
-  );
-  process.exit(1);
-}

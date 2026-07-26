@@ -2,7 +2,6 @@ import type { TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
   VOID_TYPE,
-  SAFE_ROOM_FLOOR,
   BUILDING_WALL,
   METAL_WALL,
   TREE,
@@ -163,36 +162,6 @@ export function inferFloorType(structure: TileContent[][], tx: number, ty: numbe
     }
   }
   return FloorTypeValue.concrete;
-}
-
-// Keep for any callers that haven't been migrated yet.
-export function inferGroundColor(structure: TileContent[][], tx: number, ty: number): string {
-  const dirs = CARDINAL_DIRS;
-  let hasRoad = false;
-  let hasSafe = false;
-  let hasWood = false;
-  let hasCarpet = false;
-  let hasTileFloor = false;
-  let hasConcrete = false;
-  for (const [dx, dy] of dirs) {
-    const ny = ty + dy;
-    const nx = tx + dx;
-    if (ny < 0 || ny >= structure.length || nx < 0 || nx >= structure[ny].length) continue;
-    const n = structure[ny][nx];
-    if (n.type === FloorTypeValue.road || n.type === DIRT_PATCH) hasRoad = true;
-    else if (n.type === SAFE_ROOM_FLOOR) hasSafe = true;
-    else if (n.type === FloorTypeValue.wood) hasWood = true;
-    else if (n.type === FloorTypeValue.carpet) hasCarpet = true;
-    else if (n.type === FloorTypeValue.tile_floor) hasTileFloor = true;
-    else if (n.type === FloorTypeValue.concrete) hasConcrete = true;
-  }
-  if (hasWood) return (tx + ty) % 2 === 0 ? '#b08050' : '#a07040';
-  if (hasCarpet) return (tx + ty) % 2 === 0 ? '#8b3a3a' : '#7a3232';
-  if (hasTileFloor) return '#c8bca0';
-  if (hasConcrete) return (tx + ty) % 2 === 0 ? '#b4b0ab' : '#aaa7a2';
-  if (hasRoad) return '#bc926b';
-  if (hasSafe) return (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
-  return '#6de89d';
 }
 
 const SHADOW_TOP_DEPTH = 8;

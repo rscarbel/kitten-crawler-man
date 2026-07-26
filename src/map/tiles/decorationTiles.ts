@@ -17,12 +17,8 @@ import {
   RUBBLE,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
-import {
-  drawTerrainTile,
-  drawOverworldSprite,
-  overworldFrame,
-  overworldRotation,
-} from './terrainTiles';
+import { drawTerrainTile } from './terrainTiles';
+import { drawGroundTile } from './groundTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
 import { drawFountainTileSlice } from '../../sprites/fountainSprite';
@@ -225,25 +221,18 @@ export function drawDecorationTile(
 
     // Grassy weed — walkable grass tile with decorative tufts and occasional flowers
     case GRASSY_WEED: {
-      drawOverworldSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'grass',
-        overworldFrame(tx, ty),
-        '#6de89d',
-        overworldRotation(tx, ty),
-      );
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
 
       // Deterministic hash from tile position
       const h1 = (tx * 31 + ty * 17) % 97;
       const h2 = (tx * 53 + ty * 41) % 89;
 
-      // First grass tuft
+      // First grass tuft. The blade colours track the generated grass material,
+      // which is olive — the mint greens they replaced belonged to the retired
+      // tileset and read as teal dashes on the new lawn.
       const t1x = sx + 3 + ((h1 * 7) % (ts - 12));
       const t1y = sy + 5 + ((h1 * 11) % (ts - 14));
-      ctx.fillStyle = '#3aac6a';
+      ctx.fillStyle = '#6b7f35';
       ctx.fillRect(t1x, t1y, 2, 7); // central blade
       ctx.fillRect(t1x - 3, t1y + 3, 2, 5); // left blade (angled out)
       ctx.fillRect(t1x + 3, t1y + 3, 2, 5); // right blade
@@ -251,7 +240,7 @@ export function drawDecorationTile(
       // Second smaller tuft
       const t2x = sx + 5 + ((h2 * 13) % (ts - 14));
       const t2y = sy + 4 + ((h2 * 7) % (ts - 14));
-      ctx.fillStyle = '#32986e';
+      ctx.fillStyle = '#55692a';
       ctx.fillRect(t2x, t2y, 2, 5);
       ctx.fillRect(t2x - 2, t2y + 2, 2, 3);
       ctx.fillRect(t2x + 2, t2y + 2, 2, 3);
@@ -289,16 +278,7 @@ export function drawDecorationTile(
 
     // Dirt patch — walkable road tile with pebble and soil texture
     case DIRT_PATCH: {
-      drawOverworldSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'village_streets',
-        overworldFrame(tx, ty),
-        '#bc926b',
-        overworldRotation(tx, ty),
-      );
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
 
       // Deterministic hash from tile position
       const h1 = (tx * 29 + ty * 19) % 97;
@@ -368,16 +348,7 @@ export function drawDecorationTile(
     // debris dissolves into the surrounding lawn instead of reading as an
     // opaque square.
     case RUBBLE: {
-      drawOverworldSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'grass',
-        overworldFrame(tx, ty),
-        '#6de89d',
-        overworldRotation(tx, ty),
-      );
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
 
       const h1 = (tx * 37 + ty * 23) % 97;
       const h2 = (tx * 59 + ty * 43) % 89;
@@ -413,8 +384,9 @@ export function drawDecorationTile(
       }
 
       // Grass blades poking up between and over the chunk edges, so the
-      // debris reads as half-swallowed by the lawn.
-      ctx.fillStyle = '#3aac6a';
+      // debris reads as half-swallowed by the lawn — which only works while the
+      // blades are the lawn's colour, not the retired tileset's mint.
+      ctx.fillStyle = '#6b7f35';
       for (let i = 0; i < RUBBLE_TUFT_COUNT; i++) {
         const gx = sx + 2 + ((h2 * (i * 13 + 5)) % (ts - 6));
         const gy = sy + 3 + ((h1 * (i * 9 + 7)) % (ts - 10));

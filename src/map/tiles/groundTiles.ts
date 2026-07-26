@@ -1,0 +1,1223 @@
+/**
+ * Draws one tile of outdoor ground, from the generated `ground_overworld` sheet.
+ *
+ * Five passes, in this order:
+ *
+ *  1. **Base** — the material's frame for this tile (see `groundFrameIndex`).
+ *  2. **Fringe** — where materials meet, the boundary between them is drawn
+ *     through a shared corner mask on the dual grid, so it wanders across the
+ *     tile edge instead of running along it.
+ *  3. **Scatter** — a softer neighbour spills tufts or grit a few pixels across
+ *     the joint, which is how grass takes back the gutter the fringe just paved.
+ *  4. **World noise** — a low-frequency brightness field sampled in *world*
+ *     space. Per-tile seamlessness does not fix large-scale repetition: without
+ *     this, a field of perfectly-matching tiles still reads as blocks.
+ *  5. **Ambient occlusion** — soft shading where ground meets a wall, building
+ *     or ruin, so nothing looks pasted onto the lawn.
+ *
+ * Every pass runs at chunk-bake time (`TileChunkCache`), never per frame, and
+ * every pass draws strictly inside the tile's own rect — which is what lets the
+ * chunk-cached and direct render paths be compared pixel for pixel. Four caches
+ * keep the bake cheap: masked material quarters, the weight stencils a stack of
+ * three or more materials needs, the world-noise field, and the occlusion bands.
+ */
+
+import type { TileContent } from '../tileTypes';
+import {
+  BUILDING_WALL,
+  FloorTypeValue,
+  METAL_WALL,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+  ROOF_CIRCUS_RED,
+  ROOF_GREEN,
+  ROOF_RED,
+  ROOF_SLATE,
+  ROOF_THATCH,
+  RUINED_WALL,
+} from '../tileTypes';
+import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../../core/SpriteLoader';
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { inferFloorType } from './helpers';
+import {
+  CORNER_NE,
+  CORNER_NW,
+  CORNER_SE,
+  CORNER_SW,
+  GROUND_BLEND_ORDER,
+  GROUND_FALLBACK_COLOR,
+  GROUND_MASK_SHEET_KEY,
+  GROUND_MASK_STATE,
+  GROUND_SHEET_KEY,
+  GROUND_SPILL,
+  groundFrameIndex,
+  groundMaterialAt,
+  groundMaterialForTileType,
+  groundVariantCount,
+  positiveMod,
+  type GroundMaterial,
+} from '../town/groundMaterials';
+
+export interface ResolvedMaterial {
+  readonly def: SpriteDef;
+  readonly state: SpriteStateDef;
+  readonly frame: number;
+}
+
+/**
+ * Materials inferred for tiles that stand on ground, memoised per map.
+ *
+ * `inferFloorType` walks outward until it finds real floor, which is far too
+ * much work to repeat for the sixteen corner lookups every tile's fringe does.
+ * The tile type is stored alongside the result so a tile that changes type is
+ * re-inferred rather than answered from a stale entry.
+ */
+const inferredMaterials = new WeakMap<TileContent[][], Map<number, InferredMaterial>>();
+
+interface InferredMaterial {
+  readonly type: number;
+  readonly material: GroundMaterial | undefined;
+}
+
+/**
+ * The material the ground at (tx, ty) is made of.
+ *
+ * Tiles that *are* ground answer directly. Tiles that merely stand on it — a
+ * torch, a well, a fountain, a building anchor — are inferred from their
+ * surroundings, the same way the decoration renderers pick the floor to draw
+ * beneath themselves. Without that, every one of them is a hole: a hole in what
+ * gets drawn under the decoration, and a hole in the fringe's field, which the
+ * neighbouring tiles then disagree across.
+ */
+function groundMaterialUnder(
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+): GroundMaterial | undefined {
+  const direct = groundMaterialAt(structure, tx, ty);
+  if (direct !== undefined) return direct;
+  if (ty < 0 || ty >= structure.length) return undefined;
+  const row = structure[ty];
+  if (tx < 0 || tx >= row.length) return undefined;
+
+  const type = row[tx].type;
+  let memo = inferredMaterials.get(structure);
+  if (memo === undefined) {
+    memo = new Map<number, InferredMaterial>();
+    inferredMaterials.set(structure, memo);
+  }
+  const key = ty * row.length + tx;
+  const cached = memo.get(key);
+  if (cached?.type === type) return cached.material;
+
+  const material = groundMaterialForTileType(inferFloorType(structure, tx, ty));
+  memo.set(key, { type, material });
+  return material;
+}
+
+/**
+ * A material as the fringe needs to see it: how hard it is, and how to resolve
+ * its frame at a position.
+ *
+ * The indirection exists so the `?tiles` review route composites boundaries
+ * through the same code the game does, over material rows the game does not use
+ * (the dungeon sheet) and pairs the map never produces. A preview that
+ * reimplemented the geometry would drift from the renderer, which is the one
+ * thing a review route must not do.
+ */
+export interface FringeMaterial {
+  /** Distinguishes materials in the composite cache; unique across sheets. */
+  readonly id: string;
+  /** Blend order — higher covers lower. */
+  readonly order: number;
+  resolve(tx: number, ty: number): ResolvedMaterial | undefined;
+}
+
+function resolveMaterial(
+  material: GroundMaterial,
+  tx: number,
+  ty: number,
+): ResolvedMaterial | undefined {
+  const def = getSpriteDef(GROUND_SHEET_KEY);
+  if (def === undefined) return undefined;
+  const state = def.states.get(material);
+  if (state === undefined) return undefined;
+  const patchTiles = state.patchTiles ?? 1;
+  const frame = groundFrameIndex(patchTiles, groundVariantCount(state), tx, ty);
+  // Every material ships a whole number of patches today, but a row with fewer
+  // frames than one patch would send the phase term past the row's last frame
+  // and blit a slice of the next material — or of nothing. Clamping keeps a
+  // mis-sized row looking repetitive instead of corrupt.
+  return { def, state, frame: Math.min(frame, state.frameCount - 1) };
+}
+
+function drawResolved(
+  ctx: CanvasRenderingContext2D,
+  resolved: ResolvedMaterial,
+  sx: number,
+  sy: number,
+  ts: number,
+): void {
+  const { def, state, frame } = resolved;
+  ctx.drawImage(
+    def.img,
+    frame * def.frameWidth,
+    state.row * def.frameHeight,
+    def.frameWidth,
+    def.frameHeight,
+    sx,
+    sy,
+    ts,
+    ts,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fringe — material boundaries through the shared corner masks
+// ---------------------------------------------------------------------------
+
+/**
+ * The fringe is classified on the **dual grid**: its cells are offset half a
+ * tile, so a cell's four corners are four whole tiles rather than four vertices
+ * shared by twelve.
+ *
+ * Aligning the mask with the tile grid instead looks obvious and is wrong. A
+ * vertex would have to take the hardest material of the four tiles touching it,
+ * which sets both of a tile's east corners as soon as its east *neighbour* is
+ * paved — putting the mask's half-coverage contour down the middle of that tile.
+ * Measured that way: the last unpaved tile before a road rendered 37% paved, the
+ * road drew ~0.4 tile wider than it is on both sides, any one-tile-wide softer
+ * strip disappeared entirely (all four of its corners resolve to the harder
+ * material, which the CORNER_ALL case then paints over it), and the scatter
+ * pass — anchored to the tile edge — laid its tufts 15px inside the paving,
+ * reading as a dashed lane marking rather than as grass at a kerb.
+ *
+ * On the dual grid every corner is one tile's own material, so the contour
+ * between two differing tiles falls exactly on the edge between them and
+ * neither side is dilated. One tile of a material is a corner of four dual
+ * cells and survives.
+ *
+ * A tile is covered by one quadrant of each of the four dual cells around it,
+ * so a tile draws four quarter-tile pieces. Two tiles sharing an edge take
+ * their two touching quadrants from the *same* dual cell — same bits, same
+ * mask, adjacent halves of one continuous field — so the joint cannot tear.
+ */
+interface DualCellQuadrant {
+  /** Dual-cell index, relative to the tile's own coordinates. */
+  readonly cellDX: number;
+  readonly cellDY: number;
+  /**
+   * Which quarter of the mask frame this quadrant reads, as 0 = left/top and
+   * 1 = right/bottom. It is the corner of the cell the tile itself occupies;
+   * the quadrant of the *tile* it covers is the mirror of it.
+   */
+  readonly maskQuarterX: number;
+  readonly maskQuarterY: number;
+}
+
+const DUAL_CELL_QUADRANTS: ReadonlyArray<DualCellQuadrant> = [
+  { cellDX: 0, cellDY: 0, maskQuarterX: 1, maskQuarterY: 1 },
+  { cellDX: 1, cellDY: 0, maskQuarterX: 0, maskQuarterY: 1 },
+  { cellDX: 0, cellDY: 1, maskQuarterX: 1, maskQuarterY: 0 },
+  { cellDX: 1, cellDY: 1, maskQuarterX: 0, maskQuarterY: 0 },
+];
+
+/** The four tiles at a dual cell's corners, relative to the cell's index. */
+const DUAL_CELL_CORNERS = [
+  { bit: CORNER_NW, dx: -1, dy: -1 },
+  { bit: CORNER_NE, dx: 0, dy: -1 },
+  { bit: CORNER_SE, dx: 0, dy: 0 },
+  { bit: CORNER_SW, dx: -1, dy: 0 },
+] as const;
+
+/**
+ * Masked material quarters, keyed by material, material frame, mask frame,
+ * quadrant and tile size. The mask frame carries both the corner combination and
+ * the position within the warp patch, so the key is the whole of what the surface
+ * depends on and the cache is bounded by what a map actually draws.
+ */
+const overlayCache = new Map<string, CanvasSurface>();
+
+interface MaskSheet {
+  readonly def: SpriteDef;
+  readonly state: SpriteStateDef;
+  /** Tiles across the patch the warp field wraps over. */
+  readonly patchTiles: number;
+}
+
+function maskSheet(): MaskSheet | undefined {
+  const def = getSpriteDef(GROUND_MASK_SHEET_KEY);
+  if (def === undefined) return undefined;
+  const state = def.states.get(GROUND_MASK_STATE);
+  if (state === undefined) return undefined;
+  return { def, state, patchTiles: state.patchTiles ?? 1 };
+}
+
+/**
+ * The mask sheet's alpha, read once.
+ *
+ * Needed because a stack of three or more materials cannot be composited with
+ * alpha blending alone — see `layerCoverage`. Undefined if the pixels cannot be
+ * read at all, which leaves the two-material path, and therefore every map that
+ * exists today, working exactly as before.
+ */
+let maskAlphaChannel: Uint8ClampedArray | undefined;
+let maskAlphaChannelRead = false;
+
+function maskAlpha(mask: MaskSheet): Uint8ClampedArray | undefined {
+  if (maskAlphaChannelRead) return maskAlphaChannel;
+  maskAlphaChannelRead = true;
+  const surface = allocCanvas(mask.def.img.width, mask.def.img.height);
+  const ctx = surfaceContext(surface);
+  ctx.drawImage(mask.def.img, 0, 0);
+  try {
+    maskAlphaChannel = ctx.getImageData(0, 0, surface.width, surface.height).data;
+  } catch {
+    maskAlphaChannel = undefined;
+  }
+  return maskAlphaChannel;
+}
+
+/** Box-filtered coverage of one mask frame's quarter, at the drawn size, in 0..1. */
+function sampleMaskQuarter(
+  channel: Uint8ClampedArray,
+  mask: MaskSheet,
+  frame: number,
+  quadrant: DualCellQuadrant,
+  width: number,
+  height: number,
+): Float32Array {
+  const sheetWidth = mask.def.img.width;
+  const halfWidth = mask.def.frameWidth / 2;
+  const halfHeight = mask.def.frameHeight / 2;
+  const originX = frame * mask.def.frameWidth + quadrant.maskQuarterX * halfWidth;
+  const originY = mask.state.row * mask.def.frameHeight + quadrant.maskQuarterY * halfHeight;
+
+  const coverage = new Float32Array(width * height);
+  const ALPHA_MAX = 255;
+  // Block bounds are computed *within* the quarter and offset to the sheet once;
+  // folding the origin into them makes the block run to the far side of the sheet.
+  for (let y = 0; y < height; y++) {
+    const blockY0 = Math.floor((y * halfHeight) / height);
+    const blockY1 = Math.max(blockY0 + 1, Math.floor(((y + 1) * halfHeight) / height));
+    for (let x = 0; x < width; x++) {
+      const blockX0 = Math.floor((x * halfWidth) / width);
+      const blockX1 = Math.max(blockX0 + 1, Math.floor(((x + 1) * halfWidth) / width));
+      let total = 0;
+      let samples = 0;
+      for (let blockY = blockY0; blockY < blockY1; blockY++) {
+        const rowStart = (originY + blockY) * sheetWidth + originX;
+        for (let blockX = blockX0; blockX < blockX1; blockX++) {
+          total += channel[(rowStart + blockX) * RGBA_CHANNELS + ALPHA_CHANNEL];
+          samples++;
+        }
+      }
+      coverage[y * width + x] = total / (samples * ALPHA_MAX);
+    }
+  }
+  return coverage;
+}
+
+/**
+ * How much of a quadrant one layer of a cell's stack actually shows.
+ *
+ * Painting each layer at its own mask coverage and letting the next one cover it
+ * leaves layer `k` weighing `m_k * (1 - m_k+1)` where it should weigh
+ * `m_k - m_k+1`. The two agree only where the masks are hard. They differ most at
+ * half coverage — which is the middle of the blend, on the tile's own centre
+ * line — and the difference is a *discontinuity*: two cells either side of that
+ * line agree on `m_k == m_k+1` for a layer only one of them holds, so the
+ * differenced weight vanishes there and the product weight does not. Measured at
+ * 28 of 255 for lane meeting cobble meeting plaza.
+ *
+ * Returned as the alpha to paint the layer with, given everything above it has
+ * yet to be painted: `(m_k - m_k+1) / (1 - m_k+1)`, which telescopes so that
+ * painting the stack in order lands on the differenced weights exactly.
+ *
+ * `frames` is this layer's mask frame followed by every frame above it. The
+ * running maximum is what makes the differences non-negative: the masks nest by
+ * construction *except* across the diagonal combinations, whose separation bias
+ * lifts a sub-mask above its superset by as much as 104 of 255.
+ */
+function layerCoverage(
+  channel: Uint8ClampedArray,
+  mask: MaskSheet,
+  frames: ReadonlyArray<number>,
+  quadrant: DualCellQuadrant,
+  width: number,
+  height: number,
+): Float32Array {
+  const sampled = frames.map((frame) =>
+    sampleMaskQuarter(channel, mask, frame, quadrant, width, height),
+  );
+  for (let index = sampled.length - 2; index >= 0; index--) {
+    for (let pixel = 0; pixel < sampled[index].length; pixel++) {
+      sampled[index][pixel] = Math.max(sampled[index][pixel], sampled[index + 1][pixel]);
+    }
+  }
+
+  const own = sampled[0];
+  const alpha = new Float32Array(own.length);
+  for (let pixel = 0; pixel < own.length; pixel++) {
+    const above = sampled.length > 1 ? sampled[1][pixel] : 0;
+    const remaining = 1 - above;
+    alpha[pixel] = remaining <= 0 ? 0 : (own[pixel] - above) / remaining;
+  }
+  return alpha;
+}
+
+/**
+ * The mask frame a dual cell reads: its corner combination, then its position
+ * within the warp patch. Both tiles sharing an edge resolve the same cell, so
+ * they resolve the same frame.
+ */
+function maskFrameIndex(mask: MaskSheet, bits: number, cellX: number, cellY: number): number {
+  const phases = mask.patchTiles * mask.patchTiles;
+  const phase =
+    positiveMod(cellY, mask.patchTiles) * mask.patchTiles + positiveMod(cellX, mask.patchTiles);
+  return Math.min(bits * phases + phase, mask.state.frameCount - 1);
+}
+
+/**
+ * One quarter-tile piece of overlay material, clipped to a quarter of a corner
+ * mask and ready to blit.
+ *
+ * `destination-in` keeps only the pixels the mask's alpha covers, which is why
+ * the generator stores the masks in alpha. The mask depends on the corner bits
+ * and on the cell's position within the warp patch — never on anything private
+ * to one tile — so two tiles either side of a joint read the same cell, perturb
+ * it identically, and the edge cannot tear.
+ */
+function maskedOverlayQuarter(
+  mask: MaskSheet,
+  materialId: string,
+  resolved: ResolvedMaterial,
+  maskFrame: number,
+  quadrant: DualCellQuadrant,
+  ts: number,
+): CanvasSurface {
+  const cacheKey = `${materialId}|${resolved.frame}|${maskFrame}|${quadrant.maskQuarterX}${quadrant.maskQuarterY}|${ts}`;
+  const cached = overlayCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const tileQuarterX = 1 - quadrant.maskQuarterX;
+  const tileQuarterY = 1 - quadrant.maskQuarterY;
+  const width = quarterExtent(ts, tileQuarterX);
+  const height = quarterExtent(ts, tileQuarterY);
+
+  const surface = allocCanvas(width, height);
+  const surfaceCtx = surfaceContext(surface);
+
+  const { def, state, frame } = resolved;
+  const sourceHalfWidth = def.frameWidth / 2;
+  const sourceHalfHeight = def.frameHeight / 2;
+  surfaceCtx.drawImage(
+    def.img,
+    frame * def.frameWidth + tileQuarterX * sourceHalfWidth,
+    state.row * def.frameHeight + tileQuarterY * sourceHalfHeight,
+    sourceHalfWidth,
+    sourceHalfHeight,
+    0,
+    0,
+    width,
+    height,
+  );
+
+  surfaceCtx.globalCompositeOperation = 'destination-in';
+  const maskHalfWidth = mask.def.frameWidth / 2;
+  const maskHalfHeight = mask.def.frameHeight / 2;
+  surfaceCtx.drawImage(
+    mask.def.img,
+    maskFrame * mask.def.frameWidth + quadrant.maskQuarterX * maskHalfWidth,
+    mask.state.row * mask.def.frameHeight + quadrant.maskQuarterY * maskHalfHeight,
+    maskHalfWidth,
+    maskHalfHeight,
+    0,
+    0,
+    width,
+    height,
+  );
+
+  overlayCache.set(cacheKey, surface);
+  return surface;
+}
+
+/** Weight stencils, keyed by the mask stack, quadrant and tile size. */
+const stencilCache = new Map<string, CanvasSurface>();
+
+/**
+ * The stencil a layer with others above it is painted through.
+ *
+ * Cached apart from the material, and keyed only by the masks: the weights depend
+ * on the stack of coverages, never on which materials happen to be stacked. That
+ * keeps this off the per-material-frame axis, which is the difference between a
+ * few thousand of these and a few hundred thousand.
+ */
+function weightStencil(
+  channel: Uint8ClampedArray,
+  mask: MaskSheet,
+  maskFrames: ReadonlyArray<number>,
+  quadrant: DualCellQuadrant,
+  width: number,
+  height: number,
+  ts: number,
+): CanvasSurface {
+  const cacheKey = `${maskFrames.join('.')}|${quadrant.maskQuarterX}${quadrant.maskQuarterY}|${ts}`;
+  const cached = stencilCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const alpha = layerCoverage(channel, mask, maskFrames, quadrant, width, height);
+  const stencil = allocCanvas(width, height);
+  const stencilCtx = surfaceContext(stencil);
+  const image = stencilCtx.createImageData(width, height);
+  const ALPHA_MAX = 255;
+  for (let pixel = 0; pixel < alpha.length; pixel++) {
+    image.data[pixel * RGBA_CHANNELS + ALPHA_CHANNEL] = Math.round(alpha[pixel] * ALPHA_MAX);
+  }
+  stencilCtx.putImageData(image, 0, 0);
+
+  stencilCache.set(cacheKey, stencil);
+  return stencil;
+}
+
+/** One reusable surface for layers that are weighed rather than plainly masked. */
+let weighedQuarter: CanvasSurface | undefined;
+
+function weighedQuarterSurface(width: number, height: number): CanvasSurface {
+  const existing = weighedQuarter;
+  if (existing?.width === width && existing.height === height) return existing;
+  const surface = allocCanvas(width, height);
+  weighedQuarter = surface;
+  return surface;
+}
+
+/**
+ * A layer that has others above it, painted at the weight that makes the stack
+ * add up — see `layerCoverage`. Composed into a shared surface rather than a
+ * cached one, because caching it would multiply the stencils by every material
+ * frame that can sit under them.
+ */
+function weighedOverlayQuarter(
+  channel: Uint8ClampedArray,
+  mask: MaskSheet,
+  resolved: ResolvedMaterial,
+  maskFrames: ReadonlyArray<number>,
+  quadrant: DualCellQuadrant,
+  ts: number,
+): CanvasSurface {
+  const tileQuarterX = 1 - quadrant.maskQuarterX;
+  const tileQuarterY = 1 - quadrant.maskQuarterY;
+  const width = quarterExtent(ts, tileQuarterX);
+  const height = quarterExtent(ts, tileQuarterY);
+
+  const surface = weighedQuarterSurface(width, height);
+  const surfaceCtx = surfaceContext(surface);
+  const { def, state, frame } = resolved;
+  surfaceCtx.globalCompositeOperation = 'copy';
+  surfaceCtx.drawImage(
+    def.img,
+    frame * def.frameWidth + tileQuarterX * (def.frameWidth / 2),
+    state.row * def.frameHeight + tileQuarterY * (def.frameHeight / 2),
+    def.frameWidth / 2,
+    def.frameHeight / 2,
+    0,
+    0,
+    width,
+    height,
+  );
+  surfaceCtx.globalCompositeOperation = 'destination-in';
+  surfaceCtx.drawImage(weightStencil(channel, mask, maskFrames, quadrant, width, height, ts), 0, 0);
+  surfaceCtx.globalCompositeOperation = 'source-over';
+  return surface;
+}
+
+/** Splits a tile in two without losing a pixel to rounding at an odd tile size. */
+function quarterExtent(ts: number, quarterIndex: number): number {
+  const first = Math.round(ts / 2);
+  return quarterIndex === 0 ? first : ts - first;
+}
+
+function quarterOrigin(ts: number, quarterIndex: number): number {
+  return quarterIndex === 0 ? 0 : Math.round(ts / 2);
+}
+
+/** Draws one quarter of a material's frame, unmasked, into a tile quadrant. */
+function drawMaterialQuarter(
+  ctx: CanvasRenderingContext2D,
+  resolved: ResolvedMaterial,
+  quadrant: DualCellQuadrant,
+  sx: number,
+  sy: number,
+  ts: number,
+): void {
+  const tileQuarterX = 1 - quadrant.maskQuarterX;
+  const tileQuarterY = 1 - quadrant.maskQuarterY;
+  const { def, state, frame } = resolved;
+  ctx.drawImage(
+    def.img,
+    frame * def.frameWidth + tileQuarterX * (def.frameWidth / 2),
+    state.row * def.frameHeight + tileQuarterY * (def.frameHeight / 2),
+    def.frameWidth / 2,
+    def.frameHeight / 2,
+    sx + quarterOrigin(ts, tileQuarterX),
+    sy + quarterOrigin(ts, tileQuarterY),
+    quarterExtent(ts, tileQuarterX),
+    quarterExtent(ts, tileQuarterY),
+  );
+}
+
+/**
+ * Paints one quadrant of the tile with the whole material stack of the dual cell
+ * around it: the softest material the cell touches, then every harder one
+ * composited through its own mask, in blend order.
+ *
+ * Painting the *stack* rather than only the materials harder than this tile's own
+ * is what makes the boundary two-sided. The harder material bulging into the
+ * softer tile and the softer one holding its ground in the harder tile are the
+ * same contour seen from either side, so both tiles have to be able to draw
+ * either material. It is also exact when three materials meet at one cell, which
+ * an "overlay the harder ones" rule is not.
+ *
+ * The softest layer is skipped when it is already the tile's own material, since
+ * the base pass has drawn it.
+ */
+function drawFringeQuadrant(
+  ctx: CanvasRenderingContext2D,
+  mask: MaskSheet,
+  own: FringeMaterial,
+  materialAt: (tx: number, ty: number) => FringeMaterial,
+  quadrant: DualCellQuadrant,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const cellX = tx + quadrant.cellDX;
+  const cellY = ty + quadrant.cellDY;
+
+  const cornerMaterials: FringeMaterial[] = [];
+  let differs = false;
+  for (const corner of DUAL_CELL_CORNERS) {
+    const cornerMaterial = materialAt(cellX + corner.dx, cellY + corner.dy);
+    cornerMaterials.push(cornerMaterial);
+    if (cornerMaterial.id !== own.id) differs = true;
+  }
+  if (!differs) return;
+
+  const layers = [...new Set(cornerMaterials)].sort((a, b) => a.order - b.order);
+
+  // Every masked layer's frame up front, so each can be weighed against the ones
+  // above it. A layer's bits are never empty — it is at a corner of this cell by
+  // definition, and that corner qualifies for it — and never all four either,
+  // since the softest layer is at some corner too and is strictly softer. So no
+  // layer ever covers a whole quadrant, which is what leaves a lone tile of a
+  // softer material its middle however hard its surroundings are.
+  const maskFrames = layers.slice(1).map((layer) => {
+    let bits = 0;
+    DUAL_CELL_CORNERS.forEach((corner, cornerIndex) => {
+      if (cornerMaterials[cornerIndex].order >= layer.order) bits |= corner.bit;
+    });
+    return maskFrameIndex(mask, bits, cellX, cellY);
+  });
+
+  layers.forEach((layer, index) => {
+    const resolved = layer.resolve(tx, ty);
+    if (resolved === undefined) return;
+
+    if (index === 0) {
+      if (layer.id !== own.id) drawMaterialQuarter(ctx, resolved, quadrant, sx, sy, ts);
+      return;
+    }
+
+    const stack = maskFrames.slice(index - 1);
+    // Only a layer with something above it needs weighing; the topmost one's own
+    // coverage is its weight, which the sheet can mask directly and cache.
+    const channel = stack.length > 1 ? maskAlpha(mask) : undefined;
+    const surface =
+      channel === undefined
+        ? maskedOverlayQuarter(mask, layer.id, resolved, stack[0], quadrant, ts)
+        : weighedOverlayQuarter(channel, mask, resolved, stack, quadrant, ts);
+    ctx.drawImage(
+      surface,
+      sx + quarterOrigin(ts, 1 - quadrant.maskQuarterX),
+      sy + quarterOrigin(ts, 1 - quadrant.maskQuarterY),
+    );
+  });
+}
+
+/**
+ * Draws the material boundaries running through one tile, over its already-drawn
+ * base.
+ *
+ * `materialAt` must answer for **every** position, including ones that are not
+ * ground at all. The tear-free argument runs through the material *orders* at the
+ * two corners an edge is interpolated from: a layer only one of two cells holds
+ * is always covered, along their shared edge, by a harder layer both hold. A
+ * corner with no order at all breaks that, and every way of faking one after the
+ * fact — softest, hardest, belongs-to-everything, skip the cell — lets one cell
+ * draw something its neighbour cannot match, which is a full-alpha cut down the
+ * middle of a tile. Two cells share a corner but not a *cell*, so the stand-in
+ * has to be chosen per position, by the caller, and be the same for both.
+ */
+export function drawFringe(
+  ctx: CanvasRenderingContext2D,
+  own: FringeMaterial,
+  materialAt: (tx: number, ty: number) => FringeMaterial,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  // Checked once, before anything is drawn. A quadrant paints its softest layer
+  // unmasked and composites the harder ones back on top, so bailing out part way
+  // through would leave the softest material covering ground that should be
+  // paved — half a tile of lawn over every road edge, baked into the chunk cache.
+  const mask = maskSheet();
+  if (mask === undefined) return;
+
+  for (const quadrant of DUAL_CELL_QUADRANTS) {
+    drawFringeQuadrant(ctx, mask, own, materialAt, quadrant, sx, sy, ts, tx, ty);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scatter — softer material spilling across the joint
+// ---------------------------------------------------------------------------
+
+/** Cardinal neighbours, in the order their scatter is hashed. */
+const CARDINAL_OFFSETS = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+] as const;
+
+const SCATTER_MARKS_PER_EDGE = 3;
+/** How far from the shared edge a spill mark may land. */
+const SCATTER_EDGE_DEPTH_PX = 7;
+const SCATTER_BLADE_WIDTH_PX = 2;
+const SCATTER_BLADE_HEIGHT_PX = 5;
+const SCATTER_GRIT_RADIUS_PX = 1.2;
+const SCATTER_HASH_X = 374761393;
+const SCATTER_HASH_Y = 668265263;
+const SCATTER_HASH_SLOT = 1274126177;
+const SCATTER_HASH_SHIFT = 13;
+
+function scatterHash(tx: number, ty: number, slot: number): number {
+  let h = Math.imul(tx, SCATTER_HASH_X) ^ Math.imul(ty, SCATTER_HASH_Y);
+  h = Math.imul(h ^ (h >>> SCATTER_HASH_SHIFT), SCATTER_HASH_SLOT + slot);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * Keeps a mark's whole extent inside its own tile.
+ *
+ * A mark that overhangs its tile is drawn twice over: the chunk cache clips it at
+ * the chunk's edge, and within a chunk the next tile's base pass paints over the
+ * part that crossed into it — so the same tuft appears, is cut in half, or
+ * vanishes depending on where the tile falls in the bake order.
+ */
+function clampMarkCentre(centre: number, origin: number, ts: number, extent: number): number {
+  const half = extent / 2;
+  return Math.min(Math.max(centre, origin + half), origin + ts - half);
+}
+
+function drawScatter(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  material: GroundMaterial,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const ownOrder = GROUND_BLEND_ORDER[material];
+  const depth = Math.min(SCATTER_EDGE_DEPTH_PX, ts);
+
+  CARDINAL_OFFSETS.forEach(([dx, dy], side) => {
+    const neighbour = groundMaterialUnder(structure, tx + dx, ty + dy);
+    if (neighbour === undefined) return;
+    if (GROUND_BLEND_ORDER[neighbour] >= ownOrder) return;
+    const spill = GROUND_SPILL[neighbour];
+    if (spill === null) return;
+
+    const isBlade = spill.kind === 'blades';
+    const markWidth = isBlade ? SCATTER_BLADE_WIDTH_PX : SCATTER_GRIT_RADIUS_PX * 2;
+    const markHeight = isBlade ? SCATTER_BLADE_HEIGHT_PX : SCATTER_GRIT_RADIUS_PX * 2;
+
+    ctx.fillStyle = spill.color;
+    for (let mark = 0; mark < SCATTER_MARKS_PER_EDGE; mark++) {
+      const hash = scatterHash(tx, ty, side * SCATTER_MARKS_PER_EDGE + mark);
+      const along = hash % ts;
+      const into = (hash >>> 8) % depth;
+      // The edge the neighbour lies across runs either horizontally (dy) or
+      // vertically (dx); `into` measures inward from that edge.
+      const rawX = dx === 0 ? sx + along : dx < 0 ? sx + into : sx + ts - into;
+      const rawY = dy === 0 ? sy + along : dy < 0 ? sy + into : sy + ts - into;
+      const markX = clampMarkCentre(rawX, sx, ts, markWidth);
+      const markY = clampMarkCentre(rawY, sy, ts, markHeight);
+
+      if (isBlade) {
+        ctx.fillRect(
+          markX - markWidth / 2,
+          markY - markHeight / 2,
+          SCATTER_BLADE_WIDTH_PX,
+          SCATTER_BLADE_HEIGHT_PX,
+        );
+      } else {
+        ctx.beginPath();
+        ctx.arc(markX, markY, SCATTER_GRIT_RADIUS_PX, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// World-space brightness noise
+// ---------------------------------------------------------------------------
+
+/**
+ * The tone is the sum of two fields whose periods share no factor, so the pattern
+ * only repeats after their least common multiple — 864 tiles, which at 32px a tile
+ * is fourteen screens across a 1920px window.
+ *
+ * One field cannot do that affordably. It is stored at one pixel per screen
+ * pixel, because drawing a *sub-rectangle* of a smaller field scaled up would
+ * clamp its filtering at the rectangle's edge and put a seam on every tile
+ * boundary — so a longer period means a proportionally larger canvas, and a
+ * single field long enough to clear a screen would cost more memory than the
+ * whole tileset. Two fields buy a multiplied period for an added one.
+ *
+ * Each carries its own seed: at the same octave counts they would otherwise be
+ * the same pattern at two scales, which correlates rather than decorrelates.
+ */
+interface ToneField {
+  readonly periodTiles: number;
+  readonly seed: number;
+}
+
+const TONE_FIELDS: ReadonlyArray<ToneField> = [
+  { periodTiles: 32, seed: 0x2f6e2b1 },
+  { periodTiles: 27, seed: 0x9c1b3a7 },
+];
+
+/** One sample per tile, plus a one-sample margin so the period wraps smoothly. */
+const NOISE_MARGIN_SAMPLES = 1;
+/**
+ * Peak-to-peak darkening. The field is stored as black at a varying alpha and
+ * blended with the default operator, which lands on `dest * (1 - alpha)` — the
+ * same result a `multiply` by a grey would give, without leaving the compositor's
+ * fast path. It measured as two thirds of the whole ground pass when it was a
+ * `multiply`. Darkening-only is why the plan's ±6% is written here as 0–12%.
+ */
+const NOISE_DEPTH = 0.12;
+
+/**
+ * Depth of each field, so that the two darkening in series land on `NOISE_DEPTH`:
+ * `(1 - d)^2 = 1 - NOISE_DEPTH`.
+ */
+const TONE_FIELD_DEPTH = 1 - Math.sqrt(1 - NOISE_DEPTH);
+
+interface NoiseOctave {
+  /** Lattice cells across a field's period, whatever that period is. */
+  readonly cells: number;
+  readonly weight: number;
+}
+
+const NOISE_OCTAVES: ReadonlyArray<NoiseOctave> = [
+  { cells: 2, weight: 0.62 },
+  { cells: 4, weight: 0.26 },
+  { cells: 8, weight: 0.12 },
+];
+
+const RGBA_CHANNELS = 4;
+const ALPHA_CHANNEL = 3;
+
+const LATTICE_HASH_X = 2654435761;
+const LATTICE_HASH_Y = 1597334677;
+const LATTICE_HASH_MIX = 2246822519;
+/** Breaks the hash's fixed point at the origin — see `latticeValue`. */
+const LATTICE_HASH_OFFSET = 0x9e3779b9;
+const UINT32_SCALE = 4294967296;
+
+/**
+ * Hashed lattice value in 0..1.
+ *
+ * The offset is load-bearing. Without it the hash maps (0, 0) to 0 and stays
+ * there through every mix, and index 0 is a node of *every* octave — so the
+ * field's minimum was pinned to tile (0, 0) and to each 32-tile multiple of it
+ * rather than falling wherever the noise put it.
+ */
+function latticeValue(ix: number, iy: number, cells: number, seed: number): number {
+  const x = positiveMod(ix, cells);
+  const y = positiveMod(iy, cells);
+  let h =
+    (Math.imul(x, LATTICE_HASH_X) ^ Math.imul(y, LATTICE_HASH_Y)) + LATTICE_HASH_OFFSET + seed;
+  h = Math.imul(h ^ (h >>> 15), LATTICE_HASH_MIX);
+  return ((h ^ (h >>> 16)) >>> 0) / UINT32_SCALE;
+}
+
+function smoothFade(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/** Wrapped value noise at a tile position, in 0..1. */
+function noiseAtTile(field: ToneField, tileX: number, tileY: number): number {
+  let total = 0;
+  for (const octave of NOISE_OCTAVES) {
+    const u = (tileX * octave.cells) / field.periodTiles;
+    const v = (tileY * octave.cells) / field.periodTiles;
+    const cellX = Math.floor(u);
+    const cellY = Math.floor(v);
+    const fx = smoothFade(u - cellX);
+    const fy = smoothFade(v - cellY);
+    const top =
+      latticeValue(cellX, cellY, octave.cells, field.seed) * (1 - fx) +
+      latticeValue(cellX + 1, cellY, octave.cells, field.seed) * fx;
+    const bottom =
+      latticeValue(cellX, cellY + 1, octave.cells, field.seed) * (1 - fx) +
+      latticeValue(cellX + 1, cellY + 1, octave.cells, field.seed) * fx;
+    total += octave.weight * (top * (1 - fy) + bottom * fy);
+  }
+  return total;
+}
+
+const noiseFields = new Map<string, CanvasSurface>();
+
+/**
+ * Builds the world-space brightness field at one tile size.
+ *
+ * The samples are one per tile and are upscaled by the canvas rather than
+ * evaluated per pixel, which is why the margin matters: a scaled `drawImage`
+ * puts texel *centres* half a texel inside the destination, so the field is
+ * drawn one texel oversized and offset until sample k lands exactly on tile
+ * corner k. Sample −1 wraps to period−1, so the field is continuous where it
+ * repeats as well as within itself.
+ */
+function buildNoiseField(field: ToneField, cell: number): CanvasSurface {
+  const span = field.periodTiles + NOISE_MARGIN_SAMPLES * 2;
+  const samples = allocCanvas(span, span);
+  const samplesCtx = surfaceContext(samples);
+  const image = samplesCtx.createImageData(span, span);
+  const ALPHA_MAX = 255;
+
+  // Sampled first, then stretched to the range the depth is quoted against.
+  // A weighted sum of hashed octaves does not reach 0 and 1 on its own — the
+  // coarsest one has four lattice nodes for the whole period and can only span
+  // whatever those four happen to be — so the field measured 0.00..0.51, which
+  // is half the intended contrast plus a flat darkening of everything outdoors.
+  // Normalising makes the stated amplitude true by construction rather than by
+  // luck, in the way the mask warp's centring does for its boundary.
+  const levels = new Float32Array(span * span);
+  let lowest = Infinity;
+  let highest = -Infinity;
+  for (let j = 0; j < span; j++) {
+    for (let i = 0; i < span; i++) {
+      const level = noiseAtTile(field, i - NOISE_MARGIN_SAMPLES, j - NOISE_MARGIN_SAMPLES);
+      levels[j * span + i] = level;
+      lowest = Math.min(lowest, level);
+      highest = Math.max(highest, level);
+    }
+  }
+  const spread = highest - lowest;
+
+  for (let j = 0; j < span; j++) {
+    for (let i = 0; i < span; i++) {
+      const index = j * span + i;
+      const level = spread <= 0 ? 1 : (levels[index] - lowest) / spread;
+      image.data[index * RGBA_CHANNELS + ALPHA_CHANNEL] = Math.round(
+        ALPHA_MAX * TONE_FIELD_DEPTH * (1 - level),
+      );
+    }
+  }
+  samplesCtx.putImageData(image, 0, 0);
+
+  const surface = allocCanvas(field.periodTiles * cell, field.periodTiles * cell);
+  const surfaceCtx = surfaceContext(surface);
+  surfaceCtx.imageSmoothingEnabled = true;
+  surfaceCtx.imageSmoothingQuality = 'high';
+  const originOffset = -(NOISE_MARGIN_SAMPLES + 0.5) * cell;
+  surfaceCtx.drawImage(samples, originOffset, originOffset, span * cell, span * cell);
+  return surface;
+}
+
+function noiseField(field: ToneField, cell: number): CanvasSurface {
+  // Seeded as well as sized: two fields of the same period differing only by seed
+  // would otherwise share one surface.
+  const cacheKey = `${field.periodTiles}|${field.seed}|${cell}`;
+  const existing = noiseFields.get(cacheKey);
+  if (existing !== undefined) return existing;
+  const built = buildNoiseField(field, cell);
+  noiseFields.set(cacheKey, built);
+  return built;
+}
+
+function applyWorldNoise(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const cell = Math.max(1, Math.round(ts));
+  for (const field of TONE_FIELDS) {
+    const surface = noiseField(field, cell);
+    const period = field.periodTiles * cell;
+    const srcX = positiveMod(tx * cell, period);
+    const srcY = positiveMod(ty * cell, period);
+    ctx.drawImage(surface, srcX, srcY, cell, cell, sx, sy, ts, ts);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient occlusion
+// ---------------------------------------------------------------------------
+
+/**
+ * What shades the ground beside it.
+ *
+ * Architectural solids only. `TREE` casts the dungeon's wall shadow but is
+ * deliberately absent here: a tree is one tile standing on its own, so it gets a
+ * band with two ends and nothing to continue them, and at forest densities the
+ * result is a field of hard-edged dark rectangles — the exact artifact
+ * `SHADOW_TYPES` already excludes round furniture to avoid. Trees carry their
+ * shade in their own art.
+ */
+const GROUND_OCCLUDER_TYPES = new Set<number>([
+  FloorTypeValue.wall,
+  BUILDING_WALL,
+  METAL_WALL,
+  RUINED_WALL,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+]);
+
+/**
+ * Shading depth and strength per side. The north strip is the deepest because a
+ * facade stands between the ground below it and the sky; the south strip is
+ * barely there, since ground below a structure is only clipped by its base.
+ */
+const OCCLUSION_NORTH_DEPTH_PX = 11;
+const OCCLUSION_SIDE_DEPTH_PX = 7;
+const OCCLUSION_SOUTH_DEPTH_PX = 4;
+const OCCLUSION_NORTH_ALPHA = 0.38;
+const OCCLUSION_SIDE_ALPHA = 0.22;
+const OCCLUSION_SOUTH_ALPHA = 0.14;
+
+/** How far a band fades in at an end that no neighbouring band continues. */
+const OCCLUSION_TAPER_PX = 11;
+
+interface OcclusionSide {
+  /** Direction from the shaded tile to the occluder. */
+  readonly dx: number;
+  readonly dy: number;
+  readonly depthPx: number;
+  readonly alpha: number;
+}
+
+const OCCLUSION_SIDES: ReadonlyArray<OcclusionSide> = [
+  { dx: 0, dy: -1, depthPx: OCCLUSION_NORTH_DEPTH_PX, alpha: OCCLUSION_NORTH_ALPHA },
+  { dx: -1, dy: 0, depthPx: OCCLUSION_SIDE_DEPTH_PX, alpha: OCCLUSION_SIDE_ALPHA },
+  { dx: 1, dy: 0, depthPx: OCCLUSION_SIDE_DEPTH_PX, alpha: OCCLUSION_SIDE_ALPHA },
+  { dx: 0, dy: 1, depthPx: OCCLUSION_SOUTH_DEPTH_PX, alpha: OCCLUSION_SOUTH_ALPHA },
+];
+
+function occluderAt(structure: TileContent[][], tx: number, ty: number): boolean {
+  if (ty < 0 || ty >= structure.length) return false;
+  const row = structure[ty];
+  if (tx < 0 || tx >= row.length) return false;
+  return GROUND_OCCLUDER_TYPES.has(row[tx].type);
+}
+
+/** Pre-rendered occlusion bands, keyed by side, which ends taper, and tile size. */
+const occlusionBands = new Map<string, CanvasSurface>();
+
+/**
+ * One occlusion band: dark against the occluder, fading away from it, and fading
+ * out along its length at either end that no neighbouring tile continues.
+ *
+ * The taper is why this is a cached image rather than a `fillRect` with a
+ * gradient. A band needs to fade on two axes at once, which one gradient cannot
+ * do — but on its own surface the second axis is just a `destination-out` pass,
+ * and there are only sixteen distinct bands per tile size.
+ */
+function occlusionBand(
+  side: OcclusionSide,
+  taperLow: boolean,
+  taperHigh: boolean,
+  ts: number,
+): CanvasSurface {
+  const cacheKey = `${side.dx},${side.dy}|${taperLow ? 1 : 0}${taperHigh ? 1 : 0}|${ts}`;
+  const cached = occlusionBands.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const runsHorizontally = side.dy !== 0;
+  const depth = Math.min(side.depthPx, ts);
+  const width = runsHorizontally ? ts : depth;
+  const height = runsHorizontally ? depth : ts;
+
+  const surface = allocCanvas(width, height);
+  const bandCtx = surfaceContext(surface);
+
+  // Dark at the occluder's edge, transparent at the far edge of the band.
+  const towardsOccluder = side.dx + side.dy < 0;
+  const shade = bandCtx.createLinearGradient(
+    runsHorizontally ? 0 : towardsOccluder ? 0 : width,
+    runsHorizontally ? (towardsOccluder ? 0 : height) : 0,
+    runsHorizontally ? 0 : towardsOccluder ? width : 0,
+    runsHorizontally ? (towardsOccluder ? height : 0) : 0,
+  );
+  shade.addColorStop(0, `rgba(0,0,0,${side.alpha})`);
+  shade.addColorStop(1, 'rgba(0,0,0,0)');
+  bandCtx.fillStyle = shade;
+  bandCtx.fillRect(0, 0, width, height);
+
+  const along = runsHorizontally ? width : height;
+  const taper = Math.min(OCCLUSION_TAPER_PX, along);
+  bandCtx.globalCompositeOperation = 'destination-out';
+  for (const atLow of [true, false]) {
+    if (atLow ? !taperLow : !taperHigh) continue;
+    const from = atLow ? 0 : along;
+    const to = atLow ? taper : along - taper;
+    const erase = bandCtx.createLinearGradient(
+      runsHorizontally ? from : 0,
+      runsHorizontally ? 0 : from,
+      runsHorizontally ? to : 0,
+      runsHorizontally ? 0 : to,
+    );
+    erase.addColorStop(0, 'rgba(0,0,0,1)');
+    erase.addColorStop(1, 'rgba(0,0,0,0)');
+    bandCtx.fillStyle = erase;
+    bandCtx.fillRect(
+      runsHorizontally ? Math.min(from, to) : 0,
+      runsHorizontally ? 0 : Math.min(from, to),
+      runsHorizontally ? taper : width,
+      runsHorizontally ? height : taper,
+    );
+  }
+
+  occlusionBands.set(cacheKey, surface);
+  return surface;
+}
+
+/** Soft shading where ground meets a wall, building or ruin. */
+function drawOcclusion(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  // A solid's own ground is *under* the structure, not beside it. Shading it
+  // from its neighbours draws a lattice of bands across a building's footprint,
+  // one per tile, which is only invisible for as long as its art is opaque.
+  if (occluderAt(structure, tx, ty)) return;
+
+  for (const side of OCCLUSION_SIDES) {
+    if (!occluderAt(structure, tx + side.dx, ty + side.dy)) continue;
+
+    // The band runs along the axis the occluder is not on; it needs a taper at
+    // either end where the next tile along has no occluder to continue it.
+    const alongDX = side.dy === 0 ? 0 : 1;
+    const alongDY = side.dy === 0 ? 1 : 0;
+    const continuesLow = occluderAt(structure, tx + side.dx - alongDX, ty + side.dy - alongDY);
+    const continuesHigh = occluderAt(structure, tx + side.dx + alongDX, ty + side.dy + alongDY);
+
+    const band = occlusionBand(side, !continuesLow, !continuesHigh, ts);
+    const depth = Math.min(side.depthPx, ts);
+    ctx.drawImage(band, sx + (side.dx > 0 ? ts - depth : 0), sy + (side.dy > 0 ? ts - depth : 0));
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+function fringeMaterial(material: GroundMaterial): FringeMaterial {
+  return {
+    id: material,
+    order: GROUND_BLEND_ORDER[material],
+    resolve: (tx, ty) => resolveMaterial(material, tx, ty),
+  };
+}
+
+/**
+ * What a position with no ground at all counts as inside the fringe.
+ *
+ * It exists because the fringe needs *a* material at every corner — see
+ * `drawFringe` — not because grass is the right answer there. It is reached for
+ * any position whose floor is not an outdoor material: an indoor or dungeon
+ * floor, or off-map. On today's maps that is only the deep void border, since
+ * `drawGroundTile` runs on the overworld alone and every void tile within
+ * `inferFloorType`'s reach resolves to real ground — but a Phase 3 interior
+ * abutting outdoor ground would put grass along that seam, and would want a
+ * material of its own rather than a better stand-in.
+ */
+const FRINGE_STAND_IN_MATERIAL = 'grass';
+
+/**
+ * The `FringeMaterial` view of each ground material, built once. Identity
+ * matters — the fringe de-duplicates a cell's corner materials by reference —
+ * so these are shared, not rebuilt per tile.
+ */
+const FRINGE_MATERIALS: Record<GroundMaterial, FringeMaterial> = {
+  grass: fringeMaterial('grass'),
+  verge: fringeMaterial('verge'),
+  dirt: fringeMaterial('dirt'),
+  gravel: fringeMaterial('gravel'),
+  lane: fringeMaterial('lane'),
+  cobble: fringeMaterial('cobble'),
+  plaza: fringeMaterial('plaza'),
+};
+
+/**
+ * Draws the ground at (tx, ty), blended into its neighbours.
+ *
+ * The material comes from the tile itself rather than from the caller: it is the
+ * same lookup the fringe uses for every neighbouring tile, and a caller that
+ * disagreed with it would silently break the "softest layer is already drawn"
+ * shortcut. Callers that paint their own detail on top (weed tufts, dirt
+ * blotches, ruin stones) call this first for the surface underneath them.
+ */
+export function drawGroundTile(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const material = groundMaterialUnder(structure, tx, ty);
+  if (material === undefined) return;
+
+  const resolved = resolveMaterial(material, tx, ty);
+  if (resolved === undefined) {
+    // The fallback colours are each material's mean *in the sheet*, and the tone
+    // layer darkens what is drawn from that sheet — so it applies here too, or
+    // the stand-in sits brighter than the thing it stands in for.
+    ctx.fillStyle = GROUND_FALLBACK_COLOR[material];
+    ctx.fillRect(sx, sy, ts, ts);
+    applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+    return;
+  }
+
+  const materialAt = (atX: number, atY: number): FringeMaterial =>
+    FRINGE_MATERIALS[groundMaterialUnder(structure, atX, atY) ?? FRINGE_STAND_IN_MATERIAL];
+
+  drawResolved(ctx, resolved, sx, sy, ts);
+  drawFringe(ctx, FRINGE_MATERIALS[material], materialAt, sx, sy, ts, tx, ty);
+  drawScatter(ctx, structure, material, sx, sy, ts, tx, ty);
+  applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+  drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
+}

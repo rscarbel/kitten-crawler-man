@@ -6,8 +6,9 @@ the fastest way to tell whether the redesign is actually working.
 
 **Status legend:** ☐ not started · ◐ in progress · ☑ done · ⊘ dropped (say why)
 
-**Overall status:** ◐ In progress — Phases 0 and 1 done 2026-07-25, and Phase 2's
-tileset generator with them. Next up is Phase 2's renderer integration, then compaction.
+**Overall status:** ◐ In progress — Phases 0, 1 and 2 done 2026-07-25. The town now
+draws from the generated tileset with blended material boundaries, world-space tone and
+ambient occlusion. Next up is Phase 3, compaction and the street plan.
 
 ---
 
@@ -15,19 +16,21 @@ tileset generator with them. Next up is Phase 2's renderer integration, then com
 
 Re-measure after each phase (Phase 0 gives you the tooling to do it in one command).
 
-| Metric                            | Baseline      | Target      | Current  |
-| --------------------------------- | ------------- | ----------- | -------- |
-| Town bounding box (tiles)         | 74 × 73       | 55 × 40     | 74 × 73  |
-| Town area (tiles)                 | 5402          | 2200        | 5402     |
-| Built density                     | 16.5%         | 40.5%       | 16.5%    |
-| Farthest building door from plaza | 42.6          | ~28         | 42.6     |
-| Ground materials used in town     | 2             | 7           | 2        |
-| Ground materials available        | 2 usable      | 14          | **14**   |
-| Worst joint-to-interior ratio     | never wrapped | ≤1.15       | **1.11** |
-| Tiles before a visible repeat     | 1             | 4+          | **4–7**  |
-| Distinct outdoor prop types       | 3             | 15+         | 3        |
-| Town safe radius (tiles)          | 55            | ~40         | 55       |
-| Overworld frame time              | _measure_     | no regress. | —        |
+| Metric                              | Baseline      | Target      | Current                                             |
+| ----------------------------------- | ------------- | ----------- | --------------------------------------------------- |
+| Town bounding box (tiles)           | 74 × 73       | 55 × 40     | 74 × 73                                             |
+| Town area (tiles)                   | 5402          | 2200        | 5402                                                |
+| Built density                       | 16.5%         | 40.5%       | 16.5%                                               |
+| Farthest building door from plaza   | 42.6          | ~28         | 42.6                                                |
+| Ground materials used in town       | 2             | 7           | 2                                                   |
+| Ground materials available          | 2 usable      | 14          | **14**                                              |
+| Worst joint-to-interior ratio       | never wrapped | ≤1.15       | **1.11**                                            |
+| Tiles before a visible repeat       | 1             | 4+          | **4–7 (patch); variant choice has no period to 96** |
+| Distinct outdoor prop types         | 3             | 15+         | 3                                                   |
+| Town safe radius (tiles)            | 55            | ~40         | 55                                                  |
+| Overworld frame time                | unchanged     | no regress. | **unchanged**                                       |
+| Chunk bake (256 tiles, node-canvas) | 1.13ms        | no hitch    | **2.26ms**                                          |
+| Tile-grid amplitude on open ground  | n/a           | invisible   | **1.4/255**                                         |
 
 ---
 
@@ -110,7 +113,7 @@ Pure refactor. Zero visual change — the generated grid must be identical to to
   modules. It became one `TownPlan` field derived from `mainRoadWidth` (superseded in round
   2, which split it into `approachRoadStopOffset` and `frontageTurnThreshold`), and the
   circus approach roads moved into `paintStreets.connectSiteToMainRoads`.
-- `townMetrics` matched art to named entries by *containment*, which works today and breaks
+- `townMetrics` matched art to named entries by _containment_, which works today and breaks
   exactly when compaction puts one door inside a neighbour's footprint — double-counting
   area and corrupting the density metric in the phase it exists to validate. Matching is now
   exact (`anchor + manifest doorway`, tower by entry kind), each entry can be claimed once,
@@ -118,7 +121,7 @@ Pure refactor. Zero visual change — the generated grid must be identical to to
 - `?townmap`: the browser fires `click` after every press/release, so every pan ended by
   toggling the view and re-framing. Panning now needs to exceed a 4 px threshold to be a
   pan, the origin is clamped so the map cannot be dragged off-screen, and the safe-radius
-  and circus circles were centred on a tile *corner* while the markers used tile centres —
+  and circus circles were centred on a tile _corner_ while the markers used tile centres —
   a 12 px error at full zoom, when the point of the circle is judging what falls inside it.
 - `fountainCentre` fell back to the town centre when no fountain existed, which would play
   water from a dry plaza. It returns `undefined`; consumers already treat it as optional.
@@ -129,11 +132,11 @@ Pure refactor. Zero visual change — the generated grid must be identical to to
 
 Declined, with reasons:
 
-- *Add a `never` default to the prop switch.* The premise — that a new prop kind would
+- _Add a `never` default to the prop switch._ The premise — that a new prop kind would
   "compile clean and paint nothing" — is wrong: `@typescript-eslint/switch-exhaustiveness-check`
   is an error in this repo, and adding a fourth `PlannedProp` kind fails `npm run lint`
   (verified). A runtime guard would duplicate a gate that already blocks the commit.
-- *Rename `src/map/town/` to `src/map/overworld/`.* Plan §5 names the directory; renaming it
+- _Rename `src/map/town/` to `src/map/overworld/`._ Plan §5 names the directory; renaming it
   is a plan change, not a review fix.
 
 All fixes re-verified: still **160/160 identical** generator output, metrics unchanged.
@@ -142,12 +145,12 @@ All fixes re-verified: still **160/160 identical** generator output, metrics unc
 
 - **Found a real pre-existing layout defect.** Round 1's unification of the road far-side
   offset was right that it should be one plan-owned value, but wrong that both call sites
-  wanted the same *quantity*, and the rationale written for it was fiction. The E-W road
+  wanted the same _quantity_, and the rationale written for it was fiction. The E-W road
   band ends at `centre.y + 2`; approach roads start at `centre.y + 4`. **Row `centre.y + 3`
   is never paved** (and likewise column `centre.x + 3` eastward), so an approach taking the
   far-side branch stops a tile short of the junction — reproduced on seed 8 / size 280,
   circus at (186, 209), row 143 grass between road and approach. Scope corrected in round 5:
-  the near-side branch targets a tile *on* the band and never gaps, so the circus is only
+  the near-side branch targets a tile _on_ the band and never gaps, so the circus is only
   actually cut off when it lies south **and** east — roughly 45% of the seeds in that
   quadrant, ~11% of all seeds, and zero in the other three quadrants, over 2000 seeds and
   reproduced independently. Pre-existing and byte-identical,
@@ -199,9 +202,9 @@ Re-verified after round 3: **160/160 identical**, metrics unchanged, all gates c
   probe building's door at every front row from `+0` to `+8`: connected in all nine cases.
   The real round-2 defect is different in kind, and round 5 corrected this explanation too:
   both runs are contiguous, but they aim at different places. `connectDoorToStreet`'s
-  non-turning branch targets `centre.y − floor(mainRoadWidth / 2)`, a tile *on* the band;
+  non-turning branch targets `centre.y − floor(mainRoadWidth / 2)`, a tile _on_ the band;
   `connectSiteToMainRoads`' far-side branch targets `centre.y + approachRoadStopOffset`, two
-  tiles *past* the band's far kerb. That target, not the contiguity, is what leaves the gap.
+  tiles _past_ the band's far kerb. That target, not the contiguity, is what leaves the gap.
 - Worse than the wrong claim was its consequence: the Phase 3 checklist told a future
   implementer to move `frontageTurnThreshold` alongside `approachRoadStopOffset`, which
   would have started firing frontage turns for buildings that already front the main street
@@ -220,12 +223,12 @@ Re-verified after round 4: **160/160 identical**, metrics unchanged, all gates c
   and the round-2 note: "severed on every seed where the circus lies south or east". Only
   the far-side branch gaps; the near-side branch targets a tile on the band, so a south-west
   or north-east circus always connects. Measured over 300 seeds at size 280 by flood-filling
-  the paved network from the circus grounds to the plaza: **every cut-off seed is south *and*
+  the paved network from the circus grounds to the plaza: **every cut-off seed is south _and_
   east**, with none in the other three quadrants. The rates quoted in this note initially
   came out low; round 7 traced that to the seeding (see below) and the settled figures are
   ~45% of the south-east quadrant and ~11% of all seeds. Both places now state the scope and
   a rounded rate rather than raw counts, which are stream-dependent.
-- Round 4's explanation of *why* the door stub does not have the same bug was also wrong —
+- Round 4's explanation of _why_ the door stub does not have the same bug was also wrong —
   it blamed contiguity, when both runs are contiguous. The difference is the target: one
   aims at a tile on the band, the other two tiles past its far kerb. Corrected.
 
@@ -243,7 +246,7 @@ Re-verified after round 5: **160/160 identical**, metrics unchanged, all gates c
   correctly. Dangerous because Phase 3 moves the tower and might have trusted the contract.
 - Round 5's connectivity counts didn't reproduce: "56 of 300 seeds" in the south-east
   quadrant is 18.7%, but the circus angle is uniform so a quadrant must be ~25%. The scope
-  conclusion survives every re-measurement — each cut-off seed is south *and* east, none in
+  conclusion survives every re-measurement — each cut-off seed is south _and_ east, none in
   the other three quadrants — so the docs now state the scope and a rounded rate instead of
   raw counts.
 - **One of the two "measurement traps" in the lesson below was itself false.** Flood-filling
@@ -262,7 +265,7 @@ byte-for-byte equivalence independently, and round 8 additionally hashed
 `GameMap.generateInterior`'s output over 5 kinds × 18 building names × 4 tower floors
 (360/360 identical old vs new). The remaining fixes were to this file:
 
-- The south-east-quadrant rate was low because of how the *seeds* were generated, not the
+- The south-east-quadrant rate was low because of how the _seeds_ were generated, not the
   measurement: `mulberry32(i * 2654435761)` over consecutive `i` is an arithmetic
   progression whose first draw is not uniform, giving 18.3% at n=300 and 22.6% at n=1000
   when a uniform circus angle guarantees ~25%. Mixing the counter through an integer hash
@@ -272,7 +275,7 @@ byte-for-byte equivalence independently, and round 8 additionally hashed
 - The closing lesson had two false claims of its own — an undercount whose scope did not
   match its own record, and "every claim that was executed before being written held up",
   which the paragraph after it refuted. Rewritten to give no tally and to classify the
-  failures by kind. Round 8 then caught that the rewrite had *reinstated* a trap round 6
+  failures by kind. Round 8 then caught that the rewrite had _reinstated_ a trap round 6
   disproved (flood-filling from the circus centre, which is one of the big top's own door
   tiles and is always paved) — corrected again.
 - The refactor's own line counts were wrong: `generateOverworld` was 709 lines, not 768
@@ -304,7 +307,7 @@ settled: first treating `DIRT_PATCH` as unpaved, when ground scatter converts ~6
 tiles to it — which is also the only reason a flood fill seeded on the single circus-centre
 tile failed, since that tile is one of the big top's own door tiles and is always paved;
 then over a sample too small for the quantity claimed; then — the subtle one — over seeds
-as `i * 2654435761`, an arithmetic progression whose first `Math.random()` draw is *not*
+as `i * 2654435761`, an arithmetic progression whose first `Math.random()` draw is _not_
 uniform, which quietly pushed the south-east quadrant to 22.6% when a uniform angle
 guarantees ~25%. Mixing the counter properly gave 25.3–25.6% immediately.
 
@@ -315,7 +318,7 @@ and prefer a stated scope to an exact count that depends on which seeds you happ
 
 ---
 
-## Phase 2 — New ground tileset + rendering ☐
+## Phase 2 — New ground tileset + rendering ☑
 
 Highest visual payoff, lowest layout risk, and the foundation everything else sits on.
 Do this before touching the layout. See plan §7 for the method and the proof.
@@ -343,23 +346,461 @@ Do this before touching the layout. See plan §7 for the method and the proof.
       without becoming a grid
 - [x] `add-ground-tile` skill documenting the pipeline and its four rules
 
-**Rendering**
+**Rendering — ☑ done 2026-07-25**
 
-- [ ] `GroundMaterial` enum + material→row mapping (plan §3.1C)
-- [ ] Frame resolution in the renderer, identical to `TilePreviewScene.frameIndex`
-- [ ] Transition compositing baked into the chunk cache
-- [ ] Delete `overworldRotation` — wrapping tiles don't need it and it can only hurt
-- [ ] Per-tile variant pick by hash (any shuffle is valid once tiles wrap)
-- [ ] Edge fringe pass — noise-masked material bleed across 4-neighbour boundaries
-- [ ] Scatter pass — grass tufts onto adjacent street, cobbles onto adjacent dirt
-- [ ] **World-space** low-frequency noise (~24-tile wavelength, ±6%) — required, this is
-      what kills the per-tile tonal blocking the PoC still showed on dirt
-- [ ] Ambient occlusion on ground adjacent to walls / buildings / wall ring
-- [ ] All of the above baked into the 16-tile chunk cache, nothing per frame
-- [ ] Screenshot review: **is the grid gone at 1× zoom?**
-- [ ] typecheck / lint / format clean
+- [x] `GroundMaterial` enum + material→row mapping — `src/map/town/groundMaterials.ts`
+      (the module Phase 1 deferred). The type _is_ the sheet's state union, so a
+      material that is not in the manifest is a compile error.
+- [x] Frame resolution shared with `TilePreviewScene` rather than duplicated —
+      `groundFrameIndex`, so the `?tiles` route cannot drift from the game
+- [x] Transition compositing baked into the chunk cache
+- [x] `overworldRotation` deleted, along with `overworldFrame` and
+      `drawOverworldSprite` — nothing drew the old sheet afterwards, so its manifest
+      entry went too (the PNG stays on disk; the generator's palettes were sampled
+      from it)
+- [x] Per-tile variant pick by hash, per patch
+- [x] Edge fringe pass — the dual cell's material stack, composited through the shared
+      corner masks (see the review-round note; the first attempt classified on the tile
+      grid and dilated every harder material by ~0.4 tile)
+- [x] Scatter pass — tufts and grit from the _softer_ neighbour only; the harder one
+      already reaches across through the masks
+- [x] **World-space** low-frequency tone — two fields at coprime periods, so the
+      pattern repeats after 864 tiles — fourteen screens; ~10% peak-to-peak per
+      screen, bounded at 12%
+- [x] Ambient occlusion on ground adjacent to walls / buildings / ruins (not trees —
+      see review round 2)
+- [x] All of the above baked into the 16-tile chunk cache, nothing per frame
+- [x] Screenshot review: **the grid is gone at 1× zoom** — measured, not just eyeballed
+- [x] typecheck / lint / format clean
 
 **Notes:**
+
+- 2026-07-25 — the ground pass is five ordered passes in `src/map/tiles/groundTiles.ts`:
+  base frame, fringe, scatter, world tone, occlusion. `terrainTiles` (grass, road),
+  `decorationTiles` (weeds, dirt patches, rubble) and `buildingTiles` (ruined walls) all
+  call the one entry point, so every outdoor tile blends the same way.
+- **Only `grass` and `lane` are produced today**, which is Phase 3's job to change. The
+  renderer blends all seven, and the fringe already fires everywhere town meets street.
+- `DIRT_PATCH` deliberately maps to `lane`, not `dirt`. It is a worn patch _drawn on_ a
+  road: as its own material the surrounding lane would win all four of its corners and
+  the mask would cover it completely, deleting the decoration.
+
+**Found and fixed: the corner masks tore at every boundary that changed shape.**
+
+`buildMaskSet` seeded each mask `seedBase + bits`. The module's own doc says two
+neighbouring tiles must perturb their shared boundary identically — but neighbours
+across a boundary usually hold _different_ corner combinations (a straight edge that
+turns a corner puts a half mask beside a wedge), so a per-combination seed is exactly
+what breaks it. Measured over all 64 adjacent combination pairs: worst mismatch on a
+shared edge **1.000 of full alpha** — one tile solid where its neighbour is bare.
+
+- One shared warp field drops it to a step _smaller_ than the masks' own strongest
+  internal step — see review round 2, which replaced this absolute figure with the
+  joint-to-interior ratio the material patches are already audited against.
+- `DIAGONAL_SEPARATION_BIAS` was the other tear: a flat −0.18 over the two diagonal
+  masks put their whole field below a neighbour that shared their corners (mismatch
+  1.000). It is now multiplied by an `interiorWindow` that is 1 at the tile centre and
+  0 all round the border, so it still separates the wedges but cannot move an edge a
+  neighbour has to agree with. Re-measured after the amplitude change below, the worst shared-edge step
+  involving a diagonal mask is **0.230**, which is also the whole set's worst — and
+  well under the masks' own internal steps, which is the measure that matters.
+- With continuity structural rather than accidental, `BOUNDARY_WARP_AMPLITUDE` went
+  0.34 → 0.65. At 0.34 the four half masks wobbled 1.3–2.4px of 64 — at 32px on screen,
+  a straight line, and a road's north edge was dead flat (±2px over 300px of frontage).
+  The ceiling is `2 * (0.5 - EDGE_FEATHER)`; past it the warp punches holes in a tile
+  that should be entirely covered.
+- Only `ground_masks.png` changed. The other two sheets regenerate byte-identical,
+  which is the seeds doing what they were committed for.
+
+**Performance.** The tone layer was 65% of the whole ground pass as a `multiply`
+composite (386ms → 1107ms per 324 chunk bakes). Stored as black at varying alpha and
+blended with the default operator it lands on the same `dest * (1 - alpha)` without
+leaving the compositor's fast path: **1010ms → 452ms**, i.e. 1.39ms per 256-tile chunk
+against a 1.08ms baseline for 4 extra passes. Fringe, scatter and occlusion together
+cost 40ms of that 324-chunk run. Measured under node-canvas, which is slower than a
+browser; the ratio is what matters.
+
+**Is the grid gone?** Measured, because "looks fine" is not an answer for a 0.5% signal.
+A 40 × 24 field of one material, FFT of the row and column means: the component at the
+32px tile pitch has an amplitude of **1.2–1.4 of 255** on grass and **0.8–1.5** on lane,
+against a standard deviation of those same series of **1.9–2.5** and **5.5–6.9**. So the
+tile pitch is at or below the material's own variation, on both axes, for both
+materials. A first pass at this used the peak's ratio to the noise floor and read
+300–700, which said nothing — the floor is tiny because the signal is a smooth average.
+Amplitude against the material's own variation is the honest form.
+
+**Every tile draws inside its own rect, verified** — of the _ground_ passes. Note for
+whoever runs that comparison next: on a real map it also picks up `RUINED_WALL`, whose
+rebar is drawn 5px above its own tile (`RUIN_REBAR_OVERHANG` in `buildingTiles.ts`) and
+is therefore clipped when a ruin lands on a chunk's top row. Pre-existing, unrelated to
+this phase, and worth knowing before chasing it: exclude ruins, or the test reports a
+ghost.
+
+Scatter marks were positioned by
+their centre, so a tuft near an edge overhung its tile — clipped at a chunk boundary,
+and painted over inside a chunk by whichever neighbour the bake reached next. Rendering
+the same 48 × 48 grid through the chunk cache and through the direct path differed in
+**181 subpixels** (worst delta 84); with the mark clamped to its own tile, **0**. That
+equality is now the cheapest regression test there is for this pass.
+
+**Also fixed in passing.** `TilePreviewScene.compositeTransition` cached composites by
+patch _phase_, so two tiles at the same phase in patches the variant hash sent to
+different variants shared a cached tile and mismatched their stonework. Keyed on the
+resolved frames now.
+
+**Review round 1 (independent), fixes applied:**
+
+- **The variant hash had no avalanche step, so variant selection was a lattice.**
+  `variant` reads the low bits of `patchX*A ^ patchY*B`, and those bits are a linear
+  function of the coordinates: with an even variant count the choice collapsed into a
+  Latin square. Grass (4 variants, 2x2 patches) repeated **exactly every 8 tiles** —
+  verified at pixel level, mean per-channel difference between tiles 8 apart 2.85/255
+  (all of it the tone layer) against 12.7 for any other offset — and every 2-variant
+  material was a literal checkerboard. Shipping 48 frames of lane and then laying them
+  out periodically is the whole feature defeated. One finalising mix (the same one
+  `latticeValue` in this module already used) gives no period out to 96 patches on
+  either axis at 2, 3, 4 or 8 variants, and an even distribution.
+- **The fringe was classified on the tile grid, which dilated every harder material by
+  ~0.4 tile.** A tile-grid corner has to take the hardest of the four tiles touching it,
+  so a tile whose _neighbour_ is paved has both corners on that side set and the mask's
+  contour lands in its own middle. Measured: the last grass tile before a road rendered
+  **37% paved**; a one-tile-wide softer strip was **erased outright** (all four corners
+  resolve to the harder material, and the `CORNER_ALL` case then painted over it) — 33
+  such tiles in a real generated town, and Phase 3's 1-tile `verge` would have been
+  invisible everywhere; and the scatter pass, anchored to the tile edge, laid its tufts
+  **15px inside the paving**, reading as a dashed lane marking. Now classified on the
+  **dual grid**: cells offset half a tile, each corner one whole tile's material, so the
+  contour falls on the tile edge. Each tile draws four quarter-tile pieces, and two tiles
+  sharing an edge take their touching quadrants from the same cell, so the joint still
+  cannot tear. Re-measured: last grass tile **98% grass**, first road tile 3.7% grass
+  (the contour wandering back), 1-tile grass column **93%** where it was 0%, lone grass
+  tile 61% where it was 0%.
+- A tile draws the cell's whole material **stack**, not just the materials harder than
+  its own. Two tiles either side of a joint are looking at one contour from opposite
+  sides, so both have to be able to draw either material or the wander is one-sided. It
+  is also exact where three materials meet at one cell, which an overlay rule is not.
+- **The mask warp was biased, which the dual grid then exposed.** `fbm` averages 0.5
+  over many realisations but not over one 64px tile — the shipped seed averaged 0.303,
+  displacing every boundary in every mask the same way: the half mask's contour sat at
+  x = 40 where the geometry puts it at 32, a systematic 13% erosion rather than a wander.
+  The warp field is now centred on its own mean (one number, shared by all sixteen masks,
+  so no seam), and `BOUNDARY_WARP_OCTAVES`/`BASE_PERIOD` went 3/2 → 4/3 after sweeping
+  five configurations: contour mean **30.8–32.9 of 32** against an ideal 32, the largest
+  wobble of any configuration tried (sd 2.8–6.8px, excursions 19–42), half-mask coverage
+  48–51%, `bits=15` still fully opaque and `bits=0` fully clear.
+- **Ambient occlusion put a grid of hard dark rectangles across every forest.** `TREE`
+  was in the shadow set, and a tree is a lone tile: its band has two ends and nothing to
+  continue them. Verified by rendering a 25%-density forest — an unmistakable tile grid,
+  in the phase whose acceptance criterion is that the grid is gone. Trees are out of the
+  outdoor occluder set (they carry their shade in their own art), which leaves it
+  architectural solids only, and bands now **taper at any end no neighbouring band
+  continues** — pre-rendered per side and taper combination, because fading on two axes
+  at once is not something one gradient can do. The dungeon's `drawWallShadow` is
+  untouched.
+- Restored the frame clamp the deleted `drawOverworldSprite` had. No shipped material
+  can overrun its row, but a row with fewer frames than one patch would blit a slice of
+  the next material.
+
+Cost of the round: chunk bake 1.39ms → 1.60ms per 256 tiles (1.79ms after round 3's
+inference), the dual grid being four quarter-blits where there was one. Chunk-cached and direct render paths still differ by
+**0 subpixels**.
+
+**Review round 2 (independent), fixes applied:**
+
+- **A missing `ground_masks.png` ate the roads instead of disabling the fringe.** A
+  quadrant paints its softest layer unmasked and composites the harder ones back on
+  top, and the mask check sat in the _second_ step — so with the sheet absent the lawn
+  went down and the paving never came back: **24.9% of a road rendered as grass**, baked
+  into the chunk cache, with the scatter tufts stranded in the middle of it. `loadSprites`
+  resolves happily on a missing file by design, so this was one deleted asset away. The
+  check is hoisted to the top of `drawFringe` now; verified by deleting the sheet from a
+  copy of `src/images` and re-rendering — 3.0%, which is the tufts alone.
+- **The grass scatter colour was the retired tileset's.** `#4a8f57` is hue 131°; the
+  generated grass averages hue **73°**, so every tuft read as a saturated teal dash on an
+  olive lawn — the most visible thing in any render of the pass. Sampled from the sheet
+  instead. The same palette rot had `GRASSY_WEED`'s two blade colours at hue 145°/155°;
+  those are retuned too. `dirt` and `gravel` grit were already within 2° of their
+  materials and are unchanged.
+- **Material boundaries repeated exactly at the tile pitch.** Every mask is
+  position-independent, so a straight road edge drew the _identical_ 64px contour on
+  every tile: measured 57.5% of rows matching at a 32px lag, a ruled line with a
+  repeating scallop. This is the trap the tileset's own first rule warns about — wrap at
+  one tile and every feature is smaller than a tile — applied to the masks rather than
+  the materials. The warp now wraps over a **3x3 tile patch** and is sliced by the dual
+  cell's position, so the sheet carries 16 combinations x 9 phases = 144 frames. Match
+  rate at a 32px lag fell to **5%** and moved to 96px (3 tiles) at 63%, and the wander
+  grew from sd 1.99px to **2.93px** over a 19px range.
+- **The seam claim was measured on one axis and stated in the wrong units.** Both axes
+  now, and against the masks' own internal steps rather than in absolute alpha — the
+  yardstick plan §7 already argues for, because a mask legitimately contains hard lines
+  and its joint may land on one. **Joint-to-interior 0.77** (0.65 when this was first
+  measured with a denominator that mixed the two axes — see round 4): the joint is
+  softer than the hardest line inside a mask. The original per-combination seeding
+  scores far above 1 on the same measure. `auditMaskSeams` is part of the generator now and throws above 1.0,
+  so the number is reproduced by running the build rather than quoted from a note.
+- **`BOUNDARY_WARP_BASE_PERIOD` violated `NoiseField`'s stated precondition.** Periods
+  must divide the patch; 3 does not divide 64. It is 4 against a 192px patch, where 4,
+  8, 16 and 32 all divide cleanly.
+- The warp-centring comment justified itself with figures that did not reproduce at any
+  configuration. It no longer quotes any: the fix is right because it removes a
+  dependence on the realised mean, not because of a particular seed's mean. The
+  amplitude ceiling was likewise derived on an assumption of symmetry the mean-centred
+  field breaks, so `buildMaskSet` now _asserts_ that the solid mask is solid and the
+  empty one empty instead of claiming a bound.
+- **The `?tiles` transitions view was still compositing on the tile grid** — the scheme
+  round 1 replaced — while this file and two doc comments claimed it showed what the
+  renderer draws. Since the phase's acceptance method is "review it at `?tiles`", the
+  fringe is now shared code: `drawFringe` takes a material lookup rather than the tile
+  grid, and the preview passes its own. That is also what lets the route preview dungeon
+  materials and pairs the map never produces.
+- `drawGroundTile` no longer takes the material from its caller. It was the same lookup
+  the fringe already does for every neighbour, with nothing enforcing that the two
+  agreed.
+
+**Review round 3 (independent), fixes applied:**
+
+- **Round 2's own tidy-up blanked the ground under 18.7% of the overworld.** Removing
+  `drawGroundTile`'s material parameter looked like it removed a divergence risk. It
+  removed a load-bearing argument: seven call sites pass an _inferred_ floor because
+  the tile's own type is not a floor — `TREE`, `TORCH`, `WELL`, `FOUNTAIN`, `BRAZIER`,
+  `MAIN_TOWER`, `SPRITE_BUILDING`, `MODERN_DECORATION` — and deriving the material from
+  the tile type gave `undefined` for every one of them, so they drew nothing at all onto
+  a canvas that is never cleared. Measured on `generateOverworld(280)`: **14,657 tiles**
+  with no ground, trees floating over transparent black, a hole where the fountain
+  stands. Verified by rendering each type and measuring mean alpha: **0.0**, against
+  255.0 before the change.
+- The fix keeps the single-lookup property rather than reverting to a caller argument:
+  `groundMaterialUnder` answers directly for tiles that _are_ ground and infers from the
+  surroundings for tiles that _stand on_ it, memoised per map because `inferFloorType`
+  walks outward and the fringe asks sixteen times per tile. `TREE` is mapped directly
+  instead — it is outdoors-only, and it is the one type inference cannot resolve, since
+  a tree in a forest has nothing but trees for three rings around it. Mean alpha back to
+  **255.0** for all eight types, and 0.000% transparent subpixels over a 100x100 window
+  of the real town.
+- **A corner with no material punched a hole in the fringe field.** Dropping it made it
+  behave as the _softest_ material present, so one quadrant painted that material
+  unmasked while the neighbouring cell — which does not touch the hole — painted
+  nothing, meeting in a full-alpha cut down the tile's own centre line. Reproduced with
+  flat colours: worst internal coverage step **255** at exactly x=15 of 32. A cornerless
+  corner now counts as belonging to every layer, which both cells sharing it apply
+  identically, so they still agree along their shared edge: worst step **117**, below
+  the **134** a legitimate clean boundary produces. The inference fix removes every
+  case reachable on today's maps; this makes the remaining ones well-defined.
+- Neither failure was reachable from `?tiles`, which renders two materials with every
+  tile classified and no holes. Worth remembering the next time a route is called an
+  acceptance test.
+
+**Review round 4 (independent), fixes applied:**
+
+- **The mint tufts were still on `RUBBLE`** — 2365 tiles a map against `GRASSY_WEED`'s
+  747, and four lines below a line round 2 changed. Same palette rot, same fix. Chasing
+  the rest of it found two more: `buildingTiles`' base fill under every wall and roof
+  was the retired sheet's `#6de89d`, and `helpers.inferGroundColor` — dead code, no
+  callers — was a whole function of it. The fill now draws the real ground with a flat
+  backstop underneath for a tile buried too deep in a building to resolve one; the dead
+  function is gone. That in turn exposed a lattice of occlusion bands across every
+  building footprint, one per tile, since a roof tile shades its neighbours: a tile that
+  is itself a solid now takes no occlusion, because its ground is _under_ the structure
+  rather than beside it.
+- **The round-3 "a cornerless corner belongs to every layer" rule still tore**, and so
+  did the next two things I tried. The tear-free argument runs through the material
+  _orders_ at the two corners an edge is interpolated from — a layer only one of two
+  cells holds is always covered, along their shared edge, by a harder layer both hold —
+  and a corner with no order at all cannot take part in it. Setting every bit lets one
+  cell draw a layer its neighbour has nothing to cover with; _skipping the cell_ fails
+  the same way, because the tear is between a cell that touches the hole and one that
+  does not, and only one of them skips. Both measured at a full **255** step at exactly
+  x=15 of 32 — the tile's own centre line.
+- The fix is to make the failure unrepresentable rather than absent: `materialAt` is now
+  **total**. Every position answers with a material, the caller picks the stand-in for
+  positions that have none, and since the stand-in is a function of position both cells
+  sharing a corner get the same one. Verified by splitting the worst coverage step by
+  _where it lands_, over four configurations including a hole beside a boundary and
+  three materials meeting a hole: centre-line **45–91**, tile-edge **82–128**, against
+  **116–155** for the mask's own ramp. The centre line is never the worst place; the
+  broken versions put a 255 there.
+- `auditMaskSeams` measured its interior steps on the horizontal axis only while
+  measuring joints on both, which flattered whichever axis was smoother. Per axis now,
+  and the honest figure is 0.77 rather than 0.65.
+- Also: the `?tiles` preview resolved frames without the clamp the renderer applies, so
+  "cannot drift from the game" had one hole in it; an orphaned JSDoc block documented
+  nothing after a round-3 edit; `CORNER_ALL` was exported and unused; and the two
+  generator scripts were not prettier-clean, which `npm run format` cannot catch because
+  it only globs `src/**`.
+
+**Review round 5 (independent) — no tearing, holes or blanked tiles found.** 72
+configurations of 2–7 materials at nine tile sizes, plus the whole 280-tile overworld:
+worst centre-line step never exceeded the mask's own ramp, and the map rendered with
+zero non-opaque subpixels. The remaining fixes were to claims and to two review tools:
+
+- **The stand-in's rationale was wrong.** `inferFloorType` never comes up empty — it
+  falls back to `concrete` — so the stand-in fires for _any_ floor that is not an
+  outdoor material, which can sit one tile from visible ground, not only three rings
+  deep inside a wall. Unreachable today (`drawGroundTile` runs on the overworld alone,
+  and every void tile within reach of ground infers real ground), but it is what a
+  Phase 3 author would have trusted while adding the wall ring.
+- **`GROUND_FALLBACK_COLOR` was guessed, and guessed the retired palette** — mint where
+  the lawn is olive, up to 60 levels too bright. Sampled from each material's row now.
+  Fifth round, same defect class: a colour written from memory of the old art.
+- **The new mask gate ran after `writeMaskSheet`**, so a failing audit would have left a
+  torn PNG on disk beside a stale manifest — the opposite of what the gate is for. It
+  now runs before anything is written, and is spelled `!(ratio <= limit)` so a NaN
+  ratio fails instead of slipping through.
+- `scripts/tilegen-debug.ts` still composited with a per-combination seed and no patch
+  phase — the exact scheme measured at a full-alpha tear — so the offline review tool
+  would have shown tearing the game does not have. Fixed, and its header now says what
+  it does and does not judge, since its blob view classifies on the tile grid where the
+  renderer uses the dual grid.
+- The `?tiles` base pass resolved frames without the clamp its fringe had; the plan's §7
+  still said "sixteen 64x64 frames" (144 now), its phase table still listed Phase 2's
+  work as remaining, and its risk table said ground transitions read the
+  4-neighbourhood when the fringe and occlusion both read the 8-neighbourhood.
+
+**Review round 6 (independent), fixes applied:**
+
+- **Compositing the stack with plain alpha blending is wrong once a cell holds three
+  blend orders.** Painting each layer at its own coverage and letting the next cover it
+  leaves layer _k_ weighing `m_k * (1 - m_k+1)` where it should weigh `m_k - m_k+1`. The
+  two agree only where the masks are hard, differ most at half coverage — the middle of
+  the blend, on the tile's own centre line — and the difference is a _discontinuity_:
+  two cells either side of that line agree on `m_k == m_k+1` for a layer only one of
+  them holds, so the differenced weight vanishes there and the product weight does not.
+  Measured on the real palette at **28 of 255** for lane meeting cobble meeting plaza,
+  which is Market Street meeting the plaza — Phase 3's first junction. Latent today,
+  since only two materials are placed, and invisible from `?tiles`, which previews
+  exactly two materials per pair. The claim that the stack was "exact when three
+  materials meet" was mine and was wrong.
+- Layers with anything above them are now painted through a **weight stencil**,
+  `(m_k - m_k+1) / (1 - m_k+1)`, which telescopes so that painting the stack in order
+  lands on the differenced weights exactly. Verified: a random three-order field renders
+  centre-line 44, tile-edge 75, elsewhere 88 — the centre line is the _least_ bad place,
+  where the old form put it at 144 against 118 elsewhere. Colours stay in gamut
+  (0..255 exactly), every pixel fully opaque, 86% of them sitting exactly on a material.
+- **The masks do not nest, which the differencing assumed.** The diagonal separation
+  bias lifts a sub-mask above its superset by as much as **104 of 255**, which would
+  have made a weight negative. A running maximum down the stack restores nesting before
+  the differences are taken.
+- **My first cut of the stencil sampler was 3000x too slow**, and the reason was a real
+  bug: the sheet origin was added to the block bounds _and_ to the index, so each output
+  pixel averaged a run stretching to the far side of a 9216px sheet. A 24x24 three-order
+  field took **40 seconds** to bake; it takes **41 ms** now. Worth recording because the
+  cost is what exposed it — the output was also wrong, and quietly so.
+- Stencils are cached apart from the material, keyed only by the mask stack, quadrant
+  and tile size: the weights never depend on which materials are stacked, and keying
+  them per material frame would have multiplied a few thousand entries into a few
+  hundred thousand.
+- Two premises in the comment above the layer loop were false — the tile's own corner
+  bit does _not_ stay clear, and its material can be strictly harder than a layer above
+  it. The conclusions hold for different reasons, now stated, and the unreachable
+  `bits === 0` guard is gone.
+- Also: the **material** seam gate still ran after its sheets and the manifest were
+  written (round 5 fixed only the mask one); `GROUND_SPILL`'s JSDoc claimed all four
+  colours were sampled between their material's mean and its dark end when dirt and
+  gravel sit at the 90th percentile; the generator's header still said "16 masks"; and
+  the plan's risk table said transitions read the 8-neighbourhood when `inferFloorType`
+  reaches three rings out.
+
+**Review round 7 (independent) — the weighted stack verified clean.** An independent
+reimplementation of the differenced weights, compared pixel for pixel against
+`drawFringe` over 2, 3 and 4 blend orders, agreed to **1.5 of 255** — pure rounding. 240
+configurations of 2–7 orders at four tile sizes put the tile centre line as the _least_
+bad place every time. The running maximum was checked where it actually matters: on the
+frame border, the pixels a neighbouring cell must agree with, the worst nesting
+violation is **7 of 255** against 104 strictly inside, so it only ever rewrites
+interiors. Fixes were to one metric and three claims:
+
+- **`gravel` shipped 3 variants**, which by the generator's own `patchTiles * sqrt(variants)`
+  is 3.5 tiles before the eye finds a repeat — under the 4 this tracker holds the town's
+  ground to, on a yard material Phase 3 lays in stretches. Four variants now, so every
+  overworld material is at 4.0 or better. `dungeon_wall` is 2.8 and stays there: the
+  dungeon still draws from its old sheet, and re-cutting it is the open question below.
+  The metrics row said 4–7 and now says what the generator prints.
+- The module header still said "three caches" after round 6 added a fourth, and
+  `overlayCache`'s one-line doc described its key as the corner bits when it is the mask
+  _frame_, which carries the corner bits and the warp-patch phase together. That path
+  also keyed on the whole mask stack while reading only the first frame of it, so on the
+  fallback path one surface could be stored under several keys — which quietly weakens
+  the bound the Phase 3 cache-capping item rests on.
+- `scripts/tilegen/materials.ts` was the generator file round 4 missed; `npm run format`
+  globs `src/**` only, so nothing catches it.
+
+**Review round 8 (independent), fixes applied:**
+
+- **The world-space tone ran at half the amplitude three places claimed**, plus a flat
+  darkening of everything outdoors. A weighted sum of hashed octaves does not reach 0
+  and 1 on its own — the coarsest carries 0.62 of the weight but has four lattice nodes
+  for the whole period, so it can only span whatever those four happen to be. Measured:
+  the field spanned **0.000–0.508** where the mapping assumed 0–1, giving 5.9–12.0%
+  darkening — a 6.1% peak-to-peak against the stated 12%, with an 8.2% flat loss on
+  every outdoor tile. The field is now normalised to its own range, which makes the
+  stated amplitude true by construction rather than by luck, exactly as centring does
+  for the mask warp. Verified end to end: phase-averaged tile luminance now spans
+  91.1–105.7.
+- **The lattice hash had a fixed point at the origin**: `imul(0, A) ^ imul(0, B)` is 0
+  and stays 0 through every mix, and index 0 is a node of _all three_ octaves — so the
+  field's minimum was pinned to tile (0, 0) and to every 32-tile multiple of it rather
+  than falling where the noise put it. With an offset mixed in first, the minimum moves
+  to (16, 16) and the raw span widens from 0.000–0.508 to 0.088–0.744.
+- The fallback fill now takes the tone layer too, since the fallback colours are the
+  sheet's means and everything drawn _from_ the sheet is darkened by it.
+- **`overworld_tileset` was still in the manifest.** It had been removed, and a
+  `git checkout` of the tileset directory — mine, while testing that the seam gate
+  leaves no artefacts behind — silently put it back. Three places in these docs said it
+  was gone. The 1 MB PNG was still being fetched and decoded at every startup. Removed
+  again, and this time verified by loading the manifest and asserting the key is absent.
+
+**Review round 9 (independent), fixes applied:**
+
+- **The tone layer repeated inside a screen and a half** — the thing it exists to
+  prevent. Its period is 32 tiles, which at 32px a tile is 1024px against a 1920px
+  window, and the comment claiming the period was "well past a screen wide" was simply
+  arithmetic nobody had done. Measured: the column-mean brightness profile 32 tiles
+  apart differed by **0.15 of 255** where every other lag differed by ~1.4, a repeat an
+  order of magnitude above the noise. Round 8's amplitude fix had doubled how visible it
+  was.
+- The tone is now the sum of **two fields with coprime periods**, 32 and 27 tiles, so
+  the pattern only repeats after their least common multiple — 864 tiles, which
+  at 32px a tile is fourteen screens across a 1920px window. One field cannot do this affordably: it is stored at one pixel per screen
+  pixel, because drawing a sub-rectangle of a smaller field scaled up clamps its
+  filtering at the rectangle's edge and puts a seam on every tile boundary, so a longer
+  period means a proportionally larger canvas. Two fields multiply the period for an
+  added one. Re-measured: lag 32 now differs by **0.74** against a median of 1.44 across
+  lags — the residual of the _other_ field, exactly as it should be, and no longer a
+  distinguished lag.
+- Each field carries its own seed. At equal octave counts they would otherwise have been
+  the same pattern at two scales, which correlates rather than decorrelates.
+- The second field costs a second blit per ground tile: the bake went from 1.77ms to
+  **2.26ms** per 256 tiles against a 1.13ms baseline, still entirely at bake time.
+- Realised contrast is **~10% peak-to-peak** rather than the 12% `NOISE_DEPTH` bounds,
+  because two decorrelated fields rarely reach their extremes at the same tile. That is
+  a property of summing them, not a defect, and it is stated rather than tuned away.
+- `buildNoiseField`'s rewrite in round 8 had inlined the `4` and `3` of RGBA indexing
+  that two neighbouring functions had already named; they are shared constants now.
+- The "is the grid gone" note quoted a denominator measured before round 8 doubled the
+  tone's amplitude, and called it a "spread" when it was a standard deviation. Both
+  re-measured and named.
+
+Known and accepted, with reasons:
+
+- **Decorations drawn over ground escape the tone and occlusion layers.** Weed tufts,
+  dirt blotches, rubble and ruin stones paint after `drawGroundTile` returns, so a
+  rubble stone inside an occlusion band renders at full brightness. Fixing it means
+  splitting the ground pass so callers can interleave, which is a worse trade than the
+  artifact.
+- **`MODERN_DECORATION` replays its tile every frame.** It is in `DECORATION_TYPES` but
+  not `CACHEABLE_OVERLAY_TYPES`, so its ground now costs five passes per frame instead
+  of one `drawImage`. Pre-existing, and no level places one — but it is a live trap for
+  whoever does.
+- **`overlayCache` has no eviction.** It is bounded, not a leak — content-addressed by
+  material frame, mask frame, quadrant and tile size — and measured at **3636 entries,
+  ~3.6 MB** after baking the whole 280-tile overworld with the two materials in play
+  today. The bound with all seven materials is ~99k quarter-surfaces, so Phase 3 should
+  cap it; there is a checklist item for that.
+- **Scatter marks are anchored to the tile edge, not to the contour.** On a straight
+  boundary the two are within a pixel or two and 5.7% of blade pixels land on the softer
+  side; around an isolated tile of the harder material the contour retreats inside it and
+  some blades sit on open ground. The dual grid shrank this from the half-tile error it
+  was, and anchoring to the contour would mean sampling the mask per mark.
 
 ---
 
@@ -374,6 +815,9 @@ Do this before touching the layout. See plan §7 for the method and the proof.
 - [ ] Market Plaza (flagstone) + civic terrace at the tower foot
 - [ ] **Tower moved to the town's north edge** — verify nothing sits under the spire
 - [ ] All 16 buildings re-anchored per plan §4; verify zero overlaps
+- [ ] Cap or evict `overlayCache` in `groundTiles.ts` before placing the other five
+      materials — it is content-addressed and never evicted, which is 3.6 MB with two
+      materials and roughly 97 MB of pixel data at full spread
 - [ ] Re-tune `market/vendorDefs.ts` stall offsets
 - [ ] Re-tune `TownPropSystem` board / bench / fortune-teller offsets
 - [ ] Re-tune `TOWN_SAFE_RADIUS_TILES` (55 → ~40) and verify circus + ruins buffers
@@ -488,9 +932,12 @@ Do this before touching the layout. See plan §7 for the method and the proof.
       stalls, fountain, board and crowd in place; shrinking it is cheap.
 - [ ] Do the town walls need real art (§7), or can they be procedural like the ruined
       wall tiles? Decide after Phase 3's first screenshot.
-- [ ] Once the generator exists, is it worth regenerating the **dungeon** tileset too?
-      `dungeon_tileset.png` has the same provenance and has not been audited for wrap
-      error. Out of scope for this workstream — but cheap once the tooling is built.
+- [ ] Switch the **dungeon** over to `ground_dungeon.png`? The seven dungeon materials
+      are generated, audited and reviewable at `?tiles`, but nothing draws them: Phase 2
+      wired the overworld only, and `dungeon_tileset.png` (same ChatGPT provenance, never
+      audited for wrap error) still renders every dungeon floor. The renderer is material-
+      agnostic, so this is now a small job — but it is a different floor and a different
+      workstream, so it stays out of the town redesign unless Ryan says otherwise.
 - [ ] Night lighting: the Low Quarter lanterns imply a day/night tint. In scope, or a
       separate workstream?
 
@@ -508,6 +955,10 @@ Do this before touching the layout. See plan §7 for the method and the proof.
 | 2026-07-25 | Geometry from a shared `structure` seed, detail per variant       | Torus wrapping makes a patch seamless against _itself_, not against a differently-seeded sibling; shuffled variants of paved materials misaligned their stonework and read as a grid.                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 2026-07-25 | Ship corner masks as one sheet, composite at load                 | Baking transitions per material pair needs a row per pair _per patch phase_, and fixes at build time which pairs may blend.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 2026-07-25 | Always ship a calm jointless material per floor                   | Every material in the first dungeon draft had hard joints, so nothing could hold a stretch of floor. `dungeon_plain` is the default; jointed variants are accents.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 2026-07-25 | Verify Phase 1 with a seeded hash, not by eye                     | "Zero visual change" is untestable by screenshot when the map's wilderness is random. Seeding `Math.random` and hashing the whole grid turns the claim into a check that either passes or fails. |
-| 2026-07-25 | `?townmap` derives footprints from the grid, not `OverworldData`  | A dev-only field on the data contract would need re-deriving every time the layout changes; reading sprite anchors back off the grid survives the refactor untouched. |
-| 2026-07-25 | `groundMaterials.ts` deferred from Phase 1 to Phase 2             | It maps a `GroundMaterial` to a sheet row and frame — a renderer concern with nothing to hold until the enum exists. Creating it empty in Phase 1 would have been a stub, not a module. |
+| 2026-07-25 | Verify Phase 1 with a seeded hash, not by eye                     | "Zero visual change" is untestable by screenshot when the map's wilderness is random. Seeding `Math.random` and hashing the whole grid turns the claim into a check that either passes or fails.                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 2026-07-25 | `?townmap` derives footprints from the grid, not `OverworldData`  | A dev-only field on the data contract would need re-deriving every time the layout changes; reading sprite anchors back off the grid survives the refactor untouched.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 2026-07-25 | `groundMaterials.ts` deferred from Phase 1 to Phase 2             | It maps a `GroundMaterial` to a sheet row and frame — a renderer concern with nothing to hold until the enum exists. Creating it empty in Phase 1 would have been a stub, not a module.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 2026-07-25 | One warp seed for all 16 corner masks                             | Neighbouring tiles across a boundary usually hold different corner combinations, so a per-combination seed tears the shared edge by the full alpha range (measured 1.000 → 0.094).                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 2026-07-25 | Ground tone is black-at-varying-alpha, not a `multiply` grey      | Identical arithmetic, but `multiply` leaves the compositor's fast path and cost more than the other four ground passes put together.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 2026-07-25 | `DIRT_PATCH` renders as `lane`, not as the `dirt` material        | It is a decoration drawn over a road. As its own material the surrounding lane wins all four corners and the mask erases it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 2026-07-25 | Dropped `overworld_tileset` from the manifest                     | Nothing draws it once the four call sites move to the generated sheet, and it was a 1 MB image loaded at every startup. The PNG stays on disk — the generated palettes were sampled from it.                                                                                                                                                                                                                                                                                                                                                                                                                     |
