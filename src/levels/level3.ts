@@ -64,6 +64,7 @@ const KRASUE_MAX_LEVEL = 9;
 export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
+  floorNumber: 3,
   mapSize: 280,
   roomMobs: [],
   hallwayMobs: [

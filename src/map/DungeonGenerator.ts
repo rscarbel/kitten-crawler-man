@@ -17,6 +17,7 @@ import {
   BONES,
   BOOKSHELF,
   SPIDER_LAB_FLOOR,
+  placeProp,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
 
@@ -394,7 +395,7 @@ function stampVignette(
         existingType === FloorTypeValue.carpet ||
         existingType === FloorTypeValue.wood
       ) {
-        grid[gy][gx].type = tileType;
+        placeProp(grid[gy][gx], tileType);
       }
     }
   }
@@ -1038,7 +1039,7 @@ export function generateDungeon(
           ];
     for (const c of corners) {
       if (grid[c.y]?.[c.x]?.type === r.floor && !stairwellBlockedSet.has(`${c.x},${c.y}`)) {
-        grid[c.y][c.x].type = TORCH;
+        placeProp(grid[c.y][c.x], TORCH);
       }
     }
 
@@ -1051,7 +1052,7 @@ export function generateDungeon(
       ];
       for (const p of pillarPositions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`)) {
-          grid[p.y][p.x].type = BARREL;
+          placeProp(grid[p.y][p.x], BARREL);
         }
       }
     }
@@ -1079,7 +1080,7 @@ export function generateDungeon(
         positions.push({ x: r.x + CYCLE0_EXTRA_BARREL_DX, y: r.y + 1 });
       for (const p of positions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          grid[p.y][p.x].type = BARREL;
+          placeProp(grid[p.y][p.x], BARREL);
       }
     }
 
@@ -1090,12 +1091,12 @@ export function generateDungeon(
       ];
       for (const p of positions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          grid[p.y][p.x].type = BARREL_SIDE;
+          placeProp(grid[p.y][p.x], BARREL_SIDE);
       }
       if (zone !== 'entrance') {
         const bp = { x: r.x + 2, y: r.y + r.h - DECO_INNER_OFFSET };
         if (grid[bp.y]?.[bp.x]?.type === r.floor && !stairwellBlockedSet.has(`${bp.x},${bp.y}`))
-          grid[bp.y][bp.x].type = BONES;
+          placeProp(grid[bp.y][bp.x], BONES);
       }
     }
 
@@ -1103,17 +1104,17 @@ export function generateDungeon(
       const cx2 = i % 2 === 0 ? r.x + r.w - 2 : r.x + 1;
       const cy2 = r.y + 1;
       if (grid[cy2]?.[cx2]?.type === r.floor && !stairwellBlockedSet.has(`${cx2},${cy2}`))
-        grid[cy2][cx2].type = CRATE;
+        placeProp(grid[cy2][cx2], CRATE);
       const cx3 = cx2 + (i % 2 === 0 ? -1 : 1);
       if (grid[cy2]?.[cx3]?.type === r.floor && !stairwellBlockedSet.has(`${cx3},${cy2}`))
-        grid[cy2][cx3].type = CRATE;
+        placeProp(grid[cy2][cx3], CRATE);
     }
 
     if (cycle === DECO_CYCLE_BRAZIER && r.w >= CYCLE3_MIN_SIZE && r.h >= CYCLE3_MIN_SIZE) {
       const bx = Math.floor(r.x + r.w / 2);
       const by = Math.floor(r.y + r.h / 2);
       if (grid[by]?.[bx]?.type === r.floor && !stairwellBlockedSet.has(`${bx},${by}`))
-        grid[by][bx].type = BRAZIER;
+        placeProp(grid[by][bx], BRAZIER);
       if (zone === 'deep') {
         const ring = [
           { x: bx - 1, y: by },
@@ -1123,7 +1124,7 @@ export function generateDungeon(
         ];
         for (const p of ring) {
           if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-            grid[p.y][p.x].type = BONES;
+            placeProp(grid[p.y][p.x], BONES);
         }
       }
     }
@@ -1136,7 +1137,7 @@ export function generateDungeon(
       ];
       for (const p of positions) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          grid[p.y][p.x].type = p.type;
+          placeProp(grid[p.y][p.x], p.type);
       }
     }
 
@@ -1150,7 +1151,7 @@ export function generateDungeon(
       ].slice(0, boneCount);
       for (const p of spots) {
         if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          grid[p.y][p.x].type = BONES;
+          placeProp(grid[p.y][p.x], BONES);
       }
     }
 
@@ -1158,7 +1159,7 @@ export function generateDungeon(
       const shelfY = r.y + 1;
       for (let sx = r.x + 2; sx <= r.x + CYCLE6_SHELF_DX_END && sx < r.x + r.w - 2; sx++) {
         if (grid[shelfY]?.[sx]?.type === r.floor && !stairwellBlockedSet.has(`${sx},${shelfY}`))
-          grid[shelfY][sx].type = BOOKSHELF;
+          placeProp(grid[shelfY][sx], BOOKSHELF);
       }
     }
 
@@ -1176,7 +1177,7 @@ export function generateDungeon(
       for (const cluster of clusters) {
         for (const p of cluster) {
           if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-            grid[p.y][p.x].type = p.type;
+            placeProp(grid[p.y][p.x], p.type);
         }
       }
     }

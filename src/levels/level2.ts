@@ -8,6 +8,7 @@ import type { LevelDef } from './types';
 export const level2: LevelDef = {
   id: 'level2',
   name: 'The Dungeon, Level 2',
+  floorNumber: 2,
   mapSize: 200,
   roomMobs: [
     {

@@ -251,4 +251,48 @@ export type TileContent = {
    * neighbour a probe happens to reach first.
    */
   groundType?: number;
+  /**
+   * Wear on a destructible prop tile (BARREL, BARREL_SIDE, CRATE): see the
+   * `PROP_DAMAGE_STAGE_*` constants in `DestructiblePropSystem`.
+   *
+   * Carried on the tile rather than held only in that system so the tile
+   * renderer can pick its sprite state without a back-reference into gameplay
+   * code — the same reason `spriteKey` and `groundType` live here.
+   */
+  damageStage?: number;
 };
+
+/** A destructible prop tile that has taken no damage yet. */
+export const PROP_DAMAGE_STAGE_INTACT = 0;
+/** A destructible prop tile that is visibly hurt but still standing. */
+export const PROP_DAMAGE_STAGE_CRACKED = 1;
+
+/**
+ * The sprite state a destructible prop tile should render in.
+ *
+ * Lives here rather than in `DestructiblePropSystem` so the tile renderers can
+ * read a prop's wear without importing gameplay code — the map layer has no
+ * other dependency on `src/systems`, and pulling one in for two constants would
+ * drag the loot system and both player classes along with it.
+ */
+export function propSpriteState(damageStage: number | undefined): 'idle' | 'damaged' {
+  return (damageStage ?? PROP_DAMAGE_STAGE_INTACT) === PROP_DAMAGE_STAGE_INTACT
+    ? 'idle'
+    : 'damaged';
+}
+
+/**
+ * Stamps a decoration over a floor tile, recording the surface it replaced.
+ *
+ * Every prop write goes through this rather than assigning `type` directly: the
+ * floor is what a smashed prop is smashed back down to, and inferring it later
+ * from the neighbours gets the wrong answer for any prop sitting on a boundary
+ * (see `groundType` above).
+ */
+export function placeProp(tile: TileContent, propType: number): void {
+  // `??=`, not `=`: if a second stamp ever lands on the same tile, recording the
+  // first prop as the "ground" would leave the floor beneath it unpaintable and
+  // make smashing the prop restore a prop.
+  tile.groundType ??= tile.type;
+  tile.type = propType;
+}

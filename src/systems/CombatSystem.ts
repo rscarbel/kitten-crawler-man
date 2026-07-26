@@ -10,13 +10,14 @@ import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
+import type { DestructiblePropSystem } from './DestructiblePropSystem';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
 /** Sepsis proc chance per hit when enchanted crown is equipped. */
 const SEPSIS_PROC_CHANCE = 0.15;
-/** Melee hit cone: mobs within this range ignore the facing-dot check. */
-const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
+/** Melee hit cone: targets within this range ignore the facing-dot check. */
+export const MELEE_POINT_BLANK_RANGE = TILE_SIZE * 1;
 /** Fraction of total kill XP awarded to the top damage dealer. */
 const XP_TOP_DEALER_FRACTION = 0.85;
 /** Minimum missile level to trigger AoE splash damage. */
@@ -54,6 +55,8 @@ export interface CombatContext {
   bus: EventBus;
   abilityManager: AbilityManager;
   spells: SpellSystem;
+  /** Absent in scenes without smashable props (the overworld, building interiors). */
+  destructibles?: DestructiblePropSystem;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -98,6 +101,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         }
       }
     }
+    // OR-ed in so a swing that connects only with a crate still plays the
+    // solid punch cue rather than the whiffed one. Gated on `zeroDamage` for the
+    // same reason the mob loop above is: debug tough mode deals no damage to
+    // anything, props included.
+    if (!human.zeroDamage) {
+      humanHit = (ctx.destructibles?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
+    }
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
 
@@ -130,6 +140,9 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           mob.applyStatus(makeSepsis());
         }
       }
+    }
+    if (!cat.zeroDamage) {
+      catHit = (ctx.destructibles?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
     }
     ctx.bus.emit('catMeleeSwing', { hit: catHit });
   }
@@ -177,6 +190,16 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       }
     }
 
+    // Props take the outer-ring multiplier: a stomp that reaches a crate at the
+    // edge of the blast should still splinter it, and unlike a mob a crate has
+    // no reason to care whether it was in the inner ring.
+    if (!human.zeroDamage) {
+      const propDamage = Math.max(1, Math.round(baseDamage * stats.outerDamageMultiplier));
+      if (ctx.destructibles?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
+        ctx.hitLanded = true;
+      }
+    }
+
     // Level 10+: 20% chance to heal human for 50% of total damage dealt
     if (stats.healOnHit && totalSmushDamage > 0 && Math.random() < SMUSH_HEAL_CHANCE) {
       const healAmt = Math.round(totalSmushDamage * SMUSH_HEAL_FRACTION);
@@ -196,6 +219,20 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     for (const missile of cat.getMissiles()) {
       if (missile.state !== 'flying' || missile.hit) continue;
       const damage = cat.getMissileDamage();
+
+      // Props are checked before mobs so a missile flying into a crate stack
+      // detonates on the wood rather than sailing through it.
+      if (
+        !cat.zeroDamage &&
+        (ctx.destructibles?.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat) ?? false)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('missileImpact', {});
+        missile.hit = true;
+        missile.state = 'exploding';
+        continue;
+      }
+
       const nearMissile = mobGrid.queryCircle(missile.x, missile.y, hitRadius + TILE_SIZE);
       for (const mob of nearMissile) {
         if (!mob.isAlive) continue;

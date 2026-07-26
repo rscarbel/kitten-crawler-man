@@ -41,6 +41,7 @@ import {
   CLUB_FLOOR,
   DANCE_FLOOR,
   TOWN_WALL,
+  placeProp,
 } from './tileTypes';
 import {
   CLUB_INTERIOR_W,
@@ -235,6 +236,12 @@ export class GameMap {
   private permanentBlockedTiles = new Set<string>();
   private stairwellBlockedSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
+  /**
+   * Tiles whose base art changed since the last frame. Queued rather than
+   * invalidated on the spot because the chunk cache is created lazily on the
+   * first render, so a tile can change before there is a cache to tell.
+   */
+  private readonly _dirtyTiles: Array<{ x: number; y: number }> = [];
   private _overlayCache: OverlayTileCache | null = null;
 
   constructor(opts: GameMapOptions = {}) {
@@ -407,16 +414,16 @@ export class GameMap {
       for (let x = 2; x <= w - STORE_EAST_WALL_INSET; x++)
         grid[storeCounterRow][x].type = FloorTypeValue.wall;
       // Barrels behind counter on east side
-      grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET].type = BARREL;
-      grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1].type = BARREL;
-      grid[storeShelfStartRow][w - STORE_EAST_WALL_INSET].type = BARREL;
+      placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET], BARREL);
+      placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1], BARREL);
+      placeProp(grid[storeShelfStartRow][w - STORE_EAST_WALL_INSET], BARREL);
       // Bookshelf (display shelf) on west wall
       grid[storeShelfStartRow][1].type = BOOKSHELF;
       grid[storeShelfStartRow + 1][1].type = BOOKSHELF;
       grid[storeShelfEndRow][1].type = BOOKSHELF;
       // Barrel cluster near entrance
-      grid[h - STORE_ENTRANCE_ROW_INSET][1].type = BARREL;
-      grid[h - STORE_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
+      placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][1], BARREL);
+      placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][w - 2], BARREL);
       // Small rug in front of counter
       for (let x = storeRugStartCol; x <= storeRugEndCol; x++)
         grid[storeShelfStartRow][x].type = RUG;
@@ -480,11 +487,11 @@ export class GameMap {
 
       // Supply stacks in the two southern corners.
       for (let ry = BARRACKS_SUPPLY_TOP_ROW; ry <= BARRACKS_SUPPLY_BOTTOM_ROW; ry++) {
-        grid[ry][1].type = CRATE;
-        grid[ry][BARRACKS_EAST_WALL_COL].type = BARREL;
+        placeProp(grid[ry][1], CRATE);
+        placeProp(grid[ry][BARRACKS_EAST_WALL_COL], BARREL);
       }
-      grid[BARRACKS_SUPPLY_TOP_ROW][2].type = CRATE;
-      grid[BARRACKS_SUPPLY_TOP_ROW][BARRACKS_SECOND_EAST_COL].type = BARREL;
+      placeProp(grid[BARRACKS_SUPPLY_TOP_ROW][2], CRATE);
+      placeProp(grid[BARRACKS_SUPPLY_TOP_ROW][BARRACKS_SECOND_EAST_COL], BARREL);
 
       // Braziers flanking the entry rug.
       grid[BARRACKS_BRAZIER_ROW][BARRACKS_BRAZIER_WEST_COL].type = BRAZIER;
@@ -547,15 +554,15 @@ export class GameMap {
           grid[cabinBedNorthRow][cabinBedEastCol].type = BED;
           grid[cabinBedSouthRow][cabinBedWestCol].type = BED;
           grid[cabinBedSouthRow][cabinBedEastCol].type = BED;
-          grid[cabinHearth1][1].type = BARREL;
-          grid[cabinHearth2][1].type = BARREL;
-          grid[cabinBarrelEndRow][1].type = BARREL;
+          placeProp(grid[cabinHearth1][1], BARREL);
+          placeProp(grid[cabinHearth2][1], BARREL);
+          placeProp(grid[cabinBarrelEndRow][1], BARREL);
           grid[cabinTableRow][cabinTableCol1].type = TABLE;
           grid[cabinTableRow][cabinTableCol2].type = TABLE;
           grid[cabinChairRow][cabinTableCol1].type = CHAIR;
-          grid[cabinSouthRow][1].type = CRATE;
-          grid[cabinSouthRow][2].type = CRATE;
-          grid[cabinBarrelSideRow][cabinBedEastCol].type = BARREL_SIDE;
+          placeProp(grid[cabinSouthRow][1], CRATE);
+          placeProp(grid[cabinSouthRow][2], CRATE);
+          placeProp(grid[cabinBarrelSideRow][cabinBedEastCol], BARREL_SIDE);
           break;
         }
 
@@ -595,11 +602,11 @@ export class GameMap {
           grid[barracksBriefingRow][barracksBriefingTableCol3].type = TABLE;
           grid[barracksChairRow][barracksBriefingTableCol1].type = CHAIR;
           grid[barracksChairRow][barracksBriefingTableCol3].type = CHAIR;
-          grid[barracksCrateRow1][1].type = CRATE;
-          grid[barracksCrateRow2][1].type = CRATE;
-          grid[barracksCrateRow1][barracksEastBedCol2].type = CRATE;
-          grid[barracksCrateRow2][barracksEastBedCol2].type = CRATE;
-          grid[barracksCrateRow2][barracksBriefingTableCol2].type = BARREL;
+          placeProp(grid[barracksCrateRow1][1], CRATE);
+          placeProp(grid[barracksCrateRow2][1], CRATE);
+          placeProp(grid[barracksCrateRow1][barracksEastBedCol2], CRATE);
+          placeProp(grid[barracksCrateRow2][barracksEastBedCol2], CRATE);
+          placeProp(grid[barracksCrateRow2][barracksBriefingTableCol2], BARREL);
           break;
         }
 
@@ -629,12 +636,12 @@ export class GameMap {
           grid[hildaTableRow][hildaTableCol1].type = TABLE;
           grid[hildaTableRow][hildaTableCol2].type = TABLE;
           grid[hildaChairRow][hildaTableCol1].type = CHAIR;
-          grid[hildaBarrelRow1][1].type = BARREL;
-          grid[hildaBarrelRow2][1].type = BARREL;
-          grid[hildaBarrelRow2][hildaTableCol2].type = BARREL_SIDE;
-          grid[hildaBarrelRow2][hildaBrazierCol2].type = BARREL_SIDE;
-          grid[hildaCrateRow][hildaCrateCol1].type = CRATE;
-          grid[hildaCrateRow][hildaCrateCol2].type = CRATE;
+          placeProp(grid[hildaBarrelRow1][1], BARREL);
+          placeProp(grid[hildaBarrelRow2][1], BARREL);
+          placeProp(grid[hildaBarrelRow2][hildaTableCol2], BARREL_SIDE);
+          placeProp(grid[hildaBarrelRow2][hildaBrazierCol2], BARREL_SIDE);
+          placeProp(grid[hildaCrateRow][hildaCrateCol1], CRATE);
+          placeProp(grid[hildaCrateRow][hildaCrateCol2], CRATE);
           break;
         }
 
@@ -664,20 +671,20 @@ export class GameMap {
           for (let rx = cartwrightBench2StartCol; rx <= cartwrightBench2EndCol; rx++)
             grid[cartwrightBenchRow][rx].type = TABLE;
           for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow; ry++)
-            grid[ry][1].type = CRATE;
+            placeProp(grid[ry][1], CRATE);
           for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow - 1; ry++)
-            grid[ry][cartwrightEastWallCol].type = BARREL;
-          grid[cartwrightBarrelRow][cartwrightBarrelCol1].type = BARREL_SIDE;
-          grid[cartwrightBarrelRow][cartwrightBarrelCol2].type = BARREL_SIDE;
-          grid[cartwrightBarrelRow][cartwrightBarrelCol3].type = BARREL_SIDE;
-          grid[cartwrightBarrelRow][cartwrightBarrelCol4].type = BARREL_SIDE;
+            placeProp(grid[ry][cartwrightEastWallCol], BARREL);
+          placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol1], BARREL_SIDE);
+          placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol2], BARREL_SIDE);
+          placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol3], BARREL_SIDE);
+          placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol4], BARREL_SIDE);
           grid[cartwrightTableRow][cartwrightTableCol1].type = TABLE;
           grid[cartwrightTableRow][cartwrightTableCol2].type = TABLE;
           grid[cartwrightTableRow + 1][cartwrightTableCol1].type = CHAIR;
-          grid[cartwrightSouthRow][1].type = BARREL;
-          grid[cartwrightSouthRow][2].type = BARREL;
-          grid[cartwrightSouthRow][cartwrightSouthCrateCol1].type = CRATE;
-          grid[cartwrightSouthRow][cartwrightSouthCrateCol2].type = CRATE;
+          placeProp(grid[cartwrightSouthRow][1], BARREL);
+          placeProp(grid[cartwrightSouthRow][2], BARREL);
+          placeProp(grid[cartwrightSouthRow][cartwrightSouthCrateCol1], CRATE);
+          placeProp(grid[cartwrightSouthRow][cartwrightSouthCrateCol2], CRATE);
           break;
         }
 
@@ -706,16 +713,16 @@ export class GameMap {
             grid[ry][1].type = BOOKSHELF;
           for (let ry = herbShelfStartRow; ry <= herbEastShelfEndRow; ry++)
             grid[ry][herbEastShelfCol].type = BOOKSHELF;
-          grid[herbBarrelRow1][herbBarrelCol1].type = BARREL;
-          grid[herbBarrelRow1][herbBarrelCol2].type = BARREL;
-          grid[herbBarrelRow2][herbBarrelCol1].type = BARREL;
+          placeProp(grid[herbBarrelRow1][herbBarrelCol1], BARREL);
+          placeProp(grid[herbBarrelRow1][herbBarrelCol2], BARREL);
+          placeProp(grid[herbBarrelRow2][herbBarrelCol1], BARREL);
           for (let rx = herbRugStartCol; rx <= herbRugEndCol; rx++) {
             grid[herbBarrelRow2][rx].type = RUG;
             grid[herbBarrelRow2 + 1][rx].type = RUG;
           }
           grid[herbTableRow][herbTableCol1].type = TABLE;
           grid[herbTableRow][herbTableCol2].type = TABLE;
-          grid[herbTableRow][herbBarrelSideCol].type = BARREL_SIDE;
+          placeProp(grid[herbTableRow][herbBarrelSideCol], BARREL_SIDE);
           break;
         }
 
@@ -782,8 +789,8 @@ export class GameMap {
           grid[innCenterTableRow][innCenterTableCol2].type = TABLE;
           grid[innCenterTableRow][innCenterTableCol3].type = TABLE;
           grid[innDiningRow][innCenterTableCol1].type = CHAIR;
-          grid[innSouthRow][1].type = BARREL;
-          grid[innSouthRow][2].type = BARREL;
+          placeProp(grid[innSouthRow][1], BARREL);
+          placeProp(grid[innSouthRow][2], BARREL);
           for (let rx = innBarStartCol; rx <= innBarEndCol; rx++)
             grid[innBarRow][rx].type = FloorTypeValue.wall;
           for (let rx = innBarStartCol + 1; rx <= innBarEndCol; rx += innBarStoolPitch)
@@ -816,19 +823,20 @@ export class GameMap {
           grid[anvilTableRow][anvilWestForgeCol2].type = TABLE;
           grid[anvilTableRow][anvilEastForgeCol1].type = TABLE;
           grid[anvilTableRow][anvilEastForgeCol2].type = TABLE;
-          for (let ry = anvilCrateStartRow; ry <= anvilCrateEndRow; ry++) grid[ry][1].type = CRATE;
-          grid[anvilCrateStartRow][anvilEastWallCol].type = BARREL;
-          grid[anvilCrateStartRow + 1][anvilEastWallCol].type = BARREL;
-          grid[anvilCrateStartRow + 2][anvilEastWallCol].type = BARREL;
-          grid[anvilBarrelSideRow][anvilBarrelSideCol1].type = BARREL_SIDE;
-          grid[anvilBarrelSideRow][anvilBarrelSideCol2].type = BARREL_SIDE;
-          grid[anvilBarrelSideRow][anvilBarrelSideCol3].type = BARREL_SIDE;
-          grid[anvilBarrelSideRow][anvilBarrelSideCol4].type = BARREL_SIDE;
+          for (let ry = anvilCrateStartRow; ry <= anvilCrateEndRow; ry++)
+            placeProp(grid[ry][1], CRATE);
+          placeProp(grid[anvilCrateStartRow][anvilEastWallCol], BARREL);
+          placeProp(grid[anvilCrateStartRow + 1][anvilEastWallCol], BARREL);
+          placeProp(grid[anvilCrateStartRow + 2][anvilEastWallCol], BARREL);
+          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol1], BARREL_SIDE);
+          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol2], BARREL_SIDE);
+          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol3], BARREL_SIDE);
+          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol4], BARREL_SIDE);
           grid[anvilChairRow][anvilBarrelSideCol1].type = CHAIR;
-          grid[anvilSouthRow][1].type = CRATE;
-          grid[anvilSouthRow][2].type = CRATE;
-          grid[anvilSouthRow][anvilEastForgeCol2].type = BARREL;
-          grid[anvilSouthRow][anvilEastWallCol - 1].type = BARREL;
+          placeProp(grid[anvilSouthRow][1], CRATE);
+          placeProp(grid[anvilSouthRow][2], CRATE);
+          placeProp(grid[anvilSouthRow][anvilEastForgeCol2], BARREL);
+          placeProp(grid[anvilSouthRow][anvilEastWallCol - 1], BARREL);
           break;
         }
 
@@ -854,19 +862,19 @@ export class GameMap {
           grid[farmBedNorthRow][farmBedEastCol].type = BED;
           grid[farmBedSouthRow][farmBedWestCol].type = BED;
           grid[farmBedSouthRow][farmBedEastCol].type = BED;
-          grid[farmCrateStartRow][1].type = BARREL;
-          grid[farmCrateStartRow + 1][1].type = BARREL;
-          grid[farmCrateStartRow + 2][1].type = BARREL;
-          grid[farmCrateStartRow][farmEastWallCol].type = CRATE;
-          grid[farmCrateStartRow + 1][farmEastWallCol].type = CRATE;
-          grid[farmCrateStartRow + 2][farmEastWallCol].type = CRATE;
-          grid[farmCrateEndRow][farmEastWallCol].type = CRATE;
+          placeProp(grid[farmCrateStartRow][1], BARREL);
+          placeProp(grid[farmCrateStartRow + 1][1], BARREL);
+          placeProp(grid[farmCrateStartRow + 2][1], BARREL);
+          placeProp(grid[farmCrateStartRow][farmEastWallCol], CRATE);
+          placeProp(grid[farmCrateStartRow + 1][farmEastWallCol], CRATE);
+          placeProp(grid[farmCrateStartRow + 2][farmEastWallCol], CRATE);
+          placeProp(grid[farmCrateEndRow][farmEastWallCol], CRATE);
           grid[farmTableRow][farmTableCol1].type = TABLE;
           grid[farmTableRow][farmTableCol2].type = TABLE;
           grid[farmTableRow + 1][farmTableCol1].type = CHAIR;
           grid[farmTableRow + 1][farmTableCol2].type = CHAIR;
-          grid[farmBarrelSideRow1][1].type = BARREL_SIDE;
-          grid[farmBarrelSideRow2][1].type = BARREL_SIDE;
+          placeProp(grid[farmBarrelSideRow1][1], BARREL_SIDE);
+          placeProp(grid[farmBarrelSideRow2][1], BARREL_SIDE);
           break;
         }
 
@@ -926,7 +934,7 @@ export class GameMap {
           }
           for (let rx = FLAGON_RUG_START_COL; rx <= FLAGON_RUG_END_COL; rx++)
             grid[FLAGON_RUG_ROW][rx].type = RUG;
-          for (const t of FLAGON_BARREL_TILES) grid[t.y][t.x].type = BARREL;
+          for (const t of FLAGON_BARREL_TILES) placeProp(grid[t.y][t.x], BARREL);
           break;
         }
 
@@ -1000,10 +1008,10 @@ export class GameMap {
             grid[ry][1].type = BOOKSHELF;
           for (let ry = INK_RUG_START_ROW; ry <= INK_RUG_END_ROW; ry++)
             for (let rx = INK_RUG_START_COL; rx <= INK_RUG_END_COL; rx++) grid[ry][rx].type = RUG;
-          grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL].type = CRATE;
-          grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL - 1].type = CRATE;
-          grid[INK_BARREL_ROW_1][INK_EAST_WALL_COL].type = BARREL;
-          grid[INK_BARREL_ROW_2][INK_EAST_WALL_COL].type = BARREL;
+          placeProp(grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL], CRATE);
+          placeProp(grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL - 1], CRATE);
+          placeProp(grid[INK_BARREL_ROW_1][INK_EAST_WALL_COL], BARREL);
+          placeProp(grid[INK_BARREL_ROW_2][INK_EAST_WALL_COL], BARREL);
           break;
         }
 
@@ -1054,8 +1062,8 @@ export class GameMap {
           }
           for (let rx = STUMP_RUG_START_COL; rx <= STUMP_RUG_END_COL; rx++)
             grid[STUMP_RUG_ROW][rx].type = RUG;
-          for (const t of STUMP_BARREL_TILES) grid[t.y][t.x].type = BARREL;
-          for (const t of STUMP_BARREL_SIDE_TILES) grid[t.y][t.x].type = BARREL_SIDE;
+          for (const t of STUMP_BARREL_TILES) placeProp(grid[t.y][t.x], BARREL);
+          for (const t of STUMP_BARREL_SIDE_TILES) placeProp(grid[t.y][t.x], BARREL_SIDE);
           break;
         }
       }
@@ -1112,10 +1120,10 @@ export class GameMap {
       grid[genericChairRow][genericTableCol1].type = CHAIR;
       grid[genericChairRow][genericTableCol3].type = CHAIR;
       // Barrel in SW corner
-      grid[genericSouthRow][1].type = BARREL;
-      grid[genericSouthRow][2].type = BARREL;
+      placeProp(grid[genericSouthRow][1], BARREL);
+      placeProp(grid[genericSouthRow][2], BARREL);
       // Barrel in SE area
-      grid[genericEastBarrelRow][genericEastWallCol].type = BARREL;
+      placeProp(grid[genericEastBarrelRow][genericEastWallCol], BARREL);
       // Chair by east wall
       grid[genericEastChairRow][genericEastWallCol].type = CHAIR;
     }
@@ -1243,11 +1251,11 @@ export class GameMap {
         grid[groundFloorChairRow][groundFloorReceptionTableCol3].type = CHAIR;
         grid[groundFloorReceptionRow - 1][groundFloorReceptionTableCol2].type = CHAIR;
         // Barrels near entrance
-        grid[h - TOWER_ENTRANCE_ROW_INSET][1].type = BARREL;
-        grid[h - TOWER_ENTRANCE_ROW_INSET][2].type = BARREL;
-        grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
+        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][1], BARREL);
+        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][2], BARREL);
+        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2], BARREL);
         // Torch-style decoration on east wall (use barrel as substitute)
-        grid[groundFloorEastBarrelRow][w - 2].type = BARREL;
+        placeProp(grid[groundFloorEastBarrelRow][w - 2], BARREL);
       } else if (towerFloor === 1) {
         // 2nd floor: library — lots of bookshelves + reading tables
         const libraryShelfEndRow = 9;
@@ -1324,8 +1332,8 @@ export class GameMap {
         grid[quartersEastTableRow + 1][quartersEastTableCol1].type = CHAIR;
         grid[quartersEastTableRow + 1][quartersEastTableCol3].type = CHAIR;
         // Barrel storage
-        grid[quartersBarrelRow1][w - 2].type = BARREL;
-        grid[quartersBarrelRow2][w - 2].type = BARREL;
+        placeProp(grid[quartersBarrelRow1][w - 2], BARREL);
+        placeProp(grid[quartersBarrelRow2][w - 2], BARREL);
         // Rug by beds
         for (let rx = quartersRugStartCol; rx <= quartersRugEndCol; rx++) {
           grid[quartersNorthBedRow2][rx].type = RUG;
@@ -1367,8 +1375,8 @@ export class GameMap {
         grid[1][studyFireplaceCol1].type = FIREPLACE;
         grid[1][studyFireplaceCol2].type = FIREPLACE;
         // Barrel in corners
-        grid[h - TOWER_ENTRANCE_ROW_INSET][1].type = BARREL;
-        grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2].type = BARREL;
+        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][1], BARREL);
+        placeProp(grid[h - TOWER_ENTRANCE_ROW_INSET][w - 2], BARREL);
       }
     }
 
@@ -1550,6 +1558,16 @@ export class GameMap {
     );
   }
 
+  /**
+   * Tell the renderer a tile's base art changed. Base tiles are baked into
+   * reusable chunk canvases, so anything that rewrites `structure[y][x].type`
+   * (or a field the tile's renderer reads, such as `damageStage`) at runtime
+   * must announce it here or the stale art keeps being blitted.
+   */
+  markTileDirty(tileX: number, tileY: number): void {
+    this._dirtyTiles.push({ x: tileX, y: tileY });
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (this.permanentBlockedTiles.has(`${tileX},${tileY}`)) return false;
     return this.isWalkableIgnoringPermanent(tileX, tileY);
@@ -1632,8 +1650,18 @@ export class GameMap {
    * Returns true if there is a clear line of sight between two pixel-space
    * points — i.e. no non-walkable tiles cross the line segment.
    * Samples every half-tile along the line for accuracy.
+   *
+   * `ignore` exempts one tile from the walkability test. Needed when the target
+   * *is* a solid tile, such as a barrel a melee swing is aimed at: the ray would
+   * otherwise sample the target and report it as its own obstruction.
    */
-  hasLineOfSight(x1: number, y1: number, x2: number, y2: number): boolean {
+  hasLineOfSight(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    ignore?: { tileX: number; tileY: number },
+  ): boolean {
     const ts = this.tileHeight;
     const dist = Math.hypot(x2 - x1, y2 - y1);
     if (dist === 0) return true;
@@ -1642,6 +1670,7 @@ export class GameMap {
       const t = i / steps;
       const tx = Math.floor((x1 + (x2 - x1) * t) / ts);
       const ty = Math.floor((y1 + (y2 - y1) * t) / ts);
+      if (tx === ignore?.tileX && ty === ignore.tileY) continue;
       if (!this.isWalkable(tx, ty)) return false;
     }
     return true;
@@ -1655,6 +1684,8 @@ export class GameMap {
     viewH: number,
   ): void {
     this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight);
+    for (const t of this._dirtyTiles) this._chunkCache.invalidateTile(t.x, t.y);
+    this._dirtyTiles.length = 0;
     renderCanvas(
       ctx,
       this.structure,
@@ -1724,7 +1755,10 @@ export class GameMap {
           t === ROOF_CIRCUS_RED ||
           t === ROOF_CIRCUS_BLUE ||
           t === ROOF_CIRCUS_PURPLE ||
-          t === MAIN_TOWER
+          t === MAIN_TOWER ||
+          t === BARREL ||
+          t === BARREL_SIDE ||
+          t === CRATE
         ) {
           result.push({
             tx: x,

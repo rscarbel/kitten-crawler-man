@@ -96,6 +96,13 @@ interface PendingLoot {
   pickupDelay: number;
   droppedByPlayer?: boolean;
   isBossLoot?: boolean;
+  /**
+   * Pay the *full* coin amount to both party members rather than only `owner`.
+   *
+   * Not a split: a smashed prop on floor 1 can roll a single coin, and halving
+   * that pays one player nothing.
+   */
+  sharedCoins?: boolean;
 }
 
 export interface FloorItem {
@@ -108,14 +115,24 @@ export interface FloorItem {
 export class LootSystem implements GameSystem {
   private pendingLoots: PendingLoot[] = [];
   readonly floorItems: FloorItem[] = [];
-  private _pickupsThisFrame = 0;
+  private _itemPickupsThisFrame = 0;
+  private _coinPickupsThisFrame = 0;
 
   constructor(private readonly gameMap: GameMap) {}
 
-  drainPickups(): number {
-    const n = this._pickupsThisFrame;
-    this._pickupsThisFrame = 0;
-    return n;
+  /**
+   * Piles collected this frame, split by what they held so the scene can pick
+   * the matching cue — a purse of coins should not sound like a picked-up item.
+   * A pile holding both counts in both.
+   */
+  drainPickups(): { withItems: number; withCoins: number } {
+    const drained = {
+      withItems: this._itemPickupsThisFrame,
+      withCoins: this._coinPickupsThisFrame,
+    };
+    this._itemPickupsThisFrame = 0;
+    this._coinPickupsThisFrame = 0;
+    return drained;
   }
 
   addLoot(
@@ -124,6 +141,7 @@ export class LootSystem implements GameSystem {
     loot: LootDrop,
     owner: HumanPlayer | CatPlayer,
     isBossLoot = false,
+    sharedCoins = false,
   ): void {
     this.pendingLoots.push({
       x,
@@ -134,6 +152,7 @@ export class LootSystem implements GameSystem {
       ttl: LOOT_DEFAULT_TTL,
       pickupDelay: 0,
       isBossLoot,
+      sharedCoins,
     });
   }
 
@@ -157,9 +176,70 @@ export class LootSystem implements GameSystem {
     });
   }
 
+  /**
+   * Hands a pile over and marks it collected. Items always go to `recipient`;
+   * coins go to `recipient` too, unless the pile is `sharedCoins`, in which case
+   * every party member is paid the full amount.
+   */
+  private creditLoot(
+    loot: PendingLoot,
+    recipient: HumanPlayer | CatPlayer,
+    party: ReadonlyArray<HumanPlayer | CatPlayer>,
+  ): void {
+    if (loot.sharedCoins ?? false) {
+      for (const member of party) member.coins += loot.loot.coins;
+    } else {
+      recipient.coins += loot.loot.coins;
+    }
+    for (const it of loot.loot.items) {
+      recipient.inventory.addItem(it.id, it.quantity);
+    }
+    loot.collected = true;
+    // Counted here rather than at each call site so the click-to-collect path
+    // gets its pickup cue too, not just the walk-over one.
+    if (loot.loot.coins > 0) this._coinPickupsThisFrame++;
+    if (loot.loot.items.length > 0) this._itemPickupsThisFrame++;
+  }
+
+  /**
+   * The text drawn above a pile. Shared between `render` and the click hit-test
+   * so the box the player aims at is exactly the box they can see.
+   */
+  private lootLabel(loot: PendingLoot, active: HumanPlayer | CatPlayer): string {
+    const parts: string[] = [];
+    if (loot.loot.coins > 0) {
+      parts.push(`\u{1FA99}${loot.loot.coins}`);
+      if (loot.sharedCoins ?? false) parts.push('(each)');
+    }
+    if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
+    const ownerLabel = loot.owner instanceof HumanPlayer ? 'Human' : 'Cat';
+    const ownerIsElsewhere = !(loot.droppedByPlayer ?? false) && loot.owner !== active;
+    const paysEveryone = loot.sharedCoins ?? false;
+    if (ownerIsElsewhere && !paysEveryone) parts.push(`→${ownerLabel}`);
+    return parts.join(' ');
+  }
+
+  /** Screen-space rectangle of a pile's label box. */
+  private labelBox(
+    loot: PendingLoot,
+    label: string,
+    camX: number,
+    camY: number,
+  ): { bx: number; by: number; bw: number; bh: number } {
+    const bw = Math.max(
+      LOOT_LABEL_MIN_WIDTH,
+      label.length * LOOT_CHARS_PER_PX + LOOT_LABEL_PADDING,
+    );
+    return {
+      bx: loot.x - camX - bw / 2,
+      by: loot.y - camY - LOOT_LABEL_ABOVE_PX,
+      bw,
+      bh: LOOT_LABEL_HEIGHT,
+    };
+  }
+
   update(ctx: SystemContext): void {
     const { active, inactive: companion } = ctx;
-    this._pickupsThisFrame = 0;
     for (const loot of this.pendingLoots) {
       if (loot.collected) continue;
       if (loot.pickupDelay > 0) {
@@ -167,33 +247,25 @@ export class LootSystem implements GameSystem {
         continue;
       }
 
+      const party = [active, companion];
+
       if (loot.droppedByPlayer) {
-        for (const player of [active, companion]) {
-          if (loot.collected) break;
+        for (const player of party) {
           const dist = Math.hypot(player.x + HALF_TILE - loot.x, player.y + HALF_TILE - loot.y);
           if (dist <= DROPPED_PICKUP_RANGE) {
-            player.coins += loot.loot.coins;
-            for (const it of loot.loot.items) {
-              player.inventory.addItem(it.id, it.quantity);
-            }
-            loot.collected = true;
-            this._pickupsThisFrame++;
+            this.creditLoot(loot, player, party);
+            break;
           }
         }
         continue;
       }
 
-      for (const player of [active, companion]) {
-        if (loot.collected) break;
+      for (const player of party) {
         if (player !== active && companion.autoTarget?.isAlive) continue;
         const dist = Math.hypot(player.x + HALF_TILE - loot.x, player.y + HALF_TILE - loot.y);
         if (dist <= LOOT_PICKUP_RANGE) {
-          loot.owner.coins += loot.loot.coins;
-          for (const it of loot.loot.items) {
-            loot.owner.inventory.addItem(it.id, it.quantity);
-          }
-          loot.collected = true;
-          this._pickupsThisFrame++;
+          this.creditLoot(loot, loot.owner, party);
+          break;
         }
       }
     }
@@ -214,32 +286,16 @@ export class LootSystem implements GameSystem {
     camX: number,
     camY: number,
     active: HumanPlayer | CatPlayer,
+    inactive: HumanPlayer | CatPlayer,
   ): boolean {
     for (const loot of this.pendingLoots) {
       const dist = Math.hypot(active.x + HALF_TILE - loot.x, active.y + HALF_TILE - loot.y);
       if (dist > LOOT_CLICK_RANGE_TILES * TILE_SIZE) continue;
 
-      const sx = loot.x - camX;
-      const sy = loot.y - camY;
-      const parts: string[] = [];
-      if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
-      const label = parts.join(' ');
-      const bw = Math.max(
-        LOOT_LABEL_MIN_WIDTH,
-        label.length * LOOT_CHARS_PER_PX + LOOT_LABEL_PADDING,
-      );
-      const bh = LOOT_LABEL_HEIGHT;
-      const bx = sx - bw / 2;
-      const by = sy - LOOT_LABEL_ABOVE_PX;
-
+      const { bx, by, bw, bh } = this.labelBox(loot, this.lootLabel(loot, active), camX, camY);
       if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
-        const recipient = loot.droppedByPlayer ? active : loot.owner;
-        recipient.coins += loot.loot.coins;
-        for (const it of loot.loot.items) {
-          recipient.inventory.addItem(it.id, it.quantity);
-        }
-        loot.collected = true;
+        const recipient = (loot.droppedByPlayer ?? false) ? active : loot.owner;
+        this.creditLoot(loot, recipient, [active, inactive]);
         return true;
       }
     }
@@ -256,10 +312,7 @@ export class LootSystem implements GameSystem {
       const sx = loot.x - camX;
       const sy = loot.y - camY;
 
-      const parts: string[] = [];
-      if (loot.loot.coins > 0) parts.push(`\u{1FA99}${loot.loot.coins}`);
-      if (loot.loot.items.length > 0) parts.push(`+${loot.loot.items.length} item`);
-      const label = parts.join(' ');
+      const fullLabel = this.lootLabel(loot, active);
 
       ctx.save();
 
@@ -267,17 +320,7 @@ export class LootSystem implements GameSystem {
         ctx.globalAlpha = Math.max(LOOT_MIN_ALPHA, loot.ttl / LOOT_FADE_START_FRAMES);
       }
 
-      const ownerLabel = loot.owner instanceof HumanPlayer ? 'Human' : 'Cat';
-      const ownerTag = !loot.droppedByPlayer && loot.owner !== active ? ` →${ownerLabel}` : '';
-      const fullLabel = label + ownerTag;
-
-      const bw = Math.max(
-        LOOT_LABEL_MIN_WIDTH,
-        fullLabel.length * LOOT_CHARS_PER_PX + LOOT_LABEL_PADDING,
-      );
-      const bh = LOOT_LABEL_HEIGHT;
-      const bx = sx - bw / 2;
-      const by = sy - LOOT_LABEL_ABOVE_PX;
+      const { bx, by, bw, bh } = this.labelBox(loot, fullLabel, camX, camY);
 
       if (loot.isBossLoot) {
         const t = performance.now() / BOSS_LOOT_TIME_DIVISOR;

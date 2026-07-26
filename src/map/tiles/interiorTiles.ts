@@ -14,6 +14,7 @@ import {
   CIRCUS_RING_EDGE,
   TENT_POLE,
   BLEACHER,
+  propSpriteState,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -289,13 +290,11 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Barrel — PNG sprite with transparent background
+    // Barrel — sprite only; the ground under it is drawn by the baseOnly
+    // chunk pass, and repainting it here would clip a neighbouring prop's
+    // overhang into this tile.
     case BARREL: {
-      const barrelFloor = inferFloorType(structure, tx, ty);
-      if (!drawTerrainTile(ctx, structure, barrelFloor, sx, sy, ts, tx, ty)) {
-        drawSpecialFloorTile(ctx, structure, barrelFloor, sx, sy, ts, tx, ty);
-      }
-      drawSpriteKey(ctx, 'barrel', 'idle', 0, sx, sy, ts);
+      drawSpriteKey(ctx, 'barrel', propSpriteState(structure[ty][tx].damageStage), 0, sx, sy, ts);
       return true;
     }
 

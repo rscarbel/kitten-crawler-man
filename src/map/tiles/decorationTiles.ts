@@ -9,6 +9,7 @@ import {
   DIRT_PATCH,
   FENCE,
   GARDEN_PLANTING,
+  BARREL,
   BARREL_SIDE,
   CRATE,
   BRAZIER,
@@ -18,6 +19,7 @@ import {
   MODERN_DECORATION,
   RUBBLE,
   TOWN_WALL,
+  propSpriteState,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -549,6 +551,9 @@ export function drawDecorationTile(
       case BRAZIER:
       case MAIN_TOWER:
       case SPRITE_BUILDING:
+      case BARREL:
+      case BARREL_SIDE:
+      case CRATE:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
@@ -618,23 +623,25 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Barrel on its side — PNG sprite, draw floor first
+    // Barrel on its side — ground is already drawn by the baseOnly chunk pass,
+    // so only the sprite goes here; repainting the floor would clip the 8px
+    // overhang of the prop on the neighbouring tile.
     case BARREL_SIDE: {
-      const barrelSideFloor = inferFloorType(structure, tx, ty);
-      if (!drawTerrainTile(ctx, structure, barrelSideFloor, sx, sy, ts, tx, ty)) {
-        drawSpecialFloorTile(ctx, structure, barrelSideFloor, sx, sy, ts, tx, ty);
-      }
-      drawSpriteKey(ctx, 'barrel_side', 'idle', 0, sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        'barrel_side',
+        propSpriteState(structure[ty][tx].damageStage),
+        0,
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 
-    // Wooden crate — PNG sprite, draw floor first
+    // Wooden crate — sprite only; see BARREL_SIDE above.
     case CRATE: {
-      const crateFloor = inferFloorType(structure, tx, ty);
-      if (!drawTerrainTile(ctx, structure, crateFloor, sx, sy, ts, tx, ty)) {
-        drawSpecialFloorTile(ctx, structure, crateFloor, sx, sy, ts, tx, ty);
-      }
-      drawSpriteKey(ctx, 'crate', 'idle', 0, sx, sy, ts);
+      drawSpriteKey(ctx, 'crate', propSpriteState(structure[ty][tx].damageStage), 0, sx, sy, ts);
       return true;
     }
 

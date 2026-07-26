@@ -16,6 +16,9 @@ import {
   MAIN_TOWER,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  BARREL,
+  BARREL_SIDE,
+  CRATE,
 } from './tileTypes';
 import { getMapSpriteExtentsPx } from '../core/SpriteLoader';
 
@@ -51,6 +54,11 @@ const DECORATION_TYPES = new Set([
   MAIN_TOWER,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  // Smashable props sit in the Y-sorted pass so a player standing north of a
+  // crate is drawn behind it and one standing south is drawn in front.
+  BARREL,
+  BARREL_SIDE,
+  CRATE,
 ]);
 
 /**
@@ -171,6 +179,18 @@ export class TileChunkCache {
 
     this.chunks.set(key, chunk);
     return chunk;
+  }
+
+  /**
+   * Drop the pre-rendered block covering a tile so it re-bakes on the next
+   * frame. Required whenever a base tile changes at runtime — a chunk is baked
+   * once and reused forever, so a smashed barrel would otherwise keep showing
+   * its intact art on top of its own wreckage.
+   */
+  invalidateTile(tileX: number, tileY: number): void {
+    const cx = Math.floor(tileX / CHUNK_TILES);
+    const cy = Math.floor(tileY / CHUNK_TILES);
+    this.chunks.delete(cy * this.chunksX + cx);
   }
 
   renderVisible(

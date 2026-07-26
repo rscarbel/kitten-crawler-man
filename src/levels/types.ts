@@ -82,6 +82,8 @@ export interface OnMobKilledSpawn {
 export interface LevelDef {
   id: string;
   name: string;
+  /** Dungeon depth, 1-based. Drives depth-scaled rewards such as smashed-prop coins. */
+  floorNumber: number;
   /** Side-length passed to `new GameMap(mapSize, TILE_SIZE)`. */
   mapSize: number;
   /** Mobs that can spawn at room centres (all non-start, non-special rooms). */

@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -61,7 +62,11 @@ export class DynamiteSystem implements GameSystem {
   private _trajectoryCache: Array<{ x: number; y: number }> | null = null;
   private _trajCacheKey = '';
 
-  constructor(private readonly gameMap: GameMap) {}
+  constructor(
+    private readonly gameMap: GameMap,
+    /** Null on maps without smashable props (the overworld, building interiors). */
+    private readonly destructibles: DestructiblePropSystem | null = null,
+  ) {}
 
   get isCharging(): boolean {
     return this._charging !== null;
@@ -169,6 +174,9 @@ export class DynamiteSystem implements GameSystem {
     if (Math.hypot(cat.x + HALF_TILE - cx, cat.y + HALF_TILE - cy) <= DYN_RADIUS) {
       cat.takeDamage(damage, { kind: 'dynamite' });
     }
+    // Flattened outright rather than damaged: a barrel that survives a stick of
+    // dynamite reads as a bug, however much health it had left.
+    this.destructibles?.destroyInRadius(cx, cy, DYN_RADIUS, human);
   }
 
   private updatePhysics(

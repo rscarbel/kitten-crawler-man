@@ -24,6 +24,7 @@ import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
+import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { LootSystem } from './LootSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
@@ -116,6 +117,8 @@ export interface RenderContext {
   barriers: BarrierSystem;
   spells: SpellSystem;
   dynamite: DynamiteSystem;
+  /** Null on maps without smashable props (the overworld, building interiors). */
+  destructibles: DestructiblePropSystem | null;
   loot: LootSystem;
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
@@ -165,6 +168,7 @@ export class RenderPipeline {
     gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
     gore.renderPuddles(ctx, camX, camY);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
+    rc.destructibles?.renderWreckage(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -324,6 +328,7 @@ export class RenderPipeline {
       rc;
 
     gore.renderParticles(ctx, camX, camY);
+    rc.destructibles?.renderEffects(ctx, camX, camY);
     bodyPartGore.renderFlying(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);
     spells.renderShell(ctx, camX, camY);

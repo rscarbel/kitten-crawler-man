@@ -67,6 +67,7 @@ import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSn
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
+import { DestructiblePropSystem } from '../systems/DestructiblePropSystem';
 import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
@@ -219,6 +220,8 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 /** Building whose forge fires supply the town's fire-crackle ambience. */
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
+/** Coin-purse cue on loot pickup. Matches the vendor-purchase level. */
+const COIN_PICKUP_VOLUME = 0.55;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -415,6 +418,8 @@ export class DungeonScene extends GameplayScene {
   private spells: SpellSystem;
   private companion: CompanionSystem;
   private loot: LootSystem;
+  /** Null on the overworld — town barrels and crates are not smashable. */
+  private destructibles: DestructiblePropSystem | null;
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
@@ -520,6 +525,7 @@ export class DungeonScene extends GameplayScene {
   private krakarenKilled = false;
   private krakarenBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
+  private woodSmashSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
   private catHealthLow = false;
@@ -700,7 +706,12 @@ export class DungeonScene extends GameplayScene {
       },
       this.bossRoom,
     );
-    this.dynamite = new DynamiteSystem(this.gameMap);
+    // Built before DynamiteSystem so a blast can be handed the props it flattens.
+    this.loot = new LootSystem(this.gameMap);
+    this.destructibles = levelDef.isOverworld
+      ? null
+      : new DestructiblePropSystem(this.gameMap, this.loot, levelDef.floorNumber);
+    this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(
@@ -783,7 +794,6 @@ export class DungeonScene extends GameplayScene {
       this.companion.setPassive(this.human.isActive);
       this.inactive().autoTarget = null;
     };
-    this.loot = new LootSystem(this.gameMap);
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
 
@@ -2592,7 +2602,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     const { x: camX, y: camY } = this.camera();
-    if (this.loot.tryCollectLootAt(mx, my, camX, camY, active)) return;
+    if (this.loot.tryCollectLootAt(mx, my, camX, camY, active, this.inactive())) return;
 
     // Click on an unlocked chest in the world to open it
     for (const chest of this.treasureChests.allChests) {
@@ -2815,6 +2825,7 @@ export class DungeonScene extends GameplayScene {
       barriers: this.barriers,
       spells: this.spells,
       dynamite: this.dynamite,
+      destructibles: this.destructibles,
       loot: this.loot,
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
@@ -3313,6 +3324,14 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
       this.woodBreakSoundIdx++;
     }
+    if ((this.destructibles?.drainSmashes() ?? 0) > 0) {
+      // One cue per frame however many props gave way together: overlapping
+      // copies of the same sample stack into a blast rather than a smash. The
+      // index still advances once so back-to-back breaks alternate.
+      const smashSounds = ['wood_smashing_1', 'wood_smashing_2'] as const;
+      this.audio?.play(smashSounds[this.woodSmashSoundIdx % smashSounds.length]);
+      this.woodSmashSoundIdx++;
+    }
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
       this.audio?.play('menu_open');
@@ -3448,6 +3467,7 @@ export class DungeonScene extends GameplayScene {
       bus: this.bus,
       abilityManager: this.abilityManager,
       spells: this.spells,
+      destructibles: this.destructibles ?? undefined,
       hitLanded: false,
     };
     resolvePlayerAttacks(combatCtx);
@@ -3570,12 +3590,17 @@ export class DungeonScene extends GameplayScene {
     }
     this.loot.update(ctx);
     this.treasureChests.update(this.mobs);
-    if (this.loot.drainPickups() > 0) {
+    const pickups = this.loot.drainPickups();
+    if (pickups.withCoins > 0) {
+      this.audio?.play('coin_pouch', { volume: COIN_PICKUP_VOLUME });
+    }
+    if (pickups.withItems > 0) {
       this.audio?.playRandom(['pickup_1', 'pickup_2']);
     }
     this.speechBubblePulse++;
     this.gore.update();
     this.bodyPartGore.update();
+    this.destructibles?.update();
     this.dynamite.update(ctx);
 
     if (this.dynamite.explosionSoundPending) {

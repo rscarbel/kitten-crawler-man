@@ -52,42 +52,78 @@
   },
   "barrel": {
     "path": "environment/props/barrel.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 0,
-    "tileY": 0,
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
     "tileScale": 64,
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
         "frameCount": 1
       }
     }
   },
   "barrel_side": {
     "path": "environment/props/barrel_side.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 0,
-    "tileY": 0,
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
     "tileScale": 64,
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
         "frameCount": 1
       }
     }
   },
   "crate": {
     "path": "environment/props/crate.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 0,
-    "tileY": 0,
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
     "tileScale": 64,
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
         "frameCount": 1
       }
     }
