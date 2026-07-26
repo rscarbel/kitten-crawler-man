@@ -5,6 +5,14 @@ import { getSpriteDef } from '../core/SpriteLoader';
 const PUDDLE_LIFETIME = 18000; // 300s @ 60fps
 const PUDDLE_FADE_START = 3000; // start fading 50s before despawn
 const PARTICLE_LIFETIME = 55;
+
+/**
+ * Ceilings on live gore. Puddles last five minutes, so a prolonged fight in one
+ * room accumulates them without bound; particles are short-lived but a wave of
+ * simultaneous deaths spikes them. Overflow drops the most faded first.
+ */
+const MAX_PARTICLES = 400;
+const MAX_PUDDLES = 300;
 const PARTICLE_GRAVITY = 0.08;
 
 // Gore particle spawning
@@ -65,6 +73,22 @@ export class GoreSystem implements GameSystem {
   private particles: BloodParticle[] = [];
   private puddles: BloodPuddle[] = [];
 
+  /**
+   * Drops the closest-to-expiry entries once `list` exceeds `cap`. Index order
+   * says nothing about age — `update` compacts with swap-pop — so the shortest
+   * remaining life is what identifies the gore whose loss shows least.
+   */
+  private static capByRemainingLife(list: Array<{ life: number }>, cap: number): void {
+    while (list.length > cap) {
+      let faintest = 0;
+      for (let i = 1; i < list.length; i++) {
+        if (list[i].life < list[faintest].life) faintest = i;
+      }
+      list[faintest] = list[list.length - 1];
+      list.pop();
+    }
+  }
+
   spawnGore(cx: number, cy: number, impactDx = 0, impactDy = 0): void {
     const hasDir = impactDx !== 0 || impactDy !== 0;
     const impactAngle = hasDir ? Math.atan2(impactDy, impactDx) : 0;
@@ -117,6 +141,11 @@ export class GoreSystem implements GameSystem {
         life: PUDDLE_LIFETIME,
       });
     }
+
+    // A long fight in one spot would otherwise accumulate gore without bound,
+    // and every piece of it costs a drawImage on every frame of its lifetime.
+    GoreSystem.capByRemainingLife(this.particles, MAX_PARTICLES);
+    GoreSystem.capByRemainingLife(this.puddles, MAX_PUDDLES);
   }
 
   update(): void {
@@ -149,10 +178,14 @@ export class GoreSystem implements GameSystem {
     if (!stateDef) return;
     const { img, frameWidth, frameHeight } = def;
 
+    const viewW = ctx.canvas.width;
+    const viewH = ctx.canvas.height;
+
     ctx.save();
     for (const p of this.puddles) {
       const sx = p.x - camX;
       const sy = p.y - camY;
+      if (sx + p.rx < 0 || sx - p.rx > viewW || sy + p.ry < 0 || sy - p.ry > viewH) continue;
       const alpha = p.life <= PUDDLE_FADE_START ? p.life / PUDDLE_FADE_START : 1;
       const srcX = p.variant * frameWidth;
       const srcY = stateDef.row * frameHeight;
@@ -180,10 +213,21 @@ export class GoreSystem implements GameSystem {
     if (!dropState || !tearState) return;
     const { img, frameWidth, frameHeight } = def;
 
+    const viewW = ctx.canvas.width;
+    const viewH = ctx.canvas.height;
+
     ctx.save();
     for (const p of this.particles) {
       const sx = p.x - camX;
       const sy = p.y - camY;
+      if (
+        sx + p.radius < 0 ||
+        sx - p.radius > viewW ||
+        sy + p.radius < 0 ||
+        sy - p.radius > viewH
+      ) {
+        continue;
+      }
       const stateDef = p.isTear ? tearState : dropState;
       const srcX = p.variant * frameWidth;
       const srcY = stateDef.row * frameHeight;

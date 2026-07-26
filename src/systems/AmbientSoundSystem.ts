@@ -52,6 +52,8 @@ export class AmbientSoundSystem implements GameSystem {
   private readonly ownedSounds = new Set<SoundId>();
   /** Frames each sound has been below the audible threshold. */
   private readonly silentFrames = new Map<SoundId, number>();
+  /** Reused per-frame scratch: the loudest gain wanted for each owned sound. */
+  private readonly targetGains = new Map<SoundId, number>();
 
   constructor(
     private readonly audio: AudioManager,
@@ -79,7 +81,8 @@ export class AmbientSoundSystem implements GameSystem {
   updateListener(listenerWorldX: number, listenerWorldY: number): void {
     const listenerTileX = listenerWorldX / TILE_SIZE;
     const listenerTileY = listenerWorldY / TILE_SIZE;
-    const targetGains = new Map<SoundId, number>();
+    const targetGains = this.targetGains;
+    targetGains.clear();
     for (const emitter of this.emitters) {
       const gain = this.gainFor(emitter, listenerTileX, listenerTileY);
       const loudestSoFar = targetGains.get(emitter.soundId) ?? 0;

@@ -259,8 +259,8 @@ export class DestructiblePropSystem implements GameSystem {
         }
         // Melee reaches a little under two tiles, far enough to clip a prop
         // through a wall — without this the player could pop crates in a room
-        // they have not entered. The prop's own tile is exempt: it is solid, so
-        // a ray aimed at it would always report it as its own obstruction.
+        // they have not entered. The prop's own tile is named as exempt so the
+        // test stays correct however the ray decides to treat its end tile.
         if (
           !this.gameMap.hasLineOfSight(originX, originY, centerX, centerY, { tileX: tx, tileY: ty })
         )

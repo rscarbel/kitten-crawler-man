@@ -10,12 +10,14 @@ import type { Player } from '../Player';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
+import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 const AI_RADIUS_TILES = 22;
 const AI_RADIUS = TILE_SIZE * AI_RADIUS_TILES;
 const SEP_DIST = TILE_SIZE;
+const SEP_DIST_SQ = SEP_DIST * SEP_DIST;
 /** Effective mass used for players in separation calculations. */
 const PLAYER_MASS = 3;
 
@@ -56,11 +58,25 @@ function pushPlayerWithCollision(
 
 export class MobUpdateLoop implements GameSystem {
   /**
+   * Per-frame scratch, kept as fields and cleared each frame rather than
+   * rebuilt, so a busy level does not allocate five arrays and a Set per frame.
+   */
+  private readonly playerTargets: Player[] = [];
+  private readonly separationMobs: Mob[] = [];
+  private readonly separationSeen = new Set<Mob>();
+  private readonly separationPreX: number[] = [];
+  private readonly separationPreY: number[] = [];
+  private readonly aiTargets: Player[] = [];
+  private readonly players: Player[] = [];
+
+  /**
    * Run one frame of mob AI for all mobs within activation radius
    * of either player. Updates spatial grid positions.
    */
   update(ctx: SystemContext): void {
     const { human, cat, mobs, mobGrid, bossRoom, extraTargets, gameMap } = ctx;
+
+    resetPathfindBudget();
 
     // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
     for (const mob of mobs) {
@@ -79,7 +95,9 @@ export class MobUpdateLoop implements GameSystem {
       }
     }
 
-    const playerTargets: Player[] = [human, cat];
+    const playerTargets = this.playerTargets;
+    playerTargets.length = 0;
+    playerTargets.push(human, cat);
     if (extraTargets) {
       for (const t of extraTargets) {
         // Defend-quest NPCs (e.g. Goblin Mother) are handled by Bugaboo's own
@@ -111,10 +129,12 @@ export class MobUpdateLoop implements GameSystem {
 
         // Clear stale retaliate target; add live ones to this mob's AI targets.
         if (mob.retaliateMob && !mob.retaliateMob.isAlive) mob.retaliateMob = null;
-        const aiTargets =
-          mob.retaliateMob && !(mob instanceof BrindleGrub)
-            ? [...playerTargets, mob.retaliateMob]
-            : playerTargets;
+        let aiTargets = playerTargets;
+        if (mob.retaliateMob && !(mob instanceof BrindleGrub)) {
+          this.aiTargets.length = 0;
+          this.aiTargets.push(...playerTargets, mob.retaliateMob);
+          aiTargets = this.aiTargets;
+        }
 
         mob.updateAI(aiTargets);
       }
@@ -127,8 +147,10 @@ export class MobUpdateLoop implements GameSystem {
 
     // O(N²/2) separation over non-flying active mobs. activeMobs may contain
     // duplicates (mob in range of both players), so deduplicate via Set first.
-    const seps: Mob[] = [];
-    const sepSeen = new Set<Mob>();
+    const seps = this.separationMobs;
+    const sepSeen = this.separationSeen;
+    seps.length = 0;
+    sepSeen.clear();
     for (const mob of activeMobs) {
       if (mob.isAlive && !mob.isFlying && !sepSeen.has(mob)) {
         seps.push(mob);
@@ -136,8 +158,10 @@ export class MobUpdateLoop implements GameSystem {
       }
     }
 
-    const preX: number[] = [];
-    const preY: number[] = [];
+    const preX = this.separationPreX;
+    const preY = this.separationPreY;
+    preX.length = 0;
+    preY.length = 0;
     for (const m of seps) {
       preX.push(m.x);
       preY.push(m.y);
@@ -149,8 +173,12 @@ export class MobUpdateLoop implements GameSystem {
         const b = seps[j];
         const dx = a.x - b.x;
         const dy = a.y - b.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > SEPARATION_POSITION_TOLERANCE && dist < SEP_DIST) {
+        // Square-compare first: the sqrt is only needed for the push magnitude,
+        // and the overwhelming majority of pairs are out of range.
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= SEP_DIST_SQ) continue;
+        const dist = Math.sqrt(distSq);
+        if (dist > SEPARATION_POSITION_TOLERANCE) {
           const base = ((SEP_DIST - dist) * SEPARATION_BASE_MULTIPLIER) / dist;
           const totalMass = a.mass + b.mass;
           // Heavier mob moves less — force is proportional to the other mob's share of total mass.
@@ -169,14 +197,18 @@ export class MobUpdateLoop implements GameSystem {
     // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
     // cockroaches are displaced proportionally to their mass relative to the player.
     // AI-controlled follower: full push back onto the player only — mobs act as walls.
-    for (const player of [human, cat]) {
+    this.players.length = 0;
+    this.players.push(human, cat);
+    for (const player of this.players) {
       if (!player.isAlive) continue;
       for (const mob of seps) {
         if (!mob.isAlive) continue;
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > SEPARATION_POSITION_TOLERANCE && dist < SEP_DIST) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= SEP_DIST_SQ) continue;
+        const dist = Math.sqrt(distSq);
+        if (dist > SEPARATION_POSITION_TOLERANCE) {
           if (player.isActive) {
             const base = (SEP_DIST - dist) / dist;
             const totalMass = PLAYER_MASS + mob.mass;

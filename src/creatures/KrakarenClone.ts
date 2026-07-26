@@ -52,8 +52,6 @@ export class KrakarenClone extends Mob {
 
   isEnraged = false;
 
-  /** Set when the yell should play; DungeonScene clears it and plays the sound. */
-  yellSoundPending = false;
   /** Counts down to the next yell. Starts at 0 so the first yell fires on first aggro. */
   private yellTimer = 0;
 
@@ -118,7 +116,7 @@ export class KrakarenClone extends Mob {
     if (nearest) {
       // Periodic yell: fires immediately on first aggro, then every 15–20 seconds
       if (this.yellTimer <= 0) {
-        this.yellSoundPending = true;
+        this.specialSoundPending = true;
         this.yellTimer = randomInt(YELL_INTERVAL_MIN, YELL_INTERVAL_MAX);
       } else {
         this.yellTimer--;
@@ -316,7 +314,7 @@ export class KrakarenClone extends Mob {
       this.attackProgress,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

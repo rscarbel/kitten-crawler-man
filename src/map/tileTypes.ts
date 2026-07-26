@@ -153,6 +153,12 @@ export const FENCE = 62;
 export const GARDEN_PLANTING = 63;
 
 /**
+ * One past the highest tile type value above — the length of any array indexed
+ * by tile type. Bump this when a new tile type exceeds it.
+ */
+export const TILE_TYPE_COUNT = 64;
+
+/**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
  * that are walkable floor clutter — cables, rubble, flat debris, etc.
  * All other variants are non-walkable furniture/equipment.

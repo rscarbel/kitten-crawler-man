@@ -3,6 +3,7 @@ import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
+import { tryConsumePathfind } from './pathfindBudget';
 import { drawText } from '../ui/TextBox';
 
 /** Stagger range for initial wander timer so mobs don't change direction together. */
@@ -28,11 +29,43 @@ const ASTAR_WAYPOINT_CLOSE_FRACTION = 0.55;
 /** Default A* path refresh interval in frames. */
 const ASTAR_DEFAULT_REFRESH = 30;
 
+/** Largest per-mob offset added to the refresh interval, spreading repaths over frames. */
+const ASTAR_STAGGER_MAX = 15;
+
+/**
+ * Wait this long before retrying after A* found no route. An unreachable target
+ * stays unreachable, so retrying twice a second only burns the expansion cap.
+ */
+const ASTAR_FAILURE_BACKOFF_FRAMES = 120;
+
+/**
+ * Floor on how often a moved goal tile may trigger an early repath. A target
+ * moving diagonally crosses tile boundaries almost every frame, which would
+ * otherwise defeat the refresh interval entirely.
+ */
+const ASTAR_MIN_REPATH_GAP_FRAMES = 8;
+
+/**
+ * After this many consecutive frames of being denied by the per-frame search
+ * budget, a mob searches regardless. Bounds how stale any one mob's path can
+ * get when a large pack all want to repath at once.
+ */
+const ASTAR_MAX_DENIED_FRAMES = 20;
+
+/** Sentinel goal tile meaning "no path has been computed yet". */
+const NO_ASTAR_GOAL = -1;
+
+/** How long a line-of-sight result stays usable before it is recomputed. */
+const LOS_REFRESH_FRAMES = 3;
+
 /** How many stuck frames before flipping the perpendicular steer direction. */
 const STUCK_FLIP_FRAMES = 50;
 
 /** Speed multiplier while mob is slowed. */
 const MOB_SLOWED_SPEED_FRACTION = 0.35;
+
+/** Lifetime of a hit-applied slow — one frame, refreshed by each new impact. */
+const HIT_SLOW_FRAMES = 1;
 
 /** Tile edge fractions for wall collision (leading edge ahead/behind). */
 const MOB_COLLISION_FRONT_FRACTION = 0.72;
@@ -137,10 +170,25 @@ export abstract class Mob extends Player {
   protected lastKnownTargetX = 0;
   protected lastKnownTargetY = 0;
 
+  /** Target the cached line-of-sight result refers to; see `hasLOS`. */
+  private losCacheTarget: Player | null = null;
+  private losCacheResult = false;
+  private losCacheAge = LOS_REFRESH_FRAMES;
+
   /** Cached A* waypoint list (tile coords). Followed by followTargetAStar. */
   private astarPath: Array<{ x: number; y: number }> = [];
   /** Frames until the A* path is recalculated. */
   private astarTimer = 0;
+  /** Per-mob offset on the refresh interval so a pack doesn't repath in lockstep. */
+  private readonly astarStagger = randomInt(0, ASTAR_STAGGER_MAX);
+  /** Goal tile the cached path leads to; when the goal moves off it, repath early. */
+  private astarGoalTX = NO_ASTAR_GOAL;
+  private astarGoalTY = NO_ASTAR_GOAL;
+  private astarFramesSinceRepath = 0;
+  /** Consecutive frames this mob wanted to repath but the frame budget was spent. */
+  private astarDeniedFrames = 0;
+  /** True when the last search found no route — holds off the goal-moved trigger. */
+  private astarLastSearchFailed = false;
 
   /** Frames the mob has been fully stuck (both axes blocked) — triggers steering flip. */
   private stuckFrames = 0;
@@ -162,7 +210,26 @@ export abstract class Mob extends Player {
   isConfused = false;
 
   /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
-  isSlowed = false;
+  slowedByBarrier = false;
+
+  /** Frames left on a slow applied by a hit; see `applyHitSlow`. */
+  private hitSlowFrames = 0;
+
+  /**
+   * Derived rather than stored: a slow has several independent sources, and a
+   * stored flag left each of them able to strand the mob at reduced speed.
+   */
+  get isSlowed(): boolean {
+    return this.slowedByBarrier || this.hitSlowFrames > 0 || this.hasStatus('electrified');
+  }
+
+  /**
+   * Slows this mob for a single frame. Refreshed by every impact, so the slow
+   * holds only while the mob is under continuous fire.
+   */
+  applyHitSlow(): void {
+    this.hitSlowFrames = HIT_SLOW_FRAMES;
+  }
 
   /** True for airborne mobs that pass over ground mobs without physical collision. */
   isFlying = false;
@@ -214,6 +281,14 @@ export abstract class Mob extends Player {
 
   /** Set to true when this mob takes damage worth a pain cue; polled and cleared by the scene each frame. */
   damageSoundPending = false;
+
+  /**
+   * Set to true when this mob performs its one signature action with a cue of
+   * its own — the Hoarder's vomit, the Juicer's throw, the Ball of Swine's
+   * roll. Generic rather than per-subclass so the audio pass stays a single
+   * walk over the mob list driven by `audioTag`, with no `instanceof` chain.
+   */
+  specialSoundPending = false;
 
   /** Whether this mob is currently hostile toward players. Defaults to true; override for neutral NPCs. */
   get isHostile(): boolean {
@@ -327,6 +402,10 @@ export abstract class Mob extends Player {
   protected clearAStarPath() {
     this.astarPath = [];
     this.astarTimer = 0;
+    this.astarGoalTX = NO_ASTAR_GOAL;
+    this.astarGoalTY = NO_ASTAR_GOAL;
+    this.astarFramesSinceRepath = ASTAR_MIN_REPATH_GAP_FRAMES;
+    this.astarLastSearchFailed = false;
   }
 
   /**
@@ -350,16 +429,42 @@ export abstract class Mob extends Player {
     const goalTileX = Math.floor((targetPixelX + ts * MOB_TILE_CENTER) / ts);
     const goalTileY = Math.floor((targetPixelY + ts * MOB_TILE_CENTER) / ts);
 
-    // Refresh path on a timer
-    if (this.astarTimer <= 0) {
-      const myTileX = Math.floor((this.x + ts * MOB_TILE_CENTER) / ts);
-      const myTileY = Math.floor((this.y + ts * MOB_TILE_CENTER) / ts);
-      this.astarPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
-      // Drop the first waypoint — that's the tile we're already on
-      if (this.astarPath.length > 0) this.astarPath.shift();
-      this.astarTimer = refreshInterval;
-    } else {
-      this.astarTimer--;
+    if (this.astarTimer > 0) this.astarTimer--;
+    this.astarFramesSinceRepath++;
+
+    const goalTileMoved = goalTileX !== this.astarGoalTX || goalTileY !== this.astarGoalTY;
+    // A goal that moved is worth chasing early — but not while the last search
+    // failed, or an unreachable target would be retried every few frames, which
+    // is exactly what the failure backoff exists to prevent.
+    const goalMoveIsDue =
+      goalTileMoved &&
+      !this.astarLastSearchFailed &&
+      this.astarFramesSinceRepath >= ASTAR_MIN_REPATH_GAP_FRAMES;
+    const wantsRepath = this.astarTimer <= 0 || goalMoveIsDue;
+
+    if (wantsRepath) {
+      // Over budget: keep following the stale path rather than adding to a
+      // spike. A mob denied for too long searches anyway, so a crowded frame
+      // order can never starve the same mob indefinitely.
+      const mustSearch = this.astarDeniedFrames >= ASTAR_MAX_DENIED_FRAMES;
+      if (mustSearch || tryConsumePathfind()) {
+        const myTileX = Math.floor((this.x + ts * MOB_TILE_CENTER) / ts);
+        const myTileY = Math.floor((this.y + ts * MOB_TILE_CENTER) / ts);
+        const foundPath = this.map.findPath(myTileX, myTileY, goalTileX, goalTileY);
+        this.astarPath = foundPath;
+        // Drop the first waypoint — that's the tile we're already on
+        if (this.astarPath.length > 0) this.astarPath.shift();
+        this.astarGoalTX = goalTileX;
+        this.astarGoalTY = goalTileY;
+        this.astarFramesSinceRepath = 0;
+        this.astarDeniedFrames = 0;
+        this.astarLastSearchFailed = foundPath.length === 0;
+        this.astarTimer = this.astarLastSearchFailed
+          ? ASTAR_FAILURE_BACKOFF_FRAMES
+          : refreshInterval + this.astarStagger;
+      } else {
+        this.astarDeniedFrames++;
+      }
     }
 
     // Pop waypoints that are already close enough
@@ -382,16 +487,29 @@ export abstract class Mob extends Player {
     }
   }
 
-  /** True if there is a clear line of sight from this mob's centre to the target's centre. */
+  /**
+   * True if there is a clear line of sight from this mob's centre to the
+   * target's centre.
+   *
+   * The result is cached for a few frames: most creatures ask twice per frame
+   * (once to track the target, once to gate an attack), and LOS to a moving
+   * target is not a quantity anything can perceive at frame accuracy.
+   */
   protected hasLOS(target: Player): boolean {
     if (!this.map) return true;
+    if (this.losCacheTarget === target && this.losCacheAge < LOS_REFRESH_FRAMES) {
+      return this.losCacheResult;
+    }
     const ts = this.tileSize;
-    return this.map.hasLineOfSight(
+    this.losCacheResult = this.map.hasLineOfSight(
       this.x + ts * MOB_TILE_CENTER,
       this.y + ts * MOB_TILE_CENTER,
       target.x + ts * MOB_TILE_CENTER,
       target.y + ts * MOB_TILE_CENTER,
     );
+    this.losCacheTarget = target;
+    this.losCacheAge = 0;
+    return this.losCacheResult;
   }
 
   /**
@@ -543,7 +661,8 @@ export abstract class Mob extends Player {
   tickTimers() {
     super.tickTimers();
     if (this.healthBarTimer > 0) this.healthBarTimer--;
-    if (this.hasStatus('electrified')) this.isSlowed = true;
+    if (this.hitSlowFrames > 0) this.hitSlowFrames--;
+    this.losCacheAge++;
   }
 
   /**

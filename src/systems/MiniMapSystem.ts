@@ -1,6 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
@@ -71,12 +72,20 @@ const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
 /** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
 const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
 
+/** Sentinel for "no fog reveal has happened yet" — no real tile coord is negative. */
+const TILE_NEVER_REVEALED = -1;
+
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
   private _expanded = false;
   private _scrollTX = 0;
   private _scrollTY = 0;
   private corpseMarkers: Array<{ x: number; y: number; ttl: number }> = [];
+  /** Reused result set for the radar's neighbour query. */
+  private readonly _radarQuery = new Set<Mob>();
+  /** Tile the fog was last revealed around; TILE_NEVER_REVEALED until the first reveal. */
+  private lastRevealTileX = TILE_NEVER_REVEALED;
+  private lastRevealTileY = TILE_NEVER_REVEALED;
 
   private readonly REVEAL_RADIUS = 10;
   readonly NORMAL_SIZE = 160;
@@ -135,6 +144,10 @@ export class MiniMapSystem implements GameSystem {
   }
 
   revealAround(tileX: number, tileY: number): void {
+    if (tileX === this.lastRevealTileX && tileY === this.lastRevealTileY) return;
+    this.lastRevealTileX = tileX;
+    this.lastRevealTileY = tileY;
+
     const mapSize = this.gameMap.structure.length;
     const r = this.REVEAL_RADIUS;
     const r2 = r * r;
@@ -234,7 +247,7 @@ export class MiniMapSystem implements GameSystem {
     canvas: HTMLCanvasElement,
     active: { x: number; y: number },
     companion: { x: number; y: number },
-    mobs: Mob[],
+    mobGrid: SpatialGrid<Mob>,
     mordecaiPositions: Array<{ x: number; y: number }>,
     questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
   ): void {
@@ -314,9 +327,10 @@ export class MiniMapSystem implements GameSystem {
     // Mobs — red dots (only within radar range)
     const MOB_RADAR_PX = TILE_SIZE * MOB_RADAR_TILES;
     ctx.fillStyle = '#ef4444';
-    for (const mob of mobs) {
+    this._radarQuery.clear();
+    const mobsOnRadar = mobGrid.queryCircle(active.x, active.y, MOB_RADAR_PX, this._radarQuery);
+    for (const mob of mobsOnRadar) {
       if (!mob.isAlive) continue;
-      if (Math.hypot(mob.x - active.x, mob.y - active.y) > MOB_RADAR_PX) continue;
       const mobTX = Math.floor((mob.x + HALF_TILE) / TILE_SIZE);
       const mobTY = Math.floor((mob.y + HALF_TILE) / TILE_SIZE);
       if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;

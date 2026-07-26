@@ -53,14 +53,35 @@ const GROUND_SHADOW = 'rgba(0,0,0,0.26)';
 const GROUND_SHADOW_HALF_WIDTH = 0.26;
 const GROUND_SHADOW_HEIGHT = 0.07;
 
+/**
+ * How many distinct flicker levels a lamp is drawn at. The whole flicker is a
+ * 14% breath, so the steps are far below what the eye resolves — and quantizing
+ * lets every lamp in town share one baked picture per level.
+ */
+export const LAMP_FLICKER_STEPS = 8;
+
+/**
+ * The lamp's breath at `frame`, snapped to one of `LAMP_FLICKER_STEPS` levels.
+ * Returns the step index and the multiplier to draw it with.
+ */
+export function streetLampFlicker(
+  frame: number,
+  flickerPhase: number,
+): { step: number; flicker: number } {
+  const wave = Math.sin((frame / FLICKER_PERIOD_FRAMES) * TWO_PI + flickerPhase);
+  const normalized = (wave + 1) / 2;
+  const step = Math.min(LAMP_FLICKER_STEPS - 1, Math.floor(normalized * LAMP_FLICKER_STEPS));
+  const steppedWave = (step / (LAMP_FLICKER_STEPS - 1)) * 2 - 1;
+  return { step, flicker: 1 + steppedWave * FLICKER_AMPLITUDE };
+}
+
 /** Draws one lit street lamp standing on the tile whose top-left is (sx, sy). */
 export function drawStreetLamp(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   ts: number,
-  frame: number,
-  flickerPhase: number,
+  flicker: number,
 ): void {
   ctx.save();
   const cx = sx + ts / 2;
@@ -102,8 +123,6 @@ export function drawStreetLamp(
   ctx.fillStyle = GLASS;
   ctx.fillRect(cx - headHalf, headTop, headHalf * 2, headBottom - headTop);
 
-  const flicker =
-    1 + Math.sin((frame / FLICKER_PERIOD_FRAMES) * TWO_PI + flickerPhase) * FLICKER_AMPLITUDE;
   ctx.save();
   ctx.shadowColor = HALO;
   ctx.shadowBlur = ts * FLAME_GLOW_BLUR * flicker;

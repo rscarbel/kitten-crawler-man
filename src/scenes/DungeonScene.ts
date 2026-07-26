@@ -23,7 +23,7 @@ import { InventoryPanel } from '../ui/InventoryPanel';
 import { GearPanel } from '../ui/GearPanel';
 import { SpatialGrid } from '../core/SpatialGrid';
 
-import { MiniMapSystem } from '../systems/MiniMapSystem';
+import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
@@ -129,8 +129,6 @@ import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
-import { TheHoarder } from '../creatures/TheHoarder';
-import { Juicer } from '../creatures/Juicer';
 import {
   GrotesqueSpider,
   SLAM_AUDIO_OFFSET,
@@ -247,6 +245,12 @@ const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
 
 // Companion/Follower system
 const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
+/**
+ * How far the recall spell will look for a walking route before it gives up and
+ * teleports the companion. Map-scale, because "no route" is what makes recall
+ * teleport, and a companion left across town can still walk back.
+ */
+const RECALL_MAX_PATH_DISTANCE_TILES = 96;
 const TILE_CENTER_OFFSET = 0.5;
 const COMPANION_ERROR_DISPLAY_FRAMES = 180;
 /** Frames between playing potion_drink and the potion's secondary effect sound. */
@@ -409,6 +413,16 @@ export class DungeonScene extends GameplayScene {
   private mobs: Mob[];
   private grotesqueSpiders: GrotesqueSpider[] = [];
   private mobGrid!: SpatialGrid<Mob>;
+
+  /**
+   * The frame's shared system context and its `extraTargets` list, held as
+   * fields and refreshed by `buildSystemContext` rather than rebuilt, so the
+   * per-frame system pass allocates nothing.
+   */
+  private readonly _extraTargets: Player[] = [];
+  /** Reused per-frame array of the minimap's quest markers. */
+  private readonly _questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
+  private readonly _systemContext: SystemContext;
 
   // Systems
   private miniMap: MiniMapSystem;
@@ -673,6 +687,17 @@ export class DungeonScene extends GameplayScene {
       this.miniMap,
       levelDef.bossRooms?.map((b) => b.type) ?? [],
     );
+    this._systemContext = {
+      human: this.human,
+      cat: this.cat,
+      active: this.active(),
+      inactive: this.inactive(),
+      activeIsMoving: false,
+      mobs: this.mobs,
+      mobGrid: this.mobGrid,
+      gameMap: this.gameMap,
+      bossRoom: this.bossRoom,
+    };
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
@@ -748,7 +773,13 @@ export class DungeonScene extends GameplayScene {
         const compTY = Math.floor((companion.y + ts * TILE_CENTER_OFFSET) / ts);
         const casterTX = Math.floor((caster.x + ts * TILE_CENTER_OFFSET) / ts);
         const casterTY = Math.floor((caster.y + ts * TILE_CENTER_OFFSET) / ts);
-        const path = this.gameMap.findPath(compTX, compTY, casterTX, casterTY);
+        const path = this.gameMap.findPath(
+          compTX,
+          compTY,
+          casterTX,
+          casterTY,
+          RECALL_MAX_PATH_DISTANCE_TILES,
+        );
         if (path.length === 0) {
           const adjacentOffsets = [
             { dx: 1, dy: 0 },
@@ -2748,7 +2779,7 @@ export class DungeonScene extends GameplayScene {
     // hard stop (game over, the pause menu, or the level-complete screen) should
     // freeze the streets.
     if (!this.gameOver && !this.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
-      this.townLife?.update();
+      this.townLife?.update(this.buildSystemContext());
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
@@ -2894,13 +2925,9 @@ export class DungeonScene extends GameplayScene {
         canvas,
         this.active(),
         this.inactive(),
-        this.mobs,
+        this.mobGrid,
         this.safeRoom.mordecaiPositions,
-        [
-          ...this.defendQuest.questMarkers,
-          ...this.circusQuest.questMarkers,
-          ...this.murderQuest.questMarkers,
-        ],
+        this.collectQuestMarkers(),
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -3174,7 +3201,7 @@ export class DungeonScene extends GameplayScene {
         camY,
         this._mouseX,
         this._mouseY,
-        this.mobs,
+        this.mobGrid,
       );
     }
 
@@ -3236,27 +3263,42 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /** Gathers every quest's minimap markers into one reused array. */
+  private collectQuestMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
+    const markers = this._questMarkers;
+    markers.length = 0;
+    markers.push(...this.defendQuest.questMarkers);
+    markers.push(...this.circusQuest.questMarkers);
+    markers.push(...this.murderQuest.questMarkers);
+    return markers;
+  }
+
+  /**
+   * Refreshes and returns the shared per-frame system context. One mutable
+   * object reused across every system and every call in a frame — it used to be
+   * rebuilt (with a fresh `extraTargets` array) twice per frame.
+   */
   private buildSystemContext(): SystemContext {
     const active = this.active();
-    return {
-      human: this.human,
-      cat: this.cat,
-      active,
-      inactive: this.inactive(),
-      activeIsMoving: active.isMoving,
-      mobs: this.mobs,
-      mobGrid: this.mobGrid,
-      gameMap: this.gameMap,
-      bossRoom: this.bossRoom,
-      extraTargets: (() => {
-        const targets: Player[] = [];
-        if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
-        if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
-        const npc = this.defendQuest.questNPC;
-        if (npc?.isAlive) targets.push(npc);
-        return targets.length > 0 ? targets : undefined;
-      })(),
-    };
+    const targets = this._extraTargets;
+    targets.length = 0;
+    if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
+    if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
+    const npc = this.defendQuest.questNPC;
+    if (npc?.isAlive) targets.push(npc);
+
+    const ctx = this._systemContext;
+    ctx.human = this.human;
+    ctx.cat = this.cat;
+    ctx.active = active;
+    ctx.inactive = this.inactive();
+    ctx.activeIsMoving = active.isMoving;
+    ctx.mobs = this.mobs;
+    ctx.mobGrid = this.mobGrid;
+    ctx.gameMap = this.gameMap;
+    ctx.bossRoom = this.bossRoom;
+    ctx.extraTargets = targets.length > 0 ? targets : undefined;
+    return ctx;
   }
 
   private updateGameplay(): void {
@@ -3395,36 +3437,17 @@ export class DungeonScene extends GameplayScene {
 
     this.human.updateAttack();
     this.cat.updateAttack();
-    this.cat.updateMissiles(this.mobs);
+    this.cat.updateMissiles(this.mobGrid);
 
     this.spells.update(ctx);
     this.mobLoop.update(ctx);
 
     playMobAudioCues(this.mobs, this.audio);
-    for (const mob of this.mobs) {
-      if (mob instanceof TheHoarder) {
-        if (mob.damageSoundPending) {
-          mob.damageSoundPending = false;
-          this.audio?.playRandom(['hoarder_damage_1', 'hoarder_damage_2', 'hoarder_damage_3']);
-        }
-        if (mob.vomitSoundPending) {
-          mob.vomitSoundPending = false;
-          this.audio?.play('hoarder_vomit');
-        }
-      }
-      if (mob instanceof Juicer && mob.throwSoundPending) {
-        mob.throwSoundPending = false;
-        this.audio?.play('juicer_throw');
-      }
-      if (mob instanceof BallOfSwine && mob.rollSoundPending) {
-        mob.rollSoundPending = false;
-        this.audio?.play('ball_of_swine_rolling');
-      }
-      if (mob instanceof KrakarenClone && mob.yellSoundPending) {
-        mob.yellSoundPending = false;
-        this.audio?.play('krakaren_yell');
-      }
-    }
+
+    const activePlayer = this.active();
+    const spiderWalkTriggerDist = TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES;
+    const spiderWalkTriggerDistSq = spiderWalkTriggerDist * spiderWalkTriggerDist;
+    let anySpiderWalkingNear = false;
 
     for (const spider of this.grotesqueSpiders) {
       if (spider.slamSoundPending) {
@@ -3445,16 +3468,16 @@ export class DungeonScene extends GameplayScene {
         spider.spitLandSoundPending = false;
         this.audio?.play('grotesque_spider_spit_landing');
       }
-      const spiderDist = Math.hypot(spider.x - this.active().x, spider.y - this.active().y);
-      if (
-        spider.isAlive &&
-        spider.isMoving &&
-        spiderDist < TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES
-      ) {
-        this.audio?.startSpiderWalkingLoop();
-      } else {
-        this.audio?.stopSpiderWalkingLoop();
+      if (spider.isAlive && spider.isMoving && !anySpiderWalkingNear) {
+        const dx = spider.x - activePlayer.x;
+        const dy = spider.y - activePlayer.y;
+        anySpiderWalkingNear = dx * dx + dy * dy < spiderWalkTriggerDistSq;
       }
+    }
+    if (anySpiderWalkingNear) {
+      this.audio?.startSpiderWalkingLoop();
+    } else {
+      this.audio?.stopSpiderWalkingLoop();
     }
 
     const combatCtx: CombatContext = {

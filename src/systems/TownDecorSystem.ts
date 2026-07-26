@@ -19,8 +19,14 @@
 
 import { TILE_SIZE } from '../core/constants';
 import { GOLDEN_ANGLE_RAD } from '../utils';
-import { SIGN_SWAY_PHASE_STRIDE_RAD, drawShopSign, signWestShiftTiles } from '../sprites/shopSign';
-import { drawStreetLamp } from '../sprites/streetLamp';
+import {
+  SIGN_SWAY_PHASE_STRIDE_RAD,
+  drawShopSign,
+  shopSignSway,
+  signWestShiftTiles,
+} from '../sprites/shopSign';
+import { drawStreetLamp, streetLampFlicker } from '../sprites/streetLamp';
+import { drawBakedProp, type PropBakeBounds } from '../sprites/propFrameCache';
 import { drawLaundryLine, drawTownClutter, type TownClutterKind } from '../sprites/townClutter';
 import {
   drawBunting,
@@ -721,6 +727,85 @@ function kerbSites(bounds: TileRect): TileXY[] {
 }
 
 /**
+ * Bake boxes for the props drawn through `drawBakedProp`. Each is measured from
+ * the prop's own documented reach with a tile of slack, so nothing clips: the
+ * cost of an over-large box is a few unused pixels in a canvas baked once.
+ */
+// The sign's ink runs from 1.42 tiles above the anchor (the bracket arm) down
+// to the anchor row, and from the bracket tip at -0.5 tiles to the root at
+// +0.5. A little slack covers the board's swing and its drop shadow.
+const SIGN_BAKE_UP_TILES = 1.7;
+const SIGN_BAKE_WEST_TILES = 1.2;
+const SIGN_BAKE_EAST_TILES = 0.8;
+/** No clutter kind draws above its own anchor row — the tallest tops out on it. */
+const CLUTTER_BAKE_UP_TILES = 0;
+/** The handcart's shaft is the widest piece of clutter, reaching 1.02 tiles east. */
+const CLUTTER_BAKE_SIDE_TILES = 1.2;
+const LAMP_BAKE_UP_TILES = 4;
+const LAMP_BAKE_SIDE_TILES = 2;
+const LAMP_BAKE_DOWN_TILES = 1;
+/** Every prop's box includes its own anchor tile below the reach above it. */
+const ANCHOR_TILE = 1;
+
+function signBakeBounds(tileSize: number, westShiftTiles: number): PropBakeBounds {
+  return {
+    left: tileSize * (SIGN_BAKE_WEST_TILES + westShiftTiles),
+    up: tileSize * SIGN_BAKE_UP_TILES,
+    right: tileSize * SIGN_BAKE_EAST_TILES,
+    down: tileSize * ANCHOR_TILE,
+  };
+}
+
+function clutterBakeBounds(tileSize: number): PropBakeBounds {
+  return {
+    left: tileSize * CLUTTER_BAKE_SIDE_TILES,
+    up: tileSize * CLUTTER_BAKE_UP_TILES,
+    right: tileSize * CLUTTER_BAKE_SIDE_TILES,
+    down: tileSize * ANCHOR_TILE,
+  };
+}
+
+/**
+ * The gateway's two forms reach in different directions, so their boxes differ:
+ * the face-on arch rises 3.6 tiles over a span-wide opening, while the top-down
+ * gatehouse is narrow and runs south past its span. A single box sized for both
+ * would be mostly empty, and an empty box still costs a full-size blit.
+ */
+const GATE_ARCH_ACROSS_UP_TILES = 4;
+const GATE_ARCH_ALONG_DOWN_TILES = 2;
+const GATE_ARCH_MARGIN_TILES = 1;
+
+function gateArchBakeBounds(
+  tileSize: number,
+  spanTiles: number,
+  axis: GateArchAxis,
+): PropBakeBounds {
+  if (axis === 'across') {
+    return {
+      left: tileSize * GATE_ARCH_MARGIN_TILES,
+      up: tileSize * GATE_ARCH_ACROSS_UP_TILES,
+      right: tileSize * (spanTiles + GATE_ARCH_MARGIN_TILES),
+      down: tileSize * (ANCHOR_TILE + GATE_ARCH_MARGIN_TILES),
+    };
+  }
+  return {
+    left: tileSize * GATE_ARCH_MARGIN_TILES,
+    up: tileSize * GATE_ARCH_MARGIN_TILES,
+    right: tileSize * (GATE_ARCH_MARGIN_TILES * 2),
+    down: tileSize * (ANCHOR_TILE + spanTiles + GATE_ARCH_ALONG_DOWN_TILES),
+  };
+}
+
+function lampBakeBounds(tileSize: number): PropBakeBounds {
+  return {
+    left: tileSize * LAMP_BAKE_SIDE_TILES,
+    up: tileSize * LAMP_BAKE_UP_TILES,
+    right: tileSize * LAMP_BAKE_SIDE_TILES,
+    down: tileSize * (ANCHOR_TILE + LAMP_BAKE_DOWN_TILES),
+  };
+}
+
+/**
  * A sign board bolted to the facade beside a building's door.
  *
  * Its anchor is the **door tile**, which is the building's own front row, so the
@@ -752,15 +837,16 @@ class ShopSignProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawShopSign(
+    const { step, sway } = shopSignSway(this.currentFrame(), this.swayPhase);
+    drawBakedProp(
       ctx,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      tileSize,
-      this.emblem,
-      this.currentFrame(),
-      this.swayPhase,
-      this.westShiftTiles,
+      `sign:${this.emblem}:${tileSize}:${this.westShiftTiles}:${step}`,
+      signBakeBounds(tileSize, this.westShiftTiles),
+      (bakeCtx, originX, originY) => {
+        drawShopSign(bakeCtx, originX, originY, tileSize, this.emblem, sway, this.westShiftTiles);
+      },
     );
   }
 }
@@ -781,12 +867,15 @@ class ClutterProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawTownClutter(
+    drawBakedProp(
       ctx,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      tileSize,
-      this.kind,
+      `clutter:${this.kind}:${tileSize}`,
+      clutterBakeBounds(tileSize),
+      (bakeCtx, originX, originY) => {
+        drawTownClutter(bakeCtx, originX, originY, tileSize, this.kind);
+      },
     );
   }
 }
@@ -884,13 +973,17 @@ class GateArchProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawGateArch(
+    // Baked, not redrawn: the gateway is static masonry, and its lantern halo
+    // is a `shadowBlur` — the most expensive operation the 2D context has.
+    drawBakedProp(
       ctx,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      tileSize,
-      this.spanTiles,
-      this.axis,
+      `gatearch:${this.axis}:${this.spanTiles}:${tileSize}`,
+      gateArchBakeBounds(tileSize, this.spanTiles, this.axis),
+      (bakeCtx, originX, originY) => {
+        drawGateArch(bakeCtx, originX, originY, tileSize, this.spanTiles, this.axis);
+      },
     );
   }
 }
@@ -952,13 +1045,16 @@ class StreetLampProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawStreetLamp(
+    const { step, flicker } = streetLampFlicker(this.currentFrame(), this.flickerPhase);
+    drawBakedProp(
       ctx,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      tileSize,
-      this.currentFrame(),
-      this.flickerPhase,
+      `lamp:${tileSize}:${step}`,
+      lampBakeBounds(tileSize),
+      (bakeCtx, originX, originY) => {
+        drawStreetLamp(bakeCtx, originX, originY, tileSize, flicker);
+      },
     );
   }
 }

@@ -49,6 +49,48 @@ const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 /** Playback rate of animated overlay states composited onto sprite buildings. */
 const SPRITE_BUILDING_OVERLAY_FPS = 8;
 
+/** Playback rate and frame count of the main tower's glow overlay. */
+const MAIN_TOWER_GLOW_FPS = 4;
+const MAIN_TOWER_GLOW_FRAMES = 4;
+
+/**
+ * Radix for folding several overlay frame indices into one number. Larger than
+ * any overlay's frame count, so distinct combinations never collide.
+ */
+const OVERLAY_FRAME_KEY_STRIDE = 16;
+
+/**
+ * Which animation frame a decoration tile is currently drawing, as a single
+ * number. The overlay cache keys entries on it so an animated building is
+ * re-rendered once per distinct frame rather than once per display frame.
+ * Tiles with no animation report 0.
+ */
+export function decorationAnimationFrame(
+  structure: TileContent[][],
+  type: number,
+  tx: number,
+  ty: number,
+): number {
+  if (type === MAIN_TOWER) {
+    return timeFrameIndex(frameTime, MAIN_TOWER_GLOW_FPS, MAIN_TOWER_GLOW_FRAMES);
+  }
+  if (type !== SPRITE_BUILDING) return 0;
+
+  const spriteKey = structure[ty][tx].spriteKey;
+  if (spriteKey === undefined) return 0;
+  const def = getSpriteDefByKey(spriteKey);
+  if (def === undefined) return 0;
+
+  let key = 0;
+  for (const overlayState of getSpriteOverlayStatesByKey(spriteKey)) {
+    const overlayDef = def.states.get(overlayState);
+    if (overlayDef === undefined) continue;
+    const frame = timeFrameIndex(frameTime, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
+    key = key * OVERLAY_FRAME_KEY_STRIDE + frame;
+  }
+  return key;
+}
+
 /**
  * Tilled rows, as fractions of the tile.
  *
@@ -909,7 +951,7 @@ export function drawDecorationTile(
     // Frame 0 is the complete base tower; frames 1-3 are glow-only overlays composited on top.
     case MAIN_TOWER: {
       drawSpriteKey(ctx, 'overworld_main_tower', 'normal', 0, sx, sy, ts);
-      const glowFrame = timeFrameIndex(frameTime, 4, 4);
+      const glowFrame = timeFrameIndex(frameTime, MAIN_TOWER_GLOW_FPS, MAIN_TOWER_GLOW_FRAMES);
       if (glowFrame > 0) {
         drawSpriteKey(ctx, 'overworld_main_tower', 'normal', glowFrame, sx, sy, ts);
       }

@@ -353,7 +353,13 @@ export abstract class Player {
 
   /** Returns true if the player currently has the given status active. */
   hasStatus(type: string): boolean {
-    return this.statusEffects.some((e) => e.type === type);
+    // A plain loop rather than `some`: this is called several times per entity
+    // per frame, almost always over an empty list, and the closure was the only
+    // allocation in the whole call.
+    for (const effect of this.statusEffects) {
+      if (effect.type === type) return true;
+    }
+    return false;
   }
 
   /**
@@ -378,7 +384,14 @@ export abstract class Player {
    *   (future: frozen → block movement in scene; paralyzed → block all input)
    */
   private tickStatusEffects() {
-    this.statusEffects = this.statusEffects.filter((effect) => {
+    if (this.statusEffects.length === 0) return;
+    // Compacted in place with a write cursor rather than a fresh filtered array:
+    // an entity with no effects — which is most entities on most frames — costs
+    // nothing, and the common one-or-two case allocates neither array nor
+    // closure. Forward order matters: several effects can damage on the same
+    // tick, and the last one to land owns the death cause.
+    let kept = 0;
+    for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
         this.takeDamage(1, { kind: 'status', effectType: 'burn' });
@@ -418,8 +431,12 @@ export abstract class Player {
         this._juggJuiceHpBoost = 0;
         this.hp = Math.min(this.hp, this.maxHp);
       }
-      return effect.ticksRemaining >= 0;
-    });
+      if (effect.ticksRemaining >= 0) {
+        this.statusEffects[kept] = effect;
+        kept++;
+      }
+    }
+    this.statusEffects.length = kept;
   }
 
   /** Extra max HP the active Jugg Juice is contributing, or 0 when none is active. */
@@ -563,22 +580,28 @@ export abstract class Player {
   }
 
   private tickTempStatMods() {
-    this.tempStatMods = this.tempStatMods.filter((mod) => {
+    if (this.tempStatMods.length === 0) return;
+    let kept = 0;
+    for (const mod of this.tempStatMods) {
       mod.ticksRemaining--;
-      if (mod.ticksRemaining > 0) return true;
+      if (mod.ticksRemaining > 0) {
+        this.tempStatMods[kept] = mod;
+        kept++;
+        continue;
+      }
       // Revert the stat change
       if (mod.stat === 'strength') {
         this.strength = Math.max(1, this.strength - mod.delta);
       } else if (mod.stat === 'intelligence') {
         this.intelligence = Math.max(1, this.intelligence - mod.delta);
       } else {
-        const d = Math.round(mod.delta);
-        this.constitution = Math.max(1, this.constitution - d);
-        this.maxHp = Math.max(1, this.maxHp - d * 2);
+        const constitutionDelta = Math.round(mod.delta);
+        this.constitution = Math.max(1, this.constitution - constitutionDelta);
+        this.maxHp = Math.max(1, this.maxHp - constitutionDelta * CON_HP_BONUS_PER_POINT);
         this.hp = Math.min(this.hp, this.maxHp);
       }
-      return false;
-    });
+    }
+    this.tempStatMods.length = kept;
   }
 
   abstract render(

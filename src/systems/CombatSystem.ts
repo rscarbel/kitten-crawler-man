@@ -276,7 +276,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
             // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
             if (missileLevel >= MISSILE_SLOW_BOSS_LEVEL && mob.isBoss) {
-              mob.isSlowed = true;
+              mob.applyHitSlow();
             }
           }
 

@@ -227,7 +227,7 @@ export class TutorialMap extends GameMap {
       },
     ];
 
-    this.stairwellTiles = [{ x: STAIR_X, y: STAIR_Y }];
+    this.setStairwellTiles([{ x: STAIR_X, y: STAIR_Y }]);
 
     // No mob spawn points — tutorial goblins are placed manually.
     this.mobSpawnPoints = [];

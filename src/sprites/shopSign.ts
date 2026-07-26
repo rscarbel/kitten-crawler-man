@@ -695,6 +695,26 @@ const EMBLEM_PAINTERS: Record<ShopSignEmblem, EmblemPainter> = {
 };
 
 /**
+ * How many distinct angles a sign board is drawn at across its swing. The whole
+ * swing is 0.045 rad — the board's far corner travels about 1.5 px end to end —
+ * so four steps are already finer than a pixel, and each extra step is another
+ * baked canvas per sign.
+ */
+export const SIGN_SWAY_STEPS = 4;
+
+/**
+ * The sign's swing at `frame`, snapped to one of `SIGN_SWAY_STEPS` angles.
+ * Returns the step index and the rotation to draw it with.
+ */
+export function shopSignSway(frame: number, swayPhase: number): { step: number; sway: number } {
+  const wave = Math.sin((frame / SWAY_PERIOD_FRAMES) * TWO_PI + swayPhase);
+  const normalized = (wave + 1) / 2;
+  const step = Math.min(SIGN_SWAY_STEPS - 1, Math.floor(normalized * SIGN_SWAY_STEPS));
+  const steppedWave = (step / (SIGN_SWAY_STEPS - 1)) * 2 - 1;
+  return { step, sway: steppedWave * SWAY_AMPLITUDE_RAD };
+}
+
+/**
  * Draws the bracket and the swinging board for one shop sign.
  *
  * `sx`/`sy` are the screen position of the sign's **anchor tile** — the door
@@ -707,8 +727,7 @@ export function drawShopSign(
   sy: number,
   ts: number,
   emblem: ShopSignEmblem,
-  frame: number,
-  swayPhase: number,
+  sway: number,
   westShiftTiles = 0,
 ): void {
   // `strokeRound` sets lineCap, lineJoin and lineWidth, and the emblem painters
@@ -736,8 +755,6 @@ export function drawShopSign(
   ctx.fillStyle = BRACKET_IRON_LIGHT;
   ctx.fillRect(tipX, armY, rootX - tipX, BRACKET_THICKNESS_PX);
   ctx.fillRect(rootX - BRACKET_THICKNESS_PX, armY, BRACKET_THICKNESS_PX, stayRootY - armY);
-
-  const sway = Math.sin((frame / SWAY_PERIOD_FRAMES) * TWO_PI + swayPhase) * SWAY_AMPLITUDE_RAD;
 
   ctx.save();
   ctx.translate(tipX, armY);

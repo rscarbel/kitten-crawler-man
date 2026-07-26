@@ -177,6 +177,8 @@ export class SpellSystem implements GameSystem {
 
   /** Reusable Set to avoid allocating per queryCircle call each frame. */
   private readonly _querySet = new Set<Mob>();
+  /** Mobs confused by a fog last frame — only these need their flag cleared. */
+  private readonly confusedLastFrame: Mob[] = [];
 
   get shellCooldown(): number {
     return this._shellCooldown;
@@ -333,7 +335,7 @@ export class SpellSystem implements GameSystem {
 
   /** Called every gameplay frame. Ticks cooldowns, pushes shell mobs, marks confused mobs. */
   update(ctx: SystemContext): void {
-    const { mobs, mobGrid, cat, human } = ctx;
+    const { mobGrid, cat, human } = ctx;
 
     this._shellCooldown = human.tickCooldown(this._shellCooldown);
 
@@ -470,7 +472,8 @@ export class SpellSystem implements GameSystem {
     });
 
     // Reset confusion, then re-mark mobs inside active fogs
-    for (const mob of mobs) mob.isConfused = false;
+    for (const mob of this.confusedLastFrame) mob.isConfused = false;
+    this.confusedLastFrame.length = 0;
     this.activeFogs = this.activeFogs.filter((fog) => {
       fog.framesLeft--;
       if (fog.framesLeft <= 0) return false;
@@ -481,8 +484,9 @@ export class SpellSystem implements GameSystem {
         if (!mob.isAlive) continue;
         const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - fog.x;
         const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - fog.y;
-        if (dx * dx + dy * dy <= rSq) {
+        if (dx * dx + dy * dy <= rSq && !mob.isConfused) {
           mob.isConfused = true;
+          this.confusedLastFrame.push(mob);
         }
       }
       return true;

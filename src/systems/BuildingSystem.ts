@@ -1,6 +1,10 @@
 import type { GameMap } from '../map/GameMap';
 import type { BuildingKind } from '../map/town/townPlan';
 import { TILE_SIZE } from '../core/constants';
+import { tileCoordKey } from '../map/tileIndex';
+
+/** Sentinel index meaning the player is not standing on any building's door. */
+const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
@@ -80,12 +84,25 @@ export class BuildingSystem implements GameSystem {
   private onDoor = false;
   private _menuOpen = false;
   private dismissed = false;
-  private activeDoorIdx = -1;
+  private activeDoorIdx = NO_DOOR_HERE;
+
+  /** Door tile → index in `gameMap.buildingEntries`, so the per-frame on-door
+   * test is one lookup rather than a scan of every entrance in town. */
+  private readonly entryIndexByDoorTile: ReadonlyMap<number, number>;
 
   constructor(
     private readonly gameMap: GameMap,
     private readonly onEnterBuilding: (entry: BuildingEntry) => void,
-  ) {}
+  ) {
+    const byDoorTile = new Map<number, number>();
+    gameMap.buildingEntries.forEach((entry, index) => {
+      // First match wins, as the `findIndex` scan this replaces did — two
+      // entries sharing a door tile are guarded against but not impossible.
+      const key = tileCoordKey(entry.doorTile.x, entry.doorTile.y);
+      if (!byDoorTile.has(key)) byDoorTile.set(key, index);
+    });
+    this.entryIndexByDoorTile = byDoorTile;
+  }
 
   get menuOpen(): boolean {
     return this._menuOpen;
@@ -108,14 +125,14 @@ export class BuildingSystem implements GameSystem {
     const tx = Math.floor((active.x + TILE_SIZE * TILE_CENTER_FRAC) / TILE_SIZE);
     const ty = Math.floor((active.y + TILE_SIZE * TILE_CENTER_FRAC) / TILE_SIZE);
 
-    const idx = entries.findIndex((e) => e.doorTile.x === tx && e.doorTile.y === ty);
+    const idx = this.entryIndexByDoorTile.get(tileCoordKey(tx, ty)) ?? NO_DOOR_HERE;
     const wasOn = this.onDoor;
-    this.onDoor = idx !== -1;
+    this.onDoor = idx !== NO_DOOR_HERE;
 
     if (!this.onDoor) {
       this.dismissed = false;
       this._menuOpen = false;
-      this.activeDoorIdx = -1;
+      this.activeDoorIdx = NO_DOOR_HERE;
     } else if (!wasOn && !this.dismissed) {
       this.activeDoorIdx = idx;
       this._menuOpen = true;

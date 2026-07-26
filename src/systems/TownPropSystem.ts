@@ -198,21 +198,12 @@ export class TownPropSystem implements GameSystem {
   }
 
   private gatherWaterSpots(): void {
-    const fountainTiles: TileXY[] = [];
-    const structure = this.gameMap.structure;
-    for (let ty = 0; ty < structure.length; ty++) {
-      const row = structure[ty];
-      for (let tx = 0; tx < row.length; tx++) {
-        const type = row[tx].type;
-        if (type === FOUNTAIN) {
-          fountainTiles.push({ x: tx, y: ty });
-        } else if (type === WELL) {
-          this.healSpots.push(this.waterSpot('well', [{ x: tx, y: ty }]));
-        }
-      }
+    for (const well of this.gameMap.tilesOfType(WELL)) {
+      this.healSpots.push(this.waterSpot('well', [{ x: well.x, y: well.y }]));
     }
+    const fountainTiles = this.gameMap.tilesOfType(FOUNTAIN);
     if (fountainTiles.length > 0) {
-      this.healSpots.push(this.waterSpot('fountain', fountainTiles));
+      this.healSpots.push(this.waterSpot('fountain', [...fountainTiles]));
     }
   }
 

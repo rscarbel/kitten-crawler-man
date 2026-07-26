@@ -260,7 +260,7 @@ export class Mongo extends Mob {
       this.visualScale,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

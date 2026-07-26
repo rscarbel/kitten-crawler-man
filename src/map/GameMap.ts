@@ -41,8 +41,11 @@ import {
   CLUB_FLOOR,
   DANCE_FLOOR,
   TOWN_WALL,
+  TILE_TYPE_COUNT,
   placeProp,
 } from './tileTypes';
+import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
+import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import {
   CLUB_INTERIOR_W,
   CLUB_INTERIOR_H,
@@ -64,9 +67,10 @@ import {
   getBlockedTileOffsetsByKey,
   getSpriteDefByKey,
   getSortYAnchorPx,
-  getMapSpriteExtentsPx,
+  type MapSpriteExtentsPx,
 } from '../core/SpriteLoader';
 import {
+  decorationTileExtentsPx,
   renderCanvas,
   renderDecorationsOverlay,
   drawDecorationTileFull,
@@ -135,15 +139,192 @@ const TOWER_STAIR_DOWN_COL = 3;
 /** Maximum tower floor index — floors 0..3, so the cap is 3. */
 const TOWER_TOP_FLOOR = 3;
 
+// ── Decoration overlay index ──────────────────────────────────────────────────
+/** A decoration tile drawn in the Y-sorted overlay pass. */
+export interface DecorationTile {
+  readonly tx: number;
+  readonly ty: number;
+  readonly isTree: boolean;
+  /** Pixels below the tile's top edge where the sprite's visual foot sits. */
+  readonly sortYAnchorPx: number;
+  /** How far the art reaches past the tile's own square, per direction. */
+  readonly extents: Readonly<MapSpriteExtentsPx>;
+}
+
+/** Tile types drawn in the Y-sorted decoration overlay pass. */
+const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
+  TREE,
+  TORCH,
+  WELL,
+  BRAZIER,
+  FOUNTAIN,
+  BUILDING_WALL,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+  MAIN_TOWER,
+  BARREL,
+  BARREL_SIDE,
+  CRATE,
+  SPRITE_BUILDING,
+  MODERN_DECORATION,
+]);
+
+/**
+ * A decoration reaching further than this past its anchor is checked
+ * individually every frame rather than widening the row scan for everything
+ * else. The main tower and every sprite building qualify — a few dozen tiles
+ * on the town map, against tens of thousands of ordinary decorations.
+ */
+const OVERSIZED_DECORATION_EXTENT_TILES = 3;
+
+function isOversizedDecoration(extents: Readonly<MapSpriteExtentsPx>, tileSize: number): boolean {
+  const limit = OVERSIZED_DECORATION_EXTENT_TILES * tileSize;
+  return (
+    extents.left > limit || extents.up > limit || extents.right > limit || extents.down > limit
+  );
+}
+
+// ── Walkability masks ─────────────────────────────────────────────────────────
+/** Tile is inside a multi-tile sprite/prop footprint. */
+const BLOCK_EXTRA = 1;
+/** Tile was blocked permanently at runtime (placed prop, quest scenery). */
+const BLOCK_PERMANENT = 2;
+/** Tile is part of an arena door gap — blocking only while `arenaDoorLocked`. */
+const BLOCK_ARENA_DOOR = 4;
+/** Tile is part of a stairwell's 2×2 footprint. */
+const BLOCK_STAIRWELL = 8;
+/** Bits that block movement regardless of game state. */
+const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT;
+
+/** Tile types that cannot be walked on. Everything not listed here is walkable. */
+const NON_WALKABLE_TILE_TYPES: readonly number[] = [
+  FloorTypeValue.wall,
+  FloorTypeValue.water,
+  VOID_TYPE,
+  TREE,
+  BUILDING_WALL,
+  METAL_WALL,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  ROOF_CIRCUS_RED,
+  ROOF_CIRCUS_BLUE,
+  ROOF_CIRCUS_PURPLE,
+  FOUNTAIN,
+  TORCH,
+  // A stone well is as solid as the fountain beside it. Its absence here was
+  // pre-existing: both town wells were walkable and the player could stand
+  // inside one. Every consumer that cares about a well — the murder quest's
+  // clue and the drink heal — measures distance to the tile rather than
+  // standing on it.
+  WELL,
+  TABLE,
+  BOOKSHELF,
+  BED,
+  FIREPLACE,
+  BARREL,
+  CHAIR,
+  BARREL_SIDE,
+  CRATE,
+  BRAZIER,
+  SPRITE_BUILDING,
+  RUINED_WALL,
+  TENT_POLE,
+  BLEACHER,
+  TOWN_WALL,
+  FENCE,
+];
+
+/**
+ * Walkability by tile type as a flat lookup, so the innermost walkability test
+ * is one array read rather than a chain of inequality checks.
+ * MODERN_DECORATION is excluded — its walkability depends on the tile's variant.
+ */
+const WALKABLE_BY_TILE_TYPE = ((): Uint8Array => {
+  const table = new Uint8Array(TILE_TYPE_COUNT).fill(1);
+  for (const type of NON_WALKABLE_TILE_TYPES) table[type] = 0;
+  return table;
+})();
+
 // ── A* pathfinding constants ──────────────────────────────────────────────────
 /** Movement cost for a diagonal step (√2 approximated to 3 decimal places). */
 const DIAGONAL_MOVE_COST = 1.414;
+/** Movement cost for a cardinal step. */
+const CARDINAL_MOVE_COST = 1;
 /** Maximum A* node expansions per call — keeps per-frame cost bounded. */
 const ASTAR_MAX_NODE_EXPANSIONS = 2000;
+/**
+ * Default longest path A* will attempt, in tiles. Just beyond the AI activation
+ * radius, so a mob's walkable-but-unreachable faraway goal fails instantly
+ * instead of burning the full expansion budget on every repath. Callers that
+ * navigate outside the AI leash — a companion catching up across town — pass
+ * their own, larger limit.
+ */
+export const MOB_MAX_PATH_DISTANCE_TILES = 24;
+/**
+ * Expansions allowed regardless of how short the requested path is. Generous,
+ * because "short as the crow flies" and "short to walk" diverge sharply in
+ * town: a goal two tiles away on the far side of a building costs a few hundred
+ * expansions to route around, and failing that leaves a mob pinned to the wall.
+ */
+const ASTAR_BASE_EXPANSIONS = 400;
+/**
+ * Search radius allowance per tile of goal distance. The expansion cap is the
+ * square of `goalDistance * this`, so a 4-tile hop may explore a small
+ * neighbourhood while a cross-screen chase gets the full budget.
+ */
+const ASTAR_EXPANSIONS_PER_TILE = 4;
 
-// ── Line-of-sight sampling ────────────────────────────────────────────────────
-/** Fraction of a tile used as the LOS step size (sample every half-tile). */
-const LOS_HALF_TILE_FRACTION = 0.5;
+/** Sentinel in `pathCameFrom` marking the start node, which has no parent. */
+const PATH_NO_PARENT = -1;
+/** Initial open-set capacity — grown automatically if a search needs more. */
+const ASTAR_OPEN_HEAP_CAPACITY = 256;
+
+/**
+ * The four cardinal steps A* expands. Their walkability is computed once per
+ * expansion and reused by the diagonal corner-cutting rule.
+ */
+const CARDINAL_STEPS = [
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 },
+] as const;
+
+const CARDINAL_EAST = 0;
+const CARDINAL_WEST = 1;
+const CARDINAL_SOUTH = 2;
+const CARDINAL_NORTH = 3;
+
+/**
+ * The four diagonal steps, each naming the two `CARDINAL_STEPS` it squeezes
+ * between — both must be walkable or the move would cut a wall corner.
+ */
+const DIAGONAL_STEPS = [
+  { dx: 1, dy: 1, horizontal: CARDINAL_EAST, vertical: CARDINAL_SOUTH },
+  { dx: 1, dy: -1, horizontal: CARDINAL_EAST, vertical: CARDINAL_NORTH },
+  { dx: -1, dy: 1, horizontal: CARDINAL_WEST, vertical: CARDINAL_SOUTH },
+  { dx: -1, dy: -1, horizontal: CARDINAL_WEST, vertical: CARDINAL_NORTH },
+] as const;
+
+/** A* heuristic: the same Manhattan estimate the original search used. */
+function manhattanDistance(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+}
+
+// ── Line-of-sight traversal ───────────────────────────────────────────────────
+/**
+ * Extra boundary crossings allowed beyond the Manhattan tile distance, so a ray
+ * that clips a corner (crossing both axes at the same point) still terminates on
+ * its target tile rather than on the iteration guard.
+ */
+const LOS_CROSSING_SLACK = 2;
 
 /** Options for GameMap construction. */
 export interface GameMapOptions {
@@ -187,7 +368,17 @@ export class GameMap {
     centre: { x: number; y: number };
   }> = [];
   /** Tile-space centres of rooms that contain a stairwell (descent point). */
-  stairwellTiles: Array<{ x: number; y: number }> = [];
+  private _stairwellTiles: ReadonlyArray<{ x: number; y: number }> = [];
+
+  /**
+   * The map's stairwells. Assignable only through `setStairwellTiles`, because
+   * the list and the `BLOCK_STAIRWELL` bits `isStairwellTile` reads are two
+   * views of one fact — setting the list alone silently disables stairwell
+   * detection while the stairs still render.
+   */
+  get stairwellTiles(): ReadonlyArray<{ x: number; y: number }> {
+    return this._stairwellTiles;
+  }
   /** Door positions for enterable buildings (overworld only). */
   buildingEntries: BuildingEntry[] = [];
   /** The plan the overworld town was generated from. Undefined on other maps. */
@@ -220,21 +411,68 @@ export class GameMap {
   arenaExteriors: ArenaExterior[] = [];
   /** When true, the arena door gap tiles are treated as unwalkable. */
   arenaDoorLocked = false;
-  private arenaDoorTileSet = new Set<string>();
-  private extraBlockedTiles = new Set<string>();
+  /**
+   * Write-side record of every runtime block, keyed with `tileCoordKey` so the
+   * entries survive a structure replacement (building interiors regenerate the
+   * grid). `blockedMask` is rebuilt from these whenever the grid changes.
+   */
+  private readonly arenaDoorTileSet = new Set<number>();
+  private readonly permanentBlockedTiles = new Set<number>();
+  private readonly stairwellBlockedSet = new Set<number>();
+
+  /**
+   * Per-tile block flags (`BLOCK_*`) for the current structure, indexed
+   * `tileIndex(tx, ty, maskWidth)`. This is the read model for every
+   * walkability test — the hottest call in the game.
+   */
+  private blockedMask = new Uint8Array(0);
   /**
    * Tiles covered by a SPRITE_BUILDING's art. Only the anchor tile carries the
    * SPRITE_BUILDING type, so anything that reads the map by tile type — the
    * minimap most visibly — needs this to see a building rather than one pixel.
    */
-  private readonly spriteBuildingTiles = new Set<string>();
+  private spriteBuildingMask = new Uint8Array(0);
+  private maskWidth = 0;
+  private maskHeight = 0;
+
+  /**
+   * Decoration tiles bucketed by row, plus the few whose art reaches so far
+   * past its anchor that row-bucket culling cannot bound it. Built once per
+   * structure; see `ensureDecorationIndex`.
+   */
+  private _decorationRows: DecorationTile[][] = [];
+  private _oversizedDecorations: DecorationTile[] = [];
+  private _modestDecorationExtents: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };
+  /** Reused result of `getVisibleDecorationTiles` — holds references, never copies. */
+  private readonly _visibleDecorations: DecorationTile[] = [];
+
+  /**
+   * Memoized results of `tilesOfType`. Exiting a building rebuilds the town's
+   * systems against this same map instance, and each of them used to re-sweep
+   * all 78,400 tiles looking for wells and fountains — a visible hitch at every
+   * shop door, for a list that cannot have changed.
+   */
+  private _tilesOfTypeCache = new Map<number, ReadonlyArray<{ x: number; y: number }>>();
+
+  /**
+   * A* scratch, sized to the grid and reused across searches. `pathGScore` and
+   * `pathCameFrom` are only meaningful for tiles stamped with the current
+   * `pathSearchGeneration`, which is what lets them go uncleared between calls.
+   */
+  private pathGScore = new Float64Array(0);
+  private pathCameFrom = new Int32Array(0);
+  private pathDiscoveredStamp = new Int32Array(0);
+  private pathExpandedStamp = new Int32Array(0);
+  private pathSearchGeneration = 0;
+  private readonly pathOpenHeap = new MinHeap(ASTAR_OPEN_HEAP_CAPACITY);
+  /** Walkability of the four cardinal neighbours of the node being expanded. */
+  private readonly cardinalWalkable = [false, false, false, false];
 
   /** True when (tileX, tileY) is covered by a sprite building's artwork. */
   isSpriteBuildingTile(tileX: number, tileY: number): boolean {
-    return this.spriteBuildingTiles.has(`${tileX},${tileY}`);
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    return this.spriteBuildingMask[tileIndex(tileX, tileY, this.maskWidth)] === 1;
   }
-  private permanentBlockedTiles = new Set<string>();
-  private stairwellBlockedSet = new Set<string>();
   private _chunkCache: TileChunkCache | null = null;
   /**
    * Tiles whose base art changed since the last frame. Queued rather than
@@ -272,7 +510,7 @@ export class GameMap {
         hasSpiderLab,
       );
     }
-    this.buildExtraBlockedTiles();
+    this.rebuildBlockedMasks();
   }
 
   private generate(
@@ -294,8 +532,7 @@ export class GameMap {
       this.bossRooms = data.bossRooms;
       this.mobSpawnPoints = [];
       this.hallwaySpawnPoints = data.hallwaySpawnPoints;
-      this.stairwellTiles = data.stairwellTiles;
-      this.buildStairwellBlockedSet(data.stairwellTiles);
+      this.setStairwellTiles(data.stairwellTiles);
       this.mainTowerAnchor = data.mainTowerAnchor;
       this.townSafeRadiusTiles = data.townSafeRadiusTiles;
       this.townSquareCentre = data.townSquareCentre;
@@ -323,19 +560,18 @@ export class GameMap {
     this.spiderLabRoom = data.spiderLabRoom;
     this.mobSpawnPoints = data.mobSpawnPoints;
     this.hallwaySpawnPoints = data.hallwaySpawnPoints;
-    this.stairwellTiles = data.stairwellTiles;
-    this.buildStairwellBlockedSet(data.stairwellTiles);
+    this.setStairwellTiles(data.stairwellTiles);
     this.arenaExteriors = data.arenaExteriors;
     for (const arena of data.arenaExteriors) {
       const { x: doorX, y: doorY } = arena.doorTile;
       for (const dy of [0, -1]) {
         for (const dx of [-1, 0]) {
-          this.arenaDoorTileSet.add(`${doorX + dx},${doorY + dy}`);
+          this.addArenaDoorTile(doorX + dx, doorY + dy);
         }
       }
       // Also cover the south exit tile carved in the generator
-      this.arenaDoorTileSet.add(`${doorX - 1},${doorY + 1}`);
-      this.arenaDoorTileSet.add(`${doorX},${doorY + 1}`);
+      this.addArenaDoorTile(doorX - 1, doorY + 1);
+      this.addArenaDoorTile(doorX, doorY + 1);
     }
     return data.grid;
   }
@@ -357,13 +593,31 @@ export class GameMap {
         (s) => s.x === arena.stairwellTile.x && s.y === arena.stairwellTile.y,
       );
       if (!already) {
-        this.stairwellTiles.push(arena.stairwellTile);
-        this.addToStairwellBlockedSet(arena.stairwellTile);
+        this.setStairwellTiles([...this.stairwellTiles, arena.stairwellTile]);
       }
     }
   }
 
+  private addArenaDoorTile(tileX: number, tileY: number): void {
+    this.arenaDoorTileSet.add(tileCoordKey(tileX, tileY));
+    this.addBlockFlag(tileX, tileY, BLOCK_ARENA_DOOR);
+  }
+
+  /**
+   * Replaces the stairwell tile list and the block bits derived from it. The
+   * two are set together because `isStairwellTile` reads the bits while
+   * everything that renders or places stairs reads the list — assigning one
+   * without the other silently disables stairwell detection.
+   */
+  setStairwellTiles(tiles: ReadonlyArray<{ x: number; y: number }>): void {
+    this._stairwellTiles = tiles;
+    this.buildStairwellBlockedSet(tiles);
+  }
+
   private buildStairwellBlockedSet(tiles: ReadonlyArray<{ x: number; y: number }>): void {
+    for (const key of this.stairwellBlockedSet) {
+      this.removeBlockFlag(tileKeyX(key), tileKeyY(key), BLOCK_STAIRWELL);
+    }
     this.stairwellBlockedSet.clear();
     for (const s of tiles) {
       this.addToStairwellBlockedSet(s);
@@ -373,7 +627,8 @@ export class GameMap {
   private addToStairwellBlockedSet(s: { x: number; y: number }): void {
     for (let dy = 0; dy <= 1; dy++) {
       for (let dx = 0; dx <= 1; dx++) {
-        this.stairwellBlockedSet.add(`${s.x + dx},${s.y + dy}`);
+        this.stairwellBlockedSet.add(tileCoordKey(s.x + dx, s.y + dy));
+        this.addBlockFlag(s.x + dx, s.y + dy, BLOCK_STAIRWELL);
       }
     }
   }
@@ -1169,9 +1424,9 @@ export class GameMap {
     grid[h - 1][doorX + 1].type = ROAD_TILE;
 
     this.structure = grid;
-    this.buildExtraBlockedTiles();
+    this.rebuildBlockedMasks();
     this.startTile = { x: Math.floor(w / 2), y: h - 2 };
-    this.stairwellTiles = [];
+    this.setStairwellTiles([]);
     this.buildingEntries = [];
     this.bossRooms = [];
     this.mobSpawnPoints = [];
@@ -1417,94 +1672,159 @@ export class GameMap {
     startY: number,
     goalX: number,
     goalY: number,
+    maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
   ): Array<{ x: number; y: number }> {
     if (!this.isWalkable(goalX, goalY)) return [];
     if (startX === goalX && startY === goalY) return [{ x: goalX, y: goalY }];
 
-    type Node = {
-      x: number;
-      y: number;
-      g: number;
-      f: number;
-      parent: Node | null;
-    };
-    const size = this.structure.length;
-    const key = (x: number, y: number) => y * size + x;
-    const h = (x: number, y: number) => Math.abs(x - goalX) + Math.abs(y - goalY);
+    const goalDistanceTiles = Math.max(Math.abs(goalX - startX), Math.abs(goalY - startY));
+    if (goalDistanceTiles > maxDistanceTiles) return [];
 
-    const openMap = new Map<number, Node>();
-    const closedSet = new Set<number>();
-    openMap.set(key(startX, startY), {
-      x: startX,
-      y: startY,
-      g: 0,
-      f: h(startX, startY),
-      parent: null,
-    });
+    const width = this.maskWidth;
+    if (!this.isInsideGrid(startX, startY)) return [];
+    this.ensurePathScratch();
 
-    const dirs = [
-      { dx: 1, dy: 0, cost: 1 },
-      { dx: -1, dy: 0, cost: 1 },
-      { dx: 0, dy: 1, cost: 1 },
-      { dx: 0, dy: -1, cost: 1 },
-      { dx: 1, dy: 1, cost: DIAGONAL_MOVE_COST },
-      { dx: 1, dy: -1, cost: DIAGONAL_MOVE_COST },
-      { dx: -1, dy: 1, cost: DIAGONAL_MOVE_COST },
-      { dx: -1, dy: -1, cost: DIAGONAL_MOVE_COST },
-    ];
+    // A short hop must not be allowed to flood a wide radius of open ground.
+    const reach = goalDistanceTiles * ASTAR_EXPANSIONS_PER_TILE;
+    const maxExpansions = Math.min(
+      ASTAR_MAX_NODE_EXPANSIONS,
+      ASTAR_BASE_EXPANSIONS + reach * reach,
+    );
 
-    const MAX_NODES = ASTAR_MAX_NODE_EXPANSIONS;
+    const goalIndex = tileIndex(goalX, goalY, width);
+    const startIndex = tileIndex(startX, startY, width);
+    const generation = ++this.pathSearchGeneration;
+
+    this.pathOpenHeap.clear();
+    this.pathGScore[startIndex] = 0;
+    this.pathCameFrom[startIndex] = PATH_NO_PARENT;
+    this.pathDiscoveredStamp[startIndex] = generation;
+    this.pathOpenHeap.push(startIndex, manhattanDistance(startX, startY, goalX, goalY));
+
     let expanded = 0;
+    while (expanded < maxExpansions) {
+      const current = this.pathOpenHeap.pop();
+      if (current === HEAP_EMPTY) break;
+      // The heap holds stale duplicates of improved nodes; skip already-expanded ones.
+      if (this.pathExpandedStamp[current] === generation) continue;
+      this.pathExpandedStamp[current] = generation;
 
-    while (openMap.size > 0 && expanded < MAX_NODES) {
-      // Find lowest-f node (linear scan — fine for dungeon-scale maps)
-      let best: Node | null = null;
-      for (const n of openMap.values()) {
-        if (!best || n.f < best.f) best = n;
-      }
-      if (!best) break;
-      openMap.delete(key(best.x, best.y));
-
-      if (best.x === goalX && best.y === goalY) {
-        const path: Array<{ x: number; y: number }> = [];
-        let node: Node | null = best;
-        while (node) {
-          path.unshift({ x: node.x, y: node.y });
-          node = node.parent;
-        }
-        return path;
-      }
-
-      closedSet.add(key(best.x, best.y));
+      if (current === goalIndex) return this.rebuildPath(current, width);
       expanded++;
 
-      for (const dir of dirs) {
-        const nx = best.x + dir.dx;
-        const ny = best.y + dir.dy;
-        const nk = key(nx, ny);
-        if (closedSet.has(nk)) continue;
-        if (!this.isWalkable(nx, ny)) continue;
-        // Block diagonal moves that cut through wall corners
-        if (
-          dir.cost > 1 &&
-          (!this.isWalkable(best.x + dir.dx, best.y) || !this.isWalkable(best.x, best.y + dir.dy))
-        )
-          continue;
+      const cx = current % width;
+      const cy = (current - cx) / width;
+      const currentG = this.pathGScore[current];
 
-        const g = best.g + dir.cost;
-        const existing = openMap.get(nk);
-        if (existing && existing.g <= g) continue;
-        openMap.set(nk, { x: nx, y: ny, g, f: g + h(nx, ny), parent: best });
+      for (let i = 0; i < CARDINAL_STEPS.length; i++) {
+        const step = CARDINAL_STEPS[i];
+        this.cardinalWalkable[i] = this.isWalkable(cx + step.dx, cy + step.dy);
+        if (!this.cardinalWalkable[i]) continue;
+        this.relaxNeighbor(
+          cx + step.dx,
+          cy + step.dy,
+          currentG + CARDINAL_MOVE_COST,
+          current,
+          generation,
+          width,
+          goalX,
+          goalY,
+        );
+      }
+
+      for (const diagonal of DIAGONAL_STEPS) {
+        // Diagonal moves may not cut through a wall corner.
+        if (!this.cardinalWalkable[diagonal.horizontal]) continue;
+        if (!this.cardinalWalkable[diagonal.vertical]) continue;
+        const nx = cx + diagonal.dx;
+        const ny = cy + diagonal.dy;
+        if (!this.isWalkable(nx, ny)) continue;
+        this.relaxNeighbor(
+          nx,
+          ny,
+          currentG + DIAGONAL_MOVE_COST,
+          current,
+          generation,
+          width,
+          goalX,
+          goalY,
+        );
       }
     }
 
     return [];
   }
 
-  private buildExtraBlockedTiles(): void {
-    this.extraBlockedTiles.clear();
-    this.spriteBuildingTiles.clear();
-    for (let ty = 0; ty < this.structure.length; ty++) {
+  /**
+   * Records a cheaper route to a neighbour and queues it. Node identity is the
+   * packed tile index, so nothing is allocated per expansion.
+   */
+  private relaxNeighbor(
+    tileX: number,
+    tileY: number,
+    tentativeG: number,
+    parentIndex: number,
+    generation: number,
+    width: number,
+    goalX: number,
+    goalY: number,
+  ): void {
+    const index = tileIndex(tileX, tileY, width);
+    if (this.pathExpandedStamp[index] === generation) return;
+    const alreadyDiscovered = this.pathDiscoveredStamp[index] === generation;
+    if (alreadyDiscovered && this.pathGScore[index] <= tentativeG) return;
+
+    this.pathDiscoveredStamp[index] = generation;
+    this.pathGScore[index] = tentativeG;
+    this.pathCameFrom[index] = parentIndex;
+    this.pathOpenHeap.push(index, tentativeG + manhattanDistance(tileX, tileY, goalX, goalY));
+  }
+
+  private rebuildPath(goalIndex: number, width: number): Array<{ x: number; y: number }> {
+    const reversed: Array<{ x: number; y: number }> = [];
+    let index = goalIndex;
+    while (index !== PATH_NO_PARENT) {
+      const x = index % width;
+      reversed.push({ x, y: (index - x) / width });
+      index = this.pathCameFrom[index];
+    }
+    reversed.reverse();
+    return reversed;
+  }
+
+  /**
+   * Allocates the A* scratch buffers to match the current grid. They are reused
+   * across calls and never cleared — `pathSearchGeneration` stamping tells a
+   * live entry from a leftover one.
+   */
+  private ensurePathScratch(): void {
+    const cellCount = this.maskWidth * this.maskHeight;
+    if (this.pathGScore.length === cellCount) return;
+    this.pathGScore = new Float64Array(cellCount);
+    this.pathCameFrom = new Int32Array(cellCount);
+    this.pathDiscoveredStamp = new Int32Array(cellCount);
+    this.pathExpandedStamp = new Int32Array(cellCount);
+  }
+
+  /**
+   * Rebuilds `blockedMask` and `spriteBuildingMask` for the current structure:
+   * multi-tile footprints are re-derived from the grid, and the runtime block
+   * sets are re-applied on top. Call after any replacement of `structure`.
+   */
+  private rebuildBlockedMasks(): void {
+    this._decorationRows = [];
+    this._tilesOfTypeCache = new Map();
+    // Both caches capture the grid's width when they are built, so a replaced
+    // structure must not keep them.
+    this._chunkCache = null;
+    this._overlayCache = null;
+    this.maskHeight = this.structure.length;
+    this.maskWidth = this.structure[0]?.length ?? 0;
+    const cellCount = this.maskWidth * this.maskHeight;
+    this.blockedMask = new Uint8Array(cellCount);
+    this.spriteBuildingMask = new Uint8Array(cellCount);
+
+    for (let ty = 0; ty < this.maskHeight; ty++) {
       const row = this.structure[ty];
       for (let tx = 0; tx < row.length; tx++) {
         const tile = row[tx];
@@ -1514,17 +1834,67 @@ export class GameMap {
             ? getBlockedTileOffsetsByKey(tile.spriteKey)
             : getBlockedTileOffsets(tile.type);
         for (const { dx, dy } of offsets) {
-          const key = `${tx + dx},${ty + dy}`;
-          this.extraBlockedTiles.add(key);
-          if (isSpriteBuilding) this.spriteBuildingTiles.add(key);
+          this.addBlockFlag(tx + dx, ty + dy, BLOCK_EXTRA);
+          if (isSpriteBuilding) this.markSpriteBuildingTile(tx + dx, ty + dy);
         }
-        if (isSpriteBuilding) this.spriteBuildingTiles.add(`${tx},${ty}`);
+        if (isSpriteBuilding) this.markSpriteBuildingTile(tx, ty);
       }
+    }
+
+    this.applyBlockKeySet(this.permanentBlockedTiles, BLOCK_PERMANENT);
+    this.applyBlockKeySet(this.arenaDoorTileSet, BLOCK_ARENA_DOOR);
+    this.applyBlockKeySet(this.stairwellBlockedSet, BLOCK_STAIRWELL);
+  }
+
+  private applyBlockKeySet(keys: ReadonlySet<number>, flag: number): void {
+    for (const key of keys) {
+      this.addBlockFlag(tileKeyX(key), tileKeyY(key), flag);
     }
   }
 
+  /** Tiles outside the grid are silently ignored — footprints may overhang the edge. */
+  private addBlockFlag(tileX: number, tileY: number, flag: number): void {
+    if (!this.isInsideGrid(tileX, tileY)) return;
+    this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] |= flag;
+  }
+
+  private removeBlockFlag(tileX: number, tileY: number, flag: number): void {
+    if (!this.isInsideGrid(tileX, tileY)) return;
+    this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] &= ~flag;
+  }
+
+  private markSpriteBuildingTile(tileX: number, tileY: number): void {
+    if (!this.isInsideGrid(tileX, tileY)) return;
+    this.spriteBuildingMask[tileIndex(tileX, tileY, this.maskWidth)] = 1;
+  }
+
+  private isInsideGrid(tileX: number, tileY: number): boolean {
+    return tileX >= 0 && tileY >= 0 && tileX < this.maskWidth && tileY < this.maskHeight;
+  }
+
   blockTilePermanently(tileX: number, tileY: number): void {
-    this.permanentBlockedTiles.add(`${tileX},${tileY}`);
+    this.permanentBlockedTiles.add(tileCoordKey(tileX, tileY));
+    this.addBlockFlag(tileX, tileY, BLOCK_PERMANENT);
+  }
+
+  /**
+   * Every tile of `type`, in row-major order. The result is cached per map and
+   * must be treated as read-only. Only for tile types that are fixed for a map's
+   * lifetime — a type a runtime event can create or destroy would go stale.
+   */
+  tilesOfType(type: number): ReadonlyArray<{ x: number; y: number }> {
+    const cached = this._tilesOfTypeCache.get(type);
+    if (cached !== undefined) return cached;
+
+    const found: Array<{ x: number; y: number }> = [];
+    for (let ty = 0; ty < this.structure.length; ty++) {
+      const row = this.structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        if (row[tx].type === type) found.push({ x: tx, y: ty });
+      }
+    }
+    this._tilesOfTypeCache.set(type, found);
+    return found;
   }
 
   /** Number of tiles along one edge of the (square) map grid. */
@@ -1569,91 +1939,57 @@ export class GameMap {
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
-    if (this.permanentBlockedTiles.has(`${tileX},${tileY}`)) return false;
-    return this.isWalkableIgnoringPermanent(tileX, tileY);
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
+    if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
+    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
+    return this.isWalkableTileType(this.structure[tileY][tileX]);
   }
 
   /**
-   * Walkability ignoring only the *permanent* block set. Locked arena doors,
-   * building/sprite footprints (`extraBlockedTiles`), and tile type are all still
+   * Walkability ignoring only the *permanent* block flag. Locked arena doors,
+   * building/sprite footprints (`BLOCK_EXTRA`), and tile type are all still
    * honored — this differs from `isWalkable` only in that a tile the game blocked
    * permanently still reads as walkable.
    *
    * Use for deterministic prop placement on a map instance that is reused across
-   * scene reconstructions: `extraBlockedTiles` is rebuilt from the (stable)
-   * structure each time, but `permanentBlockedTiles` only ever grows, so a prop's
-   * own permanent block would otherwise make placement drift to — and leak — a
+   * scene reconstructions: `BLOCK_EXTRA` is rebuilt from the (stable) structure
+   * each time, but permanent blocks only ever accumulate, so a prop's own
+   * permanent block would otherwise make placement drift to — and leak — a
    * fresh blocked tile on every pass. Ignoring it keeps re-placement idempotent.
    */
   isWalkableIgnoringPermanent(tileX: number, tileY: number): boolean {
-    if (tileY < 0 || tileX < 0 || tileY >= this.structure.length) return false;
-    const row = this.structure[tileY];
-    if (tileX >= row.length) return false;
-    if (this.arenaDoorLocked && this.arenaDoorTileSet.has(`${tileX},${tileY}`)) return false;
-    if (this.extraBlockedTiles.has(`${tileX},${tileY}`)) return false;
-    return this.isWalkableTileType(row[tileX]);
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
+    if ((flags & BLOCK_EXTRA) !== 0) return false;
+    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
+    return this.isWalkableTileType(this.structure[tileY][tileX]);
   }
 
   private isWalkableTileType(tile: TileContent): boolean {
     if (tile.type === MODERN_DECORATION) {
       return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
     }
-    return (
-      tile.type !== FloorTypeValue.wall &&
-      tile.type !== FloorTypeValue.water &&
-      tile.type !== VOID_TYPE &&
-      tile.type !== TREE &&
-      tile.type !== BUILDING_WALL &&
-      tile.type !== METAL_WALL &&
-      tile.type !== ROOF_THATCH &&
-      tile.type !== ROOF_SLATE &&
-      tile.type !== ROOF_RED &&
-      tile.type !== ROOF_GREEN &&
-      tile.type !== ROOF_CIRCUS_RED &&
-      tile.type !== ROOF_CIRCUS_BLUE &&
-      tile.type !== ROOF_CIRCUS_PURPLE &&
-      tile.type !== FOUNTAIN &&
-      tile.type !== TORCH &&
-      // A stone well is as solid as the fountain beside it. Its absence here was
-      // pre-existing: both town wells were walkable and the player could stand
-      // inside one. Every consumer that cares about a well — the murder quest's
-      // clue and the drink heal — measures distance to the tile rather than
-      // standing on it.
-      tile.type !== WELL &&
-      tile.type !== TABLE &&
-      tile.type !== BOOKSHELF &&
-      tile.type !== BED &&
-      tile.type !== FIREPLACE &&
-      tile.type !== BARREL &&
-      tile.type !== CHAIR &&
-      tile.type !== BARREL_SIDE &&
-      tile.type !== CRATE &&
-      tile.type !== BRAZIER &&
-      tile.type !== SPRITE_BUILDING &&
-      tile.type !== RUINED_WALL &&
-      tile.type !== TENT_POLE &&
-      tile.type !== BLEACHER &&
-      tile.type !== TOWN_WALL &&
-      tile.type !== FENCE
-      // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43),
-      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51), the town's street
-      // materials (VERGE_GRASS 57 … PLAZA_STONE 61) and GARDEN_PLANTING (63) are
-      // walkable
-    );
+    return WALKABLE_BY_TILE_TYPE[tile.type] === 1;
   }
 
   isStairwellTile(tileX: number, tileY: number): boolean {
-    return this.stairwellBlockedSet.has(`${tileX},${tileY}`);
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_STAIRWELL) !== 0;
   }
 
   /**
    * Returns true if there is a clear line of sight between two pixel-space
    * points — i.e. no non-walkable tiles cross the line segment.
-   * Samples every half-tile along the line for accuracy.
    *
-   * `ignore` exempts one tile from the walkability test. Needed when the target
-   * *is* a solid tile, such as a barrel a melee swing is aimed at: the ray would
-   * otherwise sample the target and report it as its own obstruction.
+   * Walks the grid with an Amanatides–Woo traversal: at each step it crosses
+   * whichever tile boundary the ray reaches first, so every tile the segment
+   * passes through is tested exactly once. The endpoints' own tiles are never
+   * tested — a creature standing on a solid tile can still see out, and a solid
+   * tile can be targeted.
+   *
+   * `ignore` exempts one further tile from the walkability test. Needed when a
+   * swing is aimed *past* a solid tile that would otherwise obstruct it.
    */
   hasLineOfSight(
     x1: number,
@@ -1663,15 +1999,43 @@ export class GameMap {
     ignore?: { tileX: number; tileY: number },
   ): boolean {
     const ts = this.tileHeight;
-    const dist = Math.hypot(x2 - x1, y2 - y1);
-    if (dist === 0) return true;
-    const steps = Math.ceil(dist / (ts * LOS_HALF_TILE_FRACTION));
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      const tx = Math.floor((x1 + (x2 - x1) * t) / ts);
-      const ty = Math.floor((y1 + (y2 - y1) * t) / ts);
-      if (tx === ignore?.tileX && ty === ignore.tileY) continue;
-      if (!this.isWalkable(tx, ty)) return false;
+    const startTileX = Math.floor(x1 / ts);
+    const startTileY = Math.floor(y1 / ts);
+    const endTileX = Math.floor(x2 / ts);
+    const endTileY = Math.floor(y2 / ts);
+    if (startTileX === endTileX && startTileY === endTileY) return true;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const stepX = Math.sign(dx);
+    const stepY = Math.sign(dy);
+
+    // Distance along the ray, as a fraction of its length, between successive
+    // boundary crossings on each axis.
+    const tPerTileX = stepX === 0 ? Infinity : ts / Math.abs(dx);
+    const tPerTileY = stepY === 0 ? Infinity : ts / Math.abs(dy);
+    // Distance to the first crossing on each axis.
+    let tNextX =
+      stepX === 0 ? Infinity : ((stepX > 0 ? startTileX + 1 : startTileX) * ts - x1) / dx;
+    let tNextY =
+      stepY === 0 ? Infinity : ((stepY > 0 ? startTileY + 1 : startTileY) * ts - y1) / dy;
+
+    let tileX = startTileX;
+    let tileY = startTileY;
+    const maxCrossings =
+      Math.abs(endTileX - startTileX) + Math.abs(endTileY - startTileY) + LOS_CROSSING_SLACK;
+
+    for (let crossing = 0; crossing < maxCrossings; crossing++) {
+      if (tNextX < tNextY) {
+        tileX += stepX;
+        tNextX += tPerTileX;
+      } else {
+        tileY += stepY;
+        tNextY += tPerTileY;
+      }
+      if (tileX === endTileX && tileY === endTileY) return true;
+      if (tileX === ignore?.tileX && tileY === ignore.tileY) continue;
+      if (!this.isWalkable(tileX, tileY)) return false;
     }
     return true;
   }
@@ -1684,7 +2048,11 @@ export class GameMap {
     viewH: number,
   ): void {
     this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight);
-    for (const t of this._dirtyTiles) this._chunkCache.invalidateTile(t.x, t.y);
+    for (const t of this._dirtyTiles) {
+      this._chunkCache.invalidateTile(t.x, t.y);
+      this._overlayCache?.invalidateTile(t.x, t.y);
+      this.refreshDecorationTile(t.x, t.y);
+    }
     this._dirtyTiles.length = 0;
     renderCanvas(
       ctx,
@@ -1724,61 +2092,123 @@ export class GameMap {
     camY: number,
     viewW: number,
     viewH: number,
-  ): Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> {
+  ): ReadonlyArray<DecorationTile> {
+    this.ensureDecorationIndex();
     const ts = this.tileHeight;
     const rows = this.structure.length;
     const cols = this.structure[0]?.length ?? rows;
-    // Widen the scan by the worst-case sprite overhang in each direction:
-    // an off-screen anchor tile can still own on-screen pixels (sprite houses
-    // extend right/down of their anchor, the tower extends up and left), so
-    // culling by anchor alone makes whole buildings vanish at screen edges.
-    const extents = getMapSpriteExtentsPx();
-    const startX = Math.max(0, Math.floor(camX / ts) - Math.ceil(extents.right / ts));
-    const startY = Math.max(0, Math.floor(camY / ts) - Math.ceil(extents.down / ts));
-    const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts) + Math.ceil(extents.left / ts));
-    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts) + Math.ceil(extents.up / ts));
-    const result: Array<{ tx: number; ty: number; isTree: boolean; sortYAnchorPx: number }> = [];
+
+    // Widen the scan by how far a decoration's art can reach past its anchor
+    // tile: an off-screen anchor can still own on-screen pixels. The margin is
+    // the worst case among *ordinary* decorations only — the far-reaching ones
+    // (the tower, every sprite building) are held in `_oversizedDecorations`
+    // and tested against their own reach, so a tree's row scan isn't widened
+    // by the tower's twenty-one tiles.
+    const margin = this._modestDecorationExtents;
+    const startX = Math.max(0, Math.floor(camX / ts) - Math.ceil(margin.right / ts));
+    const startY = Math.max(0, Math.floor(camY / ts) - Math.ceil(margin.down / ts));
+    const endX = Math.min(cols - 1, Math.ceil((camX + viewW) / ts) + Math.ceil(margin.left / ts));
+    const endY = Math.min(rows - 1, Math.ceil((camY + viewH) / ts) + Math.ceil(margin.up / ts));
+
+    const visible = this._visibleDecorations;
+    visible.length = 0;
     for (let y = startY; y <= endY; y++) {
-      for (let x = startX; x <= endX; x++) {
-        const t = this.structure[y][x].type;
-        if (
-          t === TREE ||
-          t === TORCH ||
-          t === WELL ||
-          t === BRAZIER ||
-          t === FOUNTAIN ||
-          t === BUILDING_WALL ||
-          t === ROOF_THATCH ||
-          t === ROOF_SLATE ||
-          t === ROOF_RED ||
-          t === ROOF_GREEN ||
-          t === ROOF_CIRCUS_RED ||
-          t === ROOF_CIRCUS_BLUE ||
-          t === ROOF_CIRCUS_PURPLE ||
-          t === MAIN_TOWER ||
-          t === BARREL ||
-          t === BARREL_SIDE ||
-          t === CRATE
-        ) {
-          result.push({
-            tx: x,
-            ty: y,
-            isTree: t === TREE,
-            sortYAnchorPx: getSortYAnchorPx(t) ?? ts,
-          });
-        } else if (t === SPRITE_BUILDING) {
-          const tile = this.structure[y][x];
-          const def = tile.spriteKey !== undefined ? getSpriteDefByKey(tile.spriteKey) : undefined;
-          const sortY =
-            def !== undefined ? (def.frameHeight - def.tileY) * (ts / def.tileScale) : ts;
-          result.push({ tx: x, ty: y, isTree: false, sortYAnchorPx: sortY });
-        } else if (t === MODERN_DECORATION) {
-          // modern_decorations: 183×183 at tileScale=183 → renders at 1 tile; anchor at bottom
-          result.push({ tx: x, ty: y, isTree: false, sortYAnchorPx: ts });
-        }
+      for (const entry of this._decorationRows[y]) {
+        if (entry.tx < startX || entry.tx > endX) continue;
+        visible.push(entry);
       }
     }
-    return result;
+
+    // Oversized decorations are held out of the row buckets entirely, so this
+    // is their only chance to be drawn — each is tested against its own reach.
+    for (const entry of this._oversizedDecorations) {
+      const extents = entry.extents;
+      const left = entry.tx * ts - extents.left;
+      const top = entry.ty * ts - extents.up;
+      const right = (entry.tx + 1) * ts + extents.right;
+      const bottom = (entry.ty + 1) * ts + extents.down;
+      if (right < camX || left > camX + viewW || bottom < camY || top > camY + viewH) continue;
+      visible.push(entry);
+    }
+
+    return visible;
+  }
+
+  /**
+   * Builds the per-row decoration index. The set of decoration tiles is fixed
+   * for a map apart from props destroyed at runtime, which come back through
+   * `markTileDirty`, so this runs once instead of rescanning ~78k tiles a frame.
+   */
+  private ensureDecorationIndex(): void {
+    if (this._decorationRows.length === this.structure.length) return;
+
+    const rows = this.structure.length;
+    this._decorationRows = Array.from({ length: rows }, () => []);
+    this._oversizedDecorations = [];
+    this._modestDecorationExtents = { left: 0, up: 0, right: 0, down: 0 };
+
+    for (let ty = 0; ty < rows; ty++) {
+      const row = this.structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        this.indexDecorationTile(tx, ty);
+      }
+    }
+  }
+
+  /** Classifies one tile into the row buckets or the oversized list. */
+  private indexDecorationTile(tx: number, ty: number): void {
+    const entry = this.buildDecorationTile(tx, ty);
+    if (entry === null) return;
+    if (isOversizedDecoration(entry.extents, this.tileHeight)) {
+      this._oversizedDecorations.push(entry);
+      return;
+    }
+    this._decorationRows[ty].push(entry);
+    const margin = this._modestDecorationExtents;
+    margin.left = Math.max(margin.left, entry.extents.left);
+    margin.up = Math.max(margin.up, entry.extents.up);
+    margin.right = Math.max(margin.right, entry.extents.right);
+    margin.down = Math.max(margin.down, entry.extents.down);
+  }
+
+  /** The decoration entry for a tile, or null when the tile draws no decoration. */
+  private buildDecorationTile(tx: number, ty: number): DecorationTile | null {
+    const ts = this.tileHeight;
+    const tile = this.structure[ty][tx];
+    const type = tile.type;
+    if (!DECORATION_OVERLAY_TYPES.has(type)) return null;
+
+    // The same reach the overlay cache sizes its canvases to, so a tile can
+    // never be culled while part of its art is still on screen.
+    const extents = decorationTileExtentsPx(this.structure, type, tx, ty, ts);
+
+    if (type === SPRITE_BUILDING) {
+      const def = tile.spriteKey !== undefined ? getSpriteDefByKey(tile.spriteKey) : undefined;
+      const sortYAnchorPx =
+        def !== undefined ? (def.frameHeight - def.tileY) * (ts / def.tileScale) : ts;
+      return { tx, ty, isTree: false, sortYAnchorPx, extents };
+    }
+
+    return {
+      tx,
+      ty,
+      isTree: type === TREE,
+      sortYAnchorPx: getSortYAnchorPx(type) ?? ts,
+      extents,
+    };
+  }
+
+  /** Re-classifies a tile whose art changed (a smashed prop reverts to floor). */
+  private refreshDecorationTile(tx: number, ty: number): void {
+    if (this._decorationRows.length !== this.structure.length) return;
+    const row = this._decorationRows[ty];
+    const rowIndex = row.findIndex((entry) => entry.tx === tx);
+    if (rowIndex !== -1) row.splice(rowIndex, 1);
+    const oversizedIndex = this._oversizedDecorations.findIndex(
+      (entry) => entry.tx === tx && entry.ty === ty,
+    );
+    if (oversizedIndex !== -1) this._oversizedDecorations.splice(oversizedIndex, 1);
+    this.indexDecorationTile(tx, ty);
   }
 
   /** Draws a single decoration tile at full fidelity (for z-sorted rendering). */

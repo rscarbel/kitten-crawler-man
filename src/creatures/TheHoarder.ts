@@ -40,6 +40,7 @@ const COIN_DROP_MAX = 100;
 type HoarderState = 'fleeing' | 'vomit_windup';
 
 export class TheHoarder extends Mob {
+  override readonly audioTag = 'hoarder';
   readonly xpValue = 500;
   readonly bodyPartKey = 'hoarder';
   protected coinDropMin = COIN_DROP_MIN;
@@ -55,7 +56,11 @@ export class TheHoarder extends Mob {
   private vomitWindupTimer = 0;
   private vomitTargetX = 0;
   private vomitTargetY = 0;
-  private vomitWindupTargets: Player[] = [];
+  /**
+   * Copied, not aliased: the caller hands out a per-frame scratch array it
+   * reuses for other mobs, and this list is read again on later frames.
+   */
+  private readonly vomitWindupTargets: Player[] = [];
 
   private fleeStuckFrames = 0;
   private fleeBias = 0;
@@ -74,10 +79,6 @@ export class TheHoarder extends Mob {
 
   /** Set when vomit windup completes; BossRoomSystem reads and clears this each frame. */
   pendingVomitProjectile: { x: number; y: number; dx: number; dy: number } | null = null;
-
-  /** Set each time this boss takes damage; DungeonScene reads and clears it to play the hit sound. */
-  /** Set when a vomit projectile fires; DungeonScene reads and clears it to play the vomit sound. */
-  vomitSoundPending = false;
 
   get isWindingUp(): boolean {
     return this.hoarderState === 'vomit_windup';
@@ -137,7 +138,7 @@ export class TheHoarder extends Mob {
           dx: ndx * VOMIT_SPEED,
           dy: ndy * VOMIT_SPEED,
         };
-        this.vomitSoundPending = true;
+        this.specialSoundPending = true;
         this.hoarderState = 'fleeing';
       }
       return;
@@ -165,7 +166,8 @@ export class TheHoarder extends Mob {
       if (this.cockroachAtCap && nearest !== null) {
         this.vomitTargetX = nearest.x + TILE_SIZE * CENTER_OFFSET;
         this.vomitTargetY = nearest.y + TILE_SIZE * CENTER_OFFSET;
-        this.vomitWindupTargets = targets;
+        this.vomitWindupTargets.length = 0;
+        this.vomitWindupTargets.push(...targets);
         this.hoarderState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
       } else {
@@ -308,7 +310,7 @@ export class TheHoarder extends Mob {
       this.vomitWindupProgress,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

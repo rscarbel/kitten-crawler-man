@@ -138,9 +138,9 @@ export class JuicerRoomSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
+    if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
     const { mobs } = ctx;
     const juicer = mobs.find((m) => m instanceof Juicer) ?? null;
-    if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
 
     const ts = TILE_SIZE;
 

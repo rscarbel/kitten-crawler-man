@@ -1,5 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
+import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -50,6 +51,10 @@ interface PendingConstruct {
 export class BarrierSystem implements GameSystem {
   private barriers: PlacedBarrier[] = [];
   private pending: PendingConstruct | null = null;
+  /** Mobs this system slowed last frame — only these need their flag cleared. */
+  private slowedLastFrame: Mob[] = [];
+  /** Reused result set for the slow-zone neighbour query. */
+  private readonly slowZoneQuery = new Set<Mob>();
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -84,11 +89,14 @@ export class BarrierSystem implements GameSystem {
   // Update
 
   update(ctx: SystemContext): void {
-    const { mobs } = ctx;
-    // Reset all mobs' slow state — BarrierSystem re-applies it each frame
-    for (const mob of mobs) {
-      mob.isSlowed = false;
+    for (const mob of this.slowedLastFrame) {
+      mob.slowedByBarrier = false;
     }
+    this.slowedLastFrame.length = 0;
+
+    if (!this.pending && this.barriers.length === 0) return;
+
+    const { mobGrid } = ctx;
 
     // Tick pending construction
     if (this.pending) {
@@ -103,12 +111,25 @@ export class BarrierSystem implements GameSystem {
     for (const barrier of this.barriers) {
       const bwcx = barrier.worldX + TILE_SIZE * TILE_CENTER_FRACTION;
       const bwcy = barrier.worldY + TILE_SIZE * TILE_CENTER_FRACTION;
-      for (const mob of mobs) {
+      // Mob centres are half a tile off their origins, so widen the query by
+      // that much rather than missing a mob standing on the zone's edge.
+      this.slowZoneQuery.clear();
+      const nearBarrier = mobGrid.queryCircle(
+        bwcx,
+        bwcy,
+        SLOW_RADIUS_PX + TILE_SIZE,
+        this.slowZoneQuery,
+      );
+      for (const mob of nearBarrier) {
         if (!mob.isAlive) continue;
         const mcx = mob.x + TILE_SIZE * TILE_CENTER_FRACTION;
         const mcy = mob.y + TILE_SIZE * TILE_CENTER_FRACTION;
-        if (Math.hypot(mcx - bwcx, mcy - bwcy) < SLOW_RADIUS_PX) {
-          mob.isSlowed = true;
+        if (mob.slowedByBarrier) continue;
+        const dx = mcx - bwcx;
+        const dy = mcy - bwcy;
+        if (dx * dx + dy * dy < SLOW_RADIUS_PX * SLOW_RADIUS_PX) {
+          mob.slowedByBarrier = true;
+          this.slowedLastFrame.push(mob);
         }
       }
     }

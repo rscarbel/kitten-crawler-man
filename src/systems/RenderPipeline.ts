@@ -8,6 +8,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -65,6 +66,9 @@ const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
  */
 const PROP_CULL_MARGIN_TILES = 4;
 const PROP_CULL_MARGIN = TILE_SIZE * PROP_CULL_MARGIN_TILES;
+
+/** Colour of the fully fogged area outside the falloff disc. */
+const FOG_SOLID_COLOR = 'rgba(0,0,0,1)';
 
 /** Visibility inner radius in tiles. */
 const VISIBILITY_INNER_TILES = 30;
@@ -129,6 +133,11 @@ export interface RenderContext {
 }
 
 export class RenderPipeline {
+  /** Baked visibility-fog falloff disc, rebuilt only if the radii change. */
+  private _fogDisc: CanvasSurface | null = null;
+  private _fogDiscInnerR = 0;
+  private _fogDiscOuterR = 0;
+
   /** Reusable draw-entry pool to avoid per-frame allocations. */
   private _drawPool: DrawEntry[] = [];
   private _drawCount = 0;
@@ -228,7 +237,16 @@ export class RenderPipeline {
 
     // Chests are added before mobs/players so that at equal sortY the entity
     // (added later) sorts in front of the chest — stable sort preserves insertion order.
+    const viewMinX = camX - TILE_SIZE;
+    const viewMinY = camY - TILE_SIZE;
+    const viewMaxX = camX + canvas.width + TILE_SIZE;
+    const viewMaxY = camY + canvas.height + TILE_SIZE;
+
     for (const chest of treasureChests.allChests) {
+      const chestX = chest.tileX * TILE_SIZE;
+      const chestY = chest.tileY * TILE_SIZE;
+      if (chestX < viewMinX || chestX > viewMaxX || chestY < viewMinY || chestY > viewMaxY)
+        continue;
       const e = this._getEntry();
       e.sortY = chest.tileY * TILE_SIZE + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_CHEST;
@@ -260,12 +278,14 @@ export class RenderPipeline {
     }
 
     if (townsfolk !== undefined) {
-      const minX = camX - TILE_SIZE;
-      const minY = camY - TILE_SIZE;
-      const maxX = camX + canvas.width + TILE_SIZE;
-      const maxY = camY + canvas.height + TILE_SIZE;
       for (const person of townsfolk) {
-        if (person.x < minX || person.x > maxX || person.y < minY || person.y > maxY) continue;
+        if (
+          person.x < viewMinX ||
+          person.x > viewMaxX ||
+          person.y < viewMinY ||
+          person.y > viewMaxY
+        )
+          continue;
         const e = this._getEntry();
         e.sortY = person.y + ENTITY_SORT_Y_OFFSET;
         e.kind = DRAW_KIND_TOWNSPERSON;
@@ -361,12 +381,43 @@ export class RenderPipeline {
     const cx = active.x + TILE_SIZE / 2 - camX;
     const cy = active.y + TILE_SIZE / 2 - camY;
 
-    const grad = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+    // The gradient depends only on the two radii, so it is baked once into a
+    // disc and blitted; everything outside the disc is solid black anyway.
+    const disc = this.visibilityFogDisc(innerR, outerR);
+    const discLeft = cx - outerR;
+    const discTop = cy - outerR;
+    ctx.drawImage(disc, discLeft, discTop);
+
+    ctx.fillStyle = FOG_SOLID_COLOR;
+    const discRight = discLeft + disc.width;
+    const discBottom = discTop + disc.height;
+    ctx.fillRect(0, 0, canvas.width, Math.max(0, discTop));
+    ctx.fillRect(0, discBottom, canvas.width, Math.max(0, canvas.height - discBottom));
+    const bandTop = Math.max(0, discTop);
+    const bandHeight = Math.max(0, Math.min(canvas.height, discBottom) - bandTop);
+    ctx.fillRect(0, bandTop, Math.max(0, discLeft), bandHeight);
+    ctx.fillRect(discRight, bandTop, Math.max(0, canvas.width - discRight), bandHeight);
+  }
+
+  /** Lazily bakes (and caches) the fog's radial falloff disc for the given radii. */
+  private visibilityFogDisc(innerR: number, outerR: number): CanvasSurface {
+    const cached = this._fogDisc;
+    if (cached && this._fogDiscInnerR === innerR && this._fogDiscOuterR === outerR) return cached;
+
+    const size = Math.ceil(outerR * 2);
+    const disc = allocCanvas(size, size);
+    const dctx = surfaceContext(disc);
+    const centre = size / 2;
+    const grad = dctx.createRadialGradient(centre, centre, innerR, centre, centre, outerR);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,1)');
+    dctx.fillStyle = grad;
+    dctx.fillRect(0, 0, size, size);
 
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    this._fogDisc = disc;
+    this._fogDiscInnerR = innerR;
+    this._fogDiscOuterR = outerR;
+    return disc;
   }
 
   /**

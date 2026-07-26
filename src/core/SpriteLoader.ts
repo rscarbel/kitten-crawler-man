@@ -156,6 +156,7 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
 const _tileBlockedOffsets = new Map<number, ReadonlyArray<TileOffset>>();
 const _tileSortYAnchorPx = new Map<number, number>();
 const _tileSpriteOverheadPx = new Map<number, number>();
+const _tileSpriteExtentsPx = new Map<number, MapSpriteExtentsPx>();
 /** Per-sprite-key tiles the authored `blockedRegions` cover, before the footprint is filled in. */
 const _spriteKeyRegionBlockedOffsets = new Map<string, ReadonlyArray<TileOffset>>();
 /** Per-sprite-key blocked tile offsets, for sprite buildings without a fixed tileTypeId. */
@@ -243,6 +244,12 @@ for (const entry of Object.values(_manifest)) {
   _tileSortYAnchorPx.set(entry.tileTypeId, anchorPx);
   // Overhead: how many game-pixels above the tile's top-left corner the sprite extends.
   _tileSpriteOverheadPx.set(entry.tileTypeId, entry.tileY * scale);
+  _tileSpriteExtentsPx.set(entry.tileTypeId, {
+    left: entry.tileX * scale,
+    up: entry.tileY * scale,
+    right: (entry.frameWidth - entry.tileX) * scale - TILE_SIZE,
+    down: (entry.frameHeight - entry.tileY) * scale - TILE_SIZE,
+  });
 }
 
 /**
@@ -293,6 +300,7 @@ export interface SpriteDoorway extends TileOffset {
 
 const _spriteKeyFootprints = new Map<string, SpriteFootprint>();
 const _spriteKeyDoorways = new Map<string, SpriteDoorway>();
+const _spriteKeyExtentsPx = new Map<string, MapSpriteExtentsPx>();
 
 for (const [key, entry] of Object.entries(_manifest)) {
   // The anchor tile's top-left corner sits at (tileX, tileY) in sprite pixels, so
@@ -302,6 +310,22 @@ for (const [key, entry] of Object.entries(_manifest)) {
   const right = Math.ceil((entry.frameWidth - entry.tileX) / entry.tileScale);
   const bottom = Math.ceil((entry.frameHeight - entry.tileY) / entry.tileScale);
   _spriteKeyFootprints.set(key, { dx, dy, w: right - dx, h: bottom - dy });
+
+  const scale = TILE_SIZE / entry.tileScale;
+  _spriteKeyExtentsPx.set(key, {
+    left: entry.tileX * scale,
+    up: entry.tileY * scale,
+    right: (entry.frameWidth - entry.tileX) * scale - TILE_SIZE,
+    down: (entry.frameHeight - entry.tileY) * scale - TILE_SIZE,
+  });
+}
+
+/**
+ * Overhang of one named sprite beyond its anchor tile. Sprite buildings all
+ * share a tile type, so their extents can only be resolved by key.
+ */
+export function getSpriteExtentsPxByKey(key: string): Readonly<MapSpriteExtentsPx> | undefined {
+  return _spriteKeyExtentsPx.get(key);
 }
 
 /**
@@ -457,4 +481,15 @@ for (const entry of Object.values(environmentManifest)) {
 /** Returns the worst-case sprite overhang beyond an anchor tile, for culling margins. */
 export function getMapSpriteExtentsPx(): Readonly<MapSpriteExtentsPx> {
   return _mapSpriteExtentsPx;
+}
+
+/**
+ * Overhang of one tile type's sprite, for culling that widens the viewport per
+ * tile type rather than by the worst case in the whole manifest. Undefined for
+ * tile types with no registered sprite.
+ */
+export function getSpriteExtentsPxForTileType(
+  tileTypeId: number,
+): Readonly<MapSpriteExtentsPx> | undefined {
+  return _tileSpriteExtentsPx.get(tileTypeId);
 }

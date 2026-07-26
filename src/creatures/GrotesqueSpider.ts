@@ -986,7 +986,7 @@ export class GrotesqueSpider extends Mob {
 
     drawGrotesqueSpiderSprite(ctx, sx, sy, tileSize, time, 0, 1, this.spriteState, sp);
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

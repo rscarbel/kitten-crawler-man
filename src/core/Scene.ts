@@ -12,6 +12,12 @@ const FIXED_DT_MS = MS_PER_SECOND / FRAME_RATE;
 /** Maximum accumulated time to process in one frame to prevent death spiral. */
 const MAX_ACCUMULATOR_MULTIPLIER = 5;
 
+/**
+ * Maximum catch-up update() calls per animation frame. Running more updates when
+ * updates are already slow compounds the slowdown, so remaining debt is dropped.
+ */
+const MAX_CATCHUP_UPDATES = 2;
+
 export abstract class Scene {
   abstract update(): void;
   abstract render(ctx: CanvasRenderingContext2D): void;
@@ -163,10 +169,13 @@ export class SceneManager {
     this.lastTime = now;
     this.accumulator += Math.min(elapsed, this.FIXED_DT * MAX_ACCUMULATOR_MULTIPLIER);
 
-    while (this.accumulator >= this.FIXED_DT) {
+    let steps = 0;
+    while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
       this.current?.update();
       this.accumulator -= this.FIXED_DT;
+      steps++;
     }
+    if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
 
     this.current?.render(this.ctx);
 

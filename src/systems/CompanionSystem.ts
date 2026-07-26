@@ -84,6 +84,17 @@ const EVASION_STUCK_THRESHOLD = 8;
 const EVASION_ANGLE_JUMP = 0.3;
 const PATHFINDING_DISTANCE_THRESHOLD = 2.5;
 const PATHFINDING_RECALC_FRAMES = 30;
+/**
+ * How far a companion will path to catch up. Unlike a mob, a companion is not
+ * leashed to an activation radius — it must be able to cross the whole town to
+ * rejoin the player, and a failed path leaves it standing still forever.
+ */
+const COMPANION_MAX_PATH_DISTANCE_TILES = 96;
+
+/** Floor on how often a goal-tile change may trigger a fresh companion path. */
+const MIN_REPATH_GAP_FRAMES = 8;
+/** Sentinel goal tile for a freshly created path cache — no real tile is negative. */
+const NO_CACHED_GOAL_TILE = -1;
 const WAYPOINT_ARRIVAL_DISTANCE = 0.65;
 const PATHING_FAILURE_DISTANCE = 4;
 const FLEE_RADIUS_MULTIPLIER = 8;
@@ -120,6 +131,9 @@ export class CompanionSystem implements GameSystem {
   /** Cross-scene combat-stance store; combat stance mirrors into it so it persists. */
   private readonly stanceState: CompanionStanceState;
 
+  /** Reused result set for companion proximity queries. */
+  private readonly _proximityQuery = new Set<Mob>();
+
   private companionPaths = new Map<
     object,
     {
@@ -127,6 +141,8 @@ export class CompanionSystem implements GameSystem {
       timer: number;
       targetTX: number;
       targetTY: number;
+      /** Frames since the last findPath, so goal-tile changes can't repath every frame. */
+      framesSinceRecalc: number;
     }
   >();
 
@@ -232,7 +248,7 @@ export class CompanionSystem implements GameSystem {
     }
 
     this.updateAutoAI(human, cat, mobs, mobGrid, ctx.bossRoom);
-    this.updateFollower(human, cat, mobs, mobGrid, ctx.bossRoom);
+    this.updateFollower(human, cat, mobGrid, ctx.bossRoom);
   }
 
   entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
@@ -308,15 +324,13 @@ export class CompanionSystem implements GameSystem {
         if (this.catStance.combatStance === 'aggressive') {
           // Only pull cat into combat if the mob is within range of the active player;
           // prevents the companion chasing back to distant fights after a follow recall.
-          const mobTargetingCat =
-            mobs.find(
-              (m) =>
-                m.isAlive &&
-                !m.avoidInstead &&
-                !isUntriggeredBossRoomMob(m, human) &&
-                m.currentTarget === cat &&
-                Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
-            ) ?? null;
+          const mobTargetingCat = this.findMobTargetingNearPlayer(
+            mobGrid,
+            human,
+            cat,
+            nearPlayerRange,
+            isUntriggeredBossRoomMob,
+          );
           const mobTargetingHuman =
             mobs.find(
               (m) =>
@@ -333,15 +347,13 @@ export class CompanionSystem implements GameSystem {
           }
         } else {
           // Passive — only retaliate when a mob is actively targeting the cat
-          cat.autoTarget ??=
-            mobs.find(
-              (m) =>
-                m.isAlive &&
-                !m.avoidInstead &&
-                !isUntriggeredBossRoomMob(m, human) &&
-                m.currentTarget === cat &&
-                Math.hypot(m.x - human.x, m.y - human.y) <= nearPlayerRange,
-            ) ?? null;
+          cat.autoTarget ??= this.findMobTargetingNearPlayer(
+            mobGrid,
+            human,
+            cat,
+            nearPlayerRange,
+            isUntriggeredBossRoomMob,
+          );
         }
       }
 
@@ -406,21 +418,47 @@ export class CompanionSystem implements GameSystem {
   }
 
   /** Flee companion away from the nearest avoidInstead mob within fleeRadius px. Returns true if fleeing. */
+  /**
+   * The nearest engageable mob that is chasing `quarry` and is itself within
+   * `range` of `human` — the gate that stops a companion running back across
+   * the level to a fight the player has walked away from.
+   */
+  private findMobTargetingNearPlayer(
+    mobGrid: SpatialGrid<Mob>,
+    human: HumanPlayer,
+    quarry: HumanPlayer | CatPlayer,
+    range: number,
+    isUntriggeredBossRoomMob: (mob: Mob, activePlayer: { x: number; y: number }) => boolean,
+  ): Mob | null {
+    this._proximityQuery.clear();
+    const nearby = mobGrid.queryCircle(human.x, human.y, range, this._proximityQuery);
+    for (const mob of nearby) {
+      if (!mob.isAlive || mob.avoidInstead) continue;
+      if (mob.currentTarget !== quarry) continue;
+      if (isUntriggeredBossRoomMob(mob, human)) continue;
+      return mob;
+    }
+    return null;
+  }
+
   private fleeFromAvoidMobs(
     companion: HumanPlayer | CatPlayer,
-    mobs: Mob[],
+    mobGrid: SpatialGrid<Mob>,
     fleeRadius: number,
   ): boolean {
     let closest: Mob | null = null;
-    let closestDist = fleeRadius;
-    for (const m of mobs) {
+    let closestDistSq = fleeRadius * fleeRadius;
+    // Centres cancel in the difference, so the query and the compare can both
+    // use raw origins.
+    this._proximityQuery.clear();
+    const nearby = mobGrid.queryCircle(companion.x, companion.y, fleeRadius, this._proximityQuery);
+    for (const m of nearby) {
       if (!m.isAlive || !m.avoidInstead) continue;
-      const dist = Math.hypot(
-        m.x + TILE_SIZE * TILE_CENTER_OFFSET - (companion.x + TILE_SIZE * TILE_CENTER_OFFSET),
-        m.y + TILE_SIZE * TILE_CENTER_OFFSET - (companion.y + TILE_SIZE * TILE_CENTER_OFFSET),
-      );
-      if (dist < closestDist) {
-        closestDist = dist;
+      const dx = m.x - companion.x;
+      const dy = m.y - companion.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < closestDistSq) {
+        closestDistSq = distSq;
         closest = m;
       }
     }
@@ -459,8 +497,7 @@ export class CompanionSystem implements GameSystem {
   private updateFollower(
     human: HumanPlayer,
     cat: CatPlayer,
-    mobs: Mob[],
-    _mobGrid: SpatialGrid<Mob>,
+    mobGrid: SpatialGrid<Mob>,
     bossRoom: BossRoomSystem | undefined,
   ): void {
     if (this._followOverride) {
@@ -484,7 +521,7 @@ export class CompanionSystem implements GameSystem {
 
     // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
     const companion = human.isActive ? cat : human;
-    if (this.fleeFromAvoidMobs(companion, mobs, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
+    if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
     if (this.fleeFromHazards(companion, bossRoom)) return;
 
     const stance = human.isActive ? this.catStance : this.humanStance;
@@ -759,19 +796,37 @@ export class CompanionSystem implements GameSystem {
 
       let cached = this.companionPaths.get(entity);
       if (!cached) {
-        cached = { path: [], timer: 0, targetTX: -1, targetTY: -1 };
+        cached = {
+          path: [],
+          timer: 0,
+          targetTX: NO_CACHED_GOAL_TILE,
+          targetTY: NO_CACHED_GOAL_TILE,
+          framesSinceRecalc: MIN_REPATH_GAP_FRAMES,
+        };
         this.companionPaths.set(entity, cached);
       }
 
       cached.timer--;
-      if (cached.timer <= 0 || cached.targetTX !== goalTX || cached.targetTY !== goalTY) {
+      cached.framesSinceRecalc++;
+      // A diagonally moving player crosses tile boundaries constantly, so the
+      // goal-change trigger alone would bypass the timer almost every frame.
+      const goalTileChanged = cached.targetTX !== goalTX || cached.targetTY !== goalTY;
+      const goalChangeIsDue = goalTileChanged && cached.framesSinceRecalc >= MIN_REPATH_GAP_FRAMES;
+      if (cached.timer <= 0 || goalChangeIsDue) {
         const startTX = Math.floor((entity.x + ts * TILE_CENTER_OFFSET) / ts);
         const startTY = Math.floor((entity.y + ts * TILE_CENTER_OFFSET) / ts);
-        const raw = this.gameMap.findPath(startTX, startTY, goalTX, goalTY);
+        const raw = this.gameMap.findPath(
+          startTX,
+          startTY,
+          goalTX,
+          goalTY,
+          COMPANION_MAX_PATH_DISTANCE_TILES,
+        );
         cached.path = raw.length > 1 ? raw.slice(1) : [];
         cached.timer = PATHFINDING_RECALC_FRAMES;
         cached.targetTX = goalTX;
         cached.targetTY = goalTY;
+        cached.framesSinceRecalc = 0;
       }
 
       if (cached.path.length > 0) {

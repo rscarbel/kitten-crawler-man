@@ -65,6 +65,7 @@ interface Projectile {
 }
 
 export class Juicer extends Mob {
+  override readonly audioTag = 'juicer';
   readonly xpValue = 600;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
@@ -97,8 +98,6 @@ export class Juicer extends Mob {
   private tauntTimer = 0;
   currentTaunt: string | null = null;
 
-  /** Set when a dumbbell is thrown; DungeonScene reads and clears it to play the throw sound. */
-  throwSoundPending = false;
   private bubblePulse = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -308,7 +307,7 @@ export class Juicer extends Mob {
   }
 
   private throwDumbbell(target: Player): void {
-    this.throwSoundPending = true;
+    this.specialSoundPending = true;
     const ts = this.tileSize;
     const ox = this.x + ts * CENTER_OFFSET;
     const oy = this.y + ts * CENTER_OFFSET;
@@ -439,7 +438,7 @@ export class Juicer extends Mob {
       this.heldDumbbell,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     // Speech bubble (outside save/restore so filter doesn't affect it)

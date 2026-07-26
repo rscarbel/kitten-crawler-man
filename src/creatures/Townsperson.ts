@@ -12,10 +12,10 @@ import {
   type PersonAppearance,
   type TownRole,
 } from '../sprites/person/PersonAppearance';
-import { drawPerson } from '../sprites/person/drawPerson';
+import { drawPersonCached } from '../sprites/person/personFrameCache';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
-import { stepWander, type WanderParams, type WanderState } from './townWander';
+import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
 
 /** Draw size of a citizen in pixels — full-tile figures matching the player. */
 const PERSON_DRAW_SIZE = 32;
@@ -23,6 +23,15 @@ const PERSON_DRAW_SIZE = 32;
 const PHASE_STEP = 1;
 /** Minimum movement (px) on an axis before it can flip facing — kills jitter. */
 const FACING_DEADZONE = 0.05;
+
+/**
+ * Scratch for `stepWander`'s output. Safe to share: it is written and consumed
+ * entirely within one synchronous `update()` call.
+ */
+const sharedWanderStep: WanderStep = { dx: 0, dy: 0, moving: false };
+
+/** Source of `Townsperson.id` — a stable identity for pairwise crowd passes. */
+let nextTownspersonId = 0;
 
 export interface TownspersonOptions {
   x: number;
@@ -42,6 +51,8 @@ export interface TownspersonOptions {
 
 export class Townsperson implements WanderState {
   readonly isNonCombatant = true;
+  /** Stable identity, so a pairwise crowd pass can visit each pair exactly once. */
+  readonly id = nextTownspersonId++;
   readonly role: TownRole;
   readonly appearance: PersonAppearance;
 
@@ -78,10 +89,10 @@ export class Townsperson implements WanderState {
   /** Advances one frame of wander, facing, and animation. */
   update(): void {
     if (this.frozen) return;
-    const step = stepWander(this, this.wander);
-    this.moving = step.moving;
+    stepWander(this, this.wander, sharedWanderStep);
+    this.moving = sharedWanderStep.moving;
     this.phase += PHASE_STEP;
-    if (step.moving) this.updateFacing(step.dx, step.dy);
+    if (sharedWanderStep.moving) this.updateFacing(sharedWanderStep.dx, sharedWanderStep.dy);
   }
 
   /** Turn to face a world point — used to look at the player when spoken to. */
@@ -102,6 +113,15 @@ export class Townsperson implements WanderState {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const drawSize = tileSize > 0 ? tileSize : PERSON_DRAW_SIZE;
     const box = scaleHumanoidBox(this.x - camX, this.y - camY, drawSize);
-    drawPerson(ctx, box.sx, box.sy, box.s, this.appearance, this.phase, this.facing, this.moving);
+    drawPersonCached(
+      ctx,
+      box.sx,
+      box.sy,
+      box.s,
+      this.appearance,
+      this.phase,
+      this.facing,
+      this.moving,
+    );
   }
 }

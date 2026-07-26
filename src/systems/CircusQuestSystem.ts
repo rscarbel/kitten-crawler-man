@@ -513,13 +513,10 @@ export class CircusQuestSystem implements GameSystem {
     this.signet?.tickTimers();
 
     if (this.signet) this.signet.allMobs = ctx.mobs;
-    for (const mob of ctx.mobs) {
-      if (mob instanceof InkMarauder) mob.allMobs = ctx.mobs;
-    }
 
     switch (this.phase) {
       case 'ritual_defense':
-        this.updateRitualDefense(ctx.active);
+        this.updateRitualDefense(ctx);
         break;
       case 'heather_hunt':
         this.updateHeatherHunt();
@@ -539,11 +536,11 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
-  private updateRitualDefense(active: Player): void {
+  private updateRitualDefense(ctx: SystemContext): void {
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     if (this.waveIndex + 1 < RITUAL_WAVES.length) {
-      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.originFromPlayer(active));
+      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.originFromPlayer(ctx.active));
       return;
     }
 
@@ -558,6 +555,7 @@ export class CircusQuestSystem implements GameSystem {
         FIZZLE_MARAUDER_LIFESPAN_FRAMES,
       );
       fizzle.setMap(this.gameMap);
+      fizzle.allMobs = ctx.mobs;
       this.addMob(fizzle);
     }
     this.stopBattleMusic();

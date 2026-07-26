@@ -20,16 +20,46 @@ import {
   BARREL_SIDE,
   CRATE,
 } from './tileTypes';
-import { getMapSpriteExtentsPx } from '../core/SpriteLoader';
-
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
 import { drawBuildingTile } from './tiles/buildingTiles';
-import { drawDecorationTile } from './tiles/decorationTiles';
+import { drawDecorationTile, decorationAnimationFrame } from './tiles/decorationTiles';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { drawInteriorTile } from './tiles/interiorTiles';
+import { tileIndex } from './tileIndex';
+import {
+  getMapSpriteExtentsPx,
+  getSpriteExtentsPxByKey,
+  getSpriteExtentsPxForTileType,
+  type MapSpriteExtentsPx,
+} from '../core/SpriteLoader';
 
 const CHUNK_TILES = 16;
+
+/**
+ * Cold-chunk baking allowed per frame, counted in tiles so the budget means the
+ * same thing whatever the chunk size. Four chunks' worth: enough that a scroll
+ * warms up in a frame or two, small enough that no single frame pays for a
+ * screenful. Chunks over budget fall back to direct drawing, which costs about
+ * the same as the bake minus the allocation.
+ */
+const CHUNK_BAKES_PER_FRAME = 4;
+const MAX_CHUNK_BAKE_TILES_PER_FRAME = CHUNK_TILES * CHUNK_TILES * CHUNK_BAKES_PER_FRAME;
+
+/**
+ * Baked chunks kept alive. A 1080p view spans 20 chunks, so this holds the
+ * visible screen plus a couple of screens of scroll history.
+ */
+const MAX_CACHED_CHUNKS = 60;
+
+/** Sentinel chunk key meaning "no candidate found". Real keys are non-negative. */
+const NO_CHUNK = -1;
+
+interface CachedChunk {
+  canvas: CanvasSurface;
+  /** Frame this chunk was last drawn from — drives LRU eviction. */
+  lastUsedFrame: number;
+}
 
 /**
  * Tile types whose full visuals are drawn in the Y-sorted overlay pass.
@@ -76,7 +106,14 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   ROOF_CIRCUS_RED,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
+  // Not multi-op, but drawn by rescaling a full-resolution sheet — the tower
+  // overhangs hundreds of pixels — so caching skips a resample per frame.
+  SPRITE_BUILDING,
+  MAIN_TOWER,
 ]);
+
+/** Tile type used where a neighbour lookup falls off the grid. */
+const NO_TILE_TYPE = -1;
 
 /** Gable roof overhead: extends 2.75 tile-heights above the back wall tile origin. */
 const GABLE_OVERHEAD_SCALE = 2.75;
@@ -133,9 +170,11 @@ const ROOF_TILE_TYPES = new Set([
  * NOT cached here — they're drawn separately in the overlay pass.
  */
 export class TileChunkCache {
-  private chunks = new Map<number, CanvasSurface>();
+  private chunks = new Map<number, CachedChunk>();
   private chunksX: number;
   private chunksY: number;
+  private frameCounter = 0;
+  private hasRenderedOnce = false;
 
   constructor(
     private structure: TileContent[][],
@@ -147,25 +186,31 @@ export class TileChunkCache {
     this.chunksY = Math.ceil(rows / CHUNK_TILES);
   }
 
-  private getChunk(cx: number, cy: number): CanvasSurface {
-    const key = cy * this.chunksX + cx;
-    let chunk = this.chunks.get(key);
-    if (chunk) return chunk;
+  private chunkKey(cx: number, cy: number): number {
+    return cy * this.chunksX + cx;
+  }
 
-    const ts = this.ts;
-    const structure = this.structure;
-    const rows = structure.length;
-    const cols = structure[0]?.length ?? rows;
-
+  /** Last tile (exclusive) of a chunk on each axis, clamped to the grid. */
+  private chunkTileBounds(cx: number, cy: number) {
+    const rows = this.structure.length;
+    const cols = this.structure[0]?.length ?? rows;
     const tileX0 = cx * CHUNK_TILES;
     const tileY0 = cy * CHUNK_TILES;
-    const tileX1 = Math.min(tileX0 + CHUNK_TILES, cols);
-    const tileY1 = Math.min(tileY0 + CHUNK_TILES, rows);
-    const pw = (tileX1 - tileX0) * ts;
-    const ph = (tileY1 - tileY0) * ts;
+    return {
+      tileX0,
+      tileY0,
+      tileX1: Math.min(tileX0 + CHUNK_TILES, cols),
+      tileY1: Math.min(tileY0 + CHUNK_TILES, rows),
+    };
+  }
 
-    chunk = allocCanvas(pw, ph);
-    const cctx = surfaceContext(chunk);
+  private bakeChunk(cx: number, cy: number): CachedChunk {
+    const ts = this.ts;
+    const structure = this.structure;
+    const { tileX0, tileY0, tileX1, tileY1 } = this.chunkTileBounds(cx, cy);
+
+    const canvas = allocCanvas((tileX1 - tileX0) * ts, (tileY1 - tileY0) * ts);
+    const cctx = surfaceContext(canvas);
 
     for (let y = tileY0; y < tileY1; y++) {
       for (let x = tileX0; x < tileX1; x++) {
@@ -177,8 +222,48 @@ export class TileChunkCache {
       }
     }
 
-    this.chunks.set(key, chunk);
-    return chunk;
+    const cached: CachedChunk = { canvas, lastUsedFrame: this.frameCounter };
+    this.chunks.set(this.chunkKey(cx, cy), cached);
+    return cached;
+  }
+
+  /**
+   * Paints a chunk's tiles straight to the target — the cold-chunk fallback.
+   * Clipped to the chunk's own rectangle, because the baked path is implicitly
+   * clipped to its canvas and a tile painter may reach past its tile.
+   */
+  private drawChunkDirect(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    originX: number,
+    originY: number,
+  ): void {
+    const ts = this.ts;
+    const structure = this.structure;
+    const { tileX0, tileY0, tileX1, tileY1 } = this.chunkTileBounds(cx, cy);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(originX, originY, (tileX1 - tileX0) * ts, (tileY1 - tileY0) * ts);
+    ctx.clip();
+    for (let y = tileY0; y < tileY1; y++) {
+      for (let x = tileX0; x < tileX1; x++) {
+        const tile = structure[y][x];
+        const isDecoration = DECORATION_TYPES.has(tile.type);
+        drawTile(
+          ctx,
+          structure,
+          tile.type,
+          originX + (x - tileX0) * ts,
+          originY + (y - tileY0) * ts,
+          ts,
+          x,
+          y,
+          isDecoration,
+        );
+      }
+    }
+    ctx.restore();
   }
 
   /**
@@ -190,7 +275,7 @@ export class TileChunkCache {
   invalidateTile(tileX: number, tileY: number): void {
     const cx = Math.floor(tileX / CHUNK_TILES);
     const cy = Math.floor(tileY / CHUNK_TILES);
-    this.chunks.delete(cy * this.chunksX + cx);
+    this.chunks.delete(this.chunkKey(cx, cy));
   }
 
   renderVisible(
@@ -202,6 +287,7 @@ export class TileChunkCache {
   ): void {
     const ts = this.ts;
     const chunkPx = CHUNK_TILES * ts;
+    this.frameCounter++;
 
     const cx0 = Math.max(0, Math.floor(cameraX / chunkPx));
     const cy0 = Math.max(0, Math.floor(cameraY / chunkPx));
@@ -213,13 +299,61 @@ export class TileChunkCache {
     const baseX = Math.floor(-cameraX);
     const baseY = Math.floor(-cameraY);
 
+    // The first frame on a map has every visible chunk cold. Throttling there
+    // only smears the same work across many frames while the player waits on a
+    // black screen anyway, so the load transition absorbs it in one go.
+    let bakeBudget = this.hasRenderedOnce
+      ? MAX_CHUNK_BAKE_TILES_PER_FRAME
+      : Number.POSITIVE_INFINITY;
+    this.hasRenderedOnce = true;
+
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
-        const chunk = this.getChunk(cx, cy);
         const dx = baseX + cx * chunkPx;
         const dy = baseY + cy * chunkPx;
-        ctx.drawImage(chunk, dx, dy);
+        const cached = this.chunks.get(this.chunkKey(cx, cy));
+        if (cached) {
+          cached.lastUsedFrame = this.frameCounter;
+          ctx.drawImage(cached.canvas, dx, dy);
+          continue;
+        }
+        // Baking every cold chunk on the frame a scroll reveals them is what
+        // used to cost 40-100 ms. Bake up to the budget; paint the rest the
+        // slow way, and they bake over the next frame or two.
+        if (bakeBudget > 0) {
+          bakeBudget -= CHUNK_TILES * CHUNK_TILES;
+          ctx.drawImage(this.bakeChunk(cx, cy).canvas, dx, dy);
+        } else {
+          this.drawChunkDirect(ctx, cx, cy, dx, dy);
+        }
       }
+    }
+
+    this.evictLeastRecentlyUsed();
+  }
+
+  /**
+   * A fully explored town would otherwise retain every chunk it ever baked —
+   * hundreds of megabytes of canvas backing store for ground the player left
+   * long ago.
+   */
+  private evictLeastRecentlyUsed(): void {
+    // A scan per eviction rather than a sort of the whole cache: eviction runs
+    // on every frame the cache is over cap, but drops only a chunk or two.
+    while (this.chunks.size > MAX_CACHED_CHUNKS) {
+      let oldestKey = NO_CHUNK;
+      let oldestFrame = Number.POSITIVE_INFINITY;
+      for (const [key, chunk] of this.chunks) {
+        if (chunk.lastUsedFrame < oldestFrame) {
+          oldestFrame = chunk.lastUsedFrame;
+          oldestKey = key;
+        }
+      }
+      // Never evict a chunk drawn this frame. On a display wide enough to show
+      // more chunks than the cap, they all tie on age, and evicting them would
+      // re-bake and re-evict the same chunks every frame.
+      if (oldestKey === NO_CHUNK || oldestFrame === this.frameCounter) return;
+      this.chunks.delete(oldestKey);
     }
   }
 }
@@ -263,6 +397,56 @@ interface OverlayCacheEntry {
   canvas: CanvasSurface;
   /** Pixels above the tile's sy origin reserved in the canvas. Blit at (sx, sy - overhead). */
   overhead: number;
+  /** Pixels left of the tile's sx origin reserved in the canvas. Blit at (sx - overhang). */
+  leftOverhang: number;
+  /** Tile type and animation frame the entry was baked for; a change re-bakes it. */
+  type: number;
+  animationFrame: number;
+}
+
+/** Art that never leaves its own tile square. */
+const NO_DECORATION_EXTENTS: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };
+
+/**
+ * How far past its own square a decoration tile's art reaches, in pixels per
+ * direction. Shared between the overlay cache — which sizes its canvases to
+ * exactly this — and the viewport cull, which widens its scan by it: a tile
+ * whose art is drawn wider than it is culled pops in at the screen edge.
+ */
+export function decorationTileExtentsPx(
+  structure: TileContent[][],
+  type: number,
+  tx: number,
+  ty: number,
+  ts: number,
+): MapSpriteExtentsPx {
+  if (type === BUILDING_WALL) {
+    // The gable roof (intS case) extends up to 2.75 × ts above the tile.
+    const hasGableBelow = ROOF_TILE_TYPES.has(structure[ty + 1]?.[tx]?.type ?? NO_TILE_TYPE);
+    const up = hasGableBelow ? Math.ceil(ts * GABLE_OVERHEAD_SCALE) : 0;
+    return { left: 0, up, right: 0, down: 0 };
+  }
+  // Roofs are painted, not blitted, and every stroke stays inside the tile.
+  // They are also the bulk of what the overlay cache holds, so handing them the
+  // sprite fallback below would grow each cached canvas ninefold — and the
+  // per-frame blit with it — for slack that can never be drawn into.
+  if (ROOF_TILE_TYPES.has(type)) return NO_DECORATION_EXTENTS;
+  if (type === SPRITE_BUILDING) {
+    const spriteKey = structure[ty][tx].spriteKey;
+    const extents = spriteKey === undefined ? undefined : getSpriteExtentsPxByKey(spriteKey);
+    return extents ?? unregisteredDecorationExtents(ts);
+  }
+  return getSpriteExtentsPxForTileType(type) ?? unregisteredDecorationExtents(ts);
+}
+
+/**
+ * Reach assumed for a sprite-drawn decoration that declares no extents against
+ * its tile type — trees, torches, braziers and the like. One tile covers the
+ * tallest of them (a torch reaches exactly one tile up), and every such type is
+ * cull-margin only: none is cached, so the slack costs nothing but scan width.
+ */
+function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
+  return { left: ts, up: ts, right: ts, down: ts };
 }
 
 /**
@@ -279,40 +463,71 @@ interface OverlayCacheEntry {
  *    one drawImage call.
  */
 export class OverlayTileCache {
-  private readonly cache = new Map<string, OverlayCacheEntry>();
+  private readonly cache = new Map<number, OverlayCacheEntry>();
+  private readonly gridWidth: number;
 
   constructor(
     private readonly structure: TileContent[][],
     private readonly ts: number,
-  ) {}
+  ) {
+    this.gridWidth = structure[0]?.length ?? structure.length;
+  }
 
-  /** Returns the pre-rendered entry for this tile. */
-  get(type: number, tx: number, ty: number): OverlayCacheEntry {
-    const key = `${type}_${tx}_${ty}`;
+  /** Returns the pre-rendered entry for this tile at its current animation frame. */
+  get(type: number, tx: number, ty: number, animationFrame: number): OverlayCacheEntry {
+    const key = tileIndex(tx, ty, this.gridWidth);
     const hit = this.cache.get(key);
-    if (hit) return hit;
-    const entry = this.renderEntry(type, tx, ty);
+    if (hit?.type === type) {
+      if (hit.animationFrame === animationFrame) return hit;
+      // Only the picture changed. The tower's entry alone is half a megabyte
+      // and turns over four times a second, so redraw into the canvas it
+      // already has rather than allocating a fresh one every animation frame.
+      this.redrawEntry(hit, type, tx, ty, animationFrame);
+      return hit;
+    }
+    const entry = this.renderEntry(type, tx, ty, animationFrame);
     this.cache.set(key, entry);
     return entry;
   }
 
-  private computeOverhead(type: number, tx: number, ty: number): number {
-    const { ts, structure } = this;
-    if (type === BUILDING_WALL) {
-      // The gable roof (intS case) extends up to 2.5 × ts above the tile.
-      const intS = ROOF_TILE_TYPES.has(structure[ty + 1]?.[tx]?.type ?? -1);
-      return intS ? Math.ceil(ts * GABLE_OVERHEAD_SCALE) : 0;
-    }
-    return 0;
+  private redrawEntry(
+    entry: OverlayCacheEntry,
+    type: number,
+    tx: number,
+    ty: number,
+    animationFrame: number,
+  ): void {
+    const ctx = surfaceContext(entry.canvas);
+    ctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
+    drawTile(ctx, this.structure, type, entry.leftOverhang, entry.overhead, this.ts, tx, ty, false);
+    entry.animationFrame = animationFrame;
   }
 
-  private renderEntry(type: number, tx: number, ty: number): OverlayCacheEntry {
+  /**
+   * Drop a tile's entry so it re-renders. Needed whenever the tile's art
+   * changes at runtime — the entry is otherwise kept for the map's lifetime.
+   */
+  invalidateTile(tileX: number, tileY: number): void {
+    this.cache.delete(tileIndex(tileX, tileY, this.gridWidth));
+  }
+
+  private renderEntry(
+    type: number,
+    tx: number,
+    ty: number,
+    animationFrame: number,
+  ): OverlayCacheEntry {
     const { ts } = this;
-    const overhead = this.computeOverhead(type, tx, ty);
-    const canvas = allocCanvas(ts, overhead + ts);
+    const extents = decorationTileExtentsPx(this.structure, type, tx, ty, ts);
+    const overhead = Math.max(0, Math.ceil(extents.up));
+    const leftOverhang = Math.max(0, Math.ceil(extents.left));
+    const width = leftOverhang + ts + Math.max(0, Math.ceil(extents.right));
+    const height = overhead + ts + Math.max(0, Math.ceil(extents.down));
+
+    const canvas = allocCanvas(width, height);
     const ctx = surfaceContext(canvas);
-    drawTile(ctx, this.structure, type, 0, overhead, ts, tx, ty, false);
-    return { canvas, overhead };
+    drawTile(ctx, this.structure, type, leftOverhang, overhead, ts, tx, ty, false);
+    return { canvas, overhead, leftOverhang, type, animationFrame };
   }
 }
 
@@ -333,8 +548,9 @@ export function drawDecorationTileFull(
 ): void {
   const type = structure[ty][tx].type;
   if (overlayCache && CACHEABLE_OVERLAY_TYPES.has(type)) {
-    const entry = overlayCache.get(type, tx, ty);
-    ctx.drawImage(entry.canvas, sx, sy - entry.overhead);
+    const animationFrame = decorationAnimationFrame(structure, type, tx, ty);
+    const entry = overlayCache.get(type, tx, ty, animationFrame);
+    ctx.drawImage(entry.canvas, sx - entry.leftOverhang, sy - entry.overhead);
     return;
   }
   drawTile(ctx, structure, type, sx, sy, ts, tx, ty, false);

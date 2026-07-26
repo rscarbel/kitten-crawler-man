@@ -150,7 +150,7 @@ export class StiltClown extends Mob {
       this.facingX,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

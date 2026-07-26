@@ -163,7 +163,7 @@ export class RingmasterGrimaldi extends Mob {
       attackAnim,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0 || this.hitFlashTimer > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

@@ -522,7 +522,7 @@ export class SmallSpider extends Mob {
     );
     ctx.fill();
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

@@ -320,15 +320,39 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       if (mob.audioTag === 'llama') audio?.play('llama_fireball');
       if (mob.audioTag === 'lemur') audio?.play('circus_lemur_sound');
     }
-    // Only tags handled here consume the flag — TheHoarder's damage cue is
-    // scene-specific and polled separately by DungeonScene.
-    if (mob.damageSoundPending && mob.audioTag === 'grimaldi') {
-      mob.damageSoundPending = false;
-      audio?.play('grimaldi_vine_taking_damage');
+    if (mob.damageSoundPending) {
+      // Only tags handled here consume the flag.
+      switch (mob.audioTag) {
+        case 'grimaldi':
+          mob.damageSoundPending = false;
+          audio?.play('grimaldi_vine_taking_damage');
+          break;
+        case 'bear':
+          mob.damageSoundPending = false;
+          audio?.play('bear_growl_1');
+          break;
+        case 'hoarder':
+          mob.damageSoundPending = false;
+          audio?.playRandom(['hoarder_damage_1', 'hoarder_damage_2', 'hoarder_damage_3']);
+          break;
+      }
     }
-    if (mob.damageSoundPending && mob.audioTag === 'bear') {
-      mob.damageSoundPending = false;
-      audio?.play('bear_growl_1');
+    if (mob.specialSoundPending) {
+      mob.specialSoundPending = false;
+      switch (mob.audioTag) {
+        case 'hoarder':
+          audio?.play('hoarder_vomit');
+          break;
+        case 'juicer':
+          audio?.play('juicer_throw');
+          break;
+        case 'ball_of_swine':
+          audio?.play('ball_of_swine_rolling');
+          break;
+        case 'krakaren':
+          audio?.play('krakaren_yell');
+          break;
+      }
     }
   }
 }

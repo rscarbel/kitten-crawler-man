@@ -14,17 +14,19 @@ import type { Townsperson } from './Townsperson';
  * when nobody is close enough to talk to.
  */
 export function findNearestTownsperson(
-  people: ReadonlyArray<Townsperson>,
+  people: Iterable<Townsperson>,
   x: number,
   y: number,
   maxDist: number,
 ): Townsperson | null {
   let best: Townsperson | null = null;
-  let bestDist = maxDist;
+  let bestDistSq = maxDist * maxDist;
   for (const person of people) {
-    const dist = Math.hypot(person.x - x, person.y - y);
-    if (dist <= bestDist) {
-      bestDist = dist;
+    const dx = person.x - x;
+    const dy = person.y - y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq <= bestDistSq) {
+      bestDistSq = distSq;
       best = person;
     }
   }

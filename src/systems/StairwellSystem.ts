@@ -96,9 +96,8 @@ export class StairwellSystem implements GameSystem {
   isEntityOnStairwell(entity: { x: number; y: number }): boolean {
     const tx = Math.floor((entity.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
     const ty = Math.floor((entity.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-    return this.gameMap.stairwellTiles.some(
-      (s) => (tx === s.x || tx === s.x + 1) && (ty === s.y || ty === s.y + 1),
-    );
+    // The map already keeps a bit per tile for exactly this 2×2 footprint test.
+    return this.gameMap.isStairwellTile(tx, ty);
   }
 
   handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {

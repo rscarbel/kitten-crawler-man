@@ -347,7 +347,7 @@ export class BrindleGrub extends Mob {
         break;
     }
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

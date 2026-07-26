@@ -79,6 +79,26 @@ function walkPose(appearance: PersonAppearance, facing: Facing, phase: number): 
   };
 }
 
+/**
+ * Snaps an animation clock onto one of `buckets` evenly spaced positions in the
+ * person's own cycle, returning both the bucket index and a phase that lands
+ * exactly on it. The frame cache keys cells on the bucket, so it needs a phase
+ * it can reproduce the pose from; the cycle length is per-person because
+ * `strideScale` stretches it.
+ */
+export function quantizePhase(
+  appearance: PersonAppearance,
+  phase: number,
+  moving: boolean,
+  buckets: number,
+): { bucket: number; phase: number } {
+  const speed = moving ? WALK_CYCLE_SPEED * appearance.gait.strideScale : IDLE_BREATHE_SPEED;
+  const cycleFrames = (Math.PI * 2) / speed;
+  const withinCycle = ((phase % cycleFrames) + cycleFrames) % cycleFrames;
+  const bucket = Math.min(buckets - 1, Math.floor((withinCycle / cycleFrames) * buckets));
+  return { bucket, phase: (bucket / buckets) * cycleFrames };
+}
+
 /** The pose for a person at animation `phase`, facing `facing`, moving or not. */
 export function poseForMotion(
   appearance: PersonAppearance,

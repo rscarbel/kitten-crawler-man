@@ -114,6 +114,8 @@ export interface FloorItem {
 
 export class LootSystem implements GameSystem {
   private pendingLoots: PendingLoot[] = [];
+  /** Reused per-frame party list handed to `creditLoot`. */
+  private readonly party: Array<HumanPlayer | CatPlayer> = [];
   readonly floorItems: FloorItem[] = [];
   private _itemPickupsThisFrame = 0;
   private _coinPickupsThisFrame = 0;
@@ -240,44 +242,59 @@ export class LootSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     const { active, inactive: companion } = ctx;
-    for (const loot of this.pendingLoots) {
-      if (loot.collected) continue;
-      if (loot.pickupDelay > 0) {
-        loot.pickupDelay--;
-        continue;
-      }
+    // Hoisted: the party is the same two players for every piece of loot.
+    const party = this.party;
+    party.length = 0;
+    party.push(active, companion);
 
-      const party = [active, companion];
+    // Pickup, TTL and compaction in one backwards pass — swap-pop rather than a
+    // fresh filtered array every frame.
+    for (let i = this.pendingLoots.length - 1; i >= 0; i--) {
+      const loot = this.pendingLoots[i];
 
-      if (loot.droppedByPlayer) {
-        for (const player of party) {
-          const dist = Math.hypot(player.x + HALF_TILE - loot.x, player.y + HALF_TILE - loot.y);
-          if (dist <= DROPPED_PICKUP_RANGE) {
-            this.creditLoot(loot, player, party);
-            break;
+      if (!loot.collected) {
+        if (loot.pickupDelay > 0) {
+          loot.pickupDelay--;
+        } else if (loot.droppedByPlayer) {
+          for (const player of party) {
+            if (this.isWithinPickupRange(player, loot, DROPPED_PICKUP_RANGE)) {
+              this.creditLoot(loot, player, party);
+              break;
+            }
+          }
+        } else {
+          for (const player of party) {
+            if (player !== active && companion.autoTarget?.isAlive) continue;
+            if (this.isWithinPickupRange(player, loot, LOOT_PICKUP_RANGE)) {
+              this.creditLoot(loot, loot.owner, party);
+              break;
+            }
           }
         }
-        continue;
       }
 
-      for (const player of party) {
-        if (player !== active && companion.autoTarget?.isAlive) continue;
-        const dist = Math.hypot(player.x + HALF_TILE - loot.x, player.y + HALF_TILE - loot.y);
-        if (dist <= LOOT_PICKUP_RANGE) {
-          this.creditLoot(loot, loot.owner, party);
-          break;
-        }
-      }
-    }
-
-    for (const loot of this.pendingLoots) {
       if (!loot.isBossLoot && !loot.droppedByPlayer && !loot.collected) {
         loot.ttl--;
       }
+
+      const keep =
+        !loot.collected &&
+        ((loot.isBossLoot ?? false) || (loot.droppedByPlayer ?? false) || loot.ttl > 0);
+      if (!keep) {
+        this.pendingLoots[i] = this.pendingLoots[this.pendingLoots.length - 1];
+        this.pendingLoots.pop();
+      }
     }
-    this.pendingLoots = this.pendingLoots.filter(
-      (l) => !l.collected && ((l.isBossLoot ?? false) || (l.droppedByPlayer ?? false) || l.ttl > 0),
-    );
+  }
+
+  private isWithinPickupRange(
+    player: { x: number; y: number },
+    loot: { x: number; y: number },
+    range: number,
+  ): boolean {
+    const dx = player.x + HALF_TILE - loot.x;
+    const dy = player.y + HALF_TILE - loot.y;
+    return dx * dx + dy * dy <= range * range;
   }
 
   tryCollectLootAt(

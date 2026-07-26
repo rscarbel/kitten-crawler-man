@@ -50,7 +50,7 @@ export class VineTendril extends Mob {
 
     drawVineTendrilSprite(ctx, sx, sy, tileSize, this.swayPhase, this.hp / this.maxHp);
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

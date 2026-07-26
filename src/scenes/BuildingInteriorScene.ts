@@ -898,7 +898,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.human.updateAttack();
     this.cat.updateAttack();
-    this.cat.updateMissiles(combat.mobs);
+    this.cat.updateMissiles(combat.mobGrid);
 
     combat.spells.update(ctx);
     combat.mobLoop.update(ctx);

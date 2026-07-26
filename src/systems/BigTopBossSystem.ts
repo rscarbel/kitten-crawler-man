@@ -18,7 +18,6 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { RingmasterGrimaldi } from '../creatures/RingmasterGrimaldi';
 import { VineTendril } from '../creatures/VineTendril';
 import { Signet } from '../creatures/Signet';
-import { InkMarauder } from '../creatures/InkMarauder';
 import { CircusLemur } from '../creatures/CircusLemur';
 import { StiltClown } from '../creatures/StiltClown';
 import { FatClown } from '../creatures/FatClown';
@@ -192,9 +191,6 @@ export class BigTopBossSystem implements GameSystem {
     if (this.victoryTimer > 0) this.victoryTimer--;
 
     if (this.signet) this.signet.allMobs = ctx.mobs;
-    for (const mob of ctx.mobs) {
-      if (mob instanceof InkMarauder) mob.allMobs = ctx.mobs;
-    }
 
     const grimaldi = this.grimaldi;
     if (!grimaldi) return;

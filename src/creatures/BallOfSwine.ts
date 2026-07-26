@@ -44,6 +44,7 @@ const ARENA_AGGRO_EXTEND_TILES = 3;
 type BosState = 'idle' | 'zooming' | 'stopping' | 'stopped' | 'bursting';
 
 export class BallOfSwine extends Mob {
+  override readonly audioTag = 'ball_of_swine';
   readonly xpValue = 1200;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
@@ -71,8 +72,6 @@ export class BallOfSwine extends Mob {
   burstTimer = 0;
   /** Set when hp hits 0; DungeonScene reads this to spawn Tusklings. */
   pendingBurst = false;
-  /** Set each time rolling begins; DungeonScene clears it and plays the sound. */
-  rollSoundPending = false;
 
   // Contact kill cooldowns per player
   private killCooldowns = new Map<Player, number>();
@@ -202,7 +201,7 @@ export class BallOfSwine extends Mob {
     if (nearest) {
       this.updateLastKnown(nearest);
       this.state = 'zooming';
-      this.rollSoundPending = true;
+      this.specialSoundPending = true;
     }
   }
 
@@ -260,7 +259,7 @@ export class BallOfSwine extends Mob {
     this.stoppedTimer--;
     if (this.stoppedTimer <= 0) {
       this.state = 'zooming';
-      this.rollSoundPending = true;
+      this.specialSoundPending = true;
       // Reverse direction each time it resumes for variety
       this.orbitSign *= -1;
     }
@@ -375,7 +374,7 @@ export class BallOfSwine extends Mob {
       this.burstFraction,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     if (this.isStopped) {

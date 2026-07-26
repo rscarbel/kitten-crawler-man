@@ -195,6 +195,7 @@ export class Signet extends Mob {
       if (spawnTile) {
         const marauder = new InkMarauder(spawnTile.x, spawnTile.y, this.tileSize);
         marauder.setMap(this.map);
+        marauder.allMobs = this.allMobs;
         this.addMob(marauder);
         this.summonAnimTimer = SUMMON_ANIM_FRAMES;
       }
@@ -231,7 +232,7 @@ export class Signet extends Mob {
       this.facingX,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     drawEliteMarker(ctx, sx, sy, tileSize);

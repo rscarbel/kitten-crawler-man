@@ -135,19 +135,36 @@ function toHex(rgb: Rgb): string {
   return `#${channelToHex(rgb.r)}${channelToHex(rgb.g)}${channelToHex(rgb.b)}`;
 }
 
+/**
+ * Derived colors, memoized. Both inputs come from fixed palettes and a handful
+ * of fixed amounts, so the table stays tiny — while the callers sit inside the
+ * per-figure draw path and would otherwise re-parse and re-format a hex string
+ * for every garment of every person on screen, every frame.
+ */
+const derivedColors = new Map<string, string>();
+
+function derivedColor(hex: string, amount: number, derive: (rgb: Rgb) => Rgb): string {
+  const key = `${hex}|${amount}`;
+  const cached = derivedColors.get(key);
+  if (cached !== undefined) return cached;
+  const result = toHex(derive(parseHex(hex)));
+  derivedColors.set(key, result);
+  return result;
+}
+
 /** Darkens `hex` toward black by `amount` (0..1). */
 export function shade(hex: string, amount: number): string {
-  const { r, g, b } = parseHex(hex);
-  const factor = 1 - amount;
-  return toHex({ r: r * factor, g: g * factor, b: b * factor });
+  return derivedColor(hex, amount, ({ r, g, b }) => {
+    const factor = 1 - amount;
+    return { r: r * factor, g: g * factor, b: b * factor };
+  });
 }
 
 /** Lightens `hex` toward white by `amount` (0..1). */
 export function tint(hex: string, amount: number): string {
-  const { r, g, b } = parseHex(hex);
-  return toHex({
+  return derivedColor(hex, amount, ({ r, g, b }) => ({
     r: r + (BYTE_MAX - r) * amount,
     g: g + (BYTE_MAX - g) * amount,
     b: b + (BYTE_MAX - b) * amount,
-  });
+  }));
 }

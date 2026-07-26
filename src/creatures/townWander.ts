@@ -52,22 +52,26 @@ function retarget(state: WanderState, params: WanderParams): void {
 
 /**
  * Advances one frame of wander: counts down a pause, steps toward the target,
- * or retargets on arrival / when blocked. Mutates `state` in place and returns
- * the frame's motion for the caller to translate into facing and animation.
+ * or retargets on arrival / when blocked. Mutates `state` in place and writes
+ * the frame's motion into `out` for the caller to translate into facing and
+ * animation. The caller owns `out` so a crowd of agents allocates nothing.
  */
-export function stepWander(state: WanderState, params: WanderParams): WanderStep {
+export function stepWander(state: WanderState, params: WanderParams, out: WanderStep): void {
   const dx = state.targetX - state.x;
   const dy = state.targetY - state.y;
+  out.dx = dx;
+  out.dy = dy;
+  out.moving = false;
 
   if (state.pause > 0) {
     state.pause--;
-    return { dx, dy, moving: false };
+    return;
   }
 
   const dist = Math.hypot(dx, dy);
   if (dist < params.arriveDist) {
     retarget(state, params);
-    return { dx, dy, moving: false };
+    return;
   }
 
   const stepX = (dx / dist) * state.speed;
@@ -75,10 +79,10 @@ export function stepWander(state: WanderState, params: WanderParams): WanderStep
 
   if (params.isWalkable && !params.isWalkable(state.x + stepX, state.y + stepY)) {
     retarget(state, params);
-    return { dx, dy, moving: false };
+    return;
   }
 
   state.x += stepX;
   state.y += stepY;
-  return { dx, dy, moving: true };
+  out.moving = true;
 }

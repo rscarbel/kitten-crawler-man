@@ -1,5 +1,6 @@
 import { Player } from '../Player';
 import type { Mob } from './Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import { drawCatSprite, drawCatClawSwipe, drawMissiles } from '../sprites/catSprite';
 import type { GameMap } from '../map/GameMap';
@@ -17,6 +18,8 @@ import { ITEM_DEF } from '../core/ItemDefs';
 
 export class CatPlayer extends Player {
   private missiles: Missile[] = [];
+  /** Reused result set for the homing missiles' neighbour queries. */
+  private readonly _homingQuery = new Set<Mob>();
   private readonly EXPLODE_FRAMES = 22;
   private missileCooldown = 0;
   private map: GameMap | null = null;
@@ -235,7 +238,7 @@ export class CatPlayer extends Player {
     }
   }
 
-  updateMissiles(mobs?: ReadonlyArray<Mob>) {
+  updateMissiles(mobGrid?: SpatialGrid<Mob>) {
     const level = this.getMagicMissileLevel();
     const hasHoming = level >= CatPlayer.HOMING_LEVEL_THRESHOLD;
     const HOMING_RANGE_PX = TILE_SIZE * CatPlayer.MISSILE_HOMING_DISTANCE_TILES;
@@ -247,27 +250,37 @@ export class CatPlayer extends Player {
     for (const m of this.missiles) {
       if (m.state === 'flying') {
         // Level 14+ homing: curve toward nearest mob in forward cone
-        if (hasHoming && !m.isSubMissile && mobs && mobs.length > 0) {
+        if (hasHoming && !m.isSubMissile && mobGrid) {
           const speed = Math.hypot(m.vx, m.vy);
           if (speed > 0) {
             const dirAngle = Math.atan2(m.vy, m.vx);
             let bestMob: Mob | null = null;
-            let bestDist = Infinity;
+            let bestDistSq = Infinity;
 
-            for (const mob of mobs) {
+            // Only mobs inside the homing radius can ever win, so ask the grid
+            // for those rather than walking every mob on the level per missile.
+            // The query measures mob origins while the test below measures mob
+            // centres, so widen it by a tile or an edge-of-range mob is missed.
+            this._homingQuery.clear();
+            const candidates = mobGrid.queryCircle(
+              m.x,
+              m.y,
+              HOMING_RANGE_PX + TILE_SIZE,
+              this._homingQuery,
+            );
+            for (const mob of candidates) {
               if (!mob.isAlive) continue;
               const ddx = mob.x + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_X - m.x;
               const ddy = mob.y + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_Y - m.y;
-              const dist = Math.hypot(ddx, ddy);
-              if (dist > HOMING_RANGE_PX || dist < 1) continue;
+              const distSq = ddx * ddx + ddy * ddy;
+              if (distSq > HOMING_RANGE_PX * HOMING_RANGE_PX || distSq < 1) continue;
+              if (distSq >= bestDistSq) continue;
               const mobAngle = Math.atan2(ddy, ddx);
               let angleDiff = Math.abs(mobAngle - dirAngle);
               if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
               if (angleDiff > CONE_HALF) continue;
-              if (dist < bestDist) {
-                bestDist = dist;
-                bestMob = mob;
-              }
+              bestDistSq = distSq;
+              bestMob = mob;
             }
 
             if (bestMob) {

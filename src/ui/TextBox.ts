@@ -157,8 +157,26 @@ export const TEXT_PRESETS = {
   ability: { size: 11, color: '#c084fc' },
 } satisfies Record<string, Partial<Omit<TextOptions, 'x' | 'y'>>>;
 
+/**
+ * Memoized CSS font strings, keyed family → size → weight. The HUD calls
+ * `drawText` dozens of times a frame across about ten distinct combinations.
+ * Nested maps rather than one composite key, because building a composite key
+ * is itself the string allocation the memo exists to avoid.
+ */
+const fontStringCache = new Map<string, Map<number, [string, string]>>();
+
 function buildFontString(size: number, bold: boolean, font: string): string {
-  return `${bold ? 'bold ' : ''}${size}px ${font}`;
+  let bySize = fontStringCache.get(font);
+  if (bySize === undefined) {
+    bySize = new Map();
+    fontStringCache.set(font, bySize);
+  }
+  let byWeight = bySize.get(size);
+  if (byWeight === undefined) {
+    byWeight = [`${size}px ${font}`, `bold ${size}px ${font}`];
+    bySize.set(size, byWeight);
+  }
+  return bold ? byWeight[1] : byWeight[0];
 }
 
 /**
@@ -202,7 +220,9 @@ function resolveLines(
   text: string,
   innerW: number | undefined,
 ): string[] {
-  return innerW !== undefined ? computeWrappedLines(ctx, text, innerW) : text.split('\n');
+  if (innerW !== undefined) return computeWrappedLines(ctx, text, innerW);
+  // Most HUD strings are a single line; skipping the scan is the common case.
+  return text.includes('\n') ? text.split('\n') : [text];
 }
 
 /**

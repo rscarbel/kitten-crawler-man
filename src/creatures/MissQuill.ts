@@ -174,7 +174,7 @@ export class MissQuill extends Mob {
     const castAnim = this.castAnimTimer > 0 ? 1 - this.castAnimTimer / CAST_ANIM_FRAMES : 0;
     drawMissQuillSprite(ctx, sx, sy, tileSize, castAnim, this.shielded, this.facingX);
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0 || this.shieldHitFlashTimer > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

@@ -30,12 +30,14 @@ import {
   PLAZA_STONE,
   WELL,
 } from '../map/tileTypes';
+import { tileCoordKey } from '../map/tileIndex';
 
 import { Townsperson } from '../creatures/Townsperson';
 import { findNearestTownsperson } from '../creatures/townInteraction';
 import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
-import type { GameSystem } from './GameSystem';
+import type { GameSystem, SystemContext } from './GameSystem';
+import { SpatialGrid } from '../core/SpatialGrid';
 
 /** The made surfaces of the town, which citizens treat as public space. */
 const STREET_TILE_TYPES: ReadonlySet<number> = new Set([
@@ -162,6 +164,18 @@ const SEPARATION_DIST_FRACTION = 0.55;
 const SEPARATION_DIST = TILE_SIZE * SEPARATION_DIST_FRACTION;
 const SEPARATION_PUSH = 0.25;
 
+/**
+ * One tile per cell. Both queries against this grid — separation and the talk
+ * prompt — have a radius near one tile, so a query touches a handful of cells.
+ */
+const TOWNSFOLK_GRID_CELL_SIZE = TILE_SIZE;
+
+/** Floor on how close a citizen must be to update every frame; see `fullUpdateRadiusSq`. */
+const FULL_UPDATE_RADIUS_TILES = 30;
+const FULL_UPDATE_RADIUS_PX = TILE_SIZE * FULL_UPDATE_RADIUS_TILES;
+/** Everyone further out updates on one frame in this many. */
+const DISTANT_TICK_INTERVAL = 4;
+
 // Bias spawns toward the plaza by keeping the more central of two candidate tiles.
 const CENTER_BIAS_SAMPLES = 2;
 
@@ -226,7 +240,7 @@ interface TileXY {
 
 export class TownLifeSystem implements GameSystem {
   private readonly townsfolk: Townsperson[] = [];
-  private readonly doorTiles: Set<string>;
+  private readonly doorTiles: Set<number>;
   private readonly plazaTiles: TileXY[];
   private readonly streetTiles: TileXY[];
   private readonly districtDoors: TileXY[];
@@ -235,6 +249,15 @@ export class TownLifeSystem implements GameSystem {
   private readonly districtRadius: number;
   private readonly plazaWander: WanderParams;
   private seedCount = 0;
+  /**
+   * Spatial index over the crowd. The separation pass and the talk-target
+   * lookup both only care about citizens within a tile or two, and the town
+   * holds enough people that scanning all of them was the system's whole cost.
+   */
+  private readonly grid = new SpatialGrid<Townsperson>(TOWNSFOLK_GRID_CELL_SIZE);
+  /** Reused result set for grid queries. */
+  private readonly neighborQuery = new Set<Townsperson>();
+  private frameCounter = 0;
 
   constructor(private readonly gameMap: GameMap) {
     // Read from the map, not recomputed as `gridSize / 2`, which is only ever
@@ -246,7 +269,7 @@ export class TownLifeSystem implements GameSystem {
     this.plazaRadius = Math.min(safeRadius, PLAZA_RADIUS_TILES);
     this.districtRadius = Math.min(safeRadius, DISTRICT_RADIUS_TILES);
     this.doorTiles = new Set(
-      gameMap.buildingEntries.map((entry) => tileKey(entry.doorTile.x, entry.doorTile.y)),
+      gameMap.buildingEntries.map((entry) => tileCoordKey(entry.doorTile.x, entry.doorTile.y)),
     );
     this.districtDoors = gameMap.buildingEntries
       .map((entry) => entry.doorTile)
@@ -280,14 +303,47 @@ export class TownLifeSystem implements GameSystem {
 
   /** The nearest citizen the player (at world origin `x`,`y`) can talk to, or `null`. */
   findTalkTarget(x: number, y: number): Townsperson | null {
-    return findNearestTownsperson(this.townsfolk, x, y, TALK_RADIUS);
+    this.neighborQuery.clear();
+    const nearby = this.grid.queryCircle(x, y, TALK_RADIUS, this.neighborQuery);
+    return findNearestTownsperson(nearby, x, y, TALK_RADIUS);
   }
 
-  update(): void {
-    for (const person of this.townsfolk) {
+  update(ctx: SystemContext): void {
+    this.frameCounter++;
+    const { active } = ctx;
+    const fullUpdateRadiusSq = this.fullUpdateRadiusSq();
+
+    for (let i = 0; i < this.townsfolk.length; i++) {
+      const person = this.townsfolk[i];
+      const dx = person.x - active.x;
+      const dy = person.y - active.y;
+      const isNearPlayer = dx * dx + dy * dy <= fullUpdateRadiusSq;
+      // Distant citizens step coarsely. They still drift to plausible places,
+      // and the phase offset keeps the skipped work spread across frames.
+      if (!isNearPlayer && (this.frameCounter + i) % DISTANT_TICK_INTERVAL !== 0) continue;
+
+      const oldX = person.x;
+      const oldY = person.y;
       person.update();
+      this.grid.move(person, oldX, oldY);
     }
     this.separate();
+  }
+
+  /**
+   * How far a citizen may be from the player and still update every frame.
+   *
+   * Never less than the visible area: a citizen who is drawn but only stepped
+   * one frame in four visibly stutters, and the viewport is the canvas, which
+   * is the window. The constant floor keeps a small window from making the
+   * crowd's behaviour depend on window size.
+   */
+  private fullUpdateRadiusSq(): number {
+    const halfViewW = window.innerWidth / 2;
+    const halfViewH = window.innerHeight / 2;
+    const visibleReach = Math.hypot(halfViewW, halfViewH) + TILE_SIZE;
+    const radius = Math.max(FULL_UPDATE_RADIUS_PX, visibleReach);
+    return radius * radius;
   }
 
   /** Enumerate every walkable, non-door tile inside `radius` that `accept` allows. */
@@ -300,7 +356,7 @@ export class TownLifeSystem implements GameSystem {
     const tiles: TileXY[] = [];
     for (let ty = minY; ty <= maxY; ty++) {
       for (let tx = minX; tx <= maxX; tx++) {
-        if (this.doorTiles.has(tileKey(tx, ty))) continue;
+        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
         if (!this.withinRadius(tx, ty, radius)) continue;
         if (!this.gameMap.isWalkable(tx, ty)) continue;
         if (!accept(tx, ty)) continue;
@@ -422,7 +478,7 @@ export class TownLifeSystem implements GameSystem {
    * bring it back.
    */
   private spawnActivityAnchors(): void {
-    for (const well of this.findTilesOfType(WELL)) {
+    for (const well of this.gameMap.tilesOfType(WELL)) {
       this.addAnchoredCitizen(well, 'commoner', WELL_DRAWERS_PER_WELL, ANCHOR_RADIUS_TILES);
     }
     const fountain = this.gameMap.fountainCentre;
@@ -484,25 +540,13 @@ export class TownLifeSystem implements GameSystem {
     const radius = TILE_SIZE * radiusTiles;
     for (let ty = fixture.y - radiusTiles; ty <= fixture.y + radiusTiles; ty++) {
       for (let tx = fixture.x - radiusTiles; tx <= fixture.x + radiusTiles; tx++) {
-        if (this.doorTiles.has(tileKey(tx, ty))) continue;
+        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
         if (!withinTiles(tx * TILE_SIZE, ty * TILE_SIZE, fixture, radius)) continue;
         if (!this.gameMap.isWalkable(tx, ty)) continue;
         tiles.push({ x: tx, y: ty });
       }
     }
     return tiles;
-  }
-
-  private findTilesOfType(type: number): TileXY[] {
-    const found: TileXY[] = [];
-    const structure = this.gameMap.structure;
-    for (let ty = 0; ty < structure.length; ty++) {
-      const row = structure[ty];
-      for (let tx = 0; tx < row.length; tx++) {
-        if (row[tx].type === type) found.push({ x: tx, y: ty });
-      }
-    }
-    return found;
   }
 
   private addCitizen(
@@ -512,17 +556,17 @@ export class TownLifeSystem implements GameSystem {
     speedMax: number,
     wander: WanderParams,
   ): void {
-    this.townsfolk.push(
-      new Townsperson({
-        x: tile.x * TILE_SIZE,
-        y: tile.y * TILE_SIZE,
-        role: pickRole(roles),
-        seed: SEED_BASE + this.seedCount * SEED_STRIDE,
-        speed: speedMin + Math.random() * (speedMax - speedMin),
-        wander,
-        initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
-      }),
-    );
+    const person = new Townsperson({
+      x: tile.x * TILE_SIZE,
+      y: tile.y * TILE_SIZE,
+      role: pickRole(roles),
+      seed: SEED_BASE + this.seedCount * SEED_STRIDE,
+      speed: speedMin + Math.random() * (speedMax - speedMin),
+      wander,
+      initialPause: Math.floor(Math.random() * MAX_INITIAL_PAUSE),
+    });
+    this.townsfolk.push(person);
+    this.grid.insert(person);
     this.seedCount++;
   }
 
@@ -531,7 +575,7 @@ export class TownLifeSystem implements GameSystem {
     const tiles: TileXY[] = [];
     for (let ty = door.y - FRONTAGE_RADIUS_TILES; ty <= door.y + FRONTAGE_RADIUS_TILES; ty++) {
       for (let tx = door.x - FRONTAGE_RADIUS_TILES; tx <= door.x + FRONTAGE_RADIUS_TILES; tx++) {
-        if (this.doorTiles.has(tileKey(tx, ty))) continue;
+        if (this.doorTiles.has(tileCoordKey(tx, ty))) continue;
         if (!near(tx * TILE_SIZE, ty * TILE_SIZE, door)) continue;
         if (!this.gameMap.isWalkable(tx, ty)) continue;
         tiles.push({ x: tx, y: ty });
@@ -575,7 +619,7 @@ export class TownLifeSystem implements GameSystem {
   private isWalkableSpot(worldX: number, worldY: number): boolean {
     const tx = Math.floor((worldX + CENTER_OFFSET) / TILE_SIZE);
     const ty = Math.floor((worldY + CENTER_OFFSET) / TILE_SIZE);
-    if (this.doorTiles.has(tileKey(tx, ty))) return false;
+    if (this.doorTiles.has(tileCoordKey(tx, ty))) return false;
     return this.gameMap.isWalkable(tx, ty);
   }
 
@@ -589,11 +633,12 @@ export class TownLifeSystem implements GameSystem {
 
   /** Nudge overlapping citizens apart, but never into a wall. */
   private separate(): void {
-    const folk = this.townsfolk;
-    for (let i = 0; i < folk.length; i++) {
-      for (let j = i + 1; j < folk.length; j++) {
-        const a = folk[i];
-        const b = folk[j];
+    for (const a of this.townsfolk) {
+      this.neighborQuery.clear();
+      const neighbors = this.grid.queryCircle(a.x, a.y, SEPARATION_DIST, this.neighborQuery);
+      for (const b of neighbors) {
+        // Each pair is pushed apart once, as in the old i < j double loop.
+        if (b.id <= a.id) continue;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         if (Math.abs(dx) >= SEPARATION_DIST || Math.abs(dy) >= SEPARATION_DIST) continue;
@@ -602,20 +647,22 @@ export class TownLifeSystem implements GameSystem {
         const nx = (dx / dist) * SEPARATION_PUSH;
         const ny = (dy / dist) * SEPARATION_PUSH;
         if (this.isWalkableSpot(a.x - nx, a.y - ny)) {
+          const oldX = a.x;
+          const oldY = a.y;
           a.x -= nx;
           a.y -= ny;
+          this.grid.move(a, oldX, oldY);
         }
         if (this.isWalkableSpot(b.x + nx, b.y + ny)) {
+          const oldX = b.x;
+          const oldY = b.y;
           b.x += nx;
           b.y += ny;
+          this.grid.move(b, oldX, oldY);
         }
       }
     }
   }
-}
-
-function tileKey(tx: number, ty: number): string {
-  return `${tx},${ty}`;
 }
 
 function tileDistSq(a: TileXY, b: TileXY): number {

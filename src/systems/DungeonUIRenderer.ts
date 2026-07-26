@@ -7,6 +7,7 @@ import { TILE_SIZE } from '../core/constants';
 import { platform } from '../core/Platform';
 import type { Player } from '../Player';
 import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
@@ -276,13 +277,15 @@ export function renderEntityTooltip(
   camY: number,
   mouseX: number,
   mouseY: number,
-  mobs: Mob[],
+  mobGrid: SpatialGrid<Mob>,
 ): void {
   const wx = mouseX + camX;
   const wy = mouseY + camY;
 
+  // A mob can only be hovered when the cursor is inside its tile square, so
+  // every candidate has its origin within that square's diagonal of the cursor.
   let hovered: Mob | null = null;
-  for (const mob of mobs) {
+  for (const mob of mobGrid.queryCircle(wx, wy, TILE_SIZE * Math.SQRT2)) {
     if (!mob.isAlive) continue;
     if (wx >= mob.x && wx <= mob.x + TILE_SIZE && wy >= mob.y && wy <= mob.y + TILE_SIZE) {
       hovered = mob;

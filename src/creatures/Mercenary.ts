@@ -176,7 +176,7 @@ export class Mercenary extends Mob {
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = DAMAGE_FLASH_BRIGHTNESS;
     drawClubNpc(ctx, sx, sy, tileSize, this.spriteVariant, this.animPhase, this.facingX);
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

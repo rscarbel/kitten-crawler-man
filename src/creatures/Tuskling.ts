@@ -255,7 +255,7 @@ export class Tuskling extends Mob {
       this.facingY,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);

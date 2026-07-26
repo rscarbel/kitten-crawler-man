@@ -147,7 +147,7 @@ export class Krasue extends Mob {
       attackAnim,
     );
 
-    ctx.filter = 'none';
+    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);
