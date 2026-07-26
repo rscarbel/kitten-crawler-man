@@ -22,12 +22,19 @@ A level is pure data: `LevelDef` (`src/levels/types.ts`) — `id, name, mapSize,
 
 ### Map generation
 
-`src/map/GameMap.ts` orchestrates; `DungeonGenerator` (rooms + L-hallways + boss/safe rooms), `OverworldGenerator` (roads, buildings, forests — used when `isOverworld`), `TutorialMap`. Special rooms (arena, spider lab) are gated by the LevelDef flags.
+`src/map/GameMap.ts` orchestrates; `DungeonGenerator` (rooms + L-hallways + boss/safe rooms), `OverworldGenerator` (the third-floor Over City — used when `isOverworld`), `TutorialMap`. Special rooms (arena, spider lab) are gated by the LevelDef flags.
+
+### The overworld town
+
+`OverworldGenerator` owns the wilderness (circus, forests, ruins, spawn scatter) but **not** the town's layout — it consumes a declarative `TownPlan` from `src/map/town/`. Before changing anything inside the walls, read **`docs/town.md`**: it covers the painter order, why the street hierarchy is a list order rather than a priority rule, the centre-relative offsets that must be re-tuned when the layout moves, and the `OverworldData`/building-name invariants that quests key off.
+
+Verify layout changes at **`?townmap`** (localhost) — the town is several screens wide, so no in-game screenshot can show whether one worked.
 
 ## Tiles
 
 - Constants in `src/map/tileTypes.ts`: floor types via the `FLOOR_TYPES` array; everything else a numbered constant. A map cell is `TileContent { tileId, type, spriteKey?, decorationVariant? }`.
 - Rendering: `TileRenderer.drawTile` tries category renderers in order — `terrainTiles` → `specialFloorTiles` → `buildingTiles` → `decorationTiles` → `interiorTiles` (each is a `switch(type)` in `src/map/tiles/*` returning `true` when handled; first match wins).
+- Ground: floor tiles delegate to `drawGroundTile` (`src/map/tiles/groundTiles.ts`), which resolves a `GroundMaterial` to a frame of the generated tileset and runs the fringe/tone/scatter/AO passes inside the chunk cache. Adding or tuning a material is the `add-ground-tile` skill, not a new `case`.
 - Walkability: `GameMap.isWalkable` is a **negative check** — tiles are walkable unless listed in its non-walkable chain.
 
 ### New tile type checklist

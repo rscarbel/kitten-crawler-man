@@ -1,10 +1,9 @@
 /**
  * Headless renderer for the Over City — the town as pixels, without a browser.
  *
- * The town redesign's phases are accepted on a screenshot ("no visible grid",
- * "every named building identifiable from the street"), and every defect that
- * survived a phase's data-level checks was visible in the first image anyone
- * rendered: a fence drawn as a ladder down its own side, a kerb outlining every
+ * The town is judged on a screenshot ("no visible grid", "every named building
+ * identifiable from the street"), and every defect that has survived the
+ * data-level checks was visible in the first image anyone rendered: a fence drawn as a ladder down its own side, a kerb outlining every
  * building plot, mint tufts on an olive lawn. `?townmap` cannot show any of
  * those — it draws one flat colour per tile type, and it cannot see props at
  * all, because they are created by systems in `DungeonScene` rather than by the

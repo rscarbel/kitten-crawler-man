@@ -103,7 +103,7 @@ function cardLabel(card: number): string {
 /**
  * The Desperado Club casino: a single high-low coin-wager game. The player
  * picks a wager tier, sees a card, and bets whether the next card is higher or
- * lower. Ties lose. Lifetime wagers this visit accumulate toward the Phase 5
+ * lower. Ties lose. Lifetime wagers this visit accumulate toward the
  * free-bodyguard perk via {@link coinsWageredThisVisit}.
  */
 export class ClubCasinoSystem {

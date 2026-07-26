@@ -1,8 +1,8 @@
 # The Over City — Source Reference (Third Floor)
 
-Reference notes on the third floor as it appears in the source material (_Carl's Doomsday Scenario_, Dungeon Crawler Carl book 2). The game's third-floor content — the dangerous ruins, the circus questline, the murder mystery, and the doomsday finale — is **already implemented**; this document is kept as background for future content work that wants to stay faithful to the book. It is reference material, not a plan.
+Reference notes on the third floor as it appears in the source material (_Carl's Doomsday Scenario_, Dungeon Crawler Carl book 2). The game's third-floor content — the dangerous ruins, the circus questline, the murder mystery, and the doomsday finale — is **already implemented**; this document is kept as background for future content work that wants to stay faithful to the book.
 
-> For the _town-life_ workstream (making the third-floor town feel inhabited), see [living-town.md](living-town.md).
+> For how the third-floor town is generated, rendered and tuned, see [town.md](town.md).
 
 ---
 

@@ -167,9 +167,9 @@ function promptLabel(station: ClubStation): string {
 
 /**
  * Host system for the Desperado Club interior (the analog of SafeRoomSystem /
- * ShopSystem). Phase 1: the Sledge's greeting + membership gate, cosmetic
- * dance-floor lights, DJ and dancers, and proximity prompts for every station.
- * Later phases attach the bar/market shops, the casino, and the mercenary guild.
+ * ShopSystem): the Sledge's greeting + membership gate, cosmetic dance-floor
+ * lights, DJ and dancers, and proximity prompts for every station. The
+ * bar/market shops, the casino and the mercenary guild attach to it.
  */
 export class DesperadoClubSystem implements GameSystem {
   private readonly dialog: QuestDialog;
@@ -221,7 +221,7 @@ export class DesperadoClubSystem implements GameSystem {
     this.catAchievements?.tryUnlock(id);
   }
 
-  /** Coins staked at the casino since entering the club — the free-security perk hook (Phase 5). */
+  /** Coins staked at the casino since entering the club — the free-security perk hook. */
   get coinsWageredThisVisit(): number {
     return this.casino.coinsWageredThisVisit;
   }

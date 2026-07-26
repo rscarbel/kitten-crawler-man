@@ -209,8 +209,8 @@ export const FloorTypeValue = {
 } as const satisfies Record<FloorTile, number>;
 
 /**
- * The three fencing types plan §3.5 asks for, as the differences that actually
- * survive at 32 px: how the infill between the posts is made.
+ * The town's three fencing types, distinguished by the only difference that
+ * survives at 32 px: how the infill between the posts is made.
  *
  * `post_and_rail` is two long rails and nothing between them — a working yard's
  * fence, which only has to stop a cart. `picket` fills the span with sawn pales,

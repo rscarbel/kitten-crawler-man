@@ -13,8 +13,7 @@
  * Materials are generated as multi-tile **patches** sampled from a torus-wrapped
  * lattice, then sliced. See scripts/tilegen/noise.ts for why that makes them
  * seamless, scripts/tilegen/materials.ts for the three rules a painter must
- * follow, and docs/town-redesign.md §7 for the measurements that motivated
- * replacing the previous hand-repaired sheet.
+ * follow, and docs/town.md for how the town consumes the result.
  *
  * Seeds are fixed constants below: sheets are reproducible, and tuning a
  * material means editing materials.ts and re-running, not editing pixels.

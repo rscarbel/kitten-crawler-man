@@ -68,7 +68,7 @@ const GUMGUM_HOOK_CLUB_NAME = 'The Desperado Club';
  *
  * Preferred: the two-wide alley running down the Desperado Club's east flank,
  * reached from the club door by walking east along Low Street — the "murder
- * alley" the town's street plan exists to provide (`docs/town-redesign.md` §3.2).
+ * alley" the town's street plan exists to provide (`docs/town.md`).
  * The fallback offset from the pub door is kept for a map with no club: it used
  * to be the primary, and on the compacted town it now points four tiles west of
  * a pub that stands *against* the west wall, i.e. outside the town.

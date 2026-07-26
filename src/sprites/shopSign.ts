@@ -2,11 +2,10 @@
  * Hanging shop signs — a wrought bracket off a building's facade and a painted
  * board swinging under it, carrying the device of the trade inside.
  *
- * Drawn procedurally rather than commissioned, for the reason plan §3.5 gives:
- * the town's props are already primitives and a sign is a rectangle, two eyes
- * and a small emblem. It exists to satisfy the acceptance criterion that every
- * named building is identifiable without walking to its door, so the emblem is
- * the point and everything around it is frame.
+ * Drawn procedurally rather than commissioned: the town's props are already
+ * primitives and a sign is a rectangle, two eyes and a small emblem. It exists so
+ * that every named building is identifiable without walking to its door, so the
+ * emblem is the point and everything around it is frame.
  *
  * The sign is drawn **above and west of** its anchor tile — bolted to the facade
  * beside the opening, which is where an inn's sign goes and, more usefully, is

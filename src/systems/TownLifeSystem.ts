@@ -12,7 +12,7 @@
  *    a steady trickle of people going somewhere;
  *  - **activity anchors** stand at a named fixture — a well, the smithy door,
  *    the fountain steps, the club door — and barely move, so the town's props
- *    look used rather than placed. Plan §3.6.
+ *    look used rather than placed.
  *
  * Each cohort strolls via the shared wander helper (respecting walls and keeping
  * clear of building doors) and all four are exposed as one crowd for the scene's
@@ -413,9 +413,8 @@ export class TownLifeSystem implements GameSystem {
    *
    * Anchors are derived from the map — well tiles are found by type, the smithy
    * and the club by their `buildingEntries` — rather than from copied offsets.
-   * Both of those coordinates have already moved once in this redesign, and the
-   * two systems that had copied them (the murder quest's body, the notice board)
-   * are exactly what broke.
+   * Both of those coordinates have moved before, and the two systems that had
+   * copied them (the murder quest's body, the notice board) are exactly what broke.
    *
    * An anchor is a wander with a one-tile bubble and a long pause, not a fixed
    * position: standing perfectly still beside a well reads as a statue, and the

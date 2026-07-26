@@ -1,7 +1,7 @@
 /**
- * The town's clutter — the carts, crates, barrels, troughs and yard gear that
- * plan §3.5 calls tier 2. None of it does anything; all of it is the difference
- * between a yard and a rectangle of gravel.
+ * The town's clutter — carts, crates, barrels, troughs and yard gear. None of it
+ * does anything; all of it is the difference between a yard and a rectangle of
+ * gravel.
  *
  * Every piece is drawn from the anchor tile's top-left in fractions of a tile,
  * standing on the tile and reaching upward, so the scene's Y-sort puts a player

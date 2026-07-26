@@ -37,8 +37,8 @@ const DOOR_APRON_ROWS = 2;
  * paved, so the apron's effect there is to lay the *frontage* material across the
  * front of a door: setts in front of the mead hall's four-tile opening where
  * Market Street is cobble, a stone doorstep in front of Blackwood Lodge where its
- * alley is packed earth. That is what §3.4 asks for — a doorstep is a different
- * surface from the roadway, or it is not a doorstep.
+ * alley is packed earth. A doorstep is a different surface from the roadway, or
+ * it is not a doorstep.
  */
 const DOOR_APRON_SIDE_OVERHANG = 1;
 

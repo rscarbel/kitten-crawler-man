@@ -1,6 +1,5 @@
 /**
- * Measures a generated overworld against the numbers the town redesign is
- * tracked by (see `docs/town-redesign-progress.md`).
+ * Measures a generated overworld against the layout numbers in `docs/town.md`.
  *
  * Lives apart from the `?townmap` scene that displays it so the same numbers can
  * be produced without a canvas — a headless run of `generateOverworld` is the
@@ -69,8 +68,7 @@ export interface BuildingPlot {
    * the wall, so counting them would make a town measured at 55 x 40 report
    * itself as 61 tall and would attribute 138 tiles of ground to a building whose
    * base is a 6 x 2 rectangle — of which the manifest actually blocks 8 tiles, the
-   * rest being its doorway and the gaps beside it. See the tracker's Phase 3 note
-   * for both figures.
+   * rest being its doorway and the gaps beside it.
    */
   readonly rect: TileRect;
   /** The full sprite art rect, including any overhang, for the `?townmap` view. */
@@ -93,8 +91,8 @@ export interface TownMetrics {
    *
    * That box is inside the walls, so this can never count `grass`: the street
    * plan puts a made surface on every tile within the ring and leaves field grass
-   * to the country outside it, which is design principle 3 of the redesign rather
-   * than a gap. Six is therefore the ceiling, not seven.
+   * to the country outside it, by design rather than by omission. Six is
+   * therefore the ceiling, not seven.
    */
   readonly groundTypeCount: number;
   readonly buildingCount: number;
@@ -160,8 +158,7 @@ function findPlacedBuildings(grid: MeasurableOverworld['grid']): PlacedBuilding[
  * the tower is the single entry of kind `tower`. Containment would look right
  * today and break the moment compaction puts one building's door inside a
  * neighbour's footprint — which is the normal outcome of packing a town
- * tighter, and would silently corrupt the density metric the redesign is
- * judged by.
+ * tighter, and would silently corrupt the density metric.
  *
  * Entries with no art (the circus Big Top is built from tiles, not a sprite) are
  * skipped; art with no entry is a real fault and is reported.
@@ -255,7 +252,7 @@ const PERCENT = 100;
 const DENSITY_DECIMALS = 1;
 const DISTANCE_DECIMALS = 1;
 
-/** Label/value pairs for display, in the order the progress tracker lists them. */
+/** Label/value pairs for display, in reading order. */
 export function metricRows(
   metrics: TownMetrics,
   data: MeasurableOverworld,

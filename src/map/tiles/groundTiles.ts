@@ -1278,9 +1278,9 @@ function buildFootprintIndex(structure: TileContent[][]): ReadonlySet<number> {
  * doorway — and the footprint is the sprite's whole *frame*, so this includes
  * the transparent sky above a roof and any transparent columns beside it. Good
  * enough for the occlusion pass, which only needs to know that the ground here
- * is under a structure rather than beside one; **not** an opacity test, and a
- * Phase 5 attempt to reuse it as one for the fence renderer anchored three rails
- * into pixels under 2% opaque.
+ * is under a structure rather than beside one; **not** an opacity test — reusing
+ * it as one for the fence renderer anchored three rails into pixels under 2%
+ * opaque.
  */
 function underSpriteArt(structure: TileContent[][], tx: number, ty: number): boolean {
   let covered = spriteFootprintTiles.get(structure);
@@ -1419,8 +1419,8 @@ function fringeMaterial(material: GroundMaterial): FringeMaterial {
  * any position whose floor is not an outdoor material: an indoor or dungeon
  * floor, or off-map. On today's maps that is only the deep void border, since
  * `drawGroundTile` runs on the overworld alone and every void tile within
- * `inferFloorType`'s reach resolves to real ground — but a Phase 3 interior
- * abutting outdoor ground would put grass along that seam, and would want a
+ * `inferFloorType`'s reach resolves to real ground — but an interior abutting
+ * outdoor ground would put grass along that seam, and would want a
  * material of its own rather than a better stand-in.
  */
 const FRINGE_STAND_IN_MATERIAL = 'grass';

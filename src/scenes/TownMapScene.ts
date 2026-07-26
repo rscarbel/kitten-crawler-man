@@ -6,8 +6,8 @@
  * The town is several screens wide in-game, so no in-game screenshot can show
  * whether a layout change worked. This scene draws the entire generated grid as
  * a flat schematic — one filled cell per tile — with building footprints, names,
- * the safe radius and the circus overlaid, plus the layout metrics the redesign
- * is measured against (see docs/town-redesign-progress.md).
+ * the safe radius and the circus overlaid, plus the layout metrics from
+ * townMetrics.ts (see docs/town.md).
  *
  * Two views, toggled by clicking:
  *

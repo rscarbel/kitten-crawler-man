@@ -195,8 +195,8 @@ export function generateOverworld(size: number): OverworldData {
   /**
    * The whole plot of each building — band top to frontage — which is what ground
    * scatter is suppressed over. Wider than the art on purpose: the ground a
-   * building's art does not cover is still its ground, and the redesign's plots
-   * are what the yards and gardens are cut from.
+   * building's art does not cover is still its ground, and the plots are what the
+   * yards and gardens are cut from.
    */
   const buildingPlots: TileRect[] = [];
   const namedPlots: TownPlot[] = [
@@ -432,9 +432,9 @@ function assertDoomsdayEscapeTileIsClear(grid: TileGrid, plan: TownPlan): void {
  * surfaces, the worn patches scattered over the tracks, and the things that stand
  * on them.
  *
- * Field grass and `GRASSY_WEED` are deliberately absent, which is what makes the
- * redesign's third principle — bare grass exists only outside the walls — a
- * checked property rather than a claim. So are `TREE`, `RUBBLE` and `RUINED_WALL`:
+ * Field grass and `GRASSY_WEED` are deliberately absent, which is what makes
+ * "bare grass exists only outside the walls" a checked property rather than a
+ * claim. So are `TREE`, `RUBBLE` and `RUINED_WALL`:
  * the wilderness passes are supposed to keep clear of the safe radius, and the
  * only evidence that they do is that nothing of theirs is ever found in here.
  */
@@ -587,11 +587,11 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * Fails generation if anything inside the walls has been sealed off from the
  * plaza.
  *
- * This is the check that caught the phase's worst defect, and it is here rather
- * than in a scratch script because of what that defect looked like: the Garrison
- * Green's corner post landed in the single-tile gap behind two cottages and
- * stranded **14 walkable tiles** — reachable in the Phase 3 town, dead in the
- * Phase 4 one, and *nothing about the finished map looked wrong*. No screenshot
+ * This is the check that caught the worst defect the town has had, and it is here
+ * rather than in a scratch script because of what that defect looked like: the
+ * Garrison Green's corner post landed in the single-tile gap behind two cottages
+ * and stranded **14 walkable tiles**, and *nothing about the finished map looked
+ * wrong*. No screenshot
  * shows it. None of the other five assertions can see it: the plan is sane, the
  * plots do not overlap, no sliver exists, every interior tile is a town surface,
  * and the escape tile is clear. Connectivity is a property of all of them
@@ -735,9 +735,9 @@ const CARDINAL_OFFSETS: ReadonlyArray<readonly [number, number]> = [
  * How wide a gap between two buildings has to be before it is a place rather
  * than a sliver.
  *
- * Redesign §3.4 states the rule as a pair: neighbours a tile or less apart share
- * a party line, and neighbours three or more apart get a yard. What it does not
- * say, and what this enforces, is that **nothing may land in between**. A two-tile
+ * The plot rule is a pair: neighbours a tile or less apart share a party line,
+ * and neighbours three or more apart get a yard. What the pair leaves unsaid, and
+ * what this enforces, is that **nothing may land in between**. A two-tile
  * slot between two facades is too narrow to furnish and too wide to read as a
  * shared wall; on the map it is a dead-end corridor the player can walk into and
  * a townsperson can be pathed into, and it is invisible in a screenshot because

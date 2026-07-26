@@ -253,8 +253,8 @@ export class TilePreviewScene extends Scene {
    * Pairs previewed as blended boundaries, softer material first.
    *
    * These should be the boundaries the maps actually draw, or the route stops
-   * being an acceptance test for them. The four town joints below are the ones
-   * Phase 3's street plan produces most of: `verge` against `lane` runs along every
+   * being a useful check on them. The four town joints below are the ones the
+   * town's street plan produces most of: `verge` against `lane` runs along every
    * frontage and every wall base, `verge` against `plaza` rings the market square,
    * `lane` against `plaza` is every lane mouth opening onto it, and `gravel`
    * against `lane` is every workyard's edge.

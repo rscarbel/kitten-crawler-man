@@ -3,8 +3,8 @@
  * speaker label and a list of lines, and Space/click walks through them (page
  * counter and all) before closing. Unlike `DialogBox`, the speaker is chosen
  * per-conversation, so the same instance can voice a guard, then a farmer, then
- * a child. Richer, context-aware line selection lands in Phase 3 (`townDialog`);
- * this is just the reusable surface.
+ * a child. Context-aware line selection lives in `townDialog`; this is just the
+ * reusable surface.
  */
 
 import { DialogBox, type RevealMode } from './DialogBox';

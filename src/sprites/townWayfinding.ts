@@ -1,7 +1,6 @@
 /**
- * Wayfinding furniture — the signposts, gate arches and bunting of plan §3.5's
- * tier 3. Where the shop signs say *what a building is*, these say *where you
- * are* and *which way is out*.
+ * Wayfinding furniture — signposts, gate arches and bunting. Where the shop signs
+ * say *what a building is*, these say *where you are* and *which way is out*.
  *
  * All three reach well above their own tile, so all three are drawn in the
  * Y-sorted prop pass rather than baked into the ground cache. The arch is the

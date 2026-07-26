@@ -55,8 +55,8 @@ const PROP_SEARCH_RADIUS = 4;
 
 // Benches flank the fountain, one either side, on its middle row. Derived from
 // the fountain's own tiles rather than from a copy of its plan offsets: those
-// offsets moved with the plaza in Phase 3, and a bench row hard-coded to the old
-// fountain would have sat in open flagstone with nothing to face.
+// offsets move with the plaza, and a bench row hard-coded to a stale fountain
+// position would sit in open flagstone with nothing to face.
 const BENCH_COLUMN_GAP = 2;
 
 // The fortune teller sits in the plaza's north-east quadrant, clear of the

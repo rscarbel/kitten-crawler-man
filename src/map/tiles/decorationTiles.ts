@@ -227,8 +227,7 @@ const FENCE_HIGHLIGHT_PX = 1;
  * facade were untouched, because a facade tile carries the *plan's* surface type
  * rather than `SPRITE_BUILDING`.
  *
- * **Phase 5 tried to close those sides through the sprite footprints and backed
- * the change out.** `getBlockedTileOffsetsByKey` is not an opacity test either:
+ * **Closing those sides through the sprite footprints was tried and backed out.** `getBlockedTileOffsetsByKey` is not an opacity test either:
  * `SpriteLoader` derives a footprint from the frame's whole width and height and
  * blocks all of it bar the doorway, so transparent sky and transparent side
  * columns are "blocked" exactly as solid wall is. Measured over the real grid,

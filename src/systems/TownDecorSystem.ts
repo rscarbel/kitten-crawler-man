@@ -1,7 +1,7 @@
 /**
  * The town's purely decorative street furniture — the props that make the Over
  * City read as somewhere people live rather than as a street plan with buildings
- * on it. Plan §3.5.
+ * on it.
  *
  * Kept apart from `TownPropSystem`, which owns the fixtures the player *acts on*
  * (the notice board, the seer, the heal spots). Nothing here has a Space-key
@@ -37,10 +37,10 @@ import type { TownPropRenderable } from './townPropRenderable';
 
 /**
  * Streets the town lights, by the plan's own surface names. Market Street and
- * Low Street are §3.3's two lit thoroughfares; King's Road is the arrival
+ * Low Street are the town's two lit thoroughfares; King's Road is the arrival
  * sightline from the south gate, and the two Low Quarter alleys are the reason
- * §3.5 asks for lamps at all — an unlit alley beside a nightclub is a corridor,
- * a lit one is a place.
+ * for lamps at all — an unlit alley beside a nightclub is a corridor, a lit one
+ * is a place.
  *
  * Names rather than tile types, because a tile type says what a street is paved
  * in and not which street it is: Market Street and the plaza's approaches are
@@ -103,8 +103,8 @@ interface ClutterPlacement {
  * Every piece of clutter in the town.
  *
  * **The smithy's gear is on The Rusty Anvil's own frontage, not in the Market
- * Row east workyard.** §3.3 asks for a smithy yard, and the Phase 3 review
- * established that this block cannot give it one: the Anvil fills columns 9–16
+ * Row east workyard.** The district wants a smithy yard, and this block cannot
+ * give it one: the Anvil fills columns 9–16
  * and the East Lane separates it from the yard at 20–27, so an anvil dropped in
  * that yard would be an anvil in someone else's yard. The yard gets the carting
  * gear it actually serves.
@@ -315,7 +315,7 @@ const GATEWAY_CULL_SLACK_TILES = 2;
  * Bunting spans, as an offset from the plaza centre and a width in tiles.
  *
  * Two spans over the civic terrace and one across the plaza's Market Street
- * frontage — §3.5's two named sites, the terrace getting a pair because it is ten
+ * frontage — the town's two bunting sites, the terrace getting a pair because it is ten
  * rows deep and one string across it reads as a stray rope. Both terrace spans
  * sit on terrace rows: the terrace runs y −18…−9 from the plaza centre, and an
  * earlier pair at −9 and −4 put the second one five rows inside the plaza.
@@ -434,7 +434,7 @@ export class TownDecorSystem implements GameSystem {
   }
 
   /**
-   * The carts, crates, troughs and yard gear of §3.5's tier 2.
+   * The town's carts, crates, troughs and yard gear.
    *
    * Every piece blocks its tile — a barrel you can walk through is worse than no
    * barrel — so each goes through the same connectivity check the lamps do. A

@@ -90,7 +90,7 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
 
 /**
  * The Desperado Club's VIP Lounge — the tasteful adaptation of the book's
- * members-only back room (see plan §3.7). Sells three premium coin sinks: a
+ * members-only back room. Sells three premium coin sinks: a
  * full heal, a short buff cocktail, and the Sledge/Bomo bodyguard escort. The
  * escort is free when the player's casino wagers this visit clear
  * {@link BODYGUARD_PAIR_PRICE} — the canon "spend enough at the tables and

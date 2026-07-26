@@ -16,8 +16,8 @@
  * per-building road stub entirely: a stub only exists because a building was
  * dropped in open space and had to be connected back to a road afterwards.
  *
- * See `docs/town-redesign.md` §3.2 and §4 for the street hierarchy and the
- * reference layout these coordinates realise.
+ * See `docs/town.md` for the street hierarchy and districts these coordinates
+ * realise, and for the invariants a layout change must preserve.
  */
 
 import type { FenceStyle } from '../tileTypes';
@@ -236,7 +236,7 @@ export interface PlannedYard {
  *
  * Only a name and a label anchor, because that is all anything asks for. An
  * earlier draft of this plan carried a `district` on every building and a
- * `TownDistrict` union, and the Phase 3 review removed both: their docs claimed
+ * `TownDistrict` union, and a later review removed both: their docs claimed
  * the minimap read them, and nothing did. They come back here with their
  * consumer, and no wider than it needs.
  *
@@ -302,8 +302,8 @@ export interface TownPlan {
  * lines; the interior is everything strictly inside them.
  *
  * 55 x 43 of interior. The 15 sprite buildings span rows -18..21, so their bounding
- * box is exactly the 55 x 40 the redesign targets; the three interior rows none of
- * them stands on are Low Street's, 22..24.
+ * box is 55 x 40; the three interior rows none of them stands on are Low Street's,
+ * 22..24.
  *
  * The band structure is not symmetric about the plaza, which is worth knowing before
  * reasoning about distances from it: Garrison Row starts on `INTERIOR_NORTH`, so the
@@ -394,7 +394,7 @@ const MURDER_ALLEY_EAST = 16;
 /**
  * The dead-end alley Blackwood Lodge fronts. It runs west off the West Lane along
  * the Garrison band's south face and stops at the wall, and the Lodge is the only
- * building on it — which is the cult hideout the plan asks for (§3.3) rather than a
+ * building on it — which is the cult hideout it is meant to be rather than a
  * lodge on a main lane. (Its door is at the alley's middle, not its end: the alley
  * runs three tiles further west to the wall.)
  */
@@ -504,8 +504,8 @@ function shift(rect: TileRect, centre: TilePoint): TileRect {
  *
  * Read this as four passes. The whole interior goes down as verge first, so
  * every tile inside the walls that nothing else claims is a kept, weed-invaded
- * surface rather than open field — which is design principle 3 of the redesign:
- * bare default grass exists only outside the walls. Then the yards, then alleys,
+ * surface rather than open field: bare default grass exists only outside the
+ * walls. Then the yards, then alleys,
  * lanes and the two main streets in order of importance, so a junction takes the
  * material of the more important street without any special case. The plaza and
  * terrace go last, which is what lets the Upper and Cross Lanes be stated as
@@ -537,12 +537,12 @@ const PLANNED_SURFACES: ReadonlyArray<PlannedSurface> = [
   /**
    * The open block east of the East Lane, level with Market Row.
    *
-   * Named for what it is, not for the smithy: plan §3.3 wants The Rusty Anvil's
-   * coal, anvil and quench trough in a yard, and this band is the only gravel in
-   * the row — but the Anvil fills columns 9..16 and the East Lane separates it
-   * from here, so nothing in this band adjoins the forge. Phase 4/5 has to either
-   * put the smithy's props on the Anvil's own Market Street frontage or re-cut
-   * this block; it must not just drop an anvil here and call it the forge's yard.
+   * Named for what it is, not for the smithy: The Rusty Anvil's coal, anvil and
+   * quench trough want a yard, and this band is the only gravel in the row — but
+   * the Anvil fills columns 9..16 and the East Lane separates it from here, so
+   * nothing in this band adjoins the forge. The smithy's props therefore live on
+   * the Anvil's own Market Street frontage; do not drop an anvil here and call it
+   * the forge's yard.
    */
   {
     name: 'Market Row east yard',
@@ -1057,7 +1057,7 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
 ];
 
 /**
- * The quarters §3.3 names, with an anchor each.
+ * The town's named quarters, with an anchor each.
  *
  * **Four, not five, and stacked vertically.** The expanded minimap draws one
  * pixel per tile, so the whole 55-tile town is 55 px across — and one of these

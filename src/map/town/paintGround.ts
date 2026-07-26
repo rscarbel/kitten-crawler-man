@@ -38,11 +38,11 @@ export function paintVoidBorder(grid: TileGrid, borderTiles: number): void {
  * and because grass is the softest material in the blend order it also becomes an
  * island the surrounding verge bleeds into through the corner masks, eroding the
  * tuft the tile exists to show. It put about four tiles of the wrong material
- * inside the walls per generation and falsified the redesign's third principle in
- * the only place that matters, which is what gets drawn. The verge material
+ * inside the walls per generation and broke the rule that every surface inside
+ * the walls is a decision, in the only place that matters — what gets drawn. The verge material
  * already depicts grass invaded by stone and weeds, so nothing is lost; planting
- * inside the walls is Phase 4/5's job, and a decoration for it needs its own tile
- * type mapping to `verge` rather than a reuse of the outdoor one.
+ * inside the walls is `paintYards`'s job, and any decoration for it needs its own
+ * tile type mapping to `verge` rather than a reuse of the outdoor one.
  */
 export function scatterGroundCover(
   grid: TileGrid,

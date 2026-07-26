@@ -44,10 +44,22 @@ Preview: on localhost open `?people` (`PersonPreviewScene`, hooked in `game.ts` 
 - These are game-world figures, so **raw `ctx` is correct here** — the `src/ui/*` helpers are
   for chrome only.
 
-## Populating the world (future)
+## Populating the world
 
-No town scene exists yet. To spawn wandering people, add a `GameSystem` (see `add-system`)
-that holds `{ x, y, facing, phase, appearance, seed }` per person, advances `phase`, moves +
-picks `facing` from velocity, and calls `drawPerson` Y-sorted into the render pipeline.
+`TownLifeSystem` already crowds the Over City and is the model to copy. It seeds four
+cohorts so life spreads across the village instead of pooling in the square: the **plaza
+crowd**, **frontage loiterers** anchored to a building's door, **travelers** walking long
+hops between distant street tiles, and **activity anchors** standing at a named fixture
+(a well, the smithy door, the club door). All four share one wander helper that respects
+walls, biases toward street tiles and keeps clear of doorways, and all four are exposed
+as a single crowd for the scene's Y-sorted render pass.
+
+Its wander radii (`PLAZA_RADIUS_TILES`, `DISTRICT_RADIUS_TILES`, `FRONTAGE_RADIUS_TILES`)
+are tuned to the town's extents — see the invariants table in `docs/town.md` before
+changing the layout under it.
+
+For a crowd somewhere else, add a `GameSystem` (see `add-system`) holding
+`{ x, y, facing, phase, appearance, seed }` per person, advance `phase`, move + pick
+`facing` from velocity, and call `drawPerson` Y-sorted into the render pipeline.
 
 Finish with the `dev-workflow` gates: `npm run typecheck`, `npm run lint`, `npm run format`.

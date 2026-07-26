@@ -14,7 +14,7 @@ prompted. Run `npx tsx scripts/generate-ground-tileset.ts` to rebuild everything
 > `overworld_tileset.png` needed hand-repair per tile and still didn't wrap
 > (measured: 6–11 mean edge error where seamless is 0–3; only 6 of its 132 tiles
 > were ever usable). Sampling noise on a torus makes it true by construction.
-> See `docs/town-redesign.md` §1.3 and §7 for the full measurements.
+> See `docs/town.md` for how the generated ground is wired into the town.
 
 ## Pipeline
 
@@ -156,4 +156,4 @@ across its 5th–95th percentile, which is precisely why it read as flat colour.
 
 - `add-level` — wiring a new tile type into `tileTypes.ts`, walkability, renderers
 - `add-sprite` — creature/item/prop art (a different pipeline; not generated)
-- `docs/town-redesign.md` — why this exists, and the plan it belongs to
+- `docs/town.md` — how the overworld town consumes these materials
