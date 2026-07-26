@@ -144,6 +144,8 @@ const SOUND_IDS_TUPLE = [
   'wood_breaking_1',
   'wood_breaking_2',
   'wood_breaking_3',
+  'wood_smashing_1',
+  'wood_smashing_2',
 ] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
@@ -305,6 +307,8 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   wood_breaking_1: './src/audio/effects/wood_breaking_1.mp3',
   wood_breaking_2: './src/audio/effects/wood_breaking_2.mp3',
   wood_breaking_3: './src/audio/effects/wood_breaking_3.mp3',
+  wood_smashing_1: './src/audio/effects/wood_smashing_1.mp3',
+  wood_smashing_2: './src/audio/effects/wood_smashing_2.mp3',
 };
 
 /** The Desperado Club's rotating soundtrack — a shuffled, looping playlist entered on club arrival. */
