@@ -16,7 +16,10 @@ import {
   TORCH,
   WELL,
   DIRT_PATCH,
+  FENCE,
+  GARDEN_PLANTING,
   GRASSY_WEED,
+  VERGE_GRASS,
   TABLE,
   BOOKSHELF,
   BED,
@@ -108,6 +111,12 @@ const NON_FLOOR_TYPES = new Set<number>([
   MODERN_DECORATION,
   RUINED_WALL,
   TOWN_WALL,
+  // Defence in depth rather than a live branch: every fence is written with
+  // `setStanding`, so `floorTypeAt` answers from its recorded ground and returns
+  // before this set is consulted. A fence written with a plain `set` would also
+  // have had its record cleared, so this only catches a fence that arrived by
+  // some third route — at which point "not floor" is the right answer.
+  FENCE,
 ]);
 
 /**
@@ -118,10 +127,18 @@ function floorTypeAt(structure: TileContent[][], tx: number, ty: number): number
   if (ty < 0 || ty >= structure.length) return undefined;
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return undefined;
+  // A prop that recorded the surface it replaced *is* a floor answer, and a good
+  // one: a probe reaching a fence and skipping past it throws away the only tile
+  // nearby that knows what the ground is.
+  const recorded = row[tx].groundType;
+  if (recorded !== undefined) return recorded;
   const t = row[tx].type;
   if (NON_FLOOR_TYPES.has(t)) return undefined;
   if (t === GRASSY_WEED || t === RUBBLE) return FloorTypeValue.grass;
   if (t === DIRT_PATCH) return FloorTypeValue.road;
+  // Planting is a decoration drawn over the town's soft ground, exactly as the
+  // two above are over field grass and packed earth.
+  if (t === GARDEN_PLANTING) return VERGE_GRASS;
   return t;
 }
 
@@ -133,6 +150,11 @@ function floorTypeAt(structure: TileContent[][], tx: number, ty: number): number
  * Falls back to FloorTypeValue.concrete (dungeon floor) when no floor tile is found.
  */
 export function inferFloorType(structure: TileContent[][], tx: number, ty: number): number {
+  // A prop that recorded the surface it replaced does not need inferring, and
+  // must not be: the probe below takes the first cardinal it finds, starting
+  // south, so a prop on a region's south edge would take the floor outside it.
+  const recorded = structure[ty]?.[tx]?.groundType;
+  if (recorded !== undefined) return recorded;
   for (const [dx, dy] of CARDINAL_DIRS) {
     const found = floorTypeAt(structure, tx + dx, ty + dy);
     if (found !== undefined) return found;

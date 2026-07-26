@@ -7,6 +7,8 @@ import {
   WELL,
   GRASSY_WEED,
   DIRT_PATCH,
+  FENCE,
+  GARDEN_PLANTING,
   BARREL_SIDE,
   CRATE,
   BRAZIER,
@@ -15,6 +17,7 @@ import {
   SPRITE_BUILDING,
   MODERN_DECORATION,
   RUBBLE,
+  TOWN_WALL,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -43,6 +46,283 @@ const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
 /** Playback rate of animated overlay states composited onto sprite buildings. */
 const SPRITE_BUILDING_OVERLAY_FPS = 8;
+
+/**
+ * Tilled rows, as fractions of the tile.
+ *
+ * Fixed fractions rather than hashed positions, which is the whole point: every
+ * planted tile puts its furrows at the same heights, so a run of them across a
+ * garden lines up into continuous beds instead of reading as scattered tufts.
+ */
+const PLANTING_FURROW_FRACTIONS = [0.22, 0.5, 0.78] as const;
+/** Index of the furrow a crop head sits on — the middle one. */
+const PLANTING_MIDDLE_FURROW = 1;
+const PLANTING_FURROW_HEIGHT_PX = 3;
+const PLANTING_SHOOTS_PER_FURROW = 4;
+const PLANTING_SHOOT_HEIGHT_PX = 5;
+const PLANTING_SHOOT_WIDTH_PX = 2;
+/** Puts a shoot in the middle of its slot rather than on the slot's edge. */
+const PLANTING_SLOT_CENTRE = 0.5;
+/** About one planted tile in five carries a full head rather than shoots. */
+const PLANTING_CROP_HEAD_PERIOD = 5;
+const PLANTING_CROP_HEAD_RADIUS_PX = 4;
+const PLANTING_CROP_HEART_RADIUS_PX = 2;
+
+/**
+ * Per-tile jitter for the shoots, so a bed does not read as graph paper.
+ *
+ * Small odd multipliers and a prime modulus: this is decoration, not the ground
+ * variant hash, so it needs to look unpatterned rather than to survive an
+ * avalanche test.
+ */
+const PLANTING_JITTER_HASH_X = 31;
+const PLANTING_JITTER_HASH_Y = 17;
+const PLANTING_JITTER_MODULUS = 97;
+const PLANTING_WOBBLE_FURROW_STEP = 7;
+const PLANTING_WOBBLE_SHOOT_STEP = 3;
+/** Wobble lands in [-1, 1] px: span 3 offset by 1. */
+const PLANTING_WOBBLE_SPAN = 3;
+const PLANTING_WOBBLE_CENTRE = 1;
+const PLANTING_HEAD_HASH_X = 7;
+const PLANTING_HEAD_HASH_Y = 13;
+
+/**
+ * Planting colours, sampled against the generated `verge` row rather than picked
+ * by eye — the recurring defect of this rendering work has been a colour written
+ * from memory of the retired tileset, which put mint tufts on an olive lawn.
+ */
+const PLANTING_SOIL_COLOR = 'rgba(58,42,24,0.42)';
+const PLANTING_LEAF_COLOR = '#7c8f3e';
+const PLANTING_LEAF_DARK_COLOR = '#556228';
+
+/**
+ * Fence geometry, in tile fractions so it holds at any tile size.
+ *
+ * The rails sit above the tile's vertical middle and the post's foot below it, so
+ * the fence reads as standing on the ground rather than lying on it — without
+ * drawing outside its own tile, which is what lets the chunk-cached and direct
+ * render paths stay identical.
+ */
+const FENCE_POST_TOP_FRACTION = 0.24;
+const FENCE_POST_BOTTOM_FRACTION = 0.84;
+const FENCE_POST_WIDTH_PX = 4;
+const FENCE_RAIL_FRACTIONS = [0.36, 0.62] as const;
+const FENCE_RAIL_THICKNESS_PX = 3;
+
+const FENCE_POST_COLOR = '#6a5334';
+const FENCE_POST_SHADE_COLOR = '#4c3b24';
+const FENCE_RAIL_COLOR = '#7e6642';
+const FENCE_RAIL_HIGHLIGHT_COLOR = '#967d54';
+/** Ground shadow cast by the fence onto its own tile. */
+const FENCE_SHADOW_COLOR = 'rgba(0,0,0,0.22)';
+const FENCE_SHADOW_HEIGHT_PX = 3;
+/** Lit edge on a rail or post: one pixel, at any tile size. */
+const FENCE_HIGHLIGHT_PX = 1;
+
+/**
+ * What a fence rail may run into: another fence, or something whose art fills its
+ * own tile solidly enough to nail one to.
+ *
+ * Terminating only at fence tiles leaves a run stopping at the centre of its last
+ * tile whenever the thing closing the enclosure is not itself a fence — the town
+ * wall, or the side-gate torch that closes Miller's kitchen garden, where the rail
+ * ended a tile and a half short of what it was supposed to meet.
+ *
+ * **`SPRITE_BUILDING` and `MAIN_TOWER` are deliberately absent**, and the reason is
+ * the one this whole phase keeps rediscovering: a building is *one anchor tile*,
+ * and that tile is the **top-left of its art rect** — transparent sky above the
+ * roof. Including them fired on two tiles in the whole town, both gate cheeks that
+ * happened to sit above an anchor, and hung a rail off into open verge with the
+ * roof half a tile (Miller's) and 1.84 tiles (Signet's) further down, measured by
+ * alpha-scanning the rendered art. Meanwhile the 43 sides that really do abut a
+ * facade were untouched, because a facade tile carries the *plan's* surface type
+ * rather than `SPRITE_BUILDING`.
+ *
+ * Closing those 43 properly needs the sprite footprints — the same question
+ * `underSpriteArt` answers for the occlusion pass — but a footprint is not opacity
+ * either: it includes the transparent rows above a roof, which is exactly what
+ * produced the two bad anchors. That is a Phase 5 job with the signage work, not a
+ * set membership.
+ */
+export const FENCE_ANCHOR_TYPES: ReadonlySet<number> = new Set<number>([
+  FENCE,
+  TOWN_WALL,
+  TORCH,
+  WELL,
+  FOUNTAIN,
+]);
+
+function anchorsRailAt(structure: TileContent[][], tx: number, ty: number): boolean {
+  // Off-map reads land on `undefined`, which the set simply does not hold — the
+  // same idiom the neighbouring tile probes in this file use.
+  return FENCE_ANCHOR_TYPES.has(structure[ty]?.[tx]?.type);
+}
+
+/**
+ * A post-and-rail fence tile: a post at the tile's centre, and rails running
+ * from it **only towards neighbours that are also fence**.
+ *
+ * Every measurement here is half a tile, from the post outwards, and that is the
+ * whole design. Drawing a rail edge to edge whenever the run has *either* an east
+ * or a west neighbour leaves half a tile of timber hanging into open ground at
+ * every run end and every corner — 34 dangling half-rails on the town's 75 fence
+ * tiles. Two tiles either side of a joint each draw their own half, so a
+ * continuous run still looks continuous.
+ *
+ * The two axes are drawn as what they are. A run seen side-on shows two rails
+ * between its posts and casts its shadow across the tile. A run seen end-on is
+ * foreshortened to a single line of timber with a narrow shadow under it, and its
+ * post is a cap rather than the tall upright — an upright drawn on an end-on run
+ * only spans 24%–84% of the tile, so the run reads as a dashed string.
+ *
+ * A lone tile with no fence neighbour at all is a gate cheek — a perimeter is
+ * never one tile long — and draws its post alone. Rails to nowhere on both sides
+ * are what it used to draw, and a cheek is exactly where a rail stops.
+ */
+function drawFence(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const hasWest = anchorsRailAt(structure, tx - 1, ty);
+  const hasEast = anchorsRailAt(structure, tx + 1, ty);
+  const hasNorth = anchorsRailAt(structure, tx, ty - 1);
+  const hasSouth = anchorsRailAt(structure, tx, ty + 1);
+  const runsEastWest = hasWest || hasEast;
+  const runsNorthSouth = hasNorth || hasSouth;
+
+  const centreX = sx + Math.round(ts / 2);
+  const centreY = sy + Math.round(ts / 2);
+  const westEdge = hasWest ? sx : centreX;
+  const eastEdge = hasEast ? sx + ts : centreX;
+  const northEdge = hasNorth ? sy : centreY;
+  const railX = centreX - Math.floor(FENCE_RAIL_THICKNESS_PX / 2);
+  const postTop = sy + Math.round(ts * FENCE_POST_TOP_FRACTION);
+  const postBottom = sy + Math.round(ts * FENCE_POST_BOTTOM_FRACTION);
+  const southEdge = hasSouth ? sy + ts : centreY;
+  // The shadow's band, unlike the rail's, has to reach down to the east-west bar
+  // on a corner, or the two leave an 8 px nick where the run turns. They are
+  // drawn as one path, so the overlap costs nothing.
+  const shadowSouthEdge = hasSouth ? sy + ts : runsEastWest ? postBottom : centreY;
+
+  // One path, two rectangles: filled twice, the shared corner composites to 0.39
+  // alpha against 0.22 either side and reads as a smudge. Nonzero winding fills
+  // the union exactly once.
+  ctx.fillStyle = FENCE_SHADOW_COLOR;
+  ctx.beginPath();
+  if (runsEastWest) {
+    ctx.rect(
+      westEdge,
+      postBottom - FENCE_SHADOW_HEIGHT_PX,
+      eastEdge - westEdge,
+      FENCE_SHADOW_HEIGHT_PX,
+    );
+  }
+  if (!runsEastWest && !runsNorthSouth) {
+    // A gate cheek stands on its own and still casts a shadow. It had one before
+    // the rails became directional, and losing it made the two cheeks in the town
+    // read as floating.
+    ctx.rect(
+      centreX - FENCE_POST_WIDTH_PX,
+      postBottom - FENCE_SHADOW_HEIGHT_PX,
+      FENCE_POST_WIDTH_PX * 2,
+      FENCE_SHADOW_HEIGHT_PX,
+    );
+  }
+  if (runsNorthSouth) {
+    ctx.rect(
+      centreX - FENCE_POST_WIDTH_PX,
+      northEdge,
+      FENCE_POST_WIDTH_PX * 2,
+      shadowSouthEdge - northEdge,
+    );
+  }
+  ctx.fill();
+
+  if (runsEastWest) {
+    for (const railFraction of FENCE_RAIL_FRACTIONS) {
+      const railY = sy + Math.round(ts * railFraction);
+      ctx.fillStyle = FENCE_RAIL_COLOR;
+      ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_RAIL_THICKNESS_PX);
+      ctx.fillStyle = FENCE_RAIL_HIGHLIGHT_COLOR;
+      ctx.fillRect(westEdge, railY, eastEdge - westEdge, FENCE_HIGHLIGHT_PX);
+    }
+  }
+  if (runsNorthSouth) {
+    ctx.fillStyle = FENCE_RAIL_COLOR;
+    ctx.fillRect(railX, northEdge, FENCE_RAIL_THICKNESS_PX, southEdge - northEdge);
+    ctx.fillStyle = FENCE_RAIL_HIGHLIGHT_COLOR;
+    ctx.fillRect(railX, northEdge, FENCE_HIGHLIGHT_PX, southEdge - northEdge);
+  }
+
+  const postX = centreX - Math.floor(FENCE_POST_WIDTH_PX / 2);
+  // An end-on run shows the post's cap, not its full height. A corner counts as
+  // side-on: it has an east-west rail to carry, so it needs the upright.
+  const top = runsEastWest || !runsNorthSouth ? postTop : centreY - FENCE_POST_WIDTH_PX;
+  const bottom = runsEastWest || !runsNorthSouth ? postBottom : centreY + FENCE_POST_WIDTH_PX;
+  ctx.fillStyle = FENCE_POST_COLOR;
+  ctx.fillRect(postX, top, FENCE_POST_WIDTH_PX, bottom - top);
+  ctx.fillStyle = FENCE_POST_SHADE_COLOR;
+  ctx.fillRect(
+    postX + FENCE_POST_WIDTH_PX - FENCE_HIGHLIGHT_PX,
+    top,
+    FENCE_HIGHLIGHT_PX,
+    bottom - top,
+  );
+}
+
+/** A bed of tilled rows with shoots, and now and then a full crop head. */
+function drawGardenPlanting(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const jitter =
+    (tx * PLANTING_JITTER_HASH_X + ty * PLANTING_JITTER_HASH_Y) % PLANTING_JITTER_MODULUS;
+
+  for (let furrow = 0; furrow < PLANTING_FURROW_FRACTIONS.length; furrow++) {
+    const rowY = sy + Math.round(ts * PLANTING_FURROW_FRACTIONS[furrow]);
+    ctx.fillStyle = PLANTING_SOIL_COLOR;
+    ctx.fillRect(sx, rowY, ts, PLANTING_FURROW_HEIGHT_PX);
+
+    for (let shoot = 0; shoot < PLANTING_SHOOTS_PER_FURROW; shoot++) {
+      const slot = Math.round((ts * (shoot + PLANTING_SLOT_CENTRE)) / PLANTING_SHOOTS_PER_FURROW);
+      const wobbleSeed = furrow * PLANTING_WOBBLE_FURROW_STEP + shoot * PLANTING_WOBBLE_SHOOT_STEP;
+      const wobble = ((jitter * (wobbleSeed + 1)) % PLANTING_WOBBLE_SPAN) - PLANTING_WOBBLE_CENTRE;
+      const shootX = sx + slot + wobble;
+      if (shootX < sx || shootX + PLANTING_SHOOT_WIDTH_PX > sx + ts) continue;
+      ctx.fillStyle = (shoot + furrow) % 2 === 0 ? PLANTING_LEAF_COLOR : PLANTING_LEAF_DARK_COLOR;
+      ctx.fillRect(
+        shootX,
+        rowY - PLANTING_SHOOT_HEIGHT_PX,
+        PLANTING_SHOOT_WIDTH_PX,
+        PLANTING_SHOOT_HEIGHT_PX,
+      );
+    }
+  }
+
+  const carriesHead =
+    (tx * PLANTING_HEAD_HASH_X + ty * PLANTING_HEAD_HASH_Y) % PLANTING_CROP_HEAD_PERIOD === 0;
+  if (!carriesHead) return;
+  const headX = sx + Math.round(ts / 2);
+  const middleFurrow = PLANTING_FURROW_FRACTIONS[PLANTING_MIDDLE_FURROW];
+  const headY = sy + Math.round(ts * middleFurrow) - PLANTING_CROP_HEAD_RADIUS_PX;
+  ctx.fillStyle = PLANTING_LEAF_COLOR;
+  ctx.beginPath();
+  ctx.arc(headX, headY, PLANTING_CROP_HEAD_RADIUS_PX, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PLANTING_LEAF_DARK_COLOR;
+  ctx.beginPath();
+  ctx.arc(headX, headY, PLANTING_CROP_HEART_RADIUS_PX, 0, Math.PI * 2);
+  ctx.fill();
+}
 
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
@@ -273,6 +553,20 @@ export function drawDecorationTile(
         ctx.arc(fx, fy, 1, 0, Math.PI * 2);
         ctx.fill();
       }
+      return true;
+    }
+
+    // Garden planting — walkable verge tile carrying tilled rows and shoots.
+    case GARDEN_PLANTING: {
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGardenPlanting(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // Yard fence — a post-and-rail line standing on whatever surface it encloses.
+    case FENCE: {
+      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawFence(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
 

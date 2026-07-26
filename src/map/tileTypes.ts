@@ -136,6 +136,23 @@ export const COBBLE_STREET = 60;
 export const PLAZA_STONE = 61;
 
 /**
+ * Tile type for a post-and-rail fence enclosing a yard or garden — not walkable.
+ *
+ * A fence stands *on* ground rather than being ground, so it has no material of
+ * its own: `groundMaterialUnder` infers whatever surface it was driven into.
+ */
+export const FENCE = 62;
+/**
+ * Tile type for planting inside the walls — herb beds and vegetable rows, walkable.
+ *
+ * Its own type rather than a reuse of `GRASSY_WEED` because a decoration reports
+ * the material it is painted *over*, and the town's soft ground is the verge while
+ * `GRASSY_WEED`'s is field grass. Planted on a verge, `GRASSY_WEED` drew the wrong
+ * sheet row and the surrounding verge then eroded it through the corner masks.
+ */
+export const GARDEN_PLANTING = 63;
+
+/**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
  * that are walkable floor clutter — cables, rubble, flat debris, etc.
  * All other variants are non-walkable furniture/equipment.
@@ -198,4 +215,17 @@ export type TileContent = {
   spriteKey?: string;
   /** Set on MODERN_DECORATION tiles: row * 10 + col within modern_decorations.png. */
   decorationVariant?: number;
+  /**
+   * The floor a prop was driven into, for props whose own type replaces it.
+   *
+   * A tile carries one type, so writing a `FENCE` over a verge loses the fact
+   * that it was a verge — and the renderers then fall back to inferring the floor
+   * from the neighbours, which takes the **first cardinal**, and that probe starts
+   * with the tile to the south. Every fence on a yard's southern perimeter
+   * therefore rendered as the street outside the yard: 17 of 75 fence tiles, with
+   * a whole cobbled row drawn inside the Market Row workyard. Recording the
+   * surface at paint time is the only answer that does not depend on which
+   * neighbour a probe happens to reach first.
+   */
+  groundType?: number;
 };

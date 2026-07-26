@@ -11,17 +11,31 @@ import { FOUNTAIN, TORCH, WELL } from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { TilePoint, TownPlan } from './townPlan';
 
+/**
+ * Every prop is written with `setStanding`, so it remembers the surface it was
+ * placed on.
+ *
+ * A prop's own type replaces the ground's, and the renderers then infer a floor
+ * from the first cardinal neighbour they find — a probe that starts to the south
+ * and skips anything that is not floor. The west side-gate torch stands on the
+ * verge strip inside the wall with the fence south of it, the wall west of it and
+ * **Market Street's cobble to the north**, so it drew a full tile of cobble
+ * jutting down into the verge. Its mirror at the east gate has the identical
+ * neighbourhood and drew verge — only because the tile south of it happened to be
+ * planted that generation. Two identical props, opposite results, decided by a
+ * dice roll in `plantGardens`; recording the surface removes the dice.
+ */
 export function paintTownProps(grid: TileGrid, plan: TownPlan): void {
   for (const prop of plan.props) {
     switch (prop.kind) {
       case 'fountain':
-        grid.fill(prop.bounds, FOUNTAIN);
+        grid.fillStanding(prop.bounds, FOUNTAIN);
         break;
       case 'torch':
-        grid.set(prop.tile.x, prop.tile.y, TORCH);
+        grid.setStanding(prop.tile.x, prop.tile.y, TORCH);
         break;
       case 'well':
-        grid.set(prop.tile.x, prop.tile.y, WELL);
+        grid.setStanding(prop.tile.x, prop.tile.y, WELL);
         break;
     }
   }

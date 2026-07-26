@@ -23,6 +23,7 @@ import {
   COBBLE_STREET,
   DIRT_PATCH,
   FloorTypeValue,
+  GARDEN_PLANTING,
   GRASSY_WEED,
   LANE_STREET,
   PLAZA_STONE,
@@ -204,6 +205,7 @@ export function groundMaterialForTileType(type: number): GroundMaterial | undefi
     case TREE:
       return 'grass';
     case VERGE_GRASS:
+    case GARDEN_PLANTING:
       return 'verge';
     case FloorTypeValue.road:
     case DIRT_PATCH:

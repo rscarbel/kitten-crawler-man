@@ -2,7 +2,9 @@ import type { TileContent } from './tileTypes';
 import {
   COBBLE_STREET,
   DIRT_PATCH,
+  FENCE,
   FOUNTAIN,
+  GARDEN_PLANTING,
   FloorTypeValue,
   LANE_STREET,
   PLAZA_STONE,
@@ -29,6 +31,7 @@ import {
   type TileRect,
   type TownPlan,
 } from './town/townPlan';
+import { getBlockedTileOffsets, getBlockedTileOffsetsByKey } from '../core/SpriteLoader';
 import { placeSpriteBuilding, towerBasePlot, towerDoorTile } from './town/paintPlots';
 import {
   connectSiteToNearestGate,
@@ -39,6 +42,12 @@ import {
   paintWallRing,
 } from './town/paintStreets';
 import { paintVoidBorder, scatterGroundCover } from './town/paintGround';
+import {
+  assertYardsStandOnTheirOwnSurface,
+  paintYardFences,
+  plantGardens,
+  yardPlots,
+} from './town/paintYards';
 import { fountainCentre, paintTownProps } from './town/townProps';
 
 export interface BuildingEntry {
@@ -140,17 +149,31 @@ export function generateOverworld(size: number): OverworldData {
     type: plan.tower.kind,
   });
 
-  // Collected so ground scatter can be suppressed beneath each building's art.
-  // The tower is deliberately absent: its spire is transparent overhang, and the
-  // ground under it should keep whatever the plan painted there.
-  const spritePlots: TileRect[] = [];
+  // The art rects: what a fence must not be driven through, and what a plot's
+  // own back garden is measured against. The tower is deliberately absent — its
+  // spire is transparent overhang, and the ground under it should keep whatever
+  // the plan painted there.
+  const buildingArt: TileRect[] = [];
+  /**
+   * The whole plot of each building — band top to frontage — which is what ground
+   * scatter is suppressed over. Wider than the art on purpose: the ground a
+   * building's art does not cover is still its ground, and the redesign's plots
+   * are what the yards and gardens are cut from.
+   */
+  const buildingPlots: TileRect[] = [];
   const namedPlots: TownPlot[] = [
     // The only plot allowed to stand on the wall: the tower *is* part of it.
     { name: plan.tower.name, rect: towerBasePlot(plan), container: 'north wall' },
   ];
   for (const planned of plan.buildings) {
     const placement = placeSpriteBuilding(grid, plan, planned);
-    spritePlots.push(placement.rect);
+    buildingArt.push(placement.rect);
+    buildingPlots.push({
+      x: placement.rect.x,
+      y: plan.centre.y + planned.plotTop,
+      w: placement.rect.w,
+      h: planned.frontRow - planned.plotTop + 1,
+    });
     namedPlots.push({ name: planned.name, rect: placement.rect, container: 'interior' });
     buildingEntries.push({
       doorTile: placement.doorTile,
@@ -160,6 +183,7 @@ export function generateOverworld(size: number): OverworldData {
     paintDoorApron(grid, placement);
   }
   assertTownPlotsDoNotOverlap(plan, namedPlots);
+  assertNoUnusableSlivers(namedPlots);
 
   // The circus's tents, and nothing of the town's — see `paintBuildingBypassRoutes`
   // for why the town's own blocks must be left out of bypass routing. The tent
@@ -181,7 +205,22 @@ export function generateOverworld(size: number): OverworldData {
   grid.set(mainTowerAnchor.x, mainTowerAnchor.y, MAIN_TOWER);
 
   paintTownProps(grid, plan);
-  scatterGroundCover(grid, plan, BORDER, spritePlots);
+  // The yards go in after every pass that writes town ground unconditionally. An
+  // earlier draft ran the surface check before the wilderness and prop passes on
+  // the reasoning that fences would otherwise be what it found — which made it
+  // blind to the two writers that can actually reach a yard, and it missed the
+  // east side-gate torch standing inside Miller's kitchen garden.
+  //
+  // Three passes still run after it, and each is accounted for rather than
+  // assumed harmless: the fence and planting painters, which it exists to
+  // protect, and `scatterGroundCover`, which is held off the yards by being
+  // passed `yardPlots(plan)` rather than by running later. That last one is a
+  // suppression argument, not an ordering guarantee, so it is the one to check
+  // if a yard ever grows a weed.
+  assertYardsStandOnTheirOwnSurface(grid, plan, buildingArt);
+  paintYardFences(grid, plan, buildingArt);
+  plantGardens(grid, plan, buildingArt);
+  scatterGroundCover(grid, plan, BORDER, [...buildingPlots, ...yardPlots(plan)]);
   // Both checks run over the *finished* grid, which is load-bearing rather than
   // tidy. The scatter pass is itself something that has put the wrong material
   // inside the walls, and `paintTownProps` is the only writer of the wells and the
@@ -194,6 +233,7 @@ export function generateOverworld(size: number): OverworldData {
     x: plan.plaza.x + Math.floor(plan.plaza.w / 2),
     y: plan.plaza.y + Math.floor(plan.plaza.h / 2),
   };
+  assertTownIsFullyReachable(grid, plan, townSquareCentre, buildingEntries);
 
   return {
     grid: grid.cells,
@@ -370,6 +410,8 @@ const TOWN_INTERIOR_TILE_TYPES: ReadonlySet<number> = new Set<number>([
   TORCH,
   WELL,
   FOUNTAIN,
+  FENCE,
+  GARDEN_PLANTING,
 ]);
 
 /** How many packed-earth track tiles stand inside the wall, worn patches included. */
@@ -501,6 +543,201 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
 }
 
 /**
+ * Fails generation if anything inside the walls has been sealed off from the
+ * plaza.
+ *
+ * This is the check that caught the phase's worst defect, and it is here rather
+ * than in a scratch script because of what that defect looked like: the Garrison
+ * Green's corner post landed in the single-tile gap behind two cottages and
+ * stranded **14 walkable tiles** — reachable in the Phase 3 town, dead in the
+ * Phase 4 one, and *nothing about the finished map looked wrong*. No screenshot
+ * shows it. None of the other five assertions can see it: the plan is sane, the
+ * plots do not overlap, no sliver exists, every interior tile is a town surface,
+ * and the escape tile is clear. Connectivity is a property of all of them
+ * together, so it has to be checked over the finished grid.
+ *
+ * It is also reachable by an *art* change that never touches the plan, which is
+ * the class of failure this phase has hit twice.
+ *
+ * **The sweep is confined to the wall's interior, and so is the fill**, which makes
+ * this a stricter property than "reachable": getting from one part of the town to
+ * another must not require leaving it and walking round the outside. It is also
+ * what makes throwing safe. Everything blocking movement in here is plan-derived
+ * and deterministic — the nearest a circus tent comes to the interior is 23 tiles,
+ * measured over 30 generations rather than derived from `CIRCUS_MIN_DIST`, which is
+ * a clearance from the town *centre* and not from the wall; the forests keep 65 and
+ * skip anything paved; the ruins and rubble need bare grass of which the
+ * interior has none, and both scatter passes write walkable decorations — so a
+ * failure is a layout bug in the plan rather than a bad roll of the dice.
+ *
+ * The **Big Top is deliberately not checked**, and the reason is exactly that
+ * distinction. It stands outside the walls at a random distance, and below about
+ * map size 200 the circus can be placed far enough out to be clipped by the void
+ * border: measured over 100 generations, **about half** of them at size 120 and half
+ * at size 150 would throw `The door of 'Big Top' cannot be reached from the plaza`.
+ * (Two separate 20-sample runs put 120 above and below 150 respectively, so no
+ * ordering between the two sizes is claimed — only that it is a coin toss at both.)
+ * The only
+ * overworld size in the game is 280, where it never fires — but an assertion whose
+ * trigger is a dice roll must not be one that crashes generation, and this one is
+ * about the *town*.
+ *
+ * One size limit remains and is worth stating rather than discovering: the town is
+ * 55 x 43 and `FOREST_MIN_DIST_TILES` is 65, so below roughly map size 150 the
+ * forests are placed *inside* the walls and a tree can strand a tile. Measured,
+ * 100/100 generations pass at 150, 200 and 280, and roughly 5 in 6 at 120 — where
+ * `assertTownInteriorIsIntact` is already warning about trees in the town, so the
+ * map is broken at that size with or without this check.
+ *
+ * The blocking set has to include the building art, which is not a tile type: a
+ * building is one anchor tile, and `GameMap` reconstructs the rest from the sprite
+ * manifest into `extraBlockedTiles`. Checking tile types alone would walk straight
+ * through every facade in the town.
+ *
+ * It is rebuilt here the way `GameMap` rebuilds it — from the anchors on the
+ * finished grid, by sprite key where there is one and by tile type otherwise —
+ * rather than from the art rects the generator already has. Those are two
+ * different sets, and the difference is exactly the doorway: the first draft of
+ * this check used the art rects and immediately failed with `The door of
+ * 'Blackwood Lodge' cannot be reached from the plaza`, because a doorway is inside
+ * its building's art and is the one tile of it that is not blocked. A connectivity
+ * check that disagrees with the collision model is worse than none — which is also
+ * why the type branch is `getBlockedTileOffsets(tile.type)` and not a test for
+ * `MAIN_TOWER`: `WELL` declares two blocked offsets of its own, and naming the
+ * tower explicitly left the two tiles north of each plaza well walkable here and
+ * blocked in the game.
+ */
+function assertTownIsFullyReachable(
+  grid: TileGrid,
+  plan: TownPlan,
+  from: TilePoint,
+  entries: ReadonlyArray<BuildingEntry>,
+): void {
+  const size = grid.size;
+  const { interior } = plan;
+  const inTown = (x: number, y: number) =>
+    x >= interior.x &&
+    y >= interior.y &&
+    x < interior.x + interior.w &&
+    y < interior.y + interior.h;
+
+  const blockedByArt = new Set<number>();
+  for (let y = interior.y; y < interior.y + interior.h; y++) {
+    for (let x = interior.x; x < interior.x + interior.w; x++) {
+      const tile = grid.cells[y][x];
+      const offsets =
+        tile.spriteKey !== undefined
+          ? getBlockedTileOffsetsByKey(tile.spriteKey)
+          : getBlockedTileOffsets(tile.type);
+      for (const offset of offsets) blockedByArt.add((y + offset.dy) * size + (x + offset.dx));
+    }
+  }
+
+  const walkable = (x: number, y: number) => {
+    if (!inTown(x, y)) return false;
+    const type = grid.typeAt(x, y);
+    if (type === undefined || grid.isSolid(x, y)) return false;
+    if (type === TORCH || type === WELL || type === FOUNTAIN) return false;
+    return !blockedByArt.has(y * size + x);
+  };
+
+  const seen = new Set<number>([from.y * size + from.x]);
+  const queue: TilePoint[] = [from];
+  while (queue.length > 0) {
+    const tile = queue.pop();
+    if (tile === undefined) break;
+    for (const [dx, dy] of CARDINAL_OFFSETS) {
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      const key = y * size + x;
+      if (seen.has(key) || !walkable(x, y)) continue;
+      seen.add(key);
+      queue.push({ x, y });
+    }
+  }
+  const reached = (x: number, y: number) => seen.has(y * size + x);
+
+  for (let y = interior.y; y < interior.y + interior.h; y++) {
+    for (let x = interior.x; x < interior.x + interior.w; x++) {
+      if (!walkable(x, y) || reached(x, y)) continue;
+      throw new Error(
+        `Tile ${x - plan.centre.x},${y - plan.centre.y} inside the town wall is walkable but ` +
+          `cannot be reached from the plaza`,
+      );
+    }
+  }
+
+  // A door and the tile you are returned to on leaving it. A door is not covered
+  // by the sweep above — every one of them is blocked art — and a door nobody can
+  // walk to is a building nobody can enter.
+  for (const entry of entries) {
+    const { doorTile } = entry;
+    if (!inTown(doorTile.x, doorTile.y)) continue;
+    if (!reached(doorTile.x, doorTile.y)) {
+      throw new Error(`The door of '${entry.name}' cannot be reached from the plaza`);
+    }
+    if (!reached(doorTile.x, doorTile.y + 1)) {
+      throw new Error(`Leaving '${entry.name}' would put the player on an unreachable tile`);
+    }
+  }
+}
+
+/** Four-neighbourhood, for the flood fill above. */
+const CARDINAL_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+];
+
+/**
+ * How wide a gap between two buildings has to be before it is a place rather
+ * than a sliver.
+ *
+ * Redesign §3.4 states the rule as a pair: neighbours a tile or less apart share
+ * a party line, and neighbours three or more apart get a yard. What it does not
+ * say, and what this enforces, is that **nothing may land in between**. A two-tile
+ * slot between two facades is too narrow to furnish and too wide to read as a
+ * shared wall; on the map it is a dead-end corridor the player can walk into and
+ * a townsperson can be pathed into, and it is invisible in a screenshot because
+ * it looks exactly like the lane it is not.
+ *
+ * Zero is admitted because that is the party line itself — two facades meeting,
+ * which is what Blackwood Lodge and Shepherd's Cabin do today.
+ */
+const PARTY_LINE_MAX_GAP = 1;
+const YARD_MIN_GAP = 3;
+
+/**
+ * Fails generation if two buildings in the same band end up a gap apart that the
+ * plan has no answer for.
+ *
+ * Only pairs whose rows overlap are compared: two buildings in different bands
+ * always have a street between them, and a gap measured between bands is the
+ * width of that street rather than of anything between the two.
+ *
+ * Every width here comes from a sprite's manifest footprint, so this is one of
+ * the failures an *art* change causes without touching a line of the plan — which
+ * is exactly the kind that otherwise ships.
+ */
+function assertNoUnusableSlivers(plots: ReadonlyArray<TownPlot>): void {
+  for (let i = 0; i < plots.length; i++) {
+    for (let j = i + 1; j < plots.length; j++) {
+      const a = plots[i].rect;
+      const b = plots[j].rect;
+      const rowsOverlap = a.y < b.y + b.h && b.y < a.y + a.h;
+      if (!rowsOverlap) continue;
+      const gap = a.x < b.x ? b.x - (a.x + a.w) : a.x - (b.x + b.w);
+      if (gap <= PARTY_LINE_MAX_GAP || gap >= YARD_MIN_GAP) continue;
+      throw new Error(
+        `Town plots '${plots[i].name}' and '${plots[j].name}' are ${gap} tiles apart — too wide ` +
+          `for a party line and too narrow for a yard`,
+      );
+    }
+  }
+}
+
+/**
  * A tile-built structure with a gable facade: north and south rows are wall,
  * the sides and interior take the roof tile, and a two-tile gap in the south
  * face is its door. Used for the circus tents, which have no sprite art.
@@ -625,7 +862,9 @@ function paintCircusTorches(grid: TileGrid, centre: TilePoint): void {
       torchX < grid.size - BORDER &&
       torchY > BORDER &&
       torchY < grid.size - BORDER;
-    if (insideBorder && !grid.isSolid(torchX, torchY)) grid.set(torchX, torchY, TORCH);
+    // `setStanding`, as every other prop is written: a torch that records the
+    // circus's packed earth does not have to have it inferred from a neighbour.
+    if (insideBorder && !grid.isSolid(torchX, torchY)) grid.setStanding(torchX, torchY, TORCH);
   }
 }
 

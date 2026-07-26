@@ -1252,18 +1252,556 @@ Phase 4/5 review, but it is 272 tiles against the old square's 484.
 
 ---
 
-## Phase 4 — Plots & frontage ☐
+## Phase 4 — Plots & frontage ◐
 
-- [ ] Door aprons (1–2 rows, wider than the doorway)
-- [ ] Contact shadows under every building's base row
-- [ ] Party lines for neighbours ≤1 tile apart
-- [ ] Fenced yards for gaps ≥3 tiles (`YARD_GRAVEL` + props)
-- [ ] Back gardens in block interiors, reached from alleys
-- [ ] Street kerbs / gutter lips along every street edge
-- [ ] Ground scatter suppressed across whole plots, not just sprite footprints
-- [ ] typecheck / lint / format clean
+- [x] Door aprons (2 rows, one tile wider than the doorway either side)
+- [x] Contact shadows under every building's base row
+- [x] Party lines for neighbours ≤1 tile apart — **as a standing check, not new art**;
+      see the note below for why there is nothing to draw
+- [x] Fenced yards (`YARD_GRAVEL` + fence); props are Phase 5
+- [x] Back gardens in block interiors, reached from lanes and alleys
+- [x] Street kerbs / gutter lips along every street edge
+- [x] Ground scatter suppressed across whole plots, not just sprite footprints
+- [x] typecheck / lint / format clean
+- [x] Independent review round 1
+- [x] Independent review round 2
+- [x] Independent review round 3
+- [x] Independent review round 4
+- [x] Independent review round 5 — **no defect that changes a pixel or a tile**
+- [x] Independent review round 6 — **confirmation pass, code clean**
+- [x] Independent review round 7 — **ready**; three refinements to the new assertion
+- [x] Independent review round 8 — **done**; two figures in the new docstring corrected
+- [ ] Screenshot review in-game (the headless render harness stands in for it — see round 1)
 
 **Notes:**
+
+2026-07-26 — two new tile types, `FENCE` (62) and `GARDEN_PLANTING` (63), one new
+plan concept (`PlannedYard`), one new painter (`src/map/town/paintYards.ts`), and two
+new passes in the ground renderer.
+
+**Measured first, designed second.** The Phase 4 checklist reads as seven independent
+items; three of them turned out to have no site in this town and one had a site the
+checklist did not mention. Dumping the interior as ASCII and listing every plot gap
+took ten minutes and changed what got built:
+
+- **No two buildings are 3+ tiles apart without a street between them.** Every gap in
+  the same band is 0 (Blackwood Lodge ↔ Shepherd's Cabin), 3 (a lane), 5 (a lane plus a
+  yard) or wider (the plaza). So "fenced yards for gaps ≥3 tiles" has **zero** sites as
+  written. What the town does have is *block interiors* — 268 tiles of verge no building
+  stands on — and that is what got fenced.
+- **"Party lines for neighbours ≤1 tile apart" has one site and needs no art**: the two
+  Garrison cottages abut at gap 0, and two facades meeting *is* the party line. What was
+  worth adding is the rule the checklist implies but does not state — that nothing may
+  land **between** the two cases. `assertNoUnusableSlivers` fails generation on a gap of
+  exactly 2: too narrow to furnish, too wide to read as a shared wall, and on the map a
+  dead-end corridor that looks exactly like the lane it is not. Every width comes from a
+  sprite's manifest footprint, so this is a failure an *art* change causes without
+  touching the plan — the kind that otherwise ships. Verified by injection rather than
+  by reading: moving `INNER_WEST_PLOT` from −16 to −17 puts Herb & Remedy two tiles from
+  the Temple and throws `Town plots 'Temple of the Sky' and 'Herb & Remedy' are 2 tiles
+apart — too wide for a party line and too narrow for a yard`. The same injection at −18
+  (gap 1) passes the sliver check, as it must, and is caught instead by
+  `assertYardsStandOnTheirOwnSurface`, because it also drags Signet's Ink's plot into the
+  West Lane: `Town yard 'Signet's back garden' is a garden but stands on tile type 59 at
+122,153 — it needs 57`. Both checks were watched firing; neither was assumed to.
+
+**The door apron is two rows now, and the second row is the visible one.** The doorway
+row was already paved in Phase 3. Measurement showed the tiles flanking a doorway in
+that row are all under the facade's own art, so widening sideways there is invisible by
+construction — the apron reaches a tile either side anyway, so a re-cut facade that
+widens its opening still lands on paving. The row that shows is the street below: it
+lays `LANE_STREET` across the front of each door, which is setts in front of the mead
+hall's four-tile opening where Market Street is cobble, and a stone doorstep in front of
+Blackwood Lodge where its alley is packed earth. §3.4 asks for exactly that; a doorstep
+is a different surface from the roadway or it is not a doorstep. `setPaved` rather than
+`set`, because The Sunken Stump Pub's opening starts on the interior's westmost column
+and its widened apron's edge lands on the town wall.
+
+**Contact shadows needed the manifest, not the tile grid.** `GROUND_OCCLUDER_TYPES` is a
+set of tile types, and **a town building is one anchor tile** — every other tile under a
+facade keeps whatever surface the plan painted there. So all 15 sprite buildings and the
+tower were invisible to the occlusion pass and the ground in front of a facade was shaded
+by nothing at all, which is precisely the "stickers on a lawn" complaint of §1.4 that
+Phase 2 thought it had answered. `occluderAt` now also consults a per-map index built
+from `getBlockedTileOffsetsByKey` — the footprint **minus** the doorway, so a threshold
+takes the north band from the facade above it rather than being treated as facade. 16
+anchors, 735 tiles under art, and **369 interior ground tiles gain a contact shadow they
+had none of**, with 0 door tiles wrongly inside the art set. The index is built once per
+map and not revalidated; that assumption is stated in its doc, and it is the same one
+`GameMap` makes for `extraBlockedTiles`.
+
+**Kerbs are restricted to made street ↔ soft ground, which is narrower than it looks.**
+The obvious rule — "kerb the harder side of any boundary" — would ring every door apron
+in kerbstone (a lane patch inside a cobble street) and grow one around every gate apron
+out in open country. `KERBED_MATERIALS` is lane/cobble/plaza and `KERB_SOFT_MATERIALS` is
+grass/verge/dirt/gravel, so a street gets a lip where it meets ground and nowhere else.
+The lip is drawn on the tile's own edge rather than on the fringe's wandering contour;
+that is a few pixels off, in the direction the fringe already bleeds the harder material,
+so the lip lands on paving. The scatter pass makes the same trade for the same reason,
+and the kerb runs **before** the scatter so tufts spill over it rather than under it.
+
+**Yards and gardens.** Five fenced enclosures and eight planted strips:
+
+| Yard                      | Where                          | Reached from        |
+| ------------------------- | ------------------------------ | ------------------- |
+| Garrison Green            | −13…−7 × −17…−12 (7 × 6)       | Upper Lane, cart gate |
+| Sunken Stump back garden  | −27…−20 × 13…16                | West Lane           |
+| Signet's back garden      | −16…−4 × 13…21 (an L)          | West Lane, Low Street |
+| Miller's kitchen garden   | 20…27 × 12…14                  | East Lane           |
+| Market Row east workyard  | 20…27 × 2…7 (gravel)           | East Lane, cart gate |
+
+The fence painter takes the building art rather than reading tile types alone, for the
+same reason the occlusion pass does. Two tests decide each perimeter tile: *can it take a
+post* (only the yard's own surface, which rules out the two side-gate torches and any
+street a perimeter runs along), and *is this side worth fencing* (a side whose outward
+neighbour is solid gets none, so nothing doubles the town wall or a neighbour's facade).
+Corners take a post if **either** of their two sides is open, so an enclosure turning from
+an open side into a walled one still closes. That is what lets Signet's garden and the
+drying green beside it be stated as **one** L-shaped block with Signet's own facade
+closing the middle, rather than as two plots fenced back to back along a line nobody can
+walk.
+
+`South Green crop rows` changed from `YARD_GRAVEL` to `VERGE_GRASS`. It is a kitchen
+garden, and planting reports the material it is drawn *over* — on gravel the beds would
+have drawn verge tufts on a gravel row and been eroded by the surrounding gravel through
+the corner masks. That is the Phase 2 round-2 defect, and `assertYardsStandOnTheirOwnSurface`
+now makes it a generation failure rather than a thing to notice later: it checks against
+the **painted grid**, not the plan's rectangles, because surfaces are painted in order and
+a later one can take a tile a yard was written for.
+
+**A fence sealed off fourteen tiles, and the check caught it before a screenshot could.**
+The Garrison Green was first stated across its band's full height. The row above it is a
+single-tile strip pinned between the north wall and the two cottages' back walls, whose
+only lateral exit is east past the green — so the green's north-west corner post landed
+in exactly that gap and stranded **14 walkable tiles**, reachable in the Phase 3 town and
+dead in this one. Nothing about the finished map looks wrong. The green now starts one row
+lower and that row is a back lane running from the west wall to the civic terrace. The
+check is `.tmp`-free: a flood fill from the plaza asserting every door, every door's exit
+tile, the Doomsday escape tile and **every walkable tile inside the walls** is reachable,
+plus that each fenced yard's interior is fully reachable through its gates. 20/20
+generations clean after the fix, 20/20 failing before it.
+
+**Ground scatter is suppressed over whole plots now**, which needed `PlannedBuilding.plotTop`
+— the band's first row — so a plot is `west … west + sprite width` by `plotTop … frontRow`
+rather than just the art. Nothing visible changes today (the interior has no field grass
+for the weed scatter and no track for the worn-patch scatter outside the alleys), so this is
+an intent fix rather than a visual one: shrinking a building's art now leaves garden behind
+it rather than a strip of scattered weed nobody planted.
+
+**Nothing regressed.** Metrics identical to Phase 3 — 55 × 41, 764 built tiles, 33.9%,
+farthest door 33.4 (The Sunken Stump Pub), 6 ground materials, 16 buildings.
+`assertTownInteriorIsIntact` is silent over **100 consecutive generations** with the two
+new tile types admitted to `TOWN_INTERIOR_TILE_TYPES`.
+
+**Review round 1 (independent), fixes applied.** The round's own contribution was to
+build the thing this phase was missing: a **headless render harness**
+(`node-canvas` + the real sprite sheets + `renderCanvas`), which turns "verified as data"
+into "verified as pixels". Both high-severity findings were things no amount of tile-level
+measurement could have caught, and both were visible in the first image rendered.
+
+- **A north-south fence run drew as a plank with a rung every tile.** Two defects in
+  `drawFence`, and the second explains the first. The ground shadow was drawn
+  unconditionally as a full-tile-width bar — right for a run seen side-on, and a dark
+  crossbar at 84% of every tile down a run seen end-on. And the vertical branch sat inside
+  the rail loop without reading the loop variable, so it drew the identical `fillRect`
+  twice and a north-south run got *one* rail where an east-west run got two. The same
+  enclosure read as a post-and-rail fence along its top and as a ladder down its side. The
+  two axes are now drawn as what they are: side-on shows two rails between its posts,
+  end-on is foreshortened to a single line of timber with its shadow under the timber
+  rather than across the tile.
+- **The kerb pass outlined building plots and door aprons instead of street edges** —
+  the exact failure this file claimed the narrowed material sets prevented. Two causes:
+  - `KERB_SOFT_MATERIALS` held `dirt` and `gravel`, and both are **made surfaces**: `dirt`
+    is `FloorTypeValue.road`, which the plan calls the lowest rung of the street hierarchy
+    and `TileGrid` counts as paving, and `gravel` is the workyards and gate aprons. So
+    Blackwood Lodge's three-tile doorstep — an island of setts in a packed-earth alley —
+    got a closed pale rectangle drawn around it, and every gate apron grew a lip out in
+    open country. The set is now `verge` alone, which is what a street verge *is*.
+  - The ground under a facade keeps whatever the plan painted there, usually verge, so
+    classifying by tile type alone laid kerbstone along building base rows — a pale lip
+    against a wall, sitting inside the contact-shadow band this same phase added two passes
+    later. `drawKerb` asks `occluderAt` now, which is the question the occlusion pass
+    already answers.
+
+  Measured with a replica of `drawKerb`'s two tests over the real grid
+  (`old rule: 388 kerb edges, 226 against a tile under building art` →
+  `new rule: 96 edges, 0 against building art`), and confirmed in the rendered image:
+  Blackwood's doorstep is a patch of setts blending into its alley instead of a floating
+  stone tray, and The Rusty Anvil's plot no longer has a hard pale outline on all four
+  sides.
+
+- **`assertYardsStandOnTheirOwnSurface` ran before the passes that can still write into a
+  yard**, which made its own justification false — it checked the painted grid "because a
+  later pass can take a tile", while running before both later passes that reach a yard. It
+  missed the east side-gate torch standing inside Miller's kitchen garden. The yard passes
+  now run last, after the props, and the check exempts **planned prop tiles** as well as
+  building art: the torch reads as a garden lantern and doubles as the enclosure's corner
+  post, but it is exempted by being *in the plan*, not by a tile-type allowlist, so
+  anything that reaches a yard without being planned still fails.
+- `buildFootprintIndex` packed positions as `y * width + x` with no column bound, so an
+  offset reaching past a row's end would have wrapped onto the next row and put a phantom
+  contact shadow elsewhere on the map. Unreachable today; the offsets come from sprite
+  manifests and this is a shared renderer.
+- **A claim in these notes was false.** It said The Sunken Stump Pub's widened apron lands
+  on the town wall, and that this is why `paintDoorApron` uses `setPaved`. Measured across
+  all fifteen buildings, **no apron tile lands on the wall**: the pub's doorway starts on
+  the interior's *second* column, so its apron reaches the westmost interior column and
+  stops one short of the stone. `setPaved` stays — the apron's width comes from a sprite's
+  facade, so a re-cut door one column further out would reach the ring — but it is a guard,
+  not a fix for a live case, and the doc now says so.
+- Also: unnamed hash and geometry constants in `drawGardenPlanting` and `drawFence` are
+  named; the plot height was `centre.y + frontRow - (centre.y + plotTop) + 1`.
+- **Pre-existing, fixed in passing:** `WELL` was missing from `isWalkableTileType`'s
+  exclusion list while `TORCH` and `FOUNTAIN` were in it, so both town wells were walkable
+  and the player could stand inside one. Every consumer that cares about a well — the murder
+  quest's clue, the drink heal — measures distance to the tile rather than standing on it,
+  and the reachability check already treated wells as solid, so this only removes the
+  discrepancy.
+
+**What round 1 verified and found clean**, which is worth recording because it closes the
+"not measured yet" item this section previously carried:
+
+- **Chunk cache vs direct render: 0 differing channel samples of 12,582,912, max delta 0**,
+  over a 64 × 48-tile view of the whole town. That is Phase 2's cheapest regression test,
+  and it passes with three new passes in the ground renderer.
+- **Containment:** of 2,565 town tiles drawn in isolation, only the pre-existing overhang
+  types paint outside their own rect (`SPRITE_BUILDING`, `TORCH`, `WELL`, `MAIN_TOWER`,
+  `FOUNTAIN`). `FENCE`, `GARDEN_PLANTING` and the kerb pass paint **zero** pixels outside
+  their tile.
+- **Cost:** the footprint index is 1.98 ms once per map; `occluderAt`'s up-to-13 lookups
+  per tile cost 40 ms across a whole-map bake of 1321 ms — about 3%, and chunks bake lazily.
+- **Aprons:** all 15 doors are `LANE_STREET` across both rows; the whole footprint change is
+  46 tiles (30 verge under facades, 13 cobble doorsteps on Market Street, 3 in Blackwood's
+  alley) and touches no prop, gate, wall, plaza tile or other building's ground.
+- **Anchors:** notice board, fortune teller, both stalls and vendor rows, the Doomsday escape
+  tile, the krasue roost, GumGum's perch and the club alley all land on walkable non-fence
+  tiles. `TownLifeSystem` frontage components are unchanged for every door — one door gained
+  a component, none lost one.
+- Every tile-type registry checked for both new types; `townMetrics` and `DECORATION_TYPES`
+  correctly *exclude* them.
+
+**Review round 2 (independent), fixes applied.** Round 1's fixes all held under attack —
+the kerb sets, the reordering, the prop exemption, the bounds guard and the `WELL` change
+were each re-verified, several by injection. What round 2 found was that **round 1's fence
+fix was half a fix, and that it had exposed a deeper defect underneath it.**
+
+- **A fence lost the surface it was driven into, and 17 of 75 tiles rendered as the street
+  outside their own yard.** `grid.set(x, y, FENCE)` overwrites the tile's type, `FENCE`
+  deliberately has no material of its own, and `groundMaterialUnder` therefore fell through
+  to `inferFloorType` — which takes the **first cardinal neighbour**, and that probe starts
+  to the *south*. Every fence on a yard's southern perimeter took the street beyond it:
+  the Market Row workyard's entire south row drew **cobble**, the Garrison Green's drew
+  **lane setts**, and the yard's own surface stopped a row short. The corner masks blended
+  it, so it read as deliberate. This is the `GRASSY_WEED`-on-the-verge defect one level up:
+  a thing that stands on ground reporting the wrong ground.
+
+  The fix is to stop inferring where the answer is known. `TileContent.groundType` records
+  the surface a prop replaced, `TileGrid.setStanding` writes it, and both
+  `groundMaterialUnder` and `inferFloorType` prefer it over the probe. Measured after:
+  **verge→verge ×57, gravel→gravel ×18, 0 fence tiles resolving to a non-yard material.**
+  The field is optional and only fences set it today, but it is the general answer — a
+  torch or a well on a region's south edge has the same problem waiting.
+
+- **That defect was also feeding the kerb pass**, which is why round 1's kerb census was
+  wrong. Those fence tiles classified as `lane`/`cobble` are in `KERBED_MATERIALS`, and
+  their yard-side neighbour is verge, so a pale lip was drawn along the top of the fence
+  row **inside** the garden. `occluderAt` does not skip a fence. The round-1 note's
+  "96 kerb edges" was an undercount for a reason worth naming: the replica script
+  classified neighbours with `groundMaterialForTileType`, while the renderer uses
+  `groundMaterialUnder`, so the replica could not see any tile the renderer *infers* a
+  material for. **A replica that diverges from the function it replicates is the
+  "measurements that ran but still lied" trap in its purest form.** The census now mirrors
+  all three branches (direct, recorded, inferred), and reported 0 lips drawn by a fence
+  tile. Its other figures were wrong for a reason round 3 found — see that round.
+
+- **Rails were drawn edge to edge, so 34 of 75 fence tiles hung half a tile of timber into
+  open ground** at every run end and corner. Every measurement in `drawFence` now runs from
+  the post *outwards*, only towards sides that actually have a fence neighbour; two tiles
+  either side of a joint each draw their own half, so a run still looks continuous. A lone
+  tile draws its post alone, which is what a gate cheek is.
+- **The north-south ground shadow broke 3 px at every tile boundary** — a light rung every
+  tile, the mirror of the dark rung round 1 removed, because the shadow's *thickness* was
+  subtracted from a vertical *extent*. And the tall upright drawn on an end-on run spans
+  only 24%–84% of its tile, so the run read as a dashed string. An end-on run now draws a
+  post cap rather than an upright; a corner still gets the upright, because it has an
+  east-west rail to carry.
+- The comment claiming the yard passes run "after every pass that can still write into one"
+  was wider than the truth: `scatterGroundCover` runs after them and *is* such a pass, held
+  off only by the `yardPlots(plan)` suppression argument. Stated as what it is.
+
+**Review round 3 (independent), fixes applied.** Round 2's `groundType` fix held —
+verified by *pixels* rather than by re-deriving the rule, each fence tile's ground rendered
+and matched byte-for-byte against the same tile forced to each candidate material. What
+round 3 found is that **the fix had been applied to fences only, and a torch on the map was
+live proof it was needed elsewhere.**
+
+- **The west side-gate torch stood on verge and drew cobble.** `paintTownProps` still wrote
+  props with `set`, so the same inference ran: the probe skipped the fence south of it and
+  the wall west of it and took **Market Street's cobble to the north**, putting a full tile
+  of cobble jutting down into the verge strip inside the wall. Its mirror at the east gate
+  has the identical neighbourhood and drew verge — only because the tile south of it
+  happened to be planted that generation, which `floorTypeAt`'s new `GARDEN_PLANTING` case
+  rescued. **Two identical props, opposite results, decided by a dice roll in
+  `plantGardens`.** Every prop is written with `setStanding` now — torches, wells, the
+  fountain, and the circus's torches — and `floorTypeAt` consults a neighbour's recorded
+  ground rather than skipping past it. Re-measured with the same probe: **every in-town prop
+  draws the surface the plan painted.**
+- **The kerb census in these notes was wrong, and wrong in a way that hid that torch.** The
+  replica this file quoted said 145 lips / 7 by wall tiles / "5 by torch tiles standing on
+  lane". Round 3 instrumented the **real** `drawKerb` — the lip colour is filled by nothing
+  else in the pipeline — and measured **139 / 1 / 3 on plaza and 2 on cobble, none on lane**.
+  The replica omitted `GROUND_OCCLUDER_TYPES`, which `occluderAt` tests *first*, so it
+  counted six lips the renderer skips. **That is the same failure round 2 diagnosed, in the
+  script round 2 wrote to replace the one it condemned** — and the sentence "which is
+  correct — the ground under a torch really is lane" was asserting correctness for the very
+  tile that was wrong. The instrumented figure is now what this file quotes, re-run after
+  the prop fix: **139 lips, 0 straddling a tile boundary, 3 drawn by plaza torches, 2 by
+  wall tiles whose ground fill is covered by opaque stone.** The two at the side gates are
+  gone, because those torches now resolve to verge.
+- **The fence's ground shadow broke at every corner** — the east-west bar sits at 24–26 px
+  and the north-south band stopped at 15 px, leaving an 8 px nick at each of the town's six
+  corners — and the two overlapped to 0.39 alpha against 0.22 where they crossed. The band
+  now reaches down to the bar, and both layers are drawn as one union per colour so a corner
+  composites once. The kerb had the mirror of the same defect and gets the same treatment,
+  written as non-overlapping rectangles rather than as a path so that an instrumented render
+  can still count every stroke — which is a property this phase has now needed three times.
+- **A rail could only terminate at another fence**, so a run stopped at the centre of its
+  last tile wherever the thing closing the enclosure was not itself a fence. Miller's kitchen
+  garden closed against the side-gate torch and the note claimed the torch "doubles as the
+  enclosure's corner post" — which was not what rendered: the rail ended a tile and a half
+  short of it. Rails now terminate into anything solid enough to nail one to, which closes
+  that corner and every abutment against the town wall.
+- `assertYardsStandOnTheirOwnSurface` is scoped to yard *interiors*, so it was structurally
+  incapable of seeing the torch, which sits one row outside every yard bound. Stated as
+  scope rather than left reading as coverage.
+
+Round 3 also independently confirmed what rounds 1–2 claimed and this file had not re-run:
+`groundType` has exactly three call sites, no code in `src/` clones, spreads, serialises or
+diffs a `TileContent`, `GameMap` never copies tiles, the memo in `groundMaterialUnder` cannot
+go stale on it (the recorded branch returns before the memo is consulted), interiors never
+carry one, and 0 non-fence tiles carried one before this round's change. Fence topology was
+censused rather than assumed: 40 straight east-west, 11 straight north-south, 6 corners, 14
+ends, 4 isolated — and all four isolated tiles verified individually against their yard's
+own gate rectangles, so "a perimeter is never one tile long" is measured, not asserted.
+
+**Review round 4 (independent), fixes applied.** Round 4 attacked round 3's prop change and
+found it sound — every in-town prop draws the surface the plan painted, `groundType` has five
+write sites and all are on the overworld, dungeons and interiors never carry one, and of the
+61 tiles whose floor inference changed, the 18 any renderer consults are exactly the ones the
+fix targeted. What it found instead was that **round 3's rail-anchor fix was measuring the
+wrong thing, and its two live effects were both harmful.**
+
+- **`SPRITE_BUILDING` is one anchor tile, and that tile is the top-left of the art rect —
+  transparent sky above the roof.** `paintYardFences` already knows this and asks the *art
+  rects*; `drawFence` asked *tile types*. So the anchor set fired on exactly two tiles in the
+  town, both gate cheeks that happened to sit above an anchor, and hung a rail off into open
+  verge with the roof half a tile below (Miller's) and **1.84 tiles** below (Signet's) —
+  measured by alpha-scanning the rendered art, not by looking. Worse, it demoted both from a
+  post to an 8 px cap, so a tile whose own docstring says a gate cheek "draws its post alone"
+  drew no post. Meanwhile the **43 sides that genuinely abut a facade were untouched**,
+  because a facade tile carries the plan's surface type. Round 3's claim that the change
+  "closes every abutment against the town wall" was true only of the wall. Both building
+  types are out of the set now, with the reason recorded next to it: closing the 43 needs the
+  sprite footprints, and a footprint is not opacity either — it contains the very transparent
+  rows that produced the two bad anchors. That is Phase 5 work alongside the signage.
+- **A stale `groundType` outlived its prop.** `TileGrid.set` preserved the record, and the
+  circus torches are written before `paintForests`, so a `TREE` landing on one inherited it
+  and became a forest tree recording the circus's packed earth — ~2 per generation. Inert
+  today, because nothing consults a record on a tile that has a material of its own, but the
+  invariant "only props carry a record" was enforced by nothing. `set` clears it now: a plain
+  write replaces the thing that recorded it. Re-measured over 40 generations, every carrier
+  is a prop and there are no oddities.
+- A lone gate cheek had lost its ground shadow when the rails became directional. It has one
+  again.
+- **Round 3's own topology census was stale**, because it defined adjacency as `type ===
+  FENCE` while round 3's fix had changed the renderer to `FENCE_ANCHOR_TYPES` — the same
+  divergence round 3 diagnosed, one level up, in the same round that diagnosed it. The set is
+  exported now so a census imports it instead of restating it, and the settled figures under
+  the renderer's own rule are: **75 tiles — 43 straight east-west, 11 straight north-south,
+  6 corners, 10 ends, 1 T-junction, 4 isolated**, the four isolated being the gate cheeks.
+
+Corrected rather than fixed:
+
+- **The kerb corner rewrite has no live site.** Instrumented, all 139 lips are on tiles that
+  kerb exactly one side, so the non-overlap logic is never exercised and there was no visible
+  double-composited corner to repair. It is correct by construction and stays — a street tile
+  with two verge neighbours is one plot edit away — but the round-3 note read as if something
+  had been fixed, and nothing had.
+- Three of the four symmetric plaza-corner torches draw a kerb and the fourth does not: its
+  verge neighbour is under building art, which `occluderAt` suppresses. Cosmetic asymmetry,
+  now stated.
+
+Known and accepted from round 2, with reasons:
+
+- **Making `WELL` solid also blocks line of sight and projectiles**, since `hasLineOfSight`
+  samples `isWalkable`. The two plaza wells now give cover in ranged combat. That matches
+  `FOUNTAIN`, which has always behaved this way, and a stone well giving cover is right —
+  but it is a gameplay change, not only a tidy-up, and saying otherwise would be the same
+  kind of too-wide claim as the one above.
+- **`paintYardFences` is order-dependent**: `isClosed` asks `grid.isSolid`, and `FENCE` is
+  solid, so a yard painted later would decline to fence against an earlier yard's fence. No
+  two yards adjoin today — the closest pair is three tiles apart — so it is latent.
+- Four isolated fence tiles exist and all four are genuinely gate cheeks, which is what the
+  "a perimeter is never one tile long" comment claims.
+
+**Review round 5 (independent) — the change set came back clean.** Every one of rounds 1–4's
+fixes held under attack, and every quantitative claim in this section was re-derived and
+reproduced. Highlights of what was confirmed rather than asserted: the `SPRITE_BUILDING`
+anchor removal differs on **exactly the two tiles** round 4 named and both are gate cheeks;
+the shadow pass makes **88 fills for 75 fence tiles + 13 strip-boundary redraws — one
+composite per tile**, so nothing double-darkens; `assertNoUnusableSlivers` is **not vacuous**
+(21 building pairs clear its row-overlap gate, with a gap histogram of `0:1 3:4 5:2 11:1 …`,
+so one tile of art growth on any of four pairs trips it); the dev routes were **run, not
+read**, and `?townmap` prints this file's metrics from the running app; and the whole-map
+bake costs **+6% against a `HEAD` worktree** (1177 ms vs 1111 ms) for all three new ground
+passes plus the footprint index, entirely at bake time.
+
+Round 5's three findings were a dead branch, a latent hole and a naming contradiction, all
+taken:
+
+- `FENCE` in `NON_FLOOR_TYPES` carried a comment saying a probe "must look straight past one",
+  which is the opposite of what now happens — `floorTypeAt` answers from the fence's recorded
+  ground and returns before that set is consulted. The entry stays as defence in depth; the
+  comment says what it is.
+- **`setSprite` did not clear `groundType` while `set` does**, which left one hole in the
+  invariant round 4 established. Unreachable today (its one caller runs before every
+  `setStanding` site, and 0 tiles carry both a sprite key and a record), but `floorTypeAt`
+  consults a record *before* rejecting non-floor types, so a record surviving under a building
+  anchor would make that anchor answer "floor" to every neighbouring probe — the stale-`TREE`
+  defect one tile type up.
+- The `Garrison back strip` was named "back lane" in the round-1 note while being planted as a
+  garden. It is both — the buildings' back yard *and* the only route out of the strip behind
+  the cottages — so the name is now the one the plan uses and the note says walkable.
+
+Round 5 also corrected two of this file's own numbers by measuring them differently: the
+apron's "46 tiles" is the **Phase-4 delta** (110 `setPaved` calls, 56 tiles differing from an
+un-aproned grid, of which 46 are new), and "369 interior tiles gain a contact shadow" holds
+under "gained at least one occluding side" — under the stricter "had none at all" reading it
+is 331. Both figures are right; the second's wording was looser than its measurement.
+
+**Review round 6 (independent) — confirmation, and one gap worth closing.** Round 5's three
+fixes were verified to break nothing, by instrumenting the real prototype methods: over 25
+generations, **375 `setSprite` calls cleared 0 records**, and `set`'s clear does exactly the
+work round 4 claimed and only that — all 49 clears are `TORCH recording road → TREE`. Every
+required check reproduced: chunk-vs-direct 0 of 12,582,912; containment over 23,085 tile
+renders; **50/50** reachability generations; 100 generations with every assertion silent;
+metrics identical. Two speculative failures were chased down and cleared — no townsperson can
+be stranded in a fenced yard (**0 frontage tiles fall inside one**, and the aprons actually
+*removed* one pre-existing split, 10 split doors → 9), and entities never draw behind a fence
+in a way that matters, because a fence paints nothing outside its own tile and blocks
+movement, so the only figures overlapping it stand south of it.
+
+**The one finding was that this phase's best catch was not in the shipped code.** Six
+generation-time assertions live in `src/`; the flood fill lived only in a scratch script, so it
+ran when someone remembered to run it — and this file said "the check is `.tmp`-free", which
+was simply false. That matters more than it sounds: the Garrison Green defect stranded 14
+walkable tiles, *nothing about the finished map looked wrong*, and none of the other six
+assertions can see it, because connectivity is a property of all of them together.
+`assertTownIsFullyReachable` now runs over the finished grid, and it throws rather than warns
+because everything that blocks movement inside the walls is plan-derived. Round 7 then
+sharpened all three of those words — see below.
+
+**Writing it found a bug in itself, which is the point.** The first draft took the blocking set
+from the art rects the generator already has, and failed immediately with `The door of
+'Blackwood Lodge' cannot be reached from the plaza` — a doorway is inside its building's art
+and is the one tile of it that is not blocked. It rebuilds `GameMap`'s set the way `GameMap`
+does instead, from the anchors through `getBlockedTileOffsetsByKey`. A connectivity check that
+disagrees with the collision model is worse than none. Watched firing on the real defect:
+restoring the Garrison Green to its band's top throws `Tile -27,-18 inside the town wall is
+walkable but cannot be reached from the plaza`.
+
+Round 6's two documentation corrections, both taken: the containment note named five bleeding
+types and there are **six** — `DIRT_PATCH` also overhangs, 1 tile in 10–21 by up to 7 px at
+alpha 57, pre-existing art this diff does not touch, missed because round 1 swept a single
+generation and the placement is random. And **`FENCE` blocks line of sight** exactly as `WELL`
+now does — `hasLineOfSight` samples `isWalkable`, so fences affect auto-target, projectiles and
+the cat's pounce. Round 2 recorded that consequence carefully for wells and this file did not
+record it for fences; it is the same class of change and gets the same sentence.
+
+**Review round 7 (independent) — ready, and three refinements to the new assertion.** Round 7
+attacked `assertTownIsFullyReachable` specifically and found that its first shipped form was
+looser than its own docstring in three ways, none of which could produce a false pass on the
+real map but each of which was a claim wider than the code:
+
+- **Its blocking set did not match `GameMap`'s.** `GameMap.buildExtraBlockedTiles` calls
+  `getBlockedTileOffsets(tile.type)` for *every* type; this named `MAIN_TOWER` explicitly. Two
+  types carry type-keyed offsets, and the other is `WELL` — so the two tiles north of each
+  plaza well were blocked in the game and walkable to the check, 4 tiles a generation. Always
+  in the permissive direction, so it could only ever mask a disconnection, and it masked none
+  (a flood fill through the real `GameMap.isWalkable` over 30 generations found nothing
+  stranded). The branch is `getBlockedTileOffsets(tile.type)` now, which makes "rebuilt the way
+  `GameMap` rebuilds it" true rather than nearly true.
+- **Throwing was not safe for the Big Top.** The door loop included it, and it stands outside
+  the walls at a random distance: measured, **about half of all generations at map size 120 and
+  half at 150** would have crashed overworld generation with `The door of 'Big Top' cannot be
+  reached from the plaza`, because the circus's distance does not scale with the map and the
+  tent gets clipped by the void border. (Round 7 quoted 14/20 and 9/20 from single
+  20-samples; over 100 runs each it is ~53% and 50%, and two 20-samples order the two sizes
+  oppositely — so the rate is a coin toss at both and no ordering between them holds.) Never at 280, the only size the game uses — but an
+  assertion whose trigger is a dice roll must not crash generation. The check is about the
+  *town*, so it now skips any door outside the wall.
+- **It cost 8.79 ms a generation, 21% of `generateOverworld`**, because a permissive fill from
+  the plaza floods the entire wilderness. Both the fill and the anchor scan are confined to the
+  wall's interior now, which is also a **stricter** property: getting from one part of the town
+  to another must not require leaving it and walking round the outside. `generateOverworld`
+  went from 41.0 ms to **18.6 ms** a generation — faster than before the assertion was added,
+  because the anchor scan no longer sweeps 78,400 tiles.
+
+The size limit that remains is stated in the code rather than left to be discovered: the town
+is 55 x 43 and `FOREST_MIN_DIST_TILES` is 65, so below about size 150 the forests land inside
+the walls. **100/100 generations pass at 150, 200 and 280** with zero warnings at any of them; roughly
+5 in 6 at 120, where `assertTownInteriorIsIntact` is already warning about trees in the town.
+
+Round 7 verified both of round 6's documentation corrections by measurement — six bleeding
+types with `DIRT_PATCH` at 7 of 78 tiles and ≤7 px, and `FENCE` blocking line of sight through
+the real API against a verge control — and re-confirmed the standing set, including watching
+the new assertion fire on the injected Garrison Green defect with the message this file
+records, byte for byte.
+
+**Review round 8 (independent) — signed off.** The item most likely to have gone wrong was
+confining the assertion's fill and anchor scan to the interior: a bound that reads tighter
+than it is has been this redesign's recurring bug, three separate times in Phase 3. It was
+attacked structurally rather than sampled. Only three things in the whole manifest declare
+blocked offsets — sprite buildings by key, and `WELL` and `MAIN_TOWER` by type — all three are
+placed from the fixed plan, and a whole-map sweep over 30 generations finds **no
+offset-declaring anchor outside the interior at all**. The tower is the interesting case and it
+is safe for the right reason: its anchor sits at row 123, inside the interior, while 4 of its 8
+blocked tiles land on the wall row and are correctly discarded by the bound rather than missed
+by it. The blocking set and `GameMap.isWalkable` were compared tile by tile over **80
+generations at four map sizes: 0 divergences**, and the check still fires — the injected
+Garrison Green defect throws 10/10 with the recorded message.
+
+Round 8's two findings were both in the new docstring, and both are the pattern Phase 1's
+lesson names — a reasoned number where a measured one belongs:
+
+- "the circus stays **56 tiles clear of the interior**" is `CIRCUS_MIN_DIST − CIRCUS_RADIUS`,
+  which is clearance from the town *centre*. Measured, the nearest a tent comes to the
+  interior rect is **23 tiles**. The argument is untouched — 23 is still enormous — but the
+  number was arithmetic nobody had run against the thing it names.
+- "14 of 20 at size 120 and 9 of 20 at 150" were single 20-samples quoted as rates, and the
+  ordering they imply does not survive: over 100 runs each it is ~53% and 50%, and a second
+  pair of 20-samples reverses them. Both now say "about half", which is what was measured.
+
+Also confirmed: `generateOverworld` at **18.5 ms** interleaved, against ~44 ms for the
+unconfined form — the old fill reached **71,769 tiles per generation** against 55 × 43 now.
+All 16 town doors are checked and exactly one is skipped, the Big Top.
+
+**Judgement calls, recorded rather than fixed.** Two survive to the Phase 4/5 screenshot
+review. **Lone gate cheeks read as stray fenceposts** — Miller's and Signet's each draw a
+single post in open grass with no rail either side. Both are correct by the rule, and the
+reason they look orphaned is the 43 facade abutments round 4 deferred: closing those turns each
+cheek into a real gate jamb, which is why it pairs with the signage work. And **planting reads
+as scratchy horizontal dashes** at 1x, closer to lines of text than to crop rows — noted by two
+rounds now, and recorded here as surviving the fence fix rather than having been caused by it.
+
+Round 1 also reported that planting reads
+as scattered fragments rather than continuous beds at density 0.55. Rendered at 6× after the
+fence fix, the beds read as rows of a slightly untidy kitchen garden, which is what they are
+meant to be — a good deal of the "fragmented" impression came from the fence defect in the
+same images. Left alone rather than tuned by opinion; it is a screenshot judgement for the
+Phase 4/5 review, along with the observation that a building's plot shows as a green pad
+where its art does not cover the plot, which §3.4's frontage treatment may want to address
+in Phase 5.
 
 ---
 

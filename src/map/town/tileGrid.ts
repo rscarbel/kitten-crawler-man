@@ -23,6 +23,7 @@ import {
   TOWN_WALL,
   COBBLE_STREET,
   DIRT_PATCH,
+  FENCE,
   LANE_STREET,
   PLAZA_STONE,
   YARD_GRAVEL,
@@ -45,6 +46,7 @@ const SOLID_TILE_TYPES: ReadonlySet<number> = new Set([
   ROOF_CIRCUS_PURPLE,
   SPRITE_BUILDING,
   TOWN_WALL,
+  FENCE,
 ]);
 
 /**
@@ -88,18 +90,63 @@ export class TileGrid {
     return this.cells[y][x].type;
   }
 
-  /** Writes a tile type, ignoring out-of-bounds writes. */
+  /**
+   * Writes a tile type, ignoring out-of-bounds writes.
+   *
+   * Clears any recorded ground, because a plain write replaces the thing that
+   * recorded it. Without this a later pass leaves a stale record behind: the
+   * circus torches are written before `paintForests`, and a `TREE` landing on one
+   * inherited its record and became a forest tree claiming to stand on the
+   * circus's packed earth — about two per generation, harmless only because
+   * nothing consults a record on a tile that has a material of its own.
+   */
   set(x: number, y: number, type: number): void {
     if (!this.inBounds(x, y)) return;
-    this.cells[y][x].type = type;
+    const cell = this.cells[y][x];
+    cell.type = type;
+    delete cell.groundType;
   }
 
-  /** Writes a tile type together with the sprite key that selects its art. */
+  /**
+   * Writes a tile type together with the sprite key that selects its art.
+   *
+   * Clears any recorded ground for the same reason `set` does. Unreachable today
+   * — the one caller runs before every `setStanding` site — but `floorTypeAt`
+   * consults a record *before* rejecting non-floor types, so a record surviving
+   * under a building anchor would make that anchor answer "floor" to every
+   * neighbouring probe. That is the stale-`TREE` defect one tile type up.
+   */
   setSprite(x: number, y: number, type: number, spriteKey: string): void {
     if (!this.inBounds(x, y)) return;
     const cell = this.cells[y][x];
     cell.type = type;
     cell.spriteKey = spriteKey;
+    delete cell.groundType;
+  }
+
+  /**
+   * Writes a prop that stands *on* the ground, remembering the surface it
+   * replaced so the renderers do not have to infer it from a neighbour.
+   *
+   * Inference takes the first cardinal neighbour it finds, and that probe starts
+   * to the south — so a prop on the south edge of anything renders as whatever
+   * lies outside it. For a fence along a yard's southern perimeter that is the
+   * street, and the yard's own surface stops a row short.
+   */
+  setStanding(x: number, y: number, type: number): void {
+    if (!this.inBounds(x, y)) return;
+    const cell = this.cells[y][x];
+    // Guard against a second prop landing on the first: recording `FENCE` or
+    // `TORCH` as a tile's ground would be worse than not recording anything.
+    cell.groundType ??= cell.type;
+    cell.type = type;
+  }
+
+  /** `setStanding` over a rectangle, for props that occupy more than one tile. */
+  fillStanding(rect: TileRect, type: number): void {
+    for (let dy = 0; dy < rect.h; dy++) {
+      for (let dx = 0; dx < rect.w; dx++) this.setStanding(rect.x + dx, rect.y + dy, type);
+    }
   }
 
   fill(rect: TileRect, type: number): void {

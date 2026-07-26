@@ -30,6 +30,7 @@ import {
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
+  FENCE,
   MODERN_DECORATION,
   WALKABLE_MODERN_DECORATION_VARIANTS,
   RUINED_WALL,
@@ -1596,6 +1597,12 @@ export class GameMap {
       tile.type !== ROOF_CIRCUS_PURPLE &&
       tile.type !== FOUNTAIN &&
       tile.type !== TORCH &&
+      // A stone well is as solid as the fountain beside it. Its absence here was
+      // pre-existing: both town wells were walkable and the player could stand
+      // inside one. Every consumer that cares about a well — the murder quest's
+      // clue and the drink heal — measures distance to the tile rather than
+      // standing on it.
+      tile.type !== WELL &&
       tile.type !== TABLE &&
       tile.type !== BOOKSHELF &&
       tile.type !== BED &&
@@ -1609,10 +1616,12 @@ export class GameMap {
       tile.type !== RUINED_WALL &&
       tile.type !== TENT_POLE &&
       tile.type !== BLEACHER &&
-      tile.type !== TOWN_WALL
+      tile.type !== TOWN_WALL &&
+      tile.type !== FENCE
       // SAFE_ROOM_FLOOR (10), GRASSY_WEED (22), DIRT_PATCH (23), RUG (37), BONES (43),
-      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51) and the town's street
-      // materials (VERGE_GRASS 57 … PLAZA_STONE 61) are walkable
+      // RUBBLE (49), SAWDUST_FLOOR (50), CIRCUS_RING_EDGE (51), the town's street
+      // materials (VERGE_GRASS 57 … PLAZA_STONE 61) and GARDEN_PLANTING (63) are
+      // walkable
     );
   }
 

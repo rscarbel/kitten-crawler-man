@@ -11,6 +11,8 @@ import {
   HORDER_BOSS_ROOM_FLOOR,
   LANE_STREET,
   PLAZA_STONE,
+  FENCE,
+  GARDEN_PLANTING,
   SAFE_ROOM_FLOOR,
   TOWN_WALL,
   VERGE_GRASS,
@@ -443,6 +445,10 @@ export class MiniMapSystem implements GameSystem {
         return '#8e7a5c'; // the two main streets, lighter so the spine reads at a glance
       case PLAZA_STONE:
         return '#a89c86';
+      case GARDEN_PLANTING:
+        return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
+      case FENCE:
+        return '#6a5334'; // yard fence, in its own timber colour
       default:
         return '#555555';
     }

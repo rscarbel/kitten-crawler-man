@@ -1,19 +1,24 @@
 /**
  * Draws one tile of outdoor ground, from the generated `ground_overworld` sheet.
  *
- * Five passes, in this order:
+ * Six passes, in this order:
  *
  *  1. **Base** — the material's frame for this tile (see `groundFrameIndex`).
  *  2. **Fringe** — where materials meet, the boundary between them is drawn
  *     through a shared corner mask on the dual grid, so it wanders across the
  *     tile edge instead of running along it.
- *  3. **Scatter** — a softer neighbour spills tufts or grit a few pixels across
+ *  3. **Kerb** — where a made street meets soft ground, a raised stone lip along
+ *     its own edge, so a street reads as a street and not as a strip of a
+ *     different material.
+ *  4. **Scatter** — a softer neighbour spills tufts or grit a few pixels across
  *     the joint, which is how grass takes back the gutter the fringe just paved.
- *  4. **World noise** — a low-frequency brightness field sampled in *world*
+ *  5. **World noise** — a low-frequency brightness field sampled in *world*
  *     space. Per-tile seamlessness does not fix large-scale repetition: without
  *     this, a field of perfectly-matching tiles still reads as blocks.
- *  5. **Ambient occlusion** — soft shading where ground meets a wall, building
- *     or ruin, so nothing looks pasted onto the lawn.
+ *  6. **Ambient occlusion** — soft shading where ground meets a wall, building
+ *     or ruin, so nothing looks pasted onto the lawn. A town building is one
+ *     anchor tile on the grid, so this reads the sprite manifest's footprints
+ *     rather than tile types alone — see `underSpriteArt`.
  *
  * Every pass runs at chunk-bake time (`TileChunkCache`), never per frame, and
  * every pass draws strictly inside the tile's own rect — which is what lets the
@@ -34,10 +39,19 @@ import {
   ROOF_RED,
   ROOF_SLATE,
   ROOF_THATCH,
+  MAIN_TOWER,
   RUINED_WALL,
+  SPRITE_BUILDING,
   TOWN_WALL,
 } from '../tileTypes';
-import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../../core/SpriteLoader';
+import {
+  getBlockedTileOffsets,
+  getBlockedTileOffsetsByKey,
+  getSpriteDef,
+  type SpriteDef,
+  type SpriteStateDef,
+  type TileOffset,
+} from '../../core/SpriteLoader';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import { inferFloorType } from './helpers';
 import {
@@ -83,12 +97,17 @@ interface InferredMaterial {
 /**
  * The material the ground at (tx, ty) is made of.
  *
- * Tiles that *are* ground answer directly. Tiles that merely stand on it — a
- * torch, a well, a fountain, a building anchor — are inferred from their
- * surroundings, the same way the decoration renderers pick the floor to draw
- * beneath themselves. Without that, every one of them is a hole: a hole in what
- * gets drawn under the decoration, and a hole in the fringe's field, which the
- * neighbouring tiles then disagree across.
+ * Tiles that *are* ground answer directly. A tile that **recorded** the surface
+ * it replaced answers from that. Only tiles that did neither — a torch, a well, a
+ * fountain, a building anchor — are inferred from their surroundings, the same
+ * way the decoration renderers pick the floor to draw beneath themselves. Without
+ * that fallback every one of them is a hole: a hole in what gets drawn under the
+ * decoration, and a hole in the fringe's field, which the neighbouring tiles then
+ * disagree across.
+ *
+ * Inference is a last resort rather than the rule because it takes the first
+ * cardinal neighbour it finds and that probe starts to the south, so anything on
+ * the south edge of a region renders as whatever lies outside it.
  */
 function groundMaterialUnder(
   structure: TileContent[][],
@@ -100,6 +119,9 @@ function groundMaterialUnder(
   if (ty < 0 || ty >= structure.length) return undefined;
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return undefined;
+
+  const recorded = row[tx].groundType;
+  if (recorded !== undefined) return groundMaterialForTileType(recorded);
 
   const type = row[tx].type;
   let memo = inferredMaterials.get(structure);
@@ -829,6 +851,112 @@ function drawScatter(
 }
 
 // ---------------------------------------------------------------------------
+// Kerbs — the lip that makes a street a street
+// ---------------------------------------------------------------------------
+
+/**
+ * The materials a kerb belongs to, and the ones it is laid against.
+ *
+ * Every made street gets a lip where it meets **planted** ground, and nowhere
+ * else. The three exclusions are each a case the first cut got wrong and a
+ * screenshot caught:
+ *
+ * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the plan calls
+ *   the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
+ *   every track outside the walls. Kerbing against it drew a closed pale
+ *   rectangle around Blackwood Lodge's three-tile doorstep, an island of setts in
+ *   packed earth, and put a lip on every gate apron out in open country.
+ * - `gravel` is the workyards and the gate aprons, which are made surfaces too;
+ *   19 edges of the town's paving met one.
+ * - `grass` is the field outside the walls, which no street is kerbed against
+ *   because the roads out there are `dirt`.
+ *
+ * That leaves `verge`, which is what a street verge is: the soft strip a kerb
+ * exists to hold back.
+ */
+const KERBED_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>([
+  'lane',
+  'cobble',
+  'plaza',
+]);
+const KERB_SOFT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>(['verge']);
+
+/**
+ * Depth of the kerbstone lip and of the joint line behind it.
+ *
+ * Both are drawn *inside* the street tile, against its own edge. That is a few
+ * pixels off the fringe's wandering contour — which bleeds the harder material a
+ * little way across the joint, so the visible boundary sits just outside this
+ * edge and the lip lands on paving rather than in the gutter. Anchoring it to the
+ * contour instead would mean sampling the mask per pixel; the scatter pass makes
+ * the same trade for the same reason.
+ */
+const KERB_LIP_PX = 3;
+const KERB_JOINT_PX = 2;
+/**
+ * Translucent rather than a stone colour, so one pair of values works on setts,
+ * cobble and flagstone instead of three sampled colours that go stale the next
+ * time the tileset is regenerated.
+ */
+const KERB_LIP_COLOR = 'rgba(232,226,210,0.26)';
+const KERB_JOINT_COLOR = 'rgba(0,0,0,0.20)';
+
+/**
+ * A raised stone lip along every edge where a made street meets planted ground.
+ *
+ * A tile standing under a building's art is never kerbed against, and that has
+ * to be asked of the sprite footprints rather than of the tile type: the ground
+ * under a facade keeps whatever surface the plan painted there, which is usually
+ * verge, so classifying by type alone laid **167 of the map's 388 kerb edges
+ * along a building's base row** — a pale lip drawn against a wall, inside the
+ * contact-shadow band the occlusion pass adds two passes later. The occluder test
+ * already knows those tiles are solid; this asks the same question.
+ */
+function drawKerb(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  material: GroundMaterial,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  if (!KERBED_MATERIALS.has(material)) return;
+  const lip = Math.min(KERB_LIP_PX, ts);
+  const joint = Math.min(KERB_JOINT_PX, ts - lip);
+
+  const kerbs = (dx: number, dy: number) => {
+    const neighbour = groundMaterialUnder(structure, tx + dx, ty + dy);
+    if (neighbour === undefined || !KERB_SOFT_MATERIALS.has(neighbour)) return false;
+    return !occluderAt(structure, tx + dx, ty + dy);
+  };
+  const north = kerbs(0, -1);
+  const south = kerbs(0, 1);
+  const west = kerbs(-1, 0);
+  const east = kerbs(1, 0);
+  if (!north && !south && !west && !east) return;
+
+  // Both layers are translucent, so a tile that kerbs two sides must not paint
+  // their shared corner twice — it composites to a bright dot exactly where the
+  // lip turns. The horizontal strips take the full width and the vertical ones
+  // give way to them, which draws the union with no overlap and keeps every
+  // stroke a plain `fillRect` that an instrumented render can count.
+  const drawLayer = (color: string, depth: number, inset: number) => {
+    ctx.fillStyle = color;
+    if (north) ctx.fillRect(sx, sy + inset, ts, depth);
+    if (south) ctx.fillRect(sx, sy + ts - inset - depth, ts, depth);
+    const top = sy + (north ? inset + depth : 0);
+    const bottom = sy + ts - (south ? inset + depth : 0);
+    if (west) ctx.fillRect(sx + inset, top, depth, bottom - top);
+    if (east) ctx.fillRect(sx + ts - inset - depth, top, depth, bottom - top);
+  };
+
+  drawLayer(KERB_LIP_COLOR, lip, 0);
+  drawLayer(KERB_JOINT_COLOR, joint, lip);
+}
+
+// ---------------------------------------------------------------------------
 // World-space brightness noise
 // ---------------------------------------------------------------------------
 
@@ -1085,11 +1213,79 @@ const OCCLUSION_SIDES: ReadonlyArray<OcclusionSide> = [
   { dx: 0, dy: 1, depthPx: OCCLUSION_SOUTH_DEPTH_PX, alpha: OCCLUSION_SOUTH_ALPHA },
 ];
 
+/**
+ * Tiles standing under a map sprite's art, memoised per map.
+ *
+ * **The tile types are not enough to find a town building.** A sprite building is
+ * one anchor tile carrying a manifest key, and every other tile under its facade
+ * keeps whatever surface the plan painted there — so every one of the town's
+ * fifteen buildings and its tower was invisible to the occluder test, and the
+ * ground in front of a facade was shaded by nothing at all. That is what made the
+ * buildings read as stickers on the lawn: a wall casts a contact shadow and these
+ * cast none.
+ *
+ * The doorway is deliberately left out (`getBlockedTileOffsetsByKey` is the
+ * footprint *minus* the opening), so a threshold takes the north band from the
+ * facade above it rather than being treated as facade itself.
+ *
+ * Built once per map and not revalidated. That is a real assumption, stated
+ * rather than hidden: a map's building anchors are written by the generator and
+ * never afterwards, and the only honest alternative — rescanning to check — costs
+ * a whole-map sweep on a function the occlusion pass calls five times a tile.
+ * `GameMap` makes the same assumption for `extraBlockedTiles`, which it rebuilds
+ * only when the structure is replaced.
+ */
+const spriteFootprintTiles = new WeakMap<TileContent[][], ReadonlySet<number>>();
+
+/**
+ * Positions are packed as `y * width + x`, which only distinguishes them while
+ * `x` stays inside the row. An offset that reaches past either end would wrap
+ * onto the neighbouring row and mark a tile somewhere else on the map as being
+ * under a building — a phantom contact shadow with nothing casting it. Not
+ * reachable on today's maps (the index spans x 113…167 on a 280-wide grid), but
+ * the offsets come from sprite manifests and this is a shared renderer.
+ */
+function buildFootprintIndex(structure: TileContent[][]): ReadonlySet<number> {
+  const covered = new Set<number>();
+  const height = structure.length;
+  const width = structure[0]?.length ?? 0;
+  for (let ty = 0; ty < height; ty++) {
+    const row = structure[ty];
+    for (let tx = 0; tx < row.length; tx++) {
+      const tile = row[tx];
+      let offsets: ReadonlyArray<TileOffset> | undefined;
+      if (tile.type === SPRITE_BUILDING && tile.spriteKey !== undefined) {
+        offsets = getBlockedTileOffsetsByKey(tile.spriteKey);
+      } else if (tile.type === MAIN_TOWER) {
+        offsets = getBlockedTileOffsets(MAIN_TOWER);
+      }
+      if (offsets === undefined) continue;
+      for (const offset of offsets) {
+        const coveredX = tx + offset.dx;
+        const coveredY = ty + offset.dy;
+        if (coveredX < 0 || coveredX >= width || coveredY < 0 || coveredY >= height) continue;
+        covered.add(coveredY * width + coveredX);
+      }
+    }
+  }
+  return covered;
+}
+
+function underSpriteArt(structure: TileContent[][], tx: number, ty: number): boolean {
+  let covered = spriteFootprintTiles.get(structure);
+  if (covered === undefined) {
+    covered = buildFootprintIndex(structure);
+    spriteFootprintTiles.set(structure, covered);
+  }
+  return covered.has(ty * (structure[0]?.length ?? 0) + tx);
+}
+
 function occluderAt(structure: TileContent[][], tx: number, ty: number): boolean {
   if (ty < 0 || ty >= structure.length) return false;
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return false;
-  return GROUND_OCCLUDER_TYPES.has(row[tx].type);
+  if (GROUND_OCCLUDER_TYPES.has(row[tx].type)) return true;
+  return underSpriteArt(structure, tx, ty);
 }
 
 /** Pre-rendered occlusion bands, keyed by side, which ends taper, and tile size. */
@@ -1270,6 +1466,9 @@ export function drawGroundTile(
 
   drawResolved(ctx, resolved, sx, sy, ts);
   drawFringe(ctx, FRINGE_MATERIALS[material], materialAt, sx, sy, ts, tx, ty);
+  // Before the scatter, so tufts from the soft side spill over the kerb rather
+  // than being buried by it — which is what grass at a kerb actually does.
+  drawKerb(ctx, structure, material, sx, sy, ts, tx, ty);
   drawScatter(ctx, structure, material, sx, sy, ts, tx, ty);
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);

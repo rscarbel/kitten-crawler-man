@@ -17,13 +17,30 @@ import type { SpritePlacement } from './paintPlots';
 /**
  * Rows of street paved in front of a doorway, counting the door's own row.
  *
- * One is enough: every building is bottom-aligned to its band, so the row below
- * its door is already the band's street. The apron exists to pave the *doorway
- * itself* across its full width — the sprite leaves a four-tile gap in The
- * Horned Flagon's facade and a three-tile gap in the General Store's, and a
- * single paved tile in the middle of one reads as a footpath through a lawn.
+ * Two: the doorway itself, and the row of street below it. The doorway row is
+ * what stops a four-tile gap in The Horned Flagon's facade reading as a single
+ * flagstone in a lawn. The street row is the doorstep — see
+ * `DOOR_APRON_SIDE_OVERHANG` for why it is worth paving a material that is
+ * already paved.
  */
-const DOOR_APRON_ROWS = 1;
+const DOOR_APRON_ROWS = 2;
+
+/**
+ * How far the apron reaches past the doorway on either side.
+ *
+ * In the doorway's own row this falls under the facade and is invisible, which
+ * is deliberate: the row is a run of tiles the sprite covers, and stating the
+ * apron as "the doorway plus a tile" rather than "exactly the doorway" means a
+ * re-cut facade that widens its opening by a tile still lands on paving.
+ *
+ * In the street row it is what you actually see. Every band's street is already
+ * paved, so the apron's effect there is to lay the *frontage* material across the
+ * front of a door: setts in front of the mead hall's four-tile opening where
+ * Market Street is cobble, a stone doorstep in front of Blackwood Lodge where its
+ * alley is packed earth. That is what §3.4 asks for — a doorstep is a different
+ * surface from the roadway, or it is not a doorstep.
+ */
+const DOOR_APRON_SIDE_OVERHANG = 1;
 
 /** Paints every planned surface in order, later surfaces winning. */
 export function paintTownSurfaces(grid: TileGrid, plan: TownPlan): void {
@@ -88,14 +105,23 @@ export function paintGateHighways(grid: TileGrid, plan: TownPlan, borderTiles: n
 }
 
 /**
- * Paves a sprite building's doorway across its full width, so the opening in the
- * facade reads as a threshold rather than as a gap with lawn in it.
+ * Paves a sprite building's doorway and the doorstep below it, so the opening in
+ * the facade reads as a threshold rather than as a gap with lawn in it and the
+ * building meets its street rather than sitting on it.
+ *
+ * `setPaved` rather than `set` is a guard, not a fix for a live case, and the
+ * distinction is worth keeping straight: measured across all fifteen buildings,
+ * **no apron tile lands on the wall today**. The closest is The Sunken Stump Pub,
+ * whose doorway starts at the interior's second column so its apron reaches the
+ * westmost interior column and stops one short of the stone. The guard is there
+ * because the apron's width is derived from a sprite's facade, so a re-cut door
+ * one column further out would reach the ring and punch a hole in it.
  */
 export function paintDoorApron(grid: TileGrid, placement: SpritePlacement): void {
+  const from = placement.doorwayX - DOOR_APRON_SIDE_OVERHANG;
+  const to = placement.doorwayX + placement.doorwayWidth - 1 + DOOR_APRON_SIDE_OVERHANG;
   for (let row = 0; row < DOOR_APRON_ROWS; row++) {
-    for (let i = 0; i < placement.doorwayWidth; i++) {
-      grid.set(placement.doorwayX + i, placement.doorTile.y + row, LANE_STREET);
-    }
+    for (let x = from; x <= to; x++) grid.setPaved(x, placement.doorTile.y + row, LANE_STREET);
   }
 }
 

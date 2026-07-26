@@ -117,6 +117,16 @@ export interface PlannedBuilding {
    * frontage on the street and grows it northward into its own plot.
    */
   readonly frontRow: number;
+  /**
+   * North edge of the plot: its band's first row. The plot is therefore
+   * `west .. west + sprite width - 1` by `plotTop .. frontRow`, which is the art
+   * plus whatever back yard the band leaves behind it.
+   *
+   * The plot rather than the art is what ground scatter is suppressed over and
+   * what the sliver check measures between, so shrinking a building's art leaves
+   * a garden behind it rather than a strip of scattered weed nobody planted.
+   */
+  readonly plotTop: number;
   readonly spriteKey: string;
   readonly name: string;
   readonly kind: BuildingKind;
@@ -141,6 +151,46 @@ export interface PlannedTower {
   readonly kind: BuildingKind;
 }
 
+/**
+ * What a yard is for, which decides both the surface it must stand on and what
+ * gets planted in it.
+ *
+ * A `garden` is soft ground — verge — and takes planting. A `workyard` is loose
+ * gravel and takes none: it is a place things are done, and its clutter is props
+ * rather than greenery. `paintYards` checks the surface underneath against this
+ * rather than trusting it, because planting reports the material it is painted
+ * *over*, so a garden accidentally laid on gravel would draw verge tufts on a
+ * gravel row and be eroded by the surrounding gravel through the corner masks.
+ */
+export type YardKind = 'garden' | 'workyard';
+
+/**
+ * An enclosed or planted piece of block interior: a back garden, a drying green,
+ * a kitchen garden, or a working yard.
+ *
+ * Yards are what turn the ground a building does not stand on from dead lawn
+ * into somewhere that belongs to it. They deliberately overlap the plots they sit
+ * behind — a back garden *is* part of its building's plot — so nothing here has
+ * to be kept in step with the building list beyond staying on the right surface.
+ */
+export interface PlannedYard {
+  readonly name: string;
+  readonly bounds: TileRect;
+  readonly kind: YardKind;
+  /**
+   * Whether the yard gets a post-and-rail perimeter. Strips one tile deep are
+   * planted but never fenced: a fence around them would be all perimeter and no
+   * inside, and the town would read as a stockade rather than as a place.
+   */
+  readonly fenced: boolean;
+  /**
+   * Gaps left in the perimeter so the yard can be walked into. Stated as
+   * rectangles rather than as a side and an offset because that is what the
+   * painter needs and what a reviewer can check against the map.
+   */
+  readonly gates: ReadonlyArray<TileRect>;
+}
+
 /** A prop placed as tiles on the plan's ground, before any scatter runs. */
 export type PlannedProp =
   | { readonly kind: 'fountain'; readonly bounds: TileRect }
@@ -151,6 +201,8 @@ export type PlannedProp =
 export interface GroundCoverPlan {
   readonly weedDensityOnGrass: number;
   readonly dirtPatchDensityOnRoad: number;
+  /** Per-tile chance that a garden tile is planted rather than left as bare verge. */
+  readonly plantingDensityInGardens: number;
 }
 
 export interface TownPlan {
@@ -172,6 +224,8 @@ export interface TownPlan {
   readonly plaza: TileRect;
   readonly tower: PlannedTower;
   readonly buildings: ReadonlyArray<PlannedBuilding>;
+  /** Block interiors: back gardens, drying greens, planted strips and workyards. */
+  readonly yards: ReadonlyArray<PlannedYard>;
   readonly props: ReadonlyArray<PlannedProp>;
   /** Where the Doomsday finale's escape stairwell appears, just south of the tower door. */
   readonly doomsdayEscapeTile: TilePoint;
@@ -344,6 +398,13 @@ const SIDE_GATE_TORCH_ROW = LOW_QUARTER_TOP;
 
 const GRASSY_WEED_DENSITY = 0.015;
 const DIRT_PATCH_DENSITY = 0.06;
+/**
+ * Planting is dense where the outdoor scatter is sparse: a garden that is one
+ * bed in twenty reads as a neglected lot rather than as a garden, and the
+ * planting tile draws rows rather than a lone tuft, so a run of them lines up
+ * into beds.
+ */
+const GARDEN_PLANTING_DENSITY = 0.55;
 
 // ── Safe zone ────────────────────────────────────────────────────────────────
 
@@ -417,10 +478,16 @@ const PLANNED_SURFACES: ReadonlyArray<PlannedSurface> = [
     bounds: span(EAST_LANE_EAST + 1, MARKET_ROW_TOP, INTERIOR_EAST, MARKET_ROW_BOTTOM),
     tileType: YARD_GRAVEL,
   },
+  /**
+   * Soft ground, not gravel: it is Miller's kitchen garden, and the planting the
+   * `South Green` yard puts here reports the material it is drawn *over*. On
+   * gravel the beds would draw verge tufts on a gravel row and the surrounding
+   * gravel would erode them through the corner masks.
+   */
   {
     name: 'South Green crop rows',
     bounds: span(EAST_LANE_EAST + 1, LOW_QUARTER_TOP, INTERIOR_EAST, FARM_YARD_BOTTOM),
-    tileType: YARD_GRAVEL,
+    tileType: VERGE_GRASS,
   },
 
   // Alleys — packed earth, the lowest rung of the street hierarchy.
@@ -562,6 +629,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_WEST_PLOT,
     frontRow: GARRISON_BOTTOM,
+    plotTop: GARRISON_TOP,
     spriteKey: 'village_house_2',
     name: 'Blackwood Lodge',
     kind: 'house',
@@ -569,6 +637,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: GARRISON_SECOND_COTTAGE,
     frontRow: GARRISON_BOTTOM,
+    plotTop: GARRISON_TOP,
     spriteKey: 'village_house_1',
     name: "Shepherd's Cabin",
     kind: 'house',
@@ -576,6 +645,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: BARRACKS_PLOT_WEST,
     frontRow: GARRISON_BOTTOM,
+    plotTop: GARRISON_TOP,
     spriteKey: 'barracks',
     name: 'The Barracks',
     kind: 'restaurant',
@@ -583,6 +653,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_EAST_PLOT,
     frontRow: GARRISON_BOTTOM,
+    plotTop: GARRISON_TOP,
     spriteKey: 'village_house_4',
     name: "Cartwright's Workshop",
     kind: 'house',
@@ -592,6 +663,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_WEST_PLOT,
     frontRow: PLAZA_RING_BOTTOM,
+    plotTop: PLAZA_RING_TOP,
     spriteKey: 'temple',
     name: 'Temple of the Sky',
     kind: 'house',
@@ -599,6 +671,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: INNER_WEST_PLOT,
     frontRow: PLAZA_RING_BOTTOM,
+    plotTop: PLAZA_RING_TOP,
     spriteKey: 'village_house_1',
     name: 'Herb & Remedy',
     kind: 'house',
@@ -606,6 +679,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: INNER_EAST_PLOT,
     frontRow: PLAZA_RING_BOTTOM,
+    plotTop: PLAZA_RING_TOP,
     spriteKey: 'shop',
     name: 'General Store',
     kind: 'store',
@@ -613,6 +687,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_EAST_PLOT,
     frontRow: PLAZA_RING_BOTTOM,
+    plotTop: PLAZA_RING_TOP,
     spriteKey: 'small_inn',
     name: 'The Sleeping Cat Inn',
     kind: 'house',
@@ -622,6 +697,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_WEST_PLOT,
     frontRow: MARKET_ROW_BOTTOM,
+    plotTop: MARKET_ROW_TOP,
     spriteKey: 'tavern_2',
     name: 'The Horned Flagon',
     kind: 'house',
@@ -629,6 +705,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: INNER_WEST_PLOT,
     frontRow: MARKET_ROW_BOTTOM,
+    plotTop: MARKET_ROW_TOP,
     spriteKey: 'village_house_3',
     name: "Old Hilda's Cottage",
     kind: 'house',
@@ -636,6 +713,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: INNER_EAST_PLOT,
     frontRow: MARKET_ROW_BOTTOM,
+    plotTop: MARKET_ROW_TOP,
     spriteKey: 'blacksmith',
     name: 'The Rusty Anvil',
     kind: 'house',
@@ -645,6 +723,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_WEST_PLOT,
     frontRow: LOW_QUARTER_BOTTOM,
+    plotTop: LOW_QUARTER_TOP,
     spriteKey: 'tavern_1',
     name: 'The Sunken Stump Pub',
     kind: 'house',
@@ -652,6 +731,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: INNER_WEST_PLOT,
     frontRow: LOW_QUARTER_BOTTOM,
+    plotTop: LOW_QUARTER_TOP,
     spriteKey: 'tattoo_parlor',
     name: "Signet's Ink",
     kind: 'house',
@@ -659,6 +739,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: SERVICE_ALLEY_EAST + 1,
     frontRow: LOW_QUARTER_BOTTOM,
+    plotTop: LOW_QUARTER_TOP,
     spriteKey: 'desperado_club',
     name: 'The Desperado Club',
     kind: 'club',
@@ -668,9 +749,211 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
   {
     west: OUTER_EAST_PLOT,
     frontRow: LOW_QUARTER_BOTTOM,
+    plotTop: LOW_QUARTER_TOP,
     spriteKey: 'village_house_4',
     name: "Miller's Farm",
     kind: 'house',
+  },
+];
+
+// ── Yards, gardens and planted strips ────────────────────────────────────────
+
+/**
+ * The Garrison band's own green, between Shepherd's Cabin and the civic terrace.
+ * It is the largest piece of block interior in the town — seven tiles square —
+ * and the one place a fenced enclosure reads at a glance from a main street.
+ */
+const GARRISON_GREEN_WEST = -13;
+const GARRISON_GREEN_EAST = TERRACE_WEST - 1;
+/**
+ * The green starts one row below the band's top, because the row above it is the
+ * only way in or out of the strip behind Blackwood Lodge and Shepherd's Cabin.
+ *
+ * That strip is a single row wide, pinned between the north wall and the two
+ * cottages' back walls, and its one lateral exit is east past the green. A green
+ * that reached the wall put a corner post in exactly that gap and stranded
+ * **14 walkable tiles** behind the cottages — reachable in the old town, dead in
+ * the new one, and invisible on any screenshot of the finished map. Row `-18` is
+ * therefore a back lane along the wall, running from the west wall to the civic
+ * terrace, and the green's north fence faces it.
+ */
+const GARRISON_GREEN_TOP = GARRISON_TOP + 1;
+
+/**
+ * The Low Quarter's back gardens start one row below the band's top, leaving the
+ * band's first row as a verge margin under Market Street. That row also carries
+ * the two side-gate torches, and a fence line through a torch is a fence with a
+ * hole in it.
+ */
+const BACK_GARDEN_TOP = LOW_QUARTER_TOP + 1;
+const BACK_GARDEN_BOTTOM = 16;
+
+/** Gates are stated as rectangles; these are the two widths the town uses. */
+const SINGLE_GATE_WIDTH = 1;
+const CART_GATE_WIDTH = 2;
+/**
+ * How far along an edge a gate starts. Two tiles in on every yard, so no gate
+ * lands on a corner post — a corner is where two fence runs meet and is the one
+ * tile that has to stay.
+ */
+const GATE_INSET_TILES = 2;
+
+/**
+ * Every yard, garden and planted strip in the town.
+ *
+ * Fenced entries enclose a block interior; the unfenced ones are the single-row
+ * strips a band leaves behind or beside a building, which are planted but never
+ * fenced — a fence around a one-tile-deep strip is all perimeter and no inside.
+ *
+ * Every one of them must land on the surface its kind implies, which
+ * `assertYardsStandOnTheirOwnSurface` checks against the painted grid rather than
+ * against these rectangles: the surfaces above are painted in order and a later
+ * one can take a tile a yard was written for.
+ */
+const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
+  {
+    name: 'Garrison Green',
+    bounds: span(GARRISON_GREEN_WEST, GARRISON_GREEN_TOP, GARRISON_GREEN_EAST, GARRISON_BOTTOM),
+    kind: 'garden',
+    fenced: true,
+    // Onto the Upper Lane, which is the only side of it that is not a building,
+    // the terrace or the wall.
+    gates: [
+      span(
+        GARRISON_GREEN_WEST + GATE_INSET_TILES,
+        GARRISON_BOTTOM,
+        GARRISON_GREEN_WEST + GATE_INSET_TILES + CART_GATE_WIDTH - 1,
+        GARRISON_BOTTOM,
+      ),
+    ],
+  },
+  {
+    name: 'Sunken Stump back garden',
+    bounds: span(INTERIOR_WEST, BACK_GARDEN_TOP, WEST_LANE_WEST - 1, BACK_GARDEN_BOTTOM),
+    kind: 'garden',
+    fenced: true,
+    gates: [
+      span(
+        WEST_LANE_WEST - 1,
+        BACK_GARDEN_TOP + SINGLE_GATE_WIDTH,
+        WEST_LANE_WEST - 1,
+        BACK_GARDEN_TOP + SINGLE_GATE_WIDTH + CART_GATE_WIDTH - 1,
+      ),
+    ],
+  },
+  /**
+   * Signet's Ink's garden and the drying green beside it, as one enclosure: the
+   * two are an L rather than two rectangles, and the fence painter skips any tile
+   * standing under building art, so stating the whole block and letting Signet's
+   * own facade close the middle of it is simpler than fencing two plots back to
+   * back along a line nobody can walk.
+   */
+  {
+    name: "Signet's back garden",
+    bounds: span(INNER_WEST_PLOT, BACK_GARDEN_TOP, KINGS_ROAD_WEST - 1, LOW_QUARTER_BOTTOM),
+    kind: 'garden',
+    fenced: true,
+    gates: [
+      span(
+        INNER_WEST_PLOT,
+        BACK_GARDEN_TOP + SINGLE_GATE_WIDTH,
+        INNER_WEST_PLOT,
+        BACK_GARDEN_TOP + SINGLE_GATE_WIDTH + CART_GATE_WIDTH - 1,
+      ),
+      span(
+        KINGS_ROAD_WEST - GATE_INSET_TILES - CART_GATE_WIDTH,
+        LOW_QUARTER_BOTTOM,
+        KINGS_ROAD_WEST - GATE_INSET_TILES - 1,
+        LOW_QUARTER_BOTTOM,
+      ),
+    ],
+  },
+  {
+    name: "Miller's kitchen garden",
+    bounds: span(OUTER_EAST_PLOT, LOW_QUARTER_TOP, INTERIOR_EAST, FARM_YARD_BOTTOM),
+    kind: 'garden',
+    fenced: true,
+    gates: [
+      span(
+        OUTER_EAST_PLOT,
+        LOW_QUARTER_TOP + SINGLE_GATE_WIDTH,
+        OUTER_EAST_PLOT,
+        LOW_QUARTER_TOP + SINGLE_GATE_WIDTH,
+      ),
+    ],
+  },
+  {
+    name: 'Market Row east workyard',
+    bounds: span(OUTER_EAST_PLOT, MARKET_ROW_TOP, INTERIOR_EAST, MARKET_ROW_BOTTOM),
+    kind: 'workyard',
+    fenced: true,
+    gates: [
+      span(
+        OUTER_EAST_PLOT,
+        MARKET_ROW_TOP + GATE_INSET_TILES,
+        OUTER_EAST_PLOT,
+        MARKET_ROW_TOP + GATE_INSET_TILES + CART_GATE_WIDTH - 1,
+      ),
+    ],
+  },
+
+  // Planted strips: the single rows and columns a band leaves over once its
+  // buildings are packed against the lanes. Left bare they read as offcuts.
+  {
+    name: 'Garrison back strip',
+    bounds: span(INTERIOR_WEST, GARRISON_TOP, TERRACE_WEST - 1, GARRISON_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'Herb & Remedy back strip',
+    bounds: span(INNER_WEST_PLOT, PLAZA_RING_TOP, PLAZA_WEST - 1, PLAZA_RING_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'Herb & Remedy side strip',
+    bounds: span(PLAZA_WEST - 1, PLAZA_RING_TOP + 1, PLAZA_WEST - 1, PLAZA_RING_BOTTOM),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'General Store back strip',
+    bounds: span(INNER_EAST_PLOT, PLAZA_RING_TOP, INNER_EAST_PLOT + PLOT_WIDTH - 1, PLAZA_RING_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'Sleeping Cat back strip',
+    bounds: span(OUTER_EAST_PLOT, PLAZA_RING_TOP, INTERIOR_EAST, PLAZA_RING_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'Horned Flagon back strip',
+    bounds: span(INTERIOR_WEST, MARKET_ROW_TOP, WEST_LANE_WEST - 1, MARKET_ROW_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: "Old Hilda's side strip",
+    bounds: span(PLAZA_WEST - 1, MARKET_ROW_TOP, PLAZA_WEST - 1, MARKET_ROW_BOTTOM),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
+  },
+  {
+    name: 'Rusty Anvil back strip',
+    bounds: span(INNER_EAST_PLOT, MARKET_ROW_TOP, INNER_EAST_PLOT + PLOT_WIDTH - 1, MARKET_ROW_TOP),
+    kind: 'garden',
+    fenced: false,
+    gates: [],
   },
 ];
 
@@ -743,6 +1026,13 @@ export function createTownPlan(size: number): TownPlan {
       kind: 'tower',
     },
     buildings: PLANNED_BUILDINGS,
+    yards: PLANNED_YARDS.map((yard) => ({
+      name: yard.name,
+      bounds: shift(yard.bounds, centre),
+      kind: yard.kind,
+      fenced: yard.fenced,
+      gates: yard.gates.map((gate) => shift(gate, centre)),
+    })),
     props: planProps(centre),
     doomsdayEscapeTile: {
       x: cx - TOWER_DOOR_WEST_OFFSET,
@@ -752,6 +1042,7 @@ export function createTownPlan(size: number): TownPlan {
     groundCover: {
       weedDensityOnGrass: GRASSY_WEED_DENSITY,
       dirtPatchDensityOnRoad: DIRT_PATCH_DENSITY,
+      plantingDensityInGardens: GARDEN_PLANTING_DENSITY,
     },
   };
 }

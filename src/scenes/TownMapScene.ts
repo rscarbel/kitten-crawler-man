@@ -64,6 +64,8 @@ import {
   LANE_STREET,
   COBBLE_STREET,
   PLAZA_STONE,
+  FENCE,
+  GARDEN_PLANTING,
 } from '../map/tileTypes';
 
 const BG_COLOR = '#0b0e14';
@@ -111,6 +113,8 @@ const TILE_COLORS = new Map<number, string>([
   [LANE_STREET, '#9c8768'],
   [COBBLE_STREET, '#a89880'],
   [PLAZA_STONE, '#c0b49c'],
+  [GARDEN_PLANTING, '#4f6a2c'],
+  [FENCE, '#8a6a3c'],
 ]);
 
 /** Header band above the map viewport. */
