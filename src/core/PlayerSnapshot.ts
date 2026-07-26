@@ -26,7 +26,22 @@ export interface PlayerSnapshot {
   statusEffects: StatusEffect[];
   /** Max-HP loaned by an active Jugg Juice, so it is still repaid on the far side. */
   juggJuiceHpBoost: number;
+  /**
+   * Which crawler the player was controlling. Optional because saves written
+   * before this field existed are still loaded verbatim from the server.
+   */
+  isActive?: boolean;
+  /**
+   * Downed state and its clocks. Without these a knocked-out companion crosses a
+   * scene boundary as a plain 0-HP corpse, which reads as an instant game over.
+   */
+  isKnockedOut?: boolean;
+  knockedOutFrames?: number;
+  reviveProgress?: number;
 }
+
+/** HP a revived crawler comes back with, as a fraction of their max. */
+export const REVIVE_HP_FRACTION = 0.01;
 
 export function snapPlayer(p: Player): PlayerSnapshot {
   const snap: PlayerSnapshot = {
@@ -47,11 +62,33 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     tattooStat: p.tattooStat,
     statusEffects: p.statusEffects.map((e) => ({ ...e })),
     juggJuiceHpBoost: p.juggJuiceHpBoost,
+    isActive: p.isActive,
+    isKnockedOut: p.isKnockedOut,
+    knockedOutFrames: p.knockedOutFrames,
+    reviveProgress: p.reviveProgress,
   };
   if (p instanceof HumanPlayer) {
     snap.explosivesHandling = p.explosivesHandling;
   }
   return snap;
+}
+
+/**
+ * Copy of a snapshot with the downed state cleared and at least a sliver of HP.
+ *
+ * Checkpoints (floor entry, saved progress, the next floor's arrival state) must
+ * never describe a crawler who is already dead: restoring one would trip the
+ * game-over check on the first frame, and — because the same checkpoint is
+ * reused on every retry — would keep tripping it forever.
+ */
+export function revivedSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
+  return {
+    ...snap,
+    hp: Math.max(snap.hp, Math.ceil(snap.maxHp * REVIVE_HP_FRACTION)),
+    isKnockedOut: false,
+    knockedOutFrames: 0,
+    reviveProgress: 0,
+  };
 }
 
 export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
@@ -67,6 +104,10 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.facingX = snap.facingX;
   p.facingY = snap.facingY;
   p.tattooStat = snap.tattooStat;
+  p.isActive = snap.isActive ?? p.isActive;
+  p.isKnockedOut = snap.isKnockedOut ?? false;
+  p.knockedOutFrames = snap.knockedOutFrames ?? 0;
+  p.reviveProgress = snap.reviveProgress ?? 0;
   p.restoreStatusEffects(snap.statusEffects, snap.juggJuiceHpBoost);
   if (p instanceof HumanPlayer && snap.explosivesHandling !== undefined) {
     p.explosivesHandling = snap.explosivesHandling;

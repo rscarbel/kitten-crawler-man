@@ -21,6 +21,7 @@ import {
   applyMovement,
   triggerPlayerAttack,
   playMobAudioCues,
+  KNOCKOUT_TIMEOUT_FRAMES,
 } from '../systems/GameLoopPhases';
 import { GameplayScene } from './GameplayScene';
 import { pointInRect } from '../utils';
@@ -731,6 +732,42 @@ export class BuildingInteriorScene extends GameplayScene {
     };
   }
 
+  /**
+   * True when the companion went down outside and was left lying there. They are
+   * not in this building at all: they don't follow, don't render, and can't be
+   * switched to — only walking back out reaches them.
+   */
+  private get companionLeftBehind(): boolean {
+    return this.inactive().isKnockedOut;
+  }
+
+  /** The companion as a render-list fragment — empty when they were left outside. */
+  private presentCompanion(): ReturnType<BuildingInteriorScene['inactive']>[] {
+    return this.companionLeftBehind ? [] : [this.inactive()];
+  }
+
+  /** Hands control to the companion, unless they're lying knocked out outside. */
+  private trySwitchActive(): void {
+    if (this.companionLeftBehind) {
+      this.audio?.play('error');
+      return;
+    }
+    this.pm.switchActive();
+  }
+
+  /**
+   * Keeps the left-behind companion's revive deadline running while the player is
+   * indoors. Returns true once it has expired, which the overworld turns into a
+   * game over as soon as the scene hands control back.
+   */
+  private tickCompanionLeftBehind(): boolean {
+    const companion = this.inactive();
+    if (!companion.isKnockedOut) return false;
+    companion.isMoving = false;
+    companion.knockedOutFrames++;
+    return companion.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES;
+  }
+
   update(): void {
     if (this.gameOver && this.combat) {
       if (this.input.has(' ')) {
@@ -751,13 +788,17 @@ export class BuildingInteriorScene extends GameplayScene {
       this.catAchievements?.tryUnlock('doomsday_contained');
     }
 
+    const reviveDeadlineExpired = this.tickCompanionLeftBehind();
+
     // A doomsday-timeout death outside an active boss encounter has no local
     // death screen to show (most buildings never construct one) — hand off
     // to the overworld immediately so DungeonScene's own death pipeline
     // picks it up with the correct cause/flavor text, instead of leaving the
     // player wandering around at 0 hp until they happen to exit on their own.
+    // A companion who bleeds out on the doorstep takes the same route.
     const combatOnCurrentFloor = this.combat !== null && this.currentFloor === this.combat.floor;
-    if (!combatOnCurrentFloor && (!this.human.isAlive || !this.cat.isAlive)) {
+    const someoneDiedOutright = this.pm.players().some((p) => !p.isAlive && !p.isKnockedOut);
+    if (!combatOnCurrentFloor && (someoneDiedOutright || reviveDeadlineExpired)) {
       this.doExit();
       return;
     }
@@ -833,7 +874,9 @@ export class BuildingInteriorScene extends GameplayScene {
       ? TILE_SIZE * COMPANION_FOLLOW_OVERRIDE_RATIO
       : TILE_SIZE * COMPANION_FOLLOW_NORMAL_RATIO;
     // "Do not move" holds the companion in place; otherwise it trails the player.
-    if (this.companion.getMovementMode(this.human.isActive) === 'follow') {
+    if (this.companionLeftBehind) {
+      this.inactive().isMoving = false;
+    } else if (this.companion.getMovementMode(this.human.isActive) === 'follow') {
       this.applyCompanionFollow(this.map, followDist);
     } else {
       this.inactive().isMoving = false;
@@ -842,7 +885,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Tab: switch active player
     if (this.input.has('Tab')) {
       this.input.clear();
-      this.pm.switchActive();
+      this.trySwitchActive();
     }
 
     // Safe room: sleep / talk to Mordecai. Only consume Space when actually
@@ -1289,7 +1332,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
       this.renderSortedEntities(ctx, camX, camY, [
         ...combat.mobs.filter((m) => m.isAlive),
-        this.inactive(),
+        ...this.presentCompanion(),
         this.active(),
       ]);
 
@@ -1302,7 +1345,7 @@ export class BuildingInteriorScene extends GameplayScene {
       combat.spells.renderFogs(ctx, camX, camY);
     } else {
       this.renderSortedEntities(ctx, camX, camY, [
-        this.inactive(),
+        ...this.presentCompanion(),
         this.active(),
         ...(this.occupants?.people ?? []),
       ]);
@@ -1587,8 +1630,7 @@ export class BuildingInteriorScene extends GameplayScene {
       if (platform.isMobile) {
         const btn = this.mobileHUD.hitTest(x, y);
         if (btn === 'switch') {
-          this.human.isActive = !this.human.isActive;
-          this.cat.isActive = !this.cat.isActive;
+          this.trySwitchActive();
           continue;
         }
         if (btn === 'gear') {

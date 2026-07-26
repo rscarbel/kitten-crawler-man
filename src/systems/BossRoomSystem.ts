@@ -64,6 +64,17 @@ const DEFEAT_TIMER_FRAMES = 300;
 const ACID_DAMAGE_FLASH_FRAMES = 8;
 const COCKROACH_MOB_CLEANUP_THRESHOLD = 200;
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
+/** Tile deltas around a position, nearest (orthogonal) first. */
+const ADJACENT_TILE_OFFSETS = [
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+] as const;
 
 // Vomit projectile render constants
 const VOMIT_BLOB_RADIUS_FRACTION = 0.35;
@@ -419,6 +430,21 @@ export class BossRoomSystem implements GameSystem {
 
       const entryWindowOpen = state.entryWindowTimer > 0;
 
+      // A companion who goes down outside a sealed room is otherwise unreachable:
+      // the active player is clamped in and the revive clock is already running,
+      // so the fight would be an unavoidable loss. Drag them in, still down.
+      const activePlayer = human.isActive ? human : cat;
+      const companion = human.isActive ? cat : human;
+      if (
+        companion.isKnockedOut &&
+        this.isEntityInRoom(activePlayer, state.bounds) &&
+        !this.isEntityInRoom(companion, state.bounds)
+      ) {
+        this.dragIntoBossRoom(companion, activePlayer, state.bounds);
+        if (human.isActive) this.catIsInsider[i] = true;
+        else this.humanIsInsider[i] = true;
+      }
+
       // The inactive (AI-controlled) companion knocked out inside counts as an
       // exception: the active player may enter at any time to revive them.
       const inactivePlayer = human.isActive ? cat : human;
@@ -528,6 +554,37 @@ export class BossRoomSystem implements GameSystem {
       }
     }
     if (bestState) this.clampToBossRoom(mob, bestState.bounds);
+  }
+
+  /**
+   * Drops a knocked-out crawler on the nearest free tile beside `anchor`, inside
+   * the room, so the active player can stand over them and revive.
+   */
+  private dragIntoBossRoom(
+    downed: HumanPlayer | CatPlayer,
+    anchor: HumanPlayer | CatPlayer,
+    bounds: { x: number; y: number; w: number; h: number },
+  ): void {
+    const anchorTileX = Math.floor((anchor.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE);
+    const anchorTileY = Math.floor((anchor.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET) / TILE_SIZE);
+
+    for (const [offsetX, offsetY] of ADJACENT_TILE_OFFSETS) {
+      const tileX = anchorTileX + offsetX;
+      const tileY = anchorTileY + offsetY;
+      const insideRoom =
+        tileX >= bounds.x &&
+        tileX < bounds.x + bounds.w &&
+        tileY >= bounds.y &&
+        tileY < bounds.y + bounds.h;
+      if (!insideRoom || !this.gameMap.isWalkable(tileX, tileY)) continue;
+      downed.x = tileX * TILE_SIZE;
+      downed.y = tileY * TILE_SIZE;
+      return;
+    }
+
+    // Nowhere free: sharing the active player's tile still beats being sealed out.
+    downed.x = anchor.x;
+    downed.y = anchor.y;
   }
 
   private clampToBossRoom(

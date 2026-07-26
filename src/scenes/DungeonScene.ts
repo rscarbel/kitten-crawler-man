@@ -65,7 +65,13 @@ import { TreasureChestSystem } from '../systems/TreasureChestSystem';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 
-import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
+import {
+  snapPlayer,
+  restorePlayer,
+  revivedSnapshot,
+  REVIVE_HP_FRACTION,
+  type PlayerSnapshot,
+} from '../core/PlayerSnapshot';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
@@ -160,6 +166,11 @@ export interface DungeonSceneOptions {
   humanSnap?: PlayerSnapshot;
   /** Preserved cat player state from a previous scene. */
   catSnap?: PlayerSnapshot;
+  /**
+   * Pixel position to drop a knocked-out companion back at, instead of the party
+   * spawn point — used when returning from a building the player entered alone.
+   */
+  knockedOutCompanionAt?: { x: number; y: number };
   /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
   existingMap?: GameMap;
   /**
@@ -285,7 +296,6 @@ const SPIT_PLACEMENT_RANDOMNESS = 0.5;
 
 // Health and revival system
 const KNOCKDOWN_FRAMES = 5400;
-const HP_RECOVERY_THRESHOLD = 0.01;
 const CRITICAL_HP_WARNING_SECONDS = 10;
 
 // Health status pulsing
@@ -649,8 +659,18 @@ export class DungeonScene extends GameplayScene {
       if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
       this.pm.setPositions(spawnTileX, spawnTileY);
 
-      this.floorEntryHumanSnap = options?.floorEntryHumanSnap ?? snapPlayer(this.human);
-      this.floorEntryCatSnap = options?.floorEntryCatSnap ?? snapPlayer(this.cat);
+      // A companion who went down out here stays exactly where they fell while
+      // the player is off inside a building, rather than being dragged to the door.
+      const downedAt = options?.knockedOutCompanionAt;
+      const companion = this.pm.inactive();
+      if (downedAt !== undefined && companion.isKnockedOut) {
+        companion.x = downedAt.x;
+        companion.y = downedAt.y;
+      }
+
+      this.floorEntryHumanSnap =
+        options?.floorEntryHumanSnap ?? revivedSnapshot(snapPlayer(this.human));
+      this.floorEntryCatSnap = options?.floorEntryCatSnap ?? revivedSnapshot(snapPlayer(this.cat));
 
       this.mobs = spawnForLevel(levelDef, this.gameMap);
       this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
@@ -846,8 +866,8 @@ export class DungeonScene extends GameplayScene {
       // Save progress immediately so the floor is recorded as complete even if
       // the player closes the browser during the celebration screen.
       this.onSaveProgress?.({
-        humanSnap: this._cleanSnapFor(this.human),
-        catSnap: this._cleanSnapFor(this.cat),
+        humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
+        catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
         levelId: levelDef.nextLevelId,
       });
 
@@ -860,8 +880,10 @@ export class DungeonScene extends GameplayScene {
         this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
         this.sceneManager.replace(
           new DungeonScene(nextDef, this.input, this.sceneManager, {
-            humanSnap: this._cleanSnapFor(this.human),
-            catSnap: this._cleanSnapFor(this.cat),
+            // Taking the stairs regroups the party: a companion carried down
+            // still knocked out would time out on arrival with no way to reach them.
+            humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
+            catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
             humanAchievements: this.humanAchievements,
             catAchievements: this.catAchievements,
             mongoUnlocked: this.mongoSystem.unlocked,
@@ -892,6 +914,11 @@ export class DungeonScene extends GameplayScene {
         this.musicPersistsAcrossExit = true;
         const humanSnap = this._cleanSnapFor(this.human);
         const catSnap = this._cleanSnapFor(this.cat);
+        // Where a downed companion is left lying while the player is indoors.
+        const downedCompanion = this.inactive();
+        const downedCompanionAt = downedCompanion.isKnockedOut
+          ? { x: downedCompanion.x, y: downedCompanion.y }
+          : undefined;
         this.sceneManager.replace(
           new BuildingInteriorScene(
             entry,
@@ -908,6 +935,14 @@ export class DungeonScene extends GameplayScene {
                   spawnAt: exitTile,
                   humanSnap: hSnap,
                   catSnap: cSnap,
+                  knockedOutCompanionAt: downedCompanionAt,
+                  // Entering a building is a detour, not a new floor — the death
+                  // checkpoint has to stay pinned to where this floor began.
+                  floorEntryHumanSnap: this.floorEntryHumanSnap,
+                  floorEntryCatSnap: this.floorEntryCatSnap,
+                  floorEntryHumanAchievements: this.floorEntryHumanAchievements,
+                  floorEntryCatAchievements: this.floorEntryCatAchievements,
+                  floorEntryAbilityManager: this.floorEntryAbilityManager,
                   existingMap: this.gameMap,
                   existingMiniMap: this.miniMap,
                   humanAchievements: this.humanAchievements,
@@ -1420,8 +1455,8 @@ export class DungeonScene extends GameplayScene {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
       }
       this.onSaveProgress?.({
-        humanSnap: this._cleanSnapFor(this.human),
-        catSnap: this._cleanSnapFor(this.cat),
+        humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
+        catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
         levelId: this.levelDef.id,
       });
     });
@@ -1776,6 +1811,14 @@ export class DungeonScene extends GameplayScene {
 
     if (!inactive.isKnockedOut) return;
 
+    // Being down is defined by having no HP, so anything that puts HP back —
+    // a night's sleep bought while they lay outside, a lingering regen effect —
+    // brings them round without the usual proximity revive.
+    if (inactive.hp > 0) {
+      this.finishRevival(inactive);
+      return;
+    }
+
     inactive.knockedOutFrames++;
 
     const active = this.active();
@@ -1787,16 +1830,20 @@ export class DungeonScene extends GameplayScene {
       }
       inactive.reviveProgress++;
       if (inactive.reviveProgress >= this.REVIVE_FRAMES) {
-        // Revival complete
-        inactive.isKnockedOut = false;
-        inactive.knockedOutFrames = 0;
-        inactive.reviveProgress = 0;
-        inactive.hp = Math.max(1, Math.ceil(inactive.maxHp * HP_RECOVERY_THRESHOLD));
-        this.audio?.play(inactive === this.human ? 'human_revived' : 'cat_revived');
+        this.finishRevival(inactive);
       }
     } else {
       inactive.reviveProgress = 0;
     }
+  }
+
+  /** Clears the downed state and puts the crawler back on their feet with a sliver of HP. */
+  private finishRevival(player: HumanPlayer | CatPlayer): void {
+    player.isKnockedOut = false;
+    player.knockedOutFrames = 0;
+    player.reviveProgress = 0;
+    player.hp = Math.max(player.hp, Math.ceil(player.maxHp * REVIVE_HP_FRACTION));
+    this.audio?.play(player === this.human ? 'human_revived' : 'cat_revived');
   }
 
   /** Renders the knocked-out warning banner, directional arrow, and revival progress bar. */

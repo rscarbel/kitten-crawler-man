@@ -10,6 +10,7 @@ import { TownMapScene } from './scenes/TownMapScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
 import { aiAdapter } from './ai/AIAdapter';
+import { revivedSnapshot } from './core/PlayerSnapshot';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
@@ -152,8 +153,10 @@ void audio.preload();
   if (devBootScene(sceneManager, options)) return;
 
   if (progress) {
-    options.humanSnap = progress.humanSnap;
-    options.catSnap = progress.catSnap;
+    // Loading straight into a wipe is never recoverable — the same save would
+    // reload into the same wipe — so a resumed party always arrives on its feet.
+    options.humanSnap = revivedSnapshot(progress.humanSnap);
+    options.catSnap = revivedSnapshot(progress.catSnap);
     sceneManager.replace(new DungeonScene(tutorialLevel, input, sceneManager, options));
   } else {
     sceneManager.replace(new PostSignupScene(input, sceneManager, options));
