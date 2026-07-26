@@ -287,10 +287,20 @@ export abstract class Player {
     return true;
   }
 
+  /** Total XP required to advance from the current level to the next. */
+  get xpNeededForNextLevel(): number {
+    return this.level * XP_PER_LEVEL_MULTIPLIER;
+  }
+
+  /** XP still missing before the next level-up fires. */
+  get xpRemainingToNextLevel(): number {
+    return Math.max(0, this.xpNeededForNextLevel - this.xp);
+  }
+
   gainXp(amount: number): boolean {
     if (amount <= 0) return false;
     this.xp += amount;
-    const xpNeeded = this.level * XP_PER_LEVEL_MULTIPLIER;
+    const xpNeeded = this.xpNeededForNextLevel;
     if (this.xp >= xpNeeded) {
       this.xp -= xpNeeded;
       this.level++;

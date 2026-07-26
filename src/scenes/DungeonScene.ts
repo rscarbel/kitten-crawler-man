@@ -220,6 +220,8 @@ export interface DungeonSceneOptions {
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
 /** Coin-purse cue on loot pickup. Matches the vendor-purchase level. */
 const COIN_PICKUP_VOLUME = 0.55;
+/** `!payday` developer cheat — coins granted to the active player. */
+const CHEAT_PAYDAY_COINS = 2500;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -2060,6 +2062,20 @@ export class DungeonScene extends GameplayScene {
           this.enableToughMode();
           this.playerChat.showBubble('🛡️ TOUGH MODE ON');
         }
+        return;
+      }
+      if (text.trim() === '!payday') {
+        this.active().coins += CHEAT_PAYDAY_COINS;
+        this.playerChat.showBubble(`💰 +${CHEAT_PAYDAY_COINS} COINS`);
+        return;
+      }
+      if (text.trim() === '!levelup') {
+        for (const p of [this.human, this.cat]) {
+          if (p.gainXp(p.xpRemainingToNextLevel)) {
+            this.bus.emit('playerLevelUp', { player: p, newLevel: p.level });
+          }
+        }
+        this.playerChat.showBubble('⭐ LEVEL UP');
         return;
       }
       if (text.trim() === '!reveal') {

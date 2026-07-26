@@ -115,7 +115,6 @@ const PLAYER_BLOCK_HP_THRESHOLD_LOW = 0.25;
 const PLAYER_BLOCK_HP_TEXT_X_OFFSET = 4;
 const PLAYER_BLOCK_XP_Y_OFFSET = 14;
 const PLAYER_BLOCK_STATS_Y_OFFSET = 4;
-const PLAYER_LEVEL_XP_MULTIPLIER = 10;
 
 // Status icon constants
 const STATUS_ICON_PILL_W = 26;
@@ -425,7 +424,7 @@ export function drawHUDPlayerBlock(
   });
 
   // XP bar
-  const xpNeeded = player.level * PLAYER_LEVEL_XP_MULTIPLIER;
+  const xpNeeded = player.xpNeededForNextLevel;
   const xpRatio = Math.min(1, player.xp / xpNeeded);
   const y2 = y + PLAYER_BLOCK_XP_Y_OFFSET;
 
