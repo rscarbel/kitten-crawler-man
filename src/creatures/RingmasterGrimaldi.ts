@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import type { VineTendril } from './VineTendril';
 import { drawRingmasterGrimaldiSprite } from '../sprites/ringmasterGrimaldiSprite';
 
@@ -60,10 +59,6 @@ export class RingmasterGrimaldi extends Mob {
 
   get isInvulnerable(): boolean {
     return this.invulnerable;
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   override takeDamageFrom(

@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import type { Remex } from './Remex';
 import { drawMissQuillSprite } from '../sprites/missQuillSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
@@ -72,10 +71,6 @@ export class MissQuill extends Mob {
 
   get isShielded(): boolean {
     return this.shielded;
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   override takeDamageFrom(

@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import { drawFatClownSprite } from '../sprites/fatClownSprite';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
@@ -37,10 +36,6 @@ export class FatClown extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CLOWN_HP, CLOWN_SPEED);
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   updateAI(targets: Player[]): void {

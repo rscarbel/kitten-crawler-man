@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import { drawCircusLemurSprite, drawThrownKnife } from '../sprites/circusLemurSprite';
 import { normalize } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
@@ -58,10 +57,6 @@ export class CircusLemur extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LEMUR_HP, LEMUR_SPEED);
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   updateAI(targets: Player[]): void {

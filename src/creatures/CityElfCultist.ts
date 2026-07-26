@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import { drawCityElfCultistSprite } from '../sprites/cityElfCultistSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
@@ -40,10 +39,6 @@ export class CityElfCultist extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, CULTIST_HP, CULTIST_SPEED);
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   updateAI(targets: Player[]): void {

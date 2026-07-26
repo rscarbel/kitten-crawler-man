@@ -1,6 +1,5 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import type { LootDrop } from './Mob';
 import { drawHeatherBearSprite } from '../sprites/heatherBearSprite';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
@@ -51,10 +50,6 @@ export class HeatherTheBear extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HEATHER_HP, HEATHER_SPEED);
     this.isBoss = true;
-  }
-
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
   }
 
   override takeDamageFrom(

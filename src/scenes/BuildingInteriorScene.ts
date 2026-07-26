@@ -487,9 +487,13 @@ export class BuildingInteriorScene extends GameplayScene {
       gore.spawnGore(cx, cy, impactDx, impactDy);
       bodyPartGore.spawnParts(cx, cy, e.mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
       this.audio?.playRandom(['splat_1', 'splat_2', 'splat_3']);
-      // No floor-loot system indoors — coin drops go straight to the killer.
+      // No floor-loot system indoors — drops go straight into the killer's purse and pack.
       if (e.killer !== null && e.mob.droppedLoot !== null) {
         e.killer.coins += e.mob.droppedLoot.coins;
+        for (const item of e.mob.droppedLoot.items) {
+          e.killer.inventory.addItem(item.id, item.quantity);
+        }
+        e.mob.droppedLoot = null;
       }
     });
     bus.on('playerLevelUp', () => {
