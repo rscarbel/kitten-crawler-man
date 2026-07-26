@@ -26,10 +26,91 @@ const LION_EYE_Y_OFFSET = -0.02;
 const LION_EYE_GLOW_RADIUS = 5;
 const LION_ATTACK_LUNGE = 0.1;
 
-/** Poison aura pulse ring. */
-const AURA_RING_ALPHA_BASE = 0.12;
-const AURA_RING_ALPHA_PULSE = 0.08;
-const AURA_RING_PULSE_SPEED = 0.15;
+/** Poison aura — faint spore clouds that ooze outward from the mane. */
+const AURA_PUFF_COUNT = 14;
+/** Fraction of a puff's lifetime advanced per frame. */
+const AURA_PUFF_DRIFT_SPEED = 0.0045;
+/** Where in the aura radius a puff is born, as a fraction of the full radius. */
+const AURA_PUFF_START_RADIUS_FRAC = 0.15;
+const AURA_PUFF_END_RADIUS_FRAC = 1;
+/** Puff blob size at birth and at full drift, as fractions of the aura radius. */
+const AURA_PUFF_SIZE_START_FRAC = 0.16;
+const AURA_PUFF_SIZE_END_FRAC = 0.42;
+/** Peak opacity of a single puff; they overlap into a soft haze. */
+const AURA_PUFF_PEAK_ALPHA = 0.16;
+/** Extra opacity multiplier once the aura is actively poisoning. */
+const AURA_ACTIVE_ALPHA_MULT = 2.1;
+/** Sideways wobble of a drifting puff, as a fraction of the aura radius. */
+const AURA_PUFF_WOBBLE_FRAC = 0.13;
+const AURA_PUFF_WOBBLE_SPEED = 0.06;
+/** Puffs sink slightly as they spread, so the cloud hugs the ground. */
+const AURA_PUFF_SINK_FRAC = 0.12;
+/** Irrational-ish angular step so puffs never form a visible spoke pattern. */
+const AURA_PUFF_ANGLE_STEP = 2.399963;
+
+/** Alpha ramp: a puff fades in over this fraction of its life, then fades out. */
+const AURA_PUFF_FADE_IN_END = 0.25;
+/** Vertical squash, so the cloud lies on the ground instead of forming a sphere. */
+const AURA_PUFF_VERTICAL_SQUASH = 0.6;
+/** Radial-gradient midpoint and its share of the puff's peak opacity. */
+const AURA_PUFF_GRADIENT_MID_STOP = 0.55;
+const AURA_PUFF_GRADIENT_MID_ALPHA_FRAC = 0.55;
+
+function puffAlphaEnvelope(life: number): number {
+  if (life < AURA_PUFF_FADE_IN_END) return life / AURA_PUFF_FADE_IN_END;
+  return 1 - (life - AURA_PUFF_FADE_IN_END) / (1 - AURA_PUFF_FADE_IN_END);
+}
+
+/**
+ * Draw the drifting spore cloud that seeps off the lion's fungal mane. Each puff
+ * is born near the body and expands outward as it fades, so the aura reads as
+ * oozing gas rather than a flat coloured disc.
+ */
+function drawSporeCloud(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  auraRadiusPx: number,
+  auraPhase: number,
+  isActive: boolean,
+): void {
+  const alphaMult = isActive ? AURA_ACTIVE_ALPHA_MULT : 1;
+
+  ctx.save();
+  for (let i = 0; i < AURA_PUFF_COUNT; i++) {
+    const life = (((auraPhase * AURA_PUFF_DRIFT_SPEED + i / AURA_PUFF_COUNT) % 1) + 1) % 1;
+    const alpha = puffAlphaEnvelope(life) * AURA_PUFF_PEAK_ALPHA * alphaMult;
+    if (alpha <= 0) continue;
+
+    const angle = i * AURA_PUFF_ANGLE_STEP;
+    const distFrac =
+      AURA_PUFF_START_RADIUS_FRAC +
+      (AURA_PUFF_END_RADIUS_FRAC - AURA_PUFF_START_RADIUS_FRAC) * life;
+    const wobble = Math.sin(auraPhase * AURA_PUFF_WOBBLE_SPEED + i) * AURA_PUFF_WOBBLE_FRAC;
+
+    const px = cx + Math.cos(angle) * auraRadiusPx * distFrac + wobble * auraRadiusPx;
+    const py =
+      cy +
+      Math.sin(angle) * auraRadiusPx * distFrac * AURA_PUFF_VERTICAL_SQUASH +
+      life * AURA_PUFF_SINK_FRAC * auraRadiusPx;
+    const puffRadius =
+      auraRadiusPx *
+      (AURA_PUFF_SIZE_START_FRAC + (AURA_PUFF_SIZE_END_FRAC - AURA_PUFF_SIZE_START_FRAC) * life);
+
+    const gradient = ctx.createRadialGradient(px, py, 0, px, py, puffRadius);
+    gradient.addColorStop(0, `rgba(168, 226, 96, ${alpha})`);
+    gradient.addColorStop(
+      AURA_PUFF_GRADIENT_MID_STOP,
+      `rgba(120, 190, 62, ${alpha * AURA_PUFF_GRADIENT_MID_ALPHA_FRAC})`,
+    );
+    gradient.addColorStop(1, 'rgba(96, 150, 48, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(px, py, puffRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
 
 /**
  * Draw a Mold Lion — a mutated lion bruiser whose mane has become a mass of
@@ -37,6 +118,7 @@ const AURA_RING_PULSE_SPEED = 0.15;
  *
  * @param attackAnim 0–1 progress through the bite lunge (0 = idle/walk).
  * @param auraRadiusPx radius of the poison aura in screen pixels, 0 to hide it.
+ * @param auraActive whether the aura is currently poisoning, which thickens the cloud.
  */
 export function drawMoldLionSprite(
   ctx: CanvasRenderingContext2D,
@@ -49,19 +131,13 @@ export function drawMoldLionSprite(
   facingX = 1,
   auraRadiusPx = 0,
   auraPhase = 0,
+  auraActive = false,
 ): void {
   const cx = sx + s / 2;
   const cy = sy + s / 2;
 
   if (auraRadiusPx > 0) {
-    const pulse =
-      AURA_RING_ALPHA_BASE + Math.sin(auraPhase * AURA_RING_PULSE_SPEED) * AURA_RING_ALPHA_PULSE;
-    ctx.save();
-    ctx.fillStyle = `rgba(120, 200, 60, ${Math.max(0, pulse)})`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, auraRadiusPx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    drawSporeCloud(ctx, cx, cy, auraRadiusPx, auraPhase, auraActive);
   }
 
   ctx.save();

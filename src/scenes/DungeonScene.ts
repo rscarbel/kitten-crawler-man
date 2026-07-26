@@ -161,6 +161,11 @@ export interface DungeonSceneOptions {
   catSnap?: PlayerSnapshot;
   /** Existing map to reuse instead of generating a new one (e.g. returning from building). */
   existingMap?: GameMap;
+  /**
+   * Minimap to reuse so fog-of-war survives the scene rebuild. Only honoured
+   * alongside `existingMap` — its fog array is sized to that map's structure.
+   */
+  existingMiniMap?: MiniMapSystem;
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
@@ -645,7 +650,11 @@ export class DungeonScene extends GameplayScene {
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
-    this.miniMap = new MiniMapSystem(this.gameMap);
+    const reusableMiniMap =
+      options?.existingMap !== undefined && options.existingMap === this.gameMap
+        ? options.existingMiniMap
+        : undefined;
+    this.miniMap = reusableMiniMap ?? new MiniMapSystem(this.gameMap);
     this.safeRoom = new SafeRoomSystem(
       this.gameMap,
       spawnTileX,
@@ -834,13 +843,17 @@ export class DungeonScene extends GameplayScene {
             catSnap,
             this.input,
             this.sceneManager,
-            (hSnap, cSnap) => {
+            (hSnap, cSnap, defeated) => {
+              // Losing an interior encounter sends the party home to the level's
+              // start tile instead of dumping them back on the doorstep.
+              const exitTile = defeated ? this.gameMap.startTile : returnTile;
               this.sceneManager.replace(
                 new DungeonScene(levelDef, this.input, this.sceneManager, {
-                  spawnAt: returnTile,
+                  spawnAt: exitTile,
                   humanSnap: hSnap,
                   catSnap: cSnap,
                   existingMap: this.gameMap,
+                  existingMiniMap: this.miniMap,
                   humanAchievements: this.humanAchievements,
                   catAchievements: this.catAchievements,
                   mongoUnlocked: this.mongoSystem.unlocked,

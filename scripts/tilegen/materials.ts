@@ -310,7 +310,9 @@ const gravel: Material = {
 // ── worked stone ───────────────────────────────────────────────────────────
 
 interface SettOptions {
-  /** Stones across one tile; the patch scales this up automatically. */
+  /** Stones across one tile; the patch scales this up automatically. Must
+   *  multiply with the material's `patchTiles` to a whole number, or the cell
+   *  lattice stops wrapping and the patch edges seam. */
   readonly cellsPerTile: number;
   readonly jitter: number;
   readonly ramp: Ramp;
@@ -322,6 +324,9 @@ interface SettOptions {
   readonly jointStrength: number;
   readonly reliefStrength: number;
   readonly warpAmplitude: number;
+  /** Per-stone tone variance. Lower values keep a large paved area from
+   *  reading as noise; defaults to `SETT_TONE_SPREAD`. */
+  readonly toneSpread?: number;
 }
 
 const SETT_WARP_PERIOD_PER_TILE = 8;
@@ -341,6 +346,7 @@ const SETT_TONE_FLOOR = 0.15;
 function paintSetts(ctx: PaintContext, options: SettOptions): void {
   const tiles = ctx.size / TILE_PX;
   const cells = options.cellsPerTile * tiles;
+  const toneSpread = options.toneSpread ?? SETT_TONE_SPREAD;
   ctx.surface.fill((x, y) => {
     const warped = ctx.noise.warp(
       x,
@@ -367,18 +373,18 @@ function paintSetts(ctx: PaintContext, options: SettOptions): void {
       ) -
         0.5) *
       SETT_FACE_GRAIN_STRENGTH;
-    const face = sampleRamp(
-      options.ramp,
-      SETT_TONE_FLOOR + cell.cellHash * SETT_TONE_SPREAD + faceGrain,
-    );
+    const face = sampleRamp(options.ramp, SETT_TONE_FLOOR + cell.cellHash * toneSpread + faceGrain);
     const lit = shade(face, reliefFactor(cell.offsetX, cell.offsetY, options.reliefStrength));
 
-    return mix(lit, sampleRamp(options.jointRamp, cell.cellHash * SETT_TONE_SPREAD), jointBlend);
+    return mix(lit, sampleRamp(options.jointRamp, cell.cellHash * toneSpread), jointBlend);
   });
 }
 
-const LANE_CELLS_PER_TILE = 7;
-const LANE_JOINT_WIDTH = 0.3;
+/** Side lanes read as a rougher cousin of the main street, but at the same
+ *  restrained stone size — see the note on `cobble`. */
+const LANE_CELLS_PER_TILE = 2.5;
+const LANE_JOINT_WIDTH = 0.18;
+const LANE_TONE_SPREAD = 0.4;
 const LANE_JOINT_WEED_THRESHOLD = 0.72;
 const LANE_WEED_COUNT = 70;
 
@@ -390,13 +396,14 @@ const lane: Material = {
   paint: (ctx) => {
     paintSetts(ctx, {
       cellsPerTile: LANE_CELLS_PER_TILE,
-      jitter: 0.85,
+      jitter: 0.6,
       ramp: STREET_STONE_RAMP,
       jointRamp: DIRT_RAMP,
       jointWidth: LANE_JOINT_WIDTH,
-      jointStrength: 0.75,
-      reliefStrength: 1.2,
-      warpAmplitude: 1.6,
+      jointStrength: 0.5,
+      reliefStrength: 0.7,
+      warpAmplitude: 0.9,
+      toneSpread: LANE_TONE_SPREAD,
     });
     const tiles = ctx.size / TILE_PX;
     const cells = LANE_CELLS_PER_TILE * tiles;
@@ -423,6 +430,19 @@ const lane: Material = {
   },
 };
 
+/**
+ * The town's main streets carry the most foot traffic on screen, so the paving
+ * is deliberately understated: few large setts, faint joints and shallow relief.
+ * Small high-contrast stones at 32 px/tile shimmer as the camera scrolls and
+ * swallow the sprites standing on them.
+ */
+const COBBLE_CELLS_PER_TILE = 2.5;
+const COBBLE_JOINT_WIDTH = 0.13;
+const COBBLE_JOINT_STRENGTH = 0.42;
+const COBBLE_RELIEF_STRENGTH = 0.7;
+const COBBLE_WARP_AMPLITUDE = 0.8;
+const COBBLE_TONE_SPREAD = 0.28;
+
 const cobble: Material = {
   id: 'cobble',
   label: 'Main street cobble',
@@ -430,14 +450,15 @@ const cobble: Material = {
   variants: 2,
   paint: (ctx) => {
     paintSetts(ctx, {
-      cellsPerTile: 5,
-      jitter: 0.7,
+      cellsPerTile: COBBLE_CELLS_PER_TILE,
+      jitter: 0.55,
       ramp: COBBLE_RAMP,
       jointRamp: { ...DIRT_RAMP, mid: DIRT_RAMP.shadow },
-      jointWidth: 0.22,
-      jointStrength: 0.8,
-      reliefStrength: 1.8,
-      warpAmplitude: 1.1,
+      jointWidth: COBBLE_JOINT_WIDTH,
+      jointStrength: COBBLE_JOINT_STRENGTH,
+      reliefStrength: COBBLE_RELIEF_STRENGTH,
+      warpAmplitude: COBBLE_WARP_AMPLITUDE,
+      toneSpread: COBBLE_TONE_SPREAD,
     });
   },
 };

@@ -270,7 +270,12 @@ export class BuildingInteriorScene extends GameplayScene {
     catSnap: PlayerSnapshot,
     input: InputManager,
     sceneManager: SceneManager,
-    private readonly onExitCallback: (humanSnap: PlayerSnapshot, catSnap: PlayerSnapshot) => void,
+    private readonly onExitCallback: (
+      humanSnap: PlayerSnapshot,
+      catSnap: PlayerSnapshot,
+      /** True when the exit was a defeat, so the caller can respawn away from the door. */
+      defeated: boolean,
+    ) => void,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
     audio?: AudioManager,
@@ -925,13 +930,17 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  /** Death inside an encounter: patch both crawlers up and put them back outside; the fight resets on re-entry. */
+  /**
+   * Death inside an encounter: patch both crawlers up and send them back to the
+   * level's respawn point rather than the building's doorstep, so a defeat costs
+   * the walk back. The fight resets on re-entry.
+   */
   private reviveAndExit(): void {
     for (const player of [this.human, this.cat]) {
       player.hp = Math.max(player.hp, Math.ceil(player.maxHp * INTERIOR_REVIVE_HP_FRACTION));
     }
     this.gameOver = false;
-    this.doExit();
+    this.doExit(true);
   }
 
   handleClick(mx: number, my: number): void {
@@ -1042,7 +1051,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  private doExit(): void {
+  private doExit(defeated = false): void {
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
     // The overworld scene re-applies god mode from the shared state, so hand it
@@ -1051,7 +1060,7 @@ export class BuildingInteriorScene extends GameplayScene {
       stripGodModeFromSnapshot(humanSnap);
       stripGodModeFromSnapshot(catSnap);
     }
-    this.onExitCallback(humanSnap, catSnap);
+    this.onExitCallback(humanSnap, catSnap, defeated);
   }
 
   /**

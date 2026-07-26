@@ -4,6 +4,12 @@ import type { LootDrop } from './Mob';
 import { drawSignetSprite, drawEliteMarker } from '../sprites/signetSprite';
 import { InkMarauder } from './InkMarauder';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import {
+  advanceSignetFireballs,
+  fireSignetFireball,
+  renderSignetFireballs,
+  type SignetFireball,
+} from './signetFireball';
 import { normalize } from '../utils';
 
 const SIGNET_HP = 80;
@@ -13,16 +19,23 @@ const CENTER_OFFSET = 0.5;
 const SIGNET_HIT_FLASH_FRAMES = 8;
 const SIGNET_HIT_HEALTHBAR_FRAMES = 180;
 
-/** Ally-mode combat tuning — mirrors Mongo's chase/bite shape. */
+/** Ally-mode combat tuning — she hangs back and lobs fireballs rather than brawling. */
 const AGGRO_RANGE_TILES = 10;
-const ATTACK_RANGE_TILES = 1.0;
-const ATTACK_DAMAGE = 6;
-/** Frames between strikes (~0.83 s at 60 fps). */
+const ATTACK_RANGE_TILES = 6;
+/**
+ * Chip damage by design: the fireball is showmanship so Signet reads as
+ * participating in the fight, while the player still earns every kill.
+ */
+const FIREBALL_DAMAGE = 1;
+/** Frames between casts (~0.83 s at 60 fps). */
 const ATTACK_COOLDOWN = 50;
 const ATTACK_ANIM_FRAMES = 14;
+/** She stops closing once this deep inside her cast range. */
+const CAST_STANDOFF_FRACTION = 0.75;
+/** Fireballs leave from roughly chest height rather than her feet. */
+const CAST_ORIGIN_Y_OFFSET = 0.35;
 /** How far Signet will stray from her anchor point (her spawn tile) while fighting. */
 const LEASH_RADIUS_TILES = 14;
-const FOLLOW_STOP_FRACTION = 0.8;
 
 /** Summoner ability — periodically conjures a short-lived spirit ally. */
 const SUMMON_COOLDOWN_FRAMES = 600; // 10s at 60fps
@@ -57,6 +70,7 @@ export class Signet extends Mob {
   private summonCooldown = SUMMON_COOLDOWN_FRAMES;
   private summonAnimTimer = 0;
   private isAggro = false;
+  private fireballs: SignetFireball[] = [];
 
   constructor(tileX: number, tileY: number, tileSize: number, addMob: (mob: Mob) => void) {
     super(tileX, tileY, tileSize, SIGNET_HP, SIGNET_SPEED);
@@ -102,6 +116,14 @@ export class Signet extends Mob {
     if (this.summonCooldown > 0) this.summonCooldown--;
     if (this.summonAnimTimer > 0) this.summonAnimTimer--;
 
+    this.fireballs = advanceSignetFireballs(
+      this.fireballs,
+      this.map,
+      this.tileSize,
+      this.allMobs,
+      (target) => target.takeDamageFrom(FIREBALL_DAMAGE, null, 'missile'),
+    );
+
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
     const leashPx = this.tileSize * LEASH_RADIUS_TILES;
@@ -135,7 +157,7 @@ export class Signet extends Mob {
         this.lastKnownTargetX,
         this.lastKnownTargetY,
         this.speed,
-        attackRangePx * FOLLOW_STOP_FRACTION,
+        attackRangePx * CAST_STANDOFF_FRACTION,
       );
     } else {
       this.isMoving = false;
@@ -148,8 +170,17 @@ export class Signet extends Mob {
       }
     }
 
-    if (nearestDist <= attackRangePx && this.attackCooldown === 0) {
-      nearest.takeDamageFrom(ATTACK_DAMAGE, null, 'melee');
+    if (nearestDist <= attackRangePx && this.attackCooldown === 0 && this.hasLOS(nearest)) {
+      const originX = this.x + this.tileSize * CENTER_OFFSET;
+      const originY = this.y + this.tileSize * CAST_ORIGIN_Y_OFFSET;
+      this.fireballs.push(
+        fireSignetFireball(
+          originX,
+          originY,
+          nearest.x + this.tileSize * CENTER_OFFSET,
+          nearest.y + this.tileSize * CENTER_OFFSET,
+        ),
+      );
       this.attackCooldown = ATTACK_COOLDOWN;
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }
@@ -175,6 +206,8 @@ export class Signet extends Mob {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
+
+    renderSignetFireballs(ctx, this.fireballs, camX, camY);
 
     if (this.isAggro) {
       this.renderAggroIndicator(ctx, sx, sy, tileSize);

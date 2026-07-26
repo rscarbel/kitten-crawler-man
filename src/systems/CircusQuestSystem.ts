@@ -60,9 +60,10 @@ const SIGNET_ANCHOR_INSET_TILES = 3;
 /** How close the player must be to Signet to talk. */
 const INTERACT_RANGE_TILES = 2.2;
 /**
- * Heather spawns this many tiles from the player — inside her own aggro
- * range (see HeatherTheBear's AGGRO_RANGE_TILES) so she notices immediately
- * and visibly walks up rather than appearing right on top of the player.
+ * Heather spawns this many tiles east of her spawn origin — inside her own
+ * aggro range (see HeatherTheBear's AGGRO_RANGE_TILES) so that when the origin
+ * is the player she notices immediately and visibly walks up, rather than
+ * appearing right on top of them.
  */
 const HEATHER_SPAWN_OFFSET_TILES = 6;
 /** Signet waits this far south of the Big Top door for the finale stages. */
@@ -205,6 +206,12 @@ export class CircusQuestSystem implements GameSystem {
       this.mongoSystem.cooldownFrames = MONGO_KIDNAP_LOCK_FRAMES;
     }
 
+    // A rebuild happens wherever the player currently stands — town after a
+    // death, or a doorstep after a building visit — so scripted spawns anchor
+    // to the circus instead of the player, who would otherwise be ambushed by
+    // the whole encounter the instant the scene loads.
+    const rebuildOrigin = this.circusCentre ?? this.originFromPlayer(active);
+
     switch (this.progress.stage) {
       case 'not_started':
         this.phase = 'awaiting_intro';
@@ -215,7 +222,7 @@ export class CircusQuestSystem implements GameSystem {
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
         this.startBattleMusic();
-        this.spawnWave(RITUAL_WAVES, 0, this.originFromPlayer(active));
+        this.spawnWave(RITUAL_WAVES, 0, rebuildOrigin);
         break;
       case 'heather_hunt':
         this.spawnSignetAtLookout();
@@ -224,14 +231,14 @@ export class CircusQuestSystem implements GameSystem {
           this.phase = 'awaiting_heather_return';
         } else {
           this.phase = 'heather_hunt';
-          this.spawnHeather(active);
+          this.spawnHeather(rebuildOrigin);
         }
         break;
       case 'assault':
         this.phase = 'assault';
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
-        this.beginAssaultCombat(active);
+        this.beginAssaultCombat(rebuildOrigin);
         break;
       case 'bigtop_ready':
         this.phase = 'bigtop_ready';
@@ -296,8 +303,7 @@ export class CircusQuestSystem implements GameSystem {
     this.spawnSignetAt(door.x + SIGNET_DOOR_OFFSET_TILES, door.y + SIGNET_DOOR_OFFSET_TILES);
   }
 
-  private spawnHeather(active: Player): void {
-    const origin = this.originFromPlayer(active);
+  private spawnHeather(origin: { x: number; y: number }): void {
     const tile = this.findSpawnTile(origin.x + HEATHER_SPAWN_OFFSET_TILES, origin.y);
     if (!tile) return;
     const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
@@ -462,23 +468,23 @@ export class CircusQuestSystem implements GameSystem {
     }
     this.phase = 'heather_hunt';
     this.progress.stage = 'heather_hunt';
-    this.spawnHeather(active);
+    this.spawnHeather(this.originFromPlayer(active));
   }
 
   private startAssault(active: Player): void {
     this.phase = 'assault';
     this.progress.stage = 'assault';
-    this.beginAssaultCombat(active);
+    this.beginAssaultCombat(this.originFromPlayer(active));
   }
 
   /** Shared by startAssault and mid-assault scene re-entry. */
-  private beginAssaultCombat(active: Player): void {
+  private beginAssaultCombat(origin: { x: number; y: number }): void {
     if (this.signet) {
       this.signet.allyModeActive = true;
       this.signet.summonCooldownFrames = BLOOD_FUELED_SUMMON_FRAMES;
     }
     this.startBattleMusic();
-    this.spawnWave(ASSAULT_WAVES, 0, this.originFromPlayer(active));
+    this.spawnWave(ASSAULT_WAVES, 0, origin);
   }
 
   private finishQuest(active: Player): void {

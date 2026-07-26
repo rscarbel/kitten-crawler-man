@@ -23,6 +23,11 @@ const FOLLOW_STOP_FRACTION = 0.8;
 const AURA_RANGE_TILES = 2.5;
 /** Frames between aura poison re-applications (~3 s at 60 fps). */
 const AURA_TICK_COOLDOWN = 180;
+/**
+ * Distance at which a player counts as having touched the lion. The aura stays
+ * inert until then, so players are never poisoned by a lion they only walked past.
+ */
+const AURA_ARM_TOUCH_RANGE_TILES = 1;
 
 /**
  * A Mold Lion — one of Grimaldi's corrupted performers, a mid-tier bruiser
@@ -40,6 +45,7 @@ export class MoldLion extends Mob {
   private attackAnimTimer = 0;
   private auraCooldown = 0;
   private auraPhase = 0;
+  private auraArmed = false;
   private isAggro = false;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
@@ -59,7 +65,19 @@ export class MoldLion extends Mob {
     this.auraPhase++;
 
     const auraRangePx = this.tileSize * AURA_RANGE_TILES;
-    if (this.auraCooldown === 0) {
+    const touchRangePx = this.tileSize * AURA_ARM_TOUCH_RANGE_TILES;
+
+    if (!this.auraArmed) {
+      for (const t of targets) {
+        if (!t.isAlive) continue;
+        if (Math.hypot(t.x - this.x, t.y - this.y) <= touchRangePx) {
+          this.auraArmed = true;
+          break;
+        }
+      }
+    }
+
+    if (this.auraArmed && this.auraCooldown === 0) {
       let poisoned = false;
       for (const t of targets) {
         if (!t.isAlive) continue;
@@ -148,6 +166,7 @@ export class MoldLion extends Mob {
       this.facingX,
       auraRadiusPx,
       this.auraPhase,
+      this.auraArmed,
     );
 
     ctx.filter = 'none';
