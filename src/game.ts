@@ -5,6 +5,7 @@ import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
 import { PersonPreviewScene } from './scenes/PersonPreviewScene';
 import { TilePreviewScene } from './scenes/TilePreviewScene';
+import { BopcaPreviewScene } from './scenes/BopcaPreviewScene';
 import { TownMapScene } from './scenes/TownMapScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
@@ -43,6 +44,11 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
 
   if (params.get('people') !== null) {
     sceneManager.replace(new PersonPreviewScene(sceneManager));
+    return true;
+  }
+
+  if (params.get('bopca') !== null) {
+    sceneManager.replace(new BopcaPreviewScene(sceneManager));
     return true;
   }
 

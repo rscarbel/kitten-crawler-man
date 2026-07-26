@@ -193,6 +193,18 @@ export class DialogBox {
   }
 
   /**
+   * The box's screen rectangle.
+   *
+   * Exposed so callers that draw their own controls against the dialog — a row of
+   * choice buttons above it, say — can position them from the real geometry
+   * instead of re-deriving it from copies of these constants, which would drift
+   * the moment the box is resized.
+   */
+  rect(canvas: HTMLCanvasElement): { x: number; y: number; width: number; height: number } {
+    return { ...this._computeRect(canvas), height: DIALOG_HEIGHT };
+  }
+
+  /**
    * Returns true if the given canvas point falls inside the dialog box.
    * Useful for routing click events.
    */

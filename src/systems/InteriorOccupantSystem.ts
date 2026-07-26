@@ -296,8 +296,7 @@ export class InteriorOccupantSystem implements GameSystem {
     reserved.add(tileKey(start.x, start.y));
     reserved.add(tileKey(start.x + CAT_SPAWN_TILE_OFFSET_X, start.y));
     // Mordecai and the sleeping bed own their tiles in a safe-room interior.
-    for (const anchor of safeRoomAnchorTiles(this.map.safeRooms))
-      reserved.add(tileKey(anchor.x, anchor.y));
+    for (const anchor of safeRoomAnchorTiles(this.map)) reserved.add(tileKey(anchor.x, anchor.y));
     return reserved;
   }
 

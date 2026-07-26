@@ -41,6 +41,8 @@ import {
   CLUB_FLOOR,
   DANCE_FLOOR,
   TOWN_WALL,
+  SAFE_ROOM_COUNTER,
+  SAFE_ROOM_COUNTER_BACK,
   TILE_TYPE_COUNT,
   placeProp,
 } from './tileTypes';
@@ -239,6 +241,8 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BLEACHER,
   TOWN_WALL,
   FENCE,
+  SAFE_ROOM_COUNTER,
+  SAFE_ROOM_COUNTER_BACK,
 ];
 
 /**

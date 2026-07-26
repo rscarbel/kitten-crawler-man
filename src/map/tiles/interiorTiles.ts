@@ -14,8 +14,17 @@ import {
   CIRCUS_RING_EDGE,
   TENT_POLE,
   BLEACHER,
+  SAFE_ROOM_COUNTER,
+  SAFE_ROOM_COUNTER_BACK,
+  SAFE_ROOM_GALLEY_FLOOR,
   propSpriteState,
 } from '../tileTypes';
+import {
+  counterEdges,
+  drawCounterBackTile,
+  drawCounterFrontFace,
+  drawGalleyFloorTile,
+} from '../../sprites/safeRoomCounter';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
@@ -437,6 +446,35 @@ export function drawInteriorTile(
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.fillRect(sx + Math.floor(ts / 2) - 1, sy, 2, ts);
       }
+      return true;
+    }
+
+    // Safe-room service counter — front bar, back bench, and the galley strip
+    // between them. All three paint the galley's scrubbed flagstone first rather
+    // than the room's own floor: the sliver of ground each one leaves showing is
+    // on the *kitchen* side of the counter, so the three tiles read as one unit
+    // instead of a counter with a stripe of dining-room floor behind it.
+    case SAFE_ROOM_COUNTER: {
+      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
+      drawCounterFrontFace(ctx, sx, sy, ts, counterEdges(structure, SAFE_ROOM_COUNTER, tx, ty));
+      return true;
+    }
+
+    case SAFE_ROOM_COUNTER_BACK: {
+      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
+      drawCounterBackTile(
+        ctx,
+        sx,
+        sy,
+        ts,
+        counterEdges(structure, SAFE_ROOM_COUNTER_BACK, tx, ty),
+        tx,
+      );
+      return true;
+    }
+
+    case SAFE_ROOM_GALLEY_FLOOR: {
+      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 

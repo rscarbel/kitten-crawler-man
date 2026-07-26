@@ -25,6 +25,8 @@ import { SpatialGrid } from '../core/SpatialGrid';
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { BopcaSystem } from '../systems/BopcaSystem';
+import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
@@ -429,6 +431,7 @@ export class DungeonScene extends GameplayScene {
   // Systems
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
+  private bopca: BopcaSystem;
   private bossRoom: BossRoomSystem;
   private dynamite: DynamiteSystem;
   private spells: SpellSystem;
@@ -682,6 +685,16 @@ export class DungeonScene extends GameplayScene {
       spawnTileX,
       spawnTileY,
       this.levelDef.id,
+      options?.audio ?? null,
+    );
+    // Stamped here rather than in the generators: the counter belongs to every
+    // safe room on every map, and this and BuildingInteriorScene are the only two
+    // places a safe room is ever brought to life. Idempotent, because a reused
+    // map instance passes through here again on every scene reconstruction.
+    this.bopca = new BopcaSystem(
+      this.gameMap,
+      stampSafeRoomCounters(this.gameMap),
+      this.bus,
       options?.audio ?? null,
     );
     this.bossRoom = new BossRoomSystem(
@@ -1481,6 +1494,10 @@ export class DungeonScene extends GameplayScene {
     }
 
     this._spiderKeyHandler = (e: KeyboardEvent) => {
+      // The Bopca's three-way choice is picked with 1/2/3, which the hotbar also
+      // owns — but input is suppressed while its dialog is open, so the hotbar
+      // never sees these and there is no conflict to resolve.
+      if (this.bopca.handleKeyDown(e.key)) return;
       this.spiderQuest.handleKeyDown(e.key);
     };
     window.addEventListener('keydown', this._spiderKeyHandler);
@@ -1490,6 +1507,7 @@ export class DungeonScene extends GameplayScene {
         this.pauseMenu.isOpen ||
         this.followerMenu.isOpen ||
         this.safeRoom.isSleeping ||
+        this.bopca.isDialogOpen ||
         this.defendQuest.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
@@ -1530,6 +1548,7 @@ export class DungeonScene extends GameplayScene {
           this.safeRoom.mordecaiDialogOpen = false;
           return true;
         }
+        if (this.bopca.dismissDialog()) return true;
         return false;
       },
       dismissStairwell: () => {
@@ -1582,6 +1601,13 @@ export class DungeonScene extends GameplayScene {
         }
         if (this.citizenDialog?.isOpen === true) {
           this.citizenDialog.advance();
+          return true;
+        }
+        // Here rather than in `triggerSpaceAction`: this callback runs before the
+        // input-suppression gate and `spaceAction` runs after it, and an open
+        // Bopca dialog is itself one of the things that suppresses input.
+        if (this.bopca.isDialogOpen) {
+          this.bopca.advanceDialog();
           return true;
         }
         const handled = this.defendQuest.advancePage();
@@ -1645,6 +1671,7 @@ export class DungeonScene extends GameplayScene {
     // Ambient loops are positional, so they always die with the scene — unlike
     // music, which may deliberately survive a building round-trip.
     this.ambientSound?.dispose();
+    this.bopca.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     if (this._spiderKeyHandler !== null) {
@@ -2303,6 +2330,12 @@ export class DungeonScene extends GameplayScene {
     }
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
+      // Beside the Mordecai and bed checks rather than above them: each fixture
+      // owns its own corner of the room, so only one of the three can ever be in
+      // range, and the order between them is not a priority decision.
+      if (this.bopca.tryInteract(active)) {
+        return;
+      }
       if (this.safeRoom.isNearBed(active)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(active)) {
@@ -2565,6 +2598,10 @@ export class DungeonScene extends GameplayScene {
 
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.advanceMordecaiDialog();
+      return;
+    }
+
+    if (this.bopca.handleClick(mx, my, this.sceneManager.canvas)) {
       return;
     }
 
@@ -2881,6 +2918,7 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
+    this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
     this.spiderQuest.render(ctx, camX, camY, this.active());
@@ -3112,7 +3150,15 @@ export class DungeonScene extends GameplayScene {
       this.gearPanel.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
-      this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
+      this.safeRoom.renderUI(
+        ctx,
+        canvas,
+        camX,
+        camY,
+        this.active(),
+        this.bopca.hasInteraction(this.active()),
+      );
+      this.bopca.renderUI(ctx, camX, camY, this.active());
       this.renderCitizenPrompt(ctx, camX, camY);
       this.renderPropPrompt(ctx, camX, camY);
     }
@@ -3122,6 +3168,8 @@ export class DungeonScene extends GameplayScene {
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.renderMordecaiDialog(ctx, canvas);
     }
+
+    this.bopca.renderDialog(ctx, canvas);
 
     this.citizenDialog?.render(ctx, canvas);
     this.noticeBoard?.render(ctx, canvas);
@@ -3355,6 +3403,7 @@ export class DungeonScene extends GameplayScene {
     const ctx = this.buildSystemContext();
 
     this.safeRoom.update(ctx);
+    this.bopca.update(ctx);
     this.bossRoom.update(ctx);
     this.spiderQuest.applyRoomLock(this.human, this.cat);
     this.arena.update(ctx);
@@ -3981,6 +4030,7 @@ export class DungeonScene extends GameplayScene {
         this.gameOver ||
         this.pauseMenu.isOpen ||
         this.safeRoom.mordecaiDialogOpen ||
+        this.bopca.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||

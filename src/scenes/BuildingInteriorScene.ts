@@ -9,6 +9,8 @@ import type { BuildingEntry } from '../systems/BuildingSystem';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { PauseMenu } from '../ui/PauseMenu';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
+import { BopcaSystem } from '../systems/BopcaSystem';
+import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { ShopSystem } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
@@ -204,6 +206,16 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Safe room (restaurant only)
   private readonly safeRoom: SafeRoomSystem | null;
+  /** Null outside a restaurant interior, which is the only safe-room building. */
+  private readonly bopca: BopcaSystem | null;
+  /**
+   * A bus of this scene's own, purely so the Bopca's events reach `AudioManager`.
+   *
+   * The scene has no shared bus outside a live combat stack, and the alternative —
+   * playing sounds from inside the system — is what `AudioManager.wireEvents`
+   * exists to avoid.
+   */
+  private readonly bopcaBus: EventBus | null;
 
   // Shop (store only)
   private readonly shop: ShopSystem | null;
@@ -341,6 +353,16 @@ export class BuildingInteriorScene extends GameplayScene {
       entry.type === 'restaurant'
         ? new SafeRoomSystem(this.map, sx, sy, 'level3', this.audio)
         : null;
+
+    if (entry.type === 'restaurant') {
+      const bopcaBus = new EventBus();
+      this.audio?.wireEvents(bopcaBus);
+      this.bopcaBus = bopcaBus;
+      this.bopca = new BopcaSystem(this.map, stampSafeRoomCounters(this.map), bopcaBus, this.audio);
+    } else {
+      this.bopcaBus = null;
+      this.bopca = null;
+    }
 
     this.shop = entry.type === 'store' ? new ShopSystem(this.mapW) : null;
 
@@ -614,10 +636,17 @@ export class BuildingInteriorScene extends GameplayScene {
         else if (this.followerMenu.isOpen) this.followerMenu.close();
         return;
       }
+      if (this.bopca?.handleKeyDown(e.key) === true) {
+        e.preventDefault();
+        return;
+      }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
       if (this.followerMenu.isOpen) {
         this.followerMenu.close();
+        return;
+      }
+      if (this.bopca?.dismissDialog() === true) {
         return;
       }
       if (this.safeRoom?.mordecaiDialogOpen) {
@@ -651,7 +680,11 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
+    // the listeners this scene added must not outlive it.
+    this.bopcaBus?.clear();
     this.ambientSound?.dispose();
+    this.bopca?.dispose();
     // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
     clearButtonMouseState();
     if (this.escHandler) {
@@ -669,6 +702,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.towerStairs?.menuOpen === true ||
       this.safeRoom?.mordecaiDialogOpen === true ||
       this.safeRoom?.isSleeping === true ||
+      this.bopca?.isDialogOpen === true ||
       this.shop?.shopOpen === true ||
       this.club?.modalOpen === true ||
       this.servicePanel?.isOpen === true ||
@@ -732,6 +766,16 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.followerMenu.isOpen) return;
     if (this.exitMenuOpen) return;
     if (this.towerStairs?.menuOpen) return;
+    if (this.bopca?.isDialogOpen === true) {
+      // The cook timer has to keep running through the conversation — the dish
+      // is meant to land while the player is still reading the order line.
+      this.bopca.tick(this.human, this.cat, this.active(), this.inactive());
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.bopca.advanceDialog();
+      }
+      return;
+    }
     if (this.safeRoom?.mordecaiDialogOpen) {
       this.safeRoom.tickDialog();
       if (this.input.has(' ')) {
@@ -804,6 +848,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // Safe room: sleep / talk to Mordecai. Only consume Space when actually
     // acting, so an unrelated press can still fall through to talking to an
     // ambient occupant sharing the room.
+    if (this.bopca !== null && this.input.has(' ') && this.bopca.tryInteract(player)) {
+      this.input.clear();
+    }
+
     if (this.safeRoom && this.input.has(' ')) {
       if (this.safeRoom.isNearBed(player)) {
         this.input.clear();
@@ -850,6 +898,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.human.tickTimers();
     this.cat.tickTimers();
     this.safeRoom?.updateWander();
+    this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
     this.club?.update();
     this.occupants?.update();
@@ -981,6 +1030,9 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.handleClick(mx, my, this.active());
+      return;
+    }
+    if (this.bopca?.handleClick(mx, my, this.sceneManager.canvas) === true) {
       return;
     }
     if (this.citizenDialog?.isOpen === true) {
@@ -1223,6 +1275,12 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.map.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
 
+    // Before the entity pass, not after: the Bopca render redraws the counter's
+    // front face over itself, and a player standing at the counter reaches up
+    // into that tile. Drawn here, the player is painted on top of the counter —
+    // which is right, since the player is on the near side of it.
+    this.bopca?.renderObjects(ctx, camX, camY, this.active(), this.inactive());
+
     const combatOnThisFloor = this.combat !== null && this.currentFloor === this.combat.floor;
     if (this.combat && combatOnThisFloor) {
       const combat = this.combat;
@@ -1329,9 +1387,21 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.safeRoom) {
-      this.safeRoom.renderUI(ctx, canvas, camX, camY, this.active());
+      this.safeRoom.renderUI(
+        ctx,
+        canvas,
+        camX,
+        camY,
+        this.active(),
+        this.bopca?.hasInteraction(this.active()) === true,
+      );
       if (this.safeRoom.mordecaiDialogOpen) this.safeRoom.renderMordecaiDialog(ctx, canvas);
       if (this.safeRoom.isSleeping) this.safeRoom.renderSleepOverlay(ctx, canvas);
+    }
+
+    if (this.bopca !== null) {
+      this.bopca.renderUI(ctx, camX, camY, this.active());
+      this.bopca.renderDialog(ctx, canvas);
     }
 
     if (this.shop) {
@@ -1495,6 +1565,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.exitMenuOpen ||
         this.towerStairs?.menuOpen ||
         this.safeRoom?.mordecaiDialogOpen ||
+        this.bopca?.isDialogOpen === true ||
         this.shop?.shopOpen ||
         this.club?.modalOpen ||
         this.servicePanel?.isOpen === true
@@ -1622,8 +1693,12 @@ export class BuildingInteriorScene extends GameplayScene {
           // same tap (the close-then-reopen trap).
           const dialogWasOpen =
             this.citizenDialog?.isOpen === true || this.servicePanel?.isOpen === true;
+          const bopcaWasOpen = this.bopca?.isDialogOpen === true;
           this.handleClick(x, y);
           // Trigger space-equivalent actions
+          if (this.bopca !== null && !this.exitMenuOpen && !bopcaWasOpen) {
+            this.bopca.tryInteract(this.active());
+          }
           if (this.safeRoom && !this.exitMenuOpen) {
             const player = this.active();
             if (this.safeRoom.isNearBed(player)) {
@@ -1664,7 +1739,8 @@ export class BuildingInteriorScene extends GameplayScene {
             this.shop?.shopOpen !== true &&
             this.club?.modalOpen !== true &&
             this.safeRoom?.isSleeping !== true &&
-            this.safeRoom?.mordecaiDialogOpen !== true
+            this.safeRoom?.mordecaiDialogOpen !== true &&
+            this.bopca?.isDialogOpen !== true
           ) {
             this.tryTalkToOccupant(this.active());
           }

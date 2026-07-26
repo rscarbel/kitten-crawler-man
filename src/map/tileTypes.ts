@@ -152,11 +152,30 @@ export const FENCE = 62;
  */
 export const GARDEN_PLANTING = 63;
 
+// A safe room's service counter, in three tile types: the front bar the player
+// orders across, the back bench the Bopca cooks at, and the walkable strip
+// between them. The two counter types are solid, so the strip is a sealed galley
+// the player, the companion and mobs can all see into and none can enter.
+
+/** Tile type for the front bar of a safe-room counter — not walkable. */
+export const SAFE_ROOM_COUNTER = 64;
+/** Tile type for the back bench / stove line behind a safe-room counter — not walkable. */
+export const SAFE_ROOM_COUNTER_BACK = 65;
+/**
+ * Tile type for the scrubbed flagstone strip the Bopca stands on, walkable.
+ *
+ * Walkable so the Bopca's idle shuffle stays on legal tiles, and so nothing in
+ * the game has to special-case a creature standing on a solid tile. It is
+ * unreachable by geometry rather than by walkability: `stampSafeRoomCounters`
+ * always closes both ends of the strip with counter tiles.
+ */
+export const SAFE_ROOM_GALLEY_FLOOR = 66;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 64;
+export const TILE_TYPE_COUNT = 67;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

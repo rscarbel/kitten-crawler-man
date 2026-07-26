@@ -16,6 +16,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import type { GrantedReward } from './GrantedReward';
+import type { DishId } from '../systems/bopcaDialog';
 
 export interface GameEvents {
   /** A mob was just killed. */
@@ -103,6 +104,24 @@ export interface GameEvents {
 
   /** An award screen was dismissed and contains ability or special unlocks to announce. */
   rewardGranted: { rewards: GrantedReward[] };
+
+  /** A safe-room Bopca was spoken to. `tone` is which character it is addressing. */
+  bopcaGreeted: { tone: 'toHuman' | 'toCat' };
+
+  /**
+   * A crawler asked a Bopca for food; the cook timer has just started.
+   *
+   * No sound is wired to this one: the cook sizzle is a loop, so `BopcaSystem`
+   * drives it from its own state rather than from a start event that has no
+   * matching guarantee of a stop.
+   */
+  bopcaOrderPlaced: { tone: 'toHuman' | 'toCat' };
+
+  /** A Bopca finished cooking and set a dish down on its counter. */
+  bopcaServedFood: { dishId: DishId };
+
+  /** A crawler took a dish off a Bopca's counter and ate it. */
+  bopcaFoodEaten: { dishId: DishId; healed: number };
 }
 
 type EventCallback<T> = (data: T) => void;

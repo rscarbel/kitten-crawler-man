@@ -716,6 +716,21 @@ export class AudioManager {
       this.play('healing_potion');
     });
 
+    // The Bopca's one-shots. The cook sizzle is deliberately absent: it is a loop
+    // that has to be stopped as well as started, so `BopcaSystem` drives it from
+    // its own per-frame state instead — see `updateCookingLoop` there.
+    bus.on('bopcaGreeted', (e) => {
+      this.play(e.tone === 'toCat' ? 'bopca_happy_grunt' : 'bopca_grunt');
+    });
+
+    bus.on('bopcaServedFood', () => {
+      this.play('bopca_dish_set_down');
+    });
+
+    bus.on('bopcaFoodEaten', () => {
+      this.play('bopca_eating');
+    });
+
     bus.on('humanMeleeSwing', (e) => {
       if (e.hit) {
         this.playRandom(['human_punch_1', 'human_punch_2', 'human_punch_3']);

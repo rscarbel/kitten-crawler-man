@@ -1,10 +1,13 @@
 import type { GameMap } from '../map/GameMap';
+import { planSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { mordecaiAndBedTiles } from '../map/safeRoomFixtures';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { drawMordecaiForLevel, drawSpeechBubble } from '../sprites/mordecaiSprite';
+import { drawMordecaiForLevel } from '../sprites/mordecaiSprite';
+import { drawSpeechBubble } from '../sprites/speechBubble';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { randomFromArray, clamp } from '../utils';
@@ -21,22 +24,23 @@ interface SafeRoomEntry {
   showBed: boolean;
 }
 
-/** How far off-centre Mordecai and the bed sit: a quarter of the room's width. */
-const SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR = 4;
-
 /**
- * The tiles SafeRoomSystem parks Mordecai and the sleeping bed on, for each safe
- * room. Exported so interior layouts and occupant placement can keep clear of
- * them instead of duplicating the offset maths.
+ * Every tile a safe room reserves for its own fixtures: Mordecai, the sleeping
+ * bed, and the whole Bopca counter run including the galley strip behind it.
+ *
+ * Exported so interior layouts and occupant placement can keep clear of them
+ * instead of duplicating the offset maths. The counter tiles are already
+ * non-walkable, but the galley strip is not — it is sealed by geometry rather
+ * than walkability — so an occupant placer working from walkability alone would
+ * happily stand a townsperson inside the Bopca's kitchen.
  */
-export function safeRoomAnchorTiles(
-  safeRooms: ReadonlyArray<{ bounds: { w: number }; centre: { x: number; y: number } }>,
-): Array<{ x: number; y: number }> {
+export function safeRoomAnchorTiles(map: GameMap): Array<{ x: number; y: number }> {
   const tiles: Array<{ x: number; y: number }> = [];
-  for (const sr of safeRooms) {
-    const halfW = Math.floor(sr.bounds.w / SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR);
-    tiles.push({ x: sr.centre.x - halfW, y: sr.centre.y });
-    tiles.push({ x: sr.centre.x + halfW, y: sr.centre.y });
+  for (const sr of map.safeRooms) {
+    tiles.push(...mordecaiAndBedTiles(sr));
+  }
+  for (const layout of planSafeRoomCounters(map)) {
+    tiles.push(...layout.counterTiles, ...layout.backTiles, ...layout.galleyTiles);
   }
   return tiles;
 }
@@ -117,13 +121,13 @@ export class SafeRoomSystem implements GameSystem {
 
     if (gameMap.safeRooms.length > 0) {
       for (const sr of gameMap.safeRooms) {
-        const halfW = Math.floor(sr.bounds.w / SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR);
+        const [mordecai, bed] = mordecaiAndBedTiles(sr);
         this.entries.push({
           bounds: sr.bounds,
-          mordecaiHomeTileX: sr.centre.x - halfW,
-          mordecaiHomeTileY: sr.centre.y,
-          bedTileX: sr.centre.x + halfW,
-          bedTileY: sr.centre.y,
+          mordecaiHomeTileX: mordecai.x,
+          mordecaiHomeTileY: mordecai.y,
+          bedTileX: bed.x,
+          bedTileY: bed.y,
           showBed: sr.showBed ?? true,
         });
       }
@@ -383,14 +387,25 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
+  /**
+   * Safe-room HUD: the room banner, plus the `Sleep` / `Talk` world prompts.
+   *
+   * `suppressWorldPrompt` exists because a safe room now holds three things worth
+   * pressing Space at — the bed, Mordecai, and the Bopca's counter — and in a
+   * small room two of them can be in range at once. The Bopca has first claim on
+   * Space, so the scene silences this system's prompt when the counter is in
+   * reach; without it the player saw two `Talk` prompts and only one of them did
+   * anything.
+   */
   renderUI(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
     camX: number,
     camY: number,
     active: { x: number; y: number },
+    suppressWorldPrompt = false,
   ): void {
-    for (let i = 0; i < this.entries.length; i++) {
+    for (let i = 0; i < this.entries.length && !suppressWorldPrompt; i++) {
       const e = this.entries[i];
       const { offsetX } = this.getWanderState(i);
 

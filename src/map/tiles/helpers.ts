@@ -35,6 +35,9 @@ import {
   RUINED_WALL,
   RUBBLE,
   TOWN_WALL,
+  SAFE_ROOM_COUNTER,
+  SAFE_ROOM_COUNTER_BACK,
+  SAFE_ROOM_GALLEY_FLOOR,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -117,6 +120,12 @@ const NON_FLOOR_TYPES = new Set<number>([
   // have had its record cleared, so this only catches a fence that arrived by
   // some third route — at which point "not floor" is the right answer.
   FENCE,
+  // The galley strip is the Bopca's own scrubbed flagstone, one tile wide and
+  // sealed behind the counter. Nothing outside it should ever inherit that
+  // material, so it reads as "not floor" to a neighbour's probe.
+  SAFE_ROOM_COUNTER,
+  SAFE_ROOM_COUNTER_BACK,
+  SAFE_ROOM_GALLEY_FLOOR,
 ]);
 
 /**
