@@ -44,13 +44,7 @@ type AnchorKind = 'forge' | 'hearth' | 'table' | 'shelf' | 'counter' | 'crate';
 
 /** What an occupant is doing — drives how far they roam and how long they linger. */
 type InteriorActivity =
-  | 'work_forge'
-  | 'tend_counter'
-  | 'sit_at_table'
-  | 'browse_shelf'
-  | 'sweep'
-  | 'wander'
-  | 'idle';
+  'work_forge' | 'tend_counter' | 'sit_at_table' | 'browse_shelf' | 'sweep' | 'wander' | 'idle';
 
 interface OccupantSpec {
   role: TownRole;

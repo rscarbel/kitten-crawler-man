@@ -2,14 +2,17 @@
 /**
  * Generates the destructible prop sprite sheets from procedural drawing code.
  *
- * Outputs three PNG files to src/images/environment/props/:
+ * Outputs four PNG files to src/images/environment/props/:
  *   barrel.png       — idle (row 0) + damaged (1) + shatter (2, 6 frames) + remains (3)
  *   barrel_side.png  — same four rows
  *   crate.png        — same four rows
+ *   torch.png        — same four rows, but idle and damaged are 6-frame flame loops
  *
- * Frames are 96×96 with the 64px logical tile inset by 16px on every side, so
- * shatter debris can fly past the tile footprint without being clipped by the
- * neighbouring frame. The tile footprint itself is unchanged.
+ * Frames carry the 64px logical tile inset by 16px on every side, so shatter
+ * debris can fly past the tile footprint without being clipped by the
+ * neighbouring frame. The tile footprint itself is unchanged. The torch needs a
+ * taller frame than the boxy props because its flame reaches a tile above the
+ * ground it stands on.
  *
  * Run: npx tsx scripts/generate-destructible-props-sprite.ts
  */
@@ -19,19 +22,55 @@ import type { CanvasRenderingContext2D as NodeCtx } from 'canvas';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 
-const FRAME_W = 96;
-const FRAME_H = 96;
-const TILE_X = 16;
-const TILE_Y = 16;
 const TILE_SCALE = 64;
+/** Clearance around the logical tile for debris that flies past the footprint. */
+const DEBRIS_MARGIN = 16;
 
 const SHATTER_FRAMES = 6;
+/** Frames in the torch's flame loop, shared by its intact and damaged rows. */
+const FLAME_FRAMES = 6;
 const ROW_COUNT = 4;
 
 const TWO_PI = Math.PI * 2;
 
-type PropKind = 'barrel' | 'barrel_side' | 'crate';
+type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch';
 type PropState = 'idle' | 'damaged' | 'shatter' | 'remains';
+
+interface FrameGeometry {
+  frameW: number;
+  frameH: number;
+  tileX: number;
+  tileY: number;
+}
+
+/** Boxy props sit inside their own tile, so a uniform margin is all they need. */
+const BOXED_FRAME: FrameGeometry = {
+  frameW: TILE_SCALE + DEBRIS_MARGIN * 2,
+  frameH: TILE_SCALE + DEBRIS_MARGIN * 2,
+  tileX: DEBRIS_MARGIN,
+  tileY: DEBRIS_MARGIN,
+};
+
+/**
+ * Headroom above the torch's tile, for the haft, the flame and its smoke.
+ *
+ * Exactly one tile, not one tile plus a debris margin: `unregisteredDecorationExtents`
+ * in TileRenderer assumes a sprite-drawn decoration with no registered tile type
+ * reaches at most one tile past its own square, and registering the torch to buy
+ * it more would also hand it a frame-derived Y-sort anchor a quarter-tile below
+ * its actual foot. The flame and the shatter burst are sized to fit inside this.
+ */
+const TORCH_HEADROOM = TILE_SCALE;
+const TORCH_FRAME: FrameGeometry = {
+  frameW: TILE_SCALE + DEBRIS_MARGIN * 2,
+  frameH: TORCH_HEADROOM + TILE_SCALE + DEBRIS_MARGIN,
+  tileX: DEBRIS_MARGIN,
+  tileY: TORCH_HEADROOM,
+};
+
+function frameGeometryFor(kind: PropKind): FrameGeometry {
+  return kind === 'torch' ? TORCH_FRAME : BOXED_FRAME;
+}
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 // Five-value warm oak ramp, lit from the upper left. The darkest value is the
@@ -53,6 +92,16 @@ const IRON_SPEC = '#9aa4b0';
 
 const CAVITY = '#1d1208';
 const DUST = '#b09878';
+const DUST_RGB = [176, 152, 120] as const;
+
+// Fire ramp for the torch, running from the pale core out to the cooling tips.
+const FLAME_CORE = '#fff6cf';
+const FLAME_HOT = '#ffd24a';
+const FLAME_MID = '#ff8a1e';
+const FLAME_OUTER = '#e2450f';
+const EMBER_RGB = [255, 142, 46] as const;
+const SOOT = '#241a14';
+const SMOKE_RGB = [172, 166, 160] as const;
 
 const CONTACT_SHADOW_ALPHA = 0.35;
 const CONTACT_SHADOW_WIDTH_FRACTION = 0.7;
@@ -269,14 +318,29 @@ function shard(
   ctx.restore();
 }
 
-/** Pale dust cloud puffed out behind the flying wood during the break. */
-function dustPuff(ctx: NodeCtx, cx: number, cy: number, radius: number, alpha: number): void {
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  g.addColorStop(0, `rgba(176,152,120,${alpha})`);
-  g.addColorStop(0.55, `rgba(176,152,120,${alpha * 0.45})`);
-  g.addColorStop(1, 'rgba(176,152,120,0)');
+/** Alpha of a puff's mid stop, relative to its centre. */
+const PUFF_MID_STOP = 0.55;
+const PUFF_MID_ALPHA_FRACTION = 0.45;
+
+/**
+ * Soft cloud puffed out behind the flying debris during a break. Tinted by the
+ * caller so a splintering crate throws sawdust and a felled torch throws embers.
+ */
+function puff(
+  ctx: NodeCtx,
+  cx: number,
+  cy: number,
+  radius: number,
+  alpha: number,
+  rgb: readonly [number, number, number],
+): void {
+  const [r, g, b] = rgb;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+  grad.addColorStop(PUFF_MID_STOP, `rgba(${r},${g},${b},${alpha * PUFF_MID_ALPHA_FRACTION})`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
   ctx.save();
-  ctx.fillStyle = g;
+  ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, TWO_PI);
   ctx.fill();
@@ -732,11 +796,358 @@ function drawCrate(ctx: NodeCtx, ox: number, oy: number, ts: number, damaged: bo
   }
 }
 
+// ── Torch ─────────────────────────────────────────────────────────────────────
+// A floor-standing brand: splayed iron foot, wooden haft, iron fire bowl. The
+// haft is what a swing breaks, which is why the torch splinters like the boxy
+// props rather than shedding only iron.
+
+const TORCH_FOOT_BASE_FRACTION = 0.93;
+const TORCH_FOOT_HALF_W = 11;
+const TORCH_FOOT_TOP_HALF_W = 6;
+const TORCH_FOOT_H = 7;
+/** How far above its own tile the fire bowl's rim sits, as a fraction of a tile. */
+const TORCH_HEAD_ABOVE_TILE_FRACTION = 0.34;
+const TORCH_HAFT_HALF_W_BOTTOM = 3.6;
+const TORCH_HAFT_HALF_W_TOP = 2.9;
+/** Where the two iron bands sit along the haft, as fractions of its length. */
+const TORCH_FERRULE_FRACTIONS = [0.32, 0.74] as const;
+const TORCH_FERRULE_WIDTH = 3;
+const TORCH_FERRULE_OVERHANG = 1.8;
+const TORCH_BOWL_RIM_RX = 11;
+const TORCH_BOWL_RIM_RY = 4.5;
+const TORCH_BOWL_DEPTH = 10;
+const TORCH_BOWL_BASE_HALF_W = 4.5;
+const TORCH_COAL_COUNT = 5;
+const TORCH_COAL_RADIUS = 1.7;
+/** Tilt a knocked-about bowl leans at, in radians. */
+const TORCH_DAMAGED_BOWL_TILT = 0.14;
+/** Angle a sprung ferrule twists off the haft, in radians. */
+const TORCH_SPRUNG_FERRULE_TILT = -0.3;
+
+const FLAME_BASE_H = 18;
+const FLAME_H_FLICKER = 3.5;
+const FLAME_HALF_W = 6.5;
+const FLAME_SWAY = 2.2;
+const FLAME_MID_SCALE = 0.66;
+const FLAME_CORE_SCALE = 0.34;
+/** Height a guttering flame burns at, relative to a healthy one. */
+const FLAME_DAMAGED_SCALE = 0.62;
+const FLAME_GLOW_RADIUS_TILE_FRACTION = 0.44;
+const FLAME_GLOW_ALPHA_BASE = 0.26;
+const FLAME_GLOW_ALPHA_FLICKER = 0.06;
+/** Fraction of the flame's height the glow centres on. */
+const FLAME_GLOW_CENTER_FRACTION = 0.45;
+const SMOKE_PUFF_COUNT = 3;
+/** Kept tight so the highest wisp stays inside TORCH_HEADROOM. */
+const SMOKE_PUFF_STRIDE = 5;
+const SMOKE_PUFF_LIFT = 3;
+const SMOKE_PUFF_SWAY = 4;
+const SMOKE_PUFF_BASE_RADIUS = 3;
+const SMOKE_PUFF_ALPHA_BASE = 0.2;
+const SMOKE_PUFF_ALPHA_DECAY = 0.055;
+/** Extra smoke a guttering flame throws off, as a multiple of the healthy amount. */
+const SMOKE_DAMAGED_MULTIPLIER = 1.8;
+
+interface TorchGeometry {
+  cx: number;
+  footY: number;
+  haftBottomY: number;
+  haftTopY: number;
+  rimY: number;
+}
+
+function torchGeometry(ox: number, oy: number, ts: number): TorchGeometry {
+  const footY = oy + ts * TORCH_FOOT_BASE_FRACTION;
+  const rimY = oy - ts * TORCH_HEAD_ABOVE_TILE_FRACTION;
+  return {
+    cx: ox + ts / 2,
+    footY,
+    haftBottomY: footY - TORCH_FOOT_H / 2,
+    haftTopY: rimY + TORCH_BOWL_DEPTH,
+    rimY,
+  };
+}
+
+/** Splayed iron plinth that keeps the brand upright. */
+function drawTorchFoot(ctx: NodeCtx, g: TorchGeometry): void {
+  const { cx, footY } = g;
+  const topY = footY - TORCH_FOOT_H;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx - TORCH_FOOT_HALF_W, footY);
+  ctx.lineTo(cx - TORCH_FOOT_TOP_HALF_W, topY);
+  ctx.lineTo(cx + TORCH_FOOT_TOP_HALF_W, topY);
+  ctx.lineTo(cx + TORCH_FOOT_HALF_W, footY);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(
+    cx - TORCH_FOOT_HALF_W,
+    topY,
+    cx + TORCH_FOOT_HALF_W,
+    footY,
+  );
+  grad.addColorStop(0, IRON_LIGHT);
+  grad.addColorStop(0.5, IRON_MID);
+  grad.addColorStop(1, IRON_DARK);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = WOOD_EDGE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTorchHaft(ctx: NodeCtx, g: TorchGeometry, rng: () => number, damaged: boolean): void {
+  const { cx, haftBottomY, haftTopY } = g;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx - TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
+  ctx.lineTo(cx - TORCH_HAFT_HALF_W_TOP, haftTopY);
+  ctx.lineTo(cx + TORCH_HAFT_HALF_W_TOP, haftTopY);
+  ctx.lineTo(cx + TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
+  ctx.closePath();
+  ctx.fillStyle = woodGradient(
+    ctx,
+    cx - TORCH_HAFT_HALF_W_BOTTOM,
+    cx + TORCH_HAFT_HALF_W_BOTTOM,
+    (haftTopY + haftBottomY) / 2,
+  );
+  ctx.fill();
+  ctx.clip();
+  // Two grain lines rather than the boxy props' plank seams: a haft is one turned
+  // stick, so evenly spaced seams would read as staves it does not have.
+  for (let i = 0; i < 2; i++) {
+    const x = cx - TORCH_HAFT_HALF_W_TOP + 1 + i * (TORCH_HAFT_HALF_W_TOP + rng());
+    seam(ctx, x, haftTopY, x + (rng() - 0.5) * 2, haftBottomY, 0.45 + rng() * 0.25);
+  }
+  if (damaged) crack(ctx, cx + 1, haftTopY + 6, haftBottomY - 8, 2.5, rng);
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = WOOD_EDGE;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
+  ctx.lineTo(cx - TORCH_HAFT_HALF_W_TOP, haftTopY);
+  ctx.moveTo(cx + TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
+  ctx.lineTo(cx + TORCH_HAFT_HALF_W_TOP, haftTopY);
+  ctx.stroke();
+  ctx.restore();
+
+  TORCH_FERRULE_FRACTIONS.forEach((fraction, index) => {
+    const y = lerp(haftTopY, haftBottomY, fraction);
+    const halfW = lerp(TORCH_HAFT_HALF_W_TOP, TORCH_HAFT_HALF_W_BOTTOM, fraction);
+    const isSprung = damaged && index === 0;
+    ctx.save();
+    if (isSprung) {
+      ctx.translate(cx, y);
+      ctx.rotate(TORCH_SPRUNG_FERRULE_TILT);
+      ctx.translate(-cx, -y);
+    }
+    ironStrap(
+      ctx,
+      cx - halfW - TORCH_FERRULE_OVERHANG,
+      y,
+      cx + halfW + TORCH_FERRULE_OVERHANG,
+      y,
+      TORCH_FERRULE_WIDTH,
+    );
+    ctx.restore();
+  });
+
+  if (damaged) chip(ctx, cx - TORCH_HAFT_HALF_W_TOP - 1, haftTopY + 14, 6, 7);
+}
+
+/** Iron cup at the head, holding the coals the flame rises from. */
+function drawTorchBowl(ctx: NodeCtx, g: TorchGeometry, rng: () => number, damaged: boolean): void {
+  const { cx, rimY } = g;
+  ctx.save();
+  if (damaged) {
+    ctx.translate(cx, rimY);
+    ctx.rotate(TORCH_DAMAGED_BOWL_TILT);
+    ctx.translate(-cx, -rimY);
+  }
+
+  const bowlBottomY = rimY + TORCH_BOWL_DEPTH;
+  ctx.beginPath();
+  ctx.moveTo(cx - TORCH_BOWL_RIM_RX, rimY);
+  ctx.lineTo(cx - TORCH_BOWL_BASE_HALF_W, bowlBottomY);
+  ctx.lineTo(cx + TORCH_BOWL_BASE_HALF_W, bowlBottomY);
+  ctx.lineTo(cx + TORCH_BOWL_RIM_RX, rimY);
+  ctx.closePath();
+  const bowlGrad = ctx.createLinearGradient(
+    cx - TORCH_BOWL_RIM_RX,
+    rimY,
+    cx + TORCH_BOWL_RIM_RX,
+    bowlBottomY,
+  );
+  bowlGrad.addColorStop(0, IRON_LIGHT);
+  bowlGrad.addColorStop(0.45, IRON_MID);
+  bowlGrad.addColorStop(1, IRON_DARK);
+  ctx.fillStyle = bowlGrad;
+  ctx.fill();
+  ctx.strokeStyle = WOOD_EDGE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Rim, then the soot-black interior seen over its near edge.
+  ctx.beginPath();
+  ctx.ellipse(cx, rimY, TORCH_BOWL_RIM_RX, TORCH_BOWL_RIM_RY, 0, 0, TWO_PI);
+  ctx.fillStyle = SOOT;
+  ctx.fill();
+  ctx.strokeStyle = IRON_SPEC;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, rimY, TORCH_BOWL_RIM_RX, TORCH_BOWL_RIM_RY, 0, Math.PI * 1.05, Math.PI * 1.85);
+  ctx.stroke();
+
+  for (let i = 0; i < TORCH_COAL_COUNT; i++) {
+    const t = (i + 0.5) / TORCH_COAL_COUNT;
+    ctx.globalAlpha = 0.6 + rng() * 0.4;
+    ctx.fillStyle = rng() < 0.4 ? FLAME_HOT : FLAME_OUTER;
+    ctx.beginPath();
+    ctx.arc(
+      lerp(cx - TORCH_BOWL_RIM_RX * 0.6, cx + TORCH_BOWL_RIM_RX * 0.6, t),
+      rimY + (rng() - 0.5) * TORCH_BOWL_RIM_RY,
+      TORCH_COAL_RADIUS * (0.6 + rng() * 0.6),
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (damaged) {
+    // A gouge knocked out of the rim, so the head reads as struck rather than
+    // merely tilted.
+    ctx.save();
+    ctx.fillStyle = SOOT;
+    ctx.beginPath();
+    ctx.moveTo(cx + TORCH_BOWL_RIM_RX - 4, rimY - 2);
+    ctx.lineTo(cx + TORCH_BOWL_RIM_RX + 1, rimY + 1);
+    ctx.lineTo(cx + TORCH_BOWL_RIM_RX - 3, rimY + 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/** One teardrop of flame, swaying with the loop's phase. */
+function flamePath(
+  ctx: NodeCtx,
+  x: number,
+  baseY: number,
+  halfW: number,
+  height: number,
+  sway: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x - halfW, baseY);
+  ctx.bezierCurveTo(
+    x - halfW,
+    baseY - height * 0.45,
+    x + sway - halfW * 0.5,
+    baseY - height * 0.78,
+    x + sway,
+    baseY - height,
+  );
+  ctx.bezierCurveTo(
+    x + sway + halfW * 0.5,
+    baseY - height * 0.78,
+    x + halfW,
+    baseY - height * 0.45,
+    x + halfW,
+    baseY,
+  );
+  ctx.closePath();
+}
+
+function drawTorchFlame(
+  ctx: NodeCtx,
+  g: TorchGeometry,
+  ts: number,
+  phase: number,
+  damaged: boolean,
+): void {
+  const wave = Math.sin(phase * TWO_PI);
+  const scale = damaged ? FLAME_DAMAGED_SCALE : 1;
+  const height = (FLAME_BASE_H + wave * FLAME_H_FLICKER) * scale;
+  const halfW = FLAME_HALF_W * scale;
+  const sway = Math.sin(phase * TWO_PI * 2) * FLAME_SWAY;
+  const baseY = g.rimY - 1;
+  const tipY = baseY - height;
+
+  const glowY = baseY - height * FLAME_GLOW_CENTER_FRACTION;
+  puff(
+    ctx,
+    g.cx + sway * FLAME_GLOW_CENTER_FRACTION,
+    glowY,
+    ts * FLAME_GLOW_RADIUS_TILE_FRACTION,
+    FLAME_GLOW_ALPHA_BASE + wave * FLAME_GLOW_ALPHA_FLICKER,
+    EMBER_RGB,
+  );
+
+  ctx.save();
+  flamePath(ctx, g.cx, baseY, halfW, height, sway);
+  const outerGrad = ctx.createLinearGradient(g.cx, baseY, g.cx, tipY);
+  outerGrad.addColorStop(0, FLAME_MID);
+  outerGrad.addColorStop(0.55, FLAME_OUTER);
+  outerGrad.addColorStop(1, FLAME_OUTER);
+  ctx.fillStyle = outerGrad;
+  ctx.fill();
+
+  flamePath(ctx, g.cx, baseY, halfW * FLAME_MID_SCALE, height * 0.78, sway * 0.7);
+  const midGrad = ctx.createLinearGradient(g.cx, baseY, g.cx, tipY);
+  midGrad.addColorStop(0, FLAME_HOT);
+  midGrad.addColorStop(1, FLAME_MID);
+  ctx.fillStyle = midGrad;
+  ctx.fill();
+
+  flamePath(ctx, g.cx, baseY, halfW * FLAME_CORE_SCALE, height * 0.5, sway * 0.4);
+  ctx.fillStyle = FLAME_CORE;
+  ctx.fill();
+  ctx.restore();
+
+  const smokeAlphaScale = damaged ? SMOKE_DAMAGED_MULTIPLIER : 1;
+  for (let i = 0; i < SMOKE_PUFF_COUNT; i++) {
+    const drift = Math.sin(phase * TWO_PI + i) * SMOKE_PUFF_SWAY;
+    puff(
+      ctx,
+      g.cx + sway + drift,
+      tipY - SMOKE_PUFF_LIFT - i * SMOKE_PUFF_STRIDE,
+      SMOKE_PUFF_BASE_RADIUS + i,
+      Math.max(0, (SMOKE_PUFF_ALPHA_BASE - i * SMOKE_PUFF_ALPHA_DECAY) * smokeAlphaScale),
+      SMOKE_RGB,
+    );
+  }
+}
+
+function drawTorch(
+  ctx: NodeCtx,
+  ox: number,
+  oy: number,
+  ts: number,
+  damaged: boolean,
+  frame: number,
+): void {
+  const rng = makeRng(0x6b2d);
+  const g = torchGeometry(ox, oy, ts);
+
+  contactShadow(ctx, g.cx, g.footY + 2, ts, 0.75);
+  drawTorchFoot(ctx, g);
+  drawTorchHaft(ctx, g, rng, damaged);
+  drawTorchBowl(ctx, g, rng, damaged);
+  drawTorchFlame(ctx, g, ts, frame / FLAME_FRAMES, damaged);
+}
+
 // ── Shatter ───────────────────────────────────────────────────────────────────
 
 interface DebrisSpec {
   angle: number;
   distance: number;
+  /** Where along the prop the piece came off, relative to the burst centre. */
+  originY: number;
+  /** Orientation the piece starts at, before its tumble is added. */
+  restAngle: number;
   length: number;
   width: number;
   spin: number;
@@ -746,6 +1157,12 @@ interface DebrisSpec {
 
 /** Where in the tile the burst originates, as a fraction of tile height. */
 const BURST_CENTER_Y_FRACTION = 0.5;
+/**
+ * Midpoint of the torch's haft, which is most of a tile above the floor. The
+ * burst is centred there rather than on the tile so the pole reads as snapping
+ * along its length instead of the floor beneath it erupting.
+ */
+const TORCH_BURST_CENTER_Y_FRACTION = 0.34;
 /** Top-down foreshortening: debris spreads less vertically than horizontally. */
 const DEBRIS_VERTICAL_SQUASH = 0.6;
 const DEBRIS_COUNT = 16;
@@ -781,6 +1198,8 @@ function buildDebris(seed: number): DebrisSpec[] {
     out.push({
       angle: (i / DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
       distance: DEBRIS_SPREAD_PX * (0.45 + rng() * 0.75),
+      originY: 0,
+      restAngle: 0,
       length: isIron ? 9 + rng() * 5 : 7 + rng() * 9,
       width: isIron ? 2.5 : 2.5 + rng() * 3,
       spin: (rng() - 0.5) * 7,
@@ -791,14 +1210,95 @@ function buildDebris(seed: number): DebrisSpec[] {
   return out;
 }
 
+// ── Pole debris ───────────────────────────────────────────────────────────────
+// A haft breaks nothing like a box. Its pieces come off all the way up the pole
+// and are flung sideways off it, so they stay a tall narrow column of near-
+// vertical slivers rather than opening into the boxy props' radial ring.
+
+const TORCH_DEBRIS_COUNT = 18;
+/** How far the pieces' origins spread along the haft, in tile heights. */
+const TORCH_DEBRIS_ORIGIN_SPAN_TILES = 1.05;
+/** Sideways fling, well short of DEBRIS_SPREAD_PX: a pole is a narrow thing. */
+const TORCH_DEBRIS_SPREAD_PX = 15;
+/** Half-angle of the sideways cone the pieces are thrown into, off horizontal. */
+const TORCH_DEBRIS_CONE_HALF_ANGLE = Math.PI / 3;
+/** One piece in six is a ferrule or a scrap off the fire bowl. */
+const TORCH_DEBRIS_IRON_PERIOD = 6;
+const TORCH_SPLINTER_LENGTH_MIN = 9;
+const TORCH_SPLINTER_LENGTH_SPREAD = 10;
+const TORCH_SPLINTER_WIDTH_MIN = 1.7;
+const TORCH_SPLINTER_WIDTH_SPREAD = 1.6;
+/** Slivers off a pole lie near-vertical, wobbling this far either side of it. */
+const TORCH_SPLINTER_TILT = 0.5;
+const TORCH_SPLINTER_SPIN_MAX = 4;
+const QUARTER_TURN = Math.PI / 2;
+
+function buildTorchDebris(seed: number): DebrisSpec[] {
+  const rng = makeRng(seed);
+  const out: DebrisSpec[] = [];
+  for (let i = 0; i < TORCH_DEBRIS_COUNT; i++) {
+    const isIron = i % TORCH_DEBRIS_IRON_PERIOD === TORCH_DEBRIS_IRON_PERIOD - 1;
+    const thrownLeft = i % 2 === 0;
+    const offHorizontal = (rng() - 0.5) * 2 * TORCH_DEBRIS_CONE_HALF_ANGLE;
+    // Origins walk the pole in order, jittered inside their own slot, so the
+    // column stays evenly populated instead of clumping.
+    const alongPole = (i + rng()) / TORCH_DEBRIS_COUNT - 0.5;
+    out.push({
+      angle: (thrownLeft ? Math.PI : 0) + offHorizontal,
+      distance: TORCH_DEBRIS_SPREAD_PX * (0.4 + rng() * 0.9),
+      originY: alongPole * TORCH_DEBRIS_ORIGIN_SPAN_TILES,
+      restAngle: isIron ? 0 : QUARTER_TURN + (rng() - 0.5) * 2 * TORCH_SPLINTER_TILT,
+      length: isIron
+        ? 7 + rng() * 4
+        : TORCH_SPLINTER_LENGTH_MIN + rng() * TORCH_SPLINTER_LENGTH_SPREAD,
+      width: isIron ? 2.5 : TORCH_SPLINTER_WIDTH_MIN + rng() * TORCH_SPLINTER_WIDTH_SPREAD,
+      spin: (rng() - 0.5) * TORCH_SPLINTER_SPIN_MAX,
+      shade: WOOD_RAMP[Math.floor(rng() * WOOD_RAMP.length)],
+      isIron,
+    });
+  }
+  return out;
+}
+
 const BARREL_DEBRIS = buildDebris(0x1177);
 const BARREL_SIDE_DEBRIS = buildDebris(0x2288);
 const CRATE_DEBRIS = buildDebris(0x3399);
+const TORCH_DEBRIS = buildTorchDebris(0x44aa);
 
 function debrisFor(kind: PropKind): DebrisSpec[] {
   if (kind === 'barrel') return BARREL_DEBRIS;
   if (kind === 'barrel_side') return BARREL_SIDE_DEBRIS;
+  if (kind === 'torch') return TORCH_DEBRIS;
   return CRATE_DEBRIS;
+}
+
+/** Ember puffs stacked up the torch's haft, tracking the column of debris. */
+const TORCH_CLOUD_PUFF_COUNT = 3;
+/** Narrower than the boxy props' single cloud, so the column stays a column. */
+const TORCH_CLOUD_RADIUS_SCALE = 0.55;
+
+/**
+ * The cloud the pieces come out of: one round puff of sawdust for a box, a
+ * stack of ember puffs up the pole for a torch.
+ */
+function burstCloud(
+  ctx: NodeCtx,
+  kind: PropKind,
+  cx: number,
+  cy: number,
+  ts: number,
+  radiusFraction: number,
+  alpha: number,
+): void {
+  if (kind !== 'torch') {
+    puff(ctx, cx, cy, ts * radiusFraction, alpha, DUST_RGB);
+    return;
+  }
+  const radius = ts * radiusFraction * TORCH_CLOUD_RADIUS_SCALE;
+  for (let i = 0; i < TORCH_CLOUD_PUFF_COUNT; i++) {
+    const alongPole = i / (TORCH_CLOUD_PUFF_COUNT - 1) - 0.5;
+    puff(ctx, cx, cy + alongPole * ts * TORCH_DEBRIS_ORIGIN_SPAN_TILES, radius, alpha, EMBER_RGB);
+  }
 }
 
 /**
@@ -813,21 +1313,22 @@ function drawShatterFrame(
   ts: number,
   progress: number,
 ): void {
+  const isPole = kind === 'torch';
   const cx = ox + ts / 2;
   // Centre of the tile, not of the prop's silhouette: the burst has to stay
   // visually anchored to the tile the prop occupied.
-  const cy = oy + ts * BURST_CENTER_Y_FRACTION;
+  const cy = oy + ts * (isPole ? TORCH_BURST_CENTER_Y_FRACTION : BURST_CENTER_Y_FRACTION);
   const travel = lerp(DEBRIS_INITIAL_TRAVEL, 1, debrisEase(progress));
 
   // Dust sits behind the wood and only lives through the middle of the burst.
   const dustAlpha = Math.sin(Math.min(1, progress * 1.6) * Math.PI) * 0.5;
   if (dustAlpha > 0.01) {
-    dustPuff(ctx, cx, cy, ts * (0.28 + travel * 0.42), dustAlpha);
+    burstCloud(ctx, kind, cx, cy, ts, 0.28 + travel * 0.42, dustAlpha);
   }
 
   if (progress < IMPACT_FLASH_PROGRESS_END) {
     const flash = 1 - progress / IMPACT_FLASH_PROGRESS_END;
-    dustPuff(ctx, cx, cy, ts * 0.3, flash * 0.75);
+    burstCloud(ctx, kind, cx, cy, ts, 0.3, flash * 0.75);
   }
 
   const alpha =
@@ -843,13 +1344,14 @@ function drawShatterFrame(
     // Pieces are thrown up first and pulled back down as the burst settles.
     const py =
       cy +
+      d.originY * ts +
       Math.sin(d.angle) * dist * DEBRIS_VERTICAL_SQUASH -
       DEBRIS_RISE_PX * Math.sin(progress * Math.PI) +
       DEBRIS_FALL_PX * progress * progress;
     if (d.isIron) {
       ctx.save();
       ctx.translate(px, py);
-      ctx.rotate(d.spin * progress);
+      ctx.rotate(d.restAngle + d.spin * progress);
       ctx.strokeStyle = IRON_MID;
       ctx.lineWidth = d.width;
       ctx.beginPath();
@@ -857,7 +1359,7 @@ function drawShatterFrame(
       ctx.stroke();
       ctx.restore();
     } else {
-      shard(ctx, px, py, d.length, d.width, d.spin * progress, d.shade);
+      shard(ctx, px, py, d.length, d.width, d.restAngle + d.spin * progress, d.shade);
     }
   }
   ctx.restore();
@@ -897,11 +1399,57 @@ const REMAINS_PLANK_COUNT = 9;
 const BARREL_REMAINS = buildRemains(0x4411, REMAINS_PLANK_COUNT);
 const BARREL_SIDE_REMAINS = buildRemains(0x5522, REMAINS_PLANK_COUNT);
 const CRATE_REMAINS = buildRemains(0x6633, REMAINS_PLANK_COUNT);
+/** A haft is one long stick, so it leaves fewer and shorter pieces than a box. */
+const TORCH_REMAINS_PLANK_COUNT = 7;
+const TORCH_REMAINS = buildRemains(0x7755, TORCH_REMAINS_PLANK_COUNT);
 
 function remainsFor(kind: PropKind): RemainsPlank[] {
   if (kind === 'barrel') return BARREL_REMAINS;
   if (kind === 'barrel_side') return BARREL_SIDE_REMAINS;
+  if (kind === 'torch') return TORCH_REMAINS;
   return CRATE_REMAINS;
+}
+
+/** Scorch left where a torch's bowl tipped its coals onto the floor. */
+const SCORCH_RX_TILE_FRACTION = 0.3;
+const SCORCH_RY_TILE_FRACTION = 0.15;
+const SCORCH_ALPHA = 0.5;
+const DYING_EMBER_COUNT = 9;
+const DYING_EMBER_SPREAD_TILE_FRACTION = 0.26;
+const DYING_EMBER_MAX_RADIUS = 1.6;
+
+function drawTorchScorch(
+  ctx: NodeCtx,
+  cx: number,
+  cy: number,
+  ts: number,
+  rng: () => number,
+): void {
+  ctx.save();
+  ctx.globalAlpha = SCORCH_ALPHA;
+  ctx.fillStyle = SOOT;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, ts * SCORCH_RX_TILE_FRACTION, ts * SCORCH_RY_TILE_FRACTION, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
+
+  for (let i = 0; i < DYING_EMBER_COUNT; i++) {
+    const angle = rng() * TWO_PI;
+    const reach = Math.sqrt(rng()) * ts * DYING_EMBER_SPREAD_TILE_FRACTION;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + rng() * 0.5;
+    ctx.fillStyle = rng() < 0.35 ? FLAME_HOT : FLAME_OUTER;
+    ctx.beginPath();
+    ctx.arc(
+      cx + Math.cos(angle) * reach,
+      cy + Math.sin(angle) * reach * 0.5,
+      0.7 + rng() * DYING_EMBER_MAX_RADIUS,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: number): void {
@@ -917,7 +1465,9 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
   ctx.fill();
   ctx.restore();
 
-  // A bent hoop / broken bracket, whichever the prop had.
+  if (kind === 'torch') drawTorchScorch(ctx, cx, cy, ts, rng);
+
+  // A bent hoop / broken bracket / crushed fire bowl, whichever the prop had.
   ctx.save();
   ctx.strokeStyle = IRON_MID;
   ctx.lineWidth = 2.5;
@@ -925,6 +1475,8 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
   if (kind === 'crate') {
     ctx.moveTo(cx - 14, cy + 7);
     ctx.quadraticCurveTo(cx - 2, cy + 12, cx + 13, cy + 5);
+  } else if (kind === 'torch') {
+    ctx.ellipse(cx - 6, cy + 4, 9, 4, -0.35, 0, Math.PI * 1.3);
   } else {
     ctx.ellipse(cx + 2, cy + 3, 15, 6, 0.2, 0.3, Math.PI * 1.75);
   }
@@ -965,30 +1517,51 @@ function drawProp(
   const damaged = state === 'damaged';
   if (kind === 'barrel') drawBarrel(ctx, ox, oy, ts, damaged);
   else if (kind === 'barrel_side') drawBarrelSide(ctx, ox, oy, ts, damaged);
+  else if (kind === 'torch') drawTorch(ctx, ox, oy, ts, damaged, frame);
   else drawCrate(ctx, ox, oy, ts, damaged);
 }
 
-const ROWS: ReadonlyArray<{ state: PropState; frames: number }> = [
+interface SheetRow {
+  state: PropState;
+  frames: number;
+}
+
+/** The boxy props hold a single pose per wear stage. */
+const STATIC_ROWS: ReadonlyArray<SheetRow> = [
   { state: 'idle', frames: 1 },
   { state: 'damaged', frames: 1 },
   { state: 'shatter', frames: SHATTER_FRAMES },
   { state: 'remains', frames: 1 },
 ];
 
+/** The torch keeps burning at both wear stages, so both loop. */
+const TORCH_ROWS: ReadonlyArray<SheetRow> = [
+  { state: 'idle', frames: FLAME_FRAMES },
+  { state: 'damaged', frames: FLAME_FRAMES },
+  { state: 'shatter', frames: SHATTER_FRAMES },
+  { state: 'remains', frames: 1 },
+];
+
+function rowsFor(kind: PropKind): ReadonlyArray<SheetRow> {
+  return kind === 'torch' ? TORCH_ROWS : STATIC_ROWS;
+}
+
 function renderSheet(kind: PropKind): Buffer {
-  const cols = Math.max(...ROWS.map((r) => r.frames));
-  const c = createCanvas(cols * FRAME_W, ROW_COUNT * FRAME_H);
+  const { frameW, frameH, tileX, tileY } = frameGeometryFor(kind);
+  const rows = rowsFor(kind);
+  const cols = Math.max(...rows.map((r) => r.frames));
+  const c = createCanvas(cols * frameW, ROW_COUNT * frameH);
   const ctx = c.getContext('2d') as NodeCtx;
 
-  for (let row = 0; row < ROWS.length; row++) {
-    for (let col = 0; col < ROWS[row].frames; col++) {
+  for (let row = 0; row < rows.length; row++) {
+    for (let col = 0; col < rows[row].frames; col++) {
       drawProp(
         ctx,
         kind,
-        ROWS[row].state,
+        rows[row].state,
         col,
-        col * FRAME_W + TILE_X,
-        row * FRAME_H + TILE_Y,
+        col * frameW + tileX,
+        row * frameH + tileY,
         TILE_SCALE,
       );
     }
@@ -998,20 +1571,18 @@ function renderSheet(kind: PropKind): Buffer {
 }
 
 const outDir = resolve('src/images/environment/props');
-const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate'];
+const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate', 'torch'];
 
-console.log(
-  `Generating destructible props (${FRAME_W}×${FRAME_H}px frames, tileScale=${TILE_SCALE})…`,
-);
+console.log(`Generating destructible props (tileScale=${TILE_SCALE})…`);
 
 for (let i = 0; i < kinds.length; i++) {
   const kind = kinds[i];
-  console.log(`  [${i + 1}/${kinds.length}] ${kind}.png …`);
+  const { frameW, frameH, tileX, tileY } = frameGeometryFor(kind);
+  console.log(
+    `  [${i + 1}/${kinds.length}] ${kind}.png — ${frameW}×${frameH}px frames, tileX=${tileX} tileY=${tileY}`,
+  );
   writeFileSync(resolve(outDir, `${kind}.png`), renderSheet(kind));
 }
 
-console.log(
-  `\nDone. ${SHATTER_FRAMES * FRAME_W}×${ROW_COUNT * FRAME_H}px sheets written to ${outDir}`,
-);
-console.log(`tileX=${TILE_X}  tileY=${TILE_Y}  tileScale=${TILE_SCALE}`);
+console.log(`\nDone. Sheets written to ${outDir}`);
 console.log('Rows: 0 idle, 1 damaged, 2 shatter (6 frames), 3 remains');

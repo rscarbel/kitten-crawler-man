@@ -532,12 +532,10 @@ export function drawKrakarenSprite(
   // Draw tentacles in front (front half)
   for (let i = 0; i < TENTACLE_COUNT; i++) {
     const desc = TENTACLES[i];
-    if (
-      !(
-        desc.baseAngle > Math.PI * TENTACLE_FRONT_ANGLE_MIN &&
-        desc.baseAngle < Math.PI * TENTACLE_FRONT_ANGLE_MAX
-      )
-    ) {
+    if (!(
+      desc.baseAngle > Math.PI * TENTACLE_FRONT_ANGLE_MIN &&
+      desc.baseAngle < Math.PI * TENTACLE_FRONT_ANGLE_MAX
+    )) {
       drawTentacle(ctx, cx, cy, ts, desc, time, attackTentacle, i, attackProgress);
     }
   }

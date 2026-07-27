@@ -2,7 +2,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameMap } from '../map/GameMap';
-import { BARREL, BARREL_SIDE, CRATE, PROP_DAMAGE_STAGE_CRACKED } from '../map/tileTypes';
+import { BARREL, BARREL_SIDE, CRATE, TORCH, PROP_DAMAGE_STAGE_CRACKED } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
 import { drawSpriteKey, progressFrameIndex } from '../core/SpriteRenderer';
 import { randomInt } from '../utils';
@@ -18,12 +18,14 @@ const TILE_CENTER_OFFSET = 0.5;
 /** Full turn in radians. */
 const TWO_PI = Math.PI * 2;
 
-/** The three prop tile types a melee swing can break. */
-export type DestructiblePropKind = 'barrel' | 'barrel_side' | 'crate';
+/** The prop tile types a melee swing can break. */
+export type DestructiblePropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch';
 
 const BARREL_HP = 6;
 const BARREL_SIDE_HP = 5;
 const CRATE_HP = 6;
+/** A torch is a stick in a stand — the flimsiest of the props. */
+const TORCH_HP = 4;
 /**
  * HP a prop that is already wearing its cracked art comes back missing when its
  * health entry has to be rebuilt. It cannot come back at full: `damageStage`
@@ -72,8 +74,29 @@ const SPLINTER_LENGTH_MIN = 3;
 const SPLINTER_LENGTH_MAX = 7;
 const SPLINTER_WIDTH = 1.6;
 const SPLINTER_SPIN_MAX = 0.3;
-/** Splinters spawn scattered up to this far either side of the tile centre. */
+/** Splinters spawn scattered up to this far either side of their origin. */
 const SPLINTER_SPAWN_SCATTER_PX = 4;
+/**
+ * Where a kind's splinters come off, in tile heights relative to the tile
+ * centre: the middle of the prop's own mass, and the span its pieces reach over.
+ *
+ * The boxy props are a tile wide and sit inside their tile, so a point source at
+ * its centre is exactly right. A torch is a pole standing a tile above the floor
+ * — spawning its debris at the tile centre would drop the whole burst around the
+ * player's feet instead of down the length of the thing that just snapped.
+ */
+const SPLINTER_ORIGIN_OFFSET_TILES: Record<DestructiblePropKind, number> = {
+  barrel: 0,
+  barrel_side: 0,
+  crate: 0,
+  torch: -0.16,
+};
+const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
+  barrel: 0,
+  barrel_side: 0,
+  crate: 0,
+  torch: 1.05,
+};
 /** Splinters fade over the last third of their life. */
 const SPLINTER_FADE_DIVISOR = 3;
 const SPLINTER_FADE_FRACTION = 1 / SPLINTER_FADE_DIVISOR;
@@ -96,6 +119,7 @@ const COIN_SPREAD = 1;
 interface PropHealth {
   tileX: number;
   tileY: number;
+  kind: DestructiblePropKind;
   hp: number;
   maxHp: number;
   hitFlashFrames: number;
@@ -132,18 +156,20 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   if (type === BARREL) return 'barrel';
   if (type === BARREL_SIDE) return 'barrel_side';
   if (type === CRATE) return 'crate';
+  if (type === TORCH) return 'torch';
   return null;
 }
 
 function startingHpFor(kind: DestructiblePropKind): number {
   if (kind === 'barrel') return BARREL_HP;
   if (kind === 'barrel_side') return BARREL_SIDE_HP;
+  if (kind === 'torch') return TORCH_HP;
   return CRATE_HP;
 }
 
 /**
- * Lets a melee swing break the barrels and crates strewn through a dungeon
- * floor: the prop cracks, then shatters into splinters and a wreckage decal,
+ * Lets a melee swing break the barrels, crates and torches strewn through a
+ * dungeon floor: the prop cracks, then shatters into splinters and a wreckage decal,
  * the tile opens up for both players and mob pathfinding, and a small
  * depth-scaled coin drop is left behind.
  *
@@ -276,7 +302,7 @@ export class DestructiblePropSystem implements GameSystem {
           // system, so an undamaged rebuild would show damaged art.
           const wasCracked = tile.damageStage === PROP_DAMAGE_STAGE_CRACKED;
           const startingHp = wasCracked ? Math.max(1, maxHp - CRACKED_REBUILD_HP_PENALTY) : maxHp;
-          health = { tileX: tx, tileY: ty, hp: startingHp, maxHp, hitFlashFrames: 0 };
+          health = { tileX: tx, tileY: ty, kind, hp: startingHp, maxHp, hitFlashFrames: 0 };
           this.health.set(key, health);
         }
         health.hp -= damage;
@@ -321,7 +347,7 @@ export class DestructiblePropSystem implements GameSystem {
 
     const centerX = (tileX + TILE_CENTER_OFFSET) * TILE_SIZE;
     const centerY = (tileY + TILE_CENTER_OFFSET) * TILE_SIZE;
-    this.spawnSplinters(centerX, centerY, centerX - impactFromX, centerY - impactFromY);
+    this.spawnSplinters(centerX, centerY, centerX - impactFromX, centerY - impactFromY, kind);
 
     this.wreckage.push({ tileX, tileY, kind, life: WRECKAGE_LIFETIME_FRAMES });
     while (this.wreckage.length > MAX_WRECKAGE) this.dropOldestWreckage();
@@ -353,10 +379,18 @@ export class DestructiblePropSystem implements GameSystem {
     this.wreckage.splice(oldestIndex, 1);
   }
 
-  private spawnSplinters(cx: number, cy: number, awayX: number, awayY: number): void {
+  private spawnSplinters(
+    cx: number,
+    cy: number,
+    awayX: number,
+    awayY: number,
+    kind: DestructiblePropKind,
+  ): void {
     const hasDirection = awayX !== 0 || awayY !== 0;
     const awayAngle = hasDirection ? Math.atan2(awayY, awayX) : 0;
     const count = randomInt(SPLINTER_COUNT_MIN, SPLINTER_COUNT_MAX);
+    const originY = cy + SPLINTER_ORIGIN_OFFSET_TILES[kind] * TILE_SIZE;
+    const originHalfSpan = (SPLINTER_ORIGIN_SPAN_TILES[kind] * TILE_SIZE) / 2;
 
     for (let i = 0; i < count; i++) {
       const inForwardCone = hasDirection && Math.random() < SPLINTER_FORWARD_CONE_BIAS;
@@ -367,7 +401,7 @@ export class DestructiblePropSystem implements GameSystem {
       const life = randomInt(SPLINTER_LIFETIME_MIN, SPLINTER_LIFETIME_MAX);
       this.splinters.push({
         x: cx + bipolarRandom() * SPLINTER_SPAWN_SCATTER_PX,
-        y: cy + bipolarRandom() * SPLINTER_SPAWN_SCATTER_PX,
+        y: originY + bipolarRandom() * originHalfSpan + bipolarRandom() * SPLINTER_SPAWN_SCATTER_PX,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         angle: Math.random() * TWO_PI,
@@ -442,7 +476,12 @@ export class DestructiblePropSystem implements GameSystem {
       if (health.hitFlashFrames <= 0) continue;
       const flash = (health.hitFlashFrames / HIT_FLASH_FRAMES) * HIT_FLASH_MAX_ALPHA;
       const sx = (health.tileX + TILE_CENTER_OFFSET) * TILE_SIZE - camX;
-      const sy = (health.tileY + TILE_CENTER_OFFSET) * TILE_SIZE - camY;
+      // Struck on the prop's own mass, which for a torch is up the pole rather
+      // than in the middle of the tile it stands on.
+      const sy =
+        (health.tileY + TILE_CENTER_OFFSET + SPLINTER_ORIGIN_OFFSET_TILES[health.kind]) *
+          TILE_SIZE -
+        camY;
       const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, HIT_FLASH_RADIUS_PX);
       glow.addColorStop(0, `rgba(255,240,210,${flash})`);
       glow.addColorStop(1, 'rgba(255,240,210,0)');

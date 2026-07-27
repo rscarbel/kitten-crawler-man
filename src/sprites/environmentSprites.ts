@@ -1054,13 +1054,7 @@ export function drawMetalWall(ctx: Ctx, sx: number, sy: number, s: number): void
 }
 
 type GableRoofType =
-  | 'thatch'
-  | 'slate'
-  | 'red'
-  | 'green'
-  | 'circus_red'
-  | 'circus_blue'
-  | 'circus_purple';
+  'thatch' | 'slate' | 'red' | 'green' | 'circus_red' | 'circus_blue' | 'circus_purple';
 
 const GABLE_COLORS: Record<
   GableRoofType,

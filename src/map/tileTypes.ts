@@ -277,7 +277,7 @@ export type TileContent = {
    */
   groundType?: number;
   /**
-   * Wear on a destructible prop tile (BARREL, BARREL_SIDE, CRATE): see the
+   * Wear on a destructible prop tile (BARREL, BARREL_SIDE, CRATE, TORCH): see the
    * `PROP_DAMAGE_STAGE_*` constants in `DestructiblePropSystem`.
    *
    * Carried on the tile rather than held only in that system so the tile

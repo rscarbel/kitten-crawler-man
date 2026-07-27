@@ -53,6 +53,14 @@ const SPRITE_BUILDING_OVERLAY_FPS = 8;
 const MAIN_TOWER_GLOW_FPS = 4;
 const MAIN_TOWER_GLOW_FRAMES = 4;
 
+/** Playback rate and frame count of a torch's flame loop, at either wear stage. */
+const TORCH_FLAME_FPS = 8;
+const TORCH_FLAME_FRAMES = 6;
+
+/** Playback rate and frame count of a brazier's flame loop. */
+const BRAZIER_FLAME_FPS = 10;
+const BRAZIER_FLAME_FRAMES = 4;
+
 /**
  * Radix for folding several overlay frame indices into one number. Larger than
  * any overlay's frame count, so distinct combinations never collide.
@@ -647,9 +655,19 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Torch — animated PNG sprite with transparent background
+    // Torch — sprite only; see BARREL_SIDE below for why the floor is not
+    // repainted here. Smashable, so it picks its wear state the same way the
+    // barrels and crates do, and keeps burning while it stands.
     case TORCH: {
-      drawSpriteKey(ctx, 'torch', 'flicker', timeFrameIndex(frameTime, 8, 6), sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        'torch',
+        propSpriteState(structure[ty][tx].damageStage),
+        timeFrameIndex(frameTime, TORCH_FLAME_FPS, TORCH_FLAME_FRAMES),
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 
@@ -661,7 +679,15 @@ export function drawDecorationTile(
 
     // Brazier — animated iron fire brazier, extends above tile
     case BRAZIER: {
-      drawSpriteKey(ctx, 'brazier', 'flicker', timeFrameIndex(frameTime, 10, 4), sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        'brazier',
+        'flicker',
+        timeFrameIndex(frameTime, BRAZIER_FLAME_FPS, BRAZIER_FLAME_FRAMES),
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 

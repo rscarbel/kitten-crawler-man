@@ -17,11 +17,7 @@
 const TWO_PI = Math.PI * 2;
 
 export type GrotesqueSpiderState =
-  | 'idle'
-  | 'walk'
-  | 'attack_slam'
-  | 'attack_screech'
-  | 'attack_spit';
+  'idle' | 'walk' | 'attack_slam' | 'attack_screech' | 'attack_spit';
 
 // ── Hair strand descriptors (48 strands, deterministic) ──────────────────────
 

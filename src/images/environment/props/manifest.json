@@ -1,15 +1,27 @@
 {
   "torch": {
     "path": "environment/props/torch.png",
-    "frameWidth": 64,
-    "frameHeight": 128,
-    "tileX": 0,
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
     "tileY": 64,
     "tileScale": 64,
     "states": {
-      "flicker": {
+      "idle": {
         "row": 0,
         "frameCount": 6
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
       }
     }
   },

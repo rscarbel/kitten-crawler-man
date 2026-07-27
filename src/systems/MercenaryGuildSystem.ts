@@ -59,9 +59,7 @@ const GOLD_TEXT = '#f0d870';
 const MUTED_TEXT = '#a89a70';
 
 type GuildAction =
-  | { kind: 'hire'; id: MercenaryTemplateId }
-  | { kind: 'dismiss' }
-  | { kind: 'close' };
+  { kind: 'hire'; id: MercenaryTemplateId } | { kind: 'dismiss' } | { kind: 'close' };
 
 interface GuildButton {
   x: number;
