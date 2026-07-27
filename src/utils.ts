@@ -25,6 +25,18 @@ const GOLDEN_RATIO_CONJUGATE = (Math.sqrt(GOLDEN_RATIO_RADICAND) - 1) / 2;
  */
 export const GOLDEN_ANGLE_RAD = Math.PI * 2 * GOLDEN_RATIO_CONJUGATE;
 
+/**
+ * `value mod modulus`, always non-negative.
+ *
+ * JavaScript's `%` keeps the sign of the dividend, which flips pattern parity
+ * exactly at zero — so anything indexing a repeating lattice by a coordinate
+ * that can go negative (tile phases inside a ground patch, masonry courses)
+ * needs this rather than the operator.
+ */
+export function positiveMod(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
+
 /** Clamp `v` to the range [lo, hi]. */
 export const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -47,6 +59,47 @@ export const pixelToTile = (px: number) =>
 
 /** Convert a tile index to the pixel coordinate of its left/top edge. */
 export const tileToPixel = (tx: number) => tx * TILE_SIZE;
+
+export type CardinalDirection =
+  'North' | 'North East' | 'East' | 'South East' | 'South' | 'South West' | 'West' | 'North West';
+
+/**
+ * The eight sectors in the order `Math.atan2(dy, dx)` visits them, starting at
+ * due east and turning the way screen coordinates turn.
+ *
+ * **The project's convention is `-y = north`** — the same one the dungeon
+ * generator's entrance-wall test uses — so a negative `dy` lands in the northern
+ * half of this list rather than the southern one.
+ */
+const DIRECTIONS_BY_SECTOR: ReadonlyArray<CardinalDirection> = [
+  'East',
+  'South East',
+  'South',
+  'South West',
+  'West',
+  'North West',
+  'North',
+  'North East',
+];
+
+const SECTOR_ARC_RAD = (Math.PI * 2) / DIRECTIONS_BY_SECTOR.length;
+
+/**
+ * The eight-way bearing from one point to another, both in the same coordinate
+ * space (tiles or pixels — only the difference matters).
+ *
+ * Two identical points have no bearing; `atan2(0, 0)` is 0, so they read as
+ * `'East'`. Callers that can produce a degenerate pair should test for it rather
+ * than relying on that.
+ */
+export function cardinalDirection(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): CardinalDirection {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const sector = positiveMod(Math.round(angle / SECTOR_ARC_RAD), DIRECTIONS_BY_SECTOR.length);
+  return DIRECTIONS_BY_SECTOR[sector];
+}
 
 /**
  * Shared frame timestamp (seconds). Call `updateFrameTime()` once per frame

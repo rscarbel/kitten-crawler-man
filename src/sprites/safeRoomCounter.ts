@@ -1,11 +1,13 @@
 /**
  * The safe-room service counter and the dishes served across it.
  *
- * Three pieces make up the galley the Bopca works in: the front bar the player
- * orders across, the back bench it cooks at, and the scrubbed strip between
- * them. All three are drawn edge-aware — a tile checks whether its neighbours
- * belong to the same run and drops the cap detail where they do — so a
- * five-tile counter reads as one object rather than five copies of a prop.
+ * Two pieces make up the galley the Bopca works in: the front bar the player
+ * orders across and the back bench it cooks at. Both are drawn edge-aware — a
+ * tile checks whether its neighbours belong to the same run and drops the cap
+ * detail where they do — so a five-tile counter reads as one object rather than
+ * five copies of a prop. The scrubbed strip between them is not drawn here at
+ * all: it is `bopca_hearth` from the generated dungeon ground sheet, resolved
+ * through `DUNGEON_GROUND` like every other floor in the room.
  *
  * `drawCounterFrontFace` is deliberately separable from the rest of the front
  * bar: the Bopca is drawn *between* the two, so the bar's own top slab and
@@ -71,16 +73,6 @@ const BENCH_HOB_CENTRE_Y_FRACTION = 0.79;
 /** Every third tile of a bench run carries the range rather than plain worktop. */
 const BENCH_HOB_TILE_STRIDE = 3;
 
-// ── Galley floor ──────────────────────────────────────────────────────────────
-const GALLEY_FLAG_INSET = 1;
-const GALLEY_SHEEN_TOP_FRACTION = 0.12;
-const GALLEY_SHEEN_HEIGHT_FRACTION = 0.1;
-const GALLEY_SPECK_COUNT = 3;
-const GALLEY_SPECK_SIZE = 1;
-/** Odd multipliers, so the speck lattice never lines up with the flag grid. */
-const GALLEY_SPECK_X_STRIDE = 7;
-const GALLEY_SPECK_Y_STRIDE = 11;
-
 // ── Dish geometry ─────────────────────────────────────────────────────────────
 const DISH_CENTRE_Y_FRACTION = 0.24;
 const DISH_BOWL_WIDTH_FRACTION = 0.52;
@@ -131,11 +123,6 @@ const BENCH_SPLASH_GROUT = 'rgba(40,48,44,0.5)';
 const HOB_RING = '#2a2724';
 const HOB_EMBER = 'rgba(226,122,44,0.75)';
 const CROCK_COLORS = ['#9c6b3f', '#7d8b6a', '#8e5c52'] as const;
-const GALLEY_FLAG = '#8d9c8a';
-const GALLEY_FLAG_ALT = '#83917f';
-const GALLEY_GROUT = '#6f7c6d';
-const GALLEY_SHEEN = 'rgba(255,255,255,0.09)';
-const GALLEY_SPECK = 'rgba(255,255,255,0.14)';
 const DISH_SHADOW = 'rgba(0,0,0,0.22)';
 const STEAM_COLOR = '255,250,240';
 /** Grey the vessel and contents drift toward once a dish has gone cold. */
@@ -351,40 +338,6 @@ export function drawCounterBackTile(
     ctx.beginPath();
     ctx.arc(hobX, hobY, ts * BENCH_HOB_INNER_RADIUS_FRACTION, 0, Math.PI * 2);
     ctx.fill();
-  }
-}
-
-/** Scrubbed flagstone: cooler and greener than the safe room's cream floor. */
-export function drawGalleyFloorTile(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  ts: number,
-  tx: number,
-  ty: number,
-): void {
-  ctx.fillStyle = GALLEY_GROUT;
-  ctx.fillRect(sx, sy, ts, ts);
-  ctx.fillStyle = (tx + ty) % 2 === 0 ? GALLEY_FLAG : GALLEY_FLAG_ALT;
-  ctx.fillRect(
-    sx + GALLEY_FLAG_INSET,
-    sy + GALLEY_FLAG_INSET,
-    ts - GALLEY_FLAG_INSET * 2,
-    ts - GALLEY_FLAG_INSET * 2,
-  );
-  ctx.fillStyle = GALLEY_SHEEN;
-  ctx.fillRect(
-    sx + GALLEY_FLAG_INSET,
-    sy + ts * GALLEY_SHEEN_TOP_FRACTION,
-    ts - GALLEY_FLAG_INSET * 2,
-    ts * GALLEY_SHEEN_HEIGHT_FRACTION,
-  );
-
-  ctx.fillStyle = GALLEY_SPECK;
-  for (let i = 0; i < GALLEY_SPECK_COUNT; i++) {
-    const speckX = sx + ((tx * GALLEY_SPECK_X_STRIDE + i * GALLEY_SPECK_Y_STRIDE) % ts);
-    const speckY = sy + ((ty * GALLEY_SPECK_Y_STRIDE + i * GALLEY_SPECK_X_STRIDE) % ts);
-    ctx.fillRect(speckX, speckY, GALLEY_SPECK_SIZE, GALLEY_SPECK_SIZE);
   }
 }
 

@@ -1,5 +1,7 @@
 /**
- * Draws one tile of outdoor ground, from the generated `ground_overworld` sheet.
+ * Draws one tile of generated ground, from whichever sheet the caller's
+ * `GroundPalette` names — `ground_overworld` for the town, `ground_dungeon` for a
+ * safe room.
  *
  * Six passes, in this order:
  *
@@ -54,24 +56,18 @@ import {
 } from '../../core/SpriteLoader';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import { inferFloorType } from './helpers';
+import type { GroundPalette } from '../ground/GroundPalette';
 import {
   CORNER_NE,
   CORNER_NW,
   CORNER_SE,
   CORNER_SW,
-  GROUND_BLEND_ORDER,
-  GROUND_FALLBACK_COLOR,
   GROUND_MASK_SHEET_KEY,
   GROUND_MASK_STATE,
-  GROUND_SHEET_KEY,
-  GROUND_SPILL,
   groundFrameIndex,
-  groundMaterialAt,
-  groundMaterialForTileType,
   groundVariantCount,
-  positiveMod,
-  type GroundMaterial,
-} from '../town/groundMaterials';
+} from '../ground/groundFrames';
+import { positiveMod } from '../../utils';
 
 export interface ResolvedMaterial {
   readonly def: SpriteDef;
@@ -80,18 +76,55 @@ export interface ResolvedMaterial {
 }
 
 /**
- * Materials inferred for tiles that stand on ground, memoised per map.
+ * Materials inferred for tiles that stand on ground, memoised per palette per map.
  *
  * `inferFloorType` walks outward until it finds real floor, which is far too
  * much work to repeat for the sixteen corner lookups every tile's fringe does.
  * The tile type is stored alongside the result so a tile that changes type is
  * re-inferred rather than answered from a stale entry.
+ *
+ * Keyed by palette first because the same tile answers differently for each: a
+ * safe-room floor is `bopca_tile` to the dungeon palette and nothing at all to
+ * the overworld's.
  */
-const inferredMaterials = new WeakMap<TileContent[][], Map<number, InferredMaterial>>();
+const inferredMaterials = new WeakMap<
+  GroundPalette,
+  WeakMap<TileContent[][], Map<number, InferredMaterial>>
+>();
 
 interface InferredMaterial {
   readonly type: number;
-  readonly material: GroundMaterial | undefined;
+  readonly material: string | undefined;
+}
+
+function inferenceMemo(
+  palette: GroundPalette,
+  structure: TileContent[][],
+): Map<number, InferredMaterial> {
+  let perStructure = inferredMaterials.get(palette);
+  if (perStructure === undefined) {
+    perStructure = new WeakMap<TileContent[][], Map<number, InferredMaterial>>();
+    inferredMaterials.set(palette, perStructure);
+  }
+  let memo = perStructure.get(structure);
+  if (memo === undefined) {
+    memo = new Map<number, InferredMaterial>();
+    perStructure.set(structure, memo);
+  }
+  return memo;
+}
+
+/** The material at a map position, or undefined off-map or on non-ground tiles. */
+function groundMaterialAt(
+  palette: GroundPalette,
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+): string | undefined {
+  if (ty < 0 || ty >= structure.length) return undefined;
+  const row = structure[ty];
+  if (tx < 0 || tx >= row.length) return undefined;
+  return palette.materialForTileType(row[tx].type);
 }
 
 /**
@@ -110,30 +143,27 @@ interface InferredMaterial {
  * the south edge of a region renders as whatever lies outside it.
  */
 function groundMaterialUnder(
+  palette: GroundPalette,
   structure: TileContent[][],
   tx: number,
   ty: number,
-): GroundMaterial | undefined {
-  const direct = groundMaterialAt(structure, tx, ty);
+): string | undefined {
+  const direct = groundMaterialAt(palette, structure, tx, ty);
   if (direct !== undefined) return direct;
   if (ty < 0 || ty >= structure.length) return undefined;
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return undefined;
 
   const recorded = row[tx].groundType;
-  if (recorded !== undefined) return groundMaterialForTileType(recorded);
+  if (recorded !== undefined) return palette.materialForTileType(recorded);
 
   const type = row[tx].type;
-  let memo = inferredMaterials.get(structure);
-  if (memo === undefined) {
-    memo = new Map<number, InferredMaterial>();
-    inferredMaterials.set(structure, memo);
-  }
+  const memo = inferenceMemo(palette, structure);
   const key = ty * row.length + tx;
   const cached = memo.get(key);
   if (cached?.type === type) return cached.material;
 
-  const material = groundMaterialForTileType(inferFloorType(structure, tx, ty));
+  const material = palette.materialForTileType(inferFloorType(structure, tx, ty));
   memo.set(key, { type, material });
   return material;
 }
@@ -149,19 +179,27 @@ function groundMaterialUnder(
  * thing a review route must not do.
  */
 export interface FringeMaterial {
-  /** Distinguishes materials in the composite cache; unique across sheets. */
+  /** Distinguishes materials within one sheet. */
   readonly id: string;
+  /**
+   * Sheet the material's row lives in. Part of every composite cache key: a
+   * material name is only unique within its own sheet, so without this an
+   * overworld `grass` quarter and a dungeon quarter of the same name would
+   * collide in `overlayCache` and each would draw the other's pixels.
+   */
+  readonly sheetKey: string;
   /** Blend order — higher covers lower. */
   readonly order: number;
   resolve(tx: number, ty: number): ResolvedMaterial | undefined;
 }
 
 function resolveMaterial(
-  material: GroundMaterial,
+  palette: GroundPalette,
+  material: string,
   tx: number,
   ty: number,
 ): ResolvedMaterial | undefined {
-  const def = getSpriteDef(GROUND_SHEET_KEY);
+  const def = getSpriteDef(palette.sheetKey);
   if (def === undefined) return undefined;
   const state = def.states.get(material);
   if (state === undefined) return undefined;
@@ -464,13 +502,13 @@ function maskFrameIndex(mask: MaskSheet, bits: number, cellX: number, cellY: num
  */
 function maskedOverlayQuarter(
   mask: MaskSheet,
-  materialId: string,
+  layer: FringeMaterial,
   resolved: ResolvedMaterial,
   maskFrame: number,
   quadrant: DualCellQuadrant,
   ts: number,
 ): CanvasSurface {
-  const cacheKey = `${materialId}|${resolved.frame}|${maskFrame}|${quadrant.maskQuarterX}${quadrant.maskQuarterY}|${ts}`;
+  const cacheKey = `${layer.sheetKey}|${layer.id}|${resolved.frame}|${maskFrame}|${quadrant.maskQuarterX}${quadrant.maskQuarterY}|${ts}`;
   const cached = overlayCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
@@ -710,7 +748,7 @@ function drawFringeQuadrant(
     const channel = stack.length > 1 ? maskAlpha(mask) : undefined;
     const surface =
       channel === undefined
-        ? maskedOverlayQuarter(mask, layer.id, resolved, stack[0], quadrant, ts)
+        ? maskedOverlayQuarter(mask, layer, resolved, stack[0], quadrant, ts)
         : weighedOverlayQuarter(channel, mask, resolved, stack, quadrant, ts);
     ctx.drawImage(
       surface,
@@ -800,22 +838,23 @@ function clampMarkCentre(centre: number, origin: number, ts: number, extent: num
 
 function drawScatter(
   ctx: CanvasRenderingContext2D,
+  palette: GroundPalette,
   structure: TileContent[][],
-  material: GroundMaterial,
+  material: string,
   sx: number,
   sy: number,
   ts: number,
   tx: number,
   ty: number,
 ): void {
-  const ownOrder = GROUND_BLEND_ORDER[material];
+  const ownOrder = palette.blendOrder[material];
   const depth = Math.min(SCATTER_EDGE_DEPTH_PX, ts);
 
   CARDINAL_OFFSETS.forEach(([dx, dy], side) => {
-    const neighbour = groundMaterialUnder(structure, tx + dx, ty + dy);
+    const neighbour = groundMaterialUnder(palette, structure, tx + dx, ty + dy);
     if (neighbour === undefined) return;
-    if (GROUND_BLEND_ORDER[neighbour] >= ownOrder) return;
-    const spill = GROUND_SPILL[neighbour];
+    if (palette.blendOrder[neighbour] >= ownOrder) return;
+    const spill = palette.spill[neighbour];
     if (spill === null) return;
 
     const isBlade = spill.kind === 'blades';
@@ -855,33 +894,6 @@ function drawScatter(
 // ---------------------------------------------------------------------------
 
 /**
- * The materials a kerb belongs to, and the ones it is laid against.
- *
- * Every made street gets a lip where it meets **planted** ground, and nowhere
- * else. The three exclusions are each a case the first cut got wrong and a
- * screenshot caught:
- *
- * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the plan calls
- *   the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
- *   every track outside the walls. Kerbing against it drew a closed pale
- *   rectangle around Blackwood Lodge's three-tile doorstep, an island of setts in
- *   packed earth, and put a lip on every gate apron out in open country.
- * - `gravel` is the workyards and the gate aprons, which are made surfaces too;
- *   19 edges of the town's paving met one.
- * - `grass` is the field outside the walls, which no street is kerbed against
- *   because the roads out there are `dirt`.
- *
- * That leaves `verge`, which is what a street verge is: the soft strip a kerb
- * exists to hold back.
- */
-const KERBED_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>([
-  'lane',
-  'cobble',
-  'plaza',
-]);
-const KERB_SOFT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>(['verge']);
-
-/**
  * Depth of the kerbstone lip and of the joint line behind it.
  *
  * Both are drawn *inside* the street tile, against its own edge. That is a few
@@ -914,21 +926,22 @@ const KERB_JOINT_COLOR = 'rgba(0,0,0,0.20)';
  */
 function drawKerb(
   ctx: CanvasRenderingContext2D,
+  palette: GroundPalette,
   structure: TileContent[][],
-  material: GroundMaterial,
+  material: string,
   sx: number,
   sy: number,
   ts: number,
   tx: number,
   ty: number,
 ): void {
-  if (!KERBED_MATERIALS.has(material)) return;
+  if (!palette.kerbedMaterials.has(material)) return;
   const lip = Math.min(KERB_LIP_PX, ts);
   const joint = Math.min(KERB_JOINT_PX, ts - lip);
 
   const kerbs = (dx: number, dy: number) => {
-    const neighbour = groundMaterialUnder(structure, tx + dx, ty + dy);
-    if (neighbour === undefined || !KERB_SOFT_MATERIALS.has(neighbour)) return false;
+    const neighbour = groundMaterialUnder(palette, structure, tx + dx, ty + dy);
+    if (neighbour === undefined || !palette.kerbSoftMaterials.has(neighbour)) return false;
     return !occluderAt(structure, tx + dx, ty + dy);
   };
   const north = kerbs(0, -1);
@@ -1403,42 +1416,31 @@ function drawOcclusion(
 
 // ---------------------------------------------------------------------------
 
-function fringeMaterial(material: GroundMaterial): FringeMaterial {
-  return {
+/**
+ * The `FringeMaterial` view of each of a palette's materials, built once per
+ * palette. Identity matters — the fringe de-duplicates a cell's corner materials
+ * by reference — so these are shared, not rebuilt per tile.
+ */
+const fringeMaterials = new WeakMap<GroundPalette, Map<string, FringeMaterial>>();
+
+function fringeMaterial(palette: GroundPalette, material: string): FringeMaterial {
+  let byMaterial = fringeMaterials.get(palette);
+  if (byMaterial === undefined) {
+    byMaterial = new Map<string, FringeMaterial>();
+    fringeMaterials.set(palette, byMaterial);
+  }
+  const existing = byMaterial.get(material);
+  if (existing !== undefined) return existing;
+
+  const built: FringeMaterial = {
     id: material,
-    order: GROUND_BLEND_ORDER[material],
-    resolve: (tx, ty) => resolveMaterial(material, tx, ty),
+    sheetKey: palette.sheetKey,
+    order: palette.blendOrder[material],
+    resolve: (tx, ty) => resolveMaterial(palette, material, tx, ty),
   };
+  byMaterial.set(material, built);
+  return built;
 }
-
-/**
- * What a position with no ground at all counts as inside the fringe.
- *
- * It exists because the fringe needs *a* material at every corner — see
- * `drawFringe` — not because grass is the right answer there. It is reached for
- * any position whose floor is not an outdoor material: an indoor or dungeon
- * floor, or off-map. On today's maps that is only the deep void border, since
- * `drawGroundTile` runs on the overworld alone and every void tile within
- * `inferFloorType`'s reach resolves to real ground — but an interior abutting
- * outdoor ground would put grass along that seam, and would want a
- * material of its own rather than a better stand-in.
- */
-const FRINGE_STAND_IN_MATERIAL = 'grass';
-
-/**
- * The `FringeMaterial` view of each ground material, built once. Identity
- * matters — the fringe de-duplicates a cell's corner materials by reference —
- * so these are shared, not rebuilt per tile.
- */
-const FRINGE_MATERIALS: Record<GroundMaterial, FringeMaterial> = {
-  grass: fringeMaterial('grass'),
-  verge: fringeMaterial('verge'),
-  dirt: fringeMaterial('dirt'),
-  gravel: fringeMaterial('gravel'),
-  lane: fringeMaterial('lane'),
-  cobble: fringeMaterial('cobble'),
-  plaza: fringeMaterial('plaza'),
-};
 
 /**
  * Draws the ground at (tx, ty), blended into its neighbours.
@@ -1451,6 +1453,7 @@ const FRINGE_MATERIALS: Record<GroundMaterial, FringeMaterial> = {
  */
 export function drawGroundTile(
   ctx: CanvasRenderingContext2D,
+  palette: GroundPalette,
   structure: TileContent[][],
   sx: number,
   sy: number,
@@ -1458,29 +1461,32 @@ export function drawGroundTile(
   tx: number,
   ty: number,
 ): void {
-  const material = groundMaterialUnder(structure, tx, ty);
+  const material = groundMaterialUnder(palette, structure, tx, ty);
   if (material === undefined) return;
 
-  const resolved = resolveMaterial(material, tx, ty);
+  const resolved = resolveMaterial(palette, material, tx, ty);
   if (resolved === undefined) {
     // The fallback colours are each material's mean *in the sheet*, and the tone
     // layer darkens what is drawn from that sheet — so it applies here too, or
     // the stand-in sits brighter than the thing it stands in for.
-    ctx.fillStyle = GROUND_FALLBACK_COLOR[material];
+    ctx.fillStyle = palette.fallbackColor[material];
     ctx.fillRect(sx, sy, ts, ts);
     applyWorldNoise(ctx, sx, sy, ts, tx, ty);
     return;
   }
 
   const materialAt = (atX: number, atY: number): FringeMaterial =>
-    FRINGE_MATERIALS[groundMaterialUnder(structure, atX, atY) ?? FRINGE_STAND_IN_MATERIAL];
+    fringeMaterial(
+      palette,
+      groundMaterialUnder(palette, structure, atX, atY) ?? palette.fringeStandIn,
+    );
 
   drawResolved(ctx, resolved, sx, sy, ts);
-  drawFringe(ctx, FRINGE_MATERIALS[material], materialAt, sx, sy, ts, tx, ty);
+  drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty);
   // Before the scatter, so tufts from the soft side spill over the kerb rather
   // than being buried by it — which is what grass at a kerb actually does.
-  drawKerb(ctx, structure, material, sx, sy, ts, tx, ty);
-  drawScatter(ctx, structure, material, sx, sy, ts, tx, ty);
+  drawKerb(ctx, palette, structure, material, sx, sy, ts, tx, ty);
+  drawScatter(ctx, palette, structure, material, sx, sy, ts, tx, ty);
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

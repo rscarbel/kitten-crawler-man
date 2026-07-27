@@ -17,19 +17,80 @@ import {
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
   SAFE_ROOM_GALLEY_FLOOR,
+  SAFE_ROOM_BANNER,
+  SAFE_ROOM_HERB_RACK,
+  SAFE_ROOM_LANTERN,
+  SAFE_ROOM_LARDER,
+  SAFE_ROOM_MENU_BOARD,
+  SAFE_ROOM_RUG,
+  SAFE_ROOM_STOOL,
+  SAFE_ROOM_STOVE,
+  SAFE_ROOM_TABLE,
   propSpriteState,
 } from '../tileTypes';
 import {
   counterEdges,
   drawCounterBackTile,
   drawCounterFrontFace,
-  drawGalleyFloorTile,
 } from '../../sprites/safeRoomCounter';
+import {
+  drawBannerTile,
+  drawHerbRackTile,
+  drawLanternTile,
+  drawLarderTile,
+  drawMenuBoardTile,
+  drawRugTile,
+  drawStoolTile,
+  drawStoveTile,
+  drawTableTile,
+} from '../../sprites/safeRoomDecor';
+import { drawGroundTile } from './groundTiles';
+import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey } from '../../core/SpriteRenderer';
 import { frameTime } from '../../utils';
+
+/** Dispatches one furnishing to its own art, over ground already painted. */
+function drawSafeRoomDecorProp(
+  ctx: CanvasRenderingContext2D,
+  type: number,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+): void {
+  switch (type) {
+    case SAFE_ROOM_MENU_BOARD:
+      drawMenuBoardTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_HERB_RACK:
+      drawHerbRackTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_BANNER:
+      drawBannerTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_LANTERN:
+      drawLanternTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_STOVE:
+      drawStoveTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_TABLE:
+      drawTableTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_STOOL:
+      drawStoolTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_LARDER:
+      drawLarderTile(ctx, sx, sy, ts);
+      return;
+    case SAFE_ROOM_RUG:
+      drawRugTile(ctx, sx, sy, ts, tx);
+      return;
+  }
+}
 
 export function drawInteriorTile(
   ctx: CanvasRenderingContext2D,
@@ -450,18 +511,20 @@ export function drawInteriorTile(
     }
 
     // Safe-room service counter — front bar, back bench, and the galley strip
-    // between them. All three paint the galley's scrubbed flagstone first rather
-    // than the room's own floor: the sliver of ground each one leaves showing is
-    // on the *kitchen* side of the counter, so the three tiles read as one unit
-    // instead of a counter with a stripe of dining-room floor behind it.
+    // between them. All three paint the hearth paving first rather than the
+    // room's own tile: the sliver of ground each one leaves showing is on the
+    // *kitchen* side of the counter, so the three tiles read as one unit instead
+    // of a counter with a stripe of dining-room floor behind it. That is a
+    // property of the map now — `DUNGEON_GROUND` maps all three types to
+    // `bopca_hearth` — so the base is the ordinary ground pass.
     case SAFE_ROOM_COUNTER: {
-      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
       drawCounterFrontFace(ctx, sx, sy, ts, counterEdges(structure, SAFE_ROOM_COUNTER, tx, ty));
       return true;
     }
 
     case SAFE_ROOM_COUNTER_BACK: {
-      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
       drawCounterBackTile(
         ctx,
         sx,
@@ -474,7 +537,24 @@ export function drawInteriorTile(
     }
 
     case SAFE_ROOM_GALLEY_FLOOR: {
-      drawGalleyFloorTile(ctx, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // The safe room's furnishings. Every one paints the room's own ground first,
+    // exactly as the counter run does: a prop replaces the tile's type, so
+    // without this the floor it stands on would be a hole.
+    case SAFE_ROOM_MENU_BOARD:
+    case SAFE_ROOM_HERB_RACK:
+    case SAFE_ROOM_BANNER:
+    case SAFE_ROOM_LANTERN:
+    case SAFE_ROOM_STOVE:
+    case SAFE_ROOM_TABLE:
+    case SAFE_ROOM_STOOL:
+    case SAFE_ROOM_LARDER:
+    case SAFE_ROOM_RUG: {
+      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
+      drawSafeRoomDecorProp(ctx, type, sx, sy, ts, tx);
       return true;
     }
 

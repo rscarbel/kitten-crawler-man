@@ -15,7 +15,8 @@ import {
   VERGE_GRASS,
 } from '../tileTypes';
 import { drawGroundTile } from './groundTiles';
-import { GROUND_FALLBACK_COLOR, positiveMod } from '../town/groundMaterials';
+import { GROUND_FALLBACK_COLOR, OVERWORLD_GROUND } from '../town/groundMaterials';
+import { positiveMod } from '../../utils';
 
 const WALL_FOUNDATION_HEIGHT = 3;
 const WALL_CORNICE_SHADOW_DEPTH = 1;
@@ -313,7 +314,7 @@ export function drawBuildingTile(
         // otherwise leave the chunk canvas untouched, i.e. transparent.
         ctx.fillStyle = GROUND_FALLBACK_COLOR.grass;
         ctx.fillRect(sx, sy, ts, ts);
-        drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+        drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
         return true;
       case METAL_WALL:
         ctx.fillStyle = '#1a1e22';
@@ -1306,7 +1307,7 @@ export function drawBuildingTile(
     case RUINED_WALL: {
       // The real grass sprite shows through the broken top, so the fragment
       // blends with the lawn instead of reading as a solid square.
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
 
       // Deterministic per-tile hash drives the jagged top silhouette and crack pattern.
       const h1 = (tx * RUIN_HASH_X + ty * RUIN_HASH_Y) % 97;
@@ -1412,7 +1413,7 @@ function drawTownWallTile(
   ty: number,
 ): void {
   // The crenels are gaps, so the ground behind them has to be drawn first.
-  drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+  drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
 
   const isWall = (x: number, y: number) => structure[y]?.[x]?.type === TOWN_WALL;
   const inEastWestRun = isWall(tx - 1, ty) || isWall(tx + 1, ty);

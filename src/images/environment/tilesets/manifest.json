@@ -188,6 +188,24 @@
         "frameCount": 8,
         "patchTiles": 2,
         "label": "Dungeon wall"
+      },
+      "bopca_scuff": {
+        "row": 7,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Bopca station worn threshold (bare screed)"
+      },
+      "bopca_hearth": {
+        "row": 8,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Bopca station quarry tile (galley)"
+      },
+      "bopca_tile": {
+        "row": 9,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Bopca station tile (glazed, calm)"
       }
     }
   },

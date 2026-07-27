@@ -1,5 +1,11 @@
 import type { GameMap } from '../map/GameMap';
 import { planSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import {
+  planSafeRoomDecor,
+  safeRoomDecorTiles,
+  type SafeRoomDecorPlan,
+} from '../map/safeRoomDecorLayout';
+import { SAFE_ROOM_LANTERN, SAFE_ROOM_STOVE } from '../map/tileTypes';
 import { mordecaiAndBedTiles } from '../map/safeRoomFixtures';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -7,16 +13,23 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { drawMordecaiForLevel } from '../sprites/mordecaiSprite';
+import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
+import { drawStoveSteam } from '../sprites/safeRoomDecor';
 import { drawSpeechBubble } from '../sprites/speechBubble';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { randomFromArray, clamp } from '../utils';
+import { randomFromArray, clamp, frameTime } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
 
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
+  centre: { x: number; y: number };
+  /** Tiles holding a standing lantern — the room's light sources. */
+  lanternTiles: ReadonlyArray<{ x: number; y: number }>;
+  /** Tiles holding a stove, whose steam has to be drawn per frame. */
+  stoveTiles: ReadonlyArray<{ x: number; y: number }>;
   mordecaiHomeTileX: number;
   mordecaiHomeTileY: number;
   bedTileX: number;
@@ -42,7 +55,20 @@ export function safeRoomAnchorTiles(map: GameMap): Array<{ x: number; y: number 
   for (const layout of planSafeRoomCounters(map)) {
     tiles.push(...layout.counterTiles, ...layout.backTiles, ...layout.galleyTiles);
   }
+  // The furnishings too: the stove and the table are as solid as the counter, and
+  // an occupant placer working from walkability alone would happily stand a
+  // townsperson inside the firebox.
+  tiles.push(...safeRoomDecorTiles(map));
   return tiles;
+}
+
+function propTilesOfType(
+  plan: SafeRoomDecorPlan | undefined,
+  type: number,
+): ReadonlyArray<{ x: number; y: number }> {
+  return (plan?.props ?? [])
+    .filter((prop) => prop.type === type)
+    .map((prop) => ({ x: prop.x, y: prop.y }));
 }
 
 export class SafeRoomSystem implements GameSystem {
@@ -50,6 +76,9 @@ export class SafeRoomSystem implements GameSystem {
 
   private _mordecaiDialogOpen = false;
   private _awaitingResponse = false;
+  /** Pages of a scripted Mordecai dialog, or null while the AI path is in use. */
+  private _pages: ReadonlyArray<string> | null = null;
+  private _pageIndex = 0;
   private readonly _dialogBox: DialogBox | null;
   private _isSleeping = false;
   private sleepTimer = 0;
@@ -70,6 +99,10 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly MORDECAI_NEAR_DISTANCE = 2.5;
   private static readonly BED_NEAR_DISTANCE = 1.8;
   private static readonly SLEEP_HEAL_TRIGGER = 5;
+  /** Reach and strength of one standing lantern's pool of light. */
+  private static readonly LANTERN_LIGHT_RADIUS_TILES = 3.2;
+  private static readonly LANTERN_LIGHT_ALPHA = 0.16;
+  private static readonly LANTERN_LIGHT_COLOR = '255,204,128';
   private static readonly SLEEP_FRAMES_DEDUCTED = 10800;
   private static readonly BANNER_TEXT_SIZE = 10;
   private static readonly BANNER_TILE_Y_OFFSET = -1;
@@ -83,25 +116,6 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly SLEEP_TEXT_TOP_OFFSET = 21;
   private static readonly ZZZ_Y_OFFSET = 18;
   private static readonly ZZZ_TEXT_TOP_OFFSET = 11;
-  private static readonly BED_FRAME_LEFT = 0.05;
-  private static readonly BED_FRAME_TOP = 0.12;
-  private static readonly BED_FRAME_WIDTH = 0.9;
-  private static readonly BED_FRAME_HEIGHT = 0.8;
-  private static readonly BED_PILLOW_LEFT = 0.1;
-  private static readonly BED_PILLOW_TOP = 0.18;
-  private static readonly BED_PILLOW_WIDTH = 0.8;
-  private static readonly BED_PILLOW_HEIGHT = 0.65;
-  private static readonly BED_SHEET_LEFT = 0.14;
-  private static readonly BED_SHEET_TOP = 0.21;
-  private static readonly BED_SHEET_WIDTH = 0.72;
-  private static readonly BED_SHEET_HEIGHT = 0.2;
-  private static readonly BED_BLANKET_LEFT = 0.1;
-  private static readonly BED_BLANKET_TOP = 0.41;
-  private static readonly BED_BLANKET_WIDTH = 0.8;
-  private static readonly BED_BLANKET_HEIGHT = 0.42;
-  private static readonly BED_BLANKET_FOLD_HEIGHT = 0.05;
-  private static readonly BED_EDGE_HEIGHT = 0.1;
-  private static readonly BED_EDGE_BOTTOM_TOP = 0.82;
 
   // Mordecai wander animation (shared timer, different phase per entry)
   private wanderTime = 0;
@@ -119,18 +133,23 @@ export class SafeRoomSystem implements GameSystem {
         : null;
     this.entries = [];
 
+    const decorPlans = planSafeRoomDecor(gameMap);
     if (gameMap.safeRooms.length > 0) {
-      for (const sr of gameMap.safeRooms) {
+      gameMap.safeRooms.forEach((sr, safeRoomIndex) => {
         const [mordecai, bed] = mordecaiAndBedTiles(sr);
+        const plan = decorPlans.find((candidate) => candidate.safeRoomIndex === safeRoomIndex);
         this.entries.push({
           bounds: sr.bounds,
+          centre: sr.centre,
+          lanternTiles: propTilesOfType(plan, SAFE_ROOM_LANTERN),
+          stoveTiles: propTilesOfType(plan, SAFE_ROOM_STOVE),
           mordecaiHomeTileX: mordecai.x,
           mordecaiHomeTileY: mordecai.y,
           bedTileX: bed.x,
           bedTileY: bed.y,
           showBed: sr.showBed ?? true,
         });
-      }
+      });
     }
   }
 
@@ -154,6 +173,7 @@ export class SafeRoomSystem implements GameSystem {
     this._mordecaiDialogOpen = v;
     if (!v) {
       this._awaitingResponse = false;
+      this._pages = null;
       this._dialogBox?.hide();
     }
   }
@@ -162,6 +182,7 @@ export class SafeRoomSystem implements GameSystem {
   openMordecaiDialog(responsePromise: Promise<string>): void {
     this._mordecaiDialogOpen = true;
     this._awaitingResponse = true;
+    this._pages = null;
     this._dialogBox?.show('...');
     void responsePromise.then((text) => {
       this._awaitingResponse = false;
@@ -172,8 +193,33 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   /**
-   * Skip the typing animation if in progress, or close the dialog if already
-   * fully revealed. Call from Space / click handlers.
+   * Open the dialog on a multi-page script Mordecai already knows — the floor
+   * advice, which needs no server and so has nothing to wait for.
+   *
+   * Separate from `openMordecaiDialog` rather than a `Promise<string[]>` version
+   * of it: a resolved promise would still take a frame to land, so the box would
+   * flash `'...'` before text that was available all along.
+   */
+  openMordecaiPages(pages: ReadonlyArray<string>): void {
+    if (pages.length === 0) return;
+    this._mordecaiDialogOpen = true;
+    this._awaitingResponse = false;
+    this._pages = pages;
+    this._pageIndex = 0;
+    this.showCurrentPage();
+  }
+
+  private showCurrentPage(): void {
+    const pages = this._pages;
+    if (pages === null) return;
+    this._dialogBox?.show(pages[this._pageIndex], {
+      pageIndicator: { current: this._pageIndex + 1, total: pages.length },
+    });
+  }
+
+  /**
+   * Skip the typing animation if in progress, turn to the next page if there is
+   * one, or close the dialog. Call from Space / click handlers.
    * While the AI response is still loading, Space does nothing.
    */
   advanceMordecaiDialog(): void {
@@ -181,9 +227,15 @@ export class SafeRoomSystem implements GameSystem {
     if (this._awaitingResponse) return;
     if (this._dialogBox !== null && !this._dialogBox.isFullyRevealed()) {
       this._dialogBox.skipToEnd();
-    } else {
-      this.mordecaiDialogOpen = false;
+      return;
     }
+    const pages = this._pages;
+    if (pages !== null && this._pageIndex < pages.length - 1) {
+      this._pageIndex++;
+      this.showCurrentPage();
+      return;
+    }
+    this.mordecaiDialogOpen = false;
   }
 
   /** Advance the dialog animation without requiring a full SystemContext. */
@@ -258,6 +310,27 @@ export class SafeRoomSystem implements GameSystem {
     );
   }
 
+  /**
+   * Centre tile of the safe room `entity` is standing in, or null if it is in
+   * none.
+   *
+   * Mordecai's floor advice measures its bearings from here, so a floor's two
+   * safe rooms genuinely point in different directions at the same boss.
+   */
+  safeRoomCentreAt(entity: { x: number; y: number }): { x: number; y: number } | null {
+    const ts = TILE_SIZE;
+    const tx = Math.floor((entity.x + ts * SafeRoomSystem.TILE_CENTER) / ts);
+    const ty = Math.floor((entity.y + ts * SafeRoomSystem.TILE_CENTER) / ts);
+    const entry = this.entries.find(
+      (e) =>
+        tx >= e.bounds.x &&
+        tx < e.bounds.x + e.bounds.w &&
+        ty >= e.bounds.y &&
+        ty < e.bounds.y + e.bounds.h,
+    );
+    return entry?.centre ?? null;
+  }
+
   isNearMordecai(entity: { x: number; y: number }): boolean {
     return this.entries.some((e, i) => {
       const { offsetX } = this.getWanderState(i);
@@ -270,14 +343,14 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   isNearBed(entity: { x: number; y: number }): boolean {
-    return this.entries.some((e) => {
-      if (!e.showBed) return false;
-      const bx = e.bedTileX * TILE_SIZE;
-      const by = e.bedTileY * TILE_SIZE;
-      return (
-        Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * SafeRoomSystem.BED_NEAR_DISTANCE
-      );
-    });
+    return this.entries.some((e) => this.isNearThisBed(e, entity));
+  }
+
+  private isNearThisBed(entry: SafeRoomEntry, entity: { x: number; y: number }): boolean {
+    if (!entry.showBed) return false;
+    const bx = entry.bedTileX * TILE_SIZE;
+    const by = entry.bedTileY * TILE_SIZE;
+    return Math.hypot(entity.x - bx, entity.y - by) < TILE_SIZE * SafeRoomSystem.BED_NEAR_DISTANCE;
   }
 
   evictMobs(_mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
@@ -369,11 +442,22 @@ export class SafeRoomSystem implements GameSystem {
         align: 'center',
       });
 
-      // Bed
+      // Lantern pools first, so the bed and Mordecai are lit by them rather than
+      // washed out under them.
+      this.renderLanternLight(ctx, e, camX, camY);
+      // The stove tile itself is baked into the static chunk cache, so its steam
+      // has to be drawn here or it would freeze at whatever second the bake ran.
+      for (const stove of e.stoveTiles) {
+        drawStoveSteam(ctx, stove.x * ts - camX, stove.y * ts - camY, ts, frameTime);
+      }
+
       if (e.showBed) {
         const bedSx = e.bedTileX * ts - camX;
         const bedSy = e.bedTileY * ts - camY;
-        this.renderBed(ctx, bedSx, bedSy, ts);
+        // Per entry, not `isNearBed`: with two safe rooms on a floor that would
+        // set both beds breathing whenever the player stood at either one.
+        const pulse = this.isNearThisBed(e, active) ? restedPulse(this.wanderTime) : 0;
+        drawSafeRoomBed(ctx, bedSx, bedSy, ts, pulse);
       }
 
       // Mordecai (wandered position)
@@ -457,6 +541,38 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
+  /**
+   * The pools of warm light the room's standing lanterns throw.
+   *
+   * Drawn in `renderObjects` rather than baked into the tile cache because it
+   * composites over the floor *and* under the sprites standing on it — a lantern
+   * pool baked into the ground would be covered by every prop drawn after it.
+   *
+   * Deliberately cheap: this runs every frame, unlike the ground passes. A
+   * handful of radial gradients per room is affordable; a per-pixel falloff is
+   * not.
+   */
+  private renderLanternLight(
+    ctx: CanvasRenderingContext2D,
+    entry: SafeRoomEntry,
+    camX: number,
+    camY: number,
+  ): void {
+    const radius = TILE_SIZE * SafeRoomSystem.LANTERN_LIGHT_RADIUS_TILES;
+    for (const lantern of entry.lanternTiles) {
+      const cx = lantern.x * TILE_SIZE + TILE_SIZE / 2 - camX;
+      const cy = lantern.y * TILE_SIZE + TILE_SIZE / 2 - camY;
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      gradient.addColorStop(
+        0,
+        `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},${SafeRoomSystem.LANTERN_LIGHT_ALPHA})`,
+      );
+      gradient.addColorStop(1, `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},0)`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    }
+  }
+
   renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     this._dialogBox?.render(ctx, canvas);
   }
@@ -505,69 +621,5 @@ export class SafeRoomSystem implements GameSystem {
         align: 'center',
       });
     }
-  }
-
-  private renderBed(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {
-    ctx.fillStyle = '#7a4e2c';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
-      sy + s * SafeRoomSystem.BED_FRAME_TOP,
-      s * SafeRoomSystem.BED_FRAME_WIDTH,
-      s * SafeRoomSystem.BED_FRAME_HEIGHT,
-    );
-
-    ctx.fillStyle = '#f0e8d8';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_PILLOW_LEFT,
-      sy + s * SafeRoomSystem.BED_PILLOW_TOP,
-      s * SafeRoomSystem.BED_PILLOW_WIDTH,
-      s * SafeRoomSystem.BED_PILLOW_HEIGHT,
-    );
-
-    ctx.fillStyle = '#fafaf8';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_SHEET_LEFT,
-      sy + s * SafeRoomSystem.BED_SHEET_TOP,
-      s * SafeRoomSystem.BED_SHEET_WIDTH,
-      s * SafeRoomSystem.BED_SHEET_HEIGHT,
-    );
-    ctx.strokeStyle = '#d8d0c0';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(
-      sx + s * SafeRoomSystem.BED_SHEET_LEFT,
-      sy + s * SafeRoomSystem.BED_SHEET_TOP,
-      s * SafeRoomSystem.BED_SHEET_WIDTH,
-      s * SafeRoomSystem.BED_SHEET_HEIGHT,
-    );
-
-    ctx.fillStyle = '#3a6e8a';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_BLANKET_LEFT,
-      sy + s * SafeRoomSystem.BED_BLANKET_TOP,
-      s * SafeRoomSystem.BED_BLANKET_WIDTH,
-      s * SafeRoomSystem.BED_BLANKET_HEIGHT,
-    );
-
-    ctx.fillStyle = '#2e5a74';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_BLANKET_LEFT,
-      sy + s * SafeRoomSystem.BED_BLANKET_TOP,
-      s * SafeRoomSystem.BED_BLANKET_WIDTH,
-      s * SafeRoomSystem.BED_BLANKET_FOLD_HEIGHT,
-    );
-
-    ctx.fillStyle = '#5c3820';
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
-      sy + s * SafeRoomSystem.BED_FRAME_TOP,
-      s * SafeRoomSystem.BED_FRAME_WIDTH,
-      s * SafeRoomSystem.BED_EDGE_HEIGHT,
-    );
-    ctx.fillRect(
-      sx + s * SafeRoomSystem.BED_FRAME_LEFT,
-      sy + s * SafeRoomSystem.BED_EDGE_BOTTOM_TOP,
-      s * SafeRoomSystem.BED_FRAME_WIDTH,
-      s * SafeRoomSystem.BED_EDGE_HEIGHT,
-    );
   }
 }

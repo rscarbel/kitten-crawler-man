@@ -119,3 +119,39 @@ export const WATER_RAMP: Ramp = {
   light: [70, 92, 100],
   accent: [128, 156, 164],
 };
+
+/**
+ * The Bopca station's three floor ramps.
+ *
+ * Anchored to the art the floor has to sit next to rather than to the retired
+ * hand-drawn safe-room checkerboard: the counter's oiled oak (`#6b452a`) and
+ * grey-green work surface (`#8d9188`) in `src/sprites/safeRoomCounter.ts`, and
+ * the chef's own warm skin and apron in `src/sprites/bopcaSprite.ts`. The old
+ * checkerboard spanned `#f0e4c8`→`#e8d8b8` — eight levels of red across the whole
+ * floor, which is why it read as painted card rather than as glazed tile.
+ *
+ * Warm but not *earthy*. Floors 1 and 2 are indoor dungeons, and a saturated
+ * terracotta reads as a sunlit courtyard however it is laid; these sit a few
+ * degrees toward grey so lamplight is doing the warming rather than the pigment.
+ */
+export const BOPCA_TILE_RAMP: Ramp = {
+  shadow: [152, 138, 112],
+  mid: [208, 194, 166],
+  light: [234, 224, 202],
+  accent: [246, 240, 226],
+};
+
+export const BOPCA_HEARTH_RAMP: Ramp = {
+  shadow: [92, 62, 50],
+  mid: [140, 98, 78],
+  light: [174, 130, 106],
+  accent: [196, 158, 134],
+};
+
+/** Bare screed under a worn-through threshold: grey, never sandy. */
+export const BOPCA_SCUFF_RAMP: Ramp = {
+  shadow: [74, 71, 66],
+  mid: [118, 113, 105],
+  light: [152, 146, 136],
+  accent: [174, 168, 158],
+};

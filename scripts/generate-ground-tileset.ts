@@ -85,6 +85,9 @@ const SHEETS: ReadonlyArray<SheetConfig> = [
       'dungeon_wet',
       'dungeon_rubble',
       'dungeon_wall',
+      'bopca_scuff',
+      'bopca_hearth',
+      'bopca_tile',
     ],
   },
 ];

@@ -3,6 +3,7 @@ import {
   type TileContent,
   VOID_TYPE,
   SAFE_ROOM_FLOOR,
+  SAFE_ROOM_THRESHOLD,
   HORDER_BOSS_ROOM_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
@@ -20,6 +21,7 @@ import {
   placeProp,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
+import { mordecaiAndBedTiles } from './safeRoomFixtures';
 
 type Room = { x: number; y: number; w: number; h: number; floor: number };
 type Point = { x: number; y: number };
@@ -419,6 +421,80 @@ function bossFloorForType(type: string): number {
       return KRAKAREN_BOSS_ROOM_FLOOR;
     default:
       return HORDER_BOSS_ROOM_FLOOR;
+  }
+}
+
+// ── Safe-room thresholds ──────────────────────────────────────────────────────
+
+/** How far into the room the scuffed band reaches: the doorway tile, plus one. */
+const SAFE_ROOM_THRESHOLD_DEPTH_TILES = 2;
+
+/**
+ * The four sides of a room, as the direction *into* the room from each one.
+ * A perimeter tile is a doorway when the tile one step the other way — outside
+ * the room — is carved floor rather than wall.
+ */
+const ROOM_SIDES: ReadonlyArray<{ readonly inwardX: number; readonly inwardY: number }> = [
+  { inwardX: 0, inwardY: 1 },
+  { inwardX: 0, inwardY: -1 },
+  { inwardX: 1, inwardY: 0 },
+  { inwardX: -1, inwardY: 0 },
+];
+
+function isCarvedFloor(grid: TileContent[][], x: number, y: number): boolean {
+  if (y < 0 || y >= grid.length) return false;
+  const row = grid[y];
+  if (x < 0 || x >= row.length) return false;
+  const { type } = row[x];
+  return type !== FloorTypeValue.wall && type !== VOID_TYPE;
+}
+
+/**
+ * Lays the worn traffic band inside every doorway of a safe room.
+ *
+ * Run after all hallway carving, because a doorway only exists once a corridor
+ * has cut through the room's wall — before that every perimeter tile looks
+ * identical.
+ *
+ * Mordecai's tile and the bed's are skipped: they are the room's fixed furniture
+ * and the band would otherwise be drawn under them in a narrow room. The Bopca's
+ * counter run is *not* skipped, and does not need to be — it is stamped later
+ * with `placeProp`, which overwrites the type, and `DUNGEON_GROUND` maps all
+ * three counter types straight to the hearth paving regardless of what they
+ * replaced.
+ */
+function stampSafeRoomThresholds(
+  grid: TileContent[][],
+  safeRoom: { bounds: Rect; centre: Point },
+): void {
+  const { bounds } = safeRoom;
+  const fixtures = mordecaiAndBedTiles(safeRoom);
+  const isFixture = (x: number, y: number): boolean =>
+    fixtures.some((tile) => tile.x === x && tile.y === y);
+
+  const lastX = bounds.x + bounds.w - 1;
+  const lastY = bounds.y + bounds.h - 1;
+
+  for (const side of ROOM_SIDES) {
+    const alongX = side.inwardX === 0;
+    const fromX = side.inwardX > 0 ? bounds.x : side.inwardX < 0 ? lastX : bounds.x;
+    const fromY = side.inwardY > 0 ? bounds.y : side.inwardY < 0 ? lastY : bounds.y;
+    const spanLength = alongX ? bounds.w : bounds.h;
+
+    for (let step = 0; step < spanLength; step++) {
+      const edgeX = alongX ? bounds.x + step : fromX;
+      const edgeY = alongX ? fromY : bounds.y + step;
+      if (!isCarvedFloor(grid, edgeX - side.inwardX, edgeY - side.inwardY)) continue;
+
+      for (let depth = 0; depth < SAFE_ROOM_THRESHOLD_DEPTH_TILES; depth++) {
+        const x = edgeX + side.inwardX * depth;
+        const y = edgeY + side.inwardY * depth;
+        if (x < bounds.x || x > lastX || y < bounds.y || y > lastY) break;
+        if (isFixture(x, y)) continue;
+        if (grid[y][x].type !== SAFE_ROOM_FLOOR) continue;
+        grid[y][x].type = SAFE_ROOM_THRESHOLD;
+      }
+    }
   }
 }
 
@@ -847,6 +923,8 @@ export function generateDungeon(
       centre: { x: Math.floor(sr.x + sr.w / 2), y: Math.floor(sr.y + sr.h / 2) },
     });
   }
+
+  for (const safeRoom of safeRooms) stampSafeRoomThresholds(grid, safeRoom);
 
   const bossRooms: Array<{ bounds: Rect; centre: Point }> = [];
   for (let i = bossRoomStart; i < bossRoomEnd && i < rooms.length; i++) {

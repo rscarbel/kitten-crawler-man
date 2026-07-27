@@ -29,7 +29,7 @@ import {
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 
-const QUEST_ID = 'defend_goblin_mother';
+export const DEFEND_QUEST_ID = 'defend_goblin_mother';
 
 const APPROACH_SECONDS = 25;
 const DEFENSE_SECONDS = 60;
@@ -296,7 +296,7 @@ export class DefendQuestSystem implements GameSystem {
 
     this.questManager = new QuestManager();
     this.questManager.register({
-      id: QUEST_ID,
+      id: DEFEND_QUEST_ID,
       name: 'Defend the Goblin Mother',
       type: 'mini',
       rewards: {
@@ -313,7 +313,7 @@ export class DefendQuestSystem implements GameSystem {
       this.roomData = gameMap.questRooms[0];
       this.phase = 'npc_waiting';
 
-      this.npc = new QuestNPC(this.roomData.npcTile.x, this.roomData.npcTile.y, QUEST_ID);
+      this.npc = new QuestNPC(this.roomData.npcTile.x, this.roomData.npcTile.y, DEFEND_QUEST_ID);
     }
   }
 
@@ -732,21 +732,21 @@ export class DefendQuestSystem implements GameSystem {
 
   private triggerQuestComplete(active: Player): void {
     this.phase = 'complete';
-    this.questManager.completeQuest(QUEST_ID);
+    this.questManager.completeQuest(DEFEND_QUEST_ID);
     if (this.npc) this.npc.markerType = 'none';
 
-    const def = this.questManager.getDef(QUEST_ID);
+    const def = this.questManager.getDef(DEFEND_QUEST_ID);
     if (!def) return;
     active.gainXp(def.rewards.xp);
     this.xpFloatTimer = XP_FLOAT_FRAMES;
 
-    this.bus.emit('questCompleted', { questId: QUEST_ID });
+    this.bus.emit('questCompleted', { questId: DEFEND_QUEST_ID });
     this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
   }
 
   private triggerQuestFailed(): void {
     this.phase = 'failed';
-    this.questManager.failQuest(QUEST_ID);
+    this.questManager.failQuest(DEFEND_QUEST_ID);
     this.failOverlayTimer = QUEST_FAILED_DISPLAY_FRAMES;
 
     // Clear Bugaboo defend targets so they go after players
@@ -756,7 +756,7 @@ export class DefendQuestSystem implements GameSystem {
       mob.onBarrierAttack = null;
     }
 
-    this.bus.emit('questFailed', { questId: QUEST_ID });
+    this.bus.emit('questFailed', { questId: DEFEND_QUEST_ID });
   }
 
   private acceptQuest(): void {
@@ -771,8 +771,8 @@ export class DefendQuestSystem implements GameSystem {
 
   private startCountdown(): void {
     this.phase = 'countdown';
-    this.questManager.startQuest(QUEST_ID);
-    this.bus.emit('questStarted', { questId: QUEST_ID });
+    this.questManager.startQuest(DEFEND_QUEST_ID);
+    this.bus.emit('questStarted', { questId: DEFEND_QUEST_ID });
     this.approachTimer = APPROACH_TIMER_FRAMES;
     this.woodPileAvailable = true;
     if (this.npc) this.npc.markerType = 'none';

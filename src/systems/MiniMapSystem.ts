@@ -15,6 +15,16 @@ import {
   FENCE,
   GARDEN_PLANTING,
   SAFE_ROOM_FLOOR,
+  SAFE_ROOM_THRESHOLD,
+  SAFE_ROOM_BANNER,
+  SAFE_ROOM_HERB_RACK,
+  SAFE_ROOM_LANTERN,
+  SAFE_ROOM_LARDER,
+  SAFE_ROOM_MENU_BOARD,
+  SAFE_ROOM_RUG,
+  SAFE_ROOM_STOOL,
+  SAFE_ROOM_STOVE,
+  SAFE_ROOM_TABLE,
   TOWN_WALL,
   VERGE_GRASS,
   VOID_TYPE,
@@ -498,7 +508,23 @@ export class MiniMapSystem implements GameSystem {
       case FloorTypeValue.wood:
         return '#704030'; // wood
       case SAFE_ROOM_FLOOR:
+      // A minimap is a floor plan, so the runner the player walks straight over
+      // is the floor.
+      case SAFE_ROOM_RUG:
         return '#8a7040'; // safe room floor
+      case SAFE_ROOM_THRESHOLD:
+        return '#7a6a4c'; // the worn band inside a safe room's doorways
+      // The eight solid furnishings share one furniture tone rather than each
+      // becoming a stray grey pixel from the default case.
+      case SAFE_ROOM_MENU_BOARD:
+      case SAFE_ROOM_HERB_RACK:
+      case SAFE_ROOM_BANNER:
+      case SAFE_ROOM_LANTERN:
+      case SAFE_ROOM_STOVE:
+      case SAFE_ROOM_TABLE:
+      case SAFE_ROOM_STOOL:
+      case SAFE_ROOM_LARDER:
+        return '#5c4a2c'; // safe-room furniture
       case HORDER_BOSS_ROOM_FLOOR:
         return '#2a1808'; // boss room floor
       case TOWN_WALL:

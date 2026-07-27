@@ -450,6 +450,17 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
+  /**
+   * Whether the Arachnid Experiment room is finished with.
+   *
+   * `phase` reaching `'complete'` is the only durable record of it: the system
+   * never emits `bossDefeated`, only `questCompleted { questId: SPIDER_QUEST_ID }`,
+   * and an event is gone the moment it is delivered.
+   */
+  get isComplete(): boolean {
+    return this.phase === 'complete';
+  }
+
   get isDialogOpen(): boolean {
     return (
       this.phase === 'scientist_dialog' ||

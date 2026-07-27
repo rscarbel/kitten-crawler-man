@@ -290,6 +290,27 @@ export class BossRoomSystem implements GameSystem {
     return this.states;
   }
 
+  /**
+   * Which boss types have been killed, by the snake_case ids from
+   * `levelDef.bossRooms[].type` (`'the_hoarder'`, `'juicer'`, `'krakaren_clone'`).
+   *
+   * A set of what is dead rather than a widening of `bossTypes` to public: that
+   * is the question every caller actually has, and it is the only authoritative
+   * answer. The `bossDefeated` event is not — `DungeonScene` emits the *class*
+   * name for `isBoss` mobs and separately emits snake_case for a couple of
+   * specific classes, so the strings are inconsistent and Krakaren fires twice.
+   */
+  get defeatedBossTypes(): ReadonlySet<string> {
+    const defeated = new Set<string>();
+    // `bossTypes` can be shorter than `states`: the states come from the map's
+    // generated boss rooms and the types from the level definition, and a level
+    // that asked for more rooms than it named types for leaves the tail unnamed.
+    this.states.forEach((state, index) => {
+      if (state.defeated && index < this.bossTypes.length) defeated.add(this.bossTypes[index]);
+    });
+    return defeated;
+  }
+
   isEntityInRoom(
     entity: { x: number; y: number },
     bounds: { x: number; y: number; w: number; h: number },

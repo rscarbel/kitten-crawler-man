@@ -14,6 +14,7 @@ import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel, spawnExtraMobs, createMob, spawnTreasureRoomMobs } from '../levels/spawner';
 import { getLevelDef } from '../levels';
+import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
 import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
@@ -27,6 +28,7 @@ import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
@@ -108,7 +110,7 @@ import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem } from '../systems/MongoSystem';
-import { DefendQuestSystem } from '../systems/DefendQuestSystem';
+import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
@@ -145,6 +147,12 @@ import {
 import { randomInt, pointInRect } from '../utils';
 import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
+import {
+  adviceObjective,
+  MordecaiAdvisor,
+  type AdviceObjective,
+  type AdviceSlot,
+} from '../systems/mordecaiAdvice';
 import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
@@ -341,6 +349,16 @@ const HEALTH_BAR_WARNING_THRESHOLD = 0.75;
 // Combat and interaction
 const ACHIEVEMENT_RECENT_EVENTS_LIMIT = 5;
 const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
+
+/** Floors Mordecai has a list of objectives for; the rest fall through to the AI chat. */
+const DUNGEON_FLOOR_ONE = 1;
+const DUNGEON_FLOOR_TWO = 2;
+/**
+ * Identifies floor 2's shared slot to the advisor, which keys its alternation
+ * state on it so the spider lab and the Ball of Swine take turns across separate
+ * conversations.
+ */
+const FLOOR_TWO_SIDE_OBJECTIVE_SLOT = 'floor_two_side_objective';
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
@@ -443,6 +461,7 @@ export class DungeonScene extends GameplayScene {
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
   private bossRoom: BossRoomSystem;
+  private readonly mordecaiAdvisor = new MordecaiAdvisor();
   private dynamite: DynamiteSystem;
   private spells: SpellSystem;
   private companion: CompanionSystem;
@@ -717,6 +736,9 @@ export class DungeonScene extends GameplayScene {
       this.bus,
       options?.audio ?? null,
     );
+    // After the counter, because the furnishings keep clear of every tile it
+    // owns and cannot know them until it is planned.
+    stampSafeRoomDecor(this.gameMap);
     this.bossRoom = new BossRoomSystem(
       this.gameMap,
       this.miniMap,
@@ -968,7 +990,7 @@ export class DungeonScene extends GameplayScene {
             this.catAchievements,
             this.audio ?? undefined,
             this.abilityManager,
-            this.circusQuestProgress,
+            { progress: this.circusQuestProgress, overworldCentre: this.gameMap.circusCentre },
             this.murderQuestProgress,
             this.doomsdayQuestProgress,
             this.clubMembership,
@@ -2336,6 +2358,136 @@ export class DungeonScene extends GameplayScene {
     return true;
   }
 
+  /**
+   * Mordecai's answer, from the highest-ranked of three sources that has one:
+   *
+   *     tutorial (if it handles it) → floor advice → AI chat
+   *
+   * The tutorial keeps first claim, as it always had. Floor advice sits above the
+   * AI chat because it is the deterministic answer to "what is left to do here",
+   * and it needs no server; the chat becomes the flavour path for a cleared floor.
+   */
+  private talkToMordecai(active: { x: number; y: number }): void {
+    if (this.tutorial?.onMordecaiInteracted() === true) return;
+
+    const pages = this.floorAdvice(active);
+    if (pages !== null) {
+      this.safeRoom.openMordecaiPages(pages);
+      return;
+    }
+
+    const humanEvents = this.humanAchievements.getTopRecentEvents(ACHIEVEMENT_RECENT_EVENTS_LIMIT);
+    const catEvents = this.catAchievements.getTopRecentEvents(ACHIEVEMENT_RECENT_EVENTS_LIMIT);
+    const merged = [...humanEvents, ...catEvents]
+      .sort((a, b) => a.secondsAgo - b.secondsAgo)
+      .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
+    this.safeRoom.openMordecaiDialog(
+      aiAdapter.chatWithMordecai({
+        recentEvents: merged,
+        humanLevel: this.human.level,
+        catLevel: this.cat.level,
+      }),
+    );
+  }
+
+  /**
+   * The advice pages for this floor, or null when there is nothing left to say.
+   *
+   * Bearings are measured from the safe room the player is standing in rather
+   * than from the first one on the map: a floor carries two, and pointing at the
+   * same boss from both has to give two different answers.
+   */
+  private floorAdvice(active: { x: number; y: number }): ReadonlyArray<string> | null {
+    const bearingOrigin = this.safeRoom.safeRoomCentreAt(active);
+    if (bearingOrigin === null) return null;
+
+    const objectives = this.floorObjectives();
+    if (objectives.length === 0) return null;
+
+    return this.mordecaiAdvisor.nextAdvice({
+      floorNumber: this.levelDef.floorNumber,
+      bearingOrigin,
+      objectives,
+    });
+  }
+
+  /** What this floor still asks of the player, in the order Mordecai raises it. */
+  private floorObjectives(): ReadonlyArray<AdviceSlot> {
+    // The tutorial shares floor 1's number but not its map: its hand-crafted
+    // grid has no boss rooms, no goblin mother and no stairs down, so the floor-1
+    // list would send the player after a Hoarder that does not exist — and with
+    // no boss room to take a bearing from, without even a direction.
+    if (this.levelDef.id === TUTORIAL_LEVEL_ID) return [];
+
+    switch (this.levelDef.floorNumber) {
+      case DUNGEON_FLOOR_ONE:
+        return [
+          this.bossObjective('the_hoarder'),
+          this.bossObjective('juicer'),
+          this.defendQuestObjective(),
+        ];
+      case DUNGEON_FLOOR_TWO:
+        return [
+          this.bossObjective('krakaren_clone'),
+          {
+            kind: 'alternating',
+            id: FLOOR_TWO_SIDE_OBJECTIVE_SLOT,
+            options: [this.spiderLabObjective(), this.ballOfSwineObjective()],
+          },
+          this.defendQuestObjective(),
+        ];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * A boss objective, located by the boss's index in the level definition.
+   *
+   * `BossRoomSystem` builds its states from `gameMap.bossRooms` and its types
+   * from `levelDef.bossRooms`, in the same order, so the two lists are index
+   * aligned and this is the same mapping the system itself uses.
+   */
+  private bossObjective(bossType: 'the_hoarder' | 'juicer' | 'krakaren_clone'): AdviceObjective {
+    const index = this.levelDef.bossRooms?.findIndex((room) => room.type === bossType) ?? -1;
+    const room = index < 0 ? undefined : this.gameMap.bossRooms[index];
+    return adviceObjective(
+      bossType,
+      this.bossRoom.defeatedBossTypes.has(bossType),
+      room?.centre ?? null,
+    );
+  }
+
+  private defendQuestObjective(): AdviceObjective {
+    const complete = this.defendQuest.questManager.getStatus(DEFEND_QUEST_ID) === 'completed';
+    return adviceObjective(
+      'defend_goblin_mother',
+      complete,
+      this.gameMap.questRooms[0]?.centre ?? null,
+    );
+  }
+
+  private spiderLabObjective(): AdviceObjective {
+    return adviceObjective(
+      'spider_lab',
+      this.spiderQuest.isComplete,
+      this.gameMap.spiderLabRoom?.centre ?? null,
+    );
+  }
+
+  /**
+   * The Ball of Swine, done once the arena has moved on to its second phase —
+   * which is what killing it starts, and the only state that survives the event
+   * that announced it.
+   */
+  private ballOfSwineObjective(): AdviceObjective {
+    return adviceObjective(
+      'ball_of_swine',
+      this.arena.phase2Active,
+      this.gameMap.arenaExteriors[0]?.centre ?? null,
+    );
+  }
+
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
     // Space bar advances / dismisses achievement notifications and loot boxes
     if (this.achievementUI.handleSpaceBar()) return;
@@ -2386,24 +2538,7 @@ export class DungeonScene extends GameplayScene {
       if (this.safeRoom.isNearBed(active)) {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(active)) {
-        const tutorialHandled = this.tutorial?.onMordecaiInteracted() ?? false;
-        if (!tutorialHandled) {
-          const humanEvents = this.humanAchievements.getTopRecentEvents(
-            ACHIEVEMENT_RECENT_EVENTS_LIMIT,
-          );
-          const catEvents = this.catAchievements.getTopRecentEvents(
-            ACHIEVEMENT_RECENT_EVENTS_LIMIT,
-          );
-          const merged = [...humanEvents, ...catEvents]
-            .sort((a, b) => a.secondsAgo - b.secondsAgo)
-            .slice(0, MORDECAI_CHAT_MERGED_EVENTS_LIMIT);
-          const responsePromise = aiAdapter.chatWithMordecai({
-            recentEvents: merged,
-            humanLevel: this.human.level,
-            catLevel: this.cat.level,
-          });
-          this.safeRoom.openMordecaiDialog(responsePromise);
-        }
+        this.talkToMordecai(active);
       }
       return;
     }

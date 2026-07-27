@@ -25,9 +25,9 @@ const {
   counterEdges,
   drawCounterFrontFace,
   drawCounterBackTile,
-  drawGalleyFloorTile,
   drawServedDish,
 } = await import('../src/sprites/safeRoomCounter');
+const { DUNGEON_GROUND } = await import('../src/map/dungeon/groundMaterials');
 type DishVisual = Parameters<typeof drawServedDish>[4]['visual'];
 const {
   COUNTER_RUN_BACK_ROW,
@@ -160,10 +160,13 @@ function drawCell(
 
   for (let column = 0; column < COUNTER_RUN_TILES; column++) {
     const tileX = runLeft + column * ts;
-    // The galley's flagstone goes under all three rows, exactly as
-    // `drawInteriorTile` does in the game.
+    // The hearth paving goes under all three rows, exactly as `drawInteriorTile`
+    // does in the game. Flat here rather than the generated `bopca_hearth` tile:
+    // node-canvas has no loaded sprite sheet, so the sheet's own mean for that
+    // material is the honest stand-in — and this sheet is judged on the sprite.
+    ctx.fillStyle = DUNGEON_GROUND.fallbackColor.bopca_hearth;
     for (const rowTop of [frontRowTop - ts * 2, frontRowTop - ts, frontRowTop]) {
-      drawGalleyFloorTile(ctx, tileX, rowTop, ts, column, 0);
+      ctx.fillRect(tileX, rowTop, ts, ts);
     }
     drawCounterBackTile(
       ctx,

@@ -1,6 +1,7 @@
 import type { TileContent } from '../tileTypes';
 import {
   SAFE_ROOM_FLOOR,
+  SAFE_ROOM_THRESHOLD,
   HORDER_BOSS_ROOM_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
@@ -11,10 +12,9 @@ import {
   DANCE_FLOOR,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
+import { drawGroundTile } from './groundTiles';
+import { DUNGEON_GROUND } from '../dungeon/groundMaterials';
 import { getSpriteDef } from '../../core/SpriteLoader';
-
-const SAFE_ROOM_GLOW_TILE_STRIDE = 4;
-const SAFE_ROOM_GLOW_RADIUS_FRACTION = 0.3;
 
 const GYM_RUBBER_DOT_TILE_STRIDE = 3;
 const GYM_RUBBER_DOT_ALPHA = 0.04;
@@ -170,24 +170,13 @@ export function drawSpecialFloorTile(
   ty: number,
 ): boolean {
   switch (type) {
-    // Safe Room floor — warm sanctuary
-    case SAFE_ROOM_FLOOR: {
-      // Alternating warm cream tiles
-      const safeBase = (tx + ty) % 2 === 0 ? '#f0e4c8' : '#e8d8b8';
-      ctx.fillStyle = safeBase;
-      ctx.fillRect(sx, sy, ts, ts);
-      // Soft golden grout lines
-      ctx.fillStyle = '#c8b890';
-      ctx.fillRect(sx + ts - 1, sy, 1, ts);
-      ctx.fillRect(sx, sy + ts - 1, ts, 1);
-      // Subtle warm glow dot at tile corners
-      if (tx % SAFE_ROOM_GLOW_TILE_STRIDE === 0 && ty % SAFE_ROOM_GLOW_TILE_STRIDE === 0) {
-        ctx.fillStyle = 'rgba(255,200,80,0.25)';
-        ctx.beginPath();
-        ctx.arc(sx, sy, ts * SAFE_ROOM_GLOW_RADIUS_FRACTION, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+    // Safe-room floor and the scuffed traffic band inside its doorways, both
+    // resolved through the generated `ground_dungeon` sheet. No `drawWallShadow`
+    // here: the ground renderer's own occlusion pass shades the wall contact, and
+    // running both stacked two bands of shade against every north wall.
+    case SAFE_ROOM_FLOOR:
+    case SAFE_ROOM_THRESHOLD: {
+      drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }
 

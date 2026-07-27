@@ -172,10 +172,57 @@ export const SAFE_ROOM_COUNTER_BACK = 65;
 export const SAFE_ROOM_GALLEY_FLOOR = 66;
 
 /**
+ * Tile type for the scuffed traffic band inside a safe room's doorways, walkable.
+ *
+ * Its own type rather than a renderer-side guess at "near a door": the material a
+ * tile stands on is a property of the map everywhere else in this codebase, and
+ * the decor layout has to be able to keep props off the band without re-deriving
+ * which tiles the generator considered a threshold.
+ */
+export const SAFE_ROOM_THRESHOLD = 67;
+
+// A safe room is a waystation mess hall — the one warm, provisioned, lamp-lit
+// room on a floor of concrete and blood — so its decorations read as *inhabited
+// and provisioned* rather than as dungeon set dressing: food, light, storage,
+// rest. `safeRoomDecorLayout` places them; `src/sprites/safeRoomDecor.ts` draws
+// them.
+//
+// The three wall-hung types go on the room's north row and nowhere else. The
+// game's oblique projection has a fixed viewpoint to the south, so a hanging on
+// the south wall would be seen from behind — the same constraint that pins the
+// Bopca's counter to the north wall.
+
+/** Tile type for a chalk slate listing the day's stew — north wall, not walkable. */
+export const SAFE_ROOM_MENU_BOARD = 68;
+/** Tile type for a drying rack of herb bundles and cured strips — north wall, not walkable. */
+export const SAFE_ROOM_HERB_RACK = 69;
+/** Tile type for a long dyed pennant in Bopca green — north wall, not walkable. */
+export const SAFE_ROOM_BANNER = 70;
+/** Tile type for a standing brass lantern on a pole — the room's light source, not walkable. */
+export const SAFE_ROOM_LANTERN = 71;
+/** Tile type for a squat iron stove with a copper pot — not walkable. */
+export const SAFE_ROOM_STOVE = 72;
+/** Tile type for a refectory table — not walkable. */
+export const SAFE_ROOM_TABLE = 73;
+/** Tile type for a stool at the refectory table — not walkable. */
+export const SAFE_ROOM_STOOL = 74;
+/** Tile type for stacked crates, sacks and a barrel against a side wall — not walkable. */
+export const SAFE_ROOM_LARDER = 75;
+/**
+ * Tile type for a woven runner across the floor — walkable.
+ *
+ * Like every other walkable ground decoration it reports the material it is
+ * painted *over* rather than one of its own (see `DUNGEON_GROUND`), or the
+ * surrounding floor wins all four of its corners and the transition masks erase
+ * it. That exact bug already happened once, with `GRASSY_WEED` on the town verge.
+ */
+export const SAFE_ROOM_RUG = 76;
+
+/**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 67;
+export const TILE_TYPE_COUNT = 77;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

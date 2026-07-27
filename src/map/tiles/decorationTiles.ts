@@ -24,6 +24,7 @@ import {
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawGroundTile } from './groundTiles';
+import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
 import { drawFountainTileSlice } from '../../sprites/fountainSprite';
@@ -776,7 +777,7 @@ export function drawDecorationTile(
 
     // Grassy weed — walkable grass tile with decorative tufts and occasional flowers
     case GRASSY_WEED: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
 
       // Deterministic hash from tile position
       const h1 = (tx * 31 + ty * 17) % 97;
@@ -833,21 +834,21 @@ export function drawDecorationTile(
 
     // Garden planting — walkable verge tile carrying tilled rows and shoots.
     case GARDEN_PLANTING: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       drawGardenPlanting(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
     // Yard fence — a post-and-rail line standing on whatever surface it encloses.
     case FENCE: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       drawFence(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
 
     // Dirt patch — walkable road tile with pebble and soil texture
     case DIRT_PATCH: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
 
       // Deterministic hash from tile position
       const h1 = (tx * 29 + ty * 19) % 97;
@@ -917,7 +918,7 @@ export function drawDecorationTile(
     // debris dissolves into the surrounding lawn instead of reading as an
     // opaque square.
     case RUBBLE: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
 
       const h1 = (tx * 37 + ty * 23) % 97;
       const h2 = (tx * 59 + ty * 43) % 89;

@@ -23,10 +23,10 @@ import {
   counterEdges,
   drawCounterFrontFace,
   drawCounterBackTile,
-  drawGalleyFloorTile,
   drawServedDish,
   type DishVisual,
 } from '../sprites/safeRoomCounter';
+import { DUNGEON_GROUND } from '../map/dungeon/groundMaterials';
 import {
   COUNTER_RUN_BACK_ROW,
   COUNTER_RUN_FRONT_ROW,
@@ -104,6 +104,17 @@ const COUNTER_RUN_TILES = 3;
 /** The real tile grid of a standalone run, so edge detection sees real neighbours. */
 const RUN_STRUCTURE = counterRunStructure(COUNTER_RUN_TILES);
 
+/**
+ * The floor under the run, as a flat fill of `bopca_hearth`'s own mean.
+ *
+ * In the game the counter stands on generated hearth paving resolved through
+ * `DUNGEON_GROUND`, which needs a map, a loaded sheet and real neighbours on all
+ * four sides. This harness has a three-tile run floating in a panel, and its
+ * whole job is judging whether the Bopca's face reads at 32 px — so it takes the
+ * sheet's own mean for that material rather than inventing a floor of its own.
+ */
+const HEARTH_FALLBACK_COLOR = DUNGEON_GROUND.fallbackColor.bopca_hearth;
+
 /** A stand-in dish for the serving state, so the counter is not always bare. */
 const PREVIEW_DISH: DishVisual = {
   shape: 'bowl',
@@ -165,11 +176,12 @@ function drawBopcaAtCounter(
 
   for (let column = 0; column < COUNTER_RUN_TILES; column++) {
     const tileX = runLeft + column * ts;
-    // The galley's flagstone goes under all three rows, exactly as
-    // `drawInteriorTile` does in the game: every counter tile leaves a sliver of
-    // it showing on the kitchen side.
+    // The hearth paving goes under all three rows, exactly as `drawInteriorTile`
+    // does in the game: every counter tile leaves a sliver of it showing on the
+    // kitchen side.
+    ctx.fillStyle = HEARTH_FALLBACK_COLOR;
     for (const rowTop of [backRowTop, galleyRowTop, frontRowTopY]) {
-      drawGalleyFloorTile(ctx, tileX, rowTop, ts, column, 0);
+      ctx.fillRect(tileX, rowTop, ts, ts);
     }
     drawCounterBackTile(
       ctx,

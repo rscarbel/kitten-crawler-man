@@ -52,6 +52,9 @@ import {
   MOSS_RAMP,
   DUNGEON_WALL_RAMP,
   WATER_RAMP,
+  BOPCA_TILE_RAMP,
+  BOPCA_HEARTH_RAMP,
+  BOPCA_SCUFF_RAMP,
 } from './palette.js';
 
 export interface PaintContext {
@@ -826,6 +829,275 @@ const dungeonWall: Material = {
   },
 };
 
+// ── Bopca station set ──────────────────────────────────────────────────────
+//
+// A safe room is a waystation mess hall on floors 1 and 2, both of which are
+// **indoors**. That is the whole reason these three are laid on a regular grid
+// rather than built from Worley cells like `plaza` and `dungeon_flagstone`: an
+// irregular cell with a rounded bevel is a cobble or a flagstone, and a floor of
+// them reads as a courtyard however warm the palette is. Screenshotted in-game,
+// the first cut of these materials made the safe room look like it had been
+// carved out of the open air. Square units on straight grout lines are what say
+// *tiled room*.
+
+interface CeramicOptions {
+  /** Ceramic tiles across one game tile. Must multiply with the material's
+   *  `patchTiles` to a whole number, or the grid stops wrapping and the patch
+   *  edges seam. */
+  readonly tilesPerGameTile: number;
+  readonly ramp: Ramp;
+  readonly groutRamp: Ramp;
+  readonly groutWidthPx: number;
+  /** Peak opacity of the grout. Below 1 it reads as a recessed line rather than
+   *  an inked outline, which is what keeps a whole tiled room calm. */
+  readonly groutStrength: number;
+  readonly bevelPx: number;
+  readonly bevelStrength: number;
+  /** Per-tile tone variance. Fired ceramic varies, but only a little. */
+  readonly toneSpread: number;
+}
+
+/**
+ * Where a tile's own hash starts on the ramp, and — with `toneSpread` — how far
+ * it can travel.
+ *
+ * Kept on one side of the ramp's midpoint on purpose. A range that straddles it
+ * splits every tile into "sampled shadow→mid" or "sampled mid→light", which is
+ * bimodal rather than varied: the first cut spanned 0.30–0.56 and the floor came
+ * out as a two-tone chessboard rather than fired ceramic.
+ */
+const CERAMIC_TONE_FLOOR = 0.5;
+const CERAMIC_GRAIN_OCTAVES = 2;
+const CERAMIC_GRAIN_PERIOD_PER_TILE = 24;
+const CERAMIC_GRAIN_STRENGTH = 0.1;
+/**
+ * How far the grout lines wander, in pixels, and over what period.
+ *
+ * A fraction of a pixel, deliberately. Ruler-straight lines read as vinyl; this
+ * much is a hand-laid floor. More than about a pixel and the grid starts to look
+ * like crazy paving again, which is the thing these materials exist to avoid.
+ */
+const CERAMIC_LINE_WANDER_PX = 0.7;
+const CERAMIC_WANDER_PERIOD_PER_TILE = 12;
+
+/**
+ * Square ceramic tiles on a regular grid, with grout lines and a lit bevel.
+ *
+ * The grid is indexed off a *wrapped* warp of the sample position, and the
+ * per-tile hash takes `positiveMod` of the cell index against the cells in the
+ * patch — so the last column of a patch is the neighbour of its first and the
+ * joint cannot tear. Geometry comes from `ctx.structure`, so every variant of a
+ * material lays its tiles in the same places and two variants meeting mid-floor
+ * keep one continuous grid.
+ */
+function paintCeramicTiles(ctx: PaintContext, options: CeramicOptions): void {
+  const tiles = ctx.size / TILE_PX;
+  const cellSize = TILE_PX / options.tilesPerGameTile;
+  const cellsAcross = options.tilesPerGameTile * tiles;
+
+  ctx.surface.fill((x, y) => {
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      ctx.structure + 7,
+      CERAMIC_LINE_WANDER_PX,
+      CERAMIC_WANDER_PERIOD_PER_TILE * tiles,
+    );
+    const cellX = Math.floor(warped.x / cellSize);
+    const cellY = Math.floor(warped.y / cellSize);
+    const localX = warped.x - cellX * cellSize;
+    const localY = warped.y - cellY * cellSize;
+
+    const cellHash = hashLattice(
+      positiveMod(cellX, cellsAcross),
+      positiveMod(cellY, cellsAcross),
+      ctx.structure,
+    );
+    const grain =
+      (ctx.noise.fbm(
+        x,
+        y,
+        ctx.detail + 3,
+        CERAMIC_GRAIN_OCTAVES,
+        CERAMIC_GRAIN_PERIOD_PER_TILE * tiles,
+      ) -
+        0.5) *
+      CERAMIC_GRAIN_STRENGTH;
+    const face = sampleRamp(
+      options.ramp,
+      CERAMIC_TONE_FLOOR + cellHash * options.toneSpread + grain,
+    );
+
+    // Distance to the nearest of the four edges, and which way that edge lies —
+    // the bevel needs the direction to catch the light the same way the relief
+    // on every other material does.
+    const fromWest = localX;
+    const fromNorth = localY;
+    const fromEast = cellSize - localX;
+    const fromSouth = cellSize - localY;
+    const edgeDistance = Math.min(fromWest, fromNorth, fromEast, fromSouth);
+    if (edgeDistance < options.groutWidthPx) {
+      return mix(face, sampleRamp(options.groutRamp, cellHash), options.groutStrength);
+    }
+
+    const bevelEnd = options.groutWidthPx + options.bevelPx;
+    if (edgeDistance < bevelEnd) {
+      const across = (edgeDistance - options.groutWidthPx) / options.bevelPx;
+      const strength = options.bevelStrength * (1 - across);
+      const offsetX = fromWest === edgeDistance ? -1 : fromEast === edgeDistance ? 1 : 0;
+      const offsetY = fromNorth === edgeDistance ? -1 : fromSouth === edgeDistance ? 1 : 0;
+      return shade(face, reliefFactor(offsetX, offsetY, strength));
+    }
+    return face;
+  });
+}
+
+/**
+ * One glazed tile per game tile: the largest unit that still reads as ceramic
+ * rather than as a slab, and the calmest thing a whole room can stand on.
+ *
+ * Must multiply with `patchTiles` to a whole number, or the grid stops wrapping.
+ */
+const BOPCA_TILE_TILES_PER_GAME_TILE = 1;
+/**
+ * A whole room stands on this, so its grout is the softest of the three. At 32 px
+ * a tile a grout line lands every 32 screen pixels, and giving it `plaza`'s joint
+ * strength turns the only room on the floor the player relaxes in into a lattice.
+ */
+const BOPCA_TILE_GROUT_WIDTH_PX = 1;
+const BOPCA_TILE_GROUT_STRENGTH = 0.35;
+const BOPCA_TILE_BEVEL_PX = 1.6;
+const BOPCA_TILE_BEVEL_STRENGTH = 0.7;
+const BOPCA_TILE_TONE_SPREAD = 0.16;
+const BOPCA_TILE_SHEEN_COUNT = 3;
+const BOPCA_TILE_SHEEN_MIN_RADIUS = 6;
+const BOPCA_TILE_SHEEN_MAX_RADIUS = 15;
+const BOPCA_TILE_SHEEN_ALPHA = 0.08;
+const BOPCA_TILE_SHEEN_SOFTNESS = 1;
+
+const bopcaTile: Material = {
+  id: 'bopca_tile',
+  label: 'Bopca station tile (glazed, calm)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: BOPCA_TILE_TILES_PER_GAME_TILE,
+      ramp: BOPCA_TILE_RAMP,
+      groutRamp: { ...BOPCA_TILE_RAMP, mid: BOPCA_TILE_RAMP.shadow },
+      groutWidthPx: BOPCA_TILE_GROUT_WIDTH_PX,
+      groutStrength: BOPCA_TILE_GROUT_STRENGTH,
+      bevelPx: BOPCA_TILE_BEVEL_PX,
+      bevelStrength: BOPCA_TILE_BEVEL_STRENGTH,
+      toneSpread: BOPCA_TILE_TONE_SPREAD,
+    });
+    // Broad, very faint pools of glaze highlight, crossing the grout rather than
+    // respecting it — a fired floor catches the lamplight in patches, and without
+    // them the calm grid leaves nothing at all for the eye to land on.
+    paintSpeckles(ctx, ctx.detail + 37, {
+      count: BOPCA_TILE_SHEEN_COUNT,
+      minRadius: BOPCA_TILE_SHEEN_MIN_RADIUS,
+      maxRadius: BOPCA_TILE_SHEEN_MAX_RADIUS,
+      ramp: { ...BOPCA_TILE_RAMP, mid: BOPCA_TILE_RAMP.light },
+      alpha: BOPCA_TILE_SHEEN_ALPHA,
+      softness: BOPCA_TILE_SHEEN_SOFTNESS,
+    });
+  },
+};
+
+/**
+ * Four small quarry tiles to a game tile. Half the room tile's unit size, which
+ * is what makes the galley read as a different surface at a glance rather than
+ * as the same floor in a different colour.
+ */
+const BOPCA_HEARTH_TILES_PER_GAME_TILE = 2;
+const BOPCA_HEARTH_GROUT_WIDTH_PX = 1.2;
+const BOPCA_HEARTH_GROUT_STRENGTH = 0.5;
+const BOPCA_HEARTH_BEVEL_PX = 1.2;
+const BOPCA_HEARTH_BEVEL_STRENGTH = 0.8;
+const BOPCA_HEARTH_TONE_SPREAD = 0.2;
+const BOPCA_HEARTH_SOOT_COUNT = 6;
+const BOPCA_HEARTH_SOOT_MIN_RADIUS = 4;
+const BOPCA_HEARTH_SOOT_MAX_RADIUS = 11;
+const BOPCA_HEARTH_SOOT_ALPHA = 0.16;
+const BOPCA_HEARTH_SOOT_SOFTNESS = 1;
+
+const bopcaHearth: Material = {
+  id: 'bopca_hearth',
+  label: 'Bopca station quarry tile (galley)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: BOPCA_HEARTH_TILES_PER_GAME_TILE,
+      ramp: BOPCA_HEARTH_RAMP,
+      groutRamp: { ...BOPCA_HEARTH_RAMP, mid: BOPCA_HEARTH_RAMP.shadow },
+      groutWidthPx: BOPCA_HEARTH_GROUT_WIDTH_PX,
+      groutStrength: BOPCA_HEARTH_GROUT_STRENGTH,
+      bevelPx: BOPCA_HEARTH_BEVEL_PX,
+      bevelStrength: BOPCA_HEARTH_BEVEL_STRENGTH,
+      toneSpread: BOPCA_HEARTH_TONE_SPREAD,
+    });
+    // Soot from the range, which is why the galley is laid in quarry tile in the
+    // first place.
+    paintSpeckles(ctx, ctx.detail + 41, {
+      count: BOPCA_HEARTH_SOOT_COUNT,
+      minRadius: BOPCA_HEARTH_SOOT_MIN_RADIUS,
+      maxRadius: BOPCA_HEARTH_SOOT_MAX_RADIUS,
+      ramp: { ...BOPCA_HEARTH_RAMP, mid: BOPCA_HEARTH_RAMP.shadow },
+      alpha: BOPCA_HEARTH_SOOT_ALPHA,
+      softness: BOPCA_HEARTH_SOOT_SOFTNESS,
+    });
+  },
+};
+
+const BOPCA_SCUFF_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.4, contrast: 0.8 };
+const BOPCA_SCUFF_GRIT_COUNT = 34;
+const BOPCA_SCUFF_GRIT_MIN_RADIUS = 0.6;
+const BOPCA_SCUFF_GRIT_MAX_RADIUS = 1.6;
+const BOPCA_SCUFF_GRIT_ALPHA = 0.4;
+const BOPCA_SCUFF_GRIT_SOFTNESS = 0.4;
+const BOPCA_SCUFF_WEAR_COUNT = 9;
+const BOPCA_SCUFF_WEAR_MIN_RADIUS = 3;
+const BOPCA_SCUFF_WEAR_MAX_RADIUS = 8;
+const BOPCA_SCUFF_WEAR_ALPHA = 0.2;
+const BOPCA_SCUFF_WEAR_SOFTNESS = 0.9;
+
+/**
+ * Where the tile has been walked off: bare grey screed, grit and scuffing.
+ *
+ * Deliberately *not* tiled. A threshold band is where the ceramic has worn
+ * through, so it is the layer underneath rather than a third pattern — and it is
+ * grey screed rather than anything sandy, because a warm loose surface indoors
+ * reads as bare earth and puts the room back outside.
+ */
+const bopcaScuff: Material = {
+  id: 'bopca_scuff',
+  label: 'Bopca station worn threshold (bare screed)',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, BOPCA_SCUFF_RAMP, BOPCA_SCUFF_GROUND);
+    paintSpeckles(ctx, ctx.detail + 43, {
+      count: BOPCA_SCUFF_WEAR_COUNT,
+      minRadius: BOPCA_SCUFF_WEAR_MIN_RADIUS,
+      maxRadius: BOPCA_SCUFF_WEAR_MAX_RADIUS,
+      ramp: { ...BOPCA_SCUFF_RAMP, mid: BOPCA_SCUFF_RAMP.shadow },
+      alpha: BOPCA_SCUFF_WEAR_ALPHA,
+      softness: BOPCA_SCUFF_WEAR_SOFTNESS,
+    });
+    paintMineralGrain(ctx, BOPCA_SCUFF_RAMP, ctx.detail + 47);
+    paintSpeckles(ctx, ctx.detail + 53, {
+      count: BOPCA_SCUFF_GRIT_COUNT,
+      minRadius: BOPCA_SCUFF_GRIT_MIN_RADIUS,
+      maxRadius: BOPCA_SCUFF_GRIT_MAX_RADIUS,
+      ramp: GRAVEL_RAMP,
+      alpha: BOPCA_SCUFF_GRIT_ALPHA,
+      softness: BOPCA_SCUFF_GRIT_SOFTNESS,
+    });
+  },
+};
+
 export const MATERIALS: ReadonlyArray<Material> = [
   grass,
   verge,
@@ -841,6 +1113,9 @@ export const MATERIALS: ReadonlyArray<Material> = [
   dungeonWet,
   dungeonRubble,
   dungeonWall,
+  bopcaScuff,
+  bopcaHearth,
+  bopcaTile,
 ];
 
 export function getMaterial(id: string): Material {

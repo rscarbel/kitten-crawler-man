@@ -42,6 +42,14 @@ import {
   DANCE_FLOOR,
   TOWN_WALL,
   SAFE_ROOM_COUNTER,
+  SAFE_ROOM_MENU_BOARD,
+  SAFE_ROOM_HERB_RACK,
+  SAFE_ROOM_BANNER,
+  SAFE_ROOM_LANTERN,
+  SAFE_ROOM_STOVE,
+  SAFE_ROOM_TABLE,
+  SAFE_ROOM_STOOL,
+  SAFE_ROOM_LARDER,
   SAFE_ROOM_COUNTER_BACK,
   TILE_TYPE_COUNT,
   placeProp,
@@ -243,6 +251,16 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   FENCE,
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
+  // The safe room's furnishings. `SAFE_ROOM_RUG` is deliberately absent — a
+  // runner is walkable ground decoration, not furniture.
+  SAFE_ROOM_MENU_BOARD,
+  SAFE_ROOM_HERB_RACK,
+  SAFE_ROOM_BANNER,
+  SAFE_ROOM_LANTERN,
+  SAFE_ROOM_STOVE,
+  SAFE_ROOM_TABLE,
+  SAFE_ROOM_STOOL,
+  SAFE_ROOM_LARDER,
 ];
 
 /**

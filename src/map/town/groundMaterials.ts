@@ -1,24 +1,16 @@
 /**
  * The overworld's ground materials, and the rules for how they meet.
  *
- * A material is one row of the generated `ground_overworld` sheet (see
- * `scripts/generate-ground-tileset.ts`). Every row is torus-sampled, so any
- * frame of a material butts seamlessly against any other frame of the same
- * material — which is what lets a tile pick its frame from a hash instead of
- * from an adjacency table.
- *
- * Frames are packed **variant-major then row-major within a patch**: a material
- * generated as a 4x4 patch occupies 16 consecutive frames per variant, and a
- * tile has to draw the frame matching its position *inside* the patch or the
- * patch's own internal features tear. `groundFrameIndex` is the one place that
- * ordering is decoded; `TilePreviewScene` resolves frames through it too, so the
- * `?tiles` review route cannot drift from what the game draws.
+ * One `GroundPalette` over the generated `ground_overworld` sheet — see
+ * `src/map/ground/GroundPalette.ts` for what a palette is and
+ * `src/map/ground/groundFrames.ts` for how a tile picks its frame.
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
  */
 
-import type { SpriteStateDef, SpriteStates } from '../../core/SpriteLoader';
+import type { SpriteStates } from '../../core/SpriteLoader';
+import type { GroundPalette, GroundSpill } from '../ground/GroundPalette';
 import {
   COBBLE_STREET,
   DIRT_PATCH,
@@ -32,15 +24,10 @@ import {
   TREE,
   VERGE_GRASS,
   YARD_GRAVEL,
-  type TileContent,
 } from '../tileTypes';
 
 /** Sheet holding every overworld ground material, one material per row. */
-export const GROUND_SHEET_KEY = 'ground_overworld';
-
-/** Shared corner-transition masks, composited at draw time over any material pair. */
-export const GROUND_MASK_SHEET_KEY = 'ground_masks';
-export const GROUND_MASK_STATE = 'corner';
+const GROUND_SHEET_KEY = 'ground_overworld';
 
 /**
  * A ground material is exactly a state of the ground sheet, so a material that
@@ -58,7 +45,7 @@ export type GroundMaterial = SpriteStates[typeof GROUND_SHEET_KEY];
  * Also the sheet's row order, which is not a coincidence — the generator lays
  * materials out softest-first.
  */
-export const GROUND_BLEND_ORDER = {
+const GROUND_BLEND_ORDER = {
   grass: 0,
   verge: 1,
   dirt: 2,
@@ -84,12 +71,6 @@ export const GROUND_FALLBACK_COLOR = {
   plaza: '#8f8679',
 } as const satisfies Record<GroundMaterial, string>;
 
-/** How a material's loose material spills onto a harder neighbour. */
-export interface GroundSpill {
-  readonly kind: 'blades' | 'grit';
-  readonly color: string;
-}
-
 /**
  * What a material scatters onto the paving beside it. Only softer materials
  * spill: a harder neighbour already reaches across the boundary through the
@@ -102,7 +83,7 @@ export interface GroundSpill {
  * tileset's palette over and put hue-131° tufts on hue-73° grass, which read as
  * teal dashes.
  */
-export const GROUND_SPILL = {
+const GROUND_SPILL = {
   grass: { kind: 'blades', color: '#5e702e' },
   verge: { kind: 'blades', color: '#677332' },
   dirt: { kind: 'grit', color: '#7c5c3c' },
@@ -112,60 +93,46 @@ export const GROUND_SPILL = {
   plaza: null,
 } as const satisfies Record<GroundMaterial, GroundSpill | null>;
 
-/** Corner bits, matching `scripts/tilegen/masks.ts`. */
-export const CORNER_NW = 1;
-export const CORNER_NE = 2;
-export const CORNER_SE = 4;
-export const CORNER_SW = 8;
-
-/** Decorrelated multipliers for the per-patch variant hash. */
-const VARIANT_HASH_X = 73856093;
-const VARIANT_HASH_Y = 19349663;
-/** Avalanche constants — see `groundFrameIndex` for why they are not optional. */
-const VARIANT_HASH_MIX = 2246822519;
-const VARIANT_HASH_SHIFT_A = 15;
-const VARIANT_HASH_SHIFT_B = 13;
-
-export function positiveMod(value: number, modulus: number): number {
-  return ((value % modulus) + modulus) % modulus;
-}
-
-/** How many independent variants a material's row holds. */
-export function groundVariantCount(state: SpriteStateDef): number {
-  const patchTiles = state.patchTiles ?? 1;
-  return Math.max(1, Math.floor(state.frameCount / patchTiles ** 2));
-}
+/**
+ * The materials a kerb belongs to, and the ones it is laid against.
+ *
+ * Every made street gets a lip where it meets **planted** ground, and nowhere
+ * else. The three exclusions are each a case the first cut got wrong and a
+ * screenshot caught:
+ *
+ * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the plan calls
+ *   the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
+ *   every track outside the walls. Kerbing against it drew a closed pale
+ *   rectangle around Blackwood Lodge's three-tile doorstep, an island of setts in
+ *   packed earth, and put a lip on every gate apron out in open country.
+ * - `gravel` is the workyards and the gate aprons, which are made surfaces too;
+ *   19 edges of the town's paving met one.
+ * - `grass` is the field outside the walls, which no street is kerbed against
+ *   because the roads out there are `dirt`.
+ *
+ * That leaves `verge`, which is what a street verge is: the soft strip a kerb
+ * exists to hold back.
+ */
+const KERBED_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>([
+  'lane',
+  'cobble',
+  'plaza',
+]);
+const KERB_SOFT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>(['verge']);
 
 /**
- * Resolves which frame of a material's row map tile (tx, ty) draws.
+ * What a position with no outdoor ground counts as inside the fringe.
  *
- * The variant is hashed per *patch* rather than per tile so a whole patch keeps
- * one variant and its internal features stay continuous; the phase within the
- * patch comes from the tile's position, so neighbouring patches line up.
- *
- * The avalanche step is load-bearing, not hygiene. `variant` reads the *low*
- * bits of the mixed word, and without a finalising mix those bits of
- * `x*A ^ y*B` are a linear function of the patch coordinates: with an even
- * variant count the selection collapses into a Latin square. Measured before
- * the mix was added — a 4-variant material laid out `0123 / 3210 / 2301 / 1032`,
- * repeating exactly every 4 patches on both axes, which for 2x2-patch grass is a
- * literal 8-tile repeat; 2-variant materials came out a checkerboard.
+ * It exists because the fringe needs *a* material at every corner — see
+ * `drawFringe` — not because grass is the right answer there. It is reached for
+ * any position whose floor is not an outdoor material: an indoor or dungeon
+ * floor, or off-map — but an interior abutting outdoor ground would put grass
+ * along that seam, and would want a material of its own rather than a better
+ * stand-in. The restaurant is exactly that case: `GameMap.generateInterior`
+ * floors it in `SAFE_ROOM_FLOOR`, which this palette does not know, so every
+ * outdoor tile beside it falls back to grass here.
  */
-export function groundFrameIndex(
-  patchTiles: number,
-  variantCount: number,
-  tx: number,
-  ty: number,
-): number {
-  const patchX = Math.floor(tx / patchTiles);
-  const patchY = Math.floor(ty / patchTiles);
-  const mixed = Math.imul(patchX, VARIANT_HASH_X) ^ Math.imul(patchY, VARIANT_HASH_Y);
-  const avalanched = Math.imul(mixed ^ (mixed >>> VARIANT_HASH_SHIFT_A), VARIANT_HASH_MIX);
-  const hash = (avalanched ^ (avalanched >>> VARIANT_HASH_SHIFT_B)) >>> 0;
-  const variant = hash % variantCount;
-  const phase = positiveMod(ty, patchTiles) * patchTiles + positiveMod(tx, patchTiles);
-  return variant * patchTiles * patchTiles + phase;
-}
+const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
 
 /**
  * The material a tile type stands on, or undefined when the tile is not
@@ -196,7 +163,7 @@ export function groundFrameIndex(
  * a lane, a main street and the plaza are different surfaces on the map rather
  * than one surface the renderer guesses at.
  */
-export function groundMaterialForTileType(type: number): GroundMaterial | undefined {
+function groundMaterialForTileType(type: number): GroundMaterial | undefined {
   switch (type) {
     case FloorTypeValue.grass:
     case GRASSY_WEED:
@@ -223,14 +190,13 @@ export function groundMaterialForTileType(type: number): GroundMaterial | undefi
   }
 }
 
-/** The material at a map position, or undefined off-map or on non-ground tiles. */
-export function groundMaterialAt(
-  structure: TileContent[][],
-  tx: number,
-  ty: number,
-): GroundMaterial | undefined {
-  if (ty < 0 || ty >= structure.length) return undefined;
-  const row = structure[ty];
-  if (tx < 0 || tx >= row.length) return undefined;
-  return groundMaterialForTileType(row[tx].type);
-}
+export const OVERWORLD_GROUND: GroundPalette = {
+  sheetKey: GROUND_SHEET_KEY,
+  blendOrder: GROUND_BLEND_ORDER,
+  fallbackColor: GROUND_FALLBACK_COLOR,
+  spill: GROUND_SPILL,
+  kerbedMaterials: KERBED_MATERIALS,
+  kerbSoftMaterials: KERB_SOFT_MATERIALS,
+  fringeStandIn: FRINGE_STAND_IN_MATERIAL,
+  materialForTileType: groundMaterialForTileType,
+};

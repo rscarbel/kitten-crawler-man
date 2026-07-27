@@ -18,6 +18,7 @@ import {
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { drawGroundTile } from './groundTiles';
+import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { getSpriteDef } from '../../core/SpriteLoader';
 import { drawSprite } from '../../core/SpriteRenderer';
 
@@ -104,11 +105,11 @@ export function drawTerrainTile(
     case LANE_STREET:
     case COBBLE_STREET:
     case PLAZA_STONE: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }
     case FloorTypeValue.road: {
-      drawGroundTile(ctx, structure, sx, sy, ts, tx, ty);
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       // Door threshold: roof interior immediately north + building wall on either side
       const rdN = structure[ty - 1]?.[tx]?.type;
       const isDoorTile =

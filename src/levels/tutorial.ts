@@ -1,7 +1,15 @@
 import type { LevelDef } from './types';
 
+/**
+ * The tutorial's level id, exported so code that must not treat it as a real
+ * dungeon floor can say so. It shares `floorNumber: 1` with the first real floor
+ * — the two are the same rung of the progression — but its hand-crafted map has
+ * none of that floor's bosses or quests on it.
+ */
+export const TUTORIAL_LEVEL_ID = 'tutorial';
+
 export const tutorialLevel: LevelDef = {
-  id: 'tutorial',
+  id: TUTORIAL_LEVEL_ID,
   name: 'Tutorial',
   floorNumber: 1,
   music: 'bg_level_1',

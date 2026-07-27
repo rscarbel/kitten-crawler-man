@@ -11,6 +11,7 @@ import { PauseMenu } from '../ui/PauseMenu';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
+import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem } from '../systems/ShopSystem';
 import { MobileHUDSystem } from '../systems/MobileHUDSystem';
 import type { MobileHUDButton } from '../systems/MobileHUDSystem';
@@ -41,6 +42,7 @@ import { EventBus } from '../core/EventBus';
 import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
+import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../systems/mordecaiAdvice';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
@@ -190,6 +192,30 @@ interface InteriorCombat {
   floor: number;
 }
 
+/**
+ * Everything an interior needs to know about the circus questline, in one
+ * parameter.
+ *
+ * Grouped rather than added as another positional argument to an already long
+ * constructor, and grouped *here* rather than anywhere else because the two
+ * fields are read together: Mordecai's floor-3 advice needs both whether the
+ * circus is done and where it is.
+ */
+export interface BuildingInteriorCircusContext {
+  readonly progress: CircusQuestProgress;
+  /**
+   * The circus's centre in **overworld** tile coordinates.
+   *
+   * An interior builds its own `GameMap` with its own origin, so nothing inside
+   * this scene can compute an overworld bearing from its own grid — the door the
+   * player came through is the only position that exists in both spaces.
+   */
+  readonly overworldCentre: { x: number; y: number } | undefined;
+}
+
+/** Every enterable building stands on the level-3 overworld. */
+const OVERWORLD_FLOOR_NUMBER = 3;
+
 export class BuildingInteriorScene extends GameplayScene {
   private map: GameMap;
   readonly pm: PlayerManager;
@@ -207,6 +233,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   // Safe room (restaurant only)
   private readonly safeRoom: SafeRoomSystem | null;
+  private readonly mordecaiAdvisor = new MordecaiAdvisor();
   /** Null outside a restaurant interior, which is the only safe-room building. */
   private readonly bopca: BopcaSystem | null;
   /**
@@ -293,7 +320,7 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly catAchievements?: AchievementManager,
     audio?: AudioManager,
     abilityManager?: AbilityManager,
-    private readonly circusQuestProgress?: CircusQuestProgress,
+    private readonly circus?: BuildingInteriorCircusContext,
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
     clubMembership?: ClubMembership,
@@ -360,6 +387,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.wireEvents(bopcaBus);
       this.bopcaBus = bopcaBus;
       this.bopca = new BopcaSystem(this.map, stampSafeRoomCounters(this.map), bopcaBus, this.audio);
+      // After the counter, because the furnishings keep clear of every tile it
+      // owns and cannot know them until it is planned.
+      stampSafeRoomDecor(this.map);
     } else {
       this.bopcaBus = null;
       this.bopca = null;
@@ -388,7 +418,7 @@ export class BuildingInteriorScene extends GameplayScene {
       );
     }
 
-    this.combat = this.initEntryEncounter(abilityManager, circusQuestProgress);
+    this.combat = this.initEntryEncounter(abilityManager, this.circus?.progress);
 
     // Ambient occupants only where no live encounter owns the room; the tower's
     // confrontation can start after entry, so towers are excluded outright.
@@ -901,17 +931,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.safeRoom.startSleep();
       } else if (this.safeRoom.isNearMordecai(player)) {
         this.input.clear();
-        const humanEvents = this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
-        const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
-        const merged = [...humanEvents, ...catEvents]
-          .sort((a, b) => a.secondsAgo - b.secondsAgo)
-          .slice(0, RECENT_EVENTS_LIMIT);
-        const responsePromise = aiAdapter.chatWithMordecai({
-          recentEvents: merged,
-          humanLevel: this.human.level,
-          catLevel: this.cat.level,
-        });
-        this.safeRoom.openMordecaiDialog(responsePromise);
+        this.talkToMordecai();
       }
     }
 
@@ -1229,8 +1249,56 @@ export class BuildingInteriorScene extends GameplayScene {
     panel.open(() => buildTavernMenu(this.entry.name, turn), confirmed(serveDrink, true));
   }
 
+  /**
+   * Mordecai's answer, from the highest-ranked source that has one: his floor
+   * advice while anything is left to do, the AI chat once the floor is clear.
+   *
+   * The tutorial's Mordecai never runs in here — it only exists in the dungeon —
+   * so this is the two-way version of the dungeon's three-way chain.
+   */
+  private talkToMordecai(): void {
+    if (this.safeRoom === null) return;
+
+    const pages = this.mordecaiAdvisor.nextAdvice(this.circusAdviceSnapshot());
+    if (pages !== null) {
+      this.safeRoom.openMordecaiPages(pages);
+      return;
+    }
+
+    const humanEvents = this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
+    const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
+    const merged = [...humanEvents, ...catEvents]
+      .sort((a, b) => a.secondsAgo - b.secondsAgo)
+      .slice(0, RECENT_EVENTS_LIMIT);
+    this.safeRoom.openMordecaiDialog(
+      aiAdapter.chatWithMordecai({
+        recentEvents: merged,
+        humanLevel: this.human.level,
+        catLevel: this.cat.level,
+      }),
+    );
+  }
+
+  /**
+   * The floor-3 objective, measured from the door the player walked in through.
+   *
+   * `this.map` is the interior's own 22x16 grid with its own origin, so nothing
+   * in this scene's coordinate space means anything in overworld terms — the
+   * bearing has to be taken between two overworld positions, and `entry.doorTile`
+   * is the only one this scene holds.
+   */
+  private circusAdviceSnapshot(): AdviceSnapshot {
+    const stage = this.circus?.progress.stage;
+    const complete = stage === 'grimaldi_slain' || stage === 'complete';
+    return {
+      floorNumber: OVERWORLD_FLOOR_NUMBER,
+      bearingOrigin: this.entry.doorTile,
+      objectives: [adviceObjective('the_circus', complete, this.circus?.overworldCentre ?? null)],
+    };
+  }
+
   private townDialogContext(): TownDialogContext {
-    const circus = this.circusQuestProgress;
+    const circus = this.circus?.progress;
     const murder = this.murderQuestProgress;
     return {
       circus: circus?.stage ?? 'not_started',
@@ -1746,18 +1814,7 @@ export class BuildingInteriorScene extends GameplayScene {
             if (this.safeRoom.isNearBed(player)) {
               this.safeRoom.startSleep();
             } else if (this.safeRoom.isNearMordecai(player)) {
-              const humanEvents =
-                this.humanAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
-              const catEvents = this.catAchievements?.getTopRecentEvents(RECENT_EVENTS_LIMIT) ?? [];
-              const merged = [...humanEvents, ...catEvents]
-                .sort((a, b) => a.secondsAgo - b.secondsAgo)
-                .slice(0, RECENT_EVENTS_LIMIT);
-              const responsePromise = aiAdapter.chatWithMordecai({
-                recentEvents: merged,
-                humanLevel: this.human.level,
-                catLevel: this.cat.level,
-              });
-              this.safeRoom.openMordecaiDialog(responsePromise);
+              this.talkToMordecai();
             }
           }
           if (this.shop && !this.exitMenuOpen) {

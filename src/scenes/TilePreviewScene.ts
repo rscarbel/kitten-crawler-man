@@ -21,7 +21,7 @@ import type { SceneManager } from '../core/Scene';
 import { drawText } from '../ui/TextBox';
 import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../core/SpriteLoader';
 import { TILE_SIZE } from '../core/constants';
-import { groundFrameIndex, groundVariantCount } from '../map/town/groundMaterials';
+import { groundFrameIndex, groundVariantCount } from '../map/ground/groundFrames';
 import { drawFringe, type FringeMaterial, type ResolvedMaterial } from '../map/tiles/groundTiles';
 
 const BG_COLOR = '#12161f';
@@ -82,6 +82,7 @@ const OVER_BLEND_ORDER = 1;
 interface MaterialEntry {
   readonly def: SpriteDef;
   readonly state: SpriteStateDef;
+  readonly sheetKey: string;
   readonly id: string;
   readonly label: string;
   readonly patchTiles: number;
@@ -108,6 +109,7 @@ export class TilePreviewScene extends Scene {
         this.materials.push({
           def,
           state,
+          sheetKey: key,
           id: stateName,
           label: state.label ?? stateName,
           patchTiles: state.patchTiles ?? 1,
@@ -271,12 +273,18 @@ export class TilePreviewScene extends Scene {
     ['dirt', 'gravel'],
     ['dungeon_plain', 'dungeon_mossy'],
     ['dungeon_plain', 'dungeon_rubble'],
+    // The two joints a safe room actually draws: the hearth paving under the
+    // counter run meeting the room tile, and the scuffed threshold band worn
+    // through it inside each doorway.
+    ['bopca_hearth', 'bopca_tile'],
+    ['bopca_scuff', 'bopca_tile'],
   ];
 
   /** A previewed material, in the shape the renderer's fringe consumes. */
   private fringeMaterial(entry: MaterialEntry, order: number): FringeMaterial {
     return {
       id: entry.id,
+      sheetKey: entry.sheetKey,
       order,
       resolve: (tx: number, ty: number): ResolvedMaterial => ({
         def: entry.def,
