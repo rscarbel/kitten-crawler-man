@@ -1500,7 +1500,7 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
-    this.audio?.wireEvents(bus);
+    this.audio?.wireEvents(bus, this.levelDef.music);
   }
 
   onEnter(): void {
@@ -1517,8 +1517,8 @@ export class DungeonScene extends GameplayScene {
       } else {
         if (!this.skipIntro) this.audio?.playWhenReady('level_begins');
         // Overworld music is zone-driven (town/wilds/circus) by OverworldMusicSystem.
-        if (this.overworldMusic === null && this.audio?.currentMusicId !== 'bg_level_1') {
-          this.audio?.playMusic('bg_level_1', { fadeInMs: MUSIC_FADE_IN_MS });
+        if (this.overworldMusic === null && this.audio?.currentMusicId !== this.levelDef.music) {
+          this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
         }
       }
     };

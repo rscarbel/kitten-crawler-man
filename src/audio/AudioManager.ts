@@ -702,8 +702,12 @@ export class AudioManager {
   /**
    * Subscribe to EventBus events and fire the appropriate sounds.
    * The bus is cleared on scene exit, so this must be called once per scene.
+   *
+   * @param defaultMusicId - Track to resume after boss fights/quests interrupt music
+   *   with their own track. Defaults to `bg_level_1` for scenes that don't pass one
+   *   (e.g. the Bopca safe-room bus in BuildingInteriorScene).
    */
-  wireEvents(bus: EventBus): void {
+  wireEvents(bus: EventBus, defaultMusicId: SoundId = 'bg_level_1'): void {
     bus.on('mobKilled', () => {
       this.playRandom(['splat_1', 'splat_2', 'splat_3']);
     });
@@ -772,7 +776,7 @@ export class AudioManager {
       if (e.bossType === 'krakaren_clone') {
         this.play('new_unlock');
       }
-      this.playMusic('bg_level_1', { fadeInMs: 2000 });
+      this.playMusic(defaultMusicId, { fadeInMs: 2000 });
     });
 
     bus.on('questStarted', (e) => {
@@ -786,7 +790,7 @@ export class AudioManager {
 
     bus.on('objectiveComplete', (e) => {
       if (e.objectiveId === 'goblin_child_returned') {
-        this.playMusic('bg_level_1', { fadeInMs: 1000 });
+        this.playMusic(defaultMusicId, { fadeInMs: 1000 });
       }
     });
 
@@ -815,7 +819,7 @@ export class AudioManager {
 
     bus.on('questFailed', (e) => {
       if (e.questId === 'defend_goblin_mother') {
-        this.playMusic('bg_level_1', { fadeInMs: 1500 });
+        this.playMusic(defaultMusicId, { fadeInMs: 1500 });
       }
     });
   }

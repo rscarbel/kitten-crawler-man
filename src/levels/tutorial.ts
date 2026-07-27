@@ -4,6 +4,7 @@ export const tutorialLevel: LevelDef = {
   id: 'tutorial',
   name: 'Tutorial',
   floorNumber: 1,
+  music: 'bg_level_1',
   /**
    * mapSize is unused — the tutorial uses a hand-crafted TutorialMap (prebuiltStructure)
    * instead of procedural generation. Keep a plausible value for type correctness.

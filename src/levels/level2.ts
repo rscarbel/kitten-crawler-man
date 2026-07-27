@@ -9,6 +9,7 @@ export const level2: LevelDef = {
   id: 'level2',
   name: 'The Dungeon, Level 2',
   floorNumber: 2,
+  music: 'bg_level_2',
   mapSize: 200,
   roomMobs: [
     {

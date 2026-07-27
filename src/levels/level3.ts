@@ -65,6 +65,7 @@ export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
   floorNumber: 3,
+  music: 'bg_level_1',
   mapSize: 280,
   roomMobs: [],
   hallwayMobs: [

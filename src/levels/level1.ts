@@ -46,6 +46,7 @@ const TROG_SOUTH_Y = 3;
  */
 export const level1: LevelDef = {
   id: 'level1',
+  music: 'bg_level_1',
   name: 'The Dungeon',
   floorNumber: 1,
   mapSize: 450,

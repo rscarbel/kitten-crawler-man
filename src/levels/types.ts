@@ -1,3 +1,5 @@
+import type { SoundId } from '../audio/sounds';
+
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule {
   /** String key resolved by the spawner factory. */
@@ -84,6 +86,8 @@ export interface LevelDef {
   name: string;
   /** Dungeon depth, 1-based. Drives depth-scaled rewards such as smashed-prop coins. */
   floorNumber: number;
+  /** Default background music for this level, and what music resumes after boss fights/quests. */
+  music: SoundId;
   /** Side-length passed to `new GameMap(mapSize, TILE_SIZE)`. */
   mapSize: number;
   /** Mobs that can spawn at room centres (all non-start, non-special rooms). */
