@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import {
   bakeSkyFowlCanvas,
@@ -65,9 +66,11 @@ export class SkyFowl extends Mob {
     this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
   }
 
-  /** Sky Fowls are peaceful citizens — they carry no dungeon loot. */
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
+  /** No dungeon loot — only, very rarely, the book on being this quick. */
+  protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
+    const items: LootDrop['items'] = [];
+    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    return items;
   }
 
   /**

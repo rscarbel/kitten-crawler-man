@@ -1,6 +1,6 @@
 import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
-import { EquipmentManager } from './EquipmentManager';
+import { EquipmentManager, type StatBonuses } from './EquipmentManager';
 import { SLOT_COUNT, HOTBAR_COUNT, QUEST_SLOT_IDX, ITEM_DEF } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 
@@ -180,11 +180,7 @@ export class Inventory {
   }
 
   /** Sum all stat bonuses from currently equipped items. */
-  getEquippedStatBonus(): {
-    constitution: number;
-    strength: number;
-    intelligence: number;
-  } {
+  getEquippedStatBonus(): StatBonuses {
     return this.equipment.getStatBonuses();
   }
 }

@@ -1,20 +1,82 @@
 import type { StatusEffect } from './core/StatusEffect';
 import { makeSpeedFizz, makeJuggJuice, makeCooldownCrisp } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
-import type { InventoryItem } from './core/ItemDefs';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
+import { computeDodgeChance } from './core/dodge';
+import {
+  SkillManager,
+  cockroachRechargeMs,
+  COCKROACH_IFRAME_FRAMES,
+  IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL,
+  type CrawlerKind,
+  type SkillId,
+} from './core/SkillManager';
+import type { FloatingTextRequest, FloatingTextStyle } from './core/FloatingText';
 
-/** The three stats a permanent boost (potion or tattoo) can raise. */
-export const PERMANENT_STATS = ['strength', 'intelligence', 'constitution'] as const;
-export type PermanentStat = (typeof PERMANENT_STATS)[number];
+/**
+ * Every stat a crawler carries — the single vocabulary the whole stat system
+ * speaks, and the iteration order for anything that walks all stats. A permanent
+ * boost (potion or tattoo) can raise any of them.
+ */
+export const ALL_STATS = ['strength', 'intelligence', 'constitution', 'dexterity'] as const;
+export type StatName = (typeof ALL_STATS)[number];
+
+/** Short labels shown by the level-up flash and the HUD. */
+export const STAT_CODE: Record<StatName, string> = {
+  strength: 'STR',
+  intelligence: 'INT',
+  constitution: 'CON',
+  dexterity: 'DEX',
+};
+
+const STAT_NAME_LOOKUP = new Set<string>(ALL_STATS);
+
+/** Narrows an arbitrary string (AI tool argument, save field) to a known stat. */
+export function isStatName(value: string): value is StatName {
+  return STAT_NAME_LOOKUP.has(value);
+}
+
+/** A stat change that reverts itself after a fixed number of ticks. */
+export interface TempStatMod {
+  ticksRemaining: number;
+  stat: StatName;
+  delta: number;
+}
+
+/** Species-level configuration handed up to the {@link Player} constructor. */
+export interface PlayerConfig {
+  /**
+   * Fixed max HP. Mobs pass this; crawlers omit it so max HP stays derived from
+   * constitution and never has to be kept in sync by hand.
+   */
+  maxHp?: number;
+  /** Starting base values. Any stat left out starts at {@link MIN_STAT_VALUE}. */
+  baseStats?: Partial<Record<StatName, number>>;
+  /** Species HP floor added on top of the constitution-derived HP. */
+  baseHpOffset?: number;
+  /** Which crawler this is, for skill eligibility. Omitted by mobs and NPCs. */
+  crawlerKind?: CrawlerKind;
+}
 
 /**
  * Describes what caused a damage event. Stored as `lastDamageSource` on the player
  * so the death screen can explain how the player died.
  */
 export type DamageSource =
-  | { readonly kind: 'mob'; readonly mobType: string; readonly attackType?: string }
+  | {
+      readonly kind: 'mob';
+      readonly mobType: string;
+      readonly attackType?: string;
+      /**
+       * Set for standing damage fields (acid puddles and the like). They are
+       * attributed to the mob that laid them so the death screen can name it,
+       * but there is nothing to sidestep — dodging a floor you are standing on
+       * makes no sense, and would let a player farm dodge-trained skills by
+       * parking in a puddle.
+       */
+      readonly undodgeable?: boolean;
+    }
   | { readonly kind: 'status'; readonly effectType: string }
   | { readonly kind: 'dynamite' }
   | { readonly kind: 'environmental' }
@@ -25,14 +87,24 @@ const DENOMINATOR_OFFSET = 30;
 const NUMERATOR_ASYMPTOTE_SLOPE = 3;
 
 const INITIAL_HEALTH_POTIONS = 10;
-const DEFAULT_MAX_HP = 10;
+/** Ceiling on undrained feedback labels, so a scene with no drainer can't leak. */
+const MAX_PENDING_FLOATING_TEXT = 16;
+/** Same, for queued System lines. */
+const MAX_PENDING_SYSTEM_NOTICES = 4;
+/** No stat can be driven below this by debuffs or refunds. */
+export const MIN_STAT_VALUE = 1;
+/** Species HP floor used when a subclass doesn't declare one (mobs, which pass a fixed maxHp). */
+const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
 const LEVEL_UP_FLASH_FRAMES = 120;
 const SPEND_POINT_FLASH_FRAMES = 60;
 const XP_PER_LEVEL_MULTIPLIER = 10;
-const CON_HP_BONUS_PER_POINT = 2;
+/** Max HP granted by each point of constitution. The single source for this ratio. */
+export const CON_HP_BONUS_PER_POINT = 2;
 const POTION_HEAL_FRACTION = 0.5;
 const FRAMES_PER_SECOND = 60;
+/** Iron Stomach can shorten a swallow's timers by a lot, but never to nothing. */
+const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
 
 /** Tick intervals (in ticks) for each status effect type */
 const BURN_TICK_INTERVAL = 60;
@@ -51,7 +123,6 @@ const JUGG_JUICE_HP_MULTIPLIER_BONUS = 0.5;
 const JUGG_JUICE_FLAT_BONUS = 5;
 const STAT_BOOST_MIN = 2;
 const STAT_BOOST_RANGE = 3;
-const STAT_BOOST_STAT_COUNT = 3;
 
 /** Health bar display thresholds */
 const HP_BAR_GREEN_THRESHOLD = 0.5;
@@ -171,13 +242,23 @@ export abstract class Player {
   facingX = 1;
   facingY = 0;
   hp: number;
-  maxHp: number;
   xp = 0;
   level = 1;
-  strength = 1;
-  intelligence = 1;
-  /** HP growth stat — displayed as "HP" in the UI, same as health. */
-  constitution = 1;
+  /**
+   * Stored stat values: species starting points plus spent level-up points plus
+   * permanent boosts (potions, tattoos). Equipment and temporary modifiers are
+   * *not* folded in here — the effective getters add those on every read, so a
+   * paired equip/unequip can never drift.
+   */
+  private readonly baseStats: Record<StatName, number>;
+  /** Species HP floor. See {@link maxHp}. */
+  private readonly baseHpOffset: number;
+  /** Fixed max HP for entities that don't derive it from constitution (mobs). */
+  private _maxHpOverride: number | null;
+  /** Max HP as of the last {@link syncHpToMaxHp}, so growth can be credited once. */
+  private _maxHpAtLastSync: number;
+  /** Flat bonus applied to every stat while god mode is on. */
+  private _godModeStatBonus = 0;
   levelUpStat: string | null = null;
   levelUpFlash = 0;
   damageFlash = 0;
@@ -185,8 +266,36 @@ export abstract class Player {
   walkFrame = 0;
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
+  /** Feedback labels awaiting pickup by `FloatingCombatTextSystem`. */
+  readonly pendingFloatingText: FloatingTextRequest[] = [];
+  /**
+   * System-AI lines queued by code with no scene in scope (save migration),
+   * drained by `SystemNoticeSystem`.
+   */
+  readonly pendingSystemNotices: string[] = [];
+  /**
+   * Dodges landed since the last drain. Counted separately from the floating
+   * text so that the cosmetic label's backpressure cap can never decide whether
+   * a gameplay event fires.
+   */
+  pendingDodges = 0;
   /** Shared inventory for this player (separate from the other player's). */
   readonly inventory = new Inventory();
+  /** Trained skills. Starts empty — every skill has to be found in the dungeon. */
+  readonly skills: SkillManager;
+  /**
+   * Wall-clock time (ms since epoch) when Cockroach can next save this crawler,
+   * or null when it has never fired.
+   */
+  cockroachReadyAt: number | null = null;
+  /**
+   * Frames of blanket damage immunity.
+   *
+   * Separate from {@link isProtected}, which `PlayerManager` recomputes from
+   * safe-room membership every single frame and would therefore erase any
+   * timed invulnerability written into it.
+   */
+  invulnerableFrames = 0;
   /** Gold coins collected — displayed in the inventory panel. */
   coins = 0;
   /**
@@ -194,7 +303,13 @@ export abstract class Player {
    * One tattoo per character, permanent — carried through building round-trips by
    * PlayerSnapshot so it can't be re-bought by stepping outside and back in.
    */
-  tattooStat: PermanentStat | null = null;
+  tattooStat: StatName | null = null;
+  /**
+   * The skill Signet's brass mark taught this crawler, or null if unmarked.
+   * Tracked separately from {@link tattooStat} so one stat tattoo and one skill
+   * tattoo can coexist — but never two of either.
+   */
+  skillTattoo: SkillId | null = null;
   unspentPoints = 0;
   /** Frames remaining before the next potion can be used. Zero means ready. */
   potionCooldownFrames = 0;
@@ -241,19 +356,25 @@ export abstract class Player {
   /** Named multipliers applied to HP regen rate. Each entry stacks multiplicatively. */
   private readonly _regenModifiers = new Map<string, number>();
   /** Pending AI stat adjustments that will be reverted after their duration expires. */
-  tempStatMods: Array<{
-    ticksRemaining: number;
-    stat: 'strength' | 'intelligence' | 'constitution';
-    delta: number;
-  }> = [];
+  tempStatMods: TempStatMod[] = [];
   protected tileSize: number;
 
-  constructor(tileX: number, tileY: number, tileSize: number, maxHp = DEFAULT_MAX_HP) {
+  constructor(tileX: number, tileY: number, tileSize: number, config: PlayerConfig = {}) {
     this.x = tileX * tileSize;
     this.y = tileY * tileSize;
     this.tileSize = tileSize;
-    this.maxHp = maxHp;
-    this.hp = maxHp;
+    this.baseHpOffset = config.baseHpOffset ?? DEFAULT_BASE_HP_OFFSET;
+    this.baseStats = {
+      strength: MIN_STAT_VALUE,
+      intelligence: MIN_STAT_VALUE,
+      constitution: MIN_STAT_VALUE,
+      dexterity: MIN_STAT_VALUE,
+      ...config.baseStats,
+    };
+    this.skills = new SkillManager(config.crawlerKind ?? null);
+    this._maxHpOverride = config.maxHp ?? null;
+    this.hp = this.maxHp;
+    this._maxHpAtLastSync = this.maxHp;
     this.inventory.addItem('health_potion', INITIAL_HEALTH_POTIONS);
   }
 
@@ -261,11 +382,234 @@ export abstract class Player {
     return this.hp > 0;
   }
 
-  takeDamage(amount: number, source?: DamageSource) {
-    if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return;
-    this.hp = Math.max(0, this.hp - amount);
+  // ── Stats ────────────────────────────────────────────────────────────────
+
+  /**
+   * Effective value of a stat: stored base, plus the bonus from everything
+   * currently equipped, plus any live temporary modifiers.
+   */
+  private effectiveStat(stat: StatName): number {
+    let total = this.baseStats[stat] + this.inventory.getEquippedStatBonus()[stat];
+    for (const mod of this.tempStatMods) {
+      if (mod.stat === stat) total += mod.delta;
+    }
+    return Math.max(MIN_STAT_VALUE, total + this._godModeStatBonus);
+  }
+
+  get strength(): number {
+    return this.effectiveStat('strength');
+  }
+
+  get intelligence(): number {
+    return this.effectiveStat('intelligence');
+  }
+
+  /** HP growth stat — displayed as "HP" in the UI, same as health. */
+  get constitution(): number {
+    return this.effectiveStat('constitution');
+  }
+
+  /** Agility stat — drives the chance to dodge an incoming mob attack. */
+  get dexterity(): number {
+    return this.effectiveStat('dexterity');
+  }
+
+  /** Stored value of a stat, before equipment and temporary modifiers. */
+  getBaseStat(stat: StatName): number {
+    return this.baseStats[stat];
+  }
+
+  /**
+   * Overwrite a stored stat value. Save restore and migration use this; ordinary
+   * gameplay should go through {@link spendPoint} or {@link applyPermanentStat}.
+   */
+  setBaseStat(stat: StatName, value: number): void {
+    this.baseStats[stat] = Math.max(MIN_STAT_VALUE, Math.round(value));
+    this.syncHpToMaxHp();
+  }
+
+  /**
+   * Last step of a save restore: a hook for reconciling stored stats with rules
+   * that postdate the save. Base implementation does nothing.
+   *
+   * @param snapshotVersion Format version of the snapshot being restored, so a
+   *   migration can tell an old save from one already written under the rule.
+   */
+  migrateRestoredStats(snapshotVersion: number): void {
+    void snapshotVersion; // nothing to reconcile for a generic player
+  }
+
+  /** Queue a System-AI line for the scene's announcer to speak. */
+  queueSystemNotice(line: string): void {
+    if (this.pendingSystemNotices.length >= MAX_PENDING_SYSTEM_NOTICES) return;
+    this.pendingSystemNotices.push(line);
+  }
+
+  /**
+   * Max HP. Derived for crawlers so equipping, unequipping, refunding or
+   * debuffing constitution can never leave a stale total behind; mobs pass a
+   * fixed value to the constructor and keep it.
+   */
+  get maxHp(): number {
+    const base =
+      this._maxHpOverride ?? this.baseHpOffset + this.constitution * CON_HP_BONUS_PER_POINT;
+    return Math.max(1, base + this._juggJuiceHpBoost);
+  }
+
+  /**
+   * Pins max HP to a fixed value, permanently opting this entity out of the
+   * constitution-derived formula.
+   *
+   * Protected, and deliberately not a `maxHp` setter: one stray assignment on a
+   * crawler would silently freeze her max HP forever, which is precisely the
+   * drift this model exists to eliminate. Mobs, whose HP is authored per
+   * creature rather than derived, are the only legitimate callers.
+   */
+  protected setFixedMaxHp(value: number): void {
+    this._maxHpOverride = Math.max(1, Math.round(value));
+    this.syncHpToMaxHp();
+  }
+
+  /**
+   * Reconcile current HP after max HP moved: the change is applied to current HP
+   * one-for-one, in both directions.
+   *
+   * Both halves are load-bearing, and they have to mirror. Crediting growth
+   * alone would make an equip/unequip round trip a free full heal — put the
+   * Trollskin Shirt on at 2 HP, take it off, walk away at full — while clamping
+   * alone would bleed HP away on every gear swap. Mirroring is also what makes
+   * Jugg Juice's expiry actually repay the max-HP loan rather than gifting it.
+   */
+  syncHpToMaxHp(): void {
+    const currentMax = this.maxHp;
+    const delta = currentMax - this._maxHpAtLastSync;
+    // Both branches skip the downed: a crawler at 0 HP is waiting on a revive,
+    // and gearing them up from the companion inventory must not stand them back
+    // up. A living one is likewise never dropped to 0 by losing max HP —
+    // shedding your own gear should not be a way to die.
+    if (this.hp > 0) {
+      this.hp = delta > 0 ? this.hp + delta : Math.max(1, this.hp + delta);
+    }
+    this._maxHpAtLastSync = currentMax;
+    if (this.hp > currentMax) this.hp = currentMax;
+  }
+
+  /**
+   * Called after this player's equipment changed. Stat totals recompute
+   * themselves; only current HP has to be reconciled with the new maximum.
+   */
+  onEquipmentChanged(): void {
+    this.syncHpToMaxHp();
+  }
+
+  /** Raise or clear the god-mode flat bonus applied to every stat. Pass 0 to clear. */
+  setGodModeStatBonus(bonus: number): void {
+    this._godModeStatBonus = bonus;
+    this.syncHpToMaxHp();
+  }
+
+  /**
+   * @returns whether the attack connected. False when it was dodged, or when the
+   *   safe room, god mode, a knockout or i-frames swallowed it — attackers use
+   *   this to hold back the status riders they apply alongside their damage, so a
+   *   `MISS!` does not come with a helping of poison.
+   */
+  takeDamage(amount: number, source?: DamageSource): boolean {
+    if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return false;
+    if (this.invulnerableFrames > 0) return false;
+    // Only a swung, thrown or bitten attack can be dodged. Status ticks, your own
+    // dynamite, standing damage fields and the doomsday clock all land regardless.
+    if (source?.kind === 'mob' && source.undodgeable !== true && this.rollDodge()) {
+      this.onDodged();
+      return false;
+    }
+    const remainingHp = Math.max(0, this.hp - amount);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
     if (source !== undefined) this.lastDamageSource = source;
+    // Deliberately *before* hp is written: every death check in the game reads hp
+    // after takeDamage returns, so absorbing the blow here means neither the
+    // game-over check nor the companion knockout path ever sees a dead crawler.
+    if (remainingHp === 0 && this.tryCockroach()) return true;
+    this.hp = remainingHp;
+    return true;
+  }
+
+  /**
+   * Cockroach: the crawler walks away from a fatal blow at 1 HP, then the skill
+   * goes cold for a few minutes.
+   *
+   * The recharge is a wall-clock deadline, not a frame counter, because scenes
+   * are rebuilt from scratch on every floor change and building doorway — a
+   * frame counter would reset itself every time the player stepped indoors.
+   *
+   * @returns whether the skill absorbed the blow.
+   */
+  private tryCockroach(): boolean {
+    if (!this.skills.isUnlocked('cockroach')) return false;
+    if (this.cockroachReadyAt !== null && Date.now() < this.cockroachReadyAt) return false;
+
+    this.hp = 1;
+    this.invulnerableFrames = COCKROACH_IFRAME_FRAMES;
+    this.skills.recordTrigger('cockroach');
+    // Credit the use before reading the level back: surviving is how the skill
+    // trains, and a level gained on this very blow should shorten this recharge.
+    this.skills.recordUse('cockroach');
+    this.cockroachReadyAt = Date.now() + cockroachRechargeMs(this.skills.getLevel('cockroach'));
+    this.queueFloatingText('COCKROACH!', 'trigger');
+    return true;
+  }
+
+  /** True once Cockroach has finished recharging (or was never spent). */
+  get isCockroachReady(): boolean {
+    return this.cockroachReadyAt === null || Date.now() >= this.cockroachReadyAt;
+  }
+
+  /** How far through the recharge Cockroach is, 0–1. Returns 1 when ready. */
+  cockroachRechargeFraction(): number {
+    if (this.cockroachReadyAt === null) return 1;
+    const total = cockroachRechargeMs(this.skills.getLevel('cockroach'));
+    const remaining = this.cockroachReadyAt - Date.now();
+    if (remaining <= 0) return 1;
+    return Math.max(0, Math.min(1, 1 - remaining / total));
+  }
+
+  /**
+   * Whether this entity's dexterity translates into dodging. Off by default so
+   * mobs and NPCs never dodge the player's attacks; the two crawlers opt in.
+   */
+  protected get canDodge(): boolean {
+    return false;
+  }
+
+  /** Flat dodge chance from skills, added on top of the dexterity curve. */
+  protected get dodgeFlatBonus(): number {
+    return 0;
+  }
+
+  /** The chance this player has of dodging the next mob attack, 0–1. */
+  get dodgeChance(): number {
+    if (!this.canDodge) return 0;
+    return computeDodgeChance(this.dexterity, this.dodgeFlatBonus);
+  }
+
+  private rollDodge(): boolean {
+    if (!this.canDodge) return false;
+    return Math.random() < this.dodgeChance;
+  }
+
+  /** Feedback (and, for the cat, skill progress) for a dodge that just landed. */
+  protected onDodged(): void {
+    this.pendingDodges++;
+    this.queueFloatingText('MISS!', 'miss');
+  }
+
+  /**
+   * Queue a world-anchored feedback label for `FloatingCombatTextSystem` to draw.
+   * Bounded because scenes without that system (non-combat interiors) never drain it.
+   */
+  queueFloatingText(text: string, style: FloatingTextStyle): void {
+    if (this.pendingFloatingText.length >= MAX_PENDING_FLOATING_TEXT) return;
+    this.pendingFloatingText.push({ text, style });
   }
 
   /** Returns the potion cooldown in frames for the current constitution level. */
@@ -274,7 +618,29 @@ export abstract class Player {
     const rechargeDenominator = this.constitution + DENOMINATOR_OFFSET;
     const cooldownReduction = rechargeNumerator / rechargeDenominator;
     const cooldownSeconds = DEFAULT_POTION_COOLDOWN_SECONDS - cooldownReduction;
-    return Math.round(cooldownSeconds * FRAMES_PER_SECOND);
+    return Math.max(1, Math.round(cooldownSeconds * FRAMES_PER_SECOND * this.ironStomachTimeScale));
+  }
+
+  /**
+   * Multiplier Iron Stomach applies to anything a crawler swallows: potion
+   * cooldowns and how long a drink keeps the room spinning. 1 when unlearned.
+   */
+  get ironStomachTimeScale(): number {
+    const level = this.skills.getLevel('iron_stomach');
+    if (level === 0) return 1;
+    return Math.max(
+      MIN_IRON_STOMACH_TIME_SCALE,
+      1 - IRON_STOMACH_COOLDOWN_REDUCTION_PER_LEVEL * level,
+    );
+  }
+
+  /**
+   * Credit an Iron Stomach use. Called from every place a crawler swallows
+   * something — potions, Bopca dishes, tavern rounds — so the skill trains on
+   * the whole habit rather than one source.
+   */
+  recordSwallowed(): void {
+    this.skills.recordUse('iron_stomach');
   }
 
   /** Drink a health potion — heals 50 % of max HP. Returns false if none available or on cooldown. */
@@ -284,6 +650,7 @@ export abstract class Player {
     if (!this.inventory.removeOne('health_potion')) return false;
     this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * POTION_HEAL_FRACTION));
     this.potionCooldownFrames = this.computePotionCooldown();
+    this.recordSwallowed();
     return true;
   }
 
@@ -312,48 +679,36 @@ export abstract class Player {
     return false;
   }
 
-  spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
-    if (this.unspentPoints <= 0) return;
+  /**
+   * Consume one unspent level-up point and flash the given stat label.
+   * Returns false (spending nothing) when no points are banked.
+   */
+  protected consumePointFor(statLabel: string): boolean {
+    if (this.unspentPoints <= 0) return false;
     this.unspentPoints--;
-    if (stat === 'STR') {
-      this.strength++;
-      this.levelUpStat = 'STR';
-    } else if (stat === 'INT') {
-      this.intelligence++;
-      this.levelUpStat = 'INT';
-    } else {
-      this.constitution++;
-      this.maxHp += CON_HP_BONUS_PER_POINT;
-      this.hp = Math.min(this.hp + CON_HP_BONUS_PER_POINT, this.maxHp);
-      this.levelUpStat = 'CON';
-    }
+    this.levelUpStat = statLabel;
     this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
+    return true;
   }
 
-  /** Apply stat bonuses from an item being equipped. */
-  applyItemBonus(item: InventoryItem): void {
-    const b = item.statBonus;
-    if (!b) return;
-    if (b.constitution) {
-      this.constitution += b.constitution;
-      this.maxHp += b.constitution * CON_HP_BONUS_PER_POINT;
-      this.hp = Math.min(this.hp + b.constitution * CON_HP_BONUS_PER_POINT, this.maxHp);
-    }
-    if (b.strength) this.strength += b.strength;
-    if (b.intelligence) this.intelligence += b.intelligence;
+  /**
+   * Whether a banked level-up point may be invested in `stat`.
+   *
+   * Only *spending* is gated. Equipment `statBonus`, stat-boost potions and
+   * Signet's tattoos all still raise a locked stat through
+   * {@link applyPermanentStat} — the lock models the System refusing an
+   * allocation, not the attribute being frozen in place.
+   */
+  canSpendPointInto(stat: StatName): boolean {
+    void stat; // every stat is open unless a subclass says otherwise
+    return true;
   }
 
-  /** Remove stat bonuses when an item is unequipped. */
-  removeItemBonus(item: InventoryItem): void {
-    const b = item.statBonus;
-    if (!b) return;
-    if (b.constitution) {
-      this.constitution -= b.constitution;
-      this.maxHp -= b.constitution * CON_HP_BONUS_PER_POINT;
-      this.hp = Math.min(this.hp, this.maxHp);
-    }
-    if (b.strength) this.strength -= b.strength;
-    if (b.intelligence) this.intelligence -= b.intelligence;
+  spendPoint(stat: StatName): void {
+    if (!this.canSpendPointInto(stat)) return;
+    if (!this.consumePointFor(STAT_CODE[stat])) return;
+    this.baseStats[stat]++;
+    this.syncHpToMaxHp();
   }
 
   /** Liquid courage: a drunk crawler swings harder even as the room tilts. */
@@ -437,9 +792,8 @@ export abstract class Player {
         this._potionSpeedBoost = 1;
       }
       if (justExpired && effect.type === 'jugg_juice') {
-        this.maxHp = Math.max(1, this.maxHp - this._juggJuiceHpBoost);
         this._juggJuiceHpBoost = 0;
-        this.hp = Math.min(this.hp, this.maxHp);
+        this.syncHpToMaxHp();
       }
       if (effect.ticksRemaining >= 0) {
         this.statusEffects[kept] = effect;
@@ -465,7 +819,11 @@ export abstract class Player {
     this.clearStatusEffects();
     for (const effect of effects) this.statusEffects.push({ ...effect });
     this._potionSpeedBoost = this.hasStatus('speed_fizz') ? SPEED_FIZZ_MULTIPLIER : 1;
-    this._juggJuiceHpBoost = this.hasStatus('jugg_juice') ? juggJuiceHpBoost : 0;
+    // Screened like every other restored numeric: this one feeds max HP directly,
+    // so a non-finite value from a save would make the whole stat block NaN.
+    const boost = Number.isFinite(juggJuiceHpBoost) ? Math.max(0, juggJuiceHpBoost) : 0;
+    this._juggJuiceHpBoost = this.hasStatus('jugg_juice') ? boost : 0;
+    this.syncHpToMaxHp();
   }
 
   /**
@@ -479,9 +837,8 @@ export abstract class Player {
         this._potionSpeedBoost = 1;
       }
       if (effect.type === 'jugg_juice') {
-        this.maxHp = Math.max(1, this.maxHp - this._juggJuiceHpBoost);
         this._juggJuiceHpBoost = 0;
-        this.hp = Math.min(this.hp, this.maxHp);
+        this.syncHpToMaxHp();
       }
     }
     this.statusEffects = [];
@@ -537,9 +894,10 @@ export abstract class Player {
 
   /** Activate Jugg Juice: boosts max HP by 50% + 5 and heals to full for 30 seconds. */
   activateJuggJuice(): void {
+    // Read maxHp before the boost is stored — the getter already includes it.
     const boost = Math.round(this.maxHp * JUGG_JUICE_HP_MULTIPLIER_BONUS + JUGG_JUICE_FLAT_BONUS);
     this._juggJuiceHpBoost = boost;
-    this.maxHp += boost;
+    this.syncHpToMaxHp();
     this.hp = this.maxHp;
     this.applyStatus(makeJuggJuice());
   }
@@ -553,30 +911,22 @@ export abstract class Player {
    * Permanently raise one stat, flashing the same feedback a spent level-up point
    * does. Shared by the stat-boost potion and Signet's tattoos.
    */
-  applyPermanentStat(stat: PermanentStat, amount: number): void {
-    if (stat === 'strength') {
-      this.strength += amount;
-      this.levelUpStat = 'STR';
-    } else if (stat === 'intelligence') {
-      this.intelligence += amount;
-      this.levelUpStat = 'INT';
-    } else {
-      this.constitution += amount;
-      this.maxHp += amount * CON_HP_BONUS_PER_POINT;
-      this.hp = Math.min(this.hp + amount * CON_HP_BONUS_PER_POINT, this.maxHp);
-      this.levelUpStat = 'CON';
-    }
+  applyPermanentStat(stat: StatName, amount: number): void {
+    this.baseStats[stat] += amount;
+    this.levelUpStat = STAT_CODE[stat];
     this.levelUpFlash = SPEND_POINT_FLASH_FRAMES;
+    this.syncHpToMaxHp();
   }
 
   /** Permanently boost a randomly chosen stat by 2–4 points. */
   applyStatBoost(): void {
-    const stat = PERMANENT_STATS[Math.floor(Math.random() * STAT_BOOST_STAT_COUNT)];
+    const stat = ALL_STATS[Math.floor(Math.random() * ALL_STATS.length)];
     const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
     this.applyPermanentStat(stat, amount);
   }
 
   tickTimers() {
+    if (this.invulnerableFrames > 0) this.invulnerableFrames--;
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;
     this.potionCooldownFrames = this.tickCooldown(this.potionCooldownFrames);
@@ -589,6 +939,10 @@ export abstract class Player {
     this.tickTempStatMods();
   }
 
+  /**
+   * Age out expired temporary stat modifiers. Nothing needs un-applying: the
+   * effective getters read this list live, so dropping an entry *is* the revert.
+   */
   private tickTempStatMods() {
     if (this.tempStatMods.length === 0) return;
     let kept = 0;
@@ -597,21 +951,11 @@ export abstract class Player {
       if (mod.ticksRemaining > 0) {
         this.tempStatMods[kept] = mod;
         kept++;
-        continue;
-      }
-      // Revert the stat change
-      if (mod.stat === 'strength') {
-        this.strength = Math.max(1, this.strength - mod.delta);
-      } else if (mod.stat === 'intelligence') {
-        this.intelligence = Math.max(1, this.intelligence - mod.delta);
-      } else {
-        const constitutionDelta = Math.round(mod.delta);
-        this.constitution = Math.max(1, this.constitution - constitutionDelta);
-        this.maxHp = Math.max(1, this.maxHp - constitutionDelta * CON_HP_BONUS_PER_POINT);
-        this.hp = Math.min(this.hp, this.maxHp);
       }
     }
+    const expiredAny = kept !== this.tempStatMods.length;
     this.tempStatMods.length = kept;
+    if (expiredAny) this.syncHpToMaxHp();
   }
 
   abstract render(

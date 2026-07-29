@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import type { DamageSource } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -62,6 +63,16 @@ const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
 const BOSS_REVIVE_HP_FRACTION = 0.3;
 const DEFEAT_TIMER_FRAMES = 300;
 const ACID_DAMAGE_FLASH_FRAMES = 8;
+/**
+ * Attributed to The Hoarder so the death screen can name what dissolved you, but
+ * marked undodgeable: a puddle you are standing in is not something you sidestep.
+ */
+const ACID_PUDDLE_DAMAGE_SOURCE: DamageSource = {
+  kind: 'mob',
+  mobType: 'TheHoarder',
+  attackType: 'acid_puddle',
+  undodgeable: true,
+};
 const COCKROACH_MOB_CLEANUP_THRESHOLD = 200;
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
 /** Tile deltas around a position, nearest (orthogonal) first. */
@@ -712,7 +723,7 @@ export class BossRoomSystem implements GameSystem {
     if (humanInAcid) {
       this.humanAcidTick++;
       if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        human.takeDamage(1, { kind: 'mob', mobType: 'TheHoarder', attackType: 'acid_puddle' });
+        human.takeDamage(1, ACID_PUDDLE_DAMAGE_SOURCE);
         human.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
@@ -729,7 +740,7 @@ export class BossRoomSystem implements GameSystem {
     if (catInAcid) {
       this.catAcidTick++;
       if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        cat.takeDamage(1, { kind: 'mob', mobType: 'TheHoarder', attackType: 'acid_puddle' });
+        cat.takeDamage(1, ACID_PUDDLE_DAMAGE_SOURCE);
         cat.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {

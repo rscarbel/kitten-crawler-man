@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
 import {
@@ -96,15 +97,17 @@ export class BrindleGrub extends Mob {
     return 'BrindleGrub';
   }
 
-  /** Grubs drop nothing. */
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
+  /** Grubs drop nothing but, very rarely, the book on eating anything. */
+  protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
+    const items: LootDrop['items'] = [];
+    maybeDropSkillBook(items, 'skill_book_iron_stomach');
+    return items;
   }
 
   private evolveToStage2(): void {
     this.stage = 2;
     this.speed = STAGE2_SPEED;
-    this.maxHp = STAGE2_HP;
+    this.setFixedMaxHp(STAGE2_HP);
     this.hp = STAGE2_HP;
     this.evolveTimer = randomInt(STAGE2_EVOLVE_MIN, STAGE2_EVOLVE_MAX);
     this.displayName = 'Cow-Tailed Grub';
@@ -114,7 +117,7 @@ export class BrindleGrub extends Mob {
   private evolveToStage3(): void {
     this.stage = 3;
     this.speed = STAGE3_SPEED;
-    this.maxHp = STAGE3_HP;
+    this.setFixedMaxHp(STAGE3_HP);
     this.hp = STAGE3_HP;
     this.evolveTimer = -1; // no further evolution
     this.isFlying = true;

@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { HumanPlayer } from './HumanPlayer';
 import { CatPlayer } from './CatPlayer';
@@ -77,6 +78,8 @@ export class Goblin extends Mob {
     if (chance > 0 && Math.random() < chance) {
       items.push({ id: 'goblin_dynamite', quantity: 1 });
     }
+    // Goblins are the dungeon's professional brawlers; the book is theirs to lose.
+    maybeDropSkillBook(items, 'skill_book_pugilism');
     return items;
   }
 

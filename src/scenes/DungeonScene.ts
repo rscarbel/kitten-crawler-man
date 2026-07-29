@@ -27,6 +27,11 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
+import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
+import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
+import { SystemAnnouncer } from '../ui/SystemAnnouncer';
+import { useSkillBook } from '../systems/skillBookUse';
+import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
@@ -121,7 +126,6 @@ import {
   createGodModeState,
   applyGodModeToPlayer,
   removeGodModeFromPlayer,
-  stripGodModeFromSnapshot,
   GOD_MODE_ABILITY_LEVEL,
   type GodModeState,
 } from '../core/GodMode';
@@ -266,6 +270,22 @@ const CITY_CROWD_AMBIENT_VOLUME = 0.35;
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
 
+/**
+ * Which crawler must receive this item, or null when either may have it.
+ *
+ * Beyond the two hand-listed signature items, a skill book written for one
+ * crawler is routed to that crawler — the alternative is handing the cat's only
+ * guaranteed Cockroach book to the human, who cannot read it.
+ */
+function forcedRecipientFor(id: ItemId): CrawlerKind | null {
+  if (FORCED_TO_HUMAN.has(id)) return 'human';
+  if (FORCED_TO_CAT.has(id)) return 'cat';
+  const skillId = ITEM_DEF[id].skillId;
+  if (skillId === undefined) return null;
+  const eligibleFor = getSkillDef(skillId).eligibleFor;
+  return eligibleFor === 'both' ? null : eligibleFor;
+}
+
 // Companion/Follower system
 const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
 /**
@@ -387,9 +407,10 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
   const singlePool: LootDrop['items'] = [];
 
   for (const item of loot.items) {
-    if (FORCED_TO_HUMAN.has(item.id)) {
+    const forced = forcedRecipientFor(item.id);
+    if (forced === 'human') {
       humanItems.push({ ...item });
-    } else if (FORCED_TO_CAT.has(item.id)) {
+    } else if (forced === 'cat') {
       catItems.push({ ...item });
     } else if (item.quantity === 1) {
       singlePool.push({ ...item });
@@ -460,6 +481,9 @@ export class DungeonScene extends GameplayScene {
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
+  private readonly floatingText: FloatingCombatTextSystem;
+  private readonly systemAnnouncer: SystemAnnouncer;
+  private readonly systemNotices: SystemNoticeSystem;
   private bossRoom: BossRoomSystem;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
   private dynamite: DynamiteSystem;
@@ -726,10 +750,14 @@ export class DungeonScene extends GameplayScene {
       this.levelDef.id,
       options?.audio ?? null,
     );
-    // Stamped here rather than in the generators: the counter belongs to every
-    // safe room on every map, and this and BuildingInteriorScene are the only two
-    // places a safe room is ever brought to life. Idempotent, because a reused
-    // map instance passes through here again on every scene reconstruction.
+    this.floatingText = new FloatingCombatTextSystem();
+    this.systemAnnouncer = new SystemAnnouncer(options?.audio ?? null);
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.systemAnnouncer);
+    // The safe-room counter is stamped here rather than in the generators: it
+    // belongs to every safe room on every map, and this and BuildingInteriorScene
+    // are the only two places a safe room is ever brought to life. Idempotent,
+    // because a reused map instance passes through here again on every scene
+    // reconstruction.
     this.bopca = new BopcaSystem(
       this.gameMap,
       stampSafeRoomCounters(this.gameMap),
@@ -885,15 +913,26 @@ export class DungeonScene extends GameplayScene {
     this.stairwell = new StairwellSystem(this.gameMap, levelDef, () => {
       if (!levelDef.nextLevelId) return;
 
+      // Night Vision trains on floors survived while leading, not on kills — it
+      // is a passive, so a whole floor is the only honest unit of use. Credited
+      // before the save below, or closing the browser on the celebration screen
+      // would lose the floor's progress.
+      if (this.cat.isActive) this.cat.skills.recordUse('night_vision');
+
       // Save progress immediately so the floor is recorded as complete even if
       // the player closes the browser during the celebration screen.
       this.onSaveProgress?.({
-        humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
-        catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
+        humanSnap: revivedSnapshot(snapPlayer(this.human)),
+        catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: levelDef.nextLevelId,
       });
 
       this.bus.emit('levelComplete', {});
+
+      // Drain now: the celebration screen stops `updateGameplay`, and the queue
+      // does not survive into the next scene, so a level-up earned on the last
+      // step of the floor would otherwise never be announced.
+      this.systemNotices.drainFor(this.human, this.cat);
 
       const nextDef = getLevelDef(levelDef.nextLevelId);
       this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
@@ -904,8 +943,8 @@ export class DungeonScene extends GameplayScene {
           new DungeonScene(nextDef, this.input, this.sceneManager, {
             // Taking the stairs regroups the party: a companion carried down
             // still knocked out would time out on arrival with no way to reach them.
-            humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
-            catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
+            humanSnap: revivedSnapshot(snapPlayer(this.human)),
+            catSnap: revivedSnapshot(snapPlayer(this.cat)),
             humanAchievements: this.humanAchievements,
             catAchievements: this.catAchievements,
             mongoUnlocked: this.mongoSystem.unlocked,
@@ -934,8 +973,8 @@ export class DungeonScene extends GameplayScene {
         this.mongoSystem.dismiss(this.mobs, this.mobGrid);
         this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
         this.musicPersistsAcrossExit = true;
-        const humanSnap = this._cleanSnapFor(this.human);
-        const catSnap = this._cleanSnapFor(this.cat);
+        const humanSnap = snapPlayer(this.human);
+        const catSnap = snapPlayer(this.cat);
         // Where a downed companion is left lying while the player is indoors.
         const downedCompanion = this.inactive();
         const downedCompanionAt = downedCompanion.isKnockedOut
@@ -1095,8 +1134,8 @@ export class DungeonScene extends GameplayScene {
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
 
-    // Re-apply cheat overlays carried in from the previous scene. Player
-    // snapshots are stripped of god-mode boosts on every transition, so an
+    // Re-apply cheat overlays carried in from the previous scene. God mode is an
+    // overlay on top of base stats and so is never present in a snapshot — an
     // active cheat has to be rebuilt here rather than surviving in the stats.
     if (this.godModeState.active) this.enableGodMode();
     else if (this.godModeState.toughActive) this.enableToughMode();
@@ -1351,32 +1390,13 @@ export class DungeonScene extends GameplayScene {
           if (bossRoomIdx >= 0) {
             this.treasureChests.receiveBossLoot(bossRoomIdx, mob.droppedLoot);
           } else {
-            // Fallback: drop normally if no matching boss room
-            if (mob.droppedLoot.coins > 0 || mob.droppedLoot.items.length > 0) {
-              this.loot.addLoot(cx, cy, mob.droppedLoot, topDamageDealer, true);
-            }
+            // Fallback: drop normally if no matching boss room. Still partitioned
+            // by owner — The Hoarder's guaranteed Cockroach book is the cat's only
+            // reliable source and must not land on the human even down this path.
+            this.dropLootByOwner(cx, cy, mob.droppedLoot, topDamageDealer, true);
           }
         } else {
-          const mainItems = mob.droppedLoot.items.filter(
-            (it) => !FORCED_TO_HUMAN.has(it.id) && !FORCED_TO_CAT.has(it.id),
-          );
-          const humanItems = mob.droppedLoot.items.filter((it) => FORCED_TO_HUMAN.has(it.id));
-          const catItems = mob.droppedLoot.items.filter((it) => FORCED_TO_CAT.has(it.id));
-          if (mainItems.length > 0 || mob.droppedLoot.coins > 0) {
-            this.loot.addLoot(
-              cx,
-              cy,
-              { coins: mob.droppedLoot.coins, items: mainItems },
-              topDamageDealer,
-              false,
-            );
-          }
-          if (humanItems.length > 0) {
-            this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, false);
-          }
-          if (catItems.length > 0) {
-            this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, false);
-          }
+          this.dropLootByOwner(cx, cy, mob.droppedLoot, topDamageDealer, false);
         }
         mob.droppedLoot = null;
       }
@@ -1477,8 +1497,8 @@ export class DungeonScene extends GameplayScene {
         bus.emit('achievementUnlocked', { achievementId: 'safe_haven', player: 'Cat' });
       }
       this.onSaveProgress?.({
-        humanSnap: revivedSnapshot(this._cleanSnapFor(this.human)),
-        catSnap: revivedSnapshot(this._cleanSnapFor(this.cat)),
+        humanSnap: revivedSnapshot(snapPlayer(this.human)),
+        catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: this.levelDef.id,
       });
     });
@@ -1500,6 +1520,9 @@ export class DungeonScene extends GameplayScene {
         if (this.cat.gainXp(SPIDER_QUEST_COMPLETION_XP)) {
           this.bus.emit('playerLevelUp', { player: this.cat, newLevel: this.cat.level });
         }
+        // Straight to the cat: the lab's dark is what the book is about, and she
+        // is the only crawler who can read it.
+        this.cat.inventory.addItem('skill_book_night_vision', 1);
       }
       if (e.questId === 'the_show_must_go_on') {
         const def = this.circusQuest.questManager.getDef(e.questId);
@@ -1729,6 +1752,8 @@ export class DungeonScene extends GameplayScene {
     // music, which may deliberately survive a building round-trip.
     this.ambientSound?.dispose();
     this.bopca.dispose();
+    this.floatingText.dispose();
+    this.systemAnnouncer.clear();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     if (this._spiderKeyHandler !== null) {
@@ -2112,13 +2137,6 @@ export class DungeonScene extends GameplayScene {
     }
     this._toughModeActive = false;
     this.godModeState.toughActive = false;
-  }
-
-  /** Snapshot a player, stripping god-mode stat boosts so they never persist across floors. */
-  private _cleanSnapFor(p: Player): PlayerSnapshot {
-    const snap = snapPlayer(p);
-    if (this._godModeSnapshot !== null) stripGodModeFromSnapshot(snap);
-    return snap;
   }
 
   /**
@@ -2685,6 +2703,11 @@ export class DungeonScene extends GameplayScene {
       active.activateCooldownCrisp();
       this.audio?.play('potion_drink');
       this._delayedSounds.push({ id: 'cooldown_crisp', framesLeft: POTION_EFFECT_SOUND_DELAY });
+    } else if (slot?.skillId !== undefined) {
+      const bookId = slot.id;
+      const outcome = useSkillBook(active, slot.skillId, () => active.inventory.removeOne(bookId));
+      this.audio?.play(outcome.consumed ? 'menu_skillpoint_spent' : 'error_taking_action');
+      if (outcome.message !== null) this.systemAnnouncer.announce(outcome.message);
     } else if (slot?.id === 'stat_boost_potion') {
       if (!active.inventory.removeOne('stat_boost_potion')) return;
       active.applyStatBoost();
@@ -2836,7 +2859,7 @@ export class DungeonScene extends GameplayScene {
 
     const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
     if (gearResult) {
-      if (gearResult.unequippedItem) active.removeItemBonus(gearResult.unequippedItem);
+      active.onEquipmentChanged();
       return;
     }
 
@@ -2850,9 +2873,8 @@ export class DungeonScene extends GameplayScene {
       if (slotIdx !== null) {
         const item = invPlayer.inventory.bag.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-          const prev = invPlayer.inventory.equip(slotIdx);
-          if (prev) invPlayer.removeItemBonus(prev);
-          invPlayer.applyItemBonus(item);
+          invPlayer.inventory.equip(slotIdx);
+          invPlayer.onEquipmentChanged();
           return;
         }
       }
@@ -3020,6 +3042,12 @@ export class DungeonScene extends GameplayScene {
       this.market?.update();
     }
 
+    // Ticked ahead of every early return below: the announcer speaks for the
+    // System, and a line queued on the last step of a floor has to keep counting
+    // down while the level-complete screen is up or it would be drawn frozen and
+    // then thrown away with the scene.
+    this.systemAnnouncer.update();
+
     if (
       this.gameOver ||
       this.abilityLevelUpDialog.isShowing ||
@@ -3107,6 +3135,7 @@ export class DungeonScene extends GameplayScene {
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
     this.doomsdayEscape.render(ctx, camX, camY);
+    this.floatingText.render(ctx, camX, camY);
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -3426,6 +3455,7 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
+    this.systemAnnouncer.render(ctx, canvas);
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
     this.spiderQuest.renderUI(ctx, canvas, camX, camY);
@@ -3586,6 +3616,8 @@ export class DungeonScene extends GameplayScene {
 
     this.safeRoom.update(ctx);
     this.bopca.update(ctx);
+    this.floatingText.update(ctx);
+    this.systemNotices.update(ctx);
     this.bossRoom.update(ctx);
     this.spiderQuest.applyRoomLock(this.human, this.cat);
     this.arena.update(ctx);
@@ -3968,6 +4000,37 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /**
+   * Spill a loot drop onto the floor, routing items that belong to one specific
+   * crawler to that crawler and everything else to `defaultRecipient`.
+   */
+  private dropLootByOwner(
+    cx: number,
+    cy: number,
+    loot: LootDrop,
+    defaultRecipient: HumanPlayer | CatPlayer,
+    isBossLoot: boolean,
+  ): void {
+    const sharedItems = loot.items.filter((it) => forcedRecipientFor(it.id) === null);
+    const humanItems = loot.items.filter((it) => forcedRecipientFor(it.id) === 'human');
+    const catItems = loot.items.filter((it) => forcedRecipientFor(it.id) === 'cat');
+    if (sharedItems.length > 0 || loot.coins > 0) {
+      this.loot.addLoot(
+        cx,
+        cy,
+        { coins: loot.coins, items: sharedItems },
+        defaultRecipient,
+        isBossLoot,
+      );
+    }
+    if (humanItems.length > 0) {
+      this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, isBossLoot);
+    }
+    if (catItems.length > 0) {
+      this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, isBossLoot);
+    }
+  }
+
   /** Returns the player whose inventory the panel should display/interact with. */
   private inventoryPlayer(): HumanPlayer | CatPlayer {
     return this._inventoryOverridePlayer ?? this.active();
@@ -3984,12 +4047,12 @@ export class DungeonScene extends GameplayScene {
           ? active.inventory.actionBar.slots[slotIdx]
           : active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-        const prev =
-          source === 'hotbar'
-            ? active.inventory.equipHotbarSlot(slotIdx)
-            : active.inventory.equip(slotIdx);
-        if (prev) active.removeItemBonus(prev);
-        active.applyItemBonus(item);
+        if (source === 'hotbar') {
+          active.inventory.equipHotbarSlot(slotIdx);
+        } else {
+          active.inventory.equip(slotIdx);
+        }
+        active.onEquipmentChanged();
       }
     }
 
@@ -4004,7 +4067,7 @@ export class DungeonScene extends GameplayScene {
           : active.inventory.bag.slots[slotIdx];
       if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
         active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
-        active.removeItemBonus(item);
+        active.onEquipmentChanged();
       }
     }
 
@@ -4018,7 +4081,7 @@ export class DungeonScene extends GameplayScene {
           null;
         if (item?.equipSlot && item.equipSubSlot) {
           active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
-          active.removeItemBonus(item);
+          active.onEquipmentChanged();
         }
       }
       active.inventory.removeItems(id, quantity);

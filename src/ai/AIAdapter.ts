@@ -785,6 +785,7 @@ function playerSnapshot(p: Player) {
     strength: p.strength,
     intelligence: p.intelligence,
     constitution: p.constitution,
+    dexterity: p.dexterity,
     coins: p.coins,
     isActive: p.isActive,
     isProtected: p.isProtected,

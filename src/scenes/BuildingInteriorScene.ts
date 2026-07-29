@@ -39,6 +39,10 @@ import {
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
+import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
+import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
+import { SystemAnnouncer } from '../ui/SystemAnnouncer';
+import { useSkillBook } from '../systems/skillBookUse';
 import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
@@ -57,7 +61,6 @@ import {
   createGodModeState,
   applyGodModeToPlayer,
   GOD_MODE_ABILITY_LEVEL,
-  stripGodModeFromSnapshot,
   type GodModeState,
 } from '../core/GodMode';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
@@ -244,6 +247,20 @@ export class BuildingInteriorScene extends GameplayScene {
    * exists to avoid.
    */
   private readonly bopcaBus: EventBus | null;
+  /**
+   * Skill unlocks reach the player anywhere indoors — a skill book can be used
+   * in any building — so this pair is built unconditionally, unlike the combat
+   * stack and the safe-room Bopca.
+   */
+  private readonly skillBus = new EventBus();
+  private readonly systemAnnouncer: SystemAnnouncer;
+  private readonly systemNotices: SystemNoticeSystem;
+  /**
+   * Scene-level, not part of the combat stack: a level-up or a Cockroach save can
+   * happen in a building with no encounter, and an undrained label queue would
+   * otherwise dump itself all at once the next time combat started.
+   */
+  private readonly floatingText = new FloatingCombatTextSystem();
 
   // Shop (store only)
   private readonly shop: ShopSystem | null;
@@ -369,6 +386,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Re-position after restore (restore doesn't set x/y).
     this.pm.setPositions(sx, sy);
+
+    this.audio?.wireEvents(this.skillBus);
+    this.systemAnnouncer = new SystemAnnouncer(this.audio);
+    this.systemNotices = new SystemNoticeSystem(this.skillBus, this.systemAnnouncer);
 
     // Companion command state holder + menu, sharing the overworld stance so
     // movement mode and combat stance are consistent everywhere. Used only as a
@@ -714,6 +735,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bopcaBus?.clear();
+    this.skillBus.clear();
+    this.systemAnnouncer.clear();
+    this.floatingText.dispose();
     this.ambientSound?.dispose();
     this.bopca?.dispose();
     // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
@@ -817,6 +841,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.humanAchievements?.tryUnlock('doomsday_contained');
       this.catAchievements?.tryUnlock('doomsday_contained');
     }
+
+    this.systemNotices.drainFor(this.human, this.cat);
+    this.systemAnnouncer.update();
+    this.floatingText.updateFor(this.human, this.cat);
 
     const reviveDeadlineExpired = this.tickCompanionLeftBehind();
 
@@ -1171,14 +1199,10 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private doExit(defeated = false): void {
+    // God mode rides on top of base stats rather than being folded into them, so
+    // snapshots are already clean and the overworld can re-apply its own overlay.
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
-    // The overworld scene re-applies god mode from the shared state, so hand it
-    // clean stats rather than boosts baked in on top of the overlay it will add.
-    if (this.godModeState.active) {
-      stripGodModeFromSnapshot(humanSnap);
-      stripGodModeFromSnapshot(catSnap);
-    }
     this.onExitCallback(humanSnap, catSnap, defeated);
   }
 
@@ -1242,7 +1266,8 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.entry.name === "Signet's Ink") {
-      // Rebuilt per purchase, so inking one design marks the other two as spent.
+      // Rebuilt per purchase, so inking one stat design marks the other stat
+      // designs as spent — and the skill mark as spent independently of them.
       panel.open(() => buildTattooMenu(player, turn), confirmed(inkTattoo, false));
       return;
     }
@@ -1420,6 +1445,8 @@ export class BuildingInteriorScene extends GameplayScene {
       this.renderCitizenPrompt(ctx, camX, camY);
     }
 
+    this.floatingText.render(ctx, camX, camY);
+
     // Independent of `combat` — the crystal must still be visible/containable
     // if the player returns to this floor after the encounter was torn down.
     const isOnCrystalFloor =
@@ -1532,6 +1559,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
     if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
+
+    this.systemAnnouncer.render(ctx, canvas);
 
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
@@ -1854,6 +1883,13 @@ export class BuildingInteriorScene extends GameplayScene {
     const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
       active.usePotion();
+      return;
+    }
+    if (slot?.skillId !== undefined) {
+      const bookId = slot.id;
+      const outcome = useSkillBook(active, slot.skillId, () => active.inventory.removeOne(bookId));
+      this.audio?.play(outcome.consumed ? 'menu_skillpoint_spent' : 'error_taking_action');
+      if (outcome.message !== null) this.systemAnnouncer.announce(outcome.message);
     }
   }
 }

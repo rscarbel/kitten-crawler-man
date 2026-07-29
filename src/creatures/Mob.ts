@@ -322,7 +322,7 @@ export abstract class Mob extends Player {
   killType: 'melee' | 'missile' | 'shell' | 'smush' | null = null;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
-    super(tileX, tileY, tileSize, maxHp);
+    super(tileX, tileY, tileSize, { maxHp });
     this.speed = speed;
     this.spawnX = tileX * tileSize;
     this.spawnY = tileY * tileSize;
@@ -348,7 +348,7 @@ export abstract class Mob extends Player {
 
     // HP
     const hpMult = 1 + extra * MOB_LEVEL_HP_SCALE;
-    this.maxHp = Math.ceil(this.maxHp * hpMult);
+    this.setFixedMaxHp(Math.ceil(this.maxHp * hpMult));
     this.hp = this.maxHp;
 
     // Speed
@@ -371,12 +371,16 @@ export abstract class Mob extends Player {
    *
    * Pass `attackType` for special named attacks (e.g. 'slam', 'screech') so the
    * death screen can describe the specific ability that killed the player.
+   *
+   * @returns whether the blow connected. Attacks that also inflict a status
+   *   should gate the status on this, so a dodged hit doesn't still poison.
    */
-  protected dealDamage(target: Player, baseDamage: number, attackType?: string) {
+  protected dealDamage(target: Player, baseDamage: number, attackType?: string): boolean {
     const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
-    target.takeDamage(Math.ceil(baseDamage * mult), source);
+    const connected = target.takeDamage(Math.ceil(baseDamage * mult), source);
     this.attackSoundPending = true;
+    return connected;
   }
 
   setMap(map: GameMap) {

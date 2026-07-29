@@ -5,10 +5,11 @@ import type { AbilityManager } from '../core/AbilityManager';
 import type { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
 import type { PauseTab, ButtonRect } from './pause/types';
-import { renderMainTab } from './pause/MainTab';
+import { renderMainTab, mainTabHeight } from './pause/MainTab';
 import { renderInventoryTab, INVENTORY_TAB_BOX_H } from './pause/InventoryTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
+import { renderSkillsTab } from './pause/SkillsTab';
 import { renderAchievementsTab } from './pause/AchievementsTab';
 import {
   renderAbilitiesTab,
@@ -33,11 +34,6 @@ const MODAL_PADDING = 16;
 const MODAL_BOX_WIDTH = 380;
 const SETTINGS_BOX_H_MOBILE = 520;
 const SETTINGS_BOX_H_DESKTOP = 390;
-const MAIN_TAB_BUTTON_COUNT_WITH_SPEND = 7;
-const MAIN_TAB_BUTTON_COUNT_NO_SPEND = 6;
-const MAIN_TAB_HEADER_H = 52;
-const MAIN_TAB_BUTTON_H = 50;
-const MAIN_TAB_FOOTER_H = 28;
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -53,6 +49,8 @@ export class PauseMenu {
   private statsContentH = 0;
   private spendScrollY = 0;
   private spendContentH = 0;
+  private skillsScrollY = 0;
+  private skillsContentH = 0;
   private touchScrollStartY: number | null = null;
 
   /** Set by the owning scene so the Settings tab can read/write volumes. */
@@ -157,6 +155,12 @@ export class PauseMenu {
         0,
         Math.min(maxScroll, this.spendScrollY + deltaY * SCROLL_MULTIPLIER),
       );
+    } else if (this.tab === 'skills') {
+      const maxScroll = Math.max(0, this.skillsContentH - this.skillsScrollH);
+      this.skillsScrollY = Math.max(
+        0,
+        Math.min(maxScroll, this.skillsScrollY + deltaY * SCROLL_MULTIPLIER),
+      );
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -166,7 +170,7 @@ export class PauseMenu {
     if (!this._isOpen) return;
     if (this.tab === 'abilities') {
       abilitiesTabTouchStart(y);
-    } else if (this.tab === 'spend' || this.tab === 'stats') {
+    } else if (this.tab === 'spend' || this.tab === 'stats' || this.tab === 'skills') {
       this.touchScrollStartY = y;
     }
   }
@@ -184,6 +188,9 @@ export class PauseMenu {
       } else if (this.tab === 'stats') {
         const maxScroll = Math.max(0, this.statsContentH - this.statsScrollH);
         this.statsScrollY = Math.max(0, Math.min(maxScroll, this.statsScrollY + delta));
+      } else if (this.tab === 'skills') {
+        const maxScroll = Math.max(0, this.skillsContentH - this.skillsScrollH);
+        this.skillsScrollY = Math.max(0, Math.min(maxScroll, this.skillsScrollY + delta));
       }
     }
   }
@@ -198,6 +205,7 @@ export class PauseMenu {
 
   private _lastStatsBoxH = STATS_BOX_H;
   private _lastSpendBoxH = SPEND_BOX_H;
+  private _lastSkillsBoxH = SKILLS_BOX_H;
 
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN
@@ -207,6 +215,11 @@ export class PauseMenu {
   private get spendScrollH(): number {
     // Must match renderSpendTab: bh - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN
     return this._lastSpendBoxH - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN;
+  }
+
+  private get skillsScrollH(): number {
+    // Must match renderSkillsTab: bh - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN
+    return this._lastSkillsBoxH - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN;
   }
 
   /** Render the full pause overlay. Only call when isOpen === true. */
@@ -242,14 +255,17 @@ export class PauseMenu {
           ? STATS_BOX_H
           : this.tab === 'spend'
             ? SPEND_BOX_H
-            : this.tab === 'settings'
-              ? SETTINGS_BOX_H
-              : this.tab === 'inventory'
-                ? INVENTORY_TAB_BOX_H
-                : mainBoxH;
+            : this.tab === 'skills'
+              ? SKILLS_BOX_H
+              : this.tab === 'settings'
+                ? SETTINGS_BOX_H
+                : this.tab === 'inventory'
+                  ? INVENTORY_TAB_BOX_H
+                  : mainBoxH;
     const boxH = Math.min(rawBoxH, ch - MODAL_PADDING);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
+    if (this.tab === 'skills') this._lastSkillsBoxH = boxH;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,
@@ -263,6 +279,7 @@ export class PauseMenu {
     const setTab = (t: PauseTab) => {
       if (t !== 'stats') this.statsScrollY = 0;
       if (t !== 'spend') this.spendScrollY = 0;
+      if (t !== 'skills') this.skillsScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
       if (t !== 'settings') this._showResetConfirm = false;
       this.tab = t;
@@ -281,6 +298,7 @@ export class PauseMenu {
           boxX,
           boxY,
           boxW,
+          boxH,
           human,
           cat,
           setTabWithSound,
@@ -331,6 +349,20 @@ export class PauseMenu {
           setTabWithSound,
           this.spendScrollY,
           () => this.audio?.play('menu_skillpoint_spent'),
+        );
+        break;
+      case 'skills':
+        this.skillsContentH = renderSkillsTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          human,
+          cat,
+          setTabWithSound,
+          this.skillsScrollY,
         );
         break;
       case 'achievements':
@@ -417,12 +449,5 @@ export class PauseMenu {
 
 const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
+const SKILLS_BOX_H = 480;
 const SETTINGS_BOX_H = platform.isMobile ? SETTINGS_BOX_H_MOBILE : SETTINGS_BOX_H_DESKTOP;
-
-// MAIN_TAB_HEADER_H + N buttons × MAIN_TAB_BUTTON_H + MAIN_TAB_FOOTER_H
-function mainTabHeight(hasSpendButton: boolean): number {
-  const buttonCount = hasSpendButton
-    ? MAIN_TAB_BUTTON_COUNT_WITH_SPEND
-    : MAIN_TAB_BUTTON_COUNT_NO_SPEND;
-  return MAIN_TAB_HEADER_H + buttonCount * MAIN_TAB_BUTTON_H + MAIN_TAB_FOOTER_H;
-}

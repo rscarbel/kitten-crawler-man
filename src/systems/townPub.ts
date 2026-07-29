@@ -55,11 +55,12 @@ function pubServeLine(turn: number): string {
 }
 
 function pourDrink(effect: DrinkEffect, player: Player): void {
+  player.recordSwallowed();
   if (effect === 'speed') {
     player.activateSpeedFizz();
     return;
   }
-  player.applyStatus(makeDrunk());
+  player.applyStatus(makeDrunk(player.ironStomachTimeScale));
   if (effect === 'drunk_and_heal') {
     const healed = player.hp + Math.round(player.maxHp * BOOZY_MILK_HEAL_FRACTION);
     player.hp = Math.min(player.maxHp, healed);

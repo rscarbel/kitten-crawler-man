@@ -1,5 +1,7 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
+import type { LootDrop } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import { drawRatSprite } from '../sprites/ratSprite';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
@@ -17,6 +19,12 @@ const FOLLOW_STOP_FRACTION = 0.8;
 const ENGAGE_RANGE_FRACTION = 1.15;
 
 export class Rat extends Mob {
+  /** Vermin survive everything; the rarest of them leave the manual behind. */
+  protected override rollLootItems(killer: Player | null): LootDrop['items'] {
+    const items = super.rollLootItems(killer);
+    maybeDropSkillBook(items, 'skill_book_cockroach');
+    return items;
+  }
   readonly xpValue = 2;
   protected coinDropMin = 0;
   protected coinDropMax = 1;

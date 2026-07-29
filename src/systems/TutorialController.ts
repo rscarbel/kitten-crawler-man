@@ -4,7 +4,6 @@ import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { ITEM_DEF } from '../core/ItemDefs';
-import type { InventoryItem } from '../core/ItemDefs';
 import {
   TUTORIAL_GATE_G1,
   TUTORIAL_GATE_G2,
@@ -684,8 +683,8 @@ export class TutorialController {
     this.humanStartPx = human.x;
     this.humanStartPy = human.y;
 
-    this.clearForTutorial(human, true);
-    this.clearForTutorial(cat, false);
+    this.clearForTutorial(human);
+    this.clearForTutorial(cat);
 
     // Cat starts at exactly 1 HP so the health potion tutorial step is meaningful
     cat.hp = 1;
@@ -744,20 +743,16 @@ export class TutorialController {
     }
   }
 
-  private clearForTutorial(player: HumanPlayer | CatPlayer, isHuman: boolean): void {
-    if (isHuman) {
-      // HumanPlayer constructor applied the enchanted_bigboi_boxers stat bonus — reverse it
-      const boxersDef: InventoryItem = { ...ITEM_DEF.enchanted_bigboi_boxers, quantity: 1 };
-      player.removeItemBonus(boxersDef);
-    }
-
+  private clearForTutorial(player: HumanPlayer | CatPlayer): void {
     for (let i = 0; i < player.inventory.bag.slots.length; i++) {
       player.inventory.bag.slots[i] = null;
     }
     for (let i = 0; i < player.inventory.actionBar.slots.length; i++) {
       player.inventory.actionBar.slots[i] = null;
     }
-    player.inventory.equipment.equipped.clear();
+    player.inventory.equipment.clear();
+    // Stripping the starting boxers shrinks max HP, so current HP has to follow.
+    player.onEquipmentChanged();
   }
 
   /** Tick the dialog animation without running the full state machine update. */
@@ -1064,7 +1059,7 @@ export class TutorialController {
   private checkMenuGuideCompletion(human: HumanPlayer): void {
     const hasSmushInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'smush_tome');
     const hasPotionInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'health_potion');
-    const boxersSlot = human.inventory.equipment.equipped.get('Legs:Pants');
+    const boxersSlot = human.inventory.equipment.getEquippedId('Legs:Pants');
     const hasBoxersEquipped = boxersSlot === 'enchanted_bigboi_boxers';
 
     if (hasSmushInBar && hasPotionInBar && hasBoxersEquipped) {
@@ -1078,7 +1073,7 @@ export class TutorialController {
   private updateMenuGuideStep(human: HumanPlayer): void {
     const hasSmushInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'smush_tome');
     const hasPotionInBar = human.inventory.actionBar.slots.some((s) => s?.id === 'health_potion');
-    const boxersSlot = human.inventory.equipment.equipped.get('Legs:Pants');
+    const boxersSlot = human.inventory.equipment.getEquippedId('Legs:Pants');
     const hasBoxersEquipped = boxersSlot === 'enchanted_bigboi_boxers';
 
     if (!hasSmushInBar) {

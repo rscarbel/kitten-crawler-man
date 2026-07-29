@@ -17,6 +17,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import type { GrantedReward } from './GrantedReward';
 import type { DishId } from '../systems/bopcaDialog';
+import type { SkillId } from './SkillManager';
 
 export interface GameEvents {
   /** A mob was just killed. */
@@ -122,6 +123,18 @@ export interface GameEvents {
 
   /** A crawler took a dish off a Bopca's counter and ate it. */
   bopcaFoodEaten: { dishId: DishId; healed: number };
+
+  /** A crawler's dexterity turned a mob attack into a clean miss. */
+  playerDodged: { player: 'Human' | 'Cat' };
+
+  /** A crawler discovered a skill for the first time. */
+  skillUnlocked: { player: 'Human' | 'Cat'; skillId: SkillId };
+
+  /** A known skill advanced a level, through use or a duplicate skill book. */
+  skillLevelUp: { player: 'Human' | 'Cat'; skillId: SkillId; newLevel: number };
+
+  /** A skill fired in the moment (e.g. Cockroach catching a fatal blow). */
+  skillTriggered: { player: 'Human' | 'Cat'; skillId: SkillId };
 }
 
 type EventCallback<T> = (data: T) => void;

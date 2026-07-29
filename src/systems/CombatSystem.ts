@@ -325,6 +325,12 @@ export function resolveKills(ctx: CombatContext): void {
         ? mob.killedBy
         : null;
 
+    // Pugilism trains on knockouts, not swings — a landed punch is cheap, a
+    // finished fight is not.
+    if (mob.killType === 'melee' && killer === human) {
+      human.skills.recordUse('pugilism');
+    }
+
     // Magic missile kill XP + level-15 death shockwave
     if (mob.killType === 'missile' && killer === cat) {
       abilityManager.addKillXp('magic_missile');

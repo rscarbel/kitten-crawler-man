@@ -153,7 +153,7 @@ export const AI_TOOLS: ToolDefinition[] = [
       },
       stat: {
         type: 'string',
-        enum: ['strength', 'intelligence', 'constitution'],
+        enum: ['strength', 'intelligence', 'constitution', 'dexterity'],
         required: true,
       },
       delta: {

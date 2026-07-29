@@ -7,18 +7,30 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import type { PermanentStat, Player } from '../Player';
+import type { StatName, Player } from '../Player';
+import type { SkillId } from '../core/SkillManager';
+import { getSkillDef } from '../core/SkillManager';
 import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
 
 const TATTOO_PRICE = 100;
 /** Stat points a tattoo grants. Small, but it never goes away. */
 const TATTOO_STAT_POINTS = 1;
 
+/**
+ * The parlour's one skill mark. Priced well above a stat tattoo because a skill
+ * is worth more than a point, and gated on its own marker rather than
+ * `tattooStat`: a crawler may carry one stat tattoo *and* one skill tattoo, but
+ * never two of either.
+ */
+const SKILL_TATTOO_KEY = 'brass_gullet';
+const SKILL_TATTOO_PRICE = 250;
+const SKILL_TATTOO_SKILL: SkillId = 'iron_stomach';
+
 const TATTOO_DESIGNS: ReadonlyArray<{
   key: string;
   label: string;
   desc: string;
-  stat: PermanentStat;
+  stat: StatName;
 }> = [
   {
     key: 'coiled_fist',
@@ -38,7 +50,30 @@ const TATTOO_DESIGNS: ReadonlyArray<{
     desc: `It blinks. Don't watch it. +${TATTOO_STAT_POINTS} Intelligence`,
     stat: 'intelligence',
   },
+  {
+    key: 'quick_serpent',
+    label: 'The Quick Serpent',
+    desc: `It strikes before you flinch. +${TATTOO_STAT_POINTS} Dexterity`,
+    stat: 'dexterity',
+  },
 ];
+
+/** The skill-tattoo row, with its availability resolved for `player`. */
+function buildSkillTattooOption(player: Player): PricedOption {
+  const def = getSkillDef(SKILL_TATTOO_SKILL);
+  const option: PricedOption = {
+    key: SKILL_TATTOO_KEY,
+    label: 'The Brass Gullet',
+    price: SKILL_TATTOO_PRICE,
+    desc: `A throat inked in beaten brass. Teaches ${def.name}.`,
+  };
+  if (player.skillTattoo !== null) {
+    option.unavailable = 'Already marked';
+  } else if (player.skills.previewUnlock(SKILL_TATTOO_SKILL) === 'already_max') {
+    option.unavailable = 'Mastered';
+  }
+  return option;
+}
 
 const TATTOOIST_BARKS: ReadonlyArray<string> = [
   'They move, mine. Tsarina Signet’s trick — hold still and you’ll feel it settle.',
@@ -52,7 +87,13 @@ function tattooistBark(turn: number): string {
   return TATTOOIST_BARKS[index];
 }
 
-/** The tattoo menu for `player` — every row disabled once they already carry a mark. */
+/**
+ * The tattoo menu for `player`.
+ *
+ * The stat rows all disable together once they carry a stat mark; the Brass
+ * Gullet is gated separately on {@link Player.skillTattoo}, so one of each can
+ * coexist.
+ */
 export function buildTattooMenu(player: Player, turn: number): PricedMenu {
   const existing = player.tattooStat;
   return {
@@ -69,12 +110,23 @@ export function buildTattooMenu(player: Player, turn: number): PricedMenu {
         option.unavailable = existing === design.stat ? 'Yours' : 'Already inked';
       }
       return option;
-    }),
+    }).concat(buildSkillTattooOption(player)),
   };
 }
 
 /** Ink the chosen design onto the buyer and return the tattooist's line. */
 export const inkTattoo: PricedPurchaseHandler = (option, buyer) => {
+  if (option.key === SKILL_TATTOO_KEY) {
+    if (buyer.skillTattoo !== null) {
+      return { ok: false, line: 'One mark of that kind per skin. You have yours.' };
+    }
+    buyer.skills.unlockSkill(SKILL_TATTOO_SKILL);
+    buyer.skillTattoo = SKILL_TATTOO_SKILL;
+    return {
+      ok: true,
+      line: 'Swallow. There — it settles in the gullet. Try not to test it today.',
+    };
+  }
   const design = TATTOO_DESIGNS.find((d) => d.key === option.key);
   if (design === undefined) return { ok: false, line: 'The tattooist frowns at the design.' };
   buyer.applyPermanentStat(design.stat, TATTOO_STAT_POINTS);

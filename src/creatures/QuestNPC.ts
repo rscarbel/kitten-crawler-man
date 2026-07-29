@@ -7,6 +7,10 @@ const NPC_MAX_HP = 40;
 const INITIAL_POTION_COUNT = 10;
 /** Frames over which the red damage box fades out. */
 const RED_BOX_FADE_FRAMES = 8;
+/** Seconds the red damage box stays solid before its fade begins. */
+const RED_BOX_HOLD_SECONDS = 5;
+const FRAMES_PER_SECOND = 60;
+const RED_BOX_FRAMES = RED_BOX_HOLD_SECONDS * FRAMES_PER_SECOND + RED_BOX_FADE_FRAMES;
 /** Alpha multiplier for the damage box overlay. */
 const RED_BOX_ALPHA_MAX = 0.9;
 
@@ -24,11 +28,11 @@ export class QuestNPC extends Player {
   markerType: NPCMarkerType = 'exclamation';
   /** Which quest this NPC belongs to. */
   readonly questId: string;
-  /** Frames remaining on the persistent red damage box. Set to 308 on hit; box fades over final 8 frames. */
+  /** Frames remaining on the persistent red damage box; it fades over the final {@link RED_BOX_FADE_FRAMES}. */
   private redBoxTimer = 0;
 
   constructor(tileX: number, tileY: number, questId: string) {
-    super(tileX, tileY, TILE_SIZE, NPC_MAX_HP);
+    super(tileX, tileY, TILE_SIZE, { maxHp: NPC_MAX_HP });
     this.questId = questId;
     this.inventory.removeItems('health_potion', INITIAL_POTION_COUNT);
   }
@@ -56,11 +60,12 @@ export class QuestNPC extends Player {
     this.renderDamageFlash(ctx, sx, sy);
   }
 
-  takeDamage(amount: number) {
-    super.takeDamage(amount);
-    if (amount > 0 && !this.isProtected) {
-      this.redBoxTimer = 308; // 5 s at 60 fps + 8-frame fade
+  takeDamage(amount: number): boolean {
+    const connected = super.takeDamage(amount);
+    if (connected) {
+      this.redBoxTimer = RED_BOX_FRAMES;
     }
+    return connected;
   }
 
   tickTimers() {

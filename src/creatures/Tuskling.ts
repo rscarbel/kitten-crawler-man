@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import { drawTusklingSprite } from '../sprites/tusklingSprite';
 import { normalize } from '../utils';
@@ -66,8 +67,11 @@ export class Tuskling extends Mob {
     super(tileX, tileY, tileSize, TUSK_HP, TUSK_SPEED);
   }
 
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
+  /** It eats anything. The book explains how. */
+  protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
+    const items: LootDrop['items'] = [];
+    maybeDropSkillBook(items, 'skill_book_iron_stomach');
+    return items;
   }
 
   updateAI(targets: Player[]): void {

@@ -7,6 +7,8 @@ import { makeBurn, makePoison, makeSepsis } from '../core/StatusEffect';
 import { createMob } from '../levels/spawner';
 import { TILE_SIZE } from '../core/constants';
 import { isItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/ItemDefs';
+import { isStatName } from '../Player';
 
 const NEAREST_WALKABLE_SEARCH_RADIUS = 15;
 const MOB_SPAWN_COUNT_MAX_LOCAL = 5;
@@ -54,6 +56,18 @@ const VALID_ITEM_IDS = new Set<string>([
 
 function resolvePlayer(ctx: AISceneContext, target: unknown): HumanPlayer | CatPlayer {
   return target === 'Cat' ? ctx.getCat() : ctx.getHuman();
+}
+
+/** Unequip `itemId` if the player is wearing it, so it can be removed cleanly. */
+function unequipIfWorn(player: HumanPlayer | CatPlayer, itemId: ItemId): void {
+  if (!player.inventory.hasEquipped(itemId)) return;
+  const worn =
+    player.inventory.bag.slots.find((s) => s?.id === itemId) ??
+    player.inventory.actionBar.slots.find((s) => s?.id === itemId) ??
+    null;
+  if (!worn?.equipSlot || !worn.equipSubSlot) return;
+  player.inventory.unequip(`${worn.equipSlot}:${worn.equipSubSlot}`);
+  player.onEquipmentChanged();
 }
 
 function nearestWalkableTile(
@@ -151,6 +165,11 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const itemId = String(action.item_id);
       if (!VALID_ITEM_IDS.has(itemId) || !isItemId(itemId)) break;
       const qty = Math.max(1, Number(action.quantity) || 1);
+      // Take it off first if it is being worn. An equipped item removed from
+      // storage leaves its key in the equipped map with nothing to resolve it to,
+      // so its stat bonus sticks — and the gear panel can no longer find the item
+      // to unequip it, making the bonus permanent.
+      unequipIfWorn(player, itemId);
       player.inventory.removeItems(itemId, qty);
       break;
     }
@@ -168,24 +187,15 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
       const delta = Number(action.delta);
       if (isNaN(delta)) break;
       const statRaw = action.stat;
-      if (
-        typeof statRaw !== 'string' ||
-        (statRaw !== 'strength' && statRaw !== 'intelligence' && statRaw !== 'constitution')
-      )
-        break;
-      const stat = statRaw;
-      if (stat === 'strength') {
-        player.strength = Math.max(1, player.strength + delta);
-      } else if (stat === 'intelligence') {
-        player.intelligence = Math.max(1, player.intelligence + delta);
-      } else {
-        const d = Math.round(delta);
-        player.constitution = Math.max(1, player.constitution + d);
-        player.maxHp = Math.max(1, player.maxHp + d * 2);
-        player.hp = Math.min(player.hp, player.maxHp);
-      }
-      // Revert after 30 seconds (1800 ticks at 60fps)
-      player.tempStatMods.push({ ticksRemaining: TEMP_STAT_MOD_TICKS, stat, delta });
+      if (typeof statRaw !== 'string' || !isStatName(statRaw)) break;
+      // The stat getters read tempStatMods live, so pushing the entry *is* the change.
+      // It reverts itself after 30 seconds (1800 ticks at 60fps).
+      player.tempStatMods.push({
+        ticksRemaining: TEMP_STAT_MOD_TICKS,
+        stat: statRaw,
+        delta: Math.round(delta),
+      });
+      player.syncHpToMaxHp();
       break;
     }
   }

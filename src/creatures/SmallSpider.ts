@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
@@ -177,8 +178,11 @@ export class SmallSpider extends Mob {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
   }
 
+  /** Skittering is a discipline. Someone wrote it down. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
+    const items: LootDrop['items'] = [];
+    maybeDropSkillBook(items, 'skill_book_cat_reflexes');
+    return items;
   }
 
   updateAI(targets: Player[]): void {

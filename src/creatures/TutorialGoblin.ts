@@ -23,7 +23,7 @@ export class TutorialGoblin extends Goblin {
   ) {
     super(tileX, tileY, tileSize, weapon, skinColor, eyeColor);
     this.hp = TUTORIAL_HP;
-    this.maxHp = TUTORIAL_HP;
+    this.setFixedMaxHp(TUTORIAL_HP);
     this.attackDamage = 0;
     this.isStationary = stationary;
     this.defenseOnly = defenseOnly;

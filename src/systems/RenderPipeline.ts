@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import type { GameMap } from '../map/GameMap';
@@ -70,14 +71,20 @@ const PROP_CULL_MARGIN = TILE_SIZE * PROP_CULL_MARGIN_TILES;
 /** Colour of the fully fogged area outside the falloff disc. */
 const FOG_SOLID_COLOR = 'rgba(0,0,0,1)';
 
-/** Visibility inner radius in tiles. */
+/** Visibility inner radius in tiles, before any Night Vision bonus. */
 const VISIBILITY_INNER_TILES = 30;
 
-/** Visibility outer radius in tiles. */
+/** Visibility outer radius in tiles, before any Night Vision bonus. */
 const VISIBILITY_OUTER_TILES = 35;
 
 /** Frame index for tower balcony overlay. */
 const TOWER_BALCONY_OVERLAY_FRAME = 4;
+
+/** Extra fog radius the active crawler's Night Vision is worth, in tiles. */
+function nightVisionBonusFor(active: HumanPlayer | CatPlayer): number {
+  const level = active.skills.getLevel('night_vision');
+  return level === 0 ? 0 : nightVisionBonusTiles(level);
+}
 
 /** A Y-sorted draw entry that avoids per-frame closure allocation. */
 interface DrawEntry {
@@ -371,8 +378,11 @@ export class RenderPipeline {
   renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const { canvas, camX, camY, active } = rc;
 
-    const innerR = VISIBILITY_INNER_TILES * TILE_SIZE;
-    const outerR = VISIBILITY_OUTER_TILES * TILE_SIZE;
+    // Night Vision widens both radii for whoever is leading. The baked falloff
+    // disc is keyed on the radii, so it simply rebuilds when the pair changes.
+    const bonusTiles = nightVisionBonusFor(active);
+    const innerR = (VISIBILITY_INNER_TILES + bonusTiles) * TILE_SIZE;
+    const outerR = (VISIBILITY_OUTER_TILES + bonusTiles) * TILE_SIZE;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
     const halfDiag = Math.hypot(canvas.width / 2, canvas.height / 2);

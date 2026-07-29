@@ -67,9 +67,6 @@ const BACK_BTN_Y_OFFSET = 8;
 const BACK_BTN_WIDTH_REDUCTION = 40;
 const BACK_BTN_HEIGHT = 36;
 
-// Stat line section constants
-const PLAYER_LEVEL_XP_MULTIPLIER = 10;
-
 /** Returns total content height so PauseMenu can clamp scroll. */
 export function renderStatsTab(
   ctx: CanvasRenderingContext2D,
@@ -111,7 +108,7 @@ export function renderStatsTab(
       p instanceof HumanPlayer ? `EXP: ${p.explosivesHandling}` : `INT: ${p.intelligence}`;
     drawText(
       ctx,
-      `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}`,
+      `HP: ${p.hp}/${p.maxHp}   STR: ${p.strength}   ${midStat}   CON: ${p.constitution}   DEX: ${p.dexterity}`,
       {
         x: bx + STAT_BLOCK_X,
         y: y - STAT_LABEL_Y_OFFSET,
@@ -120,7 +117,7 @@ export function renderStatsTab(
       },
     );
     y += LINE_HEIGHT;
-    drawText(ctx, `XP: ${p.xp} / ${p.level * PLAYER_LEVEL_XP_MULTIPLIER}`, {
+    drawText(ctx, `XP: ${p.xp} / ${p.xpNeededForNextLevel}`, {
       x: bx + STAT_BLOCK_X,
       y: y - STAT_LABEL_Y_OFFSET,
       size: XP_LABEL_SIZE,

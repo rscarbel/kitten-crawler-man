@@ -1,5 +1,7 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
+import type { LootDrop } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 import { randomInt } from '../utils';
 
@@ -34,6 +36,12 @@ const LEG_LENGTH = 0.45;
 const CENTER_OFFSET = 0.5;
 
 export class Cockroach extends Mob {
+  /** Vermin survive everything; the rarest of them leave the manual behind. */
+  protected override rollLootItems(killer: Player | null): LootDrop['items'] {
+    const items = super.rollLootItems(killer);
+    maybeDropSkillBook(items, 'skill_book_cockroach');
+    return items;
+  }
   readonly xpValue = 2;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

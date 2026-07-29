@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import { drawTroglodyteSprite } from '../sprites/troglodyteSprite';
 import { makePoison } from '../core/StatusEffect';
@@ -61,9 +62,11 @@ export class Troglodyte extends Mob {
     super(tileX, tileY, tileSize, TROG_HP, TROG_SPEED);
   }
 
-  /** Troglodytes drop no loot — no coins, no items. */
-  protected rollLootItems(_killer: Player | null): LootDrop['items'] {
-    return [];
+  /** No coins, no gear — only, very rarely, a lifetime in the dark written down. */
+  protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
+    const items: LootDrop['items'] = [];
+    maybeDropSkillBook(items, 'skill_book_night_vision');
+    return items;
   }
 
   updateAI(targets: Player[]): void {
@@ -189,8 +192,8 @@ export class Troglodyte extends Mob {
               continue;
             }
 
-            this.dealDamage(t, TONGUE_DAMAGE);
-            if (Math.random() < POISON_CHANCE) {
+            const connected = this.dealDamage(t, TONGUE_DAMAGE);
+            if (connected && Math.random() < POISON_CHANCE) {
               t.applyStatus(makePoison());
             }
           }

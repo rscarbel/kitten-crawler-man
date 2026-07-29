@@ -675,6 +675,7 @@ export class BopcaSystem implements GameSystem {
     if (dish === null) return;
     const healed = Math.min(Math.ceil(eater.maxHp * BOPCA_HEAL_FRACTION), eater.maxHp - eater.hp);
     eater.hp += healed;
+    eater.recordSwallowed();
     entry.dish = null;
     entry.lastDishWentCold = false;
     this.bus.emit('bopcaFoodEaten', { dishId: dish.dishId, healed });

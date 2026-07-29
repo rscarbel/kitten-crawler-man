@@ -1,4 +1,5 @@
 import type { Inventory } from '../core/Inventory';
+import { drawSkillBookIcon } from './icons/skillBookIcon';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem } from '../core/ItemDefs';
 import { drawSpriteKey } from '../core/SpriteRenderer';
@@ -1193,6 +1194,12 @@ export class InventoryPanel {
   ): void {
     ctx.save();
     ctx.globalAlpha = ctx.globalAlpha * alpha;
+
+    if (item.skillId !== undefined) {
+      drawSkillBookIcon(ctx, x, y, size, item.skillId);
+      ctx.restore();
+      return;
+    }
 
     if (item.id === 'health_potion') {
       const cx = x + size * HP_POTION_CX;

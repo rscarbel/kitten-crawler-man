@@ -99,8 +99,8 @@ export class Llama extends Mob {
           Math.hypot(ball.x - cx, ball.y - cy) <
           LAVA_BALL_RADIUS + this.tileSize * PLAYER_CENTER_RADIUS_RATIO
         ) {
-          this.dealDamage(t, LAVA_BALL_DAMAGE);
-          if (Math.random() < BURN_CHANCE) t.applyStatus(makeBurn());
+          const connected = this.dealDamage(t, LAVA_BALL_DAMAGE);
+          if (connected && Math.random() < BURN_CHANCE) t.applyStatus(makeBurn());
           ball.exploding = true;
           ball.explodeTick = EXPLODE_TICKS;
           break;

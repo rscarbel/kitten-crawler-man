@@ -67,13 +67,19 @@ export function makeJuggJuice(): StatusEffect {
   return { type: 'jugg_juice', ticksRemaining: 1800, totalTicks: 1800 };
 }
 
+/** Base drunk duration: 30 seconds at 60 fps. */
+const DRUNK_TICKS = 1800;
+
 /**
  * Drunk: 30 seconds (1800 ticks at 60 fps) of swaying camera, a wandering walk and
  * a little extra melee damage. Re-drinking refreshes rather than stacks, which is
  * the intended "keep the round going" loop. See `src/core/DrunkEffect.ts`.
+ *
+ * @param durationScale Shortens the effect — Iron Stomach passes its time scale.
  */
-export function makeDrunk(): StatusEffect {
-  return { type: 'drunk', ticksRemaining: 1800, totalTicks: 1800 };
+export function makeDrunk(durationScale = 1): StatusEffect {
+  const ticks = Math.max(1, Math.round(DRUNK_TICKS * durationScale));
+  return { type: 'drunk', ticksRemaining: ticks, totalTicks: ticks };
 }
 
 /** Cooldown Crisp: halves all ability cooldowns for 25 seconds (1500 ticks at 60 fps). */

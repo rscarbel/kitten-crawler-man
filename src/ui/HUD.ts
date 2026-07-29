@@ -124,6 +124,16 @@ const STATUS_ICON_LABEL_Y_OFFSET = 2;
 const STATUS_ICON_LABEL_SIZE = 7;
 const STATUS_ICON_BAR_Y_OFFSET = 3;
 const STATUS_ICON_BAR_W = 2;
+/** Inset that keeps the pill's duration bar inside its 1px border. */
+const STATUS_ICON_BAR_X_INSET = 1;
+const STATUS_ICON_BAR_H = 2;
+/** Cockroach pill: amber when armed, drab slate while the recharge runs. */
+const COCKROACH_READY_COLOR = '#b45309';
+const COCKROACH_RECHARGING_COLOR = '#334155';
+/** Mobile collapsed HUD: the cockroach dot sits just left of the expand toggle. */
+const COLLAPSED_COCKROACH_X_OFFSET = 26;
+const COLLAPSED_COCKROACH_SIZE = 8;
+const COLLAPSED_COCKROACH_Y_OFFSET = 6;
 const STATUS_ICON_ROW_Y_OFFSET = 16;
 const STATUS_ICON_NEXT_X_OFFSET = 30;
 const STATUS_ICON_LABEL_CHAR_LIMIT = 4;
@@ -299,6 +309,18 @@ function drawHUDCollapsed(
     background: '#374151',
   });
 
+  // Cockroach state, reduced to a dot: the collapsed bar has no room for a pill,
+  // but whether the cat's one free death is armed still matters at a glance.
+  if (cat.skills.isUnlocked('cockroach')) {
+    drawBox(ctx, {
+      x: x + COLLAPSED_TOGGLE_X_OFFSET - COLLAPSED_COCKROACH_X_OFFSET,
+      y: y + COLLAPSED_COCKROACH_Y_OFFSET,
+      width: COLLAPSED_COCKROACH_SIZE,
+      height: COLLAPSED_COCKROACH_SIZE,
+      fill: cat.isCockroachReady ? COCKROACH_READY_COLOR : COCKROACH_RECHARGING_COLOR,
+    });
+  }
+
   // Expand toggle
   const toggleRect = { x: x + COLLAPSED_TOGGLE_X_OFFSET, y, w: TOGGLE_BTN_W, h: BAR_H };
   drawBox(ctx, {
@@ -455,7 +477,7 @@ export function drawHUDPlayerBlock(
   // Stats + potions
   drawText(
     ctx,
-    `STR:${player.strength}  INT:${player.intelligence}  HP:${player.constitution}  🧪${player.healthPotions}`,
+    `STR:${player.strength}  INT:${player.intelligence}  HP:${player.constitution}  DEX:${player.dexterity}  🧪${player.healthPotions}`,
     {
       x: barX,
       y: y2 + barH + PLAYER_BLOCK_STATS_Y_OFFSET,
@@ -464,14 +486,53 @@ export function drawHUDPlayerBlock(
     },
   );
 
-  // Status effect badges (Burn, Frozen, Paralyzed, …)
-  if (player.statusEffects.length > 0) {
-    let iconX = barX;
-    for (const effect of player.statusEffects) {
-      drawStatusIcon(ctx, effect, iconX, y2 + barH + STATUS_ICON_ROW_Y_OFFSET);
-      iconX += STATUS_ICON_NEXT_X_OFFSET;
-    }
+  // Status effect badges (Burn, Frozen, Paralyzed, …), then the persistent
+  // Cockroach pill — a standing capability rather than a timed effect, so it
+  // sits at the end of the row and stays there once the skill is known.
+  let iconX = barX;
+  for (const effect of player.statusEffects) {
+    drawStatusIcon(ctx, effect, iconX, y2 + barH + STATUS_ICON_ROW_Y_OFFSET);
+    iconX += STATUS_ICON_NEXT_X_OFFSET;
   }
+  if (player.skills.isUnlocked('cockroach')) {
+    drawCockroachPill(ctx, player, iconX, y2 + barH + STATUS_ICON_ROW_Y_OFFSET);
+  }
+}
+
+/**
+ * Cockroach's readiness pill: solid amber when it can save you, drained and
+ * refilling by wall-clock fraction while it recharges.
+ */
+function drawCockroachPill(
+  ctx: CanvasRenderingContext2D,
+  player: HumanPlayer | CatPlayer,
+  x: number,
+  y: number,
+): void {
+  const ready = player.isCockroachReady;
+  drawBox(ctx, {
+    x,
+    y,
+    width: STATUS_ICON_PILL_W,
+    height: STATUS_ICON_PILL_H,
+    fill: ready ? COCKROACH_READY_COLOR : COCKROACH_RECHARGING_COLOR,
+  });
+  drawText(ctx, 'ROACH', {
+    x: x + STATUS_ICON_LABEL_X_OFFSET,
+    y: y + STATUS_ICON_LABEL_Y_OFFSET,
+    bold: true,
+    size: STATUS_ICON_LABEL_SIZE,
+    color: ready ? '#fff' : '#cbd5e1',
+  });
+  drawProgressBar(ctx, {
+    x: x + STATUS_ICON_BAR_X_INSET,
+    y: y + STATUS_ICON_PILL_H - STATUS_ICON_BAR_Y_OFFSET,
+    width: STATUS_ICON_PILL_W - STATUS_ICON_BAR_W,
+    height: STATUS_ICON_BAR_H,
+    value: player.cockroachRechargeFraction(),
+    fill: ready ? 'rgba(255,255,255,0.85)' : COCKROACH_READY_COLOR,
+    background: 'rgba(0,0,0,0.4)',
+  });
 }
 
 /**
@@ -526,10 +587,10 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
   // Duration bar (white strip across the bottom of the pill)
   const ratio = effect.ticksRemaining / effect.totalTicks;
   drawProgressBar(ctx, {
-    x: x + 1,
+    x: x + STATUS_ICON_BAR_X_INSET,
     y: y + pillH - STATUS_ICON_BAR_Y_OFFSET,
     width: pillW - STATUS_ICON_BAR_W,
-    height: 2,
+    height: STATUS_ICON_BAR_H,
     value: ratio,
     fill: 'rgba(255,255,255,0.85)',
     background: 'rgba(0,0,0,0.4)',

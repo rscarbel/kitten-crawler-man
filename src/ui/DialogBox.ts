@@ -24,6 +24,12 @@ const DIALOG_HEIGHT = 175;
 const DIALOG_SIDE_MARGIN = 20;
 const GAP_ABOVE_HOTBAR = 8;
 const DIALOG_PADDING = 14;
+/**
+ * Floor on the box's top edge. A tall `yOffset` on a short viewport — a phone in
+ * landscape is barely 400px — would otherwise push the box off the top of the
+ * canvas entirely, silently swallowing whatever it was there to say.
+ */
+const DIALOG_MIN_TOP = 8;
 const HOTBAR_SLOT_SIZE = 52;
 const HOTBAR_BOTTOM_MARGIN = 12;
 
@@ -83,7 +89,8 @@ export interface ShowOptions {
 }
 
 export class DialogBox {
-  private readonly _audio: AudioManager;
+  /** Null when the scene has no audio manager — the box still works, silently. */
+  private readonly _audio: AudioManager | null;
   private readonly _speakerName: string;
   private readonly _speakerIcon: HTMLImageElement | undefined;
   private readonly _revealMode: RevealMode;
@@ -96,7 +103,7 @@ export class DialogBox {
   private _lastRevealTime = 0;
   private _pageIndicator: { readonly current: number; readonly total: number } | null = null;
 
-  constructor(audio: AudioManager, config: DialogBoxConfig) {
+  constructor(audio: AudioManager | null, config: DialogBoxConfig) {
     this._audio = audio;
     this._speakerName = config.speakerName;
     this._speakerIcon = config.speakerIcon;
@@ -119,12 +126,12 @@ export class DialogBox {
     if (this._revealMode === 'all' || this._tokens.length === 0) {
       this._revealedCount = this._tokens.length;
       if (this._tokens.length > 0) {
-        this._audio.play('typing_click');
+        this._audio?.play('typing_click');
       }
     } else {
       this._revealedCount = 1;
       this._lastRevealTime = performance.now();
-      this._audio.play('typing_click');
+      this._audio?.play('typing_click');
     }
   }
 
@@ -138,7 +145,7 @@ export class DialogBox {
 
     this._lastRevealTime = now;
     this._revealedCount++;
-    this._audio.play('typing_click');
+    this._audio?.play('typing_click');
   }
 
   /** True once all text has been revealed. */
@@ -286,7 +293,10 @@ export class DialogBox {
     const hotbarTop = canvas.height - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
     const width = Math.min(DIALOG_MAX_WIDTH, canvas.width - DIALOG_SIDE_MARGIN * 2);
     const x = (canvas.width - width) / 2;
-    const y = hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT - this._yOffset;
+    const y = Math.max(
+      DIALOG_MIN_TOP,
+      hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT - this._yOffset,
+    );
     return { x, y, width };
   }
 

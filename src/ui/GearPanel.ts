@@ -338,6 +338,7 @@ export class GearPanel {
       if (b.constitution) lines.push(`+${b.constitution} Constitution`);
       if (b.strength) lines.push(`+${b.strength} Strength`);
       if (b.intelligence) lines.push(`+${b.intelligence} Intelligence`);
+      if (b.dexterity) lines.push(`+${b.dexterity} Dexterity`);
     }
     lines.push('');
     if (item.description) {

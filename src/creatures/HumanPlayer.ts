@@ -1,9 +1,20 @@
-import { Player } from '../Player';
+import { Player, type StatName } from '../Player';
 import type { Mob } from './Mob';
 import { drawHumanSprite, type HumanAttackPhase } from '../sprites/humanSprite';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
 import { ITEM_DEF } from '../core/ItemDefs';
+import type { CrawlerKind } from '../core/SkillManager';
+
+/** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
+const HUMAN_CRAWLER_KIND: CrawlerKind = 'human';
+import { PUGILISM_DAMAGE_PER_LEVEL } from '../core/SkillManager';
+
+/** Short label the level-up flash shows for Explosives Handling. */
+const EXPLOSIVES_HANDLING_CODE = 'EXP';
+
+/** The human alone can invest points in Explosives Handling. */
+export type HumanSpendableStat = StatName | 'explosivesHandling';
 
 /**
  * This is a playable character.
@@ -12,6 +23,8 @@ import { ITEM_DEF } from '../core/ItemDefs';
  * it can be a punch of a stomp called "smush"
  */
 export class HumanPlayer extends Player {
+  /** Which half of the skill roster this crawler is eligible for. */
+  readonly crawlerKind = HUMAN_CRAWLER_KIND;
   /** Increases dynamite damage and throw distance. */
   explosivesHandling = 1;
 
@@ -34,7 +47,10 @@ export class HumanPlayer extends Player {
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
 
-  private static readonly HUMAN_STARTING_HP = 10;
+  /** Species HP floor: 8 + CON 1 × 2 = 10 starting max HP. */
+  private static readonly HUMAN_BASE_HP_OFFSET = 8;
+  /** An ordinary human is not especially nimble. */
+  private static readonly HUMAN_STARTING_DEXTERITY = 2;
   private static readonly STARTING_POTIONS = 10;
   private static readonly FACING_Y_THRESHOLD = 0.5;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.95;
@@ -51,12 +67,15 @@ export class HumanPlayer extends Player {
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, HumanPlayer.HUMAN_STARTING_HP);
+    super(tileX, tileY, tileSize, {
+      baseHpOffset: HumanPlayer.HUMAN_BASE_HP_OFFSET,
+      baseStats: { dexterity: HumanPlayer.HUMAN_STARTING_DEXTERITY },
+      crawlerKind: HUMAN_CRAWLER_KIND,
+    });
     // Pre-equip Enchanted BigBoi Boxers — adds +2 CON (+4 maxHp)
     this.inventory.addItem('enchanted_bigboi_boxers', 1);
     this.inventory.equipByItemId('enchanted_bigboi_boxers');
-    const boxersSlot = this.inventory.bag.slots.find((s) => s?.id === 'enchanted_bigboi_boxers');
-    if (boxersSlot) this.applyItemBonus(boxersSlot);
+    this.syncHpToMaxHp();
     // Pre-equip Smush tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.smush_tome, quantity: 1 };
     // Move starting potions from bag to hotbar slot 1 for quick access
@@ -83,20 +102,23 @@ export class HumanPlayer extends Player {
     return getSmushStats(this.getSmushLevel()).cooldownFrames;
   }
 
-  spendPoint(stat: 'STR' | 'INT' | 'CON' | 'EXP') {
-    if (stat === 'EXP') {
-      if (this.unspentPoints <= 0) return;
-      this.unspentPoints--;
+  spendPoint(stat: HumanSpendableStat): void {
+    if (stat === 'explosivesHandling') {
+      if (!this.consumePointFor(EXPLOSIVES_HANDLING_CODE)) return;
       this.explosivesHandling++;
-      this.levelUpStat = 'EXP';
-      this.levelUpFlash = 60;
       return;
     }
     super.spendPoint(stat);
   }
 
+  /** Crawlers dodge; the mobs they fight do not. */
+  protected override get canDodge(): boolean {
+    return true;
+  }
+
   getMeleeDamage(): number {
-    return 1 + this.strength + this.drunkDamageBonus;
+    const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.skills.getLevel('pugilism');
+    return 1 + this.strength + this.drunkDamageBonus + pugilismBonus;
   }
 
   triggerAttack() {

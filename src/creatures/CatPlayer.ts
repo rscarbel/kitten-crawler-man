@@ -1,4 +1,4 @@
-import { Player } from '../Player';
+import { Player, type StatName } from '../Player';
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
@@ -9,6 +9,18 @@ import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import { TILE_SIZE } from '../core/constants';
 import { ITEM_DEF } from '../core/ItemDefs';
+import type { CrawlerKind } from '../core/SkillManager';
+import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
+
+/** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
+const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
+import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
+
+/** Dexterity the System hands Donut for free on each level-up. */
+const ENHANCED_GROWTH_DEX_PER_LEVEL = 1;
+
+const CONSTITUTION_AUDIT_NOTICE =
+  'Patch 2.0: Crawler audit complete. Misallocated constitution points have been refunded. The System apologizes for nothing.';
 
 /**
  * This is a playable character.
@@ -17,6 +29,8 @@ import { ITEM_DEF } from '../core/ItemDefs';
  */
 
 export class CatPlayer extends Player {
+  /** Which half of the skill roster this crawler is eligible for. */
+  readonly crawlerKind = CAT_CRAWLER_KIND;
   private missiles: Missile[] = [];
   /** Reused result set for the homing missiles' neighbour queries. */
   private readonly _homingQuery = new Set<Mob>();
@@ -34,7 +48,12 @@ export class CatPlayer extends Player {
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Mob | null = null;
 
-  private static readonly CAT_STARTING_HP = 8;
+  /** Species HP floor: 2 + CON 2 × 2 = 6 starting max HP. She is meant to be fragile. */
+  private static readonly CAT_BASE_HP_OFFSET = 2;
+  /** Donut's constitution is fixed at 2 by the enhanced pet biscuit — book canon. */
+  static readonly CAT_BASE_CONSTITUTION = 2;
+  /** The pet biscuit's head start: she is very hard to hit. */
+  private static readonly CAT_STARTING_DEXTERITY = 8;
   private static readonly STARTING_POTIONS = 10;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.6;
   private static readonly MISSILE_BASE_RANGE = 3.5;
@@ -81,7 +100,14 @@ export class CatPlayer extends Player {
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
-    super(tileX, tileY, tileSize, CatPlayer.CAT_STARTING_HP);
+    super(tileX, tileY, tileSize, {
+      baseHpOffset: CatPlayer.CAT_BASE_HP_OFFSET,
+      baseStats: {
+        constitution: CatPlayer.CAT_BASE_CONSTITUTION,
+        dexterity: CatPlayer.CAT_STARTING_DEXTERITY,
+      },
+      crawlerKind: CAT_CRAWLER_KIND,
+    });
     // Initialize Magic Missile tome in hotbar slot 0
     this.inventory.actionBar.slots[0] = { ...ITEM_DEF.magic_missile_tome, quantity: 1 };
     // Move starting potions from bag to hotbar slot 1 for quick access
@@ -96,6 +122,62 @@ export class CatPlayer extends Player {
     const base = 2 + this.intelligence;
     const stats = getMagicMissileStats(this.getMagicMissileLevel());
     return Math.round(base * stats.damageMultiplier);
+  }
+
+  /** Crawlers dodge; the mobs they fight do not. */
+  protected override get canDodge(): boolean {
+    return true;
+  }
+
+  /** Cat-like Reflexes rides on top of the dexterity curve, under the same cap. */
+  protected override get dodgeFlatBonus(): number {
+    return CAT_REFLEXES_DODGE_BONUS_PER_LEVEL * this.skills.getLevel('cat_reflexes');
+  }
+
+  /** Every clean miss is a rep. The skill trains itself out of surviving. */
+  protected override onDodged(): void {
+    super.onDodged();
+    this.skills.recordUse('cat_reflexes');
+  }
+
+  /**
+   * Donut's constitution is fixed by the enhanced pet biscuit, and her dexterity
+   * is auto-allocated by Enhanced Growth — neither accepts a spent point. Her
+   * banked points go to strength and intelligence.
+   */
+  override canSpendPointInto(stat: StatName): boolean {
+    return stat !== 'constitution' && stat !== 'dexterity';
+  }
+
+  /**
+   * Refund constitution bought before the lock existed.
+   *
+   * Only runs for pre-lock saves. Potion and tattoo constitution in those saves
+   * is refunded too — the snapshot records a single total, so provenance is
+   * unrecoverable and erring toward the player is the right call. Running it on
+   * a modern save would be a bug, not a kindness: potions and tattoos still
+   * raise her base constitution lawfully, and this would confiscate the gain the
+   * next time she walked through a door.
+   */
+  override migrateRestoredStats(snapshotVersion: number): void {
+    if (snapshotVersion >= CONSTITUTION_LOCK_SNAPSHOT_VERSION) return;
+    const excess = this.getBaseStat('constitution') - CatPlayer.CAT_BASE_CONSTITUTION;
+    if (excess <= 0) return;
+    this.setBaseStat('constitution', CatPlayer.CAT_BASE_CONSTITUTION);
+    this.unspentPoints += excess;
+    this.queueSystemNotice(CONSTITUTION_AUDIT_NOTICE);
+  }
+
+  /**
+   * Enhanced Growth: the System auto-allocates Donut's dexterity on every
+   * level-up, which is the counterweight to her locked constitution.
+   */
+  override gainXp(amount: number): boolean {
+    const leveled = super.gainXp(amount);
+    if (!leveled) return false;
+    this.setBaseStat('dexterity', this.getBaseStat('dexterity') + ENHANCED_GROWTH_DEX_PER_LEVEL);
+    this.queueFloatingText(`+${ENHANCED_GROWTH_DEX_PER_LEVEL} DEX`, 'buff');
+    return true;
   }
 
   getMeleeDamage(): number {

@@ -12,6 +12,9 @@ const GOBLIN_ENCOUNTER_CHANCE = 0.15;
 const MENU_MUSIC_FADE_MS = 200;
 /** Ramp time applied to ambient-loop volume changes, short enough to track the player. */
 const AMBIENT_RAMP_MS = 100;
+/** A dodge borrows the whiffed-punch cue, quieter and quicker so it reads as air. */
+const DODGE_WHIFF_VOLUME = 0.5;
+const DODGE_WHIFF_RATE = 1.35;
 
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
@@ -733,6 +736,28 @@ export class AudioManager {
 
     bus.on('bopcaFoodEaten', () => {
       this.play('bopca_eating');
+    });
+
+    // No bespoke assets exist for the skill system yet, so each of these borrows
+    // the closest existing cue: a whiffed punch for a dodge, the unlock/level-up
+    // stings for skill progress, and the revival tone for Cockroach's save.
+    bus.on('playerDodged', () => {
+      this.play('human_punch_weak', {
+        volume: DODGE_WHIFF_VOLUME,
+        playbackRate: DODGE_WHIFF_RATE,
+      });
+    });
+
+    bus.on('skillUnlocked', () => {
+      this.play('new_unlock');
+    });
+
+    bus.on('skillLevelUp', () => {
+      this.play('ability_level_up');
+    });
+
+    bus.on('skillTriggered', (e) => {
+      if (e.skillId === 'cockroach') this.play('reviving_tone');
     });
 
     bus.on('humanMeleeSwing', (e) => {

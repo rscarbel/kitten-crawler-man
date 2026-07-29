@@ -1,3 +1,6 @@
+import type { StatName } from '../Player';
+import type { SkillId } from './SkillManager';
+
 export type ItemId =
   | 'health_potion'
   | 'speed_fizz'
@@ -15,7 +18,12 @@ export type ItemId =
   | 'quest_wood_board'
   | 'magic_missile_tome'
   | 'smush_tome'
-  | 'doomsday_scenario';
+  | 'doomsday_scenario'
+  | 'skill_book_cockroach'
+  | 'skill_book_cat_reflexes'
+  | 'skill_book_pugilism'
+  | 'skill_book_iron_stomach'
+  | 'skill_book_night_vision';
 
 export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 
@@ -30,13 +38,11 @@ export interface InventoryItem {
   equipSlot?: EquipSlot;
   equipSubSlot?: string;
   description?: string;
-  statBonus?: {
-    constitution?: number;
-    strength?: number;
-    intelligence?: number;
-  };
+  statBonus?: Partial<Record<StatName, number>>;
   /** References an active ability this item grants when equipped. */
   abilityId?: string;
+  /** Skill this item teaches when used. Set on skill books. */
+  skillId?: SkillId;
   /** When true, hotbar slot renders with a lighter quest-item colour. */
   isQuestItem?: boolean;
   /**
@@ -101,7 +107,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     canHotlist: true,
     type: 'consumable',
     description:
-      'Permanently increases one randomly chosen stat (STR, INT, or CON) by 2 to 4 points.',
+      'Permanently increases one randomly chosen stat (STR, INT, CON, or DEX) by 2 to 4 points.',
   },
   goblin_dynamite: {
     id: 'goblin_dynamite',
@@ -205,6 +211,62 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     description:
       'Use the crushing power of your bare feet to pound enemies into the ground with explosive force. ' +
       'Only the Human can use it. Place on the hotbar and press the assigned key to activate.',
+  },
+  skill_book_cockroach: {
+    id: 'skill_book_cockroach',
+    name: 'Skill Book: Cockroach',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'cockroach',
+    description:
+      'Smells faintly of insecticide and spite. Only the Cat can learn from it. ' +
+      'Teaches you to survive the blow that was supposed to end the episode. ' +
+      'A second copy makes you better at it, which says something unkind about your prospects.',
+  },
+  skill_book_cat_reflexes: {
+    id: 'skill_book_cat_reflexes',
+    name: 'Skill Book: Cat-like Reflexes',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'cat_reflexes',
+    description:
+      'Written by something that was very fast right up until it was not. ' +
+      'Only the Cat can learn from it. Improves your chance to be somewhere else when the hit lands.',
+  },
+  skill_book_pugilism: {
+    id: 'skill_book_pugilism',
+    name: 'Skill Book: Pugilism',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'pugilism',
+    description:
+      'Twelve pages of diagrams, all of them a fist. Only the Human can learn from it. ' +
+      'Every level makes your melee hurt more, which the sponsors describe as "content".',
+  },
+  skill_book_iron_stomach: {
+    id: 'skill_book_iron_stomach',
+    name: 'Skill Book: Iron Stomach',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'iron_stomach',
+    description:
+      'Sticky. Do not ask with what. Either crawler can learn from it. ' +
+      'Potions come back round faster, and the room stops spinning sooner.',
+  },
+  skill_book_night_vision: {
+    id: 'skill_book_night_vision',
+    name: 'Skill Book: Night Vision',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    skillId: 'night_vision',
+    description:
+      'The ink is only legible in the dark, which the author found hilarious. ' +
+      'Only the Cat can learn from it. Widens how far she sees when she is the one leading.',
   },
   enchanted_bigboi_boxers: {
     id: 'enchanted_bigboi_boxers',

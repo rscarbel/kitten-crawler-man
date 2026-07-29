@@ -1,5 +1,5 @@
 export type PauseTab =
-  'main' | 'inventory' | 'stats' | 'spend' | 'achievements' | 'abilities' | 'settings';
+  'main' | 'inventory' | 'stats' | 'spend' | 'skills' | 'achievements' | 'abilities' | 'settings';
 
 export type ButtonRect = {
   x: number;

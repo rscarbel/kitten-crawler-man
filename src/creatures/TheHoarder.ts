@@ -284,6 +284,9 @@ export class TheHoarder extends Mob {
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
     items.push({ id: 'trollskin_shirt', quantity: 1 });
+    // Guaranteed, not rolled: Cockroach is the safety net for the cat's locked
+    // constitution, and a 0.5% vermin drop is no way to hand out a safety net.
+    items.push({ id: 'skill_book_cockroach', quantity: 1 });
     return items;
   }
 

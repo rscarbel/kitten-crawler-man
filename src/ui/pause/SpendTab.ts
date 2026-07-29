@@ -1,4 +1,4 @@
-import { type Player } from '../../Player';
+import { type Player, type StatName, CON_HP_BONUS_PER_POINT } from '../../Player';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { type ButtonRect, type PauseTab } from './types';
@@ -64,72 +64,117 @@ const BACK_BTN_WIDTH_MARGIN = 40;
 const BACK_BTN_CONTENT_H = 36;
 
 type StatDef = {
-  key: 'STR' | 'INT' | 'CON' | 'EXP';
+  /** Stat this card invests in; null for the human-only Explosives Handling track. */
+  statName: StatName | null;
   name: string;
   description: string;
+  /**
+   * Shown in place of the description when the System refuses to allocate points
+   * into this stat for this crawler.
+   */
+  lockedNote?: string;
   accent: string;
   dimBorder: string;
   cardBg: string;
   getValue: (p: Player) => number;
+  /** Invests one banked level-up point into this card's stat. */
+  spend: (p: Player) => void;
+};
+
+const spendStrength = (p: Player): void => p.spendPoint('strength');
+const spendIntelligence = (p: Player): void => p.spendPoint('intelligence');
+const spendConstitution = (p: Player): void => p.spendPoint('constitution');
+const spendDexterity = (p: Player): void => p.spendPoint('dexterity');
+const spendExplosivesHandling = (p: Player): void => {
+  if (p instanceof HumanPlayer) p.spendPoint('explosivesHandling');
 };
 
 const HUMAN_STAT_DEFS: StatDef[] = [
   {
-    key: 'STR',
+    statName: 'strength',
     name: 'Strength',
     description: 'Hit harder. Each point raises melee damage by 1.',
     accent: '#f97316',
     dimBorder: 'rgba(249,115,22,0.22)',
     cardBg: '#160b02',
     getValue: (p) => p.strength,
+    spend: spendStrength,
   },
   {
-    key: 'EXP',
+    statName: null,
     name: 'Explosives Handling',
     description: 'Bigger booms. Boosts dynamite damage & throw range.',
     accent: '#fbbf24',
     dimBorder: 'rgba(251,191,36,0.22)',
     cardBg: '#16110a',
     getValue: (p) => (p instanceof HumanPlayer ? p.explosivesHandling : 0),
+    spend: spendExplosivesHandling,
   },
   {
-    key: 'CON',
+    statName: 'constitution',
     name: 'Constitution',
-    description: 'Toughen up. Each point grants +2 maximum HP.',
+    description: `Toughen up. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
     accent: '#4ade80',
     dimBorder: 'rgba(74,222,128,0.22)',
     cardBg: '#031208',
     getValue: (p) => p.constitution,
+    spend: spendConstitution,
+  },
+  {
+    statName: 'dexterity',
+    name: 'Dexterity',
+    description: 'Stay untouched. Each point improves your chance to dodge an attack.',
+    accent: '#22d3ee',
+    dimBorder: 'rgba(34,211,238,0.22)',
+    cardBg: '#04141a',
+    getValue: (p) => p.dexterity,
+    spend: spendDexterity,
   },
 ];
 
 const CAT_STAT_DEFS: StatDef[] = [
   {
-    key: 'STR',
+    statName: 'strength',
     name: 'Strength',
     description: 'Sharper claws. Each point raises claw attack damage.',
     accent: '#f97316',
     dimBorder: 'rgba(249,115,22,0.22)',
     cardBg: '#160b02',
     getValue: (p) => p.strength,
+    spend: spendStrength,
   },
   {
-    key: 'INT',
+    statName: 'intelligence',
     name: 'Intelligence',
     description: 'Think bigger. Amplifies magic missile power & range.',
     accent: '#818cf8',
     dimBorder: 'rgba(129,140,248,0.22)',
     cardBg: '#08061a',
     getValue: (p) => p.intelligence,
+    spend: spendIntelligence,
   },
   {
-    key: 'CON',
+    statName: 'constitution',
     name: 'Constitution',
-    description: 'Nine lives. Each point grants +2 maximum HP.',
+    description: `Nine lives. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
+    lockedNote:
+      'Attribute locked by the System. Pet biscuit enhancement is permanent and non-negotiable.',
     accent: '#4ade80',
     dimBorder: 'rgba(74,222,128,0.22)',
     cardBg: '#031208',
     getValue: (p) => p.constitution,
+    spend: spendConstitution,
+  },
+  {
+    statName: 'dexterity',
+    name: 'Dexterity',
+    description: 'Feline grace. Each point improves your chance to dodge an attack.',
+    lockedNote: 'Auto-allocated by Enhanced Growth on level-up. No input required.',
+    accent: '#22d3ee',
+    dimBorder: 'rgba(34,211,238,0.22)',
+    cardBg: '#04141a',
+    getValue: (p) => p.dexterity,
+    spend: spendDexterity,
   },
 ];
 
@@ -147,21 +192,26 @@ function renderStatCard(
   hasPoints: boolean,
   onSpend?: () => void,
 ): void {
-  ctx.fillStyle = hasPoints ? stat.cardBg : '#0c1118';
+  // Locked cards read like the dimmed no-points state — the difference is that
+  // no amount of banked points will ever open them.
+  const isLocked = stat.statName !== null && !player.canSpendPointInto(stat.statName);
+  const canInvest = hasPoints && !isLocked;
+
+  ctx.fillStyle = canInvest ? stat.cardBg : '#0c1118';
   ctx.fillRect(localX, localY, w, CARD_H);
 
-  ctx.fillStyle = hasPoints ? stat.accent : '#475569';
+  ctx.fillStyle = canInvest ? stat.accent : '#475569';
   ctx.fillRect(localX, localY, CARD_BORDER_WIDTH, CARD_H);
 
-  ctx.strokeStyle = hasPoints ? stat.dimBorder : 'rgba(51,65,85,0.35)';
+  ctx.strokeStyle = canInvest ? stat.dimBorder : 'rgba(51,65,85,0.35)';
   ctx.lineWidth = 1;
   ctx.strokeRect(localX, localY, w, CARD_H);
 
   const textX = localX + CARD_BORDER_WIDTH + CARD_PADDING;
-  const accentColor = hasPoints ? stat.accent : '#64748b';
+  const accentColor = canInvest ? stat.accent : '#64748b';
   const rightEdge = localX + w - CARD_RIGHT_EDGE_OFFSET;
 
-  drawText(ctx, stat.name.toUpperCase(), {
+  drawText(ctx, isLocked ? `\u{1F512} ${stat.name.toUpperCase()}` : stat.name.toUpperCase(), {
     x: textX,
     y: localY + CARD_NAME_Y,
     bold: true,
@@ -173,7 +223,7 @@ function renderStatCard(
     x: rightEdge,
     y: localY + CARD_LEVEL_LABEL_Y,
     size: CARD_LEVEL_LABEL_SIZE,
-    color: hasPoints ? '#475569' : '#64748b',
+    color: canInvest ? '#475569' : '#64748b',
     align: 'right',
   });
 
@@ -189,16 +239,16 @@ function renderStatCard(
   const descMaxW =
     w -
     (CARD_BORDER_WIDTH + CARD_PADDING) -
-    (hasPoints ? BTN_W + CARD_DESC_WIDTH_BTN_OFFSET : CARD_PADDING);
-  drawText(ctx, stat.description, {
+    (canInvest ? BTN_W + CARD_DESC_WIDTH_BTN_OFFSET : CARD_PADDING);
+  drawText(ctx, isLocked ? (stat.lockedNote ?? stat.description) : stat.description, {
     x: textX,
     y: localY + CARD_DESC_Y,
     size: CARD_DESC_SIZE,
-    color: hasPoints ? '#64748b' : '#475569',
+    color: isLocked ? '#7c6f4a' : canInvest ? '#64748b' : '#475569',
     width: descMaxW,
   });
 
-  if (hasPoints) {
+  if (canInvest) {
     const btnLocalX = localX + w - BTN_W - CARD_BTN_X_OFFSET;
     const btnLocalY = localY + CARD_BTN_Y_OFFSET;
     const btnScreenY = btnLocalY + scrollTop - scrollY;
@@ -224,7 +274,7 @@ function renderStatCard(
         w: BTN_W,
         h: BTN_H,
         action: () => {
-          player.spendPoint(stat.key);
+          stat.spend(player);
           onSpend?.();
         },
       });

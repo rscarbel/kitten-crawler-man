@@ -618,9 +618,10 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SHELL_BLOCK_XP);
         return;
       }
-      this.dealDamage(target, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit');
-      target.applyStatus(makeStuck());
-      target.applyStatus(makeSpitVenom());
+      if (this.dealDamage(target, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit')) {
+        target.applyStatus(makeStuck());
+        target.applyStatus(makeSpitVenom());
+      }
       this.dashTarget = target;
       return;
     }
@@ -674,9 +675,10 @@ export class GrotesqueSpider extends Mob {
           this.activeProjectile = null;
           return;
         }
-        this.dealDamage(t, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit');
-        t.applyStatus(makeStuck());
-        t.applyStatus(makeSpitVenom());
+        if (this.dealDamage(t, randomInt(SPIT_DAMAGE_MIN, SPIT_DAMAGE_MAX), 'spit')) {
+          t.applyStatus(makeStuck());
+          t.applyStatus(makeSpitVenom());
+        }
         this.dashTarget = t;
         this.activeProjectile = null;
         return;
