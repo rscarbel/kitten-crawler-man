@@ -28,6 +28,25 @@ const RAT_CHANCE = 1.0;
 /** Rat level (always level 1). */
 const RAT_LEVEL = 1;
 
+/** Branch count leaving the start room toward the Hoarder's gateway. */
+const HOARDER_BRANCH_MIN = 2;
+const HOARDER_BRANCH_MAX = 4;
+
+/** Rooms along each pre-Hoarder branch — a short first stretch for a fresh crawler. */
+const HOARDER_BRANCH_ROOMS_MIN = 3;
+const HOARDER_BRANCH_ROOMS_MAX = 9;
+
+/** Branch count leaving the Hoarder's room toward the Juicer's gateway. */
+const JUICER_BRANCH_MIN = 2;
+const JUICER_BRANCH_MAX = 3;
+
+/** Rooms along each pre-Juicer branch — noticeably longer than the first stretch. */
+const JUICER_BRANCH_ROOMS_MIN = 6;
+const JUICER_BRANCH_ROOMS_MAX = 15;
+
+/** Safe rooms scattered through the post-Juicer free-roam region. */
+const LEVEL1_SCATTER_SAFE_ROOMS = 2;
+
 /** Troglodyte west-northwest offset. */
 const TROG_WEST_NW_X = -3;
 const TROG_WEST_NW_Y = -2;
@@ -70,6 +89,21 @@ export const level1: LevelDef = {
   ],
   hallwayMobs: [{ type: 'rat', chance: RAT_CHANCE, minLevel: RAT_LEVEL, maxLevel: RAT_LEVEL }],
   bossRooms: [{ type: 'the_hoarder' }, { type: 'juicer' }],
+  progression: {
+    gauntlets: [
+      {
+        bossType: 'the_hoarder',
+        branchCount: { min: HOARDER_BRANCH_MIN, max: HOARDER_BRANCH_MAX },
+        branchRooms: { min: HOARDER_BRANCH_ROOMS_MIN, max: HOARDER_BRANCH_ROOMS_MAX },
+      },
+      {
+        bossType: 'juicer',
+        branchCount: { min: JUICER_BRANCH_MIN, max: JUICER_BRANCH_MAX },
+        branchRooms: { min: JUICER_BRANCH_ROOMS_MIN, max: JUICER_BRANCH_ROOMS_MAX },
+      },
+    ],
+    scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
+  },
   nextLevelId: 'level2',
   extraSpawns: [
     {

@@ -1,16 +1,28 @@
 import type { LevelDef } from './types';
 
+/** Branch count leaving the start room toward the Krakaren Clone's gateway. */
+const KRAKAREN_BRANCH_MIN = 2;
+const KRAKAREN_BRANCH_MAX = 3;
+
+/** Rooms along each pre-Krakaren branch. */
+const KRAKAREN_BRANCH_ROOMS_MIN = 3;
+const KRAKAREN_BRANCH_ROOMS_MAX = 9;
+
+/** Safe rooms scattered through the post-Krakaren free-roam region. */
+const LEVEL2_SCATTER_SAFE_ROOMS = 1;
+
 /**
- * Level 2 — "Safe Haven".
- * A peaceful floor with no enemies. The timer is disabled.
- * Players can rest, regroup, and prepare for future floors.
+ * Level 2 — "The Dungeon, Level 2".
+ * Runs without a countdown timer and skips treasure-room guards, but is fully
+ * populated: troglodytes, llamas and goblins roam it, the Krakaren Clone guards
+ * the forced gauntlet, and the Ball of Swine waits in the optional arena.
  */
 export const level2: LevelDef = {
   id: 'level2',
   name: 'The Dungeon, Level 2',
   floorNumber: 2,
   music: 'bg_level_2',
-  mapSize: 200,
+  mapSize: 260,
   roomMobs: [
     {
       type: 'troglodyte',
@@ -43,6 +55,16 @@ export const level2: LevelDef = {
     { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
   ],
   bossRooms: [{ type: 'krakaren_clone' }],
+  progression: {
+    gauntlets: [
+      {
+        bossType: 'krakaren_clone',
+        branchCount: { min: KRAKAREN_BRANCH_MIN, max: KRAKAREN_BRANCH_MAX },
+        branchRooms: { min: KRAKAREN_BRANCH_ROOMS_MIN, max: KRAKAREN_BRANCH_ROOMS_MAX },
+      },
+    ],
+    scatterSafeRooms: LEVEL2_SCATTER_SAFE_ROOMS,
+  },
   hasArena: true,
   hasSpiderLab: true,
   isSafeLevel: true,

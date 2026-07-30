@@ -23,9 +23,17 @@ import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
 
+/** Identity of the safe room a player is standing in. */
+export interface SafeRoomInfo {
+  centre: { x: number; y: number };
+  guardsBossType?: string;
+}
+
 interface SafeRoomEntry {
   bounds: { x: number; y: number; w: number; h: number };
   centre: { x: number; y: number };
+  /** Boss this room is the last stop before, when it guards one. */
+  guardsBossType?: string;
   /** Tiles holding a standing lantern — the room's light sources. */
   lanternTiles: ReadonlyArray<{ x: number; y: number }>;
   /** Tiles holding a stove, whose steam has to be drawn per frame. */
@@ -141,6 +149,7 @@ export class SafeRoomSystem implements GameSystem {
         this.entries.push({
           bounds: sr.bounds,
           centre: sr.centre,
+          guardsBossType: sr.guardsBossType,
           lanternTiles: propTilesOfType(plan, SAFE_ROOM_LANTERN),
           stoveTiles: propTilesOfType(plan, SAFE_ROOM_STOVE),
           mordecaiHomeTileX: mordecai.x,
@@ -311,13 +320,13 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   /**
-   * Centre tile of the safe room `entity` is standing in, or null if it is in
-   * none.
+   * Which safe room `entity` is standing in, or null if it is in none.
    *
-   * Mordecai's floor advice measures its bearings from here, so a floor's two
-   * safe rooms genuinely point in different directions at the same boss.
+   * Mordecai's floor advice measures its bearings from the room's own centre, so
+   * a floor's safe rooms genuinely point in different directions at the same
+   * boss, and pins boss-specific dialog to the room that guards that boss.
    */
-  safeRoomCentreAt(entity: { x: number; y: number }): { x: number; y: number } | null {
+  safeRoomInfoAt(entity: { x: number; y: number }): SafeRoomInfo | null {
     const ts = TILE_SIZE;
     const tx = Math.floor((entity.x + ts * SafeRoomSystem.TILE_CENTER) / ts);
     const ty = Math.floor((entity.y + ts * SafeRoomSystem.TILE_CENTER) / ts);
@@ -328,7 +337,8 @@ export class SafeRoomSystem implements GameSystem {
         ty >= e.bounds.y &&
         ty < e.bounds.y + e.bounds.h,
     );
-    return entry?.centre ?? null;
+    if (entry === undefined) return null;
+    return { centre: entry.centre, guardsBossType: entry.guardsBossType };
   }
 
   isNearMordecai(entity: { x: number; y: number }): boolean {

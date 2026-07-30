@@ -210,8 +210,10 @@ export class ArenaSystem implements GameSystem {
     const tileCenter = 0.5;
     const tx = Math.floor((player.x + TILE_SIZE * tileCenter) / TILE_SIZE);
     const ty = Math.floor((player.y + TILE_SIZE * tileCenter) / TILE_SIZE);
-    // Door tiles span x: [doorTile.x-1, doorTile.x], y: [doorTile.y-1, doorTile.y+1]
-    // (matches the set built in GameMap.loadFromData)
+    // One row deeper than the door tiles the map blocks: on a progression floor
+    // the row south of the door is the antechamber's own floor, which is
+    // deliberately left walkable, so a player who has already joined the fight
+    // has to be pushed off it rather than stopped by the map.
     const onDoor =
       tx >= doorTile.x - 1 && tx <= doorTile.x && ty >= doorTile.y - 1 && ty <= doorTile.y + 1;
     if (!onDoor) return;

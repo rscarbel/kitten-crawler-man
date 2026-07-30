@@ -80,6 +80,27 @@ export interface OnMobKilledSpawn {
   spreadRadius: number;
 }
 
+/**
+ * One forced-progression unit on a floor: several branching room chains leaving
+ * a common entry, all converging on a single gateway safe room whose only onward
+ * exit is the named boss's room. Nothing beyond that boss room is reachable
+ * without clearing it.
+ */
+export interface GauntletDef {
+  /** Boss guarding this gauntlet's gateway; pairs with the same-index `bossRooms` entry. */
+  bossType: MobSpawnRule['type'];
+  branchCount: { min: number; max: number };
+  /** Rooms per branch, exclusive of the entry room and the gateway safe room. */
+  branchRooms: { min: number; max: number };
+}
+
+export interface ProgressionDef {
+  /** In order. `gauntlets[i].bossType` must equal `bossRooms[i].type`. */
+  gauntlets: GauntletDef[];
+  /** Extra safe rooms scattered in the free region (gateway safe rooms are additional). */
+  scatterSafeRooms: number;
+}
+
 /** Data-only description of a dungeon level. No game-logic dependencies. */
 export interface LevelDef {
   id: string;
@@ -88,17 +109,25 @@ export interface LevelDef {
   floorNumber: number;
   /** Default background music for this level, and what music resumes after boss fights/quests. */
   music: SoundId;
-  /** Side-length passed to `new GameMap(mapSize, TILE_SIZE)`. */
+  /** Side length of the square tile grid this floor is generated on. */
   mapSize: number;
   /** Mobs that can spawn at room centres (all non-start, non-special rooms). */
   roomMobs: MobSpawnRule[];
   /** Mobs that can spawn at hallway points. */
   hallwayMobs: MobSpawnRule[];
-  /** Boss room configurations — one boss room per entry, placed in rooms[2+]. */
+  /**
+   * Boss room configurations, one boss room per entry. Index-aligned with the
+   * generated map's `bossRooms`, and — on a progression floor — with
+   * `progression.gauntlets`.
+   */
   bossRooms?: Array<{ type: string }>;
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
-  /** Safe levels have no timer and spawn no enemies. */
+  /**
+   * Runs the floor without a countdown timer, and without the extra mobs that
+   * guard treasure rooms. Room, hallway and boss spawns are unaffected — a "safe"
+   * level is only safe from the clock.
+   */
   isSafeLevel?: boolean;
   /** Override the auto-calculated stairwell count (default: 1 per 50 regular rooms). */
   numStairwells?: number;
@@ -112,4 +141,12 @@ export interface LevelDef {
   extraSpawns?: ExtraSpawnRule[];
   /** Mobs to spawn when another mob is killed (event-driven). */
   onMobKilledSpawns?: OnMobKilledSpawn[];
+  /**
+   * Forces an early-floor boss order. When present the generator replaces free
+   * room placement with the declared gauntlets — spawn at map centre, branch
+   * chains, gateway safe room, gateway boss room, repeated per gauntlet — and
+   * only then generates a free-roam region. Absent means the classic free-roam
+   * layout from the first room.
+   */
+  progression?: ProgressionDef;
 }

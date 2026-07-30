@@ -14,7 +14,7 @@
  * cleared floor back to the AI chat for flavour.
  */
 
-import { cardinalDirection, randomInt } from '../utils';
+import { cardinalDirection } from '../utils';
 
 /** Substituted with the computed bearing before a `bearing` sentence is shown. */
 const DIRECTION_PLACEHOLDER = '{direction}';
@@ -25,7 +25,7 @@ export interface AdviceObjective {
   /** Tile position the player should head toward. */
   readonly target: { x: number; y: number } | null;
   /**
-   * Body text, one entry per dialog page.
+   * Body text, one entry per dialog page. May contain `{direction}`.
    *
    * Paged by the author rather than split by the advisor: the dialog box is
    * about six lines tall and narrows with the canvas, so a sentence-splitting
@@ -36,25 +36,15 @@ export interface AdviceObjective {
    * Closing sentence naming the bearing, with `{direction}` substituted. Dropped
    * entirely when `target` is `null` — the map fields it comes from are optional
    * types, and a missing one must not print `undefined` at the player.
+   *
+   * Absent on objectives whose pages already say where the thing is: the pinned
+   * gateway speeches are spoken in the room immediately before the boss, where
+   * "another crawler spotted it" would be absurd.
    */
-  readonly bearing: string;
+  readonly bearing?: string;
 }
 
-/**
- * Two objectives sharing one slot, spoken alternately.
- *
- * A first-class shape rather than a special case inside `nextAdvice`, so the
- * walk over a floor's objectives stays a plain in-order search for the first
- * incomplete one.
- */
-export interface AlternatingObjective {
-  readonly kind: 'alternating';
-  /** Identifies the slot's alternation state across conversations. */
-  readonly id: string;
-  readonly options: readonly [AdviceObjective, AdviceObjective];
-}
-
-export type AdviceSlot = AdviceObjective | AlternatingObjective;
+export type AdviceSlot = AdviceObjective;
 
 export interface AdviceSnapshot {
   readonly floorNumber: number;
@@ -71,15 +61,7 @@ export interface AdviceSnapshot {
   readonly objectives: ReadonlyArray<AdviceSlot>;
 }
 
-function isAlternating(slot: AdviceSlot): slot is AlternatingObjective {
-  return 'kind' in slot;
-}
-
 export class MordecaiAdvisor {
-  /** Which of an alternating slot's options is next, keyed by slot id. */
-  private readonly nextAlternation = new Map<string, number>();
-  private lastFloorNumber: number | null = null;
-
   /**
    * The pages of the first incomplete objective, or `null` when the floor holds
    * nothing left to point at.
@@ -89,55 +71,39 @@ export class MordecaiAdvisor {
    * casing.
    */
   nextAdvice(snapshot: AdviceSnapshot): ReadonlyArray<string> | null {
-    // Alternation is per floor: the same advisor instance surviving a floor
-    // change would otherwise carry floor 2's slot state into floor 3.
-    if (this.lastFloorNumber !== snapshot.floorNumber) {
-      this.nextAlternation.clear();
-      this.lastFloorNumber = snapshot.floorNumber;
-    }
-
-    for (const slot of snapshot.objectives) {
-      const objective = this.present(slot);
-      if (objective === null) continue;
+    for (const objective of snapshot.objectives) {
+      if (objective.complete) continue;
       return this.render(objective, snapshot.bearingOrigin);
     }
     return null;
   }
 
   /**
-   * Which objective a slot presents now, or `null` when the slot is finished.
+   * Renders one specific objective, bypassing the "first incomplete" walk.
    *
-   * Advancing the alternation here is safe because `nextAdvice` returns on the
-   * first slot that presents anything: a slot that is merely walked past is
-   * complete, and a complete alternating slot never reaches the advance.
+   * A gateway safe room speaks about the boss it guards and nothing else, so it
+   * needs to name its objective rather than take whatever is next in the floor's
+   * ordering.
    */
-  private present(slot: AdviceSlot): AdviceObjective | null {
-    if (!isAlternating(slot)) return slot.complete ? null : slot;
-
-    const [first, second] = slot.options;
-    if (first.complete && second.complete) return null;
-    // One left standing pins the slot to it, and deliberately does not advance
-    // the alternation — there is nothing to alternate with.
-    if (first.complete) return second;
-    if (second.complete) return first;
-
-    const stored = this.nextAlternation.get(slot.id);
-    const index = stored ?? randomInt(0, slot.options.length - 1);
-    this.nextAlternation.set(slot.id, (index + 1) % slot.options.length);
-    return slot.options[index];
+  renderObjective(
+    objective: AdviceObjective,
+    bearingOrigin: { x: number; y: number },
+  ): ReadonlyArray<string> {
+    return this.render(objective, bearingOrigin);
   }
 
   private render(
     objective: AdviceObjective,
     bearingOrigin: { x: number; y: number },
   ): ReadonlyArray<string> {
-    const pages = [...objective.pages];
     const { target } = objective;
-    if (target === null) return pages;
+    if (target === null) return [...objective.pages];
 
-    const bearing = objective.bearing
-      .split(DIRECTION_PLACEHOLDER)
-      .join(cardinalDirection(bearingOrigin, target));
+    const direction = cardinalDirection(bearingOrigin, target);
+    const pages = objective.pages.map((page) => page.split(DIRECTION_PLACEHOLDER).join(direction));
+    if (objective.bearing === undefined) return pages;
+
+    const bearing = objective.bearing.split(DIRECTION_PLACEHOLDER).join(direction);
     if (pages.length === 0) return [bearing];
 
     const lastIndex = pages.length - 1;
@@ -147,6 +113,12 @@ export class MordecaiAdvisor {
     return pages;
   }
 }
+
+/** The four gateway bosses whose speech is pinned to the safe room guarding them. */
+const GATEWAY_ADVICE_IDS = ['the_hoarder', 'juicer', 'krakaren_clone', 'ball_of_swine'] as const;
+
+/** A boss whose speech belongs to the safe room guarding it. */
+export type GatewayAdviceId = (typeof GATEWAY_ADVICE_IDS)[number];
 
 /** Every objective Mordecai has something to say about. */
 export type AdviceObjectiveId =
@@ -160,7 +132,7 @@ export type AdviceObjectiveId =
 
 interface AdviceText {
   readonly pages: ReadonlyArray<string>;
-  readonly bearing: string;
+  readonly bearing?: string;
 }
 
 /**
@@ -168,24 +140,27 @@ interface AdviceText {
  * scenes that assemble the snapshot — a scene's job is to answer "is it done and
  * where is it", not to hold half a page of dialog per floor.
  *
- * Every entry ends with the same "another crawler noticed it" framing, phrased so
- * it reads correctly for all eight bearings ("North East of here", not "to the
- * North East side").
+ * Entries with a `bearing` end with the same "another crawler noticed it"
+ * framing, phrased so it reads correctly for all eight bearings ("North East of
+ * here", not "to the North East side"). The gateway speeches carry no bearing:
+ * they are spoken in the room immediately before their boss, so they say where
+ * it is themselves.
  */
 const ADVICE_TEXT = {
   the_hoarder: {
     pages: [
-      'Start with the Hoarder. It is a neighbourhood boss — one of the easier things down here — and every crawler who has made it past the second floor cut their teeth on it.',
-      'It has been dragging every scrap on the floor back into one room, and it fights like something guarding a nest. Keep your distance when it rears up.',
+      "Up ahead in that hallway is a boss. The dungeon contains boss fights that will commence once you are in the boss's area.",
+      "In order to find the stairwell, it looks like you'll have no choice but to face up against this and potentially other bosses.",
+      'Just keep a cool head. She is a neighborhood boss, the weakest kind of boss, and she looks like a simple one.',
     ],
-    bearing: 'I heard another crawler spotted it {direction} of here.',
   },
   juicer: {
     pages: [
-      'The Juicer is a step up from the Hoarder. Take it on once you have a level or two on you.',
-      'And be careful of the troglodytes on the way. Their tongues are poisonous — never stop moving, because standing still is how you end up wearing it for half a minute.',
+      "I see we have another boss that there's no way you can avoid. Fortunately, this one is also just a neighborhood boss, but this one looks a little tougher.",
+      "I'm not allowed to tell you any details, but what I can say is be careful of his minions, the Troglodytes.",
+      "Troglodytes lash you with their tongues, which contains a deadly poison. You do not want to get hit with that or there's a solid chance you'll find that your journey ends here.",
+      "Troglodytes are pretty slow, so maybe don't stop moving and you'll be fine.",
     ],
-    bearing: 'I heard another crawler spotted it {direction} of here.',
   },
   defend_goblin_mother: {
     pages: [
@@ -195,10 +170,10 @@ const ADVICE_TEXT = {
   },
   krakaren_clone: {
     pages: [
-      'The Krakaren Clone is a simple enough fight, so long as you avoid the red spots on the floor.',
-      'A red spot means that patch is about to take massive damage. See one under your feet and move — do not finish your swing first.',
+      "I see a Krakaren Clone just {direction} of here. It is just a copy of the Krakaren boss, which really existed in this dungeon, but don't underestimate it nonetheless.",
+      "Krakaren may be noisy and obviously visible, but she has very powerful attacks. If you see the ground turn red below you, that is a signal that you may want to move or you'll die.",
+      "Krakaren is a very politicized figure here, but there's not really time to get into all that for now.",
     ],
-    bearing: 'I heard another crawler spotted it {direction} of here.',
   },
   spider_lab: {
     pages: [
@@ -209,10 +184,11 @@ const ADVICE_TEXT = {
   },
   ball_of_swine: {
     pages: [
-      'There is a guaranteed stairwell by the Ball of Swine. All you have to do is put down the borough boss and it is yours.',
-      'Its rolling attack is lethal — but drop things in its way, the gym equipment, and you will stop it cold.',
+      "Up ahead is a borough boss. That means it's tougher than the other fights you've had so far. However, it looks like you also have the option to ignore it and go around to see if you can find a different stairwell or find other challenges.",
+      "If you can beat this boss, you're guaranteed a stairwell to the next floor.",
+      'Bosses in this dungeon always have a secret to beating them. You may find that this boss is impossibly tough, and its rolling attack will kill most crawlers instantly, so this is a very dangerous foe.',
+      'However, there is always some trick that can help you defeat it. I cannot tell you any more than that.',
     ],
-    bearing: 'I heard another crawler spotted it {direction} of here.',
   },
   the_circus: {
     pages: [
@@ -223,12 +199,26 @@ const ADVICE_TEXT = {
   },
 } as const satisfies Record<AdviceObjectiveId, AdviceText>;
 
+/**
+ * Narrows a safe room's `guardsBossType` to the objective whose prose it pins.
+ *
+ * The tag is a mob type string carried on the map, so the two vocabularies have
+ * to be reconciled somewhere; they happen to agree on all four gateway bosses.
+ */
+export function gatewayAdviceId(bossType: string | undefined): GatewayAdviceId | null {
+  if (bossType === undefined) return null;
+  for (const id of GATEWAY_ADVICE_IDS) {
+    if (id === bossType) return id;
+  }
+  return null;
+}
+
 /** One objective, with its prose looked up and its live state supplied. */
 export function adviceObjective(
   id: AdviceObjectiveId,
   complete: boolean,
   target: { x: number; y: number } | null,
 ): AdviceObjective {
-  const { pages, bearing } = ADVICE_TEXT[id];
-  return { id, complete, target, pages, bearing };
+  const text: AdviceText = ADVICE_TEXT[id];
+  return { id, complete, target, pages: text.pages, bearing: text.bearing };
 }

@@ -14,6 +14,7 @@ import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel, spawnExtraMobs, createMob, spawnTreasureRoomMobs } from '../levels/spawner';
 import { getLevelDef } from '../levels';
+import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { PauseMenu } from '../ui/PauseMenu';
 import { DeathScreen } from '../ui/DeathScreen';
@@ -153,6 +154,7 @@ import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceObjective,
+  gatewayAdviceId,
   MordecaiAdvisor,
   type AdviceObjective,
   type AdviceSlot,
@@ -373,12 +375,6 @@ const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
 /** Floors Mordecai has a list of objectives for; the rest fall through to the AI chat. */
 const DUNGEON_FLOOR_ONE = 1;
 const DUNGEON_FLOOR_TWO = 2;
-/**
- * Identifies floor 2's shared slot to the advisor, which keys its alternation
- * state on it so the spider lab and the Ball of Swine take turns across separate
- * conversations.
- */
-const FLOOR_TWO_SIDE_OBJECTIVE_SLOT = 'floor_two_side_objective';
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
@@ -670,13 +666,8 @@ export class DungeonScene extends GameplayScene {
         new GameMap({
           mapSize: levelDef.mapSize,
           tileHeight: TILE_SIZE,
-          numBossRooms: levelDef.bossRooms?.length ?? 1,
-          numSafeRooms: 2,
-          numStairwellsOverride: levelDef.numStairwells,
           mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
-          hasArena: levelDef.hasArena ?? false,
-          bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
-          hasSpiderLab: levelDef.hasSpiderLab ?? false,
+          dungeon: dungeonOptionsForLevel(levelDef),
         });
       this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
 
@@ -2416,8 +2407,12 @@ export class DungeonScene extends GameplayScene {
    * same boss from both has to give two different answers.
    */
   private floorAdvice(active: { x: number; y: number }): ReadonlyArray<string> | null {
-    const bearingOrigin = this.safeRoom.safeRoomCentreAt(active);
-    if (bearingOrigin === null) return null;
+    const safeRoom = this.safeRoom.safeRoomInfoAt(active);
+    if (safeRoom === null) return null;
+    const bearingOrigin = safeRoom.centre;
+
+    const pinned = this.pinnedGatewayAdvice(safeRoom.guardsBossType);
+    if (pinned !== null) return this.mordecaiAdvisor.renderObjective(pinned, bearingOrigin);
 
     const objectives = this.floorObjectives();
     if (objectives.length === 0) return null;
@@ -2427,6 +2422,20 @@ export class DungeonScene extends GameplayScene {
       bearingOrigin,
       objectives,
     });
+  }
+
+  /**
+   * The speech a gateway safe room owes its own boss, or null.
+   *
+   * A room that stands between the player and a specific boss talks about that
+   * boss and nothing else, for as long as the boss is alive. Once it is dead the
+   * room rejoins the ordinary floor-wide advice flow.
+   */
+  private pinnedGatewayAdvice(guardsBossType: string | undefined): AdviceObjective | null {
+    const id = gatewayAdviceId(guardsBossType);
+    if (id === null) return null;
+    const objective = id === 'ball_of_swine' ? this.ballOfSwineObjective() : this.bossObjective(id);
+    return objective.complete ? null : objective;
   }
 
   /** What this floor still asks of the player, in the order Mordecai raises it. */
@@ -2447,11 +2456,7 @@ export class DungeonScene extends GameplayScene {
       case DUNGEON_FLOOR_TWO:
         return [
           this.bossObjective('krakaren_clone'),
-          {
-            kind: 'alternating',
-            id: FLOOR_TWO_SIDE_OBJECTIVE_SLOT,
-            options: [this.spiderLabObjective(), this.ballOfSwineObjective()],
-          },
+          this.spiderLabObjective(),
           this.defendQuestObjective(),
         ];
       default:
@@ -3709,6 +3714,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
     this.companion.update(ctx);
+    this.bossRoom.clampJoinedPlayers(this.human, this.cat);
     if (this.cat.pendingAutoFireSound) {
       this.cat.pendingAutoFireSound = false;
       this.audio?.play('cat_missile_fire', { volume: 0.5 });

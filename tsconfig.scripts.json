@@ -1,0 +1,10 @@
+{
+  "//": "The progression harness proves the map invariants, so it is held to the same strictness as the game code it imports. Node types are added here rather than in the root config so browser code cannot accidentally pick up Node globals. The older scripts/ harnesses predate this and are not covered.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["scripts/verify-progression.ts"]
+}

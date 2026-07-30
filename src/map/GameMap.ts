@@ -1,10 +1,8 @@
 import {
   FloorTypeValue,
   type TileContent,
-  VOID_TYPE,
   TREE,
   BUILDING_WALL,
-  METAL_WALL,
   ROOF_THATCH,
   ROOF_SLATE,
   ROOF_RED,
@@ -30,30 +28,16 @@ import {
   BRAZIER,
   MAIN_TOWER,
   SPRITE_BUILDING,
-  FENCE,
   MODERN_DECORATION,
-  WALKABLE_MODERN_DECORATION_VARIANTS,
-  RUINED_WALL,
   SAWDUST_FLOOR,
   CIRCUS_RING_EDGE,
   TENT_POLE,
   BLEACHER,
   CLUB_FLOOR,
   DANCE_FLOOR,
-  TOWN_WALL,
-  SAFE_ROOM_COUNTER,
-  SAFE_ROOM_MENU_BOARD,
-  SAFE_ROOM_HERB_RACK,
-  SAFE_ROOM_BANNER,
-  SAFE_ROOM_LANTERN,
-  SAFE_ROOM_STOVE,
-  SAFE_ROOM_TABLE,
-  SAFE_ROOM_STOOL,
-  SAFE_ROOM_LARDER,
-  SAFE_ROOM_COUNTER_BACK,
-  TILE_TYPE_COUNT,
   placeProp,
 } from './tileTypes';
+import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import {
@@ -65,6 +49,9 @@ import {
 } from '../core/clubLayout';
 import {
   generateDungeon,
+  type DungeonLevelOptions,
+  type GenerateDungeonOptions,
+  type SafeRoomData,
   type ArenaExterior,
   type QuestRoomData,
   type TreasureRoomData,
@@ -91,6 +78,8 @@ import {
 // ── Default map construction options ──────────────────────────────────────────
 const DEFAULT_MAP_SIZE = 100;
 const DEFAULT_TILE_HEIGHT = 10;
+/** Boss rooms carved when a caller supplies no dungeon settings at all. */
+const DEFAULT_BOSS_ROOM_COUNT = 1;
 
 // ── Interior building dimensions (width × height in tiles) ────────────────────
 export const TOWER_INTERIOR_W = 20;
@@ -211,69 +200,6 @@ const BLOCK_STAIRWELL = 8;
 /** Bits that block movement regardless of game state. */
 const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT;
 
-/** Tile types that cannot be walked on. Everything not listed here is walkable. */
-const NON_WALKABLE_TILE_TYPES: readonly number[] = [
-  FloorTypeValue.wall,
-  FloorTypeValue.water,
-  VOID_TYPE,
-  TREE,
-  BUILDING_WALL,
-  METAL_WALL,
-  ROOF_THATCH,
-  ROOF_SLATE,
-  ROOF_RED,
-  ROOF_GREEN,
-  ROOF_CIRCUS_RED,
-  ROOF_CIRCUS_BLUE,
-  ROOF_CIRCUS_PURPLE,
-  FOUNTAIN,
-  TORCH,
-  // A stone well is as solid as the fountain beside it. Its absence here was
-  // pre-existing: both town wells were walkable and the player could stand
-  // inside one. Every consumer that cares about a well — the murder quest's
-  // clue and the drink heal — measures distance to the tile rather than
-  // standing on it.
-  WELL,
-  TABLE,
-  BOOKSHELF,
-  BED,
-  FIREPLACE,
-  BARREL,
-  CHAIR,
-  BARREL_SIDE,
-  CRATE,
-  BRAZIER,
-  SPRITE_BUILDING,
-  RUINED_WALL,
-  TENT_POLE,
-  BLEACHER,
-  TOWN_WALL,
-  FENCE,
-  SAFE_ROOM_COUNTER,
-  SAFE_ROOM_COUNTER_BACK,
-  // The safe room's furnishings. `SAFE_ROOM_RUG` is deliberately absent — a
-  // runner is walkable ground decoration, not furniture.
-  SAFE_ROOM_MENU_BOARD,
-  SAFE_ROOM_HERB_RACK,
-  SAFE_ROOM_BANNER,
-  SAFE_ROOM_LANTERN,
-  SAFE_ROOM_STOVE,
-  SAFE_ROOM_TABLE,
-  SAFE_ROOM_STOOL,
-  SAFE_ROOM_LARDER,
-];
-
-/**
- * Walkability by tile type as a flat lookup, so the innermost walkability test
- * is one array read rather than a chain of inequality checks.
- * MODERN_DECORATION is excluded — its walkability depends on the tile's variant.
- */
-const WALKABLE_BY_TILE_TYPE = ((): Uint8Array => {
-  const table = new Uint8Array(TILE_TYPE_COUNT).fill(1);
-  for (const type of NON_WALKABLE_TILE_TYPES) table[type] = 0;
-  return table;
-})();
-
 // ── A* pathfinding constants ──────────────────────────────────────────────────
 /** Movement cost for a diagonal step (√2 approximated to 3 decimal places). */
 const DIAGONAL_MOVE_COST = 1.414;
@@ -352,13 +278,9 @@ const LOS_CROSSING_SLACK = 2;
 export interface GameMapOptions {
   mapSize?: number;
   tileHeight?: number;
-  numBossRooms?: number;
-  numSafeRooms?: number;
-  numStairwellsOverride?: number;
   mapType?: 'dungeon' | 'overworld';
-  hasArena?: boolean;
-  bossTypes?: string[];
-  hasSpiderLab?: boolean;
+  /** Dungeon generator settings. Ignored for overworld maps. */
+  dungeon?: DungeonLevelOptions;
   /**
    * Supply a fully-built tile grid to skip procedural generation entirely.
    * When provided, the caller is responsible for manually setting startTile,
@@ -379,11 +301,7 @@ export class GameMap {
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
   /** All safe rooms on this map (bounds + centre in tile coords). */
-  safeRooms: Array<{
-    bounds: { x: number; y: number; w: number; h: number };
-    centre: { x: number; y: number };
-    showBed?: boolean;
-  }> = [];
+  safeRooms: Array<SafeRoomData & { showBed?: boolean }> = [];
   /** All boss rooms generated on this map (bounds + centre in tile coords). */
   bossRooms: Array<{
     bounds: { x: number; y: number; w: number; h: number };
@@ -508,72 +426,43 @@ export class GameMap {
     const {
       mapSize = DEFAULT_MAP_SIZE,
       tileHeight = DEFAULT_TILE_HEIGHT,
-      numBossRooms = 1,
-      numSafeRooms = 2,
-      numStairwellsOverride,
       mapType,
-      hasArena = false,
-      bossTypes = [],
-      hasSpiderLab = false,
+      dungeon = { numBossRooms: DEFAULT_BOSS_ROOM_COUNT },
       prebuiltStructure,
     } = opts;
     this.tileHeight = tileHeight;
     if (prebuiltStructure) {
       this.structure = prebuiltStructure;
+    } else if (mapType === 'overworld') {
+      this.structure = this.generateOverworldMap(mapSize);
     } else {
-      this.structure = this.generate(
-        mapSize,
-        numBossRooms,
-        numSafeRooms,
-        numStairwellsOverride,
-        mapType,
-        hasArena,
-        bossTypes,
-        hasSpiderLab,
-      );
+      this.structure = this.generateDungeonMap({ ...dungeon, size: mapSize });
     }
     this.rebuildBlockedMasks();
   }
 
-  private generate(
-    size: number,
-    numBossRooms: number,
-    numSafeRooms: number,
-    numStairwellsOverride?: number,
-    mapType?: 'dungeon' | 'overworld',
-    hasArena = false,
-    bossTypes: string[] = [],
-    hasSpiderLab = false,
-  ): TileContent[][] {
-    if (mapType === 'overworld') {
-      const data = generateOverworld(size);
-      this.startTile = data.startTile;
-      this.safeRooms = data.safeRooms;
-      this.buildingEntries = data.buildingEntries;
-      this.townPlan = data.townPlan;
-      this.bossRooms = data.bossRooms;
-      this.mobSpawnPoints = [];
-      this.hallwaySpawnPoints = data.hallwaySpawnPoints;
-      this.setStairwellTiles(data.stairwellTiles);
-      this.mainTowerAnchor = data.mainTowerAnchor;
-      this.townSafeRadiusTiles = data.townSafeRadiusTiles;
-      this.townSquareCentre = data.townSquareCentre;
-      this.fountainCentre = data.fountainCentre;
-      this.circusCentre = data.circusCentre;
-      this.circusRadiusTiles = data.circusRadiusTiles;
-      this.doomsdayEscapeTile = data.doomsdayEscapeTile;
-      return data.grid;
-    }
+  private generateOverworldMap(size: number): TileContent[][] {
+    const data = generateOverworld(size);
+    this.startTile = data.startTile;
+    this.safeRooms = data.safeRooms;
+    this.buildingEntries = data.buildingEntries;
+    this.townPlan = data.townPlan;
+    this.bossRooms = data.bossRooms;
+    this.mobSpawnPoints = [];
+    this.hallwaySpawnPoints = data.hallwaySpawnPoints;
+    this.setStairwellTiles(data.stairwellTiles);
+    this.mainTowerAnchor = data.mainTowerAnchor;
+    this.townSafeRadiusTiles = data.townSafeRadiusTiles;
+    this.townSquareCentre = data.townSquareCentre;
+    this.fountainCentre = data.fountainCentre;
+    this.circusCentre = data.circusCentre;
+    this.circusRadiusTiles = data.circusRadiusTiles;
+    this.doomsdayEscapeTile = data.doomsdayEscapeTile;
+    return data.grid;
+  }
 
-    const data = generateDungeon(
-      size,
-      numBossRooms,
-      numSafeRooms,
-      numStairwellsOverride,
-      hasArena,
-      bossTypes,
-      hasSpiderLab,
-    );
+  private generateDungeonMap(options: GenerateDungeonOptions): TileContent[][] {
+    const data = generateDungeon(options);
     this.startTile = data.startTile;
     this.safeRooms = data.safeRooms;
     this.bossRooms = data.bossRooms;
@@ -591,9 +480,18 @@ export class GameMap {
           this.addArenaDoorTile(doorX + dx, doorY + dy);
         }
       }
-      // Also cover the south exit tile carved in the generator
-      this.addArenaDoorTile(doorX - 1, doorY + 1);
-      this.addArenaDoorTile(doorX, doorY + 1);
+      // Also cover the south exit tiles carved in front of the door — unless the
+      // door opens straight into a safe room, as it does on a progression floor,
+      // where those tiles are the antechamber's own floor and sealing them would
+      // block movement inside a safe room for the length of the fight.
+      const insideSafeRoom = (x: number, y: number): boolean =>
+        this.safeRooms.some(
+          ({ bounds }) =>
+            x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h,
+        );
+      for (const dx of [-1, 0]) {
+        if (!insideSafeRoom(doorX + dx, doorY + 1)) this.addArenaDoorTile(doorX + dx, doorY + 1);
+      }
     }
     return data.grid;
   }
@@ -1965,7 +1863,7 @@ export class GameMap {
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
-    return this.isWalkableTileType(this.structure[tileY][tileX]);
+    return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
   /**
@@ -1985,14 +1883,7 @@ export class GameMap {
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_EXTRA) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
-    return this.isWalkableTileType(this.structure[tileY][tileX]);
-  }
-
-  private isWalkableTileType(tile: TileContent): boolean {
-    if (tile.type === MODERN_DECORATION) {
-      return WALKABLE_MODERN_DECORATION_VARIANTS.has(tile.decorationVariant ?? 0);
-    }
-    return WALKABLE_BY_TILE_TYPE[tile.type] === 1;
+    return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
   isStairwellTile(tileX: number, tileY: number): boolean {

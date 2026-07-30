@@ -513,6 +513,15 @@ export class BossRoomSystem implements GameSystem {
               }
             }
           }
+        } else if (this[isInsider][i]) {
+          // A player who joined the fight and is now outside it was moved there by
+          // something other than walking — knockback through the doorway, or the
+          // companion AI, which runs after this system has already clamped. Put
+          // them back rather than recording the spot as somewhere they may stand:
+          // a gateway boss room has a door on its far side, so treating "outside"
+          // as safe ground would hand the player the whole floor beyond a living
+          // boss.
+          this.clampToBossRoom(player, state.bounds);
         } else {
           // Outside the room — track position for potential push-back.
           lastOutside[i] = { x: player.x, y: player.y };
@@ -539,8 +548,12 @@ export class BossRoomSystem implements GameSystem {
       }
 
       // Fight abort: boss still alive but no conscious players remain in the room.
-      const humanConscious = humanInRoom && human.isAlive && !human.isKnockedOut;
-      const catConscious = catInRoom && cat.isAlive && !cat.isKnockedOut;
+      // Re-tested after the clamp above, so a player pulled back in this frame is
+      // not counted as having left.
+      const humanConscious =
+        this.isEntityInRoom(human, state.bounds) && human.isAlive && !human.isKnockedOut;
+      const catConscious =
+        this.isEntityInRoom(cat, state.bounds) && cat.isAlive && !cat.isKnockedOut;
       if (boss && !humanConscious && !catConscious) {
         state.locked = false;
         state.fightAborted = true;
@@ -617,6 +630,22 @@ export class BossRoomSystem implements GameSystem {
     // Nowhere free: sharing the active player's tile still beats being sealed out.
     downed.x = anchor.x;
     downed.y = anchor.y;
+  }
+
+  /**
+   * Re-clamps every player who has joined a live fight.
+   *
+   * Called again after the companion AI has moved, which happens later in the
+   * frame than this system's own update — without it the companion can be walked
+   * out of a sealed boss room and end the frame beyond it.
+   */
+  clampJoinedPlayers(human: { x: number; y: number }, cat: { x: number; y: number }): void {
+    for (let i = 0; i < this.states.length; i++) {
+      const state = this.states[i];
+      if (!state.locked || state.defeated) continue;
+      if (this.humanIsInsider[i]) this.clampToBossRoom(human, state.bounds);
+      if (this.catIsInsider[i]) this.clampToBossRoom(cat, state.bounds);
+    }
   }
 
   private clampToBossRoom(
