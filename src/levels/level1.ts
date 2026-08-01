@@ -44,8 +44,26 @@ const JUICER_BRANCH_MAX = 3;
 const JUICER_BRANCH_ROOMS_MIN = 6;
 const JUICER_BRANCH_ROOMS_MAX = 15;
 
+/**
+ * Twice the room-count-derived default. The post-Juicer free region is large
+ * enough that one stairwell per 50 rooms leaves a first-time crawler wandering.
+ */
+const LEVEL1_STAIRWELL_MULTIPLIER = 2;
+
 /** Safe rooms scattered through the post-Juicer free-roam region. */
 const LEVEL1_SCATTER_SAFE_ROOMS = 2;
+
+/**
+ * Where floor 1's XP starts drying up. A crawler who clears both gauntlets
+ * lands around level 10, so everything past that is grinding a floor whose
+ * mobs the party has already outgrown.
+ */
+const LEVEL1_XP_HALF_LEVEL = 10;
+const LEVEL1_XP_QUARTER_LEVEL = 12;
+const LEVEL1_XP_TRICKLE_LEVEL = 15;
+const LEVEL1_XP_HALF_MULTIPLIER = 0.5;
+const LEVEL1_XP_QUARTER_MULTIPLIER = 0.25;
+const LEVEL1_XP_TRICKLE_MULTIPLIER = 0.1;
 
 /** Troglodyte west-northwest offset. */
 const TROG_WEST_NW_X = -3;
@@ -105,6 +123,12 @@ export const level1: LevelDef = {
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
   },
   nextLevelId: 'level2',
+  stairwellCountMultiplier: LEVEL1_STAIRWELL_MULTIPLIER,
+  xpDiminishingTiers: [
+    { minPlayerLevel: LEVEL1_XP_HALF_LEVEL, multiplier: LEVEL1_XP_HALF_MULTIPLIER },
+    { minPlayerLevel: LEVEL1_XP_QUARTER_LEVEL, multiplier: LEVEL1_XP_QUARTER_MULTIPLIER },
+    { minPlayerLevel: LEVEL1_XP_TRICKLE_LEVEL, multiplier: LEVEL1_XP_TRICKLE_MULTIPLIER },
+  ],
   extraSpawns: [
     {
       type: 'troglodyte',

@@ -54,6 +54,8 @@ import {
 } from '../systems/skillBookUse';
 import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
+import type { Townsperson } from '../creatures/Townsperson';
+import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../systems/mordecaiAdvice';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
@@ -323,6 +325,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly servicePanel: PricedMenuPanel | null;
   // Talk surface for ambient occupants; null when there are no occupants or no audio.
   private readonly citizenDialog: CitizenDialog | null;
+  /** Occupant the open conversation belongs to; used to notice the player walking off. */
+  private citizenDialogTarget: Townsperson | null = null;
   private gameOver = false;
   /** Kept for encounters created after construction (the tower's top-floor fight). */
   private readonly encounterAbilityManager: AbilityManager | null;
@@ -752,6 +756,14 @@ export class BuildingInteriorScene extends GameplayScene {
         this.exitDismissed = true;
         return;
       }
+      // Last before the pause menu: any box that can be raised over a live
+      // conversation also renders over it, so the chat is the bottom-most thing
+      // Escape can be aimed at.
+      if (this.citizenDialog?.isOpen === true) {
+        this.citizenDialog.close();
+        this.releaseCitizenDialogTarget();
+        return;
+      }
       this.pauseMenu.toggle();
     };
     window.addEventListener('keydown', this.escHandler);
@@ -945,13 +957,16 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       return;
     }
-    if (this.citizenDialog?.isOpen === true) {
+    // Deliberately does not return: the player has to be able to walk while the
+    // box is up, because walking off is what dismisses it.
+    this.dismissCitizenDialogIfWalkedAway();
+    const conversationOpen = this.citizenDialog?.isOpen === true;
+    if (conversationOpen) {
       this.citizenDialog.update();
       if (this.input.has(' ')) {
         this.input.clear();
         this.citizenDialog.advance();
       }
-      return;
     }
 
     // Sleep tick
@@ -986,8 +1001,10 @@ export class BuildingInteriorScene extends GameplayScene {
       this.inactive().isMoving = false;
     }
 
-    // Tab: switch active player
-    if (this.input.has('Tab')) {
+    // Held back mid-conversation to match the street: swapping characters would
+    // hand the walk-away check a body standing several tiles back, closing the
+    // box on a player who never moved.
+    if (!conversationOpen && this.input.has('Tab')) {
       this.input.clear();
       this.trySwitchActive();
     }
@@ -1106,6 +1123,9 @@ export class BuildingInteriorScene extends GameplayScene {
       abilityManager: combat.abilityManager,
       spells: combat.spells,
       hitLanded: false,
+      // No `xpDiminishingTiers`: interiors hang off the overworld, which declares
+      // no curve. A floor that both declares one and hosts an interior encounter
+      // would have to plumb its LevelDef through to here.
     };
     resolvePlayerAttacks(combatCtx);
     this.cat.flushPendingSubMissiles();
@@ -1299,8 +1319,34 @@ export class BuildingInteriorScene extends GameplayScene {
       this.townDialogContext(),
     );
     this.citizenDialog.open(roleDisplayName(target.role), lines);
+    // Pinned for the same reason street citizens are: the conversation ends when
+    // the *player* walks off, which only holds if the other party stays put.
+    target.frozen = true;
+    this.citizenDialogTarget = target;
     target.conversationCount++;
     return true;
+  }
+
+  /** Ends an occupant conversation once the player has plainly walked off. */
+  private dismissCitizenDialogIfWalkedAway(): void {
+    const target = this.citizenDialogTarget;
+    if (target === null) return;
+    if (this.citizenDialog?.isOpen !== true) {
+      this.releaseCitizenDialogTarget();
+      return;
+    }
+    const player = this.active();
+    const distance = Math.hypot(player.x - target.x, player.y - target.y);
+    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) {
+      this.citizenDialog.close();
+      this.releaseCitizenDialogTarget();
+    }
+  }
+
+  private releaseCitizenDialogTarget(): void {
+    if (this.citizenDialogTarget === null) return;
+    this.citizenDialogTarget.frozen = false;
+    this.citizenDialogTarget = null;
   }
 
   /**

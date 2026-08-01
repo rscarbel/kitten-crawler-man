@@ -683,6 +683,7 @@ function detectRoomEntrance(grid: TileContent[][], bounds: Rect): { wall: RoomWa
 export interface DungeonLevelOptions {
   numBossRooms: number;
   numStairwellsOverride?: number;
+  stairwellCountMultiplier?: number;
   hasArena?: boolean;
   bossTypes?: string[];
   hasSpiderLab?: boolean;
@@ -786,6 +787,7 @@ function buildDungeon(
     size,
     numBossRooms,
     numStairwellsOverride,
+    stairwellCountMultiplier = 1,
     hasArena = false,
     bossTypes = [],
     hasSpiderLab = false,
@@ -1746,8 +1748,9 @@ function buildDungeon(
   // 7. Stairwells
   const regularRooms = regularRoomIndices.map((i) => rooms[i]);
   const stairwellTiles: Point[] = [];
-  const stairwellCount =
+  const baseStairwellCount =
     numStairwellsOverride ?? Math.max(1, Math.floor(regularRooms.length / ROOMS_PER_STAIRWELL));
+  const stairwellCount = Math.max(1, Math.round(baseStairwellCount * stairwellCountMultiplier));
 
   if (progression !== undefined && lastGatewayBossRoom !== null) {
     // A stairwell must never be in sight of the last boss room's exit, and two
@@ -1760,13 +1763,31 @@ function buildDungeon(
     const candidates = byDistanceFromExit.filter(
       (centre) => distanceToRect(centre, exitBounds) >= STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
     );
-    for (const candidate of candidates) {
-      if (stairwellTiles.length >= stairwellCount) break;
-      const clearOfOthers = stairwellTiles.every(
-        (other) =>
-          Math.hypot(candidate.x - other.x, candidate.y - other.y) >= STAIRWELL_MIN_SEPARATION,
-      );
-      if (clearOfOthers) stairwellTiles.push(candidate);
+    // Farthest-point sampling rather than "first candidate that clears the rule":
+    // taking whichever room is currently most isolated pushes the set apart
+    // across the whole free region, instead of packing them into the far edge
+    // that the distance-from-exit sort happens to visit first.
+    if (candidates.length > 0) {
+      stairwellTiles.push(candidates[0]);
+      while (stairwellTiles.length < stairwellCount) {
+        let bestCandidate: Point | null = null;
+        let bestIsolation = 0;
+        for (const candidate of candidates) {
+          let isolation = Infinity;
+          for (const chosen of stairwellTiles) {
+            isolation = Math.min(
+              isolation,
+              Math.hypot(candidate.x - chosen.x, candidate.y - chosen.y),
+            );
+          }
+          if (isolation > bestIsolation) {
+            bestIsolation = isolation;
+            bestCandidate = candidate;
+          }
+        }
+        if (bestCandidate === null || bestIsolation < STAIRWELL_MIN_SEPARATION) break;
+        stairwellTiles.push(bestCandidate);
+      }
     }
     // A floor with no way down is unplayable, so the spacing rules yield rather
     // than the stairs: the farthest free room takes one even when it sits closer
@@ -1790,7 +1811,11 @@ function buildDungeon(
     });
     const step = Math.max(1, Math.floor(farRooms.length / stairwellCount));
     for (let i = 0; i < stairwellCount; i++) {
-      const r = farRooms[i * step];
+      // Asking for more stairwells than there are distant rooms walks the stride
+      // off the end of the list — place what fits rather than reading past it.
+      const roomIndex = i * step;
+      if (roomIndex >= farRooms.length) break;
+      const r = farRooms[roomIndex];
       stairwellTiles.push({
         x: Math.floor(r.x + r.w / 2),
         y: Math.floor(r.y + r.h / 2),

@@ -11,6 +11,7 @@ import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import { diminishedXpShare, type XpDiminishingTier } from '../levels/xpDiminishing';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -59,6 +60,8 @@ export interface CombatContext {
   destructibles?: DestructiblePropSystem;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
+  /** This floor's combat-XP diminishing curve. Absent means kills award full XP. */
+  xpDiminishingTiers?: readonly XpDiminishingTier[];
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
@@ -290,7 +293,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 }
 
 export function resolveKills(ctx: CombatContext): void {
-  const { mobs, human, cat, mobGrid, bus, abilityManager, spells } = ctx;
+  const { mobs, human, cat, mobGrid, bus, abilityManager, spells, xpDiminishingTiers } = ctx;
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
@@ -313,10 +316,12 @@ export function resolveKills(ctx: CombatContext): void {
     const totalXp = mob.scaledXpValue;
     const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
     const shareXp = Math.max(1, totalXp - topXp);
-    if (topPlayer?.gainXp(topXp)) {
+    // Scaled per character, not per kill: the two can sit on opposite sides of
+    // the floor's curve.
+    if (topPlayer?.gainXp(diminishedXpShare(topXp, xpDiminishingTiers, topPlayer.level))) {
       bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
     }
-    if (otherPlayer.gainXp(shareXp)) {
+    if (otherPlayer.gainXp(diminishedXpShare(shareXp, xpDiminishingTiers, otherPlayer.level))) {
       bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
     }
 

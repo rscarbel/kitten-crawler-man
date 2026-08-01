@@ -15,6 +15,7 @@ export function dungeonOptionsForLevel(levelDef: LevelDef): DungeonLevelOptions 
   return {
     numBossRooms: levelDef.bossRooms?.length ?? DEFAULT_BOSS_ROOM_COUNT,
     numStairwellsOverride: levelDef.numStairwells,
+    stairwellCountMultiplier: levelDef.stairwellCountMultiplier,
     hasArena: levelDef.hasArena ?? false,
     bossTypes: levelDef.bossRooms?.map((b) => b.type) ?? [],
     hasSpiderLab: levelDef.hasSpiderLab ?? false,

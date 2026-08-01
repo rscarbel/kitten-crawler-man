@@ -1,4 +1,5 @@
 import type { SoundId } from '../audio/sounds';
+import type { XpDiminishingTier } from './xpDiminishing';
 
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule {
@@ -124,6 +125,12 @@ export interface LevelDef {
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
   /**
+   * Diminishing returns on combat XP earned here, so an early floor can't be
+   * farmed into trivialising the ones below it. Absent means uncapped. Quest
+   * rewards ignore this entirely — only mob kills are scaled.
+   */
+  xpDiminishingTiers?: XpDiminishingTier[];
+  /**
    * Runs the floor without a countdown timer, and without the extra mobs that
    * guard treasure rooms. Room, hallway and boss spawns are unaffected — a "safe"
    * level is only safe from the clock.
@@ -131,6 +138,12 @@ export interface LevelDef {
   isSafeLevel?: boolean;
   /** Override the auto-calculated stairwell count (default: 1 per 50 regular rooms). */
   numStairwells?: number;
+  /**
+   * Scales the stairwell count so a floor can stay room-count-driven while still
+   * being easier or harder to find a way down on (default 1). Applied after
+   * `numStairwells`, so a floor may set either or both.
+   */
+  stairwellCountMultiplier?: number;
   /** Overworld levels use outdoor map generation instead of dungeon rooms. */
   isOverworld?: boolean;
   /** Whether this level has a circular arena with the Ball of Swine boss. */

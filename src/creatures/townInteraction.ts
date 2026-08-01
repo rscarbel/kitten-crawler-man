@@ -9,6 +9,14 @@
 import type { Townsperson } from './Townsperson';
 
 /**
+ * How far from the person the player must get before an open conversation
+ * closes itself. Several times the ~1.1-tile radius that opens one, so that a
+ * tapped movement key never ends a conversation the player meant to keep
+ * reading — only walking off does.
+ */
+export const CONVERSATION_WALK_AWAY_TILES = 3.5;
+
+/**
  * The nearest citizen whose center lies within `maxDist` pixels of the point
  * `(x, y)` (the player's origin — the half-tile draw offsets cancel), or `null`
  * when nobody is close enough to talk to.

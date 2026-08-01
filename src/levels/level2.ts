@@ -12,6 +12,17 @@ const KRAKAREN_BRANCH_ROOMS_MAX = 9;
 const LEVEL2_SCATTER_SAFE_ROOMS = 1;
 
 /**
+ * Where floor 2's XP starts drying up, set well above floor 1's curve so a
+ * party that descends on schedule never notices it.
+ */
+const LEVEL2_XP_HALF_LEVEL = 19;
+const LEVEL2_XP_THIRD_LEVEL = 21;
+const LEVEL2_XP_FIFTH_LEVEL = 24;
+const LEVEL2_XP_HALF_MULTIPLIER = 0.5;
+const LEVEL2_XP_THIRD_MULTIPLIER = 0.3;
+const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
+
+/**
  * Level 2 — "The Dungeon, Level 2".
  * Runs without a countdown timer and skips treasure-room guards, but is fully
  * populated: troglodytes, llamas and goblins roam it, the Krakaren Clone guards
@@ -70,6 +81,11 @@ export const level2: LevelDef = {
   isSafeLevel: true,
   nextLevelId: 'level3',
   numStairwells: 2,
+  xpDiminishingTiers: [
+    { minPlayerLevel: LEVEL2_XP_HALF_LEVEL, multiplier: LEVEL2_XP_HALF_MULTIPLIER },
+    { minPlayerLevel: LEVEL2_XP_THIRD_LEVEL, multiplier: LEVEL2_XP_THIRD_MULTIPLIER },
+    { minPlayerLevel: LEVEL2_XP_FIFTH_LEVEL, multiplier: LEVEL2_XP_FIFTH_MULTIPLIER },
+  ],
   extraSpawns: [
     {
       type: 'ball_of_swine',

@@ -55,6 +55,7 @@ import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
 import type { Townsperson } from '../creatures/Townsperson';
+import { CONVERSATION_WALK_AWAY_TILES } from '../creatures/townInteraction';
 import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
@@ -341,6 +342,8 @@ interface PotionSlot {
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 
 // Loot and drop rates
+/** Boss chests sit this far north of the boss room centre, clear of the boss itself. */
+const BOSS_CHEST_TILES_NORTH = 2;
 const LOOT_SPLIT_THRESHOLD = 0.5;
 const LOW_HP_LOOT_CHANCE = 0.4;
 const MED_HP_LOOT_CHANCE = 0.6;
@@ -743,6 +746,17 @@ export class DungeonScene extends GameplayScene {
       this.floorEntryHumanSnap =
         options?.floorEntryHumanSnap ?? revivedSnapshot(snapPlayer(this.human));
       this.floorEntryCatSnap = options?.floorEntryCatSnap ?? revivedSnapshot(snapPlayer(this.cat));
+
+      // The chests themselves are built much later in this constructor, but
+      // their tiles have to stop being walkable now: every spawner below asks
+      // the map what is walkable, and a tile whose chest does not exist yet
+      // looks like open floor.
+      for (const br of this.gameMap.bossRooms) {
+        this.gameMap.blockTilePermanently(br.centre.x, br.centre.y - BOSS_CHEST_TILES_NORTH);
+      }
+      for (const tr of this.gameMap.treasureRooms) {
+        this.gameMap.blockTilePermanently(tr.centre.x, tr.centre.y);
+      }
 
       this.mobs = spawnForLevel(levelDef, this.gameMap);
       this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
@@ -1261,10 +1275,9 @@ export class DungeonScene extends GameplayScene {
     this.rewardGrantedDialog.audio = this.audio;
     this.skillBookPrompt.audio = this.audio;
 
-    // Boss chests — placed 2 tiles above each boss room centre
     this.gameMap.bossRooms.forEach((br, i) => {
       const cx = br.centre.x;
-      const cy = br.centre.y - 2;
+      const cy = br.centre.y - BOSS_CHEST_TILES_NORTH;
       this.treasureChests.addBossChest(cx, cy, i);
       this.gameMap.blockTilePermanently(cx, cy);
     });
@@ -2423,6 +2436,60 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Anything that takes the floor away from ordinary play: a modal, a menu, a
+   * quest interjection, the death screen. Street chat is the one dialog that
+   * does *not* belong here — the player has to keep walking during it.
+   */
+  private get gameplayHalted(): boolean {
+    return (
+      this.gameOver ||
+      this.levelUpDialog.isShowing ||
+      this.rewardGrantedDialog.isShowing ||
+      this.skillBookPrompt.isOpen ||
+      this.pauseMenu.isOpen ||
+      this.chestRewardDialog.isOpen ||
+      this.stairwell.menuOpen ||
+      this.levelCompleteScreen.isActive ||
+      this.building?.menuOpen === true ||
+      this.defendQuest.isDialogOpen ||
+      this.spiderQuest.isDialogOpen ||
+      this.spiderQuest.isDungeonPaused ||
+      this.circusQuest.isDialogOpen ||
+      this.murderQuest.isDialogOpen ||
+      this.noticeBoard?.isOpen === true ||
+      this.marketPanel?.isOpen === true ||
+      this.fortuneTeller?.isOpen === true ||
+      this.playerChat.isOpen
+    );
+  }
+
+  /**
+   * Ends a street conversation once the player has plainly walked off.
+   *
+   * The threshold is several times the ~1.1-tile radius that opens one, so that
+   * a tapped movement key reads as standing still and only a deliberate walk
+   * closes the box.
+   */
+  private dismissCitizenDialogIfWalkedAway(): void {
+    const target = this.citizenDialogTarget;
+    const dialog = this.citizenDialog;
+    if (target === null || dialog?.isOpen !== true) return;
+    const active = this.active();
+    const distance = Math.hypot(active.x - target.x, active.y - target.y);
+    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) dialog.close();
+  }
+
+  /**
+   * Small talk loses to anything that seized the frame — a quest interjection
+   * the player walked into, a level-up, the death screen. Without this the two
+   * boxes render on top of each other and the chat eats the Space presses meant
+   * for the interruption.
+   */
+  private yieldCitizenDialogToInterruption(): void {
+    if (this.citizenDialog?.isOpen === true && this.gameplayHalted) this.citizenDialog.close();
+  }
+
+  /**
    * Mordecai's answer, from the highest-ranked of three sources that has one:
    *
    *     tutorial (if it handles it) → floor advice → AI chat
@@ -3103,12 +3170,15 @@ export class DungeonScene extends GameplayScene {
   }
 
   update(): void {
+    this.yieldCitizenDialogToInterruption();
+    this.dismissCitizenDialogIfWalkedAway();
     if (this.citizenDialogTarget !== null && this.citizenDialog?.isOpen !== true) {
       this.citizenDialogTarget.frozen = false;
       this.citizenDialogTarget = null;
     }
     aiAdapter.update();
     this.playerChat.update();
+    this.citizenDialog?.update();
     if (this._companionErrorMsg !== null) {
       this._companionErrorMsg.framesLeft--;
       if (this._companionErrorMsg.framesLeft <= 0) {
@@ -3171,28 +3241,7 @@ export class DungeonScene extends GameplayScene {
     // own click handler, and the prompt it opens is itself one of the gates.
     this.openPendingSkillBookPrompt();
 
-    if (
-      this.gameOver ||
-      this.levelUpDialog.isShowing ||
-      this.rewardGrantedDialog.isShowing ||
-      this.skillBookPrompt.isOpen ||
-      this.pauseMenu.isOpen ||
-      this.chestRewardDialog.isOpen ||
-      this.stairwell.menuOpen ||
-      this.levelCompleteScreen.isActive ||
-      this.building?.menuOpen ||
-      this.defendQuest.isDialogOpen ||
-      this.spiderQuest.isDialogOpen ||
-      this.spiderQuest.isDungeonPaused ||
-      this.circusQuest.isDialogOpen ||
-      this.murderQuest.isDialogOpen ||
-      this.citizenDialog?.isOpen === true ||
-      this.noticeBoard?.isOpen === true ||
-      this.marketPanel?.isOpen === true ||
-      this.fortuneTeller?.isOpen === true ||
-      this.playerChat.isOpen
-    ) {
-      this.citizenDialog?.update();
+    if (this.gameplayHalted) {
       this.marketPanel?.update();
       return;
     }
@@ -3903,6 +3952,7 @@ export class DungeonScene extends GameplayScene {
       spells: this.spells,
       destructibles: this.destructibles ?? undefined,
       hitLanded: false,
+      xpDiminishingTiers: this.levelDef.xpDiminishingTiers,
     };
     resolvePlayerAttacks(combatCtx);
     this.cat.flushPendingSubMissiles();
