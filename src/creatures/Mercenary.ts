@@ -25,9 +25,18 @@ import {
 const AGGRO_RADIUS_TILES = 12;
 const STRIKE_RANGE_TILES = 0.9;
 const ATTACK_COOLDOWN_FRAMES = 45;
+/** Length of the visible swing — short enough to finish well inside the cooldown. */
+const STRIKE_ANIM_FRAMES = 18;
 const LEASH_RADIUS_TILES = 14;
-const RETURN_THRESHOLD_TILES = 1.5;
-const RETURN_STOP_TILES = 1.0;
+/**
+ * Follow band. The merc only sets off once the owner is `RETURN_THRESHOLD_TILES`
+ * away and parks at `RETURN_STOP_TILES`, so the gap between the two is real
+ * hysteresis: a tighter band had it arriving, being nudged out of range by the
+ * owner's next step, and re-pathing every frame — which reads on screen as the
+ * sprite vibrating against the player's shoulder.
+ */
+const RETURN_THRESHOLD_TILES = 3.0;
+const RETURN_STOP_TILES = 2.2;
 const CENTER_OFFSET = 0.5;
 const FOLLOW_STOP_RANGE_RATIO = 0.7;
 const STRIKE_TRIGGER_RANGE_RATIO = 1.2;
@@ -59,6 +68,8 @@ export class Mercenary extends Mob {
 
   private attackCooldown = 0;
   private animPhase = 0;
+  /** Frames left in the strike animation; drives the swing pose while it runs. */
+  private strikeAnimFrames = 0;
   private readonly aggroRangePx: number;
   private readonly strikeRangePx: number;
   private readonly leashPx: number;
@@ -103,6 +114,7 @@ export class Mercenary extends Mob {
     if (!this.isAlive) return;
     this.animPhase++;
     if (this.attackCooldown > 0) this.attackCooldown--;
+    if (this.strikeAnimFrames > 0) this.strikeAnimFrames--;
 
     const ownerCx = this.owner.x + TILE_SIZE * CENTER_OFFSET;
     const ownerCy = this.owner.y + TILE_SIZE * CENTER_OFFSET;
@@ -133,8 +145,10 @@ export class Mercenary extends Mob {
           TILE_SIZE * RETURN_STOP_TILES,
         );
       } else {
+        // Stand at ease rather than wander: `doWander` drifts back toward the
+        // merc's spawn tile, which for a bodyguard that has followed the player
+        // across the floor means constantly tugging away from them.
         this.isMoving = false;
-        this.doWander();
       }
       return;
     }
@@ -164,8 +178,15 @@ export class Mercenary extends Mob {
     ) {
       nearest.takeDamageFrom(this.strikeDamage, this.owner, 'melee');
       this.attackCooldown = ATTACK_COOLDOWN_FRAMES;
+      this.strikeAnimFrames = STRIKE_ANIM_FRAMES;
       this.attackSoundPending = true;
     }
+  }
+
+  /** 0→1 through the current swing, or null when the merc isn't mid-strike. */
+  private strikeProgress(): number | null {
+    if (this.strikeAnimFrames <= 0) return null;
+    return 1 - this.strikeAnimFrames / STRIKE_ANIM_FRAMES;
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
@@ -175,7 +196,10 @@ export class Mercenary extends Mob {
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = DAMAGE_FLASH_BRIGHTNESS;
-    drawClubNpc(ctx, sx, sy, tileSize, this.spriteVariant, this.animPhase, this.facingX);
+    drawClubNpc(ctx, sx, sy, tileSize, this.spriteVariant, this.animPhase, this.facingX, 0, {
+      walking: this.isMoving,
+      attack: this.strikeProgress(),
+    });
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 

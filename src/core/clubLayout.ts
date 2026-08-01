@@ -53,43 +53,9 @@ export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
   { id: 'sledge', tile: { x: 12, y: 14 }, label: 'The Sledge' },
   { id: 'bar', tile: { x: 3, y: 3 }, label: 'Bar' },
   { id: 'market', tile: { x: 3, y: 14 }, label: 'Market' },
-  { id: 'casino', tile: { x: 20, y: 3 }, label: 'Casino' },
+  { id: 'casino', tile: { x: 20, y: 4 }, label: 'Casino' },
   { id: 'mercenary', tile: { x: 20, y: 14 }, label: 'Meat Shields' },
   { id: 'vip', tile: { x: 12, y: 2 }, label: 'VIP Lounge' },
-];
-
-/**
- * Solid furniture footprints inside the club. Blocked for collision so players
- * and companions can't walk through the bar counter, casino table, market
- * stall, weapon rack, or VIP couch. Every tile stays clear of a station's
- * approach (stations interact from up to 2.6 tiles away), so the Sledge and the
- * vendors remain reachable. Collision only — the visuals come from
- * `drawClubDecor`, so these tiles still render as ordinary club floor.
- */
-export const CLUB_FURNITURE_TILES: ReadonlyArray<{ x: number; y: number }> = [
-  // The Bar — the counter the bartender works behind (station at (3,3)).
-  { x: 2, y: 4 },
-  { x: 3, y: 4 },
-  { x: 4, y: 4 },
-  // The Casino — the felt table (dealer at (20,3), reachable from the north).
-  { x: 19, y: 4 },
-  { x: 20, y: 4 },
-  { x: 21, y: 4 },
-  { x: 19, y: 5 },
-  { x: 20, y: 5 },
-  { x: 21, y: 5 },
-  // The Market — crates along the stall front (vendor at (3,14)).
-  { x: 2, y: 15 },
-  { x: 3, y: 15 },
-  { x: 4, y: 15 },
-  // Meat Shields — the weapon rack (recruiter at (20,14)).
-  { x: 19, y: 15 },
-  { x: 20, y: 15 },
-  { x: 21, y: 15 },
-  // VIP Lounge — the velvet couch (host at (12,2)).
-  { x: 11, y: 3 },
-  { x: 12, y: 3 },
-  { x: 13, y: 3 },
 ];
 
 /** Doctor Bones the skeleton DJ — cosmetic, spins records just north of the dance floor. */
@@ -132,13 +98,26 @@ export const CLUB_ZONES: ReadonlyArray<ClubZone> = [
 ];
 
 /**
- * Open floor near the entrance where cosmetic patrons mill about — clear of the
- * dance floor, the alcove dividers, and the walls, so wandering never clips.
+ * Whether cosmetic patrons may stand on a tile. They have the run of the club's
+ * open floor — the entrance hall, the corridors flanking the dance floor, and
+ * the aisles outside the alcoves — but stay out of the dance floor (that belongs
+ * to the dancers) and out of the station rooms (a patron loitering behind the
+ * bar reads as a bug, and they would shove the staff off their marks).
+ *
+ * Walkability is the caller's job: this only answers "is this somewhere a patron
+ * belongs", and knows nothing about walls or furniture.
  */
-export const CLUB_PATRON_AREA: { x0: number; y0: number; x1: number; y1: number } = {
-  x0: 8,
-  y0: 12,
-  x1: 15,
-  y1: 16,
-};
-export const CLUB_PATRON_COUNT = 6;
+export function isClubPatronTile(tx: number, ty: number): boolean {
+  const onDanceFloor =
+    tx >= CLUB_DANCE_FLOOR.x0 &&
+    tx <= CLUB_DANCE_FLOOR.x1 &&
+    ty >= CLUB_DANCE_FLOOR.y0 &&
+    ty <= CLUB_DANCE_FLOOR.y1;
+  if (onDanceFloor) return false;
+  for (const zone of CLUB_ZONES) {
+    if (tx >= zone.x0 && tx <= zone.x1 && ty >= zone.y0 && ty <= zone.y1) return false;
+  }
+  return true;
+}
+
+export const CLUB_PATRON_COUNT = 12;

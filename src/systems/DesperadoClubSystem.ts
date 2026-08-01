@@ -1,30 +1,31 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
-import type { GameSystem } from './GameSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { AchievementManager, AchievementId } from '../core/AchievementManager';
+import type { GameMap } from '../map/GameMap';
+import type { InteriorFigure } from '../core/InteriorFigure';
 import {
   CLUB_STATIONS,
   CLUB_DANCE_FLOOR,
   CLUB_DJ_TILE,
   CLUB_DANCER_TILES,
   CLUB_INTERIOR_W,
-  CLUB_PATRON_AREA,
-  CLUB_PATRON_COUNT,
   type ClubStation,
   type ClubStationId,
 } from '../core/clubLayout';
+import { CLUB_PROPS, propSortY } from '../core/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
+import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
-import { stepWander, type WanderParams, type WanderStep } from '../creatures/townWander';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { ClubCasinoSystem } from './ClubCasinoSystem';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem } from './ClubVipLoungeSystem';
+import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
 
 const STATION_INTERACT_RANGE = 2.6;
 const TILE_HALF = 0.5;
@@ -44,28 +45,8 @@ interface EscortFollower {
   y: number;
 }
 
-// Wandering patrons — cosmetic figures that stroll near the entrance so the floor feels alive.
-const PATRON_SPEED_MIN = 0.5;
-const PATRON_SPEED_MAX = 1.0;
-const PATRON_ARRIVE_DIST = 4;
-const PATRON_PAUSE_MIN = 24;
-const PATRON_PAUSE_MAX = 120;
-// Spread patron appearance seeds apart so adjacent patrons don't share a look.
-const PATRON_SEED_STRIDE = 7;
-const PATRON_SEED_OFFSET = 3;
-// Minimum horizontal drift toward the target before a patron flips which way it faces.
-const PATRON_FACING_DEADZONE = 1;
-
-interface Patron {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
-  speed: number;
-  seed: number;
-  facingX: number;
-  pause: number;
-}
+/** Below this per-frame travel an escort counts as standing still, not walking. */
+const ESCORT_WALK_EPSILON = 0.12;
 
 // Dance-floor light overlay
 const DANCE_LIGHT_COLORS = ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'];
@@ -167,11 +148,17 @@ function promptLabel(station: ClubStation): string {
 
 /**
  * Host system for the Desperado Club interior (the analog of SafeRoomSystem /
- * ShopSystem): the Sledge's greeting + membership gate, cosmetic dance-floor
- * lights, DJ and dancers, and proximity prompts for every station. The
- * bar/market shops, the casino and the mercenary guild attach to it.
+ * ShopSystem): the Sledge's greeting + membership gate, the floor dressing and
+ * dance-floor lights, the furniture and staff that join the interior's Y-sorted
+ * pass, the wandering crowd, and proximity prompts for every station. The
+ * bar/market shops, the casino, the mercenary guild and the VIP lounge attach
+ * to it.
+ *
+ * Deliberately not a `GameSystem`: its update needs the crawlers' positions to
+ * push the crowd around, which the generic per-frame `SystemContext` contract
+ * doesn't carry. `BuildingInteriorScene` owns and drives it directly.
  */
-export class DesperadoClubSystem implements GameSystem {
+export class DesperadoClubSystem {
   private readonly dialog: QuestDialog;
   private animTime = 0;
 
@@ -181,23 +168,28 @@ export class DesperadoClubSystem implements GameSystem {
   private readonly guild: MercenaryGuildSystem;
   private readonly vip: ClubVipLoungeSystem;
 
-  /** Escort Cretins trailing the player once hired from the VIP Lounge; lazily positioned on first render. */
+  /** Escort Cretins trailing the player once hired from the VIP Lounge; lazily positioned on first update. */
   private escortFollowers: EscortFollower[] | null = null;
+  /** Per-escort travel last frame, so a stationary bodyguard doesn't play a walk cycle. */
+  private readonly escortWalking: boolean[] = [false, false];
 
-  /** Cosmetic patrons that wander the entrance floor; lazily seeded on first update. */
-  private patrons: Patron[] | null = null;
-  /** Reused output for `stepWander`, so the patron loop allocates nothing. */
-  private readonly wanderStep: WanderStep = { dx: 0, dy: 0, moving: false };
+  private readonly crowd: ClubCrowdSystem;
 
-  /** Shared wander tuning for the patrons (open floor, so no walkability gate). */
-  private readonly patronWander: WanderParams = {
-    pickTarget: () => this.randomPatronPoint(),
-    arriveDist: PATRON_ARRIVE_DIST,
-    pauseMin: PATRON_PAUSE_MIN,
-    pauseMax: PATRON_PAUSE_MAX,
-  };
+  /**
+   * Rebuilt each frame: the figures a patron must not walk into. Held as a field
+   * so a floor full of people costs no per-frame allocation.
+   */
+  private readonly crowdObstacles: CrowdBody[] = [];
+
+  /** The club's standing cast — furniture and staff — neither of which ever moves. */
+  private readonly fixtureFigures: ReadonlyArray<InteriorFigure> = this.buildFixtureFigures();
+  /** Refilled each frame from the fixtures plus whoever is walking around. */
+  private readonly sortedFigures: InteriorFigure[] = [];
+  /** Built with the escort itself; empty until the VIP lounge hires one. */
+  private escortFigureList: ReadonlyArray<InteriorFigure> = [];
 
   constructor(
+    map: GameMap,
     private readonly membership: ClubMembership,
     roster: MercenaryRoster,
     private readonly audio: AudioManager | null,
@@ -205,6 +197,7 @@ export class DesperadoClubSystem implements GameSystem {
     private readonly catAchievements?: AchievementManager,
   ) {
     this.dialog = new QuestDialog(audio);
+    this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
     this.casino = new ClubCasinoSystem(audio);
@@ -245,9 +238,10 @@ export class DesperadoClubSystem implements GameSystem {
     );
   }
 
-  update(): void {
+  update(active: Player, companion: Player | null): void {
     this.animTime++;
-    this.updatePatrons();
+    this.updateEscort(active);
+    this.crowd.update(this.staticCrowdBodies(active, companion));
     this.barShop.update();
     this.marketShop.update();
     if (this.barShop.purchasePending || this.marketShop.purchasePending) {
@@ -273,41 +267,22 @@ export class DesperadoClubSystem implements GameSystem {
     }
   }
 
-  private randomPatronPoint(): { x: number; y: number } {
-    const tx = CLUB_PATRON_AREA.x0 + Math.random() * (CLUB_PATRON_AREA.x1 - CLUB_PATRON_AREA.x0);
-    const ty = CLUB_PATRON_AREA.y0 + Math.random() * (CLUB_PATRON_AREA.y1 - CLUB_PATRON_AREA.y0);
-    return { x: tx * TILE_SIZE, y: ty * TILE_SIZE };
-  }
-
-  private ensurePatrons(): void {
-    if (this.patrons !== null) return;
-    const patrons: Patron[] = [];
-    for (let i = 0; i < CLUB_PATRON_COUNT; i++) {
-      const start = this.randomPatronPoint();
-      const target = this.randomPatronPoint();
-      patrons.push({
-        x: start.x,
-        y: start.y,
-        targetX: target.x,
-        targetY: target.y,
-        speed: PATRON_SPEED_MIN + Math.random() * (PATRON_SPEED_MAX - PATRON_SPEED_MIN),
-        seed: i * PATRON_SEED_STRIDE + PATRON_SEED_OFFSET,
-        facingX: 1,
-        pause: Math.floor(Math.random() * PATRON_PAUSE_MAX),
-      });
+  /**
+   * The immovable figures on the floor this frame: every station NPC, the DJ,
+   * the dancers, the crawlers, and any hired escort. Patrons are pushed clear of
+   * all of them, which is what stops the crowd wading through the Sledge.
+   */
+  private staticCrowdBodies(active: Player, companion: Player | null): ReadonlyArray<CrowdBody> {
+    this.crowdObstacles.length = 0;
+    for (const station of CLUB_STATIONS) this.crowdObstacles.push(tileBody(station.tile));
+    this.crowdObstacles.push(tileBody(CLUB_DJ_TILE));
+    for (const dancer of CLUB_DANCER_TILES) this.crowdObstacles.push(tileBody(dancer));
+    this.crowdObstacles.push(playerBody(active));
+    if (companion !== null) this.crowdObstacles.push(playerBody(companion));
+    for (const follower of this.escortFollowers ?? []) {
+      this.crowdObstacles.push(playerBody(follower));
     }
-    this.patrons = patrons;
-  }
-
-  private updatePatrons(): void {
-    this.ensurePatrons();
-    if (this.patrons === null) return;
-    for (const p of this.patrons) {
-      stepWander(p, this.patronWander, this.wanderStep);
-      if (this.wanderStep.moving && Math.abs(this.wanderStep.dx) > PATRON_FACING_DEADZONE) {
-        p.facingX = this.wanderStep.dx < 0 ? -1 : 1;
-      }
-    }
+    return this.crowdObstacles;
   }
 
   /** Grants the Desperado Pass once the greeting dialog is taken to its final page. */
@@ -424,12 +399,83 @@ export class DesperadoClubSystem implements GameSystem {
     this.dismissModal();
   }
 
-  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
+  /**
+   * Flat-on-the-ground dressing: zone rugs, floor wear and the dance-floor
+   * lights. Drawn before the interior's Y-sorted pass so everything that stands
+   * on the club floor — furniture, staff, crawlers — draws on top of it.
+   */
+  renderFloor(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     drawClubDecor(ctx, camX, camY);
     this.renderDanceFloorLights(ctx, camX, camY);
-    this.renderNpcs(ctx, camX, camY);
-    this.renderEscort(ctx, camX, camY, active);
+  }
 
+  /**
+   * Everything in the club that occupies space and must sort against the
+   * crawlers by depth: the furniture, the station staff behind their counters,
+   * the DJ and dancers, the crowd, and any hired escort.
+   *
+   * Each entry reports the `y` the interior's pass sorts on — for furniture that
+   * is the top of its footprint row, so a counter sorts exactly like a figure
+   * standing on the same tile.
+   */
+  sortedRenderables(): ReadonlyArray<InteriorFigure> {
+    this.sortedFigures.length = 0;
+    this.sortedFigures.push(...this.fixtureFigures);
+    this.sortedFigures.push(...this.crowd.renderables());
+    this.sortedFigures.push(...this.escortFigures());
+    return this.sortedFigures;
+  }
+
+  /**
+   * The furniture and the staff, built once: neither ever moves, so the only
+   * thing a per-frame rebuild would recompute is the animation phase, which the
+   * render closures read live off `animTime`.
+   */
+  private buildFixtureFigures(): ReadonlyArray<InteriorFigure> {
+    const figures: InteriorFigure[] = CLUB_PROPS.map((prop) => ({
+      y: propSortY(prop),
+      render: (ctx: CanvasRenderingContext2D, camX: number, camY: number) =>
+        drawClubProp(ctx, prop, camX, camY),
+    }));
+
+    CLUB_DANCER_TILES.forEach((dancer, i) => {
+      figures.push(this.npcFigure(dancer, 'dancer', 0, i % 2 === 0 ? 1 : -1, i + 1));
+    });
+    figures.push(this.npcFigure(CLUB_DJ_TILE, 'dj', 0));
+    for (const station of CLUB_STATIONS) {
+      figures.push(this.npcFigure(station.tile, STATION_VARIANT[station.id], station.tile.x));
+    }
+    return figures;
+  }
+
+  /**
+   * A figure standing still on `tile`. `phaseOffset` staggers the idle animation
+   * so a room of NPCs doesn't breathe in lockstep.
+   */
+  private npcFigure(
+    tile: { x: number; y: number },
+    variant: ClubNpcVariant,
+    phaseOffset: number,
+    facingX = 1,
+    seed = 0,
+  ): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawClubNpc(
+          ctx,
+          tile.x * TILE_SIZE - camX,
+          tile.y * TILE_SIZE - camY,
+          tileSize,
+          variant,
+          this.animTime + phaseOffset,
+          facingX,
+          seed,
+        ),
+    };
+  }
+
+  renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     if (this.modalOpen) return;
     const station = this.nearestStation(active);
     if (station) {
@@ -471,95 +517,55 @@ export class DesperadoClubSystem implements GameSystem {
   }
 
   /** Once the VIP escort is hired, two Cretins ease toward flanking offsets behind the player. */
-  private renderEscort(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    active: Player,
-  ): void {
+  private updateEscort(active: Player): void {
     if (!this.vip.escortActive) return;
-    this.escortFollowers ??= [
-      {
-        variant: 'sledge',
-        offsetX: -ESCORT_OFFSET_X,
-        offsetY: ESCORT_OFFSET_Y,
-        x: active.x - ESCORT_OFFSET_X,
-        y: active.y + ESCORT_OFFSET_Y,
-      },
-      {
-        variant: 'bomo',
-        offsetX: ESCORT_OFFSET_X,
-        offsetY: ESCORT_OFFSET_Y,
-        x: active.x + ESCORT_OFFSET_X,
-        y: active.y + ESCORT_OFFSET_Y,
-      },
-    ];
-    for (const follower of this.escortFollowers) {
+    if (this.escortFollowers === null) {
+      this.escortFollowers = [
+        {
+          variant: 'sledge',
+          offsetX: -ESCORT_OFFSET_X,
+          offsetY: ESCORT_OFFSET_Y,
+          x: active.x - ESCORT_OFFSET_X,
+          y: active.y + ESCORT_OFFSET_Y,
+        },
+        {
+          variant: 'bomo',
+          offsetX: ESCORT_OFFSET_X,
+          offsetY: ESCORT_OFFSET_Y,
+          x: active.x + ESCORT_OFFSET_X,
+          y: active.y + ESCORT_OFFSET_Y,
+        },
+      ];
+      this.escortFigureList = this.escortFollowers.map((follower, i) => ({
+        y: follower.y,
+        render: (ctx, camX, camY, tileSize) =>
+          drawClubNpc(
+            ctx,
+            follower.x - camX,
+            follower.y - camY,
+            tileSize,
+            follower.variant,
+            this.animTime,
+            follower.offsetX < 0 ? -1 : 1,
+            0,
+            { walking: this.escortWalking[i] },
+          ),
+      }));
+    }
+    this.escortFollowers.forEach((follower, i) => {
       const targetX = active.x + follower.offsetX;
       const targetY = active.y + follower.offsetY;
-      follower.x += (targetX - follower.x) * ESCORT_FOLLOW_LERP;
-      follower.y += (targetY - follower.y) * ESCORT_FOLLOW_LERP;
-      const facingX = follower.offsetX < 0 ? -1 : 1;
-      drawClubNpc(
-        ctx,
-        follower.x - camX,
-        follower.y - camY,
-        TILE_SIZE,
-        follower.variant,
-        this.animTime,
-        facingX,
-      );
-    }
-  }
-
-  private renderNpcs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    CLUB_DANCER_TILES.forEach((dancer, i) => {
-      drawClubNpc(
-        ctx,
-        dancer.x * TILE_SIZE - camX,
-        dancer.y * TILE_SIZE - camY,
-        TILE_SIZE,
-        'dancer',
-        this.animTime,
-        i % 2 === 0 ? 1 : -1,
-        i + 1,
-      );
+      const stepX = (targetX - follower.x) * ESCORT_FOLLOW_LERP;
+      const stepY = (targetY - follower.y) * ESCORT_FOLLOW_LERP;
+      follower.x += stepX;
+      follower.y += stepY;
+      this.escortWalking[i] = Math.hypot(stepX, stepY) > ESCORT_WALK_EPSILON;
+      this.escortFigureList[i].y = follower.y;
     });
-    drawClubNpc(
-      ctx,
-      CLUB_DJ_TILE.x * TILE_SIZE - camX,
-      CLUB_DJ_TILE.y * TILE_SIZE - camY,
-      TILE_SIZE,
-      'dj',
-      this.animTime,
-    );
-    this.renderPatrons(ctx, camX, camY);
-    for (const station of CLUB_STATIONS) {
-      drawClubNpc(
-        ctx,
-        station.tile.x * TILE_SIZE - camX,
-        station.tile.y * TILE_SIZE - camY,
-        TILE_SIZE,
-        STATION_VARIANT[station.id],
-        this.animTime + station.tile.x,
-      );
-    }
   }
 
-  private renderPatrons(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.patrons === null) return;
-    for (const p of this.patrons) {
-      drawClubNpc(
-        ctx,
-        p.x - camX,
-        p.y - camY,
-        TILE_SIZE,
-        'patron',
-        this.animTime,
-        p.facingX,
-        p.seed,
-      );
-    }
+  private escortFigures(): ReadonlyArray<InteriorFigure> {
+    return this.vip.escortActive ? this.escortFigureList : [];
   }
 
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {

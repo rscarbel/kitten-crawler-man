@@ -4,6 +4,7 @@ import effectsManifest from '../images/effects/manifest.json';
 import enemiesManifest from '../images/enemies/manifest.json';
 import environmentBuildingsManifest from '../images/environment/buildings/manifest.json';
 import environmentCircusManifest from '../images/environment/circus/manifest.json';
+import environmentClubManifest from '../images/environment/club/manifest.json';
 import environmentNatureManifest from '../images/environment/nature/manifest.json';
 import environmentPropsManifest from '../images/environment/props/manifest.json';
 import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
@@ -15,6 +16,7 @@ import { TILE_SIZE } from './constants';
 const environmentManifest = {
   ...environmentBuildingsManifest,
   ...environmentCircusManifest,
+  ...environmentClubManifest,
   ...environmentNatureManifest,
   ...environmentPropsManifest,
   ...environmentTilesetsManifest,

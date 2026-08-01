@@ -7,13 +7,29 @@ import {
   type MercenaryTemplateId,
 } from '../core/mercenaryTemplates';
 import { drawText } from '../ui/TextBox';
-import { drawModal, drawOverlay, drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import {
+  drawModal,
+  drawOverlay,
+  drawBox,
+  BOX_PRESETS,
+  fitModal,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from '../ui/Box';
+import {
+  drawButton,
+  BUTTON_PRESETS,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
+} from '../ui/Button';
 import { pointInRect } from '../utils';
 
 // Panel geometry
 const PANEL_W = 540;
-const PANEL_H = 508;
+const PANEL_H = 540;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.6;
 /** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
@@ -34,9 +50,10 @@ const DISMISS_BTN_W = 150;
 const DISMISS_BTN_H = 34;
 const DISMISS_BTN_MARGIN = 12;
 
-// Hire cards
+// Hire cards — shortened from the VIP lounge's card height to buy room for the
+// Close button without pushing the panel taller than a short viewport.
 const CARDS_TOP = 160;
-const CARD_H = 94;
+const CARD_H = 86;
 const CARD_GAP = 12;
 const CARD_PAD = 14;
 const CARD_NAME_SIZE = 15;
@@ -49,10 +66,15 @@ const HIRE_BTN_W = 128;
 const HIRE_BTN_H = 44;
 const HIRE_BTN_MARGIN = 14;
 
+// Close button — the mouse-only way out, and the only obvious "I'm done" after a hire.
+const CLOSE_BTN_W = 200;
+const CLOSE_BTN_H = 40;
+const CLOSE_BTN_Y_FROM_BOTTOM = 96;
+
 const FEEDBACK_SIZE = 12;
-const FEEDBACK_Y_FROM_BOTTOM = 40;
+const FEEDBACK_Y_FROM_BOTTOM = 52;
 const CLOSE_HINT_SIZE = 10;
-const CLOSE_HINT_Y_FROM_BOTTOM = 18;
+const CLOSE_HINT_Y_FROM_BOTTOM = 22;
 
 const ACCENT = '#c8a840';
 const GOLD_TEXT = '#f0d870';
@@ -85,6 +107,8 @@ export class MercenaryGuildSystem {
   /** Transient status line (e.g. "Not enough coins"); cleared on the next valid action. */
   private feedbackMsg = '';
   private buttons: GuildButton[] = [];
+  /** Set every render; clicks are mapped back through it before hit-testing. */
+  private fit: ModalFit = MODAL_FIT_NONE;
 
   constructor(
     private readonly roster: MercenaryRoster,
@@ -128,8 +152,9 @@ export class MercenaryGuildSystem {
   }
 
   handleClick(mx: number, my: number, player: Player): void {
+    const point = modalFitPoint(this.fit, mx, my);
     for (const btn of this.buttons) {
-      if (!pointInRect(mx, my, btn)) continue;
+      if (!pointInRect(point.x, point.y, btn)) continue;
       const action = btn.action;
       switch (action.kind) {
         case 'hire':
@@ -154,6 +179,13 @@ export class MercenaryGuildSystem {
       canvasHeight: canvas.height,
       alpha: OVERLAY_ALPHA,
     });
+
+    // Three hire cards plus the close cluster need more height than a landscape
+    // phone has; shrink the whole panel rather than let its bottom fall off.
+    this.fit = fitModal(canvas, PANEL_H);
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
+
     const panelW = Math.min(PANEL_W, canvas.width - PANEL_CANVAS_SIDE_MARGIN);
     const panel = drawModal(ctx, {
       canvasWidth: canvas.width,
@@ -206,12 +238,42 @@ export class MercenaryGuildSystem {
       });
     }
 
+    this.renderCloseButton(ctx, panel.y, centerX);
+
     drawText(ctx, '[Space / Esc]  Leave the desk', {
       x: centerX,
       y: panel.y + PANEL_H - CLOSE_HINT_Y_FROM_BOTTOM,
       size: CLOSE_HINT_SIZE,
       color: '#5a4a30',
       align: 'center',
+    });
+
+    endModalFit(ctx);
+    resetButtonPointerSpace();
+  }
+
+  /**
+   * An always-visible way out of the panel. Signing a contract leaves every hire
+   * button disabled, so without this the panel reads as stuck to anyone not
+   * looking at the keyboard hint.
+   */
+  private renderCloseButton(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
+    const btnX = centerX - CLOSE_BTN_W / 2;
+    const btnY = panelY + PANEL_H - CLOSE_BTN_Y_FROM_BOTTOM;
+    drawButton(ctx, {
+      x: btnX,
+      y: btnY,
+      width: CLOSE_BTN_W,
+      height: CLOSE_BTN_H,
+      label: 'Close',
+      ...BUTTON_PRESETS.primary,
+    });
+    this.buttons.push({
+      x: btnX,
+      y: btnY,
+      w: CLOSE_BTN_W,
+      h: CLOSE_BTN_H,
+      action: { kind: 'close' },
     });
   }
 

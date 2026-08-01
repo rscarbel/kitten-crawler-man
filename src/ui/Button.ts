@@ -36,7 +36,46 @@ let _audioManager: AudioManager | null = null;
  * drawButton pushes each rendered button here so notifyButtonClick can find it.
  * Iterated in reverse (last-drawn = topmost) for correct z-order hit testing.
  */
-const _renderedButtons: Array<{ x: number; y: number; w: number; h: number; sound: SoundId }> = [];
+const _renderedButtons: Array<{
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  sound: SoundId;
+  space: PointerSpace;
+}> = [];
+
+/**
+ * The coordinate space a button was drawn in. Everything is canvas-space by
+ * default; a modal shrunk to fit a short viewport draws its buttons in its own
+ * design-sized space instead, and the pointer has to be mapped into that space
+ * or every hover and click sound misses by the shrink.
+ */
+interface PointerSpace {
+  scale: number;
+  pivotX: number;
+  pivotY: number;
+}
+
+const CANVAS_POINTER_SPACE: PointerSpace = { scale: 1, pivotX: 0, pivotY: 0 };
+let _pointerSpace: PointerSpace = CANVAS_POINTER_SPACE;
+
+/**
+ * Declare that buttons drawn from here on are in a scaled space — see
+ * `fitModal` in `ui/Box.ts`. Reset with {@link resetButtonPointerSpace} once the
+ * panel is drawn; the next `setButtonMouseState` resets it too.
+ */
+export function setButtonPointerSpace(scale: number, pivotX: number, pivotY: number): void {
+  _pointerSpace = { scale, pivotX, pivotY };
+}
+
+export function resetButtonPointerSpace(): void {
+  _pointerSpace = CANVAS_POINTER_SPACE;
+}
+
+function toSpace(coord: number, pivot: number, scale: number): number {
+  return pivot + (coord - pivot) / scale;
+}
 
 /**
  * Register the audio manager. Call once per scene in render() alongside
@@ -63,6 +102,7 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
   _mouseY = my;
   _isDown = isDown;
   _renderedButtons.length = 0;
+  _pointerSpace = CANVAS_POINTER_SPACE;
 }
 
 /**
@@ -89,7 +129,9 @@ export function clearButtonMouseState(): void {
 export function notifyButtonClick(mx: number, my: number): void {
   for (let i = _renderedButtons.length - 1; i >= 0; i--) {
     const btn = _renderedButtons[i];
-    if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+    const x = toSpace(mx, btn.space.pivotX, btn.space.scale);
+    const y = toSpace(my, btn.space.pivotY, btn.space.scale);
+    if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
       _audioManager?.play(btn.sound);
       return;
     }
@@ -339,8 +381,10 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   if (alignY === 'middle') y -= height / 2;
   else if (alignY === 'bottom') y -= height;
 
+  const pointerX = toSpace(_mouseX, _pointerSpace.pivotX, _pointerSpace.scale);
+  const pointerY = toSpace(_mouseY, _pointerSpace.pivotY, _pointerSpace.scale);
   const hovered =
-    !disabled && _mouseX >= x && _mouseX <= x + width && _mouseY >= y && _mouseY <= y + height;
+    !disabled && pointerX >= x && pointerX <= x + width && pointerY >= y && pointerY <= y + height;
   const pressed = hovered && _isDown;
 
   const effectiveAlpha = disabled ? alpha * DISABLED_ALPHA_MULTIPLIER : alpha;
@@ -419,7 +463,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   const rh = height;
 
   if (!disabled) {
-    _renderedButtons.push({ x: rx, y: ry, w: rw, h: rh, sound });
+    _renderedButtons.push({ x: rx, y: ry, w: rw, h: rh, sound, space: _pointerSpace });
   }
 
   return {

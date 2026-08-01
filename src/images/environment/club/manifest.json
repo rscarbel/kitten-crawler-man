@@ -1,0 +1,142 @@
+{
+  "club_bar_counter": {
+    "path": "environment/club/bar_counter.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_bar_stool": {
+    "path": "environment/club/bar_stool.png",
+    "frameWidth": 64,
+    "frameHeight": 96,
+    "tileX": 0,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_drink_shelf": {
+    "path": "environment/club/drink_shelf.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_market_stall": {
+    "path": "environment/club/market_stall.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_market_backdrop": {
+    "path": "environment/club/market_backdrop.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_weapon_rack": {
+    "path": "environment/club/weapon_rack.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "club_merc_desk": {
+    "path": "environment/club/merc_desk.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      }
+    }
+  },
+  "club_casino_table": {
+    "path": "environment/club/casino_table.png",
+    "frameWidth": 192,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      }
+    }
+  },
+  "club_vip_counter": {
+    "path": "environment/club/vip_counter.png",
+    "frameWidth": 384,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      }
+    }
+  },
+  "club_velvet_rope": {
+    "path": "environment/club/velvet_rope.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      }
+    }
+  }
+}

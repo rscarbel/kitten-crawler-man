@@ -46,6 +46,25 @@ const LEADING_EDGE_FRONT = 0.72;
 const LEADING_EDGE_BACK = 0.28;
 const CENTER_COLLISION_OFFSET = 0.5;
 
+/**
+ * How far down the sprite a *southward* step is tested, as a fraction of a tile.
+ *
+ * The default centre test lets a player walk until their waist reaches the wall,
+ * which plants their whole lower half on top of the wall tile — glaring in a
+ * small room whose south wall is right behind the camera. Testing near the sole
+ * instead stops them with their feet on the last floor tile. Not a flat 1.0:
+ * that would refuse the last floor row outright, since a player standing on it
+ * already has their soles on its bottom edge.
+ */
+const SOLE_COLLISION_OFFSET = 0.95;
+
+/**
+ * Which part of the player is tested against walls when walking south.
+ * `waist` is the long-standing behaviour; `sole` keeps feet off wall tiles and
+ * is what building interiors use.
+ */
+export type SouthCollisionAnchor = 'waist' | 'sole';
+
 export interface MovementInput {
   dx: number;
   dy: number;
@@ -96,7 +115,12 @@ export function readMovement(
 /**
  * Phase 2: Apply movement vector to player position with collision detection.
  */
-export function applyMovement(player: Player, move: MovementInput, gameMap: GameMap): void {
+export function applyMovement(
+  player: Player,
+  move: MovementInput,
+  gameMap: GameMap,
+  southAnchor: SouthCollisionAnchor = 'waist',
+): void {
   let { dx, dy } = move;
   const mapPxW = (gameMap.structure[0]?.length ?? gameMap.structure.length) * TILE_SIZE;
   const mapPxH = gameMap.structure.length * TILE_SIZE;
@@ -138,7 +162,12 @@ export function applyMovement(player: Player, move: MovementInput, gameMap: Game
 
   const nextY = clamp(player.y + dy, 0, mapPxH - TILE_SIZE);
   const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
-  const tileYnext = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
+  // Only the southward step moves its test point down the sprite: walking north
+  // has the player's head, not their feet, leading into the wall, and testing
+  // the soles there would let them back into tiles they can't stand on.
+  const yAnchor =
+    southAnchor === 'sole' && dy > 0 ? SOLE_COLLISION_OFFSET : CENTER_COLLISION_OFFSET;
+  const tileYnext = Math.floor((nextY + TILE_SIZE * yAnchor) / TILE_SIZE);
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
 }
 

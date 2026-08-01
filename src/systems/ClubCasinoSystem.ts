@@ -1,8 +1,24 @@
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText } from '../ui/TextBox';
-import { drawModal, drawOverlay, drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import {
+  drawModal,
+  drawOverlay,
+  drawBox,
+  BOX_PRESETS,
+  fitModal,
+  beginModalFit,
+  endModalFit,
+  modalFitPoint,
+  MODAL_FIT_NONE,
+  type ModalFit,
+} from '../ui/Box';
+import {
+  drawButton,
+  BUTTON_PRESETS,
+  setButtonPointerSpace,
+  resetButtonPointerSpace,
+} from '../ui/Button';
 import { pointInRect } from '../utils';
 
 // High-low rules
@@ -19,7 +35,7 @@ const CARD_LABELS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q'
 
 // Panel geometry
 const PANEL_W = 460;
-const PANEL_H = 456;
+const PANEL_H = 500;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.68;
 /** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
@@ -50,16 +66,23 @@ const WAGER_BTN_H = 40;
 const WAGER_BTN_GAP = 10;
 const WAGER_LABEL_SIZE = 12;
 
-const GUESS_ROW_Y = 308;
+const GUESS_PROMPT_Y = 290;
+const GUESS_PROMPT_SIZE = 13;
+const GUESS_ROW_Y = 310;
 const GUESS_BTN_W = 182;
 const GUESS_BTN_H = 48;
 const GUESS_BTN_GAP = 16;
 
+// Cancel/leave button — the mouse-only way out of the table.
+const CANCEL_BTN_W = 200;
+const CANCEL_BTN_H = 38;
+const CANCEL_ROW_Y_FROM_BOTTOM = 130;
+
 const RESULT_MSG_SIZE = 17;
-const RESULT_MSG_Y = 258;
+const RESULT_MSG_Y = 262;
 const DEAL_BTN_W = 200;
 const DEAL_BTN_H = 46;
-const DEAL_ROW_Y = 300;
+const DEAL_ROW_Y = 304;
 
 const FEEDBACK_SIZE = 12;
 const FEEDBACK_Y_FROM_BOTTOM = 60;
@@ -122,6 +145,8 @@ export class ClubCasinoSystem {
   /** Transient error line (e.g. "Not enough coins"); cleared on the next valid action. */
   private feedbackMsg = '';
   private buttons: CasinoButton[] = [];
+  /** Set every render; clicks are mapped back through it before hit-testing. */
+  private fit: ModalFit = MODAL_FIT_NONE;
 
   constructor(private readonly audio: AudioManager | null) {}
 
@@ -191,8 +216,9 @@ export class ClubCasinoSystem {
   }
 
   handleClick(mx: number, my: number, player: Player): void {
+    const point = modalFitPoint(this.fit, mx, my);
     for (const btn of this.buttons) {
-      if (!pointInRect(mx, my, btn)) continue;
+      if (!pointInRect(point.x, point.y, btn)) continue;
       const action = btn.action;
       switch (action.kind) {
         case 'wager':
@@ -220,6 +246,12 @@ export class ClubCasinoSystem {
       canvasHeight: canvas.height,
       alpha: OVERLAY_ALPHA,
     });
+    // The card row, wager row and guess row need more height than a landscape
+    // phone has; shrink the whole panel rather than let its edges fall off.
+    this.fit = fitModal(canvas, PANEL_H);
+    beginModalFit(ctx, this.fit);
+    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
+
     const panelW = Math.min(PANEL_W, canvas.width - PANEL_CANVAS_SIDE_MARGIN);
     const panel = drawModal(ctx, {
       canvasWidth: canvas.width,
@@ -242,7 +274,7 @@ export class ClubCasinoSystem {
       align: 'center',
     });
 
-    drawText(ctx, 'Beat the next card. Ties pay the house.', {
+    drawText(ctx, 'Guess the next card, higher or lower. Ties pay the house.', {
       x: centerX,
       y: panel.inner.y + SUBTITLE_GAP,
       size: SUBTITLE_SIZE,
@@ -277,12 +309,38 @@ export class ClubCasinoSystem {
       });
     }
 
+    this.renderCancelButton(ctx, panel.y, centerX);
+
     drawText(ctx, '[Space / Esc]  Leave the table', {
       x: centerX,
       y: panel.y + PANEL_H - CLOSE_HINT_Y_FROM_BOTTOM,
       size: CLOSE_HINT_SIZE,
       color: HINT_TEXT,
       align: 'center',
+    });
+
+    endModalFit(ctx);
+    resetButtonPointerSpace();
+  }
+
+  /** An always-visible way out: the keyboard hint alone strands mouse and touch players. */
+  private renderCancelButton(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
+    const btnX = centerX - CANCEL_BTN_W / 2;
+    const btnY = panelY + PANEL_H - CANCEL_ROW_Y_FROM_BOTTOM;
+    drawButton(ctx, {
+      x: btnX,
+      y: btnY,
+      width: CANCEL_BTN_W,
+      height: CANCEL_BTN_H,
+      label: 'Cancel — Leave Table',
+      ...BUTTON_PRESETS.danger,
+    });
+    this.buttons.push({
+      x: btnX,
+      y: btnY,
+      w: CANCEL_BTN_W,
+      h: CANCEL_BTN_H,
+      action: { kind: 'close' },
     });
   }
 
@@ -381,6 +439,15 @@ export class ClubCasinoSystem {
   }
 
   private renderGuessRow(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
+    drawText(ctx, 'Is your current card higher or lower than the next card?', {
+      x: centerX,
+      y: panelY + GUESS_PROMPT_Y,
+      size: GUESS_PROMPT_SIZE,
+      bold: true,
+      color: '#f0e2b0',
+      align: 'center',
+    });
+
     const rowWidth = GUESS_BTN_W * 2 + GUESS_BTN_GAP;
     const lowerX = centerX - rowWidth / 2;
     const higherX = lowerX + GUESS_BTN_W + GUESS_BTN_GAP;

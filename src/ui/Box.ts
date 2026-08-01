@@ -428,6 +428,67 @@ export function drawModal(ctx: CanvasRenderingContext2D, opts: ModalOptions): Bo
   return drawBox(ctx, { x, y, width: clampedWidth, height, ...rest });
 }
 
+/** How a modal's contents were shrunk to fit the viewport, and about which point. */
+export interface ModalFit {
+  scale: number;
+  pivotX: number;
+  pivotY: number;
+}
+
+/** A viewport with room to spare needs no shrinking. */
+export const MODAL_FIT_NONE: ModalFit = { scale: 1, pivotX: 0, pivotY: 0 };
+
+/** Breathing room kept above and below a shrunk modal so it doesn't touch the viewport edges. */
+const MODAL_VERTICAL_MARGIN = 24;
+
+/**
+ * Floor on the shrink factor. A viewport short enough to need more than this is
+ * one where the panel is unusable at any size, and letting the factor run to
+ * zero (or negative, on a viewport shorter than the margins) would collapse or
+ * mirror the whole panel.
+ */
+const MODAL_MIN_SCALE = 0.35;
+
+/**
+ * `drawModal` centres a fixed-height panel, which on a viewport shorter than
+ * that height hangs the panel off both edges — the title and, worse, the button
+ * that closes it end up off-screen with no way to reach them. A landscape phone
+ * is only ~390px tall, so any panel designed at desktop height hits this.
+ *
+ * This measures how much the contents must shrink to fit. Wrap the panel's whole
+ * render in {@link beginModalFit}/{@link endModalFit} and map incoming clicks
+ * back through {@link modalFitPoint}, and the layout constants stay in one
+ * design-sized coordinate space regardless of viewport.
+ */
+export function fitModal(canvas: HTMLCanvasElement, designHeight: number): ModalFit {
+  const available = canvas.height - MODAL_VERTICAL_MARGIN * 2;
+  return {
+    scale: Math.min(1, Math.max(MODAL_MIN_SCALE, available / designHeight)),
+    pivotX: canvas.width / 2,
+    pivotY: canvas.height / 2,
+  };
+}
+
+/** Scales subsequent drawing about the viewport centre, where `drawModal` centres its panel. */
+export function beginModalFit(ctx: CanvasRenderingContext2D, fit: ModalFit): void {
+  ctx.save();
+  ctx.translate(fit.pivotX, fit.pivotY);
+  ctx.scale(fit.scale, fit.scale);
+  ctx.translate(-fit.pivotX, -fit.pivotY);
+}
+
+export function endModalFit(ctx: CanvasRenderingContext2D): void {
+  ctx.restore();
+}
+
+/** Canvas point → the panel's design-sized space, so hit rects recorded while drawing still match. */
+export function modalFitPoint(fit: ModalFit, mx: number, my: number): { x: number; y: number } {
+  return {
+    x: fit.pivotX + (mx - fit.pivotX) / fit.scale,
+    y: fit.pivotY + (my - fit.pivotY) / fit.scale,
+  };
+}
+
 /**
  * Draw a horizontal progress / fill bar.
  *

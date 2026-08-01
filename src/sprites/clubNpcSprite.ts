@@ -67,6 +67,8 @@ const DANCER_OUTFITS = [
   '#20c0c0',
   '#e070b0',
 ] as const;
+// Club-night wear: mostly dark tailoring, with enough colour in the mix that a
+// crowd doesn't read as a queue of identical suits.
 const PATRON_OUTFITS = [
   '#3a4a6a',
   '#5a3a2a',
@@ -75,6 +77,11 @@ const PATRON_OUTFITS = [
   '#5a5a2a',
   '#3a3a4a',
   '#6a3a3a',
+  '#1f2733',
+  '#7a4a1c',
+  '#2f5a6a',
+  '#6a2a52',
+  '#46523a',
 ] as const;
 const HAIR_COLORS = [
   '#150d06',
@@ -87,10 +94,30 @@ const HAIR_COLORS = [
 ] as const;
 const ACCENT_COLORS = ['#40d0e0', '#f0d060', '#ff5aa0', '#8affc0', '#c090ff'] as const;
 
-/** Deterministic index into a pool from a figure seed (salt separates independent choices). */
+// Avalanche constants from the MurmurHash3 finaliser — chosen because each one
+// spreads a single changed input bit across the whole word.
+const HASH_SALT_MIX = 0x9e3779b1;
+const HASH_MIX_A = 0x85ebca6b;
+const HASH_MIX_B = 0xc2b2ae35;
+const HASH_SHIFT_A = 13;
+const HASH_SHIFT_B = 16;
+
+/**
+ * Deterministic index into a pool from a figure seed (salt separates independent
+ * choices).
+ *
+ * The seed is avalanched rather than scaled and taken modulo directly: callers
+ * hand out seeds on a fixed stride, and any stride sharing a factor with a pool's
+ * length collapses that pool to a single entry for the whole crowd. That is not
+ * hypothetical — a stride of 7 against the seven-entry skin, hair and outfit
+ * pools is what made every club patron identical.
+ */
 function pick<T>(pool: ReadonlyArray<T>, seed: number, salt: number): T {
-  const h = Math.abs(Math.floor(seed) * 2654435761 + salt * 40503) % pool.length;
-  return pool[h];
+  let h = Math.floor(seed) ^ Math.imul(salt + 1, HASH_SALT_MIX);
+  h = Math.imul(h ^ (h >>> HASH_SHIFT_A), HASH_MIX_A);
+  h = Math.imul(h ^ (h >>> HASH_SHIFT_B), HASH_MIX_B);
+  h ^= h >>> HASH_SHIFT_B;
+  return pool[Math.abs(h) % pool.length];
 }
 
 function crowdAppearance(variant: 'dancer' | 'patron', seed: number): Appearance {
@@ -223,7 +250,75 @@ function djPose(phase: number): Pose {
   };
 }
 
-function poseFor(variant: ClubNpcVariant, phase: number, seed: number): Pose {
+// Walk and strike motion — used by wandering patrons and by hired mercenaries,
+// who are club figures fighting in the field rather than standing at a station.
+const WALK_CYCLE_SPEED = 0.22;
+const WALK_STRIDE = 0.5;
+const WALK_ARM_SWING = 0.3;
+const WALK_BOUNCE = 0.02;
+/** Fraction of the strike spent winding up; the rest is the swing through. */
+const STRIKE_WINDUP_FRACTION = 0.35;
+
+/** A plain two-beat stride: legs alternate, arms counter-swing, torso bobs on each step. */
+function walkPose(phase: number): Pose {
+  const t = phase * WALK_CYCLE_SPEED;
+  const stride = Math.sin(t);
+  return {
+    ...IDLE_POSE,
+    bounce: Math.abs(Math.sin(t * 2)) * WALK_BOUNCE,
+    hipShift: stride * 0.02,
+    lean: 0.01,
+    leftArmRaise: -stride * WALK_ARM_SWING,
+    rightArmRaise: stride * WALK_ARM_SWING,
+    leftArmOut: 0.42,
+    rightArmOut: 0.42,
+    leftLegLift: Math.max(0, stride) * WALK_STRIDE,
+    rightLegLift: Math.max(0, -stride) * WALK_STRIDE,
+    headTilt: 0,
+  };
+}
+
+/**
+ * A committed overhand strike: the lead arm cocks back and over, then drives
+ * down and forward past the body while the figure leans into it.
+ */
+function strikePose(progress: number): Pose {
+  const windingUp = progress < STRIKE_WINDUP_FRACTION;
+  const swing = windingUp
+    ? progress / STRIKE_WINDUP_FRACTION
+    : 1 - (progress - STRIKE_WINDUP_FRACTION) / (1 - STRIKE_WINDUP_FRACTION);
+  const followThrough = windingUp ? 0 : 1 - swing;
+  return {
+    ...IDLE_POSE,
+    bounce: 0.01,
+    hipShift: -0.02 + followThrough * 0.05,
+    lean: -0.03 + followThrough * 0.11,
+    leftArmRaise: -0.1,
+    rightArmRaise: swing * 1.15 - followThrough * 0.55,
+    leftArmOut: 0.35,
+    rightArmOut: 0.55 + followThrough * 0.75,
+    leftLegLift: 0,
+    rightLegLift: followThrough * 0.16,
+    headTilt: followThrough * 0.03,
+  };
+}
+
+/** Optional motion overrides for figures that do more than stand at a station. */
+export interface ClubNpcMotion {
+  /** Play the stride cycle instead of the figure's resting animation. */
+  walking?: boolean;
+  /** 0→1 through a strike. Overrides `walking`; omit or pass null when not attacking. */
+  attack?: number | null;
+}
+
+function poseFor(
+  variant: ClubNpcVariant,
+  phase: number,
+  seed: number,
+  motion: ClubNpcMotion | undefined,
+): Pose {
+  if (motion?.attack !== undefined && motion.attack !== null) return strikePose(motion.attack);
+  if (motion?.walking === true) return walkPose(phase);
   if (variant === 'dancer') return danceStyle(seed, phase * DANCE_BASE_SPEED + seed);
   if (variant === 'dj') return djPose(phase);
   if (variant === 'patron') {
@@ -263,6 +358,7 @@ export function drawClubNpc(
   phase: number,
   facingX = 1,
   seed = 0,
+  motion?: ClubNpcMotion,
 ): void {
   ctx.save();
   const box = scaleHumanoidBox(sx, sy, s);
@@ -277,7 +373,7 @@ export function drawClubNpc(
   }
 
   if (variant === 'sledge' || variant === 'bomo') {
-    drawStoneGolem(ctx, cx, sy, s, variant, phase);
+    drawStoneGolem(ctx, cx, sy, s, variant, phase, motion);
     ctx.restore();
     return;
   }
@@ -287,7 +383,7 @@ export function drawClubNpc(
       ? crowdAppearance(variant, seed)
       : FIXED_STYLES[variant];
   const skeleton = 'skeleton' in appearance && appearance.skeleton === true;
-  drawHumanoid(ctx, cx, sy, s, appearance, poseFor(variant, phase, seed), skeleton);
+  drawHumanoid(ctx, cx, sy, s, appearance, poseFor(variant, phase, seed, motion), skeleton);
 
   ctx.restore();
 }
@@ -406,6 +502,12 @@ const GOLEM_TUX_ACCENT: Record<'sledge' | 'bomo', string> = {
 const GOLEM_TUX = '#15151b';
 const GOLEM_BOB_SPEED = 0.045;
 const GOLEM_BOB_AMOUNT = 0.01;
+/** A slab of granite plods: a slower cycle and a heavier heave than a person's. */
+const GOLEM_WALK_SPEED = 0.18;
+const GOLEM_STOMP_LIFT = 0.05;
+const GOLEM_WALK_HEAVE = 0.02;
+/** How far the leading fist travels forward through a swing, as a fraction of the figure. */
+const GOLEM_SWING_REACH = 0.26;
 
 /**
  * A broad, cracked-granite bruiser in a tuxedo — angular boulder shoulders, a
@@ -419,15 +521,25 @@ function drawStoneGolem(
   s: number,
   variant: 'sledge' | 'bomo',
   phase: number,
+  motion?: ClubNpcMotion,
 ): void {
+  const striking = motion?.attack !== undefined && motion.attack !== null;
+  const walking = !striking && motion?.walking === true;
+  const stride = walking ? Math.sin(phase * GOLEM_WALK_SPEED) : 0;
+  const heave = walking ? Math.abs(Math.sin(phase * GOLEM_WALK_SPEED * 2)) * GOLEM_WALK_HEAVE : 0;
+  // A strike is a wind-up followed by the arm being thrown across the body.
+  const swing = striking ? Math.sin((motion.attack ?? 0) * Math.PI) : 0;
+
   const bob = (Math.sin(phase * GOLEM_BOB_SPEED) + 1) * 0.5 * GOLEM_BOB_AMOUNT * s;
-  const bsy = sy + bob;
+  const bsy = sy + bob - heave * s;
   const accent = GOLEM_TUX_ACCENT[variant];
 
-  // Blocky legs.
+  // Blocky legs — a stomping stride raises one slab at a time.
   ctx.fillStyle = GOLEM_STONE_DARK;
-  ctx.fillRect(cx - s * 0.22, bsy + s * 0.78, s * 0.19, s * 0.2);
-  ctx.fillRect(cx + s * 0.03, bsy + s * 0.78, s * 0.19, s * 0.2);
+  const leftLift = Math.max(0, stride) * GOLEM_STOMP_LIFT * s;
+  const rightLift = Math.max(0, -stride) * GOLEM_STOMP_LIFT * s;
+  ctx.fillRect(cx - s * 0.22, bsy + s * 0.78 - leftLift, s * 0.19, s * 0.2);
+  ctx.fillRect(cx + s * 0.03, bsy + s * 0.78 - rightLift, s * 0.19, s * 0.2);
 
   // Rubble torso — an irregular stone slab.
   const torso = new Path2D();
@@ -484,13 +596,27 @@ function drawStoneGolem(
   ctx.arc(cx + s * 0.34, bsy + s * 0.42, s * 0.12, 0, TWO_PI);
   ctx.fill();
   ctx.fillStyle = GOLEM_STONE_BASE;
-  ctx.fillRect(cx - s * 0.44, bsy + s * 0.44, s * 0.14, s * 0.3);
-  ctx.fillRect(cx + s * 0.3, bsy + s * 0.44, s * 0.14, s * 0.3);
+  // The right arm is the one that swings; a stride counter-swings both.
+  const armSwing = stride * GOLEM_SWING_REACH * 0.35 * s;
+  const strikeReach = swing * GOLEM_SWING_REACH * s;
+  ctx.fillRect(cx - s * 0.44 - armSwing, bsy + s * 0.44, s * 0.14, s * 0.3);
+  ctx.fillRect(
+    cx + s * 0.3 + armSwing + strikeReach,
+    bsy + s * 0.44 - strikeReach * 0.6,
+    s * 0.14,
+    s * 0.3,
+  );
   // Stone fists.
   ctx.fillStyle = GOLEM_STONE_LIGHT;
   ctx.beginPath();
-  ctx.arc(cx - s * 0.37, bsy + s * 0.76, s * 0.09, 0, TWO_PI);
-  ctx.arc(cx + s * 0.37, bsy + s * 0.76, s * 0.09, 0, TWO_PI);
+  ctx.arc(cx - s * 0.37 - armSwing, bsy + s * 0.76, s * 0.09, 0, TWO_PI);
+  ctx.arc(
+    cx + s * 0.37 + armSwing + strikeReach,
+    bsy + s * 0.76 - strikeReach * 0.6,
+    s * 0.11,
+    0,
+    TWO_PI,
+  );
   ctx.fill();
 
   // Craggy head — a rough boulder with a chip knocked off the top-right.

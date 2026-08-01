@@ -105,17 +105,12 @@ import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
 import { DeathScreen } from '../ui/DeathScreen';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import type { SystemContext } from '../systems/GameSystem';
+import type { InteriorFigure } from '../core/InteriorFigure';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
 /** Parks the cursor outside any button until a real mouse move reports a position. */
 const OFFSCREEN_CURSOR_POS = -9999;
-
-/** Anything the interior's Y-sorted pass can draw: players, mobs, occupants. */
-interface InteriorRenderable {
-  y: number;
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
-}
 
 /** Every hearth and brazier in a room emits its own fire crackle at this reach. */
 const HEARTH_AMBIENT_RADIUS_TILES = 7;
@@ -446,6 +441,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.club =
       entry.type === 'club'
         ? new DesperadoClubSystem(
+            this.map,
             this.clubMembership,
             this.mercenaryRoster,
             this.audio,
@@ -988,7 +984,9 @@ export class BuildingInteriorScene extends GameplayScene {
       player,
       this.computeCamera(this.map),
     );
-    applyMovement(player, move, this.map);
+    // Interiors are small enough that the south wall is always on screen, so a
+    // crawler with their feet planted on it is the first thing you notice.
+    applyMovement(player, move, this.map, 'sole');
     const followDist = this.isFollowOverride
       ? TILE_SIZE * COMPANION_FOLLOW_OVERRIDE_RATIO
       : TILE_SIZE * COMPANION_FOLLOW_NORMAL_RATIO;
@@ -1054,7 +1052,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.safeRoom?.updateWander();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
-    this.club?.update();
+    this.club?.update(this.active(), this.presentCompanion()[0] ?? null);
     this.occupants?.update();
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop?.purchasePending) {
@@ -1478,7 +1476,7 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    entities: ReadonlyArray<InteriorRenderable>,
+    entities: ReadonlyArray<InteriorFigure>,
   ): void {
     const canvas = this.sceneManager.canvas;
     const drawables: Array<{ sortY: number; draw: () => void }> = entities.map((entity) => ({
@@ -1531,6 +1529,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // which is right, since the player is on the near side of it.
     this.bopca?.renderObjects(ctx, camX, camY, this.active(), this.inactive());
 
+    // The club's rugs, floor wear and dance lights are ground paint; its
+    // furniture and staff join the sorted pass below so crawlers can stand in
+    // front of a counter rather than under it.
+    this.club?.renderFloor(ctx, camX, camY);
+
     const combatOnThisFloor = this.combat !== null && this.currentFloor === this.combat.floor;
     if (this.combat && combatOnThisFloor) {
       const combat = this.combat;
@@ -1541,6 +1544,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ...combat.mobs.filter((m) => m.isAlive),
         ...this.presentCompanion(),
         this.active(),
+        ...(this.club?.sortedRenderables() ?? []),
       ]);
 
       combat.gore.renderParticles(ctx, camX, camY);
@@ -1555,6 +1559,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ...this.presentCompanion(),
         this.active(),
         ...(this.occupants?.people ?? []),
+        ...(this.club?.sortedRenderables() ?? []),
       ]);
       this.renderCitizenPrompt(ctx, camX, camY);
     }

@@ -1,9 +1,13 @@
 /**
- * Static, themed decorations for each Desperado Club area, drawn on the floor
- * behind the NPCs so the corner alcoves read as distinct rooms — a bar, a casino
- * pit, a market stall, a weapon armoury, and a velvet VIP nook — rather than
- * identical empty corners. Geometry comes from {@link CLUB_ZONES}; props are
- * primitive canvas shapes keyed off each zone's id.
+ * Floor dressing for each Desperado Club area — the rug that marks a zone out as
+ * its own room, its name across the top, and the scuffs and spill marks that
+ * keep a large flat floor from reading as empty.
+ *
+ * Everything here is painted flat on the ground *before* the Y-sorted entity
+ * pass, so anything standing on it (crawlers, staff, the furniture sprites in
+ * `clubProps`) draws over it. The furniture itself used to live in this file as
+ * primitive shapes; it is now PNG art placed by the sorted pass, which is what
+ * lets a player stand in front of a counter instead of under it.
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -15,6 +19,23 @@ const TS = TILE_SIZE;
 const RUG_INSET = 4;
 const LABEL_SIZE = 12;
 const LABEL_TOP_OFFSET = 6;
+
+/** Scuffs are flattened into ovals so they read as marks seen at the game's angle, not as circles. */
+const SCUFF_FLATTEN = 0.55;
+
+// A pool of light over each room, as if from a fixture above its centre.
+const GLOW_RADIUS_RATIO = 0.5;
+const GLOW_CENTER_ALPHA = 0.12;
+const GLOW_EDGE_ALPHA = 0;
+
+/** Wear marks are laid out from a fixed table so the floor never shimmers between frames. */
+const SCUFF_SPOTS: ReadonlyArray<{ fx: number; fy: number; r: number }> = [
+  { fx: 0.22, fy: 0.34, r: 0.5 },
+  { fx: 0.68, fy: 0.28, r: 0.32 },
+  { fx: 0.44, fy: 0.72, r: 0.62 },
+  { fx: 0.82, fy: 0.66, r: 0.4 },
+  { fx: 0.14, fy: 0.82, r: 0.28 },
+];
 
 interface Screen {
   x: number;
@@ -32,13 +53,13 @@ function zoneScreen(z: ClubZone, camX: number, camY: number): Screen {
   };
 }
 
-/** Draw all zone rugs, labels, and props. Call before the club NPCs so figures stand on top. */
+/** Draw every zone rug, its floor wear and its label. Call before the sorted entity pass. */
 export function drawClubDecor(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
   ctx.save();
   for (const zone of CLUB_ZONES) {
     const s = zoneScreen(zone, camX, camY);
     drawZoneRug(ctx, s, zone.color);
-    drawZoneProps(ctx, zone.id, s, zone.color);
+    drawFloorWear(ctx, zone.id, s, zone.color);
     drawText(ctx, zone.label, {
       x: s.x + s.w / 2,
       y: s.y + LABEL_TOP_OFFSET,
@@ -65,329 +86,53 @@ function drawZoneRug(ctx: CanvasRenderingContext2D, s: Screen, color: string): v
   });
 }
 
-function drawZoneProps(
+/**
+ * Spills, ash and worn patches keyed to what the room is for — the tell that a
+ * floor has been used, and the cheapest way to give five identical rugs their
+ * own character.
+ */
+function drawFloorWear(
   ctx: CanvasRenderingContext2D,
   id: ClubStationId,
   s: Screen,
-  color: string,
+  accent: string,
 ): void {
-  switch (id) {
-    case 'bar':
-      drawBarProps(ctx, s, color);
-      break;
-    case 'casino':
-      drawCasinoProps(ctx, s);
-      break;
-    case 'market':
-      drawMarketProps(ctx, s, color);
-      break;
-    case 'mercenary':
-      drawMercenaryProps(ctx, s, color);
-      break;
-    case 'vip':
-      drawVipProps(ctx, s, color);
-      break;
-    case 'sledge':
-      break;
-  }
-}
-
-// ── The Bar — back shelf of bottles, a wood counter, and stools ──────────────
-const BAR_WOOD = '#5a3a20';
-const BAR_WOOD_TOP = '#7a5230';
-const BAR_COUNTER_TOP = '#2a1c12';
-const BOTTLE_COLORS = ['#5ac0e0', '#e05a7a', '#7ae05a', '#e0c05a', '#c05ae0', '#e0905a'] as const;
-
-function drawBarProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string): void {
-  // Back shelf with a row of bottles along the top of the alcove, behind the
-  // bartender who stands at tile (3,3).
-  const shelfY = s.y + TS * 0.9;
-  const shelfX = s.x + TS * 0.5;
-  const shelfW = s.w - TS;
-  ctx.fillStyle = BAR_WOOD;
-  ctx.fillRect(shelfX, shelfY, shelfW, TS * 0.16);
-  const bottleCount = 6;
-  const bottleGap = shelfW / bottleCount;
-  for (let i = 0; i < bottleCount; i++) {
-    ctx.fillStyle = BOTTLE_COLORS[i % BOTTLE_COLORS.length];
-    const bx = shelfX + bottleGap * (i + 0.5) - TS * 0.05;
-    ctx.fillRect(bx, shelfY - TS * 0.42, TS * 0.1, TS * 0.42);
-    ctx.fillRect(bx + TS * 0.03, shelfY - TS * 0.56, TS * 0.04, TS * 0.16);
-  }
-
-  // Wood bar counter directly in front of the bartender (tile row y4, cols 2–4),
-  // so the seating sits right at the bar rather than across the room. Its tiles
-  // are blocked in CLUB_FURNITURE_TILES.
-  const counterY = s.y + TS * 3.05;
-  const counterX = s.x + TS;
-  const counterW = s.w - TS * 2;
-  ctx.fillStyle = BAR_WOOD;
-  ctx.fillRect(counterX, counterY, counterW, TS * 0.8);
-  ctx.fillStyle = BAR_COUNTER_TOP;
-  ctx.fillRect(counterX, counterY, counterW, TS * 0.22);
-  ctx.fillStyle = hexToRgba(accent, 0.6);
-  ctx.fillRect(counterX, counterY + TS * 0.2, counterW, 2);
-
-  // Stools in the row just in front of the counter (tile row y5).
-  const stoolY = counterY + TS * 1.15;
-  const stools = 3;
-  for (let i = 0; i < stools; i++) {
-    const stoolX = counterX + (counterW / stools) * (i + 0.5);
-    ctx.fillStyle = '#3a2a1a';
-    ctx.fillRect(stoolX - 1, stoolY, 2, TS * 0.3);
-    ctx.fillStyle = BAR_WOOD_TOP;
+  const stain = FLOOR_STAIN_COLOR[id];
+  ctx.save();
+  for (const spot of SCUFF_SPOTS) {
+    ctx.fillStyle = stain;
     ctx.beginPath();
-    ctx.arc(stoolX, stoolY, TS * 0.14, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// ── The Casino — a felt table with cards and chip stacks ────────────────────
-const FELT_GREEN = '#155a34';
-const FELT_GREEN_EDGE = '#0c3a22';
-const CHIP_COLORS = ['#d84040', '#4060d8', '#e0c040'] as const;
-
-function drawCasinoProps(ctx: CanvasRenderingContext2D, s: Screen): void {
-  const cx = s.x + s.w / 2;
-  const cy = s.y + s.h / 2 + TS * 0.3;
-  const rw = s.w * 0.34;
-  const rh = s.h * 0.26;
-  ctx.fillStyle = FELT_GREEN_EDGE;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rw + 4, rh + 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = FELT_GREEN;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Two face-up cards on the felt.
-  ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(cx - TS * 0.32, cy - TS * 0.12, TS * 0.24, TS * 0.34);
-  ctx.fillRect(cx - TS * 0.04, cy - TS * 0.12, TS * 0.24, TS * 0.34);
-  ctx.fillStyle = '#c02020';
-  ctx.fillRect(cx - TS * 0.28, cy - TS * 0.08, TS * 0.05, TS * 0.05);
-  ctx.fillStyle = '#101010';
-  ctx.fillRect(cx, cy - TS * 0.08, TS * 0.05, TS * 0.05);
-
-  // Chip stacks.
-  for (let i = 0; i < CHIP_COLORS.length; i++) {
-    const stackX = cx + TS * 0.28 + i * TS * 0.16;
-    for (let j = 0; j < 3; j++) {
-      ctx.fillStyle = CHIP_COLORS[i];
-      ctx.beginPath();
-      ctx.ellipse(stackX, cy + TS * 0.08 - j * 3, TS * 0.07, TS * 0.03, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-// ── The Market — striped awning over crates and produce ─────────────────────
-const CRATE = '#7a5028';
-const CRATE_EDGE = '#4a2f16';
-
-function drawMarketProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string): void {
-  // Striped awning across the top.
-  const awningY = s.y + TS * 0.7;
-  const awningX = s.x + TS * 0.4;
-  const awningW = s.w - TS * 0.8;
-  const stripes = 6;
-  const stripeW = awningW / stripes;
-  for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = i % 2 === 0 ? accent : '#f0e8d8';
-    ctx.beginPath();
-    ctx.moveTo(awningX + i * stripeW, awningY);
-    ctx.lineTo(awningX + (i + 1) * stripeW, awningY);
-    ctx.lineTo(awningX + (i + 0.5) * stripeW, awningY + TS * 0.3);
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.fillStyle = hexToRgba(accent, 0.8);
-  ctx.fillRect(awningX, awningY - TS * 0.14, awningW, TS * 0.14);
-
-  // Crates + produce along the bottom.
-  const crateY = s.y + s.h - TS * 1.2;
-  const crates = 3;
-  const crateW = TS * 0.7;
-  const crateGap = (s.w - TS - crates * crateW) / (crates - 1);
-  for (let i = 0; i < crates; i++) {
-    const crateX = s.x + TS * 0.5 + i * (crateW + crateGap);
-    ctx.fillStyle = CRATE;
-    ctx.fillRect(crateX, crateY, crateW, TS * 0.7);
-    ctx.strokeStyle = CRATE_EDGE;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(crateX, crateY, crateW, TS * 0.7);
-    // A couple of round goods on top.
-    ctx.fillStyle = ['#d05030', '#40a030', '#e0b030'][i % 3];
-    ctx.beginPath();
-    ctx.arc(crateX + crateW * 0.35, crateY - TS * 0.08, TS * 0.1, 0, Math.PI * 2);
-    ctx.arc(crateX + crateW * 0.65, crateY - TS * 0.08, TS * 0.1, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// ── Meat Shields — a weapon rack and a banner ───────────────────────────────
-const STEEL = '#b8c0cc';
-const STEEL_DARK = '#6a7280';
-const HAFT = '#4a3218';
-
-function drawMercenaryProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string): void {
-  // Wall banner.
-  const bannerX = s.x + s.w / 2 - TS * 0.5;
-  const bannerY = s.y + TS * 0.7;
-  ctx.fillStyle = hexToRgba(accent, 0.85);
-  ctx.beginPath();
-  ctx.moveTo(bannerX, bannerY);
-  ctx.lineTo(bannerX + TS, bannerY);
-  ctx.lineTo(bannerX + TS, bannerY + TS * 0.8);
-  ctx.lineTo(bannerX + TS * 0.5, bannerY + TS * 0.62);
-  ctx.lineTo(bannerX, bannerY + TS * 0.8);
-  ctx.closePath();
-  ctx.fill();
-
-  // Weapon rack: a horizontal beam with weapons standing against it.
-  const rackY = s.y + s.h - TS * 1.5;
-  const rackX = s.x + TS * 0.6;
-  const rackW = s.w - TS * 1.2;
-  ctx.fillStyle = HAFT;
-  ctx.fillRect(rackX, rackY, rackW, TS * 0.12);
-  ctx.fillRect(rackX, s.y + s.h - TS * 0.4, rackW, TS * 0.12);
-
-  // A sword, an axe, a spear.
-  const slot = rackW / 3;
-  // Sword.
-  const swX = rackX + slot * 0.5;
-  ctx.strokeStyle = STEEL;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(swX, rackY + TS * 0.1);
-  ctx.lineTo(swX, rackY - TS * 0.7);
-  ctx.stroke();
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(swX - TS * 0.12, rackY - TS * 0.05);
-  ctx.lineTo(swX + TS * 0.12, rackY - TS * 0.05);
-  ctx.stroke();
-  // Axe.
-  const axX = rackX + slot * 1.5;
-  ctx.strokeStyle = HAFT;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(axX, rackY + TS * 0.1);
-  ctx.lineTo(axX, rackY - TS * 0.7);
-  ctx.stroke();
-  ctx.fillStyle = STEEL_DARK;
-  ctx.beginPath();
-  ctx.moveTo(axX, rackY - TS * 0.6);
-  ctx.lineTo(axX + TS * 0.22, rackY - TS * 0.7);
-  ctx.lineTo(axX + TS * 0.22, rackY - TS * 0.44);
-  ctx.closePath();
-  ctx.fill();
-  // Spear.
-  const spX = rackX + slot * 2.5;
-  ctx.strokeStyle = HAFT;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(spX, rackY + TS * 0.1);
-  ctx.lineTo(spX, rackY - TS * 0.8);
-  ctx.stroke();
-  ctx.fillStyle = STEEL;
-  ctx.beginPath();
-  ctx.moveTo(spX, rackY - TS * 0.95);
-  ctx.lineTo(spX - TS * 0.08, rackY - TS * 0.72);
-  ctx.lineTo(spX + TS * 0.08, rackY - TS * 0.72);
-  ctx.closePath();
-  ctx.fill();
-}
-
-// ── VIP Lounge — velvet couch, rope stanchions, gold sparkle ────────────────
-const VELVET = '#7a1f3a';
-const VELVET_LIGHT = '#a02f52';
-const GOLD = '#e0c050';
-const ROPE = '#b01f3a';
-
-function drawVipProps(ctx: CanvasRenderingContext2D, s: Screen, accent: string): void {
-  // Plush velvet couch centered in the nook.
-  const couchW = s.w * 0.3;
-  const couchX = s.x + s.w / 2 - couchW / 2;
-  const couchY = s.y + s.h - TS * 0.95;
-  const couchH = TS * 0.55;
-  drawBox(ctx, {
-    x: couchX,
-    y: couchY,
-    width: couchW,
-    height: couchH,
-    fill: VELVET,
-    radius: 6,
-  });
-  // Backrest + cushions.
-  ctx.fillStyle = VELVET_LIGHT;
-  ctx.fillRect(couchX, couchY, couchW, TS * 0.16);
-  const cushions = 3;
-  for (let i = 0; i < cushions; i++) {
-    ctx.fillStyle = VELVET_LIGHT;
-    const cw = couchW / cushions;
-    drawBox(ctx, {
-      x: couchX + i * cw + 2,
-      y: couchY + TS * 0.18,
-      width: cw - 4,
-      height: couchH - TS * 0.22,
-      fill: VELVET_LIGHT,
-      radius: 4,
-    });
-  }
-
-  // Two gold rope stanchions guarding the front, joined by a velvet rope.
-  const postY = s.y + s.h - TS * 0.3;
-  const leftPostX = couchX - TS * 0.6;
-  const rightPostX = couchX + couchW + TS * 0.6;
-  ctx.strokeStyle = ROPE;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(leftPostX, postY - TS * 0.2);
-  ctx.quadraticCurveTo(
-    (leftPostX + rightPostX) / 2,
-    postY + TS * 0.15,
-    rightPostX,
-    postY - TS * 0.2,
-  );
-  ctx.stroke();
-  for (const postX of [leftPostX, rightPostX]) {
-    ctx.strokeStyle = GOLD;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(postX, postY);
-    ctx.lineTo(postX, postY - TS * 0.4);
-    ctx.stroke();
-    ctx.fillStyle = GOLD;
-    ctx.beginPath();
-    ctx.arc(postX, postY - TS * 0.44, TS * 0.08, 0, Math.PI * 2);
+    ctx.ellipse(
+      s.x + s.w * spot.fx,
+      s.y + s.h * spot.fy,
+      TS * spot.r,
+      TS * spot.r * SCUFF_FLATTEN,
+      0,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
   }
 
-  // Gold sparkle accents.
-  ctx.fillStyle = hexToRgba(accent, 0.9);
-  for (const [dx, dy] of [
-    [0.2, 0.5],
-    [0.8, 0.45],
-    [0.5, 0.35],
-  ]) {
-    const px = s.x + s.w * dx;
-    const py = s.y + s.h * dy;
-    ctx.beginPath();
-    ctx.moveTo(px, py - 3);
-    ctx.lineTo(px + 1, py);
-    ctx.lineTo(px + 3, py);
-    ctx.lineTo(px + 1, py + 1);
-    ctx.lineTo(px, py + 3);
-    ctx.lineTo(px - 1, py + 1);
-    ctx.lineTo(px - 3, py);
-    ctx.lineTo(px - 1, py);
-    ctx.closePath();
-    ctx.fill();
-  }
+  const centerX = s.x + s.w / 2;
+  const centerY = s.y + s.h / 2;
+  const glowRadius = Math.max(s.w, s.h) * GLOW_RADIUS_RATIO;
+  const glow = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius);
+  glow.addColorStop(0, hexToRgba(accent, GLOW_CENTER_ALPHA));
+  glow.addColorStop(1, hexToRgba(accent, GLOW_EDGE_ALPHA));
+  ctx.fillStyle = glow;
+  ctx.fillRect(s.x, s.y, s.w, s.h);
+  ctx.restore();
 }
+
+const FLOOR_STAIN_COLOR: Record<ClubStationId, string> = {
+  bar: 'rgba(60,34,12,0.22)',
+  market: 'rgba(40,30,50,0.2)',
+  casino: 'rgba(12,44,26,0.22)',
+  mercenary: 'rgba(52,18,14,0.22)',
+  vip: 'rgba(46,14,26,0.24)',
+  sledge: 'rgba(0,0,0,0.15)',
+};
 
 /** Expand a `#rrggbb` string to an `rgba()` with the given alpha. */
 function hexToRgba(hex: string, alpha: number): string {
