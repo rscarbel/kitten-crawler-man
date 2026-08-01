@@ -203,7 +203,17 @@ src/
 ├── abilities/
 │   ├── magicMissile.ts        ← 15-level ability tree with perk unlocks
 │   └── protectiveShell.ts     ← 15-level ability tree with perk unlocks
-├── sprites/                   ← ~21 sprite renderers (all Canvas 2D drawing)
+├── sprites/                   ← sprite renderers: PNG-sheet wrappers + procedural Canvas 2D drawing
+├── images/                    ← PNG sheets, one manifest.json per leaf folder
+│   ├── bosses/, characters/, effects/, enemies/, npcs/
+│   └── environment/
+│       ├── buildings/, circus/, club/, nature/, props/, tilesets/, walls_roofs/
+│       ├── townscape/         ← town art REUSABLE by any town or later floor
+│       │                        (shop signs, street lamps, clutter, gateways,
+│       │                        bunting, laundry lines, market stalls, benches)
+│       └── towns/
+│           └── over_city/     ← art only correct in THIS town (fingerposts whose
+│                                arms name its streets, its named seer)
 ├── audio/
 │   ├── AudioManager.ts        ← centralized audio playback
 │   ├── sounds.ts              ← sound effect registry
@@ -235,7 +245,11 @@ index.html                     ← loads canvas + bundle.js
 
 ## Architecture
 
-**No framework** — everything is Canvas 2D API calls. No DOM manipulation beyond mounting the canvas. All sprites are drawn in code; no image files.
+**No framework** — everything is Canvas 2D API calls. No DOM manipulation beyond mounting the canvas.
+
+**Art is drawn in code, then baked to PNG.** Sprites and props are authored as Canvas 2D painters under `src/sprites/`, but the ones that would otherwise be replayed every frame are rasterised offline by a `scripts/generate-*.ts` script into a sheet under `src/images/`, described by that folder's `manifest.json`. The game then blits a frame instead of replaying the drawing. The painters stay the source of truth — the generators import them rather than reimplementing the art — so a change to a painter is picked up by re-running its generator.
+
+**Where a new town asset goes.** `src/images/environment/townscape/` if another town or a later floor could hang the same thing (a lamp, a bench, a crate); `src/images/environment/towns/<town>/` if the picture is only correct in that town (a signpost whose arms name its streets). Keeping the two apart is what stops `townscape/` from becoming the place every town's one-off signage accumulates. Regenerate with `npm run gen:town-art`.
 
 **Game loop**: `SceneManager` runs `update()` + `render()` at 60 FPS via `requestAnimationFrame`. The active `Scene` (usually `DungeonScene`) orchestrates all gameplay.
 
@@ -298,3 +312,16 @@ Player (base: position, HP, stats, walk animation)
 - **Express + SQLite** — optional backend for auth and progress saving
 - **Prettier / ESLint** — formatting and linting
 - **GitHub Pages** — auto-deploy on push to main
+
+### Build output
+
+`npm run build` produces a minified `dist/bundle.js` and regenerates `sw.js`.
+
+`npm run build:site` assembles the deployable `_site/` directory (what the
+Pages workflow uploads); `npm run build:zip` packages the offline edition.
+Both take their asset list from `scripts/shipped-assets.js`, which ships only
+files the game actually references — sprite manifests are inlined into the
+bundle, and generator scripts, source art, and `.ts` modules living under
+`src/images` / `src/audio` are left out. Anything skipped is printed during the
+build, so an asset that silently stops being referenced is visible rather than
+quietly shipped.

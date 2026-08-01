@@ -1,0 +1,30 @@
+{
+  "over_city_signpost": {
+    "path": "environment/towns/over_city/signpost.png",
+    "frameWidth": 192,
+    "frameHeight": 109,
+    "tileX": 96,
+    "tileY": 77,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      }
+    }
+  },
+  "over_city_fortune_teller": {
+    "path": "environment/towns/over_city/fortune_teller.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  }
+}

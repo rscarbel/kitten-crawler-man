@@ -22,7 +22,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
-import { PARCHMENT, WOOD, WOOD_DARK } from '../sprites/townPalette';
+import { drawTownSheetFrame } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
 import type { GameMap } from '../map/GameMap';
@@ -337,23 +337,19 @@ export class TownPropSystem implements GameSystem {
   }
 }
 
-const HEADER = '#8a5a2b';
+/**
+ * The baked sheets these fixtures draw from. The bench and the board are street
+ * furniture any town could have, so they are baked by
+ * `scripts/generate-townscape-sprites.ts`; the seer is Madame Voss by name, so
+ * she is baked by `generate-over-city-sprites.ts` into this town's own folder.
+ */
+const NOTICE_BOARD_SHEET_KEY = 'town_notice_board';
+const BENCH_SHEET_KEY = 'town_bench';
+const FORTUNE_TELLER_SHEET_KEY = 'over_city_fortune_teller';
 
-// Notice-board sprite geometry, drawn with primitives (no art asset). The board
-// stands on its tile and rises upward; the tile itself is the foot for Y-sorting.
-const POST_WIDTH = 4;
-const POST_INSET = 6;
-const BOARD_TOP_TILE_FRACTION = 0.85;
-const BOARD_BOTTOM_TILE_FRACTION = 0.35;
-const BOARD_TOP = -TILE_SIZE * BOARD_TOP_TILE_FRACTION;
-const BOARD_BOTTOM = TILE_SIZE * BOARD_BOTTOM_TILE_FRACTION;
-const BOARD_SIDE_OVERHANG = 3;
-const BOARD_FRAME = 2;
-const HEADER_HEIGHT = 6;
-const NOTE_INSET = 5;
-const NOTE_HEIGHT = 4;
-const NOTE_GAP = 3;
-const NOTE_COUNT = 3;
+/** None of the three moves, so each is one picture in a single-state sheet. */
+const FIXTURE_STATE = 'idle';
+const FIXTURE_FRAME = 0;
 
 class NoticeBoardProp implements TownPropRenderable {
   constructor(readonly tile: TileXY) {}
@@ -367,62 +363,17 @@ class NoticeBoardProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    ctx.save();
-    const sx = this.tile.x * tileSize - camX;
-    const sy = this.tile.y * tileSize - camY;
-
-    const leftPostX = sx + POST_INSET;
-    const rightPostX = sx + tileSize - POST_INSET - POST_WIDTH;
-    const postTop = sy + BOARD_TOP + HEADER_HEIGHT;
-    const postBottom = sy + tileSize;
-
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(leftPostX, postTop, POST_WIDTH, postBottom - postTop);
-    ctx.fillRect(rightPostX, postTop, POST_WIDTH, postBottom - postTop);
-
-    const boardX = sx - BOARD_SIDE_OVERHANG;
-    const boardW = tileSize + BOARD_SIDE_OVERHANG * 2;
-    const boardTop = sy + BOARD_TOP;
-    const boardH = BOARD_BOTTOM - BOARD_TOP;
-
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(boardX, boardTop, boardW, boardH);
-    ctx.fillStyle = WOOD;
-    ctx.fillRect(
-      boardX + BOARD_FRAME,
-      boardTop + BOARD_FRAME,
-      boardW - BOARD_FRAME * 2,
-      boardH - BOARD_FRAME * 2,
+    drawTownSheetFrame(
+      ctx,
+      NOTICE_BOARD_SHEET_KEY,
+      FIXTURE_STATE,
+      FIXTURE_FRAME,
+      this.tile.x * tileSize - camX,
+      this.tile.y * tileSize - camY,
+      tileSize,
     );
-
-    ctx.fillStyle = HEADER;
-    ctx.fillRect(
-      boardX + BOARD_FRAME,
-      boardTop + BOARD_FRAME,
-      boardW - BOARD_FRAME * 2,
-      HEADER_HEIGHT,
-    );
-
-    const noteX = boardX + NOTE_INSET;
-    const noteW = boardW - NOTE_INSET * 2;
-    let noteY = boardTop + BOARD_FRAME + HEADER_HEIGHT + NOTE_GAP;
-    ctx.fillStyle = PARCHMENT;
-    for (let i = 0; i < NOTE_COUNT; i++) {
-      ctx.fillRect(noteX, noteY, noteW, NOTE_HEIGHT);
-      noteY += NOTE_HEIGHT + NOTE_GAP;
-    }
-    ctx.restore();
   }
 }
-
-// Bench sprite geometry: a low wooden seat with a backrest, sitting on its tile.
-const BENCH_SIDE_INSET = 2;
-const BENCH_SEAT_TILE_FRACTION = 0.55;
-const BENCH_SEAT_THICKNESS = 4;
-const BENCH_LEG_WIDTH = 3;
-const BENCH_LEG_HEIGHT = 6;
-const BENCH_BACK_TILE_FRACTION = 0.28;
-const BENCH_BACK_THICKNESS = 3;
 
 class BenchProp implements TownPropRenderable {
   constructor(readonly tile: TileXY) {}
@@ -436,86 +387,17 @@ class BenchProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    ctx.save();
-    const sx = this.tile.x * tileSize - camX;
-    const sy = this.tile.y * tileSize - camY;
-    const left = sx + BENCH_SIDE_INSET;
-    const width = tileSize - BENCH_SIDE_INSET * 2;
-    const seatY = sy + tileSize * BENCH_SEAT_TILE_FRACTION;
-    const backY = sy + tileSize * BENCH_BACK_TILE_FRACTION;
-
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(left, backY, BENCH_BACK_THICKNESS, seatY - backY);
-    ctx.fillRect(left + width - BENCH_BACK_THICKNESS, backY, BENCH_BACK_THICKNESS, seatY - backY);
-    ctx.fillRect(left, backY, width, BENCH_BACK_THICKNESS);
-
-    ctx.fillStyle = WOOD;
-    ctx.fillRect(left, seatY, width, BENCH_SEAT_THICKNESS);
-
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(
-      left + BENCH_SIDE_INSET,
-      seatY + BENCH_SEAT_THICKNESS,
-      BENCH_LEG_WIDTH,
-      BENCH_LEG_HEIGHT,
+    drawTownSheetFrame(
+      ctx,
+      BENCH_SHEET_KEY,
+      FIXTURE_STATE,
+      FIXTURE_FRAME,
+      this.tile.x * tileSize - camX,
+      this.tile.y * tileSize - camY,
+      tileSize,
     );
-    ctx.fillRect(
-      left + width - BENCH_SIDE_INSET - BENCH_LEG_WIDTH,
-      seatY + BENCH_SEAT_THICKNESS,
-      BENCH_LEG_WIDTH,
-      BENCH_LEG_HEIGHT,
-    );
-    ctx.restore();
   }
 }
-
-// Fortune-teller sprite geometry: Madame Voss, a hooded seer seated behind a
-// small table, hands framing a glowing crystal orb. Every measure is a fraction
-// of tile size so she reads as a person, not a robe-blob. The tile is her foot
-// for Y-sorting.
-const SEER_TWO_PI = Math.PI * 2;
-const SEER_BASE_FRACTION = 0.96; // seat/base line
-const SEER_SHOULDER_FRACTION = 0.44; // shoulder line
-const SEER_TABLE_TOP_FRACTION = 0.66;
-const SEER_TABLE_HEIGHT_FRACTION = 0.13;
-const SEER_TABLE_INSET_FRACTION = 0.05;
-const SEER_SHOULDER_HALF = 0.28; // half shoulder width
-const SEER_HEM_HALF = 0.42; // half robe hem width at the seat
-const SEER_ROBE_SEAM_WIDTH = 0.02;
-const SEER_HEAD_CY_FRACTION = 0.27;
-const SEER_HOOD_R = 0.19;
-const SEER_HOOD_LIFT = 0.03; // hood peak above the face center
-const SEER_FACE_RX = 0.085;
-const SEER_FACE_RY = 0.11;
-const SEER_FACE_DROP = 0.02; // face sits below the hood center so the cowl frames it
-const SEER_BROW_SHADOW_RY = 0.045;
-const SEER_EYE_DX = 0.038;
-const SEER_EYE_CY_FRACTION = 0.28;
-const SEER_EYE_R = 0.018;
-const SEER_ARM_WIDTH = 0.085;
-const SEER_HAND_DX = 0.17;
-const SEER_HAND_R = 0.045;
-const SEER_ORB_RADIUS_FRACTION = 0.09;
-const SEER_ORB_LIFT_FRACTION = 0.05;
-const SEER_COWL_SIDE_FRACTION = 0.9; // where the cowl meets the head, as a fraction of hood radius
-const SEER_COWL_SHOULDER_DROP = 0.02; // how far the cowl laps over the shoulders
-const SEER_BROW_SHADOW_RISE = 0.5; // brow shadow center above the face center, as a fraction of face RY
-const SEER_EYE_GLOW_BLUR = 0.08;
-const SEER_HAND_REST_LIFT = 0.01; // hands sit just above the table surface
-const SEER_ARM_ROOT_SPREAD = 0.7; // arm root spacing as a fraction of shoulder half-width
-const SEER_ARM_ROOT_DROP = 0.03; // arm root below the shoulder line
-const SEER_ARM_ELBOW_DX = 0.24; // elbow bow-out from center
-const SEER_ARM_ELBOW_LIFT = 0.04; // elbow above the table surface
-
-const SEER_ROBE = '#3b2f5e';
-const SEER_ROBE_SEAM = '#2c2247';
-const SEER_HOOD = '#241b38';
-const SEER_FACE = '#c9a781';
-const SEER_BROW_SHADOW = '#5a3f4a';
-const SEER_EYE = '#fff2c4';
-const SEER_EYE_GLOW = '#a855f7';
-const SEER_ORB = '#c9b8f0';
-const SEER_ORB_GLOW = '#a855f7';
 
 class FortuneTellerProp implements TownPropRenderable {
   constructor(readonly tile: TileXY) {}
@@ -528,128 +410,15 @@ class FortuneTellerProp implements TownPropRenderable {
     return this.tile.y * TILE_SIZE;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, s: number): void {
-    // The seer sets `lineWidth` and `lineCap` for her arms and never put them
-    // back. Props render back to back with no reset between them, and this scene
-    // now sorts the town's decor into the same list — so a leak here reaches the
-    // cart shafts, wheel spokes and laundry ropes drawn after her.
-    ctx.save();
-    const sx = this.tile.x * s - camX;
-    const sy = this.tile.y * s - camY;
-    const cx = sx + s / 2;
-    const baseY = sy + s * SEER_BASE_FRACTION;
-    const shoulderY = sy + s * SEER_SHOULDER_FRACTION;
-    const tableTop = sy + s * SEER_TABLE_TOP_FRACTION;
-    const headCY = sy + s * SEER_HEAD_CY_FRACTION;
-
-    // Cowl draping from the head down to the shoulders — sits behind the body.
-    ctx.fillStyle = SEER_HOOD;
-    ctx.beginPath();
-    ctx.moveTo(cx - s * SEER_HOOD_R * SEER_COWL_SIDE_FRACTION, headCY);
-    ctx.lineTo(cx - s * SEER_SHOULDER_HALF, shoulderY + s * SEER_COWL_SHOULDER_DROP);
-    ctx.lineTo(cx + s * SEER_SHOULDER_HALF, shoulderY + s * SEER_COWL_SHOULDER_DROP);
-    ctx.lineTo(cx + s * SEER_HOOD_R * SEER_COWL_SIDE_FRACTION, headCY);
-    ctx.closePath();
-    ctx.fill();
-
-    // Robe body: a trapezoid from the shoulders to a wide hem at the seat.
-    ctx.fillStyle = SEER_ROBE;
-    ctx.beginPath();
-    ctx.moveTo(cx - s * SEER_SHOULDER_HALF, shoulderY);
-    ctx.lineTo(cx + s * SEER_SHOULDER_HALF, shoulderY);
-    ctx.lineTo(cx + s * SEER_HEM_HALF, baseY);
-    ctx.lineTo(cx - s * SEER_HEM_HALF, baseY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = SEER_ROBE_SEAM;
-    ctx.lineWidth = Math.max(1, s * SEER_ROBE_SEAM_WIDTH);
-    ctx.beginPath();
-    ctx.moveTo(cx, shoulderY);
-    ctx.lineTo(cx, baseY);
-    ctx.stroke();
-
-    // Head: hood cowl behind, skin face inset, a shaded brow, and glowing eyes.
-    ctx.fillStyle = SEER_HOOD;
-    ctx.beginPath();
-    ctx.arc(cx, headCY - s * SEER_HOOD_LIFT, s * SEER_HOOD_R, 0, SEER_TWO_PI);
-    ctx.fill();
-
-    const faceCY = headCY + s * SEER_FACE_DROP;
-    ctx.fillStyle = SEER_FACE;
-    ctx.beginPath();
-    ctx.ellipse(cx, faceCY, s * SEER_FACE_RX, s * SEER_FACE_RY, 0, 0, SEER_TWO_PI);
-    ctx.fill();
-
-    ctx.fillStyle = SEER_BROW_SHADOW;
-    ctx.beginPath();
-    ctx.ellipse(
-      cx,
-      faceCY - s * SEER_FACE_RY * SEER_BROW_SHADOW_RISE,
-      s * SEER_FACE_RX,
-      s * SEER_BROW_SHADOW_RY,
-      0,
-      0,
-      SEER_TWO_PI,
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    drawTownSheetFrame(
+      ctx,
+      FORTUNE_TELLER_SHEET_KEY,
+      FIXTURE_STATE,
+      FIXTURE_FRAME,
+      this.tile.x * tileSize - camX,
+      this.tile.y * tileSize - camY,
+      tileSize,
     );
-    ctx.fill();
-
-    ctx.save();
-    ctx.shadowColor = SEER_EYE_GLOW;
-    ctx.shadowBlur = s * SEER_EYE_GLOW_BLUR;
-    ctx.fillStyle = SEER_EYE;
-    const eyeY = sy + s * SEER_EYE_CY_FRACTION;
-    ctx.beginPath();
-    ctx.arc(cx - s * SEER_EYE_DX, eyeY, s * SEER_EYE_R, 0, SEER_TWO_PI);
-    ctx.arc(cx + s * SEER_EYE_DX, eyeY, s * SEER_EYE_R, 0, SEER_TWO_PI);
-    ctx.fill();
-    ctx.restore();
-
-    // Table in front of her lower body.
-    const inset = s * SEER_TABLE_INSET_FRACTION;
-    ctx.fillStyle = WOOD_DARK;
-    ctx.fillRect(sx + inset, tableTop, s - inset * 2, s * SEER_TABLE_HEIGHT_FRACTION);
-
-    // Sleeved arms resting on the table, hands framing the orb.
-    const handY = tableTop - s * SEER_HAND_REST_LIFT;
-    ctx.strokeStyle = SEER_ROBE;
-    ctx.lineWidth = s * SEER_ARM_WIDTH;
-    ctx.lineCap = 'round';
-    for (const dir of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(
-        cx + dir * s * SEER_SHOULDER_HALF * SEER_ARM_ROOT_SPREAD,
-        shoulderY + s * SEER_ARM_ROOT_DROP,
-      );
-      ctx.quadraticCurveTo(
-        cx + dir * s * SEER_ARM_ELBOW_DX,
-        tableTop - s * SEER_ARM_ELBOW_LIFT,
-        cx + dir * s * SEER_HAND_DX,
-        handY,
-      );
-      ctx.stroke();
-    }
-    ctx.fillStyle = SEER_FACE;
-    for (const dir of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(cx + dir * s * SEER_HAND_DX, handY, s * SEER_HAND_R, 0, SEER_TWO_PI);
-      ctx.fill();
-    }
-
-    // Crystal orb between her hands.
-    ctx.save();
-    ctx.shadowColor = SEER_ORB_GLOW;
-    ctx.shadowBlur = s * SEER_ORB_RADIUS_FRACTION * 2;
-    ctx.fillStyle = SEER_ORB;
-    ctx.beginPath();
-    ctx.arc(
-      cx,
-      tableTop - s * SEER_ORB_LIFT_FRACTION,
-      s * SEER_ORB_RADIUS_FRACTION,
-      0,
-      SEER_TWO_PI,
-    );
-    ctx.fill();
-    ctx.restore();
-    ctx.restore();
   }
 }

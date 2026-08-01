@@ -8,6 +8,8 @@ import environmentClubManifest from '../images/environment/club/manifest.json';
 import environmentNatureManifest from '../images/environment/nature/manifest.json';
 import environmentPropsManifest from '../images/environment/props/manifest.json';
 import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
+import environmentTownscapeManifest from '../images/environment/townscape/manifest.json';
+import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
 import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
@@ -20,6 +22,11 @@ const environmentManifest = {
   ...environmentNatureManifest,
   ...environmentPropsManifest,
   ...environmentTilesetsManifest,
+  // The town's street furniture. Both belong in the environment subset because
+  // that is what `getMapSpriteExtentsPx` widens the map's cull margin by, and a
+  // street lamp reaches four tiles above its own tile.
+  ...environmentTownscapeManifest,
+  ...environmentOverCityManifest,
   ...environmentWallsRoofsManifest,
 } as const;
 

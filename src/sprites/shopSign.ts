@@ -703,15 +703,25 @@ const EMBLEM_PAINTERS: Record<ShopSignEmblem, EmblemPainter> = {
 export const SIGN_SWAY_STEPS = 4;
 
 /**
- * The sign's swing at `frame`, snapped to one of `SIGN_SWAY_STEPS` angles.
- * Returns the step index and the rotation to draw it with.
+ * Which of the `SIGN_SWAY_STEPS` angles the sign hangs at on `frame`.
+ *
+ * The angle itself is no longer needed at runtime — the sheet carries one baked
+ * row per step, so the game picks a row and the offline generator, which is the
+ * only caller that still has to *draw* a swing, gets the angle from
+ * `shopSignSwayForStep`. Splitting the two keeps the quantization in one place:
+ * a step the game asks for and a step the generator baked have to mean the same
+ * angle, or every sign in town hangs slightly wrong.
  */
-export function shopSignSway(frame: number, swayPhase: number): { step: number; sway: number } {
+export function shopSignSwayStep(frame: number, swayPhase: number): number {
   const wave = Math.sin((frame / SWAY_PERIOD_FRAMES) * TWO_PI + swayPhase);
   const normalized = (wave + 1) / 2;
-  const step = Math.min(SIGN_SWAY_STEPS - 1, Math.floor(normalized * SIGN_SWAY_STEPS));
+  return Math.min(SIGN_SWAY_STEPS - 1, Math.floor(normalized * SIGN_SWAY_STEPS));
+}
+
+/** The board's rotation at one of the `SIGN_SWAY_STEPS` quantized angles. */
+export function shopSignSwayForStep(step: number): number {
   const steppedWave = (step / (SIGN_SWAY_STEPS - 1)) * 2 - 1;
-  return { step, sway: steppedWave * SWAY_AMPLITUDE_RAD };
+  return steppedWave * SWAY_AMPLITUDE_RAD;
 }
 
 /**

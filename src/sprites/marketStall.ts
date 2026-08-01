@@ -18,12 +18,43 @@
 
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { WOOD, WOOD_DARK, WOOD_LIGHT } from './townPalette';
+import { MARKET_VENDORS } from '../systems/market/vendorDefs';
 import type { GoodsMotif, StallStyle } from '../systems/market/vendorDefs';
 
 /** Footprint width. A one-tile cart is too small to read as a market stall. */
 export const STALL_WIDTH_TILES = 2;
 
 const TWO_PI = Math.PI * 2;
+
+/** One stall's look: which palette it is painted in and what it has for sale. */
+export interface StallVariant {
+  readonly style: StallStyle;
+  readonly motif: GoodsMotif;
+}
+
+/**
+ * The (style, motif) pairs the town's vendors actually use, in the order their
+ * art occupies frames of the three baked stall sheets.
+ *
+ * Derived from `MARKET_VENDORS` rather than listed beside it, for the reason
+ * `TOWN_CLUTTER_KINDS` gives: the generator bakes one frame per entry and the
+ * runtime looks a stall up by its index here, so a pair present in only one of
+ * the two halves would draw a vendor's cart in somebody else's colours.
+ */
+export const STALL_VARIANTS: ReadonlyArray<StallVariant> = collectStallVariants();
+
+function collectStallVariants(): StallVariant[] {
+  const byPair = new Map<string, StallVariant>();
+  for (const vendor of MARKET_VENDORS) {
+    byPair.set(`${vendor.style}:${vendor.motif}`, { style: vendor.style, motif: vendor.motif });
+  }
+  return [...byPair.values()];
+}
+
+/** Which frame of the stall sheets carries this (style, motif) pair's art. */
+export function stallVariantIndex(style: StallStyle, motif: GoodsMotif): number {
+  return STALL_VARIANTS.findIndex((variant) => variant.style === style && variant.motif === motif);
+}
 
 interface StallPalette {
   canopy: string;
@@ -141,6 +172,40 @@ const CANOPY_CAST_SHADOW_FILL = 'rgba(0, 0, 0, 0.22)';
 const HEM_RIPPLE_SPEED = 0.045;
 const HEM_RIPPLE_STRIDE = 0.8; // phase offset per scallop, so the ripple travels
 const HEM_RIPPLE_FRACTION = 0.025;
+
+/** How long the hem takes to come back to where it started, in stall phase units. */
+const HEM_RIPPLE_PERIOD_FRAMES = TWO_PI / HEM_RIPPLE_SPEED;
+
+/**
+ * How many distinct points of its ripple the canopy hem is drawn at.
+ *
+ * Every scallop shares one period and differs only in phase, so quantizing the
+ * cycle position quantizes the whole hem coherently. The bulge travels
+ * `HEM_RIPPLE_FRACTION` of a tile either way — under a pixel end to end at the
+ * 32 px tile the sheets are baked for — so eight steps are already finer than
+ * the eye resolves, and unlike the continuous phase they replace they are a
+ * finite number of pictures, which is what lets the canopy be baked at all.
+ */
+export const STALL_RIPPLE_STEPS = 8;
+
+/** Which of the `STALL_RIPPLE_STEPS` points of its ripple the hem is at. */
+export function stallRippleStep(phase: number): number {
+  const cyclePosition = positiveMod(phase, HEM_RIPPLE_PERIOD_FRAMES) / HEM_RIPPLE_PERIOD_FRAMES;
+  return Math.min(STALL_RIPPLE_STEPS - 1, Math.floor(cyclePosition * STALL_RIPPLE_STEPS));
+}
+
+/**
+ * The phase to draw at to land exactly on one of the quantized steps. The
+ * offline generator is the only caller — it bakes one frame per step, and this
+ * is what makes the picture it bakes the picture `stallRippleStep` asks for.
+ */
+export function stallPhaseForStep(step: number): number {
+  return (step / STALL_RIPPLE_STEPS) * HEM_RIPPLE_PERIOD_FRAMES;
+}
+
+function positiveMod(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
 
 // Goods on the counter. An odd count in a deliberately uneven arrangement —
 // perfectly even spacing is what makes three squares read as programmer art.

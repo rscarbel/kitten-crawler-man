@@ -5,6 +5,7 @@ import { TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
+import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { type HumanPlayer } from '../creatures/HumanPlayer';
 import { type CatPlayer } from '../creatures/CatPlayer';
 import { type Mob, type LootDrop } from '../creatures/Mob';
@@ -111,6 +112,7 @@ import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import {
   readMovement,
   applyMovement,
+  type SouthCollisionAnchor,
   checkDeath,
   revealMinimap,
   triggerPlayerAttack,
@@ -679,6 +681,17 @@ export class DungeonScene extends GameplayScene {
     options?: DungeonSceneOptions,
   ) {
     super(input, sceneManager);
+
+    // Before anything is generated or drawn: the tile painters read the active
+    // theme rather than being handed one, so it has to be right for this floor
+    // by the time the first chunk is baked. Set here rather than in `GameMap`
+    // because a re-entry reuses `options.existingMap` and never builds one.
+    //
+    // Unconditionally, including for the tutorial and for an overworld level,
+    // so the theme is always a property of the level being entered rather than
+    // a leftover from the last one — see `DEFAULT_DUNGEON_FLOOR_THEME` for the
+    // town interiors that would otherwise inherit floor 2's blockwork.
+    setDungeonFloorTheme(levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME);
 
     const tutorialController = options?.tutorialController ?? null;
     let spawnTileX = 0;
@@ -3888,7 +3901,15 @@ export class DungeonScene extends GameplayScene {
     const humanMoveBlocked =
       this.tutorial !== null && !this.tutorial.canHumanMove && this.human.isActive;
     if (!this.spiderQuest.playerLocked && !catMoveBlocked && !humanMoveBlocked) {
-      applyMovement(player, move, this.gameMap);
+      // A dungeon wall is a wall seen from in front, the same as an interior's,
+      // so a crawler walking south into one has to stop with their feet on the
+      // last floor tile rather than planting their whole lower half on the
+      // masonry — see `SOLE_COLLISION_OFFSET`. Only the outdoor town keeps the
+      // old waist anchor: out there the "walls" are building facades and town
+      // walls whose art and clearances are a separate question from this one.
+      const southAnchor: SouthCollisionAnchor =
+        this.levelDef.isOverworld === true ? 'waist' : 'sole';
+      applyMovement(player, move, this.gameMap, southAnchor);
     }
 
     // Tutorial gate and ledge constraints — applied after movement

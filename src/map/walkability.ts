@@ -43,6 +43,8 @@ import {
   SAFE_ROOM_STOOL,
   SAFE_ROOM_LARDER,
   TILE_TYPE_COUNT,
+  INTERIOR_COUNTER,
+  INTERIOR_WALL,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
@@ -95,6 +97,11 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   SAFE_ROOM_TABLE,
   SAFE_ROOM_STOOL,
   SAFE_ROOM_LARDER,
+  // A town interior's plastered wall and its counter runs. The counters were
+  // `FloorTypeValue.wall` until they got a type of their own, so they were
+  // already solid; this is what keeps them that way.
+  INTERIOR_WALL,
+  INTERIOR_COUNTER,
 ];
 
 /**

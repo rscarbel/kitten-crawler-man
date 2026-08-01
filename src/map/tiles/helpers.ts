@@ -1,6 +1,8 @@
 import type { TileContent } from '../tileTypes';
 import {
   FloorTypeValue,
+  INTERIOR_COUNTER,
+  INTERIOR_WALL,
   VOID_TYPE,
   BUILDING_WALL,
   METAL_WALL,
@@ -30,6 +32,7 @@ import {
   CRATE,
   BRAZIER,
   BONES,
+  RUG,
   SPRITE_BUILDING,
   MODERN_DECORATION,
   RUINED_WALL,
@@ -68,6 +71,8 @@ const FLOOR_SEARCH_MAX_RADIUS = 3;
 // shadow inside its sprite.
 const SHADOW_TYPES = new Set([
   FloorTypeValue.wall,
+  INTERIOR_WALL,
+  INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
   TREE,
@@ -87,6 +92,8 @@ const SHADOW_TYPES = new Set([
 const NON_FLOOR_TYPES = new Set<number>([
   VOID_TYPE,
   FloorTypeValue.wall,
+  INTERIOR_WALL,
+  INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
   TREE,
@@ -110,6 +117,14 @@ const NON_FLOOR_TYPES = new Set<number>([
   CRATE,
   BRAZIER,
   BONES,
+  // A rug is walkable ground decoration, so it looks like a floor — but unlike
+  // `GRASSY_WEED` and `DIRT_PATCH` below it has no underlying type to report,
+  // and `inferFloorType` returning `RUG` leaves every caller with a type no
+  // renderer draws. The result was a transparent hole: a two-pixel black ring
+  // around every rug where its own inset shows through, and a solid black tile
+  // behind any chair standing on one. Skipping it sends the probe to the real
+  // floor beside it instead.
+  RUG,
   SPRITE_BUILDING,
   MODERN_DECORATION,
   RUINED_WALL,
@@ -139,8 +154,13 @@ function floorTypeAt(structure: TileContent[][], tx: number, ty: number): number
   // A prop that recorded the surface it replaced *is* a floor answer, and a good
   // one: a probe reaching a fence and skipping past it throws away the only tile
   // nearby that knows what the ground is.
+  //
+  // Filtered through the same set as a bare type, so the guarantee this function
+  // makes — it never hands back something no renderer can draw — holds down both
+  // paths. Without it a prop placed on a rug would record `RUG` and reintroduce
+  // the transparent hole that putting `RUG` in `NON_FLOOR_TYPES` closes.
   const recorded = row[tx].groundType;
-  if (recorded !== undefined) return recorded;
+  if (recorded !== undefined) return NON_FLOOR_TYPES.has(recorded) ? undefined : recorded;
   const t = row[tx].type;
   if (NON_FLOOR_TYPES.has(t)) return undefined;
   if (t === GRASSY_WEED || t === RUBBLE) return FloorTypeValue.grass;

@@ -13,6 +13,9 @@ export const tutorialLevel: LevelDef = {
   name: 'Tutorial',
   floorNumber: 1,
   music: 'bg_level_1',
+  // The same rung as floor 1, so the same cellars. Stated rather than left to
+  // `DEFAULT_DUNGEON_FLOOR_THEME` so that every level answers for its own art.
+  groundTheme: 'cellars',
   /**
    * mapSize is unused — the tutorial uses a hand-crafted TutorialMap (prebuiltStructure)
    * instead of procedural generation. Keep a plausible value for type correctness.

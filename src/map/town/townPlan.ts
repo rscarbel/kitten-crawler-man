@@ -109,22 +109,32 @@ export interface PlannedGate {
  * painter for each device lives in `src/sprites/shopSign.ts`, keyed by this
  * union, so a device with no art is a compile error rather than a blank board.
  */
-export type ShopSignEmblem =
-  | 'moon'
-  | 'fleece'
-  | 'shield'
-  | 'wheel'
-  | 'sun'
-  | 'mortar'
-  | 'barrel'
-  | 'bed'
-  | 'horn'
-  | 'cauldron'
-  | 'hammer'
-  | 'tankard'
-  | 'quill'
-  | 'cards'
-  | 'sheaf';
+/**
+ * The devices in the order their art occupies frames of `shop_sign.png`.
+ *
+ * Derived-union for the reason `TOWN_CLUTTER_KINDS` gives: the sheet is
+ * addressed by frame index, so the list and the union must be the same thing.
+ * Append only — reordering repoints every baked frame at the wrong emblem.
+ */
+export const SHOP_SIGN_EMBLEMS = [
+  'moon',
+  'fleece',
+  'shield',
+  'wheel',
+  'sun',
+  'mortar',
+  'barrel',
+  'bed',
+  'horn',
+  'cauldron',
+  'hammer',
+  'tankard',
+  'quill',
+  'cards',
+  'sheaf',
+] as const;
+
+export type ShopSignEmblem = (typeof SHOP_SIGN_EMBLEMS)[number];
 
 /**
  * A building rendered from a PNG. Its footprint and doorway both come from the

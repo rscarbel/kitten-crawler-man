@@ -1,58 +1,4 @@
 {
-  "dungeon_tileset": {
-    "path": "environment/tilesets/dungeon_tileset.png",
-    "frameWidth": 64,
-    "frameHeight": 64,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 64,
-    "states": {
-      "floor_plain": {
-        "row": 0,
-        "frameCount": 8
-      },
-      "floor_worn": {
-        "row": 1,
-        "frameCount": 8
-      },
-      "floor_cracked": {
-        "row": 2,
-        "frameCount": 8
-      },
-      "floor_mossy": {
-        "row": 3,
-        "frameCount": 8
-      },
-      "floor_wet": {
-        "row": 4,
-        "frameCount": 8
-      },
-      "floor_dark": {
-        "row": 5,
-        "frameCount": 8
-      },
-      "floor_ornate": {
-        "row": 6,
-        "frameCount": 8
-      },
-      "wall_plain": {
-        "row": 7,
-        "frameCount": 8
-      },
-      "wall_cracked": {
-        "row": 8,
-        "frameCount": 8
-      },
-      "wall_mossy": {
-        "row": 9,
-        "frameCount": 8
-      },
-      "wall_dark": {
-        "row": 10,
-        "frameCount": 8
-      }
-    }
-  },
   "modern_decorations": {
     "path": "environment/tilesets/modern_decorations.png",
     "frameWidth": 183,
@@ -147,62 +93,20 @@
     "tileY": 0,
     "tileScale": 64,
     "states": {
-      "dungeon_plain": {
-        "row": 0,
-        "frameCount": 32,
-        "patchTiles": 4,
-        "label": "Dungeon stone (calm, no joints)"
-      },
-      "dungeon_flagstone": {
-        "row": 1,
-        "frameCount": 32,
-        "patchTiles": 4,
-        "label": "Dungeon flagstone (large slabs)"
-      },
-      "dungeon_worn": {
-        "row": 2,
-        "frameCount": 32,
-        "patchTiles": 4,
-        "label": "Dungeon stone, worn & chipped"
-      },
-      "dungeon_mossy": {
-        "row": 3,
-        "frameCount": 48,
-        "patchTiles": 4,
-        "label": "Dungeon stone, mossy"
-      },
-      "dungeon_wet": {
-        "row": 4,
-        "frameCount": 48,
-        "patchTiles": 4,
-        "label": "Dungeon stone, wet"
-      },
-      "dungeon_rubble": {
-        "row": 5,
-        "frameCount": 16,
-        "patchTiles": 2,
-        "label": "Collapsed rubble"
-      },
-      "dungeon_wall": {
-        "row": 6,
-        "frameCount": 8,
-        "patchTiles": 2,
-        "label": "Dungeon wall"
-      },
       "bopca_scuff": {
-        "row": 7,
+        "row": 0,
         "frameCount": 16,
         "patchTiles": 2,
         "label": "Bopca station worn threshold (bare screed)"
       },
       "bopca_hearth": {
-        "row": 8,
+        "row": 1,
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Bopca station quarry tile (galley)"
       },
       "bopca_tile": {
-        "row": 9,
+        "row": 2,
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Bopca station tile (glazed, calm)"
@@ -222,6 +126,120 @@
         "frameCount": 144,
         "patchTiles": 3,
         "label": "Corner transition masks"
+      }
+    }
+  },
+  "ground_floor1": {
+    "path": "environment/tilesets/ground_floor1.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "f1_cinder": {
+        "row": 0,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Cellar ash floor (no joints)"
+      },
+      "f1_flagstone": {
+        "row": 1,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Cellar flagstone (calm bulk floor)"
+      },
+      "f1_flags": {
+        "row": 2,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Cellar dressed sandstone flags"
+      },
+      "f1_timber": {
+        "row": 3,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Cellar oak boarding"
+      },
+      "f1_wall": {
+        "row": 4,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Cellar rubble wall"
+      }
+    }
+  },
+  "ground_floor2": {
+    "path": "environment/tilesets/ground_floor2.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "f2_concrete": {
+        "row": 0,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Poured concrete slab (calm bulk floor)"
+      },
+      "f2_vinyl": {
+        "row": 1,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Institutional vinyl tile"
+      },
+      "f2_terrazzo": {
+        "row": 2,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Terrazzo panel floor"
+      },
+      "f2_plate": {
+        "row": 3,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Steel checker plate"
+      },
+      "f2_wall": {
+        "row": 4,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Painted blockwork wall"
+      }
+    }
+  },
+  "ground_interior": {
+    "path": "environment/tilesets/ground_interior.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "interior_boards": {
+        "row": 0,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior board floor (shop, house)"
+      },
+      "interior_stone": {
+        "row": 1,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior flagged stone (tower)"
+      },
+      "interior_plaster": {
+        "row": 2,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Interior plastered wall"
+      },
+      "interior_counter": {
+        "row": 3,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior counter / bar top"
       }
     }
   }

@@ -1,7 +1,7 @@
 /**
  * Draws one tile of generated ground, from whichever sheet the caller's
- * `GroundPalette` names — `ground_overworld` for the town, `ground_dungeon` for a
- * safe room.
+ * `GroundPalette` names — `ground_overworld` for the town, `ground_floor1` and
+ * `ground_floor2` for the two dungeon floors, `ground_dungeon` for a safe room.
  *
  * Six passes, in this order:
  *
@@ -33,6 +33,8 @@ import type { TileContent } from '../tileTypes';
 import {
   BUILDING_WALL,
   FloorTypeValue,
+  INTERIOR_COUNTER,
+  INTERIOR_WALL,
   METAL_WALL,
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
@@ -125,6 +127,27 @@ function groundMaterialAt(
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return undefined;
   return palette.materialForTileType(row[tx].type);
+}
+
+/**
+ * True when a tile can answer for its own ground — its type maps to a material,
+ * or it recorded the surface a prop replaced — rather than having to have one
+ * inferred from its neighbours.
+ *
+ * The distinction matters only to the fringe, and only for occluders. See
+ * `materialAt` in `drawGroundTile`.
+ */
+function hasDeclaredGround(
+  palette: GroundPalette,
+  structure: TileContent[][],
+  tx: number,
+  ty: number,
+): boolean {
+  if (groundMaterialAt(palette, structure, tx, ty) !== undefined) return true;
+  if (ty < 0 || ty >= structure.length) return false;
+  const row = structure[ty];
+  if (tx < 0 || tx >= row.length) return false;
+  return row[tx].groundType !== undefined;
 }
 
 /**
@@ -480,8 +503,25 @@ function layerCoverage(
 
 /**
  * The mask frame a dual cell reads: its corner combination, then its position
- * within the warp patch. Both tiles sharing an edge resolve the same cell, so
- * they resolve the same frame.
+ * within the warp patch.
+ *
+ * Two tiles sharing an edge resolve the same cell, and so the same frame — for
+ * every corner whose material both of them agree on. That is every corner except
+ * one: an occluder with no ground of its own reports the material of *the tile
+ * asking*, so where two floor tiles of different materials both touch such a
+ * corner they compute different bits for it and read different frames.
+ *
+ * The mismatch is bounded rather than absent. The mask field is bilinear in the
+ * four corner values (`scripts/tilegen/masks.ts`), so along the shared edge the
+ * two fields differ by at most a quarter at the tile corner and decay to nothing
+ * half a tile out — about half a cell's coverage of the harder material on one
+ * side where the other draws none. Two places produce it: a dungeon doorway,
+ * where a corridor of one material meets a room of another between two wall
+ * jambs, and a safe room's threshold band, where `bopca_scuff` sits between
+ * jambs with `bopca_tile` at its other corners. It was accepted because the
+ * alternative — a wall reporting an inferred material — put a wedge of a floor
+ * from an entirely different room along *every* wall on the level. See
+ * `materialAt` in `drawGroundTile`.
  */
 function maskFrameIndex(mask: MaskSheet, bits: number, cellX: number, cellY: number): number {
   const phases = mask.patchTiles * mask.patchTiles;
@@ -769,8 +809,14 @@ function drawFringeQuadrant(
  * corner with no order at all breaks that, and every way of faking one after the
  * fact — softest, hardest, belongs-to-everything, skip the cell — lets one cell
  * draw something its neighbour cannot match, which is a full-alpha cut down the
- * middle of a tile. Two cells share a corner but not a *cell*, so the stand-in
- * has to be chosen per position, by the caller, and be the same for both.
+ * middle of a tile. So the stand-in has to be chosen per position, by the caller.
+ *
+ * Choosing it the *same* for both askers is the stronger property, and it buys a
+ * boundary that cannot differ at all. `drawGroundTile` gives one class of
+ * position up — an occluder that would otherwise have its material inferred —
+ * because the guess it replaces was worse; see `maskFrameIndex` for exactly how
+ * much that costs and where. A caller that can answer position-independently
+ * everywhere should.
  */
 export function drawFringe(
   ctx: CanvasRenderingContext2D,
@@ -1183,6 +1229,8 @@ function applyWorldNoise(
  */
 const GROUND_OCCLUDER_TYPES = new Set<number>([
   FloorTypeValue.wall,
+  INTERIOR_WALL,
+  INTERIOR_COUNTER,
   BUILDING_WALL,
   METAL_WALL,
   RUINED_WALL,
@@ -1443,6 +1491,35 @@ function fringeMaterial(palette: GroundPalette, material: string): FringeMateria
 }
 
 /**
+ * Draws one named material at (tx, ty) and nothing else — the base pass and the
+ * world-space tone layer, with no fringe, kerb, scatter or occlusion.
+ *
+ * For surfaces that are *not* ground and so have no neighbours to blend into: a
+ * dungeon wall is the only one today. The tone layer still applies, or a wall
+ * would sit at a flat brightness in a room whose floor is being modulated around
+ * it and would read as pasted on.
+ */
+export function drawGroundMaterialTile(
+  ctx: CanvasRenderingContext2D,
+  palette: GroundPalette,
+  material: string,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const resolved = resolveMaterial(palette, material, tx, ty);
+  if (resolved === undefined) {
+    ctx.fillStyle = palette.fallbackColor[material];
+    ctx.fillRect(sx, sy, ts, ts);
+  } else {
+    drawResolved(ctx, resolved, sx, sy, ts);
+  }
+  applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+}
+
+/**
  * Draws the ground at (tx, ty), blended into its neighbours.
  *
  * The material comes from the tile itself rather than from the caller: it is the
@@ -1475,11 +1552,41 @@ export function drawGroundTile(
     return;
   }
 
-  const materialAt = (atX: number, atY: number): FringeMaterial =>
-    fringeMaterial(
+  // A tile that has no ground of its own and has to have one *inferred* must not
+  // impose that guess on its neighbours' fringes.
+  //
+  // `inferFloorType` takes the first cardinal neighbour it finds and probes
+  // **south first**, so a dungeon wall reports whatever is on its south side.
+  // Where that differs from the tile being drawn — which on a dungeon floor is
+  // the normal case, since `ZONE_FLOORS` gives neighbouring rooms different
+  // surfaces — the corner masks composite the south room's floor into the north
+  // room's wall corners, and oak boarding appears to seep out from under a stone
+  // wall into a room with no boards in it. Rendered with two rooms either side of
+  // a one-tile wall, it is unmistakable.
+  //
+  // So such a tile reports the material of the tile being drawn: the floor runs
+  // under the wall rather than meeting something else there.
+  //
+  // **Only when the material would be inferred.** The first cut keyed this on
+  // `occluderAt` alone, which also covers every tile inside a town building
+  // sprite's frame — 735 of them on the real map, 716 of which carry a perfectly
+  // good material of their own and 321 of which abut a different one. Those were
+  // blending correctly, and substituting removed a material that appears at no
+  // other corner, so the neighbour drew a hard tile-aligned edge where the
+  // footprint tile drew a full blend. A tile that knows its own ground keeps it.
+  //
+  // This makes the answer depend on the asker, which the fringe otherwise avoids:
+  // see the note on `maskFrameIndex` for the invariant it relaxes and where the
+  // residual mismatch shows up.
+  const materialAt = (atX: number, atY: number): FringeMaterial => {
+    if (occluderAt(structure, atX, atY) && !hasDeclaredGround(palette, structure, atX, atY)) {
+      return fringeMaterial(palette, material);
+    }
+    return fringeMaterial(
       palette,
       groundMaterialUnder(palette, structure, atX, atY) ?? palette.fringeStandIn,
     );
+  };
 
   drawResolved(ctx, resolved, sx, sy, ts);
   drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty);

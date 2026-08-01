@@ -1,6 +1,6 @@
 import {
-  FloorTypeValue,
   type TileContent,
+  FloorTypeValue,
   TREE,
   BUILDING_WALL,
   ROOF_THATCH,
@@ -36,6 +36,10 @@ import {
   CLUB_FLOOR,
   DANCE_FLOOR,
   placeProp,
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_COUNTER,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_WALL,
 } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -102,23 +106,31 @@ const BIGTOP_RING_NORTH_SHIFT = 2;
 /** Rows of bleacher benches hugging the north/west/east walls. */
 const BIGTOP_BLEACHER_DEPTH = 2;
 
-// ── Floor tile type values used in interior generation ────────────────────────
-/** Carpet floor tile (used in tower interiors). */
-const CARPET_FLOOR = 7;
-/** Wood floor tile (used in house / store interiors). */
-const WOOD_FLOOR = 8;
-/** Wall tile value, used when filling the outer ring or sealing doors. */
-const WALL_TILE = 2;
-/** Road tile value (walkable threshold), used for interior exit doors. */
-const ROAD_TILE = 1;
+// ── Tile types used in interior generation ────────────────────────────────────
+//
+// These three used to be the *dungeon's* generic types under local aliases: the
+// tower's floor was `FloorTypeValue.carpet`, a shop's and a house's was
+// `FloorTypeValue.wood`, and every interior wall was `FloorTypeValue.wall`.
+// That read as harmless while all of them were rows of one shared tileset, but
+// it meant a townhouse was floored in whatever the dungeon's fourth surface
+// happened to be — and once each dungeon floor was given a material set of its
+// own it meant a shop's floorboards changed depending on which cellar the player
+// had most recently walked through. The town owns them now.
+
+// The four interior types are used under their own names below rather than
+// through local aliases. Aliasing is what hid the borrowing in the first place:
+// a use site reading `WALL_TILE` gives no clue which kind of wall it is, which
+// is how a townhouse came to be built out of dungeon rock without anyone
+// noticing. The exit door likewise names `FloorTypeValue.road` outright — it is
+// genuinely the outdoor threshold type, and a bare `1` said nothing.
 
 /** Interior shell per building kind. Exhaustive, so a new kind cannot ship unsized. */
 const INTERIOR_BY_KIND: Record<BuildingKind, { w: number; h: number; floorType: number }> = {
-  tower: { w: TOWER_INTERIOR_W, h: TOWER_INTERIOR_H, floorType: CARPET_FLOOR },
+  tower: { w: TOWER_INTERIOR_W, h: TOWER_INTERIOR_H, floorType: INTERIOR_STONE_FLOOR },
   restaurant: { w: RESTAURANT_INTERIOR_W, h: RESTAURANT_INTERIOR_H, floorType: SAFE_ROOM_FLOOR },
-  store: { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: WOOD_FLOOR },
+  store: { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
   club: { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR },
-  house: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: WOOD_FLOOR },
+  house: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
 };
 
 /** The Big Top is registered as a `house`, so its interior is keyed by name instead. */
@@ -568,7 +580,7 @@ export class GameMap {
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
         tileId: `${x}#${y}`,
-        type: WALL_TILE,
+        type: INTERIOR_WALL,
       })),
     );
 
@@ -588,7 +600,7 @@ export class GameMap {
       const STORE_ENTRANCE_ROW_INSET = 3;
       // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
       for (let x = 2; x <= w - STORE_EAST_WALL_INSET; x++)
-        grid[storeCounterRow][x].type = FloorTypeValue.wall;
+        grid[storeCounterRow][x].type = INTERIOR_COUNTER;
       // Barrels behind counter on east side
       placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET], BARREL);
       placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1], BARREL);
@@ -683,7 +695,7 @@ export class GameMap {
           grid[y][x].type = DANCE_FLOOR;
       // Alcove divider walls (never seal a region — the dance-floor rows stay open)
       for (const wall of CLUB_DIVIDER_WALLS)
-        for (let y = wall.y0; y <= wall.y1; y++) grid[y][wall.x].type = WALL_TILE;
+        for (let y = wall.y0; y <= wall.y1; y++) grid[y][wall.x].type = INTERIOR_WALL;
       // Furniture collision — the club's props are sprites in the interior's
       // Y-sorted pass rather than tile types, so their tiles still render as
       // floor and have to be blocked here.
@@ -884,7 +896,7 @@ export class GameMap {
           const herbTableCol2 = 8;
           const herbBarrelSideCol = 3;
           for (let rx = herbCounterStartCol; rx <= herbCounterEndCol; rx++)
-            grid[herbCounterRow][rx].type = FloorTypeValue.wall;
+            grid[herbCounterRow][rx].type = INTERIOR_COUNTER;
           for (let ry = herbShelfStartRow; ry <= herbWestShelfEndRow; ry++)
             placeProp(grid[ry][1], BOOKSHELF);
           for (let ry = herbShelfStartRow; ry <= herbEastShelfEndRow; ry++)
@@ -968,7 +980,7 @@ export class GameMap {
           placeProp(grid[innSouthRow][1], BARREL);
           placeProp(grid[innSouthRow][2], BARREL);
           for (let rx = innBarStartCol; rx <= innBarEndCol; rx++)
-            grid[innBarRow][rx].type = FloorTypeValue.wall;
+            grid[innBarRow][rx].type = INTERIOR_COUNTER;
           for (let rx = innBarStartCol + 1; rx <= innBarEndCol; rx += innBarStoolPitch)
             grid[innBarStoolRow][rx].type = CHAIR;
           break;
@@ -1082,8 +1094,8 @@ export class GameMap {
           ];
           const FLAGON_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
           for (let rx = FLAGON_BAR_START_COL; rx <= FLAGON_EAST_WALL_COL; rx++)
-            grid[FLAGON_BAR_ROW][rx].type = FloorTypeValue.wall;
-          grid[FLAGON_BAR_RETURN_ROW][FLAGON_BAR_START_COL].type = FloorTypeValue.wall;
+            grid[FLAGON_BAR_ROW][rx].type = INTERIOR_COUNTER;
+          grid[FLAGON_BAR_RETURN_ROW][FLAGON_BAR_START_COL].type = INTERIOR_COUNTER;
           for (
             let rx = FLAGON_BAR_START_COL + 1;
             rx <= FLAGON_EAST_WALL_COL;
@@ -1224,8 +1236,8 @@ export class GameMap {
           // The bar's long run plus its return arm; the gap east of the return is
           // the only way in or out of the alley, so the barkeep stays put.
           for (let rx = 1; rx <= STUMP_BAR_END_COL; rx++)
-            grid[STUMP_BAR_ROW][rx].type = FloorTypeValue.wall;
-          grid[STUMP_BAR_RETURN_ROW][STUMP_BAR_END_COL].type = FloorTypeValue.wall;
+            grid[STUMP_BAR_ROW][rx].type = INTERIOR_COUNTER;
+          grid[STUMP_BAR_RETURN_ROW][STUMP_BAR_END_COL].type = INTERIOR_COUNTER;
           for (let rx = STUMP_FIRST_STOOL_COL; rx < STUMP_BAR_END_COL; rx += STUMP_STOOL_PITCH)
             grid[STUMP_STOOL_ROW][rx].type = CHAIR;
           grid[1][STUMP_HEARTH_COL_1].type = FIREPLACE;
@@ -1340,8 +1352,8 @@ export class GameMap {
 
     // Exit door: 2-tile gap at bottom wall center (leave as road = walkable)
     const doorX = Math.floor(w / 2) - 1;
-    grid[h - 1][doorX].type = ROAD_TILE;
-    grid[h - 1][doorX + 1].type = ROAD_TILE;
+    grid[h - 1][doorX].type = FloorTypeValue.road;
+    grid[h - 1][doorX + 1].type = FloorTypeValue.road;
 
     this.structure = grid;
     this.rebuildBlockedMasks();
@@ -1354,8 +1366,8 @@ export class GameMap {
     // Only ground floor (towerFloor 0) or non-tower buildings have exit doors
     if (isTower && towerFloor > 0) {
       // Upper floors: wall off the door gap (no exit)
-      grid[h - 1][doorX].type = WALL_TILE;
-      grid[h - 1][doorX + 1].type = WALL_TILE;
+      grid[h - 1][doorX].type = INTERIOR_WALL;
+      grid[h - 1][doorX + 1].type = INTERIOR_WALL;
       this._interiorExitTiles = [];
     } else {
       this._interiorExitTiles = [

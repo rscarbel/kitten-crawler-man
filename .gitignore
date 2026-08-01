@@ -6,3 +6,4 @@ memory
 .env
 game.db*
 .DS_Store
+_site

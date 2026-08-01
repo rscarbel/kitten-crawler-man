@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.js",
+    "build:site": "npm run build && node scripts/assemble-site.js",
     "build:zip": "npm run build && node scripts/build-zip.js",
     "serve": "node scripts/build.js --serve",
     "kill": "node scripts/free-port.js",
@@ -16,7 +17,10 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
-    "verify:progression": "tsx scripts/verify-progression.ts"
+    "verify:progression": "tsx scripts/verify-progression.ts",
+    "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
+    "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
+    "gen:town-art": "npm run gen:townscape && npm run gen:over-city"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

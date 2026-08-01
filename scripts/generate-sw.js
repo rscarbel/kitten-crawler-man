@@ -1,7 +1,7 @@
 /**
  * Generates sw.js with a hardcoded PRECACHE_ASSETS list containing every
- * image and audio file in the project, so the service worker can pre-cache
- * the full game on install for offline play.
+ * image and audio file the game actually loads, so the service worker can
+ * pre-cache the full game on install for offline play.
  *
  * Called automatically from build.js after esbuild finishes.
  * Also runnable directly: node scripts/generate-sw.js
@@ -10,33 +10,16 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
-
-/** Recursively walk a directory, returning paths relative to ROOT. */
-function walkDir(dir) {
-  const results = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...walkDir(fullPath));
-    } else {
-      results.push(path.relative(ROOT, fullPath).replace(/\\/g, '/'));
-    }
-  }
-  return results;
-}
+import { ROOT, collectShippedAssets, reportAssetSelection } from './shipped-assets.js';
 
 export function generateServiceWorker() {
-  const imageFiles = walkDir(path.join(ROOT, 'src/images')).filter((f) =>
-    /\.(png|jpg|jpeg|ico)$/i.test(f),
-  );
-
-  const audioFiles = walkDir(path.join(ROOT, 'src/audio')).filter((f) => /\.mp3$/i.test(f));
+  const selection = collectShippedAssets();
+  reportAssetSelection(selection);
+  const { images: imageFiles, audio: audioFiles } = selection;
 
   const CACHE_VERSION = `v${Date.now()}`;
 
+  // sw.js is deliberately absent — a service worker never pre-caches itself.
   const CORE_FILES = ['./index.html', './main.css', './manifest.json', './dist/bundle.js'];
 
   const ALL_ASSETS = [

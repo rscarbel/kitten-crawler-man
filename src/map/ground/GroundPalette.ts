@@ -5,9 +5,12 @@
  *
  * `src/map/tiles/groundTiles.ts` is written against this interface rather than
  * against the overworld's materials, so pointing a new floor at the same
- * renderer is a palette and nothing else. There are two instances today:
- * `OVERWORLD_GROUND` (`src/map/town/groundMaterials.ts`) and `DUNGEON_GROUND`
- * (`src/map/dungeon/groundMaterials.ts`).
+ * renderer is a palette and nothing else — which is exactly what floors 1 and 2
+ * are. Four instances today: `OVERWORLD_GROUND`
+ * (`src/map/town/groundMaterials.ts`), `FLOOR1_GROUND` and `FLOOR2_GROUND`
+ * (`src/map/dungeon/floor{1,2}Materials.ts`, selected per floor by
+ * `src/map/dungeon/floorTheme.ts`), and `DUNGEON_GROUND`
+ * (`src/map/dungeon/groundMaterials.ts`) for the safe rooms both floors share.
  *
  * The records are keyed by plain `string` rather than by each palette's own
  * material union. A `Record<'grass' | 'verge', number>` is not assignable to a

@@ -50,22 +50,34 @@ const SHADOW_Y = 0.9;
  * it blocks — and `Record<TownClutterKind, …>` then makes a kind with no art or
  * no walkability a compile error rather than a blank tile.
  */
-export type TownClutterKind =
-  | 'handcart'
-  | 'wagon_wheel'
-  | 'crate_stack'
-  | 'barrel_stack'
-  | 'sacks'
-  | 'hay_bale'
-  | 'water_trough'
-  | 'hitching_post'
-  | 'chicken_coop'
-  | 'anvil_block'
-  | 'coal_pile'
-  | 'quench_barrel'
-  | 'tool_rack'
-  | 'garden_pump'
-  | 'planter';
+/**
+ * The kinds in the order their art occupies frames of `town_clutter.png`.
+ *
+ * The union is derived from this array rather than declared beside it because
+ * the sheet is addressed by frame index: a kind that existed only in the union
+ * would have no frame, and one listed only here would have no painter. Deriving
+ * makes both halves impossible to get out of step, and appending is the only
+ * safe edit — reordering repoints every baked frame at the wrong picture.
+ */
+export const TOWN_CLUTTER_KINDS = [
+  'handcart',
+  'wagon_wheel',
+  'crate_stack',
+  'barrel_stack',
+  'sacks',
+  'hay_bale',
+  'water_trough',
+  'hitching_post',
+  'chicken_coop',
+  'anvil_block',
+  'coal_pile',
+  'quench_barrel',
+  'tool_rack',
+  'garden_pump',
+  'planter',
+] as const;
+
+export type TownClutterKind = (typeof TOWN_CLUTTER_KINDS)[number];
 
 type ClutterPainter = (ctx: CanvasRenderingContext2D, sx: number, sy: number, ts: number) => void;
 
@@ -716,6 +728,38 @@ const SHEET_SWAY_AMPLITUDE_RAD = 0.07;
  */
 const LINE_POLE_WIDTH_PX = 2;
 const LINE_POLE_FOOT = 0.42;
+
+/**
+ * How many distinct points of its swing a laundry line is drawn at.
+ *
+ * The sheets sway 0.07 rad about a hem half a tile long — a couple of pixels end
+ * to end — so eight steps are already finer than the eye resolves, and unlike the
+ * continuous swing it replaced it is a finite number of pictures, which is what
+ * lets the whole line be baked into a sprite sheet instead of redrawn per frame.
+ *
+ * All four sheets share one period and differ only in phase, so quantizing the
+ * cycle position quantizes the whole line coherently.
+ */
+export const LAUNDRY_SWAY_STEPS = 8;
+
+/** Which of the `LAUNDRY_SWAY_STEPS` points of its swing the line is at. */
+export function laundryLineSwayStep(frame: number): number {
+  const cyclePosition = positiveMod(frame, SHEET_SWAY_PERIOD_FRAMES) / SHEET_SWAY_PERIOD_FRAMES;
+  return Math.min(LAUNDRY_SWAY_STEPS - 1, Math.floor(cyclePosition * LAUNDRY_SWAY_STEPS));
+}
+
+/**
+ * The frame to draw to land exactly on one of the quantized steps. The offline
+ * generator is the only caller — it bakes one frame per step, and this is what
+ * makes the picture it bakes the picture `laundryLineSwayStep` asks for.
+ */
+export function laundryLineFrameForStep(step: number): number {
+  return (step / LAUNDRY_SWAY_STEPS) * SHEET_SWAY_PERIOD_FRAMES;
+}
+
+function positiveMod(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
 
 export function drawLaundryLine(
   ctx: CanvasRenderingContext2D,

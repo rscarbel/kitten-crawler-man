@@ -222,11 +222,55 @@ export const SAFE_ROOM_LARDER = 75;
  */
 export const SAFE_ROOM_RUG = 76;
 
+// ── Town building interiors ───────────────────────────────────────────────────
+//
+// A shop, a house and the tower used to be floored and walled in the *dungeon's*
+// generic types — `FloorTypeValue.wood`, `carpet` and `wall` — so whatever art
+// the dungeon's floors happened to be wearing is what a townhouse was built out
+// of. That was invisible while both were hand-extracted frames of one tileset;
+// once each dungeon floor got a palette of its own it meant a house was floored
+// in whichever cellar the player had most recently walked through. These four
+// types are the town's own, so an interior is a decision on the map rather than
+// a side effect of somebody else's.
+//
+// The restaurant, the Desperado Club and the Big Top keep their own floor types
+// (`SAFE_ROOM_FLOOR`, `CLUB_FLOOR`, `SAWDUST_FLOOR`) — but their *walls* change
+// with everything else, because `generateInterior` rings every interior in one
+// wall type. That is the right answer for all three: a town restaurant is a
+// Bopca station built inside a building, so it should have the building's
+// plaster, where a dungeon station is cut out of rock and keeps the floor's
+// masonry. The station's own floor is identical in both, which is the part that
+// has to match.
+
+/** Sawn boards: a shop's and a house's floor. */
+export const INTERIOR_BOARD_FLOOR = 77;
+
+/** Flagged stone: the tower's floor, which is masonry rather than carpentry. */
+export const INTERIOR_STONE_FLOOR = 78;
+
+/** Plastered interior wall — what a town building looks like from the inside. */
+export const INTERIOR_WALL = 79;
+
+/**
+ * A shop counter or a tavern bar: solid, and made of wood rather than stone.
+ *
+ * The counter runs in `GameMap.generateInterior` — the general store's, Herb &
+ * Remedy's, and the bars in The Sleeping Cat Inn, The Horned Flagon and The
+ * Sunken Stump Pub, seven write statements across those five buildings — were
+ * all written as `FloorTypeValue.wall`, so every one of them was drawn as a
+ * course of dungeon masonry. They only ever needed to be *solid*; borrowing the
+ * wall type to get that also borrowed its appearance.
+ *
+ * `InteriorOccupantSystem` anchors a barkeep to this type, so a building whose
+ * counter is not written with it loses its occupant silently.
+ */
+export const INTERIOR_COUNTER = 80;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 77;
+export const TILE_TYPE_COUNT = 81;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

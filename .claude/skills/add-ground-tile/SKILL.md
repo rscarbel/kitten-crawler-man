@@ -28,8 +28,14 @@ scripts/tilegen/sheet.ts      patch slicing, sheet packing, manifest, seam audit
 scripts/generate-ground-tileset.ts   entry point + sheet configs
 ```
 
-Outputs `ground_overworld.png`, `ground_dungeon.png`, `ground_masks.png` and the
+Outputs `ground_overworld.png`, `ground_floor1.png`, `ground_floor2.png`,
+`ground_interior.png` (town building interiors), `ground_dungeon.png` (the
+shared Bopca station set), `ground_masks.png` and the
 manifest entries, all into `src/images/environment/tilesets/`.
+
+A sheet config pins a `seedSlotBase`. Slots decide a material's structure seed, so
+reordering or adding sheets must never shift an existing material's slot — that
+regenerates art that has already been reviewed.
 
 ## Adding a material
 
@@ -72,7 +78,8 @@ stays continuous; let tints, wear and scatter vary per variant.
 tile is a hard line every 16 screen pixels, and a whole floor of that is
 exhausting. Prefer large units, soft joints (`jointStrength` well below 1), a
 narrow bevel band, and always ship a **calm** jointless material (see
-`dungeon_plain`) that can hold a long stretch of ground without incident. Use the
+`f1_flagstone`, `f2_concrete`) that can hold a long stretch of ground without
+incident. Use the
 jointed variants for edges, thresholds and accents.
 
 **4. Keep large-scale tone out of the tile.** A low `patchPeriod` puts one big

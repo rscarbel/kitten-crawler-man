@@ -33,8 +33,29 @@ const FLAME_CY = -1.8;
 const FLAME_RX = 0.08;
 const FLAME_RY = 0.13;
 const FLAME_GLOW_BLUR = 0.55;
-const HALO_RADIUS = 0.5;
-const HALO_ALPHA = 0.16;
+
+/**
+ * The glow around the lantern head.
+ *
+ * Drawn as its own disc rather than left to the flame's `shadowBlur`, because
+ * blur spreads a shape's *own* alpha: the flame is a 2.6 px ellipse at a 32 px
+ * tile, so blurring it over half a tile thinned it to nothing. The lamp then had
+ * no visible light at its head while the pool at its foot stayed solid, and the
+ * whole prop read as glowing at its base — a lamp lighting its own feet and
+ * nothing else.
+ */
+const HEAD_GLOW_RADIUS = 0.55;
+const HEAD_GLOW_ALPHA = 0.22;
+
+/**
+ * The pool on the paving. Deliberately fainter than the head glow: it is a
+ * consequence of the light, and when it was the stronger of the two it read as
+ * the source.
+ */
+const GROUND_POOL_RADIUS = 0.5;
+const GROUND_POOL_ALPHA = 0.07;
+/** The pool is an ellipse seen in perspective, not a circle. */
+const GROUND_POOL_FLATTEN = 0.45;
 
 /**
  * The flame's breathing, in frames and in fractions of its own size. Kept small:
@@ -61,18 +82,22 @@ const GROUND_SHADOW_HEIGHT = 0.07;
 export const LAMP_FLICKER_STEPS = 8;
 
 /**
- * The lamp's breath at `frame`, snapped to one of `LAMP_FLICKER_STEPS` levels.
- * Returns the step index and the multiplier to draw it with.
+ * Which of the `LAMP_FLICKER_STEPS` levels the flame is at on `frame`.
+ *
+ * Split from the multiplier for the reason `shopSignSwayStep` gives: the game
+ * picks a baked frame and only the offline generator still draws a flame, so the
+ * two must agree on what a step means.
  */
-export function streetLampFlicker(
-  frame: number,
-  flickerPhase: number,
-): { step: number; flicker: number } {
+export function streetLampFlickerStep(frame: number, flickerPhase: number): number {
   const wave = Math.sin((frame / FLICKER_PERIOD_FRAMES) * TWO_PI + flickerPhase);
   const normalized = (wave + 1) / 2;
-  const step = Math.min(LAMP_FLICKER_STEPS - 1, Math.floor(normalized * LAMP_FLICKER_STEPS));
+  return Math.min(LAMP_FLICKER_STEPS - 1, Math.floor(normalized * LAMP_FLICKER_STEPS));
+}
+
+/** The flame's size multiplier at one of the `LAMP_FLICKER_STEPS` levels. */
+export function streetLampFlickerForStep(step: number): number {
   const steppedWave = (step / (LAMP_FLICKER_STEPS - 1)) * 2 - 1;
-  return { step, flicker: 1 + steppedWave * FLICKER_AMPLITUDE };
+  return 1 + steppedWave * FLICKER_AMPLITUDE;
 }
 
 /** Draws one lit street lamp standing on the tile whose top-left is (sx, sy). */
@@ -119,6 +144,16 @@ export function drawStreetLamp(
   const headTop = sy + ts * HEAD_TOP;
   const headBottom = sy + ts * HEAD_BOTTOM;
   const headHalf = ts * HEAD_HALF_WIDTH;
+
+  // Under the lantern body, so the glow spills out around the glazing rather
+  // than washing over the iron in front of it.
+  ctx.save();
+  ctx.globalAlpha = HEAD_GLOW_ALPHA * flicker;
+  ctx.fillStyle = HALO;
+  ctx.beginPath();
+  ctx.arc(cx, sy + ts * FLAME_CY, ts * HEAD_GLOW_RADIUS * flicker, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
 
   ctx.fillStyle = GLASS;
   ctx.fillRect(cx - headHalf, headTop, headHalf * 2, headBottom - headTop);
@@ -173,10 +208,18 @@ export function drawStreetLamp(
   // it is over the ground rather than under it and anything stronger reads as a
   // painted disc.
   ctx.save();
-  ctx.globalAlpha = HALO_ALPHA * flicker;
+  ctx.globalAlpha = GROUND_POOL_ALPHA * flicker;
   ctx.fillStyle = HALO;
   ctx.beginPath();
-  ctx.ellipse(cx, baseY, ts * HALO_RADIUS, ts * HALO_RADIUS * 0.45, 0, 0, TWO_PI);
+  ctx.ellipse(
+    cx,
+    baseY,
+    ts * GROUND_POOL_RADIUS,
+    ts * GROUND_POOL_RADIUS * GROUND_POOL_FLATTEN,
+    0,
+    0,
+    TWO_PI,
+  );
   ctx.fill();
   ctx.restore();
   ctx.restore();

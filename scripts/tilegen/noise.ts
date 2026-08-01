@@ -64,7 +64,14 @@ export class NoiseField {
 
   /**
    * Value noise on a `period` x `period` lattice spanning the patch.
-   * `period` must divide the patch size so lattice cells land on whole pixels.
+   *
+   * Wrapping does not depend on `period`: `wrapIndex` folds the lattice at the
+   * patch edge whatever the period is. A period that divides the patch size is
+   * still worth aiming for, because it puts lattice cells on whole pixels and so
+   * keeps the field crisp — but a caller that cannot (several materials sample a
+   * detail layer at a period chosen for its look rather than its arithmetic) is
+   * trading sharpness, not seamlessness — so read this as a preference, not as a
+   * correctness rule.
    */
   value(x: number, y: number, period: number, seed: number): number {
     const cellSize = this.wrapSize / period;

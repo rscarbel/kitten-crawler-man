@@ -7,6 +7,12 @@ import type { GameMap } from '../map/GameMap';
 import type { GameSystem } from './GameSystem';
 import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import {
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_COUNTER,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_WALL,
+} from '../map/tileTypes';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -491,6 +497,19 @@ export class MobileHUDSystem implements GameSystem {
         return '#2a1808';
       case TILE_TYPE_RUBBER_FLOOR:
         return '#1a1a1a';
+      // A town building interior. Without these four every interior minimap is
+      // one flat grey square — floor, wall and counter all fall to the default —
+      // which is the whole floor plan the minimap exists to show. They used to
+      // be `wall`, `carpet` and `wood`, so they were covered by the three cases
+      // above until they were given types of their own.
+      case INTERIOR_WALL:
+        return '#3a3028';
+      case INTERIOR_BOARD_FLOOR:
+        return '#6a4a30';
+      case INTERIOR_STONE_FLOOR:
+        return '#585860';
+      case INTERIOR_COUNTER:
+        return '#4a3020';
       default:
         return '#555555';
     }

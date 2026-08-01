@@ -33,7 +33,7 @@ import {
   BOOKSHELF,
   CRATE,
   BARREL,
-  FloorTypeValue,
+  INTERIOR_COUNTER,
 } from '../map/tileTypes';
 import type { BuildingEntry } from './BuildingSystem';
 import type { GameSystem } from './GameSystem';
@@ -53,16 +53,22 @@ interface OccupantSpec {
 }
 
 /**
- * The furniture tile types each anchor kind matches. `counter` is any *interior*
- * wall run (never the perimeter — the scan skips the border). Ordered as a list
- * so the furniture scan can iterate kinds without an unsound `Object.keys` cast.
+ * The furniture tile types each anchor kind matches. Ordered as a list so the
+ * furniture scan can iterate kinds without an unsound `Object.keys` cast.
+ *
+ * `counter` used to be `FloorTypeValue.wall`, because a shop counter and a
+ * tavern bar were written as wall tiles to make them solid. They have their own
+ * type now, and the day that changed this list silently stopped matching
+ * anything: `forBuilding` drops an occupant whose anchor group is empty without
+ * a warning, so the innkeepers in all three taverns and the herbalist's merchant
+ * simply stopped appearing behind their bars.
  */
 const ANCHOR_TILE_TYPES: ReadonlyArray<{ kind: AnchorKind; types: ReadonlyArray<number> }> = [
   { kind: 'forge', types: [BRAZIER] },
   { kind: 'hearth', types: [FIREPLACE] },
   { kind: 'table', types: [TABLE] },
   { kind: 'shelf', types: [BOOKSHELF] },
-  { kind: 'counter', types: [FloorTypeValue.wall] },
+  { kind: 'counter', types: [INTERIOR_COUNTER] },
   { kind: 'crate', types: [CRATE, BARREL] },
 ];
 

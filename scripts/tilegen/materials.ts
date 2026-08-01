@@ -29,7 +29,6 @@ import {
   Surface,
   wrappedDisc,
   wrappedStroke,
-  wrappedChunk,
   positiveMod,
   TILE_PX,
   type RGB,
@@ -48,13 +47,25 @@ import {
   FLAGSTONE_RAMP,
   DIRT_RAMP,
   GRAVEL_RAMP,
-  DUNGEON_STONE_RAMP,
-  MOSS_RAMP,
-  DUNGEON_WALL_RAMP,
-  WATER_RAMP,
   BOPCA_TILE_RAMP,
   BOPCA_HEARTH_RAMP,
   BOPCA_SCUFF_RAMP,
+  CELLAR_STONE_RAMP,
+  CELLAR_DRESSED_STONE_RAMP,
+  CELLAR_MORTAR_RAMP,
+  CELLAR_TIMBER_RAMP,
+  CELLAR_CINDER_RAMP,
+  CELLAR_WALL_RAMP,
+  POURED_CONCRETE_RAMP,
+  TERRAZZO_RAMP,
+  TERRAZZO_CHIP_RAMP,
+  STEEL_PLATE_RAMP,
+  INSTITUTIONAL_VINYL_RAMP,
+  CINDERBLOCK_RAMP,
+  INTERIOR_BOARD_RAMP,
+  INTERIOR_STONE_RAMP,
+  INTERIOR_PLASTER_RAMP,
+  INTERIOR_COUNTER_RAMP,
 } from './palette.js';
 
 export interface PaintContext {
@@ -566,265 +577,1098 @@ const plaza: Material = {
   },
 };
 
-// ── dungeon set ────────────────────────────────────────────────────────────
+// ── coursed masonry ────────────────────────────────────────────────────────
 
-const DUNGEON_CALM_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.45, contrast: 0.75 };
+interface CoursedBlockOptions {
+  /**
+   * Courses across one game tile. `coursesPerTile * patchTiles` must come out a
+   * whole **even** number — whole so the course lattice wraps, even so the
+   * running bond's every-other-course shift has the same parity on both sides of
+   * the patch joint. An odd count offsets the first course against the last and
+   * every horizontal joint in the material steps at the seam.
+   */
+  readonly coursesPerTile: number;
+  /** Blocks along a course per game tile; `* patchTiles` must be whole. */
+  readonly blocksPerCoursePerTile: number;
+  readonly ramp: Ramp;
+  readonly jointRamp: Ramp;
+  readonly jointPx: number;
+  /** Peak opacity of the joint. Below 1 it reads as a recessed line of mortar
+   *  rather than as an inked outline around every block. */
+  readonly jointStrength: number;
+  /** How far alternate courses shift, as a fraction of a block. */
+  readonly bondOffset: number;
+  /** Depth of the lit band along a block's top edge and the shadowed one along
+   *  its bottom — the pair is what gives a block thickness. */
+  readonly edgeBandPx: number;
+  readonly topLight: number;
+  readonly bottomShadow: number;
+  readonly toneFloor: number;
+  readonly toneSpread: number;
+  readonly grainStrength: number;
+  /** How far the joint lines wander, in pixels. Zero is a machine-laid block. */
+  readonly jointWanderPx: number;
+}
+
+const COURSED_GRAIN_PERIOD_PER_TILE = 8;
+const COURSED_WANDER_PERIOD_PER_TILE = 16;
+const COURSED_BOND_PERIOD = 2;
 
 /**
- * The dungeon's default floor: quiet mottled stone with no joints at all.
+ * Where a ruled grid sits relative to the patch, as a fraction of one unit.
  *
- * Every material in the first draft of this sheet had hard paving joints, so
- * there was nothing that could hold a long stretch of floor without becoming a
- * grid. This is that missing material — lay it across the bulk of a room and use
- * the jointed variants for edges, thresholds and accents.
+ * A grid whose period divides the patch puts a joint at x = 0 by default, which
+ * leaves each of the patch's two edges holding one half of the same line. The
+ * profile across the boundary is symmetric, so it does not tear — but it is
+ * still the worst available place for a hard line, because the patch boundary is
+ * also where two differently-seeded *variants* meet, and the two halves of that
+ * joint then take their grain and speckle from different detail seeds. It also
+ * makes the seam audit compare a joint against a flat face and report a tear
+ * that is not there: `f2_wall` scored 1.60 with the grid unshifted.
+ *
+ * The block offset is a **quarter** block, not a half. A running bond shifts
+ * alternate courses by `bondOffset` of a block, and at the usual `bondOffset` of
+ * 0.5 a half-block phase is exactly cancelled on every odd course — which put
+ * the joint straight back on the boundary for half the wall and left `f2_wall`
+ * at 1.50. A quarter clears both the shifted and the unshifted courses.
  */
-const dungeonPlain: Material = {
-  id: 'dungeon_plain',
-  label: 'Dungeon stone (calm, no joints)',
-  patchTiles: 4,
-  variants: 2,
-  paint: (ctx) => {
-    paintNoiseGround(ctx, DUNGEON_STONE_RAMP, DUNGEON_CALM_GROUND);
-    paintSpeckles(ctx, ctx.detail + 23, {
-      count: 5,
-      minRadius: 6,
-      maxRadius: 16,
-      ramp: { ...DUNGEON_STONE_RAMP, mid: DUNGEON_STONE_RAMP.shadow },
-      alpha: 0.12,
-      softness: 1,
-    });
-    paintMineralGrain(ctx, DUNGEON_STONE_RAMP, ctx.detail + 24);
-  },
-};
+const COURSE_PHASE_OFFSET = 0.5;
+const BLOCK_PHASE_OFFSET = 0.25;
 
-const dungeonFlagstone: Material = {
-  id: 'dungeon_flagstone',
-  label: 'Dungeon flagstone (large slabs)',
+/**
+ * Rectangular blocks in a running bond — brick paving, rubble walling, painted
+ * blockwork.
+ *
+ * The block and course indices are taken from a *wrapped* warp of the sample
+ * position and hashed through `positiveMod` against the counts in the patch, so
+ * the last course of a patch is the neighbour of its first. Geometry comes from
+ * `ctx.structure`, so every variant lays its blocks in the same places and two
+ * variants meeting mid-floor keep one continuous bond.
+ */
+function paintCoursedBlocks(ctx: PaintContext, options: CoursedBlockOptions): void {
+  const tiles = ctx.size / TILE_PX;
+  const courseHeight = TILE_PX / options.coursesPerTile;
+  const blockWidth = TILE_PX / options.blocksPerCoursePerTile;
+  const coursesInPatch = options.coursesPerTile * tiles;
+  const blocksInPatch = options.blocksPerCoursePerTile * tiles;
+
+  ctx.surface.fill((x, y) => {
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      ctx.structure + 4,
+      options.jointWanderPx,
+      COURSED_WANDER_PERIOD_PER_TILE * tiles,
+    );
+    const phasedY = warped.y + courseHeight * COURSE_PHASE_OFFSET;
+    const course = Math.floor(phasedY / courseHeight);
+    const localY = phasedY - course * courseHeight;
+    const bondShift = positiveMod(course, COURSED_BOND_PERIOD) * options.bondOffset * blockWidth;
+    const shiftedX = warped.x + blockWidth * BLOCK_PHASE_OFFSET + bondShift;
+    const block = Math.floor(shiftedX / blockWidth);
+    const localX = shiftedX - block * blockWidth;
+
+    const blockHash = hashLattice(
+      positiveMod(block, blocksInPatch),
+      positiveMod(course, coursesInPatch),
+      ctx.structure,
+    );
+    const grain =
+      (ctx.noise.value(x, y, COURSED_GRAIN_PERIOD_PER_TILE * tiles, ctx.detail + 6) - 0.5) *
+      options.grainStrength;
+    const face = sampleRamp(
+      options.ramp,
+      options.toneFloor + blockHash * options.toneSpread + grain,
+    );
+
+    const edgeDistance = Math.min(localX, localY, blockWidth - localX, courseHeight - localY);
+    if (edgeDistance < options.jointPx) {
+      return mix(face, sampleRamp(options.jointRamp, blockHash), options.jointStrength);
+    }
+    const bandEnd = options.jointPx + options.edgeBandPx;
+    if (localY < bandEnd) return shade(face, options.topLight);
+    if (localY > courseHeight - bandEnd) return shade(face, options.bottomShadow);
+    return face;
+  });
+}
+
+// ── boarded floor ──────────────────────────────────────────────────────────
+
+interface PlankOptions {
+  /** Boards across one game tile; `* patchTiles` must be whole. */
+  readonly boardsPerTile: number;
+  /** Distance between a board's butt joints, in game tiles. `patchTiles /
+   *  boardLengthTiles` must be whole or the joints tear at the patch edge. */
+  readonly boardLengthTiles: number;
+  readonly ramp: Ramp;
+  readonly gapRamp: Ramp;
+  readonly gapPx: number;
+  readonly gapStrength: number;
+  readonly bevelPx: number;
+  readonly bevelStrength: number;
+  readonly toneFloor: number;
+  readonly toneSpread: number;
+  readonly grainStrength: number;
+}
+
+const PLANK_WANDER_PX = 0.6;
+const PLANK_WANDER_PERIOD_PER_TILE = 12;
+/** Keeps a grain line off its own board's edges, where the bevel already is. */
+const PLANK_GRAIN_MARGIN = 0.2;
+/** Half-width of a grain line, as a fraction of the board's height. */
+const PLANK_GRAIN_HALF_WIDTH = 0.07;
+/** One seed per grain line. Two reads as sawn oak; more reads as corduroy. */
+const PLANK_GRAIN_SEEDS: ReadonlyArray<number> = [71, 73];
+/**
+ * How many start offsets a board can take along its length.
+ *
+ * Quantised rather than continuous so that the half-step in `COURSE_PHASE_OFFSET`
+ * keeps every one of them clear of the patch boundary. A continuous stagger puts
+ * a butt joint on the boundary for roughly one board row in ten, and even though
+ * that joint stays symmetric across the wrap it is still a hard line sitting
+ * exactly where two variants meet — `f1_timber` scored 1.52 before this.
+ */
+const PLANK_STAGGER_STEPS = 4;
+
+/**
+ * Sawn boards running east–west, with staggered butt joints and a grain line or
+ * two along each.
+ *
+ * Grain is drawn as lines at hashed heights inside a board rather than sampled
+ * from a stretched noise field, because stretching a coordinate before sampling
+ * breaks the wrap: `noise.value` wraps at the patch, and `x / 4` reaches the
+ * patch edge a quarter of the way through its period.
+ */
+function paintPlanks(ctx: PaintContext, options: PlankOptions): void {
+  const tiles = ctx.size / TILE_PX;
+  const boardHeight = TILE_PX / options.boardsPerTile;
+  const segmentWidth = TILE_PX * options.boardLengthTiles;
+  const boardsInPatch = options.boardsPerTile * tiles;
+  const segmentsInPatch = tiles / options.boardLengthTiles;
+
+  ctx.surface.fill((x, y) => {
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      ctx.structure + 8,
+      PLANK_WANDER_PX,
+      PLANK_WANDER_PERIOD_PER_TILE * tiles,
+    );
+    const phasedY = warped.y + boardHeight * COURSE_PHASE_OFFSET;
+    const board = Math.floor(phasedY / boardHeight);
+    const localY = phasedY - board * boardHeight;
+    const boardIndex = positiveMod(board, boardsInPatch);
+
+    // Each board carries its own start offset, so the butt joints do not line up
+    // into one seam running across the whole floor.
+    const staggerStep = Math.floor(
+      hashLattice(boardIndex, 61, ctx.structure) * PLANK_STAGGER_STEPS,
+    );
+    const stagger = ((staggerStep + COURSE_PHASE_OFFSET) / PLANK_STAGGER_STEPS) * segmentWidth;
+    const shiftedX = warped.x + stagger;
+    const segment = Math.floor(shiftedX / segmentWidth);
+    const localX = shiftedX - segment * segmentWidth;
+    const segmentIndex = positiveMod(segment, segmentsInPatch);
+
+    const boardHash = hashLattice(boardIndex, segmentIndex, ctx.structure);
+    let face = sampleRamp(options.ramp, options.toneFloor + boardHash * options.toneSpread);
+
+    const heightInBoard = localY / boardHeight;
+    for (const grainSeed of PLANK_GRAIN_SEEDS) {
+      const grainHeight =
+        PLANK_GRAIN_MARGIN +
+        hashLattice(boardIndex, segmentIndex, ctx.structure + grainSeed) *
+          (1 - 2 * PLANK_GRAIN_MARGIN);
+      const offGrain = Math.abs(heightInBoard - grainHeight);
+      if (offGrain >= PLANK_GRAIN_HALF_WIDTH) continue;
+      const depth = 1 - offGrain / PLANK_GRAIN_HALF_WIDTH;
+      face = mix(face, options.ramp.shadow, depth * options.grainStrength);
+    }
+
+    const fromNorth = localY;
+    const fromSouth = boardHeight - localY;
+    const fromWest = localX;
+    const fromEast = segmentWidth - localX;
+    const edgeDistance = Math.min(fromNorth, fromSouth, fromWest, fromEast);
+    if (edgeDistance < options.gapPx) {
+      return mix(face, sampleRamp(options.gapRamp, boardHash), options.gapStrength);
+    }
+
+    const bevelEnd = options.gapPx + options.bevelPx;
+    if (edgeDistance < bevelEnd) {
+      const across = (edgeDistance - options.gapPx) / options.bevelPx;
+      const strength = options.bevelStrength * (1 - across);
+      const offsetX = fromWest === edgeDistance ? -1 : fromEast === edgeDistance ? 1 : 0;
+      const offsetY = fromNorth === edgeDistance ? -1 : fromSouth === edgeDistance ? 1 : 0;
+      return shade(face, reliefFactor(offsetX, offsetY, strength));
+    }
+    return face;
+  });
+}
+
+// ── pressed steel ──────────────────────────────────────────────────────────
+
+interface DiamondPlateOptions {
+  /** Lozenge cells across one game tile. `cellsPerTile * patchTiles` must be a
+   *  whole **even** number: whole so the cell grid wraps, even so the
+   *  alternating lean has the same parity on both sides of the patch joint. */
+  readonly cellsPerTile: number;
+  readonly lozengeHalfLengthPx: number;
+  readonly lozengeHalfWidthPx: number;
+  /** Share of the lozenge spent falling away to the plate, as a fraction of its
+   *  own extent. */
+  readonly bevelBand: number;
+  readonly topLight: number;
+  readonly bevelStrength: number;
+}
+
+/** cos and sin of 45°, which is the only angle a lozenge is ever drawn at. */
+const PLATE_AXIS = Math.SQRT1_2;
+const PLATE_LEAN_PERIOD = 2;
+
+/**
+ * Raised lozenges over whatever is already on the surface — checker plate.
+ *
+ * Drawn on an exact grid with no warp at all, which is the point: floor 1 is
+ * laid by hand and every joint in it wanders, so a machine-pressed pattern is
+ * the cheapest way to say *this floor was made in a factory*.
+ */
+function paintDiamondPlate(ctx: PaintContext, options: DiamondPlateOptions): void {
+  const cellSize = TILE_PX / options.cellsPerTile;
+
+  ctx.surface.fill((x, y) => {
+    const plate = ctx.surface.get(x, y);
+    const cellX = Math.floor(x / cellSize);
+    const cellY = Math.floor(y / cellSize);
+    const localX = x - cellX * cellSize - cellSize / 2;
+    const localY = y - cellY * cellSize - cellSize / 2;
+
+    // Alternating lean is what makes this read as checker plate rather than as a
+    // field of identical studs.
+    const lean = positiveMod(cellX + cellY, PLATE_LEAN_PERIOD) === 0 ? 1 : -1;
+    const along = (localX + lean * localY) * PLATE_AXIS;
+    const across = (localY - lean * localX) * PLATE_AXIS;
+    const outward =
+      Math.abs(along) / options.lozengeHalfLengthPx + Math.abs(across) / options.lozengeHalfWidthPx;
+    if (outward >= 1) return plate;
+
+    const faceEnd = 1 - options.bevelBand;
+    if (outward < faceEnd) return shade(plate, options.topLight);
+
+    const downBevel = (outward - faceEnd) / options.bevelBand;
+    const lit = reliefFactor(localX, localY, options.bevelStrength * downBevel);
+    return shade(plate, options.topLight * lit);
+  });
+}
+
+// ── marbling ───────────────────────────────────────────────────────────────
+
+interface MarblingOptions {
+  readonly periodPerTile: number;
+  readonly octaves: number;
+  readonly warpAmplitudePx: number;
+  readonly warpPeriodPerTile: number;
+  readonly strength: number;
+}
+
+const MARBLING_MIDPOINT = 0.5;
+
+/**
+ * Warped light-and-dark swirl over whatever is already on the surface, crossing
+ * any joints under it — which is exactly what a sheet material does and a laid
+ * one does not, so it is what separates vinyl from ceramic at a glance.
+ */
+function paintMarbling(
+  ctx: PaintContext,
+  ramp: Ramp,
+  seed: number,
+  options: MarblingOptions,
+): void {
+  const tiles = ctx.size / TILE_PX;
+  ctx.surface.fill((x, y) => {
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      seed + 1,
+      options.warpAmplitudePx,
+      options.warpPeriodPerTile * tiles,
+    );
+    const swirl = ctx.noise.fbm(
+      warped.x,
+      warped.y,
+      seed,
+      options.octaves,
+      options.periodPerTile * tiles,
+    );
+    const tint = swirl < MARBLING_MIDPOINT ? ramp.shadow : ramp.light;
+    const weight = Math.abs(swirl - MARBLING_MIDPOINT) * 2 * options.strength;
+    return mix(ctx.surface.get(x, y), tint, weight);
+  });
+}
+
+// ── poured slab ────────────────────────────────────────────────────────────
+
+interface ControlJointOptions {
+  /** Bays across one game tile. `TILE_PX / baysPerTile` must divide the patch
+   *  size, or the grooves tear at the patch edge. */
+  readonly baysPerTile: number;
+  readonly widthPx: number;
+  readonly strength: number;
+  readonly ramp: Ramp;
+  readonly wanderPx: number;
+  readonly wanderPeriodPerTile: number;
+}
+
+/** Where a groove samples its ramp — near the shadow end, since it is a cut. */
+const CONTROL_JOINT_RAMP_POSITION = 0.2;
+
+/**
+ * Straight grooves on a regular grid, cut into whatever is already on the
+ * surface.
+ *
+ * A slab is poured in bays and cut so that it cracks where it is told to. This
+ * is the only geometry on an otherwise jointless material, which is why the grid
+ * is kept as coarse as it is — see rule 3 at the top of this file.
+ */
+function paintControlJoints(ctx: PaintContext, options: ControlJointOptions): void {
+  const tiles = ctx.size / TILE_PX;
+  const bay = TILE_PX / options.baysPerTile;
+  ctx.surface.fill((x, y) => {
+    const slab = ctx.surface.get(x, y);
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      ctx.structure + 11,
+      options.wanderPx,
+      options.wanderPeriodPerTile * tiles,
+    );
+    const phase = bay * COURSE_PHASE_OFFSET;
+    const localX = positiveMod(warped.x + phase, bay);
+    const localY = positiveMod(warped.y + phase, bay);
+    const offGroove = Math.min(localX, bay - localX, localY, bay - localY);
+    if (offGroove >= options.widthPx) return slab;
+    const depth = 1 - offGroove / options.widthPx;
+    return mix(
+      slab,
+      sampleRamp(options.ramp, CONTROL_JOINT_RAMP_POSITION),
+      depth * options.strength,
+    );
+  });
+}
+
+// ── floor 1: the cellars ───────────────────────────────────────────────────
+//
+// Hand-laid, warm and old: limestone slabs over most of it, brick where a floor
+// was repaved, oak boards where one was boxed in, and coal ash trodden into the
+// rest. The five share a yellow-to-red cast, because hue is what a player reads
+// before pattern at 32 px a tile, and it is the one property floor 2 must not
+// share.
+
+const F1_FLAGSTONE_SLABS_PER_TILE = 0.75;
+const F1_FLAGSTONE_JOINT_WIDTH = 0.08;
+const F1_FLAGSTONE_JOINT_STRENGTH = 0.45;
+const F1_FLAGSTONE_BEVEL_STRENGTH = 1.1;
+const F1_FLAGSTONE_CRACK_COUNT = 1.2;
+const F1_FLAGSTONE_DAMP_COUNT = 4;
+const F1_FLAGSTONE_DAMP_MIN_RADIUS = 6;
+const F1_FLAGSTONE_DAMP_MAX_RADIUS = 17;
+const F1_FLAGSTONE_DAMP_ALPHA = 0.13;
+const F1_FLAGSTONE_DAMP_SOFTNESS = 1;
+
+/**
+ * Floor 1's calm bulk material: slabs a third again as wide as a game tile, with
+ * mortar rather than shadow in the joints.
+ *
+ * Every other material on the floor is jointed at half a tile or less, so this
+ * one carries the long stretches — see rule 3 at the top of this file.
+ */
+const cellarFlagstone: Material = {
+  id: 'f1_flagstone',
+  label: 'Cellar flagstone (calm bulk floor)',
   patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
     paintSlabs(ctx, {
-      slabsPerTile: 1,
-      ramp: DUNGEON_STONE_RAMP,
-      jointRamp: { ...DUNGEON_STONE_RAMP, mid: shade(DUNGEON_STONE_RAMP.shadow, 0.8) },
-      jointWidth: 0.09,
-      jointStrength: 0.5,
-      bevelStrength: 1.2,
-      crackCount: 1,
+      slabsPerTile: F1_FLAGSTONE_SLABS_PER_TILE,
+      ramp: CELLAR_STONE_RAMP,
+      jointRamp: { ...CELLAR_MORTAR_RAMP, mid: CELLAR_MORTAR_RAMP.shadow },
+      jointWidth: F1_FLAGSTONE_JOINT_WIDTH,
+      jointStrength: F1_FLAGSTONE_JOINT_STRENGTH,
+      bevelStrength: F1_FLAGSTONE_BEVEL_STRENGTH,
+      crackCount: F1_FLAGSTONE_CRACK_COUNT,
+    });
+    // Damp pooling in the low spots, crossing the joints. Without it the slabs
+    // are uniform enough that a room reads as one flat tone.
+    paintSpeckles(ctx, ctx.detail + 23, {
+      count: F1_FLAGSTONE_DAMP_COUNT,
+      minRadius: F1_FLAGSTONE_DAMP_MIN_RADIUS,
+      maxRadius: F1_FLAGSTONE_DAMP_MAX_RADIUS,
+      ramp: { ...CELLAR_STONE_RAMP, mid: CELLAR_STONE_RAMP.shadow },
+      alpha: F1_FLAGSTONE_DAMP_ALPHA,
+      softness: F1_FLAGSTONE_DAMP_SOFTNESS,
     });
   },
 };
 
-const dungeonWorn: Material = {
-  id: 'dungeon_worn',
-  label: 'Dungeon stone, worn & chipped',
+/**
+ * One dressed flag to a game tile: the largest square unit that still reads as a
+ * cut stone rather than as a blank panel, and calm enough to floor a whole room.
+ */
+const F1_FLAGS_TILES_PER_GAME_TILE = 1;
+const F1_FLAGS_JOINT_WIDTH_PX = 1.2;
+const F1_FLAGS_JOINT_STRENGTH = 0.45;
+const F1_FLAGS_BEVEL_PX = 1.8;
+const F1_FLAGS_BEVEL_STRENGTH = 0.9;
+/** Wider than a fired tile's: no two blocks out of the same quarry match. */
+const F1_FLAGS_TONE_SPREAD = 0.36;
+const F1_FLAGS_WEAR_COUNT = 5;
+const F1_FLAGS_WEAR_MIN_RADIUS = 5;
+const F1_FLAGS_WEAR_MAX_RADIUS = 14;
+const F1_FLAGS_WEAR_ALPHA = 0.14;
+const F1_FLAGS_WEAR_SOFTNESS = 1;
+const F1_FLAGS_CRACK_COUNT = 1.2;
+const F1_FLAGS_CRACK_LENGTH_PX = 16;
+const F1_FLAGS_CRACK_ALPHA = 0.22;
+const F1_FLAGS_CRACK_TAPER = 0.75;
+
+/**
+ * Sandstone cut square and laid on ruled joints — the cellar's finished rooms.
+ *
+ * Square units on a grid, **not** a running bond. A bond of any kind is what a
+ * wall is built in, and the brick this replaced read as masonry laid flat when it
+ * was seen in a room rather than in a swatch. The same reasoning already governs
+ * the Bopca station's floors; see the note above `paintCeramicTiles`.
+ */
+const cellarDressedFlags: Material = {
+  id: 'f1_flags',
+  label: 'Cellar dressed sandstone flags',
   patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
-    dungeonPlain.paint(ctx);
-    paintSpeckles(ctx, ctx.detail + 29, {
-      count: 26,
-      minRadius: 0.8,
-      maxRadius: 2.6,
-      ramp: { ...DUNGEON_STONE_RAMP, mid: DUNGEON_STONE_RAMP.shadow },
-      alpha: 0.35,
-      softness: 0.6,
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: F1_FLAGS_TILES_PER_GAME_TILE,
+      ramp: CELLAR_DRESSED_STONE_RAMP,
+      groutRamp: { ...CELLAR_MORTAR_RAMP, mid: CELLAR_MORTAR_RAMP.shadow },
+      groutWidthPx: F1_FLAGS_JOINT_WIDTH_PX,
+      groutStrength: F1_FLAGS_JOINT_STRENGTH,
+      bevelPx: F1_FLAGS_BEVEL_PX,
+      bevelStrength: F1_FLAGS_BEVEL_STRENGTH,
+      toneSpread: F1_FLAGS_TONE_SPREAD,
+      gridPhase: COURSE_PHASE_OFFSET,
     });
-    const cracks = Math.round(3 * (ctx.size / TILE_PX) ** 2);
+    paintMineralGrain(ctx, CELLAR_DRESSED_STONE_RAMP, ctx.detail + 29);
+    // Both of these cross the joints, which is what stops a ruled grid of
+    // near-identical squares reading as tiling rather than as stone.
+    paintSpeckles(ctx, ctx.detail + 31, {
+      count: F1_FLAGS_WEAR_COUNT,
+      minRadius: F1_FLAGS_WEAR_MIN_RADIUS,
+      maxRadius: F1_FLAGS_WEAR_MAX_RADIUS,
+      ramp: { ...CELLAR_DRESSED_STONE_RAMP, mid: CELLAR_DRESSED_STONE_RAMP.shadow },
+      alpha: F1_FLAGS_WEAR_ALPHA,
+      softness: F1_FLAGS_WEAR_SOFTNESS,
+    });
+    const cracks = Math.round(F1_FLAGS_CRACK_COUNT * (ctx.size / TILE_PX) ** 2);
     for (let i = 0; i < cracks; i++) {
-      const angle = hashLattice(i, 51, ctx.detail) * Math.PI * 2;
+      const angle = hashLattice(i, 33, ctx.detail) * Math.PI * 2;
       wrappedStroke(
         ctx.surface,
-        hashLattice(i, 52, ctx.detail) * ctx.size,
-        hashLattice(i, 53, ctx.detail) * ctx.size,
+        hashLattice(i, 34, ctx.detail) * ctx.size,
+        hashLattice(i, 35, ctx.detail) * ctx.size,
         Math.cos(angle),
         Math.sin(angle),
-        22,
-        DUNGEON_STONE_RAMP.shadow,
-        0.28,
-        0.75,
+        F1_FLAGS_CRACK_LENGTH_PX,
+        CELLAR_DRESSED_STONE_RAMP.shadow,
+        F1_FLAGS_CRACK_ALPHA,
+        F1_FLAGS_CRACK_TAPER,
       );
     }
   },
 };
 
-const dungeonMossy: Material = {
-  id: 'dungeon_mossy',
-  label: 'Dungeon stone, mossy',
+const F1_TIMBER_BOARDS_PER_TILE = 2;
+const F1_TIMBER_BOARD_LENGTH_TILES = 2;
+const F1_TIMBER_GAP_PX = 1.2;
+const F1_TIMBER_GAP_STRENGTH = 0.62;
+const F1_TIMBER_BEVEL_PX = 1.4;
+const F1_TIMBER_BEVEL_STRENGTH = 0.9;
+const F1_TIMBER_TONE_FLOOR = 0.24;
+const F1_TIMBER_TONE_SPREAD = 0.5;
+const F1_TIMBER_GRAIN_STRENGTH = 0.3;
+const F1_TIMBER_WEAR_COUNT = 7;
+const F1_TIMBER_WEAR_MIN_RADIUS = 4;
+const F1_TIMBER_WEAR_MAX_RADIUS = 12;
+const F1_TIMBER_WEAR_ALPHA = 0.14;
+const F1_TIMBER_WEAR_SOFTNESS = 1;
+
+const cellarTimber: Material = {
+  id: 'f1_timber',
+  label: 'Cellar oak boarding',
   patchTiles: 4,
-  variants: 3,
+  variants: 2,
   paint: (ctx) => {
-    dungeonPlain.paint(ctx);
-    paintSpeckles(ctx, ctx.detail + 61, {
-      count: 14,
-      minRadius: 4,
-      maxRadius: 13,
-      ramp: MOSS_RAMP,
-      alpha: 0.5,
-      softness: 0.9,
+    paintPlanks(ctx, {
+      boardsPerTile: F1_TIMBER_BOARDS_PER_TILE,
+      boardLengthTiles: F1_TIMBER_BOARD_LENGTH_TILES,
+      ramp: CELLAR_TIMBER_RAMP,
+      gapRamp: { ...CELLAR_TIMBER_RAMP, mid: shade(CELLAR_TIMBER_RAMP.shadow, 0.6) },
+      gapPx: F1_TIMBER_GAP_PX,
+      gapStrength: F1_TIMBER_GAP_STRENGTH,
+      bevelPx: F1_TIMBER_BEVEL_PX,
+      bevelStrength: F1_TIMBER_BEVEL_STRENGTH,
+      toneFloor: F1_TIMBER_TONE_FLOOR,
+      toneSpread: F1_TIMBER_TONE_SPREAD,
+      grainStrength: F1_TIMBER_GRAIN_STRENGTH,
     });
-    paintBlades(ctx, MOSS_RAMP, ctx.detail + 67, 260);
+    // Traffic polish, which crosses the boards and so keeps the floor from
+    // reading as a stack of identical strips.
+    paintSpeckles(ctx, ctx.detail + 31, {
+      count: F1_TIMBER_WEAR_COUNT,
+      minRadius: F1_TIMBER_WEAR_MIN_RADIUS,
+      maxRadius: F1_TIMBER_WEAR_MAX_RADIUS,
+      ramp: { ...CELLAR_TIMBER_RAMP, mid: CELLAR_TIMBER_RAMP.light },
+      alpha: F1_TIMBER_WEAR_ALPHA,
+      softness: F1_TIMBER_WEAR_SOFTNESS,
+    });
   },
 };
 
-const dungeonWet: Material = {
-  id: 'dungeon_wet',
-  label: 'Dungeon stone, wet',
-  patchTiles: 4,
-  variants: 3,
-  paint: (ctx) => {
-    dungeonPlain.paint(ctx);
-    paintSpeckles(ctx, ctx.detail + 71, {
-      count: 4,
-      minRadius: 7,
-      maxRadius: 18,
-      ramp: WATER_RAMP,
-      alpha: 0.42,
-      softness: 0.75,
-    });
-    paintSpeckles(ctx, ctx.detail + 73, {
-      count: 18,
-      minRadius: 1.2,
-      maxRadius: 3.4,
-      ramp: { ...WATER_RAMP, mid: WATER_RAMP.accent },
-      alpha: 0.12,
-      softness: 1,
-    });
-  },
-};
+const F1_CINDER_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.4, contrast: 0.9 };
+const F1_CINDER_ASH_COUNT = 7;
+const F1_CINDER_ASH_MIN_RADIUS = 4;
+const F1_CINDER_ASH_MAX_RADIUS = 13;
+const F1_CINDER_ASH_ALPHA = 0.16;
+const F1_CINDER_ASH_SOFTNESS = 1;
+const F1_CINDER_COAL_COUNT = 44;
+const F1_CINDER_COAL_MIN_RADIUS = 0.6;
+const F1_CINDER_COAL_MAX_RADIUS = 2.1;
+const F1_CINDER_COAL_ALPHA = 0.5;
+const F1_CINDER_COAL_SOFTNESS = 0.4;
 
-const RUBBLE_LOBES_PER_CHUNK = 3;
-const RUBBLE_LOBE_SPREAD = 0.45;
-const RUBBLE_LOBE_MIN_SCALE = 0.55;
-const RUBBLE_LOBE_SCALE_RANGE = 0.45;
-
-/** Largest first: real collapse debris is a few big slabs in a field of chips. */
-const RUBBLE_SIZE_CLASSES: ReadonlyArray<{ readonly count: number; readonly radius: number }> = [
-  { count: 5, radius: 5.5 },
-  { count: 14, radius: 3.2 },
-  { count: 34, radius: 1.9 },
-  { count: 90, radius: 1 },
-];
-
-const dungeonRubble: Material = {
-  id: 'dungeon_rubble',
-  label: 'Collapsed rubble',
+/**
+ * The floor's darkest end, and the only jointless one — so like the flagstone it
+ * can hold a whole room without adding a second grid to the level.
+ *
+ * "Darkest" is relative to the other three floors, not to the wall. See
+ * `CELLAR_TIMBER_RAMP` for why nothing on this level is allowed near the wall's
+ * value.
+ */
+const cellarCinder: Material = {
+  id: 'f1_cinder',
+  label: 'Cellar ash floor (no joints)',
   patchTiles: 2,
   variants: 4,
   paint: (ctx) => {
-    paintNoiseGround(
-      ctx,
-      { ...DUNGEON_STONE_RAMP, mid: DUNGEON_STONE_RAMP.shadow },
-      {
-        patchPeriod: 8,
-        patchWeight: 0.4,
-        contrast: 1,
-      },
-    );
-    paintSpeckles(ctx, ctx.detail + 79, {
-      count: 160,
-      minRadius: 0.7,
-      maxRadius: 1.4,
-      ramp: DUNGEON_STONE_RAMP,
-      alpha: 0.55,
-      softness: 0.5,
+    paintNoiseGround(ctx, CELLAR_CINDER_RAMP, F1_CINDER_GROUND);
+    paintSpeckles(ctx, ctx.detail + 37, {
+      count: F1_CINDER_ASH_COUNT,
+      minRadius: F1_CINDER_ASH_MIN_RADIUS,
+      maxRadius: F1_CINDER_ASH_MAX_RADIUS,
+      ramp: { ...CELLAR_CINDER_RAMP, mid: CELLAR_CINDER_RAMP.light },
+      alpha: F1_CINDER_ASH_ALPHA,
+      softness: F1_CINDER_ASH_SOFTNESS,
     });
-
-    const areaScale = (ctx.size / TILE_PX) ** 2;
-    let chunkIndex = 0;
-    for (const sizeClass of RUBBLE_SIZE_CLASSES) {
-      const count = Math.round(sizeClass.count * areaScale);
-      for (let i = 0; i < count; i++) {
-        const lobes: Array<readonly [number, number, number]> = [];
-        for (let lobe = 0; lobe < RUBBLE_LOBES_PER_CHUNK; lobe++) {
-          lobes.push([
-            (hashLattice(chunkIndex, 94 + lobe, ctx.detail) - 0.5) * 2 * RUBBLE_LOBE_SPREAD,
-            (hashLattice(chunkIndex, 97 + lobe, ctx.detail) - 0.5) * 2 * RUBBLE_LOBE_SPREAD,
-            RUBBLE_LOBE_MIN_SCALE +
-              hashLattice(chunkIndex, 100 + lobe, ctx.detail) * RUBBLE_LOBE_SCALE_RANGE,
-          ]);
-        }
-        wrappedChunk(
-          ctx.surface,
-          hashLattice(chunkIndex, 91, ctx.detail) * ctx.size,
-          hashLattice(chunkIndex, 92, ctx.detail) * ctx.size,
-          sizeClass.radius,
-          sampleRamp(DUNGEON_STONE_RAMP, hashLattice(chunkIndex, 93, ctx.detail)),
-          DUNGEON_STONE_RAMP.accent,
-          shade(DUNGEON_STONE_RAMP.shadow, 0.45),
-          lobes,
-        );
-        chunkIndex++;
-      }
-    }
+    paintMineralGrain(ctx, CELLAR_CINDER_RAMP, ctx.detail + 41);
+    paintSpeckles(ctx, ctx.detail + 43, {
+      count: F1_CINDER_COAL_COUNT,
+      minRadius: F1_CINDER_COAL_MIN_RADIUS,
+      maxRadius: F1_CINDER_COAL_MAX_RADIUS,
+      ramp: { ...CELLAR_CINDER_RAMP, mid: CELLAR_CINDER_RAMP.shadow },
+      alpha: F1_CINDER_COAL_ALPHA,
+      softness: F1_CINDER_COAL_SOFTNESS,
+    });
   },
 };
 
-const WALL_COURSES_PER_TILE = 2;
-const WALL_BLOCKS_PER_COURSE_PER_TILE = 1;
-const WALL_JOINT_PX = 1.6;
-const WALL_RUNNING_BOND_OFFSET = 0.5;
-const WALL_TOP_LIGHT = 1.2;
-const WALL_BOTTOM_SHADOW = 0.74;
-const WALL_TONE_SPREAD = 0.6;
-const WALL_TONE_FLOOR = 0.2;
-const WALL_GRAIN_PERIOD_PER_TILE = 8;
-const WALL_GRAIN_STRENGTH = 0.16;
-const WALL_JOINT_WARP = 1;
-const WALL_JOINT_WARP_PERIOD_PER_TILE = 16;
+const F1_WALL_COURSES_PER_TILE = 2;
+const F1_WALL_BLOCKS_PER_COURSE_PER_TILE = 1;
+const F1_WALL_JOINT_PX = 1.8;
+const F1_WALL_JOINT_STRENGTH = 0.85;
+const F1_WALL_BOND_OFFSET = 0.5;
+const F1_WALL_EDGE_BAND_PX = 1.8;
+const F1_WALL_TOP_LIGHT = 1.18;
+const F1_WALL_BOTTOM_SHADOW = 0.76;
+const F1_WALL_TONE_FLOOR = 0.2;
+const F1_WALL_TONE_SPREAD = 0.5;
+const F1_WALL_GRAIN_STRENGTH = 0.18;
+const F1_WALL_JOINT_WANDER_PX = 1.3;
+const F1_WALL_PIT_COUNT = 26;
+const F1_WALL_PIT_MIN_RADIUS = 0.7;
+const F1_WALL_PIT_MAX_RADIUS = 2.2;
+const F1_WALL_PIT_ALPHA = 0.28;
+const F1_WALL_PIT_SOFTNESS = 0.6;
 
 /**
- * Coursed masonry — the one place hard joints are wanted, because the relief is
- * what tells the player they cannot walk here.
+ * Rubble masonry. Hard joints are wanted here and only here: the relief is what
+ * tells the player they cannot walk through it.
  */
-const dungeonWall: Material = {
-  id: 'dungeon_wall',
-  label: 'Dungeon wall',
+const cellarWall: Material = {
+  id: 'f1_wall',
+  label: 'Cellar rubble wall',
   patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintCoursedBlocks(ctx, {
+      coursesPerTile: F1_WALL_COURSES_PER_TILE,
+      blocksPerCoursePerTile: F1_WALL_BLOCKS_PER_COURSE_PER_TILE,
+      ramp: CELLAR_WALL_RAMP,
+      jointRamp: { ...CELLAR_WALL_RAMP, mid: shade(CELLAR_WALL_RAMP.shadow, 0.7) },
+      jointPx: F1_WALL_JOINT_PX,
+      jointStrength: F1_WALL_JOINT_STRENGTH,
+      bondOffset: F1_WALL_BOND_OFFSET,
+      edgeBandPx: F1_WALL_EDGE_BAND_PX,
+      topLight: F1_WALL_TOP_LIGHT,
+      bottomShadow: F1_WALL_BOTTOM_SHADOW,
+      toneFloor: F1_WALL_TONE_FLOOR,
+      toneSpread: F1_WALL_TONE_SPREAD,
+      grainStrength: F1_WALL_GRAIN_STRENGTH,
+      jointWanderPx: F1_WALL_JOINT_WANDER_PX,
+    });
+    paintSpeckles(ctx, ctx.detail + 47, {
+      count: F1_WALL_PIT_COUNT,
+      minRadius: F1_WALL_PIT_MIN_RADIUS,
+      maxRadius: F1_WALL_PIT_MAX_RADIUS,
+      ramp: { ...CELLAR_WALL_RAMP, mid: CELLAR_WALL_RAMP.shadow },
+      alpha: F1_WALL_PIT_ALPHA,
+      softness: F1_WALL_PIT_SOFTNESS,
+    });
+  },
+};
+
+// ── floor 2: the service level ─────────────────────────────────────────────
+//
+// Poured, pressed and bolted rather than laid. Everything is cool grey or an
+// institutional green, every unit is machine-exact, and nothing weathers — so a
+// player who has just come down the stairs knows before reading a word that they
+// are not on floor 1 any more. Still unmistakably indoors: a concrete slab,
+// terrazzo, checker plate and painted blockwork are all building materials, and
+// none of them belongs outside.
+
+const F2_CONCRETE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.42, contrast: 0.95 };
+const F2_CONCRETE_STAIN_COUNT = 4;
+const F2_CONCRETE_STAIN_MIN_RADIUS = 7;
+const F2_CONCRETE_STAIN_MAX_RADIUS = 19;
+const F2_CONCRETE_STAIN_ALPHA = 0.17;
+const F2_CONCRETE_STAIN_SOFTNESS = 1;
+const F2_CONCRETE_CRACK_COUNT = 2;
+const F2_CONCRETE_CRACK_LENGTH_PX = 20;
+const F2_CONCRETE_CRACK_ALPHA = 0.26;
+const F2_CONCRETE_CRACK_TAPER = 0.8;
+/** One bay every four tiles, which is about where a real slab is cut. */
+const F2_CONCRETE_CONTROL_JOINTS: ControlJointOptions = {
+  baysPerTile: 0.25,
+  widthPx: 3,
+  strength: 0.55,
+  ramp: POURED_CONCRETE_RAMP,
+  wanderPx: 0.5,
+  wanderPeriodPerTile: 16,
+};
+
+/**
+ * Floor 2's calm bulk material: a poured slab, jointless except for the control
+ * joints cut across it every four tiles.
+ */
+const serviceConcrete: Material = {
+  id: 'f2_concrete',
+  label: 'Poured concrete slab (calm bulk floor)',
+  patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
-    const tiles = ctx.size / TILE_PX;
-    const courseHeight = TILE_PX / WALL_COURSES_PER_TILE;
-    const blockWidth = TILE_PX / WALL_BLOCKS_PER_COURSE_PER_TILE;
-    const coursesInPatch = WALL_COURSES_PER_TILE * tiles;
-    const blocksInPatch = WALL_BLOCKS_PER_COURSE_PER_TILE * tiles;
+    paintNoiseGround(ctx, POURED_CONCRETE_RAMP, F2_CONCRETE_GROUND);
+    paintSpeckles(ctx, ctx.detail + 53, {
+      count: F2_CONCRETE_STAIN_COUNT,
+      minRadius: F2_CONCRETE_STAIN_MIN_RADIUS,
+      maxRadius: F2_CONCRETE_STAIN_MAX_RADIUS,
+      ramp: { ...POURED_CONCRETE_RAMP, mid: POURED_CONCRETE_RAMP.shadow },
+      alpha: F2_CONCRETE_STAIN_ALPHA,
+      softness: F2_CONCRETE_STAIN_SOFTNESS,
+    });
+    paintMineralGrain(ctx, POURED_CONCRETE_RAMP, ctx.detail + 59);
 
-    ctx.surface.fill((x, y) => {
-      const warped = ctx.noise.warp(
-        x,
-        y,
-        ctx.structure + 4,
-        WALL_JOINT_WARP,
-        WALL_JOINT_WARP_PERIOD_PER_TILE * tiles,
+    const cracks = Math.round(F2_CONCRETE_CRACK_COUNT * (ctx.size / TILE_PX) ** 2);
+    for (let i = 0; i < cracks; i++) {
+      const angle = hashLattice(i, 81, ctx.detail) * Math.PI * 2;
+      wrappedStroke(
+        ctx.surface,
+        hashLattice(i, 82, ctx.detail) * ctx.size,
+        hashLattice(i, 83, ctx.detail) * ctx.size,
+        Math.cos(angle),
+        Math.sin(angle),
+        F2_CONCRETE_CRACK_LENGTH_PX,
+        POURED_CONCRETE_RAMP.shadow,
+        F2_CONCRETE_CRACK_ALPHA,
+        F2_CONCRETE_CRACK_TAPER,
       );
-      const course = Math.floor(warped.y / courseHeight);
-      const localY = warped.y - course * courseHeight;
-      const shiftedX = warped.x + positiveMod(course, 2) * WALL_RUNNING_BOND_OFFSET * blockWidth;
-      const block = Math.floor(shiftedX / blockWidth);
-      const localX = shiftedX - block * blockWidth;
+    }
+    paintControlJoints(ctx, F2_CONCRETE_CONTROL_JOINTS);
+  },
+};
 
-      const inJoint =
-        localX < WALL_JOINT_PX ||
-        localY < WALL_JOINT_PX ||
-        localX > blockWidth - WALL_JOINT_PX ||
-        localY > courseHeight - WALL_JOINT_PX;
-      if (inJoint) return shade(DUNGEON_WALL_RAMP.shadow, 0.7);
+const F2_TERRAZZO_TILES_PER_GAME_TILE = 1;
+const F2_TERRAZZO_GROUT_WIDTH_PX = 1;
+const F2_TERRAZZO_GROUT_STRENGTH = 0.4;
+const F2_TERRAZZO_BEVEL_PX = 1.2;
+const F2_TERRAZZO_BEVEL_STRENGTH = 0.5;
+const F2_TERRAZZO_TONE_SPREAD = 0.12;
+const F2_TERRAZZO_CHIP_COUNT = 210;
+const F2_TERRAZZO_CHIP_MIN_RADIUS = 0.5;
+const F2_TERRAZZO_CHIP_MAX_RADIUS = 1.8;
+const F2_TERRAZZO_CHIP_ALPHA = 0.62;
+const F2_TERRAZZO_CHIP_SOFTNESS = 0.25;
 
-      const blockHash = hashLattice(
-        positiveMod(block, blocksInPatch),
-        positiveMod(course, coursesInPatch),
-        ctx.structure,
-      );
-      const grain =
-        (ctx.noise.value(x, y, WALL_GRAIN_PERIOD_PER_TILE * tiles, ctx.detail + 6) - 0.5) *
-        WALL_GRAIN_STRENGTH;
-      const face = sampleRamp(
-        DUNGEON_WALL_RAMP,
-        WALL_TONE_FLOOR + blockHash * WALL_TONE_SPREAD + grain,
-      );
-      if (localY < WALL_JOINT_PX * 2) return shade(face, WALL_TOP_LIGHT);
-      if (localY > courseHeight - WALL_JOINT_PX * 2) return shade(face, WALL_BOTTOM_SHADOW);
-      return face;
+/**
+ * Terrazzo: pale panels divided by thin strips, with the aggregate scattered
+ * across them.
+ *
+ * The chips carry all the detail, which is why the panel joint can stay as faint
+ * as it does — a whole corridor of this needs to be readable, not busy.
+ */
+const serviceTerrazzo: Material = {
+  id: 'f2_terrazzo',
+  label: 'Terrazzo panel floor',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: F2_TERRAZZO_TILES_PER_GAME_TILE,
+      ramp: TERRAZZO_RAMP,
+      groutRamp: { ...TERRAZZO_RAMP, mid: TERRAZZO_RAMP.shadow },
+      groutWidthPx: F2_TERRAZZO_GROUT_WIDTH_PX,
+      groutStrength: F2_TERRAZZO_GROUT_STRENGTH,
+      bevelPx: F2_TERRAZZO_BEVEL_PX,
+      bevelStrength: F2_TERRAZZO_BEVEL_STRENGTH,
+      toneSpread: F2_TERRAZZO_TONE_SPREAD,
+      gridPhase: COURSE_PHASE_OFFSET,
+    });
+    paintSpeckles(ctx, ctx.detail + 61, {
+      count: F2_TERRAZZO_CHIP_COUNT,
+      minRadius: F2_TERRAZZO_CHIP_MIN_RADIUS,
+      maxRadius: F2_TERRAZZO_CHIP_MAX_RADIUS,
+      ramp: TERRAZZO_CHIP_RAMP,
+      alpha: F2_TERRAZZO_CHIP_ALPHA,
+      softness: F2_TERRAZZO_CHIP_SOFTNESS,
+    });
+  },
+};
+
+const F2_VINYL_TILES_PER_GAME_TILE = 2;
+const F2_VINYL_GROUT_WIDTH_PX = 0.8;
+const F2_VINYL_GROUT_STRENGTH = 0.3;
+const F2_VINYL_BEVEL_PX = 1;
+const F2_VINYL_BEVEL_STRENGTH = 0.35;
+const F2_VINYL_TONE_SPREAD = 0.14;
+const F2_VINYL_MARBLING: MarblingOptions = {
+  periodPerTile: 6,
+  octaves: 3,
+  warpAmplitudePx: 5,
+  warpPeriodPerTile: 10,
+  strength: 0.5,
+};
+
+/**
+ * Institutional vinyl tile: small squares, faint seams, and a marbled swirl that
+ * runs straight across them.
+ *
+ * The swirl is the whole point. Ignoring the seams under it is what a sheet
+ * material does and a laid one cannot, so it separates this from the terrazzo at
+ * a glance even though both are square units on a grid.
+ */
+const serviceVinyl: Material = {
+  id: 'f2_vinyl',
+  label: 'Institutional vinyl tile',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: F2_VINYL_TILES_PER_GAME_TILE,
+      ramp: INSTITUTIONAL_VINYL_RAMP,
+      groutRamp: { ...INSTITUTIONAL_VINYL_RAMP, mid: INSTITUTIONAL_VINYL_RAMP.shadow },
+      groutWidthPx: F2_VINYL_GROUT_WIDTH_PX,
+      groutStrength: F2_VINYL_GROUT_STRENGTH,
+      bevelPx: F2_VINYL_BEVEL_PX,
+      bevelStrength: F2_VINYL_BEVEL_STRENGTH,
+      toneSpread: F2_VINYL_TONE_SPREAD,
+      gridPhase: COURSE_PHASE_OFFSET,
+    });
+    paintMarbling(ctx, INSTITUTIONAL_VINYL_RAMP, ctx.detail + 67, F2_VINYL_MARBLING);
+  },
+};
+
+const F2_PLATE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.35, contrast: 0.55 };
+const F2_PLATE_CELLS_PER_TILE = 2;
+const F2_PLATE_LOZENGE_HALF_LENGTH_PX = 15;
+const F2_PLATE_LOZENGE_HALF_WIDTH_PX = 5;
+const F2_PLATE_BEVEL_BAND = 0.34;
+const F2_PLATE_TOP_LIGHT = 1.2;
+const F2_PLATE_BEVEL_STRENGTH = 1.8;
+const F2_PLATE_SCUFF_COUNT = 5;
+const F2_PLATE_SCUFF_MIN_RADIUS = 5;
+const F2_PLATE_SCUFF_MAX_RADIUS = 14;
+const F2_PLATE_SCUFF_ALPHA = 0.14;
+const F2_PLATE_SCUFF_SOFTNESS = 1;
+
+/** Floor 2's dark end, in the same slot floor 1 fills with trodden ash. */
+const servicePlate: Material = {
+  id: 'f2_plate',
+  label: 'Steel checker plate',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, STEEL_PLATE_RAMP, F2_PLATE_GROUND);
+    paintMineralGrain(ctx, STEEL_PLATE_RAMP, ctx.detail + 71);
+    paintDiamondPlate(ctx, {
+      cellsPerTile: F2_PLATE_CELLS_PER_TILE,
+      lozengeHalfLengthPx: F2_PLATE_LOZENGE_HALF_LENGTH_PX,
+      lozengeHalfWidthPx: F2_PLATE_LOZENGE_HALF_WIDTH_PX,
+      bevelBand: F2_PLATE_BEVEL_BAND,
+      topLight: F2_PLATE_TOP_LIGHT,
+      bevelStrength: F2_PLATE_BEVEL_STRENGTH,
+    });
+    // Over the lozenges rather than under them: traffic wears the raised pattern
+    // first, so the scuffing has to cross it.
+    paintSpeckles(ctx, ctx.detail + 73, {
+      count: F2_PLATE_SCUFF_COUNT,
+      minRadius: F2_PLATE_SCUFF_MIN_RADIUS,
+      maxRadius: F2_PLATE_SCUFF_MAX_RADIUS,
+      ramp: { ...STEEL_PLATE_RAMP, mid: STEEL_PLATE_RAMP.light },
+      alpha: F2_PLATE_SCUFF_ALPHA,
+      softness: F2_PLATE_SCUFF_SOFTNESS,
+    });
+  },
+};
+
+const F2_WALL_COURSES_PER_TILE = 1;
+const F2_WALL_BLOCKS_PER_COURSE_PER_TILE = 0.5;
+const F2_WALL_JOINT_PX = 2.2;
+const F2_WALL_JOINT_STRENGTH = 0.8;
+const F2_WALL_BOND_OFFSET = 0.5;
+const F2_WALL_EDGE_BAND_PX = 2;
+const F2_WALL_TOP_LIGHT = 1.16;
+const F2_WALL_BOTTOM_SHADOW = 0.78;
+const F2_WALL_TONE_FLOOR = 0.3;
+const F2_WALL_TONE_SPREAD = 0.24;
+const F2_WALL_GRAIN_STRENGTH = 0.12;
+const F2_WALL_JOINT_WANDER_PX = 0.3;
+const F2_WALL_POROSITY_COUNT = 40;
+const F2_WALL_POROSITY_MIN_RADIUS = 0.5;
+const F2_WALL_POROSITY_MAX_RADIUS = 1.5;
+const F2_WALL_POROSITY_ALPHA = 0.2;
+const F2_WALL_POROSITY_SOFTNESS = 0.5;
+
+/**
+ * Painted blockwork: one course to a tile, two tiles to a block, and barely any
+ * tone variation between them.
+ *
+ * Everything that makes floor 1's wall read as hand-built is inverted here — the
+ * units are four times the area, the joints hardly wander, and a coat of paint
+ * has flattened the stone out. It is the single biggest visual difference
+ * between the two floors, because a wall is most of what is on screen in a
+ * corridor.
+ */
+const serviceWall: Material = {
+  id: 'f2_wall',
+  label: 'Painted blockwork wall',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCoursedBlocks(ctx, {
+      coursesPerTile: F2_WALL_COURSES_PER_TILE,
+      blocksPerCoursePerTile: F2_WALL_BLOCKS_PER_COURSE_PER_TILE,
+      ramp: CINDERBLOCK_RAMP,
+      jointRamp: { ...CINDERBLOCK_RAMP, mid: shade(CINDERBLOCK_RAMP.shadow, 0.72) },
+      jointPx: F2_WALL_JOINT_PX,
+      jointStrength: F2_WALL_JOINT_STRENGTH,
+      bondOffset: F2_WALL_BOND_OFFSET,
+      edgeBandPx: F2_WALL_EDGE_BAND_PX,
+      topLight: F2_WALL_TOP_LIGHT,
+      bottomShadow: F2_WALL_BOTTOM_SHADOW,
+      toneFloor: F2_WALL_TONE_FLOOR,
+      toneSpread: F2_WALL_TONE_SPREAD,
+      grainStrength: F2_WALL_GRAIN_STRENGTH,
+      jointWanderPx: F2_WALL_JOINT_WANDER_PX,
+    });
+    // The open pores a breeze block keeps however many coats it is given.
+    paintSpeckles(ctx, ctx.detail + 79, {
+      count: F2_WALL_POROSITY_COUNT,
+      minRadius: F2_WALL_POROSITY_MIN_RADIUS,
+      maxRadius: F2_WALL_POROSITY_MAX_RADIUS,
+      ramp: { ...CINDERBLOCK_RAMP, mid: CINDERBLOCK_RAMP.shadow },
+      alpha: F2_WALL_POROSITY_ALPHA,
+      softness: F2_WALL_POROSITY_SOFTNESS,
+    });
+  },
+};
+
+// ── town building interiors ────────────────────────────────────────────────
+//
+// A shop, a house and the tower, seen from inside. These exist because those
+// three used to be floored and walled in the dungeon's generic tile types and so
+// wore whichever cellar's art was loaded; see the note above `INTERIOR_WALL` in
+// `src/map/tileTypes.ts`.
+
+const INTERIOR_BOARDS_PER_TILE = 2;
+const INTERIOR_BOARD_LENGTH_TILES = 2;
+const INTERIOR_BOARD_GAP_PX = 1;
+const INTERIOR_BOARD_GAP_STRENGTH = 0.5;
+const INTERIOR_BOARD_BEVEL_PX = 1.4;
+const INTERIOR_BOARD_BEVEL_STRENGTH = 0.7;
+const INTERIOR_BOARD_TONE_FLOOR = 0.3;
+const INTERIOR_BOARD_TONE_SPREAD = 0.42;
+const INTERIOR_BOARD_GRAIN_STRENGTH = 0.24;
+const INTERIOR_BOARD_POLISH_COUNT = 6;
+const INTERIOR_BOARD_POLISH_MIN_RADIUS = 5;
+const INTERIOR_BOARD_POLISH_MAX_RADIUS = 14;
+const INTERIOR_BOARD_POLISH_ALPHA = 0.13;
+const INTERIOR_BOARD_POLISH_SOFTNESS = 1;
+
+/**
+ * A shop's and a house's floor: the same joinery as the cellar's boarding, but
+ * finished — narrower gaps, a shallower bevel and a wax sheen over the top.
+ */
+const interiorBoards: Material = {
+  id: 'interior_boards',
+  label: 'Interior board floor (shop, house)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintPlanks(ctx, {
+      boardsPerTile: INTERIOR_BOARDS_PER_TILE,
+      boardLengthTiles: INTERIOR_BOARD_LENGTH_TILES,
+      ramp: INTERIOR_BOARD_RAMP,
+      gapRamp: { ...INTERIOR_BOARD_RAMP, mid: shade(INTERIOR_BOARD_RAMP.shadow, 0.7) },
+      gapPx: INTERIOR_BOARD_GAP_PX,
+      gapStrength: INTERIOR_BOARD_GAP_STRENGTH,
+      bevelPx: INTERIOR_BOARD_BEVEL_PX,
+      bevelStrength: INTERIOR_BOARD_BEVEL_STRENGTH,
+      toneFloor: INTERIOR_BOARD_TONE_FLOOR,
+      toneSpread: INTERIOR_BOARD_TONE_SPREAD,
+      grainStrength: INTERIOR_BOARD_GRAIN_STRENGTH,
+    });
+    // Wax, pooled where the room is walked. Crosses the boards, which is what
+    // separates a swept shop floor from a cellar's bare planking.
+    paintSpeckles(ctx, ctx.detail + 83, {
+      count: INTERIOR_BOARD_POLISH_COUNT,
+      minRadius: INTERIOR_BOARD_POLISH_MIN_RADIUS,
+      maxRadius: INTERIOR_BOARD_POLISH_MAX_RADIUS,
+      ramp: { ...INTERIOR_BOARD_RAMP, mid: INTERIOR_BOARD_RAMP.light },
+      alpha: INTERIOR_BOARD_POLISH_ALPHA,
+      softness: INTERIOR_BOARD_POLISH_SOFTNESS,
+    });
+  },
+};
+
+const INTERIOR_STONE_TILES_PER_GAME_TILE = 1;
+const INTERIOR_STONE_JOINT_WIDTH_PX = 1.1;
+const INTERIOR_STONE_JOINT_STRENGTH = 0.42;
+const INTERIOR_STONE_BEVEL_PX = 1.6;
+const INTERIOR_STONE_BEVEL_STRENGTH = 0.8;
+const INTERIOR_STONE_TONE_SPREAD = 0.3;
+
+/** The tower's floor: flags cut square and laid true, as a mason would. */
+const interiorStone: Material = {
+  id: 'interior_stone',
+  label: 'Interior flagged stone (tower)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: INTERIOR_STONE_TILES_PER_GAME_TILE,
+      ramp: INTERIOR_STONE_RAMP,
+      groutRamp: { ...INTERIOR_STONE_RAMP, mid: INTERIOR_STONE_RAMP.shadow },
+      groutWidthPx: INTERIOR_STONE_JOINT_WIDTH_PX,
+      groutStrength: INTERIOR_STONE_JOINT_STRENGTH,
+      bevelPx: INTERIOR_STONE_BEVEL_PX,
+      bevelStrength: INTERIOR_STONE_BEVEL_STRENGTH,
+      toneSpread: INTERIOR_STONE_TONE_SPREAD,
+      gridPhase: COURSE_PHASE_OFFSET,
+    });
+    paintMineralGrain(ctx, INTERIOR_STONE_RAMP, ctx.detail + 89);
+  },
+};
+
+const INTERIOR_PLASTER_GROUND: GroundOptions = {
+  patchPeriod: 8,
+  patchWeight: 0.45,
+  contrast: 0.6,
+};
+const INTERIOR_PLASTER_TROWEL_COUNT = 9;
+const INTERIOR_PLASTER_TROWEL_MIN_RADIUS = 5;
+const INTERIOR_PLASTER_TROWEL_MAX_RADIUS = 16;
+const INTERIOR_PLASTER_TROWEL_ALPHA = 0.12;
+const INTERIOR_PLASTER_TROWEL_SOFTNESS = 1;
+const INTERIOR_PLASTER_STAIN_COUNT = 5;
+const INTERIOR_PLASTER_STAIN_MIN_RADIUS = 3;
+const INTERIOR_PLASTER_STAIN_MAX_RADIUS = 9;
+const INTERIOR_PLASTER_STAIN_ALPHA = 0.14;
+const INTERIOR_PLASTER_STAIN_SOFTNESS = 0.9;
+
+/**
+ * Lime plaster: no joints at all, because plaster is a skin rather than a bond.
+ *
+ * That absence is the whole design. The dungeon walls are coursed, and coursing
+ * is what says "quarried and stacked"; a wall with nothing but trowel marks on
+ * it says "finished room" without a single line being drawn.
+ */
+const interiorPlaster: Material = {
+  id: 'interior_plaster',
+  label: 'Interior plastered wall',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, INTERIOR_PLASTER_RAMP, INTERIOR_PLASTER_GROUND);
+    paintSpeckles(ctx, ctx.detail + 91, {
+      count: INTERIOR_PLASTER_TROWEL_COUNT,
+      minRadius: INTERIOR_PLASTER_TROWEL_MIN_RADIUS,
+      maxRadius: INTERIOR_PLASTER_TROWEL_MAX_RADIUS,
+      ramp: { ...INTERIOR_PLASTER_RAMP, mid: INTERIOR_PLASTER_RAMP.light },
+      alpha: INTERIOR_PLASTER_TROWEL_ALPHA,
+      softness: INTERIOR_PLASTER_TROWEL_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 97, {
+      count: INTERIOR_PLASTER_STAIN_COUNT,
+      minRadius: INTERIOR_PLASTER_STAIN_MIN_RADIUS,
+      maxRadius: INTERIOR_PLASTER_STAIN_MAX_RADIUS,
+      ramp: { ...INTERIOR_PLASTER_RAMP, mid: INTERIOR_PLASTER_RAMP.shadow },
+      alpha: INTERIOR_PLASTER_STAIN_ALPHA,
+      softness: INTERIOR_PLASTER_STAIN_SOFTNESS,
+    });
+  },
+};
+
+const INTERIOR_COUNTER_BOARDS_PER_TILE = 1;
+const INTERIOR_COUNTER_BOARD_LENGTH_TILES = 4;
+const INTERIOR_COUNTER_GAP_PX = 1.2;
+const INTERIOR_COUNTER_GAP_STRENGTH = 0.7;
+const INTERIOR_COUNTER_BEVEL_PX = 2.2;
+const INTERIOR_COUNTER_BEVEL_STRENGTH = 1.6;
+const INTERIOR_COUNTER_TONE_FLOOR = 0.26;
+const INTERIOR_COUNTER_TONE_SPREAD = 0.34;
+const INTERIOR_COUNTER_GRAIN_STRENGTH = 0.3;
+
+/**
+ * A counter top: one wide board to a tile, running the length of the counter.
+ *
+ * Boards four times the size of the floor's and a bevel twice as deep, so the
+ * run reads as a raised slab of joinery the player cannot walk through rather
+ * than as more floor in a darker colour.
+ */
+const interiorCounter: Material = {
+  id: 'interior_counter',
+  label: 'Interior counter / bar top',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintPlanks(ctx, {
+      boardsPerTile: INTERIOR_COUNTER_BOARDS_PER_TILE,
+      boardLengthTiles: INTERIOR_COUNTER_BOARD_LENGTH_TILES,
+      ramp: INTERIOR_COUNTER_RAMP,
+      gapRamp: { ...INTERIOR_COUNTER_RAMP, mid: shade(INTERIOR_COUNTER_RAMP.shadow, 0.55) },
+      gapPx: INTERIOR_COUNTER_GAP_PX,
+      gapStrength: INTERIOR_COUNTER_GAP_STRENGTH,
+      bevelPx: INTERIOR_COUNTER_BEVEL_PX,
+      bevelStrength: INTERIOR_COUNTER_BEVEL_STRENGTH,
+      toneFloor: INTERIOR_COUNTER_TONE_FLOOR,
+      toneSpread: INTERIOR_COUNTER_TONE_SPREAD,
+      grainStrength: INTERIOR_COUNTER_GRAIN_STRENGTH,
     });
   },
 };
@@ -855,6 +1699,16 @@ interface CeramicOptions {
   readonly bevelStrength: number;
   /** Per-tile tone variance. Fired ceramic varies, but only a little. */
   readonly toneSpread: number;
+  /**
+   * Where the grid sits relative to the patch, as a fraction of a ceramic tile —
+   * see `COURSE_PHASE_OFFSET` for why a grid should generally not sit at zero.
+   *
+   * The Bopca station's floors are the exception and pass zero deliberately: the
+   * counter run, the galley strip and the rug are laid out on whole game tiles,
+   * so the grout has to agree with the game grid or every fixture in the room
+   * sits half a tile off its own floor.
+   */
+  readonly gridPhase: number;
 }
 
 /**
@@ -878,6 +1732,8 @@ const CERAMIC_GRAIN_STRENGTH = 0.1;
  * like crazy paving again, which is the thing these materials exist to avoid.
  */
 const CERAMIC_LINE_WANDER_PX = 0.7;
+/** The station's grout lines sit on the game grid — see `gridPhase`. */
+const BOPCA_GRID_PHASE = 0;
 const CERAMIC_WANDER_PERIOD_PER_TILE = 12;
 
 /**
@@ -903,10 +1759,13 @@ function paintCeramicTiles(ctx: PaintContext, options: CeramicOptions): void {
       CERAMIC_LINE_WANDER_PX,
       CERAMIC_WANDER_PERIOD_PER_TILE * tiles,
     );
-    const cellX = Math.floor(warped.x / cellSize);
-    const cellY = Math.floor(warped.y / cellSize);
-    const localX = warped.x - cellX * cellSize;
-    const localY = warped.y - cellY * cellSize;
+    const phase = cellSize * options.gridPhase;
+    const phasedX = warped.x + phase;
+    const phasedY = warped.y + phase;
+    const cellX = Math.floor(phasedX / cellSize);
+    const cellY = Math.floor(phasedY / cellSize);
+    const localX = phasedX - cellX * cellSize;
+    const localY = phasedY - cellY * cellSize;
 
     const cellHash = hashLattice(
       positiveMod(cellX, cellsAcross),
@@ -990,6 +1849,7 @@ const bopcaTile: Material = {
       bevelPx: BOPCA_TILE_BEVEL_PX,
       bevelStrength: BOPCA_TILE_BEVEL_STRENGTH,
       toneSpread: BOPCA_TILE_TONE_SPREAD,
+      gridPhase: BOPCA_GRID_PHASE,
     });
     // Broad, very faint pools of glaze highlight, crossing the grout rather than
     // respecting it — a fired floor catches the lamplight in patches, and without
@@ -1037,6 +1897,7 @@ const bopcaHearth: Material = {
       bevelPx: BOPCA_HEARTH_BEVEL_PX,
       bevelStrength: BOPCA_HEARTH_BEVEL_STRENGTH,
       toneSpread: BOPCA_HEARTH_TONE_SPREAD,
+      gridPhase: BOPCA_GRID_PHASE,
     });
     // Soot from the range, which is why the galley is laid in quarry tile in the
     // first place.
@@ -1106,13 +1967,20 @@ export const MATERIALS: ReadonlyArray<Material> = [
   lane,
   cobble,
   plaza,
-  dungeonPlain,
-  dungeonFlagstone,
-  dungeonWorn,
-  dungeonMossy,
-  dungeonWet,
-  dungeonRubble,
-  dungeonWall,
+  cellarCinder,
+  cellarFlagstone,
+  cellarDressedFlags,
+  cellarTimber,
+  cellarWall,
+  serviceConcrete,
+  serviceVinyl,
+  serviceTerrazzo,
+  servicePlate,
+  serviceWall,
+  interiorBoards,
+  interiorStone,
+  interiorPlaster,
+  interiorCounter,
   bopcaScuff,
   bopcaHearth,
   bopcaTile,

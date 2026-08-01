@@ -14,10 +14,7 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+import { ROOT, CORE_FILES, collectShippedAssets, reportAssetSelection } from './shipped-assets.js';
 
 // ── Launcher scripts ────────────────────────────────────────────────────────
 
@@ -106,26 +103,21 @@ if (fs.existsSync(path.join(ROOT, outZip))) {
 
 console.log('Creating ZIP...');
 
+const assets = collectShippedAssets();
+reportAssetSelection(assets);
+
+const LAUNCHER_FILES = ['start.command', 'start.bat', 'README.txt'];
+const zipEntries = [...CORE_FILES, ...assets.images, ...assets.audio, ...LAUNCHER_FILES];
+
 try {
-  execSync(
-    [
-      'zip -r',
-      outZip,
-      'index.html',
-      'main.css',
-      'manifest.json',
-      'sw.js',
-      'dist/bundle.js',
-      'src/images',
-      'src/audio',
-      'start.command',
-      'start.bat',
-      'README.txt',
-      // Exclude TypeScript source files that ended up under src/audio
-      '--exclude "src/audio/*.ts"',
-    ].join(' '),
-    { cwd: ROOT, stdio: 'inherit' },
-  );
+  // `zip -@` takes the file list on stdin, so the archive contains exactly the
+  // referenced assets rather than whatever else lives under src/images and
+  // src/audio (manifests, .ts modules, .DS_Store, unused source art).
+  execSync(`zip -X -@ ${outZip}`, {
+    cwd: ROOT,
+    input: zipEntries.join('\n'),
+    stdio: ['pipe', 'ignore', 'inherit'],
+  });
 } finally {
   fs.unlinkSync(macScriptPath);
   fs.unlinkSync(winScriptPath);

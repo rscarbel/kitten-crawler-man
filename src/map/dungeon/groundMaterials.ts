@@ -2,10 +2,10 @@
  * The dungeon's ground materials, and the rules for how they meet.
  *
  * One `GroundPalette` over the generated `ground_dungeon` sheet, covering the
- * safe room's floor today. The dungeon's ordinary rooms still blit hand-extracted
- * frames from `dungeon_tileset` (`src/map/tiles/terrainTiles.ts`); pointing those
- * at `dungeon_plain` and friends is a separate change with its own screenshot
- * pass, and this palette is what it will be pointed at when it happens.
+ * safe room's floor — and only that. A Bopca station is the same waystation
+ * wherever it is found, so it keeps one palette shared by both dungeon floors
+ * while the floors themselves are drawn through `FLOOR1_GROUND` and
+ * `FLOOR2_GROUND` (`src/map/dungeon/floorTheme.ts`).
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
@@ -43,11 +43,17 @@ const GROUND_BLEND_ORDER = {
   bopca_tile: 2,
 } as const satisfies Partial<Record<DungeonGroundMaterial, number>>;
 
-/** Each material's own mean in the generated sheet, for the pre-load frame. */
+/**
+ * Each material's own mean, **measured** from the generated sheet rather than
+ * guessed from its ramp — see the same note in `floor1Materials.ts`. The
+ * guessed values these replace were out by up to 26 levels a channel, all in
+ * the direction of the ramp rather than of the art. Re-measure whenever a
+ * painter or ramp changes.
+ */
 const GROUND_FALLBACK_COLOR = {
-  bopca_scuff: '#8a7c64',
-  bopca_hearth: '#9c6c4c',
-  bopca_tile: '#cdb88f',
+  bopca_scuff: '#767169',
+  bopca_hearth: '#8f6651',
+  bopca_tile: '#d1c4a9',
 } as const satisfies Partial<Record<DungeonGroundMaterial, string>>;
 
 /**

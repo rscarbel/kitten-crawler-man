@@ -29,7 +29,13 @@ const LABEL_COLOR = '#cbd5e1';
 const HINT_COLOR = '#94a3b8';
 
 /** Sheets reviewed by this scene, in display order. */
-const SHEET_KEYS = ['ground_overworld', 'ground_dungeon'] as const;
+const SHEET_KEYS = [
+  'ground_overworld',
+  'ground_floor1',
+  'ground_floor2',
+  'ground_interior',
+  'ground_dungeon',
+] as const;
 
 const PREVIEW_TILE = TILE_SIZE;
 const PANEL_COLUMNS = 4;
@@ -271,8 +277,18 @@ export class TilePreviewScene extends Scene {
     ['grass', 'dirt'],
     ['lane', 'cobble'],
     ['dirt', 'gravel'],
-    ['dungeon_plain', 'dungeon_mossy'],
-    ['dungeon_plain', 'dungeon_rubble'],
+    // The joints each dungeon floor actually draws: its calm bulk material
+    // against each of the three surfaces `ZONE_FLOORS` lays beside it.
+    ['f1_flagstone', 'f1_flags'],
+    ['f1_flagstone', 'f1_timber'],
+    ['f1_cinder', 'f1_flagstone'],
+    ['f2_concrete', 'f2_terrazzo'],
+    ['f2_concrete', 'f2_plate'],
+    ['f2_concrete', 'f2_vinyl'],
+    // A town interior lays one floor end to end, so these two never actually
+    // meet on a map — previewed anyway because the pair is the only way to see
+    // both interior floors at the same scale.
+    ['interior_boards', 'interior_stone'],
     // The two joints a safe room actually draws: the hearth paving under the
     // counter run meeting the room tile, and the scuffed threshold band worn
     // through it inside each doorway.

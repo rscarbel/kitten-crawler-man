@@ -13,6 +13,10 @@ import {
   LANE_STREET,
   PLAZA_STONE,
   FENCE,
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_COUNTER,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_WALL,
   GARDEN_PLANTING,
   SAFE_ROOM_FLOOR,
   SAFE_ROOM_THRESHOLD,
@@ -543,6 +547,18 @@ export class MiniMapSystem implements GameSystem {
         return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
       case FENCE:
         return '#6a5334'; // yard fence, in its own timber colour
+      // Town building interiors. This minimap does not draw one today — that is
+      // the mobile HUD's — but the two tables answer the same question, and a
+      // tile type known to one and not the other is how the mobile interior
+      // minimap turned into a flat grey square when these types were added.
+      case INTERIOR_WALL:
+        return '#3a3028';
+      case INTERIOR_BOARD_FLOOR:
+        return '#6a4a30';
+      case INTERIOR_STONE_FLOOR:
+        return '#585860';
+      case INTERIOR_COUNTER:
+        return '#4a3020';
       default:
         return '#555555';
     }

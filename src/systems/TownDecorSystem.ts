@@ -21,23 +21,34 @@ import { TILE_SIZE } from '../core/constants';
 import { GOLDEN_ANGLE_RAD } from '../utils';
 import {
   SIGN_SWAY_PHASE_STRIDE_RAD,
-  drawShopSign,
-  shopSignSway,
+  shopSignSwayStep,
   signWestShiftTiles,
 } from '../sprites/shopSign';
-import { drawStreetLamp, streetLampFlicker } from '../sprites/streetLamp';
-import { drawBakedProp, type PropBakeBounds } from '../sprites/propFrameCache';
-import { drawLaundryLine, drawTownClutter, type TownClutterKind } from '../sprites/townClutter';
+import { streetLampFlickerStep } from '../sprites/streetLamp';
 import {
-  drawBunting,
-  drawGateArch,
-  drawSignpost,
-  type GateArchAxis,
-  type SignpostArm,
-} from '../sprites/townWayfinding';
+  TOWN_CLUTTER_KINDS,
+  laundryLineSwayStep,
+  type TownClutterKind,
+} from '../sprites/townClutter';
+import { type GateArchAxis } from '../sprites/townWayfinding';
+import { drawTownSheetFrame } from '../sprites/townSheetProp';
+import {
+  BUNTING_SPANS,
+  LAUNDRY_ALLEY_NAMES,
+  LAUNDRY_ROW_OFFSETS,
+  PLANNED_SIGNPOSTS,
+  laundryLineAnchorX,
+  laundryLineSpanTiles,
+} from './townDecorPlan';
 import { tileKey } from './tileKey';
 import type { GameMap } from '../map/GameMap';
-import type { ShopSignEmblem, TileRect, TownOffset, TownPlan } from '../map/town/townPlan';
+import {
+  SHOP_SIGN_EMBLEMS,
+  type ShopSignEmblem,
+  type TileRect,
+  type TownOffset,
+  type TownPlan,
+} from '../map/town/townPlan';
 import type { GameSystem } from './GameSystem';
 import type { TownPropRenderable } from './townPropRenderable';
 
@@ -217,82 +228,6 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
 const CLUTTER_SEARCH_RADIUS = 2;
 
 /**
- * Lines strung across the Low Quarter's two alleys, by the plan's surface names.
- * An alley is the narrowest thing in the town, which is what makes a line across
- * one read as spanning a gap rather than as a rope in a field.
- *
- * The ends land on the alley's flanking ground rather than on a wall — measured,
- * the nearest building is about three tiles from either end — so `drawLaundryLine`
- * stands its own poles instead of assuming there is something there to tie to.
- */
-const LAUNDRY_ALLEY_NAMES: ReadonlyArray<string> = ['club service alley', 'murder alley'];
-/**
- * How far down an alley from its north end each line hangs. Both alleys are ten
- * rows deep, so two lines at these depths sit clear of each end and of each
- * other; a line past the last row is dropped rather than clamped.
- */
-const LAUNDRY_FIRST_ROW_OFFSET = 3;
-const LAUNDRY_SECOND_ROW_OFFSET = 7;
-const LAUNDRY_ROW_OFFSETS: ReadonlyArray<number> = [
-  LAUNDRY_FIRST_ROW_OFFSET,
-  LAUNDRY_SECOND_ROW_OFFSET,
-];
-
-/**
- * The signposts, by the plan's own names: one inside each gate, pointing back the
- * way you came and on down the street it opens onto.
- *
- * Anchored to a gate's `exit` rather than to its opening, then stepped *inward*
- * and sideways, so a post stands on the town's side of the wall where a traveller
- * reads it on arrival, beside the gate's road rather than in it.
- *
- * The arms point left and right because that is what a fingerpost's arms do; each
- * names what lies that way along the street the post stands on, so the labels are
- * read off the layout rather than invented.
- */
-interface PlannedSignpost {
-  readonly gateName: string;
-  /** Tiles inward from the gate exit along the gate's own axis. */
-  readonly inwardTiles: number;
-  /** Tiles to the side of the gate's centre line, so the post is not in the road. */
-  readonly sidewaysTiles: number;
-  readonly arms: ReadonlyArray<SignpostArm>;
-}
-
-const SIGNPOST_INWARD_TILES = 4;
-const SIGNPOST_SIDEWAYS_TILES = 3;
-
-const PLANNED_SIGNPOSTS: ReadonlyArray<PlannedSignpost> = [
-  {
-    gateName: 'south gate',
-    inwardTiles: SIGNPOST_INWARD_TILES,
-    sidewaysTiles: -SIGNPOST_SIDEWAYS_TILES,
-    arms: [
-      { label: 'Low Quarter', direction: -1 },
-      { label: 'The Club', direction: 1 },
-    ],
-  },
-  {
-    gateName: 'west gate',
-    inwardTiles: SIGNPOST_INWARD_TILES,
-    sidewaysTiles: SIGNPOST_SIDEWAYS_TILES,
-    arms: [
-      { label: 'Market Plaza', direction: 1 },
-      { label: 'West Gate', direction: -1 },
-    ],
-  },
-  {
-    gateName: 'east gate',
-    inwardTiles: SIGNPOST_INWARD_TILES,
-    sidewaysTiles: -SIGNPOST_SIDEWAYS_TILES,
-    arms: [
-      { label: 'Market Plaza', direction: -1 },
-      { label: 'East Gate', direction: 1 },
-    ],
-  },
-];
-
-/**
  * A gateway is anchored **on** the wall, at the opening's west or north jamb.
  *
  * An earlier version inset the face-on form one row inward, on the reasoning that
@@ -316,29 +251,6 @@ const GATEWAY_INSET_TILES = 0;
 const SPANNING_PROP_CULL_SLACK_TILES = 1;
 /** The gateway's piers stand proud of both ends, so it needs a little more. */
 const GATEWAY_CULL_SLACK_TILES = 2;
-
-/**
- * Bunting spans, as an offset from the plaza centre and a width in tiles.
- *
- * Two spans over the civic terrace and one across the plaza's Market Street
- * frontage — the town's two bunting sites, the terrace getting a pair because it is ten
- * rows deep and one string across it reads as a stray rope. Both terrace spans
- * sit on terrace rows: the terrace runs y −18…−9 from the plaza centre, and an
- * earlier pair at −9 and −4 put the second one five rows inside the plaza.
- *
- * Stated as offsets because none of them hangs off a building or a yard; they
- * cross open ground, and the thing they are measured against is the plaza.
- */
-interface PlannedBunting {
-  readonly offset: TownOffset;
-  readonly spanTiles: number;
-}
-
-const BUNTING_SPANS: ReadonlyArray<PlannedBunting> = [
-  { offset: { dx: -6, dy: -13 }, spanTiles: 11 },
-  { offset: { dx: -6, dy: -9 }, spanTiles: 11 },
-  { offset: { dx: -8, dy: 9 }, spanTiles: 16 },
-];
 
 interface TileXY {
   x: number;
@@ -506,7 +418,11 @@ export class TownDecorSystem implements GameSystem {
         const y = alley.bounds.y + rowOffset;
         if (y >= alley.bounds.y + alley.bounds.h) continue;
         this.renderables.push(
-          new LaundryLineProp({ x: alley.bounds.x - 1, y }, alley.bounds.w + 1, () => this.frame),
+          new LaundryLineProp(
+            { x: laundryLineAnchorX(alley.bounds.x), y },
+            laundryLineSpanTiles(alley.bounds.w),
+            () => this.frame,
+          ),
         );
       }
     }
@@ -519,9 +435,9 @@ export class TownDecorSystem implements GameSystem {
   private placeSignposts(): void {
     const plan = this.gameMap.townPlan;
     if (plan === undefined) return;
-    for (const planned of PLANNED_SIGNPOSTS) {
+    PLANNED_SIGNPOSTS.forEach((planned, plannedIndex) => {
       const gate = plan.gates.find((g) => g.name === planned.gateName);
-      if (gate === undefined) continue;
+      if (gate === undefined) return;
       // Inward is the reverse of the gate's outward axis; sideways is the axis it
       // does not run along, which for an axis-aligned gate is the other one.
       const inward = { dx: -gate.outward.dx, dy: -gate.outward.dy };
@@ -530,10 +446,10 @@ export class TownDecorSystem implements GameSystem {
         y: gate.exit.y + inward.dy * planned.inwardTiles + inward.dx * planned.sidewaysTiles,
       };
       const tile = this.findFreeTile(plan, preferred);
-      if (tile === null) continue;
+      if (tile === null) return;
       this.reserve(tile);
-      this.renderables.push(new SignpostProp(tile, planned.arms));
-    }
+      this.renderables.push(new SignpostProp(tile, plannedIndex));
+    });
   }
 
   /**
@@ -727,82 +643,32 @@ function kerbSites(bounds: TileRect): TileXY[] {
 }
 
 /**
- * Bake boxes for the props drawn through `drawBakedProp`. Each is measured from
- * the prop's own documented reach with a tile of slack, so nothing clips: the
- * cost of an over-large box is a few unused pixels in a canvas baked once.
+ * The manifest keys of the baked sheets these props draw from, generated by
+ * `scripts/generate-townscape-sprites.ts` and `generate-over-city-sprites.ts`.
+ *
+ * The span-carrying keys are built rather than listed because the generator
+ * builds them the same way, from the same plan: a gateway's picture depends on
+ * how wide its opening is, so the span is part of what names it. Move a gate and
+ * both sides follow, as long as the sheets are regenerated.
  */
-// The sign's ink runs from 1.42 tiles above the anchor (the bracket arm) down
-// to the anchor row, and from the bracket tip at -0.5 tiles to the root at
-// +0.5. A little slack covers the board's swing and its drop shadow.
-const SIGN_BAKE_UP_TILES = 1.7;
-const SIGN_BAKE_WEST_TILES = 1.2;
-const SIGN_BAKE_EAST_TILES = 0.8;
-/** No clutter kind draws above its own anchor row — the tallest tops out on it. */
-const CLUTTER_BAKE_UP_TILES = 0;
-/** The handcart's shaft is the widest piece of clutter, reaching 1.02 tiles east. */
-const CLUTTER_BAKE_SIDE_TILES = 1.2;
-const LAMP_BAKE_UP_TILES = 4;
-const LAMP_BAKE_SIDE_TILES = 2;
-const LAMP_BAKE_DOWN_TILES = 1;
-/** Every prop's box includes its own anchor tile below the reach above it. */
-const ANCHOR_TILE = 1;
+const SHOP_SIGN_SHEET_KEY = 'shop_sign';
+const STREET_LAMP_SHEET_KEY = 'street_lamp';
+const CLUTTER_SHEET_KEY = 'town_clutter';
+const SIGNPOST_SHEET_KEY = 'over_city_signpost';
 
-function signBakeBounds(tileSize: number, westShiftTiles: number): PropBakeBounds {
-  return {
-    left: tileSize * (SIGN_BAKE_WEST_TILES + westShiftTiles),
-    up: tileSize * SIGN_BAKE_UP_TILES,
-    right: tileSize * SIGN_BAKE_EAST_TILES,
-    down: tileSize * ANCHOR_TILE,
-  };
+/** A gateway is one picture, so its sheet has a single frame. */
+const GATE_ARCH_FRAME = 0;
+
+function gateArchSheetKey(axis: GateArchAxis, spanTiles: number): string {
+  return `gate_arch_${axis}_${spanTiles}`;
 }
 
-function clutterBakeBounds(tileSize: number): PropBakeBounds {
-  return {
-    left: tileSize * CLUTTER_BAKE_SIDE_TILES,
-    up: tileSize * CLUTTER_BAKE_UP_TILES,
-    right: tileSize * CLUTTER_BAKE_SIDE_TILES,
-    down: tileSize * ANCHOR_TILE,
-  };
+function buntingSheetKey(spanTiles: number): string {
+  return `bunting_${spanTiles}`;
 }
 
-/**
- * The gateway's two forms reach in different directions, so their boxes differ:
- * the face-on arch rises 3.6 tiles over a span-wide opening, while the top-down
- * gatehouse is narrow and runs south past its span. A single box sized for both
- * would be mostly empty, and an empty box still costs a full-size blit.
- */
-const GATE_ARCH_ACROSS_UP_TILES = 4;
-const GATE_ARCH_ALONG_DOWN_TILES = 2;
-const GATE_ARCH_MARGIN_TILES = 1;
-
-function gateArchBakeBounds(
-  tileSize: number,
-  spanTiles: number,
-  axis: GateArchAxis,
-): PropBakeBounds {
-  if (axis === 'across') {
-    return {
-      left: tileSize * GATE_ARCH_MARGIN_TILES,
-      up: tileSize * GATE_ARCH_ACROSS_UP_TILES,
-      right: tileSize * (spanTiles + GATE_ARCH_MARGIN_TILES),
-      down: tileSize * (ANCHOR_TILE + GATE_ARCH_MARGIN_TILES),
-    };
-  }
-  return {
-    left: tileSize * GATE_ARCH_MARGIN_TILES,
-    up: tileSize * GATE_ARCH_MARGIN_TILES,
-    right: tileSize * (GATE_ARCH_MARGIN_TILES * 2),
-    down: tileSize * (ANCHOR_TILE + spanTiles + GATE_ARCH_ALONG_DOWN_TILES),
-  };
-}
-
-function lampBakeBounds(tileSize: number): PropBakeBounds {
-  return {
-    left: tileSize * LAMP_BAKE_SIDE_TILES,
-    up: tileSize * LAMP_BAKE_UP_TILES,
-    right: tileSize * LAMP_BAKE_SIDE_TILES,
-    down: tileSize * (ANCHOR_TILE + LAMP_BAKE_DOWN_TILES),
-  };
+function laundryLineSheetKey(spanTiles: number): string {
+  return `laundry_line_${spanTiles}`;
 }
 
 /**
@@ -837,16 +703,19 @@ class ShopSignProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const { step, sway } = shopSignSway(this.currentFrame(), this.swayPhase);
-    drawBakedProp(
+    const step = shopSignSwayStep(this.currentFrame(), this.swayPhase);
+    // The west shift is applied here rather than baked, because it is a whole-sign
+    // translation: the two wide doorways that need it would otherwise double the
+    // sheet for a picture identical but for its position.
+    const shift = tileSize * this.westShiftTiles;
+    drawTownSheetFrame(
       ctx,
-      this.tile.x * tileSize - camX,
+      SHOP_SIGN_SHEET_KEY,
+      `sway_${step}`,
+      SHOP_SIGN_EMBLEMS.indexOf(this.emblem),
+      this.tile.x * tileSize - camX - shift,
       this.tile.y * tileSize - camY,
-      `sign:${this.emblem}:${tileSize}:${this.westShiftTiles}:${step}`,
-      signBakeBounds(tileSize, this.westShiftTiles),
-      (bakeCtx, originX, originY) => {
-        drawShopSign(bakeCtx, originX, originY, tileSize, this.emblem, sway, this.westShiftTiles);
-      },
+      tileSize,
     );
   }
 }
@@ -867,15 +736,14 @@ class ClutterProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawBakedProp(
+    drawTownSheetFrame(
       ctx,
+      CLUTTER_SHEET_KEY,
+      'idle',
+      TOWN_CLUTTER_KINDS.indexOf(this.kind),
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      `clutter:${this.kind}:${tileSize}`,
-      clutterBakeBounds(tileSize),
-      (bakeCtx, originX, originY) => {
-        drawTownClutter(bakeCtx, originX, originY, tileSize, this.kind);
-      },
+      tileSize,
     );
   }
 }
@@ -908,22 +776,29 @@ class LaundryLineProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawLaundryLine(
+    drawTownSheetFrame(
       ctx,
+      laundryLineSheetKey(this.spanTiles),
+      'idle',
+      laundryLineSwayStep(this.currentFrame()),
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
       tileSize,
-      this.spanTiles,
-      this.currentFrame(),
     );
   }
 }
 
-/** A fingerpost standing on and blocking its own tile. */
+/**
+ * A fingerpost standing on and blocking its own tile.
+ *
+ * Carries its index into `PLANNED_SIGNPOSTS` rather than its arms: the labels
+ * are baked into the sheet, and the arms are sized by measuring them, so at
+ * render time a post is nothing but which of the three pictures it is.
+ */
 class SignpostProp implements TownPropRenderable {
   constructor(
     private readonly tile: TileXY,
-    private readonly arms: ReadonlyArray<SignpostArm>,
+    private readonly plannedIndex: number,
   ) {}
 
   get x(): number {
@@ -935,12 +810,14 @@ class SignpostProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawSignpost(
+    drawTownSheetFrame(
       ctx,
+      SIGNPOST_SHEET_KEY,
+      'idle',
+      this.plannedIndex,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
       tileSize,
-      this.arms,
     );
   }
 }
@@ -973,17 +850,14 @@ class GateArchProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    // Baked, not redrawn: the gateway is static masonry, and its lantern halo
-    // is a `shadowBlur` — the most expensive operation the 2D context has.
-    drawBakedProp(
+    drawTownSheetFrame(
       ctx,
+      gateArchSheetKey(this.axis, this.spanTiles),
+      'idle',
+      GATE_ARCH_FRAME,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      `gatearch:${this.axis}:${this.spanTiles}:${tileSize}`,
-      gateArchBakeBounds(tileSize, this.spanTiles, this.axis),
-      (bakeCtx, originX, originY) => {
-        drawGateArch(bakeCtx, originX, originY, tileSize, this.spanTiles, this.axis);
-      },
+      tileSize,
     );
   }
 }
@@ -1009,13 +883,14 @@ class BuntingProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawBunting(
+    drawTownSheetFrame(
       ctx,
+      buntingSheetKey(this.spanTiles),
+      'idle',
+      this.colorPhase,
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
       tileSize,
-      this.spanTiles,
-      this.colorPhase,
     );
   }
 }
@@ -1045,16 +920,14 @@ class StreetLampProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const { step, flicker } = streetLampFlicker(this.currentFrame(), this.flickerPhase);
-    drawBakedProp(
+    drawTownSheetFrame(
       ctx,
+      STREET_LAMP_SHEET_KEY,
+      'idle',
+      streetLampFlickerStep(this.currentFrame(), this.flickerPhase),
       this.tile.x * tileSize - camX,
       this.tile.y * tileSize - camY,
-      `lamp:${tileSize}:${step}`,
-      lampBakeBounds(tileSize),
-      (bakeCtx, originX, originY) => {
-        drawStreetLamp(bakeCtx, originX, originY, tileSize, flicker);
-      },
+      tileSize,
     );
   }
 }

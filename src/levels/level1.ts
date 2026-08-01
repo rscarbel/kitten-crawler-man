@@ -86,6 +86,7 @@ export const level1: LevelDef = {
   music: 'bg_level_1',
   name: 'The Dungeon',
   floorNumber: 1,
+  groundTheme: 'cellars',
   mapSize: 450,
   roomMobs: [
     {

@@ -94,9 +94,11 @@ function renderMaterials(): void {
 function renderTransitions(): void {
   const pairs = [
     ['grass', 'lane'],
-    ['grass', 'dirt'],
     ['lane', 'cobble'],
-    ['dungeon_plain', 'dungeon_mossy'],
+    ['f1_flagstone', 'f1_flags'],
+    ['f1_cinder', 'f1_timber'],
+    ['f2_concrete', 'f2_terrazzo'],
+    ['f2_vinyl', 'f2_plate'],
   ] as const;
   const grid = 4;
   const block = TILE_PX * grid;

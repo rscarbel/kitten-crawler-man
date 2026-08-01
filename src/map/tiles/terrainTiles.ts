@@ -11,23 +11,23 @@ import {
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   COBBLE_STREET,
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_COUNTER,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_WALL,
   LANE_STREET,
   PLAZA_STONE,
   VERGE_GRASS,
   YARD_GRAVEL,
 } from '../tileTypes';
-import { drawWallShadow } from './helpers';
-import { drawGroundTile } from './groundTiles';
+import { drawGroundTile, drawGroundMaterialTile } from './groundTiles';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
-import { getSpriteDef } from '../../core/SpriteLoader';
-import { drawSprite } from '../../core/SpriteRenderer';
-
-const TILE_HASH2_MULTIPLIER_X = 2246822519;
-const TILE_HASH2_MULTIPLIER_Y = 668265263;
-const TILE_HASH2_MODULUS = 65536;
-
-/** Number of floor/wall sprite variants in the dungeon tileset. */
-const DUNGEON_TILE_VARIANT_COUNT = 8;
+import { dungeonFloorTheme } from '../dungeon/floorTheme';
+import {
+  INTERIOR_COUNTER_MATERIAL,
+  INTERIOR_WALL_MATERIAL,
+  TOWN_INTERIOR_GROUND,
+} from '../town/interiorMaterials';
 
 /** Pixel depth of the door threshold shadow strip from the overhang above. */
 const DOOR_OVERHANG_SHADOW_DEPTH = 5;
@@ -35,48 +35,6 @@ const DOOR_OVERHANG_SHADOW_DEPTH = 5;
 const DOOR_THRESHOLD_INSET = 2;
 /** Total size reduction (both sides) for the door threshold inset. */
 const DOOR_THRESHOLD_INSET_TOTAL = DOOR_THRESHOLD_INSET * 2;
-
-export function tileHash2(tx: number, ty: number): number {
-  return (
-    ((Math.imul(tx, TILE_HASH2_MULTIPLIER_X) ^ Math.imul(ty, TILE_HASH2_MULTIPLIER_Y)) >>> 0) %
-    TILE_HASH2_MODULUS
-  );
-}
-
-// The entire dungeon uses one floor type and one wall type for visual
-// consistency. Variety comes from which of the 8 variants is chosen per tile.
-function dungeonFloorVariant(tx: number, ty: number): { state: string; frame: number } {
-  return { state: 'floor_plain', frame: tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT };
-}
-
-function dungeonWallVariant(tx: number, ty: number): { state: string; frame: number } {
-  return { state: 'wall_plain', frame: tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT };
-}
-
-// Draw a dungeon tileset sprite, falling back to a solid fill if not yet loaded.
-function drawDungeonSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  ts: number,
-  state: string,
-  frame: number,
-  fallbackColor: string,
-): void {
-  const def = getSpriteDef('dungeon_tileset');
-  if (!def) {
-    ctx.fillStyle = fallbackColor;
-    ctx.fillRect(sx, sy, ts, ts);
-    return;
-  }
-  const stateDef = def.states.get(state);
-  if (!stateDef) {
-    ctx.fillStyle = fallbackColor;
-    ctx.fillRect(sx, sy, ts, ts);
-    return;
-  }
-  drawSprite(ctx, def, stateDef, frame, sx, sy, ts);
-}
 
 export function drawTerrainTile(
   ctx: CanvasRenderingContext2D,
@@ -147,65 +105,55 @@ export function drawTerrainTile(
       break;
     }
 
-    // Dungeon wall
+    // Dungeon wall. Base material only: a wall has no neighbouring ground to
+    // blend into, and running it through `drawGroundTile` would make the corner
+    // masks bleed masonry across the floor in front of it.
     case FloorTypeValue.wall: {
-      const { state: wallState, frame: wallFrame } = dungeonWallVariant(tx, ty);
-      drawDungeonSprite(ctx, sx, sy, ts, wallState, wallFrame, '#2a2420');
+      const theme = dungeonFloorTheme();
+      drawGroundMaterialTile(ctx, theme.ground, theme.wallMaterial, sx, sy, ts, tx, ty);
       break;
     }
 
-    // Dungeon floors
-
-    // Dungeon floor — flagstone tiles from tileset
-    case FloorTypeValue.concrete: {
-      const { state: floorState, frame: floorFrame } = dungeonFloorVariant(tx, ty);
-      drawDungeonSprite(ctx, sx, sy, ts, floorState, floorFrame, '#7a8090');
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
-      break;
-    }
-
-    // Light polished stone — cleaner, lighter rooms
-    case FloorTypeValue.tile_floor: {
-      drawDungeonSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'floor_worn',
-        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
-        '#b0aaa0',
-      );
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
-      break;
-    }
-
-    // Dark stone — atmospheric rooms
-    case FloorTypeValue.carpet: {
-      drawDungeonSprite(
-        ctx,
-        sx,
-        sy,
-        ts,
-        'floor_dark',
-        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
-        '#828490',
-      );
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
-      break;
-    }
-
-    // Mossy stone — damp, older chambers
+    // The four generic dungeon floors. One case, not four: `drawGroundTile`
+    // reads the material from the tile itself through the active floor theme's
+    // palette, which is the same lookup the fringe does for every neighbour — so
+    // a caller that named a material could only disagree with it.
+    //
+    // No `drawWallShadow` here, unlike the retired tileset path: the ground
+    // renderer's own occlusion pass already shades every side of every wall, and
+    // the two together doubled the contact shading.
+    case FloorTypeValue.concrete:
+    case FloorTypeValue.tile_floor:
+    case FloorTypeValue.carpet:
     case FloorTypeValue.wood: {
-      drawDungeonSprite(
+      drawGroundTile(ctx, dungeonFloorTheme().ground, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Town building interiors. Solids base-only and floors through the full
+    // ground pass, exactly as the dungeon's are directly above — the only
+    // difference is which palette answers, which is the whole point of these
+    // having tile types of their own.
+    case INTERIOR_WALL: {
+      drawGroundMaterialTile(ctx, TOWN_INTERIOR_GROUND, INTERIOR_WALL_MATERIAL, sx, sy, ts, tx, ty);
+      break;
+    }
+    case INTERIOR_COUNTER: {
+      drawGroundMaterialTile(
         ctx,
+        TOWN_INTERIOR_GROUND,
+        INTERIOR_COUNTER_MATERIAL,
         sx,
         sy,
         ts,
-        'floor_mossy',
-        tileHash2(tx, ty) % DUNGEON_TILE_VARIANT_COUNT,
-        '#8a9088',
+        tx,
+        ty,
       );
-      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+    case INTERIOR_BOARD_FLOOR:
+    case INTERIOR_STONE_FLOOR: {
+      drawGroundTile(ctx, TOWN_INTERIOR_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }
 
