@@ -42,6 +42,8 @@ import { EventBus } from '../core/EventBus';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { SystemAnnouncer } from '../ui/SystemAnnouncer';
+import { HotbarToast } from '../ui/HotbarToast';
+import { potionEffectNotice } from '../ui/potionNotices';
 import { SkillBookPrompt } from '../ui/SkillBookPrompt';
 import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
 import { LevelUpDialog } from '../ui/LevelUpDialog';
@@ -261,6 +263,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private readonly skillBus = new EventBus();
   private readonly systemAnnouncer: SystemAnnouncer;
+  private readonly hotbarToast = new HotbarToast();
   private readonly systemNotices: SystemNoticeSystem;
   /** The read-confirm prompt and the two award overlays a skill book can raise. */
   private readonly skillBookPrompt = new SkillBookPrompt();
@@ -400,7 +403,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.audio?.wireEvents(this.skillBus);
     this.systemAnnouncer = new SystemAnnouncer(this.audio);
-    this.systemNotices = new SystemNoticeSystem(this.skillBus, this.systemAnnouncer);
+    this.systemNotices = new SystemNoticeSystem(
+      this.skillBus,
+      this.systemAnnouncer,
+      this.hotbarToast,
+    );
     this.skillBookPrompt.audio = this.audio;
     this.rewardGrantedDialog.audio = this.audio;
     this.levelUpDialog.audio = this.audio;
@@ -756,6 +763,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bopcaBus?.clear();
     this.skillBus.clear();
     this.systemAnnouncer.clear();
+    this.hotbarToast.clear();
     this.floatingText.dispose();
     this.ambientSound?.dispose();
     this.bopca?.dispose();
@@ -863,6 +871,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.systemNotices.drainFor(this.human, this.cat);
     this.systemAnnouncer.update();
+    this.hotbarToast.update();
     this.floatingText.updateFor(this.human, this.cat);
     this.openPendingSkillBookPrompt();
     this.rewardGrantedDialog.update();
@@ -1620,6 +1629,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
 
     this.systemAnnouncer.render(ctx, canvas);
+    this.hotbarToast.render(ctx, canvas, this.mobileHUD.inventoryPanel.hotbarBandHeight(canvas));
     this.levelUpDialog.render(ctx, canvas);
     this.rewardGrantedDialog.render(ctx, canvas);
     this.skillBookPrompt.render(ctx, canvas);
@@ -1990,7 +2000,13 @@ export class BuildingInteriorScene extends GameplayScene {
     const active = this.active();
     const slot = active.inventory.actionBar.slots[hotbarIdx];
     if (slot?.id === 'health_potion') {
-      active.usePotion();
+      const drankThisSlot = active.usePotion(() =>
+        active.inventory.removeOneFromSlot('hotbar', hotbarIdx, 'health_potion'),
+      );
+      if (drankThisSlot) {
+        const notice = potionEffectNotice(slot.id);
+        if (notice !== null) this.hotbarToast.show(notice);
+      }
       return;
     }
     if (slot?.skillId !== undefined) {

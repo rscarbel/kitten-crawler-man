@@ -45,7 +45,6 @@ const HOTBAR_HIT_MARGIN = 12;
 const CONTEXT_MENU_W = 120;
 const CONTEXT_MENU_ITEM_H = 22;
 const CONTEXT_MENU_V_PAD = 4;
-const CONTEXT_MENU_MARGIN = 4;
 const CONTEXT_LABEL_OFFSET = 6;
 
 // Info popup
@@ -658,7 +657,7 @@ export class InventoryPanel {
     // Reset each frame so contextMenuOptionRects is never stale.
     this.contextMenuOptionRects = null;
     if (this.contextMenu) {
-      this.renderContextMenu(ctx, canvas);
+      this.renderContextMenu(ctx);
     }
     if (this.interaction.pendingInfoItem) {
       this.renderInfoPopup(ctx, canvas, this.interaction.pendingInfoItem);
@@ -668,15 +667,17 @@ export class InventoryPanel {
     }
   }
 
-  private renderContextMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderContextMenu(ctx: CanvasRenderingContext2D): void {
     const cm = this.contextMenu;
     if (!cm) return;
     const options = this.interaction.contextMenuOptions(cm.item, cm.source, cm.isEquipped);
     const menuW = CONTEXT_MENU_W;
     const menuItemH = CONTEXT_MENU_ITEM_H;
     const menuH = options.length * menuItemH + CONTEXT_MENU_V_PAD;
-    const mx = Math.min(cm.x, canvas.width - menuW - CONTEXT_MENU_MARGIN);
-    const my = Math.min(cm.y, canvas.height - menuH - CONTEXT_MENU_MARGIN);
+    // Already on-screen: `InventoryInteraction.openContextMenu` resolved the
+    // origin once, so hit-testing and this drawing can't disagree.
+    const mx = cm.x;
+    const my = cm.y;
 
     this.contextMenuOptionRects = options.map((label, i) => ({
       label,

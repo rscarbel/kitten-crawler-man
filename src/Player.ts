@@ -643,11 +643,19 @@ export abstract class Player {
     this.skills.recordUse('iron_stomach');
   }
 
-  /** Drink a health potion — heals 50 % of max HP. Returns false if none available or on cooldown. */
-  usePotion(): boolean {
+  /**
+   * Drink a health potion — heals 50 % of max HP. Returns false if none
+   * available, already at full HP, or on cooldown.
+   *
+   * @param consume Removes the bottle. Defaults to the first copy anywhere in
+   *   the pack, which is what a keybind or an auto-drink wants; a click on one
+   *   particular stack passes a slot-scoped remover so that stack is the one
+   *   that goes down.
+   */
+  usePotion(consume: () => boolean = () => this.inventory.removeOne('health_potion')): boolean {
     if (this.hp >= this.maxHp) return false;
     if (this.potionCooldownFrames > 0) return false;
-    if (!this.inventory.removeOne('health_potion')) return false;
+    if (!consume()) return false;
     this.hp = Math.min(this.maxHp, this.hp + Math.round(this.maxHp * POTION_HEAL_FRACTION));
     this.potionCooldownFrames = this.computePotionCooldown();
     this.recordSwallowed();
@@ -918,11 +926,17 @@ export abstract class Player {
     this.syncHpToMaxHp();
   }
 
-  /** Permanently boost a randomly chosen stat by 2–4 points. */
-  applyStatBoost(): void {
+  /**
+   * Permanently boost a randomly chosen stat by 2–4 points.
+   *
+   * @returns which stat won and by how much, so the caller can tell the player —
+   *   the roll happens in here and is not recoverable from the result.
+   */
+  applyStatBoost(): { stat: StatName; amount: number } {
     const stat = ALL_STATS[Math.floor(Math.random() * ALL_STATS.length)];
     const amount = STAT_BOOST_MIN + Math.floor(Math.random() * STAT_BOOST_RANGE);
     this.applyPermanentStat(stat, amount);
+    return { stat, amount };
   }
 
   tickTimers() {

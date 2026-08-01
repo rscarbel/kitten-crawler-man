@@ -43,6 +43,11 @@ export interface InventoryItem {
   abilityId?: string;
   /** Skill this item teaches when used. Set on skill books. */
   skillId?: SkillId;
+  /**
+   * A potion that can be drunk straight from the bag, without first assigning it
+   * to a hotbar slot. Drives the context menu's Drink entry.
+   */
+  drinkable?: boolean;
   /** When true, hotbar slot renders with a lighter quest-item colour. */
   isQuestItem?: boolean;
   /**
@@ -71,6 +76,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+    drinkable: true,
   },
   speed_fizz: {
     id: 'speed_fizz',
@@ -78,6 +84,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+    drinkable: true,
     description:
       'Doubles your movement speed for 25 seconds. Cannot be stacked while a previous Speed Fizz is active.',
   },
@@ -87,6 +94,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+    drinkable: true,
     description:
       'Temporarily boosts your max HP by 50% + 5 and heals you to full for 30 seconds. ' +
       'When the effect expires, max HP returns to normal.',
@@ -97,6 +105,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+    drinkable: true,
     description:
       'Halves all ability cooldown timers for 25 seconds. Cannot be stacked while a previous Cooldown Crisp is active.',
   },
@@ -106,6 +115,7 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     stackable: true,
     canHotlist: true,
     type: 'consumable',
+    drinkable: true,
     description:
       'Permanently increases one randomly chosen stat (STR, INT, CON, or DEX) by 2 to 4 points.',
   },

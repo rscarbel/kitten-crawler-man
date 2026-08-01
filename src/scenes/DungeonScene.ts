@@ -31,6 +31,8 @@ import { BopcaSystem } from '../systems/BopcaSystem';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { SystemAnnouncer } from '../ui/SystemAnnouncer';
+import { HotbarToast } from '../ui/HotbarToast';
+import { potionEffectNotice, statBoostNotice } from '../ui/potionNotices';
 import {
   promptSkillBookRead,
   resolveSkillBookPrompt,
@@ -307,6 +309,34 @@ const COMPANION_ERROR_DISPLAY_FRAMES = 180;
 /** Frames between playing potion_drink and the potion's secondary effect sound. */
 const POTION_EFFECT_SOUND_DELAY = 45;
 
+/**
+ * Potions whose whole effect is a timed status: each refuses a second bottle
+ * while its own is still running, and each lands the same way. The status these
+ * apply is named after the item, so the key doubles as the status type.
+ */
+const TIMED_POTIONS: Partial<
+  Record<ItemId, { effectSound: SoundId; activate: (drinker: Player) => void }>
+> = {
+  speed_fizz: {
+    effectSound: 'speed_fizz',
+    activate: (drinker) => drinker.activateSpeedFizz(),
+  },
+  jugg_juice: {
+    effectSound: 'jugg_juice',
+    activate: (drinker) => drinker.activateJuggJuice(),
+  },
+  cooldown_crisp: {
+    effectSound: 'cooldown_crisp',
+    activate: (drinker) => drinker.activateCooldownCrisp(),
+  },
+};
+
+/** Which bottle a drink came from: the container and the slot inside it. */
+interface PotionSlot {
+  source: 'inv' | 'hotbar';
+  slotIdx: number;
+}
+
 // Spatial grid sizing
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 
@@ -485,6 +515,7 @@ export class DungeonScene extends GameplayScene {
   private bopca: BopcaSystem;
   private readonly floatingText: FloatingCombatTextSystem;
   private readonly systemAnnouncer: SystemAnnouncer;
+  private readonly hotbarToast = new HotbarToast();
   private readonly systemNotices: SystemNoticeSystem;
   private bossRoom: BossRoomSystem;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
@@ -751,7 +782,7 @@ export class DungeonScene extends GameplayScene {
     );
     this.floatingText = new FloatingCombatTextSystem();
     this.systemAnnouncer = new SystemAnnouncer(options?.audio ?? null);
-    this.systemNotices = new SystemNoticeSystem(this.bus, this.systemAnnouncer);
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.systemAnnouncer, this.hotbarToast);
     // The safe-room counter is stamped here rather than in the generators: it
     // belongs to every safe room on every map, and this and BuildingInteriorScene
     // are the only two places a safe room is ever brought to life. Idempotent,
@@ -1722,21 +1753,9 @@ export class DungeonScene extends GameplayScene {
       },
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
-      usePotion: () => {
-        const active = this.human.isActive ? this.human : this.cat;
-        if (active.potionCooldownFrames > 0) {
-          this.audio?.play('error_taking_action');
-          return;
-        }
-        const hpBefore = active.hp;
-        if (active.usePotion()) {
-          this.tutorial?.onPotionUsed();
-          this.bus.emit('healingPotionUsed', {
-            player: active === this.human ? 'Human' : 'Cat',
-            hpRestored: active.hp - hpBefore,
-          });
-        }
-      },
+      // No slot: the dedicated potion key means "any bottle you have", unlike a
+      // hotbar key or a menu click, which each name one.
+      usePotion: () => this.drinkPotion(this.active(), 'health_potion', null),
       toggleInventory: () => {
         this.inventoryPanel.toggle();
         if (this.inventoryPanel.isOpen) {
@@ -1780,6 +1799,7 @@ export class DungeonScene extends GameplayScene {
     this.bopca.dispose();
     this.floatingText.dispose();
     this.systemAnnouncer.clear();
+    this.hotbarToast.clear();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     if (this._spiderKeyHandler !== null) {
@@ -2673,20 +2693,8 @@ export class DungeonScene extends GameplayScene {
       };
       return;
     }
-    if (slot?.id === 'health_potion') {
-      if (active.potionCooldownFrames > 0) {
-        this.audio?.play('error_taking_action');
-        return;
-      }
-      const hpBefore = active.hp;
-      if (active.usePotion()) {
-        this.tutorial?.onPotionUsed();
-        const playerName = active === this.human ? 'Human' : 'Cat';
-        this.bus.emit('healingPotionUsed', {
-          player: playerName,
-          hpRestored: active.hp - hpBefore,
-        });
-      }
+    if (slot?.drinkable === true) {
+      this.drinkPotion(active, slot.id, { source: 'hotbar', slotIdx: hotbarIdx });
     } else if (slot?.abilityId === 'magic_missile' && !this.human.isActive) {
       if (this.cat.triggerMissile()) {
         this.audio?.play('cat_missile_fire');
@@ -2720,45 +2728,89 @@ export class DungeonScene extends GameplayScene {
       this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
     } else if (slot?.id === 'quest_wood_board' && this.human.isActive) {
       this.defendQuest.tryBuildBarrier(this.human);
-    } else if (slot?.id === 'speed_fizz') {
-      if (active.hasStatus('speed_fizz')) {
-        this.audio?.play('error_taking_action');
-        return;
-      }
-      if (!active.inventory.removeOne('speed_fizz')) return;
-      active.activateSpeedFizz();
-      this.audio?.play('potion_drink');
-      this._delayedSounds.push({ id: 'speed_fizz', framesLeft: POTION_EFFECT_SOUND_DELAY });
-    } else if (slot?.id === 'jugg_juice') {
-      if (active.hasStatus('jugg_juice')) {
-        this.audio?.play('error_taking_action');
-        return;
-      }
-      if (!active.inventory.removeOne('jugg_juice')) return;
-      active.activateJuggJuice();
-      this.audio?.play('potion_drink');
-      this._delayedSounds.push({ id: 'jugg_juice', framesLeft: POTION_EFFECT_SOUND_DELAY });
-    } else if (slot?.id === 'cooldown_crisp') {
-      if (active.hasStatus('cooldown_crisp')) {
-        this.audio?.play('error_taking_action');
-        return;
-      }
-      if (!active.inventory.removeOne('cooldown_crisp')) return;
-      active.activateCooldownCrisp();
-      this.audio?.play('potion_drink');
-      this._delayedSounds.push({ id: 'cooldown_crisp', framesLeft: POTION_EFFECT_SOUND_DELAY });
     } else if (slot?.skillId !== undefined) {
       // Queued rather than read outright: a skill book is spent for good, so
       // every route to one — hotbar key, hotbar tap, bag click — asks first.
       // The bar belongs to the active crawler, so they are the reader even when
       // the panel is showing the companion's bag.
       this.queueSkillBookRead({ bookId: slot.id, skillId: slot.skillId }, active);
-    } else if (slot?.id === 'stat_boost_potion') {
-      if (!active.inventory.removeOne('stat_boost_potion')) return;
-      active.applyStatBoost();
-      this.audio?.play('potion_drink');
-      this._delayedSounds.push({ id: 'stat_boost', framesLeft: POTION_EFFECT_SOUND_DELAY });
     }
+  }
+
+  /**
+   * Drinks one `id` from `drinker`'s pack.
+   *
+   * The single place a potion is drunk, so the hotbar, the potion key, and the
+   * bag's Drink entry can't drift on cooldowns, refusals, sounds, or what the
+   * effect announces.
+   *
+   * @param bottle Which stack to spend, or null for the first one anywhere. A
+   *   click names one because the same potion often sits in both containers,
+   *   and it should be the stack the player pointed at that goes down.
+   * @returns whether the potion was actually swallowed. A refusal has already
+   *   been sounded by the time this returns false.
+   */
+  private drinkPotion(
+    drinker: HumanPlayer | CatPlayer,
+    id: ItemId,
+    bottle: PotionSlot | null,
+  ): boolean {
+    const consume = (): boolean =>
+      bottle === null
+        ? drinker.inventory.removeOne(id)
+        : drinker.inventory.removeOneFromSlot(bottle.source, bottle.slotIdx, id);
+
+    if (id === 'health_potion') {
+      if (drinker.potionCooldownFrames > 0) {
+        this.audio?.play('error_taking_action');
+        return false;
+      }
+      const hpBefore = drinker.hp;
+      if (!drinker.usePotion(consume)) {
+        // Almost always the full-HP refusal, which is otherwise indistinguishable
+        // from the click having missed the menu entirely.
+        this.audio?.play('error_taking_action');
+        return false;
+      }
+      this.tutorial?.onPotionUsed();
+      this.bus.emit('healingPotionUsed', {
+        player: drinker === this.human ? 'Human' : 'Cat',
+        hpRestored: drinker.hp - hpBefore,
+      });
+      this.showPotionEffectNotice(id);
+      return true;
+    }
+
+    if (id === 'stat_boost_potion') {
+      if (!consume()) return false;
+      const { stat, amount } = drinker.applyStatBoost();
+      this.playDrinkSounds('stat_boost');
+      this.hotbarToast.show(statBoostNotice(stat, amount));
+      return true;
+    }
+
+    const timed = TIMED_POTIONS[id];
+    if (timed === undefined) return false;
+    if (drinker.hasStatus(id)) {
+      this.audio?.play('error_taking_action');
+      return false;
+    }
+    if (!consume()) return false;
+    timed.activate(drinker);
+    this.playDrinkSounds(timed.effectSound);
+    this.showPotionEffectNotice(id);
+    return true;
+  }
+
+  /** The gulp, then the effect landing a beat later. */
+  private playDrinkSounds(effectSound: SoundId): void {
+    this.audio?.play('potion_drink');
+    this._delayedSounds.push({ id: effectSound, framesLeft: POTION_EFFECT_SOUND_DELAY });
+  }
+
+  private showPotionEffectNotice(id: ItemId): void {
+    const notice = potionEffectNotice(id);
+    if (notice !== null) this.hotbarToast.show(notice);
   }
 
   handleClick(mx: number, my: number): void {
@@ -3112,6 +3164,7 @@ export class DungeonScene extends GameplayScene {
     // down while the level-complete screen is up or it would be drawn frozen and
     // then thrown away with the scene.
     this.systemAnnouncer.update();
+    this.hotbarToast.update();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -3528,6 +3581,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.systemAnnouncer.render(ctx, canvas);
+    this.hotbarToast.render(ctx, canvas, this.inventoryPanel.hotbarBandHeight(canvas));
     aiAdapter.render(ctx, canvas);
     this.playerChat.renderChatHint(ctx, canvas);
     this.spiderQuest.renderUI(ctx, canvas, camX, camY);
@@ -4184,6 +4238,24 @@ export class DungeonScene extends GameplayScene {
   }
 
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
+    const bottle = this.inventoryPanel.interaction.pendingDrinkSlot;
+    if (bottle !== null) {
+      this.inventoryPanel.interaction.pendingDrinkSlot = null;
+      this.cancelInventoryDragForOverlay();
+      this.clearInvLongPress();
+      // Only a drink that landed sends the player back to the fight. A refusal
+      // has sounded and changed nothing, so the bag stays up to be acted on
+      // again. Closed through toggle() rather than the flag so the panel's own
+      // teardown runs — see `skillBookFlowHost`.
+      const drank = this.drinkPotion(active, bottle.id, {
+        source: bottle.source,
+        slotIdx: bottle.slotIdx,
+      });
+      if (drank && this.inventoryPanel.isOpen) {
+        this.inventoryPanel.toggle();
+      }
+    }
+
     if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
       const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
       const source = this.inventoryPanel.interaction.pendingEquipSource;

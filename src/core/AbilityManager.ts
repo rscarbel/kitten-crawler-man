@@ -10,6 +10,22 @@
 
 export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush';
 
+/**
+ * Every `AbilityId`, as a value. Typed as a total `Record` so adding an id to
+ * the union without listing it here fails to compile — a missing entry silently
+ * hides that ability's tome from the Abilities menu.
+ */
+const ABILITY_IDS: Record<AbilityId, true> = {
+  magic_missile: true,
+  protective_shell: true,
+  smush: true,
+};
+
+/** Narrows an item's free-form `abilityId` to one the manager knows about. */
+export function isAbilityId(id: string): id is AbilityId {
+  return id in ABILITY_IDS;
+}
+
 export interface AbilityPerkDef {
   level: number;
   description: string;

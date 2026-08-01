@@ -56,6 +56,17 @@ export class Hotbar {
     return false;
   }
 
+  /**
+   * Remove one from `slotIdx`, but only if that slot still holds `id` — a click
+   * and the frame that acts on it are far enough apart for the bar to have moved.
+   */
+  removeOneAt(slotIdx: number, id: ItemId): boolean {
+    const slot = this.slots[slotIdx];
+    if (slot?.id !== id) return false;
+    this.slots[slotIdx] = slot.quantity > 1 ? { ...slot, quantity: slot.quantity - 1 } : null;
+    return true;
+  }
+
   /** Count of the given item across hotbar slots. */
   countOf(id: ItemId): number {
     let n = 0;

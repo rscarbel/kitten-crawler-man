@@ -1,4 +1,5 @@
 import type { AbilityManager, AbilityDef, AbilityId } from '../../core/AbilityManager';
+import { isAbilityId } from '../../core/AbilityManager';
 import type { Inventory } from '../../core/Inventory';
 import { HOTBAR_COUNT } from '../../core/ItemDefs';
 import { type ButtonRect, type PauseTab } from './types';
@@ -148,11 +149,6 @@ const TOOLTIP_DRAW_Y_OFFSET = 16;
 const TOGGLE_W_WIDTH_MARGIN = 40;
 const PERK_BADGE_CENTER_Y_OFFSET = 13;
 const DESC_MAX_W_SCROLLBAR_MARGIN = 4;
-
-function isAbilityId(id: string): id is AbilityId {
-  const ABILITY_IDS: ReadonlyArray<string> = ['magic_missile', 'protective_shell'];
-  return ABILITY_IDS.includes(id);
-}
 
 type AbilitiesView = 'list' | 'equipped_abilities' | AbilityId;
 

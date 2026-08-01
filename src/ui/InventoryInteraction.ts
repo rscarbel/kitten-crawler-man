@@ -42,6 +42,17 @@ const INVENTORY_NAV_HOVER_TOP_OFFSET = 12;
 const INVENTORY_NAV_HOVER_BOTTOM_OFFSET = 4;
 const INVENTORY_NAV_HALF = 0.5;
 
+/**
+ * The one action an item offers on its own, ahead of the generic entries. An
+ * item has at most one: a skill book is read, a potion is drunk, everything else
+ * leads with the generic list.
+ */
+function leadOptionFor(item: InventoryItem): string[] {
+  if (item.skillId !== undefined) return ['Read'];
+  if (item.drinkable === true) return ['Drink'];
+  return [];
+}
+
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
@@ -90,6 +101,14 @@ export class InventoryInteraction {
   pendingUnequipSource: 'inv' | 'hotbar' | null = null;
   /** Set by context-menu "Description" selection; DungeonScene reads and clears. */
   pendingInfoItem: InventoryItem | null = null;
+  /**
+   * A potion the player asked to drink straight from the menu, so a potion never
+   * has to be parked in the hotbar first. Carries the slot, not just the id: the
+   * same potion often sits in both containers, and it is the stack the player
+   * pointed at that should go down. The scene reads and clears this, and decides
+   * who drinks — the bag on screen is not always the active crawler's.
+   */
+  pendingDrinkSlot: { source: 'inv' | 'hotbar'; slotIdx: number; id: ItemId } | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
   /**
@@ -135,9 +154,9 @@ export class InventoryInteraction {
     source: 'inv' | 'hotbar',
     isEquipped?: boolean,
   ): string[] {
-    // Read leads for a skill book: it is what the player opened the menu for,
+    // The item's own action leads: it is what the player opened the menu for,
     // and putting it anywhere but first would sit Drop next to the common action.
-    const lead = item.skillId === undefined ? [] : ['Read'];
+    const lead = leadOptionFor(item);
     if (source === 'hotbar') {
       if (item.type === 'armor') {
         const label = isEquipped ? 'Unequip' : 'Equip';
@@ -237,14 +256,17 @@ export class InventoryInteraction {
       const menuW = CONTEXT_MENU_WIDTH;
       const menuItemH = CONTEXT_MENU_ITEM_HEIGHT;
       const menuH = options.length * menuItemH + CONTEXT_MENU_PADDING;
-      const cmx = Math.min(cm.x, canvas.width - menuW - CONTEXT_MENU_MARGIN);
-      const cmy = Math.min(cm.y, canvas.height - menuH - CONTEXT_MENU_MARGIN);
+      // Already on-screen: `openContextMenu` resolved the origin once.
+      const cmx = cm.x;
+      const cmy = cm.y;
       if (mx >= cmx && mx <= cmx + menuW && my >= cmy && my <= cmy + menuH) {
         const idx = Math.floor((my - cmy - CONTEXT_MENU_ITEM_Y_OFFSET) / menuItemH);
         if (idx >= 0 && idx < options.length) {
           const action = options[idx];
           if (action === 'Read') {
             this.requestSkillBookRead(cm.item);
+          } else if (action === 'Drink') {
+            this.pendingDrinkSlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
           } else if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
             this.pendingEquipSource = cm.source;
@@ -377,6 +399,28 @@ export class InventoryInteraction {
     }
   }
 
+  /**
+   * Where a menu opened at (mx, my) will actually be drawn, pulled back on
+   * screen when it would overhang. Resolved once at open time rather than at
+   * every read, so hit-testing, hover highlighting, and the renderer can never
+   * disagree about a menu that had to slide.
+   */
+  private clampMenuOrigin(
+    mx: number,
+    my: number,
+    canvas: HTMLCanvasElement,
+    item: InventoryItem,
+    source: 'inv' | 'hotbar',
+    isEquipped: boolean,
+  ): { x: number; y: number } {
+    const optionCount = this.contextMenuOptions(item, source, isEquipped).length;
+    const menuH = optionCount * CONTEXT_MENU_ITEM_HEIGHT + CONTEXT_MENU_PADDING;
+    return {
+      x: Math.min(mx, canvas.width - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN),
+      y: Math.min(my, canvas.height - menuH - CONTEXT_MENU_MARGIN),
+    };
+  }
+
   openContextMenu(
     mx: number,
     my: number,
@@ -399,13 +443,15 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item && item.canDrop !== false) {
+          const isEquipped = inventory.hasEquipped(item.id);
+          const origin = this.clampMenuOrigin(mx, my, canvas, item, 'hotbar', isEquipped);
           this.contextMenu = {
             source: 'hotbar',
             slotIdx: i,
-            x: mx,
-            y: my,
+            x: origin.x,
+            y: origin.y,
             item,
-            isEquipped: inventory.hasEquipped(item.id),
+            isEquipped,
           };
           this.contextMenuHover = -1;
           return;
@@ -422,13 +468,15 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
+          const isEquipped = inventory.isSlotEquipped(slotIdx);
+          const origin = this.clampMenuOrigin(mx, my, canvas, item, 'inv', isEquipped);
           this.contextMenu = {
             source: 'inv',
             slotIdx,
-            x: mx,
-            y: my,
+            x: origin.x,
+            y: origin.y,
             item,
-            isEquipped: inventory.isSlotEquipped(slotIdx),
+            isEquipped,
           };
           this.contextMenuHover = -1;
           return;

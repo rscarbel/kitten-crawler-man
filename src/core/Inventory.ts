@@ -69,6 +69,19 @@ export class Inventory {
     return this.actionBar.removeOne(id) || this.bag.removeOne(id);
   }
 
+  /**
+   * Remove one from the exact slot the player pointed at, rather than the first
+   * copy anywhere. Without this, using a bag stack while the same potion also
+   * sits in the hotbar would silently drain the hotbar one instead.
+   *
+   * @returns false when that slot no longer holds `id`.
+   */
+  removeOneFromSlot(source: 'inv' | 'hotbar', slotIdx: number, id: ItemId): boolean {
+    return source === 'hotbar'
+      ? this.actionBar.removeOneAt(slotIdx, id)
+      : this.bag.removeOneAt(slotIdx, id);
+  }
+
   /** Total count across all inventory slots and hotbar. */
   countOf(id: ItemId): number {
     return this.bag.countOf(id) + this.actionBar.countOf(id);

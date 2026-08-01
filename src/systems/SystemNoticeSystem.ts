@@ -4,6 +4,7 @@ import type { EventBus } from '../core/EventBus';
 import type { SkillEvent, SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
 import type { SystemAnnouncer } from '../ui/SystemAnnouncer';
+import type { HotbarToast } from '../ui/HotbarToast';
 
 /**
  * First-unlock copy, in the System's dry faux-corporate register. One line per
@@ -22,8 +23,11 @@ const UNLOCK_LINES: Record<SkillId, string> = {
     'New skill unlocked: Night Vision. You may now see exactly what is about to happen to you.',
 };
 
-const COCKROACH_RECHARGED_LINE =
-  'Cockroach is back online. Please continue almost dying at your earliest convenience.';
+/**
+ * Short on purpose: this one rides the hotbar toast rather than the System's
+ * dialog box, so it has to read at a glance without covering the room.
+ */
+const COCKROACH_RECHARGED_LINE = 'Cockroach is back online';
 
 /**
  * Drains everything a `Player` queues for the scene to voice or broadcast: skill
@@ -41,6 +45,7 @@ export class SystemNoticeSystem implements GameSystem {
   constructor(
     private readonly bus: EventBus,
     private readonly announcer: SystemAnnouncer,
+    private readonly toast: HotbarToast,
   ) {}
 
   update(ctx: SystemContext): void {
@@ -61,13 +66,15 @@ export class SystemNoticeSystem implements GameSystem {
    * A one-shot toast the moment Cockroach comes back online.
    *
    * Polled rather than queued: the recharge is a wall-clock deadline that ripens
-   * on its own, with no gameplay event to hang an announcement off.
+   * on its own, with no gameplay event to hang an announcement off. It goes to
+   * the hotbar toast rather than the System's dialog box because it can ripen
+   * mid-fight, when a box across the screen is the last thing the player wants.
    */
   private announceCockroachRecharge(cat: Player): void {
     if (!cat.skills.isUnlocked('cockroach')) return;
     const ready = cat.isCockroachReady;
     if (ready && this.cockroachWasRecharging) {
-      this.announcer.announce(COCKROACH_RECHARGED_LINE);
+      this.toast.show(COCKROACH_RECHARGED_LINE);
     }
     this.cockroachWasRecharging = !ready;
   }
