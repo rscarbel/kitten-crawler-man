@@ -30,6 +30,8 @@
  *   const [titleY, descY, btnY] = stackV(modal.inner.y, 12, 28, 64, 40);
  */
 
+import { viewportWidth, viewportHeight } from '../core/Viewport';
+
 // Box defaults
 const DEFAULT_BORDER_WIDTH = 1.5;
 const DEFAULT_GLOW_BLUR = 20;
@@ -460,12 +462,12 @@ const MODAL_MIN_SCALE = 0.35;
  * back through {@link modalFitPoint}, and the layout constants stay in one
  * design-sized coordinate space regardless of viewport.
  */
-export function fitModal(canvas: HTMLCanvasElement, designHeight: number): ModalFit {
-  const available = canvas.height - MODAL_VERTICAL_MARGIN * 2;
+export function fitModal(designHeight: number): ModalFit {
+  const available = viewportHeight() - MODAL_VERTICAL_MARGIN * 2;
   return {
     scale: Math.min(1, Math.max(MODAL_MIN_SCALE, available / designHeight)),
-    pivotX: canvas.width / 2,
-    pivotY: canvas.height / 2,
+    pivotX: viewportWidth() / 2,
+    pivotY: viewportHeight() / 2,
   };
 }
 

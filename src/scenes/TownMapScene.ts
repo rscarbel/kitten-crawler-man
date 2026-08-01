@@ -23,7 +23,7 @@
  */
 
 import { Scene } from '../core/Scene';
-import type { SceneManager } from '../core/Scene';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { drawBox } from '../ui/Box';
 import { generateOverworld, type OverworldData } from '../map/OverworldGenerator';
@@ -181,7 +181,7 @@ export class TownMapScene extends Scene {
   private dragAnchor: { readonly mx: number; readonly my: number } | null = null;
   private dragDistancePx = 0;
 
-  constructor(private readonly sceneManager: SceneManager) {
+  constructor() {
     super();
     this.size = level3.mapSize;
     this.data = generateOverworld(this.size);
@@ -261,7 +261,8 @@ export class TownMapScene extends Scene {
   }
 
   private viewportSize(): { readonly width: number; readonly height: number } {
-    const { width, height } = this.sceneManager.canvas;
+    const width = viewportWidth();
+    const height = viewportHeight();
     return { width, height: height - HEADER_HEIGHT };
   }
 
@@ -279,7 +280,8 @@ export class TownMapScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.sceneManager.canvas;
+    const width = viewportWidth();
+    const height = viewportHeight();
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 

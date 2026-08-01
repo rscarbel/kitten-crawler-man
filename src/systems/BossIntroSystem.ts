@@ -7,6 +7,7 @@ import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
 import type { GameSystem } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 type IntroState = {
   bossType: string;
@@ -150,15 +151,15 @@ export class BossIntroSystem implements GameSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.state) return;
     const intro = this.state;
-    const CX = canvas.width / 2;
-    const CY = canvas.height / 2;
+    const CX = viewportWidth() / 2;
+    const CY = viewportHeight() / 2;
 
     // Dark overlay
     ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     if (intro.phase === 'letters') {
       const TITLE = BossIntroSystem.INTRO_TITLE;
@@ -170,7 +171,10 @@ export class BossIntroSystem implements GameSystem {
 
       // Render each visible character with individual color/scale for flair
       const fullText = TITLE.slice(0, charsShown);
-      const fontSize = Math.min(INTRO_FONT_MIN_SIZE, Math.floor(canvas.width / INTRO_FONT_DIVISOR));
+      const fontSize = Math.min(
+        INTRO_FONT_MIN_SIZE,
+        Math.floor(viewportWidth() / INTRO_FONT_DIVISOR),
+      );
       ctx.font = `bold ${fontSize}px monospace`;
 
       // Measure total width for centering
@@ -251,7 +255,7 @@ export class BossIntroSystem implements GameSystem {
       const EASE_POWER = 3;
       const eased = 1 - Math.pow(1 - slideIn, EASE_POWER);
 
-      const panelW = Math.min(VERSUS_PANEL_W_MAX, canvas.width * VERSUS_PANEL_W_FRACTION);
+      const panelW = Math.min(VERSUS_PANEL_W_MAX, viewportWidth() * VERSUS_PANEL_W_FRACTION);
       const panelH = VERSUS_PANEL_H;
       const panelY = CY - panelH / 2;
 

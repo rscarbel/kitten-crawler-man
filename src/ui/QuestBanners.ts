@@ -6,6 +6,7 @@
 
 import { drawText } from './TextBox';
 import { drawOverlay } from './Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FRAMES_PER_SECOND = 60;
 
@@ -31,7 +32,6 @@ const OVERLAY_DISMISS_SIZE = 12;
 /** Draws a fading top-of-screen stage banner. No-op when framesLeft <= 0. */
 export function drawQuestBanner(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   text: string,
   framesLeft: number,
   color = '#a8f070',
@@ -40,7 +40,7 @@ export function drawQuestBanner(
   if (framesLeft <= 0) return;
   const alpha = framesLeft < BANNER_FADE_FRAMES ? framesLeft / BANNER_FADE_FRAMES : 1;
   drawText(ctx, text, {
-    x: canvas.width / 2,
+    x: viewportWidth() / 2,
     y: BANNER_TITLE_Y,
     size: BANNER_TITLE_SIZE,
     bold: true,
@@ -55,7 +55,6 @@ export function drawQuestBanner(
 /** Draws the dimmed full-screen quest-complete overlay. No-op when framesLeft <= 0. */
 export function drawQuestCompleteOverlay(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   title: string,
   framesLeft: number,
 ): void {
@@ -63,14 +62,14 @@ export function drawQuestCompleteOverlay(
   const alpha = framesLeft < OVERLAY_FADE_FRAMES ? framesLeft / OVERLAY_FADE_FRAMES : 1;
 
   drawOverlay(ctx, {
-    canvasWidth: canvas.width,
-    canvasHeight: canvas.height,
+    canvasWidth: viewportWidth(),
+    canvasHeight: viewportHeight(),
     alpha: alpha * OVERLAY_DIM_ALPHA,
   });
 
   drawText(ctx, title, {
-    x: canvas.width / 2,
-    y: canvas.height / 2 - OVERLAY_TITLE_Y_OFFSET,
+    x: viewportWidth() / 2,
+    y: viewportHeight() / 2 - OVERLAY_TITLE_Y_OFFSET,
     size: OVERLAY_TITLE_SIZE,
     bold: true,
     color: '#4ade80',
@@ -80,8 +79,8 @@ export function drawQuestCompleteOverlay(
     glowBlur: OVERLAY_GLOW_BLUR,
   });
   drawText(ctx, 'Click to dismiss', {
-    x: canvas.width / 2,
-    y: canvas.height / 2 + OVERLAY_DISMISS_Y_OFFSET,
+    x: viewportWidth() / 2,
+    y: viewportHeight() / 2 + OVERLAY_DISMISS_Y_OFFSET,
     size: OVERLAY_DISMISS_SIZE,
     color: 'rgba(200,200,200,0.7)',
     align: 'center',

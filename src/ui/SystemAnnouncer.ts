@@ -70,10 +70,10 @@ export class SystemAnnouncer {
     this.dialogBox.update();
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (this.ticksLeft === 0) return;
     const alpha = this.ticksLeft < FADE_TICKS ? this.ticksLeft / FADE_TICKS : 1;
-    this.dialogBox.render(ctx, canvas, alpha);
+    this.dialogBox.render(ctx, alpha);
   }
 
   /** Drop everything pending — used on scene teardown. */

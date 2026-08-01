@@ -3,6 +3,7 @@ import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
 import { CAT_SWIPE_FRAMES, CatAnimator, drawCatSprite, drawMissiles } from '../sprites/catSprite';
+import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
@@ -88,9 +89,6 @@ export class CatPlayer extends Player {
   private static readonly ACTIVE_SPHERE_SPRITE_TOP = -5;
   /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
   private static readonly HEALTH_BAR_RAISE = 16;
-  private static readonly SPHERE_HIGHLIGHT_OFFSET = 0.3;
-  private static readonly SPHERE_INNER_RADIUS_RATIO = 0.1;
-  private static readonly SPHERE_MID_STOP = 0.4;
   private static readonly AI_MIN_COOLDOWN = 20;
   private static readonly MISS_OFFSET_FACTOR = 0.44;
   private static readonly HOMING_LEVEL_THRESHOLD = 14;
@@ -446,25 +444,7 @@ export class CatPlayer extends Player {
       const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
       const sphereCX = sx + s * CatPlayer.TILE_CENTER_OFFSET;
       const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
-      ctx.save();
-      const highlightOffset = r * CatPlayer.SPHERE_HIGHLIGHT_OFFSET;
-      const grad = ctx.createRadialGradient(
-        sphereCX - highlightOffset,
-        sphereCY - highlightOffset,
-        r * CatPlayer.SPHERE_INNER_RADIUS_RATIO,
-        sphereCX,
-        sphereCY,
-        r,
-      );
-      grad.addColorStop(0, '#e9d5ff');
-      grad.addColorStop(CatPlayer.SPHERE_MID_STOP, '#a855f7');
-      grad.addColorStop(1, '#6b21a8');
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(sphereCX, sphereCY, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
     drawCatSprite(ctx, sx, sy, s, {

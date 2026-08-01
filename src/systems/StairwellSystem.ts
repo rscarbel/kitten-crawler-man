@@ -5,6 +5,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const TILE_CENTER_OFFSET = 0.5;
 // Stairwell rendering
@@ -100,9 +101,9 @@ export class StairwellSystem implements GameSystem {
     return this.gameMap.isStairwellTile(tx, ty);
   }
 
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (!this._menuOpen) return false;
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
     if (
       mx >= rects.descend.x &&
       mx <= rects.descend.x + rects.descend.w &&
@@ -125,12 +126,7 @@ export class StairwellSystem implements GameSystem {
     return false;
   }
 
-  renderStairwells(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    canvas: HTMLCanvasElement,
-  ): void {
+  renderStairwells(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.levelDef.nextLevelId) return;
     const ts = TILE_SIZE;
     const bw = ts * STAIRWELL_SCALE;
@@ -143,9 +139,9 @@ export class StairwellSystem implements GameSystem {
       const sy = y * ts - camY;
       if (
         sx < -bw * STAIRWELL_OFFSCREEN_MARGIN ||
-        sx > canvas.width ||
+        sx > viewportWidth() ||
         sy < -bh * STAIRWELL_OFFSCREEN_MARGIN ||
-        sy > canvas.height
+        sy > viewportHeight()
       )
         continue;
 
@@ -167,9 +163,9 @@ export class StairwellSystem implements GameSystem {
     }
   }
 
-  renderMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  renderMenu(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     ctx.fillStyle = `rgba(0,0,0,${STAIRWELL_MENU_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
@@ -212,7 +208,7 @@ export class StairwellSystem implements GameSystem {
       align: 'center',
     });
 
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
 
     ctx.fillStyle = STAIRWELL_MENU_BUTTON_BG_COLOR;
     ctx.fillRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
@@ -244,12 +240,12 @@ export class StairwellSystem implements GameSystem {
     });
   }
 
-  private menuRects(canvas: HTMLCanvasElement): {
+  private menuRects(): {
     descend: { x: number; y: number; w: number; h: number };
     stay: { x: number; y: number; w: number; h: number };
   } {
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const panelH = STAIRWELL_MENU_PANEL_HEIGHT;
     const panelY = ch / 2 - panelH / 2;
     const btnW = STAIRWELL_MENU_BUTTON_WIDTH;

@@ -4,6 +4,7 @@ import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Dialog box dimensions
 const DIALOG_MAX_WIDTH = 320;
@@ -129,12 +130,12 @@ export class LevelUpDialog {
     return true;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.isShowing || !this.current) return;
     const current = this.current;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     // Dim background
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });

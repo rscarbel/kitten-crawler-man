@@ -12,6 +12,7 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { viewportWidth } from '../core/Viewport';
 
 interface VomitProjectile {
   x: number;
@@ -93,6 +94,28 @@ const VOMIT_ELONGATION_MIN = 0.6;
 const VOMIT_ELONGATION_RANGE = 1.4;
 const VOMIT_BLOB_HEIGHT_FRACTION = 0.55;
 const VOMIT_SPRITE_FRAMES = 7;
+const VOMIT_CORE_COLOR = 'rgba(80,200,20,0.9)';
+const VOMIT_MID_COLOR = 'rgba(180,255,60,0.95)';
+const VOMIT_TAIL_COLOR = 'rgba(40,140,10,0.4)';
+const bileGradientsByLength = new Map<number, CanvasGradient>();
+
+/**
+ * The orb stretches as it flies, and a gradient bakes its own coordinates in,
+ * so drawing one live meant an allocation per projectile per frame. Rounding
+ * the length to whole pixels bounds the variants to the handful the orb ever
+ * takes, at a sub-pixel cost nobody can see.
+ */
+function bileGradient(ctx: CanvasRenderingContext2D, halfLength: number): CanvasGradient {
+  const steppedLength = Math.max(1, Math.round(halfLength));
+  const cached = bileGradientsByLength.get(steppedLength);
+  if (cached !== undefined) return cached;
+  const gradient = ctx.createLinearGradient(-steppedLength, 0, steppedLength, 0);
+  gradient.addColorStop(0, VOMIT_CORE_COLOR);
+  gradient.addColorStop(BOSS_MIDLINE_FRACTION, VOMIT_MID_COLOR);
+  gradient.addColorStop(1, VOMIT_TAIL_COLOR);
+  bileGradientsByLength.set(steppedLength, gradient);
+  return gradient;
+}
 
 // Acid puddle render constants
 const PUDDLE_FADE_FRAMES = 300;
@@ -842,13 +865,9 @@ export class BossRoomSystem implements GameSystem {
       ctx.rotate(angle);
       const r = TILE_SIZE * VOMIT_BLOB_RADIUS_FRACTION;
       const len = r * (VOMIT_ELONGATION_MIN + progress * VOMIT_ELONGATION_RANGE);
-      const grad = ctx.createLinearGradient(-len, 0, len, 0);
-      grad.addColorStop(0, 'rgba(80,200,20,0.9)');
-      grad.addColorStop(BOSS_MIDLINE_FRACTION, 'rgba(180,255,60,0.95)');
-      grad.addColorStop(1, 'rgba(40,140,10,0.4)');
       ctx.shadowColor = '#a0ff40';
       ctx.shadowBlur = 10;
-      ctx.fillStyle = grad;
+      ctx.fillStyle = bileGradient(ctx, len);
       ctx.beginPath();
       ctx.ellipse(0, 0, len, r * VOMIT_BLOB_HEIGHT_FRACTION, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1187,7 +1206,6 @@ export class BossRoomSystem implements GameSystem {
    */
   renderUI(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     camX: number,
     camY: number,
     mobs: Mob[],
@@ -1255,7 +1273,6 @@ export class BossRoomSystem implements GameSystem {
     if (mobileTopY !== undefined) {
       return this.renderMobileBossBar(
         ctx,
-        canvas,
         boss,
         relevantState,
         meta,
@@ -1265,9 +1282,9 @@ export class BossRoomSystem implements GameSystem {
       );
     }
 
-    const barW = Math.min(BOSS_BAR_MAX_WIDTH, canvas.width * BOSS_BAR_WIDTH_FRACTION);
+    const barW = Math.min(BOSS_BAR_MAX_WIDTH, viewportWidth() * BOSS_BAR_WIDTH_FRACTION);
     const barH = BOSS_BAR_HEIGHT;
-    const barX = Math.floor((canvas.width - barW) / 2);
+    const barX = Math.floor((viewportWidth() - barW) / 2);
     const barY = BOSS_BAR_TOP_Y;
 
     const showSubText =
@@ -1296,7 +1313,7 @@ export class BossRoomSystem implements GameSystem {
 
     const nameText = isEnraged ? `⚠ ${meta.displayName} [ENRAGED] ⚠` : meta.displayName;
     drawText(ctx, nameText, {
-      x: canvas.width / 2,
+      x: viewportWidth() / 2,
       y: barY - BOSS_NAME_Y_OFFSET,
       size: 11,
       bold: true,
@@ -1324,7 +1341,7 @@ export class BossRoomSystem implements GameSystem {
     ctx.restore();
 
     drawText(ctx, `${boss.hp} / ${boss.maxHp}`, {
-      x: canvas.width / 2,
+      x: viewportWidth() / 2,
       y: barY + barH - BOSS_HP_TEXT_OFFSET,
       size: 9,
       color: '#e2e8f0',
@@ -1333,7 +1350,7 @@ export class BossRoomSystem implements GameSystem {
 
     if (relevantState.defeated) {
       drawText(ctx, 'DEFEATED', {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: barY + barH + BOSS_DEFEATED_TEXT_Y,
         size: 12,
         bold: true,
@@ -1345,7 +1362,7 @@ export class BossRoomSystem implements GameSystem {
     if (relevantState.locked && relevantState.entryWindowTimer > 0) {
       const seconds = Math.ceil(relevantState.entryWindowTimer / FRAMES_PER_SECOND);
       drawText(ctx, `Entry closes in ${seconds}s`, {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: barY + barH + BOSS_ENTRY_TEXT_Y,
         size: 11,
         bold: true,
@@ -1361,7 +1378,6 @@ export class BossRoomSystem implements GameSystem {
 
   private renderMobileBossBar(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     boss: Mob,
     state: BossRoomState,
     meta: { displayName: string; color: string },
@@ -1372,7 +1388,7 @@ export class BossRoomSystem implements GameSystem {
     const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
     const BOX_X = MOBILE_BOX_MARGIN;
     // Leave MOBILE_BOX_GAP px between the box's right edge and the minimap's left edge.
-    const boxW = canvas.width - (mmSize + MOBILE_BOX_GAP) - BOX_X - MOBILE_BOX_GAP;
+    const boxW = viewportWidth() - (mmSize + MOBILE_BOX_GAP) - BOX_X - MOBILE_BOX_GAP;
     const innerW = boxW - MOBILE_INNER_W_INSET;
     const innerX = BOX_X + MOBILE_INNER_X_OFFSET;
 

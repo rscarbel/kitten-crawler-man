@@ -22,6 +22,7 @@ import {
 import { renderSettingsTab } from './pause/SettingsTab';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 import { platform } from '../core/Platform';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Constants for magic numbers
 const SCROLL_MULTIPLIER = 0.5;
@@ -32,8 +33,19 @@ const SPEND_BOX_BOTTOM_MARGIN = 52;
 const ABILITIES_ACHIEVEMENTS_BOX_H = 440;
 const MODAL_PADDING = 16;
 const MODAL_BOX_WIDTH = 380;
-const SETTINGS_BOX_H_MOBILE = 520;
-const SETTINGS_BOX_H_DESKTOP = 390;
+/**
+ * The settings box height is hardcoded rather than measured from its content,
+ * so it has to grow by hand whenever the tab gains a section — here, Graphics.
+ * That section is shorter on mobile, where it drops the explanatory line under
+ * the buttons rather than spend more of an already tight box.
+ */
+const GRAPHICS_SECTION_H_MOBILE = 76;
+const GRAPHICS_SECTION_H_DESKTOP = 92;
+/** Height of everything in the tab other than the Graphics section. */
+const SETTINGS_BASE_H_MOBILE = 520;
+const SETTINGS_BASE_H_DESKTOP = 390;
+const SETTINGS_BOX_H_MOBILE = SETTINGS_BASE_H_MOBILE + GRAPHICS_SECTION_H_MOBILE;
+const SETTINGS_BOX_H_DESKTOP = SETTINGS_BASE_H_DESKTOP + GRAPHICS_SECTION_H_DESKTOP;
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -225,7 +237,6 @@ export class PauseMenu {
   /** Render the full pause overlay. Only call when isOpen === true. */
   render(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     human: HumanPlayer,
     cat: CatPlayer,
     humanAchievements?: AchievementManager,
@@ -240,8 +251,8 @@ export class PauseMenu {
   ): void {
     this.buttons = [];
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
@@ -432,7 +443,11 @@ export class PauseMenu {
 
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
-    for (const btn of this.buttons) {
+    // Back to front, because `buttons` is in draw order and later controls are
+    // painted over earlier ones. Where a short viewport makes two overlap, the
+    // one the player can actually see is the one that must take the click.
+    for (let i = this.buttons.length - 1; i >= 0; i--) {
+      const btn = this.buttons[i];
       const { x, y, w, h } = btn;
       if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
         if (btn.positionedAction) {

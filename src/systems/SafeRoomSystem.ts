@@ -22,6 +22,8 @@ import { randomFromArray, clamp, frameTime } from '../utils';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { drawRadialGlow, type GlowStop } from '../sprites/radialGlow';
 
 /** Identity of the safe room a player is standing in. */
 export interface SafeRoomInfo {
@@ -493,7 +495,6 @@ export class SafeRoomSystem implements GameSystem {
    */
   renderUI(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     camX: number,
     camY: number,
     active: { x: number; y: number },
@@ -537,9 +538,9 @@ export class SafeRoomSystem implements GameSystem {
     // size=12, old baseline = canvas.height - 18; top = baseline - round(12*0.8) = baseline - 10
     if (this.isEntityInSafeRoom(active)) {
       drawText(ctx, '~ Safe Room ~', {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y:
-          canvas.height -
+          viewportHeight() -
           SafeRoomSystem.HUD_BANNER_Y_OFFSET -
           SafeRoomSystem.HUD_BANNER_TEXT_TOP_OFFSET,
         size: SafeRoomSystem.HUD_BANNER_SIZE,
@@ -569,25 +570,25 @@ export class SafeRoomSystem implements GameSystem {
     camY: number,
   ): void {
     const radius = TILE_SIZE * SafeRoomSystem.LANTERN_LIGHT_RADIUS_TILES;
+    const stops: GlowStop[] = [
+      {
+        offset: 0,
+        color: `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},${SafeRoomSystem.LANTERN_LIGHT_ALPHA})`,
+      },
+      { offset: 1, color: `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},0)` },
+    ];
     for (const lantern of entry.lanternTiles) {
       const cx = lantern.x * TILE_SIZE + TILE_SIZE / 2 - camX;
       const cy = lantern.y * TILE_SIZE + TILE_SIZE / 2 - camY;
-      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      gradient.addColorStop(
-        0,
-        `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},${SafeRoomSystem.LANTERN_LIGHT_ALPHA})`,
-      );
-      gradient.addColorStop(1, `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},0)`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+      drawRadialGlow(ctx, cx, cy, radius, stops);
     }
   }
 
-  renderMordecaiDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this._dialogBox?.render(ctx, canvas);
+  renderMordecaiDialog(ctx: CanvasRenderingContext2D): void {
+    this._dialogBox?.render(ctx);
   }
 
-  renderSleepOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderSleepOverlay(ctx: CanvasRenderingContext2D): void {
     const t = this.sleepTimer;
     const fadeIn = this.SLEEP_FADEIN;
     const hold = this.SLEEP_HOLD;
@@ -604,16 +605,16 @@ export class SafeRoomSystem implements GameSystem {
     ctx.save();
     ctx.globalAlpha = clamp(alpha, 0, 1);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
     ctx.restore();
 
     if (t > fadeIn && t <= hold + fadeIn) {
       // "Sleeping..." size=26, old baseline = canvas.height/2 - 10
       // top = (canvas.height/2 - 10) - round(26*0.8) = (canvas.height/2 - 10) - 21
       drawText(ctx, 'Sleeping...', {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y:
-          canvas.height / 2 -
+          viewportHeight() / 2 -
           SafeRoomSystem.SLEEP_TEXT_Y_OFFSET -
           SafeRoomSystem.SLEEP_TEXT_TOP_OFFSET,
         size: 26,
@@ -624,8 +625,8 @@ export class SafeRoomSystem implements GameSystem {
       // "zZz" size=14, old baseline = canvas.height/2 + 18
       // top = (canvas.height/2 + 18) - round(14*0.8) = (canvas.height/2 + 18) - 11
       drawText(ctx, 'zZz', {
-        x: canvas.width / 2,
-        y: canvas.height / 2 + SafeRoomSystem.ZZZ_Y_OFFSET - SafeRoomSystem.ZZZ_TEXT_TOP_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() / 2 + SafeRoomSystem.ZZZ_Y_OFFSET - SafeRoomSystem.ZZZ_TEXT_TOP_OFFSET,
         size: 14,
         color: '#94a3b8',
         align: 'center',

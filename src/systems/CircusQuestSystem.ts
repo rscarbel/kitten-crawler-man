@@ -787,14 +787,9 @@ export class CircusQuestSystem implements GameSystem {
     drawInteractionPrompt(ctx, this.signet.x - camX, promptY, TILE_SIZE, 'Talk');
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this.dialog.render(ctx, canvas);
-    drawQuestBanner(ctx, canvas, this.bannerText, this.bannerTimer);
-    drawQuestCompleteOverlay(
-      ctx,
-      canvas,
-      'THE SHOW MUST GO ON — COMPLETE',
-      this.completeOverlayTimer,
-    );
+  renderUI(ctx: CanvasRenderingContext2D): void {
+    this.dialog.render(ctx);
+    drawQuestBanner(ctx, this.bannerText, this.bannerTimer);
+    drawQuestCompleteOverlay(ctx, 'THE SHOW MUST GO ON — COMPLETE', this.completeOverlayTimer);
   }
 }

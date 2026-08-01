@@ -10,6 +10,7 @@ import { platform } from '../core/Platform';
 import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
 import { drawText, wrapText, TEXT_PRESETS } from './TextBox';
 import type { Notice, NoticeTone } from '../systems/townNotices';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const PANEL_WIDTH = 440;
 const PANEL_PADDING = 20;
@@ -75,23 +76,23 @@ export class NoticeBoardPanel {
     return true;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.open) return;
 
     const bodyWidth = PANEL_WIDTH - PANEL_PADDING * 2;
     const laidOut = this.layout(ctx, bodyWidth);
     const contentHeight = laidOut.reduce((sum, n) => sum + n.height + NOTICE_GAP, 0);
     const fullHeight = HEADER_HEIGHT + contentHeight + FOOTER_HEIGHT + PANEL_PADDING;
-    const height = Math.min(fullHeight, canvas.height * PANEL_MAX_HEIGHT_FRACTION);
+    const height = Math.min(fullHeight, viewportHeight() * PANEL_MAX_HEIGHT_FRACTION);
 
     drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
     const modal = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       width: PANEL_WIDTH,
       height,
       radius: PANEL_RADIUS,

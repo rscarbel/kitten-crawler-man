@@ -16,6 +16,7 @@ import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
 import { platform } from '../core/Platform';
 import { pauseButtonRect } from './DungeonUIRenderer';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -225,25 +226,19 @@ export class AchievementUISystem {
   // ── Rendering ──
 
   /** Render the notification overlay and loot box opener (top-layer). */
-  renderOverlays(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderOverlays(ctx: CanvasRenderingContext2D): void {
     if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.render(ctx, canvas);
+      this.lootBoxOpener.render(ctx);
     }
 
     if (this._notifActive && this._notifQueue.length > 0) {
-      this.achievementNotif.render(
-        ctx,
-        canvas,
-        this._notifQueue[0].def,
-        this._notifQueue[0].player,
-      );
+      this.achievementNotif.render(ctx, this._notifQueue[0].def, this._notifQueue[0].player);
     }
   }
 
   /** Draw the achievement icon button. */
   drawAchievementIcon(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     miniMap: MiniMapSystem,
     gameOver: boolean,
     pauseOpen: boolean,
@@ -287,7 +282,7 @@ export class AchievementUISystem {
       const w = BANNER_W;
       const h = BANNER_H;
       const x = BANNER_LEFT;
-      const y = canvas.height / 2 - h / 2;
+      const y = viewportHeight() / 2 - h / 2;
       this._achievIconRect = { x, y, w, h };
 
       const t = Date.now();
@@ -344,9 +339,9 @@ export class AchievementUISystem {
       const DESKTOP_BTN_W = 104;
 
       const btnW = platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
-      const pb = pauseButtonRect(canvas, miniMap);
+      const pb = pauseButtonRect(miniMap);
       const r = {
-        x: canvas.width - RIGHT_MARGIN - btnW,
+        x: viewportWidth() - RIGHT_MARGIN - btnW,
         y: pb.y + BTN_H + BTN_GAP + BTN_H + BTN_GAP,
         w: btnW,
         h: ICON_H,
@@ -371,12 +366,7 @@ export class AchievementUISystem {
   }
 
   /** Draw the loot box icon banner (safe room only). */
-  drawLootBoxIcon(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    gameOver: boolean,
-    pauseOpen: boolean,
-  ): void {
+  drawLootBoxIcon(ctx: CanvasRenderingContext2D, gameOver: boolean, pauseOpen: boolean): void {
     const inSafe = this.human.isProtected || this.cat.isProtected;
     const totalBoxes =
       this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
@@ -420,7 +410,7 @@ export class AchievementUISystem {
     const w = BANNER_W;
     const h = BANNER_H;
     const x = BANNER_LEFT;
-    const y = canvas.height / 2 - h / 2;
+    const y = viewportHeight() / 2 - h / 2;
     this._lootBoxIconRect = { x, y, w, h };
 
     const t = Date.now();

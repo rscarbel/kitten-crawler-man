@@ -30,6 +30,7 @@ import { drawHumanSprite } from '../sprites/humanSprite';
 import { drawGoblinSprite } from '../sprites/goblinSprite';
 import type { PauseTab } from '../ui/pause/types';
 import type { ButtonRect } from '../ui/pause/types';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // ── State machine
 
@@ -1321,7 +1322,6 @@ export class TutorialController {
 
   renderOverlay(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     camX: number,
     camY: number,
     activePlayerX: number,
@@ -1331,22 +1331,22 @@ export class TutorialController {
     if (this._state === 'COMPLETE') return;
 
     if (this.showNearGoblinDialog) {
-      this.renderNearGoblinDialog(ctx, canvas);
+      this.renderNearGoblinDialog(ctx);
       return;
     }
 
     if (this.showTutorialMordecaiDialog || this.showMordecaiReminderDialog) {
-      this._dialogBox?.render(ctx, canvas);
+      this._dialogBox?.render(ctx);
       return;
     }
 
     if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') {
-      this.renderMenuGuide(ctx, canvas, renderCtx);
+      this.renderMenuGuide(ctx, renderCtx);
       return;
     }
 
     if (this._state === 'CAT_OPENED_TREASURE_BOX') {
-      this.renderCatMenuGuide(ctx, canvas, renderCtx);
+      this.renderCatMenuGuide(ctx, renderCtx);
       return;
     }
 
@@ -1361,7 +1361,7 @@ export class TutorialController {
           : this._state === 'SWITCHED_TO_CAT' && platform.isMobile
             ? SWITCHED_TO_CAT_MOBILE_HINT_RAISE_PX
             : 0;
-      this.renderHintBox(ctx, canvas, hint, extraYOffset);
+      this.renderHintBox(ctx, hint, extraYOffset);
     }
 
     // Suppress all guide arrows while an achievement notification, ability level-up dialog,
@@ -1437,7 +1437,6 @@ export class TutorialController {
       if (!nearLedge) {
         this.renderArrowToTarget(
           ctx,
-          canvas,
           camX,
           camY,
           activePlayerX,
@@ -1451,14 +1450,13 @@ export class TutorialController {
 
   private renderHintBox(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     text: string,
     extraYOffset = 0,
     overrides: { alpha?: number; borderColor?: string; textColor?: string } = {},
   ): void {
-    const boxW = Math.min(canvas.width - HINT_BOX_HORIZONTAL_MARGIN * 2, HINT_BOX_MAX_WIDTH);
-    const boxX = (canvas.width - boxW) / 2;
-    const hotbarTop = canvas.height - HOTBAR_SLOT_SIZE_MIRROR - HOTBAR_BOTTOM_MARGIN_MIRROR;
+    const boxW = Math.min(viewportWidth() - HINT_BOX_HORIZONTAL_MARGIN * 2, HINT_BOX_MAX_WIDTH);
+    const boxX = (viewportWidth() - boxW) / 2;
+    const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE_MIRROR - HOTBAR_BOTTOM_MARGIN_MIRROR;
     const boxY = hotbarTop - HINT_BOX_HEIGHT - HINT_BOX_GAP_ABOVE_HOTBAR - extraYOffset;
     const r = HINT_BOX_CORNER_RADIUS;
     const boxAlpha = overrides.alpha ?? HINT_BOX_ALPHA;
@@ -1499,14 +1497,14 @@ export class TutorialController {
     ctx.restore();
   }
 
-  private renderNearGoblinDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderNearGoblinDialog(ctx: CanvasRenderingContext2D): void {
     const attackInstruction = platform.isMobile
       ? 'Walk right up to an enemy and tap to attack.'
       : 'Walk right up to an enemy and press spacebar to attack.';
 
-    const dialogW = Math.min(DIALOG_WIDTH, canvas.width - DIALOG_SIDE_MARGIN * 2);
-    const dialogX = Math.round((canvas.width - dialogW) / 2);
-    const dialogY = Math.round((canvas.height - DIALOG_HEIGHT_WITH_ANIMATION) / 2);
+    const dialogW = Math.min(DIALOG_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
+    const dialogX = Math.round((viewportWidth() - dialogW) / 2);
+    const dialogY = Math.round((viewportHeight() - DIALOG_HEIGHT_WITH_ANIMATION) / 2);
 
     const box = drawBox(ctx, {
       x: dialogX,
@@ -1624,11 +1622,7 @@ export class TutorialController {
   }
 
   /** Renders step-by-step inventory guidance when human needs to set up their items. */
-  private renderMenuGuide(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    renderCtx: TutorialRenderContext,
-  ): void {
+  private renderMenuGuide(ctx: CanvasRenderingContext2D, renderCtx: TutorialRenderContext): void {
     if (renderCtx.isRewardGrantedDialogShowing) return;
 
     const step = this._menuGuideStep;
@@ -1645,12 +1639,7 @@ export class TutorialController {
           const dragHint = platform.isMobile
             ? 'Press and hold the Smush Ability, then drag it to hotbar slot 1.'
             : 'Click and drag the Smush Ability into hotbar slot 1.';
-          this.renderHintBox(
-            ctx,
-            canvas,
-            dragHint,
-            renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0,
-          );
+          this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
           const itemRect = renderCtx.bagItemRects.smush_tome;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
@@ -1664,12 +1653,7 @@ export class TutorialController {
           const dragHint = platform.isMobile
             ? 'Press and hold the Health Potions, then drag them to hotbar slot 2.'
             : 'Click and drag the Health Potions into hotbar slot 2.';
-          this.renderHintBox(
-            ctx,
-            canvas,
-            dragHint,
-            renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0,
-          );
+          this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
           const itemRect = renderCtx.bagItemRects.health_potion;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
@@ -1691,7 +1675,7 @@ export class TutorialController {
         const hint = platform.isMobile
           ? 'Tap the Pause button to open the menu.'
           : 'Press Esc to open the Pause Menu.';
-        this.renderHintBox(ctx, canvas, hint);
+        this.renderHintBox(ctx, hint);
         if (renderCtx.pauseButtonRect !== null) {
           this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
         }
@@ -1699,7 +1683,7 @@ export class TutorialController {
       }
 
       if (renderCtx.pauseMenuTab === 'main') {
-        this.renderPauseMenuOverlay(ctx, canvas, renderCtx, 'Inventory', alpha);
+        this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
         return;
       }
 
@@ -1710,7 +1694,7 @@ export class TutorialController {
         if (manageBtn !== undefined) {
           this.renderButtonOverlay(ctx, manageBtn, alpha);
         }
-        this.renderHintBox(ctx, canvas, 'Click "Manage Human Inventory" to open your item panel.');
+        this.renderHintBox(ctx, 'Click "Manage Human Inventory" to open your item panel.');
         return;
       }
 
@@ -1718,7 +1702,7 @@ export class TutorialController {
         step === 'drag_smush'
           ? 'Open the Pause Menu → Inventory → Manage Human Inventory.'
           : 'Now drag the Health Potions to hotbar slot 2.';
-      this.renderHintBox(ctx, canvas, fallback);
+      this.renderHintBox(ctx, fallback);
       return;
     }
 
@@ -1750,7 +1734,7 @@ export class TutorialController {
             Math.min(this._boxersDragHintTimer, BOXERS_DRAG_HINT_FADE_FRAMES) /
             BOXERS_DRAG_HINT_FADE_FRAMES;
           const flashAlpha = HINT_BOX_ALPHA * Math.min(fadeIn, fadeOut);
-          this.renderHintBox(ctx, canvas, BOXERS_DRAG_HINT_TEXT, 0, {
+          this.renderHintBox(ctx, BOXERS_DRAG_HINT_TEXT, 0, {
             alpha: flashAlpha,
             borderColor: BOXERS_DRAG_HINT_BORDER_COLOR,
             textColor: BOXERS_DRAG_HINT_TEXT_COLOR,
@@ -1759,7 +1743,7 @@ export class TutorialController {
           const hint = platform.isMobile
             ? 'Press and hold the Enchanted BigBoi Boxers to equip them.'
             : 'Right-click the Enchanted BigBoi Boxers to equip them.';
-          this.renderHintBox(ctx, canvas, hint);
+          this.renderHintBox(ctx, hint);
         }
         const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
         if (itemRect !== null) {
@@ -1777,7 +1761,7 @@ export class TutorialController {
         const hint = platform.isMobile
           ? 'Tap the Pause button to open the menu.'
           : 'Press Esc to open the Pause Menu.';
-        this.renderHintBox(ctx, canvas, hint);
+        this.renderHintBox(ctx, hint);
         if (renderCtx.pauseButtonRect !== null) {
           this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
         }
@@ -1785,7 +1769,7 @@ export class TutorialController {
       }
 
       if (renderCtx.pauseMenuTab === 'main') {
-        this.renderPauseMenuOverlay(ctx, canvas, renderCtx, 'Inventory', alpha);
+        this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
         return;
       }
 
@@ -1796,21 +1780,20 @@ export class TutorialController {
         if (manageBtn !== undefined) {
           this.renderButtonOverlay(ctx, manageBtn, alpha);
         }
-        this.renderHintBox(ctx, canvas, 'Click "Manage Human Inventory" to access your gear.');
+        this.renderHintBox(ctx, 'Click "Manage Human Inventory" to access your gear.');
         return;
       }
 
       const hint = platform.isMobile
         ? 'Open the Pause Menu → Inventory → Manage Human Inventory to equip the Boxers.'
         : 'Open the Pause Menu → Inventory → Manage Human Inventory to equip the Boxers.';
-      this.renderHintBox(ctx, canvas, hint);
+      this.renderHintBox(ctx, hint);
     }
   }
 
   /** Renders step-by-step inventory guidance when cat needs to set up her items. */
   private renderCatMenuGuide(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     renderCtx: TutorialRenderContext,
   ): void {
     if (renderCtx.isRewardGrantedDialogShowing) return;
@@ -1828,12 +1811,7 @@ export class TutorialController {
         const dragHint = platform.isMobile
           ? 'Press and hold the Magic Missile Ability, then drag it to hotbar slot 1.'
           : 'Click and drag the Magic Missile Ability into hotbar slot 1.';
-        this.renderHintBox(
-          ctx,
-          canvas,
-          dragHint,
-          renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0,
-        );
+        this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
         const itemRect = renderCtx.bagItemRects.magic_missile_tome;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
@@ -1847,12 +1825,7 @@ export class TutorialController {
         const dragHint = platform.isMobile
           ? 'Press and hold the Health Potions, then drag them to hotbar slot 2.'
           : 'Click and drag the Health Potions into hotbar slot 2.';
-        this.renderHintBox(
-          ctx,
-          canvas,
-          dragHint,
-          renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0,
-        );
+        this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
         const itemRect = renderCtx.bagItemRects.health_potion;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
@@ -1874,7 +1847,7 @@ export class TutorialController {
       const hint = platform.isMobile
         ? 'Tap the Pause button to open the menu.'
         : 'Press Esc to open the Pause Menu.';
-      this.renderHintBox(ctx, canvas, hint);
+      this.renderHintBox(ctx, hint);
       if (renderCtx.pauseButtonRect !== null) {
         this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
       }
@@ -1882,7 +1855,7 @@ export class TutorialController {
     }
 
     if (renderCtx.pauseMenuTab === 'main') {
-      this.renderPauseMenuOverlay(ctx, canvas, renderCtx, 'Inventory', alpha);
+      this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
       return;
     }
 
@@ -1891,17 +1864,16 @@ export class TutorialController {
       if (manageBtn !== undefined) {
         this.renderButtonOverlay(ctx, manageBtn, alpha);
       }
-      this.renderHintBox(ctx, canvas, 'Click "Manage Cat Inventory" to open your item panel.');
+      this.renderHintBox(ctx, 'Click "Manage Cat Inventory" to open your item panel.');
       return;
     }
 
-    this.renderHintBox(ctx, canvas, 'Open the Pause Menu → Inventory → Manage Cat Inventory.');
+    this.renderHintBox(ctx, 'Open the Pause Menu → Inventory → Manage Cat Inventory.');
   }
 
   /** Draw a dark overlay on all pause-menu main-tab buttons EXCEPT the one with the target label, and draw a pulsing border around the target. */
   private renderPauseMenuOverlay(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     renderCtx: TutorialRenderContext,
     targetLabel: string,
     alpha: number,
@@ -2017,7 +1989,6 @@ export class TutorialController {
   /** Renders the directional arrow above the active player pointing toward the target. */
   private renderArrowToTarget(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     camX: number,
     camY: number,
     activePlayerX: number,
@@ -2041,9 +2012,9 @@ export class TutorialController {
     const playerScreenY = activePlayerY - camY;
     if (
       playerScreenX < -TILE_SIZE * 2 ||
-      playerScreenX > canvas.width + TILE_SIZE * 2 ||
+      playerScreenX > viewportWidth() + TILE_SIZE * 2 ||
       playerScreenY < -TILE_SIZE * 2 ||
-      playerScreenY > canvas.height + TILE_SIZE * 2
+      playerScreenY > viewportHeight() + TILE_SIZE * 2
     ) {
       return;
     }

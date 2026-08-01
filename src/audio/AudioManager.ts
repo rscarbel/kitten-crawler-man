@@ -1,8 +1,8 @@
 import type { EventBus } from '../core/EventBus';
+import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
 import { ALL_SOUND_IDS, SOUND_MANIFEST } from './sounds';
 
-const DEFAULT_MUSIC_VOLUME = 0.4;
 const WALKING_VOLUME = 0.25;
 const SPIDER_WALKING_VOLUME = 0.4;
 const MACHINERY_VOLUME = 0.35;
@@ -90,9 +90,9 @@ export class AudioManager {
     { source: AudioBufferSourceNode; gain: GainNode | null }
   >();
 
-  private masterVol = 1;
-  private sfxVol = 1;
-  private musicVol = DEFAULT_MUSIC_VOLUME;
+  private masterVol = settings.masterVolume;
+  private sfxVol = settings.sfxVolume;
+  private musicVol = settings.musicVolume;
 
   // True while the page is backgrounded (lock screen, app switch). Used to keep
   // the master gain at 0 without clobbering the user's stored volume.
@@ -116,6 +116,8 @@ export class AudioManager {
     this.masterGain = this.ctx.createGain();
     this.sfxGain = this.ctx.createGain();
     this.musicGain = this.ctx.createGain();
+    this.masterGain.gain.value = this.masterVol;
+    this.sfxGain.gain.value = this.sfxVol;
     this.musicGain.gain.value = this.musicVol;
     this.sfxGain.connect(this.masterGain);
     this.musicGain.connect(this.masterGain);
@@ -700,6 +702,31 @@ export class AudioManager {
   setMusicVolume(v: number): void {
     this.musicVol = v;
     this.musicGain.gain.value = v;
+  }
+
+  /*
+   * The `...Preference` setters are what the player's own volume controls call.
+   * They are separate from the plain setters above because those are also used
+   * for transient ducking (the tutorial quiets the music, for instance), which
+   * must not be mistaken for a choice and remembered across sessions.
+   */
+
+  /** Set and remember the master volume the player chose. */
+  setMasterVolumePreference(v: number): void {
+    this.setMasterVolume(v);
+    settings.setMasterVolume(v);
+  }
+
+  /** Set and remember the SFX volume the player chose. */
+  setSfxVolumePreference(v: number): void {
+    this.setSfxVolume(v);
+    settings.setSfxVolume(v);
+  }
+
+  /** Set and remember the music volume the player chose. */
+  setMusicVolumePreference(v: number): void {
+    this.setMusicVolume(v);
+    settings.setMusicVolume(v);
   }
 
   /**

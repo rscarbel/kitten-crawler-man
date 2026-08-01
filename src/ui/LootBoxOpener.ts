@@ -3,6 +3,7 @@ import { getBoxContents } from '../core/AchievementManager';
 import { randomFromArray, randomInt } from '../utils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Particle {
   x: number;
@@ -274,11 +275,11 @@ export class LootBoxOpener {
     this.particles = this.particles.filter((p) => p.life > 0);
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.active || !this.box) return;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const boxW = Math.min(BOX_W, cw - PANEL_MARGIN);
     const boxH = Math.min(BOX_H, ch - PANEL_MARGIN);
     const bx = (cw - boxW) / 2;
@@ -440,8 +441,10 @@ export class LootBoxOpener {
   }
 
   private spawnParticle(burst = false): void {
-    const cx = typeof window !== 'undefined' ? window.innerWidth / 2 : BOX_W / 2;
-    const cy = typeof window !== 'undefined' ? window.innerHeight / 2 : BOX_H / 2;
+    // Particles are drawn onto the canvas, so they spawn in the CSS-pixel
+    // viewport the box is laid out in, not in window coordinates.
+    const cx = viewportWidth() / 2;
+    const cy = viewportHeight() / 2;
     const angle = Math.random() * Math.PI * 2;
     const speed = burst
       ? PARTICLE_BURST_SPEED_BASE + Math.random() * PARTICLE_BURST_SPEED_RANGE

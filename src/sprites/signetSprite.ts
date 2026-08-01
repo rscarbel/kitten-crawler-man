@@ -60,6 +60,37 @@ const BACK_FISH_Y = 0.0;
 const BACK_OF_HEAD_WIDTH_FRACTION = 1.08;
 const BACK_OF_HEAD_HEIGHT_FRACTION = 1.02;
 
+/**
+ * Her hair stops just past the bust, so from behind nothing covers her hips —
+ * without these contours the widest part of her silhouette reads as one blank
+ * slab of skin. The thong is the only garment, so the seat itself has to be
+ * drawn: a shaded outside, the fold under each cheek, and the cleft between.
+ */
+const GLUTE_OUTER_SHADE_X = HIP_HALF_WIDTH * 0.92;
+const GLUTE_OUTER_SHADE_Y = HIP_Y + 0.028;
+const GLUTE_OUTER_SHADE_RADIUS_X = 0.028;
+const GLUTE_OUTER_SHADE_RADIUS_Y = 0.05;
+const GLUTE_OUTER_SHADE_ALPHA = 0.45;
+
+/**
+ * Each cheek is one circle, of which only the lower arc is stroked — the same
+ * trick the bust undercurve uses. The circle has to stay clear of the hip
+ * silhouette, which is already tapering toward the crotch by this height, or
+ * the arc is simply clipped away.
+ */
+const GLUTE_CENTER_X = 0.042;
+const GLUTE_CENTER_Y = 0.124;
+const GLUTE_RADIUS = 0.043;
+/** Symmetric about straight-down, so one angle range serves both sides. */
+const GLUTE_UNDERCURVE_ARC_START = HALF_TURN * 0.14;
+const GLUTE_UNDERCURVE_ARC_END = HALF_TURN * 0.86;
+
+const GLUTE_CLEFT_TOP_Y = HIP_Y + 0.006;
+const GLUTE_CLEFT_BOTTOM_Y = CROTCH_Y - 0.008;
+/** Tapered at both ends: a lens, not a line, so it reads as depth rather than ink. */
+const GLUTE_CLEFT_HALF_WIDTH = 0.009;
+const GLUTE_CLEFT_WIDEST_Y = HIP_Y + (CROTCH_Y - HIP_Y) * 0.45;
+
 /* ── Legs ──────────────────────────────────────────────────────────────── */
 
 const LEG_TOP_Y = HIP_Y - 0.01;
@@ -826,6 +857,9 @@ const THONG_STRAP_HEIGHT = 0.009;
 const THONG_STRAP_SPAN = 0.9;
 const THONG_PANEL_SPAN = 0.52;
 const THONG_PANEL_BOTTOM_Y = CROTCH_Y - 0.005;
+/** Narrow enough that the cleft shadow still shows on either side of it. */
+const THONG_STRING_HALF_WIDTH = GLUTE_CLEFT_HALF_WIDTH * 0.38;
+const THONG_STRING_BOTTOM_Y = GLUTE_CLEFT_BOTTOM_Y - 0.012;
 
 function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
   ctx.save();
@@ -834,14 +868,29 @@ function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
 
   ctx.fillStyle = THONG_COLOR;
   if (facingAway) {
-    // From behind it is a string, and her hair covers it regardless — only the
-    // hip straps are ever drawn.
     ctx.fillRect(
       -HIP_HALF_WIDTH * THONG_STRAP_SPAN,
       THONG_STRAP_Y - THONG_STRAP_HEIGHT,
       HIP_HALF_WIDTH * THONG_STRAP_SPAN * 2,
       THONG_STRAP_HEIGHT,
     );
+
+    // From behind the panel is only a string, running down the cleft from the
+    // strap — it has to sit slightly narrower than the cleft or it reads as a
+    // painted stripe instead of a garment.
+    ctx.beginPath();
+    ctx.moveTo(-THONG_STRING_HALF_WIDTH, THONG_STRAP_Y);
+    ctx.lineTo(THONG_STRING_HALF_WIDTH, THONG_STRAP_Y);
+    ctx.quadraticCurveTo(THONG_STRING_HALF_WIDTH, THONG_STRING_BOTTOM_Y, 0, THONG_STRING_BOTTOM_Y);
+    ctx.quadraticCurveTo(
+      -THONG_STRING_HALF_WIDTH,
+      THONG_STRING_BOTTOM_Y,
+      -THONG_STRING_HALF_WIDTH,
+      THONG_STRAP_Y,
+    );
+    ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
     return;
   }
@@ -878,6 +927,51 @@ function drawThong(ctx: CanvasRenderingContext2D, facingAway: boolean): void {
   ctx.stroke();
 
   ctx.restore();
+}
+
+/**
+ * The seat, back view only. Expects the caller to have already clipped to the
+ * torso path, so the hip silhouette keeps deciding her outline.
+ */
+function drawGlutes(ctx: CanvasRenderingContext2D): void {
+  ctx.fillStyle = SKIN_SHADE;
+  ctx.globalAlpha = GLUTE_OUTER_SHADE_ALPHA;
+  ctx.beginPath();
+  for (const side of SIDES) {
+    ctx.ellipse(
+      side * GLUTE_OUTER_SHADE_X,
+      GLUTE_OUTER_SHADE_Y,
+      GLUTE_OUTER_SHADE_RADIUS_X,
+      GLUTE_OUTER_SHADE_RADIUS_Y,
+      0,
+      0,
+      Math.PI * 2,
+    );
+  }
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = SKIN_DEEP_SHADE;
+  ctx.lineWidth = BUST_UNDERCURVE_LINE_WIDTH;
+  for (const side of SIDES) {
+    ctx.beginPath();
+    ctx.arc(
+      side * GLUTE_CENTER_X,
+      GLUTE_CENTER_Y,
+      GLUTE_RADIUS,
+      GLUTE_UNDERCURVE_ARC_START,
+      GLUTE_UNDERCURVE_ARC_END,
+    );
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = SKIN_DEEP_SHADE;
+  ctx.beginPath();
+  ctx.moveTo(0, GLUTE_CLEFT_TOP_Y);
+  ctx.quadraticCurveTo(GLUTE_CLEFT_HALF_WIDTH, GLUTE_CLEFT_WIDEST_Y, 0, GLUTE_CLEFT_BOTTOM_Y);
+  ctx.quadraticCurveTo(-GLUTE_CLEFT_HALF_WIDTH, GLUTE_CLEFT_WIDEST_Y, 0, GLUTE_CLEFT_TOP_Y);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawTorso(
@@ -934,6 +1028,8 @@ function drawTorso(
     ctx.moveTo(0, SHOULDER_BLADE_TOP_Y);
     ctx.lineTo(0, HIP_Y);
     ctx.stroke();
+
+    drawGlutes(ctx);
   } else {
     // Bust undercurve only — no forward detail is ever drawn, and the hair
     // locks cover the apexes on top of that

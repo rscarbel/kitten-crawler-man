@@ -13,6 +13,7 @@ import {
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
 } from '../map/tileTypes';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -138,7 +139,6 @@ export class MobileHUDSystem implements GameSystem {
    */
   renderButtons(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     humanActive: boolean,
     extraButtons: MobileHUDButton[] = [],
     hotbarHeight = MOBILE_BTN_HEIGHT,
@@ -147,7 +147,7 @@ export class MobileHUDSystem implements GameSystem {
     if (!platform.isMobile) return;
 
     const btnY =
-      canvas.height -
+      viewportHeight() -
       hotbarHeight -
       MOBILE_BTN_BOTTOM_MARGIN -
       MOBILE_BTN_HEIGHT -
@@ -170,7 +170,7 @@ export class MobileHUDSystem implements GameSystem {
 
     // Extra large buttons (bottom-right, same row as Switch)
     this._extraBtnRects.clear();
-    let extraX = canvas.width - MOBILE_BTN_LEFT_MARGIN - MOBILE_BTN_WIDTH;
+    let extraX = viewportWidth() - MOBILE_BTN_LEFT_MARGIN - MOBILE_BTN_WIDTH;
     for (const btn of extraButtons) {
       const rect: Rect = { x: extraX, y: btnY, w: MOBILE_BTN_WIDTH, h: MOBILE_BTN_HEIGHT };
       this._extraBtnRects.set(btn.id, rect);
@@ -180,7 +180,7 @@ export class MobileHUDSystem implements GameSystem {
 
     // Gear / Bag small buttons (top-right area)
     const gearY = topRightY ?? MOBILE_GEAR_BAG_Y_DEFAULT;
-    const rightX = canvas.width - MOBILE_GEAR_BAG_X_OFFSET;
+    const rightX = viewportWidth() - MOBILE_GEAR_BAG_X_OFFSET;
     this._gearBtnRect = {
       x: rightX,
       y: gearY,
@@ -203,21 +203,20 @@ export class MobileHUDSystem implements GameSystem {
    */
   renderPanels(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     playerName: string,
     coins: number,
   ): void {
-    this.inventoryPanel.render(ctx, canvas, inventory, playerName, coins);
-    this.gearPanel.render(ctx, canvas, inventory, playerName);
+    this.inventoryPanel.render(ctx, inventory, playerName, coins);
+    this.gearPanel.render(ctx, inventory, playerName);
   }
 
   /**
    * Render a pause button. Position is relative to the minimap or top-right area.
    */
-  renderPauseButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, topY?: number): void {
+  renderPauseButton(ctx: CanvasRenderingContext2D, topY?: number): void {
     const y = topY ?? MOBILE_GEAR_BAG_Y_DEFAULT;
-    const rightX = canvas.width - MOBILE_GEAR_BAG_X_OFFSET;
+    const rightX = viewportWidth() - MOBILE_GEAR_BAG_X_OFFSET;
     this._pauseBtnRect = { x: rightX, y, w: MOBILE_SMALL_BTN_WIDTH, h: MOBILE_SMALL_BTN_HEIGHT };
     this.drawSmallBtn(ctx, this._pauseBtnRect, platform.pauseButtonLabel, false);
   }
@@ -228,7 +227,6 @@ export class MobileHUDSystem implements GameSystem {
    */
   renderInteriorMiniMap(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     gameMap: GameMap,
     active: { x: number; y: number },
     companion: { x: number; y: number },
@@ -237,7 +235,7 @@ export class MobileHUDSystem implements GameSystem {
     const mapH = gameMap.structure.length;
     const mmSize = this._miniMapExpanded ? MINIMAP_EXPANDED_SIZE : MINIMAP_NORMAL_SIZE;
 
-    const mmX = canvas.width - mmSize - MINIMAP_X_OFFSET;
+    const mmX = viewportWidth() - mmSize - MINIMAP_X_OFFSET;
     const mmY = MINIMAP_Y_OFFSET;
     this._miniMapRect = { x: mmX, y: mmY, w: mmSize, h: mmSize };
 
@@ -404,21 +402,21 @@ export class MobileHUDSystem implements GameSystem {
     }
   }
 
-  handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    this.inventoryPanel.handleMouseDown(mx, my, canvas, inventory);
+  handleMouseDown(mx: number, my: number, inventory: Inventory): void {
+    this.inventoryPanel.handleMouseDown(mx, my, inventory);
   }
 
-  handleMouseMove(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseMove(mx: number, my: number, inventory: Inventory): void {
     this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(mx, my, canvas, inventory);
+    this.gearPanel.handleMouseMove(mx, my, inventory);
   }
 
-  handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    this.inventoryPanel.handleMouseUp(mx, my, canvas, inventory);
+  handleMouseUp(mx: number, my: number, inventory: Inventory): void {
+    this.inventoryPanel.handleMouseUp(mx, my, inventory);
   }
 
-  handleContextMenu(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
-    this.inventoryPanel.openContextMenu(mx, my, canvas, inventory);
+  handleContextMenu(mx: number, my: number, inventory: Inventory): void {
+    this.inventoryPanel.openContextMenu(mx, my, inventory);
   }
 
   private drawBtn(

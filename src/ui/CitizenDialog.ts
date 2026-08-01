@@ -61,14 +61,14 @@ export class CitizenDialog {
     this.box?.update();
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this.box?.render(ctx, canvas);
+  render(ctx: CanvasRenderingContext2D): void {
+    this.box?.render(ctx);
   }
 
   /** Routes a click: advances when it lands on the box. Returns whether it was consumed. */
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (!this.box?.isVisible()) return false;
-    if (!this.box.contains(mx, my, canvas)) return false;
+    if (!this.box.contains(mx, my)) return false;
     this.advance();
     return true;
   }

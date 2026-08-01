@@ -17,6 +17,7 @@ import { drawText } from './TextBox';
 import { drawFortune } from '../systems/townFortunes';
 import type { Player } from '../Player';
 import type { TownDialogContext } from '../systems/townDialog';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FORTUNE_COST = 3;
 
@@ -76,17 +77,17 @@ export class FortuneTellerPanel {
     this.modalContains = null;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+  render(ctx: CanvasRenderingContext2D, active: Player): void {
     if (!this.open) return;
 
     drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
     const modal = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       width: PANEL_WIDTH,
       height: PANEL_HEIGHT,
       radius: PANEL_RADIUS,

@@ -15,6 +15,7 @@
 import { getSpriteDef } from '../core/SpriteLoader';
 import { platform } from '../core/Platform';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** Song length in milliseconds. */
 const SONG_DURATION_MS = 38_803;
@@ -257,22 +258,22 @@ export class KeyboardHeroSystem {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.isActive && !this._failed && !this._completed) return;
 
     // 1. Semi-transparent black overlay over entire canvas
     ctx.save();
     ctx.fillStyle = `rgba(0, 0, 0, ${RENDER_OVERLAY_ALPHA})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     // 2. Calculate display dimensions
-    const scaleH = (canvas.height * RENDER_FIELD_HEIGHT_RATIO) / FIELD_IMG_H;
-    const scaleW = (canvas.width * RENDER_FIELD_WIDTH_RATIO) / FIELD_IMG_W;
+    const scaleH = (viewportHeight() * RENDER_FIELD_HEIGHT_RATIO) / FIELD_IMG_H;
+    const scaleW = (viewportWidth() * RENDER_FIELD_WIDTH_RATIO) / FIELD_IMG_W;
     const scale = Math.min(scaleH, scaleW);
     const dw = FIELD_IMG_W * scale;
     const dh = FIELD_IMG_H * scale;
-    const dx = (canvas.width - dw) / 2;
-    const dy = (canvas.height - dh) / 2;
+    const dx = (viewportWidth() - dw) / 2;
+    const dy = (viewportHeight() - dh) / 2;
 
     // 3. Draw base playing field
     this._drawFieldSprite(ctx, 'base_container', dx, dy, dw, dh, 1);

@@ -19,6 +19,7 @@ import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -44,11 +45,16 @@ const HEALTH_RATIO_RANGE = 0.15;
 const HEALTH_WAVE_PERIOD = 120;
 const HEALTH_WAVE_OFFSET = 0.5;
 const HEALTH_WAVE_AMPLITUDE = 0.5;
-const ALPHA_PRECISION_DIGITS = 3;
 
 // Vignette gradient radii
 const VIGNETTE_INNER_RADIUS_MULT = 0.25;
 const VIGNETTE_OUTER_RADIUS_MULT = 0.85;
+const VIGNETTE_CENTER_COLOR = 'rgba(220,0,0,0)';
+const VIGNETTE_EDGE_COLOR = 'rgba(220,0,0,1)';
+
+let cachedVignette: CanvasGradient | null = null;
+let cachedVignetteWidth = 0;
+let cachedVignetteHeight = 0;
 
 // Timer related
 const SECONDS_PER_MINUTE = 60;
@@ -109,14 +115,14 @@ function rightColBtnW(): number {
 }
 
 /** Compute the pause button rectangle based on minimap size. */
-export function pauseButtonRect(canvas: HTMLCanvasElement, miniMap: MiniMapSystem): Rect {
+export function pauseButtonRect(miniMap: MiniMapSystem): Rect {
   const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
   const w = rightColBtnW();
   const followerOffset = platform.isMobile
     ? TIMER_H + MOBILE_BUTTON_GAP + MOBILE_BTN_H + MOBILE_BUTTON_GAP
     : 0;
   return {
-    x: canvas.width - RIGHT_COL_MARGIN - w,
+    x: viewportWidth() - RIGHT_COL_MARGIN - w,
     y: MINIMAP_Y + mmSize + BELOW_MAP_GAP + followerOffset,
     w,
     h: PAUSE_BTN_H,
@@ -125,13 +131,12 @@ export function pauseButtonRect(canvas: HTMLCanvasElement, miniMap: MiniMapSyste
 
 export function drawPauseButton(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   miniMap: MiniMapSystem,
   gameOver: boolean,
   pauseOpen: boolean,
 ): void {
   if (gameOver || pauseOpen) return;
-  const pb = pauseButtonRect(canvas, miniMap);
+  const pb = pauseButtonRect(miniMap);
   drawButton(ctx, {
     x: pb.x,
     y: pb.y,
@@ -145,7 +150,6 @@ export function drawPauseButton(
 
 export function renderHealthVignette(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   activePlayer: Player,
   gameOver: boolean,
 ): void {
@@ -153,8 +157,8 @@ export function renderHealthVignette(
   const ratio = activePlayer.hp / activePlayer.maxHp;
   if (ratio >= VIGNETTE_HEALTH_THRESHOLD) return;
 
-  const cw = canvas.width;
-  const ch = canvas.height;
+  const cw = viewportWidth();
+  const ch = viewportHeight();
 
   let alpha: number;
   if (ratio < CRITICAL_HEALTH_THRESHOLD) {
@@ -168,26 +172,45 @@ export function renderHealthVignette(
       MEDIUM_HEALTH_OPACITY_WAVE * (1 - (ratio - LOW_HEALTH_THRESHOLD) / HEALTH_RATIO_RANGE);
   }
 
-  const grad = ctx.createRadialGradient(
-    cw / 2,
-    ch / 2,
-    Math.min(cw, ch) * VIGNETTE_INNER_RADIUS_MULT,
-    cw / 2,
-    ch / 2,
-    Math.max(cw, ch) * VIGNETTE_OUTER_RADIUS_MULT,
-  );
-  grad.addColorStop(0, 'rgba(220,0,0,0)');
-  grad.addColorStop(1, `rgba(220,0,0,${alpha.toFixed(ALPHA_PRECISION_DIGITS)})`);
-
   ctx.save();
-  ctx.fillStyle = grad;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = vignetteGradient(ctx, cw, ch);
   ctx.fillRect(0, 0, cw, ch);
   ctx.restore();
 }
 
+/**
+ * The vignette covers the whole screen and is rebuilt only when the viewport
+ * changes size: its shape is fixed and only its opacity varies, which
+ * `globalAlpha` carries. Rebuilding it per frame meant allocating a
+ * screen-sized gradient on every frame the player was hurt.
+ */
+function vignetteGradient(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): CanvasGradient {
+  if (cachedVignette !== null && cachedVignetteWidth === width && cachedVignetteHeight === height) {
+    return cachedVignette;
+  }
+  const gradient = ctx.createRadialGradient(
+    width / 2,
+    height / 2,
+    Math.min(width, height) * VIGNETTE_INNER_RADIUS_MULT,
+    width / 2,
+    height / 2,
+    Math.max(width, height) * VIGNETTE_OUTER_RADIUS_MULT,
+  );
+  gradient.addColorStop(0, VIGNETTE_CENTER_COLOR);
+  gradient.addColorStop(1, VIGNETTE_EDGE_COLOR);
+  cachedVignette = gradient;
+  cachedVignetteWidth = width;
+  cachedVignetteHeight = height;
+  return gradient;
+}
+
 export function renderLevelTimer(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   miniMap: MiniMapSystem,
   timerFrames: number,
 ): void {
@@ -205,10 +228,10 @@ export function renderLevelTimer(
   let y: number;
   if (platform.isMobile) {
     const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
-    x = canvas.width - RIGHT_COL_MARGIN - w;
+    x = viewportWidth() - RIGHT_COL_MARGIN - w;
     y = MINIMAP_Y + mmSize + BELOW_MAP_GAP;
   } else {
-    const pauseBtn = pauseButtonRect(canvas, miniMap);
+    const pauseBtn = pauseButtonRect(miniMap);
     x = pauseBtn.x - TIMER_PAUSE_GAP - w;
     y = pauseBtn.y;
   }
@@ -272,7 +295,6 @@ export function renderLevelUpFlash(
 
 export function renderEntityTooltip(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   camX: number,
   camY: number,
   mouseX: number,
@@ -307,7 +329,8 @@ export function renderEntityTooltip(
 
   let tx = mouseX + TOOLTIP_OFFSET_X;
   let ty = mouseY - boxH - TOOLTIP_OFFSET_Y;
-  if (tx + boxW > canvas.width - TOOLTIP_MARGIN_X) tx = canvas.width - boxW - TOOLTIP_MARGIN_X;
+  if (tx + boxW > viewportWidth() - TOOLTIP_MARGIN_X)
+    tx = viewportWidth() - boxW - TOOLTIP_MARGIN_X;
   if (ty < TOOLTIP_MARGIN_X) ty = mouseY + TOOLTIP_MARGIN_Y;
 
   ctx.save();
@@ -361,17 +384,16 @@ export interface MobileButtonState {
 
 export function renderMobileButtons(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   touch: MobileTouchState,
   state: MobileButtonState,
 ): void {
   const btnY =
-    canvas.height - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
+    viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
 
   touch.switchBtnRect = { x: MOBILE_BTN_MARGIN, y: btnY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
 
   const mmSize = state.miniMap.isExpanded ? state.miniMap.EXPANDED_SIZE : state.miniMap.NORMAL_SIZE;
-  const rightX = canvas.width - MOBILE_BTN_W - RIGHT_COL_MARGIN;
+  const rightX = viewportWidth() - MOBILE_BTN_W - RIGHT_COL_MARGIN;
   const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP;
   const followerRect: Rect = { x: rightX, y: followerY, w: MOBILE_BTN_W, h: MOBILE_BTN_H };
   const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
@@ -425,7 +447,7 @@ export function renderMobileButtons(
     drawBtn(touch.switchBtnRect, humanActive ? '🐱' : '🧍', humanActive ? 'Cat' : 'Human', false);
   }
   if (!state.hideFollowerButton) {
-    renderFollowerButton(ctx, canvas, touch, state.companion, humanActive, followerRect);
+    renderFollowerButton(ctx, touch, state.companion, humanActive, followerRect);
   }
   drawSmallBtn(touch.bagBtnRect, 'Bag', state.inventoryPanel.isOpen);
 
@@ -453,16 +475,15 @@ export function renderMobileButtons(
 /** Render the Follower button and write its rect to touch (works on both mobile and desktop). */
 export function renderFollowerButton(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   touch: MobileTouchState,
   companion: CompanionSystem,
   humanIsActive: boolean,
   overrideRect?: Rect,
 ): void {
   const btnY =
-    canvas.height - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
+    viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
   const r: Rect = overrideRect ?? {
-    x: canvas.width - MOBILE_BTN_MARGIN - MOBILE_BTN_W,
+    x: viewportWidth() - MOBILE_BTN_MARGIN - MOBILE_BTN_W,
     y: btnY,
     w: MOBILE_BTN_W,
     h: MOBILE_BTN_H,

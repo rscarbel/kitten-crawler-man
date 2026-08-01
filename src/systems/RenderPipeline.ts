@@ -34,6 +34,7 @@ import type { PlayerManager } from '../core/PlayerManager';
 import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -113,7 +114,6 @@ interface DrawEntry {
 
 /** Everything the render pipeline needs, provided by the scene each frame. */
 export interface RenderContext {
-  canvas: HTMLCanvasElement;
   camX: number;
   camY: number;
   gameMap: GameMap;
@@ -176,7 +176,6 @@ export class RenderPipeline {
    */
   renderWorld(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
     const {
-      canvas,
       camX,
       camY,
       gameMap,
@@ -192,9 +191,9 @@ export class RenderPipeline {
     } = rc;
 
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
-    gameMap.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
+    gameMap.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
     gore.renderPuddles(ctx, camX, camY);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
     rc.destructibles?.renderWreckage(ctx, camX, camY);
@@ -203,8 +202,8 @@ export class RenderPipeline {
     bossRoom.renderObjects(ctx, camX, camY);
     juicerRoom.render(ctx, camX, camY, active);
     arenaRoom.render(ctx, camX, camY, active);
-    stairwell.renderStairwells(ctx, camX, camY, canvas);
-    building?.renderDoorHints(ctx, camX, camY, canvas);
+    stairwell.renderStairwells(ctx, camX, camY);
+    building?.renderDoorHints(ctx, camX, camY);
   }
 
   /**
@@ -212,24 +211,14 @@ export class RenderPipeline {
    * so depth (north = behind, south = in front) is respected.
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const {
-      canvas,
-      camX,
-      camY,
-      gameMap,
-      mobGrid,
-      active,
-      inactive,
-      treasureChests,
-      townsfolk,
-      townProps,
-    } = rc;
+    const { camX, camY, gameMap, mobGrid, active, inactive, treasureChests, townsfolk, townProps } =
+      rc;
 
     const visibleMobs = mobGrid.queryRect(
       camX - MOB_QUERY_MARGIN,
       camY - MOB_QUERY_MARGIN,
-      canvas.width + MOB_QUERY_MARGIN * 2,
-      canvas.height + MOB_QUERY_MARGIN * 2,
+      viewportWidth() + MOB_QUERY_MARGIN * 2,
+      viewportHeight() + MOB_QUERY_MARGIN * 2,
     );
 
     // Reset pool cursor (reuses existing objects)
@@ -238,8 +227,8 @@ export class RenderPipeline {
     for (const { tx, ty, isTree, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
       camX,
       camY,
-      canvas.width,
-      canvas.height,
+      viewportWidth(),
+      viewportHeight(),
     )) {
       const e = this._getEntry();
       // Trees render before all entities (negative sortY) so entities stay on top.
@@ -259,8 +248,8 @@ export class RenderPipeline {
     // (added later) sorts in front of the chest — stable sort preserves insertion order.
     const viewMinX = camX - TILE_SIZE;
     const viewMinY = camY - TILE_SIZE;
-    const viewMaxX = camX + canvas.width + TILE_SIZE;
-    const viewMaxY = camY + canvas.height + TILE_SIZE;
+    const viewMaxX = camX + viewportWidth() + TILE_SIZE;
+    const viewMaxY = camY + viewportHeight() + TILE_SIZE;
 
     for (const chest of treasureChests.allChests) {
       const chestX = chest.tileX * TILE_SIZE;
@@ -278,9 +267,9 @@ export class RenderPipeline {
       const margin = TILE_SIZE * mob.cullMarginTiles;
       if (
         mob.x < camX - margin ||
-        mob.x > camX + canvas.width + margin ||
+        mob.x > camX + viewportWidth() + margin ||
         mob.y < camY - margin ||
-        mob.y > camY + canvas.height + margin
+        mob.y > camY + viewportHeight() + margin
       ) {
         continue;
       }
@@ -331,8 +320,8 @@ export class RenderPipeline {
           prop.cullMarginTiles === undefined ? PROP_CULL_MARGIN : TILE_SIZE * prop.cullMarginTiles;
         const minX = camX - margin;
         const minY = camY - margin;
-        const maxX = camX + canvas.width + margin;
-        const maxY = camY + canvas.height + margin;
+        const maxX = camX + viewportWidth() + margin;
+        const maxY = camY + viewportHeight() + margin;
         if (prop.x < minX || prop.x > maxX || prop.y < minY || prop.y > maxY) continue;
         const e = this._getEntry();
         e.sortY = prop.y + ENTITY_SORT_Y_OFFSET;
@@ -398,7 +387,7 @@ export class RenderPipeline {
    * active player. Defeats the browser-zoom exploit without affecting normal play.
    */
   renderVisibilityFog(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { canvas, camX, camY, active } = rc;
+    const { camX, camY, active } = rc;
 
     // Night Vision widens both radii for whoever is leading. The baked falloff
     // disc is keyed on the radii, so it simply rebuilds when the pair changes.
@@ -407,7 +396,7 @@ export class RenderPipeline {
     const outerR = (VISIBILITY_OUTER_TILES + bonusTiles) * TILE_SIZE;
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
-    const halfDiag = Math.hypot(canvas.width / 2, canvas.height / 2);
+    const halfDiag = Math.hypot(viewportWidth() / 2, viewportHeight() / 2);
     if (halfDiag <= innerR) return;
 
     const cx = active.x + TILE_SIZE / 2 - camX;
@@ -423,12 +412,12 @@ export class RenderPipeline {
     ctx.fillStyle = FOG_SOLID_COLOR;
     const discRight = discLeft + disc.width;
     const discBottom = discTop + disc.height;
-    ctx.fillRect(0, 0, canvas.width, Math.max(0, discTop));
-    ctx.fillRect(0, discBottom, canvas.width, Math.max(0, canvas.height - discBottom));
+    ctx.fillRect(0, 0, viewportWidth(), Math.max(0, discTop));
+    ctx.fillRect(0, discBottom, viewportWidth(), Math.max(0, viewportHeight() - discBottom));
     const bandTop = Math.max(0, discTop);
-    const bandHeight = Math.max(0, Math.min(canvas.height, discBottom) - bandTop);
+    const bandHeight = Math.max(0, Math.min(viewportHeight(), discBottom) - bandTop);
     ctx.fillRect(0, bandTop, Math.max(0, discLeft), bandHeight);
-    ctx.fillRect(discRight, bandTop, Math.max(0, canvas.width - discRight), bandHeight);
+    ctx.fillRect(discRight, bandTop, Math.max(0, viewportWidth() - discRight), bandHeight);
   }
 
   /** Lazily bakes (and caches) the fog's radial falloff disc for the given radii. */

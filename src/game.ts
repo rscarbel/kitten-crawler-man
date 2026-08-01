@@ -44,22 +44,22 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
   const params = new URLSearchParams(window.location.search);
 
   if (params.get('people') !== null) {
-    sceneManager.replace(new PersonPreviewScene(sceneManager));
+    sceneManager.replace(new PersonPreviewScene());
     return true;
   }
 
   if (params.get('bopca') !== null) {
-    sceneManager.replace(new BopcaPreviewScene(sceneManager));
+    sceneManager.replace(new BopcaPreviewScene());
     return true;
   }
 
   if (params.get('tiles') !== null) {
-    sceneManager.replace(new TilePreviewScene(sceneManager));
+    sceneManager.replace(new TilePreviewScene());
     return true;
   }
 
   if (params.get('townmap') !== null) {
-    sceneManager.replace(new TownMapScene(sceneManager));
+    sceneManager.replace(new TownMapScene());
     return true;
   }
 

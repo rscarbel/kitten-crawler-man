@@ -16,6 +16,7 @@ import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
 const SLOT_SIZE = 54;
@@ -478,11 +479,11 @@ export class InventoryPanel {
    */
   mmSize = DEFAULT_MM_SIZE;
 
-  toggleBtnRect(canvas: HTMLCanvasElement) {
+  toggleBtnRect() {
     // On mobile the button is handled via touch.bagBtnRect in renderMobileButtons.
     // On desktop, sit below the pause button in the right column.
     return {
-      x: canvas.width - RIGHT_COL_MARGIN - DESKTOP_BTN_W,
+      x: viewportWidth() - RIGHT_COL_MARGIN - DESKTOP_BTN_W,
       y: RIGHT_COL_MARGIN + this.mmSize + PANEL_TOP_MARGIN + PAUSE_BTN_H + BTN_ROW_GAP,
       w: DESKTOP_BTN_W,
       h: TOGGLE_BTN_H,
@@ -499,14 +500,9 @@ export class InventoryPanel {
    * Returns the inventory slot index if (mx, my) is on an inventory slot in the
    * currently-visible page, or null otherwise. Used by DungeonScene for equip-on-click.
    */
-  getClickedInventorySlot(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): number | null {
+  getClickedInventorySlot(mx: number, my: number, inventory: Inventory): number | null {
     if (!this.isOpen) return null;
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
     const pageStart = this.page * SLOTS_PER_PAGE;
     for (let i = 0; i < SLOTS_PER_PAGE; i++) {
       const slotIdx = pageStart + i;
@@ -517,31 +513,31 @@ export class InventoryPanel {
     return null;
   }
 
-  private panelRect(canvas: HTMLCanvasElement) {
+  private panelRect() {
     const innerW = COLS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
     const innerH = ROWS_PER_PAGE * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP;
     const w = innerW + PANEL_PAD * 2;
     const h = HEADER_H + PANEL_PAD + innerH + PANEL_PAD + NAV_H;
     return {
-      x: Math.floor((canvas.width - w) / 2),
-      y: Math.floor((canvas.height - h) / 2),
+      x: Math.floor((viewportWidth() - w) / 2),
+      y: Math.floor((viewportHeight() - h) / 2),
       w,
       h,
     };
   }
 
-  private computedHotbarSlotSize(canvas: HTMLCanvasElement): number {
+  private computedHotbarSlotSize(): number {
     const margin = 20;
-    const available = canvas.width - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
+    const available = viewportWidth() - margin * 2 - HOTBAR_GAP * (HOTBAR_COUNT - 1);
     return Math.min(HOTBAR_SLOT_SIZE, Math.floor(available / HOTBAR_COUNT));
   }
 
-  private hotbarRect(canvas: HTMLCanvasElement) {
-    const s = this.computedHotbarSlotSize(canvas);
+  private hotbarRect() {
+    const s = this.computedHotbarSlotSize();
     const w = HOTBAR_COUNT * (s + HOTBAR_GAP) - HOTBAR_GAP;
     return {
-      x: Math.floor((canvas.width - w) / 2),
-      y: canvas.height - s - HOTBAR_BOTTOM_MARGIN,
+      x: Math.floor((viewportWidth() - w) / 2),
+      y: viewportHeight() - s - HOTBAR_BOTTOM_MARGIN,
       w,
       h: s,
       slotSize: s,
@@ -560,8 +556,8 @@ export class InventoryPanel {
     };
   }
 
-  private hotbarSlotRect(i: number, canvas: HTMLCanvasElement) {
-    const hb = this.hotbarRect(canvas);
+  private hotbarSlotRect(i: number) {
+    const hb = this.hotbarRect();
     return {
       x: hb.x + i * (hb.slotSize + HOTBAR_GAP),
       y: hb.y,
@@ -571,20 +567,20 @@ export class InventoryPanel {
   }
 
   /** Returns hotbar slot index (0–7) if (mx, my) hits a slot, else -1. */
-  getHotbarTappedIndex(mx: number, my: number, canvas: HTMLCanvasElement): number {
-    const hb = this.hotbarRect(canvas);
+  getHotbarTappedIndex(mx: number, my: number): number {
+    const hb = this.hotbarRect();
     if (my < hb.y - HOTBAR_HIT_MARGIN || my > hb.y + hb.h + HOTBAR_HIT_MARGIN) return -1;
     for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = this.hotbarSlotRect(i, canvas);
+      const r = this.hotbarSlotRect(i);
       if (mx >= r.x && mx <= r.x + r.w) return i;
     }
     return -1;
   }
 
   /** True if (mx, my) is within the open inventory panel area. */
-  hitsPanel(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  hitsPanel(mx: number, my: number): boolean {
     if (!this.isOpen) return false;
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
     return pointInRect(mx, my, p);
   }
 
@@ -597,15 +593,12 @@ export class InventoryPanel {
    * Returns the screen rect of the given bag slot index if the inventory panel
    * is open and the slot is on the currently-visible page, otherwise null.
    */
-  getBagSlotRect(
-    slotIdx: number,
-    canvas: HTMLCanvasElement,
-  ): { x: number; y: number; w: number; h: number } | null {
+  getBagSlotRect(slotIdx: number): { x: number; y: number; w: number; h: number } | null {
     if (!this.isOpen) return null;
     const pageStart = this.page * SLOTS_PER_PAGE;
     const pageEnd = pageStart + SLOTS_PER_PAGE;
     if (slotIdx < pageStart || slotIdx >= pageEnd) return null;
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
     return this.invSlotRect(slotIdx - pageStart, p);
   }
 
@@ -613,32 +606,28 @@ export class InventoryPanel {
    * Height of the screen band the hotbar strip occupies, measured up from the
    * bottom of the canvas. Scenes use it to keep world content clear of the bar.
    */
-  hotbarBandHeight(canvas: HTMLCanvasElement): number {
-    const hb = this.hotbarRect(canvas);
-    return canvas.height - (hb.y - HOTBAR_STRIP_PAD);
+  hotbarBandHeight(): number {
+    const hb = this.hotbarRect();
+    return viewportHeight() - (hb.y - HOTBAR_STRIP_PAD);
   }
 
   /** Returns the screen rect of the given hotbar slot index. */
-  getHotbarSlotRect(
-    slotIdx: number,
-    canvas: HTMLCanvasElement,
-  ): { x: number; y: number; w: number; h: number } {
-    return this.hotbarSlotRect(slotIdx, canvas);
+  getHotbarSlotRect(slotIdx: number): { x: number; y: number; w: number; h: number } {
+    return this.hotbarSlotRect(slotIdx);
   }
 
   // Render
 
   render(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     playerName: string,
     coins: number,
   ): void {
-    this.renderToggleButton(ctx, canvas);
-    this.renderHotbar(ctx, canvas, inventory);
+    this.renderToggleButton(ctx);
+    this.renderHotbar(ctx, inventory);
     if (this.isOpen) {
-      this.renderPanel(ctx, canvas, inventory, playerName, coins);
+      this.renderPanel(ctx, inventory, playerName, coins);
     }
     // Dragged item floats on top of everything
     if (this.drag) {
@@ -660,10 +649,10 @@ export class InventoryPanel {
       this.renderContextMenu(ctx);
     }
     if (this.interaction.pendingInfoItem) {
-      this.renderInfoPopup(ctx, canvas, this.interaction.pendingInfoItem);
+      this.renderInfoPopup(ctx, this.interaction.pendingInfoItem);
     }
     if (this.dropDialog) {
-      this.renderDropDialog(ctx, canvas);
+      this.renderDropDialog(ctx);
     }
   }
 
@@ -717,12 +706,8 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderInfoPopup(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    item: InventoryItem,
-  ): void {
-    const popW = Math.min(INFO_POPUP_MAX_W, canvas.width - INFO_POPUP_MARGIN);
+  private renderInfoPopup(ctx: CanvasRenderingContext2D, item: InventoryItem): void {
+    const popW = Math.min(INFO_POPUP_MAX_W, viewportWidth() - INFO_POPUP_MARGIN);
     const lineH = INFO_POPUP_LINE_H;
     const pad = INFO_POPUP_PAD;
 
@@ -732,8 +717,8 @@ export class InventoryPanel {
     // Use a rough line estimate for pre-draw sizing (similar to original)
     const approxDescLines = Math.ceil(descText.length / INFO_POPUP_DESC_CHARS_PER_LINE) || 1;
     const popH = pad + lineH + pad * INFO_POPUP_PAD_HALF + approxDescLines * lineH + pad;
-    const px = Math.floor((canvas.width - popW) / 2);
-    const py = Math.floor((canvas.height - popH) / 2);
+    const px = Math.floor((viewportWidth() - popW) / 2);
+    const py = Math.floor((viewportHeight() - popH) / 2);
 
     ctx.save();
     drawBox(ctx, {
@@ -790,13 +775,13 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderDropDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderDropDialog(ctx: CanvasRenderingContext2D): void {
     const dd = this.dropDialog;
     if (!dd) return;
-    const dlgW = Math.min(DROP_DIALOG_MAX_W, canvas.width - DROP_DIALOG_MARGIN);
+    const dlgW = Math.min(DROP_DIALOG_MAX_W, viewportWidth() - DROP_DIALOG_MARGIN);
     const dlgH = DROP_DIALOG_H;
-    const dlgX = Math.floor((canvas.width - dlgW) / 2);
-    const dlgY = Math.floor((canvas.height - dlgH) / 2);
+    const dlgX = Math.floor((viewportWidth() - dlgW) / 2);
+    const dlgY = Math.floor((viewportHeight() - dlgH) / 2);
 
     ctx.save();
     // Background
@@ -898,9 +883,9 @@ export class InventoryPanel {
     ctx.restore();
   }
 
-  private renderToggleButton(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  private renderToggleButton(ctx: CanvasRenderingContext2D): void {
     if (!platform.showDesktopToggleButtons) return;
-    const btn = this.toggleBtnRect(canvas);
+    const btn = this.toggleBtnRect();
     drawButton(ctx, {
       x: btn.x,
       y: btn.y,
@@ -911,12 +896,8 @@ export class InventoryPanel {
     });
   }
 
-  private renderHotbar(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): void {
-    const hb = this.hotbarRect(canvas);
+  private renderHotbar(ctx: CanvasRenderingContext2D, inventory: Inventory): void {
+    const hb = this.hotbarRect();
     // Background strip
     drawBox(ctx, {
       x: hb.x - HOTBAR_STRIP_PAD,
@@ -927,7 +908,7 @@ export class InventoryPanel {
     });
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = this.hotbarSlotRect(i, canvas);
+      const r = this.hotbarSlotRect(i);
       const isDragged = this.drag?.source === 'hotbar' && this.drag.idx === i;
       const hotbarItem = inventory.actionBar.slots[i];
       this.renderSlot(
@@ -967,12 +948,11 @@ export class InventoryPanel {
 
   private renderPanel(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     playerName: string,
     coins: number,
   ): void {
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
 
     // Backdrop
     drawBox(ctx, {
@@ -1705,17 +1685,16 @@ export class InventoryPanel {
 
   // Interaction
 
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): boolean {
-    const p = this.panelRect(canvas);
+  handleClick(mx: number, my: number, inventory: Inventory): boolean {
+    const p = this.panelRect();
 
     return this.interaction.handleClick(
       mx,
       my,
-      canvas,
       inventory,
       this.isOpen,
       () => this.toggle(),
-      this.toggleBtnRect(canvas),
+      this.toggleBtnRect(),
       p,
       this.page,
       (pg) => {
@@ -1738,29 +1717,27 @@ export class InventoryPanel {
     );
   }
 
-  handleMouseDown(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseDown(mx: number, my: number, inventory: Inventory): void {
     this.interaction.handleMouseDown(
       mx,
       my,
-      canvas,
       inventory,
       this.isOpen,
-      (i, c) => this.hotbarSlotRect(i, c),
-      this.panelRect(canvas),
+      (i) => this.hotbarSlotRect(i),
+      this.panelRect(),
       (i, p) => this.invSlotRect(i, p),
       this.page,
     );
   }
 
-  openContextMenu(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  openContextMenu(mx: number, my: number, inventory: Inventory): void {
     this.interaction.openContextMenu(
       mx,
       my,
-      canvas,
       inventory,
       this.isOpen,
-      (i, c) => this.hotbarSlotRect(i, c),
-      this.panelRect(canvas),
+      (i) => this.hotbarSlotRect(i),
+      this.panelRect(),
       (i, p) => this.invSlotRect(i, p),
       this.page,
     );
@@ -1770,15 +1747,14 @@ export class InventoryPanel {
     this.interaction.handleMouseMove(mx, my);
   }
 
-  handleMouseUp(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseUp(mx: number, my: number, inventory: Inventory): void {
     this.interaction.handleMouseUp(
       mx,
       my,
-      canvas,
       inventory,
       this.isOpen,
-      (i, c) => this.hotbarSlotRect(i, c),
-      this.panelRect(canvas),
+      (i) => this.hotbarSlotRect(i),
+      this.panelRect(),
       (i, p) => this.invSlotRect(i, p),
       this.page,
     );

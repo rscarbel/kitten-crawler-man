@@ -10,6 +10,7 @@ import { normalize } from '../utils';
 import { drawText } from '../ui/TextBox';
 import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import type { SpriteStates } from '../core/SpriteLoader';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface ActiveShell {
   x: number;
@@ -579,8 +580,8 @@ export class SpellSystem implements GameSystem {
     if (
       sx + extent < 0 ||
       sy + extent < 0 ||
-      sx - extent > ctx.canvas.width ||
-      sy - extent > ctx.canvas.height
+      sx - extent > viewportWidth() ||
+      sy - extent > viewportHeight()
     )
       return;
 
@@ -704,8 +705,8 @@ export class SpellSystem implements GameSystem {
   }
 
   renderFogs(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const cw = ctx.canvas.width;
-    const ch = ctx.canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     for (const fog of this.activeFogs) {
       const cx = fog.x - camX;
       const cy = fog.y - camY;

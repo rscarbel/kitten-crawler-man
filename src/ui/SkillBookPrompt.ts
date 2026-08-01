@@ -9,6 +9,7 @@ import { drawOverlay, drawModal } from './Box';
 import { drawButton, BUTTON_PRESETS, playButtonSound } from './Button';
 import { drawSkillIcon } from './icons/skillIcons';
 import { pointInRect } from '../utils';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Panel
 const PANEL_MAX_WIDTH = 340;
@@ -138,13 +139,13 @@ export class SkillBookPrompt {
     return { choice, ...request };
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     const request = this.request;
     if (request === null) return;
     const def = getSkillDef(request.skillId);
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: OVERLAY_ALPHA });
 
     const boxW = Math.min(PANEL_MAX_WIDTH, cw - PANEL_HORIZONTAL_MARGIN);

@@ -10,7 +10,7 @@
  */
 
 import { Scene } from '../core/Scene';
-import type { SceneManager } from '../core/Scene';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import {
   bopcaPaletteForSeed,
@@ -226,10 +226,6 @@ export class BopcaPreviewScene extends Scene {
   private frames = 0;
   private seedBase = 0;
 
-  constructor(private readonly sceneManager: SceneManager) {
-    super();
-  }
-
   handleClick(): void {
     this.seedBase += 1;
   }
@@ -239,7 +235,8 @@ export class BopcaPreviewScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.sceneManager.canvas;
+    const width = viewportWidth();
+    const height = viewportHeight();
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 

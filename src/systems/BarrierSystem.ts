@@ -10,6 +10,7 @@ import {
   drawTreadmillFloor,
 } from '../sprites/gymEquipmentSprite';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
@@ -241,12 +242,12 @@ export class BarrierSystem implements GameSystem {
    * Render the construct progress indicator around the player's feet.
    * Draw this on top of the HUD layer.
    */
-  renderConstructUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderConstructUI(ctx: CanvasRenderingContext2D): void {
     if (!this.pending) return;
 
     const ratio = 1 - this.pending.framesLeft / CONSTRUCT_FRAMES;
-    const cx = canvas.width * TILE_CENTER_FRACTION;
-    const cy = canvas.height * TILE_CENTER_FRACTION;
+    const cx = viewportWidth() * TILE_CENTER_FRACTION;
+    const cy = viewportHeight() * TILE_CENTER_FRACTION;
 
     // Small progress arc near screen center (represents player's feet area)
     const radius = TILE_SIZE * CONSTRUCT_ARC_RADIUS_MULT;

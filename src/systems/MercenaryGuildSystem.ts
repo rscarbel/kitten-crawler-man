@@ -26,6 +26,7 @@ import {
   resetButtonPointerSpace,
 } from '../ui/Button';
 import { pointInRect } from '../utils';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Panel geometry
 const PANEL_W = 540;
@@ -170,26 +171,26 @@ export class MercenaryGuildSystem {
     }
   }
 
-  renderPanel(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, player: Player): void {
+  renderPanel(ctx: CanvasRenderingContext2D, player: Player): void {
     if (!this.open) return;
     this.buttons = [];
 
     drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
 
     // Three hire cards plus the close cluster need more height than a landscape
     // phone has; shrink the whole panel rather than let its bottom fall off.
-    this.fit = fitModal(canvas, PANEL_H);
+    this.fit = fitModal(PANEL_H);
     beginModalFit(ctx, this.fit);
     setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
 
-    const panelW = Math.min(PANEL_W, canvas.width - PANEL_CANVAS_SIDE_MARGIN);
+    const panelW = Math.min(PANEL_W, viewportWidth() - PANEL_CANVAS_SIDE_MARGIN);
     const panel = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       width: panelW,
       height: PANEL_H,
       padding: PANEL_PADDING,

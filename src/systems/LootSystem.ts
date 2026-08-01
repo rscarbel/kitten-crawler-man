@@ -6,6 +6,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { drawRadialGlow } from '../sprites/radialGlow';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -45,6 +46,11 @@ const LOOT_LABEL_FONT_SIZE = 10;
 const LOOT_CLICK_HINT_FONT_SIZE = 8;
 /** Boss loot pulse base radius. */
 const BOSS_LOOT_GLOW_BASE_RADIUS = 18;
+/** Distinct brightness steps the pulsing boss-loot glow is baked at. */
+const BOSS_LOOT_PULSE_STEPS = 12;
+/** Radius of the glow's flat bright core, in pixels at the base glow radius. */
+const BOSS_LOOT_GLOW_CORE_PX = 2;
+const BOSS_LOOT_GLOW_CORE_FRACTION = BOSS_LOOT_GLOW_CORE_PX / BOSS_LOOT_GLOW_BASE_RADIUS;
 /** Boss loot glow pulse range (added to base radius). */
 const BOSS_LOOT_GLOW_PULSE_RANGE = 6;
 /** Boss loot inner alpha base value. */
@@ -345,20 +351,28 @@ export class LootSystem implements GameSystem {
           BOSS_LOOT_PULSE_OFFSET +
           BOSS_LOOT_PULSE_OFFSET * Math.sin(t * BOSS_LOOT_SPARKLE_ROTATION_SPEED);
         const glowR = BOSS_LOOT_GLOW_BASE_RADIUS + pulse * BOSS_LOOT_GLOW_PULSE_RANGE;
-        const grad = ctx.createRadialGradient(sx, sy, 2, sx, sy, glowR);
-        grad.addColorStop(
-          0,
-          `rgba(255,215,0,${BOSS_LOOT_INNER_ALPHA_BASE + pulse * BOSS_LOOT_INNER_ALPHA_PULSE})`,
+        // The two inner stops brighten with the pulse, so the glow is baked per
+        // quantized step rather than per frame. Twelve steps is below the point
+        // where the brightening reads as stepped.
+        const pulseStep = Math.round(pulse * BOSS_LOOT_PULSE_STEPS) / BOSS_LOOT_PULSE_STEPS;
+        drawRadialGlow(
+          ctx,
+          sx,
+          sy,
+          glowR,
+          [
+            {
+              offset: 0,
+              color: `rgba(255,215,0,${BOSS_LOOT_INNER_ALPHA_BASE + pulseStep * BOSS_LOOT_INNER_ALPHA_PULSE})`,
+            },
+            {
+              offset: BOSS_LOOT_MID_STOP,
+              color: `rgba(255,165,0,${BOSS_LOOT_MID_ALPHA_BASE + pulseStep * BOSS_LOOT_MID_ALPHA_PULSE})`,
+            },
+            { offset: 1, color: 'rgba(255,165,0,0)' },
+          ],
+          BOSS_LOOT_GLOW_CORE_FRACTION,
         );
-        grad.addColorStop(
-          BOSS_LOOT_MID_STOP,
-          `rgba(255,165,0,${BOSS_LOOT_MID_ALPHA_BASE + pulse * BOSS_LOOT_MID_ALPHA_PULSE})`,
-        );
-        grad.addColorStop(1, 'rgba(255,165,0,0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
-        ctx.fill();
 
         ctx.fillStyle = '#fff';
         for (let i = 0; i < BOSS_LOOT_SPARKLE_COUNT; i++) {

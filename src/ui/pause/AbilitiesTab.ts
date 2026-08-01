@@ -309,8 +309,6 @@ function renderListView(
         continue;
       }
 
-      const visible = rowY + LIST_ROW_H > listAreaTop && rowY < listAreaTop + areaH;
-
       const iconSize = ICON_SIZE_LIST;
       const iconX = bx + ICON_MARGIN_LEFT;
       def.renderIcon(ctx, iconX, rowY + ICON_Y_OFFSET_LIST, iconSize, state.level);
@@ -362,13 +360,22 @@ function renderListView(
         background: '#1e293b',
       });
 
-      if (visible) {
+      // The hit-rect is the button's box intersected with the clip, not the
+      // row's box. A row can still count as visible while its Details button is
+      // wholly or partly clipped away, and a hit-rect over erased pixels takes
+      // clicks meant for whatever is actually drawn there — the header button
+      // sits directly above this list.
+      const detailsY = rowY + DETAILS_BUTTON_Y_OFFSET;
+      const detailsTop = Math.max(detailsY, listAreaTop);
+      const detailsBottom = Math.min(detailsY + DETAILS_BUTTON_H, listAreaTop + areaH);
+
+      if (detailsBottom > detailsTop) {
         const btnW = DETAILS_BUTTON_WIDTH;
         const btnX = bx + bw - btnW - SCROLLBAR_W - DETAILS_BUTTON_X_OFFSET;
         const detailId = def.id;
         addButton(ctx, buttons, {
           x: btnX,
-          y: rowY + DETAILS_BUTTON_Y_OFFSET,
+          y: detailsY,
           width: btnW,
           height: DETAILS_BUTTON_H,
           label: 'Details',
@@ -379,6 +386,9 @@ function renderListView(
             touchStartY = null;
           },
         });
+        const hitRect = buttons[buttons.length - 1];
+        hitRect.y = detailsTop;
+        hitRect.h = detailsBottom - detailsTop;
       }
 
       rowY += LIST_ROW_H;

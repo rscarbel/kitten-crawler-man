@@ -3,6 +3,7 @@ import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
 import type { SkillId } from '../core/SkillManager';
 import { pointInRect } from '../utils';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Drop dialog layout dimensions
 const DROP_DIALOG_WIDTH = 200;
@@ -177,7 +178,6 @@ export class InventoryInteraction {
   handleClick(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
     toggleFn: () => void,
@@ -192,8 +192,8 @@ export class InventoryInteraction {
       const dd = this.dropDialog;
       const dlgW = DROP_DIALOG_WIDTH;
       const dlgH = DROP_DIALOG_HEIGHT;
-      const dlgX = Math.floor((canvas.width - dlgW) / 2);
-      const dlgY = Math.floor((canvas.height - dlgH) / 2);
+      const dlgX = Math.floor((viewportWidth() - dlgW) / 2);
+      const dlgY = Math.floor((viewportHeight() - dlgH) / 2);
 
       if (
         mx >= dlgX + dlgW - DROP_DIALOG_CLOSE_BTN_RIGHT &&
@@ -350,13 +350,9 @@ export class InventoryInteraction {
   handleMouseDown(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -372,7 +368,7 @@ export class InventoryInteraction {
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       if (i === QUEST_SLOT_IDX) continue; // Quest slot is not draggable
-      const r = hotbarSlotRect(i, canvas);
+      const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item && item.canDrop !== false) {
@@ -408,7 +404,6 @@ export class InventoryInteraction {
   private clampMenuOrigin(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     item: InventoryItem,
     source: 'inv' | 'hotbar',
     isEquipped: boolean,
@@ -416,21 +411,17 @@ export class InventoryInteraction {
     const optionCount = this.contextMenuOptions(item, source, isEquipped).length;
     const menuH = optionCount * CONTEXT_MENU_ITEM_HEIGHT + CONTEXT_MENU_PADDING;
     return {
-      x: Math.min(mx, canvas.width - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN),
-      y: Math.min(my, canvas.height - menuH - CONTEXT_MENU_MARGIN),
+      x: Math.min(mx, viewportWidth() - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN),
+      y: Math.min(my, viewportHeight() - menuH - CONTEXT_MENU_MARGIN),
     };
   }
 
   openContextMenu(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -439,12 +430,12 @@ export class InventoryInteraction {
     page: number,
   ): void {
     for (let i = 0; i < HOTBAR_COUNT; i++) {
-      const r = hotbarSlotRect(i, canvas);
+      const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
         const item = inventory.actionBar.slots[i];
         if (item && item.canDrop !== false) {
           const isEquipped = inventory.hasEquipped(item.id);
-          const origin = this.clampMenuOrigin(mx, my, canvas, item, 'hotbar', isEquipped);
+          const origin = this.clampMenuOrigin(mx, my, item, 'hotbar', isEquipped);
           this.contextMenu = {
             source: 'hotbar',
             slotIdx: i,
@@ -469,7 +460,7 @@ export class InventoryInteraction {
         const item = inventory.bag.slots[slotIdx];
         if (item) {
           const isEquipped = inventory.isSlotEquipped(slotIdx);
-          const origin = this.clampMenuOrigin(mx, my, canvas, item, 'inv', isEquipped);
+          const origin = this.clampMenuOrigin(mx, my, item, 'inv', isEquipped);
           this.contextMenu = {
             source: 'inv',
             slotIdx,
@@ -516,13 +507,9 @@ export class InventoryInteraction {
   handleMouseUp(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -536,7 +523,7 @@ export class InventoryInteraction {
 
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       if (i === QUEST_SLOT_IDX) continue; // Can't drop onto quest slot
-      const r = hotbarSlotRect(i, canvas);
+      const r = hotbarSlotRect(i);
       if (pointInRect(mx, my, r)) {
         if (src.source === 'hotbar') {
           // Released on the slot it came from: a plain left click, not a drag.

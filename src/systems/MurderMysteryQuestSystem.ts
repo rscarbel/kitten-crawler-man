@@ -619,9 +619,9 @@ export class MurderMysteryQuestSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this.dialog.render(ctx, canvas);
-    drawQuestBanner(ctx, canvas, this.bannerText, this.bannerTimer, '#f47c7c', '#6a2a2a');
-    drawQuestCompleteOverlay(ctx, canvas, 'THE KRASUE MURDERS — SOLVED', this.completeOverlayTimer);
+  renderUI(ctx: CanvasRenderingContext2D): void {
+    this.dialog.render(ctx);
+    drawQuestBanner(ctx, this.bannerText, this.bannerTimer, '#f47c7c', '#6a2a2a');
+    drawQuestCompleteOverlay(ctx, 'THE KRASUE MURDERS — SOLVED', this.completeOverlayTimer);
   }
 }

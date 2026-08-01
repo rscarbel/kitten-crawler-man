@@ -1,3 +1,5 @@
+import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+
 /** Body proportions (fractions of tile size). */
 const LION_BODY_RX = 0.26;
 const LION_BODY_RY = 0.18;
@@ -56,6 +58,39 @@ const AURA_PUFF_VERTICAL_SQUASH = 0.6;
 const AURA_PUFF_GRADIENT_MID_STOP = 0.55;
 const AURA_PUFF_GRADIENT_MID_ALPHA_FRAC = 0.55;
 
+/**
+ * Resolution of the baked puff texture. The puff is a soft blob with no detail
+ * to lose, so a small texture stretched to the puff's radius is indistinguishable
+ * from a fresh gradient — and costs one drawImage instead of an allocation.
+ */
+const PUFF_TEXTURE_PX = 64;
+
+const PUFF_CORE_COLOR = 'rgba(168, 226, 96, 1)';
+const PUFF_MID_COLOR = `rgba(120, 190, 62, ${AURA_PUFF_GRADIENT_MID_ALPHA_FRAC})`;
+const PUFF_EDGE_COLOR = 'rgba(96, 150, 48, 0)';
+
+let puffTexture: CanvasSurface | null = null;
+
+/**
+ * The puff gradient is identical for every puff apart from position, size and
+ * opacity — all of which the blit handles — so it is baked once at full opacity
+ * instead of being reallocated fourteen times a frame per lion.
+ */
+function getPuffTexture(): CanvasSurface {
+  if (puffTexture !== null) return puffTexture;
+  const texture = allocCanvas(PUFF_TEXTURE_PX, PUFF_TEXTURE_PX);
+  const texCtx = surfaceContext(texture);
+  const radius = PUFF_TEXTURE_PX / 2;
+  const gradient = texCtx.createRadialGradient(radius, radius, 0, radius, radius, radius);
+  gradient.addColorStop(0, PUFF_CORE_COLOR);
+  gradient.addColorStop(AURA_PUFF_GRADIENT_MID_STOP, PUFF_MID_COLOR);
+  gradient.addColorStop(1, PUFF_EDGE_COLOR);
+  texCtx.fillStyle = gradient;
+  texCtx.fillRect(0, 0, PUFF_TEXTURE_PX, PUFF_TEXTURE_PX);
+  puffTexture = texture;
+  return texture;
+}
+
 function puffAlphaEnvelope(life: number): number {
   if (life < AURA_PUFF_FADE_IN_END) return life / AURA_PUFF_FADE_IN_END;
   return 1 - (life - AURA_PUFF_FADE_IN_END) / (1 - AURA_PUFF_FADE_IN_END);
@@ -75,6 +110,8 @@ function drawSporeCloud(
   isActive: boolean,
 ): void {
   const alphaMult = isActive ? AURA_ACTIVE_ALPHA_MULT : 1;
+
+  const texture = getPuffTexture();
 
   ctx.save();
   for (let i = 0; i < AURA_PUFF_COUNT; i++) {
@@ -97,17 +134,9 @@ function drawSporeCloud(
       auraRadiusPx *
       (AURA_PUFF_SIZE_START_FRAC + (AURA_PUFF_SIZE_END_FRAC - AURA_PUFF_SIZE_START_FRAC) * life);
 
-    const gradient = ctx.createRadialGradient(px, py, 0, px, py, puffRadius);
-    gradient.addColorStop(0, `rgba(168, 226, 96, ${alpha})`);
-    gradient.addColorStop(
-      AURA_PUFF_GRADIENT_MID_STOP,
-      `rgba(120, 190, 62, ${alpha * AURA_PUFF_GRADIENT_MID_ALPHA_FRAC})`,
-    );
-    gradient.addColorStop(1, 'rgba(96, 150, 48, 0)');
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(px, py, puffRadius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.globalAlpha = alpha;
+    const puffDiameter = puffRadius * 2;
+    ctx.drawImage(texture, px - puffRadius, py - puffRadius, puffDiameter, puffDiameter);
   }
   ctx.restore();
 }

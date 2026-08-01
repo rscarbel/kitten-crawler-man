@@ -30,6 +30,7 @@ import { CityElfCultist } from '../creatures/CityElfCultist';
 import { drawText } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const SPAWN_SEARCH_RADIUS_TILES = 6;
 /**
@@ -155,14 +156,14 @@ export class QuillConfrontationSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D): void {
     const quill = this.quill;
     if (!quill) return;
 
     if (quill.isAlive) {
-      const barX = canvas.width / 2 - BOSS_BAR_WIDTH / 2;
+      const barX = viewportWidth() / 2 - BOSS_BAR_WIDTH / 2;
       drawText(ctx, quill.displayName, {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: BOSS_BAR_LABEL_Y,
         size: BOSS_BAR_LABEL_SIZE,
         bold: true,
@@ -185,8 +186,8 @@ export class QuillConfrontationSystem implements GameSystem {
           ? 'Destroy Remex — his stored souls shield her'
           : 'The shield is broken — Miss Quill is exposed!',
         {
-          x: canvas.width / 2,
-          y: canvas.height - OBJECTIVE_Y_FROM_BOTTOM,
+          x: viewportWidth() / 2,
+          y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
           size: OBJECTIVE_SIZE,
           bold: true,
           color: remexAlive ? '#e8d060' : '#a8f070',
@@ -197,7 +198,6 @@ export class QuillConfrontationSystem implements GameSystem {
       if (this.bannerTimer > 0) {
         drawQuestBanner(
           ctx,
-          canvas,
           'MISS QUILL — THE HEADMISTRESS',
           this.bannerTimer,
           '#f47c7c',
@@ -206,7 +206,7 @@ export class QuillConfrontationSystem implements GameSystem {
         const alpha =
           this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
         drawText(ctx, 'Every krasue in the city was her handiwork', {
-          x: canvas.width / 2,
+          x: viewportWidth() / 2,
           y: BANNER_SUBTITLE_Y,
           size: BANNER_SUBTITLE_SIZE,
           color: '#f4c7c7',
@@ -220,8 +220,8 @@ export class QuillConfrontationSystem implements GameSystem {
       const alpha =
         this.victoryTimer < BANNER_FADE_FRAMES ? this.victoryTimer / BANNER_FADE_FRAMES : 1;
       drawText(ctx, 'THE HEADMISTRESS FALLS', {
-        x: canvas.width / 2,
-        y: canvas.height / 2 - VICTORY_TITLE_Y_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() / 2 - VICTORY_TITLE_Y_OFFSET,
         size: VICTORY_TITLE_SIZE,
         bold: true,
         color: '#4ade80',
@@ -231,8 +231,8 @@ export class QuillConfrontationSystem implements GameSystem {
         glowBlur: VICTORY_GLOW_BLUR,
       });
       drawText(ctx, 'The murders are over. Return to the streets below.', {
-        x: canvas.width / 2,
-        y: canvas.height / 2 + VICTORY_SUBTITLE_Y_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() / 2 + VICTORY_SUBTITLE_Y_OFFSET,
         size: VICTORY_SUBTITLE_SIZE,
         color: '#d4edaa',
         align: 'center',

@@ -22,6 +22,7 @@ import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS, type ButtonResult } from './Button';
 import { drawText } from './TextBox';
 import type { Player } from '../Player';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export interface PricedOption {
   /** Stable identifier for the row, so a handler can act on a rebuilt menu. */
@@ -152,7 +153,7 @@ export class PricedMenuPanel {
     if (this.feedbackTimer > 0) this.feedbackTimer--;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+  render(ctx: CanvasRenderingContext2D, active: Player): void {
     const menu = this.menu;
     if (menu === null) return;
 
@@ -162,14 +163,14 @@ export class PricedMenuPanel {
     const headerHeight = HEADER_HEIGHT + (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT);
     const height = headerHeight + menu.options.length * ROW_HEIGHT + FOOTER_HEIGHT;
     drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
-    const panelWidth = Math.min(PANEL_MAX_WIDTH, canvas.width - PANEL_SIDE_MARGIN * 2);
+    const panelWidth = Math.min(PANEL_MAX_WIDTH, viewportWidth() - PANEL_SIDE_MARGIN * 2);
     const modal = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       width: panelWidth,
       height,
       radius: PANEL_RADIUS,

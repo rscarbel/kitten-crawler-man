@@ -4,6 +4,7 @@ import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Sparkle {
   x: number;
@@ -82,8 +83,6 @@ const SPARKLE_TOTAL_LIFE = 70;
 const SPARKLE_GRAVITY = 0.08;
 const SPARKLE_SPAWN_COUNT = 30;
 const SPAWN_OFFSET_RANGE = 0.5;
-const DEFAULT_VIEWPORT_WIDTH = 400;
-const DEFAULT_VIEWPORT_HEIGHT = 300;
 const BOX_ICON_X_OFFSET = 12;
 const BOX_BODY_TOP = 0.3;
 const BOX_BODY_HEIGHT = 0.7;
@@ -131,9 +130,10 @@ export class AchievementNotification {
     const speed = burst
       ? SPARKLE_BURST_MIN_SPEED + Math.random() * SPARKLE_BURST_SPEED_RANGE
       : SPARKLE_NORMAL_MIN_SPEED + Math.random() * SPARKLE_NORMAL_SPEED_RANGE;
-    // Spawn around the edges of the notification box (approximate screen center)
-    const cx = typeof window !== 'undefined' ? window.innerWidth / 2 : DEFAULT_VIEWPORT_WIDTH;
-    const cy = typeof window !== 'undefined' ? window.innerHeight / 2 : DEFAULT_VIEWPORT_HEIGHT;
+    // Sparkles are drawn onto the canvas, so they have to spawn in the same
+    // space the box is laid out in — the CSS-pixel viewport, not the window.
+    const cx = viewportWidth() / 2;
+    const cy = viewportHeight() / 2;
     const edgeX = cx + (Math.random() - SPAWN_OFFSET_RANGE) * BOX_W;
     const edgeY = cy + (Math.random() - SPAWN_OFFSET_RANGE) * BOX_H;
     this.sparkles.push({
@@ -150,12 +150,11 @@ export class AchievementNotification {
 
   render(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     achievement: AchievementDef,
     player: 'Human' | 'Cat' = 'Human',
   ): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     // Fade-in alpha
     const alpha = Math.min(1, this.frame / FADE_IN_FRAMES);

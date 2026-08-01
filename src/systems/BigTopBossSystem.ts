@@ -24,6 +24,7 @@ import { FatClown } from '../creatures/FatClown';
 import { MoldLion } from '../creatures/MoldLion';
 import { drawText } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FRAMES_PER_SECOND = 60;
 /** Seconds a resurrecting performer waits before respawning — the book's gimmick. */
@@ -231,14 +232,14 @@ export class BigTopBossSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D): void {
     const grimaldi = this.grimaldi;
     if (!grimaldi) return;
 
     if (grimaldi.isAlive) {
-      const barX = canvas.width / 2 - BOSS_BAR_WIDTH / 2;
+      const barX = viewportWidth() / 2 - BOSS_BAR_WIDTH / 2;
       drawText(ctx, grimaldi.displayName, {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: BOSS_BAR_LABEL_Y,
         size: BOSS_BAR_LABEL_SIZE,
         bold: true,
@@ -260,8 +261,8 @@ export class BigTopBossSystem implements GameSystem {
           ? `Destroy the Massive Roots — ${rootsLeft} remaining`
           : 'The Vine is exposed!';
       drawText(ctx, objective, {
-        x: canvas.width / 2,
-        y: canvas.height - OBJECTIVE_Y_FROM_BOTTOM,
+        x: viewportWidth() / 2,
+        y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
         size: OBJECTIVE_SIZE,
         bold: true,
         color: rootsLeft > 0 ? '#e8d060' : '#a8f070',
@@ -273,7 +274,7 @@ export class BigTopBossSystem implements GameSystem {
       const alpha =
         this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
       drawText(ctx, 'GRIMALDI THE PESTIFEROUS VINE', {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: BANNER_TITLE_Y,
         size: BANNER_TITLE_SIZE,
         bold: true,
@@ -284,7 +285,7 @@ export class BigTopBossSystem implements GameSystem {
         glowBlur: BANNER_GLOW_BLUR,
       });
       drawText(ctx, 'City Boss — while his roots live, the trunk cannot be harmed', {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: BANNER_SUBTITLE_Y,
         size: BANNER_SUBTITLE_SIZE,
         color: '#d4edaa',
@@ -297,8 +298,8 @@ export class BigTopBossSystem implements GameSystem {
       const alpha =
         this.victoryTimer < BANNER_FADE_FRAMES ? this.victoryTimer / BANNER_FADE_FRAMES : 1;
       drawText(ctx, 'THE VINE IS DEAD', {
-        x: canvas.width / 2,
-        y: canvas.height / 2 - VICTORY_TITLE_Y_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() / 2 - VICTORY_TITLE_Y_OFFSET,
         size: VICTORY_TITLE_SIZE,
         bold: true,
         color: '#4ade80',
@@ -308,8 +309,8 @@ export class BigTopBossSystem implements GameSystem {
         glowBlur: BANNER_GLOW_BLUR,
       });
       drawText(ctx, 'Return to Signet outside the Big Top', {
-        x: canvas.width / 2,
-        y: canvas.height / 2 + VICTORY_SUBTITLE_Y_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() / 2 + VICTORY_SUBTITLE_Y_OFFSET,
         size: VICTORY_SUBTITLE_SIZE,
         color: '#d4edaa',
         align: 'center',

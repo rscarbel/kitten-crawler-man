@@ -17,7 +17,7 @@
  */
 
 import { Scene } from '../core/Scene';
-import type { SceneManager } from '../core/Scene';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../core/SpriteLoader';
 import { TILE_SIZE } from '../core/constants';
@@ -102,7 +102,7 @@ export class TilePreviewScene extends Scene {
   private scrollY = 0;
   private readonly materials: MaterialEntry[] = [];
 
-  constructor(private readonly sceneManager: SceneManager) {
+  constructor() {
     super();
     this.collectMaterials();
   }
@@ -169,7 +169,8 @@ export class TilePreviewScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.sceneManager.canvas;
+    const width = viewportWidth();
+    const height = viewportHeight();
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 

@@ -1,6 +1,7 @@
 import { Player, type StatName } from '../Player';
 import type { Mob } from './Mob';
 import { drawHumanSprite, type HumanAttackPhase } from '../sprites/humanSprite';
+import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
 import { ITEM_DEF } from '../core/ItemDefs';
@@ -59,9 +60,6 @@ export class HumanPlayer extends Player {
   private static readonly ACTIVE_SPHERE_GAP = 3;
   /** Offset from tile anchor so sphere sits in the gap between head top and health bar bottom. */
   private static readonly ACTIVE_SPHERE_SPRITE_TOP = 19;
-  private static readonly SPHERE_HIGHLIGHT_OFFSET = 0.3;
-  private static readonly SPHERE_INNER_RADIUS_RATIO = 0.1;
-  private static readonly SPHERE_MID_STOP = 0.4;
   private static readonly HEALTH_BAR_Y_OFFSET = 30;
   private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
@@ -222,25 +220,7 @@ export class HumanPlayer extends Player {
       const sphereCX = sx + s * HumanPlayer.SPRITE_HORIZONTAL_OFFSET;
       const sphereCY =
         sy - HumanPlayer.ACTIVE_SPHERE_SPRITE_TOP - HumanPlayer.ACTIVE_SPHERE_GAP - r;
-      ctx.save();
-      const highlightOffset = r * HumanPlayer.SPHERE_HIGHLIGHT_OFFSET;
-      const grad = ctx.createRadialGradient(
-        sphereCX - highlightOffset,
-        sphereCY - highlightOffset,
-        r * HumanPlayer.SPHERE_INNER_RADIUS_RATIO,
-        sphereCX,
-        sphereCY,
-        r,
-      );
-      grad.addColorStop(0, '#e9d5ff');
-      grad.addColorStop(HumanPlayer.SPHERE_MID_STOP, '#a855f7');
-      grad.addColorStop(1, '#6b21a8');
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(sphereCX, sphereCY, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
     drawHumanSprite(

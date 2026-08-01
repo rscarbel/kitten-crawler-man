@@ -28,6 +28,7 @@ import {
 } from '../sprites/questNPCSprite';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export const DEFEND_QUEST_ID = 'defend_goblin_mother';
 
@@ -964,15 +965,15 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mobileTopY?: number): void {
+  renderUI(ctx: CanvasRenderingContext2D, mobileTopY?: number): void {
     if (this.phase === 'inactive') return;
 
-    const cw = canvas.width;
+    const cw = viewportWidth();
 
     // Approach countdown
     if (this.phase === 'countdown') {
       if (platform.isMobile && mobileTopY !== undefined) {
-        this.renderMobileCountdown(ctx, canvas, mobileTopY);
+        this.renderMobileCountdown(ctx, mobileTopY);
       } else {
         const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
         drawText(ctx, 'ENEMIES APPROACHING', {
@@ -1000,7 +1001,7 @@ export class DefendQuestSystem implements GameSystem {
     // Defense countdown
     if (this.phase === 'defending') {
       if (platform.isMobile && mobileTopY !== undefined) {
-        this.renderMobileDefenseTimer(ctx, canvas, mobileTopY);
+        this.renderMobileDefenseTimer(ctx, mobileTopY);
       } else {
         const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
         const mins = Math.floor(secs / DEFENSE_SECONDS);
@@ -1028,34 +1029,30 @@ export class DefendQuestSystem implements GameSystem {
     }
 
     if (this.phase === 'dialog') {
-      this.renderDialog(ctx, canvas);
+      this.renderDialog(ctx);
     }
 
     if (this.phase === 'tutorial') {
-      this.renderTutorial(ctx, canvas);
+      this.renderTutorial(ctx);
     }
 
     if (this.completeOverlayTimer > 0) {
-      this.renderCompleteOverlay(ctx, canvas);
+      this.renderCompleteOverlay(ctx);
     }
 
     if (this.failOverlayTimer > 0) {
-      this.renderFailedOverlay(ctx, canvas);
+      this.renderFailedOverlay(ctx);
     }
 
     if (this.xpFloatTimer > 0) {
-      this.renderXPFloat(ctx, canvas);
+      this.renderXPFloat(ctx);
     }
   }
 
-  private renderMobileCountdown(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    topY: number,
-  ): void {
+  private renderMobileCountdown(ctx: CanvasRenderingContext2D, topY: number): void {
     const secs = Math.ceil(this.approachTimer / FRAMES_PER_SECOND);
     const boxX = MOBILE_QUEST_BOX_X;
-    const boxW = canvas.width - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
+    const boxW = viewportWidth() - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
     const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
 
     ctx.save();
@@ -1084,17 +1081,13 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  private renderMobileDefenseTimer(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    topY: number,
-  ): void {
+  private renderMobileDefenseTimer(ctx: CanvasRenderingContext2D, topY: number): void {
     const secs = Math.ceil(this.defenseTimer / FRAMES_PER_SECOND);
     const mins = Math.floor(secs / DEFENSE_SECONDS);
     const s = secs % DEFENSE_SECONDS;
     const timerStr = `${mins}:${s.toString().padStart(2, '0')}`;
     const boxX = MOBILE_QUEST_BOX_X;
-    const boxW = canvas.width - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
+    const boxW = viewportWidth() - MOBILE_QUEST_MINIMAP_W - boxX - MOBILE_QUEST_BOX_GAP;
     const centerX = boxX + MOBILE_QUEST_PAD_H + (boxW - MOBILE_QUEST_PAD_H * 2) / 2;
 
     ctx.save();
@@ -1123,9 +1116,9 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  private renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private renderDialog(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const dw = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
     const dh = DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
@@ -1193,9 +1186,9 @@ export class DefendQuestSystem implements GameSystem {
     this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
   }
 
-  private renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const alpha =
       this.completeOverlayTimer < OVERLAY_FADE_FRAMES
         ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
@@ -1264,9 +1257,9 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  private renderFailedOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private renderFailedOverlay(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const alpha =
       this.failOverlayTimer < OVERLAY_FADE_FRAMES ? this.failOverlayTimer / OVERLAY_FADE_FRAMES : 1;
 
@@ -1309,14 +1302,14 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  private renderXPFloat(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
+  private renderXPFloat(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
     const alpha = Math.min(1, this.xpFloatTimer / XP_FLOAT_ALPHA_FRAMES);
     const yOffset = (XP_FLOAT_FRAMES - this.xpFloatTimer) * XP_FLOAT_RISE_SPEED;
 
     drawText(ctx, '+500 EXP', {
       x: cw / 2,
-      y: canvas.height / 2 - XP_FLOAT_Y_OFFSET - yOffset - XP_FLOAT_ASCENT,
+      y: viewportHeight() / 2 - XP_FLOAT_Y_OFFSET - yOffset - XP_FLOAT_ASCENT,
       size: XP_FLOAT_SIZE,
       bold: true,
       color: '#4ade80',
@@ -1328,9 +1321,9 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  private renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private renderTutorial(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const dw = Math.min(TUTORIAL_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
     const dh = Math.min(TUTORIAL_MAX_HEIGHT, ch - TUTORIAL_CANVAS_PADDING_Y);
     const dx = Math.floor((cw - dw) / 2);

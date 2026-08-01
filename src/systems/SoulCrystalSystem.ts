@@ -23,6 +23,7 @@ import {
   triggerDoomsdayExplosionIfExpired,
 } from '../core/DoomsdayProgress';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth } from '../core/Viewport';
 
 /** How close the player must walk to auto-contain the crystal. */
 const CONTAIN_RANGE_TILES = 2.5;
@@ -121,7 +122,7 @@ export class SoulCrystalSystem {
   }
 
   /** Countdown HUD — shown from anywhere while a doomsday countdown is running, not just the crystal's floor. */
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D): void {
     const { stage, deadlineAt } = this.progress;
     if ((stage !== 'containment' && stage !== 'escape') || deadlineAt === null) return;
 
@@ -129,7 +130,7 @@ export class SoulCrystalSystem {
       ctx,
       stage === 'containment' ? 'THE SOUL CRYSTAL IS DESTABILIZING' : 'ESCAPE THE CITY',
       {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: COUNTDOWN_LABEL_Y,
         size: COUNTDOWN_LABEL_SIZE,
         bold: true,
@@ -138,7 +139,7 @@ export class SoulCrystalSystem {
       },
     );
     drawText(ctx, formatCountdownClock(deadlineAt), {
-      x: canvas.width / 2,
+      x: viewportWidth() / 2,
       y: COUNTDOWN_Y,
       size: COUNTDOWN_SIZE,
       bold: true,

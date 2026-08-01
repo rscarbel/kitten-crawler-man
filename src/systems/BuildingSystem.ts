@@ -8,6 +8,7 @@ const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type BuildingEntry = {
   doorTile: { x: number; y: number };
@@ -139,9 +140,9 @@ export class BuildingSystem implements GameSystem {
     }
   }
 
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (!this._menuOpen) return false;
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
     if (
       mx >= rects.enter.x &&
       mx <= rects.enter.x + rects.enter.w &&
@@ -166,12 +167,7 @@ export class BuildingSystem implements GameSystem {
   }
 
   /** Renders a pulsing ▶ door indicator above each building entrance. */
-  renderDoorHints(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    canvas: HTMLCanvasElement,
-  ): void {
+  renderDoorHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const ts = TILE_SIZE;
     const pulse =
       DOOR_HINT_PULSE_BASE + Math.sin(Date.now() / DOOR_HINT_PULSE_PERIOD) * DOOR_HINT_PULSE_RANGE;
@@ -181,9 +177,9 @@ export class BuildingSystem implements GameSystem {
       const CULLING_HEIGHT_TILES = 3;
       if (
         sx < -ts ||
-        sx > canvas.width + ts ||
+        sx > viewportWidth() + ts ||
         sy < -ts * CULLING_HEIGHT_TILES ||
-        sy > canvas.height + ts
+        sy > viewportHeight() + ts
       )
         continue;
 
@@ -212,12 +208,12 @@ export class BuildingSystem implements GameSystem {
     }
   }
 
-  renderMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderMenu(ctx: CanvasRenderingContext2D): void {
     if (!this._menuOpen) return;
     const entry = this.gameMap.buildingEntries[this.activeDoorIdx];
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     ctx.fillStyle = `rgba(0,0,0,${MENU_BACKDROP_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
@@ -259,7 +255,7 @@ export class BuildingSystem implements GameSystem {
       align: 'center',
     });
 
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
 
     drawButton(ctx, {
       x: rects.enter.x,
@@ -288,12 +284,12 @@ export class BuildingSystem implements GameSystem {
     });
   }
 
-  private menuRects(canvas: HTMLCanvasElement): {
+  private menuRects(): {
     enter: { x: number; y: number; w: number; h: number };
     stay: { x: number; y: number; w: number; h: number };
   } {
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const panelH = MENU_PANEL_H;
     const panelY = ch / 2 - panelH / 2;
     const btnW = MENU_BTN_W;

@@ -6,6 +6,7 @@ import { pointInRect } from '../utils';
 import { drawText } from './TextBox';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
 import { drawButton } from './Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Layout constants
 const SLOT_SIZE = 46;
@@ -107,49 +108,38 @@ export class GearPanel {
     this.isOpen = !this.isOpen;
   }
 
-  toggleBtnRect(canvas: HTMLCanvasElement) {
+  toggleBtnRect() {
     return {
-      x: canvas.width - TOGGLE_BTN_X_OFFSET,
+      x: viewportWidth() - TOGGLE_BTN_X_OFFSET,
       y: TOGGLE_BTN_Y,
       w: TOGGLE_BTN_W,
       h: TOGGLE_BTN_H,
     };
   }
 
-  private panelRect(canvas: HTMLCanvasElement) {
-    const w = platform.gearPanelWidth(canvas.width);
-    const h = Math.min(MAX_PANEL_HEIGHT, canvas.height - PANEL_HEIGHT_MARGIN);
+  private panelRect() {
+    const w = platform.gearPanelWidth(viewportWidth());
+    const h = Math.min(MAX_PANEL_HEIGHT, viewportHeight() - PANEL_HEIGHT_MARGIN);
     const xOffset = platform.gearPanelXOffset;
-    const x = Math.max(PANEL_X_MARGIN, Math.floor((canvas.width - w) / 2) + xOffset);
-    const y = Math.max(MIN_PANEL_Y_OFFSET, Math.floor((canvas.height - h) / 2));
+    const x = Math.max(PANEL_X_MARGIN, Math.floor((viewportWidth() - w) / 2) + xOffset);
+    const y = Math.max(MIN_PANEL_Y_OFFSET, Math.floor((viewportHeight() - h) / 2));
     return { x, y, w, h };
   }
 
   // Render
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-    playerName: string,
-  ): void {
-    this.renderToggleButton(ctx, canvas);
+  render(ctx: CanvasRenderingContext2D, inventory: Inventory, playerName: string): void {
     if (this.isOpen) {
-      this.renderPanel(ctx, canvas, inventory, playerName);
+      this.renderPanel(ctx, inventory, playerName);
     }
-  }
-
-  private renderToggleButton(_ctx: CanvasRenderingContext2D, _canvas: HTMLCanvasElement): void {
-    // Gear button removed — gear panel is accessible only from the pause menu
   }
 
   private renderPanel(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     playerName: string,
   ): void {
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
 
     // Backdrop
     drawBox(ctx, {
@@ -231,7 +221,7 @@ export class GearPanel {
 
     // Tooltip
     if (tooltipItem) {
-      this.renderTooltip(ctx, canvas, tooltipItem, tooltipSubSlot);
+      this.renderTooltip(ctx, tooltipItem, tooltipSubSlot);
     }
   }
 
@@ -328,7 +318,6 @@ export class GearPanel {
 
   private renderTooltip(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     item: InventoryItem,
     _subSlot: string,
   ): void {
@@ -361,8 +350,8 @@ export class GearPanel {
     const tw = TOOLTIP_WIDTH;
     const lineH = TOOLTIP_LINE_HEIGHT;
     const th = lines.length * lineH + TOOLTIP_PAD;
-    const tx = Math.min(this.tooltipMx + TOOLTIP_X_OFFSET, canvas.width - tw - TOOLTIP_MARGIN);
-    let ty = Math.min(this.tooltipMy - th / 2, canvas.height - th - TOOLTIP_MARGIN);
+    const tx = Math.min(this.tooltipMx + TOOLTIP_X_OFFSET, viewportWidth() - tw - TOOLTIP_MARGIN);
+    let ty = Math.min(this.tooltipMy - th / 2, viewportHeight() - th - TOOLTIP_MARGIN);
     ty = Math.max(ty, TOOLTIP_Y_OFFSET);
 
     ctx.save();
@@ -412,23 +401,18 @@ export class GearPanel {
 
   // Interaction
 
-  handleMouseMove(mx: number, my: number, canvas: HTMLCanvasElement, inventory: Inventory): void {
+  handleMouseMove(mx: number, my: number, inventory: Inventory): void {
     if (!this.isOpen) return;
     this.tooltipMx = mx;
     this.tooltipMy = my;
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
     this.hoveredKey = this.slotKeyAt(mx, my, p, inventory);
   }
 
-  handleClick(
-    mx: number,
-    my: number,
-    canvas: HTMLCanvasElement,
-    inventory: Inventory,
-  ): GearClickResult | null {
+  handleClick(mx: number, my: number, inventory: Inventory): GearClickResult | null {
     if (!this.isOpen) return null;
 
-    const p = this.panelRect(canvas);
+    const p = this.panelRect();
 
     // Close [X]
     const closeX = p.x + p.w - CLOSE_BTN_X_OFFSET;

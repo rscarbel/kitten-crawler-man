@@ -205,8 +205,8 @@ export class AIAdapter {
     this.messages.update();
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    this.messages.render(ctx, canvas);
+  render(ctx: CanvasRenderingContext2D): void {
+    this.messages.render(ctx);
   }
 
   private handleWsMessage(e: MessageEvent): void {

@@ -3,6 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -121,9 +122,9 @@ export class TowerStairSystem implements GameSystem {
     }
   }
 
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (this._upMenuOpen) {
-      const rects = this.menuRects(canvas);
+      const rects = this.menuRects();
       if (this.hitRect(mx, my, rects.action)) {
         this.onAscend();
         return true;
@@ -135,7 +136,7 @@ export class TowerStairSystem implements GameSystem {
       }
     }
     if (this._downMenuOpen) {
-      const rects = this.menuRects(canvas);
+      const rects = this.menuRects();
       if (this.hitRect(mx, my, rects.action)) {
         this.onDescend();
         return true;
@@ -180,15 +181,15 @@ export class TowerStairSystem implements GameSystem {
     }
   }
 
-  renderMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderMenu(ctx: CanvasRenderingContext2D): void {
     if (!this._upMenuOpen && !this._downMenuOpen) return;
 
     const isUp = this._upMenuOpen;
     const targetFloor = isUp ? this.currentFloor + 1 : this.currentFloor - 1;
     const targetLabel = FLOOR_LABELS[targetFloor] ?? `Floor ${targetFloor + 1}`;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     ctx.fillStyle = `rgba(0,0,0,${MENU_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);
@@ -230,7 +231,7 @@ export class TowerStairSystem implements GameSystem {
       align: 'center',
     });
 
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
 
     ctx.fillStyle = MENU_ACTION_BG_COLOR;
     ctx.fillRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
@@ -261,9 +262,9 @@ export class TowerStairSystem implements GameSystem {
     });
   }
 
-  private menuRects(canvas: HTMLCanvasElement) {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private menuRects() {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const panelH = MENU_PANEL_HEIGHT;
     const panelY = ch / 2 - panelH / 2;
     const btnW = MENU_ACTION_BUTTON_WIDTH;

@@ -22,6 +22,7 @@ import type { PlayerManager } from '../core/PlayerManager';
 import type { PauseMenu } from '../ui/PauseMenu';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { platform } from '../core/Platform';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FOLLOW_DISTANCE_MULTIPLIER = 1.5;
 const COMPANION_FOLLOW_SPEED = 3.5;
@@ -81,20 +82,19 @@ export abstract class GameplayScene extends Scene {
 
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
-    const canvas = this.sceneManager.canvas;
     const mapPxW = (map.structure[0]?.length ?? map.structure.length) * TILE_SIZE;
     const mapPxH = map.structure.length * TILE_SIZE;
-    const viewportH = canvas.height - this.viewportBottomInset();
-    const cx = player.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - canvas.width / 2;
+    const viewportH = viewportHeight() - this.viewportBottomInset();
+    const cx = player.x + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - viewportWidth() / 2;
     const cy = player.y + TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER - viewportH / 2;
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
       x:
-        (mapPxW <= canvas.width
-          ? (mapPxW - canvas.width) / 2
-          : clamp(cx, 0, mapPxW - canvas.width)) + sway.x,
+        (mapPxW <= viewportWidth()
+          ? (mapPxW - viewportWidth()) / 2
+          : clamp(cx, 0, mapPxW - viewportWidth())) + sway.x,
       y:
         (mapPxH <= viewportH ? (mapPxH - viewportH) / 2 : clamp(cy, 0, mapPxH - viewportH)) +
         sway.y,
@@ -180,15 +180,14 @@ export abstract class GameplayScene extends Scene {
     follower.facingY = dirY;
   }
 
-  protected renderHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const hud = drawHUD(ctx, canvas, this.human, this.cat, this.notifPulse, this._hudCollapsed);
+  protected renderHUD(ctx: CanvasRenderingContext2D): void {
+    const hud = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
     this._hudToggleRect = hud.toggleRect;
     if (platform.isMobile) {
       // Skill badge position can be overridden by subclasses that stack boss UI below
       // the HUD bar. Default: place it immediately below the HUD panel.
       this._hudSkillBannerRect = renderMobileSkillBadge(
         ctx,
-        canvas,
         this.human,
         this.cat,
         this.notifPulse,

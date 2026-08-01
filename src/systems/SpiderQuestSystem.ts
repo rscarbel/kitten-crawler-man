@@ -26,6 +26,7 @@ import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
@@ -629,35 +630,35 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, camX = 0, camY = 0): void {
+  renderUI(ctx: CanvasRenderingContext2D, camX = 0, camY = 0): void {
     if (this.phase === 'inactive') return;
 
     if (this.phase === 'scientist_dialog') {
-      this._renderDialog(ctx, canvas);
+      this._renderDialog(ctx);
     }
 
     if (this.phase === 'hacking') {
-      this.keyboardHero.render(ctx, canvas);
+      this.keyboardHero.render(ctx);
     }
 
     if (this.phase === 'hacking_failed') {
-      this._renderHackFailedDialog(ctx, canvas);
+      this._renderHackFailedDialog(ctx);
     }
 
     if (this.phase === 'keyboard_hero_tutorial') {
-      this._renderTutorial(ctx, canvas);
+      this._renderTutorial(ctx);
     }
 
     if (this.phase === 'cutscene') {
-      this._renderCutsceneUI(ctx, canvas);
+      this._renderCutsceneUI(ctx);
     }
 
     if (this._roomLocked && this.roomData !== null) {
-      this._renderLockedRoomBorder(ctx, canvas, camX, camY);
+      this._renderLockedRoomBorder(ctx, camX, camY);
     }
 
     if (this.completeOverlayTimer > 0) {
-      this._renderCompleteOverlay(ctx, canvas);
+      this._renderCompleteOverlay(ctx);
     }
   }
 
@@ -727,7 +728,9 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'hacking') {
       // Touch input for keyboard hero
       if (platform.isMobile) {
-        this.keyboardHero.handleTouchAt(mx, my, window.innerWidth, window.innerHeight);
+        // mx/my arrive in canvas space, so the extents they are hit-tested
+        // against have to be the canvas viewport, not the window.
+        this.keyboardHero.handleTouchAt(mx, my, viewportWidth(), viewportHeight());
       }
       return true;
     }
@@ -1734,12 +1737,7 @@ export class SpiderQuestSystem implements GameSystem {
     this._drawSpriteFrame(ctx, 'spider-egg', stateName, sx, sy, drawW, drawH);
   }
 
-  private _renderLockedRoomBorder(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    camX: number,
-    camY: number,
-  ): void {
+  private _renderLockedRoomBorder(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.roomData === null) return;
     const b = this.roomData.bounds;
     const ts = TILE_SIZE;
@@ -1774,7 +1772,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (this._entryWindowTimer > 0) {
       const seconds = Math.ceil(this._entryWindowTimer / FRAMES_PER_SECOND);
       drawText(ctx, `Entry closes in ${seconds}s`, {
-        x: Math.round(canvas.width / 2),
+        x: Math.round(viewportWidth() / 2),
         y: LOCKED_ROOM_TEXT_OFFSET_Y,
         size: 11,
         bold: true,
@@ -1784,9 +1782,9 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  private _renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private _renderDialog(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const dw = Math.min(DIALOG_WIDTH_MIN, cw - DIALOG_WIDTH_PADDING);
     const dh = DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
@@ -1866,9 +1864,9 @@ export class SpiderQuestSystem implements GameSystem {
     this.dialogButtons.push({ x: notNowX, y: btnY, w: btnW, h: btnH, action: 'decline' });
   }
 
-  private _renderHackFailedDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private _renderHackFailedDialog(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const dw = Math.min(FAILED_DIALOG_WIDTH_MIN, cw - DIALOG_WIDTH_PADDING);
     const dh = FAILED_DIALOG_HEIGHT;
     const dx = Math.floor((cw - dw) / 2);
@@ -1964,9 +1962,9 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
   }
 
-  private _renderTutorial(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private _renderTutorial(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     // Scale down uniformly so the modal always fits on small screens (landscape mobile)
     const modalScale = Math.min(
@@ -2372,9 +2370,9 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.restore();
   }
 
-  private _renderCompleteOverlay(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private _renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const alpha =
       this.completeOverlayTimer < OVERLAY_FADE_FRAMES
         ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
@@ -2427,9 +2425,9 @@ export class SpiderQuestSystem implements GameSystem {
     });
   }
 
-  private _renderCutsceneUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private _renderCutsceneUI(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     // "Beginning Hacking Sequence..." for first 60 frames (before cutscene timer starts)
     // The cutscene starts immediately when _onHackComplete is called, so show it early

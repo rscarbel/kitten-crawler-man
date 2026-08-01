@@ -10,6 +10,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { drawText, measureTextBox } from './TextBox';
 import { drawButton, playButtonSound, BUTTON_PRESETS } from './Button';
 import { drawModal, BOX_PRESETS } from './Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** One page of quest dialog: a speaker/heading, body lines, and a button label. */
 export interface DialogPage {
@@ -102,10 +103,10 @@ export class QuestDialog {
     return true;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.isOpen) return;
     const page = this.pages[this.pageIndex];
-    const dw = Math.min(DIALOG_WIDTH, canvas.width - DIALOG_CANVAS_PADDING);
+    const dw = Math.min(DIALOG_WIDTH, viewportWidth() - DIALOG_CANVAS_PADDING);
 
     // Wrap the body to the box's inner width and size the box from the resulting
     // line count so long lines stay inside the panel instead of running past it.
@@ -119,8 +120,8 @@ export class QuestDialog {
     const dh = DIALOG_BASE_HEIGHT + lineCount * DIALOG_LINE_SPACING + DIALOG_BUTTON_AREA_HEIGHT;
 
     const box = drawModal(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       width: dw,
       height: dh,
       ...BOX_PRESETS.modal,

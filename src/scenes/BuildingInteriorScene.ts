@@ -106,6 +106,7 @@ import { DeathScreen } from '../ui/DeathScreen';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import type { SystemContext } from '../systems/GameSystem';
 import type { InteriorFigure } from '../core/InteriorFigure';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -180,7 +181,7 @@ const INTERIOR_MUSIC_FADE_IN_MS = 800;
 /** A quest encounter that runs inside a building (Big Top boss, cult hideout, tower fight). */
 interface InteriorEncounter {
   update(ctx: SystemContext): void;
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void;
+  renderUI(ctx: CanvasRenderingContext2D): void;
   /** Death-screen message when the players fall during this encounter. */
   readonly defeatMessage: string;
 }
@@ -1178,7 +1179,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.towerStairs?.menuOpen) {
-      this.towerStairs.handleClick(mx, my, this.sceneManager.canvas);
+      this.towerStairs.handleClick(mx, my);
       return;
     }
     if (this.shop?.shopOpen) {
@@ -1193,16 +1194,15 @@ export class BuildingInteriorScene extends GameplayScene {
       this.servicePanel.handleClick(mx, my, this.active());
       return;
     }
-    if (this.bopca?.handleClick(mx, my, this.sceneManager.canvas) === true) {
+    if (this.bopca?.handleClick(mx, my) === true) {
       return;
     }
     if (this.citizenDialog?.isOpen === true) {
-      this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
+      this.citizenDialog.handleClick(mx, my);
       return;
     }
     if (!this.exitMenuOpen) return;
-    const canvas = this.sceneManager.canvas;
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
     if (
       mx >= rects.exit.x &&
       mx <= rects.exit.x + rects.exit.w &&
@@ -1240,13 +1240,13 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseY = my;
     this._mouseDown = true;
     if (this.isOverlayBlockingPointer) return;
-    this.mobileHUD.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.mobileHUD.handleMouseDown(mx, my, this.active().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
-    this.mobileHUD.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.mobileHUD.handleMouseMove(mx, my, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
@@ -1254,7 +1254,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseY = my;
     this._mouseDown = false;
     if (this.isOverlayBlockingPointer) return;
-    this.mobileHUD.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.mobileHUD.handleMouseUp(mx, my, this.active().inventory);
   }
 
   /**
@@ -1478,7 +1478,6 @@ export class BuildingInteriorScene extends GameplayScene {
     camY: number,
     entities: ReadonlyArray<InteriorFigure>,
   ): void {
-    const canvas = this.sceneManager.canvas;
     const drawables: Array<{ sortY: number; draw: () => void }> = entities.map((entity) => ({
       sortY: entity.y + TILE_SIZE,
       draw: () => entity.render(ctx, camX, camY, TILE_SIZE),
@@ -1486,8 +1485,8 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const deco of this.map.getVisibleDecorationTiles(
       camX,
       camY,
-      canvas.width,
-      canvas.height,
+      viewportWidth(),
+      viewportHeight(),
     )) {
       drawables.push({
         sortY: deco.ty * TILE_SIZE + deco.sortYAnchorPx,
@@ -1506,11 +1505,10 @@ export class BuildingInteriorScene extends GameplayScene {
    * the difference between a visible door and none at all.
    */
   protected override viewportBottomInset(): number {
-    return this.mobileHUD.inventoryPanel.hotbarBandHeight(this.sceneManager.canvas);
+    return this.mobileHUD.inventoryPanel.hotbarBandHeight();
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const canvas = this.sceneManager.canvas;
     const { x: camX, y: camY } = this.computeCamera(this.map);
 
     // Drive the shared Button module before anything draws a button: it clears
@@ -1519,9 +1517,9 @@ export class BuildingInteriorScene extends GameplayScene {
     setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
 
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
-    this.map.renderCanvas(ctx, camX, camY, canvas.width, canvas.height);
+    this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
 
     // Before the entity pass, not after: the Bopca render redraws the counter's
     // front face over itself, and a player standing at the counter reaches up
@@ -1592,14 +1590,14 @@ export class BuildingInteriorScene extends GameplayScene {
     // Tower stair hints
     this.towerStairs?.renderStairHints(ctx, camX, camY);
 
-    this.renderHUD(ctx, canvas);
+    this.renderHUD(ctx);
 
     // Interior label
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, canvas.width, INTERIOR_LABEL_BAR_HEIGHT);
+    ctx.fillRect(0, 0, viewportWidth(), INTERIOR_LABEL_BAR_HEIGHT);
     const floorSuffix = this.towerFloors.length > 0 ? ` (${FLOOR_LABELS[this.currentFloor]})` : '';
     drawText(ctx, `Inside: ${this.entry.name}${floorSuffix}`, {
-      x: canvas.width / 2,
+      x: viewportWidth() / 2,
       y: 8,
       size: 13,
       bold: true,
@@ -1611,18 +1609,17 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
       const mmSize = this.mobileHUD.renderInteriorMiniMap(
         ctx,
-        canvas,
         this.map,
         this.active(),
         this.inactive(),
       );
       const pauseY = INTERIOR_TOP_MARGIN + mmSize + MM_TO_PAUSE_BTN_SPACING;
-      this.mobileHUD.renderPauseButton(ctx, canvas, pauseY);
+      this.mobileHUD.renderPauseButton(ctx, pauseY);
       const gearY = pauseY + GEAR_BTN_SPACING;
 
       const active = this.active();
       const name = this.human.isActive ? 'Human' : 'Cat';
-      this.mobileHUD.renderPanels(ctx, canvas, active.inventory, name, active.coins);
+      this.mobileHUD.renderPanels(ctx, active.inventory, name, active.coins);
       if (platform.isMobile) {
         const extraButtons: MobileHUDButton[] = [
           {
@@ -1634,7 +1631,6 @@ export class BuildingInteriorScene extends GameplayScene {
         ];
         this.mobileHUD.renderButtons(
           ctx,
-          canvas,
           this.human.isActive,
           extraButtons,
           MOBILE_BUTTONS_EXTRA_Y,
@@ -1646,59 +1642,57 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.safeRoom) {
       this.safeRoom.renderUI(
         ctx,
-        canvas,
         camX,
         camY,
         this.active(),
         this.bopca?.hasInteraction(this.active()) === true,
       );
-      if (this.safeRoom.mordecaiDialogOpen) this.safeRoom.renderMordecaiDialog(ctx, canvas);
-      if (this.safeRoom.isSleeping) this.safeRoom.renderSleepOverlay(ctx, canvas);
+      if (this.safeRoom.mordecaiDialogOpen) this.safeRoom.renderMordecaiDialog(ctx);
+      if (this.safeRoom.isSleeping) this.safeRoom.renderSleepOverlay(ctx);
     }
 
     if (this.bopca !== null) {
       this.bopca.renderUI(ctx, camX, camY, this.active());
-      this.bopca.renderDialog(ctx, canvas);
+      this.bopca.renderDialog(ctx);
     }
 
     if (this.shop) {
-      this.shop.renderUI(ctx, canvas, this.active());
-      this.shop.renderShopPanel(ctx, canvas, this.active());
+      this.shop.renderUI(ctx, this.active());
+      this.shop.renderShopPanel(ctx, this.active());
     }
 
     if (this.club) {
-      this.club.renderUI(ctx, canvas, this.active());
+      this.club.renderUI(ctx, this.active());
     }
 
-    this.citizenDialog?.render(ctx, canvas);
-    this.servicePanel?.render(ctx, canvas, this.active());
+    this.citizenDialog?.render(ctx);
+    this.servicePanel?.render(ctx, this.active());
 
-    if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx, canvas);
-    this.soulCrystal.renderUI(ctx, canvas);
+    if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx);
+    this.soulCrystal.renderUI(ctx);
 
-    if (this.exitMenuOpen) this.renderExitMenu(ctx, canvas);
-    if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
+    if (this.exitMenuOpen) this.renderExitMenu(ctx);
+    if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx);
 
-    this.systemAnnouncer.render(ctx, canvas);
-    this.hotbarToast.render(ctx, canvas, this.mobileHUD.inventoryPanel.hotbarBandHeight(canvas));
-    this.levelUpDialog.render(ctx, canvas);
-    this.rewardGrantedDialog.render(ctx, canvas);
-    this.skillBookPrompt.render(ctx, canvas);
+    this.systemAnnouncer.render(ctx);
+    this.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+    this.levelUpDialog.render(ctx);
+    this.rewardGrantedDialog.render(ctx);
+    this.skillBookPrompt.render(ctx);
 
     if (this.pauseMenu.isOpen) {
-      this.pauseMenu.render(ctx, canvas, this.human, this.cat);
+      this.pauseMenu.render(ctx, this.human, this.cat);
     }
 
     this.followerMenu.render(
       ctx,
-      canvas,
       this.companion.getMovementMode(this.human.isActive),
       this.companion.getCombatStance(this.human.isActive),
       this.human.isActive,
     );
 
     if (this.gameOver && this.combat) {
-      this.combat.deathScreen.render(ctx, canvas);
+      this.combat.deathScreen.render(ctx);
     }
   }
 
@@ -1722,9 +1716,9 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  private renderExitMenu(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private renderExitMenu(ctx: CanvasRenderingContext2D): void {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, cw, ch);
@@ -1765,7 +1759,7 @@ export class BuildingInteriorScene extends GameplayScene {
       align: 'center',
     });
 
-    const rects = this.menuRects(canvas);
+    const rects = this.menuRects();
 
     ctx.fillStyle = '#1a4d0d';
     ctx.fillRect(rects.exit.x, rects.exit.y, rects.exit.w, rects.exit.h);
@@ -1798,9 +1792,9 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.textAlign = 'left';
   }
 
-  private menuRects(canvas: HTMLCanvasElement) {
-    const cw = canvas.width;
-    const ch = canvas.height;
+  private menuRects() {
+    const cw = viewportWidth();
+    const ch = viewportHeight();
     const panelH = 190;
     const panelY = ch / 2 - panelH / 2;
     const btnW = 120;
@@ -1815,8 +1809,6 @@ export class BuildingInteriorScene extends GameplayScene {
   // Mobile touch handlers
 
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
-    const canvas = this.sceneManager.canvas;
-
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -1885,7 +1877,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // routes clicks to the inventory panel, so no option could ever be picked,
       // and Drop has nowhere to drop to in a building anyway. Reading a skill
       // book still works here through a plain tap and through the hotbar.
-      const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+      const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y);
       if (hi >= 0) {
         this.mobileHUD.inventoryDragTouchId = touch.identifier;
         this.handleMouseDown(x, y);
@@ -1894,7 +1886,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
       // Inventory panel drag start
       if (this.mobileHUD.inventoryPanel.isOpen) {
-        if (this.mobileHUD.inventoryPanel.hitsPanel(x, y, canvas)) {
+        if (this.mobileHUD.inventoryPanel.hitsPanel(x, y)) {
           this.handleMouseDown(x, y);
           this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
           continue;
@@ -1924,8 +1916,6 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
-    const canvas = this.sceneManager.canvas;
-
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -1933,7 +1923,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // Inventory / hotbar drag end
       if (touch.identifier === this.mobileHUD.inventoryDragTouchId) {
         this.handleMouseUp(x, y);
-        const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+        const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y);
         // A second finger can land on the bar in the same frame an overlay goes
         // up; its release must resolve the overlay, not fire the slot beneath.
         if (hi >= 0 && !this.isOverlayBlockingPointer) {

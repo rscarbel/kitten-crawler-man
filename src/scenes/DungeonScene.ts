@@ -179,6 +179,8 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { renderQuality } from '../core/RenderQuality';
 import {
   setButtonMouseState,
   setButtonAudio,
@@ -1654,6 +1656,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   onEnter(): void {
+    // Level entry is the one stretch of real rendering the player cannot act
+    // during, which is what makes it usable cover for the quality probe.
+    renderQuality.requestProbe();
     this.audio?.resume();
     // Delay intro ticking until the AudioContext is running so the intro sound
     // plays in sync with the visual. On desktop this is nearly instant; on mobile
@@ -2006,12 +2011,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   /** Renders the knocked-out warning banner, directional arrow, and revival progress bar. */
-  private renderKnockedOutUI(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    camX: number,
-    camY: number,
-  ): void {
+  private renderKnockedOutUI(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const inactive = this.inactive();
     if (!inactive.isKnockedOut) return;
 
@@ -2022,7 +2022,7 @@ export class DungeonScene extends GameplayScene {
     // On mobile, the minimap occupies the top-right corner — keep the banner in the
     // available space to its left so the text doesn't slide behind it.
     const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const availW = platform.isMobile ? canvas.width - mmSz - UI_SIDEBAR_WIDTH : canvas.width;
+    const availW = platform.isMobile ? viewportWidth() - mmSz - UI_SIDEBAR_WIDTH : viewportWidth();
     const cx = availW / 2;
     const bannerSize = platform.isMobile ? HEALTH_INDICATOR_SIZE : HEALTH_INDICATOR_SIZE_DESKTOP;
 
@@ -3054,7 +3054,7 @@ export class DungeonScene extends GameplayScene {
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
     if (this.citizenDialog?.isOpen === true) {
-      this.citizenDialog.handleClick(mx, my, this.sceneManager.canvas);
+      this.citizenDialog.handleClick(mx, my);
       return;
     }
     if (this.noticeBoard?.isOpen === true) {
@@ -3116,7 +3116,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
-    if (this.bopca.handleClick(mx, my, this.sceneManager.canvas)) {
+    if (this.bopca.handleClick(mx, my)) {
       return;
     }
 
@@ -3126,12 +3126,12 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.stairwell.menuOpen) {
-      this.stairwell.handleClick(mx, my, this.sceneManager.canvas);
+      this.stairwell.handleClick(mx, my);
       return;
     }
 
     if (this.building?.menuOpen) {
-      this.building.handleClick(mx, my, this.sceneManager.canvas);
+      this.building.handleClick(mx, my);
       return;
     }
 
@@ -3163,23 +3163,17 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
-    const canvas = this.sceneManager.canvas;
     const active = this.active();
     const invPlayer = this.inventoryPlayer();
 
-    const gearResult = this.gearPanel.handleClick(mx, my, canvas, active.inventory);
+    const gearResult = this.gearPanel.handleClick(mx, my, active.inventory);
     if (gearResult) {
       active.onEquipmentChanged();
       return;
     }
 
     if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
-      const slotIdx = this.inventoryPanel.getClickedInventorySlot(
-        mx,
-        my,
-        canvas,
-        invPlayer.inventory,
-      );
+      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, invPlayer.inventory);
       if (slotIdx !== null) {
         const item = invPlayer.inventory.bag.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
@@ -3191,7 +3185,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     const wasInventoryOpen = this.inventoryPanel.isOpen;
-    if (this.inventoryPanel.handleClick(mx, my, canvas, invPlayer.inventory)) {
+    if (this.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
       this.resolvePendingInventoryAction(invPlayer);
       if (this.inventoryPanel.isOpen && !wasInventoryOpen) {
         this.gearPanel.isOpen = false;
@@ -3217,7 +3211,7 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    const pb = UIRenderer.pauseButtonRect(this.sceneManager.canvas, this.miniMap);
+    const pb = UIRenderer.pauseButtonRect(this.miniMap);
     if (pointInRect(mx, my, pb)) {
       this.pauseMenu.toggle();
       this.inventoryPanel.isOpen = false;
@@ -3257,12 +3251,7 @@ export class DungeonScene extends GameplayScene {
       this._miniMapDragLastY = my;
       return;
     }
-    this.inventoryPanel.handleMouseDown(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.inventoryPlayer().inventory,
-    );
+    this.inventoryPanel.handleMouseDown(mx, my, this.inventoryPlayer().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
@@ -3274,19 +3263,14 @@ export class DungeonScene extends GameplayScene {
       this._miniMapDragLastY = my;
     }
     this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(mx, my, this.sceneManager.canvas, this.active().inventory);
+    this.gearPanel.handleMouseMove(mx, my, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
     if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
-    this.inventoryPanel.handleMouseUp(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.inventoryPlayer().inventory,
-    );
+    this.inventoryPanel.handleMouseUp(mx, my, this.inventoryPlayer().inventory);
   }
 
   handleMouseLeave(): void {
@@ -3297,12 +3281,7 @@ export class DungeonScene extends GameplayScene {
 
   handleContextMenu(mx: number, my: number): void {
     if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
-    this.inventoryPanel.openContextMenu(
-      mx,
-      my,
-      this.sceneManager.canvas,
-      this.inventoryPlayer().inventory,
-    );
+    this.inventoryPanel.openContextMenu(mx, my, this.inventoryPlayer().inventory);
   }
 
   handleWheel(deltaY: number): void {
@@ -3402,13 +3381,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const canvas = this.sceneManager.canvas;
     setButtonAudio(this.audio);
     setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
     const { x: camX, y: camY } = this.camera();
 
     const rc: RenderContext = {
-      canvas,
       camX,
       camY,
       gameMap: this.gameMap,
@@ -3474,25 +3451,18 @@ export class DungeonScene extends GameplayScene {
 
     this.renderPipeline.renderVisibilityFog(ctx, rc);
 
-    UIRenderer.renderHealthVignette(ctx, canvas, this.active(), this.gameOver);
+    UIRenderer.renderHealthVignette(ctx, this.active(), this.gameOver);
 
     // Render the HUD panel. On mobile the skill-points badge is NOT drawn here;
     // it is stacked below the boss UI box further down in this method.
-    const hudResult = drawHUD(
-      ctx,
-      canvas,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-    );
+    const hudResult = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
     this._hudToggleRect = hudResult.toggleRect;
     if (!platform.isMobile) {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
-      this.renderKnockedOutUI(ctx, canvas, camX, camY);
+      this.renderKnockedOutUI(ctx, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
     }
@@ -3500,7 +3470,6 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.miniMap.render(
         ctx,
-        canvas,
         this.active(),
         this.inactive(),
         this.mobGrid,
@@ -3509,7 +3478,7 @@ export class DungeonScene extends GameplayScene {
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
-        x: canvas.width - mmSz - MINIMAP_MARGIN,
+        x: viewportWidth() - mmSz - MINIMAP_MARGIN,
         y: MINIMAP_MARGIN,
         w: mmSz,
         h: mmSz,
@@ -3519,7 +3488,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (!this.levelDef.isSafeLevel && !this.gameOver && this.tutorial === null) {
-      UIRenderer.renderLevelTimer(ctx, canvas, this.miniMap, this.levelTimerFrames);
+      UIRenderer.renderLevelTimer(ctx, this.miniMap, this.levelTimerFrames);
     }
 
     let mobileQuestTopY: number | undefined;
@@ -3529,7 +3498,6 @@ export class DungeonScene extends GameplayScene {
       const mobileTopY = hudResult.hudPanelBottom + MOBILE_UI_SPACING;
       const bossBottom = this.bossRoom.renderUI(
         ctx,
-        canvas,
         camX,
         camY,
         this.mobs,
@@ -3540,7 +3508,6 @@ export class DungeonScene extends GameplayScene {
       const skillTopY = bossBottom !== null ? bossBottom + MOBILE_UI_SPACING : mobileTopY;
       this._hudSkillBannerRect = renderMobileSkillBadge(
         ctx,
-        canvas,
         this.human,
         this.cat,
         this.notifPulse,
@@ -3552,9 +3519,9 @@ export class DungeonScene extends GameplayScene {
           : skillTopY;
       mobileQuestTopY = skillBadgeBottom + MOBILE_UI_SPACING;
     } else {
-      this.bossRoom.renderUI(ctx, canvas, camX, camY, this.mobs, this.human, this.cat);
+      this.bossRoom.renderUI(ctx, camX, camY, this.mobs, this.human, this.cat);
     }
-    this.arena.render(ctx, canvas, this.active());
+    this.arena.render(ctx, this.active());
 
     this.loot.render(ctx, camX, camY, this.active());
 
@@ -3562,12 +3529,11 @@ export class DungeonScene extends GameplayScene {
     if (showAchievUI) {
       this.achievementUI.drawAchievementIcon(
         ctx,
-        canvas,
         this.miniMap,
         this.gameOver,
         this.pauseMenu.isOpen,
       );
-      this.achievementUI.drawLootBoxIcon(ctx, canvas, this.gameOver, this.pauseMenu.isOpen);
+      this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.pauseMenu.isOpen);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -3590,9 +3556,9 @@ export class DungeonScene extends GameplayScene {
       this.inventoryPanel.mmSize = mmSz;
 
       // Render persistent HUD buttons before panels so open menus and context menus paint over them.
-      UIRenderer.drawPauseButton(ctx, canvas, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
+      UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
       if (platform.isMobile)
-        UIRenderer.renderMobileButtons(ctx, canvas, this.touch, {
+        UIRenderer.renderMobileButtons(ctx, this.touch, {
           human: this.human,
           cat: this.cat,
           miniMap: this.miniMap,
@@ -3604,28 +3570,22 @@ export class DungeonScene extends GameplayScene {
           hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
         });
       else if (this.tutorial === null || this.tutorial.showFollowerButton)
-        UIRenderer.renderFollowerButton(
-          ctx,
-          canvas,
-          this.touch,
-          this.companion,
-          this.human.isActive,
-        );
+        UIRenderer.renderFollowerButton(ctx, this.touch, this.companion, this.human.isActive);
 
-      this.inventoryPanel.render(ctx, canvas, invPlayer.inventory, invName, invPlayer.coins);
+      this.inventoryPanel.render(ctx, invPlayer.inventory, invName, invPlayer.coins);
       const activeName = this.human.isActive ? 'Human' : 'Cat';
-      this.gearPanel.render(ctx, canvas, active.inventory, activeName);
-      this.dynamite.renderChargeBar(ctx, canvas.width, canvas.height);
-      this.barriers.renderConstructUI(ctx, canvas);
-      this.defendQuest.renderUI(ctx, canvas, mobileQuestTopY);
-      this.circusQuest.renderUI(ctx, canvas);
-      this.murderQuest.renderUI(ctx, canvas);
-      this.doomsdayEscape.renderUI(ctx, canvas);
+      this.gearPanel.render(ctx, active.inventory, activeName);
+      this.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
+      this.barriers.renderConstructUI(ctx);
+      this.defendQuest.renderUI(ctx, mobileQuestTopY);
+      this.circusQuest.renderUI(ctx);
+      this.murderQuest.renderUI(ctx);
+      this.doomsdayEscape.renderUI(ctx);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
           SUMMON_BUTTON_X,
-          canvas.height -
+          viewportHeight() -
             SUMMON_BUTTON_Y_OFFSET_1 -
             SUMMON_BUTTON_Y_OFFSET_2 -
             SUMMON_BUTTON_Y_OFFSET_3 -
@@ -3638,7 +3598,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gameOver) {
-      this.deathScreen.render(ctx, canvas);
+      this.deathScreen.render(ctx);
     }
 
     if (this.pauseMenu.isOpen) {
@@ -3653,7 +3613,6 @@ export class DungeonScene extends GameplayScene {
           : undefined;
       this.pauseMenu.render(
         ctx,
-        canvas,
         this.human,
         this.cat,
         this.humanAchievements,
@@ -3676,7 +3635,6 @@ export class DungeonScene extends GameplayScene {
     if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(
         ctx,
-        canvas,
         camX,
         camY,
         this.active(),
@@ -3687,48 +3645,47 @@ export class DungeonScene extends GameplayScene {
       this.renderPropPrompt(ctx, camX, camY);
     }
 
-    this.achievementUI.renderOverlays(ctx, canvas);
+    this.achievementUI.renderOverlays(ctx);
 
     if (this.safeRoom.mordecaiDialogOpen) {
-      this.safeRoom.renderMordecaiDialog(ctx, canvas);
+      this.safeRoom.renderMordecaiDialog(ctx);
     }
 
-    this.bopca.renderDialog(ctx, canvas);
+    this.bopca.renderDialog(ctx);
 
-    this.citizenDialog?.render(ctx, canvas);
-    this.noticeBoard?.render(ctx, canvas);
-    this.marketPanel?.render(ctx, canvas, this.active());
-    this.fortuneTeller?.render(ctx, canvas, this.active());
+    this.citizenDialog?.render(ctx);
+    this.noticeBoard?.render(ctx);
+    this.marketPanel?.render(ctx, this.active());
+    this.fortuneTeller?.render(ctx, this.active());
 
     if (this.stairwell.menuOpen) {
-      this.stairwell.renderMenu(ctx, canvas);
+      this.stairwell.renderMenu(ctx);
     }
 
     if (this.levelCompleteScreen.isActive) {
-      this.levelCompleteScreen.render(ctx, canvas);
+      this.levelCompleteScreen.render(ctx);
     }
 
     if (this.building?.menuOpen) {
-      this.building.renderMenu(ctx, canvas);
+      this.building.renderMenu(ctx);
     }
 
     if (this.safeRoom.isSleeping) {
-      this.safeRoom.renderSleepOverlay(ctx, canvas);
+      this.safeRoom.renderSleepOverlay(ctx);
     }
 
     if (this.chestRewardDialog.isOpen) {
-      this.chestRewardDialog.render(ctx, canvas);
+      this.chestRewardDialog.render(ctx);
     }
 
-    this.levelUpDialog.render(ctx, canvas);
-    this.rewardGrantedDialog.render(ctx, canvas);
-    this.skillBookPrompt.render(ctx, canvas);
+    this.levelUpDialog.render(ctx);
+    this.rewardGrantedDialog.render(ctx);
+    this.skillBookPrompt.render(ctx);
 
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.render(
         ctx,
-        canvas,
         this.companion.getMovementMode(this.human.isActive),
         this.companion.getCombatStance(this.human.isActive),
         this.human.isActive,
@@ -3736,13 +3693,13 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.tutorial === null) {
-      this.dungeonIntro.render(ctx, canvas);
+      this.dungeonIntro.render(ctx);
 
       if (this.dungeonIntro.isActive && !this.introStarted) {
         const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
         drawText(ctx, hint, {
-          x: Math.round(canvas.width / 2),
-          y: Math.round(canvas.height * HEALTH_BAR_COLOR_THRESHOLD),
+          x: Math.round(viewportWidth() / 2),
+          y: Math.round(viewportHeight() * HEALTH_BAR_COLOR_THRESHOLD),
           align: 'center',
           size: 18,
           bold: true,
@@ -3758,8 +3715,8 @@ export class DungeonScene extends GameplayScene {
       const FADE_FRAMES = 30;
       const alpha = Math.min(1, msg.framesLeft / FADE_FRAMES);
       drawText(ctx, msg.text, {
-        x: Math.round(canvas.width / 2),
-        y: Math.round(canvas.height * HEALTH_BAR_WARNING_THRESHOLD),
+        x: Math.round(viewportWidth() / 2),
+        y: Math.round(viewportHeight() * HEALTH_BAR_WARNING_THRESHOLD),
         align: 'center',
         size: 18,
         bold: true,
@@ -3769,14 +3726,14 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
-    this.systemAnnouncer.render(ctx, canvas);
-    this.hotbarToast.render(ctx, canvas, this.inventoryPanel.hotbarBandHeight(canvas));
-    aiAdapter.render(ctx, canvas);
-    this.playerChat.renderChatHint(ctx, canvas);
-    this.spiderQuest.renderUI(ctx, canvas, camX, camY);
+    this.systemAnnouncer.render(ctx);
+    this.hotbarToast.render(ctx, this.inventoryPanel.hotbarBandHeight());
+    aiAdapter.render(ctx);
+    this.playerChat.renderChatHint(ctx);
+    this.spiderQuest.renderUI(ctx, camX, camY);
 
     if (this.bossIntro.isActive) {
-      this.bossIntro.render(ctx, canvas);
+      this.bossIntro.render(ctx);
     }
 
     if (
@@ -3785,21 +3742,13 @@ export class DungeonScene extends GameplayScene {
       !this.pauseMenu.isOpen &&
       !this.achievementUI.isBlocking
     ) {
-      UIRenderer.renderEntityTooltip(
-        ctx,
-        canvas,
-        camX,
-        camY,
-        this._mouseX,
-        this._mouseY,
-        this.mobGrid,
-      );
+      UIRenderer.renderEntityTooltip(ctx, camX, camY, this._mouseX, this._mouseY, this.mobGrid);
     }
 
     if (this.tutorial !== null) {
       const { x: tutCamX, y: tutCamY } = this.camera();
       const activePlayer = this.active();
-      const pb = UIRenderer.pauseButtonRect(canvas, this.miniMap);
+      const pb = UIRenderer.pauseButtonRect(this.miniMap);
       const invPlayer = this.inventoryPlayer();
       const bagSlots = invPlayer.inventory.bag.slots;
       const smushIdx = bagSlots.findIndex((s) => s?.id === 'smush_tome');
@@ -3816,19 +3765,16 @@ export class DungeonScene extends GameplayScene {
         gearPanelOpen: this.gearPanel.isOpen,
         pauseButtonRect: { x: pb.x, y: pb.y, w: pb.w, h: pb.h },
         bagItemRects: {
-          smush_tome:
-            smushIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(smushIdx, canvas) ?? null) : null,
+          smush_tome: smushIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(smushIdx) ?? null) : null,
           health_potion:
-            potionIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(potionIdx, canvas) ?? null) : null,
+            potionIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(potionIdx) ?? null) : null,
           enchanted_bigboi_boxers:
-            boxersIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(boxersIdx, canvas) ?? null) : null,
+            boxersIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(boxersIdx) ?? null) : null,
           magic_missile_tome:
-            missileIdx >= 0
-              ? (this.inventoryPanel.getBagSlotRect(missileIdx, canvas) ?? null)
-              : null,
+            missileIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(missileIdx) ?? null) : null,
         },
         hotbarSlotRects: Array.from({ length: HOTBAR_SLOT_COUNT }, (_, i) =>
-          this.inventoryPanel.getHotbarSlotRect(i, canvas),
+          this.inventoryPanel.getHotbarSlotRect(i),
         ),
         isDragActive: this.inventoryPanel.interaction.isDragging,
         isAchievementNotifActive: this.achievementUI.notifActive,
@@ -3844,7 +3790,6 @@ export class DungeonScene extends GameplayScene {
       };
       this.tutorial.renderOverlay(
         ctx,
-        canvas,
         tutCamX,
         tutCamY,
         activePlayer.x,
@@ -4017,14 +3962,13 @@ export class DungeonScene extends GameplayScene {
 
       if (this.tutorial.needsCameraPanStart) {
         this.tutorial.needsCameraPanStart = false;
-        const canvas = this.sceneManager.canvas;
         const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
-        const halfW = canvas.width / 2;
-        const halfH = canvas.height / 2;
-        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - canvas.width);
-        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPxH - canvas.height);
-        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - canvas.width);
-        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - canvas.height);
+        const halfW = viewportWidth() / 2;
+        const halfH = viewportHeight() / 2;
+        const humanCamX = clamp(this.human.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewportWidth());
+        const humanCamY = clamp(this.human.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewportHeight());
+        const catCamX = clamp(this.cat.x + TILE_SIZE / 2 - halfW, 0, mapPxW - viewportWidth());
+        const catCamY = clamp(this.cat.y + TILE_SIZE / 2 - halfH, 0, mapPxH - viewportHeight());
         this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
       }
 
@@ -4553,29 +4497,26 @@ export class DungeonScene extends GameplayScene {
     if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
 
     const player = this.active();
-    const canvas = this.sceneManager.canvas;
     const { w: mapPxW, h: mapPxH } = this.mapExtentsPx();
 
     const targetOverride = this.spiderQuest.cameraTargetOverride;
     const targetX = targetOverride !== null ? targetOverride.x : player.x;
     const targetY = targetOverride !== null ? targetOverride.y : player.y;
 
-    const camX = targetX + TILE_SIZE / 2 - canvas.width / 2;
-    const camY = targetY + TILE_SIZE / 2 - canvas.height / 2;
+    const camX = targetX + TILE_SIZE / 2 - viewportWidth() / 2;
+    const camY = targetY + TILE_SIZE / 2 - viewportHeight() / 2;
 
     const shakeOffset = this.spiderQuest.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: clamp(camX, 0, mapPxW - canvas.width) + shakeOffset.x + sway.x,
-      y: clamp(camY, 0, mapPxH - canvas.height) + shakeOffset.y + sway.y,
+      x: clamp(camX, 0, mapPxW - viewportWidth()) + shakeOffset.x + sway.x,
+      y: clamp(camY, 0, mapPxH - viewportHeight()) + shakeOffset.y + sway.y,
     };
   }
 
   handleTouchStart(e: TouchEvent, rect: DOMRect): void {
-    const canvas = this.sceneManager.canvas;
-
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -4678,7 +4619,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
-        const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+        const hi = this.inventoryPanel.getHotbarTappedIndex(x, y);
         if (hi >= 0) {
           this.touch.inventoryDragTouchId = touch.identifier;
           this.handleMouseDown(x, y);
@@ -4723,7 +4664,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (this.human.isActive) {
-        const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+        const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y);
         if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
           this.dynamite.beginCharge(dynIdx);
           this.touch.dynamiteTouchId = touch.identifier;
@@ -4732,7 +4673,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (this.inventoryPanel.isOpen) {
-        if (this.inventoryPanel.hitsPanel(x, y, canvas)) {
+        if (this.inventoryPanel.hitsPanel(x, y)) {
           this.handleMouseDown(x, y);
           this.touch.inventoryDragTouchId ??= touch.identifier;
           this.clearInvLongPress();
@@ -4793,8 +4734,6 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
-    const canvas = this.sceneManager.canvas;
-
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
@@ -4837,7 +4776,7 @@ export class DungeonScene extends GameplayScene {
         this.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
-          const hi = this.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+          const hi = this.inventoryPanel.getHotbarTappedIndex(x, y);
           if (
             hi >= 0 &&
             wasTap &&

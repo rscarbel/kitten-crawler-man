@@ -38,6 +38,7 @@ import type { WanderParams } from '../creatures/townWander';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { SpatialGrid } from '../core/SpatialGrid';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** The made surfaces of the town, which citizens treat as public space. */
 const STREET_TILE_TYPES: ReadonlySet<number> = new Set([
@@ -339,8 +340,8 @@ export class TownLifeSystem implements GameSystem {
    * crowd's behaviour depend on window size.
    */
   private fullUpdateRadiusSq(): number {
-    const halfViewW = window.innerWidth / 2;
-    const halfViewH = window.innerHeight / 2;
+    const halfViewW = viewportWidth() / 2;
+    const halfViewH = viewportHeight() / 2;
     const visibleReach = Math.hypot(halfViewW, halfViewH) + TILE_SIZE;
     const radius = Math.max(FULL_UPDATE_RADIUS_PX, visibleReach);
     return radius * radius;

@@ -32,13 +32,9 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
   override handleMouseDown(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -46,17 +42,7 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
     ) => { x: number; y: number; w: number; h: number },
     page: number,
   ): void {
-    super.handleMouseDown(
-      mx,
-      my,
-      canvas,
-      inventory,
-      isOpen,
-      hotbarSlotRect,
-      panelRect,
-      invSlotRect,
-      page,
-    );
+    super.handleMouseDown(mx, my, inventory, isOpen, hotbarSlotRect, panelRect, invSlotRect, page);
     const allowed = this.getAllowedSourceItemId();
     if (allowed !== null && this.drag !== null && this.drag.item.id !== allowed) {
       this.drag = null;
@@ -66,13 +52,9 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
   override handleMouseUp(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -103,17 +85,7 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
 
     const allowedSlot = this.getAllowedTargetHotbarSlot();
     if (allowedSlot === null) {
-      super.handleMouseUp(
-        mx,
-        my,
-        canvas,
-        inventory,
-        isOpen,
-        hotbarSlotRect,
-        panelRect,
-        invSlotRect,
-        page,
-      );
+      super.handleMouseUp(mx, my, inventory, isOpen, hotbarSlotRect, panelRect, invSlotRect, page);
       return;
     }
 
@@ -121,7 +93,7 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
     if (!src) return;
     this.drag = null;
 
-    const r = hotbarSlotRect(allowedSlot, canvas);
+    const r = hotbarSlotRect(allowedSlot);
     if (pointInRect(mx, my, r)) {
       if (src.source === 'hotbar') {
         if (src.idx !== allowedSlot) inventory.swapHotbar(src.idx, allowedSlot);
@@ -135,13 +107,9 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
   override openContextMenu(
     mx: number,
     my: number,
-    canvas: HTMLCanvasElement,
     inventory: Inventory,
     isOpen: boolean,
-    hotbarSlotRect: (
-      i: number,
-      canvas: HTMLCanvasElement,
-    ) => { x: number; y: number; w: number; h: number },
+    hotbarSlotRect: (i: number) => { x: number; y: number; w: number; h: number },
     panelRect: { x: number; y: number; w: number; h: number },
     invSlotRect: (
       i: number,
@@ -150,16 +118,6 @@ export class TutorialInventoryInteraction extends InventoryInteraction {
     page: number,
   ): void {
     if (this.getAllowedSourceItemId() !== null) return;
-    super.openContextMenu(
-      mx,
-      my,
-      canvas,
-      inventory,
-      isOpen,
-      hotbarSlotRect,
-      panelRect,
-      invSlotRect,
-      page,
-    );
+    super.openContextMenu(mx, my, inventory, isOpen, hotbarSlotRect, panelRect, invSlotRect, page);
   }
 }

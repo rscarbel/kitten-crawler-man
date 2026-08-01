@@ -4,6 +4,7 @@ import type { TreasureChest } from '../systems/TreasureChestSystem';
 import { chestImage } from '../systems/TreasureChestSystem';
 import { drawText, TEXT_PRESETS } from './TextBox';
 import { drawBox, drawOverlay, BOX_PRESETS } from './Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Dialog dimensions
 const CHEST_DIALOG_MAX_WIDTH = 380;
@@ -160,11 +161,11 @@ export class ChestRewardDialog {
     return true;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this._isOpen || this.chest === null) return;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
 

@@ -5,6 +5,7 @@ import type { StatusEffect } from '../core/StatusEffect';
 import { platform } from '../core/Platform';
 import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
+import { viewportWidth } from '../core/Viewport';
 
 type HudRect = { x: number; y: number; w: number; h: number };
 type HudResult = { toggleRect: HudRect; notifRect: HudRect; hudPanelBottom: number };
@@ -154,14 +155,13 @@ const PULSE_BASE = 0.5;
  */
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   pulseRef: { value: number },
   collapsed = false,
 ): HudResult {
   if (platform.showHudCollapseToggle && collapsed) {
-    return drawHUDCollapsed(ctx, canvas, human, cat, pulseRef);
+    return drawHUDCollapsed(ctx, human, cat, pulseRef);
   }
 
   const activeLabel = human.isActive ? 'Human' : 'Cat';
@@ -214,7 +214,7 @@ export function drawHUD(
     color: '#fbbf24',
   });
 
-  const notifRect = renderNotification(ctx, canvas, human, cat, pulseRef);
+  const notifRect = renderNotification(ctx, human, cat, pulseRef);
   const hudPanelBottom = panelTopY + panelHeight;
 
   if (platform.showHudCollapseToggle) {
@@ -244,7 +244,6 @@ export function drawHUD(
 /** Compact single-row HUD for mobile collapsed state. Does not render the skill badge. */
 function drawHUDCollapsed(
   ctx: CanvasRenderingContext2D,
-  _canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   _pulseRef: { value: number },
@@ -352,7 +351,6 @@ function drawHUDCollapsed(
  */
 export function renderMobileSkillBadge(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   human: HumanPlayer,
   cat: CatPlayer,
   pulseRef: { value: number },
@@ -367,7 +365,7 @@ export function renderMobileSkillBadge(
   // Cap width so the badge doesn't overlap the minimap
   const badgeMaxW = Math.min(
     BADGE_MAX_W,
-    canvas.width - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
+    viewportWidth() - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
   );
   const badgeRect: HudRect = { x: BADGE_X, y: topY, w: badgeMaxW, h: BADGE_H };
 
@@ -604,7 +602,6 @@ function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: 
  */
 function renderNotification(
   ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
   human: Player,
   cat: Player,
   pulseRef: { value: number },
@@ -621,7 +618,7 @@ function renderNotification(
         NOTIF_WIDTH_FULL,
         Math.max(
           NOTIF_WIDTH_MIN,
-          canvas.width - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
+          viewportWidth() - BADGE_MINIMAP_MARGIN - BADGE_MINIMAP_WIDTH - BADGE_MINIMAP_GAP,
         ),
       )
     : NOTIF_WIDTH_FULL;

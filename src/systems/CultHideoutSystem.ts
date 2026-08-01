@@ -17,6 +17,7 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { drawText } from '../ui/TextBox';
 import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const SPAWN_SEARCH_RADIUS_TILES = 5;
 /** The congregation, spread through the barracks hall (offsets from room centre). */
@@ -81,10 +82,9 @@ export class CultHideoutSystem implements GameSystem {
     this.bannerTimer = QUEST_BANNER_FRAMES;
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D): void {
     drawQuestBanner(
       ctx,
-      canvas,
       this.cleared ? 'THE NEST IS CLEANSED' : "THE CULT'S NEST",
       this.bannerTimer,
       '#f47c7c',
@@ -96,8 +96,8 @@ export class CultHideoutSystem implements GameSystem {
       ? "A letter names Miss Quill — the magistrate's tower, top floor."
       : `Cleanse the cult — ${remaining} remaining`;
     drawText(ctx, objective, {
-      x: canvas.width / 2,
-      y: canvas.height - OBJECTIVE_Y_FROM_BOTTOM,
+      x: viewportWidth() / 2,
+      y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
       size: OBJECTIVE_SIZE,
       bold: true,
       color: this.cleared ? '#a8f070' : '#e8d060',

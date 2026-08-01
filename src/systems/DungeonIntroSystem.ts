@@ -1,5 +1,6 @@
 import interfacesManifest from '../images/interfaces/manifest.json';
 import { drawOverlay } from '../ui/Box';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const HOLD_FRAMES = 125;
 const FADE_OUT_FRAMES = 80;
@@ -25,11 +26,11 @@ export class DungeonIntroSystem {
     if (this.isActive) this.frame++;
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this.isActive || !_img.complete || _img.naturalWidth === 0) return;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     const alpha = this.frame < HOLD_FRAMES ? 1 : 1 - (this.frame - HOLD_FRAMES) / FADE_OUT_FRAMES;
 

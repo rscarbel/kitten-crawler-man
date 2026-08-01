@@ -15,6 +15,7 @@ import type { BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth } from '../core/Viewport';
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
@@ -241,11 +242,7 @@ export class ArenaSystem implements GameSystem {
     player.y = (doorTile.y - 2) * TILE_SIZE;
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
-    activePlayer: { x: number; y: number },
-  ): void {
+  render(ctx: CanvasRenderingContext2D, activePlayer: { x: number; y: number }): void {
     if (!this.hasArena) return;
 
     const mobs = this.getMobs();
@@ -261,9 +258,9 @@ export class ArenaSystem implements GameSystem {
 
       const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
       const BAR_WIDTH_FRACTION = 0.5;
-      const barW = Math.min(HEALTH_BAR_MAX_W, canvas.width * BAR_WIDTH_FRACTION);
+      const barW = Math.min(HEALTH_BAR_MAX_W, viewportWidth() * BAR_WIDTH_FRACTION);
       const barH = HEALTH_BAR_H;
-      const barX = Math.floor((canvas.width - barW) / 2);
+      const barX = Math.floor((viewportWidth() - barW) / 2);
       const barY = HEALTH_BAR_Y;
       const hpFrac = Math.max(0, bos.hp / bos.maxHp);
 
@@ -285,7 +282,7 @@ export class ArenaSystem implements GameSystem {
       );
 
       drawText(ctx, bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName, {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: barY - LABEL_Y_INSET - LABEL_TEXT_ADJUST,
         size: 11,
         bold: true,
@@ -303,7 +300,7 @@ export class ArenaSystem implements GameSystem {
       ctx.strokeRect(barX, barY, barW, barH);
 
       drawText(ctx, `${bos.hp} / ${bos.maxHp}`, {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: barY + barH - HP_TEXT_INSET - HP_TEXT_ADJUST,
         size: 9,
         color: '#e2e8f0',
@@ -313,7 +310,7 @@ export class ArenaSystem implements GameSystem {
       if (this.entryWindowTimer > 0) {
         const seconds = Math.ceil(this.entryWindowTimer / DISPLAY_FPS);
         drawText(ctx, `Entry closes in ${seconds}s`, {
-          x: canvas.width / 2,
+          x: viewportWidth() / 2,
           y: barY + barH + TUSKLINGS_LABEL_Y_OFFSET,
           size: 11,
           bold: true,
@@ -332,7 +329,7 @@ export class ArenaSystem implements GameSystem {
         ctx,
         alive > 0 ? `Tusklings remaining: ${alive}` : 'All Tusklings defeated! Stairwell unlocked.',
         {
-          x: canvas.width / 2,
+          x: viewportWidth() / 2,
           y: PHASE2_LABEL_Y - LABEL_TEXT_ADJUST,
           size: 11,
           bold: true,

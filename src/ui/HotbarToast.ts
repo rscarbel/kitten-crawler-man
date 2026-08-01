@@ -7,6 +7,7 @@
  */
 
 import { drawText } from './TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** How long a notice stays up — 2.5s at 60 fps, a glance without being a fixture. */
 const DISPLAY_TICKS = 150;
@@ -56,10 +57,10 @@ export class HotbarToast {
    *   `InventoryPanel.hotbarBandHeight`, which accounts for the bar shrinking on
    *   narrow canvases.
    */
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, hotbarBandHeight: number): void {
+  render(ctx: CanvasRenderingContext2D, hotbarBandHeight: number): void {
     if (this.notices.length === 0) return;
-    const bottomRowY = canvas.height - hotbarBandHeight - GAP_ABOVE_HOTBAR - FONT_SIZE;
-    const centerX = canvas.width / 2;
+    const bottomRowY = viewportHeight() - hotbarBandHeight - GAP_ABOVE_HOTBAR - FONT_SIZE;
+    const centerX = viewportWidth() / 2;
     const newestIndex = this.notices.length - 1;
 
     this.notices.forEach((notice, index) => {

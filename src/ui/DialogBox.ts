@@ -14,6 +14,7 @@
 import { drawBox } from './Box';
 import { drawText } from './TextBox';
 import type { AudioManager } from '../audio/AudioManager';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** Duration in ms between revealed elements — matches the typing_click sound length. */
 const TYPING_CLICK_DURATION_MS = 100;
@@ -173,10 +174,10 @@ export class DialogBox {
    * Render the dialog box. Call once per frame after update().
    * @param alpha Optional 0–1 opacity for fade-out effects. Default: 1 (fully opaque).
    */
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, alpha = 1): void {
+  render(ctx: CanvasRenderingContext2D, alpha = 1): void {
     if (!this._visible) return;
 
-    const { x: dx, y: dy, width: dw } = this._computeRect(canvas);
+    const { x: dx, y: dy, width: dw } = this._computeRect();
 
     ctx.save();
     if (alpha < 1) ctx.globalAlpha = alpha;
@@ -207,16 +208,16 @@ export class DialogBox {
    * instead of re-deriving it from copies of these constants, which would drift
    * the moment the box is resized.
    */
-  rect(canvas: HTMLCanvasElement): { x: number; y: number; width: number; height: number } {
-    return { ...this._computeRect(canvas), height: DIALOG_HEIGHT };
+  rect(): { x: number; y: number; width: number; height: number } {
+    return { ...this._computeRect(), height: DIALOG_HEIGHT };
   }
 
   /**
    * Returns true if the given canvas point falls inside the dialog box.
    * Useful for routing click events.
    */
-  contains(px: number, py: number, canvas: HTMLCanvasElement): boolean {
-    const { x, y, width } = this._computeRect(canvas);
+  contains(px: number, py: number): boolean {
+    const { x, y, width } = this._computeRect();
     return px >= x && px <= x + width && py >= y && py <= y + DIALOG_HEIGHT;
   }
 
@@ -289,10 +290,10 @@ export class DialogBox {
     });
   }
 
-  private _computeRect(canvas: HTMLCanvasElement): { x: number; y: number; width: number } {
-    const hotbarTop = canvas.height - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
-    const width = Math.min(DIALOG_MAX_WIDTH, canvas.width - DIALOG_SIDE_MARGIN * 2);
-    const x = (canvas.width - width) / 2;
+  private _computeRect(): { x: number; y: number; width: number } {
+    const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
+    const width = Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
+    const x = (viewportWidth() - width) / 2;
     const y = Math.max(
       DIALOG_MIN_TOP,
       hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT - this._yOffset,

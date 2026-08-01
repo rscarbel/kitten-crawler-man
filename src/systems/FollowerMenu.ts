@@ -1,5 +1,6 @@
 import { drawText } from '../ui/TextBox';
 import type { MovementMode, CombatStance } from './CompanionSystem';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Rect {
   x: number;
@@ -122,15 +123,14 @@ export class FollowerMenu {
    */
   render(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     movementMode: MovementMode,
     combatStance: CombatStance,
     companionIsCat: boolean,
   ): void {
     if (!this._isOpen) return;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     // Dim backdrop
     ctx.fillStyle = `rgba(0,0,0,${MENU_BACKDROP_ALPHA})`;

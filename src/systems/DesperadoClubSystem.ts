@@ -568,29 +568,29 @@ export class DesperadoClubSystem {
     return this.vip.escortActive ? this.escortFigureList : [];
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+  renderUI(ctx: CanvasRenderingContext2D, active: Player): void {
     const shop = this.activeShop();
     if (shop) {
-      shop.renderUI(ctx, canvas, active);
-      shop.renderShopPanel(ctx, canvas, active);
+      shop.renderUI(ctx, active);
+      shop.renderShopPanel(ctx, active);
       return;
     }
 
     if (this.casino.open) {
-      this.casino.renderPanel(ctx, canvas, active);
+      this.casino.renderPanel(ctx, active);
       return;
     }
 
     if (this.guild.open) {
-      this.guild.renderPanel(ctx, canvas, active);
+      this.guild.renderPanel(ctx, active);
       return;
     }
 
     if (this.vip.open) {
-      this.vip.renderPanel(ctx, canvas, active);
+      this.vip.renderPanel(ctx, active);
       return;
     }
 
-    this.dialog.render(ctx, canvas);
+    this.dialog.render(ctx);
   }
 }

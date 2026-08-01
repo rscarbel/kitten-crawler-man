@@ -6,6 +6,7 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
 import { drawShopkeeper } from '../sprites/shopkeeperSprite';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const WANDER_MIN_TILE_OFFSET = 3;
 const WANDER_MAX_TILE_INSET = 4;
@@ -172,21 +173,21 @@ export class ShopSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, _active: Player): void {
+  renderUI(ctx: CanvasRenderingContext2D, _active: Player): void {
     if (this.feedbackTimer > 0) {
       const alpha = Math.min(1, this.feedbackTimer / FEEDBACK_FADE_FRAMES);
       ctx.save();
       ctx.fillStyle = `rgba(10,8,4,${alpha * FEEDBACK_BG_ALPHA})`;
       ctx.fillRect(
-        canvas.width / 2 - FEEDBACK_BOX_W / 2,
-        canvas.height - FEEDBACK_Y_FROM_BOTTOM,
+        viewportWidth() / 2 - FEEDBACK_BOX_W / 2,
+        viewportHeight() - FEEDBACK_Y_FROM_BOTTOM,
         FEEDBACK_BOX_W,
         FEEDBACK_BOX_H,
       );
       ctx.restore();
       drawText(ctx, this.feedbackMsg, {
-        x: canvas.width / 2,
-        y: canvas.height - FEEDBACK_TEXT_Y_FROM_BOTTOM - FEEDBACK_TEXT_Y_OFFSET,
+        x: viewportWidth() / 2,
+        y: viewportHeight() - FEEDBACK_TEXT_Y_FROM_BOTTOM - FEEDBACK_TEXT_Y_OFFSET,
         size: FEEDBACK_TEXT_SIZE,
         color: `rgba(220,190,80,${alpha})`,
         align: 'center',
@@ -195,10 +196,10 @@ export class ShopSystem implements GameSystem {
     }
   }
 
-  renderShopPanel(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, active: Player): void {
+  renderShopPanel(ctx: CanvasRenderingContext2D, active: Player): void {
     if (!this.shopOpen) return;
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const cw = viewportWidth();
+    const ch = viewportHeight();
 
     ctx.fillStyle = `rgba(0,0,0,${PANEL_OVERLAY_ALPHA})`;
     ctx.fillRect(0, 0, cw, ch);

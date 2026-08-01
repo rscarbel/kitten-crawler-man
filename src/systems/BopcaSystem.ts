@@ -58,6 +58,7 @@ import {
 } from './bopcaDialog';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { clamp } from '../utils';
+import { drawRadialGlow } from '../sprites/radialGlow';
 
 /** Fraction of the eater's max HP a dish restores. Every dish, always. */
 const BOPCA_HEAL_FRACTION = 0.3;
@@ -633,7 +634,7 @@ export class BopcaSystem implements GameSystem {
   }
 
   /** Click routing. Returns true when the click landed on the dialog surface. */
-  handleClick(mx: number, my: number, canvas: HTMLCanvasElement): boolean {
+  handleClick(mx: number, my: number): boolean {
     if (this.dialogPhase === 'closed') return false;
     if (this.dialogPhase === 'choices') {
       for (const rect of this.choiceRects) {
@@ -646,7 +647,7 @@ export class BopcaSystem implements GameSystem {
         }
       }
     }
-    if (this.dialogBox?.contains(mx, my, canvas) === true) {
+    if (this.dialogBox?.contains(mx, my) === true) {
       this.advanceDialog();
       return true;
     }
@@ -880,10 +881,10 @@ export class BopcaSystem implements GameSystem {
   }
 
   /** The dialog box and, once the line is read, the choice row. */
-  renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderDialog(ctx: CanvasRenderingContext2D): void {
     const box = this.dialogBox;
     if (this.dialogPhase === 'closed' || box === null) return;
-    box.render(ctx, canvas);
+    box.render(ctx);
     this.choiceRects = [];
     if (this.dialogPhase !== 'choices') return;
 
@@ -892,7 +893,7 @@ export class BopcaSystem implements GameSystem {
     // hung off both edges with its labels cut — on the one platform where the
     // buttons are the only way to choose, since there are no number keys.
     const choices = this.currentChoices();
-    const boxRect = box.rect(canvas);
+    const boxRect = box.rect();
     const totalGap = (choices.length - 1) * CHOICE_BUTTON_GAP;
     const buttonWidth = Math.min(CHOICE_BUTTON_WIDTH, (boxRect.width - totalGap) / choices.length);
     const rowWidth = choices.length * buttonWidth + totalGap;
@@ -932,11 +933,10 @@ export class BopcaSystem implements GameSystem {
     const radius = TILE_SIZE * GALLEY_LIGHT_RADIUS_TILES;
     const alpha =
       GALLEY_LIGHT_ALPHA + (entry.activity === 'cooking' ? GALLEY_LIGHT_COOKING_BONUS : 0);
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    gradient.addColorStop(0, `rgba(${GALLEY_LIGHT_COLOR},${alpha})`);
-    gradient.addColorStop(1, `rgba(${GALLEY_LIGHT_COLOR},0)`);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    drawRadialGlow(ctx, cx, cy, radius, [
+      { offset: 0, color: `rgba(${GALLEY_LIGHT_COLOR},${alpha})` },
+      { offset: 1, color: `rgba(${GALLEY_LIGHT_COLOR},0)` },
+    ]);
   }
 
   private spriteState(entry: BopcaEntry): BopcaState {

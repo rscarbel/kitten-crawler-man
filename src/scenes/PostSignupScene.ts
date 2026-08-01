@@ -8,6 +8,7 @@ import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
 import { drawOverlay } from '../ui/Box';
 import { drawButton, BUTTON_PRESETS, setButtonMouseState, notifyButtonClick } from '../ui/Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const TITLE_Y_FRACTION = 0.22;
 const SUBTITLE_Y_FRACTION = 0.35;
@@ -36,15 +37,14 @@ export class PostSignupScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const canvas = this.sceneManager.canvas;
-    const cx = canvas.width / 2;
+    const cx = viewportWidth() / 2;
 
     // Dark background
     ctx.fillStyle = BG_COLOR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
     drawOverlay(ctx, {
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      canvasWidth: viewportWidth(),
+      canvasHeight: viewportHeight(),
       alpha: OVERLAY_ALPHA,
     });
 
@@ -52,26 +52,26 @@ export class PostSignupScene extends Scene {
 
     drawText(ctx, 'Welcome, adventurer!', {
       x: TEXT_SIDE_MARGIN,
-      y: canvas.height * TITLE_Y_FRACTION,
+      y: viewportHeight() * TITLE_Y_FRACTION,
       align: 'center',
       size: 32,
       bold: true,
       color: '#f8fafc',
       outline: true,
       glow: true,
-      width: canvas.width - TEXT_SIDE_MARGIN * 2,
+      width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
     });
 
     drawText(ctx, 'Would you like to start with the tutorial?', {
       x: TEXT_SIDE_MARGIN,
-      y: canvas.height * SUBTITLE_Y_FRACTION,
+      y: viewportHeight() * SUBTITLE_Y_FRACTION,
       align: 'center',
       size: 16,
       color: '#cbd5e1',
-      width: canvas.width - TEXT_SIDE_MARGIN * 2,
+      width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
     });
 
-    const btnY = canvas.height * BTN_Y_FRACTION;
+    const btnY = viewportHeight() * BTN_Y_FRACTION;
 
     drawButton(ctx, {
       x: cx,
@@ -95,9 +95,8 @@ export class PostSignupScene extends Scene {
   }
 
   handleClick(mx: number, my: number): void {
-    const canvas = this.sceneManager.canvas;
-    const cx = canvas.width / 2;
-    const btnY = canvas.height * BTN_Y_FRACTION;
+    const cx = viewportWidth() / 2;
+    const btnY = viewportHeight() * BTN_Y_FRACTION;
 
     const tutorialBtnX = cx - BTN_WIDTH / 2;
     const skipBtnX = cx - BTN_WIDTH / 2;
@@ -140,7 +139,7 @@ export class PostSignupScene extends Scene {
   }
 
   private launchLevel1(): void {
-    const level1Def = getLevelDef('level1');
+    const level1Def = getLevelDef('level3');
     this.sceneManager.replace(
       new DungeonScene(level1Def, this.input, this.sceneManager, this.baseOptions),
     );

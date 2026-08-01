@@ -34,6 +34,7 @@ import {
   VOID_TYPE,
   YARD_GRAVEL,
 } from '../map/tileTypes';
+import { viewportWidth } from '../core/Viewport';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -258,7 +259,6 @@ export class MiniMapSystem implements GameSystem {
 
   render(
     ctx: CanvasRenderingContext2D,
-    canvas: HTMLCanvasElement,
     active: { x: number; y: number },
     companion: { x: number; y: number },
     mobGrid: SpatialGrid<Mob>,
@@ -272,7 +272,7 @@ export class MiniMapSystem implements GameSystem {
     const tilesInView = Math.floor(mmSize / pxPerTile);
     const halfTiles = Math.floor(tilesInView / 2);
 
-    const mmX = canvas.width - mmSize - MINIMAP_MARGIN;
+    const mmX = viewportWidth() - mmSize - MINIMAP_MARGIN;
     const mmY = MINIMAP_MARGIN;
 
     const playerTX = Math.floor((active.x + HALF_TILE) / TILE_SIZE);

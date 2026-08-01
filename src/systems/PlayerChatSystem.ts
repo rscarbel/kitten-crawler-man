@@ -1,6 +1,7 @@
 import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { drawText } from '../ui/TextBox';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const BUBBLE_TTL = 300; // 5 s at 60 fps
 const BUBBLE_FADE = 60;
@@ -210,11 +211,11 @@ export class PlayerChatSystem {
     ctx.closePath();
   }
 
-  renderChatHint(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderChatHint(ctx: CanvasRenderingContext2D): void {
     if (!this._isOpen) return;
     drawText(ctx, '[Enter] send  [Esc] cancel', {
-      x: canvas.width / 2,
-      y: canvas.height - CHAT_HINT_Y_OFFSET - CHAT_HINT_Y_MARGIN,
+      x: viewportWidth() / 2,
+      y: viewportHeight() - CHAT_HINT_Y_OFFSET - CHAT_HINT_Y_MARGIN,
       size: CHAT_HINT_FONT_SIZE,
       color: 'rgba(167, 139, 250, 0.75)',
       align: 'center',

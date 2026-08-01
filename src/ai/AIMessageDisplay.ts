@@ -2,6 +2,7 @@
 import { drawText } from '../ui/TextBox';
 import { DialogBox } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface AIMessage {
   text: string;
@@ -74,10 +75,10 @@ export class AIMessageDisplay {
     });
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     const lastMsg = this.messages.length > 0 ? this.messages[this.messages.length - 1] : null;
     const alpha = lastMsg !== null && lastMsg.ttl < FADE_TICKS ? lastMsg.ttl / FADE_TICKS : 1;
-    this._dialogBox?.render(ctx, canvas, alpha);
+    this._dialogBox?.render(ctx, alpha);
 
     // Action notifications — bottom of screen
     if (this.actionNotifs.length > 0) {
@@ -92,8 +93,8 @@ export class AIMessageDisplay {
       const textW = ctx.measureText(notif.text).width;
       const pillW = pad * 2 + labelW + ACTION_TEXT_LABEL_GAP + textW;
       const pillH = fsize + pad * 2;
-      const px = Math.round((canvas.width - pillW) / 2);
-      const py = canvas.height - pillH - PADDING_BOTTOM;
+      const px = Math.round((viewportWidth() - pillW) / 2);
+      const py = viewportHeight() - pillH - PADDING_BOTTOM;
 
       ctx.globalAlpha = actionAlpha * ACTION_ALPHA_BACKGROUND;
       ctx.fillStyle = '#0a0a0c';

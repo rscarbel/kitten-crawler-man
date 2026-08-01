@@ -4,6 +4,8 @@ import { addButton, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawBox, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
+import { settings, type QualityPreset } from '../../core/Settings';
+import { renderQuality } from '../../core/RenderQuality';
 
 // Volume slider constants
 const TRACK_HEIGHT = 20;
@@ -28,6 +30,35 @@ const FIRST_SLIDER_Y_OFFSET = 72;
 const SLIDER_SPACING = 58;
 const LAST_SLIDER_SPACING = 52;
 
+// Graphics section
+const GRAPHICS_LABEL_Y_OFFSET = 16;
+const GRAPHICS_LABEL_SIZE = 12;
+const GRAPHICS_ROW_Y_SPACING = 32;
+const QUALITY_BUTTON_HEIGHT = 36;
+const QUALITY_BUTTON_GAP = 6;
+const QUALITY_HINT_Y_OFFSET = 16;
+const QUALITY_HINT_SIZE = 10;
+/**
+ * Height the section claims below the button row. The pause box's height is
+ * fixed, and the mobile one is already tight in landscape, so the explanatory
+ * line is a desktop luxury and the section is shorter without it.
+ */
+const QUALITY_SECTION_Y_SPACING_WITH_HINT = 60;
+const QUALITY_SECTION_Y_SPACING_BARE = 44;
+
+/** Order the three presets are laid out in, left to right. */
+const QUALITY_CHOICES: ReadonlyArray<{ preset: QualityPreset; label: string }> = [
+  { preset: 'auto', label: 'Auto' },
+  { preset: 'sharp', label: 'Sharp' },
+  { preset: 'performance', label: 'Fast' },
+];
+
+const QUALITY_HINTS: Record<QualityPreset, string> = {
+  auto: 'Picks the sharpest setting this device keeps up with.',
+  sharp: 'Full detail on high-density displays.',
+  performance: 'Lowest cost. Best for older or throttling devices.',
+};
+
 // Mobile controls section
 const MOBILE_SECTION_LABEL_Y_OFFSET = 16;
 const MOBILE_SECTION_LABEL_SIZE = 12;
@@ -38,6 +69,8 @@ const CHAT_BUTTON_Y_SPACING = 52;
 // Reset Game button
 const RESET_BUTTON_HEIGHT = 40;
 const RESET_BUTTON_Y_SPACING = 52;
+/** Breathing room under the last button when the section is bottom-anchored. */
+const GAME_SECTION_BOTTOM_PAD = 12;
 const SECTION_LABEL_Y_SPACING = 32;
 const SECTION_LABEL_SIZE = 12;
 
@@ -113,6 +146,47 @@ function renderVolumeSlider(
       setter(Math.max(0, Math.min(1, (mx - sliderX) / bw)));
     },
   });
+}
+
+/**
+ * Three-way quality choice. Presets rather than a scale slider: fractional
+ * scales leave hairline seams between adjacent chunk blits.
+ */
+function renderQualityChoice(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+): void {
+  const selected = settings.quality;
+  const totalGap = QUALITY_BUTTON_GAP * (QUALITY_CHOICES.length - 1);
+  const buttonWidth = Math.floor((bw - totalGap) / QUALITY_CHOICES.length);
+
+  QUALITY_CHOICES.forEach(({ preset, label }, index) => {
+    const isSelected = preset === selected;
+    addButton(ctx, buttons, {
+      x: bx + index * (buttonWidth + QUALITY_BUTTON_GAP),
+      y: by,
+      width: buttonWidth,
+      height: QUALITY_BUTTON_HEIGHT,
+      label,
+      ...(isSelected ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      action: () => {
+        renderQuality.setPreset(preset);
+      },
+    });
+  });
+
+  if (!platform.isMobile) {
+    drawText(ctx, QUALITY_HINTS[selected], {
+      x: bx,
+      y: by + QUALITY_BUTTON_HEIGHT + QUALITY_HINT_Y_OFFSET,
+      size: QUALITY_HINT_SIZE,
+      color: '#64748b',
+      width: bw,
+    });
+  }
 }
 
 function renderResetConfirmDialog(
@@ -228,17 +302,28 @@ export function renderSettingsTab(
   let y = by + FIRST_SLIDER_Y_OFFSET;
 
   renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'Master Volume', audio.masterVolume, (v) =>
-    audio.setMasterVolume(v),
+    audio.setMasterVolumePreference(v),
   );
   y += SLIDER_SPACING;
   renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'Music Volume', audio.musicVolume, (v) =>
-    audio.setMusicVolume(v),
+    audio.setMusicVolumePreference(v),
   );
   y += SLIDER_SPACING;
   renderVolumeSlider(ctx, buttons, sliderX, y, sliderW, 'SFX Volume', audio.sfxVolume, (v) =>
-    audio.setSfxVolume(v),
+    audio.setSfxVolumePreference(v),
   );
   y += LAST_SLIDER_SPACING;
+
+  drawText(ctx, 'Graphics', {
+    x: bx + AUDIO_LABEL_X,
+    y: y + GRAPHICS_LABEL_Y_OFFSET,
+    bold: true,
+    size: GRAPHICS_LABEL_SIZE,
+    color: '#64748b',
+  });
+  y += GRAPHICS_ROW_Y_SPACING;
+  renderQualityChoice(ctx, buttons, sliderX, y, sliderW);
+  y += platform.isMobile ? QUALITY_SECTION_Y_SPACING_BARE : QUALITY_SECTION_Y_SPACING_WITH_HINT;
 
   if (platform.isMobile) {
     drawText(ctx, 'Mobile Controls', {
@@ -263,6 +348,16 @@ export function renderSettingsTab(
       y += CHAT_BUTTON_Y_SPACING;
     }
   }
+
+  // Anchored to the bottom of the box rather than flowed after the sections
+  // above. The box height is clamped to the viewport, so on a short screen the
+  // flowed content runs past its lower edge — and Reset Game and Back are the
+  // two controls that must never become unreachable. Anchoring can crowd the
+  // section above it on such a screen, which is the better failure: the tab
+  // does not scroll, so anything below the box edge cannot be reached at all.
+  const gameSectionHeight =
+    SECTION_LABEL_Y_SPACING + RESET_BUTTON_Y_SPACING + CHAT_BUTTON_HEIGHT + GAME_SECTION_BOTTOM_PAD;
+  y = by + bh - gameSectionHeight;
 
   drawText(ctx, 'Game', {
     x: bx + AUDIO_LABEL_X,

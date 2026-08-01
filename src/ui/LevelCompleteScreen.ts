@@ -1,6 +1,7 @@
 import { drawText } from './TextBox';
 import { drawModal, drawOverlay } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Sparkle {
   x: number;
@@ -190,12 +191,12 @@ export class LevelCompleteScreen {
     this.sparkles = this.sparkles.filter((s) => s.life > 0);
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this._active) return;
 
     this.frame++;
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = viewportWidth();
+    const h = viewportHeight();
     const cx = w / 2;
     const cy = h / 2;
 

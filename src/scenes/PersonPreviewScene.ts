@@ -7,7 +7,7 @@
  */
 
 import { Scene } from '../core/Scene';
-import type { SceneManager } from '../core/Scene';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { generatePersonAppearance } from '../sprites/person/PersonAppearance';
 import { drawPerson } from '../sprites/person/drawPerson';
@@ -44,10 +44,6 @@ export class PersonPreviewScene extends Scene {
   private phase = 0;
   private seedBase = 1;
 
-  constructor(private readonly sceneManager: SceneManager) {
-    super();
-  }
-
   handleClick(): void {
     this.seedBase += 997;
   }
@@ -57,7 +53,8 @@ export class PersonPreviewScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const { width, height } = this.sceneManager.canvas;
+    const width = viewportWidth();
+    const height = viewportHeight();
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 

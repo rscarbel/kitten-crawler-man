@@ -2,6 +2,7 @@ import { drawText } from './TextBox';
 import { drawOverlay } from './Box';
 import { drawButton, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
+import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const ALPHA_VISIBILITY_THRESHOLD = 0.5;
 const ALPHA_MAX = 0.82;
@@ -85,13 +86,13 @@ export class DeathScreen {
       this.alpha = Math.min(ALPHA_MAX, this.alpha + ALPHA_INCREMENT_PER_FRAME);
   }
 
-  render(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  render(ctx: CanvasRenderingContext2D): void {
     if (!this._active) return;
 
     this.tick();
 
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = viewportWidth();
+    const h = viewportHeight();
 
     drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
 

@@ -26,6 +26,7 @@ import {
 } from '../core/DoomsdayProgress';
 import { drawText } from '../ui/TextBox';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import { viewportWidth } from '../core/Viewport';
 
 /** How close the player must be to the escape tile to complete the escape. */
 const REACH_RANGE_TILES = 1.2;
@@ -90,7 +91,7 @@ export class DoomsdayEscapeSystem implements GameSystem {
   }
 
   /** Countdown HUD — shown while a doomsday countdown is running, whether it's containment (crystal not yet reached) or escape. */
-  renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+  renderUI(ctx: CanvasRenderingContext2D): void {
     const { stage, deadlineAt } = this.progress;
     if ((stage !== 'containment' && stage !== 'escape') || deadlineAt === null) return;
 
@@ -98,7 +99,7 @@ export class DoomsdayEscapeSystem implements GameSystem {
       ctx,
       stage === 'containment' ? 'THE SOUL CRYSTAL IS DESTABILIZING' : 'GET TO THE ESCAPE ROUTE',
       {
-        x: canvas.width / 2,
+        x: viewportWidth() / 2,
         y: COUNTDOWN_LABEL_Y,
         size: COUNTDOWN_LABEL_SIZE,
         bold: true,
@@ -107,7 +108,7 @@ export class DoomsdayEscapeSystem implements GameSystem {
       },
     );
     drawText(ctx, formatCountdownClock(deadlineAt), {
-      x: canvas.width / 2,
+      x: viewportWidth() / 2,
       y: COUNTDOWN_Y,
       size: COUNTDOWN_SIZE,
       bold: true,
