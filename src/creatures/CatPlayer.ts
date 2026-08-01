@@ -2,7 +2,7 @@ import { Player, type StatName } from '../Player';
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
-import { drawCatSprite, drawCatClawSwipe, drawMissiles } from '../sprites/catSprite';
+import { CAT_SWIPE_FRAMES, CatAnimator, drawCatSprite, drawMissiles } from '../sprites/catSprite';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
@@ -15,6 +15,9 @@ import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
 const CAT_CRAWLER_KIND: CrawlerKind = 'cat';
 import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
+
+/** Degrees in π radians, for the one place this class works in degrees. */
+const DEGREES_PER_HALF_TURN = 180;
 
 /** Dexterity the System hands Donut for free on each level-up. */
 const ENHANCED_GROWTH_DEX_PER_LEVEL = 1;
@@ -40,7 +43,10 @@ export class CatPlayer extends Player {
   private abilityManager: AbilityManager | null = null;
 
   private attackTimer = 0;
-  private readonly ATTACK_FRAMES = 18;
+  /** The swing lasts exactly as long as the sprite sheet's swipe animation. */
+  private readonly ATTACK_FRAMES = CAT_SWIPE_FRAMES;
+  /** Drives her pose: the action playing, plus the boredom timer behind idle breaks. */
+  private readonly animator = new CatAnimator();
 
   /** Sub-missile spawns queued by CombatSystem this frame; flushed after resolvePlayerAttacks. */
   private pendingSubMissileSpawns: Array<{ x: number; y: number }> = [];
@@ -59,24 +65,27 @@ export class CatPlayer extends Player {
   private static readonly MISSILE_BASE_RANGE = 3.5;
   private static readonly MISSILE_RANGE_INTELLIGENCE_MULTIPLIER = 0.5;
   private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
-  private static readonly MISSILE_CENTER_OFFSET_X = 0.5;
-  private static readonly MISSILE_CENTER_OFFSET_Y = 0.5;
+  /** Half a tile: what you add to a tile origin to get its centre. */
+  private static readonly TILE_CENTER_OFFSET = 0.5;
   private static readonly SUBMISSILE_COUNT_BASE = 3;
   private static readonly SUBMISSILE_COUNT_RANDOM_RANGE = 3;
   private static readonly SUBMISSILE_ANGLE_VARIANCE = 0.4;
   private static readonly MISSILE_HOMING_DISTANCE_TILES = 12;
-  private static readonly HOMING_CONE_DEGREES = 3;
-  private static readonly HOMING_CONE_HALF_ANGLE = Math.PI / CatPlayer.HOMING_CONE_DEGREES;
+  /** A homing missile only curves toward mobs inside this cone ahead of it. */
+  private static readonly HOMING_CONE_HALF_ANGLE_DEGREES = 60;
+  private static readonly HOMING_CONE_HALF_ANGLE =
+    (CatPlayer.HOMING_CONE_HALF_ANGLE_DEGREES * Math.PI) / DEGREES_PER_HALF_TURN;
+  /** Radians a homing missile may turn per frame. */
   private static readonly HOMING_TURN_RATE = 0.08;
-  private static readonly MOB_CENTER_OFFSET_X = 0.5;
-  private static readonly MOB_CENTER_OFFSET_Y = 0.5;
-  private static readonly MISSILE_CENTER_OFFSET = 0.5;
-  private static readonly MISSILE_CENTER_OFFSET_2 = 0.5;
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
   /** Distance above the sprite top where the sphere centre sits. */
   private static readonly ACTIVE_SPHERE_GAP = 3;
-  /** How far above the tile anchor the cat sprite extends. */
-  private static readonly ACTIVE_SPHERE_SPRITE_TOP = 4;
+  /**
+   * Her tallest frames stop this far below the tile anchor (she is drawn at two
+   * thirds of a tile), so the sphere has to drop into the tile to hover over
+   * her head instead of floating in the air above it.
+   */
+  private static readonly ACTIVE_SPHERE_SPRITE_TOP = -5;
   /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
   private static readonly HEALTH_BAR_RAISE = 16;
   private static readonly SPHERE_HIGHLIGHT_OFFSET = 0.3;
@@ -177,6 +186,7 @@ export class CatPlayer extends Player {
     if (!leveled) return false;
     this.setBaseStat('dexterity', this.getBaseStat('dexterity') + ENHANCED_GROWTH_DEX_PER_LEVEL);
     this.queueFloatingText(`+${ENHANCED_GROWTH_DEX_PER_LEVEL} DEX`, 'buff');
+    this.animator.play('dance');
     return true;
   }
 
@@ -200,6 +210,7 @@ export class CatPlayer extends Player {
     this.attackTimer = 0;
     this.autoTarget = null;
     this.pendingSubMissileSpawns = [];
+    this.animator.reset();
   }
 
   get missileCooldownCurrent(): number {
@@ -223,8 +234,8 @@ export class CatPlayer extends Player {
       : baseRange * stats.rangeMultiplier;
 
     this.missiles.push({
-      x: fromX ?? this.x + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET_X,
-      y: fromY ?? this.y + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET_Y,
+      x: fromX ?? this.x + this.tileSize * CatPlayer.TILE_CENTER_OFFSET,
+      y: fromY ?? this.y + this.tileSize * CatPlayer.TILE_CENTER_OFFSET,
       vx: Math.cos(baseAngle) * stats.speed,
       vy: Math.sin(baseAngle) * stats.speed,
       distTraveled: 0,
@@ -245,6 +256,7 @@ export class CatPlayer extends Player {
   triggerAttack() {
     if (this.attackTimer > 0) return;
     this.attackTimer = this.ATTACK_FRAMES;
+    this.animator.play('swipe');
   }
 
   /** Hotbar-triggered magic missile fire. Returns true if a missile was actually launched. */
@@ -252,6 +264,7 @@ export class CatPlayer extends Player {
     if (this.missileCooldown > 0) return false;
     this.fireMissile();
     this.missileCooldown = this.missileCooldownMax;
+    this.animator.play('cast');
     return true;
   }
 
@@ -260,6 +273,12 @@ export class CatPlayer extends Player {
 
   updateAttack() {
     if (this.attackTimer > 0) this.attackTimer--;
+  }
+
+  /** Every scene ticks this each frame, which is where her pose timers live. */
+  override tickTimers(): void {
+    super.tickTimers();
+    this.animator.tick(this.isMoving, this.isKnockedOut);
   }
 
   /** Returns true on the single frame when the claw hits (peak of the swing). */
@@ -284,7 +303,7 @@ export class CatPlayer extends Player {
     for (const { x, y } of this.pendingSubMissileSpawns) {
       const count =
         CatPlayer.SUBMISSILE_COUNT_BASE +
-        Math.floor(Math.random() * CatPlayer.SUBMISSILE_COUNT_RANDOM_RANGE); // 3–5
+        Math.floor(Math.random() * CatPlayer.SUBMISSILE_COUNT_RANDOM_RANGE);
       for (let i = 0; i < count; i++) {
         const angle =
           (i / count) * Math.PI * 2 + Math.random() * CatPlayer.SUBMISSILE_ANGLE_VARIANCE;
@@ -307,12 +326,12 @@ export class CatPlayer extends Player {
 
     const dx =
       this.autoTarget.x +
-      this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET -
-      (this.x + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET);
+      this.tileSize * CatPlayer.TILE_CENTER_OFFSET -
+      (this.x + this.tileSize * CatPlayer.TILE_CENTER_OFFSET);
     const dy =
       this.autoTarget.y +
-      this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET -
-      (this.y + this.tileSize * CatPlayer.MISSILE_CENTER_OFFSET);
+      this.tileSize * CatPlayer.TILE_CENTER_OFFSET -
+      (this.y + this.tileSize * CatPlayer.TILE_CENTER_OFFSET);
     if (dx !== 0 || dy !== 0) {
       const n = normalize(dx, dy);
       this.facingX = n.x;
@@ -330,6 +349,7 @@ export class CatPlayer extends Player {
           : 0;
       this.fireMissile(offset);
       this.missileCooldown = cooldownMax;
+      this.animator.play('cast');
       this.pendingAutoFireSound = true;
     }
   }
@@ -338,8 +358,8 @@ export class CatPlayer extends Player {
     const level = this.getMagicMissileLevel();
     const hasHoming = level >= CatPlayer.HOMING_LEVEL_THRESHOLD;
     const HOMING_RANGE_PX = TILE_SIZE * CatPlayer.MISSILE_HOMING_DISTANCE_TILES;
-    const CONE_HALF = CatPlayer.HOMING_CONE_HALF_ANGLE; // ±60° = 120° total
-    const TURN_RATE = CatPlayer.HOMING_TURN_RATE; // radians/frame
+    const CONE_HALF = CatPlayer.HOMING_CONE_HALF_ANGLE;
+    const TURN_RATE = CatPlayer.HOMING_TURN_RATE;
 
     this.missileCooldown = this.tickCooldown(this.missileCooldown);
 
@@ -366,8 +386,8 @@ export class CatPlayer extends Player {
             );
             for (const mob of candidates) {
               if (!mob.isAlive) continue;
-              const ddx = mob.x + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_X - m.x;
-              const ddy = mob.y + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_Y - m.y;
+              const ddx = mob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.x;
+              const ddy = mob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.y;
               const distSq = ddx * ddx + ddy * ddy;
               if (distSq > HOMING_RANGE_PX * HOMING_RANGE_PX || distSq < 1) continue;
               if (distSq >= bestDistSq) continue;
@@ -380,8 +400,8 @@ export class CatPlayer extends Player {
             }
 
             if (bestMob) {
-              const ddx = bestMob.x + TILE_SIZE * CatPlayer.MOB_CENTER_OFFSET_X - m.x;
-              const ddy = bestMob.y + TILE_SIZE * CatPlayer.MISSILE_CENTER_OFFSET_2 - m.y;
+              const ddx = bestMob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.x;
+              const ddy = bestMob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.y;
               const targetAngle = Math.atan2(ddy, ddx);
               let diff = targetAngle - dirAngle;
               while (diff > Math.PI) diff -= Math.PI * 2;
@@ -424,7 +444,7 @@ export class CatPlayer extends Player {
 
     if (this.isActive) {
       const r = CatPlayer.ACTIVE_SPHERE_RADIUS;
-      const sphereCX = sx + s * CatPlayer.MISSILE_CENTER_OFFSET;
+      const sphereCX = sx + s * CatPlayer.TILE_CENTER_OFFSET;
       const sphereCY = sy - CatPlayer.ACTIVE_SPHERE_SPRITE_TOP - CatPlayer.ACTIVE_SPHERE_GAP - r;
       ctx.save();
       const highlightOffset = r * CatPlayer.SPHERE_HIGHLIGHT_OFFSET;
@@ -447,10 +467,14 @@ export class CatPlayer extends Player {
       ctx.restore();
     }
 
-    drawCatSprite(ctx, sx, sy, s, this.walkFrame, this.isMoving, this.facingY, this.facingX);
-    if (this.attackTimer > 0) {
-      drawCatClawSwipe(ctx, sx, sy, s, this.attackTimer, this.ATTACK_FRAMES, this.facingX);
-    }
+    drawCatSprite(ctx, sx, sy, s, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      isKnockedOut: this.isKnockedOut,
+      oneShot: this.animator.current,
+    });
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);

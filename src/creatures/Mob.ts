@@ -135,6 +135,9 @@ export interface LootDrop {
   goldDoubled?: boolean;
 }
 
+/** A mob drawn no larger than its own tile needs only a tile of slack. */
+const DEFAULT_CULL_MARGIN_TILES = 1;
+
 /**
  * Abstract base for all enemy mobs. Subclasses define their own AI, appearance,
  * and speed. `updateAI` is called every frame by the game loop.
@@ -142,6 +145,17 @@ export interface LootDrop {
 export abstract class Mob extends Player {
   protected speed: number;
   abstract readonly xpValue: number;
+
+  /**
+   * How far outside its own tile this mob's art reaches, in tiles — the render
+   * pipeline keeps it alive this far past the screen edge. Override in any mob
+   * drawn larger than its tile, or it pops in with part of it already on screen.
+   * An override must not exceed `MAX_MOB_CULL_MARGIN_TILES`, the width of the
+   * pipeline's own query.
+   */
+  get cullMarginTiles(): number {
+    return DEFAULT_CULL_MARGIN_TILES;
+  }
 
   /** The player this mob is currently chasing/attacking. Set each frame in updateAI. */
   currentTarget: Player | null = null;
@@ -233,6 +247,39 @@ export abstract class Mob extends Player {
 
   /** True for airborne mobs that pass over ground mobs without physical collision. */
   isFlying = false;
+
+  /**
+   * Opt-in for mobs that leave a body behind. Kill resolution normally drops a
+   * mob out of the spatial grid the frame it dies, which also stops it being
+   * drawn; setting this keeps it in the world so its corpse can play out.
+   *
+   * A mob that sets this **must** also override `tickCorpse` and
+   * `corpseExpired` — the defaults would leave the corpse expired from the
+   * outset, so it would silently never render. The corpse clock is driven by
+   * `resolveKills`, so this only works in scenes that call it every frame.
+   */
+  readonly rendersWhenDead: boolean = false;
+
+  /**
+   * Advances a corpse by one frame. Only called for `rendersWhenDead` mobs,
+   * which get no other updates once they are dead.
+   */
+  tickCorpse(): void {
+    // Corpse-less mobs have nothing to advance.
+  }
+
+  /** True once a corpse has finished and can be dropped from the world. */
+  get corpseExpired(): boolean {
+    return true;
+  }
+
+  /**
+   * Whether this mob still needs a slot in the spatial grid — living mobs
+   * always do, the dead only while a corpse is still on screen.
+   */
+  get belongsInMobGrid(): boolean {
+    return this.isAlive || (this.rendersWhenDead && !this.corpseExpired);
+  }
 
   /**
    * Physical mass used for separation weighting. Heavier mobs move less when bumped.

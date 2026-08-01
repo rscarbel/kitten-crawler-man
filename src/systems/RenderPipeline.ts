@@ -6,7 +6,7 @@
  * Usage: create once, call `renderAll(ctx, context)` each frame.
  */
 
-import { TILE_SIZE } from '../core/constants';
+import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
@@ -67,6 +67,19 @@ const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
  */
 const PROP_CULL_MARGIN_TILES = 4;
 const PROP_CULL_MARGIN = TILE_SIZE * PROP_CULL_MARGIN_TILES;
+
+/**
+ * Mobs are culled by the tile they stand on, but the big ones are drawn far
+ * outside it — Signet's ink summons reach nearly three tiles up and to either
+ * side. A one-tile margin popped those in at the screen edge with part of them
+ * still due on screen.
+ *
+ * The spatial query has to use the widest margin any mob could need, since a mob
+ * it never returns cannot ask for more; each mob is then re-tested against its
+ * own `cullMarginTiles` so an ordinary rat four tiles out is still dropped
+ * before it costs a sort entry and a draw.
+ */
+const MOB_QUERY_MARGIN = TILE_SIZE * MAX_MOB_CULL_MARGIN_TILES;
 
 /** Colour of the fully fogged area outside the falloff disc. */
 const FOG_SOLID_COLOR = 'rgba(0,0,0,1)';
@@ -213,10 +226,10 @@ export class RenderPipeline {
     } = rc;
 
     const visibleMobs = mobGrid.queryRect(
-      camX - TILE_SIZE,
-      camY - TILE_SIZE,
-      canvas.width + TILE_SIZE * 2,
-      canvas.height + TILE_SIZE * 2,
+      camX - MOB_QUERY_MARGIN,
+      camY - MOB_QUERY_MARGIN,
+      canvas.width + MOB_QUERY_MARGIN * 2,
+      canvas.height + MOB_QUERY_MARGIN * 2,
     );
 
     // Reset pool cursor (reuses existing objects)
@@ -262,6 +275,15 @@ export class RenderPipeline {
     }
 
     for (const mob of visibleMobs) {
+      const margin = TILE_SIZE * mob.cullMarginTiles;
+      if (
+        mob.x < camX - margin ||
+        mob.x > camX + canvas.width + margin ||
+        mob.y < camY - margin ||
+        mob.y > camY + canvas.height + margin
+      ) {
+        continue;
+      }
       const e = this._getEntry();
       e.sortY = mob.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_MOB;

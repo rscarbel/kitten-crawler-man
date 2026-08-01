@@ -115,7 +115,7 @@ const ELECTRIFIED_TICK_INTERVAL = 60;
 const SPIT_VENOM_TICK_INTERVAL = 40;
 
 /** Walk animation speed constant */
-const WALK_FRAME_SPEED = 0.14;
+export const WALK_FRAME_SPEED = 0.14;
 
 /** Potion effect constants */
 const SPEED_FIZZ_MULTIPLIER = 2;
@@ -264,6 +264,12 @@ export abstract class Player {
   damageFlash = 0;
   isMoving = false;
   walkFrame = 0;
+  /**
+   * Radians of walk cycle added per moving frame. Subclasses whose figure is
+   * drawn at a larger scale, or who move at a fraction of their top speed, can
+   * slow this so the stride matches the ground actually covered.
+   */
+  protected walkFrameSpeed = WALK_FRAME_SPEED;
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
   /** Feedback labels awaiting pickup by `FloatingCombatTextSystem`. */
@@ -959,7 +965,7 @@ export abstract class Player {
     if (this.damageFlash > 0) this.damageFlash--;
     this.potionCooldownFrames = this.tickCooldown(this.potionCooldownFrames);
     if (this.isMoving) {
-      this.walkFrame = (this.walkFrame + WALK_FRAME_SPEED) % (Math.PI * 2);
+      this.walkFrame = (this.walkFrame + this.walkFrameSpeed) % (Math.PI * 2);
     } else {
       this.walkFrame = 0;
     }

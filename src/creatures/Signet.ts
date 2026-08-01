@@ -1,7 +1,12 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
-import { drawSignetSprite, drawEliteMarker } from '../sprites/signetSprite';
+import {
+  drawSignetSprite,
+  drawEliteMarker,
+  SIGNET_OVERLAY_CLEARANCE,
+  SIGNET_CHEST_Y_OFFSET,
+} from '../sprites/signetSprite';
 import { InkMarauder } from './InkMarauder';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import {
@@ -10,7 +15,7 @@ import {
   renderSignetFireballs,
   type SignetFireball,
 } from './signetFireball';
-import { normalize } from '../utils';
+import { normalize, randomInt } from '../utils';
 
 const SIGNET_HP = 80;
 const SIGNET_SPEED = 1.6;
@@ -32,16 +37,45 @@ const ATTACK_COOLDOWN = 50;
 const ATTACK_ANIM_FRAMES = 14;
 /** She stops closing once this deep inside her cast range. */
 const CAST_STANDOFF_FRACTION = 0.75;
-/** Fireballs leave from roughly chest height rather than her feet. */
-const CAST_ORIGIN_Y_OFFSET = 0.35;
+/**
+ * The flight line starts at her tile centre — the tile above her may be solid,
+ * and the fireball's first walkability probe happens at the spawn point. The
+ * flame is merely *drawn* up at her chest and settles onto the line.
+ */
+const CAST_ORIGIN_Y_OFFSET = CENTER_OFFSET;
+const CAST_RENDER_RISE = CENTER_OFFSET - SIGNET_CHEST_Y_OFFSET;
 /** How far Signet will stray from her anchor point (her spawn tile) while fighting. */
 const LEASH_RADIUS_TILES = 14;
 
 /** Summoner ability — periodically conjures a short-lived spirit ally. */
 const SUMMON_COOLDOWN_FRAMES = 600; // 10s at 60fps
 const SUMMON_ANIM_FRAMES = 30;
-const SUMMON_SPAWN_OFFSET_TILES = 1;
+/** Her summons tower over a tile, so they have to land clear of her own figure. */
+const SUMMON_SPAWN_OFFSET_TILES = 2;
 const SUMMON_SPAWN_SEARCH_RADIUS_TILES = 3;
+
+/**
+ * Idle loitering — while she is only a lookout she shifts her weight and takes
+ * a step or two, but must stay on the spot the quest placed her: dialog range,
+ * the Mold Lion wave origin, and the elite marker all key off her position.
+ */
+const IDLE_WANDER_RADIUS_TILES = 1.25;
+const IDLE_WANDER_SPEED_FRACTION = 0.28;
+/** Most idle intervals are spent standing still, so she reads as loitering rather than pacing. */
+const IDLE_WANDER_PAUSE_CHANCE = 0.6;
+/** Frames between idle direction changes (~1–3 s at 60 fps). */
+const IDLE_WANDER_TIMER_MIN = 70;
+const IDLE_WANDER_TIMER_MAX = 190;
+const FULL_CIRCLE_RADIANS = Math.PI * 2;
+
+/**
+ * Gait — her figure is drawn at double scale and she spends most of her time
+ * shuffling at a fraction of her top speed, so a fixed per-frame walk cycle
+ * reads as frantic limb-flailing. Drive the cycle off ground actually covered.
+ */
+const GAIT_RADIANS_PER_PIXEL = 0.05;
+/** Ceiling so a separation shove or a repositioning jump can't snap the cycle forward. */
+const MAX_GAIT_RADIANS_PER_FRAME = 0.09;
 
 /**
  * Tsarina Signet — the half-naiad, half-high-elf Summoner who catches the
@@ -63,8 +97,17 @@ export class Signet extends Mob {
   allMobs: Mob[] = [];
   /** Frames between summons — shortened by the quest once the ritual is blood-fueled. */
   summonCooldownFrames = SUMMON_COOLDOWN_FRAMES;
+  /** Set each frame by CircusQuestSystem — she holds still while her dialog is open. */
+  isConversing = false;
 
   private readonly addMob: (mob: Mob) => void;
+  private idleAnchorX: number;
+  private idleAnchorY: number;
+  private gaitSampleX: number;
+  private gaitSampleY: number;
+  private idleWanderTimer = randomInt(0, IDLE_WANDER_TIMER_MAX);
+  private idleWanderDx = 0;
+  private idleWanderDy = 0;
   private attackCooldown = 0;
   private attackAnimTimer = 0;
   private summonCooldown = SUMMON_COOLDOWN_FRAMES;
@@ -75,10 +118,29 @@ export class Signet extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number, addMob: (mob: Mob) => void) {
     super(tileX, tileY, tileSize, SIGNET_HP, SIGNET_SPEED);
     this.addMob = addMob;
+    this.idleAnchorX = tileX * tileSize;
+    this.idleAnchorY = tileY * tileSize;
+    this.gaitSampleX = this.idleAnchorX;
+    this.gaitSampleY = this.idleAnchorY;
+  }
+
+  /**
+   * Re-pegs her loitering spot after the quest teleports her (she crosses the
+   * grounds to the Big Top door in one step); without this she would walk back
+   * toward the lookout tile she spawned on.
+   */
+  anchorIdleWanderToCurrentPosition(): void {
+    this.idleAnchorX = this.x;
+    this.idleAnchorY = this.y;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    this.idleWanderDx = 0;
+    this.idleWanderDy = 0;
   }
 
   override resetToSpawn(): void {
     super.resetToSpawn();
+    this.anchorIdleWanderToCurrentPosition();
     this.attackCooldown = 0;
     this.attackAnimTimer = 0;
     this.summonCooldown = this.summonCooldownFrames;
@@ -121,13 +183,26 @@ export class Signet extends Mob {
     this.healthBarTimer = SIGNET_HIT_HEALTHBAR_FRAMES;
   }
 
+  /**
+   * Measured over the previous frame so it also picks up the ground she lost
+   * to collision slides and separation pushes, not just her intended step.
+   */
+  private syncGaitToDistanceCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    this.walkFrameSpeed = Math.min(coveredPx * GAIT_RADIANS_PER_PIXEL, MAX_GAIT_RADIANS_PER_FRAME);
+  }
+
   updateAI(_targets: Player[]): void {
     if (!this.isAlive) return;
 
+    this.syncGaitToDistanceCovered();
+
     if (!this.allyModeActive) {
-      // Pre-ambush: a stationary lookout near the circus, watched by CircusQuestSystem's
+      // Pre-ambush: a lookout loitering near the circus, watched by CircusQuestSystem's
       // own proximity check rather than anything Signet does herself.
-      this.isMoving = false;
+      this.stepIdleWander();
       return;
     }
 
@@ -199,6 +274,7 @@ export class Signet extends Mob {
           originY,
           nearest.x + this.tileSize * CENTER_OFFSET,
           nearest.y + this.tileSize * CENTER_OFFSET,
+          this.tileSize * CAST_RENDER_RISE,
         ),
       );
       this.attackCooldown = ATTACK_COOLDOWN;
@@ -223,15 +299,79 @@ export class Signet extends Mob {
     }
   }
 
+  /**
+   * A tight loiter around her anchor: she idles most intervals, and any step
+   * that would carry her past `IDLE_WANDER_RADIUS_TILES` is turned back inward
+   * rather than continued, so she never drifts off her mark.
+   */
+  private stepIdleWander(): void {
+    if (this.isConversing) {
+      this.isMoving = false;
+      return;
+    }
+
+    if (this.idleWanderTimer > 0) {
+      this.idleWanderTimer--;
+    } else {
+      const stepSpeed = this.speed * IDLE_WANDER_SPEED_FRACTION;
+      if (Math.random() < IDLE_WANDER_PAUSE_CHANCE) {
+        this.idleWanderDx = 0;
+        this.idleWanderDy = 0;
+      } else {
+        const angle = Math.random() * FULL_CIRCLE_RADIANS;
+        this.idleWanderDx = Math.cos(angle) * stepSpeed;
+        this.idleWanderDy = Math.sin(angle) * stepSpeed;
+      }
+      this.idleWanderTimer = randomInt(IDLE_WANDER_TIMER_MIN, IDLE_WANDER_TIMER_MAX);
+    }
+
+    if (this.idleWanderDx === 0 && this.idleWanderDy === 0) {
+      this.isMoving = false;
+      return;
+    }
+
+    const toAnchorX = this.idleAnchorX - this.x;
+    const toAnchorY = this.idleAnchorY - this.y;
+    const distFromAnchor = Math.hypot(toAnchorX, toAnchorY);
+    const idleRadiusPx = this.tileSize * IDLE_WANDER_RADIUS_TILES;
+    if (distFromAnchor > idleRadiusPx) {
+      const back = normalize(toAnchorX, toAnchorY);
+      const stepSpeed = this.speed * IDLE_WANDER_SPEED_FRACTION;
+      this.idleWanderDx = back.x * stepSpeed;
+      this.idleWanderDy = back.y * stepSpeed;
+    }
+
+    const preMoveX = this.x;
+    const preMoveY = this.y;
+    this.moveWithCollision(this.idleWanderDx, this.idleWanderDy);
+
+    const movedX = this.x - preMoveX;
+    const movedY = this.y - preMoveY;
+    if (movedX === 0 && movedY === 0) {
+      // Walked into a wall — give up on this heading instead of grinding against it.
+      this.idleWanderDx = 0;
+      this.idleWanderDy = 0;
+      this.isMoving = false;
+      return;
+    }
+
+    const heading = normalize(movedX, movedY);
+    this.facingX = heading.x;
+    this.facingY = heading.y;
+    this.isMoving = true;
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    renderSignetFireballs(ctx, this.fireballs, camX, camY);
+    // The shared overlays anchor to the tile top, which lands on her chest at
+    // double scale — lift them clear of both her head and her elite marker.
+    const overlayY = sy - SIGNET_OVERLAY_CLEARANCE * tileSize;
 
     if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
+      this.renderAggroIndicator(ctx, sx, overlayY, tileSize);
     }
 
     ctx.save();
@@ -239,25 +379,36 @@ export class Signet extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    const summonAnim = this.summonAnimTimer > 0 ? 1 - this.summonAnimTimer / SUMMON_ANIM_FRAMES : 0;
+    // The last animated frame has to land on 1.0, or the gesture snaps back
+    // from partway through its arc every time the timer expires.
+    const summonProgress =
+      this.summonAnimTimer > 0
+        ? (SUMMON_ANIM_FRAMES - this.summonAnimTimer) / (SUMMON_ANIM_FRAMES - 1)
+        : 0;
+    const castProgress =
+      this.attackAnimTimer > 0
+        ? (ATTACK_ANIM_FRAMES - this.attackAnimTimer) / (ATTACK_ANIM_FRAMES - 1)
+        : 0;
 
-    drawSignetSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      summonAnim,
-      this.facingX,
-    );
+    drawSignetSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      summonProgress,
+      castProgress,
+      facingX: this.facingX,
+      // Screen y grows downward, so heading up-screen is heading away from the
+      // camera. Only when that dominates her horizontal facing.
+      facingAway: this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX),
+    });
 
-    if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
+
+    renderSignetFireballs(ctx, this.fireballs, camX, camY);
 
     drawEliteMarker(ctx, sx, sy, tileSize);
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, overlayY);
+    // The damage flash outlines her actual tile footprint, so it stays put.
     this.renderDamageFlash(ctx, sx, sy);
   }
 }

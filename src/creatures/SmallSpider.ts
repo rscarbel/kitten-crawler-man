@@ -1,5 +1,10 @@
 import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
+import {
+  drawSpiderSprite,
+  type SpiderAnimation,
+  type SpiderDeathStyle,
+} from '../sprites/spiderSprite';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
@@ -17,162 +22,119 @@ const ATTACK_RANGE_PX = TILE_SIZE * ATTACK_RANGE_TILES;
 const HIT_RANGE_PX = TILE_SIZE * HIT_RANGE_TILES;
 const ATTACK_DAMAGE = 4;
 
-const WINDUP_FRAMES = 25;
-const ATTACK_FRAMES = 22;
-const ATTACK_DAMAGE_FRAME = 8;
-const COOLDOWN_FRAMES = 80;
+const CROUCH_FRAMES = 22;
+const POUNCE_FRAMES = 20;
+const RECOVER_FRAMES = 80;
 
-/** Fraction of speed applied during cooldown retreat */
-const COOLDOWN_RETREAT_SPEED_FRACTION = 0.6;
-const COOLDOWN_WALK_SPEED = 0.2;
+/** Where in the pounce the spider slams back down — matches the sprite row. */
+const POUNCE_LANDING_PROGRESS = 0.62;
+/** Fraction of the flight spent accelerating off the ground. */
+const LEAP_LAUNCH_RAMP = 0.18;
+/** Peak leap speed as a multiple of the walking pace. */
+const LEAP_SPEED_MULTIPLIER = 2.3;
+const LEAP_PEAK_SPEED = SPIDER_SPEED * LEAP_SPEED_MULTIPLIER;
+
+/** Fraction of speed applied while backing off after a pounce. */
+const RECOVER_RETREAT_SPEED_FRACTION = 0.6;
+/** How far the spider backs away from its target before it settles. */
+const RETREAT_RANGE_TILES = 4;
+const RETREAT_RANGE_PX = TILE_SIZE * RETREAT_RANGE_TILES;
 
 /** Shell block XP for spider attack */
 const SHELL_BLOCK_XP = 2;
 
-/** Wander walk cycle speed */
-const WANDER_WALK_CYCLE_SPEED = 0.25;
-const ATTACK_APPROACH_WALK_SPEED = 0.35;
-
 /** Approach fraction of attack range */
 const APPROACH_STOP_FRACTION = 0.9;
 
-/** Lunge animation fractions */
-const LUNGE_DECEL_FACTOR = 2;
-const LUNGE_MIN_SPEED = 0.1;
-const ATTACKING_WALK_SPEED = 0.5;
+const TILE_CENTER_FRACTION = 0.5;
+const TAU = Math.PI * 2;
 
-/** Speed multiplier during the lunge phase. */
-const LUNGE_SPEED_MULTIPLIER = 3.5;
-const LUNGE_SPEED = SPIDER_SPEED * LUNGE_SPEED_MULTIPLIER;
+// Real spiders run in stop-start bursts rather than at a steady creep, so the
+// spider dashes for a stretch, freezes, then dashes again. The burst speed is
+// scaled up by the inverse of the duty cycle so the average pace still matches
+// SPIDER_SPEED and the encounter stays balanced.
+const SKITTER_BURST_FRAMES_MIN = 22;
+const SKITTER_BURST_FRAMES_MAX = 40;
+const SKITTER_PAUSE_FRAMES_MIN = 5;
+const SKITTER_PAUSE_FRAMES_MAX = 12;
+const SKITTER_BURST_SPEED_MULTIPLIER = 1.28;
 
-/** How far the spider backs away from its target during cooldown. */
-const RETREAT_RANGE_TILES = 4;
-const RETREAT_RANGE_PX = TILE_SIZE * RETREAT_RANGE_TILES;
+/** Ground distance covered by one full eight-legged gait cycle. */
+const STRIDE_TILES = 0.55;
+const STRIDE_PIXELS = TILE_SIZE * STRIDE_TILES;
+/** Frames one standing-still idle loop takes. */
+const IDLE_CYCLE_FRAMES = 90;
+const IDLE_CYCLE_SPEED = TAU / IDLE_CYCLE_FRAMES;
 
-// ── Render constants ─────────────────────────────────────────────────────────
+const DEATH_ANIM_FRAMES: Record<SpiderDeathStyle, number> = {
+  death_curl: 78,
+  death_spasm: 99,
+  death_flip: 69,
+};
 
-/** Fraction of tileSize for the spider body radius. */
-const SPIDER_BODY_RADIUS_FRACTION = 0.35;
-/** Fraction of tileSize for screen-space center offset. */
-const SPIDER_CENTER_FRACTION = 0.5;
+/** How long the body lies where it fell before it starts to fade away. */
+const CORPSE_LINGER_FRAMES = 900;
+const CORPSE_FADE_FRAMES = 180;
 
-// Leg Y anchors (fraction of r, front → back)
-const SPIDER_LEG_Y_FRONT = -0.48;
-const SPIDER_LEG_Y_MID_FRONT = -0.18;
-const SPIDER_LEG_Y_MID_BACK = 0.14;
-const SPIDER_LEG_Y_BACK = 0.42;
-/** Number of leg pairs per side. */
-const SPIDER_LEG_COUNT = 4;
+/** Odds a killing blow that leaves the body intact ends in a thrashing fit. */
+const SPASM_DEATH_CHANCE = 0.45;
 
-// Walk animation
-const SPIDER_WALK_BOB_AMP = 0.06;
-const SPIDER_WALK_LIFT_AMP = 0.18;
+type SpiderState = 'idle' | 'pursuing' | 'crouching' | 'pouncing' | 'recovering';
 
-// Leg windup coil amounts (fraction of r)
-const SPIDER_COIL_X = 0.25;
-const SPIDER_COIL_Y = 0.15;
+type DamageType = NonNullable<Parameters<Mob['takeDamageFrom']>[2]>;
 
-// Leg lunge splay amounts (fraction of r)
-const SPIDER_SPLAY_X = 0.6;
-const SPIDER_SPLAY_Y = 0.4;
+/** Blows that throw the body clear rather than dropping it where it stood. */
+const KNOCKBACK_DAMAGE_TYPES: ReadonlySet<DamageType> = new Set<DamageType>(['missile', 'smush']);
 
-// Leg segment X positions (fraction of r)
-const SPIDER_HIP_X = 0.4;
-const SPIDER_KNEE_X = 1.15;
-const SPIDER_FOOT_X = 1.65;
+function pickDeathStyle(damageType: DamageType): SpiderDeathStyle {
+  if (KNOCKBACK_DAMAGE_TYPES.has(damageType)) return 'death_flip';
+  return Math.random() < SPASM_DEATH_CHANCE ? 'death_spasm' : 'death_curl';
+}
 
-// Leg segment Y positions (fraction of r)
-const SPIDER_KNEE_Y_LIFT = 0.18;
-const SPIDER_FOOT_Y_DROP = 0.22;
+function randomFrames(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
 
-// Leg splay modifiers for knee/foot
-const SPIDER_KNEE_SPLAY_Y_FRACTION = 0.3;
-const SPIDER_FOOT_SPLAY_X_FRACTION = 1.3;
-const SPIDER_FOOT_SPLAY_Y_FRACTION = 0.8;
-const SPIDER_COIL_KNEE_X_FRACTION = 0.5;
-const SPIDER_COIL_FOOT_X_FRACTION = 0.3;
-const SPIDER_WALK_FOOT_Y_FRACTION = 0.4;
-
-// Leg line width fraction
-const SPIDER_LEG_LINE_WIDTH_FRACTION = 0.05;
-
-// Abdomen ellipse fractions
-const SPIDER_ABDOMEN_BASE_RX = 0.65;
-const SPIDER_ABDOMEN_LUNGE_RX_ADD = 0.1;
-const SPIDER_ABDOMEN_COIL_RX_SUB = 0.05;
-const SPIDER_ABDOMEN_BASE_RY = 0.85;
-const SPIDER_ABDOMEN_LUNGE_RY_SUB = 0.2;
-const SPIDER_ABDOMEN_COIL_RY_ADD = 0.1;
-const SPIDER_ABDOMEN_Y_OFFSET = 0.5;
-
-/** Number of abdomen stripe ellipses. */
-const SPIDER_ABDOMEN_STRIPE_COUNT = 3;
-const SPIDER_ABDOMEN_STRIPE_START_Y = 0.3;
-const SPIDER_ABDOMEN_STRIPE_SPACING = 0.25;
-const SPIDER_ABDOMEN_STRIPE_RX = 0.25;
-const SPIDER_ABDOMEN_STRIPE_RY = 0.1;
-
-// Cephalothorax fractions
-const SPIDER_CF_BASE_RX = 0.5;
-const SPIDER_CF_COIL_RX_SUB = 0.05;
-const SPIDER_CF_LUNGE_RX_ADD = 0.08;
-const SPIDER_CF_BASE_RY = 0.55;
-const SPIDER_CF_COIL_RY_SUB = 0.08;
-const SPIDER_CF_LUNGE_RY_ADD = 0.15;
-const SPIDER_CF_Y_OFFSET = -0.3;
-const SPIDER_CF_LUNGE_Y_OFFSET = 0.12;
-
-// Eye layout fractions (fraction of r, relative to cfY)
-const SPIDER_EYE_ROW1_X = 0.18;
-const SPIDER_EYE_ROW1_Y = -0.25;
-const SPIDER_EYE_ROW2_X = 0.1;
-const SPIDER_EYE_ROW2_Y = -0.15;
-const SPIDER_EYE_ROW3_X = 0.22;
-const SPIDER_EYE_ROW3_Y = -0.06;
-const SPIDER_EYE_ROW4_X = 0.08;
-const SPIDER_EYE_ROW4_Y = 0.04;
-const SPIDER_EYE_RADIUS_FRACTION = 0.055;
-/** Glow threshold: above this windup/lunge progress, eyes glow bright. */
-const SPIDER_EYE_GLOW_THRESHOLD = 0.4;
-const SPIDER_EYE_WINDUP_GLOW_THRESHOLD = 0.3;
-
-// Fang (chelicerae) fractions
-const SPIDER_FANG_OPEN_THRESHOLD = 0.2;
-const SPIDER_FANG_WINDUP_SCALE = 0.4;
-const SPIDER_FANG_Y_DROP = 0.18;
-const SPIDER_FANG_X_OFFSET = 0.11;
-const SPIDER_FANG_SPLAY_X = 0.08;
-const SPIDER_FANG_LUNGE_Y_ADD = 0.06;
-const SPIDER_FANG_BASE_RX = 0.07;
-const SPIDER_FANG_BASE_RY = 0.16;
-const SPIDER_CF_FANG_Y_FRACTION = 0.7;
-const SPIDER_FANG_TILT_BASE = 0.3;
-const SPIDER_FANG_TILT_SPLAY = 0.7;
-
-// Lunge settle speed: after this progress multiplier the lunge is done visually
-const SPIDER_LUNGE_SETTLE_SPEED = 1.8;
-
-type SpiderState = 'idle' | 'pursuing' | 'winding_up' | 'attacking' | 'cooldown';
+/**
+ * Speed profile across a leap: a short kick off the ground, then a decay to a
+ * dead stop at touchdown so the spider plants rather than skidding.
+ */
+function leapSpeedFactor(flightProgress: number): number {
+  if (flightProgress < LEAP_LAUNCH_RAMP) return flightProgress / LEAP_LAUNCH_RAMP;
+  const glide = (flightProgress - LEAP_LAUNCH_RAMP) / (1 - LEAP_LAUNCH_RAMP);
+  return 1 - glide * glide;
+}
 
 export class SmallSpider extends Mob {
   readonly xpValue = SPIDER_XP;
   protected override coinDropMin = 0;
   protected override coinDropMax = SPIDER_COIN_DROP_MAX;
   override displayName = 'Spider';
-  override description = 'A quick, venomous spider that lunges at its prey.';
+  override description = 'A quick, venomous spider that pounces on its prey.';
   override mass = 1;
 
   private state: SpiderState = 'idle';
-  private windupTimer = 0;
-  /** Counts down from ATTACK_FRAMES to 0. */
-  private attackTimer = 0;
-  private cooldownTimer = 0;
+  private crouchTimer = 0;
+  /** Counts down from POUNCE_FRAMES to 0. */
+  private pounceTimer = 0;
+  private recoverTimer = 0;
   private hasDealtDamage = false;
-  /** Pixel-space direction the lunge travels. */
-  private lungeTargetX = 0;
-  private lungeTargetY = 0;
-  /** Walk cycle accumulator for leg animation. */
-  private walkCycle = 0;
+  /** Pixel-space direction the leap travels, locked in as the crouch releases. */
+  private leapDirX = 0;
+  private leapDirY = 0;
+
+  /** Advanced by distance travelled, so the legs never skate over the ground. */
+  private gaitCycle = 0;
+  private idleCycle = 0;
+
+  private skitterTimer = 0;
+  private skitterPaused = false;
+
+  /** Spiders leave a body, so kill resolution keeps them in the world. */
+  override readonly rendersWhenDead = true;
+
+  private deathStyle: SpiderDeathStyle | null = null;
+  private corpseFrames = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
@@ -181,10 +143,34 @@ export class SmallSpider extends Mob {
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.state = 'idle';
-    this.windupTimer = 0;
-    this.attackTimer = 0;
-    this.cooldownTimer = 0;
+    this.crouchTimer = 0;
+    this.pounceTimer = 0;
+    this.recoverTimer = 0;
     this.hasDealtDamage = false;
+    this.skitterTimer = 0;
+    this.skitterPaused = false;
+    this.deathStyle = null;
+    this.corpseFrames = 0;
+  }
+
+  /**
+   * Dead spiders get no AI updates, so the corpse runs off its own frame count
+   * driven by kill resolution. Frames rather than wall-clock keeps the death
+   * from playing out behind a pause screen.
+   */
+  override tickCorpse(): void {
+    // Deaths that bypass takeDamageFrom still need a style to play.
+    this.deathStyle ??= pickDeathStyle('melee');
+    this.corpseFrames++;
+  }
+
+  override get corpseExpired(): boolean {
+    return !this.isAlive && this.corpseFrames >= this._corpseTotalFrames();
+  }
+
+  private _corpseTotalFrames(): number {
+    const style = this.deathStyle ?? 'death_curl';
+    return DEATH_ANIM_FRAMES[style] + CORPSE_LINGER_FRAMES + CORPSE_FADE_FRAMES;
   }
 
   /** Skittering is a discipline. Someone wrote it down. */
@@ -194,23 +180,27 @@ export class SmallSpider extends Mob {
     return items;
   }
 
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: DamageType = 'melee',
+  ) {
+    super.takeDamageFrom(amount, attacker, damageType);
+    if (this.justDied && this.deathStyle === null) {
+      this.deathStyle = pickDeathStyle(damageType);
+    }
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
-    // Find nearest living target with LOS within aggro range.
-    const aggroScanRange =
-      this.state !== 'idle' ? AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER : AGGRO_RANGE_PX;
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const d = Math.hypot(t.x - this.x, t.y - this.y);
-      if (d < aggroScanRange && d < nearestDist && this.hasLOS(t)) {
-        nearestDist = d;
-        nearest = t;
-      }
-    }
+    const startX = this.x;
+    const startY = this.y;
+
+    const nearest = this._findTarget(targets);
     this.currentTarget = nearest;
+    const nearestDist =
+      nearest === null ? Infinity : Math.hypot(nearest.x - this.x, nearest.y - this.y);
 
     switch (this.state) {
       case 'idle': {
@@ -218,14 +208,12 @@ export class SmallSpider extends Mob {
           this.state = 'pursuing';
         } else {
           this.doWander();
-          // Keep facing in sync with wander movement
           if (this.wanderDx !== 0 || this.wanderDy !== 0) {
-            const wd = Math.hypot(this.wanderDx, this.wanderDy);
-            this.facingX = this.wanderDx / wd;
-            this.facingY = this.wanderDy / wd;
+            const wanderDist = Math.hypot(this.wanderDx, this.wanderDy);
+            this.facingX = this.wanderDx / wanderDist;
+            this.facingY = this.wanderDy / wanderDist;
           }
         }
-        if (this.isMoving) this.walkCycle += WANDER_WALK_CYCLE_SPEED;
         break;
       }
 
@@ -237,110 +225,144 @@ export class SmallSpider extends Mob {
         this.updateLastKnown(nearest);
 
         if (nearestDist <= ATTACK_RANGE_PX) {
-          // Lock in lunge direction, enter windup.
-          this.state = 'winding_up';
-          this.windupTimer = WINDUP_FRAMES;
+          this.state = 'crouching';
+          this.crouchTimer = CROUCH_FRAMES;
           this.isMoving = false;
           this._faceToward(nearest);
-          this.lungeTargetX = this.facingX;
-          this.lungeTargetY = this.facingY;
         } else {
-          this.followTargetCollide(
-            nearest.x,
-            nearest.y,
-            this.speed,
-            ATTACK_RANGE_PX * APPROACH_STOP_FRACTION,
-          );
-          this.walkCycle += ATTACK_APPROACH_WALK_SPEED;
+          this._tickSkitter();
+          this._faceToward(nearest);
+          if (this.skitterPaused) {
+            this.isMoving = false;
+          } else {
+            this.followTargetCollide(
+              nearest.x,
+              nearest.y,
+              this.speed * SKITTER_BURST_SPEED_MULTIPLIER,
+              ATTACK_RANGE_PX * APPROACH_STOP_FRACTION,
+            );
+          }
         }
         break;
       }
 
-      case 'winding_up': {
+      case 'crouching': {
         this.isMoving = false;
         if (nearest) this._faceToward(nearest);
-        this.windupTimer--;
-        if (this.windupTimer <= 0) {
-          // Snapshot lunge direction at the moment of release
-          this.lungeTargetX = this.facingX;
-          this.lungeTargetY = this.facingY;
-          this.state = 'attacking';
-          this.attackTimer = ATTACK_FRAMES;
+        this.crouchTimer--;
+        if (this.crouchTimer <= 0) {
+          // The leap commits to wherever the spider was aimed at release.
+          this.leapDirX = this.facingX;
+          this.leapDirY = this.facingY;
+          this.state = 'pouncing';
+          this.pounceTimer = POUNCE_FRAMES;
           this.hasDealtDamage = false;
         }
         break;
       }
 
-      case 'attacking': {
-        // Lunge forward for the first half of the attack, then slide to a stop.
-        const lungeProgress = 1 - this.attackTimer / ATTACK_FRAMES;
-        const lungeSpeed = LUNGE_SPEED * Math.max(0, 1 - lungeProgress * LUNGE_DECEL_FACTOR);
-        if (lungeSpeed > LUNGE_MIN_SPEED) {
-          this.moveWithCollision(this.lungeTargetX * lungeSpeed, this.lungeTargetY * lungeSpeed);
+      case 'pouncing': {
+        const progress = 1 - this.pounceTimer / POUNCE_FRAMES;
+
+        if (progress < POUNCE_LANDING_PROGRESS) {
+          const speed = LEAP_PEAK_SPEED * leapSpeedFactor(progress / POUNCE_LANDING_PROGRESS);
+          this.moveWithCollision(this.leapDirX * speed, this.leapDirY * speed);
           this.isMoving = true;
-          this.walkCycle += ATTACKING_WALK_SPEED;
         } else {
           this.isMoving = false;
-        }
-
-        this.attackTimer--;
-
-        // Deal damage at the designated frame.
-        if (!this.hasDealtDamage && this.attackTimer === ATTACK_FRAMES - ATTACK_DAMAGE_FRAME) {
-          this.hasDealtDamage = true;
-          for (const t of targets) {
-            if (!t.isAlive) continue;
-            if (Math.hypot(t.x - this.x, t.y - this.y) > HIT_RANGE_PX) continue;
-            if (
-              this.spells?.isPointInsideShell(
-                t.x + TILE_SIZE * SPIDER_CENTER_FRACTION,
-                t.y + TILE_SIZE * SPIDER_CENTER_FRACTION,
-              )
-            ) {
-              this.spells.addBlockXp(SHELL_BLOCK_XP);
-              continue;
-            }
-            this.dealDamage(t, ATTACK_DAMAGE);
+          if (!this.hasDealtDamage) {
+            this.hasDealtDamage = true;
+            this._strikeOnLanding(targets);
           }
         }
 
-        if (this.attackTimer <= 0) {
-          this.state = 'cooldown';
-          this.cooldownTimer = COOLDOWN_FRAMES;
+        this.pounceTimer--;
+        if (this.pounceTimer <= 0) {
+          this.state = 'recovering';
+          this.recoverTimer = RECOVER_FRAMES;
         }
         break;
       }
 
-      case 'cooldown': {
-        // Move away from the nearest player during cooldown.
-        if (nearest) {
-          const dx = this.x - nearest.x;
-          const dy = this.y - nearest.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist < RETREAT_RANGE_PX && dist > 0) {
-            const nx = dx / dist;
-            const ny = dy / dist;
-            this.facingX = nx;
-            this.facingY = ny;
-            this.moveWithCollision(
-              nx * this.speed * COOLDOWN_RETREAT_SPEED_FRACTION,
-              ny * this.speed * COOLDOWN_RETREAT_SPEED_FRACTION,
-            );
-            this.isMoving = true;
-            this.walkCycle += COOLDOWN_WALK_SPEED;
-          } else {
-            this.isMoving = false;
-          }
+      case 'recovering': {
+        // Back off out of reach before winding up for another pounce.
+        if (nearest && nearestDist < RETREAT_RANGE_PX && nearestDist > 0) {
+          const awayX = (this.x - nearest.x) / nearestDist;
+          const awayY = (this.y - nearest.y) / nearestDist;
+          this.facingX = awayX;
+          this.facingY = awayY;
+          this.moveWithCollision(
+            awayX * this.speed * RECOVER_RETREAT_SPEED_FRACTION,
+            awayY * this.speed * RECOVER_RETREAT_SPEED_FRACTION,
+          );
+          this.isMoving = true;
         } else {
           this.isMoving = false;
         }
 
-        this.cooldownTimer--;
-        if (this.cooldownTimer <= 0) {
+        this.recoverTimer--;
+        if (this.recoverTimer <= 0) {
           this.state = nearest ? 'pursuing' : 'idle';
         }
         break;
       }
+    }
+
+    this._advanceGait(startX, startY);
+  }
+
+  private _findTarget(targets: Player[]): Player | null {
+    // An already-alerted spider keeps hunting further than it first noticed you.
+    const scanRange =
+      this.state === 'idle' ? AGGRO_RANGE_PX : AGGRO_RANGE_PX * AGGRO_PERSIST_MULTIPLIER;
+    let nearest: Player | null = null;
+    let nearestDist = Infinity;
+    for (const target of targets) {
+      if (!target.isAlive) continue;
+      const dist = Math.hypot(target.x - this.x, target.y - this.y);
+      if (dist < scanRange && dist < nearestDist && this.hasLOS(target)) {
+        nearestDist = dist;
+        nearest = target;
+      }
+    }
+    return nearest;
+  }
+
+  private _strikeOnLanding(targets: Player[]): void {
+    for (const target of targets) {
+      if (!target.isAlive) continue;
+      if (Math.hypot(target.x - this.x, target.y - this.y) > HIT_RANGE_PX) continue;
+      if (
+        this.spells?.isPointInsideShell(
+          target.x + TILE_SIZE * TILE_CENTER_FRACTION,
+          target.y + TILE_SIZE * TILE_CENTER_FRACTION,
+        )
+      ) {
+        this.spells.addBlockXp(SHELL_BLOCK_XP);
+        continue;
+      }
+      this.dealDamage(target, ATTACK_DAMAGE);
+    }
+  }
+
+  private _tickSkitter(): void {
+    if (this.skitterTimer > 0) {
+      this.skitterTimer--;
+      return;
+    }
+    this.skitterPaused = !this.skitterPaused;
+    this.skitterTimer = this.skitterPaused
+      ? randomFrames(SKITTER_PAUSE_FRAMES_MIN, SKITTER_PAUSE_FRAMES_MAX)
+      : randomFrames(SKITTER_BURST_FRAMES_MIN, SKITTER_BURST_FRAMES_MAX);
+  }
+
+  /** Ties the leg animation to ground covered so the gait cannot slide. */
+  private _advanceGait(startX: number, startY: number): void {
+    const moved = Math.hypot(this.x - startX, this.y - startY);
+    if (moved > 0) {
+      this.gaitCycle += (moved / STRIDE_PIXELS) * TAU;
+    } else {
+      this.idleCycle += IDLE_CYCLE_SPEED;
     }
   }
 
@@ -348,196 +370,64 @@ export class SmallSpider extends Mob {
     const dx = target.x - this.x;
     const dy = target.y - this.y;
     if (dx !== 0 || dy !== 0) {
-      const d = Math.hypot(dx, dy);
-      this.facingX = dx / d;
-      this.facingY = dy / d;
+      const dist = Math.hypot(dx, dy);
+      this.facingX = dx / dist;
+      this.facingY = dy / dist;
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    if (!this.isAlive) return;
+  private _animation(): SpiderAnimation {
+    switch (this.state) {
+      case 'crouching':
+        return { kind: 'crouch', progress: 1 - this.crouchTimer / CROUCH_FRAMES };
+      case 'pouncing':
+        return { kind: 'pounce', progress: 1 - this.pounceTimer / POUNCE_FRAMES };
+      case 'idle':
+      case 'pursuing':
+      case 'recovering':
+        return this.isMoving
+          ? { kind: 'walk', cycle: this.gaitCycle }
+          : { kind: 'idle', cycle: this.idleCycle };
+    }
+  }
 
+  private _deathAnimation(style: SpiderDeathStyle): SpiderAnimation {
+    const progress = Math.min(1, this.corpseFrames / DEATH_ANIM_FRAMES[style]);
+    return { kind: 'dying', style, progress };
+  }
+
+  /** Corpses hold their final frame, then fade out rather than piling up. */
+  private _corpseAlpha(style: SpiderDeathStyle): number {
+    const fadeStart = DEATH_ANIM_FRAMES[style] + CORPSE_LINGER_FRAMES;
+    if (this.corpseFrames <= fadeStart) return 1;
+    return Math.max(0, 1 - (this.corpseFrames - fadeStart) / CORPSE_FADE_FRAMES);
+  }
+
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
-    const cx = sx + tileSize * SPIDER_CENTER_FRACTION;
-    const cy = sy + tileSize * SPIDER_CENTER_FRACTION;
-    const r = tileSize * SPIDER_BODY_RADIUS_FRACTION;
 
-    ctx.save();
-    if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
-
-    // Natural orientation faces south (+Y), so atan2 + π/2 aligns it.
-    const angle = Math.atan2(this.facingY, this.facingX) + Math.PI / 2;
-    ctx.translate(cx, cy);
-    ctx.rotate(angle);
-
-    // ── Animation state values ───────────────────────────────────────────────
-    const isWindingUp = this.state === 'winding_up';
-    const isAttacking = this.state === 'attacking';
-    const windupProgress = isWindingUp ? 1 - this.windupTimer / WINDUP_FRAMES : 0;
-    const lungeProgress = isAttacking ? 1 - this.attackTimer / ATTACK_FRAMES : 0;
-    const lungeFlare = isAttacking ? Math.max(0, 1 - lungeProgress * SPIDER_LUNGE_SETTLE_SPEED) : 0;
-
-    const walkBob =
-      this.isMoving && !isAttacking ? Math.sin(this.walkCycle * 2) * r * SPIDER_WALK_BOB_AMP : 0;
-
-    // ── Legs ────────────────────────────────────────────────────────────────
-    ctx.strokeStyle = '#2a1a0a';
-    ctx.lineWidth = Math.max(1, tileSize * SPIDER_LEG_LINE_WIDTH_FRACTION);
-    ctx.lineCap = 'round';
-
-    const legYBase = [
-      r * SPIDER_LEG_Y_FRONT,
-      r * SPIDER_LEG_Y_MID_FRONT,
-      r * SPIDER_LEG_Y_MID_BACK,
-      r * SPIDER_LEG_Y_BACK,
-    ] as const;
-    const legPhaseOffsets = [0, Math.PI, Math.PI, 0] as const;
-
-    for (const side of [-1, 1] as const) {
-      for (let i = 0; i < SPIDER_LEG_COUNT; i++) {
-        const baseY = legYBase[i] + walkBob;
-        const walkLift = this.isMoving
-          ? Math.sin(this.walkCycle + legPhaseOffsets[i]) * r * SPIDER_WALK_LIFT_AMP
-          : 0;
-
-        const coilX = windupProgress * r * SPIDER_COIL_X;
-        const coilY = windupProgress * r * SPIDER_COIL_Y;
-        const splayX = lungeFlare * r * SPIDER_SPLAY_X;
-        const splayY = lungeFlare * r * SPIDER_SPLAY_Y;
-
-        const hipX = side * (r * SPIDER_HIP_X - coilX);
-        const hipY = baseY + coilY;
-
-        const kneeX = side * (r * SPIDER_KNEE_X + splayX - coilX * SPIDER_COIL_KNEE_X_FRACTION);
-        const kneeY =
-          baseY - r * SPIDER_KNEE_Y_LIFT - walkLift - splayY * SPIDER_KNEE_SPLAY_Y_FRACTION;
-
-        const footX =
-          side *
-          (r * SPIDER_FOOT_X +
-            splayX * SPIDER_FOOT_SPLAY_X_FRACTION -
-            coilX * SPIDER_COIL_FOOT_X_FRACTION);
-        const footY =
-          baseY +
-          r * SPIDER_FOOT_Y_DROP +
-          walkLift * SPIDER_WALK_FOOT_Y_FRACTION +
-          splayY * SPIDER_FOOT_SPLAY_Y_FRACTION;
-
-        ctx.beginPath();
-        ctx.moveTo(hipX, hipY);
-        ctx.lineTo(kneeX, kneeY);
-        ctx.lineTo(footX, footY);
-        ctx.stroke();
-      }
-    }
-
-    // ── Abdomen (rear, larger oval) ──────────────────────────────────────────
-    const abRx =
-      r *
-      (SPIDER_ABDOMEN_BASE_RX +
-        lungeFlare * SPIDER_ABDOMEN_LUNGE_RX_ADD -
-        windupProgress * SPIDER_ABDOMEN_COIL_RX_SUB);
-    const abRy =
-      r *
-      (SPIDER_ABDOMEN_BASE_RY -
-        lungeFlare * SPIDER_ABDOMEN_LUNGE_RY_SUB +
-        windupProgress * SPIDER_ABDOMEN_COIL_RY_ADD);
-    ctx.fillStyle = '#1a0d04';
-    ctx.beginPath();
-    ctx.ellipse(0, r * SPIDER_ABDOMEN_Y_OFFSET + walkBob, abRx, abRy, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#3d1f0a';
-    for (let i = 0; i < SPIDER_ABDOMEN_STRIPE_COUNT; i++) {
-      ctx.beginPath();
-      ctx.ellipse(
-        0,
-        r * SPIDER_ABDOMEN_STRIPE_START_Y + i * r * SPIDER_ABDOMEN_STRIPE_SPACING + walkBob,
-        r * SPIDER_ABDOMEN_STRIPE_RX,
-        r * SPIDER_ABDOMEN_STRIPE_RY,
-        0,
-        0,
-        Math.PI * 2,
+    if (!this.isAlive) {
+      // Once the animation ends the corpse holds its last frame — curled on its
+      // back, where it fell. Style is null only before the first corpse tick.
+      const style = this.deathStyle;
+      if (style === null) return;
+      drawSpiderSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.facingX,
+        this.facingY,
+        this._deathAnimation(style),
+        this._corpseAlpha(style),
       );
-      ctx.fill();
+      return;
     }
 
-    // ── Cephalothorax (front, smaller oval) ──────────────────────────────────
-    const cfRx =
-      r *
-      (SPIDER_CF_BASE_RX -
-        windupProgress * SPIDER_CF_COIL_RX_SUB +
-        lungeFlare * SPIDER_CF_LUNGE_RX_ADD);
-    const cfRy =
-      r *
-      (SPIDER_CF_BASE_RY -
-        windupProgress * SPIDER_CF_COIL_RY_SUB +
-        lungeFlare * SPIDER_CF_LUNGE_RY_ADD);
-    const cfY = r * SPIDER_CF_Y_OFFSET - lungeFlare * r * SPIDER_CF_LUNGE_Y_OFFSET + walkBob;
-    ctx.fillStyle = '#2a1206';
-    ctx.beginPath();
-    ctx.ellipse(0, cfY, cfRx, cfRy, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // ── Eyes — 8 red dots in 2 staggered rows ────────────────────────────────
-    const eyeGlow = windupProgress > SPIDER_EYE_WINDUP_GLOW_THRESHOLD ? windupProgress : lungeFlare;
-    ctx.fillStyle = eyeGlow > SPIDER_EYE_GLOW_THRESHOLD ? '#ff4400' : '#cc2200';
-    const eyeOffsets: Array<{ x: number; y: number }> = [
-      { x: -r * SPIDER_EYE_ROW1_X, y: cfY + r * SPIDER_EYE_ROW1_Y },
-      { x: r * SPIDER_EYE_ROW1_X, y: cfY + r * SPIDER_EYE_ROW1_Y },
-      { x: -r * SPIDER_EYE_ROW2_X, y: cfY + r * SPIDER_EYE_ROW2_Y },
-      { x: r * SPIDER_EYE_ROW2_X, y: cfY + r * SPIDER_EYE_ROW2_Y },
-      { x: -r * SPIDER_EYE_ROW3_X, y: cfY + r * SPIDER_EYE_ROW3_Y },
-      { x: r * SPIDER_EYE_ROW3_X, y: cfY + r * SPIDER_EYE_ROW3_Y },
-      { x: -r * SPIDER_EYE_ROW4_X, y: cfY + r * SPIDER_EYE_ROW4_Y },
-      { x: r * SPIDER_EYE_ROW4_X, y: cfY + r * SPIDER_EYE_ROW4_Y },
-    ];
-    if (eyeGlow > SPIDER_EYE_GLOW_THRESHOLD) {
-      ctx.save();
-      ctx.shadowColor = '#ff4400';
-      ctx.shadowBlur = 6;
-    }
-    for (const eye of eyeOffsets) {
-      ctx.beginPath();
-      ctx.arc(eye.x, eye.y, r * SPIDER_EYE_RADIUS_FRACTION, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (eyeGlow > SPIDER_EYE_GLOW_THRESHOLD) ctx.restore();
-
-    // ── Chelicerae / fangs ────────────────────────────────────────────────────
-    const fangOpen =
-      lungeFlare > SPIDER_FANG_OPEN_THRESHOLD
-        ? lungeFlare
-        : windupProgress * SPIDER_FANG_WINDUP_SCALE;
-    const fangY = cfY - cfRy * SPIDER_CF_FANG_Y_FRACTION - fangOpen * r * SPIDER_FANG_Y_DROP;
-    ctx.fillStyle = '#8b0000';
-    ctx.beginPath();
-    ctx.ellipse(
-      -r * SPIDER_FANG_X_OFFSET - fangOpen * r * SPIDER_FANG_SPLAY_X,
-      fangY,
-      r * SPIDER_FANG_BASE_RX,
-      r * SPIDER_FANG_BASE_RY + fangOpen * r * SPIDER_FANG_LUNGE_Y_ADD,
-      -SPIDER_FANG_TILT_BASE + fangOpen * SPIDER_FANG_TILT_SPLAY,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(
-      r * SPIDER_FANG_X_OFFSET + fangOpen * r * SPIDER_FANG_SPLAY_X,
-      fangY,
-      r * SPIDER_FANG_BASE_RX,
-      r * SPIDER_FANG_BASE_RY + fangOpen * r * SPIDER_FANG_LUNGE_Y_ADD,
-      SPIDER_FANG_TILT_BASE - fangOpen * SPIDER_FANG_TILT_SPLAY,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    if (this.damageFlash > 0) ctx.filter = 'none';
-    ctx.restore();
+    drawSpiderSprite(ctx, sx, sy, tileSize, this.facingX, this.facingY, this._animation());
 
     this.renderMobHealthBar(ctx, sx, sy);
+    this.renderDamageFlash(ctx, sx, sy);
   }
 }

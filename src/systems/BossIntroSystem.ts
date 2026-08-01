@@ -94,7 +94,7 @@ const CAT_SPRITE_X_FRACTION = 0.52;
 /** Cat sprite y offset in versus panel. */
 const CAT_SPRITE_Y_OFFSET = 66;
 /** Cat sprite size. */
-const CAT_SPRITE_SIZE = 60;
+const CAT_SPRITE_SIZE = 90;
 /** Versus countdown: frames from end when fight label fades in. */
 const FIGHT_LABEL_BEFORE_END = 90;
 /** Glow blur for "GET READY!" text. */
@@ -288,9 +288,6 @@ export class BossIntroSystem implements GameSystem {
         leftX + panelW * CAT_SPRITE_X_FRACTION,
         panelY + CAT_SPRITE_Y_OFFSET,
         CAT_SPRITE_SIZE,
-        0,
-        false,
-        0,
       );
       ctx.restore();
 

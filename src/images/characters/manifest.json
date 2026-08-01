@@ -1,35 +1,80 @@
 {
   "cat": {
     "path": "characters/cat.png",
-    "frameWidth": 96,
-    "frameHeight": 96,
-    "tileX": 16,
-    "tileY": 8,
+    "frameWidth": 160,
+    "frameHeight": 160,
+    "tileX": 48,
+    "tileY": 48,
     "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "walk_side": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 8
       },
       "walk_away": {
         "row": 2,
         "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "look_around": {
+        "row": 6,
+        "frameCount": 12
+      },
+      "groom_paw": {
+        "row": 7,
+        "frameCount": 12
+      },
+      "groom_flank": {
+        "row": 8,
+        "frameCount": 12
+      },
+      "swipe": {
+        "row": 9,
+        "frameCount": 8
+      },
+      "swipe_side": {
+        "row": 10,
+        "frameCount": 8
+      },
+      "swipe_away": {
+        "row": 11,
+        "frameCount": 8
+      },
+      "cast": {
+        "row": 12,
+        "frameCount": 8
+      },
+      "cast_side": {
+        "row": 13,
+        "frameCount": 8
+      },
+      "cast_away": {
+        "row": 14,
+        "frameCount": 8
+      },
+      "knocked_out": {
+        "row": 15,
+        "frameCount": 8
+      },
+      "dance": {
+        "row": 16,
+        "frameCount": 12
       }
-    }
-  },
-  "cat_claw": {
-    "path": "characters/cat_claw.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 16,
-    "tileY": 16,
-    "tileScale": 64,
-    "states": {
-      "swipe": { "row": 0, "frameCount": 8 }
     }
   },
   "human": {
@@ -40,17 +85,53 @@
     "tileY": 130,
     "tileScale": 128,
     "states": {
-      "idle": { "row": 0, "frameCount": 1 },
-      "idle_away": { "row": 0, "colOffset": 1, "frameCount": 1 },
-      "walk_side": { "row": 0, "colOffset": 2, "frameCount": 3 },
-      "walk": { "row": 1, "frameCount": 4 },
-      "walk_away": { "row": 1, "colOffset": 4, "frameCount": 4 },
-      "punch_side": { "row": 2, "frameCount": 8 },
-      "punch_up": { "row": 3, "frameCount": 5 },
-      "kick_down": { "row": 4, "frameCount": 8 },
-      "kick_side": { "row": 5, "frameCount": 4 },
-      "smush": { "row": 6, "frameCount": 8 },
-      "smush_end": { "row": 7, "frameCount": 3 }
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "idle_away": {
+        "row": 0,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "walk_side": {
+        "row": 0,
+        "colOffset": 2,
+        "frameCount": 3
+      },
+      "walk": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "walk_away": {
+        "row": 1,
+        "colOffset": 4,
+        "frameCount": 4
+      },
+      "punch_side": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "punch_up": {
+        "row": 3,
+        "frameCount": 5
+      },
+      "kick_down": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "kick_side": {
+        "row": 5,
+        "frameCount": 4
+      },
+      "smush": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "smush_end": {
+        "row": 7,
+        "frameCount": 3
+      }
     }
   }
 }

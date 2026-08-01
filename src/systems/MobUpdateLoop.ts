@@ -88,9 +88,11 @@ export class MobUpdateLoop implements GameSystem {
     mobGrid.queryCircle(cat.x, cat.y, AI_RADIUS, activeMobs);
 
     // Mobs that require evasion (e.g. GrotesqueSpider) always run AI — they roam
-    // the full map and must tick even when far off-screen.
+    // the full map and must tick even when far off-screen. Same for a mob under
+    // forceAggro: a scripted encounter that ignores aggro range would otherwise
+    // freeze the moment the player outran the activation radius.
     for (const mob of mobs) {
-      if (mob.isAlive && mob.requiresEvasion && !activeMobs.has(mob)) {
+      if (mob.isAlive && (mob.requiresEvasion || mob.forceAggro) && !activeMobs.has(mob)) {
         activeMobs.add(mob);
       }
     }

@@ -21,11 +21,13 @@ import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
 import { QuestManager } from '../core/QuestManager';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import { Signet } from '../creatures/Signet';
+import { SIGNET_OVERLAY_CLEARANCE } from '../sprites/signetSprite';
 import { CircusLemur } from '../creatures/CircusLemur';
 import { StiltClown } from '../creatures/StiltClown';
 import { FatClown } from '../creatures/FatClown';
@@ -55,6 +57,12 @@ const QUEST_ID = 'the_show_must_go_on';
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
+/**
+ * Wave spawns stay this far inside the circus boundary. The outermost ring of
+ * the grounds abuts the wilderness, where forest can leave a walkable tile
+ * fenced in by trees — an enemy there is unreachable and the wave never ends.
+ */
+const ARENA_SPAWN_EDGE_INSET_TILES = 1;
 /** Signet's lookout position — just inside the circus edge, opposite the town road. */
 const SIGNET_ANCHOR_INSET_TILES = 3;
 /** How close the player must be to Signet to talk. */
@@ -206,12 +214,6 @@ export class CircusQuestSystem implements GameSystem {
       this.mongoSystem.cooldownFrames = MONGO_KIDNAP_LOCK_FRAMES;
     }
 
-    // A rebuild happens wherever the player currently stands — town after a
-    // death, or a doorstep after a building visit — so scripted spawns anchor
-    // to the circus instead of the player, who would otherwise be ambushed by
-    // the whole encounter the instant the scene loads.
-    const rebuildOrigin = this.circusCentre ?? this.originFromPlayer(active);
-
     switch (this.progress.stage) {
       case 'not_started':
         this.phase = 'awaiting_intro';
@@ -222,7 +224,7 @@ export class CircusQuestSystem implements GameSystem {
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
         this.startBattleMusic();
-        this.spawnWave(RITUAL_WAVES, 0, rebuildOrigin);
+        this.spawnWave(RITUAL_WAVES, 0, this.ritualWaveOrigin());
         break;
       case 'heather_hunt':
         this.spawnSignetAtLookout();
@@ -231,14 +233,17 @@ export class CircusQuestSystem implements GameSystem {
           this.phase = 'awaiting_heather_return';
         } else {
           this.phase = 'heather_hunt';
-          this.spawnHeather(rebuildOrigin);
+          // A rebuild happens wherever the player currently stands — town after
+          // a death, or a doorstep after a building visit — so Heather anchors
+          // to the circus rather than ambushing the player on scene load.
+          this.spawnHeather(this.circusCentre ?? this.originFromPlayer(active));
         }
         break;
       case 'assault':
         this.phase = 'assault';
         this.spawnSignetAtLookout();
         this.questManager.startQuest(QUEST_ID);
-        this.beginAssaultCombat(rebuildOrigin);
+        this.beginAssaultCombat();
         break;
       case 'bigtop_ready':
         this.phase = 'bigtop_ready';
@@ -258,6 +263,68 @@ export class CircusQuestSystem implements GameSystem {
 
   private findSpawnTile(tileX: number, tileY: number): { x: number; y: number } | null {
     return findNearbyWalkableTile(this.gameMap, tileX, tileY, SPAWN_SEARCH_RADIUS_TILES);
+  }
+
+  private get arenaSpawnRadiusTiles(): number {
+    return Math.max(0, this.circusRadiusTiles - ARENA_SPAWN_EDGE_INSET_TILES);
+  }
+
+  private isInsideArena(tileX: number, tileY: number): boolean {
+    const centre = this.circusCentre;
+    if (!centre) return true;
+    return Math.hypot(tileX - centre.x, tileY - centre.y) <= this.arenaSpawnRadiusTiles;
+  }
+
+  /** Pulls a tile back onto the circus grounds, along the line to the centre. */
+  private clampTileToArena(tileX: number, tileY: number): { x: number; y: number } {
+    const centre = this.circusCentre;
+    if (!centre) return { x: tileX, y: tileY };
+    const maxRadiusTiles = this.arenaSpawnRadiusTiles;
+    const dx = tileX - centre.x;
+    const dy = tileY - centre.y;
+    const distTiles = Math.hypot(dx, dy);
+    if (distTiles <= maxRadiusTiles) return { x: tileX, y: tileY };
+    const pullBack = maxRadiusTiles / distTiles;
+    return {
+      x: Math.round(centre.x + dx * pullBack),
+      y: Math.round(centre.y + dy * pullBack),
+    };
+  }
+
+  /**
+   * Spawn tile for a battle mob: always on the circus grounds, so a wave can
+   * never materialise in the surrounding forest where the player cannot reach
+   * it (and where the fight would leave the arena entirely).
+   *
+   * Falls back to the arena centre, and then to an unconstrained search,
+   * because a wave mob that fails to spawn is worse than one standing in an
+   * imperfect spot: an empty wave reads as "cleared" and skips the encounter
+   * — which for the last assault wave would silently skip Terror the Clown.
+   */
+  private findArenaSpawnTile(tileX: number, tileY: number): { x: number; y: number } | null {
+    const preferred = this.clampTileToArena(tileX, tileY);
+    const onGrounds = findNearbyWalkableTile(
+      this.gameMap,
+      preferred.x,
+      preferred.y,
+      SPAWN_SEARCH_RADIUS_TILES,
+      (x, y) => this.isInsideArena(x, y),
+    );
+    if (onGrounds) return onGrounds;
+
+    const centre = this.circusCentre;
+    if (centre) {
+      const atCentre = findNearbyWalkableTile(
+        this.gameMap,
+        centre.x,
+        centre.y,
+        SPAWN_SEARCH_RADIUS_TILES,
+        (x, y) => this.isInsideArena(x, y),
+      );
+      if (atCentre) return atCentre;
+    }
+
+    return this.findSpawnTile(preferred.x, preferred.y);
   }
 
   private originFromPlayer(active: Player): { x: number; y: number } {
@@ -322,12 +389,42 @@ export class CircusQuestSystem implements GameSystem {
     this.waveMobs = [];
     const wave = waves[index];
     for (const { dx, dy, make } of wave) {
-      const tile = this.findSpawnTile(origin.x + dx, origin.y + dy);
+      const tile = this.findArenaSpawnTile(origin.x + dx, origin.y + dy);
       if (!tile) continue;
       const mob = make(tile.x, tile.y);
       mob.setMap(this.gameMap);
+      mob.forceAggro = true;
       this.addMob(mob);
       this.waveMobs.push(mob);
+    }
+  }
+
+  /** Mold lions come out of the circus toward Signet's casting. */
+  private ritualWaveOrigin(): { x: number; y: number } {
+    return this.signetTile();
+  }
+
+  /** The assault fills the whole grounds, so its offsets read from the centre. */
+  private assaultWaveOrigin(): { x: number; y: number } {
+    return this.circusCentre ?? this.signetTile();
+  }
+
+  /**
+   * Holds the wave to the encounter every frame:
+   *
+   * - `forceAggro` is re-asserted because a safe-room checkpoint restore runs
+   *   `resetToSpawn()` on the survivors, which clears it — a revived wave must
+   *   still hunt the player rather than mill about the arena.
+   * - The mobs are held on the grounds because forced aggro would otherwise
+   *   march them after a fleeing player into the forest belt. Once past
+   *   `MOB_MAX_PATH_DISTANCE_TILES` no route can be found at all, so a mob
+   *   stranded out there never returns and the wave never clears.
+   */
+  private keepWaveMobsEngaged(mobGrid: SpatialGrid<Mob>): void {
+    for (const mob of this.waveMobs) {
+      if (!mob.isAlive) continue;
+      mob.forceAggro = true;
+      this.holdMobOnGrounds(mob, mobGrid);
     }
   }
 
@@ -398,7 +495,7 @@ export class CircusQuestSystem implements GameSystem {
   private openDialogForCurrentPhase(active: Player): boolean {
     switch (this.phase) {
       case 'awaiting_intro':
-        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense(active));
+        this.dialog.open(INTRO_DIALOG, () => this.startRitualDefense());
         return true;
       case 'awaiting_ritual_failed':
         this.dialog.open(buildRitualFailedDialog((this.mongoSystem?.mongo ?? null) !== null), () =>
@@ -406,7 +503,7 @@ export class CircusQuestSystem implements GameSystem {
         );
         return true;
       case 'awaiting_heather_return':
-        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault(active));
+        this.dialog.open(HEATHER_RETURN_DIALOG, () => this.startAssault());
         return true;
       case 'bigtop_ready':
         this.dialog.open(BIGTOP_READY_DIALOG, () => undefined);
@@ -448,13 +545,13 @@ export class CircusQuestSystem implements GameSystem {
 
   // ── Phase transitions ─────────────────────────────────────────────────────
 
-  private startRitualDefense(active: Player): void {
+  private startRitualDefense(): void {
     this.phase = 'ritual_defense';
     this.progress.stage = 'ritual_defense';
     this.questManager.startQuest(QUEST_ID);
     this.bus.emit('questStarted', { questId: QUEST_ID });
     this.startBattleMusic();
-    this.spawnWave(RITUAL_WAVES, 0, this.originFromPlayer(active));
+    this.spawnWave(RITUAL_WAVES, 0, this.ritualWaveOrigin());
   }
 
   private startHeatherHunt(active: Player): void {
@@ -471,20 +568,20 @@ export class CircusQuestSystem implements GameSystem {
     this.spawnHeather(this.originFromPlayer(active));
   }
 
-  private startAssault(active: Player): void {
+  private startAssault(): void {
     this.phase = 'assault';
     this.progress.stage = 'assault';
-    this.beginAssaultCombat(this.originFromPlayer(active));
+    this.beginAssaultCombat();
   }
 
   /** Shared by startAssault and mid-assault scene re-entry. */
-  private beginAssaultCombat(origin: { x: number; y: number }): void {
+  private beginAssaultCombat(): void {
     if (this.signet) {
       this.signet.allyModeActive = true;
       this.signet.summonCooldownFrames = BLOOD_FUELED_SUMMON_FRAMES;
     }
     this.startBattleMusic();
-    this.spawnWave(ASSAULT_WAVES, 0, origin);
+    this.spawnWave(ASSAULT_WAVES, 0, this.assaultWaveOrigin());
   }
 
   private finishQuest(active: Player): void {
@@ -510,9 +607,14 @@ export class CircusQuestSystem implements GameSystem {
     this.lastCtx = ctx;
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
-    this.signet?.tickTimers();
 
-    if (this.signet) this.signet.allMobs = ctx.mobs;
+    // Signet is in `ctx.mobs`, so MobUpdateLoop already ticks her timers every
+    // frame she is near enough to matter — ticking her here as well ran her
+    // walk cycle and damage flash at double rate.
+    if (this.signet) {
+      this.signet.allMobs = ctx.mobs;
+      this.signet.isConversing = this.dialog.isOpen;
+    }
 
     switch (this.phase) {
       case 'ritual_defense':
@@ -524,7 +626,7 @@ export class CircusQuestSystem implements GameSystem {
       case 'assault':
         this.clampToCircus(ctx.human);
         this.clampToCircus(ctx.cat);
-        this.updateAssault(ctx.active);
+        this.updateAssault(ctx);
         break;
       case 'awaiting_intro':
       case 'awaiting_ritual_failed':
@@ -537,10 +639,11 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private updateRitualDefense(ctx: SystemContext): void {
+    this.keepWaveMobsEngaged(ctx.mobGrid);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     if (this.waveIndex + 1 < RITUAL_WAVES.length) {
-      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.originFromPlayer(ctx.active));
+      this.spawnWave(RITUAL_WAVES, this.waveIndex + 1, this.ritualWaveOrigin());
       return;
     }
 
@@ -572,12 +675,13 @@ export class CircusQuestSystem implements GameSystem {
     }
   }
 
-  private updateAssault(active: Player): void {
+  private updateAssault(ctx: SystemContext): void {
+    this.keepWaveMobsEngaged(ctx.mobGrid);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     this.bus.emit('objectiveComplete', { objectiveId: 'circus_sideshow_cleared' });
     if (this.waveIndex + 1 < ASSAULT_WAVES.length) {
-      this.spawnWave(ASSAULT_WAVES, this.waveIndex + 1, this.originFromPlayer(active));
+      this.spawnWave(ASSAULT_WAVES, this.waveIndex + 1, this.assaultWaveOrigin());
       return;
     }
 
@@ -587,10 +691,10 @@ export class CircusQuestSystem implements GameSystem {
     this.bannerText = 'THE BIG TOP AWAITS';
     this.bannerTimer = QUEST_BANNER_FRAMES;
     // Signet moves ahead to wait by the Big Top door.
-    this.repositionSignetToBigTopDoor();
+    this.repositionSignetToBigTopDoor(ctx.mobGrid);
   }
 
-  private repositionSignetToBigTopDoor(): void {
+  private repositionSignetToBigTopDoor(mobGrid: SpatialGrid<Mob>): void {
     const door = this.bigTopDoorTile;
     const signet = this.signet;
     if (!door || !signet) return;
@@ -599,23 +703,74 @@ export class CircusQuestSystem implements GameSystem {
       door.y + SIGNET_DOOR_OFFSET_TILES,
     );
     if (!tile) return;
+    // She crosses the grounds in one step, so her grid cell has to be rewritten
+    // by hand — nothing else moves her afterwards to resync it.
+    const preMoveX = signet.x;
+    const preMoveY = signet.y;
     signet.x = tile.x * TILE_SIZE;
     signet.y = tile.y * TILE_SIZE;
+    mobGrid.move(signet, preMoveX, preMoveY);
+    signet.anchorIdleWanderToCurrentPosition();
     signet.allyModeActive = false;
   }
 
-  private clampToCircus(entity: Player): void {
-    if (!this.circusCentre) return;
-    const cx = this.circusCentre.x * TILE_SIZE;
-    const cy = this.circusCentre.y * TILE_SIZE;
-    const maxDist = this.circusRadiusTiles * TILE_SIZE;
-    const dx = entity.x - cx;
-    const dy = entity.y - cy;
+  /**
+   * The point on the circus boundary that `(x, y)` maps to, or null when it is
+   * already on the grounds. Pixel coords, unlike `clampTileToArena`.
+   */
+  private boundaryPosition(
+    x: number,
+    y: number,
+    maxRadiusTiles: number,
+  ): { x: number; y: number } | null {
+    const centre = this.circusCentre;
+    if (!centre) return null;
+    const centreX = centre.x * TILE_SIZE;
+    const centreY = centre.y * TILE_SIZE;
+    const maxDistPx = maxRadiusTiles * TILE_SIZE;
+    const dx = x - centreX;
+    const dy = y - centreY;
     const dist = Math.hypot(dx, dy);
-    if (dist <= maxDist || dist === 0) return;
-    const scale = maxDist / dist;
-    entity.x = cx + dx * scale;
-    entity.y = cy + dy * scale;
+    if (dist <= maxDistPx || dist === 0) return null;
+    const pullBack = maxDistPx / dist;
+    return { x: centreX + dx * pullBack, y: centreY + dy * pullBack };
+  }
+
+  private clampToCircus(entity: Player): void {
+    const clamped = this.boundaryPosition(entity.x, entity.y, this.circusRadiusTiles);
+    if (!clamped) return;
+    entity.x = clamped.x;
+    entity.y = clamped.y;
+  }
+
+  /**
+   * Keeps a wave mob on the grounds. Unlike a player, a mob shoved onto a tent
+   * or a wall tile has no input to free itself, so a boundary point that is not
+   * walkable falls back to the nearest walkable arena tile.
+   */
+  private holdMobOnGrounds(mob: Mob, mobGrid: SpatialGrid<Mob>): void {
+    const clamped = this.boundaryPosition(mob.x, mob.y, this.arenaSpawnRadiusTiles);
+    if (!clamped) return;
+
+    const tileX = Math.round(clamped.x / TILE_SIZE);
+    const tileY = Math.round(clamped.y / TILE_SIZE);
+    let destinationX = clamped.x;
+    let destinationY = clamped.y;
+    if (!this.gameMap.isWalkable(tileX, tileY)) {
+      const openTile = this.findArenaSpawnTile(tileX, tileY);
+      if (!openTile) return;
+      destinationX = openTile.x * TILE_SIZE;
+      destinationY = openTile.y * TILE_SIZE;
+    }
+
+    // Reindex at the point of the move: MobUpdateLoop reads the mob's position
+    // *after* this system runs, so its own mobGrid.move would delete from the
+    // post-move cell and strand a phantom entry in the pre-move one.
+    const preMoveX = mob.x;
+    const preMoveY = mob.y;
+    mob.x = destinationX;
+    mob.y = destinationY;
+    mobGrid.move(mob, preMoveX, preMoveY);
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -626,7 +781,10 @@ export class CircusQuestSystem implements GameSystem {
     if (!this.hasPendingDialog()) return;
     const dist = Math.hypot(this.signet.x - active.x, this.signet.y - active.y);
     if (dist > TILE_SIZE * INTERACT_RANGE_TILES) return;
-    drawInteractionPrompt(ctx, this.signet.x - camX, this.signet.y - camY, TILE_SIZE, 'Talk');
+    // Signet is drawn at double tile scale, so her tile top is her chest — the
+    // prompt has to be lifted clear of her head and her elite marker.
+    const promptY = this.signet.y - camY - SIGNET_OVERLAY_CLEARANCE * TILE_SIZE;
+    drawInteractionPrompt(ctx, this.signet.x - camX, promptY, TILE_SIZE, 'Talk');
   }
 
   renderUI(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {

@@ -30,6 +30,12 @@ const UNLOCK_LINES: Record<SkillId, string> = {
 const COCKROACH_RECHARGED_LINE = 'Cockroach is back online';
 
 /**
+ * Effect blurbs are written as prose sentences for the skills panel, so they end
+ * in a period the one-line level-up toast reads better without.
+ */
+const TRAILING_PERIOD = /\.$/;
+
+/**
  * Drains everything a `Player` queues for the scene to voice or broadcast: skill
  * events, migration notices, and dodges.
  *
@@ -104,13 +110,16 @@ export class SystemNoticeSystem implements GameSystem {
         return;
       case 'leveled':
         this.bus.emit('skillLevelUp', { player: who, skillId: event.id, newLevel: event.level });
-        this.announcer.announce(
-          `${def.name} is now level ${event.level}. ${def.describeEffect(event.level)}.`,
+        this.toast.show(
+          `${def.name} Lv ${event.level} — ${def.describeEffect(event.level)}`.replace(
+            TRAILING_PERIOD,
+            '',
+          ),
         );
         return;
       case 'triggered':
         this.bus.emit('skillTriggered', { player: who, skillId: event.id });
-        this.announcer.announce(TRIGGER_LINES[event.id]);
+        this.toast.show(TRIGGER_LINES[event.id]);
         return;
       default: {
         const unhandled: never = event.kind;
@@ -120,10 +129,13 @@ export class SystemNoticeSystem implements GameSystem {
   }
 }
 
-/** Copy for a skill firing in the moment. Only skills with a dramatic proc need one. */
+/**
+ * Copy for a skill firing in the moment. Only skills with a dramatic proc need
+ * one. Kept to a single short line: these ride the hotbar toast, which fires
+ * mid-fight and does not wrap.
+ */
 const TRIGGER_LINES: Record<SkillId, string> = {
-  cockroach:
-    'Fatal damage detected. Cockroach engaged. Your subscriber numbers just spiked. Congratulations on the near-death experience.',
+  cockroach: 'Cockroach engaged — fatal damage survived',
   cat_reflexes: 'Cat-like Reflexes engaged.',
   pugilism: 'Pugilism engaged.',
   iron_stomach: 'Iron Stomach engaged.',

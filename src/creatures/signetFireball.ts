@@ -18,6 +18,14 @@ export interface SignetFireball {
   /** True once the fireball has struck something and is playing its burst. */
   exploding: boolean;
   explodeTick: number;
+  /**
+   * Pixels the flame is drawn *above* its collision position. A caster taller
+   * than one tile throws from well above the tile she stands on, but the very
+   * first walkability probe happens at the spawn point — so the flight line
+   * stays in her own tile and only the drawing is lifted. Decays to zero over
+   * the opening frames, reading as the flame settling out of her hands.
+   */
+  renderRise: number;
 }
 
 const FIREBALL_SPEED = 4.2;
@@ -37,11 +45,15 @@ const TRAIL_SPACING_PX = 4;
 const TRAIL_SHRINK_PER_STEP = 0.22;
 const TRAIL_ALPHA_PER_STEP = 0.26;
 
+/** Frames the launch rise takes to settle onto the flight line. */
+const LAUNCH_SETTLE_FRAMES = 8;
+
 export function fireSignetFireball(
   fromX: number,
   fromY: number,
   toX: number,
   toY: number,
+  renderRise = 0,
 ): SignetFireball {
   const n = normalize(toX - fromX, toY - fromY);
   return {
@@ -52,6 +64,7 @@ export function fireSignetFireball(
     age: 0,
     exploding: false,
     explodeTick: 0,
+    renderRise,
   };
 }
 
@@ -82,11 +95,16 @@ export function advanceSignetFireballs(
       if (!map.isWalkable(tileX, tileY)) {
         fireball.exploding = true;
         fireball.explodeTick = EXPLODE_TICKS;
+        fireball.renderRise = 0;
         continue;
       }
     }
     fireball.x = nextX;
     fireball.y = nextY;
+    if (fireball.renderRise > 0) {
+      const settleStep = fireball.renderRise / Math.max(1, LAUNCH_SETTLE_FRAMES - fireball.age);
+      fireball.renderRise = Math.max(0, fireball.renderRise - settleStep);
+    }
 
     const hitRadius = FIREBALL_RADIUS + tileSize * MOB_CENTER_RADIUS_RATIO;
     for (const target of targets) {
@@ -97,6 +115,7 @@ export function advanceSignetFireballs(
         onHit(target);
         fireball.exploding = true;
         fireball.explodeTick = EXPLODE_TICKS;
+        fireball.renderRise = 0;
         break;
       }
     }
@@ -104,7 +123,11 @@ export function advanceSignetFireballs(
   return fireballs.filter((f) => !f.exploding || f.explodeTick > 0);
 }
 
-/** Renders every fireball in screen space (call before the caster's own sprite). */
+/**
+ * Renders every fireball in screen space. Draw *after* the caster: the flame
+ * leaves her hands well above her own tile, so drawing it first hides the
+ * launch behind her body.
+ */
 export function renderSignetFireballs(
   ctx: CanvasRenderingContext2D,
   fireballs: SignetFireball[],
@@ -113,7 +136,7 @@ export function renderSignetFireballs(
 ): void {
   for (const fireball of fireballs) {
     const fx = fireball.x - camX;
-    const fy = fireball.y - camY;
+    const fy = fireball.y - fireball.renderRise - camY;
 
     if (fireball.exploding) {
       const progress = 1 - fireball.explodeTick / EXPLODE_TICKS;

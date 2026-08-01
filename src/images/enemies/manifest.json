@@ -265,6 +265,134 @@
       }
     }
   },
+  "spider": {
+    "path": "enemies/spider.png",
+    "frameWidth": 192,
+    "frameHeight": 192,
+    "tileX": 96,
+    "tileY": 96,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "crouch": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "pounce": {
+        "row": 3,
+        "frameCount": 10
+      },
+      "death_curl": {
+        "row": 4,
+        "frameCount": 12
+      },
+      "death_spasm": {
+        "row": 5,
+        "frameCount": 12
+      },
+      "death_flip": {
+        "row": 6,
+        "frameCount": 12
+      }
+    }
+  },
+  "fat_clown": {
+    "path": "enemies/fat_clown.png",
+    "frameWidth": 192,
+    "frameHeight": 160,
+    "tileX": 64,
+    "tileY": 76,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "slam": {
+        "row": 2,
+        "frameCount": 10
+      }
+    }
+  },
+  "stilt_clown": {
+    "path": "enemies/stilt_clown.png",
+    "frameWidth": 224,
+    "frameHeight": 224,
+    "tileX": 80,
+    "tileY": 140,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "windup": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "lunge": {
+        "row": 3,
+        "frameCount": 8
+      }
+    }
+  },
+  "terror_clown": {
+    "path": "enemies/terror_clown.png",
+    "frameWidth": 256,
+    "frameHeight": 240,
+    "tileX": 96,
+    "tileY": 150,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "windup": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "swing": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "walk_enraged": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_enraged": {
+        "row": 5,
+        "frameCount": 6
+      },
+      "windup_enraged": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "swing_enraged": {
+        "row": 7,
+        "frameCount": 8
+      }
+    }
+  },
   "brindled_vespa": {
     "path": "enemies/brindled_vespa.png",
     "frameWidth": 128,

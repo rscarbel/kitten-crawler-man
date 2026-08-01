@@ -108,7 +108,7 @@ export class MoldLion extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
+      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
         nearestDist = dist;
         nearest = t;
       }

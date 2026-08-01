@@ -1,7 +1,10 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import { drawTerrorTheClownSprite } from '../sprites/terrorTheClownSprite';
-import { scaleHumanoidBox } from '../sprites/humanoidScale';
+import {
+  drawTerrorTheClownSprite,
+  type TerrorTheClownAnimation,
+  IDLE_LOOP_SECONDS,
+} from '../sprites/terrorTheClownSprite';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const TERROR_HP = 60;
@@ -23,6 +26,11 @@ const COIN_DROP_MIN = 3;
 const COIN_DROP_MAX = 6;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.75;
+/**
+ * The sheet's tile sits 150px down a 240px frame at a 64px tile scale, and the
+ * raised mallet fills that headroom.
+ */
+const CULL_MARGIN_TILES = 3;
 
 /**
  * Terror the Clown — Grimaldi's largest and most feared performer, a
@@ -37,8 +45,21 @@ export class TerrorTheClown extends Mob {
   override readonly audioTag = 'clown';
   isEnraged = false;
 
+  override get cullMarginTiles(): number {
+    return CULL_MARGIN_TILES;
+  }
+
+  /** Staggers this clown's idle loop so a pack of them does not move as one. */
+  private readonly idlePhaseOffsetSeconds = Math.random() * IDLE_LOOP_SECONDS;
+
   private attackCooldown = 0;
   private windupTimer = 0;
+  /**
+   * Length of the windup currently running. Enrage shortens the windup, and if
+   * Terror crosses the threshold mid-telegraph, dividing by the *new* length
+   * would send the animation's progress backwards.
+   */
+  private windupDuration = WINDUP_FRAMES;
   private swingTimer = 0;
   private isAggro = false;
 
@@ -51,6 +72,7 @@ export class TerrorTheClown extends Mob {
     this.isEnraged = false;
     this.attackCooldown = 0;
     this.windupTimer = 0;
+    this.windupDuration = WINDUP_FRAMES;
     this.swingTimer = 0;
     this.isAggro = false;
   }
@@ -73,7 +95,7 @@ export class TerrorTheClown extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
+      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
         nearestDist = dist;
         nearest = t;
       }
@@ -107,9 +129,6 @@ export class TerrorTheClown extends Mob {
     }
 
     const inRange = nearestDist <= attackRangePx;
-    const windupFrames = this.isEnraged
-      ? Math.round(WINDUP_FRAMES * ENRAGE_WINDUP_MULTIPLIER)
-      : WINDUP_FRAMES;
 
     if (
       inRange &&
@@ -118,7 +137,8 @@ export class TerrorTheClown extends Mob {
       this.swingTimer === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      this.windupTimer = windupFrames;
+      this.windupDuration = this.windupFrames();
+      this.windupTimer = this.windupDuration;
       this.attackCooldown = this.isEnraged
         ? Math.round(ATTACK_COOLDOWN * ENRAGE_COOLDOWN_MULTIPLIER)
         : ATTACK_COOLDOWN;
@@ -137,6 +157,22 @@ export class TerrorTheClown extends Mob {
     }
   }
 
+  /** Windup shortens once enraged, so the telegraph has to be measured against it. */
+  private windupFrames(): number {
+    return this.isEnraged ? Math.round(WINDUP_FRAMES * ENRAGE_WINDUP_MULTIPLIER) : WINDUP_FRAMES;
+  }
+
+  private animation(): TerrorTheClownAnimation {
+    if (this.windupTimer > 0) {
+      return { kind: 'windup', progress: 1 - this.windupTimer / this.windupDuration };
+    }
+    if (this.swingTimer > 0) {
+      return { kind: 'swing', progress: 1 - this.swingTimer / SWING_FRAMES };
+    }
+    if (this.isMoving) return { kind: 'walk', cycle: this.walkFrame };
+    return { kind: 'idle', phaseOffsetSeconds: this.idlePhaseOffsetSeconds };
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
@@ -151,25 +187,7 @@ export class TerrorTheClown extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    const windupFrames = this.isEnraged
-      ? Math.round(WINDUP_FRAMES * ENRAGE_WINDUP_MULTIPLIER)
-      : WINDUP_FRAMES;
-    const windupProgress = this.windupTimer > 0 ? 1 - this.windupTimer / windupFrames : 0;
-    const swingProgress = this.swingTimer > 0 ? 1 - this.swingTimer / SWING_FRAMES : 0;
-
-    const box = scaleHumanoidBox(sx, sy, tileSize);
-    drawTerrorTheClownSprite(
-      ctx,
-      box.sx,
-      box.sy,
-      box.s,
-      this.walkFrame,
-      this.isMoving,
-      windupProgress,
-      swingProgress,
-      this.facingX,
-      this.isEnraged,
-    );
+    drawTerrorTheClownSprite(ctx, sx, sy, tileSize, this.facingX, this.animation(), this.isEnraged);
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

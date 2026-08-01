@@ -9,14 +9,22 @@ import type { GameMap } from './GameMap';
  * centre); those offsets can land inside tent/building footprints depending on
  * procedural generation, so every scripted spawn must be validated through
  * this helper.
+ *
+ * `isAcceptable` narrows the search further for callers that own a region as
+ * well as a point — an arena encounter must not nudge a blocked spawn out past
+ * its own boundary and into the wilderness.
  */
 export function findNearbyWalkableTile(
   map: GameMap,
   tileX: number,
   tileY: number,
   maxRadiusTiles: number,
+  isAcceptable?: (x: number, y: number) => boolean,
 ): { x: number; y: number } | null {
-  if (map.isWalkable(tileX, tileY)) return { x: tileX, y: tileY };
+  const isUsable = (x: number, y: number): boolean =>
+    map.isWalkable(x, y) && (isAcceptable === undefined || isAcceptable(x, y));
+
+  if (isUsable(tileX, tileY)) return { x: tileX, y: tileY };
 
   for (let radius = 1; radius <= maxRadiusTiles; radius++) {
     for (let dy = -radius; dy <= radius; dy++) {
@@ -25,7 +33,7 @@ export function findNearbyWalkableTile(
         if (!onRing) continue;
         const x = tileX + dx;
         const y = tileY + dy;
-        if (map.isWalkable(x, y)) return { x, y };
+        if (isUsable(x, y)) return { x, y };
       }
     }
   }

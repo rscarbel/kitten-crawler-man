@@ -2406,8 +2406,13 @@ export class DungeonScene extends GameplayScene {
         mob.clearCombatStateForCheckpoint();
       }
     }
+    // Rebuilt from the mobs that still belong in it: the dead are never spliced
+    // out of this.mobs, and reinstating them would resurrect every corpse the
+    // party has left behind since the floor loaded.
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
-    for (const mob of this.mobs) this.mobGrid.insert(mob);
+    for (const mob of this.mobs) {
+      if (mob.belongsInMobGrid) this.mobGrid.insert(mob);
+    }
 
     this.spells.resetForCheckpoint();
     this.dynamite.resetForCheckpoint();

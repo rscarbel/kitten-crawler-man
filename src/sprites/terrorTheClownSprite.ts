@@ -1,188 +1,96 @@
-/** Body proportions (fractions of tile size) — bigger and broader than the rank-and-file clowns. */
-const TERROR_BODY_RX = 0.3;
-const TERROR_BODY_RY = 0.34;
-const TERROR_BODY_Y_OFFSET = 0.08;
-const TERROR_HEAD_R = 0.18;
-const TERROR_HEAD_Y_OFFSET = -0.32;
-
-/** Wild hair tufts. */
-const TERROR_HAIR_TUFT_COUNT = 7;
-const TERROR_HAIR_R = 0.05;
-const TERROR_HAIR_SPAN = 0.16;
-const TERROR_HAIR_Y_OFFSET = -0.44;
-
-/** Face. */
-const TERROR_NOSE_R = 0.05;
-const TERROR_NOSE_Y_OFFSET = 0.01;
-const TERROR_EYE_R = 0.035;
-const TERROR_EYE_X_OFFSET = 0.07;
-const TERROR_EYE_Y_OFFSET = -0.03;
-const TERROR_EYE_GLOW_RADIUS = 6;
-const TERROR_GRIN_RX = 0.09;
-const TERROR_GRIN_RY = 0.05;
-const TERROR_GRIN_Y_OFFSET = 0.08;
-
-/** Oversized mallet. */
-const MALLET_HANDLE_LENGTH = 0.34;
-const MALLET_HANDLE_WIDTH = 0.045;
-const MALLET_HEAD_W = 0.16;
-const MALLET_HEAD_H = 0.1;
-const MALLET_Y_OFFSET = -0.1;
-const MALLET_WINDUP_ANGLE = -1.4;
-const MALLET_SWING_ANGLE = 1.6;
-
-/** Legs. */
-const TERROR_LEG_WIDTH = 0.09;
-const TERROR_LEG_HEIGHT = 0.2;
-const TERROR_LEG_X_OFFSET = 0.14;
-const TERROR_LEG_Y_OFFSET = 0.3;
-const TERROR_LEG_SWING_AMP = 0.06;
+import {
+  drawSpriteKey,
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/SpriteRenderer';
+import type { SpriteStates } from '../core/SpriteLoader';
 
 /**
- * Draw Terror the Clown — Grimaldi's largest and most feared performer, a
- * hulking mini-boss guarding the big top with an oversized mallet.
+ * Terror the Clown sprite — Grimaldi's mallet-swinging mini-boss, drawn facing
+ * right and mirrored for the other heading.
  *
- * @param windupProgress 0–1 progress through the mallet windup telegraph.
- * @param swingProgress 0–1 progress through the mallet swing itself.
- * @param enraged true once Terror drops below half health — brighter, faster tell.
+ * Enrage is a second set of rows rather than a runtime tint: it repaints the
+ * suit, the mane and the eye glow together, which no single filter would do.
+ *
+ * Sheet is produced by `npx tsx scripts/generate-clown-sprites.ts`; review it
+ * with `npx tsx scripts/render-clowns.ts --clown=terror`.
  */
+
+const WALK_FRAME_COUNT = 8;
+const IDLE_FRAME_COUNT = 6;
+const WINDUP_FRAME_COUNT = 8;
+const SWING_FRAME_COUNT = 8;
+
+/** Terror's idle heave is heavier and slower than the rank-and-file clowns'. */
+const IDLE_FPS = 5;
+const MS_PER_SECOND = 1000;
+
+/**
+ * Length of one idle loop. Terror offsets the shared clock by up to this much,
+ * which matters where he shares a tent with other clowns.
+ */
+export const IDLE_LOOP_SECONDS = IDLE_FRAME_COUNT / IDLE_FPS;
+
+/**
+ * What Terror is doing this frame. `cycle` is the walk angle in radians (a full
+ * stride loop is 2π); `progress` runs 0→1 across a one-shot attack beat.
+ */
+export type TerrorTheClownAnimation =
+  | { readonly kind: 'idle'; readonly phaseOffsetSeconds: number }
+  | { readonly kind: 'walk'; readonly cycle: number }
+  | { readonly kind: 'windup'; readonly progress: number }
+  | { readonly kind: 'swing'; readonly progress: number };
+
+type TerrorState = SpriteStates['terror_clown'];
+
+function stateFor(kind: TerrorTheClownAnimation['kind'], enraged: boolean): TerrorState {
+  switch (kind) {
+    case 'idle':
+      return enraged ? 'idle_enraged' : 'idle';
+    case 'walk':
+      return enraged ? 'walk_enraged' : 'walk';
+    case 'windup':
+      return enraged ? 'windup_enraged' : 'windup';
+    case 'swing':
+      return enraged ? 'swing_enraged' : 'swing';
+  }
+}
+
+function frameFor(animation: TerrorTheClownAnimation): number {
+  switch (animation.kind) {
+    case 'idle':
+      return timeFrameIndex(
+        performance.now() / MS_PER_SECOND + animation.phaseOffsetSeconds,
+        IDLE_FPS,
+        IDLE_FRAME_COUNT,
+      );
+    case 'walk':
+      return walkFrameIndex(animation.cycle, WALK_FRAME_COUNT);
+    case 'windup':
+      return progressFrameIndex(animation.progress, WINDUP_FRAME_COUNT);
+    case 'swing':
+      return progressFrameIndex(animation.progress, SWING_FRAME_COUNT);
+  }
+}
+
 export function drawTerrorTheClownSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
-  s: number,
-  walkFrame = 0,
-  isMoving = false,
-  windupProgress = 0,
-  swingProgress = 0,
-  facingX = 1,
-  enraged = false,
+  tileSize: number,
+  facingX: number,
+  animation: TerrorTheClownAnimation,
+  enraged: boolean,
 ): void {
-  const cx = sx + s / 2;
-  const cy = sy + s / 2;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  if (facingX < 0) ctx.scale(-1, 1);
-
-  const swayPhase = isMoving ? Math.sin(walkFrame) : 0;
-
-  // Legs
-  ctx.fillStyle = '#1a1a1a';
-  const legSwing = isMoving ? swayPhase * TERROR_LEG_SWING_AMP * s : 0;
-  ctx.fillRect(
-    -TERROR_LEG_X_OFFSET * s - TERROR_LEG_WIDTH * s * 0.5,
-    TERROR_LEG_Y_OFFSET * s + legSwing,
-    TERROR_LEG_WIDTH * s,
-    TERROR_LEG_HEIGHT * s,
+  drawSpriteKey(
+    ctx,
+    'terror_clown',
+    stateFor(animation.kind, enraged),
+    frameFor(animation),
+    sx,
+    sy,
+    tileSize,
+    { flipX: facingX < 0 },
   );
-  ctx.fillRect(
-    TERROR_LEG_X_OFFSET * s - TERROR_LEG_WIDTH * s * 0.5,
-    TERROR_LEG_Y_OFFSET * s - legSwing,
-    TERROR_LEG_WIDTH * s,
-    TERROR_LEG_HEIGHT * s,
-  );
-
-  // Torso — broad, dark purple with black trim
-  ctx.fillStyle = enraged ? '#6a1a2a' : '#3a1a3a';
-  ctx.beginPath();
-  ctx.ellipse(
-    0,
-    TERROR_BODY_Y_OFFSET * s,
-    TERROR_BODY_RX * s,
-    TERROR_BODY_RY * s,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.strokeStyle = '#0a0a0a';
-  ctx.lineWidth = Math.max(1, s * 0.02);
-  ctx.stroke();
-
-  // Oversized mallet — windup pulls back, swing arcs forward
-  const mallet = -windupProgress * MALLET_WINDUP_ANGLE + swingProgress * MALLET_SWING_ANGLE;
-  ctx.save();
-  ctx.translate(TERROR_BODY_RX * s * 0.6, MALLET_Y_OFFSET * s);
-  ctx.rotate(mallet);
-  ctx.strokeStyle = '#5a3a1a';
-  ctx.lineWidth = MALLET_HANDLE_WIDTH * s;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(MALLET_HANDLE_LENGTH * s, 0);
-  ctx.stroke();
-  ctx.fillStyle = '#8a1010';
-  ctx.fillRect(
-    MALLET_HANDLE_LENGTH * s - MALLET_HEAD_W * s * 0.3,
-    -MALLET_HEAD_H * s * 0.5,
-    MALLET_HEAD_W * s,
-    MALLET_HEAD_H * s,
-  );
-  ctx.restore();
-
-  // Head
-  const headY = TERROR_HEAD_Y_OFFSET * s;
-  ctx.fillStyle = '#e0d0b8';
-  ctx.beginPath();
-  ctx.arc(0, headY, TERROR_HEAD_R * s, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Wild hair tufts
-  ctx.fillStyle = enraged ? '#3a8a2a' : '#2a6a1a';
-  for (let i = 0; i < TERROR_HAIR_TUFT_COUNT; i++) {
-    const t = i / (TERROR_HAIR_TUFT_COUNT - 1) - 0.5;
-    const hx = t * TERROR_HAIR_SPAN * 2 * s;
-    const hy = TERROR_HAIR_Y_OFFSET * s - Math.abs(t) * s * 0.05;
-    ctx.beginPath();
-    ctx.arc(hx, hy, TERROR_HAIR_R * s, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Red nose
-  ctx.fillStyle = '#c81010';
-  ctx.beginPath();
-  ctx.arc(0, headY + TERROR_NOSE_Y_OFFSET * s, TERROR_NOSE_R * s, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Manic grin
-  ctx.fillStyle = '#8a1010';
-  ctx.beginPath();
-  ctx.ellipse(
-    0,
-    headY + TERROR_GRIN_Y_OFFSET * s,
-    TERROR_GRIN_RX * s,
-    TERROR_GRIN_RY * s,
-    0,
-    0,
-    Math.PI,
-  );
-  ctx.fill();
-
-  // Eyes — brighter and faster-pulsing once enraged
-  ctx.save();
-  ctx.shadowColor = enraged ? '#ff6020' : '#ff2020';
-  ctx.shadowBlur = TERROR_EYE_GLOW_RADIUS;
-  ctx.fillStyle = enraged ? '#ff8040' : '#ff3030';
-  ctx.beginPath();
-  ctx.arc(
-    -TERROR_EYE_X_OFFSET * s,
-    headY + TERROR_EYE_Y_OFFSET * s,
-    TERROR_EYE_R * s,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(
-    TERROR_EYE_X_OFFSET * s,
-    headY + TERROR_EYE_Y_OFFSET * s,
-    TERROR_EYE_R * s,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.restore();
-
-  ctx.restore();
 }

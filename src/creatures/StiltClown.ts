@@ -1,7 +1,10 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
-import { drawStiltClownSprite } from '../sprites/stiltClownSprite';
-import { scaleHumanoidBox } from '../sprites/humanoidScale';
+import {
+  drawStiltClownSprite,
+  type StiltClownAnimation,
+  IDLE_LOOP_SECONDS,
+} from '../sprites/stiltClownSprite';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const CLOWN_HP = 14;
@@ -19,6 +22,11 @@ const LUNGE_FRAMES = 18;
 const COIN_DROP_MAX = 2;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.75;
+/**
+ * The sheet's tile sits 140px down a 224px frame at a 64px tile scale, so the
+ * stilts and head reach well over two tiles above the tile it stands on.
+ */
+const CULL_MARGIN_TILES = 3;
 
 /**
  * A Stilt Clown — one of Grimaldi's corrupted performers, towering on
@@ -31,6 +39,13 @@ export class StiltClown extends Mob {
   displayName = 'Stilt Clown';
   description = 'A towering, spindly-limbed circus horror stalking on stilts.';
   override readonly audioTag = 'clown';
+
+  override get cullMarginTiles(): number {
+    return CULL_MARGIN_TILES;
+  }
+
+  /** Staggers this clown's idle loop so a pack of them does not move as one. */
+  private readonly idlePhaseOffsetSeconds = Math.random() * IDLE_LOOP_SECONDS;
 
   private attackCooldown = 0;
   private windupTimer = 0;
@@ -63,7 +78,7 @@ export class StiltClown extends Mob {
     for (const t of targets) {
       if (!t.isAlive) continue;
       const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
+      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
         nearestDist = dist;
         nearest = t;
       }
@@ -123,6 +138,17 @@ export class StiltClown extends Mob {
     }
   }
 
+  private animation(): StiltClownAnimation {
+    if (this.windupTimer > 0) {
+      return { kind: 'windup', progress: 1 - this.windupTimer / WINDUP_FRAMES };
+    }
+    if (this.lungeTimer > 0) {
+      return { kind: 'lunge', progress: 1 - this.lungeTimer / LUNGE_FRAMES };
+    }
+    if (this.isMoving) return { kind: 'walk', cycle: this.walkFrame };
+    return { kind: 'idle', phaseOffsetSeconds: this.idlePhaseOffsetSeconds };
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
@@ -137,21 +163,7 @@ export class StiltClown extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    const windupProgress = this.windupTimer > 0 ? 1 - this.windupTimer / WINDUP_FRAMES : 0;
-    const lungeProgress = this.lungeTimer > 0 ? 1 - this.lungeTimer / LUNGE_FRAMES : 0;
-
-    const box = scaleHumanoidBox(sx, sy, tileSize);
-    drawStiltClownSprite(
-      ctx,
-      box.sx,
-      box.sy,
-      box.s,
-      this.walkFrame,
-      this.isMoving,
-      windupProgress,
-      lungeProgress,
-      this.facingX,
-    );
+    drawStiltClownSprite(ctx, sx, sy, tileSize, this.facingX, this.animation());
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

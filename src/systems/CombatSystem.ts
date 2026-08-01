@@ -294,10 +294,21 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
 export function resolveKills(ctx: CombatContext): void {
   const { mobs, human, cat, mobGrid, bus, abilityManager, spells, xpDiminishingTiers } = ctx;
+
+  // Mobs that leave a body behind stay in the grid past death so their corpse
+  // keeps being drawn; they drop out here once it has played out. Runs before
+  // this frame's kills so a corpse never renders after it has expired.
+  for (const mob of mobs) {
+    if (mob.isAlive || !mob.rendersWhenDead) continue;
+    if (mob.corpseExpired) continue;
+    mob.tickCorpse();
+    if (!mob.belongsInMobGrid) mobGrid.remove(mob);
+  }
+
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
-    mobGrid.remove(mob);
+    if (!mob.belongsInMobGrid) mobGrid.remove(mob);
 
     let totalDmg = 0;
     for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;

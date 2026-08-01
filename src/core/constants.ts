@@ -5,6 +5,12 @@ const CAT_KITE_FLEE_MULTIPLIER = 0.92;
 const CAT_KITE_ORBIT_MULTIPLIER = 0.76;
 
 export const TILE_SIZE = 32;
+/**
+ * Widest render overhang the pipeline's mob query reserves, in tiles — the
+ * ceiling on any `Mob.cullMarginTiles` override. A mob asking for more would be
+ * culled before its own margin is ever consulted, and reappear as edge pop-in.
+ */
+export const MAX_MOB_CULL_MARGIN_TILES = 4;
 export const PLAYER_SPEED = 2.5;
 export const FOLLOWER_SPEED = 3.5;
 
