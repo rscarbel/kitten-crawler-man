@@ -169,6 +169,7 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   BARREL,
   BARREL_SIDE,
   CRATE,
+  BOOKSHELF,
   SPRITE_BUILDING,
   MODERN_DECORATION,
 ]);
@@ -592,10 +593,9 @@ export class GameMap {
       placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET], BARREL);
       placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1], BARREL);
       placeProp(grid[storeShelfStartRow][w - STORE_EAST_WALL_INSET], BARREL);
-      // Bookshelf (display shelf) on west wall
-      grid[storeShelfStartRow][1].type = BOOKSHELF;
-      grid[storeShelfStartRow + 1][1].type = BOOKSHELF;
-      grid[storeShelfEndRow][1].type = BOOKSHELF;
+      placeProp(grid[storeShelfStartRow][1], BOOKSHELF);
+      placeProp(grid[storeShelfStartRow + 1][1], BOOKSHELF);
+      placeProp(grid[storeShelfEndRow][1], BOOKSHELF);
       // Barrel cluster near entrance
       placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][1], BARREL);
       placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][w - 2], BARREL);
@@ -805,9 +805,9 @@ export class GameMap {
           grid[1][hildaBrazierCol1].type = BRAZIER;
           grid[1][hildaBrazierCol2].type = BRAZIER;
           for (let ry = hildaWestShelfStartRow; ry <= hildaWestShelfEndRow; ry++)
-            grid[ry][1].type = BOOKSHELF;
+            placeProp(grid[ry][1], BOOKSHELF);
           for (let ry = hildaWestShelfStartRow; ry <= hildaEastShelfEndRow; ry++)
-            grid[ry][hildaEastShelfCol].type = BOOKSHELF;
+            placeProp(grid[ry][hildaEastShelfCol], BOOKSHELF);
           grid[hildaTableRow][hildaTableCol1].type = TABLE;
           grid[hildaTableRow][hildaTableCol2].type = TABLE;
           grid[hildaChairRow][hildaTableCol1].type = CHAIR;
@@ -885,9 +885,9 @@ export class GameMap {
           for (let rx = herbCounterStartCol; rx <= herbCounterEndCol; rx++)
             grid[herbCounterRow][rx].type = FloorTypeValue.wall;
           for (let ry = herbShelfStartRow; ry <= herbWestShelfEndRow; ry++)
-            grid[ry][1].type = BOOKSHELF;
+            placeProp(grid[ry][1], BOOKSHELF);
           for (let ry = herbShelfStartRow; ry <= herbEastShelfEndRow; ry++)
-            grid[ry][herbEastShelfCol].type = BOOKSHELF;
+            placeProp(grid[ry][herbEastShelfCol], BOOKSHELF);
           placeProp(grid[herbBarrelRow1][herbBarrelCol1], BARREL);
           placeProp(grid[herbBarrelRow1][herbBarrelCol2], BARREL);
           placeProp(grid[herbBarrelRow2][herbBarrelCol1], BARREL);
@@ -1150,8 +1150,8 @@ export class GameMap {
             for (let rx = TEMPLE_AISLE_START_COL; rx <= TEMPLE_AISLE_END_COL; rx++)
               grid[ry][rx].type = RUG;
           for (let ry = TEMPLE_SCRIPTURE_START_ROW; ry <= TEMPLE_SCRIPTURE_END_ROW; ry++) {
-            grid[ry][1].type = BOOKSHELF;
-            grid[ry][TEMPLE_EAST_WALL_COL].type = BOOKSHELF;
+            placeProp(grid[ry][1], BOOKSHELF);
+            placeProp(grid[ry][TEMPLE_EAST_WALL_COL], BOOKSHELF);
           }
           break;
         }
@@ -1180,7 +1180,7 @@ export class GameMap {
           grid[INK_CUSTOMER_CHAIR_ROW][INK_STATION_COL_2].type = CHAIR;
           grid[INK_STATION_ROW][INK_NEEDLE_FIRE_COL].type = BRAZIER;
           for (let ry = INK_FLASH_ART_START_ROW; ry <= INK_FLASH_ART_END_ROW; ry++)
-            grid[ry][1].type = BOOKSHELF;
+            placeProp(grid[ry][1], BOOKSHELF);
           for (let ry = INK_RUG_START_ROW; ry <= INK_RUG_END_ROW; ry++)
             for (let rx = INK_RUG_START_COL; rx <= INK_RUG_END_COL; rx++) grid[ry][rx].type = RUG;
           placeProp(grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL], CRATE);
@@ -1284,10 +1284,9 @@ export class GameMap {
       grid[genericBedNorthRow][genericBedEastCol].type = BED;
       grid[genericBedSouthRow][genericBedWestCol].type = BED;
       grid[genericBedSouthRow][genericBedEastCol].type = BED;
-      // Bookshelf on west wall
-      grid[genericShelfStartRow][1].type = BOOKSHELF;
-      grid[genericShelfStartRow + 1][1].type = BOOKSHELF;
-      grid[genericShelfEndRow][1].type = BOOKSHELF;
+      placeProp(grid[genericShelfStartRow][1], BOOKSHELF);
+      placeProp(grid[genericShelfStartRow + 1][1], BOOKSHELF);
+      placeProp(grid[genericShelfEndRow][1], BOOKSHELF);
       // Dining table with chairs in center-south area
       grid[genericTableRow][genericTableCol1].type = TABLE;
       grid[genericTableRow][genericTableCol2].type = TABLE;
@@ -1415,9 +1414,8 @@ export class GameMap {
           for (let rx = groundFloorRugStartCol; rx <= groundFloorRugEndCol; rx++)
             grid[ry][rx].type = RUG;
         }
-        // Bookshelves along west wall
         for (let ry = towerShelfStartRow; ry <= groundFloorShelfEndRow; ry++)
-          grid[ry][1].type = BOOKSHELF;
+          placeProp(grid[ry][1], BOOKSHELF);
         // Reception table with chairs
         grid[groundFloorReceptionRow][groundFloorReceptionTableCol1].type = TABLE;
         grid[groundFloorReceptionRow][groundFloorReceptionTableCol2].type = TABLE;
@@ -1447,17 +1445,14 @@ export class GameMap {
         const libraryEastTableCol2 = 12;
         const libraryRugStartCol = 7;
         const libraryRugEndCol = 10;
-        // Bookshelves along west wall
         for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
-          grid[ry][1].type = BOOKSHELF;
-        // Bookshelves along east wall
+          placeProp(grid[ry][1], BOOKSHELF);
         for (let ry = towerShelfStartRow; ry <= libraryShelfEndRow; ry++)
-          grid[ry][w - 2].type = BOOKSHELF;
-        // Center bookshelf island
+          placeProp(grid[ry][w - 2], BOOKSHELF);
         for (let rx = libraryIsland1StartCol; rx <= libraryIsland1EndCol; rx++)
-          grid[libraryIslandRow][rx].type = BOOKSHELF;
+          placeProp(grid[libraryIslandRow][rx], BOOKSHELF);
         for (let rx = libraryIsland2StartCol; rx <= libraryIsland2EndCol; rx++)
-          grid[libraryIslandRow][rx].type = BOOKSHELF;
+          placeProp(grid[libraryIslandRow][rx], BOOKSHELF);
         // Reading tables
         grid[libraryReadingRow][libraryWestTableCol1].type = TABLE;
         grid[libraryReadingRow][libraryWestTableCol2].type = TABLE;
@@ -1497,9 +1492,8 @@ export class GameMap {
         grid[quartersSouthBedRow1][2].type = BED;
         grid[quartersSouthBedRow2][1].type = BED;
         grid[quartersSouthBedRow2][2].type = BED;
-        // Bookshelf between beds
-        grid[quartersShelfRow1][1].type = BOOKSHELF;
-        grid[quartersShelfRow2][1].type = BOOKSHELF;
+        placeProp(grid[quartersShelfRow1][1], BOOKSHELF);
+        placeProp(grid[quartersShelfRow2][1], BOOKSHELF);
         // Table and chairs on east side
         grid[quartersEastTableRow][quartersEastTableCol1].type = TABLE;
         grid[quartersEastTableRow][quartersEastTableCol2].type = TABLE;
@@ -1533,11 +1527,10 @@ export class GameMap {
         const studyRugEndCol = 14;
         const studyFireplaceCol1 = 6;
         const studyFireplaceCol2 = 7;
-        // Bookshelves along both walls
         for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
-          grid[ry][1].type = BOOKSHELF;
+          placeProp(grid[ry][1], BOOKSHELF);
         for (let ry = towerShelfStartRow; ry <= studyShelfEndRow; ry++)
-          grid[ry][w - 2].type = BOOKSHELF;
+          placeProp(grid[ry][w - 2], BOOKSHELF);
         // Grand desk at north end
         for (let dx = studyDeskStartCol; dx <= studyDeskEndCol; dx++)
           grid[studyDeskRow][dx].type = TABLE;

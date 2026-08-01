@@ -5,6 +5,7 @@ import type { GameMap } from '../map/GameMap';
 import {
   BARREL,
   BARREL_SIDE,
+  BOOKSHELF,
   BRAZIER,
   CRATE,
   TORCH,
@@ -26,7 +27,8 @@ const TILE_CENTER_OFFSET = 0.5;
 const TWO_PI = Math.PI * 2;
 
 /** The prop tile types a melee swing can break. */
-export type DestructiblePropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier';
+export type DestructiblePropKind =
+  'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf';
 
 const BARREL_HP = 6;
 const BARREL_SIDE_HP = 5;
@@ -35,6 +37,8 @@ const CRATE_HP = 6;
 const TORCH_HP = 4;
 /** All iron and squat with it, so a brazier takes the most punishment of the lot. */
 const BRAZIER_HP = 9;
+/** A joined case standing a whole tile tall — more timber than a crate carries. */
+const BOOKSHELF_HP = 8;
 /**
  * HP a prop that is already wearing its cracked art comes back missing when its
  * health entry has to be rebuilt. It cannot come back at full: `damageStage`
@@ -92,7 +96,9 @@ const SPLINTER_SPAWN_SCATTER_PX = 4;
  * The boxy props are a tile wide and sit inside their tile, so a point source at
  * its centre is exactly right. A torch is a pole standing a tile above the floor
  * — spawning its debris at the tile centre would drop the whole burst around the
- * player's feet instead of down the length of the thing that just snapped.
+ * player's feet instead of down the length of the thing that just snapped. A
+ * bookshelf is a case standing the full height of its tile, so its pieces come
+ * off over most of that height rather than out of a single point.
  */
 const SPLINTER_ORIGIN_OFFSET_TILES: Record<DestructiblePropKind, number> = {
   barrel: 0,
@@ -100,6 +106,7 @@ const SPLINTER_ORIGIN_OFFSET_TILES: Record<DestructiblePropKind, number> = {
   crate: 0,
   torch: -0.16,
   brazier: -0.06,
+  bookshelf: -0.05,
 };
 const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
   barrel: 0,
@@ -107,6 +114,7 @@ const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
   crate: 0,
   torch: 1.05,
   brazier: 0.3,
+  bookshelf: 0.5,
 };
 /** Splinters fade over the last third of their life. */
 const SPLINTER_FADE_DIVISOR = 3;
@@ -189,6 +197,7 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   if (type === CRATE) return 'crate';
   if (type === TORCH) return 'torch';
   if (type === BRAZIER) return 'brazier';
+  if (type === BOOKSHELF) return 'bookshelf';
   return null;
 }
 
@@ -197,14 +206,15 @@ function startingHpFor(kind: DestructiblePropKind): number {
   if (kind === 'barrel_side') return BARREL_SIDE_HP;
   if (kind === 'torch') return TORCH_HP;
   if (kind === 'brazier') return BRAZIER_HP;
+  if (kind === 'bookshelf') return BOOKSHELF_HP;
   return CRATE_HP;
 }
 
 /**
- * Lets a melee swing break the barrels, crates and torches strewn through a
- * dungeon floor: the prop cracks, then shatters into splinters and a wreckage decal,
- * the tile opens up for both players and mob pathfinding, and a small
- * depth-scaled coin drop is left behind.
+ * Lets a melee swing break the barrels, crates, torches, braziers and bookshelves
+ * strewn through a dungeon floor: the prop cracks, then shatters into splinters
+ * and a wreckage decal, the tile opens up for both players and mob pathfinding,
+ * and a small depth-scaled coin drop is left behind.
  *
  * Prop health is created lazily on the first hit, so a floor carrying thousands
  * of props costs nothing until the player actually swings at one.

@@ -11,6 +11,7 @@ import {
   GARDEN_PLANTING,
   BARREL,
   BARREL_SIDE,
+  BOOKSHELF,
   CRATE,
   BRAZIER,
   BONES,
@@ -605,6 +606,7 @@ export function drawDecorationTile(
       case BARREL:
       case BARREL_SIDE:
       case CRATE:
+      case BOOKSHELF:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {

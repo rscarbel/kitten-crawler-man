@@ -57,7 +57,11 @@ export const STAIRS_UP = 30;
 export const STAIRS_DOWN = 31;
 /** Tile type for a wooden table — not walkable. */
 export const TABLE = 32;
-/** Tile type for a bookshelf against a wall — not walkable. */
+/**
+ * Tile type for a bookshelf against a wall — not walkable. Smashable on the
+ * dungeon floors, which are the only scenes that build a `DestructiblePropSystem`;
+ * the town-interior shelves are furniture, exactly as their barrels and crates are.
+ */
 export const BOOKSHELF = 33;
 /** Tile type for a bed — not walkable. */
 export const BED = 34;
@@ -324,8 +328,9 @@ export type TileContent = {
    */
   groundType?: number;
   /**
-   * Wear on a destructible prop tile (BARREL, BARREL_SIDE, CRATE, TORCH): see the
-   * `PROP_DAMAGE_STAGE_*` constants in `DestructiblePropSystem`.
+   * Wear on a destructible prop tile (BARREL, BARREL_SIDE, CRATE, TORCH,
+   * BRAZIER, BOOKSHELF): see the `PROP_DAMAGE_STAGE_*` constants in
+   * `DestructiblePropSystem`.
    *
    * Carried on the tile rather than held only in that system so the tile
    * renderer can pick its sprite state without a back-reference into gameplay

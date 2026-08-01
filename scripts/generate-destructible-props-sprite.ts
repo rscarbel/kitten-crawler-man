@@ -2,10 +2,11 @@
 /**
  * Generates the destructible prop sprite sheets from procedural drawing code.
  *
- * Outputs five PNG files to src/images/environment/props/:
+ * Outputs six PNG files to src/images/environment/props/:
  *   barrel.png       — idle (row 0) + damaged (1) + shatter (2, 6 frames) + remains (3)
  *   barrel_side.png  — same four rows
  *   crate.png        — same four rows
+ *   bookshelf.png    — same four rows
  *   torch.png        — same four rows, but idle and damaged are 6-frame flame loops
  *   brazier.png      — same four rows, with 4-frame flame loops
  *
@@ -40,7 +41,7 @@ const ROW_COUNT = 4;
 
 const TWO_PI = Math.PI * 2;
 
-type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier';
+type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf';
 type PropState = 'idle' | 'damaged' | 'shatter' | 'remains';
 
 interface FrameGeometry {
@@ -827,6 +828,308 @@ function drawCrate(ctx: NodeCtx, ox: number, oy: number, ts: number, damaged: bo
   }
 }
 
+// ── Bookshelf ─────────────────────────────────────────────────────────────────
+// A tall oak case standing flat against a wall: cornice, two stiles, three
+// compartments of books, plinth. The spines are kept inside the same muted,
+// low-saturation range as the rest of the props — fully saturated bindings turn
+// the tile into a colour swatch pinned to the wall instead of a piece of
+// furniture, which is exactly how the old procedural bookshelf read.
+
+/** Aged leather and cloth bindings: dulled, and all within a stop of each other. */
+const BOOK_SHADES = [
+  '#6e3b34',
+  '#4c5a4a',
+  '#3f4a5e',
+  '#7a6238',
+  '#5b4436',
+  '#4d4152',
+  '#6b6247',
+] as const;
+/** Tarnished gilt for the spine bands — never bright, or it sparkles like an icon. */
+const BOOK_GILT = 'rgba(190,160,96,0.55)';
+/** Page block seen at the head of a spine. */
+const BOOK_PAGES = '#b8ab8a';
+
+const BOOKSHELF_SEED = 0x2c7b;
+const BOOKSHELF_LEFT_FRACTION = 0.11;
+const BOOKSHELF_RIGHT_FRACTION = 0.89;
+const BOOKSHELF_TOP_FRACTION = 0.07;
+const BOOKSHELF_BASE_FRACTION = 0.94;
+const BOOKSHELF_CORNICE_OVERHANG_FRACTION = 0.035;
+const BOOKSHELF_CORNICE_HEIGHT_FRACTION = 0.08;
+const BOOKSHELF_PLINTH_HEIGHT_FRACTION = 0.06;
+const BOOKSHELF_STILE_WIDTH_FRACTION = 0.075;
+const BOOKSHELF_COMPARTMENT_COUNT = 3;
+const BOOKSHELF_SHELF_BOARD_THICKNESS = 2.5;
+const BOOKSHELF_CONTACT_SHADOW_SCALE = 0.95;
+/** Which compartment gives way first once the case has been struck. */
+const BOOKSHELF_BROKEN_COMPARTMENT = 1;
+/**
+ * How far the snapped board sags at its middle, in pixels. Generous, because at
+ * a 32 px tile the wear stage has one job — telling the player their swing
+ * landed — and a board that dips by a pixel cannot do it.
+ */
+const BOOKSHELF_BROKEN_BOARD_SAG = 6;
+
+/** Clearance between the tallest book and the board above it. */
+const BOOK_HEADROOM = 2;
+const BOOK_MIN_WIDTH = 2.6;
+const BOOK_WIDTH_SPREAD = 2.8;
+const BOOK_GAP_PX = 0.6;
+/** Books never fill their compartment: shorter volumes make the row read as books. */
+const BOOK_HEIGHT_MIN_FRACTION = 0.62;
+const BOOK_HEIGHT_SPREAD_FRACTION = 0.38;
+/** Chance a slot is left empty rather than filled, and how wide that gap runs. */
+const BOOK_GAP_CHANCE = 0.1;
+/** A shelf that has been shaken loose has lost most of what stood on it. */
+const BOOK_GAP_CHANCE_BROKEN = 0.6;
+const BOOK_GAP_WIDTH_MIN = 1.5;
+const BOOK_GAP_WIDTH_SPREAD = 3;
+const BOOK_LEAN_CHANCE = 0.18;
+const BOOK_LEAN_MAX = 0.22;
+/** Chance a run of uprights is interrupted by a few volumes lying flat. */
+const BOOK_STACK_CHANCE = 0.14;
+const BOOK_STACK_MIN_COUNT = 2;
+const BOOK_STACK_COUNT_SPREAD = 2;
+const BOOK_STACK_WIDTH_MIN = 8;
+const BOOK_STACK_WIDTH_SPREAD = 4;
+const BOOK_STACK_LAYER_HEIGHT = 2.6;
+/** Fraction of a spine's width lit along its left edge, and shaded along its right. */
+const BOOK_SPINE_LIT_FRACTION = 0.3;
+const BOOK_SPINE_LIT_ALPHA = 0.16;
+const BOOK_SPINE_SHADE_ALPHA = 0.28;
+/** Where the two gilt bands sit along a spine, measured from its head. */
+const BOOK_BAND_FRACTIONS = [0.16, 0.3] as const;
+const BOOK_BAND_HEIGHT = 1;
+/** Only the wider spines carry bands — a 3px book has no room for tooling. */
+const BOOK_BAND_MIN_WIDTH = 4;
+
+function bookShade(rng: () => number): string {
+  return BOOK_SHADES[Math.floor(rng() * BOOK_SHADES.length)];
+}
+
+/** A single upright volume, standing on `baseY` and leaning about its foot. */
+function drawBookSpine(
+  ctx: NodeCtx,
+  x: number,
+  baseY: number,
+  width: number,
+  height: number,
+  lean: number,
+  shade: string,
+): void {
+  ctx.save();
+  ctx.translate(x + width / 2, baseY);
+  ctx.rotate(lean);
+  const halfW = width / 2;
+  const top = -height;
+
+  ctx.fillStyle = shade;
+  ctx.fillRect(-halfW, top, width, height);
+
+  ctx.fillStyle = `rgba(255,255,255,${BOOK_SPINE_LIT_ALPHA})`;
+  ctx.fillRect(-halfW, top, width * BOOK_SPINE_LIT_FRACTION, height);
+  ctx.fillStyle = `rgba(0,0,0,${BOOK_SPINE_SHADE_ALPHA})`;
+  ctx.fillRect(
+    halfW - width * BOOK_SPINE_LIT_FRACTION,
+    top,
+    width * BOOK_SPINE_LIT_FRACTION,
+    height,
+  );
+
+  // Page block at the head, which is what makes the shape read as a book rather
+  // than a coloured bar.
+  ctx.fillStyle = BOOK_PAGES;
+  ctx.fillRect(-halfW, top, width, 1);
+
+  if (width >= BOOK_BAND_MIN_WIDTH) {
+    ctx.fillStyle = BOOK_GILT;
+    for (const fraction of BOOK_BAND_FRACTIONS) {
+      ctx.fillRect(-halfW, top + height * fraction, width, BOOK_BAND_HEIGHT);
+    }
+  }
+
+  ctx.strokeStyle = CAVITY;
+  ctx.lineWidth = 0.6;
+  ctx.strokeRect(-halfW, top, width, height);
+  ctx.restore();
+}
+
+/** A few volumes lying flat, stacked on the board. */
+function drawBookStack(
+  ctx: NodeCtx,
+  x: number,
+  baseY: number,
+  width: number,
+  count: number,
+  rng: () => number,
+): void {
+  for (let i = 0; i < count; i++) {
+    const layerTop = baseY - (i + 1) * BOOK_STACK_LAYER_HEIGHT;
+    const inset = rng() * 2;
+    ctx.fillStyle = bookShade(rng);
+    ctx.fillRect(x + inset, layerTop, width - inset, BOOK_STACK_LAYER_HEIGHT);
+    ctx.fillStyle = BOOK_PAGES;
+    ctx.fillRect(x + inset, layerTop, width - inset, 0.8);
+    ctx.strokeStyle = CAVITY;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x + inset, layerTop, width - inset, BOOK_STACK_LAYER_HEIGHT);
+  }
+}
+
+/** Fills one compartment with a run of books, walking left to right. */
+function drawBookRow(
+  ctx: NodeCtx,
+  x0: number,
+  x1: number,
+  baseY: number,
+  compartmentHeight: number,
+  rng: () => number,
+  ransacked: boolean,
+): void {
+  const tallest = compartmentHeight - BOOK_HEADROOM;
+  const gapChance = ransacked ? BOOK_GAP_CHANCE_BROKEN : BOOK_GAP_CHANCE;
+  let x = x0 + 0.5;
+
+  while (x < x1 - BOOK_MIN_WIDTH) {
+    if (rng() < gapChance) {
+      x += BOOK_GAP_WIDTH_MIN + rng() * BOOK_GAP_WIDTH_SPREAD;
+      continue;
+    }
+    if (rng() < BOOK_STACK_CHANCE) {
+      const stackWidth = BOOK_STACK_WIDTH_MIN + rng() * BOOK_STACK_WIDTH_SPREAD;
+      if (x + stackWidth > x1 - 0.5) break;
+      const count = BOOK_STACK_MIN_COUNT + Math.floor(rng() * BOOK_STACK_COUNT_SPREAD);
+      drawBookStack(ctx, x, baseY, stackWidth, count, rng);
+      x += stackWidth + BOOK_GAP_PX;
+      continue;
+    }
+    const width = BOOK_MIN_WIDTH + rng() * BOOK_WIDTH_SPREAD;
+    if (x + width > x1 - 0.5) break;
+    const height = tallest * (BOOK_HEIGHT_MIN_FRACTION + rng() * BOOK_HEIGHT_SPREAD_FRACTION);
+    const lean = rng() < BOOK_LEAN_CHANCE ? (rng() - 0.5) * 2 * BOOK_LEAN_MAX : 0;
+    drawBookSpine(ctx, x, baseY, width, height, lean, bookShade(rng));
+    x += width + BOOK_GAP_PX;
+  }
+}
+
+/** The board the books stand on, lit along its front edge. */
+function drawShelfBoard(
+  ctx: NodeCtx,
+  x0: number,
+  x1: number,
+  surfaceY: number,
+  snapped: boolean,
+): void {
+  ctx.save();
+  if (snapped) {
+    // A sagging V rather than a straight plank, so the break reads at a glance.
+    const midX = (x0 + x1) / 2;
+    const sagY = surfaceY + BOOKSHELF_BROKEN_BOARD_SAG;
+    ctx.strokeStyle = WOOD_MID;
+    ctx.lineWidth = BOOKSHELF_SHELF_BOARD_THICKNESS;
+    ctx.beginPath();
+    ctx.moveTo(x0, surfaceY);
+    ctx.lineTo(midX - 1, sagY);
+    ctx.moveTo(midX + 2, sagY - 1);
+    ctx.lineTo(x1, surfaceY);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  ctx.fillStyle = WOOD_MID;
+  ctx.fillRect(x0, surfaceY, x1 - x0, BOOKSHELF_SHELF_BOARD_THICKNESS);
+  ctx.fillStyle = WOOD_LIGHT;
+  ctx.fillRect(x0, surfaceY, x1 - x0, 1);
+  ctx.fillStyle = WOOD_SHADOW;
+  ctx.fillRect(x0, surfaceY + BOOKSHELF_SHELF_BOARD_THICKNESS - 1, x1 - x0, 1);
+  ctx.restore();
+}
+
+function drawBookshelf(ctx: NodeCtx, ox: number, oy: number, ts: number, damaged: boolean): void {
+  const rng = makeRng(BOOKSHELF_SEED);
+  const left = ox + ts * BOOKSHELF_LEFT_FRACTION;
+  const right = ox + ts * BOOKSHELF_RIGHT_FRACTION;
+  const top = oy + ts * BOOKSHELF_TOP_FRACTION;
+  const base = oy + ts * BOOKSHELF_BASE_FRACTION;
+  const corniceOverhang = ts * BOOKSHELF_CORNICE_OVERHANG_FRACTION;
+  const corniceHeight = ts * BOOKSHELF_CORNICE_HEIGHT_FRACTION;
+  const plinthHeight = ts * BOOKSHELF_PLINTH_HEIGHT_FRACTION;
+  const stileWidth = ts * BOOKSHELF_STILE_WIDTH_FRACTION;
+
+  contactShadow(ctx, (left + right) / 2, base + 1, ts, BOOKSHELF_CONTACT_SHADOW_SCALE);
+
+  ctx.fillStyle = woodGradient(ctx, left, right, top);
+  ctx.fillRect(left, top, right - left, base - top);
+
+  const innerLeft = left + stileWidth;
+  const innerRight = right - stileWidth;
+  const innerTop = top + corniceHeight;
+  const innerBottom = base - plinthHeight;
+
+  // Backboard sits in shadow so the books read against something dark.
+  const backGrad = ctx.createLinearGradient(innerLeft, innerTop, innerRight, innerBottom);
+  backGrad.addColorStop(0, WOOD_SHADOW);
+  backGrad.addColorStop(1, CAVITY);
+  ctx.fillStyle = backGrad;
+  ctx.fillRect(innerLeft, innerTop, innerRight - innerLeft, innerBottom - innerTop);
+
+  const compartmentHeight = (innerBottom - innerTop) / BOOKSHELF_COMPARTMENT_COUNT;
+  for (let i = 0; i < BOOKSHELF_COMPARTMENT_COUNT; i++) {
+    const boardY = innerTop + compartmentHeight * (i + 1);
+    const snapped = damaged && i === BOOKSHELF_BROKEN_COMPARTMENT;
+    drawBookRow(ctx, innerLeft, innerRight, boardY, compartmentHeight, rng, snapped);
+    drawShelfBoard(ctx, innerLeft, innerRight, boardY, snapped);
+  }
+
+  // Stiles, cornice and plinth go over the books, framing them in.
+  ctx.fillStyle = woodGradientV(ctx, left, top, base);
+  ctx.fillRect(left, innerTop, stileWidth, innerBottom - innerTop);
+  ctx.fillStyle = woodGradientV(ctx, innerRight, top, base);
+  ctx.fillRect(innerRight, innerTop, stileWidth, innerBottom - innerTop);
+
+  const corniceLeft = left - corniceOverhang;
+  const corniceWidth = right - left + corniceOverhang * 2;
+  ctx.fillStyle = woodGradient(ctx, corniceLeft, corniceLeft + corniceWidth, top);
+  ctx.fillRect(corniceLeft, top, corniceWidth, corniceHeight);
+  ctx.fillStyle = WOOD_RIM;
+  ctx.fillRect(corniceLeft, top, corniceWidth, 1);
+  ctx.fillStyle = WOOD_SHADOW;
+  ctx.fillRect(corniceLeft, top + corniceHeight - 1, corniceWidth, 1);
+
+  ctx.fillStyle = woodGradient(ctx, corniceLeft, corniceLeft + corniceWidth, innerBottom);
+  ctx.fillRect(corniceLeft, innerBottom, corniceWidth, base - innerBottom);
+  ctx.fillStyle = WOOD_SHADOW;
+  ctx.fillRect(corniceLeft, base - 1, corniceWidth, 1);
+
+  // Grain down the stiles, kept subtle so the frame stays a frame.
+  seam(ctx, left + stileWidth * 0.55, innerTop, left + stileWidth * 0.55, innerBottom, 0.4);
+  seam(
+    ctx,
+    innerRight + stileWidth * 0.45,
+    innerTop,
+    innerRight + stileWidth * 0.45,
+    innerBottom,
+    0.4,
+  );
+
+  if (damaged) {
+    // Kept short and barely wobbling: at the width of a stile a wandering split
+    // strays off the case and reads as a wire hanging beside it.
+    crack(ctx, innerRight + stileWidth * 0.5, innerTop + 4, innerBottom - 6, 1.2, rng);
+    chip(ctx, corniceLeft + 4, top + 1, 7, corniceHeight - 1);
+    // What fell out of the snapped shelf, come to rest on the plinth.
+    const spillBaseY = innerBottom;
+    drawBookSpine(ctx, innerLeft + 3, spillBaseY, 3.2, 7, -0.9, BOOK_SHADES[0]);
+    drawBookStack(ctx, innerRight - 12, spillBaseY, 9, 1, rng);
+  }
+
+  ctx.strokeStyle = WOOD_EDGE;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(corniceLeft, top, corniceWidth, corniceHeight);
+  ctx.strokeRect(left, top, right - left, base - top);
+}
+
 // ── Torch ─────────────────────────────────────────────────────────────────────
 // A floor-standing brand: splayed iron foot, wooden haft, iron fire bowl. The
 // haft is what a swing breaks, which is why the torch splinters like the boxy
@@ -1367,15 +1670,7 @@ function drawBrazier(
   contactShadow(ctx, g.cx, g.footY + 2, ts, 0.95);
   drawBrazierLegs(ctx, g, damaged);
   drawBrazierBowl(ctx, g, rng, damaged);
-  drawFlame(
-    ctx,
-    g.cx,
-    g.rimY - 1,
-    ts,
-    frame / BRAZIER_FLAME_FRAMES,
-    damaged,
-    BRAZIER_FLAME_SCALE,
-  );
+  drawFlame(ctx, g.cx, g.rimY - 1, ts, frame / BRAZIER_FLAME_FRAMES, damaged, BRAZIER_FLAME_SCALE);
 }
 
 // ── Shatter ───────────────────────────────────────────────────────────────────
@@ -1552,17 +1847,51 @@ function buildBrazierDebris(seed: number): DebrisSpec[] {
   return out;
 }
 
+// ── Bookshelf debris ──────────────────────────────────────────────────────────
+// A case coming apart throws its contents as well as itself, so a share of the
+// pieces are tumbling books rather than scraps of the carcass. Nothing iron: the
+// shelf is joined wood throughout.
+
+/** One piece in three off a bookshelf is a book rather than a scrap of the case. */
+const BOOKSHELF_DEBRIS_BOOK_PERIOD = 3;
+const BOOK_DEBRIS_LENGTH_MIN = 6;
+const BOOK_DEBRIS_LENGTH_SPREAD = 4;
+const BOOK_DEBRIS_WIDTH_MIN = 4;
+const BOOK_DEBRIS_WIDTH_SPREAD = 2;
+
+function buildBookshelfDebris(seed: number): DebrisSpec[] {
+  const rng = makeRng(seed);
+  const out: DebrisSpec[] = [];
+  for (let i = 0; i < DEBRIS_COUNT; i++) {
+    const isBook = i % BOOKSHELF_DEBRIS_BOOK_PERIOD === BOOKSHELF_DEBRIS_BOOK_PERIOD - 1;
+    out.push({
+      angle: (i / DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
+      distance: DEBRIS_SPREAD_PX * (0.45 + rng() * 0.75),
+      originY: 0,
+      restAngle: 0,
+      length: isBook ? BOOK_DEBRIS_LENGTH_MIN + rng() * BOOK_DEBRIS_LENGTH_SPREAD : 7 + rng() * 9,
+      width: isBook ? BOOK_DEBRIS_WIDTH_MIN + rng() * BOOK_DEBRIS_WIDTH_SPREAD : 2.5 + rng() * 3,
+      spin: (rng() - 0.5) * 7,
+      shade: isBook ? bookShade(rng) : WOOD_RAMP[Math.floor(rng() * WOOD_RAMP.length)],
+      isIron: false,
+    });
+  }
+  return out;
+}
+
 const BARREL_DEBRIS = buildDebris(0x1177);
 const BARREL_SIDE_DEBRIS = buildDebris(0x2288);
 const CRATE_DEBRIS = buildDebris(0x3399);
 const TORCH_DEBRIS = buildTorchDebris(0x44aa);
 const BRAZIER_DEBRIS = buildBrazierDebris(0x55bb);
+const BOOKSHELF_DEBRIS = buildBookshelfDebris(0x66cc);
 
 function debrisFor(kind: PropKind): DebrisSpec[] {
   if (kind === 'barrel') return BARREL_DEBRIS;
   if (kind === 'barrel_side') return BARREL_SIDE_DEBRIS;
   if (kind === 'torch') return TORCH_DEBRIS;
   if (kind === 'brazier') return BRAZIER_DEBRIS;
+  if (kind === 'bookshelf') return BOOKSHELF_DEBRIS;
   return CRATE_DEBRIS;
 }
 
@@ -1716,14 +2045,67 @@ const TORCH_REMAINS = buildRemains(0x7755, TORCH_REMAINS_PLANK_COUNT, REMAINS_WO
 /** Iron does not splinter — a felled brazier leaves a few flattened scraps. */
 const BRAZIER_REMAINS_PIECE_COUNT = 6;
 const BRAZIER_REMAINS = buildRemains(0x8866, BRAZIER_REMAINS_PIECE_COUNT, IRON_RAMP);
+/** A case is the largest of the props, so it leaves the widest field of planks. */
+const BOOKSHELF_REMAINS_PLANK_COUNT = 11;
+const BOOKSHELF_REMAINS = buildRemains(0x9977, BOOKSHELF_REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
 
 function remainsFor(kind: PropKind): RemainsPlank[] {
   if (kind === 'barrel') return BARREL_REMAINS;
   if (kind === 'barrel_side') return BARREL_SIDE_REMAINS;
   if (kind === 'torch') return TORCH_REMAINS;
   if (kind === 'brazier') return BRAZIER_REMAINS;
+  if (kind === 'bookshelf') return BOOKSHELF_REMAINS;
   return CRATE_REMAINS;
 }
+
+/** Books thrown clear of a collapsed case, lying open and shut on the floor. */
+const SPILLED_BOOK_COUNT = 6;
+const SPILLED_BOOK_SPREAD_X = 17;
+const SPILLED_BOOK_SPREAD_Y = 8;
+const SPILLED_BOOK_LENGTH_MIN = 7;
+const SPILLED_BOOK_LENGTH_SPREAD = 5;
+const SPILLED_BOOK_WIDTH_MIN = 4.5;
+const SPILLED_BOOK_WIDTH_SPREAD = 2;
+
+function drawSpilledBooks(ctx: NodeCtx, cx: number, cy: number, rng: () => number): void {
+  for (let i = 0; i < SPILLED_BOOK_COUNT; i++) {
+    const x = cx + (rng() - 0.5) * 2 * SPILLED_BOOK_SPREAD_X;
+    const y = cy + (rng() - 0.5) * 2 * SPILLED_BOOK_SPREAD_Y;
+    const length = SPILLED_BOOK_LENGTH_MIN + rng() * SPILLED_BOOK_LENGTH_SPREAD;
+    const width = SPILLED_BOOK_WIDTH_MIN + rng() * SPILLED_BOOK_WIDTH_SPREAD;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rng() * TWO_PI);
+    ctx.fillStyle = bookShade(rng);
+    ctx.fillRect(-length / 2, -width / 2, length, width);
+    ctx.fillStyle = BOOK_PAGES;
+    ctx.fillRect(-length / 2, -width / 2, length, 1);
+    ctx.strokeStyle = CAVITY;
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(-length / 2, -width / 2, length, width);
+    ctx.restore();
+  }
+}
+
+/**
+ * Seed for each kind's wreckage scatter, written out per kind rather than derived
+ * from the name. The old `0x7744 + kind.length` handed `crate` and `torch` the
+ * same seed — only the scorch a torch draws first, consuming rng the crate never
+ * does, kept the two piles from landing identically — and it would have collided
+ * again on the next five-letter prop.
+ *
+ * The five original values are the ones that expression produced, so listing them
+ * here leaves their sheets byte-identical rather than reshuffling art nobody asked
+ * to change. The collision stays for now: unpicking it would redraw torch.png.
+ */
+const REMAINS_SEEDS: Record<PropKind, number> = {
+  barrel: 0x774a,
+  barrel_side: 0x774f,
+  crate: 0x7749,
+  torch: 0x7749,
+  brazier: 0x774b,
+  bookshelf: 0x7751,
+};
 
 /** Scorch left where a fire bowl tipped its coals onto the floor. */
 const SCORCH_RX_TILE_FRACTION = 0.3;
@@ -1763,22 +2145,14 @@ function drawScorch(ctx: NodeCtx, cx: number, cy: number, ts: number, rng: () =>
   }
 }
 
-function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: number): void {
-  const rng = makeRng(0x7744 + kind.length);
-  const cx = ox + ts / 2;
-  const cy = oy + ts * 0.6;
+/**
+ * The bent hoop / broken bracket / crushed fire bowl a prop leaves behind,
+ * whichever ironwork it was holding together with. A bookshelf is joined wood
+ * throughout, so it draws none.
+ */
+function drawRemainsIronwork(ctx: NodeCtx, kind: PropKind, cx: number, cy: number): void {
+  if (kind === 'bookshelf') return;
 
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 2, ts * 0.34, ts * 0.17, 0, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
-
-  if (kind === 'torch' || kind === 'brazier') drawScorch(ctx, cx, cy, ts, rng);
-
-  // A bent hoop / broken bracket / crushed fire bowl, whichever the prop had.
   ctx.save();
   ctx.strokeStyle = IRON_MID;
   ctx.lineWidth = 2.5;
@@ -1803,10 +2177,30 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
   ctx.lineWidth = 0.8;
   ctx.stroke();
   ctx.restore();
+}
+
+function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: number): void {
+  const rng = makeRng(REMAINS_SEEDS[kind]);
+  const cx = ox + ts / 2;
+  const cy = oy + ts * 0.6;
+
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 2, ts * 0.34, ts * 0.17, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
+
+  if (kind === 'torch' || kind === 'brazier') drawScorch(ctx, cx, cy, ts, rng);
+
+  drawRemainsIronwork(ctx, kind, cx, cy);
 
   for (const p of remainsFor(kind)) {
     shard(ctx, cx + p.dx, cy + p.dy, p.length, p.width, p.angle, p.shade);
   }
+
+  if (kind === 'bookshelf') drawSpilledBooks(ctx, cx, cy, rng);
 
   if (kind === 'brazier') {
     speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, ASH, SOOT);
@@ -1840,6 +2234,7 @@ function drawProp(
   else if (kind === 'barrel_side') drawBarrelSide(ctx, ox, oy, ts, damaged);
   else if (kind === 'torch') drawTorch(ctx, ox, oy, ts, damaged, frame);
   else if (kind === 'brazier') drawBrazier(ctx, ox, oy, ts, damaged, frame);
+  else if (kind === 'bookshelf') drawBookshelf(ctx, ox, oy, ts, damaged);
   else drawCrate(ctx, ox, oy, ts, damaged);
 }
 
@@ -1903,7 +2298,7 @@ function renderSheet(kind: PropKind): Buffer {
 }
 
 const outDir = resolve('src/images/environment/props');
-const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate', 'torch', 'brazier'];
+const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate', 'torch', 'brazier', 'bookshelf'];
 
 console.log(`Generating destructible props (tileScale=${TILE_SCALE})…`);
 

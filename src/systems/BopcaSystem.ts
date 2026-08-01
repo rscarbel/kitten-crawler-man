@@ -61,8 +61,17 @@ import { clamp } from '../utils';
 
 /** Fraction of the eater's max HP a dish restores. Every dish, always. */
 const BOPCA_HEAL_FRACTION = 0.3;
-/** Half a second at the fixed 60 Hz update — the cook animation's whole length. */
-const BOPCA_COOK_FRAMES = 30;
+const FRAMES_PER_SECOND = 60;
+
+/** How long a Bopca stands at the stove before a dish lands on the counter. */
+const BOPCA_COOK_SECONDS = 4;
+const BOPCA_COOK_FRAMES = BOPCA_COOK_SECONDS * FRAMES_PER_SECOND;
+/**
+ * The plating pose held once the dish is down. Short and unrelated to the cook
+ * itself — it is the beat of setting a plate on the counter, not the cooking.
+ */
+const BOPCA_SERVE_POSE_SECONDS = 0.5;
+const BOPCA_SERVE_POSE_FRAMES = BOPCA_SERVE_POSE_SECONDS * FRAMES_PER_SECOND;
 /** Within this range the Bopca looks up from the newsletter and tracks you. */
 const BOPCA_NOTICE_DISTANCE_TILES = 5;
 /** Within this range the `Talk` prompt appears and Space opens the dialog. */
@@ -83,8 +92,6 @@ const BOPCA_BLINK_DURATION_FRAMES = 7;
 const BARK_FRAMES = 150;
 /** Frames a heal popup rises for after a dish is eaten. */
 const HEAL_POPUP_FRAMES = 70;
-
-const FRAMES_PER_SECOND = 60;
 
 /** Warm pool of stove light on the galley floor, in tiles of radius. */
 const GALLEY_LIGHT_RADIUS_TILES = 1.6;
@@ -342,6 +349,14 @@ export class BopcaSystem implements GameSystem {
         entry.lastDishWentCold = entry.dish.framesOnCounter >= DISH_GOES_COLD_FRAMES;
         entry.dish = null;
       }
+      // An order in progress is abandoned along with a finished one. The cook
+      // runs for seconds, so walking out mid-order is easy to do — and letting
+      // it finish would plate a dish, and later bark about it going cold, into
+      // an empty room.
+      if (entry.activity === 'cooking') {
+        entry.cookFramesLeft = 0;
+        entry.activity = 'idleAnim';
+      }
       if (this.talkingEntry === entry) this.closeDialog();
     }
     entry.partyPresent = present;
@@ -409,12 +424,18 @@ export class BopcaSystem implements GameSystem {
     const dishId = randomDishId();
     entry.dish = { dishId, framesOnCounter: 0, commentedOnCold: false };
     entry.activity = 'serving';
-    entry.serveFramesLeft = BOPCA_COOK_FRAMES;
+    entry.serveFramesLeft = BOPCA_SERVE_POSE_FRAMES;
     entry.servesThisVisit++;
     entry.lastDishWentCold = false;
     this.bus.emit('bopcaServedFood', { dishId });
+    // Same split as `takeDish`: a cook now runs for seconds, so the dish usually
+    // lands after the player has closed the dialog and walked off — announcing it
+    // only into a dialog box would drop the line most of the time.
+    const dishName = DISH_DEF[dishId].name;
     if (this.talkingEntry === entry) {
-      this.showLine('serving', DISH_DEF[dishId].name);
+      this.showLine('serving', dishName);
+    } else {
+      this.showBark(entry, 'serving', dishName);
     }
   }
 
@@ -511,7 +532,12 @@ export class BopcaSystem implements GameSystem {
     this.talkingWith = active;
     this.dialogBox = null;
     this.activeTone = toneFor(active);
-    entry.activity = 'talking';
+    // Only an idle Bopca turns to face you. A busy one keeps its pose: this used
+    // to overwrite `cooking` unconditionally, and since `updateCook` is the sole
+    // thing that advances that state and nothing ever re-arms it, closing the
+    // dialog and reopening it to check on your order froze the order forever.
+    // `updateCook` hands the pose back to `talking` once the stove work is done.
+    if (entry.activity === 'idleAnim') entry.activity = 'talking';
     entry.barkFramesLeft = 0;
     entry.barkedThisVisit = true;
     this.chatTopicCursor = 0;
@@ -584,10 +610,17 @@ export class BopcaSystem implements GameSystem {
     return true;
   }
 
-  /** The choices on offer right now. `takeDish` is there only when one is waiting. */
+  /**
+   * The choices on offer right now. `takeDish` is there only when one is waiting,
+   * and `askForFood` only when the stove is free — a cook runs for seconds, and
+   * ordering again mid-cook silently restarted the timer the player was waiting on.
+   */
   private currentChoices(): ReadonlyArray<ChoiceId> {
     const hasDish = this.talkingEntry !== null && this.talkingEntry.dish !== null;
-    return CHOICE_ORDER.filter((id) => id !== 'takeDish' || hasDish);
+    const isCooking = this.talkingEntry !== null && this.talkingEntry.activity === 'cooking';
+    return CHOICE_ORDER.filter(
+      (id) => (id !== 'takeDish' || hasDish) && (id !== 'askForFood' || !isCooking),
+    );
   }
 
   /** The next question the chat button will ask, which is also what it is labelled. */
@@ -846,7 +879,7 @@ export class BopcaSystem implements GameSystem {
     }
   }
 
-  /** The dialog box and, once the line is read, the three-way choice row. */
+  /** The dialog box and, once the line is read, the choice row. */
   renderDialog(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
     const box = this.dialogBox;
     if (this.dialogPhase === 'closed' || box === null) return;

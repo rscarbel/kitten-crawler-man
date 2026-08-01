@@ -182,52 +182,19 @@ export function drawInteriorTile(
       return true;
     }
 
-    // Bookshelf — tall wooden shelf with coloured book spines
+    // Bookshelf — sprite only; the ground under it is drawn by the baseOnly
+    // chunk pass, as for the BARREL case below. Smashable, so it picks its wear
+    // state from the tile's damage stage the same way the other props do.
     case BOOKSHELF: {
-      const bsFloor = inferFloorType(structure, tx, ty);
-      if (!drawTerrainTile(ctx, structure, bsFloor, sx, sy, ts, tx, ty)) {
-        drawSpecialFloorTile(ctx, structure, bsFloor, sx, sy, ts, tx, ty);
-      }
-
-      const shelfInset = 2;
-      // Shelf back panel
-      ctx.fillStyle = '#5a3a1a';
-      ctx.fillRect(sx + shelfInset, sy + 1, ts - shelfInset * 2, ts - 2);
-      // Shelf horizontal dividers (3 shelves)
-      ctx.fillStyle = '#7a5030';
-      const shelfW = ts - shelfInset * 2;
-      for (let i = 0; i < 4; i++) {
-        const shelfY = sy + 1 + Math.floor(((ts - 2) * i) / 3);
-        ctx.fillRect(sx + shelfInset, shelfY, shelfW, 2);
-      }
-      // Books on each shelf row
-      const bookColors = [
-        '#c0392b',
-        '#2980b9',
-        '#27ae60',
-        '#8e44ad',
-        '#d4a017',
-        '#1abc9c',
-        '#e67e22',
-        '#6c3483',
-      ];
-      let colorIdx = (tx * 7 + ty * 3) % bookColors.length; // deterministic variety
-      for (let row = 0; row < 3; row++) {
-        const rowTop = sy + 3 + Math.floor(((ts - 2) * row) / 3);
-        const rowH = Math.floor((ts - 2) / 3) - 3;
-        let bx = sx + shelfInset + 2;
-        const rowEnd = sx + ts - shelfInset - 2;
-        while (bx + 2 < rowEnd) {
-          const bw = 2 + ((colorIdx * 3) % 3); // 2–4 px wide
-          ctx.fillStyle = bookColors[colorIdx % bookColors.length];
-          ctx.fillRect(bx, rowTop, bw, rowH);
-          // Spine highlight
-          ctx.fillStyle = 'rgba(255,255,255,0.18)';
-          ctx.fillRect(bx, rowTop, 1, rowH);
-          bx += bw + 1;
-          colorIdx++;
-        }
-      }
+      drawSpriteKey(
+        ctx,
+        'bookshelf',
+        propSpriteState(structure[ty][tx].damageStage),
+        0,
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 

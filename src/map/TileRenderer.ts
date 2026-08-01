@@ -18,6 +18,7 @@ import {
   MODERN_DECORATION,
   BARREL,
   BARREL_SIDE,
+  BOOKSHELF,
   CRATE,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
@@ -89,6 +90,7 @@ const DECORATION_TYPES = new Set([
   BARREL,
   BARREL_SIDE,
   CRATE,
+  BOOKSHELF,
 ]);
 
 /**
