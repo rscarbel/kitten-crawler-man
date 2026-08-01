@@ -2,6 +2,7 @@ import type { GameSystem } from './GameSystem';
 import type { SpriteKey } from '../core/SpriteLoader';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { drawSpriteRotatedCenter } from '../core/SpriteRenderer';
+import type { GameMap } from '../map/GameMap';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -68,6 +69,19 @@ const VZ_MAX = 4.0;
 const GRAVITY = 0.1;
 const SPIN_MIN = 0.04;
 const SPIN_MAX = 0.14;
+/**
+ * Tumbles run for a fixed duration rather than a fixed speed: a part is drawn
+ * over the wall it is escaping, so the artifact must clear quickly regardless
+ * of how far it has to travel.
+ */
+const TUMBLE_DURATION_FRAMES = 30;
+/** Spin carried into the tumble, so parts visibly roll rather than glide rigidly. */
+const TUMBLE_SPIN = 0.06;
+/** Wall thickness the exit slide is expected to cross; beyond this a part stays where it fell. */
+const TUMBLE_SEARCH_RADIUS_TILES = 3;
+/** Half-width of the random resting spread inside the target tile, as a fraction of it. */
+const TUMBLE_SCATTER_RATIO = 0.25;
+const TILE_CENTER_RATIO = 0.5;
 
 interface FlyingPart {
   x: number;
@@ -78,6 +92,22 @@ interface FlyingPart {
   vz: number; // vertical velocity (positive = rising)
   angle: number;
   spin: number;
+  spriteKey: SpriteKey;
+  stateName: string;
+  tileSize: number;
+}
+
+/** A part that landed inside an unwalkable tile and is sliding toward open ground. */
+interface TumblingPart {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  angle: number;
+  spin: number;
+  targetX: number;
+  targetY: number;
+  framesLeft: number;
   spriteKey: SpriteKey;
   stateName: string;
   tileSize: number;
@@ -95,7 +125,10 @@ interface SettledPart {
 
 export class BodyPartGoreSystem implements GameSystem {
   private readonly flying: FlyingPart[] = [];
+  private readonly tumbling: TumblingPart[] = [];
   private readonly settled: SettledPart[] = [];
+
+  constructor(private readonly map: GameMap) {}
 
   spawnParts(
     cx: number,
@@ -152,19 +185,22 @@ export class BodyPartGoreSystem implements GameSystem {
       p.angle += p.spin;
 
       if (p.z <= 0 && p.vz < 0) {
-        if (this.settled.length < MAX_SETTLED_PARTS) {
-          this.settled.push({
-            x: p.x,
-            y: p.y,
-            angle: p.angle,
-            spriteKey: p.spriteKey,
-            stateName: p.stateName,
-            tileSize: p.tileSize,
-            life: PART_LIFETIME,
-          });
-        }
+        this._land(p);
         this.flying[i] = this.flying[this.flying.length - 1];
         this.flying.pop();
+      }
+    }
+
+    for (let i = this.tumbling.length - 1; i >= 0; i--) {
+      const p = this.tumbling[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.angle += p.spin;
+      p.framesLeft--;
+      if (p.framesLeft <= 0) {
+        this._settle(p.targetX, p.targetY, p.angle, p);
+        this.tumbling[i] = this.tumbling[this.tumbling.length - 1];
+        this.tumbling.pop();
       }
     }
 
@@ -175,6 +211,110 @@ export class BodyPartGoreSystem implements GameSystem {
         this.settled.pop();
       }
     }
+  }
+
+  /**
+   * Resolves where a part comes to rest. Parts fly over walls while airborne,
+   * so one can easily touch down inside a wall or other blocked tile; those
+   * tumble toward the nearest open ground instead of resting inside geometry.
+   */
+  private _land(p: FlyingPart): void {
+    // Tumbling parts are already spoken for against the cap, so a part with no
+    // reserved slot is dropped at landing rather than vanishing mid-slide.
+    const partsHoldingASettledSlot = this.settled.length + this.tumbling.length;
+    if (partsHoldingASettledSlot >= MAX_SETTLED_PARTS) return;
+
+    if (this._isOnWalkableGround(p.x, p.y, p.tileSize)) {
+      this._settle(p.x, p.y, p.angle, p);
+      return;
+    }
+
+    const restingSpot = this._findTumbleTarget(p.x, p.y, p.tileSize);
+    if (restingSpot === null) {
+      this._settle(p.x, p.y, p.angle, p);
+      return;
+    }
+
+    const rollDirection = p.spin < 0 ? -TUMBLE_SPIN : TUMBLE_SPIN;
+    this.tumbling.push({
+      x: p.x,
+      y: p.y,
+      vx: (restingSpot.x - p.x) / TUMBLE_DURATION_FRAMES,
+      vy: (restingSpot.y - p.y) / TUMBLE_DURATION_FRAMES,
+      angle: p.angle,
+      spin: rollDirection,
+      targetX: restingSpot.x,
+      targetY: restingSpot.y,
+      framesLeft: TUMBLE_DURATION_FRAMES,
+      spriteKey: p.spriteKey,
+      stateName: p.stateName,
+      tileSize: p.tileSize,
+    });
+  }
+
+  /**
+   * Finds the world position a part buried in geometry should slide to: the
+   * closest walkable tile by ring search, scattered within that tile so the six
+   * parts of one corpse don't stack on a single pixel.
+   */
+  private _findTumbleTarget(
+    x: number,
+    y: number,
+    tileSize: number,
+  ): { x: number; y: number } | null {
+    const originTileX = Math.floor(x / tileSize);
+    const originTileY = Math.floor(y / tileSize);
+
+    for (let radius = 1; radius <= TUMBLE_SEARCH_RADIUS_TILES; radius++) {
+      let closestTile: { x: number; y: number } | null = null;
+      let closestDistSq = Infinity;
+
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const onRing = Math.max(Math.abs(dx), Math.abs(dy)) === radius;
+          if (!onRing) continue;
+          const tileX = originTileX + dx;
+          const tileY = originTileY + dy;
+          if (!this.map.isWalkable(tileX, tileY)) continue;
+          const centerX = (tileX + TILE_CENTER_RATIO) * tileSize;
+          const centerY = (tileY + TILE_CENTER_RATIO) * tileSize;
+          const distSq = (centerX - x) ** 2 + (centerY - y) ** 2;
+          if (distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestTile = { x: centerX, y: centerY };
+          }
+        }
+      }
+
+      if (closestTile !== null) {
+        const scatterRange = tileSize * TUMBLE_SCATTER_RATIO;
+        const scatterX = (Math.random() * 2 - 1) * scatterRange;
+        const scatterY = (Math.random() * 2 - 1) * scatterRange;
+        return { x: closestTile.x + scatterX, y: closestTile.y + scatterY };
+      }
+    }
+    return null;
+  }
+
+  private _isOnWalkableGround(x: number, y: number, tileSize: number): boolean {
+    return this.map.isWalkable(Math.floor(x / tileSize), Math.floor(y / tileSize));
+  }
+
+  private _settle(
+    x: number,
+    y: number,
+    angle: number,
+    source: Pick<FlyingPart, 'spriteKey' | 'stateName' | 'tileSize'>,
+  ): void {
+    this.settled.push({
+      x,
+      y,
+      angle,
+      spriteKey: source.spriteKey,
+      stateName: source.stateName,
+      tileSize: source.tileSize,
+      life: PART_LIFETIME,
+    });
   }
 
   renderSettled(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -190,6 +330,10 @@ export class BodyPartGoreSystem implements GameSystem {
         p.tileSize,
         alpha,
       );
+    }
+
+    for (const p of this.tumbling) {
+      this._drawPart(ctx, p.x - camX, p.y - camY, p.angle, p.spriteKey, p.stateName, p.tileSize, 1);
     }
   }
 

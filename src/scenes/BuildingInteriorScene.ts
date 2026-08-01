@@ -544,7 +544,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
     const spells = new SpellSystem();
     const gore = new GoreSystem();
-    const bodyPartGore = new BodyPartGoreSystem();
+    const bodyPartGore = new BodyPartGoreSystem(map);
     const deathScreen = new DeathScreen();
     deathScreen.audio = this.audio;
 

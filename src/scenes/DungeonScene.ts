@@ -532,7 +532,7 @@ export class DungeonScene extends GameplayScene {
   private readonly godModeState: GodModeState;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private gore = new GoreSystem();
-  private bodyPartGore = new BodyPartGoreSystem();
+  private bodyPartGore: BodyPartGoreSystem;
   private playerTick = new PlayerTickSystem();
   private mongoSystem = new MongoSystem();
   private readonly mercenarySystem: MercenarySystem;
@@ -732,6 +732,7 @@ export class DungeonScene extends GameplayScene {
     );
 
     this.cat.setMap(this.gameMap);
+    this.bodyPartGore = new BodyPartGoreSystem(this.gameMap);
 
     this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
     for (const mob of this.mobs) this.mobGrid.insert(mob);
