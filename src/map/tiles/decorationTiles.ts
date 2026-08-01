@@ -678,12 +678,14 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Brazier — animated iron fire brazier, extends above tile
+    // Brazier — animated iron fire brazier, extends above tile. Smashable, so
+    // like the torch it picks its wear state from the tile's damage stage and
+    // keeps burning while it stands.
     case BRAZIER: {
       drawSpriteKey(
         ctx,
         'brazier',
-        'flicker',
+        propSpriteState(structure[ty][tx].damageStage),
         timeFrameIndex(frameTime, BRAZIER_FLAME_FPS, BRAZIER_FLAME_FRAMES),
         sx,
         sy,

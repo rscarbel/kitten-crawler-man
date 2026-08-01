@@ -2,7 +2,14 @@ import { TILE_SIZE } from '../core/constants';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameMap } from '../map/GameMap';
-import { BARREL, BARREL_SIDE, CRATE, TORCH, PROP_DAMAGE_STAGE_CRACKED } from '../map/tileTypes';
+import {
+  BARREL,
+  BARREL_SIDE,
+  BRAZIER,
+  CRATE,
+  TORCH,
+  PROP_DAMAGE_STAGE_CRACKED,
+} from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
 import { drawSpriteKey, progressFrameIndex } from '../core/SpriteRenderer';
 import { randomInt } from '../utils';
@@ -19,13 +26,15 @@ const TILE_CENTER_OFFSET = 0.5;
 const TWO_PI = Math.PI * 2;
 
 /** The prop tile types a melee swing can break. */
-export type DestructiblePropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch';
+export type DestructiblePropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier';
 
 const BARREL_HP = 6;
 const BARREL_SIDE_HP = 5;
 const CRATE_HP = 6;
 /** A torch is a stick in a stand — the flimsiest of the props. */
 const TORCH_HP = 4;
+/** All iron and squat with it, so a brazier takes the most punishment of the lot. */
+const BRAZIER_HP = 9;
 /**
  * HP a prop that is already wearing its cracked art comes back missing when its
  * health entry has to be rebuilt. It cannot come back at full: `damageStage`
@@ -90,12 +99,14 @@ const SPLINTER_ORIGIN_OFFSET_TILES: Record<DestructiblePropKind, number> = {
   barrel_side: 0,
   crate: 0,
   torch: -0.16,
+  brazier: -0.06,
 };
 const SPLINTER_ORIGIN_SPAN_TILES: Record<DestructiblePropKind, number> = {
   barrel: 0,
   barrel_side: 0,
   crate: 0,
   torch: 1.05,
+  brazier: 0.3,
 };
 /** Splinters fade over the last third of their life. */
 const SPLINTER_FADE_DIVISOR = 3;
@@ -105,7 +116,27 @@ const SPLINTER_FADE_FRACTION = 1 / SPLINTER_FADE_DIVISOR;
 const bipolarRandom = () => Math.random() * 2 - 1;
 
 /** Wood tones for the splinter shards — the same ramp the prop sheets are drawn in. */
-const SPLINTER_SHADES = ['#3a2413', '#5a3a1e', '#7a5028', '#9a6a38', '#c09050'] as const;
+const WOOD_SPLINTER_SHADES = ['#3a2413', '#5a3a1e', '#7a5028', '#9a6a38', '#c09050'] as const;
+/**
+ * Bent iron and spilled coals, for the one prop with no wood in it. Sharing the
+ * wood ramp would throw brown splinters out of an iron bowl.
+ */
+const IRON_SPLINTER_SHADES = ['#3a4048', '#4a5058', '#6b7480', '#ff8a1e', '#e2450f'] as const;
+
+/** What a prop is chiefly made of, which decides how its break sounds and looks. */
+type PropMaterial = 'wood' | 'iron';
+
+function materialFor(kind: DestructiblePropKind): PropMaterial {
+  return kind === 'brazier' ? 'iron' : 'wood';
+}
+
+/** The debris palette a kind throws when it breaks. */
+function splinterShadesFor(kind: DestructiblePropKind): ReadonlyArray<string> {
+  return materialFor(kind) === 'iron' ? IRON_SPLINTER_SHADES : WOOD_SPLINTER_SHADES;
+}
+
+/** Breaks that happened since the scene last drained them, by material. */
+export type SmashCounts = Record<PropMaterial, number>;
 
 /**
  * Damage large enough to flatten any prop in one application, whatever its
@@ -157,6 +188,7 @@ function kindForTileType(type: number): DestructiblePropKind | null {
   if (type === BARREL_SIDE) return 'barrel_side';
   if (type === CRATE) return 'crate';
   if (type === TORCH) return 'torch';
+  if (type === BRAZIER) return 'brazier';
   return null;
 }
 
@@ -164,6 +196,7 @@ function startingHpFor(kind: DestructiblePropKind): number {
   if (kind === 'barrel') return BARREL_HP;
   if (kind === 'barrel_side') return BARREL_SIDE_HP;
   if (kind === 'torch') return TORCH_HP;
+  if (kind === 'brazier') return BRAZIER_HP;
   return CRATE_HP;
 }
 
@@ -181,7 +214,7 @@ export class DestructiblePropSystem implements GameSystem {
   private readonly bursts: ShatterBurst[] = [];
   private readonly wreckage: Wreckage[] = [];
   private readonly splinters: Splinter[] = [];
-  private smashCount = 0;
+  private readonly smashCounts: SmashCounts = { wood: 0, iron: 0 };
 
   constructor(
     private readonly gameMap: GameMap,
@@ -322,11 +355,15 @@ export class DestructiblePropSystem implements GameSystem {
     return hitAnything;
   }
 
-  /** Smashes drained by DungeonScene to fire the rotating wood_smashing cue. */
-  drainSmashes(): number {
-    const n = this.smashCount;
-    this.smashCount = 0;
-    return n;
+  /**
+   * Smashes drained by DungeonScene to fire the break cues, split by material so
+   * an iron brazier does not collapse to the sound of splitting planks.
+   */
+  drainSmashes(): SmashCounts {
+    const counts = { ...this.smashCounts };
+    this.smashCounts.wood = 0;
+    this.smashCounts.iron = 0;
+    return counts;
   }
 
   private breakProp(
@@ -363,7 +400,7 @@ export class DestructiblePropSystem implements GameSystem {
       true,
     );
 
-    this.smashCount++;
+    this.smashCounts[materialFor(kind)]++;
   }
 
   /**
@@ -391,6 +428,7 @@ export class DestructiblePropSystem implements GameSystem {
     const count = randomInt(SPLINTER_COUNT_MIN, SPLINTER_COUNT_MAX);
     const originY = cy + SPLINTER_ORIGIN_OFFSET_TILES[kind] * TILE_SIZE;
     const originHalfSpan = (SPLINTER_ORIGIN_SPAN_TILES[kind] * TILE_SIZE) / 2;
+    const shades = splinterShadesFor(kind);
 
     for (let i = 0; i < count; i++) {
       const inForwardCone = hasDirection && Math.random() < SPLINTER_FORWARD_CONE_BIAS;
@@ -407,7 +445,7 @@ export class DestructiblePropSystem implements GameSystem {
         angle: Math.random() * TWO_PI,
         spin: bipolarRandom() * SPLINTER_SPIN_MAX,
         length: SPLINTER_LENGTH_MIN + Math.random() * (SPLINTER_LENGTH_MAX - SPLINTER_LENGTH_MIN),
-        shade: SPLINTER_SHADES[Math.floor(Math.random() * SPLINTER_SHADES.length)],
+        shade: shades[Math.floor(Math.random() * shades.length)],
         life,
         maxLife: life,
       });

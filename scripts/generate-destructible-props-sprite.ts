@@ -2,17 +2,18 @@
 /**
  * Generates the destructible prop sprite sheets from procedural drawing code.
  *
- * Outputs four PNG files to src/images/environment/props/:
+ * Outputs five PNG files to src/images/environment/props/:
  *   barrel.png       — idle (row 0) + damaged (1) + shatter (2, 6 frames) + remains (3)
  *   barrel_side.png  — same four rows
  *   crate.png        — same four rows
  *   torch.png        — same four rows, but idle and damaged are 6-frame flame loops
+ *   brazier.png      — same four rows, with 4-frame flame loops
  *
  * Frames carry the 64px logical tile inset by 16px on every side, so shatter
  * debris can fly past the tile footprint without being clipped by the
- * neighbouring frame. The tile footprint itself is unchanged. The torch needs a
- * taller frame than the boxy props because its flame reaches a tile above the
- * ground it stands on.
+ * neighbouring frame. The tile footprint itself is unchanged. The two burning
+ * props need a taller frame than the boxy ones because their flames reach a tile
+ * above the ground they stand on.
  *
  * Run: npx tsx scripts/generate-destructible-props-sprite.ts
  */
@@ -29,11 +30,17 @@ const DEBRIS_MARGIN = 16;
 const SHATTER_FRAMES = 6;
 /** Frames in the torch's flame loop, shared by its intact and damaged rows. */
 const FLAME_FRAMES = 6;
+/**
+ * Frames in the brazier's flame loop. Shorter than the torch's because a bed of
+ * coals in a wide bowl settles into a slower, less legible dance than a brand
+ * does — and this is the count the tile renderer has always played it at.
+ */
+const BRAZIER_FLAME_FRAMES = 4;
 const ROW_COUNT = 4;
 
 const TWO_PI = Math.PI * 2;
 
-type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch';
+type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier';
 type PropState = 'idle' | 'damaged' | 'shatter' | 'remains';
 
 interface FrameGeometry {
@@ -51,25 +58,28 @@ const BOXED_FRAME: FrameGeometry = {
   tileY: DEBRIS_MARGIN,
 };
 
+/** The props whose art climbs above their own tile: a haft, or a bed of coals. */
+const BURNING_KINDS: ReadonlySet<PropKind> = new Set<PropKind>(['torch', 'brazier']);
+
 /**
- * Headroom above the torch's tile, for the haft, the flame and its smoke.
+ * Headroom above a burning prop's tile, for the flame and its smoke.
  *
  * Exactly one tile, not one tile plus a debris margin: `unregisteredDecorationExtents`
  * in TileRenderer assumes a sprite-drawn decoration with no registered tile type
- * reaches at most one tile past its own square, and registering the torch to buy
- * it more would also hand it a frame-derived Y-sort anchor a quarter-tile below
- * its actual foot. The flame and the shatter burst are sized to fit inside this.
+ * reaches at most one tile past its own square, and registering these props to
+ * buy them more would also hand them a frame-derived Y-sort anchor a quarter-tile
+ * below their actual foot. Flames and shatter bursts are sized to fit inside this.
  */
-const TORCH_HEADROOM = TILE_SCALE;
-const TORCH_FRAME: FrameGeometry = {
+const BURNING_HEADROOM = TILE_SCALE;
+const BURNING_FRAME: FrameGeometry = {
   frameW: TILE_SCALE + DEBRIS_MARGIN * 2,
-  frameH: TORCH_HEADROOM + TILE_SCALE + DEBRIS_MARGIN,
+  frameH: BURNING_HEADROOM + TILE_SCALE + DEBRIS_MARGIN,
   tileX: DEBRIS_MARGIN,
-  tileY: TORCH_HEADROOM,
+  tileY: BURNING_HEADROOM,
 };
 
 function frameGeometryFor(kind: PropKind): FrameGeometry {
-  return kind === 'torch' ? TORCH_FRAME : BOXED_FRAME;
+  return BURNING_KINDS.has(kind) ? BURNING_FRAME : BOXED_FRAME;
 }
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -90,9 +100,14 @@ const IRON_MID = '#4a5058';
 const IRON_LIGHT = '#6b7480';
 const IRON_SPEC = '#9aa4b0';
 
+const IRON_RAMP = [IRON_DARK, IRON_MID, IRON_LIGHT] as const;
+
 const CAVITY = '#1d1208';
 const DUST = '#b09878';
 const DUST_RGB = [176, 152, 120] as const;
+/** Grey-brown haze an iron prop throws instead of a wooden one's sawdust. */
+const ASH = '#8a7e74';
+const ASH_RGB = [138, 126, 116] as const;
 
 // Fire ramp for the torch, running from the pale core out to the cooling tips.
 const FLAME_CORE = '#fff6cf';
@@ -347,14 +362,30 @@ function puff(
   ctx.restore();
 }
 
-/** Fine sawdust speckle scattered over settled wreckage. */
-function sawdust(ctx: NodeCtx, cx: number, cy: number, spread: number, rng: () => number): void {
+const SPECKLE_COUNT = 26;
+/** How often a speckle takes the lighter of its two shades. */
+const SPECKLE_LIGHT_SHADE_CHANCE = 0.4;
+
+/**
+ * Fine speckle scattered over settled wreckage — sawdust off a splintered
+ * plank, ash off a spilled fire bed. The caller picks the two shades so the
+ * dusting matches whatever came apart.
+ */
+function speckle(
+  ctx: NodeCtx,
+  cx: number,
+  cy: number,
+  spread: number,
+  rng: () => number,
+  lightShade: string,
+  darkShade: string,
+): void {
   ctx.save();
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < SPECKLE_COUNT; i++) {
     const a = rng() * TWO_PI;
     const r = Math.sqrt(rng()) * spread;
     ctx.globalAlpha = 0.25 + rng() * 0.35;
-    ctx.fillStyle = rng() < 0.4 ? DUST : WOOD_DARK;
+    ctx.fillStyle = rng() < SPECKLE_LIGHT_SHADE_CHANCE ? lightShade : darkShade;
     ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.55, 1, 1);
   }
   ctx.restore();
@@ -1061,48 +1092,56 @@ function flamePath(
   ctx.closePath();
 }
 
-function drawTorchFlame(
+/**
+ * The fire itself, rising from `baseY` at `cx`: three nested teardrops, an ember
+ * glow behind them, and a column of smoke off the tip.
+ *
+ * @param sizeScale Multiplies every dimension, so a brazier's bed of coals burns
+ *   visibly bigger than a single brand without a second copy of this code.
+ */
+function drawFlame(
   ctx: NodeCtx,
-  g: TorchGeometry,
+  cx: number,
+  baseY: number,
   ts: number,
   phase: number,
   damaged: boolean,
+  sizeScale: number,
 ): void {
   const wave = Math.sin(phase * TWO_PI);
-  const scale = damaged ? FLAME_DAMAGED_SCALE : 1;
+  const scale = (damaged ? FLAME_DAMAGED_SCALE : 1) * sizeScale;
   const height = (FLAME_BASE_H + wave * FLAME_H_FLICKER) * scale;
   const halfW = FLAME_HALF_W * scale;
   const sway = Math.sin(phase * TWO_PI * 2) * FLAME_SWAY;
-  const baseY = g.rimY - 1;
   const tipY = baseY - height;
 
   const glowY = baseY - height * FLAME_GLOW_CENTER_FRACTION;
   puff(
     ctx,
-    g.cx + sway * FLAME_GLOW_CENTER_FRACTION,
+    cx + sway * FLAME_GLOW_CENTER_FRACTION,
     glowY,
-    ts * FLAME_GLOW_RADIUS_TILE_FRACTION,
+    ts * FLAME_GLOW_RADIUS_TILE_FRACTION * sizeScale,
     FLAME_GLOW_ALPHA_BASE + wave * FLAME_GLOW_ALPHA_FLICKER,
     EMBER_RGB,
   );
 
   ctx.save();
-  flamePath(ctx, g.cx, baseY, halfW, height, sway);
-  const outerGrad = ctx.createLinearGradient(g.cx, baseY, g.cx, tipY);
+  flamePath(ctx, cx, baseY, halfW, height, sway);
+  const outerGrad = ctx.createLinearGradient(cx, baseY, cx, tipY);
   outerGrad.addColorStop(0, FLAME_MID);
   outerGrad.addColorStop(0.55, FLAME_OUTER);
   outerGrad.addColorStop(1, FLAME_OUTER);
   ctx.fillStyle = outerGrad;
   ctx.fill();
 
-  flamePath(ctx, g.cx, baseY, halfW * FLAME_MID_SCALE, height * 0.78, sway * 0.7);
-  const midGrad = ctx.createLinearGradient(g.cx, baseY, g.cx, tipY);
+  flamePath(ctx, cx, baseY, halfW * FLAME_MID_SCALE, height * 0.78, sway * 0.7);
+  const midGrad = ctx.createLinearGradient(cx, baseY, cx, tipY);
   midGrad.addColorStop(0, FLAME_HOT);
   midGrad.addColorStop(1, FLAME_MID);
   ctx.fillStyle = midGrad;
   ctx.fill();
 
-  flamePath(ctx, g.cx, baseY, halfW * FLAME_CORE_SCALE, height * 0.5, sway * 0.4);
+  flamePath(ctx, cx, baseY, halfW * FLAME_CORE_SCALE, height * 0.5, sway * 0.4);
   ctx.fillStyle = FLAME_CORE;
   ctx.fill();
   ctx.restore();
@@ -1112,9 +1151,9 @@ function drawTorchFlame(
     const drift = Math.sin(phase * TWO_PI + i) * SMOKE_PUFF_SWAY;
     puff(
       ctx,
-      g.cx + sway + drift,
+      cx + sway + drift,
       tipY - SMOKE_PUFF_LIFT - i * SMOKE_PUFF_STRIDE,
-      SMOKE_PUFF_BASE_RADIUS + i,
+      (SMOKE_PUFF_BASE_RADIUS + i) * sizeScale,
       Math.max(0, (SMOKE_PUFF_ALPHA_BASE - i * SMOKE_PUFF_ALPHA_DECAY) * smokeAlphaScale),
       SMOKE_RGB,
     );
@@ -1136,7 +1175,207 @@ function drawTorch(
   drawTorchFoot(ctx, g);
   drawTorchHaft(ctx, g, rng, damaged);
   drawTorchBowl(ctx, g, rng, damaged);
-  drawTorchFlame(ctx, g, ts, frame / FLAME_FRAMES, damaged);
+  drawFlame(ctx, g.cx, g.rimY - 1, ts, frame / FLAME_FRAMES, damaged, TORCH_FLAME_SCALE);
+}
+
+// ── Brazier ───────────────────────────────────────────────────────────────────
+// A wide iron fire-bowl on three splayed legs. Unlike the torch there is no wood
+// in it at all, so a swing that fells one throws bent iron and scattered coals
+// rather than splinters.
+
+/** Where the legs meet the floor, as a fraction of the tile. */
+const BRAZIER_FOOT_BASE_FRACTION = 0.94;
+/** Where the bowl's rim sits, as a fraction of the tile below its top edge. */
+const BRAZIER_RIM_FRACTION = 0.42;
+const BRAZIER_BOWL_RIM_RX = 19;
+const BRAZIER_BOWL_RIM_RY = 6.5;
+const BRAZIER_BOWL_DEPTH = 12;
+const BRAZIER_BOWL_BASE_HALF_W = 8.5;
+const BRAZIER_LEG_COUNT = 3;
+/** Horizontal offsets of each leg's foot and its attachment under the bowl. */
+const BRAZIER_LEG_FOOT_OFFSETS = [-15, 0, 15] as const;
+const BRAZIER_LEG_TOP_OFFSETS = [-6.5, 0, 6.5] as const;
+const BRAZIER_LEG_WIDTH = 3.4;
+/** The centre leg points at the viewer, so its foot lands lower than the outer two. */
+const BRAZIER_CENTER_LEG_FOOT_DROP = 3;
+const BRAZIER_FOOT_PAD_RX = 4;
+const BRAZIER_FOOT_PAD_RY = 1.8;
+/** Iron collar hiding the joint where the three legs meet the bowl's base. */
+const BRAZIER_COLLAR_RX = 10;
+const BRAZIER_COLLAR_RY = 3;
+const BRAZIER_COAL_COUNT = 9;
+const BRAZIER_COAL_RADIUS = 2.1;
+/** How far across the rim the coal bed is spread, as a fraction of its radius. */
+const BRAZIER_COAL_SPREAD_FRACTION = 0.72;
+/** Tilt a struck bowl settles at, in radians. */
+const BRAZIER_DAMAGED_BOWL_TILT = 0.11;
+/** Angle the buckled outer leg folds through, in radians. */
+const BRAZIER_BUCKLED_LEG_TILT = 0.28;
+/** Which leg buckles when the brazier is damaged. */
+const BRAZIER_BUCKLED_LEG_INDEX = 0;
+/** A bed of coals burns bigger than a single brand. */
+const BRAZIER_FLAME_SCALE = 1.9;
+const TORCH_FLAME_SCALE = 1;
+
+interface BrazierGeometry {
+  cx: number;
+  footY: number;
+  rimY: number;
+  bowlBottomY: number;
+}
+
+function brazierGeometry(ox: number, oy: number, ts: number): BrazierGeometry {
+  const rimY = oy + ts * BRAZIER_RIM_FRACTION;
+  return {
+    cx: ox + ts / 2,
+    footY: oy + ts * BRAZIER_FOOT_BASE_FRACTION,
+    rimY,
+    bowlBottomY: rimY + BRAZIER_BOWL_DEPTH,
+  };
+}
+
+function drawBrazierLegs(ctx: NodeCtx, g: BrazierGeometry, damaged: boolean): void {
+  const { cx, footY, bowlBottomY } = g;
+  for (let i = 0; i < BRAZIER_LEG_COUNT; i++) {
+    const isCenterLeg = BRAZIER_LEG_FOOT_OFFSETS[i] === 0;
+    const legFootY = footY + (isCenterLeg ? BRAZIER_CENTER_LEG_FOOT_DROP : 0);
+    const footX = cx + BRAZIER_LEG_FOOT_OFFSETS[i];
+    const topX = cx + BRAZIER_LEG_TOP_OFFSETS[i];
+    const isBuckled = damaged && i === BRAZIER_BUCKLED_LEG_INDEX;
+
+    ctx.save();
+    if (isBuckled) {
+      ctx.translate(topX, bowlBottomY);
+      ctx.rotate(BRAZIER_BUCKLED_LEG_TILT);
+      ctx.translate(-topX, -bowlBottomY);
+    }
+    ironStrap(ctx, topX, bowlBottomY, footX, legFootY, BRAZIER_LEG_WIDTH);
+    ctx.fillStyle = IRON_DARK;
+    ctx.beginPath();
+    ctx.ellipse(footX, legFootY, BRAZIER_FOOT_PAD_RX, BRAZIER_FOOT_PAD_RY, 0, 0, TWO_PI);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  const collarGrad = ctx.createLinearGradient(
+    cx - BRAZIER_COLLAR_RX,
+    bowlBottomY,
+    cx + BRAZIER_COLLAR_RX,
+    bowlBottomY,
+  );
+  collarGrad.addColorStop(0, IRON_LIGHT);
+  collarGrad.addColorStop(0.5, IRON_MID);
+  collarGrad.addColorStop(1, IRON_DARK);
+  ctx.fillStyle = collarGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, bowlBottomY, BRAZIER_COLLAR_RX, BRAZIER_COLLAR_RY, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBrazierBowl(
+  ctx: NodeCtx,
+  g: BrazierGeometry,
+  rng: () => number,
+  damaged: boolean,
+): void {
+  const { cx, rimY, bowlBottomY } = g;
+  ctx.save();
+  if (damaged) {
+    ctx.translate(cx, rimY);
+    ctx.rotate(BRAZIER_DAMAGED_BOWL_TILT);
+    ctx.translate(-cx, -rimY);
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(cx - BRAZIER_BOWL_RIM_RX, rimY);
+  ctx.lineTo(cx - BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
+  ctx.lineTo(cx + BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
+  ctx.lineTo(cx + BRAZIER_BOWL_RIM_RX, rimY);
+  ctx.closePath();
+  const bowlGrad = ctx.createLinearGradient(
+    cx - BRAZIER_BOWL_RIM_RX,
+    rimY,
+    cx + BRAZIER_BOWL_RIM_RX,
+    bowlBottomY,
+  );
+  bowlGrad.addColorStop(0, IRON_LIGHT);
+  bowlGrad.addColorStop(0.45, IRON_MID);
+  bowlGrad.addColorStop(1, IRON_DARK);
+  ctx.fillStyle = bowlGrad;
+  ctx.fill();
+  ctx.strokeStyle = WOOD_EDGE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Rim, then the soot-black bed of coals seen over its near edge.
+  ctx.beginPath();
+  ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, 0, TWO_PI);
+  ctx.fillStyle = SOOT;
+  ctx.fill();
+  ctx.strokeStyle = IRON_SPEC;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, Math.PI * 1.05, Math.PI * 1.9);
+  ctx.stroke();
+
+  const coalSpread = BRAZIER_BOWL_RIM_RX * BRAZIER_COAL_SPREAD_FRACTION;
+  for (let i = 0; i < BRAZIER_COAL_COUNT; i++) {
+    const t = (i + 0.5) / BRAZIER_COAL_COUNT;
+    ctx.globalAlpha = 0.6 + rng() * 0.4;
+    ctx.fillStyle = rng() < 0.4 ? FLAME_HOT : FLAME_OUTER;
+    ctx.beginPath();
+    ctx.arc(
+      lerp(cx - coalSpread, cx + coalSpread, t),
+      rimY + (rng() - 0.5) * BRAZIER_BOWL_RIM_RY,
+      BRAZIER_COAL_RADIUS * (0.6 + rng() * 0.6),
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (damaged) {
+    // A split down the bowl's face and a bite out of the rim, so the iron reads
+    // as struck rather than merely leaning.
+    crack(ctx, cx + 4, rimY + 3, bowlBottomY - 1, 2.5, rng);
+    ctx.save();
+    ctx.fillStyle = SOOT;
+    ctx.beginPath();
+    ctx.moveTo(cx - BRAZIER_BOWL_RIM_RX + 4, rimY - 2);
+    ctx.lineTo(cx - BRAZIER_BOWL_RIM_RX - 1, rimY + 1);
+    ctx.lineTo(cx - BRAZIER_BOWL_RIM_RX + 3, rimY + 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawBrazier(
+  ctx: NodeCtx,
+  ox: number,
+  oy: number,
+  ts: number,
+  damaged: boolean,
+  frame: number,
+): void {
+  const rng = makeRng(0x3f81);
+  const g = brazierGeometry(ox, oy, ts);
+
+  contactShadow(ctx, g.cx, g.footY + 2, ts, 0.95);
+  drawBrazierLegs(ctx, g, damaged);
+  drawBrazierBowl(ctx, g, rng, damaged);
+  drawFlame(
+    ctx,
+    g.cx,
+    g.rimY - 1,
+    ts,
+    frame / BRAZIER_FLAME_FRAMES,
+    damaged,
+    BRAZIER_FLAME_SCALE,
+  );
 }
 
 // ── Shatter ───────────────────────────────────────────────────────────────────
@@ -1163,6 +1402,15 @@ const BURST_CENTER_Y_FRACTION = 0.5;
  * along its length instead of the floor beneath it erupting.
  */
 const TORCH_BURST_CENTER_Y_FRACTION = 0.34;
+/** The brazier's mass is its bowl, which rides a little above the tile centre. */
+const BRAZIER_BURST_CENTER_Y_FRACTION = 0.44;
+
+/** Where a kind's break erupts from, as a fraction of tile height. */
+function burstCenterYFraction(kind: PropKind): number {
+  if (kind === 'torch') return TORCH_BURST_CENTER_Y_FRACTION;
+  if (kind === 'brazier') return BRAZIER_BURST_CENTER_Y_FRACTION;
+  return BURST_CENTER_Y_FRACTION;
+}
 /** Top-down foreshortening: debris spreads less vertically than horizontally. */
 const DEBRIS_VERTICAL_SQUASH = 0.6;
 const DEBRIS_COUNT = 16;
@@ -1260,15 +1508,61 @@ function buildTorchDebris(seed: number): DebrisSpec[] {
   return out;
 }
 
+// ── Iron debris ───────────────────────────────────────────────────────────────
+// A brazier has no wood in it. Its break is bent iron thrown in a flat ring the
+// width of the bowl, with the coal bed scattering out ahead of it.
+
+const BRAZIER_DEBRIS_COUNT = 17;
+/** Wider than the torch's sideways fling: a bowl comes apart outwards. */
+const BRAZIER_DEBRIS_SPREAD_PX = 28;
+/** One piece in three is a coal off the fire bed rather than a scrap of iron. */
+const BRAZIER_DEBRIS_COAL_PERIOD = 3;
+const BRAZIER_IRON_LENGTH_MIN = 8;
+const BRAZIER_IRON_LENGTH_SPREAD = 7;
+const BRAZIER_IRON_WIDTH = 2.5;
+const BRAZIER_COAL_LENGTH_MIN = 3;
+const BRAZIER_COAL_LENGTH_SPREAD = 3.5;
+const BRAZIER_COAL_WIDTH_MIN = 2.2;
+const BRAZIER_COAL_WIDTH_SPREAD = 1.6;
+const BRAZIER_DEBRIS_SPIN_MAX = 6;
+/** Fire ramp the flying coals are tinted from. */
+const COAL_RAMP = [FLAME_OUTER, FLAME_MID, FLAME_HOT, SOOT] as const;
+
+function buildBrazierDebris(seed: number): DebrisSpec[] {
+  const rng = makeRng(seed);
+  const out: DebrisSpec[] = [];
+  for (let i = 0; i < BRAZIER_DEBRIS_COUNT; i++) {
+    const isCoal = i % BRAZIER_DEBRIS_COAL_PERIOD === 0;
+    out.push({
+      angle: (i / BRAZIER_DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
+      distance: BRAZIER_DEBRIS_SPREAD_PX * (isCoal ? 0.6 + rng() * 0.9 : 0.4 + rng() * 0.7),
+      originY: 0,
+      restAngle: rng() * Math.PI,
+      length: isCoal
+        ? BRAZIER_COAL_LENGTH_MIN + rng() * BRAZIER_COAL_LENGTH_SPREAD
+        : BRAZIER_IRON_LENGTH_MIN + rng() * BRAZIER_IRON_LENGTH_SPREAD,
+      width: isCoal
+        ? BRAZIER_COAL_WIDTH_MIN + rng() * BRAZIER_COAL_WIDTH_SPREAD
+        : BRAZIER_IRON_WIDTH,
+      spin: (rng() - 0.5) * BRAZIER_DEBRIS_SPIN_MAX,
+      shade: COAL_RAMP[Math.floor(rng() * COAL_RAMP.length)],
+      isIron: !isCoal,
+    });
+  }
+  return out;
+}
+
 const BARREL_DEBRIS = buildDebris(0x1177);
 const BARREL_SIDE_DEBRIS = buildDebris(0x2288);
 const CRATE_DEBRIS = buildDebris(0x3399);
 const TORCH_DEBRIS = buildTorchDebris(0x44aa);
+const BRAZIER_DEBRIS = buildBrazierDebris(0x55bb);
 
 function debrisFor(kind: PropKind): DebrisSpec[] {
   if (kind === 'barrel') return BARREL_DEBRIS;
   if (kind === 'barrel_side') return BARREL_SIDE_DEBRIS;
   if (kind === 'torch') return TORCH_DEBRIS;
+  if (kind === 'brazier') return BRAZIER_DEBRIS;
   return CRATE_DEBRIS;
 }
 
@@ -1276,10 +1570,13 @@ function debrisFor(kind: PropKind): DebrisSpec[] {
 const TORCH_CLOUD_PUFF_COUNT = 3;
 /** Narrower than the boxy props' single cloud, so the column stays a column. */
 const TORCH_CLOUD_RADIUS_SCALE = 0.55;
+/** The brazier's ember core, kept tight inside its wider ash cloud. */
+const BRAZIER_EMBER_CLOUD_RADIUS_SCALE = 0.62;
 
 /**
  * The cloud the pieces come out of: one round puff of sawdust for a box, a
- * stack of ember puffs up the pole for a torch.
+ * stack of ember puffs up the pole for a torch, and hot ash off a brazier's
+ * spilled fire bed.
  */
 function burstCloud(
   ctx: NodeCtx,
@@ -1290,6 +1587,11 @@ function burstCloud(
   radiusFraction: number,
   alpha: number,
 ): void {
+  if (kind === 'brazier') {
+    puff(ctx, cx, cy, ts * radiusFraction, alpha, ASH_RGB);
+    puff(ctx, cx, cy, ts * radiusFraction * BRAZIER_EMBER_CLOUD_RADIUS_SCALE, alpha, EMBER_RGB);
+    return;
+  }
   if (kind !== 'torch') {
     puff(ctx, cx, cy, ts * radiusFraction, alpha, DUST_RGB);
     return;
@@ -1313,11 +1615,10 @@ function drawShatterFrame(
   ts: number,
   progress: number,
 ): void {
-  const isPole = kind === 'torch';
   const cx = ox + ts / 2;
   // Centre of the tile, not of the prop's silhouette: the burst has to stay
   // visually anchored to the tile the prop occupied.
-  const cy = oy + ts * (isPole ? TORCH_BURST_CENTER_Y_FRACTION : BURST_CENTER_Y_FRACTION);
+  const cy = oy + ts * burstCenterYFraction(kind);
   const travel = lerp(DEBRIS_INITIAL_TRAVEL, 1, debrisEase(progress));
 
   // Dust sits behind the wood and only lives through the middle of the burst.
@@ -1377,7 +1678,14 @@ interface RemainsPlank {
   shade: string;
 }
 
-function buildRemains(seed: number, plankCount: number): RemainsPlank[] {
+/** Shades a settled piece is picked from, skipping each ramp's extremes. */
+const REMAINS_SHADE_COUNT = 3;
+
+function buildRemains(
+  seed: number,
+  plankCount: number,
+  ramp: ReadonlyArray<string>,
+): RemainsPlank[] {
   const rng = makeRng(seed);
   const out: RemainsPlank[] = [];
   for (let i = 0; i < plankCount; i++) {
@@ -1389,42 +1697,45 @@ function buildRemains(seed: number, plankCount: number): RemainsPlank[] {
       length: 10 + rng() * 12,
       width: 2.5 + rng() * 2.5,
       angle: rng() * Math.PI,
-      shade: WOOD_RAMP[1 + Math.floor(rng() * 3)],
+      shade: ramp[Math.floor(rng() * Math.min(REMAINS_SHADE_COUNT, ramp.length))],
     });
   }
   return out;
 }
 
+/** The wood ramp minus its darkest value, which is the props' outline colour. */
+const REMAINS_WOOD_RAMP = WOOD_RAMP.slice(1);
+
 const REMAINS_PLANK_COUNT = 9;
-const BARREL_REMAINS = buildRemains(0x4411, REMAINS_PLANK_COUNT);
-const BARREL_SIDE_REMAINS = buildRemains(0x5522, REMAINS_PLANK_COUNT);
-const CRATE_REMAINS = buildRemains(0x6633, REMAINS_PLANK_COUNT);
+const BARREL_REMAINS = buildRemains(0x4411, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
+const BARREL_SIDE_REMAINS = buildRemains(0x5522, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
+const CRATE_REMAINS = buildRemains(0x6633, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
 /** A haft is one long stick, so it leaves fewer and shorter pieces than a box. */
 const TORCH_REMAINS_PLANK_COUNT = 7;
-const TORCH_REMAINS = buildRemains(0x7755, TORCH_REMAINS_PLANK_COUNT);
+const TORCH_REMAINS = buildRemains(0x7755, TORCH_REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
+/** Iron does not splinter — a felled brazier leaves a few flattened scraps. */
+const BRAZIER_REMAINS_PIECE_COUNT = 6;
+const BRAZIER_REMAINS = buildRemains(0x8866, BRAZIER_REMAINS_PIECE_COUNT, IRON_RAMP);
 
 function remainsFor(kind: PropKind): RemainsPlank[] {
   if (kind === 'barrel') return BARREL_REMAINS;
   if (kind === 'barrel_side') return BARREL_SIDE_REMAINS;
   if (kind === 'torch') return TORCH_REMAINS;
+  if (kind === 'brazier') return BRAZIER_REMAINS;
   return CRATE_REMAINS;
 }
 
-/** Scorch left where a torch's bowl tipped its coals onto the floor. */
+/** Scorch left where a fire bowl tipped its coals onto the floor. */
 const SCORCH_RX_TILE_FRACTION = 0.3;
 const SCORCH_RY_TILE_FRACTION = 0.15;
 const SCORCH_ALPHA = 0.5;
 const DYING_EMBER_COUNT = 9;
 const DYING_EMBER_SPREAD_TILE_FRACTION = 0.26;
 const DYING_EMBER_MAX_RADIUS = 1.6;
+/** How far the settled dusting is scattered over the wreckage, in tile widths. */
+const REMAINS_SPECKLE_SPREAD_TILE_FRACTION = 0.34;
 
-function drawTorchScorch(
-  ctx: NodeCtx,
-  cx: number,
-  cy: number,
-  ts: number,
-  rng: () => number,
-): void {
+function drawScorch(ctx: NodeCtx, cx: number, cy: number, ts: number, rng: () => number): void {
   ctx.save();
   ctx.globalAlpha = SCORCH_ALPHA;
   ctx.fillStyle = SOOT;
@@ -1465,7 +1776,7 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
   ctx.fill();
   ctx.restore();
 
-  if (kind === 'torch') drawTorchScorch(ctx, cx, cy, ts, rng);
+  if (kind === 'torch' || kind === 'brazier') drawScorch(ctx, cx, cy, ts, rng);
 
   // A bent hoop / broken bracket / crushed fire bowl, whichever the prop had.
   ctx.save();
@@ -1477,6 +1788,12 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
     ctx.quadraticCurveTo(cx - 2, cy + 12, cx + 13, cy + 5);
   } else if (kind === 'torch') {
     ctx.ellipse(cx - 6, cy + 4, 9, 4, -0.35, 0, Math.PI * 1.3);
+  } else if (kind === 'brazier') {
+    // Flattened bowl plus one leg that came off with it, so the tile still reads
+    // as the thing that used to stand there.
+    ctx.ellipse(cx - 2, cy + 3, 16, 5, -0.12, 0, Math.PI * 1.55);
+    ctx.moveTo(cx + 9, cy + 8);
+    ctx.lineTo(cx + 20, cy + 12);
   } else {
     ctx.ellipse(cx + 2, cy + 3, 15, 6, 0.2, 0.3, Math.PI * 1.75);
   }
@@ -1491,7 +1808,11 @@ function drawRemains(ctx: NodeCtx, kind: PropKind, ox: number, oy: number, ts: n
     shard(ctx, cx + p.dx, cy + p.dy, p.length, p.width, p.angle, p.shade);
   }
 
-  sawdust(ctx, cx, cy, ts * 0.34, rng);
+  if (kind === 'brazier') {
+    speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, ASH, SOOT);
+  } else {
+    speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, DUST, WOOD_DARK);
+  }
 }
 
 // ── Sheet assembly ────────────────────────────────────────────────────────────
@@ -1518,6 +1839,7 @@ function drawProp(
   if (kind === 'barrel') drawBarrel(ctx, ox, oy, ts, damaged);
   else if (kind === 'barrel_side') drawBarrelSide(ctx, ox, oy, ts, damaged);
   else if (kind === 'torch') drawTorch(ctx, ox, oy, ts, damaged, frame);
+  else if (kind === 'brazier') drawBrazier(ctx, ox, oy, ts, damaged, frame);
   else drawCrate(ctx, ox, oy, ts, damaged);
 }
 
@@ -1542,8 +1864,18 @@ const TORCH_ROWS: ReadonlyArray<SheetRow> = [
   { state: 'remains', frames: 1 },
 ];
 
+/** The brazier's coal bed burns at both wear stages too, on a shorter loop. */
+const BRAZIER_ROWS: ReadonlyArray<SheetRow> = [
+  { state: 'idle', frames: BRAZIER_FLAME_FRAMES },
+  { state: 'damaged', frames: BRAZIER_FLAME_FRAMES },
+  { state: 'shatter', frames: SHATTER_FRAMES },
+  { state: 'remains', frames: 1 },
+];
+
 function rowsFor(kind: PropKind): ReadonlyArray<SheetRow> {
-  return kind === 'torch' ? TORCH_ROWS : STATIC_ROWS;
+  if (kind === 'torch') return TORCH_ROWS;
+  if (kind === 'brazier') return BRAZIER_ROWS;
+  return STATIC_ROWS;
 }
 
 function renderSheet(kind: PropKind): Buffer {
@@ -1571,7 +1903,7 @@ function renderSheet(kind: PropKind): Buffer {
 }
 
 const outDir = resolve('src/images/environment/props');
-const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate', 'torch'];
+const kinds: PropKind[] = ['barrel', 'barrel_side', 'crate', 'torch', 'brazier'];
 
 console.log(`Generating destructible props (tileScale=${TILE_SCALE})…`);
 

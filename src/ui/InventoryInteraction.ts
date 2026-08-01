@@ -1,6 +1,7 @@
 import type { Inventory } from '../core/Inventory';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem, ItemId } from '../core/ItemDefs';
+import type { SkillId } from '../core/SkillManager';
 import { pointInRect } from '../utils';
 
 // Drop dialog layout dimensions
@@ -54,6 +55,12 @@ export interface DragState {
   my: number;
 }
 
+/** A skill book the player asked to read, before the prompt has confirmed it. */
+export interface SkillBookReadRequest {
+  bookId: ItemId;
+  skillId: SkillId;
+}
+
 export interface ContextMenu {
   source: 'inv' | 'hotbar';
   slotIdx: number;
@@ -81,10 +88,16 @@ export class InventoryInteraction {
   pendingUnequipSlot: number | null = null;
   /** Which container the pending unequip slot refers to. */
   pendingUnequipSource: 'inv' | 'hotbar' | null = null;
-  /** Set by context-menu "Name"/"Description" selection; DungeonScene reads and clears. */
+  /** Set by context-menu "Description" selection; DungeonScene reads and clears. */
   pendingInfoItem: InventoryItem | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
+  /**
+   * A skill book the player asked to read, awaiting confirmation. Raised by a
+   * plain left click on the slot or by the context menu's Read entry — the
+   * scene reads and clears this.
+   */
+  pendingSkillBookRead: SkillBookReadRequest | null = null;
   /** Active drop-quantity dialog (for stackable items with qty > 1). */
   dropDialog: {
     slotIdx: number;
@@ -97,6 +110,22 @@ export class InventoryInteraction {
     return this.drag !== null;
   }
 
+  /**
+   * Queues the read prompt if this slot holds a skill book.
+   * @returns whether the click was claimed, so a left click on one opens the
+   *   prompt instead of resolving as a same-slot drag.
+   */
+  private requestSkillBookRead(item: InventoryItem): boolean {
+    if (item.skillId === undefined) return false;
+    // A menu open at this point belongs to a different slot — `handleMouseDown`
+    // refuses to start a drag while one is up, so this can only be a left click
+    // elsewhere. Leaving it would let its Drop/Equip act on that other item
+    // after the prompt is dismissed.
+    this.contextMenu = null;
+    this.pendingSkillBookRead = { bookId: item.id, skillId: item.skillId };
+    return true;
+  }
+
   cancelDrag(): void {
     this.drag = null;
   }
@@ -106,18 +135,21 @@ export class InventoryInteraction {
     source: 'inv' | 'hotbar',
     isEquipped?: boolean,
   ): string[] {
+    // Read leads for a skill book: it is what the player opened the menu for,
+    // and putting it anywhere but first would sit Drop next to the common action.
+    const lead = item.skillId === undefined ? [] : ['Read'];
     if (source === 'hotbar') {
       if (item.type === 'armor') {
         const label = isEquipped ? 'Unequip' : 'Equip';
-        return [label, 'Move to Bag', 'Name', 'Description', 'Drop'];
+        return [...lead, label, 'Move to Bag', 'Description', 'Drop'];
       }
-      return ['Move to Bag', 'Name', 'Description', 'Drop'];
+      return [...lead, 'Move to Bag', 'Description', 'Drop'];
     }
     if (item.type === 'armor') {
       const label = isEquipped ? 'Unequip' : 'Equip';
-      return [label, 'Name', 'Description', 'Drop'];
+      return [...lead, label, 'Description', 'Drop'];
     }
-    return ['Name', 'Description', 'Drop'];
+    return [...lead, 'Description', 'Drop'];
   }
 
   /**
@@ -211,7 +243,9 @@ export class InventoryInteraction {
         const idx = Math.floor((my - cmy - CONTEXT_MENU_ITEM_Y_OFFSET) / menuItemH);
         if (idx >= 0 && idx < options.length) {
           const action = options[idx];
-          if (action === 'Equip') {
+          if (action === 'Read') {
+            this.requestSkillBookRead(cm.item);
+          } else if (action === 'Equip') {
             this.pendingEquipSlot = cm.slotIdx;
             this.pendingEquipSource = cm.source;
           } else if (action === 'Unequip') {
@@ -308,6 +342,12 @@ export class InventoryInteraction {
     ) => { x: number; y: number; w: number; h: number },
     page: number,
   ): void {
+    // The menu is drawn at the click point, so it covers the slot it belongs to.
+    // A press while it is up is aimed at one of its options: starting a drag
+    // would let the mouse-up resolve first and swallow the selection, and for a
+    // skill book that mouse-up opens the read prompt instead of Drop.
+    if (this.contextMenu !== null) return;
+
     for (let i = 0; i < HOTBAR_COUNT; i++) {
       if (i === QUEST_SLOT_IDX) continue; // Quest slot is not draggable
       const r = hotbarSlotRect(i, canvas);
@@ -451,7 +491,14 @@ export class InventoryInteraction {
       const r = hotbarSlotRect(i, canvas);
       if (pointInRect(mx, my, r)) {
         if (src.source === 'hotbar') {
-          if (src.idx !== i) inventory.swapHotbar(src.idx, i);
+          // Released on the slot it came from: a plain left click, not a drag.
+          // Skill books answer that with the read prompt; everything else is a
+          // no-op swap, which is what dropping an item back where it was means.
+          if (src.idx === i) {
+            this.requestSkillBookRead(src.item);
+          } else {
+            inventory.swapHotbar(src.idx, i);
+          }
         } else {
           inventory.swapInvToHotbar(src.idx, i);
         }
@@ -469,8 +516,10 @@ export class InventoryInteraction {
       if (pointInRect(mx, my, r)) {
         if (src.source === 'hotbar') {
           inventory.swapHotbarToInv(src.idx, slotIdx);
+        } else if (src.idx === slotIdx) {
+          this.requestSkillBookRead(src.item);
         } else {
-          if (src.idx !== slotIdx) inventory.swapSlots(src.idx, slotIdx);
+          inventory.swapSlots(src.idx, slotIdx);
         }
         return;
       }

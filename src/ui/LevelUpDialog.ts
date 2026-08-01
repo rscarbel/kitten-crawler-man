@@ -1,4 +1,4 @@
-import type { AbilityManager, AbilityId } from '../core/AbilityManager';
+import type { LevelUpEntry } from '../core/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
 import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
 import { drawText } from './TextBox';
@@ -37,26 +37,25 @@ const OK_BUTTON_WIDTH = 100;
 const OK_BUTTON_HEIGHT = 34;
 const OK_BUTTON_Y_OFFSET = 50;
 
-interface QueuedLevelUp {
-  id: AbilityId;
-  newLevel: number;
-}
-
 type Phase = 'idle' | 'power_up' | 'count_up' | 'done';
 
 /**
- * Pausing overlay that plays when an ability gains a level.
+ * Pausing overlay that plays when an ability or a skill gains a level.
  * Multiple consecutive level-ups are queued and shown one after the other.
  *
- * DungeonScene should:
- *   1. Call enqueue(id, level) each time AbilityManager.onLevelUp fires.
+ * It knows nothing about either system — a caller resolves its own definition
+ * into a {@link LevelUpEntry} first, so both progressions share one ceremony
+ * instead of maintaining two near-identical overlays.
+ *
+ * A scene should:
+ *   1. Call enqueue(entry) each time something levels.
  *   2. Skip updateGameplay() while isShowing is true.
  *   3. Call update() and render() every frame regardless of pause state.
  *   4. Call handleClick(mx, my) in its click handler (returns true when consumed).
  */
-export class AbilityLevelUpDialog {
-  private queue: QueuedLevelUp[] = [];
-  private current: QueuedLevelUp | null = null;
+export class LevelUpDialog {
+  private queue: LevelUpEntry[] = [];
+  private current: LevelUpEntry | null = null;
   private phase: Phase = 'idle';
   private frame = 0;
 
@@ -70,16 +69,14 @@ export class AbilityLevelUpDialog {
 
   audio: AudioManager | null = null;
 
-  constructor(private readonly abilityManager: AbilityManager) {}
-
   /** Returns true while a level-up animation is visible (game should pause). */
   get isShowing(): boolean {
     return this.phase !== 'idle';
   }
 
   /** Push a new level-up event onto the queue. */
-  enqueue(id: AbilityId, newLevel: number): void {
-    this.queue.push({ id, newLevel });
+  enqueue(entry: LevelUpEntry): void {
+    this.queue.push(entry);
     if (this.phase === 'idle') this.advance();
   }
 
@@ -136,9 +133,6 @@ export class AbilityLevelUpDialog {
     if (!this.isShowing || !this.current) return;
     const current = this.current;
 
-    const def = this.abilityManager.getDef(current.id);
-    if (!def) return;
-
     const cw = canvas.width;
     const ch = canvas.height;
 
@@ -146,11 +140,10 @@ export class AbilityLevelUpDialog {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
 
     const boxW = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_PADDING_HORIZONTAL);
-    ctx.font = '11px monospace';
-    const perk = def.perks.find((p) => p.level === current.newLevel);
-    const perkLines = perk
-      ? wrapTextLines(ctx, perk.description, boxW - PERK_DESCRIPTION_WIDTH_MARGIN)
-      : [];
+    ctx.font = `${PERK_DESCRIPTION_SIZE}px monospace`;
+    const perk = current.perkDescription;
+    const perkLines =
+      perk === null ? [] : wrapTextLines(ctx, perk, boxW - PERK_DESCRIPTION_WIDTH_MARGIN);
     const boxH = Math.min(
       Math.max(DIALOG_MIN_HEIGHT, DIALOG_BASE_HEIGHT + perkLines.length * DIALOG_PERK_LINE_HEIGHT),
       ch - DIALOG_PADDING_HORIZONTAL,
@@ -170,7 +163,7 @@ export class AbilityLevelUpDialog {
     });
 
     // Title
-    drawText(ctx, `${def.name} Level Up!`, {
+    drawText(ctx, `${current.name} Level Up!`, {
       x: bx + boxW / 2,
       y: by + DIALOG_TITLE_Y_OFFSET - DIALOG_TITLE_OVERLAP,
       size: 16,
@@ -184,7 +177,7 @@ export class AbilityLevelUpDialog {
     const iconX = bx + boxW / 2 - iconSize / 2;
     const iconY = by + DIALOG_ICON_Y;
     drawPowerUpIcon(ctx, iconX, iconY, iconSize, this.iconPulse, this.phase === 'power_up', () => {
-      def.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
+      current.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
     });
 
     // Level display
@@ -215,9 +208,9 @@ export class AbilityLevelUpDialog {
     ctx.restore();
 
     // Perk for the new level
-    if (this.phase === 'done' && perk) {
+    if (this.phase === 'done' && perk !== null) {
       const descY = levelY + PERK_DESCRIPTION_Y_OFFSET;
-      drawText(ctx, perk.description, {
+      drawText(ctx, perk, {
         x: bx + PERK_DESCRIPTION_X,
         y: descY - PERK_DESCRIPTION_SIZE,
         size: PERK_DESCRIPTION_SIZE,
@@ -242,8 +235,7 @@ export class AbilityLevelUpDialog {
         width: btnW,
         height: btnH,
         label: 'OK',
-        ...BUTTON_PRESETS.purple,
-        labelColor: '#ede9fe',
+        ...BUTTON_PRESETS.award,
       });
     }
   }

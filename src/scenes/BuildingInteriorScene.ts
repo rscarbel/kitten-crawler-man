@@ -42,7 +42,14 @@ import { EventBus } from '../core/EventBus';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { SystemAnnouncer } from '../ui/SystemAnnouncer';
-import { useSkillBook } from '../systems/skillBookUse';
+import { SkillBookPrompt } from '../ui/SkillBookPrompt';
+import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
+import { LevelUpDialog } from '../ui/LevelUpDialog';
+import {
+  promptSkillBookRead,
+  resolveSkillBookPrompt,
+  type SkillBookFlowHost,
+} from '../systems/skillBookUse';
 import { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
@@ -255,6 +262,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly skillBus = new EventBus();
   private readonly systemAnnouncer: SystemAnnouncer;
   private readonly systemNotices: SystemNoticeSystem;
+  /** The read-confirm prompt and the two award overlays a skill book can raise. */
+  private readonly skillBookPrompt = new SkillBookPrompt();
+  private readonly rewardGrantedDialog = new RewardGrantedDialog();
+  private readonly levelUpDialog = new LevelUpDialog();
   /**
    * Scene-level, not part of the combat stack: a level-up or a Cockroach save can
    * happen in a building with no encounter, and an undrained label queue would
@@ -390,6 +401,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.audio?.wireEvents(this.skillBus);
     this.systemAnnouncer = new SystemAnnouncer(this.audio);
     this.systemNotices = new SystemNoticeSystem(this.skillBus, this.systemAnnouncer);
+    this.skillBookPrompt.audio = this.audio;
+    this.rewardGrantedDialog.audio = this.audio;
+    this.levelUpDialog.audio = this.audio;
 
     // Companion command state holder + menu, sharing the overworld stance so
     // movement mode and combat stance are consistent everywhere. Used only as a
@@ -694,6 +708,11 @@ export class BuildingInteriorScene extends GameplayScene {
       }
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
+      if (this.skillBookPrompt.isOpen) {
+        // Escape declines the read; the book stays in the pack.
+        this.skillBookPrompt.close();
+        return;
+      }
       if (this.followerMenu.isOpen) {
         this.followerMenu.close();
         return;
@@ -845,6 +864,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.systemNotices.drainFor(this.human, this.cat);
     this.systemAnnouncer.update();
     this.floatingText.updateFor(this.human, this.cat);
+    this.openPendingSkillBookPrompt();
+    this.rewardGrantedDialog.update();
+    this.levelUpDialog.update();
 
     const reviveDeadlineExpired = this.tickCompanionLeftBehind();
 
@@ -861,6 +883,21 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
 
+    if (this.skillBookPrompt.isOpen) return;
+    if (this.levelUpDialog.isShowing) {
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.levelUpDialog.handleSpaceBar();
+      }
+      return;
+    }
+    if (this.rewardGrantedDialog.isShowing) {
+      if (this.input.has(' ')) {
+        this.input.clear();
+        this.rewardGrantedDialog.handleSpaceBar();
+      }
+      return;
+    }
     if (this.pauseMenu.isOpen) return;
     if (this.followerMenu.isOpen) return;
     if (this.exitMenuOpen) return;
@@ -1093,6 +1130,12 @@ export class BuildingInteriorScene extends GameplayScene {
       if (this.combat.deathScreen.handleClick(mx, my)) this.reviveAndExit();
       return;
     }
+    if (this.levelUpDialog.handleClick(mx, my)) return;
+    if (this.rewardGrantedDialog.handleClick(mx, my)) return;
+    if (this.skillBookPrompt.isOpen) {
+      resolveSkillBookPrompt(this.skillBookFlowHost(), this.active(), mx, my);
+      return;
+    }
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.handleClick(mx, my);
       return;
@@ -1151,10 +1194,25 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
+  /**
+   * True while a pausing overlay owns the screen. The bag is still drawn
+   * underneath one, and the overlays' buttons sit right on top of its slots, so
+   * every raw-pointer path has to stop here — otherwise a click on Read or
+   * Cancel also lands on the slot beneath it and re-queues the prompt.
+   */
+  private get isOverlayBlockingPointer(): boolean {
+    return (
+      this.skillBookPrompt.isOpen ||
+      this.levelUpDialog.isShowing ||
+      this.rewardGrantedDialog.isShowing
+    );
+  }
+
   handleMouseDown(mx: number, my: number): void {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = true;
+    if (this.isOverlayBlockingPointer) return;
     this.mobileHUD.handleMouseDown(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
@@ -1168,6 +1226,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this._mouseX = mx;
     this._mouseY = my;
     this._mouseDown = false;
+    if (this.isOverlayBlockingPointer) return;
     this.mobileHUD.handleMouseUp(mx, my, this.sceneManager.canvas, this.active().inventory);
   }
 
@@ -1561,6 +1620,9 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx, canvas);
 
     this.systemAnnouncer.render(ctx, canvas);
+    this.levelUpDialog.render(ctx, canvas);
+    this.rewardGrantedDialog.render(ctx, canvas);
+    this.skillBookPrompt.render(ctx, canvas);
 
     if (this.pauseMenu.isOpen) {
       this.pauseMenu.render(ctx, canvas, this.human, this.cat);
@@ -1708,7 +1770,10 @@ export class BuildingInteriorScene extends GameplayScene {
         this.bopca?.isDialogOpen === true ||
         this.shop?.shopOpen ||
         this.club?.modalOpen ||
-        this.servicePanel?.isOpen === true
+        this.servicePanel?.isOpen === true ||
+        this.skillBookPrompt.isOpen ||
+        this.levelUpDialog.isShowing ||
+        this.rewardGrantedDialog.isShowing
       ) {
         this.handleClick(x, y);
         continue;
@@ -1752,25 +1817,25 @@ export class BuildingInteriorScene extends GameplayScene {
         }
       }
 
-      // Hotbar slot tap — defer activation until touch end so long-press opens context menu
+      // Hotbar slot tap — activation is deferred to touch end so a drag off the
+      // slot doesn't also fire the item.
+      //
+      // No long-press context menu indoors, unlike the dungeon: this scene never
+      // routes clicks to the inventory panel, so no option could ever be picked,
+      // and Drop has nowhere to drop to in a building anyway. Reading a skill
+      // book still works here through a plain tap and through the hotbar.
       const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
       if (hi >= 0) {
         this.mobileHUD.inventoryDragTouchId = touch.identifier;
         this.handleMouseDown(x, y);
-        this.mobileHUD.startInvLongPress(x, y, () => {
-          this.mobileHUD.inventoryPanel.openContextMenu(x, y, canvas, this.active().inventory);
-        });
         continue;
       }
 
-      // Inventory panel drag start + long-press for context menu
+      // Inventory panel drag start
       if (this.mobileHUD.inventoryPanel.isOpen) {
         if (this.mobileHUD.inventoryPanel.hitsPanel(x, y, canvas)) {
           this.handleMouseDown(x, y);
           this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
-          this.mobileHUD.startInvLongPress(x, y, () => {
-            this.mobileHUD.inventoryPanel.openContextMenu(x, y, canvas, this.active().inventory);
-          });
           continue;
         }
       }
@@ -1786,9 +1851,6 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const touch of Array.from(e.changedTouches)) {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
-
-      // Cancel long-press if finger moved too far
-      this.mobileHUD.checkInvLongPressMove(x, y);
 
       // Update inventory drag
       this.handleMouseMove(x, y);
@@ -1809,16 +1871,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
       // Inventory / hotbar drag end
       if (touch.identifier === this.mobileHUD.inventoryDragTouchId) {
-        const longPressFired = this.mobileHUD.invLongPressFired;
-        this.mobileHUD.clearInvLongPress();
-        if (!longPressFired) {
-          this.handleMouseUp(x, y);
-          const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
-          if (hi >= 0) {
-            this.triggerHotbarActivation(hi);
-          } else {
-            this.handleClick(x, y);
-          }
+        this.handleMouseUp(x, y);
+        const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y, canvas);
+        // A second finger can land on the bar in the same frame an overlay goes
+        // up; its release must resolve the overlay, not fire the slot beneath.
+        if (hi >= 0 && !this.isOverlayBlockingPointer) {
+          this.triggerHotbarActivation(hi);
+        } else {
+          this.handleClick(x, y);
         }
         this.mobileHUD.inventoryDragTouchId = null;
         continue;
@@ -1833,49 +1893,97 @@ export class BuildingInteriorScene extends GameplayScene {
           const dialogWasOpen =
             this.citizenDialog?.isOpen === true || this.servicePanel?.isOpen === true;
           const bopcaWasOpen = this.bopca?.isDialogOpen === true;
+          // A tap whose finger went down before an award overlay appeared still
+          // arrives here. `handleClick` routes it to the overlay; the
+          // space-equivalents must not also fire while the game is paused.
+          const overlayClaimedTap = this.isOverlayBlockingPointer;
           this.handleClick(x, y);
-          // Trigger space-equivalent actions
-          if (this.bopca !== null && !this.exitMenuOpen && !bopcaWasOpen) {
-            this.bopca.tryInteract(this.active());
-          }
-          if (this.safeRoom && !this.exitMenuOpen) {
-            const player = this.active();
-            if (this.safeRoom.isNearBed(player)) {
-              this.safeRoom.startSleep();
-            } else if (this.safeRoom.isNearMordecai(player)) {
-              this.talkToMordecai();
-            }
-          }
-          if (this.shop && !this.exitMenuOpen) {
-            if (this.shop.isNearShopkeeper(this.active())) {
-              this.shop.shopOpen = true;
-            }
-          }
-          if (this.club && !this.exitMenuOpen && !this.club.modalOpen) {
-            this.club.handleInteract(this.active());
-          }
-          // Talk to a nearby occupant only when nothing else claimed the tap: no
-          // dialog or drink menu was already open (handleClick would have
-          // advanced or closed it, and reopening it in the same tap is the
-          // close-then-reopen trap), no
-          // shop/club panel is up (the store has both a shop and shelf-browsers),
-          // and the safe room didn't just sleep or open Mordecai (a restaurant has
-          // both Mordecai/bed and ambient occupants within one tap's reach).
-          if (
-            !this.exitMenuOpen &&
-            !dialogWasOpen &&
-            this.shop?.shopOpen !== true &&
-            this.club?.modalOpen !== true &&
-            this.safeRoom?.isSleeping !== true &&
-            this.safeRoom?.mordecaiDialogOpen !== true &&
-            this.bopca?.isDialogOpen !== true
-          ) {
-            this.tryTalkToOccupant(this.active());
+          if (!overlayClaimedTap) {
+            this.triggerTapInteractions(dialogWasOpen, bopcaWasOpen);
           }
         }
         this.mobileHUD.clearMovement();
       }
     }
+  }
+
+  /**
+   * The space-equivalent actions a world tap performs, once `handleClick` has
+   * had its chance at it.
+   *
+   * @param dialogWasOpen Whether a citizen dialog or service panel was already
+   *   up before `handleClick` ran — that call would have advanced or closed it,
+   *   and reopening one in the same tap is the close-then-reopen trap.
+   * @param bopcaWasOpen The same guard for the Bopca's own conversation.
+   */
+  private triggerTapInteractions(dialogWasOpen: boolean, bopcaWasOpen: boolean): void {
+    if (this.bopca !== null && !this.exitMenuOpen && !bopcaWasOpen) {
+      this.bopca.tryInteract(this.active());
+    }
+    if (this.safeRoom && !this.exitMenuOpen) {
+      const player = this.active();
+      if (this.safeRoom.isNearBed(player)) {
+        this.safeRoom.startSleep();
+      } else if (this.safeRoom.isNearMordecai(player)) {
+        this.talkToMordecai();
+      }
+    }
+    if (this.shop && !this.exitMenuOpen) {
+      if (this.shop.isNearShopkeeper(this.active())) {
+        this.shop.shopOpen = true;
+      }
+    }
+    if (this.club && !this.exitMenuOpen && !this.club.modalOpen) {
+      this.club.handleInteract(this.active());
+    }
+    // Talk to a nearby occupant only when nothing else claimed the tap: no
+    // shop/club panel is up (the store has both a shop and shelf-browsers), and
+    // the safe room didn't just sleep or open Mordecai (a restaurant has both
+    // Mordecai/bed and ambient occupants within one tap's reach).
+    if (
+      !this.exitMenuOpen &&
+      !dialogWasOpen &&
+      this.shop?.shopOpen !== true &&
+      this.club?.modalOpen !== true &&
+      this.safeRoom?.isSleeping !== true &&
+      this.safeRoom?.mordecaiDialogOpen !== true &&
+      this.bopca?.isDialogOpen !== true
+    ) {
+      this.tryTalkToOccupant(this.active());
+    }
+  }
+
+  private skillBookFlowHost(): SkillBookFlowHost {
+    return {
+      audio: this.audio,
+      announce: (message) => this.systemAnnouncer.announce(message),
+      prompt: this.skillBookPrompt,
+      // The drag is dropped alongside: the overlays' pointer guard blocks the
+      // mouse-up that would otherwise resolve one still in flight.
+      showReward: (reward) => {
+        this.mobileHUD.inventoryPanel.interaction.cancelDrag();
+        this.rewardGrantedDialog.enqueue(reward);
+      },
+      showLevelUp: (entry) => {
+        this.mobileHUD.inventoryPanel.interaction.cancelDrag();
+        this.levelUpDialog.enqueue(entry);
+      },
+      // Through toggle() rather than the flag, so the panel's own teardown runs.
+      closeInventory: () => {
+        if (this.mobileHUD.inventoryPanel.isOpen) this.mobileHUD.inventoryPanel.toggle();
+      },
+    };
+  }
+
+  private openPendingSkillBookPrompt(): void {
+    const interaction = this.mobileHUD.inventoryPanel.interaction;
+    const request = interaction.pendingSkillBookRead;
+    if (request === null) return;
+    interaction.pendingSkillBookRead = null;
+    // The click that queued this also left a drag half-started on the slot
+    // underneath the prompt about to cover it.
+    interaction.cancelDrag();
+    promptSkillBookRead(this.skillBookFlowHost(), this.active(), request);
   }
 
   private triggerHotbarActivation(hotbarIdx: number): void {
@@ -1886,10 +1994,12 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (slot?.skillId !== undefined) {
-      const bookId = slot.id;
-      const outcome = useSkillBook(active, slot.skillId, () => active.inventory.removeOne(bookId));
-      this.audio?.play(outcome.consumed ? 'menu_skillpoint_spent' : 'error_taking_action');
-      if (outcome.message !== null) this.systemAnnouncer.announce(outcome.message);
+      // Queued rather than read outright: a skill book is spent for good, so
+      // every route to one — hotbar key, hotbar tap, bag click — asks first.
+      this.mobileHUD.inventoryPanel.interaction.pendingSkillBookRead = {
+        bookId: slot.id,
+        skillId: slot.skillId,
+      };
     }
   }
 }

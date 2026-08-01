@@ -212,6 +212,14 @@ export const BUTTON_PRESETS = {
   success: { fill: '#14532d', border: '#4ade80', borderWidth: 2, radius: 4 },
   /** Ability / legendary — purple. */
   purple: { fill: '#6d28d9', border: '#a855f7', borderWidth: 1.5, radius: 4 },
+  /** Purple, with the pale label the award overlays read best against. */
+  award: {
+    fill: '#6d28d9',
+    border: '#a855f7',
+    borderWidth: 1.5,
+    radius: 4,
+    labelColor: '#ede9fe',
+  },
   /** Level-complete / achievement — gold with glow. */
   gold: {
     fill: '#2e1065',

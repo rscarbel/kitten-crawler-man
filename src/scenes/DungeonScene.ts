@@ -31,7 +31,11 @@ import { BopcaSystem } from '../systems/BopcaSystem';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { SystemAnnouncer } from '../ui/SystemAnnouncer';
-import { useSkillBook } from '../systems/skillBookUse';
+import {
+  promptSkillBookRead,
+  resolveSkillBookPrompt,
+  type SkillBookFlowHost,
+} from '../systems/skillBookUse';
 import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
@@ -89,8 +93,10 @@ import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
-import { AbilityLevelUpDialog } from '../ui/AbilityLevelUpDialog';
+import { LevelUpDialog } from '../ui/LevelUpDialog';
 import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
+import { SkillBookPrompt } from '../ui/SkillBookPrompt';
+import type { SkillBookReadRequest } from '../ui/InventoryInteraction';
 import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoSprite } from '../sprites/mongoSprite';
 import { GoreSystem } from '../systems/GoreSystem';
@@ -555,8 +561,9 @@ export class DungeonScene extends GameplayScene {
   private musicPersistsAcrossExit = false;
 
   private readonly abilityManager: AbilityManager;
-  private readonly abilityLevelUpDialog: AbilityLevelUpDialog;
+  private readonly levelUpDialog = new LevelUpDialog();
   private readonly rewardGrantedDialog = new RewardGrantedDialog();
+  private readonly skillBookPrompt = new SkillBookPrompt();
 
   private arena!: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
@@ -1117,9 +1124,16 @@ export class DungeonScene extends GameplayScene {
     this.abilityManager.register(SMUSH_DEF);
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
-    this.abilityLevelUpDialog = new AbilityLevelUpDialog(this.abilityManager);
     this.abilityManager.onLevelUp = (id, newLevel) => {
-      this.abilityLevelUpDialog.enqueue(id, newLevel);
+      const def = this.abilityManager.getDef(id);
+      if (def === null) return;
+      this.cancelInventoryDragForOverlay();
+      this.levelUpDialog.enqueue({
+        name: def.name,
+        newLevel,
+        perkDescription: def.perks.find((p) => p.level === newLevel)?.description ?? null,
+        renderIcon: def.renderIcon,
+      });
       this.audio?.play('ability_level_up');
     };
     this.cat.setAbilityManager(this.abilityManager);
@@ -1211,8 +1225,9 @@ export class DungeonScene extends GameplayScene {
     };
 
     this.deathScreen.audio = this.audio;
-    this.abilityLevelUpDialog.audio = this.audio;
+    this.levelUpDialog.audio = this.audio;
     this.rewardGrantedDialog.audio = this.audio;
+    this.skillBookPrompt.audio = this.audio;
 
     // Boss chests — placed 2 tiles above each boss room centre
     this.gameMap.bossRooms.forEach((br, i) => {
@@ -1469,6 +1484,7 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('rewardGranted', (e) => {
       for (const reward of e.rewards) {
+        this.cancelInventoryDragForOverlay();
         this.rewardGrantedDialog.enqueue(reward);
       }
     });
@@ -1577,6 +1593,12 @@ export class DungeonScene extends GameplayScene {
       isSuppressed: () =>
         this.pauseMenu.isOpen ||
         this.followerMenu.isOpen ||
+        // Without these a hotbar key pressed under an award overlay would queue
+        // a second read behind it, stacking a prompt whose Read button the
+        // overlay's own OK button then swallows.
+        this.skillBookPrompt.isOpen ||
+        this.levelUpDialog.isShowing ||
+        this.rewardGrantedDialog.isShowing ||
         this.safeRoom.isSleeping ||
         this.bopca.isDialogOpen ||
         this.defendQuest.isDialogOpen ||
@@ -1591,6 +1613,12 @@ export class DungeonScene extends GameplayScene {
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
+        if (this.skillBookPrompt.isOpen) {
+          // Escape declines the read; the book stays in the pack.
+          this.skillBookPrompt.close();
+          this._skillBookReader = null;
+          return true;
+        }
         if (this.playerChat.isOpen) {
           this.playerChat.cancel();
           return true;
@@ -1655,6 +1683,12 @@ export class DungeonScene extends GameplayScene {
       },
       clearInput: () => this.input.clear(),
       advanceDialog: () => {
+        // Here rather than in `triggerSpaceAction` for the same reason as the
+        // Bopca dialog below: this callback runs before the input-suppression
+        // gate, and these overlays are themselves among the things that suppress
+        // input, so Space would otherwise never reach them.
+        if (this.levelUpDialog.handleSpaceBar()) return true;
+        if (this.rewardGrantedDialog.handleSpaceBar()) return true;
         if (this.noticeBoard?.isOpen === true) {
           this.noticeBoard.close();
           this.audio?.play('menu_click');
@@ -2515,8 +2549,6 @@ export class DungeonScene extends GameplayScene {
     // Space bar advances / dismisses achievement notifications and loot boxes
     if (this.achievementUI.handleSpaceBar()) return;
 
-    if (this.abilityLevelUpDialog.handleSpaceBar()) return;
-    if (this.rewardGrantedDialog.handleSpaceBar()) return;
     if (this.levelCompleteScreen.handleSpaceBar()) return;
     // The keyboard path advances the citizen dialog earlier, in `advanceDialog`
     // (which runs before the input-suppression gate); this guards the mobile
@@ -2526,6 +2558,12 @@ export class DungeonScene extends GameplayScene {
     if (this.noticeBoard?.isOpen === true) return;
     if (this.marketPanel?.isOpen === true) return;
     if (this.fortuneTeller?.isOpen === true) return;
+    // Same guard for the award overlays, which the keyboard likewise advances in
+    // `advanceDialog`. A tap whose finger went down before the overlay appeared
+    // still reaches here, and must not swing a weapon while the game is paused.
+    if (this.levelUpDialog.isShowing) return;
+    if (this.rewardGrantedDialog.isShowing) return;
+    if (this.skillBookPrompt.isOpen) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.restartAtFloorEntry();
       return;
@@ -2709,10 +2747,11 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('potion_drink');
       this._delayedSounds.push({ id: 'cooldown_crisp', framesLeft: POTION_EFFECT_SOUND_DELAY });
     } else if (slot?.skillId !== undefined) {
-      const bookId = slot.id;
-      const outcome = useSkillBook(active, slot.skillId, () => active.inventory.removeOne(bookId));
-      this.audio?.play(outcome.consumed ? 'menu_skillpoint_spent' : 'error_taking_action');
-      if (outcome.message !== null) this.systemAnnouncer.announce(outcome.message);
+      // Queued rather than read outright: a skill book is spent for good, so
+      // every route to one — hotbar key, hotbar tap, bag click — asks first.
+      // The bar belongs to the active crawler, so they are the reader even when
+      // the panel is showing the companion's bag.
+      this.queueSkillBookRead({ bookId: slot.id, skillId: slot.skillId }, active);
     } else if (slot?.id === 'stat_boost_potion') {
       if (!active.inventory.removeOne('stat_boost_potion')) return;
       active.applyStatBoost();
@@ -2742,8 +2781,14 @@ export class DungeonScene extends GameplayScene {
       this.chestRewardDialog.handleClick(mx, my);
       return;
     }
-    if (this.abilityLevelUpDialog.handleClick(mx, my)) return;
+    if (this.levelUpDialog.handleClick(mx, my)) return;
     if (this.rewardGrantedDialog.handleClick(mx, my)) return;
+    if (this.skillBookPrompt.isOpen) {
+      const reader = this._skillBookReader ?? this.inventoryPlayer();
+      const choice = resolveSkillBookPrompt(this.skillBookFlowHost(), reader, mx, my);
+      if (choice !== null) this._skillBookReader = null;
+      return;
+    }
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my)) return;
     if (this.circusQuest.handleClick(mx, my)) return;
@@ -2929,9 +2974,23 @@ export class DungeonScene extends GameplayScene {
     this.touch.longPressPos = null;
   }
 
+  /**
+   * True while a pausing overlay owns the screen. The bag is still drawn
+   * underneath one, and the overlays' buttons sit right on top of its slots, so
+   * every raw-pointer path has to stop here — otherwise a click on Read or
+   * Cancel also lands on the slot beneath it and re-queues the prompt.
+   */
+  private get isOverlayBlockingPointer(): boolean {
+    return (
+      this.skillBookPrompt.isOpen ||
+      this.levelUpDialog.isShowing ||
+      this.rewardGrantedDialog.isShowing
+    );
+  }
+
   handleMouseDown(mx: number, my: number): void {
     this._mouseDown = true;
-    if (this.gameOver || this.pauseMenu.isOpen) return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
     if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
       this._miniMapDragging = true;
       this._miniMapDragLastX = mx;
@@ -2961,7 +3020,7 @@ export class DungeonScene extends GameplayScene {
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
-    if (this.gameOver || this.pauseMenu.isOpen) return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
     this.inventoryPanel.handleMouseUp(
       mx,
       my,
@@ -2977,7 +3036,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleContextMenu(mx: number, my: number): void {
-    if (this.gameOver || this.pauseMenu.isOpen) return;
+    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
     this.inventoryPanel.openContextMenu(
       mx,
       my,
@@ -3012,7 +3071,7 @@ export class DungeonScene extends GameplayScene {
       return true;
     });
     this.achievementUI.tick();
-    this.abilityLevelUpDialog.update();
+    this.levelUpDialog.update();
     this.rewardGrantedDialog.update();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
@@ -3053,10 +3112,16 @@ export class DungeonScene extends GameplayScene {
     // then thrown away with the scene.
     this.systemAnnouncer.update();
 
+    // Also drained ahead of the early returns: the request is raised by a
+    // right-click or a hotbar key, neither of which routes through the panel's
+    // own click handler, and the prompt it opens is itself one of the gates.
+    this.openPendingSkillBookPrompt();
+
     if (
       this.gameOver ||
-      this.abilityLevelUpDialog.isShowing ||
+      this.levelUpDialog.isShowing ||
       this.rewardGrantedDialog.isShowing ||
+      this.skillBookPrompt.isOpen ||
       this.pauseMenu.isOpen ||
       this.chestRewardDialog.isOpen ||
       this.stairwell.menuOpen ||
@@ -3412,8 +3477,9 @@ export class DungeonScene extends GameplayScene {
       this.chestRewardDialog.render(ctx, canvas);
     }
 
-    this.abilityLevelUpDialog.render(ctx, canvas);
+    this.levelUpDialog.render(ctx, canvas);
     this.rewardGrantedDialog.render(ctx, canvas);
+    this.skillBookPrompt.render(ctx, canvas);
 
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
@@ -3524,7 +3590,7 @@ export class DungeonScene extends GameplayScene {
         isAchievementNotifActive: this.achievementUI.notifActive,
         isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
         contextMenuOptionRects: this.inventoryPanel.contextMenuOptionRects,
-        isAbilityDialogShowing: this.abilityLevelUpDialog.isShowing,
+        isAbilityDialogShowing: this.levelUpDialog.isShowing,
         isRewardGrantedDialogShowing: this.rewardGrantedDialog.isShowing,
         followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
         followerMenuOpen: this.followerMenu.isOpen,
@@ -3650,13 +3716,18 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
       this.woodBreakSoundIdx++;
     }
-    if ((this.destructibles?.drainSmashes() ?? 0) > 0) {
+    const smashes = this.destructibles?.drainSmashes();
+    if (smashes !== undefined && smashes.wood > 0) {
       // One cue per frame however many props gave way together: overlapping
       // copies of the same sample stack into a blast rather than a smash. The
       // index still advances once so back-to-back breaks alternate.
       const smashSounds = ['wood_smashing_1', 'wood_smashing_2'] as const;
       this.audio?.play(smashSounds[this.woodSmashSoundIdx % smashSounds.length]);
       this.woodSmashSoundIdx++;
+    }
+    if (smashes !== undefined && smashes.iron > 0) {
+      // An iron brazier folding up is a clang, not splitting planks.
+      this.audio?.play('hammer_strike');
     }
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
@@ -4042,6 +4113,75 @@ export class DungeonScene extends GameplayScene {
     return this._inventoryOverridePlayer ?? this.active();
   }
 
+  private skillBookFlowHost(): SkillBookFlowHost {
+    return {
+      audio: this.audio,
+      announce: (message) => this.systemAnnouncer.announce(message),
+      prompt: this.skillBookPrompt,
+      showReward: (reward) => this.bus.emit('rewardGranted', { rewards: [reward] }),
+      showLevelUp: (entry) => {
+        this.cancelInventoryDragForOverlay();
+        this.levelUpDialog.enqueue(entry);
+      },
+      // Through toggle() rather than the flag, so the panel's own teardown runs:
+      // setting isOpen directly leaves returnToMenuCallback and the companion
+      // inventory override behind, and every later hotbar drag would then act on
+      // the companion.
+      closeInventory: () => {
+        if (this.inventoryPanel.isOpen) this.inventoryPanel.toggle();
+      },
+    };
+  }
+
+  /**
+   * A skill book asked for, and who asked. Book and reader are held together in
+   * one field because they must agree: a hotbar key acts on the active crawler
+   * while a bag click acts on whoever's bag is on screen, and those differ while
+   * the companion's inventory is being managed. Stored separately from the
+   * panel's own request queue so the pair can never half-update.
+   */
+  private _queuedSkillBookRead: {
+    request: SkillBookReadRequest;
+    reader: HumanPlayer | CatPlayer;
+  } | null = null;
+  /** The crawler the open prompt will charge, pinned when it opened. */
+  private _skillBookReader: HumanPlayer | CatPlayer | null = null;
+
+  private queueSkillBookRead(request: SkillBookReadRequest, reader: HumanPlayer | CatPlayer): void {
+    this._queuedSkillBookRead = { request, reader };
+  }
+
+  /**
+   * Drops any drag the bag has in flight, for when a pausing overlay takes the
+   * screen. The overlays' pointer guard blocks the mouse-up that would otherwise
+   * resolve the drag, so without this the ghost item survives the overlay and
+   * the *next* mouse-up drops it into whatever slot the cursor is over.
+   */
+  private cancelInventoryDragForOverlay(): void {
+    this.inventoryPanel.interaction.cancelDrag();
+  }
+
+  /** Turns a queued skill-book click into the read confirmation. */
+  private openPendingSkillBookPrompt(): void {
+    const fromPanel = this.inventoryPanel.interaction.pendingSkillBookRead;
+    if (fromPanel !== null) {
+      this.inventoryPanel.interaction.pendingSkillBookRead = null;
+      this.queueSkillBookRead(fromPanel, this.inventoryPlayer());
+    }
+
+    const queued = this._queuedSkillBookRead;
+    if (queued === null) return;
+    this._queuedSkillBookRead = null;
+    // The click that queued this also left a drag half-started on the slot
+    // underneath the prompt about to cover it.
+    this.cancelInventoryDragForOverlay();
+    this.clearInvLongPress();
+
+    promptSkillBookRead(this.skillBookFlowHost(), queued.reader, queued.request);
+    // A refused read never opens the prompt, so there is nothing to pin.
+    this._skillBookReader = this.skillBookPrompt.isOpen ? queued.reader : null;
+  }
+
   private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
     if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
       const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
@@ -4166,14 +4306,19 @@ export class DungeonScene extends GameplayScene {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      // A full-screen town modal (notice board, market stall, fortune teller)
-      // owns every tap while it's open — route to it before any HUD button, so a
-      // tap landing on a now-hidden control (e.g. Switch, which would change whose
-      // wallet a shop charges) can't leak through underneath the overlay.
+      // A full-screen town modal (notice board, market stall, fortune teller) or
+      // a pausing award overlay owns every tap while it's open — route to it
+      // before any HUD button, so a tap landing on a now-hidden control (e.g.
+      // Switch, which would change whose wallet a shop charges) can't leak
+      // through underneath the overlay, and so an overlay button sitting over the
+      // hotbar band is pressed rather than starting a drag on the slot beneath.
       if (
         this.noticeBoard?.isOpen === true ||
         this.marketPanel?.isOpen === true ||
-        this.fortuneTeller?.isOpen === true
+        this.fortuneTeller?.isOpen === true ||
+        this.skillBookPrompt.isOpen ||
+        this.levelUpDialog.isShowing ||
+        this.rewardGrantedDialog.isShowing
       ) {
         this.handleClick(x, y);
         continue;
@@ -4422,6 +4567,12 @@ export class DungeonScene extends GameplayScene {
           if (
             hi >= 0 &&
             wasTap &&
+            // A menu open over the bar owns the tap: it is drawn on top of the
+            // slots, so activating the slot beneath would swallow the selection.
+            this.inventoryPanel.interaction.contextMenu === null &&
+            // Likewise a pausing overlay, which a second finger can raise while
+            // this one is still down.
+            !this.isOverlayBlockingPointer &&
             !this.pauseMenu.isOpen &&
             !this.safeRoom.isSleeping &&
             !this.gameOver
@@ -4496,7 +4647,7 @@ export class DungeonScene extends GameplayScene {
             ctx.fillStyle = '#a855f7';
             ctx.fillRect(x, y, size, size);
           };
-    return { name, description, renderIcon };
+    return { kind: 'ability', name, description, renderIcon };
   }
 
   private _grantChestLootSplit(split: { humanLoot: LootDrop; catLoot: LootDrop } | null): void {
@@ -4513,6 +4664,7 @@ export class DungeonScene extends GameplayScene {
 
   private _makeMongoReward(): GrantedReward {
     return {
+      kind: 'ability',
       name: 'Mongo',
       description:
         'A loyal velociraptor companion. Summon Mongo to fight alongside the Cat in battle!',

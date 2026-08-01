@@ -1,4 +1,4 @@
-import type { GrantedReward } from '../core/GrantedReward';
+import type { GrantedReward, GrantedRewardKind } from '../core/GrantedReward';
 import type { AudioManager } from '../audio/AudioManager';
 import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
 import { drawText } from './TextBox';
@@ -35,11 +35,18 @@ const OK_BUTTON_Y_OFFSET = 50;
 // Animation timing
 const POWER_UP_FRAMES = 60;
 
+/** The only thing that differs between an ability grant and a skill grant. */
+const REWARD_HEADINGS: Record<GrantedRewardKind, string> = {
+  ability: 'New Ability!',
+  skill: 'New Skill!',
+};
+
 type Phase = 'idle' | 'power_up' | 'done';
 
 /**
- * Pausing overlay shown when the player is granted an ability or special unlock
- * (e.g. Mongo the velociraptor companion) after dismissing an award screen.
+ * Pausing overlay shown when the player is granted an ability, a skill, or a
+ * special unlock (e.g. Mongo the velociraptor companion) after dismissing an
+ * award screen.
  *
  * Multiple rewards are queued and shown one after the other.
  *
@@ -151,7 +158,7 @@ export class RewardGrantedDialog {
     });
 
     // Title
-    drawText(ctx, 'New Ability!', {
+    drawText(ctx, REWARD_HEADINGS[current.kind], {
       x: bx + boxW / 2,
       y: by + DIALOG_TITLE_Y_OFFSET,
       size: 16,
@@ -203,8 +210,7 @@ export class RewardGrantedDialog {
         width: btnW,
         height: btnH,
         label: 'OK',
-        ...BUTTON_PRESETS.purple,
-        labelColor: '#ede9fe',
+        ...BUTTON_PRESETS.award,
       });
     }
   }

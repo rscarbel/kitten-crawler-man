@@ -9,7 +9,7 @@ const ICON_GLOW_SINE_AMPLITUDE = 0.5;
 
 /**
  * Renders an icon with the shared power-up pulse + glow ring animation used by
- * AbilityLevelUpDialog and RewardGrantedDialog.
+ * LevelUpDialog and RewardGrantedDialog.
  *
  * @param iconPulse - Progress through the power-up phase (0 → 1).
  * @param isPowerUp - True while the power_up phase is active.
