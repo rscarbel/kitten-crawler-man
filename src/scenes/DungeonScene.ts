@@ -84,9 +84,11 @@ import {
   snapPlayer,
   restorePlayer,
   revivedSnapshot,
+  checkpointSnapshot,
   REVIVE_HP_FRACTION,
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
+import type { LevelCheckpoint } from '../core/LevelCheckpoint';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
@@ -249,6 +251,12 @@ export interface DungeonSceneOptions {
   spawnAtCircus?: boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
+  /**
+   * In-run checkpoint from the last safe room entered on this floor. Threaded
+   * through building detours so a death mid-detour still returns to the safe
+   * room rather than restarting the floor.
+   */
+  checkpoint?: LevelCheckpoint;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -277,6 +285,9 @@ const TOWN_SQUARE_AMBIENT_VOLUME = 0.28;
  */
 const CITY_CROWD_AMBIENT_FALLBACK_RADIUS_TILES = 40;
 const CITY_CROWD_AMBIENT_VOLUME = 0.35;
+
+/** Shown via `HotbarToast` on safe-room entry, once a checkpoint is actually captured. */
+const PROGRESS_SAVED_TOAST_TEXT = 'Progress Saved...';
 
 const FORCED_TO_HUMAN = new Set<string>(['trollskin_shirt']);
 const FORCED_TO_CAT = new Set<string>(['enchanted_crown_sepsis_whore']);
@@ -625,6 +636,8 @@ export class DungeonScene extends GameplayScene {
   private levelTimerFrames = 0;
   private readonly LEVEL_TIME_LIMIT = 216_000; // 1 hour @ 60 fps
   private wasInSafeRoom = false;
+  /** In-run checkpoint from the last safe room entered on this floor, or null if none yet. */
+  private checkpoint: LevelCheckpoint | null = null;
   private speechBubblePulse = 0;
 
   private readonly inputHandler = new DungeonInputHandler();
@@ -1048,6 +1061,10 @@ export class DungeonScene extends GameplayScene {
                   floorEntryHumanAchievements: this.floorEntryHumanAchievements,
                   floorEntryCatAchievements: this.floorEntryCatAchievements,
                   floorEntryAbilityManager: this.floorEntryAbilityManager,
+                  // Threaded so a death mid-detour still returns to the safe room
+                  // rather than restarting the floor — the building interior scene
+                  // destroys this DungeonScene and any in-memory checkpoint with it.
+                  checkpoint: this.checkpoint ?? undefined,
                   existingMap: this.gameMap,
                   existingMiniMap: this.miniMap,
                   humanAchievements: this.humanAchievements,
@@ -1192,6 +1209,7 @@ export class DungeonScene extends GameplayScene {
     else if (this.godModeState.toughActive) this.enableToughMode();
 
     this.onSaveProgress = options?.saveProgress;
+    this.checkpoint = options?.checkpoint ?? null;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
     if (this.townLife !== null && this.audio !== null) {
@@ -1553,6 +1571,28 @@ export class DungeonScene extends GameplayScene {
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: this.levelDef.id,
       });
+
+      // Skipped in the tutorial, matching the achievement unlocks above — the
+      // tutorial has its own hand-scripted flow and never reaches death-restart.
+      if (this.tutorial === null) {
+        // The event fires from `pm.isAnySafe()`, which can be true for the
+        // inactive crawler while the active one is still outside the room
+        // bounds — guard rather than assert on a missing room.
+        const roomInfo = this.safeRoom.safeRoomInfoAt(this.active());
+        if (roomInfo !== null) {
+          this.checkpoint = {
+            humanSnap: checkpointSnapshot(snapPlayer(this.human)),
+            catSnap: checkpointSnapshot(snapPlayer(this.cat)),
+            abilities: this.abilityManager.clone(),
+            humanAchievements: this.humanAchievements.clone(),
+            catAchievements: this.catAchievements.clone(),
+            respawnX: roomInfo.centre.x * TILE_SIZE,
+            respawnY: roomInfo.centre.y * TILE_SIZE,
+            levelTimerFrames: this.levelTimerFrames,
+          };
+          this.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
+        }
+      }
     });
 
     bus.on('questCompleted', (e) => {
@@ -2289,6 +2329,87 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /**
+   * Routes a death-screen exit to the in-run checkpoint, if one was captured on
+   * this floor, or to the full floor restart otherwise.
+   */
+  private respawnAfterDeath(): void {
+    const cp = this.checkpoint;
+    if (cp !== null) {
+      this.restoreFromCheckpoint(cp);
+    } else {
+      this.restartAtFloorEntry();
+    }
+  }
+
+  /**
+   * Restores the party to an in-run checkpoint in place, rather than tearing
+   * down and rebuilding the scene. Map generation has no seed, so "the world
+   * you left" — smashed props, dead mobs, opened chests, defeated bosses —
+   * cannot be re-derived; it can only be kept by never recreating it.
+   *
+   * Everything not listed here is deliberately left alone: uncollected ground
+   * loot, partially-damaged props, fog of war, and `GameStats` all continue
+   * exactly as they were.
+   */
+  private restoreFromCheckpoint(cp: LevelCheckpoint): void {
+    this.audio?.stopSound('death_sequence');
+    this.deathScreen.reset();
+    this.gameOver = false;
+
+    restorePlayer(this.human, cp.humanSnap);
+    restorePlayer(this.cat, cp.catSnap);
+    this.abilityManager.restoreStates(cp.abilities.snapshotStates());
+    this.humanAchievements.restoreFrom(cp.humanAchievements);
+    this.catAchievements.restoreFrom(cp.catAchievements);
+
+    // restorePlayer() already cleared status effects and downed state — the
+    // checkpoint snapshot carries neither — so only what PlayerSnapshot doesn't
+    // cover is left. HP last, since maxHp reads the (already-zeroed) Jugg Juice loan.
+    this.human.clearTransientCombatState();
+    this.cat.clearTransientCombatState();
+    this.human.hp = this.human.maxHp;
+    this.cat.hp = this.cat.maxHp;
+    this.human.resetCombatState();
+    this.cat.resetCombatState();
+
+    this.human.x = cp.respawnX;
+    this.human.y = cp.respawnY;
+    this.cat.x = cp.respawnX + TILE_SIZE;
+    this.cat.y = cp.respawnY;
+
+    this.levelTimerFrames = cp.levelTimerFrames;
+
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      if (mob.resetsFullyOnCheckpoint) {
+        mob.resetToSpawn();
+      } else {
+        // Allies (Mongo, hired mercenaries) aren't spawn-anchored encounters
+        // to reposition — their "spawn tile" is wherever they were summoned
+        // or hired, not this safe room — but they can take real damage
+        // fighting alongside the party and must not stay critically wounded
+        // once the party itself is fully healed.
+        mob.clearCombatStateForCheckpoint();
+      }
+    }
+    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
+    for (const mob of this.mobs) this.mobGrid.insert(mob);
+
+    this.spells.resetForCheckpoint();
+    this.dynamite.resetForCheckpoint();
+    this.gore.resetForCheckpoint();
+    this.bodyPartGore.resetForCheckpoint();
+    this.bossRoom.resetForCheckpoint();
+    this.arena.resetForCheckpoint();
+    this.bossIntro.cancel();
+    this.combatCooldownFrames = 0;
+
+    // The player is standing in the safe room right now — the latch has to
+    // agree, or the next step out and back in is the only thing that re-arms it.
+    this.wasInSafeRoom = true;
+  }
+
   private restartAtFloorEntry(): void {
     this.audio?.stopSound('death_sequence');
     this.sceneManager.replace(
@@ -2307,6 +2428,7 @@ export class DungeonScene extends GameplayScene {
         audio: this.audio ?? undefined,
         tutorialController:
           this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
+        saveProgress: this.onSaveProgress,
         onResetGame: this.onResetGameCallback ?? undefined,
         // Preserved rather than reset — a death restart shouldn't force-replay an
         // already-completed boss fight (Grimaldi/Quill), and for the doomsday
@@ -2653,7 +2775,7 @@ export class DungeonScene extends GameplayScene {
     if (this.rewardGrantedDialog.isShowing) return;
     if (this.skillBookPrompt.isOpen) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
-      this.restartAtFloorEntry();
+      this.respawnAfterDeath();
       return;
     }
 
@@ -2997,7 +3119,7 @@ export class DungeonScene extends GameplayScene {
 
     if (this.gameOver) {
       if (this.deathScreen.handleClick(mx, my)) {
-        this.restartAtFloorEntry();
+        this.respawnAfterDeath();
       }
       return;
     }
@@ -4122,7 +4244,10 @@ export class DungeonScene extends GameplayScene {
         !!this.levelDef.isSafeLevel,
         this.levelTimerFrames,
       );
-      this.deathScreen.activate(pickDeathExplanation(deathCause));
+      this.deathScreen.activate(
+        pickDeathExplanation(deathCause),
+        this.checkpoint !== null ? 'checkpoint' : 'floorRestart',
+      );
     }
   }
 

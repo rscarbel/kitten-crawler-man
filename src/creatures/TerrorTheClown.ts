@@ -46,6 +46,15 @@ export class TerrorTheClown extends Mob {
     super(tileX, tileY, tileSize, TERROR_HP, TERROR_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.isEnraged = false;
+    this.attackCooldown = 0;
+    this.windupTimer = 0;
+    this.swingTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

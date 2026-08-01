@@ -57,6 +57,15 @@ export class RingmasterGrimaldi extends Mob {
     this.tendrils = tendrils;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.invulnerable = this.tendrils.some((t) => t.isAlive);
+    this.attackCooldown = 0;
+    this.windupTimer = 0;
+    this.slamTimer = 0;
+    this.hitFlashTimer = 0;
+  }
+
   get isInvulnerable(): boolean {
     return this.invulnerable;
   }

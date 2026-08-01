@@ -68,6 +68,12 @@ export class DynamiteSystem implements GameSystem {
     private readonly destructibles: DestructiblePropSystem | null = null,
   ) {}
 
+  /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
+  resetForCheckpoint(): void {
+    this._charging = null;
+    this.liveDynamites = [];
+  }
+
   get isCharging(): boolean {
     return this._charging !== null;
   }

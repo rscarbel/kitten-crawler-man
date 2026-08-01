@@ -178,6 +178,15 @@ export class SmallSpider extends Mob {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.state = 'idle';
+    this.windupTimer = 0;
+    this.attackTimer = 0;
+    this.cooldownTimer = 0;
+    this.hasDealtDamage = false;
+  }
+
   /** Skittering is a discipline. Someone wrote it down. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];

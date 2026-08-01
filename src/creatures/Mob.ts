@@ -296,6 +296,23 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether a checkpoint restore should fully reset this mob — teleport it back
+   * to its spawn tile and clear its aggro/phase state via `resetToSpawn()` —
+   * rather than just healing it and clearing status effects in place via
+   * `clearCombatStateForCheckpoint()`.
+   *
+   * Defaults to {@link isHostile}: an enemy's spawn tile is where the encounter
+   * began, so a death should rewind it there. Override to `true` for a
+   * non-hostile mob that is still spawn-anchored rather than a temporary
+   * summon — e.g. Signet, whose spawn tile is the leash anchor she fights
+   * around, unlike Mongo or a hired mercenary, whose "spawn tile" is wherever
+   * they happened to be summoned or hired.
+   */
+  get resetsFullyOnCheckpoint(): boolean {
+    return this.isHostile;
+  }
+
+  /**
    * When true, the AI-controlled companion will flee from this mob instead of attacking it.
    * Override in subclasses for enemies that are temporarily untargetable or instakill on contact.
    */
@@ -767,6 +784,55 @@ export abstract class Mob extends Player {
 
   applySeparation(dx: number, dy: number): void {
     this.moveWithCollision(dx, dy);
+  }
+
+  /**
+   * Returns this mob to its spawn tile at full health with no aggro, as if it
+   * had never engaged. Used when the party respawns at a safe-room checkpoint —
+   * a living mob must not keep the low HP, target lock or damage attribution
+   * from the encounter that killed the player. Dead mobs are left alone
+   * entirely; this is only ever called on the survivors.
+   *
+   * Boss subclasses with their own phase state (enrage, wind-ups, state
+   * machines) should override this and call `super.resetToSpawn()` first.
+   */
+  resetToSpawn(): void {
+    this.x = this.spawnX;
+    this.y = this.spawnY;
+    this.hp = this.maxHp;
+    this.currentTarget = null;
+    this.retaliateMob = null;
+    this.killedBy = null;
+    this.killType = null;
+    this.damageTakenBy.clear();
+    this.justDied = false;
+    this.droppedLoot = null;
+    this.healthBarTimer = 0;
+    this.forceAggro = false;
+    this.wanderDx = 0;
+    this.wanderDy = 0;
+    this.clearAStarPath();
+    this.clearStatusEffects();
+    this.clearTransientCombatState();
+  }
+
+  /**
+   * Heals and clears combat state without moving the mob or touching its
+   * aggro/wander state — for non-hostile mobs (Mongo, a hired mercenary) on a
+   * checkpoint restore. These are allies, not the encounter that killed the
+   * party, so they must not be teleported to their spawn tile like
+   * `resetToSpawn()` does; but they can still take real damage (a mercenary
+   * fights alongside the player) and must not stay critically wounded or
+   * poisoned once the party itself is fully healed.
+   */
+  clearCombatStateForCheckpoint(): void {
+    this.hp = this.maxHp;
+    this.currentTarget = null;
+    this.retaliateMob = null;
+    this.damageTakenBy.clear();
+    this.healthBarTimer = 0;
+    this.clearStatusEffects();
+    this.clearTransientCombatState();
   }
 
   abstract updateAI(targets: Player[]): void;

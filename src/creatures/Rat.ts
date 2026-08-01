@@ -47,6 +47,15 @@ export class Rat extends Mob {
     this.biteRangePx = tileSize * BITE_RANGE_TILES;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.isAggro = false;
+    this.firstBitePending = true;
+    this.firstBiteWindup = 0;
+  }
+
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 

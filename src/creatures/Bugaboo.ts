@@ -41,6 +41,13 @@ export class Bugaboo extends Mob {
     this.attackRangePx = tileSize * ATTACK_RANGE_TILES;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 

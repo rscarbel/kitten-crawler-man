@@ -89,6 +89,27 @@ export class ArenaSystem implements GameSystem {
     return this.arenaStairwellUnlocked;
   }
 
+  /**
+   * Unlocks the arena door and clears the entry-window/insider state — used on
+   * a checkpoint respawn so the door doesn't stay shut (or slam shut on its
+   * own timer) behind a player who is no longer inside. This has to run
+   * unconditionally, including during phase 2: the door stays locked for the
+   * whole Tuskling fight (`update()` only unlocks it once every Tuskling is
+   * dead), so dying mid-phase-2 with `arenaLocked` still true is the exact
+   * soft-lock this method exists to prevent. Phase-2 progress itself (which
+   * Tusklings are dead) and the boss-defeated unlock are untouched — walking
+   * back in re-locks the door only if the boss is still alive.
+   */
+  resetForCheckpoint(): void {
+    this.entryWindowTimer = 0;
+    this.humanIsInsider = false;
+    this.catIsInsider = false;
+    if (this.arenaLocked) {
+      this.arenaLocked = false;
+      this.gameMap.unlockArenaDoor();
+    }
+  }
+
   private wireEvents(): void {
     // Ball of Swine defeated → spawn 8 dazed Tusklings (phase 2)
     this.bus.on('bossDefeated', (e) => {

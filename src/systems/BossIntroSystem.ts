@@ -122,6 +122,11 @@ export class BossIntroSystem implements GameSystem {
     this.state = { bossType, bossName, bossColor, frame: 0, phase: 'letters' };
   }
 
+  /** Dismisses an in-progress intro without playing it out — used on a checkpoint respawn. */
+  cancel(): void {
+    this.state = null;
+  }
+
   update(): void {
     this.tick();
   }

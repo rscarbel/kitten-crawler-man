@@ -164,6 +164,21 @@ export class HumanPlayer extends Player {
   }
 
   /**
+   * Clears mid-swing/cooldown state so a checkpoint restore doesn't resume an
+   * attack frozen mid-animation from the encounter that killed the player.
+   * Several of these fields are private, so `DungeonScene` can't clear them
+   * directly and needs this entry point.
+   */
+  resetCombatState(): void {
+    this.attackPhase = null;
+    this.attackTimer = 0;
+    this.smushTimer = 0;
+    this.smushCooldown = 0;
+    this.autoAttackCooldown = 0;
+    this.autoTarget = null;
+  }
+
+  /**
    * Called every frame when the human is the follower and has an autoTarget.
    * Faces the target and attacks when in melee range.
    */

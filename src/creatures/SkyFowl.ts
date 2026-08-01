@@ -66,6 +66,14 @@ export class SkyFowl extends Mob {
     this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.isAggressive = false;
+    this.speed = FOWL_SPEED_NEUTRAL;
+    this.peckCooldown = 0;
+    this.peckAnimTimer = 0;
+  }
+
   /** No dungeon loot — only, very rarely, the book on being this quick. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];

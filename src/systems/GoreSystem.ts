@@ -89,6 +89,14 @@ export class GoreSystem implements GameSystem {
     }
   }
 
+  /**
+   * Drops in-flight blood particles from the death frame. Puddles are left
+   * alone — they're floor history, same as a smashed prop, not combat state.
+   */
+  resetForCheckpoint(): void {
+    this.particles = [];
+  }
+
   spawnGore(cx: number, cy: number, impactDx = 0, impactDy = 0): void {
     const hasDir = impactDx !== 0 || impactDy !== 0;
     const impactAngle = hasDir ? Math.atan2(impactDy, impactDx) : 0;

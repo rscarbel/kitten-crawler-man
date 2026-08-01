@@ -105,7 +105,7 @@ export class SystemNoticeSystem implements GameSystem {
       case 'leveled':
         this.bus.emit('skillLevelUp', { player: who, skillId: event.id, newLevel: event.level });
         this.announcer.announce(
-          `${def.name} is now level ${event.level}. ${def.describeEffect(event.level)} The System is contractually obliged to sound impressed.`,
+          `${def.name} is now level ${event.level}. ${def.describeEffect(event.level)}.`,
         );
         return;
       case 'triggered':

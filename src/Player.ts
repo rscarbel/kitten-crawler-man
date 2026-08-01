@@ -862,6 +862,20 @@ export abstract class Player {
     this._regenModifiers.delete(key);
   }
 
+  /**
+   * Clears combat/consumable state that `PlayerSnapshot` does not cover: temporary
+   * stat mods, potion and i-frame timers, named regen modifiers, and the last
+   * damage source. Used when restoring to a checkpoint, where nothing from the
+   * encounter that killed the player should carry over.
+   */
+  clearTransientCombatState(): void {
+    this.tempStatMods.length = 0;
+    this.potionCooldownFrames = 0;
+    this.invulnerableFrames = 0;
+    this._regenModifiers.clear();
+    this.lastDamageSource = null;
+  }
+
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
    *  Item modifiers stack multiplicatively; _regenModifiers bonuses (value − 1) stack additively on top. */
   get regenMultiplier(): number {

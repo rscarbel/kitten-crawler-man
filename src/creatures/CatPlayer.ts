@@ -188,6 +188,20 @@ export class CatPlayer extends Player {
     return this.tileSize * CatPlayer.MELEE_RANGE_MULTIPLIER;
   }
 
+  /**
+   * Clears in-flight missiles and cooldowns so a checkpoint restore doesn't
+   * resume an attack from the encounter that killed the player. Several of
+   * these fields are private, so `DungeonScene` can't clear them directly and
+   * needs this entry point.
+   */
+  resetCombatState(): void {
+    this.missiles = [];
+    this.missileCooldown = 0;
+    this.attackTimer = 0;
+    this.autoTarget = null;
+    this.pendingSubMissileSpawns = [];
+  }
+
   get missileCooldownCurrent(): number {
     return this.missileCooldown;
   }

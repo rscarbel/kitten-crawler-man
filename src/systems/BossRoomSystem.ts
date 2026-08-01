@@ -302,6 +302,26 @@ export class BossRoomSystem implements GameSystem {
   }
 
   /**
+   * Unlocks every non-defeated room and drops standing acid/vomit so a
+   * checkpoint respawn doesn't land the player inside a damage field left over
+   * from the fight that killed them. Defeated rooms are left untouched. Walking
+   * back in re-triggers the normal lock sequence via `update()`.
+   */
+  resetForCheckpoint(): void {
+    for (let i = 0; i < this.states.length; i++) {
+      const state = this.states[i];
+      if (state.defeated) continue;
+      state.locked = false;
+      state.entryWindowTimer = 0;
+      state.fightAborted = false;
+      this.humanIsInsider[i] = false;
+      this.catIsInsider[i] = false;
+    }
+    this.vomitProjectiles.length = 0;
+    this.acidPuddles.length = 0;
+  }
+
+  /**
    * Which boss types have been killed, by the snake_case ids from
    * `levelDef.bossRooms[].type` (`'the_hoarder'`, `'juicer'`, `'krakaren_clone'`).
    *

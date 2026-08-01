@@ -156,6 +156,23 @@ export class BallOfSwine extends Mob {
     return this.hp > 0;
   }
 
+  /**
+   * Mid-fight only: a checkpoint respawn during the burst animation must not
+   * resurrect a boss that has already been defeated — `isAlive` reads true
+   * through that whole window on purpose (see above), so it can't gate this.
+   */
+  override resetToSpawn(): void {
+    if (this.pendingBurst || this.state === 'bursting' || this.hp === 0) return;
+    super.resetToSpawn();
+    this.state = 'idle';
+    this.stoppedTimer = 0;
+    this.stoppingTimer = 0;
+    this.currentAngularSpeed = ANGULAR_SPEED_IDLE;
+    this.orbitCenterX = this.arenaCenterPx.x;
+    this.orbitCenterY = this.arenaCenterPx.y;
+    this.killCooldowns.clear();
+  }
+
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [{ id: 'health_potion', quantity: 3 }];
   }

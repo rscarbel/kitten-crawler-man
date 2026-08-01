@@ -87,6 +87,22 @@ export class KrakarenClone extends Mob {
     // No-op: immobile boss
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.isEnraged = false;
+    this.yellTimer = 0;
+    this.state = 'idle';
+    this.meleeWindupTimer = 0;
+    this.meleeSwingTimer = 0;
+    this.meleeCooldownTimer = 0;
+    this.attackTentacle = -1;
+    this.attackProgress = 0;
+    this.slamTimer = SLAM_INTERVAL_BASE;
+    this.slamShadowTimer = 0;
+    this.slamImpactTimer = 0;
+    this.slamActive = false;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

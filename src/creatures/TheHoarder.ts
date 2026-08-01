@@ -93,6 +93,24 @@ export class TheHoarder extends Mob {
     this.isBoss = true;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.isEnraged = false;
+    this.speed = HOARDER_SPEED;
+    this.hoarderState = 'fleeing';
+    this.vomitTimer = VOMIT_INTERVAL;
+    this.vomitWindupTimer = 0;
+    this.vomitWindupTargets.length = 0;
+    this.fleeStuckFrames = 0;
+    this.fleeBias = 0;
+    this.fleeBiasSign = 1;
+    this.stationaryFrames = 0;
+    this.wanderActive = false;
+    this.cockroachAtCap = false;
+    this.cockroachSpawns = [];
+    this.pendingVomitProjectile = null;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

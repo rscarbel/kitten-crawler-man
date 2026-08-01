@@ -52,6 +52,16 @@ export class MoldLion extends Mob {
     super(tileX, tileY, tileSize, LION_HP, LION_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.auraCooldown = 0;
+    this.auraPhase = 0;
+    this.auraArmed = false;
+    this.isAggro = false;
+  }
+
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [];
   }

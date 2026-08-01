@@ -206,6 +206,28 @@ export class GrotesqueSpider extends Mob {
     super(tileX, tileY, tileSize, SPIDER_HP, SPIDER_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.state = 'idle';
+    this.attackPhase = 'windup';
+    this.windupTimer = 0;
+    this.executeTimer = 0;
+    this.cooldownTimer = 0;
+    this.pursuitTimer = 0;
+    this.slamFacingLocked = false;
+    this.dashTarget = null;
+    this.preferredTarget = null;
+    this.retargetCooldown = 0;
+    // Standing ground traps and an in-flight spit are damage fields left over
+    // from the encounter that killed the player — leaving them would chip a
+    // freshly-respawned crawler who hasn't gone anywhere near the spider yet.
+    this.activeProjectile = null;
+    this.groundTraps = [];
+    this.roamTarget = null;
+    this.roamTimer = 0;
+    this.chasingToLastKnown = false;
+  }
+
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [];
   }

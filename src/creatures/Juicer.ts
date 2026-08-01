@@ -105,6 +105,23 @@ export class Juicer extends Mob {
     this.isBoss = true;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.isEnraged = false;
+    this.speed = JUICER_SPEED;
+    this.state = 'idle';
+    this.windupTimer = 0;
+    this.cooldownTimer = 0;
+    this.framesSinceLastAttack = 0;
+    this.heldDumbbell = false;
+    this.requestDumbbellAt = null;
+    this.nearestDumbbellPos = null;
+    this.activeThrow = null;
+    this.throwAnim = 0;
+    this.tauntTimer = 0;
+    this.currentTaunt = null;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

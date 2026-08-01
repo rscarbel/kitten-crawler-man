@@ -59,6 +59,16 @@ export class CircusLemur extends Mob {
     super(tileX, tileY, tileSize, LEMUR_HP, LEMUR_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.knives = [];
+    this.meleeCooldown = 0;
+    this.meleeAnimTimer = 0;
+    this.throwCooldown = 0;
+    this.throwAnimTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

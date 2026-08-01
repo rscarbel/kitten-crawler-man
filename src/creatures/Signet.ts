@@ -77,9 +77,29 @@ export class Signet extends Mob {
     this.addMob = addMob;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.summonCooldown = this.summonCooldownFrames;
+    this.summonAnimTimer = 0;
+    this.isAggro = false;
+    this.fireballs = [];
+  }
+
   /** Signet is an ally — never hostile to players. */
   override get isHostile(): boolean {
     return false;
+  }
+
+  /**
+   * Unlike a temporary summon (Mongo, a hired mercenary), Signet's spawn tile
+   * is her leash anchor — see `LEASH_RADIUS_TILES` — so a checkpoint restore
+   * should rewind her there and clear her fireballs/cooldowns via
+   * `resetToSpawn()`, the same as a hostile mob.
+   */
+  override get resetsFullyOnCheckpoint(): boolean {
+    return true;
   }
 
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {

@@ -64,6 +64,14 @@ export class Llama extends Mob {
     this.spitRangePx = tileSize * SPIT_RANGE_TILES;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.lavaBalls = [];
+    this.spitCooldown = 0;
+    this.spitAnimTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 

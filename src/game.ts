@@ -142,7 +142,9 @@ void audio.preload();
   };
 
   const onResetGame = () => {
-    authClient.deleteProgress().catch(() => void 0);
+    authClient.deleteProgress().catch((err: unknown) => {
+      console.error('Failed to delete server progress on reset:', err);
+    });
     sceneManager.replace(
       new PostSignupScene(input, sceneManager, { audio, saveProgress, onResetGame }),
     );
@@ -157,7 +159,15 @@ void audio.preload();
     // reload into the same wipe — so a resumed party always arrives on its feet.
     options.humanSnap = revivedSnapshot(progress.humanSnap);
     options.catSnap = revivedSnapshot(progress.catSnap);
-    sceneManager.replace(new DungeonScene(tutorialLevel, input, sceneManager, options));
+    // progress.levelId is unvalidated server JSON — a save written against a
+    // since-renamed level must fall back rather than throw at boot.
+    let resumeLevel;
+    try {
+      resumeLevel = getLevelDef(progress.levelId);
+    } catch {
+      resumeLevel = tutorialLevel;
+    }
+    sceneManager.replace(new DungeonScene(resumeLevel, input, sceneManager, options));
   } else {
     sceneManager.replace(new PostSignupScene(input, sceneManager, options));
   }

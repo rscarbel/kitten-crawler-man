@@ -41,6 +41,14 @@ export class CityElfCultist extends Mob {
     super(tileX, tileY, tileSize, CULTIST_HP, CULTIST_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.bolts = [];
+    this.castCooldown = 0;
+    this.castAnimTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

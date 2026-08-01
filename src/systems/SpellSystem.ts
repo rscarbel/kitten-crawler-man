@@ -180,6 +180,31 @@ export class SpellSystem implements GameSystem {
   /** Mobs confused by a fog last frame — only these need their flag cleared. */
   private readonly confusedLastFrame: Mob[] = [];
 
+  /**
+   * Drops every active spell effect and pending cross-frame event. Used on a
+   * checkpoint respawn so a shell, fog, or in-flight bolt from the encounter
+   * that killed the player doesn't carry into the new frame.
+   */
+  resetForCheckpoint(): void {
+    this.activeShell = null;
+    this._shellCooldown = 0;
+    this.activeFogs = [];
+    this.shellOwner = null;
+    this.catMiniShell = null;
+    this.chainLightningBolts = [];
+    this.shockwaveRipples = [];
+    this._pendingTouchXp = 0;
+    this._pendingBlockXp = 0;
+    this._pendingShockwave = null;
+    this._pendingChainLightningOrigins = [];
+    // Dropping the fog clears the fog itself, but a mob's own isConfused flag
+    // lives on the mob — without this, a mob confused at the moment of death
+    // stays confused forever, since the un-confuse guard below only unwinds it
+    // through this same list.
+    for (const mob of this.confusedLastFrame) mob.isConfused = false;
+    this.confusedLastFrame.length = 0;
+  }
+
   get shellCooldown(): number {
     return this._shellCooldown;
   }

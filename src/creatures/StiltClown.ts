@@ -41,6 +41,14 @@ export class StiltClown extends Mob {
     super(tileX, tileY, tileSize, CLOWN_HP, CLOWN_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.windupTimer = 0;
+    this.lungeTimer = 0;
+    this.isAggro = false;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

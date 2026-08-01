@@ -67,6 +67,15 @@ export class Goblin extends Mob {
     this.attackDamage = weapon === 'hammer' ? 2 : 1;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.isAggro = false;
+    this.firstHitPending = true;
+    this.attackWindupTimer = 0;
+  }
+
   protected rollLootItems(killer: Player | null): LootDrop['items'] {
     const items = super.rollLootItems(killer);
     const chance =

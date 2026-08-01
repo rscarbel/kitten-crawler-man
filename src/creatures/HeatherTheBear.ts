@@ -52,6 +52,15 @@ export class HeatherTheBear extends Mob {
     this.isBoss = true;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.windupTimer = 0;
+    this.swipeTimer = 0;
+    this.painGrowlCooldown = 0;
+    this.isAggro = false;
+  }
+
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,

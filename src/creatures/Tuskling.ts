@@ -67,6 +67,17 @@ export class Tuskling extends Mob {
     super(tileX, tileY, tileSize, TUSK_HP, TUSK_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.chargeWindup = 0;
+    this.state = 'idle';
+    this.windupTimer = 0;
+    this.chargeTimer = 0;
+    this.cooldownTimer = 0;
+    this.meleeCooldown = 0;
+    this.chargeHitDealt = false;
+  }
+
   /** It eats anything. The book explains how. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];

@@ -62,6 +62,17 @@ export class Troglodyte extends Mob {
     super(tileX, tileY, tileSize, TROG_HP, TROG_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.tongueExtend = 0;
+    this.mouthOpenAmt = 0;
+    this.state = 'idle';
+    this.windupTimer = 0;
+    this.strikeTimer = 0;
+    this.cooldownTimer = 0;
+    this.facingLocked = false;
+  }
+
   /** No coins, no gear — only, very rarely, a lifetime in the dark written down. */
   protected override rollLootItems(_killer: Player | null): LootDrop['items'] {
     const items: LootDrop['items'] = [];

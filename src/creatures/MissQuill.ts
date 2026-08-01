@@ -69,6 +69,16 @@ export class MissQuill extends Mob {
     this.shielded = capacitor.isAlive;
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.shielded = this.capacitor?.isAlive ?? false;
+    this.bolts = [];
+    this.castCooldown = 0;
+    this.castAnimTimer = 0;
+    this.summonCooldown = SUMMON_COOLDOWN_FRAMES;
+    this.shieldHitFlashTimer = 0;
+  }
+
   get isShielded(): boolean {
     return this.shielded;
   }

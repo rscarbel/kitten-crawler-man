@@ -327,4 +327,19 @@ export class AchievementManager {
     copy.recentEvents = this.recentEvents.map((e) => ({ ...e }));
     return copy;
   }
+
+  /**
+   * Overwrite this manager's state in place from a clone (e.g. rewinding to a
+   * checkpoint). In place rather than swapping the reference, because other
+   * systems (`AchievementUISystem`) hold this exact instance.
+   */
+  restoreFrom(other: AchievementManager): void {
+    this.unlocked = new Set(other.unlocked);
+    this.pendingNotifications.length = 0;
+    this.pendingNotifications.push(...other.pendingNotifications);
+    this.pendingBoxes.length = 0;
+    this.pendingBoxes.push(...other.pendingBoxes.map((b) => ({ ...b })));
+    this.nextBoxId = other.nextBoxId;
+    this.recentEvents = other.recentEvents.map((e) => ({ ...e }));
+  }
 }

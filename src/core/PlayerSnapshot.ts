@@ -157,6 +157,23 @@ export function revivedSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
   };
 }
 
+/**
+ * A snapshot with every temporary effect already stripped, so a restored crawler
+ * cannot inherit a potion, a poison, or Jugg Juice's max-HP loan from the run that
+ * killed them. HP is left as-is; the caller sets it to max once max HP has been
+ * re-derived (status effects — including Jugg Juice's loan — affect max HP).
+ */
+export function checkpointSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
+  return {
+    ...snap,
+    statusEffects: [],
+    juggJuiceHpBoost: 0,
+    isKnockedOut: false,
+    knockedOutFrames: 0,
+    reviveProgress: 0,
+  };
+}
+
 /** The snapshot's format version, defaulting to v1 for saves predating the field. */
 function snapshotVersionOf(snap: PlayerSnapshot): number {
   return snap.snapshotVersion ?? LEGACY_SNAPSHOT_VERSION;

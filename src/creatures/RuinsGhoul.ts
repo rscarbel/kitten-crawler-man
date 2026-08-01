@@ -40,6 +40,15 @@ export class RuinsGhoul extends Mob {
     super(tileX, tileY, tileSize, GHOUL_HP, GHOUL_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.isAggro = false;
+    this.firstHitPending = true;
+    this.attackWindupTimer = 0;
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

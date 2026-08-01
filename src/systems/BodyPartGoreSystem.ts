@@ -130,6 +130,15 @@ export class BodyPartGoreSystem implements GameSystem {
 
   constructor(private readonly map: GameMap) {}
 
+  /**
+   * Drops in-flight/tumbling parts from the death frame. Settled parts are left
+   * alone — they're floor history, same as a smashed prop, not combat state.
+   */
+  resetForCheckpoint(): void {
+    this.flying.length = 0;
+    this.tumbling.length = 0;
+  }
+
   spawnParts(
     cx: number,
     cy: number,

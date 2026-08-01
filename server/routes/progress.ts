@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import type { AuthedRequest } from '../middleware/auth.js';
@@ -7,8 +7,8 @@ import type { AuthedRequest } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', (req: Request, res: Response) => {
-  const { id } = (req as AuthedRequest).user;
+router.get('/', (req: AuthedRequest, res: Response) => {
+  const { id } = req.user;
   const row = db
     .prepare('SELECT data FROM progress WHERE user_id = ?')
     .get(id) as { data: string } | undefined;
@@ -16,8 +16,8 @@ router.get('/', (req: Request, res: Response) => {
   res.json({ data: row ? (JSON.parse(row.data) as unknown) : null });
 });
 
-router.post('/', (req: Request, res: Response) => {
-  const { id } = (req as AuthedRequest).user;
+router.post('/', (req: AuthedRequest, res: Response) => {
+  const { id } = req.user;
   const { data } = req.body as { data?: unknown };
 
   if (!data || typeof data !== 'object') {
@@ -33,6 +33,12 @@ router.post('/', (req: Request, res: Response) => {
           updated_at = excluded.updated_at
   `).run(id, JSON.stringify(data));
 
+  res.json({ ok: true });
+});
+
+router.delete('/', (req: AuthedRequest, res: Response) => {
+  const { id } = req.user;
+  db.prepare('DELETE FROM progress WHERE user_id = ?').run(id);
   res.json({ ok: true });
 });
 

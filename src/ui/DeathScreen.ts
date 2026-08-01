@@ -25,6 +25,19 @@ const BUTTON_Y_OFFSET = 75;
 const BUTTON_LABEL_SIZE = 17;
 const YOU_DIED_FONT_SIZE = 72;
 
+/** Where a death screen exit sends the player: the floor restart, or an in-run safe-room checkpoint. */
+export type RespawnMode = 'floorRestart' | 'checkpoint';
+
+const RESPAWN_BUTTON_LABEL: Record<RespawnMode, string> = {
+  floorRestart: 'Restart Level',
+  checkpoint: 'Return to Checkpoint',
+};
+
+const RESPAWN_SUBTITLE: Record<RespawnMode, string> = {
+  floorRestart: 'Respawning at floor start — progress from previous floors kept.',
+  checkpoint: 'Respawning at your last safe room — health and status restored.',
+};
+
 /**
  * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
  * button hit-testing. The caller is responsible for calling tick() each frame
@@ -35,13 +48,15 @@ export class DeathScreen {
   private _active = false;
   private _btnResult: { x: number; y: number; width: number; height: number } | null = null;
   private _explanation = '';
+  private _mode: RespawnMode = 'floorRestart';
   audio: AudioManager | null = null;
 
   /** Activate the death screen — begins the fade-in from alpha 0. */
-  activate(explanation: string): void {
+  activate(explanation: string, mode: RespawnMode = 'floorRestart'): void {
     this._active = true;
     this.alpha = 0;
     this._explanation = explanation;
+    this._mode = mode;
     this.audio?.play('death_sequence');
   }
 
@@ -50,6 +65,7 @@ export class DeathScreen {
     this._active = false;
     this.alpha = 0;
     this._explanation = '';
+    this._mode = 'floorRestart';
     this.audio?.stopSound('death_sequence');
   }
 
@@ -113,7 +129,7 @@ export class DeathScreen {
 
     // Subtitle
     const subtitleW = Math.min(SUBTITLE_MAX_WIDTH, w - SUBTITLE_PADDING);
-    drawText(ctx, 'Respawning at floor start — progress from previous floors kept.', {
+    drawText(ctx, RESPAWN_SUBTITLE[this._mode], {
       x: w / 2 - subtitleW / 2,
       y: h / 2 + SUBTITLE_Y_OFFSET,
       size: SUBTITLE_FONT_SIZE,
@@ -134,7 +150,7 @@ export class DeathScreen {
       y: btnY,
       width: btnW,
       height: btnH,
-      label: 'Restart Level',
+      label: RESPAWN_BUTTON_LABEL[this._mode],
       ...BUTTON_PRESETS.danger,
       labelSize: BUTTON_LABEL_SIZE,
       alpha: textAlpha,
