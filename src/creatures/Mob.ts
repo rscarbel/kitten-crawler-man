@@ -361,9 +361,25 @@ export abstract class Mob extends Player {
   /**
    * Advances a corpse by one frame. Only called for `rendersWhenDead` mobs,
    * which get no other updates once they are dead.
+   *
+   * Call {@link advanceCorpse} rather than this — the per-frame bookkeeping a
+   * corpse still owes lives there, and overrides of this method do not run it.
    */
   tickCorpse(): void {
     // Corpse-less mobs have nothing to advance.
+  }
+
+  /**
+   * One frame of corpse life: the shared bookkeeping every corpse owes, then
+   * the mob's own animation.
+   *
+   * The killing blow leaves a hit flash behind, and the regular update that
+   * would burn it down stops the moment the mob dies — so without this the
+   * corpse holds that frame's tint forever and reads as a glowing body.
+   */
+  advanceCorpse(): void {
+    if (this.damageFlash > 0) this.damageFlash--;
+    this.tickCorpse();
   }
 
   /** True once a corpse has finished and can be dropped from the world. */

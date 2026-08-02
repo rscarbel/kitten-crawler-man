@@ -361,7 +361,7 @@ export function resolveKills(ctx: CombatContext): void {
   for (const mob of mobs) {
     if (mob.isAlive || !mob.rendersWhenDead) continue;
     if (mob.corpseExpired) continue;
-    mob.tickCorpse();
+    mob.advanceCorpse();
     if (!mob.belongsInMobGrid) mobGrid.remove(mob);
   }
 
