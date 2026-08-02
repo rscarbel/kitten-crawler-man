@@ -35,6 +35,19 @@ const MS_PER_SECOND = 1000;
 const DEFAULT_STOP_MUSIC_FADE_MS = 500;
 const GOBLIN_ENCOUNTER_CHANCE = 0.15;
 const MENU_MUSIC_FADE_MS = 200;
+/**
+ * Fade applied to the ambience bus when a menu opens or closes. Matched to the
+ * music fade so the whole world goes quiet as one gesture rather than the bed
+ * trailing the track.
+ */
+const MENU_AMBIENCE_FADE_MS = MENU_MUSIC_FADE_MS;
+/** Full-signal gain for the ambience bus — it only ever sits at unity or muted. */
+const AMBIENCE_BUS_OPEN = 1;
+/**
+ * How much of the music bus survives the mix. Music is a bed; effects carry
+ * information, and at parity the bed buried them.
+ */
+const MUSIC_BUS_HEADROOM = 0.5;
 /** Ramp time applied to ambient-loop volume changes, short enough to track the player. */
 const AMBIENT_RAMP_MS = 100;
 /** A dodge borrows the whiffed-punch cue, quieter and quicker so it reads as air. */
@@ -69,8 +82,13 @@ function shuffleTracks(ids: ReadonlyArray<SoundId>): SoundId[] {
  * Web Audio API manager for the game.
  *
  * Volume hierarchy:
- *   AudioContext → masterGain → sfxGain  → one-shot SFX buffers
+ *   AudioContext → masterGain → sfxGain   → one-shot SFX buffers
+ *                             │           └→ ambienceGain → continuous world loops
  *                             → musicGain → looping music source
+ *
+ * The ambience bus hangs off the SFX bus so the player's SFX volume still governs
+ * it, but it can be muted on its own: pausing the game silences every continuous
+ * world sound while menu clicks still play.
  *
  * Usage:
  *   const audio = new AudioManager();
@@ -83,6 +101,8 @@ export class AudioManager {
   private readonly ctx: AudioContext;
   private readonly masterGain: GainNode;
   private readonly sfxGain: GainNode;
+  /** Sub-bus for looping world sounds (footsteps, machinery, ambient beds). */
+  private readonly ambienceGain: GainNode;
   private readonly musicGain: GainNode;
 
   private readonly buffers = new Map<SoundId, AudioBuffer>();
@@ -138,14 +158,27 @@ export class AudioManager {
     return this.musicVol;
   }
 
+  /**
+   * The music bus sits below the SFX bus by a fixed amount, so a card landing or
+   * a chip stacking is audible over a track without the player having to reach
+   * for the volume settings. Applied to the bus rather than to the stored
+   * preference, so the number the player set is still the number they see.
+   */
+  private get trimmedMusicVol(): number {
+    return this.musicVol * MUSIC_BUS_HEADROOM;
+  }
+
   constructor() {
     this.ctx = new AudioContext();
     this.masterGain = this.ctx.createGain();
     this.sfxGain = this.ctx.createGain();
+    this.ambienceGain = this.ctx.createGain();
     this.musicGain = this.ctx.createGain();
     this.masterGain.gain.value = this.masterVol;
     this.sfxGain.gain.value = this.sfxVol;
-    this.musicGain.gain.value = this.musicVol;
+    this.ambienceGain.gain.value = AMBIENCE_BUS_OPEN;
+    this.musicGain.gain.value = this.trimmedMusicVol;
+    this.ambienceGain.connect(this.sfxGain);
     this.sfxGain.connect(this.masterGain);
     this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
@@ -458,7 +491,7 @@ export class AudioManager {
     if (!buffer) return;
     const gain = this.ctx.createGain();
     gain.gain.value = WALKING_VOLUME;
-    gain.connect(this.sfxGain);
+    gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -487,7 +520,7 @@ export class AudioManager {
     if (!buffer) return;
     const gain = this.ctx.createGain();
     gain.gain.value = WADING_VOLUME;
-    gain.connect(this.sfxGain);
+    gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -530,7 +563,7 @@ export class AudioManager {
     if (!buffer) return;
     const gain = this.ctx.createGain();
     gain.gain.value = SPIDER_WALKING_VOLUME;
-    gain.connect(this.sfxGain);
+    gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -557,7 +590,7 @@ export class AudioManager {
     if (!buffer) return;
     const gain = this.ctx.createGain();
     gain.gain.value = MACHINERY_VOLUME;
-    gain.connect(this.sfxGain);
+    gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -594,7 +627,7 @@ export class AudioManager {
     const now = this.ctx.currentTime;
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(volume, now + AMBIENT_RAMP_MS / MS_PER_SECOND);
-    gain.connect(this.sfxGain);
+    gain.connect(this.ambienceGain);
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
@@ -665,7 +698,7 @@ export class AudioManager {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = false;
-    source.connect(this.sfxGain);
+    source.connect(this.ambienceGain);
     source.start();
     source.onended = () => {
       this.keyboardHeroMusicSource = null;
@@ -685,6 +718,40 @@ export class AudioManager {
   }
 
   private musicPaused = false;
+  private ambiencePaused = false;
+
+  /**
+   * Fade every continuous world sound out (e.g. when the pause menu opens):
+   * footsteps, wading, spider steps, machinery, the keyboard-hero track and every
+   * distance-attenuated ambient bed. One-shot SFX are untouched, so menu clicks
+   * still play while the world is silent. Idempotent.
+   *
+   * The loops keep running behind a muted bus rather than being stopped: several
+   * of them (machinery, the keyboard-hero track) are started by one-off events and
+   * would never come back if they were torn down here.
+   */
+  pauseAmbience(): void {
+    if (this.ambiencePaused) return;
+    this.ambiencePaused = true;
+    this.rampAmbienceBus(0);
+  }
+
+  /** Fade the continuous world sounds back in when the menu closes. Idempotent. */
+  resumeAmbience(): void {
+    if (!this.ambiencePaused) return;
+    this.ambiencePaused = false;
+    this.rampAmbienceBus(AMBIENCE_BUS_OPEN);
+  }
+
+  private rampAmbienceBus(target: number): void {
+    const now = this.ctx.currentTime;
+    this.ambienceGain.gain.cancelScheduledValues(now);
+    this.ambienceGain.gain.setValueAtTime(this.ambienceGain.gain.value, now);
+    this.ambienceGain.gain.linearRampToValueAtTime(
+      target,
+      now + MENU_AMBIENCE_FADE_MS / MS_PER_SECOND,
+    );
+  }
 
   /** Fade music out quickly (e.g. when a menu opens). Idempotent. */
   pauseMusic(): void {
@@ -702,7 +769,7 @@ export class AudioManager {
     const now = this.ctx.currentTime;
     this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
     this.musicGain.gain.linearRampToValueAtTime(
-      this.musicVol,
+      this.trimmedMusicVol,
       now + MENU_MUSIC_FADE_MS / MS_PER_SECOND,
     );
   }
@@ -774,7 +841,7 @@ export class AudioManager {
   /** Set the music bus volume (0–1). */
   setMusicVolume(v: number): void {
     this.musicVol = v;
-    this.musicGain.gain.value = v;
+    this.musicGain.gain.value = this.trimmedMusicVol;
   }
 
   /*

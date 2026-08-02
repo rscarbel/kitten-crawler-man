@@ -53,7 +53,7 @@ export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
   { id: 'sledge', tile: { x: 12, y: 14 }, label: 'The Sledge' },
   { id: 'bar', tile: { x: 3, y: 3 }, label: 'Bar' },
   { id: 'market', tile: { x: 3, y: 14 }, label: 'Market' },
-  { id: 'casino', tile: { x: 20, y: 4 }, label: 'Casino' },
+  { id: 'casino', tile: { x: 20, y: 4 }, label: 'Blackjack' },
   { id: 'mercenary', tile: { x: 20, y: 14 }, label: 'Meat Shields' },
   { id: 'vip', tile: { x: 12, y: 2 }, label: 'VIP Lounge' },
 ];

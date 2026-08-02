@@ -25,6 +25,8 @@ const PRESSED_OFFSET = 1;
 const PRESSED_WIDTH_REDUCTION = 2;
 const PRESSED_HEIGHT_REDUCTION = 2;
 const PRESS_DARKENING_ALPHA = 0.18;
+/** Radius large enough that any button using it reads as a pill, whatever its size. */
+const CHIP_WELL_RADIUS = 999;
 
 let _mouseX = RESET_MOUSE_POSITION;
 let _mouseY = RESET_MOUSE_POSITION;
@@ -303,6 +305,27 @@ export const BUTTON_PRESETS = {
   },
   /** Informational / navigation — dark blue with blue border. */
   blue: { fill: '#1e3a5f', border: '#60a5fa', borderWidth: 1.5, radius: 4 },
+  /**
+   * Casino chip well: a recessed gold-rimmed pill that a chip is drawn into, so
+   * the chip itself carries the colour and the button only carries the hit-rect,
+   * hover and press.
+   */
+  casinoChip: {
+    fill: 'rgba(8,32,24,0.75)',
+    border: '#c8a840',
+    borderWidth: 1.5,
+    radius: CHIP_WELL_RADIUS,
+  },
+  /**
+   * The painted betting circle on the felt. Transparent, because the chips
+   * stacked on it are the visual — the button exists for the hit-rect, the hover
+   * and the click sound.
+   */
+  casinoBetSpot: {
+    fill: 'rgba(0,0,0,0)',
+    border: 'rgba(0,0,0,0)',
+    radius: CHIP_WELL_RADIUS,
+  },
 } satisfies Record<string, ButtonPreset>;
 
 /** The default sound ID played on button click. */

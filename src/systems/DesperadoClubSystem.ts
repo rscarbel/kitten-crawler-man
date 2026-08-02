@@ -19,6 +19,7 @@ import { CLUB_PROPS, propSortY } from '../core/clubProps';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { QuestDialog } from '../ui/QuestDialog';
 import { drawClubNpc, type ClubNpcVariant } from '../sprites/clubNpcSprite';
+import { drawCasinoDealer } from '../sprites/casinoDealerSprite';
 import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
@@ -28,6 +29,13 @@ import { ClubVipLoungeSystem } from './ClubVipLoungeSystem';
 import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
 
 const STATION_INTERACT_RANGE = 2.6;
+/**
+ * `animTime` counts frames, but the dealer sprite times its motion in real
+ * milliseconds so the two renderings of Deuce move at the same speed.
+ */
+const MS_PER_SECOND = 1000;
+const FRAMES_PER_SECOND = 60;
+const MS_PER_FRAME = MS_PER_SECOND / FRAMES_PER_SECOND;
 const TILE_HALF = 0.5;
 
 // VIP bodyguard escort: two Cretins that trail the player around the club (cosmetic — the club is a safe zone).
@@ -127,11 +135,10 @@ const MARKET_SHOP_CONFIG: ShopConfig = {
   ],
 };
 
-/** Which sprite each station NPC uses. */
-const STATION_VARIANT: Record<ClubStationId, ClubNpcVariant> = {
+/** Which shared club-NPC sprite each station uses; the casino has its own renderer. */
+const STATION_VARIANT: Record<Exclude<ClubStationId, 'casino'>, ClubNpcVariant> = {
   sledge: 'sledge',
   bar: 'bartender',
-  casino: 'dealer',
   market: 'merchant',
   mercenary: 'rosemarie',
   vip: 'vip',
@@ -141,7 +148,7 @@ const STATION_VARIANT: Record<ClubStationId, ClubNpcVariant> = {
 function promptLabel(station: ClubStation): string {
   if (station.id === 'sledge') return 'Talk';
   if (station.id === 'bar' || station.id === 'market') return 'Shop';
-  if (station.id === 'casino') return 'Play';
+  if (station.id === 'casino') return 'Play Blackjack';
   if (station.id === 'mercenary') return 'Hire';
   return 'Enter';
 }
@@ -200,7 +207,7 @@ export class DesperadoClubSystem {
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG);
     this.marketShop = new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG);
-    this.casino = new ClubCasinoSystem(audio);
+    this.casino = new ClubCasinoSystem(audio, membership);
     this.guild = new MercenaryGuildSystem(roster, audio);
     this.vip = new ClubVipLoungeSystem(audio);
     if (membership.hasDesperadoPass) {
@@ -244,6 +251,7 @@ export class DesperadoClubSystem {
     this.crowd.update(this.staticCrowdBodies(active, companion));
     this.barShop.update();
     this.marketShop.update();
+    this.casino.update(active);
     if (this.barShop.purchasePending || this.marketShop.purchasePending) {
       // A round at the bar pours; gear off the market rack does not.
       if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
@@ -253,6 +261,26 @@ export class DesperadoClubSystem {
     }
     // Sub-panels freeze this update() while open, so pending achievement flags set
     // during a hire/win/hire-escort are consumed here once the panel closes.
+    this.consumePendingUnlocks();
+  }
+
+  /**
+   * Drive the sub-panels that keep running while they are open. The club's
+   * `update` is gated behind `modalOpen` by the interior scene, so anything with
+   * its own clock — the casino's dealing and dealer beats — has to be pumped
+   * from here instead.
+   */
+  tickOpenModals(active: Player): void {
+    this.animTime++;
+    this.casino.update(active);
+    // A natural can settle while the panel is still open, and that panel can be
+    // the last thing the player touches before leaving — so the flags are
+    // drained here too, or the achievement is lost with the system.
+    this.consumePendingUnlocks();
+  }
+
+  /** Drain every sub-panel's "something unlockable happened" flag. */
+  private consumePendingUnlocks(): void {
     if (this.guild.hirePending) {
       this.guild.hirePending = false;
       this.unlockAchievement('merc_hired');
@@ -303,14 +331,17 @@ export class DesperadoClubSystem {
   }
 
   /** Close the open shop panel, or advance the open sub-panel/dialog. */
-  dismissModal(): void {
+  dismissModal(player: Player): void {
     const shop = this.activeShop();
     if (shop) {
       shop.shopOpen = false;
       return;
     }
     if (this.casino.open) {
-      this.casino.close();
+      // The rules overlay sits above the table, so Esc backs out of it first
+      // rather than closing the table underneath it.
+      if (this.casino.rulesOpen) this.casino.dismissRules();
+      else this.casino.close(player);
       return;
     }
     if (this.guild.open) {
@@ -339,36 +370,41 @@ export class DesperadoClubSystem {
     return null;
   }
 
-  /** Space/tap interaction: dismiss a modal, or open the station the player stands beside. */
-  handleInteract(player: Player): void {
+  /**
+   * Space/tap interaction: dismiss a modal, or open the station the player
+   * stands beside. Returns whether the press was consumed, so a press with no
+   * station in range can still fall through to whoever else is standing there.
+   */
+  handleInteract(player: Player): boolean {
     if (this.dialog.isOpen) {
       this.dialog.advance();
-      return;
+      return true;
     }
     const station = this.nearestStation(player);
-    if (!station) return;
+    if (!station) return false;
     if (station.id === 'sledge') {
       if (this.membership.hasDesperadoPass) this.openFlavor(station.label, SLEDGE_WELCOME);
       else this.openGreeting();
-      return;
+      return true;
     }
     if (station.id === 'bar') {
       this.barShop.shopOpen = true;
-      return;
+      return true;
     }
     if (station.id === 'market') {
       this.marketShop.shopOpen = true;
-      return;
+      return true;
     }
     if (station.id === 'casino') {
       this.casino.openTable(player);
-      return;
+      return true;
     }
     if (station.id === 'mercenary') {
       this.guild.openPanel();
-      return;
+      return true;
     }
     this.vip.openPanel(this.coinsWageredThisVisit);
+    return true;
   }
 
   /** Route clicks to an open shop panel's buy buttons, else advance the modal; returns true when a modal/shop was open. */
@@ -395,8 +431,26 @@ export class DesperadoClubSystem {
     return true;
   }
 
-  closeModals(): void {
-    this.dismissModal();
+  closeModals(player: Player): void {
+    this.dismissModal(player);
+  }
+
+  /**
+   * Shut every sub-panel outright, for the scene being torn down under an open
+   * modal. Deliberately *not* `dismissModal`, which is a one-level Esc: with the
+   * rules overlay up it would close only the overlay and leave the blackjack
+   * table holding the player's stake, and with the greeting up it would fall
+   * through to `dialog.advance()` and award the Desperado Pass nobody accepted.
+   */
+  closeAll(player: Player): void {
+    const shop = this.activeShop();
+    if (shop) shop.shopOpen = false;
+    if (this.casino.open) this.casino.close(player);
+    this.guild.close();
+    this.vip.close();
+    // No tick runs after a teardown to notice a flag a panel set on its way out
+    // — and closing the casino can fast-forward a live hand into a natural.
+    this.consumePendingUnlocks();
   }
 
   /**
@@ -443,6 +497,10 @@ export class DesperadoClubSystem {
     });
     figures.push(this.npcFigure(CLUB_DJ_TILE, 'dj', 0));
     for (const station of CLUB_STATIONS) {
+      if (station.id === 'casino') {
+        figures.push(this.dealerFigure(station.tile));
+        continue;
+      }
       figures.push(this.npcFigure(station.tile, STATION_VARIANT[station.id], station.tile.x));
     }
     return figures;
@@ -471,6 +529,26 @@ export class DesperadoClubSystem {
           this.animTime + phaseOffset,
           facingX,
           seed,
+        ),
+    };
+  }
+
+  /**
+   * Deuce behind the blackjack table. Sweeps a hand across the felt while the
+   * table is open and rests otherwise, so the figure in the room tracks what the
+   * panel is doing.
+   */
+  private dealerFigure(tile: { x: number; y: number }): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawCasinoDealer(
+          ctx,
+          tile.x * TILE_SIZE - camX,
+          tile.y * TILE_SIZE - camY,
+          tileSize,
+          this.animTime * MS_PER_FRAME,
+          this.casino.open,
         ),
     };
   }

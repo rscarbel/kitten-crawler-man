@@ -737,7 +737,7 @@ export class BuildingInteriorScene extends GameplayScene {
         return;
       }
       if (this.club?.modalOpen) {
-        this.club.closeModals();
+        this.club.closeModals(this.active());
         return;
       }
       if (this.servicePanel?.isOpen === true) {
@@ -767,6 +767,10 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    // Backstop for any teardown that does not route through `doExit`, which
+    // closes the club's panels itself while the coins can still reach the
+    // player. Idempotent, so running twice costs nothing.
+    this.club?.closeAll(this.active());
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bopcaBus?.clear();
@@ -940,9 +944,13 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.shop?.shopOpen) return;
     if (this.club?.modalOpen) {
+      // The blackjack table deals, flips and settles on its own clock, so it has
+      // to keep ticking through its own panel — the same reason the Bopca's cook
+      // timer runs through her dialog above.
+      this.club.tickOpenModals(this.active());
       if (this.input.has(' ')) {
         this.input.clear();
-        this.club.dismissModal();
+        this.club.dismissModal(this.active());
       }
       return;
     }
@@ -1036,10 +1044,11 @@ export class BuildingInteriorScene extends GameplayScene {
       }
     }
 
-    // Club: talk to a station NPC (the Sledge, bar, casino, …) with Space
-    if (this.club && this.input.has(' ')) {
+    // Club: talk to a station NPC (the Sledge, bar, casino, …) with Space.
+    // Only consume when a station actually answered, so a press beside an
+    // ambient occupant still reaches the conversation below.
+    if (this.club !== null && this.input.has(' ') && this.club.handleInteract(player)) {
       this.input.clear();
-      this.club.handleInteract(player);
     }
 
     // Ambient occupants: talk to the nearest one with Space
@@ -1285,6 +1294,12 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   private doExit(defeated = false): void {
+    // Before the snapshot, not after: `onExit` runs only once the replacement
+    // scene has already been built from these snapshots, so a refund credited
+    // there lands on a Player object that is about to be discarded. The
+    // blackjack table debits chips the moment they hit the felt, so a teardown
+    // under an open table would otherwise cost the player real coins.
+    this.club?.closeAll(this.active());
     // God mode rides on top of base stats rather than being folded into them, so
     // snapshots are already clean and the overworld can re-apply its own overlay.
     const humanSnap = snapPlayer(this.human);

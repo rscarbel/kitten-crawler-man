@@ -1286,11 +1286,15 @@ function drawMercDesk(ctx: NodeCtx, geo: FrameGeometry, variant: number): void {
   ctx.fillRect(box.x + box.w / 2 - 3, box.y + box.h * 0.4, 6, box.h * 0.35);
 }
 
-// ── The Casino — the high-low table ─────────────────────────────────────────
+// ── The Casino — Deuce's blackjack table ────────────────────────────────────
 
 const FELT_TONES = ['#1a6b3e', '#6b1a2c'] as const;
 
-/** An oval baize table with a padded leather rail, chip wells and a dealt hand. */
+/**
+ * A blackjack table: the half-moon baize with the flat dealer's side toward the
+ * back of the room, a painted betting circle, the chip tray sunk into the
+ * dealer's edge, and the card shoe standing beside it.
+ */
 function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): void {
   const rng = makeRng(8000 + variant * 97);
   const felt = FELT_TONES[variant % FELT_TONES.length];
@@ -1300,6 +1304,8 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
   const rx = geo.w * 0.46;
   const ry = TILE_SCALE * 0.52;
   const skirtBottom = geo.footBottom - TILE_SCALE * 0.08;
+  /** The dealer's straight edge: the back of the half-moon, flattened. */
+  const dealerEdgeY = cy - ry * 0.62;
 
   paintContactShadow(ctx, cx, skirtBottom, rx * 1.05, TILE_SCALE * 0.16);
 
@@ -1318,7 +1324,11 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
   ctx.fill();
   ctx.restore();
 
-  // Padded leather rail.
+  // Padded leather rail, clipped flat along the dealer's side.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, dealerEdgeY, geo.w, geo.h - dealerEdgeY);
+  ctx.clip();
   const railGrad = ctx.createRadialGradient(cx, cy - ry * 0.4, ry * 0.2, cx, cy, rx);
   railGrad.addColorStop(0, '#7a4a26');
   railGrad.addColorStop(0.7, '#4a2a12');
@@ -1330,7 +1340,7 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
 
   // Baize inset.
   const feltRx = rx * 0.85;
-  const feltRy = ry * 0.72;
+  const feltRy = ry * 0.74;
   const feltGrad = ctx.createRadialGradient(
     cx - feltRx * 0.2,
     cy - feltRy * 0.4,
@@ -1345,62 +1355,111 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
   ctx.beginPath();
   ctx.ellipse(cx, cy, feltRx, feltRy, 0, 0, TWO_PI);
   ctx.fill();
+  ctx.restore();
 
-  // Gold betting line and the house legend.
+  // The painted arc the players' hands are dealt along, plus the single betting
+  // circle in front of the seat.
   ctx.strokeStyle = 'rgba(224,196,110,0.7)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, feltRx * 0.72, feltRy * 0.62, 0, 0, TWO_PI);
+  ctx.ellipse(cx, cy, feltRx * 0.78, feltRy * 0.78, 0, 0.1 * Math.PI, 0.9 * Math.PI);
   ctx.stroke();
   ctx.setLineDash([4, 5]);
   ctx.beginPath();
-  ctx.ellipse(cx, cy, feltRx * 0.46, feltRy * 0.4, 0, 0, TWO_PI);
+  ctx.ellipse(cx, cy + feltRy * 0.34, feltRx * 0.16, feltRy * 0.2, 0, 0, TWO_PI);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Brass tacks around the rail.
+  // "BLACKJACK PAYS 3 TO 2", printed as a gold band the way a real layout is.
+  ctx.strokeStyle = 'rgba(240,216,112,0.4)';
+  ctx.lineWidth = TILE_SCALE * 0.05;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - feltRy * 0.12, feltRx * 0.5, feltRy * 0.26, 0, 0.08 * Math.PI, 0.92 * Math.PI);
+  ctx.stroke();
+
+  // Brass tacks around the curved half of the rail only — the dealer's edge is flat.
   const tacks = 26;
   for (let i = 0; i < tacks; i++) {
     const a = (i / tacks) * TWO_PI;
+    const ty = cy + Math.sin(a) * ry * 0.93;
+    if (ty < dealerEdgeY) continue;
     ctx.fillStyle = BRASS_LIGHT;
     ctx.beginPath();
-    ctx.arc(
-      cx + Math.cos(a) * rx * 0.93,
-      cy + Math.sin(a) * ry * 0.93,
-      TILE_SCALE * 0.018,
-      0,
-      TWO_PI,
-    );
+    ctx.arc(cx + Math.cos(a) * rx * 0.93, ty, TILE_SCALE * 0.018, 0, TWO_PI);
     ctx.fill();
   }
 
-  // A dealt hand and chip stacks on the felt.
-  drawPlayingCard(ctx, cx - TILE_SCALE * 0.3, cy - TILE_SCALE * 0.04, -0.16, '#c02424');
-  drawPlayingCard(ctx, cx - TILE_SCALE * 0.05, cy - TILE_SCALE * 0.02, 0.1, '#161616');
-  for (let s = 0; s < 3; s++) {
-    const stackX = cx + TILE_SCALE * (0.42 + s * 0.24);
-    const height = 3 + Math.floor(rng() * 3);
+  drawChipTray(ctx, cx, dealerEdgeY + TILE_SCALE * 0.06, rx * 0.5, rng);
+  drawCardShoe(ctx, cx + rx * 0.68, dealerEdgeY + TILE_SCALE * 0.12);
+
+  // A dealt hand mid-round, so the table reads as in play even when empty.
+  drawPlayingCard(ctx, cx - TILE_SCALE * 0.22, cy + ry * 0.26, -0.14, '#c02424');
+  drawPlayingCard(ctx, cx + TILE_SCALE * 0.02, cy + ry * 0.3, 0.12, '#161616');
+
+  // Light catches the back lip of the rail. The lip is only as wide as the
+  // ellipse is at the flattened edge — running it to the full radius puts a bar
+  // of light out past the table on both sides.
+  const dealerEdgeHalfWidth = rx * Math.sqrt(1 - (dealerEdgeY - cy) ** 2 / ry ** 2);
+  ctx.strokeStyle = 'rgba(255,226,170,0.28)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - dealerEdgeHalfWidth, dealerEdgeY);
+  ctx.lineTo(cx + dealerEdgeHalfWidth, dealerEdgeY);
+  ctx.stroke();
+}
+
+/** The dealer's sunken chip rack: five wells of stacked chips along the flat edge. */
+function drawChipTray(ctx: NodeCtx, cx: number, top: number, halfWidth: number, rng: () => number): void {
+  const wells = 5;
+  const trayH = TILE_SCALE * 0.16;
+  const tray: Rect = { x: cx - halfWidth, y: top, w: halfWidth * 2, h: trayH };
+
+  ctx.fillStyle = '#1a0f06';
+  roundRectPath(ctx, tray, trayH * 0.4);
+  ctx.fill();
+  ctx.strokeStyle = BRASS_DARK;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  const chipColors = ['#c8323c', '#2f5ec8', '#d8b432', '#2f5ec8', '#c8323c'];
+  for (let i = 0; i < wells; i++) {
+    const wellX = tray.x + ((i + 0.5) / wells) * tray.w;
+    const height = 2 + Math.floor(rng() * 3);
     for (let j = 0; j < height; j++) {
-      const chipY = cy + TILE_SCALE * 0.1 - j * TILE_SCALE * 0.05;
-      ctx.fillStyle = ['#c8323c', '#2f5ec8', '#d8b432'][s];
+      const chipY = tray.y + trayH * 0.7 - j * TILE_SCALE * 0.022;
+      ctx.fillStyle = chipColors[i];
       ctx.beginPath();
-      ctx.ellipse(stackX, chipY, TILE_SCALE * 0.1, TILE_SCALE * 0.045, 0, 0, TWO_PI);
+      ctx.ellipse(wellX, chipY, TILE_SCALE * 0.07, TILE_SCALE * 0.03, 0, 0, TWO_PI);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.ellipse(stackX, chipY, TILE_SCALE * 0.1, TILE_SCALE * 0.045, 0, Math.PI, TWO_PI);
+      ctx.ellipse(wellX, chipY, TILE_SCALE * 0.07, TILE_SCALE * 0.03, 0, Math.PI, TWO_PI);
       ctx.stroke();
     }
   }
+}
 
-  // Light catches the back lip of the rail — traced along the ellipse so it
-  // follows the curve instead of cutting a straight bar above the table.
-  ctx.strokeStyle = 'rgba(255,226,170,0.4)';
-  ctx.lineWidth = 2;
+/** The card shoe the deck feeds out of, standing on the dealer's right. */
+function drawCardShoe(ctx: NodeCtx, cx: number, top: number): void {
+  const w = TILE_SCALE * 0.3;
+  const h = TILE_SCALE * 0.2;
+  ctx.fillStyle = '#2a1a10';
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx * 0.97, ry * 0.97, 0, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.moveTo(cx - w / 2, top + h);
+  ctx.lineTo(cx - w / 2 + w * 0.16, top);
+  ctx.lineTo(cx + w / 2, top);
+  ctx.lineTo(cx + w / 2, top + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = BRASS_DARK;
+  ctx.lineWidth = 1;
   ctx.stroke();
+  // A card half out of the mouth.
+  ctx.fillStyle = '#f6f0e0';
+  ctx.fillRect(cx - w * 0.66, top + h * 0.3, w * 0.34, h * 0.5);
+  ctx.strokeStyle = 'rgba(120,110,90,0.8)';
+  ctx.strokeRect(cx - w * 0.66, top + h * 0.3, w * 0.34, h * 0.5);
 }
 
 function drawPlayingCard(

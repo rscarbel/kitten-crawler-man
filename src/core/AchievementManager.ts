@@ -126,7 +126,7 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
   casino_jackpot: {
     id: 'casino_jackpot',
     name: 'High Roller',
-    description: 'Win a top-tier wager at the Desperado Club casino.',
+    description: 'Win a natural blackjack on a top-tier wager at the Desperado Club.',
     playerType: 'both',
     lootBox: { tier: 'Silver', category: 'Spicy' },
   },

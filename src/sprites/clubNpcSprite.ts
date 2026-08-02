@@ -12,16 +12,7 @@
 import { scaleHumanoidBox } from './humanoidScale';
 
 export type ClubNpcVariant =
-  | 'sledge'
-  | 'bomo'
-  | 'dj'
-  | 'dancer'
-  | 'patron'
-  | 'bartender'
-  | 'dealer'
-  | 'merchant'
-  | 'rosemarie'
-  | 'vip';
+  'sledge' | 'bomo' | 'dj' | 'dancer' | 'patron' | 'bartender' | 'merchant' | 'rosemarie' | 'vip';
 
 interface Appearance {
   skin: string;
@@ -41,7 +32,6 @@ const FIXED_STYLES: Record<
 > = {
   dj: { skin: '#e8e6de', outfit: '#2a1a3a', accent: '#e0407a', hair: '#e8e6de', skeleton: true },
   bartender: { skin: '#c89068', outfit: '#3a1f14', accent: '#e4d8b0', hair: '#241812' },
-  dealer: { skin: '#caa080', outfit: '#14322a', accent: '#e0c060', hair: '#1a1208' },
   merchant: { skin: '#b88858', outfit: '#4a2a5a', accent: '#e0b040', hair: '#3a2410' },
   rosemarie: { skin: '#d8b088', outfit: '#5a2a2a', accent: '#e0a040', hair: '#6a2820' },
   vip: { skin: '#d0a070', outfit: '#1a1a3a', accent: '#c8a840', hair: '#2a1c10' },

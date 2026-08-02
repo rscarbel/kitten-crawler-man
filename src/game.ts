@@ -8,6 +8,7 @@ import { TilePreviewScene } from './scenes/TilePreviewScene';
 import { BopcaPreviewScene } from './scenes/BopcaPreviewScene';
 import { GoblinPreviewScene } from './scenes/GoblinPreviewScene';
 import { RatPreviewScene } from './scenes/RatPreviewScene';
+import { CasinoPreviewScene } from './scenes/CasinoPreviewScene';
 import { TownMapScene } from './scenes/TownMapScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
@@ -62,6 +63,11 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
 
   if (params.get('rat') !== null) {
     sceneManager.replace(new RatPreviewScene());
+    return true;
+  }
+
+  if (params.get('casino') !== null) {
+    sceneManager.replace(new CasinoPreviewScene());
     return true;
   }
 
