@@ -189,7 +189,12 @@ export class Mercenary extends Mob {
     return 1 - this.strikeAnimFrames / STRIKE_ANIM_FRAMES;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -204,6 +209,5 @@ export class Mercenary extends Mob {
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

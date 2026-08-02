@@ -21,7 +21,12 @@
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
     "gen:town-art": "npm run gen:townscape && npm run gen:over-city",
-    "gen:trees": "tsx scripts/generate-tree-sprites.ts"
+    "gen:trees": "tsx scripts/generate-tree-sprites.ts",
+    "gen:rocks": "tsx scripts/generate-rock-sprites.ts",
+    "gen:camps": "tsx scripts/generate-camp-sprites.ts",
+    "gen:human": "tsx scripts/generate-human-sprite.ts",
+    "gen:cat": "tsx scripts/generate-cat-sprite.ts",
+    "gen:goblins": "tsx scripts/generate-goblin-sprites.gates.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

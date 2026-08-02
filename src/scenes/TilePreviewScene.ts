@@ -278,6 +278,14 @@ export class TilePreviewScene extends Scene {
     ['grass', 'dirt'],
     ['lane', 'cobble'],
     ['dirt', 'gravel'],
+    // The floor-3 wilderness joints. The first is the most load-bearing edge on
+    // the whole map: nothing draws a riverbank except grass bleeding over water
+    // through the corner masks, so this pair *is* the bank, and this route is
+    // the only place it can be judged on its own.
+    ['water', 'grass'],
+    ['water', 'highland'],
+    ['grass', 'highland'],
+    ['highland', 'scree'],
     // The joints each dungeon floor actually draws: its calm bulk material
     // against each of the three surfaces `ZONE_FLOORS` lays beside it.
     ['f1_flagstone', 'f1_flags'],

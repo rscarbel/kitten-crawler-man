@@ -13,6 +13,7 @@ import {
   type SkillId,
 } from './core/SkillManager';
 import type { FloatingTextRequest, FloatingTextStyle } from './core/FloatingText';
+import { drawWithHitFlash } from './core/hitFlash';
 
 /**
  * Every stat a crawler carries — the single vocabulary the whole stat system
@@ -114,6 +115,13 @@ const MAGIC_BURN_TICK_INTERVAL = 60;
 const ELECTRIFIED_TICK_INTERVAL = 60;
 const SPIT_VENOM_TICK_INTERVAL = 40;
 
+/**
+ * Default wading depth, used by every mob. Half a tile puts the surface at about
+ * the waist of a humanoid mob drawn a tile tall, which is most of them; a mob
+ * with a very different figure should override it as the crawlers do.
+ */
+const DEFAULT_WATERLINE_ABOVE_FOOT_PX = 16;
+
 /** Walk animation speed constant */
 export const WALK_FRAME_SPEED = 0.14;
 
@@ -130,8 +138,11 @@ const HP_BAR_YELLOW_THRESHOLD = 0.25;
 const HP_BAR_HEIGHT = 4;
 const HP_BAR_Y_OFFSET = 7;
 
-/** Damage flash visual parameters */
-const DAMAGE_FLASH_ALPHA_MULTIPLIER = 0.55;
+/**
+ * How far past their tile the crawlers' own art reaches, in tiles — enough to
+ * take in the raised health bar and the status-effect flames above the head.
+ */
+const PLAYER_HIT_FLASH_MARGIN_TILES = 2;
 
 /** Burn visual parameters */
 const BURN_OUTER_FLAME_Y_OFFSET = 7;
@@ -270,6 +281,18 @@ export abstract class Player {
    * slow this so the stride matches the ground actually covered.
    */
   protected walkFrameSpeed = WALK_FRAME_SPEED;
+  /**
+   * How far above the sprite's foot line the river surface cuts across it, in
+   * pixels at the in-game tile size. Everything below is clipped away and
+   * replaced by the waterline, so this is literally how deep the crawler wades.
+   *
+   * Per-crawler rather than one world-wide water depth, and that is a deliberate
+   * lie about the river. A single depth that puts the human in at the waist is
+   * over a cat's head, and a depth a cat can stand in barely wets a boot. Each
+   * figure instead wades to its own fraction of its own height, so both read as
+   * "in the water" from the same river.
+   */
+  readonly waterlineAboveFootPx: number = DEFAULT_WATERLINE_ABOVE_FOOT_PX;
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
   /** Feedback labels awaiting pickup by `FloatingCombatTextSystem`. */
@@ -992,12 +1015,60 @@ export abstract class Player {
     if (expiredAny) this.syncHpToMaxHp();
   }
 
-  abstract render(
+  /**
+   * Draw this character's own art. Subclasses implement this instead of
+   * `render` so hit feedback can be shaped by whatever they draw.
+   */
+  protected abstract drawSelf(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     tileSize: number,
   ): void;
+
+  /**
+   * Draw the character, tinting it by its own silhouette while a hit is fresh.
+   *
+   * Sealed on purpose: a subclass that overrode this would opt itself out of
+   * hit feedback without saying so. Subclasses override {@link drawSelf}.
+   */
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    const flashProgress = this.hitFlashProgress();
+    if (flashProgress <= 0) {
+      this.drawSelf(ctx, camX, camY, tileSize);
+      return;
+    }
+    const margin = this.hitFlashMarginTiles * tileSize;
+    const bounds = {
+      x: this.x - camX - margin,
+      y: this.y - camY - margin,
+      width: tileSize + margin * 2,
+      height: tileSize + margin * 2,
+    };
+    drawWithHitFlash(ctx, bounds, flashProgress, (target) =>
+      this.drawSelf(target, camX, camY, tileSize),
+    );
+  }
+
+  /**
+   * 1 on the frame of impact, falling to 0 as the flash expires.
+   *
+   * Capped, because several attacks set a longer flash than the standard hit —
+   * those read as a flash that holds, not as one that burns brighter.
+   */
+  protected hitFlashProgress(): number {
+    if (this.damageFlash <= 0) return 0;
+    return Math.min(1, this.damageFlash / DAMAGE_FLASH_FRAMES);
+  }
+
+  /**
+   * How far past its own tile this character's art reaches, in tiles. The hit
+   * flash is composited through a box this size, so art beyond it is cut out of
+   * the flash — mobs answer with their own cull margin.
+   */
+  protected get hitFlashMarginTiles(): number {
+    return PLAYER_HIT_FLASH_MARGIN_TILES;
+  }
 
   followTarget(targetX: number, targetY: number, speed: number, minDist: number) {
     const dx = targetX - this.x;
@@ -1026,15 +1097,6 @@ export abstract class Player {
           ? '#facc15'
           : '#ef4444';
     ctx.fillRect(sx, sy - HP_BAR_Y_OFFSET, Math.ceil(barW * ratio), barH);
-  }
-
-  protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
-    if (this.damageFlash <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = (this.damageFlash / DAMAGE_FLASH_FRAMES) * DAMAGE_FLASH_ALPHA_MULTIPLIER;
-    ctx.fillStyle = '#ff1f1f';
-    ctx.fillRect(sx, sy, this.tileSize, this.tileSize);
-    ctx.restore();
   }
 
   /** Renders world-space status effect indicators above the character sprite. */

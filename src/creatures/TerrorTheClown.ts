@@ -173,7 +173,12 @@ export class TerrorTheClown extends Mob {
     return { kind: 'idle', phaseOffsetSeconds: this.idlePhaseOffsetSeconds };
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -193,6 +198,5 @@ export class TerrorTheClown extends Mob {
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

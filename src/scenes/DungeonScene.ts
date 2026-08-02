@@ -45,6 +45,7 @@ import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
+import { SmushEffectSystem } from '../systems/SmushEffectSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import {
   CompanionSystem,
@@ -95,6 +96,7 @@ import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { DestructiblePropSystem } from '../systems/DestructiblePropSystem';
 import { TreeSystem } from '../systems/TreeSystem';
+import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
 import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
@@ -113,6 +115,7 @@ import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import {
   readMovement,
   applyMovement,
+  isStandingInWater,
   type SouthCollisionAnchor,
   checkDeath,
   revealMinimap,
@@ -323,6 +326,36 @@ const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
 const RECALL_MAX_PATH_DISTANCE_TILES = 96;
 const TILE_CENTER_OFFSET = 0.5;
 const COMPANION_ERROR_DISPLAY_FRAMES = 180;
+
+/** Ripples and splashes centre on the wader, not on their tile corner. */
+const WADER_CENTRE_FRACTION = 0.5;
+
+/**
+ * The river bed. Its emitter is repositioned every frame onto the nearest
+ * *visible* water tile, so the sound arrives as the river comes on screen and
+ * swells as the player approaches it, rather than switching on at a fixed
+ * distance from a point that a winding river does not have.
+ */
+const RIVER_AMBIENT_VOLUME = 0.55;
+/** Distance at which the river fades out, in tiles. About a screen and a half. */
+const RIVER_AMBIENT_RADIUS_TILES = 26;
+/**
+ * Radius used while actually wading. Collapsing it to the listener's own tile is
+ * what guarantees the loop is at full volume in the water: measured from a tile
+ * centre, standing in the river still leaves up to 0.7 tiles of distance, which
+ * would quietly cap the "loudest" case just below its maximum.
+ */
+const RIVER_AMBIENT_IN_WATER_RADIUS_TILES = 0;
+
+/**
+ * Entry splashes play at full gain. The mp3s are mastered to the same event
+ * loudness as the other one-shots (their loudest 300 ms sits at -11.5 dB, matching
+ * `punch_1`), so trimming here only makes them hard to hear again — which is
+ * exactly what an earlier 0.7 did.
+ */
+const SPLASH_VOLUME = 1;
+/** Beyond this a mob's splash is silent; within it, it fades with distance. */
+const MOB_SPLASH_AUDIBLE_RADIUS_TILES = 18;
 /** Frames between playing potion_drink and the potion's secondary effect sound. */
 const POTION_EFFECT_SOUND_DELAY = 45;
 
@@ -539,12 +572,15 @@ export class DungeonScene extends GameplayScene {
   private bossRoom: BossRoomSystem;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
   private dynamite: DynamiteSystem;
+  private readonly smushFx = new SmushEffectSystem();
   private spells: SpellSystem;
   private companion: CompanionSystem;
   private loot: LootSystem;
   /** Null on the overworld — town barrels and crates are not smashable. */
   private destructibles: DestructiblePropSystem | null;
   private trees: TreeSystem | null;
+  /** Null on every map but the overworld, which is the only one with rivers. */
+  private water: WaterAnimationSystem | null;
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
@@ -572,6 +608,13 @@ export class DungeonScene extends GameplayScene {
   private doomsdayEscape!: DoomsdayEscapeSystem;
   private overworldMusic: OverworldMusicSystem | null = null;
   private ambientSound: AmbientSoundSystem | null = null;
+  /**
+   * The river's emitter, held so `updateRiverAmbience` can move it. Owned here
+   * rather than rebuilt each frame because `AmbientSoundSystem` holds the object
+   * and reads it every tick — mutating the one it already has is the whole
+   * mechanism.
+   */
+  private riverAmbientEmitter: AmbientEmitter | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
@@ -903,6 +946,10 @@ export class DungeonScene extends GameplayScene {
           this.miniMap.markTileChanged(tileX, tileY),
         )
       : null;
+    // Overworld-only, mirroring `TreeSystem` above: no other map is ever
+    // generated with a water tile on it, so elsewhere this would scan the
+    // viewport every frame to find nothing.
+    this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
     this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles, this.trees);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
@@ -1873,6 +1920,9 @@ export class DungeonScene extends GameplayScene {
 
   onExit(): void {
     this.audio?.stopWalkingLoop();
+    // Walking into a building mid-river must not leave the wading loop running
+    // under the interior: nothing in `BuildingInteriorScene` would ever stop it.
+    this.audio?.stopWadingLoop();
     this.audio?.stopMachineryLoop();
     // Ambient loops are positional, so they always die with the scene — unlike
     // music, which may deliberately survive a building round-trip.
@@ -1899,6 +1949,18 @@ export class DungeonScene extends GameplayScene {
    */
   private buildTownAmbientEmitters(): AmbientEmitter[] {
     const emitters: AmbientEmitter[] = [];
+    // Starts silent (`radiusTiles: 0`) and is aimed each frame by
+    // `updateRiverAmbience`. Only the overworld builds these emitters, which is
+    // also the only place a river exists.
+    const river: AmbientEmitter = {
+      soundId: 'ambient_river_flowing',
+      x: 0,
+      y: 0,
+      radiusTiles: 0,
+      maxVolume: RIVER_AMBIENT_VOLUME,
+    };
+    this.riverAmbientEmitter = river;
+    emitters.push(river);
     const fountain = this.gameMap.fountainCentre;
     if (fountain !== undefined) {
       emitters.push({
@@ -2426,6 +2488,7 @@ export class DungeonScene extends GameplayScene {
 
     this.spells.resetForCheckpoint();
     this.dynamite.resetForCheckpoint();
+    this.smushFx.resetForCheckpoint();
     this.gore.resetForCheckpoint();
     this.bodyPartGore.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
@@ -3419,8 +3482,10 @@ export class DungeonScene extends GameplayScene {
       barriers: this.barriers,
       spells: this.spells,
       dynamite: this.dynamite,
+      smushFx: this.smushFx,
       destructibles: this.destructibles,
       trees: this.trees,
+      water: this.water,
       loot: this.loot,
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
@@ -3876,10 +3941,24 @@ export class DungeonScene extends GameplayScene {
     // Tutorial gate and ledge constraints — applied after movement
     this.tutorial?.applyGateConstraints(this.human, this.cat);
 
-    if (player.isMoving) {
+    // After every constraint that can still move a crawler this frame, so the
+    // splash and the ripples are keyed off where they actually ended up. Run
+    // before the tutorial gate and a gate shove would shed ripples on dry land.
+    this.updateWaders();
+
+    // Wading *replaces* the footstep loop rather than layering over it: boots on
+    // turf underneath a river crossing is two surfaces at once, and the pair
+    // muddies both. The river bed keeps playing under either.
+    const isWading = player.isMoving && isStandingInWater(player, this.gameMap);
+    if (isWading) {
+      this.audio?.stopWalkingLoop();
+      this.audio?.startWadingLoop();
+    } else if (player.isMoving) {
+      this.audio?.stopWadingLoop();
       this.audio?.startWalkingLoop();
     } else {
       this.audio?.stopWalkingLoop();
+      this.audio?.stopWadingLoop();
     }
 
     this.pm.updateProtection(this.safeRoom);
@@ -4063,6 +4142,7 @@ export class DungeonScene extends GameplayScene {
       spells: this.spells,
       destructibles: this.destructibles ?? undefined,
       trees: this.trees ?? undefined,
+      smushFx: this.smushFx,
       hitLanded: false,
       xpDiminishingTiers: this.levelDef.xpDiminishingTiers,
     };
@@ -4199,9 +4279,17 @@ export class DungeonScene extends GameplayScene {
     this.destructibles?.update();
     this.trees?.update(ctx);
     this.dynamite.update(ctx);
+    this.smushFx.update();
 
     if (this.dynamite.explosionSoundPending) {
       this.dynamite.explosionSoundPending = false;
+      this.audio?.play('dynamite_explosion');
+    }
+
+    // `human_smush` plays when the ability fires, which is a third of a second
+    // before the foot lands; this is the boom the landing itself makes.
+    if (this.smushFx.blastSoundPending) {
+      this.smushFx.blastSoundPending = false;
       this.audio?.play('dynamite_explosion');
     }
 
@@ -4528,12 +4616,13 @@ export class DungeonScene extends GameplayScene {
     const camY = targetY + TILE_SIZE / 2 - viewportHeight() / 2;
 
     const shakeOffset = this.spiderQuest.cameraOffset;
+    const smushShake = this.smushFx.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: clamp(camX, 0, mapPxW - viewportWidth()) + shakeOffset.x + sway.x,
-      y: clamp(camY, 0, mapPxH - viewportHeight()) + shakeOffset.y + sway.y,
+      x: clamp(camX, 0, mapPxW - viewportWidth()) + shakeOffset.x + sway.x + smushShake.x,
+      y: clamp(camY, 0, mapPxH - viewportHeight()) + shakeOffset.y + sway.y + smushShake.y,
     };
   }
 
@@ -4906,5 +4995,97 @@ export class DungeonScene extends GameplayScene {
         drawMongoSprite(ctx, x, y, size);
       },
     };
+  }
+
+  /**
+   * Feed everything that can wade to the water system, so it splashes on entry
+   * and sheds ripples while it is in there, and drive the river's ambient bed.
+   *
+   * Both crawlers plus every live mob: mobs cross rivers now, and one that waded
+   * without disturbing the surface would look like it was walking on the water.
+   * Reported whether wet or dry — the dry frames are how the system spots the
+   * bank-to-water edge, which is the only moment a splash can be detected.
+   */
+  private updateWaders(): void {
+    const water = this.water;
+    if (water === null) return;
+    water.beginFrame();
+    const centre = TILE_SIZE * WADER_CENTRE_FRACTION;
+
+    const humanEntered = water.updateWader(
+      this.human,
+      this.human.x + centre,
+      this.human.y + centre,
+      isStandingInWater(this.human, this.gameMap),
+    );
+    if (humanEntered) this.audio?.play('human_splash', { volume: SPLASH_VOLUME });
+
+    const catEntered = water.updateWader(
+      this.cat,
+      this.cat.x + centre,
+      this.cat.y + centre,
+      isStandingInWater(this.cat, this.gameMap),
+    );
+    if (catEntered) this.audio?.play('cat_splash', { volume: SPLASH_VOLUME });
+
+    const listener = this.pm.active();
+    let mobSplashed = false;
+    for (const mob of this.mobs) {
+      if (!mob.isAlive) continue;
+      const entered = water.updateWader(mob, mob.x + centre, mob.y + centre, mob.isWading());
+      // At most one voice a frame however many wade in together: a camp's worth
+      // of goblins hitting the water on the same step stacks into a bang rather
+      // than reading as several splashes.
+      if (!entered || mobSplashed) continue;
+      const distanceTiles = Math.hypot(mob.x - listener.x, mob.y - listener.y) / TILE_SIZE;
+      if (distanceTiles > MOB_SPLASH_AUDIBLE_RADIUS_TILES) continue;
+      // Faded with distance rather than played flat: a goblin wading in across
+      // the map at the same volume as your own step reads as being right beside
+      // you, which is worse than not hearing it.
+      const falloff = 1 - distanceTiles / MOB_SPLASH_AUDIBLE_RADIUS_TILES;
+      this.audio?.play('mob_splash', { volume: SPLASH_VOLUME * falloff });
+      mobSplashed = true;
+    }
+
+    this.updateRiverAmbience(listener);
+  }
+
+  /**
+   * Point the river's ambient emitter at the nearest visible water tile.
+   *
+   * A river is a long line, not a point, so a fixed emitter would be loud at one
+   * bend and silent at the next. Moving one emitter to the nearest visible tile
+   * gives the whole length a single voice that always comes from the part of it
+   * the player can actually see. Setting `radiusTiles` to zero is how the
+   * emitter is silenced — `AmbientSoundSystem.gainFor` reads that as no reach,
+   * and its own hysteresis then fades and tears the loop down.
+   */
+  private updateRiverAmbience(listener: Player): void {
+    const emitter = this.riverAmbientEmitter;
+    if (emitter === null) return;
+    const nearest = this.water?.nearestVisibleWaterTile(
+      listener.x + TILE_SIZE * WADER_CENTRE_FRACTION,
+      listener.y + TILE_SIZE * WADER_CENTRE_FRACTION,
+    );
+    if (nearest === undefined || nearest === null) {
+      // `constant` is cleared here as well as set below. It overrides distance
+      // entirely, so a frame that silenced the emitter by radius alone while the
+      // flag was still set from wading would play the river at full volume with
+      // no river anywhere near.
+      emitter.constant = false;
+      emitter.radiusTiles = 0;
+      return;
+    }
+    if (isStandingInWater(listener, this.gameMap)) {
+      emitter.x = listener.x / TILE_SIZE;
+      emitter.y = listener.y / TILE_SIZE;
+      emitter.radiusTiles = RIVER_AMBIENT_IN_WATER_RADIUS_TILES;
+      emitter.constant = true;
+      return;
+    }
+    emitter.x = nearest.x;
+    emitter.y = nearest.y;
+    emitter.radiusTiles = RIVER_AMBIENT_RADIUS_TILES;
+    emitter.constant = false;
   }
 }

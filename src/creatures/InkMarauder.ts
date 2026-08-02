@@ -6,7 +6,6 @@ import {
   INK_EMERGE_FRAMES,
   INK_MARAUDER_HALF_WIDTH,
   INK_MARAUDER_HEAD_CLEARANCE,
-  INK_SHARK_FLASH_Y_OFFSET,
   INK_STRIKE_LAND_FRACTION,
   INK_SWIM_EASE_FRAMES,
   type InkMarauderForm,
@@ -36,7 +35,7 @@ const ATTACK_ANIM_FRAMES = 20;
  */
 const STRIKE_ANIM_STEPS = ATTACK_ANIM_FRAMES - 1;
 /** How long the marauder persists before bleeding away (~8 s at 60 fps). */
-const LIFESPAN_FRAMES = 480;
+export const MARAUDER_LIFESPAN_FRAMES = 480;
 /** Lifespan remaining below which the marauder visibly fades out. */
 const FADE_START_FRAMES = 90;
 const FOLLOW_STOP_FRACTION = 0.8;
@@ -85,7 +84,7 @@ export class InkMarauder extends Mob {
     tileX: number,
     tileY: number,
     tileSize: number,
-    lifespanFrames = LIFESPAN_FRAMES,
+    lifespanFrames = MARAUDER_LIFESPAN_FRAMES,
     form: InkMarauderForm = randomForm(),
   ) {
     super(tileX, tileY, tileSize, MARAUDER_HP, MARAUDER_SPEED);
@@ -222,7 +221,12 @@ export class InkMarauder extends Mob {
     if (stillInReach) target.takeDamageFrom(STRIKE_DAMAGE, null, 'melee');
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -240,10 +244,5 @@ export class InkMarauder extends Mob {
       isMoving: this.isMoving,
       swimBlend: this.swimBlend,
     });
-
-    // The shark's own tile is empty air beneath it, so lift the tile-anchored
-    // flash onto the body rather than leaving a red square under the fish.
-    const flashY = this.form === 'shark' ? sy - tileSize * INK_SHARK_FLASH_Y_OFFSET : sy;
-    this.renderDamageFlash(ctx, sx, flashY);
   }
 }

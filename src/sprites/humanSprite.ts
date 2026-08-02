@@ -1,168 +1,156 @@
-import { drawSpriteKey, walkFrameIndex, progressFrameIndex } from '../core/SpriteRenderer';
+import {
+  drawSpriteKey,
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/SpriteRenderer';
+import type { SpriteStates } from '../core/SpriteLoader';
 
 export type HumanAttackPhase = 'punch_side' | 'kick_side' | 'punch_up' | 'kick_down' | null;
 
-// Horizontal walk cycle: walk_side[0], walk_side[1], walk_side[0], walk_side[2]
-const WALK_SIDE_FRAMES = [
-  { state: 'walk_side', frame: 0 },
-  { state: 'walk_side', frame: 1 },
-  { state: 'walk_side', frame: 0 },
-  { state: 'walk_side', frame: 2 },
-] as const;
-
-// Forward walk cycle: idle, walk[0], walk[1], walk[0], idle, walk[2], walk[3], walk[2]
-const WALK_FWD_FRAMES = [
-  { state: 'idle', frame: 0 },
-  { state: 'walk', frame: 0 },
-  { state: 'walk', frame: 1 },
-  { state: 'walk', frame: 0 },
-  { state: 'idle', frame: 0 },
-  { state: 'walk', frame: 2 },
-  { state: 'walk', frame: 3 },
-  { state: 'walk', frame: 2 },
-] as const;
-
-// Away walk cycle: idle_away, walk_away[0], walk_away[1], walk_away[0], idle_away, walk_away[2], walk_away[3], walk_away[2]
-const WALK_AWAY_FRAMES = [
-  { state: 'idle_away', frame: 0 },
-  { state: 'walk_away', frame: 0 },
-  { state: 'walk_away', frame: 1 },
-  { state: 'walk_away', frame: 0 },
-  { state: 'idle_away', frame: 0 },
-  { state: 'walk_away', frame: 2 },
-  { state: 'walk_away', frame: 3 },
-  { state: 'walk_away', frame: 2 },
-] as const;
-
-// Punch-up sequence with reversal: idle_away, punch_up[0-4], punch_up[3-0]
-const PUNCH_UP_FRAMES = [
-  { state: 'idle_away', frame: 0 },
-  { state: 'punch_up', frame: 0 },
-  { state: 'punch_up', frame: 1 },
-  { state: 'punch_up', frame: 2 },
-  { state: 'punch_up', frame: 3 },
-  { state: 'punch_up', frame: 4 },
-  { state: 'punch_up', frame: 3 },
-  { state: 'punch_up', frame: 2 },
-  { state: 'punch_up', frame: 1 },
-  { state: 'punch_up', frame: 0 },
-] as const;
-
-// Kick-down sequence: idle[0,0], then kick_down[0-7]
-const KICK_DOWN_FRAMES = [
-  { state: 'idle', frame: 0 },
-  { state: 'kick_down', frame: 0 },
-  { state: 'kick_down', frame: 1 },
-  { state: 'kick_down', frame: 2 },
-  { state: 'kick_down', frame: 3 },
-  { state: 'kick_down', frame: 4 },
-  { state: 'kick_down', frame: 5 },
-  { state: 'kick_down', frame: 6 },
-  { state: 'kick_down', frame: 7 },
-] as const;
+type HumanState = SpriteStates['human'];
 
 /**
- * Non-linear frame index for punch_side: frames 0–3 (wind-up) play at 2× speed,
- * occupying the first 1/3 of the animation; frames 4–7 (strike) play at normal
- * speed over the remaining 2/3.
- *
- * t in [0, 1/3]  → frame 0–3  (fast wind-up)
- * t in [1/3, 1]  → frame 4–7  (strike at normal pace)
+ * Frames per row of the `human` sheet, which `scripts/generate-human-sprite.ts`
+ * bakes. Keyed on the manifest-derived state union, so a row renamed or added
+ * there is a compile error here rather than a silently wrong frame index.
  */
-function punchSideFrameIndex(t: number): number {
-  const FAST_END = 1 / 3;
-  if (t < FAST_END) {
-    return Math.min(3, Math.floor(t * 12));
-  }
-  return Math.min(7, 4 + Math.floor((t - FAST_END) * 6));
+const FRAME_COUNT: Record<HumanState, number> = {
+  idle: 8,
+  idle_side: 8,
+  idle_away: 8,
+  walk: 16,
+  walk_side: 16,
+  walk_away: 16,
+  punch_side: 8,
+  kick_side: 8,
+  punch_up: 8,
+  kick_down: 8,
+  smush: 12,
+};
+
+export const SMUSH_FRAME_COUNT = FRAME_COUNT.smush;
+
+/**
+ * The frame of the smush row on which the sole meets the floor. `HumanPlayer`
+ * derives the frame its blast is spawned on from this, so the stamp and the
+ * explosion cannot drift apart. `scripts/generate-human-sprite.ts` declares the
+ * same value; the runtime cannot import from `scripts/`.
+ */
+export const SMUSH_IMPACT_FRAME = 4;
+
+/**
+ * Where the stamping heel lands, in tile fractions from the sprite's own tile
+ * origin — the blast belongs under his foot, not at his waist.
+ *
+ * The generator puts the sheet's ground line at 0.9 of the tile and stands the
+ * stamping foot `SMUSH_STANCE` (0.19) out to his right, scaled by `HUMAN_SCALE`
+ * (0.72). The runtime cannot import from `scripts/`, so those are duplicated
+ * here; the generator prints its geometry on every bake so a drift is visible.
+ */
+export const SMUSH_STAMP_X = 0.5 + 0.19 * 0.72;
+export const SMUSH_STAMP_Y = 0.9;
+
+/** Below this the facing is treated as head-on rather than sideways. */
+const SIDEWAYS_THRESHOLD = 0.5;
+/** North of this the figure is drawn from behind. */
+const AWAY_THRESHOLD = -0.5;
+
+/** Standing still, the breathing loop runs off wall-clock time as the cat's does. */
+const IDLE_FPS = 8;
+
+export interface HumanSpriteState {
+  attackPhase?: HumanAttackPhase;
+  attackTimer?: number;
+  /** Total length of the attack, used to turn the timer into progress. */
+  attackFrames?: number;
+  smushTimer?: number;
+  smushFrames?: number;
+  walkFrame?: number;
+  isMoving?: boolean;
+  facingX?: number;
+  facingY?: number;
 }
 
 /**
- * Draw the complete human player sprite, including body, attack, and smush animations.
- * All animations are full-body frames from the single sprite sheet — no overlays.
+ * Draw the human player: idle, walk, melee and the Smush stamp, all full-body
+ * rows of the one sheet. Only the profile rows are mirrored, so his jacket
+ * never swaps sides.
  *
- * Priority (highest first): smush > attack > walk/idle.
+ * The blast Smush throws off is not part of this sheet — `SmushEffectSystem`
+ * draws it, because its size follows the ability's level.
+ *
+ * Priority (highest first): smush > attack > walk > idle.
  */
 export function drawHumanSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   s: number,
-  attackPhase: HumanAttackPhase,
-  attackTimer: number,
-  attackFrames: number,
-  smushTimer: number,
-  smushFrames: number,
-  walkFrame = 0,
-  isMoving = false,
-  facingY = 0,
-  facingX = 0,
+  state: HumanSpriteState = {},
 ): void {
+  const {
+    attackPhase = null,
+    attackTimer = 0,
+    attackFrames = 1,
+    smushTimer = 0,
+    smushFrames = 1,
+    walkFrame = 0,
+    isMoving = false,
+    facingX = 0,
+    facingY = 1,
+  } = state;
+
   const flipX = facingX < 0;
+  const facingSideways = Math.abs(facingX) > SIDEWAYS_THRESHOLD;
+  const facingAway = facingY < AWAY_THRESHOLD;
 
-  // Smush overrides all other animations
   if (smushTimer > 0) {
-    const t = 1 - smushTimer / smushFrames;
-    const frameIdx = progressFrameIndex(t, 11);
-    if (frameIdx < 8) {
-      drawSpriteKey(ctx, 'human', 'smush', frameIdx, sx, sy, s);
-    } else {
-      drawSpriteKey(ctx, 'human', 'smush_end', frameIdx - 8, sx, sy, s);
-    }
+    const progress = 1 - smushTimer / smushFrames;
+    drawSpriteKey(
+      ctx,
+      'human',
+      'smush',
+      progressFrameIndex(progress, FRAME_COUNT.smush),
+      sx,
+      sy,
+      s,
+    );
     return;
   }
 
-  // Active attack animation replaces walk/idle
   if (attackPhase !== null && attackTimer > 0) {
-    const t = 1 - attackTimer / attackFrames;
-    switch (attackPhase) {
-      case 'punch_side': {
-        drawSpriteKey(ctx, 'human', 'punch_side', punchSideFrameIndex(t), sx, sy, s, { flipX });
-        return;
-      }
-      case 'kick_side': {
-        const frame = progressFrameIndex(t, 4);
-        drawSpriteKey(ctx, 'human', 'kick_side', frame, sx, sy, s, { flipX });
-        return;
-      }
-      case 'punch_up': {
-        const entry = PUNCH_UP_FRAMES[progressFrameIndex(t, PUNCH_UP_FRAMES.length)];
-        drawSpriteKey(ctx, 'human', entry.state, entry.frame, sx, sy, s);
-        return;
-      }
-      case 'kick_down': {
-        const entry = KICK_DOWN_FRAMES[progressFrameIndex(t, KICK_DOWN_FRAMES.length)];
-        drawSpriteKey(ctx, 'human', entry.state, entry.frame, sx, sy, s);
-        return;
-      }
-    }
-  }
-
-  // Walking away from camera — 2× animation rate
-  if (isMoving && facingY < -0.5) {
-    const entry = WALK_AWAY_FRAMES[walkFrameIndex(walkFrame * 2, 8)];
-    drawSpriteKey(ctx, 'human', entry.state, entry.frame, sx, sy, s);
+    const progress = 1 - attackTimer / attackFrames;
+    const frame = progressFrameIndex(progress, FRAME_COUNT[attackPhase]);
+    // Only the two sideways strikes are drawn in profile, so only they mirror.
+    const mirrored = attackPhase === 'punch_side' || attackPhase === 'kick_side';
+    drawSpriteKey(ctx, 'human', attackPhase, frame, sx, sy, s, mirrored ? { flipX } : {});
     return;
   }
 
-  // Walking sideways (horizontal component dominant) — 2× animation rate, flip for left
-  if (isMoving && Math.abs(facingX) > 0.5) {
-    const entry = WALK_SIDE_FRAMES[walkFrameIndex(walkFrame, WALK_SIDE_FRAMES.length)];
-    drawSpriteKey(ctx, 'human', entry.state, entry.frame, sx, sy, s, { flipX });
-    return;
-  }
-
-  // Walking toward camera — 2× animation rate
   if (isMoving) {
-    const entry = WALK_FWD_FRAMES[walkFrameIndex(walkFrame * 2, 8)];
-    drawSpriteKey(ctx, 'human', entry.state, entry.frame, sx, sy, s, { flipX });
+    // `walkFrame` is used as given. Scaling it here would be a bug: the caller
+    // wraps it at 2π, and a non-integer multiple of a wrapped phase does not
+    // wrap with it — at 1.3 the cycle jumped from frame 4 back to frame 0 once
+    // per lap. Pace the walk with `walkFrameSpeed` on the player instead.
+    const frame = walkFrameIndex(walkFrame, FRAME_COUNT.walk);
+    if (facingAway) {
+      drawSpriteKey(ctx, 'human', 'walk_away', frame, sx, sy, s);
+    } else if (facingSideways) {
+      drawSpriteKey(ctx, 'human', 'walk_side', frame, sx, sy, s, { flipX });
+    } else {
+      drawSpriteKey(ctx, 'human', 'walk', frame, sx, sy, s);
+    }
     return;
   }
 
-  // Idle
-  if (facingY < -0.5) {
-    drawSpriteKey(ctx, 'human', 'idle_away', 0, sx, sy, s);
+  // `walkFrame` is pinned to 0 while standing, so idle cannot ride on it.
+  const idleFrame = timeFrameIndex(performance.now() / 1000, IDLE_FPS, FRAME_COUNT.idle);
+  if (facingAway) {
+    drawSpriteKey(ctx, 'human', 'idle_away', idleFrame, sx, sy, s);
+  } else if (facingSideways) {
+    drawSpriteKey(ctx, 'human', 'idle_side', idleFrame, sx, sy, s, { flipX });
   } else {
-    drawSpriteKey(ctx, 'human', 'idle', 0, sx, sy, s, { flipX });
+    drawSpriteKey(ctx, 'human', 'idle', idleFrame, sx, sy, s);
   }
 }

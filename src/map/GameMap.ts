@@ -40,6 +40,11 @@ import {
   INTERIOR_COUNTER,
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  CLIFF,
 } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -62,6 +67,7 @@ import {
   type SpiderLabRoomData,
 } from './DungeonGenerator';
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
+import type { CampSite } from './overworld/camps';
 import type { BuildingKind, TownPlan } from './town/townPlan';
 import {
   getBlockedTileOffsets,
@@ -183,6 +189,14 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   BOOKSHELF,
   SPRITE_BUILDING,
   MODERN_DECORATION,
+  // Both registries, or the tile renders as bare floor: `DECORATION_TYPES` in
+  // `TileRenderer` decides what the chunk bake skips, and this one decides what
+  // the Y-sorted overlay draws.
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  CLIFF,
 ]);
 
 /**
@@ -347,6 +361,15 @@ export class GameMap {
   doomsdayEscapeTile: { x: number; y: number } | undefined = undefined;
   /** Radius (tiles) of the circus grounds around `circusCentre`. Undefined on non-overworld maps. */
   circusRadiusTiles: number | undefined = undefined;
+
+  /**
+   * The wilderness's enemy camps. Empty on every map but the overworld.
+   *
+   * Carried here the way `circusCentre` is, and consumed the same way: a system
+   * that needs to know where a landmark is reads it off the map rather than
+   * re-deriving it. `spawnForLevel` populates each camp from this.
+   */
+  camps: ReadonlyArray<CampSite> = [];
   /**
    * Radius (in tiles, from map centre) inside which the overworld town is
    * considered safe — no hostile ambient spawns, and hostile mobs won't
@@ -469,6 +492,7 @@ export class GameMap {
     this.fountainCentre = data.fountainCentre;
     this.circusCentre = data.circusCentre;
     this.circusRadiusTiles = data.circusRadiusTiles;
+    this.camps = data.camps;
     this.doomsdayEscapeTile = data.doomsdayEscapeTile;
     return data.grid;
   }
@@ -1869,6 +1893,18 @@ export class GameMap {
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
+  }
+
+  /**
+   * Whether (tileX, tileY) is river water — walkable, but waded rather than
+   * walked. The one definition of "this is the river", shared by the movement
+   * penalty, the submerged rendering and the splash effects.
+   */
+  isWadeable(tileX: number, tileY: number): boolean {
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
+    if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
+    return this.structure[tileY][tileX].type === FloorTypeValue.water;
   }
 
   /**

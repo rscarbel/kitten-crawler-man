@@ -7,7 +7,8 @@ import {
   SIGNET_OVERLAY_CLEARANCE,
   SIGNET_CHEST_Y_OFFSET,
 } from '../sprites/signetSprite';
-import { InkMarauder } from './InkMarauder';
+import { InkMarauder, MARAUDER_LIFESPAN_FRAMES } from './InkMarauder';
+import type { InkMarauderForm } from '../sprites/inkMarauderSprite';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import {
   advanceSignetFireballs,
@@ -53,6 +54,11 @@ const SUMMON_ANIM_FRAMES = 30;
 /** Her summons tower over a tile, so they have to land clear of her own figure. */
 const SUMMON_SPAWN_OFFSET_TILES = 2;
 const SUMMON_SPAWN_SEARCH_RADIUS_TILES = 3;
+/** She never pulls the same tattoo twice in a row — the two forms strictly alternate. */
+const NEXT_SUMMON_FORM: Record<InkMarauderForm, InkMarauderForm> = {
+  ogre: 'shark',
+  shark: 'ogre',
+};
 
 /**
  * Idle loitering — while she is only a lookout she shifts her weight and takes
@@ -112,6 +118,7 @@ export class Signet extends Mob {
   private attackAnimTimer = 0;
   private summonCooldown = SUMMON_COOLDOWN_FRAMES;
   private summonAnimTimer = 0;
+  private nextSummonForm: InkMarauderForm = randomInt(0, 1) === 0 ? 'ogre' : 'shark';
   private isAggro = false;
   private fireballs: SignetFireball[] = [];
 
@@ -289,10 +296,17 @@ export class Signet extends Mob {
         SUMMON_SPAWN_SEARCH_RADIUS_TILES,
       );
       if (spawnTile) {
-        const marauder = new InkMarauder(spawnTile.x, spawnTile.y, this.tileSize);
+        const marauder = new InkMarauder(
+          spawnTile.x,
+          spawnTile.y,
+          this.tileSize,
+          MARAUDER_LIFESPAN_FRAMES,
+          this.nextSummonForm,
+        );
         marauder.setMap(this.map);
         marauder.allMobs = this.allMobs;
         this.addMob(marauder);
+        this.nextSummonForm = NEXT_SUMMON_FORM[this.nextSummonForm];
         this.summonAnimTimer = SUMMON_ANIM_FRAMES;
       }
       this.summonCooldown = this.summonCooldownFrames;
@@ -361,7 +375,12 @@ export class Signet extends Mob {
     this.isMoving = true;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -409,6 +428,5 @@ export class Signet extends Mob {
 
     this.renderMobHealthBar(ctx, sx, overlayY);
     // The damage flash outlines her actual tile footprint, so it stays put.
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

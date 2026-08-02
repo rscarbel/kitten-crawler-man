@@ -126,7 +126,12 @@ export class Rat extends Mob {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     if (!this.isAlive) return;
 
     const sx = this.x - camX;
@@ -144,6 +149,5 @@ export class Rat extends Mob {
     drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim, this.facingX);
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

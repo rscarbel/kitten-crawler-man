@@ -21,6 +21,10 @@ import {
   BUILDING_WALL,
   RUINED_WALL,
   RUBBLE,
+  HIGHLAND_GRASS,
+  SCREE,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
 } from './tileTypes';
 import { randomInt } from '../utils';
 import { TileGrid } from './town/tileGrid';
@@ -42,7 +46,11 @@ import {
   paintTownSurfaces,
   paintWallRing,
 } from './town/paintStreets';
-import { paintVoidBorder, scatterGroundCover } from './town/paintGround';
+import {
+  paintVoidBorder,
+  scatterGroundCover,
+  scatterWildernessGroundCover,
+} from './town/paintGround';
 import {
   assertYardsStandOnTheirOwnSurface,
   paintYardFences,
@@ -50,6 +58,17 @@ import {
   yardPlots,
 } from './town/paintYards';
 import { fountainCentre, paintTownProps } from './town/townProps';
+import { ElevationField, type ElevationBand } from './overworld/elevation';
+import {
+  bridgeMaroonedRegions,
+  carveRivers,
+  paintRiverCrossings,
+  scatterRiverRocks,
+  type RiverCourse,
+} from './overworld/rivers';
+import { Reachability } from './overworld/reachability';
+import { hasWaterWithin, paintCamps, type CampSite } from './overworld/camps';
+import { openCliffRamps, paintCliffs } from './overworld/cliffs';
 
 export interface BuildingEntry {
   doorTile: TilePoint;
@@ -116,6 +135,25 @@ export interface OverworldData {
   circusCentre: TilePoint;
   /** Radius (tiles) of the circus grounds around `circusCentre`. */
   circusRadiusTiles: number;
+  /**
+   * The courses the map's rivers were carved along.
+   *
+   * Carried out of the generator rather than left behind because a course is the
+   * only compact description of a river the grid does not already hold — the
+   * water tiles themselves are on the grid, but the ordered line through them is
+   * what a future pass (a ferry, a fishing spot, a quest that says "follow the
+   * river north") would need.
+   */
+  rivers: RiverCourse[];
+  /**
+   * The wilderness's enemy camps.
+   *
+   * Carried out of the generator the way the circus's centre and radius are, and
+   * for the same reason: a system that needs to know where a landmark is should
+   * read it from the map rather than re-derive it. `spawnForLevel` populates the
+   * camps from this, and it is the seam a future quest would use to find one.
+   */
+  camps: CampSite[];
 }
 
 /** Impassable void frame around the whole map. */
@@ -125,11 +163,16 @@ const BORDER = 5;
 const CIRCUS_MIN_DIST = 70;
 const CIRCUS_DIST_VARIANCE = 20;
 const CIRCUS_RADIUS = 14;
+/** Tiles of dry ground kept between the fairground's edge and any river. */
+const CIRCUS_WATER_CLEARANCE = 8;
+const CIRCUS_SITE_ATTEMPTS = 30;
 
 // Ruins ambient-mob spawn scatter
 const RUINS_SPAWN_ATTEMPTS = 220;
 const RUINS_EDGE_MARGIN = 12;
 const RUINS_CIRCUS_BUFFER = 12;
+/** Tiles of clear ground kept between a camp and the nearest ambient spawn. */
+const RUINS_CAMP_BUFFER = 8;
 // Ruined-wall shell scatter
 const NUM_RUIN_SHELLS = 26;
 const RUIN_SHELL_MIN_SIZE = 4;
@@ -141,6 +184,13 @@ const RUBBLE_DENSITY = 0.05;
 // Torch angles (60° increments around a full circle)
 const TORCH_STEP_DEG = 60;
 const HALF_CIRCLE_DEG = 180;
+
+/**
+ * Largest seed the elevation field is given. Generation is otherwise unseeded
+ * `Math.random()`, so this is drawn per map like everything else — the seed
+ * exists so the *field* is reproducible from it, not so the map is.
+ */
+const ELEVATION_SEED_RANGE = 0x7fffffff;
 
 // Forest blobs
 const NUM_FORESTS = 30;
@@ -170,6 +220,22 @@ export function generateOverworld(size: number): OverworldData {
   // gates are then cut back through it.
   paintWallRing(grid, plan);
   paintGateHighways(grid, plan, BORDER);
+
+  // The wilderness's shared elevation field, and the band materials derived from
+  // it. It runs here — after the town and its highways, before every wilderness
+  // pass — for two reasons: the bands must never be painted over town ground,
+  // and the circus, the forests, the ruins and the rivers all want to consult
+  // the field they are being laid out on.
+  const elevation = new ElevationField(randomInt(0, ELEVATION_SEED_RANGE), size, {
+    centreTileX: plan.centre.x,
+    centreTileY: plan.centre.y,
+    safeRadiusTiles: plan.safeRadiusTiles,
+  });
+  paintElevationBands(grid, elevation);
+  // Before the circus, the forests and the ruins, so every one of them sees the
+  // channel as solid ground it has to keep off. The bridges are laid much later
+  // — see `paintRiverCrossings`.
+  const rivers = carveRivers(grid, plan, elevation, BORDER);
 
   const buildingEntries: BuildingEntry[] = [];
 
@@ -233,9 +299,23 @@ export function generateOverworld(size: number): OverworldData {
   const circus = paintCircus(grid, plan, circusStructures, buildingEntries);
   paintForests(grid, plan);
   paintRuins(grid, plan, circus);
-  const hallwaySpawnPoints = scatterRuinsSpawnPoints(grid, plan, circus);
+  // After the forests and the ruins so a camp can clear its own ground — a camp
+  // is a place people have cleared — and before the spawn scatter, which
+  // excludes the camps so ambient ghouls do not loiter in somebody else's.
+  const camps = paintCamps(
+    grid,
+    plan,
+    elevation,
+    { centreX: circus.centre.x, centreY: circus.centre.y, radiusTiles: circus.radius },
+    BORDER,
+  );
+  const hallwaySpawnPoints = scatterRuinsSpawnPoints(grid, plan, circus, camps);
 
   paintBuildingBypassRoutes(grid, circusStructures, BORDER);
+  // After every road pass, and only after: `TileGrid.setPaved` refuses to write
+  // over water, so a road laid since the carve stops dead at the bank, and only
+  // a pass that runs last can see all of them at once.
+  paintRiverCrossings(grid, rivers, BORDER);
 
   // Placed after bypass routing so road stitching cannot overwrite the anchor.
   const mainTowerAnchor: TilePoint = {
@@ -261,6 +341,13 @@ export function generateOverworld(size: number): OverworldData {
   paintYardFences(grid, plan, buildingArt);
   plantGardens(grid, plan, buildingArt);
   scatterGroundCover(grid, plan, BORDER, [...buildingPlots, ...yardPlots(plan)]);
+  scatterWildernessGroundCover(grid, plan, BORDER);
+  // After the ground cover, so a boulder is never scattered onto a wildflower
+  // clump and never has one scattered onto it.
+  scatterBoulders(grid, plan, elevation, buildingEntries);
+  // Last of the natural passes: a cliff defers to everything — roads, water,
+  // camps, forests, the town — so it runs once all of them are on the grid.
+  paintCliffs(grid, plan, elevation, camps, BORDER);
   // Both checks run over the *finished* grid, which is load-bearing rather than
   // tidy. The scatter pass is itself something that has put the wrong material
   // inside the walls, and `paintTownProps` is the only writer of the wells and the
@@ -274,6 +361,20 @@ export function generateOverworld(size: number): OverworldData {
     y: plan.plaza.y + Math.floor(plan.plaza.h / 2),
   };
   assertTownIsFullyReachable(grid, plan, townSquareCentre, buildingEntries);
+  // Last of all, because a bank can be walled off by a forest or a ruin as
+  // easily as by the water itself, and only the finished grid shows that.
+  bridgeMaroonedRegions(grid, townSquareCentre, BORDER);
+  openCliffRamps(grid, townSquareCentre, BORDER);
+  // After every deck is down: a rock is not water, so one placed earlier would
+  // stop a crossing's span dead in the middle of the channel.
+  scatterRiverRocks(grid, rivers, BORDER);
+  const reachableSpawnPoints = assertWildernessIsReachable(
+    grid,
+    townSquareCentre,
+    hallwaySpawnPoints,
+    buildingEntries,
+    circus.centre,
+  );
 
   return {
     grid: grid.cells,
@@ -286,7 +387,7 @@ export function generateOverworld(size: number): OverworldData {
     buildingEntries,
     bossRooms: [],
     mobSpawnPoints: [],
-    hallwaySpawnPoints,
+    hallwaySpawnPoints: reachableSpawnPoints,
     stairwellTiles: [],
     mainTowerAnchor,
     doomsdayEscapeTile: plan.doomsdayEscapeTile,
@@ -295,7 +396,114 @@ export function generateOverworld(size: number): OverworldData {
     fountainCentre: fountainCentre(plan),
     circusCentre: { x: circus.centre.x, y: circus.centre.y },
     circusRadiusTiles: circus.radius,
+    rivers,
+    camps,
   };
+}
+
+/**
+ * Largest piece of the map that may be cut off from the plaza before it is worth
+ * saying so on the console.
+ *
+ * §5.7 of the plan asked for this as a *fraction* of walkable tiles, at 0.97.
+ * Measurement says a fraction cannot express it: a generated map has always left
+ * 400–650 tiny pockets unreachable — the holes a forest blob's ragged edge
+ * leaves, the inside of a sealed ruin shell — and they add up to **2.0–2.5% of
+ * the map before this plan touched anything**. A 97% floor therefore sits inside
+ * the pre-existing noise, and an unlucky map fails the gate having nothing at
+ * all wrong with it (measured: one at 96.8%, with no marooned region larger than
+ * 75 tiles).
+ *
+ * Region size separates the two, but only together with **where the region's
+ * border is**. Only regions with water on their border are counted: a river can
+ * cut one off and `bridgeMaroonedRegions` can put it back, whereas a forest blob
+ * closing around a hole leaves a pocket no bridge can ever reach. Counting those
+ * too made the generator throw on about one map in a hundred, blaming a river
+ * for a hole in a wood — one measured at 153 tiles with all 156 of its border
+ * tiles a `TREE` and none of them water.
+ *
+ * The threshold itself sits well clear of both: after the repair the largest
+ * surviving water-bordered region measured under 80 tiles, while a river that
+ * genuinely severs the map leaves one of 376–31,910.
+ */
+const MAX_MAROONED_REGION_TILES = 400;
+
+const PERCENT_SCALE = 100;
+const PERCENT_DECIMALS = 1;
+
+function asPercent(fraction: number): string {
+  return (fraction * PERCENT_SCALE).toFixed(PERCENT_DECIMALS);
+}
+
+/**
+ * Checks the whole map is still one connected place, and returns the ambient
+ * spawn points a player can actually get to.
+ *
+ * `assertTownIsFullyReachable` only ever looked inside the wall, which was the
+ * right scope while nothing outside it could sever anything. A river can.
+ *
+ * The three parts of this are deliberately different in kind:
+ *
+ * - The **doors and the circus throw**, like every other validator here. Those
+ *   are what make a map playable at all, and neither has ever failed.
+ * - A large **marooned region warns**. It used to throw, and that was wrong in
+ *   both directions at once. Blaming this plan for any region with a water tile
+ *   on its rim rejected about one map in 250 for holes in woods that predate it;
+ *   attributing properly by border share fixed that but still left 2 maps in
+ *   2,500 with a *genuine* severing — one of 4,914 tiles, 88% of the map still
+ *   reachable — that neither repair pass can open, because a composite border of
+ *   forest, boulders, cliff and water offers no single tile to bridge or ramp.
+ *   Refusing to load the floor one time in 1,250 is a far worse outcome than a
+ *   corner of the wilderness the player cannot walk to, especially when the
+ *   doors, the circus and every spawn point are separately guaranteed. So it
+ *   says so loudly and carries on.
+ * - An unreachable **spawn point is pruned, not thrown on**. A generated map has
+ *   always sealed a handful of them inside a forest pocket or a ruin shell —
+ *   measured at two to eleven per map, and true before this plan touched
+ *   anything — so throwing would reject maps for a defect the rivers did not
+ *   cause. Dropping them changes nothing a player can observe except that a
+ *   ghoul neither of you could ever have reached is no longer spawned.
+ */
+function assertWildernessIsReachable(
+  grid: TileGrid,
+  from: TilePoint,
+  spawnPoints: ReadonlyArray<TilePoint>,
+  entries: ReadonlyArray<BuildingEntry>,
+  circusCentre: TilePoint,
+): TilePoint[] {
+  const reachability = new Reachability(grid, from);
+
+  for (const entry of entries) {
+    if (reachability.reached(entry.doorTile.x, entry.doorTile.y)) continue;
+    throw new Error(`The door of '${entry.name}' is cut off from the town square`);
+  }
+  if (!reachability.reached(circusCentre.x, circusCentre.y)) {
+    throw new Error('The circus is cut off from the town square');
+  }
+  const { counts, touchesWater, touchesCliff } = reachability.marooned();
+  let largestLabel = -1;
+  let largestSevered = 0;
+  for (let label = 0; label < counts.length; label++) {
+    if (counts[label] <= largestSevered) continue;
+    largestSevered = counts[label];
+    largestLabel = label;
+  }
+  if (largestLabel >= 0 && largestSevered > MAX_MAROONED_REGION_TILES) {
+    const borders: string[] = [];
+    if (touchesWater[largestLabel]) borders.push('water');
+    if (touchesCliff[largestLabel]) borders.push('cliff');
+    // Reports what borders the region rather than naming a culprit. Two earlier
+    // versions asserted a cause they could not establish — see
+    // `MAX_MAROONED_REGION_TILES`.
+    const bordering = borders.length === 0 ? 'no water or cliff' : borders.join(' and ');
+    console.warn(
+      `A ${largestSevered}-tile region of the map cannot be reached from the town square ` +
+        `(${asPercent(reachability.reachedFraction)}% of walkable tiles reachable overall). ` +
+        `Its border includes ${bordering}. The repair passes could not open it.`,
+    );
+  }
+
+  return spawnPoints.filter((point) => reachability.reached(point.x, point.y));
 }
 
 /** A named building's ground, and the rectangle it has to fit inside. */
@@ -801,6 +1009,33 @@ function placeTileBuilding(
   return { doorTile: { x: doorX, y: doorY } };
 }
 
+/**
+ * Where the circus pitches: 70+ tiles from the town, and clear of the rivers.
+ *
+ * The water check is what keeps the two apart, rather than the river router
+ * steering around the circus — the circus is sited *after* the carve, so there
+ * is nothing for the router to avoid when it runs. Doing it from this side is
+ * also the cheaper half of the problem: re-rolling a circus is one random draw,
+ * whereas re-routing a river is a whole walk across the map.
+ *
+ * Falls back to the last candidate rather than looping: a fairground with a
+ * stream through one corner is a much smaller defect than a map that never
+ * finishes generating.
+ */
+function pickCircusCentre(grid: TileGrid, townX: number, townY: number): TilePoint {
+  let candidate: TilePoint = { x: townX, y: townY };
+  for (let attempt = 0; attempt < CIRCUS_SITE_ATTEMPTS; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = CIRCUS_MIN_DIST + Math.random() * CIRCUS_DIST_VARIANCE;
+    candidate = {
+      x: Math.round(townX + Math.cos(angle) * distance),
+      y: Math.round(townY + Math.sin(angle) * distance),
+    };
+    if (!hasWaterWithin(grid, candidate, CIRCUS_RADIUS + CIRCUS_WATER_CLEARANCE)) return candidate;
+  }
+  return candidate;
+}
+
 /** Cluster of tents 70+ tiles from the town, well outside the safe radius. */
 function paintCircus(
   grid: TileGrid,
@@ -811,12 +1046,7 @@ function paintCircus(
   const { x: cx, y: cy } = plan.centre;
   const size = grid.size;
 
-  const angle = Math.random() * Math.PI * 2;
-  const distance = CIRCUS_MIN_DIST + Math.random() * CIRCUS_DIST_VARIANCE;
-  const centre: TilePoint = {
-    x: Math.round(cx + Math.cos(angle) * distance),
-    y: Math.round(cy + Math.sin(angle) * distance),
-  };
+  const centre = pickCircusCentre(grid, cx, cy);
 
   // Circus ground: a roughly circular paved area.
   for (let dy = -CIRCUS_RADIUS; dy <= CIRCUS_RADIUS; dy++) {
@@ -909,6 +1139,90 @@ function paintCircusTorches(grid: TileGrid, centre: TilePoint): void {
   }
 }
 
+/**
+ * Per-tile chance of a boulder, by the band it stands in.
+ *
+ * The gradient across the bands is the point: a rock in an open meadow is a
+ * landmark, a slope of them on a ridge is the ground itself. Boulders on scree
+ * are common enough to read as the hillside shedding them and no commoner, since
+ * every one of them is a tile the player cannot walk through.
+ */
+const BOULDER_DENSITY_BY_BAND: Readonly<Record<ElevationBand, number>> = {
+  lowland: 0.0015,
+  meadow: 0.0022,
+  highland: 0.012,
+  ridge: 0.03,
+};
+
+/** Share of boulders that are the two-tile kind, by band. */
+const LARGE_BOULDER_SHARE_BY_BAND: Readonly<Record<ElevationBand, number>> = {
+  lowland: 0.3,
+  meadow: 0.3,
+  highland: 0.22,
+  ridge: 0.16,
+};
+
+/** Tiles of clear ground kept between a boulder and any building's door. */
+const BOULDER_DOOR_CLEARANCE_TILES = 4;
+
+/**
+ * Scatters boulders across the wilderness, weighted by elevation.
+ *
+ * Runs late, after every pass that lays ground or structures, because a boulder
+ * is only allowed on open wilderness surface: no roads, no water, no forest, no
+ * ruin, no camp, nothing inside the town's safe radius. Written with
+ * `setStanding` so each rock records the band it sits on and the fringe under it
+ * is drawn from the right material.
+ */
+function scatterBoulders(
+  grid: TileGrid,
+  plan: TownPlan,
+  elevation: ElevationField,
+  entries: ReadonlyArray<BuildingEntry>,
+): void {
+  const nearADoor = (tx: number, ty: number): boolean =>
+    entries.some(
+      (entry) =>
+        Math.hypot(entry.doorTile.x - tx, entry.doorTile.y - ty) <= BOULDER_DOOR_CLEARANCE_TILES,
+    );
+
+  for (let ty = BORDER + 1; ty < grid.size - BORDER - 1; ty++) {
+    for (let tx = BORDER + 1; tx < grid.size - BORDER - 1; tx++) {
+      if (!isOpenWildernessGround(grid.typeAt(tx, ty))) continue;
+      if (Math.hypot(tx - plan.centre.x, ty - plan.centre.y) <= plan.safeRadiusTiles) continue;
+      const band = elevation.bandAt(tx, ty);
+      if (Math.random() >= BOULDER_DENSITY_BY_BAND[band]) continue;
+      if (nearADoor(tx, ty)) continue;
+      const isLarge = Math.random() < LARGE_BOULDER_SHARE_BY_BAND[band];
+      grid.setStanding(tx, ty, isLarge ? BOULDER_LARGE : BOULDER_SMALL);
+    }
+  }
+}
+
+/**
+ * Paints the upland bands: `HIGHLAND_GRASS` where the field climbs past the
+ * meadow, `SCREE` where it reaches the ridges.
+ *
+ * Only virgin grass is repainted, so the town's surfaces, its wall and every
+ * highway already on the grid are left exactly as they were — the field is
+ * flattened over the town as well, so this is belt and braces rather than the
+ * only defence.
+ *
+ * `set` rather than `setStanding` is right here: these tiles *are* ground, not
+ * something standing on it, and there is no earlier surface worth recording —
+ * they only ever replace the grass the grid was filled with.
+ */
+function paintElevationBands(grid: TileGrid, elevation: ElevationField): void {
+  for (let ty = BORDER; ty < grid.size - BORDER; ty++) {
+    for (let tx = BORDER; tx < grid.size - BORDER; tx++) {
+      if (grid.typeAt(tx, ty) !== FloorTypeValue.grass) continue;
+      const band = elevation.bandAt(tx, ty);
+      if (band === 'highland') grid.set(tx, ty, HIGHLAND_GRASS);
+      else if (band === 'ridge') grid.set(tx, ty, SCREE);
+    }
+  }
+}
+
 /** Forest blobs in the wilderness, well outside town and never over a road. */
 function paintForests(grid: TileGrid, plan: TownPlan): void {
   const size = grid.size;
@@ -930,6 +1244,10 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
         if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
         if (grid.isSolid(tx, ty)) continue;
         if (grid.isPaved(tx, ty)) continue;
+        // Nothing takes root on bare ridge rock. Highland turf is left open to
+        // forest on purpose — a wood climbing a hillside is what makes the band
+        // read as a slope rather than as a stripe.
+        if (grid.typeAt(tx, ty) === SCREE) continue;
         // `setStanding`, as every other prop is written. A tree stands *on* the
         // ground rather than being ground, and now that one can be felled the
         // record is what the tile reverts to. Inference cannot answer this:
@@ -944,6 +1262,19 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
 }
 
 /**
+ * The three open, walkable surfaces the wilderness is made of.
+ *
+ * The ruins and the ambient spawn scatter both used to test `=== grass`, which
+ * was the same question while grass was the only thing out there. Once the
+ * elevation bands repaint a third of the map, that test silently confined every
+ * ruin and every ghoul to the lowlands — the scatter's ~220 points would have
+ * collapsed with it, since a rejected attempt is not retried.
+ */
+function isOpenWildernessGround(type: number | undefined): boolean {
+  return type === FloorTypeValue.grass || type === HIGHLAND_GRASS || type === SCREE;
+}
+
+/**
  * Broken wall shells and loose rubble beyond the town's safe zone, so the land
  * outside the walls reads as a destroyed city rather than open countryside.
  */
@@ -955,7 +1286,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
     tx < size - BORDER &&
     ty > BORDER &&
     ty < size - BORDER &&
-    grid.typeAt(tx, ty) === FloorTypeValue.grass;
+    isOpenWildernessGround(grid.typeAt(tx, ty));
 
   // Shells can be up to RUIN_SHELL_MIN_SIZE + RUIN_SHELL_SIZE_RANGE tiles wide, so
   // start sampling that far past the safe radius to keep their footprint fully outside it.
@@ -988,7 +1319,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
         const tx = shellX + dx;
         const ty = shellY + dy;
         if (!isRuinsGround(tx, ty)) continue;
-        grid.set(tx, ty, RUINED_WALL);
+        grid.setStanding(tx, ty, RUINED_WALL);
       }
     }
     // Rubble-strewn interior
@@ -998,7 +1329,7 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
         const tx = shellX + dx;
         const ty = shellY + dy;
         if (!isRuinsGround(tx, ty)) continue;
-        grid.set(tx, ty, RUBBLE);
+        grid.setStanding(tx, ty, RUBBLE);
       }
     }
   }
@@ -1006,9 +1337,9 @@ function paintRuins(grid: TileGrid, plan: TownPlan, circus: CircusGrounds): void
   // Loose rubble across the whole ruins band, outside any shell
   for (let y = BORDER + 1; y < size - BORDER - 1; y++) {
     for (let x = BORDER + 1; x < size - BORDER - 1; x++) {
-      if (grid.typeAt(x, y) !== FloorTypeValue.grass) continue;
+      if (!isOpenWildernessGround(grid.typeAt(x, y))) continue;
       if (Math.hypot(x - cx, y - cy) <= plan.safeRadiusTiles) continue;
-      if (Math.random() < RUBBLE_DENSITY) grid.set(x, y, RUBBLE);
+      if (Math.random() < RUBBLE_DENSITY) grid.setStanding(x, y, RUBBLE);
     }
   }
 }
@@ -1021,6 +1352,7 @@ function scatterRuinsSpawnPoints(
   grid: TileGrid,
   plan: TownPlan,
   circus: CircusGrounds,
+  camps: ReadonlyArray<CampSite>,
 ): TilePoint[] {
   const size = grid.size;
   const { x: cx, y: cy } = plan.centre;
@@ -1038,8 +1370,18 @@ function scatterRuinsSpawnPoints(
       circus.radius + RUINS_CIRCUS_BUFFER
     )
       continue;
+    // Camps keep the ambient population out, so the mobs standing in one are the
+    // camp's own. Without this a ghoul spawns among the goblins and the landmark
+    // stops reading as anybody's.
+    if (
+      camps.some(
+        (camp) =>
+          Math.hypot(tx - camp.centre.x, ty - camp.centre.y) < camp.radiusTiles + RUINS_CAMP_BUFFER,
+      )
+    )
+      continue;
     const type = grid.typeAt(tx, ty);
-    if (type !== FloorTypeValue.grass && type !== FloorTypeValue.road && type !== RUBBLE) continue;
+    if (!isOpenWildernessGround(type) && type !== FloorTypeValue.road && type !== RUBBLE) continue;
     points.push({ x: tx, y: ty });
   }
   return points;

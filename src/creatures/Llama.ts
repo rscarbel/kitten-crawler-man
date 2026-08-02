@@ -198,7 +198,12 @@ export class Llama extends Mob {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     if (!this.isAlive) return;
 
     // Draw lava balls (behind sprite)
@@ -253,6 +258,5 @@ export class Llama extends Mob {
     drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim, this.facingX);
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

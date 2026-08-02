@@ -66,6 +66,9 @@ import {
   INTERIOR_STONE_RAMP,
   INTERIOR_PLASTER_RAMP,
   INTERIOR_COUNTER_RAMP,
+  RIVER_WATER_RAMP,
+  HIGHLAND_GRASS_RAMP,
+  SCREE_RAMP,
 } from './palette.js';
 
 export interface PaintContext {
@@ -317,6 +320,189 @@ const gravel: Material = {
       if (cell.nearest > GRAVEL_CHIP_EDGE) return ctx.surface.get(x, y);
       const chip = sampleRamp(GRAVEL_RAMP, cell.cellHash);
       return shade(chip, reliefFactor(cell.offsetX, cell.offsetY, GRAVEL_RELIEF_STRENGTH));
+    });
+  },
+};
+
+// ── the wilderness: river bed, uplands ─────────────────────────────────────
+
+/**
+ * A long low swell rather than fine grain: still water at 32 px a tile has no
+ * texture of its own, and any detail baked in here would sit motionless under
+ * the drifting highlights `WaterAnimationSystem` lays on top and read as grit
+ * frozen in the surface.
+ *
+ * The broad-tone weight is well below the first cut's 0.8, and that is the
+ * fourth rule of `add-ground-tile` biting: broad tone inside a patch makes each
+ * *patch* read as a tonal block, and on a material as flat as water — with no
+ * grain or joints to distract from it — a river came out as a mosaic of slightly
+ * different squares. Large-scale variation belongs to the renderer's world-space
+ * noise layer, not to the tile.
+ */
+const WATER_GROUND: GroundOptions = { patchPeriod: 12, patchWeight: 0.4, contrast: 0.32 };
+const WATER_DEPTH_POOL_COUNT = 5;
+const WATER_DEPTH_POOL_MIN_RADIUS = 8;
+const WATER_DEPTH_POOL_MAX_RADIUS = 20;
+const WATER_DEPTH_POOL_ALPHA = 0.2;
+const WATER_DEPTH_POOL_SOFTNESS = 1;
+const WATER_SILT_COUNT = 10;
+const WATER_SILT_MIN_RADIUS = 3;
+const WATER_SILT_MAX_RADIUS = 9;
+const WATER_SILT_ALPHA = 0.11;
+const WATER_SILT_SOFTNESS = 1;
+
+const water: Material = {
+  id: 'water',
+  label: 'River water (static base — motion is a render overlay)',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, RIVER_WATER_RAMP, WATER_GROUND);
+    const deepRamp: Ramp = { ...RIVER_WATER_RAMP, mid: shade(RIVER_WATER_RAMP.shadow, 0.8) };
+    paintSpeckles(ctx, ctx.detail + 41, {
+      count: WATER_DEPTH_POOL_COUNT,
+      minRadius: WATER_DEPTH_POOL_MIN_RADIUS,
+      maxRadius: WATER_DEPTH_POOL_MAX_RADIUS,
+      ramp: deepRamp,
+      alpha: WATER_DEPTH_POOL_ALPHA,
+      softness: WATER_DEPTH_POOL_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 43, {
+      count: WATER_SILT_COUNT,
+      minRadius: WATER_SILT_MIN_RADIUS,
+      maxRadius: WATER_SILT_MAX_RADIUS,
+      ramp: { ...RIVER_WATER_RAMP, mid: DIRT_RAMP.shadow },
+      alpha: WATER_SILT_ALPHA,
+      softness: WATER_SILT_SOFTNESS,
+    });
+  },
+};
+
+const HIGHLAND_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 1.15 };
+const HIGHLAND_BLADE_COUNT = 620;
+const HIGHLAND_DEAD_BLADE_SHARE = 0.7;
+const HIGHLAND_OUTCROP_COUNT = 9;
+const HIGHLAND_OUTCROP_MIN_RADIUS = 3;
+const HIGHLAND_OUTCROP_MAX_RADIUS = 8;
+const HIGHLAND_OUTCROP_ALPHA = 0.3;
+const HIGHLAND_OUTCROP_SOFTNESS = 0.8;
+const HIGHLAND_PEBBLE_COUNT = 52;
+const HIGHLAND_PEBBLE_MIN_RADIUS = 0.6;
+const HIGHLAND_PEBBLE_MAX_RADIUS = 1.9;
+const HIGHLAND_PEBBLE_ALPHA = 0.7;
+const HIGHLAND_PEBBLE_SOFTNESS = 0.4;
+
+/** Thin, stony upland turf — the band between field grass and bare scree. */
+const highland: Material = {
+  id: 'highland',
+  label: 'Highland turf (thin upland grass)',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, HIGHLAND_GRASS_RAMP, HIGHLAND_GROUND);
+    paintSpeckles(ctx, ctx.detail + 61, {
+      count: HIGHLAND_OUTCROP_COUNT,
+      minRadius: HIGHLAND_OUTCROP_MIN_RADIUS,
+      maxRadius: HIGHLAND_OUTCROP_MAX_RADIUS,
+      ramp: SCREE_RAMP,
+      alpha: HIGHLAND_OUTCROP_ALPHA,
+      softness: HIGHLAND_OUTCROP_SOFTNESS,
+    });
+    paintBlades(ctx, HIGHLAND_GRASS_RAMP, ctx.detail, HIGHLAND_BLADE_COUNT);
+    paintBlades(
+      ctx,
+      DEAD_GRASS_RAMP,
+      ctx.detail + 67,
+      HIGHLAND_BLADE_COUNT * HIGHLAND_DEAD_BLADE_SHARE,
+    );
+    paintSpeckles(ctx, ctx.detail + 63, {
+      count: HIGHLAND_PEBBLE_COUNT,
+      minRadius: HIGHLAND_PEBBLE_MIN_RADIUS,
+      maxRadius: HIGHLAND_PEBBLE_MAX_RADIUS,
+      ramp: SCREE_RAMP,
+      alpha: HIGHLAND_PEBBLE_ALPHA,
+      softness: HIGHLAND_PEBBLE_SOFTNESS,
+    });
+  },
+};
+
+/**
+ * Scree is `paintSetts` on a four-tile patch, not the gravel painter on a two.
+ *
+ * Two things had to be unlearned here, and both are general.
+ *
+ * The first cut copied gravel — discs of `nearest < edge` cells — which covers
+ * about half the area and leaves every chip a separated lump with a lit rim and
+ * a shadowed underside. At scree's coarser cell size that read as a tray of ball
+ * bearings. What scree actually is, seen from above, is *tessellating angular
+ * plates*, and the joint between a Worley cell and its neighbour is exactly
+ * that — so this is a paving painter with the paving taken out of it.
+ *
+ * The second cut kept `patchTiles: 2`, and a slope of it read as woven fabric.
+ * A material with **visible units** repeats at its patch, not at its cell, so a
+ * two-tile patch shows the same handful of plates every 64 screen pixels however
+ * irregular one patch is on its own. Every other cell-structured material in
+ * this file is on a four-tile patch for that reason, and the fix was to join
+ * them rather than to keep chasing the regularity with jitter and warp.
+ */
+const SCREE_CELLS_PER_TILE = 2.5;
+const SCREE_JITTER = 0.9;
+const SCREE_JOINT_WIDTH = 0.16;
+const SCREE_JOINT_STRENGTH = 0.5;
+const SCREE_RELIEF_STRENGTH = 0.7;
+const SCREE_WARP_AMPLITUDE = 1.6;
+/**
+ * Wider than the paving materials — a hillside's plates are freshly broken and
+ * genuinely differ in tone — but well under the `paintSetts` default of 0.7,
+ * which put a near-black plate beside a near-white one and read as static.
+ */
+const SCREE_TONE_SPREAD = 0.5;
+const SCREE_SHADE_POOL_COUNT = 5;
+const SCREE_SHADE_POOL_MIN_RADIUS = 7;
+const SCREE_SHADE_POOL_MAX_RADIUS = 20;
+const SCREE_SHADE_POOL_ALPHA = 0.22;
+const SCREE_SHADE_POOL_SOFTNESS = 1;
+const SCREE_FINES_COUNT = 40;
+const SCREE_FINES_MIN_RADIUS = 0.6;
+const SCREE_FINES_MAX_RADIUS = 2;
+const SCREE_FINES_ALPHA = 0.45;
+const SCREE_FINES_SOFTNESS = 0.4;
+
+const scree: Material = {
+  id: 'scree',
+  label: 'Scree (broken hillside rock)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintSetts(ctx, {
+      cellsPerTile: SCREE_CELLS_PER_TILE,
+      jitter: SCREE_JITTER,
+      ramp: SCREE_RAMP,
+      jointRamp: { ...SCREE_RAMP, mid: shade(SCREE_RAMP.shadow, 0.7), light: SCREE_RAMP.shadow },
+      jointWidth: SCREE_JOINT_WIDTH,
+      jointStrength: SCREE_JOINT_STRENGTH,
+      reliefStrength: SCREE_RELIEF_STRENGTH,
+      warpAmplitude: SCREE_WARP_AMPLITUDE,
+      toneSpread: SCREE_TONE_SPREAD,
+    });
+    // Broad soft shade pools over the plates, at a scale far larger than the
+    // cell lattice. Their job is to break up the regularity the lattice cannot
+    // avoid having, so the eye finds the slope's shape before it finds the grid.
+    paintSpeckles(ctx, ctx.detail + 73, {
+      count: SCREE_SHADE_POOL_COUNT,
+      minRadius: SCREE_SHADE_POOL_MIN_RADIUS,
+      maxRadius: SCREE_SHADE_POOL_MAX_RADIUS,
+      ramp: { ...SCREE_RAMP, mid: shade(SCREE_RAMP.shadow, 0.75) },
+      alpha: SCREE_SHADE_POOL_ALPHA,
+      softness: SCREE_SHADE_POOL_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 71, {
+      count: SCREE_FINES_COUNT,
+      minRadius: SCREE_FINES_MIN_RADIUS,
+      maxRadius: SCREE_FINES_MAX_RADIUS,
+      ramp: GRAVEL_RAMP,
+      alpha: SCREE_FINES_ALPHA,
+      softness: SCREE_FINES_SOFTNESS,
     });
   },
 };
@@ -1967,6 +2153,9 @@ export const MATERIALS: ReadonlyArray<Material> = [
   lane,
   cobble,
   plaza,
+  water,
+  highland,
+  scree,
   cellarCinder,
   cellarFlagstone,
   cellarDressedFlags,

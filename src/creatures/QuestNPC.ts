@@ -5,14 +5,14 @@ import { drawQuestNPCSprite, drawExclamationMark } from '../sprites/questNPCSpri
 const NPC_MAX_HP = 40;
 /** Initial health potion count to remove (NPC has no use for potions). */
 const INITIAL_POTION_COUNT = 10;
-/** Frames over which the red damage box fades out. */
-const RED_BOX_FADE_FRAMES = 8;
-/** Seconds the red damage box stays solid before its fade begins. */
-const RED_BOX_HOLD_SECONDS = 5;
+/** Frames over which the hurt tint fades out. */
+const HURT_FADE_FRAMES = 8;
+/** Seconds the hurt tint holds at full strength before its fade begins. */
+const HURT_HOLD_SECONDS = 5;
 const FRAMES_PER_SECOND = 60;
-const RED_BOX_FRAMES = RED_BOX_HOLD_SECONDS * FRAMES_PER_SECOND + RED_BOX_FADE_FRAMES;
-/** Alpha multiplier for the damage box overlay. */
-const RED_BOX_ALPHA_MAX = 0.9;
+const HURT_FRAMES = HURT_HOLD_SECONDS * FRAMES_PER_SECOND + HURT_FADE_FRAMES;
+/** Share of a strike's flash intensity the sustained hurt tint carries. */
+const HURT_FLASH_PROGRESS = 0.45;
 
 export type NPCMarkerType = 'exclamation' | 'question' | 'none';
 
@@ -28,8 +28,8 @@ export class QuestNPC extends Player {
   markerType: NPCMarkerType = 'exclamation';
   /** Which quest this NPC belongs to. */
   readonly questId: string;
-  /** Frames remaining on the persistent red damage box; it fades over the final {@link RED_BOX_FADE_FRAMES}. */
-  private redBoxTimer = 0;
+  /** Frames remaining on the persistent hurt tint; it fades over the final {@link HURT_FADE_FRAMES}. */
+  private hurtTimer = 0;
 
   constructor(tileX: number, tileY: number, questId: string) {
     super(tileX, tileY, TILE_SIZE, { maxHp: NPC_MAX_HP });
@@ -37,13 +37,18 @@ export class QuestNPC extends Player {
     this.inventory.removeItems('health_potion', INITIAL_POTION_COUNT);
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     if (!this.isAlive) return;
 
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.redBoxTimer);
+    drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
 
     // Overhead marker
     if (this.markerType === 'exclamation') {
@@ -56,34 +61,33 @@ export class QuestNPC extends Player {
     if (this.hp < this.maxHp) {
       this.renderHealthBar(ctx, sx, sy);
     }
-
-    this.renderDamageFlash(ctx, sx, sy);
   }
 
   takeDamage(amount: number): boolean {
     const connected = super.takeDamage(amount);
     if (connected) {
-      this.redBoxTimer = RED_BOX_FRAMES;
+      this.hurtTimer = HURT_FRAMES;
     }
     return connected;
   }
 
   tickTimers() {
     super.tickTimers();
-    if (this.redBoxTimer > 0) this.redBoxTimer--;
+    if (this.hurtTimer > 0) this.hurtTimer--;
   }
 
   clearHurtState(): void {
-    this.redBoxTimer = 0;
+    this.hurtTimer = 0;
   }
 
-  protected renderDamageFlash(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
-    if (this.redBoxTimer <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, this.redBoxTimer / RED_BOX_FADE_FRAMES) * RED_BOX_ALPHA_MAX;
-    ctx.strokeStyle = '#ff1f1f';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(sx + 1, sy + 1, this.tileSize - 2, this.tileSize - 2);
-    ctx.restore();
+  /**
+   * Her hurt state is a standing "she is being attacked" alarm rather than an
+   * impact, so it holds for seconds at a fraction of a strike's intensity —
+   * enough to keep her outlined in red without burning the sprite out.
+   */
+  protected override hitFlashProgress(): number {
+    if (this.hurtTimer <= 0) return 0;
+    const fade = Math.min(1, this.hurtTimer / HURT_FADE_FRAMES);
+    return fade * HURT_FLASH_PROGRESS;
   }
 }

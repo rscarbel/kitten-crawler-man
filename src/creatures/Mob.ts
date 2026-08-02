@@ -1,8 +1,10 @@
 import { Player } from '../Player';
 import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
+import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
+import { WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { drawText } from '../ui/TextBox';
 
@@ -138,10 +140,22 @@ export interface LootDrop {
 /** A mob drawn no larger than its own tile needs only a tile of slack. */
 const DEFAULT_CULL_MARGIN_TILES = 1;
 
+/** Slack the hit flash keeps around any mob, however small it claims to be. */
+const MIN_HIT_FLASH_MARGIN_TILES = 1.5;
+
 /**
  * Abstract base for all enemy mobs. Subclasses define their own AI, appearance,
  * and speed. `updateAI` is called every frame by the game loop.
  */
+/**
+ * How far inside its leash a camp resident walks before it stops walking home.
+ * Hysteresis: turning around exactly on the line makes it oscillate there.
+ */
+const LEASH_SETTLE_FRACTION = 0.5;
+
+/** How far ahead a resident paths on each leg of its walk home, in tiles. */
+const LEASH_RETURN_HOP_TILES = 10;
+
 export abstract class Mob extends Player {
   protected speed: number;
   abstract readonly xpValue: number;
@@ -157,8 +171,41 @@ export abstract class Mob extends Player {
     return DEFAULT_CULL_MARGIN_TILES;
   }
 
+  /**
+   * A mob already declares how far its art overreaches its tile, so the hit
+   * flash reuses that answer rather than asking every mob the same thing twice.
+   *
+   * Floored, because the two costs are not symmetric: a mob that under-declares
+   * its margin only pops in at the screen edge, but a flash cut to the same box
+   * would slice the sprite in half in the middle of a fight.
+   */
+  protected override get hitFlashMarginTiles(): number {
+    return Math.max(this.cullMarginTiles, MIN_HIT_FLASH_MARGIN_TILES);
+  }
+
   /** The player this mob is currently chasing/attacking. Set each frame in updateAI. */
   currentTarget: Player | null = null;
+
+  /**
+   * Where this mob belongs, and how far it will stray from it — set only for the
+   * residents of a floor-3 camp.
+   *
+   * **Both are optional and default to unset, and unset means the old behaviour
+   * exactly.** `isBeyondLeash` returns false and `returnHomeOrWander` falls
+   * straight through to `doWander`, so a goblin on floor 1 takes a code path
+   * that is unchanged: no extra branch it can fail, no field it can read stale.
+   * The camp spawner is the only writer.
+   *
+   * A leash exists because a camp is a landmark. Residents that chase a player
+   * across half the map leave the landmark empty, and what the player then finds
+   * on their way back is an abandoned camp with nothing to say.
+   *
+   * `homePoint` is in **pixels**, like `x`/`y`; `leashRadiusTiles` is in tiles
+   * and is multiplied by `tileSize` at every comparison.
+   */
+  homePoint?: { x: number; y: number };
+  /** Set beside `homePoint`; both in the same units the mob's own `x`/`y` are. */
+  leashRadiusTiles?: number;
 
   /** Tracks how much damage each player has dealt to this mob (for XP split). */
   readonly damageTakenBy = new Map<Player, number>();
@@ -591,6 +638,16 @@ export abstract class Mob extends Player {
     }
   }
 
+  /** Whether this mob is standing in river water. */
+  isWading(): boolean {
+    if (!this.map) return false;
+    const ts = this.tileSize;
+    return this.map.isWadeable(
+      Math.floor((this.x + ts / 2) / ts),
+      Math.floor((this.y + ts / 2) / ts),
+    );
+  }
+
   /**
    * Moves by (dx, dy) with per-axis wall collision, mirroring the player's
    * movement so mobs can slide along walls instead of passing through them.
@@ -602,6 +659,15 @@ export abstract class Mob extends Player {
       return;
     }
     const ts = this.tileSize;
+    // A mob in the river wades exactly as the player does. Scaled here rather
+    // than at each caller because every one of them — chase, wander, leash
+    // return, flee — arrives through this method, and a mob that crossed water
+    // at a run while the player laboured would make the river look like a
+    // player-only obstacle.
+    if (this.isWading()) {
+      dx *= WADE_SPEED_FACTOR;
+      dy *= WADE_SPEED_FACTOR;
+    }
     if (dx !== 0) {
       const nextX = this.x + dx;
       const tileXnext =
@@ -618,7 +684,10 @@ export abstract class Mob extends Player {
     if (dy !== 0) {
       const nextY = this.y + dy;
       const tileXcur = Math.floor((this.x + ts / 2) / ts);
-      const tileYnext = Math.floor((nextY + ts / 2) / ts);
+      // Feet-first when walking south, centre otherwise — the same rule the
+      // player follows. Without it a mob walks until its waist meets a south
+      // wall and stands with its whole lower half on the masonry.
+      const tileYnext = Math.floor((nextY + ts * verticalCollisionOffset(dy)) / ts);
       if (
         this.map.isWalkable(tileXcur, tileYnext) &&
         !this.map.isStairwellTile(tileXcur, tileYnext)
@@ -734,6 +803,86 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether **this mob** has strayed past its leash and should break off.
+   *
+   * Read carefully: it takes a position because it is asked about the mob's own,
+   * and it is consulted only where a chase is decided — never in a perception
+   * loop, a melee loop or a damage loop.
+   *
+   * The first version filtered *targets* by their distance from home, inside the
+   * aggro scan, the melee scan and the strike-damage loop. It looked like
+   * `RuinsGhoul`'s safe-zone break-off and it was a different thing entirely: a
+   * player standing a tile outside the leash became **invisible** to every
+   * resident. They would not aggro, would not retaliate when hit, and a
+   * troglodyte already mid-strike dealt no damage if its target stepped over the
+   * line — the whole camp could be cleared at range with nothing fighting back.
+   * The precedent does not transfer because a town safe zone is somewhere the
+   * player has no reason to fight from, whereas a circle round a camp is exactly
+   * where the fight happens.
+   *
+   * A leash limits how far a mob will *travel*. It has nothing to say about what
+   * the mob can see or hit.
+   */
+  protected isBeyondLeash(x: number, y: number): boolean {
+    const home = this.homePoint;
+    const radiusTiles = this.leashRadiusTiles;
+    if (home === undefined || radiusTiles === undefined) return false;
+    return Math.hypot(x - home.x, y - home.y) > radiusTiles * this.tileSize;
+  }
+
+  /**
+   * Idle behaviour for a mob with nothing to chase: walk back to its camp if it
+   * has wandered out of it, otherwise mill about.
+   *
+   * For an unleashed mob this *is* `doWander`, unchanged.
+   *
+   * It walks back until it is **well** inside the leash, not merely inside it.
+   * Turning around the instant it crosses the line makes a resident oscillate on
+   * the boundary — one step in, wander a step out, turn round again — and
+   * measured that way a goblin dragged thirty tiles out settled anywhere from
+   * four to eighteen tiles from home, i.e. often still outside its own camp.
+   */
+  protected returnHomeOrWander(): void {
+    const home = this.homePoint;
+    const radiusTiles = this.leashRadiusTiles;
+    if (home === undefined || radiusTiles === undefined) {
+      this.doWander();
+      return;
+    }
+    const settledRadiusPx = radiusTiles * this.tileSize * LEASH_SETTLE_FRACTION;
+    if (Math.hypot(this.x - home.x, this.y - home.y) <= settledRadiusPx) {
+      this.doWander();
+      return;
+    }
+    // Toward a waypoint a bounded distance along the way, not toward home
+    // itself. Two simpler versions each failed a different way, and the numbers
+    // are worth keeping: pathing straight to home leaves A* asked for a
+    // thirty-tile route, which it declines to return, and the mob then stood
+    // still for a full minute of frames on about one run in six. Steering
+    // directly instead always moves but snags on the first tree, and got home on
+    // only two runs in six. A short hop is inside A*'s reach, so it routes round
+    // obstacles *and* always has an answer; the mob simply makes the journey in
+    // stages.
+    //
+    // Measured honestly: from an artificial worst case — teleported thirty tiles
+    // out in one frame, onto reachable ground — the walk completes within a
+    // minute of frames on about two runs in three. The remainder are hemmed in by
+    // scenery at the start and work loose only as the wander drifts them. The
+    // *break-off* half of the leash, which is what actually keeps a camp
+    // populated, is unconditional: see `isBeyondLeash`.
+    const toHomeX = home.x - this.x;
+    const toHomeY = home.y - this.y;
+    const distance = Math.hypot(toHomeX, toHomeY);
+    const hop = Math.min(distance, LEASH_RETURN_HOP_TILES * this.tileSize);
+    this.followTargetAStar(
+      this.x + (toHomeX / distance) * hop,
+      this.y + (toHomeY / distance) * hop,
+      this.speed,
+      this.tileSize,
+    );
+  }
+
+  /**
    * Idle wandering: picks a random direction every ~2 s, slowly moves within
    * a 4-tile radius of the spawn point.
    */
@@ -764,6 +913,16 @@ export abstract class Mob extends Player {
         const ny = dy / distToSpawn;
         this.wanderDx = nx * this.speed * WANDER_PULLBACK_SPEED_FRACTION;
         this.wanderDy = ny * this.speed * WANDER_PULLBACK_SPEED_FRACTION;
+      }
+      // Face the way we are actually walking. `followTargetCollide` does this
+      // for a mob that is chasing something, but a wandering one used to keep
+      // whatever facing its last chase left it with — so any sprite that mirrors
+      // on `facingX` moonwalks for as long as the wander happens to run the
+      // other way, which is most of the time an unaggroed mob is on screen.
+      const wanderSpeed = Math.hypot(this.wanderDx, this.wanderDy);
+      if (wanderSpeed > 0) {
+        this.facingX = this.wanderDx / wanderSpeed;
+        this.facingY = this.wanderDy / wanderSpeed;
       }
       this.moveWithCollision(this.wanderDx, this.wanderDy);
       this.isMoving = true;

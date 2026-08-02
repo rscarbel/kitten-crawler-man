@@ -27,7 +27,7 @@ import type { ItemId } from '../core/ItemDefs';
 import { platform } from '../core/Platform';
 import { clamp } from '../utils';
 import { drawHumanSprite } from '../sprites/humanSprite';
-import { drawGoblinSprite } from '../sprites/goblinSprite';
+import { GOBLIN_ATTACKS, drawGoblinSprite } from '../sprites/goblinSprite';
 import type { PauseTab } from '../ui/pause/types';
 import type { ButtonRect } from '../ui/pause/types';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -1598,25 +1598,27 @@ export class TutorialController {
     const humanAttackPhase = humanIsAttacking ? ('punch_side' as const) : null;
     const humanAttackTimer = humanIsAttacking ? COMBAT_ATTACK_FRAMES - phaseT : 0;
 
-    drawHumanSprite(
-      ctx,
-      humanX,
-      spriteY,
-      s,
-      humanAttackPhase,
-      humanAttackTimer,
-      COMBAT_ATTACK_FRAMES,
-      0,
-      0,
-      0,
-      false,
-      0,
-      1,
-    );
+    drawHumanSprite(ctx, humanX, spriteY, s, {
+      attackPhase: humanAttackPhase,
+      attackTimer: humanAttackTimer,
+      attackFrames: COMBAT_ATTACK_FRAMES,
+      facingX: 1,
+      facingY: 0,
+    });
 
-    const goblinAttackAnim = humanIsAttacking ? 0 : phaseT + 1;
-
-    drawGoblinSprite(ctx, goblinX, spriteY, s, 'club', 0, false, goblinAttackAnim, -1);
+    // A still of the strike, not of the goblin standing there: the mace's whirl
+    // on the frame it actually connects, whichever that is.
+    const MACE_IMPACT_FRAME = GOBLIN_ATTACKS.mace.light.impactFrame;
+    const GUARD_FRAME = 0;
+    drawGoblinSprite(ctx, {
+      weapon: 'mace',
+      x: goblinX,
+      y: spriteY,
+      tileSize: s,
+      facingX: -1,
+      state: humanIsAttacking ? 'idle' : 'attack_light',
+      frame: humanIsAttacking ? GUARD_FRAME : MACE_IMPACT_FRAME,
+    });
 
     ctx.restore();
   }
@@ -2036,41 +2038,22 @@ export class TutorialController {
   /** Create all five tutorial goblins with appropriate AI flags. */
   static createMobs(tileSize: number): TutorialMobs {
     return {
-      goblinA: new TutorialGoblin(
-        GOBLIN_A_POS.x,
-        GOBLIN_A_POS.y,
-        tileSize,
-        'club',
-        '#8a7a4c',
-        '#2a1a0a',
-        false,
-        true,
-      ),
-      goblinB: new TutorialGoblin(
-        GOBLIN_B_POS.x,
-        GOBLIN_B_POS.y,
-        tileSize,
-        'club',
-        '#7a9c3c',
-        '#1a1a1a',
-        true,
-      ),
+      // Three archetypes across the four, so the tutorial shows a player more
+      // than one kind of goblin before they meet one that fights back.
+      goblinA: new TutorialGoblin(GOBLIN_A_POS.x, GOBLIN_A_POS.y, tileSize, 'mace', false, true),
+      goblinB: new TutorialGoblin(GOBLIN_B_POS.x, GOBLIN_B_POS.y, tileSize, 'sword', true),
       smushGuard1: new TutorialGoblin(
         SMUSH_GUARD_1_POS.x,
         SMUSH_GUARD_1_POS.y,
         tileSize,
-        'club',
-        '#9a3a3a',
-        '#1a0a0a',
+        'axe',
         true,
       ),
       smushGuard2: new TutorialGoblin(
         SMUSH_GUARD_2_POS.x,
         SMUSH_GUARD_2_POS.y,
         tileSize,
-        'club',
-        '#9a3a3a',
-        '#1a0a0a',
+        'axe',
         true,
       ),
     };

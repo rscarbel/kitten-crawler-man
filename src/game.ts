@@ -6,6 +6,7 @@ import { PostSignupScene } from './scenes/PostSignupScene';
 import { PersonPreviewScene } from './scenes/PersonPreviewScene';
 import { TilePreviewScene } from './scenes/TilePreviewScene';
 import { BopcaPreviewScene } from './scenes/BopcaPreviewScene';
+import { GoblinPreviewScene } from './scenes/GoblinPreviewScene';
 import { TownMapScene } from './scenes/TownMapScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
@@ -50,6 +51,11 @@ function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions):
 
   if (params.get('bopca') !== null) {
     sceneManager.replace(new BopcaPreviewScene());
+    return true;
+  }
+
+  if (params.get('goblins') !== null) {
+    sceneManager.replace(new GoblinPreviewScene());
     return true;
   }
 

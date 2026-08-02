@@ -1,0 +1,228 @@
+{
+  "boulder_small_a": {
+    "path": "environment/rocks/boulder_small_a.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    },
+    "tileTypeId": 87
+  },
+  "boulder_small_b": {
+    "path": "environment/rocks/boulder_small_b.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_c": {
+    "path": "environment/rocks/boulder_small_c.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_d": {
+    "path": "environment/rocks/boulder_small_d.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_e": {
+    "path": "environment/rocks/boulder_small_e.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_f": {
+    "path": "environment/rocks/boulder_small_f.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_g": {
+    "path": "environment/rocks/boulder_small_g.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_small_h": {
+    "path": "environment/rocks/boulder_small_h.png",
+    "frameWidth": 96,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_a": {
+    "path": "environment/rocks/boulder_large_a.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    },
+    "tileTypeId": 88
+  },
+  "boulder_large_b": {
+    "path": "environment/rocks/boulder_large_b.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_c": {
+    "path": "environment/rocks/boulder_large_c.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_d": {
+    "path": "environment/rocks/boulder_large_d.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_e": {
+    "path": "environment/rocks/boulder_large_e.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_f": {
+    "path": "environment/rocks/boulder_large_f.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_g": {
+    "path": "environment/rocks/boulder_large_g.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "boulder_large_h": {
+    "path": "environment/rocks/boulder_large_h.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  }
+}

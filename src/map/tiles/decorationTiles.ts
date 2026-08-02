@@ -7,6 +7,19 @@ import {
   WELL,
   GRASSY_WEED,
   DIRT_PATCH,
+  WILDFLOWER_TUFT,
+  PEBBLE_SCATTER,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  boulderSpriteKey,
+  CAMPFIRE,
+  CAMPFIRE_FLAME_FPS,
+  CAMPFIRE_FLAME_FRAMES,
+  GOBLIN_TENT,
+  DEN_HOLLOW,
+  goblinTentSpriteKey,
+  CLIFF,
   FENCE,
   GARDEN_PLANTING,
   BARREL,
@@ -580,6 +593,441 @@ function drawGardenPlanting(
   ctx.fill();
 }
 
+// ── wilderness ground cover ────────────────────────────────────────────────
+//
+// Neither painter may put ink outside its own tile. Terrain is baked in
+// 16x16-tile chunks, each clipped to its own rect, so anything that escapes is
+// sliced off in a straight line every sixteen tiles — which is why the
+// wildflower feet are inset by the height of the tallest bloom rather than by
+// the shared margin.
+//
+// Both painters are position-hashed and stateless: the tile stores nothing, and
+// the same tile draws the same clump every frame and after every scene rebuild.
+
+/**
+ * Avalanche mixing constants, and the salts that separate one stream from
+ * another.
+ *
+ * The first cut of this used `(|tx*a + ty*b| % 251) / 251` and passed `tx + i`
+ * for the i-th element of a clump. That expression is **linear in its
+ * arguments**, so stepping `i` steps the result by a constant: every clump came
+ * out as points on one fixed diagonal with a fixed spacing, identical in shape
+ * on every tile in the map, and the seven "pebbles" overlapped into a single
+ * diagonal smear. A scatter pass that draws the same motif everywhere is worse
+ * than no scatter pass, because it adds a repeat instead of breaking one.
+ *
+ * `Math.imul` with a shift-xor finish is the idiom used throughout the tile
+ * renderers, and it decorrelates the element index properly.
+ */
+const COVER_HASH_MIX_X = 2654435761;
+const COVER_HASH_MIX_Y = 2246822519;
+const COVER_HASH_MIX_INDEX = 3266489917;
+const COVER_HASH_FINAL_SHIFT = 15;
+const COVER_HASH_UINT32 = 0x100000000;
+
+/** Salts, so the same tile and element can draw several independent values. */
+const COVER_SALT_X = 1;
+const COVER_SALT_Y = 2;
+const COVER_SALT_SIZE = 3;
+const COVER_SALT_SPECIES = 4;
+
+/** Stable value in [0, 1) for one element of one tile's clump. */
+function coverHash01(tx: number, ty: number, index: number, salt: number): number {
+  const position = Math.imul(tx, COVER_HASH_MIX_X) ^ Math.imul(ty, COVER_HASH_MIX_Y);
+  const salted = position ^ Math.imul(index * COVER_SALT_STRIDE + salt, COVER_HASH_MIX_INDEX);
+  const mixed = Math.imul(salted, COVER_HASH_MIX_X);
+  const avalanched = mixed ^ (mixed >>> COVER_HASH_FINAL_SHIFT);
+  return (avalanched >>> 0) / COVER_HASH_UINT32;
+}
+
+/** Keeps element index and salt from aliasing onto each other. */
+const COVER_SALT_STRIDE = 16;
+
+/** Inset kept clear on every side, so a clump never touches the tile edge. */
+const COVER_MARGIN_PX = 5;
+
+/** Centre of a tile, and of a 0..1 hash. */
+const TILE_CENTRE_FRACTION = 0.5;
+const HALF = 0.5;
+
+const WILDFLOWER_COUNT = 5;
+const WILDFLOWER_STEM_MIN_PX = 3;
+const WILDFLOWER_STEM_RANGE_PX = 4;
+const WILDFLOWER_STEM_WIDTH_PX = 1;
+const WILDFLOWER_HEAD_RADIUS_PX = 1.8;
+const WILDFLOWER_EYE_RADIUS_PX = 0.7;
+const WILDFLOWER_STEM_COLOR = '#5c6f2c';
+const WILDFLOWER_EYE_COLOR = '#f2e08c';
+/**
+ * One clump is all one species — a meadow is patches of a flower, not a
+ * mixture — so the head colour is chosen per tile rather than per bloom.
+ */
+const WILDFLOWER_HEAD_COLORS: ReadonlyArray<string> = [
+  '#d8dce8',
+  '#c4a2dc',
+  '#e8d060',
+  '#d87c9c',
+  '#8fb6e0',
+];
+
+/**
+ * Highest a bloom's ink can reach above its foot: the longest stem plus the head
+ * that sits on top of it.
+ *
+ * The feet are inset from the tile's top by this, not by `COVER_MARGIN_PX`,
+ * because a stem is drawn *upward*. With the shared margin the tallest blooms
+ * put their heads up to four pixels above the tile — and terrain is baked in
+ * 16x16-tile chunks, each clipped to its own rect, so every flower on a chunk's
+ * top row had its head sliced off in a straight line every sixteen tiles.
+ */
+const WILDFLOWER_FOOT_TOP_INSET_PX =
+  WILDFLOWER_STEM_MIN_PX + WILDFLOWER_STEM_RANGE_PX + WILDFLOWER_HEAD_RADIUS_PX;
+
+function drawWildflowerTuft(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const spreadX = ts - COVER_MARGIN_PX * 2;
+  const spreadY = ts - COVER_MARGIN_PX - WILDFLOWER_FOOT_TOP_INSET_PX;
+  const species = Math.floor(
+    coverHash01(tx, ty, 0, COVER_SALT_SPECIES) * WILDFLOWER_HEAD_COLORS.length,
+  );
+  const headColor = WILDFLOWER_HEAD_COLORS[Math.min(WILDFLOWER_HEAD_COLORS.length - 1, species)];
+
+  for (let i = 0; i < WILDFLOWER_COUNT; i++) {
+    const footX = sx + COVER_MARGIN_PX + coverHash01(tx, ty, i, COVER_SALT_X) * spreadX;
+    const footY =
+      sy + WILDFLOWER_FOOT_TOP_INSET_PX + coverHash01(tx, ty, i, COVER_SALT_Y) * spreadY;
+    const stemLength =
+      WILDFLOWER_STEM_MIN_PX + coverHash01(tx, ty, i, COVER_SALT_SIZE) * WILDFLOWER_STEM_RANGE_PX;
+
+    ctx.fillStyle = WILDFLOWER_STEM_COLOR;
+    ctx.fillRect(footX, footY - stemLength, WILDFLOWER_STEM_WIDTH_PX, stemLength);
+
+    ctx.fillStyle = headColor;
+    ctx.beginPath();
+    ctx.arc(footX, footY - stemLength, WILDFLOWER_HEAD_RADIUS_PX, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = WILDFLOWER_EYE_COLOR;
+    ctx.beginPath();
+    ctx.arc(footX, footY - stemLength, WILDFLOWER_EYE_RADIUS_PX, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const PEBBLE_COUNT = 7;
+const PEBBLE_MIN_RADIUS_PX = 1.1;
+const PEBBLE_RADIUS_RANGE_PX = 1.7;
+/** Light comes from the upper left, as it does for every prop in the repo. */
+const PEBBLE_HIGHLIGHT_OFFSET_PX = 0.5;
+const PEBBLE_SHADOW_OFFSET_PX = 0.6;
+const PEBBLE_SHADOW_COLOR = 'rgba(24,22,20,0.34)';
+const PEBBLE_BODY_COLOR = '#8b867d';
+const PEBBLE_HIGHLIGHT_COLOR = '#b6b1a6';
+const PEBBLE_HIGHLIGHT_RADIUS_SHARE = 0.55;
+
+function drawPebbleScatter(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const spread = ts - COVER_MARGIN_PX * 2;
+  for (let i = 0; i < PEBBLE_COUNT; i++) {
+    const radius =
+      PEBBLE_MIN_RADIUS_PX + coverHash01(tx, ty, i, COVER_SALT_SIZE) * PEBBLE_RADIUS_RANGE_PX;
+    const cx = sx + COVER_MARGIN_PX + coverHash01(tx, ty, i, COVER_SALT_X) * spread;
+    const cy = sy + COVER_MARGIN_PX + coverHash01(tx, ty, i, COVER_SALT_Y) * spread;
+
+    ctx.fillStyle = PEBBLE_SHADOW_COLOR;
+    ctx.beginPath();
+    ctx.arc(cx + PEBBLE_SHADOW_OFFSET_PX, cy + PEBBLE_SHADOW_OFFSET_PX, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = PEBBLE_BODY_COLOR;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = PEBBLE_HIGHLIGHT_COLOR;
+    ctx.beginPath();
+    ctx.arc(
+      cx - PEBBLE_HIGHLIGHT_OFFSET_PX,
+      cy - PEBBLE_HIGHLIGHT_OFFSET_PX,
+      radius * PEBBLE_HIGHLIGHT_RADIUS_SHARE,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+}
+
+/**
+ * Wet granite: darker and bluer than the dry boulders, because a rock standing
+ * in a river is wet, plus a bright waterline where the surface cuts across it.
+ */
+const RIVER_ROCK_SHADOW_COLOR = '#2c3438';
+const RIVER_ROCK_BODY_COLOR = '#4d565a';
+const RIVER_ROCK_LIT_COLOR = '#6d7679';
+const RIVER_ROCK_DROWNED_COLOR = 'rgba(18, 44, 50, 0.45)';
+
+/** Lobes per rock, so a stone is a lump rather than a circle. */
+const RIVER_ROCK_LOBES = 3;
+const RIVER_ROCK_MIN_RADIUS_FRACTION = 0.17;
+const RIVER_ROCK_RADIUS_RANGE_FRACTION = 0.12;
+const RIVER_ROCK_LOBE_SPREAD_FRACTION = 0.1;
+/** Light is upper-left, as everywhere else in the repo. */
+const RIVER_ROCK_LIT_OFFSET_FRACTION = 0.045;
+/** How far up the stone the wet darkening reaches, as a fraction of a tile. */
+const RIVER_ROCK_WET_HEIGHT_FRACTION = 0.3;
+/** The same hue as `RIVER_ROCK_DROWNED_COLOR` at zero alpha — see the fade note. */
+const RIVER_ROCK_WET_FADE_COLOR = 'rgba(18, 44, 50, 0)';
+
+/** One lobe of a river rock, in absolute pixels. */
+interface RiverRockLobe {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+}
+
+/**
+ * The stone's lobes, derived from the tile hash once so the body, the clip and
+ * the waterline all agree about where the rock actually is.
+ */
+function riverRockLobes(
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): RiverRockLobe[] {
+  const centreX = sx + ts * TILE_CENTRE_FRACTION;
+  const centreY = sy + ts * TILE_CENTRE_FRACTION;
+  const spread = ts * RIVER_ROCK_LOBE_SPREAD_FRACTION;
+  const lobes: RiverRockLobe[] = [];
+  for (let index = 0; index < RIVER_ROCK_LOBES; index++) {
+    lobes.push({
+      x: centreX + (coverHash01(tx, ty, index, COVER_SALT_X) - HALF) * spread * 2,
+      y: centreY + (coverHash01(tx, ty, index, COVER_SALT_Y) - HALF) * spread * 2,
+      radius:
+        ts *
+        (RIVER_ROCK_MIN_RADIUS_FRACTION +
+          coverHash01(tx, ty, index, COVER_SALT_SIZE) * RIVER_ROCK_RADIUS_RANGE_FRACTION),
+    });
+  }
+  return lobes;
+}
+
+/**
+ * A wet rock standing in the river.
+ *
+ * Exported so `WaterAnimationSystem` can repaint it over its own marks — the
+ * chunk bake draws it too, and the water system's second pass is what keeps the
+ * drifting streaks and the rock's own wake *behind* the stone.
+ */
+export function drawRiverRockTile(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const lobes = riverRockLobes(sx, sy, ts, tx, ty);
+  const lit = ts * RIVER_ROCK_LIT_OFFSET_FRACTION;
+
+  const paintLobes = (color: string, offset: number): void => {
+    ctx.fillStyle = color;
+    for (const lobe of lobes) {
+      ctx.beginPath();
+      ctx.arc(lobe.x + offset, lobe.y + offset, lobe.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  paintLobes(RIVER_ROCK_SHADOW_COLOR, 0);
+  paintLobes(RIVER_ROCK_BODY_COLOR, -lit);
+  paintLobes(RIVER_ROCK_LIT_COLOR, -lit * 2);
+
+  // Wet stone, and nothing that reads as a line.
+  //
+  // A rock in a river went through three waterline treatments and every one of
+  // them was wrong at 32 px a tile: a bright bar across the tile, then the same
+  // bar clipped to the stone (a stripe painted on the rock), then a stroked ring
+  // behind it (which just looked like the rock had a hoop round it). At this size
+  // a drawn surface line has nowhere to go — the stone is barely a dozen pixels
+  // tall, so any line lands either across its face or ringing it. The rock reads
+  // as standing in water from the wake the animation puts round it and from this
+  // darkening alone, so there is no line at all now. **Do not add one back.**
+  //
+  // The gradient is what keeps the darkening from becoming a line in its own
+  // right: a flat fill had a hard top edge, which is the same artefact again. It
+  // fades at constant hue rather than to `rgba(0,0,0,0)`, because canvas
+  // interpolates gradient stops un-premultiplied and a fade to transparent black
+  // greys the middle of the band.
+  const depth = lobes.reduce((lowest, lobe) => Math.max(lowest, lobe.y + lobe.radius), -Infinity);
+  const wetTop = depth - ts * RIVER_ROCK_WET_HEIGHT_FRACTION;
+  const wet = ctx.createLinearGradient(0, wetTop, 0, depth);
+  wet.addColorStop(0, RIVER_ROCK_WET_FADE_COLOR);
+  wet.addColorStop(1, RIVER_ROCK_DROWNED_COLOR);
+
+  ctx.save();
+  ctx.beginPath();
+  for (const lobe of lobes) {
+    ctx.moveTo(lobe.x + lobe.radius, lobe.y);
+    ctx.arc(lobe.x, lobe.y, lobe.radius, 0, Math.PI * 2);
+  }
+  ctx.clip();
+  ctx.fillStyle = wet;
+  ctx.fillRect(sx, wetTop, ts, depth - wetTop);
+  ctx.restore();
+}
+
+/** The scraped-out hollow a den is dug into: bare, dark, and picked over. */
+const DEN_HOLLOW_FLOOR_COLOR = 'rgba(24,20,17,0.5)';
+const DEN_HOLLOW_RIM_COLOR = 'rgba(58,52,45,0.55)';
+const DEN_HOLLOW_SCRAPE_COLOR = 'rgba(14,11,9,0.45)';
+const DEN_HOLLOW_RADIUS_FRACTION = 0.44;
+const DEN_HOLLOW_RIM_WIDTH_PX = 2;
+const DEN_HOLLOW_SCRAPES = 4;
+const DEN_HOLLOW_SCRAPE_LENGTH_FRACTION = 0.3;
+const DEN_HOLLOW_SCRAPE_WIDTH_PX = 1;
+
+function drawDenHollow(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const centreX = sx + ts * TILE_CENTRE_FRACTION;
+  const centreY = sy + ts * TILE_CENTRE_FRACTION;
+  const radius = ts * DEN_HOLLOW_RADIUS_FRACTION;
+
+  ctx.fillStyle = DEN_HOLLOW_FLOOR_COLOR;
+  ctx.beginPath();
+  ctx.arc(centreX, centreY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = DEN_HOLLOW_RIM_COLOR;
+  ctx.lineWidth = DEN_HOLLOW_RIM_WIDTH_PX;
+  ctx.stroke();
+
+  // Claw scrapes, hashed so a run of hollow tiles does not repeat one mark, and
+  // kept **inside the hollow** rather than inside the tile.
+  //
+  // The first version started a scrape up to `radius` from the centre and ran it
+  // a further 0.3 of a tile outward, so its ink reached 1.24 tiles from the tile
+  // origin: 352 of 400 sampled tiles painted outside themselves, by up to 36 px.
+  // `DEN_HOLLOW` is not a Y-sorted decoration, so that ink is baked into the
+  // 16x16-tile chunk — sheared along a straight line at every chunk boundary and
+  // overdrawing its neighbours everywhere else.
+  ctx.strokeStyle = DEN_HOLLOW_SCRAPE_COLOR;
+  ctx.lineWidth = DEN_HOLLOW_SCRAPE_WIDTH_PX;
+  const scrapeLength = ts * DEN_HOLLOW_SCRAPE_LENGTH_FRACTION;
+  for (let scrape = 0; scrape < DEN_HOLLOW_SCRAPES; scrape++) {
+    const angle = coverHash01(tx, ty, scrape, COVER_SALT_X) * Math.PI * 2;
+    // The far end is what must stay inside, so the start is drawn from whatever
+    // room is left once the scrape's own length is taken off the radius.
+    const reach = coverHash01(tx, ty, scrape, COVER_SALT_Y) * Math.max(0, radius - scrapeLength);
+    const fromX = centreX + Math.cos(angle) * reach;
+    const fromY = centreY + Math.sin(angle) * reach;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(fromX + Math.cos(angle) * scrapeLength, fromY + Math.sin(angle) * scrapeLength);
+    ctx.stroke();
+  }
+}
+
+// ── cliffs ─────────────────────────────────────────────────────────────────
+
+/** Rock face, lit from the upper left like everything else here. */
+const CLIFF_FACE_COLOR = '#5d5952';
+const CLIFF_FACE_DARK_COLOR = '#403c37';
+const CLIFF_TOP_LIP_COLOR = '#9a9488';
+const CLIFF_TOP_LIP_HIGHLIGHT = '#b8b1a2';
+const CLIFF_CRACK_COLOR = 'rgba(28,25,22,0.6)';
+/**
+ * Shade pooling at the **foot of the ledge's own face**, where the rock meets
+ * the ground.
+ *
+ * Not the drop-shadow onto the tile below, which is what an earlier version of
+ * this comment claimed. A tile may not paint outside itself — terrain is baked
+ * in 16x16-tile chunks clipped to their own rect — so the shadow the *neighbour*
+ * receives is cast by the ground-AO pass instead, which is why `CLIFF` is in
+ * `GROUND_OCCLUDER_TYPES`. The two together are the height illusion: this darkens
+ * the base of the face, the AO darkens the ground in front of it.
+ */
+const CLIFF_FACE_FOOT_SHADE_COLOR = 'rgba(16,14,12,0.42)';
+
+/** Geometry, in tile fractions so it holds at any tile size. */
+const CLIFF_TOP_LIP_FRACTION = 0.18;
+const CLIFF_LIP_HIGHLIGHT_FRACTION = 0.06;
+const CLIFF_FACE_FOOT_SHADE_FRACTION = 0.22;
+const CLIFF_FACE_STEP_FRACTION = 0.3;
+const CLIFF_CRACKS = 3;
+const CLIFF_CRACK_WIDTH_PX = 1;
+
+function drawCliffLedge(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const lipHeight = ts * CLIFF_TOP_LIP_FRACTION;
+
+  // The face.
+  ctx.fillStyle = CLIFF_FACE_COLOR;
+  ctx.fillRect(sx, sy + lipHeight, ts, ts - lipHeight);
+
+  // A stepped darker block, offset per tile, so a run of ledge is a broken rock
+  // face rather than one flat grey band the length of the ridge.
+  const stepWidth = ts * CLIFF_FACE_STEP_FRACTION;
+  const stepX = sx + coverHash01(tx, ty, 0, COVER_SALT_X) * (ts - stepWidth);
+  ctx.fillStyle = CLIFF_FACE_DARK_COLOR;
+  ctx.fillRect(stepX, sy + lipHeight, stepWidth, ts - lipHeight);
+
+  // The top lip: the sunlit edge of the plateau above.
+  ctx.fillStyle = CLIFF_TOP_LIP_COLOR;
+  ctx.fillRect(sx, sy, ts, lipHeight);
+  ctx.fillStyle = CLIFF_TOP_LIP_HIGHLIGHT;
+  ctx.fillRect(sx, sy, ts, ts * CLIFF_LIP_HIGHLIGHT_FRACTION);
+
+  // Cracks down the face.
+  ctx.fillStyle = CLIFF_CRACK_COLOR;
+  for (let crack = 0; crack < CLIFF_CRACKS; crack++) {
+    // The crack's own width is taken off the span, or one starting in the tile's
+    // last column spills into the next. That mattered twice over: the cached
+    // overlay entry is exactly one tile square and clipped the spill away, while
+    // the uncached path drew it — so the same tile rendered differently through
+    // the two paths.
+    const crackX = sx + coverHash01(tx, ty, crack, COVER_SALT_Y) * (ts - CLIFF_CRACK_WIDTH_PX);
+    const crackTop =
+      sy + lipHeight + coverHash01(tx, ty, crack, COVER_SALT_SIZE) * (ts - lipHeight);
+    ctx.fillRect(crackX, crackTop, CLIFF_CRACK_WIDTH_PX, sy + ts - crackTop);
+  }
+
+  // Shade at the foot of the face — but only where there is open ground below
+  // for the ledge to be standing over. Against another ledge it would just
+  // darken the top of the one underneath.
+  if (structure[ty + 1]?.[tx]?.type === CLIFF) return;
+  ctx.fillStyle = CLIFF_FACE_FOOT_SHADE_COLOR;
+  ctx.fillRect(
+    sx,
+    sy + ts - ts * CLIFF_FACE_FOOT_SHADE_FRACTION,
+    ts,
+    ts * CLIFF_FACE_FOOT_SHADE_FRACTION,
+  );
+}
+
 export function drawDecorationTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -594,6 +1042,19 @@ export function drawDecorationTile(
   if (baseOnly) {
     switch (type) {
       case TREE:
+      // A boulder is written with `setStanding`, so like a tree it records the
+      // band it was dropped on and the outdoor ground path resolves the rest.
+      // Missing from here, the chunk bake drew *nothing* under the rock and
+      // every boulder on the map sat in a solid black one-tile square.
+      case BOULDER_SMALL:
+      case BOULDER_LARGE:
+      // A tent and a fire stand on the camp's beaten earth, recorded the same
+      // way. Without a case here the chunk bake draws nothing under them and
+      // every one sits in a solid black square — which is exactly what shipped
+      // for the boulders until an in-situ render caught it.
+      case CAMPFIRE:
+      case GOBLIN_TENT:
+      case CLIFF:
         // Routed through the outdoor ground path; which material actually gets
         // drawn is resolved by `groundMaterialUnder` from the `groundType` the
         // tile recorded, not from the type passed here.
@@ -825,6 +1286,93 @@ export function drawDecorationTile(
         ctx.arc(fx, fy, 1, 0, Math.PI * 2);
         ctx.fill();
       }
+      return true;
+    }
+
+    // Wildflower clump — walkable meadow cover out in the wilderness. Denser and
+    // more colourful than `GRASSY_WEED`'s occasional single bloom, because it
+    // exists to give the open country between the forests something to look at.
+    case WILDFLOWER_TUFT: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawWildflowerTuft(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // Loose stones — walkable upland cover. Drawn over whatever the tile
+    // recorded standing on, so the same type reads as stones on turf up on the
+    // highland and as stones on rock once it reaches the scree.
+    case PEBBLE_SCATTER: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawPebbleScatter(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // A wet rock standing in the river. Procedural rather than part of the baked
+    // rock family: at 32 px a tile a mid-channel stone is a couple of ellipses
+    // and a waterline, and it has to sit *under* the wake `WaterAnimationSystem`
+    // draws around it, so the boulders' Y-sorted sprite treatment would be wrong
+    // for it anyway. Its ramp is its own — see `RIVER_ROCK_BODY_COLOR` — and is
+    // deliberately darker and bluer than the dry boulders', so the two are not
+    // meant to match and neither needs retuning when the other moves.
+    case RIVER_ROCK: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawRiverRockTile(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // Boulders. Sprite only — the ground beneath was already drawn by the
+    // chunk-cache's `baseOnly` pass, and repainting it here would wipe out the
+    // overhang of any neighbouring boulder that has already drawn into this
+    // tile's space. (`TREE` is drawn the same way, for the same reason.)
+    case BOULDER_SMALL:
+    case BOULDER_LARGE: {
+      drawSpriteKey(ctx, boulderSpriteKey(type, tx, ty), 'idle', 0, sx, sy, ts);
+      return true;
+    }
+
+    // A goblin camp's hide tent. Sprite only — the ground beneath was drawn by
+    // the chunk-cache's `baseOnly` pass.
+    case GOBLIN_TENT: {
+      drawSpriteKey(ctx, goblinTentSpriteKey(tx, ty), 'idle', 0, sx, sy, ts);
+      return true;
+    }
+
+    // A camp's fire. Animated off the shared `frameTime`, the way a torch is,
+    // which is why `CAMPFIRE` is kept out of `CACHEABLE_OVERLAY_TYPES` — a
+    // cached frame is a fire that has gone out.
+    case CAMPFIRE: {
+      drawSpriteKey(
+        ctx,
+        'campfire',
+        'idle',
+        timeFrameIndex(frameTime, CAMPFIRE_FLAME_FPS, CAMPFIRE_FLAME_FRAMES),
+        sx,
+        sy,
+        ts,
+      );
+      return true;
+    }
+
+    // The gnawed hollow at the centre of a troglodyte den: walkable ground, a
+    // dark scrape in the scree rather than anything standing on it.
+    case DEN_HOLLOW: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawDenHollow(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // A stone ledge along a ridge. Procedural, and neighbour-aware like the
+    // fence and the bridge: what a ledge looks like depends on whether the tile
+    // below it is open ground for its shadow to fall on.
+    //
+    // **The shading is the whole illusion.** The game has no z-axis; a cliff is
+    // a non-walkable decoration, and what makes it read as height rather than as
+    // a grey stripe is the bright lip along its top, the shade pooling at the
+    // foot of its face, and — cast by the ground-AO pass, since a tile may not
+    // paint outside itself — the band darkening the ground to its south.
+    case CLIFF: {
+      drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
+      drawCliffLedge(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
 

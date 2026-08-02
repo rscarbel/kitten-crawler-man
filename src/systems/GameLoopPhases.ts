@@ -1,8 +1,9 @@
-import { TILE_SIZE, PLAYER_SPEED } from '../core/constants';
+import { TILE_SIZE, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { platform } from '../core/Platform';
 import { type InputManager } from '../core/InputManager';
 import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
+import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import { type Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -27,7 +28,7 @@ import { frameTime } from '../utils';
  *   5. updateMobAI      — activate nearby mobs, run AI, clamp bosses
  *   6. resolveCombat    — attack hits, kills, XP split, loot drops
  *   7. postCombat       — gore, grub spawns, arena phases, Mongo
- *   8. tickTimers       — player timers, loot TTL, dynamite, level timer
+ *   8. tickTimers       — player timers, loot TTL, dynamite, smush blasts, level timer
  *   9. checkDeath       — game over conditions
  */
 
@@ -44,20 +45,6 @@ const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
 // Wall collision offsets
 const LEADING_EDGE_FRONT = 0.72;
 const LEADING_EDGE_BACK = 0.28;
-const CENTER_COLLISION_OFFSET = 0.5;
-
-/**
- * How far down the sprite a *southward* step is tested, as a fraction of a tile.
- *
- * The default centre test lets a player walk until their waist reaches the wall,
- * which plants their whole lower half on top of the wall tile — glaring in a
- * small room whose south wall is right behind the camera. Testing near the sole
- * instead stops them with their feet on the last floor tile. Not a flat 1.0:
- * that would refuse the last floor row outright, since a player standing on it
- * already has their soles on its bottom edge.
- */
-const SOLE_COLLISION_OFFSET = 0.95;
-
 /**
  * Which part of the player is tested against walls when walking south.
  * `waist` is the long-standing behaviour; `sole` keeps feet off wall tiles and
@@ -113,6 +100,37 @@ export function readMovement(
 }
 
 /**
+ * The speed multiplier for the tile a player is *standing on*, not the one they
+ * are stepping into.
+ *
+ * Reading the destination instead would brake a step early on the bank and
+ * accelerate one step early on the way out, so the slowdown would not line up
+ * with the splash or with the sprite sinking. Tested on the tile under the
+ * player's centre, the same point the renderer uses to decide they are wading.
+ */
+function wadeSpeedFactor(player: Player, gameMap: GameMap): number {
+  return isStandingInWater(player, gameMap) ? WADE_SPEED_FACTOR : 1;
+}
+
+/**
+ * Whether a player's footing is river water.
+ *
+ * The single definition of "in the water", shared by the movement slowdown, the
+ * submerged rendering and the splash effects, so the three cannot disagree about
+ * where the bank is. It reads the tile under the player's centre rather than
+ * their soles: the soles sit at the very bottom of the sprite box and would
+ * report water for a frame while the body still visibly stands on the bank.
+ *
+ * A `BRIDGE` tile is its own type and is not water, so crossing a bridge is dry
+ * and full speed — which is the whole point of a bridge.
+ */
+export function isStandingInWater(player: Player, gameMap: GameMap): boolean {
+  const tileX = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
+  const tileY = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
+  return gameMap.isWadeable(tileX, tileY);
+}
+
+/**
  * Phase 2: Apply movement vector to player position with collision detection.
  */
 export function applyMovement(
@@ -149,8 +167,8 @@ export function applyMovement(
     dx *= DIAGONAL_PENALTY;
     dy *= DIAGONAL_PENALTY;
   }
-  dx *= PLAYER_SPEED * player.speedMultiplier;
-  dy *= PLAYER_SPEED * player.speedMultiplier;
+  dx *= PLAYER_SPEED * player.speedMultiplier * wadeSpeedFactor(player, gameMap);
+  dy *= PLAYER_SPEED * player.speedMultiplier * wadeSpeedFactor(player, gameMap);
 
   const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
   const tileXnext =

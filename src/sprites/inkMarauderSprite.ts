@@ -248,9 +248,6 @@ const SHARK_LUNGE_REACH = 0.4;
 /** Sine phase the lunge peaks at — a quarter turn in, where sin() is 1. */
 const LUNGE_ARC_PEAK_PHASE = 0.5;
 
-/** `Mob.renderDamageFlash` outlines exactly one tile. */
-const FLASH_HEIGHT_TILES = 1;
-
 type Ctx = CanvasRenderingContext2D;
 
 function setContourStyle(ctx: Ctx): void {
@@ -807,9 +804,3 @@ export const INK_MARAUDER_HALF_WIDTH = Math.max(
   SHARK_FOIL_X + SHARK_FOIL_LOBE_RADIUS + SHARK_LUNGE_REACH,
   -SHARK_TAIL_UPPER_TIP.x,
 );
-
-/**
- * How far to lift one tile of tile-anchored feedback — a damage flash — so it
- * centres on the shark's spine instead of on the empty air it floats over.
- */
-export const INK_SHARK_FLASH_Y_OFFSET = -(GROUND_ANCHOR_Y + SHARK_SPINE_Y) + FLASH_HEIGHT_TILES / 2;

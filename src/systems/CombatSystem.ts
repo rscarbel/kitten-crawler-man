@@ -10,6 +10,8 @@ import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
+import { SMUSH_STAMP_X, SMUSH_STAMP_Y } from '../sprites/humanSprite';
+import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import { diminishedXpShare, type XpDiminishingTier } from '../levels/xpDiminishing';
@@ -70,6 +72,8 @@ export interface CombatContext {
   destructibles?: DestructiblePropSystem;
   /** Absent everywhere but the overworld, which is the only map that grows trees. */
   trees?: TreeSystem;
+  /** Absent in scenes that draw no world effects (e.g. building interiors). */
+  smushFx?: Pick<SmushEffectSystem, 'spawn'>;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
   /** This floor's combat-XP diminishing curve. Absent means kills award full XP. */
@@ -172,6 +176,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const baseDamage = human.getMeleeDamage();
     const innerRadius = stats.innerBlastRadius * TILE_SIZE;
     const outerRadius = stats.outerBlastRadius * TILE_SIZE;
+
+    // Spawned before the damage pass so the shockwave and the hits it explains
+    // start on the same frame. Centred on the heel that made it, not on him:
+    // the damage query still runs off his centre, but a wave that starts at his
+    // waist reads as coming out of his body.
+    ctx.smushFx?.spawn(
+      human.x + SMUSH_STAMP_X * TILE_SIZE,
+      human.y + SMUSH_STAMP_Y * TILE_SIZE,
+      outerRadius,
+      stats.isFullPower,
+    );
 
     let totalSmushDamage = 0;
 

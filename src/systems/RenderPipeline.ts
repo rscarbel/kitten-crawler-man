@@ -26,8 +26,10 @@ import type { BuildingSystem } from './BuildingSystem';
 import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
+import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
+import type { WaterAnimationSystem } from './WaterAnimationSystem';
 import type { LootSystem } from './LootSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
@@ -36,6 +38,7 @@ import type { TreasureChest, TreasureChestSystem } from './TreasureChestSystem';
 import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { isStandingInWater } from './GameLoopPhases';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -54,6 +57,9 @@ const DRAW_KIND_TOWNSPERSON = 4;
 
 /** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
 const DRAW_KIND_TOWN_PROP = 5;
+
+/** Halfway across a tile — where a crawler's centre line sits. */
+const TILE_CENTRE_FRACTION = 0.5;
 
 /** Y-sort offset to account for sprite foot position. */
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
@@ -108,6 +114,18 @@ interface DrawEntry {
     render(ctx: CanvasRenderingContext2D, camX: number, camY: number, ts: number): void;
   } | null;
   chestRef: TreasureChest | null;
+  /**
+   * Screen y of the river surface across this entry's sprite, or `null` when it
+   * is not standing in water.
+   *
+   * Carried on the entry rather than recomputed in the draw loop because the
+   * loop has only the minimal `render`-shaped entity — resolving it there would
+   * need a cast back to `Player`, and the two places that push players already
+   * hold the typed instance.
+   */
+  waterlineScreenY: number | null;
+  /** Screen x of the wader's centre; only meaningful when wading. */
+  waterlineScreenX: number;
 }
 
 /** Everything the render pipeline needs, provided by the scene each frame. */
@@ -139,10 +157,13 @@ export interface RenderContext {
   barriers: BarrierSystem;
   spells: SpellSystem;
   dynamite: DynamiteSystem;
+  smushFx: SmushEffectSystem;
   /** Null on maps without smashable props (the overworld, building interiors). */
   destructibles: DestructiblePropSystem | null;
   /** Null on every map but the overworld, which is the only one that grows trees. */
   trees: TreeSystem | null;
+  /** Null on every map but the overworld, which is the only one with rivers. */
+  water: WaterAnimationSystem | null;
   loot: LootSystem;
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
@@ -164,9 +185,24 @@ export class RenderPipeline {
 
   private _getEntry(): DrawEntry {
     if (this._drawCount < this._drawPool.length) {
-      return this._drawPool[this._drawCount++];
+      const pooled = this._drawPool[this._drawCount++];
+      // Cleared here, not at the push sites. Every other field is assigned by
+      // all of them, but only the two player pushes know about a waterline — a
+      // pooled entry that last held a wading player would otherwise hand a stale
+      // clip to whatever decoration or mob reused the slot.
+      pooled.waterlineScreenY = null;
+      return pooled;
     }
-    const e: DrawEntry = { sortY: 0, kind: 0, tx: 0, ty: 0, entity: null, chestRef: null };
+    const e: DrawEntry = {
+      sortY: 0,
+      kind: 0,
+      tx: 0,
+      ty: 0,
+      entity: null,
+      chestRef: null,
+      waterlineScreenY: null,
+      waterlineScreenX: 0,
+    };
     this._drawPool.push(e);
     this._drawCount++;
     return e;
@@ -198,6 +234,10 @@ export class RenderPipeline {
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
     rc.destructibles?.renderWreckage(ctx, camX, camY);
     rc.trees?.renderGround(ctx, camX, camY);
+    // Same slot as the trees, and for the same reason: the river's moving parts
+    // belong over the chunk-baked ground and under the Y-sorted pass, so the
+    // player wades in front of the highlights rather than beneath them.
+    rc.water?.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -280,21 +320,25 @@ export class RenderPipeline {
       e.kind = DRAW_KIND_MOB;
       e.entity = mob;
       e.chestRef = null;
+      // Mobs wade too, and a mob drawn whole while standing mid-river reads as
+      // walking *on* the water — more obviously wrong than the player would,
+      // because there are several of them and they cross at odd angles.
+      if (mob.isWading()) {
+        e.waterlineScreenY = mob.y + TILE_SIZE - mob.waterlineAboveFootPx - camY;
+        e.waterlineScreenX = mob.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
+      }
     }
 
-    {
+    for (const player of [inactive, active]) {
       const e = this._getEntry();
-      e.sortY = inactive.y + ENTITY_SORT_Y_OFFSET;
+      e.sortY = player.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_PLAYER;
-      e.entity = inactive;
+      e.entity = player;
       e.chestRef = null;
-    }
-    {
-      const e = this._getEntry();
-      e.sortY = active.y + ENTITY_SORT_Y_OFFSET;
-      e.kind = DRAW_KIND_PLAYER;
-      e.entity = active;
-      e.chestRef = null;
+      e.waterlineScreenY = isStandingInWater(player, gameMap)
+        ? player.y + TILE_SIZE - player.waterlineAboveFootPx - camY
+        : null;
+      e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
     }
 
     if (townsfolk !== undefined) {
@@ -349,6 +393,17 @@ export class RenderPipeline {
         if (chest !== null) {
           treasureChests.renderSingle(ctx, camX, camY, active, chest);
         }
+      } else if (item.waterlineScreenY !== null) {
+        // Wading: clip the body off at the surface and cap the cut with a
+        // meniscus, so the crawler is *in* the river rather than standing on it.
+        const waterlineScreenY = item.waterlineScreenY;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, viewportWidth(), waterlineScreenY);
+        ctx.clip();
+        item.entity?.render(ctx, camX, camY, TILE_SIZE);
+        ctx.restore();
+        rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY);
       } else {
         item.entity?.render(ctx, camX, camY, TILE_SIZE);
       }
@@ -368,6 +423,10 @@ export class RenderPipeline {
       rc;
 
     gore.renderParticles(ctx, camX, camY);
+    // Droplets go over the entities: water thrown up by a crawler stepping into
+    // the river passes in front of the body that threw it. Everything else the
+    // water system draws is surface, and stays under them in `renderGround`.
+    rc.water?.renderSplashes(ctx, camX, camY);
     rc.destructibles?.renderEffects(ctx, camX, camY);
     rc.trees?.render(ctx, camX, camY);
     bodyPartGore.renderFlying(ctx, camX, camY);
@@ -380,6 +439,9 @@ export class RenderPipeline {
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
     dynamite.renderThrowPath(ctx, camX, camY, pm.human);
+    // Last of the world effects: the stamp's fire reads as being in front of
+    // everything it just hit.
+    rc.smushFx.render(ctx, camX, camY);
 
     // Cat speech bubble for Mongo summon/recall
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);

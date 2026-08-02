@@ -47,7 +47,12 @@ export class GumGum extends Mob {
     this.isMoving = false;
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const box = this.spriteBox(camX, camY, tileSize);
     drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);

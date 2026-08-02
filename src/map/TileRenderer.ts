@@ -20,6 +20,11 @@ import {
   BARREL_SIDE,
   BOOKSHELF,
   CRATE,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  CLIFF,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
@@ -91,6 +96,18 @@ const DECORATION_TYPES = new Set([
   BARREL_SIDE,
   CRATE,
   BOOKSHELF,
+  // The wilderness's boulders. Y-sorted so a player standing north of a rock is
+  // drawn behind it and one standing south is drawn in front — a two-tile-wide
+  // boulder overhangs its own tile, so flat-drawing it would put the player's
+  // feet through the stone.
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  // The goblin camp, and the wilderness's ledges. Each is taller than its own
+  // tile and a player should be able to stand behind one, so all three are
+  // Y-sorted rather than baked flat into the chunk.
+  CAMPFIRE,
+  GOBLIN_TENT,
+  CLIFF,
 ]);
 
 /**
@@ -112,6 +129,9 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   // overhangs hundreds of pixels — so caching skips a resample per frame.
   SPRITE_BUILDING,
   MAIN_TOWER,
+  // Static and genuinely multi-op — a face, a stepped block, a lip, three cracks
+  // and a shadow — which is exactly what this cache is for.
+  CLIFF,
 ]);
 
 /** Tile type used where a neighbour lookup falls off the grid. */

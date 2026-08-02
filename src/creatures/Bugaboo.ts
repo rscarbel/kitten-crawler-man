@@ -155,7 +155,12 @@ export class Bugaboo extends Mob {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     if (!this.isAlive) return;
     if (this.isBreakingIn) return;
 
@@ -182,6 +187,5 @@ export class Bugaboo extends Mob {
     );
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

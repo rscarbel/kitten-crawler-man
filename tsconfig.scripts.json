@@ -4,7 +4,9 @@
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "scripts/verify-progression.ts",
@@ -19,6 +21,24 @@
     "scripts/nodeCanvasGlobals.ts",
     "scripts/treeArt.ts",
     "scripts/generate-tree-sprites.ts",
-    "scripts/render-trees.ts"
+    "scripts/render-trees.ts",
+    "scripts/rockArt.ts",
+    "scripts/generate-rock-sprites.ts",
+    "scripts/render-rocks.ts",
+    "scripts/campArt.ts",
+    "scripts/generate-camp-sprites.ts",
+    "scripts/render-camps.ts",
+    "scripts/carlArt.ts",
+    "scripts/generate-human-sprite.ts",
+    "scripts/render-human.ts",
+    "scripts/svgCanvas.ts",
+    "scripts/svgSubjects.ts",
+    "scripts/render-svg.ts",
+    "scripts/goblinArt.ts",
+    "scripts/goblinWeapons.ts",
+    "scripts/goblinGore.ts",
+    "scripts/generate-goblin-sprites.ts",
+    "scripts/generate-goblin-sprites.gates.ts",
+    "scripts/render-goblins.ts"
   ]
 }

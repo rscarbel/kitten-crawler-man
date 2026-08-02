@@ -897,7 +897,12 @@ export class GrotesqueSpider extends Mob {
     ctx.restore();
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;

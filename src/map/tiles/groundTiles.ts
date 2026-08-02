@@ -45,6 +45,7 @@ import {
   ROOF_THATCH,
   MAIN_TOWER,
   RUINED_WALL,
+  CLIFF,
   SPRITE_BUILDING,
   TOWN_WALL,
 } from '../tileTypes';
@@ -1242,6 +1243,11 @@ const GROUND_OCCLUDER_TYPES = new Set<number>([
   ROOF_CIRCUS_BLUE,
   ROOF_CIRCUS_PURPLE,
   TOWN_WALL,
+  // A ledge shades the ground at its foot. It is the one wilderness solid that
+  // belongs here: the boulders are rounded and carry their own contact shadow in
+  // their art, and a rectangular occlusion band under one would show as a grey
+  // strip poking out from beneath it.
+  CLIFF,
 ]);
 
 /**

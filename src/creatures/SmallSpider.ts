@@ -403,7 +403,12 @@ export class SmallSpider extends Mob {
     return Math.max(0, 1 - (this.corpseFrames - fadeStart) / CORPSE_FADE_FRAMES);
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
@@ -428,6 +433,5 @@ export class SmallSpider extends Mob {
     drawSpiderSprite(ctx, sx, sy, tileSize, this.facingX, this.facingY, this._animation());
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

@@ -109,7 +109,7 @@ export class Troglodyte extends Mob {
         if (nearest) {
           this.state = 'stalking';
         } else {
-          this.doWander();
+          this.returnHomeOrWander();
         }
         break;
       }
@@ -130,6 +130,13 @@ export class Troglodyte extends Mob {
           this.windupTimer = WINDUP_FRAMES;
           this.isMoving = false;
           this._faceToward(nearest);
+        } else if (this.isBeyondLeash(this.x, this.y)) {
+          // A den's resident that has strayed past its own leash stops
+          // *travelling* and heads home — but it keeps its target, so anything
+          // that follows it still gets stalked and struck. No-op for an
+          // unleashed troglodyte: every one on floors 1 and 2. See
+          // `Mob.isBeyondLeash`.
+          this.returnHomeOrWander();
         } else {
           // Slowly lumber toward the player
           this.followTargetAStar(
@@ -243,7 +250,12 @@ export class Troglodyte extends Mob {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
@@ -270,6 +282,5 @@ export class Troglodyte extends Mob {
     ctx.restore();
 
     this.renderMobHealthBar(ctx, sx, sy);
-    this.renderDamageFlash(ctx, sx, sy);
   }
 }

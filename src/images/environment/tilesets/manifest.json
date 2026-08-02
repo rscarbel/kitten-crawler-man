@@ -82,6 +82,24 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Plaza flagstone"
+      },
+      "water": {
+        "row": 7,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "River water (static base — motion is a render overlay)"
+      },
+      "highland": {
+        "row": 8,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Highland turf (thin upland grass)"
+      },
+      "scree": {
+        "row": 9,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Scree (broken hillside rock)"
       }
     }
   },

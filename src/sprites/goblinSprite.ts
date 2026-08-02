@@ -1,41 +1,326 @@
-import { drawSpriteKey, walkFrameIndex, progressFrameIndex } from '../core/SpriteRenderer';
+import {
+  drawSpriteKey,
+  progressFrameIndex,
+  timeFrameIndex,
+  walkFrameIndex,
+} from '../core/SpriteRenderer';
+import type { SpriteKey, SpriteStates } from '../core/SpriteLoader';
 
-export type GoblinWeapon = 'club' | 'hammer';
+export type GoblinWeapon = 'sword' | 'axe' | 'mace' | 'warhammer';
+export type GoblinAttackKind = 'light' | 'heavy';
 
 /**
- * Draw the goblin enemy — base body layer plus weapon overlay.
- * skinColor and eyeColor are baked into the sprite art.
+ * One sheet per archetype, with the weapon baked in.
+ *
+ * The old base-plus-overlay split only worked while the body animation was
+ * weapon-independent, which is exactly what this rework destroys: a two-handed
+ * hammer haul, a one-handed mace whirl that passes behind the body and a lunging
+ * sword stab need three different bodies, and a shared body layer cannot express
+ * any of them.
  */
-export function drawGoblinSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  weapon: GoblinWeapon,
-  walkFrame: number,
-  isMoving: boolean,
-  attackAnim: number,
-  facingX = 1,
-): void {
-  const flipX = facingX < 0;
+const SHEET_KEYS: Record<GoblinWeapon, SpriteKey> = {
+  sword: 'goblin_sword',
+  axe: 'goblin_axe',
+  mace: 'goblin_mace',
+  warhammer: 'goblin_warhammer',
+};
 
-  type BaseState = 'walk' | 'idle' | 'attack';
-  let state: BaseState;
-  let frame: number;
+/**
+ * All four sheets share one state union, so indexing it needs no cast. Naming
+ * the rows by *weight* rather than by move keeps that true while still meaning
+ * something: in every archetype the light attack is the faster, shorter-reach,
+ * lower-commitment one and the heavy is the telegraphed haymaker.
+ */
+type GoblinState = SpriteStates['goblin_axe'];
 
-  if (attackAnim > 0) {
-    state = 'attack';
-    frame = progressFrameIndex(attackAnim, 16);
-  } else if (isMoving) {
-    state = 'walk';
-    frame = walkFrameIndex(walkFrame, 8);
-  } else {
-    state = 'idle';
-    frame = 0;
+export interface GoblinAttackTiming {
+  /** Frames the sprite row holds — must equal the generator's frameCount. */
+  readonly spriteFrames: number;
+  /** Sprite frame on which the weapon connects. */
+  readonly impactFrame: number;
+  /** Game frames the whole animation plays over. */
+  readonly animFrames: number;
+  readonly damage: number;
+  readonly reachTiles: number;
+  readonly cooldownFrames: number;
+}
+
+/** Today's balance: every goblin reaches 1.2 tiles and swings every 90 frames. */
+const LEGACY_REACH_TILES = 1.2;
+const LEGACY_COOLDOWN_FRAMES = 90;
+const LIGHT_DAMAGE = 1;
+const HEAVY_DAMAGE = 2;
+
+/**
+ * The contract between the art and `Goblin.ts`.
+ *
+ * `spriteFrames`, `impactFrame` and `animFrames` come from the animation and are
+ * asserted against the generator by gate G13 — if one moves, both move. The
+ * damage, reach and cooldown columns deliberately carry **today's** numbers: a
+ * rebalance is a separate piece of work from a visual rework, and adopting the
+ * plan's proposed spread would have made a war-hammer goblin roughly twice as
+ * dangerous as anything else on floor 1 as a side effect of new art.
+ */
+export const GOBLIN_ATTACKS: Record<GoblinWeapon, Record<GoblinAttackKind, GoblinAttackTiming>> = {
+  sword: {
+    light: {
+      spriteFrames: 14,
+      impactFrame: 6,
+      animFrames: 24,
+      damage: LIGHT_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+    heavy: {
+      spriteFrames: 18,
+      impactFrame: 8,
+      animFrames: 36,
+      damage: HEAVY_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+  },
+  axe: {
+    light: {
+      spriteFrames: 14,
+      impactFrame: 6,
+      animFrames: 30,
+      damage: LIGHT_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+    heavy: {
+      spriteFrames: 18,
+      impactFrame: 9,
+      animFrames: 42,
+      damage: HEAVY_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+  },
+  mace: {
+    light: {
+      spriteFrames: 14,
+      impactFrame: 7,
+      animFrames: 32,
+      damage: LIGHT_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+    heavy: {
+      spriteFrames: 18,
+      impactFrame: 8,
+      animFrames: 40,
+      damage: HEAVY_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+  },
+  warhammer: {
+    light: {
+      spriteFrames: 14,
+      impactFrame: 7,
+      animFrames: 40,
+      damage: LIGHT_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+    heavy: {
+      spriteFrames: 18,
+      impactFrame: 10,
+      animFrames: 52,
+      damage: HEAVY_DAMAGE,
+      reachTiles: LEGACY_REACH_TILES,
+      cooldownFrames: LEGACY_COOLDOWN_FRAMES,
+    },
+  },
+};
+
+/**
+ * What `attack_light` and `attack_heavy` actually depict per archetype. The
+ * state names are uniform so the runtime needs no per-weapon mapping; this table
+ * is what they mean, for the review harness and the `?goblins` debug scene.
+ */
+export const ATTACK_MOVE_NAMES: Record<GoblinWeapon, Record<GoblinAttackKind, string>> = {
+  sword: { light: 'stab', heavy: 'slash' },
+  axe: { light: 'hooking cleave', heavy: 'overhead chop' },
+  mace: { light: 'whirl', heavy: 'overhead crush' },
+  warhammer: { light: 'side two-handed strike', heavy: 'high two-handed strike' },
+};
+
+const WALK_FRAMES = 12;
+const IDLE_FRAMES = 12;
+const IDLE_BREAK_FRAMES = 18;
+const FLINCH_FRAMES = 5;
+/** Breathing speed of the always-on idle loop. */
+const IDLE_FPS = 8;
+const IDLE_BREAK_FPS = 14;
+
+/** Frames a flinch plays for; short on purpose, so it never eats an attack. */
+export const GOBLIN_FLINCH_FRAMES = 12;
+
+const IDLE_BREAK_MIN_SECONDS = 4;
+const IDLE_BREAK_RANDOM_SECONDS = 5;
+
+/** A resolved animation state, ready to hand to the sprite renderer. */
+interface ResolvedFrame {
+  readonly state: GoblinState;
+  readonly frame: number;
+}
+
+/**
+ * Owns a single goblin's animation timers.
+ *
+ * `idlePhaseOffset` is the part that is easy to forget and immediately visible
+ * once forgotten: without it every goblin in a camp breathes and blinks on the
+ * same frame, which reads as a rack of clones rather than as five creatures.
+ */
+export class GoblinAnimator {
+  constructor(private readonly weapon: GoblinWeapon) {}
+
+  /** Per-instance phase shift, in seconds, added to the idle time index. */
+  private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / IDLE_FPS);
+  private idleSeconds = 0;
+  private secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+  private breakFramesLeft = 0;
+  /**
+   * Frames the current break was given, so it can be played from its own start.
+   *
+   * The break used to be sampled off the free-running wall clock, which meant it
+   * began on whatever frame that clock happened to be at — a flourish that
+   * starts three-quarters of the way through is a pop, not a flourish.
+   */
+  private breakTotalFrames = 1;
+  private flinchFramesLeft = 0;
+
+  private static rollBreakDelay(): number {
+    return IDLE_BREAK_MIN_SECONDS + Math.random() * IDLE_BREAK_RANDOM_SECONDS;
   }
 
-  drawSpriteKey(ctx, 'goblin_base', state, frame, sx, sy, s, { flipX });
+  /** Drops every animation in flight — used when a scene resets combat state. */
+  reset(): void {
+    this.idleSeconds = 0;
+    this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+    this.breakFramesLeft = 0;
+    this.breakTotalFrames = 1;
+    this.flinchFramesLeft = 0;
+  }
 
-  const weaponKey = weapon === 'club' ? 'goblin_weapon_club' : 'goblin_weapon_hammer';
-  drawSpriteKey(ctx, weaponKey, state, frame, sx, sy, s, { flipX });
+  startFlinch(): void {
+    this.flinchFramesLeft = GOBLIN_FLINCH_FRAMES;
+    this.breakFramesLeft = 0;
+  }
+
+  /** Advances timers by one game frame. Call once per frame, before rendering. */
+  tick(isMoving: boolean, isAttacking: boolean, secondsPerFrame: number): void {
+    if (this.flinchFramesLeft > 0) this.flinchFramesLeft--;
+    if (this.breakFramesLeft > 0) this.breakFramesLeft--;
+
+    if (isMoving || isAttacking) {
+      this.idleSeconds = 0;
+      this.breakFramesLeft = 0;
+      this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+      return;
+    }
+
+    this.idleSeconds += secondsPerFrame;
+    if (this.breakFramesLeft > 0 || this.idleSeconds < this.secondsUntilBreak) return;
+    this.breakFramesLeft = Math.round(IDLE_BREAK_FRAMES / IDLE_BREAK_FPS / secondsPerFrame);
+    this.breakTotalFrames = this.breakFramesLeft;
+    this.idleSeconds = 0;
+    this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+  }
+
+  get isFlinching(): boolean {
+    return this.flinchFramesLeft > 0;
+  }
+
+  /**
+   * Resolve the state and frame to draw.
+   *
+   * Priority is attack → flinch → walk → idle_break → idle.
+   */
+  resolve(
+    elapsedSeconds: number,
+    walkFrame: number,
+    isMoving: boolean,
+    attack: { readonly kind: GoblinAttackKind; readonly progress: number } | null,
+  ): ResolvedFrame {
+    if (attack !== null) {
+      const state: GoblinState = attack.kind === 'light' ? 'attack_light' : 'attack_heavy';
+      const frames = GOBLIN_ATTACKS[this.weapon][attack.kind].spriteFrames;
+      return { state, frame: progressFrameIndex(attack.progress, frames) };
+    }
+    if (this.flinchFramesLeft > 0) {
+      const progress = 1 - this.flinchFramesLeft / GOBLIN_FLINCH_FRAMES;
+      return { state: 'flinch', frame: progressFrameIndex(progress, FLINCH_FRAMES) };
+    }
+    if (isMoving) {
+      return { state: 'walk', frame: walkFrameIndex(walkFrame, WALK_FRAMES) };
+    }
+    if (this.breakFramesLeft > 0) {
+      const progress = 1 - this.breakFramesLeft / this.breakTotalFrames;
+      return { state: 'idle_break', frame: progressFrameIndex(progress, IDLE_BREAK_FRAMES) };
+    }
+    // The always-on breathing loop is the one thing driven by the clock, because
+    // it has no start: `walkFrame` resets to 0 the moment a mob stops, so a
+    // walk-driven idle freezes on frame 0 and the goblin becomes a corpse that
+    // has not fallen over. The per-instance phase offset is what keeps a camp of
+    // five from breathing and blinking in lockstep.
+    const phased = elapsedSeconds + this.idlePhaseOffset;
+    return { state: 'idle', frame: timeFrameIndex(phased, IDLE_FPS, IDLE_FRAMES) };
+  }
+}
+
+export interface GoblinSpriteState {
+  readonly weapon: GoblinWeapon;
+  readonly x: number;
+  readonly y: number;
+  readonly tileSize: number;
+  readonly facingX: number;
+  readonly state: GoblinState;
+  readonly frame: number;
+}
+
+/** Draw one goblin frame. Every sheet faces +X, so the runtime mirrors it. */
+export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSpriteState): void {
+  drawSpriteKey(
+    ctx,
+    SHEET_KEYS[sprite.weapon],
+    sprite.state,
+    sprite.frame,
+    sprite.x,
+    sprite.y,
+    sprite.tileSize,
+    { flipX: sprite.facingX < 0 },
+  );
+}
+
+/**
+ * The nine pieces a goblin comes apart into, in the order they spawn.
+ *
+ * The single source of truth: `scripts/goblinGore.ts` paints them in this order
+ * and `BodyPartGoreSystem` spawns them in it, so a rename in one place is a
+ * compile error rather than a body part that silently stops appearing.
+ */
+export const GOBLIN_GORE_PARTS: ReadonlyArray<string> = [
+  'gore_head',
+  'gore_torso',
+  'gore_arm_near',
+  'gore_arm_far',
+  'gore_leg_near',
+  'gore_leg_far',
+  'gore_ribchunk',
+  'gore_entrails',
+  'gore_jaw',
+];
+
+/** The sheet an archetype's frames come from. */
+export function goblinSheetKey(weapon: GoblinWeapon): SpriteKey {
+  return SHEET_KEYS[weapon];
+}
+
+/** The gore sheet a dead goblin's flying pieces come from. */
+export function goblinBodyPartKey(weapon: GoblinWeapon): string {
+  return `goblin_${weapon}`;
 }

@@ -84,7 +84,21 @@ const SHEETS: ReadonlyArray<SheetConfig> = [
   {
     key: 'ground_overworld',
     file: 'ground_overworld.png',
-    materials: ['grass', 'verge', 'dirt', 'gravel', 'lane', 'cobble', 'plaza'],
+    // Appended, never inserted: a material's seed slot is its index from
+    // `seedSlotBase`, so putting the wilderness materials anywhere but the end
+    // would reseed — and so regenerate — art that has already been reviewed.
+    materials: [
+      'grass',
+      'verge',
+      'dirt',
+      'gravel',
+      'lane',
+      'cobble',
+      'plaza',
+      'water',
+      'highland',
+      'scree',
+    ],
     seedSlotBase: 0,
   },
   // Shared by both dungeon floors: a Bopca station is the same waystation

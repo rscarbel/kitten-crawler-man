@@ -19,10 +19,12 @@ import {
   GRASSY_WEED,
   LANE_STREET,
   PLAZA_STONE,
-  RUBBLE,
-  RUINED_WALL,
   VERGE_GRASS,
   YARD_GRAVEL,
+  HIGHLAND_GRASS,
+  SCREE,
+  WILDFLOWER_TUFT,
+  RIVER_ROCK,
 } from '../tileTypes';
 
 /** Sheet holding every overworld ground material, one material per row. */
@@ -45,13 +47,24 @@ export type GroundMaterial = SpriteStates[typeof GROUND_SHEET_KEY];
  * materials out softest-first.
  */
 const GROUND_BLEND_ORDER = {
-  grass: 0,
-  verge: 1,
-  dirt: 2,
-  gravel: 3,
-  lane: 4,
-  cobble: 5,
-  plaza: 6,
+  // Water is the softest thing on the map, so every kind of land bleeds over it
+  // through the corner masks — and that soft, irregular, diagonal-capable edge
+  // *is* the riverbank. Nothing else draws one.
+  water: 0,
+  grass: 1,
+  // The two upland bands sit between the field and the town's made surfaces:
+  // turf creeps up into the highland and the highland's own rock creeps down
+  // over the turf, which is what a hillside does. They never meet the town's
+  // materials — the elevation field is flattened inside the safe radius — so
+  // their order relative to `verge` and above is unobservable.
+  highland: 2,
+  scree: 3,
+  verge: 4,
+  dirt: 5,
+  gravel: 6,
+  lane: 7,
+  cobble: 8,
+  plaza: 9,
 } as const satisfies Record<GroundMaterial, number>;
 
 /**
@@ -61,6 +74,9 @@ const GROUND_BLEND_ORDER = {
  * levels too bright.
  */
 export const GROUND_FALLBACK_COLOR = {
+  water: '#1e434b',
+  highland: '#7f7b49',
+  scree: '#5b5854',
   grass: '#667435',
   verge: '#6f773a',
   dirt: '#6b543b',
@@ -83,6 +99,12 @@ export const GROUND_FALLBACK_COLOR = {
  * teal dashes.
  */
 const GROUND_SPILL = {
+  // Water spills nothing. A river has no loose material to throw onto the bank,
+  // and the foam where it meets land is `WaterAnimationSystem`'s to draw, in
+  // motion, rather than something baked into the static fringe.
+  water: null,
+  highland: { kind: 'blades', color: '#6f6c3e' },
+  scree: { kind: 'grit', color: '#8a877f' },
   grass: { kind: 'blades', color: '#5e702e' },
   verge: { kind: 'blades', color: '#677332' },
   dirt: { kind: 'grit', color: '#7c5c3c' },
@@ -145,6 +167,23 @@ const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
  * happened when the scatter pass put `GRASSY_WEED`, whose material is `grass`,
  * onto the town's verge.
  *
+ * `BRIDGE` is not listed for the same reason, and it is the case that shows why
+ * the rule matters: a deck spans the channel *and* lands a tile on each bank, so
+ * naming any one material here would be wrong for half of every bridge. Written
+ * with `TileGrid.setBridgeDeck`, each deck tile records what it was laid over —
+ * water mid-channel, the road or the turf at the abutments — so the planks are
+ * drawn over the right thing and the water beside them still fringes against
+ * water. **Not** `setStanding`: that records with `??=`, and a water tile
+ * already carries the record the carve left on it, so a deck written that way
+ * keeps the pre-river surface. That is exactly what the first cut did.
+ *
+ * `RUBBLE` and `RUINED_WALL` are **not** listed either, for exactly the reason
+ * `TREE` is not. They were pinned to `grass` while grass was the only surface
+ * outside the walls; the elevation bands made that false, and a ruin shell on a
+ * hillside would have drawn a rectangle of lowland turf inside the upland it
+ * stands on. Both are now written with `setStanding`, so each records the band
+ * it replaced and `groundMaterialUnder` reads it back before inference.
+ *
  * `TREE` is deliberately **not** listed, though it used to be. A tree stands on
  * ground rather than being ground, and a few of them stand on a track rather
  * than on grass — pinning them all to `grass` here drew turf under those and
@@ -171,9 +210,28 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
   switch (type) {
     case FloorTypeValue.grass:
     case GRASSY_WEED:
-    case RUBBLE:
-    case RUINED_WALL:
+    // A wildflower clump is a patch *of* the meadow it grows in, scattered only
+    // over field grass, so it reports grass and disappears into it — the same
+    // rule `GRASSY_WEED` and `DIRT_PATCH` follow. `PEBBLE_SCATTER` cannot join
+    // them and is deliberately absent: it is scattered over both highland turf
+    // and scree, so no single answer here is right for it, and it falls through
+    // to the surface `setStanding` recorded under it instead.
+    case WILDFLOWER_TUFT:
       return 'grass';
+    case HIGHLAND_GRASS:
+      return 'highland';
+    case SCREE:
+      return 'scree';
+    // A rock in the channel *replaces* a water tile, so unlike a bridge — which
+    // spans the water at one end and lands on the bank at the other — there is
+    // exactly one right answer for it, and naming it here is simpler than a
+    // second unconditional-recording setter. It cannot rely on its record:
+    // `setStanding` writes with `??=` and the carve has already recorded the
+    // grass or turf the river drowned, so without this case every rock drew a
+    // ring of meadow around itself in the middle of the river.
+    case FloorTypeValue.water:
+    case RIVER_ROCK:
+      return 'water';
     case VERGE_GRASS:
     case GARDEN_PLANTING:
       return 'verge';

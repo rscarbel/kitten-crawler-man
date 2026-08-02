@@ -61,6 +61,20 @@ const RUINS_GHOUL_MAX_LEVEL = 8;
 const KRASUE_MIN_LEVEL = 6;
 const KRASUE_MAX_LEVEL = 9;
 
+/**
+ * The camps' residents.
+ *
+ * Additions to the floor, not a redistribution of it: `hallwayMobs` and its ~150
+ * scatter points are untouched, so ruins ghouls and krasues stay the dominant
+ * population and a camp is a landmark you find among them.
+ */
+const GOBLIN_CAMP_POPULATION = 5;
+const GOBLIN_MIN_LEVEL = 5;
+const GOBLIN_MAX_LEVEL = 7;
+const TROGLODYTE_DEN_POPULATION = 4;
+const TROGLODYTE_MIN_LEVEL = 6;
+const TROGLODYTE_MAX_LEVEL = 8;
+
 export const level3: LevelDef = {
   id: 'level3',
   name: 'The Overworld',
@@ -80,6 +94,26 @@ export const level3: LevelDef = {
   bossRooms: [],
   isSafeLevel: true,
   isOverworld: true,
+  campSpawns: {
+    goblin: [
+      {
+        type: 'goblin',
+        minLevel: GOBLIN_MIN_LEVEL,
+        maxLevel: GOBLIN_MAX_LEVEL,
+        minCount: GOBLIN_CAMP_POPULATION,
+        maxCount: GOBLIN_CAMP_POPULATION,
+      },
+    ],
+    troglodyte: [
+      {
+        type: 'troglodyte',
+        minLevel: TROGLODYTE_MIN_LEVEL,
+        maxLevel: TROGLODYTE_MAX_LEVEL,
+        minCount: TROGLODYTE_DEN_POPULATION,
+        maxCount: TROGLODYTE_DEN_POPULATION,
+      },
+    ],
+  },
   extraSpawns: [
     {
       type: 'sky_fowl',

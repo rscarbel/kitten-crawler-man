@@ -6,6 +6,9 @@
  * copies.
  */
 
+import { TILE_SIZE } from '../core/constants';
+import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
+
 /** Mutable position/target/pause state every wandering agent must expose. */
 export interface WanderState {
   x: number;
@@ -77,7 +80,13 @@ export function stepWander(state: WanderState, params: WanderParams, out: Wander
   const stepX = (dx / dist) * state.speed;
   const stepY = (dy / dist) * state.speed;
 
-  if (params.isWalkable && !params.isWalkable(state.x + stepX, state.y + stepY)) {
+  // Probe from the soles when stepping south. The callbacks all convert a world
+  // point to a tile with the centre offset, so dropping the probe point instead
+  // of changing every one of them makes them test the feet — see
+  // `collisionAnchors`. Without it a townsperson walking down into a building
+  // stops with their waist at the wall and their legs on top of it.
+  const probeY = state.y + stepY + (stepY > 0 ? TILE_SIZE * SOUTHWARD_PROBE_DROP : 0);
+  if (params.isWalkable && !params.isWalkable(state.x + stepX, probeY)) {
     retarget(state, params);
     return;
   }

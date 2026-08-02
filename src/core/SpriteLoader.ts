@@ -10,6 +10,8 @@ import environmentPropsManifest from '../images/environment/props/manifest.json'
 import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
 import environmentTownscapeManifest from '../images/environment/townscape/manifest.json';
 import environmentTreesManifest from '../images/environment/trees/manifest.json';
+import environmentRocksManifest from '../images/environment/rocks/manifest.json';
+import environmentCampManifest from '../images/environment/camp/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
@@ -31,6 +33,12 @@ const environmentManifest = {
   // The forest. Its own directory because `writeSheets` replaces a directory's
   // whole manifest, and `nature/` also holds assets no tree generator writes.
   ...environmentTreesManifest,
+  // The wilderness's boulders. Their own directory for the same reason the trees
+  // have one: `writeSheets` replaces a directory's whole manifest.
+  ...environmentRocksManifest,
+  // The goblin camp's tents and its fire, in their own directory for the same
+  // reason: `writeSheets` replaces a directory's whole manifest.
+  ...environmentCampManifest,
   ...environmentWallsRoofsManifest,
 } as const;
 

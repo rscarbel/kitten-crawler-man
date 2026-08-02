@@ -2,6 +2,7 @@ import { type GameMap } from '../map/GameMap';
 import { type Mob } from '../creatures/Mob';
 import type { TreasureRoomData } from '../map/DungeonGenerator';
 import { Goblin } from '../creatures/Goblin';
+import type { GoblinWeapon } from '../sprites/goblinSprite';
 import { Llama } from '../creatures/Llama';
 import { Rat } from '../creatures/Rat';
 import { TheHoarder } from '../creatures/TheHoarder';
@@ -25,11 +26,11 @@ import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { RingmasterGrimaldi } from '../creatures/RingmasterGrimaldi';
 import { CityElfCultist } from '../creatures/CityElfCultist';
-import { randomFromArray, randomInt } from '../utils';
+import { randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 import type { MobSpawnRule, LevelDef } from './types';
 
-type GoblinVariant = { weapon: 'club' | 'hammer'; skin: string; eye: string };
+type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
 
 /** Maximum attempts to find a walkable spawn position. */
 const MAX_SPAWN_ATTEMPTS = 20;
@@ -86,12 +87,29 @@ function findWalkableSpawnTile(map: GameMap, bounds: SpawnBounds): { x: number; 
   return null;
 }
 
-export const GOBLIN_VARIANTS: GoblinVariant[] = [
-  { weapon: 'club', skin: '#3d6b32', eye: '#ef4444' },
-  { weapon: 'hammer', skin: '#4f8a3e', eye: '#fbbf24' },
-  { weapon: 'club', skin: '#7ab86a', eye: '#ef4444' },
-  { weapon: 'hammer', skin: '#3d6b32', eye: '#fbbf24' },
+/**
+ * How often each archetype turns up.
+ *
+ * Weighted rather than uniform: a war-hammer brute is the biggest, slowest and
+ * most telegraphed of the four, and one in every four goblins being one would
+ * make it ordinary. The sword skirmisher is the common grunt.
+ */
+export const GOBLIN_VARIANTS: readonly GoblinVariant[] = [
+  { weapon: 'sword', weight: 4 },
+  { weapon: 'axe', weight: 3 },
+  { weapon: 'mace', weight: 2 },
+  { weapon: 'warhammer', weight: 1 },
 ];
+
+function pickGoblinWeapon(): GoblinWeapon {
+  const total = GOBLIN_VARIANTS.reduce((sum, variant) => sum + variant.weight, 0);
+  let roll = Math.random() * total;
+  for (const variant of GOBLIN_VARIANTS) {
+    roll -= variant.weight;
+    if (roll <= 0) return variant.weapon;
+  }
+  return GOBLIN_VARIANTS[GOBLIN_VARIANTS.length - 1].weapon;
+}
 
 /** Pick a rule from a weighted list. Weights need not sum to 1. */
 function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
@@ -105,7 +123,11 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
 }
 
 /** Roll a random mob level from a spawn rule's min/max range. */
-function rollMobLevel(rule: MobSpawnRule): number {
+/**
+ * Takes the level range alone, so both a weighted `MobSpawnRule` and a camp's
+ * `CampSpawnRule` — which has no `chance` — can be levelled by it.
+ */
+function rollMobLevel(rule: Pick<MobSpawnRule, 'minLevel' | 'maxLevel'>): number {
   const min = rule.minLevel ?? 1;
   const max = rule.maxLevel ?? min;
   return randomInt(min, max);
@@ -144,8 +166,7 @@ registerMob('terror_the_clown', (x, y) => new TerrorTheClown(x, y, TILE_SIZE));
 registerMob('ringmaster_grimaldi', (x, y) => new RingmasterGrimaldi(x, y, TILE_SIZE));
 registerMob('city_elf_cultist', (x, y) => new CityElfCultist(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
-  const v = randomFromArray(GOBLIN_VARIANTS);
-  return new Goblin(x, y, TILE_SIZE, v.weapon, v.skin, v.eye);
+  return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
 });
 
 export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
@@ -220,6 +241,76 @@ export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
   return mobs;
 }
 
+/** Tiles a camp resident may stray from its camp before it turns back. */
+const CAMP_LEASH_RADIUS_TILES = 14;
+
+/**
+ * How many spots are sampled inside a camp before one mob is given up on.
+ *
+ * A camp's disc is mostly cleared ground but its centre is a fire and its ring
+ * is tents or boulders, so a fair number of draws land on something solid.
+ */
+const CAMP_SPAWN_ATTEMPTS = 40;
+
+/**
+ * Populates each camp on the map from its kind's roster.
+ *
+ * Driven off `map.camps` and `def.campSpawns`, so there is no index coupling
+ * between the generator and the level definition — a map that sited only one of
+ * the two camps populates only that one. A level with no `campSpawns` (every
+ * floor but 3) returns immediately.
+ *
+ * Residents are leashed to their camp. That is the *only* place `homePoint` and
+ * `leashRadiusTiles` are ever written, which is what makes the change provably
+ * invisible to the goblins and troglodytes on floors 1 and 2.
+ */
+function spawnCampResidents(def: LevelDef, map: GameMap): Mob[] {
+  const mobs: Mob[] = [];
+  const rosters = def.campSpawns;
+  if (rosters === undefined) return mobs;
+
+  for (const camp of map.camps) {
+    const roster = rosters[camp.kind];
+    if (roster === undefined || roster.length === 0) continue;
+    for (const rule of roster) {
+      const count = randomInt(rule.minCount ?? 1, rule.maxCount ?? 1);
+      for (let spawned = 0; spawned < count; spawned++) {
+        const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles);
+        if (tile === null) continue;
+        const mob = createMob(rule.type, tile.x, tile.y, map);
+        mob.applyMobLevel(rollMobLevel(rule));
+        // Its own spawn tile, **not** the camp's centre. The centre is a
+        // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
+        // a tile nothing can stand on, which is a resident that never walks home
+        // rather than one that walks home slowly. A spawn tile is walkable by
+        // construction and is inside the camp, which is all the leash needs.
+        mob.homePoint = { x: mob.x, y: mob.y };
+        mob.leashRadiusTiles = CAMP_LEASH_RADIUS_TILES;
+        mobs.push(mob);
+      }
+    }
+  }
+  return mobs;
+}
+
+/** A walkable tile inside a camp's disc, or null when the disc is full. */
+function findWalkableTileInCamp(
+  map: GameMap,
+  centre: { x: number; y: number },
+  radiusTiles: number,
+): { x: number; y: number } | null {
+  for (let attempt = 0; attempt < CAMP_SPAWN_ATTEMPTS; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    // Square-rooted so the draws are uniform over the disc's *area* rather than
+    // piling up at its centre, which is where the fire is.
+    const reach = Math.sqrt(Math.random()) * radiusTiles;
+    const tx = Math.round(centre.x + Math.cos(angle) * reach);
+    const ty = Math.round(centre.y + Math.sin(angle) * reach);
+    if (map.isWalkable(tx, ty)) return { x: tx, y: ty };
+  }
+  return null;
+}
+
 /**
  * Instantiate all mobs for a level. Room spawn points draw from
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
@@ -257,6 +348,8 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
       mobs.push(mob);
     }
   }
+
+  mobs.push(...spawnCampResidents(def, map));
 
   const bossRooms = def.bossRooms ?? [];
   for (let i = 0; i < bossRooms.length; i++) {

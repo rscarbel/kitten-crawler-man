@@ -45,12 +45,26 @@ import {
   TILE_TYPE_COUNT,
   INTERIOR_COUNTER,
   INTERIOR_WALL,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
 } from './tileTypes';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
 const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   FloorTypeValue.wall,
-  FloorTypeValue.water,
+  // `FloorTypeValue.water` is deliberately absent: river water is **walkable**,
+  // and everything that walks — the player, the companion and the mobs — wades
+  // through it slowly and partly submerged. `moveWithCollision` and
+  // `applyMovement` apply the speed penalty; `RenderPipeline` sinks the sprite.
+  //
+  // `RIVER_ROCK` below is what keeps a midstream stone solid, and that entry is
+  // now load-bearing rather than belt-and-braces: a rock replaces the water tile
+  // type outright, so without it the rock would be the one *swimmable* tile in a
+  // river everything else can already cross.
   VOID_TYPE,
   TREE,
   BUILDING_WALL,
@@ -102,6 +116,21 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   // already solid; this is what keeps them that way.
   INTERIOR_WALL,
   INTERIOR_COUNTER,
+  // The floor-3 wilderness. `HIGHLAND_GRASS`, `SCREE`, `BRIDGE`,
+  // `WILDFLOWER_TUFT`, `PEBBLE_SCATTER` and `DEN_HOLLOW` are deliberately
+  // absent — the first three are ground the player is meant to cross and the
+  // last three are flat cover drawn on top of it.
+  //
+  // `RIVER_ROCK` replaces the water tile it stands in rather than sitting on
+  // one, so listing it is not redundant: walkability is decided by type, and
+  // without this entry a mid-channel rock would be the one walkable pixel in a
+  // river.
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
 ];
 
 /**

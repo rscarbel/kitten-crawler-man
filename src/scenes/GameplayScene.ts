@@ -12,10 +12,11 @@
 import type { SceneManager } from '../core/Scene';
 import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/InputManager';
-import { TILE_SIZE } from '../core/constants';
+import { TILE_SIZE, WADE_SPEED_FACTOR } from '../core/constants';
 import { clamp, frameTime, pointInRect } from '../utils';
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import type { GameMap } from '../map/GameMap';
+import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { PlayerManager } from '../core/PlayerManager';
@@ -23,6 +24,7 @@ import type { PauseMenu } from '../ui/PauseMenu';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { platform } from '../core/Platform';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { isStandingInWater } from '../systems/GameLoopPhases';
 
 const FOLLOW_DISTANCE_MULTIPLIER = 1.5;
 const COMPANION_FOLLOW_SPEED = 3.5;
@@ -127,7 +129,11 @@ export abstract class GameplayScene extends Scene {
     // followDist. Taking a full step instead overshoots inside the gap, so the
     // next frame it stands still, the frame after it steps again — which reads
     // on screen as the sprite snapping between its idle and walk poses.
-    const step = Math.min(followSpeed, fdist - followDist);
+    // The companion pays the same water toll as the player. Without this it
+    // skates across the river at full speed while the player wades, overshoots
+    // the follow distance, and stands on the far bank waiting.
+    const wadeFactor = isStandingInWater(follower, map) ? WADE_SPEED_FACTOR : 1;
+    const step = Math.min(followSpeed * wadeFactor, fdist - followDist);
     const stepX = (fdx / fdist) * step;
     const stepY = (fdy / fdist) * step;
 
@@ -144,7 +150,9 @@ export abstract class GameplayScene extends Scene {
     )
       follower.x = nextX;
     const nextY = clamp(follower.y + stepY, 0, mapPxH - TILE_SIZE);
-    const nextTileY = Math.floor((nextY + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    // Feet-first walking south, like the player and every mob — see
+    // `collisionAnchors`.
+    const nextTileY = Math.floor((nextY + TILE_SIZE * verticalCollisionOffset(stepY)) / TILE_SIZE);
     if (
       map.isWalkable(
         Math.floor((follower.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE),

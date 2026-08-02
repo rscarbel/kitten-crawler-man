@@ -35,6 +35,18 @@ import {
   VERGE_GRASS,
   VOID_TYPE,
   YARD_GRAVEL,
+  HIGHLAND_GRASS,
+  SCREE,
+  WILDFLOWER_TUFT,
+  PEBBLE_SCATTER,
+  BRIDGE,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  DEN_HOLLOW,
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
 
@@ -599,6 +611,33 @@ export class MiniMapSystem implements GameSystem {
         return '#585860';
       case INTERIOR_COUNTER:
         return '#4a3020';
+      // The floor-3 wilderness. Every one of these needs an entry in this table,
+      // in the mobile HUD's, and in `TownMapScene`'s — a type known to one and
+      // not the others draws as the default grey, which is how a whole river or
+      // a whole camp can vanish from one map and not the next.
+      case HIGHLAND_GRASS:
+        return '#6f7048'; // upland turf — drier and paler than field grass
+      case SCREE:
+        return '#6a6660';
+      case WILDFLOWER_TUFT:
+        return '#4a7a48';
+      case PEBBLE_SCATTER:
+        return '#787268';
+      case BRIDGE:
+        return '#8a6a44'; // timber, and lighter than the water it spans
+      case RIVER_ROCK:
+        return '#4a5a60';
+      case BOULDER_SMALL:
+      case BOULDER_LARGE:
+        return '#6e6a64';
+      case CLIFF:
+        return '#57534c';
+      case CAMPFIRE:
+        return '#d07a2c';
+      case GOBLIN_TENT:
+        return '#7a5f3a';
+      case DEN_HOLLOW:
+        return '#2e2a26';
       default:
         return '#555555';
     }

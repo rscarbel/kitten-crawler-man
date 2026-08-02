@@ -49,3 +49,17 @@ export const CAT_BEHIND_HUMAN_OFFSET = TILE_SIZE * CAT_BEHIND_HUMAN_OFFSET_TILES
  * combat has started.
  */
 export const AGGRO_PERSIST_MULTIPLIER = 2;
+
+/**
+ * How much of its walking speed anything keeps while standing in river water.
+ *
+ * Deep enough to be a real cost — wading a four-tile river takes about as long
+ * as walking twelve tiles round to a bridge, which is what keeps a bridge worth
+ * finding. Applied identically to the player, the companion and the mobs: a
+ * river that only slowed the player would read as a player-only obstacle.
+ *
+ * Lives here rather than beside the movement code because both `GameLoopPhases`
+ * and `Mob` need it, and `GameLoopPhases` already imports `Mob` — putting it
+ * there would make that a runtime import cycle.
+ */
+export const WADE_SPEED_FACTOR = 0.36;

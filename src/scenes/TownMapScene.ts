@@ -66,6 +66,18 @@ import {
   PLAZA_STONE,
   FENCE,
   GARDEN_PLANTING,
+  HIGHLAND_GRASS,
+  SCREE,
+  WILDFLOWER_TUFT,
+  PEBBLE_SCATTER,
+  BRIDGE,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  DEN_HOLLOW,
 } from '../map/tileTypes';
 
 const BG_COLOR = '#0b0e14';
@@ -115,6 +127,23 @@ const TILE_COLORS = new Map<number, string>([
   [PLAZA_STONE, '#c0b49c'],
   [GARDEN_PLANTING, '#4f6a2c'],
   [FENCE, '#8a6a3c'],
+  // The floor-3 wilderness, in this view's own brighter schematic palette. A
+  // type missing here draws in `UNKNOWN_TILE_COLOR` magenta rather than grey,
+  // which at least fails loudly — but the whole point of the view is reading the
+  // generator's output at a glance, so every generated type belongs here.
+  [FloorTypeValue.water, '#2f6f8a'],
+  [HIGHLAND_GRASS, '#7d7c4c'],
+  [SCREE, '#7a766e'],
+  [WILDFLOWER_TUFT, '#5a8a52'],
+  [PEBBLE_SCATTER, '#8a8478'],
+  [BRIDGE, '#a07a4a'],
+  [RIVER_ROCK, '#5a6c74'],
+  [BOULDER_SMALL, '#8a857c'],
+  [BOULDER_LARGE, '#9a958c'],
+  [CLIFF, '#645f56'],
+  [CAMPFIRE, '#e8862f'],
+  [GOBLIN_TENT, '#8f6f42'],
+  [DEN_HOLLOW, '#3a352f'],
 ]);
 
 /** Header band above the map viewport. */

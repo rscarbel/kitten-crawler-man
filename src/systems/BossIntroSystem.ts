@@ -269,21 +269,11 @@ export class BossIntroSystem implements GameSystem {
       ctx.strokeRect(leftX, panelY, panelW, panelH);
 
       ctx.save();
-      // idle pose — attackPhase=null and both timers=0, so the frame-divisor args (1,1) are never reached
       drawHumanSprite(
         ctx,
         leftX + HUMAN_SPRITE_X_OFFSET,
         panelY + HUMAN_SPRITE_Y_OFFSET,
         HUMAN_SPRITE_SIZE,
-        null,
-        0,
-        1,
-        0,
-        1,
-        0,
-        false,
-        0,
-        0,
       );
       ctx.restore();
       ctx.save();

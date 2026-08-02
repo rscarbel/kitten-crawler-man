@@ -7,7 +7,16 @@
  * nowhere and be wasted, and dirt painted under it would fight the facade.
  */
 
-import { FloorTypeValue, VOID_TYPE, GRASSY_WEED, DIRT_PATCH } from '../tileTypes';
+import {
+  FloorTypeValue,
+  VOID_TYPE,
+  GRASSY_WEED,
+  DIRT_PATCH,
+  HIGHLAND_GRASS,
+  SCREE,
+  WILDFLOWER_TUFT,
+  PEBBLE_SCATTER,
+} from '../tileTypes';
 import type { TileGrid } from './tileGrid';
 import type { TileRect, TownPlan } from './townPlan';
 
@@ -72,4 +81,51 @@ export function scatterGroundCover(
   // meet, and a scatter of worn dirt across cobble would read as neglect on a
   // street that is supposed to be the town's spine.
   scatter(FloorTypeValue.road, DIRT_PATCH, plan.groundCover.dirtPatchDensityOnRoad);
+}
+
+/**
+ * Per-tile chance of each wilderness cover type on the surface it belongs to.
+ *
+ * Deliberately sparser than the town's weed scatter: these exist to stop a long
+ * walk across open country reading as one repeating material, and cover dense
+ * enough to notice tile by tile is cover dense enough to notice *as a grid*.
+ *
+ * They are constants here rather than fields on `TownPlan` because the plan
+ * describes the town, and none of this is inside the walls.
+ */
+const WILDFLOWER_DENSITY_ON_GRASS = 0.03;
+const PEBBLE_DENSITY_ON_HIGHLAND = 0.022;
+const PEBBLE_DENSITY_ON_SCREE = 0.03;
+
+/**
+ * Wildflower clumps over the open meadows and loose stones over the uplands.
+ *
+ * Separate from `scatterGroundCover` rather than another pair of calls inside
+ * it, because the two passes answer to different rules: that one is a town pass
+ * that must be suppressed over building plots and yards, this one is held
+ * outside the safe radius entirely and so needs no plot list at all.
+ *
+ * Written with `setStanding`, not `set`. `PEBBLE_SCATTER` falls on two different
+ * materials — highland turf and bare scree — so it cannot name one in
+ * `groundMaterialForTileType` the way `GRASSY_WEED` names grass, and the surface
+ * it replaced is the only record of which of the two it is standing on.
+ */
+export function scatterWildernessGroundCover(
+  grid: TileGrid,
+  plan: TownPlan,
+  borderTiles: number,
+): void {
+  const scatter = (sourceType: number, coverType: number, density: number) => {
+    for (let y = borderTiles + 1; y < grid.size - borderTiles - 1; y++) {
+      for (let x = borderTiles + 1; x < grid.size - borderTiles - 1; x++) {
+        if (grid.typeAt(x, y) !== sourceType) continue;
+        if (Math.hypot(x - plan.centre.x, y - plan.centre.y) <= plan.safeRadiusTiles) continue;
+        if (Math.random() < density) grid.setStanding(x, y, coverType);
+      }
+    }
+  };
+
+  scatter(FloorTypeValue.grass, WILDFLOWER_TUFT, WILDFLOWER_DENSITY_ON_GRASS);
+  scatter(HIGHLAND_GRASS, PEBBLE_SCATTER, PEBBLE_DENSITY_ON_HIGHLAND);
+  scatter(SCREE, PEBBLE_SCATTER, PEBBLE_DENSITY_ON_SCREE);
 }

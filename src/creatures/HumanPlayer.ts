@@ -1,6 +1,11 @@
-import { Player, type StatName } from '../Player';
+import { Player, WALK_FRAME_SPEED, type StatName } from '../Player';
 import type { Mob } from './Mob';
-import { drawHumanSprite, type HumanAttackPhase } from '../sprites/humanSprite';
+import {
+  drawHumanSprite,
+  SMUSH_FRAME_COUNT,
+  SMUSH_IMPACT_FRAME,
+  type HumanAttackPhase,
+} from '../sprites/humanSprite';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getSmushStats } from '../abilities/smush';
@@ -41,9 +46,17 @@ export class HumanPlayer extends Player {
   smushTimer = 0;
   smushCooldown = 0;
   readonly SMUSH_FRAMES = 44;
-  // Impact frame: [6,4] is the 5th of 11 visual frames → progressFrameIndex(t, 11) === 4
-  // t = 4/11 ≈ 0.364 → smushTimer = SMUSH_FRAMES * (1 - 0.364) ≈ 28
-  private readonly SMUSH_HIT_TIMER = 28;
+  /**
+   * The tick the stamp lands on, derived from where the impact sits in the
+   * animation rather than hard-coded: `drawHumanSprite` picks its frame from
+   * `1 - smushTimer / SMUSH_FRAMES`, so the timer that shows the impact frame
+   * is the one the blast has to fire on. It floors rather than rounds because
+   * `progressFrameIndex` floors — rounding lets the blast drift a frame ahead
+   * of the sole the moment either constant changes.
+   */
+  private readonly SMUSH_HIT_TIMER = Math.floor(
+    this.SMUSH_FRAMES * (1 - SMUSH_IMPACT_FRAME / SMUSH_FRAME_COUNT),
+  );
 
   /** The mob the human will automatically fight when not player-controlled. */
   autoTarget: Mob | null = null;
@@ -58,9 +71,31 @@ export class HumanPlayer extends Player {
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
   /** Distance above the sprite so the sphere sits just below the health bar. */
   private static readonly ACTIVE_SPHERE_GAP = 3;
+  /**
+   * How far the top of his hair sits above the tile anchor at the in-game tile
+   * size. Measured off the generated sheet: the standing rows top out 22px
+   * above the anchor, and the marker and health bar are stacked from there.
+   * Re-measure it whenever `HUMAN_SCALE` in the generator changes.
+   */
+  private static readonly SPRITE_TOP_ABOVE_TILE = 22;
+  /** Extra lift from the marker sphere's centre up to the health bar's anchor. */
+  private static readonly BAR_LIFT_ABOVE_SPHERE = 7;
   /** Offset from tile anchor so sphere sits in the gap between head top and health bar bottom. */
-  private static readonly ACTIVE_SPHERE_SPRITE_TOP = 19;
-  private static readonly HEALTH_BAR_Y_OFFSET = 30;
+  private static readonly ACTIVE_SPHERE_SPRITE_TOP = HumanPlayer.SPRITE_TOP_ABOVE_TILE;
+  private static readonly HEALTH_BAR_Y_OFFSET =
+    HumanPlayer.SPRITE_TOP_ABOVE_TILE + HumanPlayer.BAR_LIFT_ABOVE_SPHERE;
+  /**
+   * Waist height. His standing figure spans `SPRITE_TOP_ABOVE_TILE + TILE_SIZE`
+   * = 54 px from sole to hair, and a waist sits at about half a person's height.
+   */
+  /** How much faster than the shared default his cycle turns over. */
+  private static readonly GAIT_RATE = 1.3;
+  readonly waterlineAboveFootPx = 27;
+  /**
+   * His stride is short — a stride the leg can actually reach — so the cycle has
+   * to turn over faster than the shared default to match the ground he covers.
+   */
+  protected override walkFrameSpeed = WALK_FRAME_SPEED * HumanPlayer.GAIT_RATE;
   private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
 
@@ -152,7 +187,7 @@ export class HumanPlayer extends Player {
     return this.attackTimer === Math.ceil(this.ATTACK_FRAMES / 2);
   }
 
-  /** Returns true on the single frame when the smush impact hits the ground ([6,4]). */
+  /** Returns true on the single frame when the stamp lands and the blast goes off. */
   isSmushPeak(): boolean {
     return this.smushTimer === this.SMUSH_HIT_TIMER;
   }
@@ -210,7 +245,12 @@ export class HumanPlayer extends Player {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;
@@ -223,25 +263,19 @@ export class HumanPlayer extends Player {
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
-    drawHumanSprite(
-      ctx,
-      sx,
-      sy,
-      s,
-      this.attackPhase,
-      this.attackTimer,
-      this.ATTACK_FRAMES,
-      this.smushTimer,
-      this.SMUSH_FRAMES,
-      this.walkFrame,
-      this.isMoving,
-      this.facingY,
-      this.facingX,
-    );
+    drawHumanSprite(ctx, sx, sy, s, {
+      attackPhase: this.attackPhase,
+      attackTimer: this.attackTimer,
+      attackFrames: this.ATTACK_FRAMES,
+      smushTimer: this.smushTimer,
+      smushFrames: this.SMUSH_FRAMES,
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+    });
 
-    // Health bar above the sprite top (~32px above tile origin)
     this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
-    this.renderDamageFlash(ctx, sx, sy);
     this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }

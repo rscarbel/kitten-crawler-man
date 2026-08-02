@@ -1,6 +1,16 @@
+import type { CampKind } from '../map/overworld/camps';
 import type { SoundId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
+
+/**
+ * One entry of a camp's roster: a mob type, a count and a level range.
+ *
+ * Deliberately **not** a `MobSpawnRule`. That type is for weighted tables where
+ * one entry is picked; a camp spawns all of its entries, so a `chance` on one
+ * would be a field with no meaning that the spawner silently ignores.
+ */
+export type CampSpawnRule = Omit<MobSpawnRule, 'chance'>;
 
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule {
@@ -162,6 +172,21 @@ export interface LevelDef {
   hasSpiderLab?: boolean;
   /** Position-relative spawn rules evaluated at level construction time. */
   extraSpawns?: ExtraSpawnRule[];
+  /**
+   * Residents of the wilderness's enemy camps, one roster per kind.
+   *
+   * Keyed by camp *kind* rather than by index, deliberately: a map may site one
+   * camp and not the other, and an index-based rule would then populate the
+   * wrong one. `spawnForLevel` walks `map.camps` and looks each up here, so a
+   * level with no `campSpawns` — every floor but 3 — spawns nothing extra and
+   * takes no new code path.
+   *
+   * A camp roster spawns **every** entry rather than picking one, so
+   * `CampSpawnRule` drops `chance`. Reusing `MobSpawnRule` left a required field
+   * the spawner never read, and a future roster written with `chance: 0.5` would
+   * have spawned at 100% without a word.
+   */
+  campSpawns?: Partial<Record<CampKind, CampSpawnRule[]>>;
   /** Mobs to spawn when another mob is killed (event-driven). */
   onMobKilledSpawns?: OnMobKilledSpawn[];
   /**

@@ -3,23 +3,27 @@ import type { SpriteKey } from '../core/SpriteLoader';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { drawSpriteRotatedCenter } from '../core/SpriteRenderer';
 import type { GameMap } from '../map/GameMap';
+import { GOBLIN_GORE_PARTS } from '../sprites/goblinSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
   readonly parts: ReadonlyArray<string>;
 }
 
-const GOBLIN_CONFIG: MobBodyPartConfig = {
-  spriteKey: 'goblin_base',
-  parts: [
-    'gore_severed_arm_left',
-    'gore_severed_arm_right',
-    'gore_severed_leg_left',
-    'gore_severed_leg_right',
-    'gore_severed_torso',
-    'gore_severed_head',
-  ],
-};
+/**
+ * The nine pieces every goblin comes apart into, in spawn order.
+ *
+ * One config per archetype rather than one shared config, because each sheet
+ * bakes its own pieces: an axe goblin's severed arm has the axe goblin's skin
+ * tone, build and gear on it. `Goblin.bodyPartKey` is weapon-derived so the
+ * flying pieces match the goblin that died.
+ */
+const GOBLIN_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
+  ['goblin_sword', { spriteKey: 'goblin_sword', parts: GOBLIN_GORE_PARTS }],
+  ['goblin_axe', { spriteKey: 'goblin_axe', parts: GOBLIN_GORE_PARTS }],
+  ['goblin_mace', { spriteKey: 'goblin_mace', parts: GOBLIN_GORE_PARTS }],
+  ['goblin_warhammer', { spriteKey: 'goblin_warhammer', parts: GOBLIN_GORE_PARTS }],
+];
 
 const HOARDER_CONFIG: MobBodyPartConfig = {
   spriteKey: 'hoarder',
@@ -34,7 +38,7 @@ const HOARDER_CONFIG: MobBodyPartConfig = {
 };
 
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
-  ['goblin', GOBLIN_CONFIG],
+  ...GOBLIN_CONFIGS,
   ['hoarder', HOARDER_CONFIG],
 ]);
 

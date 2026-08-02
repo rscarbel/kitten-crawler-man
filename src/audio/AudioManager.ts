@@ -4,6 +4,31 @@ import type { SoundId } from './sounds';
 import { ALL_SOUND_IDS, SOUND_MANIFEST } from './sounds';
 
 const WALKING_VOLUME = 0.25;
+/**
+ * The wading loop has to beat the river bed, not merely the footsteps it
+ * replaces, and that is a much higher bar: both are broadband water noise, so
+ * they mask each other almost perfectly and a few dB of difference is inaudible
+ * rather than quiet. Measured effective levels (file loudness + this gain): the
+ * Tuned by ear over several passes and finally set by measurement: the river bed
+ * lands at an effective -22.2 dB, and this puts the wading loop 3 dB under it,
+ * at -25.2. Under rather than over, which is the opposite of where it started —
+ * the loop only has to be *distinguishable* from the bed, and both being
+ * broadband water noise it reads as part of the river rather than as a separate
+ * sound when it sits above.
+ *
+ * The number is not comparable to earlier values: the file itself was remastered
+ * 8 dB louder partway through. Only the effective levels are.
+ */
+const WADING_VOLUME = 0.32;
+/**
+ * Fade applied when the wading loop stops.
+ *
+ * Deliberately far shorter than `AMBIENT_RAMP_MS`: this tracks the player's own
+ * footfalls, so it has to stop when they stop, not a tenth of a second later.
+ * Not zero either — cutting a looping noise source dead puts a click on the end
+ * of every step the player takes in the water.
+ */
+const WADING_FADE_OUT_MS = 40;
 const SPIDER_WALKING_VOLUME = 0.4;
 const MACHINERY_VOLUME = 0.35;
 const MS_PER_SECOND = 1000;
@@ -69,6 +94,8 @@ export class AudioManager {
   private musicPlaylist: SoundId[] | null = null;
   private musicPlaylistPos = 0;
   private walkingSource: AudioBufferSourceNode | null = null;
+  /** Kept with its gain node, unlike the walking loop, so stopping can fade. */
+  private wadingLoop: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
   private machinerySource: AudioBufferSourceNode | null = null;
   private keyboardHeroMusicSource: AudioBufferSourceNode | null = null;
@@ -164,6 +191,7 @@ export class AudioManager {
     this.masterGain.gain.value = 0;
     // Stop looping sources so they don't resume audibly on a buggy ctx.resume().
     this.stopWalkingLoop();
+    this.stopWadingLoop();
     this.stopSpiderWalkingLoop();
     this.stopMachineryLoop();
     this.stopKeyboardHeroMusic();
@@ -448,6 +476,51 @@ export class AudioManager {
       /* already stopped */
     }
     this.walkingSource = null;
+  }
+
+  /**
+   * Start the looping wading SFX. No-op if already playing or not yet decoded.
+   */
+  startWadingLoop(): void {
+    if (this.wadingLoop !== null) return;
+    const buffer = this.buffers.get('player_wading');
+    if (!buffer) return;
+    const gain = this.ctx.createGain();
+    gain.gain.value = WADING_VOLUME;
+    gain.connect(this.sfxGain);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+    this.wadingLoop = { source, gain };
+  }
+
+  /**
+   * Stop the wading loop on a very short fade. No-op if it isn't running.
+   *
+   * The handle is dropped before the fade finishes, so a player who takes one
+   * step, stops, and steps again gets a fresh voice immediately rather than
+   * being refused for the length of the fade — the old one is already detached
+   * and rides its ramp to zero on its own.
+   */
+  stopWadingLoop(): void {
+    const loop = this.wadingLoop;
+    if (loop === null) return;
+    this.wadingLoop = null;
+    const now = this.ctx.currentTime;
+    const fadeSeconds = WADING_FADE_OUT_MS / MS_PER_SECOND;
+    try {
+      loop.gain.gain.cancelScheduledValues(now);
+      loop.gain.gain.setValueAtTime(loop.gain.gain.value, now);
+      loop.gain.gain.linearRampToValueAtTime(0, now + fadeSeconds);
+      loop.source.stop(now + fadeSeconds);
+    } catch {
+      /* already stopped */
+    }
+    loop.source.onended = () => {
+      loop.gain.disconnect();
+    };
   }
 
   /** Start a looping spider walking SFX. No-op if already playing or buffer not loaded. */
@@ -883,6 +956,7 @@ export class AudioManager {
     window.removeEventListener('pageshow', this.handlePageShow);
     this.removeUnlockListeners();
     this.stopWalkingLoop();
+    this.stopWadingLoop();
     this.stopSpiderWalkingLoop();
     this.stopMachineryLoop();
     this.stopKeyboardHeroMusic();

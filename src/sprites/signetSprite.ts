@@ -16,28 +16,35 @@ const TILE_SPAN = 1;
 
 /* ── Figure proportions (tile fractions, origin at the tile centre) ─────── */
 
-const HEAD_CENTER_Y = -0.3;
-const HEAD_RADIUS_X = 0.067;
+/**
+ * The pelvis sits high and the knee low: her legs carry a little over half the
+ * standing figure, which is what keeps a two-tile character from reading as a
+ * long torso propped on stumps. Every landmark below the waist is derived from
+ * `HIP_Y` and `CROTCH_Y`, so the whole seat, thong and thigh geometry travels
+ * with them.
+ */
+const HEAD_CENTER_Y = -0.315;
+const HEAD_RADIUS_X = 0.064;
 const HEAD_RADIUS_Y = 0.082;
 const JAW_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.9;
 
-const NECK_HALF_WIDTH = 0.026;
+const NECK_HALF_WIDTH = 0.024;
 const NECK_TOP_Y = JAW_Y - 0.01;
 
-const SHOULDER_Y = -0.185;
+const SHOULDER_Y = -0.2;
 const SHOULDER_HALF_WIDTH = 0.098;
-const BUST_Y = -0.115;
+const BUST_Y = -0.13;
 const BUST_HALF_WIDTH = 0.104;
-const WAIST_Y = -0.005;
+const WAIST_Y = -0.022;
 const WAIST_HALF_WIDTH = 0.058;
-const HIP_Y = 0.105;
+const HIP_Y = 0.075;
 const HIP_HALF_WIDTH = 0.098;
-const CROTCH_Y = 0.175;
+const CROTCH_Y = 0.142;
 const CROTCH_HALF_WIDTH = 0.036;
 
 /** Bust apex — the point the hair locks are required to cover. */
 const BUST_POINT_X = 0.052;
-const BUST_POINT_Y = -0.1;
+const BUST_POINT_Y = -0.115;
 const BUST_UNDERCURVE_RADIUS = 0.042;
 /** Only the lower outside of the circle is drawn, so it reads as a soft crease. */
 const BUST_UNDERCURVE_ARC_START = HALF_TURN * 0.12;
@@ -125,8 +132,8 @@ const GROIN_CREASE_FADE_STOP = 0.5;
 /* ── Back view ─────────────────────────────────────────────────────────── */
 
 const SHOULDER_BLADE_X = 0.05;
-const SHOULDER_BLADE_TOP_Y = -0.155;
-const SHOULDER_BLADE_BOTTOM_Y = -0.075;
+const SHOULDER_BLADE_TOP_Y = -0.17;
+const SHOULDER_BLADE_BOTTOM_Y = -0.092;
 const SHOULDER_BLADE_FLARE = 0.02;
 /** How far down the spine the groove reaches full depth, from the blades. */
 const SPINE_FADE_STOP = 0.35;
@@ -137,7 +144,7 @@ const SPINE_FADE_STOP = 0.35;
  * spot that actually reads.
  */
 const BACK_FISH_X = 0.052;
-const BACK_FISH_Y = 0.0;
+const BACK_FISH_Y = -0.012;
 const BACK_OF_HEAD_WIDTH_FRACTION = 1.08;
 const BACK_OF_HEAD_HEIGHT_FRACTION = 1.02;
 
@@ -148,37 +155,47 @@ const BACK_OF_HEAD_HEIGHT_FRACTION = 1.02;
  * past it and hang over the thighs, meeting in a notch at the crotch. Painting
  * curves onto a flat-bottomed slab instead is what makes it read as a square.
  */
-const SEAT_HALF_WIDTH = HIP_HALF_WIDTH * 1.04;
-const SEAT_WIDEST_Y = HIP_Y + 0.03;
+const SEAT_HALF_WIDTH = HIP_HALF_WIDTH * 1.06;
+const SEAT_WIDEST_Y = HIP_Y + 0.034;
 const SEAT_FOLD_OUTER_X = HIP_HALF_WIDTH * 0.97;
-const SEAT_FOLD_OUTER_Y = HIP_Y + 0.055;
+const SEAT_FOLD_OUTER_Y = HIP_Y + 0.066;
 /**
  * The cheeks hang *below* the crotch — that overhang is most of what gives the
  * seat depth, and it is also what closes the top of the gap between her thighs.
  */
 const SEAT_UNDERSIDE_CONTROL_X = HIP_HALF_WIDTH * 0.56;
-const SEAT_UNDERSIDE_CONTROL_Y = CROTCH_Y + 0.03;
-const SEAT_INNER_BOTTOM_Y = CROTCH_Y + 0.015;
+const SEAT_UNDERSIDE_CONTROL_Y = CROTCH_Y + 0.04;
+const SEAT_INNER_BOTTOM_Y = CROTCH_Y + 0.024;
 /** The notch between the cheeks; without it the hem is one flat line again. */
-const SEAT_NOTCH_Y = CROTCH_Y + 0.004;
+const SEAT_NOTCH_Y = CROTCH_Y + 0.012;
 
 /**
  * The seat is washed down before anything is lit on it. The torso's own fill is
  * already the lightest tone on her body, so a highlight painted straight onto
  * it has nothing to stand out from and the cheeks stay flat however many
  * contour lines are drawn over them.
+ *
+ * The wash is deliberately wider and taller than the seat it covers. Sized to
+ * the seat, its own soft edge lands *inside* the silhouette and the whole thing
+ * reads as one dark patch painted onto her rather than as the cheeks turning
+ * away from the light; only the lit domes over it are allowed to have edges.
  */
-const SEAT_SHADE_Y = HIP_Y + 0.048;
-const SEAT_SHADE_RADIUS_X = HIP_HALF_WIDTH * 1.05;
-const SEAT_SHADE_RADIUS_Y = 0.078;
-const SEAT_SHADE_ALPHA = 0.6;
+const SEAT_SHADE_Y = HIP_Y + 0.05;
+const SEAT_SHADE_RADIUS_X = SEAT_HALF_WIDTH * 1.5;
+const SEAT_SHADE_RADIUS_Y = 0.105;
+const SEAT_SHADE_ALPHA = 0.62;
 
 /** The lit swell of each cheek, read against that wash. */
-const GLUTE_HIGHLIGHT_X = 0.048;
-const GLUTE_HIGHLIGHT_Y = HIP_Y + 0.022;
-const GLUTE_HIGHLIGHT_RADIUS_X = 0.045;
-const GLUTE_HIGHLIGHT_RADIUS_Y = 0.05;
-const GLUTE_HIGHLIGHT_ALPHA = 0.9;
+const GLUTE_HIGHLIGHT_X = 0.05;
+/**
+ * Set high on the cheek rather than at its middle: what turns the wash from a
+ * stain into a form is the band of it left unlit *below* the dome, where the
+ * cheek rolls under toward the fold.
+ */
+const GLUTE_HIGHLIGHT_Y = HIP_Y + 0.024;
+const GLUTE_HIGHLIGHT_RADIUS_X = 0.05;
+const GLUTE_HIGHLIGHT_RADIUS_Y = 0.058;
+const GLUTE_HIGHLIGHT_ALPHA = 1;
 
 const GLUTE_OUTER_SHADE_X = HIP_HALF_WIDTH * 0.98;
 const GLUTE_OUTER_SHADE_Y = HIP_Y + 0.04;
@@ -188,39 +205,52 @@ const GLUTE_OUTER_SHADE_ALPHA = 0.55;
 
 /**
  * The gluteal fold is drawn inset above the silhouette's underside, so what
- * shows below it is thigh — drawn on the edge it would just be an outline. It
- * also stops short of the flank, the way the crease does on a real body.
+ * shows below it is thigh — drawn on the edge it would just be an outline.
+ *
+ * It spans the full width of the thigh it sits down onto and runs all the way
+ * in to meet its twin under the cleft, so the two cheeks read as one seat.
+ * Stopped short at either end it is a pair of hooks hung on her back instead,
+ * and cutting straight across — rather than tracking the underside down and
+ * back up — is what gives it the sharp elbow that reads as a drawn angle.
  */
-const GLUTE_FOLD_INSET = 0.006;
-const GLUTE_FOLD_OUTER_FRACTION = 0.88;
-const GLUTE_FOLD_INNER_X = CROTCH_HALF_WIDTH * 0.85;
-/** How far along the crease it reaches full depth, measured from the flank. */
-const GLUTE_FOLD_FADE_STOP = 0.5;
+const GLUTE_FOLD_INSET = 0.009;
+const GLUTE_FOLD_OUTER_X = SEAT_FOLD_OUTER_X * 0.99;
+const GLUTE_FOLD_OUTER_Y = SEAT_FOLD_OUTER_Y - GLUTE_FOLD_INSET;
+const GLUTE_FOLD_JUNCTION_Y = SEAT_NOTCH_Y - GLUTE_FOLD_INSET;
+/** Pull the crease down along the hang of the cheek between those two ends. */
+const GLUTE_FOLD_INNER_CONTROL_X = CROTCH_HALF_WIDTH * 0.8;
+const GLUTE_FOLD_INNER_CONTROL_Y = SEAT_INNER_BOTTOM_Y - GLUTE_FOLD_INSET * 0.4;
+const GLUTE_FOLD_OUTER_CONTROL_X = SEAT_UNDERSIDE_CONTROL_X * 1.3;
+const GLUTE_FOLD_OUTER_CONTROL_Y = SEAT_UNDERSIDE_CONTROL_Y - GLUTE_FOLD_INSET;
+/** How far along the crease, measured from the flank, it reaches full depth. */
+const GLUTE_FOLD_FADE_STOP = 0.26;
 
 const SACRAL_DIMPLE_X = 0.026;
 const SACRAL_DIMPLE_Y = HIP_Y - 0.014;
 const SACRAL_DIMPLE_RADIUS = 0.012;
 const SACRAL_DIMPLE_ALPHA = 0.4;
 
-const GLUTE_CLEFT_TOP_Y = HIP_Y + 0.006;
-const GLUTE_CLEFT_BOTTOM_Y = SEAT_NOTCH_Y - 0.004;
+const GLUTE_CLEFT_TOP_Y = HIP_Y + 0.004;
+/** Ends where the two folds meet, so all three creases join into one form. */
+const GLUTE_CLEFT_BOTTOM_Y = GLUTE_FOLD_JUNCTION_Y;
 /** Tapered at both ends: a lens, not a line, so it reads as depth rather than ink. */
-const GLUTE_CLEFT_HALF_WIDTH = 0.009;
-const GLUTE_CLEFT_WIDEST_Y = HIP_Y + (GLUTE_CLEFT_BOTTOM_Y - HIP_Y) * 0.5;
+const GLUTE_CLEFT_HALF_WIDTH = 0.013;
+const GLUTE_CLEFT_WIDEST_Y = HIP_Y + (GLUTE_CLEFT_BOTTOM_Y - HIP_Y) * 0.6;
 /**
  * The cleft is a valley, not a stroke: a soft shadow this much wider than the
  * dark core, so the two cheeks fall away into it instead of being ruled apart.
  * The thong string covers most of the core anyway, which is why a core alone
  * reads as a painted line.
  */
-const GLUTE_CLEFT_VALLEY_HALF_WIDTH = 0.024;
-const GLUTE_CLEFT_VALLEY_ALPHA = 0.6;
+const GLUTE_CLEFT_VALLEY_HALF_WIDTH = 0.034;
+const GLUTE_CLEFT_VALLEY_ALPHA = 0.75;
 
 /* ── Legs ──────────────────────────────────────────────────────────────── */
 
 const LEG_TOP_Y = HIP_Y - 0.01;
-const KNEE_Y = 0.3;
-const ANKLE_Y = 0.42;
+/** Set near the midpoint of crotch-to-floor, so the shin is not the shorter half. */
+const KNEE_Y = 0.278;
+const ANKLE_Y = 0.418;
 const FOOT_Y = 0.455;
 
 const LEG_HIP_X = 0.056;
@@ -326,7 +356,7 @@ const WALK_ARM_SWING = 0.42;
  * frame and every pose. Nothing is drawn on the chest underneath them.
  */
 const FRONT_LOCK_TOP_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.2;
-const FRONT_LOCK_BOTTOM_Y = -0.045;
+const FRONT_LOCK_BOTTOM_Y = -0.058;
 const FRONT_LOCK_CENTER_X = BUST_POINT_X;
 /**
  * Only wide enough to cover the apex it is centred on. Widened out, the pair of
@@ -347,7 +377,7 @@ const HAIR_LENGTH_Y = FRONT_LOCK_BOTTOM_Y + FRONT_LOCK_TIP_LENGTH;
 const BACK_HAIR_HALF_WIDTH = 0.128;
 const BACK_HAIR_TOP_Y = HEAD_CENTER_Y - HEAD_RADIUS_Y * 0.85;
 const BACK_HAIR_BOTTOM_Y = HAIR_LENGTH_Y;
-const BACK_HAIR_FLARE_Y = -0.15;
+const BACK_HAIR_FLARE_Y = -0.165;
 
 /**
  * Seen from behind, her hair comes over both shoulders and meets in a V below
@@ -370,6 +400,50 @@ const HAIR_STRAND_WIDTH = 0.006;
 
 const FRINGE_Y = HEAD_CENTER_Y - HEAD_RADIUS_Y * 0.15;
 
+/* ── Skull ─────────────────────────────────────────────────────────────── */
+
+/**
+ * The face is not the head ellipse: an ellipse has the same width at the jaw as
+ * at the cheekbone, which is the single thing that makes a drawn head read as
+ * male or as a doll. Hers runs wide and round through the cranium, holds its
+ * width at the cheekbone, then falls away to a narrow rounded chin.
+ */
+const HEAD_CROWN_Y = HEAD_CENTER_Y - HEAD_RADIUS_Y;
+const CHIN_Y = JAW_Y;
+const CHEEKBONE_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.08;
+const JAW_CORNER_X = HEAD_RADIUS_X * 0.74;
+const JAW_CORNER_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.46;
+const CHIN_HALF_WIDTH = HEAD_RADIUS_X * 0.26;
+/** Where the jawline stops running in and the chin itself rounds off. */
+const CHIN_SHOULDER_Y = CHIN_Y - HEAD_RADIUS_Y * 0.1;
+/** Carries the cranium out past the eye line before it turns down. */
+const TEMPLE_CONTROL_X = HEAD_RADIUS_X * 1.14;
+const CRANIUM_CONTROL_RISE = HEAD_RADIUS_Y * 0.45;
+const CHEEK_TO_JAW_CONTROL_DROP = HEAD_RADIUS_Y * 0.22;
+const CHIN_ROUND_CONTROL_FRACTION = 0.85;
+
+/**
+ * She is lit from her left (screen right), so every shadow on the face falls on
+ * the same side and the light never contradicts itself between features.
+ */
+const FACE_SHADOW_SIDE = -1;
+const TEMPLE_SHADE_X = HEAD_RADIUS_X * 0.6;
+const TEMPLE_SHADE_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.1;
+const TEMPLE_SHADE_RADIUS_X = HEAD_RADIUS_X * 0.42;
+const TEMPLE_SHADE_RADIUS_Y = HEAD_RADIUS_Y * 0.5;
+
+/** The hollow under each cheekbone; what gives the taper somewhere to start. */
+const CHEEK_HOLLOW_X = HEAD_RADIUS_X * 0.66;
+const CHEEK_HOLLOW_Y = HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.34;
+const CHEEK_HOLLOW_RADIUS_X = 0.012;
+const CHEEK_HOLLOW_RADIUS_Y = 0.016;
+const CHEEK_HOLLOW_ALPHA = 0.38;
+
+const JAW_SHADE_Y = CHIN_Y - 0.006;
+const JAW_SHADE_RADIUS_X = CHIN_HALF_WIDTH * 1.8;
+const JAW_SHADE_RADIUS_Y = 0.01;
+const JAW_SHADE_ALPHA = 0.3;
+
 /* ── Head details ──────────────────────────────────────────────────────── */
 
 const EAR_LENGTH = 0.076;
@@ -384,22 +458,87 @@ const HORN_LENGTH = 0.055;
 /** How far up the skull the horns are rooted, as a fraction of its radius. */
 const HORN_BASE_Y_FRACTION = 0.7;
 
-const EYE_X = 0.028;
+const EYE_X = 0.027;
 const EYE_Y = HEAD_CENTER_Y - 0.004;
-const EYE_RADIUS_X = 0.015;
-const EYE_RADIUS_Y = 0.011;
-const PUPIL_RADIUS = 0.006;
+const EYE_RADIUS_X = 0.0145;
+const EYE_RADIUS_Y = 0.0105;
+/** Outer corner lifted above the inner one, which is most of the almond. */
+const EYE_OUTER_CORNER_RISE = 0.004;
+const EYE_LID_CONTROL_RISE = 1.45;
+const PUPIL_RADIUS = 0.0058;
+const EYE_CATCHLIGHT_OFFSET = 0.0026;
+const EYE_CATCHLIGHT_RADIUS = 0.0022;
+/** Heavier at the outer corner and carried past it as a flick. */
+const LASH_LINE_WIDTH = 0.0026;
+const LASH_FLICK_LENGTH = 0.005;
+const LASH_FLICK_RISE = 0.0035;
 const EYE_GLOW_BLUR_IDLE_PX = 2;
 const EYE_GLOW_BLUR_CAST_PX = 14;
 /** The tile size the pixel blur radii above were chosen against. */
 const GLOW_REFERENCE_TILE_PX = 32;
 const INK_GLOW_BLUR_PX = 4;
 
-const MOUTH_Y = HEAD_CENTER_Y + 0.045;
-const MOUTH_HALF_WIDTH = 0.018;
-const FANG_X = 0.012;
-const FANG_HALF_WIDTH = 0.006;
-const FANG_LENGTH = 0.014;
+/** High, thin and arched — a heavy straight brow is the most masculine mark
+ * that can be put on a face this stylised. */
+const BROW_INNER_X = 0.016;
+const BROW_OUTER_X = 0.042;
+const BROW_Y = EYE_Y - 0.028;
+const BROW_ARCH_RISE = 0.007;
+/** The arch peaks past the middle of the brow, nearer the outer end. */
+const BROW_ARCH_X_FRACTION = 0.62;
+const BROW_LINE_WIDTH = 0.0026;
+const BROW_ALPHA = 0.6;
+
+/**
+ * Slight but present: at this size a drawn nose becomes a smudge, so hers is
+ * built out of the light instead — a shadow down one side of the bridge, a lit
+ * tip, and two nostril marks small enough to read as punctuation.
+ */
+const NOSE_TIP_Y = HEAD_CENTER_Y + 0.023;
+const NOSE_HALF_WIDTH = 0.0085;
+const NOSE_BRIDGE_TOP_Y = EYE_Y + 0.004;
+const NOSE_BRIDGE_SHADE_RADIUS_X = 0.005;
+const NOSE_BRIDGE_SHADE_ALPHA = 0.5;
+const NOSE_TIP_SHADE_Y = NOSE_TIP_Y + 0.0045;
+const NOSE_TIP_SHADE_RADIUS_X = 0.011;
+const NOSE_TIP_SHADE_RADIUS_Y = 0.005;
+const NOSE_TIP_SHADE_ALPHA = 0.62;
+const NOSE_TIP_HIGHLIGHT_Y = NOSE_TIP_Y - 0.005;
+const NOSE_TIP_HIGHLIGHT_RADIUS = 0.0065;
+const NOSE_TIP_HIGHLIGHT_ALPHA = 0.85;
+const NOSTRIL_X = NOSE_HALF_WIDTH * 0.8;
+const NOSTRIL_RADIUS_X = 0.0034;
+const NOSTRIL_RADIUS_Y = 0.0022;
+const NOSTRIL_ALPHA = 0.7;
+
+/**
+ * Two lips with a seam between them, not a single stroke. The stroke was the
+ * whole mouth before, and at her size a hairline in a skin tone simply is not
+ * there — the mouth has to be a shape holding its own colour.
+ */
+const MOUTH_Y = HEAD_CENTER_Y + 0.042;
+const MOUTH_HALF_WIDTH = 0.016;
+const UPPER_LIP_HEIGHT = 0.0075;
+const LOWER_LIP_HEIGHT = 0.0115;
+/** The peaks of the cupid's bow, either side of the philtrum dip. */
+const CUPIDS_BOW_X = 0.0055;
+const CUPIDS_BOW_DIP = 0.35;
+const LIP_PEAK_CONTROL_FRACTION = 0.55;
+const LIP_SEAM_DROP = 0.0018;
+const LIP_SEAM_LINE_WIDTH = 0.0026;
+const LOWER_LIP_SHEEN_Y_FRACTION = 0.55;
+const LOWER_LIP_SHEEN_RADIUS_X = 0.008;
+const LOWER_LIP_SHEEN_RADIUS_Y = 0.0032;
+const LOWER_LIP_SHEEN_ALPHA = 0.5;
+/** The shadow the lower lip throws onto the chin, which sets it forward. */
+const CHIN_SHADOW_Y = MOUTH_Y + LOWER_LIP_HEIGHT + 0.005;
+const CHIN_SHADOW_RADIUS_X = 0.011;
+const CHIN_SHADOW_RADIUS_Y = 0.004;
+const CHIN_SHADOW_ALPHA = 0.35;
+
+const FANG_X = 0.0095;
+const FANG_HALF_WIDTH = 0.0038;
+const FANG_LENGTH = 0.009;
 
 /* ── Ink ───────────────────────────────────────────────────────────────── */
 
@@ -542,6 +681,16 @@ const INK_COLOR = '#141a2a';
 const INK_GLOW_COLOR = '#7fe6d4';
 /** Charged ink — still dark enough to read against her skin. */
 const INK_LIT_COLOR = '#0d5f57';
+/**
+ * Kept cool and desaturated: a warm red mouth on skin this glacial reads as a
+ * sticker rather than as part of her. The upper lip is the darker of the two
+ * because it faces down and away from the light.
+ */
+const LIP_COLOR = '#b3899e';
+const LIP_UPPER_COLOR = '#9d788c';
+const LIP_SEAM_COLOR = '#5f4257';
+const LIP_SHEEN_COLOR = '#e6d4de';
+const LIP_SHEEN_FADE = 'rgba(230,212,222,0)';
 const EYE_IDLE_COLOR = '#9fd8f0';
 const EYE_CAST_COLOR = '#d6fff4';
 const SCALE_COLOR = '#8fc4e8';
@@ -1075,6 +1224,10 @@ function drawSkinRipple(
   );
 }
 
+/** Flash on the legs rides mid-thigh and just above the knee. */
+const THIGH_TATTOO_Y = LEG_TOP_Y + (KNEE_Y - LEG_TOP_Y) * 0.55;
+const KNEE_TATTOO_Y = KNEE_Y + 0.05;
+
 function drawLegs(
   ctx: CanvasRenderingContext2D,
   timeSec: number,
@@ -1162,13 +1315,13 @@ function drawLegs(
     if (side < 0) {
       stampTattoo(ctx, drawThreeHeadedOgreMotif, timeSec, {
         x: joints.hipX,
-        y: 0.21,
+        y: THIGH_TATTOO_Y,
         size: 0.085,
         phase: 1.1,
       });
       stampTattoo(ctx, drawEelLightningMotif, timeSec, {
         x: joints.kneeX,
-        y: 0.35,
+        y: KNEE_TATTOO_Y,
         size: 0.07,
         phase: 3.7,
         detail: true,
@@ -1176,7 +1329,7 @@ function drawLegs(
     } else {
       stampTattoo(ctx, drawHammerheadSharkMotif, timeSec, {
         x: joints.hipX,
-        y: 0.215,
+        y: THIGH_TATTOO_Y,
         size: 0.13,
         phase: 2.3,
         rotation: HALF_TURN * 0.5,
@@ -1381,7 +1534,7 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
     GLUTE_CLEFT_VALLEY_ALPHA,
   );
 
-  ctx.fillStyle = SKIN_DEEP_SHADE;
+  ctx.fillStyle = SKIN_CREASE;
   ctx.beginPath();
   ctx.moveTo(0, GLUTE_CLEFT_TOP_Y);
   ctx.quadraticCurveTo(GLUTE_CLEFT_HALF_WIDTH, GLUTE_CLEFT_WIDEST_Y, 0, GLUTE_CLEFT_BOTTOM_Y);
@@ -1389,27 +1542,28 @@ function drawGlutes(ctx: CanvasRenderingContext2D): void {
   ctx.closePath();
   ctx.fill();
 
-  // The fold each cheek makes where it sits down onto the thigh, tracking the
-  // silhouette's underside a little way inside it. It is deepest beside the
-  // cleft and fades out toward the flank, the way the crease dies away there.
+  // The fold each cheek makes where it sits down onto the thigh: a cubic that
+  // tracks the silhouette's underside a little way inside it, from the outer
+  // edge of the thigh all the way in to the foot of the cleft, where it meets
+  // its twin. Deepest at that junction and fading out toward the flank, the way
+  // the crease dies away there.
   for (const side of SIDES) {
-    const outerX = side * SEAT_FOLD_OUTER_X * GLUTE_FOLD_OUTER_FRACTION;
-    const outerY = SEAT_FOLD_OUTER_Y - GLUTE_FOLD_INSET;
-    const innerX = side * GLUTE_FOLD_INNER_X;
-    const innerY = SEAT_INNER_BOTTOM_Y - GLUTE_FOLD_INSET;
+    const outerX = side * GLUTE_FOLD_OUTER_X;
 
-    const crease = ctx.createLinearGradient(outerX, outerY, innerX, innerY);
+    const crease = ctx.createLinearGradient(outerX, GLUTE_FOLD_OUTER_Y, 0, GLUTE_FOLD_JUNCTION_Y);
     crease.addColorStop(0, SKIN_CREASE_FADE);
     crease.addColorStop(GLUTE_FOLD_FADE_STOP, SKIN_CREASE);
     crease.addColorStop(1, SKIN_CREASE);
 
-    strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH, crease, () => {
-      ctx.moveTo(outerX, outerY);
-      ctx.quadraticCurveTo(
-        side * SEAT_UNDERSIDE_CONTROL_X,
-        SEAT_UNDERSIDE_CONTROL_Y - GLUTE_FOLD_INSET,
-        innerX,
-        innerY,
+    strokeSoftCrease(ctx, BUST_UNDERCURVE_LINE_WIDTH * UNDERCURVE_WEIGHT, crease, () => {
+      ctx.moveTo(outerX, GLUTE_FOLD_OUTER_Y);
+      ctx.bezierCurveTo(
+        side * GLUTE_FOLD_OUTER_CONTROL_X,
+        GLUTE_FOLD_OUTER_CONTROL_Y,
+        side * GLUTE_FOLD_INNER_CONTROL_X,
+        GLUTE_FOLD_INNER_CONTROL_Y,
+        0,
+        GLUTE_FOLD_JUNCTION_Y,
       );
     });
   }
@@ -1924,6 +2078,320 @@ function drawBackCurtain(ctx: CanvasRenderingContext2D): void {
   }
 }
 
+/** Crown down one side of the face to the point of the chin. */
+function traceFaceSideDown(ctx: CanvasRenderingContext2D, side: BodySide): void {
+  ctx.bezierCurveTo(
+    side * TEMPLE_CONTROL_X,
+    HEAD_CROWN_Y,
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y - CRANIUM_CONTROL_RISE,
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y,
+  );
+  ctx.bezierCurveTo(
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y + CHEEK_TO_JAW_CONTROL_DROP,
+    side * JAW_CORNER_X,
+    JAW_CORNER_Y,
+    side * CHIN_HALF_WIDTH,
+    CHIN_SHOULDER_Y,
+  );
+  ctx.quadraticCurveTo(side * CHIN_HALF_WIDTH * CHIN_ROUND_CONTROL_FRACTION, CHIN_Y, 0, CHIN_Y);
+}
+
+/** The same profile walked the other way, to close the outline at the crown. */
+function traceFaceSideUp(ctx: CanvasRenderingContext2D, side: BodySide): void {
+  ctx.quadraticCurveTo(
+    side * CHIN_HALF_WIDTH * CHIN_ROUND_CONTROL_FRACTION,
+    CHIN_Y,
+    side * CHIN_HALF_WIDTH,
+    CHIN_SHOULDER_Y,
+  );
+  ctx.bezierCurveTo(
+    side * JAW_CORNER_X,
+    JAW_CORNER_Y,
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y + CHEEK_TO_JAW_CONTROL_DROP,
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y,
+  );
+  ctx.bezierCurveTo(
+    side * HEAD_RADIUS_X,
+    CHEEKBONE_Y - CRANIUM_CONTROL_RISE,
+    side * TEMPLE_CONTROL_X,
+    HEAD_CROWN_Y,
+    0,
+    HEAD_CROWN_Y,
+  );
+}
+
+function pathFace(ctx: CanvasRenderingContext2D): void {
+  ctx.beginPath();
+  ctx.moveTo(0, HEAD_CROWN_Y);
+  traceFaceSideDown(ctx, 1);
+  traceFaceSideUp(ctx, -1);
+  ctx.closePath();
+}
+
+/**
+ * Modelling only — no drawn line anywhere on it. A face this small is carried
+ * by where the light stops: the shaded side, the hollow under each cheekbone,
+ * and the shadow the jaw casts on the neck.
+ */
+function shadeFace(ctx: CanvasRenderingContext2D): void {
+  fillSoftEllipse(
+    ctx,
+    FACE_SHADOW_SIDE * TEMPLE_SHADE_X,
+    TEMPLE_SHADE_Y,
+    TEMPLE_SHADE_RADIUS_X,
+    TEMPLE_SHADE_RADIUS_Y,
+    SKIN_SHADE,
+    SKIN_SHADE_FADE,
+    CHEEK_SHADE_ALPHA,
+  );
+
+  for (const side of SIDES) {
+    fillSoftEllipse(
+      ctx,
+      side * CHEEK_HOLLOW_X,
+      CHEEK_HOLLOW_Y,
+      CHEEK_HOLLOW_RADIUS_X,
+      CHEEK_HOLLOW_RADIUS_Y,
+      SKIN_SHADE,
+      SKIN_SHADE_FADE,
+      CHEEK_HOLLOW_ALPHA,
+    );
+  }
+
+  fillSoftEllipse(
+    ctx,
+    0,
+    JAW_SHADE_Y,
+    JAW_SHADE_RADIUS_X,
+    JAW_SHADE_RADIUS_Y,
+    SKIN_SHADE,
+    SKIN_SHADE_FADE,
+    JAW_SHADE_ALPHA,
+  );
+}
+
+function drawBrows(ctx: CanvasRenderingContext2D): void {
+  ctx.save();
+  ctx.strokeStyle = HAIR_DARK;
+  ctx.globalAlpha = BROW_ALPHA;
+  ctx.lineWidth = BROW_LINE_WIDTH;
+  ctx.lineCap = 'round';
+  for (const side of SIDES) {
+    const archX = BROW_INNER_X + (BROW_OUTER_X - BROW_INNER_X) * BROW_ARCH_X_FRACTION;
+    ctx.beginPath();
+    ctx.moveTo(side * BROW_INNER_X, BROW_Y);
+    ctx.quadraticCurveTo(side * archX, BROW_Y - BROW_ARCH_RISE, side * BROW_OUTER_X, BROW_Y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The almond outline of one eye, inner corner low and outer corner lifted. */
+function pathEye(ctx: CanvasRenderingContext2D, side: BodySide): void {
+  const innerX = side * (EYE_X - EYE_RADIUS_X);
+  const outerX = side * (EYE_X + EYE_RADIUS_X);
+  const outerY = EYE_Y - EYE_OUTER_CORNER_RISE;
+  ctx.beginPath();
+  ctx.moveTo(innerX, EYE_Y);
+  ctx.quadraticCurveTo(side * EYE_X, EYE_Y - EYE_RADIUS_Y * EYE_LID_CONTROL_RISE, outerX, outerY);
+  ctx.quadraticCurveTo(side * EYE_X, EYE_Y + EYE_RADIUS_Y * EYE_LID_CONTROL_RISE, innerX, EYE_Y);
+  ctx.closePath();
+}
+
+function drawEyes(ctx: CanvasRenderingContext2D, castGlow: number, tileSizePx: number): void {
+  ctx.save();
+  ctx.shadowColor = castGlow > 0 ? EYE_CAST_COLOR : EYE_IDLE_COLOR;
+  ctx.shadowBlur =
+    (EYE_GLOW_BLUR_IDLE_PX + (EYE_GLOW_BLUR_CAST_PX - EYE_GLOW_BLUR_IDLE_PX) * castGlow) *
+    (tileSizePx / GLOW_REFERENCE_TILE_PX);
+  ctx.fillStyle = castGlow > 0.5 ? EYE_CAST_COLOR : EYE_IDLE_COLOR;
+  for (const side of SIDES) {
+    pathEye(ctx, side);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (castGlow < 1) {
+    ctx.save();
+    ctx.globalAlpha = 1 - castGlow;
+    ctx.fillStyle = HAIR_DARK;
+    for (const side of SIDES) {
+      ctx.beginPath();
+      ctx.arc(side * EYE_X, EYE_Y, PUPIL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    for (const side of SIDES) {
+      ctx.beginPath();
+      ctx.arc(
+        side * EYE_X - EYE_CATCHLIGHT_OFFSET,
+        EYE_Y - EYE_CATCHLIGHT_OFFSET,
+        EYE_CATCHLIGHT_RADIUS,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // The lash line, laid over the upper lid and flicked past the outer corner.
+  ctx.save();
+  ctx.strokeStyle = HAIR_DARK;
+  ctx.lineWidth = LASH_LINE_WIDTH;
+  ctx.lineCap = 'round';
+  for (const side of SIDES) {
+    const innerX = side * (EYE_X - EYE_RADIUS_X);
+    const outerX = side * (EYE_X + EYE_RADIUS_X);
+    const outerY = EYE_Y - EYE_OUTER_CORNER_RISE;
+    ctx.beginPath();
+    ctx.moveTo(innerX, EYE_Y);
+    ctx.quadraticCurveTo(side * EYE_X, EYE_Y - EYE_RADIUS_Y * EYE_LID_CONTROL_RISE, outerX, outerY);
+    ctx.quadraticCurveTo(
+      outerX + side * LASH_FLICK_LENGTH * 0.6,
+      outerY - LASH_FLICK_RISE * 0.4,
+      outerX + side * LASH_FLICK_LENGTH,
+      outerY - LASH_FLICK_RISE,
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawNose(ctx: CanvasRenderingContext2D): void {
+  fillSoftEllipse(
+    ctx,
+    FACE_SHADOW_SIDE * NOSE_HALF_WIDTH * 0.55,
+    (NOSE_BRIDGE_TOP_Y + NOSE_TIP_Y) / 2,
+    NOSE_BRIDGE_SHADE_RADIUS_X,
+    (NOSE_TIP_Y - NOSE_BRIDGE_TOP_Y) / 2,
+    SKIN_SHADE,
+    SKIN_SHADE_FADE,
+    NOSE_BRIDGE_SHADE_ALPHA,
+  );
+  fillSoftEllipse(
+    ctx,
+    0,
+    NOSE_TIP_SHADE_Y,
+    NOSE_TIP_SHADE_RADIUS_X,
+    NOSE_TIP_SHADE_RADIUS_Y,
+    SKIN_SHADE,
+    SKIN_SHADE_FADE,
+    NOSE_TIP_SHADE_ALPHA,
+  );
+  fillSoftEllipse(
+    ctx,
+    -FACE_SHADOW_SIDE * NOSE_HALF_WIDTH * 0.3,
+    NOSE_TIP_HIGHLIGHT_Y,
+    NOSE_TIP_HIGHLIGHT_RADIUS,
+    NOSE_TIP_HIGHLIGHT_RADIUS,
+    SKIN_LIT,
+    SKIN_LIT_FADE,
+    NOSE_TIP_HIGHLIGHT_ALPHA,
+  );
+  for (const side of SIDES) {
+    fillSoftEllipse(
+      ctx,
+      side * NOSTRIL_X,
+      NOSE_TIP_Y,
+      NOSTRIL_RADIUS_X,
+      NOSTRIL_RADIUS_Y,
+      SKIN_CREASE,
+      SKIN_CREASE_FADE,
+      NOSTRIL_ALPHA,
+    );
+  }
+}
+
+/**
+ * The seam where the lips meet, continued from the current point across to the
+ * far corner. Both lip shapes and the line drawn over them trace the same
+ * curve, so no sliver of skin can open along the join.
+ */
+function pathLipSeam(ctx: CanvasRenderingContext2D, towardX: number): void {
+  ctx.quadraticCurveTo(0, MOUTH_Y + LIP_SEAM_DROP, towardX, MOUTH_Y);
+}
+
+function drawMouth(ctx: CanvasRenderingContext2D): void {
+  const peakY = MOUTH_Y - UPPER_LIP_HEIGHT;
+  const bowDipY = MOUTH_Y - UPPER_LIP_HEIGHT * CUPIDS_BOW_DIP;
+  const peakControlX = MOUTH_HALF_WIDTH * LIP_PEAK_CONTROL_FRACTION;
+
+  ctx.fillStyle = LIP_UPPER_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(-MOUTH_HALF_WIDTH, MOUTH_Y);
+  ctx.quadraticCurveTo(-peakControlX, peakY, -CUPIDS_BOW_X, peakY);
+  ctx.quadraticCurveTo(0, bowDipY, CUPIDS_BOW_X, peakY);
+  ctx.quadraticCurveTo(peakControlX, peakY, MOUTH_HALF_WIDTH, MOUTH_Y);
+  pathLipSeam(ctx, -MOUTH_HALF_WIDTH);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = LIP_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(-MOUTH_HALF_WIDTH, MOUTH_Y);
+  pathLipSeam(ctx, MOUTH_HALF_WIDTH);
+  ctx.quadraticCurveTo(
+    MOUTH_HALF_WIDTH * 0.62,
+    MOUTH_Y + LOWER_LIP_HEIGHT,
+    0,
+    MOUTH_Y + LOWER_LIP_HEIGHT,
+  );
+  ctx.quadraticCurveTo(
+    -MOUTH_HALF_WIDTH * 0.62,
+    MOUTH_Y + LOWER_LIP_HEIGHT,
+    -MOUTH_HALF_WIDTH,
+    MOUTH_Y,
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  fillSoftEllipse(
+    ctx,
+    0,
+    MOUTH_Y + LOWER_LIP_HEIGHT * LOWER_LIP_SHEEN_Y_FRACTION,
+    LOWER_LIP_SHEEN_RADIUS_X,
+    LOWER_LIP_SHEEN_RADIUS_Y,
+    LIP_SHEEN_COLOR,
+    LIP_SHEEN_FADE,
+    LOWER_LIP_SHEEN_ALPHA,
+  );
+
+  ctx.strokeStyle = LIP_SEAM_COLOR;
+  ctx.lineWidth = LIP_SEAM_LINE_WIDTH;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-MOUTH_HALF_WIDTH, MOUTH_Y);
+  pathLipSeam(ctx, MOUTH_HALF_WIDTH);
+  ctx.stroke();
+
+  fillSoftEllipse(
+    ctx,
+    0,
+    CHIN_SHADOW_Y,
+    CHIN_SHADOW_RADIUS_X,
+    CHIN_SHADOW_RADIUS_Y,
+    SKIN_SHADE,
+    SKIN_SHADE_FADE,
+    CHIN_SHADOW_ALPHA,
+  );
+
+  ctx.fillStyle = '#ffffff';
+  for (const side of SIDES) {
+    ctx.beginPath();
+    ctx.moveTo(side * FANG_X - FANG_HALF_WIDTH, MOUTH_Y);
+    ctx.lineTo(side * FANG_X + FANG_HALF_WIDTH, MOUTH_Y);
+    ctx.lineTo(side * FANG_X, MOUTH_Y + FANG_LENGTH);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 function drawHead(
   ctx: CanvasRenderingContext2D,
   castGlow: number,
@@ -1967,25 +2435,17 @@ function drawHead(
     ctx.restore();
   }
 
+  pathFace(ctx);
   ctx.fillStyle = SKIN_LIT;
-  ctx.beginPath();
-  ctx.ellipse(0, HEAD_CENTER_Y, HEAD_RADIUS_X, HEAD_RADIUS_Y, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = SKIN_SHADE;
-  ctx.globalAlpha = CHEEK_SHADE_ALPHA;
-  ctx.beginPath();
-  ctx.ellipse(
-    -HEAD_RADIUS_X * 0.55,
-    HEAD_CENTER_Y + HEAD_RADIUS_Y * 0.2,
-    HEAD_RADIUS_X * 0.35,
-    HEAD_RADIUS_Y * 0.4,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.fill();
-  ctx.globalAlpha = 1;
+  if (!facingAway) {
+    ctx.save();
+    pathFace(ctx);
+    ctx.clip();
+    shadeFace(ctx);
+    ctx.restore();
+  }
 
   ctx.fillStyle = HORN_COLOR;
   for (const side of SIDES) {
@@ -2052,48 +2512,10 @@ function drawHead(
     ctx.fill();
   }
 
-  // Eyes — a permanent faint shine that flares while she casts
-  ctx.save();
-  ctx.shadowColor = castGlow > 0 ? EYE_CAST_COLOR : EYE_IDLE_COLOR;
-  ctx.shadowBlur =
-    (EYE_GLOW_BLUR_IDLE_PX + (EYE_GLOW_BLUR_CAST_PX - EYE_GLOW_BLUR_IDLE_PX) * castGlow) *
-    (tileSizePx / GLOW_REFERENCE_TILE_PX);
-  ctx.fillStyle = castGlow > 0.5 ? EYE_CAST_COLOR : EYE_IDLE_COLOR;
-  for (const side of SIDES) {
-    ctx.beginPath();
-    ctx.ellipse(side * EYE_X, EYE_Y, EYE_RADIUS_X, EYE_RADIUS_Y, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // Pupils vanish as the glow takes the eye over
-  if (castGlow < 1) {
-    ctx.fillStyle = HAIR_DARK;
-    ctx.globalAlpha = 1 - castGlow;
-    for (const side of SIDES) {
-      ctx.beginPath();
-      ctx.arc(side * EYE_X, EYE_Y, PUPIL_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.strokeStyle = SKIN_DEEP_SHADE;
-  ctx.lineWidth = FINE_LINE_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(-MOUTH_HALF_WIDTH, MOUTH_Y);
-  ctx.quadraticCurveTo(0, MOUTH_Y + 0.012, MOUTH_HALF_WIDTH, MOUTH_Y);
-  ctx.stroke();
-
-  ctx.fillStyle = '#ffffff';
-  for (const side of SIDES) {
-    ctx.beginPath();
-    ctx.moveTo(side * FANG_X - FANG_HALF_WIDTH, MOUTH_Y);
-    ctx.lineTo(side * FANG_X + FANG_HALF_WIDTH, MOUTH_Y);
-    ctx.lineTo(side * FANG_X, MOUTH_Y + FANG_LENGTH);
-    ctx.closePath();
-    ctx.fill();
-  }
+  drawBrows(ctx);
+  drawEyes(ctx, castGlow, tileSizePx);
+  drawNose(ctx);
+  drawMouth(ctx);
 }
 
 function drawSummonEffects(

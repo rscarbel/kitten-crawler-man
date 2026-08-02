@@ -12,6 +12,18 @@ import {
   INTERIOR_COUNTER,
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
+  HIGHLAND_GRASS,
+  SCREE,
+  WILDFLOWER_TUFT,
+  PEBBLE_SCATTER,
+  BRIDGE,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
+  DEN_HOLLOW,
 } from '../map/tileTypes';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -508,6 +520,32 @@ export class MobileHUDSystem implements GameSystem {
         return '#585860';
       case INTERIOR_COUNTER:
         return '#4a3020';
+      // The floor-3 wilderness, in the same colours `MiniMapSystem` uses — the
+      // two tables answer the same question and are only separate because this
+      // one predates the shared tile-type constants.
+      case HIGHLAND_GRASS:
+        return '#6f7048';
+      case SCREE:
+        return '#6a6660';
+      case WILDFLOWER_TUFT:
+        return '#4a7a48';
+      case PEBBLE_SCATTER:
+        return '#787268';
+      case BRIDGE:
+        return '#8a6a44';
+      case RIVER_ROCK:
+        return '#4a5a60';
+      case BOULDER_SMALL:
+      case BOULDER_LARGE:
+        return '#6e6a64';
+      case CLIFF:
+        return '#57534c';
+      case CAMPFIRE:
+        return '#d07a2c';
+      case GOBLIN_TENT:
+        return '#7a5f3a';
+      case DEN_HOLLOW:
+        return '#2e2a26';
       default:
         return '#555555';
     }

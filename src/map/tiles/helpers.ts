@@ -41,6 +41,12 @@ import {
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
   SAFE_ROOM_GALLEY_FLOOR,
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -85,6 +91,12 @@ const SHADOW_TYPES = new Set([
   ROOF_CIRCUS_PURPLE,
   RUINED_WALL,
   TOWN_WALL,
+  // A cliff face is architecture as far as the shadow strip is concerned: it is
+  // a wall, and the ground in front of it should read as being in its shade.
+  // The boulders are *not* here, and neither is the tent: both are rounded and
+  // carry their own contact shadow in the sprite, so the rectangular strip would
+  // only show as a grey band poking out from under them.
+  CLIFF,
 ]);
 
 // Full set of non-floor tile types used when scanning neighbours for inferFloorType.
@@ -141,6 +153,18 @@ const NON_FLOOR_TYPES = new Set<number>([
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
   SAFE_ROOM_GALLEY_FLOOR,
+  // The floor-3 wilderness solids. Without these a tile beside a boulder infers
+  // the boulder as its own floor and draws whatever material a boulder claims.
+  // The walkable wilderness types are absent on purpose: `HIGHLAND_GRASS`,
+  // `SCREE` and `BRIDGE` *are* floor, and `WILDFLOWER_TUFT`, `PEBBLE_SCATTER`
+  // and `DEN_HOLLOW` are ground cover written with `setStanding`, so they report
+  // the surface they were scattered over exactly as `GRASSY_WEED` does.
+  RIVER_ROCK,
+  BOULDER_SMALL,
+  BOULDER_LARGE,
+  CLIFF,
+  CAMPFIRE,
+  GOBLIN_TENT,
 ]);
 
 /**

@@ -87,6 +87,17 @@ export class CatPlayer extends Player {
    * her head instead of floating in the air above it.
    */
   private static readonly ACTIVE_SPHERE_SPRITE_TOP = -5;
+  /**
+   * Belly height, measured off the sheet rather than derived: at 14 px the
+   * surface crossed her shoulders, which is a cat swimming, not wading. This
+   * cuts just under the belly so her legs are in and her whole body, back and
+   * head stay clear.
+   *
+   * Far shallower than the human's 27 px, and that is the per-crawler lie
+   * `Player.waterlineAboveFootPx` documents: one honest water depth either takes
+   * him to the ankle or puts her under.
+   */
+  readonly waterlineAboveFootPx = 9;
   /** Raises the health bar above the sphere so it doesn't overlap the cat's head. */
   private static readonly HEALTH_BAR_RAISE = 16;
   private static readonly AI_MIN_COOLDOWN = 20;
@@ -435,7 +446,12 @@ export class CatPlayer extends Player {
     this.missiles = this.missiles.filter((m) => !(m.state === 'exploding' && m.explodeTimer <= 0));
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number) {
+  protected override drawSelf(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ) {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;
@@ -458,7 +474,6 @@ export class CatPlayer extends Player {
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
-    this.renderDamageFlash(ctx, sx, sy);
     this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }

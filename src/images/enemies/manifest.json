@@ -1,107 +1,341 @@
 {
-  "goblin_base": {
-    "path": "enemies/goblin_base.png",
-    "frameWidth": 192,
-    "frameHeight": 256,
+  "goblin_sword": {
+    "path": "enemies/goblin_sword.png",
+    "frameWidth": 128,
+    "frameHeight": 80,
     "tileX": 32,
-    "tileY": 32,
-    "tileScale": 128,
+    "tileY": 1,
+    "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
-        "frameCount": 8
+        "frameCount": 12,
+        "colsPerRow": 10
       },
       "idle": {
-        "row": 1,
+        "row": 2,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle_break": {
+        "row": 4,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "attack_light": {
+        "row": 6,
+        "frameCount": 14,
+        "colsPerRow": 10
+      },
+      "attack_heavy": {
+        "row": 8,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "flinch": {
+        "row": 10,
+        "frameCount": 5,
+        "colsPerRow": 10
+      },
+      "gore_head": {
+        "row": 11,
+        "colOffset": 0,
         "frameCount": 1
       },
-      "attack": {
-        "row": 2,
-        "frameCount": 16
-      },
-      "gore_damaged_head": {
-        "row": 1,
+      "gore_torso": {
+        "row": 11,
         "colOffset": 1,
         "frameCount": 1
       },
-      "gore_severed_arm_left": {
-        "row": 1,
+      "gore_arm_near": {
+        "row": 11,
         "colOffset": 2,
         "frameCount": 1
       },
-      "gore_severed_arm_right": {
-        "row": 1,
+      "gore_arm_far": {
+        "row": 11,
         "colOffset": 3,
         "frameCount": 1
       },
-      "gore_severed_leg_left": {
-        "row": 1,
+      "gore_leg_near": {
+        "row": 11,
         "colOffset": 4,
         "frameCount": 1
       },
-      "gore_severed_leg_right": {
-        "row": 1,
+      "gore_leg_far": {
+        "row": 11,
         "colOffset": 5,
         "frameCount": 1
       },
-      "gore_severed_torso": {
-        "row": 1,
+      "gore_ribchunk": {
+        "row": 11,
         "colOffset": 6,
         "frameCount": 1
       },
-      "gore_severed_head": {
-        "row": 1,
+      "gore_entrails": {
+        "row": 11,
         "colOffset": 7,
         "frameCount": 1
       },
-      "gore_severed_head_damaged": {
-        "row": 1,
+      "gore_jaw": {
+        "row": 11,
         "colOffset": 8,
         "frameCount": 1
       }
     }
   },
-  "goblin_weapon_club": {
-    "path": "enemies/goblin_weapon_club.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 16,
-    "tileY": 16,
+  "goblin_axe": {
+    "path": "enemies/goblin_axe.png",
+    "frameWidth": 104,
+    "frameHeight": 88,
+    "tileX": 20,
+    "tileY": 8,
     "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
-        "frameCount": 8
+        "frameCount": 12,
+        "colsPerRow": 10
       },
       "idle": {
-        "row": 1,
+        "row": 2,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle_break": {
+        "row": 4,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "attack_light": {
+        "row": 6,
+        "frameCount": 14,
+        "colsPerRow": 10
+      },
+      "attack_heavy": {
+        "row": 8,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "flinch": {
+        "row": 10,
+        "frameCount": 5,
+        "colsPerRow": 10
+      },
+      "gore_head": {
+        "row": 11,
+        "colOffset": 0,
         "frameCount": 1
       },
-      "attack": {
-        "row": 2,
-        "frameCount": 16
+      "gore_torso": {
+        "row": 11,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm_near": {
+        "row": 11,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_arm_far": {
+        "row": 11,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg_near": {
+        "row": 11,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg_far": {
+        "row": 11,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_ribchunk": {
+        "row": 11,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 11,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_jaw": {
+        "row": 11,
+        "colOffset": 8,
+        "frameCount": 1
       }
     }
   },
-  "goblin_weapon_hammer": {
-    "path": "enemies/goblin_weapon_hammer.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 16,
-    "tileY": 16,
+  "goblin_mace": {
+    "path": "enemies/goblin_mace.png",
+    "frameWidth": 80,
+    "frameHeight": 80,
+    "tileX": 8,
+    "tileY": 5,
     "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
-        "frameCount": 8
+        "frameCount": 12,
+        "colsPerRow": 10
       },
       "idle": {
-        "row": 1,
+        "row": 2,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle_break": {
+        "row": 4,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "attack_light": {
+        "row": 6,
+        "frameCount": 14,
+        "colsPerRow": 10
+      },
+      "attack_heavy": {
+        "row": 8,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "flinch": {
+        "row": 10,
+        "frameCount": 5,
+        "colsPerRow": 10
+      },
+      "gore_head": {
+        "row": 11,
+        "colOffset": 0,
         "frameCount": 1
       },
-      "attack": {
+      "gore_torso": {
+        "row": 11,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm_near": {
+        "row": 11,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_arm_far": {
+        "row": 11,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg_near": {
+        "row": 11,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg_far": {
+        "row": 11,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_ribchunk": {
+        "row": 11,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 11,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_jaw": {
+        "row": 11,
+        "colOffset": 8,
+        "frameCount": 1
+      }
+    }
+  },
+  "goblin_warhammer": {
+    "path": "enemies/goblin_warhammer.png",
+    "frameWidth": 112,
+    "frameHeight": 96,
+    "tileX": 24,
+    "tileY": 18,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle": {
         "row": 2,
-        "frameCount": 16
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle_break": {
+        "row": 4,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "attack_light": {
+        "row": 6,
+        "frameCount": 14,
+        "colsPerRow": 10
+      },
+      "attack_heavy": {
+        "row": 8,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "flinch": {
+        "row": 10,
+        "frameCount": 5,
+        "colsPerRow": 10
+      },
+      "gore_head": {
+        "row": 11,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 11,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm_near": {
+        "row": 11,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_arm_far": {
+        "row": 11,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg_near": {
+        "row": 11,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg_far": {
+        "row": 11,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_ribchunk": {
+        "row": 11,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 11,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_jaw": {
+        "row": 11,
+        "colOffset": 8,
+        "frameCount": 1
       }
     }
   },

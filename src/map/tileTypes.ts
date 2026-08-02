@@ -266,11 +266,82 @@ export const INTERIOR_WALL = 79;
  */
 export const INTERIOR_COUNTER = 80;
 
+// ── the floor-3 wilderness ─────────────────────────────────────────────────
+//
+// Everything from here down is painted only by `OverworldGenerator` and its
+// helpers in `src/map/overworld/`. The river itself is not here: it reuses
+// `FloorTypeValue.water`, which was already non-walkable and already had a
+// minimap colour but which no generator had ever written.
+
+/**
+ * Thin upland turf. A walkable terrain type whose whole job is to name a ground
+ * material, exactly like `VERGE_GRASS` — the elevation bands are painted as tile
+ * types because a material is derived *from* a type and cannot be set directly.
+ */
+export const HIGHLAND_GRASS = 81;
+
+/** Bare broken hillside rock: the band above `HIGHLAND_GRASS`, and cliff spoil. */
+export const SCREE = 82;
+
+/** Walkable ground cover: a clump of wildflowers, scattered over field grass. */
+export const WILDFLOWER_TUFT = 83;
+
+/** Walkable ground cover: loose stones, scattered over highland turf and scree. */
+export const PEBBLE_SCATTER = 84;
+
+/**
+ * A plank deck carrying a route over the river. Walkable, and paved as far as
+ * `TileGrid` is concerned so later road passes may stitch through it.
+ */
+export const BRIDGE = 85;
+
+/** A wet rock standing in the river. Replaces the water tile it sits on. */
+export const RIVER_ROCK = 86;
+
+/** A one-tile boulder. */
+export const BOULDER_SMALL = 87;
+
+/**
+ * A big boulder: a broad mass drawn **inside** the one tile it blocks, standing
+ * about a tile tall so it reaches a few pixels into the row above.
+ *
+ * It used to be about two tiles wide, overhanging its anchor by roughly four
+ * tenths of a tile each side, on the argument that this is what the trees do.
+ * The analogy was wrong and the overhang was a real defect: a tree's canopy is
+ * above head height and nothing about it says you cannot stand under it, but a
+ * boulder's flank is at knee height and says the opposite. Because only the
+ * anchor tile is in `NON_WALKABLE_TILE_TYPES`, the overhanging stone sat over
+ * walkable ground and the player could stand *inside* the rock — measured at
+ * 380–490 solid pixels per variant.
+ *
+ * So the art is now constrained to the footprint, and `generate-rock-sprites.ts`
+ * fails the bake if a single solid pixel escapes it. **Widening the art again
+ * reintroduces the bug**: making a genuinely wider boulder legitimate needs a
+ * multi-tile *block* with one anchor, which `SpriteLoader`'s
+ * one-geometry-per-type model does not express.
+ */
+export const BOULDER_LARGE = 88;
+
+/**
+ * A stone ledge along a ridge line. Non-walkable, and purely a visual illusion
+ * of height — the game has no z-axis and this tile grants none.
+ */
+export const CLIFF = 89;
+
+/** A camp's fire. Animated, so it must stay out of `CACHEABLE_OVERLAY_TYPES`. */
+export const CAMPFIRE = 90;
+
+/** A goblin camp's hide tent. */
+export const GOBLIN_TENT = 91;
+
+/** The gnawed hollow at the centre of a troglodyte den. Walkable ground decal. */
+export const DEN_HOLLOW = 92;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 81;
+export const TILE_TYPE_COUNT = 93;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -397,7 +468,67 @@ export type TileContent = {
    * `TreeSystem.update()`. Absent means frame 0.
    */
   treeAnimFrame?: number;
+  /**
+   * Which way the river runs across a `FloorTypeValue.water` tile: one of the
+   * eight `FLOW_DIR_*` constants.
+   *
+   * Recorded by the river painter while it carves, and read by
+   * `WaterAnimationSystem` to advect its highlights and foam. It lives on the
+   * tile, like `groundType` and `treeStage`, because the map outlives the scene:
+   * walking into a town building rebuilds `DungeonScene` around the same
+   * `GameMap`, and anything the renderer needs that is held only in a system has
+   * to be reconciled by hand afterwards. Absent means "no known direction" — a
+   * future pond — and the animation falls back to an omni-directional shimmer.
+   */
+  flowDir?: number;
+  /**
+   * Which way a `BRIDGE` tile's deck runs: one of the `BRIDGE_AXIS_*` constants.
+   *
+   * Recorded by the river painter as it lays each deck, because the renderer is
+   * handed a grid and a position rather than a plan — the same reason
+   * `fenceStyle` and `flowDir` live here. Two earlier versions inferred it from
+   * the neighbours instead and both got it wrong for the commonest crossing on
+   * the map: a deck tile in the middle of a four-tile-wide road bridge has deck
+   * on all four sides and no water anywhere to break the tie, so 38% of
+   * mid-channel tiles drew their planks across their own walkway.
+   */
+  bridgeAxis?: number;
 };
+
+/** Which way a bridge deck runs. */
+export const BRIDGE_AXIS_EAST_WEST = 0;
+export const BRIDGE_AXIS_NORTH_SOUTH = 1;
+
+/**
+ * The eight compass directions a river tile can flow in, as indices into
+ * `FLOW_DIR_VECTORS`. Screen coordinates, so south is +y.
+ */
+export const FLOW_DIR_E = 0;
+export const FLOW_DIR_SE = 1;
+export const FLOW_DIR_S = 2;
+export const FLOW_DIR_SW = 3;
+export const FLOW_DIR_W = 4;
+export const FLOW_DIR_NW = 5;
+export const FLOW_DIR_N = 6;
+export const FLOW_DIR_NE = 7;
+
+/** Unit vector per `FLOW_DIR_*` index, in the same order. */
+export const FLOW_DIR_VECTORS: ReadonlyArray<{ readonly x: number; readonly y: number }> = [
+  { x: 1, y: 0 },
+  { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+  { x: 0, y: 1 },
+  { x: -Math.SQRT1_2, y: Math.SQRT1_2 },
+  { x: -1, y: 0 },
+  { x: -Math.SQRT1_2, y: -Math.SQRT1_2 },
+  { x: 0, y: -1 },
+  { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+];
+
+/** Packs a heading in radians into the nearest `FLOW_DIR_*` index. */
+export function flowDirFromAngle(angleRadians: number): number {
+  const octant = Math.round((angleRadians / (Math.PI * 2)) * FLOW_DIR_VECTORS.length);
+  return ((octant % FLOW_DIR_VECTORS.length) + FLOW_DIR_VECTORS.length) % FLOW_DIR_VECTORS.length;
+}
 
 /** A destructible prop tile that has taken no damage yet. */
 export const PROP_DAMAGE_STAGE_INTACT = 0;
@@ -510,9 +641,28 @@ const GROVE_WOBBLE_SALT_Y = 0xa3e7;
 // axis, so `tx` and `ty` scramble independently before they are combined.
 const HASH_MULTIPLIER_X = 2654435761;
 const HASH_MULTIPLIER_Y = 2246822519;
+const HASH_AVALANCHE_SHIFT = 15;
 
+/**
+ * Stable per-tile hash.
+ *
+ * The shift-xor finish is **load-bearing, not decoration**. A multiply-xor alone
+ * leaves the low bits of the result depending only on the low bits of the
+ * inputs, so `positionHash(tx, ty) % 4` — the way every variant array of four is
+ * indexed — collapsed into a pure function of `(tx mod 4, ty mod 4)`: a fixed
+ * 4×4 Latin square, so any two props four tiles apart on a row were always the
+ * same one, and a slope of boulders cycled a,b,c,d,a,b,c,d. The tree variants
+ * had it too, four to a species; only the *species* pick escaped, because three
+ * is not a power of two.
+ *
+ * The trap worth remembering: a naive distribution check passes this cleanly.
+ * All four variants came out at exactly 10000/10000/10000/10000 over 40,000
+ * tiles. Uniformity is not independence.
+ */
 function positionHash(x: number, y: number): number {
-  return (Math.imul(x, HASH_MULTIPLIER_X) ^ Math.imul(y, HASH_MULTIPLIER_Y)) >>> 0;
+  const mixed = Math.imul(x, HASH_MULTIPLIER_X) ^ Math.imul(y, HASH_MULTIPLIER_Y);
+  const avalanched = Math.imul(mixed ^ (mixed >>> HASH_AVALANCHE_SHIFT), HASH_MULTIPLIER_X);
+  return (avalanched ^ (avalanched >>> HASH_AVALANCHE_SHIFT)) >>> 0;
 }
 
 /**
@@ -534,6 +684,65 @@ export function treeSpriteKey(tx: number, ty: number): TreeSpriteKey {
   const species = TREE_SPRITE_KEYS[groveHash % TREE_SPRITE_KEYS.length];
   return species[positionHash(tx, ty) % species.length];
 }
+
+const BOULDER_SMALL_SPRITE_KEYS = [
+  'boulder_small_a',
+  'boulder_small_b',
+  'boulder_small_c',
+  'boulder_small_d',
+  'boulder_small_e',
+  'boulder_small_f',
+  'boulder_small_g',
+  'boulder_small_h',
+] as const;
+
+const BOULDER_LARGE_SPRITE_KEYS = [
+  'boulder_large_a',
+  'boulder_large_b',
+  'boulder_large_c',
+  'boulder_large_d',
+  'boulder_large_e',
+  'boulder_large_f',
+  'boulder_large_g',
+  'boulder_large_h',
+] as const;
+
+export type BoulderSpriteKey =
+  (typeof BOULDER_SMALL_SPRITE_KEYS)[number] | (typeof BOULDER_LARGE_SPRITE_KEYS)[number];
+
+/**
+ * The sheet a boulder at (tx, ty) is drawn from.
+ *
+ * A pure function of position, like `treeSpriteKey` and for the same reason:
+ * nothing is stored per tile, and the choice survives a re-bake and a scene
+ * rebuild. Unlike a forest there is no grove structure to respect — boulders are
+ * scattered rather than grown — so the variant comes straight off the tile hash.
+ */
+export function boulderSpriteKey(type: number, tx: number, ty: number): BoulderSpriteKey {
+  const keys = type === BOULDER_LARGE ? BOULDER_LARGE_SPRITE_KEYS : BOULDER_SMALL_SPRITE_KEYS;
+  return keys[positionHash(tx, ty) % keys.length];
+}
+
+const GOBLIN_TENT_SPRITE_KEYS = [
+  'goblin_tent_a',
+  'goblin_tent_b',
+  'goblin_tent_c',
+  'goblin_tent_d',
+] as const;
+
+export type GoblinTentSpriteKey = (typeof GOBLIN_TENT_SPRITE_KEYS)[number];
+
+/**
+ * The sheet a goblin tent at (tx, ty) is drawn from — a pure function of
+ * position, like `treeSpriteKey` and `boulderSpriteKey`.
+ */
+export function goblinTentSpriteKey(tx: number, ty: number): GoblinTentSpriteKey {
+  return GOBLIN_TENT_SPRITE_KEYS[positionHash(tx, ty) % GOBLIN_TENT_SPRITE_KEYS.length];
+}
+
+/** Frames in the campfire's flame loop, and how fast it plays. */
+export const CAMPFIRE_FLAME_FRAMES = 6;
+export const CAMPFIRE_FLAME_FPS = 8;
 
 /**
  * Stamps a decoration over a floor tile, recording the surface it replaced.

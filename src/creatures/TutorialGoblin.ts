@@ -1,5 +1,5 @@
 import { Goblin } from './Goblin';
-import type { GoblinWeapon } from './Goblin';
+import type { GoblinWeapon } from '../sprites/goblinSprite';
 import type { Player } from '../Player';
 
 const TUTORIAL_HP = 1;
@@ -15,13 +15,11 @@ export class TutorialGoblin extends Goblin {
     tileX: number,
     tileY: number,
     tileSize: number,
-    weapon: GoblinWeapon = 'club',
-    skinColor = '#7a9c3c',
-    eyeColor = '#1a1a1a',
+    weapon: GoblinWeapon = 'mace',
     stationary = false,
     defenseOnly = false,
   ) {
-    super(tileX, tileY, tileSize, weapon, skinColor, eyeColor);
+    super(tileX, tileY, tileSize, weapon);
     this.hp = TUTORIAL_HP;
     this.setFixedMaxHp(TUTORIAL_HP);
     this.attackDamage = 0;

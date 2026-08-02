@@ -89,6 +89,40 @@ export const GRAVEL_RAMP: Ramp = {
   accent: [188, 180, 168],
 };
 
+// ── the wilderness: river, uplands ─────────────────────────────────────────
+//
+// A river is read through its bank, not its surface, so the water ramp is kept
+// dark and desaturated: the animated highlights `WaterAnimationSystem` lays over
+// it are the only bright pixels the river gets, and a bright base would drown
+// them. Green rather than blue because the river runs through a green field —
+// a saturated blue channel next to hue-73° grass reads as a painted stripe.
+
+export const RIVER_WATER_RAMP: Ramp = {
+  shadow: [16, 40, 46],
+  mid: [30, 68, 76],
+  light: [48, 98, 104],
+  accent: [86, 138, 140],
+};
+
+/**
+ * Thin upland turf: the grass ramp desaturated and pushed toward straw, so the
+ * highland bands read as drier and higher rather than as a different plant.
+ */
+export const HIGHLAND_GRASS_RAMP: Ramp = {
+  shadow: [76, 78, 44],
+  mid: [124, 122, 68],
+  light: [162, 156, 96],
+  accent: [192, 184, 126],
+};
+
+/** Frost-shattered rock rubble — the grey a cliff sheds downhill. */
+export const SCREE_RAMP: Ramp = {
+  shadow: [56, 54, 52],
+  mid: [102, 99, 94],
+  light: [146, 142, 136],
+  accent: [176, 172, 164],
+};
+
 // ── floor 1: the cellars ───────────────────────────────────────────────────
 //
 // Everything down here was laid by hand a long time ago out of what the town

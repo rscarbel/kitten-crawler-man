@@ -1,0 +1,74 @@
+{
+  "goblin_tent_a": {
+    "path": "environment/camp/goblin_tent_a.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    },
+    "tileTypeId": 91
+  },
+  "goblin_tent_b": {
+    "path": "environment/camp/goblin_tent_b.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "goblin_tent_c": {
+    "path": "environment/camp/goblin_tent_c.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "goblin_tent_d": {
+    "path": "environment/camp/goblin_tent_d.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
+  "campfire": {
+    "path": "environment/camp/campfire.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 32,
+    "tileY": 64,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 6
+      }
+    },
+    "tileTypeId": 90
+  }
+}
