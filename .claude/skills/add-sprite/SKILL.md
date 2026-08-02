@@ -7,6 +7,8 @@ description: Add or modify a sprite in Kitten Crawler Man — PNG sprite sheets,
 
 > **Human NPCs / townsfolk / crowds are NOT sprite sheets** — they're drawn procedurally at runtime from a seed. Use the `add-person` skill for those, not this pipeline.
 >
+> **Bipedal characters (humans, goblins, clowns, humanoid bosses) need the `bipedal-figure` skill first** — the rig/pose/view contract, gait authoring, bake gates and the image-review loop live there. Come back here for the manifest / loader / draw-wrapper wiring.
+>
 > **Ground and floor textures are NOT sprite sheets either** — they're generated
 > by `scripts/generate-ground-tileset.ts` from wrapped noise. Use the
 > `add-ground-tile` skill for terrain, paving, floors and tilesets.
