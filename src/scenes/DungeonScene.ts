@@ -783,7 +783,7 @@ export class DungeonScene extends GameplayScene {
           mapType: levelDef.isOverworld ? 'overworld' : 'dungeon',
           dungeon: dungeonOptionsForLevel(levelDef),
         });
-      this.levelTimerFrames = levelDef.isSafeLevel ? 0 : this.LEVEL_TIME_LIMIT;
+      this.levelTimerFrames = levelDef.hasCollapseTimer === true ? this.LEVEL_TIME_LIMIT : 0;
 
       // Dev bootstrap: spawn on the southern circus grounds so quest stages
       // can be exercised without the walk from town.
@@ -835,7 +835,7 @@ export class DungeonScene extends GameplayScene {
       this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
 
       // Treasure room mobs (extra enemies guarding wooden chests)
-      if (!levelDef.isSafeLevel && !levelDef.isOverworld) {
+      if (levelDef.hasTreasureRoomGuards === true) {
         const treasureMobs = spawnTreasureRoomMobs(
           this.gameMap.treasureRooms,
           levelDef,
@@ -3563,7 +3563,7 @@ export class DungeonScene extends GameplayScene {
       this.touch.miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
     }
 
-    if (!this.levelDef.isSafeLevel && !this.gameOver && this.tutorial === null) {
+    if (this.levelDef.hasCollapseTimer === true && !this.gameOver && this.tutorial === null) {
       UIRenderer.renderLevelTimer(ctx, this.miniMap, this.levelTimerFrames);
     }
 
@@ -4293,7 +4293,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('dynamite_explosion');
     }
 
-    if (!this.levelDef.isSafeLevel && this.levelTimerFrames > 0) {
+    if (this.levelDef.hasCollapseTimer === true && this.levelTimerFrames > 0) {
       this.levelTimerFrames--;
     }
 
@@ -4313,14 +4313,19 @@ export class DungeonScene extends GameplayScene {
 
     if (
       !this.gameOver &&
-      checkDeath(this.human, this.cat, !!this.levelDef.isSafeLevel, this.levelTimerFrames)
+      checkDeath(
+        this.human,
+        this.cat,
+        this.levelDef.hasCollapseTimer === true,
+        this.levelTimerFrames,
+      )
     ) {
       this.gameOver = true;
       this.barriers.cancelConstruct();
       const deathCause = resolveDeathCause(
         this.human,
         this.cat,
-        !!this.levelDef.isSafeLevel,
+        this.levelDef.hasCollapseTimer === true,
         this.levelTimerFrames,
       );
       this.deathScreen.activate(

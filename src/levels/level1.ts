@@ -123,6 +123,8 @@ export const level1: LevelDef = {
     ],
     scatterSafeRooms: LEVEL1_SCATTER_SAFE_ROOMS,
   },
+  hasCollapseTimer: true,
+  hasTreasureRoomGuards: true,
   nextLevelId: 'level2',
   stairwellCountMultiplier: LEVEL1_STAIRWELL_MULTIPLIER,
   xpDiminishingTiers: [

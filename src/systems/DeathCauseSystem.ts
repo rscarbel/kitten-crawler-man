@@ -72,7 +72,7 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
 export function resolveDeathCause(
   human: HumanPlayer,
   cat: CatPlayer,
-  isSafeLevel: boolean,
+  hasCollapseTimer: boolean,
   levelTimerFrames: number,
 ): DeathCause {
   // Direct kill: an active player's HP dropped to 0 — check this first so a
@@ -92,7 +92,7 @@ export function resolveDeathCause(
     return 'failureToRevive';
   }
 
-  if (!isSafeLevel && levelTimerFrames <= 0) return 'levelTimerRanOut';
+  if (hasCollapseTimer && levelTimerFrames <= 0) return 'levelTimerRanOut';
 
   return 'unknown';
 }

@@ -201,7 +201,7 @@ export function applyMovement(
 export function checkDeath(
   human: HumanPlayer,
   cat: CatPlayer,
-  isSafeLevel: boolean,
+  hasCollapseTimer: boolean,
   levelTimerFrames: number,
 ): boolean {
   // Active player death = immediate game over
@@ -213,7 +213,7 @@ export function checkDeath(
   // Knocked-out timer expired
   if (human.isKnockedOut && human.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
   if (cat.isKnockedOut && cat.knockedOutFrames >= KNOCKOUT_TIMEOUT_FRAMES) return true;
-  if (!isSafeLevel && levelTimerFrames <= 0) return true;
+  if (hasCollapseTimer && levelTimerFrames <= 0) return true;
   return false;
 }
 

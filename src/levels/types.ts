@@ -142,11 +142,15 @@ export interface LevelDef {
    */
   xpDiminishingTiers?: XpDiminishingTier[];
   /**
-   * Runs the floor without a countdown timer, and without the extra mobs that
-   * guard treasure rooms. Room, hallway and boss spawns are unaffected — a "safe"
-   * level is only safe from the clock.
+   * Runs the floor against a countdown; when it expires the floor collapses and
+   * kills the party. Absent means the floor is untimed.
    */
-  isSafeLevel?: boolean;
+  hasCollapseTimer?: boolean;
+  /**
+   * Spawns extra mobs guarding treasure rooms. Room, hallway and boss spawns are
+   * unaffected. Absent means treasure rooms are unguarded.
+   */
+  hasTreasureRoomGuards?: boolean;
   /** Override the auto-calculated stairwell count (default: 1 per 50 regular rooms). */
   numStairwells?: number;
   /**

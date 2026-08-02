@@ -92,7 +92,6 @@ export const level3: LevelDef = {
     { type: 'krasue', chance: 0.25, minLevel: KRASUE_MIN_LEVEL, maxLevel: KRASUE_MAX_LEVEL },
   ],
   bossRooms: [],
-  isSafeLevel: true,
   isOverworld: true,
   campSpawns: {
     goblin: [

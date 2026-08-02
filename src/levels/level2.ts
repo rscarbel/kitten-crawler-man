@@ -24,9 +24,10 @@ const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
 
 /**
  * Level 2 — "The Dungeon, Level 2".
- * Runs without a countdown timer and skips treasure-room guards, but is fully
- * populated: troglodytes, llamas and goblins roam it, the Krakaren Clone guards
- * the forced gauntlet, and the Ball of Swine waits in the optional arena.
+ * Runs against the same collapse countdown as floor 1 and guards its treasure
+ * rooms, and is fully populated besides: troglodytes, llamas and goblins roam
+ * it, the Krakaren Clone guards the forced gauntlet, and the Ball of Swine waits
+ * in the optional arena.
  */
 export const level2: LevelDef = {
   id: 'level2',
@@ -79,7 +80,8 @@ export const level2: LevelDef = {
   },
   hasArena: true,
   hasSpiderLab: true,
-  isSafeLevel: true,
+  hasCollapseTimer: true,
+  hasTreasureRoomGuards: true,
   nextLevelId: 'level3',
   numStairwells: 2,
   xpDiminishingTiers: [
