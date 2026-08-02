@@ -34,7 +34,13 @@ export abstract class Scene {
   abstract render(ctx: CanvasRenderingContext2D): void;
   onEnter?(): void;
   onExit?(): void;
-  handleClick?(mx: number, my: number): void;
+  /**
+   * @param eventTimeStampMs - when the click was *created*, on `performance.now()`'s
+   *   timebase. A stalled main thread queues events and delivers them all at resume,
+   *   so anything timing-sensitive has to score the click by this rather than by when
+   *   the handler happened to run.
+   */
+  handleClick?(mx: number, my: number, eventTimeStampMs: number): void;
   handleMouseDown?(mx: number, my: number): void;
   handleMouseMove?(mx: number, my: number): void;
   handleMouseUp?(mx: number, my: number): void;
@@ -84,7 +90,7 @@ export class SceneManager {
     this.canvas.addEventListener('click', (e) => {
       if (!this.current?.handleClick) return;
       const { x, y } = getPos(e);
-      this.current.handleClick(x, y);
+      this.current.handleClick(x, y, e.timeStamp);
     });
 
     this.canvas.addEventListener('mousedown', (e) => {

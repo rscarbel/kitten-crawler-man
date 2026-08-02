@@ -13,9 +13,12 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { drawMordecaiForLevel } from '../sprites/mordecaiSprite';
+import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../sprites/ratKinSprite';
+import { MordecaiWanderer } from './mordecaiWander';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
 import { drawSpeechBubble } from '../sprites/speechBubble';
+import type { InteriorFigure } from '../core/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { randomFromArray, clamp, frameTime } from '../utils';
@@ -42,6 +45,8 @@ interface SafeRoomEntry {
   stoveTiles: ReadonlyArray<{ x: number; y: number }>;
   mordecaiHomeTileX: number;
   mordecaiHomeTileY: number;
+  /** Owns Mordecai's position outright, which is what keeps him in his room. */
+  wanderer: MordecaiWanderer;
   bedTileX: number;
   bedTileY: number;
   showBed: boolean;
@@ -99,12 +104,12 @@ export class SafeRoomSystem implements GameSystem {
   private readonly SLEEP_HOLD = 90;
 
   // Magic number constants
-  private static readonly WANDER_PHASE_OFFSET = 210;
-  private static readonly WANDER_CYCLE = 500;
-  private static readonly WANDER_WALK_FRAMES = 150;
-  private static readonly WANDER_IDLE_DURATION = 100;
-  private static readonly WANDER_RETURN_FRAMES = 150;
-  private static readonly WANDER_MAX_OFFSET_TILES = 1.8;
+  /**
+   * Pixels of floor one full walk cycle of the sprite sheet covers. The sheet's
+   * stance foot is planted, so the cycle has to advance with the distance he
+   * travels or he skates along his own path.
+   */
+  private static readonly WANDER_PIXELS_PER_WALK_CYCLE = RAT_KIN_TILES_PER_WALK_CYCLE * TILE_SIZE;
   private static readonly TILE_CENTER = 0.5;
   private static readonly MORDECAI_NEAR_DISTANCE = 2.5;
   private static readonly BED_NEAR_DISTANCE = 1.8;
@@ -127,8 +132,14 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly ZZZ_Y_OFFSET = 18;
   private static readonly ZZZ_TEXT_TOP_OFFSET = 11;
 
-  // Mordecai wander animation (shared timer, different phase per entry)
+  /**
+   * Free-running frame counter. Drives the bed's rested pulse and the two
+   * procedural Mordecai variants, which animate straight off elapsed frames.
+   */
   private wanderTime = 0;
+
+  /** Reused between frames so the sorted pass does not allocate per safe room. */
+  private readonly sortedFigures: InteriorFigure[] = [];
 
   constructor(
     private readonly gameMap: GameMap,
@@ -144,10 +155,20 @@ export class SafeRoomSystem implements GameSystem {
     this.entries = [];
 
     const decorPlans = planSafeRoomDecor(gameMap);
+    // Everything the room has already spoken for. He may amble across his own
+    // home tile, but not into the bed, the counter, the galley or the stove.
+    const reserved = new Set(
+      safeRoomAnchorTiles(gameMap).map((tile) => SafeRoomSystem.tileKey(tile.x, tile.y)),
+    );
     if (gameMap.safeRooms.length > 0) {
       gameMap.safeRooms.forEach((sr, safeRoomIndex) => {
         const [mordecai, bed] = mordecaiAndBedTiles(sr);
         const plan = decorPlans.find((candidate) => candidate.safeRoomIndex === safeRoomIndex);
+        const canStand = (tileX: number, tileY: number): boolean => {
+          if (tileX === mordecai.x && tileY === mordecai.y) return true;
+          if (reserved.has(SafeRoomSystem.tileKey(tileX, tileY))) return false;
+          return gameMap.isWalkable(tileX, tileY);
+        };
         this.entries.push({
           bounds: sr.bounds,
           centre: sr.centre,
@@ -156,6 +177,12 @@ export class SafeRoomSystem implements GameSystem {
           stoveTiles: propTilesOfType(plan, SAFE_ROOM_STOVE),
           mordecaiHomeTileX: mordecai.x,
           mordecaiHomeTileY: mordecai.y,
+          wanderer: new MordecaiWanderer(
+            sr.bounds,
+            mordecai,
+            SafeRoomSystem.WANDER_PIXELS_PER_WALK_CYCLE,
+            canStand,
+          ),
           bedTileX: bed.x,
           bedTileY: bed.y,
           showBed: sr.showBed ?? true,
@@ -164,7 +191,17 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
-  /** All Mordecai home tile positions (for minimap). */
+  private static tileKey(tileX: number, tileY: number): string {
+    return `${tileX},${tileY}`;
+  }
+
+  /**
+   * All Mordecai home tile positions (for the minimap).
+   *
+   * His *home* tile rather than where he is standing: the minimap marker is a
+   * landmark the player navigates by, and one that drifts around its room every
+   * few seconds is harder to steer toward than one that stays put.
+   */
   get mordecaiPositions(): Array<{ x: number; y: number }> {
     return this.entries.map((e) => ({
       x: e.mordecaiHomeTileX,
@@ -264,45 +301,14 @@ export class SafeRoomSystem implements GameSystem {
 
   updateWander(): void {
     this.wanderTime++;
-  }
-
-  /** Returns pixel offset and facing for entry i's Mordecai. */
-  private getWanderState(entryIdx: number): {
-    offsetX: number;
-    isWalking: boolean;
-    facingX: number;
-  } {
-    // Each entry is out of phase with others so they don't walk in unison
-    const t = this.wanderTime + entryIdx * SafeRoomSystem.WANDER_PHASE_OFFSET;
-    // Cycle: 150f walk right, 100f idle, 150f walk left, 100f idle = 500f
-    const cycle = t % SafeRoomSystem.WANDER_CYCLE;
-    const maxOffset = TILE_SIZE * SafeRoomSystem.WANDER_MAX_OFFSET_TILES;
-
-    if (cycle < SafeRoomSystem.WANDER_WALK_FRAMES) {
-      return {
-        offsetX: (cycle / SafeRoomSystem.WANDER_WALK_FRAMES) * maxOffset,
-        isWalking: true,
-        facingX: 1,
-      };
-    } else if (cycle < SafeRoomSystem.WANDER_WALK_FRAMES + SafeRoomSystem.WANDER_IDLE_DURATION) {
-      return { offsetX: maxOffset, isWalking: false, facingX: 1 };
-    } else if (
-      cycle <
-      SafeRoomSystem.WANDER_WALK_FRAMES +
-        SafeRoomSystem.WANDER_IDLE_DURATION +
-        SafeRoomSystem.WANDER_RETURN_FRAMES
-    ) {
-      return {
-        offsetX:
-          maxOffset -
-          ((cycle - SafeRoomSystem.WANDER_WALK_FRAMES - SafeRoomSystem.WANDER_IDLE_DURATION) /
-            SafeRoomSystem.WANDER_RETURN_FRAMES) *
-            maxOffset,
-        isWalking: true,
-        facingX: -1,
-      };
-    } else {
-      return { offsetX: 0, isWalking: false, facingX: -1 };
+    for (const entry of this.entries) {
+      // He holds still while he is talking to you: a 2.5-tile talk radius and an
+      // NPC who keeps ambling is an NPC who walks out of his own conversation.
+      // `hold` *instead of* `update`, not as well as it — stepping the wanderer
+      // in the same frame runs the hold's own pause straight back down to zero,
+      // which leaves him reading as walking and re-picking a target every frame.
+      if (this._mordecaiDialogOpen) entry.wanderer.hold();
+      else entry.wanderer.update();
     }
   }
 
@@ -344,14 +350,18 @@ export class SafeRoomSystem implements GameSystem {
   }
 
   isNearMordecai(entity: { x: number; y: number }): boolean {
-    return this.entries.some((e, i) => {
-      const { offsetX } = this.getWanderState(i);
-      const mx = e.mordecaiHomeTileX * TILE_SIZE + offsetX;
-      const my = e.mordecaiHomeTileY * TILE_SIZE;
-      return (
-        Math.hypot(entity.x - mx, entity.y - my) < TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE
-      );
-    });
+    return this.entries.some((e) => SafeRoomSystem.isNearThisMordecai(e, entity));
+  }
+
+  /** Talk range is measured from where he is standing, not from his home tile. */
+  private static isNearThisMordecai(
+    entry: SafeRoomEntry,
+    entity: { x: number; y: number },
+  ): boolean {
+    const { x, y } = entry.wanderer.state;
+    return (
+      Math.hypot(entity.x - x, entity.y - y) < TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE
+    );
   }
 
   isNearBed(entity: { x: number; y: number }): boolean {
@@ -426,14 +436,11 @@ export class SafeRoomSystem implements GameSystem {
     camX: number,
     camY: number,
     active: { x: number; y: number },
-    speechBubblePulse: number,
   ): void {
     const ts = TILE_SIZE;
 
-    for (let i = 0; i < this.entries.length; i++) {
-      const e = this.entries[i];
+    for (const e of this.entries) {
       const b = e.bounds;
-      const { offsetX, isWalking, facingX } = this.getWanderState(i);
 
       // "SAFE ROOM" banner (world-space label above the room)
       // size=10, old baseline = bsy + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
@@ -471,16 +478,58 @@ export class SafeRoomSystem implements GameSystem {
         const pulse = this.isNearThisBed(e, active) ? restedPulse(this.wanderTime) : 0;
         drawSafeRoomBed(ctx, bedSx, bedSy, ts, pulse);
       }
-
-      // Mordecai (wandered position)
-      const msx = e.mordecaiHomeTileX * ts + offsetX - camX;
-      const msy = e.mordecaiHomeTileY * ts - camY;
-      drawMordecaiForLevel(ctx, msx, msy, ts, this.wanderTime, isWalking, facingX, this.levelId);
-
-      if (this.isNearMordecai(active) && !this._mordecaiDialogOpen) {
-        drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
-      }
     }
+  }
+
+  /**
+   * Mordecai, as a figure for the scene's Y-sorted pass.
+   *
+   * He is *not* drawn with the room's other fixtures, and the Bopca's counter is
+   * why. That counter's front face is repainted after the world pass so it
+   * occludes the cook standing behind it, which means anything drawn in the
+   * world pass is behind the counter too — Mordecai walking along the near side
+   * of it disappeared behind it. The players avoid that by being in the sorted
+   * pass; putting him there gives him the same depth against the counter, the
+   * table, the stove and the braziers, for the same reason.
+   *
+   * Always drawing over the counter is not merely parity, it is correct: the run
+   * is stamped against the room's north wall and its own tiles are reserved, so
+   * there is no floor he can reach that is behind it.
+   */
+  sortedRenderables(
+    active: { x: number; y: number },
+    speechBubblePulse: number,
+  ): ReadonlyArray<InteriorFigure> {
+    this.sortedFigures.length = 0;
+    for (const e of this.entries) {
+      const wander = e.wanderer.state;
+      const showBubble = SafeRoomSystem.isNearThisMordecai(e, active) && !this._mordecaiDialogOpen;
+      this.sortedFigures.push({
+        y: wander.y,
+        render: (ctx, camX, camY, ts) => {
+          const msx = wander.x - camX;
+          const msy = wander.y - camY;
+          drawMordecaiForLevel(
+            ctx,
+            msx,
+            msy,
+            ts,
+            {
+              walkTime: this.wanderTime,
+              walkPhase: wander.walkPhase,
+              isWalking: wander.isWalking,
+              facingX: wander.facingX,
+              facingY: wander.facingY,
+              lastHorizontalFacing: wander.lastHorizontalFacing,
+              idleOffsetSeconds: wander.idleOffsetSeconds,
+            },
+            this.levelId,
+          );
+          if (showBubble) drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
+        },
+      });
+    }
+    return this.sortedFigures;
   }
 
   /**
@@ -500,10 +549,9 @@ export class SafeRoomSystem implements GameSystem {
     active: { x: number; y: number },
     suppressWorldPrompt = false,
   ): void {
-    for (let i = 0; i < this.entries.length && !suppressWorldPrompt; i++) {
-      const e = this.entries[i];
-      const { offsetX } = this.getWanderState(i);
-
+    // Guards the prompt loop only — the HUD banner below it still draws when the
+    // Bopca's counter has claimed Space.
+    for (const e of suppressWorldPrompt ? [] : this.entries) {
       // Sleep prompt near bed
       if (
         e.showBed &&
@@ -518,15 +566,12 @@ export class SafeRoomSystem implements GameSystem {
       }
 
       // Talk prompt near Mordecai
-      const mx = e.mordecaiHomeTileX * TILE_SIZE + offsetX - camX;
-      const my = e.mordecaiHomeTileY * TILE_SIZE - camY;
+      const wander = e.wanderer.state;
+      const mx = wander.x - camX;
+      const my = wander.y - camY;
       const nearThis =
         this.isEntityInSafeRoom(active) &&
-        Math.hypot(
-          active.x - (e.mordecaiHomeTileX * TILE_SIZE + offsetX),
-          active.y - e.mordecaiHomeTileY * TILE_SIZE,
-        ) <
-          TILE_SIZE * SafeRoomSystem.MORDECAI_NEAR_DISTANCE &&
+        SafeRoomSystem.isNearThisMordecai(e, active) &&
         !this._mordecaiDialogOpen;
       if (nearThis) {
         drawInteractionPrompt(ctx, mx, my, TILE_SIZE, 'Talk');

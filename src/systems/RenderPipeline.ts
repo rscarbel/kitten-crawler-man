@@ -58,6 +58,9 @@ const DRAW_KIND_TOWNSPERSON = 4;
 /** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
 const DRAW_KIND_TOWN_PROP = 5;
 
+/** Draw kind for a safe room's Mordecai, rendered via his own render(). */
+const DRAW_KIND_SAFE_ROOM_NPC = 6;
+
 /** Halfway across a tile — where a crawler's centre line sits. */
 const TILE_CENTRE_FRACTION = 0.5;
 
@@ -223,7 +226,6 @@ export class RenderPipeline {
       arenaRoom,
       stairwell,
       building,
-      speechBubblePulse,
     } = rc;
 
     ctx.fillStyle = '#000';
@@ -239,7 +241,7 @@ export class RenderPipeline {
     // player wades in front of the highlights rather than beneath them.
     rc.water?.renderGround(ctx, camX, camY);
 
-    safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
+    safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
     juicerRoom.render(ctx, camX, camY, active);
     arenaRoom.render(ctx, camX, camY, active);
@@ -252,8 +254,19 @@ export class RenderPipeline {
    * so depth (north = behind, south = in front) is respected.
    */
   renderEntities(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
-    const { camX, camY, gameMap, mobGrid, active, inactive, treasureChests, townsfolk, townProps } =
-      rc;
+    const {
+      camX,
+      camY,
+      gameMap,
+      mobGrid,
+      active,
+      inactive,
+      treasureChests,
+      townsfolk,
+      townProps,
+      safeRoom,
+      speechBubblePulse,
+    } = rc;
 
     const visibleMobs = mobGrid.queryRect(
       camX - MOB_QUERY_MARGIN,
@@ -339,6 +352,17 @@ export class RenderPipeline {
         ? player.y + TILE_SIZE - player.waterlineAboveFootPx - camY
         : null;
       e.waterlineScreenX = player.x + TILE_SIZE * TILE_CENTRE_FRACTION - camX;
+    }
+
+    // Mordecai sorts with the crawlers rather than with the room he stands in:
+    // the Bopca's counter is repainted after the world pass, so anything drawn
+    // there ends up behind it.
+    for (const figure of safeRoom.sortedRenderables(active, speechBubblePulse)) {
+      const e = this._getEntry();
+      e.sortY = figure.y + ENTITY_SORT_Y_OFFSET;
+      e.kind = DRAW_KIND_SAFE_ROOM_NPC;
+      e.entity = figure;
+      e.chestRef = null;
     }
 
     if (townsfolk !== undefined) {

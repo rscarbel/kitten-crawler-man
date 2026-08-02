@@ -24,6 +24,7 @@ import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
+import { MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -403,6 +404,7 @@ export class SpiderQuestSystem implements GameSystem {
 
   // Keyboard hero
   private keyboardHero: KeyboardHeroSystem;
+  private _songClock: (() => number | null) | null = null;
 
   // Callbacks
   private addMob: (mob: Mob) => void;
@@ -517,6 +519,32 @@ export class SpiderQuestSystem implements GameSystem {
     return this._roomLocked;
   }
 
+  /**
+   * Supplies the keyboard-hero track's playback position (ms, or null when it isn't
+   * running) so the note chart can stay locked to the melody. The quest reaches the
+   * audio through the scene rather than owning an AudioManager of its own.
+   */
+  setSongClock(clock: () => number | null): void {
+    this._songClock = clock;
+  }
+
+  /**
+   * Song time at the moment an input event was *created*, not the moment its handler
+   * ran. A stalled main thread queues events and delivers them together on resume, so
+   * a keypress made right on the beat would otherwise be scored as wildly late and cost
+   * the player the run. `timeStamp` shares `performance.now()`'s timebase.
+   *
+   * The delay is clamped because a browser that reports `timeStamp` on some other
+   * timebase would otherwise hand back a nonsensical correction; past the widest
+   * playable gap the run is abandoned anyway, so nothing is lost by capping there.
+   */
+  private _songTimeAtInput(eventTimeStampMs: number | undefined): number | null {
+    const songTimeMs = this._songClock?.() ?? null;
+    if (songTimeMs === null || eventTimeStampMs === undefined) return songTimeMs;
+    const dispatchDelayMs = clamp(performance.now() - eventTimeStampMs, 0, MAX_PLAYABLE_GAP_MS);
+    return songTimeMs - dispatchDelayMs;
+  }
+
   update(ctx: SystemContext): void {
     // Overlay timer ticks even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
@@ -540,7 +568,7 @@ export class SpiderQuestSystem implements GameSystem {
     }
 
     if (this.phase === 'hacking') {
-      this.keyboardHero.update();
+      this.keyboardHero.update(this._songClock?.() ?? null);
       return;
     }
 
@@ -662,7 +690,7 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  handleClick(mx: number, my: number): boolean {
+  handleClick(mx: number, my: number, eventTimeStampMs?: number): boolean {
     if (this.completeOverlayTimer > 0) {
       this.completeOverlayTimer = 0;
       return true;
@@ -730,7 +758,13 @@ export class SpiderQuestSystem implements GameSystem {
       if (platform.isMobile) {
         // mx/my arrive in canvas space, so the extents they are hit-tested
         // against have to be the canvas viewport, not the window.
-        this.keyboardHero.handleTouchAt(mx, my, viewportWidth(), viewportHeight());
+        this.keyboardHero.handleTouchAt(
+          mx,
+          my,
+          viewportWidth(),
+          viewportHeight(),
+          this._songTimeAtInput(eventTimeStampMs),
+        );
       }
       return true;
     }
@@ -791,9 +825,9 @@ export class SpiderQuestSystem implements GameSystem {
     return false;
   }
 
-  handleKeyDown(key: string): void {
+  handleKeyDown(key: string, eventTimeStampMs?: number): void {
     if (this.phase === 'hacking') {
-      this.keyboardHero.handleKeyDown(key);
+      this.keyboardHero.handleKeyDown(key, this._songTimeAtInput(eventTimeStampMs));
     }
     if (this.phase === 'keyboard_hero_tutorial') {
       const isAdvance = key === ' ' || key === 'Enter';
@@ -811,9 +845,21 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  handleTouchAt(x: number, y: number, canvasW: number, canvasH: number): void {
+  handleTouchAt(
+    x: number,
+    y: number,
+    canvasW: number,
+    canvasH: number,
+    eventTimeStampMs?: number,
+  ): void {
     if (this.phase === 'hacking') {
-      this.keyboardHero.handleTouchAt(x, y, canvasW, canvasH);
+      this.keyboardHero.handleTouchAt(
+        x,
+        y,
+        canvasW,
+        canvasH,
+        this._songTimeAtInput(eventTimeStampMs),
+      );
     }
   }
 

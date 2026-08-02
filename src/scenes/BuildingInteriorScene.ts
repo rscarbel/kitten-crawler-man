@@ -1542,10 +1542,24 @@ export class BuildingInteriorScene extends GameplayScene {
     // which is right, since the player is on the near side of it.
     this.bopca?.renderObjects(ctx, camX, camY, this.active(), this.inactive());
 
+    // With the room's fixtures — the bed, the lantern pools, the stove steam.
+    // Ahead of the sorted pass, not after it, because Mordecai now sorts *in*
+    // that pass: left here he would be drawn before his own bed and stand
+    // behind it. The dungeon scene has always ordered these two this way.
+    if (this.safeRoom) {
+      this.safeRoom.renderObjects(ctx, camX, camY, this.active());
+    }
+
     // The club's rugs, floor wear and dance lights are ground paint; its
     // furniture and staff join the sorted pass below so crawlers can stand in
     // front of a counter rather than under it.
     this.club?.renderFloor(ctx, camX, camY);
+
+    const safeRoomFigures =
+      this.safeRoom?.sortedRenderables(
+        this.active(),
+        SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / SAFE_ROOM_PULSE_PERIOD_MS) * PULSE_SWING,
+      ) ?? [];
 
     const combatOnThisFloor = this.combat !== null && this.currentFloor === this.combat.floor;
     if (this.combat && combatOnThisFloor) {
@@ -1557,6 +1571,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ...combat.mobs.filter((m) => m.isAlive),
         ...this.presentCompanion(),
         this.active(),
+        ...safeRoomFigures,
         ...(this.club?.sortedRenderables() ?? []),
       ]);
 
@@ -1572,6 +1587,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ...this.presentCompanion(),
         this.active(),
         ...(this.occupants?.people ?? []),
+        ...safeRoomFigures,
         ...(this.club?.sortedRenderables() ?? []),
       ]);
       this.renderCitizenPrompt(ctx, camX, camY);
@@ -1584,12 +1600,6 @@ export class BuildingInteriorScene extends GameplayScene {
     const isOnCrystalFloor =
       this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
     this.soulCrystal.render(ctx, camX, camY, this.active(), isOnCrystalFloor);
-
-    if (this.safeRoom) {
-      const pulse =
-        SAFE_ROOM_PULSE_BASE + Math.sin(Date.now() / SAFE_ROOM_PULSE_PERIOD_MS) * PULSE_SWING;
-      this.safeRoom.renderObjects(ctx, camX, camY, this.active(), pulse);
-    }
 
     if (this.shop) {
       this.shop.renderObjects(ctx, camX, camY, this.active());

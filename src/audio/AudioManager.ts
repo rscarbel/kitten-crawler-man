@@ -119,6 +119,8 @@ export class AudioManager {
   private spiderWalkingSource: AudioBufferSourceNode | null = null;
   private machinerySource: AudioBufferSourceNode | null = null;
   private keyboardHeroMusicSource: AudioBufferSourceNode | null = null;
+  /** `ctx.currentTime` at which the keyboard-hero track was scheduled to start. */
+  private keyboardHeroMusicStartTime = 0;
   // Distance-attenuated ambient loops, keyed by sound id so several emitters of
   // the same sound (every hearth in a building) share one voice.
   private readonly ambientLoops = new Map<
@@ -700,10 +702,38 @@ export class AudioManager {
     source.loop = false;
     source.connect(this.ambienceGain);
     source.start();
+    this.keyboardHeroMusicStartTime = this.ctx.currentTime;
     source.onended = () => {
-      this.keyboardHeroMusicSource = null;
+      // A stopped source's onended fires after the fact; without the identity check a
+      // retry started in between would have its handle thrown away, stranding the song
+      // clock at null and silently desyncing every falling note from the melody.
+      if (this.keyboardHeroMusicSource === source) this.keyboardHeroMusicSource = null;
     };
     this.keyboardHeroMusicSource = source;
+  }
+
+  /**
+   * How far into the keyboard-hero track playback currently is, or null when the
+   * track isn't running. The note chart is driven off this rather than off a frame
+   * counter so the falling notes stay locked to the melody.
+   *
+   * The device's output latency is subtracted: `ctx.currentTime` is when a sample is
+   * handed to the audio hardware, and the player hears it that much later, so
+   * without the correction every note would land early on high-latency machines.
+   */
+  getKeyboardHeroMusicTimeMs(): number | null {
+    if (this.keyboardHeroMusicSource === null) return null;
+    const elapsed = this.ctx.currentTime - this.keyboardHeroMusicStartTime;
+    return (elapsed - this.outputLatencySeconds()) * MS_PER_SECOND;
+  }
+
+  /**
+   * `outputLatency` is typed as always present but is unimplemented in some browsers,
+   * where it reads back as undefined; the base latency is the honest floor there.
+   */
+  private outputLatencySeconds(): number {
+    const reported = this.ctx.outputLatency;
+    return Number.isFinite(reported) ? reported : this.ctx.baseLatency;
   }
 
   /** Stop the keyboard hero music track early. No-op if not playing. */

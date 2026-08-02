@@ -2,21 +2,33 @@
   "rat_kin": {
     "path": "npcs/rat_kin.png",
     "frameWidth": 96,
-    "frameHeight": 128,
+    "frameHeight": 104,
     "tileX": 16,
-    "tileY": 16,
+    "tileY": 33,
     "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
-        "frameCount": 8
+        "frameCount": 16
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 16
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 16
       },
       "idle": {
-        "row": 1,
-        "frameCount": 1
+        "row": 3,
+        "frameCount": 8
       },
-      "walk_left": {
-        "row": 2,
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
         "frameCount": 8
       }
     }

@@ -7,54 +7,57 @@
  * zone to score. One mistake is forgiven (red flash only); a second mistake ends
  * the game after a short delay.
  *
- * Song duration: 71 758 ms. ~80 notes total. The final SPAWN_CUTOFF_MS (3 s) spawn
- * no new notes so the song winds down naturally — the audio should be left to end on
- * its own after the game completes (do NOT stop it on success).
+ * Notes come from a baked chart (`keyboardHeroChart.ts`) rather than a random
+ * spawner: each entry is an attack in the music, and a note reaches the centre of
+ * the green zone exactly when that attack sounds. Positions are derived from the
+ * track's own playback clock, not from a frame counter, so a dropped frame slides
+ * the note rather than desyncing it from the melody. The game ends once the last
+ * charted note has resolved — the audio is left to finish its tail on its own (do
+ * NOT stop it on success).
  */
 
 import { getSpriteDef } from '../core/SpriteLoader';
 import { platform } from '../core/Platform';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { KEYBOARD_HERO_CHART, KEYBOARD_HERO_CHART_END_MS } from './keyboardHeroChart';
+import type { KeyboardHeroColumn } from './keyboardHeroChart';
+import {
+  FADE_IN_END_IMG_Y,
+  FALL_SPEED_IMG_PX_PER_MS,
+  FIELD_IMG_H,
+  FIELD_IMG_W,
+  HIT_WINDOW_MS,
+  HIT_ZONE_IMG_BOTTOM,
+  HIT_ZONE_IMG_CENTER,
+  HIT_ZONE_IMG_TOP,
+  MAX_PLAYABLE_GAP_MS,
+  NOTE_SPAWN_IMG_Y,
+  NOTE_TRAVEL_MS,
+} from './keyboardHeroGeometry';
 
-/** Song length in milliseconds. */
-const SONG_DURATION_MS = 38_803;
-
-/** How many image-pixels per second a note falls. */
-const FALL_SPEED_IMG_PX_PER_SEC = 480;
-
-/** Frames per second (used for elapsedMs accumulation). */
+/** Frames per second, used only by the timers that are not tied to the music. */
 const FPS = 60;
 
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1_000;
 
-/** MS added per frame. */
+const SECONDS_PER_MINUTE = 60;
+
+/** MS added per frame when no audio clock is available to drive the chart. */
 const MS_PER_FRAME = MS_PER_SECOND / FPS;
 
-/** Playing-field image dimensions (from manifest). */
-const FIELD_IMG_W = 426;
-const FIELD_IMG_H = 586;
-
-/** Green hit zone in image-Y coordinates: the visible green band in the playing field. */
-const HIT_ZONE_IMG_TOP = 455;
-const HIT_ZONE_IMG_BOTTOM = 555;
-
-/** Height of each button image (99 px). */
-const NOTE_IMG_HEIGHT = 99;
-const NOTE_IMG_HALF_HEIGHT = NOTE_IMG_HEIGHT / 2;
-
 /**
- * imgY is the CENTER of the note.
- * A note is hittable when it overlaps the green zone:
- *   bottom of note (imgY + half) >= HIT_ZONE_IMG_TOP  →  imgY >= HIT_ZONE_IMG_TOP - half
- *   top of note   (imgY - half) <= HIT_ZONE_IMG_BOTTOM →  imgY <= HIT_ZONE_IMG_BOTTOM + half
+ * A song-clock jump larger than this means the mini-game stopped updating while the
+ * track kept rolling — the pause menu skips this system entirely, and a backgrounded
+ * tab stops rAF, while `pauseAmbience` deliberately leaves the track playing behind a
+ * muted bus. The run cannot be picked back up in time with the music, and carrying on
+ * regardless would let a player win by simply waiting the song out, so the attempt is
+ * abandoned and the existing retry dialog is offered.
+ *
+ * The line is the widest gap a run can still be judged fairly across.
  */
-const HIT_ZONE_CENTER_MIN = HIT_ZONE_IMG_TOP - NOTE_IMG_HALF_HEIGHT; // 455 - 49.5 = 405.5
-const HIT_ZONE_CENTER_MAX = HIT_ZONE_IMG_BOTTOM + NOTE_IMG_HALF_HEIGHT; // 555 + 49.5 = 604.5
-
-/** A note entering within this many img-px above the hittable zone is "approaching" — don't spawn another in the same column. */
-const APPROACH_GUARD_IMG_PX = 200;
+const SUSPENSION_ABANDON_MS = MAX_PLAYABLE_GAP_MS;
 
 /** Error overlay duration in frames (normal column flash on miss). */
 const ERROR_TIMER_FRAMES = 60;
@@ -63,23 +66,7 @@ const ERROR_TIMER_FRAMES = 60;
 const FAIL_DELAY_FRAMES = 120;
 
 /** Flash duration for a successfully-clicked note. */
-const HIT_FLASH_FRAMES = 15;
-
-/** Notes fade in from fully transparent at the top to fully opaque here (image-Y). */
-const FADE_IN_END_IMG_Y = 220;
-
-/** Target total notes. */
-const TARGET_NOTE_COUNT = 160;
-
-/** Min/max ms between note spawns. */
-const SPAWN_INTERVAL_MIN_MS = 250;
-const SPAWN_INTERVAL_MAX_MS = 900;
-
-/** Never more than this many notes alive across all columns simultaneously. */
-const MAX_SIMULTANEOUS_NOTES = 4;
-
-/** Stop spawning new notes this many ms before the song ends. */
-const SPAWN_CUTOFF_MS = 4_000;
+const HIT_FLASH_MS = 250;
 
 // Render constants
 const RENDER_OVERLAY_ALPHA = 0.82;
@@ -90,49 +77,26 @@ const RENDER_COLUMN_COUNT = 4;
 const RENDER_MOBILE_BOTTOM_OFFSET = 28;
 const RENDER_TIMER_Y_OFFSET = 8;
 
-// Bitwise constants for xorshift32
-const XORSHIFT_LEFT_SHIFT_1 = 13;
-const XORSHIFT_RIGHT_SHIFT_1 = 17;
-const XORSHIFT_LEFT_SHIFT_2 = 5;
-
-// RNG constants
-const RNG_SEED = 0x12345678;
-const RNG_UPPER_BITS_SHIFT = 8;
-const RNG_UPPER_BITS_DIVISOR = 0xffffff;
-
-// Spawn scheduling
-const SPAWN_RESCHEDULE_DELAY_ACTIVE = 100;
-const SPAWN_RESCHEDULE_DELAY_EMPTY = 80;
-
 // Column indices as constants
 const COL_LEFT = 0;
 const COL_UP = 1;
 const COL_DOWN = 2;
 const COL_RIGHT = 3;
 
-type ColumnIndex = 0 | 1 | 2 | 3;
+type ColumnIndex = KeyboardHeroColumn;
 
 interface Note {
   column: ColumnIndex;
-  /** Current Y position in image coordinates (0 = top of field, 586 = bottom). */
-  imgY: number;
-  state: 'falling' | 'hit' | 'missed';
-  /** Counts down from HIT_FLASH_FRAMES after a hit, then note is removed. */
-  hitFlashTimer: number;
+  /** Song time at which this note is perfectly centred in the hit zone. */
+  hitTimeMs: number;
+  state: 'falling' | 'hit';
+  /** Song time the player struck it; only meaningful once state is 'hit'. */
+  hitAtMs: number;
 }
 
 interface ColumnState {
   /** Counts down from ERROR_TIMER_FRAMES on a miss; 0 = no error active. */
   errorTimer: number;
-}
-
-function xorshift32(state: number): number {
-  let s = state;
-  s ^= s << XORSHIFT_LEFT_SHIFT_1;
-  s ^= s >>> XORSHIFT_RIGHT_SHIFT_1;
-  s ^= s << XORSHIFT_LEFT_SHIFT_2;
-  // Ensure unsigned 32-bit
-  return s >>> 0;
 }
 
 function isColumnIndex(n: number): n is ColumnIndex {
@@ -149,7 +113,7 @@ export class KeyboardHeroSystem {
   private _onFailImmediate: (() => void) | null = null;
 
   // State
-  private _elapsedMs = 0;
+  private _songTimeMs = 0;
   private _notes: Note[] = [];
   private _columns: readonly [ColumnState, ColumnState, ColumnState, ColumnState] = [
     { errorTimer: 0 },
@@ -164,16 +128,14 @@ export class KeyboardHeroSystem {
   /** Counts down after a miss; _onFail fires when it reaches 0. */
   private _failDelayTimer = 0;
 
-  // Note scheduling
-  private _rngState = RNG_SEED;
-  private _nextSpawnMs = 0;
-  private _totalSpawned = 0;
+  /** Index of the next chart entry that has yet to enter the field. */
+  private _nextChartIndex = 0;
 
   start(onComplete: () => void, onFail: () => void, onFailImmediate?: () => void): void {
     this._onComplete = onComplete;
     this._onFail = onFail;
     this._onFailImmediate = onFailImmediate ?? null;
-    this._elapsedMs = 0;
+    this._songTimeMs = 0;
     this._notes = [];
     this._columns = [{ errorTimer: 0 }, { errorTimer: 0 }, { errorTimer: 0 }, { errorTimer: 0 }];
     this._hitCount = 0;
@@ -181,9 +143,7 @@ export class KeyboardHeroSystem {
     this._failed = false;
     this._completed = false;
     this._failDelayTimer = 0;
-    this._rngState = RNG_SEED;
-    this._totalSpawned = 0;
-    this._nextSpawnMs = this._nextSpawnInterval();
+    this._nextChartIndex = 0;
     this.isActive = true;
   }
 
@@ -194,7 +154,12 @@ export class KeyboardHeroSystem {
     this._onFailImmediate = null;
   }
 
-  update(): void {
+  /**
+   * @param songTimeMs - playback position of the keyboard-hero track, or null when
+   *   the track isn't running (no audio, or still starting). Falls back to a frame
+   *   counter so the mini-game stays playable without sound.
+   */
+  update(songTimeMs: number | null): void {
     if (!this.isActive) return;
     if (this._completed) return;
 
@@ -213,49 +178,97 @@ export class KeyboardHeroSystem {
       return;
     }
 
-    this._elapsedMs += MS_PER_FRAME;
+    const previousSongTimeMs = this._songTimeMs;
+    this._songTimeMs = songTimeMs ?? previousSongTimeMs + MS_PER_FRAME;
+    const frameGapMs = this._songTimeMs - previousSongTimeMs;
 
-    // Tick column error timers
+    if (frameGapMs > SUSPENSION_ABANDON_MS) {
+      this._abandonRun();
+      return;
+    }
+
     for (const col of this._columns) {
       if (col.errorTimer > 0) {
         col.errorTimer--;
       }
     }
 
-    // Move notes
-    const imgPxPerFrame = FALL_SPEED_IMG_PX_PER_SEC / FPS;
-    for (const note of this._notes) {
-      if (note.state === 'falling') {
-        note.imgY += imgPxPerFrame;
-      }
-      if (note.state === 'hit') {
-        note.hitFlashTimer--;
-      }
-    }
+    this._admitDueChartNotes();
 
-    // Check for notes that have fallen past the hit zone (top of note past HIT_ZONE_IMG_BOTTOM)
-    for (const note of this._notes) {
-      if (note.state === 'falling' && note.imgY > HIT_ZONE_CENTER_MAX) {
-        note.state = 'missed';
-        const hardFail = this._recordMiss(note.column);
-        if (hardFail) return;
-      }
-    }
+    // Misses are judged here rather than being held back for input that a stall may
+    // still have queued. The HTML event loop runs tasks — which is how a discrete
+    // keydown is dispatched — before the rendering steps that run this callback, so a
+    // press made during a stall has already been scored, against its own timestamp, by
+    // the time we get here. Deferring instead was tried and is worse: any rule strong
+    // enough to survive `Scene.loop`'s same-callback catch-up update also refuses to
+    // expire notes at a steady low frame rate, which makes the run unloseable.
+    if (this._resolveExpiredNotes()) return;
 
-    // Remove expired hit-flash notes and consumed missed notes
-    this._notes = this._notes.filter(
-      (n) => !(n.state === 'hit' && n.hitFlashTimer <= 0) && n.state !== 'missed',
-    );
+    this._notes = this._notes.filter((n) => !this._isHitFlashFinished(n));
 
-    // Spawn notes
-    this._maybeSpawnNote();
-
-    // Song complete
-    if (this._elapsedMs >= SONG_DURATION_MS) {
+    // Reaching the end of the track is not enough on its own — every charted note
+    // must actually have been played, so a run that skipped ahead cannot pass.
+    const chartExhausted = this._nextChartIndex >= KEYBOARD_HERO_CHART.length;
+    if (this._songTimeMs >= KEYBOARD_HERO_CHART_END_MS && chartExhausted) {
       this._completed = true;
       this.isActive = false;
       this._onComplete?.();
     }
+  }
+
+  /** End the attempt without a red-column flash: nothing the player did caused it. */
+  private _abandonRun(): void {
+    this._failed = true;
+    this._failDelayTimer = 0;
+    this.isActive = false;
+    this._onFail?.();
+  }
+
+  /** Put every chart note whose fall has begun onto the field. */
+  private _admitDueChartNotes(): void {
+    while (this._nextChartIndex < KEYBOARD_HERO_CHART.length) {
+      const entry = KEYBOARD_HERO_CHART[this._nextChartIndex];
+      if (entry.timeMs - NOTE_TRAVEL_MS > this._songTimeMs) break;
+      this._notes.push({
+        column: entry.column,
+        hitTimeMs: entry.timeMs,
+        state: 'falling',
+        hitAtMs: 0,
+      });
+      this._nextChartIndex++;
+    }
+  }
+
+  /**
+   * Drop notes that have fallen past their hit window, counting each as a miss.
+   * Returns true if that triggered a hard fail (the caller must stop updating).
+   */
+  private _resolveExpiredNotes(): boolean {
+    const stillLive: Note[] = [];
+    let hardFailed = false;
+
+    for (const note of this._notes) {
+      const windowClosesAtMs = note.hitTimeMs + HIT_WINDOW_MS;
+      if (hardFailed || note.state !== 'falling' || this._songTimeMs <= windowClosesAtMs) {
+        stillLive.push(note);
+        continue;
+      }
+
+      hardFailed = this._recordMiss(note.column);
+    }
+
+    this._notes = stillLive;
+    return hardFailed;
+  }
+
+  private _isHitFlashFinished(note: Note): boolean {
+    return note.state === 'hit' && this._songTimeMs - note.hitAtMs >= HIT_FLASH_MS;
+  }
+
+  /** Image-Y of a note's centre at the current song time. */
+  private _noteImgY(note: Note): number {
+    const referenceMs = note.state === 'hit' ? note.hitAtMs : this._songTimeMs;
+    return HIT_ZONE_IMG_CENTER + (referenceMs - note.hitTimeMs) * FALL_SPEED_IMG_PX_PER_MS;
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -310,10 +323,10 @@ export class KeyboardHeroSystem {
     }
 
     // 7. Song timer overlay
-    const remainingMs = Math.max(0, SONG_DURATION_MS - this._elapsedMs);
+    const remainingMs = Math.max(0, KEYBOARD_HERO_CHART_END_MS - this._songTimeMs);
     const remainingSec = Math.floor(remainingMs / MS_PER_SECOND);
-    const mm = Math.floor(remainingSec / FPS);
-    const ss = remainingSec % FPS;
+    const mm = Math.floor(remainingSec / SECONDS_PER_MINUTE);
+    const ss = remainingSec % SECONDS_PER_MINUTE;
     const timeStr = `Song: ${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')} remaining`;
     drawText(ctx, timeStr, {
       x: dx + dw / 2,
@@ -349,15 +362,23 @@ export class KeyboardHeroSystem {
     ctx.restore();
   }
 
-  handleKeyDown(key: string): void {
+  /** @param songTimeMs - the song clock *at the moment of the press*; see `_processColumnInput`. */
+  handleKeyDown(key: string, songTimeMs: number | null): void {
     if (!this.isActive) return;
 
     const column = this._keyToColumn(key);
     if (column === null) return;
-    this._processColumnInput(column);
+    this._processColumnInput(column, songTimeMs);
   }
 
-  handleTouchAt(x: number, y: number, canvasW: number, canvasH: number): void {
+  /** @param songTimeMs - the song clock *at the moment of the tap*; see `_processColumnInput`. */
+  handleTouchAt(
+    x: number,
+    y: number,
+    canvasW: number,
+    canvasH: number,
+    songTimeMs: number | null,
+  ): void {
     if (!this.isActive) return;
 
     // Recalculate display bounds (same as render)
@@ -379,7 +400,7 @@ export class KeyboardHeroSystem {
     const colIndex = Math.floor(relX / colWidth);
     if (!isColumnIndex(colIndex)) return;
 
-    this._processColumnInput(colIndex);
+    this._processColumnInput(colIndex, songTimeMs);
   }
 
   private _keyToColumn(key: string): ColumnIndex | null {
@@ -391,22 +412,36 @@ export class KeyboardHeroSystem {
     return null;
   }
 
-  private _processColumnInput(column: ColumnIndex): void {
+  /**
+   * Input arrives straight off the DOM event, not through the game loop, so it must be
+   * judged against the song clock *now* rather than against `_songTimeMs` — which was
+   * last written by the previous frame and after a stall is stale by the whole stall.
+   * Scoring a press against that stale time turns a machine stutter into two misses and
+   * an instant game over.
+   *
+   * @param songTimeMs - live song clock, or null when the track isn't running.
+   */
+  private _processColumnInput(column: ColumnIndex, songTimeMs: number | null): void {
     if (this._failed || this._completed) return;
 
-    // Find a note whose extent overlaps the green hit zone
-    const hitNote = this._notes.find(
-      (n) =>
-        n.state === 'falling' &&
-        n.column === column &&
-        n.imgY >= HIT_ZONE_CENTER_MIN &&
-        n.imgY <= HIT_ZONE_CENTER_MAX,
-    );
+    const pressTimeMs = songTimeMs ?? this._songTimeMs;
+    // The press landed inside a suspension: keys still reach this system while the pause
+    // menu is up. Swallow it — the next update() abandons the run rather than judging it.
+    if (pressTimeMs - this._songTimeMs > SUSPENSION_ABANDON_MS) return;
+
+    // Claim the *oldest* in-range note in this column, not the nearest one. A late press
+    // must never consume a note behind it and strand the one it was aimed at, which would
+    // turn one sloppy press into two misses.
+    let hitNote: Note | undefined;
+    for (const note of this._notes) {
+      if (note.state !== 'falling' || note.column !== column) continue;
+      if (Math.abs(pressTimeMs - note.hitTimeMs) > HIT_WINDOW_MS) continue;
+      if (hitNote === undefined || note.hitTimeMs < hitNote.hitTimeMs) hitNote = note;
+    }
 
     if (hitNote !== undefined) {
-      // HIT
       hitNote.state = 'hit';
-      hitNote.hitFlashTimer = HIT_FLASH_FRAMES;
+      hitNote.hitAtMs = pressTimeMs;
       this._hitCount++;
     } else {
       // MISS — first miss is forgiven with a flash; second miss ends the game
@@ -433,75 +468,6 @@ export class KeyboardHeroSystem {
       this._columns[failedColumn].errorTimer = ERROR_TIMER_FRAMES;
       return false;
     }
-  }
-
-  private _maybeSpawnNote(): void {
-    if (this._elapsedMs < this._nextSpawnMs) return;
-
-    // Don't spawn if we've hit our target
-    if (this._totalSpawned >= TARGET_NOTE_COUNT) return;
-
-    // Don't spawn in the last second of the song
-    if (this._elapsedMs >= SONG_DURATION_MS - SPAWN_CUTOFF_MS) return;
-
-    // Don't spawn if max simultaneous notes reached
-    const activeNotes = this._notes.filter((n) => n.state === 'falling').length;
-    if (activeNotes >= MAX_SIMULTANEOUS_NOTES) {
-      // Reschedule slightly later
-      this._nextSpawnMs = this._elapsedMs + SPAWN_RESCHEDULE_DELAY_ACTIVE;
-      return;
-    }
-
-    // Find eligible columns (no note near or in the zone for that column)
-    const eligibleColumns: ColumnIndex[] = [];
-    for (const colIdx of [COL_LEFT, COL_UP, COL_DOWN, COL_RIGHT] as const) {
-      const blocked = this._notes.some(
-        (n) =>
-          n.state === 'falling' &&
-          n.column === colIdx &&
-          n.imgY >= HIT_ZONE_CENTER_MIN - APPROACH_GUARD_IMG_PX,
-      );
-      if (!blocked) {
-        eligibleColumns.push(colIdx);
-      }
-    }
-
-    if (eligibleColumns.length === 0) {
-      this._nextSpawnMs = this._elapsedMs + SPAWN_RESCHEDULE_DELAY_EMPTY;
-      return;
-    }
-
-    // Pick a random eligible column
-    this._rngState = xorshift32(this._rngState);
-    const pick = this._rngState % eligibleColumns.length;
-    // Iterate to the desired index — avoids unsafe array indexing
-    let column: ColumnIndex | undefined;
-    let idx = 0;
-    for (const c of eligibleColumns) {
-      if (idx === pick) {
-        column = c;
-        break;
-      }
-      idx++;
-    }
-    if (column === undefined) return;
-
-    this._notes.push({
-      column,
-      imgY: 0,
-      state: 'falling',
-      hitFlashTimer: 0,
-    });
-    this._totalSpawned++;
-    this._nextSpawnMs = this._elapsedMs + this._nextSpawnInterval();
-  }
-
-  private _nextSpawnInterval(): number {
-    this._rngState = xorshift32(this._rngState);
-    const range = SPAWN_INTERVAL_MAX_MS - SPAWN_INTERVAL_MIN_MS;
-    // Use upper bits for better distribution
-    const rand = (this._rngState >>> RNG_UPPER_BITS_SHIFT) / RNG_UPPER_BITS_DIVISOR;
-    return SPAWN_INTERVAL_MIN_MS + rand * range;
   }
 
   /**
@@ -555,8 +521,9 @@ export class KeyboardHeroSystem {
     const srcX = colOff * def.frameWidth;
     const srcY = state.row * def.frameHeight;
 
-    // Screen position: center the 99px button sprite at the note's image-Y
-    const screenY = fieldDy + note.imgY * scale - (def.frameHeight * scale) / 2;
+    // Screen position: center the button sprite at the note's image-Y
+    const imgY = this._noteImgY(note);
+    const screenY = fieldDy + imgY * scale - (def.frameHeight * scale) / 2;
 
     // Column center x in screen coords
     const colWidth = fieldDw / RENDER_COLUMN_COUNT;
@@ -568,10 +535,12 @@ export class KeyboardHeroSystem {
     ctx.save();
 
     if (note.state === 'hit') {
-      ctx.globalAlpha = note.hitFlashTimer / HIT_FLASH_FRAMES;
+      const flashProgress = (this._songTimeMs - note.hitAtMs) / HIT_FLASH_MS;
+      ctx.globalAlpha = Math.max(0, 1 - flashProgress);
     } else {
-      // Fade in from top: transparent at imgY=0, fully opaque at FADE_IN_END_IMG_Y
-      ctx.globalAlpha = Math.min(1, note.imgY / FADE_IN_END_IMG_Y);
+      // Fade in from the top of the field to FADE_IN_END_IMG_Y
+      const fadeSpan = FADE_IN_END_IMG_Y - NOTE_SPAWN_IMG_Y;
+      ctx.globalAlpha = Math.min(1, Math.max(0, (imgY - NOTE_SPAWN_IMG_Y) / fadeSpan));
     }
 
     ctx.drawImage(

@@ -387,6 +387,28 @@ interface PotionSlot {
   slotIdx: number;
 }
 
+/**
+ * What Space does while a given overlay owns the screen.
+ *
+ * `passThrough` exists for the chat box alone: its DOM input needs the space
+ * character itself, so that press must not be preventDefault-ed.
+ */
+type OverlaySpaceHandling =
+  | { readonly kind: 'advance'; readonly advance: () => void }
+  | { readonly kind: 'swallow' }
+  | { readonly kind: 'passThrough' };
+
+/** One overlay's claim on the keyboard while it is on screen. */
+interface OverlayInputClaim {
+  readonly isOpen: boolean;
+  readonly space: OverlaySpaceHandling;
+  /**
+   * Whether the rest of the keyboard — hotbar, inventory, chat, Tab — is locked
+   * out too. Overlays that merely float over live play leave it unlocked.
+   */
+  readonly locksKeyboard: boolean;
+}
+
 // Spatial grid sizing
 const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 
@@ -1284,6 +1306,7 @@ export class DungeonScene extends GameplayScene {
     this.checkpoint = options?.checkpoint ?? null;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
+    this.spiderQuest.setSongClock(() => this.audio?.getKeyboardHeroMusicTimeMs() ?? null);
     if (this.townLife !== null && this.audio !== null) {
       this.citizenDialog = new CitizenDialog(this.audio);
     }
@@ -1745,31 +1768,15 @@ export class DungeonScene extends GameplayScene {
       // owns — but input is suppressed while its dialog is open, so the hotbar
       // never sees these and there is no conflict to resolve.
       if (this.bopca.handleKeyDown(e.key)) return;
-      this.spiderQuest.handleKeyDown(e.key);
+      this.spiderQuest.handleKeyDown(e.key, e.timeStamp);
     };
     window.addEventListener('keydown', this._spiderKeyHandler);
 
     this.inputHandler.bind({
-      isSuppressed: () =>
-        this.pauseMenu.isOpen ||
-        this.followerMenu.isOpen ||
-        // Without these a hotbar key pressed under an award overlay would queue
-        // a second read behind it, stacking a prompt whose Read button the
-        // overlay's own OK button then swallows.
-        this.skillBookPrompt.isOpen ||
-        this.levelUpDialog.isShowing ||
-        this.rewardGrantedDialog.isShowing ||
-        this.safeRoom.isSleeping ||
-        this.bopca.isDialogOpen ||
-        this.defendQuest.isDialogOpen ||
-        this.spiderQuest.isDialogOpen ||
-        this.circusQuest.isDialogOpen ||
-        this.murderQuest.isDialogOpen ||
-        this.citizenDialog?.isOpen === true ||
-        this.noticeBoard?.isOpen === true ||
-        this.marketPanel?.isOpen === true ||
-        this.fortuneTeller?.isOpen === true ||
-        this.playerChat.isOpen,
+      // Reads the overlay registry rather than its own list, so that a hotbar key
+      // pressed under an award overlay cannot queue a second read behind it,
+      // stacking a prompt whose Read button the overlay's own OK then swallows.
+      isSuppressed: () => this.overlayClaims.some((claim) => claim.isOpen && claim.locksKeyboard),
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
@@ -1842,42 +1849,16 @@ export class DungeonScene extends GameplayScene {
         }
       },
       clearInput: () => this.input.clear(),
+      // Runs before the input-suppression gate, because most of these overlays
+      // are themselves what suppresses input — Space would otherwise never
+      // reach them. Consuming here is also what keeps the press off the world:
+      // whatever owns the screen eats Space even when it has nothing to do with
+      // it, so a click-only menu can never leak the press to an NPC behind it.
       advanceDialog: () => {
-        // Here rather than in `triggerSpaceAction` for the same reason as the
-        // Bopca dialog below: this callback runs before the input-suppression
-        // gate, and these overlays are themselves among the things that suppress
-        // input, so Space would otherwise never reach them.
-        if (this.levelUpDialog.handleSpaceBar()) return true;
-        if (this.rewardGrantedDialog.handleSpaceBar()) return true;
-        if (this.noticeBoard?.isOpen === true) {
-          this.noticeBoard.close();
-          this.audio?.play('menu_click');
-          return true;
-        }
-        if (this.marketPanel?.isOpen === true) {
-          this.marketPanel.close();
-          this.audio?.play('menu_click');
-          return true;
-        }
-        if (this.fortuneTeller?.isOpen === true) {
-          this.fortuneTeller.close();
-          this.audio?.play('menu_click');
-          return true;
-        }
-        if (this.citizenDialog?.isOpen === true) {
-          this.citizenDialog.advance();
-          return true;
-        }
-        // Here rather than in `triggerSpaceAction`: this callback runs before the
-        // input-suppression gate and `spaceAction` runs after it, and an open
-        // Bopca dialog is itself one of the things that suppresses input.
-        if (this.bopca.isDialogOpen) {
-          this.bopca.advanceDialog();
-          return true;
-        }
-        const handled = this.defendQuest.advancePage();
-        if (handled) this.audio?.play('menu_click');
-        return handled;
+        const overlay = this.focusedOverlay;
+        if (overlay === null || overlay.space.kind === 'passThrough') return false;
+        if (overlay.space.kind === 'advance') overlay.space.advance();
+        return true;
       },
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
@@ -2649,6 +2630,130 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Every overlay that can own the screen, ordered by which one a press should
+   * reach first.
+   *
+   * This is the single source of truth for "a menu is up". The keyboard gate,
+   * the Space chain and the mobile tap path all read it, so none of them can
+   * drift apart — drift is what let a press aimed at the building menu also
+   * reach the citizen standing on the doorstep, stacking two dialogs that then
+   * fought over the same clicks.
+   */
+  private get overlayClaims(): readonly OverlayInputClaim[] {
+    const tutorial = this.tutorial;
+    const noticeBoard = this.noticeBoard;
+    const marketPanel = this.marketPanel;
+    const fortuneTeller = this.fortuneTeller;
+    const citizenDialog = this.citizenDialog;
+    const closeWithClick = (close: () => void): OverlaySpaceHandling => ({
+      kind: 'advance',
+      advance: () => {
+        close();
+        this.audio?.play('menu_click');
+      },
+    });
+    return [
+      { isOpen: this.chestRewardDialog.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: tutorial?.showNearGoblinDialog === true,
+        space: { kind: 'advance', advance: () => tutorial?.dismissNearGoblinDialog() },
+        locksKeyboard: false,
+      },
+      {
+        isOpen: tutorial?.showTutorialMordecaiDialog === true,
+        space: { kind: 'advance', advance: () => tutorial?.advanceTutorialMordecaiDialog() },
+        locksKeyboard: false,
+      },
+      {
+        isOpen: tutorial?.showMordecaiReminderDialog === true,
+        space: { kind: 'advance', advance: () => tutorial?.advanceMordecaiReminderDialog() },
+        locksKeyboard: false,
+      },
+      {
+        isOpen: this.achievementUI.isBlocking,
+        space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
+        locksKeyboard: false,
+      },
+      {
+        isOpen: this.levelUpDialog.isShowing,
+        space: { kind: 'advance', advance: () => void this.levelUpDialog.handleSpaceBar() },
+        locksKeyboard: true,
+      },
+      {
+        isOpen: this.rewardGrantedDialog.isShowing,
+        space: { kind: 'advance', advance: () => void this.rewardGrantedDialog.handleSpaceBar() },
+        locksKeyboard: true,
+      },
+      { isOpen: this.skillBookPrompt.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.levelCompleteScreen.isActive,
+        space: { kind: 'advance', advance: () => void this.levelCompleteScreen.handleSpaceBar() },
+        locksKeyboard: false,
+      },
+      { isOpen: this.playerChat.isOpen, space: { kind: 'passThrough' }, locksKeyboard: true },
+      {
+        isOpen: noticeBoard?.isOpen === true,
+        space: closeWithClick(() => noticeBoard?.close()),
+        locksKeyboard: true,
+      },
+      {
+        isOpen: marketPanel?.isOpen === true,
+        space: closeWithClick(() => marketPanel?.close()),
+        locksKeyboard: true,
+      },
+      {
+        isOpen: fortuneTeller?.isOpen === true,
+        space: closeWithClick(() => fortuneTeller?.close()),
+        locksKeyboard: true,
+      },
+      {
+        isOpen: citizenDialog?.isOpen === true,
+        space: { kind: 'advance', advance: () => citizenDialog?.advance() },
+        locksKeyboard: true,
+      },
+      {
+        isOpen: this.bopca.isDialogOpen,
+        space: { kind: 'advance', advance: () => this.bopca.advanceDialog() },
+        locksKeyboard: true,
+      },
+      {
+        isOpen: this.defendQuest.isDialogOpen,
+        space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
+        locksKeyboard: true,
+      },
+      {
+        isOpen: this.defendQuest.isOutcomeOverlayShowing,
+        space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
+        locksKeyboard: false,
+      },
+      // The quest systems below own their own window listener for Space, so the
+      // claim here only has to keep the press away from the world behind them.
+      { isOpen: this.spiderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.circusQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.murderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.safeRoom.mordecaiDialogOpen,
+        space: { kind: 'advance', advance: () => this.safeRoom.advanceMordecaiDialog() },
+        locksKeyboard: false,
+      },
+      { isOpen: this.safeRoom.isSleeping, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.stairwell.menuOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.building?.menuOpen === true, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.followerMenu.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      { isOpen: this.pauseMenu.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+    ];
+  }
+
+  private advanceDefendQuestPage(): void {
+    if (this.defendQuest.advancePage()) this.audio?.play('menu_click');
+  }
+
+  /** The overlay that currently owns input, or null when play has the floor. */
+  private get focusedOverlay(): OverlayInputClaim | null {
+    return this.overlayClaims.find((claim) => claim.isOpen) ?? null;
+  }
+
+  /**
    * Anything that takes the floor away from ordinary play: a modal, a menu, a
    * quest interjection, the death screen. Street chat is the one dialog that
    * does *not* belong here — the player has to keep walking during it.
@@ -2847,48 +2952,18 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
-    // Space bar advances / dismisses achievement notifications and loot boxes
-    if (this.achievementUI.handleSpaceBar()) return;
+    // Whatever owns the screen has already had this press: the keyboard path
+    // hands it to `advanceDialog` before the suppression gate, and the mobile
+    // tap path runs `handleClick` first. Either way the world behind the overlay
+    // must not see it — that is what opened an NPC conversation underneath the
+    // building menu and left both boxes fighting over the same clicks.
+    if (this.focusedOverlay !== null) return;
 
-    if (this.levelCompleteScreen.handleSpaceBar()) return;
-    // The keyboard path advances the citizen dialog earlier, in `advanceDialog`
-    // (which runs before the input-suppression gate); this guards the mobile
-    // tap path, where `handleClick` already advanced it, from re-opening a
-    // fresh conversation or falling through to an attack.
-    if (this.citizenDialog?.isOpen === true) return;
-    if (this.noticeBoard?.isOpen === true) return;
-    if (this.marketPanel?.isOpen === true) return;
-    if (this.fortuneTeller?.isOpen === true) return;
-    // Same guard for the award overlays, which the keyboard likewise advances in
-    // `advanceDialog`. A tap whose finger went down before the overlay appeared
-    // still reaches here, and must not swing a weapon while the game is paused.
-    if (this.levelUpDialog.isShowing) return;
-    if (this.rewardGrantedDialog.isShowing) return;
-    if (this.skillBookPrompt.isOpen) return;
     if (this.gameOver && this.deathScreen.handleSpaceBar()) {
       this.respawnAfterDeath();
       return;
     }
 
-    if (this.tutorial?.showNearGoblinDialog === true) {
-      this.tutorial.dismissNearGoblinDialog();
-      return;
-    }
-
-    if (this.tutorial?.showTutorialMordecaiDialog === true) {
-      this.tutorial.advanceTutorialMordecaiDialog();
-      return;
-    }
-
-    if (this.tutorial?.showMordecaiReminderDialog === true) {
-      this.tutorial.advanceMordecaiReminderDialog();
-      return;
-    }
-
-    if (this.safeRoom.mordecaiDialogOpen) {
-      this.safeRoom.advanceMordecaiDialog();
-      return;
-    }
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
       // Beside the Mordecai and bed checks rather than above them: each fixture
@@ -3093,7 +3168,7 @@ export class DungeonScene extends GameplayScene {
     if (notice !== null) this.hotbarToast.show(notice);
   }
 
-  handleClick(mx: number, my: number): void {
+  handleClick(mx: number, my: number, eventTimeStampMs: number): void {
     notifyButtonClick(mx, my);
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.tutorial.dismissNearGoblinDialog();
@@ -3123,7 +3198,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (this.defendQuest.handleClick(mx, my)) return;
-    if (this.spiderQuest.handleClick(mx, my)) return;
+    if (this.spiderQuest.handleClick(mx, my, eventTimeStampMs)) return;
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
     if (this.citizenDialog?.isOpen === true) {
@@ -4650,7 +4725,7 @@ export class DungeonScene extends GameplayScene {
         this.levelUpDialog.isShowing ||
         this.rewardGrantedDialog.isShowing
       ) {
-        this.handleClick(x, y);
+        this.handleClick(x, y, e.timeStamp);
         continue;
       }
 
@@ -4773,7 +4848,7 @@ export class DungeonScene extends GameplayScene {
             this.pauseMenu.touchScrollStart(y);
           }
         } else {
-          this.handleClick(x, y);
+          this.handleClick(x, y, e.timeStamp);
         }
         continue;
       }
@@ -4869,7 +4944,7 @@ export class DungeonScene extends GameplayScene {
           const elapsed = Date.now() - tapStart.time;
           const moved = Math.hypot(x - tapStart.x, y - tapStart.y);
           if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
-            this.handleClick(x, y);
+            this.handleClick(x, y, e.timeStamp);
           }
         }
         continue;
@@ -4907,7 +4982,7 @@ export class DungeonScene extends GameplayScene {
           ) {
             this.triggerHotbarActivation(hi);
           } else if (wasTap) {
-            this.handleClick(x, y);
+            this.handleClick(x, y, e.timeStamp);
           }
         }
         this.touch.inventoryDragTouchId = null;
@@ -4937,7 +5012,7 @@ export class DungeonScene extends GameplayScene {
               this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
-              this.handleClick(x, y);
+              this.handleClick(x, y, e.timeStamp);
               if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
                 const cam = this.camera();
                 const grateHandled = this.defendQuest.tryMobileTapOnGrate(

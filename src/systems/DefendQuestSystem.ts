@@ -347,6 +347,14 @@ export class DefendQuestSystem implements GameSystem {
     return this.phase === 'dialog' || this.phase === 'tutorial';
   }
 
+  /**
+   * The end-of-quest banner, which a press dismisses early. It rides over live
+   * play rather than pausing it, so it is not part of `isDialogOpen`.
+   */
+  get isOutcomeOverlayShowing(): boolean {
+    return this.completeOverlayTimer > 0 || this.failOverlayTimer > 0;
+  }
+
   readonly isSuppressed = false;
 
   /** Called when player presses Space near the NPC. */
