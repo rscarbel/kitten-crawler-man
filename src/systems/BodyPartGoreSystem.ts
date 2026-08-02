@@ -2,8 +2,10 @@ import type { GameSystem } from './GameSystem';
 import type { SpriteKey } from '../core/SpriteLoader';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { drawSpriteRotatedCenter } from '../core/SpriteRenderer';
+import { getFrameInkBounds } from '../core/spriteFrames';
 import type { GameMap } from '../map/GameMap';
 import { GOBLIN_GORE_PARTS } from '../sprites/goblinSprite';
+import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -37,9 +39,13 @@ const HOARDER_CONFIG: MobBodyPartConfig = {
   ],
 };
 
+/** The eight pieces a rat comes apart into; all eight live on the rat's own sheet. */
+const RAT_CONFIG: MobBodyPartConfig = { spriteKey: 'rat', parts: RAT_GORE_PARTS };
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...GOBLIN_CONFIGS,
   ['hoarder', HOARDER_CONFIG],
+  [RAT_BODY_PART_KEY, RAT_CONFIG],
 ]);
 
 const PART_LIFETIME = 6000; // 300s @ 60fps
@@ -86,6 +92,18 @@ const TUMBLE_SEARCH_RADIUS_TILES = 3;
 /** Half-width of the random resting spread inside the target tile, as a fraction of it. */
 const TUMBLE_SCATTER_RATIO = 0.25;
 const TILE_CENTER_RATIO = 0.5;
+/**
+ * Scattered spots that turn out to hug a wall are rerolled rather than accepted,
+ * up to this many times; past that the tile centre — the spot furthest from
+ * every wall the tile touches — is the better answer anyway.
+ */
+const SCATTER_ATTEMPTS = 4;
+/**
+ * The search starts on the landing tile itself: a piece can land on open ground
+ * and still overhang the wall beside it, and a nudge within its own tile fixes
+ * that without throwing it across the room.
+ */
+const LANDING_TILE_SEARCH_RADIUS = 0;
 
 interface FlyingPart {
   x: number;
@@ -237,12 +255,13 @@ export class BodyPartGoreSystem implements GameSystem {
     const partsHoldingASettledSlot = this.settled.length + this.tumbling.length;
     if (partsHoldingASettledSlot >= MAX_SETTLED_PARTS) return;
 
-    if (this._isOnWalkableGround(p.x, p.y, p.tileSize)) {
+    const clearance = this._pieceClearanceRadius(p);
+    if (this._isClearOfBlockedTiles(p.x, p.y, clearance, p.tileSize)) {
       this._settle(p.x, p.y, p.angle, p);
       return;
     }
 
-    const restingSpot = this._findTumbleTarget(p.x, p.y, p.tileSize);
+    const restingSpot = this._findTumbleTarget(p.x, p.y, clearance, p.tileSize);
     if (restingSpot === null) {
       this._settle(p.x, p.y, p.angle, p);
       return;
@@ -266,21 +285,31 @@ export class BodyPartGoreSystem implements GameSystem {
   }
 
   /**
-   * Finds the world position a part buried in geometry should slide to: the
-   * closest walkable tile by ring search, scattered within that tile so the six
-   * parts of one corpse don't stack on a single pixel.
+   * Finds the world position a part overlapping geometry should slide to: the
+   * closest tile by ring search that can hold the whole piece clear of every
+   * wall, scattered within that tile so the six parts of one corpse don't stack
+   * on a single pixel.
+   *
+   * A tile merely being walkable is not enough. Resting a piece on the centre of
+   * the first open tile still leaves half of it drawn over the wall it just
+   * escaped, which reads as gore stuck to the wall rather than gore that fell
+   * off it — so candidate tiles are judged by whether the piece fits, not by
+   * whether its centre point is on open ground.
    */
   private _findTumbleTarget(
     x: number,
     y: number,
+    clearanceRadius: number,
     tileSize: number,
   ): { x: number; y: number } | null {
     const originTileX = Math.floor(x / tileSize);
     const originTileY = Math.floor(y / tileSize);
+    let fallbackCenter: { x: number; y: number } | null = null;
+    let fallbackDistSq = Infinity;
 
-    for (let radius = 1; radius <= TUMBLE_SEARCH_RADIUS_TILES; radius++) {
-      let closestTile: { x: number; y: number } | null = null;
-      let closestDistSq = Infinity;
+    for (let radius = LANDING_TILE_SEARCH_RADIUS; radius <= TUMBLE_SEARCH_RADIUS_TILES; radius++) {
+      let bestCenter: { x: number; y: number } | null = null;
+      let bestDistSq = Infinity;
 
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
@@ -292,25 +321,76 @@ export class BodyPartGoreSystem implements GameSystem {
           const centerX = (tileX + TILE_CENTER_RATIO) * tileSize;
           const centerY = (tileY + TILE_CENTER_RATIO) * tileSize;
           const distSq = (centerX - x) ** 2 + (centerY - y) ** 2;
-          if (distSq < closestDistSq) {
-            closestDistSq = distSq;
-            closestTile = { x: centerX, y: centerY };
+
+          if (distSq < fallbackDistSq) {
+            fallbackDistSq = distSq;
+            fallbackCenter = { x: centerX, y: centerY };
           }
+          if (distSq >= bestDistSq) continue;
+          if (!this._isClearOfBlockedTiles(centerX, centerY, clearanceRadius, tileSize)) continue;
+          bestDistSq = distSq;
+          bestCenter = { x: centerX, y: centerY };
         }
       }
 
-      if (closestTile !== null) {
-        const scatterRange = tileSize * TUMBLE_SCATTER_RATIO;
-        const scatterX = (Math.random() * 2 - 1) * scatterRange;
-        const scatterY = (Math.random() * 2 - 1) * scatterRange;
-        return { x: closestTile.x + scatterX, y: closestTile.y + scatterY };
+      if (bestCenter !== null) {
+        return this._scatterWithinTile(bestCenter, clearanceRadius, tileSize);
       }
     }
-    return null;
+    // Nothing nearby fits the piece — a one-tile crevice, say. Its centre is
+    // still the least-buried spot on offer.
+    return fallbackCenter;
   }
 
-  private _isOnWalkableGround(x: number, y: number, tileSize: number): boolean {
-    return this.map.isWalkable(Math.floor(x / tileSize), Math.floor(y / tileSize));
+  private _scatterWithinTile(
+    center: { x: number; y: number },
+    clearanceRadius: number,
+    tileSize: number,
+  ): { x: number; y: number } {
+    const scatterRange = tileSize * TUMBLE_SCATTER_RATIO;
+    for (let attempt = 0; attempt < SCATTER_ATTEMPTS; attempt++) {
+      const scatteredX = center.x + (Math.random() * 2 - 1) * scatterRange;
+      const scatteredY = center.y + (Math.random() * 2 - 1) * scatterRange;
+      if (this._isClearOfBlockedTiles(scatteredX, scatteredY, clearanceRadius, tileSize)) {
+        return { x: scatteredX, y: scatteredY };
+      }
+    }
+    return center;
+  }
+
+  /**
+   * How far a piece's drawn pixels reach from the position physics tracks it by.
+   * Measured off the sheet rather than taken from the cell size, because a gore
+   * cell is sized for the creature's widest standing pose and a severed jaw
+   * fills almost none of it.
+   */
+  private _pieceClearanceRadius(
+    part: Pick<FlyingPart, 'spriteKey' | 'stateName' | 'tileSize'>,
+  ): number {
+    const def = getSpriteDefByKey(part.spriteKey);
+    if (!def) return 0;
+    const stateDef = def.states.get(part.stateName);
+    if (!stateDef) return 0;
+    const ink = getFrameInkBounds(def, stateDef, 0);
+    return ink.radius * (part.tileSize / def.tileScale);
+  }
+
+  /**
+   * Whether a piece of the given radius resting here would touch a blocked tile.
+   * Tests the piece's bounding square rather than its disc — the corners cost a
+   * little reach at tile corners and save the per-tile distance maths.
+   */
+  private _isClearOfBlockedTiles(x: number, y: number, radius: number, tileSize: number): boolean {
+    const minTileX = Math.floor((x - radius) / tileSize);
+    const maxTileX = Math.floor((x + radius) / tileSize);
+    const minTileY = Math.floor((y - radius) / tileSize);
+    const maxTileY = Math.floor((y + radius) / tileSize);
+    for (let tileY = minTileY; tileY <= maxTileY; tileY++) {
+      for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
+        if (!this.map.isWalkable(tileX, tileY)) return false;
+      }
+    }
+    return true;
   }
 
   private _settle(

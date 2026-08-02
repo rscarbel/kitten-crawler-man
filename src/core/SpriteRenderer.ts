@@ -5,32 +5,13 @@ import {
   type SpriteDef,
   type SpriteStateDef,
 } from './SpriteLoader';
+import { frameOrigin, getFrameInkBounds } from './spriteFrames';
 
 /** Default alpha for full opacity. */
 const DEFAULT_ALPHA = 1;
 
 /** Tile center offset as a fraction of tile size. */
 const TILE_CENTER_OFFSET = 0.5;
-
-/**
- * Resolve the sheet-pixel origin (srcX, srcY) of a frame, wrapping onto
- * subsequent rows once `colsPerRow` is exceeded (see SpriteStateDef.colsPerRow).
- */
-function frameOrigin(
-  stateDef: SpriteStateDef,
-  frameWidth: number,
-  frameHeight: number,
-  clampedFrame: number,
-): { srcX: number; srcY: number } {
-  const colOffset = stateDef.colOffset ?? 0;
-  const totalCol = colOffset + clampedFrame;
-  if (stateDef.colsPerRow === undefined) {
-    return { srcX: totalCol * frameWidth, srcY: stateDef.row * frameHeight };
-  }
-  const row = stateDef.row + Math.floor(totalCol / stateDef.colsPerRow);
-  const col = totalCol % stateDef.colsPerRow;
-  return { srcX: col * frameWidth, srcY: row * frameHeight };
-}
 
 export interface DrawSpriteOpts {
   /** Mirror the sprite horizontally around its tile-horizontal center. */
@@ -108,9 +89,15 @@ export function drawSprite(
 }
 
 /**
- * Draw a sprite rotated around its visual center (pivot = center of the rendered frame).
+ * Draw a sprite spinning about its own visible pixels, centred on (sx, sy).
  * sx/sy are the screen-space world coordinates of the part (before camera offset removal).
  * Intended for gore/debris parts that spin freely rather than directional effects.
+ *
+ * The pivot is the frame's measured ink centre, not the cell centre and not the
+ * sheet's `tileX`/`tileY` anchor: a gore cell is as large as the creature's
+ * widest pose and its anchor marks where that creature's feet stand, so either
+ * one would draw a severed limb most of a tile away from the position physics
+ * gave it and swing it around an off-piece pivot as it tumbles.
  */
 export function drawSpriteRotatedCenter(
   ctx: CanvasRenderingContext2D,
@@ -122,19 +109,28 @@ export function drawSpriteRotatedCenter(
   tileSize: number,
   alpha: number,
 ): void {
-  const { img, frameWidth, frameHeight, tileX, tileY, tileScale } = def;
+  const { img, frameWidth, frameHeight, tileScale } = def;
   const { srcX, srcY } = frameOrigin(stateDef, frameWidth, frameHeight, 0);
+  const ink = getFrameInkBounds(def, stateDef, 0);
   const scale = tileSize / tileScale;
   const dw = frameWidth * scale;
   const dh = frameHeight * scale;
-  const pivotX = sx - tileX * scale + dw / 2;
-  const pivotY = sy - tileY * scale + dh / 2;
 
   ctx.save();
   if (alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
-  ctx.translate(pivotX, pivotY);
+  ctx.translate(sx, sy);
   ctx.rotate(angle);
-  ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, -dw / 2, -dh / 2, dw, dh);
+  ctx.drawImage(
+    img,
+    srcX,
+    srcY,
+    frameWidth,
+    frameHeight,
+    -ink.centerX * scale,
+    -ink.centerY * scale,
+    dw,
+    dh,
+  );
   ctx.restore();
 }
 
