@@ -1334,7 +1334,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.pauseMenu.audio = this.audio;
     this.pauseMenu.onResetGame = this.onResetGameCallback;
-    this.pauseMenu.skipMusicPause = () =>
+    this.pauseMenu.skipAudioPause = () =>
       this.tutorial !== null &&
       (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
         this.tutorial.state === 'CAT_OPENED_TREASURE_BOX');

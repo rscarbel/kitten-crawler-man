@@ -69,13 +69,13 @@ export class PauseMenu {
   audio: AudioManager | null = null;
 
   /**
-   * When provided, called before pausing music on open. If it returns true the
-   * music pause (and matching resume on close) are skipped for that open/close
-   * cycle — useful for tutorial-guided menu phases where music should keep playing.
+   * When provided, called before silencing audio on open. If it returns true the
+   * pause (and matching resume on close) are skipped for that open/close cycle —
+   * useful for tutorial-guided menu phases where the world should keep sounding.
    */
-  skipMusicPause: (() => boolean) | null = null;
+  skipAudioPause: (() => boolean) | null = null;
 
-  private _didPauseMusic = false;
+  private _didPauseAudio = false;
 
   /** On mobile: called by the "Send Chat" settings button to open the chat window. */
   onOpenChat: (() => void) | null = null;
@@ -106,50 +106,52 @@ export class PauseMenu {
   open(): void {
     this._isOpen = true;
     this.tab = 'main';
-    this._applyMusicPause();
+    this._applyAudioPause();
   }
 
   openToInventory(): void {
     this._isOpen = true;
     this.tab = 'inventory';
-    this._applyMusicPause();
+    this._applyAudioPause();
   }
 
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
-    this._applyMusicPause();
+    this._applyAudioPause();
   }
 
   close(): void {
     this._isOpen = false;
     this._showResetConfirm = false;
-    this._applyMusicResume();
+    this._applyAudioResume();
   }
 
   toggle(): void {
     this._isOpen = !this._isOpen;
     if (this._isOpen) {
       this.tab = 'main';
-      this._applyMusicPause();
+      this._applyAudioPause();
     } else {
-      this._applyMusicResume();
+      this._applyAudioResume();
     }
   }
 
-  private _applyMusicPause(): void {
-    if (this.skipMusicPause?.() === true) {
-      this._didPauseMusic = false;
+  private _applyAudioPause(): void {
+    if (this.skipAudioPause?.() === true) {
+      this._didPauseAudio = false;
     } else {
-      this._didPauseMusic = true;
+      this._didPauseAudio = true;
       this.audio?.pauseMusic();
+      this.audio?.pauseAmbience();
     }
   }
 
-  private _applyMusicResume(): void {
-    if (this._didPauseMusic) {
-      this._didPauseMusic = false;
+  private _applyAudioResume(): void {
+    if (this._didPauseAudio) {
+      this._didPauseAudio = false;
       this.audio?.resumeMusic();
+      this.audio?.resumeAmbience();
     }
   }
 
