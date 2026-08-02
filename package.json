@@ -26,7 +26,8 @@
     "gen:camps": "tsx scripts/generate-camp-sprites.ts",
     "gen:human": "tsx scripts/generate-human-sprite.ts",
     "gen:cat": "tsx scripts/generate-cat-sprite.ts",
-    "gen:goblins": "tsx scripts/generate-goblin-sprites.gates.ts"
+    "gen:goblins": "tsx scripts/generate-goblin-sprites.gates.ts",
+    "gen:magic-missile": "tsx scripts/generate-magic-missile-sprites.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

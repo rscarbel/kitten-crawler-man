@@ -39,6 +39,9 @@
     "scripts/goblinGore.ts",
     "scripts/generate-goblin-sprites.ts",
     "scripts/generate-goblin-sprites.gates.ts",
-    "scripts/render-goblins.ts"
+    "scripts/render-goblins.ts",
+    "scripts/magicMissileArt.ts",
+    "scripts/generate-magic-missile-sprites.ts",
+    "scripts/render-magic-missile.ts"
   ]
 }

@@ -5,6 +5,7 @@ import {
   timeFrameIndex,
 } from '../core/SpriteRenderer';
 import type { SpriteStates } from '../core/SpriteLoader';
+import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abilities/magicMissile';
 
 export interface Missile {
   x: number;
@@ -265,6 +266,26 @@ export function drawCatSprite(
   );
 }
 
+/** Frames baked per row by `scripts/generate-magic-missile-sprites.ts`. */
+const MISSILE_PROJECTILE_FRAMES = 8;
+const MISSILE_EXPLOSION_FRAMES = 10;
+
+/** Both missile sheets share one set of row names. */
+type MissileSpriteVariant = MagicMissileVisualTier | 'sub_missile';
+
+/**
+ * How fast each tier's bolt cycles its loop. The higher tiers spin faster on
+ * purpose: the same braid played at the same rate reads as the same spell with
+ * a new palette, and the tempo is half of what sells the escalation.
+ */
+const MISSILE_ANIM_FPS: Record<MissileSpriteVariant, number> = {
+  tier1: 10,
+  tier2: 13,
+  tier3: 17,
+  tier4: 22,
+  sub_missile: 17,
+};
+
 export function drawMissiles(
   ctx: CanvasRenderingContext2D,
   missiles: Missile[],
@@ -278,19 +299,22 @@ export function drawMissiles(
   for (const m of missiles) {
     const mx = m.x - camX;
     const my = m.y - camY;
-    const isFullPower = m.abilityLevel >= 15;
+    // Sub-missiles carry an ability level of 1 so they cannot chain into more
+    // sub-missiles, so their level says nothing about how they should look —
+    // both sheets give them a row of their own.
+    const variant: MissileSpriteVariant = m.isSubMissile
+      ? 'sub_missile'
+      : getMagicMissileVisualTier(m.abilityLevel);
 
     if (m.state === 'flying') {
       const rotation = Math.atan2(m.vy, m.vx);
-      const state = m.isSubMissile ? 'sub_missile' : isFullPower ? 'full_power' : 'standard';
-      const frame = timeFrameIndex(now, 12, 3);
-      drawSpriteKey(ctx, 'magic_missile_projectile', state, frame, mx, my, s, { rotation });
+      const frame = timeFrameIndex(now, MISSILE_ANIM_FPS[variant], MISSILE_PROJECTILE_FRAMES);
+      drawSpriteKey(ctx, 'magic_missile_projectile', variant, frame, mx, my, s, { rotation });
     } else {
       // Explosion — centered on the missile position.
       const progress = 1 - m.explodeTimer / EXPLODE_FRAMES;
-      const frame = progressFrameIndex(progress, 8);
-      const state = isFullPower ? 'full_power' : 'standard';
-      drawSpriteKey(ctx, 'magic_missile_explosion', state, frame, mx, my, s);
+      const frame = progressFrameIndex(progress, MISSILE_EXPLOSION_FRAMES);
+      drawSpriteKey(ctx, 'magic_missile_explosion', variant, frame, mx, my, s);
     }
   }
 }

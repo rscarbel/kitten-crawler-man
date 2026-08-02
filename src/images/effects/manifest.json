@@ -31,23 +31,31 @@
   },
   "magic_missile_projectile": {
     "path": "effects/magic_missile_projectile.png",
-    "frameWidth": 176,
-    "frameHeight": 80,
-    "tileX": 140,
-    "tileY": 40,
+    "frameWidth": 256,
+    "frameHeight": 112,
+    "tileX": 208,
+    "tileY": 56,
     "tileScale": 64,
     "states": {
-      "standard": {
+      "tier1": {
         "row": 0,
-        "frameCount": 3
+        "frameCount": 8
+      },
+      "tier2": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "tier3": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "tier4": {
+        "row": 3,
+        "frameCount": 8
       },
       "sub_missile": {
-        "row": 1,
-        "frameCount": 3
-      },
-      "full_power": {
-        "row": 2,
-        "frameCount": 3
+        "row": 4,
+        "frameCount": 8
       }
     }
   },
@@ -59,13 +67,25 @@
     "tileY": 112,
     "tileScale": 64,
     "states": {
-      "standard": {
+      "tier1": {
         "row": 0,
-        "frameCount": 8
+        "frameCount": 10
       },
-      "full_power": {
+      "tier2": {
         "row": 1,
-        "frameCount": 8
+        "frameCount": 10
+      },
+      "tier3": {
+        "row": 2,
+        "frameCount": 10
+      },
+      "tier4": {
+        "row": 3,
+        "frameCount": 10
+      },
+      "sub_missile": {
+        "row": 4,
+        "frameCount": 10
       }
     }
   },
