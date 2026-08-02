@@ -287,6 +287,19 @@ export class CompanionSystem implements GameSystem {
     }
   }
 
+  /** Clear line of sight between two entities, measured centre to centre. */
+  private hasSightLine(
+    from: { readonly x: number; readonly y: number },
+    to: { readonly x: number; readonly y: number },
+  ): boolean {
+    return this.gameMap.hasLineOfSight(
+      from.x + TILE_SIZE * TILE_CENTER_OFFSET,
+      from.y + TILE_SIZE * TILE_CENTER_OFFSET,
+      to.x + TILE_SIZE * TILE_CENTER_OFFSET,
+      to.y + TILE_SIZE * TILE_CENTER_OFFSET,
+    );
+  }
+
   private updateAutoAI(
     human: HumanPlayer,
     cat: CatPlayer,
@@ -357,16 +370,7 @@ export class CompanionSystem implements GameSystem {
         }
       }
 
-      if (cat.autoTarget) {
-        const tc = cat.autoTarget;
-        const hasLOS = this.gameMap.hasLineOfSight(
-          cat.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          cat.y + TILE_SIZE * TILE_CENTER_OFFSET,
-          tc.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          tc.y + TILE_SIZE * TILE_CENTER_OFFSET,
-        );
-        if (hasLOS) cat.autoFireTick();
-      }
+      if (cat.autoTarget && this.hasSightLine(cat, cat.autoTarget)) cat.autoFireTick();
     } else {
       // Clear human's target if it's dead or became an avoid-instead mob
       if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
@@ -385,10 +389,15 @@ export class CompanionSystem implements GameSystem {
             if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
             if (isUntriggeredBossRoomMob(mob, cat)) continue;
             const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
-            if (dist < closestDist) {
-              closestDist = dist;
-              closest = mob;
-            }
+            if (dist >= closestDist) continue;
+            // Picking an unseen target is what sent the companion jogging into a
+            // wall to fight something on the other side of it. A mob already
+            // fighting the party is exempt: that fight is known about, whether or
+            // not there is a clear line to it.
+            const isFightingParty = mob.currentTarget === human || mob.currentTarget === cat;
+            if (!isFightingParty && !this.hasSightLine(human, mob)) continue;
+            closestDist = dist;
+            closest = mob;
           }
           human.autoTarget = closest;
         } else {
@@ -404,16 +413,7 @@ export class CompanionSystem implements GameSystem {
         }
       }
 
-      if (human.autoTarget) {
-        const th = human.autoTarget;
-        const hasLOS = this.gameMap.hasLineOfSight(
-          human.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          human.y + TILE_SIZE * TILE_CENTER_OFFSET,
-          th.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          th.y + TILE_SIZE * TILE_CENTER_OFFSET,
-        );
-        if (hasLOS) human.autoFightTick();
-      }
+      if (human.autoTarget && this.hasSightLine(human, human.autoTarget)) human.autoFightTick();
     }
   }
 

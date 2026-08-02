@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import { TILE_SIZE, AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { drawBugabooSprite } from '../sprites/bugabooSprite';
 
 const BUGABOO_HP = 8;
@@ -114,20 +114,7 @@ export class Bugaboo extends Mob {
     }
 
     // Priority 3: Attack nearest player (fallback / NPC dead)
-    const aggroScanRange = this.currentTarget?.isAlive
-      ? this.aggroRangePx * AGGRO_PERSIST_MULTIPLIER
-      : this.aggroRangePx;
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      if (t.isDefendTarget) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, this.aggroRangePx, (t) => !t.isDefendTarget);
 
     this.currentTarget = nearest;
 
@@ -138,6 +125,7 @@ export class Bugaboo extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
     if (nearestDist > this.attackRangePx) {

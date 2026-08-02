@@ -1,7 +1,6 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawRuinsGhoulSprite } from '../sprites/ruinsGhoulSprite';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const GHOUL_HP = 16;
 const GHOUL_SPEED = 1.1;
@@ -57,20 +56,12 @@ export class RuinsGhoul extends Mob {
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
-    const aggroScanRange = this.isAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      // Ghouls won't pursue targets sheltering inside the town safe zone.
-      if (this.map?.isInTownSafeZone(t.x, t.y)) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    // Ghouls won't pursue targets sheltering inside the town safe zone.
+    const nearest = this.acquireTarget(
+      targets,
+      aggroRangePx,
+      (t) => this.map?.isInTownSafeZone(t.x, t.y) !== true,
+    );
 
     this.currentTarget = nearest;
 
@@ -84,6 +75,7 @@ export class RuinsGhoul extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
     if (nearestDist > attackRangePx) {

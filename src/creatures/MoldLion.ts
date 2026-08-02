@@ -3,7 +3,6 @@ import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawMoldLionSprite } from '../sprites/moldLionSprite';
 import { makePoison } from '../core/StatusEffect';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const LION_HP = 24;
 const LION_SPEED = 1.3;
@@ -101,18 +100,7 @@ export class MoldLion extends Mob {
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
-    const aggroScanRange = this.isAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -124,6 +112,7 @@ export class MoldLion extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
     if (nearestDist > attackRangePx) {

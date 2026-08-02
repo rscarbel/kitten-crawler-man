@@ -2,7 +2,6 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawCircusLemurSprite, drawThrownKnife } from '../sprites/circusLemurSprite';
 import { normalize } from '../utils';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 interface ThrownKnife {
   x: number;
@@ -82,18 +81,7 @@ export class CircusLemur extends Mob {
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const meleeRangePx = this.tileSize * MELEE_RANGE_TILES;
     const knifeRangePx = this.tileSize * KNIFE_RANGE_TILES;
-    const aggroScanRange = this.isAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -105,6 +93,7 @@ export class CircusLemur extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
     const hasLOS = this.hasLOS(nearest) || this.onSameTile(nearest);
 

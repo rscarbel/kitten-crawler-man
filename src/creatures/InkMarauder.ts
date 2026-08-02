@@ -189,10 +189,6 @@ export class InkMarauder extends Mob {
     if (dx !== 0) this.facingX = Math.sign(dx);
   }
 
-  private distanceTo(target: Mob): number {
-    return Math.hypot(target.x - this.x, target.y - this.y);
-  }
-
   /** Eases the shark's gait cue so starting and stopping doesn't snap its tail. */
   private advanceSwimBlend(): void {
     const step = 1 / INK_SWIM_EASE_FRAMES;

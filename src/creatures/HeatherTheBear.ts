@@ -1,7 +1,6 @@
 import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawHeatherBearSprite } from '../sprites/heatherBearSprite';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 // Base stats are tuned to land at boss weight after applyMobLevel(HEATHER_LEVEL)
 // (×6.4 HP, ×4.6 damage, ×2.4 speed at level 19).
@@ -82,19 +81,8 @@ export class HeatherTheBear extends Mob {
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
-    const aggroScanRange =
-      this.isAggro || this.forceAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, aggroRangePx);
+    const nearestDist = nearest ? this.distanceTo(nearest) : Infinity;
 
     this.currentTarget = nearest;
 

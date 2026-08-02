@@ -12,7 +12,6 @@ import {
   type GoblinAttackKind,
   type GoblinWeapon,
 } from '../sprites/goblinSprite';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const GOBLIN_HP = 6;
 const GOBLIN_SPEED = 1.4;
@@ -237,20 +236,7 @@ export class Goblin extends Mob {
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 
-    // Find nearest living target within aggro range
-    const aggroScanRange = this.isAggro
-      ? this.aggroRangePx * AGGRO_PERSIST_MULTIPLIER
-      : this.aggroRangePx;
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, this.aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -265,6 +251,7 @@ export class Goblin extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
 
     // Track last known position while we have LOS (enables navigation around corners)
     this.updateLastKnown(nearest);

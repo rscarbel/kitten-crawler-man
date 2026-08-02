@@ -2,7 +2,6 @@ import { Mob } from './Mob';
 import type { Player } from '../Player';
 import { drawCityElfCultistSprite } from '../sprites/cityElfCultistSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const CULTIST_HP = 22;
 const CULTIST_SPEED = 1.15;
@@ -61,18 +60,7 @@ export class CityElfCultist extends Mob {
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const castRangePx = this.tileSize * CAST_RANGE_TILES;
-    const aggroScanRange = this.isAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -83,6 +71,7 @@ export class CityElfCultist extends Mob {
       return;
     }
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
 
     const handX = this.x + this.tileSize * CENTER_OFFSET;
     const handY = this.y + this.tileSize * CENTER_OFFSET;

@@ -5,7 +5,6 @@ import {
   type StiltClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/stiltClownSprite';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const CLOWN_HP = 14;
 const CLOWN_SPEED = 0.9;
@@ -71,18 +70,7 @@ export class StiltClown extends Mob {
 
     const aggroRangePx = this.tileSize * AGGRO_RANGE_TILES;
     const attackRangePx = this.tileSize * ATTACK_RANGE_TILES;
-    const aggroScanRange = this.isAggro ? aggroRangePx * AGGRO_PERSIST_MULTIPLIER : aggroRangePx;
-
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if ((this.forceAggro || dist < aggroScanRange) && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -96,6 +84,7 @@ export class StiltClown extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
     this.updateLastKnown(nearest);
 
     // Hold still while winding up or mid-lunge — the strike itself is stationary.

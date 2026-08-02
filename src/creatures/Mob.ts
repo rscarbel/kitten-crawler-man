@@ -4,7 +4,7 @@ import type { GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
-import { WADE_SPEED_FACTOR } from '../core/constants';
+import { AGGRO_PERSIST_MULTIPLIER, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
 import { drawText } from '../ui/TextBox';
 
@@ -59,6 +59,31 @@ const NO_ASTAR_GOAL = -1;
 
 /** How long a line-of-sight result stays usable before it is recomputed. */
 const LOS_REFRESH_FRAMES = 3;
+
+/**
+ * How long a *perception* result stays usable before it is recomputed.
+ *
+ * Deliberately much longer than `LOS_REFRESH_FRAMES`: noticing someone is not a
+ * frame-accurate event, and a fifth of a second before an idle mob reacts to
+ * someone stepping out of cover reads as reaction time rather than as lag. Only
+ * mobs that have not engaged anything pay this cost, one ray per candidate per
+ * window, so this constant is the direct lever on what the perception gate
+ * costs across a crowded level.
+ */
+const NOTICE_REFRESH_FRAMES = 12;
+
+/** Per-mob offset on the notice window so a pack never re-checks in lockstep. */
+const NOTICE_STAGGER_MAX = NOTICE_REFRESH_FRAMES - 1;
+
+/**
+ * How long a target that hurt this mob stays noticed even without line of sight
+ * (~5 seconds at 60 fps).
+ *
+ * Without this, the perception gate would make a mob ignore an archer shooting
+ * it from behind a wall — the sight test says "nothing there" and the mob would
+ * stand in the open being shot. Being hit is perception too.
+ */
+const ALERT_DURATION_FRAMES = 300;
 
 /** How many stuck frames before flipping the perpendicular steer direction. */
 const STUCK_FLIP_FRAMES = 50;
@@ -235,6 +260,25 @@ export abstract class Mob extends Player {
   private losCacheTarget: Player | null = null;
   private losCacheResult = false;
   private losCacheAge = LOS_REFRESH_FRAMES;
+
+  /**
+   * Sight results for aggro candidates, refreshed as a whole set; see `canNotice`.
+   *
+   * Kept separate from `losCache*` rather than reusing it: that cache holds
+   * exactly one target and is read every frame by the mob's *engaged* logic, so
+   * asking it about the other candidates in an aggro scan would evict the
+   * engaged target's entry and turn both questions into a fresh traversal per
+   * call — the one outcome this whole change has to avoid.
+   */
+  private readonly noticeCache = new Map<Player, boolean>();
+  private noticeCacheFrames = 0;
+  private readonly noticeStagger = randomInt(0, NOTICE_STAGGER_MAX);
+
+  /**
+   * Targets that have hurt this mob recently, mapped to the frames of alert
+   * remaining. An alerted target is noticed regardless of line of sight.
+   */
+  private readonly alertedTo = new Map<Player, number>();
 
   /** Cached A* waypoint list (tile coords). Followed by followTargetAStar. */
   private astarPath: Array<{ x: number; y: number }> = [];
@@ -628,6 +672,87 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether this mob can *notice* `target` — the perception gate on starting a
+   * fight, as opposed to `hasLOS`, which gates acts inside one that has already
+   * started.
+   *
+   * True when the mob has clear sight of the target, or when the target has hurt
+   * it recently: something shooting from behind a wall is unseen but is very
+   * much noticed.
+   */
+  protected canNotice(target: Player): boolean {
+    if (!this.map) return true;
+    if (this.alertedTo.has(target)) return true;
+    if (this.noticeCacheFrames <= 0) {
+      this.noticeCache.clear();
+      this.noticeCacheFrames = NOTICE_REFRESH_FRAMES + this.noticeStagger;
+    }
+    const cached = this.noticeCache.get(target);
+    if (cached !== undefined) return cached;
+    const ts = this.tileSize;
+    const seen = this.map.hasLineOfSight(
+      this.x + ts * MOB_TILE_CENTER,
+      this.y + ts * MOB_TILE_CENTER,
+      target.x + ts * MOB_TILE_CENTER,
+      target.y + ts * MOB_TILE_CENTER,
+    );
+    this.noticeCache.set(target, seen);
+    return seen;
+  }
+
+  /**
+   * The target this mob should be fighting this frame, or null to disengage.
+   *
+   * Replaces the nearest-living-target-in-range scan that every subclass used to
+   * inline, and adds the gate that scan was missing: a mob that is not already
+   * fighting someone has to be able to *notice* them first, so walls, trees and
+   * furniture genuinely hide the player until a fight starts.
+   *
+   * Once engaged the gate is gone — the mob saw where its quarry went and chases
+   * it around the corner — and the engaged target alone gets the widened
+   * `AGGRO_PERSIST_MULTIPLIER` range. That per-target widening is why this reads
+   * `currentTarget` instead of taking an "am I aggroed" flag: a mob two rooms
+   * deep in a chase should not thereby acquire a *second*, unseen target at
+   * double range.
+   *
+   * `accept` filters candidates a subclass refuses to fight; it runs before the
+   * sight test, which is the expensive one. `forceAggro` bypasses range and
+   * sight both, so scripted encounters behave exactly as before.
+   */
+  protected acquireTarget(
+    targets: readonly Player[],
+    aggroRangePx: number,
+    accept?: (target: Player) => boolean,
+  ): Player | null {
+    const engagedTarget = this.currentTarget;
+    const persistRangePx = aggroRangePx * AGGRO_PERSIST_MULTIPLIER;
+    let nearest: Player | null = null;
+    let nearestDist = Infinity;
+    for (const target of targets) {
+      if (!target.isAlive) continue;
+      if (accept && !accept(target)) continue;
+      const dist = Math.hypot(target.x - this.x, target.y - this.y);
+      if (dist >= nearestDist) continue;
+      if (this.forceAggro) {
+        nearestDist = dist;
+        nearest = target;
+        continue;
+      }
+      const isEngagedTarget = target === engagedTarget;
+      if (dist >= (isEngagedTarget ? persistRangePx : aggroRangePx)) continue;
+      if (!isEngagedTarget && !this.canNotice(target)) continue;
+      nearestDist = dist;
+      nearest = target;
+    }
+    return nearest;
+  }
+
+  /** Straight-line distance in pixels from this mob to `target`. */
+  protected distanceTo(target: { readonly x: number; readonly y: number }): number {
+    return Math.hypot(target.x - this.x, target.y - this.y);
+  }
+
+  /**
    * Records the target's current position as the last known location when LOS
    * is clear. Call each frame while a target is being chased.
    */
@@ -779,6 +904,7 @@ export abstract class Mob extends Player {
       this.healthBarTimer = HEALTH_BAR_VISIBLE_FRAMES;
       if (attacker) {
         this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
+        this.alertedTo.set(attacker, ALERT_DURATION_FRAMES);
       }
     }
     if (this.hp === 0 && prev > 0) {
@@ -820,6 +946,13 @@ export abstract class Mob extends Player {
     if (this.healthBarTimer > 0) this.healthBarTimer--;
     if (this.hitSlowFrames > 0) this.hitSlowFrames--;
     this.losCacheAge++;
+    if (this.noticeCacheFrames > 0) this.noticeCacheFrames--;
+    if (this.alertedTo.size > 0) {
+      for (const [target, framesLeft] of this.alertedTo) {
+        if (framesLeft <= 1) this.alertedTo.delete(target);
+        else this.alertedTo.set(target, framesLeft - 1);
+      }
+    }
   }
 
   /**
@@ -1031,6 +1164,8 @@ export abstract class Mob extends Player {
     this.killedBy = null;
     this.killType = null;
     this.damageTakenBy.clear();
+    this.alertedTo.clear();
+    this.noticeCache.clear();
     this.justDied = false;
     this.droppedLoot = null;
     this.healthBarTimer = 0;
@@ -1056,6 +1191,8 @@ export abstract class Mob extends Player {
     this.currentTarget = null;
     this.retaliateMob = null;
     this.damageTakenBy.clear();
+    this.alertedTo.clear();
+    this.noticeCache.clear();
     this.healthBarTimer = 0;
     this.clearStatusEffects();
     this.clearTransientCombatState();

@@ -8,7 +8,6 @@ import {
   RAT_BODY_PART_KEY,
   drawRatSprite,
 } from '../sprites/ratSprite';
-import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const RAT_HP = 3;
 const RAT_SPEED = 1.1;
@@ -107,20 +106,7 @@ export class Rat extends Mob {
 
     if (this.attackCooldown > 0) this.attackCooldown--;
 
-    // Find nearest living target within aggro range
-    const aggroScanRange = this.isAggro
-      ? this.aggroRangePx * AGGRO_PERSIST_MULTIPLIER
-      : this.aggroRangePx;
-    let nearest: Player | null = null;
-    let nearestDist = Infinity;
-    for (const t of targets) {
-      if (!t.isAlive) continue;
-      const dist = Math.hypot(t.x - this.x, t.y - this.y);
-      if (dist < aggroScanRange && dist < nearestDist) {
-        nearestDist = dist;
-        nearest = t;
-      }
-    }
+    const nearest = this.acquireTarget(targets, this.aggroRangePx);
 
     this.currentTarget = nearest;
 
@@ -134,6 +120,7 @@ export class Rat extends Mob {
     }
 
     this.isAggro = true;
+    const nearestDist = this.distanceTo(nearest);
 
     // Track last known position while we have LOS
     this.updateLastKnown(nearest);
