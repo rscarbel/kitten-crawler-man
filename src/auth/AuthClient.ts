@@ -1,4 +1,5 @@
 import type { PlayerSnapshot } from '../core/PlayerSnapshot';
+import type { SerializedAbilityState } from '../core/AbilityManager';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -12,6 +13,12 @@ export interface GameProgress {
   levelId: string;
   humanSnap: PlayerSnapshot;
   catSnap: PlayerSnapshot;
+  /**
+   * Ability levels and XP, which belong to the party rather than to either
+   * crawler and so have no home in a `PlayerSnapshot`. Absent on saves written
+   * before abilities were persisted at all — those resume at level 1.
+   */
+  abilityStates?: SerializedAbilityState[];
   savedAt: string;
 }
 

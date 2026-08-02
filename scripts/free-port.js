@@ -56,7 +56,7 @@ function parsePidList(text) {
 }
 
 function processTable() {
-  const out = execFileSync('ps', ['-eo', 'pid=,ppid=,cmd='], {
+  const out = execFileSync('ps', ['-eo', 'pid=,ppid=,command='], {
     encoding: 'utf8',
     maxBuffer: 1024 * 1024 * 8,
   });
@@ -120,7 +120,7 @@ function staleProjectPids() {
 
 function describe(pid) {
   try {
-    return execFileSync('ps', ['-p', String(pid), '-o', 'cmd='], {
+    return execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
       encoding: 'utf8',
     }).trim();
   } catch {

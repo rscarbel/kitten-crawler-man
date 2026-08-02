@@ -13,6 +13,33 @@ const serve = process.argv.includes('--serve');
 // only the shipped bundle is minified.
 const minify = !serve;
 
+/**
+ * Whether `?playtest=` / `?level=` / the art preview routes are compiled in.
+ *
+ * Opt-in rather than opt-out, because the shipped site is built by plain
+ * `npm run build` — a route left to a runtime guard would still be sitting in
+ * the deployed bundle for a player to find.
+ */
+const devBoot = serve || process.argv.includes('--dev-boot');
+
+/**
+ * Redirects `src/dev/devBoot.ts` to its inert stub unless this is a dev build.
+ *
+ * A resolve-time swap rather than a `define` flag: dead-code elimination folds
+ * the *call* away but still drags the module's imports — every preview scene,
+ * every playtest preset — into the output. Cutting the import edge is what
+ * actually keeps them out.
+ */
+const devBootStub = {
+  name: 'dev-boot-stub',
+  setup(build) {
+    if (devBoot) return;
+    build.onResolve({ filter: /(^|\/)dev\/devBoot$/ }, () => ({
+      path: path.resolve(__dirname, '../src/dev/devBoot.stub.ts'),
+    }));
+  },
+};
+
 /** @type {import('esbuild').BuildOptions} */
 const opts = {
   entryPoints: ['src/game.ts'],
@@ -24,6 +51,7 @@ const opts = {
   keepNames: minify,
   legalComments: 'none',
   alias: { ws: './src/ai/ws-stub.ts' },
+  plugins: [devBootStub],
   define: {
     __AI_CLIENT_ID__: JSON.stringify(process.env.AI_CLIENT_ID ?? ''),
     __AI_CLIENT_SECRET__: JSON.stringify(process.env.AI_CLIENT_SECRET ?? ''),

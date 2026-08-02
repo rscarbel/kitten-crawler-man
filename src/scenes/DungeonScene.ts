@@ -97,7 +97,11 @@ import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../syste
 import { DestructiblePropSystem } from '../systems/DestructiblePropSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
-import { AbilityManager, type AbilityId } from '../core/AbilityManager';
+import {
+  AbilityManager,
+  type AbilityId,
+  type SerializedAbilityState,
+} from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
@@ -192,6 +196,18 @@ import {
   clearButtonMouseState,
 } from '../ui/Button';
 
+/**
+ * Persists a run. Everything a resumed game needs that the scene cannot
+ * re-derive: both crawlers, the floor they are on, and the party's ability
+ * progress — which belongs to neither `PlayerSnapshot` because it is shared.
+ */
+export type SaveProgressFn = (data: {
+  humanSnap: PlayerSnapshot;
+  catSnap: PlayerSnapshot;
+  levelId: string;
+  abilityStates: SerializedAbilityState[];
+}) => void;
+
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
   spawnAt?: { x: number; y: number };
@@ -228,11 +244,7 @@ export interface DungeonSceneOptions {
   /** Ability state at floor entry — restored on death-restart so level-up progress rewinds to floor-start. */
   floorEntryAbilityManager?: AbilityManager;
   /** Called whenever the game wants to persist progress (e.g. on safe-room entry). */
-  saveProgress?: (data: {
-    humanSnap: PlayerSnapshot;
-    catSnap: PlayerSnapshot;
-    levelId: string;
-  }) => void;
+  saveProgress?: SaveProgressFn;
   /** Shared AudioManager instance — persists across scene transitions. */
   audio?: AudioManager;
   /** When provided, the scene runs in tutorial mode using a hand-crafted map and guided state machine. */
@@ -257,6 +269,15 @@ export interface DungeonSceneOptions {
   godModeState?: GodModeState;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
+  /**
+   * Dev bootstrap only: picks the spawn tile from this floor's freshly generated
+   * map — a gateway safe room, the spider lab door. A callback rather than a
+   * coordinate because the coordinate does not exist until the constructor has
+   * generated the map, and because keeping the landmark vocabulary out of here
+   * is what lets a release build drop the dev bootstrap entirely. Returning null
+   * falls back to the floor's own start tile.
+   */
+  resolveSpawnTile?: (gameMap: GameMap) => { x: number; y: number } | null;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
   /**
@@ -734,9 +755,7 @@ export class DungeonScene extends GameplayScene {
   private _miniMapDragLastX = 0;
   private _miniMapDragLastY = 0;
 
-  private onSaveProgress:
-    | ((data: { humanSnap: PlayerSnapshot; catSnap: PlayerSnapshot; levelId: string }) => void)
-    | undefined;
+  private onSaveProgress: SaveProgressFn | undefined;
 
   private readonly onResetGameCallback: (() => void) | null;
 
@@ -820,7 +839,8 @@ export class DungeonScene extends GameplayScene {
                 CIRCUS_SPAWN_EDGE_INSET_TILES,
             }
           : null;
-      const spawn = circusSpawn ?? options?.spawnAt ?? this.gameMap.startTile;
+      const resolvedSpawn = options?.resolveSpawnTile?.(this.gameMap) ?? null;
+      const spawn = circusSpawn ?? resolvedSpawn ?? options?.spawnAt ?? this.gameMap.startTile;
       spawnTileX = spawn.x;
       spawnTileY = spawn.y;
       this.pm = new PlayerManager(spawnTileX, spawnTileY);
@@ -1076,6 +1096,7 @@ export class DungeonScene extends GameplayScene {
         humanSnap: revivedSnapshot(snapPlayer(this.human)),
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: levelDef.nextLevelId,
+        abilityStates: this.abilityManager.serializeStates(),
       });
 
       this.bus.emit('levelComplete', {});
@@ -1665,6 +1686,7 @@ export class DungeonScene extends GameplayScene {
         humanSnap: revivedSnapshot(snapPlayer(this.human)),
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: this.levelDef.id,
+        abilityStates: this.abilityManager.serializeStates(),
       });
 
       // Skipped in the tutorial, matching the achievement unlocks above — the

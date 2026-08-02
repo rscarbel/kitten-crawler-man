@@ -33,6 +33,11 @@ export interface AbilityPerkDef {
 
 export type AbilityOwner = 'cat' | 'human';
 
+/** Narrows an owner arriving from a save, where the declared type proves nothing. */
+export function isAbilityOwner(value: string): value is AbilityOwner {
+  return value === 'cat' || value === 'human';
+}
+
 export interface AbilityDef {
   id: AbilityId;
   name: string;
@@ -76,6 +81,14 @@ export interface AbilityState {
   /** XP needed to reach the next level from the current one. Infinity at max level. */
   xpToNextLevel: number;
 }
+
+/**
+ * {@link AbilityState} as it is written to a save — the JSON-safe subset.
+ *
+ * Ability progress is shared by both crawlers, so it rides on `GameProgress`
+ * rather than on either `PlayerSnapshot`.
+ */
+export type SerializedAbilityState = Omit<AbilityState, 'xpToNextLevel'>;
 
 const DEFAULT_XP_GROWTH_RATE = 1.3;
 const DEFAULT_FINAL_LEVEL_MULTIPLIER = 1.8;
@@ -222,6 +235,46 @@ export class AbilityManager {
   restoreStates(snap: Map<AbilityId, AbilityState>): void {
     for (const [id, saved] of snap) {
       this.states.set(id, { ...saved });
+    }
+  }
+
+  /**
+   * Ability progress in the flat form the save payload carries.
+   *
+   * An array rather than {@link snapshotStates}' Map because this one crosses
+   * `JSON.stringify`, and a Map serialises to `{}`. `xpToNextLevel` is left out
+   * for the same reason — it is `Infinity` at max level, which JSON writes as
+   * `null` — so {@link restoreSerializedStates} re-derives it from the def.
+   */
+  serializeStates(): SerializedAbilityState[] {
+    return [...this.states.values()].map(({ id, owner, level, xp }) => ({ id, owner, level, xp }));
+  }
+
+  /**
+   * Restore progress written by {@link serializeStates}. Registration must have
+   * happened first — an ability with no def has no maxLevel to clamp against.
+   *
+   * Everything is re-screened rather than trusted: this is fed by unvalidated
+   * server JSON, and a `NaN` level would propagate straight into damage numbers
+   * and perk lookups. Entries naming an ability this build no longer has are
+   * dropped, and an ability the save doesn't mention keeps its level-1 default.
+   */
+  restoreSerializedStates(states: readonly SerializedAbilityState[]): void {
+    for (const saved of states) {
+      if (!isAbilityId(saved.id)) continue;
+      const def = this.defs.get(saved.id);
+      if (def === undefined) continue;
+      const level = Number.isFinite(saved.level) ? saved.level : 1;
+      const clampedLevel = Math.max(1, Math.min(level, def.maxLevel));
+      const xp = Number.isFinite(saved.xp) ? Math.max(0, saved.xp) : 0;
+      const savedOwner: string = saved.owner;
+      this.states.set(saved.id, {
+        id: saved.id,
+        owner: isAbilityOwner(savedOwner) ? savedOwner : def.owner,
+        level: clampedLevel,
+        xp: clampedLevel >= def.maxLevel ? 0 : xp,
+        xpToNextLevel: xpToNextLevel(def, clampedLevel),
+      });
     }
   }
 

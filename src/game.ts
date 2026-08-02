@@ -3,18 +3,14 @@ import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
 import { PostSignupScene } from './scenes/PostSignupScene';
-import { PersonPreviewScene } from './scenes/PersonPreviewScene';
-import { TilePreviewScene } from './scenes/TilePreviewScene';
-import { BopcaPreviewScene } from './scenes/BopcaPreviewScene';
-import { GoblinPreviewScene } from './scenes/GoblinPreviewScene';
-import { RatPreviewScene } from './scenes/RatPreviewScene';
-import { RatKinPreviewScene } from './scenes/RatKinPreviewScene';
-import { CasinoPreviewScene } from './scenes/CasinoPreviewScene';
-import { TownMapScene } from './scenes/TownMapScene';
 import { tutorialLevel, getLevelDef } from './levels/index';
-import { createCircusQuestProgress, type CircusQuestStage } from './core/CircusQuestProgress';
 import { aiAdapter } from './ai/AIAdapter';
 import { revivedSnapshot } from './core/PlayerSnapshot';
+import { devBootScene } from './dev/devBoot';
+import { AbilityManager } from './core/AbilityManager';
+import { MAGIC_MISSILE_DEF } from './abilities/magicMissile';
+import { PROTECTIVE_SHELL_DEF } from './abilities/protectiveShell';
+import { SMUSH_DEF } from './abilities/smush';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
@@ -26,91 +22,21 @@ declare const __AI_ENABLED__: boolean;
 /** HTTP status code for unauthorized. */
 const HTTP_UNAUTHORIZED = 401;
 
-const CIRCUS_STAGES: ReadonlyArray<CircusQuestStage> = [
-  'not_started',
-  'ritual_defense',
-  'heather_hunt',
-  'assault',
-  'bigtop_ready',
-  'grimaldi_slain',
-  'complete',
-];
-
 /**
- * Dev-only bootstrap: `?level=level3&quest=bigtop_ready` jumps straight to a
- * level (optionally seeding circus-quest state) so quest stages can be
- * iterated on without replaying earlier floors. Localhost only.
+ * An ability manager carrying a save's progress, or a fresh one at level 1.
+ *
+ * The defs have to be registered here rather than left to `DungeonScene`:
+ * restoring clamps each level against its def's maximum, so a manager with no
+ * defs would discard every state it was handed. Registering the same defs again
+ * in the scene constructor is harmless — `register` leaves existing state alone.
  */
-function devBootScene(sceneManager: SceneManager, options: DungeonSceneOptions): boolean {
-  const isLocalDev =
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (!isLocalDev) return false;
-  const params = new URLSearchParams(window.location.search);
-
-  if (params.get('people') !== null) {
-    sceneManager.replace(new PersonPreviewScene());
-    return true;
-  }
-
-  if (params.get('bopca') !== null) {
-    sceneManager.replace(new BopcaPreviewScene());
-    return true;
-  }
-
-  if (params.get('goblins') !== null) {
-    sceneManager.replace(new GoblinPreviewScene());
-    return true;
-  }
-
-  if (params.get('rat') !== null) {
-    sceneManager.replace(new RatPreviewScene());
-    return true;
-  }
-
-  if (params.get('ratkin') !== null) {
-    sceneManager.replace(new RatKinPreviewScene());
-    return true;
-  }
-
-  if (params.get('casino') !== null) {
-    sceneManager.replace(new CasinoPreviewScene());
-    return true;
-  }
-
-  if (params.get('tiles') !== null) {
-    sceneManager.replace(new TilePreviewScene());
-    return true;
-  }
-
-  if (params.get('townmap') !== null) {
-    sceneManager.replace(new TownMapScene());
-    return true;
-  }
-
-  const levelId = params.get('level');
-  if (levelId === null) return false;
-
-  const questStage = params.get('quest');
-  if (questStage !== null && CIRCUS_STAGES.some((s) => s === questStage)) {
-    const progress = createCircusQuestProgress();
-    // The check above proves membership; find() re-derives the narrow type.
-    const stage = CIRCUS_STAGES.find((s) => s === questStage);
-    if (stage !== undefined) progress.stage = stage;
-    if (stage === 'heather_hunt' && params.get('heatherSlain') === '1') {
-      progress.heatherSlain = true;
-    }
-    options.circusQuestProgress = progress;
-  }
-
-  if (params.get('spawn') === 'circus') options.spawnAtCircus = true;
-
-  try {
-    const levelDef = getLevelDef(levelId);
-    sceneManager.replace(new DungeonScene(levelDef, input, sceneManager, options));
-    return true;
-  } catch {
-    return false;
-  }
+function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityManager {
+  const manager = new AbilityManager();
+  manager.register(MAGIC_MISSILE_DEF);
+  manager.register(PROTECTIVE_SHELL_DEF);
+  manager.register(SMUSH_DEF);
+  if (states !== undefined) manager.restoreSerializedStates(states);
+  return manager;
 }
 
 const input = new InputManager();
@@ -127,7 +53,7 @@ void audio.preload();
     const onResetGame = () => {
       sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     };
-    if (devBootScene(sceneManager, { audio, onResetGame })) return;
+    if (devBootScene(sceneManager, input, { audio, onResetGame })) return;
     sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     return;
   }
@@ -159,6 +85,7 @@ void audio.preload();
     humanSnap: GameProgress['humanSnap'];
     catSnap: GameProgress['catSnap'];
     levelId: string;
+    abilityStates: GameProgress['abilityStates'];
   }) => {
     authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {
       void 0;
@@ -176,13 +103,14 @@ void audio.preload();
 
   const options: DungeonSceneOptions = { saveProgress, audio, onResetGame };
 
-  if (devBootScene(sceneManager, options)) return;
+  if (devBootScene(sceneManager, input, options)) return;
 
   if (progress) {
     // Loading straight into a wipe is never recoverable — the same save would
     // reload into the same wipe — so a resumed party always arrives on its feet.
     options.humanSnap = revivedSnapshot(progress.humanSnap);
     options.catSnap = revivedSnapshot(progress.catSnap);
+    options.abilityManager = resumedAbilityManager(progress.abilityStates);
     // progress.levelId is unvalidated server JSON — a save written against a
     // since-renamed level must fall back rather than throw at boot.
     let resumeLevel;

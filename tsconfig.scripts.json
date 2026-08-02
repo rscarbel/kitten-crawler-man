@@ -52,6 +52,7 @@
     "scripts/generate-rat-kin-sprite.gates.ts",
     "scripts/render-rat-kin.ts",
     "scripts/audioOnsets.ts",
-    "scripts/generate-keyboard-hero-chart.ts"
+    "scripts/generate-keyboard-hero-chart.ts",
+    "scripts/playtest.ts"
   ]
 }
