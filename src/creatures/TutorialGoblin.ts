@@ -11,6 +11,8 @@ export class TutorialGoblin extends Goblin {
   /** When true the goblin stands still but still attacks targets in melee range. */
   private readonly defenseOnly: boolean;
 
+  override readonly harmless = true;
+
   constructor(
     tileX: number,
     tileY: number,
@@ -22,7 +24,6 @@ export class TutorialGoblin extends Goblin {
     super(tileX, tileY, tileSize, weapon);
     this.hp = TUTORIAL_HP;
     this.setFixedMaxHp(TUTORIAL_HP);
-    this.attackDamage = 0;
     this.isStationary = stationary;
     this.defenseOnly = defenseOnly;
   }

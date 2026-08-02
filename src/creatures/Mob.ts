@@ -340,6 +340,13 @@ export abstract class Mob extends Player {
   isFlying = false;
 
   /**
+   * Opt-in for mobs that swing and threaten but can never actually hurt anyone —
+   * the tutorial's goblins. Gated here rather than by zeroing `attackDamage`,
+   * because subclasses re-read their damage from a weapon table on every swing.
+   */
+  readonly harmless: boolean = false;
+
+  /**
    * Opt-in for mobs that leave a body behind. Kill resolution normally drops a
    * mob out of the spatial grid the frame it dies, which also stops it being
    * drawn; setting this keeps it in the world so its corpse can play out.
@@ -531,6 +538,11 @@ export abstract class Mob extends Player {
    *   should gate the status on this, so a dodged hit doesn't still poison.
    */
   protected dealDamage(target: Player, baseDamage: number, attackType?: string): boolean {
+    // The swing still lands audibly and visibly; only the harm is withheld.
+    if (this.harmless) {
+      this.attackSoundPending = true;
+      return false;
+    }
     const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
     const connected = target.takeDamage(Math.ceil(baseDamage * mult), source);
