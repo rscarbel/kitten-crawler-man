@@ -122,12 +122,7 @@ function roundRectPath(ctx: NodeCtx, rect: Rect, radius: number): void {
   ctx.lineTo(rect.x + rect.w - r, rect.y);
   ctx.quadraticCurveTo(rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + r);
   ctx.lineTo(rect.x + rect.w, rect.y + rect.h - r);
-  ctx.quadraticCurveTo(
-    rect.x + rect.w,
-    rect.y + rect.h,
-    rect.x + rect.w - r,
-    rect.y + rect.h,
-  );
+  ctx.quadraticCurveTo(rect.x + rect.w, rect.y + rect.h, rect.x + rect.w - r, rect.y + rect.h);
   ctx.lineTo(rect.x + r, rect.y + rect.h);
   ctx.quadraticCurveTo(rect.x, rect.y + rect.h, rect.x, rect.y + rect.h - r);
   ctx.lineTo(rect.x, rect.y + r);
@@ -226,7 +221,12 @@ function drawBarCounter(ctx: NodeCtx, geo: FrameGeometry, variant: number): void
   );
 
   // Panelled front — the face the player walks up to.
-  const front: Rect = { x: TILE_SCALE * 0.06, y: frontTop, w: geo.w - TILE_SCALE * 0.12, h: frontH };
+  const front: Rect = {
+    x: TILE_SCALE * 0.06,
+    y: frontTop,
+    w: geo.w - TILE_SCALE * 0.12,
+    h: frontH,
+  };
   verticalGradient(ctx, front, [
     [0, wood.light],
     [0.35, wood.base],
@@ -256,15 +256,11 @@ function drawBarCounter(ctx: NodeCtx, geo: FrameGeometry, variant: number): void
 
   // Brass foot rail across the bottom.
   const railY = front.y + frontH * 0.78;
-  verticalGradient(
-    ctx,
-    { x: front.x, y: railY, w: front.w, h: TILE_SCALE * 0.1 },
-    [
-      [0, BRASS_LIGHT],
-      [0.5, BRASS],
-      [1, BRASS_DARK],
-    ],
-  );
+  verticalGradient(ctx, { x: front.x, y: railY, w: front.w, h: TILE_SCALE * 0.1 }, [
+    [0, BRASS_LIGHT],
+    [0.5, BRASS],
+    [1, BRASS_DARK],
+  ]);
 
   // Lacquered top slab, lightest at the back lip where the room light catches it.
   const surface: Rect = { x: 0, y: surfaceTop, w: geo.w, h: topSurfaceH };
@@ -825,13 +821,7 @@ function drawMarketBackdrop(ctx: NodeCtx, geo: FrameGeometry, variant: number): 
   const postTop = TILE_SCALE * 0.3;
   const postBottom = geo.footBottom - TILE_SCALE * 0.06;
 
-  paintContactShadow(
-    ctx,
-    geo.w / 2,
-    postBottom,
-    geo.w * 0.48,
-    TILE_SCALE * 0.12,
-  );
+  paintContactShadow(ctx, geo.w / 2, postBottom, geo.w * 0.48, TILE_SCALE * 0.12);
 
   // Backboard panelling between the posts — the wall the stock hangs against.
   const board: Rect = {
@@ -849,14 +839,10 @@ function drawMarketBackdrop(ctx: NodeCtx, geo: FrameGeometry, variant: number): 
 
   // Hanging rail with bundled herbs and cured stock.
   const railY = postTop + TILE_SCALE * 0.2;
-  verticalGradient(
-    ctx,
-    { x: board.x, y: railY, w: board.w, h: TILE_SCALE * 0.06 },
-    [
-      [0, '#8b8f98'],
-      [1, '#3d4046'],
-    ],
-  );
+  verticalGradient(ctx, { x: board.x, y: railY, w: board.w, h: TILE_SCALE * 0.06 }, [
+    [0, '#8b8f98'],
+    [1, '#3d4046'],
+  ]);
   const hangCount = 7;
   for (let i = 0; i < hangCount; i++) {
     const hx = board.x + (board.w / hangCount) * (i + 0.5);
@@ -1018,14 +1004,10 @@ function drawWeaponRack(ctx: NodeCtx, geo: FrameGeometry, variant: number): void
     paintWoodGrain(ctx, beam, rng, 20);
     for (let i = 0; i < 4; i++) {
       const strapX = beam.x + (beam.w / 4) * (i + 0.5) - TILE_SCALE * 0.03;
-      verticalGradient(
-        ctx,
-        { x: strapX, y: beam.y - 1, w: TILE_SCALE * 0.06, h: beam.h + 2 },
-        [
-          [0, '#6d747f'],
-          [1, '#31363d'],
-        ],
-      );
+      verticalGradient(ctx, { x: strapX, y: beam.y - 1, w: TILE_SCALE * 0.06, h: beam.h + 2 }, [
+        [0, '#6d747f'],
+        [1, '#31363d'],
+      ]);
     }
     paintRimLight(ctx, beam, 'rgba(255,226,180,0.3)', 2);
   }
@@ -1571,15 +1553,32 @@ function drawCandelabra(ctx: NodeCtx, cx: number, baseY: number, rng: () => numb
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(cx - TILE_SCALE * 0.14, baseY - TILE_SCALE * 0.26);
-  ctx.quadraticCurveTo(cx, baseY - TILE_SCALE * 0.38, cx + TILE_SCALE * 0.14, baseY - TILE_SCALE * 0.26);
+  ctx.quadraticCurveTo(
+    cx,
+    baseY - TILE_SCALE * 0.38,
+    cx + TILE_SCALE * 0.14,
+    baseY - TILE_SCALE * 0.26,
+  );
   ctx.stroke();
   for (const dx of [-0.14, 0, 0.14]) {
     const wx = cx + TILE_SCALE * dx;
     const wy = baseY - TILE_SCALE * (dx === 0 ? 0.3 : 0.26);
     ctx.fillStyle = '#efe6cc';
-    ctx.fillRect(wx - TILE_SCALE * 0.022, wy - TILE_SCALE * 0.14, TILE_SCALE * 0.044, TILE_SCALE * 0.14);
+    ctx.fillRect(
+      wx - TILE_SCALE * 0.022,
+      wy - TILE_SCALE * 0.14,
+      TILE_SCALE * 0.044,
+      TILE_SCALE * 0.14,
+    );
     const flameH = TILE_SCALE * (0.08 + rng() * 0.02);
-    const flame = ctx.createRadialGradient(wx, wy - TILE_SCALE * 0.17, 0, wx, wy - TILE_SCALE * 0.17, flameH);
+    const flame = ctx.createRadialGradient(
+      wx,
+      wy - TILE_SCALE * 0.17,
+      0,
+      wx,
+      wy - TILE_SCALE * 0.17,
+      flameH,
+    );
     flame.addColorStop(0, '#fff3c0');
     flame.addColorStop(0.5, '#f0a020');
     flame.addColorStop(1, 'rgba(240,120,20,0)');
@@ -1633,7 +1632,12 @@ function drawVelvetRope(ctx: NodeCtx, geo: FrameGeometry, variant: number): void
     ctx.beginPath();
     ctx.ellipse(px, baseY, TILE_SCALE * 0.2, TILE_SCALE * 0.08, 0, 0, TWO_PI);
     ctx.fill();
-    ctx.fillRect(px - TILE_SCALE * 0.2, baseY - TILE_SCALE * 0.05, TILE_SCALE * 0.4, TILE_SCALE * 0.05);
+    ctx.fillRect(
+      px - TILE_SCALE * 0.2,
+      baseY - TILE_SCALE * 0.05,
+      TILE_SCALE * 0.4,
+      TILE_SCALE * 0.05,
+    );
 
     // Column.
     const colGrad = ctx.createLinearGradient(px - TILE_SCALE * 0.06, 0, px + TILE_SCALE * 0.06, 0);

@@ -381,6 +381,22 @@ export type TileContent = {
    * code — the same reason `spriteKey` and `groundType` live here.
    */
   damageStage?: number;
+  /**
+   * How far through its life a `TREE` tile is: one of the `TREE_STAGE_*`
+   * constants. Absent means healthy.
+   *
+   * On the tile rather than only in `TreeSystem` for the same reason
+   * `damageStage` is: `drawDecorationTile` is a pure tile renderer with no
+   * handle on any gameplay system, so a burning tree could not otherwise pick
+   * its sprite row.
+   */
+  treeStage?: number;
+  /**
+   * Animation cursor for whichever looping row a `TREE` tile is currently in —
+   * the flame loop while it burns, the collapse while it falls. Advanced by
+   * `TreeSystem.update()`. Absent means frame 0.
+   */
+  treeAnimFrame?: number;
 };
 
 /** A destructible prop tile that has taken no damage yet. */
@@ -400,6 +416,123 @@ export function propSpriteState(damageStage: number | undefined): 'idle' | 'dama
   return (damageStage ?? PROP_DAMAGE_STAGE_INTACT) === PROP_DAMAGE_STAGE_INTACT
     ? 'idle'
     : 'damaged';
+}
+
+/** An untouched tree. */
+export const TREE_STAGE_HEALTHY = 0;
+/** Below half health: bark gouged, boughs snapped, crown thinned. */
+export const TREE_STAGE_DAMAGED = 1;
+/** Alight, crown still green under the flames. */
+export const TREE_STAGE_BURNING = 2;
+/** Alight, crown mostly consumed, trunk burning. */
+export const TREE_STAGE_BURNING_LATE = 3;
+/** Burnt out: a black skeletal husk, and trivially easy to knock down. */
+export const TREE_STAGE_CHARRED = 4;
+/**
+ * Coming down. Held on the tile rather than drawn as an overlay burst the way a
+ * smashed crate is: a tree is four tiles tall, and an effects-pass overlay would
+ * draw the collapse on top of a player standing south of it. Keeping it in the
+ * Y-sorted tile pass also keeps the tile blocked until it has finished falling.
+ */
+export const TREE_STAGE_FELLING = 5;
+/**
+ * Coming down having already burnt out. A separate stage from `FELLING` purely
+ * so the collapse can be drawn as the husk it is: the sheets carry one row per
+ * dressing, and reusing the green `felling` row would grow a charred tree's
+ * leaves back for the half second it takes to fall.
+ */
+export const TREE_STAGE_FELLING_CHARRED = 6;
+
+/** The sprite row a tree tile should render from, given its stage. */
+export function treeSpriteState(
+  treeStage: number | undefined,
+): 'idle' | 'damaged' | 'burning' | 'burning_late' | 'charred' | 'felling' | 'felling_charred' {
+  switch (treeStage ?? TREE_STAGE_HEALTHY) {
+    case TREE_STAGE_DAMAGED:
+      return 'damaged';
+    case TREE_STAGE_BURNING:
+      return 'burning';
+    case TREE_STAGE_BURNING_LATE:
+      return 'burning_late';
+    case TREE_STAGE_CHARRED:
+      return 'charred';
+    case TREE_STAGE_FELLING:
+      return 'felling';
+    case TREE_STAGE_FELLING_CHARRED:
+      return 'felling_charred';
+    default:
+      return 'idle';
+  }
+}
+
+/**
+ * Every baked tree sheet, grouped by species. Order is load-bearing: the grove
+ * hash indexes the species and the per-tile hash indexes the variant, so
+ * reordering either level repaints every forest on the map.
+ */
+const TREE_SPRITE_KEYS = [
+  ['tree_oak_a', 'tree_oak_b', 'tree_oak_c', 'tree_oak_d'],
+  ['tree_birch_a', 'tree_birch_b', 'tree_birch_c', 'tree_birch_d'],
+  ['tree_pine_a', 'tree_pine_b', 'tree_pine_c', 'tree_pine_d'],
+] as const;
+
+/** A single tree sheet's manifest key. */
+type TreeSpriteKey = (typeof TREE_SPRITE_KEYS)[number][number];
+
+/**
+ * How many tiles across one single-species grove is. Large enough that a stand
+ * of one species fills the screen and the wood reads as having regions, small
+ * enough that walking a forest blob crosses two or three of them.
+ */
+const GROVE_SIZE_TILES = 24;
+
+/**
+ * How far a grove's edge wanders, in tiles.
+ *
+ * Without it the species boundaries are the grove grid's own straight lines,
+ * and a forest laid over them reads as three rectangular plantations meeting at
+ * right angles. Offsetting each tile's grove lookup by a hash of the *other*
+ * axis breaks those lines into a ragged front while keeping the lookup a pure
+ * function of position.
+ */
+const GROVE_EDGE_WOBBLE_TILES = 5;
+
+function groveWobble(alongAxis: number, salt: number): number {
+  const span = GROVE_EDGE_WOBBLE_TILES * 2 + 1;
+  return (positionHash(alongAxis, salt) % span) - GROVE_EDGE_WOBBLE_TILES;
+}
+
+/** Salts keeping the two axes' wobble streams independent. */
+const GROVE_WOBBLE_SALT_X = 0x5bd1;
+const GROVE_WOBBLE_SALT_Y = 0xa3e7;
+
+// Knuth's multiplicative hash constants — two large odd 32-bit primes, one per
+// axis, so `tx` and `ty` scramble independently before they are combined.
+const HASH_MULTIPLIER_X = 2654435761;
+const HASH_MULTIPLIER_Y = 2246822519;
+
+function positionHash(x: number, y: number): number {
+  return (Math.imul(x, HASH_MULTIPLIER_X) ^ Math.imul(y, HASH_MULTIPLIER_Y)) >>> 0;
+}
+
+/**
+ * The sheet a tree at (tx, ty) is drawn from.
+ *
+ * Species comes from a low-frequency hash of the tile's grove, so neighbouring
+ * trees are usually the same species and a forest reads as one wood rather than
+ * as a nursery display. The variant within that species comes from the tile's
+ * own hash, so no two adjacent trees are identical. Both are pure functions of
+ * position: nothing is stored per tile, and the choice survives a re-bake.
+ */
+export function treeSpriteKey(tx: number, ty: number): TreeSpriteKey {
+  const wobbledX = tx + groveWobble(ty, GROVE_WOBBLE_SALT_X);
+  const wobbledY = ty + groveWobble(tx, GROVE_WOBBLE_SALT_Y);
+  const groveHash = positionHash(
+    Math.floor(wobbledX / GROVE_SIZE_TILES),
+    Math.floor(wobbledY / GROVE_SIZE_TILES),
+  );
+  const species = TREE_SPRITE_KEYS[groveHash % TREE_SPRITE_KEYS.length];
+  return species[positionHash(tx, ty) % species.length];
 }
 
 /**

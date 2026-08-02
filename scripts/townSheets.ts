@@ -9,9 +9,9 @@
  * once here and used for both the paint and the manifest row.
  */
 
-import { createCanvas } from 'canvas';
+import { createCanvas, type ImageData } from 'canvas';
 import type { CanvasRenderingContext2D as NodeCtx } from 'canvas';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /** Level 3's `mapSize`. The town plan is derived from it, so the spans are too. */
@@ -36,10 +36,25 @@ export interface SheetSpec {
   readonly frameHeight: number;
   readonly tileX: number;
   readonly tileY: number;
+  /**
+   * The map tile type this sheet is the art for, when it is one.
+   *
+   * `SpriteLoader` keys its sort-Y anchor and its cull extents off this, and
+   * both tables are last-write-wins per tile type — so at most one sheet in a
+   * family of variants may declare it, and the family must share one frame
+   * geometry. Omitted for sheets that are not a tile type's art.
+   */
+  readonly tileTypeId?: number;
   readonly rows: ReadonlyArray<SheetRow>;
 }
 
-function renderSheet(spec: SheetSpec): Buffer {
+/**
+ * Inspects a sheet's pixels before it reaches disk. Throwing rejects the whole
+ * bake — see `writeSheets`.
+ */
+export type SheetVerifier = (spec: SheetSpec, pixels: ImageData) => void;
+
+function renderSheet(spec: SheetSpec, verify?: SheetVerifier): Buffer {
   const columns = Math.max(...spec.rows.map((row) => row.frames.length));
   const canvas = createCanvas(columns * spec.frameWidth, spec.rows.length * spec.frameHeight);
   const ctx = canvas.getContext('2d');
@@ -67,6 +82,14 @@ function renderSheet(spec: SheetSpec): Buffer {
     });
   });
 
+  // Verified before the buffer is encoded, so a sheet that fails never reaches
+  // the disk at all. Checking after the write leaves the bad art — and the
+  // manifest that names it — sitting in the working tree for the next commit,
+  // which makes the check a report rather than a gate.
+  if (verify !== undefined) {
+    verify(spec, ctx.getImageData(0, 0, canvas.width, canvas.height));
+  }
+
   return canvas.toBuffer('image/png');
 }
 
@@ -75,7 +98,7 @@ function manifestEntry(spec: SheetSpec, tileScale: number, directoryPath: string
   spec.rows.forEach((row, rowIndex) => {
     states[row.state] = { row: rowIndex, frameCount: row.frames.length };
   });
-  return {
+  const entry = {
     path: `${directoryPath}/${spec.file}`,
     frameWidth: spec.frameWidth,
     frameHeight: spec.frameHeight,
@@ -84,6 +107,10 @@ function manifestEntry(spec: SheetSpec, tileScale: number, directoryPath: string
     tileScale,
     states,
   };
+  // Spread conditionally rather than writing `tileTypeId: undefined`, which
+  // `JSON.stringify` drops anyway but which would leave the key visible in the
+  // in-memory manifest a caller might verify against.
+  return spec.tileTypeId === undefined ? entry : { ...entry, tileTypeId: spec.tileTypeId };
 }
 
 /** The manifest `path` prefix for a directory — `SpriteLoader` resolves against `src/images/`. */
@@ -104,11 +131,19 @@ function imagesRelativePath(outDir: string): string {
  * is no longer written, and `loadSprites` skips missing files silently — the
  * prop would just stop drawing with nothing to say why.
  */
-export function writeSheets(outDir: string, tileScale: number, sheets: ReadonlyArray<SheetSpec>) {
+export function writeSheets(
+  outDir: string,
+  tileScale: number,
+  sheets: ReadonlyArray<SheetSpec>,
+  verify?: SheetVerifier,
+) {
   const directoryPath = imagesRelativePath(outDir);
   const manifest: Record<string, unknown> = {};
-  for (const spec of sheets) {
-    writeFileSync(resolve(outDir, spec.file), renderSheet(spec));
+  // Every sheet is rendered and verified before any of them is written, so one
+  // bad sheet cannot leave the directory half-updated.
+  const rendered = sheets.map((spec) => ({ spec, buffer: renderSheet(spec, verify) }));
+  for (const { spec, buffer } of rendered) {
+    writeFileSync(resolve(outDir, spec.file), buffer);
     manifest[spec.key] = manifestEntry(spec, tileScale, directoryPath);
   }
   const manifestPath = resolve(outDir, 'manifest.json');
@@ -125,13 +160,4 @@ function reportSheets(manifestPath: string, sheets: ReadonlyArray<SheetSpec>): v
     );
   }
   console.log(`\nwrote ${sheets.length} sheet(s) and ${manifestPath}`);
-}
-
-/** Reads a manifest back, so a generator can verify what it just claimed. */
-export function readManifest(outDir: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(readFileSync(resolve(outDir, 'manifest.json'), 'utf8'));
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error(`Manifest in ${outDir} is not an object`);
-  }
-  return { ...parsed };
 }

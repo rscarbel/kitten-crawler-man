@@ -192,11 +192,17 @@ function drawCell(
   drawCounterFronts();
 
   if (state === 'serving') {
-    drawServedDish(ctx, runLeft + (GALLEY_COLUMN + DISH_COLUMN_OFFSET_FROM_BOPCA) * ts, frontRowTop, ts, {
-      visual: PREVIEW_DISH,
-      coldness: 0,
-      elapsedSeconds: frame / FRAMES_PER_SECOND,
-    });
+    drawServedDish(
+      ctx,
+      runLeft + (GALLEY_COLUMN + DISH_COLUMN_OFFSET_FROM_BOPCA) * ts,
+      frontRowTop,
+      ts,
+      {
+        visual: PREVIEW_DISH,
+        coldness: 0,
+        elapsedSeconds: frame / FRAMES_PER_SECOND,
+      },
+    );
   }
 
   ctx.fillStyle = LABEL_COLOR;

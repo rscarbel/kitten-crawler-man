@@ -443,9 +443,14 @@ export function decorationTileExtentsPx(
 
 /**
  * Reach assumed for a sprite-drawn decoration that declares no extents against
- * its tile type — trees, torches, braziers and the like. One tile covers the
- * tallest of them (a torch reaches exactly one tile up), and every such type is
- * cull-margin only: none is cached, so the slack costs nothing but scan width.
+ * its tile type — torches, braziers and the like. One tile covers the tallest of
+ * them (a torch reaches exactly one tile up), and every such type is cull-margin
+ * only: none is cached, so the slack costs nothing but scan width.
+ *
+ * `TREE` used to land here and no longer does: its sheets declare
+ * `tileTypeId: 13`, so a three-tile canopy gets its real extents rather than
+ * this one-tile guess. A tree that fell back here would have its crown culled
+ * the moment its own tile left the screen.
  */
 function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
   return { left: ts, up: ts, right: ts, down: ts };

@@ -94,6 +94,7 @@ import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
 import { DestructiblePropSystem } from '../systems/DestructiblePropSystem';
+import { TreeSystem } from '../systems/TreeSystem';
 import { AbilityManager, type AbilityId } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
@@ -543,6 +544,7 @@ export class DungeonScene extends GameplayScene {
   private loot: LootSystem;
   /** Null on the overworld — town barrels and crates are not smashable. */
   private destructibles: DestructiblePropSystem | null;
+  private trees: TreeSystem | null;
   private stairwell: StairwellSystem;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
@@ -893,7 +895,15 @@ export class DungeonScene extends GameplayScene {
     this.destructibles = levelDef.isOverworld
       ? null
       : new DestructiblePropSystem(this.gameMap, this.loot, levelDef.floorNumber);
-    this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles);
+    // The mirror image of the line above: trees are generated only by
+    // `OverworldGenerator`, so every other floor would build a system with
+    // nothing on the map to talk to.
+    this.trees = levelDef.isOverworld
+      ? new TreeSystem(this.gameMap, this.loot, levelDef.floorNumber, (tileX, tileY) =>
+          this.miniMap.markTileChanged(tileX, tileY),
+        )
+      : null;
+    this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles, this.trees);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(
@@ -3410,6 +3420,7 @@ export class DungeonScene extends GameplayScene {
       spells: this.spells,
       dynamite: this.dynamite,
       destructibles: this.destructibles,
+      trees: this.trees,
       loot: this.loot,
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
@@ -3926,6 +3937,14 @@ export class DungeonScene extends GameplayScene {
       // An iron brazier folding up is a clang, not splitting planks.
       this.audio?.play('hammer_strike');
     }
+    if ((this.trees?.drainFelled() ?? 0) > 0) {
+      // Splitting timber is splitting timber, so a tree coming down reuses the
+      // prop break cue rather than shipping an audio file for one event. One
+      // cue however many trees fell together, for the reason above.
+      const treeFallSounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
+      this.audio?.play(treeFallSounds[this.woodBreakSoundIdx % treeFallSounds.length]);
+      this.woodBreakSoundIdx++;
+    }
     if (this.defendQuest.menuOpenSoundPending) {
       this.defendQuest.menuOpenSoundPending = false;
       this.audio?.play('menu_open');
@@ -4043,6 +4062,7 @@ export class DungeonScene extends GameplayScene {
       abilityManager: this.abilityManager,
       spells: this.spells,
       destructibles: this.destructibles ?? undefined,
+      trees: this.trees ?? undefined,
       hitLanded: false,
       xpDiminishingTiers: this.levelDef.xpDiminishingTiers,
     };
@@ -4177,6 +4197,7 @@ export class DungeonScene extends GameplayScene {
     this.gore.update();
     this.bodyPartGore.update();
     this.destructibles?.update();
+    this.trees?.update(ctx);
     this.dynamite.update(ctx);
 
     if (this.dynamite.explosionSoundPending) {

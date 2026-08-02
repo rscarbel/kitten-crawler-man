@@ -15,6 +15,10 @@
     "scripts/render-cat.ts",
     "scripts/clownArt.ts",
     "scripts/generate-clown-sprites.ts",
-    "scripts/render-clowns.ts"
+    "scripts/render-clowns.ts",
+    "scripts/nodeCanvasGlobals.ts",
+    "scripts/treeArt.ts",
+    "scripts/generate-tree-sprites.ts",
+    "scripts/render-trees.ts"
   ]
 }

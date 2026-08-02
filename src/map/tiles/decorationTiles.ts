@@ -21,6 +21,8 @@ import {
   RUBBLE,
   TOWN_WALL,
   propSpriteState,
+  treeSpriteKey,
+  treeSpriteState,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -592,9 +594,9 @@ export function drawDecorationTile(
   if (baseOnly) {
     switch (type) {
       case TREE:
-        // Trees are always outdoor tiles — draw grass directly rather than
-        // inferring from neighbours, which fails for trees deep inside a
-        // dense forest blob where all neighbours are also trees.
+        // Routed through the outdoor ground path; which material actually gets
+        // drawn is resolved by `groundMaterialUnder` from the `groundType` the
+        // tile recorded, not from the type passed here.
         drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
         return true;
       case TORCH:
@@ -623,26 +625,16 @@ export function drawDecorationTile(
       // Ground is already drawn by the baseOnly chunk-cache pass.
       // Re-drawing it here would wipe out the canopy-overhead of any
       // adjacent tree that already painted into this tile's space.
-      switch (((Math.imul(tx, 2654435761) ^ Math.imul(ty, 2246822519)) >>> 0) % 6) {
-        case 0:
-          drawSpriteKey(ctx, 'tree_1', 'idle', 0, sx, sy, ts);
-          break;
-        case 1:
-          drawSpriteKey(ctx, 'tree_2', 'idle', 0, sx, sy, ts);
-          break;
-        case 2:
-          drawSpriteKey(ctx, 'tree_3', 'idle', 0, sx, sy, ts);
-          break;
-        case 3:
-          drawSpriteKey(ctx, 'tree_4', 'idle', 0, sx, sy, ts);
-          break;
-        case 4:
-          drawSpriteKey(ctx, 'tree_5', 'idle', 0, sx, sy, ts);
-          break;
-        default:
-          drawSpriteKey(ctx, 'tree_6', 'idle', 0, sx, sy, ts);
-          break;
-      }
+      const tile = structure[ty][tx];
+      drawSpriteKey(
+        ctx,
+        treeSpriteKey(tx, ty),
+        treeSpriteState(tile.treeStage),
+        tile.treeAnimFrame ?? 0,
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 

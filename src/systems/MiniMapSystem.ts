@@ -8,6 +8,8 @@ import { frameTime } from '../utils';
 import { drawText } from '../ui/TextBox';
 import {
   COBBLE_STREET,
+  TREE,
+  TREE_STAGE_CHARRED,
   FloorTypeValue,
   HORDER_BOSS_ROOM_FLOOR,
   LANE_STREET,
@@ -86,6 +88,10 @@ const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
 
 /** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
 const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
+/** Standing forest, a shade deeper than the grass it grows out of. */
+const LIVING_TREE_MINIMAP_COLOR = '#2c5434';
+/** A tree burnt down to charcoal, so a stand the player torched stays findable. */
+const CHARRED_TREE_MINIMAP_COLOR = '#2a221e';
 
 /** Sentinel for "no fog reveal has happened yet" — no real tile coord is negative. */
 const TILE_NEVER_REVEALED = -1;
@@ -183,6 +189,31 @@ export class MiniMapSystem implements GameSystem {
         }
       }
     }
+  }
+
+  /**
+   * Repaints one already-revealed tile whose type or state has changed.
+   *
+   * The tile cache is otherwise written exactly once per tile, at the moment fog
+   * lifts off it, and never again — which was fine while the map was immutable
+   * after generation. It no longer is: a felled tree turns to grass and a burnt
+   * one turns to charcoal, both of them well inside the reveal radius, so
+   * without this the minimap keeps showing forest green over open ground and a
+   * stand the player set alight is indistinguishable from a living one.
+   *
+   * A no-op on a tile still under fog: that tile will be painted correctly the
+   * first time it is revealed.
+   */
+  markTileChanged(tileX: number, tileY: number): void {
+    const mapSize = this.gameMap.structure.length;
+    if (tileX < 0 || tileX >= mapSize || tileY < 0 || tileY >= mapSize) return;
+    if (this.fogOfWar[tileY * mapSize + tileX] === 0) return;
+    this._tileCacheCtx.fillStyle = this.minimapColorAt(
+      tileX,
+      tileY,
+      this.gameMap.structure[tileY][tileX].type,
+    );
+    this._tileCacheCtx.fillRect(tileX, tileY, 1, 1);
   }
 
   revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
@@ -488,6 +519,13 @@ export class MiniMapSystem implements GameSystem {
    */
   private minimapColorAt(tx: number, ty: number, type: number): string {
     if (this.gameMap.isSpriteBuildingTile(tx, ty)) return SPRITE_BUILDING_MINIMAP_COLOR;
+    // A burnt-out tree is still a `TREE` tile, so its colour cannot come from
+    // the type alone. Worth the special case: the map is how a player finds
+    // their way back to a stand they set alight, and charcoal drawn in forest
+    // green makes that impossible.
+    if (type === TREE && this.gameMap.structure[ty][tx].treeStage === TREE_STAGE_CHARRED) {
+      return CHARRED_TREE_MINIMAP_COLOR;
+    }
     return this.tileColor(type);
   }
 
@@ -547,6 +585,8 @@ export class MiniMapSystem implements GameSystem {
         return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
       case FENCE:
         return '#6a5334'; // yard fence, in its own timber colour
+      case TREE:
+        return LIVING_TREE_MINIMAP_COLOR;
       // Town building interiors. This minimap does not draw one today — that is
       // the mobile HUD's — but the two tables answer the same question, and a
       // tile type known to one and not the other is how the mobile interior

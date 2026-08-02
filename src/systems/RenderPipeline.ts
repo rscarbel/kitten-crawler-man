@@ -27,6 +27,7 @@ import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import type { TreeSystem } from './TreeSystem';
 import type { LootSystem } from './LootSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
@@ -53,9 +54,6 @@ const DRAW_KIND_TOWNSPERSON = 4;
 
 /** Draw kind for interactive town props (notice board, etc.), rendered via their own render(). */
 const DRAW_KIND_TOWN_PROP = 5;
-
-/** Tree depth offset to keep trees rendered behind entities. */
-const TREE_SORT_DEPTH_OFFSET = 100000;
 
 /** Y-sort offset to account for sprite foot position. */
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
@@ -143,6 +141,8 @@ export interface RenderContext {
   dynamite: DynamiteSystem;
   /** Null on maps without smashable props (the overworld, building interiors). */
   destructibles: DestructiblePropSystem | null;
+  /** Null on every map but the overworld, which is the only one that grows trees. */
+  trees: TreeSystem | null;
   loot: LootSystem;
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
@@ -197,6 +197,7 @@ export class RenderPipeline {
     gore.renderPuddles(ctx, camX, camY);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
     rc.destructibles?.renderWreckage(ctx, camX, camY);
+    rc.trees?.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active, speechBubblePulse);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -224,19 +225,20 @@ export class RenderPipeline {
     // Reset pool cursor (reuses existing objects)
     this._drawCount = 0;
 
-    for (const { tx, ty, isTree, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
+    for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
       camX,
       camY,
       viewportWidth(),
       viewportHeight(),
     )) {
       const e = this._getEntry();
-      // Trees render before all entities (negative sortY) so entities stay on top.
-      // Within the tree pass, ascending ty keeps south trees rendering last so
-      // their canopies appear above north trees' trunks.
-      // For other decorations, sort by the sprite's visual foot position derived
-      // from manifest geometry (ty * TILE_SIZE + sortYAnchorPx).
-      e.sortY = isTree ? ty - TREE_SORT_DEPTH_OFFSET : ty * TILE_SIZE + sortYAnchorPx;
+      // Sort by the sprite's visual foot position, derived from manifest
+      // geometry. Trees used to be special-cased to a large negative key, which
+      // put every tree behind every entity — the player walked in front of a
+      // tree they were standing north of. They now sort on their foot like
+      // everything else, which is only correct because `tree_oak_a` declares
+      // `tileTypeId` and so has a real anchor to sort on.
+      e.sortY = ty * TILE_SIZE + sortYAnchorPx;
       e.kind = DRAW_KIND_DECO;
       e.tx = tx;
       e.ty = ty;
@@ -367,6 +369,7 @@ export class RenderPipeline {
 
     gore.renderParticles(ctx, camX, camY);
     rc.destructibles?.renderEffects(ctx, camX, camY);
+    rc.trees?.render(ctx, camX, camY);
     bodyPartGore.renderFlying(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);
     spells.renderShell(ctx, camX, camY);

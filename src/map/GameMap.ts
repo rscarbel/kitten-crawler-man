@@ -155,7 +155,6 @@ const TOWER_TOP_FLOOR = 3;
 export interface DecorationTile {
   readonly tx: number;
   readonly ty: number;
-  readonly isTree: boolean;
   /** Pixels below the tile's top edge where the sprite's visual foot sits. */
   readonly sortYAnchorPx: number;
   /** How far the art reaches past the tile's own square, per direction. */
@@ -2105,13 +2104,12 @@ export class GameMap {
       const def = tile.spriteKey !== undefined ? getSpriteDefByKey(tile.spriteKey) : undefined;
       const sortYAnchorPx =
         def !== undefined ? (def.frameHeight - def.tileY) * (ts / def.tileScale) : ts;
-      return { tx, ty, isTree: false, sortYAnchorPx, extents };
+      return { tx, ty, sortYAnchorPx, extents };
     }
 
     return {
       tx,
       ty,
-      isTree: type === TREE,
       sortYAnchorPx: getSortYAnchorPx(type) ?? ts,
       extents,
     };

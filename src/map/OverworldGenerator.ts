@@ -930,7 +930,14 @@ function paintForests(grid: TileGrid, plan: TownPlan): void {
         if (tx < BORDER || tx >= size - BORDER || ty < BORDER || ty >= size - BORDER) continue;
         if (grid.isSolid(tx, ty)) continue;
         if (grid.isPaved(tx, ty)) continue;
-        grid.set(tx, ty, TREE);
+        // `setStanding`, as every other prop is written. A tree stands *on* the
+        // ground rather than being ground, and now that one can be felled the
+        // record is what the tile reverts to. Inference cannot answer this:
+        // `inferFloorType` searches three tiles and then gives up and returns
+        // dungeon concrete, while a forest blob runs to twenty-one tiles across
+        // — so felling a tree anywhere but at the fringe would open a hole of
+        // grey concrete in the middle of a wood.
+        grid.setStanding(tx, ty, TREE);
       }
     }
   }

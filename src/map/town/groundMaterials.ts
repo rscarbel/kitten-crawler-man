@@ -21,7 +21,6 @@ import {
   PLAZA_STONE,
   RUBBLE,
   RUINED_WALL,
-  TREE,
   VERGE_GRASS,
   YARD_GRAVEL,
 } from '../tileTypes';
@@ -146,10 +145,15 @@ const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
  * happened when the scatter pass put `GRASSY_WEED`, whose material is `grass`,
  * onto the town's verge.
  *
- * `TREE` is listed for the same reason `RUBBLE` and `RUINED_WALL` are — it only
- * ever stands outdoors, on grass — and because it is the one type that must not
- * be left to `groundMaterialUnder`'s inference: a tree in the middle of a forest
- * has nothing but trees for three rings around it.
+ * `TREE` is deliberately **not** listed, though it used to be. A tree stands on
+ * ground rather than being ground, and a few of them stand on a track rather
+ * than on grass — pinning them all to `grass` here drew turf under those and
+ * then popped the tile to dirt the moment the tree was felled. It was pinned
+ * because `groundMaterialUnder`'s *inference* cannot help a tree in the middle
+ * of a blob that has nothing but trees for three rings around it; that is no
+ * longer the fallback, because `paintForests` now uses `setStanding` and every
+ * tree records the surface it replaced, which `groundMaterialUnder` consults
+ * before it ever reaches inference.
  *
  * Anything else that *stands on* ground rather than being ground — a torch, a
  * well, a building anchor — is not listed, because outdoors and in a dungeon it
@@ -169,7 +173,6 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
     case GRASSY_WEED:
     case RUBBLE:
     case RUINED_WALL:
-    case TREE:
       return 'grass';
     case VERGE_GRASS:
     case GARDEN_PLANTING:

@@ -9,6 +9,7 @@ import environmentNatureManifest from '../images/environment/nature/manifest.jso
 import environmentPropsManifest from '../images/environment/props/manifest.json';
 import environmentTilesetsManifest from '../images/environment/tilesets/manifest.json';
 import environmentTownscapeManifest from '../images/environment/townscape/manifest.json';
+import environmentTreesManifest from '../images/environment/trees/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
@@ -27,6 +28,9 @@ const environmentManifest = {
   // street lamp reaches four tiles above its own tile.
   ...environmentTownscapeManifest,
   ...environmentOverCityManifest,
+  // The forest. Its own directory because `writeSheets` replaces a directory's
+  // whole manifest, and `nature/` also holds assets no tree generator writes.
+  ...environmentTreesManifest,
   ...environmentWallsRoofsManifest,
 } as const;
 

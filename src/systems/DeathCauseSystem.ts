@@ -30,6 +30,11 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
 function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
+  // The only producer of `environmental` is standing against a burning tree.
+  // Without this the contact damage — which is what actually kills, well before
+  // the eight-second `burn` DoT it also applies gets there — reports an unknown
+  // cause on the death screen.
+  if (source.kind === 'environmental') return 'burningTree';
 
   if (source.kind === 'status') {
     const { effectType } = source;
@@ -41,24 +46,23 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
     return 'unknown';
   }
 
-  if (source.kind === 'mob') {
-    const { mobType, attackType } = source;
+  // Every other variant is handled above, so this is a mob — narrowed by
+  // elimination rather than by a `kind` test, which the compiler can now prove
+  // is always true.
+  const { mobType, attackType } = source;
 
-    if (mobType === 'GrotesqueSpider') {
-      if (attackType === 'screech') return 'grotesqueSpiderScreech';
-      if (attackType === 'spit') return 'grotesqueSpiderSpit';
-      return 'grotesqueSpiderSlam';
-    }
-
-    if (mobType === 'KrakarenClone') {
-      if (attackType === 'slam') return 'krakarenCloneSlam';
-      return 'krakarenCloneRegularMelee';
-    }
-
-    return MOB_TYPE_TO_CAUSE[mobType] ?? 'unknown';
+  if (mobType === 'GrotesqueSpider') {
+    if (attackType === 'screech') return 'grotesqueSpiderScreech';
+    if (attackType === 'spit') return 'grotesqueSpiderSpit';
+    return 'grotesqueSpiderSlam';
   }
 
-  return 'unknown';
+  if (mobType === 'KrakarenClone') {
+    if (attackType === 'slam') return 'krakarenCloneSlam';
+    return 'krakarenCloneRegularMelee';
+  }
+
+  return MOB_TYPE_TO_CAUSE[mobType] ?? 'unknown';
 }
 
 /**

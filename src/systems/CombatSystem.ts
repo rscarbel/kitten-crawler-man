@@ -11,6 +11,7 @@ import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import type { TreeSystem } from './TreeSystem';
 import { diminishedXpShare, type XpDiminishingTier } from '../levels/xpDiminishing';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
@@ -33,6 +34,15 @@ const MISSILE_SLOW_BOSS_LEVEL = 15;
 const MISSILE_SHOCKWAVE_RADIUS_TILES = 5;
 /** Minimum shell level for chain lightning to trigger on kill. */
 const SHELL_CHAIN_LIGHTNING_LEVEL = 15;
+/**
+ * Chance that a magic missile striking a tree also sets it alight.
+ *
+ * Lives here rather than in `TreeSystem` to keep that edge one-way:
+ * `TreeSystem` already imports `MELEE_POINT_BLANK_RANGE` from this module (as
+ * `DestructiblePropSystem` does), and importing a value back the other way
+ * would close a module cycle for one number nothing else reads.
+ */
+const MISSILE_IGNITE_CHANCE = 0.1;
 /** Missile collision hit radius as a fraction of TILE_SIZE. */
 const MISSILE_HIT_RADIUS_FRACTION = 0.7;
 /** Boss stun duration in frames when smush lands in the inner blast zone. */
@@ -58,6 +68,8 @@ export interface CombatContext {
   spells: SpellSystem;
   /** Absent in scenes without smashable props (the overworld, building interiors). */
   destructibles?: DestructiblePropSystem;
+  /** Absent everywhere but the overworld, which is the only map that grows trees. */
+  trees?: TreeSystem;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
   /** This floor's combat-XP diminishing curve. Absent means kills award full XP. */
@@ -110,6 +122,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     // anything, props included.
     if (!human.zeroDamage) {
       humanHit = (ctx.destructibles?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
+      humanHit = (ctx.trees?.tryMeleeHit(human, range, damage) ?? false) || humanHit;
     }
     ctx.bus.emit('humanMeleeSwing', { hit: humanHit });
   }
@@ -146,6 +159,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     }
     if (!cat.zeroDamage) {
       catHit = (ctx.destructibles?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
+      catHit = (ctx.trees?.tryMeleeHit(cat, range, damage) ?? false) || catHit;
     }
     ctx.bus.emit('catMeleeSwing', { hit: catHit });
   }
@@ -201,6 +215,9 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (ctx.destructibles?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
         ctx.hitLanded = true;
       }
+      if (ctx.trees?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
+        ctx.hitLanded = true;
+      }
     }
 
     // Level 10+: 20% chance to heal human for 50% of total damage dealt
@@ -233,6 +250,34 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ctx.bus.emit('missileImpact', {});
         missile.hit = true;
         missile.state = 'exploding';
+        continue;
+      }
+
+      // Trees are checked after props purely so the two blocks read in the order
+      // they were written; the choice is free, because props exist only on the
+      // dungeon floors and trees only on the overworld, so no map ever has both.
+      const trees = ctx.trees;
+      if (
+        trees !== undefined &&
+        !cat.zeroDamage &&
+        trees.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat)
+      ) {
+        ctx.hitLanded = true;
+        ctx.bus.emit('missileImpact', {});
+        missile.hit = true;
+        missile.state = 'exploding';
+        // Arcane fire does not reliably take hold in green wood — most missiles
+        // just blow bark off. The roll is what makes burning a forest down
+        // something the player chooses to keep at rather than a side effect of
+        // shooting past one.
+        //
+        // Ignited by the same radius the hit was resolved with, not by the tile
+        // the missile happens to be standing in: a missile detonating on the
+        // edge of a tree's tile is inside the neighbouring one, and that
+        // neighbour is usually empty grass.
+        if (Math.random() < MISSILE_IGNITE_CHANCE) {
+          trees.igniteRadius(missile.x, missile.y, hitRadius);
+        }
         continue;
       }
 

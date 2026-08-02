@@ -1,5 +1,6 @@
 import type { GameMap } from '../map/GameMap';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
+import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -66,6 +67,8 @@ export class DynamiteSystem implements GameSystem {
     private readonly gameMap: GameMap,
     /** Null on maps without smashable props (the overworld, building interiors). */
     private readonly destructibles: DestructiblePropSystem | null = null,
+    /** Null off the overworld, which is the only map that grows trees. */
+    private readonly trees: TreeSystem | null = null,
   ) {}
 
   /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
@@ -181,8 +184,14 @@ export class DynamiteSystem implements GameSystem {
       cat.takeDamage(damage, { kind: 'dynamite' });
     }
     // Flattened outright rather than damaged: a barrel that survives a stick of
-    // dynamite reads as a bug, however much health it had left.
+    // dynamite reads as a bug, however much health it had left. The same goes
+    // for a tree, tough as one otherwise is.
     this.destructibles?.destroyInRadius(cx, cy, DYN_RADIUS, human);
+    this.trees?.destroyInRadius(cx, cy, DYN_RADIUS, human);
+    // Ignition second, and deliberately: the ring reaches back over the blast
+    // radius, and setting fire to the trees first would leave the ones inside it
+    // burning as they came down.
+    this.trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * ts);
   }
 
   private updatePhysics(

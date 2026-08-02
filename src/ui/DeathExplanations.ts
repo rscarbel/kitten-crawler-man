@@ -32,6 +32,7 @@ export type DeathCause =
   | 'brindleGrub'
   | 'cowTailedGrub'
   | 'brindledVespa'
+  | 'burningTree'
   | 'explosiveFriendlyFire'
   | 'doomsdayExplosion'
   | 'unknown';
@@ -69,6 +70,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'A Bugaboo swarmed you to death. Hard to dodge what you cannot see.',
     'The Bugaboo overwhelmed you. Watch for the swarm.',
     'You were killed by a Bugaboo. Maybe avoid the dark corners next time.',
+  ],
+  burningTree: [
+    'You stood against a burning tree until it finished the job.',
+    'The tree was on fire. You were standing in it. These facts are related.',
+    'Burned alive by a tree you set light to. Poetic, in a way.',
   ],
   burnedStatus: [
     'You stood in the flames just a little too long.',
