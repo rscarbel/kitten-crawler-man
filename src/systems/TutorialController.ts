@@ -171,6 +171,8 @@ const GUIDE_ARROW_SPEED = 0.05;
 const MORDECAI_TUTORIAL_PAGES: ReadonlyArray<string> = [
   'Welcome, adventurer! I am Mordecai, a changeling, and your guide through these dungeons. My form may shift from room to room, but I will be with you every step of your journey.',
   'You will find me in every safe room you encounter. While inside a safe room, you cannot be harmed by any new attacks. Any enemy that strikes at you here will be instantly teleported back outside.',
+  'Walking into any safe room immediately saves your progress, so if you die, you will return to the state you were in when you last entered a safe room on that level.',
+  'This is a rather new addition to the dungeon that we have never seen before in previous games. They said it has something to do with this being a videogame or whatever.',
   'Achievement rewards can only be opened inside a safe room. And it looks like you have one waiting right now! Go ahead and open it before pressing on.',
 ];
 
