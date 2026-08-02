@@ -265,8 +265,8 @@ export function makeSwordProp(palette: GoblinPalette, seed: () => number): Gobli
 // A bearded hand axe on a short haft: the beard is the hook below the bit that
 // catches at the end of the light cleave, so it has to be visible.
 
-const AXE_OVERHANG = 0.3;
-const AXE_TIP = 0.66;
+const AXE_OVERHANG = 0.26;
+const AXE_TIP = 0.72;
 /**
  * Negative: the off hand grips the *butt*, behind the lead hand, rather than up
  * the haft in front of it.
@@ -278,7 +278,7 @@ const AXE_TIP = 0.66;
  * it. Gripping behind gives the off arm slack to fold, so the two arms open into
  * a triangle with the haft as its long side. G14 asserts the result.
  */
-const AXE_OFF_GRIP = -0.2;
+const AXE_OFF_GRIP = -0.16;
 /** Leather at each grip; the lead hand's, then the butt the off hand holds. */
 const AXE_LEAD_WRAP: readonly [number, number] = [-0.08, 0.11];
 const AXE_BUTT_WRAP: readonly [number, number] = [-0.27, -0.13];
@@ -293,14 +293,49 @@ const AXE_HAFT_HALF_WIDTH = 0.028;
  * beyond it, and a beard dropping much further below the axis than the poll
  * rises above it.
  */
-const AXE_EYE_START = 0.28;
-const AXE_EYE_END = 0.5;
-/** How far the cutting edge stands off the haft's axis, on the bit side. */
-const AXE_BIT_DROP = 0.2;
+/**
+ * The head sits at the **far end** of the haft, not partway along it.
+ *
+ * The eye used to start at 0.28 of a 0.66 haft with a 0.30 butt behind the
+ * hand, which put the head at 40% of the wood's total length — a lump partway
+ * down a pole, which is a hoe or a paddle, not an axe. The head now finishes
+ * one haft-width short of the tip: enough wood past the eye to show the haft
+ * runs *through* the socket, which is what stops the bit reading as a blade
+ * glued onto the end of a stick, and not enough to read as a pole with
+ * something clamped to its middle.
+ */
+const AXE_EYE_START = 0.44;
+const AXE_EYE_END = 0.6;
+/**
+ * The bit **flares** from the socket: a narrow neck on the haft opening into an
+ * edge two and a half times its length.
+ *
+ * With the eye as long as the edge the head was a plate of even width slung
+ * under the shaft — a trowel, and the third blind review to say so. Flare is
+ * what a spade does not have: a spade blade is a parallel-sided plate on the
+ * end of its handle, and an axe is a wedge that grows out of one. This is the
+ * variable the two earlier redraws missed, because both of them changed how the
+ * *edge* was drawn while leaving the socket as wide as the edge.
+ */
+/**
+ * How far the cutting edge stands off the haft's axis, on the bit side.
+ *
+ * Read together with the beard span below: what those two numbers make is the
+ * bit's **aspect ratio**, and that is the part of an axe head a silhouette test
+ * actually judges. At 0.20 deep over a 0.34 span the bit was 1.3:1 — near
+ * square, and a near-square lump beside a stick is a spade blade or a boot
+ * whatever its edges do. The edge is now over twice as long as the bit is deep,
+ * which is what makes it read as something that cuts along its length.
+ *
+ * Shallower also buys carry angle, because this value is the prop's
+ * `headHalfHeight` and every extra unit of it flattens the carry (see
+ * `CARRY_HAND_HEIGHT_FRACTION`).
+ */
+const AXE_BIT_DROP = 0.16;
 /** The poll: the small counterweight on the other side of the eye. */
-const AXE_BIT_RISE = 0.075;
-const AXE_BEARD_START = 0.22;
-const AXE_BEARD_END = 0.56;
+const AXE_BIT_RISE = 0.05;
+const AXE_BEARD_START = 0.24;
+const AXE_BEARD_END = 0.68;
 
 export function makeAxeProp(palette: GoblinPalette, seed: () => number): GoblinProp {
   const { iron, leather, wood, outline } = palette;

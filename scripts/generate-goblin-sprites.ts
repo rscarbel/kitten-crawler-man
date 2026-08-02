@@ -226,13 +226,50 @@ const GAITS: Record<GoblinArchetype, GaitConfig> = {
  * close to the hip and a little higher, so the haft crosses the body and the
  * head rests on the floor at a believable angle.
  */
-const CARRY_HAND_HIP_FRACTION = 1.25;
-const CARRY_HAND_HEIGHT_FRACTION = 0.46;
+interface CarryConfig {
+  /** How far out from the spine the weapon hand rides, in hip half-widths. */
+  readonly hipFraction: number;
+  /** How high it rides, as a fraction of the goblin's own shoulder height. */
+  readonly heightFraction: number;
+}
 
-function carryHand(style: GoblinStyle): Pt {
+/**
+ * Where each archetype's weapon hand sits at rest.
+ *
+ * Per-archetype rather than one shared pair, and the axe is the reason. The
+ * height ends up in {@link carryAngle}, which solves for the steepest angle
+ * that still keeps the weapon's tip off the floor — so a low hand on a long
+ * weapon *forces* a near-horizontal haft. At the shared 0.46 the axe hung 14°
+ * off level, and a broad bit hanging off a horizontal stick at ankle height is
+ * a spade however the head itself is drawn: three blind silhouette reviews
+ * running named it shovel, spade, boot and bucket, and two redraws of the head
+ * moved none of them. The head was never the variable.
+ *
+ * The two numbers have to move together on a two-handed weapon, which cost a
+ * round on its own. Raising the hand alone pulled the butt grip in under the
+ * far shoulder, and the off arm — which has only 0.72 of the near arm's length
+ * — folded to a third of its span and threw its elbow up behind the shoulder,
+ * reading as an arm on upside down. G14 is blind to that: the fist is still on
+ * the haft, it is the elbow that is wrong. Carrying further *out* as well as up
+ * keeps the off arm's span past half its reach, which is where it bends like an
+ * arm.
+ *
+ * Note the trap in the other direction: `GoblinProp.headHalfHeight` feeds the
+ * same solve, so making the bit *taller* to read better lowers the carry angle
+ * and undoes this.
+ */
+const CARRIES: Record<GoblinArchetype, CarryConfig> = {
+  sword: { hipFraction: 1.25, heightFraction: 0.46 },
+  axe: { hipFraction: 1.6, heightFraction: 0.62 },
+  mace: { hipFraction: 1.25, heightFraction: 0.46 },
+  warhammer: { hipFraction: 1.25, heightFraction: 0.46 },
+};
+
+function carryHand(archetype: GoblinArchetype, style: GoblinStyle): Pt {
+  const carry = CARRIES[archetype];
   return {
-    x: style.proportions.hipHalfWidth * CARRY_HAND_HIP_FRACTION,
-    y: -shoulderHeight(style.proportions) * CARRY_HAND_HEIGHT_FRACTION,
+    x: style.proportions.hipHalfWidth * carry.hipFraction,
+    y: -shoulderHeight(style.proportions) * carry.heightFraction,
   };
 }
 
@@ -318,7 +355,7 @@ function walkPose(
    * lurch where the two are in phase — which gate G8 reports as a cliff.
    */
   const WEAPON_BOB = 0.022;
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   const nearHand: Pt = {
     x: carry.x - armPhase * gait.armSwing * gait.weaponArmDamping,
     y:
@@ -409,7 +446,7 @@ function idlePose(
   const blink = windowedAt(frame, config.blinkFrame, BLINK_FRAMES, frameCount);
   const twitch = windowedAt(frame, config.twitchFrame, TWITCH_FRAMES, frameCount);
 
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   const nearHand: Pt = { x: carry.x, y: carry.y - config.bob * breath };
   const weaponAngle = carryAngle(style, prop, nearHand.y);
 
@@ -462,7 +499,7 @@ function idleBreakPose(
 ): GoblinPose {
   const rest = restingPose(style);
   const base = idlePose(archetype, style, prop, 0, rowByName('idle').frameCount);
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   // A single 0→1→0 hump, so the break always returns to where idle frame 0 is.
   const swell = smoothHump(progress);
   const armLength = style.proportions.upperArmLength + style.proportions.forearmLength;
@@ -629,13 +666,14 @@ function pointsOverhead(weaponAngle: number): boolean {
 }
 
 function swingPose(
+  archetype: GoblinArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   spec: SwingSpec,
   progress: number,
 ): GoblinPose {
   const rest = restingPose(style);
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   const restAngle = carryAngle(style, prop, carry.y);
 
   const wind = easeInOut(clamp01(progress / spec.windEnd));
@@ -712,9 +750,15 @@ const THRUST_WIND_END = 0.32;
  * The sword's stab, which cannot be a swing: the blade translates along its own
  * axis and must not rotate, or the "thrust" reads as a slap.
  */
-function thrustPose(style: GoblinStyle, prop: GoblinProp, progress: number, impactAt: number): GoblinPose {
+function thrustPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  progress: number,
+  impactAt: number,
+): GoblinPose {
   const rest = restingPose(style);
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   const p = style.proportions;
   const armLength = p.upperArmLength + p.forearmLength;
   const shoulderY = -shoulderHeight(p);
@@ -810,32 +854,48 @@ const SWING_SPECS: Record<GoblinArchetype, { light: SwingSpec | null; heavy: Swi
   },
   axe: {
     heavy: {
-      // Overhead chop: haft past vertical, driven down hips-first, head buried
-      // at knee height, then levered back out.
-      windEnd: 0.34,
+      /**
+       * Overhead chop: haft past vertical, driven down hips-first onto a target
+       * at waist height, and rebounding off it.
+       *
+       * The hand stays high through the strike, and both of this swing's
+       * defects came from it not doing so. Driving it down to 0.46 put it near
+       * the goblin's own knee, and from there {@link groundLandingAngle} — which
+       * is a hard floor, not a suggestion — clamped the authored 58° and 88° to
+       * 16° and 0°: the blade did not chop, it lay down flat and stayed there
+       * for the rest of the row. Authoring under the clamp instead is what buys
+       * a chop that visibly descends.
+       *
+       * The follow keys are the **rebound**, not more of the swing. `follow` is
+       * eased out, so it moves fastest in the frames immediately after impact,
+       * which is exactly where a bite-and-kick-back belongs; the arms recover
+       * ahead of the body, so the lean is still forward while the blade is
+       * already coming up.
+       */
+      windEnd: 0.38,
       impactAt: 0,
-      followEnd: 0.66,
+      followEnd: 0.62,
       windHand: pt(-0.16, -1.12),
-      impactHand: pt(0.5, -0.46),
-      followHand: pt(0.3, -0.2),
+      impactHand: pt(0.46, -0.76),
+      followHand: pt(0.46, -0.72),
       windAngle: deg(-104),
-      impactAngle: deg(58),
-      followAngle: deg(88),
+      impactAngle: deg(38),
+      followAngle: deg(12),
       windLean: deg(-20),
       impactLean: deg(34),
-      followLean: deg(42),
+      followLean: deg(40),
       windSway: -0.06,
       impactSway: 0.08,
       step: 0.28,
-      stepFrom: 0.34,
-      stepTo: 0.52,
+      stepFrom: 0.38,
+      stepTo: 0.54,
       rearBrace: -0.18,
       behindFrom: 0,
       behindTo: 0.3,
       windSquash: 1.06,
       impactSquash: 0.92,
       freeHandWind: pt(-0.2, -0.9),
-      freeHandImpact: pt(0.24, -0.42),
+      freeHandImpact: pt(0.24, -0.62),
     },
     light: {
       // Hooking cleave: waist-height sweep from the far side that over-rotates
@@ -1018,8 +1078,8 @@ function attackPose(
 ): GoblinPose {
   const impactAt = impactProgress(archetype, kind);
   const spec = SWING_SPECS[archetype][kind];
-  if (spec === null) return thrustPose(style, prop, progress, impactAt);
-  return swingPose(style, prop, { ...spec, impactAt }, progress);
+  if (spec === null) return thrustPose(archetype, style, prop, progress, impactAt);
+  return swingPose(archetype, style, prop, { ...spec, impactAt }, progress);
 }
 
 // ── Flinch ───────────────────────────────────────────────────────────────────
@@ -1028,9 +1088,14 @@ function attackPose(
  * Five frames, and disproportionately effective: without it a hit that does not
  * kill produces no reaction at all and the goblin reads as unhittable.
  */
-function flinchPose(style: GoblinStyle, prop: GoblinProp, progress: number): GoblinPose {
+function flinchPose(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  progress: number,
+): GoblinPose {
   const rest = restingPose(style);
-  const carry = carryHand(style);
+  const carry = carryHand(archetype, style);
   const snap = smoothHump(clamp01(progress / 0.5));
   const settle = easeInOut(clamp01((progress - 0.4) / 0.6));
   const recoil = snap * (1 - settle * 0.4);
@@ -1260,7 +1325,7 @@ function poseFor(
     case 'attack_heavy':
       return attackPose(archetype, style, prop, 'heavy', shotProgress(frame, row.frameCount));
     case 'flinch':
-      return flinchPose(style, prop, shotProgress(frame, row.frameCount));
+      return flinchPose(archetype, style, prop, shotProgress(frame, row.frameCount));
     default:
       throw new Error(`no pose for row ${row.name}`);
   }

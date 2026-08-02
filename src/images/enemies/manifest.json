@@ -86,10 +86,10 @@
   },
   "goblin_axe": {
     "path": "enemies/goblin_axe.png",
-    "frameWidth": 104,
+    "frameWidth": 112,
     "frameHeight": 88,
-    "tileX": 20,
-    "tileY": 8,
+    "tileX": 24,
+    "tileY": 11,
     "tileScale": 64,
     "states": {
       "walk": {

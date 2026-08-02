@@ -732,6 +732,89 @@ function assertBoneCarriesTheWound(
   }
 }
 
+// ── G9c · the nine pieces are nine shapes ────────────────────────────────────
+
+/**
+ * How much of their silhouette two pieces may share, as intersection over union.
+ *
+ * G9a asks whether a piece is legible on its own; nothing asked whether it was
+ * legible *against the other eight*, and that is the gap the whole gore set fell
+ * through. A blind naming test scored two of nine, and the reason was not that
+ * any one piece was badly drawn: the four limbs were one silhouette in four
+ * variants — same taper, same bend, same wound at the same end — so a reviewer
+ * could see a severed limb and had no way to say which one. Every piece scored
+ * fine on its own footprint while the set carried a quarter of the information
+ * it looked like it did.
+ *
+ * Measured on a 16×16 mask rather than on the raw pixels, because that is the
+ * size the naming test is run at and colour is not what fails here. Scale is
+ * normalised away — a big limb and a small limb of the same outline are the
+ * same failure — but **aspect is not**: stretching each piece to fill its own
+ * bounding box maps every convex blob onto a filled square and scores a severed
+ * head against a rib slab at 71%, which measures the normalisation rather than
+ * the art. Fitting the longer side and centring the shorter one keeps
+ * elongation, which is most of what separates a limb from a chunk.
+ */
+const GORE_SHAPE_OVERLAP_MAX = 0.62;
+
+/** The 16×16 occupancy mask of a piece, scaled to fit and centred, aspect kept. */
+function goreFootprintMask(sheet: BakedSheet, window: FrameWindow): readonly boolean[] | null {
+  const bounds = inkBounds(sheet, window);
+  if (bounds === null) return null;
+  const span = Math.max(bounds.width, bounds.height);
+  const step = span / GORE_THUMB;
+  const padX = (span - bounds.width) / 2;
+  const padY = (span - bounds.height) / 2;
+  const mask: boolean[] = [];
+  for (let ty = 0; ty < GORE_THUMB; ty++) {
+    for (let tx = 0; tx < GORE_THUMB; tx++) {
+      const sx = Math.floor((tx + 0.5) * step - padX);
+      const sy = Math.floor((ty + 0.5) * step - padY);
+      const inside = sx >= 0 && sy >= 0 && sx < bounds.width && sy < bounds.height;
+      mask.push(
+        inside &&
+          alphaAt(sheet.pixels, window.x + bounds.left + sx, window.y + bounds.top + sy) >
+            INK_ALPHA_THRESHOLD,
+      );
+    }
+  }
+  return mask;
+}
+
+function shapeOverlap(a: readonly boolean[], b: readonly boolean[]): number {
+  let intersection = 0;
+  let union = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] && b[i]) intersection++;
+    if (a[i] || b[i]) union++;
+  }
+  return union === 0 ? 1 : intersection / union;
+}
+
+function gateGoreDistinctness(sheet: BakedSheet): void {
+  const row = ROWS.find((candidate) => candidate.kind === 'gore');
+  if (row === undefined) throw new Error('no gore row');
+  const masks: Array<readonly boolean[]> = [];
+  for (let frame = 0; frame < row.frameCount; frame++) {
+    const mask = goreFootprintMask(sheet, frameWindow(sheet, row, frame));
+    if (mask === null) throw new Error(`G9c ${sheet.archetype}: gore frame ${frame} is empty`);
+    masks.push(mask);
+  }
+  for (let a = 0; a < masks.length; a++) {
+    for (let b = a + 1; b < masks.length; b++) {
+      const overlap = shapeOverlap(masks[a], masks[b]);
+      if (overlap > GORE_SHAPE_OVERLAP_MAX) {
+        throw new Error(
+          `G9c ${sheet.archetype}: ${GOBLIN_GORE_PARTS[a]} and ${GOBLIN_GORE_PARTS[b]} share ` +
+            `${(overlap * 100).toFixed(1)}% of their 16×16 silhouette, over the ` +
+            `${GORE_SHAPE_OVERLAP_MAX * 100}% ceiling — they are one shape in two variants, and ` +
+            `a player cannot name either of them`,
+        );
+      }
+    }
+  }
+}
+
 // ── G10 · rotation safety ────────────────────────────────────────────────────
 
 function gateRotationSafety(sheet: BakedSheet): void {
@@ -1041,6 +1124,7 @@ const baked = GOBLIN_ARCHETYPES.map((archetype) => {
   gateOffHandGrip(sheet);
   gateWeaponClearsFloor(sheet);
   gateGoreLegibility(sheet);
+  gateGoreDistinctness(sheet);
   gateRotationSafety(sheet);
   gateTextureSize(sheet);
   return sheet;

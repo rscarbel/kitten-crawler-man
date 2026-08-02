@@ -475,13 +475,44 @@ function traceLimb(
 }
 
 const PIECE_SEED_BASE = 7717;
-/** Legs are drawn longer than arms so the two never read as the same tick. */
-const LEG_LENGTH_SCALE = 1.2;
-/** How far each limb is folded at its joint, 0 straight and 1 fully bent. */
-const ARM_NEAR_FOLD = 0.85;
-const ARM_FAR_FOLD = 0.35;
-const LEG_NEAR_FOLD = 0.12;
+
+/**
+ * Arms and legs are pulled apart in length as well as in width.
+ *
+ * A goblin's authored arm is *longer* than its leg, so drawing both limbs at
+ * their true lengths made four pieces of near-identical proportion — which is
+ * half of why a blind naming test could see "a severed limb" on four cells
+ * running and name none of them. Anatomy loses to legibility here: what the
+ * player has to be able to do is tell an arm from a leg at 16 px, and a short
+ * thin one against a long thick one is the only cue that survives that size.
+ */
+const ARM_LENGTH_SCALE = 0.82;
+const LEG_LENGTH_SCALE = 1.45;
+
+/**
+ * How far each limb is folded at its joint, 0 straight and 1 fully bent.
+ *
+ * Spread as widely as four values can be, because the fold *is* the outline:
+ * pieces at 0.85/0.35/0.12/0 gave one tight V and three near-straight sticks,
+ * and the three sticks were indistinguishable. Gate G9c measures the result.
+ */
+const ARM_NEAR_FOLD = 0.95;
+const ARM_FAR_FOLD = 0.52;
+const LEG_NEAR_FOLD = 0.22;
 const LEG_FAR_FOLD = 0;
+
+/**
+ * How far each limb's hand or foot breaks away from the limb's own axis.
+ *
+ * An extremity drawn in line with the limb it hangs off just makes the limb
+ * longer; the break is what turns a stick into an L, and an L is the one thing
+ * a severed leg has that a severed arm does not. The two feet break opposite
+ * ways — one flexed, one pointed — so the legs are not each other either.
+ */
+const ARM_NEAR_WRIST_BREAK = deg(-34);
+const ARM_FAR_WRIST_BREAK = deg(22);
+const LEG_NEAR_ANKLE_BREAK = deg(74);
+const LEG_FAR_ANKLE_BREAK = deg(-58);
 
 /**
  * The nine pieces of a goblin, in the order `BodyPartGoreSystem` spawns them.
@@ -500,24 +531,35 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
     state: 'gore_head',
     paint: (ctx) => {
       const r = p.headRadius * 1.05;
+      /**
+       * The ears are drawn longer than the goblin wears them in life.
+       *
+       * They are the only thing that makes this piece a *head* rather than one
+       * more rounded lump — and the set has two other rounded lumps, the torso
+       * slab and the rib chunk, which gate G9c scored 65–68% identical to it
+       * while the ears were at their anatomical length. Two spikes off a ball is
+       * a silhouette nothing else here can imitate, and a severed head is not
+       * the piece to be shy about.
+       */
+      const EAR_LEGIBILITY_SCALE = 1.45;
+      const earLength = p.earLength * EAR_LEGIBILITY_SCALE;
       ctx.save();
       ctx.rotate(deg(-24));
       ctx.translate(-r * 0.1, -r * 0.12);
-      // Ears stay intact: they are what identifies this as a goblin head at 16 px.
       for (const side of [-1, 1] as const) {
         ctx.save();
         ctx.rotate(deg(150 * side * 0.12));
         ctx.fillStyle = outline;
         ctx.beginPath();
         ctx.moveTo(-r * 0.5, -r * 0.28 + side * r * 0.12);
-        ctx.lineTo(-r * 0.5 - p.earLength * 0.9, r * 0.16 + side * r * 0.2);
+        ctx.lineTo(-r * 0.5 - earLength * 0.9, r * 0.16 + side * r * 0.2);
         ctx.lineTo(-r * 0.42, r * 0.1 + side * r * 0.1);
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = side < 0 ? skin.dark : skin.mid;
         ctx.beginPath();
         ctx.moveTo(-r * 0.5, -r * 0.22 + side * r * 0.12);
-        ctx.lineTo(-r * 0.5 - p.earLength * 0.82, r * 0.16 + side * r * 0.2);
+        ctx.lineTo(-r * 0.5 - earLength * 0.82, r * 0.16 + side * r * 0.2);
         ctx.lineTo(-r * 0.44, r * 0.06 + side * r * 0.1);
         ctx.closePath();
         ctx.fill();
@@ -659,20 +701,25 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
   };
 
   /** Arm and leg pieces share their construction; only the fittings differ. */
-  const limbPiece = (
-    state: string,
-    upper: number,
-    lower: number,
-    width: number,
-    kind: CutKind,
-    twoBones: boolean,
-    fitting: 'greave' | 'bracer' | 'none',
+  interface LimbSpec {
+    readonly state: string;
+    readonly upper: number;
+    readonly lower: number;
+    readonly width: number;
+    readonly kind: CutKind;
+    readonly twoBones: boolean;
+    readonly fitting: 'greave' | 'bracer' | 'none';
     /** How sharply the limb is folded at its joint; a straight limb is a stick. */
-    fold: number,
-    extremity: (ctx: Ctx, at: Pt, angle: number) => void,
-  ): GorePiece => ({
-    state,
+    readonly fold: number;
+    /** How far the hand or foot turns off the limb's own axis. */
+    readonly extremityBreak: number;
+    readonly extremity: (ctx: Ctx, at: Pt, angle: number) => void;
+  }
+
+  const limbPiece = (spec: LimbSpec): GorePiece => ({
+    state: spec.state,
     paint: (ctx) => {
+      const { upper, lower, width, kind, twoBones, fitting, fold } = spec;
       const total = upper + lower;
       const start = pt(-total * 0.42, -total * 0.24);
       const knee = pt(start.x + upper * 0.86, start.y + upper * 0.34);
@@ -703,7 +750,7 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
         ctx.fill();
       }
 
-      extremity(ctx, end, Math.atan2(end.y - knee.y, end.x - knee.x));
+      spec.extremity(ctx, end, Math.atan2(end.y - knee.y, end.x - knee.x) + spec.extremityBreak);
 
       drawWound(
         ctx,
@@ -826,8 +873,16 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
     state: 'gore_ribchunk',
     paint: (ctx) => {
       const RIB_CHUNK_LEGIBILITY_SCALE = 1.68;
-      const w = p.shoulderHalfWidth * 0.66 * RIB_CHUNK_LEGIBILITY_SCALE;
-      const h = p.torsoLength * 0.3 * RIB_CHUNK_LEGIBILITY_SCALE;
+      /**
+       * Long and shallow, not square. A slab of chest wall cut between two ribs
+       * is a strip; drawn at the width and depth the anatomy suggests it came
+       * out nearly circular — and a circle is the severed head, which G9c scored
+       * within a couple of points of the ceiling on every archetype.
+       */
+      const RIB_CHUNK_HALF_LENGTH = 0.82;
+      const RIB_CHUNK_HALF_DEPTH = 0.2;
+      const w = p.shoulderHalfWidth * RIB_CHUNK_HALF_LENGTH * RIB_CHUNK_LEGIBILITY_SCALE;
+      const h = p.torsoLength * RIB_CHUNK_HALF_DEPTH * RIB_CHUNK_LEGIBILITY_SCALE;
       ctx.save();
       ctx.rotate(deg(-32));
       const trace = (grow: number): void => {
@@ -838,23 +893,40 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
         ctx.quadraticCurveTo(-w * 0.7 - grow, h * 1.1 + grow, -w - grow, -h - grow);
         ctx.closePath();
       };
-      paintFlesh(ctx, trace, style);
-      ctx.save();
-      trace(0);
-      ctx.clip();
-      ctx.fillStyle = MUSCLE.dark;
-      ctx.fillRect(-w, -h * 0.2, w * 2, h * 1.4);
+      // The sawn rib ends stand **proud of the flesh**, so the piece's own
+      // outline is three bone stubs off one edge.
+      //
+      // Kept inside the meat, the rib arcs were shading on a rounded lump, and a
+      // rounded lump is what a severed head is too: gate G9c scored the two 65%
+      // identical and a blind reviewer had no way to tell them apart. Ribs are
+      // the only thing in the set that can break its own silhouette, so they do.
       const ARCS = 3;
-      ctx.strokeStyle = bone.rim;
-      ctx.lineWidth = h * 0.2;
+      const STUB_REACH = 1.24;
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = h * 0.3;
       ctx.lineCap = 'round';
       for (let i = 0; i < ARCS; i++) {
         const y = lerp(-h * 0.5, h * 0.6, i / (ARCS - 1));
         ctx.beginPath();
         ctx.moveTo(-w * 0.85, y);
-        ctx.quadraticCurveTo(0, y + h * 0.4, w * 0.85, y - h * 0.1);
+        ctx.quadraticCurveTo(0, y + h * 0.4, w * STUB_REACH, y - h * 0.1);
         ctx.stroke();
       }
+      paintFlesh(ctx, trace, style);
+      ctx.strokeStyle = bone.rim;
+      ctx.lineWidth = h * 0.2;
+      for (let i = 0; i < ARCS; i++) {
+        const y = lerp(-h * 0.5, h * 0.6, i / (ARCS - 1));
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.85, y);
+        ctx.quadraticCurveTo(0, y + h * 0.4, w * STUB_REACH, y - h * 0.1);
+        ctx.stroke();
+      }
+      ctx.save();
+      trace(0);
+      ctx.clip();
+      ctx.fillStyle = rgba(MUSCLE.dark, 0.75);
+      ctx.fillRect(-w, -h * 0.2, w * 2, h * 1.4);
       ctx.fillStyle = rgba(BLOOD_DARK, 0.55);
       ctx.fillRect(-w, h * 0.2, w * 2, h);
       ctx.restore();
@@ -969,14 +1041,20 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       ctx.fillRect(-w, h * 0.45, w * 2, h);
       ctx.restore();
 
-      // The tongue, lolling out of the broken jaw and filling its arch.
+      // The tongue lolls *out* of the arch rather than filling it.
+      //
+      // Sized to the arch it sat in, it plugged the one hole in the piece, and a
+      // plugged horseshoe is a solid wide mass — which is exactly what the rib
+      // chunk is, and G9c scored the two 64% identical. The open U is the whole
+      // reason a mandible is nameable at 16 px; the tongue may hang over its lip
+      // but it may not fill it.
       ctx.fillStyle = mix(MUSCLE.light, SUBCUTANEOUS, 0.3);
       ctx.beginPath();
-      ctx.ellipse(0, h * 0.12, w * 0.5, h * 0.44, 0, 0, FULL_CIRCLE_ANGLE);
+      ctx.ellipse(w * 0.16, h * 0.5, w * 0.3, h * 0.36, deg(24), 0, FULL_CIRCLE_ANGLE);
       ctx.fill();
       ctx.fillStyle = rgba(MUSCLE.shadow, 0.5);
       ctx.beginPath();
-      ctx.ellipse(0, h * 0.12, w * 0.36, h * 0.08, 0, 0, FULL_CIRCLE_ANGLE);
+      ctx.ellipse(w * 0.16, h * 0.5, w * 0.2, h * 0.07, deg(24), 0, FULL_CIRCLE_ANGLE);
       ctx.fill();
 
       // Teeth stand up off the top edge, two of them broken off short.
@@ -1002,17 +1080,63 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
     },
   };
 
-  const armWidth = p.armWidth;
-  const legWidth = p.legWidth;
+  const upperArm = p.upperArmLength * ARM_LENGTH_SCALE;
+  const forearm = p.forearmLength * ARM_LENGTH_SCALE;
+  const thigh = p.thighLength * LEG_LENGTH_SCALE;
+  const shin = p.shinLength * LEG_LENGTH_SCALE;
   return [
     head,
     torso,
     // Sizes and folds deliberately spread: a set of same-sized chunks reads as
     // tiles rather than as a body coming apart.
-    limbPiece('gore_arm_near', p.upperArmLength, p.forearmLength, armWidth, 'crushed', true, 'none', ARM_NEAR_FOLD, grippingHand),
-    limbPiece('gore_arm_far', p.upperArmLength, p.forearmLength, armWidth, 'clean', true, style.gear.bracer ? 'bracer' : 'none', ARM_FAR_FOLD, openHand),
-    limbPiece('gore_leg_near', p.thighLength * LEG_LENGTH_SCALE, p.shinLength * LEG_LENGTH_SCALE, legWidth, 'torn', false, style.gear.greave ? 'greave' : 'none', LEG_NEAR_FOLD, bareFoot),
-    limbPiece('gore_leg_far', p.thighLength * LEG_LENGTH_SCALE, p.shinLength * LEG_LENGTH_SCALE, legWidth, 'clean', false, 'none', LEG_FAR_FOLD, bareFoot),
+    limbPiece({
+      state: 'gore_arm_near',
+      upper: upperArm,
+      lower: forearm,
+      width: p.armWidth,
+      kind: 'crushed',
+      twoBones: true,
+      fitting: 'none',
+      fold: ARM_NEAR_FOLD,
+      extremityBreak: ARM_NEAR_WRIST_BREAK,
+      extremity: grippingHand,
+    }),
+    limbPiece({
+      state: 'gore_arm_far',
+      upper: upperArm,
+      lower: forearm,
+      width: p.armWidth,
+      kind: 'clean',
+      twoBones: true,
+      fitting: style.gear.bracer ? 'bracer' : 'none',
+      fold: ARM_FAR_FOLD,
+      extremityBreak: ARM_FAR_WRIST_BREAK,
+      extremity: openHand,
+    }),
+    limbPiece({
+      state: 'gore_leg_near',
+      upper: thigh,
+      lower: shin,
+      width: p.legWidth,
+      kind: 'torn',
+      twoBones: false,
+      fitting: style.gear.greave ? 'greave' : 'none',
+      fold: LEG_NEAR_FOLD,
+      extremityBreak: LEG_NEAR_ANKLE_BREAK,
+      extremity: bareFoot,
+    }),
+    limbPiece({
+      state: 'gore_leg_far',
+      upper: thigh,
+      lower: shin,
+      width: p.legWidth,
+      kind: 'clean',
+      twoBones: false,
+      fitting: 'none',
+      fold: LEG_FAR_FOLD,
+      extremityBreak: LEG_FAR_ANKLE_BREAK,
+      extremity: bareFoot,
+    }),
     ribChunk,
     entrails,
     jaw,
