@@ -42,6 +42,10 @@
     "scripts/render-goblins.ts",
     "scripts/magicMissileArt.ts",
     "scripts/generate-magic-missile-sprites.ts",
-    "scripts/render-magic-missile.ts"
+    "scripts/render-magic-missile.ts",
+    "scripts/ratArt.ts",
+    "scripts/ratGore.ts",
+    "scripts/generate-rat-sprite.ts",
+    "scripts/render-rat.ts"
   ]
 }

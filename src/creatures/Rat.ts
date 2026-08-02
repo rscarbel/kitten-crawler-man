@@ -2,7 +2,12 @@ import type { Player } from '../Player';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
-import { drawRatSprite } from '../sprites/ratSprite';
+import {
+  RAT_BITE_FRAMES,
+  RAT_BITE_IMPACT_PROGRESS,
+  RAT_BODY_PART_KEY,
+  drawRatSprite,
+} from '../sprites/ratSprite';
 import { AGGRO_PERSIST_MULTIPLIER } from '../core/constants';
 
 const RAT_HP = 3;
@@ -11,8 +16,13 @@ const AGGRO_RANGE_TILES = 3;
 const BITE_RANGE_TILES = 1.1;
 /** Frames between bites (~2 s at 60 fps) */
 const ATTACK_COOLDOWN = 120;
-/** Frames the bite-lunge animation plays */
-const ATTACK_ANIM_FRAMES = 14;
+/**
+ * Frames from the moment a bite is committed to until the jaws close on the
+ * target. The art gathers, lunges and only then snaps, so damage landing on
+ * commit would play the animation as a reaction to a hit already taken.
+ */
+const BITE_IMPACT_DELAY = Math.round(RAT_BITE_FRAMES * RAT_BITE_IMPACT_PROGRESS);
+const BITE_DAMAGE = 1;
 /** Fraction of bite range to use as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.8;
 /** Fraction of bite range to check engagement for first-bite windup. */
@@ -29,11 +39,15 @@ export class Rat extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = 1;
   override readonly audioTag = 'rat';
+  override readonly bodyPartKey = RAT_BODY_PART_KEY;
   displayName = 'Rat';
   description = 'A nimble rodent that bites when cornered.';
 
   private attackCooldown = 0;
   private attackAnimTimer = 0;
+  /** Counts down to the frame the jaws close; 0 when no bite is in flight. */
+  private biteImpactTimer = 0;
+  private biteTarget: Player | null = null;
   private isAggro = false;
   private firstBitePending = true;
   private firstBiteWindup = 0;
@@ -51,16 +65,47 @@ export class Rat extends Mob {
     super.resetToSpawn();
     this.attackCooldown = 0;
     this.attackAnimTimer = 0;
+    this.biteImpactTimer = 0;
+    this.biteTarget = null;
     this.isAggro = false;
     this.firstBitePending = true;
     this.firstBiteWindup = 0;
+  }
+
+  /**
+   * Lands a bite committed to `BITE_IMPACT_DELAY` frames ago. The target is
+   * re-checked rather than trusted: it can die, or walk out of reach, between
+   * the lunge starting and the jaws closing.
+   */
+  private resolvePendingBite(): void {
+    if (this.biteImpactTimer === 0) return;
+    this.biteImpactTimer--;
+    if (this.biteImpactTimer > 0) return;
+
+    const target = this.biteTarget;
+    this.biteTarget = null;
+    if (target?.isAlive !== true) return;
+    const dist = Math.hypot(target.x - this.x, target.y - this.y);
+    if (dist > this.biteRangePx * ENGAGE_RANGE_FRACTION) return;
+    this.dealDamage(target, BITE_DAMAGE);
+  }
+
+  /**
+   * The bite plays out here rather than in `updateAI` because a confused rat
+   * never reaches `updateAI` at all (`MobUpdateLoop` sends it straight to
+   * `doWander`). Left there, a rat confused mid-lunge would freeze on one frame
+   * of the animation and hold its pending bite until the confusion wore off.
+   */
+  override tickTimers(): void {
+    super.tickTimers();
+    if (this.attackAnimTimer > 0) this.attackAnimTimer--;
+    this.resolvePendingBite();
   }
 
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 
     if (this.attackCooldown > 0) this.attackCooldown--;
-    if (this.attackAnimTimer > 0) this.attackAnimTimer--;
 
     // Find nearest living target within aggro range
     const aggroScanRange = this.isAggro
@@ -107,6 +152,13 @@ export class Rat extends Mob {
 
     // Short windup before the first bite of each engagement
     const inRange = nearestDist <= this.biteRangePx * ENGAGE_RANGE_FRACTION;
+
+    // Once it stops walking nothing else writes `facing`, and the sheet has a
+    // pose per viewpoint — a rat that overshot its target would otherwise chew
+    // on someone standing in front of it while playing the walking-away art.
+    // Held still mid-bite: facing picks the viewpoint, so re-facing during a
+    // lunge would cut from the profile pose to the head-on one mid-bite.
+    if (inRange && this.attackAnimTimer === 0) this.faceToward(nearest);
     if (inRange && this.firstBitePending && this.firstBiteWindup === 0) {
       this.firstBiteWindup = 10;
       this.firstBitePending = false;
@@ -120,9 +172,10 @@ export class Rat extends Mob {
       this.firstBiteWindup === 0 &&
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
-      this.dealDamage(nearest, 1);
+      this.biteTarget = nearest;
+      this.biteImpactTimer = BITE_IMPACT_DELAY;
       this.attackCooldown = ATTACK_COOLDOWN;
-      this.attackAnimTimer = ATTACK_ANIM_FRAMES;
+      this.attackAnimTimer = RAT_BITE_FRAMES;
     }
   }
 
@@ -141,12 +194,16 @@ export class Rat extends Mob {
       this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
-    const attackAnim =
-      this.attackAnimTimer > 0
-        ? Math.sin((1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES) * Math.PI)
-        : 0;
+    const biteProgress =
+      this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / RAT_BITE_FRAMES : null;
 
-    drawRatSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, attackAnim, this.facingX);
+    drawRatSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      biteProgress,
+    });
 
     this.renderMobHealthBar(ctx, sx, sy);
   }

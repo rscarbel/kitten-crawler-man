@@ -158,7 +158,10 @@ export class Tuskling extends Mob {
           break;
         }
 
-        // Chase toward last known position
+        // Chase toward last known position. It stops implicitly once inside the
+        // follow radius — `followTargetCollide` returns before writing facing —
+        // so a stalking tuskling in melee range needs pointing by hand.
+        this._faceToward(nearest);
         this.followTargetAStar(
           this.lastKnownTargetX,
           this.lastKnownTargetY,

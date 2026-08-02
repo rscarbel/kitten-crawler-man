@@ -159,7 +159,7 @@ export class InkMarauder extends Mob {
       );
     } else {
       this.isMoving = false;
-      this.faceToward(nearest);
+      this.faceTowardMob(nearest);
     }
 
     // No swing it cannot finish: a marauder that dissipates mid-chop would land
@@ -183,7 +183,8 @@ export class InkMarauder extends Mob {
     return (ATTACK_ANIM_FRAMES - this.attackAnimTimer) / STRIKE_ANIM_STEPS;
   }
 
-  private faceToward(target: Mob): void {
+  /** Snapped to a side rather than normalised: this sprite is a mirror, not a rig. */
+  private faceTowardMob(target: Mob): void {
     const dx = target.x - this.x;
     if (dx !== 0) this.facingX = Math.sign(dx);
   }

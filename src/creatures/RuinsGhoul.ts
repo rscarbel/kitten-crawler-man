@@ -98,6 +98,9 @@ export class RuinsGhoul extends Mob {
     }
 
     const inRange = nearestDist <= attackRangePx;
+    // Its windup and swing both play while stopped, and nothing else writes
+    // facing once it is. Held still mid-swing so the arc cannot flip.
+    if (inRange && this.attackAnimTimer === 0) this.faceToward(nearest);
     if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
       this.attackWindupTimer = FIRST_HIT_WINDUP_FRAMES;
       this.firstHitPending = false;

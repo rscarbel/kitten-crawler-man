@@ -638,6 +638,26 @@ export abstract class Mob extends Player {
     }
   }
 
+  /**
+   * Point this mob at a target.
+   *
+   * Facing is otherwise written in only two places — `followTargetCollide` and
+   * `doWander` — and `followTargetCollide` returns *before* writing it once
+   * inside its stop radius. So the moment a mob closes to attack range, nothing
+   * points it at anything, and it plays its whole strike aimed wherever it
+   * happened to be walking. Call this in any branch that holds position to
+   * fight; guard it on the mob's own swing timer where re-facing mid-animation
+   * would flip the arc.
+   */
+  protected faceToward(target: { readonly x: number; readonly y: number }): void {
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    this.facingX = dx / distance;
+    this.facingY = dy / distance;
+  }
+
   /** Whether this mob is standing in river water. */
   isWading(): boolean {
     if (!this.map) return false;

@@ -113,6 +113,11 @@ export class StiltClown extends Mob {
     }
 
     const inRange = nearestDist <= attackRangePx;
+    // The windup and the lunge are both stationary, so this is the only thing
+    // that points the strike at anything. Held still once it is under way.
+    if (inRange && this.windupTimer === 0 && this.lungeTimer === 0) {
+      this.faceToward(nearest);
+    }
 
     if (
       inRange &&

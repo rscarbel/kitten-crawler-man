@@ -219,6 +219,10 @@ export class Goblin extends Mob {
 
     this.isAggro = true;
     this.updateLastKnown(nearest);
+    // A stand-and-fight goblin never walks, so this is the only thing that ever
+    // points it at anything. Held still mid-swing: an arc that flips direction
+    // halfway through reads as the sprite glitching, not as the goblin turning.
+    if (this.attackAnimTimer === 0) this.faceToward(nearest);
 
     const inRange = nearestDist <= this.attackRangePx;
     if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
@@ -290,6 +294,7 @@ export class Goblin extends Mob {
 
     // Brief windup before the very first strike of each engagement
     const inRange = nearestDist <= this.attackRangePx;
+    if (inRange && this.attackAnimTimer === 0) this.faceToward(nearest);
     if (inRange && this.firstHitPending && this.attackWindupTimer === 0) {
       this.attackWindupTimer = ATTACK_WINDUP_FRAMES;
       this.firstHitPending = false;

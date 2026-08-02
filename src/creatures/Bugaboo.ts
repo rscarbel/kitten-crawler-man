@@ -101,6 +101,9 @@ export class Bugaboo extends Mob {
         );
       } else {
         this.isMoving = false;
+        // Nothing else writes facing once it holds position to fight; held still
+        // mid-swing so the scratch cannot flip halfway through.
+        if (this.attackAnimTimer === 0) this.faceToward(this.defendTarget);
         if (this.attackCooldown === 0) {
           this.dealDamage(this.defendTarget, ATTACK_DAMAGE);
           this.attackCooldown = ATTACK_COOLDOWN;
@@ -146,6 +149,10 @@ export class Bugaboo extends Mob {
       );
     } else {
       this.isMoving = false;
+    }
+
+    if (nearestDist <= this.attackRangePx && this.attackAnimTimer === 0) {
+      this.faceToward(nearest);
     }
 
     if (nearestDist <= this.attackRangePx && this.attackCooldown === 0) {

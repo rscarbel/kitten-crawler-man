@@ -87,6 +87,14 @@ export class Cockroach extends Mob {
 
     this.updateLastKnown(nearest);
 
+    // Body, head, antennae and all six legs are drawn from the facing vector, so
+    // a stale one points the whole animal the wrong way rather than merely
+    // mirroring it. Outside the cooldown gate below because that branch runs on
+    // one frame in ninety, and the other eighty-nine are the ones a strafing
+    // player actually sees. No animation timer to guard against: this mob has no
+    // attack animation for a re-face to interrupt.
+    if (nearestDist <= ATTACK_RANGE_PX) this.faceToward(nearest);
+
     // Melee attack when close enough
     if (nearestDist <= ATTACK_RANGE_PX && this.attackCooldown <= 0) {
       this.dealDamage(nearest, ATTACK_DAMAGE);

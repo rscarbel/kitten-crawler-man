@@ -9,7 +9,7 @@ import {
   drawSpitTrapIdle,
 } from '../sprites/grotesqueSpiderSpitSprite';
 import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
-import { normalize, randomInt } from '../utils';
+import { randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
 
 const SPIDER_HP = 1200;
@@ -807,16 +807,6 @@ export class GrotesqueSpider extends Mob {
     const dist = Math.hypot(target.x - this.x, target.y - this.y);
     if (dist > VISION_RANGE_PX) return false;
     return super.hasLOS(target);
-  }
-
-  private faceToward(target: Player): void {
-    const dx = target.x - this.x;
-    const dy = target.y - this.y;
-    if (dx !== 0 || dy !== 0) {
-      const n = normalize(dx, dy);
-      this.facingX = n.x;
-      this.facingY = n.y;
-    }
   }
 
   /**

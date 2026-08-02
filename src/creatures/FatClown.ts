@@ -111,6 +111,12 @@ export class FatClown extends Mob {
       this.isMoving = false;
     }
 
+    // The slam plays out while stopped and nothing else writes facing then.
+    // Held still mid-slam so the swing cannot flip halfway through.
+    if (nearestDist <= attackRangePx && this.attackAnimTimer === 0) {
+      this.faceToward(nearest);
+    }
+
     if (
       nearestDist <= attackRangePx &&
       this.attackCooldown === 0 &&

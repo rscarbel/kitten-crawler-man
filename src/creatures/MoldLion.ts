@@ -137,6 +137,12 @@ export class MoldLion extends Mob {
       this.isMoving = false;
     }
 
+    // The strike plays out while stopped and nothing else writes facing then.
+    // Held still mid-swing so the pounce cannot flip halfway through.
+    if (nearestDist <= attackRangePx && this.attackAnimTimer === 0) {
+      this.faceToward(nearest);
+    }
+
     if (
       nearestDist <= attackRangePx &&
       this.attackCooldown === 0 &&

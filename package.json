@@ -27,6 +27,7 @@
     "gen:human": "tsx scripts/generate-human-sprite.ts",
     "gen:cat": "tsx scripts/generate-cat-sprite.ts",
     "gen:goblins": "tsx scripts/generate-goblin-sprites.gates.ts",
+    "gen:rat": "tsx scripts/generate-rat-sprite.ts",
     "gen:magic-missile": "tsx scripts/generate-magic-missile-sprites.ts"
   },
   "dependencies": {

@@ -179,6 +179,12 @@ export class Llama extends Mob {
       this.isMoving = false;
     }
 
+    // Nothing else points a stopped llama at anything, and spitting is the whole
+    // of its combat: unfaced, it fires backwards for the entire engagement. Only
+    // while stopped, though — a llama pathing round a corner has to face its
+    // path, or it moonwalks the whole detour.
+    if (!this.isMoving && this.spitAnimTimer === 0) this.faceToward(nearest);
+
     // Spit a lava ball (only when in range and line-of-sight is clear)
     if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
       const dx = targetCX - mouthX;
