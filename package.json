@@ -34,7 +34,8 @@
     "gen:life-machine": "tsx scripts/generate-life-machine-sprite.ts",
     "gen:magic-missile": "tsx scripts/generate-magic-missile-sprites.ts",
     "gen:rat-kin": "tsx scripts/generate-rat-kin-sprite.gates.ts",
-    "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts"
+    "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts",
+    "render:townsfolk": "tsx scripts/render-townsfolk.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

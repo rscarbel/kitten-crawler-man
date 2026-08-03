@@ -87,7 +87,7 @@ export class ClubCrowdSystem {
   private animTime = 0;
 
   /** Reused output for `stepWander`, so the patron loop allocates nothing. */
-  private readonly wanderStep: WanderStep = { dx: 0, dy: 0, moving: false };
+  private readonly wanderStep: WanderStep = { dx: 0, dy: 0, moving: false, distance: 0 };
   private readonly wanderParams: WanderParams = {
     pickTarget: () => this.randomPatronPoint(),
     arriveDist: PATRON_ARRIVE_DIST,

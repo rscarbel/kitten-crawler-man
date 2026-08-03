@@ -95,15 +95,26 @@ export interface PersonOutfit {
 }
 
 /**
+ * The *shape* of a person's walk, as opposed to the scalar jitter around it.
+ *
+ * Scaling one curve's stride and bounce per person makes a crowd un-synchronized
+ * but not varied — everyone still walks the same walk at slightly different
+ * sizes. An archetype is a different walk: how far the foot lifts, how the arms
+ * carry, whether the body sways. `gait.ts` holds the numbers for each.
+ */
+export type GaitArchetype = 'amble' | 'purposeful' | 'trudge' | 'trot' | 'stagger' | 'shuffle';
+
+/**
  * Per-person gait quirks so a crowd doesn't march in lockstep — read by
  * `gait.ts`. Fractions/multipliers, never pixels.
  */
 export interface PersonGaitTraits {
+  archetype: GaitArchetype;
   strideScale: number;
   bounceScale: number;
   armSwingScale: number;
   postureLean: number;
-  /** Radians of phase offset so cycles aren't synchronized across people. */
+  /** Fraction of a stride each person's cycle is offset by, so cycles aren't synchronized. */
   phaseOffset: number;
 }
 
@@ -208,6 +219,10 @@ const ARM_SWING_MIN = 0.75;
 const ARM_SWING_MAX = 1.3;
 const POSTURE_MIN = -0.03;
 const POSTURE_MAX = 0.05;
+/** `phaseOffset` is measured in strides, so a whole cycle is 1. */
+const FULL_CYCLE = 1;
+/** What an unbiased seed walks like; a role may override it. */
+const DEFAULT_GAIT_ARCHETYPE: GaitArchetype = 'amble';
 
 const SKIN_SHADOW_AMOUNT = 0.22;
 
@@ -267,11 +282,12 @@ function generateOutfit(rng: Rng): PersonOutfit {
 
 function generateGait(rng: Rng): PersonGaitTraits {
   return {
+    archetype: DEFAULT_GAIT_ARCHETYPE,
     strideScale: range(rng, STRIDE_MIN, STRIDE_MAX),
     bounceScale: range(rng, BOUNCE_MIN, BOUNCE_MAX),
     armSwingScale: range(rng, ARM_SWING_MIN, ARM_SWING_MAX),
     postureLean: range(rng, POSTURE_MIN, POSTURE_MAX),
-    phaseOffset: range(rng, 0, Math.PI * 2),
+    phaseOffset: range(rng, 0, FULL_CYCLE),
   };
 }
 
@@ -313,25 +329,58 @@ interface RoleBias {
   /** Force this hat; `'none'` bares the head. */
   hat?: HatStyle;
   suppressFacialHair?: boolean;
+  /** How this role walks. Omitted roles keep {@link DEFAULT_GAIT_ARCHETYPE}. */
+  gait?: GaitArchetype;
 }
 
 const ROLE_BIASES: Partial<Record<TownRole, RoleBias>> = {
-  guard: { topColors: GUARD_TOP_COLORS, bottomColors: GUARD_BOTTOM_COLORS, hat: 'brimmed' },
-  merchant: { topColors: MERCHANT_TOP_COLORS },
-  farmer: { topColors: FARMER_TOP_COLORS, bottomColors: FARMER_BOTTOM_COLORS, hat: 'brimmed' },
-  smith: { topColors: SMITH_TOP_COLORS, buildFloor: SMITH_BUILD_FLOOR, hat: 'none' },
+  guard: {
+    topColors: GUARD_TOP_COLORS,
+    bottomColors: GUARD_BOTTOM_COLORS,
+    hat: 'brimmed',
+    gait: 'purposeful',
+  },
+  merchant: { topColors: MERCHANT_TOP_COLORS, gait: 'purposeful' },
+  farmer: {
+    topColors: FARMER_TOP_COLORS,
+    bottomColors: FARMER_BOTTOM_COLORS,
+    hat: 'brimmed',
+    gait: 'trudge',
+  },
+  smith: {
+    topColors: SMITH_TOP_COLORS,
+    buildFloor: SMITH_BUILD_FLOOR,
+    hat: 'none',
+    gait: 'trudge',
+  },
   innkeeper: { topColors: INNKEEPER_TOP_COLORS, accentColors: INNKEEPER_ACCENTS },
-  priest: { topColors: PRIEST_TOP_COLORS, hat: 'none', suppressFacialHair: true },
+  priest: {
+    topColors: PRIEST_TOP_COLORS,
+    hat: 'none',
+    suppressFacialHair: true,
+    gait: 'purposeful',
+  },
   child: {
     heightFactor: CHILD_HEIGHT_FACTOR,
     build: CHILD_BUILD,
     suppressFacialHair: true,
     hat: 'none',
+    gait: 'trot',
   },
-  drunk: { topColors: DRAB_TOP_COLORS, hat: 'none' },
-  noble: { topColors: NOBLE_TOP_COLORS, accentColors: NOBLE_ACCENTS, hat: 'brimmed' },
-  beggar: { topColors: DRAB_TOP_COLORS, bottomColors: DRAB_BOTTOM_COLORS, hat: 'none' },
-  laborer: { topColors: DRAB_TOP_COLORS, buildFloor: LABORER_BUILD_FLOOR },
+  drunk: { topColors: DRAB_TOP_COLORS, hat: 'none', gait: 'stagger' },
+  noble: {
+    topColors: NOBLE_TOP_COLORS,
+    accentColors: NOBLE_ACCENTS,
+    hat: 'brimmed',
+    gait: 'purposeful',
+  },
+  beggar: {
+    topColors: DRAB_TOP_COLORS,
+    bottomColors: DRAB_BOTTOM_COLORS,
+    hat: 'none',
+    gait: 'shuffle',
+  },
+  laborer: { topColors: DRAB_TOP_COLORS, buildFloor: LABORER_BUILD_FLOOR, gait: 'trudge' },
   skyfowl: { topColors: SKYFOWL_TOP_COLORS },
 };
 
@@ -353,6 +402,7 @@ function applyRoleBias(app: PersonAppearance, role: TownRole): void {
   if (bias.accentColors) app.outfit.topAccent = pick(rng, bias.accentColors);
   if (bias.hat !== undefined) app.outfit.hat = bias.hat;
   if (bias.suppressFacialHair) app.hair.facial = 'none';
+  if (bias.gait !== undefined) app.gait.archetype = bias.gait;
 }
 
 /**

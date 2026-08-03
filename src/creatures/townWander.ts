@@ -44,6 +44,12 @@ export interface WanderStep {
   dy: number;
   /** True when the agent actually advanced this frame. */
   moving: boolean;
+  /**
+   * World pixels actually covered this frame, zero when standing. A walk cycle
+   * driven off this rather than off elapsed frames keeps cadence tied to speed,
+   * which is what stops a slow figure moonwalking.
+   */
+  distance: number;
 }
 
 function retarget(state: WanderState, params: WanderParams): void {
@@ -65,6 +71,7 @@ export function stepWander(state: WanderState, params: WanderParams, out: Wander
   out.dx = dx;
   out.dy = dy;
   out.moving = false;
+  out.distance = 0;
 
   if (state.pause > 0) {
     state.pause--;
@@ -94,4 +101,5 @@ export function stepWander(state: WanderState, params: WanderParams, out: Wander
   state.x += stepX;
   state.y += stepY;
   out.moving = true;
+  out.distance = Math.hypot(stepX, stepY);
 }

@@ -4,9 +4,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
   "include": [
     "scripts/verify-progression.ts",
@@ -54,6 +52,7 @@
     "scripts/audioOnsets.ts",
     "scripts/generate-keyboard-hero-chart.ts",
     "scripts/playtest.ts",
+    "scripts/render-townsfolk.ts",
     "scripts/goreWound.ts",
     "scripts/llamaArt.ts",
     "scripts/llamaGore.ts",
