@@ -53,6 +53,10 @@ const AMBIENT_RAMP_MS = 100;
 /** A dodge borrows the whiffed-punch cue, quieter and quicker so it reads as air. */
 const DODGE_WHIFF_VOLUME = 0.5;
 const DODGE_WHIFF_RATE = 1.35;
+/** Crossfade into a boss track when a boss fight is joined. */
+const BOSS_MUSIC_FADE_IN_MS = 1500;
+/** Crossfade back to the level track once the boss is down. */
+const BOSS_MUSIC_RESTORE_FADE_MS = 2000;
 
 export interface PlayOptions {
   /** Volume multiplier (0–1). Default: 1. */
@@ -990,7 +994,7 @@ export class AudioManager {
           : e.bossType === 'juicer'
             ? 'boss_music_2'
             : 'boss_music_3';
-      this.playMusic(track, { fadeInMs: 1500 });
+      this.playMusic(track, { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
     });
 
     bus.on('bossDefeated', (e) => {
@@ -998,7 +1002,7 @@ export class AudioManager {
       if (e.bossType === 'krakaren_clone') {
         this.play('new_unlock');
       }
-      this.playMusic(defaultMusicId, { fadeInMs: 2000 });
+      this.playMusic(defaultMusicId, { fadeInMs: BOSS_MUSIC_RESTORE_FADE_MS });
     });
 
     bus.on('questStarted', (e) => {
@@ -1024,6 +1028,11 @@ export class AudioManager {
         e.questId === 'krasue_murders'
       ) {
         this.play('quest_complete');
+      }
+      // The spider lab never emits `bossDefeated`, so its boss track has to be
+      // handed back to the level's music here or it would loop forever.
+      if (e.questId === 'grotesque_spider') {
+        this.playMusic(defaultMusicId, { fadeInMs: BOSS_MUSIC_RESTORE_FADE_MS });
       }
     });
 

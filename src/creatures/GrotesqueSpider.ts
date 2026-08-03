@@ -106,6 +106,13 @@ const MASS = 6;
 /** Tile center offset (0.5 of tile size). */
 const TILE_CENTER = 0.5;
 
+/*
+ * Both the screech circle and the slam cone paint the floor red for most of a
+ * second before they land, so both are priced as punishment for ignoring the
+ * warning: a share of the victim's own max HP, which keeps them lethal against
+ * Donut's fixed 6 HP and against a Carl who has poured everything into CON.
+ */
+
 // Screech damage constants
 const SCREECH_BLOCK_XP = 10;
 const SCREECH_HP_FRACTION = 0.9;
@@ -115,8 +122,9 @@ const SCREECH_BONUS_DAMAGE = 3;
 const SLAM_HIT_RANGE_SCALE = 1.1;
 const SLAM_CONE_MIN_DOT = 0.5;
 const SLAM_BLOCK_XP = 8;
-const SLAM_DAMAGE_MIN = 10;
-const SLAM_DAMAGE_MAX = 15;
+/** A hair short of lethal on a well-invested Carl at full HP; anything squishier dies outright. */
+const SLAM_HP_FRACTION = 0.7;
+const SLAM_BONUS_DAMAGE = 4;
 
 // Spit projectile and trap constants
 const SHELL_BLOCK_XP = 8;
@@ -589,7 +597,7 @@ export class GrotesqueSpider extends Mob {
         this.spells.addBlockXp(SLAM_BLOCK_XP);
         continue;
       }
-      this.dealDamage(t, randomInt(SLAM_DAMAGE_MIN, SLAM_DAMAGE_MAX), 'slam');
+      this.dealDamage(t, Math.ceil(t.maxHp * SLAM_HP_FRACTION) + SLAM_BONUS_DAMAGE, 'slam');
     }
   }
 

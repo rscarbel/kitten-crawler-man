@@ -60,8 +60,17 @@ const CS_DIALOG_FADE_FRAME = 162;
 const CS_CAMERA_PAN_FRAME = 240;
 // Camera lerp completes — now locked on egg until projectile fires
 const CS_PAN_END_FRAME = 275;
-// Frames the camera waits on gore before handing control back (fight start)
-const CS_FIGHT_DELAY_FRAMES = 50;
+// Frames the camera holds on the impact point before handing control back (fight start)
+const CS_IMPACT_HOLD_FRAMES = 190;
+/**
+ * The spit lands, then the scientist comes apart. Splitting the two by a beat
+ * is what makes the hit read as a cause — with the gore on the same frame the
+ * body simply blinks into two halves.
+ */
+const CS_GORE_REVEAL_FRAMES = 10;
+/** Shake spike on the frame the spit connects, decaying over the hold. */
+const CS_IMPACT_SHAKE_INTENSITY = 14;
+const CS_IMPACT_SHAKE_DECAY_FRAMES = 45;
 // Max distance (px) for projectile–scientist hit detection
 const CS_SPIT_HIT_RADIUS_PX = 24;
 // Safety TTL for cutscene projectile in case scientist tile is very close
@@ -75,6 +84,8 @@ const SCIENTIST_WANDER_SPREAD_TILES = 3;
 
 // Animation and physics
 const SPIDER_LAB_ENTRY_HP_THRESHOLD = 0.3;
+/** How long an aborted fight has to stay aborted before the boss track is handed back. */
+const BOSS_MUSIC_ABORT_GRACE_FRAMES = 90;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 
@@ -220,6 +231,31 @@ const CS_SPIT_TTL_MARGIN = 20;
 const CS_SHAKE_RAMP_FACTOR = 0.67;
 const CS_SHAKE_REDUCED_FRACTION = 0.33;
 
+/**
+ * The cutscene runs while the dungeon is paused, so `GoreSystem` never ticks —
+ * the burst that tears the scientist apart is simulated here instead.
+ */
+const CS_GORE_PARTICLE_COUNT = 46;
+const CS_GORE_SPEED_MIN = 1.2;
+const CS_GORE_SPEED_RANGE = 5.4;
+/** Fraction of the burst thrown along the spit's travel direction. */
+const CS_GORE_FORWARD_FRACTION = 0.6;
+/** Half-angle (radians) of the forward spray cone — a 120° fan of viscera. */
+const CS_GORE_FORWARD_CONE_DIVISOR = 3;
+const CS_GORE_FORWARD_CONE_HALF_ANGLE = Math.PI / CS_GORE_FORWARD_CONE_DIVISOR;
+const CS_GORE_RADIUS_MIN = 1.5;
+const CS_GORE_RADIUS_RANGE = 3.5;
+const CS_GORE_LIFE_MIN = 45;
+const CS_GORE_LIFE_RANGE = 60;
+const CS_GORE_DRAG = 0.9;
+const CS_GORE_SPAWN_SPREAD_PX = 10;
+/** Life fraction below which a chunk starts fading out. */
+const CS_GORE_FADE_LIFE_FRACTION = 0.4;
+const CS_GORE_COLORS = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#5b1010'] as const;
+
+/** Recentres `Math.random()` on zero so jitter throws both ways. */
+const SHAKE_JITTER_CENTER = 0.5;
+
 // Quest complete overlay constants
 const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds at 60 fps
 const OVERLAY_FADE_FRAMES = 90;
@@ -294,6 +330,17 @@ interface ButtonRect {
   action: string;
 }
 
+interface CutsceneGoreParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
 export class SpiderQuestSystem implements GameSystem {
   // Sound pending flags — DungeonScene checks and clears these
   poweringOffSoundPending = false;
@@ -308,6 +355,26 @@ export class SpiderQuestSystem implements GameSystem {
   keyboardHeroMusicStartPending = false;
   keyboardHeroMusicStopPending = false;
   hackFailErrorSoundPending = false;
+  cutsceneSpitImpactSoundPending = false;
+  cutsceneGoreSoundPending = false;
+
+  /**
+   * Boss music follows the room lock rather than the quest, because this fight
+   * is the only one the party can walk away from and come back to: aborting it
+   * has to hand the level's track back, and re-entering has to take it again.
+   */
+  bossMusicStartPending = false;
+  bossMusicStopPending = false;
+  /** Latched so a re-lock that never actually lost the track doesn't restart it from 0:00. */
+  private _bossMusicPlaying = false;
+  /**
+   * An abort is only worth a track change once it has lasted. The common abort
+   * is a single frame long — the insider is knocked out, so nobody in the room
+   * is conscious, and the very next frame the body itself satisfies the re-lock
+   * test and gets revived. Handing the music back and forth across those two
+   * frames is audible; walking out of the lab for good is not.
+   */
+  private _bossMusicStopGraceTimer = 0;
 
   // Quest completion
   completeOverlayTimer = 0;
@@ -401,6 +468,15 @@ export class SpiderQuestSystem implements GameSystem {
 
   // Counts down after the cutscene spit hits; fight starts when it reaches 0
   private _cutsceneFightStartTimer = 0;
+
+  /**
+   * Where the spit connected. Holds the camera on the kill for the whole
+   * countdown — the tile override alone would snap back to the egg.
+   */
+  private _cutsceneImpactPoint: { x: number; y: number } | null = null;
+  private _cutsceneImpactDirX = 0;
+  private _cutsceneImpactDirY = 1;
+  private _cutsceneGore: CutsceneGoreParticle[] = [];
 
   // Keyboard hero
   private keyboardHero: KeyboardHeroSystem;
@@ -498,6 +574,10 @@ export class SpiderQuestSystem implements GameSystem {
     // Camera follows the cutscene spit projectile while it's in flight
     if (this._cutsceneProjectile !== null) {
       return { x: this._cutsceneProjectile.x, y: this._cutsceneProjectile.y };
+    }
+
+    if (this._cutsceneImpactPoint !== null) {
+      return this._cutsceneImpactPoint;
     }
 
     const targetX = this._cameraOverrideTile.x * TILE_SIZE;
@@ -873,10 +953,39 @@ export class SpiderQuestSystem implements GameSystem {
     this._humanIsInsider = false;
     this._catIsInsider = false;
     this._cameraOverrideTile = null;
+    this._cutsceneImpactPoint = null;
     this._screenShakeIntensity = 0;
     this._screenShakeX = 0;
     this._screenShakeY = 0;
+    // `questCompleted` restores the level track itself, so any queued hand-off
+    // would only fight it.
+    this.bossMusicStartPending = false;
+    this.bossMusicStopPending = false;
+    this._bossMusicStopGraceTimer = 0;
+    this._bossMusicPlaying = false;
     this.bus.emit('questCompleted', { questId: SPIDER_QUEST_ID, difficulty: 'medium' });
+  }
+
+  /** Claims the boss track for the fight; a no-op while it is already playing. */
+  private _takeBossMusic(): void {
+    this._bossMusicStopGraceTimer = 0;
+    if (this._bossMusicPlaying) return;
+    this.bossMusicStartPending = true;
+    this._bossMusicPlaying = true;
+  }
+
+  private _beginBossMusicStopGrace(): void {
+    if (!this._bossMusicPlaying) return;
+    this._bossMusicStopGraceTimer = BOSS_MUSIC_ABORT_GRACE_FRAMES;
+  }
+
+  private _tickBossMusicStopGrace(): void {
+    if (this._bossMusicStopGraceTimer === 0) return;
+    this._bossMusicStopGraceTimer--;
+    if (this._bossMusicStopGraceTimer === 0) {
+      this.bossMusicStopPending = true;
+      this._bossMusicPlaying = false;
+    }
   }
 
   dispose(): void {
@@ -885,6 +994,7 @@ export class SpiderQuestSystem implements GameSystem {
     this.smallSpiders = [];
     this.dialogButtons = [];
     this.hackFailedButtons = [];
+    this._cutsceneGore = [];
     this._grotesqueSpider = null;
   }
 
@@ -908,9 +1018,12 @@ export class SpiderQuestSystem implements GameSystem {
     if (this._fightAborted) {
       if (!humanInRoom) this._humanLastOutside = { x: human.x, y: human.y };
       if (!catInRoom) this._catLastOutside = { x: cat.x, y: cat.y };
-      if (humanInRoom || catInRoom) {
+      if (!humanInRoom && !catInRoom) {
+        this._tickBossMusicStopGrace();
+      } else {
         this._fightAborted = false;
         this._roomLocked = true;
+        this._takeBossMusic();
         this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
         this._humanIsInsider = humanInRoom;
         this._catIsInsider = catInRoom;
@@ -936,12 +1049,14 @@ export class SpiderQuestSystem implements GameSystem {
       if (!catInRoom) this._catLastOutside = { x: cat.x, y: cat.y };
       if (humanInRoom || catInRoom) {
         this._roomLocked = true;
+        this._takeBossMusic();
         this._entryWindowTimer = SPIDER_ENTRY_WINDOW_FRAMES;
         this._humanIsInsider = humanInRoom;
         this._catIsInsider = catInRoom;
       } else {
         // No player in room when fight started — abort immediately; resets when one enters
         this._fightAborted = true;
+        this._beginBossMusicStopGrace();
         spider.hp = spider.maxHp;
       }
       return;
@@ -1006,6 +1121,7 @@ export class SpiderQuestSystem implements GameSystem {
     if (!humanConscious && !catConscious) {
       this._roomLocked = false;
       this._fightAborted = true;
+      this._beginBossMusicStopGrace();
       this._humanIsInsider = false;
       this._catIsInsider = false;
       spider.hp = spider.maxHp;
@@ -1264,18 +1380,32 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _updateCutscene(ctx: SystemContext): void {
-    // ── Fight start countdown (after projectile hits) ──────────────────────
+    // ── Impact hold: the spit has landed, the camera stays on the kill ─────
     if (this._cutsceneFightStartTimer > 0) {
       this._cutsceneFightStartTimer--;
+      const framesSinceImpact = CS_IMPACT_HOLD_FRAMES - this._cutsceneFightStartTimer;
+
+      if (framesSinceImpact === CS_GORE_REVEAL_FRAMES) {
+        this.scientistDead = true;
+        this.cutsceneGoreSoundPending = true;
+        this._spawnCutsceneGore();
+      }
+
+      this._tickCutsceneGore();
+      this._tickImpactShake(framesSinceImpact);
+
       if (this._cutsceneFightStartTimer === 0) {
         this._cameraOverrideTile = null;
+        this._cutsceneImpactPoint = null;
         this._cutsceneProjectile = null;
+        this._cutsceneGore = [];
         this._screenShakeIntensity = 0;
         this._screenShakeX = 0;
         this._screenShakeY = 0;
         this._playerLocked = false;
         this.phase = 'boss_fight';
         this.bossFightStartPending = true;
+        this._takeBossMusic();
       }
       return;
     }
@@ -1291,13 +1421,14 @@ export class SpiderQuestSystem implements GameSystem {
       const hitSci =
         Math.hypot(proj.x - this.scientistX, proj.y - this.scientistY) < CS_SPIT_HIT_RADIUS_PX;
       if (hitSci || proj.ttl <= 0) {
-        this.scientistDead = true;
+        this._cutsceneImpactPoint = { x: this.scientistX, y: this.scientistY };
+        const travelSpeed = Math.hypot(proj.vx, proj.vy);
+        this._cutsceneImpactDirX = travelSpeed > 0 ? proj.vx / travelSpeed : 0;
+        this._cutsceneImpactDirY = travelSpeed > 0 ? proj.vy / travelSpeed : 1;
         this._cutsceneProjectile = null;
-        this._cameraOverrideTile = null;
-        this._screenShakeIntensity = 0;
-        this._screenShakeX = 0;
-        this._screenShakeY = 0;
-        this._cutsceneFightStartTimer = CS_FIGHT_DELAY_FRAMES;
+        this.cutsceneSpitImpactSoundPending = true;
+        this._screenShakeIntensity = CS_IMPACT_SHAKE_INTENSITY;
+        this._cutsceneFightStartTimer = CS_IMPACT_HOLD_FRAMES;
       }
       return;
     }
@@ -1396,9 +1527,58 @@ export class SpiderQuestSystem implements GameSystem {
         // Subtle tremor while spider winds up
         this._screenShakeIntensity = CUTSCENE_SHAKE_INTENSITY * CS_SHAKE_REDUCED_FRACTION;
       }
-      this._screenShakeX = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
-      this._screenShakeY = (Math.random() - TILE_CENTER_OFFSET_PX) * this._screenShakeIntensity * 2;
+      this._applyShakeJitter();
     }
+  }
+
+  /** Turns the current shake intensity into a fresh per-frame camera offset. */
+  private _applyShakeJitter(): void {
+    this._screenShakeX = (Math.random() - SHAKE_JITTER_CENTER) * this._screenShakeIntensity * 2;
+    this._screenShakeY = (Math.random() - SHAKE_JITTER_CENTER) * this._screenShakeIntensity * 2;
+  }
+
+  /** Decays the impact spike so the hold settles instead of rattling for three seconds. */
+  private _tickImpactShake(framesSinceImpact: number): void {
+    const decay = Math.max(0, 1 - framesSinceImpact / CS_IMPACT_SHAKE_DECAY_FRAMES);
+    this._screenShakeIntensity = CS_IMPACT_SHAKE_INTENSITY * decay;
+    this._applyShakeJitter();
+  }
+
+  private _spawnCutsceneGore(): void {
+    const impact = this._cutsceneImpactPoint;
+    if (impact === null) return;
+
+    const impactAngle = Math.atan2(this._cutsceneImpactDirY, this._cutsceneImpactDirX);
+    for (let i = 0; i < CS_GORE_PARTICLE_COUNT; i++) {
+      const isForward = Math.random() < CS_GORE_FORWARD_FRACTION;
+      const angle = isForward
+        ? impactAngle + (Math.random() * 2 - 1) * CS_GORE_FORWARD_CONE_HALF_ANGLE
+        : Math.random() * Math.PI * 2;
+      const speed = CS_GORE_SPEED_MIN + Math.random() * CS_GORE_SPEED_RANGE;
+      const life = CS_GORE_LIFE_MIN + Math.random() * CS_GORE_LIFE_RANGE;
+      this._cutsceneGore.push({
+        x: impact.x + (Math.random() - SHAKE_JITTER_CENTER) * CS_GORE_SPAWN_SPREAD_PX,
+        y: impact.y + (Math.random() - SHAKE_JITTER_CENTER) * CS_GORE_SPAWN_SPREAD_PX,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: CS_GORE_RADIUS_MIN + Math.random() * CS_GORE_RADIUS_RANGE,
+        color: CS_GORE_COLORS[Math.floor(Math.random() * CS_GORE_COLORS.length)],
+        life,
+        maxLife: life,
+      });
+    }
+  }
+
+  private _tickCutsceneGore(): void {
+    if (this._cutsceneGore.length === 0) return;
+    for (const chunk of this._cutsceneGore) {
+      chunk.x += chunk.vx;
+      chunk.y += chunk.vy;
+      chunk.vx *= CS_GORE_DRAG;
+      chunk.vy *= CS_GORE_DRAG;
+      chunk.life--;
+    }
+    this._cutsceneGore = this._cutsceneGore.filter((chunk) => chunk.life > 0);
   }
 
   private _getSpriteDef(name: string) {
@@ -2406,13 +2586,27 @@ export class SpiderQuestSystem implements GameSystem {
    * Draws the cutscene spit projectile in world space.
    * Called from DungeonScene after entity rendering so it flies over mobs/players.
    */
-  renderCutsceneProjectile(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this._cutsceneProjectile === null) return;
+  renderCutsceneEffects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const proj = this._cutsceneProjectile;
+    if (proj !== null) {
+      ctx.save();
+      ctx.translate(proj.x - camX, proj.y - camY);
+      ctx.rotate(proj.angle);
+      drawSpitProjectile(ctx, 0, 0, TILE_SIZE, proj.animFrame);
+      ctx.restore();
+    }
+
+    if (this._cutsceneGore.length === 0) return;
     ctx.save();
-    ctx.translate(proj.x - camX, proj.y - camY);
-    ctx.rotate(proj.angle);
-    drawSpitProjectile(ctx, 0, 0, TILE_SIZE, proj.animFrame);
+    for (const chunk of this._cutsceneGore) {
+      const lifeFraction = chunk.life / chunk.maxLife;
+      ctx.globalAlpha =
+        lifeFraction < CS_GORE_FADE_LIFE_FRACTION ? lifeFraction / CS_GORE_FADE_LIFE_FRACTION : 1;
+      ctx.fillStyle = chunk.color;
+      ctx.beginPath();
+      ctx.arc(chunk.x - camX, chunk.y - camY, chunk.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 

@@ -106,6 +106,15 @@ const LAST_CHAR_SCALE_FACTOR = 0.15;
 const FONT_BASELINE_FRACTION = 0.8;
 /** Fractional font scale for subtext y offset. */
 const SUBTEXT_Y_FRACTION = 0.9;
+/** Backdrop of the boss panel — a near-black maroon that most bosses read against. */
+const BOSS_PANEL_DEFAULT_BG = 'rgba(30,10,10,0.9)';
+/**
+ * Per-boss overrides for {@link BOSS_PANEL_DEFAULT_BG}. A boss whose sprite is
+ * near-black disappears into the default backdrop, so it gets a lighter one.
+ */
+const BOSS_PANEL_BACKGROUNDS: Partial<Record<string, string>> = {
+  grotesque_spider: 'rgba(96,74,66,0.95)',
+};
 
 export class BossIntroSystem implements GameSystem {
   private static readonly INTRO_TITLE = 'B-B-B-B-BOSS BATTLE!';
@@ -305,7 +314,7 @@ export class BossIntroSystem implements GameSystem {
       // Right panel — Boss
       const rightX = CX + VERSUS_PANEL_GAP + (1 - eased) * CX;
       ctx.save();
-      ctx.fillStyle = 'rgba(30,10,10,0.9)';
+      ctx.fillStyle = BOSS_PANEL_BACKGROUNDS[intro.bossType] ?? BOSS_PANEL_DEFAULT_BG;
       ctx.fillRect(rightX, panelY, panelW, panelH);
       ctx.strokeStyle = intro.bossColor;
       ctx.lineWidth = 2;

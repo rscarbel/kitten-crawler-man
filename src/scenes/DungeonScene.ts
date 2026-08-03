@@ -3612,7 +3612,7 @@ export class DungeonScene extends GameplayScene {
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitProjectile(ctx, camX, camY, TILE_SIZE);
     }
-    this.spiderQuest.renderCutsceneProjectile(ctx, camX, camY);
+    this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
 
     this.playerChat.renderBubble(ctx, camX, camY, this.active());
 
@@ -4482,9 +4482,25 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.hackFailErrorSoundPending = false;
       this.audio?.play('error');
     }
+    if (this.spiderQuest.cutsceneSpitImpactSoundPending) {
+      this.spiderQuest.cutsceneSpitImpactSoundPending = false;
+      this.audio?.play('grotesque_spider_spit_landing');
+    }
+    if (this.spiderQuest.cutsceneGoreSoundPending) {
+      this.spiderQuest.cutsceneGoreSoundPending = false;
+      this.audio?.play('flesh_being_sliced');
+    }
     if (this.spiderQuest.bossFightStartPending) {
       this.spiderQuest.bossFightStartPending = false;
       this.bossIntro.trigger('grotesque_spider', 'GROTESQUE SPIDER', '#22c55e');
+    }
+    if (this.spiderQuest.bossMusicStartPending) {
+      this.spiderQuest.bossMusicStartPending = false;
+      this.bus.emit('bossFightInitiated', { bossType: 'grotesque_spider' });
+    }
+    if (this.spiderQuest.bossMusicStopPending) {
+      this.spiderQuest.bossMusicStopPending = false;
+      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
     }
   }
 
