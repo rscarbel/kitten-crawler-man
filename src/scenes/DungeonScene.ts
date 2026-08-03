@@ -46,6 +46,7 @@ import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
 import { SmushEffectSystem } from '../systems/SmushEffectSystem';
+import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import {
   CompanionSystem,
@@ -616,6 +617,7 @@ export class DungeonScene extends GameplayScene {
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
   private dynamite: DynamiteSystem;
   private readonly smushFx = new SmushEffectSystem();
+  private lavaBalls: LavaBallSystem;
   private spells: SpellSystem;
   private companion: CompanionSystem;
   private loot: LootSystem;
@@ -993,6 +995,7 @@ export class DungeonScene extends GameplayScene {
     // viewport every frame to find nothing.
     this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
     this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles, this.trees);
+    this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(
@@ -2492,6 +2495,7 @@ export class DungeonScene extends GameplayScene {
     this.spells.resetForCheckpoint();
     this.dynamite.resetForCheckpoint();
     this.smushFx.resetForCheckpoint();
+    this.lavaBalls.resetForCheckpoint();
     this.gore.resetForCheckpoint();
     this.bodyPartGore.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
@@ -3580,6 +3584,7 @@ export class DungeonScene extends GameplayScene {
       spells: this.spells,
       dynamite: this.dynamite,
       smushFx: this.smushFx,
+      lavaBalls: this.lavaBalls,
       destructibles: this.destructibles,
       trees: this.trees,
       water: this.water,
@@ -4374,6 +4379,7 @@ export class DungeonScene extends GameplayScene {
     this.gore.update();
     this.bodyPartGore.update();
     this.destructibles?.update();
+    this.lavaBalls.update(ctx);
     this.trees?.update(ctx);
     this.dynamite.update(ctx);
     this.smushFx.update();
@@ -4381,6 +4387,14 @@ export class DungeonScene extends GameplayScene {
     if (this.dynamite.explosionSoundPending) {
       this.dynamite.explosionSoundPending = false;
       this.audio?.play('dynamite_explosion');
+    }
+
+    // The llama's own impact cue. It is drained here rather than from
+    // `playMobAudioCues` because the ball outlives its llama, and a shot that
+    // lands after the animal died has no mob left to carry the flag.
+    if (this.lavaBalls.burstSoundPending) {
+      this.lavaBalls.burstSoundPending = false;
+      this.audio?.play('llama_fireball_explosion');
     }
 
     // `human_smush` plays when the ability fires, which is a third of a second

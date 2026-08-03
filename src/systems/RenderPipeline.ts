@@ -27,6 +27,7 @@ import type { BarrierSystem } from './BarrierSystem';
 import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
+import type { LavaBallSystem } from './LavaBallSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import type { WaterAnimationSystem } from './WaterAnimationSystem';
@@ -161,6 +162,7 @@ export interface RenderContext {
   spells: SpellSystem;
   dynamite: DynamiteSystem;
   smushFx: SmushEffectSystem;
+  lavaBalls: LavaBallSystem;
   /** Null on maps without smashable props (the overworld, building interiors). */
   destructibles: DestructiblePropSystem | null;
   /** Null on every map but the overworld, which is the only one that grows trees. */
@@ -240,6 +242,10 @@ export class RenderPipeline {
     // belong over the chunk-baked ground and under the Y-sorted pass, so the
     // player wades in front of the highlights rather than beneath them.
     rc.water?.renderGround(ctx, camX, camY);
+    // Under the Y-sorted pass with the trees and the river: a fire patch is
+    // burning floor, and drawn above the entities it would cover the very
+    // player it is burning.
+    rc.lavaBalls.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -463,6 +469,9 @@ export class RenderPipeline {
     renderLevelUpFlash(ctx, camX, camY);
     dynamite.render(ctx, camX, camY);
     dynamite.renderThrowPath(ctx, camX, camY, pm.human);
+    // Over the entities: a ball crossing the room must never disappear behind
+    // the mob it is about to fly past, or the shot reads as having fizzled.
+    rc.lavaBalls.render(ctx, camX, camY);
     // Last of the world effects: the stamp's fire reads as being in front of
     // everything it just hit.
     rc.smushFx.render(ctx, camX, camY);

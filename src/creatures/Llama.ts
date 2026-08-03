@@ -1,18 +1,8 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import { drawLlamaSprite } from '../sprites/llamaSprite';
-import { makeBurn } from '../core/StatusEffect';
-import { normalize } from '../utils';
-
-interface LavaBall {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  /** When true the ball has hit something and is playing its burst animation. */
-  exploding: boolean;
-  explodeTick: number;
-}
+import { LLAMA_BODY_PART_KEY, drawLlamaSprite } from '../sprites/llamaSprite';
+import { LLAMA_SPIT_FRAMES, llamaSpitReleaseFrame } from '../sprites/llamaSpitTiming';
+import type { LavaSpit } from '../systems/LavaBallSystem';
 
 const LLAMA_HP = 10;
 const LLAMA_SPEED = 1.0;
@@ -21,38 +11,40 @@ const AGGRO_RANGE_TILES = 8;
 const SPIT_RANGE_TILES = 5.5;
 /** Frames between spits (~2.5 s at 60 fps) */
 const SPIT_COOLDOWN = 150;
-/** Frames the spit-lunge animation plays */
-const SPIT_ANIM_FRAMES = 20;
-const LAVA_BALL_SPEED = 1.3;
 const LAVA_BALL_DAMAGE = 2;
-const LAVA_BALL_RADIUS = 8;
-const EXPLODE_TICKS = 22;
 const COIN_DROP_MIN = 4;
 const COIN_DROP_MAX = 5;
 const CENTER_OFFSET = 0.5;
-const PLAYER_CENTER_RADIUS_RATIO = 0.35;
-const BURN_CHANCE = 0.15;
 const MOUTH_OFFSET_X = 0.22;
 const MOUTH_OFFSET_Y = 0.22;
 const FOLLOW_STOP_RANGE_TILES = 1.5;
 const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
-const EXPLOSION_EXPANSION = 2.2;
-const EXPLOSION_ALPHA = 0.75;
-const INNER_GLOW_ALPHA = 1.0;
-const GLOW_RADIUS_RATIO = 0.5;
-const BRIGHT_CORE_RATIO = 0.55;
-const HOT_CENTER_RATIO = 0.25;
+
+/**
+ * The value `spitAnimTimer` holds on the release frame.
+ *
+ * The timer counts *down*, so it is the animation's length minus the elapsed
+ * frame the shared timing module names.
+ */
+const SPIT_RELEASE_TIMER = LLAMA_SPIT_FRAMES - llamaSpitReleaseFrame();
 
 export class Llama extends Mob {
   readonly xpValue = 8;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'llama';
+  override readonly bodyPartKey = LLAMA_BODY_PART_KEY;
   displayName = 'Lava Llama';
   description = 'Spits balls of molten rock from a distance.';
-  private lavaBalls: LavaBall[] = [];
   private spitCooldown = 0;
   private spitAnimTimer = 0;
+  /**
+   * Shots fired but not yet handed to `LavaBallSystem`, which drains this every
+   * frame. The llama never owns a ball in flight: it stops being updated and
+   * drawn the instant it dies, and a projectile stored here would be deleted
+   * in mid-air along with it.
+   */
+  private pendingSpits: LavaSpit[] = [];
   private aggroRangePx: number;
   private spitRangePx: number;
   private isAggro = false;
@@ -65,61 +57,50 @@ export class Llama extends Mob {
 
   override resetToSpawn(): void {
     super.resetToSpawn();
-    this.lavaBalls = [];
     this.spitCooldown = 0;
     this.spitAnimTimer = 0;
+    this.pendingSpits = [];
     this.isAggro = false;
+  }
+
+  /**
+   * Hands over every shot fired since the last call and clears the queue.
+   *
+   * Returning the array wholesale rather than one at a time is deliberate: the
+   * caller must be able to drain a llama that has since died, and a
+   * pull-one-per-frame interface would strand the rest.
+   */
+  takePendingSpits(): readonly LavaSpit[] {
+    if (this.pendingSpits.length === 0) return EMPTY_SPITS;
+    const spits = this.pendingSpits;
+    this.pendingSpits = [];
+    return spits;
   }
 
   updateAI(targets: Player[]) {
     if (!this.isAlive) return;
 
     if (this.spitCooldown > 0) this.spitCooldown--;
-    if (this.spitAnimTimer > 0) this.spitAnimTimer--;
-
-    // Advance lava balls & check wall/player hits
-    for (const ball of this.lavaBalls) {
-      if (ball.exploding) {
-        ball.explodeTick--;
-        continue;
-      }
-      const nextX = ball.x + ball.vx;
-      const nextY = ball.y + ball.vy;
-      // Wall collision — explode on impact
-      if (this.map) {
-        const tx = Math.floor(nextX / this.tileSize);
-        const ty = Math.floor(nextY / this.tileSize);
-        if (!this.map.isWalkable(tx, ty)) {
-          ball.exploding = true;
-          ball.explodeTick = EXPLODE_TICKS;
-          this.attackSoundPending = true;
-          continue;
-        }
-      }
-      ball.x = nextX;
-      ball.y = nextY;
-      for (const t of targets) {
-        if (!t.isAlive) continue;
-        const cx = t.x + this.tileSize * CENTER_OFFSET;
-        const cy = t.y + this.tileSize * CENTER_OFFSET;
-        if (
-          Math.hypot(ball.x - cx, ball.y - cy) <
-          LAVA_BALL_RADIUS + this.tileSize * PLAYER_CENTER_RADIUS_RATIO
-        ) {
-          const connected = this.dealDamage(t, LAVA_BALL_DAMAGE);
-          if (connected && Math.random() < BURN_CHANCE) t.applyStatus(makeBurn());
-          ball.exploding = true;
-          ball.explodeTick = EXPLODE_TICKS;
-          break;
-        }
-      }
-    }
-    // Prune fully-done balls
-    this.lavaBalls = this.lavaBalls.filter((b) => !b.exploding || b.explodeTick > 0);
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
-
     this.currentTarget = nearest;
+
+    // The wind-up runs to completion whatever happens to the target: it is the
+    // player's warning that a shot is coming, and a llama that abandons it
+    // mid-charge because the player stepped behind a pillar has told them a lie.
+    //
+    // It does keep tracking until the moment it commits, though. Facing locked
+    // from the first frame of a 26-frame charge, a llama that a player simply
+    // walks around fires at where they used to be — and worse, plays a
+    // forward-facing spit while the ball leaves in the opposite direction.
+    if (this.spitAnimTimer > 0) {
+      this.spitAnimTimer--;
+      this.isMoving = false;
+      this.isAggro = nearest !== null;
+      if (this.spitAnimTimer > SPIT_RELEASE_TIMER && nearest) this.faceToward(nearest);
+      if (this.spitAnimTimer === SPIT_RELEASE_TIMER) this.releaseSpit();
+      return;
+    }
 
     if (!nearest) {
       this.isAggro = false;
@@ -130,13 +111,12 @@ export class Llama extends Mob {
     this.isAggro = true;
     const nearestDist = this.distanceTo(nearest);
 
-    const mouthX = this.x + this.tileSize * MOUTH_OFFSET_X;
-    const mouthY = this.y + this.tileSize * MOUTH_OFFSET_Y;
     const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
     const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
+    const mouth = this.mouthPosition();
 
     // Check line of sight from mouth to target centre
-    const hasLOS = this.map ? this.map.hasLineOfSight(mouthX, mouthY, targetCX, targetCY) : true;
+    const hasLOS = this.map ? this.map.hasLineOfSight(mouth.x, mouth.y, targetCX, targetCY) : true;
 
     // Track last known position while we have LOS
     if (hasLOS) {
@@ -170,25 +150,53 @@ export class Llama extends Mob {
     // of its combat: unfaced, it fires backwards for the entire engagement. Only
     // while stopped, though — a llama pathing round a corner has to face its
     // path, or it moonwalks the whole detour.
-    if (!this.isMoving && this.spitAnimTimer === 0) this.faceToward(nearest);
+    if (!this.isMoving) this.faceToward(nearest);
 
-    // Spit a lava ball (only when in range and line-of-sight is clear)
+    // Begin the wind-up. The ball itself is not created here — it leaves the
+    // mouth partway through the animation, on the frame the neck whips forward.
     if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
-      const dx = targetCX - mouthX;
-      const dy = targetCY - mouthY;
-      const n = normalize(dx, dy);
-      this.lavaBalls.push({
-        x: mouthX,
-        y: mouthY,
-        vx: n.x * LAVA_BALL_SPEED,
-        vy: n.y * LAVA_BALL_SPEED,
-        exploding: false,
-        explodeTick: 0,
-      });
       this.spitCooldown = SPIT_COOLDOWN;
-      this.spitAnimTimer = SPIT_ANIM_FRAMES;
-      this.projectileSoundPending = true;
+      this.spitAnimTimer = LLAMA_SPIT_FRAMES;
+      this.isMoving = false;
     }
+  }
+
+  /** Where the ball leaves the animal, offset toward whichever way it faces. */
+  private mouthPosition(): { readonly x: number; readonly y: number } {
+    return {
+      x: this.x + this.tileSize * (CENTER_OFFSET + MOUTH_OFFSET_X * Math.sign(this.facingX || 1)),
+      y: this.y + this.tileSize * MOUTH_OFFSET_Y,
+    };
+  }
+
+  /**
+   * Queues one shot, aimed at wherever the target is on the release frame
+   * rather than where it was when the wind-up began — otherwise the telegraph
+   * is free to dodge and the attack never lands on a moving player.
+   */
+  private releaseSpit(): void {
+    const target = this.currentTarget;
+    const mouth = this.mouthPosition();
+    const aimX = target ? target.x + this.tileSize * CENTER_OFFSET : mouth.x + this.facingX;
+    const aimY = target ? target.y + this.tileSize * CENTER_OFFSET : mouth.y + this.facingY;
+    const dirX = aimX - mouth.x;
+    const dirY = aimY - mouth.y;
+    // A target standing exactly on the mouth would give a zero direction, which
+    // normalises to NaN and produces a ball that never moves and never expires.
+    const degenerate = dirX === 0 && dirY === 0;
+    this.pendingSpits.push({
+      x: mouth.x,
+      y: mouth.y,
+      dirX: degenerate ? this.facingX || 1 : dirX,
+      dirY: degenerate ? this.facingY : dirY,
+      damage: this.scaledDamage(LAVA_BALL_DAMAGE),
+      mobType: this.mobType,
+      // Carried unconditionally and deduplicated by the system: the interesting
+      // case is a target that is neither player — a mob made hostile by Vespa
+      // acid — which nothing else would tell the projectile about.
+      aimedAt: target,
+    });
+    this.projectileSoundPending = true;
   }
 
   protected override drawSelf(
@@ -199,44 +207,6 @@ export class Llama extends Mob {
   ) {
     if (!this.isAlive) return;
 
-    // Draw lava balls (behind sprite)
-    for (const ball of this.lavaBalls) {
-      const bx = ball.x - camX;
-      const by = ball.y - camY;
-
-      if (ball.exploding) {
-        const progress = 1 - ball.explodeTick / EXPLODE_TICKS;
-        const r = LAVA_BALL_RADIUS * (1 + progress * EXPLOSION_EXPANSION);
-        const alpha = ball.explodeTick / EXPLODE_TICKS;
-        // Outer burst
-        ctx.beginPath();
-        ctx.arc(bx, by, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 80, 0, ${alpha * EXPLOSION_ALPHA})`;
-        ctx.fill();
-        // Inner glow
-        ctx.beginPath();
-        ctx.arc(bx, by, r * GLOW_RADIUS_RATIO, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 200, 0, ${alpha * INNER_GLOW_ALPHA})`;
-        ctx.fill();
-      } else {
-        // Glowing lava ball — outer dark-orange shell
-        ctx.beginPath();
-        ctx.arc(bx, by, LAVA_BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = '#d93a00';
-        ctx.fill();
-        // Bright core
-        ctx.beginPath();
-        ctx.arc(bx, by, LAVA_BALL_RADIUS * BRIGHT_CORE_RATIO, 0, Math.PI * 2);
-        ctx.fillStyle = '#ff8c00';
-        ctx.fill();
-        // Hot centre
-        ctx.beginPath();
-        ctx.arc(bx, by, LAVA_BALL_RADIUS * HOT_CENTER_RATIO, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff176';
-        ctx.fill();
-      }
-    }
-
     const sx = this.x - camX;
     const sy = this.y - camY;
 
@@ -244,12 +214,19 @@ export class Llama extends Mob {
       this.renderAggroIndicator(ctx, sx, sy, tileSize);
     }
 
-    // Normalise spit animation to 0–1 peak-at-midpoint curve
-    const spitAnim =
-      this.spitAnimTimer > 0 ? Math.sin((1 - this.spitAnimTimer / SPIT_ANIM_FRAMES) * Math.PI) : 0;
+    const spitProgress = this.spitAnimTimer > 0 ? 1 - this.spitAnimTimer / LLAMA_SPIT_FRAMES : null;
 
-    drawLlamaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, spitAnim, this.facingX);
+    drawLlamaSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      spitProgress,
+    });
 
     this.renderMobHealthBar(ctx, sx, sy);
   }
 }
+
+/** Shared empty result so the common no-shots-this-frame path allocates nothing. */
+const EMPTY_SPITS: readonly LavaSpit[] = [];

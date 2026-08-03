@@ -178,5 +178,38 @@
         "frameCount": 6
       }
     }
+  },
+  "llama_lava_bolt": {
+    "path": "effects/llama_lava_bolt.png",
+    "frameWidth": 112,
+    "frameHeight": 80,
+    "tileX": 72,
+    "tileY": 40,
+    "tileScale": 64,
+    "states": {
+      "fly": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "llama_lava_burst": {
+    "path": "effects/llama_lava_burst.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 64,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "burst": { "row": 0, "frameCount": 10 }
+    }
+  },
+  "llama_lava_flame": {
+    "path": "effects/llama_lava_flame.png",
+    "frameWidth": 96,
+    "frameHeight": 104,
+    "tileX": 48,
+    "tileY": 62,
+    "tileScale": 64,
+    "states": {
+      "burn": { "row": 0, "frameCount": 8 }
+    }
   }
 }

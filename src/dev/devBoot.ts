@@ -6,6 +6,7 @@ import { TilePreviewScene } from '../scenes/TilePreviewScene';
 import { BopcaPreviewScene } from '../scenes/BopcaPreviewScene';
 import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
+import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -74,6 +75,11 @@ export function devBootScene(
 
   if (params.get('rat') !== null) {
     sceneManager.replace(new RatPreviewScene());
+    return true;
+  }
+
+  if (params.get('llama') !== null) {
+    sceneManager.replace(new LlamaPreviewScene());
     return true;
   }
 

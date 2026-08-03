@@ -25,16 +25,29 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   BrindleGrub: 'brindleGrub',
   CowTailedGrub: 'cowTailedGrub',
   BrindledVespa: 'brindledVespa',
+  RuinsGhoul: 'ruinsGhoul',
+  Krasue: 'krasue',
+  CircusLemur: 'circusLemur',
+  StiltClown: 'stiltClown',
+  FatClown: 'fatClown',
+  TerrorTheClown: 'terrorTheClown',
+  RingmasterGrimaldi: 'ringmasterGrimaldi',
+  MoldLion: 'moldLion',
+  CityElfCultist: 'cityElfCultist',
+  HeatherTheBear: 'heatherTheBear',
+  MissQuill: 'missQuill',
 };
 
 function causeFromDamageSource(source: DamageSource): DeathCause {
   if (source.kind === 'dynamite') return 'explosiveFriendlyFire';
   if (source.kind === 'doomsday') return 'doomsdayExplosion';
-  // The only producer of `environmental` is standing against a burning tree.
-  // Without this the contact damage — which is what actually kills, well before
-  // the eight-second `burn` DoT it also applies gets there — reports an unknown
-  // cause on the death screen.
-  if (source.kind === 'environmental') return 'burningTree';
+  // Standing hazards. Without this the contact damage — which is what actually
+  // kills, well before the eight-second `burn` DoT they also apply gets there —
+  // reports an unknown cause on the death screen. An untagged source is a
+  // burning tree, which was the only producer before lava flames existed.
+  if (source.kind === 'environmental') {
+    return source.hazard === 'lavaFlames' ? 'lavaFlames' : 'burningTree';
+  }
 
   if (source.kind === 'status') {
     const { effectType } = source;

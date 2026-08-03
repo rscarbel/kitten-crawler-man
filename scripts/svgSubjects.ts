@@ -616,12 +616,16 @@ export const SUBJECTS: readonly SvgSubject[] = [
         { name: 'idle', paint: ({ dom, unit }) => drawLlamaSprite(dom, 0, 0, unit) },
         {
           name: 'walk',
-          paint: ({ dom, unit }) => drawLlamaSprite(dom, 0, 0, unit, WALK_FRAME, true),
+          paint: ({ dom, unit }) =>
+            drawLlamaSprite(dom, 0, 0, unit, { walkFrame: WALK_FRAME, isMoving: true }),
         },
         {
           name: 'spit',
           paint: ({ dom, unit }) =>
-            drawLlamaSprite(dom, 0, 0, unit, STILL_FRAME, false, ATTACK_MIDPOINT),
+            drawLlamaSprite(dom, 0, 0, unit, {
+              walkFrame: STILL_FRAME,
+              spitProgress: ATTACK_MIDPOINT,
+            }),
         },
       ];
     },

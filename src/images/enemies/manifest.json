@@ -427,23 +427,87 @@
   },
   "llama": {
     "path": "enemies/llama.png",
-    "frameWidth": 128,
-    "frameHeight": 96,
-    "tileX": 32,
-    "tileY": 8,
+    "frameWidth": 112,
+    "frameHeight": 112,
+    "tileX": 24,
+    "tileY": 34,
     "tileScale": 64,
     "states": {
       "walk": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "walk_side": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
       },
       "spit": {
-        "row": 2,
-        "frameCount": 6
+        "row": 6,
+        "frameCount": 10
+      },
+      "spit_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "spit_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "gore_head": {
+        "row": 9,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_neck": {
+        "row": 9,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 9,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_haunch": {
+        "row": 9,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 9,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 9,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 9,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_fleece": {
+        "row": 9,
+        "colOffset": 7,
+        "frameCount": 1
       }
     }
   },

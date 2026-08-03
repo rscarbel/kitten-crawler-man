@@ -315,9 +315,6 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'rat':
           audio?.playRandom(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3']);
           break;
-        case 'llama':
-          audio?.play('llama_fireball_explosion');
-          break;
         case 'troglodyte':
           audio?.play('troglodyte_tongue');
           break;

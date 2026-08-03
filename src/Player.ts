@@ -80,7 +80,16 @@ export type DamageSource =
     }
   | { readonly kind: 'status'; readonly effectType: string }
   | { readonly kind: 'dynamite' }
-  | { readonly kind: 'environmental' }
+  | {
+      readonly kind: 'environmental';
+      /**
+       * Which standing hazard did it. Optional because `environmental` had a
+       * single producer for a long time and the burning tree is still the one
+       * an untagged source means; a second hazard reporting "a burning tree"
+       * on the death screen is the failure this discriminates away.
+       */
+      readonly hazard?: 'burningTree' | 'lavaFlames';
+    }
   | { readonly kind: 'doomsday' };
 
 const DEFAULT_POTION_COOLDOWN_SECONDS = 5.75;

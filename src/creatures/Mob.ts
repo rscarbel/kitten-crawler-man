@@ -559,11 +559,25 @@ export abstract class Mob extends Player {
       this.attackSoundPending = true;
       return false;
     }
-    const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
-    const connected = target.takeDamage(Math.ceil(baseDamage * mult), source);
+    const connected = target.takeDamage(this.scaledDamage(baseDamage), source);
     this.attackSoundPending = true;
     return connected;
+  }
+
+  /**
+   * This mob's damage number after its level multiplier, and zero if it is
+   * harmless.
+   *
+   * For attacks that cannot go through {@link dealDamage} because the harm is
+   * resolved somewhere else — a projectile that outlives its owner, say. It
+   * shares the scaling with `dealDamage` so a mob's ranged attack cannot drift
+   * away from its melee one when the level curve is retuned.
+   */
+  protected scaledDamage(baseDamage: number): number {
+    if (this.harmless) return 0;
+    const mult = 1 + (this.mobLevel - 1) * MOB_LEVEL_DAMAGE_SCALE;
+    return Math.ceil(baseDamage * mult);
   }
 
   setMap(map: GameMap) {

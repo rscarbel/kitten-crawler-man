@@ -6,6 +6,7 @@ import { getFrameInkBounds } from '../core/spriteFrames';
 import type { GameMap } from '../map/GameMap';
 import { GOBLIN_GORE_PARTS } from '../sprites/goblinSprite';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
+import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../sprites/llamaSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -42,10 +43,14 @@ const HOARDER_CONFIG: MobBodyPartConfig = {
 /** The eight pieces a rat comes apart into; all eight live on the rat's own sheet. */
 const RAT_CONFIG: MobBodyPartConfig = { spriteKey: 'rat', parts: RAT_GORE_PARTS };
 
+/** Likewise the llama's eight, which share the llama's animation sheet. */
+const LLAMA_CONFIG: MobBodyPartConfig = { spriteKey: 'llama', parts: LLAMA_GORE_PARTS };
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...GOBLIN_CONFIGS,
   ['hoarder', HOARDER_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
+  [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
 ]);
 
 const PART_LIFETIME = 6000; // 300s @ 60fps

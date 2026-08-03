@@ -32,7 +32,19 @@ export type DeathCause =
   | 'brindleGrub'
   | 'cowTailedGrub'
   | 'brindledVespa'
+  | 'ruinsGhoul'
+  | 'krasue'
+  | 'circusLemur'
+  | 'stiltClown'
+  | 'fatClown'
+  | 'terrorTheClown'
+  | 'ringmasterGrimaldi'
+  | 'moldLion'
+  | 'cityElfCultist'
+  | 'heatherTheBear'
+  | 'missQuill'
   | 'burningTree'
+  | 'lavaFlames'
   | 'explosiveFriendlyFire'
   | 'doomsdayExplosion'
   | 'unknown';
@@ -75,6 +87,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You stood against a burning tree until it finished the job.',
     'The tree was on fire. You were standing in it. These facts are related.',
     'Burned alive by a tree you set light to. Poetic, in a way.',
+  ],
+  lavaFlames: [
+    'You stood in a pool of burning llama spit until it burned through you.',
+    'The lava the llama spat was still there. So, briefly, were you.',
+    'Killed by the puddle rather than the shot. The floor was the trap.',
   ],
   burnedStatus: [
     'You stood in the flames just a little too long.',
@@ -175,6 +192,61 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     "Brindled Vespa acid burned through you. Don't let the hornets swarm.",
     'A giant dungeon hornet dissolved you with acid spit.',
     "The Vespa's acid found you at full stack. Pop those spits early next time.",
+  ],
+  ruinsGhoul: [
+    'A Ruins Ghoul tore you apart. It used to be a person, if that helps.',
+    'You were killed by a shambling former citizen of the Over City.',
+    'The ghoul got its hands on you. There was not much left after that.',
+  ],
+  krasue: [
+    'A floating head with its guts still attached ate you. Welcome to the Over City.',
+    'The Krasue drifted in and finished you off. They are hard to pin down.',
+    'You were killed by a Krasue. Flying entrails are a genuine threat here.',
+  ],
+  circusLemur: [
+    'A circus lemur put a thrown knife through you. The act still holds up.',
+    'You were killed by a knife-throwing lemur. Nobody is going to believe that.',
+    'The Former Circus Lemur landed its blade. Keep out of its throwing lane.',
+  ],
+  stiltClown: [
+    'A Stilt Clown stomped down on you from above.',
+    'You were killed by a clown on stilts. That is the whole sentence.',
+    'The Stilt Clown reached further than you thought it could. They always do.',
+  ],
+  fatClown: [
+    'A Fat Clown slammed its bulk into you and that was that.',
+    'You were flattened by a bloated circus performer.',
+    'The Fat Clown body-checked you into the afterlife.',
+  ],
+  terrorTheClown: [
+    'Terror the Clown caved you in with an oversized mallet.',
+    "You took Terror's mallet head-on. Try not to be there when it swings.",
+    "Terror the Clown finished you off. Grimaldi's favorite is not for beginners.",
+  ],
+  ringmasterGrimaldi: [
+    'Grimaldi the Pestiferous Vine crushed you against the big top pole.',
+    'What is left of Redstone Grimaldi wrapped you up and squeezed.',
+    'The Ringmaster killed you. He is a vine now, and he is still running the show.',
+  ],
+  moldLion: [
+    'A Mold Lion mauled you. Its mane is fungus, and now so are you.',
+    'You were killed by a lion made mostly of toxic mold. Unlucky.',
+    'The Mold Lion got its claws in. Keep your distance from that mane.',
+  ],
+  cityElfCultist: [
+    'A soul bolt from a City Elf Cultist burned a hole through you.',
+    'The cultist offered you to the angels above. They accepted.',
+    'You were killed by harvested soul-stuff. Break line of sight on those casters.',
+  ],
+  heatherTheBear: [
+    'Heather the Bear opened you up with one paw swipe.',
+    'The crowds adored her once. She just killed you.',
+    'You were mauled by Heather. Whatever is wearing her skin does not pull punches.',
+  ],
+  missQuill: [
+    'Miss Quill put a soul bolt through you without losing her composure.',
+    'The town schoolteacher killed you. Every krasue in the city was her work too.',
+    'Miss Quill finished the lesson. Interrupt her casting next time.',
   ],
   explosiveFriendlyFire: [
     "Your own dynamite got you. That's a one-way ticket.",
