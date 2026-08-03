@@ -1,4 +1,16 @@
-import { Player, type StatName } from '../Player';
+import { Player, type StatName, type StatusFigureBox } from '../Player';
+
+/**
+ * Donut's ink, measured off `src/images/characters/cat.png` against the
+ * manifest's tile anchor. He is roughly tile-shaped but sits low and to the
+ * right of it, and a status painted on the tile would float off his back.
+ */
+const CAT_STATUS_FIGURE_BOX: StatusFigureBox = {
+  centerX: 0.63,
+  top: 0.2,
+  bottom: 1.03,
+  halfWidth: 0.44,
+};
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
@@ -68,6 +80,11 @@ export class CatPlayer extends Player {
   private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
   /** Half a tile: what you add to a tile origin to get its centre. */
   private static readonly TILE_CENTER_OFFSET = 0.5;
+
+  /** See {@link CAT_STATUS_FIGURE_BOX}. Shared, not rebuilt on every read. */
+  protected override get statusFigureBox(): StatusFigureBox {
+    return CAT_STATUS_FIGURE_BOX;
+  }
   private static readonly SUBMISSILE_COUNT_BASE = 3;
   private static readonly SUBMISSILE_COUNT_RANDOM_RANGE = 3;
   private static readonly SUBMISSILE_ANGLE_VARIANCE = 0.4;
@@ -474,7 +491,6 @@ export class CatPlayer extends Player {
     drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
 
     this.renderHealthBar(ctx, sx, sy - CatPlayer.HEALTH_BAR_RAISE);
-    this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
 }

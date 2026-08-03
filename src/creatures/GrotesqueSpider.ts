@@ -165,6 +165,16 @@ const SLAM_DASH_SPEED = 20;
 const SLAM_DASH_MOD = 16;
 
 export class GrotesqueSpider extends Mob {
+  /**
+   * Her telegraphs are drawn by `drawSelf`, and the screech ring is the widest
+   * of them. Left at the mob default the composite would slice that ring into a
+   * square for the whole eight seconds of a burn — taking away the "don't stand
+   * here" edge at exactly the moment the player is standing in it.
+   */
+  protected override get silhouetteMarginTiles(): number {
+    return Math.max(super.silhouetteMarginTiles, SCREECH_RANGE_TILE_MULTIPLIER);
+  }
+
   readonly xpValue = 2000;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

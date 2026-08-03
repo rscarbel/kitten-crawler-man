@@ -1149,7 +1149,6 @@ export abstract class Mob extends Player {
    * Fades out over the last 40 frames.
    */
   protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
-    if (this.healthBarTimer <= 0 && !this.hasStatus('sepsis')) return;
     if (this.healthBarTimer > 0) {
       const alpha =
         this.healthBarTimer < HEALTH_BAR_FADE_FRAMES
@@ -1160,17 +1159,61 @@ export abstract class Mob extends Player {
       this.renderHealthBar(ctx, sx, sy);
       ctx.restore();
     }
-    this.renderMobStatusLabels(ctx, sx, sy);
   }
 
-  /** Renders status labels (e.g. "Septic") above the mob. */
-  private renderMobStatusLabels(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  /**
+   * Status art and the septic label, drawn by {@link Player.render} *after* the
+   * silhouette composite rather than from `drawSelf` — see the note there. The
+   * anchor is the mob's own tile, so a mob that draws its art offset from its
+   * tile (Signet stacks her overlay above hers) still gets its flames at its
+   * feet instead of over its head.
+   */
+  /**
+   * A corpse is not on fire. `drawSelf` returns early for dead mobs, so while
+   * status art lived in there this came for free; drawing it outside means
+   * saying so. It matters for the mobs that keep rendering after death — their
+   * timers stop ticking too, so the fade never starts and a killed spider would
+   * burn at full strength under its own corpse until it was culled.
+   *
+   * `BallOfSwine` reports itself alive through its burst, which is why this asks
+   * the getter rather than testing hp.
+   */
+  protected override get wearsStatusPaint(): boolean {
+    return this.isAlive;
+  }
+
+  protected override drawWorldFeedback(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+    if (!this.wearsStatusPaint) return;
+    super.drawWorldFeedback(ctx, sx, sy);
+    this.renderSepticLabel(ctx, sx, sy);
+  }
+
+  /**
+   * How far above its tile a mob's written status label has to start, in tiles,
+   * to clear its own art. Zero suits a mob drawn inside its tile; a mob drawn
+   * larger than that — Signet stands two tiles tall and has horns — must say so
+   * or the label lands across its face.
+   */
+  protected get statusLabelClearanceTiles(): number {
+    return 0;
+  }
+
+  /**
+   * The one status that also gets a written label. Sepsis is permanent and its
+   * whole point is that the mob is already dead on its feet, which no amount of
+   * green haze conveys on its own.
+   */
+  private renderSepticLabel(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.hasStatus('sepsis')) return;
+    // The label and the status art want different origins. Flames belong at the
+    // mob's feet, so they anchor to its tile; a written label belongs clear of
+    // whatever the mob draws above that tile, which only the mob knows.
+    const labelY = sy - this.statusLabelClearanceTiles * this.tileSize;
     const t = Date.now();
     const pulse = SEPTIC_PULSE_BASE + SEPTIC_PULSE_AMP * Math.sin(t * SEPTIC_PULSE_SPEED);
     drawText(ctx, 'Septic', {
       x: sx + this.tileSize * MOB_TILE_CENTER,
-      y: sy - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
+      y: labelY - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
       size: SEPTIC_LABEL_SIZE,
       bold: true,
       color: '#bef264',
@@ -1179,8 +1222,6 @@ export abstract class Mob extends Player {
       outline: '#65a30d',
       outlineWidth: 2,
     });
-    // Render sepsis bubbles above mob
-    this.renderStatusEffects(ctx, sx, sy);
   }
 
   applySeparation(dx: number, dy: number): void {

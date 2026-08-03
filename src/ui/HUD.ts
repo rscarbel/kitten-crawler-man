@@ -6,6 +6,7 @@ import { platform } from '../core/Platform';
 import { drawText } from './TextBox';
 import { drawBox, drawProgressBar } from './Box';
 import { viewportWidth } from '../core/Viewport';
+import { statusBadge } from '../sprites/status/statusEffectVisuals';
 
 type HudRect = { x: number; y: number; w: number; h: number };
 type HudResult = { toggleRect: HudRect; notifRect: HudRect; hudPanelBottom: number };
@@ -137,7 +138,9 @@ const COLLAPSED_COCKROACH_SIZE = 8;
 const COLLAPSED_COCKROACH_Y_OFFSET = 6;
 const STATUS_ICON_ROW_Y_OFFSET = 16;
 const STATUS_ICON_NEXT_X_OFFSET = 30;
-const STATUS_ICON_LABEL_CHAR_LIMIT = 4;
+const STATUS_ICON_HARMFUL_BORDER = 'rgba(20, 6, 6, 0.85)';
+const STATUS_ICON_BOON_BORDER = 'rgba(255, 255, 255, 0.7)';
+const STATUS_ICON_BORDER_WIDTH = 1.5;
 
 // Pulse constants
 const PULSE_AMPLITUDE = 0.5;
@@ -537,44 +540,29 @@ function drawCockroachPill(
  * Renders a single status-effect badge: a coloured pill with a short label and
  * a small duration bar across the bottom.
  *
- * Adding a new status type: add an `else if` branch below with the desired
- * colour and label.
+ * Label and colour come from the status-visual registry rather than a branch
+ * chain here, so a badge can never disagree with the effect drawn on the
+ * character. Adding a status means adding it there.
  */
 function drawStatusIcon(ctx: CanvasRenderingContext2D, effect: StatusEffect, x: number, y: number) {
   const pillW = STATUS_ICON_PILL_W;
   const pillH = STATUS_ICON_PILL_H;
+  const badge = statusBadge(effect.type);
 
-  let bgColor = '#6b7280';
-  let label = effect.type.toUpperCase().slice(0, STATUS_ICON_LABEL_CHAR_LIMIT);
-
-  if (effect.type === 'burn') {
-    bgColor = '#f97316';
-    label = 'BURN';
-  } else if (effect.type === 'frozen') {
-    bgColor = '#38bdf8';
-    label = 'FRZE';
-  } else if (effect.type === 'paralyzed') {
-    bgColor = '#a855f7';
-    label = 'PARA';
-  } else if (effect.type === 'speed_fizz') {
-    bgColor = '#0284c7';
-    label = 'FIZZ';
-  } else if (effect.type === 'jugg_juice') {
-    bgColor = '#ea580c';
-    label = 'JUGG';
-  } else if (effect.type === 'cooldown_crisp') {
-    bgColor = '#059669';
-    label = 'CRSP';
-  } else if (effect.type === 'drunk') {
-    bgColor = '#b45309';
-    label = 'DRNK';
-  }
-
-  // Background pill
-  drawBox(ctx, { x, y, width: pillW, height: pillH, fill: bgColor });
+  // A harmful badge carries a dark outline and a beneficial one a bright rim, so
+  // the two are separable at a glance without reading four letters of text.
+  drawBox(ctx, {
+    x,
+    y,
+    width: pillW,
+    height: pillH,
+    fill: badge.color,
+    border: badge.harmful ? STATUS_ICON_HARMFUL_BORDER : STATUS_ICON_BOON_BORDER,
+    borderWidth: STATUS_ICON_BORDER_WIDTH,
+  });
 
   // Label
-  drawText(ctx, label, {
+  drawText(ctx, badge.label, {
     x: x + STATUS_ICON_LABEL_X_OFFSET,
     y: y + STATUS_ICON_LABEL_Y_OFFSET,
     bold: true,

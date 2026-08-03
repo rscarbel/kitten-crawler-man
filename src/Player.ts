@@ -13,7 +13,14 @@ import {
   type SkillId,
 } from './core/SkillManager';
 import type { FloatingTextRequest, FloatingTextStyle } from './core/FloatingText';
-import { drawWithHitFlash } from './core/hitFlash';
+import { hitFlashLayer } from './core/hitFlash';
+import { drawWithSilhouetteLayers, type SilhouetteLayer } from './core/silhouetteComposite';
+import {
+  statusBodyLayers,
+  statusFade,
+  statusVisual,
+  type StatusVisualFrame,
+} from './sprites/status/statusEffectVisuals';
 
 /**
  * Every stat a crawler carries — the single vocabulary the whole stat system
@@ -151,96 +158,39 @@ const HP_BAR_Y_OFFSET = 7;
  * How far past their tile the crawlers' own art reaches, in tiles — enough to
  * take in the raised health bar and the status-effect flames above the head.
  */
-const PLAYER_HIT_FLASH_MARGIN_TILES = 2;
+export const PLAYER_HIT_FLASH_MARGIN_TILES = 2;
 
-/** Burn visual parameters */
-const BURN_OUTER_FLAME_Y_OFFSET = 7;
-const BURN_OUTER_FLAME_RADIUS_X = 5;
-const BURN_OUTER_FLAME_RADIUS_Y = 7;
-const BURN_INNER_FLAME_Y_OFFSET = 11;
-const BURN_INNER_FLAME_RADIUS_X = 3;
-const BURN_INNER_FLAME_RADIUS_Y = 4;
-const BURN_PULSE_SPEED = 0.009;
-const BURN_FLICKER_SPEED = 0.022;
-const BURN_FLICKER_AMP = 2.5;
-const BURN_ALPHA_BASE = 0.75;
-const BURN_ALPHA_RANGE = 0.25;
-const BURN_GLOW_MIN_SIZE = 6;
-const BURN_GLOW_PULSE_RANGE = 5;
-const BURN_INNER_X_FRACTION = 0.5;
+/**
+ * Distinct starting point for every character's status-effect randomness. Two
+ * mobs burning side by side off the same seed flicker in perfect lockstep, which
+ * the eye reads as one wide fire rather than two burning creatures.
+ */
+let nextVisualSeed = 1;
+/** Coprime-ish stride, so consecutive spawns land far apart in the hash. */
+const VISUAL_SEED_STRIDE = 97;
 
-/** Poison visual parameters */
-const POISON_DRIFT_SPEED = 0.025;
-const POISON_BUBBLE_COUNT = 3;
-const POISON_PHASE_SPACING = 2.09;
-const POISON_ORBIT_RADIUS = 4.5;
-const POISON_Y_OFFSET = 7;
-const POISON_Y_STEP = 4.5;
-const POISON_RETRACT_SPEED = 0.5;
-const POISON_MAX_RADIUS = 2.8;
-const POISON_RADIUS_SHRINK = 0.5;
-const POISON_ALPHA_BASE = 0.7;
-const POISON_ALPHA_RANGE = 0.3;
-const POISON_SHADOW_BLUR = 5;
-const POISON_WAVE_AMP = 3;
+/**
+ * Where a character's drawn figure sits relative to its own tile, in tile
+ * fractions. See {@link Player.statusFigureBox}.
+ */
+export interface StatusFigureBox {
+  /** Horizontal centre of the figure, 0 at the tile's left edge. */
+  readonly centerX: number;
+  /** Top of the figure. Negative when the art reaches above its tile. */
+  readonly top: number;
+  /** The figure's ground line, normally at or near the tile's bottom edge. */
+  readonly bottom: number;
+  /** Half the figure's width. */
+  readonly halfWidth: number;
+}
 
-/** Stuck visual parameters */
-const STUCK_PULSE_BASE = 0.65;
-const STUCK_PULSE_RANGE = 0.35;
-const STUCK_ALPHA_PULSE_SPEED = 0.008;
-const STUCK_STRAND_COUNT = 6;
-const STUCK_LINE_WIDTH = 1.5;
-const STUCK_INNER_RING_ALPHA = 0.3;
-const STUCK_RING_FRACTION = 0.55;
-const STUCK_WAVE_SPEED = 0.006;
-const STUCK_INNER_RADIUS = 0.3;
-const STUCK_OUTER_BASE_FRACTION = 0.62;
-const STUCK_WAVE_AMP = 3;
-const STUCK_ORBIT_SPEED = 0.001;
-
-/** Spit venom visual parameters */
-const SPIT_DROP_COUNT = 5;
-const SPIT_DRIFT_SPEED = 0.003;
-const SPIT_PHASE_STEP = 1.26;
-const SPIT_WAVE_X_FREQ = 2.3;
-const SPIT_ORBIT_FRACTION = 0.28;
-const SPIT_DROP_SCROLL_SPEED = 0.04;
-const SPIT_DROP_SPACING = 14;
-const SPIT_DROP_SCROLL_RANGE = 18;
-const SPIT_ALPHA_BASE = 0.5;
-const SPIT_ALPHA_RANGE = 0.5;
-const SPIT_ALPHA_OUTER = 0.75;
-const SPIT_RADIUS_X = 2.2;
-const SPIT_RADIUS_Y = 3.5;
-
-/** Sepsis visual parameters */
-const SEPSIS_DRIFT_SPEED = 0.02;
-/** Drunk: amber bubbles orbiting the head while the `drunk` status is active. */
-const DRUNK_BUBBLE_COUNT = 3;
-const DRUNK_BUBBLE_DRIFT_SPEED = 0.0022;
-const DRUNK_BUBBLE_PHASE_SPACING = (Math.PI * 2) / DRUNK_BUBBLE_COUNT;
-const DRUNK_BUBBLE_ORBIT_RADIUS = 9;
-const DRUNK_BUBBLE_Y_OFFSET = 6;
-const DRUNK_BUBBLE_RISE_AMP = 3;
-const DRUNK_BUBBLE_RADIUS = 2;
-const DRUNK_BUBBLE_SHADOW_BLUR = 5;
-const DRUNK_BUBBLE_ALPHA_BASE = 0.5;
-const DRUNK_BUBBLE_ALPHA_RANGE = 0.3;
-/** Bubbles twinkle twice per orbit, so no two are at the same brightness. */
-const DRUNK_BUBBLE_TWINKLE_RATE = 2;
-
-const SEPSIS_BUBBLE_COUNT = 4;
-const SEPSIS_PHASE_SPACING = 1.57;
-const SEPSIS_ORBIT_RADIUS = 5.5;
-const SEPSIS_Y_OFFSET = 6;
-const SEPSIS_Y_STEP = 3.5;
-const SEPSIS_RETRACT_SPEED = 0.7;
-const SEPSIS_MAX_RADIUS = 2.5;
-const SEPSIS_RADIUS_SHRINK = 0.35;
-const SEPSIS_PULSE_SPEED = 0.005;
-const SEPSIS_ALPHA_BASE = 0.6;
-const SEPSIS_ALPHA_RANGE = 0.4;
-const SEPSIS_SHADOW_BLUR = 4;
+/** The default figure box: exactly the character's tile. */
+const TILE_FIGURE_BOX: StatusFigureBox = {
+  centerX: 0.5,
+  top: 0,
+  bottom: 1,
+  halfWidth: 0.5,
+};
 
 /** KO overlay parameters */
 const KO_OVERLAY_ALPHA = 0.55;
@@ -381,6 +331,8 @@ export abstract class Player {
   private _juggJuiceHpBoost = 0;
   /** Active status effects (Burn, Frozen, Paralyzed, etc.). */
   statusEffects: StatusEffect[] = [];
+  /** See {@link nextVisualSeed}. Fixed for this character's whole life. */
+  private readonly visualSeed = (nextVisualSeed += VISUAL_SEED_STRIDE);
   /** When true, mob AI treats this player as a defend target and will not attack other targets. */
   isDefendTarget?: boolean;
   /** The last damage source that reduced this player's HP — used to explain the cause of death. */
@@ -1036,27 +988,83 @@ export abstract class Player {
   ): void;
 
   /**
-   * Draw the character, tinting it by its own silhouette while a hit is fresh.
+   * Draw the character, painting hit feedback and status effects through its own
+   * silhouette so both land on the figure rather than on its tile.
    *
-   * Sealed on purpose: a subclass that overrode this would opt itself out of
-   * hit feedback without saying so. Subclasses override {@link drawSelf}.
+   * The two share a single composite pass on purpose: running them separately
+   * would draw the character twice, and the second pass would overwrite the
+   * first — a burning crawler would stop flashing when hit.
+   *
+   * Sealed: a subclass that overrode this would opt itself out of both without
+   * saying so. Subclasses override {@link drawSelf}.
    */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const flashProgress = this.hitFlashProgress();
-    if (flashProgress <= 0) {
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+
+    // Checked before building anything: the overwhelming majority of characters
+    // on screen are neither hurt nor afflicted, and a town crowd would otherwise
+    // allocate a layer array per citizen per frame to discover it is empty.
+    const needsComposite =
+      (this.wearsStatusPaint && this.statusEffects.length > 0) || this.hitFlashProgress() > 0;
+    const layers = needsComposite ? this.silhouetteLayers(sx, sy, tileSize) : [];
+
+    if (layers.length === 0) {
       this.drawSelf(ctx, camX, camY, tileSize);
-      return;
+    } else {
+      const margin = this.silhouetteMarginTiles * tileSize;
+      const bounds = {
+        x: sx - margin,
+        y: sy - margin,
+        width: tileSize + margin * 2,
+        height: tileSize + margin * 2,
+      };
+      drawWithSilhouetteLayers(ctx, bounds, layers, (target) =>
+        this.drawSelf(target, camX, camY, tileSize),
+      );
     }
-    const margin = this.hitFlashMarginTiles * tileSize;
-    const bounds = {
-      x: this.x - camX - margin,
-      y: this.y - camY - margin,
-      width: tileSize + margin * 2,
-      height: tileSize + margin * 2,
-    };
-    drawWithHitFlash(ctx, bounds, flashProgress, (target) =>
-      this.drawSelf(target, camX, camY, tileSize),
-    );
+
+    // Deliberately outside the composite. Anything drawn inside it becomes part
+    // of the silhouette every layer is masked by — so flames drawn in there
+    // would be repainted by their own body coat, wear the rim meant for the
+    // character's outline, turn red under a hit flash, and be clipped to the
+    // composite's box mid-plume.
+    this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  /**
+   * Whether this character still shows the statuses it is carrying.
+   *
+   * The single predicate for both halves of a status: the coats painted through
+   * the silhouette *and* the art drawn in the world. Splitting them is how you
+   * get a corpse washed in a full-strength fire glow with no flames anywhere
+   * near it — worse than either half alone.
+   */
+  protected get wearsStatusPaint(): boolean {
+    return true;
+  }
+
+  /**
+   * Feedback that belongs in the world rather than on the character: status
+   * effects, and whatever a subclass stacks above them.
+   */
+  protected drawWorldFeedback(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
+    if (!this.wearsStatusPaint) return;
+    this.renderStatusEffects(ctx, sx, sy);
+  }
+
+  /** Every coat of paint this character's shape is wearing this frame. */
+  private silhouetteLayers(sx: number, sy: number, tileSize: number): SilhouetteLayer[] {
+    // Status coats go on first so a fresh hit still reads red over the top of
+    // them, which is the one piece of feedback the player cannot afford to miss.
+    const layers = this.wearsStatusPaint
+      ? statusBodyLayers(this.statusEffects, (effect) =>
+          this.statusFrameAt(effect, sx, sy, tileSize),
+        )
+      : [];
+    const flash = hitFlashLayer(this.hitFlashProgress());
+    if (flash !== null) layers.push(flash);
+    return layers;
   }
 
   /**
@@ -1108,163 +1116,74 @@ export abstract class Player {
     ctx.fillRect(sx, sy - HP_BAR_Y_OFFSET, Math.ceil(barW * ratio), barH);
   }
 
-  /** Renders world-space status effect indicators above the character sprite. */
+  /**
+   * How far past its tile the composite's box reaches, in tiles.
+   *
+   * Separate from {@link hitFlashMarginTiles} because the two answer different
+   * questions now. A hit flash lasts a few frames, so art clipped at its edge
+   * flickers and is forgiven. A status lasts seconds to minutes, and everything
+   * `drawSelf` draws outside this box — including attack telegraphs, which some
+   * bosses draw there — is cut off with a straight edge for that whole time.
+   * Anything whose `drawSelf` reaches further than its flash margin must widen
+   * this or lose the difference while it is burning.
+   */
+  protected get silhouetteMarginTiles(): number {
+    return this.hitFlashMarginTiles;
+  }
+
+  /**
+   * The box this character's drawn figure occupies, in tile fractions measured
+   * from its own tile: `top`/`bottom` down from the tile's top edge, `halfWidth`
+   * out from `centerX`.
+   *
+   * Overridden by anything whose art is not tile-shaped. The default is the tile
+   * itself, which is right for the majority of mobs and merely conservative for
+   * the rest — a status on an over-large figure stays inside it rather than
+   * spilling off, which is the failure worth having.
+   */
+  protected get statusFigureBox(): StatusFigureBox {
+    return TILE_FIGURE_BOX;
+  }
+
+  /** Builds the paint description for one status effect on this character. */
+  private statusFrameAt(
+    effect: StatusEffect,
+    sx: number,
+    sy: number,
+    size: number,
+  ): StatusVisualFrame {
+    const figure = this.statusFigureBox;
+    return {
+      centerX: sx + figure.centerX * size,
+      footY: sy + figure.bottom * size,
+      width: figure.halfWidth * 2 * size,
+      height: (figure.bottom - figure.top) * size,
+      timeMs: Date.now(),
+      seed: this.visualSeed,
+      fade: statusFade(effect),
+      moving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+    };
+  }
+
+  /**
+   * Draws the world-space half of every active status effect — flames, silk,
+   * arcs, drips. The half that paints the character's own art is contributed by
+   * {@link silhouetteLayers} instead, because it has to reach the compositor
+   * before the sprite is drawn.
+   */
   protected renderStatusEffects(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.statusEffects.length === 0) return;
-    const cx = sx + this.tileSize / 2;
     ctx.save();
     for (const effect of this.statusEffects) {
-      if (effect.type === 'burn') {
-        const t = Date.now();
-        const pulse = HALF + HALF * Math.sin(t * BURN_PULSE_SPEED);
-        const flicker = Math.sin(t * BURN_FLICKER_SPEED) * BURN_FLICKER_AMP;
-        ctx.globalAlpha = BURN_ALPHA_BASE + BURN_ALPHA_RANGE * pulse;
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur = BURN_GLOW_MIN_SIZE + BURN_GLOW_PULSE_RANGE * pulse;
-        // Outer flame
-        ctx.fillStyle = '#f97316';
-        ctx.beginPath();
-        ctx.ellipse(
-          cx + flicker,
-          sy - BURN_OUTER_FLAME_Y_OFFSET,
-          BURN_OUTER_FLAME_RADIUS_X,
-          BURN_OUTER_FLAME_RADIUS_Y,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-        // Inner flame
-        ctx.fillStyle = '#fbbf24';
-        ctx.beginPath();
-        ctx.ellipse(
-          cx + flicker * BURN_INNER_X_FRACTION,
-          sy - BURN_INNER_FLAME_Y_OFFSET,
-          BURN_INNER_FLAME_RADIUS_X,
-          BURN_INNER_FLAME_RADIUS_Y,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      if (effect.type === 'poison') {
-        const t = Date.now();
-        const drift = (t * POISON_DRIFT_SPEED) % (Math.PI * 2);
-        ctx.shadowColor = '#4ade80';
-        ctx.shadowBlur = POISON_SHADOW_BLUR;
-        ctx.fillStyle = '#22c55e';
-        // Three staggered green drips rising above the character
-        for (let b = 0; b < POISON_BUBBLE_COUNT; b++) {
-          const phase = drift + b * POISON_PHASE_SPACING; // 2π/3 apart
-          const bx = cx + Math.sin(phase) * POISON_ORBIT_RADIUS;
-          const by =
-            sy -
-            POISON_Y_OFFSET -
-            b * POISON_Y_STEP -
-            Math.abs(Math.sin(phase * POISON_RETRACT_SPEED)) * POISON_WAVE_AMP;
-          const r = POISON_MAX_RADIUS - b * POISON_RADIUS_SHRINK;
-          ctx.globalAlpha = POISON_ALPHA_BASE + POISON_ALPHA_RANGE * Math.sin(phase);
-          ctx.beginPath();
-          ctx.arc(bx, by, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-      }
-      if (effect.type === 'stuck') {
-        const t = Date.now();
-        const pulse = STUCK_PULSE_BASE + STUCK_PULSE_RANGE * Math.sin(t * STUCK_ALPHA_PULSE_SPEED);
-        const cx2 = sx + this.tileSize / 2;
-        const cy2 = sy + this.tileSize / 2;
-        ctx.globalAlpha = pulse * STUCK_RING_FRACTION;
-        ctx.strokeStyle = '#6a880e';
-        ctx.lineWidth = STUCK_LINE_WIDTH;
-        ctx.lineCap = 'round';
-        // Six web strands radiating outward from the character centre
-        for (let s = 0; s < STUCK_STRAND_COUNT; s++) {
-          const angle = (s / STUCK_STRAND_COUNT) * Math.PI * 2 + t * STUCK_ORBIT_SPEED;
-          const r1 = this.tileSize * STUCK_INNER_RADIUS;
-          const r2 =
-            this.tileSize * STUCK_OUTER_BASE_FRACTION +
-            Math.sin((angle * STUCK_STRAND_COUNT) / 2 + t * STUCK_WAVE_SPEED) * STUCK_WAVE_AMP;
-          ctx.beginPath();
-          ctx.moveTo(cx2 + Math.cos(angle) * r1, cy2 + Math.sin(angle) * r1);
-          ctx.lineTo(cx2 + Math.cos(angle) * r2, cy2 + Math.sin(angle) * r2);
-          ctx.stroke();
-        }
-        // Cross-strand connecting the tips (one ring)
-        ctx.globalAlpha = pulse * STUCK_INNER_RING_ALPHA;
-        ctx.beginPath();
-        ctx.arc(cx2, cy2, this.tileSize * STUCK_RING_FRACTION, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (effect.type === 'spit_venom') {
-        const t = Date.now();
-        const cx2 = sx + this.tileSize / 2;
-        const cy2 = sy + this.tileSize;
-        ctx.shadowColor = '#8fb000';
-        ctx.shadowBlur = SEPSIS_SHADOW_BLUR;
-        for (let d = 0; d < SPIT_DROP_COUNT; d++) {
-          const phase = (t * SPIT_DRIFT_SPEED + d * SPIT_PHASE_STEP) % (Math.PI * 2);
-          const dropX =
-            cx2 + Math.sin(phase * SPIT_WAVE_X_FREQ + d) * this.tileSize * SPIT_ORBIT_FRACTION;
-          const dropY =
-            cy2 + ((t * SPIT_DROP_SCROLL_SPEED + d * SPIT_DROP_SPACING) % SPIT_DROP_SCROLL_RANGE);
-          const alpha = SPIT_ALPHA_BASE + SPIT_ALPHA_RANGE * Math.sin(phase);
-          ctx.globalAlpha = alpha * SPIT_ALPHA_OUTER;
-          ctx.fillStyle = d % 2 === 0 ? '#8fb000' : '#b5c800';
-          ctx.beginPath();
-          ctx.ellipse(dropX, dropY, SPIT_RADIUS_X, SPIT_RADIUS_Y, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-      }
-      if (effect.type === 'drunk') {
-        const t = Date.now();
-        const drift = (t * DRUNK_BUBBLE_DRIFT_SPEED) % (Math.PI * 2);
-        ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = DRUNK_BUBBLE_SHADOW_BLUR;
-        ctx.fillStyle = '#fde68a';
-        // Amber bubbles circling the head, tracing the same lazy loop as the camera.
-        for (let b = 0; b < DRUNK_BUBBLE_COUNT; b++) {
-          const phase = drift + b * DRUNK_BUBBLE_PHASE_SPACING;
-          const bx = cx + Math.sin(phase) * DRUNK_BUBBLE_ORBIT_RADIUS;
-          const by = sy - DRUNK_BUBBLE_Y_OFFSET + Math.cos(phase) * DRUNK_BUBBLE_RISE_AMP;
-          ctx.globalAlpha =
-            DRUNK_BUBBLE_ALPHA_BASE +
-            DRUNK_BUBBLE_ALPHA_RANGE * Math.sin(phase * DRUNK_BUBBLE_TWINKLE_RATE);
-          ctx.beginPath();
-          ctx.arc(bx, by, DRUNK_BUBBLE_RADIUS, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-      }
-      if (effect.type === 'sepsis') {
-        const t = Date.now();
-        const drift = (t * SEPSIS_DRIFT_SPEED) % (Math.PI * 2);
-        // Sickly yellow-green bubbles + dripping effect
-        ctx.shadowColor = '#a3e635';
-        ctx.shadowBlur = SEPSIS_SHADOW_BLUR;
-        for (let b = 0; b < SEPSIS_BUBBLE_COUNT; b++) {
-          const phase = drift + b * SEPSIS_PHASE_SPACING; // π/2 apart
-          const bx = cx + Math.sin(phase) * SEPSIS_ORBIT_RADIUS;
-          const by =
-            sy -
-            SEPSIS_Y_OFFSET -
-            b * SEPSIS_Y_STEP -
-            Math.abs(Math.sin(phase * SEPSIS_RETRACT_SPEED)) * SEPSIS_SHADOW_BLUR;
-          const r = SEPSIS_MAX_RADIUS - b * SEPSIS_RADIUS_SHRINK;
-          const pulse =
-            SEPSIS_ALPHA_BASE + SEPSIS_ALPHA_RANGE * Math.sin(phase + t * SEPSIS_PULSE_SPEED);
-          ctx.globalAlpha = pulse;
-          ctx.fillStyle = b % 2 === 0 ? '#bef264' : '#a3e635';
-          ctx.beginPath();
-          ctx.arc(bx, by, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-      }
+      const overlay = statusVisual(effect.type)?.overlay;
+      if (overlay === undefined) continue;
+      overlay(ctx, this.statusFrameAt(effect, sx, sy, this.tileSize));
+      // Each overlay is free to leave alpha and blend mode wherever it landed;
+      // resetting between them is cheaper than making every one of them tidy up.
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
     }
     ctx.restore();
   }

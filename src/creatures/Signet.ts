@@ -91,6 +91,15 @@ const MAX_GAIT_RADIANS_PER_FRAME = 0.09;
  * conjures a short-lived `InkMarauder` ally.
  */
 export class Signet extends Mob {
+  /**
+   * Her horns and elite marker sit well above her tile, so a status label
+   * anchored to the tile would land across her face. Same clearance the rest of
+   * her overlays use.
+   */
+  protected override get statusLabelClearanceTiles(): number {
+    return SIGNET_OVERLAY_CLEARANCE;
+  }
+
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

@@ -8,6 +8,7 @@ import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
 import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
+import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { getLevelDef } from '../levels/index';
@@ -80,6 +81,11 @@ export function devBootScene(
 
   if (params.get('llama') !== null) {
     sceneManager.replace(new LlamaPreviewScene());
+    return true;
+  }
+
+  if (params.get('status') !== null) {
+    sceneManager.replace(new StatusPreviewScene());
     return true;
   }
 

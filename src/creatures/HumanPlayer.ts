@@ -1,4 +1,34 @@
-import { Player, WALK_FRAME_SPEED, type StatName } from '../Player';
+import { Player, WALK_FRAME_SPEED, type StatName, type StatusFigureBox } from '../Player';
+import { TILE_SIZE } from '../core/constants';
+
+/**
+ * How far the top of his hair sits above the tile anchor at the in-game tile
+ * size. Measured off the generated sheet: the standing rows top out 22px above
+ * the anchor. Re-measure it whenever `HUMAN_SCALE` in the generator changes.
+ */
+const HUMAN_SPRITE_TOP_ABOVE_TILE = 22;
+
+/** Where his soles land, in tile fractions — a hair short of the tile's foot. */
+const HUMAN_SOLE_BELOW_TILE_TOP = 0.98;
+
+/**
+ * Half his shoulder-to-shoulder width in tile fractions. He is a narrow figure:
+ * flames or drips spread across the full tile would visibly miss him.
+ */
+const HUMAN_HALF_WIDTH_TILES = 0.3;
+
+/**
+ * Carl's ink, measured off `src/images/characters/human.png` against the
+ * manifest's tile anchor. Exported so `StatusPreviewScene` reviews effects on
+ * the same box the game paints them on — a harness using its own numbers can
+ * only prove that the harness's numbers work.
+ */
+export const HUMAN_STATUS_FIGURE_BOX: StatusFigureBox = {
+  centerX: 0.5,
+  top: -HUMAN_SPRITE_TOP_ABOVE_TILE / TILE_SIZE,
+  bottom: HUMAN_SOLE_BELOW_TILE_TOP,
+  halfWidth: HUMAN_HALF_WIDTH_TILES,
+};
 import type { Mob } from './Mob';
 import {
   drawHumanSprite,
@@ -71,13 +101,8 @@ export class HumanPlayer extends Player {
   private static readonly ACTIVE_SPHERE_RADIUS = 4;
   /** Distance above the sprite so the sphere sits just below the health bar. */
   private static readonly ACTIVE_SPHERE_GAP = 3;
-  /**
-   * How far the top of his hair sits above the tile anchor at the in-game tile
-   * size. Measured off the generated sheet: the standing rows top out 22px
-   * above the anchor, and the marker and health bar are stacked from there.
-   * Re-measure it whenever `HUMAN_SCALE` in the generator changes.
-   */
-  private static readonly SPRITE_TOP_ABOVE_TILE = 22;
+  /** The marker and health bar are stacked from the top of his hair. */
+  private static readonly SPRITE_TOP_ABOVE_TILE = HUMAN_SPRITE_TOP_ABOVE_TILE;
   /** Extra lift from the marker sphere's centre up to the health bar's anchor. */
   private static readonly BAR_LIFT_ABOVE_SPHERE = 7;
   /** Offset from tile anchor so sphere sits in the gap between head top and health bar bottom. */
@@ -98,6 +123,16 @@ export class HumanPlayer extends Player {
   protected override walkFrameSpeed = WALK_FRAME_SPEED * HumanPlayer.GAIT_RATE;
   private static readonly SPRITE_HORIZONTAL_OFFSET = 0.5;
   private static readonly SPRITE_VERTICAL_OFFSET = 0.5;
+
+  /**
+   * He stands two thirds of a tile taller than his own tile and is only three
+   * fifths of one wide. Status effects are painted over this box, so a burn
+   * spread across his tile instead would pile up around his shins and never
+   * reach his chest.
+   */
+  protected override get statusFigureBox(): StatusFigureBox {
+    return HUMAN_STATUS_FIGURE_BOX;
+  }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
@@ -276,7 +311,6 @@ export class HumanPlayer extends Player {
     });
 
     this.renderHealthBar(ctx, sx, sy - HumanPlayer.HEALTH_BAR_Y_OFFSET);
-    this.renderStatusEffects(ctx, sx, sy);
     this.renderKnockedOutOverlay(ctx, sx, sy);
   }
 }
