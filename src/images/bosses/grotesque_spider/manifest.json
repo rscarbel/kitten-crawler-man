@@ -128,61 +128,22 @@
   },
   "life_machine": {
     "path": "bosses/grotesque_spider/life_machine.png",
-    "frameWidth": 57.5,
-    "frameHeight": 96,
-    "tileX": 0,
-    "tileY": 72,
-    "tileScale": 24,
+    "frameWidth": 128,
+    "frameHeight": 192,
+    "tileX": 32,
+    "tileY": 128,
+    "tileScale": 64,
+    "blockedRegions": [{ "x1": 32, "y1": 128, "x2": 96, "y2": 192 }],
     "states": {
-      "life_machine_without_egg_sac": {
-        "row": 0,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_idle": {
-        "row": 0,
-        "colOffset": 1,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_warming": {
-        "row": 0,
-        "colOffset": 2,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_hot": {
-        "row": 0,
-        "colOffset": 3,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_active_1": {
-        "row": 0,
-        "colOffset": 4,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_active_2": {
-        "row": 1,
-        "frameCount": 3,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_with_open_egg_sac": {
-        "row": 1,
-        "colOffset": 3,
-        "frameCount": 1,
-        "blockedRegions": [{ "x1": 0, "y1": 72, "x2": 50, "y2": 96 }]
-      },
-      "life_machine_green_lights": {
-        "row": 2,
-        "frameCount": 3
-      },
-      "life_machine_red_lights": {
-        "row": 2,
-        "colOffset": 3,
-        "frameCount": 3
-      }
+      "life_machine_idle": { "row": 0, "frameCount": 4 },
+      "life_machine_warming": { "row": 1, "frameCount": 4 },
+      "life_machine_hot": { "row": 2, "frameCount": 4 },
+      "life_machine_printing": { "row": 3, "frameCount": 6 },
+      "life_machine_dispensing": { "row": 4, "frameCount": 4 },
+      "life_machine_purging": { "row": 5, "frameCount": 4 },
+      "life_machine_offline": { "row": 6, "frameCount": 2 },
+      "life_machine_green_lights": { "row": 7, "frameCount": 3 },
+      "life_machine_red_lights": { "row": 8, "frameCount": 3 }
     }
   },
   "scientist": {

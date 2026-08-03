@@ -60,6 +60,9 @@
     "scripts/generate-llama-sprite.ts",
     "scripts/render-llama.ts",
     "scripts/lavaBallArt.ts",
-    "scripts/generate-lava-ball-sprites.ts"
+    "scripts/generate-lava-ball-sprites.ts",
+    "scripts/lifeMachineArt.ts",
+    "scripts/generate-life-machine-sprite.ts",
+    "scripts/render-life-machine.ts"
   ]
 }

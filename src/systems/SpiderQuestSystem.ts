@@ -22,6 +22,8 @@ import type { EventBus } from '../core/EventBus';
 import { SmallSpider } from '../creatures/SmallSpider';
 import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
+import type { SpriteDef } from '../core/SpriteLoader';
+import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem } from './KeyboardHeroSystem';
 import { MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
@@ -41,13 +43,15 @@ const COMPUTER_INTERACT_MULTIPLIER = 3;
 // Room locking
 const SPIDER_ENTRY_WINDOW_FRAMES = 1800; // 30 seconds at 60 fps
 
-// Life machine cycle timing
+// Life machine print cycle timing. Printing is the longest phase on purpose:
+// it is the one that tells the player where the spiders come from, so it has to
+// stay on screen long enough to be watched.
 const IDLE_FRAMES = 120;
 const WARMING_FRAMES = 60;
 const HOT_FRAMES = 60;
-const ACTIVE_FRAMES = 180;
-const OPEN_EGG_SAC_FRAMES = 240;
-const WITHOUT_EGG_SAC_FRAMES = 120;
+const PRINTING_FRAMES = 300;
+const DISPENSING_FRAMES = 180;
+const PURGING_FRAMES = 120;
 
 const MAX_SMALL_SPIDERS = 10;
 
@@ -155,8 +159,8 @@ const CUTSCENE_TEXT_OFFSET_Y = 20;
 const CUTSCENE_DARKNESS_ALPHA = 0.35;
 const LIGHTANIM_DELAY = 8;
 const LIGHTANIM_FRAME_COUNT = 3;
-const ACTIVE_ANIM_DELAY = 10;
-const ACTIVE_ANIM_FRAME_COUNT = 4;
+/** Ticks per frame for the states that loop rather than play out once. */
+const LIFE_MACHINE_LOOP_DELAY = 10;
 const LIFE_MACHINE_DRAW_HEIGHT = 3.0;
 const SCIENTIST_DRAW_HEIGHT = 1.5;
 const SCIENTIST_WALK_DIST_THRESHOLD = 2;
@@ -308,15 +312,50 @@ type QuestPhase =
   | 'boss_fight'
   | 'complete';
 
-type LifeMachineState = 'idle' | 'warming' | 'hot' | 'active' | 'open_egg_sac' | 'without_egg_sac';
+/**
+ * One turn of a life machine's print cycle: bank down, spin up, heat the
+ * nozzle, print a sac, drop it out of the chute, clear the husk — then
+ * `offline`, which the terminal hack puts every machine into for good.
+ */
+type LifeMachineState =
+  'idle' | 'warming' | 'hot' | 'printing' | 'dispensing' | 'purging' | 'offline';
+
+/** How a state's sprite row is played back over the time the state lasts. */
+type LifeMachinePlayback = 'loop' | 'once';
+
+interface LifeMachineStateDef {
+  /** Sprite state in the `life_machine` manifest entry. */
+  readonly spriteState: string;
+  /** Ticks the state lasts, or null for a state that never ends on its own. */
+  readonly duration: number | null;
+  readonly playback: LifeMachinePlayback;
+}
+
+const LIFE_MACHINE_STATES: Readonly<Record<LifeMachineState, LifeMachineStateDef>> = {
+  idle: { spriteState: 'life_machine_idle', duration: IDLE_FRAMES, playback: 'loop' },
+  warming: { spriteState: 'life_machine_warming', duration: WARMING_FRAMES, playback: 'once' },
+  hot: { spriteState: 'life_machine_hot', duration: HOT_FRAMES, playback: 'once' },
+  // The printing and dispensing rows are a build-up and a hand-off: played once
+  // across the state's whole duration, they show a sac being made and delivered.
+  // Looped, they would just flicker.
+  printing: { spriteState: 'life_machine_printing', duration: PRINTING_FRAMES, playback: 'once' },
+  dispensing: {
+    spriteState: 'life_machine_dispensing',
+    duration: DISPENSING_FRAMES,
+    playback: 'once',
+  },
+  purging: { spriteState: 'life_machine_purging', duration: PURGING_FRAMES, playback: 'once' },
+  offline: { spriteState: 'life_machine_offline', duration: null, playback: 'loop' },
+};
 
 interface LifeMachine {
   tileX: number;
   tileY: number;
   state: LifeMachineState;
-  stateTimer: number;
-  activeAnimFrame: number;
-  activeAnimTimer: number;
+  /** Ticks spent in the current state; drives which frame of its row shows. */
+  stateElapsed: number;
+  /** Whether this cycle's sac has already put its spiderling on the floor. */
+  spiderlingReleased: boolean;
   lightAnimFrame: number;
   lightAnimTimer: number;
   poweringOnSoundPending: boolean;
@@ -426,7 +465,7 @@ export class SpiderQuestSystem implements GameSystem {
   // Boss
   private _grotesqueSpider: GrotesqueSpider | null = null;
 
-  // Set when hacking completes — machines freeze at open_egg_sac with red lights
+  // Set when hacking completes — machines go offline and switch to red lamps
   private _hackingDone = false;
 
   // Room locking (boss_fight phase)
@@ -509,11 +548,10 @@ export class SpiderQuestSystem implements GameSystem {
           tileX: pt.x,
           tileY: pt.y,
           state: 'idle',
-          stateTimer: IDLE_FRAMES,
-          activeAnimFrame: 0,
-          activeAnimTimer: 10,
+          stateElapsed: 0,
+          spiderlingReleased: false,
           lightAnimFrame: 0,
-          lightAnimTimer: 8,
+          lightAnimTimer: LIGHTANIM_DELAY,
           poweringOnSoundPending: false,
         });
         gameMap.blockTilePermanently(pt.x, pt.y);
@@ -629,8 +667,13 @@ export class SpiderQuestSystem implements GameSystem {
     // Overlay timer ticks even after quest ends
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
 
-    if (this.phase === 'inactive' || this.phase === 'complete') return;
+    if (this.phase === 'inactive') return;
     if (!this.roomData) return;
+
+    // `render()` keeps drawing the machines after the quest is over, so their
+    // frames have to keep advancing after it too.
+    this._tickLifeMachineAnimation();
+    if (this.phase === 'complete') return;
 
     this._updateMachineryLoop(ctx.active);
 
@@ -1182,8 +1225,11 @@ export class SpiderQuestSystem implements GameSystem {
 
   private _onHackComplete(): void {
     this._hackingDone = true;
+    // Every machine dies where it stands: dark chamber, hatch stuck open, the
+    // sac it was printing abandoned half-finished. This is the player's proof
+    // the terminal did something.
     for (const machine of this.lifeMachines) {
-      machine.state = 'open_egg_sac';
+      this._enterLifeMachineState(machine, 'offline');
     }
     this.phase = 'cutscene';
     this.cutsceneTimer = 0;
@@ -1213,28 +1259,69 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
+  /**
+   * Every state change goes through here so `stateElapsed` — which the renderer
+   * reads to pick a frame — can never be left over from the previous state.
+   * Warming is the moment the machine audibly spins up, so its cue is armed
+   * here rather than at each call site that can start a cycle.
+   */
+  private _enterLifeMachineState(machine: LifeMachine, state: LifeMachineState): void {
+    machine.state = state;
+    machine.stateElapsed = 0;
+    machine.spiderlingReleased = false;
+    if (state === 'warming') machine.poweringOnSoundPending = true;
+  }
+
+  /**
+   * Frame-level animation, which keeps running in the phases that freeze the
+   * print cycle. The machines are on screen for the whole cutscene, boss fight
+   * and aftermath, and a machine whose lamps have stopped mid-chase reads as a
+   * rendering bug rather than as a machine somebody switched off.
+   */
+  private _tickLifeMachineAnimation(): void {
+    // The rhythm minigame stops the dungeon around the player; machines that
+    // kept animating through it would be the one thing still moving.
+    if (this.phase === 'hacking' || this.phase === 'keyboard_hero_tutorial') return;
+
+    for (const machine of this.lifeMachines) {
+      machine.stateElapsed++;
+      machine.lightAnimTimer--;
+      if (machine.lightAnimTimer <= 0) {
+        machine.lightAnimTimer = LIGHTANIM_DELAY;
+        machine.lightAnimFrame = (machine.lightAnimFrame + 1) % LIGHTANIM_FRAME_COUNT;
+      }
+    }
+  }
+
+  /** Every state a machine passes through once it has committed to making a sac. */
+  private static readonly COMMITTED_STATES: ReadonlySet<LifeMachineState> = new Set([
+    'warming',
+    'hot',
+    'printing',
+  ]);
+
+  /**
+   * Spiderlings already alive plus the ones machines are part-way through
+   * making. A machine claims its slot the moment it leaves idle and holds it
+   * until the sac tears open, so six machines running in lockstep cannot all
+   * read the same free slot and all spawn into it.
+   */
+  private _committedSpiderlingCount(): number {
+    const aliveCount = this.smallSpiders.filter((spider) => spider.isAlive).length;
+    const promised = this.lifeMachines.filter(
+      (machine) =>
+        SpiderQuestSystem.COMMITTED_STATES.has(machine.state) ||
+        (machine.state === 'dispensing' && !machine.spiderlingReleased),
+    ).length;
+    return aliveCount + promised;
+  }
+
   private _updateLifeMachines(): void {
     if (this.phase === 'cutscene' || this.phase === 'boss_fight' || this.phase === 'complete') {
       return;
     }
 
     for (const machine of this.lifeMachines) {
-      // Tick light animation
-      machine.lightAnimTimer--;
-      if (machine.lightAnimTimer <= 0) {
-        machine.lightAnimTimer = LIGHTANIM_DELAY;
-        machine.lightAnimFrame = (machine.lightAnimFrame + 1) % LIGHTANIM_FRAME_COUNT;
-      }
-
-      // Tick active animation
-      if (machine.state === 'active') {
-        machine.activeAnimTimer--;
-        if (machine.activeAnimTimer <= 0) {
-          machine.activeAnimTimer = ACTIVE_ANIM_DELAY;
-          machine.activeAnimFrame = (machine.activeAnimFrame + 1) % ACTIVE_ANIM_FRAME_COUNT;
-        }
-      }
-
       if (machine.poweringOnSoundPending) {
         machine.poweringOnSoundPending = false;
         // Only audible when the player is inside the room
@@ -1243,56 +1330,71 @@ export class SpiderQuestSystem implements GameSystem {
         }
       }
 
-      machine.stateTimer--;
-      if (machine.stateTimer > 0) continue;
+      if (machine.state === 'dispensing') {
+        this._releaseSpiderlingIfDue(machine);
+      }
 
-      // State transition
+      const duration = LIFE_MACHINE_STATES[machine.state].duration;
+      if (duration === null || machine.stateElapsed < duration) continue;
+
       switch (machine.state) {
-        case 'idle':
-          machine.state = 'warming';
-          machine.stateTimer = WARMING_FRAMES;
-          machine.poweringOnSoundPending = true;
-          break;
-
-        case 'warming':
-          machine.state = 'hot';
-          machine.stateTimer = HOT_FRAMES;
-          break;
-
-        case 'hot':
-          machine.state = 'active';
-          machine.stateTimer = ACTIVE_FRAMES;
-          machine.activeAnimFrame = 0;
-          machine.activeAnimTimer = 10;
-          break;
-
-        case 'active': {
-          const aliveCount = this.smallSpiders.filter((s) => s.isAlive).length;
-          if (aliveCount >= MAX_SMALL_SPIDERS) {
-            machine.state = 'idle';
-            machine.stateTimer = IDLE_FRAMES;
-          } else {
-            machine.state = 'open_egg_sac';
-            machine.stateTimer = OPEN_EGG_SAC_FRAMES;
-            this._spawnSmallSpider(machine.tileX, machine.tileY);
-          }
+        case 'idle': {
+          // The capacity check belongs at the very start of the cycle. Refusing
+          // here is the only refusal a player cannot see or hear: by `warming`
+          // the machine has already played its spin-up cue, and by `hot` there
+          // is a bead of silk on the plate that would have to vanish.
+          const atCapacity = this._committedSpiderlingCount() >= MAX_SMALL_SPIDERS;
+          this._enterLifeMachineState(machine, atCapacity ? 'idle' : 'warming');
           break;
         }
 
-        case 'open_egg_sac':
-          machine.state = 'without_egg_sac';
-          machine.stateTimer = WITHOUT_EGG_SAC_FRAMES;
+        case 'warming':
+          this._enterLifeMachineState(machine, 'hot');
           break;
 
-        case 'without_egg_sac':
-          machine.state = 'idle';
-          machine.stateTimer = IDLE_FRAMES;
+        case 'hot':
+          this._enterLifeMachineState(machine, 'printing');
+          break;
+
+        case 'printing':
+          this._enterLifeMachineState(machine, 'dispensing');
+          break;
+
+        case 'dispensing':
+          this._enterLifeMachineState(machine, 'purging');
+          break;
+
+        case 'purging':
+          this._enterLifeMachineState(machine, 'idle');
+          break;
+
+        // `offline` has no duration, so the guard above already skipped it: a
+        // machine the terminal killed never re-enters the cycle.
+        case 'offline':
           break;
       }
     }
 
     // Prune dead spiders
     this.smallSpiders = this.smallSpiders.filter((s) => s.isAlive);
+  }
+
+  /**
+   * Spawns the spiderling on the frame the delivered sac tears open, so the
+   * spider the player sees crawl away is the one they watched the machine make.
+   * The frame is resolved the same way the renderer resolves it, or the sac
+   * gapes empty for a moment before anything comes out.
+   */
+  private _releaseSpiderlingIfDue(machine: LifeMachine): void {
+    if (machine.spiderlingReleased) return;
+    const duration = LIFE_MACHINE_STATES.dispensing.duration;
+    if (duration === null) return;
+    const frameCount = this._lifeMachineFrameCount('dispensing');
+    if (frameCount === null) return;
+    const releaseTick = Math.ceil((lifeMachineSacSplitFrame(frameCount) * duration) / frameCount);
+    if (machine.stateElapsed < releaseTick) return;
+    machine.spiderlingReleased = true;
+    this._spawnSmallSpider(machine.tileX, machine.tileY);
   }
 
   private _spawnSmallSpider(tileX: number, tileY: number): void {
@@ -1607,26 +1709,53 @@ export class SpiderQuestSystem implements GameSystem {
     ctx.drawImage(def.img, srcX, srcY, def.frameWidth, def.frameHeight, sx, sy, drawW, drawH);
   }
 
-  private _lifeMachineStateName(machine: LifeMachine): string {
-    switch (machine.state) {
-      case 'idle':
-        return 'life_machine_idle';
-      case 'warming':
-        return 'life_machine_warming';
-      case 'hot':
-        return 'life_machine_hot';
-      case 'active': {
-        // Frames 0-3: 0 = active_1, 1-3 = active_2 col 0,1,2
-        if (machine.activeAnimFrame === 0) {
-          return 'life_machine_active_1';
-        }
-        return 'life_machine_active_2';
-      }
-      case 'open_egg_sac':
-        return 'life_machine_with_open_egg_sac';
-      case 'without_egg_sac':
-        return 'life_machine_without_egg_sac';
+  /** Frames in a state's sprite row, or null if the sheet has not loaded yet. */
+  private _lifeMachineFrameCount(state: LifeMachineState): number | null {
+    const def = this._getSpriteDef('life_machine');
+    if (def === undefined) return null;
+    return def.states.get(LIFE_MACHINE_STATES[state].spriteState)?.frameCount ?? null;
+  }
+
+  /**
+   * Which frame of the machine's row is showing. A `once` state maps its whole
+   * duration onto its row so the sac is seen being built and delivered; a
+   * `loop` state just cycles.
+   */
+  private _lifeMachineFrame(machine: LifeMachine, frameCount: number): number {
+    if (frameCount <= 1) return 0;
+    const def = LIFE_MACHINE_STATES[machine.state];
+    if (def.playback === 'once' && def.duration !== null) {
+      const progress = clamp(machine.stateElapsed / def.duration, 0, 1);
+      return Math.min(frameCount - 1, Math.floor(progress * frameCount));
     }
+    return Math.floor(machine.stateElapsed / LIFE_MACHINE_LOOP_DELAY) % frameCount;
+  }
+
+  /** Blits one row of the life machine sheet at an explicit frame index. */
+  private _drawLifeMachineRow(
+    ctx: CanvasRenderingContext2D,
+    def: SpriteDef,
+    stateName: string,
+    frameIndex: number,
+    sx: number,
+    sy: number,
+    drawW: number,
+    drawH: number,
+  ): void {
+    const state = def.states.get(stateName);
+    if (state === undefined) return;
+    const column = (state.colOffset ?? 0) + (frameIndex % state.frameCount);
+    ctx.drawImage(
+      def.img,
+      column * def.frameWidth,
+      state.row * def.frameHeight,
+      def.frameWidth,
+      def.frameHeight,
+      sx,
+      sy,
+      drawW,
+      drawH,
+    );
   }
 
   private _renderLifeMachines(
@@ -1655,69 +1784,19 @@ export class SpiderQuestSystem implements GameSystem {
       const sx = worldX - camX - (drawW - TILE_SIZE) * TILE_CENTER_OFFSET_PX;
       const sy = worldY - camY - (drawH - TILE_SIZE);
 
-      const stateName = this._lifeMachineStateName(machine);
+      const stateName = LIFE_MACHINE_STATES[machine.state].spriteState;
+      const bodyState = def.states.get(stateName);
+      if (bodyState === undefined) continue;
+      const frameIndex = this._lifeMachineFrame(machine, bodyState.frameCount);
+      this._drawLifeMachineRow(ctx, def, stateName, frameIndex, sx, sy, drawW, drawH);
 
-      // For active_2, we need the sub-frame column offset (0,1,2)
-      if (machine.state === 'active' && machine.activeAnimFrame > 0) {
-        const activeState = def.states.get('life_machine_active_2');
-        if (activeState !== undefined) {
-          const subFrame = machine.activeAnimFrame - 1; // 0,1,2
-          const srcX = subFrame * def.frameWidth;
-          const srcY = activeState.row * def.frameHeight;
-          ctx.drawImage(def.img, srcX, srcY, def.frameWidth, def.frameHeight, sx, sy, drawW, drawH);
-        }
-      } else {
-        this._drawSpriteFrame(ctx, 'life_machine', stateName, sx, sy, drawW, drawH);
-      }
-
-      if (this._hackingDone) {
-        // Red lights after hacking — machines are offline/shut down
-        const lightState = def.states.get('life_machine_red_lights');
-        if (lightState !== undefined) {
-          ctx.save();
-          ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
-          const lightSrcX = machine.lightAnimFrame * def.frameWidth;
-          const lightSrcY = lightState.row * def.frameHeight;
-          ctx.drawImage(
-            def.img,
-            lightSrcX,
-            lightSrcY,
-            def.frameWidth,
-            def.frameHeight,
-            sx,
-            sy,
-            drawW,
-            drawH,
-          );
-          ctx.restore();
-        }
-      } else if (
-        machine.state === 'idle' ||
-        machine.state === 'warming' ||
-        machine.state === 'hot' ||
-        machine.state === 'active'
-      ) {
-        // Green lights overlay while machines are running
-        const lightState = def.states.get('life_machine_green_lights');
-        if (lightState !== undefined) {
-          ctx.save();
-          ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
-          const lightSrcX = machine.lightAnimFrame * def.frameWidth;
-          const lightSrcY = lightState.row * def.frameHeight;
-          ctx.drawImage(
-            def.img,
-            lightSrcX,
-            lightSrcY,
-            def.frameWidth,
-            def.frameHeight,
-            sx,
-            sy,
-            drawW,
-            drawH,
-          );
-          ctx.restore();
-        }
-      }
+      // Lamps are a separate row composited over the body, so a shut-down
+      // machine only differs from a running one by which colour is lit.
+      const lampState = this._hackingDone ? 'life_machine_red_lights' : 'life_machine_green_lights';
+      ctx.save();
+      ctx.globalAlpha = LIFE_MACHINE_LIGHT_OPACITY;
+      this._drawLifeMachineRow(ctx, def, lampState, machine.lightAnimFrame, sx, sy, drawW, drawH);
+      ctx.restore();
     }
   }
 
@@ -2035,9 +2114,9 @@ export class SpiderQuestSystem implements GameSystem {
     const lines = [
       'Oh! A visitor. Please, I need your help —',
       'my experiments went terribly wrong. The life',
-      'machines have gone haywire and keep producing',
-      'spiders. You must access the terminal computer',
-      'and shut it down before this gets worse!',
+      'machines keep printing egg sacs and dropping',
+      'them on my floor! Get to the terminal computer',
+      'and shut them down before this gets worse!',
     ];
     for (let i = 0; i < lines.length; i++) {
       drawText(ctx, lines[i], {

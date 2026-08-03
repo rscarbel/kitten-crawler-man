@@ -31,6 +31,7 @@
     "gen:rat": "tsx scripts/generate-rat-sprite.ts",
     "gen:llama": "tsx scripts/generate-llama-sprite.ts",
     "gen:lava-ball": "tsx scripts/generate-lava-ball-sprites.ts",
+    "gen:life-machine": "tsx scripts/generate-life-machine-sprite.ts",
     "gen:magic-missile": "tsx scripts/generate-magic-missile-sprites.ts",
     "gen:rat-kin": "tsx scripts/generate-rat-kin-sprite.gates.ts",
     "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts"
