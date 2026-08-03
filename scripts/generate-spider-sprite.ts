@@ -34,8 +34,10 @@ import { resolve } from 'path';
 
 // 192px leaves clearance for the airborne pounce frames, where the body scales
 // up and the forelegs are thrown a full body-length ahead.
-const FRAME_W = 192;
-const FRAME_H = 192;
+// A spider's legs span well over twice its body, and the pounce row throws them
+// out further still, so the frame has to be four tiles wide to hold the splay.
+const FRAME_W = 256;
+const FRAME_H = 256;
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
 const TILE_SCALE = 64;
 /** Rotation pivot within each frame — the spider's body centre. */
@@ -124,14 +126,29 @@ const SHADOW_COLOR = 'rgba(0,0,0,0.42)';
 
 // ── Body geometry, in tile units (1.0 === TILE_SCALE px) ─────────────────────
 
-const PROSOMA_FRONT_Y = -0.245;
-const PROSOMA_REAR_Y = 0.1;
-const PROSOMA_HALF_WIDTH = 0.168;
-const ABDOMEN_FRONT_Y = 0.0;
-const ABDOMEN_REAR_Y = 0.56;
-const ABDOMEN_HALF_WIDTH = 0.235;
-const ABDOMEN_WIDEST_Y = 0.24;
-const PEDICEL_HALF_WIDTH = 0.038;
+// An arachnid has two tagmata of comparable bulk, not an insect's small head on
+// a fat gaster. If the carapace shrinks much below the abdomen it stops reading
+// as half the animal and starts reading as a head, and no amount of leg work
+// recovers the silhouette from there.
+const PROSOMA_FRONT_Y = -0.3;
+const PROSOMA_REAR_Y = 0.115;
+const PROSOMA_HALF_WIDTH = 0.2;
+const PROSOMA_LENGTH = PROSOMA_REAR_Y - PROSOMA_FRONT_Y;
+/** The carapace flares behind the eye region and tapers again toward the pedicel. */
+const PROSOMA_WIDEST_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.42;
+/** The eye-bearing cephalic dome sits on the front fifth of the carapace. */
+const CEPHALIC_CENTER_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.2;
+/** The fovea is the pit two-thirds back where the sucking-stomach muscles anchor. */
+const FOVEA_FRONT_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.59;
+const FOVEA_REAR_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.76;
+
+// The abdomen starts behind the carapace rather than butting against it: the
+// gap the pedicel bridges is what keeps the two from fusing into one peanut.
+const ABDOMEN_FRONT_Y = 0.055;
+const ABDOMEN_REAR_Y = 0.555;
+const ABDOMEN_HALF_WIDTH = 0.222;
+const ABDOMEN_WIDEST_Y = 0.26;
+const PEDICEL_HALF_WIDTH = 0.034;
 
 /**
  * One leg, described on the spider's right side; the left side mirrors it.
@@ -146,58 +163,63 @@ interface LegDef {
   readonly tarsusAngle: number;
   readonly femur: number;
   readonly tibia: number;
+  /** Metatarsus and tarsus lumped: nearly as long as the tibia on a real spider. */
   readonly tarsus: number;
 }
 
 /**
- * Front → rear. Leg IV is the longest and leg III the shortest, and the front
- * pair reaches forward while the rear pair trails back — the split that reads
- * as "spider" rather than "insect".
+ * Front → rear. Leg IV is the longest and leg III the shortest.
  *
- * Each femur runs close to the body's long axis and the tibia breaks hard
- * outward from it: that sharp knee, well clear of the body, is the single most
- * recognisable thing about a spider seen from above.
+ * Every coxa sockets into the carapace and nothing sockets into the abdomen —
+ * that is the whole difference between an arachnid and an insect thorax, and it
+ * forces all eight attachments into the narrow band between the eye region and
+ * the pedicel.
+ *
+ * The femur runs almost transverse so the knee is the widest point of the
+ * animal; everything past it sweeps fore or aft and the tarsus curls back in
+ * toward the long axis. That dogleg — wide knees, feet tucked inside them — is
+ * the single most recognisable thing about a spider seen from above.
  */
 const LEGS: readonly LegDef[] = [
   {
-    attachX: 0.13,
-    attachY: -0.16,
-    femurAngle: -92,
+    attachX: 0.118,
+    attachY: -0.185,
+    femurAngle: -30,
+    tibiaAngle: -74,
+    tarsusAngle: -99,
+    femur: 0.3,
+    tibia: 0.34,
+    tarsus: 0.31,
+  },
+  {
+    attachX: 0.14,
+    attachY: -0.105,
+    femurAngle: -12,
     tibiaAngle: -46,
-    tarsusAngle: -24,
-    femur: 0.3,
-    tibia: 0.3,
-    tarsus: 0.17,
-  },
-  {
-    attachX: 0.15,
-    attachY: -0.06,
-    femurAngle: -66,
-    tibiaAngle: -4,
-    tarsusAngle: 14,
+    tarsusAngle: -66,
     femur: 0.28,
-    tibia: 0.28,
-    tarsus: 0.15,
-  },
-  {
-    attachX: 0.15,
-    attachY: 0.04,
-    femurAngle: 58,
-    tibiaAngle: 8,
-    tarsusAngle: 32,
-    femur: 0.24,
-    tibia: 0.24,
-    tarsus: 0.13,
-  },
-  {
-    attachX: 0.13,
-    attachY: 0.13,
-    femurAngle: 94,
-    tibiaAngle: 48,
-    tarsusAngle: 34,
-    femur: 0.3,
     tibia: 0.31,
-    tarsus: 0.17,
+    tarsus: 0.28,
+  },
+  {
+    attachX: 0.14,
+    attachY: -0.02,
+    femurAngle: 14,
+    tibiaAngle: 44,
+    tarsusAngle: 64,
+    femur: 0.27,
+    tibia: 0.29,
+    tarsus: 0.26,
+  },
+  {
+    attachX: 0.11,
+    attachY: 0.045,
+    femurAngle: 33,
+    tibiaAngle: 76,
+    tarsusAngle: 100,
+    femur: 0.31,
+    tibia: 0.36,
+    tarsus: 0.33,
   },
 ];
 
@@ -206,10 +228,12 @@ const TOTAL_LEGS = LEG_COUNT_PER_SIDE * 2;
 /** Legs 0–3 are the right side, 4–7 the left. */
 const FIRST_LEFT_LEG = LEG_COUNT_PER_SIDE;
 
-const FEMUR_HALF_WIDTH = 0.034;
-const KNEE_HALF_WIDTH = 0.026;
-const TIBIA_TIP_HALF_WIDTH = 0.019;
-const TARSUS_TIP_HALF_WIDTH = 0.009;
+// Spider legs taper hard: a thick muscular femur down to a tarsus barely wider
+// than a hair. Even taper along the whole limb is what makes a beetle leg.
+const FEMUR_HALF_WIDTH = 0.032;
+const KNEE_HALF_WIDTH = 0.023;
+const TIBIA_TIP_HALF_WIDTH = 0.015;
+const TARSUS_TIP_HALF_WIDTH = 0.006;
 
 // ── Pose model ───────────────────────────────────────────────────────────────
 
@@ -366,6 +390,54 @@ function taperedSegment(
   ctx.fill();
 }
 
+const BOW_STEPS = 5;
+
+/**
+ * Draws a limb segment as a shallow arc instead of a straight rod, `bow` being
+ * the perpendicular control offset as a fraction of the segment's length.
+ *
+ * A spider leg is a continuous curve, not a polyline. Posing straight rods at
+ * the right joint angles still reads as machinery — the bow is what turns three
+ * hinged sticks into a limb.
+ */
+function bowedSegment(
+  ctx: Ctx,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  halfWidth1: number,
+  halfWidth2: number,
+  bow: number,
+  color: string,
+): void {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const controlX = (x1 + x2) / 2 - dy * bow;
+  const controlY = (y1 + y2) / 2 + dx * bow;
+
+  let prevX = x1;
+  let prevY = y1;
+  for (let step = 1; step <= BOW_STEPS; step++) {
+    const t = step / BOW_STEPS;
+    const u = 1 - t;
+    const nextX = u * u * x1 + 2 * u * t * controlX + t * t * x2;
+    const nextY = u * u * y1 + 2 * u * t * controlY + t * t * y2;
+    taperedSegment(
+      ctx,
+      prevX,
+      prevY,
+      nextX,
+      nextY,
+      lerp(halfWidth1, halfWidth2, (step - 1) / BOW_STEPS),
+      lerp(halfWidth1, halfWidth2, t),
+      color,
+    );
+    prevX = nextX;
+    prevY = nextY;
+  }
+}
+
 /** The specular ridge along the top of a rounded segment. */
 function segmentSheen(
   ctx: Ctx,
@@ -471,6 +543,9 @@ const LIFT_BRIGHTEN = 0.35;
 const JOINT_NUB_SCALE = 1.15;
 const CLAW_LENGTH = 0.035;
 const CLAW_SPREAD_DEG = 26;
+/** Perpendicular bow per degree of turn at the joint that follows a segment. */
+const BOW_PER_TURN_DEGREE = 0.0028;
+const TARSUS_BOW_CARRYOVER = 1.4;
 
 function drawLeg(ctx: Ctx, ts: number, side: number, def: LegDef, pose: LegPose, ventral: boolean) {
   ctx.save();
@@ -499,9 +574,16 @@ function drawLeg(ctx: Ctx, ts: number, side: number, def: LegDef, pose: LegPose,
   const baseColor = ventral ? VENTRAL_LEG_TINT : LEG_DARK;
   const midColor = ventral ? VENTRAL_LEG_MID : LEG_MID;
 
-  taperedSegment(ctx, ax, ay, kneeX, kneeY, femurHalf, kneeHalf, midColor);
-  taperedSegment(ctx, kneeX, kneeY, bendX, bendY, kneeHalf, tibiaTipHalf, baseColor);
-  taperedSegment(ctx, bendX, bendY, tipX, tipY, tibiaTipHalf, tarsusTipHalf, baseColor);
+  // Each segment bows into the turn the next joint makes, so the three links
+  // read as one continuous curve instead of a hinged polyline. The tarsus has
+  // no joint after it, so it carries on the curl the knee started.
+  const femurBow = (pose.tibiaAngle - pose.femurAngle) * BOW_PER_TURN_DEGREE;
+  const tibiaBow = (pose.tarsusAngle - pose.tibiaAngle) * BOW_PER_TURN_DEGREE;
+  const tarsusBow = tibiaBow * TARSUS_BOW_CARRYOVER;
+
+  bowedSegment(ctx, ax, ay, kneeX, kneeY, femurHalf, kneeHalf, femurBow, midColor);
+  bowedSegment(ctx, kneeX, kneeY, bendX, bendY, kneeHalf, tibiaTipHalf, tibiaBow, baseColor);
+  bowedSegment(ctx, bendX, bendY, tipX, tipY, tibiaTipHalf, tarsusTipHalf, tarsusBow, baseColor);
 
   const sheenAlpha = (ventral ? 0.18 : 0.32) + pose.lift * LIFT_BRIGHTEN;
   segmentSheen(ctx, ax, ay, kneeX, kneeY, femurHalf * 0.7, sheenAlpha);
@@ -559,19 +641,25 @@ function drawLeg(ctx: Ctx, ts: number, side: number, def: LegDef, pose: LegPose,
 
 // ── Prosoma (cephalothorax) ──────────────────────────────────────────────────
 
-/** Builds the pear-shaped carapace outline, front-narrow and rear-broad. */
+/**
+ * Builds the carapace outline: a blunt shield, narrow across the eye region and
+ * broadest where legs II and III socket in.
+ */
 function prosomaPath(ctx: Ctx, ts: number): void {
   const w = PROSOMA_HALF_WIDTH * ts;
   const front = PROSOMA_FRONT_Y * ts;
   const rear = PROSOMA_REAR_Y * ts;
+  const widest = PROSOMA_WIDEST_Y * ts;
+  const shoulder = PROSOMA_LENGTH * ts * 0.22;
+  const haunch = PROSOMA_LENGTH * ts * 0.2;
 
   ctx.beginPath();
   ctx.moveTo(0, front);
-  ctx.bezierCurveTo(w * 0.72, front + ts * 0.005, w * 1.02, front + ts * 0.09, w, -ts * 0.1);
-  ctx.bezierCurveTo(w * 0.98, -ts * 0.02, w * 0.78, rear - ts * 0.03, w * 0.38, rear);
-  ctx.bezierCurveTo(w * 0.18, rear + ts * 0.012, -w * 0.18, rear + ts * 0.012, -w * 0.38, rear);
-  ctx.bezierCurveTo(-w * 0.78, rear - ts * 0.03, -w * 0.98, -ts * 0.02, -w, -ts * 0.1);
-  ctx.bezierCurveTo(-w * 1.02, front + ts * 0.09, -w * 0.72, front + ts * 0.005, 0, front);
+  ctx.bezierCurveTo(w * 0.66, front + ts * 0.004, w * 1.0, widest - shoulder, w, widest);
+  ctx.bezierCurveTo(w, widest + haunch, w * 0.66, rear - ts * 0.02, w * 0.2, rear);
+  ctx.bezierCurveTo(w * 0.1, rear + ts * 0.01, -w * 0.1, rear + ts * 0.01, -w * 0.2, rear);
+  ctx.bezierCurveTo(-w * 0.66, rear - ts * 0.02, -w, widest + haunch, -w, widest);
+  ctx.bezierCurveTo(-w * 1.0, widest - shoulder, -w * 0.66, front + ts * 0.004, 0, front);
   ctx.closePath();
 }
 
@@ -579,7 +667,16 @@ const PROSOMA_GROOVE_COUNT = 4;
 
 function drawProsomaDorsal(ctx: Ctx, ts: number): void {
   prosomaPath(ctx, ts);
-  const gradient = ctx.createRadialGradient(0, -ts * 0.12, ts * 0.02, 0, -ts * 0.08, ts * 0.24);
+  const domeY = (PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.36) * ts;
+  const falloffY = (PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.48) * ts;
+  const gradient = ctx.createRadialGradient(
+    0,
+    domeY,
+    ts * 0.02,
+    0,
+    falloffY,
+    PROSOMA_LENGTH * ts * 0.7,
+  );
   gradient.addColorStop(0, CARAPACE_HIGHLIGHT);
   gradient.addColorStop(0.55, CARAPACE_MID);
   gradient.addColorStop(1, CARAPACE_EDGE);
@@ -601,7 +698,15 @@ function drawProsomaDorsal(ctx: Ctx, ts: number): void {
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = CARAPACE_HIGHLIGHT;
   ctx.beginPath();
-  ctx.ellipse(0, -ts * 0.175, ts * 0.088, ts * 0.062, 0, 0, TWO_PI);
+  ctx.ellipse(
+    0,
+    CEPHALIC_CENTER_Y * ts,
+    PROSOMA_HALF_WIDTH * ts * 0.52,
+    PROSOMA_LENGTH * ts * 0.18,
+    0,
+    0,
+    TWO_PI,
+  );
   ctx.fill();
   ctx.restore();
 
@@ -612,21 +717,22 @@ function drawProsomaDorsal(ctx: Ctx, ts: number): void {
   ctx.lineWidth = ts * 0.012;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(0, -ts * 0.045);
-  ctx.lineTo(0, ts * 0.015);
+  ctx.moveTo(0, FOVEA_FRONT_Y * ts);
+  ctx.lineTo(0, FOVEA_REAR_Y * ts);
   ctx.stroke();
   ctx.globalAlpha = 0.22;
   ctx.lineWidth = ts * 0.008;
+  const grooveOrigin = FOVEA_FRONT_Y * ts;
   for (let i = 0; i < PROSOMA_GROOVE_COUNT; i++) {
     const spread = deg(38 + i * 30);
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(0, -ts * 0.01);
+      ctx.moveTo(0, grooveOrigin);
       ctx.quadraticCurveTo(
-        side * Math.cos(spread) * ts * 0.07,
-        -ts * 0.01 + Math.sin(spread) * ts * 0.02 - ts * 0.03,
-        side * Math.cos(spread) * ts * 0.15,
-        -ts * 0.06 + Math.sin(spread) * ts * 0.06,
+        side * Math.cos(spread) * PROSOMA_HALF_WIDTH * ts * 0.42,
+        grooveOrigin + Math.sin(spread) * ts * 0.02 - ts * 0.03,
+        side * Math.cos(spread) * PROSOMA_HALF_WIDTH * ts * 0.9,
+        grooveOrigin - ts * 0.05 + Math.sin(spread) * ts * 0.06,
       );
       ctx.stroke();
     }
@@ -639,9 +745,9 @@ function drawProsomaDorsal(ctx: Ctx, ts: number): void {
   ctx.stroke();
 }
 
-const STERNUM_HALF_WIDTH = 0.062;
-const STERNUM_FRONT_Y = -0.16;
-const STERNUM_REAR_Y = 0.04;
+const STERNUM_HALF_WIDTH = 0.072;
+const STERNUM_FRONT_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.34;
+const STERNUM_REAR_Y = PROSOMA_FRONT_Y + PROSOMA_LENGTH * 0.85;
 const VENTRAL_COXA_COUNT = 4;
 
 function drawProsomaVentral(ctx: Ctx, ts: number): void {
@@ -897,10 +1003,13 @@ function drawSpinnerets(ctx: Ctx, ts: number, ventral: boolean): void {
   }
 }
 
+/** Bridges the gap the two tagmata leave between them; the pinch is the waist. */
 function drawPedicel(ctx: Ctx, ts: number, ventral: boolean): void {
+  const centerY = (PROSOMA_REAR_Y + ABDOMEN_FRONT_Y) / 2;
+  const halfLength = (PROSOMA_REAR_Y - ABDOMEN_FRONT_Y) / 2;
   ctx.fillStyle = ventral ? VENTRAL_BELLY_EDGE : CARAPACE_EDGE;
   ctx.beginPath();
-  ctx.ellipse(0, ts * 0.04, PEDICEL_HALF_WIDTH * ts, ts * 0.05, 0, 0, TWO_PI);
+  ctx.ellipse(0, centerY * ts, PEDICEL_HALF_WIDTH * ts, halfLength * ts, 0, 0, TWO_PI);
   ctx.fill();
 }
 
@@ -908,26 +1017,28 @@ function drawPedicel(ctx: Ctx, ts: number, ventral: boolean): void {
 
 interface EyeDef {
   readonly x: number;
-  readonly y: number;
+  /** Distance behind the front edge of the carapace, so the group rides the clypeus. */
+  readonly depth: number;
   readonly r: number;
 }
 
 /**
  * Lycosid eye group: a front row of four small eyes, a pair of large posterior
  * median eyes above them, and two posterior laterals set wide on the carapace.
+ * The whole group stays tight — spread it and the face starts reading mammalian.
  */
 const EYES: readonly EyeDef[] = [
-  { x: 0.021, y: -0.216, r: 0.0115 },
-  { x: 0.056, y: -0.208, r: 0.0105 },
-  { x: 0.042, y: -0.166, r: 0.0245 },
-  { x: 0.078, y: -0.118, r: 0.0165 },
+  { x: 0.021, depth: 0.029, r: 0.0115 },
+  { x: 0.056, depth: 0.037, r: 0.0105 },
+  { x: 0.042, depth: 0.079, r: 0.0245 },
+  { x: 0.078, depth: 0.127, r: 0.0165 },
 ];
 
 function drawEyes(ctx: Ctx, ts: number, shine: number): void {
   for (const eye of EYES) {
     for (const side of [-1, 1]) {
       const ex = side * eye.x * ts;
-      const ey = eye.y * ts;
+      const ey = (PROSOMA_FRONT_Y + eye.depth) * ts;
       const er = eye.r * ts;
 
       ctx.fillStyle = EYE_RING;
@@ -958,9 +1069,9 @@ function drawEyes(ctx: Ctx, ts: number, shine: number): void {
   }
 }
 
-const CHELICERA_ATTACH_X = 0.052;
-const CHELICERA_ATTACH_Y = -0.185;
-const CHELICERA_LENGTH = 0.088;
+const CHELICERA_ATTACH_X = 0.056;
+const CHELICERA_ATTACH_Y = PROSOMA_FRONT_Y + 0.062;
+const CHELICERA_LENGTH = 0.098;
 const CHELICERA_HALF_WIDTH = 0.042;
 const CHELICERA_REST_ANGLE_DEG = -84;
 const CHELICERA_SPREAD_DEG = 26;
@@ -1028,10 +1139,13 @@ function drawChelicerae(ctx: Ctx, ts: number, open: number): void {
   }
 }
 
-const PALP_ATTACH_X = 0.078;
-const PALP_ATTACH_Y = -0.175;
-const PALP_FEMUR = 0.058;
-const PALP_TARSUS = 0.048;
+// The palps read as a stubby fifth pair of arms held out in front of the fangs.
+// Without them the front of the carapace is bare and the leading legs get read
+// as antennae instead.
+const PALP_ATTACH_X = 0.088;
+const PALP_ATTACH_Y = PROSOMA_FRONT_Y + 0.07;
+const PALP_FEMUR = 0.078;
+const PALP_TARSUS = 0.062;
 const PALP_FEMUR_ANGLE_DEG = -104;
 const PALP_TARSUS_ANGLE_DEG = -74;
 
@@ -1059,9 +1173,9 @@ function drawPedipalps(ctx: Ctx, ts: number, swingDegrees: number): void {
 
 // ── Whole-spider assembly ────────────────────────────────────────────────────
 
-const SHADOW_RX = 0.32;
-const SHADOW_RY = 0.36;
-const SHADOW_CENTER_Y = 0.1;
+const SHADOW_RX = 0.4;
+const SHADOW_RY = 0.42;
+const SHADOW_CENTER_Y = 0.08;
 /** Never squash the body to nothing while it rolls edge-on. */
 const MIN_ROLL_SCALE = 0.07;
 

@@ -629,10 +629,10 @@
   },
   "spider": {
     "path": "enemies/spider.png",
-    "frameWidth": 192,
-    "frameHeight": 192,
-    "tileX": 96,
-    "tileY": 96,
+    "frameWidth": 256,
+    "frameHeight": 256,
+    "tileX": 128,
+    "tileY": 128,
     "tileScale": 64,
     "states": {
       "walk": {
