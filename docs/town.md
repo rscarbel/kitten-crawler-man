@@ -31,16 +31,16 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 
 ### Districts
 
-| District          | Where          | Buildings                                                              |
-| ----------------- | -------------- | ---------------------------------------------------------------------- |
-| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields) |
+| District          | Where          | Buildings                                                                                                  |
+| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                             |
 | **Garrison Row**  | north band     | The Barracks, Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge (dead-end alley — the cult hideout) |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well        |
-| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, Sleeping Cat Inn      |
-| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                |
-| **Low Quarter**   | south band     | The Desperado Club, Signet's Ink, The Sunken Stump Pub — plus the service alley the murder mystery needs |
-| **South Green**   | inside SE wall | Miller's Farm                                                          |
-| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                            |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, Sleeping Cat Inn                                          |
+| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                    |
+| **Low Quarter**   | south band     | The Desperado Club, Signet's Ink, The Sunken Stump Pub — plus the service alley the murder mystery needs   |
+| **South Green**   | inside SE wall | Miller's Farm                                                                                              |
+| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                    |
 
 ---
 
@@ -105,7 +105,7 @@ Four properties the renderer depends on:
   from a hash instead of from an adjacency table.
 - **Materials are generated as multi-tile patches**, not tiles, so the pattern's repeat
   period is the patch rather than 32 px. Frames are packed variant-major then row-major
-  within a patch, and a tile must draw the frame matching its position *inside* the
+  within a patch, and a tile must draw the frame matching its position _inside_ the
   patch. `groundFrameIndex` is the only place that ordering is decoded.
 - **Geometry comes from a `structure` seed shared across a material's variants**; only
   tint, wear and scatter use the per-variant `detail` seed. Wrapping makes a patch
@@ -116,12 +116,12 @@ Four properties the renderer depends on:
 
 On top of the tiles, all baked into `TileRenderer`'s 16-tile chunk cache:
 
-| Pass                 | What it does                                                   |
-| -------------------- | -------------------------------------------------------------- |
-| Dual-grid mask fringe | wanders material boundaries instead of running them dead straight |
-| World-space tone      | one octave of value noise, ~24-tile wavelength, sampled in world space so the *patches* don't read as blocks. Drawn as black at varying alpha — a `multiply` composite is identical arithmetic but leaves the compositor's fast path and costs more than the other four passes combined. |
-| Edge scatter          | grass tufts spilling onto street, cobbles onto dirt             |
-| Ambient occlusion     | soft darkening where ground meets walls and building bases      |
+| Pass                  | What it does                                                                                                                                                                                                                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dual-grid mask fringe | wanders material boundaries instead of running them dead straight                                                                                                                                                                                                                        |
+| World-space tone      | one octave of value noise, ~24-tile wavelength, sampled in world space so the _patches_ don't read as blocks. Drawn as black at varying alpha — a `multiply` composite is identical arithmetic but leaves the compositor's fast path and costs more than the other four passes combined. |
+| Edge scatter          | grass tufts spilling onto street, cobbles onto dirt                                                                                                                                                                                                                                      |
+| Ambient occlusion     | soft darkening where ground meets walls and building bases                                                                                                                                                                                                                               |
 
 **Nothing here may move to a per-frame pass.** The seam audit runs inside the generator
 and exits non-zero above a joint-to-interior ratio of 1.15 (current worst: 1.11).
@@ -199,4 +199,3 @@ materials in use, 30 distinct outdoor prop types, 40-tile safe radius, 8.3 ms me
 time in the plaza. The tower is counted by its base rather than its art — 21 of the
 spire's 23 rows overhang the fields north of the wall, and counting them would report a
 55 × 40 town as 61 tall.
-

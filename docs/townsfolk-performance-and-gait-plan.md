@@ -6,7 +6,7 @@ document diagnoses both, ranks the routes, and lays out a phased fix.
 
 **Scope:** `src/sprites/person/*`, `src/creatures/Townsperson.ts`,
 `src/creatures/townWander.ts`, `src/systems/TownLifeSystem.ts`, and the
-`personFrameCache`. The town's *map* rendering (chunk cache, decoration overlay,
+`personFrameCache`. The town's _map_ rendering (chunk cache, decoration overlay,
 Y-sort) is already optimized and is explicitly **not** the target — see
 [Measurements](#measurements) for why.
 
@@ -31,21 +31,21 @@ Taken 2026-08-02 with `node-canvas` at the real draw size
 treat the absolute milliseconds as an order of magnitude and the **ratios** as
 solid.
 
-| Measurement | Result |
-| --- | --- |
-| One `drawPerson` call | **0.093 ms** |
-| One cached cell blit | **0.0063 ms** (**14.7× cheaper**) |
+| Measurement                       | Result                              |
+| --------------------------------- | ----------------------------------- |
+| One `drawPerson` call             | **0.093 ms**                        |
+| One cached cell blit              | **0.0063 ms** (**14.7× cheaper**)   |
 | 40 people, every one a cache miss | **3.7 ms/frame** at 1× device scale |
-| 40 people, every one a cache hit | **0.25 ms/frame** |
+| 40 people, every one a cache hit  | **0.25 ms/frame**                   |
 
 A cell is 57 × 61 CSS px at the current padding fractions. Its cost in cache
 memory, and what a full 64-cell set per person implies:
 
-| Device scale | One cell | 64 cells (one person) | 40 people |
-| --- | --- | --- | --- |
-| 1× | 13.6 KB | 0.85 MB | **34 MB** |
-| 2× (retina) | 54.3 KB | 3.40 MB | **136 MB** |
-| 3× | 122 KB | 7.64 MB | 306 MB |
+| Device scale | One cell | 64 cells (one person) | 40 people  |
+| ------------ | -------- | --------------------- | ---------- |
+| 1×           | 13.6 KB  | 0.85 MB               | **34 MB**  |
+| 2× (retina)  | 54.3 KB  | 3.40 MB               | **136 MB** |
+| 3×           | 122 KB   | 7.64 MB               | 306 MB     |
 
 `CACHE_BYTE_BUDGET` is **24 MB** (`personFrameCache.ts:45`).
 
@@ -90,22 +90,22 @@ analytic and a real profile can always surprise you.
 
 ## Verdict on the sprite-sheet idea
 
-> *"I was wondering if making spritemaps for them and then coloring in the
-> details would work."*
+> _"I was wondering if making spritemaps for them and then coloring in the
+> details would work."_
 
 Right instinct, slightly wrong target — and the good version of it is better
 than the original idea.
 
 **Why the plain version does not help.** You already have a runtime spritesheet:
 `personFrameCache` bakes each person's frames into offscreen cells and blits
-them. Baking those cells offline into a PNG instead would remove the *bake*
-cost, but the bake cost is not what is hurting — the *memory* is, and it would
+them. Baking those cells offline into a PNG instead would remove the _bake_
+cost, but the bake cost is not what is hurting — the _memory_ is, and it would
 be identical. Worse, finished figures cannot be shared: the genome crosses ~10
 hair styles × 5 facial-hair × 5 tops × 3 bottoms × 4 hats ≈ 3,000 style
 combinations before body proportions and colors, so a sheet of finished people
 is not a sheet you can bake.
 
-**Why the layered version is very good.** Bake each *region* independently as a
+**Why the layered version is very good.** Bake each _region_ independently as a
 shape mask — limbs/skin, top, bottom, hair, hat, shoes — and colorize at
 composite time. Layers combine **additively** instead of combinatorially: 10
 hair masks plus 5 top masks, not 50 combined cells. Color variety stays
@@ -132,19 +132,19 @@ if Phase 0's re-measure says the startup bake is too slow.
 Shrink the per-person footprint until 45 people fit in budget, and replace the
 thrashing eviction policy.
 
-| Change | Saving |
-| --- | --- |
-| **1a. Bake 3 facings, mirror `left` at blit time.** `drawPerson` already treats `left` as a mirror of `right` (`drawPerson.ts:612`); the cache re-bakes it as its own cell for nothing. Blit with a `scale(-1, 1)`. | −25% cells |
-| **1b. Idle needs 2 buckets, not 8.** `IDLE_BOB_AMP` is 0.01 of draw size — 0.45 px of travel across the whole idle cycle, stored as 8 near-identical cells. | −38% of the remaining cells |
-| **1c. Per-appearance cell bounds.** `CELL_TOP_FRACTION = 0.28` exists for a mohawk on a tall genome, and every bald citizen pays it. Derive the box from the genome (hair style, hat, `heightScale`) instead of worst-casing all of them. | ~−40% area |
-| **1d. Cap the bake scale at 1.5×.** These are background figures; a 45 px person sampled at 1.5× is 67 px of detail. Needs an eyeball check against 2× before committing. | −44% bytes vs 2× |
-| **1e. Admission-stop instead of LRU-evict.** When over budget, stop *admitting* new cells and keep the cache intact, drawing the overflow directly. | Removes the cliff |
+| Change                                                                                                                                                                                                                                    | Saving                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| **1a. Bake 3 facings, mirror `left` at blit time.** `drawPerson` already treats `left` as a mirror of `right` (`drawPerson.ts:612`); the cache re-bakes it as its own cell for nothing. Blit with a `scale(-1, 1)`.                       | −25% cells                  |
+| **1b. Idle needs 2 buckets, not 8.** `IDLE_BOB_AMP` is 0.01 of draw size — 0.45 px of travel across the whole idle cycle, stored as 8 near-identical cells.                                                                               | −38% of the remaining cells |
+| **1c. Per-appearance cell bounds.** `CELL_TOP_FRACTION = 0.28` exists for a mohawk on a tall genome, and every bald citizen pays it. Derive the box from the genome (hair style, hat, `heightScale`) instead of worst-casing all of them. | ~−40% area                  |
+| **1d. Cap the bake scale at 1.5×.** These are background figures; a 45 px person sampled at 1.5× is 67 px of detail. Needs an eyeball check against 2× before committing.                                                                 | −44% bytes vs 2×            |
+| **1e. Admission-stop instead of LRU-evict.** When over budget, stop _admitting_ new cells and keep the cache intact, drawing the overflow directly.                                                                                       | Removes the cliff           |
 
 1a–1d together take a person from 64 cells × 3,477 px to ~30 cells × ~2,000 px —
 about **3.7× smaller** — and 1d takes another 44% off at retina. Estimated 40
 people at ~21 MB, inside the existing budget.
 
-**1e matters even alone.** Today, when the working set overflows, *everyone*
+**1e matters even alone.** Today, when the working set overflows, _everyone_
 degrades. With admission-stop, a stable subset keeps blitting at 0.006 ms and
 only the overflow pays 0.093 ms. A cliff becomes a slope.
 
@@ -156,7 +156,7 @@ Expected result: 40 townsfolk go from ~4 ms/frame (1×) or ~10 ms/frame (2×) to
 Rendering is already viewport-culled, and every citizen is the same size, so
 distance LOD buys little. Two things are still worth doing:
 
-- Cap the number of *newly baked* people per frame, so a camera sweep into a
+- Cap the number of _newly baked_ people per frame, so a camera sweep into a
   crowded plaza amortizes its bakes over several frames instead of spiking one.
 - `Townsperson.phase` grows without bound (`phase += 1` forever, never wrapped).
   Wrap it to the person's own cycle length. Minor, but it degrades `Math.sin`
@@ -195,13 +195,13 @@ Nine concrete defects, roughly in order of how much each one is costing you.
 `this.phase += PHASE_STEP` unconditionally, where `PHASE_STEP = 1`. Speeds range
 from `ANCHOR_SPEED_MIN` 0.2 to `TRAVELER_SPEED_MAX` 1.0 px/frame — a **5× spread
 at one identical leg cadence**. Anchors and loiterers moonwalk; travelers take
-mincing steps. *Fix:* advance phase by distance travelled, not by time —
+mincing steps. _Fix:_ advance phase by distance travelled, not by time —
 `phase += distanceMoved / strideLength`. Two lines, and the single biggest
 believability win available.
 
 **G2 — No stance phase; the planted foot is not planted.** Both legs are pure
 `±sin` swings, so the "planted" foot slides backward at a rate with no relation
-to the body's forward speed. That is the skating read. *Fix:* port
+to the body's forward speed. That is the skating read. _Fix:_ port
 `gaitFootSide`'s structure — during stance the foot is world-locked and
 translates linearly at exactly `−bodySpeed`; during swing it tucks, passes under
 the hip, and reaches. Needs 2-bone IK to a foot target, or keyed swing/bend
@@ -209,11 +209,11 @@ tables per bucket (cheaper, and it fits the frame cache, which only ever
 evaluates a fixed set of poses anyway).
 
 **G3 — The body bob is inverted.** `gait.ts:72` is
-`bob: Math.abs(swing) * BOB_AMP`, and `skeleton.ts:126` *subtracts* bob from y.
+`bob: Math.abs(swing) * BOB_AMP`, and `skeleton.ts:126` _subtracts_ bob from y.
 The body is therefore **highest at maximum leg swing** (double support) and
 **lowest at midstance** — the exact opposite of a real pelvis, which peaks over
 the straight stance leg and troughs at contact. Carl gets this right and says so
-at `generate-human-sprite.ts:408`. *Fix:* invert it. **Verify the corrected sign
+at `generate-human-sprite.ts:408`. _Fix:_ invert it. **Verify the corrected sign
 in a picture, not in your head** — this is the same class of error as
 `carl-arm-swing-is-90-degrees-out-of-phase`, and it is easy to fix an inversion
 into a different inversion.
@@ -222,8 +222,8 @@ into a different inversion.
 `bend: KNEE_BASE + kneeAmp * Math.max(0, swing)` gives a derivative
 discontinuity at every zero crossing (a visible hitch twice per stride), zero
 knee flex during stance, and a bend that peaks at mid-swing. Real gait peaks the
-swing knee shortly *after* toe-off and extends it to near-straight before heel
-strike, and dips the stance knee slightly at loading. *Fix:* keyed curves, as
+swing knee shortly _after_ toe-off and extends it to near-straight before heel
+strike, and dips the stance knee slightly at loading. _Fix:_ keyed curves, as
 `keyed()` does in the Carl generator.
 
 **G5 — There is no ankle, and the foot never rotates.** `drawFoot` paints an
@@ -231,32 +231,32 @@ axis-aligned ellipse and never pitches it. Its offset term is
 `facing === 'right' ? 1 : facing === 'up' ? 0 : 0` — a ternary that can only
 produce 1 or 0 and is 0 in every case but one. No heel strike, no toe-off roll.
 Carl has `HEEL_STRIKE_PITCH`, `TOE_OFF_PITCH`, and `SWING_PITCH`, and the rat-kin
-notes call the toe-off roll the thing that sold that walk. *Fix:* a foot pitch
+notes call the toe-off roll the thing that sold that walk. _Fix:_ a foot pitch
 angle on the limb and a rotated foot.
 
 **G6 — Arms are effectively dead in the front and back views.**
 `ARM_SWING_FRONT` is 0.16 rad, then `FRONTAL_X_SCALE` (0.32) squashes it to
 about 0.05 rad of visible travel. Head-on is most of what the player sees.
 Carl's answer (`facingArmSwing`, `FACING_SHOULDER_TWIST`) is to sell the swing
-through the shoulder and let the arm cross the body silhouette. *Fix:* raise
+through the shoulder and let the arm cross the body silhouette. _Fix:_ raise
 front-view arm travel and add shoulder twist; do **not** simply raise
 `FRONTAL_X_SCALE`, which is what stops the legs splaying sideways.
 
 **G7 — Facing flickers.** `FACING_DEADZONE` is 0.05 px against citizens moving
 0.2–1.0 px/frame. On a near-diagonal heading `|dx|` and `|dy|` trade places
-frame to frame and the figure strobes between two views. *Fix:* hysteresis — the
+frame to frame and the figure strobes between two views. _Fix:_ hysteresis — the
 new axis must beat the current one by a margin — plus a minimum dwell time in a
 facing.
 
 **G8 — Eight phase buckets is 10.7 fps of leg animation.** The cycle is
 `2π / (0.14 × strideScale)` ≈ 45 frames; 8 buckets is a pose change every 5.6
-frames. Carl's walk is `WALK_FRAMES = 16`. *Fix:* raise walk buckets to 12–16 —
+frames. Carl's walk is `WALK_FRAMES = 16`. _Fix:_ raise walk buckets to 12–16 —
 but **only after Phase 1**, since buckets are exactly what the memory budget
 buys.
 
 **G9 — Every citizen shares one gait shape.** `strideScale`, `bounceScale`,
 `armSwingScale`, `postureLean`, and `phaseOffset` are scalar jitter on a single
-curve. Distinct gait *archetypes* keyed off the `TownRole` that already exists —
+curve. Distinct gait _archetypes_ keyed off the `TownRole` that already exists —
 a purposeful stride, a laden trudge, a child's quick trot, a drunk's stagger, a
 beggar's shuffle — would do far more for crowd believability than scalar
 variation, and cost nothing at runtime.
@@ -313,7 +313,7 @@ eight citizens fill it and the ninth starts the treadmill. Phase 1 proceeded.
 - [x] **1e first** (admission-stop eviction). It is the smallest change and the
       one that removes the cliff; landing it first makes every later phase
       measurable against a stable baseline.
-      → `evictStale()` only reclaims people who were *not* drawn this frame;
+      → `evictStale()` only reclaims people who were _not_ drawn this frame;
       when the budget still will not fit, `cellFor` returns `null` and
       `drawPersonCached` falls through to a direct `drawPerson`.
 - [x] 1a — three baked facings, `left` mirrored at blit time.
@@ -352,7 +352,7 @@ Order matters: G1+G2 are the foundation, everything else refines it.
 - [x] G5 — foot pitch: heel strike, flat midstance, toe-off roll.
 - [x] G6 — front/back arm swing carried by shoulder twist.
       → Arms got their own frontal scale (0.6, against the legs' 0.32) and more
-      than double the head-on amplitude, plus a shoulder-line *roll*. Roll rather
+      than double the head-on amplitude, plus a shoulder-line _roll_. Roll rather
       than twist: rotating a flat figure about its spine foreshortens both
       shoulders symmetrically and reads as nothing, while a vertical differential
       survives.
@@ -381,7 +381,7 @@ Order matters: G1+G2 are the foundation, everything else refines it.
 Only build this if Phase 1 leaves cache misses expensive enough to matter — e.g.
 a camera sweep into the plaza still spikes, or mobile still evicts.
 
-**Not built — the gate did not open.** A full 40-person crowd with *every* cell
+**Not built — the gate did not open.** A full 40-person crowd with _every_ cell
 baked is now 23.2 MB against the 24 MB budget, and that figure no longer scales
 with `devicePixelRatio` because the bake density is capped. A crowd left running
 for a minute in Chrome settles at 11.2 MB with a 100 % hit rate and no evictions,
@@ -417,11 +417,11 @@ The original steps, if it is ever needed:
 Fill in as phases land. Always record `devicePixelRatio` and the visible citizen
 count alongside any frame time, or the number means nothing.
 
-| Date | Phase | DPR | Visible | Hit rate | Evict/frame | Cache MB | ms/frame (crowd) | ms/frame (total) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-08-02 | analytic (node-canvas, no profile) | 1 | 40 | — | — | — | 3.7 (all miss) / 0.25 (all hit) | — |
-| 2026-08-02 | after 1+2 (headless, `npm run render:townsfolk`) | any | 40 | — | — | **23.2 (every cell baked)** | — | — |
-| 2026-08-02 | after 1+2 (Chrome, `?people` crowd stress, ~1 min warm) | **2** | 40 | **100 %** | **0** | **11.2** | 0.14 submit | — |
+| Date       | Phase                                                   | DPR   | Visible | Hit rate  | Evict/frame | Cache MB                    | ms/frame (crowd)                | ms/frame (total) |
+| ---------- | ------------------------------------------------------- | ----- | ------- | --------- | ----------- | --------------------------- | ------------------------------- | ---------------- |
+| 2026-08-02 | analytic (node-canvas, no profile)                      | 1     | 40      | —         | —           | —                           | 3.7 (all miss) / 0.25 (all hit) | —                |
+| 2026-08-02 | after 1+2 (headless, `npm run render:townsfolk`)        | any   | 40      | —         | —           | **23.2 (every cell baked)** | —                               | —                |
+| 2026-08-02 | after 1+2 (Chrome, `?people` crowd stress, ~1 min warm) | **2** | 40      | **100 %** | **0**       | **11.2**                    | 0.14 submit                     | —                |
 
 The Chrome row is the real thing — 40 live `Townsperson` instances wandering and
 drawing through the cache on a `devicePixelRatio` 2 display. Every lookup hits,
@@ -450,14 +450,14 @@ Measured over 220 genomes across all twelve roles at the real draw size
 (`TILE_SIZE 32 × HUMANOID_NPC_SCALE 1.4 = 44.8 px`). The "after" column is
 independent of `devicePixelRatio` because 1d caps the bake density.
 
-| | Before | After |
-| --- | --- | --- |
-| Cells per person | 64 (4 facings × 2 motions × 8 buckets) | 54 (3 facings × (16 walk + 2 idle)) |
-| Cell area | one fixed box for everybody | **63 % smaller**, per genome |
-| Bake density | `devicePixelRatio` | capped at 1.5× |
-| Bytes per person | 0.85 MB at 1×, 3.40 MB at 2× | **0.58 MB, any DPR** |
-| 40 people, every cell | 34 MB at 1×, 136 MB at 2× | **23.2 MB** |
-| Budget | 24 MB | 24 MB |
+|                       | Before                                 | After                               |
+| --------------------- | -------------------------------------- | ----------------------------------- |
+| Cells per person      | 64 (4 facings × 2 motions × 8 buckets) | 54 (3 facings × (16 walk + 2 idle)) |
+| Cell area             | one fixed box for everybody            | **63 % smaller**, per genome        |
+| Bake density          | `devicePixelRatio`                     | capped at 1.5×                      |
+| Bytes per person      | 0.85 MB at 1×, 3.40 MB at 2×           | **0.58 MB, any DPR**                |
+| 40 people, every cell | 34 MB at 1×, 136 MB at 2×              | **23.2 MB**                         |
+| Budget                | 24 MB                                  | 24 MB                               |
 
 The working set was 1.4× the budget at 1× and 5.7× at 2×; it is now inside it at
 either. That is what makes the eviction policy stop mattering in normal play.
@@ -466,16 +466,16 @@ either. That is what makes the eviction policy stop mattering in normal play.
 
 From the same run. Every figure is 220 genomes × the whole cycle unless noted.
 
-| Check | Result |
-| --- | --- |
-| Planted-foot drift (400 frames of walking) | **0.0006 px** — the skate is gone |
-| Pelvic bob phase | troughs at contact, peaks over the stance leg, on every genome |
-| Foot roll | heel strike and toe-off present on every genome |
-| IK reach shortfall | 0.019 px — the solver's extension epsilon at mid-stance, where the leg is genuinely straight. The clamp never binds at contact, which is where it would cost stride. |
-| Cell bounds | no genome's ink leaves its cell |
-| Arm phase | each arm is furthest back as its own leg reaches forward |
-| Stride | 11.5–38.2 px per cycle — a shuffling beggar and a striding guard are 3× apart |
-| Cadence | **3.5–6.1 steps/s** across the whole crowd at full cohort speed. Previously 45 frames per cycle for every citizen at every speed; briefly, mid-rework, **4 steps/s for an adult and 14 for a child.** |
+| Check                                      | Result                                                                                                                                                                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Planted-foot drift (400 frames of walking) | **0.0006 px** — the skate is gone                                                                                                                                                                     |
+| Pelvic bob phase                           | troughs at contact, peaks over the stance leg, on every genome                                                                                                                                        |
+| Foot roll                                  | heel strike and toe-off present on every genome                                                                                                                                                       |
+| IK reach shortfall                         | 0.019 px — the solver's extension epsilon at mid-stance, where the leg is genuinely straight. The clamp never binds at contact, which is where it would cost stride.                                  |
+| Cell bounds                                | no genome's ink leaves its cell                                                                                                                                                                       |
+| Arm phase                                  | each arm is furthest back as its own leg reaches forward                                                                                                                                              |
+| Stride                                     | 11.5–38.2 px per cycle — a shuffling beggar and a striding guard are 3× apart                                                                                                                         |
+| Cadence                                    | **3.5–6.1 steps/s** across the whole crowd at full cohort speed. Previously 45 frames per cycle for every citizen at every speed; briefly, mid-rework, **4 steps/s for an adult and 14 for a child.** |
 
 ### The cadence trap, and why `gaitSpeedFactor` exists
 
@@ -505,12 +505,12 @@ what landed, what is half-done, what the next session should pick up.
 **Status: phases 0–2 implemented; Phase 3 assessed and declined. Three
 [HUMAN] checks outstanding.**
 
-| Date | Session | Phase | What landed | What is unfinished / next |
-| --- | --- | --- | --- | --- |
-| 2026-08-02 | plan authored | — | This document. Diagnosis, measurements, phases. | Phase 0 — measure before building. |
-| 2026-08-02 | implementation | 0, 1, 2 | Everything in the phase lists above, plus `scripts/render-townsfolk.ts` (contact sheet + eight gates) and the `?people` crowd-stress mode. Four review rounds; the defects they found are recorded in the gates. | The three **[HUMAN]** items: a browser profile in the plaza, the 1.5× vs 2× bake eyeball, and a playtest re-check. |
-| 2026-08-02 | Ryan's playtest | 2 | Report: the town reads well but children's limbs moved wildly fast. Diagnosed as the cadence trap (see Measured baselines), fixed with `gaitSpeedFactor` and gated by `gateCadence`. | A re-check that children now read right. |
-| | | | | |
+| Date       | Session         | Phase   | What landed                                                                                                                                                                                                      | What is unfinished / next                                                                                          |
+| ---------- | --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 2026-08-02 | plan authored   | —       | This document. Diagnosis, measurements, phases.                                                                                                                                                                  | Phase 0 — measure before building.                                                                                 |
+| 2026-08-02 | implementation  | 0, 1, 2 | Everything in the phase lists above, plus `scripts/render-townsfolk.ts` (contact sheet + eight gates) and the `?people` crowd-stress mode. Four review rounds; the defects they found are recorded in the gates. | The three **[HUMAN]** items: a browser profile in the plaza, the 1.5× vs 2× bake eyeball, and a playtest re-check. |
+| 2026-08-02 | Ryan's playtest | 2       | Report: the town reads well but children's limbs moved wildly fast. Diagnosed as the cadence trap (see Measured baselines), fixed with `gaitSpeedFactor` and gated by `gateCadence`.                             | A re-check that children now read right.                                                                           |
+|            |                 |         |                                                                                                                                                                                                                  |                                                                                                                    |
 
 ### What a later session should know
 
@@ -540,7 +540,7 @@ what landed, what is half-done, what the next session should pick up.
 height, the leg, torso, arm and neck lengths — but not `shoulderWidth`,
 `hipWidth` or `FOOT_LEN`, which are fractions of draw size applied flat. So a
 child has an adult's shoulders and an adult's shoes on a 62 %-height body. The
-head was the worst of these (its *height* scaled while its *width* did not, so a
+head was the worst of these (its _height_ scaled while its _width_ did not, so a
 child came out squat and wide-headed) and was fixed here, because it is the
 largest shape on the figure and children were the thing under review. The rest
 is a genuine art decision about what a child in this game should look like, it
@@ -607,9 +607,9 @@ Reference only — read, do not edit: `scripts/generate-human-sprite.ts`,
 From `CLAUDE.md`, and worth restating because this work touches all of them:
 
 - No `as` casts, no `!`, no `any`.
-- No magic numbers — name every constant after what it *means*
+- No magic numbers — name every constant after what it _means_
   (`TOE_OFF_PITCH`, not `PITCH_13`).
-- Comments explain *why*, never *what*.
+- Comments explain _why_, never _what_.
 - These are game-world figures, so raw `ctx` calls are correct here. The
   `src/ui/*` helpers are for interface chrome only.
 - Run `npm run typecheck`, `npm run lint`, and `npm run format` before calling
