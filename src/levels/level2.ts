@@ -43,8 +43,14 @@ const ARCHER_MAX_LEVEL = 6;
  */
 const KRAKAREN_MIN_LEVEL = 6;
 const KRAKAREN_MAX_LEVEL = 10;
-const BALL_OF_SWINE_MIN_LEVEL = 5;
-const BALL_OF_SWINE_MAX_LEVEL = 9;
+/**
+ * The Ball of Swine is a level-15 borough boss in the source, and borough bosses
+ * are meant to be tougher than anything else on their floor. It is also entirely
+ * optional, so it is the one fight on floor 2 that can afford to sit above the
+ * party's own level rather than tracking it.
+ */
+const BALL_OF_SWINE_MIN_LEVEL = 14;
+const BALL_OF_SWINE_MAX_LEVEL = 16;
 
 /**
  * Level 2 — "The Dungeon, Level 2".

@@ -3,7 +3,8 @@ import { drawCatSprite } from '../sprites/catSprite';
 import { drawJuicerSprite } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
 import { drawKrakarenSprite } from '../sprites/krakarenSprite';
-import { drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
+import { ballOfSwinePortrait, drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
+import { BOS_BODY_RADIUS_TILES } from '../sprites/ballOfSwineSheet';
 import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
 import type { GameSystem } from './GameSystem';
 import { drawText } from '../ui/TextBox';
@@ -79,9 +80,20 @@ const KRAKAREN_SPRITE_SIZE = 70;
 /** Krakaren sprite y offset. */
 const KRAKAREN_SPRITE_Y_OFFSET = 22;
 /** Ball of Swine sprite size. */
-const BOS_SPRITE_SIZE = 64;
+/**
+ * How wide the ball is drawn in its panel, and the tile size that produces it.
+ *
+ * Derived rather than picked, because the ball's `ts` argument is not a height the
+ * way every other boss's is: it is a *tile* size, and the body is
+ * `BOS_BODY_RADIUS_TILES * 2` of them across. Set as a flat 64 it drew 179px in a
+ * 200px panel and hung out over the top of it.
+ */
+const BOS_PANEL_DIAMETER = 112;
+const BOS_SPRITE_SIZE = Math.round(BOS_PANEL_DIAMETER / (BOS_BODY_RADIUS_TILES * 2));
 /** Ball of Swine sprite y offset. */
-const BOS_SPRITE_Y_OFFSET = 28;
+/** Where the ball's own centre sits down the panel, leaving room for its name. */
+const BOS_PANEL_CENTRE_Y = 86;
+const BOS_SPRITE_Y_OFFSET = BOS_PANEL_CENTRE_Y - BOS_SPRITE_SIZE / 2;
 /** Grotesque Spider sprite size. */
 const SPIDER_SPRITE_SIZE = 80;
 /** Grotesque Spider sprite y offset. */
@@ -357,10 +369,7 @@ export class BossIntroSystem implements GameSystem {
           rightX + panelW / 2 - bS / 2,
           panelY + BOS_SPRITE_Y_OFFSET,
           bS,
-          0,
-          true,
-          false,
-          0,
+          ballOfSwinePortrait(),
         );
       } else if (intro.bossType === 'grotesque_spider') {
         const spS = SPIDER_SPRITE_SIZE;

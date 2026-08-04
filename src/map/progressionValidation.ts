@@ -112,6 +112,27 @@ function isReachable(flood: FloodField, point: Point): boolean {
 }
 
 /**
+ * The first walkable tile inside a rectangle that the flood never reached, or null
+ * if every one of them is reachable.
+ *
+ * Reports the tile rather than a count so a failure names a coordinate to go and
+ * look at: an orphaned band of floor is a geometry bug a few tiles wide, and
+ * "somewhere in the arena" is not enough to find it.
+ */
+function firstUnreachableFloor(grid: TileContent[][], flood: FloodField, rect: Rect): Point | null {
+  for (let y = rect.y; y < rect.y + rect.h; y++) {
+    if (y < 0 || y >= grid.length) continue;
+    for (let x = rect.x; x < rect.x + rect.w; x++) {
+      const row = grid[y];
+      if (x < 0 || x >= row.length) continue;
+      if (!isWalkableTileType(row[x])) continue;
+      if (!isReachable(flood, { x, y })) return { x, y };
+    }
+  }
+  return null;
+}
+
+/**
  * Whether any tile of a rectangle was reached. Landmarks are tested by area
  * rather than by their centre tile, because a centre can be occupied by
  * furniture (a boss room's brazier, a stairwell's own footprint) while the room
@@ -407,6 +428,27 @@ export function validateProgression(
         if (!isReachable(withoutArena, tile)) {
           fail('I6', `stairwell ${index} needs the arena or antechamber to be reachable`);
         }
+      }
+
+      // I6b — nothing the arena carves is orphaned.
+      //
+      // Measured against the same `fullFlood` every other unblocked check uses: a
+      // second identical BFS is not only a wasted walk of the whole map, it is a
+      // second definition of "reachable with nothing blocked" that can drift.
+      //
+      // The concourse is a ring of floor inside reserved rock whose only ways in
+      // are two links down into the antechamber. Get those wrong by a tile and it
+      // becomes a band of floor nothing in the game can ever walk on — invisible
+      // in a screenshot, invisible in the invariants above, and exactly the failure
+      // the outer ring used to be suppressed to avoid. So the whole footprint is
+      // walked: every carved tile the arena owns has to be reachable.
+      const orphan = firstUnreachableFloor(grid, fullFlood, arenaReserveRect(arena.centre));
+      if (orphan !== null) {
+        fail(
+          'I6b',
+          `the arena carves floor at ${orphan.x},${orphan.y} that nothing can reach — the ` +
+            `concourse is not joined to the antechamber`,
+        );
       }
     }
   }

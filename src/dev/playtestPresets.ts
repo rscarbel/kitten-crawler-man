@@ -323,11 +323,68 @@ const LEVEL3: PlaytestPreset = {
   },
 };
 
+/**
+ * The antechamber outside the Iron Colosseum, with the party that would plausibly
+ * be standing in it.
+ *
+ * Levelled and kitted past the Krakaren, because that is the only order in which
+ * this fight can be reached — the arena is sited in the free region past the
+ * gauntlet — and carrying gym barriers, which are the item half of the ball's
+ * counterplay and are otherwise several rooms behind on floor 1.
+ */
+const SWINE: PlaytestPreset = {
+  id: 'swine',
+  description: 'Antechamber outside the Ball of Swine arena',
+  levelId: 'level2',
+  spawn: { kind: 'safeRoomBefore', bossType: 'ball_of_swine' },
+  abilityLevels: { smush: 7, magic_missile: 7, protective_shell: 4 },
+  human: {
+    level: 18,
+    xp: 120,
+    coins: 1620,
+    baseStats: { strength: 13, constitution: 12, dexterity: 3 },
+    explosivesHandling: 1,
+    skillLevels: { pugilism: 3 },
+    hotbar: [
+      { id: 'smush_tome', quantity: 1 },
+      { id: 'health_potion', quantity: 30 },
+      { id: 'enchanted_bigboi_boxers', quantity: 1, equipped: true },
+      { id: 'gym_bench_press', quantity: 4 },
+    ],
+    bag: [
+      { id: 'trollskin_shirt', quantity: 1, equipped: true },
+      { id: 'gym_treadmill', quantity: 4 },
+      { id: 'gym_dumbbell', quantity: 4 },
+      { id: 'goblin_dynamite', quantity: 8 },
+      { id: 'jugg_juice', quantity: 2 },
+      { id: 'speed_fizz', quantity: 2 },
+    ],
+  },
+  cat: {
+    level: 19,
+    xp: 120,
+    coins: 1620,
+    baseStats: { strength: 3, intelligence: 20, constitution: 2, dexterity: 24 },
+    skillLevels: { cockroach: 1 },
+    hotbar: [
+      { id: 'magic_missile_tome', quantity: 1 },
+      { id: 'health_potion', quantity: 30 },
+      { id: 'gym_treadmill', quantity: 4 },
+    ],
+    bag: [
+      { id: 'scroll_of_confusing_fog', quantity: 6 },
+      { id: 'enchanted_crown_sepsis_whore', quantity: 1, equipped: true },
+      { id: 'gym_bench_press', quantity: 4 },
+    ],
+  },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
   LEVEL2,
   KRAKAREN,
+  SWINE,
   SPIDER,
   LEVEL3,
 ];

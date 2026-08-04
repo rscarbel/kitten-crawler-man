@@ -13,14 +13,34 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Tuskling } from '../creatures/Tuskling';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
+import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawProgressBar } from '../ui/Box';
 import { viewportWidth } from '../core/Viewport';
+import { ARENA_INTERIOR_RADIUS_TILES } from '../map/arenaGeometry';
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
 /** Number of Tusklings to spawn when Ball of Swine is defeated. */
 const TUSKLING_SPAWN_COUNT = 8;
+/**
+ * Live Tusklings the ball may have shed at once during the fight.
+ *
+ * Low on purpose. Shedding is meant to add a second thing to watch while dodging a
+ * boss that fills a fifth of the arena, not to bury the crawler — an uncapped
+ * drip over a long fight ends as a wall of pigs no amount of dodging survives.
+ */
+const SHED_MAX_ALIVE = 4;
+/** Frames a shed Tuskling spends tumbling before it can act. */
+const SHED_DAZE_FRAMES = 40;
+/** Tiles from the ball a shed Tuskling is thrown clear. */
+const SHED_THROW_TILES = 1.6;
+/** Angle between two Tusklings shed on the same frame. */
+const SHED_FAN_RADIANS = 0.6;
+/** Directions tried around the ball before a shed is abandoned. */
+const SHED_PLACEMENT_ANGLES = 12;
+const TILE_CENTER_OFFSET = 0.5;
 /** Spawn radius in tiles for Tusklings around the arena center. */
 const TUSKLING_SPAWN_RADIUS_TILES = 3;
 /** Frames Tusklings remain dazed after spawning (10 seconds at 60 fps). */
@@ -33,8 +53,6 @@ const HEALTH_BAR_H = 18;
 const HEALTH_BAR_Y = 48;
 /** Padding around the health bar container box. */
 const HEALTH_BAR_PADDING = 6;
-/** Extra vertical space at the bottom of the container. */
-const HEALTH_BAR_BOTTOM_EXTRA = 30;
 /** Tile distance beyond arena radius at which the health bar is hidden. */
 const HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES = 5;
 /** Frames per second used for countdown display. */
@@ -47,6 +65,16 @@ const HP_TEXT_INSET = 4;
 const TUSKLINGS_LABEL_Y_OFFSET = 6;
 /** Phase-2 Tusklings label y relative to the bar y anchor. */
 const PHASE2_LABEL_Y = 78;
+/** Height of the momentum bar under the health bar. */
+const MOMENTUM_BAR_H = 7;
+/** Gap between the health bar and the momentum bar — enough to clear its caption. */
+const MOMENTUM_BAR_GAP = 9;
+const MOMENTUM_BAR_COLOR = '#38bdf8';
+const HUD_PANEL_FILL = 'rgba(0,0,0,0.75)';
+const HUD_BAR_TRACK = '#0a0a12';
+const HUD_STUNNED_COLOR = '#fde68a';
+const MOMENTUM_LABEL_INSET = 2;
+const MOMENTUM_LABEL_LIFT = 8;
 /** Text y anchor adjustment for label rendering. */
 const LABEL_TEXT_ADJUST = 9;
 /** HP text adjust. */
@@ -61,6 +89,23 @@ export interface ArenaCheckpoint {
   entryWindowTimer: number;
   humanIsInsider: boolean;
   catIsInsider: boolean;
+}
+
+/**
+ * What the boss bar says about the ball right now.
+ *
+ * Named states rather than a bare health bar because each one asks the crawler for
+ * something different: run, hit it, or get clear before it launches.
+ */
+function bossLabel(bos: BallOfSwine): string {
+  // `isAlive` stays true through the death burst so the fight cannot end
+  // mid-animation, which means the bar is still up while the body comes apart. It
+  // should not still be shouting FRENZIED over a corpse at 0 HP.
+  if (bos.hp === 0) return 'BALL OF SWINE — DEFEATED';
+  if (bos.isStopped) return '★ BALL OF SWINE — VULNERABLE ★';
+  if (bos.isFrenzied) return 'BALL OF SWINE — FRENZIED';
+  if (bos.isShedding) return 'BALL OF SWINE — COMING APART';
+  return 'BALL OF SWINE';
 }
 
 export class ArenaSystem implements GameSystem {
@@ -203,9 +248,12 @@ export class ArenaSystem implements GameSystem {
     const bos = mobs.find((m) => m instanceof BallOfSwine);
 
     if (bos) {
+      this.releaseShedTusklings(bos);
+      this.resolveStench(bos, ctx);
+
       const cx = arena.centre.x * TILE_SIZE;
       const cy = arena.centre.y * TILE_SIZE;
-      const innerRadius = (arena.radius - 2) * TILE_SIZE;
+      const innerRadius = ARENA_INTERIOR_RADIUS_TILES * TILE_SIZE;
       const humanInside = Math.hypot(human.x - cx, human.y - cy) < innerRadius;
       const catInside = Math.hypot(cat.x - cx, cat.y - cy) < innerRadius;
 
@@ -277,6 +325,98 @@ export class ArenaSystem implements GameSystem {
   }
 
   /**
+   * Spawns whatever the ball has torn loose since the last frame.
+   *
+   * The boss queues a count and this drains it, rather than the boss spawning them
+   * itself: a mob has no route to the scene's mob list, and — the rule this
+   * codebase repeats at every projectile site — anything owned by a mob is deleted
+   * the moment that mob dies, mid-air and mid-fight.
+   */
+  private releaseShedTusklings(bos: BallOfSwine): void {
+    if (bos.pendingSheds <= 0) return;
+    // Cleared whether or not anything is spawned. Left set while the cap is full,
+    // the queue would bank a shed per interval for the whole fight and then release
+    // all of them the instant one died.
+    const requested = bos.pendingSheds;
+    bos.pendingSheds = 0;
+
+    // Counted off the live mob list through a flag on the Tuskling itself, rather
+    // than off a list held here. A checkpoint restore deletes every mob spawned
+    // after the safe room, and a list would go on holding those references — each
+    // one permanently occupying a slot in a cap it can never free, because a mob
+    // removed from the scene never stops reporting itself alive.
+    const alive = this.getMobs().filter(
+      (mob) => mob instanceof Tuskling && mob.shedFromBall && mob.isAlive,
+    ).length;
+    const spawning = Math.min(requested, SHED_MAX_ALIVE - alive);
+
+    for (let i = 0; i < spawning; i++) {
+      // Thrown clear on the side away from the ball's own heading, so a Tuskling is
+      // never dropped under the body that is about to roll over it.
+      const behind = Math.atan2(-bos.facingY, -bos.facingX) + (i - spawning / 2) * SHED_FAN_RADIANS;
+      const tile = this.shedTile(behind, bos);
+      if (tile === null) continue;
+      const mob = createMob('tuskling', tile.x, tile.y, this.gameMap);
+      if (!(mob instanceof Tuskling)) continue;
+      // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
+      // distraction the crawler can ignore, which is the opposite of the point.
+      mob.applyMobLevel(bos.mobLevel);
+      mob.shedFromBall = true;
+      mob.dazeTimer = SHED_DAZE_FRAMES;
+      this.addMob(mob);
+    }
+  }
+
+  /**
+   * Where a shed Tuskling can actually be put down, or null if nowhere near will do.
+   *
+   * The preferred spot is behind the ball, but "behind" is wherever it is *not*
+   * heading — and the frame after a carom that is straight back out into the arena
+   * wall. The ball's own centre reaches within a tile and a half of the ironwork, so
+   * the throw lands inside it. Hence the ring search, and hence `hasRoomToMove`
+   * rather than `isWalkable`: this codebase's own rule is that a one-tile gap between
+   * solid things passes a walkability test and then traps whatever spawns in it.
+   */
+  private shedTile(preferredAngle: number, bos: BallOfSwine): { x: number; y: number } | null {
+    for (let attempt = 0; attempt < SHED_PLACEMENT_ANGLES; attempt++) {
+      // The preferred heading first, then the rest of the circle in even steps, so a
+      // ball pinned against the wall still finds the open side.
+      const angle = preferredAngle + (attempt / SHED_PLACEMENT_ANGLES) * Math.PI * 2;
+      // Floored about the ball's tile *centre*: `bos.x` is a tile top-left, so
+      // rounding it directly biases every throw half a tile up and to the left.
+      const tileX = Math.floor(
+        bos.x / TILE_SIZE + TILE_CENTER_OFFSET + Math.cos(angle) * SHED_THROW_TILES,
+      );
+      const tileY = Math.floor(
+        bos.y / TILE_SIZE + TILE_CENTER_OFFSET + Math.sin(angle) * SHED_THROW_TILES,
+      );
+      if (hasRoomToMove(this.gameMap, tileX, tileY)) return { x: tileX, y: tileY };
+    }
+    return null;
+  }
+
+  /**
+   * Resolves a stench burst the frenzied ball has vented.
+   *
+   * Only the *effect* lives here — the ring the crawler sees is drawn by the boss,
+   * which is where the timer for it belongs: the burst is centred on a body that is
+   * stationary for the whole slam, so the picture needs no state of its own.
+   */
+  private resolveStench(bos: BallOfSwine, ctx: SystemContext): void {
+    const burst = bos.pendingStench;
+    if (burst === null) return;
+    bos.pendingStench = null;
+
+    for (const target of [ctx.human, ctx.cat]) {
+      if (!target.isAlive) continue;
+      const cx = target.x + TILE_SIZE * TILE_CENTER_OFFSET;
+      const cy = target.y + TILE_SIZE * TILE_CENTER_OFFSET;
+      if (Math.hypot(cx - burst.x, cy - burst.y) > burst.radius) continue;
+      bos.applyStenchTo(target);
+    }
+  }
+
+  /**
    * Prevents a locked-in player from leaving through the door gap while the
    * entry window is still open. Snaps them two tiles north of the door, which
    * is safely inside the arena.
@@ -320,40 +460,46 @@ export class ArenaSystem implements GameSystem {
       const barY = HEALTH_BAR_Y;
       const hpFrac = Math.max(0, bos.hp / bos.maxHp);
 
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(
-        barX - HEALTH_BAR_PADDING,
-        barY - HEALTH_BAR_BOTTOM_EXTRA - HEALTH_BAR_PADDING + HEALTH_BAR_PADDING,
-        barW + HEALTH_BAR_PADDING * 2,
-        barH + HEALTH_BAR_BOTTOM_EXTRA,
-      );
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        barX - HEALTH_BAR_PADDING,
-        barY - HEALTH_BAR_BOTTOM_EXTRA - HEALTH_BAR_PADDING + HEALTH_BAR_PADDING,
-        barW + HEALTH_BAR_PADDING * 2,
-        barH + HEALTH_BAR_BOTTOM_EXTRA,
-      );
+      const momentumY = barY + barH + MOMENTUM_BAR_GAP;
+      const barColor = bos.isStopped ? HUD_STUNNED_COLOR : meta.color;
+      const labelY = barY - LABEL_Y_INSET - LABEL_TEXT_ADJUST;
+      // The panel is sized from the *label* down, not from the health bar down: the
+      // name sits above the bar, and a panel that started at the bar left it printed
+      // on the world outside the box that is meant to hold it.
+      const panelTop = labelY - HEALTH_BAR_PADDING;
 
-      drawText(ctx, bos.isStopped ? `★ ${meta.displayName} [STUNNED] ★` : meta.displayName, {
+      ctx.save();
+      drawBox(ctx, {
+        x: barX - HEALTH_BAR_PADDING,
+        y: panelTop,
+        width: barW + HEALTH_BAR_PADDING * 2,
+        height: momentumY + MOMENTUM_BAR_H + HEALTH_BAR_PADDING - panelTop,
+        fill: HUD_PANEL_FILL,
+        border: meta.color,
+        borderWidth: 1,
+        radius: 0,
+      });
+
+      drawText(ctx, bossLabel(bos), {
         x: viewportWidth() / 2,
-        y: barY - LABEL_Y_INSET - LABEL_TEXT_ADJUST,
+        y: labelY,
         size: 11,
         bold: true,
-        color: bos.isStopped ? '#fde68a' : meta.color,
+        color: barColor,
         align: 'center',
       });
 
-      ctx.fillStyle = '#0a0a12';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = bos.isStopped ? '#fde68a' : meta.color;
-      ctx.fillRect(barX, barY, barW * hpFrac, barH);
-
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barW, barH);
+      drawProgressBar(ctx, {
+        x: barX,
+        y: barY,
+        width: barW,
+        height: barH,
+        value: hpFrac,
+        fill: barColor,
+        background: HUD_BAR_TRACK,
+        border: meta.color,
+        radius: 0,
+      });
 
       drawText(ctx, `${bos.hp} / ${bos.maxHp}`, {
         x: viewportWidth() / 2,
@@ -363,11 +509,32 @@ export class ArenaSystem implements GameSystem {
         align: 'center',
       });
 
+      // The momentum read-out. The fight is *about* momentum, so the crawler has to
+      // be able to see it going down — without this, baiting a square slam and
+      // grinding it on barriers look identical until the moment it collapses.
+      drawProgressBar(ctx, {
+        x: barX,
+        y: momentumY,
+        width: barW,
+        height: MOMENTUM_BAR_H,
+        value: bos.momentumFraction,
+        fill: MOMENTUM_BAR_COLOR,
+        background: HUD_BAR_TRACK,
+        border: meta.color,
+        radius: 0,
+      });
+      drawText(ctx, 'MOMENTUM', {
+        x: barX + MOMENTUM_LABEL_INSET,
+        y: momentumY - MOMENTUM_LABEL_LIFT,
+        size: 8,
+        color: '#94a3b8',
+      });
+
       if (this.entryWindowTimer > 0) {
         const seconds = Math.ceil(this.entryWindowTimer / DISPLAY_FPS);
         drawText(ctx, `Entry closes in ${seconds}s`, {
           x: viewportWidth() / 2,
-          y: barY + barH + TUSKLINGS_LABEL_Y_OFFSET,
+          y: momentumY + MOMENTUM_BAR_H + TUSKLINGS_LABEL_Y_OFFSET,
           size: 11,
           bold: true,
           color: '#fbbf24',

@@ -8,6 +8,7 @@ import {
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
   METAL_WALL,
+  ARENA_CAGE,
   ARENA_FLOOR,
   FLOOR_GRATE,
   TORCH,
@@ -24,9 +25,13 @@ import { randomFromArray, randomInt, clamp } from '../utils';
 import { mordecaiAndBedTiles } from './safeRoomFixtures';
 import type { ProgressionDef } from '../levels/types';
 import {
+  ARENA_ANTECHAMBER_MIN_WIDTH,
+  ARENA_CONCOURSE_REACH,
+  ARENA_DOOR_COLUMN_OFFSETS,
+  ARENA_CONCOURSE_LINK_INNER_DX,
+  ARENA_CONCOURSE_LINK_OUTER_DX,
   ARENA_RADIUS,
   ARENA_REACH,
-  ARENA_RING_WIDTH,
   ARENA_WALL_THICKNESS,
   arenaDoorTileAt,
   arenaReserveRect,
@@ -320,11 +325,25 @@ const ARENA_CLEARANCE = 3;
 const ARENA_MIN_DIST_FROM_GAUNTLET_EXIT = 30;
 /** Nearest free rooms the antechamber will try to reach before the map is rejected. */
 const ANTECHAMBER_CONNECT_CANDIDATES = 12;
+/**
+ * Ways out of the antechamber the generator aims for.
+ *
+ * A target rather than a requirement: the layout may only offer one, and a floor
+ * rejected for not fitting three corridors around a reserved disc would be rejected
+ * often. Only the first is mandatory.
+ */
+const ANTECHAMBER_EXIT_TARGET = 3;
 /** Boss the arena's antechamber warns the player about. */
 const ARENA_BOSS_TYPE = 'ball_of_swine';
 /** Antechamber size range — a safe room, so it reuses the safe-room dimensions. */
-const ANTECHAMBER_W_MIN = 10;
-const ANTECHAMBER_W_MAX = 16;
+/**
+ * The antechamber has to reach out under both concourse links, so its width has a
+ * hard floor rather than a taste-based one — see `ARENA_ANTECHAMBER_MIN_WIDTH`.
+ */
+const ANTECHAMBER_W_MIN = ARENA_ANTECHAMBER_MIN_WIDTH;
+/** Slack above the floor, so every antechamber is not the same shape. */
+const ANTECHAMBER_WIDTH_SLACK = 3;
+const ANTECHAMBER_W_MAX = ARENA_ANTECHAMBER_MIN_WIDTH + ANTECHAMBER_WIDTH_SLACK;
 const ANTECHAMBER_H_MIN = 8;
 const ANTECHAMBER_H_MAX = 12;
 
@@ -742,6 +761,113 @@ interface ArenaReservation {
   antechamber: Rect;
 }
 
+/** Spectator cages set into the arena's inner wall, evenly spaced around it. */
+const ARENA_CAGE_COUNT = 14;
+/** Radians of clearance kept between a cage and the door, so none blocks the way in. */
+const ARENA_CAGE_DOOR_CLEARANCE = 0.35;
+/** Half-turns added before a modulo, so a signed angle difference wraps positive. */
+const ANGLE_WRAP_TURNS = 3;
+/** Half of a band's thickness, for finding its middle row. */
+const WALL_BAND_HALF = 0.5;
+
+/**
+ * Sets cages into the inner face of the arena wall.
+ *
+ * Placed by angle rather than by walking the wall tiles, so they stay evenly spread
+ * however the rasterised circle happens to fall, and only ever written onto a tile
+ * that is already `METAL_WALL` — the door and the concourse's own seal are both
+ * live structure, and a cage dropped on either would either wall the fight in or
+ * open a second way to it.
+ */
+function setArenaCages(
+  grid: TileContent[][],
+  size: number,
+  centreX: number,
+  centreY: number,
+): void {
+  // Mid-wall, so a cage reads as an alcove with wall on both sides of it rather than
+  // as a hole in the inner or outer face.
+  const wallBandMidpoint = (ARENA_WALL_THICKNESS - 1) * WALL_BAND_HALF;
+  const wallRadius = ARENA_RADIUS - wallBandMidpoint;
+  const doorAngle = Math.PI / 2;
+
+  for (let i = 0; i < ARENA_CAGE_COUNT; i++) {
+    const angle = (i / ARENA_CAGE_COUNT) * Math.PI * 2;
+    // Angular distance to the door, wrapped, so the two cages nearest it are dropped.
+    const toDoor = Math.abs(
+      ((angle - doorAngle + Math.PI * ANGLE_WRAP_TURNS) % (Math.PI * 2)) - Math.PI,
+    );
+    if (toDoor < ARENA_CAGE_DOOR_CLEARANCE) continue;
+    const gx = centreX + Math.round(Math.cos(angle) * wallRadius);
+    const gy = centreY + Math.round(Math.sin(angle) * wallRadius);
+    if (gy < 0 || gy >= size || gx < 0 || gx >= size) continue;
+    if (grid[gy][gx].type !== METAL_WALL) continue;
+    grid[gy][gx].type = ARENA_CAGE;
+  }
+}
+
+/**
+ * Walls off the concourse along the arena's door row, on both sides of the door.
+ *
+ * The door sits at the outer edge of the wall, so the concourse's own tiles run
+ * along beside it — and a crawler standing on one could step sideways into the
+ * arena without ever entering the antechamber, which is precisely the bypass the
+ * outer ring used to be suppressed to avoid. Walling the row instead keeps the
+ * ring and closes the bypass: the only tiles left touching the door from outside
+ * belong to the safe room.
+ *
+ * The links carved next deliberately cut back through this seal further out; what
+ * has to be sealed is the stretch *between* the door and those links.
+ */
+function sealConcourseAcrossDoorRow(
+  grid: TileContent[][],
+  size: number,
+  centreX: number,
+  doorY: number,
+): void {
+  if (doorY < 0 || doorY >= size) return;
+  for (let dx = -ARENA_CONCOURSE_REACH; dx <= ARENA_CONCOURSE_REACH; dx++) {
+    // The door's own columns are the way in and stay carved.
+    if (ARENA_DOOR_COLUMN_OFFSETS.includes(dx)) continue;
+    const radius = Math.hypot(dx, ARENA_RADIUS);
+    if (radius <= ARENA_RADIUS || radius > ARENA_CONCOURSE_REACH) continue;
+    const gx = centreX + dx;
+    if (gx < 0 || gx >= size) continue;
+    grid[doorY][gx].type = METAL_WALL;
+  }
+}
+
+/**
+ * Drops the concourse into the antechamber on both flanks.
+ *
+ * Two two-tile passages through the door row, far enough out that the seal above
+ * still separates them from the door. They are what make the circuit a circuit: the
+ * ring's western end comes down into the safe room, and its eastern end leaves
+ * again on the other side.
+ */
+function linkConcourseToAntechamber(
+  grid: TileContent[][],
+  size: number,
+  centreX: number,
+  doorY: number,
+  antechamber: Rect,
+): void {
+  for (const side of [-1, 1] as const) {
+    for (const offset of [ARENA_CONCOURSE_LINK_INNER_DX, ARENA_CONCOURSE_LINK_OUTER_DX]) {
+      const gx = centreX + side * offset;
+      if (gx < antechamber.x || gx >= antechamber.x + antechamber.w) continue;
+      if (gx < 0 || gx >= size || doorY < 0 || doorY >= size) continue;
+      // Exactly the door row, which the seal has just walled: the concourse's last
+      // row sits immediately above it and the antechamber's first immediately below,
+      // so opening this one tile joins two stretches of floor that already exist.
+      // Only ever a wall the seal put there — anywhere else and this would be
+      // punching a hole in the arena.
+      if (grid[doorY][gx].type !== METAL_WALL) continue;
+      grid[doorY][gx].type = FloorTypeValue.concrete;
+    }
+  }
+}
+
 /**
  * Finds a home for the arena in progression mode and claims the tiles for it.
  *
@@ -754,49 +880,78 @@ function rectOfRoom(room: { x: number; y: number; w: number; h: number }): Rect 
   return { x: room.x, y: room.y, w: room.w, h: room.h };
 }
 
+/**
+ * The arena's footprint at a candidate centre, or null if it will not fit there.
+ *
+ * Split out from the search so the search can score candidates instead of taking
+ * the first that fits.
+ */
+function planArenaAt(
+  segments: SegmentMap,
+  centre: Point,
+  size: number,
+  border: number,
+): ArenaReservation | null {
+  if (
+    centre.x - ARENA_REACH < border ||
+    centre.x + ARENA_REACH >= size - border ||
+    centre.y - ARENA_REACH < border ||
+    centre.y + ARENA_REACH >= size - border
+  ) {
+    return null;
+  }
+
+  const doorTile = arenaDoorTileAt(centre);
+  const reserve = arenaReserveRect(centre);
+  const antechamberW = randomInt(ANTECHAMBER_W_MIN, ANTECHAMBER_W_MAX);
+  const antechamberH = randomInt(ANTECHAMBER_H_MIN, ANTECHAMBER_H_MAX);
+  const antechamber: Rect = {
+    x: doorTile.x - Math.floor(antechamberW / 2),
+    y: doorTile.y + 1,
+    w: antechamberW,
+    h: antechamberH,
+  };
+
+  if (!segments.canPlaceRoom(reserve, SEGMENT_ARENA)) return null;
+  if (!segments.canPlaceRoom(antechamber, SEGMENT_ARENA)) return null;
+  return { centre, doorTile, reserve, antechamber };
+}
+
 function reserveArena(
   segments: SegmentMap,
   origin: Point,
   size: number,
   border: number,
 ): ArenaReservation | null {
+  // Scored rather than first-fit: the arena is meant to sit at the far end of the
+  // floor's paths, the way the Juicer does on floor 1, and taking the first legal
+  // spiral step put it wherever the search happened to look first — sometimes a
+  // couple of rooms past the gauntlet exit, where a crawler trips over it on the way
+  // out. Distance from that exit is the score, and the whole attempt budget is spent
+  // looking for the furthest one that fits.
+  let best: ArenaReservation | null = null;
+  let bestDistance = -1;
+
   for (let attempt = 0; attempt < ARENA_PLACEMENT_ATTEMPTS; attempt++) {
     const angle =
       (attempt / ARENA_PLACEMENT_ATTEMPTS) * Math.PI * 2 + Math.random() * ARENA_ANGLE_JITTER;
     const distance = ARENA_MIN_DIST_FROM_GAUNTLET_EXIT + Math.random() * ARENA_DIST_VARIANCE;
+    if (distance <= bestDistance) continue;
     const centre: Point = {
       x: Math.round(origin.x + Math.cos(angle) * distance),
       y: Math.round(origin.y + Math.sin(angle) * distance),
     };
 
-    if (
-      centre.x - ARENA_REACH < border ||
-      centre.x + ARENA_REACH >= size - border ||
-      centre.y - ARENA_REACH < border ||
-      centre.y + ARENA_REACH >= size - border
-    ) {
-      continue;
-    }
-
-    const doorTile = arenaDoorTileAt(centre);
-    const reserve = arenaReserveRect(centre);
-    const antechamberW = randomInt(ANTECHAMBER_W_MIN, ANTECHAMBER_W_MAX);
-    const antechamberH = randomInt(ANTECHAMBER_H_MIN, ANTECHAMBER_H_MAX);
-    const antechamber: Rect = {
-      x: doorTile.x - Math.floor(antechamberW / 2),
-      y: doorTile.y + 1,
-      w: antechamberW,
-      h: antechamberH,
-    };
-
-    if (!segments.canPlaceRoom(reserve, SEGMENT_ARENA)) continue;
-    if (!segments.canPlaceRoom(antechamber, SEGMENT_ARENA)) continue;
-
-    segments.addRoom(reserve, SEGMENT_ARENA);
-    segments.addRoom(antechamber, SEGMENT_ARENA);
-    return { centre, doorTile, reserve, antechamber };
+    const plan = planArenaAt(segments, centre, size, border);
+    if (plan === null) continue;
+    best = plan;
+    bestDistance = distance;
   }
-  return null;
+
+  if (best === null) return null;
+  segments.addRoom(best.reserve, SEGMENT_ARENA);
+  segments.addRoom(best.antechamber, SEGMENT_ARENA);
+  return best;
 }
 
 /**
@@ -1259,8 +1414,15 @@ function buildDungeon(
     fillWithRegularRooms(maxRooms);
     if (freeRegularRooms < MIN_FREE_REGULAR_ROOMS) return reject('free region too thin');
 
-    // The antechamber gets exactly one way out into the free region. Any second
-    // route would let a player reach the arena door without walking through it.
+    // The antechamber is a junction, not a dead end.
+    //
+    // Every route to the arena door still runs through it — the door's only
+    // neighbours outside the wall are its own tiles, and the concourse is sealed
+    // across the door row — so extra ways *out* cost nothing and buy the thing the
+    // structure has to say: this fight is optional. A crawler who walks in, sees a
+    // sealed iron drum with one door in it and three ways onward does not need to be
+    // told they can leave. One is required; the rest are taken if the layout offers
+    // them.
     if (antechamberRoomIndex !== null) {
       const antechamber = rectOfRoom(rooms[antechamberRoomIndex]);
       const antechamberCentre = rectCentre(antechamber);
@@ -1272,8 +1434,9 @@ function buildDungeon(
           Math.hypot(antechamberCentre.x - rb.x, antechamberCentre.y - rb.y)
         );
       });
-      let connected = false;
+      let connected = 0;
       for (const candidateIndex of candidates.slice(0, ANTECHAMBER_CONNECT_CANDIDATES)) {
+        if (connected >= ANTECHAMBER_EXIT_TARGET) break;
         const corridor = planCorridorBetween(
           segments,
           SEGMENT_FREE,
@@ -1284,10 +1447,9 @@ function buildDungeon(
         if (corridor === null) continue;
         segments.claimCorridor(corridor.tiles, SEGMENT_FREE);
         carvePlannedCorridor(corridor);
-        connected = true;
-        break;
+        connected++;
       }
-      if (!connected) return reject('antechamber connection');
+      if (connected === 0) return reject('antechamber connection');
     }
 
     // ── Free-region loops and dead-end rescue ───────────────────────────────
@@ -2103,8 +2265,16 @@ function buildDungeon(
   const buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }> = [];
   const arenaExteriors: ArenaExterior[] = [];
 
-  /** Carves the arena structure at a chosen centre and records its exterior. */
-  const carveArena = (acx: number, acy: number, carveOuterRing: boolean): void => {
+  /**
+   * Carves the arena structure at a chosen centre and records its exterior.
+   *
+   * `antechamber` is the safe room south of the door on a progression floor, and
+   * null on a free-roam one. When it is present the concourse is routed *through*
+   * it: the ring's two ends drop into the safe room and the door row between them
+   * is walled, so the crawler can walk the whole way around the drum but can only
+   * reach its door from inside the antechamber.
+   */
+  const carveArena = (acx: number, acy: number, antechamber: Rect | null): void => {
     for (let dy = -ARENA_RADIUS; dy <= ARENA_RADIUS; dy++) {
       for (let dx = -ARENA_RADIUS; dx <= ARENA_RADIUS; dx++) {
         const rad = Math.hypot(dx, dy);
@@ -2123,37 +2293,46 @@ function buildDungeon(
     const doorX = acx;
     for (let wy = 0; wy < ARENA_WALL_THICKNESS; wy++) {
       const ty = doorY - wy;
-      if (ty >= 0 && ty < size) {
-        grid[ty][doorX - 1].type = FloorTypeValue.concrete;
-        grid[ty][doorX].type = FloorTypeValue.concrete;
+      if (ty < 0 || ty >= size) continue;
+      for (const offset of ARENA_DOOR_COLUMN_OFFSETS) {
+        grid[ty][doorX + offset].type = FloorTypeValue.concrete;
       }
     }
 
-    // A 2-tile walkable ring just outside the wall stops the arena from severing
-    // corridors it was dropped on top of. A progression floor has no such
-    // corridors to save — the arena is sited on reserved rock — and carving the
-    // ring there would either hand the player a walk straight to the door,
-    // bypassing the antechamber, or leave a band of floor nothing can reach.
-    if (carveOuterRing) {
-      for (
-        let ry = -(ARENA_RADIUS + ARENA_RING_WIDTH);
-        ry <= ARENA_RADIUS + ARENA_RING_WIDTH;
-        ry++
-      ) {
-        for (
-          let rx = -(ARENA_RADIUS + ARENA_RING_WIDTH);
-          rx <= ARENA_RADIUS + ARENA_RING_WIDTH;
-          rx++
-        ) {
-          const rad = Math.hypot(rx, ry);
-          if (rad <= ARENA_RADIUS || rad > ARENA_RADIUS + ARENA_RING_WIDTH) continue;
-          const gx = acx + rx;
-          const gy = acy + ry;
-          if (gy < 0 || gy >= size || gx < 0 || gx >= size) continue;
-          grid[gy][gx].type = FloorTypeValue.concrete;
-        }
+    // The concourse: a walkable ring right around the outside of the wall. It is
+    // what makes the arena read as a building the crawler is walking *past* rather
+    // than a dead end they have arrived at, and it is carved on every floor that
+    // has an arena.
+    //
+    // Tiles already claimed by the antechamber are left alone. The safe room's own
+    // floor material is part of how a crawler knows they are safe, and paving over
+    // its northern strip with concourse would take that away exactly where they
+    // stop to decide whether to fight.
+    const insideAntechamber = (gx: number, gy: number): boolean =>
+      antechamber !== null &&
+      gx >= antechamber.x &&
+      gx < antechamber.x + antechamber.w &&
+      gy >= antechamber.y &&
+      gy < antechamber.y + antechamber.h;
+
+    for (let ry = -ARENA_CONCOURSE_REACH; ry <= ARENA_CONCOURSE_REACH; ry++) {
+      for (let rx = -ARENA_CONCOURSE_REACH; rx <= ARENA_CONCOURSE_REACH; rx++) {
+        const rad = Math.hypot(rx, ry);
+        if (rad <= ARENA_RADIUS || rad > ARENA_CONCOURSE_REACH) continue;
+        const gx = acx + rx;
+        const gy = acy + ry;
+        if (gy < 0 || gy >= size || gx < 0 || gx >= size) continue;
+        if (insideAntechamber(gx, gy)) continue;
+        grid[gy][gx].type = FloorTypeValue.concrete;
       }
     }
+
+    if (antechamber !== null) {
+      sealConcourseAcrossDoorRow(grid, size, acx, doorY);
+      linkConcourseToAntechamber(grid, size, acx, doorY, antechamber);
+    }
+
+    setArenaCages(grid, size, acx, acy);
 
     buildingEntries.push({
       doorTile: { x: doorX, y: doorY },
@@ -2169,7 +2348,7 @@ function buildDungeon(
   };
 
   if (arenaReservation !== null) {
-    carveArena(arenaReservation.centre.x, arenaReservation.centre.y, false);
+    carveArena(arenaReservation.centre.x, arenaReservation.centre.y, arenaReservation.antechamber);
     // The antechamber's arena-side doorway only exists now that the door is cut,
     // so its traffic band has to be laid after the arena rather than with the
     // other safe rooms.
@@ -2201,7 +2380,9 @@ function buildDungeon(
       });
       if (overlapsSpecial) continue;
 
-      carveArena(acx, acy, true);
+      // No antechamber on a free-roam floor, so the concourse is a plain ring and
+      // the door opens onto it directly.
+      carveArena(acx, acy, null);
 
       const doorY = acy + ARENA_RADIUS;
       const doorX = acx;
@@ -2221,7 +2402,7 @@ function buildDungeon(
         grid[doorY + 1][doorX].type = FloorTypeValue.concrete;
       }
 
-      const pivotX = Math.min(acx + ARENA_RADIUS + ARENA_RING_WIDTH, size - BORDER - 1);
+      const pivotX = Math.min(acx + ARENA_CONCOURSE_REACH, size - BORDER - 1);
       const pivotY = doorY + 1;
       carveHallway(doorX, pivotY, pivotX, pivotY, 'standard', FloorTypeValue.concrete);
       carveHallway(

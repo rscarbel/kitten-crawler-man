@@ -23,6 +23,7 @@ export type DeathCause =
   | 'krakarenCloneSlam'
   | 'krakarenCloneRegularMelee'
   | 'ballOfSwine'
+  | 'ballOfSwineStench'
   | 'tuskling'
   | 'troglodyte'
   | 'smallSpider'
@@ -246,9 +247,15 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The Krakaren Clone tore you apart.',
   ],
   ballOfSwine: [
-    'The Ball of Swine ran you down at full speed. Try placing gym barriers next time.',
+    'The Ball of Swine ran you down. It never slows down on its own — make it hit something flat.',
     'You were flattened by a giant rolling pig monster. Of all the ways to go...',
-    "The Ball of Swine made contact while zooming. That'll do it every time.",
+    'The Ball of Swine caught you with its momentum up. Bait it square into the wall and it has to stop.',
+    'It caroms off a glancing wall without losing a thing. Lead it in head-on instead.',
+    'A gym barrier drags its momentum down every time it rolls through one. Worth remembering.',
+  ],
+  ballOfSwineStench: [
+    'The Ball of Swine burst against the wall and the stench did the rest. Do not stand where it lands.',
+    'Sewage and rotten meat, at pressure. You were far too close to that impact.',
   ],
   tuskling: [
     "A Tuskling gored you. They're dazed, not dead.",

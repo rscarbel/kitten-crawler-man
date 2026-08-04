@@ -7,6 +7,7 @@ import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
 import { ROCK_THROW_ATTACK_TYPE, ROLL_ATTACK_TYPE } from '../creatures/rockGolemAttackTypes';
+import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from '../creatures/ballOfSwineAttackTypes';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -105,6 +106,14 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.
   if (mobType === 'SkeletonLord' && attackType === 'grasping_hands') return 'skeletonLordHands';
+
+  // Being run over and being gassed teach opposite lessons — one is "you were in its
+  // line", the other "you were standing where it was about to hit" — and the trample
+  // lines would tell a player at the far wall that they had been flattened.
+  if (mobType === 'BallOfSwine') {
+    if (attackType === STENCH_ATTACK_TYPE) return 'ballOfSwineStench';
+    if (attackType === TRAMPLE_ATTACK_TYPE) return 'ballOfSwine';
+  }
 
   // Rolling and standing are two different fights against the same golem, and
   // the roll is the one with a counterplay worth naming.

@@ -111,22 +111,41 @@
   },
   "ball_of_swine": {
     "path": "bosses/ball_of_swine.png",
-    "frameWidth": 384,
-    "frameHeight": 384,
-    "tileX": 160,
-    "tileY": 160,
+    "frameWidth": 288,
+    "frameHeight": 288,
+    "tileX": 144,
+    "tileY": 144,
     "tileScale": 64,
     "states": {
-      "orbit": {
+      "roll": {
         "row": 0,
+        "frameCount": 12
+      },
+      "wallow": {
+        "row": 1,
         "frameCount": 8
       },
-      "stopped": {
+      "shade": {
         "row": 1,
-        "frameCount": 4
+        "colOffset": 8,
+        "frameCount": 1
+      },
+      "shadow": {
+        "row": 1,
+        "colOffset": 9,
+        "frameCount": 1
       },
       "burst": {
         "row": 2,
+        "frameCount": 8
+      },
+      "slam": {
+        "row": 2,
+        "colOffset": 8,
+        "frameCount": 4
+      },
+      "spinup": {
+        "row": 3,
         "frameCount": 6
       }
     }

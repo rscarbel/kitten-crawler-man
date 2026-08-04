@@ -43,6 +43,8 @@ import {
   resolveSpawnLevel,
 } from '../src/levels/spawner';
 import { Goblin } from '../src/creatures/Goblin';
+import { BallOfSwine } from '../src/creatures/BallOfSwine';
+import { makeSepsis } from '../src/core/StatusEffect';
 import { Juicer } from '../src/creatures/Juicer';
 import { GoblinArcher } from '../src/creatures/GoblinArcher';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -89,6 +91,12 @@ const ARCHER_TEST_LOCK_MARGIN_FRAMES = 12;
 const ARCHER_TEST_DODGE_STEP_PX = 6;
 
 /** Mid-band level the boss re-levelling checks are run at. */
+/** Frames allowed for a permanent status tick to grind a levelled boss to zero. */
+const SEPSIS_SETTLE_FRAMES = 400000;
+/** Enough over max HP to kill through the damage reduction a rolling ball carries. */
+const KILLING_BLOW_MULTIPLE = 20;
+/** Frames given to the burst to play out and settle, comfortably past its length. */
+const BURST_SETTLE_FRAMES = 400;
 const BOSS_TEST_LEVEL = 7;
 
 /** Floating-point slack for comparisons between two computed reals. */
@@ -401,6 +409,69 @@ section('re-levelling');
   check(boss.isAlive, 'a boss killed after the checkpoint is alive again after a revive');
   check(boss.hp === bossMaxHp, 'a revived boss comes back at its levelled max HP');
   check(boss.moveSpeed === levelledSpeed, 'a revive keeps a levelled boss’s speed');
+
+  // The Ball of Swine gets its own pass at all of the above, because it is the one
+  // boss that overrides `isAlive` — it reports itself alive through its death burst
+  // so the fight cannot end mid-animation. Every check above is written against a
+  // boss whose `isAlive` is just `hp > 0`, so none of them can see the failure that
+  // override makes possible: a burst with nowhere to finish leaves the creature
+  // permanently "alive", re-latching `justDied` every frame. That re-resolves the
+  // kill sixty times a second — re-awarding the whole XP split, re-emitting
+  // `bossDefeated` into another eight Tusklings — and it makes the revive above
+  // unreachable, because `rewindMobsToCheckpoint` only revives what reads as dead.
+  const ball = new BallOfSwine(0, 0, TILE_SIZE);
+  ball.setArena(0, 0);
+  ball.applyMobLevel(BOSS_TEST_LEVEL);
+  const ballMaxHp = ball.maxHp;
+  // Multiplied up past the reduction a rolling ball applies to everything that hits
+  // it, so this is a killing blow rather than a scratch — at double its max HP it
+  // survived, which is the reduction doing its job.
+  ball.takeDamageFrom(ballMaxHp * KILLING_BLOW_MULTIPLE, null, 'melee');
+  check(ball.isAlive, 'the ball reports itself alive while its death burst plays');
+
+  let latches = 0;
+  for (let frame = 0; frame < BURST_SETTLE_FRAMES; frame++) {
+    ball.updateAI([]);
+    if (ball.justDied) {
+      latches++;
+      ball.justDied = false;
+    }
+  }
+  check(latches === 1, `the ball's death resolves exactly once (saw ${latches})`);
+  check(!ball.isAlive, 'the ball reads as dead once its burst has finished');
+
+  ball.reviveForCheckpoint();
+  check(ball.isAlive, 'a ball killed after the checkpoint is alive again after a revive');
+  check(ball.hp === ballMaxHp, 'a revived ball comes back at its levelled max HP');
+
+  // The other way a mob can reach zero: a status tick, which lands in
+  // `Player.takeDamage` and does none of a mob's death bookkeeping. Left alone, a ball
+  // finished off by the Sepsis Crown's permanent tick — which the cat can be wearing,
+  // and the `swine` playtest preset is — drops to zero without `justDied`, so
+  // `resolveKills` skips it: no loot, no XP, no `bossDefeated`, and therefore no
+  // phase-2 Tusklings and no stairwell out.
+  const septic = new BallOfSwine(0, 0, TILE_SIZE);
+  septic.setArena(0, 0);
+  septic.applyMobLevel(BOSS_TEST_LEVEL);
+  septic.applyStatus(makeSepsis());
+  let septicTicks = 0;
+  while (septic.hp > 0 && septicTicks < SEPSIS_SETTLE_FRAMES) {
+    septic.tickTimers();
+    septicTicks++;
+  }
+  check(septic.hp === 0, `sepsis alone can finish the ball off (took ${septicTicks} frames)`);
+  check(septic.isAlive, 'a ball killed by a status effect still bursts rather than just stopping');
+
+  let septicLatches = 0;
+  for (let frame = 0; frame < BURST_SETTLE_FRAMES; frame++) {
+    septic.updateAI([]);
+    if (septic.justDied) {
+      septicLatches++;
+      septic.justDied = false;
+    }
+  }
+  check(septicLatches === 1, `a status death resolves exactly once (saw ${septicLatches})`);
+  check(septic.droppedLoot !== null, 'a status death still drops the boss loot');
 }
 
 // ── Progression regions ──────────────────────────────────────────────────────

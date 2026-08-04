@@ -119,6 +119,10 @@
     "scripts/tusklingGore.ts",
     "scripts/generate-tuskling-sprite.ts",
     "scripts/generate-tuskling-sprite.gates.ts",
-    "scripts/render-tuskling.ts"
+    "scripts/render-tuskling.ts",
+    "scripts/ballOfSwineArt.ts",
+    "scripts/generate-ball-of-swine-sprite.ts",
+    "scripts/generate-ball-of-swine-sprite.gates.ts",
+    "scripts/render-ball-of-swine.ts"
   ]
 }

@@ -338,10 +338,21 @@ export const GOBLIN_TENT = 91;
 export const DEN_HOLLOW = 92;
 
 /**
+ * A barred alcove set into the arena's wall, holding what is left of a spectator.
+ *
+ * Structurally a `METAL_WALL` — same thickness, same solidity, same shadow — so it
+ * is registered everywhere that one is. It exists for what it says: the Ball of
+ * Swine is described as studded with scraps of tuxedos and red sequin dresses, and
+ * these are where they came from. Without them the clothing on the boss has no
+ * source anywhere in the game.
+ */
+export const ARENA_CAGE = 93;
+
+/**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 93;
+export const TILE_TYPE_COUNT = 94;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

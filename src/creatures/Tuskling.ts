@@ -64,6 +64,17 @@ export class Tuskling extends Mob {
    */
   dazeTimer = 0;
 
+  /**
+   * Whether this tuskling tore loose from a live Ball of Swine mid-fight, as
+   * against being released by its death burst.
+   *
+   * A flag on the creature rather than a list held by `ArenaSystem`, because a
+   * checkpoint restore deletes every mob spawned since the safe room: a list would
+   * keep holding those references, and each one would occupy a slot in the shed cap
+   * forever — a mob removed from the scene never stops reporting itself alive.
+   */
+  shedFromBall = false;
+
   private state: TuskState = 'idle';
   private windupTimer = 0;
   private chargeTimer = 0;

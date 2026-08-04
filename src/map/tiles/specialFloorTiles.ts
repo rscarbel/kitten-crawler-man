@@ -43,27 +43,6 @@ const KRAKAREN_SLIME_CENTER_Y_FRACTION = 0.4;
 const KRAKAREN_SLIME_MAJOR_FRACTION = 0.12;
 const KRAKAREN_SLIME_MINOR_FRACTION = 0.08;
 
-const ARENA_GRID_DIVISIONS = 4;
-const ARENA_HASH_X = 7;
-const ARENA_RIVET_RADIUS = 1.2;
-const ARENA_BLOOD_MODULUS = 3571;
-const ARENA_BLOOD_Y_MODULUS = 1237;
-const ARENA_BLOOD_SEED_MASK = 0xffff;
-const ARENA_BLOOD_TILE_STRIDE = 11;
-const ARENA_BLOOD_ALPHA_BASE = 0.18;
-const ARENA_BLOOD_ALPHA_SCALE = 0.03;
-const ARENA_BLOOD_SEED_MODULUS_7 = 7;
-const ARENA_BLOOD_POSITION_OFFSET = 4;
-const ARENA_BLOOD_SHIFT_BITS = 4;
-const ARENA_BLOOD_MAJOR_BASE = 0.2;
-const ARENA_BLOOD_MAJOR_SCALE = 0.04;
-const ARENA_BLOOD_MAJOR_MODULUS = 5;
-const ARENA_BLOOD_MINOR_BASE = 0.12;
-const ARENA_BLOOD_MINOR_SCALE = 0.03;
-const ARENA_BLOOD_MINOR_MODULUS = 4;
-const ARENA_BLOOD_ROTATION_MODULUS = 16;
-const ARENA_BLOOD_ROTATION_SCALE = 0.4;
-
 const GRATE_BASE_FILL_FRACTION = 0.06;
 const GRATE_GAP_DIVISIONS = 6;
 const GRATE_HORIZONTAL_INSET_FRACTION = 0.1;
@@ -157,6 +136,207 @@ function findSpiderLabBounds(
   const result = isFinite(minX) ? { minX, minY, maxX, maxY } : null;
   _spiderLabBoundsCache.set(structure, result);
   return result;
+}
+
+/** Tiles per steel plate. The seam between plates is the floor's whole character. */
+const ARENA_PLATE_TILES = 2;
+/** Divisions of the anti-slip crosshatch inside a plate. */
+const ARENA_GRID_DIVISIONS = 4;
+const ARENA_RIVET_RADIUS = 1.3;
+const ARENA_BASE = '#191b21';
+/**
+ * The two plate tones, exported because the ball's bake gate measures the boss's
+ * contrast against the floor it rolls on and the review harness paints it as a
+ * backdrop. Both had a copied hex that this file's own rewrite left behind, so the
+ * gate was measuring against a colour the game no longer draws.
+ */
+export const ARENA_PLATE_LIGHT = '#20232b';
+export const ARENA_PLATE_DARK = '#14161b';
+const ARENA_HATCH = '#23262e';
+const ARENA_SEAM = '#0d0e12';
+const ARENA_SEAM_LIT = '#2f343e';
+const ARENA_RIVET = '#333944';
+const ARENA_RIVET_GLINT = '#4b5563';
+const ARENA_SEAM_WIDTH = 2;
+/** How far in from a tile's own edge a rivet sits, as a fraction of the tile. */
+const ARENA_RIVET_INSET = 0.15;
+const ARENA_RIVET_GLINT_OFFSET = 0.4;
+const ARENA_RIVET_GLINT_RADIUS = 0.45;
+const ARENA_HATCH_ALPHA = 0.55;
+
+/**
+ * Drain channels, cut on a stride so they read as a grid of gutters running to the
+ * middle of the floor rather than as noise.
+ *
+ * The arena has to look like somewhere blood is expected. A drain is the cheapest
+ * possible way to say that, and it gives an otherwise featureless 26-tile disc
+ * something for the eye to measure the ball's line against.
+ */
+const ARENA_DRAIN_STRIDE = 7;
+const ARENA_DRAIN_WIDTH_FRACTION = 0.22;
+const ARENA_DRAIN_DARK = '#0a0b0e';
+const ARENA_DRAIN_GRATE = '#1d2027';
+const ARENA_DRAIN_BARS = 3;
+
+/**
+ * Coefficients that decorrelate the gouge and blood strides from each other and from
+ * the drains. Their own constants rather than a reused geometry number: retuning the
+ * plate size should not silently redistribute every stain on the floor.
+ */
+const ARENA_GOUGE_HASH_SKEW = 2;
+const ARENA_BLOOD_HASH_SKEW = 2;
+
+/** Gouges torn in the plate. Sparse, and never on the same tile as a drain. */
+const ARENA_GOUGE_STRIDE = 5;
+const ARENA_GOUGE_COUNT = 3;
+const ARENA_GOUGE_LENGTH_FRACTION = 0.34;
+const ARENA_GOUGE_ALPHA = 0.5;
+const ARENA_GOUGE_COLOR = '#2b303a';
+
+/** Dried blood, on its own coarser stride so stains and gouges rarely coincide. */
+const ARENA_BLOOD_STRIDE = 6;
+const ARENA_BLOOD_BLOTS = 4;
+const ARENA_BLOOD_ALPHA = 0.3;
+const ARENA_BLOOD_COLOR = '#5d1616';
+const ARENA_BLOOD_DARK = '#33090c';
+const ARENA_BLOOD_MAX_RADIUS_FRACTION = 0.17;
+
+/**
+ * A tile's own random stream.
+ *
+ * Hashed off the tile coordinate rather than seeded once per frame, so a tile paints
+ * the same way every time it is drawn — the chunk cache redraws tiles whenever the
+ * camera crosses a boundary, and a per-frame stream makes the whole floor crawl.
+ */
+function arenaTileNoise(tx: number, ty: number, salt: number): () => number {
+  // `Math.imul` throughout: the plain multiply overflows 2^53 and quietly drops the
+  // low bits, which is where an LCG keeps what little entropy it has.
+  let state = Math.imul(tx, 73856093) ^ Math.imul(ty, 19349663) ^ Math.imul(salt, 83492791);
+  return () => {
+    state = (Math.imul(state, 1103515245) + 12345) & 0x7fffffff;
+    return state / 0x7fffffff;
+  };
+}
+
+function drawArenaFloor(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  // Plates alternate tone in a checker of `ARENA_PLATE_TILES`, which is what makes
+  // the seams read as the edges of something rather than as a drawn grid.
+  const plateX = Math.floor(tx / ARENA_PLATE_TILES);
+  const plateY = Math.floor(ty / ARENA_PLATE_TILES);
+  ctx.fillStyle = ARENA_BASE;
+  ctx.fillRect(sx, sy, ts, ts);
+  ctx.fillStyle = (plateX + plateY) % 2 === 0 ? ARENA_PLATE_LIGHT : ARENA_PLATE_DARK;
+  ctx.fillRect(sx, sy, ts, ts);
+
+  ctx.save();
+  ctx.globalAlpha = ARENA_HATCH_ALPHA;
+  ctx.strokeStyle = ARENA_HATCH;
+  ctx.lineWidth = 1;
+  const gridStep = ts / ARENA_GRID_DIVISIONS;
+  for (let i = 1; i < ARENA_GRID_DIVISIONS; i++) {
+    const at = Math.round(i * gridStep);
+    ctx.beginPath();
+    ctx.moveTo(sx + at + 0.5, sy);
+    ctx.lineTo(sx + at + 0.5, sy + ts);
+    ctx.moveTo(sx, sy + at + 0.5);
+    ctx.lineTo(sx + ts, sy + at + 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Plate seams: a dark groove on the leading edge and a lit lip on the far side,
+  // so the plate reads as sitting slightly above its neighbour.
+  if (tx % ARENA_PLATE_TILES === 0) {
+    ctx.fillStyle = ARENA_SEAM;
+    ctx.fillRect(sx, sy, ARENA_SEAM_WIDTH, ts);
+    ctx.fillStyle = ARENA_SEAM_LIT;
+    ctx.fillRect(sx + ARENA_SEAM_WIDTH, sy, 1, ts);
+  }
+  if (ty % ARENA_PLATE_TILES === 0) {
+    ctx.fillStyle = ARENA_SEAM;
+    ctx.fillRect(sx, sy, ts, ARENA_SEAM_WIDTH);
+    ctx.fillStyle = ARENA_SEAM_LIT;
+    ctx.fillRect(sx, sy + ARENA_SEAM_WIDTH, ts, 1);
+  }
+
+  // One rivet per tile, in whichever of its corners is also a corner of the plate —
+  // so a plate ends up bolted at its four corners without any tile having to paint
+  // outside its own cell, which the chunk cache would clip.
+  const rivetX =
+    sx + ts * (tx % ARENA_PLATE_TILES === 0 ? ARENA_RIVET_INSET : 1 - ARENA_RIVET_INSET);
+  const rivetY =
+    sy + ts * (ty % ARENA_PLATE_TILES === 0 ? ARENA_RIVET_INSET : 1 - ARENA_RIVET_INSET);
+  ctx.fillStyle = ARENA_RIVET;
+  ctx.beginPath();
+  ctx.arc(rivetX, rivetY, ARENA_RIVET_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = ARENA_RIVET_GLINT;
+  ctx.beginPath();
+  ctx.arc(
+    rivetX - ARENA_RIVET_RADIUS * ARENA_RIVET_GLINT_OFFSET,
+    rivetY - ARENA_RIVET_RADIUS * ARENA_RIVET_GLINT_OFFSET,
+    ARENA_RIVET_RADIUS * ARENA_RIVET_GLINT_RADIUS,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+
+  const onDrain = tx % ARENA_DRAIN_STRIDE === 0 || ty % ARENA_DRAIN_STRIDE === 0;
+  if (onDrain) {
+    const width = ts * ARENA_DRAIN_WIDTH_FRACTION;
+    const inset = (ts - width) / 2;
+    ctx.fillStyle = ARENA_DRAIN_DARK;
+    if (tx % ARENA_DRAIN_STRIDE === 0) ctx.fillRect(sx + inset, sy, width, ts);
+    if (ty % ARENA_DRAIN_STRIDE === 0) ctx.fillRect(sx, sy + inset, ts, width);
+    ctx.fillStyle = ARENA_DRAIN_GRATE;
+    for (let bar = 1; bar <= ARENA_DRAIN_BARS; bar++) {
+      const along = (ts * bar) / (ARENA_DRAIN_BARS + 1);
+      if (tx % ARENA_DRAIN_STRIDE === 0) ctx.fillRect(sx + inset, sy + along, width, 1);
+      if (ty % ARENA_DRAIN_STRIDE === 0) ctx.fillRect(sx + along, sy + inset, 1, width);
+    }
+  } else if ((tx * ARENA_GOUGE_HASH_SKEW + ty) % ARENA_GOUGE_STRIDE === 0) {
+    // Tusk gouges. Skipped on drain tiles, where the drain already owns the eye.
+    const noise = arenaTileNoise(tx, ty, 1);
+    ctx.save();
+    ctx.globalAlpha = ARENA_GOUGE_ALPHA;
+    ctx.strokeStyle = ARENA_GOUGE_COLOR;
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    const angle = noise() * Math.PI;
+    for (let i = 0; i < ARENA_GOUGE_COUNT; i++) {
+      const cx = sx + ts * (0.2 + noise() * 0.6);
+      const cy = sy + ts * (0.2 + noise() * 0.6);
+      const half = (ts * ARENA_GOUGE_LENGTH_FRACTION) / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(angle) * half, cy - Math.sin(angle) * half);
+      ctx.lineTo(cx + Math.cos(angle) * half, cy + Math.sin(angle) * half);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if ((tx + ty * ARENA_BLOOD_HASH_SKEW) % ARENA_BLOOD_STRIDE === 0) {
+    const noise = arenaTileNoise(tx, ty, 2);
+    ctx.save();
+    ctx.globalAlpha = ARENA_BLOOD_ALPHA;
+    for (let i = 0; i < ARENA_BLOOD_BLOTS; i++) {
+      const cx = sx + ts * (0.15 + noise() * 0.7);
+      const cy = sy + ts * (0.15 + noise() * 0.7);
+      const r = ts * ARENA_BLOOD_MAX_RADIUS_FRACTION * (0.3 + noise() * 0.7);
+      ctx.fillStyle = i % 2 === 0 ? ARENA_BLOOD_COLOR : ARENA_BLOOD_DARK;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r, r * (0.5 + noise() * 0.5), noise() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 export function drawSpecialFloorTile(
@@ -295,70 +475,15 @@ export function drawSpecialFloorTile(
       break;
     }
 
-    // Arena floor — dark steel grating with blood-stained centre
+    // Arena floor — riveted steel plate, drained toward the middle, and filthy.
+    //
+    // The one large floor region in the game that is not a generated ground
+    // material, because it is a *plated* surface rather than a granular one:
+    // seamless tiling has nothing to add to a floor whose whole character is the
+    // seam every two tiles, and its transitions are all against its own wall.
     case ARENA_FLOOR: {
-      // Base: very dark steel grey
-      ctx.fillStyle = '#18191f';
-      ctx.fillRect(sx, sy, ts, ts);
-
-      // Grating crosshatch lines
-      ctx.strokeStyle = '#23262e';
-      ctx.lineWidth = 1;
-      const gridStep = Math.floor(ts / ARENA_GRID_DIVISIONS);
-      for (let i = 1; i < ARENA_GRID_DIVISIONS; i++) {
-        ctx.beginPath();
-        ctx.moveTo(sx + i * gridStep, sy);
-        ctx.lineTo(sx + i * gridStep, sy + ts);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(sx, sy + i * gridStep);
-        ctx.lineTo(sx + ts, sy + i * gridStep);
-        ctx.stroke();
-      }
-
-      // Rivet dots at grid intersections
-      if ((tx + ty) % 2 === 0) {
-        ctx.fillStyle = '#2e323c';
-        for (let iy = 1; iy < ARENA_GRID_DIVISIONS; iy++) {
-          for (let ix = 1; ix < ARENA_GRID_DIVISIONS; ix++) {
-            if ((ix + iy) % 2 === 0) {
-              ctx.beginPath();
-              ctx.arc(sx + ix * gridStep, sy + iy * gridStep, ARENA_RIVET_RADIUS, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          }
-        }
-      }
-
-      // Subtle blood stain on some tiles
-      const bloodSeed =
-        (tx * ARENA_BLOOD_MODULUS + ty * ARENA_BLOOD_Y_MODULUS) & ARENA_BLOOD_SEED_MASK;
-      if (bloodSeed % ARENA_BLOOD_TILE_STRIDE === 0) {
-        ctx.globalAlpha =
-          ARENA_BLOOD_ALPHA_BASE +
-          (bloodSeed % ARENA_BLOOD_SEED_MODULUS_7) * ARENA_BLOOD_ALPHA_SCALE;
-        ctx.fillStyle = '#6b1a1a';
-        ctx.beginPath();
-        ctx.ellipse(
-          sx +
-            ts * GYM_RUBBER_DOT_CENTER_FRACTION +
-            ((bloodSeed % ARENA_HASH_X) - ARENA_BLOOD_POSITION_OFFSET),
-          sy +
-            ts * GYM_RUBBER_DOT_CENTER_FRACTION +
-            (((bloodSeed >> ARENA_BLOOD_SHIFT_BITS) % ARENA_HASH_X) - ARENA_BLOOD_POSITION_OFFSET),
-          ts *
-            (ARENA_BLOOD_MAJOR_BASE +
-              (bloodSeed % ARENA_BLOOD_MAJOR_MODULUS) * ARENA_BLOOD_MAJOR_SCALE),
-          ts *
-            (ARENA_BLOOD_MINOR_BASE +
-              (bloodSeed % ARENA_BLOOD_MINOR_MODULUS) * ARENA_BLOOD_MINOR_SCALE),
-          (bloodSeed % ARENA_BLOOD_ROTATION_MODULUS) * ARENA_BLOOD_ROTATION_SCALE,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
+      drawArenaFloor(ctx, sx, sy, ts, tx, ty);
+      drawWallShadow(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

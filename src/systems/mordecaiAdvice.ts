@@ -186,8 +186,8 @@ const ADVICE_TEXT = {
     pages: [
       "Up ahead is a borough boss. That means it's tougher than the other fights you've had so far. However, it looks like you also have the option to ignore it and go around to see if you can find a different stairwell or find other challenges.",
       "If you can beat this boss, you're guaranteed a stairwell to the next floor.",
-      'Bosses in this dungeon always have a secret to beating them. You may find that this boss is impossibly tough, and its rolling attack will kill most crawlers instantly, so this is a very dangerous foe.',
-      'However, there is always some trick that can help you defeat it. I cannot tell you any more than that.',
+      'Bosses in this dungeon always have a secret to beating them. This one is a wheel of fused swine that rolls fast enough to break a crawler in half, and it never once slows down of its own accord. Do not try to out-last it.',
+      'That is as much as I will say. But I will note that a wheel is only unstoppable while nothing gets in its way, and that the walls of that place are iron.',
     ],
   },
   the_circus: {
