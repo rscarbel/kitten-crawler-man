@@ -20,6 +20,7 @@ import { prewarmGroups } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
+import { difficultyStats } from './core/DifficultyStats';
 
 declare const __AI_ENABLED__: boolean;
 
@@ -71,6 +72,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   if (!__AI_ENABLED__) {
     // AI/backend disabled at build time — run as a pure static game with no server calls.
     const onResetGame = () => {
+      difficultyStats.beginRun();
       sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     };
     if (devBootScene(sceneManager, input, { audio, onResetGame })) return;
@@ -114,6 +116,10 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   };
 
   const onResetGame = () => {
+    // The difficulty counters are run-scoped, and a reset is where one run ends
+    // and the next begins. Without this a second playthrough in the same page
+    // session starts on floor 1 already classified as post-Juicer.
+    difficultyStats.beginRun();
     authClient.deleteProgress().catch((err: unknown) => {
       console.error('Failed to delete server progress on reset:', err);
     });

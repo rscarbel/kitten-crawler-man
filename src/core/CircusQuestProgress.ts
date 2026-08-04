@@ -26,3 +26,33 @@ export interface CircusQuestProgress {
 export function createCircusQuestProgress(): CircusQuestProgress {
   return { stage: 'not_started', heatherSlain: false, mongoKidnapped: false };
 }
+
+export interface CircusQuestProgressCheckpoint {
+  readonly stage: CircusQuestStage;
+  readonly heatherSlain: boolean;
+  readonly mongoKidnapped: boolean;
+}
+
+/** Snapshots questline progress so a safe-room death can rewind the stage. */
+export function captureCircusQuestProgress(
+  progress: CircusQuestProgress,
+): CircusQuestProgressCheckpoint {
+  return {
+    stage: progress.stage,
+    heatherSlain: progress.heatherSlain,
+    mongoKidnapped: progress.mongoKidnapped,
+  };
+}
+
+/**
+ * Rewinds progress in place. The same object is threaded by reference through
+ * every scene and every scene reconstruction, so it can never be replaced.
+ */
+export function restoreCircusQuestProgress(
+  progress: CircusQuestProgress,
+  snapshot: CircusQuestProgressCheckpoint,
+): void {
+  progress.stage = snapshot.stage;
+  progress.heatherSlain = snapshot.heatherSlain;
+  progress.mongoKidnapped = snapshot.mongoKidnapped;
+}

@@ -27,13 +27,37 @@ import {
   drawGoblinSprite,
   goblinBodyPartKey,
   goblinSheetKey,
-  type GoblinWeapon,
+  GOBLIN_BOW_SHOTS,
+  type GoblinArchetype,
 } from '../sprites/goblinSprite';
 import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
 
 type GoblinState = SpriteStates['goblin_axe'];
 
-const ARCHETYPES: ReadonlyArray<GoblinWeapon> = ['sword', 'axe', 'mace', 'warhammer'];
+const ARCHETYPES: ReadonlyArray<GoblinArchetype> = ['sword', 'axe', 'mace', 'warhammer', 'bow'];
+
+/**
+ * What the archer's two attack rows depict, and on which frame the string goes.
+ *
+ * Kept beside the melee tables rather than in them: `GOBLIN_ATTACKS` carries a
+ * reach and a damage number an arrow has no use for, and the frame this harness
+ * marks is a *release* rather than a moment of contact.
+ */
+const BOW_MOVE_NAMES: Record<'light' | 'heavy', string> = {
+  light: 'hurried shot',
+  heavy: 'aimed shot',
+};
+
+/** The frame an archetype's attack row peaks on — impact, or the loose. */
+function peakFrameOf(archetype: GoblinArchetype, kind: 'light' | 'heavy'): number {
+  if (archetype === 'bow') return GOBLIN_BOW_SHOTS[kind].releaseFrame;
+  return GOBLIN_ATTACKS[archetype][kind].impactFrame;
+}
+
+function moveNameOf(archetype: GoblinArchetype, kind: 'light' | 'heavy'): string {
+  if (archetype === 'bow') return BOW_MOVE_NAMES[kind];
+  return ATTACK_MOVE_NAMES[archetype][kind];
+}
 
 interface RowSpec {
   readonly state: GoblinState;
@@ -56,7 +80,7 @@ const ROWS: ReadonlyArray<RowSpec> = [
 ];
 
 /** How many frames a row actually holds, from the sheet the game loaded. */
-function frameCountOf(weapon: GoblinWeapon, state: GoblinState): number {
+function frameCountOf(weapon: GoblinArchetype, state: GoblinState): number {
   const def = getSpriteDefByKey(goblinSheetKey(weapon));
   return def?.states.get(state)?.frameCount ?? 1;
 }
@@ -131,7 +155,7 @@ export class GoblinPreviewScene extends Scene {
   }
 
   /** Which frame of a row is showing right now, at the chosen playback speed. */
-  private frameOf(row: RowSpec, weapon: GoblinWeapon): number {
+  private frameOf(row: RowSpec, weapon: GoblinArchetype): number {
     const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
     return Math.floor(elapsedSeconds * row.fps) % frameCountOf(weapon, row.state);
   }
@@ -200,7 +224,7 @@ export class GoblinPreviewScene extends Scene {
         const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
         const shown = this.frameOf(row, weapon);
         drawGoblinSprite(ctx, {
-          weapon,
+          archetype: weapon,
           x: x + cell.w / 2 - tile / 2,
           y: y + cell.h * GROUND_FRACTION - tile,
           tileSize: tile,
@@ -217,13 +241,13 @@ export class GoblinPreviewScene extends Scene {
         // it is marked: stepping to it is how the two get confirmed to agree.
         if (isAttack) {
           const kind = row.state === 'attack_light' ? 'light' : 'heavy';
-          if (shown === GOBLIN_ATTACKS[weapon][kind].impactFrame) {
+          if (shown === peakFrameOf(weapon, kind)) {
             ctx.strokeStyle = '#ff8a5c';
             ctx.lineWidth = 2;
             ctx.strokeRect(x + 1, y + 1, cell.w - 2, cell.h - 2);
             ctx.lineWidth = 1;
           }
-          drawText(ctx, ATTACK_MOVE_NAMES[weapon][kind], {
+          drawText(ctx, moveNameOf(weapon, kind), {
             x: x + CELL_TEXT_INSET,
             y: y + cell.h - LABEL_SIZE - 2,
             size: LABEL_SIZE,
@@ -307,7 +331,7 @@ export class GoblinPreviewScene extends Scene {
    * whether a piece tumbles about its own centre or orbits it, and only the
    * runtime's own `drawSpriteRotatedCenter` path can answer that.
    */
-  private kill(weapon: GoblinWeapon): void {
+  private kill(weapon: GoblinArchetype): void {
     const IMPACT_DIRECTION_X = 1;
     const IMPACT_DIRECTION_Y = -0.4;
     this.gore.spawnParts(

@@ -96,7 +96,7 @@ export class TheHoarder extends Mob {
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.isEnraged = false;
-    this.speed = HOARDER_SPEED;
+    this.setBaseSpeed(HOARDER_SPEED);
     this.hoarderState = 'fleeing';
     this.vomitTimer = VOMIT_INTERVAL;
     this.vomitWindupTimer = 0;
@@ -116,7 +116,7 @@ export class TheHoarder extends Mob {
 
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
-      this.speed = HOARDER_SPEED_ENRAGED;
+      this.setBaseSpeed(HOARDER_SPEED_ENRAGED);
     }
 
     if (this.hoarderState === 'vomit_windup') {

@@ -17,6 +17,7 @@ import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
 import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
 import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
+import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -24,6 +25,7 @@ import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
 import { perfMonitor } from '../core/PerfMonitor';
 import { drawPerfOverlay } from './perfOverlay';
+import { drawDifficultyOverlay } from './difficultyOverlay';
 import { getPlaytestPreset } from './playtestPresets';
 import { buildPlaytestBoot, resolvePlaytestSpawn } from './playtestBoot';
 
@@ -70,12 +72,23 @@ export function devBootScene(
   if (!isLocalDev) return false;
   const params = new URLSearchParams(window.location.search);
 
-  // Deliberately falls through instead of returning: `?perf` decorates whatever
+  // Deliberately falls through instead of returning: these decorate whatever
   // scene boots next — the normal game, a playtest preset or a preview harness —
-  // rather than being a destination of its own.
+  // rather than being destinations of their own. Composed into one overlay
+  // because `setFrameOverlay` holds a single function, so `?perf&?difficulty`
+  // would otherwise silently show only the second one.
+  const overlays: Array<(ctx: CanvasRenderingContext2D) => void> = [];
   if (params.get('perf') !== null) {
     perfMonitor.enable();
-    sceneManager.setFrameOverlay(drawPerfOverlay);
+    overlays.push(drawPerfOverlay);
+  }
+  if (params.get('difficulty') !== null) {
+    overlays.push(drawDifficultyOverlay);
+  }
+  if (overlays.length > 0) {
+    sceneManager.setFrameOverlay((ctx) => {
+      for (const overlay of overlays) overlay(ctx);
+    });
   }
 
   if (params.get('people') !== null) {
@@ -120,6 +133,11 @@ export function devBootScene(
 
   if (params.get('bugaboo') !== null) {
     sceneManager.replace(new BugabooPreviewScene());
+    return true;
+  }
+
+  if (params.get('tuskling') !== null) {
+    sceneManager.replace(new TusklingPreviewScene());
     return true;
   }
 

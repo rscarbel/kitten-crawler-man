@@ -6,6 +6,7 @@ import type { ItemId } from '../core/ItemDefs';
 import { randomInt } from '../utils';
 import { AGGRO_PERSIST_MULTIPLIER, WADE_SPEED_FACTOR } from '../core/constants';
 import { tryConsumePathfind } from './pathfindBudget';
+import { alertPackAround } from './packAlert';
 import { drawText } from '../ui/TextBox';
 
 /** Stagger range for initial wander timer so mobs don't change direction together. */
@@ -21,6 +22,51 @@ const MOB_LEVEL_COIN_SCALE = 0.25;
 const MOB_LEVEL_XP_SCALE = 0.25;
 /** Per-level damage scaling multiplier increment (+20% per level). */
 const MOB_LEVEL_DAMAGE_SCALE = 0.2;
+
+/**
+ * The shortest a scaled cooldown ever gets, as a fraction of its level-1 value.
+ *
+ * The fourth scaling axis, alongside HP, speed and damage. Threat is damage ×
+ * cadence × hit-rate × count, and before this only the first of those moved with
+ * level: a level-8 goblin swung on exactly the level-1 goblin's clock, so
+ * levelling made enemies survive longer without ever making them more dangerous
+ * — the definition of an HP sponge. Scaling the clock instead is what the plan
+ * calls pressure over sponge.
+ *
+ * Asymptotic and floored rather than linear, because the failure mode at the far
+ * end is a machine gun: the curve is steepest over the first few levels, where
+ * the player feels it, and flattens out well before it becomes unreactable.
+ */
+const CADENCE_FLOOR = 0.55;
+/** How quickly {@link CADENCE_FLOOR} is approached; larger is faster. */
+const CADENCE_RATE = 0.12;
+
+/**
+ * Multiplier a mob of this level applies to any of its own attack cooldowns and
+ * wind-ups: 1.00 at level 1, ~0.79 at level 8, approaching {@link CADENCE_FLOOR}.
+ *
+ * A free function as well as {@link Mob.scaledCooldownFrames} so
+ * `scripts/verify-difficulty.ts` can assert the curve's shape directly, rather
+ * than against a copy of it that could drift.
+ */
+export function cooldownScaleForLevel(level: number): number {
+  const extra = Math.max(0, level - 1);
+  return CADENCE_FLOOR + (1 - CADENCE_FLOOR) / (1 + CADENCE_RATE * extra);
+}
+
+/** The value {@link cooldownScaleForLevel} approaches but never reaches. */
+export const CADENCE_SCALE_FLOOR = CADENCE_FLOOR;
+
+/**
+ * A base cooldown or wind-up shortened for a given level, never below one frame.
+ *
+ * The single implementation behind {@link Mob.scaledCooldownFrames} and behind
+ * every creature that exposes its own scaled timing as a free function, so
+ * `scripts/verify-difficulty.ts` checks the real arithmetic rather than a copy.
+ */
+export function scaledCooldownFramesForLevel(baseFrames: number, level: number): number {
+  return Math.max(1, Math.round(baseFrames * cooldownScaleForLevel(level)));
+}
 
 /**
  * The most of its own walk step a mob may be displaced by separation in one
@@ -446,6 +492,16 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * The inverse of {@link dispose}: re-acquires whatever that released, because
+   * a checkpoint restore can bring this mob back to life. Any override of
+   * `dispose()` needs a matching override here, or the revived mob draws
+   * nothing where its baked resource used to be.
+   */
+  reacquireDisposedResources(): void {
+    // Nothing to re-acquire by default.
+  }
+
+  /**
    * Whether this mob still needs a slot in the spatial grid — living mobs
    * always do, the dead only while a corpse is still on screen.
    */
@@ -471,6 +527,16 @@ export abstract class Mob extends Player {
 
   /** Difficulty level of this mob instance (1 = base). Set by applyMobLevel(). */
   mobLevel = 1;
+
+  /**
+   * The spawn-table key this mob was asked for, stamped by `createMob`; null for
+   * one built by calling its constructor directly.
+   *
+   * The key rather than the class, because it is what spawn *rules* are written
+   * in — it exists so a rule can ask how many of its own kind are already alive
+   * without anything having to map a key back to a constructor.
+   */
+  spawnTypeKey: string | null = null;
 
   /** Display name shown in hover tooltip. Subclasses should override. */
   displayName = 'Unknown';
@@ -543,6 +609,25 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether this mob was already in the world when the last checkpoint was
+   * captured. False on a fresh mob, so anything summoned, hired or staged after
+   * the safe room is identifiable — and deletable — on a restore.
+   *
+   * Stored on the mob rather than as a collection in the checkpoint on purpose:
+   * `BossRoomSystem` compacts spent Cockroaches out of the scene's mob array
+   * once it grows past its threshold, and a `Set<Mob>` held by the checkpoint
+   * would pin exactly those corpses past their removal.
+   */
+  presentAtCheckpoint = false;
+
+  /**
+   * Whether this mob was alive at the last checkpoint. Read only when
+   * {@link presentAtCheckpoint} is true; a mob that was alive then and is dead
+   * now was killed after the safe room, so the kill is rewound.
+   */
+  aliveAtCheckpoint = false;
+
+  /**
    * When true, the AI-controlled companion will flee from this mob instead of attacking it.
    * Override in subclasses for enemies that are temporarily untargetable or instakill on contact.
    */
@@ -591,6 +676,44 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * What this mob's level multiplied its authored speed and max HP by.
+   *
+   * Kept because a good many creatures write those two fields again later in
+   * their lives — a grub that evolves, a boss that enrages, a sky fowl that
+   * breaks into a chase, anything reset by `resetToSpawn` — and every one of
+   * those writes is a flat authored constant. Before this pass none of them were
+   * ever levelled so it never showed; now that they are, a plain reassignment
+   * silently throws the level away and leaves a boss with levelled HP moving at
+   * level-1 speed, which is exactly the sponge the difficulty plan forbids.
+   * Anything reassigning those fields must go through {@link setBaseSpeed} or
+   * {@link setBaseMaxHp}.
+   */
+  private _levelSpeedMultiplier = 1;
+  private _levelHpMultiplier = 1;
+
+  /** Re-author this mob's speed from a base constant, keeping its level scaling. */
+  protected setBaseSpeed(baseSpeed: number): void {
+    this.speed = baseSpeed * this._levelSpeedMultiplier;
+  }
+
+  /**
+   * This mob's current walk speed, in pixels per frame.
+   *
+   * Read-only and public purely so the invariant above is checkable from
+   * outside: `scripts/verify-difficulty.ts` asserts that a checkpoint reset
+   * leaves a levelled mob's speed alone, and there is no way to see that
+   * through a protected field.
+   */
+  get moveSpeed(): number {
+    return this.speed;
+  }
+
+  /** Re-author this mob's max HP from a base constant, keeping its level scaling. */
+  protected setBaseMaxHp(baseMaxHp: number): void {
+    this.setFixedMaxHp(Math.ceil(baseMaxHp * this._levelHpMultiplier));
+  }
+
+  /**
    * Scale this mob's stats for the given difficulty level.
    * Level 1 = base stats. Each level above 1 increases:
    *   HP:     +30% per level
@@ -601,20 +724,50 @@ export abstract class Mob extends Player {
    */
   applyMobLevel(level: number) {
     if (level <= 1) return;
+    // Every multiplier below reads the mob's *current* stats, so a second call
+    // compounds: a level-7 mark levelled twice arrives with ~5× the HP it was
+    // designed for and reads as a bug in the encounter rather than in the
+    // caller. Refused and reported rather than applied, because a mob at the
+    // wrong level is a tuning problem while a mob at the square of its level is
+    // an unwinnable fight.
+    if (this.mobLevel > 1) {
+      console.warn(
+        `[Mob] ${this.mobType} is already level ${this.mobLevel}; ignoring re-level to ${level}`,
+      );
+      return;
+    }
     this.mobLevel = level;
     const extra = level - 1;
 
     // HP
-    const hpMult = 1 + extra * MOB_LEVEL_HP_SCALE;
-    this.setFixedMaxHp(Math.ceil(this.maxHp * hpMult));
+    this._levelHpMultiplier = 1 + extra * MOB_LEVEL_HP_SCALE;
+    this.setFixedMaxHp(Math.ceil(this.maxHp * this._levelHpMultiplier));
     this.hp = this.maxHp;
 
     // Speed
-    this.speed = this.speed * (1 + extra * MOB_LEVEL_SPEED_SCALE);
+    this._levelSpeedMultiplier = 1 + extra * MOB_LEVEL_SPEED_SCALE;
+    this.speed = this.speed * this._levelSpeedMultiplier;
 
     // Coins
     this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * MOB_LEVEL_COIN_SCALE));
     this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * MOB_LEVEL_COIN_SCALE));
+  }
+
+  /**
+   * A base cooldown or wind-up length shortened for this mob's level.
+   *
+   * Every creature owns its own private timer, so this is the one shared
+   * mechanism rather than a field applied for them: call it wherever a timer is
+   * *reset*, never where one is compared, or the remaining time changes meaning
+   * halfway through a swing.
+   *
+   * Never below one frame, and never below `base × CADENCE_FLOOR` — that lower
+   * bound is the explicit floor the fairness rules require, and it comes from
+   * the curve itself rather than from a second constant per creature that could
+   * disagree with it.
+   */
+  protected scaledCooldownFrames(baseFrames: number): number {
+    return scaledCooldownFramesForLevel(baseFrames, this.mobLevel);
   }
 
   /** Returns XP value scaled by mob level. */
@@ -901,7 +1054,53 @@ export abstract class Mob extends Player {
       nearestDist = dist;
       nearest = target;
     }
+    // The frame a fight starts is the only frame worth shouting on: a mob that
+    // was already engaged has an `engagedTarget`, so the search below runs a
+    // handful of times per fight rather than once per mob per frame.
+    if (nearest !== null && engagedTarget === null && this.packAlertRadiusTiles > 0) {
+      alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, nearest);
+    }
     return nearest;
+  }
+
+  /**
+   * How far this mob's kind calls for help when a fight starts or when it is
+   * hurt, in tiles. Zero — the default — leaves a mob fighting alone exactly as
+   * before, so this is opt-in per creature rather than a change to all of them.
+   */
+  protected get packAlertRadiusTiles(): number {
+    return 0;
+  }
+
+  /**
+   * Who answers this mob's call for help.
+   *
+   * Its own class by default, which is what "a room of goblins fights as one"
+   * means for four archetypes that are all `Goblin`. Overridden where two
+   * *classes* belong to one group: a goblin archer that only ever called other
+   * archers would stand and watch its own melee line be pulled apart one goblin
+   * at a time, which is precisely the tactic it exists to punish.
+   */
+  get packKind(): string {
+    return this.mobType;
+  }
+
+  /**
+   * Told by a packmate where the fight is.
+   *
+   * Sets the target *and* registers it as alerted, which are two different
+   * things: the target makes this mob engage, and the alert is what stops the
+   * perception gate from immediately dropping a target it has no line of sight
+   * to — a goblin answering a shout from the next room can't see anything yet.
+   *
+   * A mob already fighting something is left alone. That is also what bounds the
+   * mechanism; see {@link alertPackAround}.
+   */
+  noticeTarget(target: Player): void {
+    if (!this.isAlive || !target.isAlive) return;
+    if (this.currentTarget !== null) return;
+    this.currentTarget = target;
+    this.alertedTo.set(target, ALERT_DURATION_FRAMES);
   }
 
   /** Straight-line distance in pixels from this mob to `target`. */
@@ -1062,6 +1261,16 @@ export abstract class Mob extends Player {
       if (attacker) {
         this.damageTakenBy.set(attacker, (this.damageTakenBy.get(attacker) ?? 0) + actual);
         this.alertedTo.set(attacker, ALERT_DURATION_FRAMES);
+        // Being shot from cover is the case a sight-based alert cannot cover:
+        // nobody in the pack has noticed anything, and without this the archer
+        // picks them off one at a time from outside everyone's aggro range.
+        //
+        // Only while unengaged. A mob already fighting shouted when it acquired
+        // its target, so repeating it here would buy nothing and would run a
+        // spatial query per damage tick for the whole of every fight.
+        if (this.currentTarget === null && this.packAlertRadiusTiles > 0) {
+          alertPackAround(this, this.packAlertRadiusTiles * this.tileSize, attacker);
+        }
       }
     }
     if (this.hp === 0 && prev > 0) {
@@ -1398,12 +1607,37 @@ export abstract class Mob extends Player {
     this.justDied = false;
     this.droppedLoot = null;
     this.healthBarTimer = 0;
+    // Both describe a hit that is being rewound. The flash matters most on the
+    // revive path — a mob reset while alive burns its tint down over the next
+    // few frames, but one brought back from the dead was frozen wearing the
+    // white of the blow that killed it.
+    this.damageFlash = 0;
+    this.hitSlowFrames = 0;
     this.forceAggro = false;
     this.wanderDx = 0;
     this.wanderDy = 0;
     this.clearAStarPath();
     this.clearStatusEffects();
     this.clearTransientCombatState();
+  }
+
+  /**
+   * Brings a mob that died *after* the checkpoint back to its pre-fight state.
+   *
+   * The checkpoint is a point-in-time snapshot of the floor, so a kill scored
+   * after it did not happen: the corpse has to stand back up rather than being
+   * left as a body the player already earned XP and loot for. HP is restored
+   * before `resetToSpawn()` because some bosses gate that call on being alive.
+   *
+   * Subclasses whose death leaves state `resetToSpawn()` does not clear (a
+   * burst animation, a phase latch) must override this, clear that state, and
+   * then call `super.reviveForCheckpoint()`.
+   */
+  reviveForCheckpoint(): void {
+    this.hp = this.maxHp;
+    this.justDied = false;
+    this.reacquireDisposedResources();
+    this.resetToSpawn();
   }
 
   /**

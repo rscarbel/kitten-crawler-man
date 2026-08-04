@@ -15,10 +15,40 @@ const LAVA_BALL_DAMAGE = 2;
 const COIN_DROP_MIN = 4;
 const COIN_DROP_MAX = 5;
 const CENTER_OFFSET = 0.5;
+/** An even coin flip, for picking which side to sidestep to. */
+const HALF = 0.5;
 const MOUTH_OFFSET_X = 0.22;
 const MOUTH_OFFSET_Y = 0.22;
 const FOLLOW_STOP_RANGE_TILES = 1.5;
 const FOLLOW_CLOSE_RANGE_RATIO = 0.85;
+
+/**
+ * The level at which a llama starts working the ground between shots.
+ *
+ * Gated rather than universal so floor 1's opening llamas — the first ranged
+ * enemy a crawler meets — stay the stationary target they are today, and the
+ * behaviour arrives as something the player notices the animal *learning*.
+ */
+const EVASIVE_MIN_LEVEL = 4;
+
+/** Tiles a llama sidesteps perpendicular to its shot after taking it. */
+const STRAFE_MIN_TILES = 1;
+const STRAFE_MAX_TILES = 2;
+
+/** Closer than this and the llama gives ground rather than firing point-blank. */
+const RETREAT_TRIGGER_TILES = 2.5;
+/** How far it tries to open the gap back up to. */
+const RETREAT_TARGET_TILES = 4;
+/**
+ * Ceiling on a single retreat, in frames, and the wait before another may start.
+ *
+ * Both exist for the same reason: a llama that can always open the gap is a
+ * llama that can never be caught, which is the frustrating version of this
+ * behaviour rather than the pressuring one. Backing off is something it gets to
+ * do once per exchange, not a permanent state.
+ */
+const RETREAT_MAX_FRAMES = 60;
+const RETREAT_COOLDOWN_FRAMES = 180;
 
 /**
  * The value `spitAnimTimer` holds on the release frame.
@@ -48,6 +78,15 @@ export class Llama extends Mob {
   private aggroRangePx: number;
   private spitRangePx: number;
   private isAggro = false;
+  /** Frames left in the current sidestep, and the direction it runs in. */
+  private strafeFrames = 0;
+  private strafeDirX = 0;
+  private strafeDirY = 0;
+  /** Set on the release frame; the sidestep itself waits for the animation to finish. */
+  private strafeQueued = false;
+  /** Frames left in the current backpedal, and the wait before another may start. */
+  private retreatFrames = 0;
+  private retreatCooldown = 0;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LLAMA_HP, LLAMA_SPEED);
@@ -61,6 +100,15 @@ export class Llama extends Mob {
     this.spitAnimTimer = 0;
     this.pendingSpits = [];
     this.isAggro = false;
+    this.strafeFrames = 0;
+    this.strafeQueued = false;
+    this.retreatFrames = 0;
+    this.retreatCooldown = 0;
+  }
+
+  /** Whether this llama is experienced enough to move between shots. */
+  private get isEvasive(): boolean {
+    return this.mobLevel >= EVASIVE_MIN_LEVEL;
   }
 
   /**
@@ -81,6 +129,7 @@ export class Llama extends Mob {
     if (!this.isAlive) return;
 
     if (this.spitCooldown > 0) this.spitCooldown--;
+    if (this.retreatCooldown > 0) this.retreatCooldown--;
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
     this.currentTarget = nearest;
@@ -104,12 +153,29 @@ export class Llama extends Mob {
 
     if (!nearest) {
       this.isAggro = false;
+      this.strafeFrames = 0;
+      this.strafeQueued = false;
+      this.retreatFrames = 0;
       this.clearAStarPath();
       this.doWander();
       return;
     }
     this.isAggro = true;
     const nearestDist = this.distanceTo(nearest);
+
+    // The sidestep is queued on the release frame and started here, once the
+    // spit animation has played out — begun any earlier it would run underneath
+    // the animation's own hold and be over before the llama finished spitting.
+    if (this.strafeQueued) {
+      this.strafeQueued = false;
+      this.beginStrafe(nearest);
+    }
+    const isCrowded = nearestDist < this.tileSize * RETREAT_TRIGGER_TILES;
+    if (this.isEvasive && isCrowded && this.retreatFrames === 0 && this.retreatCooldown === 0) {
+      this.retreatFrames = RETREAT_MAX_FRAMES;
+      this.retreatCooldown = RETREAT_COOLDOWN_FRAMES;
+      this.strafeFrames = 0;
+    }
 
     const targetCX = nearest.x + this.tileSize * CENTER_OFFSET;
     const targetCY = nearest.y + this.tileSize * CENTER_OFFSET;
@@ -124,8 +190,20 @@ export class Llama extends Mob {
       this.lastKnownTargetY = nearest.y;
     }
 
-    // Movement: navigate toward last known pos when no LOS; hold when in range
-    if (!hasLOS) {
+    // Movement: give ground first, then finish any sidestep, then the standing
+    // behaviour — navigate toward last known pos when no LOS, hold when in range.
+    if (this.retreatFrames > 0) {
+      this.retreatFrames--;
+      if (nearestDist >= this.tileSize * RETREAT_TARGET_TILES) {
+        this.retreatFrames = 0;
+        this.isMoving = false;
+      } else {
+        this.stepAwayFrom(nearest);
+      }
+    } else if (this.strafeFrames > 0) {
+      this.strafeFrames--;
+      this.stepInDirection(this.strafeDirX, this.strafeDirY);
+    } else if (!hasLOS) {
       // No line of sight — navigate toward last known position to find a clear angle
       this.followTargetAStar(
         this.lastKnownTargetX,
@@ -154,11 +232,59 @@ export class Llama extends Mob {
 
     // Begin the wind-up. The ball itself is not created here — it leaves the
     // mouth partway through the animation, on the frame the neck whips forward.
-    if (hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
-      this.spitCooldown = SPIT_COOLDOWN;
+    // Never mid-retreat: giving ground is a commitment, and a llama that fired
+    // while backing away would make the retreat pure profit.
+    const isGivingGround = this.retreatFrames > 0;
+    if (!isGivingGround && hasLOS && nearestDist <= this.spitRangePx && this.spitCooldown === 0) {
+      this.spitCooldown = this.scaledCooldownFrames(SPIT_COOLDOWN);
       this.spitAnimTimer = LLAMA_SPIT_FRAMES;
+      this.strafeFrames = 0;
       this.isMoving = false;
     }
+  }
+
+  /**
+   * Starts a sidestep across the shot the llama has just taken.
+   *
+   * Perpendicular to the target line rather than in a free direction, because
+   * the point is to leave the spot the player has just been given the range of.
+   * The side is a coin flip, so two llamas covering the same doorway do not
+   * drift into each other's line.
+   */
+  private beginStrafe(target: Player): void {
+    if (!this.isEvasive) return;
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    const side = Math.random() < HALF ? 1 : -1;
+    this.strafeDirX = (-dy / distance) * side;
+    this.strafeDirY = (dx / distance) * side;
+    const tiles = STRAFE_MIN_TILES + Math.random() * (STRAFE_MAX_TILES - STRAFE_MIN_TILES);
+    this.strafeFrames = Math.max(1, Math.round((tiles * this.tileSize) / this.speed));
+  }
+
+  /** One frame of walking directly away from `target`. */
+  private stepAwayFrom(target: Player): void {
+    const dx = this.x - target.x;
+    const dy = this.y - target.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return;
+    this.stepInDirection(dx / distance, dy / distance);
+  }
+
+  /**
+   * One frame of walking along a unit direction, facing the way it walks.
+   *
+   * Facing matters as much as the movement: the sprite mirrors on `facingX`, so
+   * a llama that kept aiming at the player while sidestepping would moonwalk the
+   * whole way across.
+   */
+  private stepInDirection(dirX: number, dirY: number): void {
+    this.facingX = dirX;
+    this.facingY = dirY;
+    this.moveWithCollision(dirX * this.speed, dirY * this.speed);
+    this.isMoving = true;
   }
 
   /** Where the ball leaves the animal, offset toward whichever way it faces. */
@@ -194,9 +320,11 @@ export class Llama extends Mob {
       // Carried unconditionally and deduplicated by the system: the interesting
       // case is a target that is neither player — a mob made hostile by Vespa
       // acid — which nothing else would tell the projectile about.
+      mobLevel: this.mobLevel,
       aimedAt: target,
     });
     this.projectileSoundPending = true;
+    this.strafeQueued = true;
   }
 
   protected override drawSelf(

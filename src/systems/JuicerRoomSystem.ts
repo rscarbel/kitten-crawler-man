@@ -58,6 +58,20 @@ const TREADMILL_POSITIONS = [
 // Room positioning
 const ROOM_NOT_FOUND_POS = -9999;
 
+/**
+ * The mutable half of a `GymPickup`. Item id and position are fixed at
+ * construction from the boss room's bounds, so a checkpoint ignores them.
+ */
+interface GymPickupProgress {
+  active: boolean;
+  respawnTimer: number;
+}
+
+/** Point-in-time gym-pickup progress, restorable any number of times. */
+export interface JuicerRoomCheckpoint {
+  pickups: GymPickupProgress[];
+}
+
 export class JuicerRoomSystem implements GameSystem {
   private pickups: GymPickup[] = [];
   private readonly roomOriginX: number; // tile coords
@@ -98,6 +112,32 @@ export class JuicerRoomSystem implements GameSystem {
       worldX: absTileX * TILE_SIZE,
       worldY: absTileY * TILE_SIZE,
     };
+  }
+
+  /**
+   * Snapshots which gym items are on the floor, so a run of deaths cannot farm
+   * the same dumbbells forever.
+   *
+   * Each pickup's mutable half is copied out, and copied again on the way back
+   * in, because the player can die many times against one snapshot.
+   */
+  captureCheckpoint(): JuicerRoomCheckpoint {
+    return {
+      pickups: this.pickups.map((pickup) => ({
+        active: pickup.active,
+        respawnTimer: pickup.respawnTimer,
+      })),
+    };
+  }
+
+  restoreCheckpoint(snapshot: JuicerRoomCheckpoint): void {
+    const restoreCount = Math.min(this.pickups.length, snapshot.pickups.length);
+    for (let index = 0; index < restoreCount; index++) {
+      const pickup = this.pickups[index];
+      const saved = snapshot.pickups[index];
+      pickup.active = saved.active;
+      pickup.respawnTimer = saved.respawnTimer;
+    }
   }
 
   /**

@@ -98,7 +98,15 @@ Target feel (the numbers Phase 0 measures against):
 
 ---
 
-## 3. Phase 0 — Difficulty telemetry
+## 3. Phase 0 — Difficulty telemetry — **SHIPPED 2026-08-04**
+
+Landed as `src/core/DifficultyStats.ts` (a run-scoped singleton, not fields on
+`GameStats`: that object is rebuilt with its `DungeonScene`, so counters on it
+would be lost at every stairwell — and the target-feel table is measured across a
+whole run), `src/systems/DifficultyTelemetrySystem.ts` for the per-frame half,
+and `src/dev/difficultyOverlay.ts` behind `?difficulty`. `?perf` and
+`?difficulty` now compose rather than overwriting each other.
+
 
 Add counters to `GameStats`: damage taken, potions consumed, dodges, deaths, and
 per-room-fight HP delta (bucketed per floor segment: pre-Hoarder / post-Hoarder /
@@ -111,7 +119,12 @@ comparison.
 - `[HUMAN]` One baseline playthrough of floor 1 + floor 2 with the overlay on;
   save the numbers into this doc.
 
-## Phase 1 — Healing economy
+## Phase 1 — Healing economy — **1a + 1b SHIPPED 2026-08-04; 1c deliberately not done**
+
+`Player.framesSinceDamaged` / `Player.isRegenSuppressed` and the new curve in
+`PlayerTickSystem.humanRegenHpPerSecond`. 1c stays unimplemented on purpose: the
+plan gates it on playtest data that does not exist yet.
+
 
 This is the highest-leverage change in the plan. Everything else raises pressure;
 this is what makes pressure _stick_.
@@ -159,7 +172,14 @@ Files: `src/systems/PlayerTickSystem.ts`, `src/Player.ts`, `src/creatures/Mob.ts
 - `[HUMAN]` Playtest floor 1 with 1a+1b only. Check: potions get used, and
   between-fight downtime doesn't feel like waiting. Decide 1c from the numbers.
 
-## Phase 2 — A cadence term in the central level curve
+## Phase 2 — A cadence term in the central level curve — **SHIPPED 2026-08-04**
+
+`Mob.scaledCooldownFrames` / `cooldownScaleForLevel`, called by goblin, llama,
+troglodyte, rat, ruins ghoul and krasue. `MobLevelRange` is now shared by
+`MobSpawnRule`, `CampSpawnRule`, `ExtraSpawnRule` and the new `BossRoomRule`, so
+boss rooms and `extraSpawns` are levelled at last; floor 2's on-kill grubs
+inherit the dead mob's level.
+
 
 Add a fourth scaling axis next to the existing constants in `src/creatures/Mob.ts`:
 
@@ -192,7 +212,14 @@ multiplicatively; revisit with Phase 0 data before touching it.
 - `[HUMAN]` Floor 2 room fights: do level 5–6 mobs feel noticeably more insistent
   than floor 1's, without feeling machine-gun spammy?
 
-## Phase 3 — Signature-enemy behavior
+## Phase 3 — Signature-enemy behavior — **SHIPPED 2026-08-04**
+
+One correction to the text below: the plan's `BOLT_SPEED_CAP = 2.6` contradicts
+the plan's own fairness rule in the same sentence — `PLAYER_SPEED` is 2.5, so
+2.6 is *above* player run speed, not comfortably below it. Shipped as a fraction
+of `PLAYER_SPEED` (0.9 → 2.25) so the rule is the thing written down and cannot
+drift if player speed is retuned.
+
 
 **3a. Lava Llama** (`src/creatures/Llama.ts`, `src/systems/LavaBallSystem.ts`)
 
@@ -238,7 +265,52 @@ multiplicatively; revisit with Phase 0 data before touching it.
   floor-2 troglodytes (dodgeable but demanding), and a goblin room (they come as a
   pack now).
 
-## Phase 4 — Goblin Archer (new creature)
+## Phase 4 — Goblin Archer (new creature) — **SHIPPED 2026-08-04**
+
+Art: a fifth `bow` archetype on the goblin pipeline (`goblin_bow.png`), which
+also gave `GoblinGear` a quiver and `GoblinProp` a shape that changes per frame —
+a bow's string is pulled by the *other* hand, so the painter is handed the pose.
+Three blind image-review rounds; the third still wants more of the bow in the
+walking silhouette, which is a `[HUMAN]` call at this point.
+
+Behaviour: `src/creatures/GoblinArcher.ts` (a 3.5–6-tile band, a bounded
+retreat, and two shots that differ in draw length but never in locked telegraph)
+plus `src/systems/GoblinArrowSystem.ts`, modelled on `SkeletonProjectileSystem`
+so an arrow outlives the archer that loosed it.
+
+Spawning: a new `escorts` field on `MobSpawnRule` — the plan's "never alone"
+is a *contract*, and a weighted table that can only pick one rule per room
+cannot express it any other way. Escort places are reserved against
+`MAX_ROOM_SPAWN_COUNT` before the host rule rolls, so a full room still gets its
+archer. Floor 1 gates them behind the Hoarder via `minRegion`.
+
+Also: `Mob.packKind`, so the archer and the melee goblins answer one call.
+Memory note the plan asked for — this is a fifth preloaded goblin sheet
+(1120×960), which the sprite-memory gotcha says is the axis that matters.
+
+Two things a code review caught that are worth writing down, because both were
+green under every check that existed at the time:
+
+- The aim lock was **cosmetic**. It froze the sprite's facing and left the shot
+  vector resolved on the release frame, so an arrow tracked a dodging player
+  perfectly and the 21 frames of telegraph bought them nothing. The verify
+  script asserted the *constant* was 21, which proved nothing about the runtime.
+  It now drives a real archer through a draw with a moving target.
+- The bow's release frame had **no gate at all**: it is exempt from G13b (which
+  measures a weapon tip, and a bow's tips are its limbs), invisible to G14
+  (which returns early on a null off-grip), and inside G4/G8's declared
+  acceleration window. `gateBowDraw` (G16) is the replacement, and it caught a
+  one-frame teleport of the draw hand onto the riser on exactly the frame the
+  arrow spawns.
+
+A confirming round then found two defects **inside** G16 itself, which is the
+lesson worth keeping: a threshold is not a check until you have watched it fail.
+Its fist-on-string test compared an absolute draw against a row whose peak draw
+is lower, so it silently skipped the whole hurried shot; and its "full draw is
+held at the loose" test compared the peak with itself. Both are now relative to
+the row's own full draw, and every gate added in this pass has been falsified
+by hand — broken deliberately, watched to fail, restored.
+
 
 Ryan's best idea, and the most expensive one: melee goblins pin you while an
 archer punishes from range — that's genuine tactical pressure and target-priority
@@ -261,7 +333,15 @@ gameplay, which no amount of stat tuning produces.
 - `[HUMAN]` A mixed room on floor 1 post-Hoarder: does the archer force movement
   decisions without feeling like chip-damage spam?
 
-## Phase 5 — Density escalation through the run
+## Phase 5 — Density escalation through the run — **SHIPPED 2026-08-04**
+
+`MobSpawnPoint.region` is tagged by the generator (only it knows which gauntlet
+owned a room) and `ProgressionDef.regionSpawnBonus` is applied in
+`spawnForLevel`, capped by `MAX_ROOM_SPAWN_COUNT`. Room placement now runs the
+`hasRoomToMove` pass before falling back to bare `isWalkable`. The grub swarm is
+bounded by `MAX_CONCURRENT_ON_KILL_SPAWNS`, counted through the new
+`Mob.spawnTypeKey`. `POST_HIT_GRACE_FRAMES` is held in reserve as the plan asks.
+
 
 The generator already knows which rooms belong to which progression region
 (gauntlet 0 branches, gauntlet 1 branches, free-roam). Tag rooms with a region
@@ -291,7 +371,13 @@ Guardrails:
 - `[HUMAN]` Full floor-1 run: does pressure ramp room-to-room, and is the
   post-Juicer stretch busy without slideshow perf or spike deaths?
 
-## Phase 6 — Player-relative enemy levels (soft, floored, capped)
+## Phase 6 — Player-relative enemy levels (soft, floored, capped) — **SHIPPED 2026-08-04**
+
+`partyLevelOf` / `earnedLevelFloor` / `resolveSpawnLevel` / `resolveBossLevel` in
+`src/levels/spawner.ts`, resolved once at floor generation from the party as
+restored. `Mob.applyMobLevel` now refuses a second call rather than compounding,
+which turns P5 from a convention into something the verify script can prove.
+
 
 Ryan's instinct here is right, including the caveat: 1:1 matching would erase the
 reward for getting stronger. The bounty system already does player-relative
@@ -320,7 +406,12 @@ rolledLevel  = randomInt(effectiveMin, rule.maxLevel)
 - `[HUMAN]` Enter floor 1 over-leveled and floor 2 on-level: floor 1 should bite
   a little again; floor 2 should feel unchanged for an on-schedule party.
 
-## Phase 7 — Verification harness
+## Phase 7 — Verification harness — **SHIPPED 2026-08-04**
+
+`npm run verify:difficulty` (`scripts/verify-difficulty.ts`, registered in
+`tsconfig.scripts.json`). Every check runs against the game's own exported
+functions rather than a copy of them.
+
 
 Mirror `npm run verify:bounty`: add `npm run verify:difficulty` asserting the
 invariants so later tuning can't silently break P2:

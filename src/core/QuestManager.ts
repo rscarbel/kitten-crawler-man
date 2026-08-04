@@ -63,4 +63,24 @@ export class QuestManager {
       q.state.status = 'failed';
     }
   }
+
+  /**
+   * The status of every registered quest, for a checkpoint capture.
+   *
+   * Statuses only — the definitions are registered at construction and never
+   * change, so restoring them would only risk resurrecting a stale one.
+   */
+  snapshotStatuses(): Array<[string, QuestStatus]> {
+    const statuses: Array<[string, QuestStatus]> = [];
+    for (const [id, quest] of this.quests) statuses.push([id, quest.state.status]);
+    return statuses;
+  }
+
+  /** Rewinds every quest to the status it held at capture time. */
+  restoreStatuses(statuses: ReadonlyArray<readonly [string, QuestStatus]>): void {
+    for (const [id, status] of statuses) {
+      const quest = this.quests.get(id);
+      if (quest !== undefined) quest.state.status = status;
+    }
+  }
 }

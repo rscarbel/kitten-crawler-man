@@ -13,7 +13,13 @@ import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
-import { spawnForLevel, spawnExtraMobs, createMob, spawnTreasureRoomMobs } from '../levels/spawner';
+import {
+  spawnForLevel,
+  spawnExtraMobs,
+  createMob,
+  spawnTreasureRoomMobs,
+  partyLevelOf,
+} from '../levels/spawner';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
@@ -51,6 +57,7 @@ import { SmushEffectSystem } from '../systems/SmushEffectSystem';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
+import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
 import { KnightMissileSystem } from '../systems/KnightMissileSystem';
@@ -70,7 +77,12 @@ import { TownDecorSystem } from '../systems/TownDecorSystem';
 import { TownPropSystem } from '../systems/TownPropSystem';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
 import type { TownPropRenderable } from '../systems/townPropRenderable';
-import { createMarketStock, type MarketStock } from '../systems/market/MarketStock';
+import {
+  captureMarketStock,
+  createMarketStock,
+  restoreMarketStock,
+  type MarketStock,
+} from '../systems/market/MarketStock';
 import {
   buildCitizenConversation,
   roleDisplayName,
@@ -99,6 +111,7 @@ import {
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
+import type { WorldCheckpoint } from '../core/WorldCheckpoint';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
@@ -113,7 +126,12 @@ import {
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
-import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
+import {
+  captureMongoPetState,
+  createMongoPetState,
+  restoreMongoPetState,
+  type MongoPetState,
+} from '../core/MongoPetState';
 
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
@@ -127,6 +145,7 @@ import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
 import { PlayerTickSystem } from '../systems/PlayerTickSystem';
+import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
   readMovement,
   applyMovement,
@@ -142,9 +161,24 @@ import {
 import { OverworldMusicSystem } from '../systems/OverworldMusicSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import { drunkCameraOffset } from '../core/DrunkEffect';
-import { createCircusQuestProgress, type CircusQuestProgress } from '../core/CircusQuestProgress';
-import { createMurderQuestProgress, type MurderQuestProgress } from '../core/MurderQuestProgress';
-import { createBountyProgress, type BountyProgress } from '../core/BountyProgress';
+import {
+  captureCircusQuestProgress,
+  createCircusQuestProgress,
+  restoreCircusQuestProgress,
+  type CircusQuestProgress,
+} from '../core/CircusQuestProgress';
+import {
+  captureMurderQuestProgress,
+  createMurderQuestProgress,
+  restoreMurderQuestProgress,
+  type MurderQuestProgress,
+} from '../core/MurderQuestProgress';
+import {
+  captureBountyProgress,
+  createBountyProgress,
+  restoreBountyProgress,
+  type BountyProgress,
+} from '../core/BountyProgress';
 import { BountySystem } from '../systems/BountySystem';
 import { findBountyDef } from '../systems/bountyDefs';
 import { hasRoomToMove } from '../map/findWalkableTile';
@@ -157,8 +191,18 @@ import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/Spider
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
-import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
-import { createMercenaryRoster, type MercenaryRoster } from '../core/MercenaryRoster';
+import {
+  captureClubMembership,
+  createClubMembership,
+  restoreClubMembership,
+  type ClubMembership,
+} from '../core/ClubMembership';
+import {
+  captureMercenaryRoster,
+  createMercenaryRoster,
+  restoreMercenaryRoster,
+  type MercenaryRoster,
+} from '../core/MercenaryRoster';
 import {
   createGodModeState,
   applyGodModeToPlayer,
@@ -198,6 +242,7 @@ import {
 import type { AISceneContext } from '../ai/aiActions';
 import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
+import { difficultyStats } from '../core/DifficultyStats';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
@@ -489,6 +534,25 @@ const CHEST_POTION_TOTAL_WEIGHT =
 const SPIT_PLACEMENT_ATTEMPTS = 8;
 const SPIT_PLACEMENT_RANDOMNESS = 0.5;
 
+/**
+ * Ceiling on how many mobs of one `onMobKilledSpawns` rule may be alive within
+ * {@link ON_KILL_SPAWN_CAP_RADIUS} of a death.
+ *
+ * Floor 2's rule turns *every* death into one to five brindle grubs, so the
+ * denser rooms this difficulty pass introduced would otherwise compound into a
+ * swarm that outnumbers the encounter it came out of — and each of those grubs
+ * dying is not itself a trigger, so nothing else bounds the total.
+ */
+const MAX_CONCURRENT_ON_KILL_SPAWNS = 12;
+
+/**
+ * How far the cap above looks. Wide enough to cover the room a fight is in plus
+ * the corridor mouths feeding it, so a single encounter can't stack bursts, and
+ * short enough that grubs abandoned elsewhere on the floor stop counting.
+ */
+const ON_KILL_SPAWN_CAP_RADIUS_TILES = 12;
+const ON_KILL_SPAWN_CAP_RADIUS = ON_KILL_SPAWN_CAP_RADIUS_TILES * TILE_SIZE;
+
 // Health and revival system
 const KNOCKDOWN_FRAMES = 5400;
 const CRITICAL_HP_WARNING_SECONDS = 10;
@@ -653,6 +717,7 @@ export class DungeonScene extends GameplayScene {
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
   private skeletonShots: SkeletonProjectileSystem;
+  private goblinArrows: GoblinArrowSystem;
   private skeletonSummons: SkeletonSummonSystem;
   private clownGas: ClownGasSystem;
   private knightMissiles: KnightMissileSystem;
@@ -714,6 +779,7 @@ export class DungeonScene extends GameplayScene {
   private gore = new GoreSystem();
   private bodyPartGore: BodyPartGoreSystem;
   private playerTick = new PlayerTickSystem();
+  private difficultyTelemetry = new DifficultyTelemetrySystem();
   private readonly mongoSystem: MongoSystem;
   private readonly mongoPetState: MongoPetState;
   private readonly mercenarySystem: MercenarySystem;
@@ -917,8 +983,13 @@ export class DungeonScene extends GameplayScene {
         this.gameMap.blockTilePermanently(tr.centre.x, tr.centre.y);
       }
 
-      this.mobs = spawnForLevel(levelDef, this.gameMap);
-      this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap));
+      // Read once, here: every level below is party-relative, and the whole
+      // point of computing them at floor generation is that nothing re-levels a
+      // mob afterwards. Both crawlers have been restored from their snapshots by
+      // this line, so this is the party that is about to walk in.
+      const partyLevel = partyLevelOf(this.human.level, this.cat.level);
+      this.mobs = spawnForLevel(levelDef, this.gameMap, partyLevel);
+      this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel));
 
       // Treasure room mobs (extra enemies guarding wooden chests)
       if (levelDef.hasTreasureRoomGuards === true) {
@@ -998,6 +1069,12 @@ export class DungeonScene extends GameplayScene {
       this.mobs.push(mob);
       this.mobGrid.insert(mob);
       mob.setSpells(this.spells);
+      // The lab's boss arrives through this closure rather than the level's
+      // initial spawn, so it missed the one-shot filter that builds this list
+      // at construction — which is what renders its ground traps and spit and
+      // plays its slam. Without this the boss is silent and trapless until
+      // something else rebuilds the list.
+      if (mob instanceof GrotesqueSpider) this.grotesqueSpiders.push(mob);
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
@@ -1041,6 +1118,7 @@ export class DungeonScene extends GameplayScene {
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
     this.skeletonShots = new SkeletonProjectileSystem(this.gameMap);
+    this.goblinArrows = new GoblinArrowSystem(this.gameMap);
     this.skeletonSummons = new SkeletonSummonSystem(this.gameMap, (mob) => {
       this.mobs.push(mob);
       this.mobGrid.insert(mob);
@@ -1248,10 +1326,16 @@ export class DungeonScene extends GameplayScene {
                   floorEntryHumanAchievements: this.floorEntryHumanAchievements,
                   floorEntryCatAchievements: this.floorEntryCatAchievements,
                   floorEntryAbilityManager: this.floorEntryAbilityManager,
-                  // Threaded so a death mid-detour still returns to the safe room
-                  // rather than restarting the floor — the building interior scene
-                  // destroys this DungeonScene and any in-memory checkpoint with it.
-                  checkpoint: this.checkpoint ?? undefined,
+                  // Deliberately NOT threaded, though the scene rebuilt here keeps
+                  // the same map: a checkpoint now describes the *population* too,
+                  // and every mob and player reference in it belongs to the scene
+                  // this line is destroying. Restoring one on the far side would
+                  // revive corpses nothing can see and pay floor loot into a
+                  // detached crawler. Unreachable either way today — the overworld
+                  // is the only level with buildings and it generates no safe
+                  // rooms — so the cost of dropping it is currently zero, and the
+                  // fallback (a floor restart) is merely harsh rather than broken.
+                  checkpoint: undefined,
                   existingMap: this.gameMap,
                   existingMiniMap: this.miniMap,
                   humanAchievements: this.humanAchievements,
@@ -1409,8 +1493,12 @@ export class DungeonScene extends GameplayScene {
     // quarter of an hour of regen he never spent.
     const petMaxHp = getMongoStats(this.abilityManager.getLevel('mongo')).maxHp;
     this.mongoPetState = options?.mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp);
-    this.mongoSystem = new MongoSystem(this.mongoPetState, () =>
-      this.abilityManager.getLevel('mongo'),
+    this.mongoSystem = new MongoSystem(
+      this.mongoPetState,
+      () => this.abilityManager.getLevel('mongo'),
+      (amount) => {
+        this.abilityManager.addXp('mongo', amount);
+      },
     );
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
@@ -1632,6 +1720,18 @@ export class DungeonScene extends GameplayScene {
     aiAdapter.bindScene(this.createAISceneContext(), this.bus);
   }
 
+  /**
+   * How many living mobs from a given spawn-table key are inside the patch of
+   * map centred on (x, y) — the encounter's own neighbourhood, not the floor.
+   */
+  private countLivingMobsOfTypeNear(type: string, x: number, y: number, radius: number): number {
+    let count = 0;
+    for (const mob of this.mobGrid.queryCircle(x, y, radius)) {
+      if (mob.isAlive && mob.spawnTypeKey === type) count++;
+    }
+    return count;
+  }
+
   private wireEventBus(): void {
     const bus = this.bus;
 
@@ -1643,11 +1743,24 @@ export class DungeonScene extends GameplayScene {
     bus.on('mobKilled', (e) => this.gameStats.recordKill(e.mob.displayName));
     bus.on('healingPotionUsed', () => this.gameStats.recordPotionUsed());
 
+    // ── difficulty telemetry (`docs/difficulty-plan.md` phase 0) ──
+    // Separate from `gameStats` because these counters have to survive the
+    // stairwell that rebuilds this scene; see `DifficultyStats`.
+    difficultyStats.setFloor(this.levelDef.floorNumber);
+    bus.on('healingPotionUsed', () => difficultyStats.recordPotionUsed());
+    bus.on('playerDodged', () => difficultyStats.recordDodge());
+    bus.on('bossDefeated', (e) => difficultyStats.noteBossDefeated(e.bossType));
+
     // ── mobKilled: corpse marker, achievements, loot, grub spawns ──
     bus.on('mobKilled', (e) => {
       const { mob, killer, topDamageDealer } = e;
       const cx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const cy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET;
+
+      // Only a kill the party earned. Mobs kill each other — friendly fire, a
+      // confusion fog, a bounty boss clearing the room it spawned into — and
+      // none of that is the player pressing forward.
+      if (killer !== null) this.mongoSystem.onKill();
 
       let impactDx = 0;
       let impactDy = 0;
@@ -1744,7 +1857,20 @@ export class DungeonScene extends GameplayScene {
           if (mob instanceof SmallSpider) continue;
           const tx = Math.round(mob.x / TILE_SIZE);
           const ty = Math.round(mob.y / TILE_SIZE);
-          const count = randomInt(rule.minCount, rule.maxCount);
+          // Bounded against what is alive *here*, not against the floor. The
+          // rule fires on any mob dying, so an unbounded version compounds into
+          // a swarm — but grubs left behind in rooms the party has already
+          // cleared are neither a threat nor a cost, and counting them starved
+          // every later encounter of the burst that makes the rule interesting.
+          const alreadyAliveNearby = this.countLivingMobsOfTypeNear(
+            rule.type,
+            mob.x,
+            mob.y,
+            ON_KILL_SPAWN_CAP_RADIUS,
+          );
+          const headroom = MAX_CONCURRENT_ON_KILL_SPAWNS - alreadyAliveNearby;
+          if (headroom <= 0) continue;
+          const count = Math.min(headroom, randomInt(rule.minCount, rule.maxCount));
           for (let i = 0; i < count; i++) {
             let placed = false;
             for (let attempt = 0; attempt < SPIT_PLACEMENT_ATTEMPTS && !placed; attempt++) {
@@ -1758,6 +1884,10 @@ export class DungeonScene extends GameplayScene {
               const gty = ty + oy;
               if (!this.gameMap.isWalkable(gtx, gty)) continue;
               const spawned = createMob(rule.type, gtx, gty, this.gameMap);
+              // Inherited rather than left at 1: these burst out of a mob the
+              // party has just fought, and a level-1 grub swarm on floor 2 was
+              // free XP that arrived exactly when the fight should be hardest.
+              spawned.applyMobLevel(mob.mobLevel);
               this.mobs.push(spawned);
               this.mobGrid.insert(spawned);
               placed = true;
@@ -1841,7 +1971,9 @@ export class DungeonScene extends GameplayScene {
         // bounds — guard rather than assert on a missing room.
         const roomInfo = this.safeRoom.safeRoomInfoAt(this.active());
         if (roomInfo !== null) {
+          this.markMobsAtCheckpoint();
           this.checkpoint = {
+            world: this.captureWorldCheckpoint(),
             humanSnap: checkpointSnapshot(snapPlayer(this.human)),
             catSnap: checkpointSnapshot(snapPlayer(this.cat)),
             abilities: this.abilityManager.clone(),
@@ -2087,6 +2219,10 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
+    // Drops the pack-alert grid. It is a module-level handle, so a scene that
+    // exited without this leaves its whole mob roster — and through them its
+    // `GameMap` — reachable for the rest of the page's life.
+    this.mobLoop.dispose();
     aiAdapter.unbindScene();
     this.bus.clear();
   }
@@ -2711,19 +2847,23 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Restores the party to an in-run checkpoint in place, rather than tearing
-   * down and rebuilding the scene. Map generation has no seed, so "the world
-   * you left" — smashed props, dead mobs, opened chests, defeated bosses —
-   * cannot be re-derived; it can only be kept by never recreating it.
+   * Restores the party *and the floor* to an in-run checkpoint in place, rather
+   * than tearing down and rebuilding the scene. Map generation has no seed, so
+   * the world the player left cannot be re-derived — it can only be kept and
+   * rewound, which is what {@link restoreWorldCheckpoint} does.
    *
-   * Everything not listed here is deliberately left alone: uncollected ground
-   * loot, partially-damaged props, fog of war, and `GameStats` all continue
-   * exactly as they were.
+   * The three deliberate exceptions, all preserved rather than rewound: the
+   * doomsday countdown (rewinding it would make dying a way to buy back time),
+   * the `difficultyStats` singleton (adaptive difficulty has to keep learning
+   * from real deaths), and fog of war (re-walking explored map is only tedium).
    */
   private restoreFromCheckpoint(cp: LevelCheckpoint): void {
     this.audio?.stopSound('death_sequence');
     this.deathScreen.reset();
     this.gameOver = false;
+    // Its pending callback grants a chest's reward against a world that is
+    // about to be rewound to before the chest was opened.
+    this.chestRewardDialog.discard();
 
     restorePlayer(this.human, cp.humanSnap);
     restorePlayer(this.cat, cp.catSnap);
@@ -2753,27 +2893,12 @@ export class DungeonScene extends GameplayScene {
     // would hand it back. Dismissing also writes his real remaining HP into the
     // shared state, which nothing else on this path does.
     this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+    // The same problem one companion over: the roster rewind below can un-hire a
+    // mercenary taken on after the safe room, and nothing reachable from a
+    // snapshot can splice the body out of the scene once that reference is gone.
+    this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
 
-    for (const mob of this.mobs) {
-      if (!mob.isAlive) continue;
-      if (mob.resetsFullyOnCheckpoint) {
-        mob.resetToSpawn();
-      } else {
-        // Allies (Mongo, hired mercenaries) aren't spawn-anchored encounters
-        // to reposition — their "spawn tile" is wherever they were summoned
-        // or hired, not this safe room — but they can take real damage
-        // fighting alongside the party and must not stay critically wounded
-        // once the party itself is fully healed.
-        mob.clearCombatStateForCheckpoint();
-      }
-    }
-    // Rebuilt from the mobs that still belong in it: the dead are never spliced
-    // out of this.mobs, and reinstating them would resurrect every corpse the
-    // party has left behind since the floor loaded.
-    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
-    for (const mob of this.mobs) {
-      if (mob.belongsInMobGrid) this.mobGrid.insert(mob);
-    }
+    this.rewindMobsToCheckpoint();
 
     this.spells.resetForCheckpoint();
     this.dynamite.resetForCheckpoint();
@@ -2781,6 +2906,7 @@ export class DungeonScene extends GameplayScene {
     this.lavaBalls.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.skeletonShots.resetForCheckpoint();
+    this.goblinArrows.resetForCheckpoint();
     this.clownGas.resetForCheckpoint();
     this.knightMissiles.resetForCheckpoint();
     this.skeletonSummons.resetForCheckpoint();
@@ -2788,12 +2914,201 @@ export class DungeonScene extends GameplayScene {
     this.bodyPartGore.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
     this.arena.resetForCheckpoint();
+
+    // Last, so the snapshot has the final word. The two resets above clear the
+    // same room locks and entry windows the snapshot describes, and they clear
+    // them to "no fight in progress" rather than to what was actually captured.
+    this.restoreWorldCheckpoint(cp.world);
+
     this.bossIntro.cancel();
     this.combatCooldownFrames = 0;
 
     // The player is standing in the safe room right now — the latch has to
     // agree, or the next step out and back in is the only thing that re-arms it.
     this.wasInSafeRoom = true;
+  }
+
+  /**
+   * Asks every owner of durable state to describe itself.
+   *
+   * Systems rather than a flat field list because the invariants live with the
+   * owners: a room lock mirrors a map call, a felled tree is recorded on the
+   * tile rather than in the system that felled it, and only the system knows.
+   */
+  private captureWorldCheckpoint(): WorldCheckpoint {
+    return {
+      gameMap: this.gameMap.captureCheckpoint(),
+      gameStats: this.gameStats.snapshot(),
+
+      bossRoom: this.bossRoom.captureCheckpoint(),
+      arena: this.arena.captureCheckpoint(),
+      arenaRoom: this.arenaRoom.captureCheckpoint(),
+      juicerRoom: this.juicerRoom.captureCheckpoint(),
+      barriers: this.barriers.captureCheckpoint(),
+      safeRoom: this.safeRoom.captureCheckpoint(),
+      miniMap: this.miniMap.captureCheckpoint(),
+      stairwell: this.stairwell.captureCheckpoint(),
+      treasureChests: this.treasureChests.captureCheckpoint(),
+      loot: this.loot.captureCheckpoint(),
+      bopca: this.bopca.captureCheckpoint(),
+      difficultyTelemetry: this.difficultyTelemetry.captureCheckpoint(),
+      mercenary: this.mercenarySystem.captureCheckpoint(),
+      mongo: this.mongoSystem.captureCheckpoint(),
+
+      defendQuest: this.defendQuest.captureCheckpoint(),
+      spiderQuest: this.spiderQuest.captureCheckpoint(),
+      circusQuest: this.circusQuest.captureCheckpoint(),
+      murderQuest: this.murderQuest.captureCheckpoint(),
+      doomsdayEscape: this.doomsdayEscape.captureCheckpoint(),
+
+      destructibles: this.destructibles?.captureCheckpoint() ?? null,
+      trees: this.trees?.captureCheckpoint() ?? null,
+      bounty: this.bounty?.captureCheckpoint() ?? null,
+
+      circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
+      murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
+      bountyProgress: captureBountyProgress(this.bountyProgress),
+      clubMembership: captureClubMembership(this.clubMembership),
+      marketStock: captureMarketStock(this.marketStock),
+      mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
+      mongoPetState: captureMongoPetState(this.mongoPetState),
+
+      krakarenKilled: this.krakarenKilled,
+      krakarenBossRoomIdx: this.krakarenBossRoomIdx,
+    };
+  }
+
+  /**
+   * Puts every owner of durable state back to what it described at capture.
+   *
+   * Ordering is load-bearing in three places, each noted below; everything else
+   * is independent and listed in the same order as the capture above.
+   */
+  private restoreWorldCheckpoint(world: WorldCheckpoint): void {
+    this.gameMap.restoreCheckpoint(world.gameMap);
+    this.gameStats.restore(world.gameStats);
+
+    this.bossRoom.restoreCheckpoint(world.bossRoom);
+    this.arena.restoreCheckpoint(world.arena);
+    this.arenaRoom.restoreCheckpoint(world.arenaRoom);
+    this.juicerRoom.restoreCheckpoint(world.juicerRoom);
+    this.barriers.restoreCheckpoint(world.barriers);
+    this.safeRoom.restoreCheckpoint(world.safeRoom);
+    this.miniMap.restoreCheckpoint(world.miniMap);
+    this.stairwell.restoreCheckpoint(world.stairwell);
+    this.treasureChests.restoreCheckpoint(world.treasureChests);
+    this.loot.restoreCheckpoint(world.loot);
+    this.bopca.restoreCheckpoint(world.bopca);
+    this.difficultyTelemetry.restoreCheckpoint(world.difficultyTelemetry);
+    this.mercenarySystem.restoreCheckpoint(world.mercenary);
+    this.mongoSystem.restoreCheckpoint(world.mongo);
+
+    this.defendQuest.restoreCheckpoint(world.defendQuest);
+    this.spiderQuest.restoreCheckpoint(world.spiderQuest);
+    // The grid the mob rewind just rebuilt, not the one the last frame saw:
+    // Signet's move back to the Big Top door has to land in the live one.
+    this.circusQuest.restoreCheckpoint(world.circusQuest, this.mobGrid);
+    this.murderQuest.restoreCheckpoint(world.murderQuest);
+    this.doomsdayEscape.restoreCheckpoint(world.doomsdayEscape);
+
+    if (this.destructibles !== null && world.destructibles !== null) {
+      this.destructibles.restoreCheckpoint(world.destructibles);
+    }
+    if (this.trees !== null && world.trees !== null) {
+      this.trees.restoreCheckpoint(world.trees);
+    }
+    // After `abandonBounty` in `respawnAfterDeath`, which has already pulled the
+    // encounter out of the world: the system re-stages a contract accepted
+    // before the checkpoint rather than re-pointing at mobs nothing can hit.
+    if (this.bounty !== null && world.bounty !== null) {
+      this.bounty.restoreCheckpoint(world.bounty);
+    }
+
+    restoreCircusQuestProgress(this.circusQuestProgress, world.circusQuestProgress);
+    restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
+    // Paired with the bounty system above: the re-stage reads the mark's type,
+    // name and site from this record, so an un-restored cursor would re-stage
+    // the wrong contract — or burn a name the player never saw.
+    restoreBountyProgress(this.bountyProgress, world.bountyProgress);
+    restoreClubMembership(this.clubMembership, world.clubMembership);
+    restoreMarketStock(this.marketStock, world.marketStock);
+    restoreMercenaryRoster(this.mercenaryRoster, world.mercenaryRoster);
+    // After `mongoSystem.dismiss()`, which writes the live pet's remaining HP
+    // and rest latch into this very object on its way out — restoring first
+    // would hand the despawn a snapshot to overwrite.
+    restoreMongoPetState(this.mongoPetState, world.mongoPetState);
+
+    this.krakarenKilled = world.krakarenKilled;
+    this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
+  }
+
+  /**
+   * Records which mobs the floor held, and which of them were alive, so a later
+   * restore can tell a kill the player has already banked from one it scored
+   * after the safe room.
+   */
+  private markMobsAtCheckpoint(): void {
+    for (const mob of this.mobs) {
+      mob.presentAtCheckpoint = true;
+      mob.aliveAtCheckpoint = mob.isAlive;
+    }
+  }
+
+  /**
+   * Puts the floor's population back the way the checkpoint found it: anything
+   * that arrived after the safe room is dropped, anything killed after it
+   * stands back up, and the survivors are reset as they always were.
+   *
+   * Dropping a mob is the one thing this scene otherwise never does — `mobs` is
+   * append-only so corpses stay renderable — so the array is rebuilt in place
+   * rather than spliced repeatedly, which keeps the cost linear even after a
+   * summon-heavy fight has added hundreds of bodies.
+   */
+  private rewindMobsToCheckpoint(): void {
+    const kept: Mob[] = [];
+    for (const mob of this.mobs) {
+      if (!mob.presentAtCheckpoint) {
+        // Summoned, hired or staged after the safe room, so it has no business
+        // existing. Disposed because it is leaving the array for good — the
+        // other splice sites (bounty abandon, companion despawn, the boss-room
+        // roach compaction) owe the same call.
+        mob.dispose();
+        continue;
+      }
+      if (mob.aliveAtCheckpoint && !mob.isAlive) {
+        mob.reviveForCheckpoint();
+      } else if (mob.isAlive) {
+        if (mob.resetsFullyOnCheckpoint) {
+          mob.resetToSpawn();
+        } else {
+          // Allies (Mongo, hired mercenaries) aren't spawn-anchored encounters
+          // to reposition — their "spawn tile" is wherever they were summoned
+          // or hired, not this safe room — but they can take real damage
+          // fighting alongside the party and must not stay critically wounded
+          // once the party itself is fully healed.
+          mob.clearCombatStateForCheckpoint();
+        }
+      }
+      kept.push(mob);
+    }
+    // In place: the per-frame `SystemContext` is refreshed from this field, but
+    // the spawn closures handed to the quest systems captured the array itself.
+    this.mobs.length = 0;
+    for (const mob of kept) this.mobs.push(mob);
+
+    // Re-derived rather than filtered: a spider that spawned after the
+    // checkpoint has just left `mobs`, and this list would otherwise keep
+    // rendering and ticking it.
+    this.grotesqueSpiders = this.mobs.filter(
+      (mob): mob is GrotesqueSpider => mob instanceof GrotesqueSpider,
+    );
+
+    // Rebuilt rather than patched: `belongsInMobGrid` flips for every mob the
+    // pass above revived or dropped, and the grid has no bulk-update path.
+    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
+    for (const mob of this.mobs) {
+      if (mob.belongsInMobGrid) this.mobGrid.insert(mob);
+    }
   }
 
   private restartAtFloorEntry(): void {
@@ -3899,6 +4214,7 @@ export class DungeonScene extends GameplayScene {
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
       skeletonShots: this.skeletonShots,
+      goblinArrows: this.goblinArrows,
       clownGas: this.clownGas,
       knightMissiles: this.knightMissiles,
       destructibles: this.destructibles,
@@ -4694,6 +5010,7 @@ export class DungeonScene extends GameplayScene {
     } else {
       this.playerTick.update(ctx);
     }
+    this.difficultyTelemetry.update(ctx);
     this.loot.update(ctx);
     this.treasureChests.update(this.mobs);
     const pickups = this.loot.drainPickups();
@@ -4715,6 +5032,7 @@ export class DungeonScene extends GameplayScene {
     // the bolts covering it on the same tick.
     this.skeletonSummons.update(ctx);
     this.skeletonShots.update(ctx);
+    this.goblinArrows.update(ctx);
     this.clownGas.update(ctx);
     this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
@@ -4808,6 +5126,7 @@ export class DungeonScene extends GameplayScene {
       )
     ) {
       this.gameOver = true;
+      difficultyStats.recordDeath();
       this.barriers.cancelConstruct();
       const deathCause = resolveDeathCause(
         this.human,

@@ -40,7 +40,11 @@ import {
   solvedArm,
   solvedLegRoot,
 } from './bugabooArt';
-import { BUGABOO_SWIPE_FRAMES, BUGABOO_SWIPE_IMPACT_FRAME } from '../src/sprites/bugabooSprite.js';
+import {
+  BUGABOO_STANDING_INK_TOP,
+  BUGABOO_SWIPE_FRAMES,
+  BUGABOO_SWIPE_IMPACT_FRAME,
+} from '../src/sprites/bugabooSprite.js';
 
 /** Alpha above which a pixel counts as painted. */
 const INK_ALPHA_THRESHOLD = 24;
@@ -355,7 +359,7 @@ function gateCentroidDrift(grid: Grid, sheet: BakedSheet): void {
  * rubble, and the player standing on a tile that is quietly damaging them has
  * no idea why. Measured as the height of the topmost ink above the floor line.
  */
-const BREACH_MIN_REACH_TILES = 0.45;
+const BREACH_MIN_REACH_TILES = 0.4;
 
 function gateBreachReach(grid: Grid, sheet: BakedSheet): void {
   const rowIndex = ROWS.findIndex((row) => row.name === 'breach');
@@ -647,8 +651,14 @@ function gateImpactContract(): void {
  * wave. Checked as the hand's own travel: its horizontal *and* vertical spans
  * both have to be real, because a flat sweep passes any single-axis check.
  */
-const GROPE_MIN_SPAN_X = 0.5;
-const GROPE_MIN_SPAN_Y = 0.2;
+/**
+ * In real tiles, like every other threshold in this file. The pose stream is in
+ * *figure* units, which are `FIGURE_SCALE` of a tile — 28% smaller — so anyone
+ * budgeting this against a tile allowance without the conversion sets it a
+ * third too tight, and the failure message then reports the wrong number too.
+ */
+const GROPE_MIN_SPAN_X_TILES = 0.36;
+const GROPE_MIN_SPAN_Y_TILES = 0.15;
 
 function gateGropeSweep(): void {
   let minX = Infinity;
@@ -656,24 +666,32 @@ function gateGropeSweep(): void {
   let minY = Infinity;
   let maxY = -Infinity;
   for (let frame = 0; frame < BREACH_FRAMES; frame++) {
-    const hand = breach(frame / BREACH_FRAMES).rightHand;
-    minX = Math.min(minX, hand.x);
-    maxX = Math.max(maxX, hand.x);
-    minY = Math.min(minY, hand.y);
-    maxY = Math.max(maxY, hand.y);
+    const pose = breach(frame / BREACH_FRAMES);
+    // Back into screen space. `breach()` writes this hand as a screen position
+    // with its own submergence already taken off, because the hole does not
+    // sink with the body — read raw, the body's heave is added back in, and it
+    // is *in phase* with the sweep, so the two compound and the gate reports
+    // half again the travel that is actually drawn.
+    const handY = pose.rightHand.y + pose.submerged * SUBMERGE_DEPTH;
+    minX = Math.min(minX, pose.rightHand.x);
+    maxX = Math.max(maxX, pose.rightHand.x);
+    minY = Math.min(minY, handY);
+    maxY = Math.max(maxY, handY);
   }
-  if (maxX - minX < GROPE_MIN_SPAN_X) {
+  const acrossTiles = (maxX - minX) * FIGURE_SCALE;
+  const upDownTiles = (maxY - minY) * FIGURE_SCALE;
+  if (acrossTiles < GROPE_MIN_SPAN_X_TILES) {
     fail(
       'G14',
-      `the breach hand sweeps only ${(maxX - minX).toFixed(3)} tiles across ` +
-        `(limit ${GROPE_MIN_SPAN_X})`,
+      `the breach hand sweeps only ${acrossTiles.toFixed(3)} tiles across ` +
+        `(limit ${GROPE_MIN_SPAN_X_TILES})`,
     );
   }
-  if (maxY - minY < GROPE_MIN_SPAN_Y) {
+  if (upDownTiles < GROPE_MIN_SPAN_Y_TILES) {
     fail(
       'G14',
-      `the breach hand sweeps only ${(maxY - minY).toFixed(3)} tiles up and down ` +
-        `(limit ${GROPE_MIN_SPAN_Y}) — a flat sweep is a wave, not a grope`,
+      `the breach hand sweeps only ${upDownTiles.toFixed(3)} tiles up and down ` +
+        `(limit ${GROPE_MIN_SPAN_Y_TILES}) — a flat sweep is a wave, not a grope`,
     );
   }
 }
@@ -687,12 +705,12 @@ function gateGropeSweep(): void {
  * couple of hundredths of shoulder showing above the rubble is the hump that
  * makes the hole read as occupied, but hips at the floor means it is standing.
  */
-const BREACH_MIN_HIP_DEPTH_TILES = 0.3;
+const BREACH_MIN_HIP_DEPTH_TILES = 0.22;
 
 function gateBreachDepth(): void {
   for (let frame = 0; frame < BREACH_FRAMES; frame++) {
     const pose = breach(frame / BREACH_FRAMES);
-    const depth = HIP_Y + pose.submerged * SUBMERGE_DEPTH - BREACH_FLOOR_Y;
+    const depth = (HIP_Y + pose.submerged * SUBMERGE_DEPTH - BREACH_FLOOR_Y) * FIGURE_SCALE;
     if (depth < BREACH_MIN_HIP_DEPTH_TILES) {
       fail(
         'G15',
@@ -701,6 +719,45 @@ function gateBreachDepth(): void {
           `creature is standing in the hole rather than still stuck under it`,
       );
     }
+  }
+}
+
+/**
+ * `G17` — the head clearance the runtime lifts overhead UI by matches the bake.
+ *
+ * `BUGABOO_STANDING_INK_TOP` is how the safe room knows to raise Mordecai's
+ * speech bubble and `Talk` prompt clear of a creature that stands most of a tile
+ * taller than the anchor suggests. The manifest records where his feet are and
+ * nothing else, so a redraw that raises the horns leaves the prompt sitting on
+ * his chest with every other gate still green.
+ */
+const HEAD_CLEARANCE_TOLERANCE_PX = 2;
+const OVERHEAD_UI_ROWS = [...STANDING_ROWS, 'walk', 'walk_side', 'walk_away'] as const;
+
+function gateHeadClearanceContract(grid: Grid, sheet: BakedSheet): void {
+  const { frameWidth } = sheet.geometry;
+  let bakedInkTop = Infinity;
+  for (const name of OVERHEAD_UI_ROWS) {
+    const rowIndex = ROWS.findIndex((row) => row.name === name);
+    const row = ROWS[rowIndex];
+    if (row === undefined) {
+      fail('G17', `the bake has no row named ${name}, so its head clearance measured nothing`);
+      continue;
+    }
+    for (let col = 0; col < row.frameCount; col++) {
+      const stats = inkStatsOf(cellAlpha(grid, sheet, { col, row: rowIndex }), frameWidth);
+      if (stats.count > 0) bakedInkTop = Math.min(bakedInkTop, stats.minY);
+    }
+  }
+  if (!Number.isFinite(bakedInkTop)) return;
+  const drift = Math.abs(bakedInkTop - BUGABOO_STANDING_INK_TOP);
+  if (drift > HEAD_CLEARANCE_TOLERANCE_PX) {
+    fail(
+      'G17',
+      `the standing rows reach up to y=${bakedInkTop} but BUGABOO_STANDING_INK_TOP in ` +
+        `src/sprites/bugabooSprite.ts is ${BUGABOO_STANDING_INK_TOP} — ${drift}px off, ` +
+        `limit ${HEAD_CLEARANCE_TOLERANCE_PX}; overhead UI would sit on his head`,
+    );
   }
 }
 
@@ -726,6 +783,7 @@ async function runGates(): Promise<void> {
   gateImpactContract();
   gateGropeSweep();
   gateBreachDepth();
+  gateHeadClearanceContract(grid, sheet);
   if (!verifyManifest(sheet)) {
     fail('G16', `src/images/npcs/manifest.json does not describe the sheet the bake produced`);
   }

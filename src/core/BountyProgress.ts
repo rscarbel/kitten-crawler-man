@@ -36,6 +36,78 @@ export interface BountyProgress {
   bountiesCompleted: number;
 }
 
+/**
+ * A point-in-time copy of the record, for the in-run safe-room checkpoint.
+ *
+ * Rewinding the whole record — not just the phase — is what makes a death
+ * against a checkpoint cost the player the bounty they took after it: the
+ * cycle position and the per-type name cursors go back too, so the contract
+ * they accepted is un-accepted rather than merely abandoned.
+ */
+export interface BountyProgressCheckpoint {
+  phase: BountyPhase;
+  typeOrder: string[];
+  cycleIndex: number;
+  namesByType: Record<string, string[] | undefined>;
+  nameCursorByType: Record<string, number | undefined>;
+  currentTypeId: string | null;
+  currentName: string | null;
+  currentSiteIndex: number | null;
+  lastSiteIndex: number | null;
+  bountiesCompleted: number;
+}
+
+/** Deep-copies the per-type name pools; the pools themselves are reshuffled in place. */
+function copyNamePools(
+  pools: Record<string, string[] | undefined>,
+): Record<string, string[] | undefined> {
+  const copy: Record<string, string[] | undefined> = {};
+  for (const [typeId, names] of Object.entries(pools)) {
+    copy[typeId] = names === undefined ? undefined : names.slice();
+  }
+  return copy;
+}
+
+export function captureBountyProgress(progress: BountyProgress): BountyProgressCheckpoint {
+  return {
+    phase: progress.phase,
+    typeOrder: progress.typeOrder.slice(),
+    cycleIndex: progress.cycleIndex,
+    namesByType: copyNamePools(progress.namesByType),
+    nameCursorByType: { ...progress.nameCursorByType },
+    currentTypeId: progress.currentTypeId,
+    currentName: progress.currentName,
+    currentSiteIndex: progress.currentSiteIndex,
+    lastSiteIndex: progress.lastSiteIndex,
+    bountiesCompleted: progress.bountiesCompleted,
+  };
+}
+
+/**
+ * Rewinds the record in place — every scene and `BountySystem` hold this one
+ * object by reference.
+ *
+ * The containers are copied again on the way in, because one checkpoint is
+ * restored once per death and `takeNextBountyName` reshuffles a pool in place:
+ * handing the snapshot's own arrays to the live record would let the first
+ * bounty issued after a restore rewrite the snapshot.
+ */
+export function restoreBountyProgress(
+  progress: BountyProgress,
+  snapshot: BountyProgressCheckpoint,
+): void {
+  progress.phase = snapshot.phase;
+  progress.typeOrder = snapshot.typeOrder.slice();
+  progress.cycleIndex = snapshot.cycleIndex;
+  progress.namesByType = copyNamePools(snapshot.namesByType);
+  progress.nameCursorByType = { ...snapshot.nameCursorByType };
+  progress.currentTypeId = snapshot.currentTypeId;
+  progress.currentName = snapshot.currentName;
+  progress.currentSiteIndex = snapshot.currentSiteIndex;
+  progress.lastSiteIndex = snapshot.lastSiteIndex;
+  progress.bountiesCompleted = snapshot.bountiesCompleted;
+}
+
 /** Fisher–Yates into a fresh array; leaves the source untouched. */
 function shuffled<T>(source: readonly T[]): T[] {
   const out = source.slice();

@@ -30,6 +30,7 @@ import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
+import type { GoblinArrowSystem } from './GoblinArrowSystem';
 import type { ClownGasSystem } from './ClownGasSystem';
 import type { KnightMissileSystem } from './KnightMissileSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
@@ -169,6 +170,7 @@ export interface RenderContext {
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
   skeletonShots: SkeletonProjectileSystem;
+  goblinArrows: GoblinArrowSystem;
   clownGas: ClownGasSystem;
   knightMissiles: KnightMissileSystem;
   /** Null on maps without smashable props (the overworld, building interiors). */
@@ -486,6 +488,7 @@ export class RenderPipeline {
     // Same slot and the same reason: a bolt crossing the fight must never vanish
     // behind the skeleton it is about to fly past.
     rc.skeletonShots.render(ctx, camX, camY);
+    rc.goblinArrows.render(ctx, camX, camY);
     rc.clownGas.render(ctx, camX, camY);
     rc.knightMissiles.render(ctx, camX, camY);
     // Last of the world effects: the stamp's fire reads as being in front of

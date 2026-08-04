@@ -34,9 +34,11 @@ import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { RingmasterGrimaldi } from '../creatures/RingmasterGrimaldi';
 import { CityElfCultist } from '../creatures/CityElfCultist';
-import { randomInt } from '../utils';
+import { GoblinArcher } from '../creatures/GoblinArcher';
+import { clamp, randomInt } from '../utils';
+import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
-import type { MobSpawnRule, LevelDef } from './types';
+import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
 
 type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
 
@@ -50,7 +52,17 @@ const TREASURE_ROOM_EXTRA_MOBS = 3;
 const TREASURE_ROOM_LEVEL_BOOST = 1;
 
 /** Maximum mob level cap. */
-const MAX_MOB_LEVEL = 20;
+export const MAX_MOB_LEVEL = 20;
+
+/**
+ * Hard ceiling on the mobs one room may spawn, after a region bonus is added to
+ * the rolled count.
+ *
+ * The bonus and the roll are both ranges, so their worst cases compound: a room
+ * rolling five goblins in the post-Juicer region would otherwise open with
+ * seven of them in a doorway, which is a wall of bodies rather than a fight.
+ */
+export const MAX_ROOM_SPAWN_COUNT = 6;
 
 /** Room boundary inset (1 tile from wall). */
 const ROOM_BOUNDARY_INSET = 1;
@@ -73,23 +85,44 @@ interface SpawnBounds {
 }
 
 /**
- * A walkable tile within `bounds`, or null when the room has none.
+ * A tile within `bounds` a mob can be dropped on, or null when the room has none.
  *
+ * Run twice: first demanding somewhere the occupant can actually operate, then
+ * accepting any walkable tile at all. A tile can pass `isWalkable` and still be
+ * a one-tile pocket between two props, which spawns a mob that can only shuffle
+ * on the spot — but a room that has nothing better is still owed its encounter,
+ * so a cramped spawn beats a missing one.
+ */
+function findWalkableSpawnTile(map: GameMap, bounds: SpawnBounds): { x: number; y: number } | null {
+  const roomy = probeSpawnTile(
+    map,
+    bounds,
+    (x, y) => map.isWalkable(x, y) && hasRoomToMove(map, x, y),
+  );
+  if (roomy !== null) return roomy;
+  return probeSpawnTile(map, bounds, (x, y) => map.isWalkable(x, y));
+}
+
+/**
  * Random probes come first so mobs still scatter through the room. The
  * exhaustive scan behind them exists because the old fallback was the room
  * centre chosen sight-unseen — which is exactly where a treasure chest sits, so
  * an unlucky room reliably spawned its guards inside the chest.
  */
-function findWalkableSpawnTile(map: GameMap, bounds: SpawnBounds): { x: number; y: number } | null {
+function probeSpawnTile(
+  map: GameMap,
+  bounds: SpawnBounds,
+  isUsable: (x: number, y: number) => boolean,
+): { x: number; y: number } | null {
   const { minTX, minTY, maxTX, maxTY } = bounds;
   for (let attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; attempt++) {
     const cx = randomInt(minTX, maxTX);
     const cy = randomInt(minTY, maxTY);
-    if (map.isWalkable(cx, cy)) return { x: cx, y: cy };
+    if (isUsable(cx, cy)) return { x: cx, y: cy };
   }
   for (let cy = minTY; cy <= maxTY; cy++) {
     for (let cx = minTX; cx <= maxTX; cx++) {
-      if (map.isWalkable(cx, cy)) return { x: cx, y: cy };
+      if (isUsable(cx, cy)) return { x: cx, y: cy };
     }
   }
   return null;
@@ -130,15 +163,94 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   return rules[rules.length - 1];
 }
 
-/** Roll a random mob level from a spawn rule's min/max range. */
 /**
- * Takes the level range alone, so both a weighted `MobSpawnRule` and a camp's
- * `CampSpawnRule` — which has no `chance` — can be levelled by it.
+ * How much of the party's own level an ordinary mob is levelled toward.
+ *
+ * Deliberately under 1. Matching the party exactly would erase the reward for
+ * getting stronger — every fight would feel identical at level 3 and at level
+ * 15 — while ignoring the party entirely is what made a floor revisited later
+ * a walk. Under 1, an on-schedule party always out-levels what it meets, and
+ * the gap it has earned is what it feels.
  */
-function rollMobLevel(rule: Pick<MobSpawnRule, 'minLevel' | 'maxLevel'>): number {
-  const min = rule.minLevel ?? 1;
-  const max = rule.maxLevel ?? min;
-  return randomInt(min, max);
+const MOB_LEVEL_PARTY_RATIO = 0.7;
+
+/**
+ * The same, for bosses. Higher than the ordinary ratio because a boss is meant
+ * to be the fight of its stretch of floor, not another room.
+ */
+const BOSS_LEVEL_PARTY_RATIO = 0.8;
+
+/** The stronger of the two crawlers, which is what every level below keys off. */
+export function partyLevelOf(humanLevel: number, catLevel: number): number {
+  return Math.max(humanLevel, catLevel);
+}
+
+/**
+ * The level one spawn rolls at: somewhere between what the party has earned and
+ * the top of the rule's own band.
+ *
+ * The band is never left. Its floor keeps a first encounter from being trivial
+ * for an over-levelled party's *first* visit; its ceiling is what keeps each
+ * floor's identity, so descending stays the way to find real danger and a
+ * revisited floor 1 can bite without becoming floor 2.
+ *
+ * Takes the band alone, so a weighted `MobSpawnRule`, a camp's `CampSpawnRule`,
+ * an `ExtraSpawnRule` and a `BossRoomRule` can all be levelled by it.
+ */
+export function resolveSpawnLevel(band: MobLevelRange, partyLevel: number): number {
+  const min = band.minLevel ?? 1;
+  const max = band.maxLevel ?? min;
+  return randomInt(earnedLevelFloor(band, partyLevel), max);
+}
+
+/**
+ * The bottom of the range {@link resolveSpawnLevel} rolls in: the party-relative
+ * point, held inside the band.
+ *
+ * Split out so `scripts/verify-difficulty.ts` can assert the one guarantee the
+ * roll itself hides — that the *floor* is always under what the party has
+ * earned, which is what makes levelling up feel like it bought something.
+ */
+export function earnedLevelFloor(band: MobLevelRange, partyLevel: number): number {
+  const min = band.minLevel ?? 1;
+  const max = band.maxLevel ?? min;
+  return clamp(Math.round(partyLevel * MOB_LEVEL_PARTY_RATIO), min, max);
+}
+
+/**
+ * A boss's level: the party-relative point in its band, not a roll around it.
+ *
+ * Unrolled deliberately — a boss is an authored encounter, and two runs meeting
+ * the same boss at the same party level should meet the same fight.
+ */
+export function resolveBossLevel(band: MobLevelRange, partyLevel: number): number {
+  const min = band.minLevel ?? 1;
+  const max = band.maxLevel ?? min;
+  return clamp(Math.round(partyLevel * BOSS_LEVEL_PARTY_RATIO), min, max);
+}
+
+/** Whichever of the two rules above suits what was actually spawned. */
+function levelForMob(mob: Mob, band: MobLevelRange, partyLevel: number): number {
+  return mob.isBoss ? resolveBossLevel(band, partyLevel) : resolveSpawnLevel(band, partyLevel);
+}
+
+/**
+ * The escort mobs one room actually gets: every eligible escort rule, expanded
+ * to one entry per body so the caller can simply count them.
+ */
+function rollEscorts(rule: MobSpawnRule, region: number): EscortSpawnRule[] {
+  const rolled: EscortSpawnRule[] = [];
+  for (const escort of rule.escorts ?? []) {
+    if (escort.minRegion !== undefined && region < escort.minRegion) continue;
+    const count = randomInt(escort.minCount ?? 1, escort.maxCount ?? 1);
+    for (let i = 0; i < count; i++) rolled.push(escort);
+  }
+  // Truncated here rather than only reserved against, because the cap is stated
+  // as a hard guarantee: reserving alone bounds the *host* rule while leaving
+  // the escort loop free to spawn as many bodies as it was authored with, so a
+  // generous future roster would breach the ceiling with nothing to stop it.
+  rolled.length = Math.min(rolled.length, MAX_ROOM_SPAWN_COUNT);
+  return rolled;
 }
 
 type MobFactory = (tileX: number, tileY: number) => Mob;
@@ -194,6 +306,7 @@ registerMob('city_elf_cultist', (x, y) => new CityElfCultist(x, y, TILE_SIZE));
 registerMob('skeleton_sword', (x, y) => new SkeletonWarrior(x, y, TILE_SIZE));
 registerMob('skeleton_archer', (x, y) => new SkeletonArcher(x, y, TILE_SIZE));
 registerMob('skeleton_lord', (x, y) => new SkeletonLord(x, y, TILE_SIZE));
+registerMob('goblin_archer', (x, y) => new GoblinArcher(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
 });
@@ -213,6 +326,11 @@ export function createMob(type: string, tileX: number, tileY: number, map: GameM
   if (!resolvedFactory) throw new Error(`Unknown mob type: ${type}`);
   const mob = resolvedFactory(tileX, tileY);
   mob.setMap(map);
+  // The key that was *asked for*, which for a typo'd rule is not the key of the
+  // Goblin that came back. That is the right answer for the one question this
+  // field exists to serve — how many of a rule's own spawns are alive — and the
+  // mismatch has already been reported above.
+  mob.spawnTypeKey = type;
   return mob;
 }
 
@@ -260,7 +378,7 @@ const SPAWN_SETUP: Partial<
  * Spawn mobs described by `def.extraSpawns` — position-relative spawns
  * that are tied to map landmarks rather than generic spawn points.
  */
-export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
+export function spawnExtraMobs(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
   const mobs: Mob[] = [];
   if (!def.extraSpawns) return mobs;
 
@@ -270,6 +388,7 @@ export function spawnExtraMobs(def: LevelDef, map: GameMap): Mob[] {
 
     for (const [dx, dy] of rule.offsets) {
       const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
+      mob.applyMobLevel(levelForMob(mob, rule, partyLevel));
       if (rule.setup) {
         SPAWN_SETUP[rule.setup]?.(mob, map, origin);
       }
@@ -303,7 +422,7 @@ const CAMP_SPAWN_ATTEMPTS = 40;
  * of `homePoint`/`leashRadiusTiles` and it writes them on floor 3 only, so this
  * remains provably invisible to the goblins and troglodytes on floors 1 and 2.
  */
-function spawnCampResidents(def: LevelDef, map: GameMap): Mob[] {
+function spawnCampResidents(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
   const mobs: Mob[] = [];
   const rosters = def.campSpawns;
   if (rosters === undefined) return mobs;
@@ -317,7 +436,7 @@ function spawnCampResidents(def: LevelDef, map: GameMap): Mob[] {
         const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles);
         if (tile === null) continue;
         const mob = createMob(rule.type, tile.x, tile.y, map);
-        mob.applyMobLevel(rollMobLevel(rule));
+        mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel));
         // Its own spawn tile, **not** the camp's centre. The centre is a
         // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
         // a tile nothing can stand on, which is a resident that never walks home
@@ -355,27 +474,40 @@ function findWalkableTileInCamp(
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
  * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
  */
-export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
+export function spawnForLevel(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
   const mobs: Mob[] = [];
 
   if (def.roomMobs.length > 0) {
-    for (const { x, y, w, h } of map.mobSpawnPoints) {
+    const regionBonuses = def.progression?.regionSpawnBonus ?? [];
+    for (const { x, y, w, h, region } of map.mobSpawnPoints) {
       const rule = pickRule(def.roomMobs);
       const min = rule.minCount ?? 1;
       const max = rule.maxCount ?? 1;
-      const count = randomInt(min, max);
+      // Escorts are rolled first and their places *reserved*, so a room that
+      // would otherwise fill its whole allowance with the host rule still has
+      // room for the archer that makes it a mixed group.
+      const escorts = rollEscorts(rule, region);
+      const count = Math.max(
+        0,
+        Math.min(
+          MAX_ROOM_SPAWN_COUNT - escorts.length,
+          randomInt(min, max) + (regionBonuses[region] ?? 0),
+        ),
+      );
       // Interior tile range: 1-tile inset from walls on each side
       const minTX = x - Math.floor(w / 2) + ROOM_BOUNDARY_INSET;
       const minTY = y - Math.floor(h / 2) + ROOM_BOUNDARY_INSET;
       const maxTX = minTX + w - ROOM_BOUNDS_OFFSET;
       const maxTY = minTY + h - ROOM_BOUNDS_OFFSET;
-      for (let i = 0; i < count; i++) {
+      const spawnInRoom = (band: MobLevelRange, type: MobSpawnRule['type']): void => {
         const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
-        if (tile === null) continue;
-        const mob = createMob(rule.type, tile.x, tile.y, map);
-        mob.applyMobLevel(rollMobLevel(rule));
+        if (tile === null) return;
+        const mob = createMob(type, tile.x, tile.y, map);
+        mob.applyMobLevel(resolveSpawnLevel(band, partyLevel));
         mobs.push(mob);
-      }
+      };
+      for (let i = 0; i < count; i++) spawnInRoom(rule, rule.type);
+      for (const escort of escorts) spawnInRoom(escort, escort.type);
     }
   }
 
@@ -383,19 +515,21 @@ export function spawnForLevel(def: LevelDef, map: GameMap): Mob[] {
     for (const { x, y } of map.hallwaySpawnPoints) {
       const rule = pickRule(def.hallwayMobs);
       const mob = createMob(rule.type, x, y, map);
-      mob.applyMobLevel(rollMobLevel(rule));
+      mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel));
       mobs.push(mob);
     }
   }
 
-  mobs.push(...spawnCampResidents(def, map));
+  mobs.push(...spawnCampResidents(def, map, partyLevel));
 
   const bossRooms = def.bossRooms ?? [];
   for (let i = 0; i < bossRooms.length; i++) {
     const bossEntry = bossRooms[i];
     if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
-    mobs.push(createMob(bossEntry.type, brData.centre.x, brData.centre.y, map));
+    const boss = createMob(bossEntry.type, brData.centre.x, brData.centre.y, map);
+    boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel));
+    mobs.push(boss);
   }
 
   return mobs;
@@ -413,6 +547,9 @@ export function spawnTreasureRoomMobs(
   const mobs: Mob[] = [];
   if (def.roomMobs.length === 0) return mobs;
 
+  // Escorts are deliberately not honoured here. A treasure room's guards are a
+  // fixed count at the top of their band — a second, additive mechanism on top
+  // of that is how a chest ends up behind eleven bodies.
   for (const room of treasureRooms) {
     const { x, y, w, h } = room.bounds;
     const minTX = x + ROOM_BOUNDARY_INSET;

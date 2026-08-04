@@ -25,7 +25,7 @@ import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
 import type { SpriteDef } from '../core/SpriteLoader';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
-import { KeyboardHeroSystem } from './KeyboardHeroSystem';
+import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
 import { MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
 import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
@@ -300,7 +300,7 @@ const NEIGHBOR_OFFSETS_FAR: Array<[number, number]> = [
 // Resets on page reload — tutorial plays once per session, not on retries.
 let keyboardHeroTutorialSeen = false;
 
-type QuestPhase =
+export type SpiderQuestPhase =
   | 'inactive'
   | 'scientist_waiting'
   | 'scientist_dialog'
@@ -348,7 +348,7 @@ const LIFE_MACHINE_STATES: Readonly<Record<LifeMachineState, LifeMachineStateDef
   offline: { spriteState: 'life_machine_offline', duration: null, playback: 'loop' },
 };
 
-interface LifeMachine {
+export interface LifeMachine {
   tileX: number;
   tileY: number;
   state: LifeMachineState;
@@ -378,6 +378,42 @@ interface CutsceneGoreParticle {
   color: string;
   life: number;
   maxLife: number;
+}
+
+/**
+ * A point-in-time copy of the lab's quest progress, for the safe-room
+ * checkpoint. The boss and the spiderlings are held by reference — the scene
+ * keeps every mob it ever knew about, so restoring the reference is what
+ * re-establishes which spiders were the lab's at capture time.
+ *
+ * The life machines ride along because `hackingDone` is only half the truth
+ * about them: the terminal parks each machine in `offline` individually, and
+ * un-hacking the quest without un-parking the machines would leave a lab that
+ * can never print another spiderling.
+ */
+export interface SpiderQuestCheckpoint {
+  readonly phase: SpiderQuestPhase;
+  readonly spiderEggOpened: boolean;
+  readonly scientistDead: boolean;
+  readonly hackingDone: boolean;
+  readonly hackStarting: boolean;
+  readonly hackStartTimer: number;
+  readonly machineryForcedOff: boolean;
+  readonly playerLocked: boolean;
+  readonly roomLocked: boolean;
+  readonly fightAborted: boolean;
+  readonly entryWindowTimer: number;
+  readonly humanIsInsider: boolean;
+  readonly catIsInsider: boolean;
+  readonly grotesqueSpider: GrotesqueSpider | null;
+  readonly smallSpiders: readonly SmallSpider[];
+  readonly lifeMachines: ReadonlyArray<Readonly<LifeMachine>>;
+  /**
+   * The minigame's own progress. Owned by this system rather than the scene, so
+   * it has no other route into a checkpoint — and a cleared chart is exactly the
+   * kind of thing a death after the safe room must not let the player keep.
+   */
+  readonly keyboardHero: KeyboardHeroCheckpoint;
 }
 
 export class SpiderQuestSystem implements GameSystem {
@@ -428,7 +464,7 @@ export class SpiderQuestSystem implements GameSystem {
   private _cameraOverrideTile: { x: number; y: number } | null = null;
 
   // Phase state
-  private phase: QuestPhase = 'inactive';
+  private phase: SpiderQuestPhase = 'inactive';
   private roomData: SpiderLabRoomData | null = null;
 
   // Life machines
@@ -1029,6 +1065,54 @@ export class SpiderQuestSystem implements GameSystem {
       this.bossMusicStopPending = true;
       this._bossMusicPlaying = false;
     }
+  }
+
+  /** Snapshots the lab for the safe-room checkpoint. See {@link SpiderQuestCheckpoint}. */
+  captureCheckpoint(): SpiderQuestCheckpoint {
+    return {
+      phase: this.phase,
+      spiderEggOpened: this.spiderEggOpened,
+      scientistDead: this.scientistDead,
+      hackingDone: this._hackingDone,
+      hackStarting: this.hackStarting,
+      hackStartTimer: this.hackStartTimer,
+      machineryForcedOff: this._machineryForcedOff,
+      playerLocked: this._playerLocked,
+      roomLocked: this._roomLocked,
+      fightAborted: this._fightAborted,
+      entryWindowTimer: this._entryWindowTimer,
+      humanIsInsider: this._humanIsInsider,
+      catIsInsider: this._catIsInsider,
+      grotesqueSpider: this._grotesqueSpider,
+      smallSpiders: [...this.smallSpiders],
+      lifeMachines: this.lifeMachines.map((machine) => ({ ...machine })),
+      keyboardHero: this.keyboardHero.captureCheckpoint(),
+    };
+  }
+
+  /**
+   * Rewinds the lab to a captured snapshot. Safe to call repeatedly against the
+   * same snapshot: every container is copied again on the way back in, so the
+   * next attempt never mutates the checkpoint it was restored from.
+   */
+  restoreCheckpoint(snapshot: SpiderQuestCheckpoint): void {
+    this.phase = snapshot.phase;
+    this.spiderEggOpened = snapshot.spiderEggOpened;
+    this.scientistDead = snapshot.scientistDead;
+    this._hackingDone = snapshot.hackingDone;
+    this.hackStarting = snapshot.hackStarting;
+    this.hackStartTimer = snapshot.hackStartTimer;
+    this._machineryForcedOff = snapshot.machineryForcedOff;
+    this._playerLocked = snapshot.playerLocked;
+    this._roomLocked = snapshot.roomLocked;
+    this._fightAborted = snapshot.fightAborted;
+    this._entryWindowTimer = snapshot.entryWindowTimer;
+    this._humanIsInsider = snapshot.humanIsInsider;
+    this._catIsInsider = snapshot.catIsInsider;
+    this._grotesqueSpider = snapshot.grotesqueSpider;
+    this.smallSpiders = [...snapshot.smallSpiders];
+    this.lifeMachines = snapshot.lifeMachines.map((machine) => ({ ...machine }));
+    this.keyboardHero.restoreCheckpoint(snapshot.keyboardHero);
   }
 
   dispose(): void {

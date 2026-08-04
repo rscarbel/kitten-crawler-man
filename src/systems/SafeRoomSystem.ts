@@ -12,7 +12,7 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { drawMordecaiForLevel } from '../sprites/mordecaiSprite';
+import { drawMordecaiForLevel, mordecaiOverheadLift } from '../sprites/mordecaiSprite';
 import { RAT_KIN_TILES_PER_WALK_CYCLE } from '../sprites/ratKinSprite';
 import { MordecaiWanderer } from './mordecaiWander';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
@@ -84,6 +84,11 @@ function propTilesOfType(
   return (plan?.props ?? [])
     .filter((prop) => prop.type === type)
     .map((prop) => ({ x: prop.x, y: prop.y }));
+}
+
+/** The safe room's only piece of run progress: whether the current sleep has already healed. */
+export interface SafeRoomCheckpoint {
+  sleepHealed: boolean;
 }
 
 export class SafeRoomSystem implements GameSystem {
@@ -405,6 +410,29 @@ export class SafeRoomSystem implements GameSystem {
     }
   }
 
+  /**
+   * Snapshots the sleep-heal latch.
+   *
+   * The latch is genuinely per *sleep*, not per visit: `startSleep` clears it
+   * unconditionally, so its value at any moment outside a sleep says nothing
+   * about what the next one will do. That is what makes this safe to rewind —
+   * capture happens on safe-room entry, when nobody is asleep, so the value
+   * stored is a leftover from the last completed sleep, and restoring it cannot
+   * hand the player a second free heal: a death followed by another sleep runs
+   * `startSleep` again and the latch is cleared there whatever this wrote.
+   *
+   * Captured all the same rather than skipped, so that if the latch ever becomes
+   * the once-per-visit thing its name suggests, the rewind is already correct
+   * instead of silently letting a player farm full health by dying in bed.
+   */
+  captureCheckpoint(): SafeRoomCheckpoint {
+    return { sleepHealed: this.sleepHealed };
+  }
+
+  restoreCheckpoint(snapshot: SafeRoomCheckpoint): void {
+    this.sleepHealed = snapshot.sleepHealed;
+  }
+
   startSleep(): void {
     this._isSleeping = true;
     this.sleepTimer = this.SLEEP_TOTAL;
@@ -525,7 +553,10 @@ export class SafeRoomSystem implements GameSystem {
             },
             this.levelId,
           );
-          if (showBubble) drawSpeechBubble(ctx, msx, msy, ts, speechBubblePulse);
+          if (showBubble) {
+            const bubbleY = msy - mordecaiOverheadLift(this.levelId, ts);
+            drawSpeechBubble(ctx, msx, bubbleY, ts, speechBubblePulse);
+          }
         },
       });
     }
@@ -568,13 +599,13 @@ export class SafeRoomSystem implements GameSystem {
       // Talk prompt near Mordecai
       const wander = e.wanderer.state;
       const mx = wander.x - camX;
-      const my = wander.y - camY;
+      const promptY = wander.y - camY - mordecaiOverheadLift(this.levelId, TILE_SIZE);
       const nearThis =
         this.isEntityInSafeRoom(active) &&
         SafeRoomSystem.isNearThisMordecai(e, active) &&
         !this._mordecaiDialogOpen;
       if (nearThis) {
-        drawInteractionPrompt(ctx, mx, my, TILE_SIZE, 'Talk');
+        drawInteractionPrompt(ctx, mx, promptY, TILE_SIZE, 'Talk');
         break; // only prompt once
       }
     }

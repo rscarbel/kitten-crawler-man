@@ -1,7 +1,16 @@
 import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { drawTusklingSprite } from '../sprites/tusklingSprite';
+import { TUSKLING_BODY_PART_KEY, drawTusklingSprite } from '../sprites/tusklingSprite';
+import {
+  TUSKLING_CHARGE_FRAMES,
+  TUSKLING_CHARGE_FRAME_HOLD,
+  TUSKLING_HOOK_FRAMES,
+  TUSKLING_HOOK_IMPACT_PROGRESS,
+  TUSKLING_WINDUP_GAME_FRAMES,
+  tusklingActionFrames,
+  tusklingImpactFrame,
+} from '../sprites/tusklingAttackTiming';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
 
@@ -16,7 +25,7 @@ const MELEE_DAMAGE = 2;
 const CHARGE_DAMAGE = 4;
 
 const MELEE_COOLDOWN = 70;
-const CHARGE_WINDUP_FRAMES = 35;
+
 /** Max frames the charge lasts before stopping on its own. */
 const CHARGE_DURATION = 22;
 const CHARGE_COOLDOWN = 180;
@@ -31,7 +40,11 @@ const WALL_BONK_PENALTY_FRAMES = 40;
 /** Tile fraction of charge hit detection range. */
 const CHARGE_HIT_RANGE_TILES = 1.4;
 
-type TuskState = 'idle' | 'stalking' | 'charge_windup' | 'charging' | 'cooldown';
+/** Game frames the tusk hook occupies, and the one its tusks connect on. */
+const HOOK_FRAMES = tusklingActionFrames(TUSKLING_HOOK_FRAMES);
+const HOOK_IMPACT_FRAME = tusklingImpactFrame(TUSKLING_HOOK_FRAMES, TUSKLING_HOOK_IMPACT_PROGRESS);
+
+type TuskState = 'idle' | 'stalking' | 'hooking' | 'charge_windup' | 'charging' | 'cooldown';
 
 export class Tuskling extends Mob {
   readonly xpValue = 18;
@@ -40,6 +53,7 @@ export class Tuskling extends Mob {
   displayName = 'Tuskling';
   description = 'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
   override readonly audioTag = 'tuskling';
+  override readonly bodyPartKey = TUSKLING_BODY_PART_KEY;
 
   /** 0–1: charge windup progress (for sprite snort animation). */
   chargeWindup = 0;
@@ -55,6 +69,10 @@ export class Tuskling extends Mob {
   private chargeTimer = 0;
   private cooldownTimer = 0;
   private meleeCooldown = 0;
+  /** Counts up through the hook one-shot; the tusks connect partway through. */
+  private hookTimer = 0;
+  /** Advances while charging, so the sprint row is not sampled off the walk phase. */
+  private chargeAnimTimer = 0;
 
   /** Direction the charge is locked to (unit vector). */
   private chargeDx = 0;
@@ -74,7 +92,27 @@ export class Tuskling extends Mob {
     this.chargeTimer = 0;
     this.cooldownTimer = 0;
     this.meleeCooldown = 0;
+    this.hookTimer = 0;
+    this.chargeAnimTimer = 0;
     this.chargeHitDealt = false;
+    // The daze is owned by the Ball of Swine burst that produced this tuskling,
+    // and the checkpoint restores that arena phase itself; a daze carried across
+    // the rewind leaves the creature frozen out of step with it.
+    this.dazeTimer = 0;
+    this.chargeDx = 0;
+    this.chargeDy = 0;
+  }
+
+  /** 0–1 through the tusk hook, or null when it is not swinging. */
+  private get hookProgress(): number | null {
+    if (this.state !== 'hooking') return null;
+    return Math.min(1, this.hookTimer / HOOK_FRAMES);
+  }
+
+  /** The sprite frame of the charging run, or null when it is not charging. */
+  private get chargeFrame(): number | null {
+    if (this.state !== 'charging') return null;
+    return Math.floor(this.chargeAnimTimer / TUSKLING_CHARGE_FRAME_HOLD) % TUSKLING_CHARGE_FRAMES;
   }
 
   /** It eats anything. The book explains how. */
@@ -87,11 +125,16 @@ export class Tuskling extends Mob {
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 
-    // Dazed — can't act, just spin in place
+    // Dazed — can't act, just spin in place. The action state is dropped too,
+    // or a hook interrupted by the daze would resume mid-swing ten seconds
+    // later with nothing in front of it.
     if (this.dazeTimer > 0) {
       this.dazeTimer--;
       this.isMoving = false;
       this.chargeWindup = 0;
+      this.state = 'idle';
+      this.hookTimer = 0;
+      this.chargeAnimTimer = 0;
       return;
     }
 
@@ -127,16 +170,22 @@ export class Tuskling extends Mob {
 
         this.updateLastKnown(nearest);
 
-        // Melee hit if close enough
+        // Commit to a tusk hook if close enough. The damage lands partway
+        // through the swing rather than the instant the range check passes, so
+        // what the player sees and what hits them are the same event.
         if (nearestDist <= meleeRangePx && this.meleeCooldown === 0) {
-          this.dealDamage(nearest, MELEE_DAMAGE);
-          this.meleeCooldown = MELEE_COOLDOWN;
+          this.state = 'hooking';
+          this.hookTimer = 0;
+          this.isMoving = false;
+          this._faceToward(nearest);
+          this.clearAStarPath();
+          break;
         }
 
         // Initiate charge if in range and has LOS
         if (nearestDist <= chargeRangePx && nearestDist > meleeRangePx && this.hasLOS(nearest)) {
           this.state = 'charge_windup';
-          this.windupTimer = CHARGE_WINDUP_FRAMES;
+          this.windupTimer = TUSKLING_WINDUP_GAME_FRAMES;
           this.isMoving = false;
           this._faceToward(nearest);
           // Lock charge direction now
@@ -159,9 +208,32 @@ export class Tuskling extends Mob {
         break;
       }
 
+      case 'hooking': {
+        this.chargeWindup = 0;
+        this.isMoving = false;
+        this.hookTimer++;
+
+        if (nearest) this._faceToward(nearest);
+
+        if (
+          this.hookTimer === HOOK_IMPACT_FRAME &&
+          nearest &&
+          this.distanceTo(nearest) <= meleeRangePx
+        ) {
+          this.dealDamage(nearest, MELEE_DAMAGE);
+        }
+
+        if (this.hookTimer >= HOOK_FRAMES) {
+          this.meleeCooldown = MELEE_COOLDOWN;
+          this.hookTimer = 0;
+          this.state = nearest ? 'stalking' : 'idle';
+        }
+        break;
+      }
+
       case 'charge_windup': {
         this.windupTimer--;
-        this.chargeWindup = 1 - this.windupTimer / CHARGE_WINDUP_FRAMES;
+        this.chargeWindup = 1 - this.windupTimer / TUSKLING_WINDUP_GAME_FRAMES;
         this.isMoving = false;
 
         // Keep facing locked target direction
@@ -170,6 +242,7 @@ export class Tuskling extends Mob {
         if (this.windupTimer <= 0) {
           this.state = 'charging';
           this.chargeTimer = CHARGE_DURATION;
+          this.chargeAnimTimer = 0;
           this.chargeHitDealt = false;
         }
         break;
@@ -178,6 +251,7 @@ export class Tuskling extends Mob {
       case 'charging': {
         this.chargeWindup = 0;
         this.chargeTimer--;
+        this.chargeAnimTimer++;
         this.isMoving = true;
 
         // Move at charge speed in the locked direction
@@ -254,17 +328,15 @@ export class Tuskling extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawTusklingSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      this.chargeWindup,
-      this.facingX,
-      this.facingY,
-    );
+    drawTusklingSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      hookProgress: this.hookProgress,
+      snortProgress: this.chargeWindup > 0 ? this.chargeWindup : null,
+      chargeFrame: this.chargeFrame,
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

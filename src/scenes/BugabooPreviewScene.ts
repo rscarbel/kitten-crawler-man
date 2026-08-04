@@ -19,6 +19,7 @@
  */
 
 import { Scene } from '../core/Scene';
+import { BUGABOO_ATTACK_FRAMES, BUGABOO_EMERGE_FRAMES } from '../creatures/Bugaboo';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawText } from '../ui/TextBox';
 import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
@@ -65,10 +66,7 @@ interface RowSpec {
   readonly loopFps?: number;
 }
 
-/** Matches `ATTACK_ANIM_FRAMES` and `EMERGE_FRAMES` in `src/creatures/Bugaboo.ts`. */
-const SWIPE_GAME_FRAMES = 16;
-const EMERGE_GAME_FRAMES = 34;
-/** Matches `Mob.walkFrame`'s cadence closely enough to judge the gait by. */
+/** Close enough to `Mob.walkFrame`'s cadence to judge the gait by. */
 const WALK_GAME_FRAMES = 40;
 /** The game's own fixed timestep, from `src/core/Scene.ts`. */
 const TICKS_PER_SECOND = 60;
@@ -76,9 +74,9 @@ const TICKS_PER_SECOND = 60;
 const ROWS: ReadonlyArray<RowSpec> = [
   { kind: 'idle', probeState: 'idle_side', loopFps: BUGABOO_IDLE_FPS },
   { kind: 'walk', probeState: 'walk_side', gameFrames: WALK_GAME_FRAMES },
-  { kind: 'swipe', probeState: 'swipe_side', gameFrames: SWIPE_GAME_FRAMES },
+  { kind: 'swipe', probeState: 'swipe_side', gameFrames: BUGABOO_ATTACK_FRAMES },
   { kind: 'breach', probeState: 'breach', loopFps: BUGABOO_BREACH_FPS },
-  { kind: 'emerge', probeState: 'emerge', gameFrames: EMERGE_GAME_FRAMES },
+  { kind: 'emerge', probeState: 'emerge', gameFrames: BUGABOO_EMERGE_FRAMES },
 ];
 
 /** How many frames a row actually holds, from the sheet the game loaded. */

@@ -108,7 +108,7 @@ export class Juicer extends Mob {
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.isEnraged = false;
-    this.speed = JUICER_SPEED;
+    this.setBaseSpeed(JUICER_SPEED);
     this.state = 'idle';
     this.windupTimer = 0;
     this.cooldownTimer = 0;
@@ -130,7 +130,7 @@ export class Juicer extends Mob {
     // Enrage check
     if (!this.isEnraged && this.hp / this.maxHp < ENRAGE_THRESHOLD) {
       this.isEnraged = true;
-      this.speed = JUICER_SPEED_ENRAGED;
+      this.setBaseSpeed(JUICER_SPEED_ENRAGED);
     }
 
     // Update thrown projectile physics

@@ -12,6 +12,14 @@ const KRAKAREN_BRANCH_ROOMS_MAX = 9;
 const LEVEL2_SCATTER_SAFE_ROOMS = 1;
 
 /**
+ * Extra mobs per room. Floor 2 is already past the point where a crawler is
+ * learning the rules, so even its opening rooms carry a bonus — and the
+ * free-roam region past the Krakaren carries the floor's heaviest.
+ */
+const PRE_KRAKAREN_SPAWN_BONUS = 1;
+const POST_KRAKAREN_SPAWN_BONUS = 2;
+
+/**
  * Where floor 2's XP starts drying up, set well above floor 1's curve so a
  * party that descends on schedule never notices it.
  */
@@ -21,6 +29,22 @@ const LEVEL2_XP_FIFTH_LEVEL = 24;
 const LEVEL2_XP_HALF_MULTIPLIER = 0.5;
 const LEVEL2_XP_THIRD_MULTIPLIER = 0.3;
 const LEVEL2_XP_FIFTH_MULTIPLIER = 0.2;
+
+/** Goblin archers per goblin room, and the band they spawn in. */
+const ARCHER_MIN_PER_ROOM = 1;
+const ARCHER_MAX_PER_ROOM = 2;
+const ARCHER_MIN_LEVEL = 3;
+const ARCHER_MAX_LEVEL = 6;
+
+/**
+ * Boss level bands. Both bosses spawned at base stats before this — a Krakaren
+ * Clone gating the floor's only forced gauntlet was weaker than the troglodytes
+ * in the rooms leading to it.
+ */
+const KRAKAREN_MIN_LEVEL = 6;
+const KRAKAREN_MAX_LEVEL = 10;
+const BALL_OF_SWINE_MIN_LEVEL = 5;
+const BALL_OF_SWINE_MAX_LEVEL = 9;
 
 /**
  * Level 2 — "The Dungeon, Level 2".
@@ -68,6 +92,18 @@ export const level2: LevelDef = {
       maxCount: 5,
       minLevel: 3,
       maxLevel: 6,
+      // Floor 2's goblin rooms always carry archers, and up to two of them: by
+      // here the player has met one and knows what it does, so the question the
+      // room asks is whether they can reach it through the melee line.
+      escorts: [
+        {
+          type: 'goblin_archer',
+          minCount: ARCHER_MIN_PER_ROOM,
+          maxCount: ARCHER_MAX_PER_ROOM,
+          minLevel: ARCHER_MIN_LEVEL,
+          maxLevel: ARCHER_MAX_LEVEL,
+        },
+      ],
     },
   ],
   hallwayMobs: [
@@ -75,7 +111,9 @@ export const level2: LevelDef = {
     { type: 'goblin', chance: 0.3, minLevel: 3, maxLevel: 6 },
     { type: 'rat', chance: 0.3, minLevel: 3, maxLevel: 6 },
   ],
-  bossRooms: [{ type: 'krakaren_clone' }],
+  bossRooms: [
+    { type: 'krakaren_clone', minLevel: KRAKAREN_MIN_LEVEL, maxLevel: KRAKAREN_MAX_LEVEL },
+  ],
   progression: {
     gauntlets: [
       {
@@ -85,6 +123,7 @@ export const level2: LevelDef = {
       },
     ],
     scatterSafeRooms: LEVEL2_SCATTER_SAFE_ROOMS,
+    regionSpawnBonus: [PRE_KRAKAREN_SPAWN_BONUS, POST_KRAKAREN_SPAWN_BONUS],
   },
   hasArena: true,
   hasSpiderLab: true,
@@ -101,6 +140,8 @@ export const level2: LevelDef = {
     {
       type: 'ball_of_swine',
       origin: 'arena:0',
+      minLevel: BALL_OF_SWINE_MIN_LEVEL,
+      maxLevel: BALL_OF_SWINE_MAX_LEVEL,
       offsets: [[0, 0]],
       setup: 'setupBallOfSwine',
     },

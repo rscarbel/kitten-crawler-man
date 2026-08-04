@@ -430,6 +430,16 @@ export interface GoblinGear {
   readonly necklace: boolean;
   /** Rag hood pulled over the skull, leaving the ears out. */
   readonly hood: boolean;
+  /**
+   * Arrow quiver slung across the back.
+   *
+   * The archer's whole design job is to be pickable out of a crowd, and a blind
+   * silhouette review found it failing at exactly that: walking and idling, with
+   * the bow hanging along the body, it read as "hunched creature with a tail".
+   * Shafts standing proud of the shoulder are the one cue that survives a 32-px
+   * pure-black silhouette on every frame of every row.
+   */
+  readonly quiver: boolean;
 }
 
 export interface GoblinStyle {
@@ -1210,6 +1220,96 @@ function drawNecklace(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle):
   ctx.restore();
 }
 
+/** Shafts standing out of the quiver's mouth. Three reads as a bundle; two reads as a mistake. */
+const QUIVER_ARROW_COUNT = 3;
+/** How far the quiver's mouth sits behind the spine, in shoulder half-widths. */
+const QUIVER_BACK_OFFSET = 1.15;
+/** Quiver length and width, as fractions of the torso. */
+const QUIVER_LENGTH_FRACTION = 0.66;
+const QUIVER_HALF_WIDTH_FRACTION = 0.17;
+/** How far a shaft stands past the quiver's mouth, as a fraction of its length. */
+const QUIVER_SHAFT_OVERHANG = 0.85;
+/** Lean of the whole bundle off vertical — back and up, never down. */
+// Near vertical. At 28° the tube lay back along the spine and two blind reviews
+// named it a tail; standing it up is what turns the same object into ammunition.
+const QUIVER_TILT = deg(10);
+/** Centres the shaft fan on the quiver's mouth. */
+const QUIVER_SPREAD_CENTRE = 0.5;
+
+/**
+ * The quiver, drawn behind the torso so the body overlaps it.
+ *
+ * Angled back and *up*. A quiver hanging down the back is the shape that read as
+ * a tail; the fletchings clearing the shoulder line are what make the same
+ * object read as ammunition.
+ */
+function drawQuiver(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): void {
+  const p = style.proportions;
+  const { leather, wood, bone, outline } = style.palette;
+  const length = p.torsoLength * QUIVER_LENGTH_FRACTION;
+  const halfWidth = p.torsoLength * QUIVER_HALF_WIDTH_FRACTION;
+  const overhang = length * QUIVER_SHAFT_OVERHANG;
+
+  ctx.save();
+  ctx.translate(spineTop.x - p.shoulderHalfWidth * QUIVER_BACK_OFFSET, spineTop.y);
+  ctx.rotate(lean + QUIVER_TILT);
+
+  // Shafts first, so the tube's mouth covers where they enter it.
+  for (let i = 0; i < QUIVER_ARROW_COUNT; i++) {
+    const spread = (i / (QUIVER_ARROW_COUNT - 1) - QUIVER_SPREAD_CENTRE) * halfWidth * 1.7;
+    const reach = overhang * lerp(0.78, 1, i / (QUIVER_ARROW_COUNT - 1));
+    const shaftHalf = halfWidth * 0.16;
+    ctx.save();
+    ctx.translate(spread, 0);
+    ctx.fillStyle = outline;
+    ctx.fillRect(-shaftHalf * 2, -reach, shaftHalf * 4, reach);
+    ctx.fillStyle = wood.light;
+    ctx.fillRect(-shaftHalf, -reach, shaftHalf * 2, reach);
+    // Fletching: a wedge at the very top, which is the part that has to survive
+    // as a distinct bump on the silhouette.
+    ctx.fillStyle = outline;
+    ctx.beginPath();
+    ctx.moveTo(0, -reach - shaftHalf);
+    ctx.lineTo(-shaftHalf * 4, -reach + overhang * 0.3);
+    ctx.lineTo(shaftHalf * 4, -reach + overhang * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = i % 2 === 0 ? bone.light : bone.mid;
+    ctx.beginPath();
+    ctx.moveTo(0, -reach);
+    ctx.lineTo(-shaftHalf * 2.6, -reach + overhang * 0.26);
+    ctx.lineTo(shaftHalf * 2.6, -reach + overhang * 0.26);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const traceTube = (grow: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(-halfWidth - grow, -grow);
+    ctx.lineTo(halfWidth + grow, -grow);
+    ctx.lineTo(halfWidth * 0.7 + grow, length + grow);
+    ctx.lineTo(-halfWidth * 0.7 - grow, length + grow);
+    ctx.closePath();
+  };
+  ctx.fillStyle = outline;
+  traceTube(p.torsoLength * 0.02);
+  ctx.fill();
+  ctx.fillStyle = leather.mid;
+  traceTube(0);
+  ctx.fill();
+  ctx.fillStyle = rgba(leather.light, 0.6);
+  ctx.fillRect(-halfWidth, 0, halfWidth * 0.55, length);
+  ctx.fillStyle = rgba(leather.shadow, 0.5);
+  ctx.fillRect(halfWidth * 0.3, 0, halfWidth * 0.5, length);
+  // Two binding straps, so the tube is not a plain trapezoid.
+  ctx.fillStyle = leather.shadow;
+  ctx.fillRect(-halfWidth, length * 0.22, halfWidth * 2, length * 0.08);
+  ctx.fillRect(-halfWidth * 0.85, length * 0.66, halfWidth * 1.7, length * 0.08);
+
+  ctx.restore();
+}
+
 // ── Head ─────────────────────────────────────────────────────────────────────
 //
 // Face layout as fractions of the head radius (X fractions of the half-width).
@@ -1717,12 +1817,30 @@ function drawSocketShade(ctx: Ctx, at: Pt, limbWidth: number, skin: Ramp): void 
 /**
  * Anything the goblin carries, drawn in figure space with the origin at the
  * gripping hand and +X down the weapon's own axis.
+ *
+ * Every weapon here is rigid but one. The bow's shape changes frame to frame,
+ * and it learns this frame's draw from `goblinWeapons.setBowDraw`, published by
+ * the choreography immediately before the figure is painted — not through this
+ * signature, because the draw is a property of the *weapon* and putting it on
+ * `GoblinPose` would give every other archetype a field it can only leave at
+ * zero.
  */
 export type PropPainter = (ctx: Ctx, hand: Pt, wristAngle: number) => void;
 
 /** A weapon, plus the geometry the arc gates and the choreography need. */
 export interface GoblinProp {
   readonly paint: PropPainter;
+  /**
+   * The off hand is closed on this weapon and crosses in front of the body,
+   * even though it is not gripping a point on the weapon's own axis.
+   *
+   * Exists for the bow: its draw hand holds the string at the cheek, which is
+   * neither a free hand nor a point along the stave, and it has to be painted
+   * after the torso like any other hand brought across the chest — a draw hand
+   * painted before the body vanishes behind it and the goblin appears to be
+   * shooting a bow nobody is drawing.
+   */
+  readonly offHandCloses?: boolean;
   /** Distance from the grip hand to the business end, in tile units. */
   readonly tipDistance: number;
   /** Where the off hand grips a two-handed weapon, or null for one-handed. */
@@ -1782,7 +1900,8 @@ export function drawGoblin(
     prop.paint(ctx, skeleton.nearArm.end, nearWristAngle);
   };
 
-  const twoHanded = prop !== undefined && prop.offGripDistance !== null;
+  const twoHanded =
+    prop !== undefined && (prop.offGripDistance !== null || prop.offHandCloses === true);
   // The far arm is further from the camera in a three-quarter view, so it is
   // drawn narrower — without this the free arm reads as the same mass as the
   // weapon arm and the figure looks slab-sided. A hand brought across the body
@@ -1822,6 +1941,10 @@ export function drawGoblin(
   );
 
   if (pose.propBehind) paintProp();
+
+  // Behind the torso: it is on the creature's back, and painting it in front
+  // would put a leather tube across its chest.
+  if (style.gear.quiver) drawQuiver(ctx, skeleton.spineTop, skeleton.lean, style);
 
   ctx.save();
   ctx.translate(skeleton.hip.x, skeleton.hip.y);
@@ -1908,15 +2031,26 @@ const ARCHETYPE_HEIGHTS: Record<GoblinArchetype, number> = {
   axe: 0.84,
   mace: 0.8,
   warhammer: 0.86,
+  /**
+   * The tallest of the five, and the only one that is *thin*.
+   *
+   * The other four are identified by weapon and ear length; an archer has to be
+   * identifiable before its bow is drawn, because the whole point of it is that
+   * the player picks it out of a mixed room and goes for it first. Height plus a
+   * narrow build is the one silhouette cue that survives the bow being held
+   * along the body at rest.
+   */
+  bow: 0.88,
 };
 
-export type GoblinArchetype = 'sword' | 'axe' | 'mace' | 'warhammer';
+export type GoblinArchetype = 'sword' | 'axe' | 'mace' | 'warhammer' | 'bow';
 
 export const GOBLIN_ARCHETYPES: readonly GoblinArchetype[] = [
   'sword',
   'axe',
   'mace',
   'warhammer',
+  'bow',
 ] as const;
 
 /** Filthy rag: the loincloth, the hood and every binding. */
@@ -2037,6 +2171,27 @@ const WARHAMMER_SKIN: Ramp = {
   rim: '#81b899',
 };
 
+/**
+ * A vivid spring green — the archer separates from the other four by *chroma and
+ * value*, not by hue. The others are a desaturated olive, a yellow-green, a cold
+ * teal and a gold; this is the only one that is both bright and fully saturated,
+ * so it is still the figure the eye lands on first in a mixed pack.
+ *
+ * The span from `shadow` to `rim` is close to the widest in the set on purpose.
+ * An earlier cold-blue pass sat every tone under the darkest floor, which bought
+ * separation from the ground and left nothing legible *inside* the silhouette at
+ * 32 px — a face and a fist need internal contrast more than the outline needs
+ * to win against the floor, and the near-black `shadow` plus the pale `rim` give
+ * the figure both.
+ */
+const BOW_SKIN: Ramp = {
+  shadow: '#0d2515',
+  dark: '#1e5230',
+  mid: '#3f9e57',
+  light: '#6ec97f',
+  rim: '#b6f0bd',
+};
+
 const SWORD_BUILD: GoblinProportions = {
   thighLength: 0.29,
   shinLength: 0.27,
@@ -2061,7 +2216,7 @@ const SWORD_BUILD: GoblinProportions = {
 const SWORD_STYLE: GoblinStyle = {
   palette: goblinPalette(SWORD_SKIN),
   proportions: SWORD_BUILD,
-  gear: { pauldron: false, bracer: true, greave: false, necklace: true, hood: false },
+  gear: { pauldron: false, bracer: true, greave: false, necklace: true, hood: false, quiver: false },
   spineLean: deg(8),
   // Three, not four: `MAX_EAR_NOTCHES` clamps past that anyway, and a fourth
   // bite cuts the ear into separate shards rather than nicking one edge.
@@ -2092,7 +2247,7 @@ const AXE_BUILD: GoblinProportions = {
 const AXE_STYLE: GoblinStyle = {
   palette: goblinPalette(AXE_SKIN),
   proportions: AXE_BUILD,
-  gear: { pauldron: true, bracer: false, greave: true, necklace: false, hood: false },
+  gear: { pauldron: true, bracer: false, greave: true, necklace: false, hood: false, quiver: false },
   spineLean: deg(12),
   earNotches: 3,
 };
@@ -2128,7 +2283,7 @@ const MACE_BUILD: GoblinProportions = {
 const MACE_STYLE: GoblinStyle = {
   palette: goblinPalette(MACE_SKIN),
   proportions: MACE_BUILD,
-  gear: { pauldron: false, bracer: true, greave: false, necklace: false, hood: true },
+  gear: { pauldron: false, bracer: true, greave: false, necklace: false, hood: true, quiver: false },
   spineLean: deg(16),
   earNotches: 2,
 };
@@ -2157,9 +2312,62 @@ const WARHAMMER_BUILD: GoblinProportions = {
 const WARHAMMER_STYLE: GoblinStyle = {
   palette: goblinPalette(WARHAMMER_SKIN),
   proportions: WARHAMMER_BUILD,
-  gear: { pauldron: true, bracer: true, greave: true, necklace: true, hood: false },
+  gear: { pauldron: true, bracer: true, greave: true, necklace: true, hood: false, quiver: false },
   spineLean: deg(20),
   earNotches: 3,
+};
+
+/**
+ * Long-limbed and narrow: the longest arms in the set on the narrowest
+ * shoulders, because a bow is drawn with the whole span of both arms and a
+ * stocky archer cannot reach full draw without the rig clamping the arm.
+ *
+ * The ears are the longest of the five (0.38). With the bow held along the body
+ * at rest there is no weapon shape to name it by, so the ears carry the whole
+ * identity on every non-shooting frame.
+ */
+const BOW_BUILD: GoblinProportions = {
+  thighLength: 0.33,
+  shinLength: 0.32,
+  footHeight: 0.05,
+  // Long torso on narrow hips, and shoulders nearly twice the hips' width. Lean
+  // is not the same as *tubular*: at equal shoulder and hip width the figure had
+  // no chest for a bow arm to hang off, and a blind review read the whole thing
+  // as a pipe. Wide-and-flat is also the shape nothing else in the goblin set
+  // has — the other four are wide *and* thick.
+  torsoLength: 0.45,
+  neckLength: 0.07,
+  headRadius: 0.175,
+  headWidthFactor: 0.95,
+  shoulderHalfWidth: 0.19,
+  hipHalfWidth: 0.115,
+  bellyBulge: 0.0,
+  upperArmLength: 0.46,
+  forearmLength: 0.5,
+  // Legs a good deal thicker than the arms, and not only for looks: the gore
+  // sheet cuts a limb straight off these numbers, and at 0.115 against 0.1 the
+  // severed arm and the severed leg were the same 16-px blob (gate G9c).
+  legWidth: 0.135,
+  armWidth: 0.09,
+  handRadius: 0.092,
+  footLength: 0.34,
+  earLength: 0.38,
+  noseProjection: 0.085,
+};
+
+const BOW_STYLE: GoblinStyle = {
+  palette: goblinPalette(BOW_SKIN),
+  proportions: BOW_BUILD,
+  // A hood, a bracer and a quiver, and nothing heavy: an archer that has looted
+  // plate is an archer that cannot draw. The quiver is not decoration — it is
+  // what makes the walk and idle silhouettes say "archer" at all.
+  // The greave is load-bearing in a way that has nothing to do with armour: the
+  // gore sheet cuts limbs off the same proportions, and with this archer's long
+  // arms its severed arm and severed leg came out as the same 16-px blob (gate
+  // G9c). A shin guard is what makes the leg nameable on the floor.
+  gear: { pauldron: false, bracer: true, greave: true, necklace: false, hood: true, quiver: true },
+  spineLean: deg(4),
+  earNotches: 2,
 };
 
 export const GOBLIN_STYLES: Record<GoblinArchetype, GoblinStyle> = {
@@ -2167,6 +2375,7 @@ export const GOBLIN_STYLES: Record<GoblinArchetype, GoblinStyle> = {
   axe: AXE_STYLE,
   mace: MACE_STYLE,
   warhammer: WARHAMMER_STYLE,
+  bow: BOW_STYLE,
 };
 
 /**
@@ -2188,4 +2397,5 @@ export const ARCHETYPE_SCALE: Record<GoblinArchetype, number> = {
   axe: ARCHETYPE_HEIGHTS.axe / figureHeight(AXE_BUILD),
   mace: ARCHETYPE_HEIGHTS.mace / figureHeight(MACE_BUILD),
   warhammer: ARCHETYPE_HEIGHTS.warhammer / figureHeight(WARHAMMER_BUILD),
+  bow: ARCHETYPE_HEIGHTS.bow / figureHeight(BOW_BUILD),
 };

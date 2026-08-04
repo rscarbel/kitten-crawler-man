@@ -52,6 +52,13 @@ const STAIRWELL_MENU_TITLE_TEXT_COLOR = '#e9d5ff';
 const STAIRWELL_MENU_PROMPT_TEXT_COLOR = '#94a3b8';
 const STAIRWELL_MENU_HINT_TEXT_COLOR = '#64748b';
 
+/** A point-in-time copy of the descend prompt's state. */
+export interface StairwellCheckpoint {
+  dismissed: boolean;
+  onStairwell: boolean;
+  menuOpen: boolean;
+}
+
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
@@ -62,6 +69,26 @@ export class StairwellSystem implements GameSystem {
     private readonly levelDef: LevelDef,
     private readonly onDescend: () => void,
   ) {}
+
+  captureCheckpoint(): StairwellCheckpoint {
+    return {
+      dismissed: this.dismissed,
+      onStairwell: this.onStairwell,
+      menuOpen: this._menuOpen,
+    };
+  }
+
+  /**
+   * `onStairwell` is restored alongside the flags it gates, because `detect`
+   * reads it as the *previous* frame's answer: leaving it stale would make the
+   * first frame after the restore look like a fresh arrival and pop the descend
+   * menu at a player who has just respawned.
+   */
+  restoreCheckpoint(snapshot: StairwellCheckpoint): void {
+    this.dismissed = snapshot.dismissed;
+    this.onStairwell = snapshot.onStairwell;
+    this._menuOpen = snapshot.menuOpen;
+  }
 
   get menuOpen(): boolean {
     return this._menuOpen;

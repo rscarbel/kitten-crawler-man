@@ -10,6 +10,7 @@ import {
   CRATE,
   TORCH,
   PROP_DAMAGE_STAGE_CRACKED,
+  type TileContent,
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
 import { drawSpriteKey, progressFrameIndex } from '../core/SpriteRenderer';
@@ -155,7 +156,7 @@ const INSTANT_DESTROY_DAMAGE = Number.MAX_SAFE_INTEGER;
 /** Coins a break drops: floor 1 → 1–2, floor 2 → 2–3, and so on. */
 const COIN_SPREAD = 1;
 
-interface PropHealth {
+export interface PropHealth {
   tileX: number;
   tileY: number;
   kind: DestructiblePropKind;
@@ -171,11 +172,47 @@ interface ShatterBurst {
   frames: number;
 }
 
-interface Wreckage {
+export interface Wreckage {
   tileX: number;
   tileY: number;
   kind: DestructiblePropKind;
   life: number;
+}
+
+/**
+ * The map-side half of one prop, which the tile owns rather than this system.
+ *
+ * A smashed prop is smashed *on the GameMap*: its tile becomes floor and its
+ * health entry is deleted outright, so `health` alone carries no record that the
+ * prop ever existed. Without the tile there is nothing to rewind it from.
+ */
+export interface PropTileState {
+  tileX: number;
+  tileY: number;
+  type: number;
+  damageStage: number | undefined;
+  groundType: number | undefined;
+}
+
+/**
+ * An undamaged prop's tile has these fields *absent* rather than set to
+ * `undefined`, and the renderers read absence — so a restore has to delete
+ * them, not write undefined over them.
+ */
+function applyPropTileState(tile: TileContent, state: PropTileState): void {
+  if (state.damageStage === undefined) delete tile.damageStage;
+  else tile.damageStage = state.damageStage;
+
+  if (state.groundType === undefined) delete tile.groundType;
+  else tile.groundType = state.groundType;
+}
+
+/** Everything a safe-room checkpoint has to rewind about the floor's props. */
+export interface DestructiblePropCheckpoint {
+  health: ReadonlyMap<string, PropHealth>;
+  smashCounts: SmashCounts;
+  wreckage: ReadonlyArray<Wreckage>;
+  propTiles: ReadonlyArray<PropTileState>;
 }
 
 interface Splinter {
@@ -363,6 +400,96 @@ export class DestructiblePropSystem implements GameSystem {
       }
     }
     return hitAnything;
+  }
+
+  /**
+   * Snapshots the floor's props so a death rewinds every crate the player
+   * cracked or smashed since they entered the safe room.
+   *
+   * `smashCounts` is in here because it is progress, not effect: it feeds the
+   * achievement tally, and a break that has been rewound must not still be
+   * counted. The wreckage decals come along for the same reason the tree
+   * system's stumps do — a decal is what is left *of a destroyed prop*, so
+   * leaving one lying under a crate that is standing again would be the world
+   * disagreeing with itself for the decal's whole minute of life. The shatter
+   * bursts and the flying splinters are deliberately not captured: they are
+   * sub-second animations of the moment of breaking, they mark nothing, and both
+   * have burnt out long before the death screen clears.
+   *
+   * Every container is copied on the way out and again on the way back in
+   * (`restoreCheckpoint`), the `PropHealth` values included, because one
+   * snapshot is restored once per death and handing the stored objects to the
+   * live map would let the first restore's gameplay mutate the snapshot.
+   */
+  captureCheckpoint(): DestructiblePropCheckpoint {
+    const health = new Map<string, PropHealth>();
+    for (const [key, prop] of this.health) health.set(key, { ...prop });
+    return {
+      health,
+      smashCounts: { ...this.smashCounts },
+      wreckage: this.wreckage.map((decal) => ({ ...decal })),
+      propTiles: this.capturePropTiles(),
+    };
+  }
+
+  /**
+   * Sweeps the whole grid for prop tiles. O(map) once per safe-room entry, and
+   * only tiles that *are* props at capture time need recording: nothing in the
+   * game builds a crate, so a tile that is floor now can never become a prop
+   * that would have to be rewound.
+   */
+  private capturePropTiles(): PropTileState[] {
+    const tiles: PropTileState[] = [];
+    const structure = this.gameMap.structure;
+    for (let ty = 0; ty < structure.length; ty++) {
+      const row = structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        const tile = row[tx];
+        if (kindForTileType(tile.type) === null) continue;
+        tiles.push({
+          tileX: tx,
+          tileY: ty,
+          type: tile.type,
+          damageStage: tile.damageStage,
+          groundType: tile.groundType,
+        });
+      }
+    }
+    return tiles;
+  }
+
+  restoreCheckpoint(snapshot: DestructiblePropCheckpoint): void {
+    this.health.clear();
+    for (const [key, prop] of snapshot.health) this.health.set(key, { ...prop });
+
+    this.smashCounts.wood = snapshot.smashCounts.wood;
+    this.smashCounts.iron = snapshot.smashCounts.iron;
+
+    this.wreckage.length = 0;
+    for (const decal of snapshot.wreckage) this.wreckage.push({ ...decal });
+
+    this.restorePropTiles(snapshot.propTiles);
+  }
+
+  /**
+   * Puts the map back under the rewound system: a prop smashed after the
+   * checkpoint stands again — solid to both players and to mob pathfinding,
+   * since walkability is read off the tile type — and one merely cracked loses
+   * its cracked art.
+   */
+  private restorePropTiles(propTiles: ReadonlyArray<PropTileState>): void {
+    for (const state of propTiles) {
+      const tile = this.gameMap.structure[state.tileY][state.tileX];
+      const isUnchanged =
+        tile.type === state.type &&
+        tile.damageStage === state.damageStage &&
+        tile.groundType === state.groundType;
+      if (isUnchanged) continue;
+
+      tile.type = state.type;
+      applyPropTileState(tile, state);
+      this.gameMap.markTileDirty(state.tileX, state.tileY);
+    }
   }
 
   /**

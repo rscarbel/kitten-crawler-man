@@ -22,7 +22,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
-import { QuestManager } from '../core/QuestManager';
+import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
@@ -117,6 +117,14 @@ interface CluePoint {
   pages: ReadonlyArray<DialogPage>;
 }
 
+export interface MurderMysteryQuestCheckpoint {
+  questStatuses: Array<[string, QuestStatus]>;
+  phase: MurderQuestPhase;
+  swarmCleared: boolean;
+  swarm: Mob[];
+  gumgum: GumGum | null;
+}
+
 export class MurderMysteryQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
 
@@ -124,6 +132,15 @@ export class MurderMysteryQuestSystem implements GameSystem {
   private readonly dialog: QuestDialog;
 
   private gumgum: GumGum | null = null;
+  /**
+   * Whether the creature `gumgum` points at is still in the scene's mob array.
+   *
+   * `finishHook` is the only place she leaves it, and it splices her out for
+   * good — the scene's checkpoint rewind can revive a corpse but cannot re-add
+   * a mob it no longer holds. Tracked here rather than searched for in the mob
+   * array, because "she was removed" is a fact this system alone creates.
+   */
+  private gumgumInWorld = false;
   private readonly gumgumTile: { x: number; y: number } | null;
   private readonly alleyTile: { x: number; y: number } | null;
   private readonly clues: CluePoint[] = [];
@@ -286,13 +303,84 @@ export class MurderMysteryQuestSystem implements GameSystem {
     const gumgum = new GumGum(this.gumgumTile.x, this.gumgumTile.y, TILE_SIZE);
     gumgum.setMap(this.gameMap);
     this.gumgum = gumgum;
+    this.gumgumInWorld = true;
     this.addMob(gumgum);
+  }
+
+  /**
+   * Re-creates the hook NPC when a restore rewinds the quest to a phase that
+   * expects her on the street but she has already walked off into the crowd.
+   *
+   * The checkpoint flags are stamped on because she now belongs to the
+   * checkpoint's world: without them the next rewind would read her as a
+   * post-checkpoint arrival and drop her, putting the ghost straight back.
+   */
+  private respawnGumGumForCheckpoint(): void {
+    this.spawnGumGum();
+    const gumgum = this.gumgum;
+    if (gumgum === null) return;
+    gumgum.presentAtCheckpoint = true;
+    gumgum.aliveAtCheckpoint = true;
   }
 
   // ── Public surface consumed by DungeonScene ───────────────────────────────
 
   get isDialogOpen(): boolean {
     return this.dialog.isOpen;
+  }
+
+  /**
+   * Snapshots the mystery so a death inside a safe room rewinds every beat the
+   * player completed after checking in.
+   *
+   * The swarm mobs are stored as references rather than copies: at capture time
+   * the field held those exact creatures, and the scene's checkpoint restore
+   * revives the ones that died afterwards. `gumgum` is a reference too, but it
+   * is read only as "was she on the street at the checkpoint?" — see
+   * `restoreGumGum`, which never hands the stored creature back to the field.
+   *
+   * The swarm array is copied here *and* again in `restoreCheckpoint`, because
+   * one snapshot is restored once per death — handing the stored array straight
+   * to the live field would let a later `spawnNightSwarm` mutate the snapshot.
+   *
+   * `clues` is deliberately absent: the array is built once in the constructor
+   * and never mutated, and the per-clue found flags it is read against live on
+   * MurderQuestProgress, which carries its own capture/restore pair.
+   */
+  captureCheckpoint(): MurderMysteryQuestCheckpoint {
+    return {
+      questStatuses: this.questManager.snapshotStatuses(),
+      phase: this.phase,
+      swarmCleared: this.swarmCleared,
+      swarm: [...this.swarm],
+      gumgum: this.gumgum,
+    };
+  }
+
+  restoreCheckpoint(snapshot: MurderMysteryQuestCheckpoint): void {
+    this.questManager.restoreStatuses(snapshot.questStatuses);
+    this.phase = snapshot.phase;
+    this.swarmCleared = snapshot.swarmCleared;
+    this.swarm = [...snapshot.swarm];
+    this.restoreGumGum(snapshot.gumgum);
+  }
+
+  /**
+   * A snapshot taken before the hook holds the creature that was standing on
+   * the street at the time; if the player then heard the hook, that creature
+   * has since been spliced out of the world and re-pointing at it would leave
+   * an invisible, un-tickable NPC still offering its dialog.
+   *
+   * The live `gumgumInWorld` flag decides, not the snapshot: whichever GumGum is
+   * currently on the street is the right one to keep — she is stationary, so no
+   * repositioning is owed — and only a world with none at all needs a new one.
+   */
+  private restoreGumGum(snapshotGumGum: GumGum | null): void {
+    if (snapshotGumGum === null) {
+      this.gumgum = null;
+      return;
+    }
+    if (!this.gumgumInWorld) this.respawnGumGumForCheckpoint();
   }
 
   /** Returns quest markers for the minimap. */
@@ -428,6 +516,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       this.lastCtx.mobGrid.remove(this.gumgum);
     }
     this.gumgum = null;
+    this.gumgumInWorld = false;
     this.phase = 'body_waiting';
     this.progress.stage = 'body_waiting';
   }

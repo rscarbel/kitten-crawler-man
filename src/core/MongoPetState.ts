@@ -50,6 +50,50 @@ export interface MongoPetState {
   restingUntilFull: boolean;
 }
 
+/**
+ * A point-in-time copy of the pet state, for the in-run safe-room checkpoint.
+ *
+ * Every field is a primitive, so the record itself is the only container that
+ * needs copying — and it is copied on the way out *and* on the way back in,
+ * because the player can die many times against one checkpoint.
+ */
+export interface MongoPetStateCheckpoint {
+  hp: number;
+  regenFrames: number;
+  scaledAgainstMaxHp: number;
+  summonLocked: boolean;
+  restingUntilFull: boolean;
+}
+
+export function captureMongoPetState(state: MongoPetState): MongoPetStateCheckpoint {
+  return {
+    hp: state.hp,
+    regenFrames: state.regenFrames,
+    scaledAgainstMaxHp: state.scaledAgainstMaxHp,
+    summonLocked: state.summonLocked,
+    restingUntilFull: state.restingUntilFull,
+  };
+}
+
+/**
+ * Rewinds the pet state in place.
+ *
+ * In place because this object is threaded by reference through every scene and
+ * through `MongoSystem` itself — replacing it would leave both holding the old
+ * one. Must run *after* `MongoSystem.dismiss`, which writes the live creature's
+ * remaining HP into these same fields on its way out.
+ */
+export function restoreMongoPetState(
+  state: MongoPetState,
+  snapshot: MongoPetStateCheckpoint,
+): void {
+  state.hp = snapshot.hp;
+  state.regenFrames = snapshot.regenFrames;
+  state.scaledAgainstMaxHp = snapshot.scaledAgainstMaxHp;
+  state.summonLocked = snapshot.summonLocked;
+  state.restingUntilFull = snapshot.restingUntilFull;
+}
+
 export function createMongoPetState(
   hp: number,
   maxHp: number,
@@ -104,8 +148,52 @@ export function tickMongoRegen(state: MongoPetState, maxHp: number): void {
   if (state.hp >= maxHp) state.restingUntilFull = false;
 }
 
+/**
+ * Brings the off-duty recovery forward by `frames`, returning the wait that
+ * actually removed.
+ *
+ * The return value is the point of the function. `frames` is what was offered,
+ * not what was taken: the last kill before he comes up only cuts the seconds
+ * that were left, and one landing on a pet who is already fit cuts nothing.
+ * Anything reporting the boost to the player has to say what happened, not what
+ * was asked for.
+ *
+ * Carries the leftover into `regenFrames` rather than zeroing it the way an
+ * ordinary tick does, because a boost is a whole chunk of time arriving at once
+ * and dropping its remainder would make a large one worth less than the sum of
+ * the small ones it replaced.
+ */
+export function advanceMongoRecovery(state: MongoPetState, maxHp: number, frames: number): number {
+  const waitBefore = mongoFramesUntilReady(state, maxHp);
+  if (waitBefore <= 0 || frames <= 0) return 0;
+
+  state.regenFrames += frames;
+  const healPerTick = Math.max(1, Math.ceil(maxHp * MONGO_REGEN_PERCENT));
+  while (state.regenFrames >= MONGO_REGEN_INTERVAL_FRAMES && state.hp < maxHp) {
+    state.regenFrames -= MONGO_REGEN_INTERVAL_FRAMES;
+    state.hp = Math.min(maxHp, state.hp + healPerTick);
+  }
+  if (state.hp >= maxHp) {
+    state.regenFrames = 0;
+    state.restingUntilFull = false;
+  }
+
+  return waitBefore - mongoFramesUntilReady(state, maxHp);
+}
+
 const MONGO_REGEN_INTERVAL_FRAMES = 78;
 const MONGO_REGEN_PERCENT = 0.01;
+
+/**
+ * How much recovery one kill takes off the clock: exactly one regen tick.
+ *
+ * A kill is worth the same wait a tick of resting is, which is the whole idea —
+ * pressing on is never slower than standing still, and the pet's recovery is one
+ * more thing the fight pays for. Deliberately not scaled by the mob: a rat and a
+ * boss both mean the party moved forward, and rating them would push the player
+ * toward farming whichever one paid best.
+ */
+export const MONGO_KILL_RECOVERY_FRAMES = MONGO_REGEN_INTERVAL_FRAMES;
 
 /**
  * The HP he has to have recovered before he can be sent back in.

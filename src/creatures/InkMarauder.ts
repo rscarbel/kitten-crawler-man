@@ -77,6 +77,8 @@ export class InkMarauder extends Mob {
   /** The mob the in-flight swing is aimed at — damage lands mid-animation. */
   private strikeTarget: Mob | null = null;
   private lifespanRemaining: number;
+  /** The full lifespan this one was summoned with, kept so a revive can restore it. */
+  private readonly lifespanFrames: number;
   private age = 0;
   private swimBlend = 0;
 
@@ -88,10 +90,23 @@ export class InkMarauder extends Mob {
     form: InkMarauderForm = randomForm(),
   ) {
     super(tileX, tileY, tileSize, MARAUDER_HP, MARAUDER_SPEED);
+    this.lifespanFrames = lifespanFrames;
     this.lifespanRemaining = lifespanFrames;
     this.form = form;
     this.displayName = FORM_NAMES[form];
     this.description = FORM_DESCRIPTIONS[form];
+  }
+
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    // A spent lifespan is this mob's own suicide condition, so a revived
+    // marauder would dissipate on its first frame and re-announce its death.
+    this.lifespanRemaining = this.lifespanFrames;
+    this.age = 0;
+    this.attackCooldown = 0;
+    this.attackAnimTimer = 0;
+    this.strikeTarget = null;
+    this.swimBlend = 0;
   }
 
   /** Ink Marauders are allies — never hostile to players. */

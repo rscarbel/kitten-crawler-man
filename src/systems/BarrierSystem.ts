@@ -33,7 +33,7 @@ const SLOW_PULSE_ALPHA_RANGE = 0.08;
 /** Pulse speed for slow zone ring animation. */
 const SLOW_PULSE_SPEED = 0.004;
 
-interface PlacedBarrier {
+export interface PlacedBarrier {
   tileX: number;
   tileY: number;
   worldX: number; // = tileX * TILE_SIZE
@@ -42,11 +42,37 @@ interface PlacedBarrier {
   placer: Player; // who placed it (used for pickup-back logic)
 }
 
-interface PendingConstruct {
+export interface PendingConstruct {
   player: Player;
   hotbarIdx: number;
   itemId: BarrierItemId;
   framesLeft: number;
+}
+
+export interface BarrierCheckpoint {
+  barriers: PlacedBarrier[];
+  pending: PendingConstruct | null;
+}
+
+/** `placer` stays a bare reference: it decides who reclaims the item. */
+function clonePlacedBarrier(barrier: PlacedBarrier): PlacedBarrier {
+  return {
+    tileX: barrier.tileX,
+    tileY: barrier.tileY,
+    worldX: barrier.worldX,
+    worldY: barrier.worldY,
+    itemId: barrier.itemId,
+    placer: barrier.placer,
+  };
+}
+
+function clonePendingConstruct(construct: PendingConstruct): PendingConstruct {
+  return {
+    player: construct.player,
+    hotbarIdx: construct.hotbarIdx,
+    itemId: construct.itemId,
+    framesLeft: construct.framesLeft,
+  };
 }
 
 export class BarrierSystem implements GameSystem {
@@ -85,6 +111,28 @@ export class BarrierSystem implements GameSystem {
   /** Cancel any in-progress construction (e.g. player dies or pauses). */
   cancelConstruct(): void {
     this.pending = null;
+  }
+
+  captureCheckpoint(): BarrierCheckpoint {
+    return {
+      barriers: this.barriers.map(clonePlacedBarrier),
+      pending: this.pending === null ? null : clonePendingConstruct(this.pending),
+    };
+  }
+
+  /**
+   * A barrier placed after the capture has to leave the map, otherwise it stays
+   * standing while the item that paid for it returns to the rewound inventory.
+   */
+  restoreCheckpoint(snapshot: BarrierCheckpoint): void {
+    this.barriers = snapshot.barriers.map(clonePlacedBarrier);
+    this.pending = snapshot.pending === null ? null : clonePendingConstruct(snapshot.pending);
+    // Barriers that just vanished can no longer clear these flags themselves,
+    // so a mob standing in a removed slow zone would stay slowed forever.
+    for (const mob of this.slowedLastFrame) {
+      mob.slowedByBarrier = false;
+    }
+    this.slowedLastFrame.length = 0;
   }
 
   // Update

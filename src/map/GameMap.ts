@@ -65,6 +65,7 @@ import {
   type QuestRoomData,
   type TreasureRoomData,
   type SpiderLabRoomData,
+  type MobSpawnPoint,
 } from './DungeonGenerator';
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
 import type { CampSite } from './overworld/camps';
@@ -323,7 +324,7 @@ export class GameMap {
   /** Tile coordinates where the player should spawn (centre of the first room). */
   startTile: { x: number; y: number } = { x: 15, y: 15 };
   /** Tile centres of all rooms except the start and safe rooms — used for mob placement. */
-  mobSpawnPoints: Array<{ x: number; y: number; w: number; h: number }> = [];
+  mobSpawnPoints: MobSpawnPoint[] = [];
   /** Tile coordinates inside hallways (away from rooms) — used for rat spawning. */
   hallwaySpawnPoints: Array<{ x: number; y: number }> = [];
   /** All safe rooms on this map (bounds + centre in tile coords). */
@@ -1834,6 +1835,45 @@ export class GameMap {
   }
 
   /**
+   * The runtime mutations a safe-room checkpoint has to be able to put back.
+   *
+   * "Permanent" in `blockTilePermanently` means "for the map's lifetime", which
+   * is not the same as "for the run's": a wall a quest raised after the
+   * checkpoint has to come down again when that quest is rewound, or the player
+   * respawns into a floor sealed by an event that no longer happened.
+   */
+  captureCheckpoint(): GameMapCheckpoint {
+    return {
+      arenaDoorLocked: this.arenaDoorLocked,
+      permanentBlockedTiles: [...this.permanentBlockedTiles],
+      stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
+    };
+  }
+
+  restoreCheckpoint(snapshot: GameMapCheckpoint): void {
+    this.arenaDoorLocked = snapshot.arenaDoorLocked;
+
+    // The mask is only rebuilt wholesale when the structure changes, so a key
+    // dropped from the set without its bit being cleared leaves the tile
+    // blocked until the next regeneration — which for a dungeon floor is never.
+    const restoredKeys = new Set(snapshot.permanentBlockedTiles);
+    for (const key of this.permanentBlockedTiles) {
+      if (restoredKeys.has(key)) continue;
+      this.removeBlockFlag(tileKeyX(key), tileKeyY(key), BLOCK_PERMANENT);
+    }
+    this.permanentBlockedTiles.clear();
+    for (const key of restoredKeys) {
+      this.permanentBlockedTiles.add(key);
+      this.addBlockFlag(tileKeyX(key), tileKeyY(key), BLOCK_PERMANENT);
+    }
+
+    // Through the setter, which owns the BLOCK_STAIRWELL bits as well as the
+    // list. This is what re-hides the arena stairwell that `unlockArenaStairwell`
+    // revealed — that method appends and has no inverse of its own.
+    this.setStairwellTiles(snapshot.stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })));
+  }
+
+  /**
    * Every tile of `type`, in row-major order. The result is cached per map and
    * must be treated as read-only. Only for tile types that are fixed for a map's
    * lifetime — a type a runtime event can create or destroy would go stale.
@@ -2213,4 +2253,15 @@ export class GameMap {
       this._overlayCache,
     );
   }
+}
+
+/**
+ * The map mutations a checkpoint restore undoes. Everything else about a map is
+ * either fixed at generation or derived, so it needs no snapshot.
+ */
+export interface GameMapCheckpoint {
+  arenaDoorLocked: boolean;
+  /** `tileCoordKey` values, so the entries survive a structure replacement. */
+  permanentBlockedTiles: number[];
+  stairwellTiles: ReadonlyArray<{ x: number; y: number }>;
 }

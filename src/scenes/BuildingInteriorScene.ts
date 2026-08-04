@@ -811,6 +811,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.floatingText.dispose();
     this.ambientSound?.dispose();
     this.bopca?.dispose();
+    // Drops the pack-alert grid. It is a module-level handle, so an interior
+    // that exited without this leaves its encounter's mobs — and through them
+    // its map — reachable for the rest of the page's life.
+    this.combat?.mobLoop.dispose();
     // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
     clearButtonMouseState();
     if (this.escHandler) {

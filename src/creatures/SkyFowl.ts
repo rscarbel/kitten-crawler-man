@@ -84,10 +84,15 @@ export class SkyFowl extends Mob {
     this.bakedCanvas = null;
   }
 
+  /** Re-bakes the clothing a checkpoint revive needs back; the palette outlives the canvas. */
+  override reacquireDisposedResources(): void {
+    this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.isAggressive = false;
-    this.speed = FOWL_SPEED_NEUTRAL;
+    this.setBaseSpeed(FOWL_SPEED_NEUTRAL);
     this.peckCooldown = 0;
     this.peckAnimTimer = 0;
   }
@@ -111,7 +116,7 @@ export class SkyFowl extends Mob {
     super.takeDamageFrom(amount, attacker, damageType);
     if (amount > 0 && !this.isAggressive) {
       this.isAggressive = true;
-      this.speed = FOWL_SPEED_AGGRO;
+      this.setBaseSpeed(FOWL_SPEED_AGGRO);
     }
   }
 

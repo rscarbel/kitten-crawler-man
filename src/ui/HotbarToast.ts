@@ -6,7 +6,7 @@
  * else. The outline is what carries them over whatever the world draws behind.
  */
 
-import { drawText } from './TextBox';
+import { ToastStack } from './ToastStack';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 /** How long a notice stays up — 2.5s at 60 fps, a glance without being a fixture. */
@@ -22,33 +22,29 @@ const TEXT_COLOR = '#f8fafc';
 const OUTLINE_COLOR = 'rgba(0,0,0,0.9)';
 const OUTLINE_WIDTH = 4;
 
-interface Notice {
-  text: string;
-  ticksLeft: number;
-}
-
 export class HotbarToast {
-  private readonly notices: Notice[] = [];
+  private readonly stack = new ToastStack({
+    displayTicks: DISPLAY_TICKS,
+    fadeTicks: FADE_TICKS,
+    maxVisible: MAX_VISIBLE,
+    fontSize: FONT_SIZE,
+    lineHeight: LINE_HEIGHT,
+    color: TEXT_COLOR,
+    outline: OUTLINE_COLOR,
+    outlineWidth: OUTLINE_WIDTH,
+  });
 
   /**
    * Show a line above the hotbar. Re-showing a line that is already up restarts
-   * its timer rather than stacking a second copy of the same words — and moves
-   * it back to the newest row, because `render` reads the array as oldest-first
-   * and a refreshed line outliving the one below it would shuffle the rows.
+   * its timer rather than stacking a second copy of the same words — these are
+   * sentences, and the same sentence twice is the same information twice.
    */
   show(text: string): void {
-    const alreadyShowingIndex = this.notices.findIndex((notice) => notice.text === text);
-    if (alreadyShowingIndex !== -1) this.notices.splice(alreadyShowingIndex, 1);
-    this.notices.push({ text, ticksLeft: DISPLAY_TICKS });
-    while (this.notices.length > MAX_VISIBLE) this.notices.shift();
+    this.stack.show(text, true);
   }
 
   update(): void {
-    for (const notice of this.notices) notice.ticksLeft--;
-    const surviving = this.notices.filter((notice) => notice.ticksLeft > 0);
-    if (surviving.length === this.notices.length) return;
-    this.notices.length = 0;
-    this.notices.push(...surviving);
+    this.stack.update();
   }
 
   /**
@@ -58,32 +54,13 @@ export class HotbarToast {
    *   narrow canvases.
    */
   render(ctx: CanvasRenderingContext2D, hotbarBandHeight: number): void {
-    if (this.notices.length === 0) return;
+    if (this.stack.isEmpty) return;
     const bottomRowY = viewportHeight() - hotbarBandHeight - GAP_ABOVE_HOTBAR - FONT_SIZE;
-    const centerX = viewportWidth() / 2;
-    const newestIndex = this.notices.length - 1;
-
-    this.notices.forEach((notice, index) => {
-      // Newest sits closest to the bar, so an arriving line never shoves the one
-      // the player is mid-way through reading.
-      const rowsAboveBottom = newestIndex - index;
-      const fading = notice.ticksLeft < FADE_TICKS;
-      drawText(ctx, notice.text, {
-        x: centerX,
-        y: bottomRowY - rowsAboveBottom * LINE_HEIGHT,
-        size: FONT_SIZE,
-        bold: true,
-        align: 'center',
-        color: TEXT_COLOR,
-        outline: OUTLINE_COLOR,
-        outlineWidth: OUTLINE_WIDTH,
-        alpha: fading ? notice.ticksLeft / FADE_TICKS : 1,
-      });
-    });
+    this.stack.render(ctx, viewportWidth() / 2, bottomRowY);
   }
 
   /** Drop everything on screen — used on scene teardown. */
   clear(): void {
-    this.notices.length = 0;
+    this.stack.clear();
   }
 }

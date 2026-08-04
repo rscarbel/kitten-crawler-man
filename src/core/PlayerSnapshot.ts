@@ -258,12 +258,18 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
     p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
   }
 
-  // Restore inventory slots
+  // Copied rather than aliased: a checkpoint snapshot is restored again on
+  // every death until the next safe room, so handing the stored slot objects
+  // straight to the bag would let the first restored run edit the snapshot it
+  // came from. Today's bag and hotbar happen to be copy-on-write, which is the
+  // only reason aliasing them has not already corrupted a checkpoint.
   for (let i = 0; i < snap.inventorySlots.length; i++) {
-    p.inventory.bag.slots[i] = snap.inventorySlots[i];
+    const slot = snap.inventorySlots[i];
+    p.inventory.bag.slots[i] = slot === null ? null : { ...slot };
   }
   for (let i = 0; i < snap.inventoryHotbar.length; i++) {
-    p.inventory.actionBar.slots[i] = snap.inventoryHotbar[i];
+    const slot = snap.inventoryHotbar[i];
+    p.inventory.actionBar.slots[i] = slot === null ? null : { ...slot };
   }
   // Equipment first: the stat getters — and therefore max HP — read from it.
   p.inventory.equipment.replaceAll(snap.equippedEntries);

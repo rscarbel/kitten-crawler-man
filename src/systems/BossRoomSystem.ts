@@ -30,7 +30,7 @@ interface AcidPuddle {
   ttl: number;
 }
 
-interface BossRoomState {
+export interface BossRoomState {
   bounds: { x: number; y: number; w: number; h: number };
   locked: boolean;
   defeated: boolean;
@@ -40,6 +40,21 @@ interface BossRoomState {
   entryWindowTimer: number;
   /** True when boss is alive but no conscious players remain in the room (boss HP reset). */
   fightAborted: boolean;
+}
+
+/**
+ * The mutable half of a `BossRoomState`. `bounds` is map geometry handed over by
+ * `GameMap.bossRooms` and never changes, so a checkpoint neither copies nor
+ * restores it.
+ */
+type BossRoomProgress = Omit<BossRoomState, 'bounds'>;
+
+/** Point-in-time boss-room progress, restorable any number of times. */
+export interface BossRoomCheckpoint {
+  rooms: BossRoomProgress[];
+  enteredRoomIndices: number[];
+  humanIsInsider: boolean[];
+  catIsInsider: boolean[];
 }
 
 export const BOSS_META: Record<string, { displayName: string; color: string }> = {
@@ -343,6 +358,48 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
     this.vomitProjectiles.length = 0;
     this.acidPuddles.length = 0;
+  }
+
+  /**
+   * Snapshots every room's progress so a death can rewind a boss killed after
+   * the checkpoint back to alive-and-unfought.
+   *
+   * Every container is copied on the way out and again on the way back in
+   * (`restoreCheckpoint`), because the player can die repeatedly against one
+   * snapshot and a shared array would let the first restore mutate it.
+   */
+  captureCheckpoint(): BossRoomCheckpoint {
+    return {
+      rooms: this.states.map((state) => ({
+        locked: state.locked,
+        defeated: state.defeated,
+        defeatTimer: state.defeatTimer,
+        pulse: state.pulse,
+        entryWindowTimer: state.entryWindowTimer,
+        fightAborted: state.fightAborted,
+      })),
+      enteredRoomIndices: [...this.enteredRooms],
+      humanIsInsider: [...this.humanIsInsider],
+      catIsInsider: [...this.catIsInsider],
+    };
+  }
+
+  restoreCheckpoint(snapshot: BossRoomCheckpoint): void {
+    const restoreCount = Math.min(this.states.length, snapshot.rooms.length);
+    for (let index = 0; index < restoreCount; index++) {
+      const state = this.states[index];
+      const room = snapshot.rooms[index];
+      state.locked = room.locked;
+      state.defeated = room.defeated;
+      state.defeatTimer = room.defeatTimer;
+      state.pulse = room.pulse;
+      state.entryWindowTimer = room.entryWindowTimer;
+      state.fightAborted = room.fightAborted;
+    }
+    this.enteredRooms.clear();
+    for (const index of snapshot.enteredRoomIndices) this.enteredRooms.add(index);
+    this.humanIsInsider = [...snapshot.humanIsInsider];
+    this.catIsInsider = [...snapshot.catIsInsider];
   }
 
   /**
@@ -850,8 +907,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     // copying on the exact frame the swarm was already at its largest.
     let keptCount = 0;
     for (const mob of mobs) {
+      // A roach the checkpoint saw alive is owed a resurrection if the party
+      // dies, and compacting it away is the one thing that makes that
+      // impossible — the rewind can only reach what is still in the array.
+      const isOwedToCheckpoint = mob.presentAtCheckpoint && mob.aliveAtCheckpoint;
       const isSpentCockroach = !mob.isAlive && mob instanceof Cockroach;
-      if (isSpentCockroach) {
+      if (isSpentCockroach && !isOwedToCheckpoint) {
+        mob.dispose();
         mobGrid.remove(mob);
         continue;
       }

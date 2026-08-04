@@ -7,6 +7,7 @@ import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawRadialGlow } from '../sprites/radialGlow';
+import { cloneLootDrop } from '../core/lootDrop';
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -92,7 +93,7 @@ const DROP_SEARCH_MIN_RADIUS = 2;
 /** Maximum drop-search radius (tiles from dropper). */
 const DROP_SEARCH_MAX_RADIUS = 4;
 
-interface PendingLoot {
+export interface PendingLoot {
   x: number;
   y: number;
   loot: LootDrop;
@@ -116,6 +117,34 @@ export interface FloorItem {
   y: number;
   id: ItemId;
   quantity: number;
+}
+
+export interface LootCheckpoint {
+  pendingLoots: PendingLoot[];
+  floorItems: FloorItem[];
+}
+
+/**
+ * `owner` stays a bare reference — it identifies which player the pile pays,
+ * and copying the Player would hand the credit to a detached clone.
+ */
+function clonePendingLoot(pile: PendingLoot): PendingLoot {
+  return {
+    x: pile.x,
+    y: pile.y,
+    loot: cloneLootDrop(pile.loot),
+    owner: pile.owner,
+    collected: pile.collected,
+    ttl: pile.ttl,
+    pickupDelay: pile.pickupDelay,
+    droppedByPlayer: pile.droppedByPlayer,
+    isBossLoot: pile.isBossLoot,
+    sharedCoins: pile.sharedCoins,
+  };
+}
+
+function cloneFloorItem(item: FloorItem): FloorItem {
+  return { x: item.x, y: item.y, id: item.id, quantity: item.quantity };
 }
 
 export class LootSystem implements GameSystem {
@@ -433,6 +462,28 @@ export class LootSystem implements GameSystem {
       }
 
       ctx.restore();
+    }
+  }
+
+  captureCheckpoint(): LootCheckpoint {
+    return {
+      pendingLoots: this.pendingLoots.map(clonePendingLoot),
+      floorItems: this.floorItems.map(cloneFloorItem),
+    };
+  }
+
+  /**
+   * Drops made after the capture are discarded outright, including piles from
+   * mobs the restore is about to revive — leaving them would let the player
+   * bank the loot and then kill the same mob again.
+   */
+  restoreCheckpoint(snapshot: LootCheckpoint): void {
+    this.pendingLoots = snapshot.pendingLoots.map(clonePendingLoot);
+    // `floorItems` is a public readonly array other code may already hold, so
+    // it is emptied and refilled rather than reassigned.
+    this.floorItems.length = 0;
+    for (const item of snapshot.floorItems) {
+      this.floorItems.push(cloneFloorItem(item));
     }
   }
 

@@ -151,6 +151,38 @@ export interface ProgressionLayoutData {
   stairwellSpacingWaived: boolean;
 }
 
+/**
+ * Where one room's encounter is placed, and which stretch of the floor's forced
+ * progression it belongs to.
+ *
+ * The region is what lets spawn counts climb through a run: the generator is the
+ * only thing that knows a room was part of gauntlet 0 rather than of the
+ * free-roam region past the last gateway boss, and by the time the spawner sees
+ * a point that ownership is otherwise unrecoverable from the grid.
+ */
+export interface MobSpawnPoint extends Point {
+  w: number;
+  h: number;
+  /**
+   * Index of the gauntlet whose rooms this one is among, or
+   * `gauntlets.length` for the free-roam region beyond the last of them. Always
+   * 0 on a floor with no forced progression, which has a single region.
+   */
+  region: number;
+}
+
+/** See {@link MobSpawnPoint.region}. */
+function progressionRegionOf(room: Rect, layout: ProgressionLayoutData | undefined): number {
+  if (layout === undefined) return 0;
+  const { gauntletRoomBounds } = layout;
+  for (let index = 0; index < gauntletRoomBounds.length; index++) {
+    for (const bounds of gauntletRoomBounds[index]) {
+      if (bounds.x === room.x && bounds.y === room.y) return index;
+    }
+  }
+  return gauntletRoomBounds.length;
+}
+
 export interface DungeonData {
   grid: TileContent[][];
   startTile: Point;
@@ -159,7 +191,7 @@ export interface DungeonData {
   questRooms: QuestRoomData[];
   treasureRooms: TreasureRoomData[];
   spiderLabRoom: SpiderLabRoomData | null;
-  mobSpawnPoints: Array<Point & { w: number; h: number }>;
+  mobSpawnPoints: MobSpawnPoint[];
   hallwaySpawnPoints: Point[];
   stairwellTiles: Point[];
   buildingEntries: Array<{ doorTile: Point; name: string; type: 'arena' }>;
@@ -2008,6 +2040,7 @@ function buildDungeon(
       y: Math.floor(r.y + r.h / 2),
       w: r.w,
       h: r.h,
+      region: progressionRegionOf(r, progressionLayout),
     }));
 
   // Select treasure rooms from eligible regular rooms — 5% of total rooms, at least 1

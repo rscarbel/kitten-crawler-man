@@ -20,6 +20,33 @@ export function createMarketStock(): MarketStock {
   return { remaining: new Map() };
 }
 
+/** A point-in-time copy of every vendor line's remaining units. */
+export interface MarketStockCheckpoint {
+  remaining: Map<string, number>;
+}
+
+/**
+ * Snapshots stock so a death rewinds what the market sold. The coins spent come
+ * back with the player snapshot, so a stall left sold-out would burn the limited
+ * line for nothing — and one left restocked past what was actually paid for
+ * would hand out the goods twice.
+ */
+export function captureMarketStock(stock: MarketStock): MarketStockCheckpoint {
+  return { remaining: new Map(stock.remaining) };
+}
+
+/**
+ * Mutates in place: this object is threaded by reference through every scene, so
+ * rebinding a fresh one would strand every holder.
+ *
+ * The map is copied again here because one snapshot is restored once per death —
+ * assigning the stored map straight across would let the next purchase mutate
+ * the snapshot itself.
+ */
+export function restoreMarketStock(stock: MarketStock, snapshot: MarketStockCheckpoint): void {
+  stock.remaining = new Map(snapshot.remaining);
+}
+
 export function stockKey(vendorId: string, itemId: ItemId): string {
   return `${vendorId}:${itemId}`;
 }

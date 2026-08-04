@@ -61,11 +61,17 @@ import type { LootDrop } from './Mob';
  * is {@link breakLeash} dropping the target and holding it off; do not widen the
  * bands or delete the hold-off on the strength of an ordering these radii do not
  * actually guarantee.
+ *
+ * All four are one band and must be re-scaled together — they were doubled from
+ * 4.5/6/7/3 as a unit. Widening the engage bubble alone, past the leash break,
+ * would have him take fights he snaps the leash before reaching: walk out,
+ * break, ban the mob, come home, never land a blow. That is strictly *less*
+ * aggressive than the tighter band it came from.
  */
-const ENGAGE_RADIUS_TILES = 4.5;
-const ENGAGE_PERSIST_TILES = 6.0;
-const LEASH_BREAK_TILES = 7.0;
-const LEASH_RESUME_TILES = 3.0;
+const ENGAGE_RADIUS_TILES = 9.0;
+const ENGAGE_PERSIST_TILES = 12.0;
+const LEASH_BREAK_TILES = 14.0;
+const LEASH_RESUME_TILES = 6.0;
 
 /**
  * Follow band, and it is a *latch* rather than a pair of thresholds.
@@ -205,6 +211,15 @@ export class Mongo extends Mob {
   owner: Player;
   /** All mobs in the scene — set each frame by `MongoSystem`. */
   allMobs: Mob[] = [];
+
+  /**
+   * Damage he has landed that has not been paid out as ability XP yet.
+   *
+   * Banked here rather than granted per blow because a juvenile's bite is worth
+   * a fraction of a point: rounded down every hit pays nothing, rounded up it
+   * pays him more for a nibble than the rate says. `MongoSystem` drains it.
+   */
+  damageDealtPendingXp = 0;
 
   /** Pet ability level, 1–15. Drives every stat and which sheet he is drawn from. */
   private petLevel: number;
@@ -769,7 +784,11 @@ export class Mongo extends Mob {
     // He attacks in his own name, so the victim's alert list records *him* and
     // it fights back against the raptor rather than the cat behind it. The XP
     // still reaches the cat through `xpCreditTarget`.
+    // Measured off the victim rather than taken from `damage`, so overkill on a
+    // mob with three hit points left is not paid for as a full bite.
+    const targetHpBeforeBlow = target.hp;
     target.takeDamageFrom(damage, this, 'melee');
+    this.damageDealtPendingXp += targetHpBeforeBlow - target.hp;
     target.retaliateMob = this;
     this.attackSoundPending = true;
   }

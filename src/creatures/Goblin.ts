@@ -28,6 +28,20 @@ const DYNAMITE_DROP_CHANCE_CAT = 0.05;
  * who walks into one gets a beat to react rather than being hit on contact.
  */
 const ATTACK_WINDUP_FRAMES = 15;
+/**
+ * How far a goblin's call for help carries, in tiles.
+ *
+ * Exported because `GoblinArcher` shares it: the archer and the melee line are
+ * one pack, and a room that answered at two different radii would have the
+ * archer engaging a beat behind everything it is standing behind.
+ */
+export const GOBLIN_PACK_ALERT_RADIUS_TILES = 6;
+
+/**
+ * The group a goblin answers to. Shared by every archetype *and* by the archer,
+ * which is a different class; see {@link Mob.packKind}.
+ */
+export const GOBLIN_PACK_KIND = 'goblin';
 /** How often a goblin off cooldown and in range commits to its heavy attack. */
 const HEAVY_ATTACK_CHANCE = 0.35;
 /**
@@ -102,6 +116,19 @@ export class Goblin extends Mob {
     return GOBLIN_CULL_MARGIN_TILES;
   }
 
+  /**
+   * Goblins fight in packs — a room of four is one fight, not four. Sized to a
+   * room rather than to the aggro range so a pack pulled through a doorway
+   * still arrives together, and so a floor-3 camp answers as a camp.
+   */
+  protected override get packAlertRadiusTiles(): number {
+    return GOBLIN_PACK_ALERT_RADIUS_TILES;
+  }
+
+  override get packKind(): string {
+    return GOBLIN_PACK_KIND;
+  }
+
   override resetToSpawn(): void {
     super.resetToSpawn();
     this.attackCooldown = 0;
@@ -144,7 +171,7 @@ export class Goblin extends Mob {
     const timing = GOBLIN_ATTACKS[this.weapon][kind];
     this.attackKind = kind;
     this.attackAnimTimer = timing.animFrames;
-    this.attackCooldown = timing.cooldownFrames;
+    this.attackCooldown = this.scaledCooldownFrames(timing.cooldownFrames);
     this.attackDamage = timing.damage;
     this.attackRangePx = this.goblinTileSize * timing.reachTiles;
     // Impact lands at `animFrames × (impactFrame + 0.5) / spriteFrames`, which is
@@ -319,7 +346,7 @@ export class Goblin extends Mob {
     );
 
     drawGoblinSprite(ctx, {
-      weapon: this.weapon,
+      archetype: this.weapon,
       x: sx,
       y: sy,
       tileSize,

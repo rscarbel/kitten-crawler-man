@@ -401,6 +401,9 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       // the library yet: the wood snap stands in for the stave, and the cat's
       // magic-missile launch for the soul bolt leaving the palm.
       if (mob.audioTag === 'skeleton') audio?.play('wood_breaking_3');
+      // Only the archer among the goblins ever queues one of these — the melee
+      // archetypes have nothing to throw.
+      if (mob.audioTag === 'goblin') audio?.play('wood_breaking_3');
       if (mob.audioTag === 'skeleton_lord') audio?.play('cat_missile_fire');
       if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
       // [STAND-IN] An effortful heave has not been sourced; the Juicer's throw

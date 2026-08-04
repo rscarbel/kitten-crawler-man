@@ -22,3 +22,32 @@ export interface MercenaryRoster {
 export function createMercenaryRoster(): MercenaryRoster {
   return { active: null };
 }
+
+/**
+ * A point-in-time copy of the roster, for the in-run safe-room checkpoint.
+ *
+ * Without it a merc hired after the checkpoint stayed hired through a death
+ * while the player snapshot handed the hire fee back — a free mercenary for
+ * anyone willing to die.
+ */
+export interface MercenaryRosterCheckpoint {
+  active: HiredMercenary | null;
+}
+
+/** The hire itself is copied, not shared: one snapshot is restored many times. */
+export function captureMercenaryRoster(roster: MercenaryRoster): MercenaryRosterCheckpoint {
+  const hired = roster.active;
+  return { active: hired === null ? null : { id: hired.id, name: hired.name } };
+}
+
+/**
+ * Rewinds the roster in place — it is threaded by reference through every scene
+ * and held by `MercenarySystem`, so replacing it would leave them on the old one.
+ */
+export function restoreMercenaryRoster(
+  roster: MercenaryRoster,
+  snapshot: MercenaryRosterCheckpoint,
+): void {
+  const hired = snapshot.active;
+  roster.active = hired === null ? null : { id: hired.id, name: hired.name };
+}

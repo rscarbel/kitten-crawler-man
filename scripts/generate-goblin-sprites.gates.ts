@@ -38,8 +38,9 @@ import {
   type SheetPixels,
 } from './generate-goblin-sprites';
 import { ARCHETYPE_SCALE, GOBLIN_STYLES, along, buildSkeleton, type Pt } from './goblinArt';
+import { bowDrawAt, nockPoint } from './generate-goblin-sprites';
 import { BONELESS_GORE_STATES } from './goblinGore';
-import { GOBLIN_ATTACKS, GOBLIN_GORE_PARTS } from '../src/sprites/goblinSprite';
+import { GOBLIN_ATTACKS, GOBLIN_BOW_SHOTS, GOBLIN_GORE_PARTS } from '../src/sprites/goblinSprite';
 
 const CHANNELS_PER_PIXEL = 4;
 const ALPHA_CHANNEL_OFFSET = 3;
@@ -904,23 +905,38 @@ function isManifestEntry(value: unknown): value is ManifestEntry {
  * in this repo, and programmatically rewriting a shared JSON file would clobber
  * their edits.
  */
+/** Which runtime table an archetype's attack timings come from, for error text. */
+function timingTableName(archetype: GoblinArchetype): string {
+  return archetype === 'bow' ? 'GOBLIN_BOW_SHOTS' : 'GOBLIN_ATTACKS';
+}
+
 function gateTimingTable(): void {
   for (const archetype of GOBLIN_ARCHETYPES) {
     for (const kind of ['light', 'heavy'] as const) {
-      const timing = GOBLIN_ATTACKS[archetype][kind];
+      // The archer's rows are measured by a table of their own: an arrow has no
+      // reach and no moment of contact, so `GOBLIN_ATTACKS`' reach and damage
+      // columns would be fields nothing could fill. What both tables *do* share
+      // is the frame the row peaks on, which is what this gate is about.
+      const timing =
+        archetype === 'bow'
+          ? {
+              spriteFrames: GOBLIN_BOW_SHOTS[kind].spriteFrames,
+              impactFrame: GOBLIN_BOW_SHOTS[kind].releaseFrame,
+            }
+          : GOBLIN_ATTACKS[archetype][kind];
       const rowName = kind === 'light' ? 'attack_light' : 'attack_heavy';
       const row = ROWS.find((candidate) => candidate.name === rowName);
       if (row === undefined) throw new Error(`G13: no row ${rowName}`);
       if (timing.spriteFrames !== row.frameCount) {
         throw new Error(
-          `G13 ${archetype} ${kind}: GOBLIN_ATTACKS says ${timing.spriteFrames} sprite frames, ` +
-            `the generator bakes ${row.frameCount}`,
+          `G13 ${archetype} ${kind}: ${timingTableName(archetype)} says ` +
+            `${timing.spriteFrames} sprite frames, the generator bakes ${row.frameCount}`,
         );
       }
       if (timing.impactFrame !== IMPACT_FRAMES[archetype][kind]) {
         throw new Error(
-          `G13 ${archetype} ${kind}: GOBLIN_ATTACKS says impact frame ${timing.impactFrame}, ` +
-            `the generator animates ${IMPACT_FRAMES[archetype][kind]}`,
+          `G13 ${archetype} ${kind}: ${timingTableName(archetype)} says frame ` +
+            `${timing.impactFrame}, the generator animates ${IMPACT_FRAMES[archetype][kind]}`,
         );
       }
       if (timing.impactFrame < 0 || timing.impactFrame >= row.frameCount) {
@@ -943,6 +959,11 @@ function gateTimingTable(): void {
 function gateImpactIsThePeak(sheets: readonly BakedSheet[]): void {
   const PEAK_TOLERANCE_FRAMES = 1;
   for (const sheet of sheets) {
+    // The bow is exempt, and not as a loophole: this gate measures the *weapon
+    // tip*, and a bow's tips are its limbs, which travel during the raise and
+    // the lower and stand still through the hold. What has to peak on the
+    // release frame is the string, and G16 below measures exactly that.
+    if (sheet.archetype === 'bow') continue;
     for (const kind of ['light', 'heavy'] as const) {
       const rowName = kind === 'light' ? 'attack_light' : 'attack_heavy';
       const tips = sheet.tips.get(rowName);
@@ -970,6 +991,166 @@ function gateImpactIsThePeak(sheets: readonly BakedSheet[]): void {
   }
 
 }
+
+// ── G16 · the bow's draw, and the hand on its string ─────────────────────────
+
+/**
+ * Assert that the archer's draw actually reads as a draw, and that the hand
+ * pulling it is on the string.
+ *
+ * This is what G13b is exempted from measuring, and it is not a formality.
+ * G13b tests the *weapon tip*, which for a bow is a limb that travels during the
+ * raise and stands still through the hold, so it says nothing about the release.
+ * G14 is blind here too — it returns early on a null `offGripDistance`, which a
+ * bow has, so the very artifact G14's own header calls "the one the rest of the
+ * suite is structurally blind to" (a fist drawn in mid-air, identically on every
+ * frame) had nothing looking at it at all. Everything below is measured off the
+ * baked pose stream, not off a constant compared with itself.
+ */
+function gateBowDraw(sheet: BakedSheet): void {
+  if (sheet.archetype !== 'bow') return;
+  const style = GOBLIN_STYLES.bow;
+  const slack = style.proportions.handRadius * GRIP_SLACK_FRACTION;
+
+  for (const kind of ['light', 'heavy'] as const) {
+    const rowName = kind === 'light' ? 'attack_light' : 'attack_heavy';
+    const row = ROWS.find((candidate) => candidate.name === rowName);
+    const poses = sheet.poses.get(rowName);
+    if (row === undefined || poses === undefined) {
+      throw new Error(`G16 ${kind}: no pose trace for ${rowName}`);
+    }
+    const releaseFrame = IMPACT_FRAMES.bow[kind];
+
+    // The row's own full draw, which is not the same number for both shots —
+    // the hurried one deliberately pulls less far. Everything below that has to
+    // be relative to it rather than to an absolute, or a threshold tuned on the
+    // aimed shot silently skips the whole hurried row.
+    const fullDraw = bowDrawAt(kind, releaseFrame - 1, row.frameCount).amount;
+    let peakDraw = 0;
+    let previousDraw = 0;
+    for (let frame = 0; frame < poses.length; frame++) {
+      const pose = poses[frame];
+      if (pose === undefined || pose.weaponAngle === null) {
+        throw new Error(`G16 ${kind} frame ${frame}: no aiming pose`);
+      }
+      const draw = bowDrawAt(kind, frame, row.frameCount);
+
+      // The string is let go on the release frame and stays let go: a bow still
+      // bent through its own recovery reads as a shot that never left.
+      const isReleased = frame >= releaseFrame;
+      if (isReleased && (draw.amount !== 0 || draw.nocked)) {
+        throw new Error(
+          `G16 ${kind} frame ${frame}: the string is still drawn ${draw.amount.toFixed(3)} ` +
+            `after the release on frame ${releaseFrame}`,
+        );
+      }
+      if (!isReleased) {
+        // Monotone up to the loose. A draw that eased back before releasing is a
+        // bow the archer changed its mind about, and it costs the telegraph the
+        // one thing it is for: the string only ever gets tighter.
+        if (draw.amount < previousDraw) {
+          throw new Error(
+            `G16 ${kind} frame ${frame}: the string slackens from ` +
+              `${previousDraw.toFixed(3)} to ${draw.amount.toFixed(3)} before the loose`,
+          );
+        }
+        previousDraw = draw.amount;
+        peakDraw = Math.max(peakDraw, draw.amount);
+      }
+
+      // The fist has to be *on the string*, checked only where the bow is fully
+      // up and fully drawn. Earlier in the row the archer is still raising it
+      // and the hand is legitimately on its way; afterwards the recoil is
+      // deliberately throwing it back off. Those frames are the animation, and a
+      // gate that forbade them would be forbidding the effect.
+      if (isReleased || draw.amount < fullDraw * HAND_ON_STRING_MIN_DRAW_FRACTION) continue;
+      const onString = nockPoint(pose.nearHand, pose.weaponAngle, draw.amount);
+      const solved = buildSkeleton(style, pose).farArm.end;
+      const gap = Math.hypot(solved.x - onString.x, solved.y - onString.y);
+      if (gap > slack) {
+        throw new Error(
+          `G16 ${kind} frame ${frame}: the draw hand sits ${gap.toFixed(4)} from the string ` +
+            `against a ${slack.toFixed(4)} allowance — the fist is drawn holding nothing`,
+        );
+      }
+    }
+
+    // Full draw has to be reached *and then held*. Testing the frame before the
+    // loose would be arithmetic rather than a check: the monotonicity test above
+    // already forbids the draw from decreasing, so the last frame before the
+    // loose is the peak by construction and `peak >= peak` can never fail. What
+    // is worth asserting is that the string arrived early enough to sit still
+    // for a moment first, which is the whole of what makes a telegraph readable.
+    const drawAtHoldStart = bowDrawAt(
+      kind,
+      releaseFrame - MIN_DRAW_HOLD_FRAMES,
+      row.frameCount,
+    ).amount;
+    if (drawAtHoldStart < peakDraw) {
+      throw new Error(
+        `G16 ${kind}: the string is still only at ${drawAtHoldStart.toFixed(3)} ` +
+          `${MIN_DRAW_HOLD_FRAMES} frames before the loose and reaches ` +
+          `${peakDraw.toFixed(3)} — it snaps back the instant it reaches tension, with no hold`,
+      );
+    }
+    if (peakDraw < MIN_FULL_DRAW) {
+      throw new Error(
+        `G16 ${kind}: peak draw is only ${peakDraw.toFixed(3)} — that is a bow being held, ` +
+          `not one being drawn`,
+      );
+    }
+
+    // The draw hand must never go somewhere and come straight back. This is the
+    // specific artifact the rest of the suite cannot see: the release frame sits
+    // inside G4's and G8's declared acceleration window, so a fist that snapped
+    // from the jaw onto the riser and off again — on the one frame the arrow
+    // spawns — passed every other gate in the file.
+    //
+    // A *reversal* rather than a step size, deliberately. The recovery genuinely
+    // throws the hand back fast, and the row has only four frames to return it
+    // to the idle pose G6 insists it lands on; a plain step limit would either
+    // forbid that or be too loose to catch the teleport, which was a third of a
+    // tile out and a third of a tile back.
+    for (let frame = 1; frame + 1 < poses.length; frame++) {
+      const before = poses[frame - 1];
+      const at = poses[frame];
+      const after = poses[frame + 1];
+      if (before === undefined || at === undefined || after === undefined) continue;
+      const inX = at.farHand.x - before.farHand.x;
+      const inY = at.farHand.y - before.farHand.y;
+      const outX = after.farHand.x - at.farHand.x;
+      const outY = after.farHand.y - at.farHand.y;
+      const inLength = Math.hypot(inX, inY);
+      const outLength = Math.hypot(outX, outY);
+      if (inLength < MIN_HAND_SPIKE_STEP || outLength < MIN_HAND_SPIKE_STEP) continue;
+      const alignment = (inX * outX + inY * outY) / (inLength * outLength);
+      if (alignment < -HAND_REVERSAL_ALIGNMENT) {
+        throw new Error(
+          `G16 ${kind} frame ${frame}: the draw hand travels ${inLength.toFixed(4)} and comes ` +
+            `straight back ${outLength.toFixed(4)} — a one-frame teleport, not a motion`,
+        );
+      }
+    }
+  }
+}
+
+/** Frames at least this far into their row's own full draw are checked for a fist on the string. */
+const HAND_ON_STRING_MIN_DRAW_FRACTION = 0.9;
+
+/** How many frames the string must sit at full draw before the loose. */
+const MIN_DRAW_HOLD_FRAMES = 2;
+
+/**
+ * How far the draw hand has to move, in tile units, before a reversal counts as
+ * a teleport rather than as the top of an authored arc.
+ */
+const MIN_HAND_SPIKE_STEP = 0.18;
+
+/** How anti-parallel two steps must be to read as there-and-back; cos(~37°). */
+const HAND_REVERSAL_ALIGNMENT = 0.8;
+
+/** Below this a "full draw" is a string that never left its resting chord. */
+const MIN_FULL_DRAW = 0.6;
 
 /**
  * The manifest half of G13, split out so `--skip-manifest-gate` can skip exactly
@@ -1127,6 +1308,7 @@ const baked = GOBLIN_ARCHETYPES.map((archetype) => {
   gateGoreDistinctness(sheet);
   gateRotationSafety(sheet);
   gateTextureSize(sheet);
+  gateBowDraw(sheet);
   return sheet;
 });
 

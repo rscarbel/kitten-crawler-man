@@ -21,7 +21,7 @@ import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { Llama } from '../creatures/Llama';
 import { makeBurn } from '../core/StatusEffect';
-import { TILE_SIZE } from '../core/constants';
+import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawLavaBolt, drawLavaBurst, drawLavaFlame } from '../sprites/lavaBallSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -36,6 +36,13 @@ export interface LavaSpit {
   readonly damage: number;
   /** Class name of the llama that fired it, so the death screen can name it. */
   readonly mobType: string;
+  /**
+   * The level of the llama that fired it, which sets how fast the ball flies.
+   *
+   * Carried rather than resolved here: the shot outlives its llama by design,
+   * so by the time this is read the animal it came from may not exist.
+   */
+  readonly mobLevel: number;
   /**
    * Whoever the llama was aiming at, when that is not one of the two players.
    *
@@ -75,6 +82,31 @@ interface FlamePatch {
 }
 
 const BOLT_SPEED = 1.9;
+/** Extra bolt speed per llama level, before the cap. */
+const BOLT_SPEED_LEVEL_SCALE = 0.04;
+/**
+ * The cap, as a share of the player's own run speed.
+ *
+ * Expressed as a fraction rather than as a literal so the fairness rule is the
+ * thing written down: a bolt must stay outrunnable, so retreating in a straight
+ * line has to remain a real answer to one at every level. A hard number here
+ * would quietly become wrong the day `PLAYER_SPEED` was retuned.
+ */
+const BOLT_SPEED_CAP_PLAYER_FRACTION = 0.9;
+/** Hard ceiling on a levelled bolt's speed, in pixels per frame. */
+export const BOLT_SPEED_CAP = PLAYER_SPEED * BOLT_SPEED_CAP_PLAYER_FRACTION;
+
+/**
+ * How fast a bolt spat by a llama of this level travels, in pixels per frame.
+ *
+ * Exported so `scripts/verify-difficulty.ts` asserts the cap against the real
+ * function rather than against a copy of it.
+ */
+export function lavaBoltSpeedForLevel(level: number): number {
+  const extraLevels = Math.max(0, level - 1);
+  return Math.min(BOLT_SPEED_CAP, BOLT_SPEED * (1 + extraLevels * BOLT_SPEED_LEVEL_SCALE));
+}
+
 const BOLT_RADIUS_PX = 7;
 /** How close a target's centre must be for a direct hit, as a fraction of a tile. */
 const TARGET_CENTER_RADIUS_RATIO = 0.35;
@@ -155,11 +187,12 @@ export class LavaBallSystem implements GameSystem {
       if (!(mob instanceof Llama)) continue;
       for (const spit of mob.takePendingSpits()) {
         const heading = normalize(spit.dirX, spit.dirY);
+        const speed = lavaBoltSpeedForLevel(spit.mobLevel);
         this.bolts.push({
           x: spit.x,
           y: spit.y,
-          vx: heading.x * BOLT_SPEED,
-          vy: heading.y * BOLT_SPEED,
+          vx: heading.x * speed,
+          vy: heading.y * speed,
           age: 0,
           damage: spit.damage,
           // A ball crossing a room is exactly what dodge is for, so it stays

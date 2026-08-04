@@ -113,6 +113,15 @@ export const MIN_STAT_VALUE = 1;
 /** Species HP floor used when a subclass doesn't declare one (mobs, which pass a fixed maxHp). */
 const DEFAULT_BASE_HP_OFFSET = 0;
 const DAMAGE_FLASH_FRAMES = 8;
+/**
+ * How long a hit holds passive regeneration off, in frames (5 s at 60 fps).
+ *
+ * Lives here rather than beside the other regen constants in `PlayerTickSystem`
+ * because it is a property of the character being hit, not of the tick that
+ * heals them: the counter it bounds is written by {@link Player.takeDamage},
+ * which the tick system never sees.
+ */
+export const REGEN_SUPPRESS_FRAMES = 300;
 const LEVEL_UP_FLASH_FRAMES = 120;
 const SPEND_POINT_FLASH_FRAMES = 60;
 const XP_PER_LEVEL_MULTIPLIER = 10;
@@ -267,6 +276,19 @@ export abstract class Player {
    * a gameplay event fires.
    */
   pendingDodges = 0;
+  /**
+   * Frames since this character last took damage, counted up to
+   * {@link REGEN_SUPPRESS_FRAMES} and held there. Starts at the ceiling so a
+   * character that has never been hit is not treated as freshly wounded.
+   */
+  private framesSinceDamaged = REGEN_SUPPRESS_FRAMES;
+  /**
+   * Damage taken since the last drain, for the difficulty overlay.
+   *
+   * Only the two crawlers' copies are drained, by `DifficultyTelemetrySystem`;
+   * a mob writes one nobody reads, exactly as it does with {@link pendingDodges}.
+   */
+  pendingDamageTaken = 0;
   /** Shared inventory for this player (separate from the other player's). */
   readonly inventory = new Inventory();
   /** Trained skills. Starts empty — every skill has to be found in the dungeon. */
@@ -513,15 +535,35 @@ export abstract class Player {
       this.onDodged();
       return false;
     }
+    const hpBeforeBlow = this.hp;
     const remainingHp = Math.max(0, this.hp - amount);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
+    // Every route into this method refreshes the counter, which is what makes a
+    // damage-over-time effect hold regen off for as long as it is burning
+    // rather than only on the frame it was applied.
+    this.framesSinceDamaged = 0;
     if (source !== undefined) this.lastDamageSource = source;
     // Deliberately *before* hp is written: every death check in the game reads hp
     // after takeDamage returns, so absorbing the blow here means neither the
     // game-over check nor the companion knockout path ever sees a dead crawler.
-    if (remainingHp === 0 && this.tryCockroach()) return true;
+    if (remainingHp === 0 && this.tryCockroach()) {
+      this.pendingDamageTaken += hpBeforeBlow - this.hp;
+      return true;
+    }
     this.hp = remainingHp;
+    this.pendingDamageTaken += hpBeforeBlow - remainingHp;
     return true;
+  }
+
+  /**
+   * Whether passive regeneration is currently held off by a recent wound.
+   *
+   * Never true inside a safe room: recovery between fights is meant to stay
+   * free, and a party that has just retreated to one is precisely the party the
+   * suppression window would otherwise punish for nothing.
+   */
+  get isRegenSuppressed(): boolean {
+    return !this.isProtected && this.framesSinceDamaged < REGEN_SUPPRESS_FRAMES;
   }
 
   /**
@@ -882,6 +924,10 @@ export abstract class Player {
     this.invulnerableFrames = 0;
     this._regenModifiers.clear();
     this.lastDamageSource = null;
+    // A party restored to a checkpoint is out of the fight that wounded it, so
+    // it must not spend the next five seconds unable to heal from a blow that
+    // has been rewound out of existence.
+    this.framesSinceDamaged = REGEN_SUPPRESS_FRAMES;
   }
 
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
@@ -962,6 +1008,9 @@ export abstract class Player {
   }
 
   tickTimers() {
+    // Held at the ceiling rather than counted forever: the only question anyone
+    // asks of it is whether it has reached that value.
+    if (this.framesSinceDamaged < REGEN_SUPPRESS_FRAMES) this.framesSinceDamaged++;
     if (this.invulnerableFrames > 0) this.invulnerableFrames--;
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.damageFlash > 0) this.damageFlash--;

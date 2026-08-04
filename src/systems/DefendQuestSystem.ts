@@ -19,7 +19,9 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { QuestNPC } from '../creatures/QuestNPC';
+import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
+import type { QuestStatus } from '../core/QuestManager';
 import {
   drawQuestNPCSprite,
   drawWoodPileSprite,
@@ -219,7 +221,7 @@ const DEFENSE_TIMER_SIZE = 24;
 let tutorialSeen = false;
 const TUTORIAL_PAGES = 3;
 
-type QuestPhase =
+export type DefendQuestPhase =
   | 'inactive'
   | 'npc_waiting'
   | 'dialog'
@@ -230,7 +232,7 @@ type QuestPhase =
   | 'complete'
   | 'failed';
 
-interface WoodBarrier {
+export interface WoodBarrier {
   tileX: number;
   tileY: number;
   worldX: number;
@@ -241,15 +243,42 @@ interface WoodBarrier {
   hitFlash: number;
 }
 
-interface PendingBuild {
+export interface PendingBuild {
   framesLeft: number;
   grateIdx: number;
   isRepair: boolean;
 }
 
+/**
+ * A point-in-time copy of everything the defend quest can advance, for the
+ * safe-room checkpoint. Barriers and the pending build are copied by value;
+ * quest mobs are held by reference, because the scene keeps every mob it ever
+ * knew about and the restore is what re-establishes which of them were the
+ * quest's at capture time.
+ */
+export interface DefendQuestCheckpoint {
+  readonly questStatuses: ReadonlyArray<readonly [string, QuestStatus]>;
+  readonly phase: DefendQuestPhase;
+  readonly approachTimer: number;
+  readonly defenseTimer: number;
+  readonly spawnTimer: number;
+  readonly woodRespawnTimer: number;
+  readonly woodPileAvailable: boolean;
+  readonly barriers: ReadonlyArray<Readonly<WoodBarrier>>;
+  readonly pendingBuild: Readonly<PendingBuild> | null;
+  readonly questMobs: readonly Bugaboo[];
+  /**
+   * The goblin mother is owned by this system rather than by the scene's mob
+   * array, so nothing else rewinds her — and a dead one re-fails the quest on
+   * the very first frame after a restore.
+   */
+  readonly npcHp: number;
+  readonly npcMarkerType: NPCMarkerType;
+}
+
 export class DefendQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
-  private phase: QuestPhase = 'inactive';
+  private phase: DefendQuestPhase = 'inactive';
   private roomData: QuestRoomData | null = null;
   private npc: QuestNPC | null = null;
   private approachTimer = 0;
@@ -681,14 +710,18 @@ export class DefendQuestSystem implements GameSystem {
     bug.defendTarget = this.npc;
 
     if (grateIdx >= 0 && this.roomData) {
+      // A boarded grate has to be broken through first, so that one starts
+      // under the boards — played the emerge here it would climb all the way
+      // out of a hole in intact planks and then climb back in to hammer them.
+      // An open one has to be seen coming up, and keeps no grate assignment:
+      // there is no barrier for it to go back to.
       const grate = this.roomData.grateTiles[grateIdx];
-      bug.assignedGrate = grate;
-      bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage);
-      // One that comes up an *open* grate has to be seen coming up it. A
-      // boarded one has to break through first, so it starts under the boards:
-      // played here it would climb all the way out of a hole in intact planks
-      // and then climb back in to start hammering them.
-      if (!this.damageBarrier(grate, 0)) bug.beginEmerge();
+      if (this.damageBarrier(grate, 0)) {
+        bug.assignedGrate = grate;
+        bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage);
+      } else {
+        bug.beginEmerge();
+      }
     }
 
     this.addMob(bug);
@@ -1536,6 +1569,50 @@ export class DefendQuestSystem implements GameSystem {
     });
 
     ctx.restore();
+  }
+
+  /** Snapshots the quest for the safe-room checkpoint. See {@link DefendQuestCheckpoint}. */
+  captureCheckpoint(): DefendQuestCheckpoint {
+    return {
+      questStatuses: this.questManager.snapshotStatuses(),
+      phase: this.phase,
+      approachTimer: this.approachTimer,
+      defenseTimer: this.defenseTimer,
+      spawnTimer: this.spawnTimer,
+      woodRespawnTimer: this.woodRespawnTimer,
+      woodPileAvailable: this.woodPileAvailable,
+      barriers: this.barriers.map((barrier) => ({ ...barrier })),
+      pendingBuild: this.pendingBuild === null ? null : { ...this.pendingBuild },
+      questMobs: [...this.questMobs],
+      npcHp: this.npc?.hp ?? 0,
+      npcMarkerType: this.npc?.markerType ?? 'none',
+    };
+  }
+
+  /**
+   * Rewinds the quest to a captured snapshot. Safe to call repeatedly against
+   * the same snapshot: every container is copied again on the way back in, so
+   * the next wave never mutates the checkpoint it was restored from.
+   */
+  restoreCheckpoint(snapshot: DefendQuestCheckpoint): void {
+    this.questManager.restoreStatuses(snapshot.questStatuses);
+    this.phase = snapshot.phase;
+    this.approachTimer = snapshot.approachTimer;
+    this.defenseTimer = snapshot.defenseTimer;
+    this.spawnTimer = snapshot.spawnTimer;
+    this.woodRespawnTimer = snapshot.woodRespawnTimer;
+    this.woodPileAvailable = snapshot.woodPileAvailable;
+    this.barriers = snapshot.barriers.map((barrier) => ({ ...barrier }));
+    this.pendingBuild = snapshot.pendingBuild === null ? null : { ...snapshot.pendingBuild };
+    this.questMobs = [...snapshot.questMobs];
+
+    if (this.npc !== null) {
+      this.npc.hp = snapshot.npcHp;
+      this.npc.markerType = snapshot.npcMarkerType;
+      // The tint is a standing "she is under attack" alarm; the attack it warns
+      // about is one of the things being rewound.
+      this.npc.clearHurtState();
+    }
   }
 
   dispose(): void {

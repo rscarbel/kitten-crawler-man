@@ -98,6 +98,7 @@
     "scripts/clownGore.ts",
     "scripts/generate-clown-gas-sprites.ts",
     "scripts/verify-bounty.ts",
+    "scripts/verify-difficulty.ts",
     "scripts/verify-separation.ts",
     "scripts/bench-separation.ts",
     "scripts/verify-assets.ts",
@@ -113,6 +114,11 @@
     "scripts/bugabooArt.ts",
     "scripts/generate-bugaboo-sprite.ts",
     "scripts/generate-bugaboo-sprite.gates.ts",
-    "scripts/render-bugaboo.ts"
+    "scripts/render-bugaboo.ts",
+    "scripts/tusklingArt.ts",
+    "scripts/tusklingGore.ts",
+    "scripts/generate-tuskling-sprite.ts",
+    "scripts/generate-tuskling-sprite.gates.ts",
+    "scripts/render-tuskling.ts"
   ]
 }

@@ -170,6 +170,13 @@ const SIDE_HAND_BEHIND = 0.05;
  * splits the legs so far fore-and-aft that the mass no longer sits over either.
  */
 const IDLE_SIDE_FOOT_LEAD = 0.07;
+/**
+ * Edge-on the elbow has to break *backward*: forward it swings the forearm
+ * across the creature's own front. It breaks further back through a walk than
+ * standing still, because the elbow trails the shoulder through the swing.
+ */
+const SIDE_ELBOW_FLARE = -0.35;
+const WALK_SIDE_ELBOW_FLARE = -0.5;
 
 function idleBase(phase: number): BugabooPose {
   const breath = Math.sin(phase * FULL_TURN);
@@ -213,9 +220,7 @@ function idleSide(phase: number): BugabooPose {
   pose.leftFoot = pt(-IDLE_SIDE_FOOT_LEAD, 0);
   pose.rightFoot = pt(IDLE_SIDE_FOOT_LEAD, 0);
   pose.headTurn = SIDE_HEAD_TURN + sway * IDLE_HEAD_TURN;
-  // Edge-on the elbow has to break backward; forward it swings the forearm
-  // across the creature's own front.
-  pose.elbowFlare = -0.35;
+  pose.elbowFlare = SIDE_ELBOW_FLARE;
   return pose;
 }
 
@@ -398,8 +403,7 @@ export function walkSide(phase: number): BugabooPose {
   pose.leftArmAngles = sideArmAngles(-rightForward);
   pose.rightClaw = WALK_CLAW;
   pose.leftClaw = WALK_CLAW;
-  // Edge-on the elbow trails behind the shoulder through the swing.
-  pose.elbowFlare = -0.5;
+  pose.elbowFlare = WALK_SIDE_ELBOW_FLARE;
   pose.furFlow = -WALK_FUR_TRAIL;
   pose.furPhase = phase * FULL_TURN;
   pose.blink = blink(phase, BLINK_AT);
@@ -952,7 +956,7 @@ export function breach(phase: number): BugabooPose {
     GROPE_CENTRE_X + Math.cos(sweep) * GROPE_RADIUS_X,
     GROPE_CENTRE_Y + Math.sin(sweep) * GROPE_RADIUS_Y - sunk,
   );
-  pose.leftHand = pt(GRIP_X, GRIP_Y + Math.sin(sweep * 2) * GRIP_SHUDDER - sunk);
+  pose.leftHand = pt(GRIP_X, GRIP_Y + Math.sin(sweep * GRASPS_PER_SWEEP) * GRIP_SHUDDER - sunk);
   // Claws open and close through the sweep: a hand groping for something is
   // grasping, and a fixed spread reads as a prop hand on a stick.
   pose.rightClaw = GROPE_CLAW_MIN + GROPE_CLAW_RANGE * grasp(sweep);

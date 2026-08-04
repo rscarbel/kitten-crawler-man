@@ -13,6 +13,7 @@ import {
   TREE_STAGE_CHARRED,
   TREE_STAGE_FELLING,
   TREE_STAGE_FELLING_CHARRED,
+  type TileContent,
 } from '../map/tileTypes';
 import { inferFloorType } from '../map/tiles/helpers';
 import { drawSpriteKey } from '../core/SpriteRenderer';
@@ -136,7 +137,7 @@ const FIRE_GLOW_PULSE_DEPTH = 0.22;
 const INSTANT_DESTROY_DAMAGE = Number.MAX_SAFE_INTEGER;
 
 /** Live state for one tree tile. Created lazily — see the class doc. */
-interface TreeHealth {
+export interface TreeHealth {
   tileX: number;
   tileY: number;
   hp: number;
@@ -154,10 +155,53 @@ interface TreeHealth {
   feller: HumanPlayer | CatPlayer | null;
 }
 
-interface Stump {
+export interface Stump {
   tileX: number;
   tileY: number;
   life: number;
+}
+
+/**
+ * The map-side half of one tree, which the tile owns rather than this system.
+ *
+ * A felled tree is felled *on the GameMap*: its tile stops being `TREE`
+ * altogether. Rewinding `health` alone would leave the system believing in a
+ * tree that the world has already turned into grass, so the checkpoint has to
+ * carry the tile too.
+ */
+export interface TreeTileState {
+  tileX: number;
+  tileY: number;
+  treeStage: number | undefined;
+  treeAnimFrame: number | undefined;
+  groundType: number | undefined;
+}
+
+/**
+ * A healthy tree's tile has these fields *absent* rather than set to
+ * `undefined`, and the renderers read absence — so a restore has to delete
+ * them, not write undefined over them.
+ */
+function applyTreeTileState(tile: TileContent, state: TreeTileState): void {
+  if (state.treeStage === undefined) delete tile.treeStage;
+  else tile.treeStage = state.treeStage;
+
+  if (state.treeAnimFrame === undefined) delete tile.treeAnimFrame;
+  else tile.treeAnimFrame = state.treeAnimFrame;
+
+  if (state.groundType === undefined) delete tile.groundType;
+  else tile.groundType = state.groundType;
+}
+
+/** Everything a safe-room checkpoint has to rewind about the forest. */
+export interface TreeCheckpoint {
+  health: ReadonlyMap<string, TreeHealth>;
+  stumps: ReadonlyArray<Stump>;
+  burning: ReadonlySet<string>;
+  felling: ReadonlySet<string>;
+  flashing: ReadonlySet<string>;
+  felledSinceDrain: number;
+  treeTiles: ReadonlyArray<TreeTileState>;
 }
 
 interface Ember {
@@ -394,6 +438,91 @@ export class TreeSystem implements GameSystem {
     this.forEachTreeInRange(centerX, centerY, radius, (tileX, tileY) => {
       this.igniteAt(tileX, tileY);
     });
+  }
+
+  /**
+   * Snapshots the forest so a death rewinds every tree the player damaged, lit
+   * or felled since they entered the safe room.
+   *
+   * Every container is copied on the way out and again on the way back in
+   * (`restoreCheckpoint`), including the `TreeHealth` *values* — one snapshot is
+   * restored once per death, and handing the stored objects to the live map
+   * would let the first restore's gameplay mutate the snapshot itself.
+   *
+   * The tile sweep is O(map) and runs once per safe-room entry, the same order
+   * and the same rarity as the constructor's `adoptTreesInProgress`. Only tiles
+   * that *are* trees at capture time are recorded: nothing in the game plants
+   * one, so a tile that is not a tree now can never become one to be rewound.
+   */
+  captureCheckpoint(): TreeCheckpoint {
+    const health = new Map<string, TreeHealth>();
+    for (const [key, tree] of this.health) health.set(key, { ...tree });
+    return {
+      health,
+      stumps: this.stumps.map((stump) => ({ ...stump })),
+      burning: new Set(this.burning),
+      felling: new Set(this.felling),
+      flashing: new Set(this.flashing),
+      felledSinceDrain: this.felledSinceDrain,
+      treeTiles: this.captureTreeTiles(),
+    };
+  }
+
+  private captureTreeTiles(): TreeTileState[] {
+    const tiles: TreeTileState[] = [];
+    const structure = this.gameMap.structure;
+    for (let ty = 0; ty < structure.length; ty++) {
+      const row = structure[ty];
+      for (let tx = 0; tx < row.length; tx++) {
+        const tile = row[tx];
+        if (tile.type !== TREE) continue;
+        tiles.push({
+          tileX: tx,
+          tileY: ty,
+          treeStage: tile.treeStage,
+          treeAnimFrame: tile.treeAnimFrame,
+          groundType: tile.groundType,
+        });
+      }
+    }
+    return tiles;
+  }
+
+  restoreCheckpoint(snapshot: TreeCheckpoint): void {
+    this.health.clear();
+    for (const [key, tree] of snapshot.health) this.health.set(key, { ...tree });
+
+    this.stumps.length = 0;
+    for (const stump of snapshot.stumps) this.stumps.push({ ...stump });
+
+    restoreKeySet(this.burning, snapshot.burning);
+    restoreKeySet(this.felling, snapshot.felling);
+    restoreKeySet(this.flashing, snapshot.flashing);
+    this.felledSinceDrain = snapshot.felledSinceDrain;
+
+    this.restoreTreeTiles(snapshot.treeTiles);
+  }
+
+  /**
+   * Puts the map back under the rewound system: a tree felled after the
+   * checkpoint has to stand again, and one burnt after it has to go back to
+   * whatever stage it was at.
+   */
+  private restoreTreeTiles(treeTiles: ReadonlyArray<TreeTileState>): void {
+    for (const state of treeTiles) {
+      const tile = this.gameMap.structure[state.tileY][state.tileX];
+      const isUnchanged =
+        tile.type === TREE &&
+        tile.treeStage === state.treeStage &&
+        tile.treeAnimFrame === state.treeAnimFrame &&
+        tile.groundType === state.groundType;
+      if (isUnchanged) continue;
+
+      tile.type = TREE;
+      applyTreeTileState(tile, state);
+      this.gameMap.markTileDirty(state.tileX, state.tileY);
+      this.onTileChanged(state.tileX, state.tileY);
+    }
   }
 
   /** Trees felled since the scene last drained them, for the break cue. */
@@ -858,6 +987,16 @@ export class TreeSystem implements GameSystem {
       ctx.restore();
     }
   }
+}
+
+/**
+ * Refill a live key set from a snapshot's. Refilled rather than reassigned
+ * because the live sets are `readonly` fields, and copied rather than adopted so
+ * a later restore of the same snapshot still sees the keys it captured.
+ */
+function restoreKeySet(live: Set<string>, snapshot: ReadonlySet<string>): void {
+  live.clear();
+  for (const key of snapshot) live.add(key);
 }
 
 /** A predicate for "this world point is near enough the camera to be worth drawing". */

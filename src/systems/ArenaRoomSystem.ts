@@ -36,6 +36,20 @@ interface ArenaGymPickup {
   worldY: number;
 }
 
+/**
+ * The mutable half of an `ArenaGymPickup`. Item id and world position are fixed
+ * at construction from the arena's geometry, so a checkpoint ignores them.
+ */
+interface ArenaGymPickupProgress {
+  active: boolean;
+  respawnTimer: number;
+}
+
+/** Point-in-time gym-pickup progress, restorable any number of times. */
+export interface ArenaRoomCheckpoint {
+  pickups: ArenaGymPickupProgress[];
+}
+
 export class ArenaRoomSystem implements GameSystem {
   private readonly pickups: ArenaGymPickup[];
   private readonly hasArena: boolean;
@@ -68,6 +82,32 @@ export class ArenaRoomSystem implements GameSystem {
       worldX: absTileX * TILE_SIZE,
       worldY: absTileY * TILE_SIZE,
     };
+  }
+
+  /**
+   * Snapshots which gym items are on the floor, so a run of deaths cannot farm
+   * the same bench forever.
+   *
+   * Each pickup's mutable half is copied out, and copied again on the way back
+   * in, because the player can die many times against one snapshot.
+   */
+  captureCheckpoint(): ArenaRoomCheckpoint {
+    return {
+      pickups: this.pickups.map((pickup) => ({
+        active: pickup.active,
+        respawnTimer: pickup.respawnTimer,
+      })),
+    };
+  }
+
+  restoreCheckpoint(snapshot: ArenaRoomCheckpoint): void {
+    const restoreCount = Math.min(this.pickups.length, snapshot.pickups.length);
+    for (let index = 0; index < restoreCount; index++) {
+      const pickup = this.pickups[index];
+      const saved = snapshot.pickups[index];
+      pickup.active = saved.active;
+      pickup.respawnTimer = saved.respawnTimer;
+    }
   }
 
   tryPickupNear(player: HumanPlayer | CatPlayer): boolean {

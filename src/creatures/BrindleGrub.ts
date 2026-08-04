@@ -59,6 +59,10 @@ const STAGE2_BITE_COOLDOWN = 80;
 const STAGE2_BITE_ANIM_FRAMES = 14;
 const VESPA_FOLLOW_STOP_RANGE_RATIO = 0.8;
 
+const STAGE_LARVA = 1;
+const STAGE1_NAME = 'Brindle Grub';
+const STAGE1_DESCRIPTION = 'A harmless wriggling larva. It seems to be growing...';
+
 export type GrubStage = 1 | 2 | 3;
 
 export interface AcidSpit {
@@ -82,7 +86,7 @@ export interface AcidSpit {
  *                                  mobs will retaliate.
  */
 export class BrindleGrub extends Mob {
-  stage: GrubStage = 1;
+  stage: GrubStage = STAGE_LARVA;
   private evolveTimer: number;
   private spitCooldown = 0;
   /** >0 while the Vespa is charging up a spit; counts down to 0, which fires it. */
@@ -115,8 +119,32 @@ export class BrindleGrub extends Mob {
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, STAGE1_HP, STAGE1_SPEED);
     this.evolveTimer = randomInt(STAGE1_EVOLVE_MIN, STAGE1_EVOLVE_MAX);
-    this.displayName = 'Brindle Grub';
-    this.description = 'A harmless wriggling larva. It seems to be growing...';
+    this.displayName = STAGE1_NAME;
+    this.description = STAGE1_DESCRIPTION;
+  }
+
+  /**
+   * Rewinds the whole lifecycle, not just the combat state: the checkpoint
+   * predates however far this grub grew, so it goes back to the larva it was
+   * authored to spawn as and starts its evolution clock over.
+   */
+  /**
+   * The growth stage is deliberately left alone.
+   *
+   * Every checkpoint restore calls this on living mobs too, so rewinding the
+   * stage would de-evolve every grub on the floor back to a larva on each
+   * death — a strictly easier encounter, repeatable by dying on purpose. The
+   * stage is driven by time rather than by the fight, and by the time a grub
+   * dies it was at least this far along when the checkpoint was taken.
+   */
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    // In-flight acid outlives its owner: left in the list it keeps travelling
+    // and chipping a party that was just rewound to the safe room.
+    this.spits.length = 0;
+    this.spitCooldown = 0;
+    this.spitWindupTimer = 0;
+    this.biteAnimTimer = 0;
   }
 
   override get mobType(): string {
@@ -134,9 +162,12 @@ export class BrindleGrub extends Mob {
 
   private evolveToStage2(): void {
     this.stage = 2;
-    this.speed = STAGE2_SPEED;
-    this.setFixedMaxHp(STAGE2_HP);
-    this.hp = STAGE2_HP;
+    // Through the base-* setters, not by assignment: an evolution is a new set
+    // of authored stats, and a plain write would throw away the level this grub
+    // inherited from whatever it burst out of.
+    this.setBaseSpeed(STAGE2_SPEED);
+    this.setBaseMaxHp(STAGE2_HP);
+    this.hp = this.maxHp;
     this.evolveTimer = randomInt(STAGE2_EVOLVE_MIN, STAGE2_EVOLVE_MAX);
     this.displayName = 'Cow-Tailed Grub';
     this.description = 'A bigger, angrier grub with a painful bite.';
@@ -144,9 +175,9 @@ export class BrindleGrub extends Mob {
 
   private evolveToStage3(): void {
     this.stage = 3;
-    this.speed = STAGE3_SPEED;
-    this.setFixedMaxHp(STAGE3_HP);
-    this.hp = STAGE3_HP;
+    this.setBaseSpeed(STAGE3_SPEED);
+    this.setBaseMaxHp(STAGE3_HP);
+    this.hp = this.maxHp;
     this.evolveTimer = -1; // no further evolution
     this.isFlying = true;
     this.displayName = 'Brindled Vespa';
@@ -162,7 +193,7 @@ export class BrindleGrub extends Mob {
     if (!this.isAlive || this.stage >= STAGE_VESPA) return;
     this.evolveTimer--;
     if (this.evolveTimer <= 0) {
-      if (this.stage === 1) this.evolveToStage2();
+      if (this.stage === STAGE_LARVA) this.evolveToStage2();
       else this.evolveToStage3();
     }
   }
@@ -173,7 +204,7 @@ export class BrindleGrub extends Mob {
     if (this.stage < STAGE_VESPA) {
       // evolveTimer is ticked by tickEvolve() separately (works off-screen too)
 
-      if (this.stage === 1) {
+      if (this.stage === STAGE_LARVA) {
         // Stage 1: wander passively, never attack
         this.doWander();
       } else {
@@ -399,7 +430,7 @@ export class BrindleGrub extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
 
     switch (this.stage) {
-      case 1:
+      case STAGE_LARVA:
         drawBrindleGrubSprite(ctx, sx, sy, tileSize, {
           walkFrame: this.walkFrame,
           isMoving: this.isMoving,
@@ -407,7 +438,7 @@ export class BrindleGrub extends Mob {
           facingY: this.facingY,
         });
         break;
-      case 2:
+      case STAGE_COW_TAILED:
         drawCowTailedGrubSprite(ctx, sx, sy, tileSize, {
           walkFrame: this.walkFrame,
           isMoving: this.isMoving,

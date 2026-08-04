@@ -19,6 +19,16 @@ import type { GameSystem, SystemContext } from './GameSystem';
  * transitions call `dismiss` — that only despawns the mob, leaving the roster
  * intact so the merc respawns from the new scene's `MercenarySystem`.
  */
+/**
+ * A point-in-time copy of the spawn state, for the in-run safe-room checkpoint.
+ * The hire itself is durable state and is snapshotted with the roster.
+ */
+export interface MercenaryCheckpoint {
+  /** Stored by reference: a snapshot names the merc, it does not clone it. */
+  merc: Mercenary | null;
+  spawnAttempted: boolean;
+}
+
 export class MercenarySystem implements GameSystem {
   private merc: Mercenary | null = null;
   private spawnAttempted = false;
@@ -57,6 +67,37 @@ export class MercenarySystem implements GameSystem {
     if (this.merc.isAlive && this.merc.hp > 0) return;
     this.despawn(mobs, mobGrid);
     this.roster.active = null;
+  }
+
+  captureCheckpoint(): MercenaryCheckpoint {
+    return { merc: this.merc, spawnAttempted: this.spawnAttempted };
+  }
+
+  /**
+   * Rewinds the spawn state to match the restored roster.
+   *
+   * A merc that died after the checkpoint cannot simply be re-referenced: its
+   * death spliced it out of the scene's mob array and grid, so the snapshot's
+   * reference is a creature nothing can see, hit, or draw. The hire lives in the
+   * roster, which is rewound separately, so the honest rewind is to forget the
+   * mob entirely and let the next `update` spawn a fresh one beside the player
+   * from whatever the roster now says — the same path a scene rebuild takes.
+   *
+   * Precondition: any merc hired *after* the checkpoint must already be off the
+   * map (`dismiss`) when this runs, the way the death path already dismisses
+   * Mongo. No mob list reaches this method, so it cannot splice one out itself,
+   * and a merc left standing while the roster forgets it is an orphan following
+   * the party for free.
+   */
+  restoreCheckpoint(snapshot: MercenaryCheckpoint): void {
+    const sameMercStillStanding =
+      this.merc !== null && this.merc === snapshot.merc && this.merc.isAlive;
+    if (sameMercStillStanding) {
+      this.spawnAttempted = snapshot.spawnAttempted;
+      return;
+    }
+    this.merc = null;
+    this.spawnAttempted = false;
   }
 
   private spawn(active: Player, gameMap: GameMap, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {

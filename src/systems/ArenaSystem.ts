@@ -52,6 +52,17 @@ const LABEL_TEXT_ADJUST = 9;
 /** HP text adjust. */
 const HP_TEXT_ADJUST = 7;
 
+/** Point-in-time arena progress, restorable any number of times. */
+export interface ArenaCheckpoint {
+  arenaLocked: boolean;
+  arenaPhase2Active: boolean;
+  arenaStairwellUnlocked: boolean;
+  arenaLiveTusklings: Tuskling[];
+  entryWindowTimer: number;
+  humanIsInsider: boolean;
+  catIsInsider: boolean;
+}
+
 export class ArenaSystem implements GameSystem {
   private arenaLocked = false;
   private arenaPhase2Active = false;
@@ -109,6 +120,51 @@ export class ArenaSystem implements GameSystem {
       this.arenaLocked = false;
       this.gameMap.unlockArenaDoor();
     }
+  }
+
+  /**
+   * Snapshots arena progress so a death rewinds the Ball of Swine fight and the
+   * Tuskling phase that follows it.
+   *
+   * The Tuskling list is copied but its elements are not: those mobs stay in the
+   * scene's mob array for its whole life, so the reference remains the same
+   * creature whose `isAlive` the phase-2 check reads.
+   *
+   * The copy happens again in `restoreCheckpoint`, because one snapshot can be
+   * restored many times and handing the stored array to the live field would let
+   * the first restore mutate the snapshot.
+   */
+  captureCheckpoint(): ArenaCheckpoint {
+    return {
+      arenaLocked: this.arenaLocked,
+      arenaPhase2Active: this.arenaPhase2Active,
+      arenaStairwellUnlocked: this.arenaStairwellUnlocked,
+      arenaLiveTusklings: [...this.arenaLiveTusklings],
+      entryWindowTimer: this.entryWindowTimer,
+      humanIsInsider: this.humanIsInsider,
+      catIsInsider: this.catIsInsider,
+    };
+  }
+
+  restoreCheckpoint(snapshot: ArenaCheckpoint): void {
+    this.arenaPhase2Active = snapshot.arenaPhase2Active;
+    this.arenaLiveTusklings = [...snapshot.arenaLiveTusklings];
+    this.entryWindowTimer = snapshot.entryWindowTimer;
+    this.humanIsInsider = snapshot.humanIsInsider;
+    this.catIsInsider = snapshot.catIsInsider;
+
+    // The door tiles on the map and this flag are two halves of one fact, so a
+    // restore that moved the flag has to move the map with it or the player is
+    // sealed in (or walks out of) an arena whose state disagrees with the door.
+    if (snapshot.arenaLocked !== this.arenaLocked) {
+      this.arenaLocked = snapshot.arenaLocked;
+      if (snapshot.arenaLocked) this.gameMap.lockArenaDoor();
+      else this.gameMap.unlockArenaDoor();
+    }
+
+    // The stairwell's map tiles are not re-locked here: `unlockArenaStairwell()`
+    // has no inverse, and the map side of this rewind is restored separately.
+    this.arenaStairwellUnlocked = snapshot.arenaStairwellUnlocked;
   }
 
   private wireEvents(): void {

@@ -36,7 +36,7 @@ const RESPAWN_BUTTON_LABEL: Record<RespawnMode, string> = {
 
 const RESPAWN_SUBTITLE: Record<RespawnMode, string> = {
   floorRestart: 'Respawning at floor start — progress from previous floors kept.',
-  checkpoint: 'Respawning at your last safe room — health and status restored.',
+  checkpoint: 'Respawning at your last safe room — the floor rewinds to how you left it.',
 };
 
 /**

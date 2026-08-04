@@ -53,6 +53,14 @@ const SKYF_12_Y = -4;
  * An outdoor world with grass, forests, roads, and a town.
  * The town has a large tower and many smaller buildings that can be entered.
  */
+/**
+ * Sky fowl level range. They spawned at level 1 until the difficulty pass — a
+ * floor-3 creature no tougher than a floor-1 rat, on a floor whose weakest
+ * regular is level 5.
+ */
+const SKY_FOWL_MIN_LEVEL = 5;
+const SKY_FOWL_MAX_LEVEL = 7;
+
 /** Ruins ghoul level range — common shambler encountered outside town. */
 const RUINS_GHOUL_MIN_LEVEL = 5;
 const RUINS_GHOUL_MAX_LEVEL = 8;
@@ -69,6 +77,7 @@ const KRASUE_MAX_LEVEL = 9;
  * population and a camp is a landmark you find among them.
  */
 const GOBLIN_CAMP_POPULATION = 5;
+const GOBLIN_CAMP_ARCHERS = 2;
 const GOBLIN_MIN_LEVEL = 5;
 const GOBLIN_MAX_LEVEL = 7;
 const TROGLODYTE_DEN_POPULATION = 4;
@@ -114,6 +123,15 @@ export const level3: LevelDef = {
         minCount: GOBLIN_CAMP_POPULATION,
         maxCount: GOBLIN_CAMP_POPULATION,
       },
+      // A camp roster spawns every entry, so the archers are never alone here
+      // by construction — the five melee residents above are their line.
+      {
+        type: 'goblin_archer',
+        minCount: GOBLIN_CAMP_ARCHERS,
+        maxCount: GOBLIN_CAMP_ARCHERS,
+        minLevel: GOBLIN_MIN_LEVEL,
+        maxLevel: GOBLIN_MAX_LEVEL,
+      },
     ],
     troglodyte: [
       {
@@ -129,6 +147,8 @@ export const level3: LevelDef = {
     {
       type: 'sky_fowl',
       origin: 'mapCenter',
+      minLevel: SKY_FOWL_MIN_LEVEL,
+      maxLevel: SKY_FOWL_MAX_LEVEL,
       offsets: [
         [SKYF_1_X, SKYF_1_Y],
         [SKYF_2_X, SKYF_2_Y],

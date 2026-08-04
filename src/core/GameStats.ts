@@ -23,4 +23,21 @@ export class GameStats {
   get potionsUsed(): number {
     return this._potionsUsed;
   }
+
+  /** Point-in-time copy of the tallies, for a checkpoint capture. */
+  snapshot(): GameStatsSnapshot {
+    return { killsByType: [...this._killsByType], potionsUsed: this._potionsUsed };
+  }
+
+  /** Rewinds the tallies so kills scored after a checkpoint stop counting. */
+  restore(snapshot: GameStatsSnapshot): void {
+    this._killsByType = new Map(snapshot.killsByType);
+    this._potionsUsed = snapshot.potionsUsed;
+  }
+}
+
+/** Serialisable copy of a {@link GameStats}, captured at a checkpoint. */
+export interface GameStatsSnapshot {
+  killsByType: Array<[string, number]>;
+  potionsUsed: number;
 }

@@ -108,12 +108,30 @@ const CHARRED_TREE_MINIMAP_COLOR = '#2a221e';
 /** Sentinel for "no fog reveal has happened yet" — no real tile coord is negative. */
 const TILE_NEVER_REVEALED = -1;
 
+/** One "you died here" X on the map, in world pixels, with its remaining life in frames. */
+export interface CorpseMarker {
+  x: number;
+  y: number;
+  ttl: number;
+}
+
+/**
+ * Corpse markers only.
+ *
+ * The fog of war is deliberately absent, and so is everything derived from it —
+ * `lastRevealTileX/Y` and the tile cache. Explored map stays explored: a death
+ * rewinds what the player *did*, not what they know.
+ */
+export interface MiniMapCheckpoint {
+  corpseMarkers: ReadonlyArray<CorpseMarker>;
+}
+
 export class MiniMapSystem implements GameSystem {
   private fogOfWar: Uint8Array;
   private _expanded = false;
   private _scrollTX = 0;
   private _scrollTY = 0;
-  private corpseMarkers: Array<{ x: number; y: number; ttl: number }> = [];
+  private corpseMarkers: CorpseMarker[] = [];
   /** Reused result set for the radar's neighbour query. */
   private readonly _radarQuery = new Set<Mob>();
   /** Tile the fog was last revealed around; TILE_NEVER_REVEALED until the first reveal. */
@@ -251,6 +269,24 @@ export class MiniMapSystem implements GameSystem {
 
   addCorpseMarker(x: number, y: number): void {
     this.corpseMarkers.push({ x, y, ttl: CORPSE_MARKER_TTL });
+  }
+
+  /**
+   * Snapshots the corpse markers so the X left by a death the player has since
+   * rewound past does not outlive the run it belonged to.
+   *
+   * The markers are copied on the way out and again on the way back in
+   * (`restoreCheckpoint`) — one snapshot serves every death against the same
+   * checkpoint, and `tickCorpseMarkers` decrements each marker's `ttl` in place,
+   * so a shared object would be counted down by the first restored run and
+   * expire out of the snapshot.
+   */
+  captureCheckpoint(): MiniMapCheckpoint {
+    return { corpseMarkers: this.corpseMarkers.map((marker) => ({ ...marker })) };
+  }
+
+  restoreCheckpoint(snapshot: MiniMapCheckpoint): void {
+    this.corpseMarkers = snapshot.corpseMarkers.map((marker) => ({ ...marker }));
   }
 
   tickCorpseMarkers(): void {

@@ -12,6 +12,7 @@ import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
+import { setPackAlertGrid } from '../creatures/packAlert';
 import type { GameMap } from '../map/GameMap';
 import { SeparationGrid } from '../core/SeparationGrid';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -100,6 +101,7 @@ export class MobUpdateLoop implements GameSystem {
     const { human, cat, mobs, mobGrid, bossRoom, extraTargets, gameMap } = ctx;
 
     resetPathfindBudget();
+    setPackAlertGrid(mobGrid);
 
     // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
     for (const mob of mobs) {
@@ -248,6 +250,11 @@ export class MobUpdateLoop implements GameSystem {
         }
       }
     }
+  }
+
+  /** Drops the published grid so a torn-down scene's mobs can never be searched. */
+  dispose(): void {
+    setPackAlertGrid(null);
   }
 
   /**

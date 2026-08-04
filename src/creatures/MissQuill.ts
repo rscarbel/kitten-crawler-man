@@ -77,6 +77,10 @@ export class MissQuill extends Mob {
     this.castAnimTimer = 0;
     this.summonCooldown = SUMMON_COOLDOWN_FRAMES;
     this.shieldHitFlashTimer = 0;
+    // The restore deletes every krasue summoned since the checkpoint, including
+    // live ones. Holding those references would keep counting them against the
+    // summon cap forever, until Quill stops summoning altogether.
+    this.summons.length = 0;
   }
 
   get isShielded(): boolean {

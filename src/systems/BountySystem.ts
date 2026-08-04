@@ -143,6 +143,23 @@ export function bountyPayoutCoins(bossLevel: number): number {
   return BOUNTY_PAYOUT_BASE_COINS + BOUNTY_PAYOUT_PER_LEVEL_COINS * (bossLevel - 1);
 }
 
+/**
+ * A point-in-time copy of the live half of the bounty loop, for the in-run
+ * safe-room checkpoint. The durable half is snapshotted separately — see
+ * {@link captureBountyProgress}.
+ */
+export interface BountyCheckpoint {
+  /** Mobs are stored by reference: a snapshot names creatures, it does not clone them. */
+  boss: Mob | null;
+  encounter: Mob[];
+  aggroReleased: boolean;
+  respawnPending: boolean;
+  markers: Array<{ x: number; y: number; type: QuestMarkerType }>;
+  pendingPayoutCoins: number;
+  collectPointWorld: { x: number; y: number } | null;
+  shady: Shady | null;
+}
+
 export class BountySystem implements GameSystem {
   /** The mark, while it is alive. Null before a bounty is issued and after the kill. */
   private boss: Mob | null = null;
@@ -466,6 +483,58 @@ export class BountySystem implements GameSystem {
     this.progress.lastSiteIndex = this.progress.currentSiteIndex;
     this.progress.currentSiteIndex = null;
     advanceBountyType(this.progress);
+  }
+
+  /**
+   * Snapshots the live half of the loop so a death rewinds to the contract the
+   * party held when they entered the safe room.
+   *
+   * The encounter list is copied but its mobs are not — a snapshot names
+   * creatures rather than cloning them — and it is copied again on the way back
+   * in, because one checkpoint is restored once per death.
+   */
+  captureCheckpoint(): BountyCheckpoint {
+    return {
+      boss: this.boss,
+      encounter: [...this.encounter],
+      aggroReleased: this.aggroReleased,
+      respawnPending: this.respawnPending,
+      markers: this._markers.map((marker) => ({ ...marker })),
+      pendingPayoutCoins: this.pendingPayoutCoins,
+      collectPointWorld: this.collectPointWorld === null ? null : { ...this.collectPointWorld },
+      shady: this.shady,
+    };
+  }
+
+  /**
+   * Rewinds the loop. Must run *after* {@link abandonBounty}, which the death
+   * path already calls: nothing is re-referenced here, it is re-staged, and
+   * staging on top of an encounter still standing would put two copies of one
+   * mark on the map.
+   *
+   * The mark is re-staged rather than restored because abandoning splices its
+   * mobs out of the scene's mob array and grid — those references are creatures
+   * nothing can see or hit any more. `respawnPending` sends the next `update`
+   * through the same `restageFromRecord` path a scene rebuild uses, which reads
+   * the (separately restored) durable record for the type, name and site.
+   *
+   * Gated on the snapshot's *boss* rather than on a non-empty encounter: a mark
+   * already dead at checkpoint time leaves the loop in `kill_pending` with its
+   * minions still listed, and re-staging there would resurrect a mark the player
+   * is on their way to collect payment for.
+   */
+  restoreCheckpoint(snapshot: BountyCheckpoint): void {
+    const markWasStillAtLarge = snapshot.boss !== null || snapshot.respawnPending;
+    this.boss = null;
+    this.encounter = [];
+    this.aggroReleased = false;
+    this.respawnPending = markWasStillAtLarge;
+    this._markers.length = 0;
+    for (const marker of snapshot.markers) this._markers.push({ ...marker });
+    this.pendingPayoutCoins = snapshot.pendingPayoutCoins;
+    this.collectPointWorld =
+      snapshot.collectPointWorld === null ? null : { ...snapshot.collectPointWorld };
+    this.shady = snapshot.shady;
   }
 
   update(ctx: SystemContext): void {

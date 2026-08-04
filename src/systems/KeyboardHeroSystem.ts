@@ -103,6 +103,15 @@ function isColumnIndex(n: number): n is ColumnIndex {
   return n === COL_LEFT || n === COL_UP || n === COL_DOWN || n === COL_RIGHT;
 }
 
+/** A point-in-time copy of a mini-game attempt's scoring state. */
+export interface KeyboardHeroCheckpoint {
+  hitCount: number;
+  missCount: number;
+  failed: boolean;
+  completed: boolean;
+  nextChartIndex: number;
+}
+
 export class KeyboardHeroSystem {
   isActive = false;
 
@@ -145,6 +154,34 @@ export class KeyboardHeroSystem {
     this._failDelayTimer = 0;
     this._nextChartIndex = 0;
     this.isActive = true;
+  }
+
+  /**
+   * Snapshots the attempt's scoring state so a death rewinds a hack the player
+   * completed after checking in.
+   *
+   * Only the run's verdict is stored. The live field (`_notes`, `_columns`,
+   * `_songTimeMs`, the fail delay) belongs to an attempt that is driven by the
+   * track's own clock, and `start` rebuilds all of it from scratch — restoring a
+   * half-played field against a song that is no longer playing would resume a
+   * run mid-air with no way to judge it.
+   */
+  captureCheckpoint(): KeyboardHeroCheckpoint {
+    return {
+      hitCount: this._hitCount,
+      missCount: this._missCount,
+      failed: this._failed,
+      completed: this._completed,
+      nextChartIndex: this._nextChartIndex,
+    };
+  }
+
+  restoreCheckpoint(snapshot: KeyboardHeroCheckpoint): void {
+    this._hitCount = snapshot.hitCount;
+    this._missCount = snapshot.missCount;
+    this._failed = snapshot.failed;
+    this._completed = snapshot.completed;
+    this._nextChartIndex = snapshot.nextChartIndex;
   }
 
   stop(): void {

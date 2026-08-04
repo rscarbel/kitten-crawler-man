@@ -1,6 +1,14 @@
 import { drawRatKinSprite } from './ratKinSprite';
 import { drawIncubusSprite } from './incubusSprite';
-import { drawBugabooSprite } from './bugabooSprite';
+import { bugabooHeadClearanceTiles, drawBugabooSprite } from './bugabooSprite';
+
+/**
+ * How much room above the tile origin the tile-anchored overhead UI already
+ * reserves for itself. The "…" bubble and the Space prompt both hang off the
+ * NPC's tile, and half a tile is enough to clear the Rat Kin and the Incubus,
+ * who are both roughly tile-tall.
+ */
+const TILE_ANCHORED_UI_CLEARANCE_TILES = 0.5;
 
 /** Everything the Mordecai variants need to animate, whichever one is drawn. */
 export interface MordecaiSpriteState {
@@ -27,6 +35,18 @@ export interface MordecaiSpriteState {
   readonly lastHorizontalFacing: number;
   /** Offset into the idle loops, so safe rooms do not idle in unison. */
   readonly idleOffsetSeconds: number;
+}
+
+/**
+ * Extra pixels that overhead UI must rise by to clear the Mordecai variant this
+ * level draws, beyond the clearance a tile-anchored bubble or prompt already
+ * assumes. Zero for the Rat Kin and the Incubus; the Bugaboo stands nearly a
+ * tile taller than either, so his head overlaps anything anchored on the tile.
+ */
+export function mordecaiOverheadLift(levelId: string, tileSize: number): number {
+  const headClearanceTiles = levelId === 'level2' ? bugabooHeadClearanceTiles() : 0;
+  const excessTiles = headClearanceTiles - TILE_ANCHORED_UI_CLEARANCE_TILES;
+  return Math.max(0, excessTiles * tileSize);
 }
 
 /**

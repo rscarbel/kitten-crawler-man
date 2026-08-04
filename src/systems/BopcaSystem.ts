@@ -184,6 +184,42 @@ type DialogPhase = 'closed' | 'line' | 'choices';
 const CHOICE_ORDER = ['takeDish', 'askForFood', 'chat', 'leave'] as const;
 type ChoiceId = (typeof CHOICE_ORDER)[number];
 
+/** One attendant's rewindable state, keyed in the checkpoint by safe-room index. */
+interface BopcaEntryCheckpoint {
+  activity: BopcaActivity;
+  cookFramesLeft: number;
+  serveFramesLeft: number;
+  dish: ServedDish | null;
+  barkedThisVisit: boolean;
+  servesThisVisit: number;
+  lastDishWentCold: boolean;
+  visited: boolean;
+}
+
+/** A point-in-time copy of every attendant's met/heal state. */
+export interface BopcaCheckpoint {
+  anyBopcaMet: boolean;
+  chatTopicCursor: number;
+  entries: Map<number, BopcaEntryCheckpoint>;
+}
+
+/**
+ * Copied field by field rather than spread, so a dish — the one nested object in
+ * an entry — can never be shared between the live entry and a stored one.
+ */
+function copyEntryCheckpoint(source: BopcaEntryCheckpoint): BopcaEntryCheckpoint {
+  return {
+    activity: source.activity,
+    cookFramesLeft: source.cookFramesLeft,
+    serveFramesLeft: source.serveFramesLeft,
+    dish: source.dish === null ? null : { ...source.dish },
+    barkedThisVisit: source.barkedThisVisit,
+    servesThisVisit: source.servesThisVisit,
+    lastDishWentCold: source.lastDishWentCold,
+    visited: source.visited,
+  };
+}
+
 export class BopcaSystem implements GameSystem {
   private readonly entries: BopcaEntry[] = [];
   /**
@@ -251,6 +287,56 @@ export class BopcaSystem implements GameSystem {
   /** True while a Bopca conversation owns input. */
   get isDialogOpen(): boolean {
     return this.dialogPhase !== 'closed';
+  }
+
+  /**
+   * Snapshots every attendant so a death rewinds the free heals the party ate
+   * after checking in — the dish restores a fraction of max HP, so a Bopca left
+   * mid-cook, or one whose plate was already taken, would hand the same meal out
+   * twice against a rewound HP bar.
+   *
+   * Entries are keyed by safe-room index rather than by array position so the
+   * mapping stays legible, and only the state a visit changes is stored: the
+   * idle rotation, blink phase, bark bubble and `partyPresent` are recomputed
+   * from the world within a frame or two of the restore.
+   */
+  captureCheckpoint(): BopcaCheckpoint {
+    const entries = new Map<number, BopcaEntryCheckpoint>();
+    for (const entry of this.entries) {
+      entries.set(entry.layout.safeRoomIndex, copyEntryCheckpoint(entry));
+    }
+    return {
+      anyBopcaMet: this.anyBopcaMet,
+      chatTopicCursor: this.chatTopicCursor,
+      entries,
+    };
+  }
+
+  /**
+   * Entries are copied out of the snapshot rather than assigned from it, because
+   * one snapshot is restored once per death and the live entry keeps being
+   * mutated every frame afterwards.
+   */
+  restoreCheckpoint(snapshot: BopcaCheckpoint): void {
+    this.anyBopcaMet = snapshot.anyBopcaMet;
+    this.chatTopicCursor = snapshot.chatTopicCursor;
+    for (const entry of this.entries) {
+      const stored = snapshot.entries.get(entry.layout.safeRoomIndex);
+      if (stored === undefined) continue;
+      const restored = copyEntryCheckpoint(stored);
+      entry.activity = restored.activity;
+      entry.cookFramesLeft = restored.cookFramesLeft;
+      entry.serveFramesLeft = restored.serveFramesLeft;
+      entry.dish = restored.dish;
+      entry.barkedThisVisit = restored.barkedThisVisit;
+      entry.servesThisVisit = restored.servesThisVisit;
+      entry.lastDishWentCold = restored.lastDishWentCold;
+      entry.visited = restored.visited;
+    }
+    // A conversation cannot survive the restore: `talkingWith` points at a player
+    // whose own state has just been rewound, and the dialog box is rebuilt per
+    // conversation anyway.
+    this.closeDialog();
   }
 
   update(ctx: SystemContext): void {

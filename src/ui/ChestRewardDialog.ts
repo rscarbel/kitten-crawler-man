@@ -107,6 +107,22 @@ export class ChestRewardDialog {
     this.rewardSoundPending = false;
   }
 
+  /**
+   * Drops the dialog without running its `onClose`.
+   *
+   * That callback grants the chest's reward — the Mongo unlock among them — and
+   * a checkpoint restore has just rewound the world the chest was opened in, so
+   * firing it would hand out a prize for a chest that is locked again.
+   */
+  discard(): void {
+    this._isOpen = false;
+    this.chest = null;
+    this.lootSplit = null;
+    this.onClose = null;
+    this.particles = [];
+    this.rewardSoundPending = false;
+  }
+
   tick(): void {
     if (!this._isOpen) return;
 

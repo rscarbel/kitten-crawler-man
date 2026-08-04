@@ -339,6 +339,91 @@
       }
     }
   },
+  "goblin_bow": {
+    "path": "enemies/goblin_bow.png",
+    "frameWidth": 112,
+    "frameHeight": 80,
+    "tileX": 24,
+    "tileY": 3,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle": {
+        "row": 2,
+        "frameCount": 12,
+        "colsPerRow": 10
+      },
+      "idle_break": {
+        "row": 4,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "attack_light": {
+        "row": 6,
+        "frameCount": 14,
+        "colsPerRow": 10
+      },
+      "attack_heavy": {
+        "row": 8,
+        "frameCount": 18,
+        "colsPerRow": 10
+      },
+      "flinch": {
+        "row": 10,
+        "frameCount": 5,
+        "colsPerRow": 10
+      },
+      "gore_head": {
+        "row": 11,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 11,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm_near": {
+        "row": 11,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_arm_far": {
+        "row": 11,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg_near": {
+        "row": 11,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg_far": {
+        "row": 11,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_ribchunk": {
+        "row": 11,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 11,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_jaw": {
+        "row": 11,
+        "colOffset": 8,
+        "frameCount": 1
+      }
+    }
+  },
   "rat": {
     "path": "enemies/rat.png",
     "frameWidth": 144,
@@ -852,23 +937,111 @@
   },
   "tuskling": {
     "path": "enemies/tuskling.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 24,
-    "tileY": 16,
+    "frameWidth": 104,
+    "frameHeight": 88,
+    "tileX": 20,
+    "tileY": 22,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "idle_side": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 16
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 16
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 16
+      },
+      "hook": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "hook_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "hook_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "snort": {
+        "row": 9,
+        "frameCount": 12
+      },
+      "snort_side": {
+        "row": 10,
+        "frameCount": 12
+      },
+      "snort_away": {
+        "row": 11,
+        "frameCount": 12
       },
       "charge": {
-        "row": 2,
-        "frameCount": 6
+        "row": 12,
+        "frameCount": 8
+      },
+      "charge_side": {
+        "row": 13,
+        "frameCount": 8
+      },
+      "charge_away": {
+        "row": 14,
+        "frameCount": 8
+      },
+      "gore_head": {
+        "row": 15,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 15,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 15,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 15,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 15,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 15,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_tusk": {
+        "row": 15,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_jaw": {
+        "row": 15,
+        "colOffset": 7,
+        "frameCount": 1
       }
     }
   },

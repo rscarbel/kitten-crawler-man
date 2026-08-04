@@ -41,7 +41,7 @@ import {
   type GoblinStyle,
   type Pt,
 } from './goblinArt';
-import { WEAPON_FACTORIES } from './goblinWeapons';
+import { WEAPON_FACTORIES, bowStringPull, setBowDraw, type BowDraw } from './goblinWeapons';
 import { gorePieces } from './goblinGore';
 
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
@@ -100,6 +100,8 @@ export const IMPACT_FRAMES: Record<GoblinArchetype, { light: number; heavy: numb
   axe: { light: 6, heavy: 9 },
   mace: { light: 7, heavy: 8 },
   warhammer: { light: 7, heavy: 10 },
+  // The frame the string is released on, not a frame anything is struck on.
+  bow: { light: 10, heavy: 13 },
 };
 
 /** Loops sample the cycle evenly; one-shots sample the middle of each frame. */
@@ -215,6 +217,22 @@ const GAITS: Record<GoblinArchetype, GaitConfig> = {
     splay: 0.06,
     headLead: 0.02,
   },
+  // The longest stride in the set: this one is not scuttling in to swing at
+  // anybody, it is repositioning. The bob is what a blind review found missing —
+  // at 0.042 the head sat at a constant height for all twelve frames and the
+  // whole walk read as a figure on a conveyor. A stride needs the hips to rise
+  // and fall, or nothing about it lands.
+  bow: {
+    stride: 0.42,
+    lift: 0.15,
+    bob: 0.1,
+    sway: 0.05,
+    leanSwing: deg(3),
+    armSwing: 0.3,
+    weaponArmDamping: 0.6,
+    splay: 0.022,
+    headLead: 0.045,
+  },
 };
 
 /**
@@ -231,6 +249,18 @@ interface CarryConfig {
   readonly hipFraction: number;
   /** How high it rides, as a fraction of the goblin's own shoulder height. */
   readonly heightFraction: number;
+  /**
+   * A carry angle stated outright, instead of solved for ground clearance.
+   *
+   * {@link carryAngle} answers "how steeply can this hang without the head going
+   * through the floor", which is the right question for a weapon with a head.
+   * A bow has none — both its ends are tips — and the solve puts it right up
+   * against `MAX_CARRY_ANGLE`, where `asin` is nearly vertical: the idle's own
+   * breathing bob then swings the stave several degrees a frame and gate G8
+   * reports the spacing cliff. Stating the angle removes the derivative along
+   * with the cliff.
+   */
+  readonly angle?: number;
 }
 
 /**
@@ -258,11 +288,23 @@ interface CarryConfig {
  * same solve, so making the bit *taller* to read better lowers the carry angle
  * and undoes this.
  */
+/** How steeply a slung bow hangs from the fist. Near vertical; see {@link CarryConfig.angle}. */
+const BOW_CARRY_ANGLE = deg(62);
+
 const CARRIES: Record<GoblinArchetype, CarryConfig> = {
   sword: { hipFraction: 1.25, heightFraction: 0.46 },
   axe: { hipFraction: 1.6, heightFraction: 0.62 },
   mace: { hipFraction: 1.25, heightFraction: 0.46 },
   warhammer: { hipFraction: 1.25, heightFraction: 0.46 },
+  // Held high and *well clear of the body*, and the hip fraction is the load
+  // bearing half of that. The height sets the carry angle (see `carryAngle`),
+  // and near-vertical is what makes a hanging bow read as a bow rather than as
+  // the tail a blind silhouette review named it. But a near-vertical stave
+  // carried at the hip lies straight down the middle of the torso — the same
+  // review's next look called it an ironing board. The stave is 0.5 tiles either
+  // side of the fist, so the fist has to sit further out than the shoulder is
+  // wide before the bow becomes a separate shape in pure black.
+  bow: { hipFraction: 3.6, heightFraction: 0.62, angle: BOW_CARRY_ANGLE },
 };
 
 function carryHand(archetype: GoblinArchetype, style: GoblinStyle): Pt {
@@ -310,6 +352,16 @@ function groundLandingAngle(prop: GoblinProp, handY: number): number {
 /** Clearance plus however far the weapon's own head hangs below its axis. */
 function groundDrop(prop: GoblinProp): number {
   return CARRY_GROUND_CLEARANCE + prop.headHalfHeight;
+}
+
+/** The carry angle for one archetype: its stated one, or the solved one. */
+function carryAngleFor(
+  archetype: GoblinArchetype,
+  style: GoblinStyle,
+  prop: GoblinProp,
+  handY: number,
+): number {
+  return CARRIES[archetype].angle ?? carryAngle(style, prop, handY);
 }
 
 function carryAngle(style: GoblinStyle, prop: GoblinProp, handY: number): number {
@@ -364,7 +416,7 @@ function walkPose(
       Math.abs(armPhase) * gait.armSwing * 0.18 -
       WEAPON_BOB * Math.cos(swingAngle * BOB_PER_CYCLE),
   };
-  const weaponAngle = carryAngle(style, prop, nearHand.y);
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
   const freeHand: Pt = {
     x: rest.farHand.x + armPhase * gait.armSwing,
     y: rest.farHand.y - Math.abs(armPhase) * gait.armSwing * 0.22,
@@ -407,6 +459,10 @@ const IDLES: Record<GoblinArchetype, IdleConfig> = {
   axe: { breathDepth: 0.09, bob: 0.05, weightShift: 0.07, headRoll: deg(3), blinkFrame: 7, twitchFrame: 2 },
   mace: { breathDepth: 0.12, bob: 0.065, weightShift: 0.1, headRoll: deg(5), blinkFrame: 5, twitchFrame: 10 },
   warhammer: { breathDepth: 0.115, bob: 0.075, weightShift: 0.06, headRoll: deg(2), blinkFrame: 9, twitchFrame: 4 },
+  // Deeper than it looks it should be. At 0.07/0.045 the idle moved about two
+  // pixels across its whole loop and read as a still frame; the archer is the
+  // one goblin a player stands and watches, so its idle has to breathe.
+  bow: { breathDepth: 0.16, bob: 0.105, weightShift: 0.15, headRoll: deg(9), blinkFrame: 1, twitchFrame: 6 },
 };
 
 /** A blink is two frames of a twelve-frame loop; any longer reads as a doze. */
@@ -448,7 +504,7 @@ function idlePose(
 
   const carry = carryHand(archetype, style);
   const nearHand: Pt = { x: carry.x, y: carry.y - config.bob * breath };
-  const weaponAngle = carryAngle(style, prop, nearHand.y);
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
 
   return {
     ...rest,
@@ -521,7 +577,7 @@ function idleBreakPose(
       return {
         ...base,
         nearHand,
-        weaponAngle: lerp(carryAngle(style, prop, nearHand.y), LEVELLED_ANGLE, raise),
+        weaponAngle: lerp(carryAngleFor(archetype, style, prop, nearHand.y), LEVELLED_ANGLE, raise),
         farHand: {
           x: rest.farHand.x - 0.05 * raise,
           y: rest.farHand.y - armLength * 0.16 * raise,
@@ -541,7 +597,7 @@ function idleBreakPose(
         x: carry.x + 0.09 * heft,
         y: carry.y - armLength * 0.52 * heft,
       };
-      const weaponAngle = carryAngle(style, prop, nearHand.y) - deg(26) * heft;
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(26) * heft;
       return {
         ...base,
         bob: -0.02 * heft,
@@ -565,7 +621,7 @@ function idleBreakPose(
       return {
         ...base,
         nearHand,
-        weaponAngle: carryAngle(style, prop, nearHand.y) - twirl,
+        weaponAngle: carryAngleFor(archetype, style, prop, nearHand.y) - twirl,
         propBehind: Math.sin(twirl) < -0.2,
         headTilt: deg(6) * swell,
         mouthOpen: 0.3 * swell,
@@ -580,7 +636,7 @@ function idleBreakPose(
         x: carry.x + 0.07 * roll,
         y: carry.y - 0.12 * roll,
       };
-      const weaponAngle = carryAngle(style, prop, nearHand.y);
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
       return {
         ...base,
         torsoSquash: base.torsoSquash + 0.11 * roll,
@@ -593,6 +649,37 @@ function idleBreakPose(
         headLead: 0.11 * spit - 0.05 * crack,
         mouthOpen: spit,
         earLag: deg(-22) * crack,
+      };
+    }
+    case 'bow': {
+      // Checks the string, then scans the room over one shoulder. Neither beat
+      // raises the bow: the flourish has to be unmistakably *not* an aim, or an
+      // idling archer reads as one about to shoot and the telegraph loses its
+      // meaning.
+      // Both envelopes span the whole row rather than a leading slice of it.
+      // Compressed into the first 40% the pluck left the idle pose at speed and
+      // the opening frames jumped — the same spacing cliff the sword's break was
+      // rewritten to avoid, and gate G4 measures it.
+      const pluck = smoothHump(progress);
+      const scan = Math.sin(progress * Math.PI * SCAN_SWEEPS) * swell;
+      const nearHand: Pt = {
+        x: carry.x + 0.05 * pluck,
+        y: carry.y - armLength * 0.18 * pluck,
+      };
+      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(12) * pluck;
+      return {
+        ...base,
+        nearHand,
+        weaponAngle,
+        farHand: {
+          x: rest.farHand.x + 0.12 * pluck,
+          y: rest.farHand.y - armLength * 0.34 * pluck,
+        },
+        lean: deg(-3) * pluck,
+        headTilt: deg(-14) * pluck + deg(18) * scan,
+        headLead: 0.04 * pluck - 0.03 * scan,
+        earLag: deg(24) * scan,
+        eyeOpen: 1,
       };
     }
   }
@@ -653,6 +740,9 @@ function steppingFoot(base: number, distance: number, from: number, to: number, 
 
 const STEP_LIFT = 0.05;
 
+/** Head sweeps the archer's idle break makes while it looks the room over. */
+const SCAN_SWEEPS = 2;
+
 /**
  * Elevation past which a weapon is over the goblin's own skull. Angles run 0
  * forward and negative upward.
@@ -674,7 +764,7 @@ function swingPose(
 ): GoblinPose {
   const rest = restingPose(style);
   const carry = carryHand(archetype, style);
-  const restAngle = carryAngle(style, prop, carry.y);
+  const restAngle = carryAngleFor(archetype, style, prop, carry.y);
 
   const wind = easeInOut(clamp01(progress / spec.windEnd));
   const drive = easeIn(clamp01((progress - spec.windEnd) / (spec.impactAt - spec.windEnd)));
@@ -811,7 +901,7 @@ function thrustPose(
       x: rest.farHand.x - 0.14 * drive * (1 - recover),
       y: rest.farHand.y - armLength * 0.3 * drive * (1 - recover),
     },
-    weaponAngle: lerp(carryAngle(style, prop, nearHand.y), LEVELLED_ANGLE, Math.max(wind, drive)),
+    weaponAngle: lerp(carryAngleFor(archetype, style, prop, nearHand.y), LEVELLED_ANGLE, Math.max(wind, drive)),
     headTilt: (deg(-6) * wind + deg(9) * drive) * (1 - recover),
     headLead: 0.05 * drive * (1 - recover),
     earLag: (deg(12) * wind - deg(20) * drive) * (1 - recover),
@@ -820,7 +910,186 @@ function thrustPose(
   };
 }
 
-const SWING_SPECS: Record<GoblinArchetype, { light: SwingSpec | null; heavy: SwingSpec }> = {
+// ── Bow ──────────────────────────────────────────────────────────────────────
+//
+// The archer's two rows are not swings and not a thrust: nothing travels through
+// an arc and nothing connects. What the frames have to sell is a *draw* — the
+// stave coming up to vertical, the string bending back to a point, and the
+// whole thing snapping flat again on release — because that string is the
+// player's only warning that a shot is coming.
+
+/** The stave stands vertical when aimed, which points the arrow along +X. */
+const BOW_AIM_ANGLE = deg(-90);
+/**
+ * Progress by which the bow has finished coming up to aim.
+ *
+ * Half the row, which is much of it — and it has to be. The bow hand travels
+ * from the hip to full extension, which at 14 frames is a long way; compressed
+ * into the opening quarter it covered that distance in three frames and gate G4
+ * reported the first of them as a hitch, correctly. Raising and drawing overlap
+ * anyway, which is how the motion actually works.
+ */
+const BOW_RAISE_END = 0.5;
+/** Progress the string starts moving at. */
+const BOW_DRAW_START = 0.12;
+/**
+ * Where the draw finishes, as a fraction of the way to release.
+ *
+ * Short of 1 on purpose: the frames between full draw and the loose are the
+ * hold, and a hold is what makes a telegraph readable. A draw that arrives
+ * exactly on the release frame is a string that snaps back the instant it
+ * reaches tension, which at 14 frames the eye never resolves at all.
+ *
+ * 0.72 rather than 0.82 because the shorter row is what sets the floor: at 0.82
+ * the 14-frame hurried shot reached full draw on the single frame before its
+ * loose, which is not a hold. Gate G16 asserts both rows hold for at least
+ * `MIN_DRAW_HOLD_FRAMES`.
+ */
+const BOW_DRAW_END_FRACTION = 0.72;
+/** How far the snap shot pulls, against the aimed shot's full draw. */
+const BOW_SNAP_DRAW = 0.68;
+/**
+ * How far in front of the shoulder the bow fist is held, in arm lengths.
+ *
+ * Nearly straight, which is both correct form and what puts the two fists far
+ * enough apart to read as a draw: at 0.62 the bow arm was bent and the draw hand
+ * landed in front of the far shoulder rather than back at the jaw, so both arms
+ * pointed forward and the string had nowhere to go.
+ */
+const BOW_HAND_REACH_FRACTION = 0.82;
+/** How high the bow fist is held, as a fraction of shoulder height. */
+const BOW_HAND_HEIGHT_FRACTION = 0.92;
+/** Progress span after release over which the loose's recoil plays out. */
+const BOW_SNAP_BACK_SPAN = 0.18;
+/**
+ * How far *before* the release the recoil window opens, in progress.
+ *
+ * A hump whose window starts exactly at the release evaluates to zero on the
+ * release frame — the one frame the recoil exists to sell — and peaks two frames
+ * later, so the loose reads as a pause followed by a flinch. Roughly half a
+ * frame of lead puts the bloom on the frame the arrow leaves.
+ */
+const BOW_SNAP_BACK_LEAD = 0.03;
+/**
+ * How far the loose throws each hand back, in tile units — the bow hand a
+ * little, the draw hand rather more, since that is the one the string was
+ * pulling against.
+ */
+const BOW_HAND_RECOIL = 0.05;
+const BOW_DRAW_HAND_RECOIL = 0.09;
+
+/**
+ * The bow's shape on one frame of a named shot row.
+ *
+ * Exported for gate G16, which measures the baked draw rather than trusting the
+ * table it came from.
+ */
+export function bowDrawAt(kind: 'light' | 'heavy', frame: number, frameCount: number): BowDraw {
+  return bowShotDraw(kind, shotProgress(frame, frameCount), impactProgress('bow', kind));
+}
+
+/** The bow's shape on one frame of one shot row. */
+function bowShotDraw(kind: 'light' | 'heavy', progress: number, impactAt: number): BowDraw {
+  // Past the release the arrow is gone and the string is flat — the frames that
+  // follow are recovery, and a string still bent through them would read as a
+  // shot that never left.
+  if (progress >= impactAt) return { amount: 0, nocked: false };
+  const maxDraw = kind === 'light' ? BOW_SNAP_DRAW : 1;
+  const drawEnd = impactAt * BOW_DRAW_END_FRACTION;
+  const pulled = easeInOut(clamp01((progress - BOW_DRAW_START) / (drawEnd - BOW_DRAW_START)));
+  return { amount: maxDraw * pulled, nocked: true };
+}
+
+/** Where the string's nocking point sits in figure space at a given draw. */
+export function nockPoint(bowHand: Pt, weaponAngle: number, drawAmount: number): Pt {
+  const pull = bowStringPull(drawAmount);
+  return {
+    x: bowHand.x - pull * Math.sin(weaponAngle),
+    y: bowHand.y + pull * Math.cos(weaponAngle),
+  };
+}
+
+function bowShotPose(
+  style: GoblinStyle,
+  prop: GoblinProp,
+  kind: 'light' | 'heavy',
+  progress: number,
+  impactAt: number,
+): GoblinPose {
+  const rest = restingPose(style);
+  const p = style.proportions;
+  const carry = carryHand('bow', style);
+  const restAngle = carryAngleFor('bow', style, prop, carry.y);
+  const armLength = p.upperArmLength + p.forearmLength;
+
+  const raised = easeInOut(clamp01(progress / BOW_RAISE_END));
+  const lowered = easeInOut(clamp01((progress - impactAt) / (1 - impactAt)));
+  const aiming = raised * (1 - lowered);
+  // A short bloom on the frames straight after the loose: the bow arm kicks back
+  // and the draw hand flies off the string. Without it the release is a single
+  // frame in which the string simply stops being bent, and reads as a dropped
+  // frame rather than as a shot.
+  const loosed = hump(
+    clamp01((progress - impactAt + BOW_SNAP_BACK_LEAD) / (BOW_SNAP_BACK_SPAN + BOW_SNAP_BACK_LEAD)),
+  );
+
+  const aimHand: Pt = {
+    x: p.shoulderHalfWidth + armLength * BOW_HAND_REACH_FRACTION,
+    y: -shoulderHeight(p) * BOW_HAND_HEIGHT_FRACTION,
+  };
+  const nearHand: Pt = {
+    x: lerp(carry.x, aimHand.x, aiming) - BOW_HAND_RECOIL * loosed,
+    y: lerp(carry.y, aimHand.y, aiming),
+  };
+  const weaponAngle = lerp(restAngle, BOW_AIM_ANGLE, aiming);
+
+  const draw = bowShotDraw(kind, progress, impactAt);
+  // The *hand* does not follow the string's snap to zero. The string is released
+  // and flat from the release frame on, but the fist it left is still back at
+  // the jaw and travels further back from there under the recoil — placing it at
+  // the resting nock instead teleports it onto the riser for exactly one frame,
+  // which lands on the frame the arrow spawns.
+  const releasedDraw = kind === 'light' ? BOW_SNAP_DRAW : 1;
+  const handDraw = progress >= impactAt ? releasedDraw : draw.amount;
+  const nock = nockPoint(nearHand, weaponAngle, handDraw);
+  const drawHand: Pt = {
+    x: lerp(rest.farHand.x, nock.x, aiming) - BOW_DRAW_HAND_RECOIL * loosed,
+    y: lerp(rest.farHand.y, nock.y, aiming),
+  };
+
+  // The stance opens as the bow comes up and closes again as it comes down: an
+  // archer that draws with its feet where it was walking reads as a mannequin
+  // holding a bow.
+  const BRACE_STEP = 0.09;
+  return {
+    ...rest,
+    lean: deg(-5) * aiming - deg(7) * loosed,
+    sway: -0.03 * aiming,
+    torsoSquash: 1 - 0.04 * aiming + 0.05 * loosed,
+    bob: -0.015 * aiming,
+    nearFoot: steppingFoot(rest.nearFoot.x, BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
+    farFoot: steppingFoot(rest.farFoot.x, -BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
+    nearHand,
+    farHand: drawHand,
+    weaponAngle,
+    propBehind: false,
+    headTilt: deg(6) * aiming + deg(-10) * loosed,
+    headLead: 0.035 * aiming,
+    earLag: deg(-14) * aiming + deg(30) * loosed,
+    mouthOpen: 0.25 * draw.amount + 0.6 * loosed,
+    // Narrowed while sighting down the arrow, wide open on the loose.
+    eyeOpen: 1 - 0.4 * aiming * (1 - loosed),
+  };
+}
+
+/** Melee archetypes: every one whose attack rows are a swing or a thrust. */
+type MeleeArchetype = Exclude<GoblinArchetype, 'bow'>;
+
+function isMeleeArchetype(archetype: GoblinArchetype): archetype is MeleeArchetype {
+  return archetype !== 'bow';
+}
+
+const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: SwingSpec }> = {
   sword: {
     // The light attack is the stab, which `thrustPose` handles instead.
     light: null,
@@ -1060,7 +1329,9 @@ export function accelerationWindow(
   kind: 'light' | 'heavy',
 ): { readonly from: number; readonly to: number } {
   const row = rowByName(kind === 'light' ? 'attack_light' : 'attack_heavy');
-  const spec = SWING_SPECS[archetype][kind];
+  // The bow's whole row is a draw and a release, so the window that the spacing
+  // gates skip is the draw itself — the string has to accelerate off the hold.
+  const spec = isMeleeArchetype(archetype) ? SWING_SPECS[archetype][kind] : null;
   const windEnd = spec === null ? THRUST_WIND_END : spec.windEnd;
   const FOLLOW_THROUGH_FRAMES = 2;
   return {
@@ -1077,6 +1348,7 @@ function attackPose(
   progress: number,
 ): GoblinPose {
   const impactAt = impactProgress(archetype, kind);
+  if (!isMeleeArchetype(archetype)) return bowShotPose(style, prop, kind, progress, impactAt);
   const spec = SWING_SPECS[archetype][kind];
   if (spec === null) return thrustPose(archetype, style, prop, progress, impactAt);
   return swingPose(archetype, style, prop, { ...spec, impactAt }, progress);
@@ -1104,7 +1376,7 @@ function flinchPose(
     x: carry.x - 0.11 * recoil,
     y: carry.y + armLength * 0.1 * recoil,
   };
-  const weaponAngle = carryAngle(style, prop, nearHand.y) + deg(14) * recoil;
+  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) + deg(14) * recoil;
 
   return {
     ...rest,
@@ -1182,8 +1454,11 @@ function drawImpactSmear(
 function smearStrength(archetype: GoblinArchetype, row: RowSpec, frame: number): number {
   if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return 0;
   const kind = row.name === 'attack_light' ? 'light' : 'heavy';
-  // The sword's stab does not rotate, so a crescent would be a lie.
+  // The sword's stab does not rotate, so a crescent would be a lie. Neither does
+  // anything the bow does: an arc smear across a draw is a swing that never
+  // happened.
   if (archetype === 'sword' && kind === 'light') return 0;
+  if (archetype === 'bow') return 0;
   const distance = Math.abs(frame - IMPACT_FRAMES[archetype][kind]);
   const SMEAR_REACH = 2;
   if (distance > SMEAR_REACH) return 0;
@@ -1297,6 +1572,10 @@ function buildJobs(
             : along(pose.nearHand, pose.weaponAngle, prop.tipDistance),
         paint: (ctx, originX, originY, unit) => {
           const figureUnit = unit * drawScale;
+          // Published immediately before the figure is painted, because the bow
+          // is the one prop whose geometry is not fixed and the painter has no
+          // other way to learn how far this frame's string is pulled.
+          setBowDraw(bowDrawFor(archetype, row, frame));
           drawImpactSmear(ctx, originX, originY, figureUnit, style, pose, prop, smear);
           drawGoblin(ctx, originX, originY, figureUnit, style, pose, prop);
         },
@@ -1304,6 +1583,23 @@ function buildJobs(
     }
   }
   return jobs;
+}
+
+/** No bow shape at all, which is what every non-bow archetype's painter ignores. */
+const NO_BOW_DRAW: BowDraw = { amount: 0, nocked: false };
+
+/**
+ * How far this frame's string is pulled.
+ *
+ * Derived from the same progress the pose is, rather than carried on the pose:
+ * a bow's draw is a property of the *weapon*, and putting it on `GoblinPose`
+ * would give every other archetype a field it can only ever leave at zero.
+ */
+function bowDrawFor(archetype: GoblinArchetype, row: RowSpec, frame: number): BowDraw {
+  if (isMeleeArchetype(archetype)) return NO_BOW_DRAW;
+  if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return NO_BOW_DRAW;
+  const kind = row.name === 'attack_light' ? 'light' : 'heavy';
+  return bowDrawAt(kind, frame, row.frameCount);
 }
 
 function poseFor(

@@ -121,16 +121,16 @@ async function main(): Promise<void> {
   const columns = Math.max(...ROWS.map((row) => row.frameCount));
   const frameW = Math.round(sheet.width / columns);
   const frameH = Math.round(sheet.height / ROWS.length);
-  // The guide comes from the fresh bake but the pixels may come from disk, and
-  // during a fix those are exactly the two things that disagree. Drawn anyway,
-  // the guide lands at the wrong offset over the old art and quietly reads as a
-  // moved anchor.
-  const geometryMatchesSheet = geometry.frameWidth === frameW && geometry.frameHeight === frameH;
-  if (!geometryMatchesSheet) {
-    console.warn(
-      `${SHEET_PATH} is ${frameW}×${frameH} per cell but the current bake makes ` +
-        `${geometry.frameWidth}×${geometry.frameHeight} — the tile guide is omitted. ` +
-        `Pass --fresh to review the bake instead of the file.`,
+  // Every source rectangle in this harness is derived from the *current* code's
+  // row table and the *file's* dimensions. Once those disagree — which is
+  // exactly what happens while a bake is failing its gates and the file on disk
+  // is the last passing art — the whole contact sheet is sheared, not just the
+  // tile guide, so there is nothing worth half-drawing.
+  if (geometry.frameWidth !== frameW || geometry.frameHeight !== frameH) {
+    throw new Error(
+      `${SHEET_PATH} has ${frameW}×${frameH} cells but the current bake makes ` +
+        `${geometry.frameWidth}×${geometry.frameHeight}. Pass --fresh to review the bake ` +
+        `itself, or run \`npm run gen:bugaboo\` to bring the file up to date.`,
     );
   }
 
@@ -200,7 +200,7 @@ async function main(): Promise<void> {
       blit(col, 1);
       ctx.strokeStyle = GRID_LINE;
       ctx.strokeRect(x, y, cellW, cellH);
-      if (part === null && geometryMatchesSheet) {
+      if (part === null) {
         ctx.strokeStyle = TILE_GUIDE;
         ctx.strokeRect(
           x + geometry.tileX * scale,

@@ -216,6 +216,21 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
 
 export const MONGO_MAX_LEVEL = MONGO_LEVELS.length;
 
+/**
+ * Damage he has to land for one point of ability XP.
+ *
+ * `killXp` alone makes the first levels a wall, because the pet is the one
+ * creature in the party that mostly does not get the killing blow: a juvenile
+ * bites for two against mobs the cat is already hitting for ten, so a raptor who
+ * spent a whole floor in the fight can come off it having earned nothing. Paying
+ * for the contribution as well as the finish is what makes chip damage count.
+ *
+ * Deliberately coarse. A rate fine enough to pay per blow at level 1 pays an
+ * adult twelve times as much for the same swing, and his XP thresholds are the
+ * ones that grew — see {@link MONGO_DEF.xpGrowthRate}.
+ */
+export const MONGO_DAMAGE_PER_XP = 5;
+
 /** The stats Mongo fights with at a given pet level. */
 export function getMongoStats(level: number): MongoStats {
   const index = Math.max(0, Math.min(MONGO_LEVELS.length - 1, Math.round(level) - 1));

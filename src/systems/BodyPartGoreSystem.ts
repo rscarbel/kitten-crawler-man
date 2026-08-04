@@ -30,6 +30,7 @@ import {
   BRINDLED_VESPA_GORE_PARTS,
 } from '../sprites/brindledVespaSprite';
 import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/troglodyteSprite';
+import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../sprites/tusklingSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -138,6 +139,17 @@ const BRINDLED_VESPA_CONFIG: MobBodyPartConfig = {
   parts: BRINDLED_VESPA_GORE_PARTS,
 };
 
+/**
+ * The Tuskling's eight. The severed tusk is the piece that names the creature —
+ * a long ivory crescent nothing else in the bestiary drops — and the ragged
+ * flap of pink hide with the spine bristles still in it is the one that says
+ * the rest of the pile came off something with a coat.
+ */
+const TUSKLING_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'tuskling',
+  parts: TUSKLING_GORE_PARTS,
+};
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
@@ -149,6 +161,7 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   [EVIL_CLOWN_BODY_PART_KEY, EVIL_CLOWN_CONFIG],
   [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_CONFIG],
   [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_CONFIG],
+  [TUSKLING_BODY_PART_KEY, TUSKLING_CONFIG],
   [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
   ...SKELETON_CONFIGS,
 ]);

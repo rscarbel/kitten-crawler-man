@@ -9,12 +9,31 @@ import type { AssetGroup } from '../core/assetGroups';
  *
  * Deliberately **not** a `MobSpawnRule`. That type is for weighted tables where
  * one entry is picked; a camp spawns all of its entries, so a `chance` on one
- * would be a field with no meaning that the spawner silently ignores.
+ * would be a field with no meaning that the spawner silently ignores. `escorts`
+ * goes for the same reason and is unnecessary besides — a roster that spawns
+ * every entry can simply list the escort as an entry of its own, which is what
+ * floor 3's goblin camp does with its archers.
  */
-export type CampSpawnRule = Omit<MobSpawnRule, 'chance'>;
+export type CampSpawnRule = Omit<MobSpawnRule, 'chance' | 'escorts'>;
+
+/**
+ * The level band a spawn rule rolls within, shared by every kind of rule that
+ * can produce a levelled mob.
+ *
+ * Factored out because for a long time only room and hallway rules had one, so
+ * boss rooms and `extraSpawns` spawned at base stats forever — a level-1
+ * troglodyte guarding a floor-1 gauntlet boss, and a Ball of Swine no tougher on
+ * the day the party finds it than on the day the floor was authored.
+ */
+export interface MobLevelRange {
+  /** Minimum mob level (default 1). Higher levels scale HP, speed, damage, cadence, XP and coins. */
+  minLevel?: number;
+  /** Maximum mob level (default `minLevel`). A random level in the band is picked per spawn. */
+  maxLevel?: number;
+}
 
 /** A single entry in a weighted mob-spawn table. */
-export interface MobSpawnRule {
+export interface MobSpawnRule extends MobLevelRange {
   /** String key resolved by the spawner factory. */
   type:
     | 'goblin'
@@ -47,7 +66,8 @@ export interface MobSpawnRule {
     | 'city_elf_cultist'
     | 'skeleton_sword'
     | 'skeleton_archer'
-    | 'skeleton_lord';
+    | 'skeleton_lord'
+    | 'goblin_archer';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -57,12 +77,50 @@ export interface MobSpawnRule {
   minCount?: number;
   /** Maximum number of this mob type to spawn per room (default 1). */
   maxCount?: number;
-  /** Minimum mob level (default 1). Higher levels scale HP, speed, damage, XP, and coins. */
-  minLevel?: number;
-  /** Maximum mob level (default 1). A random level in [minLevel, maxLevel] is picked per spawn. */
-  maxLevel?: number;
+  /**
+   * Extra mobs spawned into the same room alongside this rule's own.
+   *
+   * The mechanism exists for one creature and states its design contract: a
+   * goblin archer must never be the thing a room is made of. Alone it is a slow,
+   * fragile plinker the player simply walks down; behind a melee line it is what
+   * makes the melee line dangerous. A weighted table can only pick *one* rule
+   * per room, so without this an archer entry would occasionally fill a whole
+   * room with archers and never once produce the mixed group it is for.
+   */
+  escorts?: EscortSpawnRule[];
   /** Optional per-mob config forwarded to the constructor. */
   config?: Record<string, unknown>;
+}
+
+/**
+ * A mob attached to another rule's spawn, never spawned on its own.
+ *
+ * See {@link MobSpawnRule.escorts}.
+ */
+export interface EscortSpawnRule extends MobLevelRange {
+  type: MobSpawnRule['type'];
+  /** Minimum number to spawn alongside the host rule (default 1). */
+  minCount?: number;
+  /** Maximum number to spawn alongside the host rule (default 1). */
+  maxCount?: number;
+  /**
+   * Withheld until the progression region at this index; absent means every
+   * region. Floor 1's archers are gated behind the Hoarder this way, so the
+   * opening stretch of a first-time crawler's first dungeon is unchanged.
+   */
+  minRegion?: number;
+}
+
+/**
+ * One boss room's occupant and the level band it spawns within.
+ *
+ * The band is a band rather than a single number because the party's own level
+ * is folded into it at generation time (see `resolveSpawnLevel`): its floor
+ * protects a first encounter from being trivial and its ceiling keeps the
+ * encounter's authored tuning intact for a party that comes back over-levelled.
+ */
+export interface BossRoomRule extends MobLevelRange {
+  type: string;
 }
 
 /**
@@ -70,7 +128,7 @@ export interface MobSpawnRule {
  * landmark (boss room, arena centre, map centre, etc.) rather than at
  * generic room/hallway spawn points.
  */
-export interface ExtraSpawnRule {
+export interface ExtraSpawnRule extends MobLevelRange {
   /** Mob type key (must be registered in the spawner MOB_REGISTRY). */
   type: MobSpawnRule['type'];
   /**
@@ -120,6 +178,17 @@ export interface ProgressionDef {
   gauntlets: GauntletDef[];
   /** Extra safe rooms scattered in the free region (gateway safe rooms are additional). */
   scatterSafeRooms: number;
+  /**
+   * Extra mobs added to each room's rolled count, indexed by progression region
+   * — one entry per gauntlet, then one more for the free-roam region beyond the
+   * last gateway boss. Missing entries mean no bonus.
+   *
+   * The count axis is the one that never scaled: spawn tables are fixed at
+   * generation and clearing a boss changed nothing, so the last stretch of a
+   * floor was as thinly populated as its first. Rooms stay capped at
+   * `MAX_ROOM_SPAWN_COUNT` however generous a bonus and a roll combine to be.
+   */
+  regionSpawnBonus?: number[];
 }
 
 /** Data-only description of a dungeon level. No game-logic dependencies. */
@@ -152,7 +221,7 @@ export interface LevelDef {
    * generated map's `bossRooms`, and — on a progression floor — with
    * `progression.gauntlets`.
    */
-  bossRooms?: Array<{ type: string }>;
+  bossRooms?: BossRoomRule[];
   /** ID of the next level in the registry, if any. */
   nextLevelId?: string;
   /**

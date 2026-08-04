@@ -38,7 +38,6 @@ export function shade(color: RGB, factor: number): RGB {
   return [color[0] * factor, color[1] * factor, color[2] * factor];
 }
 
-// Sampled from overworld_tileset row 0 col 0 (hand-repaired grass), then widened.
 export const GRASS_RAMP: Ramp = {
   shadow: [58, 72, 30],
   mid: [99, 112, 50],
@@ -53,7 +52,6 @@ export const DEAD_GRASS_RAMP: Ramp = {
   accent: [196, 182, 118],
 };
 
-// Sampled from overworld_tileset row 3 col 0 (hand-repaired village street).
 export const STREET_STONE_RAMP: Ramp = {
   shadow: [84, 70, 52],
   mid: [140, 120, 90],

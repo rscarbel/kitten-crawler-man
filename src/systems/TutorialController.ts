@@ -1613,7 +1613,7 @@ export class TutorialController {
     const MACE_IMPACT_FRAME = GOBLIN_ATTACKS.mace.light.impactFrame;
     const GUARD_FRAME = 0;
     drawGoblinSprite(ctx, {
-      weapon: 'mace',
+      archetype: 'mace',
       x: goblinX,
       y: spriteY,
       tileSize: s,

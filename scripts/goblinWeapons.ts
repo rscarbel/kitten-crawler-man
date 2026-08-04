@@ -617,10 +617,283 @@ export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): G
   };
 }
 
+// ── Short bow ────────────────────────────────────────────────────────────────
+//
+// The one weapon in the set whose shape is not fixed. Its local +X runs along
+// the stave exactly as a haft does, so it hangs from the hand at rest like every
+// other weapon and needs no special carry rule; the arrow and the drawn string
+// live along local ±Y, which is why the aiming poses rotate the whole stave and
+// the shot leaves along the goblin's facing.
+//
+// Nothing about it is straight. A bow drawn as two sticks and a line reads as a
+// slingshot or a lyre at 32 px; what names it is a stave that bows *away* from
+// the string with its tips set back behind the grip, plus a string that bends to
+// a point at the draw hand rather than staying a chord.
+
+/**
+ * Half the stave's length: local +X to the upper tip, −X to the lower.
+ *
+ * Sized against the *figure*, not against realism. A blind review at in-game
+ * size asked for a bow spanning 70–85% of the archer's own height, on the
+ * grounds that a shape smaller than that cannot dominate a 28-pixel silhouette
+ * — and dominating the silhouette is the whole reason this creature is drawn
+ * differently from the other four goblins. At 0.56 either side the stave comes
+ * to about three quarters of the figure.
+ */
+const BOW_LIMB = 0.56;
+/**
+ * How far the middle of each limb bows forward of the grip, toward the target.
+ *
+ * Read together with {@link BOW_TIP_SETBACK}: those two are what decide how much
+ * open background the stave and its string enclose, and that gap is the entire
+ * archer signal in a pure-black silhouette. Two blind reviews running failed the
+ * walking figure for having none — at 0.115 over a 0.5 half-length the enclosed
+ * sliver came to about two pixels at the in-game tile, which the outline eats.
+ * Together they now enclose ~0.27 tiles, which survives as a visible D-hole.
+ *
+ * There is a limit in the other direction: a belly this deep on a *filled* shape
+ * reads as a shield, so the string has to stay thin enough to leave the middle
+ * open.
+ */
+const BOW_BELLY = 0.175;
+/** How far behind the grip the tips — and so the resting string — sit. */
+const BOW_TIP_SETBACK = 0.1;
+const BOW_LIMB_HALF_WIDTH = 0.022;
+/** The thickened grip section the fist closes on, either side of the origin. */
+const BOW_RISER = 0.085;
+/**
+ * The string's drawn width, which is nothing like a real bowstring's.
+ *
+ * At a hair's width it is under a pixel on the baked sheet and vanishes: a blind
+ * review looking at 7× magnification reported no string at all. A bow without a
+ * visible string is a boomerang, so it is drawn at the smallest width that
+ * survives the bake and in near-white, which is the only value that reads
+ * against both the brown limbs and a dungeon floor.
+ */
+const BOW_STRING_WIDTH = 0.026;
+/** Arrow length forward of the nocking point. */
+const BOW_ARROW_LENGTH = 0.76;
+/**
+ * Half the shaft's width.
+ *
+ * Thick for an arrow, and it has to be: at 0.008 the shaft was two thirds of a
+ * pixel on the baked sheet and simply was not there — the draw read as a goblin
+ * pulling an empty string. The one thing this animation exists to show is that
+ * something is about to be shot, so the shaft is drawn at the smallest width
+ * that survives the bake rather than at the width an arrow would really be.
+ */
+const BOW_ARROW_HALF_WIDTH = 0.017;
+const BOW_HEAD_LENGTH = 0.075;
+const BOW_HEAD_HALF_WIDTH = 0.036;
+const BOW_FLETCH_LENGTH = 0.075;
+const BOW_FLETCH_HALF_WIDTH = 0.028;
+
+/**
+ * How far back the string is pulled at full draw, in tile units.
+ *
+ * Read against {@link BOW_LIMB}: a short bow is drawn to about half its own
+ * length. At a third of it the string barely left its resting chord, the two
+ * fists ended up a hand apart out in front of the chest, and the pose read as a
+ * goblin holding a bow rather than one drawing it.
+ *
+ * It also sets {@link BOW_ARROW_LENGTH}: at full draw the arrow's head sits just
+ * past the riser, so the two numbers move together or the point ends up behind
+ * the bow that is supposed to be shooting it.
+ */
+const BOW_FULL_DRAW = 0.58;
+
+/** The bow's shape on one frame. Everything else about the pose is irrelevant. */
+export interface BowDraw {
+  /** 0 = string at rest, 1 = full draw. */
+  readonly amount: number;
+  /** Whether an arrow is on the string at all. */
+  readonly nocked: boolean;
+}
+
+const BOW_AT_REST: BowDraw = { amount: 0, nocked: false };
+
+/**
+ * The bow's per-frame state, published by the choreography.
+ *
+ * A module-level handle rather than a constructor argument because the prop is
+ * built once per sheet and painted for every frame. The generator sets this
+ * immediately before painting each frame; nothing else reads it.
+ */
+let currentDraw: BowDraw = BOW_AT_REST;
+
+export function setBowDraw(draw: BowDraw): void {
+  currentDraw = draw;
+}
+
+/** Where the nocking point sits at a given draw, in weapon-local units on Y. */
+export function bowStringPull(amount: number): number {
+  return -BOW_TIP_SETBACK - BOW_FULL_DRAW * amount;
+}
+
+/** Where the arrow's point sits at a given draw, in weapon-local units on Y. */
+export function bowArrowTip(amount: number): number {
+  return bowStringPull(amount) + BOW_ARROW_LENGTH;
+}
+
+export function makeBowProp(palette: GoblinPalette, seed: () => number): GoblinProp {
+  const { iron, leather, wood, bone, outline } = palette;
+  return {
+    tipDistance: BOW_LIMB,
+    offGripDistance: null,
+    offHandCloses: true,
+    // The belly, not a limb tip: the stave's tips are on the ±X axis, so what
+    // hangs off that axis when the bow is carried is the forward bow of the limbs.
+    headHalfHeight: BOW_BELLY,
+    paint: (ctx, hand, wristAngle) => {
+      const { amount, nocked } = currentDraw;
+      ctx.save();
+      ctx.translate(hand.x, hand.y);
+      ctx.rotate(wristAngle);
+
+      const pull = bowStringPull(amount);
+
+      /**
+       * One limb, from the riser out to its tip. Drawn twice, mirrored: a bow
+       * whose limbs differ is a bow that was assembled wrong.
+       */
+      const traceLimb = (sign: number, grow: number): void => {
+        const width = BOW_LIMB_HALF_WIDTH + grow;
+        ctx.beginPath();
+        ctx.moveTo(sign * BOW_RISER, -width);
+        ctx.quadraticCurveTo(
+          sign * BOW_LIMB * 0.6,
+          BOW_BELLY - width,
+          sign * (BOW_LIMB + grow),
+          -BOW_TIP_SETBACK,
+        );
+        ctx.lineTo(sign * (BOW_LIMB + grow), -BOW_TIP_SETBACK + width * 2);
+        ctx.quadraticCurveTo(
+          sign * BOW_LIMB * 0.6,
+          BOW_BELLY + width * 2,
+          sign * BOW_RISER,
+          width,
+        );
+        ctx.closePath();
+      };
+
+      for (const sign of [1, -1]) {
+        ctx.fillStyle = outline;
+        traceLimb(sign, PART_OUTLINE);
+        ctx.fill();
+        ctx.fillStyle = wood.mid;
+        traceLimb(sign, 0);
+        ctx.fill();
+        ctx.save();
+        traceLimb(sign, 0);
+        ctx.clip();
+        // Lit along the belly, shadowed on the string side: a flat brown arc is
+        // the fastest way to make a bow look like a placeholder.
+        ctx.fillStyle = rgba(wood.light, 0.7);
+        ctx.fillRect(-BOW_LIMB, -BOW_TIP_SETBACK, BOW_LIMB * 2, BOW_LIMB_HALF_WIDTH);
+        ctx.fillStyle = rgba(wood.shadow, 0.5);
+        ctx.fillRect(-BOW_LIMB, BOW_BELLY * 0.5, BOW_LIMB * 2, BOW_LIMB_HALF_WIDTH * 1.6);
+        ctx.restore();
+      }
+
+      // Horn nocks at both tips — two pale specks that stop the stave reading as
+      // a bent twig, and the only bone on the whole weapon.
+      for (const sign of [1, -1]) {
+        ctx.fillStyle = outline;
+        ctx.beginPath();
+        ctx.arc(sign * BOW_LIMB, -BOW_TIP_SETBACK, BOW_LIMB_HALF_WIDTH * 1.5, 0, FULL_CIRCLE_ANGLE);
+        ctx.fill();
+        ctx.fillStyle = bone.light;
+        ctx.beginPath();
+        ctx.arc(sign * BOW_LIMB, -BOW_TIP_SETBACK, BOW_LIMB_HALF_WIDTH, 0, FULL_CIRCLE_ANGLE);
+        ctx.fill();
+      }
+
+      // The string: two straight runs meeting at the nocking point, so a drawn
+      // bow shows the sharp V that a chord never does.
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = BOW_STRING_WIDTH * 2.6;
+      ctx.beginPath();
+      ctx.moveTo(BOW_LIMB, -BOW_TIP_SETBACK);
+      ctx.lineTo(0, pull);
+      ctx.lineTo(-BOW_LIMB, -BOW_TIP_SETBACK);
+      ctx.stroke();
+      // Brightest at full draw and dull at rest. The string is the whole warning
+      // that a shot is coming, so it should be the loudest thing on the sprite
+      // exactly then — and at rest a near-white bar across the stave is what
+      // turned the carried bow into a shield with a boss on it.
+      ctx.strokeStyle = mix(bone.dark, bone.rim, amount);
+      ctx.lineWidth = BOW_STRING_WIDTH;
+      ctx.stroke();
+
+      if (nocked) {
+        const tipY = bowArrowTip(amount);
+        ctx.fillStyle = outline;
+        ctx.fillRect(-BOW_ARROW_HALF_WIDTH * 1.7, pull, BOW_ARROW_HALF_WIDTH * 3.4, tipY - pull);
+        ctx.fillStyle = wood.light;
+        ctx.fillRect(-BOW_ARROW_HALF_WIDTH, pull, BOW_ARROW_HALF_WIDTH * 2, tipY - pull);
+        ctx.fillStyle = rgba(wood.shadow, 0.6);
+        ctx.fillRect(0, pull, BOW_ARROW_HALF_WIDTH, tipY - pull);
+
+        const traceHead = (grow: number): void => {
+          ctx.beginPath();
+          ctx.moveTo(0, tipY + grow);
+          ctx.lineTo(-BOW_HEAD_HALF_WIDTH - grow, tipY - BOW_HEAD_LENGTH);
+          ctx.lineTo(BOW_HEAD_HALF_WIDTH + grow, tipY - BOW_HEAD_LENGTH);
+          ctx.closePath();
+        };
+        paintSteel(ctx, traceHead, iron, outline, () => {
+          ctx.fillStyle = rgba(iron.rim, 0.6);
+          ctx.fillRect(
+            -BOW_HEAD_HALF_WIDTH,
+            tipY - BOW_HEAD_LENGTH,
+            BOW_HEAD_HALF_WIDTH,
+            BOW_HEAD_LENGTH,
+          );
+          paintPitting(
+            ctx,
+            -BOW_HEAD_HALF_WIDTH,
+            BOW_HEAD_HALF_WIDTH,
+            BOW_HEAD_LENGTH * 0.4,
+            iron,
+            leather,
+            seed,
+          );
+        });
+
+        // Fletching at the nock end, swept forward off the string.
+        for (const sign of [1, -1]) {
+          ctx.fillStyle = outline;
+          ctx.beginPath();
+          ctx.moveTo(0, pull);
+          ctx.lineTo(sign * (BOW_FLETCH_HALF_WIDTH + PART_OUTLINE), pull + BOW_FLETCH_LENGTH * 0.55);
+          ctx.lineTo(0, pull + BOW_FLETCH_LENGTH);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = sign > 0 ? leather.light : leather.mid;
+          ctx.beginPath();
+          ctx.moveTo(0, pull + PART_OUTLINE);
+          ctx.lineTo(sign * BOW_FLETCH_HALF_WIDTH, pull + BOW_FLETCH_LENGTH * 0.55);
+          ctx.lineTo(0, pull + BOW_FLETCH_LENGTH - PART_OUTLINE);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      // The riser last, over the limbs and the string, because the fist closes
+      // on it and a grip drawn under the string reads as a hand behind the bow.
+      drawWrap(ctx, -BOW_RISER, BOW_RISER, BOW_LIMB_HALF_WIDTH * 1.6, leather, outline);
+
+      ctx.restore();
+    },
+  };
+}
+
 /** Every weapon, keyed the same way the archetypes are. */
 export const WEAPON_FACTORIES = {
   sword: makeSwordProp,
   axe: makeAxeProp,
   mace: makeMaceProp,
   warhammer: makeWarhammerProp,
+  bow: makeBowProp,
 } as const;

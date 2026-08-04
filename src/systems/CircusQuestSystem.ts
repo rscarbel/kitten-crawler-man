@@ -23,7 +23,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
-import { QuestManager } from '../core/QuestManager';
+import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import { Signet } from '../creatures/Signet';
@@ -93,6 +93,16 @@ type CircusQuestPhase =
   | 'awaiting_resolution'
   | 'complete';
 
+/**
+ * The phases that expect Signet waiting by the Big Top door rather than on her
+ * lookout — the same split `enterStageFromProgress` makes when it decides
+ * between `spawnSignetAtBigTopDoor` and `spawnSignetAtLookout`.
+ */
+const BIGTOP_DOOR_PHASES: ReadonlySet<CircusQuestPhase> = new Set([
+  'bigtop_ready',
+  'awaiting_resolution',
+]);
+
 interface WaveSpawn {
   dx: number;
   dy: number;
@@ -142,6 +152,15 @@ const ASSAULT_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   ],
   [{ dx: 0, dy: -8, make: (x, y) => new TerrorTheClown(x, y, TILE_SIZE) }],
 ];
+
+export interface CircusQuestCheckpoint {
+  questStatuses: Array<[string, QuestStatus]>;
+  phase: CircusQuestPhase;
+  waveIndex: number;
+  waveMobs: Mob[];
+  signet: Signet | null;
+  heather: HeatherTheBear | null;
+}
 
 export class CircusQuestSystem implements GameSystem {
   readonly questManager: QuestManager;
@@ -450,6 +469,55 @@ export class CircusQuestSystem implements GameSystem {
 
   get isDialogOpen(): boolean {
     return this.dialog.isOpen;
+  }
+
+  /**
+   * Snapshots the questline so a death inside a safe room rewinds every beat the
+   * player completed after checking in.
+   *
+   * Mob fields are stored as references rather than copies: at capture time the
+   * field held that exact creature, and the scene's checkpoint restore revives
+   * the ones that died afterwards, so pointing back at them is the whole point.
+   *
+   * `waveMobs` is copied here *and* again in `restoreCheckpoint`, because one
+   * snapshot is restored once per death — handing the stored array straight to
+   * the live field would let a later `spawnWave` mutate the snapshot itself.
+   *
+   * Banner and complete-overlay timers are left out: they are per-frame FX that
+   * expire on their own within a second of the restore.
+   */
+  captureCheckpoint(): CircusQuestCheckpoint {
+    return {
+      questStatuses: this.questManager.snapshotStatuses(),
+      phase: this.phase,
+      waveIndex: this.waveIndex,
+      waveMobs: [...this.waveMobs],
+      signet: this.signet,
+      heather: this.heather,
+    };
+  }
+
+  /**
+   * `mobGrid` is taken as an argument rather than read off `lastCtx`: the
+   * scene's rewind replaces its grid wholesale just before this runs, so the
+   * cached frame context points at the discarded one.
+   */
+  restoreCheckpoint(snapshot: CircusQuestCheckpoint, mobGrid: SpatialGrid<Mob>): void {
+    this.questManager.restoreStatuses(snapshot.questStatuses);
+    this.phase = snapshot.phase;
+    this.waveIndex = snapshot.waveIndex;
+    this.waveMobs = [...snapshot.waveMobs];
+    this.signet = snapshot.signet;
+    this.heather = snapshot.heather;
+
+    // Signet is `resetsFullyOnCheckpoint`, so the rewind has already sent her
+    // back to the lookout tile she spawned on and re-anchored her loiter there.
+    // The late phases expect her across the grounds at the Big Top door, so the
+    // move has to be re-applied *after* that reset — the reposition re-anchors
+    // her again, and doing it first would just be undone.
+    if (BIGTOP_DOOR_PHASES.has(this.phase)) {
+      this.repositionSignetToBigTopDoor(mobGrid);
+    }
   }
 
   /** Returns quest markers for the minimap. */

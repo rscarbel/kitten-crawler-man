@@ -59,6 +59,14 @@ export class Cockroach extends Mob {
     super(tileX, tileY, tileSize, COCKROACH_HP, COCKROACH_SPEED);
   }
 
+  override resetToSpawn(): void {
+    super.resetToSpawn();
+    // A spent TTL is what BossRoomSystem despawns on, so a revived roach with
+    // the old countdown is culled again the same frame it stands back up.
+    this.ttl = COCKROACH_DESPAWN_TTL;
+    this.attackCooldown = randomInt(0, ATTACK_COOLDOWN - 1);
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
 

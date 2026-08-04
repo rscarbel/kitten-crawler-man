@@ -12,7 +12,7 @@ const BUGABOO_SPEED = 0.8;
 const AGGRO_RANGE_TILES = 20;
 const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_COOLDOWN = 60;
-const ATTACK_ANIM_FRAMES = 16;
+export const BUGABOO_ATTACK_FRAMES = 16;
 const ATTACK_DAMAGE = 2;
 /** Fraction of attack range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.6;
@@ -23,11 +23,11 @@ const FOLLOW_STOP_FRACTION = 0.6;
  * swing starts, so the hit and the picture of the hit are the same event.
  */
 const SWIPE_IMPACT_TIMER = Math.round(
-  ATTACK_ANIM_FRAMES * (1 - BUGABOO_SWIPE_IMPACT_FRAME / BUGABOO_SWIPE_FRAMES),
+  BUGABOO_ATTACK_FRAMES * (1 - BUGABOO_SWIPE_IMPACT_FRAME / BUGABOO_SWIPE_FRAMES),
 );
 
 /** How long it takes to haul itself out of a grate once the boards give. */
-const EMERGE_FRAMES = 34;
+export const BUGABOO_EMERGE_FRAMES = 34;
 
 /**
  * How close a player has to stand to a breach before the arm coming out of it
@@ -45,6 +45,18 @@ const BREACH_GRAB_COOLDOWN = 42;
  * sits in empty floor beside it.
  */
 const BREACH_STAND_RANGE_TILES = 0.2;
+
+/**
+ * How far outside the viewport one still has to be drawn.
+ *
+ * Measured off the bake, not guessed: the art reaches 1.44 tiles above its own
+ * tile — it is seven feet tall and its windup puts a claw over its own head — so
+ * at the default one tile of slack it pops in with a third of a tile of skull
+ * and claw still owed to the bottom edge of the screen. The same number sizes
+ * the hit-flash silhouette box, which at the default only clears the crown
+ * because a 1.5-tile floor rescues it by two pixels.
+ */
+const BUGABOO_CULL_MARGIN_TILES = 1.6;
 
 /** What a Bugaboo is doing with its arms this frame, in priority order. */
 type SwingTarget = { readonly player: Player } | { readonly barrier: { x: number; y: number } };
@@ -80,6 +92,10 @@ export class Bugaboo extends Mob {
    */
   private readonly loopOffsetSeconds = Math.random();
 
+  override get cullMarginTiles(): number {
+    return BUGABOO_CULL_MARGIN_TILES;
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, BUGABOO_HP, BUGABOO_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
@@ -95,6 +111,11 @@ export class Bugaboo extends Mob {
     this.breachGrabCooldown = 0;
     this.isBreakingIn = false;
     this.isAggro = false;
+    // The quest system rebuilds its barrier list and its wave roster on a
+    // checkpoint restore, so a grate assignment, its barrier callback and a
+    // defend target held across the rewind all point at the old encounter.
+    this.releaseGrate();
+    this.defendTarget = null;
   }
 
   /**
@@ -105,7 +126,7 @@ export class Bugaboo extends Mob {
    * the creature is coming up through the floor and has to be seen to do it.
    */
   beginEmerge(): void {
-    this.emergeTimer = EMERGE_FRAMES;
+    this.emergeTimer = BUGABOO_EMERGE_FRAMES;
     this.isMoving = false;
     // Whatever it was swinging at is behind it now. Left running, the swing
     // lands during the climb and its cooldown burns down out of sight, so it
@@ -113,10 +134,17 @@ export class Bugaboo extends Mob {
     this.attackAnimTimer = 0;
     this.attackCooldown = 0;
     this.swingTarget = null;
-    // Once it is out, it is out. Boarding grates is the player's whole job in
-    // this quest, so a creature that keeps its grate assignment walks back
-    // across the room and dives through the floor again the moment that grate
-    // is re-boarded — under boards it is standing on top of.
+    this.releaseGrate();
+  }
+
+  /**
+   * Forgets the grate this one came up. Boarding grates is the player's whole
+   * job in this quest, so a creature that keeps its assignment walks back across
+   * the room and dives through the floor again the moment that grate is
+   * re-boarded — rendering as an arm out of a hole while standing on top of
+   * intact planks, with its health bar snapped off its body onto the grate.
+   */
+  private releaseGrate(): void {
     this.assignedGrate = null;
     this.onBarrierAttack = null;
   }
@@ -161,8 +189,14 @@ export class Bugaboo extends Mob {
         }
         return;
       }
-      // The boards have just given way, so it climbs out before it does
-      // anything else — the grate is where the player's eye already is.
+      // The boards are gone. Released here rather than only on the emerge
+      // path, because a swing lands on whatever it was aimed at without
+      // re-checking range: shoved off its grate mid-swing — by the separation
+      // push, or by a second Bugaboo spawning on the same grate — this one
+      // still breaks the boards, and `wasBreakingIn` is false when it does.
+      this.releaseGrate();
+      // It climbs out before it does anything else, but only if it was actually
+      // still in the hole. The grate is where the player's eye already is.
       if (wasBreakingIn) {
         this.beginEmerge();
         return;
@@ -229,7 +263,7 @@ export class Bugaboo extends Mob {
 
   private beginSwing(target: SwingTarget): void {
     this.attackCooldown = ATTACK_COOLDOWN;
-    this.attackAnimTimer = ATTACK_ANIM_FRAMES;
+    this.attackAnimTimer = BUGABOO_ATTACK_FRAMES;
     this.swingTarget = target;
   }
 
@@ -319,8 +353,8 @@ export class Bugaboo extends Mob {
       facingX: this.facingX,
       facingY: this.facingY,
       swipeProgress:
-        this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : null,
-      emergeProgress: this.emergeTimer > 0 ? 1 - this.emergeTimer / EMERGE_FRAMES : null,
+        this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / BUGABOO_ATTACK_FRAMES : null,
+      emergeProgress: this.emergeTimer > 0 ? 1 - this.emergeTimer / BUGABOO_EMERGE_FRAMES : null,
       loopOffsetSeconds: this.loopOffsetSeconds,
     });
 

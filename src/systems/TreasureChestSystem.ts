@@ -6,6 +6,7 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
+import { cloneLootDrop } from '../core/lootDrop';
 
 export type ChestType = 'wooden' | 'silver';
 
@@ -21,6 +22,24 @@ export interface TreasureChest {
   guardBounds: { x: number; y: number; w: number; h: number } | null;
   bossRoomIndex: number | null;
   hadMobs: boolean;
+}
+
+/**
+ * One chest's progress at capture time. `chest` is a bare reference rather than
+ * a copy: `ChestRewardDialog` and the render pass both hold live chest objects,
+ * so a restore has to write back into the same instances, not swap in new ones.
+ */
+export interface TreasureChestProgressSnapshot {
+  chest: TreasureChest;
+  state: TreasureChest['state'];
+  loot: LootDrop | null;
+  unlockFrame: number;
+  tryLockedTimer: number;
+  hadMobs: boolean;
+}
+
+export interface TreasureChestCheckpoint {
+  chests: TreasureChestProgressSnapshot[];
 }
 
 // Sparkle animation constants
@@ -391,6 +410,35 @@ export class TreasureChestSystem {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, active: Player): void {
     for (const chest of this.chests) {
       this.renderSingle(ctx, camX, camY, active, chest);
+    }
+  }
+
+  captureCheckpoint(): TreasureChestCheckpoint {
+    return {
+      chests: this.chests.map((chest) => ({
+        chest,
+        state: chest.state,
+        loot: chest.loot === null ? null : cloneLootDrop(chest.loot),
+        unlockFrame: chest.unlockFrame,
+        tryLockedTimer: chest.tryLockedTimer,
+        hadMobs: chest.hadMobs,
+      })),
+    };
+  }
+
+  restoreCheckpoint(snapshot: TreasureChestCheckpoint): void {
+    // A chest added after the capture (a boss room reached and then rewound)
+    // must go away entirely, so the list is rebuilt from the snapshot rather
+    // than walked in parallel with the live one.
+    this.chests.length = 0;
+    for (const entry of snapshot.chests) {
+      const chest = entry.chest;
+      chest.state = entry.state;
+      chest.loot = entry.loot === null ? null : cloneLootDrop(entry.loot);
+      chest.unlockFrame = entry.unlockFrame;
+      chest.tryLockedTimer = entry.tryLockedTimer;
+      chest.hadMobs = entry.hadMobs;
+      this.chests.push(chest);
     }
   }
 

@@ -1,6 +1,7 @@
 import type { AbilityManager } from './AbilityManager';
 import type { AchievementManager } from './AchievementManager';
 import type { PlayerSnapshot } from './PlayerSnapshot';
+import type { WorldCheckpoint } from './WorldCheckpoint';
 
 /**
  * In-run checkpoint captured on safe-room entry. Restoring it puts the current
@@ -9,6 +10,12 @@ import type { PlayerSnapshot } from './PlayerSnapshot';
  * re-derived, only kept. In-memory only: it does not survive a page reload.
  */
 export interface LevelCheckpoint {
+  /**
+   * The floor and the run as they stood at capture. Without this the checkpoint
+   * rewound the party but not the world, so a boss killed after the safe room
+   * stayed dead and its reward stayed collected.
+   */
+  world: WorldCheckpoint;
   humanSnap: PlayerSnapshot;
   catSnap: PlayerSnapshot;
   /**

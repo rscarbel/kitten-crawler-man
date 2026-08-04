@@ -22,6 +22,26 @@ export const BUGABOO_SWIPE_IMPACT_FRAME = 4;
 /** How many frames every swipe row holds, which the impact frame counts into. */
 export const BUGABOO_SWIPE_FRAMES = 8;
 
+/**
+ * The topmost inked row of the standing frames, in the sheet's own `tileScale`
+ * units — every idle and walk frame starts with this much transparent padding.
+ * Measured off the baked sheet rather than derived, because the anchor only says
+ * where the feet are; nothing in the manifest records how far the horns reach.
+ * A bake gate re-measures it, since a redraw would move it silently.
+ */
+export const BUGABOO_STANDING_INK_TOP = 39;
+
+/**
+ * How far above his tile origin the standing art actually reaches, in tiles.
+ * Anything drawn over a Bugaboo's head — a speech bubble, an interaction prompt —
+ * has to start above this or it lands on his chest.
+ */
+export function bugabooHeadClearanceTiles(): number {
+  const def = getSpriteDefByKey('bugaboo');
+  if (!def) return 0;
+  return (def.tileY - BUGABOO_STANDING_INK_TOP) / def.tileScale;
+}
+
 /** Loop speed for the idle, which is driven by the clock rather than a timer. */
 export const BUGABOO_IDLE_FPS = 6;
 /** How fast the arm sweeps its circle while the creature is stuck in a breach. */

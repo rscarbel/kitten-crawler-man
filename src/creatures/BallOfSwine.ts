@@ -178,6 +178,18 @@ export class BallOfSwine extends Mob {
     this.killCooldowns.clear();
   }
 
+  /**
+   * The burst latch has to be cleared before the base revive runs: it is what
+   * `resetToSpawn()` bails on, so a ball brought back with the latch still set
+   * would keep its full HP and none of its position or phase reset.
+   */
+  override reviveForCheckpoint(): void {
+    this.pendingBurst = false;
+    this.burstTimer = 0;
+    this.state = 'idle';
+    super.reviveForCheckpoint();
+  }
+
   protected rollLootItems(_killer: Player | null): LootDrop['items'] {
     return [{ id: 'health_potion', quantity: 3 }];
   }

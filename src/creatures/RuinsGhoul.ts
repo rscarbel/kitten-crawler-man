@@ -106,7 +106,7 @@ export class RuinsGhoul extends Mob {
       (this.hasLOS(nearest) || this.onSameTile(nearest))
     ) {
       this.dealDamage(nearest, ATTACK_DAMAGE);
-      this.attackCooldown = ATTACK_COOLDOWN;
+      this.attackCooldown = this.scaledCooldownFrames(ATTACK_COOLDOWN);
       this.attackAnimTimer = ATTACK_ANIM_FRAMES;
     }
   }

@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { Mob, scaledCooldownFramesForLevel } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import { TROGLODYTE_BODY_PART_KEY, drawTroglodyteSprite } from '../sprites/troglodyteSprite';
@@ -25,7 +25,42 @@ const TONGUE_RANGE_TILES = TROGLODYTE_TONGUE_RANGE_TILES;
 const TONGUE_DAMAGE = 4;
 const POISON_CHANCE = 0.25;
 
-const WINDUP_FRAMES = 50; // slow, menacing windup
+/** Slow, menacing windup at level 1. Shortened with level, never past the floor. */
+const WINDUP_FRAMES = 50;
+/**
+ * The shortest the windup ever gets, in frames.
+ *
+ * Explicit rather than left to the cadence curve, because the curve's own floor
+ * (50 × 0.55 ≈ 28) would leave only three frames of aim tracking — at which
+ * point the strike is effectively instantaneous and the *whole* attack, not just
+ * its tracking half, has stopped being something a player can read.
+ */
+export const TROGLODYTE_WINDUP_FLOOR_FRAMES = 32;
+/**
+ * How long before the strike the aim freezes, in frames.
+ *
+ * Deliberately a constant rather than a fraction of the windup: this is the
+ * dodgeable part, so scaling it with level would shrink the telegraph itself
+ * instead of the tracking that precedes it. At the windup floor the split is 7
+ * frames of tracking to 25 frames locked, comfortably over the fairness rule's
+ * 21-frame minimum, so a higher-level troglodyte commits *sooner* rather than
+ * warning you less.
+ */
+export const TROGLODYTE_AIM_LOCK_FRAMES = 25;
+
+/**
+ * How long a troglodyte of this level gapes before its tongue fires.
+ *
+ * A free function as well as the method the creature calls, so
+ * `scripts/verify-difficulty.ts` can assert the floor and the locked-telegraph
+ * split against the arithmetic the game actually runs.
+ */
+export function troglodyteWindupFrames(level: number): number {
+  return Math.max(
+    TROGLODYTE_WINDUP_FLOOR_FRAMES,
+    scaledCooldownFramesForLevel(WINDUP_FRAMES, level),
+  );
+}
 const STRIKE_FRAMES = 18; // 9 frames out, 9 frames back
 const COOLDOWN_FRAMES = 150;
 /** Fraction of tongue range used as follow stop distance. */
@@ -69,6 +104,14 @@ export class Troglodyte extends Mob {
 
   private state: TrogState = 'idle';
   private windupTimer = 0;
+  /**
+   * How long the windup currently under way was started at. Held rather than
+   * read back off {@link WINDUP_FRAMES}, because the gape animation is driven
+   * off elapsed-over-total and a level-scaled windup makes those two different
+   * numbers — using the constant would leave a high-level troglodyte's mouth
+   * only part-way open at the moment it strikes.
+   */
+  private windupDuration = WINDUP_FRAMES;
   private strikeTimer = 0;
   private cooldownTimer = 0;
 
@@ -87,6 +130,7 @@ export class Troglodyte extends Mob {
     this.mouthOpenAmt = 0;
     this.state = 'idle';
     this.windupTimer = 0;
+    this.windupDuration = WINDUP_FRAMES;
     this.strikeTimer = 0;
     this.cooldownTimer = 0;
     this.strikeProgress = null;
@@ -138,7 +182,8 @@ export class Troglodyte extends Mob {
         if (nearestDist <= tongueRangePx && this.hasLOS(nearest)) {
           // In tongue range — start the slow windup
           this.state = 'winding_up';
-          this.windupTimer = WINDUP_FRAMES;
+          this.windupDuration = troglodyteWindupFrames(this.mobLevel);
+          this.windupTimer = this.windupDuration;
           this.isMoving = false;
           this._faceToward(nearest);
         } else if (this.isBeyondLeash(this.x, this.y)) {
@@ -162,15 +207,15 @@ export class Troglodyte extends Mob {
 
       case 'winding_up': {
         this.windupTimer--;
-        this.mouthOpenAmt = 1 - this.windupTimer / WINDUP_FRAMES;
+        this.mouthOpenAmt = 1 - this.windupTimer / this.windupDuration;
         this.tongueExtend = 0;
         this.strikeProgress = null;
         this.isMoving = false;
 
-        // Track the target only during the first half of windup.
-        // Once past the halfway point the aim locks in, giving the player
-        // time to sidestep before the tongue fires.
-        const lockThreshold = Math.floor(WINDUP_FRAMES / 2);
+        // Track the target until the aim-lock point, then freeze. The locked
+        // stretch is a fixed number of frames at every level, so what levelling
+        // buys a troglodyte is committing sooner — never a shorter warning.
+        const lockThreshold = TROGLODYTE_AIM_LOCK_FRAMES;
         if (this.windupTimer > lockThreshold) {
           if (nearest) this._faceToward(nearest);
           this.lockedFacingX = this.facingX;
@@ -235,7 +280,7 @@ export class Troglodyte extends Mob {
           this.mouthOpenAmt = 0;
           this.strikeProgress = null;
           this.state = 'cooldown';
-          this.cooldownTimer = COOLDOWN_FRAMES;
+          this.cooldownTimer = this.scaledCooldownFrames(COOLDOWN_FRAMES);
         }
         break;
       }

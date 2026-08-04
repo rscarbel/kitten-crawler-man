@@ -42,6 +42,11 @@ const COUNTDOWN_SIZE = 16;
 const COUNTDOWN_LABEL_Y = 78;
 const COUNTDOWN_LABEL_SIZE = 12;
 
+/** A point-in-time copy of the escape one-shot latch. */
+export interface DoomsdayEscapeCheckpoint {
+  floorEscapedPending: boolean;
+}
+
 export class DoomsdayEscapeSystem implements GameSystem {
   /** Set once the player reaches the escape tile in time; DungeonScene reads and clears it to play a sound and unlock the achievement. */
   floorEscapedPending = false;
@@ -50,6 +55,19 @@ export class DoomsdayEscapeSystem implements GameSystem {
     private readonly gameMap: GameMap,
     private readonly progress: DoomsdayProgress,
   ) {}
+
+  /**
+   * Snapshots only this system's own latch. `DoomsdayProgress` is deliberately
+   * left alone: the countdown keeps running through a death, so its stage and
+   * deadline are not the checkpoint's to rewind.
+   */
+  captureCheckpoint(): DoomsdayEscapeCheckpoint {
+    return { floorEscapedPending: this.floorEscapedPending };
+  }
+
+  restoreCheckpoint(snapshot: DoomsdayEscapeCheckpoint): void {
+    this.floorEscapedPending = snapshot.floorEscapedPending;
+  }
 
   update(ctx: SystemContext): void {
     const escapeTile = this.gameMap.doomsdayEscapeTile;

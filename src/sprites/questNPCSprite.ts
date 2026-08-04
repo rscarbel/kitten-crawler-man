@@ -746,8 +746,15 @@ const BARRIER_SPLINTER_SPACING = 0.3;
 const BARRIER_SPLINTER_START = 0.2;
 /** How far a splinter leans sideways off the edge it broke from. */
 const BARRIER_SPLINTER_SIDEWAYS = 0.01;
-/** Halfway across a plank — where it pivots when it buckles, and where its nail goes. */
+/** Halfway across a plank, which is where its nail goes. */
 const BARRIER_PLANK_MIDPOINT = 0.5;
+/**
+ * Halfway *down the tile* — a buckled plank tilts about the middle of the
+ * opening it covers, so both of its ends swing. Deliberately not the plank
+ * midpoint: that one is measured across `plankW` and this one down `s`, and one
+ * constant standing for both means moving a pivot sideways moves it vertically.
+ */
+const BARRIER_PLANK_PIVOT_Y = 0.5;
 /**
  * The narrowest the centre plank's crack ever gets. Even a pristine barrier has
  * one: it is the gap the thing under the boards reaches an arm through.
@@ -800,6 +807,12 @@ const BARRIER_HEALTH_HP_LOW = 0.25;
 const BARRIER_BUCKLE_EVEN_SCALE = 0.3;
 const BARRIER_BUCKLE_ODD_SCALE = 1;
 const BARRIER_TILT_SCALE = 0.08;
+/**
+ * How far a buckled plank is shoved along the grate, as a share of the tile.
+ * Its own number rather than the nail radius it used to borrow: those are a
+ * displacement and a dot, and they are the same size only by accident.
+ */
+const BARRIER_BUCKLE_SHOVE = 0.018;
 
 export function drawWoodBarrierSprite(
   ctx: CanvasRenderingContext2D,
@@ -840,7 +853,7 @@ export function drawWoodBarrierSprite(
     // At heavy damage, some planks are pushed outward / tilted
     const plankBuckle =
       buckle * (i === 1 || i === 3 ? BARRIER_BUCKLE_ODD_SCALE : BARRIER_BUCKLE_EVEN_SCALE);
-    const offsetY = plankBuckle * s * BARRIER_NAIL_R * (i % 2 === 0 ? -1 : 1);
+    const offsetY = plankBuckle * s * BARRIER_BUCKLE_SHOVE * (i % 2 === 0 ? -1 : 1);
     const tiltAngle = plankBuckle * BARRIER_TILT_SCALE * (i % 2 === 0 ? 1 : -1);
 
     // Center plank always has a hole (tiny crack at pristine, grows with damage); sides join in later
@@ -848,9 +861,9 @@ export function drawWoodBarrierSprite(
 
     ctx.save();
     if (tiltAngle !== 0) {
-      ctx.translate(px + plankW * BARRIER_PLANK_MIDPOINT, sy + s * BARRIER_PLANK_MIDPOINT);
+      ctx.translate(px + plankW * BARRIER_PLANK_MIDPOINT, sy + s * BARRIER_PLANK_PIVOT_Y);
       ctx.rotate(tiltAngle);
-      ctx.translate(-(px + plankW * BARRIER_PLANK_MIDPOINT), -(sy + s * BARRIER_PLANK_MIDPOINT));
+      ctx.translate(-(px + plankW * BARRIER_PLANK_MIDPOINT), -(sy + s * BARRIER_PLANK_PIVOT_Y));
     }
 
     const shade = i % 2 === 0 ? '#8b6914' : '#9b7924';

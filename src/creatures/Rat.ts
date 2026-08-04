@@ -161,7 +161,7 @@ export class Rat extends Mob {
     ) {
       this.biteTarget = nearest;
       this.biteImpactTimer = BITE_IMPACT_DELAY;
-      this.attackCooldown = ATTACK_COOLDOWN;
+      this.attackCooldown = this.scaledCooldownFrames(ATTACK_COOLDOWN);
       this.attackAnimTimer = RAT_BITE_FRAMES;
     }
   }

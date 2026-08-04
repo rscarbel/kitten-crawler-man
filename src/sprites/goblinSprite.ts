@@ -10,6 +10,17 @@ export type GoblinWeapon = 'sword' | 'axe' | 'mace' | 'warhammer';
 export type GoblinAttackKind = 'light' | 'heavy';
 
 /**
+ * Every goblin sheet, including the archer's.
+ *
+ * Deliberately wider than {@link GoblinWeapon}: the four melee archetypes share
+ * a damage/reach/cooldown table that a bow has no use for, and putting the bow
+ * in that union would give every melee lookup a case that can only ever be
+ * unreachable. The sheets, though, are uniform — same rows, same states — so
+ * everything that only wants to *draw* a goblin keys off this.
+ */
+export type GoblinArchetype = GoblinWeapon | 'bow';
+
+/**
  * One sheet per archetype, with the weapon baked in.
  *
  * The old base-plus-overlay split only worked while the body animation was
@@ -18,11 +29,12 @@ export type GoblinAttackKind = 'light' | 'heavy';
  * sword stab need three different bodies, and a shared body layer cannot express
  * any of them.
  */
-const SHEET_KEYS: Record<GoblinWeapon, SpriteKey> = {
+const SHEET_KEYS: Record<GoblinArchetype, SpriteKey> = {
   sword: 'goblin_sword',
   axe: 'goblin_axe',
   mace: 'goblin_mace',
   warhammer: 'goblin_warhammer',
+  bow: 'goblin_bow',
 };
 
 /**
@@ -148,6 +160,84 @@ export const ATTACK_MOVE_NAMES: Record<GoblinWeapon, Record<GoblinAttackKind, st
   warhammer: { light: 'side two-handed strike', heavy: 'high two-handed strike' },
 };
 
+/**
+ * What the archer's two rows are worth in play.
+ *
+ * A separate table from {@link GOBLIN_ATTACKS} because nothing in that one
+ * applies: an arrow has no reach (the projectile does), and what the frames
+ * measure is a *release* rather than a moment of contact.
+ *
+ * `lockedFrames` is the fairness rule made explicit — the aim freezes that many
+ * game frames before the string goes, at every level, so the shot is always
+ * avoidable by moving. `scripts/verify-difficulty.ts` asserts it stays above the
+ * 21-frame minimum; the aim-lock itself is applied in `GoblinArcher`.
+ */
+export interface GoblinShotTiming {
+  /** Frames the sprite row holds — must equal the generator's frameCount. */
+  readonly spriteFrames: number;
+  /** Sprite frame the string is released on. */
+  readonly releaseFrame: number;
+  /** Game frames the whole draw-and-recover plays over. */
+  readonly animFrames: number;
+  readonly damage: number;
+  readonly cooldownFrames: number;
+  /** Game frames of frozen aim immediately before the release. */
+  readonly lockedFrames: number;
+}
+
+const ARROW_DAMAGE = 2;
+const ARROW_COOLDOWN_FRAMES = 130;
+/** The fairness floor, and what both shots are authored against. */
+const ARROW_LOCKED_FRAMES = 21;
+
+export const GOBLIN_BOW_SHOTS: Record<GoblinAttackKind, GoblinShotTiming> = {
+  // The hurried shot, snapped off while giving ground. Shorter overall, but the
+  // locked stretch is identical — what it buys the archer is committing sooner,
+  // never warning the player less.
+  light: {
+    spriteFrames: 14,
+    releaseFrame: 10,
+    animFrames: 34,
+    damage: ARROW_DAMAGE,
+    cooldownFrames: ARROW_COOLDOWN_FRAMES,
+    lockedFrames: ARROW_LOCKED_FRAMES,
+  },
+  // The aimed shot: the archer's standard, taken from inside its own band.
+  heavy: {
+    spriteFrames: 18,
+    releaseFrame: 13,
+    animFrames: 40,
+    damage: ARROW_DAMAGE,
+    cooldownFrames: ARROW_COOLDOWN_FRAMES,
+    lockedFrames: ARROW_LOCKED_FRAMES,
+  },
+};
+
+/**
+ * The game frame of a shot's animation the string is released on.
+ *
+ * Derived from the sprite timing the same way every other one-shot row is
+ * sampled, so the arrow leaves on the frame the art shows it leaving.
+ */
+export function goblinArrowReleaseFrame(kind: GoblinAttackKind): number {
+  const timing = GOBLIN_BOW_SHOTS[kind];
+  return Math.round(
+    (timing.animFrames * (timing.releaseFrame + FRAME_MIDPOINT)) / timing.spriteFrames,
+  );
+}
+
+/**
+ * A one-shot row samples the *middle* of each frame, so its release lands half a
+ * frame past the release frame's index.
+ */
+const FRAME_MIDPOINT = 0.5;
+
+/** How many sprite frames an archetype's attack row holds. */
+function attackSpriteFrames(archetype: GoblinArchetype, kind: GoblinAttackKind): number {
+  if (archetype === 'bow') return GOBLIN_BOW_SHOTS[kind].spriteFrames;
+  return GOBLIN_ATTACKS[archetype][kind].spriteFrames;
+}
+
 const WALK_FRAMES = 12;
 const IDLE_FRAMES = 12;
 const IDLE_BREAK_FRAMES = 18;
@@ -176,7 +266,7 @@ interface ResolvedFrame {
  * same frame, which reads as a rack of clones rather than as five creatures.
  */
 export class GoblinAnimator {
-  constructor(private readonly weapon: GoblinWeapon) {}
+  constructor(private readonly archetype: GoblinArchetype) {}
 
   /** Per-instance phase shift, in seconds, added to the idle time index. */
   private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / IDLE_FPS);
@@ -248,7 +338,7 @@ export class GoblinAnimator {
   ): ResolvedFrame {
     if (attack !== null) {
       const state: GoblinState = attack.kind === 'light' ? 'attack_light' : 'attack_heavy';
-      const frames = GOBLIN_ATTACKS[this.weapon][attack.kind].spriteFrames;
+      const frames = attackSpriteFrames(this.archetype, attack.kind);
       return { state, frame: progressFrameIndex(attack.progress, frames) };
     }
     if (this.flinchFramesLeft > 0) {
@@ -273,7 +363,7 @@ export class GoblinAnimator {
 }
 
 export interface GoblinSpriteState {
-  readonly weapon: GoblinWeapon;
+  readonly archetype: GoblinArchetype;
   readonly x: number;
   readonly y: number;
   readonly tileSize: number;
@@ -286,7 +376,7 @@ export interface GoblinSpriteState {
 export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSpriteState): void {
   drawSpriteKey(
     ctx,
-    SHEET_KEYS[sprite.weapon],
+    SHEET_KEYS[sprite.archetype],
     sprite.state,
     sprite.frame,
     sprite.x,
@@ -316,11 +406,11 @@ export const GOBLIN_GORE_PARTS: ReadonlyArray<string> = [
 ];
 
 /** The sheet an archetype's frames come from. */
-export function goblinSheetKey(weapon: GoblinWeapon): SpriteKey {
-  return SHEET_KEYS[weapon];
+export function goblinSheetKey(archetype: GoblinArchetype): SpriteKey {
+  return SHEET_KEYS[archetype];
 }
 
 /** The gore sheet a dead goblin's flying pieces come from. */
-export function goblinBodyPartKey(weapon: GoblinWeapon): string {
-  return `goblin_${weapon}`;
+export function goblinBodyPartKey(archetype: GoblinArchetype): string {
+  return `goblin_${archetype}`;
 }
