@@ -18,6 +18,15 @@ export interface DialogPage {
   lines: ReadonlyArray<string>;
   /** Label for the advance button on this page. */
   button: string;
+  /**
+   * Label for a second button that closes the dialog *without* completing it.
+   *
+   * Omit — as every page but an offer's last one does — and the page renders
+   * with the single centred button it always had. Esc has always done this, but
+   * a modal whose only refusal is a key nobody is told about is not a choice the
+   * player knows they have.
+   */
+  declineButton?: string;
 }
 
 const DIALOG_WIDTH = 460;
@@ -33,6 +42,8 @@ const DIALOG_LINE_SIZE = 12;
 const DIALOG_BTN_W = 150;
 const DIALOG_BTN_H = 30;
 const DIALOG_BTN_Y_FROM_BOTTOM = 42;
+/** Gap between the accept and decline buttons when a page offers both. */
+const DIALOG_BTN_GAP = 12;
 const DIALOG_BTN_LABEL_SIZE = 12;
 const DIALOG_PAGE_COUNTER_SIZE = 10;
 
@@ -41,6 +52,7 @@ export class QuestDialog {
   private pageIndex = 0;
   private onComplete: (() => void) | null = null;
   private buttonRect: { x: number; y: number; w: number; h: number } | null = null;
+  private declineRect: { x: number; y: number; w: number; h: number } | null = null;
 
   constructor(private readonly audio: AudioManager | null) {}
 
@@ -67,11 +79,25 @@ export class QuestDialog {
     return true;
   }
 
+  /**
+   * Closes on the current page's decline button, if it has one. Returns true
+   * when there was something to decline — callers use that to tell a refusal
+   * apart from a click that landed on nothing.
+   */
+  decline(): boolean {
+    if (!this.isOpen) return false;
+    if (this.pages[this.pageIndex].declineButton === undefined) return false;
+    playButtonSound(this.audio);
+    this.close();
+    return true;
+  }
+
   private close(): void {
     this.pages = [];
     this.pageIndex = 0;
     this.onComplete = null;
     this.buttonRect = null;
+    this.declineRect = null;
   }
 
   /**
@@ -97,6 +123,10 @@ export class QuestDialog {
   /** Returns true when the click was consumed — dialogs are modal while open. */
   handleClick(mx: number, my: number): boolean {
     if (!this.isOpen) return false;
+    if (this.declineRect && pointInRect(mx, my, this.declineRect)) {
+      this.decline();
+      return true;
+    }
     if (this.buttonRect && pointInRect(mx, my, this.buttonRect)) {
       this.advance();
     }
@@ -154,10 +184,42 @@ export class QuestDialog {
       });
     }
 
-    const btnX = box.x + dw / 2 - DIALOG_BTN_W / 2;
     const btnY = box.y + dh - DIALOG_BTN_Y_FROM_BOTTOM;
+    const decline = page.declineButton;
+
+    if (decline === undefined) {
+      const btnX = box.x + dw / 2 - DIALOG_BTN_W / 2;
+      drawButton(ctx, {
+        x: btnX,
+        y: btnY,
+        width: DIALOG_BTN_W,
+        height: DIALOG_BTN_H,
+        label: page.button,
+        ...BUTTON_PRESETS.primary,
+        labelSize: DIALOG_BTN_LABEL_SIZE,
+      });
+      this.buttonRect = { x: btnX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
+      this.declineRect = null;
+      return;
+    }
+
+    // Decline on the left, accept on the right: the committing button is the one
+    // under the thumb on mobile, and the pair reads in the order the player is
+    // being asked to weigh them.
+    const pairWidth = DIALOG_BTN_W * 2 + DIALOG_BTN_GAP;
+    const declineX = box.x + dw / 2 - pairWidth / 2;
+    const acceptX = declineX + DIALOG_BTN_W + DIALOG_BTN_GAP;
     drawButton(ctx, {
-      x: btnX,
+      x: declineX,
+      y: btnY,
+      width: DIALOG_BTN_W,
+      height: DIALOG_BTN_H,
+      label: decline,
+      ...BUTTON_PRESETS.toggle,
+      labelSize: DIALOG_BTN_LABEL_SIZE,
+    });
+    drawButton(ctx, {
+      x: acceptX,
       y: btnY,
       width: DIALOG_BTN_W,
       height: DIALOG_BTN_H,
@@ -165,6 +227,7 @@ export class QuestDialog {
       ...BUTTON_PRESETS.primary,
       labelSize: DIALOG_BTN_LABEL_SIZE,
     });
-    this.buttonRect = { x: btnX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
+    this.declineRect = { x: declineX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
+    this.buttonRect = { x: acceptX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
   }
 }

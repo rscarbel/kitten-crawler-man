@@ -5,6 +5,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import { getSpriteDefByKey } from '../core/SpriteLoader';
 
 export type ChestType = 'wooden' | 'silver';
 
@@ -80,8 +81,31 @@ const LOCK_SRC_X_PHASE_3 = 240;
 const LOCK_SRC_X_PHASE_4 = 320;
 const LOCK_SRC_X_PHASE_5 = 400;
 
-export const chestImage = new Image();
-chestImage.src = 'src/images/environment/props/treasure_chests.png';
+/**
+ * The chest sheet, routed through `SpriteLoader` like every other sprite
+ * instead of a standalone `new Image()` — see `docs/asset-management-plan.md`
+ * Phase 5's stray-load trap. Undefined until `core` (or a later group) has
+ * loaded it; callers must skip drawing rather than pass this to `drawImage`.
+ */
+export function getChestImage(): HTMLImageElement | HTMLCanvasElement | undefined {
+  return getSpriteDefByKey('treasure_chests')?.img;
+}
+
+/**
+ * Ratio of the chest sheet's actually-loaded frame width to the 80px
+ * full-resolution width every source-rect constant below is authored
+ * against. 1 normally; less than 1 when Phase 8's low-end downscale
+ * (`docs/asset-management-plan.md`) has halved the sheet into a smaller
+ * canvas — every constant here is a SOURCE (not destination) rect value, so
+ * without this scale they'd read from the wrong region of a downscaled
+ * sheet. `frameWidth` (not `img.width`) is the authority: it's the field
+ * `SpriteLoader` halves in lockstep with the actual pixels.
+ */
+export function getChestSourceScale(): number {
+  return (
+    (getSpriteDefByKey('treasure_chests')?.frameWidth ?? CHEST_SPRITE_SIZE) / CHEST_SPRITE_SIZE
+  );
+}
 
 export class TreasureChestSystem {
   private readonly chests: TreasureChest[] = [];
@@ -256,37 +280,22 @@ export class TreasureChestSystem {
     active: Player,
     chest: TreasureChest,
   ): void {
+    const chestImage = getChestImage();
+    if (chestImage === undefined) return; // Not loaded yet — skip this frame, same as any other miss.
+
+    const s = getChestSourceScale();
+    const srcSize = CHEST_SPRITE_SIZE * s;
     const dx = chest.tileX * TILE_SIZE - camX;
     const dy = chest.tileY * TILE_SIZE - camY;
 
     if (chest.state === 'opened') {
       const openedSrcX = chest.type === 'wooden' ? WOODEN_CHEST_OPEN_X : SILVER_CHEST_OPEN_X;
-      ctx.drawImage(
-        chestImage,
-        openedSrcX,
-        0,
-        CHEST_SPRITE_SIZE,
-        CHEST_SPRITE_SIZE,
-        dx,
-        dy,
-        TILE_SIZE,
-        TILE_SIZE,
-      );
+      ctx.drawImage(chestImage, openedSrcX * s, 0, srcSize, srcSize, dx, dy, TILE_SIZE, TILE_SIZE);
       return;
     }
 
     const closedSrcX = chest.type === 'wooden' ? WOODEN_CHEST_CLOSED_X : SILVER_CHEST_CLOSED_X;
-    ctx.drawImage(
-      chestImage,
-      closedSrcX,
-      0,
-      CHEST_SPRITE_SIZE,
-      CHEST_SPRITE_SIZE,
-      dx,
-      dy,
-      TILE_SIZE,
-      TILE_SIZE,
-    );
+    ctx.drawImage(chestImage, closedSrcX * s, 0, srcSize, srcSize, dx, dy, TILE_SIZE, TILE_SIZE);
 
     if (chest.state === 'unlocked') {
       const sf = chest.sparkleFrame;
@@ -302,10 +311,10 @@ export class TreasureChestSystem {
         const sparkleOffY = dy + (TILE_SIZE - SPARKLE_SIZE) / 2;
         ctx.drawImage(
           chestImage,
-          sparkleSrcX,
-          CHEST_SPRITE_SIZE,
-          CHEST_SPRITE_SIZE,
-          CHEST_SPRITE_SIZE,
+          sparkleSrcX * s,
+          srcSize,
+          srcSize,
+          srcSize,
           sparkleOffX,
           sparkleOffY,
           SPARKLE_SIZE,
@@ -321,10 +330,10 @@ export class TreasureChestSystem {
     if (chest.state === 'locked' && chest.tryLockedTimer > 0) {
       ctx.drawImage(
         chestImage,
-        SILVER_CHEST_CLOSED_X,
-        SILVER_CHEST_CLOSED_X,
-        CHEST_SPRITE_SIZE,
-        CHEST_SPRITE_SIZE,
+        SILVER_CHEST_CLOSED_X * s,
+        SILVER_CHEST_CLOSED_X * s,
+        srcSize,
+        srcSize,
         lockX,
         lockY,
         lockSize,
@@ -356,10 +365,10 @@ export class TreasureChestSystem {
 
       ctx.drawImage(
         chestImage,
-        lockSrcX,
-        SILVER_CHEST_CLOSED_X,
-        CHEST_SPRITE_SIZE,
-        CHEST_SPRITE_SIZE,
+        lockSrcX * s,
+        SILVER_CHEST_CLOSED_X * s,
+        srcSize,
+        srcSize,
         lockX,
         lockY,
         lockSize,

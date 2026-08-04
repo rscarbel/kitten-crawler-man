@@ -1,8 +1,12 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
+import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
 import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
+import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
+import { ROCK_THROW_ATTACK_TYPE, ROLL_ATTACK_TYPE } from '../creatures/rockGolemAttackTypes';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -31,6 +35,15 @@ const MOB_TYPE_TO_CAUSE: Partial<Record<string, DeathCause>> = {
   StiltClown: 'stiltClown',
   FatClown: 'fatClown',
   TerrorTheClown: 'terrorTheClown',
+  EvilClown: 'evilClown',
+  Mantid: 'mantid',
+  MantisCrony: 'mantis',
+  DarkKnight: 'darkKnight',
+  SkeletonLord: 'skeletonLord',
+  SkeletonWarrior: 'skeletonWarrior',
+  SkeletonArcher: 'skeletonArcher',
+  RockGolem: 'rockGolem',
+  RockGolemBoss: 'rockGolem',
   RingmasterGrimaldi: 'ringmasterGrimaldi',
   MoldLion: 'moldLion',
   CityElfCultist: 'cityElfCultist',
@@ -46,7 +59,9 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
   // reports an unknown cause on the death screen. An untagged source is a
   // burning tree, which was the only producer before lava flames existed.
   if (source.kind === 'environmental') {
-    return source.hazard === 'lavaFlames' ? 'lavaFlames' : 'burningTree';
+    if (source.hazard === 'lavaFlames') return 'lavaFlames';
+    if (source.hazard === 'clownGas') return 'clownGas';
+    return 'burningTree';
   }
 
   if (source.kind === 'status') {
@@ -69,6 +84,36 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
     if (attackType === 'spit') return 'grotesqueSpiderSpit';
     return 'grotesqueSpiderSlam';
   }
+
+  // The glass and the backhand are the same mob but not the same death, and the
+  // melee lines would tell a player they were beaten to death by a bottle.
+  if (mobType === 'EvilClown' && attackType === VIAL_ATTACK_TYPE) return 'evilClownVial';
+
+  // Fifteen ticks of a three-second blender is not the same death as one strike.
+  if (mobType === 'Mantid' && attackType === MANTID_FLURRY_ATTACK_TYPE) return 'mantidFlurry';
+
+  // Four different deaths from one boss: the two telegraphed ground attacks read
+  // as "you ignored a red circle", the gauntlet as "you stood too close", and the
+  // bolt as "distance was not the answer you thought it was".
+  if (mobType === 'DarkKnight') {
+    if (attackType === 'slam') return 'darkKnightSlam';
+    if (attackType === 'sweep') return 'darkKnightSweep';
+    if (attackType === KNIGHT_MISSILE_ATTACK_TYPE) return 'darkKnightBolt';
+    return 'darkKnight';
+  }
+
+  // The cone is a red shape on the ground the player was given time to leave;
+  // the bolts are not. Telling both deaths the same way loses the lesson.
+  if (mobType === 'SkeletonLord' && attackType === 'grasping_hands') return 'skeletonLordHands';
+
+  // Rolling and standing are two different fights against the same golem, and
+  // the roll is the one with a counterplay worth naming.
+  if ((mobType === 'RockGolemBoss' || mobType === 'RockGolem') && attackType === ROLL_ATTACK_TYPE) {
+    return 'rockGolemRoll';
+  }
+  // The thrown boulder is a third fight again — one you dodge by moving, not by
+  // closing — and it can be attributed to a hired bruiser as well as to a golem.
+  if (attackType === ROCK_THROW_ATTACK_TYPE) return 'rockGolemRock';
 
   if (mobType === 'KrakarenClone') {
     if (attackType === 'slam') return 'krakarenCloneSlam';

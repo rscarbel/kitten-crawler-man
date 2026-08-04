@@ -36,6 +36,8 @@ import {
   TOWER_MUSIC_TRACKS,
   type SoundId,
 } from '../audio/sounds';
+import { sfxGroupsForBuildingEntry } from '../audio/sfxGroups';
+import { prewarmGroups } from '../core/SpriteLoader';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
@@ -107,6 +109,8 @@ import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../syste
 import type { SystemContext } from '../systems/GameSystem';
 import type { InteriorFigure } from '../core/InteriorFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { tickMongoRegen, type MongoPetState } from '../core/MongoPetState';
+import { getMongoStats } from '../abilities/mongo';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
 
@@ -358,9 +362,20 @@ export class BuildingInteriorScene extends GameplayScene {
     mercenaryRoster?: MercenaryRoster,
     godModeState?: GodModeState,
     companionStance?: CompanionStanceState,
+    /**
+     * The pet's shared state, so his off-duty recovery keeps running indoors.
+     *
+     * He cannot follow the party inside, and recovery that only ticked in the
+     * dungeon meant an hour spent shopping healed him by nothing.
+     */
+    private readonly mongoPetState?: MongoPetState,
+    private readonly mongoPetLevel?: () => number,
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
+    // Additive and cheap on repeat entry — see the DungeonScene equivalent
+    // and Phase 2 of docs/asset-management-plan.md.
+    void this.audio?.preload(sfxGroupsForBuildingEntry(entry));
     this.pauseMenu.audio = this.audio;
     this.encounterAbilityManager = abilityManager ?? null;
     this.doomsdayProgress = doomsdayQuestProgress ?? createDoomsdayProgress();
@@ -389,6 +404,23 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
+
+    // Interiors (shops, the club, the tower) all draw from the town furniture
+    // sheets — 'town' is a safe superset here rather than a per-entry-type
+    // breakdown, since every interior variant is cheap to re-request and
+    // already covered by that one group (Phase 5 of the asset plan).
+    // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload
+    // during the fade into the interior rather than on the first draw
+    // (Phase 7) — still fire-and-forget, must not block construction. Ground
+    // tiles/decorations bake into cached chunk canvases on first draw and
+    // never re-look at a sheet that finishes loading after that bake (see
+    // `GameMap.invalidateAllTileArt`'s doc comment) — every tower floor was
+    // built above from the same 'town' group, so one resolution covers all
+    // of them; `changeFloor` never re-triggers this load.
+    const interiorMaps = isTower ? this.towerFloors : [this.map];
+    void prewarmGroups(['town']).then(() => {
+      for (const m of interiorMaps) m.invalidateAllTileArt();
+    });
 
     const { x: sx, y: sy } = this.map.startTile;
     this.pm = new PlayerManager(sx, sy);
@@ -981,6 +1013,14 @@ export class BuildingInteriorScene extends GameplayScene {
       this.human.tickTimers();
       this.cat.tickTimers();
       return;
+    }
+
+    // Below every gameplay-halting return above — the blackjack table and the
+    // service panel each have their own, and the pet must not heal on wall-clock
+    // time behind any of them. `DungeonScene` runs its regen inside
+    // `updateGameplay`, which the same halts skip.
+    if (this.mongoPetState !== undefined && this.mongoPetLevel !== undefined) {
+      tickMongoRegen(this.mongoPetState, getMongoStats(this.mongoPetLevel()).maxHp);
     }
 
     const player = this.active();

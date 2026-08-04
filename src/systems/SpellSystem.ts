@@ -180,6 +180,8 @@ export class SpellSystem implements GameSystem {
   private readonly _querySet = new Set<Mob>();
   /** Mobs confused by a fog last frame — only these need their flag cleared. */
   private readonly confusedLastFrame: Mob[] = [];
+  /** Display names of fog-immune mobs standing in a fog, awaiting a toast. */
+  private readonly fogResistedNames: string[] = [];
 
   /**
    * Drops every active spell effect and pending cross-frame event. Used on a
@@ -204,6 +206,19 @@ export class SpellSystem implements GameSystem {
     // through this same list.
     for (const mob of this.confusedLastFrame) mob.isConfused = false;
     this.confusedLastFrame.length = 0;
+    this.fogResistedNames.length = 0;
+  }
+
+  /**
+   * Drains the names of mobs that shrugged off a fog this frame, so the scene
+   * can toast them. Queued per frame while the mob stands in the fog; the
+   * hotbar toast dedupes identical text, so the repetition is harmless.
+   */
+  takeFogResistedNames(): string[] {
+    if (this.fogResistedNames.length === 0) return [];
+    const drained = this.fogResistedNames.slice();
+    this.fogResistedNames.length = 0;
+    return drained;
   }
 
   get shellCooldown(): number {
@@ -500,6 +515,10 @@ export class SpellSystem implements GameSystem {
     // Reset confusion, then re-mark mobs inside active fogs
     for (const mob of this.confusedLastFrame) mob.isConfused = false;
     this.confusedLastFrame.length = 0;
+    // Cleared here rather than only by the drain: a scene that never drains it
+    // (a building interior runs its own SpellSystem) would otherwise grow the
+    // buffer by one string per immune mob per frame, forever.
+    this.fogResistedNames.length = 0;
     this.activeFogs = this.activeFogs.filter((fog) => {
       fog.framesLeft--;
       if (fog.framesLeft <= 0) return false;
@@ -510,7 +529,15 @@ export class SpellSystem implements GameSystem {
         if (!mob.isAlive) continue;
         const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - fog.x;
         const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - fog.y;
-        if (dx * dx + dy * dy <= rSq && !mob.isConfused) {
+        if (dx * dx + dy * dy > rSq) continue;
+        if (mob.immuneToConfusion) {
+          // Only enemies are worth a "sees you through the fog" notice. The
+          // cat's own pet is immune too, and toasting the player that their
+          // summon resisted their spell reads as the pet turning on them.
+          if (mob.isHostile) this.fogResistedNames.push(mob.displayName);
+          continue;
+        }
+        if (!mob.isConfused) {
           mob.isConfused = true;
           this.confusedLastFrame.push(mob);
         }

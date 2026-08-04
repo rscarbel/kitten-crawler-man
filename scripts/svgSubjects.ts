@@ -596,19 +596,6 @@ export const SUBJECTS: readonly SvgSubject[] = [
     },
   },
   {
-    name: 'mongo',
-    views: async () => {
-      const { drawMongoSprite } = await import('../src/sprites/mongoSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawMongoSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawMongoSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-      ];
-    },
-  },
-  {
     name: 'llama',
     views: async () => {
       const { drawLlamaSprite } = await import('../src/sprites/llamaSprite.js');

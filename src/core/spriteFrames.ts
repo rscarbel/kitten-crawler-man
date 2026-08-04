@@ -37,10 +37,13 @@ const ALPHA_CHANNEL_OFFSET = 3;
 /** Half of a pixel, so a bounding box spans whole pixels rather than their corners. */
 const HALF_PIXEL = 0.5;
 
-const inkBoundsBySheet = new WeakMap<HTMLImageElement, Map<number, FrameInkBounds>>();
+const inkBoundsBySheet = new WeakMap<
+  HTMLImageElement | HTMLCanvasElement,
+  Map<number, FrameInkBounds>
+>();
 
 function measureInkBounds(
-  img: HTMLImageElement,
+  img: HTMLImageElement | HTMLCanvasElement,
   srcX: number,
   srcY: number,
   frameWidth: number,
@@ -54,24 +57,32 @@ function measureInkBounds(
 
   const surface = allocCanvas(frameWidth, frameHeight);
   const ctx = surfaceContext(surface);
-  ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
+  // `surface.width`/`.height` are what the canvas actually allocated — a canvas
+  // dimension is a whole number, so a fractional `frameWidth` (Phase 8's
+  // low-end downscale can halve an odd source width, e.g. 65 → 32.5) gets
+  // truncated here. The pixel buffer below is laid out on THAT integer stride,
+  // not on `frameWidth` — indexing with the fractional value would misalign
+  // every row after the first, so every stride/loop-bound uses `w`/`h` instead.
+  const w = surface.width;
+  const h = surface.height;
+  ctx.drawImage(img, srcX, srcY, frameWidth, frameHeight, 0, 0, w, h);
 
   let pixels: Uint8ClampedArray;
   try {
-    pixels = ctx.getImageData(0, 0, frameWidth, frameHeight).data;
+    pixels = ctx.getImageData(0, 0, w, h).data;
   } catch {
     // A sheet served from a foreign origin taints the surface; the cell centre
     // is the only honest answer left, and it is what the old code assumed.
     return wholeCell;
   }
 
-  let minX = frameWidth;
-  let minY = frameHeight;
+  let minX = w;
+  let minY = h;
   let maxX = -1;
   let maxY = -1;
-  for (let y = 0; y < frameHeight; y++) {
-    for (let x = 0; x < frameWidth; x++) {
-      const alpha = pixels[(y * frameWidth + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const alpha = pixels[(y * w + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET];
       if (alpha <= EMPTY_ALPHA_CUTOFF) continue;
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
@@ -87,7 +98,7 @@ function measureInkBounds(
   let radiusSq = 0;
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
-      const alpha = pixels[(y * frameWidth + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET];
+      const alpha = pixels[(y * w + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET];
       if (alpha <= EMPTY_ALPHA_CUTOFF) continue;
       const dx = x + HALF_PIXEL - centerX;
       const dy = y + HALF_PIXEL - centerY;

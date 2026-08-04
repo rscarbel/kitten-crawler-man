@@ -36,6 +36,14 @@ export const level2: LevelDef = {
   music: 'bg_level_2',
   groundTheme: 'service_level',
   mapSize: 260,
+  spriteGroups: [
+    'core',
+    'dungeon_common',
+    'floor2_tileset',
+    'boss_krakaren',
+    'boss_ball_of_swine',
+    'boss_grotesque_spider',
+  ],
   roomMobs: [
     {
       type: 'troglodyte',

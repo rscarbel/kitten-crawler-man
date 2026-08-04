@@ -511,61 +511,342 @@
       }
     }
   },
-  "mongo": {
-    "path": "enemies/mongo.png",
-    "frameWidth": 128,
-    "frameHeight": 96,
-    "tileX": 32,
-    "tileY": 8,
+  "mongo_juvenile": {
+    "path": "enemies/mongo_juvenile.png",
+    "frameWidth": 80,
+    "frameHeight": 64,
+    "tileX": 8,
+    "tileY": -7,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "idle_side": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 8
       },
-      "attack": {
+      "idle_away": {
         "row": 2,
-        "frameCount": 6
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "bite": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "bite_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "bite_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "slash": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "slash_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "slash_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "pounce": {
+        "row": 12,
+        "frameCount": 14
+      },
+      "pounce_side": {
+        "row": 13,
+        "frameCount": 14
+      },
+      "pounce_away": {
+        "row": 14,
+        "frameCount": 14
+      },
+      "collapse": {
+        "row": 15,
+        "frameCount": 10
+      }
+    }
+  },
+  "mongo_adolescent": {
+    "path": "enemies/mongo_adolescent.png",
+    "frameWidth": 120,
+    "frameHeight": 88,
+    "tileX": 28,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "bite": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "bite_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "bite_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "slash": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "slash_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "slash_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "pounce": {
+        "row": 12,
+        "frameCount": 14
+      },
+      "pounce_side": {
+        "row": 13,
+        "frameCount": 14
+      },
+      "pounce_away": {
+        "row": 14,
+        "frameCount": 14
+      },
+      "collapse": {
+        "row": 15,
+        "frameCount": 10
+      }
+    }
+  },
+  "mongo_adult": {
+    "path": "enemies/mongo_adult.png",
+    "frameWidth": 160,
+    "frameHeight": 104,
+    "tileX": 48,
+    "tileY": 35,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "bite": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "bite_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "bite_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "slash": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "slash_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "slash_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "pounce": {
+        "row": 12,
+        "frameCount": 14
+      },
+      "pounce_side": {
+        "row": 13,
+        "frameCount": 14
+      },
+      "pounce_away": {
+        "row": 14,
+        "frameCount": 14
+      },
+      "collapse": {
+        "row": 15,
+        "frameCount": 10
       }
     }
   },
   "troglodyte": {
     "path": "enemies/troglodyte.png",
-    "frameWidth": 128,
-    "frameHeight": 128,
-    "tileX": 24,
-    "tileY": 16,
+    "frameWidth": 120,
+    "frameHeight": 96,
+    "tileX": 28,
+    "tileY": 18,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
+        "frameCount": 14
+      },
+      "idle_side": {
+        "row": 1,
         "frameCount": 8
       },
-      "idle": {
-        "row": 1,
+      "idle_away": {
+        "row": 2,
+        "frameCount": 14
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 12
+      },
+      "gape": {
+        "row": 6,
+        "frameCount": 6
+      },
+      "gape_side": {
+        "row": 7,
+        "frameCount": 6
+      },
+      "gape_away": {
+        "row": 8,
+        "frameCount": 6
+      },
+      "lash": {
+        "row": 9,
+        "frameCount": 8
+      },
+      "lash_side": {
+        "row": 10,
+        "frameCount": 8
+      },
+      "lash_away": {
+        "row": 11,
+        "frameCount": 8
+      },
+      "gore_head": {
+        "row": 12,
+        "colOffset": 0,
         "frameCount": 1
       },
-      "mouth_open": {
-        "row": 2,
-        "frameCount": 6
+      "gore_torso": {
+        "row": 12,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 12,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 12,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 12,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 12,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_crest": {
+        "row": 12,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_tongue": {
+        "row": 12,
+        "colOffset": 7,
+        "frameCount": 1
+      },
+      "gore_tail": {
+        "row": 12,
+        "colOffset": 8,
+        "frameCount": 1
       }
     }
   },
   "troglodyte_tongue": {
     "path": "enemies/troglodyte_tongue.png",
-    "frameWidth": 220,
-    "frameHeight": 40,
-    "tileX": 8,
-    "tileY": 20,
+    "frameWidth": 224,
+    "frameHeight": 48,
+    "tileX": 7,
+    "tileY": 27,
     "tileScale": 64,
     "states": {
       "extend": {
         "row": 0,
-        "frameCount": 6
+        "frameCount": 8
       }
     }
   },
@@ -593,37 +874,65 @@
   },
   "brindle_grub": {
     "path": "enemies/brindle_grub.png",
-    "frameWidth": 96,
-    "frameHeight": 80,
-    "tileX": 16,
-    "tileY": 12,
+    "frameWidth": 56,
+    "frameHeight": 48,
+    "tileX": -4,
+    "tileY": -26,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "walk": {
+        "row": 1,
         "frameCount": 8
       },
-      "idle": {
-        "row": 1,
-        "frameCount": 1
+      "walk_side": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 3,
+        "frameCount": 8
       }
     }
   },
   "cow_tailed_grub": {
     "path": "enemies/cow_tailed_grub.png",
-    "frameWidth": 96,
-    "frameHeight": 96,
-    "tileX": 16,
-    "tileY": 12,
+    "frameWidth": 88,
+    "frameHeight": 72,
+    "tileX": 12,
+    "tileY": -10,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
+        "frameCount": 1
+      },
+      "walk": {
+        "row": 1,
         "frameCount": 8
       },
-      "idle": {
-        "row": 1,
-        "frameCount": 1
+      "walk_side": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "attack": {
+        "row": 4,
+        "frameCount": 7
+      },
+      "attack_side": {
+        "row": 5,
+        "frameCount": 7
+      },
+      "attack_away": {
+        "row": 6,
+        "frameCount": 7
       }
     }
   },
@@ -757,23 +1066,963 @@
   },
   "brindled_vespa": {
     "path": "enemies/brindled_vespa.png",
-    "frameWidth": 128,
+    "frameWidth": 112,
     "frameHeight": 96,
-    "tileX": 32,
-    "tileY": 16,
+    "tileX": 24,
+    "tileY": 25,
     "tileScale": 64,
     "states": {
       "hover": {
         "row": 0,
         "frameCount": 8
       },
-      "hover_left": {
+      "hover_side": {
         "row": 1,
         "frameCount": 8
       },
-      "hover_bob": {
+      "hover_away": {
         "row": 2,
         "frameCount": 8
+      },
+      "spit_windup": {
+        "row": 3,
+        "frameCount": 9
+      },
+      "spit_windup_side": {
+        "row": 4,
+        "frameCount": 9
+      },
+      "spit_windup_away": {
+        "row": 5,
+        "frameCount": 9
+      },
+      "gore_head": {
+        "row": 6,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_thorax": {
+        "row": 6,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_abdomen": {
+        "row": 6,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_stinger": {
+        "row": 6,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_wing": {
+        "row": 6,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 6,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_antenna": {
+        "row": 6,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 6,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
+  },
+  "evil_clown": {
+    "path": "enemies/evil_clown.png",
+    "frameWidth": 272,
+    "frameHeight": 296,
+    "tileX": 104,
+    "tileY": 204,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 6
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 6
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 6
+      },
+      "swipe": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "swipe_side": {
+        "row": 7,
+        "frameCount": 8
+      },
+      "swipe_away": {
+        "row": 8,
+        "frameCount": 8
+      },
+      "laugh": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "juggle_walk": {
+        "row": 10,
+        "frameCount": 8
+      },
+      "juggle_walk_side": {
+        "row": 11,
+        "frameCount": 8
+      },
+      "juggle_walk_away": {
+        "row": 12,
+        "frameCount": 8
+      },
+      "gore_head": {
+        "row": 13,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_ruff": {
+        "row": 13,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 13,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 13,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_shoe": {
+        "row": 13,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_vials": {
+        "row": 13,
+        "colOffset": 5,
+        "frameCount": 1
+      }
+    }
+  },
+  "rock_golem": {
+    "path": "enemies/rock_golem.png",
+    "frameWidth": 112,
+    "frameHeight": 112,
+    "tileX": 36,
+    "tileY": 55,
+    "tileScale": 40,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slam": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "slam_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "slam_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "stomp": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "stomp_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "stomp_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "throw": {
+        "row": 12,
+        "frameCount": 14
+      },
+      "throw_side": {
+        "row": 13,
+        "frameCount": 14
+      },
+      "throw_away": {
+        "row": 14,
+        "frameCount": 14
+      },
+      "gore_head": {
+        "row": 15,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_core": {
+        "row": 15,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_fist_left": {
+        "row": 15,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_fist_right": {
+        "row": 15,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 15,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 15,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_shoulder": {
+        "row": 15,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_scatter": {
+        "row": 15,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
+  },
+  "rock_golem_boss": {
+    "path": "enemies/rock_golem_boss.png",
+    "frameWidth": 136,
+    "frameHeight": 136,
+    "tileX": 48,
+    "tileY": 77,
+    "tileScale": 40,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slam": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "slam_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "slam_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "stomp": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "stomp_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "stomp_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "throw": {
+        "row": 12,
+        "frameCount": 14
+      },
+      "throw_side": {
+        "row": 13,
+        "frameCount": 14
+      },
+      "throw_away": {
+        "row": 14,
+        "frameCount": 14
+      },
+      "curl": {
+        "row": 15,
+        "frameCount": 8
+      },
+      "roll": {
+        "row": 16,
+        "frameCount": 8
+      },
+      "uncurl": {
+        "row": 17,
+        "frameCount": 8
+      },
+      "stunned": {
+        "row": 18,
+        "frameCount": 8
+      },
+      "gore_head": {
+        "row": 19,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_core": {
+        "row": 19,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_fist_left": {
+        "row": 19,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_fist_right": {
+        "row": 19,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 19,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 19,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_shoulder": {
+        "row": 19,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_scatter": {
+        "row": 19,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
+  },
+  "skeleton_lord": {
+    "path": "enemies/skeleton_lord.png",
+    "frameWidth": 128,
+    "frameHeight": 208,
+    "tileX": 32,
+    "tileY": 157,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "cast": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "cast_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "cast_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "hands_cast": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "hands_cast_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "hands_cast_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "summon": {
+        "row": 12,
+        "frameCount": 10
+      },
+      "gore_skull": {
+        "row": 13,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 13,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pelvis": {
+        "row": 13,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_femur": {
+        "row": 13,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_tibia": {
+        "row": 13,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_forearm": {
+        "row": 13,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_hand": {
+        "row": 13,
+        "colOffset": 6,
+        "frameCount": 1
+      }
+    }
+  },
+  "skeleton_sword": {
+    "path": "enemies/skeleton_sword.png",
+    "frameWidth": 120,
+    "frameHeight": 152,
+    "tileX": 28,
+    "tileY": 104,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slash": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "slash_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "slash_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "rise": {
+        "row": 9,
+        "frameCount": 12
+      },
+      "gore_skull": {
+        "row": 10,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 10,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pelvis": {
+        "row": 10,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_femur": {
+        "row": 10,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_tibia": {
+        "row": 10,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_forearm": {
+        "row": 10,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_hand": {
+        "row": 10,
+        "colOffset": 6,
+        "frameCount": 1
+      }
+    }
+  },
+  "skeleton_archer": {
+    "path": "enemies/skeleton_archer.png",
+    "frameWidth": 80,
+    "frameHeight": 120,
+    "tileX": 8,
+    "tileY": 73,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 12
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 12
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 12
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "draw_loose": {
+        "row": 6,
+        "frameCount": 10
+      },
+      "draw_loose_side": {
+        "row": 7,
+        "frameCount": 10
+      },
+      "draw_loose_away": {
+        "row": 8,
+        "frameCount": 10
+      },
+      "rise": {
+        "row": 9,
+        "frameCount": 12
+      },
+      "gore_skull": {
+        "row": 10,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_ribcage": {
+        "row": 10,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pelvis": {
+        "row": 10,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_femur": {
+        "row": 10,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_tibia": {
+        "row": 10,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_forearm": {
+        "row": 10,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_hand": {
+        "row": 10,
+        "colOffset": 6,
+        "frameCount": 1
+      }
+    }
+  },
+  "mantid": {
+    "path": "enemies/mantid.png",
+    "frameWidth": 272,
+    "frameHeight": 208,
+    "tileX": 104,
+    "tileY": 125,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slash": {
+        "row": 6,
+        "frameCount": 9
+      },
+      "slash_side": {
+        "row": 7,
+        "frameCount": 9
+      },
+      "slash_away": {
+        "row": 8,
+        "frameCount": 9
+      },
+      "flurry": {
+        "row": 9,
+        "frameCount": 8
+      },
+      "flurry_side": {
+        "row": 10,
+        "frameCount": 8
+      },
+      "flurry_away": {
+        "row": 11,
+        "frameCount": 8
+      },
+      "rage_pause": {
+        "row": 12,
+        "frameCount": 6
+      },
+      "gore_raptorial_arm": {
+        "row": 13,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_head": {
+        "row": 13,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pronotum": {
+        "row": 13,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_abdomen": {
+        "row": 13,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_wing_case": {
+        "row": 13,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 13,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 13,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_carapace": {
+        "row": 13,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
+  },
+  "mantis": {
+    "path": "enemies/mantis.png",
+    "frameWidth": 152,
+    "frameHeight": 112,
+    "tileX": 44,
+    "tileY": 36,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slash": {
+        "row": 6,
+        "frameCount": 9
+      },
+      "slash_side": {
+        "row": 7,
+        "frameCount": 9
+      },
+      "slash_away": {
+        "row": 8,
+        "frameCount": 9
+      },
+      "gore_raptorial_arm": {
+        "row": 9,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_head": {
+        "row": 9,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_pronotum": {
+        "row": 9,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_abdomen": {
+        "row": 9,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_wing_case": {
+        "row": 9,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 9,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 9,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_carapace": {
+        "row": 9,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
+  },
+  "dark_knight": {
+    "path": "enemies/dark_knight.png",
+    "frameWidth": 164,
+    "frameHeight": 204,
+    "tileX": 50,
+    "tileY": 134,
+    "tileScale": 64,
+    "states": {
+      "walk": {
+        "row": 0,
+        "frameCount": 16
+      },
+      "walk_side": {
+        "row": 1,
+        "frameCount": 16
+      },
+      "walk_away": {
+        "row": 2,
+        "frameCount": 16
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 8
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 8
+      },
+      "idle_away": {
+        "row": 5,
+        "frameCount": 8
+      },
+      "slam": {
+        "row": 6,
+        "frameCount": 16
+      },
+      "slam_side": {
+        "row": 7,
+        "frameCount": 16
+      },
+      "slam_away": {
+        "row": 8,
+        "frameCount": 16
+      },
+      "sweep": {
+        "row": 9,
+        "frameCount": 18
+      },
+      "sweep_side": {
+        "row": 10,
+        "frameCount": 18
+      },
+      "sweep_away": {
+        "row": 11,
+        "frameCount": 18
+      },
+      "punch": {
+        "row": 12,
+        "frameCount": 8
+      },
+      "punch_side": {
+        "row": 13,
+        "frameCount": 8
+      },
+      "punch_away": {
+        "row": 14,
+        "frameCount": 8
+      },
+      "gore_helm": {
+        "row": 15,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_pauldron": {
+        "row": 15,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_breastplate": {
+        "row": 15,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_gauntlet": {
+        "row": 15,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 15,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 15,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_mace": {
+        "row": 15,
+        "colOffset": 6,
+        "frameCount": 1
       }
     }
   }

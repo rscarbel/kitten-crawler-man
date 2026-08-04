@@ -1,7 +1,11 @@
 import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { drawTroglodyteSprite } from '../sprites/troglodyteSprite';
+import { TROGLODYTE_BODY_PART_KEY, drawTroglodyteSprite } from '../sprites/troglodyteSprite';
+import {
+  TROGLODYTE_TONGUE_OVERREACH,
+  TROGLODYTE_TONGUE_RANGE_TILES,
+} from '../sprites/troglodyteTongue';
 import { makePoison } from '../core/StatusEffect';
 import { normalize } from '../utils';
 import type { LootDrop } from './Mob';
@@ -10,7 +14,14 @@ const TROG_HP = 22;
 const TROG_SPEED = 0.7;
 
 const AGGRO_RANGE_TILES = 8;
-const TONGUE_RANGE_TILES = 3;
+/**
+ * Range and overreach come from `troglodyteTongue.ts` rather than living here,
+ * because the tongue *art* has to reach exactly this far: the overlay is scaled
+ * per view against these values so its tip lands on the hit boundary. Two
+ * copies and the thing that visibly reaches the player stops being the thing
+ * that damages them.
+ */
+const TONGUE_RANGE_TILES = TROGLODYTE_TONGUE_RANGE_TILES;
 const TONGUE_DAMAGE = 4;
 const POISON_CHANCE = 0.25;
 
@@ -19,8 +30,7 @@ const STRIKE_FRAMES = 18; // 9 frames out, 9 frames back
 const COOLDOWN_FRAMES = 150;
 /** Fraction of tongue range used as follow stop distance. */
 const FOLLOW_STOP_FRACTION = 0.85;
-/** Extended range fraction for tongue hit detection (allows slight overreach). */
-const TONGUE_HIT_RANGE_FRACTION = 1.1;
+const TONGUE_HIT_RANGE_FRACTION = TROGLODYTE_TONGUE_OVERREACH;
 /** Minimum dot product for tongue cone (cos(60°) ≈ 0.5). */
 const TONGUE_CONE_MIN_DOT = 0.5;
 /** Tile center offset fraction. */
@@ -37,6 +47,7 @@ export class Troglodyte extends Mob {
   displayName = 'Troglodyte';
   description = 'A cave-dwelling predator with a venomous tongue lash.';
   override readonly audioTag = 'troglodyte';
+  override readonly bodyPartKey = TROGLODYTE_BODY_PART_KEY;
 
   override get requiresEvasion(): boolean {
     return true;
@@ -46,6 +57,15 @@ export class Troglodyte extends Mob {
   tongueExtend = 0;
   /** 0–1: how wide the mouth is open (0 = barely open, 1 = full windup). */
   mouthOpenAmt = 0;
+  /**
+   * 0–1 through the strike, rising monotonically.
+   *
+   * Separate from {@link tongueExtend}, which rises and then falls back as the
+   * tongue is reeled in: the sprite's strike row is a one-shot that has to play
+   * forward once, and driven off the tongue it would play forward and then
+   * backward through its own recovery frames.
+   */
+  strikeProgress: number | null = null;
 
   private state: TrogState = 'idle';
   private windupTimer = 0;
@@ -69,6 +89,7 @@ export class Troglodyte extends Mob {
     this.windupTimer = 0;
     this.strikeTimer = 0;
     this.cooldownTimer = 0;
+    this.strikeProgress = null;
     this.facingLocked = false;
   }
 
@@ -94,6 +115,7 @@ export class Troglodyte extends Mob {
       case 'idle': {
         this.mouthOpenAmt = 0;
         this.tongueExtend = 0;
+        this.strikeProgress = null;
         if (nearest) {
           this.state = 'stalking';
         } else {
@@ -105,6 +127,7 @@ export class Troglodyte extends Mob {
       case 'stalking': {
         this.mouthOpenAmt = 0;
         this.tongueExtend = 0;
+        this.strikeProgress = null;
         if (!nearest) {
           this.state = 'idle';
           this.clearAStarPath();
@@ -141,6 +164,7 @@ export class Troglodyte extends Mob {
         this.windupTimer--;
         this.mouthOpenAmt = 1 - this.windupTimer / WINDUP_FRAMES;
         this.tongueExtend = 0;
+        this.strikeProgress = null;
         this.isMoving = false;
 
         // Track the target only during the first half of windup.
@@ -171,6 +195,7 @@ export class Troglodyte extends Mob {
         this.strikeTimer--;
         this.isMoving = false;
         this.mouthOpenAmt = 0.75;
+        this.strikeProgress = (STRIKE_FRAMES - this.strikeTimer) / STRIKE_FRAMES;
 
         // First half: tongue shoots out; second half: tongue retracts
         const half = STRIKE_FRAMES / 2;
@@ -208,6 +233,7 @@ export class Troglodyte extends Mob {
         if (this.strikeTimer <= 0) {
           this.tongueExtend = 0;
           this.mouthOpenAmt = 0;
+          this.strikeProgress = null;
           this.state = 'cooldown';
           this.cooldownTimer = COOLDOWN_FRAMES;
         }
@@ -218,6 +244,7 @@ export class Troglodyte extends Mob {
         this.cooldownTimer--;
         this.mouthOpenAmt = 0;
         this.tongueExtend = 0;
+        this.strikeProgress = null;
         this.isMoving = false;
 
         if (this.cooldownTimer <= 0) {
@@ -253,18 +280,15 @@ export class Troglodyte extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawTroglodyteSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      this.tongueExtend,
-      this.mouthOpenAmt,
-      this.facingX,
-      this.facingY,
-    );
+    drawTroglodyteSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      gapeProgress: this.mouthOpenAmt,
+      strikeProgress: this.strikeProgress,
+      tongueExtend: this.tongueExtend,
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

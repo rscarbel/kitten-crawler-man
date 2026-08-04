@@ -7,7 +7,15 @@ import { BopcaPreviewScene } from '../scenes/BopcaPreviewScene';
 import { GoblinPreviewScene } from '../scenes/GoblinPreviewScene';
 import { RatPreviewScene } from '../scenes/RatPreviewScene';
 import { LlamaPreviewScene } from '../scenes/LlamaPreviewScene';
+import { RockGolemPreviewScene } from '../scenes/RockGolemPreviewScene';
+import { SkeletonPreviewScene } from '../scenes/SkeletonPreviewScene';
+import { MongoPreviewScene } from '../scenes/MongoPreviewScene';
+import { EvilClownPreviewScene } from '../scenes/EvilClownPreviewScene';
+import { MantidPreviewScene } from '../scenes/MantidPreviewScene';
+import { DarkKnightPreviewScene } from '../scenes/DarkKnightPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
+import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
+import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -84,6 +92,41 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('golem') !== null) {
+    sceneManager.replace(new RockGolemPreviewScene());
+    return true;
+  }
+
+  if (params.get('darkknight') !== null) {
+    sceneManager.replace(new DarkKnightPreviewScene());
+    return true;
+  }
+
+  if (params.get('mongo') !== null) {
+    sceneManager.replace(new MongoPreviewScene());
+    return true;
+  }
+
+  if (params.get('trog') !== null) {
+    sceneManager.replace(new TroglodytePreviewScene());
+    return true;
+  }
+
+  if (params.get('mantid') !== null) {
+    sceneManager.replace(new MantidPreviewScene());
+    return true;
+  }
+
+  if (params.get('evilclown') !== null) {
+    sceneManager.replace(new EvilClownPreviewScene());
+    return true;
+  }
+
+  if (params.get('skeletons') !== null) {
+    sceneManager.replace(new SkeletonPreviewScene());
+    return true;
+  }
+
   if (params.get('status') !== null) {
     sceneManager.replace(new StatusPreviewScene());
     return true;
@@ -91,6 +134,11 @@ export function devBootScene(
 
   if (params.get('ratkin') !== null) {
     sceneManager.replace(new RatKinPreviewScene());
+    return true;
+  }
+
+  if (params.get('shady') !== null) {
+    sceneManager.replace(new ShadyPreviewScene());
     return true;
   }
 
@@ -117,6 +165,9 @@ export function devBootScene(
       options.humanSnap = boot.humanSnap;
       options.catSnap = boot.catSnap;
       options.abilityManager = boot.abilityManager;
+      // The pet is unlocked from a treasure chest most presets start well past,
+      // and a playtest drop-in that cannot summon him cannot test him.
+      options.mongoUnlocked = true;
       options.resolveSpawnTile = (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap);
       sceneManager.replace(new DungeonScene(boot.levelDef, input, sceneManager, options));
       return true;

@@ -1,6 +1,12 @@
 /**
  * Drawing engine for Grimaldi's corrupted circus performers — the Fat Clown,
- * the Stilt Clown and Terror the Clown.
+ * the Stilt Clown, Terror the Clown and the Evil Clown.
+ *
+ * Three viewpoints share the one rig (see {@link ClownView}). The skeleton is
+ * identical in all three — a head-on figure's "near" limb is simply its right
+ * one — so only the head painter, the depth shading and the way a spine lean
+ * foreshortens differ. The troupe's original three clowns predate the views and
+ * bake as `'profile'`, which is the default and is bit-for-bit what they were.
  *
  * All three share one skeletal rig so their silhouettes read as members of the
  * same troupe: a pelvis, a leaning spine, a head on a neck, and four two-bone
@@ -283,12 +289,23 @@ export interface ClownProportions {
   readonly shoeHeight: number;
 }
 
-export type HairStyle = 'tufts' | 'stringy' | 'mane';
-export type MouthStyle = 'grin' | 'stitched' | 'fanged';
-export type FacePaintStyle = 'rouge' | 'tears' | 'slashes';
+export type HairStyle = 'tufts' | 'stringy' | 'mane' | 'lank';
+export type MouthStyle = 'grin' | 'stitched' | 'fanged' | 'rictus';
+export type FacePaintStyle = 'rouge' | 'tears' | 'slashes' | 'sockets';
 export type SuitPattern = 'stripes' | 'harlequin' | 'motley';
 export type FootStyle = 'shoes' | 'stilts';
 export type HatStyle = 'none' | 'cone';
+
+/**
+ * Which way the figure is turned relative to the camera.
+ *
+ * `'profile'` is the original three-quarter view every clown was drawn in: the
+ * body faces +X and the runtime mirrors the sheet for the other heading.
+ * `'toward'` and `'away'` are head-on, and are never mirrored at runtime — a
+ * flipped front view puts the figure's left hand on its right side every time
+ * it changes heading.
+ */
+export type ClownView = 'profile' | 'toward' | 'away';
 
 export interface ClownStyle {
   readonly palette: ClownPalette;
@@ -303,6 +320,40 @@ export interface ClownStyle {
   readonly ruffRadius: number;
   /** Pompom buttons running down the front of the suit. */
   readonly pompomCount: number;
+  /**
+   * How far up the neck the ruff sits, as a fraction of the neck's length.
+   * 0 leaves it on the shoulders (the default, and where a short-necked clown
+   * wants it); 1 pushes it up under the jaw, which is the only place it reads
+   * as a collar rather than as a platter on a long neck.
+   */
+  readonly ruffRise?: number;
+  /** Optional per-style tweaks to the shared face layout; omit for the default. */
+  readonly face?: ClownFaceTuning;
+}
+
+/**
+ * Deviations from the shared face layout, as multiples of the default.
+ *
+ * The layout constants below are tuned for a clown whose head is a prop; a
+ * figure meant to be frightening needs a smaller nose and larger eyes on the
+ * same skull. Every field is optional and every default is 1 or 0, so a style
+ * that omits this is drawn exactly as it was before the hook existed.
+ */
+export interface ClownFaceTuning {
+  readonly eyeScale?: number;
+  readonly noseScale?: number;
+  /** Extra drop of the mouth down the face, in head radii. */
+  readonly mouthDrop?: number;
+}
+
+const DEFAULT_FACE_TUNING: Required<ClownFaceTuning> = {
+  eyeScale: 1,
+  noseScale: 1,
+  mouthDrop: 0,
+};
+
+function faceTuningOf(style: ClownStyle): Required<ClownFaceTuning> {
+  return { ...DEFAULT_FACE_TUNING, ...style.face };
 }
 
 /**
@@ -482,6 +533,59 @@ function drawShoe(ctx: Ctx, ankle: Point, angle: number, style: ClownStyle): voi
   ctx.restore();
 }
 
+/**
+ * The same shoe seen end-on: a wide splayed blob rather than a long wedge.
+ *
+ * Rotating the profile shoe by a right angle was the obvious alternative and is
+ * wrong — it draws a long shoe running *down* the screen, which reads as an
+ * enormous foot dangling in the air instead of one pointing at the camera.
+ */
+const HEADON_SHOE_WIDTH_FRACTION = 0.66;
+const HEADON_SHOE_HEIGHT_FRACTION = 1.5;
+const HEADON_SHOE_SOLE_FRACTION = 0.26;
+const HEADON_TOECAP_WIDTH = 0.62;
+const HEADON_TOECAP_HEIGHT = 0.5;
+
+function drawShoeHeadOn(ctx: Ctx, ankle: Point, style: ClownStyle, view: ClownView): void {
+  const { shoeLength, shoeHeight } = style.proportions;
+  const halfWidth = shoeLength * HEADON_SHOE_WIDTH_FRACTION * 0.5;
+  const height = shoeHeight * HEADON_SHOE_HEIGHT_FRACTION;
+
+  ctx.save();
+  ctx.translate(ankle.x, ankle.y);
+
+  ctx.fillStyle = style.palette.shoeDark;
+  ctx.beginPath();
+  ctx.ellipse(0, height * 0.35, halfWidth, height * 0.85, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.fillStyle = style.palette.suitTrim;
+  ctx.fillRect(-halfWidth, height * 0.85, halfWidth * 2, height * HEADON_SHOE_SOLE_FRACTION);
+
+  // Only the front of a shoe has a cap and a pompom; the heel is a plain lump.
+  if (view === 'toward') {
+    ctx.fillStyle = style.palette.shoe;
+    ctx.beginPath();
+    ctx.ellipse(
+      0,
+      height * 0.2,
+      halfWidth * HEADON_TOECAP_WIDTH,
+      height * HEADON_TOECAP_HEIGHT,
+      0,
+      0,
+      FULL_CIRCLE,
+    );
+    ctx.fill();
+
+    ctx.fillStyle = style.palette.accent;
+    ctx.beginPath();
+    ctx.arc(0, -height * 0.35, shoeHeight * 0.26, 0, FULL_CIRCLE);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 /** Wooden stilt tip: a peg on a wedge foot, strapped to the shin. */
 const STILT_PEG_WIDTH = 0.055;
 const STILT_FOOT_WIDTH = 0.16;
@@ -635,7 +739,7 @@ function paintSuitPattern(ctx: Ctx, style: ClownStyle): void {
   }
 }
 
-function drawTorso(ctx: Ctx, style: ClownStyle, squash: number): void {
+function drawTorso(ctx: Ctx, style: ClownStyle, squash: number, headOn = false): void {
   const { proportions, palette } = style;
   const top = -proportions.torsoLength;
 
@@ -655,25 +759,35 @@ function drawTorso(ctx: Ctx, style: ClownStyle, squash: number): void {
   ctx.clip();
   paintSuitPattern(ctx, style);
 
-  const shading = ctx.createLinearGradient(
-    -proportions.shoulderHalfWidth,
-    top,
-    halfSpanOf(style),
-    0,
-  );
-  shading.addColorStop(0, TORSO_HIGHLIGHT);
-  shading.addColorStop(0.45, TORSO_TRANSPARENT);
-  shading.addColorStop(1, TORSO_SHADE);
+  // A profile chest is lit from the front and shaded toward its back edge; a
+  // head-on chest is a barrel, brightest down the middle and falling off to
+  // both sides.
+  const shading = headOn
+    ? ctx.createLinearGradient(-halfSpanOf(style), 0, halfSpanOf(style), 0)
+    : ctx.createLinearGradient(-proportions.shoulderHalfWidth, top, halfSpanOf(style), 0);
+  if (headOn) {
+    shading.addColorStop(0, TORSO_SHADE);
+    shading.addColorStop(0.38, TORSO_HIGHLIGHT);
+    shading.addColorStop(0.62, TORSO_TRANSPARENT);
+    shading.addColorStop(1, TORSO_SHADE);
+  } else {
+    shading.addColorStop(0, TORSO_HIGHLIGHT);
+    shading.addColorStop(0.45, TORSO_TRANSPARENT);
+    shading.addColorStop(1, TORSO_SHADE);
+  }
   ctx.fillStyle = shading;
   ctx.fillRect(-halfSpanOf(style), top, halfSpanOf(style) * 2, -top);
   ctx.restore();
 
   const pompomRadius = proportions.shoulderHalfWidth * 0.2;
+  // The button placket runs down the middle of a head-on chest; in profile it is
+  // pushed toward the facing edge where it can actually be seen.
+  const pompomX = headOn ? 0 : proportions.hipHalfWidth * 0.42;
   ctx.fillStyle = palette.accent;
   for (let i = 0; i < style.pompomCount; i++) {
     const t = (i + 1) / (style.pompomCount + 1);
     ctx.beginPath();
-    ctx.arc(proportions.hipHalfWidth * 0.42, top * (1 - t), pompomRadius, 0, FULL_CIRCLE);
+    ctx.arc(pompomX, top * (1 - t), pompomRadius, 0, FULL_CIRCLE);
     ctx.fill();
   }
 
@@ -786,6 +900,43 @@ function drawHair(ctx: Ctx, style: ClownStyle): void {
       }
       return;
     }
+    case 'lank': {
+      // Wet, heavy hanks that hang past the jaw rather than standing out from
+      // the skull: the clown silhouette without any of its bounce.
+      const HANK_COUNT = 11;
+      const HANK_ARC_START = deg(150);
+      const HANK_ARC_END = deg(390);
+      const HANK_DROP = 1.9;
+      const HANK_WIDTH = 0.22;
+      const HANK_DROOP_SPREAD = 0.45;
+      for (let i = 0; i < HANK_COUNT; i++) {
+        const t = i / (HANK_COUNT - 1);
+        const angle = lerp(HANK_ARC_START, HANK_ARC_END, t);
+        const rootX = Math.cos(angle) * r * 0.98;
+        const rootY = Math.sin(angle) * r * 0.98;
+        // Hanks nearest the crown fall furthest; the ones already low barely move.
+        const drop = r * HANK_DROP * (0.35 + 0.65 * Math.abs(Math.cos(angle)));
+        const drift = Math.cos(angle) * r * HANK_DROOP_SPREAD;
+        ctx.fillStyle = i % 2 === 0 ? palette.hair : palette.hairShade;
+        ctx.beginPath();
+        ctx.moveTo(rootX - r * HANK_WIDTH, rootY);
+        ctx.quadraticCurveTo(
+          rootX + drift - r * HANK_WIDTH,
+          rootY + drop * 0.6,
+          rootX + drift,
+          rootY + drop,
+        );
+        ctx.quadraticCurveTo(
+          rootX + drift + r * HANK_WIDTH,
+          rootY + drop * 0.6,
+          rootX + r * HANK_WIDTH,
+          rootY,
+        );
+        ctx.closePath();
+        ctx.fill();
+      }
+      return;
+    }
     case 'mane': {
       const SPIKE_COUNT = 13;
       const SPIKE_LENGTH = 1.15;
@@ -817,14 +968,29 @@ function traceMouth(ctx: Ctx, cx: number, cy: number, halfWidth: number, height:
   ctx.closePath();
 }
 
-function drawMouth(ctx: Ctx, style: ClownStyle, mouthOpen: number): void {
+/**
+ * The mouth, at a caller-chosen centre and width.
+ *
+ * The profile head pushes it toward the facing side; a head-on head centres it.
+ * Both go through here so a style's mouth is recognisably the same mouth from
+ * every angle.
+ */
+function paintMouth(
+  ctx: Ctx,
+  style: ClownStyle,
+  mouthOpen: number,
+  cx: number,
+  halfWidth: number,
+): void {
   const r = style.proportions.headRadius;
-  const rx = r * style.proportions.headWidthFactor;
   const { palette } = style;
-  const cx = rx * (FACE_FORWARD_SHIFT + MOUTH_X);
-  const cy = r * MOUTH_Y;
-  const halfWidth = rx * MOUTH_HALF_WIDTH;
+  const cy = r * (MOUTH_Y + faceTuningOf(style).mouthDrop);
   const height = r * lerp(MOUTH_BASE_HEIGHT, MOUTH_OPEN_HEIGHT, clamp01(mouthOpen));
+
+  if (style.mouth === 'rictus') {
+    paintRictus(ctx, style, mouthOpen, cx, cy, halfWidth);
+    return;
+  }
 
   if (style.mouth === 'stitched') {
     const STITCH_COUNT = 7;
@@ -888,6 +1054,105 @@ function drawMouth(ctx: Ctx, style: ClownStyle, mouthOpen: number): void {
     ctx.fillRect(cx - halfWidth, cy - height, halfWidth * 2, height * TEETH_BAND_HEIGHT);
   }
   ctx.restore();
+}
+
+/** Profile-head mouth: shoved toward the facing side of the face. */
+function drawMouth(ctx: Ctx, style: ClownStyle, mouthOpen: number): void {
+  const r = style.proportions.headRadius;
+  const rx = r * style.proportions.headWidthFactor;
+  paintMouth(
+    ctx,
+    style,
+    mouthOpen,
+    rx * (FACE_FORWARD_SHIFT + MOUTH_X),
+    rx * MOUTH_HALF_WIDTH,
+  );
+}
+
+/**
+ * A grin cut into the face rather than worn on it: the corners run up past the
+ * cheekbones and the teeth are always showing, so the expression never changes
+ * no matter what the animation is doing. `mouthOpen` only drops the jaw — the
+ * grin itself is fixed, which is the whole point of the thing.
+ */
+/** The cut runs wider than any mouth belongs, so it overshoots the face's own. */
+const RICTUS_WIDTH_GROWTH = 1.04;
+const RICTUS_CORNER_RISE = 0.3;
+const RICTUS_JAW_DROP = 0.82;
+const RICTUS_CLOSED_DEPTH = 0.26;
+const RICTUS_SCAR_WIDTH = 0.075;
+const RICTUS_TOOTH_COUNT = 7;
+/** Fraction of the gape each tooth occupies vertically, upper and lower rows. */
+const RICTUS_TOOTH_DEPTH = 0.33;
+const RICTUS_TOOTH_GAP = 0.12;
+
+function traceRictus(
+  ctx: Ctx,
+  cx: number,
+  cy: number,
+  halfWidth: number,
+  rise: number,
+  depth: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(cx - halfWidth, cy - rise);
+  ctx.quadraticCurveTo(cx, cy + depth * 1.9, cx + halfWidth, cy - rise);
+  ctx.quadraticCurveTo(cx, cy - rise * 0.55, cx - halfWidth, cy - rise);
+  ctx.closePath();
+}
+
+function paintRictus(
+  ctx: Ctx,
+  style: ClownStyle,
+  mouthOpen: number,
+  cx: number,
+  cy: number,
+  nominalHalfWidth: number,
+): void {
+  const r = style.proportions.headRadius;
+  const { palette } = style;
+  const halfWidth = nominalHalfWidth * RICTUS_WIDTH_GROWTH;
+  const rise = r * RICTUS_CORNER_RISE;
+  const depth = r * lerp(RICTUS_CLOSED_DEPTH, RICTUS_JAW_DROP, clamp01(mouthOpen));
+
+  ctx.fillStyle = palette.mouthFill;
+  traceRictus(ctx, cx, cy, halfWidth * LIP_PAINT_GROWTH, rise * LIP_PAINT_GROWTH, depth);
+  ctx.fill();
+
+  ctx.fillStyle = palette.mouthDark;
+  traceRictus(ctx, cx, cy, halfWidth, rise, depth);
+  ctx.fill();
+
+  ctx.save();
+  traceRictus(ctx, cx, cy, halfWidth, rise, depth);
+  ctx.clip();
+  ctx.fillStyle = palette.teeth;
+  const toothWidth = (halfWidth * 2) / RICTUS_TOOTH_COUNT;
+  const gape = depth * 2 + rise;
+  for (let i = 0; i < RICTUS_TOOTH_COUNT; i++) {
+    const left = cx - halfWidth + i * toothWidth + toothWidth * RICTUS_TOOTH_GAP;
+    const width = toothWidth * (1 - RICTUS_TOOTH_GAP * 2);
+    // Upper teeth hang from the lip line, lower teeth stand off the jaw, and the
+    // two rows never meet — a permanent gap is what makes it read as a wound.
+    // Ragged rather than even: a row of identical rectangles reads as dentures,
+    // and dentures are funny. The pattern is fixed so a re-bake is identical.
+    const upperRagged = RICTUS_TOOTH_DEPTH * (i % 3 === 1 ? 0.55 : 1);
+    const lowerRagged = RICTUS_TOOTH_DEPTH * (i % 2 === 0 ? 0.6 : 1);
+    ctx.fillRect(left, cy - rise, width, gape * upperRagged);
+    ctx.fillRect(left, cy + depth * 1.5 - gape * lowerRagged, width, gape * lowerRagged);
+  }
+  ctx.restore();
+
+  // The slits carried on past the corners: the cut kept going.
+  ctx.strokeStyle = palette.mouthDark;
+  ctx.lineWidth = r * RICTUS_SCAR_WIDTH;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1] as const) {
+    ctx.beginPath();
+    ctx.moveTo(cx + halfWidth * side, cy - rise);
+    ctx.lineTo(cx + halfWidth * side * 1.22, cy - rise * 1.7);
+    ctx.stroke();
+  }
 }
 
 function drawEye(
@@ -968,6 +1233,21 @@ function drawFacePaint(ctx: Ctx, style: ClownStyle, nearEye: Point, farEye: Poin
       }
       return;
     }
+    case 'sockets': {
+      // Two hard black pits with the eyes burning at the bottom of them. A soft
+      // radial was tried first and is wrong: the falloff greys out the whole
+      // middle of the face, and at tile size the pits stop being holes at all.
+      const SOCKET_RX = 0.27;
+      const SOCKET_RY = 0.58;
+      const SOCKET_DROP = 0.04;
+      ctx.fillStyle = palette.paintMark;
+      for (const eye of [nearEye, farEye]) {
+        ctx.beginPath();
+        ctx.ellipse(eye.x, eye.y + r * SOCKET_DROP, r * SOCKET_RX, r * SOCKET_RY, 0, 0, FULL_CIRCLE);
+        ctx.fill();
+      }
+      return;
+    }
     case 'slashes': {
       ctx.strokeStyle = palette.paintMark;
       ctx.lineWidth = r * SLASH_WIDTH;
@@ -1034,7 +1314,162 @@ function drawHat(ctx: Ctx, style: ClownStyle): void {
 }
 
 /** Draw the head in head-local space: origin at its centre, +X is forward. */
-function drawHead(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
+function drawHead(ctx: Ctx, style: ClownStyle, pose: ClownPose, view: ClownView): void {
+  if (view === 'toward') {
+    drawHeadToward(ctx, style, pose);
+    return;
+  }
+  if (view === 'away') {
+    drawHeadAway(ctx, style);
+    return;
+  }
+  drawHeadProfile(ctx, style, pose);
+}
+
+/** Eye separation in a head-on face, as a fraction of the head's half-width. */
+const EYE_TOWARD_X = 0.42;
+/** How much of the skull's own width the shaded side of a head-on face covers. */
+const HEADON_SHADE_WIDTH = 0.5;
+const HEADON_SHADE_OFFSET = 0.95;
+
+function drawHeadToward(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
+  const { proportions, palette } = style;
+  const r = proportions.headRadius;
+  const rx = r * proportions.headWidthFactor;
+
+  drawHair(ctx, style);
+
+  ctx.fillStyle = palette.outline;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 1.06, r * 1.06, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.fillStyle = palette.paint;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, r, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  const rightEye: Point = { x: rx * EYE_TOWARD_X, y: r * EYE_Y };
+  const leftEye: Point = { x: -rx * EYE_TOWARD_X, y: r * EYE_Y };
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, r, 0, 0, FULL_CIRCLE);
+  ctx.clip();
+
+  ctx.fillStyle = palette.paintShade;
+  ctx.beginPath();
+  ctx.ellipse(-rx * HEADON_SHADE_OFFSET, 0, rx * HEADON_SHADE_WIDTH, r, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  drawFacePaint(ctx, style, rightEye, leftEye);
+  ctx.restore();
+
+  const eyeSize = r * faceTuningOf(style).eyeScale;
+  drawEye(ctx, rightEye.x, rightEye.y, eyeSize, pose.eyeGlow, palette);
+  drawEye(ctx, leftEye.x, leftEye.y, eyeSize, pose.eyeGlow, palette);
+
+  if (style.facePaint !== 'sockets') {
+    ctx.strokeStyle = palette.paintMark;
+    ctx.lineWidth = r * BROW_WIDTH;
+    ctx.lineCap = 'round';
+    for (const side of [1, -1] as const) {
+      const eye = side > 0 ? rightEye : leftEye;
+      ctx.beginPath();
+      // Both brows climb toward the centre of the face, which is what makes a
+      // symmetric head-on stare read as a glare instead of a blank.
+      ctx.moveTo(eye.x + rx * BROW_LENGTH * side, eye.y - r * BROW_RISE * 0.45);
+      ctx.lineTo(eye.x - rx * BROW_LENGTH * side, eye.y - r * BROW_RISE);
+      ctx.stroke();
+    }
+  }
+
+  paintMouth(ctx, style, pose.mouthOpen, 0, rx * MOUTH_HALF_WIDTH);
+  paintNose(ctx, style, 0);
+
+  drawHat(ctx, style);
+}
+
+/** The nose ball, at a caller-chosen horizontal position on the face. */
+function paintNose(ctx: Ctx, style: ClownStyle, cx: number): void {
+  const r = style.proportions.headRadius;
+  const { palette } = style;
+  const noseRadius = r * NOSE_FRACTION * faceTuningOf(style).noseScale;
+  const noseY = r * NOSE_Y;
+  const gradient = ctx.createRadialGradient(
+    cx - noseRadius * 0.35,
+    noseY - noseRadius * 0.35,
+    noseRadius * 0.1,
+    cx,
+    noseY,
+    noseRadius,
+  );
+  gradient.addColorStop(0, palette.noseHighlight);
+  gradient.addColorStop(1, palette.nose);
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, noseY, noseRadius, 0, FULL_CIRCLE);
+  ctx.fill();
+}
+
+/**
+ * The back of the head: a bare painted dome under the hair, with no features at
+ * all. Deliberately empty — a face peeking round from behind is the single most
+ * common way a four-view figure gives itself away.
+ */
+function drawHeadAway(ctx: Ctx, style: ClownStyle): void {
+  const { proportions, palette } = style;
+  const r = proportions.headRadius;
+  const rx = r * proportions.headWidthFactor;
+
+  ctx.fillStyle = palette.outline;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx * 1.06, r * 1.06, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.fillStyle = palette.paint;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, r, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, r, 0, 0, FULL_CIRCLE);
+  ctx.clip();
+  ctx.fillStyle = palette.paintShade;
+  ctx.beginPath();
+  ctx.ellipse(-rx * HEADON_SHADE_OFFSET, 0, rx * HEADON_SHADE_WIDTH, r, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  // Most of the back of a head is hair, not scalp. Without this cap the dome
+  // stays a bare white disc and the hair beside it reads as a hood with a
+  // pointed crown cut out of it.
+  const SCALP_CAP_DROP = 0.34;
+  const SCALP_CAP_HEIGHT = 1.15;
+  ctx.fillStyle = palette.hair;
+  ctx.beginPath();
+  ctx.ellipse(0, -r * SCALP_CAP_DROP, rx, r * SCALP_CAP_HEIGHT, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+  ctx.fillStyle = palette.hairShade;
+  ctx.beginPath();
+  ctx.ellipse(
+    -rx * HEADON_SHADE_OFFSET,
+    -r * SCALP_CAP_DROP,
+    rx * HEADON_SHADE_WIDTH,
+    r * SCALP_CAP_HEIGHT,
+    0,
+    0,
+    FULL_CIRCLE,
+  );
+  ctx.fill();
+  ctx.restore();
+
+  // Hanks last so they hang over the cap rather than behind it.
+  drawHair(ctx, style);
+  drawHat(ctx, style);
+}
+
+function drawHeadProfile(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
   const { proportions, palette } = style;
   const r = proportions.headRadius;
   const rx = r * proportions.headWidthFactor;
@@ -1069,9 +1504,34 @@ function drawHead(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
   drawFacePaint(ctx, style, nearEye, farEye);
   ctx.restore();
 
-  drawEye(ctx, nearEye.x, nearEye.y, r, pose.eyeGlow, palette);
-  drawEye(ctx, farEye.x, farEye.y, r * FAR_EYE_SCALE, pose.eyeGlow * FAR_EYE_SCALE, palette);
+  const eyeSize = r * faceTuningOf(style).eyeScale;
+  drawEye(ctx, nearEye.x, nearEye.y, eyeSize, pose.eyeGlow, palette);
+  drawEye(
+    ctx,
+    farEye.x,
+    farEye.y,
+    eyeSize * FAR_EYE_SCALE,
+    pose.eyeGlow * FAR_EYE_SCALE,
+    palette,
+  );
 
+  if (style.facePaint !== 'sockets') drawProfileBrows(ctx, style, nearEye, farEye);
+
+  drawMouth(ctx, style, pose.mouthOpen);
+  paintNose(ctx, style, rx * (FACE_FORWARD_SHIFT + NOSE_X));
+
+  drawHat(ctx, style);
+}
+
+/**
+ * A drawn brow over a hollow socket only reads as a raised eyebrow, which is an
+ * expression — and the whole point of the socket is that there is no expression
+ * there at all. So the socket styles get none.
+ */
+function drawProfileBrows(ctx: Ctx, style: ClownStyle, nearEye: Point, farEye: Point): void {
+  const { proportions, palette } = style;
+  const r = proportions.headRadius;
+  const rx = r * proportions.headWidthFactor;
   ctx.strokeStyle = palette.paintMark;
   ctx.lineWidth = r * BROW_WIDTH;
   ctx.lineCap = 'round';
@@ -1084,28 +1544,6 @@ function drawHead(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
     ctx.lineTo(eye.x + rx * BROW_LENGTH * browScale, eye.y - r * BROW_RISE * 0.45 * browScale);
     ctx.stroke();
   }
-
-  drawMouth(ctx, style, pose.mouthOpen);
-
-  const noseRadius = r * NOSE_FRACTION;
-  const noseX = rx * (FACE_FORWARD_SHIFT + NOSE_X);
-  const noseY = r * NOSE_Y;
-  const noseGradient = ctx.createRadialGradient(
-    noseX - noseRadius * 0.35,
-    noseY - noseRadius * 0.35,
-    noseRadius * 0.1,
-    noseX,
-    noseY,
-    noseRadius,
-  );
-  noseGradient.addColorStop(0, palette.noseHighlight);
-  noseGradient.addColorStop(1, palette.nose);
-  ctx.fillStyle = noseGradient;
-  ctx.beginPath();
-  ctx.arc(noseX, noseY, noseRadius, 0, FULL_CIRCLE);
-  ctx.fill();
-
-  drawHat(ctx, style);
 }
 
 // ── Assembly ─────────────────────────────────────────────────────────────────
@@ -1134,8 +1572,10 @@ export function drawClown(
   style: ClownStyle,
   pose: ClownPose,
   drawProp?: PropPainter,
+  view: ClownView = 'profile',
 ): void {
   const { proportions, palette } = style;
+  const headOn = view !== 'profile';
 
   ctx.save();
   ctx.translate(originX, originY);
@@ -1146,7 +1586,7 @@ export function drawClown(
   const hip: Point = { x: pose.sway, y: -groundedHipHeight(proportions) + pose.bob };
   const spineTop = offset(
     hip,
-    ...spineOffset(proportions.torsoLength * pose.torsoSquash, pose.lean),
+    ...spineOffset(proportions.torsoLength * pose.torsoSquash, pose.lean, view),
   );
   const shoulderDrop = proportions.shoulderHalfWidth * SHOULDER_DROP_FRACTION;
 
@@ -1197,37 +1637,49 @@ export function drawClown(
     outline: palette.outline,
     sheen: palette.limbSheen,
   };
-  const farPaint: LimbPaint = {
-    fill: palette.suitFar,
-    outline: palette.outline,
-    sheen: FAR_LIMB_SHEEN,
-  };
+  // Head-on, neither limb is further from the camera than the other, so the
+  // depth darkening that sells a profile would just look like one arm in shadow.
+  const farPaint: LimbPaint = headOn
+    ? nearPaint
+    : {
+        fill: palette.suitFar,
+        outline: palette.outline,
+        sheen: FAR_LIMB_SHEEN,
+      };
 
   const paintProp = (): void => {
     if (drawProp === undefined) return;
     drawProp(ctx, nearArm.end, segmentAngle(nearArm.joint, nearArm.end) + pose.wristTwist);
   };
 
-  drawLimbWithExtremity(ctx, farArm, proportions.armWidth, farPaint, style, 'hand');
-  drawLimbWithExtremity(ctx, farLeg, proportions.legWidth, farPaint, style, 'foot');
+  drawLimbWithExtremity(ctx, farArm, proportions.armWidth, farPaint, style, 'hand', view);
+  drawLimbWithExtremity(ctx, farLeg, proportions.legWidth, farPaint, style, 'foot', view);
   if (pose.propBehind) paintProp();
 
   ctx.save();
   ctx.translate(hip.x, hip.y);
-  ctx.rotate(pose.lean);
-  drawTorso(ctx, style, pose.torsoSquash);
+  // A head-on spine leans toward or away from the camera, which is a
+  // foreshortening rather than a rotation — rotating it would tip the figure
+  // sideways every time it wound up an attack.
+  if (!headOn) ctx.rotate(pose.lean);
+  drawTorso(ctx, style, pose.torsoSquash * (headOn ? Math.cos(pose.lean) : 1), headOn);
   ctx.restore();
 
-  drawLimbWithExtremity(ctx, nearLeg, proportions.legWidth, nearPaint, style, 'foot');
+  drawLimbWithExtremity(ctx, nearLeg, proportions.legWidth, nearPaint, style, 'foot', view);
 
   const headCentre = offset(
     hip,
     ...spineOffset(
       proportions.torsoLength * pose.torsoSquash + proportions.neckLength + proportions.headRadius,
       pose.lean,
+      view,
     ),
   );
-  const headAt = offset(headCentre, pose.headLead, 0);
+  // Head-on, leading with the face pushes the head down the screen (toward the
+  // camera) rather than sideways.
+  const headAt = headOn
+    ? offset(headCentre, 0, pose.headLead)
+    : offset(headCentre, pose.headLead, 0);
 
   fillCapsule(
     ctx,
@@ -1240,25 +1692,32 @@ export function drawClown(
 
   if (style.ruffRadius > 0) {
     ctx.save();
-    ctx.translate(spineTop.x, spineTop.y - style.ruffRadius * RUFF_SQUASH * 0.4);
+    const ruffLift = proportions.neckLength * (style.ruffRise ?? 0);
+    ctx.translate(spineTop.x, spineTop.y - style.ruffRadius * RUFF_SQUASH * 0.4 - ruffLift);
     drawRuff(ctx, style.ruffRadius, palette);
     ctx.restore();
   }
 
   ctx.save();
   ctx.translate(headAt.x, headAt.y);
-  ctx.rotate(pose.headTilt + pose.lean);
-  drawHead(ctx, style, pose);
+  ctx.rotate(pose.headTilt + (headOn ? 0 : pose.lean));
+  drawHead(ctx, style, pose, view);
   ctx.restore();
 
-  drawLimbWithExtremity(ctx, nearArm, proportions.armWidth, nearPaint, style, 'hand');
+  drawLimbWithExtremity(ctx, nearArm, proportions.armWidth, nearPaint, style, 'hand', view);
   if (!pose.propBehind) paintProp();
 
   ctx.restore();
 }
 
-/** Offset from the hip to a point `length` up the leaning spine. */
-function spineOffset(length: number, lean: number): [number, number] {
+/**
+ * Offset from the hip to a point `length` up the spine.
+ *
+ * A profile spine rotates by the lean; a head-on one only shortens by it, since
+ * leaning toward the camera does not move the shoulders across the screen.
+ */
+function spineOffset(length: number, lean: number, view: ClownView): [number, number] {
+  if (view !== 'profile') return [0, -length * Math.cos(lean)];
   const rotated = rotatePoint({ x: 0, y: -length }, lean);
   return [rotated.x, rotated.y];
 }
@@ -1270,6 +1729,7 @@ function drawLimbWithExtremity(
   paint: LimbPaint,
   style: ClownStyle,
   extremity: 'hand' | 'foot',
+  view: ClownView = 'profile',
 ): void {
   const walksOnStilts = extremity === 'foot' && style.feet === 'stilts';
   const woodPaint: LimbPaint = {
@@ -1286,6 +1746,10 @@ function drawLimbWithExtremity(
   const footAngle = lowerAngle * FOOT_ANGLE_FOLLOW;
   if (style.feet === 'stilts') {
     drawStiltFoot(ctx, chain.end, footAngle, style);
+    return;
+  }
+  if (view !== 'profile') {
+    drawShoeHeadOn(ctx, chain.end, style, view);
     return;
   }
   drawShoe(ctx, chain.end, footAngle, style);

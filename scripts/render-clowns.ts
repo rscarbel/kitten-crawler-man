@@ -24,6 +24,7 @@ const CLOWNS = {
   fat: manifest.fat_clown,
   stilt: manifest.stilt_clown,
   terror: manifest.terror_clown,
+  evil: manifest.evil_clown,
 };
 
 type ClownName = keyof typeof CLOWNS;
@@ -47,19 +48,31 @@ interface SheetGeometry {
   readonly tileX: number;
   readonly tileY: number;
   readonly tileScale: number;
-  readonly states: Readonly<Record<string, { readonly row: number; readonly frameCount: number }>>;
+  readonly states: Readonly<
+    Record<
+      string,
+      { readonly row: number; readonly frameCount: number; readonly colOffset?: number }
+    >
+  >;
 }
 
 interface RowSpec {
   readonly name: string;
   readonly row: number;
   readonly frameCount: number;
+  /** First column this state occupies. Gore pieces share one row by column. */
+  readonly colOffset: number;
 }
 
 function rowsOf(sheet: SheetGeometry): readonly RowSpec[] {
   return Object.entries(sheet.states)
-    .map(([name, state]) => ({ name, row: state.row, frameCount: state.frameCount }))
-    .sort((a, b) => a.row - b.row);
+    .map(([name, state]) => ({
+      name,
+      row: state.row,
+      frameCount: state.frameCount,
+      colOffset: state.colOffset ?? 0,
+    }))
+    .sort((a, b) => a.row - b.row || a.colOffset - b.colOffset);
 }
 
 function parseFlag(name: string, fallback: string): string {
@@ -101,7 +114,7 @@ function drawContactSheet(sheet: SheetGeometry, image: Image, scale: number): Bu
       const x = PADDING + col * (cellW + PADDING);
       ctx.drawImage(
         image,
-        col * sheet.frameWidth,
+        (spec.colOffset + col) * sheet.frameWidth,
         spec.row * sheet.frameHeight,
         sheet.frameWidth,
         sheet.frameHeight,
@@ -132,7 +145,7 @@ function drawContactSheet(sheet: SheetGeometry, image: Image, scale: number): Bu
     const x = PADDING + i * (inGameW + PADDING);
     ctx.drawImage(
       image,
-      0,
+      spec.colOffset * sheet.frameWidth,
       spec.row * sheet.frameHeight,
       sheet.frameWidth,
       sheet.frameHeight,

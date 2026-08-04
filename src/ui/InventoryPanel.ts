@@ -12,6 +12,7 @@ import {
 } from '../sprites/gymEquipmentSprite';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
 import { InventoryInteraction } from './InventoryInteraction';
+import { drawCooldownOverlay } from './CooldownOverlay';
 import { drawText } from './TextBox';
 import { pointInRect } from '../utils';
 import { drawBox, drawDivider, BOX_PRESETS } from './Box';
@@ -126,9 +127,6 @@ const NAV_BAR_SIZE = 11;
 const PANEL_NAME_Y = 15;
 const PANEL_COINS_Y = 16;
 
-// Cooldown seconds threshold
-const COOLDOWN_SECS_OVERFLOW = 99;
-
 // Quantity badge minimum font
 const QTY_BADGE_MIN_FONT = 7;
 const QTY_BADGE_FONT_SCALE = 0.22;
@@ -145,9 +143,6 @@ const PANEL_HEADER_COINS_SIZE = 11;
 // Nav bar layout
 const NAV_Y_ADJUST = 6;
 const NAV_BASELINE_CORRECTION = 9;
-
-// Cooldown
-const COOLDOWN_PER_SECOND = 60;
 
 // Health potion icon proportions
 const HP_POTION_CX = 0.5;
@@ -329,13 +324,6 @@ const COOL_CRISP_HAND_SHORT = 0.07;
 const STAT_BOOST_STAR_R_OUTER = 0.17;
 const STAT_BOOST_STAR_R_INNER = 0.08;
 const STAT_BOOST_STAR_POINTS = 5;
-
-// Cooldown overlay opacity
-const COOLDOWN_OVERLAY_ALPHA = 0.65;
-const COOLDOWN_OVERLAY_DARK = 0.75;
-const COOLDOWN_Y_OFFSET = 4;
-const COOLDOWN_FONT_SCALE = 0.28;
-const COOLDOWN_FONT_BASELINE = 0.8;
 
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
@@ -1139,25 +1127,14 @@ export class InventoryPanel {
     // Ability cooldown overlay on hotbar
     if (isHotbar && item?.abilityId) {
       const cd = this.abilityCooldowns.get(item.abilityId);
-      if (cd && cd.current > 0) {
-        const frac = cd.current / cd.max;
-        ctx.globalAlpha = COOLDOWN_OVERLAY_ALPHA;
-        ctx.fillStyle = `rgba(0,0,0,${COOLDOWN_OVERLAY_DARK})`;
-        ctx.fillRect(x, y + size * (1 - frac), size, size * frac);
-        ctx.globalAlpha = 1;
-        // Remaining seconds
-        const secs = Math.ceil(cd.current / COOLDOWN_PER_SECOND);
-        const cdFontSize = Math.floor(size * COOLDOWN_FONT_SCALE);
-        // baseline_y = y+size/2+4, cdFontSize → top_y = baseline_y - Math.round(cdFontSize*0.8)
-        const cdTopY =
-          y + size / 2 + COOLDOWN_Y_OFFSET - Math.round(cdFontSize * COOLDOWN_FONT_BASELINE);
-        drawText(ctx, secs > COOLDOWN_SECS_OVERFLOW ? '…' : `${secs}`, {
-          x: x + size / 2,
-          y: cdTopY,
-          size: cdFontSize,
-          bold: true,
-          color: '#e2e8f0',
-          align: 'center',
+      if (cd) {
+        drawCooldownOverlay(ctx, {
+          x,
+          y,
+          width: size,
+          height: size,
+          remainingFrames: cd.current,
+          totalFrames: cd.max,
         });
       }
     }

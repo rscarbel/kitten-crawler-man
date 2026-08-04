@@ -1,7 +1,7 @@
 import type { EventBus } from '../core/EventBus';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
-import { ALL_SOUND_IDS, SOUND_MANIFEST } from './sounds';
+import { NON_STREAMING_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } from './sounds';
 
 const WALKING_VOLUME = 0.25;
 /**
@@ -72,6 +72,35 @@ export interface MusicOptions {
   fadeInMs?: number;
 }
 
+/** A currently-playing music track: either a decoded buffer or a streamed media element. */
+type MusicVoice =
+  | { readonly kind: 'buffer'; readonly source: AudioBufferSourceNode; readonly gain: GainNode }
+  | {
+      readonly kind: 'stream';
+      readonly el: HTMLAudioElement;
+      readonly gain: GainNode;
+      /** Which alternating slot (0 = A, 1 = B) this voice owns — see `slotGeneration`. */
+      readonly slot: 0 | 1;
+      /**
+       * `slotGeneration[slot]` at the moment this voice claimed the slot. A
+       * deferred fade-out pause checks this before firing: two more
+       * `playMusic` calls reuse the same slot (it only alternates between two),
+       * so without this a stale timeout from an earlier stop can pause a
+       * completely unrelated later track sharing the slot.
+       */
+      readonly gen: number;
+    };
+
+/** A currently-playing ambient loop: either a decoded buffer or a streamed media element. */
+type AmbientVoice =
+  | { readonly kind: 'buffer'; readonly source: AudioBufferSourceNode; readonly gain: GainNode }
+  | {
+      readonly kind: 'stream';
+      readonly el: HTMLAudioElement;
+      readonly node: MediaElementAudioSourceNode;
+      readonly gain: GainNode;
+    };
+
 /** Fisher–Yates shuffle into a fresh array (leaves the source untouched). */
 function shuffleTracks(ids: ReadonlyArray<SoundId>): SoundId[] {
   const arr = [...ids];
@@ -110,9 +139,21 @@ export class AudioManager {
   private readonly musicGain: GainNode;
 
   private readonly buffers = new Map<SoundId, AudioBuffer>();
-  private currentMusicSource: AudioBufferSourceNode | null = null;
-  private currentMusicGain: GainNode | null = null;
+  private currentMusicVoice: MusicVoice | null = null;
   private _currentMusicId: SoundId | null = null;
+  /**
+   * Two alternating `<audio>` elements (and their permanently-wired gain nodes)
+   * for streamed music. A single element can't be re-pointed at a new `src`
+   * mid-fade without a click, so each `startMusicTrack` call toggles which slot
+   * it uses — see `streamSlotIsB`.
+   */
+  private readonly musicStreamElA = new Audio();
+  private readonly musicStreamElB = new Audio();
+  private readonly musicStreamGainA: GainNode;
+  private readonly musicStreamGainB: GainNode;
+  private streamSlotIsB = false;
+  /** Bumped each time a slot is claimed by a new track — see `MusicVoice`'s `gen` field. */
+  private readonly slotGeneration: [number, number] = [0, 0];
   private pendingMusic: { id: SoundId; opts: MusicOptions } | null = null;
   // Shuffled track list when a playlist is active (advances on each track's end); null for a single looping track.
   private musicPlaylist: SoundId[] | null = null;
@@ -127,10 +168,7 @@ export class AudioManager {
   private keyboardHeroMusicStartTime = 0;
   // Distance-attenuated ambient loops, keyed by sound id so several emitters of
   // the same sound (every hearth in a building) share one voice.
-  private readonly ambientLoops = new Map<
-    SoundId,
-    { source: AudioBufferSourceNode; gain: GainNode }
-  >();
+  private readonly ambientLoops = new Map<SoundId, AmbientVoice>();
 
   // Sounds queued because their buffer wasn't decoded yet when requested.
   private readonly pendingSfx = new Map<SoundId, PlayOptions>();
@@ -188,6 +226,12 @@ export class AudioManager {
     this.sfxGain.connect(this.masterGain);
     this.musicGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
+    this.musicStreamGainA = this.ctx.createGain();
+    this.musicStreamGainB = this.ctx.createGain();
+    this.ctx.createMediaElementSource(this.musicStreamElA).connect(this.musicStreamGainA);
+    this.ctx.createMediaElementSource(this.musicStreamElB).connect(this.musicStreamGainB);
+    this.musicStreamGainA.connect(this.musicGain);
+    this.musicStreamGainB.connect(this.musicGain);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
     // pagehide fires when the page enters the BFCache (lock screen / app switch on
     // iOS) — more reliable than visibilitychange alone on some mobile browsers.
@@ -319,13 +363,15 @@ export class AudioManager {
 
   /**
    * Fetch and decode sounds into memory in parallel.
-   * Defaults to every sound in the manifest.
+   * Defaults to every non-streamed sound in the manifest — music and ambience
+   * (`STREAMING_SOUND_IDS`) are played via `MediaElementAudioSourceNode`
+   * instead and must never be decoded into `buffers`.
    * Failures emit a console warning and are skipped — they will not throw.
    */
-  async preload(ids: ReadonlyArray<SoundId> = ALL_SOUND_IDS): Promise<void> {
+  async preload(ids: ReadonlyArray<SoundId> = NON_STREAMING_SOUND_IDS): Promise<void> {
     await Promise.all(
       ids.map(async (id) => {
-        if (this.buffers.has(id)) return;
+        if (this.buffers.has(id) || STREAMING_SOUND_IDS.has(id)) return;
         const path = SOUND_MANIFEST[id];
         try {
           const response = await fetch(path);
@@ -349,6 +395,47 @@ export class AudioManager {
       this.pendingMusic = null;
       this.resumePendingMusic(id, opts);
     }
+  }
+
+  /**
+   * Drop decoded buffers for ids no longer needed, so a floor change can shed
+   * the previous floor's SFX instead of only ever accumulating them (Phase 2
+   * of docs/asset-management-plan.md). Skips any id that is mid-playback —
+   * as a one-shot, an ambient loop, or the current music track — rather than
+   * risk cutting audio off; a skipped id just gets re-decoded on the next
+   * `preload` call for its group, which is a fine failure mode.
+   *
+   * TODO(asset-management-plan Phase 6): not yet called from anywhere. Phase 6
+   * ("Eviction on floor change") gives floor transitions a real floor-identity
+   * hook (`levelDef.id`, not scene construction — entering a building interior
+   * rebuilds the scene without being a floor change). Wire this call there
+   * once that hook exists, rather than guessing at scene-construction call
+   * sites now and risking evicting SFX on an interior enter/exit.
+   */
+  releaseSounds(ids: ReadonlyArray<SoundId>): void {
+    for (const id of ids) {
+      if (this.activeSources.has(id)) continue;
+      if (this.ambientLoops.has(id)) continue;
+      if (this._currentMusicId === id) continue;
+      if (this.isDedicatedLoopPlaying(id)) continue;
+      this.buffers.delete(id);
+    }
+  }
+
+  /**
+   * True if `id` is the sound behind one of the fixed-purpose loop/one-shot
+   * sources (walking, wading, spider walking, machinery, keyboard-hero music) —
+   * these aren't keyed by `SoundId` the way `activeSources`/`ambientLoops` are,
+   * so `releaseSounds` has to check them individually or a floor-change evict
+   * could delete a buffer one of them is actively reading from.
+   */
+  private isDedicatedLoopPlaying(id: SoundId): boolean {
+    if (id === 'player_walking') return this.walkingSource !== null;
+    if (id === 'player_wading') return this.wadingLoop !== null;
+    if (id === 'spider_walking') return this.spiderWalkingSource !== null;
+    if (id === 'tech_machinery_running') return this.machinerySource !== null;
+    if (id === 'keyboard_hero_music_track_1') return this.keyboardHeroMusicSource !== null;
+    return false;
   }
 
   /** Play a one-shot sound effect. Silently skips if the buffer is not yet loaded. */
@@ -465,8 +552,18 @@ export class AudioManager {
   ): void {
     this.stopCurrentMusicSource(0);
     this._currentMusicId = id;
+    if (this.ctx.state !== 'running') {
+      this.pendingMusic = { id, opts };
+      return;
+    }
+
+    if (STREAMING_SOUND_IDS.has(id)) {
+      this.startStreamingMusicTrack(id, opts, loop, onEnded);
+      return;
+    }
+
     const buffer = this.buffers.get(id);
-    if (!buffer || this.ctx.state !== 'running') {
+    if (!buffer) {
       this.pendingMusic = { id, opts };
       return;
     }
@@ -486,8 +583,47 @@ export class AudioManager {
     if (onEnded !== null) source.onended = onEnded;
     source.start();
 
-    this.currentMusicSource = source;
-    this.currentMusicGain = perTrackGain;
+    this.currentMusicVoice = { kind: 'buffer', source, gain: perTrackGain };
+  }
+
+  /**
+   * Start a streamed music track on whichever of the two alternating `<audio>`
+   * slots was used least recently, so a track that is still ramping out on one
+   * slot never has its element repointed out from under it.
+   */
+  private startStreamingMusicTrack(
+    id: SoundId,
+    opts: MusicOptions,
+    loop: boolean,
+    onEnded: (() => void) | null,
+  ): void {
+    const useSlotA = !this.streamSlotIsB;
+    this.streamSlotIsB = !this.streamSlotIsB;
+    const slot: 0 | 1 = useSlotA ? 0 : 1;
+    const el = useSlotA ? this.musicStreamElA : this.musicStreamElB;
+    const gain = useSlotA ? this.musicStreamGainA : this.musicStreamGainB;
+    const gen = ++this.slotGeneration[slot];
+
+    el.loop = loop;
+    el.onended = onEnded;
+    el.src = SOUND_MANIFEST[id];
+    el.currentTime = 0;
+
+    const now = this.ctx.currentTime;
+    const fadeInMs = opts.fadeInMs ?? 0;
+    gain.gain.cancelScheduledValues(now);
+    if (fadeInMs > 0) {
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(1, now + fadeInMs / MS_PER_SECOND);
+    } else {
+      gain.gain.setValueAtTime(1, now);
+    }
+
+    void el.play().catch((err: unknown) => {
+      console.warn(`[AudioManager] Failed to play streaming music "${id}":`, err);
+    });
+
+    this.currentMusicVoice = { kind: 'stream', el, gain, slot, gen };
   }
 
   /** Start a looping walking SFX. No-op if already playing or buffer not loaded. */
@@ -625,21 +761,35 @@ export class AudioManager {
   startAmbientLoop(id: SoundId, volume: number): void {
     if (this.ambientLoops.has(id)) return;
     if (!this.isRunning) return;
-    const buffer = this.buffers.get(id);
-    if (!buffer) return;
-    const gain = this.ctx.createGain();
+
     // Fade in rather than snapping to `volume`: a room-wide bed starts at full
     // gain the instant you walk in, and an instant step would click.
+    const gain = this.ctx.createGain();
     const now = this.ctx.currentTime;
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(volume, now + AMBIENT_RAMP_MS / MS_PER_SECOND);
     gain.connect(this.ambienceGain);
+
+    if (STREAMING_SOUND_IDS.has(id)) {
+      const el = new Audio(SOUND_MANIFEST[id]);
+      el.loop = true;
+      const node = this.ctx.createMediaElementSource(el);
+      node.connect(gain);
+      void el.play().catch((err: unknown) => {
+        console.warn(`[AudioManager] Failed to play streaming ambient loop "${id}":`, err);
+      });
+      this.ambientLoops.set(id, { kind: 'stream', el, node, gain });
+      return;
+    }
+
+    const buffer = this.buffers.get(id);
+    if (!buffer) return;
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
     source.connect(gain);
     source.start();
-    this.ambientLoops.set(id, { source, gain });
+    this.ambientLoops.set(id, { kind: 'buffer', source, gain });
   }
 
   /**
@@ -678,17 +828,28 @@ export class AudioManager {
     this.ambientLoops.delete(id);
     const now = this.ctx.currentTime;
     const rampSeconds = AMBIENT_RAMP_MS / MS_PER_SECOND;
-    try {
-      loop.gain.gain.cancelScheduledValues(now);
-      loop.gain.gain.setValueAtTime(loop.gain.gain.value, now);
-      loop.gain.gain.linearRampToValueAtTime(0, now + rampSeconds);
-      loop.source.stop(now + rampSeconds);
-    } catch {
-      /* already stopped */
+    loop.gain.gain.cancelScheduledValues(now);
+    loop.gain.gain.setValueAtTime(loop.gain.gain.value, now);
+    loop.gain.gain.linearRampToValueAtTime(0, now + rampSeconds);
+
+    if (loop.kind === 'buffer') {
+      try {
+        loop.source.stop(now + rampSeconds);
+      } catch {
+        /* already stopped */
+      }
+      loop.source.onended = () => {
+        loop.gain.disconnect();
+      };
+      return;
     }
-    loop.source.onended = () => {
-      loop.gain.disconnect();
-    };
+
+    const { el, node, gain } = loop;
+    window.setTimeout(() => {
+      el.pause();
+      node.disconnect();
+      gain.disconnect();
+    }, AMBIENT_RAMP_MS);
   }
 
   /** Stop every ambient loop. Call on scene swap and teardown. */
@@ -822,29 +983,46 @@ export class AudioManager {
     this.musicPaused = false;
     this.pendingMusic = null;
     this._currentMusicId = null;
-    const src = this.currentMusicSource;
-    const gain = this.currentMusicGain;
-    if (src === null || gain === null) return;
-    this.currentMusicSource = null;
-    this.currentMusicGain = null;
-    // Detach the advance handler so a deliberate swap/stop never triggers the next playlist track.
-    src.onended = null;
+    const voice = this.currentMusicVoice;
+    if (voice === null) return;
+    this.currentMusicVoice = null;
 
+    if (voice.kind === 'buffer') {
+      // Detach the advance handler so a deliberate swap/stop never triggers the next playlist track.
+      voice.source.onended = null;
+      if (fadeMs > 0) {
+        const now = this.ctx.currentTime;
+        voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+        voice.gain.gain.linearRampToValueAtTime(0, now + fadeMs / MS_PER_SECOND);
+        try {
+          voice.source.stop(now + fadeMs / MS_PER_SECOND);
+        } catch {
+          /* already stopped */
+        }
+      } else {
+        try {
+          voice.source.stop();
+        } catch {
+          /* already stopped */
+        }
+      }
+      return;
+    }
+
+    voice.el.onended = null;
+    const now = this.ctx.currentTime;
+    voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+    voice.gain.gain.linearRampToValueAtTime(0, now + fadeMs / MS_PER_SECOND);
+    const { el, slot, gen } = voice;
     if (fadeMs > 0) {
-      const now = this.ctx.currentTime;
-      gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0, now + fadeMs / MS_PER_SECOND);
-      try {
-        src.stop(now + fadeMs / MS_PER_SECOND);
-      } catch {
-        /* already stopped */
-      }
+      window.setTimeout(() => {
+        // The slot may have been claimed by a newer track while this fade was
+        // pending (two `playMusic` calls is all it takes to cycle back to the
+        // same element) — pausing it now would silently cut that track off.
+        if (this.slotGeneration[slot] === gen) el.pause();
+      }, fadeMs);
     } else {
-      try {
-        src.stop();
-      } catch {
-        /* already stopped */
-      }
+      el.pause();
     }
   }
 

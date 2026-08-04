@@ -1,5 +1,16 @@
 {
   "find-the-stairwell": {
-    "path": "interfaces/find-the-stairwell.png"
+    "path": "interfaces/find-the-stairwell.png",
+    "frameWidth": 997,
+    "frameHeight": 500,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 997,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
   }
 }

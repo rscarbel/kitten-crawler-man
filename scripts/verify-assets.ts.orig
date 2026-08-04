@@ -1,0 +1,143 @@
+#!/usr/bin/env tsx
+/**
+ * Phase 4 of `docs/asset-management-plan.md`: cross-references every floor's
+ * declared sprite-group coverage against every mob type that floor can
+ * actually produce, and fails loudly on anything uncovered.
+ *
+ * "Every mob a floor can produce" is two unioned sources, matching the plan's
+ * own trap list:
+ *
+ * 1. The `LevelDef`'s own spawn tables (`roomMobs`, `hallwayMobs`,
+ *    `extraSpawns`, `campSpawns`, `onMobKilledSpawns`, `bossRooms`).
+ * 2. `SYSTEM_ASSET_REQUIREMENTS` (`src/core/systemAssetRequirements.ts`) —
+ *    creatures introduced by a bounty/quest/companion system that never
+ *    touches the level def at all (`BountySystem`, `CircusQuestSystem`,
+ *    `SpiderQuestSystem`, `MongoSystem`, ...).
+ *
+ * "Ground truth for what can be spawned" is `getRegisteredMobTypes()`
+ * (`src/levels/spawner.ts`'s `MOB_REGISTRY`), not `MobSpawnRule['type']` — that
+ * union is one entry narrower than the registry (`bugaboo` is registered but
+ * missing from it), so deriving spawnability from the type alone would miss
+ * exactly the case the plan calls out. This script uses the registry to
+ * sanity-check `MOB_SPRITE_KEYS` itself, then the level defs' actual field
+ * values (which are typed to the union, but a def only ever contains what its
+ * author wrote) to compute what each floor produces.
+ *
+ * Run: npx tsx scripts/verify-assets.ts
+ */
+import { tutorialLevel, level1, level2, level3 } from '../src/levels/index';
+import type { LevelDef, MobSpawnRule } from '../src/levels/types';
+import { getRegisteredMobTypes } from '../src/levels/spawner';
+import { ASSET_GROUPS, MOB_SPRITE_KEYS, type AssetGroup } from '../src/core/assetGroups';
+import { SYSTEM_ASSET_REQUIREMENTS } from '../src/core/systemAssetRequirements';
+
+const LEVELS: readonly LevelDef[] = [tutorialLevel, level1, level2, level3];
+
+let failures = 0;
+
+function fail(message: string): void {
+  failures++;
+  console.error(`[verify-assets] FAIL: ${message}`);
+}
+
+/** Every mob type a `LevelDef`'s own fields can spawn (not system-introduced). */
+function mobTypesFromLevelDef(def: LevelDef): Set<string> {
+  const types = new Set<string>();
+  const addRule = (rule: { type: string }): void => {
+    types.add(rule.type);
+  };
+  def.roomMobs.forEach(addRule);
+  def.hallwayMobs.forEach(addRule);
+  (def.extraSpawns ?? []).forEach(addRule);
+  (def.onMobKilledSpawns ?? []).forEach(addRule);
+  (def.bossRooms ?? []).forEach(addRule);
+  if (def.campSpawns) {
+    for (const roster of Object.values(def.campSpawns)) {
+      (roster as MobSpawnRule[] | undefined)?.forEach(addRule);
+    }
+  }
+  return types;
+}
+
+function keysForGroups(groups: Iterable<AssetGroup>): Set<string> {
+  const keys = new Set<string>();
+  for (const group of groups) {
+    for (const key of ASSET_GROUPS[group]) keys.add(key);
+  }
+  return keys;
+}
+
+// Sanity-check the ground truth itself: every mob the spawner can actually
+// construct must have an entry in MOB_SPRITE_KEYS, even if that entry is an
+// empty array (procedural, no sheet). A missing entry means some floor's
+// coverage could pass this whole script while a real gap goes unrepresented.
+for (const type of getRegisteredMobTypes()) {
+  if (!(type in MOB_SPRITE_KEYS)) {
+    fail(
+      `MOB_REGISTRY has "${type}" but MOB_SPRITE_KEYS (src/core/assetGroups.ts) has no ` +
+        `entry for it — add one (an empty array if it is procedural/no-sheet).`,
+    );
+  }
+}
+
+for (const def of LEVELS) {
+  const declaredGroups = new Set<AssetGroup>(def.spriteGroups);
+  const mobTypes = mobTypesFromLevelDef(def);
+
+  for (const req of SYSTEM_ASSET_REQUIREMENTS) {
+    if (!req.levelIds.includes(def.id)) continue;
+    for (const group of req.requiredGroups) declaredGroups.add(group);
+    for (const type of req.mobTypes) mobTypes.add(type);
+  }
+
+  const declaredKeys = keysForGroups(declaredGroups);
+
+  for (const type of mobTypes) {
+    const requiredKeys = MOB_SPRITE_KEYS[type];
+    if (requiredKeys === undefined) {
+      fail(
+        `Floor "${def.id}" can produce mob type "${type}", which has no entry in ` +
+          `MOB_SPRITE_KEYS — add one so its sprite requirement (or lack of one) is known.`,
+      );
+      continue;
+    }
+    for (const key of requiredKeys) {
+      if (!declaredKeys.has(key)) {
+        fail(
+          `Floor "${def.id}" can produce mob type "${type}", which needs sprite key ` +
+            `"${key}", but no group in its declared coverage (LevelDef.spriteGroups plus ` +
+            `every SYSTEM_ASSET_REQUIREMENTS entry scoped to "${def.id}") includes it.`,
+        );
+      }
+    }
+  }
+}
+
+// Every SYSTEM_ASSET_REQUIREMENTS entry should also be internally consistent:
+// its own requiredGroups should cover its own mobTypes, independent of which
+// floor it is scoped to. Catches a system whose declared groups only happen
+// to work because some level's own spriteGroups quietly filled the gap.
+for (const req of SYSTEM_ASSET_REQUIREMENTS) {
+  const declaredKeys = keysForGroups(req.requiredGroups);
+  for (const type of req.mobTypes) {
+    const requiredKeys = MOB_SPRITE_KEYS[type];
+    if (requiredKeys === undefined) continue; // already reported above
+    for (const key of requiredKeys) {
+      if (!declaredKeys.has(key)) {
+        fail(
+          `SYSTEM_ASSET_REQUIREMENTS entry "${req.id}" can produce mob type "${type}", ` +
+            `which needs sprite key "${key}", but the entry's own requiredGroups ` +
+            `(${req.requiredGroups.join(', ') || '<none>'}) don't include it.`,
+        );
+      }
+    }
+  }
+}
+
+if (failures > 0) {
+  console.error(`\n[verify-assets] ${failures} failure(s).`);
+  process.exit(1);
+}
+console.log(
+  `[verify-assets] OK — ${LEVELS.length} floors, ${SYSTEM_ASSET_REQUIREMENTS.length} system/quest/bounty entries, ${getRegisteredMobTypes().length} registered mob types, all covered.`,
+);

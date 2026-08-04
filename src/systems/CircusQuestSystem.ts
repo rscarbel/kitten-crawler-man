@@ -81,8 +81,6 @@ const BLOOD_FUELED_SUMMON_FRAMES = 300;
 /** Lifespan of the single marauder that fizzles when the first ritual fails. */
 const FIZZLE_MARAUDER_LIFESPAN_FRAMES = 80;
 const BATTLE_MUSIC_FADE_IN_MS = 1000;
-/** Blocks Mongo's summon button while Signet holds him as collateral. */
-const MONGO_KIDNAP_LOCK_FRAMES = 999999;
 
 type CircusQuestPhase =
   | 'awaiting_intro'
@@ -211,7 +209,7 @@ export class CircusQuestSystem implements GameSystem {
   /** Rebuild the phase state the cross-scene progress object describes. */
   private enterStageFromProgress(active: Player): void {
     if (this.progress.mongoKidnapped && this.mongoSystem) {
-      this.mongoSystem.cooldownFrames = MONGO_KIDNAP_LOCK_FRAMES;
+      this.mongoSystem.summonLocked = true;
     }
 
     switch (this.progress.stage) {
@@ -561,7 +559,7 @@ export class CircusQuestSystem implements GameSystem {
       this.progress.mongoKidnapped = true;
     }
     if (this.progress.mongoKidnapped && this.mongoSystem) {
-      this.mongoSystem.cooldownFrames = MONGO_KIDNAP_LOCK_FRAMES;
+      this.mongoSystem.summonLocked = true;
     }
     this.phase = 'heather_hunt';
     this.progress.stage = 'heather_hunt';
@@ -593,7 +591,7 @@ export class CircusQuestSystem implements GameSystem {
     if (def) active.gainXp(def.rewards.xp);
 
     if (this.progress.mongoKidnapped && this.mongoSystem) {
-      this.mongoSystem.cooldownFrames = 0;
+      this.mongoSystem.summonLocked = false;
       this.progress.mongoKidnapped = false;
     }
 

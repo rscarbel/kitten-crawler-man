@@ -38,6 +38,22 @@ export type DeathCause =
   | 'stiltClown'
   | 'fatClown'
   | 'terrorTheClown'
+  | 'evilClown'
+  | 'evilClownVial'
+  | 'mantid'
+  | 'mantidFlurry'
+  | 'darkKnight'
+  | 'darkKnightSlam'
+  | 'darkKnightSweep'
+  | 'darkKnightBolt'
+  | 'skeletonLord'
+  | 'skeletonLordHands'
+  | 'skeletonWarrior'
+  | 'skeletonArcher'
+  | 'rockGolem'
+  | 'rockGolemRoll'
+  | 'rockGolemRock'
+  | 'mantis'
   | 'ringmasterGrimaldi'
   | 'moldLion'
   | 'cityElfCultist'
@@ -45,6 +61,7 @@ export type DeathCause =
   | 'missQuill'
   | 'burningTree'
   | 'lavaFlames'
+  | 'clownGas'
   | 'explosiveFriendlyFire'
   | 'doomsdayExplosion'
   | 'unknown';
@@ -92,6 +109,91 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You stood in a pool of burning llama spit until it burned through you.',
     'The lava the llama spat was still there. So, briefly, were you.',
     'Killed by the puddle rather than the shot. The floor was the trap.',
+  ],
+  evilClown: [
+    'The Evil Clown backhanded you across the wilderness. He did not stop grinning.',
+    'A clown three tiles tall reached further than you thought he could.',
+    'You were beaten to death by a clown. The grin was the last thing you saw.',
+  ],
+  mantid: [
+    'The Mantid folded you in half with one arm and went back to waiting.',
+    'A praying mantis the size of a horse reached out once. Once was enough.',
+    'You were within reach of the arms. That was the whole mistake.',
+  ],
+  darkKnight: [
+    'A gauntlet the size of your head found you while you were watching the mace.',
+    'The Dark Knight punched you. There is no dodging a punch from a man in plate.',
+    "You stood in arm's reach of a knight between his swings. That was the whole mistake.",
+  ],
+  darkKnightSlam: [
+    'The red circle was on the ground for a full second. You were still standing in it.',
+    'The mace came down where you were, not where you went. You did not go.',
+    'A knight buried a mace in the earth. You were between it and the earth.',
+  ],
+  darkKnightSweep: [
+    'He whirled the mace and you were inside the ring. Backing up was the answer.',
+    'The circle around him was the warning. You closed instead.',
+    'Swept off your feet by fifteen pounds of steel travelling in a circle.',
+  ],
+  darkKnightBolt: [
+    'He raised the mace and the green fire came off it. Standing still was the mistake.',
+    'Six bolts, two a second. You only had to cross the line of one of them.',
+    'You backed out of his reach. He had already stopped needing it.',
+  ],
+  mantidFlurry: [
+    'You stood in the flurry. The Mantid does not stop for three seconds.',
+    'The exclamation mark was the warning. You spent it swinging at a wall of chitin.',
+    'Cut apart by two arms moving faster than you could count. You had a second to run.',
+  ],
+  skeletonLord: [
+    'A green bolt out of a dead man\u2019s hand. It found you across the whole clearing.',
+    'The Skeleton Lord killed you from range, which is where he always intended to be.',
+    'Witch-light in the ribs, and then none in yours.',
+  ],
+  skeletonLordHands: [
+    'The ground opened in a cone and every hand in it wanted you.',
+    'You saw the red wedge and stood in it. They held you while they finished.',
+    'Dragged down by hands that came up through the dirt. Out of the cone was the answer.',
+  ],
+  skeletonWarrior: [
+    'A skeleton with a notched sword and nothing to lose finished you.',
+    'Killed by a thing that climbed out of the ground about a minute ago.',
+    'It has no muscle, no blood and no reason to stop. You had all three.',
+  ],
+  skeletonArcher: [
+    'A bone arrow, from something with no eyes to aim with.',
+    'The archer kept its distance the whole fight. That was the fight.',
+    'Shot dead by a skeleton that never once let you reach it.',
+  ],
+  rockGolem: [
+    'A fist the size of your chest, arriving at the speed of a landslide.',
+    'The golem hit you once. Once was the plan.',
+    'Crushed by something that was a hillside until it decided otherwise.',
+  ],
+  rockGolemRock: [
+    'It picked up the landscape and threw the landscape at you.',
+    'You watched it haul a boulder off the ground and stayed exactly where you were.',
+    'Killed by scenery. Thrown scenery, but scenery.',
+  ],
+  rockGolemRoll: [
+    'It curled up and rolled straight through you. Three passes; you lasted one.',
+    'A boulder with intent. Getting out of its lane was the whole counterplay.',
+    'Flattened. Drop something heavy in its path next time \u2014 it cannot roll over a barricade.',
+  ],
+  mantis: [
+    'A mantis took your head off with a limb it had been holding still for an hour.',
+    'It was folded up like it was praying. Then it was not.',
+    'Killed by a bug. A very large, very patient bug.',
+  ],
+  evilClownVial: [
+    'A bottle broke at your feet and the green got into you before you moved.',
+    'The clown threw a vial. You did not get out from under it.',
+    'Killed by the glass, not the clown. He was still juggling when you dropped.',
+  ],
+  clownGas: [
+    "You stood in the clown's gas until your lungs gave out.",
+    'The green cloud was still there. So, briefly, were you.',
+    'Killed by the bottle rather than the clown. The ground was the trap.',
   ],
   burnedStatus: [
     'You stood in the flames just a little too long.',

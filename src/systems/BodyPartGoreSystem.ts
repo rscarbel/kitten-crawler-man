@@ -7,6 +7,29 @@ import type { GameMap } from '../map/GameMap';
 import { GOBLIN_GORE_PARTS } from '../sprites/goblinSprite';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
 import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../sprites/llamaSprite';
+import {
+  SKELETON_ARCHER_BODY_PART_KEY,
+  SKELETON_GORE_PARTS,
+  SKELETON_LORD_BODY_PART_KEY,
+  SKELETON_SWORD_BODY_PART_KEY,
+} from '../sprites/skeletonSprite';
+import {
+  MANTID_BODY_PART_KEY,
+  MANTID_GORE_PARTS,
+  MANTIS_BODY_PART_KEY,
+} from '../sprites/mantidSprite';
+import { EVIL_CLOWN_BODY_PART_KEY, EVIL_CLOWN_GORE_PARTS } from '../sprites/evilClownSprite';
+import {
+  ROCK_GOLEM_BODY_PART_KEY,
+  ROCK_GOLEM_BOSS_BODY_PART_KEY,
+  ROCK_GOLEM_GORE_PARTS,
+} from '../sprites/rockGolemSprite';
+import { DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_GORE_PARTS } from '../sprites/darkKnightSprite';
+import {
+  BRINDLED_VESPA_BODY_PART_KEY,
+  BRINDLED_VESPA_GORE_PARTS,
+} from '../sprites/brindledVespaSprite';
+import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/troglodyteSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -46,11 +69,88 @@ const RAT_CONFIG: MobBodyPartConfig = { spriteKey: 'rat', parts: RAT_GORE_PARTS 
 /** Likewise the llama's eight, which share the llama's animation sheet. */
 const LLAMA_CONFIG: MobBodyPartConfig = { spriteKey: 'llama', parts: LLAMA_GORE_PARTS };
 
+/**
+ * The boss and his cronies come apart into the same eight pieces, but off their
+ * own sheets — the pieces carry each build's colouring, so a dead crony's limbs
+ * are green and the Mantid's are his own dark teal.
+ */
+const MANTID_CONFIG: MobBodyPartConfig = { spriteKey: 'mantid', parts: MANTID_GORE_PARTS };
+const MANTIS_CONFIG: MobBodyPartConfig = { spriteKey: 'mantis', parts: MANTID_GORE_PARTS };
+
+/** And the Evil Clown's six, on the last row of his own animation sheet. */
+const EVIL_CLOWN_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'evil_clown',
+  parts: EVIL_CLOWN_GORE_PARTS,
+};
+
+/**
+ * The Dark Knight's seven: six pieces of plate with the flesh showing only at
+ * the joins, plus the mace itself, which is not a body part at all and is the
+ * more recognisable for it.
+ */
+const DARK_KNIGHT_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'dark_knight',
+  parts: DARK_KNIGHT_GORE_PARTS,
+};
+
+/**
+ * The seven loose bones each skeleton variant scatters.
+ *
+ * One config per variant rather than one shared config, for the same reason the
+ * goblins have four: each sheet bakes its own pieces, so the lord's bones come
+ * out pale and crowned while his warriors' come out stained.
+ */
+const SKELETON_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
+  [SKELETON_LORD_BODY_PART_KEY, { spriteKey: 'skeleton_lord', parts: SKELETON_GORE_PARTS }],
+  [SKELETON_SWORD_BODY_PART_KEY, { spriteKey: 'skeleton_sword', parts: SKELETON_GORE_PARTS }],
+  [SKELETON_ARCHER_BODY_PART_KEY, { spriteKey: 'skeleton_archer', parts: SKELETON_GORE_PARTS }],
+];
+
+/**
+ * A golem does not bleed: its eight pieces are rubble, off whichever of the two
+ * golem sheets it was drawn from — so the boss's fragments come out molten and
+ * lichened while a bouncer's come out plain grey.
+ */
+const ROCK_GOLEM_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
+  [ROCK_GOLEM_BODY_PART_KEY, { spriteKey: 'rock_golem', parts: ROCK_GOLEM_GORE_PARTS }],
+  [ROCK_GOLEM_BOSS_BODY_PART_KEY, { spriteKey: 'rock_golem_boss', parts: ROCK_GOLEM_GORE_PARTS }],
+];
+
+/**
+ * The troglodyte's nine, on the last row of its own animation sheet. The set
+ * carries its severed tongue and its shed tail, which are the two pieces a
+ * player will recognise as this creature's and no other's.
+ */
+const TROGLODYTE_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'troglodyte',
+  parts: TROGLODYTE_GORE_PARTS,
+};
+
+/**
+ * The Brindled Vespa's eight — the final, flying stage of the Brindle Grub
+ * lifecycle. The two earlier grub stages are deliberately absent here: they
+ * are squishy bugs whose deaths are covered by the generic gore burst and
+ * blood puddle every mob already gets, and only the adult hornet gets real
+ * severed parts.
+ */
+const BRINDLED_VESPA_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'brindled_vespa',
+  parts: BRINDLED_VESPA_GORE_PARTS,
+};
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
+  ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
   ['hoarder', HOARDER_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
   [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
+  [MANTID_BODY_PART_KEY, MANTID_CONFIG],
+  [MANTIS_BODY_PART_KEY, MANTIS_CONFIG],
+  [EVIL_CLOWN_BODY_PART_KEY, EVIL_CLOWN_CONFIG],
+  [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_CONFIG],
+  [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_CONFIG],
+  [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
+  ...SKELETON_CONFIGS,
 ]);
 
 const PART_LIFETIME = 6000; // 300s @ 60fps

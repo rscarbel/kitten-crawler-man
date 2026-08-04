@@ -1,14 +1,10 @@
-import interfacesManifest from '../images/interfaces/manifest.json';
 import { drawOverlay } from '../ui/Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { getSpriteDefByKey } from '../core/SpriteLoader';
 
 const HOLD_FRAMES = 125;
 const FADE_OUT_FRAMES = 80;
 const TOTAL_FRAMES = HOLD_FRAMES + FADE_OUT_FRAMES;
-
-// Load once at module level — shared across scene transitions
-const _img = new Image();
-_img.src = 'src/images/' + interfacesManifest['find-the-stairwell'].path;
 
 export class DungeonIntroSystem {
   private frame = 0;
@@ -27,7 +23,20 @@ export class DungeonIntroSystem {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    if (!this.isActive || !_img.complete || _img.naturalWidth === 0) return;
+    if (!this.isActive) return;
+    // Routed through SpriteLoader (Phase 5 of docs/asset-management-plan.md)
+    // instead of a standalone `new Image()` — undefined until the `core`
+    // group has loaded it, in which case this frame (and maybe the next
+    // couple) just shows no banner, same as any other sprite miss.
+    const img = getSpriteDefByKey('find-the-stairwell')?.img;
+    // `img` only ever reaches `_defs` (and so is only ever returned here) after
+    // `ensureLoading`'s onload finished populating it — a Phase 8 downscale, if
+    // one happened, is drawn synchronously before that point too — so by the
+    // time this getter returns something, it is always ready to draw. The
+    // width check alone (rather than `<img>`-only `.complete`/`.naturalWidth`,
+    // which a Phase 8 `<canvas>` doesn't have) guards the one degenerate case:
+    // a 0×0 source, which `drawImage` would otherwise throw on.
+    if (img === undefined || img.width === 0) return;
 
     const cw = viewportWidth();
     const ch = viewportHeight();
@@ -42,14 +51,14 @@ export class DungeonIntroSystem {
       alpha: alpha * OVERLAY_ALPHA_MULT,
     });
 
-    const aspectRatio = _img.naturalHeight / _img.naturalWidth;
+    const aspectRatio = img.height / img.width;
     const widthCappedH = Math.round(cw * aspectRatio);
     const imgW = widthCappedH <= ch ? cw : Math.round(ch / aspectRatio);
     const imgH = Math.round(imgW * aspectRatio);
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.drawImage(_img, Math.round((cw - imgW) / 2), Math.round((ch - imgH) / 2), imgW, imgH);
+    ctx.drawImage(img, Math.round((cw - imgW) / 2), Math.round((ch - imgH) / 2), imgW, imgH);
     ctx.restore();
   }
 }

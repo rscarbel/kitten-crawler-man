@@ -15,8 +15,11 @@ import environmentCampManifest from '../images/environment/camp/manifest.json';
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import environmentWallsRoofsManifest from '../images/environment/walls_roofs/manifest.json';
 import npcsManifest from '../images/npcs/manifest.json';
+import interfacesManifest from '../images/interfaces/manifest.json';
 import grotesqueSpiderManifest from '../images/bosses/grotesque_spider/manifest.json';
 import { TILE_SIZE } from './constants';
+import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
+import { settings } from './Settings';
 
 const environmentManifest = {
   ...environmentBuildingsManifest,
@@ -50,6 +53,7 @@ const manifestJson = {
   ...enemiesManifest,
   ...environmentManifest,
   ...npcsManifest,
+  ...interfacesManifest,
 } as const;
 
 export interface SpriteStateDef {
@@ -114,9 +118,17 @@ export type SpriteStates = {
   [K in SpriteKey]: keyof (typeof manifestJson)[K]['states'] & string;
 };
 
-/** Runtime sprite data: loaded image + dimensions from the manifest. */
+/**
+ * Runtime sprite data: loaded image + dimensions from the manifest.
+ *
+ * `img` is normally the decoded `HTMLImageElement` itself. On a low-end device
+ * (Phase 8 of `docs/asset-management-plan.md`) it may instead be a half-size
+ * offscreen `<canvas>` the sheet was resampled into at load time — every other
+ * field on this def is halved to match, so nothing downstream needs to know
+ * which one it got.
+ */
 export interface SpriteDef {
-  readonly img: HTMLImageElement;
+  readonly img: HTMLImageElement | HTMLCanvasElement;
   readonly frameWidth: number;
   readonly frameHeight: number;
   readonly tileX: number;
@@ -126,50 +138,389 @@ export interface SpriteDef {
 }
 
 const _defs = new Map<string, SpriteDef>();
-let _loadPromise: Promise<void> | null = null;
 
 /**
- * Load all sprite sheets listed in the manifest.
- * Safe to call multiple times — subsequent calls return the same promise.
- * Missing files are silently skipped so procedural fallbacks can fill in.
- *
- * @param base  URL prefix prepended to each manifest path (default: 'src/images/')
+ * One promise per in-flight (or already-settled) image load, keyed by manifest
+ * key. Lets a given key's load be awaited independently — `loadSprites`,
+ * `loadGroups` and a lazy miss in `getSpriteDef` all share the same in-flight
+ * promise instead of each kicking off its own `Image()`.
  */
-export async function loadSprites(base = 'src/images/'): Promise<void> {
-  if (_loadPromise) return _loadPromise;
+const _loading = new Map<string, Promise<void>>();
 
-  _loadPromise = Promise.all(
-    Object.entries(_manifest).map(([key, entry]) => {
-      return new Promise<void>((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const statesMap = new Map<string, SpriteStateDef>();
-          for (const [name, sd] of Object.entries(entry.states)) {
-            statesMap.set(name, sd);
-          }
-          _defs.set(key, {
-            img,
-            frameWidth: entry.frameWidth,
-            frameHeight: entry.frameHeight,
-            tileX: entry.tileX,
-            tileY: entry.tileY,
-            tileScale: entry.tileScale,
-            states: statesMap,
-          });
-          resolve();
-        };
-        img.onerror = () => resolve(); // Missing file — skip silently
-        img.src = base + entry.path;
-      });
-    }),
-  ).then(() => undefined);
+/** URL prefix prepended to every manifest path, browser-side. */
+const DEFAULT_IMAGE_BASE = 'src/images/';
 
-  return _loadPromise;
+// A missing sprite is otherwise invisible in every sense: onload/onerror both
+// resolve silently and the getters below just return undefined, so a typo'd
+// manifest path produces an invisible creature with zero console output.
+const _missCounts = new Map<string, number>();
+
+/** Logs once per key on its first miss — every miss after that would just be per-frame noise. */
+function recordMiss(key: string): void {
+  const priorCount = _missCounts.get(key) ?? 0;
+  if (priorCount === 0) {
+    console.warn(`[SpriteLoader] Miss: no loaded sprite for key "${key}"`);
+  }
+  _missCounts.set(key, priorCount + 1);
 }
 
-/** Returns the loaded SpriteDef for the given key, or undefined if not yet loaded. */
+/**
+ * Per-key miss counts for keys that are STILL unresolved right now, for the
+ * `!assets` dev command. Empty in a healthy run.
+ *
+ * `_missCounts` alone can't answer that: since Phase 5, every non-`core`
+ * sprite on the current floor is *expected* to miss once while its group's
+ * `loadGroups` call is in flight — recording that as a permanent miss would
+ * make a genuinely broken sheet indistinguishable from ordinary lazy-load
+ * latency, defeating the point of this counter. Filtering to keys absent
+ * from `_defs` at read time reports only sprites that never arrived.
+ */
+export function getSpriteMissCounts(): ReadonlyMap<string, number> {
+  const unresolved = new Map<string, number>();
+  for (const [key, count] of _missCounts) {
+    if (!_defs.has(key)) unresolved.set(key, count);
+  }
+  return unresolved;
+}
+
+/** A sheet resampled to half size shrinks resident bitmap memory 4×. */
+const DOWNSCALE_FACTOR = 0.5;
+
+/**
+ * Phase 8 of `docs/asset-management-plan.md`: whether this device is low-end
+ * enough to trade sheet resolution for memory.
+ *
+ * Deliberately narrow and device-derived rather than a new setting of its own —
+ * reuses the existing `RenderQuality` axis (`settings.quality`) and the
+ * display's own pixel ratio, per the plan's explicit rule. Must NEVER be true
+ * at DPR ≥ 2: those sheets are baked 1:1 for a Retina display (see "What is
+ * not the problem" in the plan), and halving them there is a visible quality
+ * regression, not an invisible memory win.
+ */
+function shouldDownscaleForLowEndDevice(): boolean {
+  if (Math.round(window.devicePixelRatio) >= 2) return false;
+  return settings.quality === 'performance' || Math.round(window.devicePixelRatio) <= 1;
+}
+
+/**
+ * Resamples a loaded sheet into a half-size canvas and returns the geometry
+ * to store alongside it, or `undefined` if the sheet is not a safe candidate
+ * (already too small to halve without degenerating to zero).
+ *
+ * Every field that describes a pixel position in the sheet — `frameWidth`,
+ * `frameHeight`, `tileX`, `tileY`, `tileScale` — is scaled by the exact same
+ * `DOWNSCALE_FACTOR` as the bitmap, and deliberately left as the resulting
+ * (possibly fractional) number rather than rounded to an integer. Rounding
+ * each field independently would drift the computed frame origin
+ * (`col * frameWidth` in `frameOrigin`) further from the bitmap's true frame
+ * boundary with every column — invisible on frame 0, a visibly mis-cropped
+ * frame by frame 7 of an 8-frame walk cycle. Keeping the scale factor exact
+ * means every downstream `drawImage` sub-rect lands exactly where it would
+ * have on an ideal (non-rounded) half-size image; only the canvas's own
+ * backing-store dimensions round to whole device pixels, which is an
+ * unavoidable and uniform sub-pixel stretch across the whole sheet, not a
+ * per-frame misalignment.
+ */
+function downscaleSheet(
+  img: HTMLImageElement,
+  entry: SpriteManifestEntry,
+):
+  | {
+      img: HTMLCanvasElement;
+      frameWidth: number;
+      frameHeight: number;
+      tileX: number;
+      tileY: number;
+      tileScale: number;
+    }
+  | undefined {
+  const halfFrameWidth = entry.frameWidth * DOWNSCALE_FACTOR;
+  const halfFrameHeight = entry.frameHeight * DOWNSCALE_FACTOR;
+  if (Math.round(halfFrameWidth) < 1 || Math.round(halfFrameHeight) < 1) return undefined;
+
+  const halfImageWidth = Math.round(img.naturalWidth * DOWNSCALE_FACTOR);
+  const halfImageHeight = Math.round(img.naturalHeight * DOWNSCALE_FACTOR);
+  if (halfImageWidth < 1 || halfImageHeight < 1) return undefined;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = halfImageWidth;
+  canvas.height = halfImageHeight;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return undefined;
+  ctx.drawImage(img, 0, 0, halfImageWidth, halfImageHeight);
+
+  return {
+    img: canvas,
+    frameWidth: halfFrameWidth,
+    frameHeight: halfFrameHeight,
+    tileX: entry.tileX * DOWNSCALE_FACTOR,
+    tileY: entry.tileY * DOWNSCALE_FACTOR,
+    tileScale: entry.tileScale * DOWNSCALE_FACTOR,
+  };
+}
+
+/**
+ * Loads one manifest entry's image and populates `_defs` on success. Shared by
+ * every loading path (`loadSprites`, `loadGroups`, and a lazy miss scheduled
+ * from `getSpriteDef`/`getSpriteDefByKey`) so the `img.onerror` observability
+ * from Phase 3 only lives in one place.
+ *
+ * Returns the same promise to every caller for a given key while it's
+ * in-flight, and a pre-resolved one once `_defs` already has the key — so
+ * calling this on an already-loaded key is a cheap no-op, not a re-fetch.
+ */
+function ensureLoading(key: string, entry: SpriteManifestEntry, base: string): Promise<void> {
+  if (_defs.has(key)) return Promise.resolve();
+  const existing = _loading.get(key);
+  if (existing) return existing;
+
+  const promise = new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const statesMap = new Map<string, SpriteStateDef>();
+      for (const [name, sd] of Object.entries(entry.states)) {
+        statesMap.set(name, sd);
+      }
+      const downscaled = shouldDownscaleForLowEndDevice() ? downscaleSheet(img, entry) : undefined;
+      _defs.set(key, {
+        img: downscaled?.img ?? img,
+        frameWidth: downscaled?.frameWidth ?? entry.frameWidth,
+        frameHeight: downscaled?.frameHeight ?? entry.frameHeight,
+        tileX: downscaled?.tileX ?? entry.tileX,
+        tileY: downscaled?.tileY ?? entry.tileY,
+        tileScale: downscaled?.tileScale ?? entry.tileScale,
+        states: statesMap,
+      });
+      resolve();
+    };
+    img.onerror = () => {
+      console.warn(`[SpriteLoader] Failed to load "${key}" from "${img.src}"`);
+      resolve(); // Skip — a procedural fallback may still cover this key.
+    };
+    img.src = base + entry.path;
+  });
+
+  _loading.set(key, promise);
+  return promise;
+}
+
+/**
+ * Manifest entry for an arbitrary string key, or undefined if it names nothing
+ * in the manifest. `_manifest`'s declared type has no `undefined` in its index
+ * signature (every `SpriteKey` is guaranteed present), but a plain `string`
+ * from `getSpriteDefByKey` carries no such guarantee — the `in` check below is
+ * what earns the `| undefined` in this function's own return type.
+ */
+function manifestEntryFor(key: string): SpriteManifestEntry | undefined {
+  return key in _manifest ? _manifest[key] : undefined;
+}
+
+/**
+ * Narrows a plain string key to `SpriteKey` when it names a real manifest
+ * entry. Every key ever inserted into `_defs`/`_loading` came from a call that
+ * already resolved a manifest entry for it (see `ensureLoading`'s callers), so
+ * this is always true in practice — it exists to satisfy `releaseSpritesExcept`'s
+ * `ReadonlySet<SpriteKey>` parameter without an `as` cast.
+ */
+function isSpriteKey(key: string): key is SpriteKey {
+  return key in _manifest;
+}
+
+/**
+ * Load every sprite sheet listed in the manifest, eagerly. Used by offline
+ * render/review scripts that want the whole atlas resident, not by the
+ * shipped game (see `loadGroups` for that) — safe to call repeatedly since
+ * `ensureLoading` skips anything already loaded or in flight.
+ *
+ * @param base  URL prefix prepended to each manifest path (default: 'src/images/')
+ * @param onProgress  Called once per key as it resolves (loaded, total).
+ */
+export async function loadSprites(
+  base = DEFAULT_IMAGE_BASE,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<void> {
+  const entries = Object.entries(_manifest);
+  let loaded = 0;
+  await Promise.all(
+    entries.map(([key, entry]) =>
+      ensureLoading(key, entry, base).then(() => {
+        loaded++;
+        onProgress?.(loaded, entries.length);
+      }),
+    ),
+  );
+}
+
+/**
+ * Load every sprite sheet covered by the union of the given asset groups.
+ * Skips any key already resolved in `_defs` or already in flight — repeated
+ * or overlapping calls (e.g. re-entering a floor) are cheap.
+ *
+ * @param onProgress  Called once per key as it resolves (loaded, total) —
+ *   drives the boot loading screen.
+ */
+export async function loadGroups(
+  groups: readonly AssetGroup[],
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<void> {
+  const keys = new Set<SpriteKey>();
+  for (const group of groups) {
+    for (const key of ASSET_GROUPS[group]) keys.add(key);
+  }
+  const keyList = Array.from(keys);
+  let loaded = 0;
+  await Promise.all(
+    keyList.map((key) =>
+      ensureLoading(key, _manifest[key], DEFAULT_IMAGE_BASE).then(() => {
+        loaded++;
+        onProgress?.(loaded, keyList.length);
+      }),
+    ),
+  );
+}
+
+// Reused across every `prewarmGroups` call rather than allocated per image —
+// a 1×1 canvas is cheap either way, but there is no reason to churn one per sprite.
+let _scratchCtx: CanvasRenderingContext2D | null = null;
+
+function getScratchCtx(): CanvasRenderingContext2D | null {
+  if (_scratchCtx === null) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    _scratchCtx = canvas.getContext('2d');
+  }
+  return _scratchCtx;
+}
+
+/**
+ * Phase 7 of `docs/asset-management-plan.md`: forces the browser to actually
+ * upload a loaded image as a GPU texture, rather than leaving that for
+ * whatever frame first `drawImage()`s it.
+ *
+ * `img.decode()` resolving is not enough on its own — Chrome can still defer
+ * the texture upload to the first real draw, which is exactly the hitch this
+ * phase exists to move earlier. Drawing the image into an off-screen canvas
+ * forces that upload to happen now, while nothing is watching the frame time.
+ *
+ * `img` may be a Phase 8 downscaled `<canvas>` instead of an `<img>` —
+ * `decode()` doesn't exist on `HTMLCanvasElement` (it was already rasterized
+ * synchronously when `downscaleSheet` drew into it), so that step is skipped
+ * for a canvas; the forcing draw below still applies to either source.
+ */
+async function forceGpuUpload(img: HTMLImageElement | HTMLCanvasElement): Promise<void> {
+  if (img instanceof HTMLImageElement) {
+    try {
+      await img.decode();
+    } catch {
+      // A decode failure here just skips the pre-warm — the sprite falls back
+      // to hitching on its first real draw, exactly as it would have before
+      // this phase existed. Not worth surfacing as a miss: `ensureLoading`'s
+      // `onerror` already covers genuinely broken sheets.
+      return;
+    }
+  }
+  const ctx = getScratchCtx();
+  if (ctx === null) return;
+  ctx.drawImage(img, 0, 0, 1, 1);
+}
+
+/**
+ * Loads every sprite sheet covered by the given asset groups (same as
+ * `loadGroups`), then forces each one's GPU texture upload while nothing is
+ * watching the frame time — see `forceGpuUpload`. Callers decide when "now"
+ * is: behind the boot loading screen, during a floor's fade-in, or the moment
+ * a boss encounter is staged rather than when its fight actually starts. Safe
+ * to call repeatedly or with overlapping groups — same coalescing as
+ * `loadGroups`, plus `forceGpuUpload` on an already-uploaded image is just a
+ * cheap redundant draw.
+ */
+export async function prewarmGroups(
+  groups: readonly AssetGroup[],
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<void> {
+  await loadGroups(groups, onProgress);
+  const keys = new Set<SpriteKey>();
+  for (const group of groups) {
+    for (const key of ASSET_GROUPS[group]) keys.add(key);
+  }
+  await Promise.all(
+    Array.from(keys, (key) => {
+      const def = _defs.get(key);
+      return def === undefined ? Promise.resolve() : forceGpuUpload(def.img);
+    }),
+  );
+}
+
+/**
+ * Returns the loaded SpriteDef for the given key, or undefined if not yet
+ * loaded. A miss schedules that key's load (fire-and-forget) in addition to
+ * recording it — the caller sees `undefined` and skips its draw for a frame
+ * or two, exactly as an always-missing sprite already did before lazy
+ * loading existed; `_loading`'s per-key guard means repeated calls for the
+ * same still-loading key don't re-fetch.
+ */
 export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
-  return _defs.get(key);
+  const def = _defs.get(key);
+  if (def === undefined) {
+    recordMiss(key);
+    void ensureLoading(key, _manifest[key], DEFAULT_IMAGE_BASE);
+  }
+  return def;
+}
+
+/**
+ * Phase 6 of `docs/asset-management-plan.md`: drops every loaded sprite whose
+ * key is not in `keep`, so its decoded bitmap can be reclaimed. Only touches
+ * `_defs`/`_loading` — every eager derived-metadata map above (blocked tile
+ * offsets, footprints, doorways, extents) stays exactly as Phase 5 left it,
+ * per the plan's "keep the metadata eager" rule; nothing here reads pixels.
+ *
+ * Setting `img.src = ''` (rather than just letting the `HTMLImageElement` fall
+ * out of `_defs`) is what actually releases the decoded bitmap — an `<img>`
+ * with no other referrer would otherwise still be reachable from whatever
+ * fired its `load` event closure until GC gets around to it, and Chrome does
+ * not appear to drop the backing bitmap just because nothing on the page
+ * currently points at the element.
+ *
+ * A key evicted here that's still needed shows up again exactly like a
+ * never-loaded one: `getSpriteDef`/`getSpriteDefByKey` miss, log it once, and
+ * reschedule its load — the same fail-safe path Phase 5 already relies on.
+ *
+ * Known trade-off: this only sweeps `_defs` (already-resolved keys) at the
+ * instant of transition. A key the OUTGOING floor kicked off via `loadGroups`
+ * but that hadn't resolved yet will still land in `_defs` when its fetch
+ * completes a moment later, even though the new floor doesn't need it —
+ * nothing revisits it until the *next* floor change's sweep. Bounded to at
+ * most one extra floor's worth of stragglers, not an unbounded leak, so this
+ * is accepted rather than solved with e.g. a generation counter.
+ */
+export function releaseSpritesExcept(keep: ReadonlySet<SpriteKey>): void {
+  for (const [key, def] of _defs) {
+    if (isSpriteKey(key) && keep.has(key)) continue;
+    if (def.img instanceof HTMLImageElement) {
+      // Detach the handlers before clearing `src` — an `HTMLImageElement` fires
+      // `error` when pointed at `''` same as any other failed load, and the
+      // `onerror` from `ensureLoading` would otherwise log this deliberate
+      // eviction as an indistinguishable "Failed to load" miss.
+      def.img.onload = null;
+      def.img.onerror = null;
+      def.img.src = '';
+    } else {
+      // Phase 8's downscaled sheet: a `<canvas>` has no `src` to clear, so
+      // the equivalent release is shrinking its own backing store to
+      // nothing — the decoded pixels it held are what actually cost memory,
+      // and dropping the `_defs` entry below only frees the wrapper object.
+      def.img.width = 0;
+      def.img.height = 0;
+    }
+    _defs.delete(key);
+    // Not expected to still be here (a resolved `_defs` entry means its
+    // `_loading` promise already settled), but a stale in-flight promise for
+    // an evicted key would otherwise sit around forever pointing at pixels
+    // that are gone.
+    _loading.delete(key);
+  }
 }
 
 // Both maps below are built synchronously from manifest JSON — no image loading required.
@@ -284,10 +635,19 @@ export function getBlockedTileOffsets(tileTypeId: number): ReadonlyArray<TileOff
 /**
  * Returns the SpriteDef for any manifest key by string lookup.
  * Use this for runtime lookups where the key is not statically known (e.g. SPRITE_BUILDING).
- * Returns undefined if the sprite has not been loaded yet.
+ * Returns undefined if the sprite has not been loaded yet — same schedule-a-load-then-miss
+ * behavior as `getSpriteDef`, see its doc comment. A key that names nothing in the
+ * manifest at all (as opposed to one merely not loaded yet) records a miss but has
+ * nothing to schedule.
  */
 export function getSpriteDefByKey(key: string): SpriteDef | undefined {
-  return _defs.get(key);
+  const def = _defs.get(key);
+  if (def === undefined) {
+    recordMiss(key);
+    const entry = manifestEntryFor(key);
+    if (entry !== undefined) void ensureLoading(key, entry, DEFAULT_IMAGE_BASE);
+  }
+  return def;
 }
 
 /**

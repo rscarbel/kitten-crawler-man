@@ -95,7 +95,7 @@ export type DamageSource =
        * an untagged source means; a second hazard reporting "a burning tree"
        * on the death screen is the failure this discriminates away.
        */
-      readonly hazard?: 'burningTree' | 'lavaFlames';
+      readonly hazard?: 'burningTree' | 'lavaFlames' | 'clownGas';
     }
   | { readonly kind: 'doomsday' };
 
@@ -660,6 +660,24 @@ export abstract class Player {
   /** XP still missing before the next level-up fires. */
   get xpRemainingToNextLevel(): number {
     return Math.max(0, this.xpNeededForNextLevel - this.xp);
+  }
+
+  /**
+   * Who should be credited with damage this entity deals.
+   *
+   * Almost always itself. A summon points it at its owner, so a pet can attack
+   * in its own name — which is what makes mobs retaliate against the pet rather
+   * than against the player standing behind it — without the kill XP quietly
+   * going to a creature that has no XP bar.
+   *
+   * A field rather than an overridable getter returning `this`: the credit
+   * target of a summon is a *different* Player, not a narrower one, so a `this`
+   * return type would be actively wrong.
+   */
+  protected creditTarget: Player = this;
+
+  get xpCreditTarget(): Player {
+    return this.creditTarget;
   }
 
   gainXp(amount: number): boolean {

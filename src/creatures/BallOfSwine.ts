@@ -136,14 +136,19 @@ export class BallOfSwine extends Mob {
     }
 
     if (this.hp === 0 && prevHp > 0) {
-      this.killedBy = attacker;
+      // Mapped through `xpCreditTarget`, exactly as `Mob.takeDamageFrom` does:
+      // a summon deals damage in its own name so that mobs retaliate against
+      // it, and every killer-keyed reward belongs to the owner who sent it in.
+      const credited = attacker?.xpCreditTarget ?? null;
+      this.killedBy = credited;
+      this.killedByDealer = attacker;
       this.killType = damageType;
       this.pendingBurst = true;
       this.state = 'bursting';
       this.burstTimer = BURST_FRAMES;
       // Roll loot
       const coins = randomInt(this.coinDropMin, this.coinDropMax);
-      const items = this.rollLootItems(attacker);
+      const items = this.rollLootItems(credited);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
       }

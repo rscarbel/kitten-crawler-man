@@ -34,6 +34,14 @@ const OWNER_LABEL_X_OFFSET = 8;
 const OWNER_LABEL_Y_OFFSET = 15;
 const OWNER_LABEL_Y_ADJUST = 8;
 const OWNER_LABEL_SIZE = 10;
+const TAG_CHIP_GAP = 6;
+const TAG_CHIP_PAD_X = 4;
+const TAG_CHIP_PAD_Y = 2;
+const TAG_CHIP_RISE = 3;
+const TAG_CHIP_RADIUS = 3;
+const TAG_CHIP_FILL = 'rgba(236,72,153,0.18)';
+const TAG_CHIP_BORDER = '#ec4899';
+const TAG_CHIP_TEXT = '#f9a8d4';
 const LEVEL_TEXT_Y_OFFSET = 30;
 const LEVEL_TEXT_Y_ADJUST = 9;
 const LEVEL_TEXT_SIZE = 11;
@@ -89,6 +97,8 @@ const DETAIL_EQUIP_Y_ADJUST = 8;
 const DETAIL_EQUIP_SIZE = 10;
 const DETAIL_EQUIP_H_PAD = 16;
 const DETAIL_CONTENT_Y_OFFSET = 64;
+const DETAIL_EQUIP_LINE_H = 12;
+const DETAIL_EQUIP_GAP = 8;
 const DETAIL_LEVEL_Y_ADJUST = 10;
 const DETAIL_LEVEL_SIZE = 12;
 const DETAIL_LEVEL_SPACING = 14;
@@ -331,13 +341,43 @@ function renderListView(
       const nameWidth = ctx.measureText(def.name).width;
       ctx.restore();
 
+      const ownerX = textX + nameWidth + OWNER_LABEL_X_OFFSET;
       drawText(ctx, ownerLabel, {
-        x: textX + nameWidth + OWNER_LABEL_X_OFFSET,
+        x: ownerX,
         y: rowY + OWNER_LABEL_Y_OFFSET - OWNER_LABEL_Y_ADJUST,
         bold: true,
         size: OWNER_LABEL_SIZE,
         color: ownerColor,
       });
+
+      // A badge for an ability that does not work like the others — Mongo has no
+      // tome and no hotbar slot, and without the chip a player hunts for one.
+      if (def.tag !== undefined) {
+        ctx.save();
+        ctx.font = `bold ${OWNER_LABEL_SIZE}px monospace`;
+        const ownerWidth = ctx.measureText(ownerLabel).width;
+        const tagWidth = ctx.measureText(def.tag).width;
+        ctx.restore();
+        const chipX = ownerX + ownerWidth + TAG_CHIP_GAP;
+        const chipY = rowY + OWNER_LABEL_Y_OFFSET - OWNER_LABEL_Y_ADJUST - TAG_CHIP_RISE;
+        drawBox(ctx, {
+          x: chipX,
+          y: chipY,
+          width: tagWidth + TAG_CHIP_PAD_X * 2,
+          height: OWNER_LABEL_SIZE + TAG_CHIP_PAD_Y * 2,
+          fill: TAG_CHIP_FILL,
+          border: TAG_CHIP_BORDER,
+          borderWidth: 1,
+          radius: TAG_CHIP_RADIUS,
+        });
+        drawText(ctx, def.tag, {
+          x: chipX + TAG_CHIP_PAD_X,
+          y: chipY + TAG_CHIP_PAD_Y,
+          bold: true,
+          size: OWNER_LABEL_SIZE,
+          color: TAG_CHIP_TEXT,
+        });
+      }
       drawText(ctx, `Level ${state.level} / ${def.maxLevel}`, {
         x: textX,
         y: rowY + LEVEL_TEXT_Y_OFFSET - LEVEL_TEXT_Y_ADJUST,
@@ -824,17 +864,36 @@ function renderDetailView(
     align: 'center',
   });
 
-  // Equip instructions
-  drawText(ctx, `How to equip: ${def.equipInstructions}`, {
-    x: bx + DETAIL_EQUIP_H_PAD,
-    y: by + DETAIL_EQUIP_Y_OFFSET - DETAIL_EQUIP_Y_ADJUST,
+  // The badge is folded into the equip line rather than given a line of its own.
+  // This detail page is a stack of hard-coded absolute Ys with no layout pass, so
+  // an extra line inserted between two of them lands exactly on top of one — and
+  // this block already wraps, so the note costs nothing to add here.
+  const equipLine =
+    def.tag === undefined
+      ? `How to equip: ${def.equipInstructions}`
+      : `How to equip: ${def.tag} — no tome, no hotbar slot. ${def.equipInstructions}`;
+  const equipTop = by + DETAIL_EQUIP_Y_OFFSET - DETAIL_EQUIP_Y_ADJUST;
+  const equipWidth = bw - DETAIL_EQUIP_H_PAD * 2;
+  const equipStyle = {
     size: DETAIL_EQUIP_SIZE,
+    width: equipWidth,
+    lineHeight: DETAIL_EQUIP_LINE_H,
+  };
+  const { lineCount: equipLines } = measureTextBox(ctx, equipLine, equipStyle);
+  drawText(ctx, equipLine, {
+    ...equipStyle,
+    x: bx + DETAIL_EQUIP_H_PAD,
+    y: equipTop,
     color: '#64748b',
     align: 'center',
-    width: bw - DETAIL_EQUIP_H_PAD * 2,
   });
 
-  let y = by + DETAIL_CONTENT_Y_OFFSET;
+  // The content below starts under whatever the equip block actually took, not
+  // at a fixed offset that assumed one line. A tagged ability's instructions run
+  // to four, and painted over a hard-coded start they cross the level line, the
+  // XP bar and its label.
+  const equipBottom = equipTop + equipLines * DETAIL_EQUIP_LINE_H + DETAIL_EQUIP_GAP;
+  let y = Math.max(by + DETAIL_CONTENT_Y_OFFSET, equipBottom);
 
   // Level + XP bar
   drawText(ctx, `Current level: ${currentLevel}`, {

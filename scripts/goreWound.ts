@@ -101,8 +101,14 @@ export interface CutSpec {
   readonly hide: string;
 }
 
-const SKIN_LOBE_MIN = 5;
-const SKIN_LOBE_MAX = 8;
+/**
+ * How many lobes a wound's rim is traced from. Shared by both engines: on flesh
+ * they are everted skin, on bone they are the ragged edge of the break. Named
+ * for the shape rather than for either tissue, because `drawBoneBreak` reads it
+ * too and a skeleton has no skin.
+ */
+const RIM_LOBE_MIN = 5;
+const RIM_LOBE_MAX = 8;
 /** Bone diameter as a fraction of the wound's, once a piece's own scale applies. */
 const BONE_OF_WOUND = 1.5;
 const CORTICAL_FRACTION = 0.3;
@@ -134,7 +140,7 @@ export function drawWound(ctx: Ctx, cut: CutSpec): void {
 
   // 1. Torn skin margin — irregular everted lobes, never a smooth ellipse. The
   // lobe count and their raggedness are what separate the three cut kinds.
-  const lobes = pick(noise, SKIN_LOBE_MIN, SKIN_LOBE_MAX);
+  const lobes = pick(noise, RIM_LOBE_MIN, RIM_LOBE_MAX);
   const ragged = cut.kind === 'clean' ? 0.08 : cut.kind === 'crushed' ? 0.3 : 0.4;
   const lobeRadii: number[] = [];
   for (let i = 0; i < lobes; i++) lobeRadii.push(r * (1 + (noise() - 0.5) * 2 * ragged));
@@ -339,6 +345,159 @@ export function drawWound(ctx: Ctx, cut: CutSpec): void {
   ctx.restore();
 }
 
+// ── Dry break (no flesh) ─────────────────────────────────────────────────────
+
+/**
+ * Where a bone came apart on a creature that has no flesh left to cut.
+ *
+ * A skeleton's severed parts route through here instead of {@link drawWound}:
+ * everything that engine exists to paint — the everted skin margin, the fat
+ * band, the muscle field, the artery, the blood — is exactly what a skeleton
+ * does not have, and running a bone-only piece through it produces a bone disc
+ * floating in a pool of gore that came from nowhere.
+ *
+ * What is left is the part of a wound that always was bone: a bright cortical
+ * ring, the sponge inside it, and the way the two fail. It deliberately shares
+ * `CutKind` with the flesh engine so a set of pieces can still be spread across
+ * clean / crushed / torn and not look stamped.
+ *
+ * Added alongside {@link drawWound} rather than as a branch inside it so the
+ * rat's and llama's baked sheets stay byte-identical — a shared random stream
+ * with one extra draw in it re-rolls every piece downstream of the change.
+ */
+export interface BoneBreakSpec {
+  /** How the bone failed: sawn through, shattered, or snapped and splintered. */
+  readonly kind: CutKind;
+  /** Centre of the break face, in cell-local tile units. */
+  readonly centre: Pt;
+  /** Radius of the break face along its long axis, in tile units. */
+  readonly radius: number;
+  /** Foreshortening of the face; 1 is a break seen square on. */
+  readonly squash: number;
+  readonly angle: number;
+  readonly seed: number;
+  /**
+   * The piece's own bone tone. Required rather than defaulted: the lord's bone
+   * is paler than his warriors', and a break ringed in the wrong one is the one
+   * mistake this engine could make silently.
+   */
+  readonly cortical: string;
+  readonly shadow: string;
+}
+
+/** Fraction of the break's radius the dense cortical wall occupies. */
+const CORTICAL_WALL = 0.26;
+const TRABECULA_MIN = 6;
+const TRABECULA_MAX = 10;
+const SPLINTER_MIN = 3;
+const SPLINTER_MAX = 6;
+const DUST_COUNT = 6;
+/** Long-dried marrow: a dark, dusty brown rather than anything wet. */
+const DRY_MARROW = '#4a3a2a';
+const BONE_DUST = '#cfc4a6';
+
+export function drawBoneBreak(ctx: Ctx, spec: BoneBreakSpec): void {
+  const noise = seededNoise(spec.seed);
+  const r = spec.radius;
+
+  ctx.save();
+  ctx.translate(spec.centre.x, spec.centre.y);
+  ctx.rotate(spec.angle);
+  ctx.scale(1, spec.squash);
+
+  // A snapped bone's rim is jagged; a sawn one's is very nearly round. The rim
+  // shape is the only cue for *how* it came off once the colour is all bone.
+  const ragged = spec.kind === 'clean' ? 0.05 : spec.kind === 'crushed' ? 0.26 : 0.34;
+  const lobes = pick(noise, RIM_LOBE_MIN, RIM_LOBE_MAX);
+  const lobeRadii: number[] = [];
+  for (let i = 0; i < lobes; i++) lobeRadii.push(r * (1 + (noise() - 0.5) * 2 * ragged));
+
+  const traceRim = (scale: number): void => {
+    ctx.beginPath();
+    for (let i = 0; i <= lobes; i++) {
+      const index = i % lobes;
+      const angle = (index / lobes) * TWO_PI;
+      const radius = lobeRadii[index] * scale;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  };
+
+  traceRim(1.12);
+  ctx.fillStyle = spec.shadow;
+  ctx.fill();
+  traceRim(1);
+  ctx.fillStyle = spec.cortical;
+  ctx.fill();
+
+  // The sponge: darker than the wall, and the wall's own thickness is what
+  // separates "broken bone" from "pale disc".
+  traceRim(1 - CORTICAL_WALL);
+  ctx.fillStyle = mix(DRY_MARROW, spec.shadow, 0.35);
+  ctx.fill();
+
+  ctx.save();
+  traceRim(1 - CORTICAL_WALL);
+  ctx.clip();
+  const trabeculae = pick(noise, TRABECULA_MIN, TRABECULA_MAX);
+  ctx.strokeStyle = rgba(spec.cortical, 0.6);
+  ctx.lineWidth = r * 0.07;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < trabeculae; i++) {
+    const angle = noise() * TWO_PI;
+    const inner = r * lerp(0.05, 0.3, noise());
+    const outer = r * lerp(0.45, 0.72, noise());
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  ctx.fillStyle = rgba(DRY_MARROW, 0.7);
+  ctx.beginPath();
+  ctx.arc(r * 0.1, r * -0.08, r * 0.2, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+
+  // Splinters standing off the rim, outside the squash so they are not flattened
+  // along with the face they came off.
+  ctx.save();
+  ctx.translate(spec.centre.x, spec.centre.y);
+  const splinters = pick(noise, SPLINTER_MIN, SPLINTER_MAX) + (spec.kind === 'torn' ? 2 : 0);
+  for (let i = 0; i < splinters; i++) {
+    const angle = noise() * TWO_PI;
+    const reach = r * lerp(1.05, spec.kind === 'clean' ? 1.25 : 1.8, noise());
+    ctx.fillStyle = i % 2 === 0 ? spec.cortical : mix(spec.cortical, spec.shadow, 0.45);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle - 0.14) * r * 0.9, Math.sin(angle - 0.14) * r * 0.9);
+    ctx.lineTo(Math.cos(angle) * reach, Math.sin(angle) * reach);
+    ctx.lineTo(Math.cos(angle + 0.14) * r * 0.9, Math.sin(angle + 0.14) * r * 0.9);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Bone dust, which is a skeleton's answer to blood spatter: it says the piece
+  // was struck rather than placed.
+  ctx.fillStyle = rgba(BONE_DUST, 0.5);
+  for (let i = 0; i < DUST_COUNT; i++) {
+    const angle = noise() * TWO_PI;
+    const dist = r * lerp(1.2, 2.4, noise());
+    ctx.beginPath();
+    ctx.arc(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      r * lerp(0.04, 0.1, noise()),
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // ── Piece body fill ──────────────────────────────────────────────────────────
 
 /**
@@ -367,4 +526,75 @@ export function grownOutline(outline: readonly Pt[], grow: number): Pt[] {
     const len = Math.hypot(dx, dy) || 1;
     return { x: p.x + (dx / len) * grow, y: p.y + (dy / len) * grow };
   });
+}
+
+/**
+ * The ink outline, ambient fill and rotation-safe rim every severed piece gets.
+ *
+ * The occlusion runs toward the middle of the shape rather than down from a key
+ * light: a piece spins continuously once it is thrown, so any single light
+ * direction is wrong most of the time.
+ *
+ * `trace` re-lays the same silhouette grown or inset by the amount it is
+ * handed, which is what lets one shape serve the border, the fill, the ambient
+ * clip and the rim. Callers pass their creature's own three tones.
+ *
+ * Lives here rather than in a creature's gore module because it is the same
+ * four passes for every one of them. It touches no random stream, so a module
+ * adopting it bakes byte-identical art to its own hand-rolled copy.
+ */
+export function paintGoreMass(
+  ctx: Ctx,
+  trace: (grow: number) => void,
+  tone: { readonly mid: string; readonly dark: string; readonly light: string },
+  outlineInk: string,
+): void {
+  ctx.fillStyle = outlineInk;
+  trace(FLESH_OUTLINE_GROW);
+  ctx.fill();
+  ctx.fillStyle = tone.mid;
+  trace(0);
+  ctx.fill();
+
+  ctx.save();
+  trace(0);
+  ctx.clip();
+  ctx.fillStyle = rgba(tone.dark, AMBIENT_ALPHA);
+  ctx.fillRect(-1, -1, 2, 2);
+  ctx.fillStyle = rgba(tone.light, AMBIENT_ALPHA * AMBIENT_LIGHT_GAIN);
+  trace(-FLESH_AMBIENT_INSET);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  trace(-FLESH_RIM_INSET);
+  ctx.clip();
+  ctx.strokeStyle = rgba(tone.light, RIM_ALPHA);
+  ctx.lineWidth = FLESH_RIM_WIDTH;
+  trace(-FLESH_RIM_INSET);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** How much brighter than the ambient shade the inset highlight runs. */
+const AMBIENT_LIGHT_GAIN = 1.4;
+
+/**
+ * Lays one closed smooth loop into the *current* path without opening a new
+ * one.
+ *
+ * A trace that begins its own path cannot describe a shape with a hole in it,
+ * and a hole is the only thing that makes a coil of gut read as a coil rather
+ * than as a disc: two loops in one path, filled even-odd, is the whole trick.
+ */
+export function appendGoreLoop(ctx: Ctx, pts: readonly Pt[]): void {
+  const last = pts[pts.length - 1];
+  const first = pts[0];
+  ctx.moveTo((last.x + first.x) / 2, (last.y + first.y) / 2);
+  for (let i = 0; i < pts.length; i++) {
+    const cur = pts[i];
+    const next = pts[(i + 1) % pts.length];
+    ctx.quadraticCurveTo(cur.x, cur.y, (cur.x + next.x) / 2, (cur.y + next.y) / 2);
+  }
+  ctx.closePath();
 }

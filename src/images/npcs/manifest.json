@@ -246,5 +246,27 @@
         "frameCount": 1
       }
     }
+  },
+  "shady": {
+    "path": "npcs/shady.png",
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 32,
+    "tileY": 62,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 10
+      },
+      "scratch": {
+        "row": 1,
+        "frameCount": 14
+      },
+      "talk": {
+        "row": 2,
+        "frameCount": 8
+      }
+    }
   }
 }

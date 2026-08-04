@@ -368,3 +368,51 @@ export const TOWER_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['big_tower_music'];
 
 /** Fallback interior music for buildings with no soundtrack of their own. */
 export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
+
+/**
+ * Every `background_music/` and `ambient/` id. These are long, streamed via
+ * `MediaElementAudioSourceNode` rather than decoded into a resident
+ * `AudioBuffer` — decoding them all as Float32 PCM is ~828 MB for audio that
+ * is played one or two at a time. See `docs/asset-management-plan.md`.
+ *
+ * `AudioManager.preload` excludes these ids by default and `startMusicTrack`/
+ * `startAmbientLoop` route them through the streaming path instead of
+ * `buffers`.
+ */
+export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
+  // background_music/
+  'bg_level_1',
+  'bg_level_2',
+  'big_tower_music',
+  'boss_music_1',
+  'boss_music_2',
+  'boss_music_3',
+  'building_default_music_1',
+  'circus_battle',
+  'circus_theme',
+  'defense_quest_music',
+  'desperado_club_1',
+  'desperado_club_2',
+  'desperado_club_3',
+  'desperado_club_4',
+  'forest_path',
+  'tavern_music_1',
+  'tavern_music_2',
+  'town_music_1',
+  'town_music_2',
+  'tutorial_island',
+  // ambient/
+  'ambient_bar_crowd',
+  'ambient_city_crowd_chatting',
+  'ambient_fire_crackling',
+  'ambient_fountain',
+  'ambient_magic_shop',
+  'ambient_pouring_a_drink',
+  'ambient_river_flowing',
+  'ambient_town_square_crowd',
+]);
+
+/** Every sound id not covered by `STREAMING_SOUND_IDS` — the default `preload()` set. */
+export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.filter(
+  (id) => !STREAMING_SOUND_IDS.has(id),
+);

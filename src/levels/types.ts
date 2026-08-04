@@ -2,6 +2,7 @@ import type { CampKind } from '../map/overworld/camps';
 import type { SoundId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
+import type { AssetGroup } from '../core/assetGroups';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -18,6 +19,10 @@ export interface MobSpawnRule {
   type:
     | 'goblin'
     | 'llama'
+    | 'rock_golem'
+    | 'rock_golem_boss'
+    | 'mantid'
+    | 'mantis'
     | 'rat'
     | 'the_hoarder'
     | 'cockroach'
@@ -35,10 +40,14 @@ export interface MobSpawnRule {
     | 'circus_lemur'
     | 'stilt_clown'
     | 'fat_clown'
+    | 'evil_clown'
     | 'mold_lion'
     | 'terror_the_clown'
     | 'ringmaster_grimaldi'
-    | 'city_elf_cultist';
+    | 'city_elf_cultist'
+    | 'skeleton_sword'
+    | 'skeleton_archer'
+    | 'skeleton_lord';
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -123,6 +132,17 @@ export interface LevelDef {
   music: SoundId;
   /** Side length of the square tile grid this floor is generated on. */
   mapSize: number;
+  /**
+   * The sprite groups (`src/core/assetGroups.ts`) this floor's *base* content
+   * needs: `roomMobs`, `hallwayMobs`, `extraSpawns`, `campSpawns`, `bossRooms`
+   * and the ground/wall theme. Does NOT include creatures introduced by
+   * bounty/quest/companion systems that never touch this def — those are
+   * declared separately in `SYSTEM_ASSET_REQUIREMENTS`
+   * (`src/core/systemAssetRequirements.ts`) and unioned in by floor id at
+   * `verify:assets` time. See that file's header for why: a floor's `LevelDef`
+   * does not list everything that can appear on it.
+   */
+  spriteGroups: readonly AssetGroup[];
   /** Mobs that can spawn at room centres (all non-start, non-special rooms). */
   roomMobs: MobSpawnRule[];
   /** Mobs that can spawn at hallway points. */

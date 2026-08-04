@@ -5,7 +5,7 @@ codebase facts). This file is the foundation every other bounty file plugs into.
 It must land before files 02–07 are integrated, and it is fully testable on its
 own via a debug command that uses an existing mob as a stand-in target.
 
-**Status: NOT STARTED**
+**Status: PHASES A–D IMPLEMENTED** (Ryan's playtest outstanding)
 
 Skills to load: `game-architecture`, `dev-workflow`, `add-system`, `add-quest`
 (for state-machine/dialog conventions), `add-ui` (board/toast touches).
@@ -83,8 +83,11 @@ export interface BountyDef {
   /** 5–10 unique bounty names; copied + shuffled into BountyProgress. */
   names: readonly string[];
   /** Build the whole encounter at a site. Implementations must setMap() every
-   *  mob, applyMobLevel(), and set the bounty flags (see Phase B). They must NOT
-   *  push into mobs/mobGrid — BountySystem does insertion uniformly. */
+   *  mob. They must NOT push into mobs/mobGrid, must NOT set the bounty flags,
+   *  and must NOT call applyMobLevel — BountySystem does all three uniformly.
+   *  `applyMobLevel` scales off current stats rather than a stored base, so a
+   *  def that also called it would ship a compounded encounter. `level` is
+   *  passed only so a def can size the encounter (minion count, loadout). */
   spawn(siteTileX: number, siteTileY: number, map: GameMap, level: number): BountyEncounter;
 }
 
@@ -101,12 +104,12 @@ also called out in each creature file's integration phase).
 
 ### A3. Checklist
 
-- [ ] `BountyProgress` + factory + shuffle/cycle helpers written
-- [ ] `bountyDefs.ts` with `BountyDef`, `BountyEncounter`, `BOUNTY_DEFS`
-- [ ] `DungeonSceneOptions` gains `bountyProgress?`; created-if-absent in the
+- [x] `BountyProgress` + factory + shuffle/cycle helpers written
+- [x] `bountyDefs.ts` with `BountyDef`, `BountyEncounter`, `BOUNTY_DEFS`
+- [x] `DungeonSceneOptions` gains `bountyProgress?`; created-if-absent in the
       constructor, re-passed at every scene-rebuild site (grep every place
       `circusQuestProgress` is threaded and mirror all of them)
-- [ ] Validation gates + review loop run (see 00-overview)
+- [x] Validation gates + review loop run (see 00-overview)
 
 ---
 
@@ -149,10 +152,10 @@ also called out in each creature file's integration phase).
 
 ### B3. Checklist
 
-- [ ] `immuneToConfusion` on Mob + SpellSystem check + pending-toast drain
-- [ ] Toast copy exactly: `` `${name} sees you through the fog` ``
-- [ ] `ignoresTownSafeZone` on Mob; Krasue migrated; both accept predicates updated
-- [ ] Validation gates + review loop run
+- [x] `immuneToConfusion` on Mob + SpellSystem check + pending-toast drain
+- [x] Toast copy exactly: `` `${name} sees you through the fog` ``
+- [x] `ignoresTownSafeZone` on Mob; Krasue migrated; both accept predicates updated
+- [x] Validation gates + review loop run
 
 ---
 
@@ -196,7 +199,7 @@ Responsibilities:
   command, Phase D): pick next type via cycle helpers, pick next name, pick a
   site — random among sites at least ~60 tiles from the player's current
   position (fall back to farthest if none qualify). Call `def.spawn(...)`, then
-  uniformly: `applyMobLevel(bountyLevel)` if the def didn't, set
+  uniformly: `applyMobLevel(bountyLevel)` (always — defs must not), set
   `ignoresTownSafeZone = true` on all, `immuneToConfusion = true` on the
   **boss only**, `boss.displayName = currentName`, `boss.isBoss = true`, insert
   all via `addMob`. Update progress: `phase = 'active'`, current fields set.
@@ -285,46 +288,163 @@ the existing `dropLootByOwner(..., isBossLoot = true)` fallback automatically
 
 ### C6. Checklist
 
-- [ ] `scatterBountySites` + `GameMap.bountySites` + reachability filter
-- [ ] `BountySystem` implemented and wired (constructor block, update, render,
+- [x] `scatterBountySites` + `GameMap.bountySites` + reachability filter
+- [x] `BountySystem` implemented and wired (constructor block, update, render,
       space-chain untouched — Shady owns interaction; minimap markers merged)
-- [ ] Level formula in one exported function
-- [ ] Arrow uses `WorldArrow.ts`, suppressed when near, both phases targeted
-- [ ] Board notices dynamic; `RUINS_BOUNTY` static notice replaced
-- [ ] `dangerTelegraph.ts` extracted; GrotesqueSpider refactored, output verified
+- [x] Level formula in one exported function
+- [x] Arrow uses `WorldArrow.ts`, suppressed when near, both phases targeted
+- [x] Board notices dynamic; `RUINS_BOUNTY` static notice replaced
+- [x] `dangerTelegraph.ts` extracted; GrotesqueSpider refactored, output verified
       pixel-identical via `?spider`-adjacent preview/screenshot comparison
-- [ ] `GroundHazardSource` interface; CompanionSystem generalized; hoarder fight
+- [x] `GroundHazardSource` interface; CompanionSystem generalized; hoarder fight
       behavior unchanged
-- [ ] Validation gates + review loop run
+- [x] Validation gates + review loop run
 
 ---
 
 ## Phase D — Debug harness and end-to-end verification
 
-- Add a `!bounty` chat command next to `!reveal` (`DungeonScene.triggerOpenChat`,
-  ~line 2340): issues the next bounty immediately (bypassing Shady), and
-  `!bounty done` force-completes payout — so this file is fully testable before
-  Shady or any real boss exists (using the `debug_ghoul` placeholder def).
+- [x] Add a `!bounty` chat command next to `!reveal` (`DungeonScene.triggerOpenChat`,
+      ~line 2340): issues the next bounty immediately (bypassing Shady), and
+      `!bounty done` force-completes payout — so this file is fully testable before
+      Shady or any real boss exists (using the `debug_ghoul` placeholder def).
 - Walkthrough to verify (browser automation can drive movement/keys; timing
   quirks need Ryan — see memory "browser automation mostly CAN drive the game";
   unregister the service worker first):
-  - [ ] `!bounty` spawns the placeholder at a real site, board text updates,
-        arrow appears and points correctly, minimap marker shows
-  - [ ] Killing the target flips to kill_pending; arrow points to board/Shady
-  - [ ] `!bounty done` pays coins, advances the cycle, state returns to available
-  - [ ] Cycle: issue 6+ bounties; no type repeats within a cycle; names unique
-        per type until exhaustion; reshuffle happens at the seam without an
-        immediate repeat
-  - [ ] Building entry/exit mid-bounty: state survives, encounter re-spawns
-  - [ ] Fog scroll: placeholder boss flagged immune shows the toast verbatim and
-        keeps chasing; a nearby normal mob wanders confused
-  - [ ] Luring into town: bounty mobs cross the safe radius and keep attacking;
-        a RuinsGhoul control deaggros as before
-  - [ ] Loot drops golden and persistent at the corpse
+  - [x] **Site scatter, headless** — `npm run verify:bounty` (new,
+        `scripts/verify-bounty.ts`) generates five overworlds and asserts every
+        one yields the full 8 sites, all outside the town safe radius, all clear
+        of the circus, and none closer than 30 tiles to another. Five for five.
+  - [x] **Cycle, headless** — the same script walks six full cycles: `peek` is
+        proved a pure read, every cycle deals each type exactly once, and no
+        type or name ever repeats back to back, including across the seam.
+  - [x] **Name pools, headless** — every registered type's first pass is
+        distinct and the reshuffle never repeats at the wrap.
+  - [x] **Every registered def's encounter, headless** — each `spawn()` is
+        called for real and its mobs inspected. Catches the double-scaling trap
+        automatically: a def that called `applyMobLevel` itself now fails a
+        named check rather than shipping a compounded encounter that reads as a
+        tuning problem.
+  - [x] **The whole state machine, headless** — a real `BountySystem` over a
+        real generated map is driven `available → issue → kill → collect →
+available`, asserting at each step: the phase, the mark's name and type,
+        the mob count, that a second issue is refused, that exactly one mob is
+        the boss and is levelled and fog-immune while the escort is not, that
+        every mob ignores the town safe zone, that the board copy follows, that
+        the coins land on the player, that a second payout is refused, and that
+        the next bounty picks a different site.
+  - [ ] **[HUMAN]** `!bounty` — the _visual_ half: arrow points correctly and is
+        readable, minimap marker shows, board text renders. The state changes
+        underneath are covered by `verify:bounty`.
+  - [ ] **[HUMAN]** The arrow flips to Shady once the mark is dead
+  - [x] **Building entry/exit mid-bounty, headless** — `verify:bounty` rebuilds
+        `BountySystem` over the same record and asserts the bounty survives, keeps
+        its name and site, re-stages its encounter on the next update, and that
+        the re-staged mobs still carry the bounty flags.
+  - [ ] **[HUMAN]** Fog scroll: the mark shows the toast verbatim and keeps
+        chasing; a nearby normal mob wanders confused
+  - [ ] **[HUMAN]** Luring into town: bounty mobs cross the safe radius and keep
+        attacking; a RuinsGhoul control deaggros as before
+  - [ ] **[HUMAN]** Loot drops golden and persistent at the corpse
 - [ ] **[HUMAN]** Ryan playtests feel: site distances, arrow readability, coin
       amounts.
-- [ ] Validation gates + final review loop (zero genuine findings) run
+- [x] Validation gates + review loop run — two rounds, second returned only the
+      two findings recorded above, both fixed and re-verified.
+
+**Why so much of Phase D is [HUMAN].** Browser automation loads the game and can
+drive keys and clicks, but `requestAnimationFrame` throttles to roughly one frame
+a second whenever the window is occluded — and every remaining item on this list
+is a timing or motion judgement. Rather than claim those from a stalled frame
+loop, the checks that _can_ be made deterministic were pulled out into
+`npm run verify:bounty`, which is worth more than a screenshot anyway: it runs on
+five freshly generated maps instead of the one a human would happen to see.
 
 ## Journal
 
 - 2026-08-02 — Plan written; not started.
+- 2026-08-02 — **Phases A–D implemented** (Claude, main session).
+
+  **A.** `src/core/BountyProgress.ts` (record + factory + cycle/name helpers) and
+  `src/systems/bountyDefs.ts` (`BountyDef`, `BountyEncounter`, `BOUNTY_DEFS`).
+  Threaded through `DungeonSceneOptions` at both scene-rebuild sites that
+  `circusQuestProgress` uses (building entry/exit, death restart) — deliberately
+  **not** at the stairs transition, since bounty sites are floor-3 geometry and a
+  new floor should get a fresh record. Shipped with the `debug_ghoul` placeholder
+  def per the plan.
+
+  **B.** `immuneToConfusion` and `ignoresTownSafeZone` promoted onto `Mob`;
+  `Krasue`'s private flag removed in favour of the shared one; both town-deaggro
+  `accept` predicates (`Krasue`, `RuinsGhoul`) honour it. `SpellSystem` skips
+  immune mobs in the fog loop and queues their `displayName`; `DungeonScene`
+  drains that into the toast.
+
+  **C.** `scatterBountySites` in `OverworldGenerator` (8 sites, ring-sampled,
+  town/circus/camp/water exclusions, ≥80% open ground in a 6-tile disc, ≥30 tiles
+  apart, filtered through the existing reachability flood fill, warn-don't-throw
+  below 3). `BountySystem` with the full state machine. `dangerTelegraph.ts`
+  extracted from `GrotesqueSpider` and the spider refactored onto it.
+  `GroundHazardSource` extracted; `CompanionSystem` now takes a registered list
+  and `BossRoomSystem` registers itself.
+
+  **D.** `!bounty` / `!bounty done` chat commands beside `!reveal`.
+
+  **Deviations from the plan, and why.**
+  - `dangerTelegraph.ts` takes a `DangerPalette` rather than hard-coding one
+    recipe. The spider's ring and cone differ in three colours and three dash
+    constants, and a single palette could not have reproduced both — the plan's
+    "pixel-identical output" gate is only satisfiable with the palette
+    parameter. Two exported presets carry the spider's exact values.
+  - `bossFightInitiated` fires on **first aggro**, not at spawn. The plan put
+    the emit in the issue path; a mark staged sixty tiles away has not started
+    a fight, and the boss music would have played across the whole journey.
+  - The minimap marker tracks the live boss rather than its site (see review
+    round 2 below).
+
+  **Review round 1** (independent agent, full diff + spec). Verified clean: the
+  telegraph extraction is pixel-identical call-for-call; the fog bookkeeping;
+  the companion generalization; the site scatter's ordering after the natural
+  passes. Four genuine findings, all fixed:
+  1. `MobUpdateLoop` wrote `forceAggro = false` every frame for any `isBoss`
+     mob whenever a `BossRoomSystem` existed — and the overworld builds one with
+     zero rooms, so the mark alone silently reverted to ordinary aggro while its
+     escort committed. Fixed with `BossRoomSystem.governsBoss(mob)`: the loop now
+     only clears the flag for a boss standing inside some room's bounds.
+  2. `pickSiteIndex`'s "not the last site" test compared against
+     `currentSiteIndex`, which is always null by then. Added `lastSiteIndex` to
+     the record, captured in `collectBounty` before the clear.
+  3. `BountyDef.spawn`'s contract was ambiguous about `applyMobLevel`, which is
+     **not** idempotent — it compounds off current stats. The plan's own A2 text
+     told creature sessions to call it, which would have shipped double-scaled
+     encounters. Fixed the JSDoc _and_ this plan file, and messaged all five
+     in-flight creature sessions.
+  4. `SpellSystem.fogResistedNames` was write-only in any scene that never
+     drains it (a building interior runs its own `SpellSystem`). Now cleared in
+     the per-frame fog pass rather than relying on the drain.
+     Dismissed as minor but fixed anyway: `BountySystem.dispose()` was never called
+     (safe only because `bus.clear()` happened to cover it) — now called from
+     `onExit`; and `peekNextBountyType` mutated the durable record as a side effect
+     of a read, which Shady's dialog was about to depend on.
+
+  **Review round 2** (fresh agent, full re-review). Confirmed all five fixes
+  correct and complete, including that `governsBoss` cannot change behaviour for
+  any shipped boss. Two further genuine findings, both fixed:
+  1. `forceAggro` was still set only once. A safe-room checkpoint restore runs
+     `resetToSpawn()` on every hostile mob, which clears it — and out here no
+     boss room puts it back, so the whole encounter quietly de-committed for the
+     rest of the run. It is now re-asserted every frame (`holdAggro`), the same
+     lesson `CircusQuestSystem` already records for its wave mobs.
+  2. The minimap pinned the red X to the spawn site forever while the arrow
+     tracked the live boss, so the two guidance affordances disagreed from the
+     moment the fight started. The marker now tracks the boss and falls back to
+     the site.
+     Also noted: the plan's "idle anchoring" via `homePoint`/`leashRadiusTiles` is
+     inert for any class that calls `doWander()` rather than `returnHomeOrWander()`
+     — repo-wide only `Goblin` and `Troglodyte` honour it today. Rather than
+     special-case it in the system, the obligation is now documented on
+     `BountyDef.spawn` and all five creature sessions were messaged directly.
+
+  **Next session must know.** The `debug_ghoul` placeholder has since been
+  **removed** — all five real types landed the same day, and `verify:bounty` now
+  builds a real encounter from every entry in `BOUNTY_DEFS`, so there is nothing
+  left for a placeholder to cover. `!bounty` / `!bounty done` are still the
+  fastest way to drive the loop by hand.

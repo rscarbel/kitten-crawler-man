@@ -12,6 +12,8 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { AudioManager } from '../audio/AudioManager';
 import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
+import { SkeletonLord } from '../creatures/SkeletonLord';
+import { DarkKnight } from '../creatures/DarkKnight';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -330,12 +332,29 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
           break;
         case 'mongo':
+          // One cue for all three of his attacks. `mongo_released` is the summon
+          // roar, not a chomp, so branching on the one-shot would only mean the
+          // bite plays a wrong sound instead of a generic one — a bite chomp and
+          // a pounce screech are a [HUMAN] item in docs/mongo-redesign-plan.md §11.
           audio?.play('mongo_slash');
           break;
         case 'mercenary':
           audio?.play('sword_attack_1');
           break;
+        // [STAND-IN] No insect audio has been sourced yet; the raptorial strike
+        // borrows the sharpest blade cue in the library. See docs/bounty/03-mantid.md.
+        case 'mantis':
+        case 'mantid':
+          audio?.play('sword_attack_1');
+          break;
         case 'krakaren':
+          audio?.play('krakaren_ground_slam');
+          break;
+        // [STAND-IN] No stone-on-stone slam or stomp has been sourced yet; the
+        // Krakaren's ground slam is the heaviest earth impact in the library and
+        // covers both the double-fist slam and the stomp.
+        // See docs/bounty/07-rock-golem.md.
+        case 'rock_golem':
           audio?.play('krakaren_ground_slam');
           break;
         case 'lemur':
@@ -344,8 +363,23 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'clown':
           audio?.playRandom(['clown_laughing_1', 'clown_laughing_2', 'clown_horn', 'clown_burp']);
           break;
+        // Stand-ins until the Evil Clown's own audio is sourced: the horn is the
+        // closest thing to the whoomph of a backhand this troupe already owns.
+        case 'evil_clown':
+          audio?.play('clown_horn');
+          break;
         case 'krasue':
           audio?.play('krasue_attack');
+          break;
+        // Stand-in: `hammer_strike` is the closest thing in the library to a
+        // gauntlet thud. Replace with `dark_knight_punch` if Ryan sources one.
+        case 'dark_knight':
+          audio?.play('hammer_strike');
+          break;
+        // [STAND-IN] A rusty blade whoosh has not been sourced yet; the human
+        // sword swing is the closest thing in the library.
+        case 'skeleton':
+          audio?.play('sword_attack_1');
           break;
         case 'bear':
           audio?.play('bear_big_attack');
@@ -363,6 +397,15 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       mob.projectileSoundPending = false;
       if (mob.audioTag === 'llama') audio?.play('llama_fireball');
       if (mob.audioTag === 'lemur') audio?.play('circus_lemur_sound');
+      // [STAND-IN] No bow creak-and-twang and no whispered incantation exist in
+      // the library yet: the wood snap stands in for the stave, and the cat's
+      // magic-missile launch for the soul bolt leaving the palm.
+      if (mob.audioTag === 'skeleton') audio?.play('wood_breaking_3');
+      if (mob.audioTag === 'skeleton_lord') audio?.play('cat_missile_fire');
+      if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
+      // [STAND-IN] An effortful heave has not been sourced; the Juicer's throw
+      // is the library's only two-handed hurl.
+      if (mob.audioTag === 'rock_golem') audio?.play('juicer_throw');
     }
     if (mob.damageSoundPending) {
       // Only tags handled here consume the flag.
@@ -379,6 +422,20 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           mob.damageSoundPending = false;
           audio?.playRandom(['hoarder_damage_1', 'hoarder_damage_2', 'hoarder_damage_3']);
           break;
+        // [STAND-IN] Dry bone rattle, not yet sourced. Snapping wood is the
+        // nearest dry clatter the library has.
+        case 'skeleton':
+        case 'skeleton_lord':
+          mob.damageSoundPending = false;
+          audio?.playRandom(['wood_breaking_1', 'wood_breaking_2']);
+          break;
+        // [STAND-IN] The golem uses this flag for the dazed groan after a
+        // barrier interrupts its roll, not for taking a hit. No cracked stone
+        // groan has been sourced; the bear's growl is the nearest heavy grunt.
+        case 'rock_golem':
+          mob.damageSoundPending = false;
+          audio?.play('bear_growl_1');
+          break;
       }
     }
     if (mob.specialSoundPending) {
@@ -393,11 +450,77 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'ball_of_swine':
           audio?.play('ball_of_swine_rolling');
           break;
+        // [STAND-IN] Auditioned per the plan and kept: the Ball of Swine's roll
+        // is already a stone-heavy rumble, and the golem's curl, roll start and
+        // uncurl all read against it. See docs/bounty/07-rock-golem.md.
+        case 'rock_golem':
+          audio?.play('ball_of_swine_rolling');
+          break;
         case 'krakaren':
           audio?.play('krakaren_yell');
           break;
+        // [STAND-IN] The rage pause wants a rising insectoid shriek; the spider's
+        // screech is the only shriek in the library. See docs/bounty/03-mantid.md.
+        case 'mantid':
+          audio?.play('grotesque_spider_screech_attack');
+          break;
+        // The laugh that tells the party the vials are coming. A stand-in until
+        // a slow distorted clown laugh is sourced.
+        case 'evil_clown':
+          audio?.playRandom(['clown_laughing_1', 'clown_laughing_2']);
+          break;
+        // The lord has two specials and `specialSoundPending` is one flag, so
+        // which cue to play comes off the boss itself.
+        // [STAND-IN] Neither "earth cracking under many dry scrapes" nor a
+        // rising choral moan has been sourced; the Krakaren's ground slam and
+        // its yell are the closest in kind.
+        case 'skeleton_lord':
+          audio?.play(
+            mob instanceof SkeletonLord && mob.lastSpecial === 'summon'
+              ? 'krakaren_yell'
+              : 'krakaren_ground_slam',
+          );
+          break;
       }
     }
+    playDarkKnightCues(mob, audio);
+  }
+}
+
+/**
+ * The Dark Knight's three extra cues.
+ *
+ * They are separate flags rather than more `specialSoundPending` arms because
+ * he fires two of them within a second of each other — the whirl as the sweep
+ * winds up and the hit as it lands — and one shared flag can only carry one.
+ *
+ * Every id here is a **stand-in** for a sound Ryan has not sourced yet; the
+ * substitutions are recorded in `docs/bounty/05-dark-knight.md`.
+ */
+function playDarkKnightCues(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof DarkKnight)) return;
+  if (mob.whirlSoundPending) {
+    mob.whirlSoundPending = false;
+    audio?.play('rumble');
+  }
+  if (mob.slamSoundPending) {
+    mob.slamSoundPending = false;
+    audio?.play('krakaren_ground_slam');
+  }
+  if (mob.sweepHitSoundPending) {
+    mob.sweepHitSoundPending = false;
+    audio?.play('grotesque_spider_slam_attack');
+  }
+  if (mob.castSoundPending) {
+    mob.castSoundPending = false;
+    audio?.play('cat_missile_fire');
+  }
+  if (mob.overheatSoundPending) {
+    mob.overheatSoundPending = false;
+    // Deliberately silent. The overheat wants a cooling hiss and the library has
+    // nothing close — every candidate (a fireball, an error beep) would say the
+    // wrong thing about a window the player is meant to read as *their* opening.
+    // The flag is drained here so the cue can be added in one line later.
   }
 }
 

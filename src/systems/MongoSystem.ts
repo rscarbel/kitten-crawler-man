@@ -4,42 +4,66 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
+import {
+  MONGO_MIN_SUMMON_HP,
+  mongoFramesUntilReady,
+  mongoTotalRecoveryFrames,
+  tickMongoRegen,
+  type MongoPetState,
+} from '../core/MongoPetState';
+import { getMongoStats } from '../abilities/mongo';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
 import { drawButton } from '../ui/Button';
+import { drawBox, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { drawCooldownOverlay } from '../ui/CooldownOverlay';
+import { findNearbyWalkableTile } from '../map/findWalkableTile';
 
-/** Cooldown in seconds. */
-const COOLDOWN_SECONDS = 90;
+/**
+ * Mongo's lifecycle: summoning, recall, off-duty recovery and the summon button.
+ *
+ * The pet's HP is *persistent*. He does not heal by being put away and brought
+ * back out; he regenerates slowly while off duty and carries whatever is left
+ * into his next summon. That is the whole shape of the feature: sending him in
+ * costs something, and the cost is paid in the time he needs to recover.
+ */
 
-/** Frames per second. */
-const FPS = 60;
+/** Fraction of a tile giving its centre, for tile lookups from a sprite corner. */
+const TILE_CENTER = 0.5;
 
-/** Cooldown in frames: 90 seconds at 60 fps. */
-const COOLDOWN_FRAMES = COOLDOWN_SECONDS * FPS; // 5400
+/**
+ * How far from the tile behind the cat the summon may look for open ground.
+ *
+ * Small on purpose: a pet that appears several tiles away has not been summoned
+ * to her side, and past this the honest answer is her own tile.
+ */
+const SPAWN_SEARCH_RADIUS_TILES = 3;
 
-/** Duration speech bubble stays visible (frames). */
-const SPEECH_DURATION = 150; // 2.5 seconds
+/** Duration a speech bubble stays visible (frames). */
+const SPEECH_DURATION = 150;
 
 // Rendering constants
 const MONGO_BUTTON_ICON_SIZE_RATIO = 0.6;
-const MONGO_BUTTON_LABEL_Y_OFFSET = 5;
-const MONGO_BUTTON_LABEL_OFFSET = 7;
+/** Clear space between the label's top and the HP bar drawn under it. */
+const MONGO_BUTTON_LABEL_GAP = 12;
 const MONGO_BUTTON_LABEL_SIZE = 9;
-const MONGO_COOLDOWN_TEXT_Y_OFFSET_UP = 10;
-const MONGO_COOLDOWN_TEXT_Y_OFFSET_DOWN = 4;
-const MONGO_COOLDOWN_TEXT_SIZE = 12;
-const MONGO_COOLDOWN_OVERLAY_ALPHA = 0.6;
-const MONGO_ICON_Y_OFFSET = 4;
+const MONGO_ICON_Y_OFFSET = 6;
+const MONGO_HP_BAR_HEIGHT = 4;
+const MONGO_HP_BAR_INSET = 4;
+const MONGO_HP_BAR_BOTTOM_GAP = 2;
+const MONGO_HP_READY_COLOR = '#4ade80';
+const MONGO_HP_SPENT_COLOR = '#ef4444';
 
 // Speech bubble rendering
 const SPEECH_BUBBLE_ALPHA_DECAY_TIME = 30; // frames
 const SPEECH_BUBBLE_FONT_SIZE = 11;
-const SPEECH_BUBBLE_BOLD_FONT = 'bold 11px monospace';
+const SPEECH_BUBBLE_BOLD_FONT = `bold ${SPEECH_BUBBLE_FONT_SIZE}px monospace`;
 const SPEECH_BUBBLE_OFFSET_X_RATIO = 0.5;
 const SPEECH_BUBBLE_OFFSET_Y = 28;
 const SPEECH_BUBBLE_PADDING = 16;
 const SPEECH_BUBBLE_PADDING_CORNERS = 6;
+const SPEECH_BUBBLE_HEIGHT = 22;
 const SPEECH_BUBBLE_BG_ALPHA = 0.8;
 const SPEECH_BUBBLE_BORDER_WIDTH = 1;
 const SPEECH_BUBBLE_BORDER_COLOR = '#60a5fa';
@@ -55,34 +79,106 @@ export class MongoSystem implements GameSystem {
   /** The currently active Mongo instance (null when not summoned). */
   mongo: Mongo | null = null;
 
-  /** Cooldown timer — when > 0, summon button is disabled. */
-  cooldownFrames = 0;
-
   /** Current speech bubble text shown above the cat. */
   speechText: string | null = null;
   /** Remaining frames for the speech bubble. */
   speechTimer = 0;
 
-  /** Whether Mongo is currently recalling (running back before despawn). */
-  private isRecalling = false;
+  /**
+   * The mob list from the last frame.
+   *
+   * `checkHealth` and `toggleRecall` are both called from outside the system's
+   * own `update`, so they have no context to read it from — and both of them
+   * start a retreat, which has to shake off everything targeting him.
+   */
+  private retreatMobs: Mob[] = [];
+
+  /**
+   * @param petState  HP and the quest lock, threaded by reference across scenes
+   *                  because the `Mongo` instance is destroyed on every despawn.
+   * @param petLevel  Reads the current ability level. A function rather than a
+   *                  number so a level-up mid-summon is picked up immediately.
+   */
+  constructor(
+    private readonly petState: MongoPetState,
+    private readonly petLevel: () => number,
+  ) {}
+
+  /**
+   * His HP right now — the live creature's while he is out, the stored value
+   * while he is not.
+   *
+   * `petState.hp` alone is only written back on despawn, so a bar reading it
+   * stays full while he is being chewed to pieces. The live value alone is just
+   * as wrong the other way: `checkHealth` pins a spent pet at one hit point so
+   * he can walk home, and reading that would save him as 1 and paint his bar
+   * green for a raptor the player has already spent.
+   */
+  get hp(): number {
+    if (this.mongo === null) return this.petState.hp;
+    return this.mongo.exhausted ? 0 : this.mongo.hp;
+  }
+
+  get maxHp(): number {
+    return getMongoStats(this.petLevel()).maxHp;
+  }
+
+  /** 0–1, for the button's HP bar. Live, like {@link hp} — the two feed one widget. */
+  get hpRatio(): number {
+    const max = this.maxHp;
+    return max <= 0 ? 0 : Math.max(0, Math.min(1, this.hp / max));
+  }
+
+  /**
+   * True while he is recovering from a knockout and cannot be sent back in at
+   * any health short of full. Persisted, so it survives a reload.
+   */
+  get restingUntilFull(): boolean {
+    // Live/stored, exactly like `hp`: the latch is only written into the pet
+    // state on despawn, and both autosaves can fire while he is still limping
+    // home — which stored `hp: 0` alongside `resting: false`, and a reload from
+    // that pair had him summonable again one regen tick later.
+    return this.petState.restingUntilFull || (this.mongo?.exhausted ?? false);
+  }
+
+  /**
+   * Frames of recovery left before the Summon button goes live.
+   *
+   * Zero while he is out — the button says Recall then, and a countdown over it
+   * would be counting down to something that is already true.
+   */
+  get framesUntilReady(): number {
+    if (this.mongo !== null) return 0;
+    if (this.petState.summonLocked) return 0;
+    return mongoFramesUntilReady(this.petState, this.maxHp);
+  }
+
+  /** Blocked while the circus quest holds him as Signet's collateral. */
+  get summonLocked(): boolean {
+    return this.petState.summonLocked;
+  }
+
+  set summonLocked(locked: boolean) {
+    this.petState.summonLocked = locked;
+  }
 
   /**
    * Summon Mongo near the cat.
    * Returns the new Mongo instance to be added to the mobs array + grid.
    */
-  summon(cat: CatPlayer, gameMap: GameMap, levelId: string): Mongo | null {
-    if (!this.unlocked || this.mongo || this.cooldownFrames > 0) return null;
+  summon(cat: CatPlayer, gameMap: GameMap): Mongo | null {
+    if (!this.canSummon) return null;
 
-    // Spawn 1 tile behind the cat
-    const tx = Math.floor(cat.x / TILE_SIZE) - Math.round(cat.facingX);
-    const ty = Math.floor(cat.y / TILE_SIZE) - Math.round(cat.facingY);
-    // Fallback: spawn at cat's tile if behind isn't walkable
-    const spawnTx = gameMap.isWalkable(tx, ty) ? tx : Math.floor(cat.x / TILE_SIZE);
-    const spawnTy = gameMap.isWalkable(tx, ty) ? ty : Math.floor(cat.y / TILE_SIZE);
-
-    this.mongo = new Mongo(spawnTx, spawnTy, TILE_SIZE, cat, levelId);
+    const spawn = this.findSpawnTile(cat, gameMap);
+    if (spawn === null) {
+      // `canSummon` is true here, so the button looks live and the key is armed.
+      // Refusing in silence is indistinguishable from a dropped input.
+      this.speak('No room for Mongo!');
+      return null;
+    }
+    this.mongo = new Mongo(spawn.x, spawn.y, TILE_SIZE, cat, this.petLevel(), this.petState.hp);
     this.mongo.setMap(gameMap);
-    this.isRecalling = false;
+    this.petState.regenFrames = 0;
 
     this.speechText = 'Go Mongo!';
     this.speechTimer = SPEECH_DURATION;
@@ -91,86 +187,235 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
-   * Called each frame to update Mongo state, cooldown, and speech.
-   * Returns true if Mongo just fully despawned (so DungeonScene can remove it).
+   * Where to drop him: behind the cat if there is room, otherwise the nearest
+   * tile to it that he can actually stand in.
+   *
+   * Two things made the old version put him inside walls in a corridor. It took
+   * the cat's tile as `floor(cat.x / TILE_SIZE)`, which is the tile under her
+   * sprite's top-left *corner* rather than under her — one tile off in a narrow
+   * hallway, where the neighbouring tile is masonry. And its fallback was that
+   * same unvalidated tile, so the one branch that existed to handle a blocked
+   * spawn placed him on ground nothing had checked.
+   *
+   * The sight test keeps the ring search from solving a blocked corridor by
+   * putting him in the room on the other side of the wall, and stairwell tiles
+   * are excluded because `isWalkable` admits them while `Mob.moveWithCollision`
+   * refuses to enter one — the spawn contract has to match the movement contract
+   * or he lands somewhere he cannot leave by three of its four sides.
+   *
+   * Returns null when there is nowhere he can stand, and the summon is refused.
+   * There is deliberately no "just use the cat's tile" fallback: the only way to
+   * reach one is for the cat herself to be standing somewhere unwalkable — an
+   * arena door closing under her, a scripted placement — which is precisely the
+   * case where that tile is the wrong answer.
+   */
+  private findSpawnTile(cat: CatPlayer, gameMap: GameMap): { x: number; y: number } | null {
+    const catTileX = Math.floor((cat.x + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
+    const catTileY = Math.floor((cat.y + TILE_SIZE * TILE_CENTER) / TILE_SIZE);
+    const behindTileX = catTileX - Math.round(cat.facingX);
+    const behindTileY = catTileY - Math.round(cat.facingY);
+
+    const inSightOfCat = (x: number, y: number): boolean =>
+      gameMap.hasLineOfSight(
+        cat.x + TILE_SIZE * TILE_CENTER,
+        cat.y + TILE_SIZE * TILE_CENTER,
+        (x + TILE_CENTER) * TILE_SIZE,
+        (y + TILE_CENTER) * TILE_SIZE,
+      );
+
+    return findNearbyWalkableTile(
+      gameMap,
+      behindTileX,
+      behindTileY,
+      SPAWN_SEARCH_RADIUS_TILES,
+      (x, y) => inSightOfCat(x, y) && !gameMap.isStairwellTile(x, y),
+    );
+  }
+
+  /**
+   * Called each frame. Returns true on the frame he finished despawning; the
+   * removal from `mobs` and `mobGrid` has already happened by then.
    */
   update(ctx: SystemContext): boolean {
-    const { mobs, mobGrid } = ctx;
-    // Tick cooldown
-    if (this.cooldownFrames > 0) this.cooldownFrames--;
+    const { mobs, mobGrid, cat } = ctx;
+    this.retreatMobs = mobs;
 
-    // Tick speech
     if (this.speechTimer > 0) this.speechTimer--;
     if (this.speechTimer <= 0) this.speechText = null;
 
-    if (!this.mongo) return false;
+    if (!this.mongo) {
+      // Also here, not only from `onLevelUp`: `setGodModeMinLevel` moves the
+      // effective level without firing that callback, and a pet left holding a
+      // level-1 value against a level-15 maximum reads as permanently dying.
+      this.rescaleStoredHp();
+      this.tickRegen();
+      return false;
+    }
 
-    // Set allMobs for Mongo's AI
     this.mongo.allMobs = mobs;
+    // A growth spurt mid-fight has to reach the creature that is already out, or
+    // he keeps the juvenile's stats and sheet until the next time he is summoned.
+    this.mongo.applyLevel(this.petLevel());
 
-    // Check if Mongo's HP hit 0 from damage (not from recall completion)
-    if (!this.isRecalling && this.mongo.hp <= 0 && !this.mongo.isAlive) {
-      // Mongo was killed by enemies — start recall
-      // Actually his HP is 0 so he's dead. We need to catch before death.
-      // Instead, check HP threshold before it reaches 0.
+    // The cat going down spends him, by the player's ruling: he goes down with
+    // her, and comes back owing the same full recovery a knockout costs, so a
+    // wipe cannot be walked off by re-summoning the raptor on the next screen.
+    // Set outside the recall guard below, which exists only to keep from
+    // re-issuing the order — a Mongo already running home is spent just the same.
+    if (!cat.isAlive) this.mongo.exhausted = true;
+
+    // The cat going down calls him home, exactly as running out of health does.
+    if (!cat.isAlive && !this.mongo.recalling && !this.mongo.collapsing) {
+      this.speak('Mongo, come back!');
+      this.mongo.beginRecall();
+      this.releaseTargeting(mobs, this.mongo);
     }
 
-    // Check if Mongo's HP is low enough to trigger recall
-    if (!this.isRecalling && this.mongo.isAlive && this.mongo.hp <= 0) {
-      this.startRecall();
-    }
-
-    // Check HP reaching 1 or below to start recall (before actual death)
-    if (!this.isRecalling && this.mongo.isAlive && this.mongo.hp <= 1) {
-      this.startRecall();
-    }
-
-    // If recalling and Mongo reached the cat (hp set to 0 by Mongo.updateAI)
-    if (this.isRecalling && !this.mongo.isAlive) {
-      return this.finishDespawn(mobs, mobGrid);
-    }
-
+    if (this.mongo.despawnComplete) return this.finishDespawn(mobs, mobGrid);
     return false;
   }
 
   /**
-   * Explicitly check Mongo's health. Called from DungeonScene after mob
-   * damage resolution. If Mongo took lethal damage, intercept and start recall.
+   * Recovery while he is off duty. The clock and the arithmetic live on the pet
+   * state so a building interior can run the identical tick.
+   *
+   * Not gated on `unlocked`: a pet nobody has unlocked is at full health by
+   * definition, so the tick is already a no-op there — and the interior scene
+   * has no way to know about the unlock, so a gate here would only make the two
+   * call sites differ.
    */
-  checkHealth(): void {
-    if (!this.mongo || this.isRecalling) return;
-    if (this.mongo.hp <= 0) {
-      // Restore 1 HP so Mongo can run back
-      this.mongo.hp = 1;
-      this.startRecall();
-    }
+  private tickRegen(): void {
+    tickMongoRegen(this.petState, this.maxHp);
   }
 
-  private startRecall(): void {
-    if (!this.mongo || this.isRecalling) return;
-    this.isRecalling = true;
-    this.mongo.recalling = true;
-    this.speechText = 'Mongo, come back!';
+  /**
+   * Intercepts lethal damage. Called from `DungeonScene` after mob damage
+   * resolution, before kills are resolved, so Mongo never actually dies: he
+   * collapses, gets up, and runs home on his last legs.
+   */
+  checkHealth(): void {
+    if (!this.mongo) return;
+    if (this.mongo.hp > 0) return;
+    // Deliberately *not* gated on whether he is already retreating. He runs home
+    // on one hit point, and mobs keep swinging at him the whole way — gated, the
+    // interception switched itself off exactly when it was needed, he died for
+    // real mid-recall, and the system was left holding a dead pet it could
+    // neither despawn nor resummon for the rest of the floor.
+    const alreadyRetreating = this.mongo.collapsing || this.mongo.recalling;
+    // Recorded before that early return, not inside `beginCollapse`. Recalling a
+    // wounded pet is the obvious thing to do when he is in trouble, and mobs keep
+    // swinging at him the whole way home — his HP reaching zero on that run is
+    // still his HP reaching zero, and skipping the flag made pressing R in time
+    // a way to spend him for free.
+    this.mongo.exhausted = true;
+    // One hit point, so he stays alive long enough to play the collapse and run
+    // back. The zero the player cares about is written into the pet state on
+    // despawn — see `finishDespawn`.
+    this.mongo.hp = 1;
+    // `takeDamage` has already flagged the death that is being intercepted here.
+    // Left set, `resolveKills` would run its whole kill path on a pet that is
+    // still standing: a `mobKilled` event, a stray point of XP to the human, and
+    // a corpse the scene then has to reason about.
+    this.mongo.justDied = false;
+    this.mongo.killedBy = null;
+    this.mongo.killedByDealer = null;
+    this.mongo.killType = null;
+    this.mongo.damageTakenBy.clear();
+    if (alreadyRetreating) return;
+    this.speak('Mongo, come back!');
+    this.mongo.beginCollapse();
+    this.releaseTargeting(this.retreatMobs, this.mongo);
+  }
+
+  /**
+   * Rescale the stored HP when the pet levels while he is off duty.
+   *
+   * Takes no level argument on purpose — the effective level is read from the
+   * same source everything else uses, so god mode's floor cannot make the two
+   * disagree.
+   *
+   * Without it the two paths disagree: a summoned Mongo grows through
+   * `Mongo.applyLevel` and an unsummoned one silently keeps the hit points of a
+   * smaller animal against a larger maximum.
+   */
+  onPetLevelUp(): void {
+    if (this.mongo !== null) return;
+    this.rescaleStoredHp();
+  }
+
+  /**
+   * Rescale the stored HP onto the current maximum, keeping its fraction.
+   *
+   * Measured against the maximum the value was *last* scaled to, which the pet
+   * state remembers — not against the previous level's, which god mode's level
+   * floor makes wrong.
+   */
+  private rescaleStoredHp(): void {
+    const previousMax = this.petState.scaledAgainstMaxHp;
+    const newMax = this.maxHp;
+    if (previousMax === newMax) return;
+    const fraction = previousMax > 0 ? this.petState.hp / previousMax : 1;
+    this.petState.hp = Math.min(newMax, Math.ceil(fraction * newMax));
+    this.petState.scaledAgainstMaxHp = newMax;
+  }
+
+  /** The R key and the Summon button both route here: out → recall, in → summon. */
+  toggleRecall(): void {
+    if (!this.mongo || this.mongo.recalling || this.mongo.collapsing) return;
+    this.speak('Mongo, come back!');
+    this.mongo.beginRecall();
+    this.releaseTargeting(this.retreatMobs, this.mongo);
+  }
+
+  private speak(text: string): void {
+    this.speechText = text;
     this.speechTimer = SPEECH_DURATION;
   }
 
+  /**
+   * Drop every reference the mob list holds to the pet.
+   *
+   * Each mob he provoked holds a `retaliateMob` pointing at him, and the
+   * staleness sweep that normally clears those only fires on a *dead* target —
+   * which he never is, because the whole point of the recall is that he
+   * survives it. Run at despawn it stops them beelining to the tile he vanished
+   * from for the rest of the floor; run again when the retreat *starts*, it also
+   * stops them escorting him all the way home, which is what made excluding him
+   * from `extraTargets` do nothing.
+   */
+  private releaseTargeting(mobs: Mob[], mongo: Mongo): void {
+    for (const mob of mobs) {
+      if (mob.retaliateMob === mongo) mob.retaliateMob = null;
+      if (mob.currentTarget === mongo) mob.currentTarget = null;
+    }
+  }
+
   private finishDespawn(mobs: Mob[], mobGrid: SpatialGrid<Mob>): boolean {
-    if (!this.mongo) return false;
-    mobGrid.remove(this.mongo);
-    const idx = mobs.indexOf(this.mongo);
-    if (idx >= 0) mobs.splice(idx, 1);
+    const mongo = this.mongo;
+    if (!mongo) return false;
+    this.releaseTargeting(mobs, mongo);
+    // His remaining health goes back into the pet state, which is the only place
+    // it survives: this instance is about to be thrown away.
+    this.petState.hp = mongo.exhausted ? 0 : Math.max(0, mongo.hp);
+    this.petState.scaledAgainstMaxHp = mongo.maxHp;
+    // Recalled with health to spare he is available again immediately; recalled
+    // spent, he owes the player the whole climb back to full.
+    if (mongo.exhausted) this.petState.restingUntilFull = true;
+    mobGrid.remove(mongo);
+    const index = mobs.indexOf(mongo);
+    if (index >= 0) mobs.splice(index, 1);
     this.mongo = null;
-    this.isRecalling = false;
-    this.cooldownFrames = COOLDOWN_FRAMES;
+    this.petState.regenFrames = 0;
     return true;
   }
 
-  /** Manually dismiss Mongo (e.g. floor transition). */
+  /**
+   * Remove Mongo immediately — a floor transition or a building entry, where
+   * there is no time for a recall run. His HP is preserved either way.
+   */
   dismiss(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     if (!this.mongo) return;
     this.finishDespawn(mobs, mobGrid);
-    // No cooldown on manual dismiss during floor transitions
-    this.cooldownFrames = 0;
   }
 
   /** Whether the summon button should be shown. */
@@ -178,24 +423,27 @@ export class MongoSystem implements GameSystem {
     return this.unlocked;
   }
 
-  /** Whether the summon button is currently usable. */
+  /** Whether Mongo can be sent in right now. */
   get canSummon(): boolean {
-    return this.unlocked && !this.mongo && this.cooldownFrames <= 0;
+    return (
+      this.unlocked &&
+      this.mongo === null &&
+      !this.petState.summonLocked &&
+      !this.petState.restingUntilFull &&
+      this.hp >= MONGO_MIN_SUMMON_HP
+    );
   }
 
-  /** Returns cooldown remaining as a 0–1 ratio for UI display. */
-  get cooldownRatio(): number {
-    if (this.cooldownFrames <= 0) return 0;
-    return this.cooldownFrames / COOLDOWN_FRAMES;
-  }
-
-  /** Returns cooldown in whole seconds for display. */
-  get cooldownSeconds(): number {
-    return Math.ceil(this.cooldownFrames / FPS);
+  /** Whether the button's press does anything at all, in either direction. */
+  get canPress(): boolean {
+    if (this.canSummon) return true;
+    // Not while he is collapsing: `toggleRecall` no-ops there, and a button that
+    // looks live and does nothing for half a second reads as a dropped input.
+    return this.mongo !== null && !this.mongo.recalling && !this.mongo.collapsing;
   }
 
   /**
-   * Render the Summon button. Works for both desktop and mobile.
+   * Render the Summon/Recall button. Works for both desktop and mobile.
    * Returns the button rect for hit-testing.
    */
   renderSummonButton(
@@ -209,8 +457,8 @@ export class MongoSystem implements GameSystem {
     const rect = { x, y, w, h };
     if (!this.unlocked || !isCatActive) return rect;
 
-    const canUse = this.canSummon;
-    const isActive = !!this.mongo;
+    const isActive = this.mongo !== null;
+    const usable = this.canPress;
 
     drawButton(ctx, {
       x,
@@ -218,39 +466,54 @@ export class MongoSystem implements GameSystem {
       width: w,
       height: h,
       label: '',
-      fill: isActive ? 'rgba(37,99,235,0.30)' : canUse ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)',
-      border: isActive ? '#2563eb' : canUse ? '#475569' : '#334155',
+      fill: isActive ? 'rgba(37,99,235,0.30)' : usable ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)',
+      border: isActive ? '#2563eb' : usable ? '#475569' : '#334155',
       borderWidth: 1.5,
       radius: 0,
     });
 
-    // Raptor icon
-    const iconSize = Math.min(w, h) * MONGO_BUTTON_ICON_SIZE_RATIO;
-    drawMongoIcon(ctx, x + w / 2, y + h / 2 - MONGO_ICON_Y_OFFSET, iconSize);
+    drawMongoIcon(
+      ctx,
+      getMongoStats(this.petLevel()).stage,
+      x + w / 2,
+      y + h / 2 - MONGO_ICON_Y_OFFSET,
+      Math.min(w, h) * MONGO_BUTTON_ICON_SIZE_RATIO,
+    );
 
-    // Label
-    drawText(ctx, isActive ? 'Active' : 'Summon', {
+    const label = isActive ? 'Recall' : this.restingUntilFull ? 'Resting' : 'Summon';
+    drawText(ctx, label, {
       x: x + w / 2,
-      y: y + h - MONGO_BUTTON_LABEL_Y_OFFSET - MONGO_BUTTON_LABEL_OFFSET,
+      y: y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP - MONGO_BUTTON_LABEL_GAP,
       size: MONGO_BUTTON_LABEL_SIZE,
-      color: canUse ? '#94a3b8' : '#64748b',
+      color: usable ? '#94a3b8' : '#64748b',
       align: 'center',
     });
 
-    // Cooldown overlay
-    if (this.cooldownFrames > 0) {
-      ctx.save();
-      ctx.fillStyle = `rgba(0,0,0,${MONGO_COOLDOWN_OVERLAY_ALPHA})`;
-      const fillH = h * this.cooldownRatio;
-      ctx.fillRect(x, y + h - fillH, w, fillH);
-      ctx.restore();
-      drawText(ctx, `${this.cooldownSeconds}s`, {
-        x: x + w / 2,
-        y: y + h / 2 + MONGO_COOLDOWN_TEXT_Y_OFFSET_DOWN - MONGO_COOLDOWN_TEXT_Y_OFFSET_UP,
-        size: MONGO_COOLDOWN_TEXT_SIZE,
-        bold: true,
-        color: '#ef4444',
-        align: 'center',
+    // His health, which is what the countdown over it is counting *toward* —
+    // there is no separate cooldown clock, only the climb back up this bar.
+    drawProgressBar(ctx, {
+      x: x + MONGO_HP_BAR_INSET,
+      y: y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP,
+      width: w - MONGO_HP_BAR_INSET * 2,
+      height: MONGO_HP_BAR_HEIGHT,
+      value: this.hpRatio,
+      ...PROGRESS_PRESETS.hp,
+      // Green once he is fit to send in, red while he is still recovering: the
+      // bar answers "can I summon him" as well as "how hurt is he".
+      fill: this.canSummon || isActive ? MONGO_HP_READY_COLOR : MONGO_HP_SPENT_COLOR,
+    });
+
+    // The wait is only legible as a number. The HP bar answers "how hurt is he",
+    // but a raptor resting off a knockout is unavailable at 99% as surely as at
+    // 1%, and the bar cannot show the difference between "nearly" and "yes".
+    if (!isActive) {
+      drawCooldownOverlay(ctx, {
+        x,
+        y,
+        width: w,
+        height: h,
+        remainingFrames: this.framesUntilReady,
+        totalFrames: mongoTotalRecoveryFrames(this.petState, this.maxHp),
       });
     }
 
@@ -271,24 +534,23 @@ export class MongoSystem implements GameSystem {
     ctx.font = SPEECH_BUBBLE_BOLD_FONT;
     const tw = ctx.measureText(text).width;
     const bw = tw + SPEECH_BUBBLE_PADDING;
-    const bh = 22;
+    const bh = SPEECH_BUBBLE_HEIGHT;
     const bx = catScreenX + TILE_SIZE * SPEECH_BUBBLE_OFFSET_X_RATIO - bw / 2;
     const by = catScreenY - SPEECH_BUBBLE_OFFSET_Y;
 
-    // Bubble background
-    ctx.fillStyle = `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, SPEECH_BUBBLE_PADDING_CORNERS);
-    ctx.fill();
+    drawBox(ctx, {
+      x: bx,
+      y: by,
+      width: bw,
+      height: bh,
+      fill: `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`,
+      border: SPEECH_BUBBLE_BORDER_COLOR,
+      borderWidth: SPEECH_BUBBLE_BORDER_WIDTH,
+      radius: SPEECH_BUBBLE_PADDING_CORNERS,
+    });
 
-    // Bubble border
-    ctx.strokeStyle = SPEECH_BUBBLE_BORDER_COLOR;
-    ctx.lineWidth = SPEECH_BUBBLE_BORDER_WIDTH;
-    ctx.beginPath();
-    ctx.roundRect(bx, by, bw, bh, SPEECH_BUBBLE_PADDING_CORNERS);
-    ctx.stroke();
-
-    // Pointer triangle
+    // The pointer is the one part with no utility for it: a triangle hanging off
+    // one edge of a box is not a box.
     ctx.fillStyle = `rgba(0,0,0,${SPEECH_BUBBLE_BG_ALPHA})`;
     ctx.beginPath();
     ctx.moveTo(

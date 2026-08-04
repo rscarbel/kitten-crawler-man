@@ -9,6 +9,7 @@ import { Cockroach } from '../creatures/Cockroach';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
+import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
@@ -269,7 +270,7 @@ const BORDER_CROSS_OFFSET = 4;
 
 // Corner X markers
 
-export class BossRoomSystem implements GameSystem {
+export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly states: BossRoomState[];
   private readonly bossTypes: string[];
   private readonly enteredRooms = new Set<number>();
@@ -409,6 +410,18 @@ export class BossRoomSystem implements GameSystem {
   /** Returns true if any boss room is currently locked (players clamped inside). */
   get anyLocked(): boolean {
     return this.states.some((s) => s.locked);
+  }
+
+  /**
+   * Whether any boss room's bounds contain this mob, locked or not — i.e.
+   * whether this system is the thing that should be deciding the mob's aggro.
+   *
+   * A boss that stands in no room at all belongs to somebody else (a bounty
+   * encounter out in the wilderness), and its owner's `forceAggro` must not be
+   * overwritten by a system with no rooms to speak for.
+   */
+  governsBoss(mob: Mob): boolean {
+    return this.states.some((s) => this.isEntityInRoom(mob, s.bounds));
   }
 
   /** Returns true when this mob is inside an active (locked) boss room. */

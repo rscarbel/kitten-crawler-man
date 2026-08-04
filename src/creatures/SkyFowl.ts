@@ -49,13 +49,26 @@ export class SkyFowl extends Mob {
   /** Clothing palette chosen at construction — stays the same for this fowl's lifetime. */
   readonly cloth: SkyFowlClothColors;
 
-  /** Pre-baked sprite canvas with this instance's palette composited onto the body. */
-  private readonly bakedCanvas: HTMLCanvasElement | null;
+  /**
+   * Pre-baked sprite canvas with this instance's palette composited onto the
+   * body. Not `readonly`: `dispose()` drops it once this fowl dies, since
+   * `drawSelf` never draws a dead mob again and every other fowl in town
+   * carries its own copy of this same backing-store cost.
+   */
+  private bakedCanvas: HTMLCanvasElement | null;
 
   private isAggressive = false;
 
   get isHostile(): boolean {
     return this.isAggressive;
+  }
+
+  /**
+   * Mongo hunts the town fowl whether or not they have been provoked. Players
+   * cannot melee a calm one; the pet raptor has no such manners.
+   */
+  override get isPetAttackable(): boolean {
+    return true;
   }
   private peckCooldown = 0;
   private peckAnimTimer = 0;
@@ -64,6 +77,11 @@ export class SkyFowl extends Mob {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
     this.cloth = randomFromArray(SKY_FOWL_PALETTES);
     this.bakedCanvas = bakeSkyFowlCanvas(this.cloth);
+  }
+
+  /** Releases the baked clothing canvas — this fowl is dead and `drawSelf` will never run again. */
+  override dispose(): void {
+    this.bakedCanvas = null;
   }
 
   override resetToSpawn(): void {

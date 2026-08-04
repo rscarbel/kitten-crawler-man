@@ -33,13 +33,13 @@ exists via its `!bounty` debug command (Phase D of file 01).
 Update this table when a file's work completes (its own checklist is the source
 of truth; this is the at-a-glance view).
 
-- [ ] 01 Core system
-- [ ] 02 Shady
-- [ ] 03 The Mantid
-- [ ] 04 The Evil Clown
-- [ ] 05 The Dark Knight
-- [ ] 06 The Skeleton Lord
-- [ ] 07 The Rock Golem
+- [x] 01 Core system — implemented, 2 review rounds, `npm run verify:bounty` green; Ryan's playtest outstanding
+- [x] 02 Shady — implemented, 4 blind art reviews; a 5th round and Ryan's in-game look outstanding
+- [x] 03 The Mantid — implemented; Ryan's playtest outstanding
+- [x] 04 The Evil Clown — implemented; Ryan's playtest outstanding
+- [x] 05 The Dark Knight — implemented; Ryan's playtest outstanding
+- [x] 06 The Skeleton Lord — implemented; Ryan's playtest outstanding
+- [x] 07 The Rock Golem — implemented, 5 art review rounds + independent code review; Ryan's playtest and the in-game `!bounty` walkthrough outstanding
 
 ## How the bounty loop works (product spec, agreed with Ryan)
 
@@ -78,6 +78,13 @@ of truth; this is the at-a-glance view).
   utilities for UI chrome.
 - **Validation gates** after every phase: `npm run typecheck` and `npm run lint`
   must exit 0, then `npm run format`. Never mark a checkbox with a failing gate.
+  Also run **`npm run verify:bounty`** — 253 headless assertions over the sites,
+  the registry, every def's encounter, the cycles and the whole state machine.
+- **Register every new `scripts/` file in `tsconfig.scripts.json`.** Its
+  `include` is an explicit list, so `npm run typecheck` simply does not see a
+  file that is missing from it — and a passing gate then means nothing. Five of
+  the six sessions on this plan set skipped it, which hid 22 real errors, one of
+  them a drawing feature that had been written and silently never called.
 - **Art pipeline** follows the Lava Llama shape (the best current example):
   `scripts/<name>Art.ts` (drawing engine) → `scripts/generate-<name>-sprite.ts`
   (bake, `npm run gen:<name>` alias in package.json) → PNG + hand-pasted entry in
@@ -108,10 +115,34 @@ After implementing each phase:
    what was dismissed and why.
 4. If any genuine finding survived triage: implement the fix, then **go back to
    step 2 for a full fresh review** — not a skim of the fix.
+   This is not ceremony. On this plan set alone the confirming round found a
+   defect _inside_ a completed fix on the Evil Clown (3 of round 2's findings
+   were in round 1's fixes), on the Dark Knight, and twice on Shady — where a
+   frozen animation was "fixed" and then froze again for an entirely different
+   reason.
 5. The phase is done only when a review round returns **zero genuine findings**.
    That final clean round is required even if the previous round had exactly one
    trivial fix — in this repo, re-reviews have four times found defects _inside_
    a completed fix (see memory: "A fix can entrench the bug it fixed").
+
+## What only a cross-cutting review can catch
+
+Each of the seven workstreams below passed its own review loop, and eight
+defects still survived at the seams — including three that no single session
+could have seen:
+
+- **Rewards drifted 7× apart.** Three of the five bosses shipped below every
+  named boss in the game. Each looked reasonable read on its own.
+- **Two individually-correct edits were mutually exclusive.** One session made an
+  open bounty dialog halt gameplay; another drove Shady's talk pose from the
+  gameplay update. Together they made the talk pose unreachable.
+- **A shared registry file was skipped by five of six sessions**, and the gate
+  that would have said so was the very thing not registered.
+
+Budget a cross-cutting pass at the end of any plan set built in parallel, and
+give it the seams explicitly: shared files, contract compliance across _all_
+implementers, reward/stat consistency, and anything one session's change could
+make unreachable in another's.
 
 ## Codebase facts the plans rely on (verified 2026-08-02)
 
@@ -231,6 +262,144 @@ Journal and the implementing session adapts (reuse the closest existing id from
 `sounds.ts` as a stand-in and record the substitution).
 
 ## Journal
+
+- 2026-08-02 — **Whole plan set implemented** in one session: the core system and
+  Shady by the main agent, the five bosses by five parallel agents, each running
+  its own independent review loop per the protocol above.
+
+  **`npm run verify:bounty` is new** (`scripts/verify-bounty.ts`) and is the
+  cheapest way for a later session to check nothing has rotted. 216 assertions:
+  the wilderness site scatter over five freshly generated overworlds, every
+  registered def's encounter built for real, the type and name cycles walked six
+  times over, and the whole `available → issue → kill → collect → available`
+  state machine driven through a real `BountySystem`. It exists because browser
+  `requestAnimationFrame` throttles to about one frame a second when the window
+  is occluded, so nothing about timing or motion can be honestly claimed from
+  automation — rather than assert those from a stalled frame loop, everything
+  that could be made deterministic was moved here, and the rest is marked
+  [HUMAN].
+
+  The `debug_ghoul` placeholder def has been **removed**, all five real types
+  having landed.
+
+  **One defect only visible across all five bosses at once**, found in the final
+  integration pass and fixed: the XP rewards had drifted into a 7× spread. The
+  Mantid and the Dark Knight shipped at 1500/1600, correctly boss-tier against
+  the Grotesque Spider's 2000 and the Hoarder's 500 — but the Evil Clown, the
+  Skeleton Lord and the Rock Golem shipped at 320, 220 and 260, _below every
+  named boss in the game_ and only an order of magnitude above a regular floor-3
+  ghoul. Each looks perfectly reasonable read on its own, which is exactly why
+  five parallel sessions could not catch it and why the per-boss reviews did not.
+  All five are now in a 1300–1600 band with matching coin ranges, and
+  `verify:bounty` asserts both the band and that a mark always out-earns its own
+  escort, so the next bounty boss cannot drift out of it quietly.
+
+  **A full cross-cutting integration review** then found eight more defects at
+  the seams between the six workstreams, all fixed:
+  1. **21 of the 25 new `scripts/` files were never registered in
+     `tsconfig.scripts.json`**, whose `include` is an explicit list — so
+     `npm run typecheck` never saw them, and 22 real errors were hiding behind
+     the gap. One of them was live: a cape-seam feature in `shadyArt.ts` had been
+     written and never called, so the fix a blind review asked for was silently
+     absent from the baked sheet. Registered all 21 and cleared the fallout; the
+     six sheets re-bake byte-identical, which is what proves the rest of the
+     removed code really was dead.
+  2. **`Shady.isTalking` could never be true.** Its only writer sat in
+     `BountySystem.update`, which the scene skips whenever gameplay is halted —
+     and an open bounty dialog is exactly that. His lean-in pose and his
+     mid-conversation tic suppression were both unreachable outside the preview
+     harness. Moved to `syncShady()`, called above the scene's early return.
+  3. **Five of the nine new creatures had no death cause**, so dying to a soul
+     bolt, a bone arrow, a thrown boulder or the golem's roll showed the generic
+     "unknown" text. Added, with separate lines for the grasping-hands cone and
+     the boulder roll, since both have counterplay worth naming.
+  4. **Four of five defs placed minions at fixed offsets with no walkability
+     check.** A site only guarantees ~80% open ground, so mobs spawned inside
+     trees — measured at 4 of 416 across two maps. All four now go through a
+     shared `placeNearSite`, which keeps the author's formation and only rescues
+     when it has to.
+  5. **`verify:bounty` did not check the contract clause with no symptom**: that
+     `setMap()` was called. A mob without a map walks through walls and never
+     paths, and nothing shows until the fight starts. Added, along with
+     walkability and same-tile checks — and a sweep that stages every def at
+     every site of two maps, because a single site cannot exercise the blocked
+     20%.
+  6. That new sweep immediately found a **sixth** defect nobody had looked for:
+     the Dark Knight's ten goblins were drawn from an unremembering random
+     sample and could land two on one tile.
+  7. **`SkeletonSummonSystem` was the one encounter system with no checkpoint
+     reset**, so a safe-room restore on the frame a wave rose played the rise cue
+     for a summon that had just been undone.
+  8. **The Evil Clown's entire escort ignored the site anchor.** All nine new
+     classes correctly call `returnHomeOrWander()`, but that troupe is composed
+     only of reused circus classes, all of which plain-wander — so the boss held
+     his clearing while all five of his clowns drifted off it. Fixed in
+     `StiltClown`, `FatClown` and `CircusLemur`; with no home set the call is
+     exactly `doWander`, so their circus spawns are unchanged.
+
+  **The confirming integration round then found six more — three of them inside
+  the fixes above.** Exactly the pattern this repo keeps producing, and the
+  reason the protocol demands the extra round:
+  1. **`placeNearSite` had no occupancy awareness** — the rescue spiral could
+     hand a minion the boss's own tile or a tile another minion had just been
+     rescued onto. This is the _identical_ bug the Dark Knight's goblin placement
+     had been fixed for one round earlier, reintroduced by the fix for a
+     different problem. Both helpers now share one `claimed` set, seeded with the
+     boss's tile.
+  2. **The new placement sweep only asserted walkability.** The `setMap` and
+     same-tile checks still ran on a single site of a single map — and same-tile
+     is precisely the rare, layout-dependent failure in (1), so the sweep could
+     not have caught it. All three now run across the whole sweep, which was also
+     widened to four maps, and a vacuity guard was added: the checks used to pass
+     if the sweep staged nothing at all.
+  3. **The wired-in cape seam overshot onto the coat.** The cape's hem is a
+     quadratic, but the seams ended at a flat `hemY + dip`, so all three crossed
+     the cape's own outline and finished on the coat at belt height. A defect
+     created by the fix that wired the seam in at all.
+  4. **The `syncShady` fix was incomplete.** Talking was checked _after_
+     scratching in `drawSelf`, and nothing advances the scratch while a dialog is
+     open — so a conversation begun during a tic (about 11% of presses) froze him
+     mid-scratch for its whole duration and the lean-in pose still never played.
+     Talking now wins, and the tic is cancelled outright.
+  5. A stale JSDoc block left stacked above `placeNearSite`, misdescribing it.
+  6. Two comments made false by earlier fixes — `spawner.ts` still claimed camp
+     residents were the only writer of `homePoint`, and `verify-bounty.ts` called
+     itself deterministic while generating unseeded maps. Both corrected rather
+     than deleted, since both were load-bearing explanations.
+
+  **The session ended when it hit a monthly spend limit**, which killed five
+  agents mid-edit. Only one had left the tree broken: the Mantid session had
+  added a `flareSign` parameter to `drawWingCase` and been cut off partway
+  through updating its three call sites, so `tsc -p tsconfig.scripts.json`
+  failed. Repaired (side view flares outward, the two axial views mirror per
+  `side`), and every generator re-bakes clean. Worth noting that the _scripts_
+  typecheck is what caught it — the same gate that five of six sessions had
+  skipped registering their files with, and which had been fixed two rounds
+  earlier. Had it not been, a broken art module would have shipped silently.
+
+  And then, checking my own arithmetic before handing (3) to the next reviewer:
+  **the new `hemDipFactor` was exactly 2× wrong.** A quadratic Bézier reaches
+  only _half_ its control point's offset — solving the curve gives
+  `2u(1−u) = (1 − t²)/2`, not `1 − t²`. The seams therefore still ended below the
+  hem; they only _looked_ right because `MANTLE_SEAM_REACH`'s pullback happened
+  to cancel almost exactly the same amount. A fix that is wrong and passes by
+  coincidence is worse than one that fails, because nothing will ever question
+  it. Corrected, with the derivation written beside the constant.
+
+  Two conventions were corrected mid-flight and are worth knowing about, because
+  the original plan text got both wrong and all five creature sessions had to be
+  messaged directly:
+  - **A def must not call `applyMobLevel`.** It is not idempotent — it multiplies
+    off current stats rather than a stored base — so a def that scaled its own
+    mobs alongside `BountySystem` would ship a compounded encounter that reads as
+    a tuning problem rather than as a bug. `verify:bounty` now checks this.
+  - **A bounty mob's idle branch must call `returnHomeOrWander()`**, not
+    `doWander()`. Only the former consults the `homePoint`/`leashRadiusTiles`
+    anchor `BountySystem` sets, so a plain-wandering class drifts off the site
+    the player was sent to.
+
+  Ryan's note in the entry below about "thorough the fog": the toast ships as
+  `` `${name} sees you through the fog` ``.
 
 - 2026-08-02 — Plan set written by Claude (planning session). Grounding facts
   verified by four parallel code-exploration agents the same day. No

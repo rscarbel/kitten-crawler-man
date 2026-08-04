@@ -1,6 +1,11 @@
 import { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
-import { drawQuestNPCSprite, drawExclamationMark } from '../sprites/questNPCSprite';
+import {
+  drawQuestNPCSprite,
+  drawQuestMarker,
+  QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
+} from '../sprites/questNPCSprite';
 
 const NPC_MAX_HP = 40;
 /** Initial health potion count to remove (NPC has no use for potions). */
@@ -52,9 +57,9 @@ export class QuestNPC extends Player {
 
     // Overhead marker
     if (this.markerType === 'exclamation') {
-      drawExclamationMark(ctx, sx, sy, tileSize, '#fbbf24');
+      drawQuestMarker(ctx, sx, sy, tileSize, '!', QUEST_MARKER_GOLD);
     } else if (this.markerType === 'question') {
-      drawExclamationMark(ctx, sx, sy, tileSize, '#4ade80');
+      drawQuestMarker(ctx, sx, sy, tileSize, '?', QUEST_MARKER_GREEN);
     }
 
     // Health bar when damaged

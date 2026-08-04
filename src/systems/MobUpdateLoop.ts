@@ -12,6 +12,7 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import type { GameMap } from '../map/GameMap';
+import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 const AI_RADIUS_TILES = 22;
@@ -24,6 +25,14 @@ const PLAYER_MASS = 3;
 // Separation physics
 const SEPARATION_BASE_MULTIPLIER = 0.3;
 const SEPARATION_POSITION_TOLERANCE = 0;
+
+/**
+ * Overlap, in pixels, that is tolerated before anything is pushed at all.
+ *
+ * Without a deadband two mobs resting at exactly `SEP_DIST` trade sub-pixel
+ * corrections forever. Mobs settle a few pixels inside contact and stay there.
+ */
+const SEPARATION_DEADBAND_PX = 3;
 const LEADING_EDGE_FRONT = 0.72;
 const LEADING_EDGE_BACK = 0.28;
 const TILE_CENTER_OFFSET = 0.5;
@@ -66,6 +75,19 @@ export class MobUpdateLoop implements GameSystem {
   private readonly separationSeen = new Set<Mob>();
   private readonly separationPreX: number[] = [];
   private readonly separationPreY: number[] = [];
+  private readonly separationDx: number[] = [];
+  private readonly separationDy: number[] = [];
+  /**
+   * Flying mobs get their own separation pass so they push off each other by
+   * weight without being pushed by (or pushing) ground mobs sharing their tile
+   * — a flying mob overlapping a ground mob's footprint is expected.
+   */
+  private readonly flyingSeparationMobs: Mob[] = [];
+  private readonly flyingSeparationSeen = new Set<Mob>();
+  private readonly flyingSeparationPreX: number[] = [];
+  private readonly flyingSeparationPreY: number[] = [];
+  private readonly flyingSeparationDx: number[] = [];
+  private readonly flyingSeparationDy: number[] = [];
   private readonly aiTargets: Player[] = [];
   private readonly players: Player[] = [];
 
@@ -120,9 +142,20 @@ export class MobUpdateLoop implements GameSystem {
       } else {
         // Without a boss-room system (building interiors), leave forceAggro to
         // whatever the hosting scene's boss system decided.
-        if (mob.isBoss && bossRoom)
-          mob.forceAggro =
-            bossRoom.isBossInLockedRoom(mob) || bossRoom.isAnyPlayerInBossRoom(mob, playerTargets);
+        //
+        // It is also left alone for a boss standing in no boss room at all: on
+        // the overworld the scene builds a BossRoomSystem with an empty room
+        // list, so an unguarded write here cleared a bounty mark's forceAggro
+        // every single frame and the mark alone could be outrun while its
+        // escort committed for good.
+        if (mob.isBoss && bossRoom) {
+          if (
+            bossRoom.isBossInLockedRoom(mob) ||
+            bossRoom.isAnyPlayerInBossRoom(mob, playerTargets)
+          )
+            mob.forceAggro = true;
+          else if (bossRoom.governsBoss(mob)) mob.forceAggro = false;
+        }
 
         // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
         if (mob instanceof BrindleGrub) {
@@ -147,54 +180,33 @@ export class MobUpdateLoop implements GameSystem {
       mobGrid.move(mob, ox, oy);
     }
 
-    // O(N²/2) separation over non-flying active mobs. activeMobs may contain
-    // duplicates (mob in range of both players), so deduplicate via Set first.
-    const seps = this.separationMobs;
-    const sepSeen = this.separationSeen;
-    seps.length = 0;
-    sepSeen.clear();
-    for (const mob of activeMobs) {
-      if (mob.isAlive && !mob.isFlying && !sepSeen.has(mob)) {
-        seps.push(mob);
-        sepSeen.add(mob);
-      }
-    }
-
-    const preX = this.separationPreX;
-    const preY = this.separationPreY;
-    preX.length = 0;
-    preY.length = 0;
-    for (const m of seps) {
-      preX.push(m.x);
-      preY.push(m.y);
-    }
-
-    for (let i = 0; i < seps.length; i++) {
-      const a = seps[i];
-      for (let j = i + 1; j < seps.length; j++) {
-        const b = seps[j];
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        // Square-compare first: the sqrt is only needed for the push magnitude,
-        // and the overwhelming majority of pairs are out of range.
-        const distSq = dx * dx + dy * dy;
-        if (distSq >= SEP_DIST_SQ) continue;
-        const dist = Math.sqrt(distSq);
-        if (dist > SEPARATION_POSITION_TOLERANCE) {
-          const base = ((SEP_DIST - dist) * SEPARATION_BASE_MULTIPLIER) / dist;
-          const totalMass = a.mass + b.mass;
-          // Heavier mob moves less — force is proportional to the other mob's share of total mass.
-          a.applySeparation(dx * base * (b.mass / totalMass), dy * base * (b.mass / totalMass));
-          b.applySeparation(-dx * base * (a.mass / totalMass), -dy * base * (a.mass / totalMass));
-        }
-      }
-    }
-
-    for (let i = 0; i < seps.length; i++) {
-      if (seps[i].x !== preX[i] || seps[i].y !== preY[i]) {
-        mobGrid.move(seps[i], preX[i], preY[i]);
-      }
-    }
+    // O(N²/2) separation over non-flying active mobs, and a second pass for
+    // flying mobs against each other only — see the field comment on
+    // `flyingSeparationMobs` for why they're not merged into one pass.
+    // activeMobs may contain duplicates (mob in range of both players), so
+    // deduplicate via Set first.
+    this.runSeparationPass(
+      activeMobs,
+      (mob) => !mob.isFlying,
+      this.separationMobs,
+      this.separationSeen,
+      this.separationPreX,
+      this.separationPreY,
+      this.separationDx,
+      this.separationDy,
+      mobGrid,
+    );
+    this.runSeparationPass(
+      activeMobs,
+      (mob) => mob.isFlying,
+      this.flyingSeparationMobs,
+      this.flyingSeparationSeen,
+      this.flyingSeparationPreX,
+      this.flyingSeparationPreY,
+      this.flyingSeparationDx,
+      this.flyingSeparationDy,
+      mobGrid,
+    );
 
     // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
     // cockroaches are displaced proportionally to their mass relative to the player.
@@ -203,7 +215,7 @@ export class MobUpdateLoop implements GameSystem {
     this.players.push(human, cat);
     for (const player of this.players) {
       if (!player.isAlive) continue;
-      for (const mob of seps) {
+      for (const mob of this.separationMobs) {
         if (!mob.isAlive) continue;
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
@@ -231,6 +243,93 @@ export class MobUpdateLoop implements GameSystem {
             pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Pairwise mass-weighted separation over `activeMobs` filtered by
+   * `include`, written into the given scratch arrays. Shared by the ground
+   * pass and the flying pass so a mob only separates from others that pass
+   * the same filter.
+   */
+  private runSeparationPass(
+    activeMobs: ReadonlySet<Mob>,
+    include: (mob: Mob) => boolean,
+    seps: Mob[],
+    sepSeen: Set<Mob>,
+    preX: number[],
+    preY: number[],
+    sepDx: number[],
+    sepDy: number[],
+    mobGrid: SpatialGrid<Mob>,
+  ): void {
+    seps.length = 0;
+    sepSeen.clear();
+    for (const mob of activeMobs) {
+      if (mob.isAlive && include(mob) && !sepSeen.has(mob)) {
+        seps.push(mob);
+        sepSeen.add(mob);
+      }
+    }
+
+    preX.length = 0;
+    preY.length = 0;
+    for (const m of seps) {
+      preX.push(m.x);
+      preY.push(m.y);
+    }
+
+    // Accumulated first and applied afterwards, rather than each pair moving its
+    // mobs as it is visited. Two reasons, both of which showed up as shake:
+    //
+    // - Applying in the loop reads positions earlier pairs already changed, so
+    //   the result depends on pair order — and pair order comes from a Set fed
+    //   by a spatial query, which reshuffles as mobs cross grid cells. The same
+    //   standing configuration then resolved differently on consecutive frames.
+    // - There is nowhere to bound the total. A mob in a crowd took one push per
+    //   neighbour, and ten goblins around a knight all pushed the same way.
+    sepDx.length = 0;
+    sepDy.length = 0;
+    for (const _mob of seps) {
+      sepDx.push(0);
+      sepDy.push(0);
+    }
+
+    for (let i = 0; i < seps.length; i++) {
+      const a = seps[i];
+      for (let j = i + 1; j < seps.length; j++) {
+        const b = seps[j];
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        // Square-compare first: the sqrt is only needed for the push magnitude,
+        // and the overwhelming majority of pairs are out of range.
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= SEP_DIST_SQ) continue;
+        const dist = Math.sqrt(distSq);
+        if (dist <= SEPARATION_POSITION_TOLERANCE) continue;
+        const overlap = SEP_DIST - dist - SEPARATION_DEADBAND_PX;
+        if (overlap <= 0) continue;
+        const base = (overlap * SEPARATION_BASE_MULTIPLIER) / dist;
+        const totalMass = a.mass + b.mass;
+        // Heavier mob moves less — force is proportional to the other mob's share of total mass.
+        const aShare = b.mass / totalMass;
+        const bShare = a.mass / totalMass;
+        sepDx[i] += dx * base * aShare;
+        sepDy[i] += dy * base * aShare;
+        sepDx[j] -= dx * base * bShare;
+        sepDy[j] -= dy * base * bShare;
+      }
+    }
+
+    // `applySeparation` caps each mob's displacement against its own walk step.
+    for (let i = 0; i < seps.length; i++) {
+      seps[i].applySeparation(sepDx[i], sepDy[i]);
+    }
+
+    for (let i = 0; i < seps.length; i++) {
+      if (seps[i].x !== preX[i] || seps[i].y !== preY[i]) {
+        mobGrid.move(seps[i], preX[i], preY[i]);
       }
     }
   }

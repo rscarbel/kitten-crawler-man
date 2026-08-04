@@ -8,6 +8,7 @@ import {
   drawSpitTrapSplat,
   drawSpitTrapIdle,
 } from '../sprites/grotesqueSpiderSpitSprite';
+import { drawDangerCircle, drawDangerCone } from '../sprites/dangerTelegraph';
 import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
 import { randomInt } from '../utils';
 import { TILE_SIZE } from '../core/constants';
@@ -143,26 +144,16 @@ const ROAM_BORDER_MARGIN = 3;
 
 // Render: shared
 const MS_PER_SECOND = 1000;
-const DANGER_FILL_ALPHA = 0.28;
-const DANGER_STRIPE_ALPHA = 0.14;
-const STRIPE_ANIM_DIVISOR = 120;
-const DANGER_OUTLINE_ALPHA = 0.7;
 
 // Render: screech danger zone
 // Circle appears at 5% of windup (~0.1s in) and fades out exactly when damage fires at sp=0.5
 const SCREECH_SP_THRESHOLD = 0.05;
 const SCREECH_FADE_DIVISOR = 0.45;
-const SCREECH_DASH_SEGMENT = 10;
-const SCREECH_DASH_SPEED = 25;
-const SCREECH_DASH_MOD = 20;
 
 // Render: slam danger zone
 const SLAM_SP_THRESHOLD = 0.15;
 const SLAM_FADE_DIVISOR = 0.4;
 const SLAM_ARC_DIVISOR = 3;
-const SLAM_DASH_SEGMENT = 8;
-const SLAM_DASH_SPEED = 20;
-const SLAM_DASH_MOD = 16;
 
 export class GrotesqueSpider extends Mob {
   /**
@@ -924,39 +915,7 @@ export class GrotesqueSpider extends Mob {
       const cy2 = sy + tileSize * TILE_CENTER;
       const r = SCREECH_RANGE_PX;
 
-      // Filled danger zone + hazard stripes clipped to circle
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.globalAlpha = fade * DANGER_FILL_ALPHA;
-      ctx.fillStyle = '#ff1020';
-      ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
-      ctx.globalAlpha = fade * DANGER_STRIPE_ALPHA;
-      ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 10;
-      ctx.setLineDash([]);
-      const screechStripeSpacing = 28;
-      const screechStripeOffset = (now / STRIPE_ANIM_DIVISOR) % screechStripeSpacing;
-      for (let d = -r * 2 + screechStripeOffset; d < r * 2; d += screechStripeSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(cx2 + d - r, cy2 - r);
-        ctx.lineTo(cx2 + d + r, cy2 + r);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // Animated dashed outline
-      ctx.save();
-      ctx.globalAlpha = fade * DANGER_OUTLINE_ALPHA;
-      ctx.strokeStyle = '#ff1020';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([SCREECH_DASH_SEGMENT, SCREECH_DASH_SEGMENT]);
-      ctx.lineDashOffset = -(now / SCREECH_DASH_SPEED) % SCREECH_DASH_MOD;
-      ctx.beginPath();
-      ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      drawDangerCircle(ctx, cx2, cy2, r, fade);
     }
 
     if (this.state === 'slam' && this.attackPhase === 'windup' && sp > SLAM_SP_THRESHOLD) {
@@ -968,46 +927,7 @@ export class GrotesqueSpider extends Mob {
       const cx2 = sx + tileSize * TILE_CENTER;
       const cy2 = sy + tileSize * TILE_CENTER;
       const r = SLAM_RANGE_PX * SLAM_HIT_RANGE_SCALE;
-      const arcStart = facingAngle - Math.PI / SLAM_ARC_DIVISOR;
-      const arcEnd = facingAngle + Math.PI / SLAM_ARC_DIVISOR;
-
-      // Filled danger zone + hazard stripes clipped to pie-slice
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(cx2, cy2);
-      ctx.arc(cx2, cy2, r, arcStart, arcEnd);
-      ctx.closePath();
-      ctx.clip();
-      ctx.globalAlpha = fade * DANGER_FILL_ALPHA;
-      ctx.fillStyle = '#ff4010';
-      ctx.fillRect(cx2 - r, cy2 - r, r * 2, r * 2);
-      ctx.globalAlpha = fade * DANGER_STRIPE_ALPHA;
-      ctx.strokeStyle = '#ff5010';
-      ctx.lineWidth = 10;
-      ctx.setLineDash([]);
-      const slamStripeSpacing = 28;
-      const slamStripeOffset = (now / STRIPE_ANIM_DIVISOR) % slamStripeSpacing;
-      for (let d = -r * 2 + slamStripeOffset; d < r * 2; d += slamStripeSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(cx2 + d - r, cy2 - r);
-        ctx.lineTo(cx2 + d + r, cy2 + r);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // Animated dashed outline (closed pie-slice)
-      ctx.save();
-      ctx.globalAlpha = fade * DANGER_OUTLINE_ALPHA;
-      ctx.strokeStyle = '#ff6020';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([SLAM_DASH_SEGMENT, SLAM_DASH_SEGMENT]);
-      ctx.lineDashOffset = -(now / SLAM_DASH_SPEED) % SLAM_DASH_MOD;
-      ctx.beginPath();
-      ctx.moveTo(cx2, cy2);
-      ctx.arc(cx2, cy2, r, arcStart, arcEnd);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
+      drawDangerCone(ctx, cx2, cy2, r, facingAngle, Math.PI / SLAM_ARC_DIVISOR, fade);
     }
 
     ctx.save();

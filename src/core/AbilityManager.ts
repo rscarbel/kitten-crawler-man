@@ -8,7 +8,7 @@
  * Both fields have per-ability overrides; defaults are 1.3 and 1.8 respectively.
  */
 
-export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush';
+export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo';
 
 /**
  * Every `AbilityId`, as a value. Typed as a total `Record` so adding an id to
@@ -19,6 +19,7 @@ const ABILITY_IDS: Record<AbilityId, true> = {
   magic_missile: true,
   protective_shell: true,
   smush: true,
+  mongo: true,
 };
 
 /** Narrows an item's free-form `abilityId` to one the manager knows about. */
@@ -43,6 +44,13 @@ export interface AbilityDef {
   name: string;
   /** Which player this ability belongs to by default. */
   owner: AbilityOwner;
+  /**
+   * Short badge shown beside the owner in the Abilities list, e.g. `PET`.
+   *
+   * Only for abilities that do not work like the others — the badge exists to
+   * warn a player that hunting for this one's tome is wasted effort.
+   */
+  tag?: string;
   equipInstructions: string;
   /** XP needed to advance from level 1 → 2. Later thresholds are derived. */
   baseXpToLevel2: number;

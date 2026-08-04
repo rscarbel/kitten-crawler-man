@@ -1,4 +1,32 @@
 {
+  "vespa_acid_spit_projectile": {
+    "path": "effects/vespa_acid_spit_projectile.png",
+    "frameWidth": 40,
+    "frameHeight": 40,
+    "tileX": 20,
+    "tileY": 20,
+    "tileScale": 64,
+    "states": {
+      "default": {
+        "row": 0,
+        "frameCount": 6
+      }
+    }
+  },
+  "vespa_acid_spit_impact": {
+    "path": "effects/vespa_acid_spit_impact.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 48,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "default": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
   "smush_icon": {
     "path": "effects/smush_icon.png",
     "frameWidth": 64,
@@ -210,6 +238,120 @@
     "tileScale": 64,
     "states": {
       "burn": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "skeleton_soul_bolt": {
+    "path": "effects/skeleton_soul_bolt.png",
+    "frameWidth": 80,
+    "frameHeight": 80,
+    "tileX": 40,
+    "tileY": 40,
+    "tileScale": 64,
+    "states": {
+      "fly": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "skeleton_soul_burst": {
+    "path": "effects/skeleton_soul_burst.png",
+    "frameWidth": 146,
+    "frameHeight": 146,
+    "tileX": 73,
+    "tileY": 73,
+    "tileScale": 64,
+    "states": {
+      "burst": { "row": 0, "frameCount": 10 }
+    }
+  },
+  "skeleton_bone_arrow": {
+    "path": "effects/skeleton_bone_arrow.png",
+    "frameWidth": 98,
+    "frameHeight": 42,
+    "tileX": 49,
+    "tileY": 21,
+    "tileScale": 64,
+    "states": {
+      "fly": { "row": 0, "frameCount": 1 }
+    }
+  },
+  "skeleton_grasping_hands": {
+    "path": "effects/skeleton_grasping_hands.png",
+    "frameWidth": 118,
+    "frameHeight": 118,
+    "tileX": 59,
+    "tileY": 59,
+    "tileScale": 64,
+    "states": {
+      "erupt": { "row": 0, "frameCount": 8 }
+    }
+  },
+  "evil_clown_vial": {
+    "path": "effects/evil_clown_vial.png",
+    "frameWidth": 78,
+    "frameHeight": 78,
+    "tileX": 39,
+    "tileY": 39,
+    "tileScale": 64,
+    "states": {
+      "fly": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+  "evil_clown_shatter": {
+    "path": "effects/evil_clown_shatter.png",
+    "frameWidth": 114,
+    "frameHeight": 114,
+    "tileX": 57,
+    "tileY": 57,
+    "tileScale": 64,
+    "states": {
+      "shatter": {
+        "row": 0,
+        "frameCount": 10
+      }
+    }
+  },
+  "evil_clown_gas": {
+    "path": "effects/evil_clown_gas.png",
+    "frameWidth": 212,
+    "frameHeight": 212,
+    "tileX": 106,
+    "tileY": 106,
+    "tileScale": 64,
+    "states": {
+      "billow": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+    "golem_rock": {
+    "path": "effects/golem_rock.png",
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 32,
+    "tileY": 32,
+    "tileScale": 40,
+    "states": {
+      "spin": {
+        "row": 0,
+        "frameCount": 8
+      }
+    }
+  },
+    "golem_rock_burst": {
+    "path": "effects/golem_rock_burst.png",
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 48,
+    "tileY": 48,
+    "tileScale": 40,
+    "states": {
+      "spin": {
+        "row": 0,
+        "frameCount": 8
+      }
     }
   }
 }

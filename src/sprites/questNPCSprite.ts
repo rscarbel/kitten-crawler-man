@@ -310,21 +310,36 @@ const EXCLAMATION_FONT_SIZE_RATIO = 0.45;
 const EXCLAMATION_OUTLINE_WIDTH = 3;
 const EXCLAMATION_GLOW_BLUR = 8;
 
-export function drawExclamationMark(
+/** Standard gold of an available-quest marker. */
+export const QUEST_MARKER_GOLD = '#fbbf24';
+/** Standard green of a turn-in marker. */
+export const QUEST_MARKER_GREEN = '#4ade80';
+
+/** The two overhead glyphs quest-givers wear. */
+export type QuestMarkerGlyph = '!' | '?';
+
+/**
+ * Bouncing overhead quest marker.
+ *
+ * The glyph is a parameter rather than something inferred from `color`: an
+ * earlier version picked `?` by string-comparing the colour to the turn-in
+ * green, which silently made every new caller's marker an exclamation unless it
+ * happened to reuse that exact hex.
+ */
+export function drawQuestMarker(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
   s: number,
+  glyph: QuestMarkerGlyph,
   color: string,
 ) {
   const t = performance.now() / MS_TO_SECONDS;
   const bounce = Math.sin(t * EXCLAMATION_BOUNCE_FREQ) * s * EXCLAMATION_BOUNCE_AMP;
   const cx = sx + s * EXCLAMATION_CENTER_X;
   const baseY = sy - s * EXCLAMATION_BASE_OFFSET_Y + bounce;
-  const isQuestion = color === '#4ade80';
 
   const glyphFontSize = Math.floor(s * EXCLAMATION_FONT_SIZE_RATIO);
-  const glyph = isQuestion ? '?' : '!';
 
   // Midpoint y converted to top: drawText_y = baseY - size/2
   // outline (black stroke) + glow in one pass

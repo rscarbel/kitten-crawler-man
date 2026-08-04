@@ -719,15 +719,21 @@ function drawWildflowerTuft(
   }
 }
 
-const PEBBLE_COUNT = 7;
+const PEBBLE_COUNT = 5;
 const PEBBLE_MIN_RADIUS_PX = 1.1;
 const PEBBLE_RADIUS_RANGE_PX = 1.7;
 /** Light comes from the upper left, as it does for every prop in the repo. */
 const PEBBLE_HIGHLIGHT_OFFSET_PX = 0.5;
 const PEBBLE_SHADOW_OFFSET_PX = 0.6;
-const PEBBLE_SHADOW_COLOR = 'rgba(24,22,20,0.34)';
+/**
+ * Pebbles are an accent on rock that is itself now calm and mid-toned, so the
+ * three passes sit closer together than a prop's would. A full-strength drop
+ * shadow and a near-white highlight on a 2 px disc is confetti at this scale —
+ * legible as a pebble only if you stop and look for one.
+ */
+const PEBBLE_SHADOW_COLOR = 'rgba(24,22,20,0.22)';
 const PEBBLE_BODY_COLOR = '#8b867d';
-const PEBBLE_HIGHLIGHT_COLOR = '#b6b1a6';
+const PEBBLE_HIGHLIGHT_COLOR = '#a49f95';
 const PEBBLE_HIGHLIGHT_RADIUS_SHARE = 0.55;
 
 function drawPebbleScatter(

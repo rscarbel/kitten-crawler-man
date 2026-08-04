@@ -3,12 +3,12 @@ import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
+import { drawBrindleGrubSprite, drawCowTailedGrubSprite } from '../sprites/brindleGrubSprite';
 import {
-  drawBrindleGrubSprite,
-  drawCowTailedGrubSprite,
-  drawBrindledVespaSprite,
+  BRINDLED_VESPA_BODY_PART_KEY,
   drawAcidSpit,
-} from '../sprites/brindleGrubSprite';
+  drawBrindledVespaSprite,
+} from '../sprites/brindledVespaSprite';
 
 const STAGE1_HP = 4;
 const STAGE2_HP = 10;
@@ -32,6 +32,14 @@ const VESPA_SPIT_DAMAGE = 3;
 const VESPA_SPIT_COOLDOWN = 100; // ~1.7 s
 const VESPA_SPIT_TTL = 220;
 const VESPA_HIT_FADE = 5; // TTL decrease per frame once hit
+/**
+ * How long the Vespa rears back before the acid actually launches. Exactly
+ * double the `spit_windup` row's frame count baked by
+ * `scripts/generate-brindled-vespa-sprite.ts` — each baked frame is held for
+ * two game ticks — tuned to read as a wasp rearing back rather than a hitch
+ * in the fight's pacing.
+ */
+const VESPA_SPIT_WINDUP_FRAMES = 18;
 const XP_STAGE3 = 22;
 const XP_STAGE2 = 2;
 const STAGE_COW_TAILED = 2;
@@ -43,6 +51,12 @@ const STAGE2_ATTACK_RANGE_MULTIPLIER = 1.1;
 const STAGE2_FOLLOW_STOP_RANGE_RATIO = 0.8;
 const STAGE2_BITE_DAMAGE = 1;
 const STAGE2_BITE_COOLDOWN = 80;
+/**
+ * Exactly double the `attack*` row length baked by
+ * `scripts/generate-brindle-grub-sprite.ts` — each baked frame is held for
+ * two game ticks.
+ */
+const STAGE2_BITE_ANIM_FRAMES = 14;
 const VESPA_FOLLOW_STOP_RANGE_RATIO = 0.8;
 
 export type GrubStage = 1 | 2 | 3;
@@ -54,6 +68,8 @@ export interface AcidSpit {
   vy: number;
   ttl: number;
   hit: boolean;
+  /** Frames elapsed since impact; drives the splash animation once `hit` is true. */
+  hitAge: number;
 }
 
 /**
@@ -69,9 +85,21 @@ export class BrindleGrub extends Mob {
   stage: GrubStage = 1;
   private evolveTimer: number;
   private spitCooldown = 0;
+  /** >0 while the Vespa is charging up a spit; counts down to 0, which fires it. */
+  private spitWindupTimer = 0;
+  /** >0 while the cow-tailed grub's bite-strike animation is playing. */
+  private biteAnimTimer = 0;
 
   /** Active acid-spit projectiles (Vespa stage only). */
   readonly spits: AcidSpit[] = [];
+
+  /**
+   * Squishy bug stages leave no severed parts — the user's call: the generic
+   * gore burst and blood puddle `GoreSystem` already fires on every death is
+   * sufficient for stages 1 and 2. Only the fully-evolved Vespa gets a real
+   * body-part set, set at the moment it evolves in `evolveToStage3()`.
+   */
+  override bodyPartKey: string | null = null;
 
   /**
    * Populated each frame by DungeonScene so the Vespa can find mob targets
@@ -123,6 +151,7 @@ export class BrindleGrub extends Mob {
     this.isFlying = true;
     this.displayName = 'Brindled Vespa';
     this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
+    this.bodyPartKey = BRINDLED_VESPA_BODY_PART_KEY;
   }
 
   /**
@@ -159,6 +188,8 @@ export class BrindleGrub extends Mob {
   }
 
   private updateStage2AI(playerTargets: Player[]): void {
+    if (this.biteAnimTimer > 0) this.biteAnimTimer--;
+
     const ts = this.tileSize;
     const aggroRange = ts * STAGE2_AGGRO_TILES;
     const attackRange = ts * STAGE2_ATTACK_RANGE_MULTIPLIER;
@@ -194,6 +225,7 @@ export class BrindleGrub extends Mob {
       if (this.spitCooldown <= 0) {
         this.dealDamage(nearest, STAGE2_BITE_DAMAGE); // very weak bite
         this.spitCooldown = STAGE2_BITE_COOLDOWN;
+        this.biteAnimTimer = STAGE2_BITE_ANIM_FRAMES;
       }
     }
 
@@ -209,6 +241,7 @@ export class BrindleGrub extends Mob {
     for (const spit of this.spits) {
       if (spit.hit) {
         spit.ttl -= VESPA_HIT_FADE;
+        spit.hitAge++;
         continue;
       }
       const nx = Math.floor(spit.x / ts);
@@ -222,7 +255,9 @@ export class BrindleGrub extends Mob {
       spit.ttl--;
 
       // Check hit against all potential targets
-      const mobTargets = this.allMobs.filter((m) => m !== this && m.isAlive);
+      const mobTargets = this.allMobs.filter(
+        (m) => m !== this && m.isAlive && !(m instanceof BrindleGrub),
+      );
       for (const t of [...playerTargets, ...mobTargets]) {
         if (!t.isAlive) continue;
         const cx = t.x + ts * CENTER_OFFSET;
@@ -292,25 +327,36 @@ export class BrindleGrub extends Mob {
       this._faceToward(nearest);
     }
 
-    // Fire acid spit
-    if (nearestDist <= spitRange && this.spitCooldown === 0 && this.hasLOS(nearest)) {
-      const cx = this.x + ts * CENTER_OFFSET;
-      const cy = this.y + ts * CENTER_OFFSET;
-      const tx = nearest.x + ts * CENTER_OFFSET;
-      const ty = nearest.y + ts * CENTER_OFFSET;
-      const dx = tx - cx;
-      const dy = ty - cy;
-      const n = normalize(dx, dy);
-      this.spits.push({
-        x: cx,
-        y: cy,
-        vx: n.x * VESPA_SPIT_SPEED,
-        vy: n.y * VESPA_SPIT_SPEED,
-        ttl: VESPA_SPIT_TTL,
-        hit: false,
-      });
+    // The charge-up: once started, the Vespa holds still and keeps facing its
+    // target until the wind-up completes, then the acid actually launches.
+    if (this.spitWindupTimer > 0) {
+      this.isMoving = false;
+      this._faceToward(nearest);
+      this.spitWindupTimer--;
+      if (this.spitWindupTimer === 0) this._releaseAcidSpit(nearest, ts);
+    } else if (nearestDist <= spitRange && this.spitCooldown === 0 && this.hasLOS(nearest)) {
+      this.isMoving = false;
+      this._faceToward(nearest);
+      this.spitWindupTimer = VESPA_SPIT_WINDUP_FRAMES;
       this.spitCooldown = VESPA_SPIT_COOLDOWN;
     }
+  }
+
+  private _releaseAcidSpit(target: Player, tileSize: number): void {
+    const cx = this.x + tileSize * CENTER_OFFSET;
+    const cy = this.y + tileSize * CENTER_OFFSET;
+    const tx = target.x + tileSize * CENTER_OFFSET;
+    const ty = target.y + tileSize * CENTER_OFFSET;
+    const n = normalize(tx - cx, ty - cy);
+    this.spits.push({
+      x: cx,
+      y: cy,
+      vx: n.x * VESPA_SPIT_SPEED,
+      vy: n.y * VESPA_SPIT_SPEED,
+      ttl: VESPA_SPIT_TTL,
+      hit: false,
+      hitAge: 0,
+    });
   }
 
   private _faceToward(target: Player): void {
@@ -336,7 +382,16 @@ export class BrindleGrub extends Mob {
     // Render acid spits (behind mob sprite for Vespa)
     if (this.stage === STAGE_VESPA) {
       for (const spit of this.spits) {
-        drawAcidSpit(ctx, spit.x - camX, spit.y - camY, spit.hit);
+        drawAcidSpit(
+          ctx,
+          spit.x - camX,
+          spit.y - camY,
+          tileSize,
+          spit.vx,
+          spit.vy,
+          spit.hit,
+          spit.hitAge,
+        );
       }
     }
 
@@ -345,13 +400,30 @@ export class BrindleGrub extends Mob {
 
     switch (this.stage) {
       case 1:
-        drawBrindleGrubSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
+        drawBrindleGrubSprite(ctx, sx, sy, tileSize, {
+          walkFrame: this.walkFrame,
+          isMoving: this.isMoving,
+          facingX: this.facingX,
+          facingY: this.facingY,
+        });
         break;
       case 2:
-        drawCowTailedGrubSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving);
+        drawCowTailedGrubSprite(ctx, sx, sy, tileSize, {
+          walkFrame: this.walkFrame,
+          isMoving: this.isMoving,
+          facingX: this.facingX,
+          facingY: this.facingY,
+          biteProgress:
+            this.biteAnimTimer > 0 ? 1 - this.biteAnimTimer / STAGE2_BITE_ANIM_FRAMES : null,
+        });
         break;
       case STAGE_VESPA:
-        drawBrindledVespaSprite(ctx, sx, sy, tileSize, this.walkFrame, this.isMoving, this.facingX);
+        drawBrindledVespaSprite(ctx, sx, sy, tileSize, {
+          facingX: this.facingX,
+          facingY: this.facingY,
+          spitWindupProgress:
+            this.spitWindupTimer > 0 ? 1 - this.spitWindupTimer / VESPA_SPIT_WINDUP_FRAMES : null,
+        });
         break;
     }
 

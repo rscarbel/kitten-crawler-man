@@ -9,6 +9,7 @@ import { snapPlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
+import { MONGO_DEF } from '../abilities/mongo';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
 import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
@@ -96,6 +97,7 @@ function abilityManagerFor(levels: Partial<Record<AbilityId, number>>): AbilityM
   manager.register(MAGIC_MISSILE_DEF);
   manager.register(PROTECTIVE_SHELL_DEF);
   manager.register(SMUSH_DEF);
+  manager.register(MONGO_DEF);
   for (const [id, level] of Object.entries(levels)) {
     if (!isAbilityId(id)) continue;
     manager.setLevel(id, level);

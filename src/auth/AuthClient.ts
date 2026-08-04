@@ -19,6 +19,23 @@ export interface GameProgress {
    * before abilities were persisted at all — those resume at level 1.
    */
   abilityStates?: SerializedAbilityState[];
+  /**
+   * Whether the Krakaren chest has been opened and Mongo is available at all.
+   *
+   * Optional, like every field added after the fact: the server stores this
+   * payload as one opaque JSON blob, so an older save simply arrives without it
+   * and resumes with the pet still locked.
+   */
+  mongoUnlocked?: boolean;
+  /** The pet's HP, which persists across summons and sessions. */
+  mongoPetHp?: number;
+  /**
+   * Whether he is resting off a knockout, which blocks summoning until he is
+   * back to full. Stored separately from the HP because it is a latch: the HP
+   * alone cannot say whether a half-healed raptor is on his way back up from
+   * zero or was simply recalled hurt.
+   */
+  mongoPetResting?: boolean;
   savedAt: string;
 }
 

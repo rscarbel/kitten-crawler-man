@@ -60,7 +60,7 @@ export class RuinsGhoul extends Mob {
     const nearest = this.acquireTarget(
       targets,
       aggroRangePx,
-      (t) => this.map?.isInTownSafeZone(t.x, t.y) !== true,
+      (t) => this.ignoresTownSafeZone || this.map?.isInTownSafeZone(t.x, t.y) !== true,
     );
 
     this.currentTarget = nearest;

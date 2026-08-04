@@ -14,6 +14,8 @@ import { PlayerManager } from '../core/PlayerManager';
 import { MobileTouchState } from '../core/MobileTouchState';
 import type { LevelDef } from '../levels/types';
 import { spawnForLevel, spawnExtraMobs, createMob, spawnTreasureRoomMobs } from '../levels/spawner';
+import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
+import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
@@ -47,6 +49,11 @@ import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
 import { DynamiteSystem } from '../systems/DynamiteSystem';
 import { SmushEffectSystem } from '../systems/SmushEffectSystem';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
+import { RockThrowSystem } from '../systems/RockThrowSystem';
+import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
+import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
+import { ClownGasSystem } from '../systems/ClownGasSystem';
+import { KnightMissileSystem } from '../systems/KnightMissileSystem';
 import { SpellSystem } from '../systems/SpellSystem';
 import {
   CompanionSystem,
@@ -105,6 +112,9 @@ import {
 } from '../core/AbilityManager';
 import { FollowerMenu } from '../systems/FollowerMenu';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
+import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
+import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
+
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
 import { LevelUpDialog } from '../ui/LevelUpDialog';
@@ -112,7 +122,7 @@ import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
 import { SkillBookPrompt } from '../ui/SkillBookPrompt';
 import type { SkillBookReadRequest } from '../ui/InventoryInteraction';
 import type { GrantedReward } from '../core/GrantedReward';
-import { drawMongoSprite } from '../sprites/mongoSprite';
+import { drawMongoIcon } from '../sprites/mongoSprite';
 import { GoreSystem } from '../systems/GoreSystem';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
@@ -134,6 +144,10 @@ import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSound
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import { createCircusQuestProgress, type CircusQuestProgress } from '../core/CircusQuestProgress';
 import { createMurderQuestProgress, type MurderQuestProgress } from '../core/MurderQuestProgress';
+import { createBountyProgress, type BountyProgress } from '../core/BountyProgress';
+import { BountySystem } from '../systems/BountySystem';
+import { findBountyDef } from '../systems/bountyDefs';
+import { hasRoomToMove } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
@@ -186,6 +200,7 @@ import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
+import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -207,6 +222,15 @@ export type SaveProgressFn = (data: {
   catSnap: PlayerSnapshot;
   levelId: string;
   abilityStates: SerializedAbilityState[];
+  /**
+   * Whether the Krakaren chest has been opened. The pet's level and XP ride
+   * along in `abilityStates`, but whether he exists at all does not — it is not
+   * an ability state, it is a one-off unlock.
+   */
+  mongoUnlocked: boolean;
+  /** The pet's current HP, which does not reset between summons or sessions. */
+  mongoPetHp: number;
+  mongoPetResting: boolean;
 }) => void;
 
 export interface DungeonSceneOptions {
@@ -240,6 +264,12 @@ export interface DungeonSceneOptions {
   floorEntryCatSnap?: PlayerSnapshot;
   /** Whether Mongo the velociraptor has been unlocked (persists across floors). */
   mongoUnlocked?: boolean;
+  /**
+   * The pet's HP and quest lock, threaded by reference like the quest progress
+   * objects. His health persists across summons, floors and buildings, and the
+   * `Mongo` instance that carries it in play is destroyed on every despawn.
+   */
+  mongoPetState?: MongoPetState;
   /** Carry ability leveling progress across floor transitions. */
   abilityManager?: AbilityManager;
   /** Ability state at floor entry — restored on death-restart so level-up progress rewinds to floor-start. */
@@ -256,6 +286,8 @@ export interface DungeonSceneOptions {
   circusQuestProgress?: CircusQuestProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
   murderQuestProgress?: MurderQuestProgress;
+  /** Bounty-board state, threaded by reference across building/scene transitions. */
+  bountyProgress?: BountyProgress;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
@@ -296,6 +328,10 @@ const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
 const COIN_PICKUP_VOLUME = 0.55;
 /** `!payday` developer cheat — coins granted to the active player. */
 const CHEAT_PAYDAY_COINS = 2500;
+/** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
+const BOUNTY_WARP_STANDOFF_TILES = 4;
+/** Widest ring `!bounty go` will search for somewhere walkable to land. */
+const BOUNTY_WARP_SEARCH_TILES = 20;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -618,6 +654,11 @@ export class DungeonScene extends GameplayScene {
   private dynamite: DynamiteSystem;
   private readonly smushFx = new SmushEffectSystem();
   private lavaBalls: LavaBallSystem;
+  private rockThrows: RockThrowSystem;
+  private skeletonShots: SkeletonProjectileSystem;
+  private skeletonSummons: SkeletonSummonSystem;
+  private clownGas: ClownGasSystem;
+  private knightMissiles: KnightMissileSystem;
   private spells: SpellSystem;
   private companion: CompanionSystem;
   private loot: LootSystem;
@@ -630,6 +671,8 @@ export class DungeonScene extends GameplayScene {
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
   private townProps: TownPropSystem | null = null;
+  /** Shady's bounty loop. Overworld only — null on every other floor. */
+  private bounty: BountySystem | null = null;
   private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
@@ -662,6 +705,7 @@ export class DungeonScene extends GameplayScene {
   private riverAmbientEmitter: AmbientEmitter | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
+  private readonly bountyProgress: BountyProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
   private readonly marketStock: MarketStock;
@@ -673,7 +717,8 @@ export class DungeonScene extends GameplayScene {
   private gore = new GoreSystem();
   private bodyPartGore: BodyPartGoreSystem;
   private playerTick = new PlayerTickSystem();
-  private mongoSystem = new MongoSystem();
+  private readonly mongoSystem: MongoSystem;
+  private readonly mongoPetState: MongoPetState;
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private mobLoop = new MobUpdateLoop();
@@ -959,6 +1004,7 @@ export class DungeonScene extends GameplayScene {
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
+    this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
     this.marketStock = options?.marketStock ?? createMarketStock();
@@ -996,6 +1042,15 @@ export class DungeonScene extends GameplayScene {
     this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
     this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles, this.trees);
     this.lavaBalls = new LavaBallSystem(this.gameMap);
+    this.rockThrows = new RockThrowSystem(this.gameMap);
+    this.skeletonShots = new SkeletonProjectileSystem(this.gameMap);
+    this.skeletonSummons = new SkeletonSummonSystem(this.gameMap, (mob) => {
+      this.mobs.push(mob);
+      this.mobGrid.insert(mob);
+      mob.setSpells(this.spells);
+    });
+    this.clownGas = new ClownGasSystem(this.gameMap);
+    this.knightMissiles = new KnightMissileSystem(this.gameMap);
     this.spells = new SpellSystem();
     for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(
@@ -1004,6 +1059,8 @@ export class DungeonScene extends GameplayScene {
       spawnTileY,
       this.companionStance,
     );
+    this.companion.registerHazardSource(this.bossRoom);
+    this.companion.registerHazardSource(this.clownGas);
 
     if (tutorialController !== null) {
       // Both players start anchored in the tutorial so neither chases the other
@@ -1100,6 +1157,13 @@ export class DungeonScene extends GameplayScene {
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: levelDef.nextLevelId,
         abilityStates: this.abilityManager.serializeStates(),
+        mongoUnlocked: this.mongoSystem.unlocked,
+        // The system's accessor, not the stored value: both of these saves can
+        // fire with Mongo still out, and the stored value is only written back
+        // when he despawns — so a safe room entered with a 5/130 raptor at the
+        // player's heel was recording 130.
+        mongoPetHp: this.mongoSystem.hp,
+        mongoPetResting: this.mongoSystem.restingUntilFull,
       });
 
       this.bus.emit('levelComplete', {});
@@ -1114,6 +1178,13 @@ export class DungeonScene extends GameplayScene {
         // Dismiss Mongo and any hired merc before floor transition
         this.mongoSystem.dismiss(this.mobs, this.mobGrid);
         this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
+        // This is the one genuine floor change among DungeonScene's four
+        // `sceneManager.replace` sites (see docs/asset-management-plan.md's
+        // Phase 6) — building enter/exit rebuild the scene around the same
+        // floor identity and must never evict. Keyed on the *new* floor's
+        // required keys, not the old floor's: anything the two floors share
+        // (core, dungeon_common, ...) simply isn't touched.
+        releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
         this.sceneManager.replace(
           new DungeonScene(nextDef, this.input, this.sceneManager, {
             // Taking the stairs regroups the party: a companion carried down
@@ -1123,6 +1194,7 @@ export class DungeonScene extends GameplayScene {
             humanAchievements: this.humanAchievements,
             catAchievements: this.catAchievements,
             mongoUnlocked: this.mongoSystem.unlocked,
+            mongoPetState: this.mongoPetState,
             abilityManager: this._cleanAbilityManager(),
             saveProgress: this.onSaveProgress,
             audio: this.audio ?? undefined,
@@ -1188,12 +1260,14 @@ export class DungeonScene extends GameplayScene {
                   humanAchievements: this.humanAchievements,
                   catAchievements: this.catAchievements,
                   mongoUnlocked: this.mongoSystem.unlocked,
+                  mongoPetState: this.mongoPetState,
                   abilityManager: this._cleanAbilityManager(),
                   saveProgress: this.onSaveProgress,
                   audio: this.audio ?? undefined,
                   onResetGame: this.onResetGameCallback ?? undefined,
                   circusQuestProgress: this.circusQuestProgress,
                   murderQuestProgress: this.murderQuestProgress,
+                  bountyProgress: this.bountyProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
                   marketStock: this.marketStock,
@@ -1215,6 +1289,8 @@ export class DungeonScene extends GameplayScene {
             this.mercenaryRoster,
             this.godModeState,
             this.companionStance,
+            this.mongoPetState,
+            () => this.abilityManager.getLevel('mongo'),
           ),
         );
       });
@@ -1238,6 +1314,9 @@ export class DungeonScene extends GameplayScene {
         () => this.audio,
         this.market.reservedTiles,
       );
+      // Claimed before the decor system copies the reserved set, or a lamp post
+      // is planted on the tile the bounty giver is about to stand on.
+      const bountyGiverTile = this.townProps.claimBountyGiverTile();
       this.townDecor = new TownDecorSystem(
         this.gameMap,
         new Set([...this.market.reservedTiles, ...this.townProps.reservedTiles]),
@@ -1248,6 +1327,30 @@ export class DungeonScene extends GameplayScene {
         ...this.townDecor.props,
       ];
       this.townLife = new TownLifeSystem(this.gameMap);
+      this.bounty = new BountySystem(
+        this.gameMap,
+        this.bus,
+        this.bountyProgress,
+        (mob) => {
+          this.mobs.push(mob);
+          this.mobGrid.insert(mob);
+          mob.setSpells(this.spells);
+        },
+        options?.audio ?? null,
+      );
+      if (bountyGiverTile !== null) {
+        this.bounty.placeShady(bountyGiverTile);
+      } else {
+        // No room beside the board — he cannot be talked to, so send the collect
+        // arrow to the board itself rather than nowhere.
+        const boardTile = this.townProps.boardTile;
+        if (boardTile !== null) {
+          this.bounty.setCollectPoint(
+            (boardTile.x + TILE_CENTER_OFFSET) * TILE_SIZE,
+            (boardTile.y + TILE_CENTER_OFFSET) * TILE_SIZE,
+          );
+        }
+      }
     }
 
     this.pauseMenu = new PauseMenu();
@@ -1295,17 +1398,30 @@ export class DungeonScene extends GameplayScene {
     this.floorEntryCatAchievements =
       options?.floorEntryCatAchievements ?? this.catAchievements.clone();
 
-    if (options?.mongoUnlocked) {
-      this.mongoSystem.unlocked = true;
-    }
-
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
     this.abilityManager.register(MAGIC_MISSILE_DEF);
     this.abilityManager.register(PROTECTIVE_SHELL_DEF);
     this.abilityManager.register(SMUSH_DEF);
+    this.abilityManager.register(MONGO_DEF);
+
+    // Built here rather than as a field initialiser because it needs both the
+    // shared pet state and a live read of the pet's ability level.
+    // Seeded against whatever level the restored ability manager carries, not
+    // against level 1: an older save with no stored pet HP but a level-10 Mongo
+    // would otherwise boot him at 20 of 130 and make the player wait out a
+    // quarter of an hour of regen he never spent.
+    const petMaxHp = getMongoStats(this.abilityManager.getLevel('mongo')).maxHp;
+    this.mongoPetState = options?.mongoPetState ?? createMongoPetState(petMaxHp, petMaxHp);
+    this.mongoSystem = new MongoSystem(this.mongoPetState, () =>
+      this.abilityManager.getLevel('mongo'),
+    );
+    if (options?.mongoUnlocked) {
+      this.mongoSystem.unlocked = true;
+    }
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     this.abilityManager.onLevelUp = (id, newLevel) => {
+      if (id === 'mongo') this.mongoSystem.onPetLevelUp();
       const def = this.abilityManager.getDef(id);
       if (def === null) return;
       this.cancelInventoryDragForOverlay();
@@ -1330,6 +1446,27 @@ export class DungeonScene extends GameplayScene {
     this.checkpoint = options?.checkpoint ?? null;
     this.onResetGameCallback = options?.onResetGame ?? null;
     this.audio = options?.audio ?? null;
+    // Additive and cheap even on a re-entry: `preload` skips any id already in
+    // `buffers`, so this just tops up whatever this floor needs without
+    // re-decoding what a previous floor already loaded. See Phase 2 of
+    // docs/asset-management-plan.md.
+    void this.audio?.preload(sfxGroupsForLevelId(levelDef.id));
+    // Same "additive, cheap on re-entry" reasoning as the SFX preload above,
+    // for this floor's declared sprite groups (Phase 4 of the asset plan).
+    // `prewarmGroups` also forces each sheet's GPU texture upload during this
+    // floor's fade-in rather than on whichever frame first draws it (Phase 7).
+    // Still fire-and-forget: this must not block scene construction/rendering.
+    // Bounty/quest-system-introduced creatures aren't covered here — those
+    // stay on the schedule-a-load-on-miss path (Phase 5's "load on demand,
+    // fail safe") except bounties, which `BountySystem.stageEncounter`
+    // pre-warms itself well before the fight starts.
+    // Ground tiles and decorations bake into cached chunk canvases the first
+    // time they're drawn (see `TileChunkCache`), which — unlike a plain sprite
+    // draw — never looks again once baked. A chunk near the player can bake
+    // before this floor's sheets finish loading, locking in the fallback
+    // colors/art forever. Re-baking once the whole group is confirmed loaded
+    // turns that into the intended "wrong for a frame or two", not permanent.
+    void prewarmGroups(levelDef.spriteGroups).then(() => this.gameMap.invalidateAllTileArt());
     this.spiderQuest.setSongClock(() => this.audio?.getKeyboardHeroMusicTimeMs() ?? null);
     if (this.townLife !== null && this.audio !== null) {
       this.citizenDialog = new CitizenDialog(this.audio);
@@ -1690,6 +1827,13 @@ export class DungeonScene extends GameplayScene {
         catSnap: revivedSnapshot(snapPlayer(this.cat)),
         levelId: this.levelDef.id,
         abilityStates: this.abilityManager.serializeStates(),
+        mongoUnlocked: this.mongoSystem.unlocked,
+        // The system's accessor, not the stored value: both of these saves can
+        // fire with Mongo still out, and the stored value is only written back
+        // when he despawns — so a safe room entered with a 5/130 raptor at the
+        // player's heel was recording 130.
+        mongoPetHp: this.mongoSystem.hp,
+        mongoPetResting: this.mongoSystem.restingUntilFull,
       });
 
       // Skipped in the tutorial, matching the achievement unlocks above — the
@@ -1817,6 +1961,7 @@ export class DungeonScene extends GameplayScene {
         }
         if (this.defendQuest.dismissDialog()) return true;
         if (this.spiderQuest.dismissDialog()) return true;
+        if (this.bounty?.dismissDialog() === true) return true;
         if (this.circusQuest.dismissDialog()) return true;
         if (this.murderQuest.dismissDialog()) return true;
         if (this.citizenDialog?.isOpen === true) {
@@ -1910,7 +2055,7 @@ export class DungeonScene extends GameplayScene {
         this.audio?.play('menu_expand_map');
       },
       openChat: () => this.triggerOpenChat(),
-      mongoSummon: () => this.triggerMongoSummon(),
+      mongoSummon: () => this.toggleMongoSummon(),
       buildAction: () => this.triggerBuildAction(),
       hotbarActivation: (idx) => this.triggerHotbarActivation(idx),
       dynamiteRelease: (idx) => {
@@ -1944,6 +2089,7 @@ export class DungeonScene extends GameplayScene {
       this._spiderKeyHandler = null;
     }
     this.spiderQuest.dispose();
+    this.bounty?.dispose();
     aiAdapter.unbindScene();
     this.bus.clear();
   }
@@ -2389,6 +2535,14 @@ export class DungeonScene extends GameplayScene {
         );
         return;
       }
+      if (text.trim().startsWith('!bounty')) {
+        this.runBountyCheat(text.trim().slice('!bounty'.length).trim());
+        return;
+      }
+      if (text.trim() === '!assets') {
+        this.reportAssetMisses();
+        return;
+      }
       if (text.trim() === '!spider') {
         if (this.gameMap.spiderLabRoom === null) {
           this.audio?.play('error');
@@ -2405,17 +2559,137 @@ export class DungeonScene extends GameplayScene {
     });
   }
 
+  /**
+   * `!assets` — dumps every sprite key that has ever missed (`getSpriteDef`/
+   * `getSpriteDefByKey` found nothing loaded for it) and how many times, so a
+   * lazily-loaded or typo'd sheet shows up in seconds instead of during a
+   * playtest. See `docs/asset-management-plan.md` Phase 3.
+   */
+  private reportAssetMisses(): void {
+    const misses = [...getSpriteMissCounts().entries()];
+    if (misses.length === 0) {
+      this.playerChat.showBubble('🖼 NO SPRITE MISSES');
+      return;
+    }
+    misses.sort((a, b) => b[1] - a[1]);
+    const summary = misses.map(([key, count]) => `${key}×${count}`).join(', ');
+    this.playerChat.showBubble(`🖼 MISSES: ${summary}`);
+    console.warn('[SpriteLoader] Miss counts:', Object.fromEntries(misses));
+  }
+
+  /**
+   * The `!bounty` cheat family, which lets the whole loop be exercised from
+   * anywhere on the floor:
+   *
+   * - `!bounty` — issue whatever the cycle has queued next
+   * - `!bounty <type>` — issue a named type instead (`evil_clown`, `mantid`,
+   *   `dark_knight`, `rock_golem`, `skeleton_lord`), so testing one particular
+   *   fight does not mean rerolling the shuffle until it comes up
+   * - `!bounty go` — warp to the staged mark
+   * - `!bounty done` — force-collect one whose mark is already dead
+   */
+  private runBountyCheat(argument: string): void {
+    const bounty = this.bounty;
+    if (bounty === null) {
+      this.audio?.play('error');
+      return;
+    }
+    if (argument === 'go') {
+      this.runBountyWarpCheat();
+      return;
+    }
+    if (argument === 'done') {
+      const coins = bounty.collectBounty(this.active(), this.human, this.cat);
+      if (coins === 0) {
+        this.audio?.play('error');
+        return;
+      }
+      this.playerChat.showBubble(`💰 BOUNTY PAID +${coins}`);
+      return;
+    }
+    const forcedTypeId = argument === '' ? undefined : argument;
+    if (forcedTypeId !== undefined && findBountyDef(forcedTypeId) === null) {
+      this.playerChat.showBubble(`❓ NO BOUNTY TYPE "${forcedTypeId}"`);
+      this.audio?.play('error');
+      return;
+    }
+    if (!bounty.issueBounty(this.human, this.cat, forcedTypeId)) {
+      this.audio?.play('error');
+      return;
+    }
+    this.playerChat.showBubble(`🎯 ${bounty.currentName ?? '?'} ${bounty.currentTypeLabel ?? ''}`);
+  }
+
+  /**
+   * `!bounty go` — drops the party just outside the staged mark.
+   *
+   * `pickSiteIndex` guarantees a site is at least 60 tiles from the party, so
+   * without this every test of a bounty *fight* — the part that has never been
+   * exercised by automation — costs a minute of walking first.
+   */
+  private runBountyWarpCheat(): void {
+    const bounty = this.bounty;
+    const mark = bounty?.markPointWorld ?? null;
+    if (mark === null) {
+      this.audio?.play('error');
+      return;
+    }
+    const markTileX = Math.floor(mark.x / TILE_SIZE);
+    const markTileY = Math.floor(mark.y / TILE_SIZE);
+    const landing = this.findWarpLandingTile(markTileX, markTileY);
+    if (landing === null) {
+      this.audio?.play('error');
+      return;
+    }
+    this.human.x = landing.x * TILE_SIZE;
+    this.human.y = landing.y * TILE_SIZE;
+    this.cat.x = this.human.x;
+    this.cat.y = this.human.y;
+    this.playerChat.showBubble('🎯 WARPED TO MARK');
+  }
+
+  /**
+   * Nearest walkable tile at least {@link BOUNTY_WARP_STANDOFF_TILES} out from
+   * the mark, so the party lands in aggro range rather than inside the boss.
+   */
+  private findWarpLandingTile(
+    markTileX: number,
+    markTileY: number,
+  ): { x: number; y: number } | null {
+    for (let radius = BOUNTY_WARP_STANDOFF_TILES; radius <= BOUNTY_WARP_SEARCH_TILES; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const tileX = markTileX + dx;
+          const tileY = markTileY + dy;
+          if (hasRoomToMove(this.gameMap, tileX, tileY)) return { x: tileX, y: tileY };
+        }
+      }
+    }
+    return null;
+  }
+
   private triggerBuildAction(): void {
     if (!this.human.isActive) return;
     this.defendQuest.tryBuildBarrier(this.human);
   }
 
-  private triggerMongoSummon(): void {
-    if (!this.cat.isActive || !this.mongoSystem.canSummon) return;
-    const mongo = this.mongoSystem.summon(this.cat, this.gameMap, this.levelDef.id);
+  /**
+   * The Summon button and the R key are one toggle: out of play he is summoned,
+   * in play he is called back — and he runs home rather than vanishing, so
+   * recalling him mid-fight is a real decision rather than a free undo.
+   */
+  private toggleMongoSummon(): void {
+    if (!this.cat.isActive) return;
+    if (this.mongoSystem.mongo) {
+      this.mongoSystem.toggleRecall();
+      return;
+    }
+    const mongo = this.mongoSystem.summon(this.cat, this.gameMap);
     if (mongo) {
       this.mobs.push(mongo);
       this.mobGrid.insert(mongo);
+      this.abilityManager.addUsageXp('mongo');
       this.audio?.play('mongo_released');
     }
   }
@@ -2425,6 +2699,12 @@ export class DungeonScene extends GameplayScene {
    * this floor, or to the full floor restart otherwise.
    */
   private respawnAfterDeath(): void {
+    // Before the branch, so it runs on both routes: a checkpoint restore keeps
+    // the world (and so would keep the mark standing where the party fell) while
+    // a floor restart throws it away, and the durable record would have survived
+    // either one.
+    this.bounty?.abandonBounty(this.mobs, this.mobGrid);
+
     const cp = this.checkpoint;
     if (cp !== null) {
       this.restoreFromCheckpoint(cp);
@@ -2471,6 +2751,12 @@ export class DungeonScene extends GameplayScene {
 
     this.levelTimerFrames = cp.levelTimerFrames;
 
+    // The pet goes home rather than being healed where he stands: his HP is the
+    // whole cost of using him, and a free full heal on every safe-room restore
+    // would hand it back. Dismissing also writes his real remaining HP into the
+    // shared state, which nothing else on this path does.
+    this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+
     for (const mob of this.mobs) {
       if (!mob.isAlive) continue;
       if (mob.resetsFullyOnCheckpoint) {
@@ -2496,6 +2782,11 @@ export class DungeonScene extends GameplayScene {
     this.dynamite.resetForCheckpoint();
     this.smushFx.resetForCheckpoint();
     this.lavaBalls.resetForCheckpoint();
+    this.rockThrows.resetForCheckpoint();
+    this.skeletonShots.resetForCheckpoint();
+    this.clownGas.resetForCheckpoint();
+    this.knightMissiles.resetForCheckpoint();
+    this.skeletonSummons.resetForCheckpoint();
     this.gore.resetForCheckpoint();
     this.bodyPartGore.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
@@ -2509,6 +2800,9 @@ export class DungeonScene extends GameplayScene {
   }
 
   private restartAtFloorEntry(): void {
+    // Before the scene is replaced: his HP only reaches the shared state through
+    // a despawn, and the instance holding it is about to be discarded.
+    this.mongoSystem.dismiss(this.mobs, this.mobGrid);
     this.audio?.stopSound('death_sequence');
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
@@ -2523,6 +2817,7 @@ export class DungeonScene extends GameplayScene {
         floorEntryCatAchievements: this.floorEntryCatAchievements,
         abilityManager: this.floorEntryAbilityManager.clone(),
         mongoUnlocked: this.mongoSystem.unlocked,
+        mongoPetState: this.mongoPetState,
         audio: this.audio ?? undefined,
         tutorialController:
           this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
@@ -2534,6 +2829,7 @@ export class DungeonScene extends GameplayScene {
         // lethal countdown for free by simply dying to anything else.
         circusQuestProgress: this.circusQuestProgress,
         murderQuestProgress: this.murderQuestProgress,
+        bountyProgress: this.bountyProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
         marketStock: this.marketStock,
@@ -2576,6 +2872,7 @@ export class DungeonScene extends GameplayScene {
       murder: murder.stage,
       murderCluesFound: cluesFound,
       doomsday: this.doomsdayQuestProgress.stage,
+      bounty: this.bounty?.noticeState ?? null,
     };
   }
 
@@ -2606,7 +2903,8 @@ export class DungeonScene extends GameplayScene {
     if (
       this.noticeBoard?.isOpen === true ||
       this.marketPanel?.isOpen === true ||
-      this.fortuneTeller?.isOpen === true
+      this.fortuneTeller?.isOpen === true ||
+      this.bounty?.isDialogOpen === true
     ) {
       return;
     }
@@ -2618,6 +2916,7 @@ export class DungeonScene extends GameplayScene {
     // Same order as the Space chain in `tryInteract`, so the prompt always names
     // the thing that press would actually reach.
     if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
+    if (this.bounty?.renderPrompt(ctx, camX, camY, active) === true) return;
     this.townProps?.renderPrompt(ctx, camX, camY, active);
   }
 
@@ -2755,6 +3054,11 @@ export class DungeonScene extends GameplayScene {
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
       { isOpen: this.spiderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.bounty?.isDialogOpen === true,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+      },
       { isOpen: this.circusQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
       { isOpen: this.murderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
       {
@@ -2800,6 +3104,7 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.isDungeonPaused ||
       this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
+      this.bounty?.isDialogOpen === true ||
       this.noticeBoard?.isOpen === true ||
       this.marketPanel?.isOpen === true ||
       this.fortuneTeller?.isOpen === true ||
@@ -3038,6 +3343,11 @@ export class DungeonScene extends GameplayScene {
       if (this.market?.tryInteract(active) === true) {
         return;
       }
+      // Before the board he stands beside: with both in reach, a press should
+      // reach the man, not the noticeboard behind him.
+      if (this.bounty?.tryInteract(active, this.human, this.cat) === true) {
+        return;
+      }
       if (this.townProps?.tryInteract(active) === true) {
         return;
       }
@@ -3225,6 +3535,7 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.defendQuest.handleClick(mx, my)) return;
     if (this.spiderQuest.handleClick(mx, my, eventTimeStampMs)) return;
+    if (this.bounty?.handleClick(mx, my) === true) return;
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
     if (this.citizenDialog?.isOpen === true) {
@@ -3267,7 +3578,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       const sb = this.touch.summonBtnRect;
       if (pointInRect(mx, my, sb)) {
-        this.triggerMongoSummon();
+        this.toggleMongoSummon();
         return;
       }
     }
@@ -3528,6 +3839,10 @@ export class DungeonScene extends GameplayScene {
     // then thrown away with the scene.
     this.systemAnnouncer.update();
     this.hotbarToast.update();
+    // Above the gameplay-halted early return below: his talk pose is only ever
+    // wanted while his own dialog is open, which is exactly when gameplay is
+    // halted and `updateGameplay` never runs.
+    this.bounty?.syncShady();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -3585,6 +3900,10 @@ export class DungeonScene extends GameplayScene {
       dynamite: this.dynamite,
       smushFx: this.smushFx,
       lavaBalls: this.lavaBalls,
+      rockThrows: this.rockThrows,
+      skeletonShots: this.skeletonShots,
+      clownGas: this.clownGas,
+      knightMissiles: this.knightMissiles,
       destructibles: this.destructibles,
       trees: this.trees,
       water: this.water,
@@ -3643,6 +3962,7 @@ export class DungeonScene extends GameplayScene {
       this.renderKnockedOutUI(ctx, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
+      this.bounty?.renderArrow(ctx, this.active(), camX, camY);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -3820,6 +4140,7 @@ export class DungeonScene extends GameplayScene {
       );
       this.bopca.renderUI(ctx, camX, camY, this.active());
       this.renderCitizenPrompt(ctx, camX, camY);
+      this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
       this.renderPropPrompt(ctx, camX, camY);
     }
 
@@ -3831,6 +4152,7 @@ export class DungeonScene extends GameplayScene {
 
     this.bopca.renderDialog(ctx);
 
+    this.bounty?.renderDialog(ctx);
     this.citizenDialog?.render(ctx);
     this.noticeBoard?.render(ctx);
     this.marketPanel?.render(ctx, this.active());
@@ -3984,6 +4306,7 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.defendQuest.questMarkers);
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
+    if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
     return markers;
   }
 
@@ -3996,7 +4319,11 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const targets = this._extraTargets;
     targets.length = 0;
-    if (this.mongoSystem.mongo) targets.push(this.mongoSystem.mongo);
+    // Not while he is retreating: on one hit point with the interception holding
+    // him there, further hits are damage nobody can act on and a fight he cannot
+    // leave.
+    const mongo = this.mongoSystem.mongo;
+    if (mongo && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
     if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
     const npc = this.defendQuest.questNPC;
     if (npc?.isAlive) targets.push(npc);
@@ -4191,7 +4518,11 @@ export class DungeonScene extends GameplayScene {
     this.cat.updateAttack();
     this.cat.updateMissiles(this.mobGrid);
 
+    this.bounty?.update(ctx);
     this.spells.update(ctx);
+    for (const name of this.spells.takeFogResistedNames()) {
+      this.hotbarToast.show(`${name} sees you through the fog`);
+    }
     this.mobLoop.update(ctx);
 
     playMobAudioCues(this.mobs, this.audio);
@@ -4380,6 +4711,15 @@ export class DungeonScene extends GameplayScene {
     this.bodyPartGore.update();
     this.destructibles?.update();
     this.lavaBalls.update(ctx);
+    this.rockThrows.update(ctx);
+    // Summons first, so a skeleton raised this frame is already in `ctx.mobs`
+    // when the projectile system walks it. Neither ordering can strand a shot —
+    // the drain reads the whole list every frame — but this one keeps a wave and
+    // the bolts covering it on the same tick.
+    this.skeletonSummons.update(ctx);
+    this.skeletonShots.update(ctx);
+    this.clownGas.update(ctx);
+    this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
     this.dynamite.update(ctx);
     this.smushFx.update();
@@ -4395,6 +4735,45 @@ export class DungeonScene extends GameplayScene {
     if (this.lavaBalls.burstSoundPending) {
       this.lavaBalls.burstSoundPending = false;
       this.audio?.play('llama_fireball_explosion');
+    }
+
+    // The golem's boulder shatter, drained here for the same reason: the rock
+    // outlives the golem that threw it.
+    // [STAND-IN] No shattering-rock burst has been sourced; smashing wood is
+    // the library's nearest hard break. See docs/bounty/07-rock-golem.md.
+    if (this.rockThrows.burstSoundPending) {
+      this.rockThrows.burstSoundPending = false;
+      this.audio?.playRandom(['wood_smashing_1', 'wood_smashing_2']);
+    }
+
+    // Drained here rather than from `playMobAudioCues` for the same reason the
+    // llama's is: a soul bolt outlives its caster, and one that lands after the
+    // lord died has no mob left to carry the flag.
+    // [STAND-IN] A soft green whumph has not been sourced; see the plan file.
+    if (this.skeletonShots.burstSoundPending) {
+      this.skeletonShots.burstSoundPending = false;
+      this.audio?.play('llama_fireball_explosion');
+    }
+
+    // Likewise the rise: the mob that made it happen is the lord, but the sound
+    // belongs to the skeletons coming out of the ground.
+    // [STAND-IN] Earth breaking under a choral moan, not yet sourced.
+    if (this.skeletonSummons.riseSoundPending) {
+      this.skeletonSummons.riseSoundPending = false;
+      this.audio?.play('krakaren_ground_slam');
+    }
+    if (this.clownGas.shatterSoundPending) {
+      this.clownGas.shatterSoundPending = false;
+      // Stand-in for glass shattering into a hiss: the spider's landing spit is
+      // the closest wet-impact cue already in the manifest.
+      this.audio?.play('grotesque_spider_spit_landing');
+    }
+    if (this.knightMissiles.impactSoundPending) {
+      this.knightMissiles.impactSoundPending = false;
+      // Stand-in. There is no green-magic impact in the manifest; the player's
+      // own missile hit is the nearest arcane one, and a real cue can replace it
+      // here without anything else changing.
+      this.audio?.play('cat_missile_impact');
     }
 
     // `human_smush` plays when the ability fires, which is a third of a second
@@ -4834,7 +5213,7 @@ export class DungeonScene extends GameplayScene {
         const mb = this.touch.summonBtnRect;
         if (pointInRect(x, y, mb)) {
           if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
-            this.triggerMongoSummon();
+            this.toggleMongoSummon();
           continue;
         }
       }
@@ -5124,7 +5503,8 @@ export class DungeonScene extends GameplayScene {
       description:
         'A loyal velociraptor companion. Summon Mongo to fight alongside the Cat in battle!',
       renderIcon: (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
-        drawMongoSprite(ctx, x, y, size);
+        const stage = getMongoStats(this.abilityManager.getLevel('mongo')).stage;
+        drawMongoIcon(ctx, stage, x + size / 2, y + size / 2, size);
       },
     };
   }

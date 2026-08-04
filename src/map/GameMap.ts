@@ -363,6 +363,12 @@ export class GameMap {
   circusRadiusTiles: number | undefined = undefined;
 
   /**
+   * Wilderness clearings (tile coords) where bounty encounters are staged.
+   * Empty on every map but the overworld.
+   */
+  bountySites: ReadonlyArray<{ x: number; y: number }> = [];
+
+  /**
    * The wilderness's enemy camps. Empty on every map but the overworld.
    *
    * Carried here the way `circusCentre` is, and consumed the same way: a system
@@ -492,6 +498,7 @@ export class GameMap {
     this.fountainCentre = data.fountainCentre;
     this.circusCentre = data.circusCentre;
     this.circusRadiusTiles = data.circusRadiusTiles;
+    this.bountySites = data.bountySites;
     this.camps = data.camps;
     this.doomsdayEscapeTile = data.doomsdayEscapeTile;
     return data.grid;
@@ -1992,6 +1999,27 @@ export class GameMap {
       if (!this.isWalkable(tileX, tileY)) return false;
     }
     return true;
+  }
+
+  /**
+   * Drops every pre-rendered chunk/overlay block so the next `renderCanvas`
+   * re-bakes everything from scratch.
+   *
+   * A chunk is baked once and reused forever (see `invalidateTile`'s own
+   * comment), which is fine for a runtime tile change but breaks against
+   * Phase 5 of `docs/asset-management-plan.md`'s lazy sprite loading: a
+   * ground-tileset or decoration sheet that is still loading when a chunk
+   * near the player first bakes gets that chunk permanently stuck on its
+   * fallback color/art, even after the sheet finishes loading a moment
+   * later — nothing else ever tells the chunk cache to look again. Call this
+   * once a floor's declared sprite groups finish loading (see
+   * `DungeonScene`'s `prewarmGroups(levelDef.spriteGroups).then(...)`) so
+   * that one-time race turns back into the "wrong for a frame or two" the
+   * lazy-loading design intends, not "wrong forever".
+   */
+  invalidateAllTileArt(): void {
+    this._chunkCache = null;
+    this._overlayCache = null;
   }
 
   renderCanvas(

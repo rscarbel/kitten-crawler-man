@@ -79,7 +79,11 @@ export class StiltClown extends Mob {
       this.windupTimer = 0;
       this.lungeTimer = 0;
       this.clearAStarPath();
-      this.doWander();
+      // `returnHomeOrWander`, not `doWander`: this class is reused as a bounty
+      // encounter's escort, and only the former honours the `homePoint` the
+      // BountySystem anchors the encounter to its site with. With no home set it
+      // is exactly `doWander`, so the circus spawns are unchanged.
+      this.returnHomeOrWander();
       return;
     }
 

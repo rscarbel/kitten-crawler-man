@@ -14,6 +14,7 @@
 import type { CircusQuestStage } from '../core/CircusQuestProgress';
 import type { MurderQuestStage } from '../core/MurderQuestProgress';
 import type { DoomsdayStage } from '../core/DoomsdayProgress';
+import type { BountyPhase } from '../core/BountyProgress';
 
 /** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → DONE. */
 export type NoticeTone = 'danger' | 'active' | 'available' | 'done';
@@ -33,6 +34,17 @@ export interface TownNoticeContext {
   /** How many of the three murder clues have been gathered so far. */
   murderCluesFound: number;
   doomsday: DoomsdayStage;
+  /** Live bounty state, or null on maps with no notice board bounty (non-overworld). */
+  bounty: BountyNoticeState | null;
+}
+
+/** What the board knows about Shady's current job. */
+export interface BountyNoticeState {
+  phase: BountyPhase;
+  /** The mark's name, e.g. "Slice". Null unless a bounty is out. */
+  name: string | null;
+  /** The mark's type label, e.g. "the Mantid". Null unless a bounty is out. */
+  typeLabel: string | null;
 }
 
 export const TOTAL_MURDER_CLUES = 3;
@@ -159,12 +171,37 @@ function doomsdayNotice(ctx: TownNoticeContext): Notice | null {
   }
 }
 
-/** A standing bounty that always gives the board something to say. */
-const RUINS_BOUNTY: Notice = {
-  title: 'Ruins Bounty',
-  body: 'The Watch pays coin for every horror culled beyond the town walls. Bring proof of the kill.',
-  tone: 'available',
-};
+/**
+ * The board's bounty posting, which tracks Shady's job rather than standing
+ * still — so the board is the second place (after the arrow) a player can find
+ * out who they are hunting.
+ */
+function bountyNotice(state: BountyNoticeState | null): Notice {
+  const hooded = 'Speak to the hooded man beside this board.';
+  if (state === null || state.phase === 'available') {
+    return {
+      title: 'Ruins Bounty',
+      body: `The Watch pays coin for every horror culled beyond the town walls. ${hooded}`,
+      tone: 'available',
+    };
+  }
+  const mark =
+    state.name !== null && state.typeLabel !== null
+      ? `${state.name} ${state.typeLabel}`
+      : 'the marked beast';
+  if (state.phase === 'active') {
+    return {
+      title: `WANTED: ${mark}`,
+      body: `Last seen out in the wilds beyond the walls. Kill it, then return. ${hooded}`,
+      tone: 'active',
+    };
+  }
+  return {
+    title: `SLAIN: ${mark}`,
+    body: `The mark is down. The purse is waiting. ${hooded}`,
+    tone: 'active',
+  };
+}
 
 /**
  * Assemble the current board postings, most urgent first. Always returns at
@@ -175,7 +212,7 @@ export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
   for (const notice of [circusNotice(ctx), murderNotice(ctx), doomsdayNotice(ctx)]) {
     if (notice !== null) notices.push(notice);
   }
-  notices.push(RUINS_BOUNTY);
+  notices.push(bountyNotice(ctx.bounty));
   notices.sort((a, b) => TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone]);
   return notices;
 }

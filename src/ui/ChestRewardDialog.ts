@@ -1,7 +1,7 @@
 import { ITEM_DEF } from '../core/ItemDefs';
 import type { LootDrop } from '../creatures/Mob';
 import type { TreasureChest } from '../systems/TreasureChestSystem';
-import { chestImage } from '../systems/TreasureChestSystem';
+import { getChestImage, getChestSourceScale } from '../systems/TreasureChestSystem';
 import { drawText, TEXT_PRESETS } from './TextBox';
 import { drawBox, drawOverlay, BOX_PRESETS } from './Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -218,17 +218,25 @@ export class ChestRewardDialog {
       srcX = chestOpened ? CHEST_SILVER_OPEN_X : CHEST_SILVER_CLOSED_X;
     }
 
-    ctx.drawImage(
-      chestImage,
-      srcX,
-      0,
-      CHEST_SPRITE_SOURCE_WIDTH,
-      CHEST_SPRITE_SOURCE_HEIGHT,
-      chestSpriteX,
-      chestSpriteY,
-      chestSpriteSize,
-      chestSpriteSize,
-    );
+    const chestImage = getChestImage();
+    if (chestImage !== undefined) {
+      // Every constant above is authored against the chest sheet's 80px
+      // full-resolution frame — scale by how much smaller the actually-loaded
+      // sheet is (Phase 8's low-end downscale) or these source coordinates
+      // read from the wrong region of a halved canvas.
+      const s = getChestSourceScale();
+      ctx.drawImage(
+        chestImage,
+        srcX * s,
+        0,
+        CHEST_SPRITE_SOURCE_WIDTH * s,
+        CHEST_SPRITE_SOURCE_HEIGHT * s,
+        chestSpriteX,
+        chestSpriteY,
+        chestSpriteSize,
+        chestSpriteSize,
+      );
+    }
 
     // Resolve particle origin to chest sprite center on the burst frame
     const particleCenterX = chestSpriteX + chestSpriteSize / 2;

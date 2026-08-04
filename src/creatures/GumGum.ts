@@ -3,7 +3,7 @@ import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawGumGumSprite } from '../sprites/gumGumSprite';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
-import { drawExclamationMark } from '../sprites/questNPCSprite';
+import { drawQuestMarker } from '../sprites/questNPCSprite';
 
 const GUMGUM_HP = 30;
 const GUMGUM_SPEED = 0;
@@ -71,7 +71,7 @@ export class GumGum extends Mob {
   ): void {
     if (!this.isAlive) return;
     const box = this.spriteBox(camX, camY, tileSize);
-    drawExclamationMark(ctx, box.sx, box.sy, box.s, GUMGUM_MARKER_COLOR);
+    drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', GUMGUM_MARKER_COLOR);
   }
 
   private spriteBox(camX: number, camY: number, tileSize: number) {

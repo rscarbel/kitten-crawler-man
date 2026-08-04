@@ -1,7 +1,9 @@
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
+import { Mongo } from '../creatures/Mongo';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
+import type { Player } from '../Player';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import type { SafeRoomSystem } from './SafeRoomSystem';
@@ -368,18 +370,34 @@ export function resolveKills(ctx: CombatContext): void {
   for (const mob of mobs) {
     if (!mob.justDied) continue;
     mob.justDied = false;
+    mob.dispose();
     if (!mob.belongsInMobGrid) mobGrid.remove(mob);
 
+    // Damage is attributed through `xpCreditTarget`, which is the dealer itself
+    // for a crawler and the owner for a summon. Mongo hits in his own name so
+    // that mobs retaliate against *him*; without this mapping his damage would
+    // simply drop out of the split and the cat would lose XP for sending him in.
+    const creditedDamage = new Map<Player, number>();
     let totalDmg = 0;
-    for (const dmg of mob.damageTakenBy.values()) totalDmg += dmg;
+    for (const [dealer, dmg] of mob.damageTakenBy) {
+      totalDmg += dmg;
+      const credited = dealer.xpCreditTarget;
+      creditedDamage.set(credited, (creditedDamage.get(credited) ?? 0) + dmg);
+    }
     if (totalDmg === 0) continue;
 
+    // Non-players stay in the running for top dealer without being able to win
+    // it: a mob that out-damages both crawlers — friendly fire, confusion fog —
+    // leaves the 85% share unclaimed rather than handing it to whoever came
+    // second. This is a deliberate *change*. The loop this replaced never reset
+    // `topPlayer`, so that case awarded the top share to whichever crawler
+    // happened to be seen first with the lower damage, which is arbitrary.
     let topPlayer: HumanPlayer | CatPlayer | null = null;
     let maxDmg = 0;
-    for (const [p, dmg] of mob.damageTakenBy) {
+    for (const [player, dmg] of creditedDamage) {
       if (dmg > maxDmg) {
         maxDmg = dmg;
-        if (p instanceof HumanPlayer || p instanceof CatPlayer) topPlayer = p;
+        topPlayer = player instanceof HumanPlayer || player instanceof CatPlayer ? player : null;
       }
     }
     const otherPlayer = topPlayer === human ? cat : human;
@@ -400,6 +418,10 @@ export function resolveKills(ctx: CombatContext): void {
       mob.killedBy instanceof HumanPlayer || mob.killedBy instanceof CatPlayer
         ? mob.killedBy
         : null;
+
+    // A kill the pet finished feeds the pet's own ability, and the cat keeps the
+    // crawler XP through the credit mapping above.
+    if (mob.killedByDealer instanceof Mongo) abilityManager.addKillXp('mongo');
 
     // Pugilism trains on knockouts, not swings — a landed punch is cheap, a
     // finished fight is not.

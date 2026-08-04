@@ -11,6 +11,7 @@ import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { GroundHazardSource } from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
 import { normalize, clamp, randomInt } from '../utils';
 
@@ -146,6 +147,8 @@ export class CompanionSystem implements GameSystem {
     }
   >();
 
+  private readonly hazardSources: GroundHazardSource[] = [];
+
   constructor(
     private readonly gameMap: GameMap,
     startTileX: number,
@@ -248,7 +251,7 @@ export class CompanionSystem implements GameSystem {
     }
 
     this.updateAutoAI(human, cat, mobs, mobGrid, ctx.bossRoom);
-    this.updateFollower(human, cat, mobGrid, ctx.bossRoom);
+    this.updateFollower(human, cat, mobGrid);
   }
 
   entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
@@ -478,12 +481,23 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
-  /** Move the companion out of any active hazard zone (acid puddles, etc.). Returns true if fleeing. */
-  private fleeFromHazards(
-    companion: HumanPlayer | CatPlayer,
-    bossRoom: BossRoomSystem | undefined,
-  ): boolean {
-    const escape = bossRoom?.getHazardEscapeVector(companion.x, companion.y);
+  /**
+   * Registers a system whose damaging ground the companion should keep out of.
+   * Registration rather than a constructor dependency because the hazard owners
+   * (a boss room, an encounter's gas system) come and go with the encounter.
+   */
+  registerHazardSource(source: GroundHazardSource): void {
+    if (this.hazardSources.includes(source)) return;
+    this.hazardSources.push(source);
+  }
+
+  /** Move the companion out of any active hazard zone (acid puddles, gas, ...). Returns true if fleeing. */
+  private fleeFromHazards(companion: HumanPlayer | CatPlayer): boolean {
+    let escape: { dx: number; dy: number } | null = null;
+    for (const source of this.hazardSources) {
+      escape = source.getHazardEscapeVector(companion.x, companion.y);
+      if (escape) break;
+    }
     if (!escape) return false;
     this.entityMoveWithCollision(
       companion,
@@ -494,12 +508,7 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
-  private updateFollower(
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobGrid: SpatialGrid<Mob>,
-    bossRoom: BossRoomSystem | undefined,
-  ): void {
+  private updateFollower(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     if (this._followOverride) {
       const caster = human.isActive ? human : cat;
       const companion = human.isActive ? cat : human;
@@ -522,7 +531,7 @@ export class CompanionSystem implements GameSystem {
     // If any avoidInstead mob is nearby, flee from it — takes priority over all other movement.
     const companion = human.isActive ? cat : human;
     if (this.fleeFromAvoidMobs(companion, mobGrid, TILE_SIZE * FLEE_RADIUS_MULTIPLIER)) return;
-    if (this.fleeFromHazards(companion, bossRoom)) return;
+    if (this.fleeFromHazards(companion)) return;
 
     const stance = human.isActive ? this.catStance : this.humanStance;
 

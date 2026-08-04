@@ -64,6 +64,19 @@ const BENCH_COLUMN_GAP = 2;
 // the centre row) and the fountain (south-east).
 const FORTUNE_OFFSET: TileOffset = { dx: 4, dy: -4 };
 
+/** Tiles either side of the board the bounty giver may stand on, nearest first. */
+const BOUNTY_GIVER_MAX_OFFSET = 2;
+/**
+ * Where the bounty giver stands relative to the notice board, in order of
+ * preference: immediately beside it, then a tile further out either way.
+ */
+const BOUNTY_GIVER_OFFSETS: readonly number[] = [
+  -1,
+  1,
+  -BOUNTY_GIVER_MAX_OFFSET,
+  BOUNTY_GIVER_MAX_OFFSET,
+];
+
 const CENTER_OFFSET = TILE_SIZE / 2;
 
 interface TileXY {
@@ -128,6 +141,41 @@ export class TownPropSystem implements GameSystem {
    */
   get reservedTiles(): ReadonlySet<string> {
     return this.occupied;
+  }
+
+  /**
+   * The notice board's tile, or null if placement failed. Read by the bounty
+   * system, whose quest-giver stands beside the board and whose postings are
+   * what the board shows.
+   */
+  get boardTile(): { x: number; y: number } | null {
+    return this.board?.tile ?? null;
+  }
+
+  /**
+   * Claims the tile the bounty giver stands on, beside the notice board, and
+   * returns it. Null when the board itself could not be placed.
+   *
+   * Reserved but deliberately **not** permanently blocked: he is a mob and does
+   * his own collision, but the market stalls and street decor built after this
+   * read `reservedTiles` and must steer clear of the tile he occupies.
+   *
+   * Only the board's own row is considered, never the tiles above or below it.
+   * A figure standing on the board's face covers the art the player came to
+   * read, and puts a second Space target inside the board's own reach radius.
+   */
+  claimBountyGiverTile(): TileXY | null {
+    const board = this.board;
+    if (board === null) return null;
+    for (const dx of BOUNTY_GIVER_OFFSETS) {
+      const tile = { x: board.tile.x + dx, y: board.tile.y };
+      const key = tileKey(tile.x, tile.y);
+      if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
+      if (!this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y)) continue;
+      this.occupied.add(key);
+      return tile;
+    }
+    return null;
   }
 
   /** Renderable props for the scene's Y-sorted entity pass. */

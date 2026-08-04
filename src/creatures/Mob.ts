@@ -22,6 +22,14 @@ const MOB_LEVEL_XP_SCALE = 0.25;
 /** Per-level damage scaling multiplier increment (+20% per level). */
 const MOB_LEVEL_DAMAGE_SCALE = 0.2;
 
+/**
+ * The most of its own walk step a mob may be displaced by separation in one
+ * frame. Under 1 so the AI always wins the tug-of-war: a stack still comes
+ * apart, but over several frames, as drift rather than as a bounce. See
+ * {@link Mob.applySeparation}.
+ */
+const MAX_SEPARATION_STEP_FRACTION = 0.5;
+
 /** Fraction of tile for center offset used in same-tile and LOS checks. */
 const MOB_TILE_CENTER = 0.5;
 
@@ -306,6 +314,18 @@ export abstract class Mob extends Player {
 
   protected map: GameMap | null = null;
 
+  /**
+   * Whether this mob has been given the map it lives on.
+   *
+   * Exposed only so a bounty def's contract can be *checked* — a mob spawned
+   * without one has no collision and never pathfinds (`moveWithCollision` adds
+   * its delta unconditionally), and nothing about that is visible until the
+   * fight starts. See `scripts/verify-bounty.ts`.
+   */
+  get hasMap(): boolean {
+    return this.map !== null;
+  }
+
   /** Shell context injected by DungeonScene — used by subclasses to check shell state. */
   protected spells: ShellContext | null = null;
 
@@ -313,6 +333,24 @@ export abstract class Mob extends Player {
   isBoss = false;
   /** Set each frame by DungeonScene when this mob is inside an active confusing fog. */
   isConfused = false;
+
+  /**
+   * Opt-out from the Scroll of Confusing Fog. Read by SpellSystem so `isConfused`
+   * is never set in the first place — flagging and then ignoring would lie to
+   * every other reader of that flag.
+   */
+  immuneToConfusion = false;
+
+  /**
+   * When true this mob hunts players sheltering inside the town safe zone.
+   * Ambient mobs leave it false and deaggro at the town line; scripted spawns
+   * (Quill's summons, a bounty encounter lured home) set it so a player cannot
+   * simply outrun the fight to the plaza.
+   *
+   * Only mobs whose `acquireTarget` passes a town-safe-zone predicate consult
+   * it; classes with no such predicate are already aggressive everywhere.
+   */
+  ignoresTownSafeZone = false;
 
   /** Set each frame by BarrierSystem when this mob is adjacent to a placed barrier. */
   slowedByBarrier = false;
@@ -388,6 +426,26 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Called exactly once, the frame a mob dies (from `resolveKills`, alongside
+   * `justDied`). No-op by default — override it to release any per-instance
+   * resource a mob baked for itself and will never draw again once dead (e.g.
+   * `SkyFowl`'s per-instance clothing canvas). A dead mob can otherwise sit in
+   * `this.mobs` for the rest of the scene's life (see `restoreFromCheckpoint`'s
+   * "the dead are never spliced out" note in `DungeonScene`), so freeing on
+   * death rather than on removal from the array is what actually bounds this.
+   *
+   * Not called for every kind of removal: `MongoSystem`/`MercenarySystem`
+   * intercept their companion's lethal damage and clear `justDied` (Mongo) or
+   * splice themselves out directly (Mercenary) specifically so `resolveKills`
+   * never processes them — neither overrides `dispose()` today since neither
+   * bakes a per-instance resource, but a future one that does would need its
+   * own cleanup hook rather than assuming this path covers it.
+   */
+  dispose(): void {
+    // Nothing to release by default.
+  }
+
+  /**
    * Whether this mob still needs a slot in the spatial grid — living mobs
    * always do, the dead only while a corpse is still on screen.
    */
@@ -457,6 +515,17 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether the cat's pet raptor will pick a fight with this mob.
+   *
+   * Defaults to {@link isHostile}, which already excludes every quest ally and
+   * summon in the game. Overridden to `true` by mobs that are calm toward
+   * players but that Mongo hunts anyway — he is an animal, not a diplomat.
+   */
+  get isPetAttackable(): boolean {
+    return this.isHostile;
+  }
+
+  /**
    * Whether a checkpoint restore should fully reset this mob — teleport it back
    * to its spawn tile and clear its aggro/phase state via `resetToSpawn()` —
    * rather than just healing it and clearing status effects in place via
@@ -495,6 +564,17 @@ export abstract class Mob extends Player {
 
   /** The player who dealt the killing blow; set when hp reaches 0. */
   killedBy: Player | null = null;
+
+  /**
+   * The entity that actually landed the killing blow, which is not always who
+   * gets credited for it.
+   *
+   * `killedBy` is mapped through {@link Player.xpCreditTarget} so a summon's kill
+   * reads as its owner's everywhere that already keys off the killer — loot
+   * tables, achievements, XP. This field keeps the literal dealer, for the one
+   * question those cannot answer: whether it was the pet rather than the cat.
+   */
+  killedByDealer: Player | null = null;
 
   /** The type of attack that landed the killing blow. */
   killType: 'melee' | 'missile' | 'shell' | 'smush' | null = null;
@@ -566,6 +646,30 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Deal damage that has **already** been sized, skipping the level multiplier.
+   *
+   * For attacks priced as a share of the victim's own max HP. Those already
+   * scale with everything that matters — a tougher party takes a proportionally
+   * bigger hit — so putting them through {@link dealDamage} multiplies the
+   * scaling in twice. At the level a bounty mark spawns at that is a ~3.8×
+   * multiplier on a number that was already most of a health bar, which is an
+   * instant kill dressed up as a tuning value.
+   *
+   * Everything else about the blow is identical to `dealDamage`, including the
+   * `harmless` early-out and the attack sound.
+   */
+  protected dealPreScaledDamage(target: Player, damage: number, attackType?: string): boolean {
+    if (this.harmless) {
+      this.attackSoundPending = true;
+      return false;
+    }
+    const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
+    const connected = target.takeDamage(damage, source);
+    this.attackSoundPending = true;
+    return connected;
+  }
+
+  /**
    * This mob's damage number after its level multiplier, and zero if it is
    * harmless.
    *
@@ -597,6 +701,17 @@ export abstract class Mob extends Player {
       Math.floor((this.y + ts * MOB_TILE_CENTER) / ts) ===
         Math.floor((target.y + ts * MOB_TILE_CENTER) / ts)
     );
+  }
+
+  /**
+   * True when the most recent A* search found no route to its goal.
+   *
+   * `followTargetAStar` falls back to a straight-line walk in that case, which
+   * for an unreachable goal means pressing into the wall between here and there.
+   * A subclass that can pick a *different* goal should ask this and do so.
+   */
+  protected get astarSearchFailed(): boolean {
+    return this.astarLastSearchFailed;
   }
 
   /** Clears the cached A* path so it is recomputed on the next followTargetAStar call. */
@@ -951,11 +1066,16 @@ export abstract class Mob extends Player {
     }
     if (this.hp === 0 && prev > 0) {
       this.justDied = true;
-      this.killedBy = attacker;
+      // Credited rather than literal: a pet attacks in its own name so that mobs
+      // retaliate against *it*, but every killer-keyed reward in the game — loot
+      // chances, achievements, kill XP — belongs to the owner who sent it in.
+      const credited = attacker?.xpCreditTarget ?? null;
+      this.killedBy = credited;
+      this.killedByDealer = attacker;
       this.killType = damageType;
       // Roll loot
       const coins = randomInt(this.coinDropMin, this.coinDropMax);
-      const items = this.rollLootItems(attacker);
+      const items = this.rollLootItems(credited);
       if (coins > 0 || items.length > 0) {
         this.droppedLoot = { coins, items };
       }
@@ -1224,8 +1344,33 @@ export abstract class Mob extends Player {
     });
   }
 
+  /**
+   * Shove this mob out of an overlap, capped at a share of its own walk step.
+   *
+   * **The cap is what stops packs vibrating.** Separation is a position write
+   * applied *after* `updateAI` has already moved the mob, while the AI's own
+   * restoring step is clamped to `Math.min(speed, …)`. Uncapped, a third of a
+   * tile of overlap displaced a goblin about 3 px against a walk step of 1.4 —
+   * the AI pulled in a pixel, separation threw it out three, and the two
+   * alternated forever. A group steering at one point (a bounty escort's shared
+   * home point, or all of them chasing one player) can never reach a separated
+   * equilibrium, so the forcing never stops and the oscillation never damps.
+   *
+   * Capping here rather than in the caller means every source of separation gets
+   * it — the pairwise mob pass, and the player shove, which resolved its whole
+   * overlap in a single frame and shook any mob whose stop distance sat inside
+   * one tile.
+   */
   applySeparation(dx: number, dy: number): void {
-    this.moveWithCollision(dx, dy);
+    const length = Math.hypot(dx, dy);
+    if (length === 0) return;
+    const limit = this.speed * MAX_SEPARATION_STEP_FRACTION;
+    if (length <= limit) {
+      this.moveWithCollision(dx, dy);
+      return;
+    }
+    const scale = limit / length;
+    this.moveWithCollision(dx * scale, dy * scale);
   }
 
   /**
@@ -1245,6 +1390,7 @@ export abstract class Mob extends Player {
     this.currentTarget = null;
     this.retaliateMob = null;
     this.killedBy = null;
+    this.killedByDealer = null;
     this.killType = null;
     this.damageTakenBy.clear();
     this.alertedTo.clear();
@@ -1262,8 +1408,10 @@ export abstract class Mob extends Player {
 
   /**
    * Heals and clears combat state without moving the mob or touching its
-   * aggro/wander state — for non-hostile mobs (Mongo, a hired mercenary) on a
-   * checkpoint restore. These are allies, not the encounter that killed the
+   * aggro/wander state — for non-hostile mobs (a hired mercenary) on a
+   * checkpoint restore. Not the pet: he is dismissed before this runs, so his
+   * spent HP reaches the save rather than being handed back for free. These are
+   * allies, not the encounter that killed the
    * party, so they must not be teleported to their spawn tile like
    * `resetToSpawn()` does; but they can still take real damage (a mercenary
    * fights alongside the player) and must not stay critically wounded or

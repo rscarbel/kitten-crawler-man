@@ -4,6 +4,13 @@ import type { TreasureRoomData } from '../map/DungeonGenerator';
 import { Goblin } from '../creatures/Goblin';
 import type { GoblinWeapon } from '../sprites/goblinSprite';
 import { Llama } from '../creatures/Llama';
+import { RockGolem } from '../creatures/RockGolem';
+import { RockGolemBoss } from '../creatures/RockGolemBoss';
+import { Mantid } from '../creatures/Mantid';
+import { SkeletonLord } from '../creatures/SkeletonLord';
+import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
+import { SkeletonArcher } from '../creatures/SkeletonArcher';
+import { MantisCrony } from '../creatures/MantisCrony';
 import { Rat } from '../creatures/Rat';
 import { TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
@@ -22,6 +29,7 @@ import { Krasue } from '../creatures/Krasue';
 import { CircusLemur } from '../creatures/CircusLemur';
 import { StiltClown } from '../creatures/StiltClown';
 import { FatClown } from '../creatures/FatClown';
+import { EvilClown } from '../creatures/EvilClown';
 import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { RingmasterGrimaldi } from '../creatures/RingmasterGrimaldi';
@@ -142,8 +150,25 @@ export function registerMob(type: string, factory: MobFactory): void {
   MOB_REGISTRY.set(type, factory);
 }
 
+/**
+ * Every mob type actually spawnable via `createMob`, straight from the
+ * registry rather than from `MobSpawnRule['type']`.
+ *
+ * That union is one entry narrower than this registry (`bugaboo` is
+ * registered but was never added to the union), so anything deriving "what
+ * can a floor spawn" from the typed union alone silently misses it —
+ * `scripts/verify-assets.ts` uses this instead for exactly that reason.
+ */
+export function getRegisteredMobTypes(): readonly string[] {
+  return Array.from(MOB_REGISTRY.keys());
+}
+
 registerMob('llama', (x, y) => new Llama(x, y, TILE_SIZE));
+registerMob('rock_golem', (x, y) => new RockGolem(x, y, TILE_SIZE));
+registerMob('rock_golem_boss', (x, y) => new RockGolemBoss(x, y, TILE_SIZE));
 registerMob('rat', (x, y) => new Rat(x, y, TILE_SIZE));
+registerMob('mantid', (x, y) => new Mantid(x, y, TILE_SIZE));
+registerMob('mantis', (x, y) => new MantisCrony(x, y, TILE_SIZE));
 registerMob('the_hoarder', (x, y) => new TheHoarder(x, y, TILE_SIZE));
 registerMob('cockroach', (x, y) => new Cockroach(x, y, TILE_SIZE));
 registerMob('juicer', (x, y) => new Juicer(x, y, TILE_SIZE));
@@ -161,18 +186,32 @@ registerMob('krasue', (x, y) => new Krasue(x, y, TILE_SIZE));
 registerMob('circus_lemur', (x, y) => new CircusLemur(x, y, TILE_SIZE));
 registerMob('stilt_clown', (x, y) => new StiltClown(x, y, TILE_SIZE));
 registerMob('fat_clown', (x, y) => new FatClown(x, y, TILE_SIZE));
+registerMob('evil_clown', (x, y) => new EvilClown(x, y, TILE_SIZE));
 registerMob('mold_lion', (x, y) => new MoldLion(x, y, TILE_SIZE));
 registerMob('terror_the_clown', (x, y) => new TerrorTheClown(x, y, TILE_SIZE));
 registerMob('ringmaster_grimaldi', (x, y) => new RingmasterGrimaldi(x, y, TILE_SIZE));
 registerMob('city_elf_cultist', (x, y) => new CityElfCultist(x, y, TILE_SIZE));
+registerMob('skeleton_sword', (x, y) => new SkeletonWarrior(x, y, TILE_SIZE));
+registerMob('skeleton_archer', (x, y) => new SkeletonArcher(x, y, TILE_SIZE));
+registerMob('skeleton_lord', (x, y) => new SkeletonLord(x, y, TILE_SIZE));
 registerMob('goblin', (x, y) => {
   return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
 });
 
+// An unknown mob type otherwise falls back to a Goblin with zero console output —
+// a typo'd spawn-rule type silently spawns the wrong creature forever. Logged
+// once per type so a floor full of the same typo doesn't spam every spawn.
+const _unknownMobTypesLogged = new Set<string>();
+
 export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
-  const factory = MOB_REGISTRY.get(type) ?? MOB_REGISTRY.get('goblin');
-  if (!factory) throw new Error(`Unknown mob type: ${type}`);
-  const mob = factory(tileX, tileY);
+  const factory = MOB_REGISTRY.get(type);
+  if (factory === undefined && !_unknownMobTypesLogged.has(type)) {
+    _unknownMobTypesLogged.add(type);
+    console.warn(`[spawner] Unknown mob type "${type}" — falling back to Goblin`);
+  }
+  const resolvedFactory = factory ?? MOB_REGISTRY.get('goblin');
+  if (!resolvedFactory) throw new Error(`Unknown mob type: ${type}`);
+  const mob = resolvedFactory(tileX, tileY);
   mob.setMap(map);
   return mob;
 }
@@ -260,9 +299,9 @@ const CAMP_SPAWN_ATTEMPTS = 40;
  * the two camps populates only that one. A level with no `campSpawns` (every
  * floor but 3) returns immediately.
  *
- * Residents are leashed to their camp. That is the *only* place `homePoint` and
- * `leashRadiusTiles` are ever written, which is what makes the change provably
- * invisible to the goblins and troglodytes on floors 1 and 2.
+ * Residents are leashed to their camp. `BountySystem` is the only other writer
+ * of `homePoint`/`leashRadiusTiles` and it writes them on floor 3 only, so this
+ * remains provably invisible to the goblins and troglodytes on floors 1 and 2.
  */
 function spawnCampResidents(def: LevelDef, map: GameMap): Mob[] {
   const mobs: Mob[] = [];

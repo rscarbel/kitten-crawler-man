@@ -444,29 +444,60 @@ const highland: Material = {
  * irregular one patch is on its own. Every other cell-structured material in
  * this file is on a four-tile patch for that reason, and the fix was to join
  * them rather than to keep chasing the regularity with jitter and warp.
+ *
+ * The third cut went to 1.25 cells and failed the seam gate at 1.30 — which was
+ * *not* a new seam. The generator's ratio is the wrap error over the patch's own
+ * strongest interior edge, so calming a material shrinks the yardstick: scree's
+ * absolute wrap error actually fell (4.34 → 3.30) while its interior denominator
+ * fell further (4.76 → 2.39). The gate is right to fail it anyway, because a
+ * fixed wrap error is more visible on a calm surface than on a busy one. 1.5 is
+ * where the plates are large and the wrap error is genuinely small.
  */
-const SCREE_CELLS_PER_TILE = 2.5;
-const SCREE_JITTER = 0.9;
-const SCREE_JOINT_WIDTH = 0.16;
-const SCREE_JOINT_STRENGTH = 0.5;
-const SCREE_RELIEF_STRENGTH = 0.7;
+const SCREE_CELLS_PER_TILE = 1.5;
+const SCREE_JITTER = 0.85;
+const SCREE_JOINT_WIDTH = 0.14;
+const SCREE_JOINT_STRENGTH = 0.3;
+const SCREE_RELIEF_STRENGTH = 0.38;
 const SCREE_WARP_AMPLITUDE = 1.6;
 /**
  * Wider than the paving materials — a hillside's plates are freshly broken and
  * genuinely differ in tone — but well under the `paintSetts` default of 0.7,
  * which put a near-black plate beside a near-white one and read as static.
  */
-const SCREE_TONE_SPREAD = 0.5;
+const SCREE_TONE_SPREAD = 0.3;
 const SCREE_SHADE_POOL_COUNT = 5;
-const SCREE_SHADE_POOL_MIN_RADIUS = 7;
-const SCREE_SHADE_POOL_MAX_RADIUS = 20;
-const SCREE_SHADE_POOL_ALPHA = 0.22;
+const SCREE_SHADE_POOL_MIN_RADIUS = 9;
+const SCREE_SHADE_POOL_MAX_RADIUS = 26;
+const SCREE_SHADE_POOL_ALPHA = 0.18;
 const SCREE_SHADE_POOL_SOFTNESS = 1;
-const SCREE_FINES_COUNT = 40;
-const SCREE_FINES_MIN_RADIUS = 0.6;
-const SCREE_FINES_MAX_RADIUS = 2;
-const SCREE_FINES_ALPHA = 0.45;
-const SCREE_FINES_SOFTNESS = 0.4;
+const SCREE_FINES_COUNT = 10;
+const SCREE_FINES_MIN_RADIUS = 0.8;
+const SCREE_FINES_MAX_RADIUS = 2.4;
+const SCREE_FINES_ALPHA = 0.22;
+const SCREE_FINES_SOFTNESS = 0.7;
+/**
+ * The joint tops out a long way above the ramp's shadow. Taking it all the way
+ * down inked every plate boundary, and at scree's plate count that is most of
+ * what the tile is — the slope has to read as one surface with cracks in it,
+ * not as a mosaic of outlined chips.
+ */
+const SCREE_JOINT_DEPTH = 0.55;
+/**
+ * Raised well above the paving default. Scree's plates are few and large now,
+ * so the material's whole value is carried by a handful of faces — sitting them
+ * between shadow and mid, as the default floor does, made the slope read as a
+ * dark smear rather than as lit rock.
+ */
+const SCREE_TONE_FLOOR = 0.42;
+/**
+ * Fractures run *across* plates, not around them. The plate joints say where
+ * the rock broke; these say it is still breaking, and they are what stops a
+ * calm cell lattice from reading as upholstery.
+ */
+const SCREE_FRACTURE_COUNT = 2.5;
+const SCREE_FRACTURE_LENGTH = 18;
+const SCREE_FRACTURE_ALPHA = 0.3;
+const SCREE_FRACTURE_SOFTNESS = 0.8;
 
 const scree: Material = {
   id: 'scree',
@@ -478,13 +509,36 @@ const scree: Material = {
       cellsPerTile: SCREE_CELLS_PER_TILE,
       jitter: SCREE_JITTER,
       ramp: SCREE_RAMP,
-      jointRamp: { ...SCREE_RAMP, mid: shade(SCREE_RAMP.shadow, 0.7), light: SCREE_RAMP.shadow },
+      jointRamp: {
+        ...SCREE_RAMP,
+        mid: mix(SCREE_RAMP.mid, SCREE_RAMP.shadow, SCREE_JOINT_DEPTH),
+        light: mix(SCREE_RAMP.light, SCREE_RAMP.shadow, SCREE_JOINT_DEPTH),
+      },
       jointWidth: SCREE_JOINT_WIDTH,
       jointStrength: SCREE_JOINT_STRENGTH,
       reliefStrength: SCREE_RELIEF_STRENGTH,
       warpAmplitude: SCREE_WARP_AMPLITUDE,
       toneSpread: SCREE_TONE_SPREAD,
+      toneFloor: SCREE_TONE_FLOOR,
     });
+    const tiles = ctx.size / TILE_PX;
+    const fractures = Math.round(SCREE_FRACTURE_COUNT * tiles * tiles);
+    for (let i = 0; i < fractures; i++) {
+      const x = hashLattice(i, 51, ctx.detail) * ctx.size;
+      const y = hashLattice(i, 52, ctx.detail) * ctx.size;
+      const angle = hashLattice(i, 53, ctx.detail) * Math.PI * 2;
+      wrappedStroke(
+        ctx.surface,
+        x,
+        y,
+        Math.cos(angle),
+        Math.sin(angle),
+        SCREE_FRACTURE_LENGTH,
+        SCREE_RAMP.shadow,
+        SCREE_FRACTURE_ALPHA,
+        SCREE_FRACTURE_SOFTNESS,
+      );
+    }
     // Broad soft shade pools over the plates, at a scale far larger than the
     // cell lattice. Their job is to break up the regularity the lattice cannot
     // avoid having, so the eye finds the slope's shape before it finds the grid.
@@ -527,6 +581,14 @@ interface SettOptions {
   /** Per-stone tone variance. Lower values keep a large paved area from
    *  reading as noise; defaults to `SETT_TONE_SPREAD`. */
   readonly toneSpread?: number;
+  /**
+   * Where the per-stone tone band starts on the ramp. Narrowing `toneSpread`
+   * alone drags the whole material down towards `shadow`, because the band is
+   * anchored at its floor rather than centred — so a material that wants to be
+   * calm *and* mid-toned has to raise this as it narrows the spread. Defaults
+   * to `SETT_TONE_FLOOR`.
+   */
+  readonly toneFloor?: number;
 }
 
 const SETT_WARP_PERIOD_PER_TILE = 8;
@@ -547,6 +609,7 @@ function paintSetts(ctx: PaintContext, options: SettOptions): void {
   const tiles = ctx.size / TILE_PX;
   const cells = options.cellsPerTile * tiles;
   const toneSpread = options.toneSpread ?? SETT_TONE_SPREAD;
+  const toneFloor = options.toneFloor ?? SETT_TONE_FLOOR;
   ctx.surface.fill((x, y) => {
     const warped = ctx.noise.warp(
       x,
@@ -573,7 +636,7 @@ function paintSetts(ctx: PaintContext, options: SettOptions): void {
       ) -
         0.5) *
       SETT_FACE_GRAIN_STRENGTH;
-    const face = sampleRamp(options.ramp, SETT_TONE_FLOOR + cell.cellHash * toneSpread + faceGrain);
+    const face = sampleRamp(options.ramp, toneFloor + cell.cellHash * toneSpread + faceGrain);
     const lit = shade(face, reliefFactor(cell.offsetX, cell.offsetY, options.reliefStrength));
 
     return mix(lit, sampleRamp(options.jointRamp, cell.cellHash * toneSpread), jointBlend);
@@ -582,11 +645,15 @@ function paintSetts(ctx: PaintContext, options: SettOptions): void {
 
 /** Side lanes read as a rougher cousin of the main street, but at the same
  *  restrained stone size — see the note on `cobble`. */
-const LANE_CELLS_PER_TILE = 2.5;
-const LANE_JOINT_WIDTH = 0.18;
-const LANE_TONE_SPREAD = 0.4;
+const LANE_CELLS_PER_TILE = 2;
+const LANE_JOINT_WIDTH = 0.15;
+const LANE_JOINT_STRENGTH = 0.34;
+const LANE_RELIEF_STRENGTH = 0.45;
+const LANE_WARP_AMPLITUDE = 0.9;
+const LANE_JITTER = 0.6;
+const LANE_TONE_SPREAD = 0.26;
 const LANE_JOINT_WEED_THRESHOLD = 0.72;
-const LANE_WEED_COUNT = 70;
+const LANE_WEED_COUNT = 40;
 
 const lane: Material = {
   id: 'lane',
@@ -596,13 +663,13 @@ const lane: Material = {
   paint: (ctx) => {
     paintSetts(ctx, {
       cellsPerTile: LANE_CELLS_PER_TILE,
-      jitter: 0.6,
+      jitter: LANE_JITTER,
       ramp: STREET_STONE_RAMP,
       jointRamp: DIRT_RAMP,
       jointWidth: LANE_JOINT_WIDTH,
-      jointStrength: 0.5,
-      reliefStrength: 0.7,
-      warpAmplitude: 0.9,
+      jointStrength: LANE_JOINT_STRENGTH,
+      reliefStrength: LANE_RELIEF_STRENGTH,
+      warpAmplitude: LANE_WARP_AMPLITUDE,
       toneSpread: LANE_TONE_SPREAD,
     });
     const tiles = ctx.size / TILE_PX;
@@ -636,12 +703,13 @@ const lane: Material = {
  * Small high-contrast stones at 32 px/tile shimmer as the camera scrolls and
  * swallow the sprites standing on them.
  */
-const COBBLE_CELLS_PER_TILE = 2.5;
-const COBBLE_JOINT_WIDTH = 0.13;
-const COBBLE_JOINT_STRENGTH = 0.42;
-const COBBLE_RELIEF_STRENGTH = 0.7;
-const COBBLE_WARP_AMPLITUDE = 0.8;
-const COBBLE_TONE_SPREAD = 0.28;
+const COBBLE_CELLS_PER_TILE = 1.5;
+const COBBLE_JOINT_WIDTH = 0.11;
+const COBBLE_JOINT_STRENGTH = 0.3;
+const COBBLE_RELIEF_STRENGTH = 0.42;
+const COBBLE_WARP_AMPLITUDE = 1.1;
+const COBBLE_TONE_SPREAD = 0.18;
+const COBBLE_JITTER = 0.55;
 
 const cobble: Material = {
   id: 'cobble',
@@ -651,7 +719,7 @@ const cobble: Material = {
   paint: (ctx) => {
     paintSetts(ctx, {
       cellsPerTile: COBBLE_CELLS_PER_TILE,
-      jitter: 0.55,
+      jitter: COBBLE_JITTER,
       ramp: COBBLE_RAMP,
       jointRamp: { ...DIRT_RAMP, mid: DIRT_RAMP.shadow },
       jointWidth: COBBLE_JOINT_WIDTH,

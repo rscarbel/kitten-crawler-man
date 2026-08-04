@@ -135,6 +135,8 @@ export interface OverworldData {
   circusCentre: TilePoint;
   /** Radius (tiles) of the circus grounds around `circusCentre`. */
   circusRadiusTiles: number;
+  /** Wilderness clearings where bounty encounters are staged. */
+  bountySites: TilePoint[];
   /**
    * The courses the map's rivers were carved along.
    *
@@ -173,6 +175,26 @@ const RUINS_EDGE_MARGIN = 12;
 const RUINS_CIRCUS_BUFFER = 12;
 /** Tiles of clear ground kept between a camp and the nearest ambient spawn. */
 const RUINS_CAMP_BUFFER = 8;
+
+// Bounty encounter sites — the clearings Shady's marks are found in.
+/** How many sites the scatter aims for; the wilderness is big enough for this many well-spread ones. */
+const BOUNTY_SITE_TARGET = 8;
+/** Sampling attempts spent looking for them. Generous: most candidates fail the open-ground test. */
+const BOUNTY_SITE_ATTEMPTS = 600;
+/** Extra tiles past the town safe radius before a site may sit — a bounty is out in the wilds. */
+const BOUNTY_TOWN_BUFFER = 12;
+const BOUNTY_CIRCUS_BUFFER = 16;
+const BOUNTY_CAMP_BUFFER = 14;
+/** Tiles kept between the outermost site and the map edge. */
+const BOUNTY_EDGE_MARGIN = 16;
+/** Radius of the clearing a site needs: a boss with a 3-second flurry has to fit. */
+const BOUNTY_CLEARANCE_RADIUS_TILES = 6;
+/** Fraction of that disc that must be open walkable ground for the site to be usable. */
+const BOUNTY_CLEARANCE_MIN_OPEN_FRACTION = 0.8;
+/** Minimum spacing between two sites, so "scattered all over the map" is literal. */
+const BOUNTY_SITE_MIN_SPACING_TILES = 30;
+/** Below this many surviving sites the map is degenerate but still playable — warn, don't throw. */
+const BOUNTY_SITE_MIN_ACCEPTABLE = 3;
 // Ruined-wall shell scatter
 const NUM_RUIN_SHELLS = 26;
 const RUIN_SHELL_MIN_SIZE = 4;
@@ -368,10 +390,15 @@ export function generateOverworld(size: number): OverworldData {
   // After every deck is down: a rock is not water, so one placed earlier would
   // stop a crossing's span dead in the middle of the channel.
   scatterRiverRocks(grid, rivers, BORDER);
-  const reachableSpawnPoints = assertWildernessIsReachable(
+  // Sampled here rather than beside the ambient scatter: a site's whole job is
+  // to be somewhere a fight fits, and the cliffs, boulders and river rocks that
+  // decide that are only all on the grid once the natural passes have finished.
+  const bountySiteCandidates = scatterBountySites(grid, plan, circus, camps);
+  const { spawnPoints: reachableSpawnPoints, bountySites } = assertWildernessIsReachable(
     grid,
     townSquareCentre,
     hallwaySpawnPoints,
+    bountySiteCandidates,
     buildingEntries,
     circus.centre,
   );
@@ -396,6 +423,7 @@ export function generateOverworld(size: number): OverworldData {
     fountainCentre: fountainCentre(plan),
     circusCentre: { x: circus.centre.x, y: circus.centre.y },
     circusRadiusTiles: circus.radius,
+    bountySites,
     rivers,
     camps,
   };
@@ -468,9 +496,10 @@ function assertWildernessIsReachable(
   grid: TileGrid,
   from: TilePoint,
   spawnPoints: ReadonlyArray<TilePoint>,
+  bountySites: ReadonlyArray<TilePoint>,
   entries: ReadonlyArray<BuildingEntry>,
   circusCentre: TilePoint,
-): TilePoint[] {
+): { spawnPoints: TilePoint[]; bountySites: TilePoint[] } {
   const reachability = new Reachability(grid, from);
 
   for (const entry of entries) {
@@ -503,7 +532,18 @@ function assertWildernessIsReachable(
     );
   }
 
-  return spawnPoints.filter((point) => reachability.reached(point.x, point.y));
+  const reachableSites = bountySites.filter((site) => reachability.reached(site.x, site.y));
+  if (reachableSites.length < BOUNTY_SITE_MIN_ACCEPTABLE) {
+    console.warn(
+      `Only ${reachableSites.length} reachable bounty site(s) survived generation ` +
+        `(wanted ${BOUNTY_SITE_TARGET}). Bounties will repeat locations.`,
+    );
+  }
+
+  return {
+    spawnPoints: spawnPoints.filter((point) => reachability.reached(point.x, point.y)),
+    bountySites: reachableSites,
+  };
 }
 
 /** A named building's ground, and the rectangle it has to fit inside. */
@@ -1385,4 +1425,78 @@ function scatterRuinsSpawnPoints(
     points.push({ x: tx, y: ty });
   }
   return points;
+}
+
+/** Ground a bounty encounter can be fought on: open wilderness, road or rubble. */
+function isBountyFightableGround(type: number | undefined): boolean {
+  return isOpenWildernessGround(type) || type === FloorTypeValue.road || type === RUBBLE;
+}
+
+/**
+ * Fraction of the tiles within `BOUNTY_CLEARANCE_RADIUS_TILES` of (tx, ty) that
+ * a boss fight could actually be fought across. Trees, water, cliffs and ruined
+ * walls all count against it — an encounter dropped into a forest pocket is one
+ * the player cannot circle-strafe, which is the whole counterplay to a flurry.
+ */
+function openGroundFraction(grid: TileGrid, tx: number, ty: number): number {
+  const radius = BOUNTY_CLEARANCE_RADIUS_TILES;
+  const radiusSq = radius * radius;
+  let inDisc = 0;
+  let open = 0;
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dy * dy > radiusSq) continue;
+      inDisc++;
+      if (isBountyFightableGround(grid.typeAt(tx + dx, ty + dy))) open++;
+    }
+  }
+  return inDisc === 0 ? 0 : open / inDisc;
+}
+
+/**
+ * Clearings out in the wilds where Shady's bounty encounters are staged.
+ *
+ * Modelled on `scatterRuinsSpawnPoints` — same ring sampling, same town/circus/
+ * camp exclusions — with two extra demands an ambient ghoul does not have: room
+ * to fight in, and distance from every other site, so consecutive bounties send
+ * the player somewhere genuinely new.
+ */
+function scatterBountySites(
+  grid: TileGrid,
+  plan: TownPlan,
+  circus: CircusGrounds,
+  camps: ReadonlyArray<CampSite>,
+): TilePoint[] {
+  const size = grid.size;
+  const { x: cx, y: cy } = plan.centre;
+  const innerRadius = plan.safeRadiusTiles + BOUNTY_TOWN_BUFFER;
+  const outerRadius = size / 2 - BORDER - BOUNTY_EDGE_MARGIN;
+  const sites: TilePoint[] = [];
+  const minSpacingSq = BOUNTY_SITE_MIN_SPACING_TILES * BOUNTY_SITE_MIN_SPACING_TILES;
+
+  for (let i = 0; i < BOUNTY_SITE_ATTEMPTS && sites.length < BOUNTY_SITE_TARGET; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = innerRadius + Math.random() * Math.max(0, outerRadius - innerRadius);
+    const tx = Math.round(cx + Math.cos(angle) * distance);
+    const ty = Math.round(cy + Math.sin(angle) * distance);
+    if (tx <= BORDER || tx >= size - BORDER || ty <= BORDER || ty >= size - BORDER) continue;
+    if (
+      Math.hypot(tx - circus.centre.x, ty - circus.centre.y) <
+      circus.radius + BOUNTY_CIRCUS_BUFFER
+    )
+      continue;
+    if (
+      camps.some(
+        (camp) =>
+          Math.hypot(tx - camp.centre.x, ty - camp.centre.y) <
+          camp.radiusTiles + BOUNTY_CAMP_BUFFER,
+      )
+    )
+      continue;
+    if (sites.some((site) => (site.x - tx) ** 2 + (site.y - ty) ** 2 < minSpacingSq)) continue;
+    if (!isBountyFightableGround(grid.typeAt(tx, ty))) continue;
+    if (openGroundFraction(grid, tx, ty) < BOUNTY_CLEARANCE_MIN_OPEN_FRACTION) continue;
+    sites.push({ x: tx, y: ty });
+  }
+  return sites;
 }

@@ -1,27 +1,31 @@
 #!/usr/bin/env tsx
 /**
- * Generates the sprite sheets for Grimaldi's clown troupe on floor 3 — the Fat
- * Clown, the Stilt Clown and Terror the Clown.
+ * Generates the sprite sheets for the clowns on floor 3 — Grimaldi's Fat Clown,
+ * Stilt Clown and Terror the Clown, plus the Evil Clown bounty target.
  *
  * Each clown is posed through the shared skeletal rig in `scripts/clownArt.ts`,
  * which solves knees and elbows from foot and hand targets. Gaits are therefore
  * authored as *where the foot goes*, which is what keeps a planted foot planted
  * and stops a limb from sliding off the body mid-swing.
  *
- * Every figure is drawn facing +X; the runtime mirrors it for the other facing.
+ * Grimaldi's three are drawn in profile facing +X and the runtime mirrors them.
+ * The Evil Clown is three tiles tall, which a mirrored profile cannot carry
+ * when he walks straight down the screen, so he is drawn in all three of the
+ * rig's viewpoints and only his profile rows are mirrored.
  *
- * Sheet rows (see the `fat_clown`, `stilt_clown` and `terror_clown` entries in
- * src/images/enemies/manifest.json):
+ * Sheet rows (see the matching entries in src/images/enemies/manifest.json):
  *   fat_clown     walk, idle, slam
  *   stilt_clown   walk, idle, windup, lunge
  *   terror_clown  walk, idle, windup, swing, then the same four enraged
+ *   evil_clown    walk / idle / swipe / juggle_walk × toward, side, away,
+ *                 plus a toward-only laugh and a gore row
  *
- * Run: npx tsx scripts/generate-clown-sprites.ts
- * Review: npx tsx scripts/render-clowns.ts
+ * Run: npm run gen:clowns
+ * Review: npx tsx scripts/render-clowns.ts --clown=evil
  */
 
-import { createCanvas, type CanvasRenderingContext2D as Ctx } from 'canvas';
-import { writeFileSync } from 'node:fs';
+import { createCanvas, type CanvasRenderingContext2D as Ctx, type ImageData } from 'canvas';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   clamp01,
@@ -37,9 +41,11 @@ import {
   type ClownPose,
   type ClownProportions,
   type ClownStyle,
+  type ClownView,
   type Point,
   type PropPainter,
 } from './clownArt';
+import { EVIL_CLOWN_GORE_PIECES } from './clownGore';
 
 /** Tile size the art is drawn at; the runtime scales by tileSize / TILE_SCALE. */
 const TILE_SCALE = 64;
@@ -666,14 +672,435 @@ function terrorSwingPose(progress: number): ClownPose {
   };
 }
 
+// ── The Evil Clown ───────────────────────────────────────────────────────────
+
+/**
+ * The bounty target: a clown the size of a doorway, painted in bleached
+ * greasepaint over a bruise-coloured suit, with the toxic yellow-green of his
+ * own gas showing in his eyes and his pompoms.
+ *
+ * Nothing here is bright. Every colour a circus would use is present and
+ * soured — the ruff is yellowed rather than white, the nose is scabbed rather
+ * than pillar-box, the hair is a mossy green rather than orange. Read at 32 px
+ * the figure is a pale head and a pale ruff floating over a dark column, which
+ * is the silhouette the whole design is built around.
+ */
+const EVIL_PALETTE: ClownPalette = {
+  suitLight: '#57653a',
+  suitMid: '#2f2438',
+  suitDark: '#1a1322',
+  suitTrim: '#8a7a3f',
+  suitFar: '#170f1e',
+  limbSheen: 'rgba(206,226,176,0.12)',
+  accent: '#b9d146',
+  ruff: '#c2b596',
+  ruffShade: '#726348',
+  skin: '#cdbfa8',
+  skinShade: '#9c8c74',
+  paint: '#f2f0e6',
+  paintShade: '#a9a698',
+  paintMark: '#100c14',
+  mouthFill: '#5a0e18',
+  mouthDark: '#160308',
+  teeth: '#d8cca4',
+  hair: '#3a4a24',
+  hairShade: '#22301a',
+  shoe: '#3a2d34',
+  shoeDark: '#171015',
+  nose: '#6d1418',
+  noseHighlight: '#a2413a',
+  eyeCore: '#eaffc0',
+  eyeGlow: 'rgba(150,220,60,0.85)',
+  outline: '#0b070e',
+};
+
+/**
+ * Roughly three tiles tall, and wrong at every joint: the arms are longer than
+ * the legs, so the hands hang below the knee, and the head is a full third of
+ * the torso's length. The narrow shoulders on a wide stance are what make him
+ * read as stretched rather than merely large.
+ */
+const EVIL_PROPORTIONS: ClownProportions = {
+  torsoLength: 0.86,
+  shoulderHalfWidth: 0.34,
+  hipHalfWidth: 0.28,
+  bellyBulge: 0.06,
+  neckLength: 0.32,
+  headRadius: 0.42,
+  headWidthFactor: 0.86,
+  thighLength: 0.52,
+  shinLength: 0.54,
+  upperArmLength: 0.55,
+  forearmLength: 0.58,
+  legWidth: 0.15,
+  armWidth: 0.13,
+  handRadius: 0.13,
+  shoeLength: 0.62,
+  shoeHeight: 0.18,
+};
+
+const EVIL_STYLE: ClownStyle = {
+  palette: EVIL_PALETTE,
+  proportions: EVIL_PROPORTIONS,
+  hair: 'lank',
+  mouth: 'rictus',
+  facePaint: 'sockets',
+  pattern: 'harlequin',
+  feet: 'shoes',
+  hat: 'none',
+  ruffRadius: 0.24,
+  ruffRise: 0.8,
+  pompomCount: 4,
+  // A small scabbed nose and big burning eyes on a face whose grin sits low:
+  // the default clown layout puts a bright ball in the middle of the mouth and
+  // hides the eyes, which reads as a party mask rather than as a predator.
+  face: { eyeScale: 0.92, noseScale: 0.48, mouthDrop: 0.14 },
+};
+
+const EVIL_ARM_LENGTH = EVIL_PROPORTIONS.upperArmLength + EVIL_PROPORTIONS.forearmLength;
+const EVIL_SHOULDER_Y = -shoulderHeight(EVIL_STYLE.proportions);
+
+/** Long, slow, over-reaching strides — he covers ground without hurrying. */
+const EVIL_GAIT: GaitConfig = {
+  stride: 0.3,
+  lift: 0.13,
+  bob: 0.055,
+  sway: 0.03,
+  leanBase: deg(5),
+  leanSwing: deg(2),
+  armSwing: 0.16,
+};
+
+/**
+ * Walking at the camera, the stride is almost invisible and the lift is
+ * everything, so the feet are picked up higher and placed narrower than the
+ * profile gait would put them.
+ */
+const EVIL_FRONTAL_GAIT: GaitConfig = {
+  stride: 0.1,
+  lift: 0.19,
+  bob: 0.06,
+  sway: 0.05,
+  leanBase: 0,
+  leanSwing: deg(1.5),
+  armSwing: 0.09,
+};
+
+const EVIL_IDLE: IdleConfig = {
+  breathDepth: 0.035,
+  bob: 0.03,
+  sway: 0.018,
+  headRoll: deg(6),
+  mouthPulse: 0.15,
+};
+
+/**
+ * A head-on walk cannot borrow the profile arm swing: swinging a hand along +X
+ * from a front view walks it sideways across the body instead of forward past
+ * the hip. Here the hands rise and fall in counter-phase instead, and the whole
+ * pelvis rocks, which is what a walk toward the camera actually shows.
+ */
+function frontalWalkPose(style: ClownStyle, phase: number, config: GaitConfig): ClownPose {
+  const rest = restingPose(style);
+  const swingAngle = phase * FULL_CYCLE;
+  const armPhase = Math.sin(swingAngle);
+
+  return {
+    ...rest,
+    bob: -config.bob * (0.5 - 0.5 * Math.cos(swingAngle * BOB_PER_CYCLE)),
+    sway: config.sway * Math.sin(swingAngle),
+    lean: config.leanBase + config.leanSwing * Math.sin(swingAngle * BOB_PER_CYCLE),
+    nearFoot: frontalFootTarget(phase, config, rest.nearFoot.x),
+    farFoot: frontalFootTarget(phase + 0.5, config, rest.farFoot.x),
+    nearHand: {
+      x: rest.nearHand.x + armPhase * config.armSwing * 0.35,
+      y: rest.nearHand.y - armPhase * config.armSwing,
+    },
+    farHand: {
+      x: rest.farHand.x - armPhase * config.armSwing * 0.35,
+      y: rest.farHand.y + armPhase * config.armSwing,
+    },
+    headTilt: -armPhase * deg(2),
+  };
+}
+
+/** Head-on footfall: mostly a lift, with a small in-and-out shuffle around it. */
+function frontalFootTarget(phase: number, config: GaitConfig, restX: number): Point {
+  const wrapped = phase - Math.floor(phase);
+  if (wrapped < CONTACT_FRACTION) return { x: restX, y: 0 };
+  const swing = (wrapped - CONTACT_FRACTION) / (1 - CONTACT_FRACTION);
+  return {
+    x: restX + Math.sin(swing * Math.PI) * config.stride,
+    y: -config.lift * Math.sin(swing * Math.PI),
+  };
+}
+
+/** Swipe beats: the arm is dragged back, thrown across, then hangs. */
+const SWIPE_WINDUP_END = 0.42;
+const SWIPE_STRIKE_END = 0.66;
+
+/**
+ * A backhand, not a punch: the whole arm is hauled across the body and flung
+ * out again at the end of its own length, which is the only attack that reads
+ * on a figure whose hands hang below its knees.
+ */
+function evilSwipePose(progress: number): ClownPose {
+  const rest = restingPose(EVIL_STYLE);
+  const windup = clamp01(progress / SWIPE_WINDUP_END);
+  const strike = clamp01((progress - SWIPE_WINDUP_END) / (SWIPE_STRIKE_END - SWIPE_WINDUP_END));
+  const recover = clamp01((progress - SWIPE_STRIKE_END) / (1 - SWIPE_STRIKE_END));
+
+  const cock = easeInOut(windup) * (1 - easeOut(strike));
+  const throwOut = easeOut(strike) * (1 - easeInOut(recover));
+
+  const REACH_ACROSS = 0.55;
+  const REACH_OUT = 1.15;
+  const STRIKE_HEIGHT = 0.42;
+
+  return {
+    ...rest,
+    lean: deg(-12) * cock + deg(22) * throwOut,
+    bob: 0.03 * cock - 0.02 * throwOut,
+    sway: -0.07 * cock + 0.1 * throwOut,
+    torsoSquash: 1 + 0.03 * cock,
+    nearFoot: { x: rest.nearFoot.x + 0.16 * throwOut, y: 0 },
+    farFoot: { x: rest.farFoot.x - 0.12 * cock, y: 0 },
+    nearHand: {
+      x: lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * REACH_ACROSS, cock) +
+        EVIL_ARM_LENGTH * REACH_OUT * throwOut,
+      y: lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.2, cock) -
+        EVIL_ARM_LENGTH * STRIKE_HEIGHT * throwOut,
+    },
+    farHand: {
+      x: rest.farHand.x - 0.12 * cock + 0.18 * throwOut,
+      y: rest.farHand.y - EVIL_ARM_LENGTH * 0.12 * throwOut,
+    },
+    headTilt: deg(-7) * cock + deg(12) * throwOut,
+    headLead: 0.07 * throwOut,
+    mouthOpen: Math.max(cock * 0.4, throwOut),
+    eyeGlow: 0.5 + 0.5 * Math.max(cock, throwOut),
+  };
+}
+
+/**
+ * The same beat seen head-on. The reach is lateral rather than forward, and the
+ * lean becomes a lunge toward or away from the camera — which the rig renders
+ * as foreshortening, so the pose only has to say how far he leans.
+ */
+function evilFrontalSwipePose(progress: number): ClownPose {
+  const rest = restingPose(EVIL_STYLE);
+  const windup = clamp01(progress / SWIPE_WINDUP_END);
+  const strike = clamp01((progress - SWIPE_WINDUP_END) / (SWIPE_STRIKE_END - SWIPE_WINDUP_END));
+  const recover = clamp01((progress - SWIPE_STRIKE_END) / (1 - SWIPE_STRIKE_END));
+
+  const cock = easeInOut(windup) * (1 - easeOut(strike));
+  const throwOut = easeOut(strike) * (1 - easeInOut(recover));
+
+  const ACROSS_BODY = 0.35;
+  const SWEEP_OUT = 0.95;
+
+  return {
+    ...rest,
+    lean: deg(-10) * cock + deg(18) * throwOut,
+    bob: 0.03 * cock - 0.03 * throwOut,
+    sway: -0.05 * cock + 0.06 * throwOut,
+    nearFoot: { x: rest.nearFoot.x + 0.1 * throwOut, y: 0 },
+    farFoot: { x: rest.farFoot.x - 0.1 * cock, y: 0 },
+    nearHand: {
+      x: lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * ACROSS_BODY, cock) +
+        EVIL_ARM_LENGTH * SWEEP_OUT * throwOut,
+      y: lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.3, cock) -
+        EVIL_ARM_LENGTH * 0.25 * throwOut,
+    },
+    farHand: {
+      x: rest.farHand.x + 0.06 * cock - 0.14 * throwOut,
+      y: rest.farHand.y - EVIL_ARM_LENGTH * 0.1 * throwOut,
+    },
+    headTilt: deg(6) * cock - deg(9) * throwOut,
+    headLead: 0.05 * throwOut,
+    mouthOpen: Math.max(cock * 0.4, throwOut),
+    eyeGlow: 0.5 + 0.5 * Math.max(cock, throwOut),
+  };
+}
+
+/**
+ * The laugh: the tell that the juggling is coming. Head thrown back, shoulders
+ * heaving twice, arms slack at his sides. It has to be legible from across a
+ * field, so the whole spine goes with it rather than just the jaw.
+ */
+const LAUGH_HEAVES = 2;
+/** Fraction of the laugh spent throwing the head back, and later righting it. */
+const LAUGH_RISE_END = 0.25;
+const LAUGH_FALL_START = 0.75;
+
+function evilLaughPose(progress: number): ClownPose {
+  const rest = restingPose(EVIL_STYLE);
+  const rise = easeInOut(clamp01(progress / LAUGH_RISE_END));
+  const fall = easeInOut(clamp01((progress - LAUGH_FALL_START) / (1 - LAUGH_FALL_START)));
+  const held = rise * (1 - fall);
+  const heave = Math.sin(progress * FULL_CYCLE * LAUGH_HEAVES);
+
+  return {
+    ...rest,
+    // Head-on rows render a lean as foreshortening, so tipping backwards reads
+    // as the head sinking into the shoulders — exactly the shape wanted here.
+    lean: deg(-26) * held,
+    bob: (-0.04 + 0.03 * heave) * held,
+    torsoSquash: 1 + (0.06 + 0.04 * heave) * held,
+    nearHand: {
+      x: rest.nearHand.x + 0.1 * held,
+      y: rest.nearHand.y + 0.05 * heave * held,
+    },
+    farHand: {
+      x: rest.farHand.x - 0.1 * held,
+      y: rest.farHand.y - 0.05 * heave * held,
+    },
+    headTilt: deg(4) * heave * held,
+    headLead: -0.06 * held,
+    mouthOpen: held * (0.7 + 0.3 * heave),
+    eyeGlow: 0.4 + 0.6 * held,
+  };
+}
+
+/**
+ * The juggling walk: an unhurried meander with both hands up at chest height,
+ * catching and tossing. The vials themselves are painted by
+ * {@link makeJugglePainter} — they are part of the pose, not a projectile.
+ */
+function evilJugglePose(style: ClownStyle, phase: number, headOn: boolean): ClownPose {
+  const base = headOn
+    ? frontalWalkPose(style, phase, EVIL_FRONTAL_GAIT)
+    : walkPose(style, phase, EVIL_GAIT);
+  const catchPhase = Math.sin(phase * FULL_CYCLE * JUGGLE_TOSSES_PER_STRIDE);
+  const handY = EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * JUGGLE_HAND_DROP;
+  const handX = EVIL_PROPORTIONS.shoulderHalfWidth * JUGGLE_HAND_SPREAD;
+
+  return {
+    ...base,
+    nearHand: { x: handX, y: handY - JUGGLE_HAND_TRAVEL * catchPhase },
+    farHand: { x: -handX, y: handY + JUGGLE_HAND_TRAVEL * catchPhase },
+    headTilt: deg(3) * catchPhase,
+    mouthOpen: 0.45,
+    eyeGlow: 0.9,
+  };
+}
+
+/** Tosses per stride — the hands work faster than the feet do. */
+const JUGGLE_TOSSES_PER_STRIDE = 3;
+/** Where the hands hold, down the arm's length from the shoulder. */
+const JUGGLE_HAND_DROP = 0.55;
+const JUGGLE_HAND_SPREAD = 1.9;
+const JUGGLE_HAND_TRAVEL = 0.07;
+
+// ── The juggled vials ────────────────────────────────────────────────────────
+
+const VIAL_COUNT = 3;
+const VIAL_BODY_HALF_WIDTH = 0.1;
+const VIAL_BODY_HEIGHT = 0.3;
+const VIAL_NECK_HALF_WIDTH = 0.034;
+const VIAL_NECK_HEIGHT = 0.08;
+const VIAL_GLASS = 'rgba(180,205,190,0.72)';
+/** The vials cross the clown's own white face; without an outline they vanish. */
+const VIAL_OUTLINE = '#0b070e';
+const VIAL_OUTLINE_WIDTH = 0.022;
+const VIAL_GLASS_RIM = 'rgba(232,245,232,0.85)';
+const VIAL_GAS = '#9fbe33';
+const VIAL_GAS_LIGHT = '#d7e86a';
+const VIAL_CORK = '#6b4d2c';
+
+/** One stoppered vial, drawn upright about its own centre. */
+function paintVial(ctx: Ctx): void {
+  const halfW = VIAL_BODY_HALF_WIDTH;
+  const bodyTop = -VIAL_BODY_HEIGHT * 0.5;
+  const bodyBottom = VIAL_BODY_HEIGHT * 0.5;
+
+  ctx.beginPath();
+  ctx.moveTo(-halfW, bodyTop);
+  ctx.lineTo(halfW, bodyTop);
+  ctx.quadraticCurveTo(halfW * 1.15, bodyBottom, 0, bodyBottom);
+  ctx.quadraticCurveTo(-halfW * 1.15, bodyBottom, -halfW, bodyTop);
+  ctx.closePath();
+  ctx.fillStyle = VIAL_GLASS;
+  ctx.fill();
+  ctx.strokeStyle = VIAL_OUTLINE;
+  ctx.lineWidth = VIAL_OUTLINE_WIDTH;
+  ctx.stroke();
+
+  // The contents sit in the bottom two-thirds, so the vial reads as full of
+  // something rather than as a lump of glass.
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = VIAL_GAS;
+  ctx.fillRect(-halfW, bodyTop + VIAL_BODY_HEIGHT * 0.3, halfW * 2, VIAL_BODY_HEIGHT);
+  ctx.fillStyle = VIAL_GAS_LIGHT;
+  ctx.fillRect(-halfW, bodyTop + VIAL_BODY_HEIGHT * 0.3, halfW * 0.55, VIAL_BODY_HEIGHT);
+  ctx.restore();
+
+  ctx.fillStyle = VIAL_GLASS_RIM;
+  ctx.fillRect(-VIAL_NECK_HALF_WIDTH, bodyTop - VIAL_NECK_HEIGHT, VIAL_NECK_HALF_WIDTH * 2, VIAL_NECK_HEIGHT);
+  ctx.fillStyle = VIAL_CORK;
+  ctx.fillRect(
+    -VIAL_NECK_HALF_WIDTH * 1.4,
+    bodyTop - VIAL_NECK_HEIGHT * 1.6,
+    VIAL_NECK_HALF_WIDTH * 2.8,
+    VIAL_NECK_HEIGHT * 0.7,
+  );
+}
+
+/** Half the width of the cascade the vials travel through. */
+const CASCADE_HALF_WIDTH = 0.5;
+/**
+ * Peak height of the cascade above the hands. A juggler's pattern crests level
+ * with the top of the head; anything shorter keeps the vials down among the
+ * arms, where the figure's own limbs hide the one thing the row exists to show.
+ */
+const CASCADE_APEX = 2.25;
+const VIAL_SPIN_TURNS = 1.5;
+
+/**
+ * The three vials in the air above the clown's hands, at a given point in the
+ * cascade. Ignores the hand it is handed: the cascade is anchored on the body's
+ * centre line, which is what keeps the pattern steady while the hands work.
+ */
+function makeJugglePainter(phase: number): PropPainter {
+  const handY = EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * JUGGLE_HAND_DROP;
+  return (ctx: Ctx): void => {
+    for (let i = 0; i < VIAL_COUNT; i++) {
+      const t = (phase + i / VIAL_COUNT) % 1;
+      const x = lerp(-CASCADE_HALF_WIDTH, CASCADE_HALF_WIDTH, t);
+      const y = handY - CASCADE_APEX * Math.sin(t * Math.PI);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(t * FULL_CYCLE * VIAL_SPIN_TURNS);
+      paintVial(ctx);
+      ctx.restore();
+    }
+  };
+}
+
 // ── Sheet assembly ───────────────────────────────────────────────────────────
 
 interface RowSpec {
   readonly name: string;
   readonly frameCount: number;
-  readonly pose: (frame: number) => ClownPose;
+  /**
+   * The pose for each frame, or null on a gore row — whose cells are severed
+   * pieces rather than poses of a whole figure.
+   */
+  readonly pose: ((frame: number) => ClownPose) | null;
+  /** Severed-piece painters, one per column. Present only on a gore row. */
+  readonly pieces?: ReadonlyArray<(ctx: Ctx, style: ClownStyle) => void>;
+  /**
+   * Manifest state name per gore column. Carried so {@link gateManifest} can
+   * check the pieces against the sheet's `colOffset` states — without it the
+   * gore order is a convention nothing enforces.
+   */
+  readonly pieceStates?: ReadonlyArray<string>;
   readonly style: ClownStyle;
   readonly prop?: PropPainter;
+  /** Per-frame prop, for rows whose prop moves independently of the hands. */
+  readonly propFor?: (frame: number) => PropPainter;
+  readonly view?: ClownView;
 }
 
 interface SheetSpec {
@@ -702,6 +1129,90 @@ const STILT_WINDUP_FRAMES = 6;
 const STILT_LUNGE_FRAMES = 8;
 const TERROR_WINDUP_FRAMES = 8;
 const TERROR_SWING_FRAMES = 8;
+const EVIL_SWIPE_FRAMES = 8;
+const EVIL_LAUGH_FRAMES = 10;
+const EVIL_JUGGLE_FRAMES = 8;
+
+/**
+ * The Evil Clown's rows, three views apiece.
+ *
+ * Only the profile rows are mirrored at runtime; the head-on rows are drawn
+ * once and used for both headings, which is why the toward and away walks are
+ * authored from {@link frontalWalkPose} rather than being the profile walk
+ * turned sideways.
+ */
+function evilRows(): readonly RowSpec[] {
+  const style = EVIL_STYLE;
+  const views: ReadonlyArray<{ suffix: string; view: ClownView }> = [
+    { suffix: '', view: 'toward' },
+    { suffix: '_side', view: 'profile' },
+    { suffix: '_away', view: 'away' },
+  ];
+  const rows: RowSpec[] = [];
+
+  for (const { suffix, view } of views) {
+    const headOn = view !== 'profile';
+    rows.push({
+      name: `walk${suffix}`,
+      frameCount: WALK_FRAMES,
+      style,
+      view,
+      pose: (f) =>
+        headOn
+          ? frontalWalkPose(style, cyclePhase(f, WALK_FRAMES), EVIL_FRONTAL_GAIT)
+          : walkPose(style, cyclePhase(f, WALK_FRAMES), EVIL_GAIT),
+    });
+  }
+  for (const { suffix, view } of views) {
+    rows.push({
+      name: `idle${suffix}`,
+      frameCount: IDLE_FRAMES,
+      style,
+      view,
+      pose: (f) => idlePose(style, cyclePhase(f, IDLE_FRAMES), EVIL_IDLE),
+    });
+  }
+  for (const { suffix, view } of views) {
+    const headOn = view !== 'profile';
+    rows.push({
+      name: `swipe${suffix}`,
+      frameCount: EVIL_SWIPE_FRAMES,
+      style,
+      view,
+      pose: (f) =>
+        headOn
+          ? evilFrontalSwipePose(shotProgress(f, EVIL_SWIPE_FRAMES))
+          : evilSwipePose(shotProgress(f, EVIL_SWIPE_FRAMES)),
+    });
+  }
+  rows.push({
+    name: 'laugh',
+    frameCount: EVIL_LAUGH_FRAMES,
+    style,
+    view: 'toward',
+    pose: (f) => evilLaughPose(shotProgress(f, EVIL_LAUGH_FRAMES)),
+  });
+  for (const { suffix, view } of views) {
+    const headOn = view !== 'profile';
+    rows.push({
+      name: `juggle_walk${suffix}`,
+      frameCount: EVIL_JUGGLE_FRAMES,
+      style,
+      view,
+      pose: (f) => evilJugglePose(style, cyclePhase(f, EVIL_JUGGLE_FRAMES), headOn),
+      propFor: (f) => makeJugglePainter(cyclePhase(f, EVIL_JUGGLE_FRAMES)),
+    });
+  }
+  rows.push({
+    name: 'gore',
+    frameCount: EVIL_CLOWN_GORE_PIECES.length,
+    style,
+    pose: null,
+    pieces: EVIL_CLOWN_GORE_PIECES.map((piece) => piece.paint),
+    pieceStates: EVIL_CLOWN_GORE_PIECES.map((piece) => piece.name),
+  });
+  return rows;
+}
 
 function terrorRows(enraged: boolean): readonly RowSpec[] {
   const style = terrorStyle(enraged);
@@ -808,9 +1319,22 @@ const SHEETS: readonly SheetSpec[] = [
     groundY: 214,
     rows: [...terrorRows(false), ...terrorRows(true)],
   },
+  {
+    key: 'evil_clown',
+    fileName: 'evil_clown.png',
+    frameWidth: 272,
+    frameHeight: 296,
+    groundY: 268,
+    rows: evilRows(),
+  },
 ];
 
-function renderSheet(spec: SheetSpec): Buffer {
+interface BakedSheet {
+  readonly buffer: Buffer;
+  readonly pixels: ImageData;
+}
+
+function renderSheet(spec: SheetSpec): BakedSheet {
   const cols = Math.max(...spec.rows.map((row) => row.frameCount));
   const sheet = createCanvas(cols * spec.frameWidth, spec.rows.length * spec.frameHeight);
   const sheetCtx = sheet.getContext('2d');
@@ -824,14 +1348,41 @@ function renderSheet(spec: SheetSpec): Buffer {
     const rowSpec = spec.rows[row];
     for (let col = 0; col < rowSpec.frameCount; col++) {
       frameCtx.clearRect(0, 0, frame.width, frame.height);
+      const piece = rowSpec.pieces?.[col];
+      if (piece !== undefined) {
+        frameCtx.save();
+        // Gore cells anchor on the middle of the cell rather than on the ground
+        // line: a tumbling piece has no feet and no floor to stand on.
+        frameCtx.translate((spec.frameWidth / 2) * SUPERSAMPLE, (spec.frameHeight / 2) * SUPERSAMPLE);
+        frameCtx.scale(TILE_SCALE * SUPERSAMPLE, TILE_SCALE * SUPERSAMPLE);
+        piece(frameCtx, rowSpec.style);
+        frameCtx.restore();
+        sheetCtx.drawImage(
+          frame,
+          0,
+          0,
+          frame.width,
+          frame.height,
+          col * spec.frameWidth,
+          row * spec.frameHeight,
+          spec.frameWidth,
+          spec.frameHeight,
+        );
+        continue;
+      }
+      const pose = rowSpec.pose;
+      if (pose === null) {
+        throw new Error(`row "${rowSpec.name}" has neither a pose function nor a piece painter`);
+      }
       drawClown(
         frameCtx,
         originX,
         originY,
         TILE_SCALE * SUPERSAMPLE,
         rowSpec.style,
-        rowSpec.pose(col),
-        rowSpec.prop,
+        pose(col),
+        rowSpec.propFor?.(col) ?? rowSpec.prop,
+        rowSpec.view,
       );
       sheetCtx.drawImage(
         frame,
@@ -848,14 +1399,148 @@ function renderSheet(spec: SheetSpec): Buffer {
   }
 
   // These sheets are baked once offline, so the slowest zlib setting is free.
-  return sheet.toBuffer('image/png', {
-    compressionLevel: MAX_PNG_COMPRESSION,
+  return {
+    buffer: sheet.toBuffer('image/png', { compressionLevel: MAX_PNG_COMPRESSION }),
+    pixels: sheetCtx.getImageData(0, 0, sheet.width, sheet.height),
+  };
+}
+
+/**
+ * Alpha a frame's outermost pixels may carry before the bake is rejected.
+ *
+ * Anything above this means the figure ran into the cell wall and was cut along
+ * a straight line — permanently, in the PNG. A clipped shoe or a clipped
+ * juggled vial is invisible in a code review and obvious in the game.
+ */
+const MAX_EDGE_ALPHA = 6;
+
+function gateEdgeBleed(spec: SheetSpec, pixels: ImageData): void {
+  const ALPHA_OFFSET = 3;
+  const CHANNELS = 4;
+  const alphaAt = (x: number, y: number): number =>
+    pixels.data[(y * pixels.width + x) * CHANNELS + ALPHA_OFFSET];
+
+  for (let row = 0; row < spec.rows.length; row++) {
+    for (let col = 0; col < spec.rows[row].frameCount; col++) {
+      const left = col * spec.frameWidth;
+      const right = left + spec.frameWidth - 1;
+      const top = row * spec.frameHeight;
+      const bottom = top + spec.frameHeight - 1;
+      let worst = 0;
+      for (let x = left; x <= right; x++) worst = Math.max(worst, alphaAt(x, top), alphaAt(x, bottom));
+      for (let y = top; y <= bottom; y++) worst = Math.max(worst, alphaAt(left, y), alphaAt(right, y));
+      if (worst > MAX_EDGE_ALPHA) {
+        throw new Error(
+          `${spec.key} row "${spec.rows[row].name}" frame ${col} paints its own border at alpha ` +
+            `${worst}; the figure is clipped by the frame. Grow the cell or shrink the pose.`,
+        );
+      }
+    }
+  }
+}
+
+const MANIFEST_PATH = 'src/images/enemies/manifest.json';
+
+interface ManifestState {
+  readonly row: number;
+  readonly frameCount: number;
+  readonly colOffset?: number;
+}
+
+interface ManifestEntry {
+  readonly path: string;
+  readonly frameWidth: number;
+  readonly frameHeight: number;
+  readonly tileX: number;
+  readonly tileY: number;
+  readonly tileScale: number;
+  readonly states: Record<string, ManifestState>;
+}
+
+/**
+ * The manifest entry this bake requires.
+ *
+ * A gore row is many one-frame states sharing a row by column, so it expands to
+ * one state per piece rather than to a single row entry.
+ */
+function manifestEntryFor(spec: SheetSpec): ManifestEntry {
+  const states: Record<string, ManifestState> = {};
+  spec.rows.forEach((row, index) => {
+    if (row.pieceStates === undefined) {
+      states[row.name] = { row: index, frameCount: row.frameCount };
+      return;
+    }
+    row.pieceStates.forEach((state, colOffset) => {
+      states[state] = { row: index, colOffset, frameCount: 1 };
+    });
+  });
+  return {
+    path: `enemies/${spec.fileName}`,
+    frameWidth: spec.frameWidth,
+    frameHeight: spec.frameHeight,
+    tileX: spec.frameWidth / 2 - TILE_SCALE / 2,
+    tileY: spec.groundY - TILE_SCALE,
+    tileScale: TILE_SCALE,
+    states,
+  };
+}
+
+/** Key order in JSON carries no meaning, so compare on a sorted stringify. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, nested: unknown) => {
+    if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) return nested;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(nested).sort()) {
+      sorted[key] = Object.getOwnPropertyDescriptor(nested, key)?.value;
+    }
+    return sorted;
   });
 }
 
+/**
+ * A sheet whose manifest entry does not describe it renders as garbage — the
+ * runtime slices rectangles that are no longer there. The manifest is checked
+ * rather than rewritten because `src/images/enemies/manifest.json` also holds
+ * every other creature's entry, and a programmatic rewrite of a shared file
+ * clobbers other agents' edits.
+ */
+function gateManifest(specs: readonly SheetSpec[]): boolean {
+  const parsed: unknown = JSON.parse(readFileSync(resolve(MANIFEST_PATH), 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error(`${MANIFEST_PATH} is not an object`);
+  }
+  const manifest: Record<string, unknown> = { ...parsed };
+  const stale: string[] = [];
+  for (const spec of specs) {
+    const required = manifestEntryFor(spec);
+    if (canonicalJson(manifest[spec.key]) !== canonicalJson(required)) {
+      stale.push(`"${spec.key}": ${JSON.stringify(required, null, 2)}`);
+    }
+  }
+  if (stale.length === 0) {
+    console.log(`manifest: ${MANIFEST_PATH} is in sync`);
+    return true;
+  }
+  console.error(
+    `\n${MANIFEST_PATH} is out of sync with the bake. Set these entries:\n${stale.join(',\n')}\n`,
+  );
+  process.exitCode = 1;
+  return false;
+}
+
+// Gated before anything reaches disk, for the same reason the edge-bleed gate
+// is: a sheet the manifest no longer describes must not be the one sitting in
+// src/images when the run reports a failure.
+const manifestInSync = gateManifest(SHEETS);
+
 for (const spec of SHEETS) {
+  if (!manifestInSync) break;
   const outPath = resolve(`src/images/enemies/${spec.fileName}`);
-  writeFileSync(outPath, renderSheet(spec));
+  const { buffer, pixels } = renderSheet(spec);
+  // Gated before anything reaches disk: a sheet that fails must not be the one
+  // sitting in src/images when the run ends.
+  gateEdgeBleed(spec, pixels);
+  writeFileSync(outPath, buffer);
 
   const cols = Math.max(...spec.rows.map((row) => row.frameCount));
   const tileX = spec.frameWidth / 2 - TILE_SCALE / 2;

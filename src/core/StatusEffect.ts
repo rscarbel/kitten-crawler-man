@@ -42,9 +42,16 @@ export function makeElectrified(): StatusEffect {
   return { type: 'electrified', ticksRemaining: 600, totalTicks: 600 };
 }
 
-/** Spider spit: immobilises the target for 4 seconds (240 ticks at 60 fps). */
-export function makeStuck(): StatusEffect {
-  return { type: 'stuck', ticksRemaining: 240, totalTicks: 240 };
+/** Four seconds at 60 fps. */
+const SPIDER_WEB_TICKS = 240;
+
+/**
+ * Immobilises the target. Defaults to the spider's web, which is where the
+ * effect started; callers that root for a different length pass their own ticks
+ * rather than mutating the returned effect.
+ */
+export function makeStuck(ticks: number = SPIDER_WEB_TICKS): StatusEffect {
+  return { type: 'stuck', ticksRemaining: ticks, totalTicks: ticks };
 }
 
 /** Spider spit venom: acid DoT applied alongside stuck — 1 damage every 40 ticks (~6 dmg over 4 s). */

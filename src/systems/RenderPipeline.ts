@@ -28,6 +28,10 @@ import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
+import type { RockThrowSystem } from './RockThrowSystem';
+import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
+import type { ClownGasSystem } from './ClownGasSystem';
+import type { KnightMissileSystem } from './KnightMissileSystem';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TreeSystem } from './TreeSystem';
 import type { WaterAnimationSystem } from './WaterAnimationSystem';
@@ -163,6 +167,10 @@ export interface RenderContext {
   dynamite: DynamiteSystem;
   smushFx: SmushEffectSystem;
   lavaBalls: LavaBallSystem;
+  rockThrows: RockThrowSystem;
+  skeletonShots: SkeletonProjectileSystem;
+  clownGas: ClownGasSystem;
+  knightMissiles: KnightMissileSystem;
   /** Null on maps without smashable props (the overworld, building interiors). */
   destructibles: DestructiblePropSystem | null;
   /** Null on every map but the overworld, which is the only one that grows trees. */
@@ -246,6 +254,7 @@ export class RenderPipeline {
     // burning floor, and drawn above the entities it would cover the very
     // player it is burning.
     rc.lavaBalls.renderGround(ctx, camX, camY);
+    rc.clownGas.renderGround(ctx, camX, camY);
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
@@ -472,6 +481,13 @@ export class RenderPipeline {
     // Over the entities: a ball crossing the room must never disappear behind
     // the mob it is about to fly past, or the shot reads as having fizzled.
     rc.lavaBalls.render(ctx, camX, camY);
+    // Same slot and the same reason for the golem's thrown boulders.
+    rc.rockThrows.render(ctx, camX, camY);
+    // Same slot and the same reason: a bolt crossing the fight must never vanish
+    // behind the skeleton it is about to fly past.
+    rc.skeletonShots.render(ctx, camX, camY);
+    rc.clownGas.render(ctx, camX, camY);
+    rc.knightMissiles.render(ctx, camX, camY);
     // Last of the world effects: the stamp's fire reads as being in front of
     // everything it just hit.
     rc.smushFx.render(ctx, camX, camY);

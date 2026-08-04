@@ -11,11 +11,15 @@ import { AbilityManager } from './core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from './abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from './abilities/protectiveShell';
 import { SMUSH_DEF } from './abilities/smush';
+import { MONGO_DEF, getMongoStats } from './abilities/mongo';
+import { createMongoPetState } from './core/MongoPetState';
 import { AuthClient } from './auth/AuthClient';
 import type { GameProgress } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
-import { loadSprites } from './core/SpriteLoader';
+import { prewarmGroups } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
+import { CORE_SFX_IDS } from './audio/sfxGroups';
+import { showLoadingScreen } from './ui/LoadingScreen';
 
 declare const __AI_ENABLED__: boolean;
 
@@ -35,21 +39,37 @@ function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityMa
   manager.register(MAGIC_MISSILE_DEF);
   manager.register(PROTECTIVE_SHELL_DEF);
   manager.register(SMUSH_DEF);
+  manager.register(MONGO_DEF);
   if (states !== undefined) manager.restoreSerializedStates(states);
   return manager;
 }
 
 const input = new InputManager();
 const audio = new AudioManager();
-// Begin decoding all audio assets in the background immediately.
-void audio.preload();
+// Only the universal group (menu/UI + generic player-combat cues) decodes at
+// boot now — see docs/asset-management-plan.md Phase 2. Per-floor and
+// per-interior SFX preload additively as the player reaches them
+// (DungeonScene / BuildingInteriorScene constructors).
+void audio.preload(CORE_SFX_IDS);
+
+// Created before any sprite has loaded so the loading screen below has a
+// canvas to draw on immediately — see docs/asset-management-plan.md Phase 5.
+const sceneManager = new SceneManager();
+const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
 (async () => {
-  await loadSprites();
+  // Only the group every scene needs decodes before the first frame; the rest
+  // loads lazily on demand (SpriteLoader.getSpriteDef schedules a load on a
+  // miss). This is what turns the ~2.3s blank-page boot into a loading screen.
+  // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload for
+  // each sprite behind this same loading screen — see Phase 7 of
+  // docs/asset-management-plan.md — so `core`'s sheets don't hitch on the
+  // first frame that actually draws them.
+  await prewarmGroups(['core'], (loaded, total) => loadingScreen.setProgress(loaded, total));
+  loadingScreen.stop();
 
   if (!__AI_ENABLED__) {
     // AI/backend disabled at build time — run as a pure static game with no server calls.
-    const sceneManager = new SceneManager();
     const onResetGame = () => {
       sceneManager.replace(new PostSignupScene(input, sceneManager, { audio, onResetGame }));
     };
@@ -79,13 +99,14 @@ void audio.preload();
   // Load any previously saved progress for this user.
   const progress = await authClient.loadProgress().catch(() => null);
 
-  const sceneManager = new SceneManager();
-
   const saveProgress = (data: {
     humanSnap: GameProgress['humanSnap'];
     catSnap: GameProgress['catSnap'];
     levelId: string;
     abilityStates: GameProgress['abilityStates'];
+    mongoUnlocked: boolean;
+    mongoPetHp: number;
+    mongoPetResting: boolean;
   }) => {
     authClient.saveProgress({ ...data, savedAt: new Date().toISOString() }).catch(() => {
       void 0;
@@ -111,6 +132,21 @@ void audio.preload();
     options.humanSnap = revivedSnapshot(progress.humanSnap);
     options.catSnap = revivedSnapshot(progress.catSnap);
     options.abilityManager = resumedAbilityManager(progress.abilityStates);
+    options.mongoUnlocked = progress.mongoUnlocked ?? false;
+    if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
+      // Clamped against the maximum the *restored* level implies: this arrives
+      // as unvalidated server JSON, and a value above the maximum renders as a
+      // permanently full bar that never regenerates down to the truth.
+      const petMaxHp = getMongoStats(options.abilityManager.getLevel('mongo')).maxHp;
+      const restoredHp = Math.max(0, Math.min(petMaxHp, progress.mongoPetHp));
+      options.mongoPetState = createMongoPetState(
+        restoredHp,
+        petMaxHp,
+        // Absent from saves written before the rest latch existed, where a zeroed
+        // pet is exactly the case the latch is for.
+        progress.mongoPetResting ?? restoredHp <= 0,
+      );
+    }
     // progress.levelId is unvalidated server JSON — a save written against a
     // since-renamed level must fall back rather than throw at boot.
     let resumeLevel;
