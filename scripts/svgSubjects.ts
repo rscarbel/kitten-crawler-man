@@ -579,20 +579,15 @@ export const SUBJECTS: readonly SvgSubject[] = [
   },
   {
     name: 'bugaboo',
-    views: async () => {
-      const { drawBugabooSprite } = await import('../src/sprites/bugabooSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawBugabooSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawBugabooSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-        {
-          name: 'attack',
-          paint: ({ dom, unit }) =>
-            drawBugabooSprite(dom, 0, 0, unit, 0, false, FACING_RIGHT, ATTACK_MIDPOINT),
-        },
-      ];
+    views: async (frame) => {
+      const { drawBugabooFront, drawBugabooBack, drawBugabooSide } =
+        await import('./bugabooArt.js');
+      const { ROWS } = await import('./generate-bugaboo-sprite.js');
+      return sheetViews(
+        ROWS,
+        { front: drawBugabooFront, back: drawBugabooBack, side: drawBugabooSide },
+        frame,
+      );
     },
   },
   {

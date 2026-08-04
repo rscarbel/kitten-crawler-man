@@ -713,61 +713,21 @@ export function drawWoodPileSprite(
 //
 // Damage stages (based on hpFraction):
 //   1.0        — pristine boards, nailed cross-beam
-//   0.75–1.0   — small hole punched through, a clawed hand reaches up and waves
-//   0.5–0.75   — bigger hole, two huge owl-like eyes peer up from the dark below
-//   0.25–0.5   — boards buckling outward, wide gaps, eyes + arm, nearly apart
+//   0.75–1.0   — small hole punched through the centre plank
+//   0.5–0.75   — the hole widens and the side planks start to go
+//   0.25–0.5   — boards buckling outward, wide gaps, nearly apart
 //   0.0–0.25   — splintering apart, about to shatter
+//
+// What is *under* the boards is not drawn here. The thing breaking through is a
+// real Bugaboo, and it paints its own `breach` row over this tile — a hand out
+// of the hole, groping, with its eyes just under the lip. This sprite used to
+// hand-roll a second copy of that creature out of ellipses and line strokes,
+// which meant two arms and two pairs of eyes the moment one actually arrived.
 
 // ── Wood barrier sprite constants ─────────────────────────────────────────────
 
 const BARRIER_VOID_INSET = 0.08;
 const BARRIER_VOID_SIZE = 0.84;
-const BARRIER_BUGABOO_ALPHA_BASE = 0.18;
-const BARRIER_BUGABOO_ALPHA_SCALE = 0.22;
-const BARRIER_BUGABOO_X = 0.5;
-const BARRIER_BUGABOO_Y = 0.72;
-const BARRIER_BUGABOO_RX = 0.28;
-const BARRIER_BUGABOO_RY = 0.16;
-const BARRIER_EYE_SPREAD_SCALE = 4;
-const BARRIER_EYE_ALPHA_BASE = 0.5;
-const BARRIER_EYE_Y_BASE = 0.52;
-const BARRIER_EYE_Y_SHIFT = 0.06;
-const BARRIER_EYE_SWAY_FREQ = 1.5;
-const BARRIER_EYE_SWAY_AMP = 0.02;
-const BARRIER_EYE_LEFT_X = 0.44;
-const BARRIER_EYE_RIGHT_X = 0.56;
-const BARRIER_EYE_SPREAD_OFFSET = 0.08;
-const BARRIER_EYE_W_BASE = 0.065;
-const BARRIER_EYE_W_SCALE = 0.025;
-const BARRIER_EYE_H_BASE = 0.075;
-const BARRIER_EYE_H_SCALE = 0.015;
-const BARRIER_EYE_RING_W = 0.015;
-const BARRIER_EYE_IRIS_RATIO = 0.62;
-const BARRIER_EYE_PUPIL_RATIO = 0.3;
-const BARRIER_EYE_PUPIL_OFFSET_Y = 0.01;
-const BARRIER_EYE_GLOW_ALPHA = 0.18;
-const BARRIER_EYE_GLOW_RADIUS = 1.5;
-const BARRIER_ARM_ALPHA_BASE = 0.42;
-const BARRIER_ARM_ALPHA_SCALE = 0.58;
-const BARRIER_ARM_WAVE_FREQ = 3;
-const BARRIER_ARM_WAVE_BASE = 0.025;
-const BARRIER_ARM_WAVE_SCALE = 0.035;
-const BARRIER_ARM_REACH_FREQ = 1.8;
-const BARRIER_ARM_REACH_AMP = 0.03;
-const BARRIER_ARM_X = 0.5;
-const BARRIER_ARM_BASE_Y = 0.88;
-const BARRIER_ARM_TOP_BASE = 0.5;
-const BARRIER_ARM_TOP_SCALE = 0.24;
-const BARRIER_ARM_THICK_BASE = 0.03;
-const BARRIER_ARM_THICK_SCALE = 0.02;
-const BARRIER_ARM_CP_RATIO = 0.3;
-const BARRIER_ARM_MID_Y = 0.68;
-const BARRIER_PALM_BASE = 0.025;
-const BARRIER_PALM_SCALE = 0.015;
-const BARRIER_FINGER_ANGLE = 0.45;
-const BARRIER_FINGER_LENGTH = 0.055;
-const BARRIER_FINGER_TIP_R = 0.01;
-const BARRIER_FINGER_LINE_W = 0.018;
 const BARRIER_PLANK_COUNT = 5;
 const BARRIER_HEAVY_DMG_THRESHOLD = 0.5;
 const BARRIER_HEAVY_BUCKLE_SCALE = 2;
@@ -784,6 +744,15 @@ const BARRIER_PLANK_BOT = 0.9;
 const BARRIER_SPLINTER_COUNT = 3;
 const BARRIER_SPLINTER_SPACING = 0.3;
 const BARRIER_SPLINTER_START = 0.2;
+/** How far a splinter leans sideways off the edge it broke from. */
+const BARRIER_SPLINTER_SIDEWAYS = 0.01;
+/** Halfway across a plank — where it pivots when it buckles, and where its nail goes. */
+const BARRIER_PLANK_MIDPOINT = 0.5;
+/**
+ * The narrowest the centre plank's crack ever gets. Even a pristine barrier has
+ * one: it is the gap the thing under the boards reaches an arm through.
+ */
+const BARRIER_CRACK_MIN_WIDTH = 0.15;
 const BARRIER_SPLINTER_DOWN = 0.03;
 const BARRIER_SPLINTER_UP = 0.03;
 const BARRIER_GRAIN_X_RATIO = 0.3;
@@ -851,174 +820,7 @@ export function drawWoodBarrierSprite(
     s * BARRIER_VOID_SIZE,
   );
 
-  // ── Bugaboo body silhouette (dark mass below boards, subtle at pristine) ──
-  {
-    const bodyAlpha = BARRIER_BUGABOO_ALPHA_BASE + dmg * BARRIER_BUGABOO_ALPHA_SCALE;
-    ctx.save();
-    ctx.globalAlpha = bodyAlpha;
-    ctx.fillStyle = '#1a1a2e';
-    ctx.beginPath();
-    ctx.ellipse(
-      sx + s * BARRIER_BUGABOO_X,
-      sy + s * BARRIER_BUGABOO_Y,
-      s * BARRIER_BUGABOO_RX,
-      s * BARRIER_BUGABOO_RY,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // ── Eyes peeking up (visible from the start, narrow crack at pristine) ──
-  {
-    // At pristine both eyes sit within the center plank crack; they spread outward as boards break
-    const eyeSpread = Math.min(1, dmg * BARRIER_EYE_SPREAD_SCALE);
-    const eyeAlpha = BARRIER_EYE_ALPHA_BASE + dmg * BARRIER_EYE_ALPHA_BASE;
-    const eyeY = sy + s * (BARRIER_EYE_Y_BASE - dmg * BARRIER_EYE_Y_SHIFT);
-    const eyeShift = Math.sin(t * BARRIER_EYE_SWAY_FREQ) * s * BARRIER_EYE_SWAY_AMP;
-    const leftEyeX =
-      sx + s * (BARRIER_EYE_LEFT_X - eyeSpread * BARRIER_EYE_SPREAD_OFFSET) + eyeShift;
-    const rightEyeX =
-      sx + s * (BARRIER_EYE_RIGHT_X + eyeSpread * BARRIER_EYE_SPREAD_OFFSET) + eyeShift;
-    const eyeW = s * (BARRIER_EYE_W_BASE + dmg * BARRIER_EYE_W_SCALE);
-    const eyeH = s * (BARRIER_EYE_H_BASE + dmg * BARRIER_EYE_H_SCALE);
-
-    ctx.save();
-    ctx.globalAlpha = eyeAlpha;
-
-    // Eye whites
-    ctx.fillStyle = '#e8e8d0';
-    ctx.beginPath();
-    ctx.ellipse(leftEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(rightEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Dark ring outlines
-    ctx.strokeStyle = '#0a0a1a';
-    ctx.lineWidth = s * BARRIER_EYE_RING_W;
-    ctx.beginPath();
-    ctx.ellipse(leftEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(rightEyeX, eyeY, eyeW, eyeH, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Amber irises
-    ctx.fillStyle = '#d4a820';
-    ctx.beginPath();
-    ctx.arc(
-      leftEyeX,
-      eyeY + s * BARRIER_EYE_PUPIL_OFFSET_Y,
-      eyeW * BARRIER_EYE_IRIS_RATIO,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(
-      rightEyeX,
-      eyeY + s * BARRIER_EYE_PUPIL_OFFSET_Y,
-      eyeW * BARRIER_EYE_IRIS_RATIO,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    // Dark pupils
-    ctx.fillStyle = '#0a0a1a';
-    ctx.beginPath();
-    ctx.arc(
-      leftEyeX,
-      eyeY + s * BARRIER_EYE_PUPIL_OFFSET_Y,
-      eyeW * BARRIER_EYE_PUPIL_RATIO,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(
-      rightEyeX,
-      eyeY + s * BARRIER_EYE_PUPIL_OFFSET_Y,
-      eyeW * BARRIER_EYE_PUPIL_RATIO,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    // Amber glow (bleeds slightly through boards)
-    ctx.globalAlpha = eyeAlpha * BARRIER_EYE_GLOW_ALPHA;
-    ctx.fillStyle = '#d4a820';
-    ctx.beginPath();
-    ctx.arc(leftEyeX, eyeY, eyeW * BARRIER_EYE_GLOW_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(rightEyeX, eyeY, eyeW * BARRIER_EYE_GLOW_RADIUS, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  // ── Arm/hand reaching up through center crack (visible from the start) ──
-  {
-    const handAlpha = BARRIER_ARM_ALPHA_BASE + dmg * BARRIER_ARM_ALPHA_SCALE;
-    const wave =
-      Math.sin(t * BARRIER_ARM_WAVE_FREQ) *
-      s *
-      (BARRIER_ARM_WAVE_BASE + dmg * BARRIER_ARM_WAVE_SCALE);
-    const reach = Math.sin(t * BARRIER_ARM_REACH_FREQ) * s * BARRIER_ARM_REACH_AMP;
-
-    // Hand starts at center of tile (within center plank crack) and rises with damage
-    const armCx = sx + s * BARRIER_ARM_X + wave;
-    const armBaseY = sy + s * BARRIER_ARM_BASE_Y;
-    const armTopY = sy + s * (BARRIER_ARM_TOP_BASE - dmg * BARRIER_ARM_TOP_SCALE) + reach;
-
-    ctx.save();
-    ctx.globalAlpha = handAlpha;
-
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = s * (BARRIER_ARM_THICK_BASE + dmg * BARRIER_ARM_THICK_SCALE);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(armCx, armBaseY);
-    ctx.quadraticCurveTo(
-      armCx + wave * BARRIER_ARM_CP_RATIO,
-      sy + s * BARRIER_ARM_MID_Y,
-      armCx,
-      armTopY,
-    );
-    ctx.stroke();
-
-    // Palm
-    ctx.fillStyle = '#1a1a2e';
-    ctx.beginPath();
-    ctx.arc(armCx, armTopY, s * (BARRIER_PALM_BASE + dmg * BARRIER_PALM_SCALE), 0, Math.PI * 2);
-    ctx.fill();
-
-    // Three clawed fingers
-    ctx.strokeStyle = '#12122a';
-    ctx.lineWidth = s * BARRIER_FINGER_LINE_W;
-    for (let f = -1; f <= 1; f++) {
-      const angle = -Math.PI / 2 + f * BARRIER_FINGER_ANGLE;
-      const fx = armCx + Math.cos(angle) * s * BARRIER_FINGER_LENGTH;
-      const fy = armTopY + Math.sin(angle) * s * BARRIER_FINGER_LENGTH;
-      ctx.beginPath();
-      ctx.moveTo(armCx, armTopY);
-      ctx.lineTo(fx, fy);
-      ctx.stroke();
-      ctx.fillStyle = '#2a2a4e';
-      ctx.beginPath();
-      ctx.arc(fx, fy, s * BARRIER_FINGER_TIP_R, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-
-  // ── Boards (drawn ON TOP of the creature elements) ──
+  // ── Boards ──
   const numPlanks = BARRIER_PLANK_COUNT;
   const plankW = s / numPlanks;
 
@@ -1046,9 +848,9 @@ export function drawWoodBarrierSprite(
 
     ctx.save();
     if (tiltAngle !== 0) {
-      ctx.translate(px + plankW * WOODPILE_ARROW_HALF, sy + s * WOODPILE_ARROW_HALF);
+      ctx.translate(px + plankW * BARRIER_PLANK_MIDPOINT, sy + s * BARRIER_PLANK_MIDPOINT);
       ctx.rotate(tiltAngle);
-      ctx.translate(-(px + plankW * WOODPILE_ARROW_HALF), -(sy + s * WOODPILE_ARROW_HALF));
+      ctx.translate(-(px + plankW * BARRIER_PLANK_MIDPOINT), -(sy + s * BARRIER_PLANK_MIDPOINT));
     }
 
     const shade = i % 2 === 0 ? '#8b6914' : '#9b7924';
@@ -1060,7 +862,7 @@ export function drawWoodBarrierSprite(
         i === 2
           ? s *
             Math.max(
-              BARRIER_CRACK_ALPHA_BASE - BARRIER_CRACK_ALPHA_SCALE,
+              BARRIER_CRACK_MIN_WIDTH,
               BARRIER_HOLE_BASE + (dmg - BARRIER_HOLE_DMG_START) * BARRIER_HOLE_SCALE,
             )
           : s * (BARRIER_HOLE_BASE + dmg * BARRIER_HOLE_SCALE);
@@ -1084,12 +886,12 @@ export function drawWoodBarrierSprite(
         const spy = holeCy - holeSize / 2 + offsetY;
         ctx.beginPath();
         ctx.moveTo(spx, spy);
-        ctx.lineTo(spx + s * BARRIER_FINGER_TIP_R, spy + s * BARRIER_SPLINTER_DOWN);
+        ctx.lineTo(spx + s * BARRIER_SPLINTER_SIDEWAYS, spy + s * BARRIER_SPLINTER_DOWN);
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(spx, holeCy + holeSize / 2 + offsetY);
         ctx.lineTo(
-          spx - s * BARRIER_FINGER_TIP_R,
+          spx - s * BARRIER_SPLINTER_SIDEWAYS,
           holeCy + holeSize / 2 + offsetY - s * BARRIER_SPLINTER_UP,
         );
         ctx.stroke();
@@ -1149,7 +951,7 @@ export function drawWoodBarrierSprite(
       if (dmg > BARRIER_CRACKED_BEAM_START && i === 2) continue; // middle nail gone
       ctx.beginPath();
       ctx.arc(
-        sx + i * plankW + plankW * WOODPILE_ARROW_HALF,
+        sx + i * plankW + plankW * BARRIER_PLANK_MIDPOINT,
         beamY + s * BARRIER_NAIL_Y_RATIO,
         s * BARRIER_NAIL_R,
         0,

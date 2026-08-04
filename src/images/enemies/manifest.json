@@ -1067,7 +1067,7 @@
   "brindled_vespa": {
     "path": "enemies/brindled_vespa.png",
     "frameWidth": 112,
-    "frameHeight": 96,
+    "frameHeight": 88,
     "tileX": 24,
     "tileY": 25,
     "tileScale": 64,

@@ -1,5 +1,12 @@
 # Mob Separation: O(k²) → ~O(k) Plan
 
+> **Status: implemented — see §11 for what measurement changed.** The goal below
+> was met, but §3's specific design (a second persistent `SpatialGrid` mirrored
+> at every `mobGrid` call site) was built, measured, and rejected: it was slower
+> than the loop it replaced at every mob count the game reaches. §11 records the
+> numbers and the design that shipped instead. Read it before §2–§5, which
+> describe the rejected approach.
+
 Goal: replace the all-pairs mob separation pass with a grid-neighbor query so
 frame cost scales with local density instead of the square of active-mob
 count, enabling meaningfully larger concurrent mob counts (e.g. the 2x-spawn
@@ -332,3 +339,102 @@ not measurement). This plan needs its own before/after evidence:
 | Expected win                                    | Large in dense clusters (grows with k), negligible-to-slightly-negative at low active-mob counts — needs the size-gated fallback in §9 to avoid regressing the common case.                                                                       |
 | Cost                                            | One more `SpatialGrid` instance (or two, ground/flying) + mirrored insert/remove/move calls at every existing `mobGrid` call site; risk is mostly "a call site gets missed and two grids drift," mitigated by a shared move/insert/remove helper. |
 | Instrumentation                                 | None exists; must be added temporarily to validate this plan at all, and is worth keeping given the difficulty-rebalance work already in flight.                                                                                                  |
+
+---
+
+## 11. Implementation outcome (measured)
+
+### 11.1 The plan's design was built, measured, and rejected
+
+§3's proposal — a second persistent `SpatialGrid<Mob>` with `SEP_DIST`-sized
+cells, mirrored into every `mobGrid.insert`/`remove`/`move` call site, queried
+via the existing `queryCircle` — was implemented in full. Against the all-pairs
+loop it was meant to replace, it **lost at every mob count the game reaches**,
+by a factor of 3–8:
+
+| mobs | all-pairs | plan's design | speedup |
+| ---- | --------- | ------------- | ------- |
+| 24   | 0.94us    | 6.96us        | 0.13x   |
+| 64   | 5.04us    | 18.20us       | 0.28x   |
+| 192  | 39.8us    | 82.0us        | 0.48x   |
+
+Three reasons, none of which are visible from reading the code:
+
+- **The pair loop is much cheaper per pair than §3.4 assumed.** It is a flat
+  array walk: two subtractions, a multiply-add, a compare — about 2ns per pair.
+  Trading 4-5 of those for one hashed lookup is not a trade worth making.
+- **`queryCircle` answers through a `Set`.** Every candidate is hashed on the
+  way in and iterated on the way out. At a radius this small the hashing costs
+  more than the arithmetic it was there to avoid.
+- **A persistent grid holds the wrong population.** Its buckets contain every
+  mob on the level — corpses, sleeping mobs, the other flight category — so each
+  query fetches and then rejects bodies that were never candidates, and the
+  rejection is itself a `Set` lookup.
+
+The bookkeeping side of the ledger (§3.2) was real too: mirroring `move()` into a
+second grid cost up to 7us/frame at 192 mobs, comparable to the entire saving
+the grid was supposed to deliver.
+
+### 11.2 What shipped: `src/core/SeparationGrid.ts`
+
+A uniform grid **rebuilt from the roster every frame**, into flat `Int32Array`s —
+`head` gives the first body in a cell, `next` chains the rest, both reused across
+frames. A lookup is an array read. This fixes all three problems at once: no
+hashing, only roster members are indexed, and no persistent membership means no
+second call-site to keep in sync.
+
+| mobs | all-pairs | shipped | speedup |
+| ---- | --------- | ------- | ------- |
+| 48   | 2.9us     | 2.5us   | 1.15x   |
+| 96   | 10.6us    | 5.8us   | 1.82x   |
+| 192  | 41.7us    | 9.8us   | 4.24x   |
+
+(camp density; the gap keeps widening with k, which was the point of the plan.)
+
+Consequences for the rest of this document:
+
+- **§2 is answered differently.** Separation does need its own grid, but not a
+  second *`SpatialGrid`* — it needs a different data structure entirely.
+- **§3.1's "no new method is needed" is wrong**, and for a subtler reason than
+  cell size: the API shape (`Set` in, `Set` out) is what costs.
+- **§3.2 and §5's "grid drift" risk no longer exists.** Nothing is mirrored, so
+  there is no second call site to miss. This was the plan's largest identified
+  risk and the design that shipped deletes it rather than mitigating it.
+- **§3.3's 2x-redundant-force-math concern stands and is fine.** Each pair is
+  still evaluated from both sides; `verify-separation` confirms the two sides
+  net out to the same force the pair loop computes, to floating-point rounding.
+- **§3.4's complexity result holds**, with d measured rather than estimated.
+
+### 11.3 The size gate is real and matters
+
+§9.3's honesty check was right: below the crossover the grid loses, because
+building an index costs more than a short pair loop. Measured crossover is 32
+mobs (loose), 48 (camp), 64 (packed), so `SEPARATION_GRID_MIN_MOBS = 48` sits
+mid-band. Below it the two shapes are within a microsecond of each other either
+way; above it the gap grows without bound.
+
+Note what this means today: **at current spawn density the grid path rarely
+engages.** The win is banked for the 2x-density work, not collected now.
+
+### 11.4 What was added
+
+- `src/core/SeparationGrid.ts` — the per-frame grid.
+- `src/systems/mobSeparation.ts` — the force math and both strategies, split out
+  of `MobUpdateLoop` so they can be measured and compared headlessly.
+- `src/core/PerfMonitor.ts` + `src/dev/perfOverlay.ts` — §9's instrumentation.
+  Off unless `?perf` is passed; the overlay lives in `src/dev` so a release build
+  has no import edge to it. Shows fps, update/render/separation ms, active and
+  separated mob counts, and force evaluations per frame.
+- `npm run verify:separation` — force math, cell-boundary coverage, strategy
+  equivalence over 200 random layouts, degenerate layouts, and the §5
+  negative-coordinate question (answered: safe, and bucket collisions cannot
+  produce wrong results because every query re-tests its candidates).
+- `npm run bench:separation` — the table above, reproducible.
+- §8's `BossRoomSystem` cockroach cleanup, rewritten as one compaction pass.
+
+### 11.5 Still outstanding
+
+- `[HUMAN]` §4 step 6: frame-pacing feel in a dense fight. Run with `?perf` and
+  watch the `separation` row against `mobs act/sep`.
+- The payoff is only observable above ~48 active mobs, so a density-raising
+  change (see `docs/difficulty-plan.md`) is what will actually exercise it.

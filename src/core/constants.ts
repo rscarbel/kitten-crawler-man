@@ -11,6 +11,16 @@ export const TILE_SIZE = 32;
  * culled before its own margin is ever consulted, and reappear as edge pop-in.
  */
 export const MAX_MOB_CULL_MARGIN_TILES = 4;
+/**
+ * Cell size of the mob spatial grid, in tiles.
+ *
+ * Tuned for the query that dominates the frame — the 22-tile AI activation
+ * sweep, run twice however many mobs there are — where fewer, larger buckets
+ * win. Separation's one-tile radius is served by its own grid instead of by
+ * shrinking this one; see `SeparationGrid`.
+ */
+const MOB_GRID_CELL_SIZE_TILES = 4;
+export const MOB_GRID_CELL_SIZE = TILE_SIZE * MOB_GRID_CELL_SIZE_TILES;
 export const PLAYER_SPEED = 2.5;
 export const FOLLOWER_SPEED = 3.5;
 

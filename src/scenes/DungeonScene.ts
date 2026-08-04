@@ -1,7 +1,7 @@
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
-import { TILE_SIZE } from '../core/constants';
+import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
@@ -466,9 +466,6 @@ interface OverlayInputClaim {
    */
   readonly locksKeyboard: boolean;
 }
-
-// Spatial grid sizing
-const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 
 // Loot and drop rates
 /** Boss chests sit this far north of the boss room centre, clear of the boss itself. */
@@ -941,7 +938,7 @@ export class DungeonScene extends GameplayScene {
     this.cat.setMap(this.gameMap);
     this.bodyPartGore = new BodyPartGoreSystem(this.gameMap);
 
-    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
+    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
     for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     const reusableMiniMap =
@@ -2773,7 +2770,7 @@ export class DungeonScene extends GameplayScene {
     // Rebuilt from the mobs that still belong in it: the dead are never spliced
     // out of this.mobs, and reinstating them would resurrect every corpse the
     // party has left behind since the floor loaded.
-    this.mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
+    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
     for (const mob of this.mobs) {
       if (mob.belongsInMobGrid) this.mobGrid.insert(mob);
     }

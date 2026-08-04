@@ -1,5 +1,14 @@
-/** Maximum cell coordinate value (safely supports grids up to 100,000 x 100,000). */
-const MAX_CELL_COORD = 100000;
+/**
+ * Stride the x cell coordinate is multiplied by when the two are packed into one
+ * key, and so the width of the y window that packs without collisions.
+ *
+ * Negative world positions are safe here, on two counts that `verify-separation`
+ * pins down. `cx * RANGE + cy` is injective over *any* 100,000-wide window of
+ * `cy`, so -50,000 to 49,999 is as sound as 0 to 99,999; and even a genuine
+ * collision would only put two cells in one bucket, which costs a few extra
+ * candidates and nothing else, because every query re-tests what it pulls out.
+ */
+const CELL_COORD_RANGE = 100000;
 
 /** Generic spatial hash grid. T needs x, y in pixel-space. */
 export class SpatialGrid<T extends { x: number; y: number }> {
@@ -10,10 +19,8 @@ export class SpatialGrid<T extends { x: number; y: number }> {
     this.cs = cellSize;
   }
 
-  // Pack two non-negative cell coords into a single integer key.
-  // Supports cell coords 0–99,999 (safely beyond any map we'll ever build).
   private key(cx: number, cy: number): number {
-    return cx * MAX_CELL_COORD + cy;
+    return cx * CELL_COORD_RANGE + cy;
   }
 
   private cellOf(x: number, y: number): [number, number] {

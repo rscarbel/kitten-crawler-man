@@ -20,7 +20,7 @@
  */
 import { generateOverworld } from '../src/map/OverworldGenerator';
 import { GameMap } from '../src/map/GameMap';
-import { TILE_SIZE } from '../src/core/constants';
+import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../src/core/constants';
 import {
   advanceBountyType,
   createBountyProgress,
@@ -299,7 +299,7 @@ function makeContext(human: HumanPlayer, cat: CatPlayer, map: GameMap): SystemCo
     inactive: cat,
     activeIsMoving: false,
     mobs: [],
-    mobGrid: new SpatialGrid<Mob>(TILE_SIZE),
+    mobGrid: new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE),
     gameMap: map,
   };
 }

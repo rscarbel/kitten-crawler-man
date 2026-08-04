@@ -842,17 +842,23 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         mob.justDied = true;
       }
     }
-    if (mobs.length > COCKROACH_MOB_CLEANUP_THRESHOLD) {
-      for (const m of mobs) {
-        if (!m.isAlive && m instanceof Cockroach) mobGrid.remove(m);
+    if (mobs.length <= COCKROACH_MOB_CLEANUP_THRESHOLD) return;
+
+    // One compaction pass rather than a scan to un-grid the dead followed by a
+    // reverse scan splicing them out one at a time: `splice` reshuffles the tail
+    // on every removal, so clearing a whole swarm cost a quadratic amount of
+    // copying on the exact frame the swarm was already at its largest.
+    let keptCount = 0;
+    for (const mob of mobs) {
+      const isSpentCockroach = !mob.isAlive && mob instanceof Cockroach;
+      if (isSpentCockroach) {
+        mobGrid.remove(mob);
+        continue;
       }
-      // Splice dead cockroaches out in place
-      let i = mobs.length;
-      while (i--) {
-        const m = mobs[i];
-        if (!m.isAlive && m instanceof Cockroach) mobs.splice(i, 1);
-      }
+      mobs[keptCount] = mob;
+      keptCount++;
     }
+    mobs.length = keptCount;
   }
 
   renderObjects(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {

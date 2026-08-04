@@ -681,8 +681,14 @@ export class DefendQuestSystem implements GameSystem {
     bug.defendTarget = this.npc;
 
     if (grateIdx >= 0 && this.roomData) {
-      bug.assignedGrate = this.roomData.grateTiles[grateIdx];
-      bug.onBarrierAttack = (grate, damage) => this.damageBarrier(grate, damage);
+      const grate = this.roomData.grateTiles[grateIdx];
+      bug.assignedGrate = grate;
+      bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage);
+      // One that comes up an *open* grate has to be seen coming up it. A
+      // boarded one has to break through first, so it starts under the boards:
+      // played here it would climb all the way out of a hole in intact planks
+      // and then climb back in to start hammering them.
+      if (!this.damageBarrier(grate, 0)) bug.beginEmerge();
     }
 
     this.addMob(bug);

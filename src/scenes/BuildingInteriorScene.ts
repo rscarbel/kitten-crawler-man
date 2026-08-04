@@ -1,6 +1,6 @@
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
-import { TILE_SIZE } from '../core/constants';
+import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_INTERIOR_W } from '../map/GameMap';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
@@ -174,7 +174,6 @@ const EXIT_MENU_HINT_Y = 79;
 const EXIT_BTN_TEXT_Y = 16;
 const EXIT_BTN_Y_OFFSET = 110;
 const EXIT_BTN_GAP = 8;
-const SPATIAL_GRID_CELL_SIZE_MULTIPLIER = 4;
 /** Fraction of max HP both players are revived to after falling in an interior fight. */
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 /** The Quill confrontation happens in the magistrate's office on the tower's top floor. */
@@ -581,7 +580,7 @@ export class BuildingInteriorScene extends GameplayScene {
   ): InteriorCombat {
     const bus = new EventBus();
     const mobs: Mob[] = [];
-    const mobGrid = new SpatialGrid<Mob>(TILE_SIZE * SPATIAL_GRID_CELL_SIZE_MULTIPLIER);
+    const mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
     const spells = new SpellSystem();
     const gore = new GoreSystem();
     const bodyPartGore = new BodyPartGoreSystem(map);

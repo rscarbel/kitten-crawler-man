@@ -6,33 +6,28 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { perfMonitor } from '../core/PerfMonitor';
 import type { Player } from '../Player';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import type { GameMap } from '../map/GameMap';
+import { SeparationGrid } from '../core/SeparationGrid';
 import type { SpatialGrid } from '../core/SpatialGrid';
+import {
+  accumulateSeparationForces,
+  SEPARATION_POSITION_TOLERANCE,
+  SEPARATION_RADIUS,
+  SEPARATION_RADIUS_SQ,
+} from './mobSeparation';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 const AI_RADIUS_TILES = 22;
 const AI_RADIUS = TILE_SIZE * AI_RADIUS_TILES;
-const SEP_DIST = TILE_SIZE;
-const SEP_DIST_SQ = SEP_DIST * SEP_DIST;
 /** Effective mass used for players in separation calculations. */
 const PLAYER_MASS = 3;
 
-// Separation physics
-const SEPARATION_BASE_MULTIPLIER = 0.3;
-const SEPARATION_POSITION_TOLERANCE = 0;
-
-/**
- * Overlap, in pixels, that is tolerated before anything is pushed at all.
- *
- * Without a deadband two mobs resting at exactly `SEP_DIST` trade sub-pixel
- * corrections forever. Mobs settle a few pixels inside contact and stay there.
- */
-const SEPARATION_DEADBAND_PX = 3;
 const LEADING_EDGE_FRONT = 0.72;
 const LEADING_EDGE_BACK = 0.28;
 const TILE_CENTER_OFFSET = 0.5;
@@ -90,6 +85,12 @@ export class MobUpdateLoop implements GameSystem {
   private readonly flyingSeparationDy: number[] = [];
   private readonly aiTargets: Player[] = [];
   private readonly players: Player[] = [];
+  /**
+   * Rebuilt per pass rather than held across frames — see `SeparationGrid`. The
+   * ground pass and the flying pass run one after the other, so one grid and one
+   * candidate buffer serve both.
+   */
+  private readonly separationGrid = new SeparationGrid<Mob>();
 
   /**
    * Run one frame of mob AI for all mobs within activation radius
@@ -118,6 +119,8 @@ export class MobUpdateLoop implements GameSystem {
         activeMobs.add(mob);
       }
     }
+
+    perfMonitor.count('activeMobs', activeMobs.size);
 
     const playerTargets = this.playerTargets;
     playerTargets.length = 0;
@@ -180,11 +183,10 @@ export class MobUpdateLoop implements GameSystem {
       mobGrid.move(mob, ox, oy);
     }
 
-    // O(N²/2) separation over non-flying active mobs, and a second pass for
-    // flying mobs against each other only — see the field comment on
-    // `flyingSeparationMobs` for why they're not merged into one pass.
-    // activeMobs may contain duplicates (mob in range of both players), so
-    // deduplicate via Set first.
+    // Separation over non-flying active mobs, and a second pass for flying mobs
+    // against each other only — see the field comment on `flyingSeparationMobs`
+    // for why they're not merged into one pass.
+    const separationStartedAt = perfMonitor.begin();
     this.runSeparationPass(
       activeMobs,
       (mob) => !mob.isFlying,
@@ -207,6 +209,7 @@ export class MobUpdateLoop implements GameSystem {
       this.flyingSeparationDy,
       mobGrid,
     );
+    perfMonitor.end('separation', separationStartedAt);
 
     // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
     // cockroaches are displaced proportionally to their mass relative to the player.
@@ -220,11 +223,11 @@ export class MobUpdateLoop implements GameSystem {
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq >= SEP_DIST_SQ) continue;
+        if (distSq >= SEPARATION_RADIUS_SQ) continue;
         const dist = Math.sqrt(distSq);
         if (dist > SEPARATION_POSITION_TOLERANCE) {
           if (player.isActive) {
-            const base = (SEP_DIST - dist) / dist;
+            const base = (SEPARATION_RADIUS - dist) / dist;
             const totalMass = PLAYER_MASS + mob.mass;
             const playerShare = mob.mass / totalMass;
             const mobShare = PLAYER_MASS / totalMass;
@@ -239,7 +242,7 @@ export class MobUpdateLoop implements GameSystem {
             mob.applySeparation(-dx * base * mobShare, -dy * base * mobShare);
             if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
           } else {
-            const full = (SEP_DIST - dist) / dist;
+            const full = (SEPARATION_RADIUS - dist) / dist;
             pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
           }
         }
@@ -248,10 +251,9 @@ export class MobUpdateLoop implements GameSystem {
   }
 
   /**
-   * Pairwise mass-weighted separation over `activeMobs` filtered by
-   * `include`, written into the given scratch arrays. Shared by the ground
-   * pass and the flying pass so a mob only separates from others that pass
-   * the same filter.
+   * Mass-weighted separation over `activeMobs` filtered by `include`, written
+   * into the given scratch arrays. Shared by the ground pass and the flying
+   * pass so a mob only separates from others that pass the same filter.
    */
   private runSeparationPass(
     activeMobs: ReadonlySet<Mob>,
@@ -296,31 +298,7 @@ export class MobUpdateLoop implements GameSystem {
       sepDy.push(0);
     }
 
-    for (let i = 0; i < seps.length; i++) {
-      const a = seps[i];
-      for (let j = i + 1; j < seps.length; j++) {
-        const b = seps[j];
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        // Square-compare first: the sqrt is only needed for the push magnitude,
-        // and the overwhelming majority of pairs are out of range.
-        const distSq = dx * dx + dy * dy;
-        if (distSq >= SEP_DIST_SQ) continue;
-        const dist = Math.sqrt(distSq);
-        if (dist <= SEPARATION_POSITION_TOLERANCE) continue;
-        const overlap = SEP_DIST - dist - SEPARATION_DEADBAND_PX;
-        if (overlap <= 0) continue;
-        const base = (overlap * SEPARATION_BASE_MULTIPLIER) / dist;
-        const totalMass = a.mass + b.mass;
-        // Heavier mob moves less — force is proportional to the other mob's share of total mass.
-        const aShare = b.mass / totalMass;
-        const bShare = a.mass / totalMass;
-        sepDx[i] += dx * base * aShare;
-        sepDy[i] += dy * base * aShare;
-        sepDx[j] -= dx * base * bShare;
-        sepDy[j] -= dy * base * bShare;
-      }
-    }
+    accumulateSeparationForces(seps, sepDx, sepDy, this.separationGrid);
 
     // `applySeparation` caps each mob's displacement against its own walk step.
     for (let i = 0; i < seps.length; i++) {

@@ -57,23 +57,55 @@
   },
   "bugaboo": {
     "path": "npcs/bugaboo.png",
-    "frameWidth": 128,
-    "frameHeight": 144,
-    "tileX": 32,
-    "tileY": 16,
+    "frameWidth": 176,
+    "frameHeight": 176,
+    "tileX": 56,
+    "tileY": 97,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "idle_side": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 8
       },
-      "attack": {
+      "idle_away": {
         "row": 2,
-        "frameCount": 6
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 16
+      },
+      "walk_side": {
+        "row": 4,
+        "frameCount": 16
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 16
+      },
+      "swipe": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "swipe_side": {
+        "row": 7,
+        "frameCount": 8
+      },
+      "swipe_away": {
+        "row": 8,
+        "frameCount": 8
+      },
+      "breach": {
+        "row": 9,
+        "frameCount": 12
+      },
+      "emerge": {
+        "row": 10,
+        "frameCount": 12
       }
     }
   },

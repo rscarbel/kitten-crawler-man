@@ -37,7 +37,7 @@ export type AssetGroup =
  *
  * Roughly half of `src/sprites/*` (Krasue, CircusLemur, MoldLion,
  * RingmasterGrimaldi, MissQuill, Remex, Signet, GumGum, HeatherTheBear,
- * RuinsGhoul, Bugaboo, Cockroach, VineTendril, InkMarauder, CityElfCultist, all
+ * RuinsGhoul, Cockroach, VineTendril, InkMarauder, CityElfCultist, all
  * townsfolk) is procedural canvas drawing with no manifest entry at all — those
  * creatures cost nothing sprite-wise and deliberately have no key anywhere in
  * this file. See `MOB_SPRITE_KEYS` below for the canonical "does this mob type
@@ -218,6 +218,9 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'troglodyte',
     'troglodyte_tongue',
     'tuskling',
+    // The defend quest's grate-crawlers, and the shape Mordecai wears on the
+    // floor they appear on.
+    'bugaboo',
   ],
 
   floor1_tileset: ['ground_floor1'],
@@ -307,7 +310,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   ball_of_swine: ['ball_of_swine'],
   krakaren_clone: ['krakaren'],
   brindle_grub: ['brindle_grub'],
-  bugaboo: [],
+  bugaboo: ['bugaboo'],
   grotesque_spider: [
     'grotesque_spider_base',
     'grotesque_spider_screech',

@@ -1,5 +1,6 @@
 import { updateFrameTime } from '../utils';
 import { beginPersonFrame } from '../sprites/person/personFrameCache';
+import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
 import {
   getRenderScale,
@@ -64,6 +65,13 @@ export class SceneManager {
   private lastTime = performance.now();
   private accumulator = 0;
   private readonly FIXED_DT = FIXED_DT_MS;
+  /**
+   * Draws on top of whatever the current scene rendered. Installed by a dev
+   * entry point for the `?perf` overlay and null otherwise — keeping it a hook
+   * rather than a call means `core` never has to reach into `ui`, and a release
+   * build has no import edge to the overlay at all.
+   */
+  private frameOverlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -228,6 +236,10 @@ export class SceneManager {
     scene.onEnter?.();
   }
 
+  setFrameOverlay(overlay: (ctx: CanvasRenderingContext2D) => void): void {
+    this.frameOverlay = overlay;
+  }
+
   private loop(now: number): void {
     // Keep frameTime current for smooth visual animations in render().
     updateFrameTime();
@@ -241,11 +253,13 @@ export class SceneManager {
     this.accumulator += Math.min(elapsed, this.FIXED_DT * MAX_ACCUMULATOR_MULTIPLIER);
 
     let steps = 0;
+    const updateStartedAt = perfMonitor.begin();
     while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
       this.current?.update();
       this.accumulator -= this.FIXED_DT;
       steps++;
     }
+    perfMonitor.end('update', updateStartedAt);
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
 
     // Here rather than inside a render pipeline or a scene: the procedural-people
@@ -255,7 +269,20 @@ export class SceneManager {
     // freeze that clock, turning the cache off. This is the one call site every
     // scene passes through.
     beginPersonFrame();
+    const renderStartedAt = perfMonitor.begin();
     this.current?.render(this.ctx);
+    perfMonitor.end('render', renderStartedAt);
+
+    // After the timers close, so the overlay reports the frame it is drawn on
+    // top of rather than adding its own cost to the figures it shows. Saved and
+    // restored around because it draws after an arbitrary scene's render, which
+    // is under no obligation to leave alpha, transform or filter as it found them.
+    perfMonitor.endFrame();
+    if (this.frameOverlay) {
+      this.ctx.save();
+      this.frameOverlay(this.ctx);
+      this.ctx.restore();
+    }
 
     requestAnimationFrame((t) => this.loop(t));
   }
