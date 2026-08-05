@@ -136,8 +136,8 @@ const DOORSTEP_ANCHORS_PER_BUILDING = 1;
  * The doorways worth posting someone permanently on, and who stands there.
  *
  * Keyed by building name, which is what `buildingEntries` carries — and matched
- * by lookup rather than by index, so a building the plan drops simply loses its
- * anchor instead of giving the next building in the list a bouncer.
+ * by lookup rather than by index, so a building the `TownPlan` drops simply
+ * loses its anchor instead of giving the next building in the list a bouncer.
  */
 const DOORSTEP_ANCHOR_ROLES: ReadonlyArray<readonly [string, TownRole]> = [
   ['The Rusty Anvil', 'smith'],

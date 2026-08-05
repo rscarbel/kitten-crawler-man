@@ -170,7 +170,7 @@ export function rgba(hex: string, alpha: number): string {
 // ── Palette ──────────────────────────────────────────────────────────────────
 
 /**
- * The brief's palette, named by where it sits rather than by hue so the same
+ * The palette is named by where it sits rather than by hue so the same
  * list serves the head, the haunch and the limbs without re-deriving anything.
  *
  * `dorsal` is a deep navy rather than a true black: at a 32 px tile a true black

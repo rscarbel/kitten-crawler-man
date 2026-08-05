@@ -102,9 +102,10 @@ const LOCK_SRC_X_PHASE_5 = 400;
 
 /**
  * The chest sheet, routed through `SpriteLoader` like every other sprite
- * instead of a standalone `new Image()` — see `docs/asset-management-plan.md`
- * Phase 5's stray-load trap. Undefined until `core` (or a later group) has
- * loaded it; callers must skip drawing rather than pass this to `drawImage`.
+ * instead of a standalone `new Image()` — a standalone `Image()` load would
+ * race the lazy sprite-group loader and could stray-load the sheet outside
+ * its group. Undefined until `core` (or a later group) has loaded it;
+ * callers must skip drawing rather than pass this to `drawImage`.
  */
 export function getChestImage(): HTMLImageElement | HTMLCanvasElement | undefined {
   return getSpriteDefByKey('treasure_chests')?.img;
@@ -113,12 +114,12 @@ export function getChestImage(): HTMLImageElement | HTMLCanvasElement | undefine
 /**
  * Ratio of the chest sheet's actually-loaded frame width to the 80px
  * full-resolution width every source-rect constant below is authored
- * against. 1 normally; less than 1 when Phase 8's low-end downscale
- * (`docs/asset-management-plan.md`) has halved the sheet into a smaller
- * canvas — every constant here is a SOURCE (not destination) rect value, so
- * without this scale they'd read from the wrong region of a downscaled
- * sheet. `frameWidth` (not `img.width`) is the authority: it's the field
- * `SpriteLoader` halves in lockstep with the actual pixels.
+ * against. 1 normally; less than 1 when the low-end-device downscale has
+ * halved the sheet into a smaller canvas — every constant here is a SOURCE
+ * (not destination) rect value, so without this scale they'd read from the
+ * wrong region of a downscaled sheet. `frameWidth` (not `img.width`) is the
+ * authority: it's the field `SpriteLoader` halves in lockstep with the
+ * actual pixels.
  */
 export function getChestSourceScale(): number {
   return (

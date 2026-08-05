@@ -866,9 +866,11 @@ function evilSwipePose(progress: number): ClownPose {
     nearFoot: { x: rest.nearFoot.x + 0.16 * throwOut, y: 0 },
     farFoot: { x: rest.farFoot.x - 0.12 * cock, y: 0 },
     nearHand: {
-      x: lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * REACH_ACROSS, cock) +
+      x:
+        lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * REACH_ACROSS, cock) +
         EVIL_ARM_LENGTH * REACH_OUT * throwOut,
-      y: lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.2, cock) -
+      y:
+        lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.2, cock) -
         EVIL_ARM_LENGTH * STRIKE_HEIGHT * throwOut,
     },
     farHand: {
@@ -907,9 +909,11 @@ function evilFrontalSwipePose(progress: number): ClownPose {
     nearFoot: { x: rest.nearFoot.x + 0.1 * throwOut, y: 0 },
     farFoot: { x: rest.farFoot.x - 0.1 * cock, y: 0 },
     nearHand: {
-      x: lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * ACROSS_BODY, cock) +
+      x:
+        lerp(rest.nearHand.x, -EVIL_ARM_LENGTH * ACROSS_BODY, cock) +
         EVIL_ARM_LENGTH * SWEEP_OUT * throwOut,
-      y: lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.3, cock) -
+      y:
+        lerp(rest.nearHand.y, EVIL_SHOULDER_Y + EVIL_ARM_LENGTH * 0.3, cock) -
         EVIL_ARM_LENGTH * 0.25 * throwOut,
     },
     farHand: {
@@ -1037,7 +1041,12 @@ function paintVial(ctx: Ctx): void {
   ctx.restore();
 
   ctx.fillStyle = VIAL_GLASS_RIM;
-  ctx.fillRect(-VIAL_NECK_HALF_WIDTH, bodyTop - VIAL_NECK_HEIGHT, VIAL_NECK_HALF_WIDTH * 2, VIAL_NECK_HEIGHT);
+  ctx.fillRect(
+    -VIAL_NECK_HALF_WIDTH,
+    bodyTop - VIAL_NECK_HEIGHT,
+    VIAL_NECK_HALF_WIDTH * 2,
+    VIAL_NECK_HEIGHT,
+  );
   ctx.fillStyle = VIAL_CORK;
   ctx.fillRect(
     -VIAL_NECK_HALF_WIDTH * 1.4,
@@ -1353,7 +1362,10 @@ function renderSheet(spec: SheetSpec): BakedSheet {
         frameCtx.save();
         // Gore cells anchor on the middle of the cell rather than on the ground
         // line: a tumbling piece has no feet and no floor to stand on.
-        frameCtx.translate((spec.frameWidth / 2) * SUPERSAMPLE, (spec.frameHeight / 2) * SUPERSAMPLE);
+        frameCtx.translate(
+          (spec.frameWidth / 2) * SUPERSAMPLE,
+          (spec.frameHeight / 2) * SUPERSAMPLE,
+        );
         frameCtx.scale(TILE_SCALE * SUPERSAMPLE, TILE_SCALE * SUPERSAMPLE);
         piece(frameCtx, rowSpec.style);
         frameCtx.restore();
@@ -1427,8 +1439,10 @@ function gateEdgeBleed(spec: SheetSpec, pixels: ImageData): void {
       const top = row * spec.frameHeight;
       const bottom = top + spec.frameHeight - 1;
       let worst = 0;
-      for (let x = left; x <= right; x++) worst = Math.max(worst, alphaAt(x, top), alphaAt(x, bottom));
-      for (let y = top; y <= bottom; y++) worst = Math.max(worst, alphaAt(left, y), alphaAt(right, y));
+      for (let x = left; x <= right; x++)
+        worst = Math.max(worst, alphaAt(x, top), alphaAt(x, bottom));
+      for (let y = top; y <= bottom; y++)
+        worst = Math.max(worst, alphaAt(left, y), alphaAt(right, y));
       if (worst > MAX_EDGE_ALPHA) {
         throw new Error(
           `${spec.key} row "${spec.rows[row].name}" frame ${col} paints its own border at alpha ` +

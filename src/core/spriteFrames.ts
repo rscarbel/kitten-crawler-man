@@ -58,8 +58,8 @@ function measureInkBounds(
   const surface = allocCanvas(frameWidth, frameHeight);
   const ctx = surfaceContext(surface);
   // `surface.width`/`.height` are what the canvas actually allocated — a canvas
-  // dimension is a whole number, so a fractional `frameWidth` (Phase 8's
-  // low-end downscale can halve an odd source width, e.g. 65 → 32.5) gets
+  // dimension is a whole number, so a fractional `frameWidth` (the low-end
+  // downscale in `SpriteLoader.ts` can halve an odd source width, e.g. 65 → 32.5) gets
   // truncated here. The pixel buffer below is laid out on THAT integer stride,
   // not on `frameWidth` — indexing with the fractional value would misalign
   // every row after the first, so every stride/loop-bound uses `w`/`h` instead.

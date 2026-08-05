@@ -106,7 +106,7 @@ interface PlacedBuilding {
   readonly artRect: TileRect;
   /**
    * Door the placement rule derives from the sprite, or undefined for the tower
-   * — its door comes from the plan rather than from its art.
+   * — its door comes from the `TownPlan` rather than from its art.
    */
   readonly spriteDoorTile: TilePoint | undefined;
   readonly isTower: boolean;

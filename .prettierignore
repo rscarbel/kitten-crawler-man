@@ -1,0 +1,8 @@
+node_modules
+dist
+_site
+download
+package-lock.json
+*.db
+*.db-shm
+*.db-wal

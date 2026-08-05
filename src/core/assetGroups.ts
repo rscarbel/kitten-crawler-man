@@ -1,13 +1,12 @@
 import type { SpriteKey } from './SpriteLoader';
 
 /**
- * Phase 4 of `docs/asset-management-plan.md`: typed, build-checked declarations
- * of which sprite sheets a floor or system needs. Nothing here changes what
- * loads today — `loadSprites()` still loads every manifest entry at boot
- * (Phase 5 is what makes these groups load-bearing). This file exists so that
- * Phase 5/6 have a shape to build on, and so `npm run verify:assets` can catch
- * a floor/system that grew a new creature without anyone updating its
- * declared coverage.
+ * Typed, build-checked declarations of which sprite sheets a floor or system
+ * needs. `loadGroups` (in `SpriteLoader.ts`) uses these to lazy-load only the
+ * groups a floor actually needs instead of loading every manifest entry at
+ * boot, and `npm run verify:assets` cross-checks a floor/system's declared
+ * coverage against what it actually spawns, catching a creature added without
+ * updating the group that's supposed to cover it.
  *
  * `ASSET_GROUPS`'s values are `readonly SpriteKey[]`, not `string[]`, so a
  * renamed or deleted manifest entry fails `tsc` here instead of vanishing
@@ -227,7 +226,13 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   floor1_tileset: ['ground_floor1'],
   floor2_tileset: ['ground_floor2'],
 
-  boss_hoarder: ['hoarder', 'hoarder_vomit_arc', 'hoarder_vomit_puddle', 'hoarders_room'],
+  boss_hoarder: [
+    'hoarder',
+    'hoarder_vomit_arc',
+    'hoarder_vomit_puddle',
+    'hoarders_room',
+    'cockroach',
+  ],
   boss_juicer: ['juicer'],
   // Includes brindle_grub: level 2's onMobKilledSpawns rule reactively spawns
   // it whenever any mob dies on the floor, not only near the Krakaren Clone —
@@ -304,8 +309,14 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   mantid: ['mantid'],
   mantis: ['mantis'],
   rat: ['rat'],
-  the_hoarder: ['hoarder', 'hoarder_vomit_arc', 'hoarder_vomit_puddle', 'hoarders_room'],
-  cockroach: [],
+  the_hoarder: [
+    'hoarder',
+    'hoarder_vomit_arc',
+    'hoarder_vomit_puddle',
+    'hoarders_room',
+    'cockroach',
+  ],
+  cockroach: ['cockroach'],
   juicer: ['juicer'],
   troglodyte: ['troglodyte', 'troglodyte_tongue'],
   tuskling: ['tuskling'],

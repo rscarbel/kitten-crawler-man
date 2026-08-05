@@ -2,7 +2,11 @@ import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 import db from '../db.js';
 
-const SECRET = process.env.JWT_SECRET ?? (() => { throw new Error('JWT_SECRET is not set in environment'); })();
+const SECRET =
+  process.env.JWT_SECRET ??
+  (() => {
+    throw new Error('JWT_SECRET is not set in environment');
+  })();
 
 export interface AuthUser {
   id: number;
@@ -12,14 +16,16 @@ export interface AuthUser {
 export type AuthedRequest = Request & { user: AuthUser };
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const token: string | undefined = (req as Request & { cookies: Record<string, string> }).cookies?.token;
+  const token: string | undefined = (req as Request & { cookies: Record<string, string> }).cookies
+    ?.token;
   if (!token) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
   try {
     const payload = jwt.verify(token, SECRET) as unknown as AuthUser;
-    const row = db.prepare('SELECT id, username FROM users WHERE id = ?').get(payload.id) as AuthUser | undefined;
+    const row = db.prepare('SELECT id, username FROM users WHERE id = ?').get(payload.id) as
+      AuthUser | undefined;
     if (!row) {
       res.status(401).json({ error: 'Invalid or expired session' });
       return;

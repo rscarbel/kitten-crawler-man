@@ -372,8 +372,9 @@ export class BuildingInteriorScene extends GameplayScene {
   ) {
     super(input, sceneManager);
     this.audio = audio ?? null;
-    // Additive and cheap on repeat entry — see the DungeonScene equivalent
-    // and Phase 2 of docs/asset-management-plan.md.
+    // Additive and cheap on repeat entry: preloading the same interior's SFX
+    // group twice is a no-op, so re-entering a shop never re-pays the decode
+    // cost (see the DungeonScene equivalent for the matching per-floor case).
     void this.audio?.preload(sfxGroupsForBuildingEntry(entry));
     this.pauseMenu.audio = this.audio;
     this.encounterAbilityManager = abilityManager ?? null;
@@ -407,10 +408,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // Interiors (shops, the club, the tower) all draw from the town furniture
     // sheets — 'town' is a safe superset here rather than a per-entry-type
     // breakdown, since every interior variant is cheap to re-request and
-    // already covered by that one group (Phase 5 of the asset plan).
+    // already covered by that one lazily-loaded group.
     // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload
-    // during the fade into the interior rather than on the first draw
-    // (Phase 7) — still fire-and-forget, must not block construction. Ground
+    // during the fade into the interior rather than on the first draw —
+    // still fire-and-forget, must not block construction. Ground
     // tiles/decorations bake into cached chunk canvases on first draw and
     // never re-look at a sheet that finishes loading after that bake (see
     // `GameMap.invalidateAllTileArt`'s doc comment) — every tower floor was

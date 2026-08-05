@@ -90,8 +90,12 @@ function weightShift(rawT: number): number {
   // is a discontinuity at exactly the seam, and it measured as a 2.2x hitch at
   // the wrap with a stall beside it, once per loop forever.
   const t = ((rawT % 1) + 1) % 1;
-  const rise = easeInOut(ramp(t, FIRST_SHIFT_AT - SHIFT_DURATION / 2, FIRST_SHIFT_AT + SHIFT_DURATION / 2));
-  const fall = easeInOut(ramp(t, SECOND_SHIFT_AT - SHIFT_DURATION / 2, SECOND_SHIFT_AT + SHIFT_DURATION / 2));
+  const rise = easeInOut(
+    ramp(t, FIRST_SHIFT_AT - SHIFT_DURATION / 2, FIRST_SHIFT_AT + SHIFT_DURATION / 2),
+  );
+  const fall = easeInOut(
+    ramp(t, SECOND_SHIFT_AT - SHIFT_DURATION / 2, SECOND_SHIFT_AT + SHIFT_DURATION / 2),
+  );
   return -1 + 2 * rise - 2 * fall;
 }
 const FIRST_SHIFT_AT = 0.25;
@@ -504,9 +508,9 @@ const COWL_MAX_CHANNEL = 12;
 /**
  * G2 — the hood interior is solid darkness at every frame.
  *
- * The plan makes this non-negotiable and it is exactly the property a later
- * palette tweak, a stray highlight or a shifted brow lip could undo without
- * anything else looking wrong.
+ * This is non-negotiable, and exactly the property a later palette tweak, a
+ * stray highlight or a shifted brow lip could undo without anything else
+ * looking wrong.
  */
 function gateCowlIsVoid(frames: readonly BakedFrame[]): void {
   for (let i = 0; i < frames.length; i++) {
@@ -611,7 +615,8 @@ function gateLoopCloses(frames: readonly BakedFrame[]): void {
     if (!spec.loops || spec.frameCount < LOOP_GATE_MIN_FRAMES) continue;
     const rowFrames = frames.filter((f) => f.row === row);
     const steps: number[] = [];
-    for (let i = 1; i < rowFrames.length; i++) steps.push(frameDelta(rowFrames[i - 1], rowFrames[i]));
+    for (let i = 1; i < rowFrames.length; i++)
+      steps.push(frameDelta(rowFrames[i - 1], rowFrames[i]));
     const seam = frameDelta(rowFrames[rowFrames.length - 1], rowFrames[0]);
     const typical = median(steps);
     if (typical > 0 && seam > typical * LOOP_SEAM_LIMIT) {
@@ -640,7 +645,8 @@ function gateOneShotSettles(frames: readonly BakedFrame[]): void {
     if (spec.loops) continue;
     const rowFrames = frames.filter((f) => f.row === row);
     const steps: number[] = [];
-    for (let i = 1; i < rowFrames.length; i++) steps.push(frameDelta(rowFrames[i - 1], rowFrames[i]));
+    for (let i = 1; i < rowFrames.length; i++)
+      steps.push(frameDelta(rowFrames[i - 1], rowFrames[i]));
     const handOff = frameDelta(rowFrames[rowFrames.length - 1], idleStart);
     const typical = median(steps);
     if (typical > 0 && handOff > typical * SETTLE_LIMIT) {
@@ -685,7 +691,9 @@ function gateAnchor(frames: readonly BakedFrame[]): void {
     );
   }
   if (lowest >= TILE_Y + TILE_SCALE) {
-    throw new Error(`G6 his soles at y=${lowest} fall below the tile (ends ${TILE_Y + TILE_SCALE})`);
+    throw new Error(
+      `G6 his soles at y=${lowest} fall below the tile (ends ${TILE_Y + TILE_SCALE})`,
+    );
   }
 }
 

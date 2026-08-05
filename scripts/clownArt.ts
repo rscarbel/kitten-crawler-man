@@ -1060,13 +1060,7 @@ function paintMouth(
 function drawMouth(ctx: Ctx, style: ClownStyle, mouthOpen: number): void {
   const r = style.proportions.headRadius;
   const rx = r * style.proportions.headWidthFactor;
-  paintMouth(
-    ctx,
-    style,
-    mouthOpen,
-    rx * (FACE_FORWARD_SHIFT + MOUTH_X),
-    rx * MOUTH_HALF_WIDTH,
-  );
+  paintMouth(ctx, style, mouthOpen, rx * (FACE_FORWARD_SHIFT + MOUTH_X), rx * MOUTH_HALF_WIDTH);
 }
 
 /**
@@ -1243,7 +1237,15 @@ function drawFacePaint(ctx: Ctx, style: ClownStyle, nearEye: Point, farEye: Poin
       ctx.fillStyle = palette.paintMark;
       for (const eye of [nearEye, farEye]) {
         ctx.beginPath();
-        ctx.ellipse(eye.x, eye.y + r * SOCKET_DROP, r * SOCKET_RX, r * SOCKET_RY, 0, 0, FULL_CIRCLE);
+        ctx.ellipse(
+          eye.x,
+          eye.y + r * SOCKET_DROP,
+          r * SOCKET_RX,
+          r * SOCKET_RY,
+          0,
+          0,
+          FULL_CIRCLE,
+        );
         ctx.fill();
       }
       return;
@@ -1506,14 +1508,7 @@ function drawHeadProfile(ctx: Ctx, style: ClownStyle, pose: ClownPose): void {
 
   const eyeSize = r * faceTuningOf(style).eyeScale;
   drawEye(ctx, nearEye.x, nearEye.y, eyeSize, pose.eyeGlow, palette);
-  drawEye(
-    ctx,
-    farEye.x,
-    farEye.y,
-    eyeSize * FAR_EYE_SCALE,
-    pose.eyeGlow * FAR_EYE_SCALE,
-    palette,
-  );
+  drawEye(ctx, farEye.x, farEye.y, eyeSize * FAR_EYE_SCALE, pose.eyeGlow * FAR_EYE_SCALE, palette);
 
   if (style.facePaint !== 'sockets') drawProfileBrows(ctx, style, nearEye, farEye);
 

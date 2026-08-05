@@ -231,44 +231,38 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'front',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(
-              dom,
-              0,
-              0,
-              unit,
-              0,
-              FACING_TOWARD_CAMERA,
-              STILL_FRAME,
-              false,
-              false,
-              0,
-            ),
+            drawHoarderSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              idleFrame: STILL_FRAME,
+            }),
         },
         {
           name: 'back',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, 0, FACING_AWAY, STILL_FRAME, false, false, 0),
+            drawHoarderSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_AWAY,
+              idleFrame: STILL_FRAME,
+            }),
         },
         {
           name: 'side',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(dom, 0, 0, unit, FACING_RIGHT, 0, STILL_FRAME, false, false, 0),
+            drawHoarderSprite(dom, 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              idleFrame: STILL_FRAME,
+            }),
         },
         {
-          name: 'vomit-windup',
+          name: 'vomit',
           paint: ({ dom, unit }) =>
-            drawHoarderSprite(
-              dom,
-              0,
-              0,
-              unit,
-              0,
-              FACING_TOWARD_CAMERA,
-              STILL_FRAME,
-              false,
-              true,
-              ATTACK_MIDPOINT,
-            ),
+            drawHoarderSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              vomitProgress: ATTACK_MIDPOINT,
+            }),
         },
       ];
     },
@@ -530,9 +524,8 @@ export const SUBJECTS: readonly SvgSubject[] = [
   {
     name: 'ball-of-swine',
     views: async () => {
-      const { drawBallOfSwineSprite, ballOfSwinePortrait } = await import(
-        '../src/sprites/ballOfSwineSprite.js'
-      );
+      const { drawBallOfSwineSprite, ballOfSwinePortrait } =
+        await import('../src/sprites/ballOfSwineSprite.js');
       const still = ballOfSwinePortrait();
       return [
         {

@@ -235,9 +235,10 @@ interface SegmentSnapshot {
  * Tile-level ownership of everything carved so far, and the placement rules that
  * keep one segment from accidentally opening a shortcut into another.
  *
- * Kept separate from the tile grid because the generator plans a whole gauntlet
- * before stamping any of it: ownership is claimed as the plan is built and rolled
- * back wholesale when the plan fails, so no carved tile ever has to be undone.
+ * Kept separate from the tile grid because the generator builds a whole
+ * `GauntletPlan` before stamping any of it: ownership is claimed as the
+ * `GauntletPlan` is built and rolled back wholesale when it fails, so no
+ * carved tile ever has to be undone.
  */
 export class SegmentMap {
   private readonly segmentOf: Int16Array;

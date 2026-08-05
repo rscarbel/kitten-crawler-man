@@ -241,20 +241,19 @@ export class RockThrowSystem implements GameSystem {
   /**
    * Lands damage on one victim.
    *
-   * A `Mob` has to go through `takeDamageFrom`, not `takeDamage`: `Mob` extends
-   * `Player`, so the plain call quietly drops it to zero HP without ever setting
-   * `justDied`/`killedBy`/`droppedLoot` — and `CombatSystem`'s kill loop skips
-   * anything without `justDied`, so the corpse awards no XP, drops nothing, and
-   * is never removed from the mob list or the spatial grid. That is the *normal*
-   * case for a hired bruiser, whose whole job is throwing rocks at mobs.
+   * A `Mob` goes through `takeDamageFrom`, not `takeDamage`. The plain call does
+   * register the death now, but it credits nobody: it is the route for a burn or
+   * a poison tick, which have no owner by the time they land. A thrown rock has
+   * one, and `takeDamageFrom` is what puts the thrower in the ledger the XP split
+   * reads. That is the *normal* case for a hired bruiser, whose whole job is
+   * throwing rocks at mobs.
    */
   private strike(rock: Rock, target: Player, damage: number, source: DamageSource): void {
     if (target instanceof Mob) {
       // Falls back to the thrower when there is no owner. A wild golem's rock
-      // passed `null` here, which leaves `damageTakenBy` empty — and
-      // `resolveKills` bails on a mob nothing damaged *before* loot, gore and
-      // `mobKilled`, so the kill silently awarded nothing and the victim never
-      // retaliated either.
+      // passed `null` here, which leaves `damageTakenBy` empty: the kill lands
+      // in nobody's ledger — no XP share and no loot recipient — and the victim
+      // registers no attacker to retaliate against.
       //
       // Typed `melee` rather than `missile` on purpose: `missile` kills credited
       // to the cat grant Magic Missile ability XP and, past level 15, fire a

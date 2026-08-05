@@ -302,8 +302,8 @@ export class TreeSystem implements GameSystem {
    * alone, a tree that was alight when the player stepped through a doorway
    * would render its `burning` row frozen on one frame for the rest of the
    * session: never reaching `charred`, never hurting anyone, never going out.
-   * That would break §5.7's one hard guarantee — that a fire always terminates
-   * at `charred` — from outside the state machine's reach.
+   * That would break the one hard guarantee a fire makes — that it always
+   * terminates at `charred` — from outside the state machine's reach.
    *
    * Scanning the whole map is O(map) exactly once per scene, which is the same
    * order the decoration index already pays, and only on the overworld.
@@ -394,8 +394,8 @@ export class TreeSystem implements GameSystem {
    * the blast's centre is blocked by the front rank of trees and spares almost
    * everything behind them — measured on a real forest, 4 of 28 trees inside the
    * radius came down and the other 24 were merely set alight by the ignite ring
-   * that follows. §1.7 is explicit that dynamite *always* destroys every tree in
-   * its radius, and a blast has no line of sight to respect anyway.
+   * that follows. Dynamite *always* destroys every tree in its radius, and a
+   * blast has no line of sight to respect anyway.
    */
   destroyInRadius(x: number, y: number, radius: number, owner: HumanPlayer | CatPlayer): boolean {
     return this.damageTreesInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, owner, null, false);

@@ -79,9 +79,9 @@ export interface BuildingEntry {
    *
    * Optional because two entries are not shop fronts: the main tower, and the
    * circus's Big Top out beyond the walls. Carried on the entry rather than
-   * re-derived by name in the renderer, so the sign is stated once — in the plan
-   * — and a building added without one is a compile error there rather than a
-   * silently missing sign here.
+   * re-derived by name in the renderer, so the sign is stated once — in the
+   * `TownPlan` — and a building added without one is a compile error there
+   * rather than a silently missing sign here.
    */
   sign?: ShopSignEmblem;
   /**
@@ -94,8 +94,8 @@ export interface BuildingEntry {
    * front, the tile immediately west of `doorTile` is still doorway.
    *
    * Optional alongside `sign`, and for the same two entries: the tower's door is
-   * stated by the plan rather than derived from a manifest, and the Big Top's is
-   * a two-tile gap cut into a tile-built tent.
+   * stated by the `TownPlan` rather than derived from a manifest, and the Big
+   * Top's is a two-tile gap cut into a tile-built tent.
    */
   doorwayWidth?: number;
 }
@@ -103,16 +103,16 @@ export interface BuildingEntry {
 export interface OverworldData {
   grid: TileContent[][];
   /**
-   * The plan the town was generated from.
+   * The `TownPlan` the town was generated from.
    *
    * Handed back rather than kept private because the town's *systems* need its
    * geometry too — which streets are streets, where the yards and gates are —
    * and every one that has re-derived a coordinate instead has eventually
    * drifted from it: the murder quest anchored a body four tiles west of a door
    * that later stood against the west wall, and the notice board sat due south
-   * of centre on a rationale about a tower that had moved. The plan is pure data
-   * and already the single source of truth for the layout; a second copy of a
-   * coordinate is a second thing to keep in step.
+   * of centre on a rationale about a tower that had moved. The `TownPlan` is
+   * pure data and already the single source of truth for the layout; a second
+   * copy of a coordinate is a second thing to keep in step.
    */
   townPlan: TownPlan;
   startTile: TilePoint;
@@ -129,7 +129,7 @@ export interface OverworldData {
   townSafeRadiusTiles: number;
   /** Centre of the town square, in tile coordinates. */
   townSquareCentre: TilePoint;
-  /** Centre tile of the town fountain, or undefined if the plan has no fountain. */
+  /** Centre tile of the town fountain, or undefined if the `TownPlan` has no fountain. */
   fountainCentre: TilePoint | undefined;
   /** Centre of the circus, in tile coordinates. */
   circusCentre: TilePoint;
@@ -267,7 +267,7 @@ export function generateOverworld(size: number): OverworldData {
    * transparent areas. Nothing is reserved for the spire either: it hangs over
    * the fields north of the wall, where the safe radius already keeps the ruins
    * and the forests out. `?townmap` draws the overhang from the sprite footprint
-   * (`BuildingPlot.artRect`), not from anything the plan states.
+   * (`BuildingPlot.artRect`), not from anything the `TownPlan` states.
    */
   buildingEntries.push({
     doorTile: towerDoorTile(plan),
@@ -278,7 +278,7 @@ export function generateOverworld(size: number): OverworldData {
   // The art rects: what a fence must not be driven through, and what a plot's
   // own back garden is measured against. The tower is deliberately absent — its
   // spire is transparent overhang, and the ground under it should keep whatever
-  // the plan painted there.
+  // the `TownPlan` painted there.
   const buildingArt: TileRect[] = [];
   /**
    * The whole plot of each building — band top to frontage — which is what ground
@@ -433,11 +433,11 @@ export function generateOverworld(size: number): OverworldData {
  * Largest piece of the map that may be cut off from the plaza before it is worth
  * saying so on the console.
  *
- * §5.7 of the plan asked for this as a *fraction* of walkable tiles, at 0.97.
+ * This was first tried as a *fraction* of walkable tiles, at 0.97.
  * Measurement says a fraction cannot express it: a generated map has always left
  * 400–650 tiny pockets unreachable — the holes a forest blob's ragged edge
  * leaves, the inside of a sealed ruin shell — and they add up to **2.0–2.5% of
- * the map before this plan touched anything**. A 97% floor therefore sits inside
+ * the map even with no rivers carved at all**. A 97% floor therefore sits inside
  * the pre-existing noise, and an unlucky map fails the gate having nothing at
  * all wrong with it (measured: one at 96.8%, with no marooned region larger than
  * 75 tiles).
@@ -475,8 +475,9 @@ function asPercent(fraction: number): string {
  * - The **doors and the circus throw**, like every other validator here. Those
  *   are what make a map playable at all, and neither has ever failed.
  * - A large **marooned region warns**. It used to throw, and that was wrong in
- *   both directions at once. Blaming this plan for any region with a water tile
- *   on its rim rejected about one map in 250 for holes in woods that predate it;
+ *   both directions at once. Blaming the river carving for any region with a
+ *   water tile on its rim rejected about one map in 250 for holes in woods that
+ *   predate rivers entirely;
  *   attributing properly by border share fixed that but still left 2 maps in
  *   2,500 with a *genuine* severing — one of 4,914 tiles, 88% of the map still
  *   reachable — that neither repair pass can open, because a composite border of
@@ -487,8 +488,8 @@ function asPercent(fraction: number): string {
  *   says so loudly and carries on.
  * - An unreachable **spawn point is pruned, not thrown on**. A generated map has
  *   always sealed a handful of them inside a forest pocket or a ruin shell —
- *   measured at two to eleven per map, and true before this plan touched
- *   anything — so throwing would reject maps for a defect the rivers did not
+ *   measured at two to eleven per map, and true even with no rivers carved at
+ *   all — so throwing would reject maps for a defect the rivers did not
  *   cause. Dropping them changes nothing a player can observe except that a
  *   ghoul neither of you could ever have reached is no longer spawned.
  */
@@ -567,14 +568,14 @@ interface CircusGrounds {
  * all, and a negative one is a hole in the town that the next surface may or may
  * not cover. That mistake is easy to make while re-cutting a band and impossible
  * to see afterwards, since the missing surface just shows whatever was underneath
- * it. Checking is the plan's 17 surfaces plus each gate's opening and apron.
+ * it. Checking is the `TownPlan`'s 17 surfaces plus each gate's opening and apron.
  *
  * Surfaces are also required to stay inside the wall's interior. That is
  * containment, not coverage, and it is worth being explicit that it does **not**
- * prove "everything inside the walls is a made surface": deleting the plan's
- * `town interior` entry would pass this check and leave the whole interior as the
- * grid's bare grass fill. `assertTownInteriorIsIntact`, which runs over the
- * finished grid, is what actually holds that property.
+ * prove "everything inside the walls is a made surface": deleting the
+ * `TownPlan`'s `town interior` entry would pass this check and leave the whole
+ * interior as the grid's bare grass fill. `assertTownInteriorIsIntact`, which
+ * runs over the finished grid, is what actually holds that property.
  *
  * Gates are checked against the wall too: an opening has to lie *on* the ring or
  * it walls the street in, and an apron has to lie *outside* it or it paves gravel
@@ -632,7 +633,7 @@ function assertTownPlanIsSane(plan: TownPlan): void {
  * Fails generation if the Doomsday finale's escape stairwell would appear on a
  * tile the player cannot stand on.
  *
- * The tile is not painted — the plan puts it on the civic terrace, which is
+ * The tile is not painted — the `TownPlan` puts it on the civic terrace, which is
  * already flagstone, and forcing it to the packed-earth road type (as this did
  * while the tile sat on a road slab) would leave one dirt tile in the middle of
  * the terrace. All it has to be is walkable, and it is not added to
@@ -719,7 +720,7 @@ function countTracksInsideTown(grid: TileGrid, plan: TownPlan): number {
  * Standing check that nothing has written over the town.
  *
  * Two faults, one sweep. An **unexpected type** inside the walls means either that
- * the plan left a tile uncovered — the grid's bare grass showing through — or that
+ * the `TownPlan` left a tile uncovered — the grid's bare grass showing through — or that
  * a wilderness pass reached inside the safe radius. A **changed track count** means
  * something paved packed earth in here, which is an allowed type in the alleys and
  * nowhere else.
@@ -788,7 +789,7 @@ function assertTownInteriorIsIntact(grid: TileGrid, plan: TownPlan, expectedTrac
  * one column on the west wall and its base sitting in the Cross Lane, which passes a
  * check whose whole purpose is to say the tower is part of the *north* wall.
  *
- * The plan packs buildings shoulder to shoulder against the lanes, and every
+ * The `TownPlan` packs buildings shoulder to shoulder against the lanes, and every
  * width comes from a sprite's manifest footprint rather than from a number
  * written next to the anchor. That is the right way round — re-scaling a
  * building re-spaces its own plot — but it also means an art change can silently
@@ -840,13 +841,13 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * Garrison Green's corner post landed in the single-tile gap behind two cottages
  * and stranded **14 walkable tiles**, and *nothing about the finished map looked
  * wrong*. No screenshot
- * shows it. None of the other five assertions can see it: the plan is sane, the
- * plots do not overlap, no sliver exists, every interior tile is a town surface,
- * and the escape tile is clear. Connectivity is a property of all of them
- * together, so it has to be checked over the finished grid.
+ * shows it. None of the other five assertions can see it: the `TownPlan` is sane,
+ * the plots do not overlap, no sliver exists, every interior tile is a town
+ * surface, and the escape tile is clear. Connectivity is a property of all of
+ * them together, so it has to be checked over the finished grid.
  *
- * It is also reachable by an *art* change that never touches the plan, which is
- * the class of failure this phase has hit twice.
+ * It is also reachable by an *art* change that never touches the `TownPlan`,
+ * which is the class of failure this phase has hit twice.
  *
  * **The sweep is confined to the wall's interior, and so is the fill**, which makes
  * this a stricter property than "reachable": getting from one part of the town to
@@ -857,7 +858,7 @@ function assertTownPlotsDoNotOverlap(plan: TownPlan, plots: ReadonlyArray<TownPl
  * a clearance from the town *centre* and not from the wall; the forests keep 65 and
  * skip anything paved; the ruins and rubble need bare grass of which the
  * interior has none, and both scatter passes write walkable decorations — so a
- * failure is a layout bug in the plan rather than a bad roll of the dice.
+ * failure is a layout bug in the `TownPlan` rather than a bad roll of the dice.
  *
  * The **Big Top is deliberately not checked**, and the reason is exactly that
  * distinction. It stands outside the walls at a random distance, and below about
@@ -999,15 +1000,15 @@ const YARD_MIN_GAP = 3;
 
 /**
  * Fails generation if two buildings in the same band end up a gap apart that the
- * plan has no answer for.
+ * `TownPlan` has no answer for.
  *
  * Only pairs whose rows overlap are compared: two buildings in different bands
  * always have a street between them, and a gap measured between bands is the
  * width of that street rather than of anything between the two.
  *
  * Every width here comes from a sprite's manifest footprint, so this is one of
- * the failures an *art* change causes without touching a line of the plan — which
- * is exactly the kind that otherwise ships.
+ * the failures an *art* change causes without touching a line of the `TownPlan`
+ * — which is exactly the kind that otherwise ships.
  */
 function assertNoUnusableSlivers(plots: ReadonlyArray<TownPlot>): void {
   for (let i = 0; i < plots.length; i++) {

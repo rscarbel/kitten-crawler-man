@@ -2,10 +2,10 @@ import type { SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 
 /**
- * Where a group of non-streaming sound effects can be heard. See Phase 2 of
- * `docs/asset-management-plan.md`: the 144 non-streamed ids used to be decoded
- * in one `preload()` call at boot; these groups let `AudioManager.preload` be
- * called with only what a floor/boss/quest/interior actually needs.
+ * Where a group of non-streaming sound effects can be heard. The 144
+ * non-streamed ids used to be decoded in one `preload()` call at boot; these
+ * groups let `AudioManager.preload` be called with only what a
+ * floor/boss/quest/interior actually needs.
  *
  * `misc` exists so a sound with no confident home still gets preloaded
  * (see its own doc comment below) rather than silently never loading — a
@@ -250,9 +250,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * No id currently lands here — every non-streaming `SoundId` found a home
-   * in one of the groups above. Kept as the documented catch-all Phase 2
-   * asks for, so a future id with no obvious floor/boss/quest/interior still
-   * has somewhere safe to go instead of being silently dropped.
+   * in one of the groups above. Kept as a documented catch-all so a future id
+   * with no obvious floor/boss/quest/interior still has somewhere safe to go
+   * instead of being silently dropped.
    */
   misc: [],
 };

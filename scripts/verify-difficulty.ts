@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Headless gate on the fairness rules behind `docs/difficulty-plan.md`.
+ * Headless gate on the fairness rules behind the game's difficulty tuning.
  *
  * The thing worth guarding here is that later tuning cannot quietly break the
- * invariants that make a harder game a fair one. Every number in that plan is a
+ * invariants that make a harder game a fair one. Every tuning number is a
  * starting point meant to be moved; none of the *rules* around them are. A
  * cadence curve retuned past its floor, a telegraph shortened below what a
  * player can react to, a projectile nudged past the speed you can outrun — all
@@ -13,8 +13,7 @@
  * Everything here is arithmetic over the game's own exported functions, never a
  * copy of them, so a formula that moves is either still inside its bounds or
  * fails this. How the result *feels* is still a `[HUMAN]` gate — run the game
- * with `?difficulty` for the counters the plan's target-feel table is written
- * against.
+ * with `?difficulty` for the target-feel counters this gate checks against.
  *
  * Run: npx tsx scripts/verify-difficulty.ts
  */
@@ -127,7 +126,8 @@ section('cadence curve');
 
   let strictlyDecreasing = true;
   for (let level = 1; level < PROBE_LEVEL_LIMIT; level++) {
-    if (cooldownScaleForLevel(level + 1) >= cooldownScaleForLevel(level)) strictlyDecreasing = false;
+    if (cooldownScaleForLevel(level + 1) >= cooldownScaleForLevel(level))
+      strictlyDecreasing = false;
   }
   check(strictlyDecreasing, 'it decreases at every level');
 
@@ -390,8 +390,9 @@ section('re-levelling');
   // level cannot be re-applied, so anything that re-authors speed or max HP from
   // a flat constant throws the scaling away for good. A checkpoint restore calls
   // `resetToSpawn` on every surviving hostile, which is where a levelled boss
-  // used to come back at level-1 speed with its levelled HP intact — the sponge
-  // the plan's P1 exists to forbid.
+  // used to come back at level-1 speed with its levelled HP intact — a boss
+  // that eats hits like a level-1 mob but has a levelled boss's max HP, which
+  // this gate exists to forbid.
   const boss = new Juicer(0, 0, TILE_SIZE);
   boss.applyMobLevel(BOSS_TEST_LEVEL);
   const levelledSpeed = boss.moveSpeed;

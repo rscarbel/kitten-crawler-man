@@ -30,8 +30,10 @@ const MOB_LEVEL_DAMAGE_SCALE = 0.2;
  * cadence × hit-rate × count, and before this only the first of those moved with
  * level: a level-8 goblin swung on exactly the level-1 goblin's clock, so
  * levelling made enemies survive longer without ever making them more dangerous
- * — the definition of an HP sponge. Scaling the clock instead is what the plan
- * calls pressure over sponge.
+ * — the definition of an HP sponge. The fix this codebase commits to is
+ * pressure over sponge: scale the attack clock with level rather than
+ * inflating HP, so a higher level reads as a more dangerous fight and not
+ * just a longer one.
  *
  * Asymptotic and floored rather than linear, because the failure mode at the far
  * end is a machine gun: the curve is steepest over the first few levels, where
@@ -684,7 +686,8 @@ export abstract class Mob extends Player {
    * those writes is a flat authored constant. Before this pass none of them were
    * ever levelled so it never showed; now that they are, a plain reassignment
    * silently throws the level away and leaves a boss with levelled HP moving at
-   * level-1 speed, which is exactly the sponge the difficulty plan forbids.
+   * level-1 speed — an HP sponge with none of the matching threat, which is the
+   * exact failure mode {@link cooldownScaleForLevel} exists to avoid elsewhere.
    * Anything reassigning those fields must go through {@link setBaseSpeed} or
    * {@link setBaseMaxHp}.
    */
@@ -1273,22 +1276,53 @@ export abstract class Mob extends Player {
         }
       }
     }
-    if (this.hp === 0 && prev > 0) {
-      this.justDied = true;
-      // Credited rather than literal: a pet attacks in its own name so that mobs
-      // retaliate against *it*, but every killer-keyed reward in the game — loot
-      // chances, achievements, kill XP — belongs to the owner who sent it in.
-      const credited = attacker?.xpCreditTarget ?? null;
-      this.killedBy = credited;
-      this.killedByDealer = attacker;
-      this.killType = damageType;
-      // Roll loot
-      const coins = randomInt(this.coinDropMin, this.coinDropMax);
-      const items = this.rollLootItems(credited);
-      if (coins > 0 || items.length > 0) {
-        this.droppedLoot = { coins, items };
-      }
+    if (this.hp === 0 && prev > 0) this._resolveDeath(attacker, damageType);
+  }
+
+  /**
+   * A wound that kills, whatever dealt it: `justDied`, kill credit, and the loot
+   * roll. Everything downstream of a kill hangs off `justDied` — the `mobKilled`
+   * event, and with it the gore, the XP, the loot and the removal from the mob
+   * grid.
+   */
+  private _resolveDeath(
+    attacker: Player | null,
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null,
+  ): void {
+    this.justDied = true;
+    // Credited rather than literal: a pet attacks in its own name so that mobs
+    // retaliate against *it*, but every killer-keyed reward in the game — loot
+    // chances, achievements, kill XP — belongs to the owner who sent it in.
+    const credited = attacker?.xpCreditTarget ?? null;
+    this.killedBy = credited;
+    this.killedByDealer = attacker;
+    this.killType = damageType;
+    // Roll loot
+    const coins = randomInt(this.coinDropMin, this.coinDropMax);
+    const items = this.rollLootItems(credited);
+    if (coins > 0 || items.length > 0) {
+      this.droppedLoot = { coins, items };
     }
+  }
+
+  /**
+   * Damage that arrives without an attacker — a burn, a poison tick, an acid
+   * pool, the doomsday clock. `Player.takeDamage` writes hp and nothing else, so
+   * a mob finished by one of these used to hit zero with `justDied` still false:
+   * no death event, and therefore no gore, no loot, no XP, and a nought-HP body
+   * left standing in `mobs` and in the mob grid until something else culled it.
+   *
+   * There is no attacker to credit and no weapon to name — the tick has no owner
+   * by the time it lands — so both go null, which is what every consumer of
+   * `killType` already treats as "not killed by a blow".
+   */
+  override takeDamage(amount: number, source?: DamageSource): boolean {
+    const prev = this.hp;
+    const connected = super.takeDamage(amount, source);
+    if (connected && this.hp === 0 && prev > 0 && !this.justDied) {
+      this._resolveDeath(null, null);
+    }
+    return connected;
   }
 
   /**

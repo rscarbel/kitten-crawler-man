@@ -13,7 +13,33 @@ npm run lint        # eslint src — must exit 0
 npm run format      # prettier --write "src/**/*.ts"
 ```
 
-CLAUDE.md rules that gate on these: strict types everywhere, **no `as` casts, no `!` assertions, no `any`**, no magic numbers, comments explain *why* only.
+CLAUDE.md rules that gate on these: strict types everywhere, **no `as` casts, no `!` assertions, no `any`**, no magic numbers, comments explain _why_ only.
+
+## Headless verification harnesses
+
+Typecheck and lint don't prove behavior. Several invariants have their own scripts, each running against the game's own exported functions and constants rather than a copy, so a retuned formula either still satisfies the rule or fails the script. Run the one that covers what you touched:
+
+```bash
+npm run verify:difficulty    # the P1-P5 fairness rules (docs/difficulty-fairness-rules.md)
+npm run verify:progression   # 50 generated maps per floor: reachability and bypass invariants
+npm run verify:bounty        # bounty registry, encounters, state machine, site scatter
+npm run verify:separation    # mob push-apart force math and strategy equivalence
+npm run verify:assets        # every mob a floor can produce vs. its declared sprite groups
+npm run bench:separation     # measures the separation strategy crossover
+```
+
+- `verify:difficulty` covers the cadence curve, telegraph floors, projectile speed caps, the regen curve, spawn-count caps, spawn and boss level bands, progression regions, and that nothing calls `applyMobLevel` twice.
+- `verify:progression` regenerates 50 maps per floor; a rare layout failure needs that volume to show up at all. Bump `VERIFY_RUN_COUNT` locally for a sign-off run and leave the committed value alone.
+- `verify:assets` proves every mob a floor can produce has its sprite keys declared — see `docs/asset-management.md`.
+- `verify:bounty`'s map checks are a random sample, not a deterministic gate: overworld generation runs on unseeded `Math.random()` on purpose, because a fixed seed only ever proves the one map it encodes. Run it more than once when something looks marginal.
+- `verify:separation` checks force math, cell-boundary coverage, and that the grid and all-pairs strategies agree to floating-point rounding across 200 random layouts plus degenerate ones. It also pins `SpatialGrid`'s key-packing assumptions: negative coordinates are safe, and a bucket collision can only cost work rather than produce a wrong answer, because every query re-tests its candidates.
+- `bench:separation` is what makes `SEPARATION_GRID_MIN_MOBS` a measured number rather than a guess. It sweeps roster sizes against three crowding levels and carries a max-force-delta column beside the timings, so a faster shape that quietly computed _different_ forces fails loudly. Treat the crossover as the result and the absolute microseconds as scenery — they are wall-clock on whatever machine runs them.
+- These scripts exist because browser `requestAnimationFrame` throttles to roughly one frame a second when the tab is occluded, so nothing about timing or motion can be honestly claimed from browser automation. Everything that could be made deterministic was moved into them; the rest is left to a human.
+- A new script must be listed by name in `tsconfig.scripts.json`'s `include`. Scripts typecheck is opt-in — an unregistered script is never checked and the gate still passes.
+
+## Dev overlays
+
+`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player.
 
 ## Running the game
 

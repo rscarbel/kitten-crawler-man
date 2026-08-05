@@ -90,7 +90,7 @@ export function scatterGroundCover(
  * walk across open country reading as one repeating material, and cover dense
  * enough to notice tile by tile is cover dense enough to notice *as a grid*.
  *
- * They are constants here rather than fields on `TownPlan` because the plan
+ * They are constants here rather than fields on `TownPlan` because it
  * describes the town, and none of this is inside the walls.
  */
 const WILDFLOWER_DENSITY_ON_GRASS = 0.03;

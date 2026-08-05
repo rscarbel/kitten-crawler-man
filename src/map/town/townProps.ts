@@ -1,7 +1,7 @@
 /**
- * Paints the plan's props onto the grid. Props are tile types rather than
+ * Paints the `TownPlan`'s props onto the grid. Props are tile types rather than
  * sprites — the fountain, torches and wells all render procedurally — so
- * placing one is a write, and the registry is the plan's `props` list.
+ * placing one is a write, and the registry is its `props` list.
  *
  * Runs after the streets and buildings so props always sit on finished ground,
  * and before ground scatter so scatter never lands on top of one.
@@ -42,10 +42,10 @@ export function paintTownProps(grid: TileGrid, plan: TownPlan): void {
 }
 
 /**
- * Centre tile of the plan's fountain — what the ambient water emitter and the
- * plaza's activity anchors position themselves against.
+ * Centre tile of the `TownPlan`'s fountain — what the ambient water emitter and
+ * the plaza's activity anchors position themselves against.
  *
- * Undefined when the plan has no fountain. Consumers already treat the fountain
+ * Undefined when the layout has no fountain. Consumers already treat the fountain
  * as optional (`GameMap.fountainCentre`), and falling back to the town centre
  * would silently play water from a dry plaza rather than play nothing.
  */

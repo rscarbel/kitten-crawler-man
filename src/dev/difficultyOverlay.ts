@@ -3,9 +3,8 @@
  *
  * Lives here rather than beside the counters so a release build has no import
  * edge to it at all — see the module comment on `devBoot.ts`. Its whole job is
- * to end a playtest with the numbers from `docs/difficulty-plan.md`'s
- * target-feel table instead of an impression: HP left after a room fight,
- * potions per segment, deaths per floor, seconds per fight.
+ * to end a playtest with target-feel numbers instead of an impression: HP left
+ * after a room fight, potions per segment, deaths per floor, seconds per fight.
  */
 
 import {
@@ -44,7 +43,7 @@ const SEGMENT_LABELS: Record<DifficultySegment, string> = {
 const PERCENT_SCALE = 100;
 const SECONDS_DECIMALS = 1;
 
-/** The plan's "HP remaining after a regular room fight" band. */
+/** Target "HP remaining after a regular room fight" band; see docs/difficulty-fairness-rules.md. */
 const HP_TARGET_MIN_FRACTION = 0.4;
 const HP_TARGET_MAX_FRACTION = 0.7;
 

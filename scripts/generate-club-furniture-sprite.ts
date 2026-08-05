@@ -1374,7 +1374,15 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
   ctx.strokeStyle = 'rgba(240,216,112,0.4)';
   ctx.lineWidth = TILE_SCALE * 0.05;
   ctx.beginPath();
-  ctx.ellipse(cx, cy - feltRy * 0.12, feltRx * 0.5, feltRy * 0.26, 0, 0.08 * Math.PI, 0.92 * Math.PI);
+  ctx.ellipse(
+    cx,
+    cy - feltRy * 0.12,
+    feltRx * 0.5,
+    feltRy * 0.26,
+    0,
+    0.08 * Math.PI,
+    0.92 * Math.PI,
+  );
   ctx.stroke();
 
   // Brass tacks around the curved half of the rail only — the dealer's edge is flat.
@@ -1409,7 +1417,13 @@ function drawCasinoTable(ctx: NodeCtx, geo: FrameGeometry, variant: number): voi
 }
 
 /** The dealer's sunken chip rack: five wells of stacked chips along the flat edge. */
-function drawChipTray(ctx: NodeCtx, cx: number, top: number, halfWidth: number, rng: () => number): void {
+function drawChipTray(
+  ctx: NodeCtx,
+  cx: number,
+  top: number,
+  halfWidth: number,
+  rng: () => number,
+): void {
   const wells = 5;
   const trayH = TILE_SCALE * 0.16;
   const tray: Rect = { x: cx - halfWidth, y: top, w: halfWidth * 2, h: trayH };

@@ -9,9 +9,8 @@ router.use(requireAuth);
 
 router.get('/', (req: AuthedRequest, res: Response) => {
   const { id } = req.user;
-  const row = db
-    .prepare('SELECT data FROM progress WHERE user_id = ?')
-    .get(id) as { data: string } | undefined;
+  const row = db.prepare('SELECT data FROM progress WHERE user_id = ?').get(id) as
+    { data: string } | undefined;
 
   res.json({ data: row ? (JSON.parse(row.data) as unknown) : null });
 });
@@ -25,13 +24,15 @@ router.post('/', (req: AuthedRequest, res: Response) => {
     return;
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO progress (user_id, data, updated_at)
     VALUES (?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE
       SET data = excluded.data,
           updated_at = excluded.updated_at
-  `).run(id, JSON.stringify(data));
+  `,
+  ).run(id, JSON.stringify(data));
 
   res.json({ ok: true });
 });

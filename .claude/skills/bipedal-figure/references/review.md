@@ -14,7 +14,7 @@ within seconds in a render.
    adjectives.
 3. Apply the numbers. Re-render. Repeat.
 4. **Run one more round after it looks right.** Four separate defects in this
-   codebase have lived *inside* a completed fix.
+   codebase have lived _inside_ a completed fix.
 
 Four rounds on Carl produced, in order: a five-head bobblehead, hips wider than
 shoulders, mitten hands, an unreadable face, sandal-strap toes, a jacket darker
@@ -46,14 +46,14 @@ gets caught before it ships.
 
 ## The blind naming test
 
-For anything that has to be *identified* — a carried prop, a gore piece, a
+For anything that has to be _identified_ — a carried prop, a gore piece, a
 distinct archetype — show the shape alone with no context and ask what it is.
 The axe failed three attempts running (shovel, spade, boot, bucket) while two
 redraws of its cutting edge changed nothing; the real faults were carry angle,
 aspect, position along the haft, and flare.
 
-A distinctness gate proves shapes are *different*. Only a naming test proves
-they are the *right* shapes.
+A distinctness gate proves shapes are _different_. Only a naming test proves
+they are the _right_ shapes.
 
 ## Diagnostic harness modes worth having
 
@@ -62,7 +62,7 @@ figure's (unconvincing) motion:
 
 - **onion** — consecutive frames overlaid at low alpha. Shows a snap or a pop as
   a doubled edge.
-- **delta** — per-frame difference against the previous frame. Locates *where* a
+- **delta** — per-frame difference against the previous frame. Locates _where_ a
   continuity gate fired.
 - **arc** — traces a point (weapon tip, hand, ankle) across a row. A believable
   swing is a smooth arc; a cornered one is a rig bug.
@@ -71,7 +71,7 @@ figure's (unconvincing) motion:
 ## In-motion checks a still cannot cover
 
 Add a `?<name>` preview scene in `game.ts`'s `devBootScene`. Browser automation
-*can* drive this game (rAF, keyboard, synthetic canvas mouse events all work),
+_can_ drive this game (rAF, keyboard, synthetic canvas mouse events all work),
 but rAF stalls to ~1 fps when the window is occluded — so **anything about
 timing or feel needs a human**. Flag these explicitly rather than claiming them:
 

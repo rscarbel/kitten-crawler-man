@@ -5,12 +5,13 @@
  * Stills genuinely cannot answer "does this look smooth", which is why the
  * `?goblins` preview scene exists — but stills are the only thing a reviewer
  * with no browser can look at, and most defects are visible in one. This slices
- * a baked sheet into the seven panels of the plan's §8.1:
+ * a baked sheet into seven panels:
  *
  *   1 contact sheet   every row at review scale, with the tile guide
  *   2 in-game strip   every row at TILE_SIZE / tileScale, where only the
  *                     silhouette survives
- *   3 silhouette      the same strip in solid black — the §3.4 test
+ *   3 silhouette      the same strip in solid black — a shape read entirely
+ *                     from outline, with no interior linework to lean on
  *   4 part crops      --part=head|ears|hands|weapon|feet|wound
  *   5 onion skin      every frame of a row at low alpha, so the arc the motion
  *                     traces is visible as a shape
@@ -121,7 +122,9 @@ interface Geometry {
  * manifest matches what was baked, which is what makes that safe.
  */
 function geometryOf(archetype: GoblinArchetype): Geometry {
-  const raw: unknown = JSON.parse(readFileSync(resolve('src/images/enemies/manifest.json'), 'utf8'));
+  const raw: unknown = JSON.parse(
+    readFileSync(resolve('src/images/enemies/manifest.json'), 'utf8'),
+  );
   if (typeof raw !== 'object' || raw === null) throw new Error('manifest is not an object');
   const parsed: Record<string, unknown> = { ...raw };
   const entry: unknown = parsed[`goblin_${archetype}`];
@@ -258,16 +261,34 @@ function drawSheetPanels(
       for (let frame = 0; frame < row.frameCount; frame++) {
         const x = PADDING + frame * (inGame + PADDING);
         const { sx, sy } = frameSource(row, frame, geometry);
-        ctx.fillStyle = asSilhouette
-          ? BACKDROP
-          : FLOOR_SWATCHES[frame % FLOOR_SWATCHES.length];
+        ctx.fillStyle = asSilhouette ? BACKDROP : FLOOR_SWATCHES[frame % FLOOR_SWATCHES.length];
         ctx.fillRect(x, y, inGame, inGameH);
         if (!asSilhouette) {
-          ctx.drawImage(sheet, sx, sy, geometry.frameWidth, geometry.frameHeight, x, y, inGame, inGameH);
+          ctx.drawImage(
+            sheet,
+            sx,
+            sy,
+            geometry.frameWidth,
+            geometry.frameHeight,
+            x,
+            y,
+            inGame,
+            inGameH,
+          );
         } else {
           const shape = createCanvas(Math.ceil(inGame), Math.ceil(inGameH));
           const shapeCtx = shape.getContext('2d');
-          shapeCtx.drawImage(sheet, sx, sy, geometry.frameWidth, geometry.frameHeight, 0, 0, inGame, inGameH);
+          shapeCtx.drawImage(
+            sheet,
+            sx,
+            sy,
+            geometry.frameWidth,
+            geometry.frameHeight,
+            0,
+            0,
+            inGame,
+            inGameH,
+          );
           const pixels = shapeCtx.getImageData(0, 0, shape.width, shape.height);
           const ALPHA_CUTOFF = 40;
           const CHANNELS = 4;
@@ -315,7 +336,8 @@ function drawPartPanel(
   const height =
     PADDING +
     rows.reduce(
-      (sum, row) => sum + LABEL_HEIGHT + Math.ceil(row.frameCount / COLS_PER_ROW) * (cellH + PADDING),
+      (sum, row) =>
+        sum + LABEL_HEIGHT + Math.ceil(row.frameCount / COLS_PER_ROW) * (cellH + PADDING),
       0,
     );
   const canvas = createCanvas(Math.ceil(width), Math.ceil(height));
@@ -327,7 +349,11 @@ function drawPartPanel(
   let y = PADDING;
   for (const row of rows) {
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${archetype} ${row.name} — ${partName} at ${scale}×`, PADDING, y + LABEL_HEIGHT - PADDING);
+    ctx.fillText(
+      `${archetype} ${row.name} — ${partName} at ${scale}×`,
+      PADDING,
+      y + LABEL_HEIGHT - PADDING,
+    );
     y += LABEL_HEIGHT;
     for (let frame = 0; frame < row.frameCount; frame++) {
       const block = Math.floor(frame / COLS_PER_ROW);
@@ -432,11 +458,7 @@ const ARC_PANEL = 320;
 const ARC_CHART_HEIGHT = 120;
 const ARC_DOT_RADIUS = 3;
 
-function drawArcPanel(
-  archetype: GoblinArchetype,
-  rows: readonly RowSpec[],
-  out: string,
-): void {
+function drawArcPanel(archetype: GoblinArchetype, rows: readonly RowSpec[], out: string): void {
   const trace = readArcTrace(archetype);
   const shown = rows.filter((row) => (trace[row.name] ?? []).length > 1);
   if (shown.length === 0) throw new Error('no arc trace for the requested rows');
@@ -453,7 +475,11 @@ function drawArcPanel(
     const points = trace[row.name];
     const x0 = PADDING + index * (ARC_PANEL + PADDING);
     ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${archetype} ${row.name} — weapon tip path`, x0, PADDING + LABEL_HEIGHT - PADDING);
+    ctx.fillText(
+      `${archetype} ${row.name} — weapon tip path`,
+      x0,
+      PADDING + LABEL_HEIGHT - PADDING,
+    );
 
     const minX = Math.min(...points.map((point) => point.x));
     const maxX = Math.max(...points.map((point) => point.x));
@@ -540,8 +566,28 @@ function drawDeltaPanel(
       const a = frameSource(row, frame - 1, geometry);
       const b = frameSource(row, frame, geometry);
       scratchCtx.clearRect(0, 0, scratch.width, scratch.height);
-      scratchCtx.drawImage(sheet, a.sx, a.sy, geometry.frameWidth, geometry.frameHeight, 0, 0, geometry.frameWidth, geometry.frameHeight);
-      scratchCtx.drawImage(sheet, b.sx, b.sy, geometry.frameWidth, geometry.frameHeight, 0, geometry.frameHeight, geometry.frameWidth, geometry.frameHeight);
+      scratchCtx.drawImage(
+        sheet,
+        a.sx,
+        a.sy,
+        geometry.frameWidth,
+        geometry.frameHeight,
+        0,
+        0,
+        geometry.frameWidth,
+        geometry.frameHeight,
+      );
+      scratchCtx.drawImage(
+        sheet,
+        b.sx,
+        b.sy,
+        geometry.frameWidth,
+        geometry.frameHeight,
+        0,
+        geometry.frameHeight,
+        geometry.frameWidth,
+        geometry.frameHeight,
+      );
       const pixels = scratchCtx.getImageData(0, 0, scratch.width, scratch.height);
       const CHANNELS = 4;
       const half = geometry.frameWidth * geometry.frameHeight * CHANNELS;
@@ -565,7 +611,12 @@ function drawDeltaPanel(
     deltas.forEach((delta, i) => {
       const barHeight = (delta / peak) * DELTA_PANEL_HEIGHT;
       ctx.fillStyle = CHART_INK;
-      ctx.fillRect(x0 + i * barWidth, top + DELTA_PANEL_HEIGHT - barHeight, barWidth - 1, barHeight);
+      ctx.fillRect(
+        x0 + i * barWidth,
+        top + DELTA_PANEL_HEIGHT - barHeight,
+        barWidth - 1,
+        barHeight,
+      );
     });
     const limitY = top + DELTA_PANEL_HEIGHT - (limit / peak) * DELTA_PANEL_HEIGHT;
     ctx.strokeStyle = CHART_LIMIT;
@@ -585,10 +636,10 @@ function drawDeltaPanel(
  * The nine pieces alone, at review scale and at the size they actually render.
  *
  * Gore draws at `TILE_SIZE / tileScale` — half the sheet's own pixels — so the
- * bottom strip here is the real test: §7's exit criterion is that a reviewer can
- * *name* all nine from it. Cropped to each piece's own ink, because the cell is
- * sized by a war hammer hauled overhead and a severed jaw floating in the middle
- * of it tells a reviewer nothing about whether the jaw reads.
+ * bottom strip here is the real test: a reviewer must be able to *name* all
+ * nine pieces from it at that size. Cropped to each piece's own ink, because
+ * the cell is sized by a war hammer hauled overhead and a severed jaw floating
+ * in the middle of it tells a reviewer nothing about whether the jaw reads.
  */
 const GORE_REVIEW_SCALES: ReadonlyArray<number> = [4, 1, 0.5];
 

@@ -196,7 +196,7 @@ export const ARM_ROOT_HALF = SHOULDER_HALF * ARM_INSET;
  */
 const LEG_ROOT_HALF = 0.135;
 
-/** Limb widths. "Absurdly thin" is the brief, and these are the numbers for it. */
+/** Limb widths, kept absurdly thin relative to the body mass above them. */
 const THIGH_WIDTH = 0.056;
 const KNEE_WIDTH = 0.04;
 const CALF_WIDTH = 0.05;

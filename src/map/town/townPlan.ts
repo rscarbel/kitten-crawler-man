@@ -56,7 +56,7 @@ export type BuildingKind = 'house' | 'tower' | 'restaurant' | 'store' | 'club';
 /**
  * One paved or planted region of the town.
  *
- * Surfaces are painted in the order the plan lists them and later ones win, so
+ * Surfaces are painted in the order the `TownPlan` lists them and later ones win, so
  * the hierarchy is expressed by ordering rather than by priority numbers: soft
  * ground first, then alleys, lanes, main streets, and finally the plaza's
  * flagstone. Overlapping a lane across the plaza and letting the plaza win is
@@ -104,7 +104,7 @@ export interface PlannedGate {
  * The device painted on a building's hanging shop sign.
  *
  * Declared here rather than in the sprite that draws it because it is part of
- * what the plan *states* about a building — the trade it carries on — and every
+ * what the `TownPlan` *states* about a building — the trade it carries on — and every
  * plot must name one, which `PlannedBuilding.sign` being required enforces. The
  * painter for each device lives in `src/sprites/shopSign.ts`, keyed by this
  * union, so a device with no art is a compile error rather than a blank board.
@@ -138,7 +138,7 @@ export type ShopSignEmblem = (typeof SHOP_SIGN_EMBLEMS)[number];
 
 /**
  * A building rendered from a PNG. Its footprint and doorway both come from the
- * sprite manifest at paint time, so the plan only has to say where the art's
+ * sprite manifest at paint time, so the `TownPlan` only has to say where the art's
  * anchor tile goes.
  */
 export interface PlannedBuilding {
@@ -148,7 +148,7 @@ export interface PlannedBuilding {
    * Row the building's front (south) face stands on — always its band's last
    * row, so the street below is the street its door opens onto.
    *
-   * Stated instead of an anchor row so the plan never repeats a sprite's height.
+   * Stated instead of an anchor row so the `TownPlan` never repeats a sprite's height.
    * `placeSpriteBuilding` derives the anchor by bottom-aligning the manifest
    * footprint to this row, which means re-scaling a building's art keeps its
    * frontage on the street and grows it northward into its own plot.
@@ -260,7 +260,7 @@ export interface PlannedDistrict {
   readonly label: TilePoint;
 }
 
-/** A prop placed as tiles on the plan's ground, before any scatter runs. */
+/** A prop placed as tiles on the `TownPlan`'s ground, before any scatter runs. */
 export type PlannedProp =
   | { readonly kind: 'fountain'; readonly bounds: TileRect }
   | { readonly kind: 'torch'; readonly tile: TilePoint }

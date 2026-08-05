@@ -1729,7 +1729,7 @@ function drawHeadProfile(ctx: Ctx, pose: TusklingPose): void {
   drawProfileEar(ctx);
   // All four tusks are in the profile, and the far pair is painted over the
   // skull rather than behind it: a head this deep hides anything drawn under
-  // it, and the profile then shows one tusk where the brief promises four.
+  // it, and the profile then shows one tusk where the design calls for four.
   drawProfileFarTusks(ctx);
   drawMaw(ctx, pose.maw, true);
   drawSnoutDisc(

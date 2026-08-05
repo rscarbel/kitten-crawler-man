@@ -57,7 +57,8 @@ router.post('/login', async (req: Request, res: Response) => {
     .get(username) as { id: number; username: string; password_hash: string } | undefined;
 
   // Use constant-time compare even on "user not found" to prevent user enumeration
-  const hash = user?.password_hash ?? '$2a$12$invalidhashpadding00000000000000000000000000000000000';
+  const hash =
+    user?.password_hash ?? '$2a$12$invalidhashpadding00000000000000000000000000000000000';
   const ok = await bcrypt.compare(password, hash);
 
   if (!user || !ok) {

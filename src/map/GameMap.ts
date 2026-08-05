@@ -348,7 +348,7 @@ export class GameMap {
   }
   /** Door positions for enterable buildings (overworld only). */
   buildingEntries: BuildingEntry[] = [];
-  /** The plan the overworld town was generated from. Undefined on other maps. */
+  /** The `TownPlan` the overworld town was generated from. Undefined on other maps. */
   townPlan: TownPlan | undefined = undefined;
   /** Tile coords of the MAIN_TOWER sprite anchor (overworld only). */
   mainTowerAnchor: { x: number; y: number } | undefined = undefined;
@@ -2047,15 +2047,15 @@ export class GameMap {
    *
    * A chunk is baked once and reused forever (see `invalidateTile`'s own
    * comment), which is fine for a runtime tile change but breaks against
-   * Phase 5 of `docs/asset-management-plan.md`'s lazy sprite loading: a
-   * ground-tileset or decoration sheet that is still loading when a chunk
-   * near the player first bakes gets that chunk permanently stuck on its
-   * fallback color/art, even after the sheet finishes loading a moment
-   * later — nothing else ever tells the chunk cache to look again. Call this
-   * once a floor's declared sprite groups finish loading (see
-   * `DungeonScene`'s `prewarmGroups(levelDef.spriteGroups).then(...)`) so
-   * that one-time race turns back into the "wrong for a frame or two" the
-   * lazy-loading design intends, not "wrong forever".
+   * lazy sprite-group loading: a ground-tileset or decoration sheet that is
+   * still loading when a chunk near the player first bakes gets that chunk
+   * permanently stuck on its fallback color/art, even after the sheet
+   * finishes loading a moment later — nothing else ever tells the chunk
+   * cache to look again. Call this once a floor's declared sprite groups
+   * finish loading (see `DungeonScene`'s
+   * `prewarmGroups(levelDef.spriteGroups).then(...)`) so that one-time race
+   * turns back into the "wrong for a frame or two" lazy loading intends, not
+   * "wrong forever".
    */
   invalidateAllTileArt(): void {
     this._chunkCache = null;

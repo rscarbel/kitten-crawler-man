@@ -81,7 +81,8 @@ async function loadSheet(baked: BakedSheet | null): Promise<Canvas> {
     return canvas;
   }
   const path = resolve(SHEET_PATH);
-  if (!existsSync(path)) throw new Error(`${SHEET_PATH} does not exist; run npm run gen:ball-of-swine`);
+  if (!existsSync(path))
+    throw new Error(`${SHEET_PATH} does not exist; run npm run gen:ball-of-swine`);
   const image = await loadImage(readFileSync(path));
   const canvas = createCanvas(image.width, image.height);
   canvas.getContext('2d').drawImage(image, 0, 0);
@@ -184,7 +185,12 @@ async function main(): Promise<void> {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = ARENA_FLOOR;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    label(ctx, `composite — shadow + roll rotated to heading + shade, on the arena floor`, MARGIN, MARGIN);
+    label(
+      ctx,
+      `composite — shadow + roll rotated to heading + shade, on the arena floor`,
+      MARGIN,
+      MARGIN,
+    );
     const states = compositeStates();
     for (let i = 0; i < COMPOSITE_HEADINGS; i++) {
       const heading = (i / COMPOSITE_HEADINGS) * Math.PI * 2;
@@ -266,17 +272,7 @@ async function main(): Promise<void> {
   ctx.fillRect(MARGIN, y, canvas.width - MARGIN * 2, gameDrawn);
   const states = compositeStates();
   for (let col = 0; col < BOS_ROLL_FRAMES; col++) {
-    drawComposite(
-      ctx,
-      sheet,
-      size,
-      states,
-      col,
-      0,
-      MARGIN + col * gameDrawn,
-      y,
-      gameScale,
-    );
+    drawComposite(ctx, sheet, size, states, col, 0, MARGIN + col * gameDrawn, y, gameScale);
   }
 
   writeFileSync(resolve(outPath), canvas.toBuffer('image/png'));

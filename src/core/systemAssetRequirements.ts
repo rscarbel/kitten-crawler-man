@@ -2,19 +2,21 @@ import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
 import type { SpriteKey } from './SpriteLoader';
 
 /**
- * Phase 4's answer to the plan's "trap": a `LevelDef` does not list everything
- * that can appear on its floor. `BountySystem`, `CircusQuestSystem`,
- * `BigTopBossSystem`, `QuillConfrontationSystem`, `MurderMysteryQuestSystem`,
- * `SpiderQuestSystem`, `SkeletonSummonSystem`, `MongoSystem` and
- * `MercenarySystem` all construct creatures no `LevelDef.roomMobs` /
- * `hallwayMobs` / `extraSpawns` / `campSpawns` entry ever names, because each
- * is gated on a map feature (`gameMap.circusCentre`, `gameMap.spiderLabRoom`,
- * a live bounty site, a hired mercenary) rather than on the level def itself.
+ * A `LevelDef` does not list everything that can appear on its floor.
+ * `BountySystem`, `CircusQuestSystem`, `BigTopBossSystem`,
+ * `QuillConfrontationSystem`, `MurderMysteryQuestSystem`, `SpiderQuestSystem`,
+ * `SkeletonSummonSystem`, `MongoSystem` and `MercenarySystem` all construct
+ * creatures no `LevelDef.roomMobs` / `hallwayMobs` / `extraSpawns` /
+ * `campSpawns` entry ever names, because each is gated on a map feature
+ * (`gameMap.circusCentre`, `gameMap.spiderLabRoom`, a live bounty site, a
+ * hired mercenary) rather than on the level def itself. This file is where
+ * each such system declares what it can spawn and where, so `verify:assets`
+ * can check that coverage too.
  *
  * One entry per system, or per bounty/quest *type* where a system covers more
- * than one distinct encounter — matching the plan's "keyed by
- * system/bounty-type/quest-id" suggestion. `levelIds` is which floors the
- * entry's creatures can actually appear on; `mobTypes` are keys into
+ * than one distinct encounter — keyed by system/bounty-type/quest-id.
+ * `levelIds` is which floors the entry's creatures can actually appear on;
+ * `mobTypes` are keys into
  * `MOB_SPRITE_KEYS` (`src/core/assetGroups.ts`) so `verify:assets` can confirm
  * `requiredGroups` actually covers what the system spawns, not just that the
  * author remembered to list *something*.
@@ -162,22 +164,22 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
 
   // BossRoomSystem (src/systems/BossRoomSystem.ts) — `spawnHoarderCockroaches`
   // only fires while a live TheHoarder exists, i.e. level 1's first gauntlet
-  // boss. Cockroach is procedural, so no group is needed beyond what level 1
-  // already declares for the Hoarder himself.
+  // boss. The roaches have their own sheet now, and it rides in with hers.
   {
     id: 'boss_room:hoarder_cockroaches',
     levelIds: ['level1'],
     mobTypes: ['cockroach'],
-    requiredGroups: [],
+    requiredGroups: ['boss_hoarder'],
   },
 ];
 
 /**
  * Every sprite key a floor can produce: its own `LevelDef.spriteGroups` plus
  * every `SYSTEM_ASSET_REQUIREMENTS` entry scoped to it — the same union
- * `scripts/verify-assets.ts` cross-checks coverage against. Shared so Phase 6's
- * runtime eviction (`DungeonScene`'s floor-change call site) can't drift from
- * the build-time check: "what a floor needs" has exactly one definition.
+ * `scripts/verify-assets.ts` cross-checks coverage against. Shared so
+ * `releaseSpritesExcept`'s runtime eviction (`DungeonScene`'s floor-change call
+ * site) can't drift from the build-time check: "what a floor needs" has
+ * exactly one definition.
  *
  * Takes `levelId`/`spriteGroups` rather than a `LevelDef` to avoid a circular
  * import — `src/levels/types.ts` already imports `AssetGroup` from

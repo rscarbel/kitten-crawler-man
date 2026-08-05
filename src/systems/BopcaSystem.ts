@@ -429,9 +429,8 @@ export class BopcaSystem implements GameSystem {
       entry.idleFramesLeft = BOPCA_IDLE_ANIM_MAX_FRAMES;
     }
     if (!present && entry.partyPresent) {
-      // The party left: the dish goes with them, per the plan's "clears on
-      // leaving the room". Whether it had gone cold is remembered for the
-      // greeting next time.
+      // The party left: the dish clears when the room clears. Whether it had
+      // gone cold is remembered for the greeting next time.
       if (entry.dish !== null) {
         entry.lastDishWentCold = entry.dish.framesOnCounter >= DISH_GOES_COLD_FRAMES;
         entry.dish = null;
@@ -588,10 +587,10 @@ export class BopcaSystem implements GameSystem {
    * reach, otherwise opens the conversation. Returns whether it consumed the
    * press, so the scene can fall through to its other interactions.
    *
-   * This is the mobile path too. The plan asked for the interaction on
-   * `MobileHUDSystem`'s "contextual action button, the same way the existing
-   * Talk/Sleep actions are surfaced" — but there is no such button and those
-   * actions were never surfaced there: `MobileHUDSystem.hitTest` knows only
+   * This is the mobile path too. Routing it through a contextual action button
+   * on `MobileHUDSystem`, alongside the existing Talk/Sleep actions, is not an
+   * option: there is no such button and those actions were never surfaced
+   * there either — `MobileHUDSystem.hitTest` knows only
    * minimap, pause, switch, gear and bag. On mobile, Talk and Sleep are reached by
    * tapping the world, which routes here through both scenes' touch handlers, and
    * `drawInteractionPrompt` already renders its key cap as "TAP". Adding a sixth

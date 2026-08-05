@@ -352,9 +352,8 @@ export class RockGolemBoss extends RockGolem {
       // `targets` is not just the two crawlers: `MobUpdateLoop` folds in the
       // scene's extra targets and any mob this one is retaliating against, so a
       // confused bodyguard can end up under the boulder. A `Mob` flattened by
-      // plain `takeDamage` drops to zero HP without `justDied`, and
-      // `resolveKills` then skips it entirely — no XP, no loot, no gore, and it
-      // is never removed from the mob grid.
+      // plain `takeDamage` dies unattributed — the boulder has a thrower, and
+      // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
       else target.takeDamage(damage, rollDamageSource(this.mobType));
       this.attackSoundPending = true;

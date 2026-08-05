@@ -12,12 +12,15 @@ unlimited unique people. **Routing:** use this for townsfolk / human crowds / hu
 use `add-creature` + `add-sprite` for enemies, bosses, and non-human NPCs (PNG-sheet pipeline).
 
 Module: `src/sprites/person/`
+
 - `rng.ts` — mulberry32 PRNG + `range`/`rangeInt`/`pick`/`chance`/`centered`/`subSeed`.
 - `color.ts` — palette pools (`SKIN_TONES`, `HAIR_COLORS`, `EYE_COLORS`, `TOP_COLORS`, …) + `shade`/`tint`.
 - `PersonAppearance.ts` — `generatePersonAppearance(seed)`: the genome (body/head/face/hair/outfit/gait) + all tunable `*_MIN/*_MAX` ranges.
 - `skeleton.ts` — `buildSkeleton(app, pose, facing, cx, sy, s)`; FK so limbs always connect.
-- `gait.ts` — `poseForMotion(app, facing, phase, moving)`: contralateral walk + idle.
+- `gait.ts` — `poseForMotion(app, facing, phase, moving)`: contralateral walk + idle; also
+  `walkCycleDistance(appearance, drawSize)` and `gaitSpeedFactor(appearance)` (see below).
 - `drawPerson.ts` — `drawPerson(ctx, sx, sy, size, app, phase, facing, moving)`.
+- `personFrameCache.ts` — `drawPersonCached(...)`: the cache most callers should actually use (see below).
 
 Preview: on localhost open `?people` (`PersonPreviewScene`, hooked in `game.ts` `devBootScene`).
 
@@ -43,6 +46,10 @@ Preview: on localhost open `?people` (`PersonPreviewScene`, hooked in `game.ts` 
   any `size`.
 - These are game-world figures, so **raw `ctx` is correct here** — the `src/ui/*` helpers are
   for chrome only.
+- **`heightScale` scales one axis.** It scales head height, leg, torso, arm and neck lengths, but
+  not `shoulderWidth`, `hipWidth` or `FOOT_LEN`, which are flat fractions of draw size. A child
+  therefore has an adult's shoulders and an adult's shoes. The head was corrected specifically;
+  the rest is an open art decision, not a bug to fix in passing.
 
 ## Populating the world
 
@@ -59,7 +66,53 @@ are tuned to the town's extents — see the invariants table in `docs/town.md` b
 changing the layout under it.
 
 For a crowd somewhere else, add a `GameSystem` (see `add-system`) holding
-`{ x, y, facing, phase, appearance, seed }` per person, advance `phase`, move + pick
-`facing` from velocity, and call `drawPerson` Y-sorted into the render pipeline.
+`{ x, y, facing, phase, appearance, seed }` per person, move + pick `facing` from
+velocity, advance `phase` per the cadence contract below, and call `drawPersonCached`
+Y-sorted into the render pipeline.
+
+## The cadence and cache contract
+
+`phase` is measured in strides, not frames, and wraps to `[0, 1)`. Advance it by
+`distanceMoved / walkCycleDistance(appearance, drawSize)` — never by a fixed step.
+A raw frame counter still animates, at a cadence unrelated to how fast the figure
+is moving, which is what made anchors moonwalk and travelers mince.
+
+Distance-driven cadence makes speed and stride one decision. Cadence is
+`speed / cycleDistance`, so handing every cohort the same speed range while their
+strides differ four-fold hands them a four-fold spread of step rates: a child is
+62% of an adult's height and so has 62% of the stride, and walking a plaza at an
+adult's pace could only be done at fourteen steps a second. `gaitSpeedFactor` in
+`gait.ts` is the fix — the same terms that shorten a stride also slow the person
+down, with `STRIDE_SPEED_SHARE` of the difference moving into speed so a child
+still visibly out-steps the adult beside them. Multiply a cohort's speed by it
+when you spawn a person. `gateCadence` (in `render-townsfolk.ts`) fails the build
+below one stride per `WALK_PHASE_BUCKETS` (16) frames, the point at which the
+cache's baked poses cannot all be shown and the legs alias.
+
+People are drawn through `drawPersonCached`, not `drawPerson`. The cache bakes
+each genome's cells and blits them instead of redrawing every frame. Its eviction
+is admission-stop, not LRU, and that distinction is the whole performance story:
+when the working set exceeds the byte budget, LRU evicts the person drawn
+earliest this frame, who is drawn again next frame and rebuilds everything, so
+the hit rate collapses and every citizen pays the full draw price. Admission-stop
+instead keeps the cache intact, refuses new cells, and lets the overflow fall
+through to a direct `drawPerson` — a cliff becomes a slope. Anything that grows
+the per-person footprint (more phase buckets, a taller cell box, a higher
+`MAX_BAKE_SCALE`) spends against a byte budget that a forty-person plaza already
+nearly fills — `personFrameCache.ts` currently sets that budget at 24 MB
+(`CACHE_BUDGET_MEGABYTES`) with a 48-person head-count cap (`MAX_CACHED_PEOPLE`)
+as the looser of the two bounds. Confirm both constants before quoting numbers —
+they are tuning knobs, not fixed facts.
+
+`npm run render:townsfolk` is the review path, and it is a gate, not just a
+picture. It writes a contact sheet — every facing, every phase, a ground line to
+judge the pelvic bob against, one row per gait archetype — and runs 8 gates that
+fail the build. `--only=<label substring>` and `--scale=9` narrow it to one row.
+Two of those gates guard defects this code has actually shipped: `gateCellBounds`
+rasterizes every pose into a padded canvas and measures overspill, because a hat
+clips on one hairstyle in ten; `gateStancePlant` walks a figure across many
+frames watching its planted ankle, because a skate of a fraction of a pixel per
+frame is invisible in a still and obvious in motion. Confirm the gate list in
+`scripts/render-townsfolk.ts` before stating one.
 
 Finish with the `dev-workflow` gates: `npm run typecheck`, `npm run lint`, `npm run format`.

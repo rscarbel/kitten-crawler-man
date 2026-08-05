@@ -381,7 +381,7 @@ function gateCentroidDrift(stage: MongoStage, cells: Map<string, Cell>): void {
 /**
  * G-FEATHER — the three pink display zones.
  *
- * The brief puts pink in exactly three places: the head crest, the forearms and
+ * Pink appears in exactly three places: the head crest, the forearms and
  * the tail fan. It is an invariant, not a decoration: a frame that loses one has
  * lost the thing that separates Mongo from any other blue lizard, and a pose
  * change that hides the crest behind the body is invisible on a contact sheet

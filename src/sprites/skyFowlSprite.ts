@@ -45,8 +45,9 @@ export function bakeSkyFowlCanvas(cloth: SkyFowlClothColors): HTMLCanvasElement 
   if (!bodyDef || !pantsDef || !vestDef || !trimDef || !hatDef) return null;
 
   // `.width`/`.height` rather than `.naturalWidth`/`.naturalHeight`: `img` may
-  // be a Phase 8 downscaled `<canvas>` instead of an `<img>`, and the two
-  // agree anyway for a plain `Image()` with no explicit width/height attribute.
+  // be a `downscaleSheet`-produced `<canvas>` (the low-end-device downscale)
+  // instead of an `<img>`, and the two agree anyway for a plain `Image()`
+  // with no explicit width/height attribute.
   const w = bodyDef.img.width;
   const h = bodyDef.img.height;
 
@@ -81,10 +82,11 @@ export function bakeSkyFowlCanvas(cloth: SkyFowlClothColors): HTMLCanvasElement 
     tc.fillRect(0, 0, w, h);
     tc.globalCompositeOperation = 'destination-in';
     // Stretched to the body's own (w, h) rather than drawn at the mask's
-    // natural size: each sheet is downscaled independently (Phase 8), and
-    // while today's source PNGs happen to share identical dimensions so the
-    // rounding agrees, nothing enforces that — an explicit stretch keeps the
-    // mask aligned to the body even if a future asset edit makes them differ.
+    // natural size: the low-end-device downscale (`downscaleSheet`) resizes
+    // each sheet independently, and while today's source PNGs happen to share
+    // identical dimensions so the rounding agrees, nothing enforces that — an
+    // explicit stretch keeps the mask aligned to the body even if a future
+    // asset edit makes them differ.
     tc.drawImage(maskImg, 0, 0, maskImg.width, maskImg.height, 0, 0, w, h);
 
     ctx.drawImage(tmp, 0, 0);

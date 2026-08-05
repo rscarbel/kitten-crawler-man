@@ -3,7 +3,11 @@ import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt } from '../utils';
-import { drawHoarderSprite } from '../sprites/hoarderSprite';
+import {
+  HOARDER_BODY_PART_KEY,
+  HOARDER_VOMIT_RELEASE_PROGRESS,
+  drawHoarderSprite,
+} from '../sprites/hoarderSprite';
 
 const HOARDER_HP = 80;
 const HOARDER_MASS = 10;
@@ -14,10 +18,59 @@ const FLEE_RANGE_TILE_MULTIPLIER = 8;
 const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
 const FLEE_RANGE_PX = TILE_SIZE * FLEE_RANGE_TILE_MULTIPLIER;
 const ENRAGE_THRESHOLD = 0.5;
-const VOMIT_INTERVAL = 480;
+/**
+ * The bile and the cockroaches are two attacks on two clocks. They used to be
+ * one: she only ever spat when the roach cap was already full, so in a normal
+ * clear the acid never appeared at all and the fight was three roaches and
+ * nothing else.
+ */
+const VOMIT_INTERVAL = 210;
+/**
+ * Longer than the unenraged interval, not shorter, because enraged she throws
+ * three at a time: the volley is what grows, and the pace has to give way to it
+ * or the room silts up. What actually bounds the coverage is the crowding rule
+ * at the far end — pools cannot stack, so the floor fills with spread-out
+ * hazard and lanes between rather than with one wall.
+ */
 const VOMIT_INTERVAL_ENRAGED = 240;
+const PURGE_INTERVAL = 300;
+const PURGE_INTERVAL_ENRAGED = 190;
+/** How soon she tries again when the purge found the roach cap already full. */
+const PURGE_RETRY_INTERVAL = 90;
+/**
+ * She will not spit at a player standing this close, and `BossRoomSystem` forms
+ * no pool this close to her either — one rule, so it is one constant.
+ *
+ * Pools laid at her own feet are what made the fight a wall of acid: every one
+ * of them landed on the ground a melee attacker has to stand on, so the room
+ * silted up until there was no way in at all. The value is the pool's own radius
+ * (two tiles) plus the ring a melee attacker occupies, which is what it takes
+ * for a pool landing at the edge of the bubble not to burn back into that ring.
+ * Aiming and forming have to agree: at two against three she spent whole
+ * attacks on players in the gap, and the pool was silently discarded on landing.
+ */
+export const POINT_BLANK_TILES = 3.5;
+const POINT_BLANK_RANGE_PX = TILE_SIZE * POINT_BLANK_TILES;
+/** Thirty seconds: how often she is allowed one spit at someone at her feet. */
+const POINT_BLANK_ALLOWANCE_FRAMES = 1800;
+/**
+ * How soon she tries again when every candidate was at her feet or already
+ * standing in her acid. Short, because the shot is deferred rather than spent
+ * and a player who steps back should be spat at promptly.
+ */
+const VOMIT_RETRY_INTERVAL = 45;
 const VOMIT_WINDUP_FRAMES = 80;
 const VOMIT_SPEED = 3.5;
+/**
+ * Enraged she brings up three at once. A spread rather than a faster single
+ * shot, because what makes the acid interesting is the ground it takes away,
+ * and one bolus lands in one place however often it is thrown.
+ */
+const ENRAGED_SPREAD_COUNT = 3;
+const HALF_TURN_DEGREES = 180;
+/** Twenty degrees between boluses: three of them fan across sixty. */
+const ENRAGED_SPREAD_DEGREES = 20;
+const ENRAGED_SPREAD_ANGLE = (ENRAGED_SPREAD_DEGREES * Math.PI) / HALF_TURN_DEGREES;
 const CENTER_OFFSET = 0.5;
 const RETURN_TO_SPAWN_THRESHOLD_TILES = 2;
 const RETURN_TO_SPAWN_SPEED_MULTIPLIER = 0.6;
@@ -34,6 +87,8 @@ const VOMIT_SPAWN_RANGE_TILES_MIN = 0.5;
 const VOMIT_SPAWN_RANGE_TILES_RANGE = 1.5;
 const VOMIT_COUNT_MIN = 3;
 const VOMIT_COUNT_MAX = 5;
+/** Covers the sheet: she stands 3.6 tiles and the frame is wider still. */
+const HOARDER_CULL_MARGIN_TILES = 4;
 const COIN_DROP_MIN = 50;
 const COIN_DROP_MAX = 100;
 
@@ -42,7 +97,7 @@ type HoarderState = 'fleeing' | 'vomit_windup';
 export class TheHoarder extends Mob {
   override readonly audioTag = 'hoarder';
   readonly xpValue = 500;
-  readonly bodyPartKey = 'hoarder';
+  override readonly bodyPartKey = HOARDER_BODY_PART_KEY;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   displayName = 'The Hoarder';
@@ -53,14 +108,19 @@ export class TheHoarder extends Mob {
 
   private hoarderState: HoarderState = 'fleeing';
   private vomitTimer = VOMIT_INTERVAL;
+  private purgeTimer = PURGE_INTERVAL;
   private vomitWindupTimer = 0;
+  private vomitFired = false;
   private vomitTargetX = 0;
   private vomitTargetY = 0;
+  private pointBlankTimer = 0;
   /**
-   * Copied, not aliased: the caller hands out a per-frame scratch array it
-   * reuses for other mobs, and this list is read again on later frames.
+   * Who this wind-up was aimed at, tracked so the bolus still lands on a player
+   * who kept walking. Only ever the player chosen when the attack started: the
+   * choice is what keeps the acid off her own doorstep and away from pools she
+   * has already laid, so re-picking the nearest mid-animation would undo it.
    */
-  private readonly vomitWindupTargets: Player[] = [];
+  private vomitTarget: Player | null = null;
 
   private fleeStuckFrames = 0;
   private fleeBias = 0;
@@ -74,23 +134,58 @@ export class TheHoarder extends Mob {
   /** Set by BossRoomSystem each frame: true when cockroach cap is full. */
   cockroachAtCap = false;
 
+  /**
+   * Set by BossRoomSystem: answers whether a point is inside acid right now. The
+   * Hoarder cannot see the system's puddle list, and a player the floor is
+   * already burning is not worth a spit.
+   */
+  isAcidCovered: ((x: number, y: number) => boolean) | null = null;
+
   /** Pending cockroach spawn positions. BossRoomSystem drains this each frame. */
   cockroachSpawns: Array<{ x: number; y: number }> = [];
 
-  /** Set when vomit windup completes; BossRoomSystem reads and clears this each frame. */
-  pendingVomitProjectile: { x: number; y: number; dx: number; dy: number } | null = null;
+  /**
+   * Bile released this frame. BossRoomSystem drains it; enraged there is more
+   * than one, which is why this is a list rather than the single slot it was.
+   */
+  pendingVomitProjectiles: Array<{ x: number; y: number; dx: number; dy: number }> = [];
 
-  get isWindingUp(): boolean {
-    return this.hoarderState === 'vomit_windup';
+  /** How far through the vomit animation she is, or null when not vomiting. */
+  get vomitProgress(): number | null {
+    if (this.hoarderState !== 'vomit_windup') return null;
+    return 1 - this.vomitWindupTimer / VOMIT_WINDUP_FRAMES;
   }
 
-  get vomitWindupProgress(): number {
-    return this.vomitWindupTimer > 0 ? 1 - this.vomitWindupTimer / VOMIT_WINDUP_FRAMES : 0;
+  /**
+   * She is drawn nearly four tiles tall over a one-tile mob, so the cull margin
+   * has to cover the art rather than the footprint or she pops out of existence
+   * while most of her is still on screen.
+   */
+  override get cullMarginTiles(): number {
+    return HOARDER_CULL_MARGIN_TILES;
   }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HOARDER_HP, HOARDER_SPEED);
     this.isBoss = true;
+  }
+
+  /**
+   * A wind-up caught by a fog is dropped rather than frozen. `updateAI` is
+   * skipped entirely for a confused mob, so the twelve-frame vomit row would
+   * hold one cell for as long as the fog lasted and then resume from the middle
+   * — and if the fog landed after the release frame she would keep the pose
+   * without ever having thrown anything.
+   */
+  override tickTimers(): void {
+    super.tickTimers();
+    if (!this.isConfused || this.hoarderState !== 'vomit_windup') return;
+    this.hoarderState = 'fleeing';
+    this.vomitWindupTimer = 0;
+    this.vomitFired = false;
+    this.vomitTarget = null;
+    // The attack is cancelled, not refunded.
+    this.vomitTimer = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
   }
 
   override resetToSpawn(): void {
@@ -99,8 +194,11 @@ export class TheHoarder extends Mob {
     this.setBaseSpeed(HOARDER_SPEED);
     this.hoarderState = 'fleeing';
     this.vomitTimer = VOMIT_INTERVAL;
+    this.purgeTimer = PURGE_INTERVAL;
     this.vomitWindupTimer = 0;
-    this.vomitWindupTargets.length = 0;
+    this.vomitFired = false;
+    this.vomitTarget = null;
+    this.pointBlankTimer = 0;
     this.fleeStuckFrames = 0;
     this.fleeBias = 0;
     this.fleeBiasSign = 1;
@@ -108,7 +206,7 @@ export class TheHoarder extends Mob {
     this.wanderActive = false;
     this.cockroachAtCap = false;
     this.cockroachSpawns = [];
-    this.pendingVomitProjectile = null;
+    this.pendingVomitProjectiles = [];
   }
 
   updateAI(targets: Player[]): void {
@@ -119,21 +217,22 @@ export class TheHoarder extends Mob {
       this.setBaseSpeed(HOARDER_SPEED_ENRAGED);
     }
 
+    // Unguarded by a target, unlike the two attack clocks: this is a cooldown on
+    // a permission rather than a wind-up, and letting it run while she waits
+    // only means she is willing the moment somebody walks in.
+    if (this.pointBlankTimer > 0) this.pointBlankTimer--;
+
     if (this.hoarderState === 'vomit_windup') {
-      // Track player movement during windup so the shot stays accurate
-      let nearestWindup: Player | null = null;
-      let nearestWindupDist = Infinity;
-      for (const t of this.vomitWindupTargets) {
-        if (!t.isAlive) continue;
-        const d = Math.hypot(t.x - this.x, t.y - this.y);
-        if (d < nearestWindupDist) {
-          nearestWindupDist = d;
-          nearestWindup = t;
-        }
-      }
-      if (nearestWindup !== null) {
-        this.vomitTargetX = nearestWindup.x + TILE_SIZE * CENTER_OFFSET;
-        this.vomitTargetY = nearestWindup.y + TILE_SIZE * CENTER_OFFSET;
+      // Tracked only while the target still satisfies the rule that picked it.
+      // Followed unconditionally, an 0.8-second telegraph is long enough for a
+      // player to walk into a pool or into her face and have the fresh one land
+      // there anyway — which is the whole failure this selection exists to stop,
+      // and it would let a point-blank hit through without spending the
+      // allowance that is supposed to cap them.
+      const tracked = this.vomitTarget;
+      if (tracked !== null && this.isDistantVomitTarget(tracked)) {
+        this.vomitTargetX = tracked.x + TILE_SIZE * CENTER_OFFSET;
+        this.vomitTargetY = tracked.y + TILE_SIZE * CENTER_OFFSET;
       }
 
       this.vomitWindupTimer--;
@@ -147,18 +246,16 @@ export class TheHoarder extends Mob {
         this.facingX = dx / len;
         this.facingY = dy / len;
       }
-      if (this.vomitWindupTimer <= 0) {
-        const ndx = len > 0 ? dx / len : 1;
-        const ndy = len > 0 ? dy / len : 0;
-        this.pendingVomitProjectile = {
-          x: cx,
-          y: cy,
-          dx: ndx * VOMIT_SPEED,
-          dy: ndy * VOMIT_SPEED,
-        };
+      // Released partway through the row rather than at the end of it, on the
+      // exact frame her jaw comes off its hinge — fired at the end, the bile
+      // appeared after she had already started to sag.
+      const progress = 1 - this.vomitWindupTimer / VOMIT_WINDUP_FRAMES;
+      if (!this.vomitFired && progress >= HOARDER_VOMIT_RELEASE_PROGRESS) {
+        this.releaseBile(cx, cy, len > 0 ? dx / len : 1, len > 0 ? dy / len : 0);
+        this.vomitFired = true;
         this.specialSoundPending = true;
-        this.hoarderState = 'fleeing';
       }
+      if (this.vomitWindupTimer <= 0) this.hoarderState = 'fleeing';
       return;
     }
 
@@ -167,20 +264,39 @@ export class TheHoarder extends Mob {
 
     this.currentTarget = nearest;
 
-    this.vomitTimer--;
-    const interval = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
-    if (this.vomitTimer <= 0) {
-      this.vomitTimer = interval;
-      if (this.cockroachAtCap && nearest !== null) {
-        this.vomitTargetX = nearest.x + TILE_SIZE * CENTER_OFFSET;
-        this.vomitTargetY = nearest.y + TILE_SIZE * CENTER_OFFSET;
-        this.vomitWindupTargets.length = 0;
-        this.vomitWindupTargets.push(...targets);
+    // Both clocks only run while there is someone to attack. Ticking with no
+    // target they run tens of thousands of frames into the negative, and the
+    // wind-up then fires on the exact frame a player first crosses the aggro
+    // ring — before there is any telegraph left to react to.
+    if (nearest !== null) this.vomitTimer--;
+    if (this.vomitTimer <= 0 && nearest !== null) {
+      const victim = this.pickVomitTarget(targets);
+      if (victim === null) {
+        this.vomitTimer = VOMIT_RETRY_INTERVAL;
+      } else {
+        this.vomitTimer = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
+        if (this.distanceTo(victim) < POINT_BLANK_RANGE_PX) {
+          this.pointBlankTimer = POINT_BLANK_ALLOWANCE_FRAMES;
+        }
+        this.vomitTarget = victim;
+        this.vomitTargetX = victim.x + TILE_SIZE * CENTER_OFFSET;
+        this.vomitTargetY = victim.y + TILE_SIZE * CENTER_OFFSET;
         this.hoarderState = 'vomit_windup';
         this.vomitWindupTimer = VOMIT_WINDUP_FRAMES;
-      } else {
-        this.triggerVomit();
+        this.vomitFired = false;
       }
+    }
+
+    if (nearest !== null) this.purgeTimer--;
+    if (this.purgeTimer <= 0 && nearest !== null) {
+      // A purge that finds the cap full is not spent, only deferred: she is
+      // meant to be topping the swarm back up the moment there is room.
+      this.purgeTimer = this.cockroachAtCap
+        ? PURGE_RETRY_INTERVAL
+        : this.isEnraged
+          ? PURGE_INTERVAL_ENRAGED
+          : PURGE_INTERVAL;
+      if (!this.cockroachAtCap) this.triggerPurge();
     }
 
     if (!nearest) {
@@ -266,7 +382,58 @@ export class TheHoarder extends Mob {
     }
   }
 
-  private triggerVomit(): void {
+  /** True when a player is standing on ground her acid already covers. */
+  private isStandingInHerAcid(target: Player): boolean {
+    const probe = this.isAcidCovered;
+    if (probe === null) return false;
+    return probe(target.x + TILE_SIZE * CENTER_OFFSET, target.y + TILE_SIZE * CENTER_OFFSET);
+  }
+
+  private readonly isDistantVomitTarget = (target: Player): boolean =>
+    target.isAlive &&
+    this.distanceTo(target) >= POINT_BLANK_RANGE_PX &&
+    !this.isStandingInHerAcid(target);
+
+  private readonly isReachableVomitTarget = (target: Player): boolean =>
+    target.isAlive && !this.isStandingInHerAcid(target);
+
+  /**
+   * Who this spit is worth aiming at: someone standing on clean ground, and
+   * standing off her, unless the point-blank allowance has come back around.
+   * Null means nobody qualifies and the shot should be held.
+   */
+  private pickVomitTarget(targets: Player[]): Player | null {
+    const distant = this.acquireTarget(targets, AGGRO_RANGE_PX, this.isDistantVomitTarget);
+    if (distant !== null) return distant;
+    if (this.pointBlankTimer > 0) return null;
+    return this.acquireTarget(targets, AGGRO_RANGE_PX, this.isReachableVomitTarget);
+  }
+
+  /**
+   * Queues the bile the sprite is about to show leaving her mouth.
+   *
+   * Every bolus flies. Whether the pool it leaves is worth having is decided
+   * where it lands, by the system that owns the pools — a bolus travels until a
+   * wall, a player or its own lifetime stops it, so nothing here can say where
+   * it will come down, and the spread's flanks miss the target by construction
+   * and travel the full distance.
+   */
+  private releaseBile(cx: number, cy: number, ndx: number, ndy: number): void {
+    const count = this.isEnraged ? ENRAGED_SPREAD_COUNT : 1;
+    const base = Math.atan2(ndy, ndx);
+    const centreOffset = (count - 1) / 2;
+    for (let i = 0; i < count; i++) {
+      const angle = base + (i - centreOffset) * ENRAGED_SPREAD_ANGLE;
+      this.pendingVomitProjectiles.push({
+        x: cx,
+        y: cy,
+        dx: Math.cos(angle) * VOMIT_SPEED,
+        dy: Math.sin(angle) * VOMIT_SPEED,
+      });
+    }
+  }
+
+  private triggerPurge(): void {
     const count = randomInt(VOMIT_COUNT_MIN, VOMIT_COUNT_MAX);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -313,18 +480,13 @@ export class TheHoarder extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawHoarderSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.facingX,
-      this.facingY,
-      this.walkFrame,
-      this.isMoving,
-      this.isWindingUp,
-      this.vomitWindupProgress,
-    );
+    drawHoarderSprite(ctx, sx, sy, tileSize, {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      vomitProgress: this.vomitProgress,
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();

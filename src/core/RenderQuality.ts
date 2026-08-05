@@ -301,9 +301,9 @@ class RenderQualityController {
  * Whether a sample of frame intervals is slow enough to be worth giving up
  * density for: the p95 interval past an absolute stutter threshold.
  *
- * The plan asked for this to be measured against the display's own refresh
- * rate, estimated from the samples. That was implemented and then removed,
- * because it cannot do any work here. The estimate has to be capped at 60 Hz —
+ * This was measured against the display's own refresh rate, estimated from
+ * the samples, at one point. That was implemented and then removed, because
+ * it cannot do any work here. The estimate has to be capped at 60 Hz —
  * otherwise a machine pinned at half rate takes its own failure as the target
  * and always passes — and once capped, `estimate × tolerance` is never greater
  * than the absolute threshold, so the display-relative test can never be the

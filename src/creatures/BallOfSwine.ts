@@ -59,8 +59,9 @@ const MIN_ROLL_FRACTION = 0.3;
  * the middle of a circle meets it head-on, and one that clips the edge grazes. So
  * make it charge you across the centre, then step off the line.
  *
- * P2's "avoidance by movement alone" is satisfied outright — the line is fixed at
- * the moment it commits, so stepping off it always works.
+ * This satisfies the fairness invariant that avoidance by movement alone must
+ * always remain possible (see docs/difficulty-fairness-rules.md): the line is
+ * fixed at the moment it commits, so stepping off it always works.
  */
 // (No constant: there is no turn rate. The absence is the design.)
 
@@ -156,8 +157,8 @@ const FRENZY_WALLOW_MULTIPLIER = 0.6;
 /**
  * Radius of the stench shockwave a frenzied ball vents on impact, in tiles.
  *
- * Undodgeable once you are inside it, so per P2 its damage is flat and never
- * scaled — the avoidance is spatial: do not be standing at the wall the ball is
+ * Undodgeable once you are inside it, so its damage stays flat and never
+ * scales — the avoidance is spatial: do not be standing at the wall the ball is
  * about to hit.
  */
 const STENCH_RADIUS_TILES = 4;
@@ -217,9 +218,9 @@ const MIN_HEADING_LENGTH = 1e-4;
  * cannot.
  *
  * At six tiles that leaves about 35 frames between the correction and contact, above
- * the 21-frame floor `docs/difficulty-plan.md` P2 puts on a locked telegraph, so the
- * dodge stays possible by movement alone — it just has to be *timed* rather than
- * merely remembered.
+ * this codebase's 21-frame floor on any locked telegraph (`MIN_LOCKED_TELEGRAPH_FRAMES`
+ * in `scripts/verify-difficulty.ts`), so the dodge stays possible by movement alone —
+ * it just has to be *timed* rather than merely remembered.
  */
 const LUNGE_RANGE_TILES = 6;
 /** Frames the lunge tell is drawn for. */
@@ -553,12 +554,13 @@ export class BallOfSwine extends Mob {
   /**
    * A status effect's damage tick.
    *
-   * `Player.takeDamage` is where burn, poison and sepsis land, and it does none of a
-   * mob's death bookkeeping — no `justDied`, no loot, no kill credit. For an ordinary
-   * mob that is a reward quietly lost; for this one it is also the burst skipped, so
-   * no Tusklings and no stairwell, and the Sepsis Crown the cat can be wearing
-   * applies a *permanent* tick. So a lethal tick is converted into a real mob death
-   * here rather than being allowed to drop the hit points on the floor.
+   * `Player.takeDamage` is where burn, poison and sepsis land. `Mob` overrides it
+   * so an ordinary mob at least dies properly, but the death it resolves is
+   * unattributed — no dealer in the ledger, so no XP and no kill credit. For this
+   * one that is not enough: its burst has to be *held*, and a plain tick would
+   * end it outright, so no Tusklings and no stairwell, and the Sepsis Crown the
+   * cat can be wearing applies a *permanent* tick. A lethal tick is converted
+   * into a real, credited mob death here instead.
    *
    * Taking the lethal blow off `super` skips its guards, and each one is checked
    * rather than assumed: `isProtected` is written only by `PlayerManager`, for the two
@@ -713,7 +715,7 @@ export class BallOfSwine extends Mob {
    * just committed to, thrown forward from the body.
    *
    * Without it the lunge is a boss that swerves onto you for no visible reason, which
-   * is the difference between pressure and unfairness — P2 wants the dodge possible by
+   * is the difference between pressure and unfairness — the dodge must stay possible by
    * movement alone, and that means the crawler has to be able to see what to move off.
    */
   private drawLungeTell(
@@ -1017,8 +1019,8 @@ export class BallOfSwine extends Mob {
     this.phase = 'spinning_up';
     this.spinupTimer = BOS_SPINUP_GAME_FRAMES;
     // Aim locked at the top of the telegraph and never touched again until it is
-    // moving, which is what P2's "locked telegraph" means: what the crawler reads
-    // during the wind-up is where it is actually going.
+    // moving: the shot vector freezes for at least 21 frames, so what the crawler
+    // reads during the wind-up is where it is actually going.
     this.lockChargeAtTarget();
     this.specialSoundPending = true;
   }
@@ -1072,8 +1074,8 @@ export class BallOfSwine extends Mob {
       // `targets` is not only the two crawlers: `MobUpdateLoop` folds in the scene's
       // extra targets and anything this boss is retaliating against, so a shed
       // Tuskling can end up under its own parent. A `Mob` flattened by plain
-      // `takeDamage` drops to zero HP without `justDied`, and the kill resolver then
-      // skips it — no XP, no loot, no gore, and it never leaves the mob grid.
+      // `takeDamage` dies unattributed — the trample has an owner, and
+      // `takeDamageFrom` is what puts it in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
       else target.takeDamage(damage, trampleDamageSource(this.mobType));
       this.attackSoundPending = true;

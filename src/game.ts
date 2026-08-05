@@ -48,13 +48,13 @@ function resumedAbilityManager(states: GameProgress['abilityStates']): AbilityMa
 const input = new InputManager();
 const audio = new AudioManager();
 // Only the universal group (menu/UI + generic player-combat cues) decodes at
-// boot now — see docs/asset-management-plan.md Phase 2. Per-floor and
-// per-interior SFX preload additively as the player reaches them
-// (DungeonScene / BuildingInteriorScene constructors).
+// boot now; per-floor and per-interior SFX preload additively as the player
+// reaches them (DungeonScene / BuildingInteriorScene constructors), so a
+// floor's sounds are never paid for until that floor is actually visited.
 void audio.preload(CORE_SFX_IDS);
 
 // Created before any sprite has loaded so the loading screen below has a
-// canvas to draw on immediately — see docs/asset-management-plan.md Phase 5.
+// canvas to draw on immediately.
 const sceneManager = new SceneManager();
 const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
@@ -63,9 +63,8 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   // loads lazily on demand (SpriteLoader.getSpriteDef schedules a load on a
   // miss). This is what turns the ~2.3s blank-page boot into a loading screen.
   // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload for
-  // each sprite behind this same loading screen — see Phase 7 of
-  // docs/asset-management-plan.md — so `core`'s sheets don't hitch on the
-  // first frame that actually draws them.
+  // each sprite behind this same loading screen, so `core`'s sheets don't
+  // hitch on the first frame that actually draws them.
   await prewarmGroups(['core'], (loaded, total) => loadingScreen.setProgress(loaded, total));
   loadingScreen.stop();
 

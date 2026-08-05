@@ -24,18 +24,19 @@ export class DungeonIntroSystem {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.isActive) return;
-    // Routed through SpriteLoader (Phase 5 of docs/asset-management-plan.md)
-    // instead of a standalone `new Image()` — undefined until the `core`
-    // group has loaded it, in which case this frame (and maybe the next
-    // couple) just shows no banner, same as any other sprite miss.
+    // Routed through SpriteLoader's lazy sprite-group loading instead of a
+    // standalone `new Image()` — undefined until the `core` group has loaded
+    // it, in which case this frame (and maybe the next couple) just shows no
+    // banner, same as any other sprite miss.
     const img = getSpriteDefByKey('find-the-stairwell')?.img;
     // `img` only ever reaches `_defs` (and so is only ever returned here) after
-    // `ensureLoading`'s onload finished populating it — a Phase 8 downscale, if
-    // one happened, is drawn synchronously before that point too — so by the
-    // time this getter returns something, it is always ready to draw. The
-    // width check alone (rather than `<img>`-only `.complete`/`.naturalWidth`,
-    // which a Phase 8 `<canvas>` doesn't have) guards the one degenerate case:
-    // a 0×0 source, which `drawImage` would otherwise throw on.
+    // `ensureLoading`'s onload finished populating it — the low-end-device
+    // downscale, if it ran, is drawn synchronously before that point too — so
+    // by the time this getter returns something, it is always ready to draw.
+    // The width check alone (rather than `<img>`-only `.complete`/
+    // `.naturalWidth`, which the downscale's `<canvas>` output doesn't have)
+    // guards the one degenerate case: a 0×0 source, which `drawImage` would
+    // otherwise throw on.
     if (img === undefined || img.width === 0) return;
 
     const cw = viewportWidth();

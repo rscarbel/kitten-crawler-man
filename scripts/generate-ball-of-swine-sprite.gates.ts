@@ -273,7 +273,7 @@ function alphaMassOf(alpha: Uint8ClampedArray): number {
 function frameDelta(a: Uint8ClampedArray, b: Uint8ClampedArray): number {
   let differing = 0;
   for (let i = 0; i < a.length; i++) {
-    if (a[i] >= INK_ALPHA_THRESHOLD !== (b[i] >= INK_ALPHA_THRESHOLD)) differing++;
+    if (a[i] >= INK_ALPHA_THRESHOLD !== b[i] >= INK_ALPHA_THRESHOLD) differing++;
   }
   return differing;
 }
@@ -621,7 +621,10 @@ function gatePackingIsDisjoint(sheet: BakedSheet): void {
       const key = `${cell.row},${cell.col}`;
       const owner = claimed.get(key);
       if (owner !== undefined) {
-        fail('G9', `${row.name}[${frame}] is packed on top of ${owner} at row ${cell.row} col ${cell.col}`);
+        fail(
+          'G9',
+          `${row.name}[${frame}] is packed on top of ${owner} at row ${cell.row} col ${cell.col}`,
+        );
         continue;
       }
       claimed.set(key, `${row.name}[${frame}]`);

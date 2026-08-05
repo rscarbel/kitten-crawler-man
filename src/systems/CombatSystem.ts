@@ -384,7 +384,12 @@ export function resolveKills(ctx: CombatContext): void {
       const credited = dealer.xpCreditTarget;
       creditedDamage.set(credited, (creditedDamage.get(credited) ?? 0) + dmg);
     }
-    if (totalDmg === 0) continue;
+    // The XP split, and only the XP split, needs somebody to have dealt damage.
+    // The death itself does not: a mob finished by a burn or a poison — or one
+    // the game kills outright, like the Hoarder's swarm when she drops — has an
+    // empty ledger, and bailing here took its gore, its corpse marker and its
+    // `mobKilled` event with the XP it had nobody to give.
+    const hasDamageLedger = totalDmg > 0;
 
     // Non-players stay in the running for top dealer without being able to win
     // it: a mob that out-damages both crawlers — friendly fire, confusion fog —
@@ -402,16 +407,18 @@ export function resolveKills(ctx: CombatContext): void {
     }
     const otherPlayer = topPlayer === human ? cat : human;
 
-    const totalXp = mob.scaledXpValue;
-    const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
-    const shareXp = Math.max(1, totalXp - topXp);
-    // Scaled per character, not per kill: the two can sit on opposite sides of
-    // the floor's curve.
-    if (topPlayer?.gainXp(diminishedXpShare(topXp, xpDiminishingTiers, topPlayer.level))) {
-      bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
-    }
-    if (otherPlayer.gainXp(diminishedXpShare(shareXp, xpDiminishingTiers, otherPlayer.level))) {
-      bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
+    if (hasDamageLedger) {
+      const totalXp = mob.scaledXpValue;
+      const topXp = Math.max(1, Math.round(totalXp * XP_TOP_DEALER_FRACTION));
+      const shareXp = Math.max(1, totalXp - topXp);
+      // Scaled per character, not per kill: the two can sit on opposite sides of
+      // the floor's curve.
+      if (topPlayer?.gainXp(diminishedXpShare(topXp, xpDiminishingTiers, topPlayer.level))) {
+        bus.emit('playerLevelUp', { player: topPlayer, newLevel: topPlayer.level });
+      }
+      if (otherPlayer.gainXp(diminishedXpShare(shareXp, xpDiminishingTiers, otherPlayer.level))) {
+        bus.emit('playerLevelUp', { player: otherPlayer, newLevel: otherPlayer.level });
+      }
     }
 
     const killer =

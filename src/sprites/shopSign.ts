@@ -673,7 +673,8 @@ const drawSheaf: EmblemPainter = (ctx, box) => {
 };
 
 /**
- * Every device, keyed by the plan's own union. A `Record` rather than a switch
+ * Every device, keyed by the `ShopSignEmblem` union the `TownPlan` states. A
+ * `Record` rather than a switch
  * so adding an emblem to `ShopSignEmblem` without drawing it fails to compile.
  */
 const EMBLEM_PAINTERS: Record<ShopSignEmblem, EmblemPainter> = {

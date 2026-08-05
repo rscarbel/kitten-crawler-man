@@ -3,16 +3,16 @@
 Every entry here was found by looking at a rendered figure, not by reading code.
 They are ordered roughly by how much time each one cost.
 
-**Numbers here are illustrative of *scale*, not authoritative.** Where a value
+**Numbers here are illustrative of _scale_, not authoritative.** Where a value
 appears, the named constant beside it is the source of truth — grep `carlArt.ts`
 or `generate-human-sprite.ts` for the name before relying on a figure. Five
-values in the first draft of this file were already stale. The *reasoning* is
+values in the first draft of this file were already stale. The _reasoning_ is
 what carries; the digits drift.
 
 **Provenance matters.** Everything under Arms / Legs / Feet / Timing comes from
 Carl, the one figure in this game whose movement actually convinces — treat it as
-the standard. A handful of entries are marked *(from the goblin rig — a caution,
-not a model)*: those record a specific failure worth avoiding, but goblin gait
+the standard. A handful of entries are marked _(from the goblin rig — a caution,
+not a model)_: those record a specific failure worth avoiding, but goblin gait
 and attack motion are **not** convincing and must never be copied, measured
 against, or cited as "how it's done here".
 
@@ -22,7 +22,7 @@ against, or cited as "how it's done here".
   with a deliberately oversized head, so any life-drawing ratio hung off it
   inflates. `HAND_LENGTH` was `HEAD_RY * 1.12` — the usual "a hand is as long as
   the face" — which made the hand 80% of its own forearm, and the bare skin
-  below the cuff then read as a rolled-up sleeve. Derive from the *parent limb*:
+  below the cuff then read as a rolled-up sleeve. Derive from the _parent limb_:
   `HAND_LENGTH = FOREARM_LENGTH * 0.38`.
 - **Pin height and heads-tall, derive every joint from those.** `HIP_Y`,
   `WAIST_Y`, `SHOULDER_Y`, `HEAD_CENTRE_Y` are constants in tile units with
@@ -39,7 +39,7 @@ against, or cited as "how it's done here".
 
 - **An arm swing is a sway, never a lift.** Head-on the swing is almost pure
   depth: the hand sweeps sideways across the hip (inboard going forward,
-  outboard going back) and hangs slightly *higher at both ends* because the arm
+  outboard going back) and hangs slightly _higher at both ends_ because the arm
   foreshortens — so the vertical term comes off `cos(swingAngle)`, not off the
   signed swing. Driving one hand up while the other goes down is a dumbbell curl.
 - **An arm placed by its hand cannot swing correctly at all.** Nearly all of a
@@ -53,7 +53,7 @@ against, or cited as "how it's done here".
 - Head-on the upper arm is nearly end-on and shows little (`FACING_UPPER_SWING`
   5°); the forearm carries most of the visible travel
   (`FACING_FOREARM_SWING` 11°).
-- **An FK arm needs a *pair* of rest tilts, not one.** The upper arm tilts out
+- **An FK arm needs a _pair_ of rest tilts, not one.** The upper arm tilts out
   ~8° further than the forearm — that break at the elbow is what holds the arm
   off the ribs. Solve the pair by bisection so the wrist still lands exactly on
   the intended hang spread.
@@ -70,44 +70,44 @@ against, or cited as "how it's done here".
 - **Which side an arm is drawn on is per view, never per frame.** Toward the
   camera an arm is in front of the chest for the whole cycle; away from it,
   behind the back for the whole cycle. Switching mid-swing pops at the shoulder.
-- **A hand drop is measured from the shoulder *joint*,** which sits ~0.055 below
+- **A hand drop is measured from the shoulder _joint_,** which sits ~0.055 below
   the shoulder line poses write against. Hanging hands at `ARM_LENGTH` below the
   shoulder line leaves the arm 0.05 short of straight, and the IK throws that
   slack sideways into the elbow — a 6px bow on a 46px-per-tile sheet. That is
   what "the arms have a sharp elbow" always means.
 - **A relaxed arm is a straight line.** Any bend must be posed deliberately.
-- **`elbowFlare` must bow the two arms in *opposite* screen directions** or the
+- **`elbowFlare` must bow the two arms in _opposite_ screen directions** or the
   arms cross the chest.
 - **A 2D arm has no way to foreshorten except to be drawn shorter.** A
   `foreScale` on the forearm (down to ~0.82 at the front of a head-on swing) is
   what carries the wrist up the body. Without it the hands track a flat arc at
   one height and the walk stays subtly wrong however well the angles are tuned.
-- *(from the goblin rig — a caution, not a model)* **The free arm of a
+- _(from the goblin rig — a caution, not a model)_ **The free arm of a
   weapon-carrier is three separate numbers**, and fixing one
   at a time takes three rounds: width scale, length scale (~0.72), and how far
   out the hand hangs (~0.95 against the weapon hand's 1.9). All three exist
   because that arm is angled away from the camera and must read as nearer the
   body than the weapon arm.
-- *(from the goblin rig — a caution, not a model)* **Raising a two-handed
+- _(from the goblin rig — a caution, not a model)_ **Raising a two-handed
   weapon's carry hand over-folds the off arm.** The butt
   grip comes up under the far shoulder and the shorter far arm folds to a third
   of its span, throwing its elbow up behind the shoulder — reads as an arm
-  upside down. Carry further *out* as well as up; keep the far arm's span past
+  upside down. Carry further _out_ as well as up; keep the far arm's span past
   half its reach. Sweep it numerically against the skeleton builder — the
   shoulder moves with the lean.
 
 ## Legs {#legs}
 
-- **Head-on, a knee is a change in *width*, not an angle.** A knee pointed at the
+- **Head-on, a knee is a change in _width_, not an angle.** A knee pointed at the
   viewer hinges away from the camera, so in the image plane there is no angle at
   all. Two separate pose values do this and conflating them is a bug:
   - `foreshorten` pulls the solved knee onto the hip→ankle line and must be **1
     on every leg of every head-on pose**, walk and idle alike. A bow that shows
     on the planted leg and vanishes on the swinging one flickers once per step
     and reads as a wiggle.
-  - `legNearness` only changes widths, so it *should* differ per leg: it blends
+  - `legNearness` only changes widths, so it _should_ differ per leg: it blends
     the leg shape toward a near-leg shape where the knee stops pinching and
-    widens to the thigh's width. The shin reading *wider* is what says "closer
+    widens to the thigh's width. The shin reading _wider_ is what says "closer
     to the camera" rather than "shorter". Drive it off the swing foot's lift.
 - **IK slack goes into the knee as a square root**, so tiny slack is huge
   sideways offset: 3.5% of slack threw the knees a fifth of a head sideways —
@@ -116,7 +116,7 @@ against, or cited as "how it's done here".
   real bends come from geometry (a swung or crouched leg), never from slack.
 - **"Knees break away from the centreline" is a head-on rule only.** Applied
   edge-on it sends the two knees in opposite screen directions, so one hinges
-  *backward* — the single most obviously wrong thing a side walk can do. Force
+  _backward_ — the single most obviously wrong thing a side walk can do. Force
   both knees forward in profile via a multiplier on the pose's knee-break, so a
   pose can still fold one deliberately.
 - **A walking leg is nearly as long as the hip is high**, so a foot planted a
@@ -126,14 +126,14 @@ against, or cited as "how it's done here".
   Get this backwards and no amount of stride or knee tuning fixes the side walk.
 - **A stride that clamps on even one frame reads as a hop.** Check it
   numerically: model hip→ankle distance per frame against
-  `THIGH + SHIN - JOINT_SLACK` and require headroom on *every* frame. Carl's
+  `THIGH + SHIN - JOINT_SLACK` and require headroom on _every_ frame. Carl's
   worst frame sits at 0.9307 against a 0.9334 limit (`STRIDE` 0.17,
   `WALK_BOB` 0.038, plus a toe-lift key easing the foot off the floor).
 - **A raised leg solves into a shin sticking out sideways** unless the pose
   carries an explicit knee-break (−1 folds the knee up in front) plus a foot
   swung outboard.
 - Two silent IK bugs made legs look wrong that no code review caught: the ankle
-  target lifted by the foot's *drawn depth* instead of the ankle's own height
+  target lifted by the foot's _drawn depth_ instead of the ankle's own height
   (asks the leg to over-reach → clamp → feet pulled up and inward, knees locked),
   and an inverted knee-bend sign (both knees break toward the centreline → legs
   read as crossed).
@@ -156,7 +156,7 @@ against, or cited as "how it's done here".
 ## Feet {#feet}
 
 - **A foot pointed at the camera cannot be splayed by rotating it** — that rolls
-  the figure onto the outside edges of both soles. Lead the *toe end* outward
+  the figure onto the outside edges of both soles. Lead the _toe end_ outward
   and keep the sole level.
 - Toes drawn as separate strokes read as sandal straps. Bump the silhouette
   instead.
@@ -165,7 +165,7 @@ against, or cited as "how it's done here".
 
 - **The head is a tall oval head-on and a deeper one in profile — two radii, not
   one.** Width ratio 0.74, depth ratio 0.9. A round head makes any chin under it
-  read as blocky *however narrow the chin is*, so narrowing the jaw alone never
+  read as blocky _however narrow the chin is_, so narrowing the jaw alone never
   fixes it. The profile skull, hair, ear, brow, eye and mouth all key off
   **depth**, not width.
 - **The jaw holds its width down to the top of the mouth and only turns in
@@ -182,7 +182,7 @@ against, or cited as "how it's done here".
   peak, not bow up through the middle; and the hairline crown must clear the
   brow by a real margin or there is no forehead at all.
 - **Edge-on the hairline is three heights**: the brow (at the front view's crown
-  height, and placed *on* the skull — the head is an ellipse, only ~63% as wide
+  height, and placed _on_ the skull — the head is an ellipse, only ~63% as wide
   at brow height, so a brow point at the full half-width hangs off the face), a
   sideburn just forward of the ear, and a shallow nape. The profile crop needs
   its own arc range or its front end juts past the brow and the hairline cuts
@@ -204,14 +204,14 @@ against, or cited as "how it's done here".
 ## Clothing {#clothing}
 
 - **Each leg of a pair of shorts is a cuff wrapped round its own thigh**: a band
-  placed a fixed distance *down the thigh* and square to it, with the crotch
+  placed a fixed distance _down the thigh_ and square to it, with the crotch
   anchored between the two. A fixed trapezoid stays bolt upright through a kick
   while the leg swings out bare. Rotating a fixed hem about the hip is the
   obvious fix and **does not work**: the turn has to be damped and capped or the
   crotch sweeps across the body into a draped cape, and a capped hem stops
   covering a thigh raised past the cap. Following the thigh's own direction
   covers it at any angle by construction.
-- The cuff takes two things from the *legs*, not the hip: its centre comes off
+- The cuff takes two things from the _legs_, not the hip: its centre comes off
   the leg root (re-deriving from hip width puts it twice as far out in profile,
   because roots narrow with `view.lateral` and the hip does not), and its
   half-width is floored at `THIGH_WIDTH * CUFF_SLACK` (a flare-derived width came
@@ -223,7 +223,7 @@ against, or cited as "how it's done here".
   `LEG_ROOT_HALF + THIGH_WIDTH` (so the hem flare can't drop below ~1.4), and
   pushing the hands out instead tilts the arm off the shoulder root. The gap
   that survives all three is ~1px at sheet scale, and it took trimming the
-  shorts *and* moving the hands.
+  shorts _and_ moving the hands.
 
 ## Views and depth {#views}
 
@@ -238,7 +238,7 @@ against, or cited as "how it's done here".
   including an arm drawn behind the torso. A depth shade on skin does not read as
   depth, it reads as two different colours of skin. Only a true profile shades a
   far limb, where it is genuinely behind the body.
-- **A carried prop is painted over the torso and face but *under* the gripping
+- **A carried prop is painted over the torso and face but _under_ the gripping
   fist.** A haft is wider than a fist, so painting it over the hand buries it and
   the figure appears to swing something nobody holds. Do not fix that by putting
   the prop behind the body (the haft vanishes) or the head over it (the haft is
@@ -250,7 +250,7 @@ against, or cited as "how it's done here".
   straddling the haft is the whole read.
 - **Prop identity lives in flare, aspect, and position along the haft.** The axe
   failed a blind naming test three attempts running — shovel, spade, boot,
-  bucket — and two redraws of the *edge* moved nothing. Four things were wrong at
+  bucket — and two redraws of the _edge_ moved nothing. Four things were wrong at
   once: carry angle (14° off level; solve carry for tip clearance per archetype,
   ~29°), bit aspect (0.20 deep over a 0.34 edge is square; 2:1), head position
   (40% along the wood is a lump partway down a pole; finish one haft-width short
@@ -266,11 +266,11 @@ against, or cited as "how it's done here".
   does not wrap with it: at rate 1.3 the cycle jumped from frame 4 straight back
   to 0 once per lap — a glitch frame in every direction that no amount of staring
   at the sheet finds, because the sheet is fine. Integer rates hide the bug.
-- *(from the goblin rig — a caution, not a model)* **A swing cap silently
+- _(from the goblin rig — a caution, not a model)_ **A swing cap silently
   discards authored angles.** A ground-clearance clamp on
   a chop returned 16° from an authored 58° at impact, so the swing lay flat and
   stayed there for six frames. Keep the hand high through the strike and author
-  *under* the clamp.
+  _under_ the clamp.
 - **The rebound is the follow keyframes, not a fifth beat.** `follow` is eased
   out, so it moves fastest in the frames right after impact.
 - **An effect whose size is a gameplay value does not belong in the sheet.**
@@ -283,7 +283,7 @@ against, or cited as "how it's done here".
   must move with it. Measure off the sheet: Carl's standing rows top out 40 px
   above the tile anchor against ~32 px on the old art.
 - **Frame geometry is measured at bake time, not authored.** Have the generator
-  print the exact manifest entry; the gate then *verifies* rather than rewrites
+  print the exact manifest entry; the gate then _verifies_ rather than rewrites
   it. After a pose change: re-run with the manifest gate skipped, paste the
   printed entries, re-run clean.
 - **Vertical wall tests are anchored by direction** (`src/map/collisionAnchors.ts`).
@@ -298,7 +298,7 @@ against, or cited as "how it's done here".
 
 - **A path that starts and ends at different points gets its gap stroked shut by
   `closePath`.** The back hair began at temple height and its closure ended at 0,
-  so a seam ran down *one* side of the head as a dark line — the other side looked
+  so a seam ran down _one_ side of the head as a dark line — the other side looked
   fine because the path actually travels that segment. Any one-sided artifact in
   a filled-and-stroked shape is worth checking against this first.
 - **node-canvas drops an `rgba()` with an exponent-notation alpha.** A tiny

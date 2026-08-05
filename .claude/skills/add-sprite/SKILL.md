@@ -33,6 +33,51 @@ Runtime rendering uses **PNG sprite sheets described by JSON manifests** under `
 - Multi-layer sprites (e.g. goblin body + weapon overlay): separate manifest keys drawn at the same frame — see `src/sprites/goblinSprite.ts`.
 - Reference shape (`src/sprites/ratSprite.ts`): attack anim → `attack` state via `progressFrameIndex`; moving → `walk` via `walkFrameIndex`; else `idle` frame 0. `flipX = facingX < 0`.
 
+## Animation cadence
+
+A sprite row is sampled by however many game ticks the motion driving it lasts.
+Past one sprite frame per tick the row is undersampled, not played — frames are
+skipped, the legs jump between non-adjacent poses, and it reads as vibration or
+a freeze. Nothing in typecheck, lint, the sheet, or a contact sheet shows it; it
+is only visible in motion, at the real speed. This has bitten three separate
+creatures here, in three disguises:
+
+- A small fast creature on a distance-driven walk phase. A juvenile raptor's
+  stride is 0.31 tiles, so covering the speed its AI asks for needs twelve
+  strides a second — ninety-odd frames a second out of an eight-frame row.
+  Neither the art nor the constant can fix it: a stride long enough to sync
+  would step further than the leg extends and the reach gate rejects it. Cap
+  the cadence with a ceiling derived from the fastest real locomotion
+  (`MONGO_UNDERSAMPLING_FRAME_LIMIT` in `mongoSprite.ts` and
+  `MAX_WALK_FRAMES_PER_TICK` in `Mongo.ts` are the pattern), so raising the
+  sprint speeds the legs up with it instead of clamping to a stale number.
+- A creature that changes speed for one state. A charging Tuskling sampled at
+  the walk cadence skipped frames and read as vibrating rather than sprinting;
+  the charge run needs its own frame counter at its own hold, not `walkFrame`.
+- The dominant unbounded displacement is usually not the creature. The mob
+  separation pass shoves an overlapped mob a large fraction of the overlap —
+  several times its own per-frame step — so a distance-driven gait re-opens
+  the strobe simply because the player stood next to it. Measure cadence from
+  pixels actually covered and put a ceiling on it.
+
+Two related traps: a preview scene that plays a row at a different fps than the
+game does hides all of this (five rounds of art review missed a strobe because
+the harness ran at 12 fps against a shipping 30) — derive the harness's
+playback from the shared timing constant. And when a runtime frame count and a
+bake gate must agree, put both on one shared timing module imported by the
+generator and the runtime; a gate that parses frame counts out of source with a
+regex silently passes the moment those literals become named constants.
+
+## Views for a horizontal-bodied animal
+
+Head-on and away views of a long, low animal are not a geometric projection of
+the profile. A depth-ordered true projection of a raptor was measured to be
+correct and was unreadable: the head could not be found at 32 px, the axial
+views came out a third shorter than the profile, and the bite punched through
+the floor. This game's convention — set by the rat's walk row — is head at the
+top with any crest above it, body below, tail swept off the centreline. Follow
+it.
+
 ## Checklist for a new creature sprite
 
 1. Write + run the generator script → PNG in `src/images/<category>/`.

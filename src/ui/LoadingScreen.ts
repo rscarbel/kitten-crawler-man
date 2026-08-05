@@ -1,6 +1,6 @@
 /**
- * The boot-time loading screen shown while `loadGroups(['core'])` resolves
- * (`docs/asset-management-plan.md` Phase 5). Runs its own `requestAnimationFrame`
+ * The boot-time loading screen shown while `loadGroups(['core'])` resolves.
+ * Runs its own `requestAnimationFrame`
  * loop rather than going through a `Scene`/`SceneManager` — there is no scene yet
  * to hand the canvas to, and a progress bar has no input handling or update-tick
  * needs that would justify the extra machinery.

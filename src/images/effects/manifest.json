@@ -326,7 +326,7 @@
       }
     }
   },
-    "golem_rock": {
+  "golem_rock": {
     "path": "effects/golem_rock.png",
     "frameWidth": 64,
     "frameHeight": 64,
@@ -340,7 +340,7 @@
       }
     }
   },
-    "golem_rock_burst": {
+  "golem_rock_burst": {
     "path": "effects/golem_rock_burst.png",
     "frameWidth": 96,
     "frameHeight": 96,

@@ -399,18 +399,18 @@ export class AudioManager {
 
   /**
    * Drop decoded buffers for ids no longer needed, so a floor change can shed
-   * the previous floor's SFX instead of only ever accumulating them (Phase 2
-   * of docs/asset-management-plan.md). Skips any id that is mid-playback —
-   * as a one-shot, an ambient loop, or the current music track — rather than
-   * risk cutting audio off; a skipped id just gets re-decoded on the next
-   * `preload` call for its group, which is a fine failure mode.
+   * the previous floor's SFX instead of only ever accumulating them. Skips
+   * any id that is mid-playback — as a one-shot, an ambient loop, or the
+   * current music track — rather than risk cutting audio off; a skipped id
+   * just gets re-decoded on the next `preload` call for its group, which is a
+   * fine failure mode.
    *
-   * TODO(asset-management-plan Phase 6): not yet called from anywhere. Phase 6
-   * ("Eviction on floor change") gives floor transitions a real floor-identity
-   * hook (`levelDef.id`, not scene construction — entering a building interior
-   * rebuilds the scene without being a floor change). Wire this call there
-   * once that hook exists, rather than guessing at scene-construction call
-   * sites now and risking evicting SFX on an interior enter/exit.
+   * TODO: not yet called from anywhere. Floor transitions need a real
+   * floor-identity hook (`levelDef.id`, not scene construction — entering a
+   * building interior rebuilds the scene without being a floor change). Wire
+   * this call there once that hook exists, rather than guessing at
+   * scene-construction call sites now and risking evicting SFX on an interior
+   * enter/exit.
    */
   releaseSounds(ids: ReadonlyArray<SoundId>): void {
     for (const id of ids) {

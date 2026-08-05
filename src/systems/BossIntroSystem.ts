@@ -99,9 +99,17 @@ const SPIDER_SPRITE_SIZE = 80;
 /** Grotesque Spider sprite y offset. */
 const SPIDER_SPRITE_Y_OFFSET = 16;
 /** Hoarder sprite size. */
-const HOARDER_SPRITE_SIZE = 80;
+/**
+ * The redraw moved her tile anchor from 26px down a 206px frame to 191px down a
+ * 280px one, and the portrait is positioned off that anchor: at the old size and
+ * offset the panel showed her shins and painted her head off the top of the
+ * screen. Both numbers are measured against the current sheet.
+ */
+const HOARDER_SPRITE_SIZE = 44;
 /** Hoarder sprite y offset. */
-const HOARDER_SPRITE_Y_OFFSET = 18;
+const HOARDER_SPRITE_Y_OFFSET = 135;
+/** Pinned rather than clock-driven: a portrait that breathes reads as a bug. */
+const HOARDER_PORTRAIT_FRAME = 0;
 /** Cat sprite x fraction of panel width. */
 const CAT_SPRITE_X_FRACTION = 0.52;
 /** Cat sprite y offset in versus panel. */
@@ -385,18 +393,11 @@ export class BossIntroSystem implements GameSystem {
         );
       } else {
         const hS = HOARDER_SPRITE_SIZE;
-        drawHoarderSprite(
-          ctx,
-          rightX + panelW / 2 - hS / 2,
-          panelY + HOARDER_SPRITE_Y_OFFSET,
-          hS,
-          0,
-          1,
-          0,
-          false,
-          false,
-          0,
-        );
+        drawHoarderSprite(ctx, rightX + panelW / 2 - hS / 2, panelY + HOARDER_SPRITE_Y_OFFSET, hS, {
+          facingX: 0,
+          facingY: 1,
+          idleFrame: HOARDER_PORTRAIT_FRAME,
+        });
       }
       ctx.restore();
 

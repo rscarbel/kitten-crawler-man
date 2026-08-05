@@ -104,7 +104,6 @@ const STUNNED_FRAMES = 8;
 
 // ── Pose helpers ─────────────────────────────────────────────────────────────
 
-
 function leg(fore: number, lift: number, splay = 0): GolemLegPose {
   return { fore, splay, lift };
 }
@@ -177,7 +176,7 @@ function walkPose(phase: number): GolemPose {
     // is shoved back up, rather than floating on a sine wave.
     bob: WALK_LAND_DROP * Math.max(landR, landL),
     lean: WALK_LEAN,
-    twist: WALK_TWIST * (legR.fore - legL.fore) / (WALK_REACH * 2),
+    twist: (WALK_TWIST * (legR.fore - legL.fore)) / (WALK_REACH * 2),
     headSink: 0.5,
     coreGlow: 0.45 + 0.15 * Math.sin(phase * TWO_PI),
     // Arms counterswing their own-side leg; heavy stone arms barely move.
@@ -248,7 +247,11 @@ function slamPose(progress: number): GolemPose {
   const drive = easeIn(ramp(progress, SLAM_RAISE_END, GOLEM_SLAM_IMPACT_PROGRESS));
   const recover = easeInOut(ramp(progress, GOLEM_SLAM_IMPACT_PROGRESS, 1));
 
-  const swing = lerp(lerp(lerp(0, SLAM_OVERHEAD_SWING, raise), SLAM_STRIKE_SWING, drive), 0, recover);
+  const swing = lerp(
+    lerp(lerp(0, SLAM_OVERHEAD_SWING, raise), SLAM_STRIKE_SWING, drive),
+    0,
+    recover,
+  );
   const bend = lerp(lerp(lerp(deg(14), deg(-22), raise), deg(6), drive), deg(14), recover);
   // The fists come together on the blow rather than spreading: it is a
   // double-fist slam, and the spread was also costing the reach G10 measures.
@@ -1216,7 +1219,9 @@ function gateThrowReleasesOnTime(): void {
   // A release fraction under half a frame would index frame -1 below, which
   // reads as an empty pose rather than as the nonsense it is.
   if (release < 1) {
-    throw new Error(`[G10] the throw release resolves to frame ${release}, which has no frame before it`);
+    throw new Error(
+      `[G10] the throw release resolves to frame ${release}, which has no frame before it`,
+    );
   }
   for (const row of ROWS.filter((candidate) => candidate.name.startsWith('throw'))) {
     if (row.pose === null) throw new Error(`[G10] ${row.name} has no pose`);
@@ -1304,7 +1309,9 @@ function bakeEffect(
     superCtx.scale(TILE_SCALE, TILE_SCALE);
     paint(superCtx, frame / frames);
     const flat = createCanvas(cell, cell);
-    flat.getContext('2d').drawImage(superCell, 0, 0, superCell.width, superCell.height, 0, 0, cell, cell);
+    flat
+      .getContext('2d')
+      .drawImage(superCell, 0, 0, superCell.width, superCell.height, 0, 0, cell, cell);
     cells.push(flat);
     ctx.drawImage(flat, frame * cell, 0);
   }
@@ -1480,10 +1487,7 @@ function readManifest(path: string): Record<string, unknown> {
  * their edits. A mismatch prints the entry to paste and fails the run — a sheet
  * on disk that its manifest does not describe renders as garbage.
  */
-function verifyManifests(
-  sheets: readonly BakedSheet[],
-  effects: readonly EffectSheet[],
-): boolean {
+function verifyManifests(sheets: readonly BakedSheet[], effects: readonly EffectSheet[]): boolean {
   let ok = true;
   const check = (path: string, key: string, required: ManifestEntry): void => {
     const manifest = readManifest(path);

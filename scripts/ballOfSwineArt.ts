@@ -766,7 +766,10 @@ function drawHand(ctx: Ctx, unit: number, seed: number): void {
     const length = unit * (0.28 + hash1(seed + 16 + finger) * 0.16);
     ctx.beginPath();
     ctx.moveTo(reach * 0.9, finger * unit * 0.09);
-    ctx.lineTo(reach * 0.9 + Math.cos(angle) * length, finger * unit * 0.09 + Math.sin(angle) * length);
+    ctx.lineTo(
+      reach * 0.9 + Math.cos(angle) * length,
+      finger * unit * 0.09 + Math.sin(angle) * length,
+    );
     ctx.strokeStyle = BELLY.mid;
     ctx.lineWidth = unit * 0.11;
     ctx.lineCap = 'round';
@@ -981,7 +984,13 @@ export function drawBallShade(ctx: Ctx): void {
 
   // The lift, up and to the left.
   ctx.beginPath();
-  traceEllipse(ctx, -BALL_RADIUS * 0.42, -BALL_RADIUS * 0.46, BALL_RADIUS * 0.72, BALL_RADIUS * 0.66);
+  traceEllipse(
+    ctx,
+    -BALL_RADIUS * 0.42,
+    -BALL_RADIUS * 0.46,
+    BALL_RADIUS * 0.72,
+    BALL_RADIUS * 0.66,
+  );
   ctx.fillStyle = tinted(BELLY.light, 0.13);
   ctx.fill();
 
@@ -1262,7 +1271,14 @@ export function drawBallBurst(ctx: Ctx, progress: number): void {
         i % 2 === 0 ? GUT.mid : GUT.dark,
       );
     }
-    fillEllipse(ctx, 0, BALL_RADIUS * collapse * 0.4, BALL_RADIUS * 0.9, gapHalf * 0.4, tinted(BLOOD, 0.7));
+    fillEllipse(
+      ctx,
+      0,
+      BALL_RADIUS * collapse * 0.4,
+      BALL_RADIUS * 0.9,
+      gapHalf * 0.4,
+      tinted(BLOOD, 0.7),
+    );
   }
 
   // Debris: heads, hooves and cloth thrown clear as the thing lets go.

@@ -47,18 +47,8 @@ const LABEL_FONT_PX = 10;
 const LABEL_LEFT_PAD = 2;
 const TILE_GUIDE_COLOR = 'rgba(80,200,255,0.35)';
 
-type FloorPainter = (
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-) => void;
-type IconPainter = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-) => void;
+type FloorPainter = (ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number) => void;
+type IconPainter = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void;
 
 interface Subject {
   label: string;
@@ -137,7 +127,11 @@ SUBJECTS.forEach((subject, column) => {
   subject.icon(ctx, slotLeft, slotTop, INVENTORY_SLOT_PX);
 
   ctx.fillStyle = LABEL_COLOR;
-  ctx.fillText(`icon @${INVENTORY_SLOT_PX}`, cellLeft + LABEL_LEFT_PAD, slotTop + INVENTORY_SLOT_PX);
+  ctx.fillText(
+    `icon @${INVENTORY_SLOT_PX}`,
+    cellLeft + LABEL_LEFT_PAD,
+    slotTop + INVENTORY_SLOT_PX,
+  );
 });
 
 writeFileSync(outPath, canvas.toBuffer('image/png'));

@@ -121,8 +121,8 @@ const GROUND_SPILL = {
  * else. The three exclusions are each a case the first cut got wrong and a
  * screenshot caught:
  *
- * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the plan calls
- *   the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
+ * - `dirt` is `FloorTypeValue.road` — the town's alleys, which the `TownPlan`
+ *   calls the lowest rung of the street hierarchy and `TileGrid` counts as paving, plus
  *   every track outside the walls. Kerbing against it drew a closed pale
  *   rectangle around Blackwood Lodge's three-tile doorstep, an island of setts in
  *   packed earth, and put a lip on every gate apron out in open country.

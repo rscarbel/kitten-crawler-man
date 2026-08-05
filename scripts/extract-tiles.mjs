@@ -11,9 +11,9 @@ import { writeFileSync, readFileSync, existsSync } from 'fs';
 
 const SRC_PATH = 'src/images/environment/hoarders_floor.png';
 const TILESET_PATH = 'src/images/environment/dungeon_tileset.png';
-const FRAME_SIZE = 64;       // target frame size (px)
-const FRAMES_NEEDED = 8;     // floor_hoarder has 8 variants
-const HOARDER_ROW = 7;       // row index in dungeon_tileset
+const FRAME_SIZE = 64; // target frame size (px)
+const FRAMES_NEEDED = 8; // floor_hoarder has 8 variants
+const HOARDER_ROW = 7; // row index in dungeon_tileset
 
 // Minimum average brightness to consider a row/column as tile content (not separator).
 const SEPARATOR_THRESHOLD = 25;
@@ -97,7 +97,7 @@ function splitToTarget(ranges, targetCount) {
   while (sorted.length < targetCount) {
     let maxIdx = 0;
     for (let i = 1; i < sorted.length; i++) {
-      if ((sorted[i].end - sorted[i].start) > (sorted[maxIdx].end - sorted[maxIdx].start)) {
+      if (sorted[i].end - sorted[i].start > sorted[maxIdx].end - sorted[maxIdx].start) {
         maxIdx = i;
       }
     }
@@ -153,12 +153,18 @@ async function extractOverworldTileset() {
 
   console.log(`Row ranges (${rowRanges.length}/${OW_NUM_ROWS}):`);
   rowRanges.forEach((r, i) =>
-    console.log(`  [${i}] ${OW_ROW_NAMES[i] ?? '?'}: rows ${r.start}-${r.end} (${r.end - r.start + 1}px)`)
+    console.log(
+      `  [${i}] ${OW_ROW_NAMES[i] ?? '?'}: rows ${r.start}-${r.end} (${r.end - r.start + 1}px)`,
+    ),
   );
-  console.log(`Col ranges: ${allColRanges.length} total, ${usableColRanges.length} usable (last skipped)`);
+  console.log(
+    `Col ranges: ${allColRanges.length} total, ${usableColRanges.length} usable (last skipped)`,
+  );
 
   if (rowRanges.length !== OW_NUM_ROWS) {
-    console.error(`Expected ${OW_NUM_ROWS} row ranges but got ${rowRanges.length}. Adjust OW_ROW_THRESHOLD.`);
+    console.error(
+      `Expected ${OW_NUM_ROWS} row ranges but got ${rowRanges.length}. Adjust OW_ROW_THRESHOLD.`,
+    );
     process.exit(1);
   }
 
@@ -178,12 +184,25 @@ async function extractOverworldTileset() {
       const tmpCtx = tmp.getContext('2d');
       tmpCtx.drawImage(
         srcCanvas,
-        colR.start, rowR.start, colR.end - colR.start + 1, rowR.end - rowR.start + 1,
-        0, 0, OW_FRAME_SIZE, OW_FRAME_SIZE
+        colR.start,
+        rowR.start,
+        colR.end - colR.start + 1,
+        rowR.end - rowR.start + 1,
+        0,
+        0,
+        OW_FRAME_SIZE,
+        OW_FRAME_SIZE,
       );
       outCtx.drawImage(
-        tmp, 0, 0, OW_FRAME_SIZE, OW_FRAME_SIZE,
-        col * OW_FRAME_SIZE, row * OW_FRAME_SIZE, OW_FRAME_SIZE, OW_FRAME_SIZE
+        tmp,
+        0,
+        0,
+        OW_FRAME_SIZE,
+        OW_FRAME_SIZE,
+        col * OW_FRAME_SIZE,
+        row * OW_FRAME_SIZE,
+        OW_FRAME_SIZE,
+        OW_FRAME_SIZE,
       );
     }
   }
@@ -207,7 +226,9 @@ async function extractOverworldTileset() {
     states,
   };
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
-  console.log(`Updated manifest.json — overworld_tileset: ${numRows} rows × ${numCols} frames each`);
+  console.log(
+    `Updated manifest.json — overworld_tileset: ${numRows} rows × ${numCols} frames each`,
+  );
 }
 
 async function main() {
@@ -252,8 +273,12 @@ async function main() {
   const rowRanges = findBrightRanges(Array.from(rowBright));
   const colRanges = findBrightRanges(Array.from(colBright));
 
-  console.log(`Detected tile rows: ${rowRanges.length}  (${rowRanges.map(r => `${r.start}-${r.end}`).join(', ')})`);
-  console.log(`Detected tile cols: ${colRanges.length}  (${colRanges.map(r => `${r.start}-${r.end}`).join(', ')})`);
+  console.log(
+    `Detected tile rows: ${rowRanges.length}  (${rowRanges.map((r) => `${r.start}-${r.end}`).join(', ')})`,
+  );
+  console.log(
+    `Detected tile cols: ${colRanges.length}  (${colRanges.map((r) => `${r.start}-${r.end}`).join(', ')})`,
+  );
 
   // ── Collect candidate tiles (cell regions from the detected grid) ──────────
   const candidates = [];
@@ -266,14 +291,14 @@ async function main() {
       for (let i = 0; i < regionData.data.length; i += 4) {
         mean += (regionData.data[i] + regionData.data[i + 1] + regionData.data[i + 2]) / 3;
       }
-      mean /= (regionData.data.length / 4);
+      mean /= regionData.data.length / 4;
       let variance = 0;
       for (let i = 0; i < regionData.data.length; i += 4) {
         const b = (regionData.data[i] + regionData.data[i + 1] + regionData.data[i + 2]) / 3;
         variance += (b - mean) ** 2;
       }
-      variance /= (regionData.data.length / 4);
-      const score = (mean > 30 && mean < 180 && variance > 100) ? variance : -1;
+      variance /= regionData.data.length / 4;
+      const score = mean > 30 && mean < 180 && variance > 100 ? variance : -1;
       candidates.push({ colR, rowR, mean, variance, score, tileW, tileH });
     }
   }
@@ -288,7 +313,9 @@ async function main() {
 
   console.log(`\nChosen ${chosen.length} tiles:`);
   chosen.forEach((c, i) =>
-    console.log(`  [${i}] col ${c.colR.start}-${c.colR.end}, row ${c.rowR.start}-${c.rowR.end}  mean=${c.mean.toFixed(1)} var=${c.variance.toFixed(0)} score=${c.score.toFixed(0)}`)
+    console.log(
+      `  [${i}] col ${c.colR.start}-${c.colR.end}, row ${c.rowR.start}-${c.rowR.end}  mean=${c.mean.toFixed(1)} var=${c.variance.toFixed(0)} score=${c.score.toFixed(0)}`,
+    ),
   );
 
   // ── Load dungeon_tileset and splice in the new row 7 ──────────────────────
@@ -308,11 +335,7 @@ async function main() {
 
     const tmp = createCanvas(FRAME_SIZE, FRAME_SIZE);
     const tmpCtx = tmp.getContext('2d');
-    tmpCtx.drawImage(
-      srcCanvas,
-      colR.start, rowR.start, tileW, tileH,
-      0, 0, FRAME_SIZE, FRAME_SIZE
-    );
+    tmpCtx.drawImage(srcCanvas, colR.start, rowR.start, tileW, tileH, 0, 0, FRAME_SIZE, FRAME_SIZE);
 
     const destX = i * FRAME_SIZE;
     tilesetCtx.drawImage(tmp, 0, 0, FRAME_SIZE, FRAME_SIZE, destX, destY, FRAME_SIZE, FRAME_SIZE);
@@ -321,7 +344,17 @@ async function main() {
   if (chosen.length < FRAMES_NEEDED) {
     for (let i = chosen.length; i < FRAMES_NEEDED; i++) {
       const srcX = (i % chosen.length) * FRAME_SIZE;
-      tilesetCtx.drawImage(tilesetCanvas, srcX, destY, FRAME_SIZE, FRAME_SIZE, i * FRAME_SIZE, destY, FRAME_SIZE, FRAME_SIZE);
+      tilesetCtx.drawImage(
+        tilesetCanvas,
+        srcX,
+        destY,
+        FRAME_SIZE,
+        FRAME_SIZE,
+        i * FRAME_SIZE,
+        destY,
+        FRAME_SIZE,
+        FRAME_SIZE,
+      );
     }
   }
 
@@ -331,7 +364,17 @@ async function main() {
 
   const preview = createCanvas(FRAMES_NEEDED * FRAME_SIZE, FRAME_SIZE);
   const previewCtx = preview.getContext('2d');
-  previewCtx.drawImage(tilesetCanvas, 0, destY, FRAMES_NEEDED * FRAME_SIZE, FRAME_SIZE, 0, 0, FRAMES_NEEDED * FRAME_SIZE, FRAME_SIZE);
+  previewCtx.drawImage(
+    tilesetCanvas,
+    0,
+    destY,
+    FRAMES_NEEDED * FRAME_SIZE,
+    FRAME_SIZE,
+    0,
+    0,
+    FRAMES_NEEDED * FRAME_SIZE,
+    FRAME_SIZE,
+  );
   writeFileSync('hoarder_row_preview.png', preview.toBuffer('image/png'));
   console.log('Preview saved to hoarder_row_preview.png — open it to verify the tiles look right.');
 
@@ -339,4 +382,7 @@ async function main() {
   await extractOverworldTileset();
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -12,7 +12,8 @@ All audio is **pre-recorded mp3 files** — no synthesis. WebAudio is only the p
 1. Drop the `.mp3` in the appropriate `src/audio/<category>/` folder.
 2. Add its id to `SOUND_IDS_TUPLE` in `src/audio/sounds.ts` (the `SoundId` type derives from it).
 3. Add the id → path mapping in `SOUND_MANIFEST` in the same file.
-4. Play it. Preloading is automatic (`preload()` fetches and decodes everything in `ALL_SOUND_IDS`; missing files warn and skip).
+4. `src/audio/sfxGroups.ts` — add the id to every `SFX_GROUPS` group whose context can trigger it (the `universal` group for menu, UI and the party's own cues; a `level1`/`level2`/`level3` group; a `bounty`/quest/interior group). Preloading is **not** automatic: only the groups a scene declares are decoded, and `AudioManager.play` returns silently when the buffer is absent — so an id in no group is a cue that simply never sounds, with no error and no failing gate. Ids may appear in several groups; `preload` de-dupes against `buffers`. Music and ambience ids are the exception: they're in `STREAMING_SOUND_IDS`, play through a media element, and are never preloaded at all.
+5. Play it (see below).
 
 ## Playing sounds
 

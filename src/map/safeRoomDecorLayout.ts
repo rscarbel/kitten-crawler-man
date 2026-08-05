@@ -159,7 +159,7 @@ function occupiedTiles(
   // lanterns in 52% of rooms and the stove in 34%, leaving lamplight pooling on
   // bare floor and steam rising off nothing. `planSafeRoomCounters` is itself
   // stamp-independent — it takes its door columns from walkability outside the
-  // room — so consulting the plan is stable wherever this is called from.
+  // room — so consulting the counter layout is stable wherever this is called from.
   if (counterLayout !== undefined) {
     for (const tile of [
       ...counterLayout.counterTiles,

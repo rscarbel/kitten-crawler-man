@@ -478,7 +478,7 @@ export function shoulderHeight(p: GoblinProportions): number {
   return groundedHipHeight(p) + p.torsoLength;
 }
 
-/** Sole-to-skull-top height, the number the art brief specifies per archetype. */
+/** Sole-to-skull-top height, tuned separately per archetype below. */
 export function figureHeight(p: GoblinProportions): number {
   return shoulderHeight(p) + p.neckLength + p.headRadius * 2;
 }
@@ -748,7 +748,12 @@ function drawFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: 
     ctx.quadraticCurveTo(heel - grow, sole + grow, heel * 0.35, sole + grow);
     ctx.lineTo(toe * 0.9, sole + grow);
     ctx.quadraticCurveTo(toe + grow, sole * 0.4, toe * 0.72, -footHeight * ARCH_RISE * 0.35 - grow);
-    ctx.quadraticCurveTo(toe * 0.2, -footHeight * ARCH_RISE * 0.6 - grow, heel - grow, -footHeight * 0.2);
+    ctx.quadraticCurveTo(
+      toe * 0.2,
+      -footHeight * ARCH_RISE * 0.6 - grow,
+      heel - grow,
+      -footHeight * 0.2,
+    );
     ctx.closePath();
   };
 
@@ -770,7 +775,12 @@ function drawFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: 
     ctx.fillStyle = rgba(skin.light, 0.24);
     ctx.beginPath();
     ctx.moveTo(heel * 0.5, -footHeight * 0.5);
-    ctx.quadraticCurveTo(toe * 0.35, -footHeight * ARCH_RISE * 0.55, toe * 0.68, -footHeight * 0.25);
+    ctx.quadraticCurveTo(
+      toe * 0.35,
+      -footHeight * ARCH_RISE * 0.55,
+      toe * 0.68,
+      -footHeight * 0.25,
+    );
     ctx.lineTo(toe * 0.6, footHeight * 0.15);
     ctx.quadraticCurveTo(toe * 0.2, -footHeight * 0.15, heel * 0.5, -footHeight * 0.5);
     ctx.closePath();
@@ -996,8 +1006,18 @@ function drawTorso(ctx: Ctx, style: GoblinStyle, squash: number): void {
   ctx.fillStyle = rgba(skin.light, 0.3);
   ctx.beginPath();
   ctx.moveTo(-p.shoulderHalfWidth * 0.7, top * (COLLAR_Y - 0.06));
-  ctx.quadraticCurveTo(0, top * (PECTORAL_Y + 0.14), p.shoulderHalfWidth * 0.68, top * (COLLAR_Y - 0.06));
-  ctx.quadraticCurveTo(0, top * (PECTORAL_Y - 0.06), -p.shoulderHalfWidth * 0.7, top * (COLLAR_Y - 0.06));
+  ctx.quadraticCurveTo(
+    0,
+    top * (PECTORAL_Y + 0.14),
+    p.shoulderHalfWidth * 0.68,
+    top * (COLLAR_Y - 0.06),
+  );
+  ctx.quadraticCurveTo(
+    0,
+    top * (PECTORAL_Y - 0.06),
+    -p.shoulderHalfWidth * 0.7,
+    top * (COLLAR_Y - 0.06),
+  );
   ctx.closePath();
   ctx.fill();
 
@@ -1125,14 +1145,28 @@ function drawPauldron(ctx: Ctx, shoulder: Pt, lean: number, style: GoblinStyle):
 
   ctx.fillStyle = rgba(plateSheen, 0.45);
   ctx.beginPath();
-  ctx.ellipse(-halfWidth * 0.34, -height * 0.2, halfWidth * 0.36, height * 0.18, deg(-20), 0, FULL_CIRCLE);
+  ctx.ellipse(
+    -halfWidth * 0.34,
+    -height * 0.2,
+    halfWidth * 0.36,
+    height * 0.18,
+    deg(-20),
+    0,
+    FULL_CIRCLE,
+  );
   ctx.fill();
 
   ctx.fillStyle = rgba(iron.shadow, 0.7);
   for (let i = 0; i < PAULDRON_STUD_COUNT; i++) {
     const t = (i + 0.5) / PAULDRON_STUD_COUNT;
     ctx.beginPath();
-    ctx.arc(lerp(-halfWidth * 0.7, halfWidth * 0.7, t), height * 0.24, halfWidth * 0.1, 0, FULL_CIRCLE);
+    ctx.arc(
+      lerp(-halfWidth * 0.7, halfWidth * 0.7, t),
+      height * 0.24,
+      halfWidth * 0.1,
+      0,
+      FULL_CIRCLE,
+    );
     ctx.fill();
   }
 
@@ -1396,10 +1430,13 @@ function drawEar(
   };
 
   /** Where each notch sits along the ear, and how deep it bites. */
-  const notches = Array.from({ length: Math.min(style.earNotches, MAX_EAR_NOTCHES) }, (unused, i) => ({
-    at: NOTCH_FIRST + ((i * 0.31 + notchSeed * 0.17) % NOTCH_SPAN),
-    depth: NOTCH_DEPTH * (0.7 + ((i + notchSeed) % 3) * 0.22),
-  })).sort((a, b) => a.at - b.at);
+  const notches = Array.from(
+    { length: Math.min(style.earNotches, MAX_EAR_NOTCHES) },
+    (unused, i) => ({
+      at: NOTCH_FIRST + ((i * 0.31 + notchSeed * 0.17) % NOTCH_SPAN),
+      depth: NOTCH_DEPTH * (0.7 + ((i + notchSeed) % 3) * 0.22),
+    }),
+  ).sort((a, b) => a.at - b.at);
 
   /**
    * The notches are cut into the traced path rather than painted over it. The
@@ -1484,7 +1521,15 @@ function drawEar(
   ctx.restore();
 }
 
-function drawEye(ctx: Ctx, x: number, y: number, r: number, scale: number, openness: number, style: GoblinStyle): void {
+function drawEye(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  r: number,
+  scale: number,
+  openness: number,
+  style: GoblinStyle,
+): void {
   const { eye, sclera, outline } = style.palette;
   const radius = r * EYE_RADIUS * scale;
   const open = clamp01(openness);
@@ -1493,7 +1538,15 @@ function drawEye(ctx: Ctx, x: number, y: number, r: number, scale: number, openn
   const SOCKET_RY = 1.8;
   ctx.fillStyle = sclera;
   ctx.beginPath();
-  ctx.ellipse(x, y, radius * SOCKET_RX, radius * SOCKET_RY * Math.max(open, 0.1), 0, 0, FULL_CIRCLE);
+  ctx.ellipse(
+    x,
+    y,
+    radius * SOCKET_RX,
+    radius * SOCKET_RY * Math.max(open, 0.1),
+    0,
+    0,
+    FULL_CIRCLE,
+  );
   ctx.fill();
 
   if (open < 0.2) return;
@@ -1505,7 +1558,15 @@ function drawEye(ctx: Ctx, x: number, y: number, r: number, scale: number, openn
 
   ctx.fillStyle = outline;
   ctx.beginPath();
-  ctx.ellipse(x, y, radius * PUPIL_FRACTION, radius * PUPIL_FRACTION * open * 1.6, 0, 0, FULL_CIRCLE);
+  ctx.ellipse(
+    x,
+    y,
+    radius * PUPIL_FRACTION,
+    radius * PUPIL_FRACTION * open * 1.6,
+    0,
+    0,
+    FULL_CIRCLE,
+  );
   ctx.fill();
 }
 
@@ -1530,7 +1591,12 @@ function drawMouth(ctx: Ctx, style: GoblinStyle, mouthOpen: number): void {
   const traceSlot = (): void => {
     ctx.beginPath();
     ctx.moveTo(cx - halfWidth, cy - height * 0.2);
-    ctx.quadraticCurveTo(cx - halfWidth * 0.1, cy + height * 1.7, cx + halfWidth, cy - height * 0.6);
+    ctx.quadraticCurveTo(
+      cx - halfWidth * 0.1,
+      cy + height * 1.7,
+      cx + halfWidth,
+      cy - height * 0.6,
+    );
     ctx.quadraticCurveTo(cx, cy - height * 1.1, cx - halfWidth, cy - height * 0.2);
     ctx.closePath();
   };
@@ -1598,14 +1664,7 @@ function drawNose(ctx: Ctx, style: GoblinStyle): void {
     ctx.beginPath();
     ctx.moveTo(bridgeX - grow, bridgeY - grow);
     // Bridge: convex, bulging forward as it drops.
-    ctx.bezierCurveTo(
-      rx * 0.78 + grow,
-      -r * 0.24,
-      tipX + grow,
-      -r * 0.06,
-      tipX + grow,
-      tipY,
-    );
+    ctx.bezierCurveTo(rx * 0.78 + grow, -r * 0.24, tipX + grow, -r * 0.06, tipX + grow, tipY);
     // Tip turns down and then the underside scoops back under it.
     ctx.quadraticCurveTo(tipX * 0.98 + grow, tipY + r * 0.16 + grow, septumX, septumY + grow);
     // Concave run back to the cheek, which is what makes it a hook.
@@ -1649,7 +1708,15 @@ function drawNose(ctx: Ctx, style: GoblinStyle): void {
   // what stops the tip reading as a rounded knob.
   ctx.fillStyle = style.palette.outline;
   ctx.beginPath();
-  ctx.ellipse(lerp(tipX, septumX, 0.5), septumY - r * 0.04, r * 0.06, r * 0.018, deg(28), 0, FULL_CIRCLE);
+  ctx.ellipse(
+    lerp(tipX, septumX, 0.5),
+    septumY - r * 0.04,
+    r * 0.06,
+    r * 0.018,
+    deg(28),
+    0,
+    FULL_CIRCLE,
+  );
   ctx.fill();
 }
 
@@ -1736,9 +1803,24 @@ function drawHead(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
   ctx.fillStyle = rgba(skin.shadow, 0.5);
   ctx.beginPath();
   ctx.moveTo(-rx * 0.34, browY - r * BROW_THICKNESS * 0.4);
-  ctx.quadraticCurveTo(rx * 0.3, browY - r * BROW_THICKNESS * 1.5, rx * 0.9, browY - r * BROW_THICKNESS * 0.6);
-  ctx.quadraticCurveTo(rx * 0.82, browY + r * BROW_THICKNESS * 1.1, rx * 0.52, browY + r * BROW_THICKNESS * 0.9);
-  ctx.quadraticCurveTo(rx * 0.1, browY + r * BROW_THICKNESS * 0.4, -rx * 0.3, browY + r * BROW_THICKNESS * 0.3);
+  ctx.quadraticCurveTo(
+    rx * 0.3,
+    browY - r * BROW_THICKNESS * 1.5,
+    rx * 0.9,
+    browY - r * BROW_THICKNESS * 0.6,
+  );
+  ctx.quadraticCurveTo(
+    rx * 0.82,
+    browY + r * BROW_THICKNESS * 1.1,
+    rx * 0.52,
+    browY + r * BROW_THICKNESS * 0.9,
+  );
+  ctx.quadraticCurveTo(
+    rx * 0.1,
+    browY + r * BROW_THICKNESS * 0.4,
+    -rx * 0.3,
+    browY + r * BROW_THICKNESS * 0.3,
+  );
   ctx.closePath();
   ctx.fill();
 
@@ -1747,7 +1829,12 @@ function drawHead(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
   ctx.lineWidth = r * 0.045;
   ctx.beginPath();
   ctx.moveTo(-rx * 0.3, browY - r * BROW_THICKNESS * 0.5);
-  ctx.quadraticCurveTo(rx * 0.3, browY - r * BROW_THICKNESS * 1.6, rx * 0.88, browY - r * BROW_THICKNESS * 0.7);
+  ctx.quadraticCurveTo(
+    rx * 0.3,
+    browY - r * BROW_THICKNESS * 1.6,
+    rx * 0.88,
+    browY - r * BROW_THICKNESS * 0.7,
+  );
   ctx.stroke();
 
   const nearEyeX = rx * EYE_NEAR_X;
@@ -2014,10 +2101,9 @@ const WRIST_FORWARD_TURN = deg(-46);
 
 // ── The four archetypes ──────────────────────────────────────────────────────
 //
-// Numbers come straight from the art brief's §3.2 and §3.3 tables. The height
-// spread and the ear-length spread (0.36 → 0.24, before scaling) are what make
-// the four read as different creatures in a 32-px silhouette; do not collapse
-// either.
+// The height spread and the ear-length spread (0.36 → 0.24, before scaling)
+// are what make the four read as different creatures in a 32-px silhouette;
+// do not collapse either.
 //
 // Goblins are small: the tallest of them stands a little over half of Carl's
 // 2.03 tiles. These tables author *shape* — how a gut sits against a shoulder
@@ -2216,7 +2302,14 @@ const SWORD_BUILD: GoblinProportions = {
 const SWORD_STYLE: GoblinStyle = {
   palette: goblinPalette(SWORD_SKIN),
   proportions: SWORD_BUILD,
-  gear: { pauldron: false, bracer: true, greave: false, necklace: true, hood: false, quiver: false },
+  gear: {
+    pauldron: false,
+    bracer: true,
+    greave: false,
+    necklace: true,
+    hood: false,
+    quiver: false,
+  },
   spineLean: deg(8),
   // Three, not four: `MAX_EAR_NOTCHES` clamps past that anyway, and a fourth
   // bite cuts the ear into separate shards rather than nicking one edge.
@@ -2247,13 +2340,20 @@ const AXE_BUILD: GoblinProportions = {
 const AXE_STYLE: GoblinStyle = {
   palette: goblinPalette(AXE_SKIN),
   proportions: AXE_BUILD,
-  gear: { pauldron: true, bracer: false, greave: true, necklace: false, hood: false, quiver: false },
+  gear: {
+    pauldron: true,
+    bracer: false,
+    greave: true,
+    necklace: false,
+    hood: false,
+    quiver: false,
+  },
   spineLean: deg(12),
   earNotches: 3,
 };
 
 /**
- * Short and wiry, not heavy. The brief had this one pot-bellied, and it was cut
+ * Short and wiry, not heavy. This one was originally pot-bellied, and it was cut
  * twice on Ryan's note that it still read as fat — it is now the *shortest* of
  * the four rather than the widest, and carries barely more bulk than the sword
  * goblin. What identifies it at 32 px is no longer its mass: it is the shortest
@@ -2283,7 +2383,14 @@ const MACE_BUILD: GoblinProportions = {
 const MACE_STYLE: GoblinStyle = {
   palette: goblinPalette(MACE_SKIN),
   proportions: MACE_BUILD,
-  gear: { pauldron: false, bracer: true, greave: false, necklace: false, hood: true, quiver: false },
+  gear: {
+    pauldron: false,
+    bracer: true,
+    greave: false,
+    necklace: false,
+    hood: true,
+    quiver: false,
+  },
   spineLean: deg(16),
   earNotches: 2,
 };

@@ -612,7 +612,7 @@ function handsCastBack(progress: number): SkeletonPose {
  * it is two arms drawn on top of each other, and from behind it is a robe with
  * nothing happening above it. A single camera-facing row is both the clearest
  * read and the honest one — the creature turns to face the party before it
- * summons, which is what a summon is for. Journalled in the plan file.
+ * summons, which is what a summon is for.
  */
 /** How far off the ground the summon lifts him, in tile units. */
 const SUMMON_LIFT = 0.045;

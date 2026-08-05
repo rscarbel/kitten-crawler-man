@@ -40,9 +40,9 @@ export class DifficultyTelemetrySystem implements GameSystem {
    * Counted rather than subtracted out at the end: a fight has as many lulls as
    * the room has pillars, and each of them is short of the grace window, so
    * taking the fight's wall-clock length and removing only the final gap would
-   * report every one of those lulls as combat. That number feeds the plan's
-   * time-to-kill target, so it would read high in exactly the direction that
-   * makes the game look harder than it is.
+   * report every one of those lulls as combat. That number feeds the
+   * time-to-kill target this telemetry tracks, so it would read high in
+   * exactly the direction that makes the game look harder than it is.
    */
   private engagedFrames = 0;
   private idleFrames = 0;

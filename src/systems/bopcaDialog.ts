@@ -37,8 +37,8 @@ export type BopcaTopic =
 
 /**
  * A line table that is provably non-empty, so indexing into it yields `string`
- * and never `string | undefined` — the type-safety note in the plan, enforced by
- * the type rather than by a `??` at every call site.
+ * and never `string | undefined` — enforced by the type rather than by a `??`
+ * at every call site.
  */
 type LineTable = readonly [string, ...string[]];
 

@@ -238,8 +238,9 @@ export class ChestRewardDialog {
     if (chestImage !== undefined) {
       // Every constant above is authored against the chest sheet's 80px
       // full-resolution frame — scale by how much smaller the actually-loaded
-      // sheet is (Phase 8's low-end downscale) or these source coordinates
-      // read from the wrong region of a halved canvas.
+      // sheet is (low-end devices bake sprite sheets at a fraction of full
+      // resolution) or these source coordinates read from the wrong region
+      // of a halved canvas.
       const s = getChestSourceScale();
       ctx.drawImage(
         chestImage,

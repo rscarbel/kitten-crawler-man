@@ -46,10 +46,11 @@ export const BOS_BURST_FRAMES = 8;
 /**
  * Game frames the spin-up telegraph occupies.
  *
- * Above the 21-frame floor `docs/difficulty-plan.md` P2 puts on every locked
- * telegraph, with room to spare: this one ends with a boss the size of a room
- * accelerating at you, so the read has to be finishable from anywhere in the
- * arena rather than merely possible.
+ * Above this codebase's 21-frame floor on every locked telegraph
+ * (`MIN_LOCKED_TELEGRAPH_FRAMES` in `scripts/verify-difficulty.ts`), with room
+ * to spare: this one ends with a boss the size of a room accelerating at you,
+ * so the read has to be finishable from anywhere in the arena rather than
+ * merely possible.
  */
 export const BOS_SPINUP_GAME_FRAMES = 48;
 

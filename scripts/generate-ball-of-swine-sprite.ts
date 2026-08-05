@@ -260,8 +260,7 @@ function measureReach(): number {
 
 function geometryFor(reachPx: number): SheetGeometry {
   const half = reachPx + FRAME_PADDING;
-  const frameSize =
-    Math.ceil((half * 2) / (FRAME_SIZE_QUANTUM * 2)) * FRAME_SIZE_QUANTUM * 2;
+  const frameSize = Math.ceil((half * 2) / (FRAME_SIZE_QUANTUM * 2)) * FRAME_SIZE_QUANTUM * 2;
   return { frameSize, anchor: frameSize / 2 };
 }
 

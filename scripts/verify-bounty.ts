@@ -43,7 +43,7 @@ const MIN_ACCEPTABLE_SITES = 3;
 const CYCLES_TO_WALK = 6;
 /** An arbitrary mid-range level to build each test encounter at. */
 const ENCOUNTER_TEST_LEVEL = 7;
-/** The plan asks each bounty type for 5–10 distinct names. */
+/** Each bounty type needs 5–10 distinct names, or the same mark repeats too often. */
 const MIN_NAMES_PER_TYPE = 5;
 /**
  * The band a bounty boss's XP has to sit in.
@@ -66,8 +66,9 @@ const KILL_OVERKILL = 10;
  */
 const PLACEMENT_MAPS = 4;
 /**
- * Bounty minions the plans call out for ambient reuse later. A boss appendage
- * that cannot be spawned on its own is not the first-class mob they asked for.
+ * Bounty minions meant for ambient reuse outside their bounty encounter later.
+ * A boss appendage that cannot be spawned on its own is not the first-class
+ * mob that reuse requires.
  */
 const REUSABLE_MINION_IDS: readonly string[] = [
   'mantis',
@@ -104,7 +105,10 @@ for (let i = 0; i < MAPS_TO_GENERATE; i++) {
   let closestPair = Infinity;
   for (let a = 0; a < sites.length; a++) {
     for (let b = a + 1; b < sites.length; b++) {
-      closestPair = Math.min(closestPair, Math.hypot(sites[a].x - sites[b].x, sites[a].y - sites[b].y));
+      closestPair = Math.min(
+        closestPair,
+        Math.hypot(sites[a].x - sites[b].x, sites[a].y - sites[b].y),
+      );
     }
   }
   check(
@@ -162,11 +166,10 @@ console.log(`\nBuilding one encounter per registered bounty type…`);
         stuck.length === 0,
         `${def.id}: every mob lands on walkable ground (${stuck.length} of ${all.length} embedded)`,
       );
-      const tiles = all.map((mob) => `${Math.floor(mob.x / TILE_SIZE)},${Math.floor(mob.y / TILE_SIZE)}`);
-      check(
-        new Set(tiles).size === tiles.length,
-        `${def.id}: no two mobs share a spawn tile`,
+      const tiles = all.map(
+        (mob) => `${Math.floor(mob.x / TILE_SIZE)},${Math.floor(mob.y / TILE_SIZE)}`,
       );
+      check(new Set(tiles).size === tiles.length, `${def.id}: no two mobs share a spawn tile`);
       // A bounty is meant to be a strong source of XP, and five bosses built in
       // parallel drifted badly on this: three of them shipped near 250 XP —
       // below every named boss in the game and barely above a regular floor-3
@@ -258,7 +261,10 @@ console.log('\nStaging every def at every site of several maps…');
   }
   // Without this the three checks below all pass vacuously if the sweep ever
   // stages nothing at all — a broken site scatter would read as a clean run.
-  check(staged > 0, `the sweep actually staged something (${staged} mobs, ${encounters} encounters)`);
+  check(
+    staged > 0,
+    `the sweep actually staged something (${staged} mobs, ${encounters} encounters)`,
+  );
   check(embedded === 0, `no mob embedded in scenery (${embedded} of ${staged})`);
   check(noMap === 0, `setMap() called on every mob (${noMap} of ${staged} missing)`);
   check(
@@ -267,8 +273,8 @@ console.log('\nStaging every def at every site of several maps…');
   );
 }
 
-// The plan asks for the crony mantises, both skeleton warriors and the regular
-// rock golem to be first-class mobs Ryan can spawn ambiently later, not boss
+// The crony mantises, both skeleton warriors and the regular rock golem are
+// meant to be first-class mobs Ryan can spawn ambiently later, not boss
 // appendages. That is only true if the registry can actually build them.
 console.log('\nSpawning every reusable bounty minion through the registry…');
 {

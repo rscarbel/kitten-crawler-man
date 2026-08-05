@@ -373,7 +373,7 @@ export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_
  * Every `background_music/` and `ambient/` id. These are long, streamed via
  * `MediaElementAudioSourceNode` rather than decoded into a resident
  * `AudioBuffer` — decoding them all as Float32 PCM is ~828 MB for audio that
- * is played one or two at a time. See `docs/asset-management-plan.md`.
+ * is played one or two at a time.
  *
  * `AudioManager.preload` excludes these ids by default and `startMusicTrack`/
  * `startAmbientLoop` route them through the streaming path instead of

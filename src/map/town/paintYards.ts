@@ -28,7 +28,7 @@ function containedByAny(rects: ReadonlyArray<TileRect>, x: number, y: number): b
   return rects.some((rect) => contains(rect, x, y));
 }
 
-/** Every tile the plan deliberately puts a prop on. */
+/** Every tile the `TownPlan` deliberately puts a prop on. */
 function plannedPropTiles(plan: TownPlan): ReadonlySet<string> {
   const tiles = new Set<string>();
   for (const prop of plan.props) {
@@ -52,22 +52,23 @@ function plannedPropTiles(plan: TownPlan): ReadonlySet<string> {
 /**
  * Fails generation if a yard has ended up on the wrong surface.
  *
- * Checked against the painted grid rather than against the plan's rectangles,
- * because surfaces are painted in order and a later one wins: a garden stated
- * over ground a lane subsequently claims would look right in the plan and be
- * gravel-and-setts on the map. It matters because planting reports the material
- * it is drawn *over*, so a garden on the wrong surface draws verge tufts on that
- * surface's sheet row and is then eroded by its neighbours through the corner
- * masks — the defect that once took the weed scatter off the verge.
+ * Checked against the painted grid rather than against the `TownPlan`'s
+ * rectangles, because surfaces are painted in order and a later one wins: a
+ * garden stated over ground a lane subsequently claims would look right in the
+ * `TownPlan` and be gravel-and-setts on the map. It matters because planting
+ * reports the material it is drawn *over*, so a garden on the wrong surface
+ * draws verge tufts on that surface's sheet row and is then eroded by its
+ * neighbours through the corner masks — the defect that once took the weed
+ * scatter off the verge.
  *
- * Two exemptions, both for things the plan put there on purpose. A tile under
- * **building art** is fine: an enclosure stated across a whole block legitimately
- * runs behind the facade that closes it. A tile carrying a **planned prop** is
- * fine too: the east side gate's torch stands in the row Miller's kitchen garden
- * occupies, where it reads as a garden lantern and doubles as the enclosure's
- * corner post. Both are stated as exemptions rather than left to a tile-type
- * allowlist, so anything that reaches a yard *without* being in the plan still
- * fails.
+ * Two exemptions, both for things the `TownPlan` put there on purpose. A tile
+ * under **building art** is fine: an enclosure stated across a whole block
+ * legitimately runs behind the facade that closes it. A tile carrying a
+ * **planned prop** is fine too: the east side gate's torch stands in the row
+ * Miller's kitchen garden occupies, where it reads as a garden lantern and
+ * doubles as the enclosure's corner post. Both are stated as exemptions rather
+ * than left to a tile-type allowlist, so anything that reaches a yard
+ * *without* being declared there still fails.
  */
 export function assertYardsStandOnTheirOwnSurface(
   grid: TileGrid,
@@ -104,13 +105,13 @@ function isOnPerimeter(bounds: TileRect, x: number, y: number): boolean {
 }
 
 /**
- * Post-and-rail perimeters around every fenced yard, with the plan's gates left
- * open.
+ * Post-and-rail perimeters around every fenced yard, with the `TownPlan`'s
+ * gates left open.
  *
  * Two tests decide each perimeter tile, and both need the building art rather
  * than the grid alone. **A building's art is not solid on the grid** — only its
  * anchor tile carries `SPRITE_BUILDING`, and every other tile under the facade
- * keeps whatever surface the plan painted there — so a fence deciding from tile
+ * keeps whatever surface the `TownPlan` painted there — so a fence deciding from tile
  * types alone would happily post itself under a roof and would treat a facade as
  * open ground to fence against.
  *

@@ -299,10 +299,23 @@ function paintShoe(ctx: Ctx, style: ClownStyle): void {
   ctx.clip();
   ctx.fillStyle = palette.shoe;
   ctx.beginPath();
-  ctx.ellipse(0.1, -SHOE_HALF_HEIGHT * 0.3, SHOE_HALF_LENGTH * 0.5, SHOE_HALF_HEIGHT * 0.6, 0, 0, TWO_PI);
+  ctx.ellipse(
+    0.1,
+    -SHOE_HALF_HEIGHT * 0.3,
+    SHOE_HALF_LENGTH * 0.5,
+    SHOE_HALF_HEIGHT * 0.6,
+    0,
+    0,
+    TWO_PI,
+  );
   ctx.fill();
   ctx.fillStyle = palette.suitTrim;
-  ctx.fillRect(-SHOE_HALF_LENGTH, SHOE_HALF_HEIGHT * 0.5, SHOE_HALF_LENGTH * 2, SHOE_HALF_HEIGHT * 0.45);
+  ctx.fillRect(
+    -SHOE_HALF_LENGTH,
+    SHOE_HALF_HEIGHT * 0.5,
+    SHOE_HALF_LENGTH * 2,
+    SHOE_HALF_HEIGHT * 0.45,
+  );
   ctx.restore();
 
   ctx.fillStyle = palette.accent;
@@ -412,7 +425,15 @@ function paintVials(ctx: Ctx, style: ClownStyle): void {
     ctx.clip();
     ctx.fillStyle = GAS;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + VIAL_HALF_HEIGHT * 0.3, VIAL_HALF_WIDTH, VIAL_HALF_HEIGHT, angle, 0, TWO_PI);
+    ctx.ellipse(
+      cx,
+      cy + VIAL_HALF_HEIGHT * 0.3,
+      VIAL_HALF_WIDTH,
+      VIAL_HALF_HEIGHT,
+      angle,
+      0,
+      TWO_PI,
+    );
     ctx.fill();
     ctx.restore();
   }

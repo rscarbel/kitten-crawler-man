@@ -26,7 +26,7 @@
  * companion and every mob are all stopped by tile walkability alone, so the
  * galley needs no special-casing anywhere else in the game.
  *
- * The plan's `SAFE_ROOM_COUNTER_MIN_ROOM_WIDTH` has no equivalent here: the run's
+ * There is no single "minimum room width for a counter" constant here: the run's
  * length is taken from the widest door-free span of columns, not from the room's
  * width, so a wide room with a cut-up wall gets a short counter and there is no
  * single width above which a full-length run is guaranteed.
@@ -91,9 +91,9 @@ const MIN_ROOM_HEIGHT_FOR_COUNTER = SAFE_ROOM_COUNTER_DEPTH_TILES + 2;
  * Narrowest room that can hold a run at all: the shortest run plus a clear column
  * against each side wall.
  *
- * Rooms narrower than this get no counter. The plan asked for a two-tile counter
- * instead of a skip, but two tiles are both side returns and leave the Bopca
- * nowhere to stand — and no generator produces a safe room this narrow anyway
+ * Rooms narrower than this get no counter. A two-tile counter instead of a
+ * skip was considered and rejected: two tiles are both side returns and leave
+ * the Bopca nowhere to stand — and no generator produces a safe room this narrow anyway
  * (`DungeonGenerator` floors at 7 tiles, and both scripted safe rooms are wider),
  * so this is a guard rather than a live branch.
  */

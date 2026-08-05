@@ -254,10 +254,10 @@ function inkCentroid(sheet: BakedSheet, window: FrameWindow): { x: number; y: nu
  * G5: the ink centroid's path around a loop must close without a cliff at the
  * seam.
  *
- * Comparing frame 0 to the *last* frame — which is what the plan literally asks
- * for — measures the wrong thing: in a twelve-frame cycle the last frame is one
- * twelfth *before* frame 0, so a correctly closed loop still shows a full
- * frame's worth of travel there. What matters is that the step across the seam
+ * Comparing frame 0 to the *last* frame is the obvious test, but it measures
+ * the wrong thing: in a twelve-frame cycle the last frame is one twelfth
+ * *before* frame 0, so a correctly closed loop still shows a full frame's
+ * worth of travel there. What matters is that the step across the seam
  * is the same size as every other step, which is the same property G3 checks in
  * pixel space, measured on the figure's mass instead.
  */
@@ -269,7 +269,9 @@ function gateCentroid(sheet: BakedSheet): void {
     );
     const steps: number[] = [];
     for (let i = 1; i < centroids.length; i++) {
-      steps.push(Math.hypot(centroids[i].x - centroids[i - 1].x, centroids[i].y - centroids[i - 1].y));
+      steps.push(
+        Math.hypot(centroids[i].x - centroids[i - 1].x, centroids[i].y - centroids[i - 1].y),
+      );
     }
     const last = centroids[centroids.length - 1];
     const seam = Math.hypot(centroids[0].x - last.x, centroids[0].y - last.y);
@@ -321,8 +323,9 @@ const CONTACT_ROLL_TOLERANCE = 0.02;
  * is played on the spot, so a foot on the ground must not move at all. A walk
  * cycle is *also* played on the spot — the world scrolls past instead — so its
  * planted foot has to roll backward at exactly the speed the body is notionally
- * moving forward. The naive "x must be constant" test the plan specifies fails
- * every correct walk cycle ever authored.
+ * moving forward. The naive test "x must be constant" fails every correct walk
+ * cycle ever authored, because a planted foot in a walk is supposed to roll
+ * backward as the body advances.
  *
  * The invariant that actually holds for a rolling contact is: the foot never
  * moves *forward* while planted, and each backward step is the same size as the
@@ -666,11 +669,7 @@ function gateGoreLegibility(sheet: BakedSheet): void {
  * wound is found by its colour: blood and cut muscle are the only strongly
  * red-dominant things a goblin is made of.
  */
-function assertBoneCarriesTheWound(
-  sheet: BakedSheet,
-  window: FrameWindow,
-  partName: string,
-): void {
+function assertBoneCarriesTheWound(sheet: BakedSheet, window: FrameWindow, partName: string): void {
   const isWoundPixel = (px: number, py: number): boolean => {
     if (alphaAt(sheet.pixels, px, py) <= INK_ALPHA_THRESHOLD) return false;
     const index = (py * sheet.pixels.width + px) * CHANNELS_PER_PIXEL;
@@ -940,7 +939,9 @@ function gateTimingTable(): void {
         );
       }
       if (timing.impactFrame < 0 || timing.impactFrame >= row.frameCount) {
-        throw new Error(`G13 ${archetype} ${kind}: impact frame ${timing.impactFrame} out of range`);
+        throw new Error(
+          `G13 ${archetype} ${kind}: impact frame ${timing.impactFrame} out of range`,
+        );
       }
     }
   }
@@ -978,7 +979,9 @@ function gateImpactIsThePeak(sheets: readonly BakedSheet[]): void {
       if (steps.every((step: number) => step === steps[0])) fastestFrame = -1;
       const impact = IMPACT_FRAMES[sheet.archetype][kind];
       if (fastestFrame < 0) {
-        throw new Error(`G13b ${sheet.archetype} ${kind}: the weapon tip travels evenly — no strike`);
+        throw new Error(
+          `G13b ${sheet.archetype} ${kind}: the weapon tip travels evenly — no strike`,
+        );
       }
       if (Math.abs(fastestFrame - impact) > PEAK_TOLERANCE_FRAMES) {
         throw new Error(
@@ -989,7 +992,6 @@ function gateImpactIsThePeak(sheets: readonly BakedSheet[]): void {
       }
     }
   }
-
 }
 
 // ── G16 · the bow's draw, and the hand on its string ─────────────────────────
@@ -1181,7 +1183,9 @@ function gateManifestSync(sheets: readonly BakedSheet[]): void {
     for (const [field, value] of Object.entries(expected)) {
       const actual: unknown = { ...entry }[field];
       if (actual !== value) {
-        throw new Error(`G13 ${key}: manifest ${field} is ${String(actual)}, the bake produced ${value}`);
+        throw new Error(
+          `G13 ${key}: manifest ${field} is ${String(actual)}, the bake produced ${value}`,
+        );
       }
     }
     if (entry.path !== `enemies/${sheetFileName(sheet.archetype)}`) {

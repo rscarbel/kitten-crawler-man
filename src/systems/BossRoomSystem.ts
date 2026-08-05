@@ -4,7 +4,7 @@ import { TILE_SIZE } from '../core/constants';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
-import { TheHoarder } from '../creatures/TheHoarder';
+import { POINT_BLANK_TILES, TheHoarder } from '../creatures/TheHoarder';
 import { Cockroach } from '../creatures/Cockroach';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -12,7 +12,7 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
-import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
 import { viewportWidth } from '../core/Viewport';
 
 interface VomitProjectile {
@@ -67,14 +67,51 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
 /** 30 seconds at 60 fps. */
 const ENTRY_WINDOW_FRAMES = 1800;
 
-const MAX_COCKROACHES = 3;
-const MAX_ACID_PUDDLES = 15;
-const PUDDLE_TTL = 6000;
+const MAX_COCKROACHES = 5;
+/**
+ * At `ACID_PUDDLE_RADIUS` each and no two of them overlapping, this is about a
+ * fifth of the boss room's floor. Fifteen was over half of it, which is not a
+ * hazard to walk around — it is a wall, and the melee half of the party could
+ * not reach her through it.
+ */
+const MAX_ACID_PUDDLES = 6;
+/**
+ * Twenty seconds. It was a hundred, from a time when the Hoarder almost never
+ * spat: now that the bile is on its own clock, pools at the old lifetime would
+ * simply accumulate until they owned the arena.
+ */
+const PUDDLE_TTL = 1200;
 const ACID_DAMAGE_INTERVAL = 20;
+const ACID_DAMAGE = 1;
+/**
+ * A direct hit used to do nothing at all — the bolus passed through the player
+ * and the only harm was the pool it dropped. Small, because the pool is still
+ * the real threat and this is meant to be the easy fight.
+ */
+const VOMIT_IMPACT_DAMAGE = 2;
 const PROJECTILE_TTL = 90;
 const ACID_PUDDLE_RADIUS = TILE_SIZE * 2;
 const PROJECTILE_HIT_RADIUS_FRACTION = 0.8;
 const PROJECTILE_HIT_RADIUS = TILE_SIZE * PROJECTILE_HIT_RADIUS_FRACTION;
+/**
+ * How close to a live pool a fresh one may land: exactly far enough apart that
+ * two of them are tangent, so pools never overlap at all and the hazard spreads
+ * around the room instead of merging into one wall with no lane through it.
+ * Derived rather than written as a distance, because the tangency *is* the
+ * reasoning — at a hand-set 2.5 tiles they still overlapped by a tile and a half
+ * each and a run of them across an approach was a wall.
+ */
+const POOLS_TANGENT_MULTIPLIER = 2;
+const PUDDLE_CROWDING_RADIUS = ACID_PUDDLE_RADIUS * POOLS_TANGENT_MULTIPLIER;
+/**
+ * No acid forms this close to a living Hoarder, so a bolus landing at the edge
+ * of the bubble still cannot burn back into the ring a melee attacker stands in.
+ * Otherwise a boss who backs into a corner spits a moat around herself and the
+ * only way in is through it, which is exactly how the fight played.
+ *
+ * The same rule decides who she is willing to aim at, so it is her constant.
+ */
+const HOARDER_CLEAR_RADIUS = TILE_SIZE * POINT_BLANK_TILES;
 
 // Rendering constants
 const BOSS_REVIVE_HP_FRACTION = 0.3;
@@ -90,6 +127,13 @@ const ACID_PUDDLE_DAMAGE_SOURCE: DamageSource = {
   attackType: 'acid_puddle',
   undodgeable: true,
 };
+
+/** A direct hit is dodgeable; standing in the pool it leaves is not. */
+const VOMIT_IMPACT_DAMAGE_SOURCE: DamageSource = {
+  kind: 'mob',
+  mobType: 'TheHoarder',
+  attackType: 'acid_puddle',
+};
 const COCKROACH_MOB_CLEANUP_THRESHOLD = 200;
 const ENTITY_TILE_CENTER_OFFSET = 0.5;
 /** Tile deltas around a position, nearest (orthogonal) first. */
@@ -104,48 +148,10 @@ const ADJACENT_TILE_OFFSETS = [
   [-1, -1],
 ] as const;
 
-// Vomit projectile render constants
-const VOMIT_BLOB_RADIUS_FRACTION = 0.35;
-const VOMIT_ELONGATION_MIN = 0.6;
-const VOMIT_ELONGATION_RANGE = 1.4;
-const VOMIT_BLOB_HEIGHT_FRACTION = 0.55;
-const VOMIT_SPRITE_FRAMES = 7;
-const VOMIT_CORE_COLOR = 'rgba(80,200,20,0.9)';
-const VOMIT_MID_COLOR = 'rgba(180,255,60,0.95)';
-const VOMIT_TAIL_COLOR = 'rgba(40,140,10,0.4)';
-const bileGradientsByLength = new Map<number, CanvasGradient>();
-
-/**
- * The orb stretches as it flies, and a gradient bakes its own coordinates in,
- * so drawing one live meant an allocation per projectile per frame. Rounding
- * the length to whole pixels bounds the variants to the handful the orb ever
- * takes, at a sub-pixel cost nobody can see.
- */
-function bileGradient(ctx: CanvasRenderingContext2D, halfLength: number): CanvasGradient {
-  const steppedLength = Math.max(1, Math.round(halfLength));
-  const cached = bileGradientsByLength.get(steppedLength);
-  if (cached !== undefined) return cached;
-  const gradient = ctx.createLinearGradient(-steppedLength, 0, steppedLength, 0);
-  gradient.addColorStop(0, VOMIT_CORE_COLOR);
-  gradient.addColorStop(BOSS_MIDLINE_FRACTION, VOMIT_MID_COLOR);
-  gradient.addColorStop(1, VOMIT_TAIL_COLOR);
-  bileGradientsByLength.set(steppedLength, gradient);
-  return gradient;
-}
-
-// Acid puddle render constants
+/** Alpha of the old puke stains painted into the room's floor decoration. */
+const PUKE_STAIN_ALPHA = 0.45;
+/** A quarter of the pool's life, so it visibly recedes rather than vanishing. */
 const PUDDLE_FADE_FRAMES = 300;
-const PUDDLE_ANIMATION_FPS = 60;
-const PUDDLE_FRAME_ROWS = 6;
-const PUDDLE_FRAME_COLS = 4;
-const PUDDLE_PULSE_SPEED = 0.12;
-const PUDDLE_BASE_ALPHA = 0.7;
-const PUDDLE_PULSE_AMP = 0.3;
-const PUDDLE_OUTER_ALPHA = 0.45;
-const PUDDLE_OUTER_RX_FRACTION = 1.2;
-const PUDDLE_OUTER_RY_FRACTION = 0.55;
-const PUDDLE_INNER_RX_FRACTION = 0.7;
-const PUDDLE_INNER_RY_FRACTION = 0.3;
 
 // Hoarder room decoration constants
 const GARBAGE_BAG_COUNT = 7;
@@ -292,9 +298,34 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   private readonly vomitProjectiles: VomitProjectile[] = [];
   private readonly acidPuddles: AcidPuddle[] = [];
-  private puddleClock = 0;
   private humanAcidTick = 0;
   private catAcidTick = 0;
+
+  /**
+   * Whether a fresh pool here would crowd a live one. Used where a bolus lands.
+   *
+   * Every pool counts, including one already receding: it fades over five
+   * seconds and burns at full strength the whole way down, so "it will be gone
+   * by then" — which an earlier version of this said — was never true of ground
+   * a bolus is landing on right now.
+   */
+  private readonly isPuddleCrowdedAt = (x: number, y: number): boolean =>
+    this.acidPuddles.some(
+      (puddle) => Math.hypot(puddle.x - x, puddle.y - y) < PUDDLE_CROWDING_RADIUS,
+    );
+
+  /**
+   * Whether this point is inside acid *now*. Handed to the Hoarder so she does
+   * not waste a spit on someone the floor is already burning; bound once rather
+   * than rebuilt per frame, because she holds it across frames.
+   *
+   * A separate question from crowding and a much tighter radius: crowding asks
+   * whether two pools would overlap, this asks whether a player is standing in
+   * one. Answered at the crowding radius she would decline to shoot at anyone
+   * within four tiles of any pool, which is most of the room she fights in.
+   */
+  private readonly isStandingInAcidAt = (x: number, y: number): boolean =>
+    this.acidPuddles.some((puddle) => Math.hypot(puddle.x - x, puddle.y - y) < ACID_PUDDLE_RADIUS);
 
   /**
    * Last known positions for each player while they were OUTSIDE a boss room.
@@ -486,6 +517,27 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     return this.states.some((s) => s.locked && this.isEntityInRoom(mob, s.bounds));
   }
 
+  /**
+   * Whether an alive player is standing in the same boss room as this boss.
+   *
+   * Unlike {@link isAnyPlayerInBossRoom} this does not require the room to be
+   * locked, because the question it answers is about the moment *before* the
+   * fight: a boss with a ten-tile aggro range can see down a corridor through
+   * its own doorway, and the Hoarder was spitting acid across the threshold at
+   * a party that had not come in yet — walling off her own entrance with pools
+   * the companion AI would not path through.
+   */
+  sharesRoomWithPlayer(
+    mob: Mob,
+    players: ReadonlyArray<{ x: number; y: number; isAlive: boolean }>,
+  ): boolean {
+    for (const state of this.states) {
+      if (!this.isEntityInRoom(mob, state.bounds)) continue;
+      return players.some((p) => p.isAlive && this.isEntityInRoom(p, state.bounds));
+    }
+    return false;
+  }
+
   /** Returns true when any alive player is inside the same locked boss room as this mob. */
   isAnyPlayerInBossRoom(
     mob: Mob,
@@ -528,8 +580,6 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           this.humanIsInsider[i] = false;
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
-          this.vomitProjectiles.length = 0;
-          this.acidPuddles.length = 0;
         } else if (humanInRoom || catInRoom) {
           // Player entered to revive companion — reset insider state, start fresh.
           state.fightAborted = false;
@@ -641,7 +691,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         }
       }
 
-      // Boss defeated normally.
+      // Boss defeated normally. Nothing is cleaned up: the pools fade on their
+      // own clock, a bolus still in the air lands and leaves one more, and the
+      // cockroaches die where they stand rather than blinking out — the moment
+      // the boss dropped, the whole room used to empty itself in one frame,
+      // which reads as the level being reset rather than as a fight ending.
       if (!bossAlive) {
         state.locked = false;
         state.defeated = true;
@@ -649,14 +703,17 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         this.humanIsInsider[i] = false;
         this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
+        // Her swarm outlives her by exactly as long as it takes to die. Killed
+        // through `justDied` they come apart and leave the mob grid the way
+        // anything else does, rather than being spliced out of existence. The
+        // kill is unattributed unless the party had already been hitting that
+        // roach — nobody earns a cockroach for killing its summoner.
         for (const mob of mobs) {
           if (mob instanceof Cockroach && mob.isAlive) {
             mob.hp = 0;
             mob.justDied = true;
           }
         }
-        this.vomitProjectiles.length = 0;
-        this.acidPuddles.length = 0;
         continue;
       }
 
@@ -681,9 +738,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
     this.spawnHoarderCockroaches(mobs, mobGrid);
     this.tickCockroachTTLs(mobs, mobGrid);
-    this.processVomitProjectiles(human, cat);
+    this.processVomitProjectiles(mobs, human, cat);
     this.tickAcidPuddles(human, cat);
-    this.puddleClock++;
   }
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
@@ -774,17 +830,28 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
-    const liveCount = mobs.filter((m) => m instanceof Cockroach && m.isAlive).length;
+    // Counted rather than filtered into a new array, and only once a live
+    // Hoarder is known to exist: this runs every frame on every floor, and on
+    // the three floors with no Hoarder on them the filter was allocating an
+    // array per frame to learn nothing.
+    let hoarders = 0;
+    let liveCount = 0;
+    for (const mob of mobs) {
+      if (!mob.isAlive) continue;
+      if (mob instanceof Cockroach) liveCount++;
+      else if (mob instanceof TheHoarder) hoarders++;
+    }
+    if (hoarders === 0) return;
+
     for (const mob of mobs) {
       if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
 
-      // Tell the hoarder whether the cap is full so it can decide to vomit instead
       mob.cockroachAtCap = liveCount >= MAX_COCKROACHES;
+      mob.isAcidCovered = this.isStandingInAcidAt;
 
-      // Drain any pending vomit projectile
-      if (mob.pendingVomitProjectile !== null) {
-        const p = mob.pendingVomitProjectile;
-        mob.pendingVomitProjectile = null;
+      // Enraged she brings up a spread, which is why this is a list rather than
+      // the single slot it used to be.
+      for (const p of mob.pendingVomitProjectiles) {
         this.vomitProjectiles.push({
           x: p.x,
           y: p.y,
@@ -794,6 +861,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           age: 0,
         });
       }
+      mob.pendingVomitProjectiles.length = 0;
 
       if (mob.cockroachSpawns.length === 0) continue;
       let spawned = liveCount;
@@ -813,7 +881,23 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private processVomitProjectiles(human: HumanPlayer, cat: CatPlayer): void {
+  /**
+   * True when a fresh pool here would land on the ground around a living
+   * Hoarder. Tested where a bolus lands, so it keeps that ground clear at the
+   * moment the acid appears; she is free to walk onto her own pools afterwards,
+   * and a player chasing her is free to follow.
+   */
+  private isUnderfootOfHoarder(mobs: readonly Mob[], x: number, y: number): boolean {
+    for (const mob of mobs) {
+      if (!(mob instanceof TheHoarder) || !mob.isAlive) continue;
+      const centreX = mob.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+      const centreY = mob.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+      if (Math.hypot(centreX - x, centreY - y) < HOARDER_CLEAR_RADIUS) return true;
+    }
+    return false;
+  }
+
+  private processVomitProjectiles(mobs: readonly Mob[], human: HumanPlayer, cat: CatPlayer): void {
     for (let i = this.vomitProjectiles.length - 1; i >= 0; i--) {
       const proj = this.vomitProjectiles[i];
       const newX = proj.x + proj.dx;
@@ -829,13 +913,28 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         newX - (cat.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
         newY - (cat.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET),
       );
-      const hitPlayer = humanDist < PROJECTILE_HIT_RADIUS || catDist < PROJECTILE_HIT_RADIUS;
+      const humanHit = human.isAlive && humanDist < PROJECTILE_HIT_RADIUS;
+      const catHit = cat.isAlive && catDist < PROJECTILE_HIT_RADIUS;
+      const hitPlayer = humanHit || catHit;
       if (hitWall || proj.ttl <= 0 || hitPlayer) {
         this.vomitProjectiles.splice(i, 1);
-        if (this.acidPuddles.length < MAX_ACID_PUDDLES) {
-          // For wall hits use the pre-move position; for player hits use the new position so the puddle lands on them
-          const puddleX = hitWall ? proj.x : newX;
-          const puddleY = hitWall ? proj.y : newY;
+        if (humanHit) human.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
+        if (catHit) cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
+        // A wall hit puddles where the bolus was, a player hit where it now is,
+        // so the pool lands on them.
+        const puddleX = hitWall ? proj.x : newX;
+        const puddleY = hitWall ? proj.y : newY;
+        // Crowding is decided here rather than where the bolus was aimed: it
+        // flies until a wall, a player or its lifetime stops it, so the Hoarder
+        // cannot know where it will come down, and the enraged spread's flanks
+        // miss the target by construction and fly the whole way. A pool poured
+        // into a live pool adds no hazard and takes another lane away, and one
+        // at her own feet takes away the only ground anyone can hit her from.
+        if (
+          this.acidPuddles.length < MAX_ACID_PUDDLES &&
+          !this.isPuddleCrowdedAt(puddleX, puddleY) &&
+          !this.isUnderfootOfHoarder(mobs, puddleX, puddleY)
+        ) {
           this.acidPuddles.push({ x: puddleX, y: puddleY, ttl: PUDDLE_TTL });
         }
       } else {
@@ -865,7 +964,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (humanInAcid) {
       this.humanAcidTick++;
       if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        human.takeDamage(1, ACID_PUDDLE_DAMAGE_SOURCE);
+        human.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
         human.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
@@ -882,7 +981,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (catInAcid) {
       this.catAcidTick++;
       if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        cat.takeDamage(1, ACID_PUDDLE_DAMAGE_SOURCE);
+        cat.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
         cat.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
       }
     } else {
@@ -891,15 +990,21 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   private tickCockroachTTLs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+    let expired = 0;
     for (const mob of mobs) {
       if (!(mob instanceof Cockroach) || !mob.isAlive) continue;
       mob.ttl--;
       if (mob.ttl <= 0) {
+        // Despawned, not killed. It used to be marked `justDied` purely to get
+        // it out of the mob grid, which was harmless only while the kill
+        // resolver dropped a mob nothing had damaged — now that it does not, a
+        // roach that merely ran out of time would spray gore, leave a corpse
+        // marker and add itself to the party's kill count.
         mob.hp = 0;
-        mob.justDied = true;
+        expired++;
       }
     }
-    if (mobs.length <= COCKROACH_MOB_CLEANUP_THRESHOLD) return;
+    if (expired === 0 && mobs.length <= COCKROACH_MOB_CLEANUP_THRESHOLD) return;
 
     // One compaction pass rather than a scan to un-grid the dead followed by a
     // reverse scan splicing them out one at a time: `splice` reshuffles the tail
@@ -912,10 +1017,21 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // impossible — the rewind can only reach what is still in the array.
       const isOwedToCheckpoint = mob.presentAtCheckpoint && mob.aliveAtCheckpoint;
       const isSpentCockroach = !mob.isAlive && mob instanceof Cockroach;
-      if (isSpentCockroach && !isOwedToCheckpoint) {
-        mob.dispose();
+      // A death the kill resolver has not seen yet is not spent: compacting it
+      // out of the array here is the one way to lose its gore and its rewards
+      // outright, and this pass now runs on any frame a roach times out rather
+      // than only on the rare frame the swarm is enormous.
+      if (isSpentCockroach && !mob.justDied) {
+        // Out of the grid on both paths. A dead mob is never `belongsInMobGrid`,
+        // and one held back for the checkpoint is re-inserted when the rewind
+        // rebuilds the grid — kept in the grid it is a stale entry that outlives
+        // the floor, because nothing else on this path ever removes it now that
+        // a timed-out roach is no longer marked `justDied`.
         mobGrid.remove(mob);
-        continue;
+        if (!isOwedToCheckpoint) {
+          mob.dispose();
+          continue;
+        }
       }
       mobs[keptCount] = mob;
       keptCount++;
@@ -932,90 +1048,30 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   renderProjectiles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.vomitProjectiles.length === 0) return;
-    ctx.save();
     for (const proj of this.vomitProjectiles) {
-      const screenX = proj.x - camX;
-      const screenY = proj.y - camY;
-      const angle = Math.atan2(proj.dy, proj.dx);
-      const progress = proj.age / PROJECTILE_TTL;
-
-      // Procedural bile orb: bright green blob with inner glow
-      ctx.save();
-      ctx.translate(screenX, screenY);
-      ctx.rotate(angle);
-      const r = TILE_SIZE * VOMIT_BLOB_RADIUS_FRACTION;
-      const len = r * (VOMIT_ELONGATION_MIN + progress * VOMIT_ELONGATION_RANGE);
-      ctx.shadowColor = '#a0ff40';
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = bileGradient(ctx, len);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, len, r * VOMIT_BLOB_HEIGHT_FRACTION, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Overlay sprite if loaded
-      const frame = progressFrameIndex(progress, VOMIT_SPRITE_FRAMES);
-      drawSpriteKey(ctx, 'hoarder_vomit_arc', 'arc', frame, screenX, screenY, TILE_SIZE, {
-        rotation: angle,
-      });
+      drawHoarderBile(
+        ctx,
+        proj.x - camX,
+        proj.y - camY,
+        TILE_SIZE,
+        proj.age,
+        Math.atan2(proj.dy, proj.dx),
+      );
     }
-    ctx.restore();
   }
 
   private renderAcidPuddles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.acidPuddles.length === 0) return;
-    const frame = timeFrameIndex(
-      this.puddleClock / PUDDLE_ANIMATION_FPS,
-      PUDDLE_FRAME_ROWS,
-      PUDDLE_FRAME_COLS,
-    );
-    const pulse =
-      1 - PUDDLE_PULSE_AMP + PUDDLE_PULSE_AMP * Math.sin(this.puddleClock * PUDDLE_PULSE_SPEED);
-    ctx.save();
     for (const puddle of this.acidPuddles) {
-      const fadeAlpha = puddle.ttl < PUDDLE_FADE_FRAMES ? puddle.ttl / PUDDLE_FADE_FRAMES : 1;
-      const screenX = puddle.x - camX;
-      const screenY = puddle.y - camY;
-
-      // Procedural acid puddle: glowing green ellipse on the floor
-      ctx.save();
-      ctx.globalAlpha = fadeAlpha * PUDDLE_BASE_ALPHA * pulse;
-      ctx.shadowColor = '#80ff20';
-      ctx.shadowBlur = 14;
-      ctx.fillStyle = '#4aad10';
-      ctx.beginPath();
-      ctx.ellipse(
-        screenX,
-        screenY,
-        TILE_SIZE * PUDDLE_OUTER_RX_FRACTION,
-        TILE_SIZE * PUDDLE_OUTER_RY_FRACTION,
-        0,
-        0,
-        Math.PI * 2,
+      drawHoarderAcidPool(
+        ctx,
+        puddle.x - camX,
+        puddle.y - camY,
+        TILE_SIZE,
+        PUDDLE_TTL - puddle.ttl,
+        puddle.ttl,
+        PUDDLE_FADE_FRAMES,
       );
-      ctx.fill();
-      ctx.globalAlpha = fadeAlpha * PUDDLE_OUTER_ALPHA;
-      ctx.fillStyle = '#a0ff40';
-      ctx.beginPath();
-      ctx.ellipse(
-        screenX,
-        screenY,
-        TILE_SIZE * PUDDLE_INNER_RX_FRACTION,
-        TILE_SIZE * PUDDLE_INNER_RY_FRACTION,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.restore();
-
-      // Overlay sprite if loaded
-      drawSpriteKey(ctx, 'hoarder_vomit_puddle', 'puddle', frame, screenX, screenY, TILE_SIZE, {
-        alpha: fadeAlpha,
-      });
     }
-    ctx.restore();
   }
 
   private renderSingleBossRoomObjects(
@@ -1229,7 +1285,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           b.h *
           ts *
           PUKE_SCATTER_FRACTION;
-      ctx.globalAlpha = PUDDLE_OUTER_ALPHA;
+      ctx.globalAlpha = PUKE_STAIN_ALPHA;
       ctx.fillStyle = '#8fbc14';
       ctx.beginPath();
       ctx.ellipse(

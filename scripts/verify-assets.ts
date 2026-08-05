@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * Phase 4 of `docs/asset-management-plan.md`: cross-references every floor's
- * declared sprite-group coverage against every mob type that floor can
- * actually produce, and fails loudly on anything uncovered.
+ * Cross-references every floor's declared sprite-group coverage against
+ * every mob type that floor can actually produce, and fails loudly on
+ * anything uncovered — a floor that can spawn a mob whose sprites aren't
+ * declared for it will hit a missing-asset error at runtime instead of load.
  *
- * "Every mob a floor can produce" is two unioned sources, matching the plan's
- * own trap list:
+ * "Every mob a floor can produce" is two unioned sources:
  *
  * 1. The `LevelDef`'s own spawn tables (`roomMobs`, `hallwayMobs`,
  *    `extraSpawns`, `campSpawns`, `onMobKilledSpawns`, `bossRooms`).
@@ -18,10 +18,10 @@
  * (`src/levels/spawner.ts`'s `MOB_REGISTRY`), not `MobSpawnRule['type']` — that
  * union is one entry narrower than the registry (`bugaboo` is registered but
  * missing from it), so deriving spawnability from the type alone would miss
- * exactly the case the plan calls out. This script uses the registry to
- * sanity-check `MOB_SPRITE_KEYS` itself, then the level defs' actual field
- * values (which are typed to the union, but a def only ever contains what its
- * author wrote) to compute what each floor produces.
+ * a mob that's spawnable but absent from the union. This script uses the
+ * registry to sanity-check `MOB_SPRITE_KEYS` itself, then the level defs'
+ * actual field values (which are typed to the union, but a def only ever
+ * contains what its author wrote) to compute what each floor produces.
  *
  * Run: npx tsx scripts/verify-assets.ts
  */

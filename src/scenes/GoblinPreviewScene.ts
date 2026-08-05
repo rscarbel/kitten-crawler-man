@@ -6,7 +6,8 @@
  * smooth": the review harness in `scripts/render-goblins.ts` can show that an
  * arc is even and a loop closes, but only playback shows whether a swing has
  * weight. This scene is worth more than the rest of the review tooling put
- * together, which is why the plan puts it in Phase 4 rather than at the end.
+ * together, which is why it was built before the goblin rework shipped rather
+ * than left as a nice-to-have.
  *
  * All four archetypes play every row simultaneously on a labelled grid, at a
  * chosen zoom and speed, over a backdrop that cycles the real floor palettes so

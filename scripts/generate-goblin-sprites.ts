@@ -455,14 +455,49 @@ interface IdleConfig {
 }
 
 const IDLES: Record<GoblinArchetype, IdleConfig> = {
-  sword: { breathDepth: 0.075, bob: 0.055, weightShift: 0.085, headRoll: deg(4), blinkFrame: 3, twitchFrame: 8 },
-  axe: { breathDepth: 0.09, bob: 0.05, weightShift: 0.07, headRoll: deg(3), blinkFrame: 7, twitchFrame: 2 },
-  mace: { breathDepth: 0.12, bob: 0.065, weightShift: 0.1, headRoll: deg(5), blinkFrame: 5, twitchFrame: 10 },
-  warhammer: { breathDepth: 0.115, bob: 0.075, weightShift: 0.06, headRoll: deg(2), blinkFrame: 9, twitchFrame: 4 },
+  sword: {
+    breathDepth: 0.075,
+    bob: 0.055,
+    weightShift: 0.085,
+    headRoll: deg(4),
+    blinkFrame: 3,
+    twitchFrame: 8,
+  },
+  axe: {
+    breathDepth: 0.09,
+    bob: 0.05,
+    weightShift: 0.07,
+    headRoll: deg(3),
+    blinkFrame: 7,
+    twitchFrame: 2,
+  },
+  mace: {
+    breathDepth: 0.12,
+    bob: 0.065,
+    weightShift: 0.1,
+    headRoll: deg(5),
+    blinkFrame: 5,
+    twitchFrame: 10,
+  },
+  warhammer: {
+    breathDepth: 0.115,
+    bob: 0.075,
+    weightShift: 0.06,
+    headRoll: deg(2),
+    blinkFrame: 9,
+    twitchFrame: 4,
+  },
   // Deeper than it looks it should be. At 0.07/0.045 the idle moved about two
   // pixels across its whole loop and read as a still frame; the archer is the
   // one goblin a player stands and watches, so its idle has to breathe.
-  bow: { breathDepth: 0.16, bob: 0.105, weightShift: 0.15, headRoll: deg(9), blinkFrame: 1, twitchFrame: 6 },
+  bow: {
+    breathDepth: 0.16,
+    bob: 0.105,
+    weightShift: 0.15,
+    headRoll: deg(9),
+    blinkFrame: 1,
+    twitchFrame: 6,
+  },
 };
 
 /** A blink is two frames of a twelve-frame loop; any longer reads as a doze. */
@@ -731,7 +766,14 @@ interface SwingSpec {
 }
 
 /** A foot that moves only while it is off the ground; G7 asserts exactly this. */
-function steppingFoot(base: number, distance: number, from: number, to: number, progress: number, lift: number): Pt {
+function steppingFoot(
+  base: number,
+  distance: number,
+  from: number,
+  to: number,
+  progress: number,
+  lift: number,
+): Pt {
   if (progress <= from) return { x: base, y: 0 };
   if (progress >= to) return { x: base + distance, y: 0 };
   const t = (progress - from) / (to - from);
@@ -856,10 +898,10 @@ function thrustPose(
   /**
    * The recovery gets the back 42% of the row — six frames.
    *
-   * The plan's 0.68 left only four, and a `easeInOut` over four frames has a
-   * middle step nearly four times its end steps: the blade snapped back to guard
-   * instead of retracting. Six frames keeps the steepest step inside 1.9× its
-   * neighbours, which is what gate G8 measures.
+   * An earlier cut at 0.68 left only four recovery frames, and a `easeInOut`
+   * over four frames has a middle step nearly four times its end steps: the
+   * blade snapped back to guard instead of retracting. Six frames keeps the
+   * steepest step inside 1.9× its neighbours, which is what gate G8 measures.
    */
   const SETTLE_END = 0.58;
   const LEVELLED_ANGLE = deg(-3);
@@ -901,7 +943,11 @@ function thrustPose(
       x: rest.farHand.x - 0.14 * drive * (1 - recover),
       y: rest.farHand.y - armLength * 0.3 * drive * (1 - recover),
     },
-    weaponAngle: lerp(carryAngleFor(archetype, style, prop, nearHand.y), LEVELLED_ANGLE, Math.max(wind, drive)),
+    weaponAngle: lerp(
+      carryAngleFor(archetype, style, prop, nearHand.y),
+      LEVELLED_ANGLE,
+      Math.max(wind, drive),
+    ),
     headTilt: (deg(-6) * wind + deg(9) * drive) * (1 - recover),
     headLead: 0.05 * drive * (1 - recover),
     earLag: (deg(12) * wind - deg(20) * drive) * (1 - recover),
@@ -1067,7 +1113,14 @@ function bowShotPose(
     sway: -0.03 * aiming,
     torsoSquash: 1 - 0.04 * aiming + 0.05 * loosed,
     bob: -0.015 * aiming,
-    nearFoot: steppingFoot(rest.nearFoot.x, BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
+    nearFoot: steppingFoot(
+      rest.nearFoot.x,
+      BRACE_STEP,
+      0,
+      BOW_RAISE_END,
+      progress,
+      STEP_LIFT * 0.5,
+    ),
     farFoot: steppingFoot(rest.farFoot.x, -BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
     nearHand,
     farHand: drawHand,
@@ -1862,8 +1915,7 @@ function bake(archetype: GoblinArchetype): BakedSheet {
     const column = job.frame % COLS_PER_ROW;
 
     frameCtx.clearRect(0, 0, frame.width, frame.height);
-    const anchorY =
-      job.anchor === 'ground' ? geometry.groundY : geometry.frameHeight / 2;
+    const anchorY = job.anchor === 'ground' ? geometry.groundY : geometry.frameHeight / 2;
     job.paint(
       frameCtx,
       (geometry.frameWidth / 2) * SUPERSAMPLE,

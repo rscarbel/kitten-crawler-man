@@ -18,7 +18,7 @@ const MAX_VOLUME = 1;
 
 const DEFAULT_MASTER_VOLUME = 1;
 const DEFAULT_SFX_VOLUME = 1;
-const DEFAULT_MUSIC_VOLUME = 0.4;
+const DEFAULT_MUSIC_VOLUME = 0.75;
 
 /**
  * Render-quality choice.

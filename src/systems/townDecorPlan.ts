@@ -18,8 +18,8 @@ import type { SignpostArm } from '../sprites/townWayfinding';
 import type { TownOffset } from '../map/town/townPlan';
 
 /**
- * The signposts, by the plan's own names: one inside each gate, pointing back the
- * way you came and on down the street it opens onto.
+ * The signposts, by the `TownPlan`'s own names: one inside each gate, pointing
+ * back the way you came and on down the street it opens onto.
  *
  * Anchored to a gate's `exit` rather than to its opening, then stepped *inward*
  * and sideways, so a post stands on the town's side of the wall where a traveller
@@ -98,7 +98,7 @@ export const BUNTING_SPANS: ReadonlyArray<PlannedBunting> = [
 ];
 
 /**
- * Lines strung across the Low Quarter's two alleys, by the plan's surface names.
+ * Lines strung across the Low Quarter's two alleys, by the `TownPlan`'s surface names.
  * An alley is the narrowest thing in the town, which is what makes a line across
  * one read as spanning a gap rather than as a rope in a field.
  *

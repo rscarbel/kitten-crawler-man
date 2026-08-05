@@ -160,7 +160,7 @@ const FIXTURE_MARGIN_TILES = 0.5;
 const px = (tiles: number): number => Math.ceil(tiles * TILE_SCALE);
 
 /**
- * The town's laundry spans, derived from the plan rather than restated.
+ * The town's laundry spans, derived from the `TownPlan` rather than restated.
  *
  * A hand-copied span here would be a silent failure: the sheet would carry
  * frames for a width no alley has, and the lines would draw nothing.
@@ -176,7 +176,7 @@ function laundrySpans(): number[] {
   return [...spans].sort((a, b) => a - b);
 }
 
-/** The town's gateway forms, derived from the plan for the same reason. */
+/** The town's gateway forms, derived from the `TownPlan` for the same reason. */
 function gateForms(): Array<{ axis: GateArchAxis; spanTiles: number }> {
   const plan = createTownPlan(OVERWORLD_MAP_SIZE_TILES);
   const forms = new Map<string, { axis: GateArchAxis; spanTiles: number }>();

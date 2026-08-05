@@ -1,5 +1,5 @@
 /**
- * Places the town's buildings on the plots the plan assigns them.
+ * Places the town's buildings on the plots the `TownPlan` assigns them.
  *
  * A sprite building is one anchor tile carrying its manifest key; everything
  * else — how much ground the art covers and where its doorway falls — is
@@ -40,10 +40,10 @@ export interface SpritePlacement {
 /**
  * Writes one sprite building's anchor tile and clears its doorway.
  *
- * The plan states the plot's west column and the row the facade fronts; the
- * anchor is derived by aligning the manifest footprint's west and south edges to
- * those, so the plan never restates a sprite's size and a re-scaled building
- * keeps its frontage on the street.
+ * The `TownPlan` states the plot's west column and the row the facade fronts;
+ * the anchor is derived by aligning the manifest footprint's west and south
+ * edges to those, so the layout never restates a sprite's size and a re-scaled
+ * building keeps its frontage on the street.
  *
  * Throws rather than skipping on an off-map anchor or a sprite with no
  * footprint or doorway. Every one of these buildings is a named quest, dialog

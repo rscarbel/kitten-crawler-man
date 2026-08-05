@@ -112,9 +112,19 @@ export function drawClownVial(ctx: Ctx, phase: number): void {
   ctx.save();
   ctx.clip();
   ctx.fillStyle = gas(0.95);
-  ctx.fillRect(-VIAL_HALF_WIDTH, top + VIAL_HALF_HEIGHT * 0.35, VIAL_HALF_WIDTH * 2, VIAL_HALF_HEIGHT * 2);
+  ctx.fillRect(
+    -VIAL_HALF_WIDTH,
+    top + VIAL_HALF_HEIGHT * 0.35,
+    VIAL_HALF_WIDTH * 2,
+    VIAL_HALF_HEIGHT * 2,
+  );
   ctx.fillStyle = gasPale(0.85);
-  ctx.fillRect(-VIAL_HALF_WIDTH, top + VIAL_HALF_HEIGHT * 0.35, VIAL_HALF_WIDTH * 0.5, VIAL_HALF_HEIGHT * 2);
+  ctx.fillRect(
+    -VIAL_HALF_WIDTH,
+    top + VIAL_HALF_HEIGHT * 0.35,
+    VIAL_HALF_WIDTH * 0.5,
+    VIAL_HALF_HEIGHT * 2,
+  );
   ctx.restore();
 
   ctx.beginPath();
@@ -128,7 +138,12 @@ export function drawClownVial(ctx: Ctx, phase: number): void {
   ctx.stroke();
 
   ctx.fillStyle = VIAL_GLASS;
-  ctx.fillRect(-VIAL_NECK_HALF_WIDTH, top - VIAL_NECK_HEIGHT, VIAL_NECK_HALF_WIDTH * 2, VIAL_NECK_HEIGHT);
+  ctx.fillRect(
+    -VIAL_NECK_HALF_WIDTH,
+    top - VIAL_NECK_HEIGHT,
+    VIAL_NECK_HALF_WIDTH * 2,
+    VIAL_NECK_HEIGHT,
+  );
   ctx.fillStyle = VIAL_CORK;
   ctx.fillRect(
     -VIAL_NECK_HALF_WIDTH * 1.5,
@@ -165,7 +180,8 @@ export function drawClownVialShatter(ctx: Ctx, progress: number): void {
   for (let i = 0; i < SHARD_COUNT; i++) {
     const angle = (i / SHARD_COUNT) * TWO_PI + jitter(i, 1) * 0.5;
     // Shards decelerate: they leave fast and are already slowing by mid-burst.
-    const reach = SHATTER_REACH * (1 - (1 - progress) * (1 - progress)) * lerp(0.6, 1, jitter(i, 2));
+    const reach =
+      SHATTER_REACH * (1 - (1 - progress) * (1 - progress)) * lerp(0.6, 1, jitter(i, 2));
     const size = lerp(0.05, 0.09, jitter(i, 4)) * fade;
     ctx.save();
     ctx.translate(Math.cos(angle) * reach, Math.sin(angle) * reach);

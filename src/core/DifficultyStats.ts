@@ -1,9 +1,10 @@
 /**
- * Run-scoped counters behind the difficulty rebalance (`docs/difficulty-plan.md`).
+ * Run-scoped counters used to check the game's difficulty curve against its
+ * target feel.
  *
  * A singleton rather than a field on {@link GameStats}, and the reason is the
  * whole point of the thing: `GameStats` is rebuilt with its `DungeonScene`, so a
- * party that walks down a stairwell loses everything it counted. The plan's
+ * party that walks down a stairwell loses everything it counted. The
  * target-feel table is measured across a *run* — floor 1 pre-Hoarder through
  * floor 3 — so the numbers have to outlive the scene that produced them, the
  * same way `perfMonitor` does.
@@ -13,7 +14,7 @@
  */
 
 /**
- * The stretches of a run the plan's target-feel table is measured over.
+ * The stretches of a run the target-feel table is measured over.
  *
  * Floor 1 is split by its two gauntlet bosses because that is where the
  * difficulty curve is supposed to bend — a single "floor 1" number would average
@@ -135,7 +136,7 @@ export class DifficultyStats {
    * One completed room fight.
    *
    * @param hpRemainingFraction Party HP over party max HP the moment the last
-   *   engaged mob let go — the plan's "HP remaining after a regular room fight".
+   *   engaged mob let go — "HP remaining after a regular room fight".
    * @param seconds How long the fight ran, for the time-to-kill target.
    */
   recordRoomFight(hpRemainingFraction: number, seconds: number): void {
@@ -155,8 +156,8 @@ export class DifficultyStats {
    *
    * The boss flags matter as much as the tallies: they latch, so a second
    * playthrough in the same page session would begin on floor 1 already
-   * classified `floor1-post-juicer` — and the pre-Hoarder baseline the plan asks
-   * Phase 0 to capture would be unreachable without reloading the page.
+   * classified `floor1-post-juicer` — and the pre-Hoarder baseline this is
+   * meant to capture would be unreachable without reloading the page.
    */
   beginRun(): void {
     this.tallies.clear();

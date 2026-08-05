@@ -16,7 +16,7 @@
  *
  * The numbers are wall-clock on whatever machine runs this, so treat the
  * *crossover* as the result and the absolute microseconds as scenery. In-game
- * frame pacing still needs a human with `?perf` — see the plan's §4 step 6.
+ * frame pacing still needs a human with `?perf`.
  *
  * Run: npx tsx scripts/bench-separation.ts
  */
@@ -43,7 +43,8 @@ const MOB_COUNTS = [8, 12, 16, 20, 24, 32, 48, 64, 96, 128, 192];
  * Crowding levels, as map area per mob. A mob's separation radius sweeps ~3.1
  * tiles², so 8 tiles²/mob is a patrol strung out across a room, 2 is a camp
  * clustered on its fire, and 0.8 is the wall of bodies a doorway funnel makes —
- * roughly the d≈4 the plan estimates as the practical ceiling on crowding.
+ * roughly a mob-count-to-radius density of 4, the practical ceiling on crowding
+ * the game ever produces.
  */
 const DENSITIES = [
   { label: 'loose', tilesPerMob: 8 },

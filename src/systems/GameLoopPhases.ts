@@ -334,15 +334,16 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'mongo':
           // One cue for all three of his attacks. `mongo_released` is the summon
           // roar, not a chomp, so branching on the one-shot would only mean the
-          // bite plays a wrong sound instead of a generic one — a bite chomp and
-          // a pounce screech are a [HUMAN] item in docs/mongo-redesign-plan.md §11.
+          // bite plays a wrong sound instead of a generic one — a dedicated bite
+          // chomp and pounce screech are still unsourced; a human ear is needed
+          // to judge whether the shared cue reads well enough to keep.
           audio?.play('mongo_slash');
           break;
         case 'mercenary':
           audio?.play('sword_attack_1');
           break;
         // [STAND-IN] No insect audio has been sourced yet; the raptorial strike
-        // borrows the sharpest blade cue in the library. See docs/bounty/03-mantid.md.
+        // borrows the sharpest blade cue in the library.
         case 'mantis':
         case 'mantid':
           audio?.play('sword_attack_1');
@@ -353,7 +354,6 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         // [STAND-IN] No stone-on-stone slam or stomp has been sourced yet; the
         // Krakaren's ground slam is the heaviest earth impact in the library and
         // covers both the double-fist slam and the stomp.
-        // See docs/bounty/07-rock-golem.md.
         case 'rock_golem':
           audio?.play('krakaren_ground_slam');
           break;
@@ -453,9 +453,9 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'ball_of_swine':
           audio?.play('ball_of_swine_rolling');
           break;
-        // [STAND-IN] Auditioned per the plan and kept: the Ball of Swine's roll
-        // is already a stone-heavy rumble, and the golem's curl, roll start and
-        // uncurl all read against it. See docs/bounty/07-rock-golem.md.
+        // [STAND-IN] Auditioned and kept: the Ball of Swine's roll is already a
+        // stone-heavy rumble, and the golem's curl, roll start and uncurl all
+        // read against it.
         case 'rock_golem':
           audio?.play('ball_of_swine_rolling');
           break;
@@ -463,7 +463,7 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           audio?.play('krakaren_yell');
           break;
         // [STAND-IN] The rage pause wants a rising insectoid shriek; the spider's
-        // screech is the only shriek in the library. See docs/bounty/03-mantid.md.
+        // screech is the only shriek in the library.
         case 'mantid':
           audio?.play('grotesque_spider_screech_attack');
           break;
@@ -497,8 +497,13 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
  * he fires two of them within a second of each other — the whirl as the sweep
  * winds up and the hit as it lands — and one shared flag can only carry one.
  *
- * Every id here is a **stand-in** for a sound Ryan has not sourced yet; the
- * substitutions are recorded in `docs/bounty/05-dark-knight.md`.
+ * Every id here is a **stand-in** for a sound Ryan has not sourced yet:
+ * `rumble` for the whirl wind-up (the closest thing to a building metal gust),
+ * the Krakaren's `krakaren_ground_slam` for the sweep's slam (a golem's earth
+ * impact is the nearest heavy thud), the Grotesque Spider's
+ * `grotesque_spider_slam_attack` for the sweep landing (already a sudden heavy
+ * hit), and the cat's `cat_missile_fire` for the cast (the only spell-launch
+ * sound in the library).
  */
 function playDarkKnightCues(mob: Mob, audio: AudioManager | null): void {
   if (!(mob instanceof DarkKnight)) return;

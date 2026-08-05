@@ -244,9 +244,8 @@ function canopyHalfWidthPx(clumps: readonly Clump[], centerX: number, rootFlareP
 }
 
 // Geometry, all in tile units. The frame gives a tree 3 tiles of headroom above
-// its anchor tile and 1 tile of clearance each side (see §5.2 of the plan), so
-// the drawable envelope is 3.84 tiles up from the trunk's foot and 1.5 tiles
-// sideways.
+// its anchor tile and 1 tile of clearance each side, so the drawable envelope
+// is 3.84 tiles up from the trunk's foot and 1.5 tiles sideways.
 //
 // Treat the two constants below as the budget the species parameters are picked
 // against, not as an enforced bound: `MAX_CROWN_HALF_WIDTH_TILES` caps the

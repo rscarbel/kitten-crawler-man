@@ -1,5 +1,7 @@
 import type { GameSystem } from './GameSystem';
 import type { SpriteKey } from '../core/SpriteLoader';
+import { COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS } from '../sprites/cockroachSprite';
+import { HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS } from '../sprites/hoarderSprite';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 import { drawSpriteRotatedCenter } from '../core/SpriteRenderer';
 import { getFrameInkBounds } from '../core/spriteFrames';
@@ -52,16 +54,14 @@ const GOBLIN_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
   ['goblin_warhammer', { spriteKey: 'goblin_warhammer', parts: GOBLIN_GORE_PARTS }],
 ];
 
+const COCKROACH_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'cockroach',
+  parts: COCKROACH_GORE_PARTS,
+};
+
 const HOARDER_CONFIG: MobBodyPartConfig = {
   spriteKey: 'hoarder',
-  parts: [
-    'gore_head',
-    'gore_right_arm',
-    'gore_left_arm',
-    'gore_left_leg',
-    'gore_right_leg',
-    'gore_torso',
-  ],
+  parts: HOARDER_GORE_PARTS,
 };
 
 /** The eight pieces a rat comes apart into; all eight live on the rat's own sheet. */
@@ -153,7 +153,8 @@ const TUSKLING_CONFIG: MobBodyPartConfig = {
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
-  ['hoarder', HOARDER_CONFIG],
+  [HOARDER_BODY_PART_KEY, HOARDER_CONFIG],
+  [COCKROACH_BODY_PART_KEY, COCKROACH_CONFIG],
   [RAT_BODY_PART_KEY, RAT_CONFIG],
   [LLAMA_BODY_PART_KEY, LLAMA_CONFIG],
   [MANTID_BODY_PART_KEY, MANTID_CONFIG],

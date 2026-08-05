@@ -121,9 +121,11 @@ function pick(noise: () => number, min: number, max: number): number {
 }
 
 /**
- * Paint one wound: the eight layers of §7.3, outward in. Every piece routes its
- * cut through here so all nine wounds on a corpse are recognisably the same
- * injury seen on different parts.
+ * Paint one wound, outward in: torn skin margin, subcutaneous band, muscle
+ * field, vessels, bone, wet blood pooled toward the cavity, blood gloss,
+ * exterior blood, and flesh tags. Every piece routes its cut through here so
+ * all nine wounds on a corpse are recognisably the same injury seen on
+ * different parts.
  */
 export function drawWound(ctx: Ctx, cut: CutSpec, style: GoblinStyle): void {
   const noise = seededNoise(cut.seed);
@@ -645,11 +647,27 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       ctx.clip();
       ctx.fillStyle = MUSCLE.shadow;
       ctx.beginPath();
-      ctx.ellipse(halfW * 0.2, halfH * 0.1, halfW * 0.6, halfH * 0.62, deg(-12), 0, FULL_CIRCLE_ANGLE);
+      ctx.ellipse(
+        halfW * 0.2,
+        halfH * 0.1,
+        halfW * 0.6,
+        halfH * 0.62,
+        deg(-12),
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
       ctx.fillStyle = rgba(BLOOD_DARK, 0.7);
       ctx.beginPath();
-      ctx.ellipse(halfW * 0.24, halfH * 0.18, halfW * 0.44, halfH * 0.46, deg(-12), 0, FULL_CIRCLE_ANGLE);
+      ctx.ellipse(
+        halfW * 0.24,
+        halfH * 0.18,
+        halfW * 0.44,
+        halfH * 0.46,
+        deg(-12),
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
       const RIB_ARCS = 4;
       ctx.strokeStyle = bone.light;
@@ -741,12 +759,26 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       if (fitting === 'greave') {
         const RUST = 0.42;
         ctx.fillStyle = mix(iron.dark, leather.dark, RUST);
-        traceLimb(ctx, pt(lerp(knee.x, end.x, 0.2), lerp(knee.y, end.y, 0.2)), pt(lerp(knee.x, end.x, 0.8), lerp(knee.y, end.y, 0.8)), width * 0.5, width * 0.44, 0);
+        traceLimb(
+          ctx,
+          pt(lerp(knee.x, end.x, 0.2), lerp(knee.y, end.y, 0.2)),
+          pt(lerp(knee.x, end.x, 0.8), lerp(knee.y, end.y, 0.8)),
+          width * 0.5,
+          width * 0.44,
+          0,
+        );
         ctx.fill();
       }
       if (fitting === 'bracer') {
         ctx.fillStyle = leather.dark;
-        traceLimb(ctx, pt(lerp(knee.x, end.x, 0.25), lerp(knee.y, end.y, 0.25)), pt(lerp(knee.x, end.x, 0.8), lerp(knee.y, end.y, 0.8)), width * 0.5, width * 0.44, 0);
+        traceLimb(
+          ctx,
+          pt(lerp(knee.x, end.x, 0.25), lerp(knee.y, end.y, 0.25)),
+          pt(lerp(knee.x, end.x, 0.8), lerp(knee.y, end.y, 0.8)),
+          width * 0.5,
+          width * 0.44,
+          0,
+        );
         ctx.fill();
       }
 
@@ -760,7 +792,8 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
           // Deliberately wider than the limb it ends. At the runtime's 0.5×
           // gore scale an anatomically-sized cut on a 0.10-tile forearm is four
           // screen pixels across and the bone inside it is one — which is to say
-          // it does not exist. §7.1 says exaggerate, and this is where.
+          // it does not exist, so the radius is exaggerated well past anatomy
+          // to keep the bone visible at that scale.
           radius: width * 1.15,
           squash: 0.62,
           angle: Math.atan2(knee.y - start.y, knee.x - start.x) + Math.PI,
@@ -863,7 +896,13 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
     for (let i = 0; i < TOES; i++) {
       const t = i / (TOES - 1);
       ctx.beginPath();
-      ctx.arc(length * lerp(0.86, 0.62, t), lerp(-height * 0.4, height * 0.5, t), height * 0.34, 0, FULL_CIRCLE_ANGLE);
+      ctx.arc(
+        length * lerp(0.86, 0.62, t),
+        lerp(-height * 0.4, height * 0.5, t),
+        height * 0.34,
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
     }
     ctx.restore();
@@ -1010,12 +1049,7 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
         ctx.quadraticCurveTo(-w - grow, h * 1.1 + grow, 0, h + grow);
         ctx.quadraticCurveTo(w + grow, h * 1.1 + grow, w + grow, -h * RAMUS_HEIGHT - grow);
         ctx.lineTo(w * INNER_WIDTH + grow, -h * RAMUS_HEIGHT - grow);
-        ctx.quadraticCurveTo(
-          w * INNER_WIDTH + grow,
-          h * INNER_DEPTH,
-          0,
-          h * INNER_DEPTH + grow,
-        );
+        ctx.quadraticCurveTo(w * INNER_WIDTH + grow, h * INNER_DEPTH, 0, h * INNER_DEPTH + grow);
         ctx.quadraticCurveTo(
           -w * INNER_WIDTH - grow,
           h * INNER_DEPTH,
@@ -1151,4 +1185,3 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
  * gate would be asking a question the piece cannot answer.
  */
 export const BONELESS_GORE_STATES: readonly string[] = ['gore_entrails'];
-

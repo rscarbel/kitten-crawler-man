@@ -1254,11 +1254,11 @@ export class DungeonScene extends GameplayScene {
         this.mongoSystem.dismiss(this.mobs, this.mobGrid);
         this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
         // This is the one genuine floor change among DungeonScene's four
-        // `sceneManager.replace` sites (see docs/asset-management-plan.md's
-        // Phase 6) — building enter/exit rebuild the scene around the same
-        // floor identity and must never evict. Keyed on the *new* floor's
-        // required keys, not the old floor's: anything the two floors share
-        // (core, dungeon_common, ...) simply isn't touched.
+        // `sceneManager.replace` sites, so it's the only one that runs the
+        // sprite eviction pass — building enter/exit rebuild the scene around
+        // the same floor identity and must never evict. Keyed on the *new*
+        // floor's required keys, not the old floor's: anything the two
+        // floors share (core, dungeon_common, ...) simply isn't touched.
         releaseSpritesExcept(requiredSpriteKeysForLevel(nextDef.id, nextDef.spriteGroups));
         this.sceneManager.replace(
           new DungeonScene(nextDef, this.input, this.sceneManager, {
@@ -1533,17 +1533,18 @@ export class DungeonScene extends GameplayScene {
     this.audio = options?.audio ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
-    // re-decoding what a previous floor already loaded. See Phase 2 of
-    // docs/asset-management-plan.md.
+    // re-decoding what a previous floor already loaded. This is the per-floor
+    // SFX unload/reload cycle: only the current floor's sounds stay resident.
     void this.audio?.preload(sfxGroupsForLevelId(levelDef.id));
     // Same "additive, cheap on re-entry" reasoning as the SFX preload above,
-    // for this floor's declared sprite groups (Phase 4 of the asset plan).
+    // for this floor's declared sprite groups.
     // `prewarmGroups` also forces each sheet's GPU texture upload during this
-    // floor's fade-in rather than on whichever frame first draws it (Phase 7).
+    // floor's fade-in rather than on whichever frame first draws it.
     // Still fire-and-forget: this must not block scene construction/rendering.
     // Bounty/quest-system-introduced creatures aren't covered here — those
-    // stay on the schedule-a-load-on-miss path (Phase 5's "load on demand,
-    // fail safe") except bounties, which `BountySystem.stageEncounter`
+    // stay on the lazy load-on-miss path (`SpriteLoader.getSpriteDef`
+    // schedules a load the first time a sprite is requested and fails safe
+    // until it resolves) except bounties, which `BountySystem.stageEncounter`
     // pre-warms itself well before the fight starts.
     // Ground tiles and decorations bake into cached chunk canvases the first
     // time they're drawn (see `TileChunkCache`), which — unlike a plain sprite
@@ -1743,7 +1744,7 @@ export class DungeonScene extends GameplayScene {
     bus.on('mobKilled', (e) => this.gameStats.recordKill(e.mob.displayName));
     bus.on('healingPotionUsed', () => this.gameStats.recordPotionUsed());
 
-    // ── difficulty telemetry (`docs/difficulty-plan.md` phase 0) ──
+    // ── difficulty telemetry ──
     // Separate from `gameStats` because these counters have to survive the
     // stairwell that rebuilds this scene; see `DifficultyStats`.
     difficultyStats.setFloor(this.levelDef.floorNumber);
@@ -2696,7 +2697,7 @@ export class DungeonScene extends GameplayScene {
    * `!assets` — dumps every sprite key that has ever missed (`getSpriteDef`/
    * `getSpriteDefByKey` found nothing loaded for it) and how many times, so a
    * lazily-loaded or typo'd sheet shows up in seconds instead of during a
-   * playtest. See `docs/asset-management-plan.md` Phase 3.
+   * playtest.
    */
   private reportAssetMisses(): void {
     const misses = [...getSpriteMissCounts().entries()];
@@ -5055,7 +5056,7 @@ export class DungeonScene extends GameplayScene {
     // The golem's boulder shatter, drained here for the same reason: the rock
     // outlives the golem that threw it.
     // [STAND-IN] No shattering-rock burst has been sourced; smashing wood is
-    // the library's nearest hard break. See docs/bounty/07-rock-golem.md.
+    // the library's nearest hard break.
     if (this.rockThrows.burstSoundPending) {
       this.rockThrows.burstSoundPending = false;
       this.audio?.playRandom(['wood_smashing_1', 'wood_smashing_2']);
@@ -5064,7 +5065,9 @@ export class DungeonScene extends GameplayScene {
     // Drained here rather than from `playMobAudioCues` for the same reason the
     // llama's is: a soul bolt outlives its caster, and one that lands after the
     // lord died has no mob left to carry the flag.
-    // [STAND-IN] A soft green whumph has not been sourced; see the plan file.
+    // [STAND-IN] A soft green whumph has not been sourced; the llama's own
+    // fireball explosion is the closest burst-type impact already in the
+    // manifest.
     if (this.skeletonShots.burstSoundPending) {
       this.skeletonShots.burstSoundPending = false;
       this.audio?.play('llama_fireball_explosion');
@@ -5072,7 +5075,8 @@ export class DungeonScene extends GameplayScene {
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
     // belongs to the skeletons coming out of the ground.
-    // [STAND-IN] Earth breaking under a choral moan, not yet sourced.
+    // [STAND-IN] Earth breaking under a choral moan has not been sourced;
+    // the krakaren's ground slam is the closest existing rumble.
     if (this.skeletonSummons.riseSoundPending) {
       this.skeletonSummons.riseSoundPending = false;
       this.audio?.play('krakaren_ground_slam');

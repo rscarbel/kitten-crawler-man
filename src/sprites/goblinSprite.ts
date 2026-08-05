@@ -69,8 +69,8 @@ const HEAVY_DAMAGE = 2;
  * `spriteFrames`, `impactFrame` and `animFrames` come from the animation and are
  * asserted against the generator by gate G13 — if one moves, both move. The
  * damage, reach and cooldown columns deliberately carry **today's** numbers: a
- * rebalance is a separate piece of work from a visual rework, and adopting the
- * plan's proposed spread would have made a war-hammer goblin roughly twice as
+ * rebalance is a separate piece of work from a visual rework, and adopting an
+ * earlier proposed spread would have made a war-hammer goblin roughly twice as
  * dangerous as anything else on floor 1 as a side effect of new art.
  */
 export const GOBLIN_ATTACKS: Record<GoblinWeapon, Record<GoblinAttackKind, GoblinAttackTiming>> = {

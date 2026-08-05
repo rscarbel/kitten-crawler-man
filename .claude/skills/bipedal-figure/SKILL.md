@@ -15,7 +15,7 @@ of those traps cost multiple rounds of "it still looks wrong" to find the first
 time.
 
 > **Carl is the only figure in this game whose movement is convincing.**
-> `carlArt.ts` + `generate-human-sprite.ts` are the *sole* reference for gait,
+> `carlArt.ts` + `generate-human-sprite.ts` are the _sole_ reference for gait,
 > limb motion, weight, and pose authoring. The goblin and clown pipelines are
 > cited here **only** for build structure — bake gates, harness modes, prop
 > silhouette — and their walks, idles and attacks are explicitly not a model to
@@ -31,12 +31,12 @@ the gameplay class. Seeded runtime townsfolk → `add-person`. Non-bipeds → `a
 Every bipedal figure in this repo is the same four modules. Copy the shape; do
 not invent a new one.
 
-| File | Job | Reference implementations |
-| --- | --- | --- |
-| `scripts/<name>Art.ts` | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation. | `carlArt.ts` — the rig to copy |
-| `scripts/generate-<name>-sprite.ts` | **Choreography only.** One pose function per row, the row table, sheet geometry constants, tiles frames into the sheet, writes the PNG. Exports `ROWS`/`FRAME_W`/`FRAME_H`/`TILE_*` so nothing else can desync. | `generate-human-sprite.ts` — the **only** trustworthy motion reference |
-| `scripts/generate-<name>-sprites.gates.ts` | **The bake gate** — the entry point in `package.json`, not the generator. Measures the baked pixels and the pose stream, throws on anything wrong, then writes. | `generate-goblin-sprites.gates.ts` (~20 gates) — structure only |
-| `scripts/render-<name>.ts` | **The review harness.** Slices the sheet into a labelled contact sheet, plus per-part crops and an in-game-size strip. This is the only way the art gets judged. | `render-human.ts`; `render-goblins.ts` for its extra modes (`--mode=onion\|arc\|delta`) |
+| File                                       | Job                                                                                                                                                                                                             | Reference implementations                                                               |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `scripts/<name>Art.ts`                     | **The painter.** Palette ramps, proportions in tile units, the view table, the pose interface, the IK solver, and one `draw<Name><View>` per view over one shared pose type. Knows nothing about animation.     | `carlArt.ts` — the rig to copy                                                          |
+| `scripts/generate-<name>-sprite.ts`        | **Choreography only.** One pose function per row, the row table, sheet geometry constants, tiles frames into the sheet, writes the PNG. Exports `ROWS`/`FRAME_W`/`FRAME_H`/`TILE_*` so nothing else can desync. | `generate-human-sprite.ts` — the **only** trustworthy motion reference                  |
+| `scripts/generate-<name>-sprites.gates.ts` | **The bake gate** — the entry point in `package.json`, not the generator. Measures the baked pixels and the pose stream, throws on anything wrong, then writes.                                                 | `generate-goblin-sprites.gates.ts` (~20 gates) — structure only                         |
+| `scripts/render-<name>.ts`                 | **The review harness.** Slices the sheet into a labelled contact sheet, plus per-part crops and an in-game-size strip. This is the only way the art gets judged.                                                | `render-human.ts`; `render-goblins.ts` for its extra modes (`--mode=onion\|arc\|delta`) |
 
 Wire `npm run gen:<name>` to the **gates** file. Add a `?<name>` preview scene
 in `game.ts`'s `devBootScene` for in-motion checks.
@@ -51,19 +51,19 @@ in `game.ts`'s `devBootScene` for in-motion checks.
    game figure's head is deliberately oversized, so any life-drawing ratio hung
    off it inflates (`references/anatomy.md#proportions`).
 3. **Write the `ViewSpec` table before any drawing code.** Head-on and edge-on
-   are not one figure with a multiplier: a profile needs *two* lateral factors
+   are not one figure with a multiplier: a profile needs _two_ lateral factors
    (`lateral` for limb roots, `girth` for torso width) plus `chestTaper`,
    `hipDepth`, `armSpread`, `crotchNotch`, and the `profile`/`showsFace`/
    `showsBack` flags. See the `ViewSpec` interface and the `VIEWS` table in
    `carlArt.ts`.
 4. **Define the pose interface as targets, not angles — with FK escape hatches.**
    Hand/foot positions the IK reaches for is the right default; but a walking
-   arm *must* be FK (`ArmAngles`), because IK from a hand target sweeps both
+   arm _must_ be FK (`ArmAngles`), because IK from a hand target sweeps both
    segments together and the forearm flails. Both mechanisms coexist in
    `CarlPose`; the angles win for that arm when set.
 5. **Author `restingPose()` and write every animation as edits to it.**
 6. **Choreograph rows.** Walk rows at 16 frames, most others at 8; more frames
-   buy smoothness only. Pace motion with a *phase speed* on the player/mob,
+   buy smoothness only. Pace motion with a _phase speed_ on the player/mob,
    never by scaling the frame index (`references/anatomy.md#timing`).
 7. **Gate the bake.** Start from `references/gates.md` — the generalised gate
    list with what each one actually catches. At minimum: border-clip, anchor,
@@ -71,11 +71,11 @@ in `game.ts`'s `devBootScene` for in-motion checks.
 8. **Review as an image, with an agent that only sees the image.** This is not
    optional and it is not one pass. See `references/review.md`.
 9. **Wire it up** via `add-sprite` (manifest/loader/draw wrapper) and re-measure
-   the tile anchor — health bars and aggro markers key off it and *will* be
+   the tile anchor — health bars and aggro markers key off it and _will_ be
    wrong after a redraw (`references/anatomy.md#anchor`).
 10. **Validation gates:** `npm run typecheck`, `npm run lint`, `npm run format`.
 
-## The three rules that generalise past this repo
+## Rules that generalise past this repo
 
 - **Art has to be reviewed as an image, by something that only looks at the
   image.** Four blind rounds on Carl caught, in order: a five-head bobblehead,
@@ -87,7 +87,11 @@ in `game.ts`'s `devBootScene` for in-motion checks.
   rectangle into a star. If a shape is misread, fix the outline, never the
   interior.
 - **A fix can entrench the bug it fixed.** Re-review after every "done" —
-  four separate defects in this codebase lived *inside* a completed fix.
+  four separate defects in this codebase lived _inside_ a completed fix.
+- **One sheet cannot carry an individual trait.** "Some females pierce their
+  tusks" baked onto every Tuskling turns a personal choice into a species
+  marking. Per-instance variation needs a second sheet or a runtime overlay
+  (`troglodyte_tongue` is the precedent), or it gets cut.
 
 ## References
 

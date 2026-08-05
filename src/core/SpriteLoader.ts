@@ -122,7 +122,7 @@ export type SpriteStates = {
  * Runtime sprite data: loaded image + dimensions from the manifest.
  *
  * `img` is normally the decoded `HTMLImageElement` itself. On a low-end device
- * (Phase 8 of `docs/asset-management-plan.md`) it may instead be a half-size
+ * (see `shouldDownscaleForLowEndDevice`) it may instead be a half-size
  * offscreen `<canvas>` the sheet was resampled into at load time — every other
  * field on this def is halved to match, so nothing downstream needs to know
  * which one it got.
@@ -168,9 +168,9 @@ function recordMiss(key: string): void {
  * Per-key miss counts for keys that are STILL unresolved right now, for the
  * `!assets` dev command. Empty in a healthy run.
  *
- * `_missCounts` alone can't answer that: since Phase 5, every non-`core`
- * sprite on the current floor is *expected* to miss once while its group's
- * `loadGroups` call is in flight — recording that as a permanent miss would
+ * `_missCounts` alone can't answer that: because sprite groups load lazily,
+ * every non-`core` sprite on the current floor is *expected* to miss once
+ * while its group's `loadGroups` call is in flight — recording that as a permanent miss would
  * make a genuinely broken sheet indistinguishable from ordinary lazy-load
  * latency, defeating the point of this counter. Filtering to keys absent
  * from `_defs` at read time reports only sprites that never arrived.
@@ -187,14 +187,12 @@ export function getSpriteMissCounts(): ReadonlyMap<string, number> {
 const DOWNSCALE_FACTOR = 0.5;
 
 /**
- * Phase 8 of `docs/asset-management-plan.md`: whether this device is low-end
- * enough to trade sheet resolution for memory.
+ * Whether this device is low-end enough to trade sheet resolution for memory.
  *
  * Deliberately narrow and device-derived rather than a new setting of its own —
  * reuses the existing `RenderQuality` axis (`settings.quality`) and the
- * display's own pixel ratio, per the plan's explicit rule. Must NEVER be true
- * at DPR ≥ 2: those sheets are baked 1:1 for a Retina display (see "What is
- * not the problem" in the plan), and halving them there is a visible quality
+ * display's own pixel ratio. Must NEVER be true at DPR ≥ 2: those sheets are
+ * baked 1:1 for a Retina display, and halving them there is a visible quality
  * regression, not an invisible memory win.
  */
 function shouldDownscaleForLowEndDevice(): boolean {
@@ -263,7 +261,7 @@ function downscaleSheet(
  * Loads one manifest entry's image and populates `_defs` on success. Shared by
  * every loading path (`loadSprites`, `loadGroups`, and a lazy miss scheduled
  * from `getSpriteDef`/`getSpriteDefByKey`) so the `img.onerror` observability
- * from Phase 3 only lives in one place.
+ * only lives in one place.
  *
  * Returns the same promise to every caller for a given key while it's
  * in-flight, and a pre-resolved one once `_defs` already has the key — so
@@ -394,16 +392,15 @@ function getScratchCtx(): CanvasRenderingContext2D | null {
 }
 
 /**
- * Phase 7 of `docs/asset-management-plan.md`: forces the browser to actually
- * upload a loaded image as a GPU texture, rather than leaving that for
- * whatever frame first `drawImage()`s it.
+ * Forces the browser to actually upload a loaded image as a GPU texture,
+ * rather than leaving that for whatever frame first `drawImage()`s it.
  *
  * `img.decode()` resolving is not enough on its own — Chrome can still defer
  * the texture upload to the first real draw, which is exactly the hitch this
- * phase exists to move earlier. Drawing the image into an off-screen canvas
+ * function exists to move earlier. Drawing the image into an off-screen canvas
  * forces that upload to happen now, while nothing is watching the frame time.
  *
- * `img` may be a Phase 8 downscaled `<canvas>` instead of an `<img>` —
+ * `img` may be a `downscaleSheet`-produced `<canvas>` instead of an `<img>` —
  * `decode()` doesn't exist on `HTMLCanvasElement` (it was already rasterized
  * synchronously when `downscaleSheet` drew into it), so that step is skipped
  * for a canvas; the forcing draw below still applies to either source.
@@ -470,11 +467,12 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
 }
 
 /**
- * Phase 6 of `docs/asset-management-plan.md`: drops every loaded sprite whose
- * key is not in `keep`, so its decoded bitmap can be reclaimed. Only touches
- * `_defs`/`_loading` — every eager derived-metadata map above (blocked tile
- * offsets, footprints, doorways, extents) stays exactly as Phase 5 left it,
- * per the plan's "keep the metadata eager" rule; nothing here reads pixels.
+ * Drops every loaded sprite whose key is not in `keep`, so its decoded bitmap
+ * can be reclaimed. Only touches `_defs`/`_loading` — every derived-metadata
+ * map above (blocked tile offsets, footprints, doorways, extents) is built
+ * synchronously from the manifest JSON at module load and stays eager
+ * regardless of what's evicted here, since none of it reads pixels and none
+ * of it costs the memory this eviction is trying to reclaim.
  *
  * Setting `img.src = ''` (rather than just letting the `HTMLImageElement` fall
  * out of `_defs`) is what actually releases the decoded bitmap — an `<img>`
@@ -485,7 +483,8 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
  *
  * A key evicted here that's still needed shows up again exactly like a
  * never-loaded one: `getSpriteDef`/`getSpriteDefByKey` miss, log it once, and
- * reschedule its load — the same fail-safe path Phase 5 already relies on.
+ * reschedule its load — the same fail-safe lazy-load path every other miss
+ * already relies on.
  *
  * Known trade-off: this only sweeps `_defs` (already-resolved keys) at the
  * instant of transition. A key the OUTGOING floor kicked off via `loadGroups`
@@ -507,8 +506,8 @@ export function releaseSpritesExcept(keep: ReadonlySet<SpriteKey>): void {
       def.img.onerror = null;
       def.img.src = '';
     } else {
-      // Phase 8's downscaled sheet: a `<canvas>` has no `src` to clear, so
-      // the equivalent release is shrinking its own backing store to
+      // A downscaled sheet (see `downscaleSheet`): a `<canvas>` has no `src` to
+      // clear, so the equivalent release is shrinking its own backing store to
       // nothing — the decoded pixels it held are what actually cost memory,
       // and dropping the `_defs` entry below only frees the wrapper object.
       def.img.width = 0;

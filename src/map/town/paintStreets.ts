@@ -6,7 +6,7 @@
  *
  * The hierarchy is not encoded here — it is the order of `plan.surfaces`, and
  * this module only replays that order. That is deliberate: which street beats
- * which at a junction is a design decision and belongs in the plan.
+ * which at a junction is a design decision and belongs in the `TownPlan`.
  */
 
 import { FloorTypeValue, LANE_STREET, TOWN_WALL, YARD_GRAVEL } from '../tileTypes';
@@ -226,9 +226,9 @@ function paveRowRange(
  * tent genuinely can cut the road in two. The town's buildings cannot: every
  * band is bounded above and below by a street by design, so every town building
  * has paving on both sides and this router would "detour" around all fifteen of
- * them — paving a column straight through the gardens and lanes the plan just
- * laid out. Running it over the town was correct when buildings were dropped on
- * a lawn; under a street plan it is actively wrong.
+ * them — paving a column straight through the gardens and lanes the `TownPlan`
+ * just laid out. Running it over the town was correct when buildings were
+ * dropped on a lawn; under a street plan it is actively wrong.
  */
 export function paintBuildingBypassRoutes(
   grid: TileGrid,

@@ -77,8 +77,8 @@ const CLOWN_TROUPE: ReadonlyArray<{
  * chosen for the shape of the fight rather than for flavour: the fat clown
  * bodies the player off the boss, the stilt clown reaches over it, and the
  * lemur throws knives from range, so backing out of the gas is never simply
- * safe. (The plan left the lemur optional; it is in, because without a ranged
- * threat the whole encounter can be kited in a circle around the clouds.)
+ * safe. The lemur was nearly cut as optional; it stays, because without a
+ * ranged threat the whole encounter can be kited in a circle around the clouds.
  */
 const EVIL_CLOWN_DEF: BountyDef = {
   id: 'evil_clown',

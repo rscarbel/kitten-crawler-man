@@ -699,10 +699,10 @@ export class BountySystem implements GameSystem {
     const site = siteAt(this.gameMap.bountySites, siteIndex);
     if (def === null || site === null) return;
 
-    // Phase 7 of docs/asset-management-plan.md: the player is still 60+
-    // tiles from `site` at this point (both callers stage before any warp),
-    // so pre-warming here — rather than waiting for the boss's first draw —
-    // gets its sheets GPU-resident well ahead of the fight.
+    // The player is still 60+ tiles from `site` at this point (both callers
+    // stage before any warp), so kicking off the decode/warm-up pass here —
+    // rather than waiting for the boss's first draw — gets its sheets
+    // GPU-resident well ahead of the fight.
     //
     // `typeof Image` guards this because `scripts/verify-bounty.ts` exercises
     // `BountySystem` directly under plain Node, with no `Image`/`document` —

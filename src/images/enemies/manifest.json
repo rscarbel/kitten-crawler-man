@@ -2198,5 +2198,91 @@
         "frameCount": 1
       }
     }
+  },
+  "cockroach": {
+    "path": "enemies/cockroach.png",
+    "frameWidth": 144,
+    "frameHeight": 144,
+    "tileX": 40,
+    "tileY": 40,
+    "tileScale": 64,
+    "states": {
+      "skitter": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "skitter_side": {
+        "row": 1,
+        "frameCount": 8
+      },
+      "skitter_back": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "idle": {
+        "row": 3,
+        "frameCount": 6
+      },
+      "idle_side": {
+        "row": 4,
+        "frameCount": 6
+      },
+      "idle_back": {
+        "row": 5,
+        "frameCount": 6
+      },
+      "bite": {
+        "row": 6,
+        "frameCount": 8
+      },
+      "bite_side": {
+        "row": 7,
+        "frameCount": 8
+      },
+      "bite_back": {
+        "row": 8,
+        "frameCount": 8
+      },
+      "gore_head": {
+        "row": 9,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_pronotum": {
+        "row": 9,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_tegmen": {
+        "row": 9,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_abdomen": {
+        "row": 9,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_leg": {
+        "row": 9,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_legpair": {
+        "row": 9,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_thorax": {
+        "row": 9,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_cerci": {
+        "row": 9,
+        "colOffset": 7,
+        "frameCount": 1
+      }
+    }
   }
 }

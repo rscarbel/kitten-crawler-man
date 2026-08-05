@@ -61,6 +61,17 @@ function pushPlayerWithCollision(
   }
 }
 
+/**
+ * Handed to a boss that must not engage yet — shared, so holding fire allocates
+ * nothing. `updateAI` takes a mutable array for the sake of the thirty-odd
+ * subclasses that implement it; none of them writes to what it is given.
+ */
+const NO_TARGETS: Player[] = [];
+// Frozen for its side effect only — the return value is typed readonly and
+// `updateAI` takes a mutable array. A future implementation that writes to what
+// it is given throws here instead of corrupting every boss on the floor.
+Object.freeze(NO_TARGETS);
+
 export class MobUpdateLoop implements GameSystem {
   /**
    * Per-frame scratch, kept as fields and cleared each frame rather than
@@ -153,13 +164,21 @@ export class MobUpdateLoop implements GameSystem {
         // list, so an unguarded write here cleared a bounty mark's forceAggro
         // every single frame and the mark alone could be outrun while its
         // escort committed for good.
+        // A boss whose room nobody has walked into yet has nothing to fight, and
+        // is handed no targets rather than merely un-forced ones: its own aggro
+        // range reaches out through the doorway, so leaving it the party list
+        // lets it open the fight across a threshold the party has not crossed.
+        let holdsFire = false;
         if (mob.isBoss && bossRoom) {
           if (
             bossRoom.isBossInLockedRoom(mob) ||
             bossRoom.isAnyPlayerInBossRoom(mob, playerTargets)
           )
             mob.forceAggro = true;
-          else if (bossRoom.governsBoss(mob)) mob.forceAggro = false;
+          else if (bossRoom.governsBoss(mob)) {
+            mob.forceAggro = false;
+            holdsFire = !bossRoom.sharesRoomWithPlayer(mob, playerTargets);
+          }
         }
 
         // Vespa-stage BrindleGrubs need the full mob list to target other mobs.
@@ -176,7 +195,7 @@ export class MobUpdateLoop implements GameSystem {
           aiTargets = this.aiTargets;
         }
 
-        mob.updateAI(aiTargets);
+        mob.updateAI(holdsFire ? NO_TARGETS : aiTargets);
       }
 
       // Keep bosses (specifically the Juicer) confined to their room

@@ -34,13 +34,13 @@ import { NO_REGION, Reachability } from './reachability';
 /**
  * How many rivers a map gets.
  *
- * Both are routed identically — edge to edge, same minimum length. §5.6 offered
- * the choice of making the second a shorter tributary joining the first, and
- * this does not: two independent courses already cross often enough to read as a
- * catchment, and a tributary would need join logic, a confluence width rule and
- * its own bridging case for a difference the player would have to be looking
- * for. Recorded here rather than left silent, per §5.6's instruction to journal
- * the call.
+ * Both are routed identically — edge to edge, same minimum length. A shorter
+ * tributary joining the first river was considered and rejected: two
+ * independent courses already cross often enough to read as a catchment, and a
+ * tributary would need join logic, a confluence width rule and its own
+ * bridging case for a difference the player would have to be looking for.
+ * Recorded here rather than left silent, since the tradeoff isn't obvious from
+ * the code alone.
  */
 const NUM_RIVERS = 2;
 
@@ -72,9 +72,9 @@ const TOWN_REPULSION_WEIGHT = 0.06;
 /**
  * Tiles of dry ground kept between the town's safe radius and any river.
  *
- * The circus has no matching constant here, though §5.6 of the plan asks for
- * one: the fairground is sited *after* the carve, so there is nothing for the
- * router to avoid when it runs. That clearance is enforced from the circus's own
+ * The circus has no matching constant here: the fairground is sited *after*
+ * the carve, so there is nothing for the router to avoid when it runs. That
+ * clearance is enforced from the circus's own
  * side instead (`pickCircusCentre` in `OverworldGenerator`), which is both
  * equivalent and cheaper — re-rolling a circus is one random draw, re-routing a
  * river is a walk across the whole map.
@@ -531,8 +531,8 @@ export function paintRiverCrossings(
    * The scan below tests every water tile, so a four-tile-wide road bridge finds
    * the same span a dozen times over. Pushing one entry per *tile* made
    * `MIN_RIVER_CROSSINGS` satisfied by a single bridge and the top-up loop broke
-   * immediately: measured over 50 rivers, 34 of them shipped with fewer than the
-   * three crossings §5.7 asks for, and the median river had two.
+   * immediately: measured over 50 rivers, 34 of them shipped with fewer than
+   * `MIN_RIVER_CROSSINGS`, and the median river had two.
    */
   const recordCrossing = (centre: TilePoint): void => {
     if (decks.some((deck) => tileDistance(deck, centre) < MIN_BRIDGE_SPACING_TILES)) return;

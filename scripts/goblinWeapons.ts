@@ -2,14 +2,14 @@
  * The four goblin weapons — sword, axe, mace and war hammer.
  *
  * Split out of `goblinArt.ts` because the weapons are as much of the art as the
- * body is: at 32 px the brief gives the ears and the weapon the whole job of
+ * body is: at 32 px the ears and the weapon carry the whole job of
  * identifying which goblin a player is looking at, and the rig file is already
  * the biggest sprawl risk in this pipeline.
  *
  * Every painter works in **weapon-local space**: the origin is the primary
  * (near) hand, +X runs down the weapon toward its tip, and the caller has
- * already rotated by the wrist angle. Distances are tile units and come
- * straight from the brief's §3.3a table.
+ * already rotated by the wrist angle. Distances are tile units, tuned per
+ * weapon so each reads at its own scale against the goblin holding it.
  *
  * Steel is bevelled along its own spine rather than lit from the scene's key
  * direction. A weapon swings through 180° in a single row, so any highlight
@@ -206,22 +206,46 @@ export function makeSwordProp(palette: GoblinPalette, seed: () => number): Gobli
       ctx.fill();
       ctx.fillStyle = rgba(iron.light, 0.5);
       ctx.beginPath();
-      ctx.arc(-SWORD_OVERHANG * 1.12, -SWORD_POMMEL_RADIUS * 0.3, SWORD_POMMEL_RADIUS * 0.4, 0, FULL_CIRCLE_ANGLE);
+      ctx.arc(
+        -SWORD_OVERHANG * 1.12,
+        -SWORD_POMMEL_RADIUS * 0.3,
+        SWORD_POMMEL_RADIUS * 0.4,
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
 
-      drawWrap(ctx, -SWORD_OVERHANG * 0.6, SWORD_GRIP_END, SWORD_BLADE_HALF_WIDTH * 0.9, leather, outline);
+      drawWrap(
+        ctx,
+        -SWORD_OVERHANG * 0.6,
+        SWORD_GRIP_END,
+        SWORD_BLADE_HALF_WIDTH * 0.9,
+        leather,
+        outline,
+      );
 
       const traceGuard = (grow: number): void => {
         ctx.beginPath();
         ctx.moveTo(SWORD_GRIP_END - grow, -SWORD_GUARD_HALF_WIDTH - grow);
-        ctx.lineTo(SWORD_GRIP_END + SWORD_GUARD_THICKNESS + grow, -SWORD_GUARD_HALF_WIDTH * 0.72 - grow);
-        ctx.lineTo(SWORD_GRIP_END + SWORD_GUARD_THICKNESS + grow, SWORD_GUARD_HALF_WIDTH * 0.72 + grow);
+        ctx.lineTo(
+          SWORD_GRIP_END + SWORD_GUARD_THICKNESS + grow,
+          -SWORD_GUARD_HALF_WIDTH * 0.72 - grow,
+        );
+        ctx.lineTo(
+          SWORD_GRIP_END + SWORD_GUARD_THICKNESS + grow,
+          SWORD_GUARD_HALF_WIDTH * 0.72 + grow,
+        );
         ctx.lineTo(SWORD_GRIP_END - grow, SWORD_GUARD_HALF_WIDTH + grow);
         ctx.closePath();
       };
       paintSteel(ctx, traceGuard, iron, outline, () => {
         ctx.fillStyle = rgba(iron.light, 0.55);
-        ctx.fillRect(SWORD_GRIP_END, -SWORD_GUARD_HALF_WIDTH, SWORD_GUARD_THICKNESS, SWORD_GUARD_HALF_WIDTH * 0.5);
+        ctx.fillRect(
+          SWORD_GRIP_END,
+          -SWORD_GUARD_HALF_WIDTH,
+          SWORD_GUARD_THICKNESS,
+          SWORD_GUARD_HALF_WIDTH * 0.5,
+        );
       });
 
       const bladeStart = SWORD_GRIP_END + SWORD_GUARD_THICKNESS;
@@ -351,7 +375,15 @@ export function makeAxeProp(palette: GoblinPalette, seed: () => number): GoblinP
       // Full length, and drawn first: the haft runs past the eye and out the far
       // side of the head, which is the detail that stops the bit reading as a
       // blade mounted on the end of a stick.
-      drawHaft(ctx, -AXE_OVERHANG, AXE_TIP, AXE_HAFT_HALF_WIDTH * 1.15, AXE_HAFT_HALF_WIDTH * 0.85, wood, outline);
+      drawHaft(
+        ctx,
+        -AXE_OVERHANG,
+        AXE_TIP,
+        AXE_HAFT_HALF_WIDTH * 1.15,
+        AXE_HAFT_HALF_WIDTH * 0.85,
+        wood,
+        outline,
+      );
       drawWrap(ctx, AXE_LEAD_WRAP[0], AXE_LEAD_WRAP[1], AXE_HAFT_HALF_WIDTH, leather, outline);
       drawWrap(ctx, AXE_BUTT_WRAP[0], AXE_BUTT_WRAP[1], AXE_HAFT_HALF_WIDTH, leather, outline);
 
@@ -412,7 +444,12 @@ export function makeAxeProp(palette: GoblinPalette, seed: () => number): GoblinP
       ctx.fillStyle = outline;
       ctx.fillRect(AXE_EYE_END - 0.02, -AXE_HAFT_HALF_WIDTH * 2, 0.028, AXE_HAFT_HALF_WIDTH * 4);
       ctx.fillStyle = iron.dark;
-      ctx.fillRect(AXE_EYE_END - 0.016, -AXE_HAFT_HALF_WIDTH * 1.7, 0.02, AXE_HAFT_HALF_WIDTH * 3.4);
+      ctx.fillRect(
+        AXE_EYE_END - 0.016,
+        -AXE_HAFT_HALF_WIDTH * 1.7,
+        0.02,
+        AXE_HAFT_HALF_WIDTH * 3.4,
+      );
 
       ctx.restore();
     },
@@ -444,8 +481,23 @@ export function makeMaceProp(palette: GoblinPalette, seed: () => number): Goblin
       ctx.translate(hand.x, hand.y);
       ctx.rotate(wristAngle);
 
-      drawHaft(ctx, -MACE_OVERHANG, headCentre, MACE_HAFT_HALF_WIDTH * 1.2, MACE_HAFT_HALF_WIDTH, wood, outline);
-      drawWrap(ctx, -MACE_OVERHANG * 0.7, MACE_OVERHANG * 1.6, MACE_HAFT_HALF_WIDTH, leather, outline);
+      drawHaft(
+        ctx,
+        -MACE_OVERHANG,
+        headCentre,
+        MACE_HAFT_HALF_WIDTH * 1.2,
+        MACE_HAFT_HALF_WIDTH,
+        wood,
+        outline,
+      );
+      drawWrap(
+        ctx,
+        -MACE_OVERHANG * 0.7,
+        MACE_OVERHANG * 1.6,
+        MACE_HAFT_HALF_WIDTH,
+        leather,
+        outline,
+      );
 
       const traceFlanges = (grow: number): void => {
         ctx.beginPath();
@@ -482,7 +534,15 @@ export function makeMaceProp(palette: GoblinPalette, seed: () => number): Goblin
           FULL_CIRCLE_ANGLE,
         );
         ctx.fill();
-        paintPitting(ctx, headCentre - MACE_HEAD_RADIUS, MACE_TIP, MACE_HEAD_RADIUS, iron, leather, seed);
+        paintPitting(
+          ctx,
+          headCentre - MACE_HEAD_RADIUS,
+          MACE_TIP,
+          MACE_HEAD_RADIUS,
+          iron,
+          leather,
+          seed,
+        );
       });
 
       // A core disc behind the flanges, so the head has a body and the flanges
@@ -493,7 +553,13 @@ export function makeMaceProp(palette: GoblinPalette, seed: () => number): Goblin
       ctx.fill();
       ctx.fillStyle = rgba(iron.light, 0.4);
       ctx.beginPath();
-      ctx.arc(headCentre - MACE_HEAD_RADIUS * 0.24, -MACE_HEAD_RADIUS * 0.28, MACE_HEAD_RADIUS * 0.34, 0, FULL_CIRCLE_ANGLE);
+      ctx.arc(
+        headCentre - MACE_HEAD_RADIUS * 0.24,
+        -MACE_HEAD_RADIUS * 0.28,
+        MACE_HEAD_RADIUS * 0.34,
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
 
       // A knurled iron butt behind the hand, so the weapon's outline is never
@@ -573,8 +639,23 @@ export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): G
       ctx.translate(hand.x, hand.y);
       ctx.rotate(wristAngle);
 
-      drawHaft(ctx, -HAMMER_OVERHANG, HAMMER_TIP, HAMMER_HAFT_HALF_WIDTH * 1.2, HAMMER_HAFT_HALF_WIDTH * 0.9, wood, outline);
-      drawWrap(ctx, HAMMER_GRIP_WRAP[0], HAMMER_GRIP_WRAP[1], HAMMER_HAFT_HALF_WIDTH, leather, outline);
+      drawHaft(
+        ctx,
+        -HAMMER_OVERHANG,
+        HAMMER_TIP,
+        HAMMER_HAFT_HALF_WIDTH * 1.2,
+        HAMMER_HAFT_HALF_WIDTH * 0.9,
+        wood,
+        outline,
+      );
+      drawWrap(
+        ctx,
+        HAMMER_GRIP_WRAP[0],
+        HAMMER_GRIP_WRAP[1],
+        HAMMER_HAFT_HALF_WIDTH,
+        leather,
+        outline,
+      );
 
       // A blunt rectangle straddling the haft. Flat parallel edges on purpose:
       // it is the only clean rectangle in the weapon set, and that is the whole
@@ -609,8 +690,18 @@ export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): G
       // The langets: iron straps down the haft either side of the eye, which is
       // what stops the head reading as a sticker laid over the wood.
       ctx.fillStyle = iron.dark;
-      ctx.fillRect(HAMMER_EYE_START - 0.03, -HAMMER_HAFT_HALF_WIDTH * 1.6, 0.026, HAMMER_HAFT_HALF_WIDTH * 3.2);
-      ctx.fillRect(HAMMER_EYE_END + 0.008, -HAMMER_HAFT_HALF_WIDTH * 1.6, 0.026, HAMMER_HAFT_HALF_WIDTH * 3.2);
+      ctx.fillRect(
+        HAMMER_EYE_START - 0.03,
+        -HAMMER_HAFT_HALF_WIDTH * 1.6,
+        0.026,
+        HAMMER_HAFT_HALF_WIDTH * 3.2,
+      );
+      ctx.fillRect(
+        HAMMER_EYE_END + 0.008,
+        -HAMMER_HAFT_HALF_WIDTH * 1.6,
+        0.026,
+        HAMMER_HAFT_HALF_WIDTH * 3.2,
+      );
 
       ctx.restore();
     },
@@ -767,12 +858,7 @@ export function makeBowProp(palette: GoblinPalette, seed: () => number): GoblinP
           -BOW_TIP_SETBACK,
         );
         ctx.lineTo(sign * (BOW_LIMB + grow), -BOW_TIP_SETBACK + width * 2);
-        ctx.quadraticCurveTo(
-          sign * BOW_LIMB * 0.6,
-          BOW_BELLY + width * 2,
-          sign * BOW_RISER,
-          width,
-        );
+        ctx.quadraticCurveTo(sign * BOW_LIMB * 0.6, BOW_BELLY + width * 2, sign * BOW_RISER, width);
         ctx.closePath();
       };
 
@@ -866,7 +952,10 @@ export function makeBowProp(palette: GoblinPalette, seed: () => number): GoblinP
           ctx.fillStyle = outline;
           ctx.beginPath();
           ctx.moveTo(0, pull);
-          ctx.lineTo(sign * (BOW_FLETCH_HALF_WIDTH + PART_OUTLINE), pull + BOW_FLETCH_LENGTH * 0.55);
+          ctx.lineTo(
+            sign * (BOW_FLETCH_HALF_WIDTH + PART_OUTLINE),
+            pull + BOW_FLETCH_LENGTH * 0.55,
+          );
           ctx.lineTo(0, pull + BOW_FLETCH_LENGTH);
           ctx.closePath();
           ctx.fill();

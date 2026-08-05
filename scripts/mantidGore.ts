@@ -710,7 +710,10 @@ export function mantidGorePieces(): readonly MantidGorePiece[] {
       ctx.restore();
 
       // The torn ends get the wet dark of an opening rather than a flat cap.
-      for (const end of [{ p: centres[0], t: 0 }, { p: centres[STEPS], t: 1 }]) {
+      for (const end of [
+        { p: centres[0], t: 0 },
+        { p: centres[STEPS], t: 1 },
+      ]) {
         ctx.beginPath();
         ctx.arc(end.p.x, end.p.y, halfWidthAt(end.t) * 0.72, 0, TWO_PI);
         ctx.fillStyle = rgba(VISCERA_DARK, 0.8);

@@ -532,7 +532,6 @@ function slabPolygon(
   });
 }
 
-
 function traceOutline(ctx: Ctx, pts: readonly Pt[]): void {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
@@ -1015,10 +1014,14 @@ function drawLeg(ctx: Ctx, d: DrawCtx, leg: GolemLegPose, side: number, depth: n
   );
 
   const shinStart = shortenToward(knee, ankle, JOINT_GAP);
-  paintStone(ctx, slabPolygon(seed + 1, shinStart, ankle, SHIN_HALF_W, SHIN_HALF_W * 1.05, jitter), {
-    depth,
-    strata: 1,
-  });
+  paintStone(
+    ctx,
+    slabPolygon(seed + 1, shinStart, ankle, SHIN_HALF_W, SHIN_HALF_W * 1.05, jitter),
+    {
+      depth,
+      strata: 1,
+    },
+  );
 
   // A block of a foot, longer fore-aft in profile than it is wide across.
   const footHalfW = FOOT_HALF_W * (d.view.profile ? 1.25 : 1);
@@ -1301,7 +1304,9 @@ function drawEyes(ctx: Ctx, d: DrawCtx, centre: Pt, rx: number): void {
     if (d.view.profile && side < 0) continue;
     const x = d.view.profile
       ? centre.x + rx * 0.45
-      : centre.x + EYE_HALF_SPREAD * d.spec.bulk * side + d.view.project(d.pose.headTurn * rx * 0.2, 0);
+      : centre.x +
+        EYE_HALF_SPREAD * d.spec.bulk * side +
+        d.view.project(d.pose.headTurn * rx * 0.2, 0);
     ctx.fillStyle = rgba(SEAM, 0.9);
     ctx.beginPath();
     ctx.arc(x, eyeY, EYE_RADIUS * 1.7, 0, TWO_PI);
@@ -1555,12 +1560,7 @@ export function drawGolemSide(ctx: Ctx, pose: GolemPose, variant: GolemVariant):
   drawGolemFigure(ctx, 'side', pose, variant);
 }
 
-export function drawGolem(
-  ctx: Ctx,
-  view: GolemView,
-  pose: GolemPose,
-  variant: GolemVariant,
-): void {
+export function drawGolem(ctx: Ctx, view: GolemView, pose: GolemPose, variant: GolemVariant): void {
   drawGolemFigure(ctx, view, pose, variant);
 }
 
@@ -1879,11 +1879,15 @@ export function rockGolemRubblePieces(): readonly RubblePiece[] {
             Math.cos(angle) * SCATTER_PIECE_R * 1.15,
             Math.sin(angle) * SCATTER_PIECE_R * 0.8,
           );
-          paintStone(ctx, rubbleStone(700 + i, SCATTER_PIECE_R * 0.7, SCATTER_PIECE_R * 0.6, 5, 1), {
-            tone: lerp(-0.2, 0.2, i / SCATTER_STONES),
-            strata: 0,
-            seamWidth: 0.012,
-          });
+          paintStone(
+            ctx,
+            rubbleStone(700 + i, SCATTER_PIECE_R * 0.7, SCATTER_PIECE_R * 0.6, 5, 1),
+            {
+              tone: lerp(-0.2, 0.2, i / SCATTER_STONES),
+              strata: 0,
+              seamWidth: 0.012,
+            },
+          );
           ctx.restore();
         }
         paintGlow(ctx, { x: 0, y: 0 }, SCATTER_PIECE_R * 0.5, spec, 0.5);

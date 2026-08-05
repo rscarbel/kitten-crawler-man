@@ -10,7 +10,7 @@
  * Y-sorted render pass.
  *
  * **Placement is derived from the finished map, not restated.** Signs hang off
- * `buildingEntries` and lamps off the plan's own street rectangles, so a
+ * `buildingEntries` and lamps off the `TownPlan`'s own street rectangles, so a
  * building or a street that moves takes its furniture with it. That is the same
  * choice `?townmap` makes when it re-derives footprints from the grid instead of
  * having the generator export them: a second copy of a coordinate is a second
@@ -53,7 +53,7 @@ import type { GameSystem } from './GameSystem';
 import type { TownPropRenderable } from './townPropRenderable';
 
 /**
- * Streets the town lights, by the plan's own surface names. Market Street and
+ * Streets the town lights, by the `TownPlan`'s own surface names. Market Street and
  * Low Street are the town's two lit thoroughfares; King's Road is the arrival
  * sightline from the south gate, and the two Low Quarter alleys are the reason
  * for lamps at all — an unlit alley beside a nightclub is a corridor, a lit one
@@ -97,8 +97,8 @@ const DEFAULT_DOORWAY_WIDTH_TILES = 1;
 const LAMP_FLICKER_PHASE_STRIDE_RAD = GOLDEN_ANGLE_RAD;
 
 /**
- * Where a piece of clutter belongs, named the way the plan names things rather
- * than as a coordinate.
+ * Where a piece of clutter belongs, named the way the `TownPlan` names things
+ * rather than as a coordinate.
  *
  * `yard` puts it inside a block interior, offset from that yard's north-west
  * corner. `door` puts it on a building's own frontage, offset from its door
@@ -620,7 +620,7 @@ const CARDINALS: ReadonlyArray<readonly [number, number]> = [
  *
  * A street rectangle is longer than it is wide, and which axis that is decides
  * which two edges are kerbs. A square one would be a plaza, not a street, and
- * the plan has none.
+ * the `TownPlan` has none.
  */
 function kerbSites(bounds: TileRect): TileXY[] {
   const sites: TileXY[] = [];

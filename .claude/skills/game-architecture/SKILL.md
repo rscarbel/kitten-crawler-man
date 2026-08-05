@@ -40,18 +40,42 @@ See the `add-system` skill for the recipe.
 
 `src/ai/AIAdapter.ts` — singleton bridging to an external LLM server on `localhost:3001`; silently no-ops when disabled (`AI_ENABLED` in `.env`). Exposes game actions (`src/ai/aiActions.ts`, allowlist-guarded) and a tool vocabulary (`src/ai/aiTools.ts`); subscribes to EventBus events and streams state snapshots. AI-spawned mobs reuse the same `createMob` spawner as levels.
 
+## Docs and plans
+
+`docs/` holds two different kinds of file, and they have opposite lifetimes.
+
+Durable reference — describes the shipped system, is kept and maintained:
+
+- `docs/town.md` — how the third floor's town is generated, rendered and tuned
+- `docs/over-city-reference.md` — source-material background for third-floor content
+- `docs/asset-management.md` — lazy sprite/sound loading, per-floor eviction, declared coverage
+- `docs/difficulty-fairness-rules.md` — the P1-P5 fairness rules and the target-feel bands
+
+Every other file in `docs/` is an implementation plan — usually named
+`*-plan.md`, occasionally not — meaning scaffolding written for an agent to
+execute, and DELETED once the work ships. Never cite a
+plan, a plan phase, or a plan section number from code or from a skill — the
+pointer is guaranteed to rot.
+
+Never cite a source line number either — not from code, and not from a plan.
+It rots on the next edit to that file, and a plan is read by an agent that will
+trust it, so a stale `Foo.ts:317` sends that agent to the wrong code. Point at a
+file, a function, a class, a constant, or a distinctive quoted fragment; those
+survive edits and can be found by grep. When writing a plan, cite symbols for the
+same reason.
+
 ## Where does my change go?
 
-| Change | Skill |
-|---|---|
-| New enemy / NPC | `add-creature` |
-| New sprite / animation | `add-sprite` |
-| New item / loot / shop stock | `add-item` |
-| New ability / spell | `add-ability` |
-| New level / tile type | `add-level` |
-| New ground/floor texture | `add-ground-tile` |
-| New quest | `add-quest` |
-| New sound / music | `add-sound` |
-| New gameplay mechanic | `add-system` |
-| New menu / dialog / HUD element | `add-ui` |
-| Running & verifying | `dev-workflow` |
+| Change                          | Skill             |
+| ------------------------------- | ----------------- |
+| New enemy / NPC                 | `add-creature`    |
+| New sprite / animation          | `add-sprite`      |
+| New item / loot / shop stock    | `add-item`        |
+| New ability / spell             | `add-ability`     |
+| New level / tile type           | `add-level`       |
+| New ground/floor texture        | `add-ground-tile` |
+| New quest                       | `add-quest`       |
+| New sound / music               | `add-sound`       |
+| New gameplay mechanic           | `add-system`      |
+| New menu / dialog / HUD element | `add-ui`          |
+| Running & verifying             | `dev-workflow`    |

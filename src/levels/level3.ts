@@ -92,10 +92,10 @@ export const level3: LevelDef = {
   mapSize: 280,
   // Deliberately does NOT include the bounty/circus/quill/murder-mystery
   // groups: none of those systems is named anywhere in this def (they key off
-  // map features like `gameMap.circusCentre`, not `LevelDef`), which is
-  // exactly the trap `docs/asset-management-plan.md` calls out. Their
-  // coverage is unioned in by level id from `SYSTEM_ASSET_REQUIREMENTS`
-  // instead — see `scripts/verify-assets.ts`.
+  // map features like `gameMap.circusCentre`, not `LevelDef`), so a naive
+  // "union every group named in this level's own fields" pass would silently
+  // drop their sprite coverage. Their coverage is unioned in by level id from
+  // `SYSTEM_ASSET_REQUIREMENTS` instead — see `scripts/verify-assets.ts`.
   // `dungeon_common` covers the goblin weapon-variant sheets — the permanent
   // `campSpawns.goblin` roster below depends on them directly, and that must
   // not ride on `bounty_dark_knight`'s escort-goblin coverage coincidentally

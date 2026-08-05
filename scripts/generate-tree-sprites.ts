@@ -36,7 +36,7 @@ const TILE_X = TILE_SCALE;
 /** Top edge of the anchor tile — three tiles down from the top of the frame. */
 const TILE_Y = TILE_SCALE * 3;
 
-/** `TREE` in `src/map/tileTypes.ts`. Declared by exactly one sheet (see §5.3). */
+/** `TREE` in `src/map/tileTypes.ts`. Exactly one sheet may declare this tile type. */
 const TREE_TILE_TYPE_ID = 13;
 
 /**

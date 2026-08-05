@@ -359,7 +359,11 @@ export class AIAdapter {
 
     this.eventUnsubs.push(
       bus.on('mobKilled', (e) => {
-        const killerName = e.killer === ctx.getHuman() ? 'Human' : 'Cat';
+        // A kill with no killer is not the cat's. Status ticks and mobs killing
+        // each other both arrive here with a null killer, and reading that as
+        // "not the human, therefore the cat" credited her for every burn.
+        const killerName =
+          e.killer === null ? 'Unknown' : e.killer === ctx.getHuman() ? 'Human' : 'Cat';
         const mobName = e.mob.constructor.name;
         this.sendEvent({
           ts: Date.now(),

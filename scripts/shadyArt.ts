@@ -479,13 +479,7 @@ function strokeAndFill(ctx: Ctx, fill: string): void {
 }
 
 /** The tapered-quad path both segment painters share. */
-function taperedPath(
-  ctx: Ctx,
-  from: Pt,
-  to: Pt,
-  halfFrom: number,
-  halfTo: number,
-): void {
+function taperedPath(ctx: Ctx, from: Pt, to: Pt, halfFrom: number, halfTo: number): void {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -635,7 +629,12 @@ function drawCloak(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   ctx.lineTo(hx - HIP_HALF + waistShift, hipY);
   // The hem is a shallow curve, not a straight line: a flat bottom edge on a
   // long garment reads as a bell, and a bell reads as a dress.
-  ctx.quadraticCurveTo(hx - HEM_HALF + hemShift, lerp(hipY, hemY, 0.7), hx - HEM_HALF + hemShift, hemY);
+  ctx.quadraticCurveTo(
+    hx - HEM_HALF + hemShift,
+    lerp(hipY, hemY, 0.7),
+    hx - HEM_HALF + hemShift,
+    hemY,
+  );
   ctx.quadraticCurveTo(hx + hemShift, hemY + HEM_DIP, hx + HEM_HALF + hemShift, hemY);
   ctx.quadraticCurveTo(
     hx + HEM_HALF + hemShift,
@@ -723,12 +722,7 @@ function drawBelt(ctx: Ctx, skel: ShadySkeleton): void {
   strokeAndFill(ctx, POUCH_MID);
   // A flap, so it commits to being a pouch rather than a misplaced fitting.
   ctx.beginPath();
-  ctx.rect(
-    x + POUCH_OFFSET_X - POUCH_HALF_WIDTH,
-    y,
-    POUCH_HALF_WIDTH * 2,
-    POUCH_FLAP_HEIGHT,
-  );
+  ctx.rect(x + POUCH_OFFSET_X - POUCH_HALF_WIDTH, y, POUCH_HALF_WIDTH * 2, POUCH_FLAP_HEIGHT);
   strokeAndFill(ctx, BELT_MID);
 }
 
@@ -833,7 +827,12 @@ function drawMantle(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
     sx + MANTLE_HALF,
     tipY,
   );
-  ctx.quadraticCurveTo(sx + MANTLE_HALF + lag, topY + MANTLE_SHOULDER_DROP, sx + collarHalf + lag, topY);
+  ctx.quadraticCurveTo(
+    sx + MANTLE_HALF + lag,
+    topY + MANTLE_SHOULDER_DROP,
+    sx + collarHalf + lag,
+    topY,
+  );
   ctx.quadraticCurveTo(sx + lag, topY - MANTLE_COLLAR_RISE, sx - collarHalf + lag, topY);
   ctx.closePath();
   strokeAndFill(ctx, MANTLE_MID);
@@ -863,7 +862,12 @@ function drawMantle(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   const trimHalf = MANTLE_HALF * MANTLE_TRIM_SPAN;
   ctx.beginPath();
   ctx.moveTo(sx - trimHalf, hemY + MANTLE_HEM_DIP * MANTLE_TRIM_SPAN);
-  ctx.quadraticCurveTo(sx, hemY + MANTLE_HEM_DIP, sx + trimHalf, hemY + MANTLE_HEM_DIP * MANTLE_TRIM_SPAN);
+  ctx.quadraticCurveTo(
+    sx,
+    hemY + MANTLE_HEM_DIP,
+    sx + trimHalf,
+    hemY + MANTLE_HEM_DIP * MANTLE_TRIM_SPAN,
+  );
   ctx.lineTo(sx + trimHalf, hemY + MANTLE_HEM_DIP * MANTLE_TRIM_SPAN - MANTLE_TRIM);
   ctx.quadraticCurveTo(
     sx,
@@ -1028,7 +1032,12 @@ function drawHood(ctx: Ctx, skel: ShadySkeleton, pose: ShadyPose): void {
   ctx.beginPath();
   ctx.moveTo(openX - COWL_RX, COWL_FORWARD + COWL_RY);
   ctx.quadraticCurveTo(openX - COWL_RX, COWL_FORWARD - COWL_RY, openX, COWL_FORWARD - COWL_RY);
-  ctx.quadraticCurveTo(openX + COWL_RX, COWL_FORWARD - COWL_RY, openX + COWL_RX, COWL_FORWARD + COWL_RY);
+  ctx.quadraticCurveTo(
+    openX + COWL_RX,
+    COWL_FORWARD - COWL_RY,
+    openX + COWL_RX,
+    COWL_FORWARD + COWL_RY,
+  );
   ctx.closePath();
   ctx.fillStyle = COWL_VOID;
   ctx.fill();
@@ -1067,7 +1076,8 @@ export function drawShady(ctx: Ctx, pose: ShadyPose): void {
   drawCloak(ctx, skel, pose);
   drawBelt(ctx, skel);
 
-  if (!pose.leftHandBehind && !pose.leftArmOverMantle) drawArm(ctx, skel.leftArm, pose.leftFist, -1);
+  if (!pose.leftHandBehind && !pose.leftArmOverMantle)
+    drawArm(ctx, skel.leftArm, pose.leftFist, -1);
   if (!pose.rightHandBehind && !pose.rightArmOverMantle)
     drawArm(ctx, skel.rightArm, pose.rightFist, 1);
 
@@ -1083,8 +1093,8 @@ export function drawShady(ctx: Ctx, pose: ShadyPose): void {
 /**
  * Where the cowl's void sits for a given pose, in tile units. The bake gate
  * samples this region and asserts it is genuinely black — the one property of
- * this figure that the plan calls out as non-negotiable, and the one a later
- * palette tweak could quietly undo.
+ * this figure that is non-negotiable, and the one a later palette tweak could
+ * quietly undo.
  */
 /** Sampled a little low in the arch, where the opening is at its deepest. */
 const COWL_SAMPLE_DROP = 0.3;
@@ -1110,5 +1120,3 @@ export function cowlWindow(pose: ShadyPose): { cx: number; cy: number; rx: numbe
     ry: COWL_RY * COWL_SAMPLE_INSET_Y,
   };
 }
-
-

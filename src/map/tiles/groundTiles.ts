@@ -966,8 +966,8 @@ const KERB_JOINT_COLOR = 'rgba(0,0,0,0.20)';
  *
  * A tile standing under a building's art is never kerbed against, and that has
  * to be asked of the sprite footprints rather than of the tile type: the ground
- * under a facade keeps whatever surface the plan painted there, which is usually
- * verge, so classifying by type alone laid **167 of the map's 388 kerb edges
+ * under a facade keeps whatever surface the `TownPlan` painted there, which is
+ * usually verge, so classifying by type alone laid **167 of the map's 388 kerb edges
  * along a building's base row** — a pale lip drawn against a wall, inside the
  * contact-shadow band the occlusion pass adds two passes later. The occluder test
  * already knows those tiles are solid; this asks the same question.
@@ -1053,7 +1053,8 @@ const NOISE_MARGIN_SAMPLES = 1;
  * blended with the default operator, which lands on `dest * (1 - alpha)` — the
  * same result a `multiply` by a grey would give, without leaving the compositor's
  * fast path. It measured as two thirds of the whole ground pass when it was a
- * `multiply`. Darkening-only is why the plan's ±6% is written here as 0–12%.
+ * `multiply`. The design target is a symmetric ±6% variation, but darkening
+ * only (never lightening) doubles that to a 0–12% range here.
  */
 const NOISE_DEPTH = 0.12;
 
@@ -1287,7 +1288,7 @@ const OCCLUSION_SIDES: ReadonlyArray<OcclusionSide> = [
  *
  * **The tile types are not enough to find a town building.** A sprite building is
  * one anchor tile carrying a manifest key, and every other tile under its facade
- * keeps whatever surface the plan painted there — so every one of the town's
+ * keeps whatever surface the `TownPlan` painted there — so every one of the town's
  * fifteen buildings and its tower was invisible to the occluder test, and the
  * ground in front of a facade was shaded by nothing at all. That is what made the
  * buildings read as stickers on the lawn: a wall casts a contact shadow and these

@@ -64,7 +64,7 @@ export function drawVespaAcidProjectile(
 
   ctx.save();
 
-  // A trailing drip behind the glob — the thrown-liquid read the brief asks for.
+  // A trailing drip behind the glob gives it a thrown-liquid read.
   const dripLength = 10 + Math.sin(phase * TWO_PI + 1) * 2;
   ctx.beginPath();
   ctx.moveTo(cx - coreRadius * 0.5, cy - 1);
