@@ -2,7 +2,7 @@ import type { Player } from '../Player';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, normalize } from '../utils';
-import { drawKrakarenSprite, drawSlamShadow, drawSlamImpact } from '../sprites/krakarenSprite';
+import { drawKrakarenSprite } from '../sprites/krakarenSprite';
 
 const KRAKAREN_HP = 200;
 const KRAKAREN_SPEED = 0; // immobile
@@ -38,6 +38,14 @@ const DAMAGE_FLASH_SWING = 8;
 const CENTER_OFFSET = 0.5;
 const DUMMY_TARGET_INDEX = 0;
 const FRAMES_PER_SECOND = 60;
+const KRAKAREN_CULL_MARGIN_TILES = 3;
+
+/** A slam telegraph or its impact, in world pixels, with its animation progress. */
+export interface SlamMarker {
+  x: number;
+  y: number;
+  progress: number;
+}
 
 type KrakarenState = 'idle' | 'melee_windup' | 'melee_swing' | 'melee_cooldown' | 'slam_charging';
 
@@ -75,6 +83,41 @@ export class KrakarenClone extends Mob {
 
   // Animation time
   private animTime = 0;
+
+  /**
+   * Where the next slam lands and how far through its warning it is, or null
+   * when no slam is charging. Rendered by `BossRoomSystem` in the ground pass:
+   * the target is up to the full aggro range away from this mob, so drawing it
+   * here would tie a twelve-tile-away marker to this mob's own cull margin and
+   * silhouette composite box.
+   */
+  get slamShadow(): SlamMarker | null {
+    if (!this.slamActive) return null;
+    return {
+      x: this.slamTargetX,
+      y: this.slamTargetY,
+      progress: 1 - this.slamShadowTimer / SLAM_SHADOW_FRAMES,
+    };
+  }
+
+  /** Where the last slam landed and how far through its impact it is, or null. */
+  get slamImpact(): SlamMarker | null {
+    if (this.slamImpactTimer <= 0) return null;
+    return {
+      x: this.slamTargetX,
+      y: this.slamTargetY,
+      progress: 1 - this.slamImpactTimer / SLAM_IMPACT_FRAMES,
+    };
+  }
+
+  /**
+   * Its tentacles reach nearly three tiles past its one-tile footprint, so the
+   * cull margin has to cover the art or they pop out of existence while most of
+   * them are still on screen.
+   */
+  override get cullMarginTiles(): number {
+    return KRAKAREN_CULL_MARGIN_TILES;
+  }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, KRAKAREN_HP, KRAKAREN_SPEED);
@@ -293,18 +336,6 @@ export class KrakarenClone extends Mob {
     if (!this.isAlive) return;
     const sx = this.x - camX;
     const sy = this.y - camY;
-
-    // Draw slam warning shadow (before boss so it appears on the ground)
-    if (this.slamActive) {
-      const progress = 1 - this.slamShadowTimer / SLAM_SHADOW_FRAMES;
-      drawSlamShadow(ctx, this.slamTargetX - camX, this.slamTargetY - camY, tileSize, progress);
-    }
-
-    // Draw slam impact effect
-    if (this.slamImpactTimer > 0) {
-      const progress = 1 - this.slamImpactTimer / SLAM_IMPACT_FRAMES;
-      drawSlamImpact(ctx, this.slamTargetX - camX, this.slamTargetY - camY, tileSize, progress);
-    }
 
     ctx.save();
     if (this.damageFlash > 0) {

@@ -13,6 +13,8 @@ import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
+import { KrakarenClone } from '../creatures/KrakarenClone';
+import { drawSlamShadow, drawSlamImpact } from '../sprites/krakarenSprite';
 import { viewportWidth } from '../core/Viewport';
 
 interface VomitProjectile {
@@ -298,6 +300,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
   private readonly vomitProjectiles: VomitProjectile[] = [];
   private readonly acidPuddles: AcidPuddle[] = [];
+
+  /**
+   * Rebuilt from the mob list every frame rather than kept across frames, so a
+   * checkpoint restore can never leave a disposed boss in here.
+   */
+  private readonly liveKrakarens: KrakarenClone[] = [];
   private humanAcidTick = 0;
   private catAcidTick = 0;
 
@@ -736,6 +744,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
     }
 
+    this.cacheLiveKrakarens(mobs);
     this.spawnHoarderCockroaches(mobs, mobGrid);
     this.tickCockroachTTLs(mobs, mobGrid);
     this.processVomitProjectiles(mobs, human, cat);
@@ -827,6 +836,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const maxPy = (bounds.y + bounds.h - 1) * TILE_SIZE;
     entity.x = clamp(entity.x, minPx, maxPx);
     entity.y = clamp(entity.y, minPy, maxPy);
+  }
+
+  private cacheLiveKrakarens(mobs: Mob[]): void {
+    this.liveKrakarens.length = 0;
+    for (const mob of mobs) {
+      if (mob instanceof KrakarenClone && mob.isAlive) this.liveKrakarens.push(mob);
+    }
   }
 
   private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
@@ -1045,6 +1061,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       this.renderSingleBossRoomObjects(ctx, camX, camY, this.states[i].bounds, bossType);
     }
     this.renderAcidPuddles(ctx, camX, camY);
+    this.renderKrakarenSlams(ctx, camX, camY);
   }
 
   renderProjectiles(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -1071,6 +1088,24 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         puddle.ttl,
         PUDDLE_FADE_FRAMES,
       );
+    }
+  }
+
+  /**
+   * The slam telegraph is floor paint, not part of the boss: drawn here it
+   * survives the boss being culled off screen and the silhouette composite that
+   * clips whatever a flashing mob draws beyond its own tile.
+   */
+  private renderKrakarenSlams(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const boss of this.liveKrakarens) {
+      const shadow = boss.slamShadow;
+      if (shadow) {
+        drawSlamShadow(ctx, shadow.x - camX, shadow.y - camY, TILE_SIZE, shadow.progress);
+      }
+      const impact = boss.slamImpact;
+      if (impact) {
+        drawSlamImpact(ctx, impact.x - camX, impact.y - camY, TILE_SIZE, impact.progress);
+      }
     }
   }
 
