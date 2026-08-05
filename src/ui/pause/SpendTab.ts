@@ -415,6 +415,7 @@ export function renderSpendTab(
     height: BACK_BTN_CONTENT_H,
     label: 'Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => setTab('main'),
   });
 

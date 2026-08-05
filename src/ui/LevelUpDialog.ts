@@ -3,7 +3,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import { wrapTextLines, drawPowerUpIcon } from './canvasUtils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox } from './Box';
-import { drawButton, BUTTON_PRESETS } from './Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Dialog box dimensions
@@ -124,12 +124,6 @@ export class LevelUpDialog {
     return true;
   }
 
-  handleSpaceBar(): boolean {
-    if (!this.isShowing) return false;
-    if (this.phase === 'done') this.advance();
-    return true;
-  }
-
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.isShowing || !this.current) return;
     const current = this.current;
@@ -230,6 +224,9 @@ export class LevelUpDialog {
       const btnY = by + boxH - OK_BUTTON_Y_OFFSET;
       this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
 
+      // Only once the count-up has finished: before that there is nothing to
+      // accept, and the press should keep falling through to whatever wanted it.
+      beginMenuFocus('level-up');
       drawButton(ctx, {
         x: btnX,
         y: btnY,
@@ -237,7 +234,9 @@ export class LevelUpDialog {
         height: btnH,
         label: 'OK',
         ...BUTTON_PRESETS.award,
+        primaryAction: true,
       });
+      endMenuFocus();
     }
   }
 }

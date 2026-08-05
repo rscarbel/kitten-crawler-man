@@ -35,6 +35,7 @@ import {
   ARENA_REACH,
   ARENA_WALL_THICKNESS,
   arenaDoorTileAt,
+  arenaGateBreachTiles,
   arenaGateTileAt,
   arenaReserveRect,
 } from './arenaGeometry';
@@ -906,15 +907,9 @@ function carveArenaGate(
   centreY: number,
   landingRoom: Rect,
 ): void {
-  const marginY = centreY - ARENA_REACH;
-  const landingSouthY = landingRoom.y + landingRoom.h;
-  for (const offset of ARENA_GATE_COLUMN_OFFSETS) {
-    const gx = centreX + offset;
-    if (gx < 0 || gx >= size) continue;
-    for (let gy = marginY; gy < landingSouthY; gy++) {
-      if (gy < 0 || gy >= size) continue;
-      grid[gy][gx].type = FloorTypeValue.concrete;
-    }
+  for (const tile of arenaGateBreachTiles({ x: centreX, y: centreY }, landingRoom)) {
+    if (tile.x < 0 || tile.x >= size || tile.y < 0 || tile.y >= size) continue;
+    grid[tile.y][tile.x].type = FloorTypeValue.concrete;
   }
 }
 
@@ -1467,6 +1462,10 @@ function buildDungeon(
             );
             if (!spansGateColumns) continue;
             segments.addRoom(rect, SEGMENT_BEYOND);
+            // The breach is carved much later, straight through rock nothing has
+            // claimed yet; claiming it now is what stops a free-region room being
+            // seated on the run and turning the gate into a way in from the front.
+            segments.claimCorridor(arenaGateBreachTiles(arenaCentre, rect), SEGMENT_BEYOND);
             const index = addRoom(rect, regularFloorFor(centre), 'regular');
             beyondRoomIndices.push(index);
             return index;

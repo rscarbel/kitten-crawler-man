@@ -1,6 +1,6 @@
 import { drawText } from './TextBox';
 import { drawModal, drawOverlay } from './Box';
-import { drawButton, BUTTON_PRESETS } from './Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Sparkle {
@@ -137,13 +137,6 @@ export class LevelCompleteScreen {
       return true;
     }
     return false;
-  }
-
-  handleSpaceBar(): boolean {
-    if (!this._active || this.frame < BTN_APPEAR_FRAMES) return false;
-    this._active = false;
-    this.onContinue?.();
-    return true;
   }
 
   private spawnBurst(cx: number, cy: number, count: number): void {
@@ -362,6 +355,9 @@ export class LevelCompleteScreen {
       const btnX = panelCenterX - btnW / 2;
       const btnY = panel.y + panelH - btnH - BTN_MARGIN_BOTTOM;
 
+      // Declared here rather than at the top of `render`: the button fades in
+      // after the panel, and an accept press before it exists must not be eaten.
+      beginMenuFocus('level-complete');
       const btn = drawButton(ctx, {
         x: btnX,
         y: btnY,
@@ -374,7 +370,9 @@ export class LevelCompleteScreen {
         glow: '#ffd700',
         glowBlur: BTN_GLOW_BLUR,
         alpha: btnAlpha * alpha,
+        primaryAction: true,
       });
+      endMenuFocus();
 
       this.btnResult = { x: btn.x, y: btn.y, width: btn.width, height: btn.height };
     }

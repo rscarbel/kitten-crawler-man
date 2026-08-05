@@ -1,6 +1,7 @@
 import { TILE_SIZE, PLAYER_SPEED, WADE_SPEED_FACTOR } from '../core/constants';
 import { platform } from '../core/Platform';
 import { type InputManager } from '../core/InputManager';
+import { keybindings } from '../core/Keybindings';
 import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
@@ -72,10 +73,10 @@ export function readMovement(
 ): MovementInput {
   let dx = 0;
   let dy = 0;
-  if (input.has('ArrowUp') || input.has('w')) dy -= 1;
-  if (input.has('ArrowDown') || input.has('s')) dy += 1;
-  if (input.has('ArrowLeft') || input.has('a')) dx -= 1;
-  if (input.has('ArrowRight') || input.has('d')) dx += 1;
+  if (keybindings.isHeld(input, 'moveUp')) dy -= 1;
+  if (keybindings.isHeld(input, 'moveDown')) dy += 1;
+  if (keybindings.isHeld(input, 'moveLeft')) dx -= 1;
+  if (keybindings.isHeld(input, 'moveRight')) dx += 1;
 
   let isMobile = false;
   const touchHoldMs = mobileTapStart ? Date.now() - mobileTapStart.time : 0;

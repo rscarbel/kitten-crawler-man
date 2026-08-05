@@ -411,7 +411,7 @@ export class DesperadoClubSystem {
   handleClick(mx: number, my: number, active: Player): boolean {
     const shop = this.activeShop();
     if (shop) {
-      shop.handleClick(mx, my, active);
+      shop.handleClick(mx, my);
       return true;
     }
     if (this.casino.open) {

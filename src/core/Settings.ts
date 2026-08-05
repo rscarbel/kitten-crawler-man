@@ -41,11 +41,22 @@ export const MAX_SHARP_RENDER_SCALE = 2;
 /** The unscaled backing store: one device pixel per CSS pixel. */
 export const PERFORMANCE_RENDER_SCALE = 1;
 
+/**
+ * Keyboard overrides, stored as raw action-name → key-list pairs.
+ *
+ * Only the *shape* is checked here; which action names and key strings are
+ * meaningful is `Keybindings`' business, and this module deliberately does not
+ * import it — the dependency runs the other way, so a binding table can be
+ * built out of persisted settings without a cycle.
+ */
+type StoredBindings = Record<string, readonly string[]>;
+
 interface SettingsData {
   quality: QualityPreset;
   masterVolume: number;
   sfxVolume: number;
   musicVolume: number;
+  bindings: StoredBindings;
 }
 
 const DEFAULTS: SettingsData = {
@@ -53,6 +64,7 @@ const DEFAULTS: SettingsData = {
   masterVolume: DEFAULT_MASTER_VOLUME,
   sfxVolume: DEFAULT_SFX_VOLUME,
   musicVolume: DEFAULT_MUSIC_VOLUME,
+  bindings: {},
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
@@ -63,6 +75,24 @@ function readVolume(source: Record<string, unknown>, key: string, fallback: numb
   const raw = source[key];
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
   return Math.min(MAX_VOLUME, Math.max(MIN_VOLUME, raw));
+}
+
+/**
+ * Assigning this key on an object literal re-points its prototype instead of
+ * adding a property, so a hand-edited payload carrying it is dropped outright.
+ */
+const PROTOTYPE_POLLUTION_KEY = '__proto__';
+
+function readBindings(source: Record<string, unknown>, key: string): StoredBindings {
+  const raw = source[key];
+  if (typeof raw !== 'object' || raw === null) return {};
+  const result: StoredBindings = {};
+  for (const [action, keys] of Object.entries(raw)) {
+    if (action === PROTOTYPE_POLLUTION_KEY) continue;
+    if (!Array.isArray(keys)) continue;
+    result[action] = keys.filter((entry): entry is string => typeof entry === 'string');
+  }
+  return result;
 }
 
 /**
@@ -92,6 +122,7 @@ function load(): SettingsData {
     masterVolume: readVolume(stored, 'masterVolume', DEFAULTS.masterVolume),
     sfxVolume: readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume),
     musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
+    bindings: readBindings(stored, 'bindings'),
   };
 }
 
@@ -131,6 +162,16 @@ class Settings {
 
   setMusicVolume(volume: number): void {
     this.data.musicVolume = clampVolume(volume);
+    this.persist();
+  }
+
+  get bindings(): Readonly<StoredBindings> {
+    return this.data.bindings;
+  }
+
+  /** Replaces the whole override map; `Keybindings` owns what belongs in it. */
+  setBindings(bindings: StoredBindings): void {
+    this.data.bindings = bindings;
     this.persist();
   }
 

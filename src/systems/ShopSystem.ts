@@ -3,8 +3,10 @@ import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawOverlay } from '../ui/Box';
+import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import type { ButtonRect } from '../ui/pause/types';
 import { drawShopkeeper } from '../sprites/shopkeeperSprite';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -27,6 +29,15 @@ const FEEDBACK_BOX_H = 28;
 const FEEDBACK_TEXT_SIZE = 12;
 
 const PANEL_OVERLAY_ALPHA = 0.62;
+const PANEL_FILL_COLOR = '#120d04';
+const PANEL_BORDER_COLOR = '#c8a840';
+const PANEL_BORDER_WIDTH = 2;
+const BUY_AFFORDABLE_FILL = '#14400a';
+const BUY_UNAFFORDABLE_FILL = '#281818';
+const BUY_AFFORDABLE_BORDER = '#5aaa34';
+const BUY_UNAFFORDABLE_BORDER = '#3a2020';
+const BUY_AFFORDABLE_LABEL = '#c8e890';
+const BUY_UNAFFORDABLE_LABEL = '#5a4040';
 const PANEL_W = 400;
 const PANEL_ITEM_H = 56;
 const PANEL_HEADER_H = 72;
@@ -59,11 +70,11 @@ const PANEL_BTN_W = 68;
 const PANEL_BTN_H = 32;
 const PANEL_BTN_BORDER_W = 1.5;
 const PANEL_BTN_X_MARGIN = 12;
-const PANEL_BTN_TEXT_Y = 21;
-const PANEL_BTN_TEXT_BASELINE = 10;
 const PANEL_BTN_TEXT_SIZE = 12;
-const PANEL_CLOSE_Y_FROM_BOTTOM = 12;
-const PANEL_CLOSE_BASELINE = 8;
+/** The footer's Close button, sized to sit inside PANEL_FOOTER_H with a hair of margin. */
+const PANEL_CLOSE_BTN_W = 150;
+const PANEL_CLOSE_BTN_H = 24;
+const PANEL_CLOSE_BTN_Y_FROM_BOTTOM = 28;
 const PANEL_CLOSE_SIZE = 10;
 
 const HEALTH_POTION_PRICE = 5;
@@ -120,7 +131,8 @@ export class ShopSystem implements GameSystem {
 
   private feedbackMsg = '';
   private feedbackTimer = 0;
-  private buyRects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  /** Rebuilt every render, so a click and the row it hits can never drift apart. */
+  private panelButtons: ButtonRect[] = [];
 
   private readonly title: string;
   private readonly items: ReadonlyArray<ShopItem>;
@@ -201,18 +213,22 @@ export class ShopSystem implements GameSystem {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    ctx.fillStyle = `rgba(0,0,0,${PANEL_OVERLAY_ALPHA})`;
-    ctx.fillRect(0, 0, cw, ch);
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: PANEL_OVERLAY_ALPHA });
 
     const panelH = PANEL_HEADER_H + this.items.length * PANEL_ITEM_H + PANEL_FOOTER_H;
     const panelX = cw / 2 - PANEL_W / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = '#120d04';
-    ctx.fillRect(panelX, panelY, PANEL_W, panelH);
-    ctx.strokeStyle = '#c8a840';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, PANEL_W, panelH);
+    drawBox(ctx, {
+      x: panelX,
+      y: panelY,
+      width: PANEL_W,
+      height: panelH,
+      fill: PANEL_FILL_COLOR,
+      border: PANEL_BORDER_COLOR,
+      borderWidth: PANEL_BORDER_WIDTH,
+      radius: 0,
+    });
 
     ctx.strokeStyle = '#6a5420';
     ctx.lineWidth = 1;
@@ -247,7 +263,8 @@ export class ShopSystem implements GameSystem {
       align: 'center',
     });
 
-    this.buyRects = [];
+    this.panelButtons = [];
+    beginMenuFocus('shop');
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       const rowY = panelY + PANEL_FIRST_ROW_Y + i * PANEL_ITEM_H;
@@ -291,37 +308,51 @@ export class ShopSystem implements GameSystem {
       const btnX = panelX + PANEL_W - PANEL_BTN_W - PANEL_BTN_X_MARGIN;
       const btnY = rowY + (PANEL_ITEM_H - PANEL_BTN_H) / 2;
 
-      ctx.fillStyle = canAfford ? '#14400a' : '#281818';
-      ctx.fillRect(btnX, btnY, PANEL_BTN_W, PANEL_BTN_H);
-      ctx.strokeStyle = canAfford ? '#5aaa34' : '#3a2020';
-      ctx.lineWidth = PANEL_BTN_BORDER_W;
-      ctx.strokeRect(btnX, btnY, PANEL_BTN_W, PANEL_BTN_H);
-      drawText(ctx, 'Buy', {
-        x: btnX + PANEL_BTN_W / 2,
-        y: btnY + PANEL_BTN_TEXT_Y - PANEL_BTN_TEXT_BASELINE,
-        size: PANEL_BTN_TEXT_SIZE,
-        bold: true,
-        color: canAfford ? '#c8e890' : '#5a4040',
-        align: 'center',
+      const itemIdx = i;
+      addButton(ctx, this.panelButtons, {
+        x: btnX,
+        y: btnY,
+        width: PANEL_BTN_W,
+        height: PANEL_BTN_H,
+        label: 'Buy',
+        fill: canAfford ? BUY_AFFORDABLE_FILL : BUY_UNAFFORDABLE_FILL,
+        border: canAfford ? BUY_AFFORDABLE_BORDER : BUY_UNAFFORDABLE_BORDER,
+        borderWidth: PANEL_BTN_BORDER_W,
+        radius: 0,
+        labelSize: PANEL_BTN_TEXT_SIZE,
+        labelColor: canAfford ? BUY_AFFORDABLE_LABEL : BUY_UNAFFORDABLE_LABEL,
+        action: () => this.tryBuy(itemIdx, active),
       });
-
-      this.buyRects.push({ x: btnX, y: btnY, w: PANEL_BTN_W, h: PANEL_BTN_H });
     }
 
-    drawText(ctx, '[Space / Esc]  Close', {
+    addButton(ctx, this.panelButtons, {
       x: cw / 2,
-      y: panelY + panelH - PANEL_CLOSE_Y_FROM_BOTTOM - PANEL_CLOSE_BASELINE,
-      size: PANEL_CLOSE_SIZE,
-      color: '#5a4a30',
-      align: 'center',
+      y: panelY + panelH - PANEL_CLOSE_BTN_Y_FROM_BOTTOM,
+      width: PANEL_CLOSE_BTN_W,
+      height: PANEL_CLOSE_BTN_H,
+      alignX: 'center',
+      label: '[Space / Esc]  Close',
+      labelSize: PANEL_CLOSE_SIZE,
+      ...BUTTON_PRESETS.primary,
+      radius: 0,
+      primaryAction: true,
+      action: () => {
+        this.shopOpen = false;
+      },
     });
+    endMenuFocus();
   }
 
-  handleClick(mx: number, my: number, active: Player): void {
-    for (let i = 0; i < this.buyRects.length; i++) {
-      const r = this.buyRects[i];
-      if (pointInRect(mx, my, r)) {
-        this.tryBuy(i, active);
+  handleClick(mx: number, my: number): void {
+    if (!this.shopOpen) return;
+    for (const button of this.panelButtons) {
+      if (
+        mx >= button.x &&
+        mx <= button.x + button.w &&
+        my >= button.y &&
+        my <= button.y + button.h
+      ) {
+        button.action?.();
         return;
       }
     }

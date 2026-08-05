@@ -113,6 +113,20 @@ function nightVisionBonusFor(active: HumanPlayer | CatPlayer): number {
   return level === 0 ? 0 : nightVisionBonusTiles(level);
 }
 
+/**
+ * How far the active crawler can see, in world pixels — the radius past which
+ * {@link RenderPipeline.renderVisibilityFog} paints solid black.
+ *
+ * Exported because "on screen" and "visible" are two different questions and
+ * anything drawing a *because you cannot see it* affordance has to ask the
+ * second. The viewport rect is the wrong test on its own: once the camera clamps
+ * at a map border the party sits off-centre, and a wide swathe of the canvas is
+ * inside the rect and beyond this radius — fogged out completely.
+ */
+export function visibilityRadiusPx(active: HumanPlayer | CatPlayer): number {
+  return (VISIBILITY_OUTER_TILES + nightVisionBonusFor(active)) * TILE_SIZE;
+}
+
 /** A Y-sorted draw entry that avoids per-frame closure allocation. */
 interface DrawEntry {
   sortY: number;
@@ -510,7 +524,7 @@ export class RenderPipeline {
     // disc is keyed on the radii, so it simply rebuilds when the pair changes.
     const bonusTiles = nightVisionBonusFor(active);
     const innerR = (VISIBILITY_INNER_TILES + bonusTiles) * TILE_SIZE;
-    const outerR = (VISIBILITY_OUTER_TILES + bonusTiles) * TILE_SIZE;
+    const outerR = visibilityRadiusPx(active);
 
     // Skip the (cheap) gradient if the whole canvas fits inside the clear zone.
     const halfDiag = Math.hypot(viewportWidth() / 2, viewportHeight() / 2);

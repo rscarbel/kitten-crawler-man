@@ -26,9 +26,9 @@ const DIALOG_SIDE_MARGIN = 20;
 const GAP_ABOVE_HOTBAR = 8;
 const DIALOG_PADDING = 14;
 /**
- * Floor on the box's top edge. A tall `yOffset` on a short viewport — a phone in
- * landscape is barely 400px — would otherwise push the box off the top of the
- * canvas entirely, silently swallowing whatever it was there to say.
+ * Floor on the box's top edge. A short viewport — a phone in landscape is barely
+ * 400px — would otherwise push the box off the top of the canvas entirely,
+ * silently swallowing whatever it was there to say.
  */
 const DIALOG_MIN_TOP = 8;
 const HOTBAR_SLOT_SIZE = 52;
@@ -68,11 +68,6 @@ export interface DialogBoxConfig {
   /** How text is progressively revealed. Default: 'all' */
   revealMode?: RevealMode;
   /**
-   * Pixels to raise the dialog above its default position (just above the hotbar).
-   * Positive values move it up on screen. Default: 0
-   */
-  yOffset?: number;
-  /**
    * Whether to render the Skip / Continue footer hint. Set to false for dialogs
    * that auto-dismiss and have no user interaction. Default: true
    */
@@ -95,7 +90,6 @@ export class DialogBox {
   private readonly _speakerName: string;
   private readonly _speakerIcon: HTMLImageElement | undefined;
   private readonly _revealMode: RevealMode;
-  private readonly _yOffset: number;
   private readonly _showFooterHint: boolean;
 
   private _visible = false;
@@ -109,7 +103,6 @@ export class DialogBox {
     this._speakerName = config.speakerName;
     this._speakerIcon = config.speakerIcon;
     this._revealMode = config.revealMode ?? 'all';
-    this._yOffset = config.yOffset ?? 0;
     this._showFooterHint = config.showFooterHint ?? true;
   }
 
@@ -294,10 +287,7 @@ export class DialogBox {
     const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE - HOTBAR_BOTTOM_MARGIN;
     const width = Math.min(DIALOG_MAX_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
     const x = (viewportWidth() - width) / 2;
-    const y = Math.max(
-      DIALOG_MIN_TOP,
-      hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT - this._yOffset,
-    );
+    const y = Math.max(DIALOG_MIN_TOP, hotbarTop - GAP_ABOVE_HOTBAR - DIALOG_HEIGHT);
     return { x, y, width };
   }
 

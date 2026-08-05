@@ -6,7 +6,13 @@ import type { AudioManager } from '../audio/AudioManager';
 import { wrapTextLines } from './canvasUtils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawModal } from './Box';
-import { drawButton, BUTTON_PRESETS, playButtonSound } from './Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  playButtonSound,
+} from './Button';
 import { drawSkillIcon } from './icons/skillIcons';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -226,6 +232,7 @@ export class SkillBookPrompt {
     this.readBtn = { x: readX, y: buttonsY, w: BUTTON_WIDTH, h: BUTTON_HEIGHT };
     this.cancelBtn = { x: cancelX, y: buttonsY, w: BUTTON_WIDTH, h: BUTTON_HEIGHT };
 
+    beginMenuFocus('skill-book-prompt');
     drawButton(ctx, {
       x: readX,
       y: buttonsY,
@@ -233,6 +240,7 @@ export class SkillBookPrompt {
       height: BUTTON_HEIGHT,
       label: 'Read',
       ...BUTTON_PRESETS.award,
+      primaryAction: true,
     });
     drawButton(ctx, {
       x: cancelX,
@@ -242,5 +250,6 @@ export class SkillBookPrompt {
       label: 'Cancel',
       ...BUTTON_PRESETS.primary,
     });
+    endMenuFocus();
   }
 }

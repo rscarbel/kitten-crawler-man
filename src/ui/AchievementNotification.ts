@@ -2,7 +2,7 @@ import type { AchievementDef } from '../core/AchievementManager';
 import { randomFromArray, randomInt, pointInRect } from '../utils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, BOX_PRESETS } from './Box';
-import { drawButton, BUTTON_PRESETS } from './Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -264,6 +264,10 @@ export class AchievementNotification {
     const okY = by + boxH - OK_BTN_H - OK_BTN_Y_OFFSET;
     this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
 
+    // Matches the fade gate `handleClick` uses: the button is not acceptable
+    // until the box has fully appeared.
+    const acceptable = this.frame >= FADE_IN_FRAMES;
+    if (acceptable) beginMenuFocus('achievement-notification');
     drawButton(ctx, {
       x: okX,
       y: okY,
@@ -274,7 +278,9 @@ export class AchievementNotification {
       labelColor: '#4ade80',
       labelSize: OK_BTN_LABEL_SIZE,
       alpha,
+      primaryAction: true,
     });
+    if (acceptable) endMenuFocus();
 
     // Sparkles
     for (const s of this.sparkles) {
@@ -298,11 +304,6 @@ export class AchievementNotification {
     if (this.frame < FADE_IN_FRAMES) return false;
     const r = this.okRect;
     return pointInRect(mx, my, r);
-  }
-
-  /** Space bar counts as OK once the notification has fully faded in. */
-  handleSpaceBar(): boolean {
-    return this.frame >= FADE_IN_FRAMES;
   }
 
   // Helpers

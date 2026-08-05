@@ -451,7 +451,7 @@ export abstract class Player {
     void snapshotVersion; // nothing to reconcile for a generic player
   }
 
-  /** Queue a System-AI line for the scene's announcer to speak. */
+  /** Queue a System line for the scene to show as a hotbar toast. */
   queueSystemNotice(line: string): void {
     if (this.pendingSystemNotices.length >= MAX_PENDING_SYSTEM_NOTICES) return;
     this.pendingSystemNotices.push(line);

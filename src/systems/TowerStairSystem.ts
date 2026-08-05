@@ -1,8 +1,10 @@
 import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawOverlay } from '../ui/Box';
+import { addButton, beginMenuFocus, endMenuFocus } from '../ui/Button';
+import type { ButtonRect } from '../ui/pause/types';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const FLOOR_LABELS = ['Ground Floor', '2nd Floor', '3rd Floor', 'Top Floor'];
@@ -38,8 +40,6 @@ const MENU_ACTION_BUTTON_WIDTH = 120;
 const MENU_ACTION_BUTTON_HEIGHT = 42;
 const MENU_ACTION_BUTTON_Y_OFFSET = 110;
 const MENU_ACTION_BUTTON_X_SPACING = 8;
-const MENU_ACTION_TEXT_Y_OFFSET = 27;
-const MENU_ACTION_TEXT_Y_ADJUST = 11;
 const MENU_ACTION_TEXT_SIZE = 14;
 const MENU_STAY_BG_COLOR = '#1e293b';
 const MENU_STAY_BORDER_COLOR = '#475569';
@@ -59,6 +59,8 @@ export class TowerStairSystem implements GameSystem {
   private _downMenuOpen = false;
   private upDismissed = false;
   private downDismissed = false;
+  /** Rebuilt by `renderMenu`, so a click and the thing it hits can never drift apart. */
+  private menuButtons: ButtonRect[] = [];
 
   constructor(
     private map: GameMap,
@@ -123,27 +125,15 @@ export class TowerStairSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this._upMenuOpen) {
-      const rects = this.menuRects();
-      if (this.hitRect(mx, my, rects.action)) {
-        this.onAscend();
-        return true;
-      }
-      if (this.hitRect(mx, my, rects.stay)) {
-        this._upMenuOpen = false;
-        this.upDismissed = true;
-        return true;
-      }
-    }
-    if (this._downMenuOpen) {
-      const rects = this.menuRects();
-      if (this.hitRect(mx, my, rects.action)) {
-        this.onDescend();
-        return true;
-      }
-      if (this.hitRect(mx, my, rects.stay)) {
-        this._downMenuOpen = false;
-        this.downDismissed = true;
+    if (!this.menuOpen) return false;
+    for (const button of this.menuButtons) {
+      if (
+        mx >= button.x &&
+        mx <= button.x + button.w &&
+        my >= button.y &&
+        my <= button.y + button.h
+      ) {
+        button.action?.();
         return true;
       }
     }
@@ -191,19 +181,24 @@ export class TowerStairSystem implements GameSystem {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    ctx.fillStyle = `rgba(0,0,0,${MENU_OVERLAY_ALPHA})`;
-    ctx.fillRect(0, 0, cw, ch);
+    this.menuButtons = [];
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_OVERLAY_ALPHA });
 
     const panelW = MENU_PANEL_WIDTH;
     const panelH = MENU_PANEL_HEIGHT;
     const panelX = cw / 2 - panelW / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = MENU_PANEL_BG_COLOR;
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = MENU_PANEL_BORDER_COLOR;
-    ctx.lineWidth = MENU_BORDER_WIDTH_THIN;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    drawBox(ctx, {
+      x: panelX,
+      y: panelY,
+      width: panelW,
+      height: panelH,
+      fill: MENU_PANEL_BG_COLOR,
+      border: MENU_PANEL_BORDER_COLOR,
+      borderWidth: MENU_BORDER_WIDTH_THIN,
+      radius: 0,
+    });
 
     const arrow = isUp ? '▲' : '▼';
     drawText(ctx, `${arrow}  Staircase  ${arrow}`, {
@@ -233,33 +228,39 @@ export class TowerStairSystem implements GameSystem {
 
     const rects = this.menuRects();
 
-    ctx.fillStyle = MENU_ACTION_BG_COLOR;
-    ctx.fillRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
-    ctx.strokeStyle = MENU_ACTION_BORDER_COLOR;
-    ctx.lineWidth = MENU_BORDER_WIDTH;
-    ctx.strokeRect(rects.action.x, rects.action.y, rects.action.w, rects.action.h);
-    drawText(ctx, isUp ? 'Ascend' : 'Descend', {
-      x: rects.action.x + rects.action.w / 2,
-      y: rects.action.y + MENU_ACTION_TEXT_Y_OFFSET - MENU_ACTION_TEXT_Y_ADJUST,
-      size: MENU_ACTION_TEXT_SIZE,
-      bold: true,
-      color: MENU_ACTION_TEXT_COLOR,
-      align: 'center',
+    // The travel button leads the ring so one Tab reaches it, but Stay is the
+    // primary: standing on a step is not consent to change floors.
+    beginMenuFocus('tower-stairs');
+    addButton(ctx, this.menuButtons, {
+      x: rects.action.x,
+      y: rects.action.y,
+      width: rects.action.w,
+      height: rects.action.h,
+      label: isUp ? 'Ascend' : 'Descend',
+      fill: MENU_ACTION_BG_COLOR,
+      border: MENU_ACTION_BORDER_COLOR,
+      borderWidth: MENU_BORDER_WIDTH,
+      radius: 0,
+      labelSize: MENU_ACTION_TEXT_SIZE,
+      labelColor: MENU_ACTION_TEXT_COLOR,
+      action: isUp ? () => this.onAscend() : () => this.onDescend(),
     });
-
-    ctx.fillStyle = MENU_STAY_BG_COLOR;
-    ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = MENU_STAY_BORDER_COLOR;
-    ctx.lineWidth = MENU_BORDER_WIDTH;
-    ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    drawText(ctx, 'Stay', {
-      x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + MENU_ACTION_TEXT_Y_OFFSET - MENU_ACTION_TEXT_Y_ADJUST,
-      size: MENU_ACTION_TEXT_SIZE,
-      bold: true,
-      color: MENU_STAY_TEXT_COLOR,
-      align: 'center',
+    addButton(ctx, this.menuButtons, {
+      x: rects.stay.x,
+      y: rects.stay.y,
+      width: rects.stay.w,
+      height: rects.stay.h,
+      label: 'Stay',
+      fill: MENU_STAY_BG_COLOR,
+      border: MENU_STAY_BORDER_COLOR,
+      borderWidth: MENU_BORDER_WIDTH,
+      radius: 0,
+      labelSize: MENU_ACTION_TEXT_SIZE,
+      labelColor: MENU_STAY_TEXT_COLOR,
+      primaryAction: true,
+      action: () => this.closeMenu(),
     });
+    endMenuFocus();
   }
 
   private menuRects() {
@@ -274,13 +275,5 @@ export class TowerStairSystem implements GameSystem {
       action: { x: cw / 2 - btnW - MENU_ACTION_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
       stay: { x: cw / 2 + MENU_ACTION_BUTTON_X_SPACING, y: btnY, w: btnW, h: btnH },
     };
-  }
-
-  private hitRect(
-    mx: number,
-    my: number,
-    r: { x: number; y: number; w: number; h: number },
-  ): boolean {
-    return pointInRect(mx, my, r);
   }
 }

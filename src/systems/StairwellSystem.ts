@@ -4,6 +4,9 @@ import type { LevelDef } from '../levels/types';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawOverlay } from '../ui/Box';
+import { addButton, beginMenuFocus, endMenuFocus } from '../ui/Button';
+import type { ButtonRect } from '../ui/pause/types';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -36,8 +39,6 @@ const STAIRWELL_MENU_BUTTON_WIDTH = 120;
 const STAIRWELL_MENU_BUTTON_HEIGHT = 42;
 const STAIRWELL_MENU_BUTTON_Y_OFFSET = 110;
 const STAIRWELL_MENU_BUTTON_X_SPACING = 8;
-const STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET = 27;
-const STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST = 11;
 const STAIRWELL_MENU_BUTTON_TEXT_SIZE = 14;
 const STAIRWELL_MENU_BG_COLOR = '#0d0920';
 const STAIRWELL_MENU_BORDER_COLOR = '#a855f7';
@@ -63,6 +64,8 @@ export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
   private dismissed = false;
+  /** Rebuilt by `renderMenu`, so a click and the thing it hits can never drift apart. */
+  private menuButtons: ButtonRect[] = [];
 
   constructor(
     private readonly gameMap: GameMap,
@@ -130,25 +133,16 @@ export class StairwellSystem implements GameSystem {
 
   handleClick(mx: number, my: number): boolean {
     if (!this._menuOpen) return false;
-    const rects = this.menuRects();
-    if (
-      mx >= rects.descend.x &&
-      mx <= rects.descend.x + rects.descend.w &&
-      my >= rects.descend.y &&
-      my <= rects.descend.y + rects.descend.h
-    ) {
-      this.onDescend();
-      return true;
-    }
-    if (
-      mx >= rects.stay.x &&
-      mx <= rects.stay.x + rects.stay.w &&
-      my >= rects.stay.y &&
-      my <= rects.stay.y + rects.stay.h
-    ) {
-      this._menuOpen = false;
-      this.dismissed = true;
-      return true;
+    for (const button of this.menuButtons) {
+      if (
+        mx >= button.x &&
+        mx <= button.x + button.w &&
+        my >= button.y &&
+        my <= button.y + button.h
+      ) {
+        button.action?.();
+        return true;
+      }
     }
     return false;
   }
@@ -194,19 +188,28 @@ export class StairwellSystem implements GameSystem {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    ctx.fillStyle = `rgba(0,0,0,${STAIRWELL_MENU_OVERLAY_ALPHA})`;
-    ctx.fillRect(0, 0, cw, ch);
+    this.menuButtons = [];
+    drawOverlay(ctx, {
+      canvasWidth: cw,
+      canvasHeight: ch,
+      alpha: STAIRWELL_MENU_OVERLAY_ALPHA,
+    });
 
     const panelW = STAIRWELL_MENU_PANEL_WIDTH;
     const panelH = STAIRWELL_MENU_PANEL_HEIGHT;
     const panelX = cw / 2 - panelW / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = STAIRWELL_MENU_BG_COLOR;
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = STAIRWELL_MENU_BORDER_COLOR;
-    ctx.lineWidth = STAIRWELL_MENU_BORDER_WIDTH;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    drawBox(ctx, {
+      x: panelX,
+      y: panelY,
+      width: panelW,
+      height: panelH,
+      fill: STAIRWELL_MENU_BG_COLOR,
+      border: STAIRWELL_MENU_BORDER_COLOR,
+      borderWidth: STAIRWELL_MENU_BORDER_WIDTH,
+      radius: 0,
+    });
 
     drawText(ctx, '▼  Stairwell  ▼', {
       x: cw / 2,
@@ -237,34 +240,40 @@ export class StairwellSystem implements GameSystem {
 
     const rects = this.menuRects();
 
-    ctx.fillStyle = STAIRWELL_MENU_BUTTON_BG_COLOR;
-    ctx.fillRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
-    ctx.strokeStyle = STAIRWELL_MENU_BORDER_COLOR;
-    ctx.lineWidth = STAIRWELL_MENU_BUTTON_BORDER_WIDTH;
-    ctx.strokeRect(rects.descend.x, rects.descend.y, rects.descend.w, rects.descend.h);
-    drawText(ctx, 'Descend', {
-      x: rects.descend.x + rects.descend.w / 2,
-      y:
-        rects.descend.y + STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET - STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST,
-      size: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
-      bold: true,
-      color: STAIRWELL_MENU_BUTTON_TEXT_COLOR,
-      align: 'center',
+    // Descend leads the ring so the first Tab lands on it, but Stay is the
+    // primary: a crawler mashing the attack key onto a stairwell tile must not
+    // leave the floor by accident.
+    beginMenuFocus('stairwell');
+    addButton(ctx, this.menuButtons, {
+      x: rects.descend.x,
+      y: rects.descend.y,
+      width: rects.descend.w,
+      height: rects.descend.h,
+      label: 'Descend',
+      fill: STAIRWELL_MENU_BUTTON_BG_COLOR,
+      border: STAIRWELL_MENU_BORDER_COLOR,
+      borderWidth: STAIRWELL_MENU_BUTTON_BORDER_WIDTH,
+      radius: 0,
+      labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
+      labelColor: STAIRWELL_MENU_BUTTON_TEXT_COLOR,
+      action: () => this.onDescend(),
     });
-
-    ctx.fillStyle = STAIRWELL_MENU_STAY_BG_COLOR;
-    ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = STAIRWELL_MENU_STAY_BORDER_COLOR;
-    ctx.lineWidth = STAIRWELL_MENU_BUTTON_BORDER_WIDTH;
-    ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    drawText(ctx, 'Stay', {
-      x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + STAIRWELL_MENU_BUTTON_TEXT_Y_OFFSET - STAIRWELL_MENU_BUTTON_TEXT_Y_ADJUST,
-      size: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
-      bold: true,
-      color: STAIRWELL_MENU_STAY_TEXT_COLOR,
-      align: 'center',
+    addButton(ctx, this.menuButtons, {
+      x: rects.stay.x,
+      y: rects.stay.y,
+      width: rects.stay.w,
+      height: rects.stay.h,
+      label: 'Stay',
+      fill: STAIRWELL_MENU_STAY_BG_COLOR,
+      border: STAIRWELL_MENU_STAY_BORDER_COLOR,
+      borderWidth: STAIRWELL_MENU_BUTTON_BORDER_WIDTH,
+      radius: 0,
+      labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
+      labelColor: STAIRWELL_MENU_STAY_TEXT_COLOR,
+      primaryAction: true,
+      action: () => this.closeMenu(),
     });
+    endMenuFocus();
   }
 
   private menuRects(): {

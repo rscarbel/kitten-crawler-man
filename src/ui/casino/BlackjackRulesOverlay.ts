@@ -11,7 +11,13 @@
  */
 
 import { drawModal, drawOverlay, BOX_PRESETS } from '../Box';
-import { drawButton, BUTTON_PRESETS, type ButtonResult } from '../Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  type ButtonResult,
+} from '../Button';
 import { drawText } from '../TextBox';
 import { platform } from '../../core/Platform';
 import { viewportWidth, viewportHeight } from '../../core/Viewport';
@@ -378,6 +384,7 @@ export class BlackjackRulesOverlay {
     const rowWidth = buttonWidth * FOOTER_BUTTON_COUNT + FOOTER_BTN_GAP * (FOOTER_BUTTON_COUNT - 1);
     let x = centreX - rowWidth * HALF;
 
+    beginMenuFocus('blackjack-rules');
     this.backButton = drawButton(ctx, {
       x,
       y: footerTop,
@@ -409,7 +416,9 @@ export class BlackjackRulesOverlay {
       label: this.skipLabel(),
       labelSize: FOOTER_LABEL_SIZE,
       ...BUTTON_PRESETS.primary,
+      primaryAction: true,
     });
+    endMenuFocus();
   }
 }
 

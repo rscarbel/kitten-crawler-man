@@ -1,6 +1,6 @@
 import { drawText } from './TextBox';
 import { drawOverlay } from './Box';
-import { drawButton, BUTTON_PRESETS } from './Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -96,7 +96,14 @@ export class DeathScreen {
 
     drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
 
+    // Below the fade gate: while the screen is still darkening there is no
+    // button to accept yet, and a ring declared over an empty frame would eat
+    // the press that follows.
     if (this.alpha < TEXT_ALPHA_START_THRESHOLD) return;
+    // Deliberately the same gate `handleClick` uses rather than the fade above:
+    // a ring declared a few frames early consumes an accept press that the click
+    // router would then throw away.
+    if (this.isVisible) beginMenuFocus('death-screen');
     const textAlpha = Math.min(
       1,
       (this.alpha - TEXT_ALPHA_START_THRESHOLD) / TEXT_ALPHA_FADE_RANGE,
@@ -155,7 +162,9 @@ export class DeathScreen {
       ...BUTTON_PRESETS.danger,
       labelSize: BUTTON_LABEL_SIZE,
       alpha: textAlpha,
+      primaryAction: true,
     });
+    if (this.isVisible) endMenuFocus();
   }
 
   /**
@@ -169,10 +178,5 @@ export class DeathScreen {
       return true;
     }
     return false;
-  }
-
-  /** Space bar counts as clicking the restart button once the screen is visible. */
-  handleSpaceBar(): boolean {
-    return this.isVisible;
   }
 }

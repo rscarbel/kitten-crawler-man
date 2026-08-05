@@ -19,7 +19,13 @@
 
 import { platform } from '../core/Platform';
 import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
-import { drawButton, BUTTON_PRESETS, type ButtonResult } from './Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  type ButtonResult,
+} from './Button';
 import { drawText } from './TextBox';
 import type { Player } from '../Player';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -217,6 +223,7 @@ export class PricedMenuPanel {
     }
 
     this.buyButtons = [];
+    beginMenuFocus('priced-menu');
     let rowY = modal.y + headerHeight;
     for (const option of menu.options) {
       this.renderRow(ctx, option, active, contentLeft, rowY, contentRight, contentWidth);
@@ -235,7 +242,9 @@ export class PricedMenuPanel {
       label: closeHint,
       labelSize: CLOSE_LABEL_SIZE,
       ...BUTTON_PRESETS.primary,
+      primaryAction: true,
     });
+    endMenuFocus();
     // The purse shares the footer rather than the header: a centred title on a
     // narrow phone panel grows into the top-right corner and hides it.
     drawText(ctx, `Coins: ${active.coins}`, {

@@ -1,4 +1,7 @@
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawOverlay } from '../ui/Box';
+import { addButton, beginMenuFocus, endMenuFocus } from '../ui/Button';
+import type { ButtonRect } from '../ui/pause/types';
 import type { MovementMode, CombatStance } from './CompanionSystem';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -15,7 +18,6 @@ const MENU_PANEL_HEIGHT = 380;
 const MENU_TITLE_Y_OFFSET = 42;
 const MENU_BUTTON_WIDTH = 320;
 const MENU_BUTTON_HEIGHT = 48;
-const MENU_BUTTON_COUNT = 4;
 
 // Menu layout spacing
 const MENU_INITIAL_Y_OFFSET = 62;
@@ -29,7 +31,7 @@ const MENU_BACKDROP_ALPHA = 0.65;
 const MENU_PANEL_BG_COLOR = '#111927';
 const MENU_PANEL_BORDER_COLOR = '#5a8fc5';
 const MENU_PANEL_BORDER_WIDTH = 2;
-const MENU_TITLE_BOLD_FONT = 'bold 22px monospace';
+const MENU_TITLE_SIZE = 22;
 
 // Button styling
 const BUTTON_ACTIVE_BG = 'rgba(90,143,197,0.3)';
@@ -65,12 +67,17 @@ const MENU_FOOTER_Y_OFFSET = 18;
 const MENU_FOOTER_SIZE = 11;
 const MENU_FOOTER_COLOR = '#4a6680';
 
-// Overlay constants for restricted buttons
-const RESTRICTED_DIM_ALPHA = 0.7;
+/**
+ * Extra dimming painted over a tutorial-restricted row. The row is drawn
+ * `disabled`, which already fades the button box, so this only has to reach the
+ * icon, label and radio dot drawn on top of it — hence far lighter than the
+ * blackout this used to be when the box carried no dimming of its own.
+ */
+const RESTRICTED_DIM_ALPHA = 0.35;
 
 export class FollowerMenu {
   private _isOpen = false;
-  private _buttonRects: Rect[] = [];
+  private _buttonRects: ButtonRect[] = [];
 
   onFollowMe: (() => void) | null = null;
   onDoNotMove: (() => void) | null = null;
@@ -102,20 +109,21 @@ export class FollowerMenu {
 
   handleClick(mx: number, my: number): boolean {
     if (!this._isOpen) return false;
-    const callbacks = [this.onFollowMe, this.onDoNotMove, this.onSetAggressive, this.onSetPassive];
-    for (let i = 0; i < this._buttonRects.length; i++) {
-      const r = this._buttonRects[i];
+    for (const r of this._buttonRects) {
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        if (this.restrictedToButtonIndex !== null && i !== this.restrictedToButtonIndex) {
-          return true; // Consume click but do nothing — button is restricted
-        }
-        this._isOpen = false;
-        callbacks[i]?.();
+        r.action?.();
         return true;
       }
     }
+    // Anywhere else, including the panel's own margins: clicking away closes.
     this._isOpen = false;
     return true;
+  }
+
+  /** The order the four orders are drawn in, which is also their callback order. */
+  private orderCallback(idx: number): (() => void) | null {
+    const callbacks = [this.onFollowMe, this.onDoNotMove, this.onSetAggressive, this.onSetPassive];
+    return callbacks[idx] ?? null;
   }
 
   /**
@@ -132,30 +140,34 @@ export class FollowerMenu {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    // Dim backdrop
-    ctx.fillStyle = `rgba(0,0,0,${MENU_BACKDROP_ALPHA})`;
-    ctx.fillRect(0, 0, cw, ch);
+    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: MENU_BACKDROP_ALPHA });
 
     const panelW = MENU_PANEL_WIDTH;
     const panelH = MENU_PANEL_HEIGHT;
     const panelX = Math.round(cw / 2 - panelW / 2);
     const panelY = Math.round(ch / 2 - panelH / 2);
 
-    // Panel background + border
-    ctx.fillStyle = MENU_PANEL_BG_COLOR;
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = MENU_PANEL_BORDER_COLOR;
-    ctx.lineWidth = MENU_PANEL_BORDER_WIDTH;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    drawBox(ctx, {
+      x: panelX,
+      y: panelY,
+      width: panelW,
+      height: panelH,
+      fill: MENU_PANEL_BG_COLOR,
+      border: MENU_PANEL_BORDER_COLOR,
+      borderWidth: MENU_PANEL_BORDER_WIDTH,
+      radius: 0,
+    });
 
-    // Title row
     const companionEmoji = companionIsCat ? '🐱' : '🧍';
     const companionName = companionIsCat ? 'Cat Companion' : 'Human Companion';
-    ctx.font = MENU_TITLE_BOLD_FONT;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${companionEmoji}  ${companionName}`, cw / 2, panelY + MENU_TITLE_Y_OFFSET);
-    ctx.textAlign = 'left';
+    drawText(ctx, `${companionEmoji}  ${companionName}`, {
+      x: cw / 2,
+      y: panelY + MENU_TITLE_Y_OFFSET - MENU_TITLE_SIZE,
+      size: MENU_TITLE_SIZE,
+      bold: true,
+      color: '#ffffff',
+      align: 'center',
+    });
 
     const btnW = MENU_BUTTON_WIDTH;
     const btnH = MENU_BUTTON_HEIGHT;
@@ -181,7 +193,8 @@ export class FollowerMenu {
       },
     ];
 
-    this._buttonRects = new Array<Rect>(MENU_BUTTON_COUNT);
+    this._buttonRects = [];
+    beginMenuFocus('follower-menu');
     let currentY = panelY + MENU_INITIAL_Y_OFFSET;
 
     for (const section of sections) {
@@ -197,16 +210,33 @@ export class FollowerMenu {
 
       for (const item of section.items) {
         const r: Rect = { x: btnX, y: currentY, w: btnW, h: btnH };
-        this._buttonRects[item.idx] = r;
-
-        // Button fill + border
+        // A tutorial-restricted row is drawn `disabled`, which both dims it and
+        // keeps it out of the focus ring — the keyboard skips it for free.
         const isRestricted =
           this.restrictedToButtonIndex !== null && item.idx !== this.restrictedToButtonIndex;
-        ctx.fillStyle = item.active ? BUTTON_ACTIVE_BG : BUTTON_INACTIVE_BG;
-        ctx.fillRect(r.x, r.y, r.w, r.h);
-        ctx.strokeStyle = item.active ? BUTTON_ACTIVE_BORDER : BUTTON_INACTIVE_BORDER;
-        ctx.lineWidth = item.active ? BUTTON_ACTIVE_BORDER_WIDTH : BUTTON_INACTIVE_BORDER_WIDTH;
-        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        const callback = this.orderCallback(item.idx);
+        addButton(ctx, this._buttonRects, {
+          x: r.x,
+          y: r.y,
+          width: r.w,
+          height: r.h,
+          // The row paints its own icon, left-aligned label and radio dot on top.
+          label: '',
+          fill: item.active ? BUTTON_ACTIVE_BG : BUTTON_INACTIVE_BG,
+          border: item.active ? BUTTON_ACTIVE_BORDER : BUTTON_INACTIVE_BORDER,
+          borderWidth: item.active ? BUTTON_ACTIVE_BORDER_WIDTH : BUTTON_INACTIVE_BORDER_WIDTH,
+          radius: 0,
+          disabled: isRestricted,
+          action: isRestricted
+            ? () => {
+                // Swallow: the tutorial is pointing at another row, and closing
+                // the menu here would strand the step it is waiting on.
+              }
+            : () => {
+                this._isOpen = false;
+                callback?.();
+              },
+        });
 
         if (isRestricted) {
           ctx.fillStyle = `rgba(0, 0, 0, ${RESTRICTED_DIM_ALPHA})`;
@@ -253,6 +283,7 @@ export class FollowerMenu {
 
       currentY += MENU_SECTION_SPACING;
     }
+    endMenuFocus();
 
     drawText(ctx, 'Esc or click outside to close', {
       x: cw / 2,

@@ -1,6 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { Mongo } from '../creatures/Mongo';
+import { MONGO_ASSIST_XP } from '../abilities/mongo';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
@@ -427,8 +428,18 @@ export function resolveKills(ctx: CombatContext): void {
         : null;
 
     // A kill the pet finished feeds the pet's own ability, and the cat keeps the
-    // crawler XP through the credit mapping above.
-    if (mob.killedByDealer instanceof Mongo) abilityManager.addKillXp('mongo');
+    // crawler XP through the credit mapping above. A kill he only contributed to
+    // pays the smaller assist — see MONGO_ASSIST_XP for why contribution has to
+    // pay at all.
+    if (mob.killedByDealer instanceof Mongo) {
+      abilityManager.addKillXp('mongo');
+    } else {
+      for (const dealer of mob.damageTakenBy.keys()) {
+        if (!(dealer instanceof Mongo)) continue;
+        abilityManager.addXp('mongo', MONGO_ASSIST_XP);
+        break;
+      }
+    }
 
     // Pugilism trains on knockouts, not swings — a landed punch is cheap, a
     // finished fight is not.

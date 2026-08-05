@@ -18,6 +18,7 @@
 
 import { getSpriteDef } from '../core/SpriteLoader';
 import { platform } from '../core/Platform';
+import { keybindings } from '../core/Keybindings';
 import { drawText } from '../ui/TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { KEYBOARD_HERO_CHART, KEYBOARD_HERO_CHART_END_MS } from './keyboardHeroChart';
@@ -440,12 +441,16 @@ export class KeyboardHeroSystem {
     this._processColumnInput(colIndex, songTimeMs);
   }
 
+  /**
+   * Columns follow the movement bindings rather than literal WASD/arrows, so a
+   * crawler who plays on ESDF is not handed a minigame they cannot reach.
+   */
   private _keyToColumn(key: string): ColumnIndex | null {
-    const lower = key.toLowerCase();
-    if (lower === 'arrowleft' || lower === 'a') return COL_LEFT;
-    if (lower === 'arrowup' || lower === 'w') return COL_UP;
-    if (lower === 'arrowdown' || lower === 's') return COL_DOWN;
-    if (lower === 'arrowright' || lower === 'd') return COL_RIGHT;
+    const action = keybindings.actionFor(key);
+    if (action === 'moveLeft') return COL_LEFT;
+    if (action === 'moveUp') return COL_UP;
+    if (action === 'moveDown') return COL_DOWN;
+    if (action === 'moveRight') return COL_RIGHT;
     return null;
   }
 

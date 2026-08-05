@@ -22,6 +22,7 @@
     "verify:bounty": "tsx scripts/verify-bounty.ts",
     "verify:separation": "tsx scripts/verify-separation.ts",
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",
+    "verify:mongo": "tsx scripts/verify-mongo.ts",
     "bench:separation": "tsx scripts/bench-separation.ts",
     "verify:assets": "tsx scripts/verify-assets.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",

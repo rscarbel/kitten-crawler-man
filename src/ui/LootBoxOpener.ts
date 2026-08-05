@@ -3,6 +3,7 @@ import { getBoxContents } from '../core/AchievementManager';
 import { randomFromArray, randomInt } from '../utils';
 import { drawText } from './TextBox';
 import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
+import { suppressMenuFocus } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 interface Particle {
@@ -277,6 +278,9 @@ export class LootBoxOpener {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.active || !this.box) return;
+    // Owns the screen with nothing to focus, and is opened from the pause menu —
+    // without this the menu underneath would keep the live ring.
+    suppressMenuFocus('loot-box');
 
     const cw = viewportWidth();
     const ch = viewportHeight();

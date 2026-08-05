@@ -93,8 +93,13 @@ const ASTAR_STAGGER_MAX = 15;
 /**
  * Wait this long before retrying after A* found no route. An unreachable target
  * stays unreachable, so retrying twice a second only burns the expansion cap.
+ *
+ * Exported because it sets how long {@link Mob.astarSearchFailed} stays true:
+ * that flag is a latch held for this whole window rather than a fresh verdict
+ * each frame, so anything counting frames of failure has to outlast it or it is
+ * really only measuring one search.
  */
-const ASTAR_FAILURE_BACKOFF_FRAMES = 120;
+export const ASTAR_FAILURE_BACKOFF_FRAMES = 120;
 
 /**
  * Floor on how often a moved goal tile may trigger an early repath. A target
@@ -107,8 +112,13 @@ const ASTAR_MIN_REPATH_GAP_FRAMES = 8;
  * After this many consecutive frames of being denied by the per-frame search
  * budget, a mob searches regardless. Bounds how stale any one mob's path can
  * get when a large pack all want to repath at once.
+ *
+ * Exported alongside {@link ASTAR_FAILURE_BACKOFF_FRAMES} because it extends the
+ * same latch: once the backoff expires the retry is only *wanted*, not run, and
+ * a crowded frame can withhold it for this long on top. The true worst case for
+ * how long `astarSearchFailed` can read true is the two added together.
  */
-const ASTAR_MAX_DENIED_FRAMES = 20;
+export const ASTAR_MAX_DENIED_FRAMES = 20;
 
 /** Sentinel goal tile meaning "no path has been computed yet". */
 const NO_ASTAR_GOAL = -1;
@@ -646,6 +656,21 @@ export abstract class Mob extends Player {
     return false;
   }
 
+  /**
+   * When true, this mob's AI ticks regardless of its distance to any player.
+   *
+   * The activation radius exists so a floor's worth of sleeping enemies costs
+   * nothing, and every enemy is happy to be frozen off-screen. A *summon* is
+   * not: the thing it is trying to do is get back to the party, so freezing it
+   * the moment it falls behind is precisely the failure that leaves a pet stood
+   * in an empty corridor with no way to recover. Opt in only for mobs whose
+   * whole existence is following the party — the cost is one permanently active
+   * mob for as long as it is in the world.
+   */
+  get exemptFromAiActivationRadius(): boolean {
+    return false;
+  }
+
   /** Whether this mob is currently in an enraged state. Subclasses (e.g. Juicer) set this. */
   isEnraged?: boolean;
 
@@ -1104,6 +1129,24 @@ export abstract class Mob extends Player {
     if (this.currentTarget !== null) return;
     this.currentTarget = target;
     this.alertedTo.set(target, ALERT_DURATION_FRAMES);
+  }
+
+  /**
+   * Whether `target` has hurt *this* mob, recently.
+   *
+   * Exposed so an ally can ask it from outside: "which mob is the cat fighting"
+   * has no answer on the cat, who does not track what she swung at, but every
+   * mob already records who hit it and how long ago.
+   *
+   * Both halves are needed and neither is sufficient. `alertedTo` carries the
+   * recency but not the target — a pack shout registers the alert on every
+   * packmate in the radius, so a mob the attacker has never touched reports the
+   * alert for the full window. `damageTakenBy` carries the target but not the
+   * recency; nothing clears it short of death. Together they mean what the name
+   * says.
+   */
+  wasRecentlyHurtBy(target: Player): boolean {
+    return this.alertedTo.has(target) && this.damageTakenBy.has(target);
   }
 
   /** Straight-line distance in pixels from this mob to `target`. */

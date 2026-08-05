@@ -31,11 +31,31 @@ interface MongoLevelRow extends MongoStats {
   readonly perk: string;
 }
 
+/**
+ * Every stat he has, per level.
+ *
+ * The `maxHp` column carries two invariants the perk text depends on and the
+ * numbers do not state, both of which a partial re-scale breaks quietly.
+ *
+ * Levels 5 and 10 are *growth spurts*, so their step has to be visibly larger
+ * than the ordinary steps either side of it. Fattening the juvenile rows without
+ * re-taping the adolescent ones broke this in the worst possible way — a level-4
+ * raptor with more health than a level-5 one, under a perk line reading GROWTH
+ * SPURT.
+ *
+ * And the ordinary steps never go backwards: a level-6 raptor must not gain less
+ * health per level than a level-2 one. That is the trap the first repair fell
+ * into. Restoring the spurt by *flattening its neighbours* satisfies a purely
+ * relative check while leaving the adolescent band the slowest-growing stretch
+ * in the table, right where the player has just been taught that levelling
+ * matters. Both invariants are gated in `verify-mongo.ts`; re-scale a band and
+ * run it.
+ */
 const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 1,
     stage: 'juvenile',
-    maxHp: 20,
+    maxHp: 35,
     biteDamage: 2,
     slashDamage: 0,
     pounceDamage: 0,
@@ -47,7 +67,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 2,
     stage: 'juvenile',
-    maxHp: 24,
+    maxHp: 42,
     biteDamage: 3,
     slashDamage: 0,
     pounceDamage: 0,
@@ -59,7 +79,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 3,
     stage: 'juvenile',
-    maxHp: 28,
+    maxHp: 50,
     biteDamage: 3,
     slashDamage: 4,
     pounceDamage: 0,
@@ -71,7 +91,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 4,
     stage: 'juvenile',
-    maxHp: 34,
+    maxHp: 60,
     biteDamage: 4,
     slashDamage: 5,
     pounceDamage: 0,
@@ -83,7 +103,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 5,
     stage: 'adolescent',
-    maxHp: 55,
+    maxHp: 80,
     biteDamage: 6,
     slashDamage: 8,
     pounceDamage: 0,
@@ -95,7 +115,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 6,
     stage: 'adolescent',
-    maxHp: 62,
+    maxHp: 90,
     biteDamage: 7,
     slashDamage: 9,
     pounceDamage: 0,
@@ -107,7 +127,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 7,
     stage: 'adolescent',
-    maxHp: 70,
+    maxHp: 100,
     biteDamage: 8,
     slashDamage: 10,
     pounceDamage: 14,
@@ -119,7 +139,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 8,
     stage: 'adolescent',
-    maxHp: 80,
+    maxHp: 110,
     biteDamage: 9,
     slashDamage: 11,
     pounceDamage: 16,
@@ -131,7 +151,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 9,
     stage: 'adolescent',
-    maxHp: 92,
+    maxHp: 120,
     biteDamage: 10,
     slashDamage: 12,
     pounceDamage: 18,
@@ -143,7 +163,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 10,
     stage: 'adult',
-    maxHp: 130,
+    maxHp: 155,
     biteDamage: 14,
     slashDamage: 17,
     pounceDamage: 26,
@@ -155,7 +175,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 11,
     stage: 'adult',
-    maxHp: 145,
+    maxHp: 168,
     biteDamage: 15,
     slashDamage: 19,
     pounceDamage: 29,
@@ -167,7 +187,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 12,
     stage: 'adult',
-    maxHp: 160,
+    maxHp: 181,
     biteDamage: 17,
     slashDamage: 21,
     pounceDamage: 32,
@@ -179,7 +199,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 13,
     stage: 'adult',
-    maxHp: 175,
+    maxHp: 194,
     biteDamage: 19,
     slashDamage: 23,
     pounceDamage: 35,
@@ -191,7 +211,7 @@ const MONGO_LEVELS: readonly MongoLevelRow[] = [
   {
     level: 14,
     stage: 'adult',
-    maxHp: 190,
+    maxHp: 207,
     biteDamage: 21,
     slashDamage: 25,
     pounceDamage: 39,
@@ -228,8 +248,26 @@ export const MONGO_MAX_LEVEL = MONGO_LEVELS.length;
  * Deliberately coarse. A rate fine enough to pay per blow at level 1 pays an
  * adult twelve times as much for the same swing, and his XP thresholds are the
  * ones that grew — see {@link MONGO_DEF.xpGrowthRate}.
+ *
+ * Two, not five, because at five the arithmetic never reached a level-up. A
+ * level-1 raptor bites for two every 46 frames, which at five damage a point is
+ * about a third of a point per second of *uninterrupted* combat — five-plus
+ * minutes of continuous biting, from an animal who dies in a few hits and then
+ * owes minutes of recovery, to buy the first level. Players did not report
+ * levelling as slow; they reported it as not existing.
  */
-export const MONGO_DAMAGE_PER_XP = 5;
+export const MONGO_DAMAGE_PER_XP = 2;
+
+/**
+ * XP for a kill he helped with but did not finish.
+ *
+ * The pet is the one party member who mostly does not land the killing blow —
+ * he chips at what the cat is already hitting for many times his bite — so a
+ * finish-only reward pays him for the fights he happened to be lucky in rather
+ * than the ones he did work in. Well under {@link MONGO_DEF.killXp}: helping is
+ * worth real progress, finishing is worth more.
+ */
+export const MONGO_ASSIST_XP = 5;
 
 /** The stats Mongo fights with at a given pet level. */
 export function getMongoStats(level: number): MongoStats {
@@ -259,8 +297,17 @@ export const MONGO_DEF: AbilityDef = {
   owner: 'cat',
   tag: 'PET',
   equipInstructions:
-    'Switch to Cat (Tab), then press R or the Summon button. Press again to recall.',
-  baseXpToLevel2: 100,
+    'Switch to Cat (Tab), then press R or the Summon button. Press again to recall. ' +
+    'His health is his own and it carries between summons — he does not come back topped up. ' +
+    'He heals slowly only while recalled, and a knockout means he rests all the way to full ' +
+    'before he can be sent in again. Below roughly two fifths of his health he will not go in ' +
+    'at all — a raptor that hurt stays at your side instead of fighting, so the button holds ' +
+    'him back until he is fit.',
+  // Sixty rather than a hundred: the first level-up has to land inside the first
+  // session that actually uses him, because it is the proof to the player that
+  // he levels at all. The 1.45 growth rate is untouched — the late curve is fine
+  // once there is a reason to believe in it.
+  baseXpToLevel2: 60,
   xpGrowthRate: 1.45,
   finalLevelMultiplier: 2.0,
   usageXp: 2,

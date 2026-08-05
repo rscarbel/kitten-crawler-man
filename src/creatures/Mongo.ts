@@ -1,5 +1,5 @@
-import { Mob } from './Mob';
-import type { Player } from '../Player';
+import { ASTAR_FAILURE_BACKOFF_FRAMES, ASTAR_MAX_DENIED_FRAMES, Mob } from './Mob';
+import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   MONGO_HEAD_CLEARANCE_TILES,
@@ -23,6 +23,7 @@ import {
   mongoImpactFrame,
 } from '../sprites/mongoAttackTiming';
 import { getMongoStats, type MongoAttack, type MongoStats } from '../abilities/mongo';
+import { MONGO_MIN_SUMMON_HP } from '../core/MongoPetState';
 import type { LootDrop } from './Mob';
 
 /**
@@ -158,10 +159,134 @@ const LEASH_BAN_LIFT_MIN_TILES = 2.25;
 /** A cat-distance no mob can be inside, for bans that must run their full term. */
 const NO_EARLY_LIFT = -1;
 
-/** Pixels of movement in a frame below which a chase counts as going nowhere. */
-const CHASE_PROGRESS_EPSILON_PX = 0.01;
+/** Pixels of movement in a frame below which a walk counts as going nowhere. */
+const MOVEMENT_PROGRESS_EPSILON_PX = 0.01;
 /** Frames of standing still mid-chase before he writes the target off. */
 const ENGAGE_STALL_LIMIT_FRAMES = 45;
+
+/**
+ * Frames beyond the pathfinder's own backoff that a stall has to persist for,
+ * so tripping the rescue takes a *second* failed search rather than one.
+ */
+const FRAMES_TO_CONFIRM_A_STALL = 30;
+/**
+ * Frames of getting nowhere on the way to the cat before he calls for a rescue.
+ *
+ * Derived from the pathfinder's own timings rather than written down, and the
+ * ordering is load-bearing. `astarSearchFailed` is a latch, not a per-frame
+ * observation: one empty search holds it true for the whole failure backoff,
+ * during which no re-search is allowed to run — and once that expires the retry
+ * is still only *wanted*, so a crowded frame can withhold it for the denial cap
+ * on top. Both terms therefore have to be in the sum. A limit shorter than their
+ * total *cannot* tell a transient failure — the cat rounding a corner, a search
+ * that blew its expansion budget on a windy route, the cat standing for a moment
+ * on a tile `isWalkable` rejects — from a sealed door, and would snap a raptor
+ * who was walking home perfectly well to her heels a second and a half later.
+ * Longer, every single failure gets its chance to clear before the count can
+ * matter, and only a sustained absence of a route trips a rescue.
+ */
+const HOME_STALL_LIMIT_FRAMES =
+  ASTAR_FAILURE_BACKOFF_FRAMES + ASTAR_MAX_DENIED_FRAMES + FRAMES_TO_CONFIRM_A_STALL;
+/**
+ * Cat-distance beyond which he asks for a rescue regardless of progress.
+ *
+ * Deliberately inside the mob loop's activation radius. The rescue is decided by
+ * his own AI, so it can only fire on a frame that AI runs — and while
+ * {@link Mongo.exemptFromAiActivationRadius} means that is now every frame, a
+ * bar set outside the radius would have depended on the exemption for its
+ * correctness rather than merely for its speed.
+ */
+const RESCUE_DISTANCE_TILES = 18.0;
+
+/**
+ * Target tiers, highest first. Within a tier, nearest wins.
+ *
+ * One sentence describes the whole result, which is the point: he guards the
+ * cat, helps with whatever she is hitting, and otherwise hunts what is nearest.
+ * A flat nearest-first scan gave none of that — a raptor summoned into a fight
+ * would trot past the mob chewing on his owner to reach a rat one pixel closer.
+ */
+const PRIORITY_PARTY_THREAT = 2;
+const PRIORITY_OWNER_QUARRY = 1;
+const PRIORITY_NEAREST = 0;
+/** Below every tier, so the first admissible candidate always beats it. */
+const PRIORITY_NONE = -1;
+
+/**
+ * Fraction of a blow he actually takes.
+ *
+ * He cannot kite, cannot heal in the field, is on every hostile's target list
+ * while he is out, and pays real minutes of recovery for every point — so the
+ * same hit costs the party far more landing on him than on a crawler. Flat and
+ * in one place rather than folded into the level table, so it can be judged and
+ * tuned as the single lever it is.
+ */
+const MONGO_DAMAGE_TAKEN_MULTIPLIER = 0.6;
+/** A blow never rounds away to nothing; the resistance softens hits, it does not void them. */
+const MIN_DAMAGE_TAKEN = 1;
+/**
+ * The most the softening ledger may ever run in the pet's favour, in hit points.
+ *
+ * A bound rather than a tuning number — see {@link Mongo.soften}. Without one the
+ * ledger is a sink that both voids the resistance on small hits and banks the
+ * difference as free hit points to spend later.
+ */
+const MAX_SOFTENING_CREDIT = 1;
+
+/**
+ * Whether a badly wounded Mongo breaks off and holds at the cat's side.
+ *
+ * A single switch because it is a genuine design trade rather than a tuning
+ * number: it turns "he died instantly" into a visible limping raptor the player
+ * can answer with a recall, at the cost of softening the rule that spending him
+ * is the decision. Flip it off to get the old press-until-collapse behaviour
+ * back in one edit.
+ */
+// A named setting rather than a bare `true`, because a bare boolean cannot be
+// written here at all: left to infer it takes the literal type and the guard
+// reading it is dead code the linter rejects, and annotated `boolean` it is a
+// trivially-inferrable annotation the linter also rejects. A two-member union
+// says the same thing and stays flippable in one edit.
+type WoundedRetreatSetting = 'on' | 'off';
+const MONGO_WOUNDED_RETREAT: WoundedRetreatSetting = 'on';
+/** HP fraction at or below which the wounded retreat takes over from fighting. */
+const MONGO_RETREAT_HP_FRACTION = 0.25;
+
+/**
+ * Health fraction the Summon button requires, against the retreat threshold's.
+ *
+ * A margin rather than one hit point above the threshold, and the gap is the
+ * point. Sent in at exactly the threshold he stops fighting again after a single
+ * point of damage — which is what every status tick delivers, and what the
+ * resistance's own floor guarantees the smallest blow delivers — so the trap
+ * this floor exists to close would reopen within a second of closing. The gap is
+ * roughly fifteen per cent of his health: a few blows of fighting, which is the
+ * least a summon should be worth.
+ */
+const MONGO_MIN_SUMMON_HP_FRACTION = 0.4;
+
+/**
+ * The least health he can be sent in with and still be worth sending in.
+ *
+ * One hit point used to be the floor, and with the wounded retreat that becomes
+ * a trap rather than a choice: the whole band under the retreat threshold
+ * summons a raptor who walks out, never picks a target, never bites, and stands
+ * on every hostile's list as a free target — for two usage XP and a green
+ * button that explains none of it. The Summon button already has the right
+ * affordance for "not yet": it reads Resting and counts down.
+ */
+export function mongoMinFightingHp(maxHp: number): number {
+  // With the retreat switched off he fights at any health, so the only floor left
+  // is the one the pet state has always had.
+  if (MONGO_WOUNDED_RETREAT === 'off') return MONGO_MIN_SUMMON_HP;
+  return Math.ceil(maxHp * MONGO_MIN_SUMMON_HP_FRACTION);
+}
+
+/**
+ * Frames a recall must have been running before a second press of the button is
+ * read as "he is not coming" rather than as a double-tap.
+ */
+const RECALL_RESCUE_GRACE_FRAMES = 90;
 
 /** Frames the white flash marking a growth spurt runs for. */
 const GROWTH_FLASH_FRAMES = 10;
@@ -191,6 +316,24 @@ interface TargetBan {
    * would just restart the grinding this recorded.
    */
   liftAtCatDistance: number;
+  /**
+   * Whether a mob attacking the owner has already spent its one free attempt at
+   * this ban, and must now serve the full term like anything else.
+   *
+   * A ban is a claim that he cannot get to something, and a mob that has walked
+   * to the cat has disproved the version of that claim which said "it is over
+   * there". So the top tier is allowed through — see {@link isValidTarget} — but
+   * exactly once, and this is what makes "once" true. Ungated, the exemption and
+   * the ban feed each other every single frame: he re-acquires the mob, the
+   * search fails, {@link abandonUnreachable} bans it again, and the next frame
+   * the exemption deletes the fresh ban. That is a full A* search per frame for
+   * as long as the mob lives, and worse than the cost, it pins him inside
+   * {@link engage} — where the homeward watchdog does not run, because walking
+   * away from the cat is what engaging *is*. A raptor laps there with no route to
+   * the mob and no route to a rescue, which is the vanish again wearing a
+   * different hat.
+   */
+  refusesPartyThreatLift: boolean;
 }
 
 interface PendingBlow {
@@ -283,6 +426,61 @@ export class Mongo extends Mob {
    * it for as long as both of them live.
    */
   private engageStallFrames = 0;
+  /**
+   * Consecutive frames of walking toward the cat without getting closer to her.
+   *
+   * Separate from {@link engageStallFrames} because the two mean opposite
+   * things. A chase that stalls is abandoned — there are other mobs. A walk home
+   * that stalls cannot be abandoned; there is only the one cat, and giving up on
+   * reaching her is the vanish this whole counter exists to end.
+   */
+  private homeStallFrames = 0;
+
+  /**
+   * Set when he cannot reach the cat by walking; {@link MongoSystem} teleports
+   * him.
+   *
+   * He never moves himself by fiat. Deciding *that* he is stuck needs the
+   * navigation state only he holds, and executing the rescue needs the map and
+   * the mob grid only the system holds, so the two halves live where their
+   * information is and this flag is the seam.
+   */
+  needsRescue = false;
+
+  /**
+   * Damage the resistance has softened away but not yet charged, in fractions of
+   * a hit point. See {@link soften}.
+   *
+   * Approximate across a dodge or an absorbed blow — the balance is added to
+   * before the base class decides whether the hit landed at all — which is worth
+   * a sentence only to say it does not matter: the drift is under a hit point and
+   * it falls in the pet's favour.
+   */
+  private softenedDamageOwed = 0;
+
+  /**
+   * Frames the current run home has been going, for the forced rescue.
+   *
+   * A double-tap of the recall key is an ordinary input, and without this the
+   * second press snapped him to the cat's feet and completed the despawn — which
+   * deletes the run home, and the run home is the thing that makes a recall read
+   * as a pet coming back rather than as a toggle being flipped.
+   */
+  private recallFrames = 0;
+
+  /**
+   * Every mob this frame's scan let past its ban for attacking the owner.
+   *
+   * A set rather than "the last one", so the bookkeeping is right by inspection
+   * instead of by argument: a scan can exempt more than one candidate, and
+   * recording only the most recent quietly forgets an attempt that was spent on
+   * a mob the scan did not end up choosing. That is exactly the shape of
+   * near-miss that turned the previous version of this exemption into a
+   * per-frame A* lap. Cleared and refilled by every {@link pickTarget}; on the
+   * frames that skips — leashed, wounded, recalling, collapsing — it is stale and
+   * unread, because `abandonUnreachable` is unreachable from all of them.
+   */
+  private readonly partyThreatExemptionsUsed = new Set<Mob>();
 
   /** True once he has run out of HP — the state `MongoSystem` writes back as zero. */
   exhausted = false;
@@ -319,6 +517,77 @@ export class Mongo extends Mob {
   /** Mongo is an ally — never hostile to players. */
   override get isHostile(): boolean {
     return false;
+  }
+
+  /**
+   * He ticks wherever he is. A summon frozen for being far from the party is a
+   * summon that can never stop being far from the party — see the base getter.
+   */
+  override get exemptFromAiActivationRadius(): boolean {
+    return true;
+  }
+
+  /**
+   * The wound he actually takes; see {@link MONGO_DAMAGE_TAKEN_MULTIPLIER}.
+   *
+   * Applied in *both* damage entry points below, because they are genuinely two
+   * doors rather than one wrapping the other: `takeDamage` is what a mob swinging
+   * at a player-like target calls, `takeDamageFrom` is what a mob swinging at
+   * another *mob* calls — the golem's boulders and the Ball of Swine's charge go
+   * through the second — and it writes hp itself rather than delegating. Softened
+   * in one place only, half the things on the floor would ignore the resistance
+   * entirely, which is exactly the sort of gap that reads as random difficulty.
+   * Because neither method calls the other, softening both cannot double-apply.
+   *
+   * Kept as a running ledger rather than rounded per blow, and that is not
+   * fussiness — rounding gave the resistance a rate that depended on the size of
+   * the hit, and gave it *no effect at all* on the one damage class he cannot
+   * walk away from. Every damage-over-time tick in the game is one point, and one
+   * point softened and rounded is still one point: burn, poison, sepsis and the
+   * rest landed at full strength on the animal who cannot kite and cannot heal in
+   * the field. Charging whole points off an accumulated balance makes a run of
+   * ticks cost 0.6 each on average, which is what the multiplier says.
+   *
+   * The balance is bounded on the credit side, and that bound is the whole
+   * safety of the scheme. A blow forced up to {@link MIN_DAMAGE_TAKEN} bills the
+   * difference back to the ledger, and unbounded that is a sink: a stream of
+   * one-point hits pushes the balance 0.4 further negative every time, so the
+   * resistance stops applying to them *and* the accumulated credit is later
+   * spent as flat immunity — measured at seventy-six free hit points after two
+   * hundred ticks of a shell edge, which is a damage shield rather than a
+   * resistance. Clamped, the most the ledger can ever owe or be owed is one hit
+   * point in either direction.
+   *
+   * @param mayLandForNothing whether the blow is allowed to charge zero. True
+   *   wherever nothing reads a "did not connect" answer — every status tick, and
+   *   `takeDamageFrom`, which returns nothing at all. False only for a blow
+   *   arriving through `takeDamage`, where returning false means "missed" and
+   *   attackers use it to hold back the status riders they swing alongside.
+   */
+  private soften(amount: number, mayLandForNothing: boolean): number {
+    if (amount <= 0) return amount;
+    this.softenedDamageOwed += amount * MONGO_DAMAGE_TAKEN_MULTIPLIER;
+    let charged = Math.max(0, Math.floor(this.softenedDamageOwed));
+    if (charged < MIN_DAMAGE_TAKEN && !mayLandForNothing) charged = MIN_DAMAGE_TAKEN;
+    this.softenedDamageOwed = Math.max(-MAX_SOFTENING_CREDIT, this.softenedDamageOwed - charged);
+    return charged;
+  }
+
+  override takeDamage(amount: number, source?: DamageSource): boolean {
+    const isStatusTick = source?.kind === 'status';
+    return super.takeDamage(this.soften(amount, isStatusTick), source);
+  }
+
+  override takeDamageFrom(
+    amount: number,
+    attacker: Player | null,
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+  ): void {
+    // Free to charge nothing: this door returns void, so no caller is waiting to
+    // be told whether the blow connected. A one-point mob-on-mob tick — the
+    // shell edge, a thorn — is therefore genuinely resisted rather than forced
+    // up to a full point forty per cent of the time.
+    super.takeDamageFrom(this.soften(amount, true), attacker, damageType);
   }
 
   /**
@@ -382,6 +651,14 @@ export class Mongo extends Mob {
     this.pending = null;
     this.target = null;
     this.engageStallFrames = 0;
+    this.homeStallFrames = 0;
+    // A stall latched on the very frame he was beaten to zero must not survive
+    // the collapse. The rescue is suppressed *during* it, so left set it fires on
+    // frame one of the run home — snapping him to the cat's feet and completing
+    // the despawn instead of letting him limp back, which is the one moment the
+    // limp is the whole point. `runHome` re-latches it in a couple of seconds if
+    // he genuinely cannot get there.
+    this.needsRescue = false;
     this.isMoving = false;
     this.animator.play('collapse');
   }
@@ -394,6 +671,11 @@ export class Mongo extends Mob {
     this.pending = null;
     this.target = null;
     this.engageStallFrames = 0;
+    // The run home is a fresh walk and gets a fresh allowance: a pet who stalled
+    // his way into the recall should not be teleported on its first frame.
+    this.homeStallFrames = 0;
+    this.recallFrames = 0;
+    this.needsRescue = false;
     this.animator.cancel();
     this.clearAStarPath();
   }
@@ -439,7 +721,9 @@ export class Mongo extends Mob {
     if (distToCat > TILE_SIZE * LEASH_BREAK_TILES) this.breakLeash();
     else if (distToCat < TILE_SIZE * LEASH_RESUME_TILES) this.leashed = false;
 
-    const target = this.leashed ? null : this.pickTarget();
+    if (this.isTooWoundedToFight) this.disengageWounded();
+    const holdingBack = this.leashed || this.isTooWoundedToFight;
+    const target = holdingBack ? null : this.pickTarget();
     if (target === null) {
       this.standBy(distToCat);
       return;
@@ -447,6 +731,83 @@ export class Mongo extends Mob {
 
     this.following = false;
     this.engage(target);
+  }
+
+  /**
+   * Whether he has taken enough that he stops picking fights and sticks to the
+   * cat — see {@link MONGO_WOUNDED_RETREAT}.
+   */
+  private get isTooWoundedToFight(): boolean {
+    if (MONGO_WOUNDED_RETREAT === 'off') return false;
+    return this.maxHp > 0 && this.hp <= this.maxHp * MONGO_RETREAT_HP_FRACTION;
+  }
+
+  /**
+   * Drops the fight he was in on the frame the wound threshold is crossed.
+   *
+   * Without this the target is merely never re-picked: `pickTarget` is skipped,
+   * so the mob he held stays in the field and the cached route to it stays on
+   * the books, and the first frame he heals back over the line he resumes a
+   * chase the player thought he had broken off.
+   */
+  private disengageWounded(): void {
+    if (this.target === null) return;
+    this.target = null;
+    this.engageStallFrames = 0;
+    this.clearAStarPath();
+  }
+
+  /**
+   * The player asking, by pressing recall at a pet who is already recalling, for
+   * him to be brought home now.
+   *
+   * Honoured only once the run home has had time to *be* a run home. The press
+   * means "he is not coming", and that is not a claim a player can have formed
+   * in the two frames a double-tap takes — see {@link recallFrames}. A pet who
+   * has already decided for himself that he is stuck is answered immediately.
+   */
+  requestRescue(): void {
+    if (!this.acceptsRescueRequest) return;
+    this.needsRescue = true;
+  }
+
+  /**
+   * Whether asking would do anything — so the button can grey itself out rather
+   * than look live and swallow the press.
+   *
+   * The same rule `collapsing` is excluded by: a control that answers nothing
+   * for a second and a half reads as a dropped input, and the fix for that is to
+   * stop claiming to be live, not to shorten the window.
+   */
+  get acceptsRescueRequest(): boolean {
+    if (!this.recalling || this.recallArrived) return false;
+    return this.recallFrames >= RECALL_RESCUE_GRACE_FRAMES;
+  }
+
+  /**
+   * Accept a teleport home: forget the walk that failed.
+   *
+   * Every piece of state undone here is private to him — the cached route and
+   * its verdict, the stall counters, the mob he was walking at, the latches that
+   * remember he was mid-return. The system does the moving and cannot reach any
+   * of it, and a rescued raptor still holding a route to the corner he was stuck
+   * in walks straight back into it.
+   */
+  onRescued(): void {
+    this.needsRescue = false;
+    this.homeStallFrames = 0;
+    this.engageStallFrames = 0;
+    this.target = null;
+    this.navigationGoal = null;
+    this.leashed = false;
+    this.following = false;
+    this.clearAStarPath();
+    // The gait is paced by ground covered, and the jump is not ground he walked.
+    // Left unsampled it reads back as many times his own speed on the landing
+    // frame, which is the undersampled strobe `syncGaitToDistanceCovered` exists
+    // to keep him out of.
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
   }
 
   /**
@@ -476,6 +837,9 @@ export class Mongo extends Mob {
           TILE_SIZE * LEASH_BAN_LIFT_MIN_TILES,
           this.catDistanceTo(dropped) - TILE_SIZE * LEASH_BAN_LIFT_APPROACH_TILES,
         ),
+        // Nothing is wrong with this mob — he simply cannot have it and stay with
+        // the cat — so if it comes to her he should absolutely take it again.
+        refusesPartyThreatLift: false,
       });
     }
     this.target = null;
@@ -493,41 +857,134 @@ export class Mongo extends Mob {
    * an enemy nobody can see, ignoring the one around the corner.
    */
   private pickTarget(): Mob | null {
+    // Cleared here and refilled during this frame's scan, so `abandonUnreachable`
+    // — which runs later in the same frame, out of `engage` — reads a fresh
+    // answer and never a stale mob reference.
+    this.partyThreatExemptionsUsed.clear();
     const held = this.target;
-    if (held !== null && this.isValidTarget(held, ENGAGE_PERSIST_TILES)) return held;
+    const heldRank = held === null ? PRIORITY_NONE : this.rankOf(held);
+    if (held !== null && this.isValidTarget(held, ENGAGE_PERSIST_TILES, heldRank)) {
+      // Held targets are kept — see the field comment on `target` — with exactly
+      // one thing allowed to break the hold: something has started on the cat.
+      // Peeling him off a rat to answer that is the entire promise of "he
+      // defends the party first", and a hold that outranked it would mean the
+      // promise only applied to a pet who happened to be idle.
+      if (heldRank >= PRIORITY_PARTY_THREAT) return held;
+      const threat = this.nearestPartyThreat();
+      if (threat === null) return held;
+      return this.commitToTarget(threat, held);
+    }
 
+    let best: Mob | null = null;
+    let bestRank = PRIORITY_NONE;
+    let bestDist = Infinity;
+    for (const mob of this.allMobs) {
+      // Ranked before it is validated, because the rank is one of the inputs to
+      // whether it is valid: a mob fighting the owner is exempt from the
+      // unreachable-route ban. Two field reads, so this costs nothing.
+      const rank = this.rankOf(mob);
+      if (rank < bestRank) continue;
+      if (!this.isValidTarget(mob, ENGAGE_RADIUS_TILES, rank)) continue;
+      const distance = Math.hypot(mob.x - this.x, mob.y - this.y);
+      if (rank === bestRank && distance >= bestDist) continue;
+      // Last, because it is the only expensive test here.
+      if (!this.canNoticeCandidate(mob, rank)) continue;
+      bestRank = rank;
+      bestDist = distance;
+      best = mob;
+    }
+
+    return this.commitToTarget(best, held);
+  }
+
+  /** Which tier `mob` falls into; see the `PRIORITY_*` constants. */
+  private rankOf(mob: Mob): number {
+    if (mob.currentTarget === this.owner) return PRIORITY_PARTY_THREAT;
+    if (mob.wasRecentlyHurtBy(this.owner)) return PRIORITY_OWNER_QUARRY;
+    return PRIORITY_NEAREST;
+  }
+
+  /**
+   * The nearest mob that is currently fighting the cat, or null.
+   *
+   * No sight test, on purpose and cheaply: a mob whose target is the owner is
+   * top tier, and top tier is exempt from the perception gate anyway — see
+   * {@link canNoticeCandidate}. That is what makes this affordable to run every
+   * frame while he already has a target.
+   */
+  private nearestPartyThreat(): Mob | null {
     let nearest: Mob | null = null;
     let nearestDist = Infinity;
     for (const mob of this.allMobs) {
-      if (!this.isValidTarget(mob, ENGAGE_RADIUS_TILES)) continue;
+      if (mob.currentTarget !== this.owner) continue;
+      if (!this.isValidTarget(mob, ENGAGE_RADIUS_TILES, PRIORITY_PARTY_THREAT)) continue;
       const distance = Math.hypot(mob.x - this.x, mob.y - this.y);
       if (distance >= nearestDist) continue;
-      if (!this.canNotice(mob)) continue;
       nearestDist = distance;
       nearest = mob;
     }
-
-    if (nearest !== held) {
-      // The cached route leads to the mob he just gave up on; walking it while
-      // steering at a new one is the "chasing two things at once" stagger.
-      this.clearAStarPath();
-      if (nearest !== null) {
-        this.lastKnownTargetX = nearest.x;
-        this.lastKnownTargetY = nearest.y;
-      }
-    }
-    if (nearest !== held) this.engageStallFrames = 0;
-    this.target = nearest;
     return nearest;
   }
 
-  /** Whether `mob` is something he may fight, from within `radiusTiles` of the cat. */
-  private isValidTarget(mob: Mob, radiusTiles: number): boolean {
+  /**
+   * The perception gate on new quarry, lifted for a mob already in a fight with
+   * his owner.
+   *
+   * Sight is the right gate for picking a fight — without it he walks to a wall
+   * with his nose to an enemy nobody can see. It is the wrong gate for answering
+   * one: the cat being bitten through a doorway is a thing he is told about by
+   * her, not something he has to see for himself, and this is the same exemption
+   * `canNotice` already makes for a mob that has hurt *him*.
+   */
+  private canNoticeCandidate(mob: Mob, rank: number): boolean {
+    if (rank >= PRIORITY_PARTY_THREAT) return true;
+    return this.canNotice(mob);
+  }
+
+  /** Adopts `chosen`, resetting the per-target state `held` left behind. */
+  private commitToTarget(chosen: Mob | null, held: Mob | null): Mob | null {
+    if (chosen !== held) {
+      // The cached route leads to the mob he just gave up on; walking it while
+      // steering at a new one is the "chasing two things at once" stagger.
+      this.clearAStarPath();
+      this.engageStallFrames = 0;
+      if (chosen !== null) {
+        this.lastKnownTargetX = chosen.x;
+        this.lastKnownTargetY = chosen.y;
+      }
+    }
+    this.target = chosen;
+    return chosen;
+  }
+
+  /**
+   * Whether `mob` is something he may fight, from within `radiusTiles` of the
+   * cat.
+   *
+   * `rank` is an input rather than decoration: a mob fighting the owner clears
+   * the hold-off list outright. Both bans are claims that stop being true the
+   * moment a mob closes on the cat, and one of them cannot say so by itself — a
+   * leash-break ban lifts on cat-distance and a mob standing on her satisfies
+   * that, but {@link abandonUnreachable} sets `liftAtCatDistance` to a value no
+   * distance can ever satisfy, so it always runs its full term. Without this the
+   * top tier's whole promise fails in the commonest case it exists for: he
+   * cannot route to a mob across a diagonal gap and bans it, the mob then walks
+   * over and starts biting the cat, and he stands at her shoulder for three
+   * seconds refusing to peel it — on the strength of a routing verdict the mob
+   * has just disproved with its feet.
+   *
+   * The exemption is spent once per ban, not granted afresh every frame; see
+   * {@link TargetBan.refusesPartyThreatLift} for what that costs when it is not.
+   */
+  private isValidTarget(mob: Mob, radiusTiles: number, rank = PRIORITY_NEAREST): boolean {
     if (mob === this || !mob.isAlive || !mob.isPetAttackable) return false;
     const fromCat = this.catDistanceTo(mob);
     const ban = this.offLimits.get(mob);
     if (ban !== undefined) {
-      if (fromCat > ban.liftAtCatDistance) return false;
+      const exempt = rank >= PRIORITY_PARTY_THREAT && !ban.refusesPartyThreatLift;
+      const banHolds = !exempt && fromCat > ban.liftAtCatDistance;
+      if (banHolds) return false;
+      if (exempt) this.partyThreatExemptionsUsed.add(mob);
       this.offLimits.delete(mob);
     }
     return fromCat <= TILE_SIZE * radiusTiles;
@@ -555,6 +1012,15 @@ export class Mongo extends Mob {
     this.offLimits.set(target, {
       framesLeft: NO_ROUTE_FORGET_FRAMES,
       liftAtCatDistance: NO_EARLY_LIFT,
+      // Only if the exemption is what let him try in the first place. Keyed on
+      // the exemption having actually been *used* rather than on the target's
+      // rank, because those are not the same test and the difference is the
+      // whole feature: a mob banned for the first time has no prior ban for the
+      // exemption to have lifted, so ranking on it would mark every party threat
+      // as having spent an attempt it was never granted — and he would refuse to
+      // peel the mob biting his owner for the full ban, which is the behaviour
+      // the exemption exists to prevent.
+      refusesPartyThreatLift: this.partyThreatExemptionsUsed.has(target),
     });
     this.target = null;
     this.engageStallFrames = 0;
@@ -575,6 +1041,7 @@ export class Mongo extends Mob {
     else if (distToCat <= TILE_SIZE * RETURN_STOP_TILES) this.following = false;
 
     if (!this.following) {
+      this.homeStallFrames = 0;
       this.isMoving = false;
       if (!this.animator.isPlaying) this.faceToward(this.owner);
       return;
@@ -584,12 +1051,49 @@ export class Mongo extends Mob {
     // bite killing the thing he was biting, and walking off mid-swing slides a
     // raptor across the floor with his jaws still closing on empty air.
     if (this.animator.isPlaying) {
+      // Standing through his own swing is not a stall — he chose it.
+      this.homeStallFrames = 0;
       this.isMoving = false;
       return;
     }
 
     this.setNavigationGoal('cat');
+    const preX = this.x;
+    const preY = this.y;
     this.followTargetAStar(this.owner.x, this.owner.y, this.speed, TILE_SIZE * RETURN_STOP_TILES);
+    this.trackHomewardWalk(Math.hypot(this.x - preX, this.y - preY), distToCat);
+  }
+
+  /**
+   * Records one frame of walking toward the cat, and latches
+   * {@link needsRescue} when the walk is never going to arrive.
+   *
+   * Shared by the follow walk and the recall run, because both fail the same
+   * way: geometry between him and the cat that A* cannot route around — a sealed
+   * boss door, a one-tile pocket, a diagonal gap — after which
+   * `followTargetAStar` degrades to pressing straight into it.
+   *
+   * A frame is lost when he covered no ground *or* when the last search for a
+   * route home came back empty; it counts as progress only when he has a route
+   * and is moving along it. Pixels rather than `isMoving`, which
+   * `followTargetCollide` sets true on the branch where neither the direct step
+   * nor the unstick moved him at all.
+   *
+   * Falling behind on open ground is deliberately *not* a stall — he has a route
+   * and he is walking it, he is simply slower than the cat. Counting it would
+   * teleport a juvenile to her heels every couple of seconds for the crime of
+   * having short legs. {@link RESCUE_DISTANCE_TILES} is what catches that case,
+   * at a distance the player will read as the pet catching up.
+   */
+  private trackHomewardWalk(coveredPx: number, distToCat: number): void {
+    const wentNowhere = coveredPx <= MOVEMENT_PROGRESS_EPSILON_PX;
+    if (wentNowhere || this.astarSearchFailed) this.homeStallFrames++;
+    else this.homeStallFrames = 0;
+
+    const strandedFarFromCat = distToCat > TILE_SIZE * RESCUE_DISTANCE_TILES;
+    if (this.homeStallFrames > HOME_STALL_LIMIT_FRAMES || strandedFarFromCat) {
+      this.needsRescue = true;
+    }
   }
 
   /** Throws away the cached route, and its verdict, when he changes his mind about where he is going. */
@@ -600,6 +1104,7 @@ export class Mongo extends Mob {
   }
 
   private runHome(): void {
+    this.recallFrames++;
     this.setNavigationGoal('cat');
     const distance = Math.hypot(this.owner.x - this.x, this.owner.y - this.y);
     if (distance < TILE_SIZE * RECALL_ARRIVE_TILES) {
@@ -609,7 +1114,10 @@ export class Mongo extends Mob {
       return;
     }
     const speed = this.speed * RECALL_SPEED_MULTIPLIER;
+    const preX = this.x;
+    const preY = this.y;
     this.followTargetAStar(this.owner.x, this.owner.y, speed, TILE_SIZE * RECALL_STOP_TILES);
+    this.trackHomewardWalk(Math.hypot(this.x - preX, this.y - preY), distance);
   }
 
   private engage(target: Mob): void {
@@ -640,7 +1148,7 @@ export class Mongo extends Mob {
       // grinding against geometry A* was willing to route him through, and the
       // second is the wall-walking the player reported.
       const covered = Math.hypot(this.x - preX, this.y - preY);
-      if (covered > CHASE_PROGRESS_EPSILON_PX) this.engageStallFrames = 0;
+      if (covered > MOVEMENT_PROGRESS_EPSILON_PX) this.engageStallFrames = 0;
       else this.engageStallFrames++;
       if (this.astarSearchFailed || this.engageStallFrames > ENGAGE_STALL_LIMIT_FRAMES) {
         this.abandonUnreachable(target);
@@ -883,6 +1391,18 @@ export class Mongo extends Mob {
   /** Game frames the collapse one-shot runs for, for callers that need to wait it out. */
   static get collapseFrames(): number {
     return mongoActionDuration('collapse');
+  }
+
+  /**
+   * The mob he is fighting right now, or null.
+   *
+   * Read-only and public purely so the target-priority rules are checkable from
+   * outside: `scripts/verify-mongo.ts` asserts he peels the mob attacking his
+   * owner rather than the nearer one, and which mob he chose is otherwise
+   * invisible to anything but the eye.
+   */
+  get engagedTarget(): Mob | null {
+    return this.target;
   }
 
   /** The one-shot currently playing, for the preview harness and for audio. */

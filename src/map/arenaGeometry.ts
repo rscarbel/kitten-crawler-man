@@ -124,6 +124,32 @@ export function arenaGateTileAt(centre: Point): Point {
 }
 
 /**
+ * Tiles the north gate's breach runs over: the straight column pair from the
+ * landing room's southern edge south to the reserve margin's outermost row,
+ * which touches the concourse ring at the arena's north pole.
+ *
+ * The pocket lies north of the arena, so the run counts *up* in y from the room
+ * towards the ring, never the other way.
+ *
+ * Shared because two passes have to agree on it exactly: the generator claims
+ * these tiles for the beyond pocket so nothing else may seat on them, and later
+ * carves the same run out of the rock. A claim that missed a carved tile would
+ * leave a free-region room free to open onto the breach — the one bypass into
+ * the pocket that the whole design exists to close.
+ */
+export function arenaGateBreachTiles(centre: Point, landingRoom: Rect): Point[] {
+  const marginY = centre.y - ARENA_REACH;
+  const landingSouthY = landingRoom.y + landingRoom.h;
+  const tiles: Point[] = [];
+  for (const offset of ARENA_GATE_COLUMN_OFFSETS) {
+    for (let y = landingSouthY; y <= marginY; y++) {
+      tiles.push({ x: centre.x + offset, y });
+    }
+  }
+  return tiles;
+}
+
+/**
  * The ground the arena structure occupies.
  *
  * Stops at the door row rather than being a symmetric square: everything south of

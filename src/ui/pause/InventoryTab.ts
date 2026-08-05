@@ -220,6 +220,7 @@ export function renderInventoryTab(
     height: BACK_BUTTON_HEIGHT,
     label: 'Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => setTab('main'),
   });
 }

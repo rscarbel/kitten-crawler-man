@@ -39,7 +39,6 @@ import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
-import { SystemAnnouncer } from '../ui/SystemAnnouncer';
 import { HotbarToast } from '../ui/HotbarToast';
 import { potionEffectNotice, statBoostNotice } from '../ui/potionNotices';
 import {
@@ -185,7 +184,7 @@ import { hasRoomToMove } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
-import { MongoSystem } from '../systems/MongoSystem';
+import { MongoSystem, SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
 import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem } from '../systems/CircusQuestSystem';
@@ -212,7 +211,7 @@ import {
 } from '../core/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
-import { RenderPipeline, type RenderContext } from '../systems/RenderPipeline';
+import { RenderPipeline, visibilityRadiusPx, type RenderContext } from '../systems/RenderPipeline';
 import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
 import { DungeonInputHandler } from '../systems/DungeonInputHandler';
@@ -578,8 +577,6 @@ const IDLE_TEXT_BOUNCE_FREQUENCY = 0.005;
 
 // UI button positioning (Mongo/Gear/Bag etc)
 const SUMMON_BUTTON_X = 10;
-const SUMMON_BUTTON_WIDTH = 80;
-const SUMMON_BUTTON_HEIGHT = 48;
 const SUMMON_BUTTON_Y_OFFSET_1 = 52;
 const SUMMON_BUTTON_Y_OFFSET_2 = 12;
 const SUMMON_BUTTON_Y_OFFSET_3 = 52;
@@ -707,7 +704,6 @@ export class DungeonScene extends GameplayScene {
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
   private readonly floatingText: FloatingCombatTextSystem;
-  private readonly systemAnnouncer: SystemAnnouncer;
   private readonly hotbarToast = new HotbarToast();
   private readonly systemNotices: SystemNoticeSystem;
   private bossRoom: BossRoomSystem;
@@ -1025,8 +1021,7 @@ export class DungeonScene extends GameplayScene {
       options?.audio ?? null,
     );
     this.floatingText = new FloatingCombatTextSystem();
-    this.systemAnnouncer = new SystemAnnouncer(options?.audio ?? null);
-    this.systemNotices = new SystemNoticeSystem(this.bus, this.systemAnnouncer, this.hotbarToast);
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.hotbarToast);
     // The safe-room counter is stamped here rather than in the generators: it
     // belongs to every safe room on every map, and this and BuildingInteriorScene
     // are the only two places a safe room is ever brought to life. Idempotent,
@@ -1499,6 +1494,8 @@ export class DungeonScene extends GameplayScene {
       (amount) => {
         this.abilityManager.addXp('mongo', amount);
       },
+      () => this.mongoXpFraction(),
+      (message) => this.hotbarToast.show(message),
     );
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
@@ -2210,7 +2207,6 @@ export class DungeonScene extends GameplayScene {
     this.ambientSound?.dispose();
     this.bopca.dispose();
     this.floatingText.dispose();
-    this.systemAnnouncer.clear();
     this.hotbarToast.clear();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
@@ -2809,6 +2805,19 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Progress toward the next pet level, 0–1, for the strip on the Summon button.
+   *
+   * Full at the cap rather than empty: `xpToNextLevel` is Infinity there, and a
+   * bar reading zero for a maxed-out pet says the opposite of what is true.
+   */
+  private mongoXpFraction(): number {
+    const state = this.abilityManager.getState('mongo');
+    if (state === null) return 0;
+    if (!Number.isFinite(state.xpToNextLevel) || state.xpToNextLevel <= 0) return 1;
+    return Math.max(0, Math.min(1, state.xp / state.xpToNextLevel));
+  }
+
+  /**
    * The Summon button and the R key are one toggle: out of play he is summoned,
    * in play he is called back — and he runs home rather than vanishing, so
    * recalling him mid-fight is a real decision rather than a free undo.
@@ -3312,20 +3321,20 @@ export class DungeonScene extends GameplayScene {
         space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
         locksKeyboard: false,
       },
-      {
-        isOpen: this.levelUpDialog.isShowing,
-        space: { kind: 'advance', advance: () => void this.levelUpDialog.handleSpaceBar() },
-        locksKeyboard: true,
-      },
+      // The four below each render an accept button inside their own focus ring,
+      // so the ring takes the press before this chain is reached. The claim is
+      // still needed to keep the rest of the keyboard — and the world behind —
+      // out of it.
+      { isOpen: this.levelUpDialog.isShowing, space: { kind: 'swallow' }, locksKeyboard: true },
       {
         isOpen: this.rewardGrantedDialog.isShowing,
-        space: { kind: 'advance', advance: () => void this.rewardGrantedDialog.handleSpaceBar() },
+        space: { kind: 'swallow' },
         locksKeyboard: true,
       },
       { isOpen: this.skillBookPrompt.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
       {
         isOpen: this.levelCompleteScreen.isActive,
-        space: { kind: 'advance', advance: () => void this.levelCompleteScreen.handleSpaceBar() },
+        space: { kind: 'swallow' },
         locksKeyboard: false,
       },
       { isOpen: this.playerChat.isOpen, space: { kind: 'passThrough' }, locksKeyboard: true },
@@ -3334,14 +3343,10 @@ export class DungeonScene extends GameplayScene {
         space: closeWithClick(() => noticeBoard?.close()),
         locksKeyboard: true,
       },
-      {
-        isOpen: marketPanel?.isOpen === true,
-        space: closeWithClick(() => marketPanel?.close()),
-        locksKeyboard: true,
-      },
+      { isOpen: marketPanel?.isOpen === true, space: { kind: 'swallow' }, locksKeyboard: true },
       {
         isOpen: fortuneTeller?.isOpen === true,
-        space: closeWithClick(() => fortuneTeller?.close()),
+        space: { kind: 'swallow' },
         locksKeyboard: true,
       },
       {
@@ -3609,11 +3614,6 @@ export class DungeonScene extends GameplayScene {
     // building menu and left both boxes fighting over the same clicks.
     if (this.focusedOverlay !== null) return;
 
-    if (this.gameOver && this.deathScreen.handleSpaceBar()) {
-      this.respawnAfterDeath();
-      return;
-    }
-
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
       // Beside the Mordecai and bed checks rather than above them: each fixture
@@ -3844,6 +3844,11 @@ export class DungeonScene extends GameplayScene {
       this.chestRewardDialog.handleClick(mx, my);
       return;
     }
+    // Ranked here rather than below the panels, matching where `overlayClaims`
+    // puts it: the award overlays swallow every click while they are up, so a
+    // menu that outranked them here would take a press aimed at their OK button
+    // and leave the overlay with no way to be dismissed.
+    if (this.achievementUI.handleClick(mx, my)) return;
     if (this.levelUpDialog.handleClick(mx, my)) return;
     if (this.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.skillBookPrompt.isOpen) {
@@ -3873,8 +3878,6 @@ export class DungeonScene extends GameplayScene {
       this.fortuneTeller.handleClick(mx, my, this.active());
       return;
     }
-    if (this.achievementUI.handleClick(mx, my)) return;
-
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.handleClick(mx, my);
@@ -4152,11 +4155,9 @@ export class DungeonScene extends GameplayScene {
       this.market?.update();
     }
 
-    // Ticked ahead of every early return below: the announcer speaks for the
-    // System, and a line queued on the last step of a floor has to keep counting
-    // down while the level-complete screen is up or it would be drawn frozen and
-    // then thrown away with the scene.
-    this.systemAnnouncer.update();
+    // Ticked ahead of every early return below: a toast raised on the last step
+    // of a floor has to keep counting down while the level-complete screen is up
+    // or it would be drawn frozen and then thrown away with the scene.
     this.hotbarToast.update();
     // Above the gameplay-halted early return below: his talk pose is only ever
     // wanted while his own dialog is open, which is exactly when gameplay is
@@ -4270,6 +4271,31 @@ export class DungeonScene extends GameplayScene {
 
     UIRenderer.renderHealthVignette(ctx, this.active(), this.gameOver);
 
+    // Between the fog and the HUD, and pinned there by both neighbours.
+    //
+    // It has to be after the fog, which fills everything past its outer radius
+    // with solid black: a marker clamped to the screen edge is by definition out
+    // at that radius or further — further still once the camera clamps at a map
+    // border and puts the party on the opposite side of the screen — so drawn
+    // with the world effects it was painted out in precisely the
+    // far-from-the-cat case it exists to answer.
+    //
+    // And it has to be before the HUD, which is the one piece of chrome drawn
+    // ahead of it. The other directional affordances below are drawn *at the
+    // player* and can never reach the corners; this one is clamped to the edge,
+    // so a pet off the top of the screen puts it inside the HUD panel's health
+    // bars. Everything else on screen — the minimap, the buttons, the pause menu
+    // and the award overlays — is drawn after this point and covers it already.
+    if (!this.gameOver && !this.pauseMenu.isOpen) {
+      this.mongoSystem.renderOffscreenMarker(
+        ctx,
+        camX,
+        camY,
+        this.active(),
+        visibilityRadiusPx(this.active()),
+      );
+    }
+
     // Render the HUD panel. On mobile the skill-points badge is NOT drawn here;
     // it is stacked below the boss UI box further down in this method.
     const hudResult = drawHUD(ctx, this.human, this.cat, this.notifPulse, this._hudCollapsed);
@@ -4293,6 +4319,7 @@ export class DungeonScene extends GameplayScene {
         this.mobGrid,
         this.safeRoom.mordecaiPositions,
         this.collectQuestMarkers(),
+        this.mongoSystem.mongo,
       );
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
       this.touch.miniMapRect = {
@@ -4464,8 +4491,6 @@ export class DungeonScene extends GameplayScene {
       this.renderPropPrompt(ctx, camX, camY);
     }
 
-    this.achievementUI.renderOverlays(ctx);
-
     if (this.safeRoom.mordecaiDialogOpen) {
       this.safeRoom.renderMordecaiDialog(ctx);
     }
@@ -4494,14 +4519,6 @@ export class DungeonScene extends GameplayScene {
       this.safeRoom.renderSleepOverlay(ctx);
     }
 
-    if (this.chestRewardDialog.isOpen) {
-      this.chestRewardDialog.render(ctx);
-    }
-
-    this.levelUpDialog.render(ctx);
-    this.rewardGrantedDialog.render(ctx);
-    this.skillBookPrompt.render(ctx);
-
     if (this.followerMenu.isOpen) {
       this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
       this.followerMenu.render(
@@ -4512,7 +4529,23 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    if (this.tutorial === null) {
+    // The award stack, drawn lowest-priority first so that draw order matches
+    // the order `overlayClaims` and `handleClick` rank these same surfaces in.
+    // Whichever one is on top is then also the one that owns the keyboard's
+    // focus ring and the one a click reaches — three orders that used to
+    // disagree, which left the topmost dialog visible but un-activatable.
+    this.skillBookPrompt.render(ctx);
+    this.rewardGrantedDialog.render(ctx);
+    this.levelUpDialog.render(ctx);
+    this.achievementUI.renderOverlays(ctx);
+    if (this.chestRewardDialog.isOpen) {
+      this.chestRewardDialog.render(ctx);
+    }
+
+    // Hidden behind the pause menu, like every other overlay above: the intro
+    // card is drawn last and would otherwise cover the menu it was opened over,
+    // leaving a screen of buttons nobody can see to aim at.
+    if (this.tutorial === null && !this.pauseMenu.isOpen) {
       this.dungeonIntro.render(ctx);
 
       if (this.dungeonIntro.isActive && !this.introStarted) {
@@ -4546,7 +4579,6 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
-    this.systemAnnouncer.render(ctx);
     this.hotbarToast.render(ctx, this.inventoryPanel.hotbarBandHeight());
     aiAdapter.render(ctx);
     this.playerChat.renderChatHint(ctx);
@@ -5262,7 +5294,7 @@ export class DungeonScene extends GameplayScene {
   private skillBookFlowHost(): SkillBookFlowHost {
     return {
       audio: this.audio,
-      announce: (message) => this.systemAnnouncer.announce(message),
+      announce: (message) => this.hotbarToast.show(message),
       prompt: this.skillBookPrompt,
       showReward: (reward) => this.bus.emit('rewardGranted', { rewards: [reward] }),
       showLevelUp: (entry) => {

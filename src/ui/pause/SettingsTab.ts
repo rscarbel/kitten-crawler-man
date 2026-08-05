@@ -1,6 +1,6 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { type ButtonRect, type PauseTab } from './types';
-import { addButton, BUTTON_PRESETS } from '../Button';
+import { addButton, beginMenuFocus, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawBox, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
@@ -58,6 +58,12 @@ const QUALITY_HINTS: Record<QualityPreset, string> = {
   sharp: 'Full detail on high-density displays.',
   performance: 'Lowest cost. Best for older or throttling devices.',
 };
+
+// Controls section
+const CONTROLS_SECTION_LABEL_Y_OFFSET = 16;
+const CONTROLS_SECTION_Y_SPACING = 32;
+const CONTROLS_BUTTON_HEIGHT = 40;
+const CONTROLS_BUTTON_Y_SPACING = 52;
 
 // Mobile controls section
 const MOBILE_SECTION_LABEL_Y_OFFSET = 16;
@@ -261,6 +267,7 @@ function renderResetConfirmDialog(
     height: CONFIRM_BTN_H,
     label: 'Cancel',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: onCancel,
   });
 }
@@ -325,6 +332,26 @@ export function renderSettingsTab(
   renderQualityChoice(ctx, buttons, sliderX, y, sliderW);
   y += platform.isMobile ? QUALITY_SECTION_Y_SPACING_BARE : QUALITY_SECTION_Y_SPACING_WITH_HINT;
 
+  drawText(ctx, 'Controls', {
+    x: bx + AUDIO_LABEL_X,
+    y: y + CONTROLS_SECTION_LABEL_Y_OFFSET,
+    bold: true,
+    size: SECTION_LABEL_SIZE,
+    color: '#64748b',
+  });
+  y += CONTROLS_SECTION_Y_SPACING;
+
+  addButton(ctx, buttons, {
+    x: sliderX,
+    y,
+    width: sliderW,
+    height: CONTROLS_BUTTON_HEIGHT,
+    label: 'Controls & Key Bindings',
+    ...BUTTON_PRESETS.primary,
+    action: () => setTab('controls'),
+  });
+  y += CONTROLS_BUTTON_Y_SPACING;
+
   if (platform.isMobile) {
     drawText(ctx, 'Mobile Controls', {
       x: bx + AUDIO_LABEL_X,
@@ -386,11 +413,15 @@ export function renderSettingsTab(
     height: CHAT_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => setTab('main'),
   });
 
   if (showResetConfirm) {
     buttons.length = 0;
+    // Narrows both the click routing and the focus ring to the dialog's own two
+    // buttons, so nothing behind the dim can be reached by pointer or keyboard.
+    beginMenuFocus('pause-reset-confirm');
     renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
   }
 }

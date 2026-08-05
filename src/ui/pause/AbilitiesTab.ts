@@ -455,6 +455,7 @@ function renderListView(
     height: BACK_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => {
       currentView = 'list';
       setTab('main');
@@ -820,6 +821,7 @@ function renderEquippedAbilitiesView(
     height: BACK_BUTTON_HEIGHT,
     label: '← Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => {
       currentView = 'list';
       touchStartY = null;
@@ -1065,6 +1067,7 @@ function renderDetailView(
     height: BACK_BUTTON_HEIGHT,
     label: '← Back to Abilities',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => {
       currentView = 'list';
       touchStartY = null;

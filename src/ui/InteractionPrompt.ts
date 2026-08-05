@@ -1,4 +1,5 @@
 import { platform } from '../core/Platform';
+import { keybindings } from '../core/Keybindings';
 
 // InteractionPrompt layout constants
 const BOB_PERIOD = 400;
@@ -38,7 +39,8 @@ export function drawInteractionPrompt(
   label?: string,
   keyOverride?: string,
 ): void {
-  const keyText = keyOverride ?? (platform.isMobile ? 'TAP' : 'SPACE');
+  const keyText =
+    keyOverride ?? (platform.isMobile ? 'TAP' : keybindings.labelFor('attack').toUpperCase());
   const bob = Math.sin(performance.now() / BOB_PERIOD) * BOB_AMPLITUDE;
 
   ctx.save();

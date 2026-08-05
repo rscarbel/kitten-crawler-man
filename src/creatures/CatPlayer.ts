@@ -35,8 +35,7 @@ const DEGREES_PER_HALF_TURN = 180;
 /** Dexterity the System hands Donut for free on each level-up. */
 const ENHANCED_GROWTH_DEX_PER_LEVEL = 1;
 
-const CONSTITUTION_AUDIT_NOTICE =
-  'Patch 2.0: Crawler audit complete. Misallocated constitution points have been refunded. The System apologizes for nothing.';
+const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
 
 /**
  * This is a playable character.

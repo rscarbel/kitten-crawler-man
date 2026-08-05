@@ -256,6 +256,7 @@ export function renderStatsTab(
     height: BACK_BTN_HEIGHT,
     label: 'Back',
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: () => setTab('main'),
   });
 

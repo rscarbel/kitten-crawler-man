@@ -16,8 +16,8 @@ export interface SkillBookUseOutcome {
   /** Set when the read failed, so the caller can play an error sound. */
   refusalReason: 'wrong_crawler' | 'already_mastered' | 'missing' | null;
   /**
-   * System-AI line to announce, or null when the unlock itself already
-   * announced through `SkillManager`'s event queue.
+   * System line to announce, or null when the unlock itself already announced
+   * through `SkillManager`'s event queue.
    */
   message: string | null;
 }
@@ -40,7 +40,7 @@ export function skillBookRefusal(
     return {
       consumed: false,
       refusalReason: 'wrong_crawler',
-      message: `${def.name} is not written for you. The System suggests handing it to someone with the correct number of legs.`,
+      message: `${def.name} — wrong crawler`,
     };
   }
 
@@ -48,7 +48,7 @@ export function skillBookRefusal(
     return {
       consumed: false,
       refusalReason: 'already_mastered',
-      message: `${def.name} is already at maximum. Sell it. Capitalism finds a way.`,
+      message: `${def.name} — already maxed`,
     };
   }
 

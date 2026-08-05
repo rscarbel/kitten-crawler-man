@@ -7,7 +7,15 @@ import { TutorialController } from '../systems/TutorialController';
 import { getLevelDef } from '../levels';
 import { drawText } from '../ui/TextBox';
 import { drawOverlay } from '../ui/Box';
-import { drawButton, BUTTON_PRESETS, setButtonMouseState, notifyButtonClick } from '../ui/Button';
+import type { ButtonResult } from '../ui/Button';
+import {
+  beginMenuFocus,
+  endMenuFocus,
+  drawButton,
+  BUTTON_PRESETS,
+  setButtonMouseState,
+  notifyButtonClick,
+} from '../ui/Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const TITLE_Y_FRACTION = 0.22;
@@ -23,6 +31,12 @@ const TEXT_SIDE_MARGIN = 24;
 export class PostSignupScene extends Scene {
   private _mouseX = 0;
   private _mouseY = 0;
+  /**
+   * The rects `render` last produced. Kept rather than re-derived in
+   * `handleClick`, so the two can never disagree about where a button is.
+   */
+  private tutorialButton: ButtonResult | null = null;
+  private skipButton: ButtonResult | null = null;
 
   constructor(
     private readonly input: InputManager,
@@ -49,6 +63,7 @@ export class PostSignupScene extends Scene {
     });
 
     setButtonMouseState(this._mouseX, this._mouseY);
+    beginMenuFocus('post-signup');
 
     drawText(ctx, 'Welcome, adventurer!', {
       x: TEXT_SIDE_MARGIN,
@@ -73,7 +88,7 @@ export class PostSignupScene extends Scene {
 
     const btnY = viewportHeight() * BTN_Y_FRACTION;
 
-    drawButton(ctx, {
+    this.tutorialButton = drawButton(ctx, {
       x: cx,
       y: btnY,
       width: BTN_WIDTH,
@@ -81,9 +96,10 @@ export class PostSignupScene extends Scene {
       alignX: 'center',
       label: 'Continue to Tutorial',
       ...BUTTON_PRESETS.success,
+      primaryAction: true,
     });
 
-    drawButton(ctx, {
+    this.skipButton = drawButton(ctx, {
       x: cx,
       y: btnY + BTN_HEIGHT + BTN_GAP,
       width: BTN_WIDTH,
@@ -92,24 +108,16 @@ export class PostSignupScene extends Scene {
       label: 'Skip to Level 1',
       ...BUTTON_PRESETS.primary,
     });
+
+    endMenuFocus();
   }
 
   handleClick(mx: number, my: number): void {
-    const cx = viewportWidth() / 2;
-    const btnY = viewportHeight() * BTN_Y_FRACTION;
-
-    const tutorialBtnX = cx - BTN_WIDTH / 2;
-    const skipBtnX = cx - BTN_WIDTH / 2;
-    const skipBtnY = btnY + BTN_HEIGHT + BTN_GAP;
-
-    const inRect = (x: number, y: number, bx: number, by: number, w: number, h: number) =>
-      x >= bx && x <= bx + w && y >= by && y <= by + h;
-
     notifyButtonClick(mx, my);
 
-    if (inRect(mx, my, tutorialBtnX, btnY, BTN_WIDTH, BTN_HEIGHT)) {
+    if (this.tutorialButton?.contains(mx, my) === true) {
       this.launchTutorial();
-    } else if (inRect(mx, my, skipBtnX, skipBtnY, BTN_WIDTH, BTN_HEIGHT)) {
+    } else if (this.skipButton?.contains(mx, my) === true) {
       this.launchLevel1();
     }
   }

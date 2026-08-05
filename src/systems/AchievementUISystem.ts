@@ -75,20 +75,19 @@ export class AchievementUISystem {
 
   /**
    * Handle a space-bar press as an OK/continue action.
-   * Returns true if the event was consumed.
+   *
+   * The achievement notification accepts through its own focus ring now, so all
+   * that is left here is the loot-box reveal — which has no button to focus and
+   * is skipped by a bare press.
+   *
+   * @returns true if the event was consumed.
    */
   handleSpaceBar(): boolean {
     if (this.lootBoxOpener.isOpen) {
       this.lootBoxOpener.skip();
       return true;
     }
-    if (this._notifActive) {
-      if (this.achievementNotif.handleSpaceBar()) {
-        this._advanceNotifQueue();
-      }
-      return true;
-    }
-    return false;
+    return this._notifActive;
   }
 
   private _advanceNotifQueue(): void {

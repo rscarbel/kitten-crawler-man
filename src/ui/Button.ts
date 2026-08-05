@@ -62,6 +62,174 @@ interface PointerSpace {
 const CANVAS_POINTER_SPACE: PointerSpace = { scale: 1, pivotX: 0, pivotY: 0 };
 let _pointerSpace: PointerSpace = CANVAS_POINTER_SPACE;
 
+/** Gold, so the ring reads as focus against every preset's own border colour. */
+const FOCUS_RING_COLOR = '#facc15';
+const FOCUS_RING_BLUR = 10;
+const FOCUS_RING_BORDER_WIDTH = 2.5;
+/** Grown slightly outside the button so a gold-bordered preset still shows a ring. */
+const FOCUS_RING_INSET = -2;
+
+/**
+ * One keyboard-navigable button, captured in draw order while a menu context is
+ * declared. Carries its own pointer space so activation can synthesize a click
+ * at the button's real canvas position.
+ */
+interface FocusEntry {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  isPrimary: boolean;
+  space: PointerSpace;
+}
+
+/** The ring the most recent completed render frame left behind. */
+const _focusRing: FocusEntry[] = [];
+
+/** The context declared by the last {@link beginMenuFocus} call of the frame. */
+let _declaredContextId: string | null = null;
+
+/** Whether buttons drawn right now still join the ring. */
+let _ringOpen = false;
+
+/** The context {@link _focusIndex} is an index into. */
+let _focusedContextId: string | null = null;
+
+/** Which ring entry is focused, or null while the player has not touched the keyboard. */
+let _focusIndex: number | null = null;
+
+/**
+ * Whether an accept key has already been answered since the last render.
+ *
+ * The ring the keyboard aims at belongs to the last frame that drew, and
+ * activating a button usually tears that frame's menu down. Without this a
+ * second press arriving inside the same ~16 ms would synthesize a second click
+ * at coordinates that no longer mean anything.
+ */
+let _activatedSinceRender = false;
+
+/**
+ * Declare that the buttons drawn after this call, in this frame, form a
+ * keyboard-navigable ring. One call at the top of a menu's render is the whole
+ * adoption cost.
+ *
+ * Calling it again in the same frame *restarts* the ring, which is how an inner
+ * confirm dialog narrows focus to its own two buttons: the same trick its click
+ * routing already plays by zeroing the hit-rect array.
+ *
+ * @param contextId - stable identity for this menu. Focus resets whenever the
+ *   declared context changes, so a mouse user never sees a ring they did not ask for.
+ */
+export function beginMenuFocus(contextId: string): void {
+  _declaredContextId = contextId;
+  _ringOpen = true;
+  _focusRing.length = 0;
+}
+
+/**
+ * Close the ring at the end of a menu's render.
+ *
+ * Required, not optional: a scene keeps drawing after its topmost dialog —
+ * quest UI, tutorial callouts, HUD chrome — and any button drawn while the ring
+ * is still open would silently become tabbable from inside a modal that has
+ * nothing to do with it.
+ */
+export function endMenuFocus(): void {
+  _ringOpen = false;
+}
+
+/**
+ * Declare a surface that owns the screen but offers nothing to focus — a
+ * loot-box reveal, a chest award, an intro card, an advance-anywhere dialog.
+ *
+ * Without this the ring belongs to whichever menu drew last, which is not the
+ * same as the menu on top: a buttonless overlay painted over an open pause menu
+ * would otherwise leave the pause menu's ring live and let a press underneath it
+ * activate Resume.
+ */
+export function suppressMenuFocus(contextId: string): void {
+  beginMenuFocus(contextId);
+  endMenuFocus();
+}
+
+/** Number of navigable buttons the last rendered frame registered. */
+export function menuFocusRingSize(): number {
+  return _focusRing.length;
+}
+
+/**
+ * Drop focus without touching the ring — used when a menu closes from something
+ * other than a context change, so re-opening it starts unfocused.
+ */
+export function clearMenuFocus(): void {
+  _focusedContextId = null;
+  _focusIndex = null;
+  _focusRing.length = 0;
+}
+
+/**
+ * Reconcile focus against the context the frame actually declared. A menu that
+ * swapped tabs, opened a confirm dialog, or closed entirely gets a fresh ring
+ * rather than an index pointing into somebody else's buttons.
+ */
+function adoptDeclaredContext(): void {
+  if (_focusedContextId !== _declaredContextId) {
+    _focusedContextId = _declaredContextId;
+    _focusIndex = null;
+    return;
+  }
+  // Inside one context the ring can still shrink — a tab whose content changed,
+  // a row that became unaffordable. Clamping keeps focus near where the player
+  // left it instead of throwing them back to the top of the menu.
+  if (_focusIndex === null) return;
+  if (_focusRing.length === 0) _focusIndex = null;
+  else if (_focusIndex >= _focusRing.length) _focusIndex = _focusRing.length - 1;
+}
+
+/** Move focus forward, wrapping. The first press lands on the first button. */
+export function focusNextButton(): void {
+  adoptDeclaredContext();
+  if (_focusRing.length === 0) return;
+  _focusIndex = _focusIndex === null ? 0 : (_focusIndex + 1) % _focusRing.length;
+}
+
+/** Move focus backward, wrapping. The first press lands on the last button. */
+export function focusPreviousButton(): void {
+  adoptDeclaredContext();
+  if (_focusRing.length === 0) return;
+  _focusIndex =
+    _focusIndex === null
+      ? _focusRing.length - 1
+      : (_focusIndex + _focusRing.length - 1) % _focusRing.length;
+}
+
+/** Canvas coordinates of a ring entry's centre — where a synthesized click lands. */
+function entryCenterInCanvasSpace(entry: FocusEntry): { x: number; y: number } {
+  const { scale, pivotX, pivotY } = entry.space;
+  return {
+    x: pivotX + (entry.x + entry.w / 2 - pivotX) * scale,
+    y: pivotY + (entry.y + entry.h / 2 - pivotY) * scale,
+  };
+}
+
+/**
+ * Where an accept keypress should click.
+ *
+ * With a button focused that is the focused button; with nothing focused it is
+ * the menu's primary button, which is what makes "spacebar accepts" true for
+ * players who never press Tab. Returns null when neither exists, so the key
+ * falls through to whatever else wanted it.
+ */
+export function focusedButtonClickPoint(): { x: number; y: number } | null {
+  if (_activatedSinceRender) return null;
+  adoptDeclaredContext();
+  const target =
+    _focusIndex !== null ? _focusRing[_focusIndex] : _focusRing.find((entry) => entry.isPrimary);
+  if (target === undefined) return null;
+  _activatedSinceRender = true;
+  return entryCenterInCanvasSpace(target);
+}
+
 /**
  * Declare that buttons drawn from here on are in a scaled space — see
  * `fitModal` in `ui/Box.ts`. Reset with {@link resetButtonPointerSpace} once the
@@ -104,6 +272,15 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
   _mouseY = my;
   _isDown = isDown;
   _renderedButtons.length = 0;
+  // A completed frame that declared no menu context means every menu has closed,
+  // so focus is dropped here rather than by each menu's own close path. Without
+  // it a dialog reopening under the same context id would come up with the ring
+  // already sitting on whatever the player last activated.
+  if (_declaredContextId === null) clearMenuFocus();
+  _focusRing.length = 0;
+  _declaredContextId = null;
+  _ringOpen = false;
+  _activatedSinceRender = false;
   _pointerSpace = CANVAS_POINTER_SPACE;
 }
 
@@ -221,6 +398,21 @@ export interface ButtonOptions {
    * Override per-button when a different sound is appropriate (e.g. 'menu_open').
    */
   sound?: SoundId;
+
+  /**
+   * Opt this button out of the keyboard focus ring declared by
+   * {@link beginMenuFocus}. Use for decoration-only hit-rects and for chips a
+   * player should reach with the pointer rather than by tabbing past everything.
+   * Default: true (joins the ring).
+   */
+  focusable?: boolean;
+
+  /**
+   * Marks the menu's safe default — the button an accept keypress activates
+   * when nothing is focused. Resume, Close, Continue and Cancel are primaries;
+   * anything destructive or wagering never is.
+   */
+  primaryAction?: boolean;
 }
 
 /** Return value from drawButton. */
@@ -305,6 +497,44 @@ export const BUTTON_PRESETS = {
   },
   /** Informational / navigation — dark blue with blue border. */
   blue: { fill: '#1e3a5f', border: '#60a5fa', borderWidth: 1.5, radius: 4 },
+  /**
+   * Armed and waiting for a keypress — the Controls screen's capturing chip.
+   * No existing preset reads as "listening"; gold and glowing is the only state
+   * on that screen that is asking the player for something.
+   */
+  listening: {
+    fill: '#3f2d05',
+    border: '#facc15',
+    borderWidth: 2,
+    radius: 4,
+    labelColor: '#fde68a',
+    glow: '#facc15' as const,
+    glowBlur: 12,
+  },
+  /** An optional second slot with nothing in it — quiet, because it is not a fault. */
+  emptyChip: {
+    fill: 'rgba(15,23,42,0.5)',
+    border: '#334155',
+    borderWidth: 1,
+    radius: 4,
+    labelColor: '#475569',
+  },
+  /** The last slot of an action nobody can trigger any more — the hole has to be visible. */
+  unboundChip: {
+    fill: '#2b1414',
+    border: '#f87171',
+    borderWidth: 1.5,
+    radius: 4,
+    labelColor: '#fca5a5',
+  },
+  /** A bound key chip: quiet, reads as a keycap rather than an action. */
+  keyChip: {
+    fill: '#0f172a',
+    border: '#475569',
+    borderWidth: 1.5,
+    radius: 4,
+    labelColor: '#e2e8f0',
+  },
   /**
    * Casino chip well: a recessed gold-rimmed pill that a chip is drawn into, so
    * the chip itself carries the colour and the button only carries the hit-rect,
@@ -394,6 +624,8 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     shadowOffset,
     disabled = false,
     sound = BUTTON_CLICK_SOUND,
+    focusable = true,
+    primaryAction = false,
     label,
   } = opts;
 
@@ -409,6 +641,10 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   const hovered =
     !disabled && pointerX >= x && pointerX <= x + width && pointerY >= y && pointerY <= y + height;
   const pressed = hovered && _isDown;
+
+  const joinsFocusRing = !disabled && focusable && _ringOpen;
+  const focused =
+    joinsFocusRing && _focusedContextId === _declaredContextId && _focusIndex === _focusRing.length;
 
   const effectiveAlpha = disabled ? alpha * DISABLED_ALPHA_MULTIPLIER : alpha;
 
@@ -429,7 +665,7 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
     shadowOffset,
   });
 
-  if (hovered && !pressed) {
+  if ((hovered || focused) && !pressed) {
     drawBox(ctx, {
       x,
       y,
@@ -442,6 +678,24 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
       alpha: effectiveAlpha,
       glow: border,
       glowBlur: HOVER_GLOW_BLUR,
+    });
+  }
+
+  // Outside the button rather than on its border, so a preset that is already
+  // gold-bordered still shows a visible ring rather than merging with it.
+  if (focused) {
+    drawBox(ctx, {
+      x: x + FOCUS_RING_INSET,
+      y: y + FOCUS_RING_INSET,
+      width: width - FOCUS_RING_INSET * 2,
+      height: height - FOCUS_RING_INSET * 2,
+      fill: 'rgba(0,0,0,0)',
+      border: FOCUS_RING_COLOR,
+      borderWidth: FOCUS_RING_BORDER_WIDTH,
+      radius: radius - FOCUS_RING_INSET,
+      alpha: effectiveAlpha,
+      glow: FOCUS_RING_COLOR,
+      glowBlur: FOCUS_RING_BLUR,
     });
   }
 
@@ -487,6 +741,16 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
 
   if (!disabled) {
     _renderedButtons.push({ x: rx, y: ry, w: rw, h: rh, sound, space: _pointerSpace });
+  }
+  if (joinsFocusRing) {
+    _focusRing.push({
+      x: rx,
+      y: ry,
+      w: rw,
+      h: rh,
+      isPrimary: primaryAction,
+      space: _pointerSpace,
+    });
   }
 
   return {

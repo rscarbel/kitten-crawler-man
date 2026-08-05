@@ -66,6 +66,13 @@ const COMPANION_DOT_RADIUS = 2;
 const MOB_DOT_RADIUS = 1.5;
 /** Mordecai dot radius on minimap. */
 const MORDECAI_DOT_RADIUS = 1.5;
+/** Pet dot radius on minimap. Under the companion's — he is party, but not a crawler. */
+const PET_DOT_RADIUS = 1.75;
+/**
+ * Mongo's dot. Pink, for his feathers, and distinct from every other marker on
+ * the map: red is a hostile, blue the companion, white Mordecai and stairs.
+ */
+const MINIMAP_PET_COLOR = '#f0abfc';
 /** Quest marker pulse speed (radians per frame-time unit). */
 const QUEST_MARKER_PULSE_SPEED = 5;
 /** Quest marker X line arm length (pixels). */
@@ -343,6 +350,7 @@ export class MiniMapSystem implements GameSystem {
     mobGrid: SpatialGrid<Mob>,
     mordecaiPositions: Array<{ x: number; y: number }>,
     questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [],
+    pet: { x: number; y: number } | null = null,
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
@@ -447,6 +455,21 @@ export class MiniMapSystem implements GameSystem {
     ctx.beginPath();
     ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
+
+    // Mongo — his own colour, and no fog test, exactly like the companion above:
+    // he is party, and a party member you cannot find is the bug this answers.
+    if (pet !== null) {
+      const petTX = Math.floor((pet.x + HALF_TILE) / TILE_SIZE);
+      const petTY = Math.floor((pet.y + HALF_TILE) / TILE_SIZE);
+      const petSX =
+        mmX + (petTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      const petSY =
+        mmY + (petTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      ctx.fillStyle = MINIMAP_PET_COLOR;
+      ctx.beginPath();
+      ctx.arc(petSX, petSY, PET_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Mordecai — white dot per safe room if revealed
     ctx.fillStyle = '#ffffff';

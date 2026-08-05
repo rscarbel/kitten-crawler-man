@@ -20,6 +20,13 @@ import {
   abilitiesTabTouchEnd,
 } from './pause/AbilitiesTab';
 import { renderSettingsTab } from './pause/SettingsTab';
+import {
+  renderControlsTab,
+  resetControlsTab,
+  CONTROLS_SCROLL_TOP_Y,
+  CONTROLS_FOOTER_H,
+} from './pause/ControlsTab';
+import { beginMenuFocus, endMenuFocus } from './Button';
 import { drawOverlay, drawModal, BOX_PRESETS } from './Box';
 import { platform } from '../core/Platform';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -41,11 +48,18 @@ const MODAL_BOX_WIDTH = 380;
  */
 const GRAPHICS_SECTION_H_MOBILE = 76;
 const GRAPHICS_SECTION_H_DESKTOP = 92;
-/** Height of everything in the tab other than the Graphics section. */
+/**
+ * The Controls section — a label and the button that opens the Controls tab —
+ * is the same height on both platforms, so it is one constant rather than two.
+ */
+const CONTROLS_SECTION_H = 84;
+/** Height of everything in the tab other than the Graphics and Controls sections. */
 const SETTINGS_BASE_H_MOBILE = 520;
 const SETTINGS_BASE_H_DESKTOP = 390;
-const SETTINGS_BOX_H_MOBILE = SETTINGS_BASE_H_MOBILE + GRAPHICS_SECTION_H_MOBILE;
-const SETTINGS_BOX_H_DESKTOP = SETTINGS_BASE_H_DESKTOP + GRAPHICS_SECTION_H_DESKTOP;
+const SETTINGS_BOX_H_MOBILE =
+  SETTINGS_BASE_H_MOBILE + GRAPHICS_SECTION_H_MOBILE + CONTROLS_SECTION_H;
+const SETTINGS_BOX_H_DESKTOP =
+  SETTINGS_BASE_H_DESKTOP + GRAPHICS_SECTION_H_DESKTOP + CONTROLS_SECTION_H;
 
 /**
  * Self-contained pause menu. Holds tab state internally and rebuilds button
@@ -63,6 +77,8 @@ export class PauseMenu {
   private spendContentH = 0;
   private skillsScrollY = 0;
   private skillsContentH = 0;
+  private controlsScrollY = 0;
+  private controlsContentH = 0;
   private touchScrollStartY: number | null = null;
 
   /** Set by the owning scene so the Settings tab can read/write volumes. */
@@ -84,6 +100,7 @@ export class PauseMenu {
   onResetGame: (() => void) | null = null;
 
   private _showResetConfirm = false;
+  private _showBindingsRestoreConfirm = false;
 
   /** Called when the inventory tab's "Manage Human" button is pressed. */
   onManageHumanInventory: (() => void) | null = null;
@@ -124,17 +141,24 @@ export class PauseMenu {
   close(): void {
     this._isOpen = false;
     this._showResetConfirm = false;
+    this._showBindingsRestoreConfirm = false;
+    resetControlsTab();
     this._applyAudioResume();
   }
 
+  /**
+   * Escape's path in and out. Closing routes through `close` rather than just
+   * flipping the flag, so the confirm dialogs and the Controls tab's capture
+   * state cannot survive to greet the player when the menu is next opened.
+   */
   toggle(): void {
-    this._isOpen = !this._isOpen;
     if (this._isOpen) {
-      this.tab = 'main';
-      this._applyAudioPause();
-    } else {
-      this._applyAudioResume();
+      this.close();
+      return;
     }
+    this._isOpen = true;
+    this.tab = 'main';
+    this._applyAudioPause();
   }
 
   private _applyAudioPause(): void {
@@ -175,6 +199,12 @@ export class PauseMenu {
         0,
         Math.min(maxScroll, this.skillsScrollY + deltaY * SCROLL_MULTIPLIER),
       );
+    } else if (this.tab === 'controls') {
+      const maxScroll = Math.max(0, this.controlsContentH - this.controlsScrollH);
+      this.controlsScrollY = Math.max(
+        0,
+        Math.min(maxScroll, this.controlsScrollY + deltaY * SCROLL_MULTIPLIER),
+      );
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -184,7 +214,12 @@ export class PauseMenu {
     if (!this._isOpen) return;
     if (this.tab === 'abilities') {
       abilitiesTabTouchStart(y);
-    } else if (this.tab === 'spend' || this.tab === 'stats' || this.tab === 'skills') {
+    } else if (
+      this.tab === 'spend' ||
+      this.tab === 'stats' ||
+      this.tab === 'skills' ||
+      this.tab === 'controls'
+    ) {
       this.touchScrollStartY = y;
     }
   }
@@ -205,6 +240,9 @@ export class PauseMenu {
       } else if (this.tab === 'skills') {
         const maxScroll = Math.max(0, this.skillsContentH - this.skillsScrollH);
         this.skillsScrollY = Math.max(0, Math.min(maxScroll, this.skillsScrollY + delta));
+      } else if (this.tab === 'controls') {
+        const maxScroll = Math.max(0, this.controlsContentH - this.controlsScrollH);
+        this.controlsScrollY = Math.max(0, Math.min(maxScroll, this.controlsScrollY + delta));
       }
     }
   }
@@ -220,6 +258,7 @@ export class PauseMenu {
   private _lastStatsBoxH = STATS_BOX_H;
   private _lastSpendBoxH = SPEND_BOX_H;
   private _lastSkillsBoxH = SKILLS_BOX_H;
+  private _lastControlsBoxH = CONTROLS_BOX_H;
 
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN
@@ -234,6 +273,11 @@ export class PauseMenu {
   private get skillsScrollH(): number {
     // Must match renderSkillsTab: bh - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN
     return this._lastSkillsBoxH - SPEND_BOX_TOP_MARGIN - SPEND_BOX_BOTTOM_MARGIN;
+  }
+
+  private get controlsScrollH(): number {
+    // Must match renderControlsTab's scroll band, floor included
+    return Math.max(0, this._lastControlsBoxH - CONTROLS_SCROLL_TOP_Y - CONTROLS_FOOTER_H);
   }
 
   /** Render the full pause overlay. Only call when isOpen === true. */
@@ -252,6 +296,10 @@ export class PauseMenu {
     mouseY?: number,
   ): void {
     this.buttons = [];
+    // Keyed by tab so that activating a button which changes tabs hands the new
+    // tab a fresh ring, rather than leaving focus on whatever now occupies the
+    // same index.
+    beginMenuFocus(`pause-${this.tab}`);
 
     const cw = viewportWidth();
     const ch = viewportHeight();
@@ -274,11 +322,14 @@ export class PauseMenu {
                 ? SETTINGS_BOX_H
                 : this.tab === 'inventory'
                   ? INVENTORY_TAB_BOX_H
-                  : mainBoxH;
+                  : this.tab === 'controls'
+                    ? CONTROLS_BOX_H
+                    : mainBoxH;
     const boxH = Math.min(rawBoxH, ch - MODAL_PADDING);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
     if (this.tab === 'skills') this._lastSkillsBoxH = boxH;
+    if (this.tab === 'controls') this._lastControlsBoxH = boxH;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,
@@ -295,6 +346,11 @@ export class PauseMenu {
       if (t !== 'skills') this.skillsScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
       if (t !== 'settings') this._showResetConfirm = false;
+      if (t !== 'controls') {
+        this.controlsScrollY = 0;
+        this._showBindingsRestoreConfirm = false;
+        resetControlsTab();
+      }
       this.tab = t;
     };
 
@@ -440,7 +496,28 @@ export class PauseMenu {
           );
         }
         break;
+      case 'controls':
+        this.controlsContentH = renderControlsTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          setTabWithSound,
+          this.controlsScrollY,
+          this._showBindingsRestoreConfirm,
+          () => {
+            this._showBindingsRestoreConfirm = true;
+          },
+          () => {
+            this._showBindingsRestoreConfirm = false;
+          },
+        );
+        break;
     }
+
+    endMenuFocus();
   }
 
   handleClick(mx: number, my: number): boolean {
@@ -468,3 +545,9 @@ const STATS_BOX_H = 420;
 const SPEND_BOX_H = 480;
 const SKILLS_BOX_H = 480;
 const SETTINGS_BOX_H = platform.isMobile ? SETTINGS_BOX_H_MOBILE : SETTINGS_BOX_H_DESKTOP;
+/**
+ * The Controls tab wants every pixel it can get — the action list is ~20 rows —
+ * so it asks for the tallest box any tab uses. `render` clamps it to the
+ * viewport, and the list scrolls inside whatever survives that clamp.
+ */
+const CONTROLS_BOX_H = 560;

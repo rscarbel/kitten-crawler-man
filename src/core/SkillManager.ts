@@ -53,7 +53,7 @@ export interface SkillEvent {
   level: number;
 }
 
-/** Ceiling on undrained events, so a scene without an announcer can't leak. */
+/** Ceiling on undrained events, so a scene that never drains them can't leak. */
 const MAX_PENDING_EVENTS = 8;
 
 // ── Per-skill tuning ─────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ export class SkillManager {
   constructor(private readonly owner: CrawlerKind | null) {}
 
   /**
-   * Skill happenings awaiting pickup by the scene's announcer. Queued rather
+   * Skill happenings awaiting pickup by the scene's notice system. Queued rather
    * than emitted because a `SkillManager` belongs to a `Player`, which has no
    * event bus in scope.
    */

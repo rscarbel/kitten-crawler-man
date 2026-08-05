@@ -4,6 +4,7 @@ import type { TreasureChest } from '../systems/TreasureChestSystem';
 import { getChestImage, getChestSourceScale } from '../systems/TreasureChestSystem';
 import { drawText, TEXT_PRESETS } from './TextBox';
 import { drawBox, drawOverlay, BOX_PRESETS } from './Box';
+import { suppressMenuFocus } from './Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Dialog dimensions
@@ -179,6 +180,7 @@ export class ChestRewardDialog {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this._isOpen || this.chest === null) return;
+    suppressMenuFocus('chest-reward');
 
     const cw = viewportWidth();
     const ch = viewportHeight();

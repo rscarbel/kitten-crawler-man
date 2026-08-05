@@ -40,14 +40,31 @@ export interface MongoPetState {
   /**
    * Set when he leaves the field spent, and held until he is back to *full*.
    *
-   * Being knocked out is the one thing that costs real time. Without the latch
-   * he is summonable again the moment the first regen tick lands, which for a
-   * high-level pet is a hit point out of two hundred and change — the player
-   * sends a raptor in, watches him collapse, and sends the same raptor back in
-   * two seconds later. It has to survive a reload, or quitting to the menu is a
-   * way of skipping the recovery.
+   * Being knocked out is the one thing that costs real time. Without the latch he
+   * is summonable again as soon as he clears the ordinary summon floor — the
+   * player sends a raptor in, watches him collapse, and sends the same raptor
+   * back in well before he has recovered from it. The latch is what makes a
+   * knockout cost the whole climb to full rather than the climb to fit-to-fight.
+   * It has to survive a reload, or quitting to the menu is a way of skipping the
+   * recovery.
    */
   restingUntilFull: boolean;
+  /**
+   * Whether the System has already stated the knockout rule this run.
+   *
+   * Lives beside the latch it explains rather than on `MongoSystem`, because the
+   * two have to share a lifetime. {@link restingUntilFull} stays true for the
+   * couple of minutes of regen a knockout costs, and the notice is raised from
+   * that state rather than from the despawn that produced it — so a flag scoped
+   * to the system, which is rebuilt for every scene, turns "once" into once per
+   * stairwell and once per shop door. The player was told three times.
+   *
+   * Deliberately absent from {@link MongoPetStateCheckpoint} and from the saved
+   * fields: a checkpoint rewind must not un-teach a rule the player has already
+   * read, and persisting it lets an autosave mark taught a rule that was never
+   * shown.
+   */
+  knockoutRuleExplained: boolean;
 }
 
 /**
@@ -99,7 +116,14 @@ export function createMongoPetState(
   maxHp: number,
   restingUntilFull = hp <= 0,
 ): MongoPetState {
-  return { hp, regenFrames: 0, scaledAgainstMaxHp: maxHp, summonLocked: false, restingUntilFull };
+  return {
+    hp,
+    regenFrames: 0,
+    scaledAgainstMaxHp: maxHp,
+    summonLocked: false,
+    restingUntilFull,
+    knockoutRuleExplained: false,
+  };
 }
 
 /**
@@ -107,9 +131,18 @@ export function createMongoPetState(
  *
  * Zero once he is summonable — which, while he is resting off a knockout, means
  * once he is at full health rather than once he has a hit point.
+ *
+ * `minSummonHp` is passed in rather than read from {@link MONGO_MIN_SUMMON_HP}
+ * because the floor is no longer a constant: a pet too wounded to fight is held
+ * back until he can, and a countdown measured against a floor the button does
+ * not use reaches zero over a button that still refuses.
  */
-export function mongoFramesUntilReady(state: MongoPetState, maxHp: number): number {
-  const targetHp = state.restingUntilFull ? maxHp : MONGO_MIN_SUMMON_HP;
+export function mongoFramesUntilReady(
+  state: MongoPetState,
+  maxHp: number,
+  minSummonHp: number,
+): number {
+  const targetHp = state.restingUntilFull ? maxHp : minSummonHp;
   if (state.hp >= targetHp) return 0;
   const healPerTick = Math.max(1, Math.ceil(maxHp * MONGO_REGEN_PERCENT));
   const ticksNeeded = Math.ceil((targetHp - state.hp) / healPerTick);
@@ -117,8 +150,12 @@ export function mongoFramesUntilReady(state: MongoPetState, maxHp: number): numb
 }
 
 /** The whole recovery, for scaling the countdown's drain overlay. */
-export function mongoTotalRecoveryFrames(state: MongoPetState, maxHp: number): number {
-  const targetHp = state.restingUntilFull ? maxHp : MONGO_MIN_SUMMON_HP;
+export function mongoTotalRecoveryFrames(
+  state: MongoPetState,
+  maxHp: number,
+  minSummonHp: number,
+): number {
+  const targetHp = state.restingUntilFull ? maxHp : minSummonHp;
   const healPerTick = Math.max(1, Math.ceil(maxHp * MONGO_REGEN_PERCENT));
   return Math.max(1, Math.ceil(targetHp / healPerTick) * MONGO_REGEN_INTERVAL_FRAMES);
 }
@@ -163,8 +200,13 @@ export function tickMongoRegen(state: MongoPetState, maxHp: number): void {
  * and dropping its remainder would make a large one worth less than the sum of
  * the small ones it replaced.
  */
-export function advanceMongoRecovery(state: MongoPetState, maxHp: number, frames: number): number {
-  const waitBefore = mongoFramesUntilReady(state, maxHp);
+export function advanceMongoRecovery(
+  state: MongoPetState,
+  maxHp: number,
+  minSummonHp: number,
+  frames: number,
+): number {
+  const waitBefore = mongoFramesUntilReady(state, maxHp, minSummonHp);
   if (waitBefore <= 0 || frames <= 0) return 0;
 
   state.regenFrames += frames;
@@ -178,7 +220,7 @@ export function advanceMongoRecovery(state: MongoPetState, maxHp: number, frames
     state.restingUntilFull = false;
   }
 
-  return waitBefore - mongoFramesUntilReady(state, maxHp);
+  return waitBefore - mongoFramesUntilReady(state, maxHp, minSummonHp);
 }
 
 const MONGO_REGEN_INTERVAL_FRAMES = 78;
@@ -198,9 +240,11 @@ export const MONGO_KILL_RECOVERY_FRAMES = MONGO_REGEN_INTERVAL_FRAMES;
 /**
  * The HP he has to have recovered before he can be sent back in.
  *
- * One, deliberately: the design allows resummoning him the instant he has a
- * single hit point back, because the interesting decision is *when* to spend
- * him. The exception is `restingUntilFull` — a pet actually knocked out has to
- * heal all the way, and that is the cost of losing him.
+ * A floor under the floor, and no longer the operative one. The number that
+ * actually gates the button is `MongoSystem.minSummonHp`, which asks the
+ * creature how much health it takes to be worth sending in — because a pet below
+ * the wounded-retreat threshold walks out and refuses to fight, which is a trap
+ * rather than the "spend him whenever you like" decision this one was written
+ * for. It still binds when that retreat behaviour is switched off.
  */
 export const MONGO_MIN_SUMMON_HP = 1;

@@ -79,6 +79,7 @@ export function renderMainTab(
     height: bH,
     label: platform.resumeButtonLabel,
     ...BUTTON_PRESETS.primary,
+    primaryAction: true,
     action: close,
   });
   bY += spacing;

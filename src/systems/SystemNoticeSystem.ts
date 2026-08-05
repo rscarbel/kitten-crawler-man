@@ -3,31 +3,21 @@ import type { Player } from '../Player';
 import type { EventBus } from '../core/EventBus';
 import type { SkillEvent, SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
-import type { SystemAnnouncer } from '../ui/SystemAnnouncer';
 import type { HotbarToast } from '../ui/HotbarToast';
 
 /**
- * First-unlock copy, in the System's dry faux-corporate register. One line per
- * skill so discovering something reads as an event rather than a status change.
+ * First-unlock copy. One line per skill, trimmed to the name and the fact that
+ * it is new: these ride the hotbar toast, which is read at a glance mid-fight.
  */
 const UNLOCK_LINES: Record<SkillId, string> = {
-  cockroach:
-    'New skill unlocked: Cockroach. Statistically, you will need it. Statistically, it will not be enough.',
-  cat_reflexes:
-    'New skill unlocked: Cat-like Reflexes. The System notes this was already true and has decided to charge you for it anyway.',
-  pugilism:
-    'New skill unlocked: Pugilism. Hitting things, but with documentation. Sponsors love documentation.',
-  iron_stomach:
-    'New skill unlocked: Iron Stomach. Your digestive tract has been reclassified as a hazardous materials container.',
-  night_vision:
-    'New skill unlocked: Night Vision. You may now see exactly what is about to happen to you.',
+  cockroach: 'Skill unlocked: Cockroach',
+  cat_reflexes: 'Skill unlocked: Cat-like Reflexes',
+  pugilism: 'Skill unlocked: Pugilism',
+  iron_stomach: 'Skill unlocked: Iron Stomach',
+  night_vision: 'Skill unlocked: Night Vision',
 };
 
-/**
- * Short on purpose: this one rides the hotbar toast rather than the System's
- * dialog box, so it has to read at a glance without covering the room.
- */
-const COCKROACH_RECHARGED_LINE = 'Cockroach is back online';
+const COCKROACH_RECHARGED_LINE = 'Cockroach ready';
 
 /**
  * Effect blurbs are written as prose sentences for the skills panel, so they end
@@ -36,8 +26,8 @@ const COCKROACH_RECHARGED_LINE = 'Cockroach is back online';
 const TRAILING_PERIOD = /\.$/;
 
 /**
- * Drains everything a `Player` queues for the scene to voice or broadcast: skill
- * events, migration notices, and dodges.
+ * Drains everything a `Player` queues for the scene to announce or broadcast:
+ * skill events, migration notices, and dodges.
  *
  * Players have no event bus in scope — a dodge is decided inside
  * `Player.takeDamage` — so they queue and this converts. It is built
@@ -50,7 +40,6 @@ export class SystemNoticeSystem implements GameSystem {
 
   constructor(
     private readonly bus: EventBus,
-    private readonly announcer: SystemAnnouncer,
     private readonly toast: HotbarToast,
   ) {}
 
@@ -72,9 +61,7 @@ export class SystemNoticeSystem implements GameSystem {
    * A one-shot toast the moment Cockroach comes back online.
    *
    * Polled rather than queued: the recharge is a wall-clock deadline that ripens
-   * on its own, with no gameplay event to hang an announcement off. It goes to
-   * the hotbar toast rather than the System's dialog box because it can ripen
-   * mid-fight, when a box across the screen is the last thing the player wants.
+   * on its own, with no gameplay event to hang an announcement off.
    */
   private announceCockroachRecharge(cat: Player): void {
     if (!cat.skills.isUnlocked('cockroach')) return;
@@ -87,7 +74,7 @@ export class SystemNoticeSystem implements GameSystem {
 
   private drain(player: Player, who: 'Human' | 'Cat'): void {
     const notices = player.pendingSystemNotices;
-    for (const line of notices) this.announcer.announce(line);
+    for (const line of notices) this.toast.show(line);
     notices.length = 0;
 
     for (let i = 0; i < player.pendingDodges; i++) {
@@ -106,7 +93,7 @@ export class SystemNoticeSystem implements GameSystem {
     switch (event.kind) {
       case 'unlocked':
         this.bus.emit('skillUnlocked', { player: who, skillId: event.id });
-        this.announcer.announce(UNLOCK_LINES[event.id]);
+        this.toast.show(UNLOCK_LINES[event.id]);
         return;
       case 'leveled':
         this.bus.emit('skillLevelUp', { player: who, skillId: event.id, newLevel: event.level });
@@ -135,7 +122,7 @@ export class SystemNoticeSystem implements GameSystem {
  * mid-fight and does not wrap.
  */
 const TRIGGER_LINES: Record<SkillId, string> = {
-  cockroach: 'Cockroach engaged — fatal damage survived',
+  cockroach: 'Cockroach — fatal damage survived',
   cat_reflexes: 'Cat-like Reflexes engaged.',
   pugilism: 'Pugilism engaged.',
   iron_stomach: 'Iron Stomach engaged.',

@@ -1,4 +1,3 @@
-import { type InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { normalize, clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
@@ -19,10 +18,6 @@ interface Moveable {
   facingY: number;
 }
 
-// Mobile input detection
-const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms
-const MOBILE_DISTANCE_THRESHOLD = 8; // px
-
 // Diagonal movement penalty
 const DIAGONAL_PENALTY = 0.7071; // 1/sqrt(2)
 
@@ -32,43 +27,6 @@ const LEADING_EDGE_BACK = 0.28;
 
 // Wall collision offset for center mode
 const CENTER_COLLISION_OFFSET = 0.5;
-
-/**
- * Reads keyboard + mobile touch input and returns a raw direction vector.
- */
-export function readMoveInput(
-  input: InputManager,
-  mobileTarget: { x: number; y: number } | null,
-  touchHoldMs: number,
-  playerCenterX: number,
-  playerCenterY: number,
-  camX: number,
-  camY: number,
-): MoveInput {
-  let dx = 0;
-  let dy = 0;
-  if (input.has('ArrowUp') || input.has('w')) dy -= 1;
-  if (input.has('ArrowDown') || input.has('s')) dy += 1;
-  if (input.has('ArrowLeft') || input.has('a')) dx -= 1;
-  if (input.has('ArrowRight') || input.has('d')) dx += 1;
-
-  let isMobileVector = false;
-
-  if (mobileTarget && touchHoldMs >= MOBILE_TOUCH_MIN_HOLD_TIME && dx === 0 && dy === 0) {
-    const wx = mobileTarget.x + camX;
-    const wy = mobileTarget.y + camY;
-    const ddx = wx - playerCenterX;
-    const ddy = wy - playerCenterY;
-    const dist = Math.hypot(ddx, ddy);
-    if (dist > MOBILE_DISTANCE_THRESHOLD) {
-      dx = ddx / dist;
-      dy = ddy / dist;
-      isMobileVector = true;
-    }
-  }
-
-  return { dx, dy, isMobileVector };
-}
 
 /**
  * Apply movement to an entity with per-axis wall collision.

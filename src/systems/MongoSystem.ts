@@ -1,13 +1,13 @@
 import { TILE_SIZE } from '../core/constants';
-import { Mongo } from '../creatures/Mongo';
+import { mongoMinFightingHp, Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
+import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import {
   advanceMongoRecovery,
   MONGO_KILL_RECOVERY_FRAMES,
-  MONGO_MIN_SUMMON_HP,
   mongoFramesUntilReady,
   mongoTotalRecoveryFrames,
   tickMongoRegen,
@@ -22,6 +22,7 @@ import { drawBox, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
 import { drawCooldownOverlay } from '../ui/CooldownOverlay';
 import { ToastStack } from '../ui/ToastStack';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { viewportHeight, viewportWidth } from '../core/Viewport';
 
 /**
  * Mongo's lifecycle: summoning, recall, off-duty recovery and the summon button.
@@ -47,16 +48,96 @@ const SPAWN_SEARCH_RADIUS_TILES = 3;
 const SPEECH_DURATION = 150;
 
 // Rendering constants
-const MONGO_BUTTON_ICON_SIZE_RATIO = 0.6;
-/** Clear space between the label's top and the HP bar drawn under it. */
+/**
+ * Icon size and lift, which have to be read together with the rows below it.
+ *
+ * Both shrank when the XP strip and the numeric health were added: the button is
+ * a fixed 80×48 and the stack under the icon grew by a bar and a text row, so
+ * the portrait had to give the space up rather than be drawn through the label.
+ */
+const MONGO_BUTTON_ICON_SIZE_RATIO = 0.52;
+const MONGO_ICON_Y_OFFSET = 9;
+/** Clear space between the text row's top and the XP strip drawn under it. */
 const MONGO_BUTTON_LABEL_GAP = 12;
-const MONGO_BUTTON_LABEL_SIZE = 9;
-const MONGO_ICON_Y_OFFSET = 6;
+const MONGO_BUTTON_LABEL_SIZE = 8;
 const MONGO_HP_BAR_HEIGHT = 4;
 const MONGO_HP_BAR_INSET = 4;
 const MONGO_HP_BAR_BOTTOM_GAP = 2;
 const MONGO_HP_READY_COLOR = '#4ade80';
 const MONGO_HP_SPENT_COLOR = '#ef4444';
+/**
+ * The XP strip: thinner than the HP bar, and directly above it.
+ *
+ * Two pixels because it is not a thing the player acts on — it is the tell that
+ * a number the game never showed is moving at all, between the growth-spurt
+ * flashes that are the only other evidence he levels.
+ */
+const MONGO_XP_BAR_HEIGHT = 2;
+const MONGO_XP_BAR_GAP = 2;
+const MONGO_XP_BAR_COLOR = '#38bdf8';
+/**
+ * His health as a number, beside the label.
+ *
+ * The bar answers "roughly how hurt is he"; the number is what makes a regen
+ * tick visibly *count up*, which is the thing that teaches "he is healing right
+ * now" without a line of text saying so.
+ */
+const MONGO_HP_TEXT_SIZE = 7;
+const MONGO_BUTTON_TEXT_INSET = 2;
+/**
+ * Clear space the label and the health number must leave between them.
+ *
+ * Both sit on one row, left- and right-aligned, and at the sizes they started
+ * from the worst live pairing — 'Resting' beside '190/220', which is exactly the
+ * state the number was added for — came to 79.4 px of the button's 80. They did
+ * not overlap; they touched, and only on the assumption that the browser's
+ * monospace is 0.6 em wide. `verify-mongo.ts` gates the arithmetic against a
+ * pessimistic ratio so the next size change cannot quietly close the gap.
+ */
+export const MONGO_BUTTON_TEXT_MIN_GAP = 6;
+
+/**
+ * The Summon button's own size.
+ *
+ * Owned here rather than by the scene that positions it: the rows inside it are
+ * laid out against these two numbers, so a caller free to pass any width could
+ * push the label through the health number without anything failing.
+ */
+export const SUMMON_BUTTON_WIDTH = 80;
+export const SUMMON_BUTTON_HEIGHT = 48;
+
+/**
+ * Every label the button can show.
+ *
+ * Exported and read by the render rather than duplicated as literals there, so
+ * the width gate in `verify-mongo.ts` measures the strings that are actually
+ * drawn. Duplicated, renaming one to something longer leaves the gate green
+ * while the row overflows.
+ */
+export const MONGO_BUTTON_LABELS = {
+  recall: 'Recall',
+  resting: 'Resting',
+  summon: 'Summon',
+} as const;
+export const MONGO_BUTTON_TEXT_SIZES = {
+  label: MONGO_BUTTON_LABEL_SIZE,
+  hp: MONGO_HP_TEXT_SIZE,
+  inset: MONGO_BUTTON_TEXT_INSET,
+} as const;
+
+// The off-screen marker: a small portrait of him pinned to the screen edge,
+// with a chevron pointing on past it along the cat→Mongo bearing.
+/** Kept off the very edge, where a marker is half-clipped and reads as an artefact. */
+const OFFSCREEN_MARKER_EDGE_INSET_PX = 22;
+const OFFSCREEN_MARKER_SIZE_PX = 26;
+/** Chevron length as a fraction of the portrait, so the two scale together. */
+const OFFSCREEN_MARKER_CHEVRON_RATIO = 0.75;
+/** How far back from the tip the chevron's trailing corners sit, as a fraction of its length. */
+const OFFSCREEN_MARKER_CHEVRON_BACK = 0.35;
+const OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH = 0.45;
+const OFFSCREEN_MARKER_CHEVRON_COLOR = '#f0abfc';
+const OFFSCREEN_MARKER_CHEVRON_OUTLINE = '#000000';
+const OFFSCREEN_MARKER_CHEVRON_LINE_WIDTH = 1.5;
 
 // Speech bubble rendering
 const SPEECH_BUBBLE_ALPHA_DECAY_TIME = 30; // frames
@@ -144,6 +225,19 @@ export class MongoSystem implements GameSystem {
   });
 
   /**
+   * Whether the "he only heals while recalled" line has been said in this scene.
+   *
+   * Scoped to the system, and so re-armed with every scene — a visit to a floor
+   * rather than a floor, since a shop door builds a new one. That is a real
+   * choice rather than a free one: summon and recall is a toggle a player can
+   * work all afternoon, so this flag is genuinely de-duplicating within a scene
+   * too. Repeating the line once per floor is simply judged cheap. Its sibling
+   * could not be scoped this way, because the knockout latch it describes stays
+   * true for minutes and would re-announce at every transition.
+   */
+  private hasExplainedOffDutyRegen = false;
+
+  /**
    * @param petState  HP and the quest lock, threaded by reference across scenes
    *                  because the `Mongo` instance is destroyed on every despawn.
    * @param petLevel  Reads the current ability level. A function rather than a
@@ -151,11 +245,17 @@ export class MongoSystem implements GameSystem {
    * @param grantAbilityXp  Pays XP into the Mongo ability. Injected for the same
    *                  reason `petLevel` is: the system has no ability manager of
    *                  its own, and the scene owns the one that must be levelled.
+   * @param petXpFraction  Progress toward the next pet level, 0–1, for the strip
+   *                  above the HP bar. Same injection, same reason.
+   * @param announce  Raises one line as a hotbar toast. Used for the two
+   *                  first-time healing rules, which are stated nowhere else.
    */
   constructor(
     private readonly petState: MongoPetState,
     private readonly petLevel: () => number,
     private readonly grantAbilityXp: (amount: number) => void,
+    private readonly petXpFraction: () => number,
+    private readonly announce: (text: string) => void,
   ) {}
 
   /**
@@ -204,7 +304,20 @@ export class MongoSystem implements GameSystem {
   get framesUntilReady(): number {
     if (this.mongo !== null) return 0;
     if (this.petState.summonLocked) return 0;
-    return mongoFramesUntilReady(this.petState, this.maxHp);
+    return mongoFramesUntilReady(this.petState, this.maxHp, this.minSummonHp);
+  }
+
+  /**
+   * The health he has to have recovered before the button will send him in.
+   *
+   * Not a constant, because "fit to be sent in" is not the same question as
+   * "alive": a raptor under the wounded-retreat threshold walks out and refuses
+   * to fight. Every clock on the button — the countdown, the drain overlay, the
+   * `canSummon` gate — measures against this one number, or the wait finishes
+   * over a button that still says no.
+   */
+  private get minSummonHp(): number {
+    return mongoMinFightingHp(this.maxHp);
   }
 
   /** Blocked while the circus quest holds him as Signet's collateral. */
@@ -296,7 +409,7 @@ export class MongoSystem implements GameSystem {
    * removal from `mobs` and `mobGrid` has already happened by then.
    */
   update(ctx: SystemContext): boolean {
-    const { mobs, mobGrid, cat } = ctx;
+    const { mobs, mobGrid, cat, gameMap } = ctx;
     this.retreatMobs = mobs;
 
     if (this.speechTimer > 0) this.speechTimer--;
@@ -312,6 +425,7 @@ export class MongoSystem implements GameSystem {
       // level-1 value against a level-15 maximum reads as permanently dying.
       this.rescaleStoredHp();
       this.tickRegen();
+      this.explainKnockoutOnce();
       return false;
     }
 
@@ -335,7 +449,72 @@ export class MongoSystem implements GameSystem {
       this.releaseTargeting(mobs, this.mongo);
     }
 
+    // After the AI has run — the mob loop ticks before this system, and the latch
+    // is set inside `updateAI` — so a stall decided this frame is answered this
+    // frame rather than one behind. Not once the recall has landed: he is at her
+    // feet fading out, and snapping a half-transparent raptor across the room is
+    // a glitch rather than a rescue.
+    // Excluded for the same reason `recallArrived` is: the collapse is a
+    // sub-second one-shot that has to play where he fell. A stall latched in the
+    // corner he was beaten to zero in would otherwise snap a mid-collapse raptor
+    // across the room. Nothing is lost — the collapse always ends in a recall,
+    // and `runHome` re-latches within a couple of seconds if he really is stuck.
+    const midAnimation = this.mongo.recallArrived || this.mongo.collapsing;
+    const stranded = this.mongo.needsRescue && !midAnimation;
+    if (stranded && this.rescue(this.mongo, cat, gameMap, mobs, mobGrid)) return true;
+
     if (this.mongo.despawnComplete) return this.finishDespawn(mobs, mobGrid);
+    return false;
+  }
+
+  /**
+   * Brings a stranded pet to the cat, because he has told us he cannot walk
+   * there — see {@link Mongo.needsRescue}.
+   *
+   * Landing tile comes from the same {@link findSpawnTile} a summon uses, so the
+   * contract is identical: walkable, room to move in, in the cat's sight, not a
+   * stairwell. In front of her rather than on her, so it reads as a loyal animal
+   * catching up rather than as a sprite appearing out of the floor.
+   *
+   * @returns true when he was despawned instead — the caller must report that
+   *   frame the same way a completed recall does.
+   */
+  private rescue(
+    mongo: Mongo,
+    cat: CatPlayer,
+    gameMap: GameMap,
+    mobs: Mob[],
+    mobGrid: SpatialGrid<Mob>,
+  ): boolean {
+    const landing = this.findSpawnTile(cat, gameMap);
+    if (landing === null) {
+      // Nowhere beside the cat he could stand — she is somewhere unwalkable
+      // herself, which is an arena door closing under her or a scripted
+      // placement. Put him away instead: `finishDespawn` preserves his HP and
+      // hands the button back as Summon, so the unrecoverable state ends either
+      // way and neither branch costs the player anything.
+      mongo.onRescued();
+      // Spoken after the despawn, not before it: `finishDespawn` may raise the
+      // off-duty-regen line, which is a speech bubble too, and the first of two
+      // bubbles set on one frame is replaced before it is ever drawn.
+      const despawned = this.finishDespawn(mobs, mobGrid);
+      this.speak('Mongo, come back!');
+      return despawned;
+    }
+
+    const preX = mongo.x;
+    const preY = mongo.y;
+    mongo.x = landing.x * TILE_SIZE;
+    mongo.y = landing.y * TILE_SIZE;
+    // A position written by anything other than the mob's own movement has to be
+    // re-indexed by hand; nothing downstream fixes it up, and attacks then miss
+    // him at the tile the grid still believes he is on.
+    mobGrid.move(mongo, preX, preY);
+    mongo.onRescued();
+    // Whatever was chasing him was chasing him *there*. Left alone they beeline
+    // to a tile he is no longer on for the rest of the floor.
+    this.releaseTargeting(mobs, mongo);
+    this.speak('Mongo!');
     return false;
   }
 
@@ -351,7 +530,12 @@ export class MongoSystem implements GameSystem {
    */
   onKill(): void {
     if (!this.unlocked || this.summonLocked || this.mongo !== null) return;
-    const framesSaved = advanceMongoRecovery(this.petState, this.maxHp, MONGO_KILL_RECOVERY_FRAMES);
+    const framesSaved = advanceMongoRecovery(
+      this.petState,
+      this.maxHp,
+      this.minSummonHp,
+      MONGO_KILL_RECOVERY_FRAMES,
+    );
     // Zero whenever he was already fit, which is most of the run — no toast for
     // a boost that did nothing.
     if (framesSaved <= 0) return;
@@ -465,7 +649,20 @@ export class MongoSystem implements GameSystem {
 
   /** The R key and the Summon button both route here: out → recall, in → summon. */
   toggleRecall(): void {
-    if (!this.mongo || this.mongo.recalling || this.mongo.collapsing) return;
+    if (!this.mongo || this.mongo.collapsing) return;
+    if (this.mongo.recalling) {
+      // Pressing recall at a pet who is already recalling *is* an input, and it
+      // has an obvious meaning: he is not coming, bring him to me. Answering it
+      // with nothing is what made the button dead exactly when the player most
+      // needed it — the recall order was already given, and the only thing left
+      // to give was the rescue.
+      //
+      // Except once he has arrived: he is standing at her feet fading out, and
+      // "bring him to me" has already happened. The creature judges the rest —
+      // a press two frames into the run is a double-tap, not a diagnosis.
+      if (!this.mongo.recallArrived) this.mongo.requestRescue();
+      return;
+    }
     this.speak('Mongo, come back!');
     this.mongo.beginRecall();
     this.releaseTargeting(this.retreatMobs, this.mongo);
@@ -494,7 +691,13 @@ export class MongoSystem implements GameSystem {
     }
   }
 
-  private finishDespawn(mobs: Mob[], mobGrid: SpatialGrid<Mob>): boolean {
+  /**
+   * @param explainHealing whether this despawn is a moment the player is
+   *   watching. False for a floor transition or a building entry, where the pet
+   *   is put away as a side effect of something else and a notice about his
+   *   health would arrive over a loading screen with nothing to attach it to.
+   */
+  private finishDespawn(mobs: Mob[], mobGrid: SpatialGrid<Mob>, explainHealing = true): boolean {
     const mongo = this.mongo;
     if (!mongo) return false;
     this.releaseTargeting(mobs, mongo);
@@ -505,6 +708,10 @@ export class MongoSystem implements GameSystem {
     // Recalled with health to spare he is available again immediately; recalled
     // spent, he owes the player the whole climb back to full.
     if (mongo.exhausted) this.petState.restingUntilFull = true;
+    // The knockout line is deliberately *not* said here — see
+    // `explainKnockoutOnce`, which is driven by the state rather than by the
+    // despawn that produced it.
+    else if (explainHealing) this.explainOffDutyRegenOnce(mongo);
     mobGrid.remove(mongo);
     const index = mobs.indexOf(mongo);
     if (index >= 0) mobs.splice(index, 1);
@@ -514,12 +721,50 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
+   * Names the knockout rule the first time the player is actually looking at a
+   * knocked-out pet.
+   *
+   * Driven by the state rather than by the despawn that produced it, because the
+   * despawn is the wrong moment on both of the paths that matter. A party wipe
+   * spends him and then rewinds: with a checkpoint the restore puts the latch
+   * back to whatever it was, so a line said at despawn announces a knockout that
+   * has just been undone — over a full green bar reading Summon — and burns its
+   * one-shot, leaving the next real knockout explained by nothing. Without a
+   * checkpoint the scene is replaced and the toast is cleared, so the line is
+   * discarded unseen. Reading the settled state instead is right in both, and in
+   * the ordinary case says it on the first frame the button goes grey.
+   */
+  private explainKnockoutOnce(): void {
+    if (this.petState.knockoutRuleExplained) return;
+    if (!this.unlocked || this.summonLocked) return;
+    if (this.mongo !== null || !this.petState.restingUntilFull) return;
+    this.petState.knockoutRuleExplained = true;
+    this.announce('Mongo must heal fully before resummoning');
+  }
+
+  /**
+   * Names the off-duty regen rule the first time he leaves the field wounded.
+   *
+   * True of every despawn and always has been; what was missing is that nothing
+   * in the game ever said it. Said in the world at the moment it bites — the cat
+   * talking to her pet, the System stating the rule — because the alternative is
+   * a tutorial screen for one sentence.
+   */
+  private explainOffDutyRegenOnce(mongo: Mongo): void {
+    if (this.hasExplainedOffDutyRegen) return;
+    if (mongo.hp >= mongo.maxHp) return;
+    this.hasExplainedOffDutyRegen = true;
+    this.speak('Rest up, Mongo.');
+    this.announce('Mongo heals only while recalled');
+  }
+
+  /**
    * Remove Mongo immediately — a floor transition or a building entry, where
    * there is no time for a recall run. His HP is preserved either way.
    */
   dismiss(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     if (!this.mongo) return;
-    this.finishDespawn(mobs, mobGrid);
+    this.finishDespawn(mobs, mobGrid, false);
   }
 
   /**
@@ -553,16 +798,22 @@ export class MongoSystem implements GameSystem {
       this.mongo === null &&
       !this.petState.summonLocked &&
       !this.petState.restingUntilFull &&
-      this.hp >= MONGO_MIN_SUMMON_HP
+      this.hp >= this.minSummonHp
     );
   }
 
   /** Whether the button's press does anything at all, in either direction. */
   get canPress(): boolean {
     if (this.canSummon) return true;
-    // Not while he is collapsing: `toggleRecall` no-ops there, and a button that
-    // looks live and does nothing for half a second reads as a dropped input.
-    return this.mongo !== null && !this.mongo.recalling && !this.mongo.collapsing;
+    const mongo = this.mongo;
+    if (mongo === null) return false;
+    // One rule, applied everywhere it holds: the button claims to be live only
+    // when a press would actually do something. It does nothing through the
+    // collapse one-shot, and nothing through the opening of a recall — where a
+    // press is a double-tap rather than "he is not coming" — so it says so.
+    if (mongo.collapsing) return false;
+    if (mongo.recalling) return mongo.acceptsRescueRequest;
+    return true;
   }
 
   /**
@@ -603,20 +854,58 @@ export class MongoSystem implements GameSystem {
       Math.min(w, h) * MONGO_BUTTON_ICON_SIZE_RATIO,
     );
 
-    const label = isActive ? 'Recall' : this.restingUntilFull ? 'Resting' : 'Summon';
+    // Stacked upward from the bottom edge, so every row's position is stated
+    // relative to the one below it rather than as its own arithmetic on `h`.
+    const hpBarY = y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP;
+    const xpBarY = hpBarY - MONGO_XP_BAR_HEIGHT - MONGO_XP_BAR_GAP;
+    const textRowY = xpBarY - MONGO_BUTTON_LABEL_GAP;
+
+    // 'Resting' covers every health reason he is unavailable, not just a
+    // knockout. A pet recalled voluntarily at a third of his health is exactly as
+    // unsummonable as a knocked-out one until he heals past the floor, and
+    // labelling that state 'Summon' over a countdown says the button is ready
+    // when it is refusing. The circus quest's hold is deliberately not covered:
+    // that is a story beat rather than a wait, and it is not resting.
+    const restingUp = !isActive && !this.summonLocked && !this.canSummon;
+    const label = isActive
+      ? MONGO_BUTTON_LABELS.recall
+      : restingUp
+        ? MONGO_BUTTON_LABELS.resting
+        : MONGO_BUTTON_LABELS.summon;
+    const labelColor = usable ? '#94a3b8' : '#64748b';
     drawText(ctx, label, {
-      x: x + w / 2,
-      y: y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP - MONGO_BUTTON_LABEL_GAP,
+      x: x + MONGO_BUTTON_TEXT_INSET,
+      y: textRowY,
       size: MONGO_BUTTON_LABEL_SIZE,
-      color: usable ? '#94a3b8' : '#64748b',
-      align: 'center',
+      color: labelColor,
+      align: 'left',
+    });
+    drawText(ctx, `${Math.round(this.hp)}/${this.maxHp}`, {
+      x: x + w - MONGO_BUTTON_TEXT_INSET,
+      y: textRowY,
+      size: MONGO_HP_TEXT_SIZE,
+      color: labelColor,
+      align: 'right',
+    });
+
+    // Progress toward his next level. Deliberately above the health bar rather
+    // than beside it: the two answer different questions and the one the player
+    // acts on is the lower, larger one.
+    drawProgressBar(ctx, {
+      x: x + MONGO_HP_BAR_INSET,
+      y: xpBarY,
+      width: w - MONGO_HP_BAR_INSET * 2,
+      height: MONGO_XP_BAR_HEIGHT,
+      value: this.petXpFraction(),
+      ...PROGRESS_PRESETS.xp,
+      fill: MONGO_XP_BAR_COLOR,
     });
 
     // His health, which is what the countdown over it is counting *toward* —
     // there is no separate cooldown clock, only the climb back up this bar.
     drawProgressBar(ctx, {
       x: x + MONGO_HP_BAR_INSET,
-      y: y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP,
+      y: hpBarY,
       width: w - MONGO_HP_BAR_INSET * 2,
       height: MONGO_HP_BAR_HEIGHT,
       value: this.hpRatio,
@@ -636,7 +925,7 @@ export class MongoSystem implements GameSystem {
         width: w,
         height: h,
         remainingFrames: this.framesUntilReady,
-        totalFrames: mongoTotalRecoveryFrames(this.petState, this.maxHp),
+        totalFrames: mongoTotalRecoveryFrames(this.petState, this.maxHp, this.minSummonHp),
       });
     }
 
@@ -662,6 +951,80 @@ export class MongoSystem implements GameSystem {
   ): void {
     const newestRowTopY = buttonY - RECOVERY_TOAST_BOTTOM_GAP - RECOVERY_TOAST_FONT_SIZE;
     this.recoveryToasts.render(ctx, buttonX + buttonWidth / 2, newestRowTopY);
+  }
+
+  /**
+   * A marker pinned to the screen edge while he is out but off-camera.
+   *
+   * The passive half of the vanish fix: the rescue guarantees he can always get
+   * home, and this guarantees the player can always tell where he is on the way.
+   * Between them there is no arrangement of pet and geometry that reads as "he
+   * is simply gone" — which is what the complaint actually was.
+   *
+   * Both the visibility test and the bearing are taken from the *active* crawler
+   * rather than from the cat, because that is who the camera follows and who the
+   * player is steering: the marker's position on screen is camera-relative, so a
+   * bearing measured from anyone else points somewhere the arrow does not.
+   *
+   * "Off screen" means out of *sight*, not out of the rect. On a viewport large
+   * enough for the fog to draw at all, everything past its outer radius is
+   * painted solid black — and once the camera clamps at a map border a wide
+   * swathe of that is inside the rect, so a pet there is on screen and completely
+   * invisible, which is the state this marker exists to answer. On a viewport
+   * small enough that the fog never draws, the same test marks a pet who is
+   * technically still lit; a redundant icon is the right way round to be wrong.
+   * Called from the scene after the fog and before the HUD; see the call site for
+   * why it is pinned between them.
+   */
+  renderOffscreenMarker(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: HumanPlayer | CatPlayer,
+    visibleRadiusPx: number,
+  ): void {
+    const mongo = this.mongo;
+    // Nothing to point at during the fade: he is at her feet and on his way out.
+    if (mongo === null || mongo.recallArrived) return;
+
+    const screenX = mongo.x - camX + TILE_SIZE * TILE_CENTER;
+    const screenY = mongo.y - camY + TILE_SIZE * TILE_CENTER;
+    const width = viewportWidth();
+    const height = viewportHeight();
+    const insideViewport = screenX >= 0 && screenY >= 0 && screenX <= width && screenY <= height;
+    const distanceFromActive = Math.hypot(mongo.x - active.x, mongo.y - active.y);
+    if (insideViewport && distanceFromActive <= visibleRadiusPx) return;
+
+    const inset = OFFSCREEN_MARKER_EDGE_INSET_PX;
+    const markerX = Math.max(inset, Math.min(width - inset, screenX));
+    const markerY = Math.max(inset, Math.min(height - inset, screenY));
+
+    drawMongoIcon(
+      ctx,
+      getMongoStats(this.petLevel()).stage,
+      markerX,
+      markerY,
+      OFFSCREEN_MARKER_SIZE_PX,
+    );
+
+    // The icon says who; the chevron says which way, which the clamped position
+    // alone cannot at a corner, where both axes are pinned.
+    const bearing = Math.atan2(mongo.y - active.y, mongo.x - active.x);
+    const tip = OFFSCREEN_MARKER_SIZE_PX * OFFSCREEN_MARKER_CHEVRON_RATIO;
+    ctx.save();
+    ctx.translate(markerX, markerY);
+    ctx.rotate(bearing);
+    ctx.fillStyle = OFFSCREEN_MARKER_CHEVRON_COLOR;
+    ctx.strokeStyle = OFFSCREEN_MARKER_CHEVRON_OUTLINE;
+    ctx.lineWidth = OFFSCREEN_MARKER_CHEVRON_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(tip, 0);
+    ctx.lineTo(tip * OFFSCREEN_MARKER_CHEVRON_BACK, -tip * OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH);
+    ctx.lineTo(tip * OFFSCREEN_MARKER_CHEVRON_BACK, tip * OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   /**

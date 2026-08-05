@@ -1,4 +1,16 @@
 import { updateFrameTime } from '../utils';
+import {
+  clearMenuFocus,
+  focusNextButton,
+  focusPreviousButton,
+  focusedButtonClickPoint,
+  menuFocusRingSize,
+} from '../ui/Button';
+import {
+  cancelRebindCapture,
+  handleRebindCaptureKey,
+  isRebindCaptureActive,
+} from '../ui/pause/rebindCapture';
 import { beginPersonFrame } from '../sprites/person/personFrameCache';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
@@ -30,6 +42,22 @@ const MAX_CATCHUP_UPDATES = 2;
 
 /** Floor for the viewport size so a zero-sized window can't divide by zero. */
 const MIN_VIEWPORT_PX = 1;
+
+/** Keys that step the menu focus ring forward. */
+const FOCUS_NEXT_KEYS: ReadonlySet<string> = new Set(['Tab', 'ArrowDown', 'ArrowRight']);
+/** Keys that step it backward. Shift+Tab is handled separately. */
+const FOCUS_PREVIOUS_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowLeft']);
+/** Keys that activate the focused button — or, with nothing focused, the primary one. */
+const FOCUS_ACTIVATE_KEYS: ReadonlySet<string> = new Set([' ', 'Enter']);
+
+/** Elements that own their own keystrokes; the ring must not steal from them. */
+const TEXT_ENTRY_TAG_NAMES: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA']);
+
+function isTypingIntoTextField(): boolean {
+  const active = document.activeElement;
+  if (active === null) return false;
+  return TEXT_ENTRY_TAG_NAMES.has(active.tagName);
+}
 
 export abstract class Scene {
   abstract update(): void;
@@ -90,6 +118,11 @@ export class SceneManager {
       // surfaces, so the scale the preset asks for may have changed with it.
       renderQuality.handleDisplayChange();
     });
+
+    // Capture phase, on `window`: it has to run before the gameplay handlers
+    // registered on the same target, so that a key the menu ring consumes never
+    // also fires an attack or a character switch underneath the open menu.
+    window.addEventListener('keydown', (e) => this.handleMenuNavigation(e), { capture: true });
 
     const getPos = (e: MouseEvent) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -176,6 +209,59 @@ export class SceneManager {
     requestAnimationFrame((t) => this.loop(t));
   }
 
+  /**
+   * Keyboard driving for whatever menu declared a focus ring last frame.
+   *
+   * Deliberately inert outside menus: with no ring declared this returns
+   * immediately, so Space still attacks, Tab still switches crawlers and the
+   * arrows still walk. Escape is never consumed here — it belongs to the scenes'
+   * dismiss chains, which are the only way out of some of these menus.
+   */
+  private handleMenuNavigation(e: KeyboardEvent): void {
+    if (isTypingIntoTextField()) return;
+
+    if (isRebindCaptureActive()) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') cancelRebindCapture();
+      else if (!e.repeat) handleRebindCaptureKey(e.key);
+      return;
+    }
+
+    if (e.key === 'Escape') return;
+    if (menuFocusRingSize() === 0) return;
+
+    const consume = () => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    if (FOCUS_NEXT_KEYS.has(e.key)) {
+      consume();
+      if (e.key === 'Tab' && e.shiftKey) focusPreviousButton();
+      else focusNextButton();
+      return;
+    }
+
+    if (FOCUS_PREVIOUS_KEYS.has(e.key)) {
+      consume();
+      focusPreviousButton();
+      return;
+    }
+
+    if (FOCUS_ACTIVATE_KEYS.has(e.key)) {
+      // Consumed whether or not anything answers it. A menu that declares a ring
+      // but marks no primary — the casino's betting row is the deliberate case —
+      // must still not let the press reach the world and swing a weapon behind
+      // the panel. A held accept key never re-activates: one press, one button.
+      consume();
+      if (e.repeat) return;
+      const point = focusedButtonClickPoint();
+      if (point === null) return;
+      this.current?.handleClick?.(point.x, point.y, e.timeStamp);
+    }
+  }
+
   /** Visible width in CSS pixels. */
   viewportWidth(): number {
     return viewportWidth();
@@ -232,6 +318,12 @@ export class SceneManager {
    */
   replace(scene: Scene): void {
     this.current?.onExit?.();
+    // The outgoing scene's ring outlives its last render otherwise, and a key
+    // pressed before the incoming scene draws would synthesize a click at
+    // coordinates belonging to a menu that is no longer on screen. An armed
+    // rebind chip would likewise eat the first key of the new scene.
+    clearMenuFocus();
+    cancelRebindCapture();
     this.current = scene;
     scene.onEnter?.();
   }

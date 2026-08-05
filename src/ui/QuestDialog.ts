@@ -8,7 +8,13 @@
 import { pointInRect } from '../utils';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText, measureTextBox } from './TextBox';
-import { drawButton, playButtonSound, BUTTON_PRESETS } from './Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  playButtonSound,
+  BUTTON_PRESETS,
+} from './Button';
 import { drawModal, BOX_PRESETS } from './Box';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
@@ -187,6 +193,7 @@ export class QuestDialog {
     const btnY = box.y + dh - DIALOG_BTN_Y_FROM_BOTTOM;
     const decline = page.declineButton;
 
+    beginMenuFocus('quest-dialog');
     if (decline === undefined) {
       const btnX = box.x + dw / 2 - DIALOG_BTN_W / 2;
       drawButton(ctx, {
@@ -197,7 +204,9 @@ export class QuestDialog {
         label: page.button,
         ...BUTTON_PRESETS.primary,
         labelSize: DIALOG_BTN_LABEL_SIZE,
+        primaryAction: true,
       });
+      endMenuFocus();
       this.buttonRect = { x: btnX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
       this.declineRect = null;
       return;
@@ -226,7 +235,9 @@ export class QuestDialog {
       label: page.button,
       ...BUTTON_PRESETS.primary,
       labelSize: DIALOG_BTN_LABEL_SIZE,
+      primaryAction: true,
     });
+    endMenuFocus();
     this.declineRect = { x: declineX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
     this.buttonRect = { x: acceptX, y: btnY, w: DIALOG_BTN_W, h: DIALOG_BTN_H };
   }

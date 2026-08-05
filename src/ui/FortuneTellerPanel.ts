@@ -12,7 +12,13 @@
 
 import { platform } from '../core/Platform';
 import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
-import { drawButton, BUTTON_PRESETS, type ButtonResult } from './Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  BUTTON_PRESETS,
+  type ButtonResult,
+} from './Button';
 import { drawText } from './TextBox';
 import { drawFortune } from '../systems/townFortunes';
 import type { Player } from '../Player';
@@ -116,6 +122,7 @@ export class FortuneTellerPanel {
     });
 
     const canAfford = active.coins >= FORTUNE_COST;
+    beginMenuFocus('fortune-teller');
     if (this.fortune === null) {
       this.renderCards(ctx, modal.inner.y, centerX, canAfford);
     } else {
@@ -123,6 +130,7 @@ export class FortuneTellerPanel {
     }
 
     this.renderFooter(ctx, modal.y, centerX, canAfford);
+    endMenuFocus();
   }
 
   private renderCards(
@@ -193,6 +201,7 @@ export class FortuneTellerPanel {
         label: closeHint,
         labelSize: FOOTER_LABEL_SIZE,
         ...BUTTON_PRESETS.primary,
+        primaryAction: true,
       });
       return;
     }
@@ -218,6 +227,7 @@ export class FortuneTellerPanel {
       label: platform.isMobile ? 'Close' : 'Close  [Esc]',
       labelSize: FOOTER_LABEL_SIZE,
       ...BUTTON_PRESETS.primary,
+      primaryAction: true,
     });
   }
 

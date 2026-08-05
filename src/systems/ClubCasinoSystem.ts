@@ -28,7 +28,9 @@ import {
   type ModalFit,
 } from '../ui/Box';
 import {
+  beginMenuFocus,
   drawButton,
+  endMenuFocus,
   BUTTON_PRESETS,
   setButtonPointerSpace,
   resetButtonPointerSpace,
@@ -1171,10 +1173,17 @@ export class ClubCasinoSystem {
         this.renderBettingActions(ctx, layout, row, player);
         return;
       case 'player_turn':
+        // Only the two decision phases join a ring. The betting row deliberately
+        // does not: a stray accept press must never place a wager the player did
+        // not aim at.
+        beginMenuFocus('casino-turn');
         this.renderTurnActions(ctx, layout, row, player);
+        endMenuFocus();
         return;
       case 'settled':
+        beginMenuFocus('casino-settled');
         this.renderSettledActions(ctx, layout, row);
+        endMenuFocus();
         return;
     }
   }
@@ -1209,6 +1218,7 @@ export class ClubCasinoSystem {
     preset: CasinoButtonPreset,
     action: PanelAction,
     disabled = false,
+    primaryAction = false,
   ): void {
     const result = drawButton(ctx, {
       x: cell.x,
@@ -1218,6 +1228,7 @@ export class ClubCasinoSystem {
       label,
       labelSize: BUTTON_LABEL_SIZE,
       disabled,
+      primaryAction,
       ...preset,
     });
     if (!disabled) this.buttons.push({ result, action });
@@ -1310,7 +1321,16 @@ export class ClubCasinoSystem {
     row: Rect,
   ): void {
     const cells = this.actionCells(layout, row, SETTLED_CONTROL_COUNT);
-    this.addButton(ctx, cells[0], 'Next Hand', BUTTON_PRESETS.gold, { kind: 'next_hand' });
+    // The one safe default at this table: it clears the felt rather than staking anything.
+    this.addButton(
+      ctx,
+      cells[0],
+      'Next Hand',
+      BUTTON_PRESETS.gold,
+      { kind: 'next_hand' },
+      false,
+      true,
+    );
     this.addButton(
       ctx,
       cells[1],

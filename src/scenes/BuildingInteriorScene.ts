@@ -1,5 +1,6 @@
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
+import { keybindings } from '../core/Keybindings';
 import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_INTERIOR_W } from '../map/GameMap';
 import type { TownRole } from '../sprites/person/PersonAppearance';
@@ -43,7 +44,6 @@ import { drawText } from '../ui/TextBox';
 import { EventBus } from '../core/EventBus';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
-import { SystemAnnouncer } from '../ui/SystemAnnouncer';
 import { HotbarToast } from '../ui/HotbarToast';
 import { potionEffectNotice } from '../ui/potionNotices';
 import { SkillBookPrompt } from '../ui/SkillBookPrompt';
@@ -263,7 +263,6 @@ export class BuildingInteriorScene extends GameplayScene {
    * stack and the safe-room Bopca.
    */
   private readonly skillBus = new EventBus();
-  private readonly systemAnnouncer: SystemAnnouncer;
   private readonly hotbarToast = new HotbarToast();
   private readonly systemNotices: SystemNoticeSystem;
   /** The read-confirm prompt and the two award overlays a skill book can raise. */
@@ -434,12 +433,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pm.setPositions(sx, sy);
 
     this.audio?.wireEvents(this.skillBus);
-    this.systemAnnouncer = new SystemAnnouncer(this.audio);
-    this.systemNotices = new SystemNoticeSystem(
-      this.skillBus,
-      this.systemAnnouncer,
-      this.hotbarToast,
-    );
+    this.systemNotices = new SystemNoticeSystem(this.skillBus, this.hotbarToast);
     this.skillBookPrompt.audio = this.audio;
     this.rewardGrantedDialog.audio = this.audio;
     this.levelUpDialog.audio = this.audio;
@@ -727,16 +721,20 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.escHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
+      const action = keybindings.actionFor(e.key);
+      // Swallowed rather than acted on: the switch itself is polled from the
+      // held-key set in `update`, and letting Tab through moves DOM focus off
+      // the canvas.
+      if (action === 'switchCharacter') {
         e.preventDefault();
         return;
       }
-      if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
+      if (action === 'toggleMiniMap' && !e.repeat) {
         e.preventDefault();
         this.mobileHUD.toggleMiniMap();
         return;
       }
-      if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
+      if (action === 'companionFollow' && !e.repeat) {
         e.preventDefault();
         if (!this.followerMenu.isOpen && this.canOpenFollowerMenu()) this.followerMenu.open();
         else if (this.followerMenu.isOpen) this.followerMenu.close();
@@ -807,7 +805,6 @@ export class BuildingInteriorScene extends GameplayScene {
     // the listeners this scene added must not outlive it.
     this.bopcaBus?.clear();
     this.skillBus.clear();
-    this.systemAnnouncer.clear();
     this.hotbarToast.clear();
     this.floatingText.dispose();
     this.ambientSound?.dispose();
@@ -899,13 +896,9 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   update(): void {
-    if (this.gameOver && this.combat) {
-      if (this.input.has(' ')) {
-        this.input.clear();
-        if (this.combat.deathScreen.handleSpaceBar()) this.reviveAndExit();
-      }
-      return;
-    }
+    // The death screen accepts through its own focus ring now, which reaches
+    // `handleClick` — nothing to poll for here.
+    if (this.gameOver && this.combat) return;
 
     // Ticked unconditionally (any floor, any building) — the containment/
     // escape deadline must keep being checked wherever the players are.
@@ -919,7 +912,6 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.systemNotices.drainFor(this.human, this.cat);
-    this.systemAnnouncer.update();
     this.hotbarToast.update();
     this.floatingText.updateFor(this.human, this.cat);
     this.openPendingSkillBookPrompt();
@@ -942,20 +934,11 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.skillBookPrompt.isOpen) return;
-    if (this.levelUpDialog.isShowing) {
-      if (this.input.has(' ')) {
-        this.input.clear();
-        this.levelUpDialog.handleSpaceBar();
-      }
-      return;
-    }
-    if (this.rewardGrantedDialog.isShowing) {
-      if (this.input.has(' ')) {
-        this.input.clear();
-        this.rewardGrantedDialog.handleSpaceBar();
-      }
-      return;
-    }
+    // Both award dialogs accept through their own focus rings, which reach
+    // `handleClick`; polling the key here would be the second path to the same
+    // OK button.
+    if (this.levelUpDialog.isShowing) return;
+    if (this.rewardGrantedDialog.isShowing) return;
     if (this.pauseMenu.isOpen) return;
     if (this.followerMenu.isOpen) return;
     if (this.exitMenuOpen) return;
@@ -964,7 +947,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // The cook timer has to keep running through the conversation — the dish
       // is meant to land while the player is still reading the order line.
       this.bopca.tick(this.human, this.cat, this.active(), this.inactive());
-      if (this.input.has(' ')) {
+      if (keybindings.isHeld(this.input, 'attack')) {
         this.input.clear();
         this.bopca.advanceDialog();
       }
@@ -972,7 +955,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.safeRoom?.mordecaiDialogOpen) {
       this.safeRoom.tickDialog();
-      if (this.input.has(' ')) {
+      if (keybindings.isHeld(this.input, 'attack')) {
         this.input.clear();
         this.safeRoom.advanceMordecaiDialog();
       }
@@ -984,7 +967,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // to keep ticking through its own panel — the same reason the Bopca's cook
       // timer runs through her dialog above.
       this.club.tickOpenModals(this.active());
-      if (this.input.has(' ')) {
+      if (keybindings.isHeld(this.input, 'attack')) {
         this.input.clear();
         this.club.dismissModal(this.active());
       }
@@ -992,7 +975,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.update();
-      if (this.input.has(' ')) {
+      if (keybindings.isHeld(this.input, 'attack')) {
         this.input.clear();
         this.servicePanel.close();
       }
@@ -1004,7 +987,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const conversationOpen = this.citizenDialog?.isOpen === true;
     if (conversationOpen) {
       this.citizenDialog.update();
-      if (this.input.has(' ')) {
+      if (keybindings.isHeld(this.input, 'attack')) {
         this.input.clear();
         this.citizenDialog.advance();
       }
@@ -1055,7 +1038,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Held back mid-conversation to match the street: swapping characters would
     // hand the walk-away check a body standing several tiles back, closing the
     // box on a player who never moved.
-    if (!conversationOpen && this.input.has('Tab')) {
+    if (!conversationOpen && keybindings.isHeld(this.input, 'switchCharacter')) {
       this.input.clear();
       this.trySwitchActive();
     }
@@ -1063,11 +1046,15 @@ export class BuildingInteriorScene extends GameplayScene {
     // Safe room: sleep / talk to Mordecai. Only consume Space when actually
     // acting, so an unrelated press can still fall through to talking to an
     // ambient occupant sharing the room.
-    if (this.bopca !== null && this.input.has(' ') && this.bopca.tryInteract(player)) {
+    if (
+      this.bopca !== null &&
+      keybindings.isHeld(this.input, 'attack') &&
+      this.bopca.tryInteract(player)
+    ) {
       this.input.clear();
     }
 
-    if (this.safeRoom && this.input.has(' ')) {
+    if (this.safeRoom && keybindings.isHeld(this.input, 'attack')) {
       if (this.safeRoom.isNearBed(player)) {
         this.input.clear();
         this.safeRoom.startSleep();
@@ -1078,7 +1065,7 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     // Store: toggle shop when near shopkeeper or close it with Space
-    if (this.shop && this.input.has(' ')) {
+    if (this.shop && keybindings.isHeld(this.input, 'attack')) {
       if (this.shop.shopOpen) {
         this.input.clear();
         this.shop.shopOpen = false;
@@ -1091,12 +1078,16 @@ export class BuildingInteriorScene extends GameplayScene {
     // Club: talk to a station NPC (the Sledge, bar, casino, …) with Space.
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
-    if (this.club !== null && this.input.has(' ') && this.club.handleInteract(player)) {
+    if (
+      this.club !== null &&
+      keybindings.isHeld(this.input, 'attack') &&
+      this.club.handleInteract(player)
+    ) {
       this.input.clear();
     }
 
     // Ambient occupants: talk to the nearest one with Space
-    if (this.input.has(' ') && this.tryTalkToOccupant(player)) {
+    if (keybindings.isHeld(this.input, 'attack') && this.tryTalkToOccupant(player)) {
       this.input.clear();
     }
 
@@ -1138,7 +1129,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!combat) return;
 
     // Space attacks — encounter interiors have no safe room or shop competing for the key.
-    if (this.input.has(' ')) {
+    if (keybindings.isHeld(this.input, 'attack')) {
       this.input.clear();
       triggerPlayerAttack(this.human, this.cat, combat.mobGrid, this.map, this.audio);
     }
@@ -1236,7 +1227,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (this.shop?.shopOpen) {
-      this.shop.handleClick(mx, my, this.active());
+      this.shop.handleClick(mx, my);
       return;
     }
     if (this.club?.modalOpen) {
@@ -1743,7 +1734,6 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.exitMenuOpen) this.renderExitMenu(ctx);
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx);
 
-    this.systemAnnouncer.render(ctx);
     this.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
     this.levelUpDialog.render(ctx);
     this.rewardGrantedDialog.render(ctx);
@@ -2076,7 +2066,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private skillBookFlowHost(): SkillBookFlowHost {
     return {
       audio: this.audio,
-      announce: (message) => this.systemAnnouncer.announce(message),
+      announce: (message) => this.hotbarToast.show(message),
       prompt: this.skillBookPrompt,
       // The drag is dropped alongside: the overlays' pointer guard blocks the
       // mouse-up that would otherwise resolve one still in flight.

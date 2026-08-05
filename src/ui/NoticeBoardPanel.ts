@@ -8,6 +8,7 @@
 
 import { platform } from '../core/Platform';
 import { drawModal, drawOverlay, BOX_PRESETS } from './Box';
+import { suppressMenuFocus } from './Button';
 import { drawText, wrapText, TEXT_PRESETS } from './TextBox';
 import type { Notice, NoticeTone } from '../systems/townNotices';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -78,6 +79,7 @@ export class NoticeBoardPanel {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.open) return;
+    suppressMenuFocus('notice-board');
 
     const bodyWidth = PANEL_WIDTH - PANEL_PADDING * 2;
     const laidOut = this.layout(ctx, bodyWidth);

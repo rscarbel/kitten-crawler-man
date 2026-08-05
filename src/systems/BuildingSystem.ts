@@ -7,7 +7,7 @@ import { tileCoordKey } from '../map/tileIndex';
 const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawText } from '../ui/TextBox';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type BuildingEntry = {
@@ -257,6 +257,7 @@ export class BuildingSystem implements GameSystem {
 
     const rects = this.menuRects();
 
+    beginMenuFocus('building-entry');
     drawButton(ctx, {
       x: rects.enter.x,
       y: rects.enter.y,
@@ -281,7 +282,9 @@ export class BuildingSystem implements GameSystem {
       border: '#475569',
       labelSize: 14,
       labelColor: '#94a3b8',
+      primaryAction: true,
     });
+    endMenuFocus();
   }
 
   private menuRects(): {
