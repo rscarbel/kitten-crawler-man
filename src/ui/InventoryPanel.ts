@@ -325,6 +325,36 @@ const STAT_BOOST_STAR_R_OUTER = 0.17;
 const STAT_BOOST_STAR_R_INNER = 0.08;
 const STAT_BOOST_STAR_POINTS = 5;
 
+// Dirty Shirley icon proportions — a tall straight-sided highball glass, drawn as its
+// own shape rather than via drawRoundFlask since a tumbler has no round body or neck
+const DIRTY_SHIRLEY_CX = 0.5;
+const DIRTY_SHIRLEY_GLASS_HALF_W = 0.2;
+const DIRTY_SHIRLEY_GLASS_TOP_Y = 0.14;
+const DIRTY_SHIRLEY_GLASS_BOTTOM_Y = 0.88;
+const DIRTY_SHIRLEY_RIM_RY = 0.02;
+const DIRTY_SHIRLEY_LIQUID_TOP_Y = 0.26;
+const DIRTY_SHIRLEY_LIQUID_INSET = 0.02;
+const DIRTY_SHIRLEY_HIGHLIGHT_X_OFFSET = 0.06;
+const DIRTY_SHIRLEY_HIGHLIGHT_W = 0.045;
+const DIRTY_SHIRLEY_HIGHLIGHT_ALPHA = 0.3;
+const DIRTY_SHIRLEY_BUBBLE_R = 0.014;
+const DIRTY_SHIRLEY_BUBBLE_1_X = 0.42;
+const DIRTY_SHIRLEY_BUBBLE_1_Y = 0.7;
+const DIRTY_SHIRLEY_BUBBLE_2_X = 0.58;
+const DIRTY_SHIRLEY_BUBBLE_2_Y = 0.56;
+const DIRTY_SHIRLEY_BUBBLE_3_X = 0.47;
+const DIRTY_SHIRLEY_BUBBLE_3_Y = 0.42;
+const DIRTY_SHIRLEY_CHERRY_X_OFFSET = 0.12;
+const DIRTY_SHIRLEY_CHERRY_Y_OFFSET = -0.03;
+const DIRTY_SHIRLEY_CHERRY_R = 0.055;
+const DIRTY_SHIRLEY_CHERRY_SHINE_X_OFFSET = -0.018;
+const DIRTY_SHIRLEY_CHERRY_SHINE_Y_OFFSET = -0.018;
+const DIRTY_SHIRLEY_CHERRY_SHINE_R = 0.016;
+const DIRTY_SHIRLEY_STEM_END_X_OFFSET = -0.03;
+const DIRTY_SHIRLEY_STEM_END_Y_OFFSET = -0.1;
+const DIRTY_SHIRLEY_STEM_CTRL_X_OFFSET = 0.05;
+const DIRTY_SHIRLEY_STEM_CTRL_Y_OFFSET = -0.06;
+
 /** How many pages are needed for the full slot array. */
 function pageCount(slotCount: number): number {
   return Math.max(1, Math.ceil(slotCount / SLOTS_PER_PAGE));
@@ -1629,6 +1659,105 @@ export class InventoryPanel {
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
+      ctx.fill();
+    }
+
+    if (item.id === 'dirty_shirley') {
+      const cx = x + size * DIRTY_SHIRLEY_CX;
+      const glassTopY = y + size * DIRTY_SHIRLEY_GLASS_TOP_Y;
+      const glassBottomY = y + size * DIRTY_SHIRLEY_GLASS_BOTTOM_Y;
+      const glassLeftX = cx - size * DIRTY_SHIRLEY_GLASS_HALF_W;
+      const glassRightX = cx + size * DIRTY_SHIRLEY_GLASS_HALF_W;
+
+      // Faint glass body under the liquid so the tumbler's walls read past the fill line
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(glassLeftX, glassTopY, glassRightX - glassLeftX, glassBottomY - glassTopY);
+
+      const liquidTopY = y + size * DIRTY_SHIRLEY_LIQUID_TOP_Y;
+      const liquidLeftX = glassLeftX + size * DIRTY_SHIRLEY_LIQUID_INSET;
+      const liquidRightX = glassRightX - size * DIRTY_SHIRLEY_LIQUID_INSET;
+
+      // Deep grenadine red settles at the bottom, lighter ginger-ale fizz rises to the top
+      const liquidGradient = ctx.createLinearGradient(0, liquidTopY, 0, glassBottomY);
+      liquidGradient.addColorStop(0, '#fda4af');
+      liquidGradient.addColorStop(1, '#7f1d3d');
+      ctx.fillStyle = liquidGradient;
+      ctx.fillRect(liquidLeftX, liquidTopY, liquidRightX - liquidLeftX, glassBottomY - liquidTopY);
+
+      // Rim ellipse reads as the glass's top opening
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(
+        cx,
+        glassTopY,
+        size * DIRTY_SHIRLEY_GLASS_HALF_W,
+        size * DIRTY_SHIRLEY_RIM_RY,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+
+      // A pale stripe down one side sells the glass over the liquid
+      ctx.fillStyle = `rgba(255,255,255,${DIRTY_SHIRLEY_HIGHLIGHT_ALPHA})`;
+      ctx.fillRect(
+        glassLeftX + size * DIRTY_SHIRLEY_HIGHLIGHT_X_OFFSET,
+        glassTopY,
+        size * DIRTY_SHIRLEY_HIGHLIGHT_W,
+        glassBottomY - glassTopY,
+      );
+
+      // A few fizz bubbles rising through the liquid
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      const bubbleFracs: Array<[number, number]> = [
+        [DIRTY_SHIRLEY_BUBBLE_1_X, DIRTY_SHIRLEY_BUBBLE_1_Y],
+        [DIRTY_SHIRLEY_BUBBLE_2_X, DIRTY_SHIRLEY_BUBBLE_2_Y],
+        [DIRTY_SHIRLEY_BUBBLE_3_X, DIRTY_SHIRLEY_BUBBLE_3_Y],
+      ];
+      for (const [bxFrac, byFrac] of bubbleFracs) {
+        ctx.beginPath();
+        ctx.arc(
+          x + size * bxFrac,
+          y + size * byFrac,
+          size * DIRTY_SHIRLEY_BUBBLE_R,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+
+      // Maraschino cherry perched on the rim, with a thin curved stem
+      const cherryX = cx + size * DIRTY_SHIRLEY_CHERRY_X_OFFSET;
+      const cherryY = glassTopY + size * DIRTY_SHIRLEY_CHERRY_Y_OFFSET;
+      const cherryR = size * DIRTY_SHIRLEY_CHERRY_R;
+
+      ctx.strokeStyle = '#4d7c0f';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cherryX, cherryY - cherryR);
+      ctx.quadraticCurveTo(
+        cherryX + size * DIRTY_SHIRLEY_STEM_CTRL_X_OFFSET,
+        cherryY + size * DIRTY_SHIRLEY_STEM_CTRL_Y_OFFSET,
+        cherryX + size * DIRTY_SHIRLEY_STEM_END_X_OFFSET,
+        cherryY + size * DIRTY_SHIRLEY_STEM_END_Y_OFFSET,
+      );
+      ctx.stroke();
+
+      ctx.fillStyle = '#7f1d3d';
+      ctx.beginPath();
+      ctx.arc(cherryX, cherryY, cherryR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(
+        cherryX + size * DIRTY_SHIRLEY_CHERRY_SHINE_X_OFFSET,
+        cherryY + size * DIRTY_SHIRLEY_CHERRY_SHINE_Y_OFFSET,
+        size * DIRTY_SHIRLEY_CHERRY_SHINE_R,
+        0,
+        Math.PI * 2,
+      );
       ctx.fill();
     }
 

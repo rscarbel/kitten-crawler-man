@@ -18,6 +18,7 @@ import { gaitSpeedFactor, IDLE_CYCLES_PER_FRAME, walkCycleDistance } from '../sp
 import { HUMANOID_NPC_SCALE, scaleHumanoidBox } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
 import { stepWander, type WanderParams, type WanderState, type WanderStep } from './townWander';
+import type { ResidentId } from '../systems/townResidents';
 
 /**
  * Draw size of a citizen in pixels before the humanoid scale-up — full-tile
@@ -63,6 +64,8 @@ export interface TownspersonOptions {
   initialPause?: number;
   /** Facing to hold until the figure first moves — lets a stationed occupant face its workstation. */
   initialFacing?: Facing;
+  /** Names this citizen as a specific person; unset citizens speak from the role pools. */
+  residentId?: ResidentId;
 }
 
 export class Townsperson implements WanderState {
@@ -70,6 +73,8 @@ export class Townsperson implements WanderState {
   /** Stable identity, so a pairwise crowd pass can visit each pair exactly once. */
   readonly id = nextTownspersonId++;
   readonly role: TownRole;
+  /** Set when this citizen is a named resident; drives their dialog and speaker label. */
+  readonly residentId: ResidentId | null;
   readonly appearance: PersonAppearance;
 
   x: number;
@@ -109,6 +114,7 @@ export class Townsperson implements WanderState {
     this.targetX = opts.x;
     this.targetY = opts.y;
     this.role = opts.role;
+    this.residentId = opts.residentId ?? null;
     this.pause = opts.initialPause ?? 0;
     this.wander = opts.wander;
     if (opts.initialFacing !== undefined) this.facing = opts.initialFacing;

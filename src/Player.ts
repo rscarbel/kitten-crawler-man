@@ -1,5 +1,11 @@
 import type { StatusEffect } from './core/StatusEffect';
-import { makeSpeedFizz, makeJuggJuice, makeCooldownCrisp } from './core/StatusEffect';
+import {
+  makeSpeedFizz,
+  makeJuggJuice,
+  makeCooldownCrisp,
+  makeDrunk,
+  WHETSTONE_MELEE_DAMAGE_BONUS,
+} from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
@@ -85,7 +91,17 @@ export type DamageSource =
        */
       readonly undodgeable?: boolean;
     }
-  | { readonly kind: 'status'; readonly effectType: string }
+  | {
+      readonly kind: 'status';
+      readonly effectType: string;
+      /**
+       * Whoever applied the status this tick came from, copied off the effect —
+       * see {@link StatusEffect.applier}. `Mob` reads it to credit a kill that
+       * lands on a damage-over-time tick, which is the only channel a tick has:
+       * by the time it fires, the blow that applied it is long gone.
+       */
+      readonly applier: Player | null;
+    }
   | { readonly kind: 'dynamite' }
   | {
       readonly kind: 'environmental';
@@ -128,6 +144,12 @@ const XP_PER_LEVEL_MULTIPLIER = 10;
 /** Max HP granted by each point of constitution. The single source for this ratio. */
 export const CON_HP_BONUS_PER_POINT = 2;
 const POTION_HEAL_FRACTION = 0.5;
+/**
+ * Half what a health potion gives back. The Dirty Shirley is a cocktail with a
+ * drawback attached, not a medicine — matching the pub's Boozy Milk, which is
+ * the same trade at a bar you cannot carry home.
+ */
+const DIRTY_SHIRLEY_HEAL_FRACTION = 0.25;
 const FRAMES_PER_SECOND = 60;
 /** Iron Stomach can shorten a swallow's timers by a lot, but never to nothing. */
 const MIN_IRON_STOMACH_TIME_SCALE = 0.4;
@@ -774,6 +796,92 @@ export abstract class Player {
     return this.hasStatus('drunk') ? DRUNK_MELEE_DAMAGE_BONUS : 0;
   }
 
+  /**
+   * The Desperado Club's signature, drunk from the bag: a quarter of your health
+   * back and the liquid courage that comes with it.
+   *
+   * It lives here rather than in a scene branch because both the dungeon and the
+   * building interiors let you drink one, and a house special that heals
+   * differently depending on which room you are standing in is a bug waiting to
+   * be reported.
+   */
+  drinkDirtyShirley(): void {
+    this.recordSwallowed();
+    this.applyStatus(makeDrunk(this.ironStomachTimeScale));
+    const healed = this.hp + Math.round(this.maxHp * DIRTY_SHIRLEY_HEAL_FRACTION);
+    this.hp = Math.min(this.maxHp, healed);
+  }
+
+  /**
+   * Whether a Dirty Shirley would do anything at all — there is something to
+   * mend, or the courage is not already running.
+   *
+   * Asked before the bottle is spent rather than folded into the swallow, so the
+   * two can be ordered consume-then-effect: an effect applied ahead of a consume
+   * that then fails is a free drink for the rest of the run.
+   */
+  get dirtyShirleyWouldHelp(): boolean {
+    return this.hp < this.maxHp || !this.hasStatus('drunk');
+  }
+
+  /**
+   * Puts this crawler back on their feet at full health.
+   *
+   * Writing `hp = maxHp` is not enough on its own: a knocked-out crawler stays
+   * knocked out at any HP, so a service that advertises mending the pair would
+   * otherwise take the coin and leave the companion face-down at full health.
+   */
+  reviveToFull(): void {
+    this.isKnockedOut = false;
+    this.knockedOutFrames = 0;
+    this.reviveProgress = 0;
+    this.hp = this.maxHp;
+  }
+
+  /** The Rusty Anvil's edge, for as long as it holds. */
+  get whetstoneDamageBonus(): number {
+    return this.hasStatus('whetstone') ? WHETSTONE_MELEE_DAMAGE_BONUS : 0;
+  }
+
+  /**
+   * Every melee bonus that comes from a temporary status. Subclasses add this to
+   * their own damage rather than each status separately, so a new one lands in
+   * both crawlers' swings at once.
+   */
+  get statusMeleeDamageBonus(): number {
+    return this.drunkDamageBonus + this.whetstoneDamageBonus;
+  }
+
+  /**
+   * Removes every listed status, returning how many were actually cleared —
+   * the apothecary charges only for a cure that had something to cure.
+   *
+   * Routed through the same expiry cleanup as `clearStatusEffects`, so a status
+   * that loans the player something (Jugg Juice's max HP, Speed Fizz's
+   * multiplier) still pays it back if a caller ever names one.
+   */
+  cureStatuses(types: ReadonlyArray<string>): number {
+    const kept: StatusEffect[] = [];
+    let cleared = 0;
+    for (const effect of this.statusEffects) {
+      if (!types.includes(effect.type)) {
+        kept.push(effect);
+        continue;
+      }
+      cleared++;
+      if (effect.type === 'speed_fizz') {
+        this._potionSpeedBoost = 1;
+      }
+      if (effect.type === 'jugg_juice') {
+        this._juggJuiceHpBoost = 0;
+      }
+    }
+    if (cleared === 0) return 0;
+    this.statusEffects = kept;
+    this.syncHpToMaxHp();
+    return cleared;
+  }
+
   /** Returns true if the player currently has the given status active. */
   hasStatus(type: string): boolean {
     // A plain loop rather than `some`: this is called several times per entity
@@ -817,19 +925,19 @@ export abstract class Player {
     for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'burn' });
+        this.takeDamage(1, { kind: 'status', effectType: 'burn', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'poison' && elapsed > 0 && elapsed % POISON_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'poison' });
+        this.takeDamage(1, { kind: 'status', effectType: 'poison', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'sepsis' && elapsed > 0 && elapsed % SEPSIS_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'sepsis' });
+        this.takeDamage(1, { kind: 'status', effectType: 'sepsis', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'magic_burn' && elapsed > 0 && elapsed % MAGIC_BURN_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'magic_burn' });
+        this.takeDamage(1, { kind: 'status', effectType: 'magic_burn', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       if (
@@ -837,11 +945,11 @@ export abstract class Player {
         elapsed > 0 &&
         elapsed % ELECTRIFIED_TICK_INTERVAL === 0
       ) {
-        this.takeDamage(1, { kind: 'status', effectType: 'electrified' });
+        this.takeDamage(1, { kind: 'status', effectType: 'electrified', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
-        this.takeDamage(1, { kind: 'status', effectType: 'spit_venom' });
+        this.takeDamage(1, { kind: 'status', effectType: 'spit_venom', applier: effect.applier });
         this.effectDamageSoundPending = true;
       }
       effect.ticksRemaining--;

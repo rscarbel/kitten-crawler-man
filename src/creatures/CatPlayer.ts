@@ -216,7 +216,7 @@ export class CatPlayer extends Player {
   }
 
   getMeleeDamage(): number {
-    return 1 + this.strength + this.drunkDamageBonus;
+    return 1 + this.strength + this.statusMeleeDamageBonus;
   }
 
   getMeleeRange(): number {

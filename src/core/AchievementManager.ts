@@ -30,7 +30,8 @@ export type AchievementId =
   | 'desperado_member'
   | 'merc_hired'
   | 'casino_jackpot'
-  | 'club_bodyguards';
+  | 'club_bodyguards'
+  | 'ask_for_it_dirty';
 
 export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Legendary' | 'Celestial';
 export type BoxCategory = 'Adventurer' | 'Boss' | 'Spicy' | 'Tutorial';
@@ -136,6 +137,13 @@ export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
     description: 'Hire the Sledge & Bomo as your VIP escort.',
     playerType: 'both',
     lootBox: { tier: 'Bronze', category: 'Adventurer' },
+  },
+  ask_for_it_dirty: {
+    id: 'ask_for_it_dirty',
+    name: 'Ask For It Dirty',
+    description: 'Drink a Dirty Shirley inside the Desperado Club.',
+    playerType: 'both',
+    lootBox: { tier: 'Bronze', category: 'Spicy' },
   },
 };
 

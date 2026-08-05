@@ -78,6 +78,8 @@ const GREETING_TITLE = '🔪  The Desperado Club  🔪';
 const SLEDGE_WELCOME = '"Back again? Good. Enjoy yourself — and mind the rules."';
 
 // Bar drinks — the club's buff consumables, priced as premium members' pours.
+/** The house special leads the board, because that is what a house special is. */
+const DIRTY_SHIRLEY_PRICE = 15;
 const SPEED_FIZZ_PRICE = 20;
 const COOLDOWN_CRISP_PRICE = 25;
 const JUGG_JUICE_PRICE = 30;
@@ -85,6 +87,12 @@ const JUGG_JUICE_PRICE = 30;
 const BAR_SHOP_CONFIG: ShopConfig = {
   title: 'The Bar',
   items: [
+    {
+      id: 'dirty_shirley',
+      label: 'The Dirty Shirley',
+      price: DIRTY_SHIRLEY_PRICE,
+      desc: 'The house special. Ask for it dirty',
+    },
     {
       id: 'speed_fizz',
       label: 'Speed Fizz',

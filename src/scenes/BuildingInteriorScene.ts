@@ -3,7 +3,6 @@ import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
 import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_INTERIOR_W } from '../map/GameMap';
-import type { TownRole } from '../sprites/person/PersonAppearance';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
@@ -45,7 +44,8 @@ import { EventBus } from '../core/EventBus';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { HotbarToast } from '../ui/HotbarToast';
-import { potionEffectNotice } from '../ui/potionNotices';
+import { potionEffectNotice, statBoostNotice } from '../ui/potionNotices';
+import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../core/timedPotions';
 import { SkillBookPrompt } from '../ui/SkillBookPrompt';
 import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
 import { LevelUpDialog } from '../ui/LevelUpDialog';
@@ -78,23 +78,57 @@ import {
 } from '../core/GodMode';
 import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
+import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
   buildCitizenConversation,
+  isTownInDanger,
   roleDisplayName,
   type TownDialogContext,
 } from '../systems/townDialog';
-import { buildTavernMenu, serveDrink } from '../systems/townPub';
+import {
+  buildResidentConversation,
+  residentById,
+  residentHost,
+  type ResidentDef,
+  type ResidentHost,
+} from '../systems/townResidents';
+import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
+import { buildSmithyMenu, sharpenEdges } from '../systems/townSmithy';
+import { buildInnMenu, serveInn, INN_ROOM_KEY } from '../systems/townInn';
+import {
+  buildCartwrightMenu,
+  buildMillerMenu,
+  buildShepherdMenu,
+  sellCartwrightGoods,
+  serveMillerGoods,
+  serveShepherdRest,
+} from '../systems/townHomesteads';
+import { buildTavernMenu, serveDrinkAt } from '../systems/townPub';
 import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
 import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
-import { PricedMenuPanel, type PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import {
+  PricedMenuPanel,
+  type PricedOption,
+  type PricedPurchaseHandler,
+} from '../ui/PricedMenuPanel';
 import {
   setButtonMouseState,
   setButtonAudio,
   notifyButtonClick,
   clearButtonMouseState,
 } from '../ui/Button';
+import type { ItemId } from '../core/ItemDefs';
+import { interiorServiceFor } from '../systems/townServices';
+import {
+  createTownMemory,
+  noteResidentTalk,
+  residentTalkCount,
+  type TownMemory,
+} from '../core/TownMemory';
 import { CitizenDialog } from '../ui/CitizenDialog';
+import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
+import { ReadablePanel } from '../ui/ReadablePanel';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { SpellSystem } from '../systems/SpellSystem';
 import { GoreSystem } from '../systems/GoreSystem';
@@ -123,17 +157,26 @@ const HEARTH_AMBIENT_VOLUME = 0.4;
 /** Volume of a room-wide crowd/shop bed, quiet enough to sit under dialog and music. */
 const BAR_CROWD_AMBIENT_VOLUME = 0.35;
 const MAGIC_SHOP_AMBIENT_VOLUME = 0.3;
+/** Prompt shown over an occupant who has nothing special to offer. */
+const TALK_PROMPT_LABEL = 'Talk';
+/** Prompt shown over a ledger, letter or board sitting on the furniture. */
+const READ_PROMPT_LABEL = 'Read';
+
 /**
- * Buildings that offer a priced service, and the occupant role that sells it —
- * talking to that role opens the service menu instead of ordinary chatter.
+ * Frames a freshly-opened interior modal ignores the interact key entirely.
+ *
+ * The same key opens these panels and closes them, and `InputManager` only
+ * tracks whether a key is currently *down*. `input.clear()` empties that set, so
+ * a key the player is physically still holding reads as released — until the
+ * browser's auto-repeat puts it back and the panel shuts itself the moment it
+ * appeared.
+ *
+ * The window has to outlast that repeat delay, which is an OS setting and can be
+ * as long as a second, so this is deliberately generous: a player who just
+ * opened a shop or a ledger is not reaching for the key again inside a second,
+ * and `modalCloseArmed` takes over as soon as it expires.
  */
-const SERVICE_NPC_ROLES = new Map<string, TownRole>([
-  ['The Sunken Stump Pub', 'innkeeper'],
-  ['The Horned Flagon', 'innkeeper'],
-  ['The Sleeping Cat Inn', 'innkeeper'],
-  ['Temple of the Sky', 'priest'],
-  ["Signet's Ink", 'merchant'],
-]);
+const MODAL_REOPEN_GRACE_FRAMES = 60;
 
 /** Rooms that hum with their own constant ambience regardless of where you stand. */
 const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number }>([
@@ -142,6 +185,9 @@ const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number
   ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Desperado Club', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
+  // No entry for The Rusty Anvil on purpose: its braziers already emit the
+  // forge crackle through `buildAmbientEmitters`, and a room-wide bed on top of
+  // them would only double the same loop against itself.
 ]);
 
 /** The town's drinking houses, which share the rotating tavern soundtrack. */
@@ -321,10 +367,40 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly ambientSound: AmbientSoundSystem | null;
   /** Priced-service menu for this room's NPC (drinks, blessing, ink); null where none is offered. */
   private readonly servicePanel: PricedMenuPanel | null;
+  /** Old Hilda's reading surface; null in every room that sells rather than reads. */
+  private readonly readingPanel: FortuneTellerPanel | null;
+  /** Ledgers, letters and tally boards sitting on this room's furniture. */
+  private readonly readables: InteriorReadableSystem | null;
+  private readonly readablePanel = new ReadablePanel();
+  /**
+   * Resident lore progress and the apothecary's batch. Threaded in by reference
+   * because this scene is rebuilt on every door entry — anything held here
+   * instead would reset each visit, which is exactly the bug it exists to fix.
+   */
+  private readonly townMemory: TownMemory;
   // Talk surface for ambient occupants; null when there are no occupants or no audio.
   private readonly citizenDialog: CitizenDialog | null;
   /** Occupant the open conversation belongs to; used to notice the player walking off. */
   private citizenDialogTarget: Townsperson | null = null;
+  /**
+   * A service NPC whose story is playing, and the turn their menu should open
+   * on. The turn is captured here rather than re-read later: `noteTalk` runs the
+   * moment the story starts, so re-reading it after the story ends would rotate
+   * the shopkeeper's greeting one line further than the same visit's direct
+   * talk does.
+   */
+  private pendingServiceTalk: { target: Townsperson; turn: number } | null = null;
+  /** Frames left in which a freshly-opened interior modal ignores the interact key. */
+  private modalGraceFrames = 0;
+  /**
+   * Whether the interact key has been observed genuinely released since the open
+   * modal appeared. Nothing calls `input.clear()` while one of these panels is
+   * up, so inside that window "not held" really does mean the key came up —
+   * which makes this the edge trigger `isHeld` cannot be on its own.
+   */
+  private modalCloseArmed = false;
+  /** Effect stings waiting out their beat behind a gulp. */
+  private delayedSounds: Array<{ id: SoundId; framesLeft: number }> = [];
   private gameOver = false;
   /** Kept for encounters created after construction (the tower's top-floor fight). */
   private readonly encounterAbilityManager: AbilityManager | null;
@@ -357,6 +433,7 @@ export class BuildingInteriorScene extends GameplayScene {
     private readonly murderQuestProgress?: MurderQuestProgress,
     doomsdayQuestProgress?: DoomsdayProgress,
     clubMembership?: ClubMembership,
+    townMemory?: TownMemory,
     mercenaryRoster?: MercenaryRoster,
     godModeState?: GodModeState,
     companionStance?: CompanionStanceState,
@@ -497,11 +574,25 @@ export class BuildingInteriorScene extends GameplayScene {
         : null;
     this.citizenDialog =
       this.occupants !== null && this.audio !== null ? new CitizenDialog(this.audio) : null;
+    // Suppressed for the same reason occupants are: a room hosting a live quest
+    // encounter is a fight, not a library.
+    this.readables =
+      this.combat === null
+        ? InteriorReadableSystem.forBuilding(
+            this.map,
+            entry.name,
+            this.occupants?.occupiedFurniture ?? new Set(),
+          )
+        : null;
 
     this.ambientSound =
       this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
 
-    this.servicePanel = SERVICE_NPC_ROLES.has(entry.name) ? new PricedMenuPanel() : null;
+    this.townMemory = townMemory ?? createTownMemory();
+
+    const service = interiorServiceFor(entry.name);
+    this.servicePanel = service?.surface === 'menu' ? new PricedMenuPanel() : null;
+    this.readingPanel = service?.surface === 'reading' ? new FortuneTellerPanel() : null;
   }
 
   /**
@@ -774,6 +865,14 @@ export class BuildingInteriorScene extends GameplayScene {
         this.servicePanel.close();
         return;
       }
+      if (this.readingPanel?.isOpen === true) {
+        this.readingPanel.close();
+        return;
+      }
+      if (this.readablePanel.isOpen) {
+        this.readablePanel.close();
+        return;
+      }
       if (this.towerStairs?.menuOpen) {
         this.towerStairs.closeMenu();
         return;
@@ -788,6 +887,9 @@ export class BuildingInteriorScene extends GameplayScene {
       // Escape can be aimed at.
       if (this.citizenDialog?.isOpen === true) {
         this.citizenDialog.close();
+        // Escape is a refusal, not a page turn: a menu queued behind the story
+        // must not open on the way out of it.
+        this.pendingServiceTalk = null;
         this.releaseCitizenDialogTarget();
         return;
       }
@@ -834,6 +936,8 @@ export class BuildingInteriorScene extends GameplayScene {
       this.shop?.shopOpen === true ||
       this.club?.modalOpen === true ||
       this.servicePanel?.isOpen === true ||
+      this.readingPanel?.isOpen === true ||
+      this.readablePanel.isOpen ||
       this.citizenDialog?.isOpen === true
     );
   }
@@ -915,6 +1019,12 @@ export class BuildingInteriorScene extends GameplayScene {
     this.hotbarToast.update();
     this.floatingText.updateFor(this.human, this.cat);
     this.openPendingSkillBookPrompt();
+    this.resolvePendingDrink();
+    this.tickDelayedSounds();
+    // Drained here rather than inside the panel branches that read it: a panel
+    // dismissed with the mouse before the grace expired would otherwise leave a
+    // stale count behind to swallow an unrelated key press later.
+    if (this.modalGraceFrames > 0) this.modalGraceFrames--;
     this.rewardGrantedDialog.update();
     this.levelUpDialog.update();
 
@@ -975,15 +1085,23 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.update();
-      if (keybindings.isHeld(this.input, 'attack')) {
-        this.input.clear();
-        this.servicePanel.close();
-      }
+      if (this.consumeModalClose()) this.servicePanel.close();
+      return;
+    }
+    if (this.readingPanel?.isOpen === true) {
+      if (this.consumeModalClose()) this.readingPanel.close();
+      return;
+    }
+    if (this.readablePanel.isOpen) {
+      // Advances rather than closing: a long readable is paged, and the last
+      // page is where `advance` closes it.
+      if (this.consumeModalClose()) this.readablePanel.advance();
       return;
     }
     // Deliberately does not return: the player has to be able to walk while the
     // box is up, because walking off is what dismisses it.
     this.dismissCitizenDialogIfWalkedAway();
+    if (this.resolvePendingServiceTalk()) return;
     const conversationOpen = this.citizenDialog?.isOpen === true;
     if (conversationOpen) {
       this.citizenDialog.update();
@@ -1090,6 +1208,15 @@ export class BuildingInteriorScene extends GameplayScene {
     if (keybindings.isHeld(this.input, 'attack') && this.tryTalkToOccupant(player)) {
       this.input.clear();
     }
+
+    // Readables sit on furniture the occupants stand beside, so this runs after
+    // the talk above: a person in reach always wins the same press.
+    //
+    // The press is deliberately *not* cleared. Nothing below this reads it, the
+    // panel's own early-return owns every frame after, and leaving the key alone
+    // is what lets `consumeModalClose` see the player's real hold — a clear here
+    // would fake a release and the page would shut on the first auto-repeat.
+    if (keybindings.isHeld(this.input, 'attack')) this.tryReadNearby(player);
 
     // Update walk animation
     this.human.tickTimers();
@@ -1238,6 +1365,13 @@ export class BuildingInteriorScene extends GameplayScene {
       this.servicePanel.handleClick(mx, my, this.active());
       return;
     }
+    if (this.readingPanel?.isOpen === true) {
+      this.readingPanel.handleClick(mx, my, this.active());
+      return;
+    }
+    if (this.readablePanel.handleClick()) {
+      return;
+    }
     if (this.bopca?.handleClick(mx, my) === true) {
       return;
     }
@@ -1344,34 +1478,119 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * Opens a conversation with the nearest ambient occupant in range — or the
-   * drink menu, when that occupant is the barkeep of a room that serves. Returns
-   * whether something opened, so the caller can consume the triggering input.
-   * Shared by the desktop Space path and the mobile tap path so occupants are
-   * talkable on both.
+   * building's service menu, when that occupant is the one who sells here.
+   * Returns whether something opened, so the caller can consume the triggering
+   * input. Shared by the desktop Space path and the mobile tap path so occupants
+   * are talkable on both.
+   *
+   * A named resident who also runs the service tells their story first: the
+   * lore conversation plays, and `pendingServiceTalk` opens the menu the moment
+   * it ends, so a player who came in for a drink is never more than one
+   * dismissal from one.
    */
   private tryTalkToOccupant(player: ReturnType<BuildingInteriorScene['active']>): boolean {
     if (this.citizenDialog === null || this.occupants === null) return false;
     const target = this.occupants.findTalkTarget(player.x, player.y);
     if (target === null) return false;
     target.faceToward(player.x, player.y);
-    if (this.servicePanel !== null && target.role === SERVICE_NPC_ROLES.get(this.entry.name)) {
-      this.openServiceMenu(this.servicePanel, target.conversationCount, player);
-      this.audio?.play('menu_open');
-      target.conversationCount++;
+
+    const ctx = this.townDialogContext();
+    const inDanger = isTownInDanger(ctx);
+    const resident = target.residentId === null ? null : residentById(target.residentId);
+    const sellsHere = target.role === interiorServiceFor(this.entry.name)?.role;
+    const turn = this.turnFor(target);
+
+    if (sellsHere && !this.hasUntoldLore(target)) {
+      this.openService(turn, resident);
+      this.noteTalk(target, inDanger);
       return true;
     }
-    const lines = buildCitizenConversation(
-      target.role,
-      target.appearance.seed,
-      target.conversationCount,
-      this.townDialogContext(),
-    );
-    this.citizenDialog.open(roleDisplayName(target.role), lines);
+
+    const lines =
+      resident !== null
+        ? buildResidentConversation(resident, turn, ctx)
+        : buildCitizenConversation(target.role, target.appearance.seed, turn, ctx);
+    this.citizenDialog.open(resident?.name ?? roleDisplayName(target.role), lines);
     // Pinned for the same reason street citizens are: the conversation ends when
     // the *player* walks off, which only holds if the other party stays put.
     target.frozen = true;
     this.citizenDialogTarget = target;
-    target.conversationCount++;
+    this.pendingServiceTalk = sellsHere ? { target, turn } : null;
+    this.noteTalk(target, inDanger);
+    return true;
+  }
+
+  /**
+   * How many conversations this occupant has already had with the player.
+   *
+   * A named resident's count comes from `TownMemory`, which outlives the scene:
+   * the whole point of a lore list is that it advances across visits, and this
+   * scene — along with every `Townsperson` in it — is rebuilt every time the
+   * door opens. An unnamed extra has nothing worth remembering, so their count
+   * stays on the figure and resets with the room.
+   */
+  private turnFor(target: Townsperson): number {
+    if (target.residentId === null) return target.conversationCount;
+    return residentTalkCount(this.townMemory, target.residentId);
+  }
+
+  /**
+   * Counts a conversation, unless the town is in danger — a panicking one-liner
+   * is not a conversation, and counting it would burn a lore entry the player
+   * never got to hear.
+   */
+  private noteTalk(target: Townsperson, inDanger: boolean): void {
+    if (inDanger) return;
+    if (target.residentId === null) {
+      target.conversationCount++;
+      return;
+    }
+    noteResidentTalk(this.townMemory, target.residentId);
+  }
+
+  /**
+   * Opens the service menu queued behind a resident's story as soon as that
+   * story is dismissed. `SERVICE_MENU_GRACE_FRAMES` is what stops the press that
+   * closed the last page from also closing the menu it just opened.
+   *
+   * Returns whether it opened one, so `update` can end the frame there rather
+   * than running movement and exit-tile detection behind a modal that is now up.
+   */
+  private resolvePendingServiceTalk(): boolean {
+    const queued = this.pendingServiceTalk;
+    if (queued === null) return false;
+    if (this.citizenDialog?.isOpen === true) return false;
+
+    const target = queued.target;
+    this.pendingServiceTalk = null;
+    // Re-checked rather than assumed: the story can be dismissed on one side of
+    // the room and the key released on the other, and a counter you have walked
+    // away from should not throw its menu at you.
+    const player = this.active();
+    const distance = Math.hypot(player.x - target.x, player.y - target.y);
+    if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) return false;
+
+    const resident = target.residentId === null ? null : residentById(target.residentId);
+    this.openService(queued.turn, resident);
+    return true;
+  }
+
+  /**
+   * Whether the interact key is asking to close the open interior modal.
+   *
+   * Edge-triggered rather than level-triggered: the key must be seen released
+   * before a press counts, so the press that opened the panel — and every
+   * auto-repeat of it — is ignored while the player keeps holding it.
+   */
+  private consumeModalClose(): boolean {
+    if (this.modalGraceFrames > 0) return false;
+    if (!keybindings.isHeld(this.input, 'attack')) {
+      this.modalCloseArmed = true;
+      return false;
+    }
+    if (!this.modalCloseArmed) return false;
+    this.modalCloseArmed = false;
+    this.input.clear();
     return true;
   }
 
@@ -1387,6 +1606,9 @@ export class BuildingInteriorScene extends GameplayScene {
     const distance = Math.hypot(player.x - target.x, player.y - target.y);
     if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) {
       this.citizenDialog.close();
+      // Walking out mid-story is a refusal, not a queue: the shop must not
+      // ambush a player who left the counter.
+      this.pendingServiceTalk = null;
       this.releaseCitizenDialogTarget();
     }
   }
@@ -1398,42 +1620,123 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Opens whatever this building's service NPC does — a priced menu almost
+   * everywhere, a reading in Old Hilda's kitchen.
+   */
+  private openService(turn: number, resident: ResidentDef | null): void {
+    if (this.readingPanel !== null) {
+      this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
+      this.beginModalGrace();
+      this.audio?.play('menu_open');
+      return;
+    }
+    if (this.servicePanel === null) return;
+    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn));
+    this.beginModalGrace();
+    this.audio?.play('menu_open');
+  }
+
+  /**
+   * Starts the window in which a newly-opened modal ignores the interact key.
+   * Every path that opens one goes through here, including the ones whose caller
+   * already calls `input.clear()` — that clear is exactly the protection this
+   * mechanism exists because it does not provide.
+   */
+  private beginModalGrace(): void {
+    this.modalGraceFrames = MODAL_REOPEN_GRACE_FRAMES;
+    this.modalCloseArmed = false;
+  }
+
+  /**
    * Fill the service panel with whatever this building sells. Each builder returns
    * both the rows and the handler that performs the service, so the two can never
    * drift apart.
    */
-  private openServiceMenu(
-    panel: PricedMenuPanel,
-    turn: number,
-    player: ReturnType<BuildingInteriorScene['active']>,
-  ): void {
+  private openServiceMenu(panel: PricedMenuPanel, turn: number, host: ResidentHost | null): void {
     const party = [this.human, this.cat];
     // Every service confirms with the same purchase chime; the tavern layers its
     // pour underneath so a round sounds like a round.
-    const confirmed = (handler: PricedPurchaseHandler, pour: boolean): PricedPurchaseHandler => {
+    const never = (): boolean => false;
+    const always = (): boolean => true;
+    const confirmed = (
+      handler: PricedPurchaseHandler,
+      pours: (option: PricedOption) => boolean,
+    ): PricedPurchaseHandler => {
       return (option, buyer) => {
         const result = handler(option, buyer);
         if (!result.ok) return result;
-        if (pour) this.audio?.play('ambient_pouring_a_drink');
+        if (pours(option)) this.audio?.play('ambient_pouring_a_drink');
         this.audio?.play('purchase_success');
         return result;
       };
     };
 
-    if (this.entry.name === 'Temple of the Sky') {
-      panel.open(
-        () => buildBlessingMenu(party, turn),
-        confirmed(() => ({ ok: true, line: grantBlessing(party, turn) }), false),
-      );
-      return;
+    switch (this.entry.name) {
+      case 'Temple of the Sky':
+        panel.open(
+          () => buildBlessingMenu(party, turn, host),
+          confirmed(() => ({ ok: true, line: grantBlessing(party, turn) }), never),
+        );
+        return;
+      case "Signet's Ink":
+        // Rebuilt per purchase, so inking one stat design marks the other stat
+        // designs as spent — and the skill mark as spent independently of them.
+        panel.open(() => buildTattooMenu(this.active(), turn, host), confirmed(inkTattoo, never));
+        return;
+      case 'Herb & Remedy':
+        panel.open(
+          () => buildApothecaryMenu(party, this.townMemory, turn, host),
+          confirmed(serveRemedy(party, this.townMemory), never),
+        );
+        return;
+      case 'The Rusty Anvil':
+        panel.open(
+          () => buildSmithyMenu(party, this.active(), turn, host),
+          confirmed(sharpenEdges(party, turn), never),
+        );
+        return;
+      case "Cartwright's Workshop":
+        panel.open(
+          () => buildCartwrightMenu(turn, host),
+          confirmed(sellCartwrightGoods(turn), never),
+        );
+        return;
+      case "Miller's Farm":
+        panel.open(
+          () => buildMillerMenu(this.active(), turn, host),
+          confirmed(serveMillerGoods(turn), never),
+        );
+        return;
+      case "Shepherd's Cabin":
+        panel.open(
+          () => buildShepherdMenu(party, turn, host),
+          confirmed(serveShepherdRest(party, turn), never),
+        );
+        return;
+      case 'The Sleeping Cat Inn':
+        panel.open(
+          () =>
+            buildInnMenu(
+              this.entry.name,
+              party,
+              this.active(),
+              turn,
+              host,
+              isTownInDanger(this.townDialogContext()),
+            ),
+          // A round off the kitchen board pours; a bed does not.
+          confirmed(
+            serveInn(this.entry.name, party, turn),
+            (option) => option.key !== INN_ROOM_KEY,
+          ),
+        );
+        return;
+      default:
+        panel.open(
+          () => buildTavernMenu(this.entry.name, this.active(), turn, host),
+          confirmed(serveDrinkAt(this.entry.name), always),
+        );
     }
-    if (this.entry.name === "Signet's Ink") {
-      // Rebuilt per purchase, so inking one stat design marks the other stat
-      // designs as spent — and the skill mark as spent independently of them.
-      panel.open(() => buildTattooMenu(player, turn), confirmed(inkTattoo, false));
-      return;
-    }
-    panel.open(() => buildTavernMenu(this.entry.name, turn), confirmed(serveDrink, true));
   }
 
   /**
@@ -1496,23 +1799,82 @@ export class BuildingInteriorScene extends GameplayScene {
     };
   }
 
-  /** Floats a "Talk" prompt over the nearest occupant when one is in range. */
+  /**
+   * Floats one interact prompt over whatever the next press would reach: the
+   * nearest occupant, or — when nobody is in range — whatever there is to read.
+   * One prompt at a time, because two hovering key-caps in a small room read as
+   * a bug rather than as two options.
+   */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.citizenDialog === null || this.occupants === null) return;
-    if (this.citizenDialog.isOpen) return;
+    if (this.citizenDialog?.isOpen === true) return;
     if (
       this.pauseMenu.isOpen ||
       this.exitMenuOpen ||
       this.shop?.shopOpen === true ||
+      this.servicePanel?.isOpen === true ||
+      this.readingPanel?.isOpen === true ||
+      this.readablePanel.isOpen ||
       this.safeRoom?.mordecaiDialogOpen === true ||
       this.safeRoom?.isSleeping === true
     ) {
       return;
     }
     const active = this.active();
-    const target = this.occupants.findTalkTarget(active.x, active.y);
-    if (target === null) return;
-    drawInteractionPrompt(ctx, target.x - camX, target.y - camY, TILE_SIZE, 'Talk');
+    const target =
+      this.citizenDialog === null
+        ? null
+        : (this.occupants?.findTalkTarget(active.x, active.y) ?? null);
+    if (target !== null) {
+      drawInteractionPrompt(
+        ctx,
+        target.x - camX,
+        target.y - camY,
+        TILE_SIZE,
+        this.promptFor(target),
+      );
+      return;
+    }
+    const page = this.readables?.findReadTarget(active.x, active.y) ?? null;
+    if (page === null) return;
+    drawInteractionPrompt(ctx, page.x - camX, page.y - camY, TILE_SIZE, READ_PROMPT_LABEL);
+  }
+
+  /**
+   * Opens whatever is in reach to read. Returns whether something opened, so
+   * the caller can consume the triggering input.
+   */
+  private tryReadNearby(player: ReturnType<BuildingInteriorScene['active']>): boolean {
+    if (this.readables === null || this.readablePanel.isOpen) return false;
+    if (this.citizenDialog?.isOpen === true) return false;
+    const page = this.readables.findReadTarget(player.x, player.y);
+    if (page === null) return false;
+    this.readablePanel.openWith(page.readable);
+    this.beginModalGrace();
+    this.audio?.play('menu_open');
+    return true;
+  }
+
+  /**
+   * What pressing interact on `target` will actually do. A service NPC still
+   * holding a story reads as "Talk", because that is what the press gets you —
+   * the verb only appears once the story is behind them.
+   */
+  private promptFor(target: Townsperson): string {
+    const service = interiorServiceFor(this.entry.name);
+    if (service?.role !== target.role) return TALK_PROMPT_LABEL;
+    if (this.hasUntoldLore(target)) return TALK_PROMPT_LABEL;
+    return service.verb;
+  }
+
+  /**
+   * Whether this occupant is a named resident with a story still to tell. False
+   * while the town is in danger: nobody reminisces through an alarm, so the lore
+   * list neither plays nor advances until it is over.
+   */
+  private hasUntoldLore(target: Townsperson): boolean {
+    if (target.residentId === null) return false;
+    if (isTownInDanger(this.townDialogContext())) return false;
+    return this.turnFor(target) < residentById(target.residentId).lore.length;
   }
 
   /**
@@ -1727,6 +2089,8 @@ export class BuildingInteriorScene extends GameplayScene {
 
     this.citizenDialog?.render(ctx);
     this.servicePanel?.render(ctx, this.active());
+    this.readingPanel?.render(ctx, this.active());
+    this.readablePanel.render(ctx);
 
     if (this.combat && combatOnThisFloor) this.combat.encounter.renderUI(ctx);
     this.soulCrystal.renderUI(ctx);
@@ -1883,6 +2247,8 @@ export class BuildingInteriorScene extends GameplayScene {
         this.shop?.shopOpen ||
         this.club?.modalOpen ||
         this.servicePanel?.isOpen === true ||
+        this.readingPanel?.isOpen === true ||
+        this.readablePanel.isOpen ||
         this.skillBookPrompt.isOpen ||
         this.levelUpDialog.isShowing ||
         this.rewardGrantedDialog.isShowing
@@ -2001,7 +2367,10 @@ export class BuildingInteriorScene extends GameplayScene {
           // guarding the talk trigger below against reopening a fresh one in the
           // same tap (the close-then-reopen trap).
           const dialogWasOpen =
-            this.citizenDialog?.isOpen === true || this.servicePanel?.isOpen === true;
+            this.citizenDialog?.isOpen === true ||
+            this.servicePanel?.isOpen === true ||
+            this.readingPanel?.isOpen === true ||
+            this.readablePanel.isOpen;
           const bopcaWasOpen = this.bopca?.isDialogOpen === true;
           // A tap whose finger went down before an award overlay appeared still
           // arrives here. `handleClick` routes it to the overlay; the
@@ -2057,9 +2426,13 @@ export class BuildingInteriorScene extends GameplayScene {
       this.club?.modalOpen !== true &&
       this.safeRoom?.isSleeping !== true &&
       this.safeRoom?.mordecaiDialogOpen !== true &&
-      this.bopca?.isDialogOpen !== true
+      this.bopca?.isDialogOpen !== true &&
+      this.servicePanel?.isOpen !== true &&
+      this.readingPanel?.isOpen !== true &&
+      !this.readablePanel.isOpen
     ) {
-      this.tryTalkToOccupant(this.active());
+      const active = this.active();
+      if (!this.tryTalkToOccupant(active)) this.tryReadNearby(active);
     }
   }
 
@@ -2085,6 +2458,122 @@ export class BuildingInteriorScene extends GameplayScene {
     };
   }
 
+  /**
+   * Drinks whatever the bag's context menu queued. Interiors resolve this
+   * themselves because `DungeonScene` owns the dungeon's copy, and a player who
+   * just bought a drink at the club bar reaches for it before walking outside.
+   */
+  private resolvePendingDrink(): void {
+    const interaction = this.mobileHUD.inventoryPanel.interaction;
+    const bottle = interaction.pendingDrinkSlot;
+    if (bottle === null) return;
+    interaction.pendingDrinkSlot = null;
+    if (this.drinkFromSlot(bottle.id, bottle) && this.mobileHUD.inventoryPanel.isOpen) {
+      this.mobileHUD.inventoryPanel.toggle();
+    }
+  }
+
+  /**
+   * Drinks one bottle from a slot, reporting whether it went down.
+   *
+   * Every drinkable is served, because two of the town's new counters sell
+   * exactly the ones that used to be refused indoors — a Ruin-Root Tonic at the
+   * apothecary and a Bag of Crisps at the mill are Jugg Juice and Cooldown
+   * Crisps, and buzzing at a player who tries to drink what they just bought in
+   * the shop they bought it in reads as a broken item.
+   *
+   * This is not `DungeonScene.drinkPotion`: that one also owns the tutorial
+   * hooks, the potion cooldown and the `healingPotionUsed` event, none of which
+   * exist in here. The timed-potion table is shared (`timedPotions.ts`) so the
+   * two can never pour different drinks.
+   */
+  private drinkFromSlot(
+    id: ItemId,
+    bottle: { source: 'inv' | 'hotbar'; slotIdx: number },
+  ): boolean {
+    const active = this.active();
+    const consume = (): boolean =>
+      active.inventory.removeOneFromSlot(bottle.source, bottle.slotIdx, id);
+
+    if (id === 'health_potion') {
+      // `usePotion` gates on the cooldown and on being unhurt before it consumes,
+      // so a refusal here has already cost nothing.
+      if (!active.usePotion(consume)) {
+        this.audio?.play('error_taking_action');
+        return false;
+      }
+      // Played outright rather than through `healingPotionUsed`: that event is
+      // wired to the audio manager on the *dungeon's* bus, so indoors a health
+      // potion went down in silence.
+      this.audio?.play('healing_potion');
+      this.showDrinkNotice(id);
+      return true;
+    }
+    if (id === 'dirty_shirley') {
+      // A bottle that would change nothing is refused before it is opened: it
+      // comes out of the bag rather than off a bar, so spending one for no
+      // effect costs the player twice.
+      if (!active.dirtyShirleyWouldHelp) {
+        this.audio?.play('error_taking_action');
+        return false;
+      }
+      if (!consume()) return false;
+      active.drinkDirtyShirley();
+      this.playDrinkSounds('healing_potion');
+      this.showDrinkNotice(id);
+      // The achievement is for drinking it where it is poured. Carrying one down
+      // a floor and drinking it in a corridor is allowed; it just isn't this.
+      if (this.entry.type === 'club') {
+        this.humanAchievements?.tryUnlock('ask_for_it_dirty');
+        this.catAchievements?.tryUnlock('ask_for_it_dirty');
+      }
+      return true;
+    }
+    if (id === 'stat_boost_potion') {
+      if (!consume()) return false;
+      const { stat, amount } = active.applyStatBoost();
+      this.playDrinkSounds('stat_boost');
+      this.hotbarToast.show(statBoostNotice(stat, amount));
+      return true;
+    }
+
+    const timed = TIMED_POTIONS[id];
+    if (timed === undefined) {
+      this.audio?.play('error_taking_action');
+      return false;
+    }
+    // Refusing rather than refreshing, exactly as the dungeon does: a second
+    // bottle poured over a running one is coins for nothing.
+    if (active.hasStatus(id) || !consume()) {
+      this.audio?.play('error_taking_action');
+      return false;
+    }
+    timed.activate(active);
+    this.playDrinkSounds(timed.effectSound);
+    this.showDrinkNotice(id);
+    return true;
+  }
+
+  private tickDelayedSounds(): void {
+    this.delayedSounds = this.delayedSounds.filter((pending) => {
+      pending.framesLeft--;
+      if (pending.framesLeft > 0) return true;
+      this.audio?.play(pending.id);
+      return false;
+    });
+  }
+
+  /** The gulp, then the effect landing a beat later — the dungeon's pattern. */
+  private playDrinkSounds(effectSound: SoundId): void {
+    this.audio?.play('potion_drink');
+    this.delayedSounds.push({ id: effectSound, framesLeft: POTION_EFFECT_SOUND_DELAY });
+  }
+
+  private showDrinkNotice(id: ItemId): void {
+    const notice = potionEffectNotice(id);
+    if (notice !== null) this.hotbarToast.show(notice);
+  }
+
   private openPendingSkillBookPrompt(): void {
     const interaction = this.mobileHUD.inventoryPanel.interaction;
     const request = interaction.pendingSkillBookRead;
@@ -2099,14 +2588,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private triggerHotbarActivation(hotbarIdx: number): void {
     const active = this.active();
     const slot = active.inventory.actionBar.slots[hotbarIdx];
-    if (slot?.id === 'health_potion') {
-      const drankThisSlot = active.usePotion(() =>
-        active.inventory.removeOneFromSlot('hotbar', hotbarIdx, 'health_potion'),
-      );
-      if (drankThisSlot) {
-        const notice = potionEffectNotice(slot.id);
-        if (notice !== null) this.hotbarToast.show(notice);
-      }
+    if (slot?.drinkable === true) {
+      this.drinkFromSlot(slot.id, { source: 'hotbar', slotIdx: hotbarIdx });
       return;
     }
     if (slot?.skillId !== undefined) {

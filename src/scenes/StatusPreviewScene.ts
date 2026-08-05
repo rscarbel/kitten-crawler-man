@@ -48,6 +48,7 @@ const PREVIEW_STATUSES: readonly string[] = [
   'speed_fizz',
   'jugg_juice',
   'cooldown_crisp',
+  'whetstone',
   'drunk',
 ];
 
@@ -240,6 +241,9 @@ export class StatusPreviewScene extends Scene {
       type,
       ticksRemaining: ticks,
       totalTicks: FULL_DURATION_TICKS,
+      // Nobody inflicted this one — it is a swatch in a review harness, and
+      // there is no kill for it to be credited to.
+      applier: null,
     };
     const frame: StatusVisualFrame = {
       centerX: left + size * HUMAN_STATUS_FIGURE_BOX.centerX,

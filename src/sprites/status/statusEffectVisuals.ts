@@ -45,9 +45,11 @@ import {
   drawDrunk,
   drawJuggJuice,
   drawSpeedFizz,
+  drawWhetstone,
   drunkBodyLayer,
   juggJuiceBodyLayer,
   speedFizzBodyLayer,
+  whetstoneBodyLayer,
 } from './statusBoons';
 
 export type { StatusVisualFrame } from './statusPaint';
@@ -178,6 +180,16 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: false,
       bodyLayers: (f) => [cooldownCrispBodyLayer(f)],
       overlay: drawCooldownCrisp,
+    },
+  ],
+  [
+    'whetstone',
+    {
+      label: 'EDGE',
+      color: '#94a3b8',
+      harmful: false,
+      bodyLayers: (f) => [whetstoneBodyLayer(f)],
+      overlay: drawWhetstone,
     },
   ],
   [

@@ -332,3 +332,59 @@ export function drawDrunk(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): 
   }
   ctx.globalCompositeOperation = 'source-over';
 }
+
+// -- whetstone: the smith put an edge on it ---------------------------------
+
+const EDGE_STEEL: Rgb = [206, 226, 244];
+const EDGE_SPARK: Rgb = [255, 236, 190];
+
+const EDGE_RIM_ALPHA = 0.5;
+/** A cold ring at the feet, so the boon is visible on a crawler standing still. */
+const EDGE_GLINT_COUNT = 3;
+const EDGE_GLINT_RATE_PER_MS = 0.00055;
+const EDGE_GLINT_RADIUS = 0.11;
+const EDGE_GLINT_ALPHA = 0.9;
+/** Glints travel up the leading edge of the figure rather than rising off it. */
+const EDGE_GLINT_RISE = 1.15;
+const EDGE_GLINT_LEAD = 0.42;
+const EDGE_SHEEN_ALPHA = 0.18;
+const EDGE_SHEEN_RADIUS = 0.75;
+const EDGE_SHEEN_UP = 0.55;
+
+export function whetstoneBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
+  return {
+    rimColor: rgba(EDGE_STEEL, 1),
+    rimAlpha: EDGE_RIM_ALPHA * f.fade,
+  };
+}
+
+export function drawWhetstone(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  ctx.globalCompositeOperation = 'lighter';
+  drawGlow(
+    ctx,
+    EDGE_STEEL,
+    f.centerX + f.facingX * f.width * EDGE_GLINT_LEAD,
+    bodyY(f, EDGE_SHEEN_UP),
+    f.width * EDGE_SHEEN_RADIUS,
+    EDGE_SHEEN_ALPHA * f.fade,
+  );
+
+  // Sparks run along the side the swing comes from, which is what says "edge"
+  // rather than the generic upward drift every other boon uses.
+  for (let i = 0; i < EDGE_GLINT_COUNT; i++) {
+    const phase = particlePhase(f, i, EDGE_GLINT_RATE_PER_MS);
+    const alpha = Math.sin(phase * Math.PI) * EDGE_GLINT_ALPHA * f.fade;
+    if (alpha <= 0) continue;
+    const x = f.centerX + f.facingX * f.width * EDGE_GLINT_LEAD;
+    drawEmbermote(
+      ctx,
+      EDGE_STEEL,
+      EDGE_SPARK,
+      x,
+      bodyY(f, EDGE_GLINT_RISE * phase),
+      f.width * EDGE_GLINT_RADIUS,
+      alpha,
+    );
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}

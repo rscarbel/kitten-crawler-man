@@ -11,6 +11,8 @@ import type { StatName, Player } from '../Player';
 import type { SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
 import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ResidentHost } from './townResidents';
+import { rotateLine } from './townServiceUtil';
 
 const TATTOO_PRICE = 100;
 /** Stat points a tattoo grants. Small, but it never goes away. */
@@ -83,8 +85,7 @@ const TATTOOIST_BARKS: ReadonlyArray<string> = [
 
 /** The tattooist's greeting, rotated by how many times the player has talked to them. */
 function tattooistBark(turn: number): string {
-  const index = ((turn % TATTOOIST_BARKS.length) + TATTOOIST_BARKS.length) % TATTOOIST_BARKS.length;
-  return TATTOOIST_BARKS[index];
+  return rotateLine(TATTOOIST_BARKS, turn);
 }
 
 /**
@@ -93,12 +94,20 @@ function tattooistBark(turn: number): string {
  * The stat rows all disable together once they carry a stat mark; the Brass
  * Gullet is gated separately on {@link Player.skillTattoo}, so one of each can
  * coexist.
+ *
+ * `host` names the resident behind the needle when the room has one, so the
+ * greeting is theirs rather than the generic tattooist's.
  */
-export function buildTattooMenu(player: Player, turn: number): PricedMenu {
+export function buildTattooMenu(
+  player: Player,
+  turn: number,
+  host: ResidentHost | null,
+): PricedMenu {
   const existing = player.tattooStat;
   return {
     title: "Signet's Ink",
-    bark: tattooistBark(turn),
+    bark: host?.line ?? tattooistBark(turn),
+    byline: host?.name,
     options: TATTOO_DESIGNS.map((design) => {
       const option: PricedOption = {
         key: design.key,

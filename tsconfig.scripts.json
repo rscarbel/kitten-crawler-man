@@ -115,6 +115,7 @@
     "scripts/verify-separation.ts",
     "scripts/bench-separation.ts",
     "scripts/verify-assets.ts",
+    "scripts/verify-interiors.ts",
     "scripts/grubArt.ts",
     "scripts/generate-brindle-grub-sprite.ts",
     "scripts/render-grub.ts",

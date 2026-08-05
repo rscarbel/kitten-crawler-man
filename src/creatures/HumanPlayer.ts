@@ -186,7 +186,7 @@ export class HumanPlayer extends Player {
 
   getMeleeDamage(): number {
     const pugilismBonus = PUGILISM_DAMAGE_PER_LEVEL * this.skills.getLevel('pugilism');
-    return 1 + this.strength + this.drunkDamageBonus + pugilismBonus;
+    return 1 + this.strength + this.statusMeleeDamageBonus + pugilismBonus;
   }
 
   triggerAttack() {

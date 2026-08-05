@@ -1,10 +1,15 @@
 /**
- * The fortune teller's repertoire. Pure data + selection: given a snapshot of
- * quest progress, `drawFortune` returns one reading. Most draws are whimsical
+ * The town's two readings. Pure data + selection: given a snapshot of quest
+ * progress, a reader's `draw` returns one reading. Most draws are whimsical
  * general fortunes; some are quest-reactive omens that nod at what the player is
  * (or should be) doing, so the mystic feels like she actually sees the town's
- * troubles. The `TownPropSystem` fortune-teller prop and `FortuneTellerPanel`
- * own the prop, coin cost, and card flip — this module only picks the words.
+ * troubles. `FortuneTellerPanel` owns the coin cost and the card flip — this
+ * module only picks the words.
+ *
+ * Two people read in this town and they are not the same act. Madame Voss works
+ * the plaza with cards and showmanship. Old Hilda reads in her own kitchen for
+ * less, has no cards, and tells you what she actually sees — which is mostly
+ * about the curse, the ruins and the thing humming under the tower.
  */
 
 import type { TownDialogContext } from './townDialog';
@@ -79,9 +84,88 @@ function pick<T>(pool: ReadonlyArray<T>): T {
 
 /** Draw a single fortune for the current world state. */
 export function drawFortune(ctx: TownDialogContext): string {
-  const applicable = REACTIVE_FORTUNES.filter((f) => f.when(ctx));
+  return drawFrom(GENERAL_FORTUNES, REACTIVE_FORTUNES, ctx);
+}
+
+function drawFrom(
+  general: ReadonlyArray<string>,
+  reactive: ReadonlyArray<ReactiveFortune>,
+  ctx: TownDialogContext,
+): string {
+  const applicable = reactive.filter((f) => f.when(ctx));
   if (applicable.length > 0 && Math.random() < REACTIVE_DRAW_CHANCE) {
     return pick(pick(applicable).lines);
   }
-  return pick(GENERAL_FORTUNES);
+  return pick(general);
+}
+
+// -- Old Hilda's kitchen reading --------------------------------------------
+
+const HILDA_GENERAL_READINGS: ReadonlyArray<string> = [
+  'Sit. Hands on the table. ...You are going to be fine, which is more than I usually get to say.',
+  'There is a door you have not opened because it looked like a wall. It is not a wall.',
+  'Something you are carrying was made by someone who is dead now. Most things are. This one minds.',
+  'You will be offered a bargain by someone who is smiling. Take it. Just read it twice.',
+  'The ruins remember the street plan even where the streets are gone. Walk the old lines and you will not get lost.',
+  'You have killed something this week that had a name. Nothing to be done about it now.',
+  'Water first, then whatever you were going to do. You are no good to anyone dried out.',
+  'I see the number three, and I have no idea what it means, and I am not going to invent something.',
+  'Someone in this town is lying to you kindly. Let them. It costs you nothing yet.',
+  'Old bones tell weather, not futures. Rain by evening. That is my honest reading.',
+];
+
+const HILDA_REACTIVE_READINGS: ReadonlyArray<ReactiveFortune> = [
+  {
+    when: (ctx) => ctx.doomsday === 'containment' || ctx.doomsday === 'escape',
+    lines: [
+      'The humming has stopped. Forty years it hummed. Whatever you are going to do, do it running.',
+      'No reading. Get out of my kitchen and get up that tower.',
+    ],
+  },
+  {
+    when: (ctx) => ctx.doomsday === 'complete',
+    lines: [
+      'It hums again. Quieter. Whatever you put back in that box, it is sleeping.',
+      'I have nothing to warn you about for the first time in forty years. I do not know what to do with my hands.',
+    ],
+  },
+  {
+    when: (ctx) => ctx.murder === 'confrontation' || ctx.quillNamed,
+    lines: [
+      'She has a name now, and a name is a handle. Take hold of it before she puts it down.',
+      'The one doing the killing is not the one who wants the killing done. Do not stop at the knife.',
+    ],
+  },
+  {
+    when: (ctx) =>
+      ctx.murder === 'night_attack' ||
+      ctx.murder === 'cult_hideout' ||
+      ctx.murder === 'investigation',
+    lines: [
+      'Heads without bodies. That is not a beast, that is a recipe, and somebody is following it.',
+      'Look at the low streets, not the plaza. The plaza never had anything worth taking.',
+    ],
+  },
+  {
+    when: (ctx) =>
+      ctx.circus === 'ritual_defense' ||
+      ctx.circus === 'heather_hunt' ||
+      ctx.circus === 'assault' ||
+      ctx.circus === 'bigtop_ready',
+    lines: [
+      'The vine under that tent is not keeping them alive. It is keeping them from finishing dying.',
+      'Kill the root, not the family. If you cannot tell which is which, wait until you can.',
+    ],
+  },
+  {
+    when: (ctx) => ctx.circus === 'grimaldi_slain' || ctx.circus === 'complete',
+    lines: [
+      'The lights are out over the Big Top. I had forgotten what that side of the sky looked like.',
+    ],
+  },
+];
+
+/** Hilda's reading — the same machinery, a darker and more specific voice. */
+export function drawHildaReading(ctx: TownDialogContext): string {
+  return drawFrom(HILDA_GENERAL_READINGS, HILDA_REACTIVE_READINGS, ctx);
 }

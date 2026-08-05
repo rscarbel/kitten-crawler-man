@@ -175,6 +175,14 @@ const DANGER_LINES: Record<TownRole, string> = {
 };
 
 /**
+ * What this role shouts while the town is under threat. Named residents borrow
+ * it too: an alarm is no time for a personal anecdote.
+ */
+export function dangerLine(role: TownRole): string {
+  return DANGER_LINES[role];
+}
+
+/**
  * The most relevant gossip line for the current world state, or `null` when
  * nothing noteworthy has happened. Ordered by recency/urgency so the freshest
  * development wins when several quests are mid-flight.

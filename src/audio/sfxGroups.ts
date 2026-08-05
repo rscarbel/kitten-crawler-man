@@ -1,5 +1,6 @@
 import type { SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
+import { interiorSellsSomething } from '../systems/townServices';
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -292,20 +293,6 @@ export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
 }
 
 /**
- * Names, within a `house`-kind building, that sell something and so need
- * `interiorCommerce`'s `purchase_success` cue — the tavern trio (drinks),
- * the temple (blessings) and the ink parlor (tattoos). Every other `house`
- * is flavor-only with nothing bespoke to preload.
- */
-const HOUSE_SERVICE_NAMES: ReadonlySet<string> = new Set([
-  'The Sunken Stump Pub',
-  'The Horned Flagon',
-  'The Sleeping Cat Inn',
-  'Temple of the Sky',
-  "Signet's Ink",
-]);
-
-/**
  * Which `SfxGroup`s a `BuildingInteriorScene` should preload for the interior
  * it just entered. Every enterable building is on the floor-3 overworld (see
  * `BuildingInteriorScene`'s own comment to that effect), so `level3`'s bundle
@@ -318,7 +305,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
       ? ['interiorBopca']
       : entry.type === 'club'
         ? ['interiorCasino', 'interiorCommerce']
-        : entry.type === 'store' || (entry.type === 'house' && HOUSE_SERVICE_NAMES.has(entry.name))
+        : entry.type === 'store' || (entry.type === 'house' && interiorSellsSomething(entry.name))
           ? ['interiorCommerce']
           : [];
   return groups.flatMap((group) => SFX_GROUPS[group]);

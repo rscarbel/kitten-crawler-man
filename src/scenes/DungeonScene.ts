@@ -196,6 +196,13 @@ import {
   restoreClubMembership,
   type ClubMembership,
 } from '../core/ClubMembership';
+import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../core/timedPotions';
+import {
+  captureTownMemory,
+  createTownMemory,
+  restoreTownMemory,
+  type TownMemory,
+} from '../core/TownMemory';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -336,6 +343,8 @@ export interface DungeonSceneOptions {
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
   clubMembership?: ClubMembership;
+  /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
+  townMemory?: TownMemory;
   /** Market-stall stock, threaded by reference so a shop trip can't restock a stall. */
   marketStock?: MarketStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
@@ -458,30 +467,6 @@ const RIVER_AMBIENT_IN_WATER_RADIUS_TILES = 0;
 const SPLASH_VOLUME = 1;
 /** Beyond this a mob's splash is silent; within it, it fades with distance. */
 const MOB_SPLASH_AUDIBLE_RADIUS_TILES = 18;
-/** Frames between playing potion_drink and the potion's secondary effect sound. */
-const POTION_EFFECT_SOUND_DELAY = 45;
-
-/**
- * Potions whose whole effect is a timed status: each refuses a second bottle
- * while its own is still running, and each lands the same way. The status these
- * apply is named after the item, so the key doubles as the status type.
- */
-const TIMED_POTIONS: Partial<
-  Record<ItemId, { effectSound: SoundId; activate: (drinker: Player) => void }>
-> = {
-  speed_fizz: {
-    effectSound: 'speed_fizz',
-    activate: (drinker) => drinker.activateSpeedFizz(),
-  },
-  jugg_juice: {
-    effectSound: 'jugg_juice',
-    activate: (drinker) => drinker.activateJuggJuice(),
-  },
-  cooldown_crisp: {
-    effectSound: 'cooldown_crisp',
-    activate: (drinker) => drinker.activateCooldownCrisp(),
-  },
-};
 
 /** Which bottle a drink came from: the container and the slot inside it. */
 interface PotionSlot {
@@ -766,6 +751,7 @@ export class DungeonScene extends GameplayScene {
   private readonly bountyProgress: BountyProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
+  private readonly townMemory: TownMemory;
   private readonly marketStock: MarketStock;
   private readonly mercenaryRoster: MercenaryRoster;
   /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
@@ -1076,6 +1062,7 @@ export class DungeonScene extends GameplayScene {
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
+    this.townMemory = options?.townMemory ?? createTownMemory();
     this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
@@ -1346,6 +1333,7 @@ export class DungeonScene extends GameplayScene {
                   bountyProgress: this.bountyProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
+                  townMemory: this.townMemory,
                   marketStock: this.marketStock,
                   mercenaryRoster: this.mercenaryRoster,
                   godModeState: this.godModeState,
@@ -1362,6 +1350,7 @@ export class DungeonScene extends GameplayScene {
             this.murderQuestProgress,
             this.doomsdayQuestProgress,
             this.clubMembership,
+            this.townMemory,
             this.mercenaryRoster,
             this.godModeState,
             this.companionStance,
@@ -1730,6 +1719,36 @@ export class DungeonScene extends GameplayScene {
     return count;
   }
 
+  /**
+   * Unlocks the silver chest of any boss room that has just been marked
+   * defeated and whose chest the kill pipeline left shut.
+   *
+   * The pipeline is the mechanism; this is the net under it. The `mobKilled`
+   * handler fills the chest only when somebody was credited with damage, so a
+   * boss killed with an empty ledger — by the environment, or by anything that
+   * empties its HP without an attacker — left an open door, a visibly dead boss
+   * and a chest locked for the rest of the run. That failure has already cost a
+   * playtest once, which is why it gets a net at all.
+   *
+   * It cannot race the pipeline: `BossRoomSystem.update` sees a death that
+   * `resolveKills` resolved on the *previous* frame, so `mobKilled` has always
+   * had its turn by the time a room lands in this queue.
+   */
+  private backfillDefeatedBossChests(): void {
+    const defeated = this.bossRoom.newlyDefeatedRooms;
+    if (defeated.length === 0) return;
+    for (const { roomIndex, boss } of defeated) {
+      if (!this.treasureChests.hasLockedBossChest(roomIndex)) continue;
+      // A fresh roll when the boss has none left: either its table came up
+      // empty or the loot has already been spent elsewhere, and a silver boss
+      // chest that opens on nothing reads as the bug this method exists to fix.
+      const loot = boss.droppedLoot ?? boss.rollLootDrop(null);
+      boss.droppedLoot = null;
+      this.treasureChests.receiveBossLoot(roomIndex, loot);
+    }
+    defeated.length = 0;
+  }
+
   private wireEventBus(): void {
     const bus = this.bus;
 
@@ -1835,18 +1854,17 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (mob.isBoss) {
+        // One emit per boss, named by its spawn key. Every listener that cares
+        // which boss died — the boss music, the Mongo unlock, the difficulty
+        // stats — is written in snake_case spawn keys, and the class name this
+        // used to send was a second vocabulary that mostly matched nothing. The
+        // Krakaren papered over it by announcing itself a second time under its
+        // real name; the Hoarder and the Juicer had no such patch, so their
+        // boss music never got the message that the fight was over.
         bus.emit('bossDefeated', {
-          bossType: mob.constructor.name || 'unknown',
+          bossType: mob.spawnTypeKey ?? mob.constructor.name || 'unknown',
           mob,
         });
-      }
-
-      if (mob instanceof BallOfSwine) {
-        bus.emit('bossDefeated', { bossType: 'ball_of_swine', mob });
-      }
-
-      if (mob instanceof KrakarenClone) {
-        bus.emit('bossDefeated', { bossType: 'krakaren_clone', mob });
       }
 
       if (this.levelDef.onMobKilledSpawns) {
@@ -2979,6 +2997,7 @@ export class DungeonScene extends GameplayScene {
       murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       clubMembership: captureClubMembership(this.clubMembership),
+      townMemory: captureTownMemory(this.townMemory),
       marketStock: captureMarketStock(this.marketStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState(this.mongoPetState),
@@ -3041,6 +3060,7 @@ export class DungeonScene extends GameplayScene {
     // the wrong contract — or burn a name the player never saw.
     restoreBountyProgress(this.bountyProgress, world.bountyProgress);
     restoreClubMembership(this.clubMembership, world.clubMembership);
+    restoreTownMemory(this.townMemory, world.townMemory);
     restoreMarketStock(this.marketStock, world.marketStock);
     restoreMercenaryRoster(this.mercenaryRoster, world.mercenaryRoster);
     // After `mongoSystem.dismiss()`, which writes the live pet's remaining HP
@@ -3154,6 +3174,7 @@ export class DungeonScene extends GameplayScene {
         bountyProgress: this.bountyProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
+        townMemory: this.townMemory,
         marketStock: this.marketStock,
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
@@ -3787,6 +3808,21 @@ export class DungeonScene extends GameplayScene {
         player: drinker === this.human ? 'Human' : 'Cat',
         hpRestored: drinker.hp - hpBefore,
       });
+      this.showPotionEffectNotice(id);
+      return true;
+    }
+
+    if (id === 'dirty_shirley') {
+      // A bottle that would change nothing is refused before it is opened: it
+      // comes out of the bag rather than off a bar, so spending one for no
+      // effect costs the player twice.
+      if (!drinker.dirtyShirleyWouldHelp) {
+        this.audio?.play('error_taking_action');
+        return false;
+      }
+      if (!consume()) return false;
+      drinker.drinkDirtyShirley();
+      this.playDrinkSounds('healing_potion');
       this.showPotionEffectNotice(id);
       return true;
     }
@@ -4772,6 +4808,8 @@ export class DungeonScene extends GameplayScene {
       this.bus.emit('bossFightInitiated', { bossType: bt });
     }
 
+    this.backfillDefeatedBossChests();
+
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
     if (this.defendQuest.hammerSoundPending) {
@@ -5004,7 +5042,7 @@ export class DungeonScene extends GameplayScene {
         const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.y;
         if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * 2) {
           if (!this.human.zeroDamage) mob.takeDamageFrom(SHOCKWAVE_DAMAGE, this.human, 'shell');
-          mob.applyStatus(makeElectrified());
+          mob.applyStatus(makeElectrified(this.human));
         }
       }
     }

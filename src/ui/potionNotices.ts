@@ -11,6 +11,7 @@ const FIXED_EFFECT_NOTICES: Partial<Record<ItemId, string>> = {
   speed_fizz: 'Speed temporarily increased',
   jugg_juice: 'Max HP temporarily increased',
   cooldown_crisp: 'Cooldowns temporarily halved',
+  dirty_shirley: 'Health restored — and you are drunk',
 };
 
 /**

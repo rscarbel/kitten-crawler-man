@@ -7,6 +7,7 @@ export type ItemId =
   | 'jugg_juice'
   | 'cooldown_crisp'
   | 'stat_boost_potion'
+  | 'dirty_shirley'
   | 'enchanted_bigboi_boxers'
   | 'trollskin_shirt'
   | 'enchanted_crown_sepsis_whore'
@@ -69,6 +70,17 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     type: 'consumable',
     description:
       'Summons a thick fog cloud around the caster. Any enemy caught inside the fog loses all sense of sight and cannot target any entity. Lasts INT × 5 seconds.',
+  },
+  dirty_shirley: {
+    id: 'dirty_shirley',
+    name: 'The Dirty Shirley',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    drinkable: true,
+    description:
+      'The Desperado Club’s signature: grenadine, ginger ale, a cherry, and far too much vodka. ' +
+      'Restores health and grants liquid courage. You will be drunk.',
   },
   health_potion: {
     id: 'health_potion',

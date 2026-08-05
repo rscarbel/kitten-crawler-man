@@ -13,6 +13,8 @@
 
 import type { Player } from '../Player';
 import type { PricedMenu, PricedOption } from '../ui/PricedMenuPanel';
+import type { ResidentHost } from './townResidents';
+import { rotateLine } from './townServiceUtil';
 
 const BLESSING_PRICE = 25;
 
@@ -30,33 +32,38 @@ const PRIEST_BARKS: ReadonlyArray<string> = [
 
 /** A priest's greeting, rotated by how many times the player has talked to them. */
 function priestBark(turn: number): string {
-  const index = ((turn % PRIEST_BARKS.length) + PRIEST_BARKS.length) % PRIEST_BARKS.length;
-  return PRIEST_BARKS[index];
+  return rotateLine(PRIEST_BARKS, turn);
 }
 
 function graceLine(turn: number): string {
-  const index = ((turn % GRACE_LINES.length) + GRACE_LINES.length) % GRACE_LINES.length;
-  return GRACE_LINES[index];
+  return rotateLine(GRACE_LINES, turn);
 }
 
 /** The blessing menu for `party`, disabled while nobody in it is wounded. */
-export function buildBlessingMenu(party: ReadonlyArray<Player>, turn: number): PricedMenu {
+export function buildBlessingMenu(
+  party: ReadonlyArray<Player>,
+  turn: number,
+  host: ResidentHost | null,
+): PricedMenu {
   const option: PricedOption = {
     key: 'blessing',
     label: 'Blessing of the Sky',
     price: BLESSING_PRICE,
-    desc: 'Fully heals you and your companion',
+    desc: 'Fully heals you and your companion, and stands the fallen up',
   };
-  if (party.every((member) => member.hp >= member.maxHp)) option.unavailable = 'Unhurt';
+  if (party.every((member) => member.hp >= member.maxHp && !member.isKnockedOut)) {
+    option.unavailable = 'Unhurt';
+  }
   return {
     title: 'Temple of the Sky',
-    bark: priestBark(turn),
+    bark: host?.line ?? priestBark(turn),
+    byline: host?.name,
     options: [option],
   };
 }
 
 /** Heal the whole party and return the priest's parting grace. */
 export function grantBlessing(party: ReadonlyArray<Player>, turn: number): string {
-  for (const member of party) member.hp = member.maxHp;
+  for (const member of party) member.reviveToFull();
   return graceLine(turn);
 }

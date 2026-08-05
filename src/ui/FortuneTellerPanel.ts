@@ -20,12 +20,43 @@ import {
   type ButtonResult,
 } from './Button';
 import { drawText } from './TextBox';
-import { drawFortune } from '../systems/townFortunes';
+import { drawFortune, drawHildaReading } from '../systems/townFortunes';
 import type { Player } from '../Player';
 import type { TownDialogContext } from '../systems/townDialog';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-const FORTUNE_COST = 3;
+/**
+ * Who is doing the reading. The panel is one surface with two acts behind it:
+ * the plaza's card-flipping seer and the hedge witch in her own kitchen, who
+ * charges less and does not own a deck.
+ */
+export interface FortuneReader {
+  /** Shown as the panel's title. */
+  readonly name: string;
+  /** Coins per reading. */
+  readonly cost: number;
+  /** The line under the title, before a card is turned. */
+  readonly invitation: string;
+  readonly draw: (context: TownDialogContext) => string;
+}
+
+const PLAZA_SEER_COST = 3;
+/** Hilda reads at her own table for less; the plaza pays for the theatre. */
+const HEDGE_WITCH_COST = 2;
+
+export const PLAZA_SEER: FortuneReader = {
+  name: 'Madame Voss, Seer',
+  cost: PLAZA_SEER_COST,
+  invitation: `Cross my palm with silver — ${PLAZA_SEER_COST} coins a reading.`,
+  draw: drawFortune,
+};
+
+export const HEDGE_WITCH: FortuneReader = {
+  name: 'Old Hilda',
+  cost: HEDGE_WITCH_COST,
+  invitation: `${HEDGE_WITCH_COST} coins, and I will tell you what I actually see.`,
+  draw: drawHildaReading,
+};
 
 const PANEL_WIDTH = 420;
 const PANEL_HEIGHT = 240;
@@ -56,6 +87,7 @@ const CARD_PRESET = { fill: '#2a2140', border: '#a855f7', borderWidth: 2, radius
 
 export class FortuneTellerPanel {
   private open = false;
+  private reader: FortuneReader = PLAZA_SEER;
   private context: TownDialogContext | null = null;
   private fortune: string | null = null;
   private cardButtons: ButtonResult[] = [];
@@ -67,8 +99,9 @@ export class FortuneTellerPanel {
     return this.open;
   }
 
-  openWith(context: TownDialogContext): void {
+  openWith(context: TownDialogContext, reader: FortuneReader = PLAZA_SEER): void {
     this.open = true;
+    this.reader = reader;
     this.context = context;
     this.fortune = null;
   }
@@ -103,7 +136,7 @@ export class FortuneTellerPanel {
     this.modalContains = (px, py) => modal.contains(px, py);
 
     const centerX = modal.x + PANEL_WIDTH / 2;
-    drawText(ctx, 'Madame Voss, Seer', {
+    drawText(ctx, this.reader.name, {
       x: centerX,
       y: modal.inner.y + PANEL_PADDING,
       size: TITLE_SIZE,
@@ -121,7 +154,7 @@ export class FortuneTellerPanel {
       align: 'right',
     });
 
-    const canAfford = active.coins >= FORTUNE_COST;
+    const canAfford = active.coins >= this.reader.cost;
     beginMenuFocus('fortune-teller');
     if (this.fortune === null) {
       this.renderCards(ctx, modal.inner.y, centerX, canAfford);
@@ -139,7 +172,7 @@ export class FortuneTellerPanel {
     centerX: number,
     canAfford: boolean,
   ): void {
-    drawText(ctx, `Cross my palm with silver — ${FORTUNE_COST} coins a reading.`, {
+    drawText(ctx, this.reader.invitation, {
       x: centerX,
       y: innerY + PANEL_PADDING + TITLE_SIZE + PROMPT_SIZE,
       size: PROMPT_SIZE,
@@ -212,7 +245,7 @@ export class FortuneTellerPanel {
       y: footerY,
       width: FOOTER_BTN_WIDTH,
       height: FOOTER_BTN_HEIGHT,
-      label: `Draw Again (${FORTUNE_COST}c)`,
+      label: `Draw Again (${this.reader.cost}c)`,
       labelSize: FOOTER_LABEL_SIZE,
       disabled: !canAfford,
       ...BUTTON_PRESETS.gold,
@@ -268,8 +301,8 @@ export class FortuneTellerPanel {
   }
 
   private payAndReveal(active: Player): void {
-    if (active.coins < FORTUNE_COST || this.context === null) return;
-    active.coins -= FORTUNE_COST;
-    this.fortune = drawFortune(this.context);
+    if (active.coins < this.reader.cost || this.context === null) return;
+    active.coins -= this.reader.cost;
+    this.fortune = this.reader.draw(this.context);
   }
 }

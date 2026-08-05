@@ -25,6 +25,7 @@ import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
 import type { BountyProgressCheckpoint } from './BountyProgress';
 import type { CircusQuestProgressCheckpoint } from './CircusQuestProgress';
 import type { ClubMembershipCheckpoint } from './ClubMembership';
+import type { TownMemoryCheckpoint } from './TownMemory';
 import type { GameStatsSnapshot } from './GameStats';
 import type { MercenaryRosterCheckpoint } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
@@ -83,6 +84,7 @@ export interface WorldCheckpoint {
   bountyProgress: BountyProgressCheckpoint;
   clubMembership: ClubMembershipCheckpoint;
   marketStock: MarketStockCheckpoint;
+  townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
 
