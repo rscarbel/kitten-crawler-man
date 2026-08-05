@@ -103,6 +103,27 @@ export function arenaDoorTileAt(centre: Point): Point {
 }
 
 /**
+ * Columns the arena's north gate occupies, relative to the arena's centre column.
+ *
+ * A separate constant from the door's, even though the shape is identical today,
+ * because the two openings serve different jobs — one is the fight's only entrance,
+ * the other is a way off the ring into the beyond pocket — and nothing should force
+ * them to stay the same width just because they started that way.
+ */
+export const ARENA_GATE_COLUMN_OFFSETS: readonly number[] = [-1, 0];
+
+/**
+ * Tile the arena's north gate opens through, diametrically opposite the door.
+ *
+ * Mirrors `arenaDoorTileAt`. Unlike the door, the gate never breaches the arena's
+ * own wall — it only opens the reserve margin, joining the concourse ring to the
+ * beyond pocket — so the drum stays enterable only through the south door.
+ */
+export function arenaGateTileAt(centre: Point): Point {
+  return { x: centre.x, y: centre.y - ARENA_RADIUS };
+}
+
+/**
  * The ground the arena structure occupies.
  *
  * Stops at the door row rather than being a symmetric square: everything south of

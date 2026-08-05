@@ -28,18 +28,21 @@ import {
   ARENA_ANTECHAMBER_MIN_WIDTH,
   ARENA_CONCOURSE_REACH,
   ARENA_DOOR_COLUMN_OFFSETS,
+  ARENA_GATE_COLUMN_OFFSETS,
   ARENA_CONCOURSE_LINK_INNER_DX,
   ARENA_CONCOURSE_LINK_OUTER_DX,
   ARENA_RADIUS,
   ARENA_REACH,
   ARENA_WALL_THICKNESS,
   arenaDoorTileAt,
+  arenaGateTileAt,
   arenaReserveRect,
 } from './arenaGeometry';
 import {
   SegmentMap,
   SEGMENT_FREE,
   SEGMENT_ARENA,
+  SEGMENT_BEYOND,
   gauntletSegment,
   planGauntlet,
   planCorridorBetween,
@@ -60,6 +63,7 @@ import {
   SCATTER_SAFE_ROOM_SEPARATION,
   STAIRWELL_MIN_SEPARATION,
   STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT,
+  BEYOND_STAIRWELL_MIN_SEPARATION,
   type InvariantFailure,
 } from './progressionValidation';
 
@@ -346,6 +350,25 @@ const ANTECHAMBER_WIDTH_SLACK = 3;
 const ANTECHAMBER_W_MAX = ARENA_ANTECHAMBER_MIN_WIDTH + ANTECHAMBER_WIDTH_SLACK;
 const ANTECHAMBER_H_MIN = 8;
 const ANTECHAMBER_H_MAX = 12;
+
+/**
+ * Rock the arena's reserve must keep clear to its north, beyond its own reserved
+ * rect, so the beyond pocket always has somewhere to live. An arena sited too
+ * close to the map's border scores zero instead of stranding the pocket.
+ */
+const BEYOND_HEADROOM_TILES = 22;
+/** Rooms the beyond pocket aims to seat before it stops trying for more. */
+const BEYOND_ROOM_TARGET = 6;
+/** Below this many seated rooms, the pocket is rejected rather than shipped thin. */
+const BEYOND_MIN_ROOMS = 3;
+/** How far a beyond-pocket room may sit from the gate tile, keeping the pocket clustered behind the drum. */
+const BEYOND_MAX_DIST_FROM_GATE = 60;
+/**
+ * Distance outside the arena a mob or stairwell must keep, so neither sits on the
+ * concourse ring. One tile inside `ARENA_REACH`, so beyond-region stairwells —
+ * which sit past the reserve edge — still clear it, if only by that one tile.
+ */
+const ARENA_STAIRWELL_EXCLUSION_TILES = ARENA_RADIUS + 2;
 
 function getZone(point: Point, start: Point): Zone {
   const d = Math.hypot(point.x - start.x, point.y - start.y);
@@ -869,6 +892,33 @@ function linkConcourseToAntechamber(
 }
 
 /**
+ * Breaches the reserve margin at the arena's north point, joining the concourse
+ * ring straight to the beyond pocket's landing room.
+ *
+ * Unlike the door, this never touches the metal wall band around the disc — the
+ * gate only opens the rock reserved outside the ring, never the ring's own inner
+ * boundary — so the drum stays enterable only through the south door.
+ */
+function carveArenaGate(
+  grid: TileContent[][],
+  size: number,
+  centreX: number,
+  centreY: number,
+  landingRoom: Rect,
+): void {
+  const marginY = centreY - ARENA_REACH;
+  const landingSouthY = landingRoom.y + landingRoom.h;
+  for (const offset of ARENA_GATE_COLUMN_OFFSETS) {
+    const gx = centreX + offset;
+    if (gx < 0 || gx >= size) continue;
+    for (let gy = marginY; gy < landingSouthY; gy++) {
+      if (gy < 0 || gy >= size) continue;
+      grid[gy][gx].type = FloorTypeValue.concrete;
+    }
+  }
+}
+
+/**
  * Finds a home for the arena in progression mode and claims the tiles for it.
  *
  * Spirals outward from the last gateway boss room, so the arena sits somewhere in
@@ -903,6 +953,12 @@ function planArenaAt(
 
   const doorTile = arenaDoorTileAt(centre);
   const reserve = arenaReserveRect(centre);
+
+  // The beyond pocket lives north of the reserve, so a candidate that would back
+  // onto the map's border there is unusable even though the reserve itself fits —
+  // scoring it zero here is what keeps `reserveArena` from ever picking it.
+  if (reserve.y - BEYOND_HEADROOM_TILES < border) return null;
+
   const antechamberW = randomInt(ANTECHAMBER_W_MIN, ANTECHAMBER_W_MAX);
   const antechamberH = randomInt(ANTECHAMBER_H_MIN, ANTECHAMBER_H_MAX);
   const antechamber: Rect = {
@@ -1118,6 +1174,8 @@ function buildDungeon(
   let lastGatewayBossRoom: Rect | null = null;
   let arenaReservation: ArenaReservation | null = null;
   let antechamberSafeRoom: SafeRoomData | null = null;
+  /** Indices into `rooms` of the beyond pocket, index 0 always the landing room. */
+  const beyondRoomIndices: number[] = [];
 
   const carveRoomFloor = (rect: Rect, floor: number): void => {
     for (let ry = rect.y; ry < rect.y + rect.h; ry++) {
@@ -1338,6 +1396,104 @@ function buildDungeon(
     const regularFloorFor = (centre: Point): number => randomFromArray(ZONE_FLOORS[zoneOf(centre)]);
     const anyPosition = (): boolean => true;
 
+    // ── Beyond pocket ─────────────────────────────────────────────────────
+    //
+    // Every floor-2 stairwell lives back here. Seeded from the arena's north gate
+    // rather than the antechamber, so the walk to any of them crosses the ring the
+    // boss rages along, not merely the door that leads to it. Carved before the
+    // free region's own rooms saturate the map, while the ground behind the arena
+    // is still untouched rock.
+    if (hasArena && arenaReservation !== null) {
+      const arenaCentre = arenaReservation.centre;
+      const reserveRect = arenaReservation.reserve;
+      const gateTile = arenaGateTileAt(arenaCentre);
+
+      const connectBeyondRoom = (rect: Rect): PlannedCorridor | null => {
+        const centre = rectCentre(rect);
+        const sorted = [...beyondRoomIndices].sort((a, b) => {
+          const ra = rooms[a];
+          const rb = rooms[b];
+          return (
+            Math.hypot(
+              centre.x - Math.floor(ra.x + ra.w / 2),
+              centre.y - Math.floor(ra.y + ra.h / 2),
+            ) -
+            Math.hypot(
+              centre.x - Math.floor(rb.x + rb.w / 2),
+              centre.y - Math.floor(rb.y + rb.h / 2),
+            )
+          );
+        });
+        for (const candidateIndex of sorted.slice(0, FREE_CONNECT_CANDIDATES)) {
+          const corridor = planCorridorBetween(
+            segments,
+            SEGMENT_BEYOND,
+            rectOfRoom(rooms[candidateIndex]),
+            rect,
+            pickCorridorKind(false, centre),
+          );
+          if (corridor === null) continue;
+          segments.claimCorridor(corridor.tiles, SEGMENT_BEYOND);
+          return corridor;
+        }
+        return null;
+      };
+
+      const placeBeyondRoom = (w: number, h: number): number | null => {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const rect: Rect = {
+            x: randomInt(BORDER + 1, size - BORDER - w - 2),
+            y: randomInt(BORDER + 1, size - BORDER - h - 2),
+            w,
+            h,
+          };
+          const centre = rectCentre(rect);
+          if (
+            Math.hypot(centre.x - gateTile.x, centre.y - gateTile.y) > BEYOND_MAX_DIST_FROM_GATE
+          ) {
+            continue;
+          }
+          // Stays north of the reserve — the pocket's whole reason to exist is
+          // ground the arena never claimed.
+          if (rect.y + rect.h > reserveRect.y) continue;
+          if (!segments.canPlaceRoom(rect, SEGMENT_BEYOND)) continue;
+
+          if (beyondRoomIndices.length === 0) {
+            // The landing room is what the gate's straight breach reaches, so it
+            // has to span both gate columns — otherwise the breach carved through
+            // the reserve margin misses it entirely.
+            const spansGateColumns = ARENA_GATE_COLUMN_OFFSETS.every(
+              (offset) => gateTile.x + offset >= rect.x && gateTile.x + offset < rect.x + rect.w,
+            );
+            if (!spansGateColumns) continue;
+            segments.addRoom(rect, SEGMENT_BEYOND);
+            const index = addRoom(rect, regularFloorFor(centre), 'regular');
+            beyondRoomIndices.push(index);
+            return index;
+          }
+
+          const snapshot = segments.snapshot();
+          segments.addRoom(rect, SEGMENT_BEYOND);
+          const corridor = connectBeyondRoom(rect);
+          if (corridor === null) {
+            segments.rollback(snapshot);
+            continue;
+          }
+          const index = addRoom(rect, regularFloorFor(centre), 'regular');
+          carvePlannedCorridor(corridor);
+          beyondRoomIndices.push(index);
+          return index;
+        }
+        return null;
+      };
+
+      while (beyondRoomIndices.length < BEYOND_ROOM_TARGET) {
+        if (placeBeyondRoom(randomInt(MIN_W, MAX_W), randomInt(MIN_H, MAX_H)) === null) break;
+      }
+
+      if (beyondRoomIndices.length < BEYOND_MIN_ROOMS) return reject('beyond region');
+    }
+
     let freeRegularRooms = 0;
     const fillWithRegularRooms = (limit: number): void => {
       while (rooms.length < limit) {
@@ -1453,11 +1609,14 @@ function buildDungeon(
     }
 
     // ── Free-region loops and dead-end rescue ───────────────────────────────
-
-    const freeRegularIndices = rooms.reduce<number[]>((acc, room, idx) => {
-      if (room.role === 'regular') acc.push(idx);
-      return acc;
-    }, []);
+    //
+    // Filtered from `connectableIndices` — the rooms `placeFreeRoom` actually
+    // seated — rather than scanned by role. Beyond-pocket rooms keep the
+    // 'regular' role too (decorations and mob spawns work unchanged on them), so
+    // a role scan over every room would hand these passes a beyond room and let
+    // them carve a `SEGMENT_FREE` shortcut straight back into the free region —
+    // reopening the very bypass the beyond pocket exists to close.
+    const freeRegularIndices = connectableIndices.filter((i) => rooms[i].role === 'regular');
 
     const tryFreeShortcut = (fromIndex: number, toIndex: number): boolean => {
       const corridor = planCorridorBetween(
@@ -1950,8 +2109,20 @@ function buildDungeon(
     // A stairwell must never be in sight of the last boss room's exit, and two
     // stairwells must never be found in the same sweep of the free region — the
     // hunt for the stairs is the point of the post-gauntlet stretch.
+    //
+    // On an arena floor every candidate comes from the beyond pocket instead of
+    // the whole free region: the pocket is far from the exit by construction, so
+    // the distance filter below stays true, but restricting the pool is what
+    // makes "every stairwell sits behind the drum" a guarantee rather than a
+    // likelihood.
+    const stairwellRoomPool = hasArena ? beyondRoomIndices.map((i) => rooms[i]) : regularRooms;
+    // The pocket is only ~`BEYOND_MAX_DIST_FROM_GATE` tiles across, far tighter
+    // than the free region `STAIRWELL_MIN_SEPARATION` was tuned for.
+    const stairwellSeparation = hasArena
+      ? BEYOND_STAIRWELL_MIN_SEPARATION
+      : STAIRWELL_MIN_SEPARATION;
     const exitBounds = lastGatewayBossRoom;
-    const byDistanceFromExit = regularRooms
+    const byDistanceFromExit = stairwellRoomPool
       .map((r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) }))
       .sort((a, b) => distanceToRect(b, exitBounds) - distanceToRect(a, exitBounds));
     const candidates = byDistanceFromExit.filter(
@@ -1979,18 +2150,25 @@ function buildDungeon(
             bestCandidate = candidate;
           }
         }
-        if (bestCandidate === null || bestIsolation < STAIRWELL_MIN_SEPARATION) break;
+        if (bestCandidate === null || bestIsolation < stairwellSeparation) break;
         stairwellTiles.push(bestCandidate);
       }
     }
     // A floor with no way down is unplayable, so the spacing rules yield rather
-    // than the stairs: the farthest free room takes one even when it sits closer
-    // to the boss's exit than the rule would like. The validator is told, so it
-    // waives the distance rule instead of rejecting a floor that is merely
-    // unlucky.
+    // than the stairs: the farthest room in the pool takes one even when it sits
+    // closer to the boss's exit than the rule would like. The validator is told,
+    // so it waives the distance rule instead of rejecting a floor that is merely
+    // unlucky. On an arena floor the pool is already beyond-only, so the waiver
+    // can never reach into the free region.
     if (stairwellTiles.length === 0 && byDistanceFromExit.length > 0) {
       stairwellTiles.push(byDistanceFromExit[0]);
       if (progressionLayout !== undefined) progressionLayout.stairwellSpacingWaived = true;
+    }
+    // Under this plan the stairwell count is part of the guarantee on an arena
+    // floor: every stairwell has to seat behind the drum, or the map is unplayable
+    // as designed and must retry rather than ship a shortfall.
+    if (hasArena && stairwellTiles.length < stairwellCount) {
+      return reject('beyond stairwells');
     }
   } else if (rooms.length > 0) {
     const MIN_STAIRWELL_DIST = 20;
@@ -2349,6 +2527,10 @@ function buildDungeon(
 
   if (arenaReservation !== null) {
     carveArena(arenaReservation.centre.x, arenaReservation.centre.y, arenaReservation.antechamber);
+    if (beyondRoomIndices.length > 0) {
+      const landingRoom = rectOfRoom(rooms[beyondRoomIndices[0]]);
+      carveArenaGate(grid, size, arenaReservation.centre.x, arenaReservation.centre.y, landingRoom);
+    }
     // The antechamber's arena-side doorway only exists now that the door is cut,
     // so its traffic band has to be laid after the arena rather than with the
     // other safe rooms.
@@ -2422,7 +2604,7 @@ function buildDungeon(
     arenaExteriors.length > 0
       ? mobSpawnPoints.filter((p) => {
           const a = arenaExteriors[0];
-          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2;
+          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_STAIRWELL_EXCLUSION_TILES;
         })
       : mobSpawnPoints;
 
@@ -2430,7 +2612,7 @@ function buildDungeon(
     arenaExteriors.length > 0
       ? stairwellTiles.filter((p) => {
           const a = arenaExteriors[0];
-          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_RADIUS + 2;
+          return Math.hypot(p.x - a.centre.x, p.y - a.centre.y) > ARENA_STAIRWELL_EXCLUSION_TILES;
         })
       : stairwellTiles;
 

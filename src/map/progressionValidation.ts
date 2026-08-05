@@ -1,7 +1,7 @@
 import type { TileContent } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import type { DungeonData } from './DungeonGenerator';
-import { arenaReserveRect } from './arenaGeometry';
+import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -23,6 +23,14 @@ const CENTER_SPAWN_TOLERANCE_TILES = 3;
 const MIN_START_ROOM_DOORWAYS = 2;
 /** Pairwise stairwell distance in the free region (I4). */
 export const STAIRWELL_MIN_SEPARATION = 45;
+/**
+ * Pairwise stairwell distance inside the beyond pocket, on an arena floor (I4).
+ *
+ * `STAIRWELL_MIN_SEPARATION` was tuned for the whole free region; the pocket
+ * behind the arena is only tens of tiles across, far too tight to ever hold two
+ * stairwells that far apart.
+ */
+export const BEYOND_STAIRWELL_MIN_SEPARATION = 20;
 /** Stairwell distance from the last gateway boss room's bounds (I4). */
 export const STAIRWELL_MIN_DIST_FROM_GAUNTLET_EXIT = 35;
 /** Pairwise scatter-safe-room distance, and their distance from gateway safe rooms (I5). */
@@ -60,23 +68,27 @@ type FloodField = ReadonlyArray<ReadonlyArray<boolean>>;
 
 /**
  * Reachability from `start` over walkable tiles, treating every tile inside a
- * `blockedRects` rectangle as solid.
+ * `blockedRects` rectangle — or matched by the optional `isExtraBlocked`
+ * predicate — as solid.
  *
  * Every cut-vertex invariant is phrased as "block this room, then check what
  * became unreachable", so blocking is expressed as rectangles rather than by
- * mutating a copy of the grid.
+ * mutating a copy of the grid. The predicate exists for I6d, which has to block
+ * an annulus (the concourse ring) rather than anything a rectangle can express.
  */
 function floodFill(
   grid: TileContent[][],
   start: Point,
   blockedRects: ReadonlyArray<Rect>,
+  isExtraBlocked?: (point: Point) => boolean,
 ): FloodField {
   const height = grid.length;
   const width = grid[0]?.length ?? 0;
   const visited = Array.from({ length: height }, () => new Array<boolean>(width).fill(false));
 
   const isBlocked = (x: number, y: number): boolean =>
-    blockedRects.some((rect) => rectContains(rect, { x, y }));
+    blockedRects.some((rect) => rectContains(rect, { x, y })) ||
+    (isExtraBlocked?.({ x, y }) ?? false);
 
   const open = (x: number, y: number): boolean => {
     if (y < 0 || y >= height || x < 0 || x >= width) return false;
@@ -358,6 +370,13 @@ export function validateProgression(
 
   // I4 — stairwells are spread out, well past the last boss's exit, and never
   // sitting inside a gauntlet.
+  //
+  // On an arena floor every stairwell seats inside the beyond pocket, which is
+  // far tighter than the free region `STAIRWELL_MIN_SEPARATION` was tuned for —
+  // so the pairwise check uses the pocket's own, tighter minimum there instead.
+  const stairwellSeparationMin = hasArena
+    ? BEYOND_STAIRWELL_MIN_SEPARATION
+    : STAIRWELL_MIN_SEPARATION;
   if (stairwellTiles.length === 0) {
     fail('I4', 'the floor has no stairwell down');
   }
@@ -372,10 +391,10 @@ export function validateProgression(
     }
     for (let j = i + 1; j < stairwellTiles.length; j++) {
       const separation = pointDistance(tile, stairwellTiles[j]);
-      if (separation < STAIRWELL_MIN_SEPARATION) {
+      if (separation < stairwellSeparationMin) {
         fail(
           'I4',
-          `stairwells ${i} and ${j} are ${separation.toFixed(1)} tiles apart (min ${STAIRWELL_MIN_SEPARATION})`,
+          `stairwells ${i} and ${j} are ${separation.toFixed(1)} tiles apart (min ${stairwellSeparationMin})`,
         );
       }
     }
@@ -420,13 +439,41 @@ export function validateProgression(
       if (isReachable(withoutAntechamber, arenaDoorTile)) {
         fail('I6', 'the arena door is reachable without passing through the antechamber');
       }
-      const withoutArena = floodFill(grid, startTile, [
-        antechamber.bounds,
-        arenaReserveRect(arena.centre),
-      ]);
+
+      // I6c — every stairwell now lives behind the arena, so blocking only the
+      // antechamber has to strand every one of them, not just the door. This is
+      // the inverse of the check this design replaces: the old I6 proved a
+      // stairwell survived without the arena, which was exactly the proof that
+      // the floor was skippable. `withoutAntechamber` already blocks the
+      // antechamber alone, so it is reused rather than flooded twice.
       for (const [index, tile] of stairwellTiles.entries()) {
-        if (!isReachable(withoutArena, tile)) {
-          fail('I6', `stairwell ${index} needs the arena or antechamber to be reachable`);
+        if (isReachable(withoutAntechamber, tile)) {
+          fail(
+            'I6c',
+            `stairwell ${index} at (${tile.x},${tile.y}) is reachable without the antechamber`,
+          );
+        }
+      }
+
+      // I6d — the viewing walk itself. I6c alone would pass a future corridor
+      // that slipped from the antechamber straight into the beyond pocket
+      // without ever touching the ring; blocking the ring instead makes the
+      // half-circuit — the stretch of route with the drum on screen — the thing
+      // that is machine-checked. Same annulus-minus-antechamber predicate the
+      // concourse-ring carve uses, so drift between carving and checking is
+      // impossible by construction.
+      const isConcourseRingTile = (point: Point): boolean => {
+        const radius = Math.hypot(point.x - arena.centre.x, point.y - arena.centre.y);
+        if (radius <= ARENA_RADIUS || radius > ARENA_CONCOURSE_REACH) return false;
+        return !rectContains(antechamber.bounds, point);
+      };
+      const withoutConcourseRing = floodFill(grid, startTile, [], isConcourseRingTile);
+      for (const [index, tile] of stairwellTiles.entries()) {
+        if (isReachable(withoutConcourseRing, tile)) {
+          fail(
+            'I6d',
+            `stairwell ${index} at (${tile.x},${tile.y}) is reachable without crossing the concourse ring`,
+          );
         }
       }
 

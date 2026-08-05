@@ -15,7 +15,7 @@ import {
   BOS_SPINUP_GAME_FRAMES,
 } from '../sprites/ballOfSwineSheet';
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from './ballOfSwineAttackTypes';
-import { ARENA_INTERIOR_RADIUS_TILES } from '../map/arenaGeometry';
+import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { makePoison } from '../core/StatusEffect';
 import type { LootDrop } from './Mob';
 
@@ -203,8 +203,6 @@ const MASS = 10;
 const TILE_CENTER_OFFSET = 0.5;
 /** Tiles of sprite overhang the render pipeline has to keep in view. */
 const CULL_MARGIN_TILES = 3;
-/** Tiles past the arena's own ground the ball will still notice a crawler on. */
-const ARENA_AGGRO_EXTEND_TILES = 3;
 /** Below this a heading vector is degenerate rather than something to normalise. */
 const MIN_HEADING_LENGTH = 1e-4;
 
@@ -695,7 +693,7 @@ export class BallOfSwine extends Mob {
     if (this.phase !== 'rolling') return;
 
     this.trampleContacts(targets);
-    this.tickShedding(target !== null);
+    this.tickShedding(this.targetInsideDrum(target));
     this.layTrack();
   }
 
@@ -882,6 +880,25 @@ export class BallOfSwine extends Mob {
     return Math.hypot(movedX, movedY);
   }
 
+  /**
+   * Whether a target is inside the drum, where the wall can actually reach them.
+   *
+   * The concourse ring the mandatory route walks sits outside
+   * `ARENA_INTERIOR_RADIUS_TILES` on purpose — a ring walker is safe by
+   * construction, however wide the ball's notice range gets. So a target the
+   * ball has acquired from out there is one it can charge at and rage against,
+   * but every wall contact against them has to resolve as a free carom: nothing
+   * that touches this creature's momentum, damage, or shedding economy is
+   * allowed to fire at a target the wall is physically between.
+   */
+  private targetInsideDrum(target: Player | null): boolean {
+    if (target === null) return false;
+    const targetX = target.x + TILE_SIZE * TILE_CENTER_OFFSET;
+    const targetY = target.y + TILE_SIZE * TILE_CENTER_OFFSET;
+    const distance = Math.hypot(targetX - this.arenaCentrePx.x, targetY - this.arenaCentrePx.y);
+    return distance <= this.arenaInteriorPx;
+  }
+
   private resolveArenaWall(): void {
     if (this.arenaInteriorPx <= 0) return;
     const centreX = this.x + TILE_SIZE * TILE_CENTER_OFFSET;
@@ -902,13 +919,15 @@ export class BallOfSwine extends Mob {
     this.x += normalX * (distance - limit);
     this.y += normalY * (distance - limit);
 
-    // Only a fight can cost it momentum. With nobody in the chamber every contact is
-    // a free carom however square it is: the source is explicit that it never loses
+    // Only a fight can cost it momentum. With nobody in the chamber, or with its
+    // target out on the safe ring rather than in the drum, every contact is a free
+    // carom however square it is: the source is explicit that it never loses
     // momentum, and a ball that had been grinding itself down on the ironwork since
-    // the floor loaded would greet the party already collapsed, with an empty
-    // momentum bar and VULNERABLE over its head — the opening beat and Mordecai's
-    // hint about baiting the wall both spent before anyone arrived.
-    if (incidence >= HEAD_ON_COSINE && this.currentTarget !== null) {
+    // the floor loaded — or on a route walker it can see but never touch — would
+    // greet the party already collapsed, with an empty momentum bar and VULNERABLE
+    // over its head, the opening beat and Mordecai's hint about baiting the wall
+    // both spent before anyone arrived or without anyone ever risking anything.
+    if (incidence >= HEAD_ON_COSINE && this.targetInsideDrum(this.currentTarget)) {
       this.slamHeading = this.heading;
       this.heading = caromHeading(this.heading, normalX, normalY);
       this.slamInto((incidence - HEAD_ON_COSINE) / (1 - HEAD_ON_COSINE));
@@ -1083,8 +1102,13 @@ export class BallOfSwine extends Mob {
     }
   }
 
-  private tickShedding(hasTarget: boolean): void {
-    if (!this.isShedding || !hasTarget) return;
+  /**
+   * A ball shedding Tusklings at a route walker it can never reach would spend
+   * its whole shed budget on a fight nobody chose to have, so this requires the
+   * same drum containment the wall carom does.
+   */
+  private tickShedding(targetInDrum: boolean): void {
+    if (!this.isShedding || !targetInDrum) return;
     this.shedTimer--;
     if (this.shedTimer > 0) return;
     this.shedTimer = SHED_INTERVAL_FRAMES;
@@ -1100,9 +1124,16 @@ export class BallOfSwine extends Mob {
     target.applyStatus(makePoison());
   }
 
-  /** Only notices crawlers who are inside, or right outside, the arena. */
+  /**
+   * Only notices crawlers within `ARENA_REACH` of the arena centre — the same
+   * distance the concourse ring's outer edge and its reserve margin sit at, so
+   * every tile of the mandatory route around the drum is inside this reach and a
+   * ring walker is always a target. Reusing `ARENA_REACH` rather than a second
+   * constant with the same value keeps the ring geometry and the boss's notice
+   * range from being able to drift apart.
+   */
   private nearestInArena(targets: Player[]): Player | null {
-    const aggroRange = this.arenaInteriorPx + TILE_SIZE * ARENA_AGGRO_EXTEND_TILES;
+    const aggroRange = ARENA_REACH * TILE_SIZE;
     let best: Player | null = null;
     let bestDistance = Infinity;
     for (const target of targets) {

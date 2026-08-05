@@ -14,6 +14,8 @@ const SEGMENT_NONE = 0;
 export const SEGMENT_FREE = -1;
 /** Tile belongs to the arena structure and the antechamber guarding its door. */
 export const SEGMENT_ARENA = -2;
+/** Tile belongs to the beyond pocket — the rooms seeded behind the arena's north gate. */
+export const SEGMENT_BEYOND = -3;
 
 /**
  * A gauntlet owns two segments: one for the branches and the gateway safe room

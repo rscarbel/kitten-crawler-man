@@ -217,6 +217,24 @@ export class ArenaSystem implements GameSystem {
     this.bus.on('bossDefeated', (e) => {
       if (e.bossType !== 'ball_of_swine' || this.arenaPhase2Active) return;
 
+      // hp hits 0 the instant the killing blow lands, but this event — and the
+      // Tusklings it spawns below — waits out the whole burst animation first.
+      // Gating a door-unlock on hp === 0 elsewhere in this file used to open the
+      // door during that hold, before a single Tuskling existed to be confined
+      // by it, so an escaping party would already be past it by the time the
+      // Tusklings spawned and could give chase. Resetting the entry-window state
+      // here instead of there ties it to the moment the Tusklings actually
+      // arrive, and the door itself is locked (never unlocked) here — it stays
+      // shut for the whole Tuskling fight, same as a checkpoint respawn expects,
+      // and the phase-2 all-dead block below is the only place it opens again.
+      this.entryWindowTimer = 0;
+      this.humanIsInsider = false;
+      this.catIsInsider = false;
+      if (!this.arenaLocked) {
+        this.arenaLocked = true;
+        this.gameMap.lockArenaDoor();
+      }
+
       this.arenaPhase2Active = true;
       this.arenaLiveTusklings = [];
 
@@ -249,11 +267,12 @@ export class ArenaSystem implements GameSystem {
 
     if (bos) {
       this.releaseShedTusklings(bos);
-      this.resolveStench(bos, ctx);
 
       const cx = arena.centre.x * TILE_SIZE;
       const cy = arena.centre.y * TILE_SIZE;
       const innerRadius = ARENA_INTERIOR_RADIUS_TILES * TILE_SIZE;
+      this.resolveStench(bos, ctx, cx, cy, innerRadius);
+
       const humanInside = Math.hypot(human.x - cx, human.y - cy) < innerRadius;
       const catInside = Math.hypot(cat.x - cx, cat.y - cy) < innerRadius;
 
@@ -292,20 +311,10 @@ export class ArenaSystem implements GameSystem {
         }
       }
 
-      // BoS defeated (hp check, not isAlive — see comment above).
-      if (
-        bos.hp === 0 &&
-        (this.arenaLocked || this.entryWindowTimer > 0) &&
-        !this.arenaPhase2Active
-      ) {
-        this.entryWindowTimer = 0;
-        this.humanIsInsider = false;
-        this.catIsInsider = false;
-        if (this.arenaLocked) {
-          this.arenaLocked = false;
-          this.gameMap.unlockArenaDoor();
-        }
-      }
+      // The door unlock that used to fire here, the instant hp hit 0, moved to
+      // the `bossDefeated` handler in `wireEvents` — see the comment there for
+      // why hp === 0 is the wrong moment and the phase-2 all-dead block below is
+      // the only door-unlock left.
     }
 
     // Phase 2: unlock stairwell when all spawned Tusklings are dead
@@ -402,7 +411,13 @@ export class ArenaSystem implements GameSystem {
    * which is where the timer for it belongs: the burst is centred on a body that is
    * stationary for the whole slam, so the picture needs no state of its own.
    */
-  private resolveStench(bos: BallOfSwine, ctx: SystemContext): void {
+  private resolveStench(
+    bos: BallOfSwine,
+    ctx: SystemContext,
+    arenaCentreX: number,
+    arenaCentreY: number,
+    interiorRadiusPx: number,
+  ): void {
     const burst = bos.pendingStench;
     if (burst === null) return;
     bos.pendingStench = null;
@@ -412,6 +427,12 @@ export class ArenaSystem implements GameSystem {
       const cx = target.x + TILE_SIZE * TILE_CENTER_OFFSET;
       const cy = target.y + TILE_SIZE * TILE_CENTER_OFFSET;
       if (Math.hypot(cx - burst.x, cy - burst.y) > burst.radius) continue;
+      // The burst radius alone reaches past the ring at the wall clamp: a bare
+      // distance check would hit a route walker through two tiles of iron. The
+      // wall only blocks what is actually behind it, so the target's own
+      // distance from the arena centre is the second, load-bearing half of this
+      // check.
+      if (Math.hypot(cx - arenaCentreX, cy - arenaCentreY) > interiorRadiusPx) continue;
       bos.applyStenchTo(target);
     }
   }

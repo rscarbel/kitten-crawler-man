@@ -128,6 +128,7 @@ export type AdviceObjectiveId =
   | 'krakaren_clone'
   | 'spider_lab'
   | 'ball_of_swine'
+  | 'ball_of_swine_distant'
   | 'the_circus';
 
 interface AdviceText {
@@ -149,14 +150,14 @@ interface AdviceText {
 const ADVICE_TEXT = {
   the_hoarder: {
     pages: [
-      "Up ahead in that hallway is a boss. The dungeon contains boss fights that will commence once you are in the boss's area.",
+      "Through the hallway {direction} of this room is a boss. The dungeon contains boss fights that will commence once you are in the boss's area.",
       "In order to find the stairwell, it looks like you'll have no choice but to face up against this and potentially other bosses.",
       'Just keep a cool head. She is a neighborhood boss, the weakest kind of boss, and she looks like a simple one.',
     ],
   },
   juicer: {
     pages: [
-      "I see we have another boss that there's no way you can avoid. Fortunately, this one is also just a neighborhood boss, but this one looks a little tougher.",
+      "I see we have another boss that there's no way you can avoid — his den lies {direction} of here. Fortunately, this one is also just a neighborhood boss, but this one looks a little tougher.",
       "I'm not allowed to tell you any details, but what I can say is be careful of his minions, the Troglodytes.",
       "Troglodytes lash you with their tongues, which contains a deadly poison. You do not want to get hit with that or there's a solid chance you'll find that your journey ends here.",
       "Troglodytes are pretty slow, so maybe don't stop moving and you'll be fine.",
@@ -184,11 +185,18 @@ const ADVICE_TEXT = {
   },
   ball_of_swine: {
     pages: [
-      "Up ahead is a borough boss. That means it's tougher than the other fights you've had so far. However, it looks like you also have the option to ignore it and go around to see if you can find a different stairwell or find other challenges.",
+      "Up ahead, {direction} of this room, is a borough boss. That means it's tougher than the other fights you've had so far. However, it looks like you also have the option to ignore it and go around to see if you can find a different stairwell or find other challenges.",
       "If you can beat this boss, you're guaranteed a stairwell to the next floor.",
       'Bosses in this dungeon always have a secret to beating them. This one is a wheel of fused swine that rolls fast enough to break a crawler in half, and it never once slows down of its own accord. Do not try to out-last it.',
       'That is as much as I will say. But I will note that a wheel is only unstoppable while nothing gets in its way, and that the walls of that place are iron.',
     ],
+  },
+  ball_of_swine_distant: {
+    pages: [
+      'Somewhere out in these halls stands a great iron arena, and a borough boss rolls inside it — a wheel of fused swine. Borough bosses are tougher than anything else on their floor, but beat one and you are guaranteed a stairwell down.',
+      'It is entirely optional, mind. If you would rather keep your bones arranged the way they are, no one here will judge you.',
+    ],
+    bearing: 'Another crawler marked the arena {direction} of here.',
   },
   the_circus: {
     pages: [

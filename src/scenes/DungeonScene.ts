@@ -3518,7 +3518,8 @@ export class DungeonScene extends GameplayScene {
   private pinnedGatewayAdvice(guardsBossType: string | undefined): AdviceObjective | null {
     const id = gatewayAdviceId(guardsBossType);
     if (id === null) return null;
-    const objective = id === 'ball_of_swine' ? this.ballOfSwineObjective() : this.bossObjective(id);
+    const objective =
+      id === 'ball_of_swine' ? this.ballOfSwineObjective('ball_of_swine') : this.bossObjective(id);
     return objective.complete ? null : objective;
   }
 
@@ -3542,6 +3543,7 @@ export class DungeonScene extends GameplayScene {
           this.bossObjective('krakaren_clone'),
           this.spiderLabObjective(),
           this.defendQuestObjective(),
+          this.ballOfSwineObjective('ball_of_swine_distant'),
         ];
       default:
         return [];
@@ -3586,10 +3588,14 @@ export class DungeonScene extends GameplayScene {
    * The Ball of Swine, done once the arena has moved on to its second phase —
    * which is what killing it starts, and the only state that survives the event
    * that announced it.
+   *
+   * Shared between the pinned antechamber speech and the distant floor-wide
+   * objective: both watch the same arena state and target, and differ only in
+   * which prose id they carry.
    */
-  private ballOfSwineObjective(): AdviceObjective {
+  private ballOfSwineObjective(id: 'ball_of_swine' | 'ball_of_swine_distant'): AdviceObjective {
     return adviceObjective(
-      'ball_of_swine',
+      id,
       this.arena.phase2Active,
       this.gameMap.arenaExteriors[0]?.centre ?? null,
     );
