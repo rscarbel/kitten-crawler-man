@@ -132,7 +132,7 @@ The getters return plain object literals — no casts, no assertions.
 This phase is independent of the telegraph fix — the telegraph must not depend
 on any margin — but ships with it because the same diagnosis surfaced it.
 
-## 5. Gates and human checks
+## 5. Gates and notes for Ryan's playtest
 
 Automated, all must pass: `npm run typecheck`, `npm run lint`,
 `npm run format`.
@@ -141,14 +141,14 @@ Automated, all must pass: `npm run typecheck`, `npm run lint`,
 `src/dev/playtestPresets.ts`) drops the party in the safe room just before the
 boss.
 
-- [HUMAN] Kite to the far side of the arena with the boss fully off screen:
+- Kite to the far side of the arena with the boss fully off screen:
   the red slam ring appears at your feet, whole, every slam.
-- [HUMAN] Stand in melee and attack continuously (hit flash active): the ring
+- Stand in melee and attack continuously (hit flash active): the ring
   is complete — no straight-edged quarter, no clipping at any angle around the
   boss.
-- [HUMAN] Ring layering: it reads as floor paint — the crawlers and the boss
+- Ring layering: it reads as floor paint — the crawlers and the boss
   draw over it, not under it.
-- [HUMAN] The impact shockwave and debris still show at the slam point,
+- The impact shockwave and debris still show at the slam point,
   including when the boss is off screen.
-- [HUMAN] Walk the boss across the screen edge: the tentacles no longer pop in
+- Walk the boss across the screen edge: the tentacles no longer pop in
   or out with part of them visible, and a mid-flash boss keeps whole tentacles.

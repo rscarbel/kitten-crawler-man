@@ -11,7 +11,8 @@ boss kills, no XP-economy changes, no floor-2 band changes (floor 2 is the
 calibration reference), no forced grinding — every nudge stays declinable.
 
 All numbers below are **starting points for tuning**, not final values. Every
-phase ends with a `[HUMAN]` playtest gate.
+phase lists in-game notes for Ryan's playtest afterward — automated checks
+(typecheck/lint/format) are what gate the phase as done.
 
 ---
 
@@ -185,7 +186,7 @@ its `DungeonScene`). Add:
   `DungeonScene`'s constructor).
 - Surface both on the `?difficulty` overlay (`src/dev/difficultyOverlay.ts`).
 
-- `[HUMAN]` One baseline floor-1 + floor-2 run with the overlay on; record the
+- One baseline floor-1 + floor-2 run with the overlay on; record the
   hunt time and arrival level into this doc before any later phase lands.
 
 ## Phase 1 — Placement: a distance band instead of "farthest"
@@ -223,7 +224,7 @@ out of sight of the boss door (the stated intent of the min, per the comment
 introducing the stairwell-placement block in `buildDungeon`) while pulling it
 off the perimeter and into the ring a player actually sweeps first.
 
-- `[HUMAN]` Generate and eyeball ~5 floor-1 maps (the `?difficulty` run or a
+- Generate and eyeball ~5 floor-1 maps (the `?difficulty` run or a
   render harness): stairwells should sit in the mid-ring, not the corners, and
   never beside the boss exit.
 
@@ -253,7 +254,7 @@ hunt in, not which room — the reveal radius shows an 8-tile pool of fog on a
 160-px minimap (`NORMAL_SIZE = 160` in `src/systems/MiniMapSystem.ts`), a
 smudge with a white dot, not a waypoint.
 
-- `[HUMAN]` Kill the Juicer, open the minimap: is the revealed patch
+- Kill the Juicer, open the minimap: is the revealed patch
   noticeable without being read as "go exactly here"? Does the announcer line
   land once and only once?
 
@@ -274,14 +275,14 @@ slow dust motes that drift toward the stairwell, rendered in
   `src/systems/StairwellSystem.ts`); the draft needs its own wider cull
   (`STAIRWELL_DRAFT_RADIUS_TILES` + viewport) or motes pop in at the screen
   edge.
-- Optional, behind its own `[HUMAN]` call: a soft looping air sound via the
-  add-sound pipeline, positional within the same radius. Ship the visual
-  first.
+- Optional, and a candidate for Ryan to judge by ear: a soft looping air
+  sound via the add-sound pipeline, positional within the same radius. Ship
+  the visual first.
 
 This is the micro hint: it confirms "warmer" once the player is already in
 the right neighbourhood, which Phases 1–2 make likely.
 
-- `[HUMAN]` Walk a corridor 10–14 tiles from a stairwell: do the motes read as
+- Walk a corridor 10–14 tiles from a stairwell: do the motes read as
   a directional draft at game speed? Are they invisible enough during combat?
 
 ## Phase 4 — Wayfinder fail-safe (and the arrow dedupe)
@@ -309,7 +310,7 @@ boss is dead AND `WAYFINDER_GRACE_FRAMES = 5400` (90 s) have passed without a
   Fold the cheat arrow onto the shared helper and implement the Wayfinder on
   the same call with the quantized bearing. One arrow renderer, two callers.
 
-- `[HUMAN]` Idle post-Juicer for 90 s: the pulse should read as a hint you can
+- Idle post-Juicer for 90 s: the pulse should read as a hint you can
   ignore, and the exact-bearing `!reveal` cheat must still work unchanged.
 
 ## Phase 5 — Stairwell menu: recommended level + soft warning
@@ -357,7 +358,7 @@ existing open/dismiss/checkpoint flow (`detect`/`closeMenu`/`handleClick` and
   `nextLevelId` check at the top of `detect()` in
   `src/systems/StairwellSystem.ts`); nothing to do.
 
-- `[HUMAN]` Reach a stairwell at level 5 and at level 9: does the warning read
+- Reach a stairwell at level 5 and at level 9: does the warning read
   as advice rather than a scold, and does the ported menu look native next to
   the other modals (pause, skill book)?
 
@@ -413,7 +414,7 @@ _band_, never re-level a live mob. `MOB_LEVEL_DAMAGE_SCALE`/`MOB_LEVEL_HP_SCALE`
 are untouched — this plan adds no new scaling axis, it uses the four that
 shipped.
 
-- `[HUMAN]` Full floor-1 run with `?difficulty`: post-Juicer room fights
+- Full floor-1 run with `?difficulty`: post-Juicer room fights
   should land in the 40–70% HP band, and the floor-2 entry should feel like a
   step, not a wall. Compare hunt-time and arrival-level against the Phase 0
   baseline.

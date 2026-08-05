@@ -406,31 +406,31 @@ exit 0. Phase 1 adds the doorway-bounds assertion; Phase 2 adds the headless
 multi-map generation check and the `gen:townscape` re-bake; the service worker
 serves stale bundles, so unregister it before trusting any browser check.
 
-## 8. Human checks
+## 8. Notes for Ryan's playtest
 
-- [HUMAN] Walk at every town building door from the right-hand side, the
+- Walk at every town building door from the right-hand side, the
   centre, and the left — the menu must open anywhere across the visible
   opening, and the ▶ hint must sit over the actual door (tower, Big Top, and
   the four corrected shops especially: Sleeping Cat Inn, Sunken Stump Pub,
   Horned Flagon, Desperado Club).
-- [HUMAN] Murder-quest anchors after the door shift: GumGum's spot, the alley
+- Murder-quest anchors after the door shift: GumGum's spot, the alley
   body and the Blackwood Lodge hideout door still make sense on the map.
-- [HUMAN] North gate: leave and re-enter through it on foot; does the corridor
+- North gate: leave and re-enter through it on foot; does the corridor
   past the tower torches feel walkable or pinched? Does the arch read as a gate
   from both sides? Does the highway north meet the wilderness convincingly
   (river bridge if one crosses it)?
-- [HUMAN] Doomsday escape sequence still stages correctly on the terrace with
+- Doomsday escape sequence still stages correctly on the terrace with
   the new gate open.
-- [HUMAN] Beacon readability: is the column visible across the plaza at normal
+- Beacon readability: is the column visible across the plaza at normal
   zoom, on both desktop and phone? Does it distract during dialog or combat?
-- [HUMAN] Tracker layout on mobile — it shares the right edge with the minimap,
+- Tracker layout on mobile — it shares the right edge with the minimap,
   pause button and boss bar stack (the mobile-only HUD stacking block in
   `DungeonScene.render`); check nothing overlaps at phone widths.
-- [HUMAN] Journal contents during a full run: floor 1 defend quest, floor 2
+- Journal contents during a full run: floor 1 defend quest, floor 2
   spider lab, floor 3 circus + murder + a bounty — statuses, hints and arrows
   correct at each stage, including after dying and checkpoint-restoring
   mid-quest.
-- [HUMAN] First-arrival flow: banner timing, auto-expanded tracker, and that it
+- First-arrival flow: banner timing, auto-expanded tracker, and that it
   never re-fires on a second visit (and that a fresh browser profile sees it
   again).
-- [HUMAN] Frame time with beacons + tracker open (`?perf`) on the town map.
+- Frame time with beacons + tracker open (`?perf`) on the town map.

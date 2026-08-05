@@ -528,9 +528,9 @@ SkeletonSummonSystem`, `new BountySystem`, `new CircusQuestSystem`, and
       `DungeonScene.onExit`'s `this.bus.clear()`).
 - [ ] Verification: gates green; grep proves no remaining
       `mobs.push(...)` outside `MobRoster` and spawn helpers.
-- [ ] `[HUMAN]` 10-minute dungeon sanity run (spawns, quest spawns, bounty
-      spawn, checkpoint restore) — this phase touches the dungeon's spawn
-      plumbing and must show zero behavior change.
+- 10-minute dungeon sanity run (spawns, quest spawns, bounty
+  spawn, checkpoint restore) — this phase touches the dungeon's spawn
+  plumbing and should show zero behavior change.
 
 ### Phase 2 — `CombatKit`: combat in every building
 
@@ -551,11 +551,11 @@ SkeletonSummonSystem`, `new BountySystem`, `new CircusQuestSystem`, and
 - [ ] Verification: gates green; `npm run playtest -- swine`-style headless
       check if feasible for one interior encounter (Big Top) proving the
       refactored stack still kills/loots/gores identically.
-- [ ] `[HUMAN]` Big Top fight, cult hideout, and tower confrontation each
-      replayed end to end — no regressions in the three encounters that
-      already worked.
-- [ ] `[HUMAN]` In a plain house/tavern: attack swings work, hitting nothing
-      feels harmless, no stray HP bars or projectile artifacts.
+- Big Top fight, cult hideout, and tower confrontation each
+  replayed end to end — no regressions in the three encounters that
+  already worked.
+- In a plain house/tavern: attack swings work, hitting nothing
+  feels harmless, no stray HP bars or projectile artifacts.
 
 ### Phase 3 — `DestructionKit`: barrels, crates, loot, dynamite indoors
 
@@ -570,12 +570,12 @@ SkeletonSummonSystem`, `new BountySystem`, `new CircusQuestSystem`, and
 - [ ] Loot pickup click routing indoors (mirror the
       `this.loot.tryCollectLootAt(...)` call in `DungeonScene.handleClick`).
 - [ ] Verification: gates green.
-- [ ] `[HUMAN]` Smash the store's barrels (placed in the store branch of
-      `GameMap.generateInterior`): HP, wreckage, drops, pickup, smash audio
-      all present; exit and re-enter — props re-stand (accepted §4 behavior)
-      and no loot is lost on exit.
-- [ ] `[HUMAN]` Dynamite indoors: blast radius respects interior walls, no
-      crash where the map has no trees.
+- Smash the store's barrels (placed in the store branch of
+  `GameMap.generateInterior`): HP, wreckage, drops, pickup, smash audio
+  all present; exit and re-enter — props re-stand (accepted §4 behavior)
+  and no loot is lost on exit.
+- Dynamite indoors: blast radius respects interior walls, no
+  crash where the map has no trees.
 
 ### Phase 4 — Input + `MenusKit`: keys, panels, skill points
 
@@ -601,12 +601,12 @@ SkeletonSummonSystem`, `new BountySystem`, `new CircusQuestSystem`, and
       stripped copy (`BuildingInteriorScene.triggerHotbarActivation`)
       deleted.
 - [ ] Verification: gates green.
-- [ ] `[HUMAN]` Inside a tavern: press `g`, spend a skill point; press `i`,
-      drag an item to the hotbar; press `3` to drink a potion; Esc chain
-      closes things in the right order; nothing double-fires under the
-      service panel.
-- [ ] `[HUMAN]` Mobile: bag/gear panels open, drag works, skill badge tap
-      opens Spend — in a building.
+- Inside a tavern: press `g`, spend a skill point; press `i`,
+  drag an item to the hotbar; press `3` to drink a potion; Esc chain
+  closes things in the right order; nothing double-fires under the
+  service panel.
+- Mobile: bag/gear panels open, drag works, skill badge tap
+  opens Spend — in a building.
 
 ### Phase 5 — `ChatKit` + dungeon migration
 
@@ -626,15 +626,15 @@ SkeletonSummonSystem`, `new BountySystem`, `new CircusQuestSystem`, and
       `verify:bounty`, `verify:difficulty`, `verify:separation`,
       `verify:assets` all pass; diff review confirms `updateGameplay`'s call
       order is the same sequence re-grouped.
-- [ ] `[HUMAN]` Full dungeon regression pass: floor 1 clear incl. Hoarder,
-      a safe-room checkpoint death-restore (mobs revive, chests re-lock,
-      loot rewinds), stairwell transition, dynamite + destructibles on
-      floor 1, chat commands.
-- [ ] `[HUMAN]` Overworld pass: town systems, building enter/exit round trip
-      (snapshots, music persistence via the `this.musicPersistsAcrossExit =
+- Full dungeon regression pass: floor 1 clear incl. Hoarder,
+  a safe-room checkpoint death-restore (mobs revive, chests re-lock,
+  loot rewinds), stairwell transition, dynamite + destructibles on
+  floor 1, chat commands.
+- Overworld pass: town systems, building enter/exit round trip
+  (snapshots, music persistence via the `this.musicPersistsAcrossExit =
 true` assignment in the `BuildingSystem` entry callback, knocked-out
-      companion left outside per the `knockedOutCompanionAt` handling in the
-      constructor), bounty flow.
+  companion left outside per the `knockedOutCompanionAt` handling in the
+  constructor), bounty flow.
 
 ### Phase 6 — New-environment proof
 
@@ -649,9 +649,9 @@ construction.
       the recipe: build `SceneWorld`, construct kits, bind
       `GameplayInputHandler`, compose overlay claims — the checklist a future
       scene follows.
-- [ ] `[HUMAN]` Fight in that interior with skill spending, hotbar, loot,
-      destructibles, and chat all exercised in one session — the original
-      playtest complaint, replayed to green.
+- Fight in that interior with skill spending, hotbar, loot,
+  destructibles, and chat all exercised in one session — the original
+  playtest complaint, replayed to green.
 
 ---
 

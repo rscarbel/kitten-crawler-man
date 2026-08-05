@@ -23,7 +23,8 @@ riding on the existing `drawButton` registry (Phases 2–4), and a
 **Controls screen + rebinding UI** in the pause menu (Phases 5–6).
 
 Each phase ends green on `npm run typecheck`, `npm run lint`, and
-`npm run format`, and ends with its `[HUMAN]` checks.
+`npm run format`. Each phase also lists in-game notes for Ryan's playtest
+afterward — not a blocking gate.
 
 ## 1. What is wrong today (measured from the code)
 
@@ -322,11 +323,11 @@ Out of scope on purpose: Bopca digit choices
 (`BopcaSystem.handleKeyDown`, `src/systems/BopcaSystem.ts`) and dev preview scene keys stay literal
 — dialog-context and dev-only respectively.
 
-- `[HUMAN]` Full desktop input pass with defaults: move (incl. holding
+- Full desktop input pass with defaults: move (incl. holding
   Shift mid-walk — must keep walking now), attack, Tab switch, Q/I/G/F/M/R,
   hotbar 1–8 incl. dynamite hold-release, Enter chat, Esc chains in both
   scenes, keyboard-hero minigame.
-- `[HUMAN]` Hand-edit localStorage to a hostile payload (unknown actions,
+- Hand-edit localStorage to a hostile payload (unknown actions,
   numbers, `"Escape"`); game must boot on defaults without a console error.
 
 ## Phase 2 — Focus ring in Button.ts + SceneManager nav listener
@@ -351,13 +352,13 @@ prove the loop end to end:
   with the
   `ButtonResult` rects it already gets back from `drawButton`.
 
-- `[HUMAN]` Pause menu: Tab/Shift+Tab/arrows cycle visibly, wrap at both
+- Pause menu: Tab/Shift+Tab/arrows cycle visibly, wrap at both
   ends, Space activates, Space with no focus resumes, Esc still closes,
   mouse hover/click unaffected, click sound fires on keyboard activation.
-- `[HUMAN]` Volume sliders (not in the ring — they are raw `ButtonRect`s
+- Volume sliders (not in the ring — they are raw `ButtonRect`s
   pushed in `renderVolumeSlider`, `src/ui/pause/SettingsTab.ts`): confirm
   focus skips them cleanly rather than trapping.
-- `[HUMAN]` With chat input open, Space/Tab type into the field instead of
+- With chat input open, Space/Tab type into the field instead of
   driving the ring.
 
 ## Phase 3 — Spacebar-accept adoption across the drawButton dialogs
@@ -387,10 +388,10 @@ buttons — their existing Space/any-key paths already match the feedback),
 and `InventoryPanel`/`GearPanel` (item grids; a 1-D ring over ~40 slots is
 worse than the mouse — deferred, see the non-goals).
 
-- `[HUMAN]` Space-mash a full run: level-up, reward, chest, quest,
+- Space-mash a full run: level-up, reward, chest, quest,
   skill-book, shop close, death, level-complete. Every dialog advances
   exactly once per press; no dialog behind another one advances.
-- `[HUMAN]` Blackjack: Space never places a bet; Hit/Stand reachable by Tab.
+- Blackjack: Space never places a bet; Hit/Stand reachable by Tab.
 
 ## Phase 4 — Migrate the hand-rolled menus onto addButton
 
@@ -411,7 +412,7 @@ un-navigable. Migrating them is the whole of their adoption cost:
   (`src/systems/ShopSystem.ts`) — `buyRects` → `addButton` rows;
   ring; Close primary.
 
-- `[HUMAN]` Stairwell, tower stairs, follower menu (incl. the tutorial's
+- Stairwell, tower stairs, follower menu (incl. the tutorial's
   restricted state), and shop all drive by keyboard and look unchanged.
 
 ## Phase 5 — The Controls tab (view all bindings)
@@ -432,10 +433,10 @@ un-navigable. Migrating them is the whole of their adoption cost:
 - Box height: new `CONTROLS_BOX_H` beside `STATS_BOX_H`, `SPEND_BOX_H`,
   `SKILLS_BOX_H` and `SETTINGS_BOX_H` in `src/ui/PauseMenu.ts`.
 
-- `[HUMAN]` Desktop: every action listed matches what the key actually
+- Desktop: every action listed matches what the key actually
   does. Mobile device: Touch view is the default, lists every gesture, and
   the keyboard list is still reachable.
-- `[HUMAN]` Short-viewport landscape phone: rows scroll; Back never
+- Short-viewport landscape phone: rows scroll; Back never
   unreachable.
 
 ## Phase 6 — Rebinding UI (capture, conflicts, reset)
@@ -447,22 +448,23 @@ confirm-dialog pattern as Reset Game (`renderResetConfirmDialog` in
 `src/ui/pause/SettingsTab.ts`).
 Persistence and HUD-hint refresh already work from Phase 1.
 
-- `[HUMAN]` Rebind attack to `j`: HUD hint line updates, `j` attacks,
+- Rebind attack to `j`: HUD hint line updates, `j` attacks,
   Space no longer attacks in the world but still accepts in menus.
-- `[HUMAN]` Steal flow: bind Q onto inventory — potion row shows unbound in
+- Steal flow: bind Q onto inventory — potion row shows unbound in
   the warning style and the notice names where the key went.
-- `[HUMAN]` Escape during capture cancels; Escape cannot be bound.
-- `[HUMAN]` Reload the page: bindings survive. Restore Defaults returns
+- Escape during capture cancels; Escape cannot be bound.
+- Reload the page: bindings survive. Restore Defaults returns
   every row and the HUD hints to stock.
-- `[HUMAN]` Rebind movement to arrows-only, then play the keyboard-hero
+- Rebind movement to arrows-only, then play the keyboard-hero
   minigame — columns must follow the rebind.
 
 ## Sequencing
 
 1 → 2 are the foundations and land in order. 3 and 4 both depend only on 2
 and can land in either order or in parallel. 5 depends on 1; 6 depends on
-1 + 2 + 5. Ship no more than one adoption phase per playtest so a
-double-advance regression is attributable.
+1 + 2 + 5. Each phase's automated checks passing is what gates moving to the
+next one; ship all phases, then note per-phase playtest observations so a
+double-advance regression is still attributable.
 
 ## What we are deliberately NOT doing
 
@@ -474,7 +476,7 @@ double-advance regression is attributable.
 - **No focus ring in the item grids** (`InventoryPanel`, `GearPanel`) or on
   the volume sliders. Grid/slider keyboard editing is real scope with its
   own UX questions; nothing in the feedback asks for it. The ring skipping
-  them cleanly is a Phase 2 `[HUMAN]` check.
+  them cleanly is a Phase 2 playtest note.
 - **No gamepad support.** The action abstraction in Phase 1 is the
   prerequisite if it is ever wanted; nothing here forecloses it.
 - **No chorded bindings** (Shift+X). One normalized key per slot, two slots

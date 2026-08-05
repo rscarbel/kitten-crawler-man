@@ -361,24 +361,24 @@ safe zone; (d) companion speed — `FOLLOWER_SPEED = 3.5`
 prohibitive, but every line of it is new, and none of it shortens the town
 round trip as much as the stone does.
 
-## 10. [HUMAN] checklist (Ryan)
+## 10. Notes for Ryan's playtest
 
-- [HUMAN] Does the 60 s cooldown / 3 s channel feel like a travel tool rather
+- Does the 60 s cooldown / 3 s channel feel like a travel tool rather
   than a combat escape? Tune `RECALL_COOLDOWN_FRAMES` /
   `RECALL_CHANNEL_FRAMES`.
-- [HUMAN] Is the two-mode behaviour instantly clear from the grant dialog and
+- Is the two-mode behaviour instantly clear from the grant dialog and
   the channel labels, without reading the item description?
-- [HUMAN] Return-leg danger: landing on your trail anchor can put you next to
+- Return-leg danger: landing on your trail anchor can put you next to
   wandered mobs. Fair surprise or needs a landing-safety search radius?
-- [HUMAN] Does dismissing Mongo/mercenaries on fast travel feel acceptable, or
+- Does dismissing Mongo/mercenaries on fast travel feel acceptable, or
   should they re-summon free on arrival?
-- [HUMAN] Downed-companion case: the party teleports with the companion still
+- Downed-companion case: the party teleports with the companion still
   downed — confirm that reads correctly at the destination.
-- [HUMAN] Is the 7-tile enemies-nearby block too strict or too lax on a camp's
+- Is the 7-tile enemies-nearby block too strict or too lax on a camp's
   edge?
-- [HUMAN] After the stone ships, is overland traversal still slow enough to
+- After the stone ships, is overland traversal still slow enough to
   justify the §9 mount (or a cheaper road-speed bonus)?
-- [HUMAN] Do the reused sounds (`confusing_fog`, `speed_fizz`) carry the warp,
+- Do the reused sounds (`confusing_fog`, `speed_fizz`) carry the warp,
   or does it need bespoke audio?
 
 ## 11. Progress log

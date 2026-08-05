@@ -360,29 +360,29 @@ centroid-drift / texture-size set, the ones specific to this work:
 - **Antenna reach** on the roach: the antennae are most of what makes the
   silhouette an insect, and they are the first thing a frame-size change clips.
 
-## 5. Human checks
+## 5. Notes for Ryan's playtest
 
 Everything below is invisible to typecheck, lint, the bake gates and a still
-image, and needs Ryan at the keyboard.
+image, and is left as an assumption to verify at the keyboard.
 
-- [HUMAN] Does she read as fifteen feet tall in the room, next to Carl and next
+- Does she read as fifteen feet tall in the room, next to Carl and next
   to the door frames?
-- [HUMAN] Gait: does she plant and lumber, or float?
-- [HUMAN] Is the vomit telegraph readable in time to walk out of the line?
-- [HUMAN] Are five frantic roaches actually annoying to hit with magic missile,
+- Gait: does she plant and lumber, or float?
+- Is the vomit telegraph readable in time to walk out of the line?
+- Are five frantic roaches actually annoying to hit with magic missile,
   or merely annoying?
-- [HUMAN] Is the fight still winnable-on-a-first-try easy, and does the acid now
+- Is the fight still winnable-on-a-first-try easy, and does the acid now
   come up often enough to matter without walling off the arena?
-- [HUMAN] Health bar and aggro marker placement on the new (much taller) anchor.
-- [HUMAN] Frame rate with five roaches, several pools and the bile in flight.
-- [HUMAN] Is there always a lane to walk in on her now, and does the acid still
+- Health bar and aggro marker placement on the new (much taller) anchor.
+- Frame rate with five roaches, several pools and the bile in flight.
+- Is there always a lane to walk in on her now, and does the acid still
   threaten a ranged fight rather than merely decorating it?
-- [HUMAN] Does she now stay put until the party is actually in the room, and does
+- Does she now stay put until the party is actually in the room, and does
   the companion path in without balking?
-- [HUMAN] Does the gore read as a body at tile size, or still as a cartoon?
-- [HUMAN] Does her death now leave a mess behind — six pieces, the pools still
+- Does the gore read as a body at tile size, or still as a cartoon?
+- Does her death now leave a mess behind — six pieces, the pools still
   fading, the roaches dying where they stood?
-- [HUMAN] Does the once-per-thirty-seconds point-blank spit still land often
+- Does the once-per-thirty-seconds point-blank spit still land often
   enough to punish standing in her face?
 
 `npm run playtest -- hoarder` drops the party in the safe room immediately

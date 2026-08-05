@@ -476,30 +476,30 @@ stairwells`, the headroom siting condition) must leave mean attempts well
    stairwell.
 5. Gates: `npm run typecheck`, `npm run lint`, `npm run format` — all clean.
 
-## 9. `[HUMAN]` checks
+## 9. Notes for Ryan's playtest
 
-- [ ] `[HUMAN]` **Saw the boss without taking damage:** play floor 2 start to
-      stairs without entering the drum. Confirm (a) the Ball of Swine itself was
-      unmistakably on screen — charging, slamming the wall beside you — not just
-      its room, and (b) you took zero damage from it or anything it produced for
-      the whole route.
-- [ ] `[HUMAN]` **The skip felt deliberate:** bypassing the fight should feel
-      like walking past a door you chose not to open — Mordecai, the sealed drum,
-      the door, the raging ball — not like the level quietly routing you around a
-      boss you never clocked.
-- [ ] `[HUMAN]` Does the menace charge read as _menace_ — the boss hurling
-      itself at the iron beside you — rather than as a bug where the boss is stuck
-      on a wall? Does it stay dramatic on the second and third lap?
-- [ ] `[HUMAN]` Does forcing the walk _first_ spoil or sharpen the entry
-      moment when you do step through the door and the intro fires?
-- [ ] `[HUMAN]` Play floor 2 start to stairs: does the hunt for the stairwell
-      ending behind the Iron Colosseum land as a beat, or feel like a wall?
-- [ ] `[HUMAN]` Collapse timer (the `hasCollapseTimer` property on the `level2`
-      `LevelDef` in `src/levels/level2.ts`): the forced detour lengthens the
-      route — is there still slack on an ordinary run?
-- [ ] `[HUMAN]` Does the rewritten Mordecai copy read naturally?
-- [ ] `[HUMAN]` Minimap: do the beyond-region stairwells telegraph "behind the
-      arena" rather than looking unreachable?
-- [ ] `[HUMAN]` **Ryan — design decision (§2.4):** keep the no-fight stairwells
-      behind the arena, or go full source-material and make the defeat-gated
-      centre stairwell the only way down (which forces the fight)?
+- **Saw the boss without taking damage:** play floor 2 start to
+  stairs without entering the drum. Confirm (a) the Ball of Swine itself was
+  unmistakably on screen — charging, slamming the wall beside you — not just
+  its room, and (b) you took zero damage from it or anything it produced for
+  the whole route.
+- **The skip felt deliberate:** bypassing the fight should feel
+  like walking past a door you chose not to open — Mordecai, the sealed drum,
+  the door, the raging ball — not like the level quietly routing you around a
+  boss you never clocked.
+- Does the menace charge read as _menace_ — the boss hurling
+  itself at the iron beside you — rather than as a bug where the boss is stuck
+  on a wall? Does it stay dramatic on the second and third lap?
+- Does forcing the walk _first_ spoil or sharpen the entry
+  moment when you do step through the door and the intro fires?
+- Play floor 2 start to stairs: does the hunt for the stairwell
+  ending behind the Iron Colosseum land as a beat, or feel like a wall?
+- Collapse timer (the `hasCollapseTimer` property on the `level2`
+  `LevelDef` in `src/levels/level2.ts`): the forced detour lengthens the
+  route — is there still slack on an ordinary run?
+- Does the rewritten Mordecai copy read naturally?
+- Minimap: do the beyond-region stairwells telegraph "behind the
+  arena" rather than looking unreachable?
+- **Ryan — design decision (§2.4):** keep the no-fight stairwells
+  behind the arena, or go full source-material and make the defeat-gated
+  centre stairwell the only way down (which forces the fight)?

@@ -12,7 +12,8 @@ bit-identical to today's game**, and the verify script proves it.
 
 All numbers are starting points for tuning. Every phase ends in the validation
 gates (`npm run typecheck`, `npm run lint`, `npm run format`) plus the two
-verify scripts; player-feel checks are `[HUMAN]`.
+verify scripts. Player-feel checks are noted for Ryan's playtest afterward,
+not a blocking gate.
 
 ---
 
@@ -215,7 +216,7 @@ Promote the Mantid's clamp to the shared mechanism it should have been:
   ambients roll levels 5–9. Flag for Ryan; if it plays badly, she gets a
   getter row in the same registry.
 
-- `[HUMAN]` Fight the Dark Knight bounty at a level-12+ party: the goblin
+- Fight the Dark Knight bounty at a level-12+ party: the goblin
   screen should pin and swarm, not chase you down in the open. Confirm plain
   floor-1 goblins feel unchanged.
 
@@ -351,7 +352,7 @@ profile.rewardCoinScale)` with every `applyMobLevel` site
   so the reward change is disclosed where the contract is signed. No selector
   at the board — one global selector in Settings, per P2; a second control
   surface would invite per-bounty toggling for reward arbitrage.
-- `[HUMAN]` Settings tab on a phone in landscape: all three difficulty buttons
+- Settings tab on a phone in landscape: all three difficulty buttons
   reachable, nothing crowded off the box; Reset/Back still reachable.
 
 ## 7. Phase 5 — Verify-gate extension
@@ -387,18 +388,18 @@ MAX_LEVELLED_WALK_ADVANTAGE` or its authored base — this is the check that
 No new script files — both scripts already sit in `tsconfig.scripts.json`'s
 include list.
 
-## 8. Phase 6 — `[HUMAN]` playtest gates
+## 8. Phase 6 — Notes for Ryan's playtest
 
-- `[HUMAN]` Floor 1 on Nightmare from a fresh save: room fights bite (HP
+- Floor 1 on Nightmare from a fresh save: room fights bite (HP
   after a room fight lands in the rebalance's 40–70% target band on the
   `?difficulty` overlay) without spike deaths.
-- `[HUMAN]` A floor-3 bounty on Kitten at a mid-skill party: winnable with
+- A floor-3 bounty on Kitten at a mid-skill party: winnable with
   potions and movement; the Dark Knight's goblin screen pins but cannot run
   you down (composes Phase 1 + Phase 2).
-- `[HUMAN]` Flip Kitten → Nightmare mid-floor: damage changes immediately,
+- Flip Kitten → Nightmare mid-floor: damage changes immediately,
   spawned mobs keep their levels, next floor spawns harder. Shady's offer
   shows the tier line on both non-Normal tiers.
-- `[HUMAN]` Rewards read fair: Nightmare bounty pays visibly more coins/XP;
+- Rewards read fair: Nightmare bounty pays visibly more coins/XP;
   Kitten pays less without feeling punitive.
 
 ---

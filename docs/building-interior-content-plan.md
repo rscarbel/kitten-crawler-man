@@ -440,23 +440,23 @@ can ship first if the Dirty Shirley is wanted immediately) → 4 → 5. Phase 2h
 waits for the universal scene-systems work and should be re-planned
 against its actual shape when it lands.
 
-## 8. Human checks
+## 8. Notes for Ryan's playtest
 
-- [HUMAN] Walk all 16 interiors: does each now have at least one thing to do
+- Walk all 16 interiors: does each now have at least one thing to do
   and one person worth talking to? Which still feel empty?
-- [HUMAN] Do the resident lore conversations read as _this town's_ lore, and
+- Do the resident lore conversations read as _this town's_ lore, and
   do the quest-reactive lines fire at the right stages (before/during/after
   circus, murder, doomsday)?
-- [HUMAN] Are the three taverns now distinguishable blind — menus, barks,
+- Are the three taverns now distinguishable blind — menus, barks,
   crowd?
-- [HUMAN] Buy a Dirty Shirley at the club, drink it at the bar: pour sound,
+- Buy a Dirty Shirley at the club, drink it at the bar: pour sound,
   heal, drunk wobble, hotbar toast — does the moment land? Is 15 coins right?
-- [HUMAN] Does the drunk effect stacked with the club's dance-floor lights
+- Does the drunk effect stacked with the club's dance-floor lights
   cause any readability/comfort problem?
-- [HUMAN] Herb & Remedy prices vs the General Store and market stalls — does
+- Herb & Remedy prices vs the General Store and market stalls — does
   the town economy still make sense (no strictly-dominant potion source)?
-- [HUMAN] Performance: interiors with new occupants/ambience on the phone
+- Performance: interiors with new occupants/ambience on the phone
   layout — any frame-time regression vs the current rooms?
-- [HUMAN] Confirm nothing in this plan collided with what the universal
+- Confirm nothing in this plan collided with what the universal
   scene-systems work shipped — especially consumable
   activation (3e) and any interior combat hooks (2h).

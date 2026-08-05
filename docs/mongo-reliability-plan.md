@@ -331,7 +331,7 @@ legibility fix; no UI is needed beyond what Phase 2/4 already add.
 ## 6. Phase 5 — survivability
 
 He is a melee animal on every hostile's target list. Three levers, all in
-the one stat table or one named constant, all [HUMAN]-tunable:
+the one stat table or one named constant, all tunable by feel after playtesting:
 
 - **Pet damage resistance.** `MONGO_DAMAGE_TAKEN_MULTIPLIER = 0.6` applied
   in a `Mongo.takeDamage` override before delegating to `super` — flat,
@@ -348,7 +348,7 @@ the one stat table or one named constant, all [HUMAN]-tunable:
   "he died instantly" into a visible limping-raptor state the player can
   respond to with a recall. It slightly softens the "spending him is the
   decision" design (the class-level doc comment on `MongoSystem`, `src/systems/MongoSystem.ts`), so it ships behind
-  a single boolean constant and gets its own [HUMAN] verdict.
+  a single boolean constant and is flagged for a feel-check after playtesting.
 
 ## 7. The numbers, before → after
 
@@ -383,27 +383,27 @@ tunables for Ryan.
   `HOME_STALL_LIMIT_FRAMES + RESCUE` bound — the vanish was invisible to
   every existing gate precisely because it needs distance and time.
 
-## 9. Human checks
+## 9. Notes for Ryan's playtest
 
-Everything below needs Ryan at the keyboard (`?playtest=<preset>` unlocks
-Mongo; `?mongo` previews the art).
+Everything below is a note for Ryan's own playtest; the agent cannot verify
+these (`?playtest=<preset>` unlocks Mongo; `?mongo` previews the art).
 
-- [HUMAN] Walk away from a summoned juvenile at full player speed for 30+
+- Walk away from a summoned juvenile at full player speed for 30+
   seconds, through forest and around boss doors: does he always either
   arrive or visibly teleport in, never vanish?
-- [HUMAN] Recall him from behind sealed geometry (boss room, tree pocket):
+- Recall him from behind sealed geometry (boss room, tree pocket):
   does the button press bring him, and does the despawn complete?
-- [HUMAN] Does the rescue teleport read as "loyal pet catching up" rather
+- Does the rescue teleport read as "loyal pet catching up" rather
   than as a glitch (speech line, landing tile in front of the cat)?
-- [HUMAN] Minimap dot and edge arrow: visible, not noisy?
-- [HUMAN] Do the two first-time healing notices land at the right moments,
+- Minimap dot and edge arrow: visible, not noisy?
+- Do the two first-time healing notices land at the right moments,
   and is once each enough to teach the model?
-- [HUMAN] Does level 2 arrive within the first session of real use, and
+- Does level 2 arrive within the first session of real use, and
   level 5's growth spurt soon enough to feel earned rather than mythical?
-- [HUMAN] With threat-first targeting, does he peel the mob that is biting
+- With threat-first targeting, does he peel the mob that is biting
   the cat, and join the player's target otherwise?
-- [HUMAN] Survivability at unlock: does he survive a normal room fight at
+- Survivability at unlock: does he survive a normal room fight at
   level 1-2 with the 0.6 multiplier and fatter juvenile HP, without
   trivializing it?
-- [HUMAN] Verdict on the optional wounded-retreat behavior: keep, tune, or
+- Verdict on the optional wounded-retreat behavior: keep, tune, or
   cut?

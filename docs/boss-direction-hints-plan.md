@@ -202,32 +202,32 @@ the map.
 - `npm run lint` — exit 0.
 - `npm run format`.
 
-## 5. Playtest checklist
+## 5. Notes for Ryan's playtest
 
 All directions are seed-dependent, so each check is: open the dialog, then
 confirm the stated bearing against the minimap.
 
-- [ ] [HUMAN] Floor 1, Hoarder gateway safe room: Mordecai names a direction
-      and it matches where the Hoarder's room actually is on this seed.
-- [ ] [HUMAN] Floor 1, Hoarder gateway safe room **after** killing the
-      Hoarder: the Juicer speech now plays with a direction, and it points
-      down the second gauntlet, not back the way you came.
-- [ ] [HUMAN] Floor 1, Juicer gateway safe room: Juicer direction correct
-      from _this_ room too (different origin, same target).
-- [ ] [HUMAN] Floor 2, Krakaren gateway: existing hint still correct
-      (regression).
-- [ ] [HUMAN] Floor 2, any non-antechamber safe room after clearing Krakaren,
-      spider lab and the goblin-mother quest: Mordecai now offers the arena
-      speech with a correct bearing.
-- [ ] [HUMAN] Floor 2, arena antechamber: pinned speech names the direction
-      of the arena door.
-- [ ] [HUMAN] Floor 3, restaurant Mordecai: circus bearing unchanged
-      (regression).
-- [ ] [HUMAN] Voice check: all three edited gateway pages and the two new
-      arena pages read naturally in the dialog box on a phone-width canvas
-      (pages are author-split, see the `pages` field's doc comment on
-      `AdviceObjective` in `src/systems/mordecaiAdvice.ts` — no
-      page should overflow six lines).
+- Floor 1, Hoarder gateway safe room: Mordecai names a direction
+  and it matches where the Hoarder's room actually is on this seed.
+- Floor 1, Hoarder gateway safe room **after** killing the
+  Hoarder: the Juicer speech now plays with a direction, and it points
+  down the second gauntlet, not back the way you came.
+- Floor 1, Juicer gateway safe room: Juicer direction correct
+  from _this_ room too (different origin, same target).
+- Floor 2, Krakaren gateway: existing hint still correct
+  (regression).
+- Floor 2, any non-antechamber safe room after clearing Krakaren,
+  spider lab and the goblin-mother quest: Mordecai now offers the arena
+  speech with a correct bearing.
+- Floor 2, arena antechamber: pinned speech names the direction
+  of the arena door.
+- Floor 3, restaurant Mordecai: circus bearing unchanged
+  (regression).
+- Voice check: all three edited gateway pages and the two new
+  arena pages read naturally in the dialog box on a phone-width canvas
+  (pages are author-split, see the `pages` field's doc comment on
+  `AdviceObjective` in `src/systems/mordecaiAdvice.ts` — no
+  page should overflow six lines).
 
 ## 6. Explicitly out of scope
 

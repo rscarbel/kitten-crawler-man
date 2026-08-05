@@ -231,8 +231,9 @@ this.drunkDamageBonus`; the drunk term is 0 sober, so the claim still holds
   discovered violations are in scope).
 - **Every threshold is a named constant**; no `as`, no `!`, no `any` in
   anything below.
-- One behavioral change per phase, each behind its own `[HUMAN]` gate —
-  companion feel is exactly the kind of thing arithmetic cannot sign off.
+- One behavioral change per phase, each followed by its own playtest notes —
+  companion feel is exactly the kind of thing arithmetic cannot sign off, so
+  each phase records what to check in-game afterward.
 
 ## 3. Phase 0 — Reproduction + verification harness
 
@@ -255,7 +256,7 @@ Assertions (headless, constructing the real classes):
 - 0.4 `CatPlayer` in companion mode with an adjacent target starts a swipe
   (`attackTimer > 0`) rather than a missile (Phase 4).
 
-- `[HUMAN]` Reproduce the original report once before any fix, for a
+- Reproduce the original report once before any fix, for a
   baseline: `npm run playtest -- krakaren` (the `krakaren` preset in
   `src/dev/playtestPresets.ts`), stand in the corridor, let the cat work.
   Confirm: cat opens fire unprompted, no intro plays, and on a DoT-assisted
@@ -351,14 +352,14 @@ adapter now labels these kills `'Unknown'` rather than misattributing them to
 the cat (the `killerName` computation in `subscribeToEvents`,
 `src/ai/AIAdapter.ts`) — after 1a it can name the applier.
 
-- `[HUMAN]` Re-run the §3 baseline repro against the landed fix first
+- Re-run the §3 baseline repro against the landed fix first
   (`npm run playtest -- krakaren`, DoT-assisted kill): chest should now
   unlock — confirming the concurrent fix before building on it.
-- `[HUMAN]` Kill any floor-1 mob with a sepsis tick (crown equipped, walk
+- Kill any floor-1 mob with a sepsis tick (crown equipped, walk
   away, let it die): XP floats, loot drops, corpse leaves the grid, and
   (after 1a) the kill shows the crown-wearer as killer — Mongo counter and
   achievements included.
-- `[HUMAN]` Kill the Krakaren where a `magic_burn`/sepsis tick lands the
+- Kill the Krakaren where a `magic_burn`/sepsis tick lands the
   final point: chest unlocks, `bossDefeated` fires once, Mongo unlock intact.
 
 ## 5. Phase 2 — A real engagement signal (fixes §1.2)
@@ -400,11 +401,11 @@ regenerates to full after `UNENTERED_BOSS_REGEN_DELAY_FRAMES` (proposed 300 —
 _active-player_ doorway snipe. It is a difficulty decision, so it ships only
 if the playtest wants it.
 
-- `[HUMAN]` `npm run playtest -- krakaren`: approach the corridor, stop. The
+- `npm run playtest -- krakaren`: approach the corridor, stop. The
   cat must hold fire. Step into the room: intro plays, then the cat joins.
-- `[HUMAN]` Retaliation check: let the Hoarder's bile actually hit someone
+- Retaliation check: let the Hoarder's bile actually hit someone
   while the party stands outside her room — companion may now return fire.
-- `[HUMAN]` (if 2c ships) Poke the Krakaren from the doorway and retreat: it
+- (if 2c ships) Poke the Krakaren from the doorway and retreat: it
   visibly heals back.
 
 ## 6. Phase 3 — Leash and sight discipline (fixes §1.3)
@@ -443,10 +444,10 @@ Leave the vespa's own no-LOS acquisition (`updateVespaAI` in
 walls is a separate design question, and the companion no longer amplifies
 it.
 
-- `[HUMAN]` Floor 2 near brindled vespas, playing the cat: the human
+- Floor 2 near brindled vespas, playing the cat: the human
   companion may start toward a fight but must turn back once 10 tiles out,
   and must not yo-yo (watch ~30 s; the ban is what prevents the lap).
-- `[HUMAN]` Backpedal out of a fight with a mob still chasing: companion
+- Backpedal out of a fight with a mob still chasing: companion
   stays engaged on the chaser (the ban exemption working).
 
 ## 7. Phase 4 — The companion cat uses her claws (fixes §1.4)
@@ -480,12 +481,12 @@ wants more, the natural extension is a third combat stance in `FollowerMenu`
 pounce-style gap-closer as a trained skill. Both are follow-up plans; do not
 fold them in here.
 
-- `[HUMAN]` Play the human with roaches/rats swarming: the cat visibly swipes
+- Play the human with roaches/rats swarming: the cat visibly swipes
   adjacent enemies between missile casts, and strength points change the
   kill speed.
-- `[HUMAN]` The swipe animation and swing sound read correctly on the
+- The swipe animation and swing sound read correctly on the
   companion (not just the active cat), in all facings.
-- `[HUMAN]` The cat does not stand toe-to-toe trading with things she should
+- The cat does not stand toe-to-toe trading with things she should
   kite — the swipe must feel opportunistic, not suicidal.
 
 ## 8. Phase 5 — The cat can build, slowly (defend quest)
@@ -550,14 +551,14 @@ the cat (`src/scenes/DungeonScene.ts`); the hotbar path in
 prompt in `renderObjects` (`src/systems/DefendQuestSystem.ts`) renders for
 whichever crawler is active, holds boards, and stands by a grate.
 
-- `[HUMAN]` Play the cat in the defend quest: prompt appears at a grate,
+- Play the cat in the defend quest: prompt appears at a grate,
   build takes visibly ~6 s (vs the human's 2 s), 4 boards leave the _cat's_
   bag, hammer sound cadence still reads right over the longer bar.
-- `[HUMAN]` Repair path as the cat (damaged barrier, not a fresh one) — same
+- Repair path as the cat (damaged barrier, not a fresh one) — same
   3× duration.
-- `[HUMAN]` Mid-build crawler swap and a checkpoint death during a cat build:
+- Mid-build crawler swap and a checkpoint death during a cat build:
   no orphaned progress bar, no boards lost without a barrier.
-- `[HUMAN]` Feel check: is a 6 s build under bugaboo pressure "possible but
+- Feel check: is a 6 s build under bugaboo pressure "possible but
   not very effective" as intended, or just a death sentence? (Tuning knob is
   the one constant.)
 
@@ -590,20 +591,20 @@ ship any time. After each phase: `npm run typecheck`, `npm run lint`,
   companion kills (the credited-damage split and `topPlayer`/`otherPlayer` XP
   award in `resolveKills`, `src/systems/CombatSystem.ts`).
 
-## 11. Consolidated human checklist
+## 11. Consolidated notes for Ryan's playtest
 
-- `[HUMAN]` §3 baseline re-run against the concurrently-landed fix (chest
+- §3 baseline re-run against the concurrently-landed fix (chest
   should now unlock on the old repro).
-- `[HUMAN]` §4 DoT-kill loot on a regular mob with the killer _named_ (Mongo
+- §4 DoT-kill loot on a regular mob with the killer _named_ (Mongo
   counter, achievements); DoT-finished Krakaren unlocks chest and Mongo.
-- `[HUMAN]` §5 cat holds fire until entry/blood; intro always precedes the
+- §5 cat holds fire until entry/blood; intro always precedes the
   first companion shot on an untouched boss.
-- `[HUMAN]` §6 no cross-map chases on floor 2; no leash yo-yo; chasers still
+- §6 no cross-map chases on floor 2; no leash yo-yo; chasers still
   get fought.
-- `[HUMAN]` §7 companion swipes adjacent enemies; strength investment felt;
+- §7 companion swipes adjacent enemies; strength investment felt;
   kite behavior otherwise unchanged.
-- `[HUMAN]` §8 cat builds a defend-quest barrier in ~6 s from her own boards;
+- §8 cat builds a defend-quest barrier in ~6 s from her own boards;
   human still 2 s; the pace feels "possible, not very effective".
-- `[HUMAN]` One full Krakaren gauntlet run start-to-finish playing each
+- One full Krakaren gauntlet run start-to-finish playing each
   crawler, checking the fight still _feels_ like a boss fight when the
   companion participates properly.
