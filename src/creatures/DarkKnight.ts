@@ -689,12 +689,13 @@ export class DarkKnight extends Mob {
     // reach when the fist started moving, which is when an unavoidable attack
     // becomes unavoidable.
     if (Math.hypot(target.x - this.x, target.y - this.y) > this.punchResolveRangePx()) return;
-    target.takeDamage(this.scaledDamage(PUNCH_DAMAGE), {
+    const connected = target.takeDamage(this.scaledDamage(PUNCH_DAMAGE), {
       kind: 'mob',
       mobType: this.mobType,
       attackType: 'gauntlet',
       undodgeable: true,
     });
+    if (connected) this.noteStruckPlayer(target);
   }
 
   private punchResolveRangePx(): number {

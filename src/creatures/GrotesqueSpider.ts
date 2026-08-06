@@ -767,6 +767,11 @@ export class GrotesqueSpider extends Mob {
         ) {
           t.applyStatus(makeStuck());
           t.applyStatus(makeSpitVenom());
+          // A web that roots and poisons is this spider fighting the party even
+          // though no blow landed; without this the companion reads the fight as
+          // nobody's and can be banned off the spider mid-web. Not through a
+          // safe room, which nothing reaches through.
+          if (t.canBeHarmed) this.noteStruckPlayer(t);
           // Keep the trap — it can catch both players
         }
       }

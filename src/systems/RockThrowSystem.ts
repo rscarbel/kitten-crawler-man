@@ -88,6 +88,17 @@ interface Rock {
   aimedAt: Player | null;
   thrower: Player | null;
   owner: Player | null;
+  /**
+   * The mob that threw it, so a hit can be recorded against it. Named apart from
+   * `thrower` and `owner`, which are the *player-like* views of the same throw —
+   * the self-hit exclusion and the kill-credit holder respectively.
+   *
+   * The whole point of this system is that a boulder outlives its golem, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the golem precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  attacker: Mob;
 }
 
 interface Burst {
@@ -175,6 +186,7 @@ export class RockThrowSystem implements GameSystem {
           aimedAt: thrown.aimedAt,
           thrower: thrown.thrower,
           owner: thrown.owner,
+          attacker: mob,
         });
       }
     }
@@ -264,7 +276,8 @@ export class RockThrowSystem implements GameSystem {
       target.takeDamageFrom(damage, rock.owner ?? rock.thrower, 'melee');
       return;
     }
-    target.takeDamage(damage, source);
+    const connected = target.takeDamage(damage, source);
+    if (connected) rock.attacker.noteStruckPlayer(target);
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Player } from '../Player';
 import type { DamageSource } from '../Player';
+import type { StatusEffect } from '../core/StatusEffect';
 import type { GameMap } from '../map/GameMap';
 import { verticalCollisionOffset } from '../map/collisionAnchors';
 import type { ItemId } from '../core/ItemDefs';
@@ -166,6 +167,16 @@ const MOB_COLLISION_BACK_FRACTION = 0.28;
 
 /** Frames to show the health bar after taking damage (~3 seconds at 60 fps). */
 const HEALTH_BAR_VISIBLE_FRAMES = 180;
+/**
+ * A tick's share of that.
+ *
+ * Sized under the two-second gap between sepsis and poison ticks, because those
+ * two are the ones that can outlast a fight — sepsis never expires at all — and
+ * a bar that outlives the gap between its own ticks never goes out. The faster
+ * DoTs (burn, spit venom) do hold the bar unbroken, which is correct: they are
+ * seconds long, and a creature visibly on fire is a creature worth a bar.
+ */
+const STATUS_TICK_HEALTH_BAR_FRAMES = 90;
 /** Frame count for damage flash. */
 const MOB_DAMAGE_FLASH_FRAMES = 8;
 /** Frames at which health bar starts fading out. */
@@ -300,6 +311,73 @@ export abstract class Mob extends Player {
 
   /** Tracks how much damage each player has dealt to this mob (for XP split). */
   readonly damageTakenBy = new Map<Player, number>();
+
+  private _hasStruckPlayer = false;
+  private _framesSinceStruckPlayer = Number.MAX_SAFE_INTEGER;
+
+  /**
+   * Whether this mob has actually landed a blow on a crawler.
+   *
+   * Half of the companion's answer to "is this fight ours" — the other half is
+   * {@link wasDamagedByParty}. `currentTarget` used to stand in for both, and it
+   * cannot: it is set by proximity, sometimes without line of sight, so a mob
+   * that had merely turned its head read as a mob the party was fighting. That
+   * is what sent the companion across the level after something behind a wall,
+   * and what let it open a boss fight through a doorway nobody had crossed.
+   * Blood is a fact; noticing is not.
+   */
+  get hasStruckPlayer(): boolean {
+    return this._hasStruckPlayer;
+  }
+
+  /**
+   * Frames since this mob last landed a blow on a crawler, and effectively
+   * infinite for one that never has.
+   *
+   * {@link hasStruckPlayer} answers "has this mob ever fought us", which is the
+   * right question for a boss room — a fight, once started, has started. It is
+   * the wrong question for "is this mob biting the player *now*", because it
+   * latches for good: a wasp that spat on somebody once at the top of the floor
+   * would read as an active threat for the rest of it.
+   */
+  get framesSinceStruckPlayer(): number {
+    return this._framesSinceStruckPlayer;
+  }
+
+  /**
+   * Whether either crawler has landed a blow on this mob — read off the damage
+   * ledger, which only real damage writes to, rather than exposing the map.
+   *
+   * Credited rather than literal, so a wound the pet dealt counts as the cat's:
+   * a mob the party's summon is fighting is a mob the party is fighting.
+   */
+  get wasDamagedByParty(): boolean {
+    for (const dealer of this.damageTakenBy.keys()) {
+      if (dealer.xpCreditTarget.isCrawler) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Record that one of this mob's attacks landed on `target`.
+   *
+   * Called for you by {@link dealDamage} and {@link dealPreScaledDamage}. Any
+   * other route a mob's harm can take must call it itself, or the companion
+   * will not count that mob as having engaged anybody — and half the game's
+   * damage takes another route. A subclass that prices its own blow (a
+   * trample, a roll) does it inline; an arrow, a bolt or a thrown rock is
+   * resolved by the system that owns the projectile, long after the mob that
+   * launched it has moved on, which is why this is public rather than
+   * protected.
+   *
+   * Only ever called for a blow that actually connected: a swing the target
+   * dodged, or one a safe room swallowed, is not blood.
+   */
+  noteStruckPlayer(target: Player): void {
+    if (!target.isCrawler) return;
+    this._hasStruckPlayer = true;
+    this._framesSinceStruckPlayer = 0;
+  }
 
   /** Set to true on the frame this mob's HP reaches 0; game loop reads and resets it. */
   justDied = false;
@@ -607,7 +685,7 @@ export abstract class Mob extends Player {
    * Whether a checkpoint restore should fully reset this mob — teleport it back
    * to its spawn tile and clear its aggro/phase state via `resetToSpawn()` —
    * rather than just healing it and clearing status effects in place via
-   * `clearCombatStateForCheckpoint()`.
+   * `healAndForgetFight()`.
    *
    * Defaults to {@link isHostile}: an enemy's spawn tile is where the encounter
    * began, so a death should rewind it there. Override to `true` for a
@@ -822,6 +900,7 @@ export abstract class Mob extends Player {
     }
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
     const connected = target.takeDamage(this.scaledDamage(baseDamage), source);
+    if (connected) this.noteStruckPlayer(target);
     this.attackSoundPending = true;
     return connected;
   }
@@ -846,6 +925,7 @@ export abstract class Mob extends Player {
     }
     const source: DamageSource = { kind: 'mob', mobType: this.mobType, attackType };
     const connected = target.takeDamage(damage, source);
+    if (connected) this.noteStruckPlayer(target);
     this.attackSoundPending = true;
     return connected;
   }
@@ -1290,14 +1370,59 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether this mob currently refuses all damage.
+   *
+   * A scripted boss hiding behind something the party has to destroy first —
+   * Grimaldi's tendrils, Miss Quill's capacitor — is the only user. This is
+   * *the* switch: every route into this mob's health asks it, the swung one and
+   * the damage-over-time one alike. A shield that guarded only the swing let one
+   * crown proc dissolve the whole "kill the adds first" mechanic and be paid the
+   * kill credit, the XP and the boss chest for doing it.
+   */
+  protected get isDamageImmune(): boolean {
+    return false;
+  }
+
+  /**
+   * Shows the player that a blow was refused rather than missed. Overridden by
+   * whichever boss is doing the refusing, because the tell belongs to its own
+   * art — a flare across the tendrils, a crack of the capacitor's field.
+   */
+  protected onDamageBlocked(): void {
+    // Nothing to show by default; only a shielded boss has a tell.
+  }
+
+  /**
+   * A shield that swallows the damage swallows the cause with it.
+   *
+   * Otherwise the sepsis a crown proc paid for lands on a boss that cannot be
+   * hurt, counts its duration down against the shield, and is gone by the time
+   * the tendrils are — which is worse than not proccing at all, because the
+   * player watched it apply.
+   */
+  override applyStatus(effect: StatusEffect): void {
+    if (this.isDamageImmune) return;
+    super.applyStatus(effect);
+  }
+
+  /**
    * Deal damage and attribute it to an attacker for kill-credit / XP tracking.
    * Also triggers the damage flash and shows the health bar.
+   *
+   * `damageType` names the weapon, and takes `null` for harm an attacker owns
+   * but swung nothing for — a damage-over-time tick they applied. Everything
+   * that keys off `killType` already treats null as "not killed by a blow", so
+   * a status finish trains no weapon skill while still crediting the kill.
    */
   takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ) {
+    if (this.isDamageImmune) {
+      this.onDamageBlocked();
+      return;
+    }
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - amount);
     const actual = prev - this.hp;
@@ -1340,30 +1465,70 @@ export abstract class Mob extends Player {
     this.killedBy = credited;
     this.killedByDealer = attacker;
     this.killType = damageType;
-    // Roll loot
-    const coins = randomInt(this.coinDropMin, this.coinDropMax);
-    const items = this.rollLootItems(credited);
-    if (coins > 0 || items.length > 0) {
-      this.droppedLoot = { coins, items };
+    const rolled = this.rollLootDrop(credited);
+    if (rolled.coins > 0 || rolled.items.length > 0) {
+      this.droppedLoot = rolled;
     }
   }
 
   /**
-   * Damage that arrives without an attacker — a burn, a poison tick, an acid
-   * pool, the doomsday clock. `Player.takeDamage` writes hp and nothing else, so
-   * a mob finished by one of these used to hit zero with `justDied` still false:
-   * no death event, and therefore no gore, no loot, no XP, and a nought-HP body
+   * One pass over this mob's loot table. Public because a boss chest must never
+   * open empty: the defeat-transition safety net in `DungeonScene` fills a chest
+   * the kill pipeline could not, and by then `droppedLoot` may be null because
+   * the original roll came up with nothing at all.
+   *
+   * @param killer Who the roll is for — subclasses give different drops to
+   *   different crawlers. Null when nobody earned the kill.
+   */
+  rollLootDrop(killer: Player | null): LootDrop {
+    return {
+      coins: randomInt(this.coinDropMin, this.coinDropMax),
+      items: this.rollLootItems(killer),
+    };
+  }
+
+  /**
+   * Damage that arrives outside a swing — a burn, a poison tick, an acid pool,
+   * the doomsday clock. `Player.takeDamage` writes hp and nothing else, so a mob
+   * finished by one of these used to hit zero with `justDied` still false: no
+   * death event, and therefore no gore, no loot, no XP, and a nought-HP body
    * left standing in `mobs` and in the mob grid until something else culled it.
    *
-   * There is no attacker to credit and no weapon to name — the tick has no owner
-   * by the time it lands — so both go null, which is what every consumer of
-   * `killType` already treats as "not killed by a blow".
+   * A damage-over-time tick that somebody *applied* is a blow they landed, just
+   * a late one: it goes into the damage ledger and credits the kill, so the
+   * sepsis crown's proc earns its wearer the XP, the loot, the achievement and
+   * the boss chest exactly as the hit that applied it would have.
+   *
+   * `killType` stays null even then. The union names weapons — melee, missile,
+   * shell, smush — and a status is none of them; a DoT finish therefore trains
+   * no ability, which is the deliberate price of not having to teach every
+   * `killType` consumer a fifth case for a kill nobody aimed.
    */
   override takeDamage(amount: number, source?: DamageSource): boolean {
+    if (this.isDamageImmune) {
+      this.onDamageBlocked();
+      return false;
+    }
     const prev = this.hp;
     const connected = super.takeDamage(amount, source);
-    if (connected && this.hp === 0 && prev > 0 && !this.justDied) {
-      this._resolveDeath(null, null);
+    if (!connected) return false;
+    const applier = source?.kind === 'status' ? source.applier : null;
+    const dealt = prev - this.hp;
+    if (dealt > 0) {
+      // Raised to the tick's share, never lowered to it. Without a bar at all a
+      // mob melting to the sepsis crown gives the player nothing to read but
+      // the corpse at the end; with a bar held longer than the gap between
+      // ticks it never lapses, and sepsis is permanent, so every mob ever
+      // procced would wear one for the rest of the run. And a plain assignment
+      // would let a tick landing mid-fight cut short the longer bar the blow
+      // before it had earned.
+      this.healthBarTimer = Math.max(this.healthBarTimer, STATUS_TICK_HEALTH_BAR_FRAMES);
+      if (applier !== null) {
+        this.damageTakenBy.set(applier, (this.damageTakenBy.get(applier) ?? 0) + dealt);
+      }
+    }
+    if (this.hp === 0 && prev > 0 && !this.justDied) {
+      this._resolveDeath(applier, null);
     }
     return connected;
   }
@@ -1393,6 +1558,10 @@ export abstract class Mob extends Player {
     super.tickTimers();
     if (this.healthBarTimer > 0) this.healthBarTimer--;
     if (this.hitSlowFrames > 0) this.hitSlowFrames--;
+    // Saturating rather than wrapping: this counter is only ever compared
+    // against a small window, and a mob that has not hit anybody for two years
+    // of game time must not roll back around to "just did".
+    if (this._framesSinceStruckPlayer < Number.MAX_SAFE_INTEGER) this._framesSinceStruckPlayer++;
     this.losCacheAge++;
     if (this.noticeCacheFrames > 0) this.noticeCacheFrames--;
     if (this.alertedTo.size > 0) {
@@ -1667,9 +1836,11 @@ export abstract class Mob extends Player {
    * entirely; this is only ever called on the survivors.
    *
    * Boss subclasses with their own phase state (enrage, wind-ups, state
-   * machines) should override this and call `super.resetToSpawn()` first.
+   * machines) put that in {@link clearEncounterPhase} rather than overriding
+   * this, so that the other two ways a fight gets called off unwind it too.
    */
   resetToSpawn(): void {
+    this.clearEncounterPhase();
     this.x = this.spawnX;
     this.y = this.spawnY;
     this.hp = this.maxHp;
@@ -1679,6 +1850,8 @@ export abstract class Mob extends Player {
     this.killedByDealer = null;
     this.killType = null;
     this.damageTakenBy.clear();
+    this._hasStruckPlayer = false;
+    this._framesSinceStruckPlayer = Number.MAX_SAFE_INTEGER;
     this.alertedTo.clear();
     this.noticeCache.clear();
     this.justDied = false;
@@ -1696,6 +1869,28 @@ export abstract class Mob extends Player {
     this.clearAStarPath();
     this.clearStatusEffects();
     this.clearTransientCombatState();
+  }
+
+  /**
+   * Unwinds whatever this mob latched during a fight that is being called off:
+   * an enrage and the speed it bought, a wind-up half-played, a queued
+   * projectile, a phase the encounter cannot start in.
+   *
+   * A boss room can rewind a fight in three different ways — a checkpoint
+   * restore, an abort when nobody conscious is left inside, and the heal that
+   * undoes damage dealt to a boss nobody ever walked in on. All three mean the
+   * same thing to the boss: that fight did not happen. Without this, a Juicer
+   * chipped to a third of its health and left alone came back at full health
+   * and still permanently enraged, which is a harder boss than the one the
+   * party first met.
+   *
+   * No-op by default. Override it — not `resetToSpawn`, which calls this —
+   * anywhere a mob keeps state its own AI cannot climb back out of at full
+   * health, because the enrage checks are all `if (!isEnraged && hurt)` and
+   * never un-latch on their own.
+   */
+  protected clearEncounterPhase(): void {
+    // Nothing latched by default.
   }
 
   /**
@@ -1718,21 +1913,28 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Heals and clears combat state without moving the mob or touching its
-   * aggro/wander state — for non-hostile mobs (a hired mercenary) on a
-   * checkpoint restore. Not the pet: he is dismissed before this runs, so his
-   * spent HP reaches the save rather than being handed back for free. These are
-   * allies, not the encounter that killed the
-   * party, so they must not be teleported to their spawn tile like
-   * `resetToSpawn()` does; but they can still take real damage (a mercenary
-   * fights alongside the player) and must not stay critically wounded or
-   * poisoned once the party itself is fully healed.
+   * Heals this mob and unlearns the fight, without moving it or touching its
+   * wander state — every trace that it was ever in one, including the ledger
+   * the engagement checks read and any phase its own AI latched.
+   *
+   * Two callers, for the same reason. A non-hostile mob (a hired mercenary) on
+   * a checkpoint restore: an ally is not the encounter that killed the party,
+   * so it must not be teleported to its spawn tile the way `resetToSpawn()`
+   * does, but it can still take real damage and must not stay critically
+   * wounded once the party itself is fully healed. Not the pet — he is
+   * dismissed before that runs, so his spent HP reaches the save rather than
+   * being handed back for free. And a boss the party chipped at from outside
+   * its room and then walked away from, which has to be as untouched next time
+   * as it was the first time.
    */
-  clearCombatStateForCheckpoint(): void {
+  healAndForgetFight(): void {
+    this.clearEncounterPhase();
     this.hp = this.maxHp;
     this.currentTarget = null;
     this.retaliateMob = null;
     this.damageTakenBy.clear();
+    this._hasStruckPlayer = false;
+    this._framesSinceStruckPlayer = Number.MAX_SAFE_INTEGER;
     this.alertedTo.clear();
     this.noticeCache.clear();
     this.healthBarTimer = 0;

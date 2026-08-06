@@ -458,22 +458,20 @@ export class Mantid extends Mob {
 
   /**
    * Blocks every point of damage for the invincible second and throws a label
-   * instead.
+   * instead — every route into its health, not only the swung one. A burn or a
+   * crown proc ticking through the invincible second would put a hole in the
+   * one window this whole fight is built around.
    *
-   * The early return skips `damageTakenBy` on purpose: no damage was dealt, so
-   * no damage should be attributed, and a swing that hit a wall of chitin must
-   * not buy a share of the kill XP.
+   * Refusing the blow outright also keeps `damageTakenBy` clean: no damage was
+   * dealt, so none should be attributed, and a swing that hit a wall of chitin
+   * must not buy a share of the kill XP.
    */
-  override takeDamageFrom(
-    amount: number,
-    attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
-  ): void {
-    if (this.isImmune && amount > 0) {
-      this.pushImmuneLabel();
-      return;
-    }
-    super.takeDamageFrom(amount, attacker, damageType);
+  protected override get isDamageImmune(): boolean {
+    return this.isImmune;
+  }
+
+  protected override onDamageBlocked(): void {
+    this.pushImmuneLabel();
   }
 
   private pushImmuneLabel(): void {

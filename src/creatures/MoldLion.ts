@@ -92,6 +92,12 @@ export class MoldLion extends Mob {
         if (!t.isAlive) continue;
         if (Math.hypot(t.x - this.x, t.y - this.y) <= auraRangePx) {
           t.applyStatus(makePoison());
+          // Harm with no blow behind it still counts as this lion fighting the
+          // party: the companion decides whether to stay engaged on whether
+          // blood has been drawn, and a crawler being aura-poisoned to death is
+          // not a crawler nobody is attacking. Not one a safe room is holding,
+          // though — nothing reaches them, so nothing was drawn.
+          if (t.canBeHarmed) this.noteStruckPlayer(t);
           poisoned = true;
         }
       }

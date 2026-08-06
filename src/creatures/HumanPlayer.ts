@@ -61,6 +61,16 @@ export type HumanSpendableStat = StatName | 'explosivesHandling';
 export class HumanPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
   readonly crawlerKind = HUMAN_CRAWLER_KIND;
+
+  override get isCrawler(): boolean {
+    return true;
+  }
+
+  override get isSwinging(): boolean {
+    // The timer, not the phase: `attackPhase` records which limb threw the last
+    // blow and is never cleared, so reading it answers "has he ever punched".
+    return this.attackTimer > 0;
+  }
   /** Increases dynamite damage and throw distance. */
   explosivesHandling = 1;
 

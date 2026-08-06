@@ -105,8 +105,7 @@ export class Juicer extends Mob {
     this.isBoss = true;
   }
 
-  override resetToSpawn(): void {
-    super.resetToSpawn();
+  protected override clearEncounterPhase(): void {
     this.isEnraged = false;
     this.setBaseSpeed(JUICER_SPEED);
     this.state = 'idle';

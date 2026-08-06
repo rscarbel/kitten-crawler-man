@@ -511,7 +511,7 @@ export class BallOfSwine extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
     if (this.isDying) return;
     super.takeDamageFrom(this.throughHide(amount), attacker, damageType);
@@ -536,16 +536,25 @@ export class BallOfSwine extends Mob {
   /**
    * A killing blow that does not have to get past the hide.
    *
-   * Credited to the crawler it was charging — the best available guess for a status
-   * effect nobody is holding, while the XP split itself comes off the damage-share
-   * ledger regardless. Routed through the ordinary mob damage path rather than
-   * hand-rolled, so that ledger, the loot roll, the kill credit and the hit flash all
-   * behave exactly as they do for a sword: a boss that dropped nothing and awarded
-   * nothing because of *how* it died would read as a bug.
+   * Credited to whoever actually owns it: the crawler who applied the status,
+   * when the tick that landed it carries one, and otherwise the crawler it was
+   * charging — the best available guess for harm nobody is holding. Guessing
+   * where an answer exists is how the wrong crawler came to be handed this
+   * boss's loot and a melee kill they never made. Routed through the ordinary
+   * mob damage path rather than hand-rolled, so the ledger, the loot roll, the
+   * kill credit and the hit flash all behave exactly as they do for a sword: a
+   * boss that dropped nothing and awarded nothing because of *how* it died
+   * would read as a bug.
+   *
+   * `killType` follows the same rule the base class uses — a status is not a
+   * weapon, and calling one `melee` trained the human's pugilism off a kill the
+   * cat's crown scored.
    */
-  private takeUnreducedDamage(amount: number): void {
+  private takeUnreducedDamage(amount: number, source?: DamageSource): void {
     if (amount <= 0) return;
-    super.takeDamageFrom(amount, this.currentTarget, 'melee');
+    const applier = source?.kind === 'status' ? source.applier : null;
+    if (applier !== null) super.takeDamageFrom(amount, applier, null);
+    else super.takeDamageFrom(amount, this.currentTarget, 'melee');
     this.holdDeathForTheBurst();
   }
 
@@ -553,9 +562,8 @@ export class BallOfSwine extends Mob {
    * A status effect's damage tick.
    *
    * `Player.takeDamage` is where burn, poison and sepsis land. `Mob` overrides it
-   * so an ordinary mob at least dies properly, but the death it resolves is
-   * unattributed — no dealer in the ledger, so no XP and no kill credit. For this
-   * one that is not enough: its burst has to be *held*, and a plain tick would
+   * so an ordinary mob dies properly and credits whoever applied the status. For
+   * this one that is not enough: its burst has to be *held*, and a plain tick would
    * end it outright, so no Tusklings and no stairwell, and the Sepsis Crown the
    * cat can be wearing applies a *permanent* tick. A lethal tick is converted
    * into a real, credited mob death here instead.
@@ -572,7 +580,7 @@ export class BallOfSwine extends Mob {
     // `this.hp > 0` as well as `amount >= this.hp`, so the branch cannot be entered
     // for an already-dead ball and then return `true` having done nothing.
     if (amount > 0 && this.hp > 0 && amount >= this.hp) {
-      this.takeUnreducedDamage(this.hp);
+      this.takeUnreducedDamage(this.hp, source);
       return true;
     }
     return super.takeDamage(amount, source);
@@ -1096,7 +1104,8 @@ export class BallOfSwine extends Mob {
       // `takeDamage` dies unattributed — the trample has an owner, and
       // `takeDamageFrom` is what puts it in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else target.takeDamage(damage, trampleDamageSource(this.mobType));
+      else if (target.takeDamage(damage, trampleDamageSource(this.mobType)))
+        this.noteStruckPlayer(target);
       this.attackSoundPending = true;
       this.trampleCooldowns.set(target, TRAMPLE_COOLDOWN);
     }
@@ -1120,7 +1129,11 @@ export class BallOfSwine extends Mob {
    * the burst once the ball has queued it.
    */
   applyStenchTo(target: Player): void {
-    target.takeDamage(STENCH_DAMAGE, stenchDamageSource(this.mobType));
+    // The stench is undodgeable, so a blow that fails to land here failed
+    // because the target was untouchable — a safe room, god mode, i-frames.
+    // Neither the poison nor the engagement flag should outlive that.
+    if (!target.takeDamage(STENCH_DAMAGE, stenchDamageSource(this.mobType))) return;
+    this.noteStruckPlayer(target);
     target.applyStatus(makePoison());
   }
 

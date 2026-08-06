@@ -97,7 +97,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const hc = centerOf(human);
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
-    const nearHuman = mobGrid.queryCircle(hc.x, hc.y, range);
+    // Widened by a tile because the grid measures a mob's origin while the test
+    // below measures its centre: without the slack, reach is a third shorter
+    // swinging up or left than it is swinging down or right, and the narrow
+    // phase never gets to reject the candidates it was meant to.
+    const nearHuman = mobGrid.queryCircle(hc.x, hc.y, range + TILE_SIZE);
     let humanHit = false;
     for (const mob of nearHuman) {
       if (!mob.isAlive || !mob.isHostile) continue;
@@ -119,7 +123,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
           Math.random() < SEPSIS_PROC_CHANCE
         ) {
-          mob.applyStatus(makeSepsis());
+          mob.applyStatus(makeSepsis(human));
         }
       }
     }
@@ -138,7 +142,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const cc = centerOf(cat);
     const range = cat.getMeleeRange();
     const damage = cat.getMeleeDamage();
-    const nearCat = mobGrid.queryCircle(cc.x, cc.y, range);
+    const nearCat = mobGrid.queryCircle(cc.x, cc.y, range + TILE_SIZE);
     let catHit = false;
     for (const mob of nearCat) {
       if (!mob.isAlive || !mob.isHostile) continue;
@@ -160,7 +164,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
           cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
           Math.random() < SEPSIS_PROC_CHANCE
         ) {
-          mob.applyStatus(makeSepsis());
+          mob.applyStatus(makeSepsis(cat));
         }
       }
     }
@@ -314,7 +318,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
               cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
               Math.random() < SEPSIS_PROC_CHANCE
             ) {
-              mob.applyStatus(makeSepsis());
+              mob.applyStatus(makeSepsis(cat));
             }
 
             // Level 5+: AoE magic splash
@@ -455,13 +459,16 @@ export function resolveKills(ctx: CombatContext): void {
         const shockwaveRadius = TILE_SIZE * MISSILE_SHOCKWAVE_RADIUS_TILES;
         const cx = mob.x + HALF_TILE;
         const cy = mob.y + HALF_TILE;
-        const nearShock = mobGrid.queryCircle(cx, cy, shockwaveRadius);
+        // Widened for the same reason the melee queries are: the grid measures a
+        // mob's origin and the test below measures its centre, so without the
+        // slack the burn field comes up short on one side of the corpse.
+        const nearShock = mobGrid.queryCircle(cx, cy, shockwaveRadius + TILE_SIZE);
         for (const nearMob of nearShock) {
           if (!nearMob.isAlive) continue;
           const sdx = nearMob.x + HALF_TILE - cx;
           const sdy = nearMob.y + HALF_TILE - cy;
           if (Math.hypot(sdx, sdy) < shockwaveRadius) {
-            nearMob.applyStatus(makeMagicBurn());
+            nearMob.applyStatus(makeMagicBurn(cat));
           }
         }
       }

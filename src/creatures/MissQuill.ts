@@ -87,17 +87,13 @@ export class MissQuill extends Mob {
     return this.shielded;
   }
 
-  override takeDamageFrom(
-    amount: number,
-    attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
-  ): void {
-    if (this.shielded) {
-      this.shieldHitFlashTimer = SHIELD_HIT_FLASH_FRAMES;
-      this.healthBarTimer = SHIELD_HIT_HEALTHBAR_FRAMES;
-      return;
-    }
-    super.takeDamageFrom(amount, attacker, damageType);
+  protected override onDamageBlocked(): void {
+    this.shieldHitFlashTimer = SHIELD_HIT_FLASH_FRAMES;
+    this.healthBarTimer = SHIELD_HIT_HEALTHBAR_FRAMES;
+  }
+
+  protected override get isDamageImmune(): boolean {
+    return this.shielded;
   }
 
   updateAI(targets: Player[]): void {

@@ -57,6 +57,15 @@ interface Arrow {
   readonly damage: number;
   readonly source: DamageSource;
   readonly aimedAt: Player | null;
+  /**
+   * The archer that loosed it, so a hit can be recorded against them.
+   *
+   * The whole point of this system is that a shaft outlives its archer, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the archer precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  readonly owner: Mob;
 }
 
 /** A shaft that has already stopped, left in the floor for a moment. */
@@ -119,11 +128,11 @@ export class GoblinArrowSystem implements GameSystem {
   private collectShots(mobs: readonly Mob[]): void {
     for (const mob of mobs) {
       if (!(mob instanceof GoblinArcher)) continue;
-      for (const shot of mob.takePendingShots()) this.launch(shot);
+      for (const shot of mob.takePendingShots()) this.launch(shot, mob);
     }
   }
 
-  private launch(shot: GoblinArrowShot): void {
+  private launch(shot: GoblinArrowShot, archer: Mob): void {
     const heading = normalize(shot.dirX, shot.dirY);
     this.arrows.push({
       x: shot.x,
@@ -135,6 +144,7 @@ export class GoblinArrowSystem implements GameSystem {
       // An arrow crossing open ground is exactly what dodge is for.
       source: { kind: 'mob', mobType: shot.mobType },
       aimedAt: shot.aimedAt,
+      owner: archer,
     });
   }
 
@@ -163,7 +173,8 @@ export class GoblinArrowSystem implements GameSystem {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(arrow.x - cx, arrow.y - cy) >= hitRadius) continue;
-        target.takeDamage(arrow.damage, arrow.source);
+        const connected = target.takeDamage(arrow.damage, arrow.source);
+        if (connected) arrow.owner.noteStruckPlayer(target);
         struck = true;
         break;
       }

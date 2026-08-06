@@ -188,8 +188,7 @@ export class TheHoarder extends Mob {
     this.vomitTimer = this.isEnraged ? VOMIT_INTERVAL_ENRAGED : VOMIT_INTERVAL;
   }
 
-  override resetToSpawn(): void {
-    super.resetToSpawn();
+  protected override clearEncounterPhase(): void {
     this.isEnraged = false;
     this.setBaseSpeed(HOARDER_SPEED);
     this.hoarderState = 'fleeing';
@@ -449,7 +448,7 @@ export class TheHoarder extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
     const prevHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);

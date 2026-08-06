@@ -124,7 +124,11 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     equippedEntries: p.inventory.equipment.entries(),
     tattooStat: p.tattooStat,
     skillTattoo: p.skillTattoo,
-    statusEffects: p.statusEffects.map((e) => ({ ...e })),
+    // The applier is dropped rather than copied: a snapshot is how a crawler
+    // crosses into another scene, and that scene builds its own crawlers, so a
+    // retained reference would credit a Player object nothing on the new map
+    // has ever heard of.
+    statusEffects: p.statusEffects.map((e) => ({ ...e, applier: null })),
     juggJuiceHpBoost: p.juggJuiceHpBoost,
     isActive: p.isActive,
     isKnockedOut: p.isKnockedOut,

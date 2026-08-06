@@ -958,7 +958,7 @@ console.log('\nwhat a blow actually costs him');
     // animal who cannot walk out of them.
     const beforeTicks = mongo.hp;
     for (let tick = 0; tick < STATUS_TICKS; tick++) {
-      mongo.takeDamage(1, { kind: 'status', effectType: 'poison' });
+      mongo.takeDamage(1, { kind: 'status', effectType: 'poison', applier: null });
     }
     const ticked = beforeTicks - mongo.hp;
     const expectedTicked = STATUS_TICKS * EXPECTED_DAMAGE_MULTIPLIER;

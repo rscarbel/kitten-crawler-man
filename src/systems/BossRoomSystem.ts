@@ -1,5 +1,5 @@
 import type { GameMap } from '../map/GameMap';
-import type { DamageSource } from '../Player';
+import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -24,12 +24,27 @@ interface VomitProjectile {
   dy: number;
   ttl: number;
   age: number;
+  /**
+   * The Hoarder that brought it up, so a hit can be recorded against her.
+   *
+   * A bolus in the air outlives her — this system keeps flying it after she
+   * dies — so this may reference a dead mob, which is fine: it is only ever read
+   * to note blood. Held on the record rather than on her precisely because a
+   * projectile stored on a mob is deleted in mid-air when that mob dies.
+   */
+  readonly owner: TheHoarder;
 }
 
 interface AcidPuddle {
   x: number;
   y: number;
   ttl: number;
+  /**
+   * The Hoarder whose bolus poured it. A pool routinely outlives her, which is
+   * why burning in one only counts as her blow while she is still alive — see
+   * `tickAcidPuddles`.
+   */
+  readonly owner: TheHoarder;
 }
 
 export interface BossRoomState {
@@ -57,6 +72,8 @@ export interface BossRoomCheckpoint {
   enteredRoomIndices: number[];
   humanIsInsider: boolean[];
   catIsInsider: boolean[];
+  unenteredRegenDelay: number[];
+  regenNoticeGiven: boolean[];
 }
 
 export const BOSS_META: Record<string, { displayName: string; color: string }> = {
@@ -68,6 +85,37 @@ export const BOSS_META: Record<string, { displayName: string; color: string }> =
 
 /** 30 seconds at 60 fps. */
 const ENTRY_WINDOW_FRAMES = 1800;
+
+/**
+ * Five seconds of nobody hurting an un-entered boss before it heals back up —
+ * the same cadence the abort-heal uses for a fight that had actually started.
+ * Long enough that an opener thrown from the threshold still counts for the
+ * player walking in behind it.
+ */
+const UNENTERED_BOSS_REGEN_DELAY_FRAMES = 300;
+
+/**
+ * Said when it happens, because a boss quietly refilling its health bar off
+ * screen is indistinguishable from the damage never having landed. The player
+ * has to be able to learn the rule from playing, and the rule is that a boss
+ * fight starts when you walk in.
+ */
+const UNENTERED_BOSS_REGEN_NOTICE = 'The boss is healing — this fight starts inside its room';
+
+/** How near a room the party must be for a notice about that room to be worth reading. */
+const REGEN_NOTICE_RANGE_TILES = 20;
+
+/**
+ * Drops every hazard a given boss laid, in place. In place because the arrays
+ * are held by reference — the renderer and the companion's hazard-avoidance
+ * both read them — and by owner because one system owns the hazards of every
+ * boss room on the floor at once.
+ */
+function removeOwnedBy(items: Array<{ readonly owner: Mob }>, owner: Mob): void {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].owner === owner) items.splice(i, 1);
+  }
+}
 
 const MAX_COCKROACHES = 5;
 /**
@@ -350,9 +398,35 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    */
   private humanIsInsider: boolean[];
   private catIsInsider: boolean[];
+  /** Frames each un-entered room's boss has gone unharmed; see `tickUnenteredBossRegen`. */
+  private readonly unenteredRegenDelay: number[];
+  /**
+   * Whether each room still had a living boss standing in it last frame.
+   *
+   * Starts true so a companion's boss-room veto holds from the first frame,
+   * before this system has looked at anything: assuming a fight is pending and
+   * being wrong costs a moment of caution, while assuming one is not and being
+   * wrong is the whole bug the veto exists to stop.
+   */
+  private readonly roomHasLivingBoss: boolean[];
+  /** Whether the un-entered-regen lesson has already been given for each room. */
+  private readonly regenNoticeGiven: boolean[];
 
   /** Set when a boss room is entered for the first time; cleared by DungeonScene. */
   newlyLockedBossType: string | null = null;
+
+  /**
+   * Rooms that flipped to `defeated` this frame, with the body that did it.
+   * Drained by `DungeonScene`, which uses it as the last line of defence on the
+   * boss chest: the kill pipeline is what normally fills the chest, and this
+   * exists for the deaths it cannot attribute — a boss nobody ever hit, killed
+   * by the environment, whose empty damage ledger leaves the loot gate closed.
+   *
+   * Deliberately a queue rather than a flag: two rooms can resolve on one frame,
+   * and a chest that stays locked because a second boss overwrote the first is
+   * the exact failure this is here to prevent.
+   */
+  readonly newlyDefeatedRooms: Array<{ roomIndex: number; boss: Mob }> = [];
 
   constructor(
     private readonly gameMap: GameMap,
@@ -373,10 +447,28 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.catLastOutside = gameMap.bossRooms.map(() => null);
     this.humanIsInsider = gameMap.bossRooms.map(() => false);
     this.catIsInsider = gameMap.bossRooms.map(() => false);
+    this.unenteredRegenDelay = gameMap.bossRooms.map(() => 0);
+    this.roomHasLivingBoss = gameMap.bossRooms.map(() => true);
+    this.regenNoticeGiven = gameMap.bossRooms.map(() => false);
   }
 
   getBossRoomStates(): BossRoomState[] {
     return this.states;
+  }
+
+  /**
+   * Whether this room still holds a boss fight nobody has had yet.
+   *
+   * The question a companion's veto actually wants answered. "Is this mob
+   * standing inside boss-room bounds" is not the same thing: those bounds
+   * outlive the fight, so once the boss is dead — or on a map that generated a
+   * room the level never put a boss in — every hostile that wanders into them
+   * would otherwise be invisible to the companion for the rest of the run.
+   */
+  isFightPending(state: BossRoomState): boolean {
+    if (state.defeated) return false;
+    const index = this.states.indexOf(state);
+    return index >= 0 && this.roomHasLivingBoss[index];
   }
 
   /**
@@ -420,6 +512,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       enteredRoomIndices: [...this.enteredRooms],
       humanIsInsider: [...this.humanIsInsider],
       catIsInsider: [...this.catIsInsider],
+      unenteredRegenDelay: [...this.unenteredRegenDelay],
+      regenNoticeGiven: [...this.regenNoticeGiven],
     };
   }
 
@@ -439,6 +533,10 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     for (const index of snapshot.enteredRoomIndices) this.enteredRooms.add(index);
     this.humanIsInsider = [...snapshot.humanIsInsider];
     this.catIsInsider = [...snapshot.catIsInsider];
+    for (let index = 0; index < this.unenteredRegenDelay.length; index++) {
+      this.unenteredRegenDelay[index] = snapshot.unenteredRegenDelay[index] ?? 0;
+      this.regenNoticeGiven[index] = snapshot.regenNoticeGiven[index] ?? false;
+    }
   }
 
   /**
@@ -446,10 +544,11 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * `levelDef.bossRooms[].type` (`'the_hoarder'`, `'juicer'`, `'krakaren_clone'`).
    *
    * A set of what is dead rather than a widening of `bossTypes` to public: that
-   * is the question every caller actually has, and it is the only authoritative
-   * answer. The `bossDefeated` event is not — `DungeonScene` emits the *class*
-   * name for `isBoss` mobs and separately emits snake_case for a couple of
-   * specific classes, so the strings are inconsistent and Krakaren fires twice.
+   * is the question every caller actually has, and it is the only answer that
+   * survives a scene rebuild. The `bossDefeated` event says the same thing in
+   * the same vocabulary, but it says it once, at the moment of the kill — a
+   * listener built after the fact, or rebuilt on a floor re-entry, never hears
+   * it at all.
    */
   get defeatedBossTypes(): ReadonlySet<string> {
     const defeated = new Set<string>();
@@ -569,10 +668,14 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
-      if (state.defeated) continue;
+      if (state.defeated) {
+        this.roomHasLivingBoss[i] = false;
+        continue;
+      }
 
       const boss = mobs.find((m) => m.isBoss && this.isEntityInRoom(m, state.bounds));
       const bossAlive = boss?.isAlive ?? false;
+      this.roomHasLivingBoss[i] = bossAlive;
 
       const humanInRoom = this.isEntityInRoom(human, state.bounds);
       const catInRoom = this.isEntityInRoom(cat, state.bounds);
@@ -588,6 +691,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           this.humanIsInsider[i] = false;
           this.catIsInsider[i] = false;
           this.miniMap.revealBossNeighborhood(state.bounds);
+          if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
+        } else if (!humanInRoom && !catInRoom && boss !== undefined) {
+          // An aborted room is still a room nobody is standing in, so the rule
+          // that a boss cannot be emptied from the corridor has to reach it —
+          // otherwise this is the one state in which it silently does not.
+          this.tickUnenteredBossRegen(i, boss, state, ctx.active);
         } else if (humanInRoom || catInRoom) {
           // Player entered to revive companion — reset insider state, start fresh.
           state.fightAborted = false;
@@ -612,6 +721,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // Start a new fight when a player enters a room with a living boss.
       if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
         state.locked = true;
+        // They walked in, so the lesson landed. A later retreat and a second
+        // poke earns it again.
+        this.regenNoticeGiven[i] = false;
         state.entryWindowTimer = ENTRY_WINDOW_FRAMES;
         this.humanIsInsider[i] = humanInRoom;
         this.catIsInsider[i] = catInRoom;
@@ -622,11 +734,33 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
 
       if (!state.locked) {
+        if (boss !== undefined && !bossAlive) {
+          // A boss can die without its room ever locking — sniped through the
+          // doorway, or finished by something the party left burning on it.
+          // Everything downstream of a boss room hangs off this transition, so
+          // without it the room stays "undefeated" for the rest of the run: no
+          // minimap reveal, no silver chest, and a gateway floor that will not
+          // let the party past a boss whose body is lying in front of them.
+          //
+          // Guarded on a boss actually existing rather than on `bossAlive`
+          // alone: a map can hold more boss rooms than the level populates, and
+          // an empty one would otherwise declare itself won on the first frame.
+          state.defeated = true;
+          state.defeatTimer = DEFEAT_TIMER_FRAMES;
+          this.humanIsInsider[i] = false;
+          this.catIsInsider[i] = false;
+          this.miniMap.revealBossNeighborhood(state.bounds);
+          this.newlyDefeatedRooms.push({ roomIndex: i, boss });
+          continue;
+        }
+        if (boss !== undefined && bossAlive)
+          this.tickUnenteredBossRegen(i, boss, state, ctx.active);
         // Room is open — track outside positions in case a fight starts next frame.
         this.humanLastOutside[i] = { x: human.x, y: human.y };
         this.catLastOutside[i] = { x: cat.x, y: cat.y };
         continue;
       }
+      this.unenteredRegenDelay[i] = 0;
 
       // Tick the entry window.
       if (state.entryWindowTimer > 0) state.entryWindowTimer--;
@@ -711,6 +845,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         this.humanIsInsider[i] = false;
         this.catIsInsider[i] = false;
         this.miniMap.revealBossNeighborhood(state.bounds);
+        if (boss) this.newlyDefeatedRooms.push({ roomIndex: i, boss });
         // Her swarm outlives her by exactly as long as it takes to die. Killed
         // through `justDied` they come apart and leave the mob grid the way
         // anything else does, rather than being spliced out of existence. The
@@ -737,9 +872,15 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         state.fightAborted = true;
         this.humanIsInsider[i] = false;
         this.catIsInsider[i] = false;
-        boss.hp = boss.maxHp;
-        this.vomitProjectiles.length = 0;
-        this.acidPuddles.length = 0;
+        // The whole fight is unwound, not only the health bar: the damage
+        // ledger the companion reads as "blood has been drawn here", and the
+        // phase the boss latched on the way down. Refilling HP alone left both,
+        // so an aborted fight permanently re-commissioned the companion against
+        // a boss standing at full health — and handed the party a Juicer back
+        // at full health that was still permanently enraged.
+        boss.healAndForgetFight();
+        removeOwnedBy(this.vomitProjectiles, boss);
+        removeOwnedBy(this.acidPuddles, boss);
         continue;
       }
     }
@@ -749,6 +890,72 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.tickCockroachTTLs(mobs, mobGrid);
     this.processVomitProjectiles(mobs, human, cat);
     this.tickAcidPuddles(human, cat);
+  }
+
+  /**
+   * Undoes damage dealt to a boss whose room nobody has walked into, once the
+   * party has stopped dealing it.
+   *
+   * The room lock is what makes a boss a boss fight — the intro, the entry
+   * window, the clamp, the abort-heal when the party is wiped or runs. All of
+   * it is skipped by standing in the corridor and shooting through the doorway,
+   * and a boss that cannot close the distance (the Krakaren does not move at
+   * all) has no answer to it whatsoever. The abort-heal already refuses that
+   * trade for a fight that *started*; this refuses it for one that never did.
+   *
+   * Five seconds from the first wound, and ongoing fire does not extend it.
+   * That is the whole rule: an opener thrown from the threshold still counts
+   * for the player who walks in behind it, and a party that would rather stand
+   * in the corridor emptying a health bar it can already reach is told, once,
+   * where the fight is. Measuring quiet instead was strictly worse — a cat
+   * firing several missiles a second never leaves a quiet frame, so the party
+   * that most needed telling was the one party the rule could never reach.
+   *
+   * The clock resets only when there is nothing to undo: a boss back at full
+   * health with a clean ledger. Walking in stops it another way — the room
+   * locks, and a locked room never reaches this at all.
+   */
+  private tickUnenteredBossRegen(
+    roomIndex: number,
+    boss: Mob,
+    state: BossRoomState,
+    active: HumanPlayer | CatPlayer,
+  ): void {
+    const untouched = boss.hp >= boss.maxHp && !boss.wasDamagedByParty;
+    if (untouched) {
+      this.unenteredRegenDelay[roomIndex] = 0;
+      return;
+    }
+    this.unenteredRegenDelay[roomIndex]++;
+    if (this.unenteredRegenDelay[roomIndex] < UNENTERED_BOSS_REGEN_DELAY_FRAMES) return;
+    this.unenteredRegenDelay[roomIndex] = 0;
+    boss.healAndForgetFight();
+    // The ground this boss flooded goes with its wounds — a restored Hoarder
+    // standing behind a wall of her own acid has sealed the doorway the notice
+    // is telling the player to use. Filtered by owner rather than emptied:
+    // these two arrays are shared by every room on the floor, and truncating
+    // them would delete another boss's live hazards mid-fight.
+    removeOwnedBy(this.vomitProjectiles, boss);
+    removeOwnedBy(this.acidPuddles, boss);
+    // Only to somebody close enough for it to mean anything. A line about a
+    // boss healing, read three rooms away in the middle of a different fight,
+    // is noise rather than the lesson it is meant to be.
+    if (!this.regenNoticeGiven[roomIndex] && this.isWithinNoticeRange(active, state.bounds)) {
+      this.regenNoticeGiven[roomIndex] = true;
+      active.queueSystemNotice(UNENTERED_BOSS_REGEN_NOTICE);
+    }
+  }
+
+  /** Whether this player is near enough a room for a notice about it to land. */
+  private isWithinNoticeRange(
+    player: { readonly x: number; readonly y: number },
+    bounds: { x: number; y: number; w: number; h: number },
+  ): boolean {
+    const tileX = player.x / TILE_SIZE;
+    const tileY = player.y / TILE_SIZE;
+    const dx = Math.max(bounds.x - tileX, 0, tileX - (bounds.x + bounds.w));
+    const dy = Math.max(bounds.y - tileY, 0, tileY - (bounds.y + bounds.h));
+    return Math.hypot(dx, dy) <= REGEN_NOTICE_RANGE_TILES;
   }
 
   /** Clamps a boss mob to its own boss room (call after mob AI runs each frame). */
@@ -875,6 +1082,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           dy: p.dy,
           ttl: PROJECTILE_TTL,
           age: 0,
+          owner: mob,
         });
       }
       mob.pendingVomitProjectiles.length = 0;
@@ -934,8 +1142,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const hitPlayer = humanHit || catHit;
       if (hitWall || proj.ttl <= 0 || hitPlayer) {
         this.vomitProjectiles.splice(i, 1);
-        if (humanHit) human.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
-        if (catHit) cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE);
+        if (humanHit && human.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE)) {
+          proj.owner.noteStruckPlayer(human);
+        }
+        if (catHit && cat.takeDamage(VOMIT_IMPACT_DAMAGE, VOMIT_IMPACT_DAMAGE_SOURCE)) {
+          proj.owner.noteStruckPlayer(cat);
+        }
         // A wall hit puddles where the bolus was, a player hit where it now is,
         // so the pool lands on them.
         const puddleX = hitWall ? proj.x : newX;
@@ -951,7 +1163,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
           !this.isPuddleCrowdedAt(puddleX, puddleY) &&
           !this.isUnderfootOfHoarder(mobs, puddleX, puddleY)
         ) {
-          this.acidPuddles.push({ x: puddleX, y: puddleY, ttl: PUDDLE_TTL });
+          this.acidPuddles.push({ x: puddleX, y: puddleY, ttl: PUDDLE_TTL, owner: proj.owner });
         }
       } else {
         proj.x = newX;
@@ -962,6 +1174,37 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
   }
 
+  /** The pool this player is standing in, if any. */
+  private puddleUnder(player: Player): AcidPuddle | null {
+    const centreX = player.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    const centreY = player.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+    for (const puddle of this.acidPuddles) {
+      if (Math.hypot(centreX - puddle.x, centreY - puddle.y) < ACID_PUDDLE_RADIUS) return puddle;
+    }
+    return null;
+  }
+
+  /**
+   * One player's acid burn. Returns the new unbroken-contact count, which the
+   * caller stores against that player.
+   */
+  private tickAcidFor(player: Player, contactFrames: number): number {
+    const puddle = this.puddleUnder(player);
+    if (puddle === null) return 0;
+
+    const frames = contactFrames + 1;
+    if (frames % ACID_DAMAGE_INTERVAL === 0) {
+      const connected = player.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
+      player.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
+      // Standing in a live Hoarder's acid is being in a fight with the Hoarder,
+      // so the burn counts as her blow. Only while she lives: a pool outlasts
+      // her, and reviving the flag for a dead boss would keep pointing the
+      // companion at a corpse.
+      if (connected && puddle.owner.isAlive) puddle.owner.noteStruckPlayer(player);
+    }
+    return frames;
+  }
+
   private tickAcidPuddles(human: HumanPlayer, cat: CatPlayer): void {
     for (let i = this.acidPuddles.length - 1; i >= 0; i--) {
       const puddle = this.acidPuddles[i];
@@ -969,40 +1212,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       if (puddle.ttl <= 0) this.acidPuddles.splice(i, 1);
     }
 
-    // Apply acid damage per player
-    const humanInAcid = this.acidPuddles.some(
-      (p) =>
-        Math.hypot(
-          human.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.x,
-          human.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.y,
-        ) < ACID_PUDDLE_RADIUS,
-    );
-    if (humanInAcid) {
-      this.humanAcidTick++;
-      if (this.humanAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        human.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
-        human.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
-      }
-    } else {
-      this.humanAcidTick = 0;
-    }
-
-    const catInAcid = this.acidPuddles.some(
-      (p) =>
-        Math.hypot(
-          cat.x + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.x,
-          cat.y + TILE_SIZE * ENTITY_TILE_CENTER_OFFSET - p.y,
-        ) < ACID_PUDDLE_RADIUS,
-    );
-    if (catInAcid) {
-      this.catAcidTick++;
-      if (this.catAcidTick % ACID_DAMAGE_INTERVAL === 0) {
-        cat.takeDamage(ACID_DAMAGE, ACID_PUDDLE_DAMAGE_SOURCE);
-        cat.damageFlash = ACID_DAMAGE_FLASH_FRAMES;
-      }
-    } else {
-      this.catAcidTick = 0;
-    }
+    this.humanAcidTick = this.tickAcidFor(human, this.humanAcidTick);
+    this.catAcidTick = this.tickAcidFor(cat, this.catAcidTick);
   }
 
   private tickCockroachTTLs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {

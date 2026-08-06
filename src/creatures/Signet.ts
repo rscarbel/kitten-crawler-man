@@ -193,7 +193,7 @@ export class Signet extends Mob {
   override takeDamageFrom(
     _amount: number,
     _attacker: Player | null,
-    _damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    _damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
     this.damageFlash = SIGNET_HIT_FLASH_FRAMES;
     this.healthBarTimer = SIGNET_HIT_HEALTHBAR_FRAMES;

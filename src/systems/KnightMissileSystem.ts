@@ -56,6 +56,15 @@ interface Missile {
   readonly dirY: number;
   readonly damage: number;
   readonly source: DamageSource;
+  /**
+   * The knight that threw it, so a hit can be recorded against him.
+   *
+   * The whole point of this system is that a bolt outlives its knight, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the knight precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  readonly owner: Mob;
   age: number;
 }
 
@@ -111,6 +120,7 @@ export class KnightMissileSystem implements GameSystem {
             mobType: released.mobType,
             attackType: KNIGHT_MISSILE_ATTACK_TYPE,
           },
+          owner: mob,
           age: 0,
         });
       }
@@ -127,7 +137,8 @@ export class KnightMissileSystem implements GameSystem {
 
       const victim = this.victimAt(missile, targets);
       if (victim !== null) {
-        victim.takeDamage(missile.damage, missile.source);
+        const connected = victim.takeDamage(missile.damage, missile.source);
+        if (connected) missile.owner.noteStruckPlayer(victim);
         this.burstAt(missile);
         continue;
       }

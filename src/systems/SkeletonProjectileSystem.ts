@@ -60,6 +60,15 @@ interface Projectile {
   readonly source: DamageSource;
   readonly burstSource: DamageSource;
   readonly aimedAt: Player | null;
+  /**
+   * The caster that fired it, so a hit can be recorded against them.
+   *
+   * The whole point of this system is that a shot outlives its caster, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the caster precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  readonly owner: Mob;
 }
 
 interface Burst {
@@ -119,11 +128,11 @@ export class SkeletonProjectileSystem implements GameSystem {
   private collectShots(mobs: readonly Mob[]): void {
     for (const mob of mobs) {
       if (!(mob instanceof SkeletonLord) && !(mob instanceof SkeletonArcher)) continue;
-      for (const shot of mob.takePendingShots()) this.launch(shot);
+      for (const shot of mob.takePendingShots()) this.launch(shot, mob);
     }
   }
 
-  private launch(shot: SkeletonShot): void {
+  private launch(shot: SkeletonShot, caster: Mob): void {
     const heading = normalize(shot.dirX, shot.dirY);
     const speed = shot.kind === 'soul_bolt' ? SOUL_BOLT_SPEED : BONE_ARROW_SPEED;
     this.projectiles.push({
@@ -140,6 +149,7 @@ export class SkeletonProjectileSystem implements GameSystem {
       source: { kind: 'mob', mobType: shot.mobType },
       burstSource: { kind: 'mob', mobType: shot.mobType, undodgeable: true },
       aimedAt: shot.aimedAt,
+      owner: caster,
     });
   }
 
@@ -171,7 +181,8 @@ export class SkeletonProjectileSystem implements GameSystem {
         const cx = target.x + TILE_SIZE * CENTER_OFFSET;
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(projectile.x - cx, projectile.y - cy) >= hitRadius) continue;
-        target.takeDamage(projectile.damage, projectile.source);
+        const connected = target.takeDamage(projectile.damage, projectile.source);
+        if (connected) projectile.owner.noteStruckPlayer(target);
         struck = target;
         break;
       }
@@ -207,7 +218,8 @@ export class SkeletonProjectileSystem implements GameSystem {
       const cx = target.x + TILE_SIZE * CENTER_OFFSET;
       const cy = target.y + TILE_SIZE * CENTER_OFFSET;
       if (Math.hypot(x - cx, y - cy) > radius) continue;
-      target.takeDamage(BURST_DAMAGE, projectile.burstSource);
+      const connected = target.takeDamage(BURST_DAMAGE, projectile.burstSource);
+      if (connected) projectile.owner.noteStruckPlayer(target);
     }
   }
 

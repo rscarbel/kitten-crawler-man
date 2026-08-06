@@ -543,14 +543,24 @@ export abstract class Player {
   }
 
   /**
+   * Whether anything can reach this character's health at all right now.
+   *
+   * The one list of blanket protections, so a caller that has to ask before it
+   * acts — a mob deciding whether the harm it just applied counts as having
+   * fought the party — cannot drift out of step with {@link takeDamage}.
+   */
+  get canBeHarmed(): boolean {
+    return !this.isProtected && !this.godMode && !this.isKnockedOut && this.invulnerableFrames <= 0;
+  }
+
+  /**
    * @returns whether the attack connected. False when it was dodged, or when the
    *   safe room, god mode, a knockout or i-frames swallowed it — attackers use
    *   this to hold back the status riders they apply alongside their damage, so a
    *   `MISS!` does not come with a helping of poison.
    */
   takeDamage(amount: number, source?: DamageSource): boolean {
-    if (amount <= 0 || this.isProtected || this.godMode || this.isKnockedOut) return false;
-    if (this.invulnerableFrames > 0) return false;
+    if (amount <= 0 || !this.canBeHarmed) return false;
     // Only a swung, thrown or bitten attack can be dodged. Status ticks, your own
     // dynamite, standing damage fields and the doomsday clock all land regardless.
     if (source?.kind === 'mob' && source.undodgeable !== true && this.rollDodge()) {
@@ -742,6 +752,18 @@ export abstract class Player {
 
   get xpCreditTarget(): Player {
     return this.creditTarget;
+  }
+
+  /**
+   * Whether this is one of the two playable crawlers.
+   *
+   * Mobs, summons and quest NPCs all share this base class, so "did that blow
+   * land on the party" has no other way to be asked without a chain of
+   * `instanceof` checks that would close an import cycle wherever it was
+   * written. Overridden to true by exactly two classes.
+   */
+  get isCrawler(): boolean {
+    return false;
   }
 
   gainXp(amount: number): boolean {
@@ -1008,6 +1030,19 @@ export abstract class Player {
       }
     }
     this.statusEffects = [];
+  }
+
+  /**
+   * Whether a melee swing is currently playing out.
+   *
+   * The follower AI reads it to leave a swinging companion's facing alone: it
+   * decides an attack, aims at the target, and then in the same frame walks the
+   * attacker somewhere else — and re-aiming at the step is how a companion cat
+   * came to claw at empty floor beside the thing she had just turned to hit,
+   * since both the sprite and the resolver's facing cone read the live value.
+   */
+  get isSwinging(): boolean {
+    return false;
   }
 
   /** Register (or overwrite) a named regen bonus. Value is a multiplier where 1 = no effect; bonuses above 1 stack additively. */

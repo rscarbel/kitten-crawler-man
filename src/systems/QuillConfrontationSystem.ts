@@ -145,6 +145,10 @@ export class QuillConfrontationSystem implements GameSystem {
       this.victoryHandled = true;
       this.progress.stage = 'quill_slain';
       this.victoryTimer = VICTORY_BANNER_FRAMES;
+      // The cue is played here rather than left to `AudioManager`'s
+      // `bossDefeated` handler: an interior encounter runs on a bus of its own
+      // that the audio system is never wired to, which is why every other sound
+      // in this scene is hand-played too.
       this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill });
       this.audio?.play('boss_defeated');
       this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });

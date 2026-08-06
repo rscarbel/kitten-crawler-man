@@ -70,18 +70,26 @@ export class RingmasterGrimaldi extends Mob {
     return this.invulnerable;
   }
 
+  protected override onDamageBlocked(): void {
+    this.hitFlashTimer = INVULN_HIT_FLASH_FRAMES;
+    this.healthBarTimer = INVULN_HIT_HEALTHBAR_FRAMES;
+  }
+
+  protected override get isDamageImmune(): boolean {
+    return this.invulnerable;
+  }
+
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
-    if (this.invulnerable) {
-      this.hitFlashTimer = INVULN_HIT_FLASH_FRAMES;
-      this.healthBarTimer = INVULN_HIT_HEALTHBAR_FRAMES;
-      return;
-    }
+    const before = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);
-    this.damageSoundPending = true;
+    // Gated on the wound actually landing: the base class refuses the blow while
+    // the tendrils live, and a pain cue for a hit his shield ate reads as him
+    // being hurt by something that cannot hurt him.
+    if (this.hp < before) this.damageSoundPending = true;
   }
 
   updateAI(targets: Player[]): void {

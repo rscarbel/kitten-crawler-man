@@ -4,6 +4,7 @@ import {
   FOLLOWER_SPEED,
   CAT_KITE_DIST,
   CAT_BEHIND_HUMAN_OFFSET,
+  COMPANION_LEASH_PX,
   HUMAN_ENGAGE_RANGE,
 } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -21,6 +22,8 @@ type Entity = {
   isMoving: boolean;
   facingX: number;
   facingY: number;
+  /** See {@link CompanionSystem.companionFollow} for why the follower reads this. */
+  readonly isSwinging: boolean;
 };
 
 export type MovementMode = 'follow' | 'anchored';
@@ -92,6 +95,36 @@ const PATHFINDING_RECALC_FRAMES = 30;
  */
 const COMPANION_MAX_PATH_DISTANCE_TILES = 96;
 
+/**
+ * How long a companion refuses to re-acquire the mob it just broke its leash
+ * on. Mirrors `Mongo`'s own forget window, for the same reason: the drop is
+ * only half a disengage, and without the ban the companion turns around the
+ * moment it is back within range of what it just walked away from.
+ */
+const COMPANION_TARGET_BAN_FRAMES = 90;
+
+/**
+ * How much of her claw reach the cat holds at when she has stopped retreating.
+ * Comfortably inside it rather than on the edge, so the swipe still connects
+ * when the pursuer's own separation shove nudges her back a few pixels.
+ */
+const CLAW_HOLD_FRACTION = 0.8;
+
+/**
+ * How much health the cat needs before she will stand her ground for a swipe.
+ * Above this the trade is a small bonus; below it the missile she can fire from
+ * across the room is the only thing keeping her upright.
+ */
+const CAT_BRAWL_MIN_HP_FRACTION = 0.6;
+/**
+ * How many hostiles may be near her before standing her ground stops being a
+ * trade and becomes a mugging. One is a duel; the second is a free hit on the
+ * crawler with the smallest health pool in the game.
+ */
+const CAT_BRAWL_MAX_CROWD = 1;
+/** The crowd is counted a little beyond claw reach, so she reads a swarm closing rather than one already on her. */
+const CAT_BRAWL_CROWD_RADIUS_MULTIPLIER = 2;
+
 /** Floor on how often a goal-tile change may trigger a fresh companion path. */
 const MIN_REPATH_GAP_FRAMES = 8;
 /** Sentinel goal tile for a freshly created path cache — no real tile is negative. */
@@ -134,6 +167,17 @@ export class CompanionSystem implements GameSystem {
 
   /** Reused result set for companion proximity queries. */
   private readonly _proximityQuery = new Set<Mob>();
+
+  /** Mobs the companion broke its leash on, mapped to frames of ban remaining. */
+  private readonly targetBans = new Map<Mob, number>();
+
+  /**
+   * Whether the cat had a missile ready this frame, sampled before she spends
+   * it. The kite reads it to decide whether backing off is worth anything —
+   * see {@link catStandOff} — and by the time the kite runs, the shot has
+   * already been fired and the cooldown already restarted.
+   */
+  private catMissileWasReady = true;
 
   private companionPaths = new Map<
     object,
@@ -235,7 +279,7 @@ export class CompanionSystem implements GameSystem {
 
   /** Update both companion AI (auto-target) and companion follower movement. */
   update(ctx: SystemContext): void {
-    const { human, cat, mobs, mobGrid, activeIsMoving } = ctx;
+    const { human, cat, mobGrid, activeIsMoving } = ctx;
     // Track human idle frames
     if (human.isActive) {
       if (activeIsMoving) this.humanIdleFrames = 0;
@@ -244,14 +288,20 @@ export class CompanionSystem implements GameSystem {
       this.humanIdleFrames = 0;
     }
 
+    // Ahead of the knockout check: a ban is a wall-clock penalty on the
+    // companion, and freezing it through a knockout and a revive would leave a
+    // mob still banned minutes after the chase that banned it.
+    this.tickTargetBans();
+
     const companion = human.isActive ? cat : human;
     if (companion.isKnockedOut) {
       companion.isMoving = false;
       return;
     }
 
-    this.updateAutoAI(human, cat, mobs, mobGrid, ctx.bossRoom);
-    this.updateFollower(human, cat, mobGrid);
+    const chaseBlocked = this.isLeashStretched(human, cat, ctx.bossRoom);
+    this.updateAutoAI(human, cat, mobGrid, ctx.bossRoom, chaseBlocked);
+    this.updateFollower(human, cat, mobGrid, chaseBlocked);
   }
 
   entityMoveWithCollision(entity: { x: number; y: number }, dx: number, dy: number): void {
@@ -306,25 +356,42 @@ export class CompanionSystem implements GameSystem {
   private updateAutoAI(
     human: HumanPlayer,
     cat: CatPlayer,
-    mobs: Mob[],
     mobGrid: SpatialGrid<Mob>,
     bossRoom: BossRoomSystem | undefined,
+    chaseBlocked: boolean,
   ): void {
-    // Returns true if a mob is inside a boss room that the active player hasn't entered,
-    // AND the mob hasn't initiated combat against either player.
-    // In that case the companion should not proactively target it.
+    // Whether a mob sits in a boss room whose fight has not started, in which
+    // case the companion must leave it alone.
+    //
+    // Engagement is harm or entry, never notice. A mob's `currentTarget` used to
+    // stand in for "the fight is on", and it cannot: the Krakaren's aggro radius
+    // reaches out through its own doorway, so it acquired a crawler standing in
+    // the corridor, the veto lifted, and the companion cat shot an untouched
+    // boss to death through a wall — no intro, no room lock, no chest.
     const isUntriggeredBossRoomMob = (m: Mob, activePlayer: { x: number; y: number }): boolean => {
       if (!bossRoom) return false;
       for (const state of bossRoom.getBossRoomStates()) {
         if (!bossRoom.isEntityInRoom(m, state.bounds)) continue;
-        // Mob is in a boss room — allow targeting only if the active player is also in that
-        // room or the mob has already attacked one of the players.
+        // A room whose fight is over — or that never had one — vetoes nothing.
+        // The bounds outlive the boss, and without this every goblin that later
+        // wandered into a cleared boss room was invisible to the companion for
+        // the rest of the run.
+        if (!bossRoom.isFightPending(state)) return false;
         const playerInRoom = bossRoom.isEntityInRoom(activePlayer, state.bounds);
-        const hasAttackedPlayers = m.currentTarget === human || m.currentTarget === cat;
-        return !playerInRoom && !hasAttackedPlayers;
+        const bloodDrawn = m.hasStruckPlayer || m.wasDamagedByParty;
+        return !playerInRoom && !state.locked && !bloodDrawn;
       }
       return false;
     };
+
+    this.breakStretchedLeash(human, cat, chaseBlocked);
+    // Capped at the leash, because a job the companion has to break its leash to
+    // start is a job it will be pulled off two seconds later — and then re-given
+    // the moment the ban lapses, which is a lap rather than a disengage.
+    const nearPlayerRange = Math.min(
+      HUMAN_ENGAGE_RANGE * NEARBY_PLAYER_RANGE_MULTIPLIER,
+      COMPANION_LEASH_PX,
+    );
 
     if (human.isActive) {
       // Clear cat's target if it's dead or became an avoid-instead mob
@@ -334,46 +401,68 @@ export class CompanionSystem implements GameSystem {
       // Also clear if the current target is in an untriggered boss room
       if (cat.autoTarget && isUntriggeredBossRoomMob(cat.autoTarget, human)) cat.autoTarget = null;
 
-      // While companion is being recalled, don't auto-assign new targets
+      // While the companion is being recalled, nothing is assigned at all.
       if (!this._followOverride) {
-        const nearPlayerRange = HUMAN_ENGAGE_RANGE * NEARBY_PLAYER_RANGE_MULTIPLIER;
-        if (this.catStance.combatStance === 'aggressive') {
-          // Only pull cat into combat if the mob is within range of the active player;
-          // prevents the companion chasing back to distant fights after a follow recall.
-          const mobTargetingCat = this.findMobTargetingNearPlayer(
-            mobGrid,
-            human,
-            cat,
-            nearPlayerRange,
-            isUntriggeredBossRoomMob,
-          );
-          const mobTargetingHuman =
-            mobs.find(
-              (m) =>
-                m.isAlive &&
-                !m.avoidInstead &&
-                !isUntriggeredBossRoomMob(m, human) &&
-                m.currentTarget === human,
-            ) ?? null;
+        // Something chewing on the companion herself is hers to answer, leash or
+        // no leash: the leash is there to stop a chase, not to disarm the
+        // crawler being chased. In practice it rarely has to do anything —
+        // heading home she outruns every mob in the game — but the frames where
+        // it does are the ones where a six-health cat is being hit and has no
+        // other reason to be allowed to hit back.
+        const mobTargetingCat = this.findMobTargetingNear(
+          mobGrid,
+          cat,
+          cat,
+          nearPlayerRange,
+          human,
+          isUntriggeredBossRoomMob,
+        );
+        // Joining the player's fight is the part the leash does govern — and
+        // without the gate the drop below is undone on the frame it happens,
+        // because whatever the companion just walked away from is still the
+        // nearest thing it can see.
+        const mobTargetingHuman =
+          this.catStance.combatStance === 'aggressive' && !chaseBlocked
+            ? this.findMobTargetingNear(
+                mobGrid,
+                human,
+                human,
+                nearPlayerRange,
+                human,
+                isUntriggeredBossRoomMob,
+              )
+            : null;
 
-          if (mobTargetingCat) {
-            cat.autoTarget = mobTargetingCat;
-          } else if (!cat.autoTarget && mobTargetingHuman) {
-            cat.autoTarget = mobTargetingHuman;
-          }
-        } else {
-          // Passive — only retaliate when a mob is actively targeting the cat
-          cat.autoTarget ??= this.findMobTargetingNearPlayer(
-            mobGrid,
-            human,
-            cat,
-            nearPlayerRange,
-            isUntriggeredBossRoomMob,
-          );
+        if (mobTargetingCat) {
+          cat.autoTarget = mobTargetingCat;
+        } else if (!cat.autoTarget && mobTargetingHuman) {
+          cat.autoTarget = mobTargetingHuman;
         }
       }
 
-      if (cat.autoTarget && this.hasSightLine(cat, cat.autoTarget)) cat.autoFireTick();
+      // Read before the shot, not after, and outside the sight test: the kite
+      // asks this on every frame it runs, while `autoFireTick` writes the
+      // cooldown it starts. Sampled afterwards it always answers "cooling", and
+      // sampled only when she can see would leave a stale answer standing her
+      // in melee range of something behind a pillar that she can neither shoot
+      // nor reach.
+      this.catMissileWasReady = cat.missileCooldownCurrent === 0;
+      if (cat.autoTarget && this.hasSightLine(cat, cat.autoTarget)) {
+        // The missile first, always, and the claw in the gaps between casts.
+        // Her missile out-damages her claw several times over at every ability
+        // level, so a swipe that costs her a shot is a straight loss — but the
+        // frames between shots used to be frames a companion with one attack
+        // spent doing nothing at all, however close the thing chewing on her
+        // was. That is what the claw is for.
+        // Captured first: `autoFireTick` drops the target if it died between
+        // acquisition and the shot, and the distance test below would then be
+        // measured against nothing.
+        const target = cat.autoTarget;
+        const fired = cat.autoFireTick();
+        if (!fired && this.centreDistance(cat, target) <= cat.getMeleeRange()) {
+          cat.autoMeleeTick();
+        }
+      }
     } else {
       // Clear human's target if it's dead or became an avoid-instead mob
       if (human.autoTarget && (!human.autoTarget.isAlive || human.autoTarget.avoidInstead))
@@ -383,36 +472,45 @@ export class CompanionSystem implements GameSystem {
       if (human.autoTarget && isUntriggeredBossRoomMob(human.autoTarget, cat))
         human.autoTarget = null;
 
-      if (!human.autoTarget) {
+      // Same rule the other way round: he answers whatever is hitting him
+      // regardless of the leash, and only goes looking for a fight when he is
+      // close enough to the player to be allowed one. A recall silences both,
+      // as it does for the cat — a companion being called back should not be
+      // picking new fights on the way.
+      if (!this._followOverride) {
+        human.autoTarget ??= this.findMobTargetingNear(
+          mobGrid,
+          human,
+          human,
+          nearPlayerRange,
+          cat,
+          isUntriggeredBossRoomMob,
+        );
+      }
+
+      if (!human.autoTarget && !this._followOverride && !chaseBlocked) {
         if (this.humanStance.combatStance === 'aggressive') {
           let closestDist = HUMAN_ENGAGE_RANGE;
           let closest: Mob | null = null;
           const nearHuman = mobGrid.queryCircle(human.x, human.y, HUMAN_ENGAGE_RANGE);
           for (const mob of nearHuman) {
             if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
+            if (this.targetBans.has(mob)) continue;
             if (isUntriggeredBossRoomMob(mob, cat)) continue;
             const dist = Math.hypot(mob.x - human.x, mob.y - human.y);
             if (dist >= closestDist) continue;
             // Picking an unseen target is what sent the companion jogging into a
-            // wall to fight something on the other side of it. A mob already
-            // fighting the party is exempt: that fight is known about, whether or
-            // not there is a clear line to it.
-            const isFightingParty = mob.currentTarget === human || mob.currentTarget === cat;
-            if (!isFightingParty && !this.hasSightLine(human, mob)) continue;
+            // wall to fight something on the other side of it. A mob that has
+            // actually spat on somebody — or been hit by somebody — is exempt:
+            // that fight is a known fact, wall or no wall. A vespa that has
+            // merely locked on through the bricks is not, and it was exactly
+            // that exemption that walked the human companion off the map.
+            const bloodDrawn = mob.hasStruckPlayer || mob.wasDamagedByParty;
+            if (!bloodDrawn && !this.hasSightLine(human, mob)) continue;
             closestDist = dist;
             closest = mob;
           }
           human.autoTarget = closest;
-        } else {
-          // Passive — only retaliate when a mob is actively targeting the human
-          human.autoTarget =
-            mobs.find(
-              (m) =>
-                m.isAlive &&
-                !m.avoidInstead &&
-                !isUntriggeredBossRoomMob(m, cat) &&
-                m.currentTarget === human,
-            ) ?? null;
         }
       }
 
@@ -420,28 +518,161 @@ export class CompanionSystem implements GameSystem {
     }
   }
 
-  /** Flee companion away from the nearest avoidInstead mob within fleeRadius px. Returns true if fleeing. */
+  /** Centre-to-centre distance between two tile-aligned entities, in world pixels. */
+  private centreDistance(
+    a: { readonly x: number; readonly y: number },
+    b: { readonly x: number; readonly y: number },
+  ): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  /** Counts every active target ban down, dropping the ones that have run out. */
+  private tickTargetBans(): void {
+    for (const [mob, framesLeft] of this.targetBans) {
+      if (framesLeft <= 1) this.targetBans.delete(mob);
+      else this.targetBans.set(mob, framesLeft - 1);
+    }
+  }
+
+  /**
+   * Drops the companion's target once the chase has pulled it further from the
+   * active player than {@link COMPANION_LEASH_PX}, and bans that mob briefly.
+   *
+   * Both halves are required. A drop on its own re-acquires the same mob the
+   * frame the companion gets home — it is still the nearest thing in range —
+   * and the companion spends the rest of the fight running laps. That is the
+   * lesson `Mongo`'s own leash had to learn, and the ban is what ends it.
+   *
+   * A mob that has drawn blood recently *and is still beside the party* is
+   * exempt from the ban, though never from the drop — so a chaser that follows
+   * the player home is picked straight back up, and nobody is left spectating a
+   * mauling. Exempting it from the drop as well was worse than not exempting it
+   * at all: anything that lands a hit every second or so then pins the
+   * companion at whatever range it likes.
+   *
+   * An anchored companion is exempt entirely. It is not chasing anything — the
+   * player parked it — and it already has a leash of its own to its anchor.
+   *
+   * So is a locked boss room, which is wider than the leash is long: the party
+   * is sealed in with the boss and neither of them can leave, so the distance
+   * the leash measures is the fight working as designed rather than a chase
+   * getting away from anybody. Cutting the companion loose there strands the
+   * player alone with a boss for as long as they hang back.
+   */
+  private isLeashStretched(
+    human: HumanPlayer,
+    cat: CatPlayer,
+    bossRoom: BossRoomSystem | undefined,
+  ): boolean {
+    if (this.stanceFor(human.isActive).movementMode !== 'follow') return false;
+    const companion = human.isActive ? cat : human;
+    const activePlayer = human.isActive ? human : cat;
+    if (this.sealedInTogether(companion, activePlayer, bossRoom)) return false;
+    return this.centreDistance(companion, activePlayer) > COMPANION_LEASH_PX;
+  }
+
+  /**
+   * Whether both crawlers are shut inside the same boss room.
+   *
+   * A boss room is wider than the leash is long, so the two of them are
+   * routinely further apart inside one than the leash allows — and neither can
+   * leave. Cutting the companion loose there strands the player alone with a
+   * boss for as long as they hang back.
+   *
+   * Both of them, in the *same* room, deliberately. Asking merely whether any
+   * room on the floor is locked switched the leash off floor-wide for the whole
+   * of every boss encounter, including for a companion that was outside the
+   * bounds when the door shut and is under no clamp at all — which is the
+   * cross-map runaway, re-enabled at exactly the time adds are on the floor.
+   */
+  private sealedInTogether(
+    companion: HumanPlayer | CatPlayer,
+    activePlayer: HumanPlayer | CatPlayer,
+    bossRoom: BossRoomSystem | undefined,
+  ): boolean {
+    if (!bossRoom) return false;
+    for (const state of bossRoom.getBossRoomStates()) {
+      if (!state.locked) continue;
+      if (
+        bossRoom.isEntityInRoom(activePlayer, state.bounds) &&
+        bossRoom.isEntityInRoom(companion, state.bounds)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private breakStretchedLeash(human: HumanPlayer, cat: CatPlayer, stretched: boolean): void {
+    if (!stretched) return;
+    const companion = human.isActive ? cat : human;
+    const activePlayer = human.isActive ? human : cat;
+    const quarry = companion.autoTarget;
+    if (quarry === null) return;
+
+    // Always dropped. Holding it instead — however good the reason — leaves the
+    // companion pathing at something up to ninety-six tiles away with nothing
+    // bounding it, which is the runaway this whole leash exists to end.
+    companion.autoTarget = null;
+
+    // Recently, not ever. `hasStruckPlayer` is a latch that never clears, so a
+    // wasp that spat on somebody once at the start of the floor would be exempt
+    // for the rest of it — the original runaway again, wearing the exemption
+    // meant to prevent a different one.
+    const stillBiting = quarry.framesSinceStruckPlayer < COMPANION_TARGET_BAN_FRAMES;
+    // And still where the *player* is. Measured against the companion instead,
+    // or as well, the clause is satisfied by construction — the mob it just
+    // chased is the mob it is now standing next to — so the ban is never set
+    // and the same target is re-acquired on the same frame, forever. A chaser
+    // that follows the player home is picked straight back up, which is the
+    // whole point of the exemption; an archer plinking from where it stands is
+    // left behind, which is the whole point of the leash.
+    const nearParty = this.centreDistance(quarry, activePlayer) <= COMPANION_LEASH_PX;
+    if (stillBiting && nearParty) return;
+    this.targetBans.set(quarry, COMPANION_TARGET_BAN_FRAMES);
+  }
+
   /**
    * The nearest engageable mob that is chasing `quarry` and is itself within
-   * `range` of `human` — the gate that stops a companion running back across
-   * the level to a fight the player has walked away from.
+   * `range` of `centre` — always the quarry's own neighbourhood, so the answer
+   * to "is something biting this crawler" does not depend on where the *other*
+   * crawler happens to be standing. What stops the companion running back
+   * across the level to a fight the player has left is the leash, which bounds
+   * the whole acquisition before this is ever called.
+   *
+   * `activePlayer` is passed on to the boss-room veto, which asks whether the
+   * player driving the party is standing in the room; it is not always the same
+   * crawler as `centre` or as `quarry`.
    */
-  private findMobTargetingNearPlayer(
+  private findMobTargetingNear(
     mobGrid: SpatialGrid<Mob>,
-    human: HumanPlayer,
+    centre: { readonly x: number; readonly y: number },
     quarry: HumanPlayer | CatPlayer,
     range: number,
+    activePlayer: HumanPlayer | CatPlayer,
     isUntriggeredBossRoomMob: (mob: Mob, activePlayer: { x: number; y: number }) => boolean,
   ): Mob | null {
     this._proximityQuery.clear();
-    const nearby = mobGrid.queryCircle(human.x, human.y, range, this._proximityQuery);
+    const nearby = mobGrid.queryCircle(centre.x, centre.y, range, this._proximityQuery);
+    // Genuinely the nearest, rather than whichever the grid's Set happened to
+    // hand over first. At this radius several mobs routinely qualify, and a
+    // companion that picks an arbitrary one of them fights a different enemy
+    // depending on spawn order.
+    let closest: Mob | null = null;
+    let closestDistSq = range * range;
     for (const mob of nearby) {
       if (!mob.isAlive || mob.avoidInstead) continue;
       if (mob.currentTarget !== quarry) continue;
-      if (isUntriggeredBossRoomMob(mob, human)) continue;
-      return mob;
+      if (this.targetBans.has(mob)) continue;
+      if (isUntriggeredBossRoomMob(mob, activePlayer)) continue;
+      const dx = mob.x - centre.x;
+      const dy = mob.y - centre.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= closestDistSq) continue;
+      closestDistSq = distSq;
+      closest = mob;
     }
-    return null;
+    return closest;
   }
 
   private fleeFromAvoidMobs(
@@ -508,7 +739,12 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
-  private updateFollower(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
+  private updateFollower(
+    human: HumanPlayer,
+    cat: CatPlayer,
+    mobGrid: SpatialGrid<Mob>,
+    chaseBlocked: boolean,
+  ): void {
     if (this._followOverride) {
       const caster = human.isActive ? human : cat;
       const companion = human.isActive ? cat : human;
@@ -585,14 +821,31 @@ export class CompanionSystem implements GameSystem {
       return;
     }
 
+    if (chaseBlocked) {
+      // Past the leash, the companion's feet belong to the player whatever its
+      // hands are doing. It keeps whatever it is shooting back at — being
+      // stretched is not a reason to stand there and be hit — but walking home
+      // stops depending on the target having been successfully dropped, which
+      // is one latch too many to trust with the whole runaway.
+      const activePlayer = human.isActive ? human : cat;
+      this.companionFollow(
+        companion,
+        activePlayer.x,
+        activePlayer.y,
+        FOLLOWER_SPEED * RECALL_CHASE_SPEED,
+        TILE_SIZE * HUMAN_PURSUE_DISTANCE,
+      );
+      return;
+    }
+
     if (human.isActive) {
       if (cat.autoTarget?.isAlive) {
         const enemy = cat.autoTarget;
         if (enemy.currentTarget === cat) {
-          this.doCatKite(cat, enemy);
+          this.doCatKite(cat, enemy, mobGrid);
         } else if (enemy.currentTarget === human) {
           if (enemy.requiresEvasion) {
-            this.doCatKite(cat, enemy);
+            this.doCatKite(cat, enemy, mobGrid);
           } else {
             this.doCatBehindHuman(cat, human, enemy);
           }
@@ -664,12 +917,79 @@ export class CompanionSystem implements GameSystem {
     }
   }
 
-  private doCatKite(cat: CatPlayer, enemy: Mob): void {
+  /**
+   * How far the kiting cat tries to stay from what she is fighting.
+   *
+   * Her casting distance whenever she has a cast to make. While the missile is
+   * cooling she has nothing to protect that distance for, and giving more
+   * ground costs her the only other attack she owns: her claws reach a tile and
+   * a half, and the kite's usual stand-off is more than twice that, so a cat
+   * holding it through a cooldown is a cat doing nothing at all.
+   *
+   * She still never walks *in* — the hold is clamped to wherever she already
+   * is, so closing the gap is the pursuer's job and the swipe is its reward.
+   *
+   * And she only offers the trade at all when it is one she can win, because
+   * the claw is a rounding error next to a levelled missile while the exposure
+   * it buys is not: she has the smallest health pool in the game.
+   */
+  private catStandOff(
+    cat: CatPlayer,
+    enemy: Mob,
+    distToEnemy: number,
+    mobGrid: SpatialGrid<Mob>,
+  ): number {
+    if (this.catMissileWasReady) return CAT_KITE_DIST;
+    if (!this.catMayTradeBlows(cat, enemy, mobGrid)) return CAT_KITE_DIST;
+    return clamp(distToEnemy, cat.getMeleeRange() * CLAW_HOLD_FRACTION, CAT_KITE_DIST);
+  }
+
+  /**
+   * Whether standing her ground is a fight the cat should take.
+   *
+   * Four refusals, each earned. A boss or a telegraphed attacker is what the
+   * orbit exists for in the first place, and dodging by movement has to stay
+   * possible. A crowd kills her outright: her claw answers one pursuer, and the
+   * other four in a swarm simply get free hits on the six-health crawler while
+   * she takes it. Once she is already hurt, the missile she can fire from
+   * across the room is worth far more than the swipe she can trade for.
+   *
+   * And the trade has to be worth taking at all. Giving up the retreat costs
+   * her roughly the same health whatever she is fighting, while what it buys
+   * scales entirely with strength — so a cat who has put nothing into strength
+   * spends half a six-point health pool to add two damage a swing to a missile
+   * that was already killing the thing. Pricing one against the other is what
+   * makes strength the stat that decides it, which is the whole reason the claw
+   * exists on a companion at all. She still swipes whatever wanders into reach;
+   * she simply will not stop running to arrange it.
+   */
+  private catMayTradeBlows(cat: CatPlayer, enemy: Mob, mobGrid: SpatialGrid<Mob>): boolean {
+    if (enemy.isBoss || enemy.requiresEvasion) return false;
+    if (cat.hp < cat.maxHp * CAT_BRAWL_MIN_HP_FRACTION) return false;
+
+    const clawPerFrame = cat.getMeleeDamage() / cat.autoSwipeIntervalFrames;
+    const missilePerFrame = cat.getMissileDamage() / cat.autoFireIntervalFrames;
+    if (clawPerFrame < missilePerFrame) return false;
+
+    const crowdRadius = cat.getMeleeRange() * CAT_BRAWL_CROWD_RADIUS_MULTIPLIER;
+    this._proximityQuery.clear();
+    let closeHostiles = 0;
+    for (const mob of mobGrid.queryCircle(cat.x, cat.y, crowdRadius, this._proximityQuery)) {
+      if (!mob.isAlive || !mob.isHostile) continue;
+      if (this.centreDistance(cat, mob) > crowdRadius) continue;
+      closeHostiles++;
+      if (closeHostiles > CAT_BRAWL_MAX_CROWD) return false;
+    }
+    return true;
+  }
+
+  private doCatKite(cat: CatPlayer, enemy: Mob, mobGrid: SpatialGrid<Mob>): void {
     const ex = enemy.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const ey = enemy.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const cx = cat.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const cy = cat.y + TILE_SIZE * TILE_CENTER_OFFSET;
     const distToEnemy = Math.hypot(cx - ex, cy - ey);
+    const standOff = this.catStandOff(cat, enemy, distToEnemy, mobGrid);
 
     // Evasion-flagged enemies get a faster, less predictable orbit angle.
     const angleStep = enemy.requiresEvasion
@@ -678,7 +998,7 @@ export class CompanionSystem implements GameSystem {
       : CAT_EVADE_ANGLE_STANDARD;
     this.catKiteAngle += angleStep;
 
-    if (distToEnemy < CAT_KITE_DIST * KITE_DISTANCE_THRESHOLD) {
+    if (distToEnemy < standOff * KITE_DISTANCE_THRESHOLD) {
       if (distToEnemy > 0) {
         const nx = (cx - ex) / distToEnemy;
         const ny = (cy - ey) / distToEnemy;
@@ -694,10 +1014,8 @@ export class CompanionSystem implements GameSystem {
         cat.isMoving = true;
       }
     } else {
-      const targetX =
-        ex + Math.cos(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * TILE_CENTER_OFFSET;
-      const targetY =
-        ey + Math.sin(this.catKiteAngle) * CAT_KITE_DIST - TILE_SIZE * TILE_CENTER_OFFSET;
+      const targetX = ex + Math.cos(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET;
+      const targetY = ey + Math.sin(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET;
       this.companionFollow(
         cat,
         targetX,
@@ -873,7 +1191,13 @@ export class CompanionSystem implements GameSystem {
 
     this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
     entity.isMoving = true;
-    entity.facingX = moveNx;
-    entity.facingY = moveNy;
+    // A crawler mid-swing keeps the facing that swing committed to. The step
+    // still happens — the kite has to keep moving — but re-aiming at it would
+    // draw the companion clawing the floor beside whatever she is actually
+    // hitting, since the blow itself resolves against the committed facing.
+    if (!entity.isSwinging) {
+      entity.facingX = moveNx;
+      entity.facingY = moveNy;
+    }
   }
 }

@@ -183,14 +183,35 @@ export class TreasureChestSystem {
     });
   }
 
-  receiveBossLoot(bossRoomIndex: number, loot: LootDrop): void {
+  /** Whether this boss room still has a chest waiting to be handed its loot. */
+  hasLockedBossChest(bossRoomIndex: number): boolean {
+    return this.chests.some((c) => c.bossRoomIndex === bossRoomIndex && c.state === 'locked');
+  }
+
+  /**
+   * Hands a boss room's silver chest its loot and starts the unlock.
+   *
+   * @returns whether a locked chest was found. Missing one used to return in
+   *   silence, and the failure it hides — a defeated boss, an open door and a
+   *   chest that stays shut forever — cost a whole playtest before anyone could
+   *   name it. Callers that treat a miss as normal (the defeat-transition
+   *   safety net, which runs after the kill has usually already unlocked it)
+   *   must ask {@link hasLockedBossChest} first rather than provoke the warning.
+   */
+  receiveBossLoot(bossRoomIndex: number, loot: LootDrop): boolean {
     const chest = this.chests.find(
       (c) => c.bossRoomIndex === bossRoomIndex && c.state === 'locked',
     );
-    if (chest === undefined) return;
+    if (chest === undefined) {
+      console.warn(
+        `[TreasureChestSystem] Boss loot for room ${bossRoomIndex} had no locked chest to go into.`,
+      );
+      return false;
+    }
     chest.loot = loot;
     const idx = this.chests.indexOf(chest);
     this.triggerUnlock(idx);
+    return true;
   }
 
   triggerUnlock(chestIndex: number): void {

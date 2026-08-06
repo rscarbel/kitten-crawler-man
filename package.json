@@ -23,6 +23,7 @@
     "verify:separation": "tsx scripts/verify-separation.ts",
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",
     "verify:mongo": "tsx scripts/verify-mongo.ts",
+    "verify:companion": "tsx scripts/verify-companion.ts",
     "bench:separation": "tsx scripts/bench-separation.ts",
     "verify:assets": "tsx scripts/verify-assets.ts",
     "verify:interiors": "tsx scripts/verify-interiors.ts",

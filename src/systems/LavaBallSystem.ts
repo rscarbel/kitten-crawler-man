@@ -65,6 +65,15 @@ interface Bolt {
   /** Source used for this bolt's impact blast, which is not the same injury. */
   burstSource: DamageSource;
   aimedAt: Player | null;
+  /**
+   * The llama that spat it, so a hit can be recorded against it.
+   *
+   * The whole point of this system is that a shot outlives its llama, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the llama precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  owner: Mob;
 }
 
 interface Burst {
@@ -79,6 +88,12 @@ interface FlamePatch {
   /** Staggers the loop so patches burning together do not animate in lockstep. */
   readonly seed: number;
   tick: number;
+  /**
+   * The llama whose bolt laid this patch. A patch routinely outlives it, which
+   * is why burning in one only counts as that llama striking you while it is
+   * still alive — see `tickContactFor`.
+   */
+  readonly owner: Mob;
 }
 
 const BOLT_SPEED = 1.9;
@@ -201,6 +216,7 @@ export class LavaBallSystem implements GameSystem {
           source: { kind: 'mob', mobType: spit.mobType },
           burstSource: { kind: 'mob', mobType: spit.mobType, undodgeable: true },
           aimedAt: spit.aimedAt,
+          owner: mob,
         });
       }
     }
@@ -235,7 +251,10 @@ export class LavaBallSystem implements GameSystem {
         const cy = target.y + TILE_SIZE * CENTER_OFFSET;
         if (Math.hypot(bolt.x - cx, bolt.y - cy) >= hitRadius) continue;
         const connected = target.takeDamage(bolt.damage, bolt.source);
-        if (connected && Math.random() < BURN_CHANCE) target.applyStatus(makeBurn());
+        if (connected) {
+          bolt.owner.noteStruckPlayer(target);
+          if (Math.random() < BURN_CHANCE) target.applyStatus(makeBurn());
+        }
         struck = target;
         break;
       }
@@ -265,7 +284,7 @@ export class LavaBallSystem implements GameSystem {
     const { x, y } = bolt;
     this.bursts.push({ x, y, tick: BURST_FRAMES });
     if (this.flames.length >= MAX_FLAME_PATCHES) this.flames.shift();
-    this.flames.push({ x, y, seed: this.nextFlameSeed++, tick: FLAME_FRAMES });
+    this.flames.push({ x, y, seed: this.nextFlameSeed++, tick: FLAME_FRAMES, owner: bolt.owner });
     this.burstSoundPending = true;
 
     const radius = TILE_SIZE * BURST_RADIUS_TILES;
@@ -280,7 +299,8 @@ export class LavaBallSystem implements GameSystem {
       // Attributed to the llama, not to the fire patch: a player killed by the
       // explosion never stood in anything, and the flame source's death line
       // would tell them they burned to death in a puddle.
-      target.takeDamage(BURST_DAMAGE, bolt.burstSource);
+      const connected = target.takeDamage(BURST_DAMAGE, bolt.burstSource);
+      if (connected) bolt.owner.noteStruckPlayer(target);
     }
   }
 
@@ -326,7 +346,8 @@ export class LavaBallSystem implements GameSystem {
     this.flames = this.flames.filter((flame) => flame.tick > 0);
   }
 
-  private isTouchingFlame(player: Player): boolean {
+  /** The burning patch this player is standing in, if any. */
+  private flameUnder(player: Player): FlamePatch | null {
     const cx = player.x + TILE_SIZE * CENTER_OFFSET;
     const cy = player.y + TILE_SIZE * CENTER_OFFSET;
     const radius = TILE_SIZE * FLAME_RADIUS_TILES;
@@ -334,9 +355,9 @@ export class LavaBallSystem implements GameSystem {
       // A patch that is still catching does not burn yet; without this the
       // damage lands a full second before there is any fire drawn to explain it.
       if (flame.tick > FLAME_FRAMES - FLAME_RISE_FRAMES) continue;
-      if (Math.hypot(flame.x - cx, flame.y - cy) < radius) return true;
+      if (Math.hypot(flame.x - cx, flame.y - cy) < radius) return flame;
     }
-    return false;
+    return null;
   }
 
   /**
@@ -345,12 +366,18 @@ export class LavaBallSystem implements GameSystem {
    * moment they step out so the burn delay measures *unbroken* contact.
    */
   private tickContactFor(player: Player, contactFrames: number): number {
-    if (!player.isAlive || !this.isTouchingFlame(player)) return 0;
+    const flame = player.isAlive ? this.flameUnder(player) : null;
+    if (flame === null) return 0;
 
     const frames = contactFrames + 1;
     if (frames === 1 || frames % FLAME_DAMAGE_INTERVAL === 0) {
-      player.takeDamage(FLAME_CONTACT_DAMAGE, FLAME_DAMAGE_SOURCE);
+      const connected = player.takeDamage(FLAME_CONTACT_DAMAGE, FLAME_DAMAGE_SOURCE);
       player.damageFlash = FLAME_DAMAGE_FLASH_FRAMES;
+      // Standing in a live llama's fire is being in a fight with that llama, so
+      // the burn counts as its blow. Only while it lives: a patch outlasts its
+      // caster, and reviving the flag for a dead one would keep pointing the
+      // companion at a corpse.
+      if (connected && flame.owner.isAlive) flame.owner.noteStruckPlayer(player);
     }
     if (frames === FLAME_BURN_DELAY) player.applyStatus(makeBurn());
     return frames;

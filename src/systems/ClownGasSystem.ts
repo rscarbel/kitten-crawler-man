@@ -82,6 +82,15 @@ interface Vial {
    * already broken on the ground you are standing on.
    */
   readonly source: DamageSource;
+  /**
+   * The clown that threw it, so a hit can be recorded against him.
+   *
+   * The whole point of this system is that a bottle outlives its clown, so this
+   * may well reference a dead mob — which is fine, it is only ever read to note
+   * blood. Held here rather than on the clown precisely because a projectile
+   * stored on a mob is deleted in mid-air when that mob dies.
+   */
+  readonly owner: Mob;
   age: number;
 }
 
@@ -97,6 +106,12 @@ interface GasCloud {
   /** Staggers the loop so clouds laid together do not billow in lockstep. */
   readonly seed: number;
   tick: number;
+  /**
+   * The clown whose bottle laid this cloud. A cloud routinely outlives him,
+   * which is why choking in one only counts as his blow while he is still
+   * alive — see `tickContactFor`.
+   */
+  readonly owner: Mob;
 }
 
 export class ClownGasSystem implements GameSystem, GroundHazardSource {
@@ -159,6 +174,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
             attackType: VIAL_ATTACK_TYPE,
             undodgeable: true,
           },
+          owner: mob,
           age: 0,
         });
       }
@@ -198,6 +214,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
       y: landing.y,
       seed: this.nextCloudSeed++,
       tick: CLOUD_FRAMES,
+      owner: vial.owner,
     });
     this.shatterSoundPending = true;
 
@@ -207,7 +224,8 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
       const cx = target.x + TILE_SIZE * CENTER_OFFSET;
       const cy = target.y + TILE_SIZE * CENTER_OFFSET;
       if (Math.hypot(landing.x - cx, landing.y - cy) > radius) continue;
-      target.takeDamage(vial.damage, vial.source);
+      const connected = target.takeDamage(vial.damage, vial.source);
+      if (connected) vial.owner.noteStruckPlayer(target);
     }
   }
 
@@ -256,7 +274,8 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
     return cloud.tick > CLOUD_FRAMES - CLOUD_RISE_FRAMES;
   }
 
-  private isInGas(x: number, y: number): boolean {
+  /** The choking cloud this position is inside, if any. */
+  private cloudAt(x: number, y: number): GasCloud | null {
     const cx = x + TILE_SIZE * CENTER_OFFSET;
     const cy = y + TILE_SIZE * CENTER_OFFSET;
     const radius = TILE_SIZE * CLOUD_RADIUS_TILES;
@@ -264,9 +283,9 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
       // A cloud that is still welling up does not choke yet; without this the
       // damage lands well before there is any gas drawn to explain it.
       if (this.isStillWellingUp(cloud)) continue;
-      if (Math.hypot(cloud.x - cx, cloud.y - cy) < radius) return true;
+      if (Math.hypot(cloud.x - cx, cloud.y - cy) < radius) return cloud;
     }
-    return false;
+    return null;
   }
 
   /**
@@ -274,15 +293,21 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
    * moment they step out, so the interval measures *unbroken* exposure.
    */
   private tickContactFor(victim: Player): void {
-    if (!victim.isAlive || !this.isInGas(victim.x, victim.y)) {
+    const cloud = victim.isAlive ? this.cloudAt(victim.x, victim.y) : null;
+    if (cloud === null) {
       this.contactFrames.delete(victim);
       return;
     }
     const frames = (this.contactFrames.get(victim) ?? 0) + 1;
     this.contactFrames.set(victim, frames);
     if (frames === 1 || frames % CLOUD_DAMAGE_INTERVAL === 0) {
-      victim.takeDamage(CLOUD_CONTACT_DAMAGE, CLOUD_DAMAGE_SOURCE);
+      const connected = victim.takeDamage(CLOUD_CONTACT_DAMAGE, CLOUD_DAMAGE_SOURCE);
       victim.damageFlash = CLOUD_DAMAGE_FLASH_FRAMES;
+      // Choking on a live clown's gas is being in a fight with that clown, so
+      // the tick counts as his blow. Only while he lives: a cloud outlasts him,
+      // and reviving the flag for a dead clown would keep pointing the companion
+      // at a corpse.
+      if (connected && cloud.owner.isAlive) cloud.owner.noteStruckPlayer(victim);
     }
   }
 

@@ -16,6 +16,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
+import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
 import { QuestNPC } from '../creatures/QuestNPC';
@@ -46,6 +47,12 @@ const WOOD_PER_PICKUP = 8;
 const BOARDS_PER_BUILD = 4;
 const BUILD_SECONDS = 2;
 const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
+/**
+ * The cat has no thumbs and no hammer, so she can board up a grate — just badly.
+ * Progress is a seeded frame countdown, so "slower" is more frames, not a
+ * fractional per-tick rate.
+ */
+const CAT_BUILD_TIME_MULTIPLIER = 3;
 const BARRIER_MAX_HP = 36;
 const SPAWN_INTERVAL_MIN = 180; // 3 seconds
 const SPAWN_INTERVAL_MAX = 300; // 5 seconds
@@ -243,10 +250,20 @@ export interface WoodBarrier {
   hitFlash: number;
 }
 
+/**
+ * Which crawler started a build. A discriminant rather than a `Player`
+ * reference, because {@link DefendQuestCheckpoint} copies the pending build by
+ * value and a reference would not survive that contract.
+ */
+export type BarrierBuilderId = 'human' | 'cat';
+
 export interface PendingBuild {
   framesLeft: number;
+  /** Seeded duration, so the progress arc and hammer cadence stay right for a slower builder. */
+  totalFrames: number;
   grateIdx: number;
   isRepair: boolean;
+  builder: BarrierBuilderId;
 }
 
 /**
@@ -485,17 +502,21 @@ export class DefendQuestSystem implements GameSystem {
     return false;
   }
 
-  /** Try to build or repair a wood barrier (Human only, hotbar activation). */
-  tryBuildBarrier(human: HumanPlayer): boolean {
+  /** Try to build or repair a wood barrier. The cat can, at {@link CAT_BUILD_TIME_MULTIPLIER} the cost. */
+  tryBuildBarrier(builder: HumanPlayer | CatPlayer): boolean {
     if (this.phase !== 'defending' && this.phase !== 'countdown') return false;
     if (this.pendingBuild) return false;
     if (!this.roomData) return false;
 
-    const boardCount = human.inventory.countOf('quest_wood_board');
+    const boardCount = builder.inventory.countOf('quest_wood_board');
     if (boardCount < BOARDS_PER_BUILD) return false;
 
-    const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-    const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const isCat = builder instanceof CatPlayer;
+    const builderId: BarrierBuilderId = isCat ? 'cat' : 'human';
+    const totalFrames = isCat ? BUILD_FRAMES * CAT_BUILD_TIME_MULTIPLIER : BUILD_FRAMES;
+
+    const ptx = Math.floor((builder.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const pty = Math.floor((builder.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
     // Check if standing on or adjacent to a grate tile
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
@@ -506,15 +527,25 @@ export class DefendQuestSystem implements GameSystem {
       const existing = this.barriers.find((b) => b.grateIdx === gi);
       if (existing) {
         if (existing.hp < existing.maxHp) {
-          // Repair
-          this.pendingBuild = { framesLeft: BUILD_FRAMES, grateIdx: gi, isRepair: true };
+          this.pendingBuild = {
+            framesLeft: totalFrames,
+            totalFrames,
+            grateIdx: gi,
+            isRepair: true,
+            builder: builderId,
+          };
           return true;
         }
         continue; // Already at full HP
       }
 
-      // Build new barrier
-      this.pendingBuild = { framesLeft: BUILD_FRAMES, grateIdx: gi, isRepair: false };
+      this.pendingBuild = {
+        framesLeft: totalFrames,
+        totalFrames,
+        grateIdx: gi,
+        isRepair: false,
+        builder: builderId,
+      };
       return true;
     }
     return false;
@@ -530,18 +561,18 @@ export class DefendQuestSystem implements GameSystem {
     screenY: number,
     camX: number,
     camY: number,
-    human: HumanPlayer,
+    builder: HumanPlayer | CatPlayer,
   ): boolean {
     if (this.phase !== 'defending' && this.phase !== 'countdown') return false;
     if (this.pendingBuild) return false;
     if (!this.roomData) return false;
-    if (human.inventory.countOf('quest_wood_board') < BOARDS_PER_BUILD) return false;
+    if (builder.inventory.countOf('quest_wood_board') < BOARDS_PER_BUILD) return false;
 
     const tapTileX = Math.floor((screenX + camX) / TILE_SIZE);
     const tapTileY = Math.floor((screenY + camY) / TILE_SIZE);
 
-    const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-    const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const ptx = Math.floor((builder.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+    const pty = Math.floor((builder.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
 
     for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
       const g = this.roomData.grateTiles[gi];
@@ -553,7 +584,7 @@ export class DefendQuestSystem implements GameSystem {
       const existing = this.barriers.find((b) => b.grateIdx === gi);
       if (existing && existing.hp >= existing.maxHp) return false;
 
-      return this.tryBuildBarrier(human);
+      return this.tryBuildBarrier(builder);
     }
     return false;
   }
@@ -615,13 +646,13 @@ export class DefendQuestSystem implements GameSystem {
 
     // Tick pending build/repair
     if (this.pendingBuild && this.roomData) {
-      const elapsed = BUILD_FRAMES - this.pendingBuild.framesLeft;
+      const elapsed = this.pendingBuild.totalFrames - this.pendingBuild.framesLeft;
       if (elapsed % HAMMER_SOUND_INTERVAL === 0) {
         this.hammerSoundPending = true;
       }
       this.pendingBuild.framesLeft--;
       if (this.pendingBuild.framesLeft <= 0) {
-        this.finishBuild(ctx.human);
+        this.finishBuild(ctx);
       }
     }
 
@@ -826,15 +857,16 @@ export class DefendQuestSystem implements GameSystem {
     if (this.npc) this.npc.markerType = 'none';
   }
 
-  private finishBuild(human: HumanPlayer): void {
+  private finishBuild(ctx: SystemContext): void {
     if (!this.pendingBuild || !this.roomData) return;
-    const { grateIdx, isRepair } = this.pendingBuild;
+    const { grateIdx, isRepair, builder } = this.pendingBuild;
     this.pendingBuild = null;
 
-    const boardCount = human.inventory.countOf('quest_wood_board');
+    const buildingCrawler = builder === 'cat' ? ctx.cat : ctx.human;
+    const boardCount = buildingCrawler.inventory.countOf('quest_wood_board');
     if (boardCount < BOARDS_PER_BUILD) return;
 
-    human.inventory.removeItems('quest_wood_board', BOARDS_PER_BUILD);
+    buildingCrawler.inventory.removeItems('quest_wood_board', BOARDS_PER_BUILD);
 
     if (isRepair) {
       const barrier = this.barriers.find((b) => b.grateIdx === grateIdx);
@@ -859,7 +891,7 @@ export class DefendQuestSystem implements GameSystem {
     camX: number,
     camY: number,
     active?: { x: number; y: number },
-    human?: HumanPlayer,
+    activeCrawler?: HumanPlayer | CatPlayer,
   ): void {
     if (this.phase === 'inactive') return;
 
@@ -939,15 +971,15 @@ export class DefendQuestSystem implements GameSystem {
 
     // Build/repair prompt on nearest grate
     if (
-      human &&
-      human.isActive &&
+      activeCrawler &&
+      activeCrawler.isActive &&
       !this.pendingBuild &&
       (this.phase === 'countdown' || this.phase === 'defending') &&
       this.roomData &&
-      human.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
+      activeCrawler.inventory.countOf('quest_wood_board') >= BOARDS_PER_BUILD
     ) {
-      const ptx = Math.floor((human.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
-      const pty = Math.floor((human.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const ptx = Math.floor((activeCrawler.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
+      const pty = Math.floor((activeCrawler.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE);
       for (let gi = 0; gi < this.roomData.grateTiles.length; gi++) {
         const g = this.roomData.grateTiles[gi];
         const dist = Math.abs(ptx - g.x) + Math.abs(pty - g.y);
@@ -976,7 +1008,7 @@ export class DefendQuestSystem implements GameSystem {
     const sx = grate.x * TILE_SIZE - camX + TILE_SIZE * TILE_CENTER_OFFSET;
     const sy = grate.y * TILE_SIZE - camY + TILE_SIZE * TILE_CENTER_OFFSET;
 
-    const ratio = 1 - this.pendingBuild.framesLeft / BUILD_FRAMES;
+    const ratio = 1 - this.pendingBuild.framesLeft / this.pendingBuild.totalFrames;
     const radius = TILE_SIZE * BUILD_PROGRESS_RADIUS_FRACTION;
     const startAngle = -Math.PI / 2;
     const endAngle = startAngle + Math.PI * 2 * ratio;

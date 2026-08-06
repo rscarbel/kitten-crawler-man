@@ -64,11 +64,11 @@ function emptyTally(): MutableTally {
 }
 
 /**
- * Class names of the two floor-1 gauntlet bosses, as `bossDefeated` reports
- * them. `DungeonScene` emits `mob.constructor.name` for boss-flagged mobs.
+ * Spawn keys of the two floor-1 gauntlet bosses, as `bossDefeated` reports
+ * them — the same names the level definitions and the boss music use.
  */
-const HOARDER_BOSS_TYPE = 'TheHoarder';
-const JUICER_BOSS_TYPE = 'Juicer';
+const HOARDER_BOSS_TYPE = 'the_hoarder';
+const JUICER_BOSS_TYPE = 'juicer';
 
 const FIRST_FLOOR = 1;
 const SECOND_FLOOR = 2;

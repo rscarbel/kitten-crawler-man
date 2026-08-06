@@ -46,6 +46,10 @@ const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
 export class CatPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
   readonly crawlerKind = CAT_CRAWLER_KIND;
+
+  override get isCrawler(): boolean {
+    return true;
+  }
   private missiles: Missile[] = [];
   /** Reused result set for the homing missiles' neighbour queries. */
   private readonly _homingQuery = new Set<Mob>();
@@ -57,6 +61,8 @@ export class CatPlayer extends Player {
   private attackTimer = 0;
   /** The swing lasts exactly as long as the sprite sheet's swipe animation. */
   private readonly ATTACK_FRAMES = CAT_SWIPE_FRAMES;
+  /** Frames left before the companion AI may swipe again; see {@link autoMeleeTick}. */
+  private autoSwipeCooldown = 0;
   /** Drives her pose: the action playing, plus the boredom timer behind idle breaks. */
   private readonly animator = new CatAnimator();
 
@@ -74,6 +80,14 @@ export class CatPlayer extends Player {
   private static readonly CAT_STARTING_DEXTERITY = 8;
   private static readonly STARTING_POTIONS = 10;
   private static readonly MELEE_RANGE_MULTIPLIER = 1.6;
+  /**
+   * How long the companion AI waits between claw swipes.
+   *
+   * The human companion's auto-attack cadence, deliberately: the two crawlers
+   * fight at the same pace when the computer is driving, and neither of them
+   * out-swings the player who is holding the attack key.
+   */
+  private static readonly AUTO_SWIPE_COOLDOWN_FRAMES = 90;
   private static readonly MISSILE_BASE_RANGE = 3.5;
   private static readonly MISSILE_RANGE_INTELLIGENCE_MULTIPLIER = 0.5;
   private static readonly SUBMISSILE_MAX_DIST_TILES = 1.8;
@@ -233,6 +247,7 @@ export class CatPlayer extends Player {
     this.missiles = [];
     this.missileCooldown = 0;
     this.attackTimer = 0;
+    this.autoSwipeCooldown = 0;
     this.autoTarget = null;
     this.pendingSubMissileSpawns = [];
     this.animator.reset();
@@ -240,6 +255,23 @@ export class CatPlayer extends Player {
 
   get missileCooldownCurrent(): number {
     return this.missileCooldown;
+  }
+
+  /**
+   * How often the companion AI actually gets a missile away — her ability's own
+   * cooldown, floored so the computer cannot out-shoot a human hand.
+   *
+   * Public so the follower can price her two attacks against each other before
+   * deciding whether standing in reach of something is worth the health it
+   * costs. See {@link autoMeleeTick}.
+   */
+  get autoFireIntervalFrames(): number {
+    return Math.max(this.missileCooldownMax, CatPlayer.AI_MIN_COOLDOWN);
+  }
+
+  /** How often the companion AI gets a claw in; the other half of that price. */
+  get autoSwipeIntervalFrames(): number {
+    return CatPlayer.AUTO_SWIPE_COOLDOWN_FRAMES;
   }
 
   get missileCooldownMax(): number {
@@ -298,12 +330,21 @@ export class CatPlayer extends Player {
 
   updateAttack() {
     if (this.attackTimer > 0) this.attackTimer--;
+    // Counted down every frame, not only on the frames a target happens to be
+    // in reach. The cat kites, so she is inside her own claw range for a few
+    // frames at a time; a cooldown that only ran during those would take the
+    // best part of a minute of real fighting to clear ninety of them.
+    if (this.autoSwipeCooldown > 0) this.autoSwipeCooldown--;
   }
 
   /** Every scene ticks this each frame, which is where her pose timers live. */
   override tickTimers(): void {
     super.tickTimers();
     this.animator.tick(this.isMoving, this.isKnockedOut);
+  }
+
+  override get isSwinging(): boolean {
+    return this.attackTimer > 0;
   }
 
   /** Returns true on the single frame when the claw hits (peak of the swing). */
@@ -342,11 +383,12 @@ export class CatPlayer extends Player {
    * Called every frame when the cat is the follower and has an autoTarget.
    * Faces the target and fires missiles on cooldown.
    * @param missChance 0–1 probability the shot flies slightly off-target (visible miss).
+   * @returns whether a missile actually launched this frame.
    */
-  autoFireTick(missChance = 0) {
+  autoFireTick(missChance = 0): boolean {
     if (!this.autoTarget?.isAlive) {
       this.autoTarget = null;
-      return;
+      return false;
     }
 
     const dx =
@@ -366,17 +408,60 @@ export class CatPlayer extends Player {
     // AI fires at most as fast as an average human could (~3 shots/sec at 60fps).
     // Cooldown is decremented by updateMissiles each frame — don't decrement here too.
     const cooldownMax = Math.max(this.missileCooldownMax, CatPlayer.AI_MIN_COOLDOWN);
-    if (this.missileCooldown === 0) {
-      // Use the same shared cooldown as player-triggered shots
-      const offset =
-        Math.random() < missChance
-          ? (Math.random() - CatPlayer.RANDOM_OFFSET_BASE) * 2 * CatPlayer.MISS_OFFSET_FACTOR
-          : 0;
-      this.fireMissile(offset);
-      this.missileCooldown = cooldownMax;
-      this.animator.play('cast');
-      this.pendingAutoFireSound = true;
+    if (this.missileCooldown !== 0) return false;
+
+    // Use the same shared cooldown as player-triggered shots
+    const offset =
+      Math.random() < missChance
+        ? (Math.random() - CatPlayer.RANDOM_OFFSET_BASE) * 2 * CatPlayer.MISS_OFFSET_FACTOR
+        : 0;
+    this.fireMissile(offset);
+    this.missileCooldown = cooldownMax;
+    this.animator.play('cast');
+    this.pendingAutoFireSound = true;
+    return true;
+  }
+
+  /**
+   * The claw-swipe counterpart of {@link autoFireTick}, for a companion cat with
+   * something already inside her reach.
+   *
+   * Until this existed the companion cat had exactly one attack — the missile —
+   * so every point a player put into her strength was dead weight for as long as
+   * they were playing the human. Nothing downstream needed teaching: the melee
+   * resolver never asked which crawler was active, and the swipe animation and
+   * its sound were already wired.
+   *
+   * Cooldown-gated rather than fired on every eligible frame, at the human
+   * companion's cadence, so the AI cat cannot out-swing a player holding Space.
+   *
+   * Called only on the frames her missile is still cooling — the missile
+   * out-damages the claw several times over at every ability level, so a swipe
+   * that cost her a cast would be a straight loss. What the claw is for is the
+   * dead frames in between, which a companion with one attack spent doing
+   * nothing however close the thing chewing on her was.
+   *
+   * @returns whether a swipe actually started.
+   */
+  autoMeleeTick(): boolean {
+    if (!this.autoTarget?.isAlive) {
+      this.autoTarget = null;
+      return false;
     }
+
+    const centreOffset = this.tileSize * CatPlayer.TILE_CENTER_OFFSET;
+    const dx = this.autoTarget.x + centreOffset - (this.x + centreOffset);
+    const dy = this.autoTarget.y + centreOffset - (this.y + centreOffset);
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0) {
+      this.facingX = dx / dist;
+      this.facingY = dy / dist;
+    }
+
+    if (dist > this.getMeleeRange() || this.autoSwipeCooldown > 0) return false;
+    this.triggerAttack();
+    this.autoSwipeCooldown = CatPlayer.AUTO_SWIPE_COOLDOWN_FRAMES;
+    return true;
   }
 
   updateMissiles(mobGrid?: SpatialGrid<Mob>) {

@@ -52,11 +52,18 @@ export abstract class RisingSkeleton extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
-    if (this.riseTimer > 0) return;
     const previousHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);
     if (this.hp < previousHp) this.damageSoundPending = true;
+  }
+
+  /**
+   * Nothing reaches a skeleton still underground — a status tick least of all,
+   * since it would otherwise kill one that has not finished arriving.
+   */
+  protected override get isDamageImmune(): boolean {
+    return this.riseTimer > 0;
   }
 }

@@ -130,8 +130,7 @@ export class KrakarenClone extends Mob {
     // No-op: immobile boss
   }
 
-  override resetToSpawn(): void {
-    super.resetToSpawn();
+  protected override clearEncounterPhase(): void {
     this.isEnraged = false;
     this.yellTimer = 0;
     this.state = 'idle';

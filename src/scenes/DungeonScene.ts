@@ -227,7 +227,6 @@ import { TutorialController, type TutorialRenderContext } from '../systems/Tutor
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { TutorialInventoryInteraction } from '../ui/TutorialInventoryInteraction';
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
-import { KrakarenClone } from '../creatures/KrakarenClone';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
@@ -593,6 +592,12 @@ const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const SHOCKWAVE_DAMAGE = 4;
+/**
+ * How far past its drawn radius the level-15 shell's wave still catches people.
+ * The ring reads as a thick band rather than a hairline, so the harm follows
+ * the art rather than the single number the ripple is centred on.
+ */
+const SHOCKWAVE_RADIUS_TILE_MARGIN = 2;
 const CHAIN_LIGHTNING_RANGE_TILES = 3;
 const CHAIN_LIGHTNING_MAX_TARGETS = 3;
 const CHAIN_LIGHTNING_DAMAGE = 2;
@@ -1839,12 +1844,22 @@ export class DungeonScene extends GameplayScene {
               mobTileY >= br.bounds.y &&
               mobTileY < br.bounds.y + br.bounds.h,
           );
-          if (bossRoomIdx >= 0) {
+          // Onto the floor when no chest took it — a boss standing outside every
+          // boss room the map knows about, or one whose chest is already open.
+          // Tested rather than assumed: this used to discard the drop on the
+          // strength of having called `receiveBossLoot`, whether or not the call
+          // found anything. Still partitioned by owner even down this path — The
+          // Hoarder's guaranteed Cockroach book is the cat's only reliable
+          // source and must never land on the human.
+          // `hasLockedBossChest` is asked first because `receiveBossLoot` warns
+          // on a miss, and a boss room whose chest has already been opened is a
+          // legitimate miss rather than the silent failure that warning exists
+          // to catch.
+          const chestTookIt =
+            bossRoomIdx >= 0 &&
+            this.treasureChests.hasLockedBossChest(bossRoomIdx) &&
             this.treasureChests.receiveBossLoot(bossRoomIdx, mob.droppedLoot);
-          } else {
-            // Fallback: drop normally if no matching boss room. Still partitioned
-            // by owner — The Hoarder's guaranteed Cockroach book is the cat's only
-            // reliable source and must not land on the human even down this path.
+          if (!chestTookIt) {
             this.dropLootByOwner(cx, cy, mob.droppedLoot, topDamageDealer, true);
           }
         } else {
@@ -1853,16 +1868,20 @@ export class DungeonScene extends GameplayScene {
         mob.droppedLoot = null;
       }
 
-      if (mob.isBoss) {
+      // The Ball of Swine is the one boss that does not carry the `isBoss` flag:
+      // the arena owns it, not `BossRoomSystem`, and that flag is what commits a
+      // mob to a room lock and a clamp it has no room for. Its death is a boss
+      // defeat all the same, and the arena's second wave waits on this event.
+      if (mob.isBoss || mob instanceof BallOfSwine) {
         // One emit per boss, named by its spawn key. Every listener that cares
-        // which boss died — the boss music, the Mongo unlock, the difficulty
-        // stats — is written in snake_case spawn keys, and the class name this
-        // used to send was a second vocabulary that mostly matched nothing. The
-        // Krakaren papered over it by announcing itself a second time under its
-        // real name; the Hoarder and the Juicer had no such patch, so their
-        // boss music never got the message that the fight was over.
+        // *which* boss died — the Mongo unlock, the difficulty stats, the arena
+        // — is written in snake_case spawn keys, and the class name this used
+        // to send was a second vocabulary they did not speak, so the Hoarder
+        // and the Juicer were never recorded as beaten. The Krakaren papered
+        // over its own case by announcing itself a second time under its real
+        // name, which cost a duplicate boss-slayer loot box per crawler.
         bus.emit('bossDefeated', {
-          bossType: mob.spawnTypeKey ?? mob.constructor.name || 'unknown',
+          bossType: mob.spawnTypeKey ?? (mob.constructor.name || 'unknown'),
           mob,
         });
       }
@@ -2818,8 +2837,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerBuildAction(): void {
-    if (!this.human.isActive) return;
-    this.defendQuest.tryBuildBarrier(this.human);
+    this.defendQuest.tryBuildBarrier(this.active());
   }
 
   /**
@@ -3116,7 +3134,7 @@ export class DungeonScene extends GameplayScene {
           // or hired, not this safe room — but they can take real damage
           // fighting alongside the party and must not stay critically wounded
           // once the party itself is fully healed.
-          mob.clearCombatStateForCheckpoint();
+          mob.healAndForgetFight();
         }
       }
       kept.push(mob);
@@ -3757,8 +3775,8 @@ export class DungeonScene extends GameplayScene {
       !this.barriers.isConstructing
     ) {
       this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
-    } else if (slot?.id === 'quest_wood_board' && this.human.isActive) {
-      this.defendQuest.tryBuildBarrier(this.human);
+    } else if (slot?.id === 'quest_wood_board') {
+      this.defendQuest.tryBuildBarrier(active);
     } else if (slot?.skillId !== undefined) {
       // Queued rather than read outright: a skill book is spent for good, so
       // every route to one — hotbar key, hotbar tap, bag click — asks first.
@@ -4274,7 +4292,8 @@ export class DungeonScene extends GameplayScene {
     this.renderPipeline.renderWorld(ctx, rc);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
-    this.defendQuest.renderObjects(ctx, camX, camY, this.active(), this.human);
+    const activeCrawler = this.active();
+    this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler);
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
@@ -5031,16 +5050,19 @@ export class DungeonScene extends GameplayScene {
     const shockwave = this.spells.drainPendingShockwave();
     if (shockwave !== null) {
       this.spells.addShockwaveRipple(shockwave.x, shockwave.y, shockwave.radiusPx);
+      // The extra tile is the grid's, not the blast's: it keys mobs by origin
+      // while the test below measures centres, so without the slack the wave
+      // comes up short on one side of itself.
       const nearBlast = this.mobGrid.queryCircle(
         shockwave.x,
         shockwave.y,
-        shockwave.radiusPx + TILE_SIZE * 2,
+        shockwave.radiusPx + TILE_SIZE * SHOCKWAVE_RADIUS_TILE_MARGIN + TILE_SIZE,
       );
       for (const mob of nearBlast) {
         if (!mob.isAlive) continue;
         const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.x;
         const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.y;
-        if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * 2) {
+        if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * SHOCKWAVE_RADIUS_TILE_MARGIN) {
           if (!this.human.zeroDamage) mob.takeDamageFrom(SHOCKWAVE_DAMAGE, this.human, 'shell');
           mob.applyStatus(makeElectrified(this.human));
         }
@@ -5847,7 +5869,7 @@ export class DungeonScene extends GameplayScene {
                   y,
                   cam.x,
                   cam.y,
-                  this.human,
+                  this.active(),
                 );
                 if (!grateHandled) {
                   this.triggerSpaceAction(x, y);

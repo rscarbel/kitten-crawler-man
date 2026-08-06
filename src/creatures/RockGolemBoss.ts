@@ -177,7 +177,7 @@ export class RockGolemBoss extends RockGolem {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
     const capped = this.isRolled ? Math.min(amount, ROLLED_DAMAGE_CAP) : amount;
     super.takeDamageFrom(capped, attacker, damageType);
@@ -355,7 +355,8 @@ export class RockGolemBoss extends RockGolem {
       // plain `takeDamage` dies unattributed — the boulder has a thrower, and
       // `takeDamageFrom` is what puts him in the ledger the XP split reads.
       if (target instanceof Mob) target.takeDamageFrom(damage, this, 'melee');
-      else target.takeDamage(damage, rollDamageSource(this.mobType));
+      else if (target.takeDamage(damage, rollDamageSource(this.mobType)))
+        this.noteStruckPlayer(target);
       this.attackSoundPending = true;
       this.rollHitCooldowns.set(target, ROLL_HIT_COOLDOWN);
     }

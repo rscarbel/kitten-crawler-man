@@ -81,7 +81,13 @@ const SPASM_DEATH_CHANCE = 0.45;
 
 type SpiderState = 'idle' | 'pursuing' | 'crouching' | 'pouncing' | 'recovering';
 
-type DamageType = NonNullable<Parameters<Mob['takeDamageFrom']>[2]>;
+/**
+ * Derived rather than restated, so this cannot drift from the base signature.
+ * Nullable, because a blow with no weapon behind it — a damage-over-time tick
+ * its applier owns — is a real way for this spider to die, and a type that
+ * stripped the null would quietly narrow every time the base widened.
+ */
+type DamageType = Parameters<Mob['takeDamageFrom']>[2];
 
 /** Blows that throw the body clear rather than dropping it where it stood. */
 const KNOCKBACK_DAMAGE_TYPES: ReadonlySet<DamageType> = new Set<DamageType>(['missile', 'smush']);

@@ -242,7 +242,7 @@ export class SkeletonLord extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' = 'melee',
+    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
   ): void {
     const previousHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);
@@ -515,7 +515,10 @@ export class SkeletonLord extends Mob {
       );
       // Gated on the hit landing: a dodge that avoids the damage but still roots
       // the player in the middle of the cone is worse than no dodge at all.
-      if (connected) target.applyStatus(makeStuck(HANDS_STUCK_FRAMES));
+      if (connected) {
+        this.noteStruckPlayer(target);
+        target.applyStatus(makeStuck(HANDS_STUCK_FRAMES));
+      }
     }
   }
 
