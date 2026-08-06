@@ -108,6 +108,14 @@ export class GoblinArrowSystem implements GameSystem {
   private arrows: Arrow[] = [];
   private spent: SpentArrow[] = [];
 
+  /**
+   * Set when an arrow stops, in a wall or in someone; `DungeonScene` reads and
+   * clears it. It lives here rather than on the archer because a shaft outlives
+   * the goblin that loosed it, and one landing after its owner died would have
+   * no mob left to carry the flag.
+   */
+  impactSoundPending = false;
+
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
@@ -176,6 +184,9 @@ export class GoblinArrowSystem implements GameSystem {
         const connected = target.takeDamage(arrow.damage, arrow.source);
         if (connected) arrow.owner.noteStruckPlayer(target);
         struck = true;
+        // A body hit leaves no shaft, so `land` never runs for it — the cue has
+        // to be raised here as well or every arrow that connects is silent.
+        this.impactSoundPending = true;
         break;
       }
       if (struck) continue;
@@ -187,6 +198,7 @@ export class GoblinArrowSystem implements GameSystem {
 
   /** Leaves a spent shaft where an arrow stopped. */
   private land(arrow: Arrow): void {
+    this.impactSoundPending = true;
     if (this.spent.length >= MAX_SPENT_ARROWS) this.spent.shift();
     this.spent.push({
       x: arrow.x,
@@ -240,5 +252,6 @@ export class GoblinArrowSystem implements GameSystem {
   resetForCheckpoint(): void {
     this.arrows = [];
     this.spent = [];
+    this.impactSoundPending = false;
   }
 }

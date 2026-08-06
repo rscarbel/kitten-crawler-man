@@ -28,6 +28,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { BountyNoticeState } from './townNotices';
+import type { TrackerEntry } from './questTracker';
 import { drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
@@ -92,6 +93,13 @@ const SHADY_BUBBLE_RADIUS_TILES = 3.2;
  * hood, which itself stands well above the tile his feet are on.
  */
 const SHADY_BUBBLE_LIFT_TILES = 0.85;
+
+/**
+ * The Journal's id for the bounty loop. Not a quest id — no `QuestManager`
+ * registers one — but the Journal pins by id, and a pin has to survive the
+ * bounty it was placed on being paid out and replaced.
+ */
+const BOUNTY_TRACKER_ID = 'shady_bounties';
 
 /** The glyph over Shady's head for each phase of the loop. */
 const SHADY_MARKER_BY_PHASE: Record<BountyPhase, ShadyMarker> = {
@@ -415,6 +423,7 @@ export class BountySystem implements GameSystem {
     this.progress.currentTypeId = typeId;
     this.progress.currentName = name;
     this.progress.currentSiteIndex = siteIndex;
+    this.audio?.play('accepted_bounty');
     this.stageEncounter(def.id, name, siteIndex, human, cat);
     return true;
   }
@@ -603,6 +612,70 @@ export class BountySystem implements GameSystem {
   }
 
   /**
+   * The Journal's line for the bounty loop.
+   *
+   * One entry, not one per bounty taken: a bounty is a standing contract Shady
+   * re-issues rather than a questline with a history, and a journal that grew a
+   * completed row per kill would bury the four real questlines under them. The
+   * running total goes in the objective line instead.
+   *
+   * Its status is never `completed` for the same reason — there is always
+   * another mark.
+   */
+  trackerEntries(): ReadonlyArray<TrackerEntry> {
+    const base = { id: BOUNTY_TRACKER_ID, name: 'Shady’s Bounties' };
+    const markName = this.progress.currentName ?? 'the mark';
+
+    if (this.progress.phase === 'available') {
+      const next = this.nextTypeLabel;
+      return [
+        {
+          ...base,
+          status: 'available',
+          objective:
+            next === null ? 'Take a contract from Shady' : `Shady has ${next} on the board`,
+          hint: 'He loiters by the notice board on the plaza.',
+          target: this.shadyTile() ?? undefined,
+        },
+      ];
+    }
+
+    if (this.progress.phase === 'active') {
+      const boss = this.boss;
+      const site = this.currentSite();
+      return [
+        {
+          ...base,
+          status: 'active',
+          objective: `Hunt down ${markName}`,
+          hint: 'Out in the wilds, well past the walls.',
+          target:
+            boss?.isAlive === true
+              ? { x: Math.floor(boss.x / TILE_SIZE), y: Math.floor(boss.y / TILE_SIZE) }
+              : (site ?? undefined),
+        },
+      ];
+    }
+
+    return [
+      {
+        ...base,
+        status: 'active',
+        objective: `Collect the price on ${markName}`,
+        hint: 'Shady pays out where he stands.',
+        target: this.shadyTile() ?? undefined,
+      },
+    ];
+  }
+
+  /** Shady's own tile, or null before he has been placed on this floor. */
+  private shadyTile(): { x: number; y: number } | null {
+    const shady = this.shady;
+    if (shady === null) return null;
+    return { x: Math.floor(shady.x / TILE_SIZE), y: Math.floor(shady.y / TILE_SIZE) };
+  }
+
+  /**
    * Where the staged mark is standing, in world pixels, or null with no bounty
    * out. Exposed for the `!bounty go` cheat: a site is at least
    * {@link MIN_SITE_DISTANCE_TILES} tiles from the party by construction, so
@@ -748,6 +821,7 @@ export class BountySystem implements GameSystem {
     // starting, and a mark staged across the map has not started anything.
     const typeId = this.progress.currentTypeId;
     if (typeId !== null) this.bus.emit('bossFightInitiated', { bossType: typeId });
+    this.audio?.play('bounty_fight_engaged');
     for (const mob of this.encounter) {
       mob.homePoint = undefined;
       mob.leashRadiusTiles = undefined;

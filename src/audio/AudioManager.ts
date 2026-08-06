@@ -1090,7 +1090,21 @@ export class AudioManager {
    *   (e.g. the Bopca safe-room bus in BuildingInteriorScene).
    */
   wireEvents(bus: EventBus, defaultMusicId: SoundId = 'bg_level_1'): void {
-    bus.on('mobKilled', () => {
+    bus.on('mobKilled', (e) => {
+      // A skeleton has no meat to make a splat. The lord gets his own send-off
+      // and the rank and file collapse into a heap of bones.
+      if (e.mob.audioTag === 'skeleton_lord') {
+        this.play('skeleton_lord_death');
+        return;
+      }
+      if (e.mob.audioTag === 'skeleton') {
+        this.play('bones_rattling');
+        return;
+      }
+      if (e.mob.audioTag === 'rock_golem' && e.mob.isBoss) {
+        this.play('rock_golem_death');
+        return;
+      }
       this.playRandom(['splat_1', 'splat_2', 'splat_3']);
     });
 

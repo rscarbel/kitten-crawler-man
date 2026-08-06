@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -671,6 +672,74 @@ export class SpiderQuestSystem implements GameSystem {
 
   get roomLocked(): boolean {
     return this._roomLocked;
+  }
+
+  /**
+   * The Journal's line for the Arachnid Experiment, rebuilt from the phase every
+   * frame.
+   *
+   * This questline has no `QuestManager` of its own — it only ever emitted
+   * `questStarted`/`questCompleted` — so the name and the status are stated here
+   * rather than looked up. That is the whole reason the tracker asks each system
+   * for a line instead of reading one manager: adding a manager to this system
+   * purely to answer the Journal would be state to keep in step with the phase
+   * machine that already knows the answer.
+   */
+  trackerEntries(): ReadonlyArray<TrackerEntry> {
+    if (this.phase === 'inactive' || this.roomData === null) return [];
+    const base = { id: SPIDER_QUEST_ID, name: 'The Arachnid Experiment' };
+    const labTile = {
+      x: this.roomData.computerTile.x,
+      y: this.roomData.computerTile.y,
+    };
+
+    switch (this.phase) {
+      case 'scientist_waiting':
+      case 'scientist_dialog':
+        return [
+          {
+            ...base,
+            status: 'available',
+            objective: 'Hear out the scientist in the lab',
+            hint: 'The sealed room off the hallway — the one with the machines in it.',
+            target: {
+              x: Math.floor(this.scientistX / TILE_SIZE),
+              y: Math.floor(this.scientistY / TILE_SIZE),
+            },
+          },
+        ];
+      case 'awaiting_hacking':
+      case 'keyboard_hero_tutorial':
+      case 'hacking':
+      case 'hacking_failed':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Shut the life machines down at the terminal',
+            hint: 'The console on the lab bench. Keep time with the prompts.',
+            target: labTile,
+          },
+        ];
+      case 'cutscene':
+      case 'boss_fight':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Kill what came out of the egg sac',
+            target:
+              this._grotesqueSpider?.isAlive === true
+                ? {
+                    x: Math.floor(this._grotesqueSpider.x / TILE_SIZE),
+                    y: Math.floor(this._grotesqueSpider.y / TILE_SIZE),
+                  }
+                : labTile,
+          },
+        ];
+      case 'complete':
+        return [{ ...base, status: 'completed', objective: 'The lab is quiet' }];
+    }
   }
 
   /**

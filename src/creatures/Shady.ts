@@ -2,7 +2,14 @@ import { Mob } from './Mob';
 import type { Player } from './../Player';
 import type { LootDrop } from './Mob';
 import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
-import { drawQuestMarker, QUEST_MARKER_GOLD, QUEST_MARKER_GREEN } from '../sprites/questNPCSprite';
+import {
+  drawQuestMarker,
+  questMarkerColorFor,
+  QUEST_MARKER_GOLD,
+  QUEST_MARKER_GREEN,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 import { randomInt } from '../utils';
 
 /** He never fights and never dies; the HP exists only because every Mob has one. */
@@ -27,7 +34,7 @@ const LOOP_OFFSET_SPREAD_SECONDS = 4;
 const HEAD_ABOVE_TILE_TILES = 0.78;
 
 /** Which glyph floats over him, or none. Driven by `BountyProgress.phase`. */
-export type ShadyMarker = 'exclamation' | 'question' | 'none';
+export type ShadyMarker = QuestMarkerState;
 
 /**
  * Shady — the hooded man beside the town notice board who issues and pays out
@@ -108,6 +115,12 @@ export class Shady extends Mob {
   ): void {
     if (!this.isAlive) return;
     const box = this.spriteBox(camX, camY, tileSize);
+    // Beacon first, so the column stands behind him. It branches on the same
+    // `markerType` his glyph does, so the two can never disagree.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
+    }
     // Talking wins over scratching, not the other way round. `updateAI` — the
     // only thing that advances the scratch — does not run while a dialog is
     // open, so a conversation started mid-tic would otherwise freeze him with

@@ -9,7 +9,7 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 3
+        "frameCount": 4
       }
     }
   },

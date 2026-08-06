@@ -265,6 +265,14 @@ export class DarkKnight extends Mob {
   slamSoundPending = false;
   sweepHitSoundPending = false;
 
+  /**
+   * Set on the frame the mace starts coming up for a volley. Separate from
+   * {@link whirlSoundPending} because a raise that ends in green fire has to
+   * announce itself as something other than a physical swing — it is the only
+   * warning the player gets before bolts start crossing the room.
+   */
+  volleyWindupSoundPending = false;
+
   private state: KnightState = 'idle';
   private attackPhase: AttackPhase = 'windup';
   private windupTimer = 0;
@@ -335,6 +343,7 @@ export class DarkKnight extends Mob {
     this.whirlSoundPending = false;
     this.slamSoundPending = false;
     this.sweepHitSoundPending = false;
+    this.volleyWindupSoundPending = false;
     this.boltTimer = 0;
     this.boltsFired = 0;
     this.overheatTimer = 0;
@@ -449,7 +458,7 @@ export class DarkKnight extends Mob {
     // The first bolt waits for the mace to actually get overhead; the rest are
     // spaced by the interval alone.
     this.boltTimer = BOLT_RAISE_FRAMES;
-    this.whirlSoundPending = true;
+    this.volleyWindupSoundPending = true;
   }
 
   /**

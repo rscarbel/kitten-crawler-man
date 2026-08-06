@@ -30,6 +30,7 @@ import { randomInt } from '../utils';
 import { TileGrid } from './town/tileGrid';
 import {
   createTownPlan,
+  GATE_ARCH_PIER_TILES,
   type BuildingKind,
   type ShopSignEmblem,
   type TilePoint,
@@ -37,7 +38,12 @@ import {
   type TownPlan,
 } from './town/townPlan';
 import { getBlockedTileOffsets, getBlockedTileOffsetsByKey } from '../core/SpriteLoader';
-import { placeSpriteBuilding, towerBasePlot, towerDoorTile } from './town/paintPlots';
+import {
+  placeSpriteBuilding,
+  towerBasePlot,
+  towerDoorTile,
+  towerDoorwaySpan,
+} from './town/paintPlots';
 import {
   connectSiteToNearestGate,
   paintBuildingBypassRoutes,
@@ -98,6 +104,16 @@ export interface BuildingEntry {
    * Top's is a two-tile gap cut into a tile-built tent.
    */
   doorwayWidth?: number;
+  /**
+   * Westmost column of the opening, so the whole of it can be walked into.
+   *
+   * `doorTile` alone is one tile of an opening up to four tiles wide, and every
+   * tile of that opening is walkable ground with the door apron painted across
+   * it: an entrance that only triggers on its centre column is an entrance the
+   * player can stand squarely inside and not be offered. Paired with
+   * `doorwayWidth` — both present or both absent.
+   */
+  doorwayX0?: number;
 }
 
 export interface OverworldData {
@@ -269,10 +285,28 @@ export function generateOverworld(size: number): OverworldData {
    * and the forests out. `?townmap` draws the overhang from the sprite footprint
    * (`BuildingPlot.artRect`), not from anything the `TownPlan` states.
    */
+  // The tower is the one building whose door the `TownPlan` states rather than
+  // derives (its art is 23 rows tall and only its bottom two block, so the
+  // "front row" rule the sprite buildings share does not apply to it). Its
+  // *opening* is still the manifest's, though, so both ends of the span come
+  // from the anchor and the manifest — deriving only the width and taking the
+  // start from the plan agrees today by coincidence, and a re-drawn tower whose
+  // gap started a column further west would have registered one column of solid
+  // wall as an entrance and left one column of real doorway dead.
+  const towerDoor = towerDoorTile(plan);
+  const towerSpan = towerDoorwaySpan(plan);
+  if (towerDoor.x < towerSpan.x0 || towerDoor.x >= towerSpan.x0 + towerSpan.width) {
+    throw new Error(
+      `The town plan puts the tower door at column ${towerDoor.x}, outside the opening its own ` +
+        `art leaves at [${towerSpan.x0}, ${towerSpan.x0 + towerSpan.width})`,
+    );
+  }
   buildingEntries.push({
-    doorTile: towerDoorTile(plan),
+    doorTile: towerDoor,
     name: plan.tower.name,
     type: plan.tower.kind,
+    doorwayX0: towerSpan.x0,
+    doorwayWidth: towerSpan.width,
   });
 
   // The art rects: what a fence must not be driven through, and what a plot's
@@ -307,6 +341,7 @@ export function generateOverworld(size: number): OverworldData {
       type: planned.kind,
       sign: planned.sign,
       doorwayWidth: placement.doorwayWidth,
+      doorwayX0: placement.doorwayX,
     });
     paintDoorApron(grid, placement);
   }
@@ -616,6 +651,36 @@ function assertTownPlanIsSane(plan: TownPlan): void {
     rect.y < plan.wall.y + plan.wall.h &&
     plan.wall.y < rect.y + rect.h;
 
+  // The tower stands *in* the north wall, so unlike every other stretch of ring
+  // this one has a building on it — and the tower's width comes from its manifest
+  // footprint while the north gate's east edge is stated in the `TownPlan`. A
+  // re-drawn tower reaching further west would grow over the gate, which looks
+  // like an arch in a wall and walks like a dead end.
+  //
+  // The opening is widened by a pier before the comparison: a gateway's piers
+  // stand on the wall tiles beyond each end of what they arch over, so a gate
+  // that merely *abuts* the tower still has its east pier drawn into the tower's
+  // foot — two pieces of masonry occupying one tile, which no assertion on the
+  // openings alone can see.
+  const towerBase = towerBasePlot(plan);
+  const overlapsTowerBase = (rect: TileRect) =>
+    rect.x < towerBase.x + towerBase.w &&
+    towerBase.x < rect.x + rect.w &&
+    rect.y < towerBase.y + towerBase.h &&
+    towerBase.y < rect.y + rect.h;
+  // Grown along the opening's own run, which is the axis the piers flank: a gate
+  // in an east–west wall is wide and short, one in a north–south wall the
+  // reverse, and `placeGateArches` reads the same shape to pick the arch form.
+  const withPiers = (rect: TileRect): TileRect => {
+    const runsEastWest = rect.w >= rect.h;
+    return {
+      x: rect.x - (runsEastWest ? GATE_ARCH_PIER_TILES : 0),
+      y: rect.y - (runsEastWest ? 0 : GATE_ARCH_PIER_TILES),
+      w: rect.w + (runsEastWest ? GATE_ARCH_PIER_TILES * 2 : 0),
+      h: rect.h + (runsEastWest ? 0 : GATE_ARCH_PIER_TILES * 2),
+    };
+  };
+
   for (const gate of plan.gates) {
     if (gate.bounds.w <= 0 || gate.bounds.h <= 0 || gate.apron.w <= 0 || gate.apron.h <= 0) {
       throw new Error(`Town gate '${gate.name}' has a degenerate opening or apron`);
@@ -625,6 +690,9 @@ function assertTownPlanIsSane(plan: TownPlan): void {
     }
     if (overlapsWall(gate.apron)) {
       throw new Error(`Town gate '${gate.name}' has its apron on or inside the wall`);
+    }
+    if (overlapsTowerBase(withPiers(gate.bounds))) {
+      throw new Error(`Town gate '${gate.name}' stands its arch on the main tower's blocking base`);
     }
   }
 }
@@ -1027,6 +1095,9 @@ function assertNoUnusableSlivers(plots: ReadonlyArray<TownPlot>): void {
   }
 }
 
+/** Tiles of the south face a tile-built structure clears for its entrance. */
+const TILE_BUILDING_DOORWAY_WIDTH = 2;
+
 /**
  * A tile-built structure with a gable facade: north and south rows are wall,
  * the sides and interior take the roof tile, and a two-tile gap in the south
@@ -1036,18 +1107,22 @@ function placeTileBuilding(
   grid: TileGrid,
   rect: TileRect,
   roofTile: number,
-): { readonly doorTile: TilePoint } {
+): { readonly doorTile: TilePoint; readonly doorwayWidth: number } {
   for (let dy = 0; dy < rect.h; dy++) {
     for (let dx = 0; dx < rect.w; dx++) {
       const isGableRow = dy === 0 || dy === rect.h - 1;
       grid.set(rect.x + dx, rect.y + dy, isGableRow ? BUILDING_WALL : roofTile);
     }
   }
-  const doorX = rect.x + Math.floor(rect.w / 2) - 1;
+  const doorX = rect.x + Math.floor(rect.w / 2) - Math.floor(TILE_BUILDING_DOORWAY_WIDTH / 2);
   const doorY = rect.y + rect.h - 1;
-  grid.set(doorX, doorY, FloorTypeValue.road);
-  grid.set(doorX + 1, doorY, FloorTypeValue.road);
-  return { doorTile: { x: doorX, y: doorY } };
+  for (let dx = 0; dx < TILE_BUILDING_DOORWAY_WIDTH; dx++) {
+    grid.set(doorX + dx, doorY, FloorTypeValue.road);
+  }
+  return {
+    doorTile: { x: doorX, y: doorY },
+    doorwayWidth: TILE_BUILDING_DOORWAY_WIDTH,
+  };
 }
 
 /**
@@ -1114,7 +1189,13 @@ function paintCircus(
   };
   const bigTopPlacement = placeTileBuilding(grid, bigTop, ROOF_CIRCUS_RED);
   circusStructures.push(bigTop);
-  buildingEntries.push({ doorTile: bigTopPlacement.doorTile, name: 'Big Top', type: 'house' });
+  buildingEntries.push({
+    doorTile: bigTopPlacement.doorTile,
+    name: 'Big Top',
+    type: 'house',
+    doorwayX0: bigTopPlacement.doorTile.x,
+    doorwayWidth: bigTopPlacement.doorwayWidth,
+  });
 
   /** Decorative tents — solid structures with no door, so they are not enterable. */
   const SMALL_TENTS = [

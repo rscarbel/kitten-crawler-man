@@ -174,6 +174,14 @@ export class SkeletonLord extends Mob {
    */
   lastSpecial: 'hands' | 'summon' = 'hands';
 
+  /**
+   * Set on the frame the cast begins, which is a full second before the bolts
+   * leave. Its own flag rather than a `specialSoundPending` arm: the wind-up and
+   * the release are one attack, and `projectileSoundPending` already carries the
+   * release.
+   */
+  castWindupSoundPending = false;
+
   private state: LordState = 'idle';
   private castTimer = 0;
   private handsTimer = 0;
@@ -237,6 +245,7 @@ export class SkeletonLord extends Mob {
     this.pendingShots = [];
     this.pendingSummons = [];
     this.escortAtCap = false;
+    this.castWindupSoundPending = false;
   }
 
   override takeDamageFrom(
@@ -320,6 +329,7 @@ export class SkeletonLord extends Mob {
       this.beginAttack('cast', target);
       this.castTimer = SOUL_BOLT_CAST_FRAMES;
       this.boltCooldown = SOUL_BOLT_COOLDOWN_FRAMES;
+      this.castWindupSoundPending = true;
       return true;
     }
     if (this.summonCooldown === 0 && !this.escortAtCap) {

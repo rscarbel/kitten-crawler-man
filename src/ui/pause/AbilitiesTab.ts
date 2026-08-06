@@ -458,7 +458,7 @@ function renderListView(
     primaryAction: true,
     action: () => {
       currentView = 'list';
-      setTab('main');
+      setTab('game');
     },
   });
 }

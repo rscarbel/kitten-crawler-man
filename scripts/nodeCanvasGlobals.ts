@@ -5,8 +5,10 @@
  * market stall stacks the game's real crate and barrel PNGs on its counter via
  * `drawSpriteKey` — has to run `SpriteLoader.loadSprites` first, and that builds
  * an `Image` per sheet. `allocCanvas`'s fallback path wants
- * `document.createElement('canvas')`. Those two shims are the whole
- * compatibility layer; `performance.now` is already a Node global.
+ * `document.createElement('canvas')`, and every sheet that finishes loading asks
+ * `window.devicePixelRatio` whether this device is poor enough to halve it.
+ * Those three shims are the whole compatibility layer; `performance.now` is
+ * already a Node global.
  *
  * Without this, a painter's sprite blits are silently skipped — `drawSpriteKey`
  * returns early on an unloaded key — and the missing crates would be baked into
@@ -23,7 +25,19 @@ const IMAGE_BASE = 'src/images/';
 interface CanvasGlobals {
   Image?: unknown;
   document?: unknown;
+  window?: unknown;
 }
+
+/**
+ * The pixel ratio the shimmed `window` reports.
+ *
+ * A generator must bake at the sheet's authored resolution, and `SpriteLoader`
+ * halves a sheet it decides the device is too poor for. Reporting a Retina
+ * ratio is not a fib about the machine running the bake — it is the display the
+ * sheets are authored for, and it is the one answer that keeps a re-bake
+ * pixel-identical to the art the game ships.
+ */
+const BAKE_DEVICE_PIXEL_RATIO = 2;
 
 /**
  * Installs the shims and loads every sheet in the manifest, so painters that
@@ -38,5 +52,6 @@ export async function loadGameSpritesInNode(): Promise<void> {
       return createCanvas(1, 1);
     },
   };
+  globals.window = { devicePixelRatio: BAKE_DEVICE_PIXEL_RATIO };
   await loadSprites(IMAGE_BASE);
 }

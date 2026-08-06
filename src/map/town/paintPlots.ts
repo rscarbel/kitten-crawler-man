@@ -14,7 +14,7 @@ import { offsetToTile, type PlannedBuilding, type TilePoint, type TileRect } fro
 import type { TownPlan } from './townPlan';
 
 /** Manifest key of the town's main tower, whose anchor tile carries no sprite key. */
-const MAIN_TOWER_SPRITE_KEY = 'overworld_main_tower';
+export const MAIN_TOWER_SPRITE_KEY = 'overworld_main_tower';
 
 /**
  * The tower's blocking base, relative to its anchor: the manifest blocks the two
@@ -29,7 +29,7 @@ const TOWER_BASE_FALLBACK_WEST_OFFSET = 3;
 /** A sprite building once it is on the grid. */
 export interface SpritePlacement {
   readonly doorTile: TilePoint;
-  /** Leftmost column of the facade's opening; `doorTile.x` is its centre. */
+  /** Leftmost column of the facade's opening. `doorTile.x` is a column inside it. */
   readonly doorwayX: number;
   /** Tiles wide the facade's opening is, so the door's apron can match it. */
   readonly doorwayWidth: number;
@@ -91,6 +91,33 @@ export function placeSpriteBuilding(
 
 export function towerDoorTile(plan: TownPlan): TilePoint {
   return offsetToTile(plan, plan.tower.door);
+}
+
+/**
+ * Used only if the tower's sprite is missing from the manifest, as the fallback
+ * base widths above are.
+ */
+const TOWER_DOORWAY_FALLBACK_X0_OFFSET = -1;
+const TOWER_DOORWAY_FALLBACK_WIDTH = 2;
+
+/**
+ * The columns the tower's own art leaves open at its foot, as absolute tiles.
+ *
+ * Derived from the manifest and the tower's anchor rather than from
+ * `plan.tower.door`, which states one tile *inside* that opening — the two are
+ * different questions, and answering the first with the second registers half a
+ * doorway.
+ */
+export function towerDoorwaySpan(plan: TownPlan): { readonly x0: number; readonly width: number } {
+  const anchor = offsetToTile(plan, plan.tower.anchor);
+  const doorway = getSpriteDoorwayByKey(MAIN_TOWER_SPRITE_KEY);
+  if (doorway === undefined) {
+    return {
+      x0: anchor.x + TOWER_DOORWAY_FALLBACK_X0_OFFSET,
+      width: TOWER_DOORWAY_FALLBACK_WIDTH,
+    };
+  }
+  return { x0: anchor.x + doorway.dx0, width: doorway.width };
 }
 
 /**

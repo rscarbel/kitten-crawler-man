@@ -318,6 +318,22 @@ export const QUEST_MARKER_GREEN = '#4ade80';
 /** The two overhead glyphs quest-givers wear. */
 export type QuestMarkerGlyph = '!' | '?';
 
+/** What a quest giver has for the player: something to say, something to hand in, or nothing. */
+export type QuestMarkerState = 'exclamation' | 'question' | 'none';
+
+/**
+ * The colour of a marker state, or `undefined` for a giver with nothing to say.
+ *
+ * Shared so a giver's glyph and its beacon are painted from one branch on one
+ * state. Drawn from two branches they drift: a state added to one and not the
+ * other leaves an NPC with a column of light and no glyph, or the reverse.
+ */
+export function questMarkerColorFor(state: QuestMarkerState): string | undefined {
+  if (state === 'exclamation') return QUEST_MARKER_GOLD;
+  if (state === 'question') return QUEST_MARKER_GREEN;
+  return undefined;
+}
+
 /**
  * Bouncing overhead quest marker.
  *

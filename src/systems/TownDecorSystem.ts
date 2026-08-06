@@ -83,13 +83,6 @@ const LAMP_END_MARGIN_TILES = 3;
 const LAMP_DOOR_CLEARANCE_TILES = 2;
 
 /**
- * The doorway width assumed for an entry that does not state one. Only the tower
- * and the Big Top lack it, and neither carries a sign, so this is a fallback that
- * nothing reaches rather than a guess about a real building.
- */
-const DEFAULT_DOORWAY_WIDTH_TILES = 1;
-
-/**
  * Spread the flicker so a street of lamps does not breathe in unison. The golden
  * angle, for the reason `GOLDEN_ANGLE_RAD` gives — a round stride puts some pair
  * of a dozen lamps in visual lockstep.
@@ -311,7 +304,7 @@ export class TownDecorSystem implements GameSystem {
         new ShopSignProp(
           entry.doorTile,
           emblem,
-          signWestShiftTiles(entry.doorwayWidth ?? DEFAULT_DOORWAY_WIDTH_TILES),
+          signWestShiftTiles(entry.doorTile.x, entry.doorwayX0 ?? entry.doorTile.x),
           signIndex * SIGN_SWAY_PHASE_STRIDE_RAD,
           () => this.frame,
         ),
@@ -457,11 +450,11 @@ export class TownDecorSystem implements GameSystem {
    * the opening and its stonework is above head height — so it needs no
    * connectivity check.
    *
-   * **The three gates are not the same shape and must not be drawn the same way.**
-   * The south gate is a four-tile opening in an east–west wall: you look through
-   * it, and it takes the face-on arch. The side gates are four-tile openings in
+   * **The gates are not all the same shape and must not be drawn the same way.**
+   * The north and south gates are openings in an east–west wall: you look through
+   * them, and they take the face-on arch. The side gates are four-tile openings in
    * north–south walls, which the wall renderer itself draws top-down, so they take
-   * the gatehouse form. Drawing all three face-on spanned the side gates *along
+   * the gatehouse form. Drawing every gate face-on spanned the side gates *along
    * Market Street* instead of across their own throats and planted a stone pier in
    * the carriageway five tiles inside the wall.
    */
@@ -705,8 +698,8 @@ class ShopSignProp implements TownPropRenderable {
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
     const step = shopSignSwayStep(this.currentFrame(), this.swayPhase);
     // The west shift is applied here rather than baked, because it is a whole-sign
-    // translation: the two wide doorways that need it would otherwise double the
-    // sheet for a picture identical but for its position.
+    // translation: the fronts that need it would otherwise double the sheet for a
+    // picture identical but for its position.
     const shift = tileSize * this.westShiftTiles;
     drawTownSheetFrame(
       ctx,

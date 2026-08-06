@@ -23,6 +23,7 @@ import { QuestNPC } from '../creatures/QuestNPC';
 import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
 import type { QuestStatus } from '../core/QuestManager';
+import { secondsLabel, type TrackerEntry } from './questTracker';
 import {
   drawQuestNPCSprite,
   drawWoodPileSprite,
@@ -387,6 +388,63 @@ export class DefendQuestSystem implements GameSystem {
       return [{ x: tileX, y: tileY, type: 'exclamation' }];
     }
     return [];
+  }
+
+  /**
+   * The Journal's line for this quest, rebuilt from the phase every frame.
+   *
+   * Deliberately silent while `inactive`: on a floor with no quest room there
+   * is no goblin mother to defend, and a journal entry for a quest that does not
+   * exist on this floor is worse than no entry at all.
+   */
+  trackerEntries(): ReadonlyArray<TrackerEntry> {
+    if (this.phase === 'inactive' || this.npc === null) return [];
+    const name = this.questManager.getDef(DEFEND_QUEST_ID)?.name ?? 'Defend the Goblin Mother';
+    const target = {
+      x: Math.floor(this.npc.x / TILE_SIZE),
+      y: Math.floor(this.npc.y / TILE_SIZE),
+    };
+    const base = { id: DEFEND_QUEST_ID, name, target };
+
+    switch (this.phase) {
+      case 'npc_waiting':
+      case 'dialog':
+      case 'tutorial':
+        return [
+          {
+            ...base,
+            status: 'available',
+            objective: 'Speak to the goblin mother',
+            hint: 'She is waiting in the nursery room, marked on your map.',
+          },
+        ];
+      case 'countdown':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Barricade the doors — the swarm arrives in ${secondsLabel(this.approachTimer)}`,
+            hint: 'Grab wood from the pile and build across the openings.',
+          },
+        ];
+      case 'defending':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Hold the room — ${secondsLabel(this.defenseTimer)} left`,
+            hint: 'She dies, the quest dies. Keep the bugaboos off her.',
+          },
+        ];
+      case 'complete_pending':
+        return [
+          { ...base, status: 'active', objective: 'Return to the goblin mother for your reward' },
+        ];
+      case 'failed':
+        return [{ ...base, status: 'failed', objective: 'The goblin mother did not survive' }];
+      case 'complete':
+        return [{ id: base.id, name, status: 'completed', objective: 'The nursery held' }];
+    }
   }
 
   get isDialogOpen(): boolean {

@@ -131,10 +131,14 @@ export function paintDoorApron(grid: TileGrid, placement: SpritePlacement): void
  * into the gate.
  *
  * **The order of the two segments is the whole correctness argument, and getting
- * it the other way round drove a road through the middle of the town.** There is
- * no north gate, so a circus north of the walls routes to a *side* gate, whose
- * exit sits beside Market Street — 9 rows below the town's centre line and well
- * inside its north-south extent. Turning along the site's own column first then
+ * it the other way round drove a road through the middle of the town.** The
+ * pathology was measured when the town had only three gates, so a circus north
+ * of the walls routed to a *side* gate, whose exit sits beside Market Street — 9
+ * rows below the town's centre line and well inside its north-south extent. The
+ * north gate removes that particular case, but not the argument: the gate chosen
+ * is the nearest by straight line, and a site off the town's diagonals still
+ * picks one whose exit is deep inside the town's extent on the other axis.
+ * Turning along the site's own column first then
  * paved 3 tiles of packed earth from the circus straight down through the Civic
  * Terrace, the plaza and Market Street's cobble, and `TOWN_WALL` being solid then
  * cut the run at the wall so the circus finished with no road at all: measured

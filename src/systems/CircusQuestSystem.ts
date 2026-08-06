@@ -24,6 +24,7 @@ import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import type { TrackerEntry } from './questTracker';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import { Signet } from '../creatures/Signet';
@@ -53,7 +54,7 @@ import {
   buildResolutionDialog,
 } from './circusQuestDialogs';
 
-const QUEST_ID = 'the_show_must_go_on';
+export const CIRCUS_QUEST_ID = 'the_show_must_go_on';
 
 /** How far a scripted spawn may be nudged to find a walkable tile. */
 const SPAWN_SEARCH_RADIUS_TILES = 6;
@@ -196,7 +197,7 @@ export class CircusQuestSystem implements GameSystem {
   ) {
     this.questManager = new QuestManager();
     this.questManager.register({
-      id: QUEST_ID,
+      id: CIRCUS_QUEST_ID,
       name: 'The Show Must Go On',
       type: 'story',
       rewards: {
@@ -239,13 +240,13 @@ export class CircusQuestSystem implements GameSystem {
       case 'ritual_defense':
         this.phase = 'ritual_defense';
         this.spawnSignetAtLookout();
-        this.questManager.startQuest(QUEST_ID);
+        this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.startBattleMusic();
         this.spawnWave(RITUAL_WAVES, 0, this.ritualWaveOrigin());
         break;
       case 'heather_hunt':
         this.spawnSignetAtLookout();
-        this.questManager.startQuest(QUEST_ID);
+        this.questManager.startQuest(CIRCUS_QUEST_ID);
         if (this.progress.heatherSlain) {
           this.phase = 'awaiting_heather_return';
         } else {
@@ -259,17 +260,17 @@ export class CircusQuestSystem implements GameSystem {
       case 'assault':
         this.phase = 'assault';
         this.spawnSignetAtLookout();
-        this.questManager.startQuest(QUEST_ID);
+        this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.beginAssaultCombat();
         break;
       case 'bigtop_ready':
         this.phase = 'bigtop_ready';
-        this.questManager.startQuest(QUEST_ID);
+        this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.spawnSignetAtBigTopDoor();
         break;
       case 'grimaldi_slain':
         this.phase = 'awaiting_resolution';
-        this.questManager.startQuest(QUEST_ID);
+        this.questManager.startQuest(CIRCUS_QUEST_ID);
         this.spawnSignetAtBigTopDoor();
         break;
       case 'complete':
@@ -548,6 +549,114 @@ export class CircusQuestSystem implements GameSystem {
     return markers;
   }
 
+  /**
+   * The Journal's line for the circus, rebuilt from the phase every frame.
+   *
+   * Every phase points at somewhere: Signet while she is waiting to talk,
+   * Heather while she is loose, the Big Top door when it is time to go in. The
+   * one entry with no target is the finished one, which nobody needs directions
+   * to.
+   */
+  trackerEntries(): ReadonlyArray<TrackerEntry> {
+    const name = this.questManager.getDef(CIRCUS_QUEST_ID)?.name ?? 'The Show Must Go On';
+    const atSignet = this.signet?.isAlive === true ? this.signetTile() : undefined;
+    const base = { id: CIRCUS_QUEST_ID, name };
+
+    switch (this.phase) {
+      case 'awaiting_intro':
+        return [
+          {
+            ...base,
+            status: 'available',
+            objective: 'Find the Tsarina at the circus',
+            hint: 'The fairground is well outside the walls — take a gate and follow the road.',
+            target: atSignet,
+          },
+        ];
+      case 'ritual_defense':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Guard the casting — wave ${this.waveIndex + 1} of ${RITUAL_WAVES.length}`,
+            hint: 'She cannot fight and cast. Keep the mold off her.',
+            target: atSignet,
+          },
+        ];
+      case 'awaiting_ritual_failed':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Hear the Tsarina out',
+            target: atSignet,
+          },
+        ];
+      case 'heather_hunt':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Bring Heather the bear back to the circus',
+            hint: 'She bolted into the wilds. Follow the red mark.',
+            target:
+              this.heather?.isAlive === true
+                ? {
+                    x: Math.round(this.heather.x / TILE_SIZE),
+                    y: Math.round(this.heather.y / TILE_SIZE),
+                  }
+                : atSignet,
+          },
+        ];
+      case 'awaiting_heather_return':
+        return [
+          { ...base, status: 'active', objective: 'Report back to the Tsarina', target: atSignet },
+        ];
+      case 'assault':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Break the assault — wave ${this.waveIndex + 1} of ${ASSAULT_WAVES.length}`,
+            target: this.circusCentre ?? atSignet,
+          },
+        ];
+      case 'bigtop_ready':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Take the ring under the Big Top',
+            hint: 'The Tsarina waits at the tent door.',
+            target: this.bigTopDoorTile ?? atSignet,
+          },
+        ];
+      case 'awaiting_resolution':
+        return [
+          { ...base, status: 'active', objective: 'Settle up with the Tsarina', target: atSignet },
+        ];
+      case 'complete':
+        return [{ ...base, status: 'completed', objective: 'The show went on' }];
+    }
+  }
+
+  /**
+   * Holds Signet's beacon state to the phase, every frame.
+   *
+   * Deliberately **not** part of `update()`, for the reason `syncShady` is not:
+   * the scene treats an open quest dialog as halted gameplay and returns before
+   * the system update pass, so a write in there could only ever observe the
+   * dialog closed — and her beacon would stand over her for the whole
+   * conversation. The scene calls this above that early return.
+   */
+  syncMarkers(): void {
+    if (this.signet === null) return;
+    // The same state her minimap `exclamation` marker is derived from, so the
+    // beacon she draws over herself and the pip on the map agree.
+    this.signet.markerType =
+      this.hasPendingDialog() && !this.dialog.isOpen ? 'exclamation' : 'none';
+  }
+
   private hasPendingDialog(): boolean {
     return (
       this.phase === 'awaiting_intro' ||
@@ -614,8 +723,8 @@ export class CircusQuestSystem implements GameSystem {
   private startRitualDefense(): void {
     this.phase = 'ritual_defense';
     this.progress.stage = 'ritual_defense';
-    this.questManager.startQuest(QUEST_ID);
-    this.bus.emit('questStarted', { questId: QUEST_ID });
+    this.questManager.startQuest(CIRCUS_QUEST_ID);
+    this.bus.emit('questStarted', { questId: CIRCUS_QUEST_ID });
     this.startBattleMusic();
     this.spawnWave(RITUAL_WAVES, 0, this.ritualWaveOrigin());
   }
@@ -653,9 +762,9 @@ export class CircusQuestSystem implements GameSystem {
   private finishQuest(active: Player): void {
     this.phase = 'complete';
     this.progress.stage = 'complete';
-    this.questManager.completeQuest(QUEST_ID);
+    this.questManager.completeQuest(CIRCUS_QUEST_ID);
 
-    const def = this.questManager.getDef(QUEST_ID);
+    const def = this.questManager.getDef(CIRCUS_QUEST_ID);
     if (def) active.gainXp(def.rewards.xp);
 
     if (this.progress.mongoKidnapped && this.mongoSystem) {
@@ -663,7 +772,7 @@ export class CircusQuestSystem implements GameSystem {
       this.progress.mongoKidnapped = false;
     }
 
-    this.bus.emit('questCompleted', { questId: QUEST_ID });
+    this.bus.emit('questCompleted', { questId: CIRCUS_QUEST_ID });
     this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;
   }
 

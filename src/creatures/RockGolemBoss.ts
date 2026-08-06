@@ -117,6 +117,13 @@ export class RockGolemBoss extends RockGolem {
 
   private state: BossState = 'fighting';
   private stateFrame = 0;
+  /**
+   * Which of the roll's beats raised `specialSoundPending`. The curl, the roll
+   * itself and the uncurl all share that one flag, and the boulder grinding
+   * across the arena is a different sound from the golem hauling itself into
+   * and out of the shape — `playMobAudioCues` reads this to tell them apart.
+   */
+  lastSpecial: 'brace' | 'roll' = 'brace';
   private rollCooldown = ROLL_COOLDOWN;
   private passesLeft = 0;
   private passFrames = 0;
@@ -214,6 +221,7 @@ export class RockGolemBoss extends RockGolem {
     // slam the player is already reading as a telegraph.
     if (this.rollCooldown === 0 && this.currentAttack === null && this.currentTarget !== null) {
       this.enterState('curling');
+      this.lastSpecial = 'brace';
       this.specialSoundPending = true;
       return;
     }
@@ -245,6 +253,7 @@ export class RockGolemBoss extends RockGolem {
     this.passesLeft = ROLL_PASSES;
     this.passFrames = 0;
     this.aim = null;
+    this.lastSpecial = 'roll';
     this.specialSoundPending = true;
   }
 
@@ -259,6 +268,7 @@ export class RockGolemBoss extends RockGolem {
       // The grind of the shell coming apart, not the groan — the groan belongs
       // to the stun that follows half a second later, and firing both here
       // stacks two cues on one beat.
+      this.lastSpecial = 'brace';
       this.specialSoundPending = true;
       return;
     }
@@ -329,6 +339,7 @@ export class RockGolemBoss extends RockGolem {
 
   private finishRoll(): void {
     this.enterState('uncurling');
+    this.lastSpecial = 'brace';
     this.specialSoundPending = true;
   }
 

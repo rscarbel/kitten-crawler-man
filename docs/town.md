@@ -10,7 +10,7 @@ anyone changing the town's layout, ground, props or the systems anchored to it.
 ## What the town is
 
 A **walled market village**, not a crossroads: a wall ring roughly 55 × 41 tiles
-inside, three gates, a street hierarchy, and sixteen buildings standing shoulder to
+inside, four gates, a street hierarchy, and sixteen buildings standing shoulder to
 shoulder on plots that front a street. Outside the wall are the ruins, the forests and
 the circus.
 
@@ -79,6 +79,17 @@ list — don't add a rule to `paintStreets.ts`.
 The wall is painted **after** the streets and its gates are then re-cut, which lets
 every street be a plain rectangle spanning the interior.
 
+The four gates are south (King's Road), west and east (Market Street), and north.
+The north one is a **postern**, two tiles wide against the others' four: it is cut
+into the Civic Terrace's own frontage west of the tower's foot, which is the only
+stretch of north wall the tower's blocking base does not stand on, and the width is
+what that stretch holds once the terrace's west column and the tower's pier
+clearance are accounted for. It opens onto flagstone that already runs south past
+the tower into the plaza, so it needs no interior street of its own.
+`assertTownPlanIsSane` compares each gate — grown by a pier either side, since a
+gateway stands its piers on the wall beyond its opening — against `towerBasePlot`,
+so a re-drawn tower cannot grow over it silently.
+
 ### Plots are stated as frontage, not anchors
 
 The plan gives a building its west column and front row; width and height come from the
@@ -129,6 +140,39 @@ and exits non-zero above a joint-to-interior ratio of 1.15 (current worst: 1.11)
 `DIRT_PATCH` renders as `lane`, not as its own material — it is a decoration drawn over
 a road, and as a material the surrounding lane would win all four corners and the mask
 would erase it.
+
+---
+
+## Wayfinding
+
+The town is the floor a player is most likely to stall on: sixteen doors, three
+questlines and a market, and nothing that says what any of it is for. Four things answer
+that, and each answers a different half of "I don't know what to do":
+
+- **The Quest Journal** (`src/ui/pause/JournalTab.ts`) — a pause-menu tab, reached from
+  the compass button under the achievement chip, from the `toggleQuestTracker` binding, or
+  from the Game tab. It lists whatever the floor's quest systems say is outstanding: an
+  objective line, a hint, a compass chevron and a tile distance per row, and clicking one
+  pins it — which puts a world arrow over the player and an extra marker on the minimap.
+  It lives behind a pause rather than on the HUD because it has to be able to show
+  _everything_: a corner panel had to cap its rows and squeeze its text, and a "+N more"
+  line the player cannot open is worse than a menu they have to press a button for. Only
+  floors from `JOURNAL_FIRST_FLOOR` up offer it, which is where more than one thread runs
+  at once.
+- **The tracker seam** (`src/systems/questTracker.ts`) — every quest system grows a
+  `trackerEntries()` getter beside its existing `questMarkers` one, rebuilt from its own
+  phase machine each frame. Deliberately _not_ a global `QuestManager`: two of the five
+  questlines do not use one at all.
+- **Quest beacons** (`src/sprites/questBeacon.ts`) — a column of light over anyone
+  wearing a `!`/`?`, drawn by the creature before its own body paint so it Y-sorts with
+  the figure. Gated on the exact state that drives the glyph, so the two cannot disagree.
+- **The Town Guide** (`src/systems/TownGuideSystem.ts`) — Journal rows pointing at the
+  town's own furniture (notice board, General Store, the safe room) until the player has
+  stood near each. Deliberately none of the quest givers and not the circus: all four
+  already have rows from their own systems, and two rows sending the player to one place
+  under two different names is worse guidance than one.
+
+`npm run verify:town` is the gate for the door and gate geometry these rely on.
 
 ---
 

@@ -35,6 +35,20 @@ import { GearPanel } from '../ui/GearPanel';
 import { SpatialGrid } from '../core/SpatialGrid';
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
+import {
+  captureJournalProgress,
+  createJournalProgress,
+  restoreJournalProgress,
+  type JournalProgress,
+} from '../core/JournalProgress';
+import { TownGuideSystem } from '../systems/TownGuideSystem';
+import { drawArrowAbovePlayer } from '../ui/WorldArrow';
+import {
+  collectTrackerEntries,
+  isOutstanding,
+  resolvePinnedEntry,
+  type TrackerEntry,
+} from '../systems/questTracker';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
@@ -187,7 +201,7 @@ import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem, SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
 import { DEFEND_QUEST_ID, DefendQuestSystem } from '../systems/DefendQuestSystem';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
-import { CircusQuestSystem } from '../systems/CircusQuestSystem';
+import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import {
@@ -336,6 +350,8 @@ export interface DungeonSceneOptions {
   circusQuestProgress?: CircusQuestProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
   murderQuestProgress?: MurderQuestProgress;
+  /** Journal state that must survive a door: guide visits and the pinned objective. */
+  journalProgress?: JournalProgress;
   /** Bounty-board state, threaded by reference across building/scene transitions. */
   bountyProgress?: BountyProgress;
   /** Doomsday-finale state (soul crystal containment + escape), threaded by reference across building/scene transitions. */
@@ -585,6 +601,12 @@ const MORDECAI_CHAT_MERGED_EVENTS_LIMIT = 5;
 /** Floors Mordecai has a list of objectives for; the rest fall through to the AI chat. */
 const DUNGEON_FLOOR_ONE = 1;
 const DUNGEON_FLOOR_TWO = 2;
+/**
+ * The Over City: the only floor that is a town rather than a dungeon, and the
+ * first with more than one questline running at once — which is why it is also
+ * where the Quest Journal starts being offered.
+ */
+const OVERWORLD_FLOOR_THREE = 3;
 const GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES = 12;
 const COMBAT_COOLDOWN_FRAMES = 300;
 const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
@@ -612,6 +634,13 @@ const ARROW_BOUNCE_AMPLITUDE = 4;
 const ARROW_LENGTH_PIXELS = 22;
 const ARROW_LINE_WIDTH = 1.5;
 const ARROW_VERTICAL_OFFSET_TILES = 1.5;
+
+/** Offset from a tile's origin to its centre, as a fraction of a tile. */
+const TILE_CENTRE_FRACTION = 0.5;
+/** Inside this many tiles the pinned-objective arrow is suppressed — it is on screen. */
+const PINNED_ARROW_SUPPRESS_TILES = 4;
+/** Gold, matching the pinned Journal row it belongs to. */
+const PINNED_ARROW_COLOR = '#facc15';
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -687,6 +716,8 @@ export class DungeonScene extends GameplayScene {
   private readonly _extraTargets: Player[] = [];
   /** Reused per-frame array of the minimap's quest markers. */
   private readonly _questMarkers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
+  /** Reused per-frame array of the Journal's entries, for the same reason. */
+  private readonly _trackerEntries: TrackerEntry[] = [];
   private readonly _systemContext: SystemContext;
 
   // Systems
@@ -721,6 +752,9 @@ export class DungeonScene extends GameplayScene {
   private townProps: TownPropSystem | null = null;
   /** Shady's bounty loop. Overworld only — null on every other floor. */
   private bounty: BountySystem | null = null;
+  private townGuide: TownGuideSystem | null = null;
+  /** Screen rect of the Journal's compass button, or null on floors without one. */
+  private journalButtonRect: UIRenderer.Rect | null = null;
   private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
@@ -753,6 +787,7 @@ export class DungeonScene extends GameplayScene {
   private riverAmbientEmitter: AmbientEmitter | null = null;
   private readonly circusQuestProgress: CircusQuestProgress;
   private readonly murderQuestProgress: MurderQuestProgress;
+  private readonly journalProgress: JournalProgress;
   private readonly bountyProgress: BountyProgress;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
@@ -1064,6 +1099,7 @@ export class DungeonScene extends GameplayScene {
     });
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
+    this.journalProgress = options?.journalProgress ?? createJournalProgress();
     this.bountyProgress = options?.bountyProgress ?? createBountyProgress();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
@@ -1335,6 +1371,7 @@ export class DungeonScene extends GameplayScene {
                   onResetGame: this.onResetGameCallback ?? undefined,
                   circusQuestProgress: this.circusQuestProgress,
                   murderQuestProgress: this.murderQuestProgress,
+                  journalProgress: this.journalProgress,
                   bountyProgress: this.bountyProgress,
                   doomsdayQuestProgress: this.doomsdayQuestProgress,
                   clubMembership: this.clubMembership,
@@ -1421,6 +1458,11 @@ export class DungeonScene extends GameplayScene {
           );
         }
       }
+      this.townGuide = new TownGuideSystem(
+        this.gameMap,
+        this.townProps.boardTile,
+        this.journalProgress,
+      );
     }
 
     this.pauseMenu = new PauseMenu();
@@ -2218,6 +2260,12 @@ export class DungeonScene extends GameplayScene {
         this.miniMap.toggle();
         this.audio?.play('menu_expand_map');
       },
+      toggleQuestTracker: () => {
+        // Same gate as its button: a menu tab that opens onto a floor with no
+        // quests to list is worse than a key that does nothing.
+        if (!this.hasQuestJournal) return;
+        if (this.openQuestJournal()) this.audio?.play('menu_open');
+      },
       openChat: () => this.triggerOpenChat(),
       mongoSummon: () => this.toggleMongoSummon(),
       buildAction: () => this.triggerBuildAction(),
@@ -2594,6 +2642,82 @@ export class DungeonScene extends GameplayScene {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+  }
+
+  /**
+   * Whether this floor offers a Quest Journal at all.
+   *
+   * The town is the first floor where several threads run at once, which is what
+   * a journal is for. The tutorial is held back for the same reason the
+   * achievement chrome is: it is itself a guidance system, and a second one
+   * offering the player somewhere else to go is the opposite of what it is for.
+   */
+  private get hasQuestJournal(): boolean {
+    return this.tutorial === null && this.levelDef.floorNumber >= OVERWORLD_FLOOR_THREE;
+  }
+
+  /** Pauses into the Journal — the compass button's action and the J key's. */
+  private openQuestJournal(): boolean {
+    if (this.gameOver) return false;
+    this.syncJournalContext();
+    this.pauseMenu.openToJournal();
+    // The same housekeeping `togglePause` does, because this opens the same
+    // menu: two panels left open behind it would be waiting on the far side of
+    // a Resume the player pressed to get back to the game.
+    this.inventoryPanel.isOpen = false;
+    this.gearPanel.isOpen = false;
+    // No sound here: the compass button declares its own, which the pointer
+    // paths have already played through `notifyButtonClick`. The key path plays
+    // it at the binding instead, exactly as `togglePause` does.
+    return true;
+  }
+
+  /**
+   * Hands the pause menu this frame's journal, or takes it away.
+   *
+   * Null is what hides the Quest Journal row from the Game tab, so the menu has
+   * one condition to read rather than a floor number it would have to be told
+   * about separately.
+   */
+  private syncJournalContext(): void {
+    if (!this.hasQuestJournal) {
+      this.pauseMenu.journalContext = null;
+      return;
+    }
+    const active = this.active();
+    this.pauseMenu.journalContext = {
+      playerTileX: Math.floor(active.x / TILE_SIZE),
+      playerTileY: Math.floor(active.y / TILE_SIZE),
+      entries: this._trackerEntries,
+      progress: this.journalProgress,
+    };
+  }
+
+  /**
+   * The world arrow for whichever Journal entry the player pinned.
+   *
+   * Suppressed within a few tiles of the target, as the bounty arrow is: past
+   * that point the thing is on screen, and an arrow still insisting on a
+   * direction is telling the player something they can see.
+   */
+  private renderPinnedObjectiveArrow(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): void {
+    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
+    const target = pinned?.target;
+    if (target === undefined) return;
+
+    const player = this.active();
+    const targetX = (target.x + TILE_CENTRE_FRACTION) * TILE_SIZE;
+    const targetY = (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE;
+    const distanceTiles =
+      Math.hypot(targetX - (player.x + TILE_SIZE / 2), targetY - (player.y + TILE_SIZE / 2)) /
+      TILE_SIZE;
+    if (distanceTiles < PINNED_ARROW_SUPPRESS_TILES) return;
+
+    drawArrowAbovePlayer(ctx, player.x, player.y, targetX, targetY, camX, camY, PINNED_ARROW_COLOR);
   }
 
   private triggerCompanionFollow(): void {
@@ -3013,6 +3137,7 @@ export class DungeonScene extends GameplayScene {
 
       circusQuestProgress: captureCircusQuestProgress(this.circusQuestProgress),
       murderQuestProgress: captureMurderQuestProgress(this.murderQuestProgress),
+      journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       clubMembership: captureClubMembership(this.clubMembership),
       townMemory: captureTownMemory(this.townMemory),
@@ -3073,6 +3198,7 @@ export class DungeonScene extends GameplayScene {
 
     restoreCircusQuestProgress(this.circusQuestProgress, world.circusQuestProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
+    restoreJournalProgress(this.journalProgress, world.journal);
     // Paired with the bounty system above: the re-stage reads the mark's type,
     // name and site from this record, so an un-restored cursor would re-stage
     // the wrong contract — or burn a name the player never saw.
@@ -3189,6 +3315,10 @@ export class DungeonScene extends GameplayScene {
         // lethal countdown for free by simply dying to anything else.
         circusQuestProgress: this.circusQuestProgress,
         murderQuestProgress: this.murderQuestProgress,
+        // Carried through a death restart with the questlines it belongs to: the
+        // Town Guide is a record of where the player has been, and dying does not
+        // un-visit the shop.
+        journalProgress: this.journalProgress,
         bountyProgress: this.bountyProgress,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         clubMembership: this.clubMembership,
@@ -3589,9 +3719,47 @@ export class DungeonScene extends GameplayScene {
           this.defendQuestObjective(),
           this.ballOfSwineObjective('ball_of_swine_distant'),
         ];
+      case OVERWORLD_FLOOR_THREE:
+        // The floor's three questlines, and deliberately not the Town Guide's
+        // stops: Mordecai's advice is quest-shaped — a page of prose and a
+        // bearing about something worth doing — and "there is a shop" is a
+        // signpost, not a story. The Journal carries those; he does not.
+        return [this.circusObjective(), this.murderQuestObjective(), this.bountyObjective()].filter(
+          (objective): objective is AdviceSlot => objective !== null,
+        );
       default:
         return [];
     }
+  }
+
+  private circusObjective(): AdviceObjective {
+    return adviceObjective(
+      'the_circus',
+      this.circusQuest.questManager.getStatus(CIRCUS_QUEST_ID) === 'completed',
+      this.gameMap.circusCentre ?? null,
+    );
+  }
+
+  private murderQuestObjective(): AdviceObjective {
+    const complete = this.murderQuest.questManager.getStatus(MURDER_QUEST_ID) === 'completed';
+    // The quest's own first anchor, so his bearing points where its Journal row
+    // does rather than at the town centre.
+    const target = this.murderQuest.trackerEntries()[0]?.target ?? null;
+    return adviceObjective('krasue_murders', complete, target);
+  }
+
+  /**
+   * Shady, or null on a floor with no bounty loop — the bounty system is the one
+   * of the three that is optional on the map.
+   *
+   * Never "complete": there is always another mark, which is the whole shape of
+   * the loop. Mordecai therefore keeps offering it, which is correct — it is the
+   * floor's repeatable work.
+   */
+  private bountyObjective(): AdviceObjective | null {
+    const bounty = this.bounty;
+    if (bounty === null) return null;
+    return adviceObjective('shady_bounties', false, bounty.trackerEntries()[0]?.target ?? null);
   }
 
   /**
@@ -4045,6 +4213,14 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
+    // With the rest of the HUD chrome, and crucially *above* the world hit-tests
+    // below: those compare screen coordinates against loot drops and chests, so
+    // anything drawn behind the button would otherwise take a click aimed at it.
+    if (this.journalButtonRect !== null && pointInRect(mx, my, this.journalButtonRect)) {
+      this.openQuestJournal();
+      return;
+    }
+
     const wasInventoryOpen = this.inventoryPanel.isOpen;
     if (this.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
       this.resolvePendingInventoryAction(invPlayer);
@@ -4078,6 +4254,7 @@ export class DungeonScene extends GameplayScene {
       this.inventoryPanel.isOpen = false;
       this.gearPanel.isOpen = false;
       this.input.clear();
+      return;
     }
   }
 
@@ -4207,6 +4384,9 @@ export class DungeonScene extends GameplayScene {
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
+      // Latches its stops here rather than in `updateGameplay`, so walking past
+      // the shop while a citizen is mid-sentence still counts as having found it.
+      this.townGuide?.update(this.buildSystemContext());
     }
 
     // Ticked ahead of every early return below: a toast raised on the last step
@@ -4217,6 +4397,12 @@ export class DungeonScene extends GameplayScene {
     // wanted while his own dialog is open, which is exactly when gameplay is
     // halted and `updateGameplay` never runs.
     this.bounty?.syncShady();
+    // Same reason, for the two givers whose beacon and glyph are drawn by
+    // different owners. Their marker state is suppressed while their own dialog
+    // is open, and an open dialog is a halted frame — so setting it in `update`
+    // alone would leave a column of light standing over somebody mid-sentence.
+    this.circusQuest.syncMarkers();
+    this.murderQuest.syncMarkers();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -4359,11 +4545,25 @@ export class DungeonScene extends GameplayScene {
       this._hudSkillBannerRect = hudResult.notifRect;
     }
 
+    // Rebuilt once here, above every consumer: the pinned world arrow, the
+    // minimap's extra marker and the Journal tab all resolve the pin against
+    // this list, and reading it a block later would have the arrow a frame
+    // behind the tab it is supposed to be following. Skipped outright on the
+    // floors with no Journal, where every one of those consumers is off — the
+    // list is rebuilt from scratch each frame and nothing would read it.
+    if (this.hasQuestJournal) this.collectTrackerEntries();
+    else this._trackerEntries.length = 0;
+    // Every frame, not only when the Journal is opened from its own button: the
+    // pause menu can also be reached with Escape, and the Game tab decides
+    // whether to offer a Quest Journal row from whether this is null.
+    this.syncJournalContext();
+
     if (!this.gameOver && !this.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
       this.bounty?.renderArrow(ctx, this.active(), camX, camY);
+      this.renderPinnedObjectiveArrow(ctx, camX, camY);
     }
 
     if (!this.gameOver && !this.pauseMenu.isOpen) {
@@ -4457,6 +4657,15 @@ export class DungeonScene extends GameplayScene {
 
       // Render persistent HUD buttons before panels so open menus and context menus paint over them.
       UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
+
+      if (this.hasQuestJournal) {
+        const outstanding = this._trackerEntries.filter((entry) =>
+          isOutstanding(entry.status),
+        ).length;
+        this.journalButtonRect = UIRenderer.drawJournalButton(ctx, this.miniMap, outstanding);
+      } else {
+        this.journalButtonRect = null;
+      }
       if (platform.isMobile)
         UIRenderer.renderMobileButtons(ctx, this.touch, {
           human: this.human,
@@ -4714,7 +4923,33 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
     if (this.bounty !== null) markers.push(...this.bounty.questMarkers);
+    const pinned = resolvePinnedEntry(this.journalProgress.pinnedTrackerId, this._trackerEntries);
+    // The pinned objective gets a marker of its own on top of whatever its own
+    // system already contributes. That is not redundant: a quest can be pinned
+    // while its system's marker rules say nothing (a bounty being collected,
+    // a Town Guide pointer), and the pin is the player's own answer to "where
+    // am I going", which should outrank the quest's.
+    if (pinned?.target !== undefined) {
+      markers.push({ x: pinned.target.x, y: pinned.target.y, type: 'exclamation' });
+    }
     return markers;
+  }
+
+  /** Gathers every quest system's Journal lines into one reused array. */
+  private collectTrackerEntries(): TrackerEntry[] {
+    const entries = this._trackerEntries;
+    entries.length = 0;
+    entries.push(
+      ...collectTrackerEntries([
+        this.defendQuest,
+        this.spiderQuest,
+        this.circusQuest,
+        this.murderQuest,
+        this.bounty,
+        this.townGuide,
+      ]),
+    );
+    return entries;
   }
 
   /**
@@ -5153,44 +5388,52 @@ export class DungeonScene extends GameplayScene {
 
     // The golem's boulder shatter, drained here for the same reason: the rock
     // outlives the golem that threw it.
-    // [STAND-IN] No shattering-rock burst has been sourced; smashing wood is
-    // the library's nearest hard break.
     if (this.rockThrows.burstSoundPending) {
       this.rockThrows.burstSoundPending = false;
-      this.audio?.playRandom(['wood_smashing_1', 'wood_smashing_2']);
+      this.audio?.playRandom(['rock_thud_1', 'rock_thud_2', 'rock_thud_3', 'rock_thud_4']);
     }
 
     // Drained here rather than from `playMobAudioCues` for the same reason the
     // llama's is: a soul bolt outlives its caster, and one that lands after the
     // lord died has no mob left to carry the flag.
-    // [STAND-IN] A soft green whumph has not been sourced; the llama's own
-    // fireball explosion is the closest burst-type impact already in the
-    // manifest.
     if (this.skeletonShots.burstSoundPending) {
       this.skeletonShots.burstSoundPending = false;
-      this.audio?.play('llama_fireball_explosion');
+      this.audio?.play('magic_ball_impact');
+    }
+
+    // A bone shaft does not go off, so it is drained separately from the bolt
+    // burst above — the same frame can end one of each.
+    if (this.skeletonShots.arrowImpactSoundPending) {
+      this.skeletonShots.arrowImpactSoundPending = false;
+      this.audio?.play('arrow_impact');
+    }
+
+    if (this.goblinArrows.impactSoundPending) {
+      this.goblinArrows.impactSoundPending = false;
+      this.audio?.play('arrow_impact');
     }
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
     // belongs to the skeletons coming out of the ground.
-    // [STAND-IN] Earth breaking under a choral moan has not been sourced;
-    // the krakaren's ground slam is the closest existing rumble.
     if (this.skeletonSummons.riseSoundPending) {
       this.skeletonSummons.riseSoundPending = false;
-      this.audio?.play('krakaren_ground_slam');
+      this.audio?.play('bones_rattling');
     }
     if (this.clownGas.shatterSoundPending) {
       this.clownGas.shatterSoundPending = false;
-      // Stand-in for glass shattering into a hiss: the spider's landing spit is
-      // the closest wet-impact cue already in the manifest.
-      this.audio?.play('grotesque_spider_spit_landing');
+      // Two cues on one beat by design: the bottle breaking, and the cloud it
+      // lets out. They are simultaneous in the fiction and in `ClownGasSystem`,
+      // which spawns the shatter and the cloud on the same frame.
+      this.audio?.playRandom(['glass_break_1', 'glass_break_2', 'glass_break_3', 'glass_break_4']);
+      this.audio?.play('gas_cloud');
     }
     if (this.knightMissiles.impactSoundPending) {
       this.knightMissiles.impactSoundPending = false;
-      // Stand-in. There is no green-magic impact in the manifest; the player's
-      // own missile hit is the nearest arcane one, and a real cue can replace it
-      // here without anything else changing.
-      this.audio?.play('cat_missile_impact');
+      this.audio?.playRandom([
+        'small_magic_impact_1',
+        'small_magic_impact_2',
+        'small_magic_impact_3',
+      ]);
     }
 
     // `human_smush` plays when the ability fires, which is a third of a second
@@ -5625,6 +5868,21 @@ export class DungeonScene extends GameplayScene {
           }
           continue;
         }
+      }
+
+      // The Journal's compass, before the fall-through that turns an unclaimed
+      // tap into a move order: without this a tap on it also walks the party
+      // toward the button and swings on release.
+      if (
+        platform.isMobile &&
+        !this.gameOver &&
+        !this.pauseMenu.isOpen &&
+        this.journalButtonRect !== null &&
+        pointInRect(x, y, this.journalButtonRect)
+      ) {
+        notifyButtonClick(x, y);
+        this.openQuestJournal();
+        continue;
       }
 
       if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {

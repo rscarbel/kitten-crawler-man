@@ -370,6 +370,13 @@ export class Mongo extends Mob {
 
   private readonly animator = new MongoAnimator();
   private pending: PendingBlow | null = null;
+
+  /**
+   * Which blow raised `attackSoundPending`. All three of his attacks share that
+   * one flag, and a chomp is not the sound a claw makes — `playMobAudioCues`
+   * reads this to tell them apart.
+   */
+  lastAttack: MongoAttack = 'bite';
   private biteCooldown = 0;
   private slashCooldown = 0;
   private pounceCooldown = 0;
@@ -1298,6 +1305,7 @@ export class Mongo extends Mob {
     target.takeDamageFrom(damage, this, 'melee');
     this.damageDealtPendingXp += targetHpBeforeBlow - target.hp;
     target.retaliateMob = this;
+    this.lastAttack = attack;
     this.attackSoundPending = true;
   }
 

@@ -672,7 +672,11 @@ export interface SpriteFootprint {
 
 /** A sprite building's entrance: the gap its facade leaves in its blocked base row. */
 export interface SpriteDoorway extends TileOffset {
-  /** Leftmost column of the gap; `dx` is its centre. */
+  /**
+   * Leftmost column of the gap. `dx` is a column *inside* it — the one the art's
+   * painted door falls on, which is not in general its centre; see
+   * `computeDoorway`.
+   */
   readonly dx0: number;
   /** How many tiles wide the gap is, so road stubs can match the opening. */
   readonly width: number;
@@ -709,20 +713,92 @@ export function getSpriteExtentsPxByKey(key: string): Readonly<MapSpriteExtentsP
 }
 
 /**
+ * Where the facade's opening actually is in the art, as an anchor-relative tile
+ * column, or `undefined` when the regions describe no interior gap.
+ *
+ * The tile-space scan `computeDoorway` runs is a poor answer to "which tile is
+ * the door": `computeBlockedOffsetsFromRegions` calls a tile unblocked until
+ * wall art covers half of it, so the tile gap routinely reaches a column
+ * further left than the painted opening does, and the centre of an even-width
+ * gap then floors one further left again. Both errors push the same way, and
+ * the result was a trigger tile at the extreme left edge of the visible door on
+ * five of the town's entrances. Measuring the gap between the region rectangles
+ * themselves has neither error.
+ *
+ * Only the regions reaching into the facade's bottom tile row are considered —
+ * those are its base course, the row the doorway is cut into. The shallower
+ * regions above are the wall band spanning the whole frontage, which has no gap
+ * to find.
+ *
+ * "Reaching into the bottom row", not "ending at the deepest pixel": a facade's
+ * two flanks are authored by hand and need not end level. Blackwood Lodge's
+ * differ by five pixels, and an exact-depth test found only one flank there, no
+ * gap between it and nothing, and silently fell back to the tile-run centre this
+ * whole function exists to correct.
+ */
+function doorCentreColumnFromRegions(
+  regions: ReadonlyArray<{
+    readonly x1: number;
+    readonly y1: number;
+    readonly x2: number;
+    readonly y2: number;
+  }>,
+  tileX: number,
+  tileScale: number,
+): number | undefined {
+  let deepestY2 = -Infinity;
+  for (const region of regions) {
+    if (region.y2 > deepestY2) deepestY2 = region.y2;
+  }
+  const baseRowTop = deepestY2 - tileScale;
+  const baseCourse = regions
+    .filter((region) => region.y2 >= baseRowTop)
+    .slice()
+    .sort((a, b) => a.x1 - b.x1);
+  if (baseCourse.length < 2) return undefined;
+
+  let widestGapPx = 0;
+  let doorCentrePx = 0;
+  let reachedX2 = baseCourse[0].x2;
+  for (let i = 1; i < baseCourse.length; i++) {
+    const gapLeft = reachedX2;
+    const gapRight = baseCourse[i].x1;
+    const gapWidth = gapRight - gapLeft;
+    if (gapWidth > widestGapPx) {
+      widestGapPx = gapWidth;
+      doorCentrePx = (gapLeft + gapRight) / 2;
+    }
+    reachedX2 = Math.max(reachedX2, baseCourse[i].x2);
+  }
+  if (widestGapPx <= 0) return undefined;
+
+  return Math.floor((doorCentrePx - tileX) / tileScale);
+}
+
+/**
  * Derive a sprite building's doorway from the gap its `blockedRegions` leave in the
  * base of the facade: take the bottom-most blocked row, find the longest run of
- * unblocked columns inside the building's overall column span, and use its centre.
+ * unblocked columns inside the building's overall column span, and anchor the
+ * door tile on where the art's own opening is (`doorCentreColumnFromRegions`),
+ * clamped into that run.
  *
  * The doorway is then pushed down to the sprite's front row. Decorations Y-sort on
  * `tileY * TILE_SIZE + frameHeight` while players sort on `y + TILE_SIZE`, so a
  * door tile above the sprite's visual foot would draw the player *behind* the
  * facade they are standing in front of.
  *
+ * `dx0` and `width` still come from the tile-space run: they decide which tiles
+ * stay walkable and how wide the street apron is painted, and a run derived
+ * from the same half-tile threshold as the blocked set is exactly what those
+ * two want. Only `dx` — the tile the entry menu and the ▶ hint key off — moves
+ * onto the pixel gap.
+ *
  * Sprites without blocked regions get no doorway.
  */
 function computeDoorway(
   offsets: ReadonlyArray<TileOffset>,
   footprintBottomDy: number,
+  pixelDoorCentreDx: number | undefined,
 ): SpriteDoorway | undefined {
   if (offsets.length === 0) return undefined;
   let minDx = offsets[0].dx;
@@ -737,27 +813,37 @@ function computeDoorway(
   for (const o of offsets) {
     if (o.dy === maxDy) blockedInBaseRow.add(o.dx);
   }
-  let bestStart = -1;
+  // `undefined` rather than a numeric "no run yet" sentinel: columns are
+  // anchor-relative and freely negative, so any sentinel column is also a real
+  // one. A -1 sentinel here used to swallow the first column of the tower's own
+  // doorway — its gap runs -1..0, and the run was re-started at 0 because
+  // `runStart` still read as "unset".
+  let bestStart: number | undefined;
   let bestLength = 0;
-  let runStart = -1;
+  let runStart: number | undefined;
   for (let dx = minDx; dx <= maxDx + 1; dx++) {
     const isGap = dx <= maxDx && !blockedInBaseRow.has(dx);
     if (isGap) {
-      if (runStart === -1) runStart = dx;
+      runStart ??= dx;
       continue;
     }
-    if (runStart !== -1) {
+    if (runStart !== undefined) {
       const runLength = dx - runStart;
       if (runLength > bestLength) {
         bestLength = runLength;
         bestStart = runStart;
       }
-      runStart = -1;
+      runStart = undefined;
     }
   }
-  if (bestLength === 0) return undefined;
+  if (bestStart === undefined || bestLength === 0) return undefined;
+  const tileRunCentreDx = bestStart + Math.floor((bestLength - 1) / 2);
+  const doorDx =
+    pixelDoorCentreDx === undefined
+      ? tileRunCentreDx
+      : Math.min(Math.max(pixelDoorCentreDx, bestStart), bestStart + bestLength - 1);
   return {
-    dx: bestStart + Math.floor((bestLength - 1) / 2),
+    dx: doorDx,
     dx0: bestStart,
     dy: Math.max(maxDy, footprintBottomDy),
     width: bestLength,
@@ -767,8 +853,30 @@ function computeDoorway(
 for (const [key, regionOffsets] of _spriteKeyRegionBlockedOffsets) {
   const footprint = _spriteKeyFootprints.get(key);
   if (footprint === undefined) continue;
-  const doorway = computeDoorway(regionOffsets, footprint.dy + footprint.h - 1);
+  const entry = _manifest[key];
+  const regions = entry.blockedRegions;
+  const pixelDoorCentreDx =
+    regions === undefined
+      ? undefined
+      : doorCentreColumnFromRegions(regions, entry.tileX, entry.tileScale);
+  const doorway = computeDoorway(regionOffsets, footprint.dy + footprint.h - 1, pixelDoorCentreDx);
   if (doorway === undefined) continue;
+  // The painted opening and the walkable run are derived two entirely different
+  // ways — one from the region rectangles in pixels, one from a half-tile
+  // coverage threshold — and `computeDoorway` clamps the first into the second
+  // rather than trusting them to agree. Asserting on the clamped result would
+  // therefore assert nothing; this asserts on the input, so a manifest whose art
+  // and whose coverage genuinely disagree about where the door is fails loudly
+  // instead of silently taking the nearest edge of the run.
+  if (
+    pixelDoorCentreDx !== undefined &&
+    (pixelDoorCentreDx < doorway.dx0 || pixelDoorCentreDx >= doorway.dx0 + doorway.width)
+  ) {
+    throw new Error(
+      `Sprite '${key}' paints its door at column ${pixelDoorCentreDx}, outside the walkable ` +
+        `opening its blocked regions leave at [${doorway.dx0}, ${doorway.dx0 + doorway.width})`,
+    );
+  }
   _spriteKeyDoorways.set(key, doorway);
 
   const blocked: TileOffset[] = [];

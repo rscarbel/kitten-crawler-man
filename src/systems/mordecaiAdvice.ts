@@ -129,7 +129,9 @@ export type AdviceObjectiveId =
   | 'spider_lab'
   | 'ball_of_swine'
   | 'ball_of_swine_distant'
-  | 'the_circus';
+  | 'the_circus'
+  | 'krasue_murders'
+  | 'shady_bounties';
 
 interface AdviceText {
   readonly pages: ReadonlyArray<string>;
@@ -204,6 +206,20 @@ const ADVICE_TEXT = {
       'But be careful about getting involved in anything over your head.',
     ],
     bearing: 'You can find it {direction} from here.',
+  },
+  krasue_murders: {
+    pages: [
+      'People have been turning up in pieces, and the pieces are the wrong ones. The city guard has decided it is a wild animal. It is not a wild animal.',
+      'I would leave it well alone, and I know perfectly well that you will not.',
+    ],
+    bearing: 'It started {direction} of here, if you insist.',
+  },
+  shady_bounties: {
+    pages: [
+      'There is a man by the notice board who will pay you to go and kill something out in the ruins. He will not tell you his name and I would not believe it if he did.',
+      'The coin is real, though, and the marks are out where nobody minds the noise. It is honest work by the standards of this place.',
+    ],
+    bearing: 'He loiters {direction} of here.',
   },
 } as const satisfies Record<AdviceObjectiveId, AdviceText>;
 

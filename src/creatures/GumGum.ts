@@ -3,7 +3,13 @@ import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawGumGumSprite } from '../sprites/gumGumSprite';
 import { scaleHumanoidBox } from '../sprites/humanoidScale';
-import { drawQuestMarker } from '../sprites/questNPCSprite';
+import {
+  drawQuestMarker,
+  questMarkerColorFor,
+  QUEST_MARKER_GOLD,
+  type QuestMarkerState,
+} from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 
 const GUMGUM_HP = 30;
 const GUMGUM_SPEED = 0;
@@ -13,9 +19,6 @@ const GUMGUM_SPEED = 0;
  * crowd size the figure got lost in the street traffic outside the club.
  */
 const GUMGUM_SCALE = 1.8;
-
-/** Amber, matching the overhead marker every other quest giver wears. */
-const GUMGUM_MARKER_COLOR = '#fbbf24';
 
 /**
  * GumGum — the jittery street elf whose plea opens "The Krasue Murders".
@@ -29,6 +32,17 @@ export class GumGum extends Mob {
   protected coinDropMax = 0;
   displayName = 'GumGum';
   description = 'A nervous street elf clutching her coat, watching the crowd for something.';
+
+  /**
+   * Whether she has something to say, set by `MurderMysteryQuestSystem` each
+   * frame from its phase.
+   *
+   * Her glyph is drawn by the system in the overlay pass while her beacon is
+   * drawn here in the Y-sorted one, so the state they share has to live
+   * somewhere both can read — otherwise a column of light stands over an elf
+   * with nothing left to tell you.
+   */
+  markerType: QuestMarkerState = 'none';
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, GUMGUM_HP, GUMGUM_SPEED);
@@ -55,6 +69,11 @@ export class GumGum extends Mob {
   ): void {
     if (!this.isAlive) return;
     const box = this.spriteBox(camX, camY, tileSize);
+    // Beacon first, so the column stands behind her rather than across her.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, box.sx, box.sy, box.s, camX, camY, performance.now(), markerColor);
+    }
     drawGumGumSprite(ctx, box.sx, box.sy, box.s, this.walkFrame, this.isMoving, this.facingX);
   }
 
@@ -71,7 +90,7 @@ export class GumGum extends Mob {
   ): void {
     if (!this.isAlive) return;
     const box = this.spriteBox(camX, camY, tileSize);
-    drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', GUMGUM_MARKER_COLOR);
+    drawQuestMarker(ctx, box.sx, box.sy, box.s, '!', QUEST_MARKER_GOLD);
   }
 
   private spriteBox(camX: number, camY: number, tileSize: number) {

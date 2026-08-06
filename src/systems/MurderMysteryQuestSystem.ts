@@ -23,6 +23,7 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
+import type { TrackerEntry } from './questTracker';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
@@ -383,6 +384,23 @@ export class MurderMysteryQuestSystem implements GameSystem {
     if (!this.gumgumInWorld) this.respawnGumGumForCheckpoint();
   }
 
+  /**
+   * Holds GumGum's beacon state to the phase, every frame.
+   *
+   * Deliberately **not** part of `update()`, for the reason `BountySystem`'s
+   * `syncShady` is not: an open quest dialog halts gameplay and the scene
+   * returns before the system update pass, so a write in there could only ever
+   * observe the dialog closed — and her beacon would stand over her for the
+   * whole conversation. The scene calls this above that early return.
+   */
+  syncMarkers(): void {
+    if (this.gumgum === null) return;
+    // The same condition her glyph is drawn under in `render`, held on the
+    // creature so her beacon — drawn a pass earlier, by her — agrees with it.
+    this.gumgum.markerType =
+      this.phase === 'gumgum_waiting' && !this.dialog.isOpen ? 'exclamation' : 'none';
+  }
+
   /** Returns quest markers for the minimap. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
     const markers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
@@ -434,6 +452,93 @@ export class MurderMysteryQuestSystem implements GameSystem {
         break;
     }
     return markers;
+  }
+
+  /**
+   * The Journal's line for the murder mystery, rebuilt from the phase every
+   * frame.
+   *
+   * The investigation phase is the one that most needs a written objective: its
+   * three clues are scattered across the town with nothing on screen tying them
+   * together, and its minimap pips vanish under the fog on any street the player
+   * has not walked yet.
+   */
+  trackerEntries(): ReadonlyArray<TrackerEntry> {
+    const name = this.questManager.getDef(MURDER_QUEST_ID)?.name ?? 'The Krasue Murders';
+    const base = { id: MURDER_QUEST_ID, name };
+
+    switch (this.phase) {
+      case 'gumgum_waiting':
+        return [
+          {
+            ...base,
+            status: 'available',
+            objective: 'Hear GumGum out',
+            hint: 'The jittery street elf outside the Desperado Club.',
+            target: this.gumgumTile ?? undefined,
+          },
+        ];
+      case 'body_waiting':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Find what GumGum was so afraid of',
+            hint: 'She pointed you down the service alley.',
+            target: this.alleyTile ?? undefined,
+          },
+        ];
+      case 'investigation': {
+        const outstanding = this.clues.filter((clue) => !this.isClueFound(clue.id));
+        const found = this.clues.length - outstanding.length;
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Follow the trail — ${found} of ${this.clues.length} clues found`,
+            hint: 'The well, a home and a roost. Ask the town what it has seen.',
+            target: outstanding[0]?.tile,
+          },
+        ];
+      }
+      case 'night_attack': {
+        const alive = this.swarm.filter((mob) => mob.isAlive);
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: `Survive the krasue — ${alive.length} still flying`,
+            target:
+              alive.length === 0
+                ? undefined
+                : { x: Math.round(alive[0].x / TILE_SIZE), y: Math.round(alive[0].y / TILE_SIZE) },
+          },
+        ];
+      }
+      case 'cult_hideout':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Search the cult’s lodge',
+            hint: 'Blackwood Lodge, at the end of the dead-end alley off the West Lane.',
+            target: this.hideoutDoorTile ?? undefined,
+          },
+        ];
+      case 'confrontation':
+        return [
+          {
+            ...base,
+            status: 'active',
+            objective: 'Take it to the tower',
+            target: this.towerDoorTile ?? undefined,
+          },
+        ];
+      case 'awaiting_rewards':
+        return [{ ...base, status: 'active', objective: 'Collect what you are owed' }];
+      case 'complete':
+        return [{ ...base, status: 'completed', objective: 'The Krasue Murders are closed' }];
+    }
   }
 
   private isClueFound(id: ClueId): boolean {

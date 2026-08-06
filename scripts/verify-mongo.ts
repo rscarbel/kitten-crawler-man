@@ -1073,8 +1073,11 @@ console.log('\nthe knockout rule is stated once, when it is true');
   if (mongo === null) {
     check(false, 'the notice run had a summoned pet');
   } else {
+    // Matched against a fragment of the toast `explainKnockoutOnce` actually
+    // raises. Its sibling line is "Mongo heals only while recalled", which this
+    // must not catch.
     const knockoutSaid = (): number =>
-      h.announced.filter((line) => line.includes('knocked out')).length;
+      h.announced.filter((line) => line.includes('heal fully')).length;
 
     // Spent, then dismissed the way every death path dismisses him.
     mongo.exhausted = true;

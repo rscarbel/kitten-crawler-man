@@ -15,6 +15,10 @@ import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { DarkKnight } from '../creatures/DarkKnight';
+import { RockGolemBoss } from '../creatures/RockGolemBoss';
+import { Mantid } from '../creatures/Mantid';
+import { BallOfSwine } from '../creatures/BallOfSwine';
+import { Mongo } from '../creatures/Mongo';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -332,31 +336,28 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'skyfowl':
           audio?.playRandom(['skyfowl_1', 'skyfowl_2']);
           break;
+        // The pounce still lands on the claw cue: a dedicated pounce screech is
+        // unsourced, and the pounce ends in a raking swipe anyway.
         case 'mongo':
-          // One cue for all three of his attacks. `mongo_released` is the summon
-          // roar, not a chomp, so branching on the one-shot would only mean the
-          // bite plays a wrong sound instead of a generic one — a dedicated bite
-          // chomp and pounce screech are still unsourced; a human ear is needed
-          // to judge whether the shared cue reads well enough to keep.
-          audio?.play('mongo_slash');
+          if (mob instanceof Mongo && mob.lastAttack === 'bite') {
+            audio?.playRandom(['bite_1', 'bite_2', 'bite_3']);
+          } else {
+            audio?.play('mongo_slash');
+          }
           break;
         case 'mercenary':
           audio?.play('sword_attack_1');
           break;
-        // [STAND-IN] No insect audio has been sourced yet; the raptorial strike
-        // borrows the sharpest blade cue in the library.
         case 'mantis':
         case 'mantid':
-          audio?.play('sword_attack_1');
+          audio?.playRandom(['slash_strike_1', 'slash_strike_2', 'slash_strike_3']);
           break;
         case 'krakaren':
           audio?.play('krakaren_ground_slam');
           break;
-        // [STAND-IN] No stone-on-stone slam or stomp has been sourced yet; the
-        // Krakaren's ground slam is the heaviest earth impact in the library and
-        // covers both the double-fist slam and the stomp.
+        // One cue for both the double-fist slam and the stomp.
         case 'rock_golem':
-          audio?.play('krakaren_ground_slam');
+          audio?.play('massive_strike_with_dirt_impact');
           break;
         case 'lemur':
           audio?.play('circus_lemur_attack');
@@ -377,10 +378,8 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'dark_knight':
           audio?.play('hammer_strike');
           break;
-        // [STAND-IN] A rusty blade whoosh has not been sourced yet; the human
-        // sword swing is the closest thing in the library.
         case 'skeleton':
-          audio?.play('sword_attack_1');
+          audio?.playRandom(['slash_strike_1', 'slash_strike_2', 'slash_strike_3']);
           break;
         case 'bear':
           audio?.play('bear_big_attack');
@@ -398,18 +397,13 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
       mob.projectileSoundPending = false;
       if (mob.audioTag === 'llama') audio?.play('llama_fireball');
       if (mob.audioTag === 'lemur') audio?.play('circus_lemur_sound');
-      // [STAND-IN] No bow creak-and-twang and no whispered incantation exist in
-      // the library yet: the wood snap stands in for the stave, and the cat's
-      // magic-missile launch for the soul bolt leaving the palm.
-      if (mob.audioTag === 'skeleton') audio?.play('wood_breaking_3');
+      if (mob.audioTag === 'skeleton') audio?.play('shooting_an_arrow');
       // Only the archer among the goblins ever queues one of these — the melee
       // archetypes have nothing to throw.
-      if (mob.audioTag === 'goblin') audio?.play('wood_breaking_3');
-      if (mob.audioTag === 'skeleton_lord') audio?.play('cat_missile_fire');
+      if (mob.audioTag === 'goblin') audio?.play('shooting_an_arrow');
+      if (mob.audioTag === 'skeleton_lord') audio?.play('magic_ball_launch');
       if (mob.audioTag === 'evil_clown') audio?.play('juicer_throw');
-      // [STAND-IN] An effortful heave has not been sourced; the Juicer's throw
-      // is the library's only two-handed hurl.
-      if (mob.audioTag === 'rock_golem') audio?.play('juicer_throw');
+      if (mob.audioTag === 'rock_golem') audio?.play('rock_golem_grunt');
     }
     if (mob.damageSoundPending) {
       // Only tags handled here consume the flag.
@@ -433,12 +427,11 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           mob.damageSoundPending = false;
           audio?.playRandom(['wood_breaking_1', 'wood_breaking_2']);
           break;
-        // [STAND-IN] The golem uses this flag for the dazed groan after a
-        // barrier interrupts its roll, not for taking a hit. No cracked stone
-        // groan has been sourced; the bear's growl is the nearest heavy grunt.
+        // The golem uses this flag for the dazed groan after a barrier
+        // interrupts its roll, not for taking a hit.
         case 'rock_golem':
           mob.damageSoundPending = false;
-          audio?.play('bear_growl_1');
+          audio?.play('rock_golem_frustrated');
           break;
       }
     }
@@ -454,19 +447,20 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         case 'ball_of_swine':
           audio?.play('ball_of_swine_rolling');
           break;
-        // [STAND-IN] Auditioned and kept: the Ball of Swine's roll is already a
-        // stone-heavy rumble, and the golem's curl, roll start and uncurl all
-        // read against it.
+        // The boulder grinding across the arena, versus the golem hauling
+        // itself into and out of that shape.
         case 'rock_golem':
-          audio?.play('ball_of_swine_rolling');
+          audio?.play(
+            mob instanceof RockGolemBoss && mob.lastSpecial === 'roll'
+              ? 'rolling_earth_ball'
+              : 'rock_golem_grunt',
+          );
           break;
         case 'krakaren':
           audio?.play('krakaren_yell');
           break;
-        // [STAND-IN] The rage pause wants a rising insectoid shriek; the spider's
-        // screech is the only shriek in the library.
         case 'mantid':
-          audio?.play('grotesque_spider_screech_attack');
+          audio?.play('mantid_furious');
           break;
         // The laugh that tells the party the vials are coming. A stand-in until
         // a slow distorted clown laugh is sourced.
@@ -475,54 +469,93 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
           break;
         // The lord has two specials and `specialSoundPending` is one flag, so
         // which cue to play comes off the boss itself.
-        // [STAND-IN] Neither "earth cracking under many dry scrapes" nor a
-        // rising choral moan has been sourced; the Krakaren's ground slam and
-        // its yell are the closest in kind.
         case 'skeleton_lord':
           audio?.play(
             mob instanceof SkeletonLord && mob.lastSpecial === 'summon'
-              ? 'krakaren_yell'
-              : 'krakaren_ground_slam',
+              ? 'skeleton_lord_chant'
+              : 'dead_hand_wave',
           );
           break;
       }
     }
+    playMantidHiss(mob, audio);
+    playSwineSpinup(mob, audio);
+    playLordCastWindup(mob, audio);
     playDarkKnightCues(mob, audio);
   }
 }
 
 /**
- * The Dark Knight's three extra cues.
+ * The Mantid's stalking hiss.
+ *
+ * A flag of its own rather than another `specialSoundPending` arm because it
+ * fires while he walks, and the rage pause can raise that flag on the very same
+ * frame — one shared boolean would drop whichever came second.
+ */
+function playMantidHiss(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof Mantid) || !mob.hissSoundPending) return;
+  mob.hissSoundPending = false;
+  audio?.playRandom([
+    'mantid_hiss_1',
+    'mantid_hiss_2',
+    'mantid_hiss_3',
+    'mantid_hiss_4',
+    'mantid_hiss_5',
+  ]);
+}
+
+/**
+ * The Ball of Swine's charge wind-up — the beat the whole fight is read off,
+ * split out of `specialSoundPending` because that flag already carries the
+ * lunge, the carom, the wall slam and the collapse.
+ */
+function playSwineSpinup(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof BallOfSwine) || !mob.spinupSoundPending) return;
+  mob.spinupSoundPending = false;
+  audio?.play('deep_rumbling');
+}
+
+/**
+ * The Skeleton Lord's cast wind-up — a full second of gathering before the
+ * bolts leave, which `projectileSoundPending` covers separately.
+ */
+function playLordCastWindup(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof SkeletonLord) || !mob.castWindupSoundPending) return;
+  mob.castWindupSoundPending = false;
+  audio?.play('prepare_for_magic_strike');
+}
+
+/**
+ * The Dark Knight's five extra cues.
  *
  * They are separate flags rather than more `specialSoundPending` arms because
  * he fires two of them within a second of each other — the whirl as the sweep
  * winds up and the hit as it lands — and one shared flag can only carry one.
- *
- * Every id here is a **stand-in** for a sound Ryan has not sourced yet:
- * `rumble` for the whirl wind-up (the closest thing to a building metal gust),
- * the Krakaren's `krakaren_ground_slam` for the sweep's slam (a golem's earth
- * impact is the nearest heavy thud), the Grotesque Spider's
- * `grotesque_spider_slam_attack` for the sweep landing (already a sudden heavy
- * hit), and the cat's `cat_missile_fire` for the cast (the only spell-launch
- * sound in the library).
+ * The two wind-ups are likewise split: a physical swing and a volley of green
+ * fire have to announce themselves differently or the player cannot tell from
+ * the sound alone whether to close or to break the line.
  */
 function playDarkKnightCues(mob: Mob, audio: AudioManager | null): void {
   if (!(mob instanceof DarkKnight)) return;
   if (mob.whirlSoundPending) {
     mob.whirlSoundPending = false;
-    audio?.play('rumble');
+    audio?.play('metal_winding_up');
+  }
+  if (mob.volleyWindupSoundPending) {
+    mob.volleyWindupSoundPending = false;
+    audio?.play('knight_magic_windup');
   }
   if (mob.slamSoundPending) {
     mob.slamSoundPending = false;
-    audio?.play('krakaren_ground_slam');
+    audio?.play('massive_metal_hit');
   }
   if (mob.sweepHitSoundPending) {
     mob.sweepHitSoundPending = false;
-    audio?.play('grotesque_spider_slam_attack');
+    audio?.play('massive_weapon_strike');
   }
   if (mob.castSoundPending) {
     mob.castSoundPending = false;
-    audio?.play('cat_missile_fire');
+    audio?.playRandom(['laser_1', 'laser_2', 'laser_3']);
   }
   if (mob.overheatSoundPending) {
     mob.overheatSoundPending = false;

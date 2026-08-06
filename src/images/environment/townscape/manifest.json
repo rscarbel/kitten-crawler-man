@@ -53,6 +53,20 @@
       }
     }
   },
+  "gate_arch_across_2": {
+    "path": "environment/townscape/gate_arch_across_2.png",
+    "frameWidth": 128,
+    "frameHeight": 192,
+    "tileX": 32,
+    "tileY": 128,
+    "tileScale": 32,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      }
+    }
+  },
   "gate_arch_across_4": {
     "path": "environment/townscape/gate_arch_across_4.png",
     "frameWidth": 192,

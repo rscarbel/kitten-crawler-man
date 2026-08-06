@@ -29,6 +29,14 @@ const ACH_NAME_Y_ABOVE = 13;
 const ACH_NAME_Y_BASELINE = 8;
 const ACH_NAME_SIZE = 10;
 const ACH_NAME_WIDTH_OFFSET = 46;
+/**
+ * Line box for the name, used as both its line height and its clip height. Equal
+ * values are what hold a long name to one line: a second line starts at the
+ * clip's own bottom edge and so is cut entirely, while the first keeps its
+ * descender. The row pitch has no room for a second line, and a wrapped name
+ * used to spill out of its own box and over the checkmark of the row beneath it.
+ */
+const ACH_NAME_LINE_BOX = 14;
 const ACH_TIER_RESERVE = 110;
 const ACH_TIER_X_OFFSET = 14;
 const ACH_TIER_Y_ABOVE = 13;
@@ -142,7 +150,8 @@ function renderPlayerAchievements(
       size: ACH_NAME_SIZE,
       color: '#f1f5f9',
       width: bw - ACH_NAME_WIDTH_OFFSET - tierReserve,
-      height: ACH_BOX_HEIGHT,
+      lineHeight: ACH_NAME_LINE_BOX,
+      height: ACH_NAME_LINE_BOX,
     });
 
     if (def.lootBox) {
@@ -261,6 +270,6 @@ export function renderAchievementsTab(
     label: 'Back',
     ...BUTTON_PRESETS.primary,
     primaryAction: true,
-    action: () => setTab('main'),
+    action: () => setTab('game'),
   });
 }

@@ -38,6 +38,7 @@ export interface DungeonInputActions {
   toggleGear(): void;
   companionFollow(): void;
   toggleMiniMap(): void;
+  toggleQuestTracker(): void;
   mongoSummon(): void;
   buildAction(): void;
   hotbarActivation(idx: number): void;
@@ -75,6 +76,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: DungeonInputA
     toggleGear: (actions) => actions.toggleGear(),
     companionFollow: (actions) => actions.companionFollow(),
     toggleMiniMap: (actions) => actions.toggleMiniMap(),
+    toggleQuestTracker: (actions) => actions.toggleQuestTracker(),
     buildSummon: (actions) => {
       actions.buildAction();
       actions.mongoSummon();

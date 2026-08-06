@@ -19,6 +19,7 @@ import type { GearPanel } from '../ui/GearPanel';
 import type { PlayerManager } from '../core/PlayerManager';
 import { drawText } from '../ui/TextBox';
 import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { drawCompassIcon } from '../ui/icons/compassIcon';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -472,6 +473,147 @@ export function renderMobileButtons(
   }
 }
 
+/**
+ * The chip's own geometry, in the right-hand HUD column below the pause button.
+ */
+const CHIP_SLOTS_BELOW_PAUSE = 2;
+const CHIP_HEIGHT = 26;
+
+/**
+ * Where `AchievementUISystem`'s "🏆 NEW" chip stands when the party is not in a
+ * safe room.
+ *
+ * Lives here rather than with the system that paints it, because it is a slot in
+ * *this* module's column: everything else that column holds is measured here,
+ * and the Journal has to know how far down it reaches. Keeping the arithmetic in
+ * one place is also what stops the two drifting — a second copy of it is how the
+ * Journal ended up drawn over the top of the chip in the first place.
+ */
+export function achievementChipRect(miniMap: MiniMapSystem): Rect {
+  const width = rightColBtnW();
+  const pause = pauseButtonRect(miniMap);
+  return {
+    x: viewportWidth() - RIGHT_COL_MARGIN - width,
+    y: pause.y + CHIP_SLOTS_BELOW_PAUSE * (PAUSE_BTN_H + MOBILE_BUTTON_GAP),
+    w: width,
+    h: CHIP_HEIGHT,
+  };
+}
+
+/** The Journal button is a square, big enough that the rose reads at a glance. */
+const JOURNAL_BTN_SIZE = 36;
+const JOURNAL_BTN_GAP = 8;
+/** Inset of the compass rose inside its button frame. */
+const JOURNAL_ICON_INSET = 4;
+/** The badge sits in the button's bottom-right corner, over the rose's rim. */
+const JOURNAL_BADGE_X_INSET = 9;
+const JOURNAL_BADGE_Y_INSET = 13;
+const JOURNAL_BADGE_SIZE = 11;
+
+/**
+ * Where the Journal's compass button stands: at the top of the band of the
+ * right-hand HUD column that is free under the minimap.
+ *
+ * The column is stacked differently on the two platforms and the arithmetic for
+ * both already lives in this module, so it is answered here rather than
+ * re-derived by the caller. Every slot above it is reserved *unconditionally*,
+ * including the achievement chip's, which only appears when there is something
+ * unread: a button placed against what happens to be on screen would jump down
+ * the moment an achievement was earned, and the chip is hit-tested first — so it
+ * would also quietly swallow the clicks aimed at the compass.
+ *
+ * - Desktop: the pause button, then the achievement chip's slot; the floor is
+ *   the Follower button above the hotbar.
+ * - Mobile: the Follower and Pause buttons are both up in the column and the Bag
+ *   button sits under them; the floor is the hotbar itself.
+ *
+ * On a window too short to hold the whole column — a phone in landscape, an
+ * expanded minimap on a small desktop — the button rides up against that floor
+ * rather than off the bottom of the screen. It can then land on the achievement
+ * chip's slot, which is the lesser of the two failures: the chip is only there
+ * when something is unread, whereas a button below the hotbar is unreachable
+ * every frame.
+ */
+export function journalButtonRect(miniMap: MiniMapSystem): Rect {
+  const chip = achievementChipRect(miniMap);
+  let topY = chip.y + chip.h;
+  let floorY = followerButtonRect().y;
+  if (platform.isMobile) {
+    const mmSize = miniMap.isExpanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
+    const followerY = MINIMAP_Y + mmSize + BELOW_MAP_GAP + TIMER_H + MOBILE_BUTTON_GAP;
+    const pauseY = followerY + MOBILE_BTN_H + MOBILE_BUTTON_GAP;
+    const bagBottom = pauseY + PAUSE_BTN_H + MOBILE_BUTTON_GAP + PAUSE_BTN_H;
+    topY = Math.max(bagBottom, topY);
+    floorY = viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN;
+  }
+  const highestAllowed = floorY - JOURNAL_BTN_GAP - JOURNAL_BTN_SIZE;
+  return {
+    x: viewportWidth() - RIGHT_COL_MARGIN - JOURNAL_BTN_SIZE,
+    y: Math.min(topY + JOURNAL_BTN_GAP, highestAllowed),
+    w: JOURNAL_BTN_SIZE,
+    h: JOURNAL_BTN_SIZE,
+  };
+}
+
+/**
+ * The Journal button, with a badge count when quests are outstanding.
+ *
+ * `outstanding` only changes the frame's colour, never its size: a button that
+ * grew when a quest was accepted would move the thing under the player's finger
+ * at the moment they were most likely to be reaching for it.
+ */
+export function drawJournalButton(
+  ctx: CanvasRenderingContext2D,
+  miniMap: MiniMapSystem,
+  outstanding: number,
+): Rect {
+  const r = journalButtonRect(miniMap);
+  drawButton(ctx, {
+    x: r.x,
+    y: r.y,
+    width: r.w,
+    height: r.h,
+    label: '',
+    sound: 'menu_open',
+    ...(outstanding > 0 ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+  });
+  drawCompassIcon(
+    ctx,
+    r.x + JOURNAL_ICON_INSET,
+    r.y + JOURNAL_ICON_INSET,
+    r.w - JOURNAL_ICON_INSET * 2,
+  );
+  if (outstanding > 0) {
+    drawText(ctx, String(outstanding), {
+      x: r.x + r.w - JOURNAL_BADGE_X_INSET,
+      y: r.y + r.h - JOURNAL_BADGE_Y_INSET,
+      size: JOURNAL_BADGE_SIZE,
+      bold: true,
+      color: '#fde68a',
+      outline: true,
+      align: 'center',
+    });
+  }
+  return r;
+}
+
+/**
+ * Where the Follower button stands when nothing overrides it: bottom-right,
+ * clear of the hotbar.
+ *
+ * Exported because it is the *floor* of the right-hand HUD column — anything
+ * hung under the minimap has to stop above it, and re-deriving that arithmetic
+ * anywhere else is how two pieces of chrome end up on the same pixels.
+ */
+export function followerButtonRect(): Rect {
+  return {
+    x: viewportWidth() - MOBILE_BTN_MARGIN - MOBILE_BTN_W,
+    y: viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET,
+    w: MOBILE_BTN_W,
+    h: MOBILE_BTN_H,
+  };
+}
+
 /** Render the Follower button and write its rect to touch (works on both mobile and desktop). */
 export function renderFollowerButton(
   ctx: CanvasRenderingContext2D,
@@ -480,14 +622,7 @@ export function renderFollowerButton(
   humanIsActive: boolean,
   overrideRect?: Rect,
 ): void {
-  const btnY =
-    viewportHeight() - SLOT_HEIGHT - BOTTOM_MARGIN - MOBILE_BTN_H - MOBILE_BTN_BOTTOM_OFFSET;
-  const r: Rect = overrideRect ?? {
-    x: viewportWidth() - MOBILE_BTN_MARGIN - MOBILE_BTN_W,
-    y: btnY,
-    w: MOBILE_BTN_W,
-    h: MOBILE_BTN_H,
-  };
+  const r: Rect = overrideRect ?? followerButtonRect();
   touch.followBtnRect = r;
 
   const anchored = companion.getMovementMode(humanIsActive) === 'anchored';

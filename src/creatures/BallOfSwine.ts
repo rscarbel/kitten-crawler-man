@@ -381,6 +381,14 @@ export class BallOfSwine extends Mob {
   private hasLunged = false;
   private lungeFlash = 0;
   private spinupTimer = 0;
+  /**
+   * The charge wind-up, drained by `playMobAudioCues`. Its own flag rather than
+   * another `specialSoundPending` beat because that flag already carries the
+   * lunge, the carom, the wall slam and the collapse — five beats through one
+   * boolean can only ever be one sound, and the wind-up is the one the whole
+   * fight is read off.
+   */
+  spinupSoundPending = false;
   private wallowTimer = 0;
   private wallowTotal = WALLOW_MIN_FRAMES;
   private burstTimer = 0;
@@ -609,6 +617,7 @@ export class BallOfSwine extends Mob {
     this.hasLunged = false;
     this.lungeFlash = 0;
     this.spinupTimer = 0;
+    this.spinupSoundPending = false;
     this.wallowTimer = 0;
     this.wallowTotal = WALLOW_MIN_FRAMES;
     this.shedTimer = SHED_INTERVAL_FRAMES;
@@ -1049,7 +1058,7 @@ export class BallOfSwine extends Mob {
     // moving: the shot vector freezes for at least 21 frames, so what the crawler
     // reads during the wind-up is where it is actually going.
     this.lockChargeAtTarget();
-    this.specialSoundPending = true;
+    this.spinupSoundPending = true;
   }
 
   private updateSpinningUp(): void {

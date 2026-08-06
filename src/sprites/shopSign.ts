@@ -42,11 +42,11 @@ const MIRRORED_SIDES: ReadonlyArray<number> = [-1, 1];
  * one offset for all fifteen.
  *
  * The arm projects **west**, past the opening the player walks through. How far
- * west is not fixed, because doorways are not all one tile wide: `doorTile` is
- * the *centre* of the opening, so a wide front's opening reaches west of it and
- * an unshifted sign would hang across the middle of it. `signWestShiftTiles`
- * turns the width into the shift that keeps every sign the same distance west of
- * its opening's west edge.
+ * west is not fixed, because doorways are not all one tile wide and `doorTile`
+ * is a tile *inside* the opening rather than its west edge — so on a wide front
+ * an unshifted sign would hang across the middle of the doorway.
+ * `signWestShiftTiles` turns the two into the shift that keeps every sign the
+ * same distance west of its opening's west edge.
  */
 const BRACKET_ARM_Y = -1.42;
 const BRACKET_ROOT_X = 0.5;
@@ -88,21 +88,20 @@ const SWAY_PERIOD_FRAMES = 190;
 export const SIGN_SWAY_PHASE_STRIDE_RAD = GOLDEN_ANGLE_RAD;
 
 /**
- * How far west of the door tile a sign is shifted, in tiles, for an opening
- * `doorwayWidth` tiles wide.
+ * How far west of the door tile a sign is shifted, in tiles, so that its bracket
+ * roots on the opening's west column and its board hangs over the facade tile
+ * beyond that — the same geometry for every building whatever its width.
  *
- * `SpriteLoader.computeDoorway` puts the door tile at `dx0 + floor((w-1)/2)`, so
- * the opening reaches exactly that many tiles west of it. Shifting the sign by
- * the same amount therefore gives every building the *same* geometry relative to
- * its opening's west edge, whatever its width — rather than leaving a wide front
- * with its sign over the middle of its own doorway.
+ * Measured from the opening's own west edge rather than derived from its width:
+ * the door tile is anchored on where the art's opening actually is, which is not
+ * a fixed offset from `doorwayX0` (it is the centre of the *pixel* gap, and a
+ * facade's painted door sits wherever its painter put it inside the tile run).
  *
  * Measured over the thirteen sprites the town uses: six openings are one tile
  * wide, five are two, the General Store is three and The Horned Flagon is four.
- * Only the last two shift, by one tile each.
  */
-export function signWestShiftTiles(doorwayWidth: number): number {
-  return Math.floor((doorwayWidth - 1) / 2);
+export function signWestShiftTiles(doorTileX: number, doorwayX0: number): number {
+  return Math.max(0, doorTileX - doorwayX0);
 }
 
 const BRACKET_IRON = '#3a3630';

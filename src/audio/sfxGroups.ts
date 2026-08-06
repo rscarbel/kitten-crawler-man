@@ -44,6 +44,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   universal: [
     'ability_level_up',
     'achievement_awarded',
+    // Mongo's own three cues. `DungeonScene` constructs `MongoSystem` for every
+    // floor, so the pet can be out anywhere the ability is unlocked.
+    'bite_1',
+    'bite_2',
+    'bite_3',
+    'mongo_released',
+    'mongo_slash',
     'achievement_unlocked',
     'boss_defeated',
     'cat_effect_damage_1',
@@ -72,6 +79,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'goblin_1',
     'goblin_2',
     'goblin_found_you',
+    // The goblin archer's bow, and the shaft landing. Same reason as the goblin
+    // voices above: he is on the spawn table of all three floors.
+    'shooting_an_arrow',
+    'arrow_impact',
     'hammer_strike',
     'healing_potion',
     'human_effect_damage_1',
@@ -143,6 +154,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   /** Krakaren clone boss room, Ball of Swine, the spider lab quest, level2's llama/rat/arena. */
   level2: [
     'ball_of_swine_rolling',
+    'deep_rumbling',
     'flesh_being_sliced',
     'grotesque_spider_screech_attack',
     'grotesque_spider_slam_attack',
@@ -177,28 +189,62 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
-   * overworld only). Most of these ids are stand-ins borrowed from a
-   * level1/level2 boss's sample — see the `[STAND-IN]` comments in
-   * `GameLoopPhases.playMobAudioCues` — so they need their own preload here
-   * even though the sample itself "belongs" to another floor.
+   * overworld only), plus the bounty hand-off cues themselves. Each boss now
+   * owns most of its voice, but the ids still borrowed from a level1/level2
+   * boss — see the remaining `[STAND-IN]` comments in
+   * `GameLoopPhases.playMobAudioCues` — need their own preload here even though
+   * the sample itself "belongs" to another floor.
    */
   bounty: [
-    'bear_growl_1',
-    'ball_of_swine_rolling',
-    'cat_missile_fire',
+    'accepted_bounty',
+    'bones_rattling',
+    'bounty_fight_engaged',
     'clown_horn',
     'clown_laughing_1',
     'clown_laughing_2',
-    'grotesque_spider_screech_attack',
-    'grotesque_spider_slam_attack',
+    'dead_hand_wave',
+    'gas_cloud',
+    'glass_break_1',
+    'glass_break_2',
+    'glass_break_3',
+    'glass_break_4',
     'hammer_strike',
     'juicer_throw',
-    'krakaren_ground_slam',
-    'krakaren_yell',
-    'sword_attack_1',
+    'knight_magic_windup',
+    'laser_1',
+    'laser_2',
+    'laser_3',
+    'magic_ball_impact',
+    'magic_ball_launch',
+    'mantid_furious',
+    'mantid_hiss_1',
+    'mantid_hiss_2',
+    'mantid_hiss_3',
+    'mantid_hiss_4',
+    'mantid_hiss_5',
+    'massive_metal_hit',
+    'massive_strike_with_dirt_impact',
+    'massive_weapon_strike',
+    'metal_winding_up',
+    'prepare_for_magic_strike',
+    'rock_golem_death',
+    'rock_golem_frustrated',
+    'rock_golem_grunt',
+    'rock_thud_1',
+    'rock_thud_2',
+    'rock_thud_3',
+    'rock_thud_4',
+    'rolling_earth_ball',
+    'skeleton_lord_chant',
+    'skeleton_lord_death',
+    'slash_strike_1',
+    'slash_strike_2',
+    'slash_strike_3',
+    'small_magic_impact_1',
+    'small_magic_impact_2',
+    'small_magic_impact_3',
     'wood_breaking_1',
     'wood_breaking_2',
-    'wood_breaking_3',
   ],
 
   /** `CircusQuestSystem` + `BigTopBossSystem` (Grimaldi, Heather the Bear, the clown troupe). */
@@ -221,8 +267,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   /** `MurderMysteryQuestSystem`, `CultHideoutSystem` and the tower's `QuillConfrontationSystem`. */
   murderMysteryQuest: ['krasue_attack', 'rumble'],
 
-  /** `MongoSystem` (the pet raptor) and `MercenarySystem`/`MercenaryGuildSystem` escorts. */
-  mongoMercenary: ['mongo_released', 'mongo_slash', 'sword_attack_1'],
+  /**
+   * `MercenarySystem`/`MercenaryGuildSystem` escorts, who are hired in town and
+   * so exist only on floor 3. Mongo is NOT here despite the pairing the name
+   * suggests: `DungeonScene` builds `MongoSystem` unconditionally, so the pet's
+   * own cues are universal.
+   */
+  mongoMercenary: ['sword_attack_1'],
 
   /** The restaurant safe room's Bopca cook — `BopcaSystem`. */
   interiorBopca: [

@@ -10,6 +10,7 @@ import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { setQuestBeaconViewer } from '../sprites/questBeacon';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -298,6 +299,11 @@ export class RenderPipeline {
       safeRoom,
       speechBubblePulse,
     } = rc;
+
+    // Before anything in the pass draws: a quest beacon fades as the player
+    // closes on it, and the creatures that draw one have no reference to the
+    // player of their own.
+    setQuestBeaconViewer(active.x, active.y);
 
     const visibleMobs = mobGrid.queryRect(
       camX - MOB_QUERY_MARGIN,

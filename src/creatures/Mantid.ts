@@ -104,6 +104,14 @@ const RAGE_COOLDOWN_MAX_FRAMES = 1200;
 /** Frames of recovery after the flurry, during which he does nothing else. */
 const POST_FLURRY_RECOVERY_FRAMES = 40;
 
+/**
+ * Frames between the stalking hisses, while a player is inside aggro range:
+ * 2.5–5.5 seconds. Randomised rather than fixed so two Mantids in one encounter
+ * do not lock into unison.
+ */
+const HISS_INTERVAL_MIN_FRAMES = 150;
+const HISS_INTERVAL_MAX_FRAMES = 330;
+
 const XP_VALUE = 1500;
 const COIN_DROP_MIN = 120;
 const COIN_DROP_MAX = 220;
@@ -202,6 +210,13 @@ export class Mantid extends Mob {
   private slashLanded = false;
   private slashCooldown = 0;
   private rageCooldown = randomInt(RAGE_COOLDOWN_MIN_FRAMES, RAGE_COOLDOWN_MAX_FRAMES);
+  private hissCooldown = randomInt(HISS_INTERVAL_MIN_FRAMES, HISS_INTERVAL_MAX_FRAMES);
+  /**
+   * The stalking hiss, drained by `playMobAudioCues`. A flag of its own rather
+   * than another `specialSoundPending` arm because it fires while he walks, and
+   * the rage pause can raise that flag on the very same frame.
+   */
+  hissSoundPending = false;
   private flurryTickTimer = 0;
   private readonly immuneLabels: ImmuneLabel[] = [];
   private readonly aggroRangePx: number;
@@ -239,6 +254,8 @@ export class Mantid extends Mob {
     this.slashLanded = false;
     this.slashCooldown = 0;
     this.rageCooldown = randomInt(RAGE_COOLDOWN_MIN_FRAMES, RAGE_COOLDOWN_MAX_FRAMES);
+    this.hissCooldown = randomInt(HISS_INTERVAL_MIN_FRAMES, HISS_INTERVAL_MAX_FRAMES);
+    this.hissSoundPending = false;
     this.flurryTickTimer = 0;
     this.immuneLabels.length = 0;
     this.isAggro = false;
@@ -288,6 +305,7 @@ export class Mantid extends Mob {
     if (!this.isAlive) return;
     if (this.slashCooldown > 0) this.slashCooldown--;
     if (this.rageCooldown > 0) this.rageCooldown--;
+    if (this.hissCooldown > 0) this.hissCooldown--;
 
     const nearest = this.acquireTarget(targets, this.aggroRangePx);
     this.currentTarget = nearest;
@@ -325,6 +343,13 @@ export class Mantid extends Mob {
 
     this.state = 'pursuing';
     this.updateLastKnown(nearest);
+
+    // Only while he is actually stalking someone: a hiss from an idle Mantid
+    // across the map is a jump-scare with nothing behind it.
+    if (this.hissCooldown === 0) {
+      this.hissCooldown = randomInt(HISS_INTERVAL_MIN_FRAMES, HISS_INTERVAL_MAX_FRAMES);
+      this.hissSoundPending = true;
+    }
 
     // The rage cycle outranks the ordinary strike: a Mantid that spent its
     // window slashing would never show the player the mechanic it is built on.

@@ -72,6 +72,28 @@ export const PLANNED_SIGNPOSTS: ReadonlyArray<PlannedSignpost> = [
       { label: 'East Gate', direction: 1 },
     ],
   },
+  /**
+   * East of the gate's centre line, not west: west of it is the Garrison Green,
+   * and a post inside a fenced garden is a post in somebody's flower bed.
+   *
+   * Its arms name Garrison Row and the Barracks rather than the plaza or the
+   * wilds, which is the whole reason this entry is worth reading. A fingerpost's
+   * arms are *bearings* — `SignpostArm.direction` is literally west or east — and
+   * this post stands on the civic terrace, a north–south route. The plaza is
+   * sixteen rows south of it and the wilds nineteen rows north; labelling either
+   * as a left or a right turn would point a lost player sideways at a
+   * destination that is straight ahead. What actually lies west and east of this
+   * tile is the Garrison band, so that is what the arms say.
+   */
+  {
+    gateName: 'north gate',
+    inwardTiles: SIGNPOST_INWARD_TILES,
+    sidewaysTiles: SIGNPOST_SIDEWAYS_TILES,
+    arms: [
+      { label: 'Garrison Row', direction: -1 },
+      { label: 'The Barracks', direction: 1 },
+    ],
+  },
 ];
 
 /**

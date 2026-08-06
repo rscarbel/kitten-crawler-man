@@ -14,9 +14,8 @@ import type { MiniMapSystem } from './MiniMapSystem';
 import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
 import { drawText } from '../ui/TextBox';
-import { platform } from '../core/Platform';
-import { pauseButtonRect } from './DungeonUIRenderer';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { achievementChipRect } from './DungeonUIRenderer';
+import { viewportHeight } from '../core/Viewport';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -323,9 +322,6 @@ export class AchievementUISystem {
         align: 'center',
       });
     } else {
-      const BTN_H = 28;
-      const BTN_GAP = 6;
-      const RIGHT_MARGIN = 8;
       const PULSE_PERIOD = 300;
       const PULSE_BASE = 0.5;
       const PULSE_AMPLITUDE = 0.5;
@@ -333,18 +329,8 @@ export class AchievementUISystem {
       const STROKE_RANGE = 0.4;
       const ICON_Y_OFFSET = 4;
       const ICON_Y_ADJUST = 9;
-      const ICON_H = 26;
-      const MOBILE_BTN_W = 80;
-      const DESKTOP_BTN_W = 104;
 
-      const btnW = platform.isMobile ? MOBILE_BTN_W : DESKTOP_BTN_W;
-      const pb = pauseButtonRect(miniMap);
-      const r = {
-        x: viewportWidth() - RIGHT_MARGIN - btnW,
-        y: pb.y + BTN_H + BTN_GAP + BTN_H + BTN_GAP,
-        w: btnW,
-        h: ICON_H,
-      };
+      const r = achievementChipRect(miniMap);
       this._achievIconRect = r;
 
       const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(Date.now() / PULSE_PERIOD);

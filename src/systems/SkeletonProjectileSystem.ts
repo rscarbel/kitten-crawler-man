@@ -108,6 +108,13 @@ export class SkeletonProjectileSystem implements GameSystem {
   /** Set when a bolt lands; `DungeonScene` reads and clears it to play the cue. */
   burstSoundPending = false;
 
+  /**
+   * Set when a bone arrow stops. Separate from {@link burstSoundPending}
+   * because the two kinds end differently — a bolt goes off, a shaft just
+   * stops — and the same frame can end one of each.
+   */
+  arrowImpactSoundPending = false;
+
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
@@ -204,7 +211,10 @@ export class SkeletonProjectileSystem implements GameSystem {
    * archers hit harder from behind cover than the lord does.
    */
   private land(projectile: Projectile, targets: readonly Player[], directHit?: Player): void {
-    if (projectile.kind !== 'soul_bolt') return;
+    if (projectile.kind !== 'soul_bolt') {
+      this.arrowImpactSoundPending = true;
+      return;
+    }
     const { x, y } = projectile;
     this.bursts.push({ x, y, tick: BURST_FRAMES });
     this.burstSoundPending = true;
@@ -268,5 +278,6 @@ export class SkeletonProjectileSystem implements GameSystem {
     this.projectiles = [];
     this.bursts = [];
     this.burstSoundPending = false;
+    this.arrowImpactSoundPending = false;
   }
 }

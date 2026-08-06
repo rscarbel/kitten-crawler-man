@@ -17,8 +17,8 @@ const FIRST_BUTTON_Y = 52;
 const BUTTON_SPACING = 50;
 /** Gap between the last button and the bottom of the modal. */
 const BOTTOM_MARGIN = 12;
-/** Buttons always present, in render order: Resume, Inventory, Stats, Achievements, Abilities, Skills, Settings. */
-const BUTTON_COUNT_NO_SPEND = 7;
+/** Buttons always present, in render order: Resume, Inventory, Game, Settings. */
+const BUTTON_COUNT_NO_SPEND = 4;
 /** Plus the conditional Spend Skill Points button. */
 const BUTTON_COUNT_WITH_SPEND = BUTTON_COUNT_NO_SPEND + 1;
 /** Buttons stay legible even when the pitch is compressed to fit a short window. */
@@ -93,50 +93,18 @@ export function renderMainTab(
     action: () => setTab('inventory'),
   });
   bY += spacing;
-  addButton(ctx, buttons, {
-    x: bX,
-    y: bY,
-    width: bW,
-    height: bH,
-    label: 'Stats',
-    ...BUTTON_PRESETS.primary,
-    action: () => setTab('stats'),
-  });
-  bY += spacing;
 
   const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
-  const achLabel = unread > 0 ? `Achievements  (${unread} new)` : 'Achievements';
+  const gameLabel = unread > 0 ? `Game  (${unread} new)` : 'Game';
   addButton(ctx, buttons, {
     x: bX,
     y: bY,
     width: bW,
     height: bH,
-    label: achLabel,
+    label: gameLabel,
     ...BUTTON_PRESETS.primary,
     ...(unread > 0 ? { fill: '#1a2a0a', labelColor: '#86efac' } : {}),
-    action: () => setTab('achievements'),
-  });
-  bY += spacing;
-
-  addButton(ctx, buttons, {
-    x: bX,
-    y: bY,
-    width: bW,
-    height: bH,
-    label: 'Abilities',
-    ...BUTTON_PRESETS.primary,
-    action: () => setTab('abilities'),
-  });
-  bY += spacing;
-
-  addButton(ctx, buttons, {
-    x: bX,
-    y: bY,
-    width: bW,
-    height: bH,
-    label: 'Skills',
-    ...BUTTON_PRESETS.primary,
-    action: () => setTab('skills'),
+    action: () => setTab('game'),
   });
   bY += spacing;
 

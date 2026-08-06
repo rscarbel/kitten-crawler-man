@@ -6,6 +6,14 @@ import type { GameStats } from '../core/GameStats';
 import type { AudioManager } from '../audio/AudioManager';
 import type { PauseTab, ButtonRect } from './pause/types';
 import { renderMainTab, mainTabHeight } from './pause/MainTab';
+import { renderGameTab, gameTabHeight } from './pause/GameTab';
+import {
+  renderJournalTab,
+  outstandingCount,
+  type JournalTabContext,
+  JOURNAL_SCROLL_TOP_Y,
+  JOURNAL_FOOTER_H,
+} from './pause/JournalTab';
 import { renderInventoryTab, INVENTORY_TAB_BOX_H } from './pause/InventoryTab';
 import { renderStatsTab } from './pause/StatsTab';
 import { renderSpendTab } from './pause/SpendTab';
@@ -79,7 +87,17 @@ export class PauseMenu {
   private skillsContentH = 0;
   private controlsScrollY = 0;
   private controlsContentH = 0;
+  private journalScrollY = 0;
+  private journalContentH = 0;
   private touchScrollStartY: number | null = null;
+
+  /**
+   * Supplied by the owning scene each frame it wants a Journal, and left null on
+   * the floors that have none. Null is also what hides the Quest Journal entry
+   * from the Game tab, so there is one condition rather than two that can
+   * disagree — a menu row that opens an empty screen is worse than no row.
+   */
+  journalContext: JournalTabContext | null = null;
 
   /** Set by the owning scene so the Settings tab can read/write volumes. */
   audio: AudioManager | null = null;
@@ -135,6 +153,14 @@ export class PauseMenu {
   openToSpend(): void {
     this._isOpen = true;
     this.tab = 'spend';
+    this._applyAudioPause();
+  }
+
+  /** The compass button's landing: straight past the menu into the Journal. */
+  openToJournal(): void {
+    this._isOpen = true;
+    this.tab = 'journal';
+    this.journalScrollY = 0;
     this._applyAudioPause();
   }
 
@@ -205,6 +231,8 @@ export class PauseMenu {
         0,
         Math.min(maxScroll, this.controlsScrollY + deltaY * SCROLL_MULTIPLIER),
       );
+    } else if (this.tab === 'journal') {
+      this.scrollJournal(deltaY * SCROLL_MULTIPLIER);
     } else if (this.tab === 'abilities') {
       scrollAbilitiesTab(deltaY);
     }
@@ -218,7 +246,8 @@ export class PauseMenu {
       this.tab === 'spend' ||
       this.tab === 'stats' ||
       this.tab === 'skills' ||
-      this.tab === 'controls'
+      this.tab === 'controls' ||
+      this.tab === 'journal'
     ) {
       this.touchScrollStartY = y;
     }
@@ -243,6 +272,8 @@ export class PauseMenu {
       } else if (this.tab === 'controls') {
         const maxScroll = Math.max(0, this.controlsContentH - this.controlsScrollH);
         this.controlsScrollY = Math.max(0, Math.min(maxScroll, this.controlsScrollY + delta));
+      } else if (this.tab === 'journal') {
+        this.scrollJournal(delta);
       }
     }
   }
@@ -259,6 +290,7 @@ export class PauseMenu {
   private _lastSpendBoxH = SPEND_BOX_H;
   private _lastSkillsBoxH = SKILLS_BOX_H;
   private _lastControlsBoxH = CONTROLS_BOX_H;
+  private _lastJournalBoxH = JOURNAL_BOX_H;
 
   private get statsScrollH(): number {
     // Must match the scroll area computed in renderStatsTab: bh - STATS_BOX_TOP_MARGIN - STATS_BOX_BOTTOM_MARGIN
@@ -280,6 +312,17 @@ export class PauseMenu {
     return Math.max(0, this._lastControlsBoxH - CONTROLS_SCROLL_TOP_Y - CONTROLS_FOOTER_H);
   }
 
+  /** Pixels of journal travel, clamped — the shared path for wheel, drag and the ▲/▼ buttons. */
+  private scrollJournal(delta: number): void {
+    const maxScroll = Math.max(0, this.journalContentH - this.journalScrollH);
+    this.journalScrollY = Math.max(0, Math.min(maxScroll, this.journalScrollY + delta));
+  }
+
+  private get journalScrollH(): number {
+    // Must match renderJournalTab's scroll band.
+    return Math.max(0, this._lastJournalBoxH - JOURNAL_SCROLL_TOP_Y - JOURNAL_FOOTER_H);
+  }
+
   /** Render the full pause overlay. Only call when isOpen === true. */
   render(
     ctx: CanvasRenderingContext2D,
@@ -296,6 +339,10 @@ export class PauseMenu {
     mouseY?: number,
   ): void {
     this.buttons = [];
+    // Resolved before anything is sized or drawn: a Journal open on a floor that
+    // has none — the scene is rebuilt under the menu on every building entry —
+    // would otherwise spend a frame as a modal with no content and no way out.
+    if (this.tab === 'journal' && this.journalContext === null) this.tab = 'game';
     // Keyed by tab so that activating a button which changes tabs hands the new
     // tab a fresh ring, rather than leaving focus on whatever now occupies the
     // same index.
@@ -307,29 +354,37 @@ export class PauseMenu {
     drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.68 });
 
     const boxW = Math.min(MODAL_BOX_WIDTH, cw - MODAL_PADDING);
+    const hasQuestJournal = this.journalContext !== null;
     const mainBoxH =
-      this.tab === 'main' ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0) : 0;
+      this.tab === 'main'
+        ? mainTabHeight(human.unspentPoints + cat.unspentPoints > 0)
+        : this.tab === 'game'
+          ? gameTabHeight(hasQuestJournal)
+          : 0;
     const rawBoxH =
       this.tab === 'achievements' || this.tab === 'abilities'
         ? ABILITIES_ACHIEVEMENTS_BOX_H
-        : this.tab === 'stats'
-          ? STATS_BOX_H
-          : this.tab === 'spend'
-            ? SPEND_BOX_H
-            : this.tab === 'skills'
-              ? SKILLS_BOX_H
-              : this.tab === 'settings'
-                ? SETTINGS_BOX_H
-                : this.tab === 'inventory'
-                  ? INVENTORY_TAB_BOX_H
-                  : this.tab === 'controls'
-                    ? CONTROLS_BOX_H
-                    : mainBoxH;
+        : this.tab === 'journal'
+          ? JOURNAL_BOX_H
+          : this.tab === 'stats'
+            ? STATS_BOX_H
+            : this.tab === 'spend'
+              ? SPEND_BOX_H
+              : this.tab === 'skills'
+                ? SKILLS_BOX_H
+                : this.tab === 'settings'
+                  ? SETTINGS_BOX_H
+                  : this.tab === 'inventory'
+                    ? INVENTORY_TAB_BOX_H
+                    : this.tab === 'controls'
+                      ? CONTROLS_BOX_H
+                      : mainBoxH;
     const boxH = Math.min(rawBoxH, ch - MODAL_PADDING);
     if (this.tab === 'stats') this._lastStatsBoxH = boxH;
     if (this.tab === 'spend') this._lastSpendBoxH = boxH;
     if (this.tab === 'skills') this._lastSkillsBoxH = boxH;
     if (this.tab === 'controls') this._lastControlsBoxH = boxH;
+    if (this.tab === 'journal') this._lastJournalBoxH = boxH;
     const modal = drawModal(ctx, {
       canvasWidth: cw,
       canvasHeight: ch,
@@ -344,6 +399,7 @@ export class PauseMenu {
       if (t !== 'stats') this.statsScrollY = 0;
       if (t !== 'spend') this.spendScrollY = 0;
       if (t !== 'skills') this.skillsScrollY = 0;
+      if (t !== 'journal') this.journalScrollY = 0;
       if (t !== 'abilities') resetAbilitiesTab();
       if (t !== 'settings') this._showResetConfirm = false;
       if (t !== 'controls') {
@@ -375,6 +431,41 @@ export class PauseMenu {
           humanAchievements,
           catAchievements,
         );
+        break;
+      case 'game':
+        renderGameTab(
+          ctx,
+          this.buttons,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          setTabWithSound,
+          hasQuestJournal,
+          this.journalContext === null ? 0 : outstandingCount(this.journalContext.entries),
+          humanAchievements,
+          catAchievements,
+        );
+        break;
+      case 'journal':
+        // Non-null by the fallback at the top of this method; the check is what
+        // narrows it for the compiler.
+        if (this.journalContext !== null) {
+          this.journalContentH = renderJournalTab(
+            ctx,
+            this.buttons,
+            boxX,
+            boxY,
+            boxW,
+            boxH,
+            setTabWithSound,
+            (delta) => {
+              this.scrollJournal(delta);
+            },
+            this.journalContext,
+            this.journalScrollY,
+          );
+        }
         break;
       case 'inventory':
         renderInventoryTab(
@@ -551,3 +642,9 @@ const SETTINGS_BOX_H = platform.isMobile ? SETTINGS_BOX_H_MOBILE : SETTINGS_BOX_
  * viewport, and the list scrolls inside whatever survives that clamp.
  */
 const CONTROLS_BOX_H = 560;
+/**
+ * The Journal asks for the same as the Controls tab: however many quests are
+ * running, the list wants every pixel the window will give it, and what survives
+ * the viewport clamp scrolls.
+ */
+const JOURNAL_BOX_H = 560;

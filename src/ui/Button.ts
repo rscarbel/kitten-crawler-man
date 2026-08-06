@@ -527,6 +527,24 @@ export const BUTTON_PRESETS = {
     radius: 4,
     labelColor: '#fca5a5',
   },
+  /**
+   * A Journal row. Almost nothing but a hover target: the row's content is
+   * drawn over it and has to stay the thing the eye lands on, so the fill is a
+   * hair lighter than the panel behind it and the border is barely there.
+   */
+  trackerRow: {
+    fill: 'rgba(30,41,59,0.6)',
+    border: '#1e293b',
+    borderWidth: 1,
+    radius: 3,
+  },
+  /** The pinned Journal row — the one the world arrow is following. */
+  trackerRowPinned: {
+    fill: 'rgba(250,204,21,0.14)',
+    border: '#facc15',
+    borderWidth: 1.5,
+    radius: 3,
+  },
   /** A bound key chip: quiet, reads as a keycap rather than an action. */
   keyChip: {
     fill: '#0f172a',

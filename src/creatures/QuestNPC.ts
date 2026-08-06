@@ -3,9 +3,12 @@ import { TILE_SIZE } from '../core/constants';
 import {
   drawQuestNPCSprite,
   drawQuestMarker,
+  questMarkerColorFor,
   QUEST_MARKER_GOLD,
   QUEST_MARKER_GREEN,
+  type QuestMarkerState,
 } from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 
 const NPC_MAX_HP = 40;
 /** Initial health potion count to remove (NPC has no use for potions). */
@@ -19,7 +22,7 @@ const HURT_FRAMES = HURT_HOLD_SECONDS * FRAMES_PER_SECOND + HURT_FADE_FRAMES;
 /** Share of a strike's flash intensity the sustained hurt tint carries. */
 const HURT_FLASH_PROGRESS = 0.45;
 
-export type NPCMarkerType = 'exclamation' | 'question' | 'none';
+export type NPCMarkerType = QuestMarkerState;
 
 /**
  * A non-combatant quest NPC (goblin mother in pink dress).
@@ -53,9 +56,16 @@ export class QuestNPC extends Player {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
+    // Beacon first, so the column stands behind her rather than across her.
+    // Both it and the glyph below branch on `markerType` and nothing else, so
+    // the two can never disagree about whether she has something to say.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
+
     drawQuestNPCSprite(ctx, sx, sy, tileSize, this.facingX, this.hurtTimer);
 
-    // Overhead marker
     if (this.markerType === 'exclamation') {
       drawQuestMarker(ctx, sx, sy, tileSize, '!', QUEST_MARKER_GOLD);
     } else if (this.markerType === 'question') {

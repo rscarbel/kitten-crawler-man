@@ -14,7 +14,28 @@ export type BuildingEntry = {
   doorTile: { x: number; y: number };
   name: string;
   type: BuildingKind;
+  /** Westmost column of the opening; absent means the opening is `doorTile` alone. */
+  doorwayX0?: number;
+  /** Tiles wide the opening is; absent means one. */
+  doorwayWidth?: number;
 };
+
+/** An entry with neither doorway field opens on its `doorTile` and nothing else. */
+const SINGLE_TILE_DOORWAY_WIDTH = 1;
+
+/**
+ * The span of tiles an entrance opens on, as `[x0, x0 + width)` at `doorTile.y`.
+ *
+ * Both fields are read together and both default together: an entry carrying a
+ * width but no start column would otherwise silently open a span beginning at
+ * the map's west edge.
+ */
+function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readonly width: number } {
+  if (entry.doorwayX0 === undefined || entry.doorwayWidth === undefined) {
+    return { x0: entry.doorTile.x, width: SINGLE_TILE_DOORWAY_WIDTH };
+  }
+  return { x0: entry.doorwayX0, width: entry.doorwayWidth };
+}
 
 /** Entry-menu icon per building type. Exhaustive over `BuildingKind` by construction. */
 const BUILDING_TYPE_ICONS: Record<BuildingKind, string> = {
@@ -87,8 +108,9 @@ export class BuildingSystem implements GameSystem {
   private dismissed = false;
   private activeDoorIdx = NO_DOOR_HERE;
 
-  /** Door tile → index in `gameMap.buildingEntries`, so the per-frame on-door
-   * test is one lookup rather than a scan of every entrance in town. */
+  /** Doorway tile → index in `gameMap.buildingEntries`, so the per-frame on-door
+   * test is one lookup rather than a scan of every entrance in town. Every tile
+   * of an entrance's opening is a key, not just its `doorTile`. */
   private readonly entryIndexByDoorTile: ReadonlyMap<number, number>;
 
   constructor(
@@ -97,10 +119,13 @@ export class BuildingSystem implements GameSystem {
   ) {
     const byDoorTile = new Map<number, number>();
     gameMap.buildingEntries.forEach((entry, index) => {
-      // First match wins, as the `findIndex` scan this replaces did — two
-      // entries sharing a door tile are guarded against but not impossible.
-      const key = tileCoordKey(entry.doorTile.x, entry.doorTile.y);
-      if (!byDoorTile.has(key)) byDoorTile.set(key, index);
+      const { x0, width } = doorwaySpan(entry);
+      for (let x = x0; x < x0 + width; x++) {
+        // First match wins, as the `findIndex` scan this replaces did — two
+        // entries sharing a door tile are guarded against but not impossible.
+        const key = tileCoordKey(x, entry.doorTile.y);
+        if (!byDoorTile.has(key)) byDoorTile.set(key, index);
+      }
     });
     this.entryIndexByDoorTile = byDoorTile;
   }
@@ -172,7 +197,11 @@ export class BuildingSystem implements GameSystem {
     const pulse =
       DOOR_HINT_PULSE_BASE + Math.sin(Date.now() / DOOR_HINT_PULSE_PERIOD) * DOOR_HINT_PULSE_RANGE;
     for (const entry of this.gameMap.buildingEntries) {
-      const sx = entry.doorTile.x * ts - camX + Math.floor(ts / 2);
+      const { x0, width } = doorwaySpan(entry);
+      // Centred on the whole opening rather than on `doorTile`: on a four-tile
+      // front those are two tiles apart, and an arrow that does not sit over the
+      // painted door is the game pointing at the wrong place to stand.
+      const sx = Math.round((x0 + width / 2) * ts) - camX;
       const sy = entry.doorTile.y * ts - camY;
       const CULLING_HEIGHT_TILES = 3;
       if (

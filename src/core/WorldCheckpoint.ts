@@ -30,6 +30,7 @@ import type { GameStatsSnapshot } from './GameStats';
 import type { MercenaryRosterCheckpoint } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
 import type { MurderQuestProgressCheckpoint } from './MurderQuestProgress';
+import type { JournalProgressCheckpoint } from './JournalProgress';
 
 /**
  * Everything about the floor — and the run — that a safe-room checkpoint has to
@@ -81,6 +82,7 @@ export interface WorldCheckpoint {
    */
   circusQuestProgress: CircusQuestProgressCheckpoint;
   murderQuestProgress: MurderQuestProgressCheckpoint;
+  journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
   clubMembership: ClubMembershipCheckpoint;
   marketStock: MarketStockCheckpoint;

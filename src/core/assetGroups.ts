@@ -121,6 +121,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'club_weapon_rack',
     'bunting_11',
     'bunting_16',
+    'gate_arch_across_2',
     'gate_arch_across_4',
     'gate_arch_along_4',
     'laundry_line_3',

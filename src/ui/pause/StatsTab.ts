@@ -257,7 +257,7 @@ export function renderStatsTab(
     label: 'Back',
     ...BUTTON_PRESETS.primary,
     primaryAction: true,
-    action: () => setTab('main'),
+    action: () => setTab('game'),
   });
 
   return contentHeight;

@@ -24,6 +24,20 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 See the `add-system` skill for the recipe.
 
+### Cross-cutting getters
+
+Two seams cut across the quest systems instead of living in one owner, because
+three of the five questlines keep a `QuestManager` privately and the other two have
+none at all — centralising the state would mean rewriting all five.
+
+- `questMarkers` — minimap pips, gathered by `DungeonScene.collectQuestMarkers()`.
+- `trackerEntries()` — Quest Journal rows, the `TrackerSource` interface in
+  `src/systems/questTracker.ts`, gathered by `DungeonScene.collectTrackerEntries()`.
+
+Both are rebuilt from the system's own phase machine every frame and stored
+nowhere, so neither can go stale. `TownGuideSystem` is a `TrackerSource` with no
+quest behind it at all — it points at the town's own furniture. See `add-quest`.
+
 ## Entity hierarchy
 
 `Player` (`src/Player.ts`, abstract: position, HP, stats, status effects, walk animation) → `HumanPlayer`, `CatPlayer`, and `Mob` (`src/creatures/Mob.ts`, abstract: aggro, A* pathfinding, LOS, health bar, loot). All enemies extend `Mob`. See the `add-creature` skill.

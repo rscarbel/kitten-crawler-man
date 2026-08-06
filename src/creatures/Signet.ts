@@ -17,6 +17,8 @@ import {
   type SignetFireball,
 } from './signetFireball';
 import { normalize, randomInt } from '../utils';
+import { questMarkerColorFor, type QuestMarkerState } from '../sprites/questNPCSprite';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 
 const SIGNET_HP = 80;
 const SIGNET_SPEED = 1.6;
@@ -114,6 +116,14 @@ export class Signet extends Mob {
   summonCooldownFrames = SUMMON_COOLDOWN_FRAMES;
   /** Set each frame by CircusQuestSystem — she holds still while her dialog is open. */
   isConversing = false;
+  /**
+   * Whether she is waiting to say something, set each frame by
+   * CircusQuestSystem from the same phases its minimap marker reads.
+   *
+   * She is the one quest giver who walks, which is why her beacon is drawn from
+   * here rather than pinned to a tile the way a notice board's would be.
+   */
+  markerType: QuestMarkerState = 'none';
 
   private readonly addMob: (mob: Mob) => void;
   private idleAnchorX: number;
@@ -397,6 +407,12 @@ export class Signet extends Mob {
     // The shared overlays anchor to the tile top, which lands on her chest at
     // double scale — lift them clear of both her head and her elite marker.
     const overlayY = sy - SIGNET_OVERLAY_CLEARANCE * tileSize;
+
+    // Before the body paint, so the column stands behind her.
+    const markerColor = questMarkerColorFor(this.markerType);
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
 
     if (this.isAggro) {
       this.renderAggroIndicator(ctx, sx, overlayY, tileSize);

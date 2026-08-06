@@ -422,6 +422,36 @@ const FARM_YARD_BOTTOM = LOW_QUARTER_TOP + 2;
 const GATE_APRON_DEPTH = 3;
 const GATE_APRON_OVERHANG = 2;
 
+/**
+ * A gateway's stone piers stand on the wall tile immediately beyond each end of
+ * the opening they arch over, so a gate needs this much clear wall either side
+ * of itself as well as the opening itself.
+ */
+export const GATE_ARCH_PIER_TILES = 1;
+
+/**
+ * The north gate's opening, west of the tower's foot.
+ *
+ * The tower stands *in* the north wall and its blocking base spans the columns
+ * either side of the town's centre line, so the only stretch of north wall a
+ * gate can be cut into is the terrace's own frontage west of it. It opens
+ * straight onto existing flagstone — the Civic Terrace already leads south past
+ * the tower's foot into the plaza — so no interior street has to be added to
+ * serve it.
+ *
+ * A postern rather than a carriage gate, two tiles wide against the other three
+ * gates' four, because that is what the frontage holds: the terrace's west
+ * column is the westmost the corridor can start at without running into the
+ * Garrison Green's fence a few rows south, and the east edge has to leave the
+ * tower's base a pier's width of clear wall. The tower's own width comes from
+ * its manifest footprint, which this file deliberately does not read —
+ * `assertTownPlanIsSane` compares the two, so a re-drawn tower that reaches
+ * further west fails generation rather than growing over the gate.
+ */
+const TOWER_BASE_WEST = -3;
+const NORTH_GATE_WEST = TERRACE_WEST;
+const NORTH_GATE_EAST = TOWER_BASE_WEST - 1 - GATE_ARCH_PIER_TILES;
+
 // ── Tower ────────────────────────────────────────────────────────────────────
 
 /**
@@ -654,6 +684,18 @@ interface GateTemplate {
 }
 
 const GATE_TEMPLATES: ReadonlyArray<GateTemplate> = [
+  {
+    name: 'north gate',
+    bounds: span(NORTH_GATE_WEST, WALL_NORTH, NORTH_GATE_EAST, WALL_NORTH),
+    apron: span(
+      NORTH_GATE_WEST - GATE_APRON_OVERHANG,
+      WALL_NORTH - GATE_APRON_DEPTH,
+      NORTH_GATE_EAST + GATE_APRON_OVERHANG,
+      WALL_NORTH - 1,
+    ),
+    exit: { dx: Math.floor((NORTH_GATE_WEST + NORTH_GATE_EAST) / 2), dy: WALL_NORTH - 1 },
+    outward: { dx: 0, dy: -1 },
+  },
   {
     name: 'south gate',
     bounds: span(KINGS_ROAD_WEST, WALL_SOUTH, KINGS_ROAD_EAST, WALL_SOUTH),
