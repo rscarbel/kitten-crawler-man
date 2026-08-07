@@ -234,7 +234,7 @@ export class CombatKit {
       // while the test below measures centres, so without the slack the wave
       // comes up short on one side of itself.
       for (const mob of grid.queryCircle(shockwave.x, shockwave.y, reach + TILE_SIZE)) {
-        if (!mob.isAlive) continue;
+        if (!mob.isAlive || !mob.takesPlayerDamage('shell')) continue;
         const dx = mob.x + HALF_TILE - shockwave.x;
         const dy = mob.y + HALF_TILE - shockwave.y;
         if (Math.hypot(dx, dy) >= reach) continue;
@@ -248,6 +248,7 @@ export class CombatKit {
       let hits = 0;
       for (const mob of nearby) {
         if (!mob.isAlive || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
+        if (!mob.takesPlayerDamage('shell')) continue;
         if (!human.zeroDamage) mob.takeDamageFrom(CHAIN_LIGHTNING_DAMAGE, human, 'shell');
         this.spells.addChainLightningBolt(target.x, target.y, mob.x + HALF_TILE, mob.y + HALF_TILE);
         hits++;

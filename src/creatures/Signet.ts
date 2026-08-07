@@ -199,16 +199,22 @@ export class Signet extends Mob {
   }
 
   /**
-   * Signet is quest-critical and must never die — some hostile AI (e.g. the
-   * Vespa-stage BrindleGrub) targets any mob in range regardless of
-   * hostility, bypassing the `isHostile` check that protects her from the
-   * player. Still flash for hit feedback, but never reduce hp.
+   * Signet is quest-critical and must never die, from any direction: some
+   * hostile AI (e.g. the Vespa-stage BrindleGrub) targets any mob in range
+   * regardless of hostility, and a blast or a sepsis proc reaches her without
+   * anyone aiming at all.
+   *
+   * The shield goes here rather than on `takeDamageFrom` because this is the
+   * switch every route into her health asks — the swung one, the blast and the
+   * damage-over-time tick alike. Guarding only the swing is what left one crown
+   * proc able to kill her.
    */
-  override takeDamageFrom(
-    _amount: number,
-    _attacker: Player | null,
-    _damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
-  ): void {
+  protected override get isDamageImmune(): boolean {
+    return true;
+  }
+
+  /** She still flashes, so a blow reads as refused rather than as missed. */
+  protected override onDamageBlocked(): void {
     this.damageFlash = SIGNET_HIT_FLASH_FRAMES;
     this.healthBarTimer = SIGNET_HIT_HEALTHBAR_FRAMES;
   }

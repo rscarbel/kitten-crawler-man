@@ -662,7 +662,10 @@ export class CompanionSystem implements GameSystem {
     let closest: Mob | null = null;
     let closestDistSq = range * range;
     for (const mob of nearby) {
-      if (!mob.isAlive || mob.avoidInstead) continue;
+      // Hostility gates this the same way it gates the human's own scan: an
+      // ally that has somehow come to hold a crawler as its `currentTarget` —
+      // a pack shout, a defend assignment — is not a fight to answer.
+      if (!mob.isAlive || !mob.isHostile || mob.avoidInstead) continue;
       if (mob.currentTarget !== quarry) continue;
       if (this.targetBans.has(mob)) continue;
       if (isUntriggeredBossRoomMob(mob, activePlayer)) continue;

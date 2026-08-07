@@ -448,7 +448,7 @@ export class SpellSystem implements GameSystem {
             this._querySet,
           );
           for (const mob of boundaryMobs) {
-            if (!mob.isAlive) continue;
+            if (!mob.isAlive || !mob.takesPlayerDamage('shell')) continue;
             const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shell.x;
             const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shell.y;
             const dist = Math.hypot(dx, dy);
@@ -583,8 +583,14 @@ export class SpellSystem implements GameSystem {
         mob.x += nx * push;
         mob.y += ny * push;
 
-        // Expansion damage: only on the very first push frame (initial cast)
-        if (!shell.didInitialDamage && stats.expandDamageEnabled) {
+        // Expansion damage: only on the very first push frame (initial cast).
+        // Allies are still shoved clear — the shell is a wall to everyone — but
+        // it only wounds what it is allowed to wound.
+        if (
+          !shell.didInitialDamage &&
+          stats.expandDamageEnabled &&
+          mob.takesPlayerDamage('shell')
+        ) {
           mob.takeDamageFrom(stats.expandDamage, this.shellOwner, 'shell');
         }
 

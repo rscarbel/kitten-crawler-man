@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob, type LootDrop } from './Mob';
+import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
@@ -256,7 +256,7 @@ export class SkeletonLord extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     const previousHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);

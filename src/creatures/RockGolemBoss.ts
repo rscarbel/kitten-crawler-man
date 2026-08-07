@@ -1,6 +1,6 @@
 import type { DamageSource, Player } from '../Player';
 import { RockGolem, FRAMES_PER_SHEET_FRAME } from './RockGolem';
-import { Mob, type LootDrop } from './Mob';
+import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import { ROLL_ATTACK_TYPE } from './rockGolemAttackTypes';
 import {
@@ -184,7 +184,7 @@ export class RockGolemBoss extends RockGolem {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     const capped = this.isRolled ? Math.min(amount, ROLLED_DAMAGE_CAP) : amount;
     super.takeDamageFrom(capped, attacker, damageType);

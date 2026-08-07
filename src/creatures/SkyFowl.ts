@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import {
@@ -9,6 +10,10 @@ import {
 } from '../sprites/skyFowlSprite';
 import type { LootDrop } from './Mob';
 import { randomFromArray, randomInt, normalize } from '../utils';
+
+/** The blows the player lands by hand, as opposed to anything fired or thrown. */
+const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
+  new Set<PlayerDamageType | null>(['melee', 'smush']);
 
 const FOWL_HP = 14;
 const FOWL_SPEED_NEUTRAL = 0.55;
@@ -70,6 +75,16 @@ export class SkyFowl extends Mob {
   override get isPetAttackable(): boolean {
     return true;
   }
+
+  /**
+   * A calm fowl is provokable rather than protected: it is nobody's ally, and
+   * putting a missile into one is how the player picks the fight. Only the
+   * hand-swung blows stay blocked, so that swinging at something else while a
+   * bird is underfoot never starts it by accident.
+   */
+  override takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+    return super.takesPlayerDamage(damageType) || !HAND_SWUNG_DAMAGE_TYPES.has(damageType);
+  }
   private peckCooldown = 0;
   private peckAnimTimer = 0;
 
@@ -108,10 +123,10 @@ export class SkyFowl extends Mob {
    * Any hit turns this fowl aggressive for the rest of its life.
    * Also bumps movement speed to the angry sprint value.
    */
-  takeDamageFrom(
+  override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ) {
     super.takeDamageFrom(amount, attacker, damageType);
     if (amount > 0 && !this.isAggressive) {

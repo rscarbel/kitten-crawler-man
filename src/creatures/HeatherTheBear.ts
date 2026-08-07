@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import { drawHeatherBearSprite } from '../sprites/heatherBearSprite';
 
@@ -63,7 +64,7 @@ export class HeatherTheBear extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     super.takeDamageFrom(amount, attacker, damageType);
     if (this.painGrowlCooldown === 0) {

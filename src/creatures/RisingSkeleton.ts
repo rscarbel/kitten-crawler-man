@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
+import type { PlayerDamageType } from './Mob';
 import { SKELETON_RISE_FRAMES } from '../sprites/skeletonTiming';
 
 /**
@@ -52,7 +53,7 @@ export abstract class RisingSkeleton extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     const previousHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);

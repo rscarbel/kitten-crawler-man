@@ -179,9 +179,12 @@ export class DynamiteSystem implements GameSystem {
     const nearBlast = mobGrid.queryCircle(cx, cy, DYN_RADIUS + ts);
     if (!human.zeroDamage) {
       for (const mob of nearBlast) {
-        if (!mob.isAlive) continue;
+        // Allies included, which is the point of the type: a blast is the one
+        // player-sourced damage that ignores friendly-fire immunity, exactly as
+        // it already ignores the pair who lit it.
+        if (!mob.isAlive || !mob.takesPlayerDamage('explosion')) continue;
         if (Math.hypot(mob.x + HALF_TILE - cx, mob.y + HALF_TILE - cy) <= DYN_RADIUS) {
-          mob.takeDamageFrom(damage, human);
+          mob.takeDamageFrom(damage, human, 'explosion');
         }
       }
     }

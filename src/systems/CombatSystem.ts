@@ -104,7 +104,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const nearHuman = mobGrid.queryCircle(hc.x, hc.y, range + TILE_SIZE);
     let humanHit = false;
     for (const mob of nearHuman) {
-      if (!mob.isAlive || !mob.isHostile) continue;
+      if (!mob.isAlive || !mob.takesPlayerDamage('melee')) continue;
       const mc = centerOf(mob);
       const dx = mc.x - hc.x;
       const dy = mc.y - hc.y;
@@ -145,7 +145,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const nearCat = mobGrid.queryCircle(cc.x, cc.y, range + TILE_SIZE);
     let catHit = false;
     for (const mob of nearCat) {
-      if (!mob.isAlive || !mob.isHostile) continue;
+      if (!mob.isAlive || !mob.takesPlayerDamage('melee')) continue;
       const mc = centerOf(mob);
       const dx = mc.x - cc.x;
       const dy = mc.y - cc.y;
@@ -207,7 +207,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     // Query both rings in one pass using the outer radius
     const nearSmush = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
     for (const mob of nearSmush) {
-      if (!mob.isAlive || !mob.isHostile) continue;
+      if (!mob.isAlive || !mob.takesPlayerDamage('smush')) continue;
       const mc = centerOf(mob);
       const dist = Math.hypot(mc.x - hc.x, mc.y - hc.y);
       if (dist > outerRadius) continue;
@@ -315,7 +315,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
 
       const nearMissile = mobGrid.queryCircle(missile.x, missile.y, hitRadius + TILE_SIZE);
       for (const mob of nearMissile) {
-        if (!mob.isAlive) continue;
+        // A missile passes clean through anything it cannot hurt rather than
+        // detonating on it: an ally who wanders into the line of fire should
+        // cost the player nothing at all, not even the shot.
+        if (!mob.isAlive || !mob.takesPlayerDamage('missile')) continue;
         const mc = centerOf(mob);
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
@@ -341,6 +344,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
               );
               for (const splashMob of nearSplash) {
                 if (!splashMob.isAlive || splashMob === mob) continue;
+                if (!splashMob.takesPlayerDamage('missile')) continue;
                 const splashDx = splashMob.x + HALF_TILE - missile.x;
                 const splashDy = splashMob.y + HALF_TILE - missile.y;
                 if (Math.hypot(splashDx, splashDy) < splashRadius) {
@@ -474,7 +478,7 @@ export function resolveKills(ctx: CombatContext): void {
         // slack the burn field comes up short on one side of the corpse.
         const nearShock = mobGrid.queryCircle(cx, cy, shockwaveRadius + TILE_SIZE);
         for (const nearMob of nearShock) {
-          if (!nearMob.isAlive) continue;
+          if (!nearMob.isAlive || !nearMob.takesPlayerDamage('missile')) continue;
           const sdx = nearMob.x + HALF_TILE - cx;
           const sdy = nearMob.y + HALF_TILE - cy;
           if (Math.hypot(sdx, sdy) < shockwaveRadius) {

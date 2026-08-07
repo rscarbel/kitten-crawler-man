@@ -11,7 +11,7 @@
  *   bus.emit('mobKilled', { mob, killer, killType });
  */
 
-import type { Mob } from '../creatures/Mob';
+import type { Mob, PlayerDamageType } from '../creatures/Mob';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
@@ -35,7 +35,7 @@ export interface GameEvents {
   mobKilled: {
     mob: Mob;
     killer: HumanPlayer | CatPlayer | null;
-    killType: 'melee' | 'missile' | 'shell' | 'smush' | null;
+    killType: PlayerDamageType | null;
     topDamageDealer: HumanPlayer | CatPlayer | null;
   };
 

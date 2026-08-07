@@ -10,6 +10,20 @@ import { tryConsumePathfind } from './pathfindBudget';
 import { alertPackAround } from './packAlert';
 import { drawText } from '../ui/TextBox';
 
+/**
+ * The weapon a player-sourced blow was struck with, named so that everything
+ * downstream of a hit — kill credit, ability XP, death animations, friendly-fire
+ * immunity — can key off what actually landed. `null` is harm an attacker owns
+ * but swung nothing for: a damage-over-time tick they applied.
+ */
+export type PlayerDamageType = 'melee' | 'missile' | 'shell' | 'smush' | 'explosion';
+
+/**
+ * The one damage type that ignores friendly-fire immunity, so the rule lives in
+ * a single place rather than as a string literal repeated at every blast site.
+ */
+const EXPLOSION_DAMAGE_TYPE = 'explosion' satisfies PlayerDamageType;
+
 /** Stagger range for initial wander timer so mobs don't change direction together. */
 const WANDER_TIMER_STAGGER_MAX = 119;
 
@@ -684,6 +698,19 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether a player-sourced blow of this kind is allowed to land on this mob.
+   *
+   * A non-hostile mob — Mongo, a hired mercenary, a quest ally — is immune to
+   * every aimed player weapon, so the cat firing a missile through her own pet
+   * can never cost the player their friend. Explosives are the deliberate
+   * exception: a blast already hurts whoever lit it, and being indiscriminate
+   * is the whole character of the item.
+   */
+  takesPlayerDamage(damageType: PlayerDamageType | null): boolean {
+    return this.isHostile || damageType === EXPLOSION_DAMAGE_TYPE;
+  }
+
+  /**
    * Whether the cat's pet raptor will pick a fight with this mob.
    *
    * Defaults to {@link isHostile}, which already excludes every quest ally and
@@ -780,7 +807,7 @@ export abstract class Mob extends Player {
   killedByDealer: Player | null = null;
 
   /** The type of attack that landed the killing blow. */
-  killType: 'melee' | 'missile' | 'shell' | 'smush' | null = null;
+  killType: PlayerDamageType | null = null;
 
   constructor(tileX: number, tileY: number, tileSize: number, maxHp: number, speed: number) {
     super(tileX, tileY, tileSize, { maxHp });
@@ -1219,6 +1246,10 @@ export abstract class Mob extends Player {
    */
   noticeTarget(target: Player): void {
     if (!this.isAlive || !target.isAlive) return;
+    // A shout cannot recruit a bystander. Nothing else writes an ally's
+    // `currentTarget`, and that field is what the companion AI reads to decide
+    // who is fighting the party.
+    if (!this.isHostile) return;
     if (this.currentTarget !== null) return;
     this.currentTarget = target;
     this.alertedTo.set(target, ALERT_DURATION_FRAMES);
@@ -1430,12 +1461,18 @@ export abstract class Mob extends Player {
   takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ) {
     if (this.isDamageImmune) {
       this.onDamageBlocked();
       return;
     }
+    // The friendly-fire rule is enforced at the door as well as at each attack
+    // site, so a weapon added later cannot wound an ally by forgetting to ask.
+    // A mob attacker is exempt: an enemy hitting a non-hostile mob is the fight
+    // working, not friendly fire.
+    const isCrawlerAttack = attacker !== null && !(attacker instanceof Mob);
+    if (isCrawlerAttack && !this.takesPlayerDamage(damageType)) return;
     const prev = this.hp;
     this.hp = Math.max(0, this.hp - amount);
     const actual = prev - this.hp;
@@ -1466,10 +1503,7 @@ export abstract class Mob extends Player {
    * event, and with it the gore, the XP, the loot and the removal from the mob
    * grid.
    */
-  private _resolveDeath(
-    attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null,
-  ): void {
+  private _resolveDeath(attacker: Player | null, damageType: PlayerDamageType | null): void {
     this.justDied = true;
     // Credited rather than literal: a pet attacks in its own name so that mobs
     // retaliate against *it*, but every killer-keyed reward in the game — loot
@@ -1513,9 +1547,9 @@ export abstract class Mob extends Player {
    * the boss chest exactly as the hit that applied it would have.
    *
    * `killType` stays null even then. The union names weapons — melee, missile,
-   * shell, smush — and a status is none of them; a DoT finish therefore trains
+   * shell, smush, explosion — and a status is none of them; a DoT finish trains
    * no ability, which is the deliberate price of not having to teach every
-   * `killType` consumer a fifth case for a kill nobody aimed.
+   * `killType` consumer a case for a kill nobody aimed.
    */
   override takeDamage(amount: number, source?: DamageSource): boolean {
     if (this.isDamageImmune) {

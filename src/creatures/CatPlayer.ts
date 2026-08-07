@@ -508,7 +508,11 @@ export class CatPlayer extends Player {
               this._homingQuery,
             );
             for (const mob of candidates) {
-              if (!mob.isAlive) continue;
+              // Homing seeks enemies only. A missile that curves out of its line
+              // into a bystander is the one way a shot the player aimed
+              // correctly can still land on a friend, and it reads as the spell
+              // choosing the target for them.
+              if (!mob.isAlive || !mob.isHostile) continue;
               const ddx = mob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.x;
               const ddy = mob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.y;
               const distSq = ddx * ddx + ddy * ddy;

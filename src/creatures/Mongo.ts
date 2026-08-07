@@ -24,7 +24,7 @@ import {
 } from '../sprites/mongoAttackTiming';
 import { getMongoStats, type MongoAttack, type MongoStats } from '../abilities/mongo';
 import { MONGO_MIN_SUMMON_HP } from '../core/MongoPetState';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
 
 /**
  * Mongo — the cat's pet Mongoliensis.
@@ -588,7 +588,7 @@ export class Mongo extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     // Free to charge nothing: this door returns void, so no caller is waiting to
     // be told whether the blow connected. A one-point mob-on-mob tick — the

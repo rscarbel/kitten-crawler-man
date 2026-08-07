@@ -17,7 +17,7 @@ import {
 import { STENCH_ATTACK_TYPE, TRAMPLE_ATTACK_TYPE } from './ballOfSwineAttackTypes';
 import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { makePoison } from '../core/StatusEffect';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
 
 /**
  * Base HP. A borough boss spawns in the level-14–16 band, where `applyMobLevel`
@@ -524,7 +524,7 @@ export class BallOfSwine extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     if (this.isDying) return;
     super.takeDamageFrom(this.throughHide(amount), attacker, damageType);

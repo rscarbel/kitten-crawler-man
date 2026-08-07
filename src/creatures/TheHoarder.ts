@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import type { LootDrop } from './Mob';
+import type { LootDrop, PlayerDamageType } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt } from '../utils';
 import {
@@ -456,7 +456,7 @@ export class TheHoarder extends Mob {
   override takeDamageFrom(
     amount: number,
     attacker: Player | null,
-    damageType: 'melee' | 'missile' | 'shell' | 'smush' | null = 'melee',
+    damageType: PlayerDamageType | null = 'melee',
   ): void {
     const prevHp = this.hp;
     super.takeDamageFrom(amount, attacker, damageType);
