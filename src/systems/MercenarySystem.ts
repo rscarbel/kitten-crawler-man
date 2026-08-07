@@ -6,6 +6,7 @@ import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { MobRoster } from './kits/SceneWorld';
 
 /**
  * Overworld manager for a hired mercenary (the Desperado Club's "Meat Shields"
@@ -41,17 +42,17 @@ export class MercenarySystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const { mobs, mobGrid, gameMap, active } = ctx;
+    const { gameMap, active } = ctx;
 
     if (!this.spawnAttempted) {
       this.spawnAttempted = true;
-      this.spawn(active, gameMap, mobs, mobGrid);
+      this.spawn(active, gameMap, ctx.roster);
     }
 
     if (!this.merc?.isAlive) return;
 
     this.merc.owner = active;
-    this.merc.allMobs = mobs;
+    this.merc.allMobs = ctx.roster.mobs;
   }
 
   /**
@@ -100,7 +101,7 @@ export class MercenarySystem implements GameSystem {
     this.spawnAttempted = false;
   }
 
-  private spawn(active: Player, gameMap: GameMap, mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  private spawn(active: Player, gameMap: GameMap, roster: MobRoster): void {
     const hired = this.roster.active;
     if (!hired) return;
 
@@ -111,9 +112,7 @@ export class MercenarySystem implements GameSystem {
     const spawnTy = behindWalkable ? behindTy : Math.floor(active.y / TILE_SIZE);
 
     this.merc = new Mercenary(spawnTx, spawnTy, TILE_SIZE, active, hired.id, hired.name);
-    this.merc.setMap(gameMap);
-    mobs.push(this.merc);
-    mobGrid.insert(this.merc);
+    roster.add(this.merc);
   }
 
   private despawn(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {

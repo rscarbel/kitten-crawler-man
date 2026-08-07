@@ -32,16 +32,21 @@ export function hasRoomToMove(
 ): boolean {
   if (!map.isWalkable(tileX, tileY)) return false;
 
-  const mapSize = map.structure.length;
+  // Both axes read from the grid rather than one standing in for the other: a
+  // building interior is 20x16 and a store 20x12, so a square bound taken from
+  // the row count would call every column past it out of bounds — and the east
+  // strip of every interior, where the stairs and the counters are, would look
+  // walled off to the flood fill.
+  const rows = map.structure.length;
+  const columns = map.structure[0]?.length ?? rows;
   const seen = new Set<number>();
   // Keyed by arithmetic on the tile position rather than a string, because a
   // ring search calls this once per candidate tile. Only in-bounds tiles are
   // ever keyed, so the row stride cannot make two positions collide.
-  const inBounds = (x: number, y: number): boolean =>
-    x >= 0 && y >= 0 && x < mapSize && y < mapSize;
+  const inBounds = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < columns && y < rows;
 
   const queue: Array<{ x: number; y: number }> = [{ x: tileX, y: tileY }];
-  seen.add(tileY * mapSize + tileX);
+  seen.add(tileY * columns + tileX);
 
   let reached = 0;
   // Iterating the queue rather than shifting off it — `shift` is O(n) per call.
@@ -55,7 +60,7 @@ export function hasRoomToMove(
       const x = tile.x + dx;
       const y = tile.y + dy;
       if (!inBounds(x, y)) continue;
-      const key = y * mapSize + x;
+      const key = y * columns + x;
       if (seen.has(key)) continue;
       seen.add(key);
       if (!map.isWalkable(x, y)) continue;

@@ -75,6 +75,10 @@ export class Llama extends Mob {
    * in mid-air along with it.
    */
   private pendingSpits: LavaSpit[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.pendingSpits = [];
+  }
   private aggroRangePx: number;
   private spitRangePx: number;
   private isAggro = false;

@@ -118,6 +118,7 @@
     "scripts/verify-assets.ts",
     "scripts/verify-interiors.ts",
     "scripts/verify-town-guidance.ts",
+    "scripts/verify-kits.ts",
     "scripts/grubArt.ts",
     "scripts/generate-brindle-grub-sprite.ts",
     "scripts/render-grub.ts",

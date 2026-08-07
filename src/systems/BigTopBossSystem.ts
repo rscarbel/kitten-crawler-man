@@ -38,6 +38,10 @@ const ROOT_RING_RADIUS_TILES = 4;
 const ROOT_COUNT = 4;
 /** Grimaldi's entity tile sits just south of the pole cluster so the vine mass wraps it. */
 const GRIMALDI_POLE_SOUTH_OFFSET = 1;
+
+/** Fade for the fight's own battle track, and for the circus theme it returns to. */
+const CIRCUS_BATTLE_FADE_IN_MS = 1000;
+const CIRCUS_THEME_FADE_IN_MS = 2000;
 /** Signet takes position this many tiles north of the entrance. */
 const SIGNET_ENTRANCE_OFFSET_TILES = 3;
 
@@ -119,8 +123,8 @@ export class BigTopBossSystem implements GameSystem {
     private readonly audio: AudioManager | null,
   ) {
     this.spawnEncounter();
-    this.bus.emit('bossFightInitiated', { bossType: 'ringmaster_grimaldi' });
-    this.audio?.playMusic('circus_battle', { fadeInMs: 1000 });
+    this.bus.emit('bossFightInitiated', { bossType: 'ringmaster_grimaldi', music: 'caller' });
+    this.audio?.playMusic('circus_battle', { fadeInMs: CIRCUS_BATTLE_FADE_IN_MS });
   }
 
   get bossAlive(): boolean {
@@ -191,7 +195,7 @@ export class BigTopBossSystem implements GameSystem {
     if (this.bannerTimer > 0) this.bannerTimer--;
     if (this.victoryTimer > 0) this.victoryTimer--;
 
-    if (this.signet) this.signet.allMobs = ctx.mobs;
+    if (this.signet) this.signet.allMobs = ctx.roster.mobs;
 
     const grimaldi = this.grimaldi;
     if (!grimaldi) return;
@@ -201,13 +205,15 @@ export class BigTopBossSystem implements GameSystem {
         this.victoryHandled = true;
         this.progress.stage = 'grimaldi_slain';
         this.victoryTimer = VICTORY_BANNER_FRAMES;
-        // The cue is played here rather than left to `AudioManager`'s
-        // `bossDefeated` handler: an interior encounter runs on a bus of its
-        // own that the audio system is never wired to, which is why every other
-        // sound in this scene is hand-played too.
-        this.bus.emit('bossDefeated', { bossType: 'ringmaster_grimaldi', mob: grimaldi });
-        this.audio?.play('boss_defeated');
-        this.audio?.playMusic('circus_theme', { fadeInMs: 2000 });
+        // `music: 'caller'` because the big top has a track of its own on both
+        // sides of the fight — no boss-type table in `AudioManager` could name
+        // the circus theme this returns to.
+        this.bus.emit('bossDefeated', {
+          bossType: 'ringmaster_grimaldi',
+          mob: grimaldi,
+          music: 'caller',
+        });
+        this.audio?.playMusic('circus_theme', { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
       }
       return;
     }

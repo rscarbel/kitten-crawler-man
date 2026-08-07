@@ -1,7 +1,7 @@
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
-import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../core/constants';
+import { TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
 import { GameMap } from '../map/GameMap';
@@ -25,14 +25,12 @@ import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
-import { PauseMenu } from '../ui/PauseMenu';
-import { DeathScreen } from '../ui/DeathScreen';
 import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
+import type { PauseMenu } from '../ui/PauseMenu';
+import { SpellSystem } from '../systems/SpellSystem';
+import type { InventoryItem } from '../core/ItemDefs';
 import { AchievementManager } from '../core/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
-import { InventoryPanel } from '../ui/InventoryPanel';
-import { GearPanel } from '../ui/GearPanel';
-import { SpatialGrid } from '../core/SpatialGrid';
 
 import { MiniMapSystem, type QuestMarkerType } from '../systems/MiniMapSystem';
 import {
@@ -51,22 +49,13 @@ import {
 } from '../systems/questTracker';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
-import { FloatingCombatTextSystem } from '../systems/FloatingCombatTextSystem';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
-import { HotbarToast } from '../ui/HotbarToast';
-import { potionEffectNotice, statBoostNotice } from '../ui/potionNotices';
-import {
-  promptSkillBookRead,
-  resolveSkillBookPrompt,
-  type SkillBookFlowHost,
-} from '../systems/skillBookUse';
+import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import { getSkillDef, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
 import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
-import { DynamiteSystem } from '../systems/DynamiteSystem';
-import { SmushEffectSystem } from '../systems/SmushEffectSystem';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
@@ -74,13 +63,31 @@ import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
 import { KnightMissileSystem } from '../systems/KnightMissileSystem';
-import { SpellSystem } from '../systems/SpellSystem';
+import { CombatKit } from '../systems/kits/CombatKit';
+import { DestructionKit } from '../systems/kits/DestructionKit';
+import { ALL_BREAKABLE_PROPS, NO_BREAKABLE_PROPS } from '../systems/DestructiblePropSystem';
+import { MenusKit } from '../systems/kits/MenusKit';
+import { ChatKit, type ChatCommand } from '../systems/kits/ChatKit';
+import {
+  activateHotbarSlot,
+  drinkAnyHealthPotion,
+  releaseChargedDynamite,
+  type HotbarHost,
+} from '../systems/kits/hotbarActions';
+import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
+import {
+  advanceFocusedOverlay,
+  focusedOverlay,
+  keyboardSuppressed,
+  worldHalted,
+  type OverlayInputClaim,
+  type OverlaySpaceHandling,
+} from '../systems/kits/OverlayClaims';
 import {
   CompanionSystem,
   createCompanionStanceState,
   type CompanionStanceState,
 } from '../systems/CompanionSystem';
-import { LootSystem } from '../systems/LootSystem';
 import { StairwellSystem } from '../systems/StairwellSystem';
 import { BuildingSystem } from '../systems/BuildingSystem';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
@@ -127,8 +134,6 @@ import type { LevelCheckpoint } from '../core/LevelCheckpoint';
 import type { WorldCheckpoint } from '../core/WorldCheckpoint';
 import { BossIntroSystem } from '../systems/BossIntroSystem';
 import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
-import { resolvePlayerAttacks, resolveKills, type CombatContext } from '../systems/CombatSystem';
-import { DestructiblePropSystem } from '../systems/DestructiblePropSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
 import {
@@ -148,16 +153,9 @@ import {
 
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
 import { SMUSH_DEF } from '../abilities/smush';
-import { LevelUpDialog } from '../ui/LevelUpDialog';
-import { RewardGrantedDialog } from '../ui/RewardGrantedDialog';
-import { SkillBookPrompt } from '../ui/SkillBookPrompt';
-import type { SkillBookReadRequest } from '../ui/InventoryInteraction';
 import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoIcon } from '../sprites/mongoSprite';
-import { GoreSystem } from '../systems/GoreSystem';
-import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { EventBus } from '../core/EventBus';
-import { PlayerTickSystem } from '../systems/PlayerTickSystem';
 import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
   readMovement,
@@ -167,7 +165,6 @@ import {
   checkDeath,
   revealMinimap,
   triggerPlayerAttack,
-  playMobAudioCues,
   HUMAN_ATTACK_RANGE_TILES,
   CAT_ATTACK_RANGE_TILES,
 } from '../systems/GameLoopPhases';
@@ -210,7 +207,6 @@ import {
   restoreClubMembership,
   type ClubMembership,
 } from '../core/ClubMembership';
-import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../core/timedPotions';
 import {
   captureTownMemory,
   createTownMemory,
@@ -223,19 +219,12 @@ import {
   restoreMercenaryRoster,
   type MercenaryRoster,
 } from '../core/MercenaryRoster';
-import {
-  createGodModeState,
-  applyGodModeToPlayer,
-  removeGodModeFromPlayer,
-  GOD_MODE_ABILITY_LEVEL,
-  type GodModeState,
-} from '../core/GodMode';
+import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
 import { DoomsdayEscapeSystem } from '../systems/DoomsdayEscapeSystem';
 import { RenderPipeline, visibilityRadiusPx, type RenderContext } from '../systems/RenderPipeline';
-import { MobUpdateLoop } from '../systems/MobUpdateLoop';
 import type { SystemContext } from '../systems/GameSystem';
-import { DungeonInputHandler } from '../systems/DungeonInputHandler';
+import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
@@ -249,7 +238,6 @@ import {
   SCREECH_AUDIO_OFFSET,
 } from '../creatures/GrotesqueSpider';
 import { randomInt, pointInRect } from '../utils';
-import { makeElectrified } from '../core/StatusEffect';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceObjective,
@@ -259,11 +247,9 @@ import {
   type AdviceSlot,
 } from '../systems/mordecaiAdvice';
 import type { AISceneContext } from '../ai/aiActions';
-import { PlayerChatSystem } from '../systems/PlayerChatSystem';
 import { GameStats } from '../core/GameStats';
 import { difficultyStats } from '../core/DifficultyStats';
 import type { AudioManager } from '../audio/AudioManager';
-import type { SoundId } from '../audio/sounds';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
@@ -368,6 +354,12 @@ export interface DungeonSceneOptions {
   companionStance?: CompanionStanceState;
   /** `!god` / `!tough` cheat state, threaded by reference so it survives scene transitions. */
   godModeState?: GodModeState;
+  /**
+   * The run's kill and potion tallies, threaded by reference: the Stats tab is
+   * readable from inside a building, and a counter that reset every time the
+   * party stepped through a door would be reporting the last five minutes.
+   */
+  gameStats?: GameStats;
   /** Dev bootstrap only: spawn beside the circus instead of the map start tile. */
   spawnAtCircus?: boolean;
   /**
@@ -392,10 +384,6 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 /** Building whose forge fires supply the town's fire-crackle ambience. */
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
-/** Coin-purse cue on loot pickup. Matches the vendor-purchase level. */
-const COIN_PICKUP_VOLUME = 0.55;
-/** `!payday` developer cheat — coins granted to the active player. */
-const CHEAT_PAYDAY_COINS = 2500;
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
 const BOUNTY_WARP_STANDOFF_TILES = 4;
 /** Widest ring `!bounty go` will search for somewhere walkable to land. */
@@ -482,34 +470,6 @@ const RIVER_AMBIENT_IN_WATER_RADIUS_TILES = 0;
 const SPLASH_VOLUME = 1;
 /** Beyond this a mob's splash is silent; within it, it fades with distance. */
 const MOB_SPLASH_AUDIBLE_RADIUS_TILES = 18;
-
-/** Which bottle a drink came from: the container and the slot inside it. */
-interface PotionSlot {
-  source: 'inv' | 'hotbar';
-  slotIdx: number;
-}
-
-/**
- * What Space does while a given overlay owns the screen.
- *
- * `passThrough` exists for the chat box alone: its DOM input needs the space
- * character itself, so that press must not be preventDefault-ed.
- */
-type OverlaySpaceHandling =
-  | { readonly kind: 'advance'; readonly advance: () => void }
-  | { readonly kind: 'swallow' }
-  | { readonly kind: 'passThrough' };
-
-/** One overlay's claim on the keyboard while it is on screen. */
-interface OverlayInputClaim {
-  readonly isOpen: boolean;
-  readonly space: OverlaySpaceHandling;
-  /**
-   * Whether the rest of the keyboard — hotbar, inventory, chat, Tab — is locked
-   * out too. Overlays that merely float over live play leave it unlocked.
-   */
-  readonly locksKeyboard: boolean;
-}
 
 // Loot and drop rates
 /** Boss chests sit this far north of the boss room centre, clear of the boss itself. */
@@ -613,16 +573,6 @@ const PLAYER_IDLE_REPORT_INTERVAL_FRAMES = 300;
 const LOW_HEALTH_THRESHOLD = 0.25;
 const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
-const SHOCKWAVE_DAMAGE = 4;
-/**
- * How far past its drawn radius the level-15 shell's wave still catches people.
- * The ring reads as a thick band rather than a hairline, so the harm follows
- * the art rather than the single number the ripple is centred on.
- */
-const SHOCKWAVE_RADIUS_TILE_MARGIN = 2;
-const CHAIN_LIGHTNING_RANGE_TILES = 3;
-const CHAIN_LIGHTNING_MAX_TARGETS = 3;
-const CHAIN_LIGHTNING_DAMAGE = 2;
 
 // Revive arrow positioning and animation
 const ARROW_HEIGHT_ABOVE_PLAYER = 28;
@@ -704,9 +654,13 @@ function rollChestPotion(): ItemId {
 export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
   readonly pm: PlayerManager;
-  private mobs: Mob[];
+  /** Map, bus, audio and population — what every kit this scene builds is handed. */
+  private readonly world: SceneWorld;
   private grotesqueSpiders: GrotesqueSpider[] = [];
-  private mobGrid!: SpatialGrid<Mob>;
+
+  protected override get pauseMenu(): PauseMenu {
+    return this.menus.pauseMenu;
+  }
 
   /**
    * The frame's shared system context and its `extraTargets` list, held as
@@ -724,13 +678,17 @@ export class DungeonScene extends GameplayScene {
   private miniMap: MiniMapSystem;
   private safeRoom: SafeRoomSystem;
   private bopca: BopcaSystem;
-  private readonly floatingText: FloatingCombatTextSystem;
-  private readonly hotbarToast = new HotbarToast();
   private readonly systemNotices: SystemNoticeSystem;
+  /** Spells, mob AI, attack and death resolution, gore, regen, the death screen. */
+  private readonly combat: CombatKit;
+  /** Smashable props, floor loot and dynamite. Always present — see `DestructionKit`. */
+  private readonly destruction: DestructionKit;
+  /** Bag, gear, pause menu, award stack, toasts, potions, skill books. */
+  private readonly menus: MenusKit;
+  /** The chat box and the cheat table behind it. */
+  private readonly chat: ChatKit;
   private bossRoom: BossRoomSystem;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
-  private dynamite: DynamiteSystem;
-  private readonly smushFx = new SmushEffectSystem();
   private lavaBalls: LavaBallSystem;
   private rockThrows: RockThrowSystem;
   private skeletonShots: SkeletonProjectileSystem;
@@ -738,11 +696,7 @@ export class DungeonScene extends GameplayScene {
   private skeletonSummons: SkeletonSummonSystem;
   private clownGas: ClownGasSystem;
   private knightMissiles: KnightMissileSystem;
-  private spells: SpellSystem;
   private companion: CompanionSystem;
-  private loot: LootSystem;
-  /** Null on the overworld — town barrels and crates are not smashable. */
-  private destructibles: DestructiblePropSystem | null;
   private trees: TreeSystem | null;
   /** Null on every map but the overworld, which is the only one with rivers. */
   private water: WaterAnimationSystem | null;
@@ -798,24 +752,14 @@ export class DungeonScene extends GameplayScene {
   private readonly companionStance: CompanionStanceState;
   private readonly godModeState: GodModeState;
   private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
-  private gore = new GoreSystem();
-  private bodyPartGore: BodyPartGoreSystem;
-  private playerTick = new PlayerTickSystem();
   private difficultyTelemetry = new DifficultyTelemetrySystem();
   private readonly mongoSystem: MongoSystem;
   private readonly mongoPetState: MongoPetState;
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
-  private mobLoop = new MobUpdateLoop();
   private bus = new EventBus();
 
-  protected pauseMenu: PauseMenu;
-  private deathScreen: DeathScreen;
   private levelCompleteScreen = new LevelCompleteScreen();
-  private inventoryPanel: InventoryPanel;
-  private gearPanel: GearPanel;
-  /** When set, the inventory panel shows this player's inventory instead of the active player's. */
-  private _inventoryOverridePlayer: HumanPlayer | CatPlayer | null = null;
 
   private achievementUI!: AchievementUISystem;
   private humanAchievements: AchievementManager;
@@ -830,9 +774,6 @@ export class DungeonScene extends GameplayScene {
   private musicPersistsAcrossExit = false;
 
   private readonly abilityManager: AbilityManager;
-  private readonly levelUpDialog = new LevelUpDialog();
-  private readonly rewardGrantedDialog = new RewardGrantedDialog();
-  private readonly skillBookPrompt = new SkillBookPrompt();
 
   private arena!: ArenaSystem;
   private readonly treasureChests = new TreasureChestSystem();
@@ -846,12 +787,6 @@ export class DungeonScene extends GameplayScene {
 
   private readonly followerMenu = new FollowerMenu();
 
-  private _godModeSnapshot: null | {
-    human: { originalSpeedMultiplier: number };
-    cat: { originalSpeedMultiplier: number };
-  } = null;
-
-  private _toughModeActive = false;
   private _revealStairwell = false;
   private _revealSpiderLab = false;
 
@@ -864,25 +799,22 @@ export class DungeonScene extends GameplayScene {
   private checkpoint: LevelCheckpoint | null = null;
   private speechBubblePulse = 0;
 
-  private readonly inputHandler = new DungeonInputHandler();
-  private readonly playerChat = new PlayerChatSystem();
+  private readonly inputHandler = new GameplayInputHandler();
 
   private readonly touch = new MobileTouchState();
   private krakarenKilled = false;
   private krakarenBossRoomIdx = -1;
   private woodBreakSoundIdx = 0;
-  private woodSmashSoundIdx = 0;
   private combatCooldownFrames = 0;
   private humanHealthLow = false;
   private catHealthLow = false;
   private playerIdleFrames = 0;
-  private gameStats = new GameStats();
+  private readonly gameStats: GameStats;
 
   private _mouseX = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
   private _mouseY = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
   private _mouseDown = false;
   private _companionErrorMsg: { text: string; framesLeft: number } | null = null;
-  private _delayedSounds: Array<{ id: SoundId; framesLeft: number }> = [];
   private _miniMapDragging = false;
   private _miniMapDragLastX = 0;
   private _miniMapDragLastY = 0;
@@ -913,7 +845,44 @@ export class DungeonScene extends GameplayScene {
     // town interiors that would otherwise inherit floor 2's blockwork.
     setDungeonFloorTheme(levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME);
 
+    // Both are needed before the roster below, which hands every mob it accepts
+    // the spell context, and by the level spawners' audio-carrying siblings.
+    this.audio = options?.audio ?? null;
+    this.companionStance = options?.companionStance ?? createCompanionStanceState();
+    this.godModeState = options?.godModeState ?? createGodModeState();
+    this.gameStats = options?.gameStats ?? new GameStats();
+    this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
+    this.catAchievements = options?.catAchievements ?? new AchievementManager();
+    // Ahead of the kits: `CombatKit` levels abilities off kills and `MenusKit`
+    // draws the ability screen, so both want this before they exist.
+    this.abilityManager = options?.abilityManager ?? new AbilityManager();
+    this.abilityManager.register(MAGIC_MISSILE_DEF);
+    this.abilityManager.register(PROTECTIVE_SHELL_DEF);
+    this.abilityManager.register(SMUSH_DEF);
+    this.abilityManager.register(MONGO_DEF);
+
     const tutorialController = options?.tutorialController ?? null;
+    // Built here rather than beside the bag it restricts: `MenusKit` owns the
+    // bag now, and the kit is constructed long before the tutorial's other
+    // wiring.
+    const tutorialInventoryInteraction =
+      tutorialController === null ? null : new TutorialInventoryInteraction();
+    if (tutorialController !== null && tutorialInventoryInteraction !== null) {
+      const drag = tutorialInventoryInteraction;
+      drag.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
+      drag.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
+      drag.getBlockedDragItemId = () => tutorialController.tutorialBlockedDragItemId;
+      drag.onBlockedDragAttempt = () => {
+        this.audio?.play('error');
+        tutorialController.triggerBoxersDragHint();
+      };
+    }
+    /**
+     * The floor's starting population, held aside until the roster exists —
+     * `MobRoster.add` is what gives a mob its map and spell context, so nothing
+     * may reach `this.world.roster.mobs` before it.
+     */
+    const initialMobs: Mob[] = [];
     let spawnTileX = 0;
     let spawnTileY = 0;
 
@@ -934,10 +903,7 @@ export class DungeonScene extends GameplayScene {
       this.floorEntryHumanSnap = snapPlayer(this.human);
       this.floorEntryCatSnap = snapPlayer(this.cat);
 
-      this.mobs = [...tutorialController.allMobs];
-      for (const mob of this.mobs) {
-        mob.setMap(tutMap);
-      }
+      initialMobs.push(...tutorialController.allMobs);
       // Tutorial chest — unlocked immediately since there are no mob guards
       this.treasureChests.addWoodenChest(
         TUTORIAL_CHEST_POS.x,
@@ -1010,29 +976,31 @@ export class DungeonScene extends GameplayScene {
       // mob afterwards. Both crawlers have been restored from their snapshots by
       // this line, so this is the party that is about to walk in.
       const partyLevel = partyLevelOf(this.human.level, this.cat.level);
-      this.mobs = spawnForLevel(levelDef, this.gameMap, partyLevel);
-      this.mobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel));
+      initialMobs.push(...spawnForLevel(levelDef, this.gameMap, partyLevel));
+      initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel));
 
       // Treasure room mobs (extra enemies guarding wooden chests)
       if (levelDef.hasTreasureRoomGuards === true) {
-        const treasureMobs = spawnTreasureRoomMobs(
-          this.gameMap.treasureRooms,
-          levelDef,
-          this.gameMap,
+        initialMobs.push(
+          ...spawnTreasureRoomMobs(this.gameMap.treasureRooms, levelDef, this.gameMap),
         );
-        this.mobs.push(...treasureMobs);
       }
     }
 
-    this.grotesqueSpiders = this.mobs.filter(
+    this.world = {
+      gameMap: this.gameMap,
+      bus: this.bus,
+      audio: this.audio,
+      pm: this.pm,
+      roster: new MobRoster(this.gameMap, new SpellSystem()),
+    };
+    for (const mob of initialMobs) this.world.roster.add(mob);
+
+    this.grotesqueSpiders = this.world.roster.mobs.filter(
       (m): m is GrotesqueSpider => m instanceof GrotesqueSpider,
     );
 
     this.cat.setMap(this.gameMap);
-    this.bodyPartGore = new BodyPartGoreSystem(this.gameMap);
-
-    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
-    for (const mob of this.mobs) this.mobGrid.insert(mob);
 
     const reusableMiniMap =
       options?.existingMap !== undefined && options.existingMap === this.gameMap
@@ -1044,10 +1012,42 @@ export class DungeonScene extends GameplayScene {
       spawnTileX,
       spawnTileY,
       this.levelDef.id,
-      options?.audio ?? null,
+      this.audio,
     );
-    this.floatingText = new FloatingCombatTextSystem();
-    this.systemNotices = new SystemNoticeSystem(this.bus, this.hotbarToast);
+    this.combat = new CombatKit({
+      world: this.world,
+      abilityManager: this.abilityManager,
+      safeRoom: this.safeRoom,
+      xpDiminishingTiers: levelDef.xpDiminishingTiers,
+    });
+    this.menus = new MenusKit({
+      world: this.world,
+      abilityManager: this.abilityManager,
+      inventoryInteraction: tutorialInventoryInteraction ?? undefined,
+      onOverlayRaised: () => this.clearInvLongPress(),
+      // The tutorial waits on this one: `SWITCHED_TO_CAT` locks the cat in place
+      // and drinking is the only thing that unlocks her.
+      onPotionDrunk: (id) => {
+        if (id === 'health_potion') this.tutorial?.onPotionUsed();
+      },
+    });
+    this.chat = new ChatKit({
+      world: this.world,
+      abilityManager: this.abilityManager,
+      godModeState: this.godModeState,
+      describeSituation: () =>
+        `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
+        `Floor: ${this.levelDef.id}. ` +
+        `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`,
+      sceneCommands: this.dungeonChatCommands(),
+    });
+    this.destruction = new DestructionKit(this.world, levelDef.floorNumber, {
+      // The town's street torches and gate braziers are architecture. Everything
+      // underground, and everything indoors, is for breaking.
+      breakableProps: levelDef.isOverworld ? NO_BREAKABLE_PROPS : ALL_BREAKABLE_PROPS,
+      trees: () => this.trees,
+    });
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
     // The safe-room counter is stamped here rather than in the generators: it
     // belongs to every safe room on every map, and this and BuildingInteriorScene
     // are the only two places a safe room is ever brought to life. Idempotent,
@@ -1057,7 +1057,7 @@ export class DungeonScene extends GameplayScene {
       this.gameMap,
       stampSafeRoomCounters(this.gameMap),
       this.bus,
-      options?.audio ?? null,
+      this.audio,
     );
     // After the counter, because the furnishings keep clear of every tile it
     // owns and cannot know them until it is planned.
@@ -1073,23 +1073,18 @@ export class DungeonScene extends GameplayScene {
       active: this.active(),
       inactive: this.inactive(),
       activeIsMoving: false,
-      mobs: this.mobs,
-      mobGrid: this.mobGrid,
+      roster: this.world.roster,
       gameMap: this.gameMap,
       bossRoom: this.bossRoom,
     };
     this.juicerRoom = new JuicerRoomSystem(this.gameMap.bossRooms[1]?.bounds);
     this.arenaRoom = new ArenaRoomSystem(this.gameMap.arenaExteriors[0]);
     this.barriers = new BarrierSystem(this.gameMap);
-    this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) => {
-      this.mobs.push(mob);
-      this.mobGrid.insert(mob);
-      mob.setSpells(this.spells);
-    });
+    this.defendQuest = new DefendQuestSystem(this.gameMap, this.bus, (mob) =>
+      this.world.roster.add(mob),
+    );
     this.spiderQuest = new SpiderQuestSystem(this.gameMap, this.bus, (mob) => {
-      this.mobs.push(mob);
-      this.mobGrid.insert(mob);
-      mob.setSpells(this.spells);
+      this.world.roster.add(mob);
       // The lab's boss arrives through this closure rather than the level's
       // initial spawn, so it missed the one-shot filter that builds this list
       // at construction — which is what renders its ground traps and spit and
@@ -1106,30 +1101,18 @@ export class DungeonScene extends GameplayScene {
     this.townMemory = options?.townMemory ?? createTownMemory();
     this.marketStock = options?.marketStock ?? createMarketStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
-    this.companionStance = options?.companionStance ?? createCompanionStanceState();
-    this.godModeState = options?.godModeState ?? createGodModeState();
     this.mercenarySystem = new MercenarySystem(this.mercenaryRoster);
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
-      () => this.mobs,
-      (mob) => {
-        this.mobs.push(mob);
-        this.mobGrid.insert(mob);
-        mob.setSpells(this.spells);
-      },
+      () => this.world.roster.mobs,
+      (mob) => this.world.roster.add(mob),
       this.bossRoom,
     );
-    // Built before DynamiteSystem so a blast can be handed the props it flattens.
-    this.loot = new LootSystem(this.gameMap);
-    this.destructibles = levelDef.isOverworld
-      ? null
-      : new DestructiblePropSystem(this.gameMap, this.loot, levelDef.floorNumber);
-    // The mirror image of the line above: trees are generated only by
-    // `OverworldGenerator`, so every other floor would build a system with
-    // nothing on the map to talk to.
+    // Trees are generated only by `OverworldGenerator`, so every other floor
+    // would build a system with nothing on the map to talk to.
     this.trees = levelDef.isOverworld
-      ? new TreeSystem(this.gameMap, this.loot, levelDef.floorNumber, (tileX, tileY) =>
+      ? new TreeSystem(this.gameMap, this.destruction.loot, levelDef.floorNumber, (tileX, tileY) =>
           this.miniMap.markTileChanged(tileX, tileY),
         )
       : null;
@@ -1137,20 +1120,15 @@ export class DungeonScene extends GameplayScene {
     // generated with a water tile on it, so elsewhere this would scan the
     // viewport every frame to find nothing.
     this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
-    this.dynamite = new DynamiteSystem(this.gameMap, this.destructibles, this.trees);
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
     this.skeletonShots = new SkeletonProjectileSystem(this.gameMap);
     this.goblinArrows = new GoblinArrowSystem(this.gameMap);
-    this.skeletonSummons = new SkeletonSummonSystem(this.gameMap, (mob) => {
-      this.mobs.push(mob);
-      this.mobGrid.insert(mob);
-      mob.setSpells(this.spells);
-    });
+    this.skeletonSummons = new SkeletonSummonSystem(this.gameMap, (mob) =>
+      this.world.roster.add(mob),
+    );
     this.clownGas = new ClownGasSystem(this.gameMap);
     this.knightMissiles = new KnightMissileSystem(this.gameMap);
-    this.spells = new SpellSystem();
-    for (const mob of this.mobs) mob.setSpells(this.spells);
     this.companion = new CompanionSystem(
       this.gameMap,
       spawnTileX,
@@ -1274,8 +1252,8 @@ export class DungeonScene extends GameplayScene {
       const nextDef = getLevelDef(levelDef.nextLevelId);
       this.levelCompleteScreen.activate(levelDef.name, nextDef.name, () => {
         // Dismiss Mongo and any hired merc before floor transition
-        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
-        this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
+        this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+        this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
         // This is the one genuine floor change among DungeonScene's four
         // `sceneManager.replace` sites, so it's the only one that runs the
         // sprite eviction pass — building enter/exit rebuild the scene around
@@ -1315,8 +1293,8 @@ export class DungeonScene extends GameplayScene {
         // Neither Mongo nor a hired merc can follow indoors — dismiss so they
         // aren't stranded in a stale mob list (the merc respawns from the
         // roster when the player returns to the overworld).
-        this.mongoSystem.dismiss(this.mobs, this.mobGrid);
-        this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
+        this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+        this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
         this.musicPersistsAcrossExit = true;
         const humanSnap = snapPlayer(this.human);
         const catSnap = snapPlayer(this.cat);
@@ -1380,6 +1358,7 @@ export class DungeonScene extends GameplayScene {
                   mercenaryRoster: this.mercenaryRoster,
                   godModeState: this.godModeState,
                   companionStance: this.companionStance,
+                  gameStats: this.gameStats,
                   skipIntro: true,
                 }),
               );
@@ -1398,6 +1377,7 @@ export class DungeonScene extends GameplayScene {
             this.companionStance,
             this.mongoPetState,
             () => this.abilityManager.getLevel('mongo'),
+            this.gameStats,
           ),
         );
       });
@@ -1438,12 +1418,8 @@ export class DungeonScene extends GameplayScene {
         this.gameMap,
         this.bus,
         this.bountyProgress,
-        (mob) => {
-          this.mobs.push(mob);
-          this.mobGrid.insert(mob);
-          mob.setSpells(this.spells);
-        },
-        options?.audio ?? null,
+        (mob) => this.world.roster.add(mob),
+        this.audio,
       );
       if (bountyGiverTile !== null) {
         this.bounty.placeShady(bountyGiverTile);
@@ -1465,34 +1441,12 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    this.pauseMenu = new PauseMenu();
-    this.deathScreen = new DeathScreen();
-
-    if (tutorialController !== null) {
-      const tutInteraction = new TutorialInventoryInteraction();
-      tutInteraction.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
-      tutInteraction.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
-      tutInteraction.getBlockedDragItemId = () => tutorialController.tutorialBlockedDragItemId;
-      tutInteraction.onBlockedDragAttempt = () => {
-        this.audio?.play('error');
-        tutorialController.triggerBoxersDragHint();
-      };
-      this.inventoryPanel = new InventoryPanel(tutInteraction);
-    } else {
-      this.inventoryPanel = new InventoryPanel();
-    }
-
-    this.gearPanel = new GearPanel();
-
-    this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
-    this.catAchievements = options?.catAchievements ?? new AchievementManager();
-
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
       this.human,
       this.cat,
-      options?.audio ?? null,
+      this.audio,
     );
 
     if (tutorialController !== null) {
@@ -1510,12 +1464,6 @@ export class DungeonScene extends GameplayScene {
     this.floorEntryCatAchievements =
       options?.floorEntryCatAchievements ?? this.catAchievements.clone();
 
-    this.abilityManager = options?.abilityManager ?? new AbilityManager();
-    this.abilityManager.register(MAGIC_MISSILE_DEF);
-    this.abilityManager.register(PROTECTIVE_SHELL_DEF);
-    this.abilityManager.register(SMUSH_DEF);
-    this.abilityManager.register(MONGO_DEF);
-
     // Built here rather than as a field initialiser because it needs both the
     // shared pet state and a live read of the pet's ability level.
     // Seeded against whatever level the restored ability manager carries, not
@@ -1531,7 +1479,7 @@ export class DungeonScene extends GameplayScene {
         this.abilityManager.addXp('mongo', amount);
       },
       () => this.mongoXpFraction(),
-      (message) => this.hotbarToast.show(message),
+      (message) => this.menus.hotbarToast.show(message),
     );
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
@@ -1542,8 +1490,8 @@ export class DungeonScene extends GameplayScene {
       if (id === 'mongo') this.mongoSystem.onPetLevelUp();
       const def = this.abilityManager.getDef(id);
       if (def === null) return;
-      this.cancelInventoryDragForOverlay();
-      this.levelUpDialog.enqueue({
+      this.menus.cancelInventoryDragForOverlay();
+      this.menus.levelUpDialog.enqueue({
         name: def.name,
         newLevel,
         perkDescription: def.perks.find((p) => p.level === newLevel)?.description ?? null,
@@ -1557,13 +1505,11 @@ export class DungeonScene extends GameplayScene {
     // Re-apply cheat overlays carried in from the previous scene. God mode is an
     // overlay on top of base stats and so is never present in a snapshot — an
     // active cheat has to be rebuilt here rather than surviving in the stats.
-    if (this.godModeState.active) this.enableGodMode();
-    else if (this.godModeState.toughActive) this.enableToughMode();
+    this.chat.applyCarriedCheat();
 
     this.onSaveProgress = options?.saveProgress;
     this.checkpoint = options?.checkpoint ?? null;
     this.onResetGameCallback = options?.onResetGame ?? null;
-    this.audio = options?.audio ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
     // re-decoding what a previous floor already loaded. This is the per-floor
@@ -1605,11 +1551,7 @@ export class DungeonScene extends GameplayScene {
     this.circusQuest = new CircusQuestSystem(
       this.gameMap,
       this.bus,
-      (mob) => {
-        this.mobs.push(mob);
-        this.mobGrid.insert(mob);
-        mob.setSpells(this.spells);
-      },
+      (mob) => this.world.roster.add(mob),
       this.mongoSystem,
       this.circusQuestProgress,
       this.overworldMusic,
@@ -1619,11 +1561,7 @@ export class DungeonScene extends GameplayScene {
     this.murderQuest = new MurderMysteryQuestSystem(
       this.gameMap,
       this.bus,
-      (mob) => {
-        this.mobs.push(mob);
-        this.mobGrid.insert(mob);
-        mob.setSpells(this.spells);
-      },
+      (mob) => this.world.roster.add(mob),
       this.murderQuestProgress,
       this.overworldMusic,
       this.audio,
@@ -1635,38 +1573,21 @@ export class DungeonScene extends GameplayScene {
     if (this.audio !== null) {
       aiAdapter.messages.setAudio(this.audio);
     }
-    this.pauseMenu.audio = this.audio;
-    this.pauseMenu.onResetGame = this.onResetGameCallback;
-    this.pauseMenu.skipAudioPause = () =>
+    this.menus.pauseMenu.onResetGame = this.onResetGameCallback;
+    this.menus.pauseMenu.skipAudioPause = () =>
       this.tutorial !== null &&
       (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
         this.tutorial.state === 'CAT_OPENED_TREASURE_BOX');
-    this.pauseMenu.onOpenChat = () => {
-      this.pauseMenu.close();
+    this.menus.pauseMenu.onOpenChat = () => {
+      this.menus.pauseMenu.close();
       this.triggerOpenChat();
     };
 
-    const openInventoryFor = (player: HumanPlayer | CatPlayer) => {
-      this.pauseMenu.close();
-      this._inventoryOverridePlayer = player;
-      this.inventoryPanel.isOpen = true;
-      this.inventoryPanel.returnToMenuCallback = () => {
-        this._inventoryOverridePlayer = null;
-        this.inventoryPanel.isOpen = false;
-        this.pauseMenu.openToInventory();
-      };
+    const openInventoryFor = (player: HumanPlayer | CatPlayer): void => {
+      this.menus.openInventoryFor(player, () => this.menus.pauseMenu.openToInventory());
     };
-    this.pauseMenu.onManageHumanInventory = () => openInventoryFor(this.human);
-    this.pauseMenu.onManageCatInventory = () => openInventoryFor(this.cat);
-
-    this.inventoryPanel.onClose = () => {
-      this._inventoryOverridePlayer = null;
-    };
-
-    this.deathScreen.audio = this.audio;
-    this.levelUpDialog.audio = this.audio;
-    this.rewardGrantedDialog.audio = this.audio;
-    this.skillBookPrompt.audio = this.audio;
+    this.menus.pauseMenu.onManageHumanInventory = () => openInventoryFor(this.human);
+    this.menus.pauseMenu.onManageCatInventory = () => openInventoryFor(this.cat);
 
     this.gameMap.bossRooms.forEach((br, i) => {
       const cx = br.centre.x;
@@ -1760,7 +1681,7 @@ export class DungeonScene extends GameplayScene {
    */
   private countLivingMobsOfTypeNear(type: string, x: number, y: number, radius: number): number {
     let count = 0;
-    for (const mob of this.mobGrid.queryCircle(x, y, radius)) {
+    for (const mob of this.world.roster.grid.queryCircle(x, y, radius)) {
       if (mob.isAlive && mob.spawnTypeKey === type) count++;
     }
     return count;
@@ -1800,7 +1721,7 @@ export class DungeonScene extends GameplayScene {
     const bus = this.bus;
 
     bus.on('spawnGore', (e) => {
-      this.gore.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
+      this.combat.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
     });
 
     // ── stats tracking ──
@@ -1826,20 +1747,7 @@ export class DungeonScene extends GameplayScene {
       // none of that is the player pressing forward.
       if (killer !== null) this.mongoSystem.onKill();
 
-      let impactDx = 0;
-      let impactDy = 0;
-      if (killer !== null) {
-        const dx = cx - (killer.x + TILE_SIZE * TILE_CENTER_OFFSET);
-        const dy = cy - (killer.y + TILE_SIZE * TILE_CENTER_OFFSET);
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-          impactDx = dx / dist;
-          impactDy = dy / dist;
-        }
-      }
-
-      bus.emit('spawnGore', { x: cx, y: cy, impactDx, impactDy });
-      this.bodyPartGore.spawnParts(cx, cy, mob.bodyPartKey, TILE_SIZE, impactDx, impactDy);
+      this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
 
       if (killer === this.human && this.humanAchievements.tryUnlock('first_blood')) {
@@ -1965,8 +1873,7 @@ export class DungeonScene extends GameplayScene {
               // party has just fought, and a level-1 grub swarm on floor 2 was
               // free XP that arrived exactly when the fight should be hardest.
               spawned.applyMobLevel(mob.mobLevel);
-              this.mobs.push(spawned);
-              this.mobGrid.insert(spawned);
+              this.world.roster.add(spawned);
               placed = true;
             }
           }
@@ -2007,8 +1914,8 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('rewardGranted', (e) => {
       for (const reward of e.rewards) {
-        this.cancelInventoryDragForOverlay();
-        this.rewardGrantedDialog.enqueue(reward);
+        this.menus.cancelInventoryDragForOverlay();
+        this.menus.rewardGrantedDialog.enqueue(reward);
       }
     });
 
@@ -2060,7 +1967,7 @@ export class DungeonScene extends GameplayScene {
             respawnY: roomInfo.centre.y * TILE_SIZE,
             levelTimerFrames: this.levelTimerFrames,
           };
-          this.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
+          this.menus.hotbarToast.show(PROGRESS_SAVED_TOAST_TEXT);
         }
       }
     });
@@ -2140,9 +2047,15 @@ export class DungeonScene extends GameplayScene {
 
     this._spiderKeyHandler = (e: KeyboardEvent) => {
       // The Bopca's three-way choice is picked with 1/2/3, which the hotbar also
-      // owns — but input is suppressed while its dialog is open, so the hotbar
-      // never sees these and there is no conflict to resolve.
-      if (this.bopca.handleKeyDown(e.key)) return;
+      // owns. Stopped rather than merely defaulted: the shared handler's
+      // suppression gate reads whether her dialog is open *after* this ran, and
+      // the choice that closes it — "leave" — would otherwise land on a hotbar
+      // slot on its way out.
+      if (this.bopca.handleKeyDown(e.key)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       this.spiderQuest.handleKeyDown(e.key, e.timeStamp);
     };
     window.addEventListener('keydown', this._spiderKeyHandler);
@@ -2151,18 +2064,18 @@ export class DungeonScene extends GameplayScene {
       // Reads the overlay registry rather than its own list, so that a hotbar key
       // pressed under an award overlay cannot queue a second read behind it,
       // stacking a prompt whose Read button the overlay's own OK then swallows.
-      isSuppressed: () => this.overlayClaims.some((claim) => claim.isOpen && claim.locksKeyboard),
+      isSuppressed: () => keyboardSuppressed(this.overlayClaims),
       isGameOver: () => this.gameOver,
       dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
       dismissDialog: () => {
-        if (this.skillBookPrompt.isOpen) {
+        if (this.menus.skillBookPrompt.isOpen) {
           // Escape declines the read; the book stays in the pack.
-          this.skillBookPrompt.close();
-          this._skillBookReader = null;
+          this.menus.skillBookPrompt.close();
+          this.menus.releaseSkillBookReader();
           return true;
         }
-        if (this.playerChat.isOpen) {
-          this.playerChat.cancel();
+        if (this.chat.isOpen) {
+          this.chat.cancel();
           return true;
         }
         if (this.defendQuest.dismissDialog()) return true;
@@ -2170,10 +2083,6 @@ export class DungeonScene extends GameplayScene {
         if (this.bounty?.dismissDialog() === true) return true;
         if (this.circusQuest.dismissDialog()) return true;
         if (this.murderQuest.dismissDialog()) return true;
-        if (this.citizenDialog?.isOpen === true) {
-          this.citizenDialog.close();
-          return true;
-        }
         if (this.noticeBoard?.isOpen === true) {
           this.noticeBoard.close();
           return true;
@@ -2191,6 +2100,17 @@ export class DungeonScene extends GameplayScene {
           return true;
         }
         if (this.bopca.dismissDialog()) return true;
+        // Last, and declining while anything halts the world: a street
+        // conversation is the bottom-most surface Escape can be aimed at,
+        // everything else is drawn over it, and the handler reaches the
+        // stairwell, building and follower menus *after* this callback. Without
+        // the guard, stepping onto a shop's doorstep mid-sentence and pressing
+        // Escape shuts the conversation underneath the Enter/Stay menu the
+        // player is actually looking at.
+        if (this.citizenDialog?.isOpen === true && !this.gameplayHalted) {
+          this.citizenDialog.close();
+          return true;
+        }
         return false;
       },
       dismissStairwell: () => {
@@ -2215,46 +2135,27 @@ export class DungeonScene extends GameplayScene {
         return false;
       },
       togglePause: () => {
-        this.pauseMenu.toggle();
-        if (this.pauseMenu.isOpen) {
-          this.inventoryPanel.isOpen = false;
-          this.gearPanel.isOpen = false;
+        this.menus.pauseMenu.toggle();
+        if (this.menus.pauseMenu.isOpen) {
+          this.menus.closePanels();
           this.audio?.play('menu_open');
         } else {
           this.input.clear();
         }
       },
-      clearInput: () => this.input.clear(),
       // Runs before the input-suppression gate, because most of these overlays
       // are themselves what suppresses input — Space would otherwise never
       // reach them. Consuming here is also what keeps the press off the world:
       // whatever owns the screen eats Space even when it has nothing to do with
       // it, so a click-only menu can never leak the press to an NPC behind it.
-      advanceDialog: () => {
-        const overlay = this.focusedOverlay;
-        if (overlay === null || overlay.space.kind === 'passThrough') return false;
-        if (overlay.space.kind === 'advance') overlay.space.advance();
-        return true;
-      },
+      advanceDialog: () => advanceFocusedOverlay(this.overlayClaims) !== 'ignored',
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       // No slot: the dedicated potion key means "any bottle you have", unlike a
       // hotbar key or a menu click, which each name one.
-      usePotion: () => this.drinkPotion(this.active(), 'health_potion', null),
-      toggleInventory: () => {
-        this.inventoryPanel.toggle();
-        if (this.inventoryPanel.isOpen) {
-          this.pauseMenu.close();
-          this.gearPanel.isOpen = false;
-        }
-      },
-      toggleGear: () => {
-        this.gearPanel.toggle();
-        if (this.gearPanel.isOpen) {
-          this.pauseMenu.close();
-          this.inventoryPanel.isOpen = false;
-        }
-      },
+      usePotion: () => drinkAnyHealthPotion(this.hotbarHost()),
+      toggleInventory: () => this.menus.toggleInventory(),
+      toggleGear: () => this.menus.toggleGear(),
       companionFollow: () => this.triggerCompanionFollow(),
       toggleMiniMap: () => {
         this.miniMap.toggle();
@@ -2269,15 +2170,8 @@ export class DungeonScene extends GameplayScene {
       openChat: () => this.triggerOpenChat(),
       mongoSummon: () => this.toggleMongoSummon(),
       buildAction: () => this.triggerBuildAction(),
-      hotbarActivation: (idx) => this.triggerHotbarActivation(idx),
-      dynamiteRelease: (idx) => {
-        if (this.dynamite.chargingHotbarIdx === idx) {
-          this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
-          this.bus.emit('dynamiteUsed', { player: 'Human' });
-          return true;
-        }
-        return false;
-      },
+      hotbarActivation: (idx) => activateHotbarSlot(this.hotbarHost(), idx),
+      dynamiteRelease: (idx) => releaseChargedDynamite(this.hotbarHost(), idx),
     });
   }
 
@@ -2291,20 +2185,22 @@ export class DungeonScene extends GameplayScene {
     // music, which may deliberately survive a building round-trip.
     this.ambientSound?.dispose();
     this.bopca.dispose();
-    this.floatingText.dispose();
-    this.hotbarToast.clear();
+    this.menus.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
+    // A real <input> on document.body, which swallows every key it is focused
+    // for. Left behind, it makes the scene that replaces this one unplayable.
+    this.chat.dispose();
     if (this._spiderKeyHandler !== null) {
       window.removeEventListener('keydown', this._spiderKeyHandler);
       this._spiderKeyHandler = null;
     }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
-    // Drops the pack-alert grid. It is a module-level handle, so a scene that
-    // exited without this leaves its whole mob roster — and through them its
-    // `GameMap` — reachable for the rest of the page's life.
-    this.mobLoop.dispose();
+    // Drops the pack-alert grid among other things. It is a module-level handle,
+    // so a scene that exited without this leaves its whole mob roster — and
+    // through it its `GameMap` — reachable for the rest of the page's life.
+    this.combat.dispose();
     aiAdapter.unbindScene();
     this.bus.clear();
   }
@@ -2660,12 +2556,11 @@ export class DungeonScene extends GameplayScene {
   private openQuestJournal(): boolean {
     if (this.gameOver) return false;
     this.syncJournalContext();
-    this.pauseMenu.openToJournal();
+    this.menus.pauseMenu.openToJournal();
     // The same housekeeping `togglePause` does, because this opens the same
     // menu: two panels left open behind it would be waiting on the far side of
     // a Resume the player pressed to get back to the game.
-    this.inventoryPanel.isOpen = false;
-    this.gearPanel.isOpen = false;
+    this.menus.closePanels();
     // No sound here: the compass button declares its own, which the pointer
     // paths have already played through `notifyButtonClick`. The key path plays
     // it at the binding instead, exactly as `togglePause` does.
@@ -2681,11 +2576,11 @@ export class DungeonScene extends GameplayScene {
    */
   private syncJournalContext(): void {
     if (!this.hasQuestJournal) {
-      this.pauseMenu.journalContext = null;
+      this.menus.pauseMenu.journalContext = null;
       return;
     }
     const active = this.active();
-    this.pauseMenu.journalContext = {
+    this.menus.pauseMenu.journalContext = {
       playerTileX: Math.floor(active.x / TILE_SIZE),
       playerTileY: Math.floor(active.y / TILE_SIZE),
       entries: this._trackerEntries,
@@ -2725,47 +2620,6 @@ export class DungeonScene extends GameplayScene {
     this.followerMenu.open();
   }
 
-  /** Enable `!god`: apply the stat/speed/ability overlay and mark the shared cheat state active. */
-  private enableGodMode(): void {
-    this._godModeSnapshot = {
-      human: { originalSpeedMultiplier: this.human.baseSpeedMultiplier },
-      cat: { originalSpeedMultiplier: this.cat.baseSpeedMultiplier },
-    };
-    applyGodModeToPlayer(this.human);
-    applyGodModeToPlayer(this.cat);
-    this.abilityManager.setGodModeMinLevel(GOD_MODE_ABILITY_LEVEL);
-    this.godModeState.active = true;
-  }
-
-  private disableGodMode(): void {
-    if (this._godModeSnapshot === null) return;
-    removeGodModeFromPlayer(this.human, this._godModeSnapshot.human.originalSpeedMultiplier);
-    removeGodModeFromPlayer(this.cat, this._godModeSnapshot.cat.originalSpeedMultiplier);
-    this.abilityManager.setGodModeMinLevel(0);
-    this._godModeSnapshot = null;
-    this.godModeState.active = false;
-  }
-
-  /** Enable `!tough`: damage immunity + zero outgoing damage. Mutually exclusive with god mode. */
-  private enableToughMode(): void {
-    this.disableGodMode();
-    for (const p of [this.human, this.cat]) {
-      p.godMode = true;
-      p.zeroDamage = true;
-    }
-    this._toughModeActive = true;
-    this.godModeState.toughActive = true;
-  }
-
-  private disableToughMode(): void {
-    for (const p of [this.human, this.cat]) {
-      p.godMode = false;
-      p.zeroDamage = false;
-    }
-    this._toughModeActive = false;
-    this.godModeState.toughActive = false;
-  }
-
   /**
    * Return a clean ability manager for floor/scene transitions — godModeMinLevel
    * is not carried across floors, so clone() (which leaves it at 0) is correct.
@@ -2775,79 +2629,47 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerOpenChat(): void {
-    if (this.gameOver || this.pauseMenu.isOpen) return;
-    const context =
-      `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
-      `Floor: ${this.levelDef.id}. ` +
-      `Human HP: ${this.human.hp}/${this.human.maxHp}, Cat HP: ${this.cat.hp}/${this.cat.maxHp}.`;
-    this.playerChat.open(this.sceneManager.canvas, (text) => {
-      if (text.trim() === '!god') {
-        if (this._godModeSnapshot !== null) {
-          this.disableGodMode();
-          this.playerChat.showBubble('⚡ GOD MODE OFF');
-        } else if (this._toughModeActive) {
-          this.disableToughMode();
-          this.enableGodMode();
-          this.playerChat.showBubble('⚡ GOD MODE ON (disabled Tough Mode first)');
-        } else {
-          this.enableGodMode();
-          this.playerChat.showBubble('⚡ GOD MODE ON');
-        }
-        return;
-      }
-      if (text.trim() === '!tough') {
-        if (this._toughModeActive) {
-          this.disableToughMode();
-          this.playerChat.showBubble('🛡️ TOUGH MODE OFF');
-        } else {
-          this.enableToughMode();
-          this.playerChat.showBubble('🛡️ TOUGH MODE ON');
-        }
-        return;
-      }
-      if (text.trim() === '!payday') {
-        this.active().coins += CHEAT_PAYDAY_COINS;
-        this.playerChat.showBubble(`💰 +${CHEAT_PAYDAY_COINS} COINS`);
-        return;
-      }
-      if (text.trim() === '!levelup') {
-        for (const p of [this.human, this.cat]) {
-          if (p.gainXp(p.xpRemainingToNextLevel)) {
-            this.bus.emit('playerLevelUp', { player: p, newLevel: p.level });
+    if (this.gameOver || this.menus.pauseMenu.isOpen) return;
+    this.chat.open(this.sceneManager.canvas);
+  }
+
+  /**
+   * The cheats only this floor can answer. The universal four (`!god`,
+   * `!tough`, `!payday`, `!levelup`) live in `ChatKit`; these reach systems that
+   * exist nowhere else, so a scene without them simply does not offer them.
+   */
+  private dungeonChatCommands(): ReadonlyArray<ChatCommand> {
+    return [
+      {
+        name: '!reveal',
+        run: () => {
+          this._revealStairwell = !this._revealStairwell;
+          return this._revealStairwell ? '🧭 STAIRWELL REVEALED' : '🧭 STAIRWELL HIDDEN';
+        },
+      },
+      {
+        name: '!bounty',
+        run: (argument) => {
+          this.runBountyCheat(argument);
+          return null;
+        },
+      },
+      {
+        name: '!assets',
+        run: () => this.spriteMissReport(),
+      },
+      {
+        name: '!spider',
+        run: () => {
+          if (this.gameMap.spiderLabRoom === null) {
+            this.audio?.play('error');
+            return null;
           }
-        }
-        this.playerChat.showBubble('⭐ LEVEL UP');
-        return;
-      }
-      if (text.trim() === '!reveal') {
-        this._revealStairwell = !this._revealStairwell;
-        this.playerChat.showBubble(
-          this._revealStairwell ? '🧭 STAIRWELL REVEALED' : '🧭 STAIRWELL HIDDEN',
-        );
-        return;
-      }
-      if (text.trim().startsWith('!bounty')) {
-        this.runBountyCheat(text.trim().slice('!bounty'.length).trim());
-        return;
-      }
-      if (text.trim() === '!assets') {
-        this.reportAssetMisses();
-        return;
-      }
-      if (text.trim() === '!spider') {
-        if (this.gameMap.spiderLabRoom === null) {
-          this.audio?.play('error');
-        } else {
           this._revealSpiderLab = !this._revealSpiderLab;
-          this.playerChat.showBubble(
-            this._revealSpiderLab ? '🕷 SPIDER LAB REVEALED' : '🕷 SPIDER LAB HIDDEN',
-          );
-        }
-        return;
-      }
-      this.playerChat.showBubble(text);
-      void aiAdapter.chatWithSystem(text, context);
-    });
+          return this._revealSpiderLab ? '🕷 SPIDER LAB REVEALED' : '🕷 SPIDER LAB HIDDEN';
+        },
+      },
+    ];
   }
 
   /**
@@ -2856,16 +2678,12 @@ export class DungeonScene extends GameplayScene {
    * lazily-loaded or typo'd sheet shows up in seconds instead of during a
    * playtest.
    */
-  private reportAssetMisses(): void {
+  private spriteMissReport(): string {
     const misses = [...getSpriteMissCounts().entries()];
-    if (misses.length === 0) {
-      this.playerChat.showBubble('🖼 NO SPRITE MISSES');
-      return;
-    }
+    if (misses.length === 0) return '🖼 NO SPRITE MISSES';
     misses.sort((a, b) => b[1] - a[1]);
-    const summary = misses.map(([key, count]) => `${key}×${count}`).join(', ');
-    this.playerChat.showBubble(`🖼 MISSES: ${summary}`);
     console.warn('[SpriteLoader] Miss counts:', Object.fromEntries(misses));
+    return `🖼 MISSES: ${misses.map(([key, count]) => `${key}×${count}`).join(', ')}`;
   }
 
   /**
@@ -2895,12 +2713,12 @@ export class DungeonScene extends GameplayScene {
         this.audio?.play('error');
         return;
       }
-      this.playerChat.showBubble(`💰 BOUNTY PAID +${coins}`);
+      this.chat.showBubble(`💰 BOUNTY PAID +${coins}`);
       return;
     }
     const forcedTypeId = argument === '' ? undefined : argument;
     if (forcedTypeId !== undefined && findBountyDef(forcedTypeId) === null) {
-      this.playerChat.showBubble(`❓ NO BOUNTY TYPE "${forcedTypeId}"`);
+      this.chat.showBubble(`❓ NO BOUNTY TYPE "${forcedTypeId}"`);
       this.audio?.play('error');
       return;
     }
@@ -2908,7 +2726,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('error');
       return;
     }
-    this.playerChat.showBubble(`🎯 ${bounty.currentName ?? '?'} ${bounty.currentTypeLabel ?? ''}`);
+    this.chat.showBubble(`🎯 ${bounty.currentName ?? '?'} ${bounty.currentTypeLabel ?? ''}`);
   }
 
   /**
@@ -2936,7 +2754,7 @@ export class DungeonScene extends GameplayScene {
     this.human.y = landing.y * TILE_SIZE;
     this.cat.x = this.human.x;
     this.cat.y = this.human.y;
-    this.playerChat.showBubble('🎯 WARPED TO MARK');
+    this.chat.showBubble('🎯 WARPED TO MARK');
   }
 
   /**
@@ -2990,8 +2808,7 @@ export class DungeonScene extends GameplayScene {
     }
     const mongo = this.mongoSystem.summon(this.cat, this.gameMap);
     if (mongo) {
-      this.mobs.push(mongo);
-      this.mobGrid.insert(mongo);
+      this.world.roster.add(mongo);
       this.abilityManager.addUsageXp('mongo');
       this.audio?.play('mongo_released');
     }
@@ -3006,7 +2823,7 @@ export class DungeonScene extends GameplayScene {
     // the world (and so would keep the mark standing where the party fell) while
     // a floor restart throws it away, and the durable record would have survived
     // either one.
-    this.bounty?.abandonBounty(this.mobs, this.mobGrid);
+    this.bounty?.abandonBounty(this.world.roster.mobs, this.world.roster.grid);
 
     const cp = this.checkpoint;
     if (cp !== null) {
@@ -3029,7 +2846,7 @@ export class DungeonScene extends GameplayScene {
    */
   private restoreFromCheckpoint(cp: LevelCheckpoint): void {
     this.audio?.stopSound('death_sequence');
-    this.deathScreen.reset();
+    this.combat.deathScreen.reset();
     this.gameOver = false;
     // Its pending callback grants a chest's reward against a world that is
     // about to be rewound to before the chest was opened.
@@ -3062,17 +2879,16 @@ export class DungeonScene extends GameplayScene {
     // whole cost of using him, and a free full heal on every safe-room restore
     // would hand it back. Dismissing also writes his real remaining HP into the
     // shared state, which nothing else on this path does.
-    this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // The same problem one companion over: the roster rewind below can un-hire a
     // mercenary taken on after the safe room, and nothing reachable from a
     // snapshot can splice the body out of the scene once that reference is gone.
-    this.mercenarySystem.dismiss(this.mobs, this.mobGrid);
+    this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
 
     this.rewindMobsToCheckpoint();
 
-    this.spells.resetForCheckpoint();
-    this.dynamite.resetForCheckpoint();
-    this.smushFx.resetForCheckpoint();
+    this.combat.resetForCheckpoint();
+    this.destruction.resetForCheckpoint();
     this.lavaBalls.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.skeletonShots.resetForCheckpoint();
@@ -3080,8 +2896,6 @@ export class DungeonScene extends GameplayScene {
     this.clownGas.resetForCheckpoint();
     this.knightMissiles.resetForCheckpoint();
     this.skeletonSummons.resetForCheckpoint();
-    this.gore.resetForCheckpoint();
-    this.bodyPartGore.resetForCheckpoint();
     this.bossRoom.resetForCheckpoint();
     this.arena.resetForCheckpoint();
 
@@ -3119,7 +2933,7 @@ export class DungeonScene extends GameplayScene {
       miniMap: this.miniMap.captureCheckpoint(),
       stairwell: this.stairwell.captureCheckpoint(),
       treasureChests: this.treasureChests.captureCheckpoint(),
-      loot: this.loot.captureCheckpoint(),
+      destruction: this.destruction.captureCheckpoint(),
       bopca: this.bopca.captureCheckpoint(),
       difficultyTelemetry: this.difficultyTelemetry.captureCheckpoint(),
       mercenary: this.mercenarySystem.captureCheckpoint(),
@@ -3131,7 +2945,6 @@ export class DungeonScene extends GameplayScene {
       murderQuest: this.murderQuest.captureCheckpoint(),
       doomsdayEscape: this.doomsdayEscape.captureCheckpoint(),
 
-      destructibles: this.destructibles?.captureCheckpoint() ?? null,
       trees: this.trees?.captureCheckpoint() ?? null,
       bounty: this.bounty?.captureCheckpoint() ?? null,
 
@@ -3169,7 +2982,7 @@ export class DungeonScene extends GameplayScene {
     this.miniMap.restoreCheckpoint(world.miniMap);
     this.stairwell.restoreCheckpoint(world.stairwell);
     this.treasureChests.restoreCheckpoint(world.treasureChests);
-    this.loot.restoreCheckpoint(world.loot);
+    this.destruction.restoreCheckpoint(world.destruction);
     this.bopca.restoreCheckpoint(world.bopca);
     this.difficultyTelemetry.restoreCheckpoint(world.difficultyTelemetry);
     this.mercenarySystem.restoreCheckpoint(world.mercenary);
@@ -3179,13 +2992,10 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
     // The grid the mob rewind just rebuilt, not the one the last frame saw:
     // Signet's move back to the Big Top door has to land in the live one.
-    this.circusQuest.restoreCheckpoint(world.circusQuest, this.mobGrid);
+    this.circusQuest.restoreCheckpoint(world.circusQuest, this.world.roster.grid);
     this.murderQuest.restoreCheckpoint(world.murderQuest);
     this.doomsdayEscape.restoreCheckpoint(world.doomsdayEscape);
 
-    if (this.destructibles !== null && world.destructibles !== null) {
-      this.destructibles.restoreCheckpoint(world.destructibles);
-    }
     if (this.trees !== null && world.trees !== null) {
       this.trees.restoreCheckpoint(world.trees);
     }
@@ -3222,7 +3032,7 @@ export class DungeonScene extends GameplayScene {
    * after the safe room.
    */
   private markMobsAtCheckpoint(): void {
-    for (const mob of this.mobs) {
+    for (const mob of this.world.roster.mobs) {
       mob.presentAtCheckpoint = true;
       mob.aliveAtCheckpoint = mob.isAlive;
     }
@@ -3240,7 +3050,7 @@ export class DungeonScene extends GameplayScene {
    */
   private rewindMobsToCheckpoint(): void {
     const kept: Mob[] = [];
-    for (const mob of this.mobs) {
+    for (const mob of this.world.roster.mobs) {
       if (!mob.presentAtCheckpoint) {
         // Summoned, hired or staged after the safe room, so it has no business
         // existing. Disposed because it is leaving the array for good — the
@@ -3265,30 +3075,22 @@ export class DungeonScene extends GameplayScene {
       }
       kept.push(mob);
     }
-    // In place: the per-frame `SystemContext` is refreshed from this field, but
-    // the spawn closures handed to the quest systems captured the array itself.
-    this.mobs.length = 0;
-    for (const mob of kept) this.mobs.push(mob);
+    this.world.roster.replaceAll(kept);
 
     // Re-derived rather than filtered: a spider that spawned after the
     // checkpoint has just left `mobs`, and this list would otherwise keep
     // rendering and ticking it.
-    this.grotesqueSpiders = this.mobs.filter(
+    this.grotesqueSpiders = this.world.roster.mobs.filter(
       (mob): mob is GrotesqueSpider => mob instanceof GrotesqueSpider,
     );
 
-    // Rebuilt rather than patched: `belongsInMobGrid` flips for every mob the
-    // pass above revived or dropped, and the grid has no bulk-update path.
-    this.mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
-    for (const mob of this.mobs) {
-      if (mob.belongsInMobGrid) this.mobGrid.insert(mob);
-    }
+    this.world.roster.rebuildGrid();
   }
 
   private restartAtFloorEntry(): void {
     // Before the scene is replaced: his HP only reaches the shared state through
     // a despawn, and the instance holding it is about to be discarded.
-    this.mongoSystem.dismiss(this.mobs, this.mobGrid);
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.audio?.stopSound('death_sequence');
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
@@ -3334,7 +3136,7 @@ export class DungeonScene extends GameplayScene {
   private hasNearbyEnemy(player: HumanPlayer | CatPlayer, range: number): boolean {
     const px = player.x + TILE_SIZE * TILE_CENTER_OFFSET;
     const py = player.y + TILE_SIZE * TILE_CENTER_OFFSET;
-    const nearby = this.mobGrid.queryCircle(px, py, range);
+    const nearby = this.world.roster.grid.queryCircle(px, py, range);
     for (const mob of nearby) {
       // Allies (Signet, Ink Marauders) must not force attack-priority over talking.
       if (mob.isAlive && mob.isHostile) return true;
@@ -3445,16 +3247,7 @@ export class DungeonScene extends GameplayScene {
     return true;
   }
 
-  /**
-   * Every overlay that can own the screen, ordered by which one a press should
-   * reach first.
-   *
-   * This is the single source of truth for "a menu is up". The keyboard gate,
-   * the Space chain and the mobile tap path all read it, so none of them can
-   * drift apart — drift is what let a press aimed at the building menu also
-   * reach the citizen standing on the doorstep, stacking two dialogs that then
-   * fought over the same clicks.
-   */
+  /** This floor's overlays, ordered by which one a press should reach first. */
   private get overlayClaims(): readonly OverlayInputClaim[] {
     const tutorial = this.tutorial;
     const noticeBoard = this.noticeBoard;
@@ -3469,95 +3262,190 @@ export class DungeonScene extends GameplayScene {
       },
     });
     return [
-      { isOpen: this.chestRewardDialog.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.chestRewardDialog.isOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
       {
         isOpen: tutorial?.showNearGoblinDialog === true,
         space: { kind: 'advance', advance: () => tutorial?.dismissNearGoblinDialog() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
+      // Not world-halting: `update` has its own branch for each of these two,
+      // and it is what types the dialog out a character at a time. Halting here
+      // would make that branch unreachable and every page arrive blank.
       {
         isOpen: tutorial?.showTutorialMordecaiDialog === true,
         space: { kind: 'advance', advance: () => tutorial?.advanceTutorialMordecaiDialog() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
       {
         isOpen: tutorial?.showMordecaiReminderDialog === true,
         space: { kind: 'advance', advance: () => tutorial?.advanceMordecaiReminderDialog() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
       {
         isOpen: this.achievementUI.isBlocking,
         space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
       // The four below each render an accept button inside their own focus ring,
       // so the ring takes the press before this chain is reached. The claim is
       // still needed to keep the rest of the keyboard — and the world behind —
       // out of it.
-      { isOpen: this.levelUpDialog.isShowing, space: { kind: 'swallow' }, locksKeyboard: true },
       {
-        isOpen: this.rewardGrantedDialog.isShowing,
+        isOpen: this.menus.levelUpDialog.isShowing,
         space: { kind: 'swallow' },
         locksKeyboard: true,
+        haltsWorld: true,
       },
-      { isOpen: this.skillBookPrompt.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.menus.rewardGrantedDialog.isShowing,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      {
+        isOpen: this.menus.skillBookPrompt.isOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      // Below the award stack because that stack draws over the death screen — a
+      // level-up earned by the blow that killed you is still on top and still
+      // has to be dismissible. `locksKeyboard` even so: the screen's own focus
+      // ring listens in the capture phase and is reached first, so locking here
+      // only stops a hotbar key spending a potion the respawn will throw away.
+      { isOpen: this.gameOver, space: { kind: 'swallow' }, locksKeyboard: true, haltsWorld: true },
       {
         isOpen: this.levelCompleteScreen.isActive,
         space: { kind: 'swallow' },
         locksKeyboard: false,
+        haltsWorld: true,
       },
-      { isOpen: this.playerChat.isOpen, space: { kind: 'passThrough' }, locksKeyboard: true },
+      {
+        isOpen: this.chat.isOpen,
+        space: { kind: 'passThrough' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
       {
         isOpen: noticeBoard?.isOpen === true,
         space: closeWithClick(() => noticeBoard?.close()),
         locksKeyboard: true,
+        haltsWorld: true,
       },
-      { isOpen: marketPanel?.isOpen === true, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: marketPanel?.isOpen === true,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
       {
         isOpen: fortuneTeller?.isOpen === true,
         space: { kind: 'swallow' },
         locksKeyboard: true,
-      },
-      {
-        isOpen: citizenDialog?.isOpen === true,
-        space: { kind: 'advance', advance: () => citizenDialog?.advance() },
-        locksKeyboard: true,
+        haltsWorld: true,
       },
       {
         isOpen: this.bopca.isDialogOpen,
         space: { kind: 'advance', advance: () => this.bopca.advanceDialog() },
         locksKeyboard: true,
+        haltsWorld: false,
       },
       {
         isOpen: this.defendQuest.isDialogOpen,
         space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
         locksKeyboard: true,
+        haltsWorld: true,
       },
       {
         isOpen: this.defendQuest.isOutcomeOverlayShowing,
         space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
-      { isOpen: this.spiderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.spiderQuest.isDialogOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
       {
         isOpen: this.bounty?.isDialogOpen === true,
         space: { kind: 'swallow' },
         locksKeyboard: true,
+        haltsWorld: true,
       },
-      { isOpen: this.circusQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
-      { isOpen: this.murderQuest.isDialogOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      {
+        isOpen: this.circusQuest.isDialogOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      {
+        isOpen: this.murderQuest.isDialogOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
       {
         isOpen: this.safeRoom.mordecaiDialogOpen,
         space: { kind: 'advance', advance: () => this.safeRoom.advanceMordecaiDialog() },
         locksKeyboard: false,
+        haltsWorld: false,
       },
-      { isOpen: this.safeRoom.isSleeping, space: { kind: 'swallow' }, locksKeyboard: true },
-      { isOpen: this.stairwell.menuOpen, space: { kind: 'swallow' }, locksKeyboard: true },
-      { isOpen: this.building?.menuOpen === true, space: { kind: 'swallow' }, locksKeyboard: true },
-      { isOpen: this.followerMenu.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
-      { isOpen: this.pauseMenu.isOpen, space: { kind: 'swallow' }, locksKeyboard: true },
+      // Not world-halting for the same reason: `update`'s sleep branch is the
+      // only thing that ticks the sleep down, and the only thing that ever ends
+      // it. Halting here would leave the player asleep for good.
+      {
+        isOpen: this.safeRoom.isSleeping,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: false,
+      },
+      {
+        isOpen: this.stairwell.menuOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      {
+        isOpen: this.building?.menuOpen === true,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      {
+        isOpen: this.followerMenu.isOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: false,
+      },
+      {
+        isOpen: this.menus.pauseMenu.isOpen,
+        space: { kind: 'swallow' },
+        locksKeyboard: true,
+        haltsWorld: true,
+      },
+      // Last: the one overlay the world keeps running under — a street
+      // conversation ends because the player walked away from it — and the one
+      // every other surface here is drawn over. Ranking it above them would hand
+      // Space and Escape to the box underneath whatever the player is looking at.
+      {
+        isOpen: citizenDialog?.isOpen === true,
+        space: { kind: 'advance', advance: () => citizenDialog?.advance() },
+        locksKeyboard: true,
+        haltsWorld: false,
+      },
     ];
   }
 
@@ -3567,36 +3455,21 @@ export class DungeonScene extends GameplayScene {
 
   /** The overlay that currently owns input, or null when play has the floor. */
   private get focusedOverlay(): OverlayInputClaim | null {
-    return this.overlayClaims.find((claim) => claim.isOpen) ?? null;
+    return focusedOverlay(this.overlayClaims);
   }
 
   /**
-   * Anything that takes the floor away from ordinary play: a modal, a menu, a
-   * quest interjection, the death screen. Street chat is the one dialog that
-   * does *not* belong here — the player has to keep walking during it.
+   * Anything that takes the floor away from ordinary play.
+   *
+   * Derived from the claim registry rather than restated as a second boolean
+   * chain: the two used to be hand-maintained lists of the same overlays, and a
+   * dialog added to one of them and not the other is a menu the world keeps
+   * running underneath. The spider lab's cutscene is the one term with no
+   * overlay behind it — the quest freezes the floor from inside its own state
+   * machine.
    */
   private get gameplayHalted(): boolean {
-    return (
-      this.gameOver ||
-      this.levelUpDialog.isShowing ||
-      this.rewardGrantedDialog.isShowing ||
-      this.skillBookPrompt.isOpen ||
-      this.pauseMenu.isOpen ||
-      this.chestRewardDialog.isOpen ||
-      this.stairwell.menuOpen ||
-      this.levelCompleteScreen.isActive ||
-      this.building?.menuOpen === true ||
-      this.defendQuest.isDialogOpen ||
-      this.spiderQuest.isDialogOpen ||
-      this.spiderQuest.isDungeonPaused ||
-      this.circusQuest.isDialogOpen ||
-      this.murderQuest.isDialogOpen ||
-      this.bounty?.isDialogOpen === true ||
-      this.noticeBoard?.isOpen === true ||
-      this.marketPanel?.isOpen === true ||
-      this.fortuneTeller?.isOpen === true ||
-      this.playerChat.isOpen
-    );
+    return worldHalted(this.overlayClaims) || this.spiderQuest.isDungeonPaused;
   }
 
   /**
@@ -3896,153 +3769,54 @@ export class DungeonScene extends GameplayScene {
         active.facingY = ddy / d;
       }
     }
-    triggerPlayerAttack(this.human, this.cat, this.mobGrid, this.gameMap, this.audio);
+    triggerPlayerAttack(this.human, this.cat, this.world.roster.grid, this.gameMap, this.audio);
   }
 
-  private triggerHotbarActivation(hotbarIdx: number): void {
-    const active = this.active();
-    const slot = active.inventory.actionBar.slots[hotbarIdx];
-    if (this.tutorial?.blockBoxersActivation === true && slot?.id === 'enchanted_bigboi_boxers') {
+  /**
+   * The collaborators a hotbar press reaches. Rebuilt per press rather than held,
+   * so it always names the systems this scene currently owns.
+   */
+  private hotbarHost(): HotbarHost {
+    return {
+      world: this.world,
+      menus: this.menus,
+      abilityManager: this.abilityManager,
+      spells: this.combat.spells,
+      dynamite: this.destruction.dynamite,
+      trySceneSlot: (slot, hotbarIdx) => this.trySceneHotbarSlot(slot, hotbarIdx),
+    };
+  }
+
+  /**
+   * The slots that mean something only down here: the gym equipment a barrier is
+   * built from, the quest boards, and the tutorial's one blocked item.
+   *
+   * @returns whether the press was consumed, so the shared table does not also
+   *   act on it.
+   */
+  private trySceneHotbarSlot(slot: InventoryItem, hotbarIdx: number): boolean {
+    if (this.tutorial?.blockBoxersActivation === true && slot.id === 'enchanted_bigboi_boxers') {
       this.audio?.play('error');
       this._companionErrorMsg = {
         text: 'The boxers are already doing their job — just equip them!',
         framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
       };
-      return;
+      return true;
     }
-    if (slot?.drinkable === true) {
-      this.drinkPotion(active, slot.id, { source: 'hotbar', slotIdx: hotbarIdx });
-    } else if (slot?.abilityId === 'magic_missile' && !this.human.isActive) {
-      if (this.cat.triggerMissile()) {
-        this.audio?.play('cat_missile_fire');
-      }
-    } else if (slot?.abilityId === 'protective_shell' && this.human.isActive) {
-      const level = this.human.getProtectiveShellLevel();
-      if (this.spells.triggerProtectiveShell(this.human, this.cat, this.mobGrid, level)) {
-        this.abilityManager.addUsageXp('protective_shell');
-        this.audio?.play('human_protective_shell');
-      }
-    } else if (slot?.abilityId === 'smush' && this.human.isActive) {
-      if (this.human.triggerSmush()) {
-        this.audio?.play('human_smush');
-      }
-    } else if (slot?.id === 'scroll_of_confusing_fog') {
-      this.spells.castConfusingFog(active);
-      this.audio?.play('confusing_fog');
-    } else if (slot?.id === 'goblin_dynamite' && this.human.isActive) {
-      if (this.dynamite.isCharging) {
-        this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
-        this.bus.emit('dynamiteUsed', { player: 'Human' });
-      } else {
-        this.dynamite.beginCharge(hotbarIdx);
-      }
-    } else if (
-      (slot?.id === 'gym_dumbbell' ||
-        slot?.id === 'gym_bench_press' ||
-        slot?.id === 'gym_treadmill') &&
+    if (
+      (slot.id === 'gym_dumbbell' ||
+        slot.id === 'gym_bench_press' ||
+        slot.id === 'gym_treadmill') &&
       !this.barriers.isConstructing
     ) {
       this.barriers.beginConstruct(this.active(), hotbarIdx, slot.id);
-    } else if (slot?.id === 'quest_wood_board') {
-      this.defendQuest.tryBuildBarrier(active);
-    } else if (slot?.skillId !== undefined) {
-      // Queued rather than read outright: a skill book is spent for good, so
-      // every route to one — hotbar key, hotbar tap, bag click — asks first.
-      // The bar belongs to the active crawler, so they are the reader even when
-      // the panel is showing the companion's bag.
-      this.queueSkillBookRead({ bookId: slot.id, skillId: slot.skillId }, active);
-    }
-  }
-
-  /**
-   * Drinks one `id` from `drinker`'s pack.
-   *
-   * The single place a potion is drunk, so the hotbar, the potion key, and the
-   * bag's Drink entry can't drift on cooldowns, refusals, sounds, or what the
-   * effect announces.
-   *
-   * @param bottle Which stack to spend, or null for the first one anywhere. A
-   *   click names one because the same potion often sits in both containers,
-   *   and it should be the stack the player pointed at that goes down.
-   * @returns whether the potion was actually swallowed. A refusal has already
-   *   been sounded by the time this returns false.
-   */
-  private drinkPotion(
-    drinker: HumanPlayer | CatPlayer,
-    id: ItemId,
-    bottle: PotionSlot | null,
-  ): boolean {
-    const consume = (): boolean =>
-      bottle === null
-        ? drinker.inventory.removeOne(id)
-        : drinker.inventory.removeOneFromSlot(bottle.source, bottle.slotIdx, id);
-
-    if (id === 'health_potion') {
-      if (drinker.potionCooldownFrames > 0) {
-        this.audio?.play('error_taking_action');
-        return false;
-      }
-      const hpBefore = drinker.hp;
-      if (!drinker.usePotion(consume)) {
-        // Almost always the full-HP refusal, which is otherwise indistinguishable
-        // from the click having missed the menu entirely.
-        this.audio?.play('error_taking_action');
-        return false;
-      }
-      this.tutorial?.onPotionUsed();
-      this.bus.emit('healingPotionUsed', {
-        player: drinker === this.human ? 'Human' : 'Cat',
-        hpRestored: drinker.hp - hpBefore,
-      });
-      this.showPotionEffectNotice(id);
       return true;
     }
-
-    if (id === 'dirty_shirley') {
-      // A bottle that would change nothing is refused before it is opened: it
-      // comes out of the bag rather than off a bar, so spending one for no
-      // effect costs the player twice.
-      if (!drinker.dirtyShirleyWouldHelp) {
-        this.audio?.play('error_taking_action');
-        return false;
-      }
-      if (!consume()) return false;
-      drinker.drinkDirtyShirley();
-      this.playDrinkSounds('healing_potion');
-      this.showPotionEffectNotice(id);
+    if (slot.id === 'quest_wood_board') {
+      this.defendQuest.tryBuildBarrier(this.active());
       return true;
     }
-
-    if (id === 'stat_boost_potion') {
-      if (!consume()) return false;
-      const { stat, amount } = drinker.applyStatBoost();
-      this.playDrinkSounds('stat_boost');
-      this.hotbarToast.show(statBoostNotice(stat, amount));
-      return true;
-    }
-
-    const timed = TIMED_POTIONS[id];
-    if (timed === undefined) return false;
-    if (drinker.hasStatus(id)) {
-      this.audio?.play('error_taking_action');
-      return false;
-    }
-    if (!consume()) return false;
-    timed.activate(drinker);
-    this.playDrinkSounds(timed.effectSound);
-    this.showPotionEffectNotice(id);
-    return true;
-  }
-
-  /** The gulp, then the effect landing a beat later. */
-  private playDrinkSounds(effectSound: SoundId): void {
-    this.audio?.play('potion_drink');
-    this._delayedSounds.push({ id: effectSound, framesLeft: POTION_EFFECT_SOUND_DELAY });
-  }
-
-  private showPotionEffectNotice(id: ItemId): void {
-    const notice = potionEffectNotice(id);
-    if (notice !== null) this.hotbarToast.show(notice);
+    return false;
   }
 
   handleClick(mx: number, my: number, eventTimeStampMs: number): void {
@@ -4071,12 +3845,12 @@ export class DungeonScene extends GameplayScene {
     // menu that outranked them here would take a press aimed at their OK button
     // and leave the overlay with no way to be dismissed.
     if (this.achievementUI.handleClick(mx, my)) return;
-    if (this.levelUpDialog.handleClick(mx, my)) return;
-    if (this.rewardGrantedDialog.handleClick(mx, my)) return;
-    if (this.skillBookPrompt.isOpen) {
-      const reader = this._skillBookReader ?? this.inventoryPlayer();
-      const choice = resolveSkillBookPrompt(this.skillBookFlowHost(), reader, mx, my);
-      if (choice !== null) this._skillBookReader = null;
+    if (this.menus.levelUpDialog.handleClick(mx, my)) return;
+    if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
+    if (this.menus.skillBookPrompt.isOpen) {
+      const reader = this.menus.pendingSkillBookReader(this.menus.inventoryPlayer());
+      const choice = resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my);
+      if (choice !== null) this.menus.releaseSkillBookReader();
       return;
     }
     if (this.defendQuest.handleClick(mx, my)) return;
@@ -4084,10 +3858,9 @@ export class DungeonScene extends GameplayScene {
     if (this.bounty?.handleClick(mx, my) === true) return;
     if (this.circusQuest.handleClick(mx, my)) return;
     if (this.murderQuest.handleClick(mx, my)) return;
-    if (this.citizenDialog?.isOpen === true) {
-      this.citizenDialog.handleClick(mx, my);
-      return;
-    }
+    // Only the dialog's own box is consumed: a conversation does not halt the
+    // world, so the bag can be open underneath it and its slots must stay live.
+    if (this.citizenDialog?.handleClick(mx, my) === true) return;
     if (this.noticeBoard?.isOpen === true) {
       this.noticeBoard.handleClick();
       return;
@@ -4106,7 +3879,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
-    if (!platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
+    if (!platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
       if (pointInRect(mx, my, this.touch.followBtnRect)) {
         this.triggerCompanionFollow();
         return;
@@ -4116,7 +3889,7 @@ export class DungeonScene extends GameplayScene {
     if (
       !platform.isMobile &&
       !this.gameOver &&
-      !this.pauseMenu.isOpen &&
+      !this.menus.pauseMenu.isOpen &&
       this.mongoSystem.canShow &&
       this.cat.isActive
     ) {
@@ -4127,17 +3900,11 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       if (this.achievementUI.handleAchievIconClick(mx, my)) return;
-      if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.pauseMenu.close())) return;
-      if (
-        (this.human.unspentPoints > 0 || this.cat.unspentPoints > 0) &&
-        pointInRect(mx, my, this._hudSkillBannerRect)
-      ) {
-        this.pauseMenu.openToSpend();
-        this.audio?.play('menu_open');
+      if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.menus.pauseMenu.close()))
         return;
-      }
+      if (this.menus.tryOpenSpendScreen(mx, my, this._hudSkillBannerRect)) return;
     }
 
     if (this.safeRoom.mordecaiDialogOpen) {
@@ -4165,17 +3932,19 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gameOver) {
-      if (this.deathScreen.handleClick(mx, my)) {
+      if (this.combat.deathScreen.handleClick(mx, my)) {
         this.respawnAfterDeath();
       }
       return;
     }
 
-    if (this.pauseMenu.isOpen) {
-      const allowedLabel = this.tutorial?.getAllowedMenuButtonLabel(this.pauseMenu.currentTab);
+    if (this.menus.pauseMenu.isOpen) {
+      const allowedLabel = this.tutorial?.getAllowedMenuButtonLabel(
+        this.menus.pauseMenu.currentTab,
+      );
       if (allowedLabel !== undefined && allowedLabel !== null) {
         // Tutorial is guiding: only permit the highlighted button to be clicked
-        const btn = this.pauseMenu.renderedButtons.find((b) => b.label === allowedLabel);
+        const btn = this.menus.pauseMenu.renderedButtons.find((b) => b.label === allowedLabel);
         if (btn !== undefined) {
           const { x, y, w, h } = btn;
           if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
@@ -4188,21 +3957,25 @@ export class DungeonScene extends GameplayScene {
         }
         return;
       }
-      this.pauseMenu.handleClick(mx, my);
+      this.menus.pauseMenu.handleClick(mx, my);
       return;
     }
 
     const active = this.active();
-    const invPlayer = this.inventoryPlayer();
+    const invPlayer = this.menus.inventoryPlayer();
 
-    const gearResult = this.gearPanel.handleClick(mx, my, active.inventory);
+    const gearResult = this.menus.gearPanel.handleClick(mx, my, active.inventory);
     if (gearResult) {
       active.onEquipmentChanged();
       return;
     }
 
-    if (this.gearPanel.isOpen && this.inventoryPanel.isOpen) {
-      const slotIdx = this.inventoryPanel.getClickedInventorySlot(mx, my, invPlayer.inventory);
+    if (this.menus.gearPanel.isOpen && this.menus.inventoryPanel.isOpen) {
+      const slotIdx = this.menus.inventoryPanel.getClickedInventorySlot(
+        mx,
+        my,
+        invPlayer.inventory,
+      );
       if (slotIdx !== null) {
         const item = invPlayer.inventory.bag.slots[slotIdx];
         if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
@@ -4221,17 +3994,19 @@ export class DungeonScene extends GameplayScene {
       return;
     }
 
-    const wasInventoryOpen = this.inventoryPanel.isOpen;
-    if (this.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
-      this.resolvePendingInventoryAction(invPlayer);
-      if (this.inventoryPanel.isOpen && !wasInventoryOpen) {
-        this.gearPanel.isOpen = false;
+    const wasInventoryOpen = this.menus.inventoryPanel.isOpen;
+    if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
+      this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
+        this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
+      );
+      if (this.menus.inventoryPanel.isOpen && !wasInventoryOpen) {
+        this.menus.gearPanel.isOpen = false;
       }
       return;
     }
 
     const { x: camX, y: camY } = this.camera();
-    if (this.loot.tryCollectLootAt(mx, my, camX, camY, active, this.inactive())) return;
+    if (this.destruction.loot.tryCollectLootAt(mx, my, camX, camY, active, this.inactive())) return;
 
     // Click on an unlocked chest in the world to open it
     for (const chest of this.treasureChests.allChests) {
@@ -4250,9 +4025,8 @@ export class DungeonScene extends GameplayScene {
 
     const pb = UIRenderer.pauseButtonRect(this.miniMap);
     if (pointInRect(mx, my, pb)) {
-      this.pauseMenu.toggle();
-      this.inventoryPanel.isOpen = false;
-      this.gearPanel.isOpen = false;
+      this.menus.pauseMenu.toggle();
+      this.menus.closePanels();
       this.input.clear();
       return;
     }
@@ -4273,23 +4047,19 @@ export class DungeonScene extends GameplayScene {
    * Cancel also lands on the slot beneath it and re-queues the prompt.
    */
   private get isOverlayBlockingPointer(): boolean {
-    return (
-      this.skillBookPrompt.isOpen ||
-      this.levelUpDialog.isShowing ||
-      this.rewardGrantedDialog.isShowing
-    );
+    return this.menus.isOverlayBlockingPointer;
   }
 
   handleMouseDown(mx: number, my: number): void {
     this._mouseDown = true;
-    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
+    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
     if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
       this._miniMapDragging = true;
       this._miniMapDragLastX = mx;
       this._miniMapDragLastY = my;
       return;
     }
-    this.inventoryPanel.handleMouseDown(mx, my, this.inventoryPlayer().inventory);
+    this.menus.inventoryPanel.handleMouseDown(mx, my, this.menus.inventoryPlayer().inventory);
   }
 
   handleMouseMove(mx: number, my: number): void {
@@ -4300,15 +4070,15 @@ export class DungeonScene extends GameplayScene {
       this._miniMapDragLastX = mx;
       this._miniMapDragLastY = my;
     }
-    this.inventoryPanel.handleMouseMove(mx, my);
-    this.gearPanel.handleMouseMove(mx, my, this.active().inventory);
+    this.menus.inventoryPanel.handleMouseMove(mx, my);
+    this.menus.gearPanel.handleMouseMove(mx, my, this.active().inventory);
   }
 
   handleMouseUp(mx: number, my: number): void {
     this._mouseDown = false;
     this._miniMapDragging = false;
-    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
-    this.inventoryPanel.handleMouseUp(mx, my, this.inventoryPlayer().inventory);
+    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
+    this.menus.inventoryPanel.handleMouseUp(mx, my, this.menus.inventoryPlayer().inventory);
   }
 
   handleMouseLeave(): void {
@@ -4318,12 +4088,12 @@ export class DungeonScene extends GameplayScene {
   }
 
   handleContextMenu(mx: number, my: number): void {
-    if (this.gameOver || this.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
-    this.inventoryPanel.openContextMenu(mx, my, this.inventoryPlayer().inventory);
+    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
+    this.menus.inventoryPanel.openContextMenu(mx, my, this.menus.inventoryPlayer().inventory);
   }
 
   handleWheel(deltaY: number): void {
-    if (this.pauseMenu.isOpen) this.pauseMenu.handleWheel(deltaY);
+    if (this.menus.pauseMenu.isOpen) this.menus.pauseMenu.handleWheel(deltaY);
   }
 
   update(): void {
@@ -4334,7 +4104,7 @@ export class DungeonScene extends GameplayScene {
       this.citizenDialogTarget = null;
     }
     aiAdapter.update();
-    this.playerChat.update();
+    this.chat.update();
     this.citizenDialog?.update();
     if (this._companionErrorMsg !== null) {
       this._companionErrorMsg.framesLeft--;
@@ -4342,17 +4112,11 @@ export class DungeonScene extends GameplayScene {
         this._companionErrorMsg = null;
       }
     }
-    this._delayedSounds = this._delayedSounds.filter((s) => {
-      s.framesLeft--;
-      if (s.framesLeft <= 0) {
-        this.audio?.play(s.id);
-        return false;
-      }
-      return true;
-    });
     this.achievementUI.tick();
-    this.levelUpDialog.update();
-    this.rewardGrantedDialog.update();
+    // Above the boss-intro return below: an award overlay raised on the frame a
+    // boss room locks would otherwise sit frozen at its first frame for the
+    // length of the intro, and a potion's effect cue would be held with it.
+    this.menus.update();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
       this.chestRewardDialog.rewardSoundPending = false;
@@ -4370,7 +4134,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     // Spider quest ticks even while other systems are paused (keyboard hero must advance)
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       const sqCtx = this.buildSystemContext();
       this.spiderQuest.update(sqCtx);
       this._processSpiderQuestSounds();
@@ -4379,7 +4143,7 @@ export class DungeonScene extends GameplayScene {
     // Town keeps living through citizen chats and other overlay dialogs — only a
     // hard stop (game over, the pause menu, or the level-complete screen) should
     // freeze the streets.
-    if (!this.gameOver && !this.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen && !this.levelCompleteScreen.isActive) {
       this.townLife?.update(this.buildSystemContext());
       this.townProps?.update();
       this.townDecor?.update();
@@ -4389,10 +4153,6 @@ export class DungeonScene extends GameplayScene {
       this.townGuide?.update(this.buildSystemContext());
     }
 
-    // Ticked ahead of every early return below: a toast raised on the last step
-    // of a floor has to keep counting down while the level-complete screen is up
-    // or it would be drawn frozen and then thrown away with the scene.
-    this.hotbarToast.update();
     // Above the gameplay-halted early return below: his talk pose is only ever
     // wanted while his own dialog is open, which is exactly when gameplay is
     // halted and `updateGameplay` never runs.
@@ -4407,7 +4167,7 @@ export class DungeonScene extends GameplayScene {
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
     // own click handler, and the prompt it opens is itself one of the gates.
-    this.openPendingSkillBookPrompt();
+    this.menus.openPendingSkillBookPrompt(this.menus.inventoryPlayer());
 
     if (this.gameplayHalted) {
       this.marketPanel?.update();
@@ -4441,14 +4201,14 @@ export class DungeonScene extends GameplayScene {
       pm: this.pm,
       active: this.active(),
       inactive: this.inactive(),
-      mobs: this.mobs,
-      mobGrid: this.mobGrid,
+      mobs: this.world.roster.mobs,
+      mobGrid: this.world.roster.grid,
       townsfolk: this.townLife?.people,
       townProps: this.townPropRenderables ?? undefined,
       gameOver: this.gameOver,
-      pauseMenuOpen: this.pauseMenu.isOpen,
-      gore: this.gore,
-      bodyPartGore: this.bodyPartGore,
+      pauseMenuOpen: this.menus.pauseMenu.isOpen,
+      gore: this.combat.gore,
+      bodyPartGore: this.combat.bodyPartGore,
       safeRoom: this.safeRoom,
       bossRoom: this.bossRoom,
       juicerRoom: this.juicerRoom,
@@ -4456,19 +4216,19 @@ export class DungeonScene extends GameplayScene {
       stairwell: this.stairwell,
       building: this.building,
       barriers: this.barriers,
-      spells: this.spells,
-      dynamite: this.dynamite,
-      smushFx: this.smushFx,
+      spells: this.combat.spells,
+      dynamite: this.destruction.dynamite,
+      smushFx: this.combat.smushFx,
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
       skeletonShots: this.skeletonShots,
       goblinArrows: this.goblinArrows,
       clownGas: this.clownGas,
       knightMissiles: this.knightMissiles,
-      destructibles: this.destructibles,
+      destructibles: this.destruction.destructibles,
       trees: this.trees,
       water: this.water,
-      loot: this.loot,
+      loot: this.destruction.loot,
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
@@ -4484,7 +4244,7 @@ export class DungeonScene extends GameplayScene {
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
     this.doomsdayEscape.render(ctx, camX, camY);
-    this.floatingText.render(ctx, camX, camY);
+    this.combat.floatingText.render(ctx, camX, camY);
     // Puddles render before entities so players/mobs always appear on top of them
     for (const spider of this.grotesqueSpiders) {
       spider.renderSpitGroundTraps(ctx, camX, camY, TILE_SIZE);
@@ -4500,7 +4260,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
 
-    this.playerChat.renderBubble(ctx, camX, camY, this.active());
+    this.chat.renderBubble(ctx, camX, camY);
 
     this.renderPipeline.renderTowerBalconyOverlay(ctx, rc);
 
@@ -4527,7 +4287,7 @@ export class DungeonScene extends GameplayScene {
     // so a pet off the top of the screen puts it inside the HUD panel's health
     // bars. Everything else on screen — the minimap, the buttons, the pause menu
     // and the award overlays — is drawn after this point and covers it already.
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       this.mongoSystem.renderOffscreenMarker(
         ctx,
         camX,
@@ -4558,7 +4318,7 @@ export class DungeonScene extends GameplayScene {
     // whether to offer a Quest Journal row from whether this is null.
     this.syncJournalContext();
 
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       this.renderKnockedOutUI(ctx, camX, camY);
       this.renderStairwellRevealArrow(ctx, camX, camY);
       this.renderSpiderLabArrow(ctx, camX, camY);
@@ -4566,12 +4326,12 @@ export class DungeonScene extends GameplayScene {
       this.renderPinnedObjectiveArrow(ctx, camX, camY);
     }
 
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       this.miniMap.render(
         ctx,
         this.active(),
         this.inactive(),
-        this.mobGrid,
+        this.world.roster.grid,
         this.safeRoom.mordecaiPositions,
         this.collectQuestMarkers(),
         this.mongoSystem.mongo,
@@ -4600,7 +4360,7 @@ export class DungeonScene extends GameplayScene {
         ctx,
         camX,
         camY,
-        this.mobs,
+        this.world.roster.mobs,
         this.human,
         this.cat,
         mobileTopY,
@@ -4619,11 +4379,11 @@ export class DungeonScene extends GameplayScene {
           : skillTopY;
       mobileQuestTopY = skillBadgeBottom + MOBILE_UI_SPACING;
     } else {
-      this.bossRoom.renderUI(ctx, camX, camY, this.mobs, this.human, this.cat);
+      this.bossRoom.renderUI(ctx, camX, camY, this.world.roster.mobs, this.human, this.cat);
     }
     this.arena.render(ctx, this.active());
 
-    this.loot.render(ctx, camX, camY, this.active());
+    this.destruction.loot.render(ctx, camX, camY, this.active());
 
     const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
     if (showAchievUI) {
@@ -4631,32 +4391,32 @@ export class DungeonScene extends GameplayScene {
         ctx,
         this.miniMap,
         this.gameOver,
-        this.pauseMenu.isOpen,
+        this.menus.pauseMenu.isOpen,
       );
-      this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.pauseMenu.isOpen);
+      this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.menus.pauseMenu.isOpen);
     }
 
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
       const active = this.active();
-      const invPlayer = this.inventoryPlayer();
+      const invPlayer = this.menus.inventoryPlayer();
       const invName = invPlayer === this.human ? 'Human' : 'Cat';
-      this.inventoryPanel.abilityCooldowns.set('protective_shell', {
-        current: this.spells.shellCooldown,
-        max: this.spells.shellCooldownMax,
+      this.menus.inventoryPanel.abilityCooldowns.set('protective_shell', {
+        current: this.combat.spells.shellCooldown,
+        max: this.combat.spells.shellCooldownMax,
       });
-      this.inventoryPanel.abilityCooldowns.set('magic_missile', {
+      this.menus.inventoryPanel.abilityCooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
       });
-      this.inventoryPanel.abilityCooldowns.set('smush', {
+      this.menus.inventoryPanel.abilityCooldowns.set('smush', {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
       const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-      this.inventoryPanel.mmSize = mmSz;
+      this.menus.inventoryPanel.mmSize = mmSz;
 
       // Render persistent HUD buttons before panels so open menus and context menus paint over them.
-      UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.pauseMenu.isOpen);
+      UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.menus.pauseMenu.isOpen);
 
       if (this.hasQuestJournal) {
         const outstanding = this._trackerEntries.filter((entry) =>
@@ -4673,18 +4433,18 @@ export class DungeonScene extends GameplayScene {
           miniMap: this.miniMap,
           companion: this.companion,
           mongoSystem: this.mongoSystem,
-          inventoryPanel: this.inventoryPanel,
-          gearPanel: this.gearPanel,
+          inventoryPanel: this.menus.inventoryPanel,
+          gearPanel: this.menus.gearPanel,
           hideSwitchButton: this.tutorial !== null && !this.tutorial.showSwitchButton,
           hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
         });
       else if (this.tutorial === null || this.tutorial.showFollowerButton)
         UIRenderer.renderFollowerButton(ctx, this.touch, this.companion, this.human.isActive);
 
-      this.inventoryPanel.render(ctx, invPlayer.inventory, invName, invPlayer.coins);
+      this.menus.inventoryPanel.render(ctx, invPlayer.inventory, invName, invPlayer.coins);
       const activeName = this.human.isActive ? 'Human' : 'Cat';
-      this.gearPanel.render(ctx, active.inventory, activeName);
-      this.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
+      this.menus.gearPanel.render(ctx, active.inventory, activeName);
+      this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
       this.barriers.renderConstructUI(ctx);
       this.defendQuest.renderUI(ctx, mobileQuestTopY);
       this.circusQuest.renderUI(ctx);
@@ -4707,39 +4467,34 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gameOver) {
-      this.deathScreen.render(ctx);
+      this.combat.deathScreen.render(ctx);
     }
 
-    if (this.pauseMenu.isOpen) {
+    if (this.menus.pauseMenu.isOpen) {
       const inSafe = this.human.isProtected || this.cat.isProtected;
       const onOpenHuman =
         inSafe && this.humanAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('human', () => this.pauseMenu.close())
+          ? () => this.achievementUI.openBoxQueue('human', () => this.menus.pauseMenu.close())
           : undefined;
       const onOpenCat =
         inSafe && this.catAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('cat', () => this.pauseMenu.close())
+          ? () => this.achievementUI.openBoxQueue('cat', () => this.menus.pauseMenu.close())
           : undefined;
-      this.pauseMenu.render(
-        ctx,
-        this.human,
-        this.cat,
-        this.humanAchievements,
-        this.catAchievements,
-        inSafe,
-        onOpenHuman,
-        onOpenCat,
-        this.gameStats,
-        this.abilityManager,
-        this._mouseX,
-        this._mouseY,
-      );
+      this.menus.renderPauseMenu(ctx, {
+        humanAchievements: this.humanAchievements,
+        catAchievements: this.catAchievements,
+        gameStats: this.gameStats,
+        onOpenHumanBoxes: onOpenHuman,
+        onOpenCatBoxes: onOpenCat,
+        mouseX: this._mouseX,
+        mouseY: this._mouseY,
+      });
     }
 
     const anyMenuOpen =
-      this.pauseMenu.isOpen ||
-      this.inventoryPanel.isOpen ||
-      this.gearPanel.isOpen ||
+      this.menus.pauseMenu.isOpen ||
+      this.menus.inventoryPanel.isOpen ||
+      this.menus.gearPanel.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
       this.safeRoom.renderUI(
@@ -4798,9 +4553,7 @@ export class DungeonScene extends GameplayScene {
     // Whichever one is on top is then also the one that owns the keyboard's
     // focus ring and the one a click reaches — three orders that used to
     // disagree, which left the topmost dialog visible but un-activatable.
-    this.skillBookPrompt.render(ctx);
-    this.rewardGrantedDialog.render(ctx);
-    this.levelUpDialog.render(ctx);
+    this.menus.renderOverlays(ctx);
     this.achievementUI.renderOverlays(ctx);
     if (this.chestRewardDialog.isOpen) {
       this.chestRewardDialog.render(ctx);
@@ -4809,7 +4562,7 @@ export class DungeonScene extends GameplayScene {
     // Hidden behind the pause menu, like every other overlay above: the intro
     // card is drawn last and would otherwise cover the menu it was opened over,
     // leaving a screen of buttons nobody can see to aim at.
-    if (this.tutorial === null && !this.pauseMenu.isOpen) {
+    if (this.tutorial === null && !this.menus.pauseMenu.isOpen) {
       this.dungeonIntro.render(ctx);
 
       if (this.dungeonIntro.isActive && !this.introStarted) {
@@ -4843,9 +4596,9 @@ export class DungeonScene extends GameplayScene {
       });
     }
 
-    this.hotbarToast.render(ctx, this.inventoryPanel.hotbarBandHeight());
+    this.menus.hotbarToast.render(ctx, this.menus.inventoryPanel.hotbarBandHeight());
     aiAdapter.render(ctx);
-    this.playerChat.renderChatHint(ctx);
+    this.chat.renderHint(ctx);
     this.spiderQuest.renderUI(ctx, camX, camY);
 
     if (this.bossIntro.isActive) {
@@ -4855,17 +4608,24 @@ export class DungeonScene extends GameplayScene {
     if (
       platform.showEntityTooltip &&
       !this.gameOver &&
-      !this.pauseMenu.isOpen &&
+      !this.menus.pauseMenu.isOpen &&
       !this.achievementUI.isBlocking
     ) {
-      UIRenderer.renderEntityTooltip(ctx, camX, camY, this._mouseX, this._mouseY, this.mobGrid);
+      UIRenderer.renderEntityTooltip(
+        ctx,
+        camX,
+        camY,
+        this._mouseX,
+        this._mouseY,
+        this.world.roster.grid,
+      );
     }
 
     if (this.tutorial !== null) {
       const { x: tutCamX, y: tutCamY } = this.camera();
       const activePlayer = this.active();
       const pb = UIRenderer.pauseButtonRect(this.miniMap);
-      const invPlayer = this.inventoryPlayer();
+      const invPlayer = this.menus.inventoryPlayer();
       const bagSlots = invPlayer.inventory.bag.slots;
       const smushIdx = bagSlots.findIndex((s) => s?.id === 'smush_tome');
       const potionIdx = bagSlots.findIndex((s) => s?.id === 'health_potion');
@@ -4874,30 +4634,31 @@ export class DungeonScene extends GameplayScene {
       const HOTBAR_SLOT_COUNT = 8;
       const tutRenderCtx: TutorialRenderContext = {
         isPlayerInSafeRoom: this.safeRoom.isEntityInSafeRoom(activePlayer),
-        pauseMenuOpen: this.pauseMenu.isOpen,
-        pauseMenuTab: this.pauseMenu.isOpen ? this.pauseMenu.currentTab : null,
-        pauseMenuButtons: this.pauseMenu.renderedButtons,
-        inventoryPanelOpen: this.inventoryPanel.isOpen,
-        gearPanelOpen: this.gearPanel.isOpen,
+        pauseMenuOpen: this.menus.pauseMenu.isOpen,
+        pauseMenuTab: this.menus.pauseMenu.isOpen ? this.menus.pauseMenu.currentTab : null,
+        pauseMenuButtons: this.menus.pauseMenu.renderedButtons,
+        inventoryPanelOpen: this.menus.inventoryPanel.isOpen,
+        gearPanelOpen: this.menus.gearPanel.isOpen,
         pauseButtonRect: { x: pb.x, y: pb.y, w: pb.w, h: pb.h },
         bagItemRects: {
-          smush_tome: smushIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(smushIdx) ?? null) : null,
+          smush_tome:
+            smushIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(smushIdx) ?? null) : null,
           health_potion:
-            potionIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(potionIdx) ?? null) : null,
+            potionIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(potionIdx) ?? null) : null,
           enchanted_bigboi_boxers:
-            boxersIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(boxersIdx) ?? null) : null,
+            boxersIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(boxersIdx) ?? null) : null,
           magic_missile_tome:
-            missileIdx >= 0 ? (this.inventoryPanel.getBagSlotRect(missileIdx) ?? null) : null,
+            missileIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(missileIdx) ?? null) : null,
         },
         hotbarSlotRects: Array.from({ length: HOTBAR_SLOT_COUNT }, (_, i) =>
-          this.inventoryPanel.getHotbarSlotRect(i),
+          this.menus.inventoryPanel.getHotbarSlotRect(i),
         ),
-        isDragActive: this.inventoryPanel.interaction.isDragging,
+        isDragActive: this.menus.inventoryPanel.interaction.isDragging,
         isAchievementNotifActive: this.achievementUI.notifActive,
-        isContextMenuOpen: this.inventoryPanel.interaction.contextMenu !== null,
-        contextMenuOptionRects: this.inventoryPanel.contextMenuOptionRects,
-        isAbilityDialogShowing: this.levelUpDialog.isShowing,
-        isRewardGrantedDialogShowing: this.rewardGrantedDialog.isShowing,
+        isContextMenuOpen: this.menus.inventoryPanel.interaction.contextMenu !== null,
+        contextMenuOptionRects: this.menus.inventoryPanel.contextMenuOptionRects,
+        isAbilityDialogShowing: this.menus.levelUpDialog.isShowing,
+        isRewardGrantedDialogShowing: this.menus.rewardGrantedDialog.isShowing,
         followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
         followerMenuOpen: this.followerMenu.isOpen,
         followerMenuFollowMeRect: this.followerMenu.isOpen
@@ -4976,8 +4737,7 @@ export class DungeonScene extends GameplayScene {
     ctx.active = active;
     ctx.inactive = this.inactive();
     ctx.activeIsMoving = active.isMoving;
-    ctx.mobs = this.mobs;
-    ctx.mobGrid = this.mobGrid;
+    ctx.roster = this.world.roster;
     ctx.gameMap = this.gameMap;
     ctx.bossRoom = this.bossRoom;
     ctx.extraTargets = targets.length > 0 ? targets : undefined;
@@ -5045,7 +4805,7 @@ export class DungeonScene extends GameplayScene {
 
     this.safeRoom.update(ctx);
     this.bopca.update(ctx);
-    this.floatingText.update(ctx);
+    this.combat.floatingText.update(ctx);
     this.systemNotices.update(ctx);
     this.bossRoom.update(ctx);
     this.spiderQuest.applyRoomLock(this.human, this.cat);
@@ -5075,19 +4835,6 @@ export class DungeonScene extends GameplayScene {
       const sounds = ['wood_breaking_1', 'wood_breaking_2', 'wood_breaking_3'] as const;
       this.audio?.play(sounds[this.woodBreakSoundIdx % sounds.length]);
       this.woodBreakSoundIdx++;
-    }
-    const smashes = this.destructibles?.drainSmashes();
-    if (smashes !== undefined && smashes.wood > 0) {
-      // One cue per frame however many props gave way together: overlapping
-      // copies of the same sample stack into a blast rather than a smash. The
-      // index still advances once so back-to-back breaks alternate.
-      const smashSounds = ['wood_smashing_1', 'wood_smashing_2'] as const;
-      this.audio?.play(smashSounds[this.woodSmashSoundIdx % smashSounds.length]);
-      this.woodSmashSoundIdx++;
-    }
-    if (smashes !== undefined && smashes.iron > 0) {
-      // An iron brazier folding up is a clang, not splitting planks.
-      this.audio?.play('hammer_strike');
     }
     if ((this.trees?.drainFelled() ?? 0) > 0) {
       // Splitting timber is splitting timber, so a tree coming down reuses the
@@ -5145,10 +4892,8 @@ export class DungeonScene extends GameplayScene {
 
       if (this.tutorial.needsAutoCloseMenus) {
         this.tutorial.needsAutoCloseMenus = false;
-        this.pauseMenu.close();
-        this.inventoryPanel.isOpen = false;
-        this._inventoryOverridePlayer = null;
-        this.gearPanel.isOpen = false;
+        this.menus.pauseMenu.close();
+        this.menus.closePanels();
       }
     }
     this.companion.update(ctx);
@@ -5158,18 +4903,15 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('cat_missile_fire', { volume: 0.5 });
     }
 
-    this.human.updateAttack();
-    this.cat.updateAttack();
-    this.cat.updateMissiles(this.mobGrid);
+    this.combat.updatePlayerAttacks();
 
     this.bounty?.update(ctx);
-    this.spells.update(ctx);
-    for (const name of this.spells.takeFogResistedNames()) {
-      this.hotbarToast.show(`${name} sees you through the fog`);
+    this.combat.updateMobs(ctx);
+    for (const name of this.combat.spells.takeFogResistedNames()) {
+      this.menus.announce(`${name} sees you through the fog`);
     }
-    this.mobLoop.update(ctx);
 
-    playMobAudioCues(this.mobs, this.audio);
+    this.combat.drainMobAudioCues(this.audio);
 
     const activePlayer = this.active();
     const spiderWalkTriggerDist = TILE_SIZE * GROTESQUE_SPIDER_WALKING_TRIGGER_DISTANCE_TILES;
@@ -5207,28 +4949,14 @@ export class DungeonScene extends GameplayScene {
       this.audio?.stopSpiderWalkingLoop();
     }
 
-    const combatCtx: CombatContext = {
-      human: this.human,
-      cat: this.cat,
-      mobs: this.mobs,
-      mobGrid: this.mobGrid,
-      gameMap: this.gameMap,
-      safeRoom: this.safeRoom,
-      bus: this.bus,
-      abilityManager: this.abilityManager,
-      spells: this.spells,
-      destructibles: this.destructibles ?? undefined,
+    const outcome = this.combat.resolvePlayerAttacks({
+      destructibles: this.destruction.destructibles,
       trees: this.trees ?? undefined,
-      smushFx: this.smushFx,
-      hitLanded: false,
-      xpDiminishingTiers: this.levelDef.xpDiminishingTiers,
-    };
-    resolvePlayerAttacks(combatCtx);
-    this.cat.flushPendingSubMissiles();
+    });
 
-    if (combatCtx.hitLanded) {
+    if (outcome.hitLanded) {
       if (this.combatCooldownFrames <= 0) {
-        const hitMob = this.mobs.find((m) => m.isAlive && m.damageTakenBy.size > 0);
+        const hitMob = this.world.roster.mobs.find((m) => m.isAlive && m.damageTakenBy.size > 0);
         this.bus.emit('combatStarted', {
           attacker: this.human.isActive ? 'Human' : 'Cat',
           mobType: hitMob?.constructor.name ?? 'Unknown',
@@ -5239,7 +4967,7 @@ export class DungeonScene extends GameplayScene {
       this.combatCooldownFrames--;
     }
 
-    if (player.isMoving || combatCtx.hitLanded) {
+    if (player.isMoving || outcome.hitLanded) {
       this.playerIdleFrames = 0;
     } else {
       this.playerIdleFrames++;
@@ -5269,61 +4997,10 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.mongoSystem.checkHealth();
-    this.mercenarySystem.checkHealth(this.mobs, this.mobGrid);
-    resolveKills(combatCtx);
+    this.mercenarySystem.checkHealth(this.world.roster.mobs, this.world.roster.grid);
+    this.combat.resolveKills();
 
-    const touchXp = this.spells.drainTouchXp();
-    if (touchXp > 0) {
-      this.abilityManager.addXp('protective_shell', touchXp);
-    }
-
-    const blockXp = this.spells.drainBlockXp();
-    if (blockXp > 0) {
-      this.abilityManager.addXp('protective_shell', blockXp);
-    }
-
-    const shockwave = this.spells.drainPendingShockwave();
-    if (shockwave !== null) {
-      this.spells.addShockwaveRipple(shockwave.x, shockwave.y, shockwave.radiusPx);
-      // The extra tile is the grid's, not the blast's: it keys mobs by origin
-      // while the test below measures centres, so without the slack the wave
-      // comes up short on one side of itself.
-      const nearBlast = this.mobGrid.queryCircle(
-        shockwave.x,
-        shockwave.y,
-        shockwave.radiusPx + TILE_SIZE * SHOCKWAVE_RADIUS_TILE_MARGIN + TILE_SIZE,
-      );
-      for (const mob of nearBlast) {
-        if (!mob.isAlive) continue;
-        const dx = mob.x + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.x;
-        const dy = mob.y + TILE_SIZE * TILE_CENTER_OFFSET - shockwave.y;
-        if (Math.hypot(dx, dy) < shockwave.radiusPx + TILE_SIZE * SHOCKWAVE_RADIUS_TILE_MARGIN) {
-          if (!this.human.zeroDamage) mob.takeDamageFrom(SHOCKWAVE_DAMAGE, this.human, 'shell');
-          mob.applyStatus(makeElectrified(this.human));
-        }
-      }
-    }
-
-    const chainTargets = this.spells.drainChainLightningOrigins();
-    for (const target of chainTargets) {
-      const nearby = this.mobGrid.queryCircle(
-        target.x,
-        target.y,
-        TILE_SIZE * CHAIN_LIGHTNING_RANGE_TILES,
-      );
-      let hits = 0;
-      for (const mob of nearby) {
-        if (!mob.isAlive || hits >= CHAIN_LIGHTNING_MAX_TARGETS) continue;
-        if (!this.human.zeroDamage) mob.takeDamageFrom(CHAIN_LIGHTNING_DAMAGE, this.human, 'shell');
-        this.spells.addChainLightningBolt(
-          target.x,
-          target.y,
-          mob.x + TILE_SIZE * TILE_CENTER_OFFSET,
-          mob.y + TILE_SIZE * TILE_CENTER_OFFSET,
-        );
-        hits++;
-      }
-    }
+    this.combat.resolveSpellAftermath();
 
     this.mongoSystem.update(ctx);
     this.mercenarySystem.update(ctx);
@@ -5339,28 +5016,18 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.tutorial?.suppressCatRegen === true) {
-      this.playerTick.tickRegenHumanOnly(this.human);
-      this.playerTick.tickAutoPotion(this.human, this.cat);
+      this.combat.playerTick.tickRegenHumanOnly(this.human);
+      this.combat.playerTick.tickAutoPotion(this.human, this.cat);
     } else {
-      this.playerTick.update(ctx);
+      this.combat.playerTick.update(ctx);
     }
     this.difficultyTelemetry.update(ctx);
-    this.loot.update(ctx);
-    this.treasureChests.update(this.mobs);
-    const pickups = this.loot.drainPickups();
-    if (pickups.withCoins > 0) {
-      this.audio?.play('coin_pouch', { volume: COIN_PICKUP_VOLUME });
-    }
-    if (pickups.withItems > 0) {
-      this.audio?.playRandom(['pickup_1', 'pickup_2']);
-    }
+    this.treasureChests.update(this.world.roster.mobs);
     this.speechBubblePulse++;
-    this.gore.update();
-    this.bodyPartGore.update();
-    this.destructibles?.update();
+    this.combat.updatePostCombat(this.audio);
     this.lavaBalls.update(ctx);
     this.rockThrows.update(ctx);
-    // Summons first, so a skeleton raised this frame is already in `ctx.mobs`
+    // Summons first, so a skeleton raised this frame is already in `ctx.roster.mobs`
     // when the projectile system walks it. Neither ordering can strand a shot —
     // the drain reads the whole list every frame — but this one keeps a wave and
     // the bolts covering it on the same tick.
@@ -5370,13 +5037,8 @@ export class DungeonScene extends GameplayScene {
     this.clownGas.update(ctx);
     this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
-    this.dynamite.update(ctx);
-    this.smushFx.update();
-
-    if (this.dynamite.explosionSoundPending) {
-      this.dynamite.explosionSoundPending = false;
-      this.audio?.play('dynamite_explosion');
-    }
+    this.destruction.update(ctx);
+    this.destruction.drainAudioCues(this.audio);
 
     // The llama's own impact cue. It is drained here rather than from
     // `playMobAudioCues` because the ball outlives its llama, and a shot that
@@ -5436,13 +5098,6 @@ export class DungeonScene extends GameplayScene {
       ]);
     }
 
-    // `human_smush` plays when the ability fires, which is a third of a second
-    // before the foot lands; this is the boom the landing itself makes.
-    if (this.smushFx.blastSoundPending) {
-      this.smushFx.blastSoundPending = false;
-      this.audio?.play('dynamite_explosion');
-    }
-
     if (this.levelDef.hasCollapseTimer === true && this.levelTimerFrames > 0) {
       this.levelTimerFrames--;
     }
@@ -5479,7 +5134,7 @@ export class DungeonScene extends GameplayScene {
         this.levelDef.hasCollapseTimer === true,
         this.levelTimerFrames,
       );
-      this.deathScreen.activate(
+      this.combat.deathScreen.activate(
         pickDeathExplanation(deathCause),
         this.checkpoint !== null ? 'checkpoint' : 'floorRestart',
       );
@@ -5573,7 +5228,7 @@ export class DungeonScene extends GameplayScene {
     const humanItems = loot.items.filter((it) => forcedRecipientFor(it.id) === 'human');
     const catItems = loot.items.filter((it) => forcedRecipientFor(it.id) === 'cat');
     if (sharedItems.length > 0 || loot.coins > 0) {
-      this.loot.addLoot(
+      this.destruction.loot.addLoot(
         cx,
         cy,
         { coins: loot.coins, items: sharedItems },
@@ -5582,156 +5237,16 @@ export class DungeonScene extends GameplayScene {
       );
     }
     if (humanItems.length > 0) {
-      this.loot.addLoot(cx, cy, { coins: 0, items: humanItems }, this.human, isBossLoot);
+      this.destruction.loot.addLoot(
+        cx,
+        cy,
+        { coins: 0, items: humanItems },
+        this.human,
+        isBossLoot,
+      );
     }
     if (catItems.length > 0) {
-      this.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, isBossLoot);
-    }
-  }
-
-  /** Returns the player whose inventory the panel should display/interact with. */
-  private inventoryPlayer(): HumanPlayer | CatPlayer {
-    return this._inventoryOverridePlayer ?? this.active();
-  }
-
-  private skillBookFlowHost(): SkillBookFlowHost {
-    return {
-      audio: this.audio,
-      announce: (message) => this.hotbarToast.show(message),
-      prompt: this.skillBookPrompt,
-      showReward: (reward) => this.bus.emit('rewardGranted', { rewards: [reward] }),
-      showLevelUp: (entry) => {
-        this.cancelInventoryDragForOverlay();
-        this.levelUpDialog.enqueue(entry);
-      },
-      // Through toggle() rather than the flag, so the panel's own teardown runs:
-      // setting isOpen directly leaves returnToMenuCallback and the companion
-      // inventory override behind, and every later hotbar drag would then act on
-      // the companion.
-      closeInventory: () => {
-        if (this.inventoryPanel.isOpen) this.inventoryPanel.toggle();
-      },
-    };
-  }
-
-  /**
-   * A skill book asked for, and who asked. Book and reader are held together in
-   * one field because they must agree: a hotbar key acts on the active crawler
-   * while a bag click acts on whoever's bag is on screen, and those differ while
-   * the companion's inventory is being managed. Stored separately from the
-   * panel's own request queue so the pair can never half-update.
-   */
-  private _queuedSkillBookRead: {
-    request: SkillBookReadRequest;
-    reader: HumanPlayer | CatPlayer;
-  } | null = null;
-  /** The crawler the open prompt will charge, pinned when it opened. */
-  private _skillBookReader: HumanPlayer | CatPlayer | null = null;
-
-  private queueSkillBookRead(request: SkillBookReadRequest, reader: HumanPlayer | CatPlayer): void {
-    this._queuedSkillBookRead = { request, reader };
-  }
-
-  /**
-   * Drops any drag the bag has in flight, for when a pausing overlay takes the
-   * screen. The overlays' pointer guard blocks the mouse-up that would otherwise
-   * resolve the drag, so without this the ghost item survives the overlay and
-   * the *next* mouse-up drops it into whatever slot the cursor is over.
-   */
-  private cancelInventoryDragForOverlay(): void {
-    this.inventoryPanel.interaction.cancelDrag();
-  }
-
-  /** Turns a queued skill-book click into the read confirmation. */
-  private openPendingSkillBookPrompt(): void {
-    const fromPanel = this.inventoryPanel.interaction.pendingSkillBookRead;
-    if (fromPanel !== null) {
-      this.inventoryPanel.interaction.pendingSkillBookRead = null;
-      this.queueSkillBookRead(fromPanel, this.inventoryPlayer());
-    }
-
-    const queued = this._queuedSkillBookRead;
-    if (queued === null) return;
-    this._queuedSkillBookRead = null;
-    // The click that queued this also left a drag half-started on the slot
-    // underneath the prompt about to cover it.
-    this.cancelInventoryDragForOverlay();
-    this.clearInvLongPress();
-
-    promptSkillBookRead(this.skillBookFlowHost(), queued.reader, queued.request);
-    // A refused read never opens the prompt, so there is nothing to pin.
-    this._skillBookReader = this.skillBookPrompt.isOpen ? queued.reader : null;
-  }
-
-  private resolvePendingInventoryAction(active: HumanPlayer | CatPlayer): void {
-    const bottle = this.inventoryPanel.interaction.pendingDrinkSlot;
-    if (bottle !== null) {
-      this.inventoryPanel.interaction.pendingDrinkSlot = null;
-      this.cancelInventoryDragForOverlay();
-      this.clearInvLongPress();
-      // Only a drink that landed sends the player back to the fight. A refusal
-      // has sounded and changed nothing, so the bag stays up to be acted on
-      // again. Closed through toggle() rather than the flag so the panel's own
-      // teardown runs — see `skillBookFlowHost`.
-      const drank = this.drinkPotion(active, bottle.id, {
-        source: bottle.source,
-        slotIdx: bottle.slotIdx,
-      });
-      if (drank && this.inventoryPanel.isOpen) {
-        this.inventoryPanel.toggle();
-      }
-    }
-
-    if (this.inventoryPanel.interaction.pendingEquipSlot !== null) {
-      const slotIdx = this.inventoryPanel.interaction.pendingEquipSlot;
-      const source = this.inventoryPanel.interaction.pendingEquipSource;
-      this.inventoryPanel.interaction.pendingEquipSlot = null;
-      this.inventoryPanel.interaction.pendingEquipSource = null;
-      const item =
-        source === 'hotbar'
-          ? active.inventory.actionBar.slots[slotIdx]
-          : active.inventory.bag.slots[slotIdx];
-      if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-        if (source === 'hotbar') {
-          active.inventory.equipHotbarSlot(slotIdx);
-        } else {
-          active.inventory.equip(slotIdx);
-        }
-        active.onEquipmentChanged();
-      }
-    }
-
-    if (this.inventoryPanel.interaction.pendingUnequipSlot !== null) {
-      const slotIdx = this.inventoryPanel.interaction.pendingUnequipSlot;
-      const source = this.inventoryPanel.interaction.pendingUnequipSource;
-      this.inventoryPanel.interaction.pendingUnequipSlot = null;
-      this.inventoryPanel.interaction.pendingUnequipSource = null;
-      const item =
-        source === 'hotbar'
-          ? active.inventory.actionBar.slots[slotIdx]
-          : active.inventory.bag.slots[slotIdx];
-      if (item?.type === 'armor' && item.equipSlot && item.equipSubSlot) {
-        active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
-        active.onEquipmentChanged();
-      }
-    }
-
-    if (this.inventoryPanel.interaction.pendingDropItem !== null) {
-      const { id, quantity } = this.inventoryPanel.interaction.pendingDropItem;
-      this.inventoryPanel.interaction.pendingDropItem = null;
-      if (active.inventory.hasEquipped(id)) {
-        const item =
-          active.inventory.bag.slots.find((s) => s?.id === id) ??
-          active.inventory.actionBar.slots.find((s) => s?.id === id) ??
-          null;
-        if (item?.equipSlot && item.equipSubSlot) {
-          active.inventory.unequip(`${item.equipSlot}:${item.equipSubSlot}`);
-          active.onEquipmentChanged();
-        }
-      }
-      active.inventory.removeItems(id, quantity);
-      this.loot.addPlayerDrop(active.x, active.y, id, quantity, active);
-      this.audio?.play('menu_drop_item');
+      this.destruction.loot.addLoot(cx, cy, { coins: 0, items: catItems }, this.cat, isBossLoot);
     }
   }
 
@@ -5739,24 +5254,21 @@ export class DungeonScene extends GameplayScene {
     return {
       getHuman: () => this.human,
       getCat: () => this.cat,
-      getMobs: () => this.mobs,
+      getMobs: () => this.world.roster.mobs,
       getGameMap: () => this.gameMap,
       getLevelId: () => this.levelDef.id,
-      spawnMob: (mob) => {
-        this.mobs.push(mob);
-        this.mobGrid.insert(mob);
-      },
+      spawnMob: (mob) => this.world.roster.add(mob),
       isBossFightActive: () => this.bossRoom.anyLocked,
       isPaused: () =>
         this.gameOver ||
-        this.pauseMenu.isOpen ||
+        this.menus.pauseMenu.isOpen ||
         this.stairwell.menuOpen ||
         (this.building?.menuOpen ?? false) ||
         this.defendQuest.isDialogOpen ||
         this.circusQuest.isDialogOpen ||
         this.murderQuest.isDialogOpen ||
         this.citizenDialog?.isOpen === true ||
-        this.playerChat.isOpen,
+        this.chat.isOpen,
     };
   }
 
@@ -5788,7 +5300,7 @@ export class DungeonScene extends GameplayScene {
     const camY = targetY + TILE_SIZE / 2 - viewportHeight() / 2;
 
     const shakeOffset = this.spiderQuest.cameraOffset;
-    const smushShake = this.smushFx.cameraOffset;
+    const smushShake = this.combat.smushFx.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
@@ -5813,9 +5325,9 @@ export class DungeonScene extends GameplayScene {
         this.noticeBoard?.isOpen === true ||
         this.marketPanel?.isOpen === true ||
         this.fortuneTeller?.isOpen === true ||
-        this.skillBookPrompt.isOpen ||
-        this.levelUpDialog.isShowing ||
-        this.rewardGrantedDialog.isShowing
+        this.menus.skillBookPrompt.isOpen ||
+        this.menus.levelUpDialog.isShowing ||
+        this.menus.rewardGrantedDialog.isShowing
       ) {
         this.handleClick(x, y, e.timeStamp);
         continue;
@@ -5832,16 +5344,13 @@ export class DungeonScene extends GameplayScene {
       if (
         platform.isMobile &&
         !this.gameOver &&
-        !this.pauseMenu.isOpen &&
-        (this.human.unspentPoints > 0 || this.cat.unspentPoints > 0) &&
-        pointInRect(x, y, this._hudSkillBannerRect)
+        !this.menus.pauseMenu.isOpen &&
+        this.menus.tryOpenSpendScreen(x, y, this._hudSkillBannerRect)
       ) {
-        this.pauseMenu.openToSpend();
-        this.audio?.play('menu_open');
         continue;
       }
 
-      if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
         const mm = this.touch.miniMapRect;
         if (pointInRect(x, y, mm)) {
           if (!this.miniMap.isExpanded) {
@@ -5859,12 +5368,12 @@ export class DungeonScene extends GameplayScene {
         }
       }
 
-      if (platform.isMobile && !this.gameOver && !this.pauseMenu.isOpen) {
+      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
         const bb = this.touch.bagBtnRect;
         if (pointInRect(x, y, bb)) {
-          this.inventoryPanel.toggle();
-          if (this.inventoryPanel.isOpen) {
-            this.gearPanel.isOpen = false;
+          this.menus.inventoryPanel.toggle();
+          if (this.menus.inventoryPanel.isOpen) {
+            this.menus.gearPanel.isOpen = false;
           }
           continue;
         }
@@ -5876,7 +5385,7 @@ export class DungeonScene extends GameplayScene {
       if (
         platform.isMobile &&
         !this.gameOver &&
-        !this.pauseMenu.isOpen &&
+        !this.menus.pauseMenu.isOpen &&
         this.journalButtonRect !== null &&
         pointInRect(x, y, this.journalButtonRect)
       ) {
@@ -5888,7 +5397,7 @@ export class DungeonScene extends GameplayScene {
       if (platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
         const mb = this.touch.summonBtnRect;
         if (pointInRect(x, y, mb)) {
-          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
+          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.toggleMongoSummon();
           continue;
         }
@@ -5903,20 +5412,20 @@ export class DungeonScene extends GameplayScene {
       if (platform.isMobile) {
         const sb = this.touch.switchBtnRect;
         if (pointInRect(x, y, sb)) {
-          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
+          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerSwitchCharacter();
           continue;
         }
         const fb = this.touch.followBtnRect;
         if (pointInRect(x, y, fb)) {
-          if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
+          if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver)
             this.triggerCompanionFollow();
           continue;
         }
       }
 
-      if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
-        const hi = this.inventoryPanel.getHotbarTappedIndex(x, y);
+      if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+        const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
         if (hi >= 0) {
           this.touch.inventoryDragTouchId = touch.identifier;
           this.handleMouseDown(x, y);
@@ -5925,7 +5434,7 @@ export class DungeonScene extends GameplayScene {
           this.touch.longPressFired = false;
           this.touch.longPressTimer = setTimeout(() => {
             this.touch.longPressFired = true;
-            this.inventoryPanel.cancelDrag();
+            this.menus.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
           }, LONGPRESS_TIMEOUT_MS);
           continue;
@@ -5936,7 +5445,7 @@ export class DungeonScene extends GameplayScene {
         this.achievementUI.isBlocking ||
         this.stairwell.menuOpen ||
         this.gameOver ||
-        this.pauseMenu.isOpen ||
+        this.menus.pauseMenu.isOpen ||
         this.safeRoom.mordecaiDialogOpen ||
         this.bopca.isDialogOpen ||
         this.spiderQuest.isDialogOpen ||
@@ -5948,11 +5457,11 @@ export class DungeonScene extends GameplayScene {
         this.tutorial?.showTutorialMordecaiDialog === true ||
         this.tutorial?.showMordecaiReminderDialog === true
       ) {
-        if (this.pauseMenu.isOpen) {
+        if (this.menus.pauseMenu.isOpen) {
           if (this.touch.pauseScrollTouchId === null) {
             this.touch.pauseScrollTouchId = touch.identifier;
             this.touch.pauseScrollTapStart = { x, y, time: Date.now() };
-            this.pauseMenu.touchScrollStart(y);
+            this.menus.pauseMenu.touchScrollStart(y);
           }
         } else {
           this.handleClick(x, y, e.timeStamp);
@@ -5961,16 +5470,16 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (this.human.isActive) {
-        const dynIdx = this.inventoryPanel.getHotbarTappedIndex(x, y);
+        const dynIdx = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
         if (dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite') {
-          this.dynamite.beginCharge(dynIdx);
+          this.destruction.dynamite.beginCharge(dynIdx);
           this.touch.dynamiteTouchId = touch.identifier;
           continue;
         }
       }
 
-      if (this.inventoryPanel.isOpen) {
-        if (this.inventoryPanel.hitsPanel(x, y)) {
+      if (this.menus.inventoryPanel.isOpen) {
+        if (this.menus.inventoryPanel.hitsPanel(x, y)) {
           this.handleMouseDown(x, y);
           this.touch.inventoryDragTouchId ??= touch.identifier;
           this.clearInvLongPress();
@@ -5978,7 +5487,7 @@ export class DungeonScene extends GameplayScene {
           this.touch.longPressFired = false;
           this.touch.longPressTimer = setTimeout(() => {
             this.touch.longPressFired = true;
-            this.inventoryPanel.cancelDrag();
+            this.menus.inventoryPanel.cancelDrag();
             this.handleContextMenu(x, y);
           }, LONGPRESS_TIMEOUT_MS);
           continue;
@@ -5989,7 +5498,7 @@ export class DungeonScene extends GameplayScene {
         this.touch.moveTouchId = touch.identifier;
         this.touch.moveTarget = { x, y };
         this.touch.tapStart = { x, y, time: Date.now() };
-        this.pauseMenu.touchScrollStart(y);
+        this.menus.pauseMenu.touchScrollStart(y);
       }
     }
   }
@@ -6021,11 +5530,11 @@ export class DungeonScene extends GameplayScene {
 
       if (touch.identifier === this.touch.moveTouchId) {
         this.touch.moveTarget = { x, y };
-        this.pauseMenu.touchScrollMove(y);
+        this.menus.pauseMenu.touchScrollMove(y);
       }
 
       if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.pauseMenu.touchScrollMove(y);
+        this.menus.pauseMenu.touchScrollMove(y);
       }
     }
   }
@@ -6043,7 +5552,7 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.pauseMenu.touchScrollEnd();
+        this.menus.pauseMenu.touchScrollEnd();
         this.touch.pauseScrollTouchId = null;
         const tapStart = this.touch.pauseScrollTapStart;
         this.touch.pauseScrollTapStart = null;
@@ -6058,8 +5567,13 @@ export class DungeonScene extends GameplayScene {
       }
 
       if (touch.identifier === this.touch.dynamiteTouchId) {
-        const wasCharging = this.dynamite.isCharging;
-        this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+        const wasCharging = this.destruction.dynamite.isCharging;
+        this.destruction.dynamite.release(
+          this.human,
+          this.cat,
+          this.world.roster.mobs,
+          this.world.roster.grid,
+        );
         if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
         this.touch.dynamiteTouchId = null;
         continue;
@@ -6073,21 +5587,21 @@ export class DungeonScene extends GameplayScene {
         this.clearInvLongPress();
         if (!longPressFired) {
           this.handleMouseUp(x, y);
-          const hi = this.inventoryPanel.getHotbarTappedIndex(x, y);
+          const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
           if (
             hi >= 0 &&
             wasTap &&
             // A menu open over the bar owns the tap: it is drawn on top of the
             // slots, so activating the slot beneath would swallow the selection.
-            this.inventoryPanel.interaction.contextMenu === null &&
+            this.menus.inventoryPanel.interaction.contextMenu === null &&
             // Likewise a pausing overlay, which a second finger can raise while
             // this one is still down.
             !this.isOverlayBlockingPointer &&
-            !this.pauseMenu.isOpen &&
+            !this.menus.pauseMenu.isOpen &&
             !this.safeRoom.isSleeping &&
             !this.gameOver
           ) {
-            this.triggerHotbarActivation(hi);
+            activateHotbarSlot(this.hotbarHost(), hi);
           } else if (wasTap) {
             this.handleClick(x, y, e.timeStamp);
           }
@@ -6102,9 +5616,9 @@ export class DungeonScene extends GameplayScene {
           const moved = Math.hypot(x - this.touch.tapStart.x, y - this.touch.tapStart.y);
           if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
             if (
-              this.dynamite.isCharging &&
+              this.destruction.dynamite.isCharging &&
               this.human.isActive &&
-              !this.pauseMenu.isOpen &&
+              !this.menus.pauseMenu.isOpen &&
               !this.safeRoom.isSleeping &&
               !this.gameOver
             ) {
@@ -6116,11 +5630,16 @@ export class DungeonScene extends GameplayScene {
                 this.human.facingX = ddx / dist;
                 this.human.facingY = ddy / dist;
               }
-              this.dynamite.release(this.human, this.cat, this.mobs, this.mobGrid);
+              this.destruction.dynamite.release(
+                this.human,
+                this.cat,
+                this.world.roster.mobs,
+                this.world.roster.grid,
+              );
               this.bus.emit('dynamiteUsed', { player: 'Human' });
             } else {
               this.handleClick(x, y, e.timeStamp);
-              if (!this.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
+              if (!this.menus.pauseMenu.isOpen && !this.safeRoom.isSleeping && !this.gameOver) {
                 const cam = this.camera();
                 const grateHandled = this.defendQuest.tryMobileTapOnGrate(
                   x,
@@ -6136,7 +5655,7 @@ export class DungeonScene extends GameplayScene {
             }
           }
         }
-        this.pauseMenu.touchScrollEnd();
+        this.menus.pauseMenu.touchScrollEnd();
         this.touch.moveTouchId = null;
         this.touch.moveTarget = null;
         this.touch.tapStart = null;
@@ -6218,7 +5737,7 @@ export class DungeonScene extends GameplayScene {
 
     const listener = this.pm.active();
     let mobSplashed = false;
-    for (const mob of this.mobs) {
+    for (const mob of this.world.roster.mobs) {
       if (!mob.isAlive) continue;
       const entered = water.updateWader(mob, mob.x + centre, mob.y + centre, mob.isWading());
       // At most one voice a frame however many wade in together: a camp's worth

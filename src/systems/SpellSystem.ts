@@ -189,8 +189,21 @@ export class SpellSystem implements GameSystem {
    * that killed the player doesn't carry into the new frame.
    */
   resetForCheckpoint(): void {
-    this.activeShell = null;
+    this.dropWorldEffects();
     this._shellCooldown = 0;
+  }
+
+  /**
+   * Clears everything this system has standing in the world, and nothing the
+   * party has *spent*.
+   *
+   * Separate from {@link resetForCheckpoint} because leaving a room is not the
+   * same as rewinding time: a shell has to stop existing when the map it was
+   * cast on stops being drawn, but refunding its cooldown would let a player
+   * re-cast it by stepping through a door and back.
+   */
+  dropWorldEffects(): void {
+    this.activeShell = null;
     this.activeFogs = [];
     this.shellOwner = null;
     this.catMiniShell = null;
@@ -376,7 +389,8 @@ export class SpellSystem implements GameSystem {
 
   /** Called every gameplay frame. Ticks cooldowns, pushes shell mobs, marks confused mobs. */
   update(ctx: SystemContext): void {
-    const { mobGrid, cat, human } = ctx;
+    const { cat, human } = ctx;
+    const mobGrid = ctx.roster.grid;
 
     this._shellCooldown = human.tickCooldown(this._shellCooldown);
 

@@ -240,10 +240,31 @@ export class AchievementManager {
   private nextBoxId = 1;
   /** Rolling log of recent significant events (capped at 20, newest first). */
   private recentEvents: RecentEvent[] = [];
+  private menuUnseen = 0;
 
-  /** Number of achievements unlocked since the last clearUnread() call. */
+  /**
+   * Achievements awaiting the in-world notification overlay. Drained only by
+   * clicking through that overlay, so it is not a badge the pause menu can
+   * dismiss — `menuUnseenCount` is.
+   */
   get unreadCount(): number {
     return this.pendingNotifications.length;
+  }
+
+  /**
+   * Achievements unlocked since the player last opened the Achievements tab.
+   * Deliberately independent of `unreadCount`: the pause-menu badge has to be
+   * dismissable by reading the tab, whereas the overlay queue is only satisfied
+   * by actually watching the awards, and the loot boxes behind them can only be
+   * opened in a safe room.
+   */
+  get menuUnseenCount(): number {
+    return this.menuUnseen;
+  }
+
+  /** Zero the pause-menu badge (call when the player opens the Achievements tab). */
+  markMenuSeen(): void {
+    this.menuUnseen = 0;
   }
 
   /**
@@ -255,6 +276,7 @@ export class AchievementManager {
     this.unlocked.add(id);
     const def = ACHIEVEMENT_DEFS[id];
     this.pendingNotifications.push(def);
+    this.menuUnseen++;
     if (def.lootBox) {
       this.pendingBoxes.push({
         id: this.nextBoxId++,
@@ -280,11 +302,6 @@ export class AchievementManager {
       label: e.label,
       secondsAgo: Math.floor((now - e.timestamp) / EVENT_TIMESTAMP_MILLISECONDS_DIVISOR),
     }));
-  }
-
-  /** Clear all unread notifications (call when the player views the achievements tab). */
-  clearUnread(): void {
-    this.pendingNotifications.length = 0;
   }
 
   isUnlocked(id: AchievementId): boolean {
@@ -333,6 +350,7 @@ export class AchievementManager {
     copy.pendingBoxes.push(...this.pendingBoxes.map((b) => ({ ...b })));
     copy.nextBoxId = this.nextBoxId;
     copy.recentEvents = this.recentEvents.map((e) => ({ ...e }));
+    copy.menuUnseen = this.menuUnseen;
     return copy;
   }
 
@@ -349,5 +367,6 @@ export class AchievementManager {
     this.pendingBoxes.push(...other.pendingBoxes.map((b) => ({ ...b })));
     this.nextBoxId = other.nextBoxId;
     this.recentEvents = other.recentEvents.map((e) => ({ ...e }));
+    this.menuUnseen = other.menuUnseen;
   }
 }

@@ -28,13 +28,32 @@ export interface TownMemory {
   residentTalks: Map<ResidentId, number>;
   /** Poultices left in Apothecary Fen's current batch. */
   poulticesLeft: number;
+  /**
+   * Rooms whose hostile occupants have already been dealt with, keyed by
+   * `<building name>#<floor>`.
+   *
+   * The third thing that needs this record. An interior map is regenerated on
+   * every entry, so a room that spawns its hostiles from its own layout would
+   * restock them the moment the player stepped back through the door — turning
+   * a fight into a farm.
+   */
+  clearedRooms: Set<string>;
 }
 
 /** How many poultices Fen has made up, and does not remake while you wait. */
 export const APOTHECARY_BATCH_SIZE = 3;
 
 export function createTownMemory(): TownMemory {
-  return { residentTalks: new Map(), poulticesLeft: APOTHECARY_BATCH_SIZE };
+  return {
+    residentTalks: new Map(),
+    poulticesLeft: APOTHECARY_BATCH_SIZE,
+    clearedRooms: new Set(),
+  };
+}
+
+/** The key a room is remembered under. A tower's storeys are separate rooms. */
+export function roomKey(buildingName: string, floor: number): string {
+  return `${buildingName}#${floor}`;
 }
 
 /** How many conversations this resident has already had with the player. */
@@ -50,6 +69,7 @@ export function noteResidentTalk(memory: TownMemory, id: ResidentId): void {
 export interface TownMemoryCheckpoint {
   residentTalks: ReadonlyArray<readonly [ResidentId, number]>;
   poulticesLeft: number;
+  clearedRooms: ReadonlyArray<string>;
 }
 
 /**
@@ -61,6 +81,7 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
   return {
     residentTalks: [...memory.residentTalks],
     poulticesLeft: memory.poulticesLeft,
+    clearedRooms: [...memory.clearedRooms],
   };
 }
 
@@ -71,4 +92,5 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
 export function restoreTownMemory(memory: TownMemory, snapshot: TownMemoryCheckpoint): void {
   memory.residentTalks = new Map(snapshot.residentTalks);
   memory.poulticesLeft = snapshot.poulticesLeft;
+  memory.clearedRooms = new Set(snapshot.clearedRooms);
 }

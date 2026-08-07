@@ -150,7 +150,7 @@ export class RockThrowSystem implements GameSystem {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectThrows(ctx.mobs);
+    this.collectThrows(ctx.roster.mobs);
     this.advanceRocks(ctx);
     this.advanceBursts();
   }

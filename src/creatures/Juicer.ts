@@ -90,6 +90,10 @@ export class Juicer extends Mob {
 
   /** Active thrown projectile (null if not in flight). */
   private activeThrow: Projectile | null = null;
+
+  override clearAirborneAttacks(): void {
+    this.activeThrow = null;
+  }
   throwAnim = 0; // 0–1 for sprite animation
 
   // Taunts

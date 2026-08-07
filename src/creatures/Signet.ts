@@ -141,6 +141,10 @@ export class Signet extends Mob {
   private isAggro = false;
   private fireballs: SignetFireball[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.fireballs = [];
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number, addMob: (mob: Mob) => void) {
     super(tileX, tileY, tileSize, SIGNET_HP, SIGNET_SPEED);
     this.addMob = addMob;

@@ -205,6 +205,11 @@ export class GrotesqueSpider extends Mob {
   private activeProjectile: SpitProjectile | null = null;
   private groundTraps: SpitTrap[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.groundTraps = [];
+    this.activeProjectile = null;
+  }
+
   private roamTarget: { tx: number; ty: number } | null = null;
   private roamTimer = 0;
 

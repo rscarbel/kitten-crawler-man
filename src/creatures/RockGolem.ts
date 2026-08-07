@@ -131,6 +131,10 @@ export class RockGolem extends Mob {
    * be deleted in mid-air along with it.
    */
   private pendingThrows: GolemRockThrow[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.pendingThrows = [];
+  }
   private isAggro = false;
 
   protected readonly aggroRangePx: number;

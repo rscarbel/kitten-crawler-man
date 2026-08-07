@@ -200,6 +200,11 @@ export class SkeletonLord extends Mob {
   private pendingShots: SkeletonShot[] = [];
   private pendingSummons: SkeletonSummonRequest[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.pendingShots = [];
+    this.pendingSummons = [];
+  }
+
   private readonly aggroRangePx: number;
   private readonly preferredMinPx: number;
   private readonly preferredMaxPx: number;

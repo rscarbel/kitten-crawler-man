@@ -271,6 +271,11 @@ export class BodyPartGoreSystem implements GameSystem {
 
   constructor(private readonly map: GameMap) {}
 
+  /** Pieces in flight, tumbling and settled — how many body parts this system is holding. */
+  get liveCount(): number {
+    return this.flying.length + this.tumbling.length + this.settled.length;
+  }
+
   /**
    * Drops in-flight/tumbling parts from the death frame. Settled parts are left
    * alone — they're floor history, same as a smashed prop, not combat state.

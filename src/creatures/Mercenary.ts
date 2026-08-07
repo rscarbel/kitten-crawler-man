@@ -133,6 +133,10 @@ export class Mercenary extends Mob {
    * every frame. A merc that dies mid-throw must not take the boulder with it.
    */
   private pendingThrows: GolemRockThrow[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.pendingThrows = [];
+  }
   private readonly throwMinRangePx: number;
   private readonly throwMaxRangePx: number;
 

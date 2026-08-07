@@ -116,6 +116,10 @@ export class GoblinArcher extends Mob {
    */
   private pendingShots: GoblinArrowShot[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.pendingShots = [];
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, ARCHER_HP, ARCHER_SPEED);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;

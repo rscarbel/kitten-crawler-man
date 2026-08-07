@@ -70,13 +70,13 @@ export class SkeletonSummonSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const lords = ctx.mobs.filter(
+    const lords = ctx.roster.mobs.filter(
       (mob): mob is SkeletonLord => mob instanceof SkeletonLord && mob.isAlive,
     );
     if (lords.length === 0) return;
 
     const escortRadiusPx = TILE_SIZE * ESCORT_RADIUS_TILES;
-    const skeletons = ctx.mobs.filter(
+    const skeletons = ctx.roster.mobs.filter(
       (mob): mob is RisingSkeleton => mob instanceof RisingSkeleton && mob.isAlive,
     );
 

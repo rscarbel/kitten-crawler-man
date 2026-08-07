@@ -108,7 +108,8 @@ export function renderGameTab(
   });
   bY += spacing;
 
-  const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
+  const unread =
+    (humanAchievements?.menuUnseenCount ?? 0) + (catAchievements?.menuUnseenCount ?? 0);
   addButton(ctx, buttons, {
     x: bX,
     y: bY,

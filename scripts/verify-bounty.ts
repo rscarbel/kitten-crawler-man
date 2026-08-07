@@ -20,7 +20,7 @@
  */
 import { generateOverworld } from '../src/map/OverworldGenerator';
 import { GameMap } from '../src/map/GameMap';
-import { MOB_GRID_CELL_SIZE, TILE_SIZE } from '../src/core/constants';
+import { TILE_SIZE } from '../src/core/constants';
 import {
   advanceBountyType,
   createBountyProgress,
@@ -33,9 +33,10 @@ import { BountySystem, bountyBossLevel, bountyPayoutCoins } from '../src/systems
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { EventBus } from '../src/core/EventBus';
+import { SpellSystem } from '../src/systems/SpellSystem';
+import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
-import { SpatialGrid } from '../src/core/SpatialGrid';
 
 const MAP_SIZE = 220;
 const MAPS_TO_GENERATE = 5;
@@ -304,8 +305,7 @@ function makeContext(human: HumanPlayer, cat: CatPlayer, map: GameMap): SystemCo
     active: human,
     inactive: cat,
     activeIsMoving: false,
-    mobs: [],
-    mobGrid: new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE),
+    roster: new MobRoster(map, new SpellSystem()),
     gameMap: map,
   };
 }

@@ -145,7 +145,7 @@ export class BarrierSystem implements GameSystem {
 
     if (!this.pending && this.barriers.length === 0) return;
 
-    const { mobGrid } = ctx;
+    const { grid: mobGrid } = ctx.roster;
 
     // Tick pending construction
     if (this.pending) {

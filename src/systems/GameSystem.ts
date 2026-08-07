@@ -10,10 +10,9 @@
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { Mob } from '../creatures/Mob';
-import type { SpatialGrid } from '../core/SpatialGrid';
 import type { GameMap } from '../map/GameMap';
 import type { BossRoomSystem } from './BossRoomSystem';
+import type { MobRoster } from './kits/SceneWorld';
 
 /** Per-frame shared state passed to every system's update(). */
 export interface SystemContext {
@@ -22,8 +21,12 @@ export interface SystemContext {
   active: HumanPlayer | CatPlayer;
   inactive: HumanPlayer | CatPlayer;
   activeIsMoving: boolean;
-  mobs: Mob[];
-  mobGrid: SpatialGrid<Mob>;
+  /**
+   * The scene's population — the list, the spatial index, and the one spawn path
+   * that keeps them in step. A system that adds a mob mid-frame calls
+   * `roster.add`; anything else reads `roster.mobs` / `roster.grid`.
+   */
+  roster: MobRoster;
   gameMap: GameMap;
   /** Boss room system reference — used by MobUpdateLoop for clamping. Absent in scenes without boss rooms (e.g. building interiors). */
   bossRoom?: BossRoomSystem;

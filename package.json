@@ -28,6 +28,7 @@
     "verify:assets": "tsx scripts/verify-assets.ts",
     "verify:interiors": "tsx scripts/verify-interiors.ts",
     "verify:town": "tsx scripts/verify-town-guidance.ts",
+    "verify:kits": "tsx scripts/verify-kits.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
     "gen:town-art": "npm run gen:townscape && npm run gen:over-city",

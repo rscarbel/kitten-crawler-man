@@ -15,14 +15,28 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 ## Systems
 
-~30 plain classes in `src/systems/` implementing `GameSystem` (`src/systems/GameSystem.ts`): optional `update(ctx: SystemContext)` + `dispose()`. `SystemContext` carries per-frame shared state (`human, cat, active, mobs, mobGrid, gameMap, bossRoom, ...`).
+~30 plain classes in `src/systems/` implementing `GameSystem` (`src/systems/GameSystem.ts`): optional `update(ctx: SystemContext)` + `dispose()`. `SystemContext` carries per-frame shared state (`human, cat, active, roster, gameMap, bossRoom, ...`), where `roster` is the scene's `MobRoster` — `roster.mobs`, `roster.grid`, and `roster.add(mob)` as the one spawn path.
 
 - Systems are fields on `DungeonScene`, constructed in its constructor with explicit deps (`gameMap`, `bus`, `addMob` callbacks).
 - `DungeonScene.updateGameplay()` calls each system's `update(ctx)` in an explicit order; `src/systems/GameLoopPhases.ts` documents the 9 named phases.
-- Rendering is layered by `src/systems/RenderPipeline.ts`: world → entities (Y-sorted by `entity.y`) → effects → visibility fog. Being in `this.mobs` is enough to get rendered — no extra registration.
+- Rendering is layered by `src/systems/RenderPipeline.ts`: world → entities (Y-sorted by `entity.y`) → effects → visibility fog. Being in the roster's spatial grid is what gets a mob rendered (`RenderPipeline` draws from `roster.grid.queryRect`), and `roster.add` puts it there — no extra registration. A dead mob leaves the grid unless it declares `rendersWhenDead`.
 - Systems don't play audio directly; they set pending flags (e.g. `explosionSoundPending`) that the scene reads and clears.
 
 See the `add-system` skill for the recipe.
+
+### Scene kits
+
+`src/systems/kits/` groups the systems that make a _place_ rather than a _floor_, so a new environment gets them by construction instead of by hand-wiring:
+
+- `SceneWorld.ts` — `MobRoster` (list + spatial grid + the one `add` path) and the `SceneWorld` record (`gameMap`, `bus`, `audio`, `pm`, `roster`). One world per **map**; one bus per **scene**.
+- `CombatKit` — spells, mob AI, attack/death resolution, gore, floating numbers, smush, regen, death screen.
+- `DestructionKit` — smashable props, floor loot, dynamite.
+- `MenusKit` — bag, gear, pause menu, award stack, toasts, potions, skill books.
+- `ChatKit` — chat box plus the universal cheat table.
+- `OverlayClaims.ts` — the one ordered list of "what owns the screen", read by the keyboard gate, the Space chain, the mobile tap route and the world-halt test.
+- `hotbarActions.ts` — what pressing slots 1–8 does, for every scene that has them.
+
+Kit fields stay concrete types: `update` signatures are not uniform, so a `GameSystem[]` loop could only be reached through casts. `npm run verify:kits` gates the spine.
 
 ### Cross-cutting getters
 
@@ -48,7 +62,7 @@ quest behind it at all — it points at the town's own furniture. See `add-quest
 
 ## Input
 
-`InputManager` only tracks held keys. Per-scene bindings live in `src/systems/DungeonInputHandler.ts`, bound in `DungeonScene.onEnter` via a `DungeonInputActions` callback object (Esc handler chain + action handlers, suppressed while menus are open). Mouse/touch flows `SceneManager` → scene `handleClick`, which routes to consumers in priority order; each consumer returns `boolean` and the scene early-returns on `true`.
+`InputManager` only tracks held keys. Per-scene bindings live in `src/systems/GameplayInputHandler.ts`, bound in each scene's `onEnter` via a `GameplayInputActions` callback object (Esc handler chain + action handlers, suppressed while menus are open — the suppression reads `overlayClaims`). Mouse/touch flows `SceneManager` → scene `handleClick`, which routes to consumers in priority order; each consumer returns `boolean` and the scene early-returns on `true`.
 
 ## AI bridge (optional)
 

@@ -298,7 +298,7 @@ export class SafeRoomSystem implements GameSystem {
 
   update(ctx: SystemContext): void {
     this._dialogBox?.update();
-    this.evictMobs(ctx.mobs, ctx.mobGrid);
+    this.evictMobs(ctx.roster.mobs, ctx.roster.grid);
     this.updateWander();
   }
 

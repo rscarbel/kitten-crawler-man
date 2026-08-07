@@ -118,7 +118,7 @@ export class SkeletonProjectileSystem implements GameSystem {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectShots(ctx.mobs);
+    this.collectShots(ctx.roster.mobs);
     this.advance(ctx);
     for (const burst of this.bursts) burst.tick--;
     this.bursts = this.bursts.filter((burst) => burst.tick > 0);

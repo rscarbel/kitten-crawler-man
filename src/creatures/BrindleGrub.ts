@@ -97,6 +97,10 @@ export class BrindleGrub extends Mob {
   /** Active acid-spit projectiles (Vespa stage only). */
   readonly spits: AcidSpit[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.spits.length = 0;
+  }
+
   /**
    * Squishy bug stages leave no severed parts — the user's call: the generic
    * gore burst and blood puddle `GoreSystem` already fires on every death is

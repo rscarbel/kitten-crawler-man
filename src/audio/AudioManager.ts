@@ -1180,6 +1180,7 @@ export class AudioManager {
     });
 
     bus.on('bossFightInitiated', (e) => {
+      if (e.music === 'caller') return;
       const track =
         e.bossType === 'the_hoarder'
           ? 'boss_music_1'
@@ -1194,6 +1195,7 @@ export class AudioManager {
       if (e.bossType === 'krakaren_clone') {
         this.play('new_unlock');
       }
+      if (e.music === 'caller') return;
       this.playMusic(defaultMusicId, { fadeInMs: BOSS_MUSIC_RESTORE_FADE_MS });
     });
 

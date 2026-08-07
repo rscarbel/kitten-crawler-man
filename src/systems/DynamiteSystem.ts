@@ -57,7 +57,7 @@ interface LiveDynamite {
 export class DynamiteSystem implements GameSystem {
   private _charging: { hotbarIdx: number; chargeFrames: number } | null = null;
   private liveDynamites: LiveDynamite[] = [];
-  /** Set each time a dynamite explodes; DungeonScene reads and clears it to play the explosion sound. */
+  /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
 
   private _trajectoryCache: Array<{ x: number; y: number }> | null = null;
@@ -65,10 +65,18 @@ export class DynamiteSystem implements GameSystem {
 
   constructor(
     private readonly gameMap: GameMap,
-    /** Null on maps without smashable props (the overworld, building interiors). */
+    /**
+     * Defaulted for a caller with no prop system at all. `DestructionKit`, which
+     * is the only thing that builds one of these, always hands over its own.
+     */
     private readonly destructibles: DestructiblePropSystem | null = null,
-    /** Null off the overworld, which is the only map that grows trees. */
-    private readonly trees: TreeSystem | null = null,
+    /**
+     * Read at blast time rather than held, because the tree system is built
+     * *from* the loot system this one's owner also builds — a plain reference
+     * would make the two constructions circular. Returns null off the overworld,
+     * which is the only map that grows trees.
+     */
+    private readonly trees: () => TreeSystem | null = () => null,
   ) {}
 
   /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
@@ -122,7 +130,8 @@ export class DynamiteSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    const { human, cat, mobs, mobGrid } = ctx;
+    const { human, cat } = ctx;
+    const { mobs, grid: mobGrid } = ctx.roster;
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
@@ -187,11 +196,12 @@ export class DynamiteSystem implements GameSystem {
     // dynamite reads as a bug, however much health it had left. The same goes
     // for a tree, tough as one otherwise is.
     this.destructibles?.destroyInRadius(cx, cy, DYN_RADIUS, human);
-    this.trees?.destroyInRadius(cx, cy, DYN_RADIUS, human);
+    const trees = this.trees();
+    trees?.destroyInRadius(cx, cy, DYN_RADIUS, human);
     // Ignition second, and deliberately: the ring reaches back over the blast
     // radius, and setting fire to the trees first would leave the ones inside it
     // burning as they came down.
-    this.trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * ts);
+    trees?.igniteRadius(cx, cy, DYN_RADIUS + EXPLOSION_IGNITE_RING_TILES * ts);
   }
 
   private updatePhysics(

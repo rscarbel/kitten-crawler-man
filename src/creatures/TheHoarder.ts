@@ -150,6 +150,14 @@ export class TheHoarder extends Mob {
    */
   pendingVomitProjectiles: Array<{ x: number; y: number; dx: number; dy: number }> = [];
 
+  override clearAirborneAttacks(): void {
+    this.pendingVomitProjectiles = [];
+    // Her roach spawns are the same shape: a request handed to a system that has
+    // not picked it up yet, and one left queued would hatch on a floor the party
+    // has already left or a world the checkpoint has already rewound.
+    this.cockroachSpawns = [];
+  }
+
   /** How far through the vomit animation she is, or null when not vomiting. */
   get vomitProgress(): number | null {
     if (this.hoarderState !== 'vomit_windup') return null;

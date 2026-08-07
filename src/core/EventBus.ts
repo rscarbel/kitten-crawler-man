@@ -19,6 +19,17 @@ import type { GrantedReward } from './GrantedReward';
 import type { DishId } from '../systems/bopcaDialog';
 import type { SkillId } from './SkillManager';
 
+/**
+ * Who decides what plays when a boss fight starts or ends.
+ *
+ * `shared` is the ordinary case: the audio wiring picks the track from the boss
+ * type. `caller` says the emitter has already chosen — the interior encounters
+ * each have a track of their own (the circus battle, the town playlist after
+ * Quill) that no boss-type table could name — so the audio wiring plays the
+ * sting and leaves the music alone.
+ */
+export type BossMusicOwnership = 'shared' | 'caller';
+
 export interface GameEvents {
   /** A mob was just killed. */
   mobKilled: {
@@ -35,7 +46,7 @@ export interface GameEvents {
   bossRoomLocked: { bossType: string };
 
   /** A boss was defeated. */
-  bossDefeated: { bossType: string; mob: Mob };
+  bossDefeated: { bossType: string; mob: Mob; music?: BossMusicOwnership };
 
   /** A player leveled up. */
   playerLevelUp: { player: Player; newLevel: number };
@@ -71,7 +82,7 @@ export interface GameEvents {
   combatStarted: { attacker: 'Human' | 'Cat'; mobType: string };
 
   /** Players entered a boss room and the fight has begun. */
-  bossFightInitiated: { bossType: string };
+  bossFightInitiated: { bossType: string; music?: BossMusicOwnership };
 
   /** A player drank a healing potion. */
   healingPotionUsed: { player: 'Human' | 'Cat'; hpRestored: number };

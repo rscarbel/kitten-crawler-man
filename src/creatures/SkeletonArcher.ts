@@ -61,6 +61,10 @@ export class SkeletonArcher extends RisingSkeleton {
    */
   private pendingShots: SkeletonShot[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.pendingShots = [];
+  }
+
   private readonly aggroRangePx: number;
   private readonly kiteMinPx: number;
   private readonly kiteMaxPx: number;

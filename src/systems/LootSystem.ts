@@ -239,6 +239,28 @@ export class LootSystem implements GameSystem {
   }
 
   /**
+   * Empties the floor, paying every pile to its owner except the ones the player
+   * put down deliberately.
+   *
+   * For places the party leaves for good rather than walks out of: a building
+   * interior is rebuilt from scratch on the next entry, so a barrel's drop left
+   * lying by the door would simply cease to exist. Sweeping it into the pack on
+   * the way out is the only way earned loot survives the door.
+   */
+  sweepUncollected(party: ReadonlyArray<HumanPlayer | CatPlayer>): void {
+    for (const loot of this.pendingLoots) {
+      if (loot.collected) continue;
+      // A pile the player put there on purpose goes with the room rather than
+      // back into the pack. They dropped it to make space; handing it straight
+      // back at the door would make an interior the one place in the game where
+      // an item cannot be thrown away.
+      if (loot.droppedByPlayer ?? false) continue;
+      this.creditLoot(loot, loot.owner, party);
+    }
+    this.pendingLoots.length = 0;
+  }
+
+  /**
    * The text drawn above a pile. Shared between `render` and the click hit-test
    * so the box the player aims at is exactly the box they can see.
    */

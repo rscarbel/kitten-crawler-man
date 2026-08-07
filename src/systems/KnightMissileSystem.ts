@@ -84,7 +84,7 @@ export class KnightMissileSystem implements GameSystem {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectReleases(ctx.mobs);
+    this.collectReleases(ctx.roster.mobs);
     this.advanceMissiles(ctx);
     this.advanceBursts();
   }

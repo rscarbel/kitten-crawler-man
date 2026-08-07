@@ -196,6 +196,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     );
 
     let totalSmushDamage = 0;
+    /**
+     * Whether the stomp reached anything at all, props included — which is what
+     * earns its usage XP. Separate from `ctx.hitLanded`, which means "an attack
+     * connected with a *mob*": that flag drives the combat-started telemetry,
+     * and a stomp that only splintered a crate is not a fight starting.
+     */
+    let smushConnected = false;
 
     // Query both rings in one pass using the outer radius
     const nearSmush = mobGrid.queryCircle(hc.x, hc.y, outerRadius + TILE_SIZE);
@@ -211,6 +218,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const damage = Math.max(1, Math.round(baseDamage * mult * bossMult));
         mob.takeDamageFrom(damage, human, 'smush');
         ctx.hitLanded = true;
+        smushConnected = true;
         totalSmushDamage += damage;
 
         // Level 5+: stun non-boss enemies
@@ -234,11 +242,13 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     // no reason to care whether it was in the inner ring.
     if (!human.zeroDamage) {
       const propDamage = Math.max(1, Math.round(baseDamage * stats.outerDamageMultiplier));
+      // Assigned rather than OR-ed on each line so neither call is skipped by
+      // short-circuiting: a stomp splinters the crate *and* the sapling.
       if (ctx.destructibles?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
-        ctx.hitLanded = true;
+        smushConnected = true;
       }
       if (ctx.trees?.tryAreaHit(human, outerRadius, propDamage) ?? false) {
-        ctx.hitLanded = true;
+        smushConnected = true;
       }
     }
 
@@ -248,7 +258,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       human.hp = Math.min(human.hp + healAmt, human.maxHp);
     }
 
-    if (ctx.hitLanded) {
+    if (smushConnected) {
       ctx.abilityManager.addUsageXp('smush');
     }
   }

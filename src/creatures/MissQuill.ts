@@ -50,6 +50,10 @@ export class MissQuill extends Mob {
   private capacitor: Remex | null = null;
   private shielded = false;
   private bolts: SoulBolt[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.bolts.length = 0;
+  }
   private castCooldown = 0;
   private castAnimTimer = 0;
   private summonCooldown = SUMMON_COOLDOWN_FRAMES;

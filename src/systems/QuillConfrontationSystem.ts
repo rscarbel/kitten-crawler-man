@@ -95,7 +95,7 @@ export class QuillConfrontationSystem implements GameSystem {
     private readonly doomsdayProgress: DoomsdayProgress,
   ) {
     this.spawnEncounter();
-    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill' });
+    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
     this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
   }
 
@@ -145,12 +145,9 @@ export class QuillConfrontationSystem implements GameSystem {
       this.victoryHandled = true;
       this.progress.stage = 'quill_slain';
       this.victoryTimer = VICTORY_BANNER_FRAMES;
-      // The cue is played here rather than left to `AudioManager`'s
-      // `bossDefeated` handler: an interior encounter runs on a bus of its own
-      // that the audio system is never wired to, which is why every other sound
-      // in this scene is hand-played too.
-      this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill });
-      this.audio?.play('boss_defeated');
+      // `music: 'caller'` because what follows this fight is the town's own
+      // rotating playlist, which no boss-type table in `AudioManager` can name.
+      this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill, music: 'caller' });
       this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
 
       this.doomsdayProgress.crystalTile = { x: quill.x, y: quill.y };

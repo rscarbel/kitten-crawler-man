@@ -408,6 +408,11 @@ export class BallOfSwine extends Mob {
   pendingSheds = 0;
   pendingStench: StenchBurst | null = null;
 
+  override clearAirborneAttacks(): void {
+    this.pendingSheds = 0;
+    this.pendingStench = null;
+  }
+
   private trampleCooldowns = new Map<Player, number>();
 
   /** Ring buffer of recent positions, oldest-first once it has wrapped. */

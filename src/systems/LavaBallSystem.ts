@@ -181,7 +181,7 @@ export class LavaBallSystem implements GameSystem {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectSpits(ctx.mobs);
+    this.collectSpits(ctx.roster.mobs);
     this.advanceBolts(ctx);
     this.advanceBursts();
     this.advanceFlames();

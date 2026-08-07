@@ -298,6 +298,10 @@ export class DarkKnight extends Mob {
   private overheatTimer = 0;
   /** Bolts released this frame, drained by {@link takePendingMissiles}. */
   private pendingMissiles: PendingKnightMissile[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.pendingMissiles = [];
+  }
   /** Raised on the frame a bolt leaves the mace; the scene plays the cue. */
   castSoundPending = false;
   /** Raised on the frame the volley overheats. */

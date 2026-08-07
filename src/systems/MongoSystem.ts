@@ -409,7 +409,8 @@ export class MongoSystem implements GameSystem {
    * removal from `mobs` and `mobGrid` has already happened by then.
    */
   update(ctx: SystemContext): boolean {
-    const { mobs, mobGrid, cat, gameMap } = ctx;
+    const { cat, gameMap } = ctx;
+    const { mobs, grid: mobGrid } = ctx.roster;
     this.retreatMobs = mobs;
 
     if (this.speechTimer > 0) this.speechTimer--;

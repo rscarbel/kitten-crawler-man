@@ -11,6 +11,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { MobRoster } from './kits/SceneWorld';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
 import { KrakarenClone } from '../creatures/KrakarenClone';
@@ -659,7 +660,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   }
 
   update(ctx: SystemContext): void {
-    const { mobs, mobGrid, human, cat } = ctx;
+    const { human, cat } = ctx;
+    const { mobs, grid: mobGrid } = ctx.roster;
     // Tick defeat timers and pulse
     for (const state of this.states) {
       if (state.defeatTimer > 0) state.defeatTimer--;
@@ -886,7 +888,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
 
     this.cacheLiveKrakarens(mobs);
-    this.spawnHoarderCockroaches(mobs, mobGrid);
+    this.spawnHoarderCockroaches(ctx.roster);
     this.tickCockroachTTLs(mobs, mobGrid);
     this.processVomitProjectiles(mobs, human, cat);
     this.tickAcidPuddles(human, cat);
@@ -1052,7 +1054,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     }
   }
 
-  private spawnHoarderCockroaches(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  private spawnHoarderCockroaches(roster: MobRoster): void {
+    const { mobs } = roster;
     // Counted rather than filtered into a new array, and only once a live
     // Hoarder is known to exist: this runs every frame on every floor, and on
     // the three floors with no Hoarder on them the filter was allocating an
@@ -1094,10 +1097,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const tileX = Math.floor(sp.x / TILE_SIZE);
         const tileY = Math.floor(sp.y / TILE_SIZE);
         if (this.gameMap.isWalkable(tileX, tileY)) {
-          const roach = new Cockroach(tileX, tileY, TILE_SIZE);
-          roach.setMap(this.gameMap);
-          mobs.push(roach);
-          mobGrid.insert(roach);
+          // Through the roster rather than by hand: a roach that never received
+          // the scene's spell context walks straight through a protective shell.
+          roster.add(new Cockroach(tileX, tileY, TILE_SIZE));
           spawned++;
         }
       }

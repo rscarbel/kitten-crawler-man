@@ -142,7 +142,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectThrows(ctx.mobs);
+    this.collectThrows(ctx.roster.mobs);
     this.advanceVials(ctx);
     this.advanceShatters();
     this.advanceClouds();

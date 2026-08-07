@@ -23,8 +23,7 @@
  */
 
 import { GameMap } from '../src/map/GameMap';
-import { SpatialGrid } from '../src/core/SpatialGrid';
-import { MOB_GRID_CELL_SIZE, PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
+import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob } from '../src/creatures/Mob';
@@ -45,6 +44,8 @@ import {
   MONGO_MAX_LEVEL,
 } from '../src/abilities/mongo';
 import type { SystemContext } from '../src/systems/GameSystem';
+import { SpellSystem } from '../src/systems/SpellSystem';
+import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { createMob } from '../src/levels/spawner';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { setPackAlertGrid } from '../src/creatures/packAlert';
@@ -213,8 +214,7 @@ function makeContext(
   human: HumanPlayer,
   cat: CatPlayer,
   map: GameMap,
-  mobs: Mob[],
-  mobGrid: SpatialGrid<Mob>,
+  roster: MobRoster,
 ): SystemContext {
   return {
     human,
@@ -222,8 +222,7 @@ function makeContext(
     active: cat,
     inactive: human,
     activeIsMoving: true,
-    mobs,
-    mobGrid,
+    roster,
     gameMap: map,
   };
 }
@@ -343,8 +342,7 @@ interface Harness {
   announced: string[];
   human: HumanPlayer;
   cat: CatPlayer;
-  mobs: Mob[];
-  mobGrid: SpatialGrid<Mob>;
+  roster: MobRoster;
   system: MongoSystem;
   ctx: SystemContext;
 }
@@ -368,13 +366,12 @@ function buildHarness(existingPetState?: MongoPetState): Harness {
   const start = map.startTile;
   const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
   const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
-  const mobs: Mob[] = [];
-  const mobGrid = new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE);
+  const roster = new MobRoster(map, new SpellSystem());
   // The pack-alert grid is a module global that `MobUpdateLoop` normally
   // publishes. Left unset, a scenario that never runs the loop queries whichever
   // grid the *previous* scenario installed — and the shout it was meant to raise
   // silently reaches nobody.
-  setPackAlertGrid(mobGrid);
+  setPackAlertGrid(roster.grid);
   const petState =
     existingPetState ?? createMongoPetState(getMongoStats(1).maxHp, getMongoStats(1).maxHp);
   const announced: string[] = [];
@@ -394,18 +391,16 @@ function buildHarness(existingPetState?: MongoPetState): Harness {
     announced,
     human,
     cat,
-    mobs,
-    mobGrid,
+    roster,
     system,
-    ctx: makeContext(human, cat, map, mobs, mobGrid),
+    ctx: makeContext(human, cat, map, roster),
   };
 }
 
 function summonInto(h: Harness): Mongo | null {
   const mongo = h.system.summon(h.cat, h.map);
   if (mongo === null) return null;
-  h.mobs.push(mongo);
-  h.mobGrid.insert(mongo);
+  h.roster.add(mongo);
   return mongo;
 }
 
@@ -456,9 +451,7 @@ function findOpenTileNear(
 /** Puts a live hostile on the map, wired the way the spawner would. */
 function spawnHostile(h: Harness, tile: { x: number; y: number }): Mob {
   const mob = createMob(ATTACKER_MOB_ID, tile.x, tile.y, h.map);
-  mob.setMap(h.map);
-  h.mobs.push(mob);
-  h.mobGrid.insert(mob);
+  h.roster.add(mob);
   return mob;
 }
 
@@ -468,7 +461,7 @@ function pinInto(h: Harness, mongo: Mongo, tile: { x: number; y: number }): void
   const preY = mongo.y;
   mongo.x = tile.x * TILE_SIZE;
   mongo.y = tile.y * TILE_SIZE;
-  h.mobGrid.move(mongo, preX, preY);
+  h.roster.grid.move(mongo, preX, preY);
 }
 
 /** One frame of the real ordering: mob AI, then the pet system that answers it. */
@@ -492,7 +485,7 @@ console.log('\nthe activation-radius exemption');
     const preY = mongo.y;
     mongo.x = h.cat.x + TILE_SIZE * FAR_EXILE_TILES;
     mongo.y = h.cat.y;
-    h.mobGrid.move(mongo, preX, preY);
+    h.roster.grid.move(mongo, preX, preY);
 
     check(mongo.exemptFromAiActivationRadius, 'Mongo opts out of the activation radius');
 
@@ -514,7 +507,7 @@ console.log('\nthe activation-radius exemption');
       const gridTX = Math.floor(mongo.x / TILE_SIZE);
       const gridTY = Math.floor(mongo.y / TILE_SIZE);
       check(
-        h.mobGrid.queryCircle(mongo.x, mongo.y, TILE_SIZE).has(mongo),
+        h.roster.grid.queryCircle(mongo.x, mongo.y, TILE_SIZE).has(mongo),
         `the mob grid found him at his new tile (${gridTX},${gridTY}) — a teleport that skips mobGrid.move is a mob nothing can hit`,
       );
       check(!mongo.needsRescue, 'the rescue cleared the latch rather than firing every frame');
@@ -722,10 +715,8 @@ console.log('\nstuck, with something biting the cat');
     check(false, 'the engage-lap run had a summoned pet and solid ground to pin him in');
   } else {
     const attacker = createMob(ATTACKER_MOB_ID, catTile.x + 1, catTile.y, h.map);
-    attacker.setMap(h.map);
+    h.roster.add(attacker);
     attacker.currentTarget = h.cat;
-    h.mobs.push(attacker);
-    h.mobGrid.insert(attacker);
     pinInto(h, mongo, pocket);
 
     const loop = new MobUpdateLoop();
@@ -918,7 +909,7 @@ console.log('\nwho he picks a fight with');
       // under test.
       contender.currentTarget = tier === 'party threat' ? h.cat : null;
       bystander.currentTarget = null;
-      mongo.allMobs = h.mobs;
+      mongo.allMobs = h.roster.mobs;
       mongo.updateAI([]);
     }
 
@@ -1029,7 +1020,7 @@ console.log('\nwounded, and not summonable while he would not fight');
     // …and therefore must not be *summonable* down there either. A pet who walks
     // out, never picks a target and never bites, for two usage XP and a green
     // button, is a trap rather than a decision.
-    h.system.dismiss(h.mobs, h.mobGrid);
+    h.system.dismiss(h.roster.mobs, h.roster.grid);
     check(
       !h.system.canSummon,
       `the button refuses to send in a pet too wounded to fight (${h.system.hp}/${h.system.maxHp})`,
@@ -1081,7 +1072,7 @@ console.log('\nthe knockout rule is stated once, when it is true');
 
     // Spent, then dismissed the way every death path dismisses him.
     mongo.exhausted = true;
-    h.system.dismiss(h.mobs, h.mobGrid);
+    h.system.dismiss(h.roster.mobs, h.roster.grid);
     check(knockoutSaid() === 0, 'the dismissal itself announces nothing');
 
     // A checkpoint rewind undoes the spend before the next frame runs.

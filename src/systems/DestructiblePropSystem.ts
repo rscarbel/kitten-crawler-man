@@ -31,6 +31,26 @@ const TWO_PI = Math.PI * 2;
 export type DestructiblePropKind =
   'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf';
 
+/**
+ * Everything breakable, which is what a dungeon floor and a building interior
+ * both allow.
+ */
+export const ALL_BREAKABLE_PROPS: ReadonlySet<DestructiblePropKind> = new Set([
+  'barrel',
+  'barrel_side',
+  'crate',
+  'torch',
+  'brazier',
+  'bookshelf',
+]);
+
+/**
+ * Nothing breakable, for a map whose props are scenery. The outdoor town's
+ * street torches and gate braziers are architecture — a crawler knocking the
+ * lamps out of a peaceful town square is not a mechanic anyone asked for.
+ */
+export const NO_BREAKABLE_PROPS: ReadonlySet<DestructiblePropKind> = new Set();
+
 const BARREL_HP = 6;
 const BARREL_SIDE_HP = 5;
 const CRATE_HP = 6;
@@ -267,7 +287,21 @@ export class DestructiblePropSystem implements GameSystem {
     private readonly gameMap: GameMap,
     private readonly loot: LootSystem,
     private readonly floorNumber: number,
+    /**
+     * Which prop kinds this map lets a swing break. A floor whose props are
+     * scenery passes {@link NO_BREAKABLE_PROPS} rather than going without the
+     * system, so every scene builds the same shape and nothing downstream has to
+     * carry a null.
+     */
+    private readonly breakable: ReadonlySet<DestructiblePropKind> = ALL_BREAKABLE_PROPS,
   ) {}
+
+  /** The kind of breakable prop on this tile, or null when there is nothing to break. */
+  private breakableKindAt(type: number): DestructiblePropKind | null {
+    const kind = kindForTileType(type);
+    if (kind === null || !this.breakable.has(kind)) return null;
+    return kind;
+  }
 
   /**
    * Resolve a melee swing against every destructible prop in range.
@@ -348,7 +382,7 @@ export class DestructiblePropSystem implements GameSystem {
       const lastTileX = Math.min(row.length - 1, originTileX + searchRadiusTiles);
       for (let tx = firstTileX; tx <= lastTileX; tx++) {
         const tile = row[tx];
-        const kind = kindForTileType(tile.type);
+        const kind = this.breakableKindAt(tile.type);
         if (kind === null) continue;
 
         const centerX = (tx + TILE_CENTER_OFFSET) * TILE_SIZE;
@@ -445,7 +479,7 @@ export class DestructiblePropSystem implements GameSystem {
       const row = structure[ty];
       for (let tx = 0; tx < row.length; tx++) {
         const tile = row[tx];
-        if (kindForTileType(tile.type) === null) continue;
+        if (this.breakableKindAt(tile.type) === null) continue;
         tiles.push({
           tileX: tx,
           tileY: ty,

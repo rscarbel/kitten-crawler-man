@@ -119,7 +119,7 @@ export class GoblinArrowSystem implements GameSystem {
   constructor(private readonly gameMap: GameMap) {}
 
   update(ctx: SystemContext): void {
-    this.collectShots(ctx.mobs);
+    this.collectShots(ctx.roster.mobs);
     this.advance(ctx);
     for (const shaft of this.spent) shaft.framesLeft--;
     this.spent = this.spent.filter((shaft) => shaft.framesLeft > 0);

@@ -330,7 +330,6 @@ export class PauseMenu {
     cat: CatPlayer,
     humanAchievements?: AchievementManager,
     catAchievements?: AchievementManager,
-    inSafeRoom?: boolean,
     onOpenHumanBoxes?: () => void,
     onOpenCatBoxes?: () => void,
     gameStats?: GameStats,
@@ -526,6 +525,11 @@ export class PauseMenu {
         );
         break;
       case 'achievements':
+        // Marked from render rather than from setTab because the tab is also
+        // reachable without going through setTab, and a badge the player has
+        // demonstrably looked at must never survive the look.
+        humanAchievements?.markMenuSeen();
+        catAchievements?.markMenuSeen();
         renderAchievementsTab(
           ctx,
           this.buttons,
@@ -536,7 +540,6 @@ export class PauseMenu {
           setTabWithSound,
           humanAchievements,
           catAchievements,
-          inSafeRoom ?? false,
           onOpenHumanBoxes,
           onOpenCatBoxes,
         );

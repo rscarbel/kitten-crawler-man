@@ -181,6 +181,10 @@ export class EvilClown extends Mob {
   private isAggro = false;
   private pendingVials: PendingVial[] = [];
 
+  override clearAirborneAttacks(): void {
+    this.pendingVials = [];
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, EVIL_CLOWN_HP, EVIL_CLOWN_SPEED);
   }

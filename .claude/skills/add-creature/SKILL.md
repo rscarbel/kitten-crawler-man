@@ -32,7 +32,7 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 
 ## Runtime spawning
 
-Any mob added mid-game must go into both collections: `this.mobs.push(mob)` **and** `this.mobGrid.insert(mob)` (see `DungeonScene`). AI only runs within `AI_RADIUS` of players via `mobGrid.queryCircle` unless `requiresEvasion` is set. `CombatSystem.resolveKills` removes dead mobs from the grid.
+Any mob added mid-game joins through the scene's roster: `world.roster.add(mob)` (or `ctx.roster.add(mob)` inside a system). That is the only spawn path — it inserts into the list _and_ the spatial grid _and_ hands the mob the scene's map and spell context, and a mob that misses the last of those walks straight through a protective shell. AI only runs within `AI_RADIUS` of players via `roster.grid.queryCircle` unless `requiresEvasion` is set. `CombatSystem.resolveKills` removes dead mobs from the grid.
 
 ## Don't forget
 

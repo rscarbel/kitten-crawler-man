@@ -74,6 +74,11 @@ export class GoreSystem implements GameSystem {
   private particles: BloodParticle[] = [];
   private puddles: BloodPuddle[] = [];
 
+  /** Blood in flight plus puddles on the floor — how much gore this system is holding. */
+  get liveCount(): number {
+    return this.particles.length + this.puddles.length;
+  }
+
   /**
    * Drops the closest-to-expiry entries once `list` exceeds `cap`. Index order
    * says nothing about age — `update` compacts with swap-pop — so the shortest

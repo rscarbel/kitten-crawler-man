@@ -9,7 +9,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
-import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
@@ -28,7 +27,12 @@ const CULTIST_SPAWN_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
   { dx: -2, dy: 2 },
   { dx: 2, dy: 2 },
 ];
-const CULTIST_LEVEL = 6;
+/**
+ * The congregation's level. Exported because the cult's stair guards elsewhere
+ * in the town are meant to be the same fight, and two numbers that have to agree
+ * eventually stop agreeing.
+ */
+export const CULT_HIDEOUT_CULTIST_LEVEL = 6;
 
 const OBJECTIVE_Y_FROM_BOTTOM = 96;
 const OBJECTIVE_SIZE = 13;
@@ -46,7 +50,6 @@ export class CultHideoutSystem implements GameSystem {
     private readonly bus: EventBus,
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: MurderQuestProgress,
-    private readonly audio: AudioManager | null,
   ) {
     this.spawnCultists();
   }
@@ -64,7 +67,7 @@ export class CultHideoutSystem implements GameSystem {
       if (!tile) continue;
       const cultist = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       cultist.setMap(this.map);
-      cultist.applyMobLevel(CULTIST_LEVEL);
+      cultist.applyMobLevel(CULT_HIDEOUT_CULTIST_LEVEL);
       this.addMob(cultist);
       this.cultists.push(cultist);
     }
@@ -78,7 +81,6 @@ export class CultHideoutSystem implements GameSystem {
     this.cleared = true;
     this.progress.stage = 'confrontation';
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_cult_hideout_cleared' });
-    this.audio?.play('objective_complete');
     this.bannerTimer = QUEST_BANNER_FRAMES;
   }
 

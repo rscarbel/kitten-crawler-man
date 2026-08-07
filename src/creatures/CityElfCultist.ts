@@ -32,6 +32,10 @@ export class CityElfCultist extends Mob {
   description = 'A hooded elf hurling bolts of harvested soul-stuff for the angels above.';
 
   private bolts: SoulBolt[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.bolts.length = 0;
+  }
   private castCooldown = 0;
   private castAnimTimer = 0;
   private isAggro = false;

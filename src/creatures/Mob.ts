@@ -582,6 +582,19 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Drops anything this mob has in the air.
+   *
+   * A projectile a mob owns is advanced from that mob's own AI, so it only moves
+   * while the mob's roster is being ticked. A shot left in flight on a floor the
+   * party walks away from would hang there and resume — landing a hit a minute
+   * later, from a caster the player has already forgotten — and a rewound world
+   * would keep the bolts the fight it is rewinding had thrown.
+   */
+  clearAirborneAttacks(): void {
+    // Nothing in the air by default.
+  }
+
+  /**
    * The inverse of {@link dispose}: re-acquires whatever that released, because
    * a checkpoint restore can bring this mob back to life. Any override of
    * `dispose()` needs a matching override here, or the revived mob draws

@@ -732,7 +732,7 @@ export class CircusQuestSystem implements GameSystem {
   private startHeatherHunt(active: Player): void {
     // The book's collateral beat — Signet takes Mongo until the job is done.
     if (this.mongoSystem?.mongo && this.lastCtx) {
-      this.mongoSystem.dismiss(this.lastCtx.mobs, this.lastCtx.mobGrid);
+      this.mongoSystem.dismiss(this.lastCtx.roster.mobs, this.lastCtx.roster.grid);
       this.progress.mongoKidnapped = true;
     }
     if (this.progress.mongoKidnapped && this.mongoSystem) {
@@ -783,11 +783,11 @@ export class CircusQuestSystem implements GameSystem {
     if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
 
-    // Signet is in `ctx.mobs`, so MobUpdateLoop already ticks her timers every
+    // Signet is in `ctx.roster.mobs`, so MobUpdateLoop already ticks her timers every
     // frame she is near enough to matter — ticking her here as well ran her
     // walk cycle and damage flash at double rate.
     if (this.signet) {
-      this.signet.allMobs = ctx.mobs;
+      this.signet.allMobs = ctx.roster.mobs;
       this.signet.isConversing = this.dialog.isOpen;
     }
 
@@ -814,7 +814,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private updateRitualDefense(ctx: SystemContext): void {
-    this.keepWaveMobsEngaged(ctx.mobGrid);
+    this.keepWaveMobsEngaged(ctx.roster.grid);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     if (this.waveIndex + 1 < RITUAL_WAVES.length) {
@@ -833,7 +833,7 @@ export class CircusQuestSystem implements GameSystem {
         FIZZLE_MARAUDER_LIFESPAN_FRAMES,
       );
       fizzle.setMap(this.gameMap);
-      fizzle.allMobs = ctx.mobs;
+      fizzle.allMobs = ctx.roster.mobs;
       this.addMob(fizzle);
     }
     this.stopBattleMusic();
@@ -851,7 +851,7 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   private updateAssault(ctx: SystemContext): void {
-    this.keepWaveMobsEngaged(ctx.mobGrid);
+    this.keepWaveMobsEngaged(ctx.roster.grid);
     if (this.waveMobs.some((m) => m.isAlive)) return;
 
     this.bus.emit('objectiveComplete', { objectiveId: 'circus_sideshow_cleared' });
@@ -866,7 +866,7 @@ export class CircusQuestSystem implements GameSystem {
     this.bannerText = 'THE BIG TOP AWAITS';
     this.bannerTimer = QUEST_BANNER_FRAMES;
     // Signet moves ahead to wait by the Big Top door.
-    this.repositionSignetToBigTopDoor(ctx.mobGrid);
+    this.repositionSignetToBigTopDoor(ctx.roster.grid);
   }
 
   private repositionSignetToBigTopDoor(mobGrid: SpatialGrid<Mob>): void {

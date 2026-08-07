@@ -244,13 +244,26 @@ export class CatPlayer extends Player {
    * needs this entry point.
    */
   resetCombatState(): void {
-    this.missiles = [];
+    this.clearAirborneAttacks();
     this.missileCooldown = 0;
     this.attackTimer = 0;
     this.autoSwipeCooldown = 0;
     this.autoTarget = null;
-    this.pendingSubMissileSpawns = [];
     this.animator.reset();
+  }
+
+  /**
+   * Drops the missiles she has in the air, and nothing else.
+   *
+   * Separate from {@link resetCombatState} because a party walking out of a room
+   * has to leave its bolts behind — a missile still homing is steered against
+   * whatever grid the next frame hands it, so one that outlives its floor hunts
+   * the new floor's mobs from the old floor's coordinates — while a cooldown is
+   * something she spent and must not be refunded by a staircase.
+   */
+  clearAirborneAttacks(): void {
+    this.missiles = [];
+    this.pendingSubMissileSpawns = [];
   }
 
   get missileCooldownCurrent(): number {

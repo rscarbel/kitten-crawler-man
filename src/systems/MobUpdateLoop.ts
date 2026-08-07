@@ -109,7 +109,8 @@ export class MobUpdateLoop implements GameSystem {
    * of either player. Updates spatial grid positions.
    */
   update(ctx: SystemContext): void {
-    const { human, cat, mobs, mobGrid, bossRoom, extraTargets, gameMap } = ctx;
+    const { human, cat, bossRoom, extraTargets, gameMap } = ctx;
+    const { mobs, grid: mobGrid } = ctx.roster;
 
     resetPathfindBudget();
     setPackAlertGrid(mobGrid);

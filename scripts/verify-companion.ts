@@ -16,9 +16,8 @@
  */
 import { createCanvas } from 'canvas';
 
-import { TILE_SIZE, MOB_GRID_CELL_SIZE, COMPANION_LEASH_PX } from '../src/core/constants';
+import { TILE_SIZE, COMPANION_LEASH_PX } from '../src/core/constants';
 import { GameMap } from '../src/map/GameMap';
-import { SpatialGrid } from '../src/core/SpatialGrid';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob } from '../src/creatures/Mob';
@@ -30,6 +29,8 @@ import { MIN_STAT_VALUE } from '../src/Player';
 import { BossRoomSystem } from '../src/systems/BossRoomSystem';
 import { MiniMapSystem } from '../src/systems/MiniMapSystem';
 import { TreasureChestSystem } from '../src/systems/TreasureChestSystem';
+import { SpellSystem } from '../src/systems/SpellSystem';
+import { MobRoster } from '../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../src/systems/GameSystem';
 
 /**
@@ -164,8 +165,7 @@ interface Party {
   map: GameMap;
   human: HumanPlayer;
   cat: CatPlayer;
-  mobs: Mob[];
-  mobGrid: SpatialGrid<Mob>;
+  roster: MobRoster;
 }
 
 /** A human-active party standing on the map's start tile, with an empty world. */
@@ -175,13 +175,12 @@ function makeParty(map: GameMap): Party {
   const cat = new CatPlayer(start.x, start.y, TILE_SIZE);
   human.isActive = true;
   cat.isActive = false;
-  return { map, human, cat, mobs: [], mobGrid: new SpatialGrid<Mob>(MOB_GRID_CELL_SIZE) };
+  return { map, human, cat, roster: new MobRoster(map, new SpellSystem()) };
 }
 
 function addMob(party: Party, type: string, tileX: number, tileY: number): Mob {
   const mob = createMob(type, tileX, tileY, party.map);
-  party.mobs.push(mob);
-  party.mobGrid.insert(mob);
+  party.roster.add(mob);
   return mob;
 }
 
@@ -199,8 +198,7 @@ function makeContext(party: Party, bossRoom?: BossRoomSystem): SystemContext {
     active,
     inactive,
     activeIsMoving: false,
-    mobs: party.mobs,
-    mobGrid: party.mobGrid,
+    roster: party.roster,
     gameMap: party.map,
     ...(bossRoom ? { bossRoom } : {}),
   };
@@ -226,18 +224,18 @@ function runCompanion(
  * only calls the system under test cannot see.
  */
 function runFightFrame(system: CompanionSystem, party: Party): void {
-  for (const mob of party.mobs) {
+  for (const mob of party.roster.mobs) {
     if (!mob.isAlive) continue;
     const ox = mob.x;
     const oy = mob.y;
     mob.updateAI([party.human, party.cat]);
     mob.tickTimers();
-    party.mobGrid.move(mob, ox, oy);
+    party.roster.grid.move(mob, ox, oy);
   }
   system.update(makeContext(party));
   party.human.updateAttack();
   party.cat.updateAttack();
-  party.cat.updateMissiles(party.mobGrid);
+  party.cat.updateMissiles(party.roster.grid);
   party.human.tickTimers();
   party.cat.tickTimers();
 }
@@ -728,7 +726,7 @@ console.log('\nA mob that hits from where it stands does not pin the companion')
   const previousY = sniper.y;
   sniper.x = party.human.x + BEYOND_LEASH_PX;
   sniper.y = party.human.y;
-  party.mobGrid.move(sniper, previousX, previousY);
+  party.roster.grid.move(sniper, previousX, previousY);
   party.cat.x = sniper.x;
   party.cat.y = sniper.y;
   sniper.noteStruckPlayer(party.cat);

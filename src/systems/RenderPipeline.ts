@@ -188,8 +188,11 @@ export interface RenderContext {
   goblinArrows: GoblinArrowSystem;
   clownGas: ClownGasSystem;
   knightMissiles: KnightMissileSystem;
-  /** Null on maps without smashable props (the overworld, building interiors). */
-  destructibles: DestructiblePropSystem | null;
+  /**
+   * Always present: a map whose props are architecture rather than scenery
+   * builds one over an empty set of breakable kinds instead of going without.
+   */
+  destructibles: DestructiblePropSystem;
   /** Null on every map but the overworld, which is the only one that grows trees. */
   trees: TreeSystem | null;
   /** Null on every map but the overworld, which is the only one with rivers. */
@@ -261,7 +264,7 @@ export class RenderPipeline {
     gameMap.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
     gore.renderPuddles(ctx, camX, camY);
     rc.bodyPartGore.renderSettled(ctx, camX, camY);
-    rc.destructibles?.renderWreckage(ctx, camX, camY);
+    rc.destructibles.renderWreckage(ctx, camX, camY);
     rc.trees?.renderGround(ctx, camX, camY);
     // Same slot as the trees, and for the same reason: the river's moving parts
     // belong over the chunk-baked ground and under the Y-sorted pass, so the
@@ -488,7 +491,7 @@ export class RenderPipeline {
     // the river passes in front of the body that threw it. Everything else the
     // water system draws is surface, and stays under them in `renderGround`.
     rc.water?.renderSplashes(ctx, camX, camY);
-    rc.destructibles?.renderEffects(ctx, camX, camY);
+    rc.destructibles.renderEffects(ctx, camX, camY);
     rc.trees?.render(ctx, camX, camY);
     bodyPartGore.renderFlying(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);

@@ -49,10 +49,10 @@ const OPEN_BOX_BTN_WIDTH = 100;
 const OPEN_BOX_BTN_X_OFFSET = 20;
 const OPEN_BOX_BTN_HEIGHT = 22;
 const OPEN_BOX_BTN_LABEL_SIZE = 10;
-const SAFE_ROOM_HINT_X_OFFSET = 140;
-const SAFE_ROOM_HINT_Y_BASELINE = 7;
-const SAFE_ROOM_HINT_SIZE = 9;
-const SAFE_ROOM_HINT_TEXT_Y_OFFSET = 10;
+const REWARDS_DIRECTIVE_X_OFFSET = 18;
+const REWARDS_DIRECTIVE_SIZE = 9;
+const REWARDS_DIRECTIVE_COLOR = '#fbbf24';
+const REWARDS_DIRECTIVE_WIDTH_OFFSET = 36;
 const ACH_ROW_INCREMENT = 20;
 const ACH_LABEL_X_OFFSET = 16;
 const TAB_TITLE_Y_BASELINE = 13;
@@ -95,7 +95,6 @@ function renderPlayerAchievements(
   labelColor: string,
   manager: AchievementManager | undefined,
   playerTarget: 'human' | 'cat',
-  inSafeRoom: boolean,
   onOpenBoxes?: () => void,
 ): void {
   drawText(ctx, label, {
@@ -170,13 +169,14 @@ function renderPlayerAchievements(
 
   const boxCount = manager?.pendingBoxes.length ?? 0;
   if (boxCount > 0) {
-    drawText(ctx, `Unopened boxes: ${boxCount}`, {
-      x: bx + ACH_BOX_COUNT_X_OFFSET,
-      y: oy + ACH_BOX_COUNT_Y_OFFSET - ACH_BOX_COUNT_Y_BASELINE,
-      ...TEXT_PRESETS.hint,
-    });
-
+    const rewardsLineY = oy + ACH_BOX_COUNT_Y_OFFSET - ACH_BOX_COUNT_Y_BASELINE;
     if (onOpenBoxes) {
+      drawText(ctx, `Unopened boxes: ${boxCount}`, {
+        x: bx + ACH_BOX_COUNT_X_OFFSET,
+        y: rewardsLineY,
+        ...TEXT_PRESETS.hint,
+      });
+
       const btnW = OPEN_BOX_BTN_WIDTH;
       const btnX = bx + bw - OPEN_BOX_BTN_X_OFFSET - btnW;
       addButton(ctx, buttons, {
@@ -189,12 +189,18 @@ function renderPlayerAchievements(
         labelSize: OPEN_BOX_BTN_LABEL_SIZE,
         action: onOpenBoxes,
       });
-    } else if (!inSafeRoom) {
-      drawText(ctx, '(safe room only)', {
-        x: bx + SAFE_ROOM_HINT_X_OFFSET,
-        y: oy + SAFE_ROOM_HINT_TEXT_Y_OFFSET - SAFE_ROOM_HINT_Y_BASELINE,
-        size: SAFE_ROOM_HINT_SIZE,
-        color: '#374151',
+    } else {
+      // Reached both outside a safe room and inside one whose scene cannot run
+      // the opener (building interiors), so the directive names the dungeon
+      // rather than promising the current room will do.
+      const rewardNoun = boxCount === 1 ? 'reward' : 'rewards';
+      drawText(ctx, `🎁 ${boxCount} unopened ${rewardNoun} — open at a dungeon safe room`, {
+        x: bx + REWARDS_DIRECTIVE_X_OFFSET,
+        y: rewardsLineY,
+        size: REWARDS_DIRECTIVE_SIZE,
+        bold: true,
+        color: REWARDS_DIRECTIVE_COLOR,
+        width: bw - REWARDS_DIRECTIVE_WIDTH_OFFSET,
       });
     }
   }
@@ -210,7 +216,6 @@ export function renderAchievementsTab(
   setTab: (tab: PauseTab) => void,
   humanAchievements: AchievementManager | undefined,
   catAchievements: AchievementManager | undefined,
-  inSafeRoom: boolean,
   onOpenHumanBoxes?: () => void,
   onOpenCatBoxes?: () => void,
 ): void {
@@ -235,7 +240,6 @@ export function renderAchievementsTab(
     '#93c5fd',
     humanAchievements,
     'human',
-    inSafeRoom,
     onOpenHumanBoxes,
   );
 
@@ -258,7 +262,6 @@ export function renderAchievementsTab(
     '#fb923c',
     catAchievements,
     'cat',
-    inSafeRoom,
     onOpenCatBoxes,
   );
 

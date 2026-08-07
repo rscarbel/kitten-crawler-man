@@ -30,7 +30,7 @@ Prefer reaching for `DialogBox` (single speaker line, revealed live) or `QuestDi
 
 ## Click routing
 
-`DungeonScene.handleClick` routes to consumers in priority order (dialogs before panels before world). Each consumer's `handleClick` returns `boolean`; the scene early-returns on `true`. New UI must be inserted at the right point in that chain — position determines stacking priority. Keyboard dismissal goes in `DungeonInputHandler`'s Esc chain.
+A scene's `handleClick` routes to consumers in priority order (dialogs before panels before world). Each consumer's `handleClick` returns `boolean`; the scene early-returns on `true`. New UI must be inserted at the right point in that chain — position determines stacking priority. Keyboard dismissal goes in `GameplayInputHandler`'s Esc chain, and anything that owns the screen also needs an `overlayClaims` entry (`src/systems/kits/OverlayClaims.ts`) so the keyboard gate, the Space chain and the world-halt test agree with the draw order.
 
 ## Adding a pause menu tab
 

@@ -1,6 +1,6 @@
 import { platform } from '../core/Platform';
-import { InventoryPanel } from '../ui/InventoryPanel';
-import { GearPanel } from '../ui/GearPanel';
+import type { InventoryPanel } from '../ui/InventoryPanel';
+import type { GearPanel } from '../ui/GearPanel';
 import { TILE_SIZE } from '../core/constants';
 import type { Inventory } from '../core/Inventory';
 import type { GameMap } from '../map/GameMap';
@@ -135,9 +135,16 @@ export class MobileHUDSystem implements GameSystem {
   // Interior minimap state
   private _miniMapExpanded = false;
 
-  // Shared UI panels
-  readonly inventoryPanel = new InventoryPanel();
-  readonly gearPanel = new GearPanel();
+  /**
+   * The scene's own panels, rendered here rather than owned here: the bag and
+   * the gear screen are the same two surfaces the keyboard, the desktop click
+   * routing and the mobile buttons all act on, and a second pair would mean a
+   * key and a tap opening different bags.
+   */
+  constructor(
+    readonly inventoryPanel: InventoryPanel,
+    readonly gearPanel: GearPanel,
+  ) {}
 
   /**
    * Render the standard mobile buttons: Switch + Gear + Bag,

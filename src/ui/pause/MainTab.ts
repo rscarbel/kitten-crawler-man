@@ -94,7 +94,8 @@ export function renderMainTab(
   });
   bY += spacing;
 
-  const unread = (humanAchievements?.unreadCount ?? 0) + (catAchievements?.unreadCount ?? 0);
+  const unread =
+    (humanAchievements?.menuUnseenCount ?? 0) + (catAchievements?.menuUnseenCount ?? 0);
   const gameLabel = unread > 0 ? `Game  (${unread} new)` : 'Game';
   addButton(ctx, buttons, {
     x: bX,

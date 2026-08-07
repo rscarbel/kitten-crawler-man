@@ -7,11 +7,10 @@ import type { BossRoomCheckpoint } from '../systems/BossRoomSystem';
 import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { DefendQuestCheckpoint } from '../systems/DefendQuestSystem';
-import type { DestructiblePropCheckpoint } from '../systems/DestructiblePropSystem';
+import type { DestructionCheckpoint } from '../systems/kits/DestructionKit';
 import type { DifficultyTelemetryCheckpoint } from '../systems/DifficultyTelemetrySystem';
 import type { DoomsdayEscapeCheckpoint } from '../systems/DoomsdayEscapeSystem';
 import type { JuicerRoomCheckpoint } from '../systems/JuicerRoomSystem';
-import type { LootCheckpoint } from '../systems/LootSystem';
 import type { MercenaryCheckpoint } from '../systems/MercenarySystem';
 import type { MiniMapCheckpoint } from '../systems/MiniMapSystem';
 import type { MongoCheckpoint } from '../systems/MongoSystem';
@@ -59,7 +58,6 @@ export interface WorldCheckpoint {
   miniMap: MiniMapCheckpoint;
   stairwell: StairwellCheckpoint;
   treasureChests: TreasureChestCheckpoint;
-  loot: LootCheckpoint;
   bopca: BopcaCheckpoint;
   difficultyTelemetry: DifficultyTelemetryCheckpoint;
   mercenary: MercenaryCheckpoint;
@@ -71,7 +69,8 @@ export interface WorldCheckpoint {
   murderQuest: MurderMysteryQuestCheckpoint;
   doomsdayEscape: DoomsdayEscapeCheckpoint;
 
-  destructibles: DestructiblePropCheckpoint | null;
+  /** Floor loot and smashable props together — what the destruction kit owns. */
+  destruction: DestructionCheckpoint;
   trees: TreeCheckpoint | null;
   bounty: BountyCheckpoint | null;
 

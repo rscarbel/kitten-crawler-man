@@ -82,7 +82,7 @@ export class DifficultyTelemetrySystem implements GameSystem {
 
   /** True while at least one living mob has one of the crawlers in its sights. */
   private anyMobEngaged(ctx: SystemContext): boolean {
-    for (const mob of ctx.mobs) {
+    for (const mob of ctx.roster.mobs) {
       if (!mob.isAlive) continue;
       const target = mob.currentTarget;
       if (target === ctx.human || target === ctx.cat) return true;

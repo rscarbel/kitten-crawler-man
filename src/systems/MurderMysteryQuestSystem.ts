@@ -616,9 +616,10 @@ export class MurderMysteryQuestSystem implements GameSystem {
   private finishHook(): void {
     // GumGum slips away into the crowd — the next time anyone sees her is the alley.
     if (this.gumgum && this.lastCtx) {
-      const idx = this.lastCtx.mobs.indexOf(this.gumgum);
-      if (idx >= 0) this.lastCtx.mobs.splice(idx, 1);
-      this.lastCtx.mobGrid.remove(this.gumgum);
+      const { mobs, grid } = this.lastCtx.roster;
+      const idx = mobs.indexOf(this.gumgum);
+      if (idx >= 0) mobs.splice(idx, 1);
+      grid.remove(this.gumgum);
     }
     this.gumgum = null;
     this.gumgumInWorld = false;

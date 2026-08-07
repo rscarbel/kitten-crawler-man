@@ -279,7 +279,8 @@ export class CompanionSystem implements GameSystem {
 
   /** Update both companion AI (auto-target) and companion follower movement. */
   update(ctx: SystemContext): void {
-    const { human, cat, mobGrid, activeIsMoving } = ctx;
+    const { human, cat, activeIsMoving } = ctx;
+    const mobGrid = ctx.roster.grid;
     // Track human idle frames
     if (human.isActive) {
       if (activeIsMoving) this.humanIdleFrames = 0;

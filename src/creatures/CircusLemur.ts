@@ -48,6 +48,10 @@ export class CircusLemur extends Mob {
   override readonly audioTag = 'lemur';
 
   private knives: ThrownKnife[] = [];
+
+  override clearAirborneAttacks(): void {
+    this.knives.length = 0;
+  }
   private meleeCooldown = 0;
   private meleeAnimTimer = 0;
   private throwCooldown = 0;
