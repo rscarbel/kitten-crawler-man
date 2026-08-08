@@ -1,4 +1,5 @@
 import type { FenceStyle, TileContent } from '../tileTypes';
+import { OVERLAY_FRAME_KEY_STRIDE, SPRITE_BUILDING_OVERLAY_FPS } from './overlayAnimation';
 import {
   FloorTypeValue,
   TREE,
@@ -63,9 +64,6 @@ const RUBBLE_PATCH_RX_EXTRA = 3;
 const RUBBLE_CHUNK_MIN_SIZE = 3;
 const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
-/** Playback rate of animated overlay states composited onto sprite buildings. */
-const SPRITE_BUILDING_OVERLAY_FPS = 8;
-
 /** Playback rate and frame count of the main tower's glow overlay. */
 const MAIN_TOWER_GLOW_FPS = 4;
 const MAIN_TOWER_GLOW_FRAMES = 4;
@@ -77,12 +75,6 @@ const TORCH_FLAME_FRAMES = 6;
 /** Playback rate and frame count of a brazier's flame loop. */
 const BRAZIER_FLAME_FPS = 10;
 const BRAZIER_FLAME_FRAMES = 4;
-
-/**
- * Radix for folding several overlay frame indices into one number. Larger than
- * any overlay's frame count, so distinct combinations never collide.
- */
-const OVERLAY_FRAME_KEY_STRIDE = 16;
 
 /**
  * Which animation frame a decoration tile is currently drawing, as a single

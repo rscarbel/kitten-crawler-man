@@ -30,9 +30,11 @@
     "verify:interiors": "tsx scripts/verify-interiors.ts",
     "verify:town": "tsx scripts/verify-town-guidance.ts",
     "verify:kits": "tsx scripts/verify-kits.ts",
+    "verify:buildings": "tsx scripts/verify-building-gates.ts",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
-    "gen:town-art": "npm run gen:townscape && npm run gen:over-city",
+    "gen:buildings": "tsx scripts/generate-building-sprites.ts",
+    "gen:town-art": "npm run gen:townscape && npm run gen:over-city && npm run gen:buildings",
     "gen:trees": "tsx scripts/generate-tree-sprites.ts",
     "gen:rocks": "tsx scripts/generate-rock-sprites.ts",
     "gen:camps": "tsx scripts/generate-camp-sprites.ts",
@@ -65,7 +67,8 @@
     "gen:vespa": "tsx scripts/generate-brindled-vespa-sprite.ts",
     "gen:vespa-spit": "tsx scripts/generate-vespa-spit-sprites.ts",
     "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts",
-    "render:townsfolk": "tsx scripts/render-townsfolk.ts"
+    "render:townsfolk": "tsx scripts/render-townsfolk.ts",
+    "render:buildings": "tsx scripts/render-buildings.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

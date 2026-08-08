@@ -28,11 +28,12 @@ import { writeFileSync } from 'node:fs';
 
 /**
  * Everything below imports the game's own modules, which are written against
- * browser globals. Two shims are the whole compatibility layer: `Image` for
- * `SpriteLoader`, and `document.createElement('canvas')` for `allocCanvas`'s
- * fallback path. The tile animations want `performance.now`, which Node provides
- * as a global already — worth stating, because a third shim was written for it
- * here and never assigned, and nothing failed.
+ * browser globals. Three shims are the whole compatibility layer: `Image` for
+ * `SpriteLoader`, `document.createElement('canvas')` for `allocCanvas`'s
+ * fallback path, and `window.devicePixelRatio` for the low-end downscale check.
+ * The tile animations want `performance.now`, which Node provides as a global
+ * already — worth stating, because a fourth shim was written for it here and
+ * never assigned, and nothing failed.
  *
  * They are installed before the game modules are imported, because
  * `SpriteLoader` builds its footprint tables at module load.
@@ -40,11 +41,25 @@ import { writeFileSync } from 'node:fs';
 interface CanvasGlobals {
   Image?: unknown;
   document?: unknown;
+  window?: unknown;
 }
 const globals: CanvasGlobals = globalThis;
 
+/**
+ * Retina, so `shouldDownscaleForLowEndDevice` returns false and the sheets are
+ * rendered at the resolution they were baked at.
+ *
+ * Absent entirely until a sheet grew large enough to reach that check, at which
+ * point this harness died on a bare `window is not defined` — the shim was
+ * missing all along and nothing had asked for it. Halving the sheets here would
+ * be worse than the crash: the review image would no longer be showing the art
+ * that ships.
+ */
+const REVIEW_DEVICE_PIXEL_RATIO = 2;
+
 const nodeCanvasModule = await import('canvas');
 globals.Image = nodeCanvasModule.Image;
+globals.window = { devicePixelRatio: REVIEW_DEVICE_PIXEL_RATIO };
 globals.document = {
   createElement(tag: string) {
     if (tag !== 'canvas') throw new Error(`headless renderer cannot create <${tag}>`);

@@ -1,0 +1,312 @@
+{
+  "barracks": {
+    "path": "environment/buildings/barracks.png",
+    "frameWidth": 322,
+    "frameHeight": 255,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 6
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 5,
+      "dx0": 3,
+      "width": 2
+    },
+    "textureRichness": 30.199076827304285
+  },
+  "blacksmith": {
+    "path": "environment/buildings/blacksmith.png",
+    "frameWidth": 200,
+    "frameHeight": 122,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 25,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 5
+    },
+    "doorway": {
+      "dx": 4,
+      "dy": 4,
+      "dx0": 4,
+      "width": 2
+    },
+    "textureRichness": 28.259581744608777
+  },
+  "desperado_club": {
+    "path": "environment/buildings/desperado_club.png",
+    "frameWidth": 500,
+    "frameHeight": 437,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 12,
+      "h": 10
+    },
+    "doorway": {
+      "dx": 5,
+      "dy": 9,
+      "dx0": 4,
+      "width": 2
+    },
+    "textureRichness": 31.930778317885725
+  },
+  "hoarders_room": {
+    "path": "environment/buildings/hoarders_room.png",
+    "frameWidth": 512,
+    "frameHeight": 512,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 8
+    },
+    "doorway": null,
+    "textureRichness": null
+  },
+  "overworld_main_tower": {
+    "path": "environment/buildings/overworld_main_tower.png",
+    "frameWidth": 183.833,
+    "frameHeight": 700,
+    "tileX": 92,
+    "tileY": 688,
+    "tileScale": 32,
+    "footprint": {
+      "dx": -3,
+      "dy": -22,
+      "w": 6,
+      "h": 23
+    },
+    "doorway": {
+      "dx": 0,
+      "dy": 0,
+      "dx0": -1,
+      "width": 2
+    },
+    "textureRichness": null
+  },
+  "shop": {
+    "path": "environment/buildings/shop.png",
+    "frameWidth": 346,
+    "frameHeight": 204,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 5
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 4,
+      "dx0": 2,
+      "width": 3
+    },
+    "textureRichness": 26.325133791425035
+  },
+  "small_inn": {
+    "path": "environment/buildings/small_inn.png",
+    "frameWidth": 346,
+    "frameHeight": 269,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 6
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 5,
+      "dx0": 2,
+      "width": 2
+    },
+    "textureRichness": 30.034764448397123
+  },
+  "tattoo_parlor": {
+    "path": "environment/buildings/tattoo_parlor.png",
+    "frameWidth": 330,
+    "frameHeight": 218,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 5
+    },
+    "doorway": {
+      "dx": 2,
+      "dy": 4,
+      "dx0": 2,
+      "width": 1
+    },
+    "textureRichness": 29.612861013680483
+  },
+  "tavern_1": {
+    "path": "environment/buildings/tavern_1.png",
+    "frameWidth": 348,
+    "frameHeight": 211,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 5
+    },
+    "doorway": {
+      "dx": 2,
+      "dy": 4,
+      "dx0": 1,
+      "width": 2
+    },
+    "textureRichness": 26.483581975973582
+  },
+  "tavern_2": {
+    "path": "environment/buildings/tavern_2.png",
+    "frameWidth": 357,
+    "frameHeight": 208,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 5
+    },
+    "doorway": {
+      "dx": 4,
+      "dy": 4,
+      "dx0": 2,
+      "width": 4
+    },
+    "textureRichness": 29.947420982371078
+  },
+  "temple": {
+    "path": "environment/buildings/temple.png",
+    "frameWidth": 323,
+    "frameHeight": 282,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 45,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 7
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 6,
+      "dx0": 3,
+      "width": 1
+    },
+    "textureRichness": 34.71771169381218
+  },
+  "village_house_1": {
+    "path": "environment/buildings/village-house-1.png",
+    "frameWidth": 139,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 21.5,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 7,
+      "h": 6
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 5,
+      "dx0": 3,
+      "width": 1
+    },
+    "textureRichness": 24.115519704007877
+  },
+  "village_house_2": {
+    "path": "environment/buildings/village-house-2.png",
+    "frameWidth": 150,
+    "frameHeight": 125,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 21.5,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 7,
+      "h": 6
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 5,
+      "dx0": 3,
+      "width": 1
+    },
+    "textureRichness": 20.405737835443254
+  },
+  "village_house_3": {
+    "path": "environment/buildings/village-house-3.png",
+    "frameWidth": 149,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 21.5,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 7,
+      "h": 6
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 5,
+      "dx0": 3,
+      "width": 1
+    },
+    "textureRichness": 22.83181352177632
+  },
+  "village_house_4": {
+    "path": "environment/buildings/village-house-4.png",
+    "frameWidth": 154,
+    "frameHeight": 133,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 21.5,
+    "footprint": {
+      "dx": 0,
+      "dy": 0,
+      "w": 8,
+      "h": 7
+    },
+    "doorway": {
+      "dx": 3,
+      "dy": 6,
+      "dx0": 3,
+      "width": 1
+    },
+    "textureRichness": 21.08335437170071
+  }
+}

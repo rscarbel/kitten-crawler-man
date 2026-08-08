@@ -1,199 +1,67 @@
 {
-  "village_house_1": {
-    "path": "environment/buildings/village-house-1.png",
-    "frameWidth": 139,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 21.5,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 60,
-        "x2": 138,
-        "y2": 96
-      },
-      {
-        "x1": 6,
-        "y1": 97,
-        "x2": 59,
-        "y2": 128
-      },
-      {
-        "x1": 80,
-        "y1": 97,
-        "x2": 111,
-        "y2": 128
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "village_house_2": {
-    "path": "environment/buildings/village-house-2.png",
-    "frameWidth": 150,
-    "frameHeight": 125,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 21.5,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 44,
-        "x2": 150,
-        "y2": 87
-      },
-      {
-        "x1": 5,
-        "y1": 88,
-        "x2": 65,
-        "y2": 126
-      },
-      {
-        "x1": 85,
-        "y1": 88,
-        "x2": 146,
-        "y2": 121
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "village_house_3": {
-    "path": "environment/buildings/village-house-3.png",
-    "frameWidth": 149,
-    "frameHeight": 128,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 21.5,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 57,
-        "x2": 150,
-        "y2": 100
-      },
-      {
-        "x1": 4,
-        "y1": 93,
-        "x2": 71,
-        "y2": 128
-      },
-      {
-        "x1": 92,
-        "y1": 93,
-        "x2": 147,
-        "y2": 128
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "village_house_4": {
-    "path": "environment/buildings/village-house-4.png",
-    "frameWidth": 154,
-    "frameHeight": 133,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 21.5,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 54,
-        "x2": 154,
-        "y2": 99
-      },
-      {
-        "x1": 5,
-        "y1": 100,
-        "x2": 70,
-        "y2": 133
-      },
-      {
-        "x1": 91,
-        "y1": 100,
-        "x2": 150,
-        "y2": 133
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
   "barracks": {
     "path": "environment/buildings/barracks.png",
-    "frameWidth": 322,
-    "frameHeight": 255,
+    "frameWidth": 384,
+    "frameHeight": 288,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 45,
+    "tileScale": 48,
     "blockedRegions": [
       {
-        "x1": 1,
-        "y1": 148,
-        "x2": 321,
-        "y2": 178
+        "x1": 0,
+        "y1": 125,
+        "x2": 384,
+        "y2": 239
       },
       {
-        "x1": 1,
-        "y1": 178,
-        "x2": 128,
-        "y2": 255
+        "x1": 0,
+        "y1": 240,
+        "x2": 144,
+        "y2": 288
       },
       {
-        "x1": 200,
-        "y1": 178,
-        "x2": 321,
-        "y2": 255
+        "x1": 240,
+        "y1": 240,
+        "x2": 384,
+        "y2": 288
       }
     ],
     "states": {
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 8
       }
     }
   },
   "blacksmith": {
     "path": "environment/buildings/blacksmith.png",
-    "frameWidth": 200,
-    "frameHeight": 122,
+    "frameWidth": 384,
+    "frameHeight": 240,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 25,
+    "tileScale": 48,
     "blockedRegions": [
       {
-        "x1": 1,
-        "y1": 60,
-        "x2": 199,
-        "y2": 68
+        "x1": 0,
+        "y1": 116,
+        "x2": 384,
+        "y2": 191
       },
       {
-        "x1": 1,
-        "y1": 68,
-        "x2": 103,
-        "y2": 122
+        "x1": 0,
+        "y1": 192,
+        "x2": 192,
+        "y2": 240
       },
       {
-        "x1": 138,
-        "y1": 68,
-        "x2": 199,
-        "y2": 122
+        "x1": 288,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
       }
     ],
     "states": {
@@ -201,249 +69,85 @@
         "row": 0,
         "frameCount": 1
       },
-      "flame": {
-        "row": 0,
-        "colOffset": 1,
-        "frameCount": 5,
-        "colsPerRow": 3
+      "life": {
+        "row": 1,
+        "frameCount": 8
       }
     }
   },
   "desperado_club": {
     "path": "environment/buildings/desperado_club.png",
-    "frameWidth": 500,
-    "frameHeight": 437,
+    "frameWidth": 576,
+    "frameHeight": 480,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 45,
+    "tileScale": 48,
     "blockedRegions": [
       {
-        "x1": 1,
-        "y1": 300,
-        "x2": 499,
-        "y2": 330
+        "x1": 0,
+        "y1": 173,
+        "x2": 576,
+        "y2": 431
       },
       {
-        "x1": 1,
-        "y1": 330,
-        "x2": 198,
-        "y2": 437
+        "x1": 0,
+        "y1": 432,
+        "x2": 192,
+        "y2": 480
       },
       {
-        "x1": 275,
-        "y1": 330,
-        "x2": 499,
-        "y2": 437
+        "x1": 288,
+        "y1": 432,
+        "x2": 576,
+        "y2": 480
       }
     ],
     "states": {
       "idle": {
         "row": 0,
         "frameCount": 1
-      }
-    }
-  },
-  "shop": {
-    "path": "environment/buildings/shop.png",
-    "frameWidth": 346,
-    "frameHeight": 204,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 45,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 95,
-        "x2": 345,
-        "y2": 112
       },
-      {
-        "x1": 1,
-        "y1": 112,
-        "x2": 110,
-        "y2": 204
-      },
-      {
-        "x1": 185,
-        "y1": 112,
-        "x2": 345,
-        "y2": 204
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "small_inn": {
-    "path": "environment/buildings/small_inn.png",
-    "frameWidth": 346,
-    "frameHeight": 269,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 45,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 185,
-        "x2": 345,
-        "y2": 198
-      },
-      {
-        "x1": 1,
-        "y1": 198,
-        "x2": 113,
-        "y2": 269
-      },
-      {
-        "x1": 168,
-        "y1": 198,
-        "x2": 345,
-        "y2": 269
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "tattoo_parlor": {
-    "path": "environment/buildings/tattoo_parlor.png",
-    "frameWidth": 330,
-    "frameHeight": 218,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 45,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 110,
-        "x2": 329,
-        "y2": 120
-      },
-      {
-        "x1": 1,
-        "y1": 120,
-        "x2": 85,
-        "y2": 218
-      },
-      {
-        "x1": 150,
-        "y1": 120,
-        "x2": 329,
-        "y2": 218
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "tavern_1": {
-    "path": "environment/buildings/tavern_1.png",
-    "frameWidth": 348,
-    "frameHeight": 211,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 45,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 125,
-        "x2": 347,
-        "y2": 135
-      },
-      {
-        "x1": 1,
-        "y1": 135,
-        "x2": 68,
-        "y2": 211
-      },
-      {
-        "x1": 130,
-        "y1": 135,
-        "x2": 347,
-        "y2": 211
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      }
-    }
-  },
-  "tavern_2": {
-    "path": "environment/buildings/tavern_2.png",
-    "frameWidth": 357,
-    "frameHeight": 208,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 45,
-    "blockedRegions": [
-      {
-        "x1": 1,
-        "y1": 110,
-        "x2": 356,
-        "y2": 120
-      },
-      {
-        "x1": 1,
-        "y1": 120,
-        "x2": 120,
-        "y2": 208
-      },
-      {
-        "x1": 250,
-        "y1": 120,
-        "x2": 356,
-        "y2": 208
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
+      "life": {
+        "row": 1,
+        "frameCount": 6
       }
     }
   },
   "temple": {
     "path": "environment/buildings/temple.png",
-    "frameWidth": 323,
-    "frameHeight": 282,
+    "frameWidth": 384,
+    "frameHeight": 336,
     "tileX": 0,
     "tileY": 0,
-    "tileScale": 45,
+    "tileScale": 48,
     "blockedRegions": [
       {
-        "x1": 1,
-        "y1": 150,
-        "x2": 322,
-        "y2": 163
+        "x1": 0,
+        "y1": 165,
+        "x2": 384,
+        "y2": 287
       },
       {
-        "x1": 1,
-        "y1": 163,
-        "x2": 113,
-        "y2": 230
+        "x1": 0,
+        "y1": 288,
+        "x2": 144,
+        "y2": 336
       },
       {
-        "x1": 193,
-        "y1": 163,
-        "x2": 322,
-        "y2": 230
+        "x1": 192,
+        "y1": 288,
+        "x2": 384,
+        "y2": 336
       }
     ],
     "states": {
       "idle": {
         "row": 0,
         "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 6
       }
     }
   },
@@ -497,6 +201,424 @@
       "default": {
         "row": 0,
         "frameCount": 1
+      }
+    }
+  },
+  "sleeping_cat_inn": {
+    "path": "environment/buildings/sleeping_cat_inn.png",
+    "frameWidth": 384,
+    "frameHeight": 288,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 136,
+        "x2": 384,
+        "y2": 239
+      },
+      {
+        "x1": 0,
+        "y1": 240,
+        "x2": 96,
+        "y2": 288
+      },
+      {
+        "x1": 192,
+        "y1": 240,
+        "x2": 384,
+        "y2": 288
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "blackwood_lodge": {
+    "path": "environment/buildings/blackwood_lodge.png",
+    "frameWidth": 336,
+    "frameHeight": 288,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 145,
+        "x2": 336,
+        "y2": 239
+      },
+      {
+        "x1": 0,
+        "y1": 240,
+        "x2": 144,
+        "y2": 288
+      },
+      {
+        "x1": 192,
+        "y1": 240,
+        "x2": 336,
+        "y2": 288
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 9
+      }
+    }
+  },
+  "shepherds_cabin": {
+    "path": "environment/buildings/shepherds_cabin.png",
+    "frameWidth": 336,
+    "frameHeight": 288,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 141,
+        "x2": 336,
+        "y2": 239
+      },
+      {
+        "x1": 0,
+        "y1": 240,
+        "x2": 144,
+        "y2": 288
+      },
+      {
+        "x1": 192,
+        "y1": 240,
+        "x2": 336,
+        "y2": 288
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 7
+      }
+    }
+  },
+  "cartwrights_workshop": {
+    "path": "environment/buildings/cartwrights_workshop.png",
+    "frameWidth": 384,
+    "frameHeight": 336,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 152,
+        "x2": 384,
+        "y2": 287
+      },
+      {
+        "x1": 0,
+        "y1": 288,
+        "x2": 144,
+        "y2": 336
+      },
+      {
+        "x1": 240,
+        "y1": 288,
+        "x2": 384,
+        "y2": 336
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "herb_remedy": {
+    "path": "environment/buildings/herb_remedy.png",
+    "frameWidth": 336,
+    "frameHeight": 288,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 134,
+        "x2": 336,
+        "y2": 239
+      },
+      {
+        "x1": 0,
+        "y1": 240,
+        "x2": 144,
+        "y2": 288
+      },
+      {
+        "x1": 192,
+        "y1": 240,
+        "x2": 336,
+        "y2": 288
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 7
+      }
+    }
+  },
+  "general_store": {
+    "path": "environment/buildings/general_store.png",
+    "frameWidth": 384,
+    "frameHeight": 240,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 110,
+        "x2": 384,
+        "y2": 191
+      },
+      {
+        "x1": 0,
+        "y1": 192,
+        "x2": 96,
+        "y2": 240
+      },
+      {
+        "x1": 192,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "horned_flagon": {
+    "path": "environment/buildings/horned_flagon.png",
+    "frameWidth": 384,
+    "frameHeight": 240,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 112,
+        "x2": 384,
+        "y2": 191
+      },
+      {
+        "x1": 0,
+        "y1": 192,
+        "x2": 144,
+        "y2": 240
+      },
+      {
+        "x1": 240,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 24
+      }
+    }
+  },
+  "hildas_cottage": {
+    "path": "environment/buildings/hildas_cottage.png",
+    "frameWidth": 336,
+    "frameHeight": 288,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 149,
+        "x2": 336,
+        "y2": 239
+      },
+      {
+        "x1": 0,
+        "y1": 240,
+        "x2": 144,
+        "y2": 288
+      },
+      {
+        "x1": 192,
+        "y1": 240,
+        "x2": 336,
+        "y2": 288
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 7
+      }
+    }
+  },
+  "sunken_stump": {
+    "path": "environment/buildings/sunken_stump.png",
+    "frameWidth": 384,
+    "frameHeight": 240,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 114,
+        "x2": 384,
+        "y2": 191
+      },
+      {
+        "x1": 0,
+        "y1": 192,
+        "x2": 96,
+        "y2": 240
+      },
+      {
+        "x1": 192,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 6
+      }
+    }
+  },
+  "signets_ink": {
+    "path": "environment/buildings/signets_ink.png",
+    "frameWidth": 384,
+    "frameHeight": 240,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 106,
+        "x2": 384,
+        "y2": 191
+      },
+      {
+        "x1": 0,
+        "y1": 192,
+        "x2": 96,
+        "y2": 240
+      },
+      {
+        "x1": 144,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 8
+      }
+    }
+  },
+  "millers_farm": {
+    "path": "environment/buildings/millers_farm.png",
+    "frameWidth": 384,
+    "frameHeight": 336,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 153,
+        "x2": 384,
+        "y2": 287
+      },
+      {
+        "x1": 0,
+        "y1": 288,
+        "x2": 144,
+        "y2": 336
+      },
+      {
+        "x1": 192,
+        "y1": 288,
+        "x2": 384,
+        "y2": 336
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 7
       }
     }
   }
