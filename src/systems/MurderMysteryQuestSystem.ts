@@ -14,6 +14,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { WELL } from '../map/tileTypes';
@@ -666,6 +667,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
       krasue.setMap(this.gameMap);
       krasue.ignoresTownSafeZone = true;
       krasue.applyMobLevel(NIGHT_SWARM_LEVEL);
+      applyActiveDifficultyRewards(krasue);
       this.addMob(krasue);
       this.swarm.push(krasue);
     }

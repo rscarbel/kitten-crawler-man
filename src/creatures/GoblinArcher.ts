@@ -12,6 +12,7 @@ import {
 } from '../sprites/goblinSprite';
 import { GOBLIN_PACK_ALERT_RADIUS_TILES, GOBLIN_PACK_KIND } from './Goblin';
 import type { GoblinArrowShot } from '../systems/GoblinArrowSystem';
+import { PLAYER_SPEED } from '../core/constants';
 
 /**
  * A goblin that will not close.
@@ -30,6 +31,12 @@ import type { GoblinArrowShot } from '../systems/GoblinArrowSystem';
 
 const ARCHER_HP = 5;
 const ARCHER_SPEED = 1.2;
+/**
+ * A kiter that outruns its pursuer is unkillable, so its levelled walk speed
+ * is capped at this fraction of the player's. Levels 1-6 are unaffected.
+ */
+const ARCHER_MAX_SPEED_RATIO = 0.7;
+export const ARCHER_MAX_SPEED = PLAYER_SPEED * ARCHER_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 9;
 
 /**
@@ -141,6 +148,10 @@ export class GoblinArcher extends Mob {
 
   protected override get packAlertRadiusTiles(): number {
     return GOBLIN_PACK_ALERT_RADIUS_TILES;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return ARCHER_MAX_SPEED;
   }
 
   /** Its telegraphs are long and its shots are dodgeable — so the companion dodges. */

@@ -5,6 +5,7 @@ import { drawMissQuillSprite } from '../sprites/missQuillSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
 import { Krasue } from './Krasue';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 
 const QUILL_HP = 260;
 /** She holds her office floor — a headmistress does not chase. */
@@ -159,6 +160,7 @@ export class MissQuill extends Mob {
           krasue.setMap(this.map);
           krasue.ignoresTownSafeZone = true;
           krasue.applyMobLevel(SUMMON_LEVEL);
+          applyActiveDifficultyRewards(krasue);
           this.addMob(krasue);
           this.summons.push(krasue);
           this.castAnimTimer = CAST_ANIM_FRAMES;

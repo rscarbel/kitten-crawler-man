@@ -34,6 +34,14 @@ export interface BountyProgress {
    */
   lastSiteIndex: number | null;
   bountiesCompleted: number;
+  /**
+   * The coins this encounter will pay out, stamped when the mark was
+   * levelled. Lives here — not on `BountySystem`, which is rebuilt on every
+   * building entry/exit — so a mark killed on one difficulty and collected
+   * after a door round-trip still pays what that fight was actually worth,
+   * rather than whatever a freshly constructed system happens to default to.
+   */
+  pendingPayoutCoins: number;
 }
 
 /**
@@ -55,6 +63,7 @@ export interface BountyProgressCheckpoint {
   currentSiteIndex: number | null;
   lastSiteIndex: number | null;
   bountiesCompleted: number;
+  pendingPayoutCoins: number;
 }
 
 /** Deep-copies the per-type name pools; the pools themselves are reshuffled in place. */
@@ -80,6 +89,7 @@ export function captureBountyProgress(progress: BountyProgress): BountyProgressC
     currentSiteIndex: progress.currentSiteIndex,
     lastSiteIndex: progress.lastSiteIndex,
     bountiesCompleted: progress.bountiesCompleted,
+    pendingPayoutCoins: progress.pendingPayoutCoins,
   };
 }
 
@@ -106,6 +116,7 @@ export function restoreBountyProgress(
   progress.currentSiteIndex = snapshot.currentSiteIndex;
   progress.lastSiteIndex = snapshot.lastSiteIndex;
   progress.bountiesCompleted = snapshot.bountiesCompleted;
+  progress.pendingPayoutCoins = snapshot.pendingPayoutCoins;
 }
 
 /** Fisher–Yates into a fresh array; leaves the source untouched. */
@@ -156,6 +167,7 @@ export function createBountyProgress(): BountyProgress {
     currentSiteIndex: null,
     lastSiteIndex: null,
     bountiesCompleted: 0,
+    pendingPayoutCoins: 0,
   };
 }
 

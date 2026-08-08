@@ -7,6 +7,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -68,6 +69,7 @@ export class CultHideoutSystem implements GameSystem {
       const cultist = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       cultist.setMap(this.map);
       cultist.applyMobLevel(CULT_HIDEOUT_CULTIST_LEVEL);
+      applyActiveDifficultyRewards(cultist);
       this.addMob(cultist);
       this.cultists.push(cultist);
     }

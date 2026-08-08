@@ -6,6 +6,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -370,6 +371,7 @@ export class ArenaSystem implements GameSystem {
       // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
       // distraction the crawler can ignore, which is the opposite of the point.
       mob.applyMobLevel(bos.mobLevel);
+      applyActiveDifficultyRewards(mob);
       mob.shedFromBall = true;
       mob.dazeTimer = SHED_DAZE_FRAMES;
       this.addMob(mob);

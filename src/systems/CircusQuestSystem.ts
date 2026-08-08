@@ -15,6 +15,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
@@ -394,6 +395,7 @@ export class CircusQuestSystem implements GameSystem {
     const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
     heather.setMap(this.gameMap);
     heather.applyMobLevel(HEATHER_LEVEL);
+    applyActiveDifficultyRewards(heather);
     this.heather = heather;
     this.addMob(heather);
   }

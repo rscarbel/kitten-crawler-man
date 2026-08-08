@@ -12,6 +12,7 @@ import {
   difficultyStats,
   type DifficultySegment,
 } from '../core/DifficultyStats';
+import { DIFFICULTY_LABELS } from '../core/difficultyProfiles';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 
@@ -68,8 +69,12 @@ function buildRow(segment: DifficultySegment): DifficultyRow | null {
   const meanHpFraction = hasFights ? tally.hpRemainingSum / tally.roomFights : 0;
   const isOnTarget =
     meanHpFraction >= HP_TARGET_MIN_FRACTION && meanHpFraction <= HP_TARGET_MAX_FRACTION;
+  // The tag names the tier this segment's numbers were actually measured
+  // under — stamped on the tally when it opened, not read live, so it stays
+  // correct even if the player flips difficulty mid-run.
+  const tag = DIFFICULTY_LABELS[tally.difficulty][0];
   return {
-    label: SEGMENT_LABELS[segment],
+    label: `${SEGMENT_LABELS[segment]} [${tag}]`,
     hp: hasFights ? `${Math.round(meanHpFraction * PERCENT_SCALE)}%` : NO_DATA,
     hpColor: !hasFights
       ? TEXT_PRESETS.label.color

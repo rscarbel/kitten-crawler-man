@@ -16,6 +16,8 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { activeDifficultyProfile, type DifficultyProfile } from '../core/difficultyProfiles';
+import { settings } from '../core/Settings';
 import { clamp } from '../utils';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -62,9 +64,11 @@ import {
  * the first attempt at these levels. What made the Knight and the Mantid
  * unbeatable was specific to them (a percentage-of-max-HP attack scaled a second
  * time by mob level; a walk speed with no ceiling), and both are fixed at the
- * source. Tune an individual mark, not this number.
+ * source — every levelled walk speed in the game now goes through
+ * `Mob.levelledSpeedCap`, so no escort of any kind can outrun the player
+ * again. Tune an individual mark, not this number.
  */
-const MAX_BOUNTY_MOB_LEVEL = 20;
+export const MAX_BOUNTY_MOB_LEVEL = 20;
 /** The mark itself outranks its escort by this much. */
 const BOUNTY_BOSS_LEVEL_BONUS = 1;
 
@@ -131,22 +135,38 @@ function tileCentrePx(tile: number): number {
 
 /**
  * The level a bounty encounter's escort spawns at: the stronger party member's
- * level, capped. The only place in the codebase where a mob's level derives from
- * the players' — keep the derivation here so tuning it is one edit.
+ * level, scaled by the difficulty's `bountyLevelRatio` and capped. The only
+ * place in the codebase where a mob's level derives from the players' — keep
+ * the derivation here so tuning it is one edit. The ratio applies before the
+ * cap, per `earnedLevelFloor`'s own convention — Easy's relief is a lower
+ * escort level, not a wider band.
  */
-export function bountyMinionLevel(humanLevel: number, catLevel: number): number {
-  return clamp(Math.max(humanLevel, catLevel), 1, MAX_BOUNTY_MOB_LEVEL);
+export function bountyMinionLevel(
+  humanLevel: number,
+  catLevel: number,
+  profile: DifficultyProfile,
+): number {
+  const partyLevel = Math.max(humanLevel, catLevel);
+  return clamp(Math.round(partyLevel * profile.bountyLevelRatio), 1, MAX_BOUNTY_MOB_LEVEL);
 }
 
 /** The mark's own level: one step above its escort, still capped. */
-export function bountyBossLevel(humanLevel: number, catLevel: number): number {
+export function bountyBossLevel(
+  humanLevel: number,
+  catLevel: number,
+  profile: DifficultyProfile,
+): number {
   return Math.min(
-    bountyMinionLevel(humanLevel, catLevel) + BOUNTY_BOSS_LEVEL_BONUS,
+    bountyMinionLevel(humanLevel, catLevel, profile) + BOUNTY_BOSS_LEVEL_BONUS,
     MAX_BOUNTY_MOB_LEVEL,
   );
 }
 
-/** Coins Shady hands over for a mark of the given level. */
+/**
+ * Coins Shady hands over for a mark of the given level, before the
+ * difficulty's `bountyPayoutScale`. Kept separate from that scale so
+ * `verify-bounty.ts` can assert the base curve is untouched by it.
+ */
 export function bountyPayoutCoins(bossLevel: number): number {
   return BOUNTY_PAYOUT_BASE_COINS + BOUNTY_PAYOUT_PER_LEVEL_COINS * (bossLevel - 1);
 }
@@ -163,7 +183,6 @@ export interface BountyCheckpoint {
   aggroReleased: boolean;
   respawnPending: boolean;
   markers: Array<{ x: number; y: number; type: QuestMarkerType }>;
-  pendingPayoutCoins: number;
   collectPointWorld: { x: number; y: number } | null;
   shady: Shady | null;
 }
@@ -184,13 +203,6 @@ export class BountySystem implements GameSystem {
   /** The quest-giver himself, once the scene has found him a tile beside the board. */
   private shady: Shady | null = null;
   private readonly dialog: QuestDialog;
-  /**
-   * The coins the open payout dialog promised. Captured when the dialog opens
-   * and handed to `collectBounty` when it completes, so the number he says and
-   * the number he pays cannot disagree — recomputing on completion would let a
-   * level-up landing mid-conversation quietly change one of them.
-   */
-  private pendingPayoutCoins = 0;
 
   /**
    * Where the arrow points once the mark is dead — Shady's tile. Set by the
@@ -329,10 +341,12 @@ export class BountySystem implements GameSystem {
       return true;
     }
     if (this.progress.phase === 'kill_pending') {
-      this.pendingPayoutCoins = bountyPayoutCoins(bountyBossLevel(human.level, cat.level));
       this.dialog.open(
-        buildBountyPayoutDialog(this.progress.currentName ?? 'It', this.pendingPayoutCoins),
-        () => this.collectBounty(active, human, cat, this.pendingPayoutCoins),
+        buildBountyPayoutDialog(
+          this.progress.currentName ?? 'It',
+          this.progress.pendingPayoutCoins,
+        ),
+        () => this.collectBounty(active),
       );
       return true;
     }
@@ -344,7 +358,7 @@ export class BountySystem implements GameSystem {
     // spent when the last page is pressed through, so an abandoned conversation
     // does not burn a name out of the pool.
     const name = peekNextBountyName(this.progress, def.id);
-    this.dialog.open(buildBountyOfferDialog(name, def.typeLabel), () =>
+    this.dialog.open(buildBountyOfferDialog(name, def.typeLabel, settings.difficulty), () =>
       this.issueBounty(human, cat),
     );
     return true;
@@ -432,17 +446,15 @@ export class BountySystem implements GameSystem {
    * Pays the bounty out and re-arms the loop. Returns the coins awarded, or 0
    * when there is nothing to collect.
    */
-  collectBounty(
-    recipient: HumanPlayer | CatPlayer,
-    human: HumanPlayer,
-    cat: CatPlayer,
-    promised?: number,
-  ): number {
+  collectBounty(recipient: HumanPlayer | CatPlayer): number {
     if (this.progress.phase !== 'kill_pending') return 0;
-    // Shady's dialog passes the figure it already quoted. Recomputing it here
-    // would let a level-up landing mid-conversation pay a different number from
-    // the one on screen; the debug command omits it and computes its own.
-    const coins = promised ?? bountyPayoutCoins(bountyBossLevel(human.level, cat.level));
+    // Stamped in `stageEncounter` when the mark was levelled, not recomputed
+    // here — a difficulty flip between the kill and this conversation must not
+    // change what the fight that already happened is worth. Lives on `progress`
+    // rather than on this system, which is rebuilt on every building
+    // entry/exit — a mark killed just before a door round-trip must still pay
+    // what it was worth, not whatever a fresh instance defaults to.
+    const coins = this.progress.pendingPayoutCoins;
     recipient.coins += coins;
     this.audio?.play('coin_pouch');
     this.progress.phase = 'available';
@@ -509,7 +521,6 @@ export class BountySystem implements GameSystem {
       aggroReleased: this.aggroReleased,
       respawnPending: this.respawnPending,
       markers: this._markers.map((marker) => ({ ...marker })),
-      pendingPayoutCoins: this.pendingPayoutCoins,
       collectPointWorld: this.collectPointWorld === null ? null : { ...this.collectPointWorld },
       shady: this.shady,
     };
@@ -540,7 +551,6 @@ export class BountySystem implements GameSystem {
     this.respawnPending = markWasStillAtLarge;
     this._markers.length = 0;
     for (const marker of snapshot.markers) this._markers.push({ ...marker });
-    this.pendingPayoutCoins = snapshot.pendingPayoutCoins;
     this.collectPointWorld =
       snapshot.collectPointWorld === null ? null : { ...snapshot.collectPointWorld };
     this.shady = snapshot.shady;
@@ -785,15 +795,33 @@ export class BountySystem implements GameSystem {
       void prewarmGroups(assetReq.requiredGroups);
     }
 
-    const minionLevel = bountyMinionLevel(human.level, cat.level);
-    const bossLevel = bountyBossLevel(human.level, cat.level);
+    // Read live, not stamped at issue: a bounty issued on one setting and
+    // resumed after a door stays on that setting only if it still says so —
+    // the same re-read `restageFromRecord` already does for player levels.
+    const profile = activeDifficultyProfile();
+    const minionLevel = bountyMinionLevel(human.level, cat.level, profile);
+    const bossLevel = bountyBossLevel(human.level, cat.level, profile);
     const { boss, minions } = def.spawn(site.x, site.y, this.gameMap, minionLevel);
 
     boss.applyMobLevel(bossLevel);
+    boss.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
     boss.displayName = name;
     boss.isBoss = true;
     boss.immuneToConfusion = true;
-    for (const minion of minions) minion.applyMobLevel(minionLevel);
+    for (const minion of minions) {
+      minion.applyMobLevel(minionLevel);
+      minion.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
+    }
+    // Stamped on `progress` here, alongside the level and the mob rewards,
+    // rather than read live at collection time: the payout is a reward like
+    // any other, and a player who kills the mark on Kitten and only then
+    // walks back to Shady must not be able to switch to Nightmare in the
+    // pause menu on the way and collect Nightmare's payout for a fight they
+    // never had. On `progress` rather than this system, which is rebuilt on
+    // every building entry/exit, so the stamp survives a door round-trip too.
+    this.progress.pendingPayoutCoins = Math.round(
+      bountyPayoutCoins(bossLevel) * profile.bountyPayoutScale,
+    );
 
     this.encounter = [boss, ...minions];
     this.boss = boss;

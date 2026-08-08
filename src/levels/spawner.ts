@@ -38,6 +38,7 @@ import { GoblinArcher } from '../creatures/GoblinArcher';
 import { clamp, randomInt } from '../utils';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
+import type { DifficultyProfile } from '../core/difficultyProfiles';
 import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
 
 type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
@@ -163,23 +164,6 @@ function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
   return rules[rules.length - 1];
 }
 
-/**
- * How much of the party's own level an ordinary mob is levelled toward.
- *
- * Deliberately under 1. Matching the party exactly would erase the reward for
- * getting stronger — every fight would feel identical at level 3 and at level
- * 15 — while ignoring the party entirely is what made a floor revisited later
- * a walk. Under 1, an on-schedule party always out-levels what it meets, and
- * the gap it has earned is what it feels.
- */
-const MOB_LEVEL_PARTY_RATIO = 0.7;
-
-/**
- * The same, for bosses. Higher than the ordinary ratio because a boss is meant
- * to be the fight of its stretch of floor, not another room.
- */
-const BOSS_LEVEL_PARTY_RATIO = 0.8;
-
 /** The stronger of the two crawlers, which is what every level below keys off. */
 export function partyLevelOf(humanLevel: number, catLevel: number): number {
   return Math.max(humanLevel, catLevel);
@@ -197,10 +181,14 @@ export function partyLevelOf(humanLevel: number, catLevel: number): number {
  * Takes the band alone, so a weighted `MobSpawnRule`, a camp's `CampSpawnRule`,
  * an `ExtraSpawnRule` and a `BossRoomRule` can all be levelled by it.
  */
-export function resolveSpawnLevel(band: MobLevelRange, partyLevel: number): number {
+export function resolveSpawnLevel(
+  band: MobLevelRange,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
-  return randomInt(earnedLevelFloor(band, partyLevel), max);
+  return randomInt(earnedLevelFloor(band, partyLevel, profile), max);
 }
 
 /**
@@ -210,28 +198,51 @@ export function resolveSpawnLevel(band: MobLevelRange, partyLevel: number): numb
  * Split out so `scripts/verify-difficulty.ts` can assert the one guarantee the
  * roll itself hides — that the *floor* is always under what the party has
  * earned, which is what makes levelling up feel like it bought something.
+ *
+ * The ratio is `profile.ambientLevelRatio` rather than a flat constant so the
+ * difficulty toggle can move it — deliberately under 1 on every profile.
+ * Matching the party exactly would erase the reward for getting stronger, while
+ * ignoring the party entirely is what made a floor revisited later a walk.
+ * Under 1, an on-schedule party always out-levels what it meets.
  */
-export function earnedLevelFloor(band: MobLevelRange, partyLevel: number): number {
+export function earnedLevelFloor(
+  band: MobLevelRange,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
-  return clamp(Math.round(partyLevel * MOB_LEVEL_PARTY_RATIO), min, max);
+  return clamp(Math.round(partyLevel * profile.ambientLevelRatio), min, max);
 }
 
 /**
  * A boss's level: the party-relative point in its band, not a roll around it.
  *
  * Unrolled deliberately — a boss is an authored encounter, and two runs meeting
- * the same boss at the same party level should meet the same fight.
+ * the same boss at the same party level and difficulty should meet the same
+ * fight. Higher ratio than the ambient one on every profile, because a boss is
+ * meant to be the fight of its stretch of floor, not another room.
  */
-export function resolveBossLevel(band: MobLevelRange, partyLevel: number): number {
+export function resolveBossLevel(
+  band: MobLevelRange,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
-  return clamp(Math.round(partyLevel * BOSS_LEVEL_PARTY_RATIO), min, max);
+  return clamp(Math.round(partyLevel * profile.bossLevelRatio), min, max);
 }
 
 /** Whichever of the two rules above suits what was actually spawned. */
-function levelForMob(mob: Mob, band: MobLevelRange, partyLevel: number): number {
-  return mob.isBoss ? resolveBossLevel(band, partyLevel) : resolveSpawnLevel(band, partyLevel);
+function levelForMob(
+  mob: Mob,
+  band: MobLevelRange,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): number {
+  return mob.isBoss
+    ? resolveBossLevel(band, partyLevel, profile)
+    : resolveSpawnLevel(band, partyLevel, profile);
 }
 
 /**
@@ -378,7 +389,12 @@ const SPAWN_SETUP: Partial<
  * Spawn mobs described by `def.extraSpawns` — position-relative spawns
  * that are tied to map landmarks rather than generic spawn points.
  */
-export function spawnExtraMobs(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
+export function spawnExtraMobs(
+  def: LevelDef,
+  map: GameMap,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): Mob[] {
   const mobs: Mob[] = [];
   if (!def.extraSpawns) return mobs;
 
@@ -388,7 +404,8 @@ export function spawnExtraMobs(def: LevelDef, map: GameMap, partyLevel: number):
 
     for (const [dx, dy] of rule.offsets) {
       const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
-      mob.applyMobLevel(levelForMob(mob, rule, partyLevel));
+      mob.applyMobLevel(levelForMob(mob, rule, partyLevel, profile));
+      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
       if (rule.setup) {
         SPAWN_SETUP[rule.setup]?.(mob, map, origin);
       }
@@ -422,7 +439,12 @@ const CAMP_SPAWN_ATTEMPTS = 40;
  * of `homePoint`/`leashRadiusTiles` and it writes them on floor 3 only, so this
  * remains provably invisible to the goblins and troglodytes on floors 1 and 2.
  */
-function spawnCampResidents(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
+function spawnCampResidents(
+  def: LevelDef,
+  map: GameMap,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): Mob[] {
   const mobs: Mob[] = [];
   const rosters = def.campSpawns;
   if (rosters === undefined) return mobs;
@@ -436,7 +458,8 @@ function spawnCampResidents(def: LevelDef, map: GameMap, partyLevel: number): Mo
         const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles);
         if (tile === null) continue;
         const mob = createMob(rule.type, tile.x, tile.y, map);
-        mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel));
+        mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
+        mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
         // Its own spawn tile, **not** the camp's centre. The centre is a
         // `CAMPFIRE` — solid — and `followTargetAStar` would be asked to path to
         // a tile nothing can stand on, which is a resident that never walks home
@@ -474,7 +497,12 @@ function findWalkableTileInCamp(
  * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
  * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
  */
-export function spawnForLevel(def: LevelDef, map: GameMap, partyLevel: number): Mob[] {
+export function spawnForLevel(
+  def: LevelDef,
+  map: GameMap,
+  partyLevel: number,
+  profile: DifficultyProfile,
+): Mob[] {
   const mobs: Mob[] = [];
 
   if (def.roomMobs.length > 0) {
@@ -503,7 +531,8 @@ export function spawnForLevel(def: LevelDef, map: GameMap, partyLevel: number): 
         const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
         if (tile === null) return;
         const mob = createMob(type, tile.x, tile.y, map);
-        mob.applyMobLevel(resolveSpawnLevel(band, partyLevel));
+        mob.applyMobLevel(resolveSpawnLevel(band, partyLevel, profile));
+        mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
         mobs.push(mob);
       };
       for (let i = 0; i < count; i++) spawnInRoom(rule, rule.type);
@@ -515,12 +544,13 @@ export function spawnForLevel(def: LevelDef, map: GameMap, partyLevel: number): 
     for (const { x, y } of map.hallwaySpawnPoints) {
       const rule = pickRule(def.hallwayMobs);
       const mob = createMob(rule.type, x, y, map);
-      mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel));
+      mob.applyMobLevel(resolveSpawnLevel(rule, partyLevel, profile));
+      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
       mobs.push(mob);
     }
   }
 
-  mobs.push(...spawnCampResidents(def, map, partyLevel));
+  mobs.push(...spawnCampResidents(def, map, partyLevel, profile));
 
   const bossRooms = def.bossRooms ?? [];
   for (let i = 0; i < bossRooms.length; i++) {
@@ -528,7 +558,8 @@ export function spawnForLevel(def: LevelDef, map: GameMap, partyLevel: number): 
     if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
     const boss = createMob(bossEntry.type, brData.centre.x, brData.centre.y, map);
-    boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel));
+    boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile));
+    boss.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
     mobs.push(boss);
   }
 
@@ -543,6 +574,7 @@ export function spawnTreasureRoomMobs(
   treasureRooms: TreasureRoomData[],
   def: LevelDef,
   map: GameMap,
+  profile: DifficultyProfile,
 ): Mob[] {
   const mobs: Mob[] = [];
   if (def.roomMobs.length === 0) return mobs;
@@ -564,6 +596,7 @@ export function spawnTreasureRoomMobs(
       const mob = createMob(rule.type, tile.x, tile.y, map);
       const maxLevel = rule.maxLevel ?? rule.minLevel ?? 1;
       mob.applyMobLevel(Math.min(maxLevel + TREASURE_ROOM_LEVEL_BOOST, MAX_MOB_LEVEL));
+      mob.applyDifficultyRewards(profile.rewardXpScale, profile.rewardCoinScale);
       mobs.push(mob);
     }
   }

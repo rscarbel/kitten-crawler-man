@@ -4,6 +4,7 @@ import { SKELETON_ARCHER_BODY_PART_KEY, drawSkeletonArcherSprite } from '../spri
 import { BONE_ARROW_DRAW_FRAMES, boneArrowReleaseFrame } from '../sprites/skeletonTiming';
 import { SKELETON_ESCORT_XP } from './SkeletonWarrior';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
+import { PLAYER_SPEED } from '../core/constants';
 
 /**
  * A bow skeleton.
@@ -16,6 +17,9 @@ import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 
 const ARCHER_HP = 10;
 const ARCHER_SPEED = 1.05;
+/** Same reasoning as the goblin archer's cap: a kiter that outruns its pursuer is unkillable. */
+const ARCHER_MAX_SPEED_RATIO = 0.7;
+export const ARCHER_MAX_SPEED = PLAYER_SPEED * ARCHER_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 11;
 /**
  * The kiting band. Nearer than the minimum it retreats, further than the
@@ -84,6 +88,10 @@ export class SkeletonArcher extends RisingSkeleton {
    */
   override get cullMarginTiles(): number {
     return SKELETON_ARCHER_CULL_MARGIN_TILES;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return ARCHER_MAX_SPEED;
   }
 
   override resetToSpawn(): void {

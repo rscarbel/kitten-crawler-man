@@ -23,6 +23,7 @@ import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import type { GameSystem, SystemContext } from './GameSystem';
 
 /**
@@ -104,9 +105,10 @@ export class SkeletonSummonSystem implements GameSystem {
         ? new SkeletonWarrior(tileX, tileY, TILE_SIZE)
         : new SkeletonArcher(tileX, tileY, TILE_SIZE);
     risen.setMap(this.gameMap);
-    // The three flags BountySystem would have applied at issue time. Summons
-    // never pass through it, so they are applied here — exactly once each.
+    // The flags BountySystem would have applied at issue time. Summons never
+    // pass through it, so they are applied here — exactly once each.
     risen.applyMobLevel(lord.mobLevel);
+    applyActiveDifficultyRewards(risen);
     risen.ignoresTownSafeZone = true;
     // Deliberately unleashed: they climb out into a fight that is already
     // happening, so there is no site for them to be anchored to.

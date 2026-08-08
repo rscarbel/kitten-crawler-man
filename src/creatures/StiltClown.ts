@@ -5,9 +5,13 @@ import {
   type StiltClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/stiltClownSprite';
+import { PLAYER_SPEED } from '../core/constants';
 
 const CLOWN_HP = 14;
 const CLOWN_SPEED = 0.9;
+/** A levelled clown's walk is capped at this fraction of the player's. */
+const CLOWN_MAX_SPEED_RATIO = 0.8;
+export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 8;
 /** Long reach — the stilt clown's signature "Slender Man" lunge. */
 const ATTACK_RANGE_TILES = 2.2;
@@ -41,6 +45,10 @@ export class StiltClown extends Mob {
 
   override get cullMarginTiles(): number {
     return CULL_MARGIN_TILES;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return CLOWN_MAX_SPEED;
   }
 
   /** Staggers this clown's idle loop so a pack of them does not move as one. */

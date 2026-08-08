@@ -21,6 +21,9 @@
  * the tutorial-adjacent opening together with the post-Juicer free region and
  * say nothing about either.
  */
+import { settings } from './Settings';
+import type { Difficulty } from './difficultyProfiles';
+
 export const DIFFICULTY_SEGMENTS = [
   'floor1-pre-hoarder',
   'floor1-post-hoarder',
@@ -33,6 +36,13 @@ export type DifficultySegment = (typeof DIFFICULTY_SEGMENTS)[number];
 
 /** Everything counted for one segment. */
 export interface SegmentTally {
+  /**
+   * The difficulty active when this segment's tally was first opened.
+   * Stamped once rather than read live, so a segment already in progress when
+   * the player flips difficulty in the pause menu keeps the label its numbers
+   * were actually measured under.
+   */
+  readonly difficulty: Difficulty;
   /** Total HP the party lost to anything at all. */
   readonly damageTaken: number;
   readonly potionsUsed: number;
@@ -51,8 +61,9 @@ export interface SegmentTally {
 
 type MutableTally = { -readonly [K in keyof SegmentTally]: SegmentTally[K] };
 
-function emptyTally(): MutableTally {
+function emptyTally(difficulty: Difficulty): MutableTally {
   return {
+    difficulty,
     damageTaken: 0,
     potionsUsed: 0,
     dodges: 0,
@@ -110,7 +121,7 @@ export class DifficultyStats {
     const segment = this.segment;
     const existing = this.tallies.get(segment);
     if (existing !== undefined) return existing;
-    const fresh = emptyTally();
+    const fresh = emptyTally(settings.difficulty);
     this.tallies.set(segment, fresh);
     return fresh;
   }

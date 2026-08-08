@@ -5,9 +5,13 @@ import {
   type FatClownAnimation,
   IDLE_LOOP_SECONDS,
 } from '../sprites/fatClownSprite';
+import { PLAYER_SPEED } from '../core/constants';
 
 const CLOWN_HP = 30;
 const CLOWN_SPEED = 0.7;
+/** A levelled clown's walk is capped at this fraction of the player's. */
+const CLOWN_MAX_SPEED_RATIO = 0.8;
+export const CLOWN_MAX_SPEED = PLAYER_SPEED * CLOWN_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 6;
 const ATTACK_RANGE_TILES = 1.2;
 const ATTACK_DAMAGE = 10;
@@ -46,6 +50,10 @@ export class FatClown extends Mob {
 
   override get cullMarginTiles(): number {
     return CULL_MARGIN_TILES;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return CLOWN_MAX_SPEED;
   }
 
   /** Staggers this clown's idle loop so a pack of them does not move as one. */

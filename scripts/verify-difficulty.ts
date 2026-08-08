@@ -22,6 +22,7 @@ import {
   CADENCE_SCALE_FLOOR,
   cooldownScaleForLevel,
   scaledCooldownFramesForLevel,
+  Mob,
 } from '../src/creatures/Mob';
 import {
   TROGLODYTE_AIM_LOCK_FRAMES,
@@ -41,12 +42,32 @@ import {
   resolveBossLevel,
   resolveSpawnLevel,
 } from '../src/levels/spawner';
-import { Goblin } from '../src/creatures/Goblin';
+import { Goblin, GOBLIN_MAX_SPEED } from '../src/creatures/Goblin';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeSepsis } from '../src/core/StatusEffect';
 import { Juicer } from '../src/creatures/Juicer';
-import { GoblinArcher } from '../src/creatures/GoblinArcher';
+import {
+  GoblinArcher,
+  ARCHER_MAX_SPEED as GOBLIN_ARCHER_MAX_SPEED,
+} from '../src/creatures/GoblinArcher';
+import { CircusLemur, LEMUR_MAX_SPEED } from '../src/creatures/CircusLemur';
+import {
+  SkeletonArcher,
+  ARCHER_MAX_SPEED as SKELETON_ARCHER_MAX_SPEED,
+} from '../src/creatures/SkeletonArcher';
+import { SkeletonWarrior, SKELETON_MAX_SPEED } from '../src/creatures/SkeletonWarrior';
+import { StiltClown, CLOWN_MAX_SPEED as STILT_CLOWN_MAX_SPEED } from '../src/creatures/StiltClown';
+import { FatClown, CLOWN_MAX_SPEED as FAT_CLOWN_MAX_SPEED } from '../src/creatures/FatClown';
+import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
+import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
+import {
+  DIFFICULTY_PROFILES,
+  NORMAL_AMBIENT_LEVEL_RATIO,
+  NORMAL_BOSS_LEVEL_RATIO,
+  type Difficulty,
+} from '../src/core/difficultyProfiles';
+import { bountyMinionLevel, MAX_BOUNTY_MOB_LEVEL } from '../src/systems/BountySystem';
 import { generateDungeon } from '../src/map/DungeonGenerator';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
@@ -349,9 +370,9 @@ section('level bands');
     const max = band.maxLevel ?? min;
     let previousBossLevel = 0;
     for (let partyLevel = 1; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
-      const rolled = resolveSpawnLevel(band, partyLevel);
+      const rolled = resolveSpawnLevel(band, partyLevel, DIFFICULTY_PROFILES.normal);
       if (rolled < min || rolled > max) staysInBand = false;
-      const bossLevel = resolveBossLevel(band, partyLevel);
+      const bossLevel = resolveBossLevel(band, partyLevel, DIFFICULTY_PROFILES.normal);
       if (bossLevel < min || bossLevel > max) bossStaysInBand = false;
       if (bossLevel < previousBossLevel) growsWithParty = false;
       previousBossLevel = bossLevel;
@@ -367,7 +388,9 @@ section('level bands');
   const wideBand: MobLevelRange = { minLevel: 1, maxLevel: MAX_LEVEL };
   let partyStaysAhead = true;
   for (let partyLevel = 2; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
-    if (earnedLevelFloor(wideBand, partyLevel) >= partyLevel) partyStaysAhead = false;
+    if (earnedLevelFloor(wideBand, partyLevel, DIFFICULTY_PROFILES.normal) >= partyLevel) {
+      partyStaysAhead = false;
+    }
   }
   check(partyStaysAhead, 'an open band’s earned floor always sits below the party’s own level');
 
@@ -473,6 +496,292 @@ section('re-levelling');
   }
   check(septicLatches === 1, `a status death resolves exactly once (saw ${septicLatches})`);
   check(septic.droppedLoot !== null, 'a status death still drops the boss loot');
+}
+
+// ── Speed caps ───────────────────────────────────────────────────────────────
+
+/**
+ * The one sanctioned advantage over player speed — the Mantid's stalk, at
+ * 1.08. Anything else claiming a cap above player speed is the goblin
+ * runaway again.
+ */
+const MAX_LEVELLED_WALK_ADVANTAGE = 1.1;
+/** Level every registry entry is levelled to before its cap is checked. */
+const SPEED_CAP_TEST_LEVEL = 20;
+
+const SPEED_CAPPED_MOBS: ReadonlyArray<{ name: string; make: () => Mob; cap: number }> = [
+  {
+    name: 'Goblin (sword)',
+    make: () => new Goblin(0, 0, TILE_SIZE, 'sword'),
+    cap: GOBLIN_MAX_SPEED,
+  },
+  {
+    name: 'GoblinArcher',
+    make: () => new GoblinArcher(0, 0, TILE_SIZE),
+    cap: GOBLIN_ARCHER_MAX_SPEED,
+  },
+  { name: 'CircusLemur', make: () => new CircusLemur(0, 0, TILE_SIZE), cap: LEMUR_MAX_SPEED },
+  {
+    name: 'SkeletonArcher',
+    make: () => new SkeletonArcher(0, 0, TILE_SIZE),
+    cap: SKELETON_ARCHER_MAX_SPEED,
+  },
+  {
+    name: 'SkeletonWarrior',
+    make: () => new SkeletonWarrior(0, 0, TILE_SIZE),
+    cap: SKELETON_MAX_SPEED,
+  },
+  { name: 'StiltClown', make: () => new StiltClown(0, 0, TILE_SIZE), cap: STILT_CLOWN_MAX_SPEED },
+  { name: 'FatClown', make: () => new FatClown(0, 0, TILE_SIZE), cap: FAT_CLOWN_MAX_SPEED },
+  { name: 'Mantid', make: () => new Mantid(0, 0, TILE_SIZE), cap: MANTID_MAX_SPEED },
+  { name: 'MantisCrony', make: () => new MantisCrony(0, 0, TILE_SIZE), cap: MANTIS_MAX_SPEED },
+];
+
+/** Base speed for {@link SpeedCapTestMob} — high enough that level 20 clearly exceeds its cap. */
+const SPEED_CAP_TEST_MOB_BASE_SPEED = 2.0;
+/** The cap {@link SpeedCapTestMob} declares — below what level 20 would otherwise reach. */
+const SPEED_CAP_TEST_MOB_CAP = 3.0;
+
+/**
+ * A minimal capped mob whose only job is to prove `setBaseSpeed` itself
+ * clamps — no registry creature exercises that path today, since none of the
+ * game's `setBaseSpeed` callers (the Hoarder, BrindleGrub, SkyFowl, Juicer)
+ * declare a `levelledSpeedCap`.
+ */
+class SpeedCapTestMob extends Mob {
+  readonly xpValue = 0;
+
+  constructor(tileX: number, tileY: number, tileSize: number) {
+    super(tileX, tileY, tileSize, 1, SPEED_CAP_TEST_MOB_BASE_SPEED);
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return SPEED_CAP_TEST_MOB_CAP;
+  }
+
+  updateAI(): void {
+    // No AI: this mob exists only to drive `applyMobLevel`/`setBaseSpeed` directly.
+  }
+
+  protected override drawSelf(): void {
+    // Never rendered: this script runs headless under Node with no canvas.
+  }
+
+  /** Exposes the protected re-author path a real creature's enrage/evolution would use. */
+  reauthorSpeed(baseSpeed: number): void {
+    this.setBaseSpeed(baseSpeed);
+  }
+}
+
+section('speed caps');
+{
+  // A registry that silently lost every entry would report all-green while
+  // checking nothing — the exact failure mode a gate exists to catch, not
+  // fall into itself.
+  check(SPEED_CAPPED_MOBS.length > 0, 'the speed-cap registry actually has entries');
+
+  let everyCapIsSane = true;
+  for (const { name, cap } of SPEED_CAPPED_MOBS) {
+    if (cap > PLAYER_SPEED * MAX_LEVELLED_WALK_ADVANTAGE + EPSILON) {
+      console.log(`  (${name}'s cap of ${cap} exceeds the sanctioned advantage)`);
+      everyCapIsSane = false;
+    }
+  }
+  check(
+    everyCapIsSane,
+    `every declared cap stays within ${MAX_LEVELLED_WALK_ADVANTAGE}x player speed`,
+  );
+
+  let everyCapHolds = true;
+  for (const { name, make, cap } of SPEED_CAPPED_MOBS) {
+    const mob = make();
+    mob.applyMobLevel(SPEED_CAP_TEST_LEVEL);
+    if (mob.moveSpeed > cap + EPSILON) {
+      console.log(`  (${name} walks at ${mob.moveSpeed} against a cap of ${cap})`);
+      everyCapHolds = false;
+    }
+  }
+  check(everyCapHolds, `no levelled mob exceeds its declared cap at level ${SPEED_CAP_TEST_LEVEL}`);
+
+  // No registry creature today re-authors its speed via `setBaseSpeed` after
+  // levelling (the four `setBaseSpeed` callers in the game — the Hoarder,
+  // BrindleGrub, SkyFowl, Juicer — declare no cap), so a checkpoint reset on
+  // any of them would pass this check whether or not `setBaseSpeed` clamps at
+  // all — the gate-that-cannot-find-its-row trap. Exercised directly instead,
+  // against a minimal capped mob built for exactly this: levelled past its
+  // cap, then re-authored from its base the way an enrage or evolution would.
+  const capped = new SpeedCapTestMob(0, 0, TILE_SIZE);
+  capped.applyMobLevel(SPEED_CAP_TEST_LEVEL);
+  check(
+    capped.moveSpeed <= SPEED_CAP_TEST_MOB_CAP + EPSILON,
+    'the test mob itself is capped by applyMobLevel',
+  );
+  capped.reauthorSpeed(SPEED_CAP_TEST_MOB_BASE_SPEED);
+  check(
+    capped.moveSpeed <= SPEED_CAP_TEST_MOB_CAP + EPSILON,
+    'setBaseSpeed clamps a re-authored speed to the same cap applyMobLevel enforces',
+  );
+}
+
+// ── Difficulty profiles ──────────────────────────────────────────────────────
+
+/** Party level the bounty-relief check is run at — comfortably into the Dark Knight's range. */
+const DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL = 15;
+/** Party levels sampled for the band-safety sweep across every profile. */
+const MAX_PROFILE_PROBED_PARTY_LEVEL = 30;
+
+const ALL_DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+
+section('difficulty profiles');
+{
+  const normal = DIFFICULTY_PROFILES.normal;
+  check(
+    normal.incomingMobDamageScale === 1 &&
+      normal.rewardXpScale === 1 &&
+      normal.rewardCoinScale === 1 &&
+      normal.bountyPayoutScale === 1 &&
+      normal.bountyLevelRatio === 1,
+    "Normal's scales are all exactly 1 — today's game, untouched",
+  );
+  check(
+    normal.ambientLevelRatio === NORMAL_AMBIENT_LEVEL_RATIO &&
+      normal.bossLevelRatio === NORMAL_BOSS_LEVEL_RATIO,
+    'Normal’s level ratios match the shipped 0.7 ambient / 0.8 boss curve',
+  );
+
+  const easy = DIFFICULTY_PROFILES.easy;
+  const hard = DIFFICULTY_PROFILES.hard;
+  check(
+    easy.incomingMobDamageScale <= normal.incomingMobDamageScale &&
+      normal.incomingMobDamageScale <= hard.incomingMobDamageScale,
+    'incoming mob damage only ever rises from Kitten to Nightmare',
+  );
+  check(
+    easy.ambientLevelRatio <= normal.ambientLevelRatio &&
+      normal.ambientLevelRatio <= hard.ambientLevelRatio &&
+      easy.bossLevelRatio <= normal.bossLevelRatio &&
+      normal.bossLevelRatio <= hard.bossLevelRatio &&
+      easy.bountyLevelRatio <= normal.bountyLevelRatio &&
+      normal.bountyLevelRatio <= hard.bountyLevelRatio,
+    'every level ratio only ever rises from Kitten to Nightmare',
+  );
+  check(
+    easy.rewardXpScale === 1 && easy.rewardCoinScale === 1,
+    'Kitten’s reward drop is intrinsic — its explicit reward scales stay at 1',
+  );
+  check(
+    hard.rewardXpScale >= 1 && hard.rewardCoinScale >= 1 && hard.bountyPayoutScale >= 1,
+    'Nightmare’s explicit reward scales never fall below 1',
+  );
+  let everyScaleIsPositive = true;
+  for (const difficulty of ALL_DIFFICULTIES) {
+    const profile = DIFFICULTY_PROFILES[difficulty];
+    for (const value of Object.values(profile)) {
+      if (value <= 0) everyScaleIsPositive = false;
+    }
+  }
+  check(everyScaleIsPositive, 'every axis of every profile is strictly positive');
+
+  // Band safety: no profile may let a party of any level roll outside a rule's
+  // own band — the invariant that keeps a floor's identity whatever the
+  // difficulty toggle says.
+  const bandSafetyBands: readonly MobLevelRange[] = [
+    {},
+    { minLevel: 1, maxLevel: 2 },
+    { minLevel: 3, maxLevel: 7 },
+    { minLevel: 6, maxLevel: 10 },
+    { minLevel: 5 },
+  ];
+  let everyProfileStaysInBand = true;
+  for (const difficulty of ALL_DIFFICULTIES) {
+    const profile = DIFFICULTY_PROFILES[difficulty];
+    for (const band of bandSafetyBands) {
+      const min = band.minLevel ?? 1;
+      const max = band.maxLevel ?? min;
+      for (let partyLevel = 1; partyLevel <= MAX_PROFILE_PROBED_PARTY_LEVEL; partyLevel++) {
+        const rolled = resolveSpawnLevel(band, partyLevel, profile);
+        const bossLevel = resolveBossLevel(band, partyLevel, profile);
+        if (rolled < min || rolled > max) everyProfileStaysInBand = false;
+        if (bossLevel < min || bossLevel > max) everyProfileStaysInBand = false;
+      }
+    }
+  }
+  check(everyProfileStaysInBand, 'every profile keeps every roll inside its rule’s band');
+
+  // Bounty levels: every profile stays inside the hard cap, and Kitten is the
+  // actual relief being promised — a lower escort level at the same party level.
+  let everyProfileStaysInBountyCap = true;
+  for (const difficulty of ALL_DIFFICULTIES) {
+    const profile = DIFFICULTY_PROFILES[difficulty];
+    for (let partyLevel = 1; partyLevel <= MAX_PROFILE_PROBED_PARTY_LEVEL; partyLevel++) {
+      const level = bountyMinionLevel(partyLevel, partyLevel, profile);
+      if (level < 1 || level > MAX_BOUNTY_MOB_LEVEL) everyProfileStaysInBountyCap = false;
+    }
+  }
+  check(everyProfileStaysInBountyCap, 'every profile keeps a bounty escort within 1..cap');
+  check(
+    bountyMinionLevel(
+      DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+      DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+      easy,
+    ) <
+      bountyMinionLevel(
+        DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+        normal,
+      ),
+    `Kitten spawns a lower-level bounty escort than Crawler at a level-${DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL} party`,
+  );
+
+  // Composes with the "Speed caps" section above: difficulty must never
+  // re-open the goblin runaway. `applyMobLevel` itself never reads a profile,
+  // so levelling every registry entry straight to 20 (as that section does)
+  // would run byte-for-byte the same check three times regardless of profile
+  // — the actual seam a profile can affect is the *level a bounty escort
+  // spawns at*, so that's what this drives, through `bountyMinionLevel`, the
+  // real function that decides a bounty escort's level in production.
+  let capsHoldUnderEveryProfile = true;
+  for (const difficulty of ALL_DIFFICULTIES) {
+    const profile = DIFFICULTY_PROFILES[difficulty];
+    const level = bountyMinionLevel(
+      DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+      DIFFICULTY_BOUNTY_TEST_PARTY_LEVEL,
+      profile,
+    );
+    for (const { name, make, cap } of SPEED_CAPPED_MOBS) {
+      const mob = make();
+      mob.applyMobLevel(level);
+      if (mob.moveSpeed > cap + EPSILON) {
+        console.log(
+          `  (${name} at level ${level} on ${difficulty} walks at ${mob.moveSpeed} against a cap of ${cap})`,
+        );
+        capsHoldUnderEveryProfile = false;
+      }
+    }
+  }
+  check(
+    capsHoldUnderEveryProfile,
+    'every speed cap holds at the bounty escort level each profile actually derives',
+  );
+
+  // Speed caps are level-driven, not profile-driven — `mob.applyMobLevel` never
+  // reads a `DifficultyProfile` — so the sweep above is a fixed point rather
+  // than three different worlds. What actually varies by profile is reward
+  // scaling, checked below.
+  const rewardMob = new Goblin(0, 0, TILE_SIZE, 'sword');
+  const baseXp = rewardMob.scaledXpValue;
+  rewardMob.applyDifficultyRewards(hard.rewardXpScale, hard.rewardCoinScale);
+  check(
+    rewardMob.scaledXpValue > baseXp,
+    'applyDifficultyRewards actually raises scaledXpValue on Nightmare',
+  );
+  const xpAfterFirstApply = rewardMob.scaledXpValue;
+  console.log('  (the warning below is the check working, not a failure)');
+  rewardMob.applyDifficultyRewards(hard.rewardXpScale, hard.rewardCoinScale);
+  check(
+    rewardMob.scaledXpValue === xpAfterFirstApply,
+    'a second applyDifficultyRewards is refused rather than compounded',
+  );
 }
 
 // ── Progression regions ──────────────────────────────────────────────────────

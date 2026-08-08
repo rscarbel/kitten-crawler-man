@@ -12,6 +12,7 @@ import { normalize } from './utils';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
 import { computeDodgeChance } from './core/dodge';
+import { activeDifficultyProfile } from './core/difficultyProfiles';
 import {
   SkillManager,
   cockroachRechargeMs,
@@ -587,6 +588,13 @@ export abstract class Player {
    */
   takeDamage(amount: number, source?: DamageSource): boolean {
     if (amount <= 0 || !this.canBeHarmed) return false;
+    // Read live rather than stamped at spawn: flipping to Kitten mid-bounty must
+    // help immediately, or the toggle fails the player who needed it most.
+    // Status ticks and self-inflicted dynamite are unscaled — re-pricing a burn
+    // that is already running would re-price a hit after the dodge/avoid
+    // decision was already made.
+    const scaledAmount =
+      source?.kind === 'mob' ? amount * activeDifficultyProfile().incomingMobDamageScale : amount;
     // Only a swung, thrown or bitten attack can be dodged. Status ticks, your own
     // dynamite, standing damage fields and the doomsday clock all land regardless.
     if (source?.kind === 'mob' && source.undodgeable !== true && this.rollDodge()) {
@@ -594,7 +602,7 @@ export abstract class Player {
       return false;
     }
     const hpBeforeBlow = this.hp;
-    const remainingHp = Math.max(0, this.hp - amount);
+    const remainingHp = Math.max(0, this.hp - scaledAmount);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
     // Every route into this method refreshes the counter, which is what makes a
     // damage-over-time effect hold regen off for as long as it is burning

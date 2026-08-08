@@ -14,6 +14,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { roomKey, type TownMemory } from '../core/TownMemory';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { CityElfCultist } from '../creatures/CityElfCultist';
@@ -91,6 +92,7 @@ export function interiorHostilesFor(ctx: InteriorHostileContext): Mob[] {
   return distinctSpawnTiles(ctx.map, wanted, SPAWN_SEARCH_RADIUS_TILES).map((tile) => {
     const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
     guard.applyMobLevel(STAIR_GUARD_LEVEL);
+    applyActiveDifficultyRewards(guard);
     // No boss room exists indoors, so nothing else would ever wake them, and a
     // guard that has to be walked up to is not a guard.
     guard.forceAggro = true;

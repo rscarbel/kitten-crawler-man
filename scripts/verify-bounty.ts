@@ -29,7 +29,15 @@ import {
 } from '../src/core/BountyProgress';
 import { BOUNTY_DEFS } from '../src/systems/bountyDefs';
 import { createMob } from '../src/levels/spawner';
-import { BountySystem, bountyBossLevel, bountyPayoutCoins } from '../src/systems/BountySystem';
+import {
+  BountySystem,
+  bountyBossLevel,
+  bountyMinionLevel,
+  bountyPayoutCoins,
+} from '../src/systems/BountySystem';
+import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
+import { settings } from '../src/core/Settings';
+import { PLAYER_SPEED } from '../src/core/constants';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { EventBus } from '../src/core/EventBus';
@@ -77,6 +85,14 @@ const REUSABLE_MINION_IDS: readonly string[] = [
   'skeleton_archer',
   'rock_golem',
 ];
+/**
+ * The one sanctioned advantage over player speed — the Mantid's stalk, at
+ * 1.08. Mirrors the same constant in `verify-difficulty.ts`; this is the
+ * check that was missing when the goblins shipped, so it belongs here too.
+ */
+const MAX_LEVELLED_WALK_ADVANTAGE = 1.1;
+/** Party level the per-profile escort-speed and payout sweeps are run at. */
+const DIFFICULTY_TEST_PARTY_LEVEL = 15;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -274,6 +290,94 @@ console.log('\nStaging every def at every site of several maps…');
   );
 }
 
+// Per-difficulty checks: the goblin runaway must stay fixed under every
+// profile, the reward scale must never touch the base XP curve the boss-band
+// checks above read, and Kitten's payout relief has to actually be smaller.
+console.log('\nChecking every def’s encounter under every difficulty profile…');
+{
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });
+  const site = map.bountySites[0];
+  if (site === undefined) {
+    check(false, 'the verification map produced at least one bounty site for the profile sweep');
+  } else {
+    let everyEscortStaysCapped = true;
+    for (const profileName of ['easy', 'normal', 'hard'] as const) {
+      const profile = DIFFICULTY_PROFILES[profileName];
+      const minionLevel = bountyMinionLevel(
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        profile,
+      );
+      const bossLevel = bountyBossLevel(
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        profile,
+      );
+      for (const def of BOUNTY_DEFS) {
+        const { boss, minions } = def.spawn(site.x, site.y, map, minionLevel);
+        boss.applyMobLevel(bossLevel);
+        for (const minion of minions) minion.applyMobLevel(minionLevel);
+        // `verify-difficulty.ts`'s speed-cap registry already covers the
+        // lemur's "capped at its own authored base" exception explicitly;
+        // every one of those authored caps also happens to sit at or under
+        // this ratio, so a bounty escort clearing it is the actual guarantee
+        // this sweep exists to make — a def cannot field a creature that
+        // slips through the shared cap mechanism.
+        for (const mob of [boss, ...minions]) {
+          if (mob.moveSpeed > PLAYER_SPEED * MAX_LEVELLED_WALK_ADVANTAGE) {
+            console.log(`  (${def.id}/${mob.mobType} on ${profileName} walks at ${mob.moveSpeed})`);
+            everyEscortStaysCapped = false;
+          }
+        }
+      }
+    }
+    check(
+      everyEscortStaysCapped,
+      'every def’s escort stays within the sanctioned speed advantage under every profile',
+    );
+  }
+
+  const rewardCheckMob = createMob('goblin', 0, 0, map);
+  const baseXpValue = rewardCheckMob.xpValue;
+  rewardCheckMob.applyDifficultyRewards(
+    DIFFICULTY_PROFILES.hard.rewardXpScale,
+    DIFFICULTY_PROFILES.hard.rewardCoinScale,
+  );
+  check(
+    rewardCheckMob.xpValue === baseXpValue,
+    'rewardXpScale never mutates the base xpValue the boss-band checks read',
+  );
+
+  const easyPayout =
+    bountyPayoutCoins(
+      bountyBossLevel(
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_PROFILES.easy,
+      ),
+    ) * DIFFICULTY_PROFILES.easy.bountyPayoutScale;
+  const normalPayout =
+    bountyPayoutCoins(
+      bountyBossLevel(
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_PROFILES.normal,
+      ),
+    ) * DIFFICULTY_PROFILES.normal.bountyPayoutScale;
+  const hardPayout =
+    bountyPayoutCoins(
+      bountyBossLevel(
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_TEST_PARTY_LEVEL,
+        DIFFICULTY_PROFILES.hard,
+      ),
+    ) * DIFFICULTY_PROFILES.hard.bountyPayoutScale;
+  check(
+    easyPayout <= normalPayout && normalPayout <= hardPayout,
+    `the actual bounty payout is monotone in difficulty at a fixed party level (${easyPayout} <= ${normalPayout} <= ${hardPayout})`,
+  );
+}
+
 // The crony mantises, both skeleton warriors and the regular rock golem are
 // meant to be first-class mobs Ryan can spawn ambiently later, not boss
 // appendages. That is only true if the registry can actually build them.
@@ -334,7 +438,7 @@ console.log('\nDriving the full issue → kill → collect loop…');
 
   const boss = spawned.find((mob) => mob.isBoss) ?? null;
   check(boss !== null, 'exactly one mob is flagged the boss');
-  const bossLevel = bountyBossLevel(human.level, cat.level);
+  const bossLevel = bountyBossLevel(human.level, cat.level, DIFFICULTY_PROFILES.normal);
   check(
     boss?.mobLevel === bossLevel,
     `the mark is levelled to ${bossLevel} (found ${boss?.mobLevel ?? 'none'})`,
@@ -361,14 +465,23 @@ console.log('\nDriving the full issue → kill → collect loop…');
   check(system.phase === 'kill_pending', 'the kill flips it to kill_pending');
   check(system.noticeState.phase === 'kill_pending', 'the board follows');
 
+  // The arbitrage this fight was staged to close: nothing between the kill and
+  // Shady's table may change what the fight that already happened is worth.
+  // Flipping to Nightmare here and collecting must still pay the Normal rate.
+  settings.setDifficulty('hard');
   const coinsBefore = human.coins;
-  const paid = system.collectBounty(human, human, cat);
-  check(paid === bountyPayoutCoins(bossLevel), `pays ${bountyPayoutCoins(bossLevel)} coins`);
+  const paid = system.collectBounty(human);
+  settings.setDifficulty('normal');
+  check(
+    paid === bountyPayoutCoins(bossLevel),
+    `pays the Normal rate (${bountyPayoutCoins(bossLevel)}) even though difficulty was ` +
+      `flipped to Nightmare between the kill and the payout (paid ${paid})`,
+  );
   check(human.coins === coinsBefore + paid, 'the coins actually land on the player');
   check(system.phase === 'available', 'returns to available');
   check(loopProgress.bountiesCompleted === 1, 'counts the completion');
   check(loopProgress.lastSiteIndex !== null, 'remembers the site it used');
-  check(system.collectBounty(human, human, cat) === 0, 'refuses to pay twice');
+  check(system.collectBounty(human) === 0, 'refuses to pay twice');
 
   const secondIssued = system.issueBounty(human, cat);
   check(secondIssued, 'the next bounty issues straight away');
@@ -416,6 +529,49 @@ console.log('\nRebuilding the scene mid-bounty…');
     after.every((mob) => mob.ignoresTownSafeZone),
     'the re-staged encounter keeps its bounty flags',
   );
+  second.dispose();
+}
+
+// The regression this closes: `pendingPayoutCoins` used to live only on the
+// system instance, which a building entry/exit destroys and rebuilds. A mark
+// killed just before stepping through a door paid 0 coins once the player
+// reached Shady, because the fresh system had never seen the kill. Stamping
+// the payout onto `BountyProgress` — the record that actually survives a
+// door — is what this proves.
+console.log('\nKilling the mark, then rebuilding the scene before collecting…');
+{
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });
+  const start = map.startTile;
+  const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
+  const cat = new CatPlayer(start.x + 1, start.y, TILE_SIZE);
+  const progress = createBountyProgress();
+  const bus = new EventBus();
+
+  const spawned: Mob[] = [];
+  const first = new BountySystem(map, bus, progress, (mob) => spawned.push(mob), null);
+  first.issueBounty(human, cat);
+  const boss = spawned.find((mob) => mob.isBoss) ?? null;
+  check(boss !== null, 'a mark is staged before the kill');
+  if (boss !== null) {
+    boss.takeDamageFrom(boss.maxHp * KILL_OVERKILL, null);
+    bus.emit('mobKilled', { mob: boss, killer: null, killType: null, topDamageDealer: null });
+  }
+  check(progress.phase === 'kill_pending', 'the kill flips the durable record too');
+  check(progress.pendingPayoutCoins > 0, 'the payout is stamped on the durable record');
+  const payoutBeforeDoor = progress.pendingPayoutCoins;
+  first.dispose();
+
+  // A building entry/exit is exactly this: the old system and its mobs are
+  // gone, but `progress` — passed by reference — is not.
+  const second = new BountySystem(map, new EventBus(), progress, () => undefined, null);
+  check(second.phase === 'kill_pending', 'the rebuilt system still reads kill_pending');
+  const coinsBefore = human.coins;
+  const paid = second.collectBounty(human);
+  check(
+    paid === payoutBeforeDoor && paid > 0,
+    `a door round-trip after the kill still pays out (${paid} coins, expected ${payoutBeforeDoor})`,
+  );
+  check(human.coins === coinsBefore + paid, 'the coins land on the player after the round-trip');
   second.dispose();
 }
 

@@ -48,7 +48,7 @@ const MANTID_SPEED = 1.45;
  * seconds, which is losing a retreat rather than never having one.
  */
 const MANTID_WALK_ADVANTAGE = 1.08;
-const MANTID_MAX_SPEED = PLAYER_SPEED * MANTID_WALK_ADVANTAGE;
+export const MANTID_MAX_SPEED = PLAYER_SPEED * MANTID_WALK_ADVANTAGE;
 const AGGRO_RANGE_TILES = 11;
 
 /** Reach of a single raptorial strike, in tiles from his own tile origin. */
@@ -234,17 +234,12 @@ export class Mantid extends Mob {
   }
 
   /**
-   * Levels him up, then puts the ceiling back on his walk.
-   *
    * The base scaling is a flat 8% a level with nothing above it, which is fine
    * for a mob the player is meant to outrun and wrong for one whose whole design
-   * is a slow stalk punctuated by a charge. Clamped after `super` rather than by
-   * scaling the increment, so the flurry's own multiplier still reads off a
-   * known walk speed. See {@link MANTID_MAX_SPEED}.
+   * is a slow stalk punctuated by a charge. See {@link MANTID_MAX_SPEED}.
    */
-  override applyMobLevel(level: number): void {
-    super.applyMobLevel(level);
-    this.speed = Math.min(this.speed, MANTID_MAX_SPEED);
+  protected override get levelledSpeedCap(): number {
+    return MANTID_MAX_SPEED;
   }
 
   override resetToSpawn(): void {

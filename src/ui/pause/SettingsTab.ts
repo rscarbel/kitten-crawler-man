@@ -6,6 +6,7 @@ import { drawBox, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
 import { settings, type QualityPreset } from '../../core/Settings';
 import { renderQuality } from '../../core/RenderQuality';
+import { DIFFICULTY_LABELS, type Difficulty } from '../../core/difficultyProfiles';
 
 // Volume slider constants
 const TRACK_HEIGHT = 20;
@@ -57,6 +58,29 @@ const QUALITY_HINTS: Record<QualityPreset, string> = {
   auto: 'Picks the sharpest setting this device keeps up with.',
   sharp: 'Full detail on high-density displays.',
   performance: 'Lowest cost. Best for older or throttling devices.',
+};
+
+// Difficulty section — same layout constants as Graphics, cloned rather than
+// shared: the two sections happen to look alike today, but that is not a
+// reason to couple their spacing.
+const DIFFICULTY_LABEL_Y_OFFSET = 16;
+const DIFFICULTY_LABEL_SIZE = 12;
+const DIFFICULTY_ROW_Y_SPACING = 32;
+const DIFFICULTY_BUTTON_HEIGHT = 36;
+const DIFFICULTY_BUTTON_GAP = 6;
+const DIFFICULTY_HINT_Y_OFFSET = 16;
+const DIFFICULTY_HINT_SIZE = 10;
+const DIFFICULTY_SECTION_Y_SPACING_WITH_HINT = 60;
+const DIFFICULTY_SECTION_Y_SPACING_BARE = 44;
+
+/** Order the three tiers are laid out in, left to right. */
+const DIFFICULTY_ORDER: ReadonlyArray<Difficulty> = ['easy', 'normal', 'hard'];
+
+/** States the timing contract: levels stamp at the next spawn, damage changes immediately. */
+const DIFFICULTY_HINTS: Record<Difficulty, string> = {
+  easy: 'Take less damage now; weaker spawns from the next floor or bounty.',
+  normal: 'The game as shipped — no scaling on either side.',
+  hard: 'Take more damage now; tougher spawns and bigger rewards from the next floor or bounty.',
 };
 
 // Controls section
@@ -189,6 +213,49 @@ function renderQualityChoice(
       x: bx,
       y: by + QUALITY_BUTTON_HEIGHT + QUALITY_HINT_Y_OFFSET,
       size: QUALITY_HINT_SIZE,
+      color: '#64748b',
+      width: bw,
+    });
+  }
+}
+
+/**
+ * Three-way difficulty choice, cloned from {@link renderQualityChoice}'s
+ * preset-button pattern. One global selector rather than a per-bounty picker:
+ * a second control surface at Shady's board would invite reward-arbitrage
+ * toggling right before a kill.
+ */
+function renderDifficultyChoice(
+  ctx: CanvasRenderingContext2D,
+  buttons: ButtonRect[],
+  bx: number,
+  by: number,
+  bw: number,
+): void {
+  const selected = settings.difficulty;
+  const totalGap = DIFFICULTY_BUTTON_GAP * (DIFFICULTY_ORDER.length - 1);
+  const buttonWidth = Math.floor((bw - totalGap) / DIFFICULTY_ORDER.length);
+
+  DIFFICULTY_ORDER.forEach((difficulty, index) => {
+    const isSelected = difficulty === selected;
+    addButton(ctx, buttons, {
+      x: bx + index * (buttonWidth + DIFFICULTY_BUTTON_GAP),
+      y: by,
+      width: buttonWidth,
+      height: DIFFICULTY_BUTTON_HEIGHT,
+      label: DIFFICULTY_LABELS[difficulty],
+      ...(isSelected ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
+      action: () => {
+        settings.setDifficulty(difficulty);
+      },
+    });
+  });
+
+  if (!platform.isMobile) {
+    drawText(ctx, DIFFICULTY_HINTS[selected], {
+      x: bx,
+      y: by + DIFFICULTY_BUTTON_HEIGHT + DIFFICULTY_HINT_Y_OFFSET,
+      size: DIFFICULTY_HINT_SIZE,
       color: '#64748b',
       width: bw,
     });
@@ -331,6 +398,19 @@ export function renderSettingsTab(
   y += GRAPHICS_ROW_Y_SPACING;
   renderQualityChoice(ctx, buttons, sliderX, y, sliderW);
   y += platform.isMobile ? QUALITY_SECTION_Y_SPACING_BARE : QUALITY_SECTION_Y_SPACING_WITH_HINT;
+
+  drawText(ctx, 'Difficulty', {
+    x: bx + AUDIO_LABEL_X,
+    y: y + DIFFICULTY_LABEL_Y_OFFSET,
+    bold: true,
+    size: DIFFICULTY_LABEL_SIZE,
+    color: '#64748b',
+  });
+  y += DIFFICULTY_ROW_Y_SPACING;
+  renderDifficultyChoice(ctx, buttons, sliderX, y, sliderW);
+  y += platform.isMobile
+    ? DIFFICULTY_SECTION_Y_SPACING_BARE
+    : DIFFICULTY_SECTION_Y_SPACING_WITH_HINT;
 
   drawText(ctx, 'Controls', {
     x: bx + AUDIO_LABEL_X,

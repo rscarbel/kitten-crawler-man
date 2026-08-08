@@ -15,6 +15,7 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
@@ -130,6 +131,7 @@ export class QuillConfrontationSystem implements GameSystem {
       const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
       guard.setMap(this.map);
       guard.applyMobLevel(GUARD_LEVEL);
+      applyActiveDifficultyRewards(guard);
       this.addMob(guard);
     }
   }

@@ -8,6 +8,8 @@
  * all — while these settings must work in every boot path.
  */
 
+import type { Difficulty } from './difficultyProfiles';
+
 const STORAGE_KEY = 'kittenCrawler.settings.v1';
 
 /** Bumped when the stored shape changes incompatibly; older payloads are discarded. */
@@ -35,6 +37,22 @@ export type QualityPreset = 'auto' | 'sharp' | 'performance';
 
 const QUALITY_PRESETS: ReadonlyArray<QualityPreset> = ['auto', 'sharp', 'performance'];
 
+/**
+ * Mirrors {@link Difficulty} as a value so it can be validated without a
+ * runtime dependency on `difficultyProfiles.ts` — that module reads
+ * `settings.difficulty`, so importing it here for the tuple would be a cycle.
+ *
+ * A `Record<Difficulty, true>` rather than an array: TypeScript rejects this
+ * literal if `Difficulty` ever gains a member this object doesn't list, so a
+ * forgotten tier is a compile error here rather than a setting that silently
+ * fails validation and falls back to Normal on every reload.
+ */
+const DIFFICULTY_PRESET_LOOKUP: Record<Difficulty, true> = {
+  easy: true,
+  normal: true,
+  hard: true,
+};
+
 /** Highest density `sharp` will ask for, regardless of the display's ratio. */
 export const MAX_SHARP_RENDER_SCALE = 2;
 
@@ -53,6 +71,7 @@ type StoredBindings = Record<string, readonly string[]>;
 
 interface SettingsData {
   quality: QualityPreset;
+  difficulty: Difficulty;
   masterVolume: number;
   sfxVolume: number;
   musicVolume: number;
@@ -61,6 +80,7 @@ interface SettingsData {
 
 const DEFAULTS: SettingsData = {
   quality: 'auto',
+  difficulty: 'normal',
   masterVolume: DEFAULT_MASTER_VOLUME,
   sfxVolume: DEFAULT_SFX_VOLUME,
   musicVolume: DEFAULT_MUSIC_VOLUME,
@@ -69,6 +89,13 @@ const DEFAULTS: SettingsData = {
 
 function isQualityPreset(value: unknown): value is QualityPreset {
   return QUALITY_PRESETS.some((preset) => preset === value);
+}
+
+function isDifficulty(value: unknown): value is Difficulty {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(DIFFICULTY_PRESET_LOOKUP, value)
+  );
 }
 
 function readVolume(source: Record<string, unknown>, key: string, fallback: number): number {
@@ -117,8 +144,10 @@ function load(): SettingsData {
   const stored = readStoredJson();
   if (stored === null) return { ...DEFAULTS };
   const quality = stored.quality;
+  const difficulty = stored.difficulty;
   return {
     quality: isQualityPreset(quality) ? quality : DEFAULTS.quality,
+    difficulty: isDifficulty(difficulty) ? difficulty : DEFAULTS.difficulty,
     masterVolume: readVolume(stored, 'masterVolume', DEFAULTS.masterVolume),
     sfxVolume: readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume),
     musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
@@ -131,6 +160,10 @@ class Settings {
 
   get quality(): QualityPreset {
     return this.data.quality;
+  }
+
+  get difficulty(): Difficulty {
+    return this.data.difficulty;
   }
 
   get masterVolume(): number {
@@ -147,6 +180,11 @@ class Settings {
 
   setQuality(preset: QualityPreset): void {
     this.data.quality = preset;
+    this.persist();
+  }
+
+  setDifficulty(difficulty: Difficulty): void {
+    this.data.difficulty = difficulty;
     this.persist();
   }
 

@@ -4,6 +4,7 @@ import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { HumanPlayer } from './HumanPlayer';
 import { CatPlayer } from './CatPlayer';
+import { PLAYER_SPEED } from '../core/constants';
 import {
   GOBLIN_ATTACKS,
   GoblinAnimator,
@@ -15,6 +16,13 @@ import {
 
 const GOBLIN_HP = 6;
 const GOBLIN_SPEED = 1.4;
+/**
+ * A levelled goblin's walk speed is capped at this fraction of the player's —
+ * a level-20 bounty escort otherwise reaches 141% of player speed and
+ * becomes un-outrunnable. Levels 1-6 are unaffected (level 6 = 1.96 < 2.0).
+ */
+const GOBLIN_MAX_SPEED_RATIO = 0.8;
+export const GOBLIN_MAX_SPEED = PLAYER_SPEED * GOBLIN_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 6;
 const COIN_DROP_MAX = 3;
 /** Fraction of attack range used as follow stop distance. */
@@ -110,6 +118,10 @@ export class Goblin extends Mob {
     this.attackRangePx = tileSize * GOBLIN_ATTACKS[weapon].light.reachTiles;
     this.attackDamage = GOBLIN_ATTACKS[weapon].light.damage;
     this.previousHp = this.hp;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return GOBLIN_MAX_SPEED;
   }
 
   override get cullMarginTiles(): number {

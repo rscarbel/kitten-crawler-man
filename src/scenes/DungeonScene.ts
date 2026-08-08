@@ -20,6 +20,7 @@ import {
   spawnTreasureRoomMobs,
   partyLevelOf,
 } from '../levels/spawner';
+import { activeDifficultyProfile, applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
@@ -977,15 +978,23 @@ export class DungeonScene extends GameplayScene {
       // Read once, here: every level below is party-relative, and the whole
       // point of computing them at floor generation is that nothing re-levels a
       // mob afterwards. Both crawlers have been restored from their snapshots by
-      // this line, so this is the party that is about to walk in.
+      // this line, so this is the party that is about to walk in. The
+      // difficulty profile is captured alongside it for the same reason — a
+      // settings flip mid-floor must not re-level anything already spawned.
       const partyLevel = partyLevelOf(this.human.level, this.cat.level);
-      initialMobs.push(...spawnForLevel(levelDef, this.gameMap, partyLevel));
-      initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel));
+      const difficultyProfile = activeDifficultyProfile();
+      initialMobs.push(...spawnForLevel(levelDef, this.gameMap, partyLevel, difficultyProfile));
+      initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
 
       // Treasure room mobs (extra enemies guarding wooden chests)
       if (levelDef.hasTreasureRoomGuards === true) {
         initialMobs.push(
-          ...spawnTreasureRoomMobs(this.gameMap.treasureRooms, levelDef, this.gameMap),
+          ...spawnTreasureRoomMobs(
+            this.gameMap.treasureRooms,
+            levelDef,
+            this.gameMap,
+            difficultyProfile,
+          ),
         );
       }
     }
@@ -1876,6 +1885,7 @@ export class DungeonScene extends GameplayScene {
               // party has just fought, and a level-1 grub swarm on floor 2 was
               // free XP that arrived exactly when the fight should be hardest.
               spawned.applyMobLevel(mob.mobLevel);
+              applyActiveDifficultyRewards(spawned);
               this.world.roster.add(spawned);
               placed = true;
             }
@@ -2712,7 +2722,7 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     if (argument === 'done') {
-      const coins = bounty.collectBounty(this.active(), this.human, this.cat);
+      const coins = bounty.collectBounty(this.active());
       if (coins === 0) {
         this.audio?.play('error');
         return;
@@ -2910,6 +2920,14 @@ export class DungeonScene extends GameplayScene {
 
     this.bossIntro.cancel();
     this.combatCooldownFrames = 0;
+
+    // A boss encounter switches to its boss track via `bossFightInitiated`, but
+    // dying mid-fight and restoring here never emits `bossDefeated` — nothing
+    // else tells the audio system the encounter is over, so the boss track
+    // would otherwise keep playing at the safe room.
+    if (this.overworldMusic === null && this.audio?.currentMusicId !== this.levelDef.music) {
+      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
+    }
 
     // The player is standing in the safe room right now — the latch has to
     // agree, or the next step out and back in is the only thing that re-arms it.

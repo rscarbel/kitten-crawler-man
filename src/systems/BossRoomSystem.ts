@@ -1,6 +1,7 @@
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
+import { applyActiveDifficultyRewards } from '../core/difficultyProfiles';
 import { clamp } from '../utils';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -1287,6 +1288,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // Once, at spawn, from the boss that raised it: an add levelled to a
         // weaker curve than the fight it belongs to is free damage reduction.
         tentacle.applyMobLevel(mob.mobLevel);
+        applyActiveDifficultyRewards(tentacle);
         // Through the roster rather than by hand, so it receives the scene's
         // map and spell context like anything else that joins a fight.
         roster.add(tentacle);

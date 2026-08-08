@@ -2,6 +2,7 @@ import type { Player } from '../Player';
 import { RisingSkeleton } from './RisingSkeleton';
 import { SKELETON_SWORD_BODY_PART_KEY, drawSkeletonWarriorSprite } from '../sprites/skeletonSprite';
 import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTiming';
+import { PLAYER_SPEED } from '../core/constants';
 
 /**
  * A sword-and-shield skeleton.
@@ -14,6 +15,9 @@ import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTi
 
 const SKELETON_HP = 14;
 const SKELETON_SPEED = 0.95;
+/** A levelled warrior's walk is capped at this fraction of the player's. */
+const SKELETON_MAX_SPEED_RATIO = 0.8;
+export const SKELETON_MAX_SPEED = PLAYER_SPEED * SKELETON_MAX_SPEED_RATIO;
 const AGGRO_RANGE_TILES = 9;
 /** How close it closes before it swings. */
 const ATTACK_RANGE_TILES = 1.15;
@@ -67,6 +71,10 @@ export class SkeletonWarrior extends RisingSkeleton {
    */
   override get cullMarginTiles(): number {
     return SKELETON_WARRIOR_CULL_MARGIN_TILES;
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return SKELETON_MAX_SPEED;
   }
 
   override resetToSpawn(): void {

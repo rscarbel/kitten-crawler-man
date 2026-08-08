@@ -8,10 +8,21 @@
  */
 
 import type { DialogPage } from '../ui/QuestDialog';
+import type { Difficulty } from '../core/difficultyProfiles';
 
 export type { DialogPage };
 
 const SHADY = 'Shady';
+
+/**
+ * The extra line disclosing a non-Normal payout, appended to the offer's last
+ * page. Normal has no entry: the reward change is only worth naming where it
+ * has actually changed, and Normal is identity.
+ */
+const DIFFICULTY_PAYOUT_LINES: Partial<Record<Difficulty, string>> = {
+  easy: 'Kitten rates — the purse is lighter.',
+  hard: 'Nightmare rates — the purse is heavier.',
+};
 
 /**
  * The pitch. `onComplete` on the last page is what issues the bounty, so the
@@ -22,8 +33,19 @@ const SHADY = 'Shady';
  * The refusal is a button rather than only the Esc key because hearing the offer
  * should not *be* accepting it, and a modal whose only exit is an unadvertised
  * key does not read as a choice.
+ *
+ * @param difficulty The active difficulty, so the pay page can disclose the
+ *   consequence where the contract is actually signed. No selector at the
+ *   board itself — one global selector in Settings, per the difficulty
+ *   toggle's design: a second control surface here would invite per-bounty
+ *   reward-arbitrage toggling.
  */
-export function buildBountyOfferDialog(name: string, typeLabel: string): DialogPage[] {
+export function buildBountyOfferDialog(
+  name: string,
+  typeLabel: string,
+  difficulty: Difficulty,
+): DialogPage[] {
+  const payoutLine = DIFFICULTY_PAYOUT_LINES[difficulty];
   return [
     {
       title: SHADY,
@@ -49,6 +71,7 @@ export function buildBountyOfferDialog(name: string, typeLabel: string): DialogP
         'Coin. Good coin. Whatever it was carrying, you keep.',
         'Kill it, come back, don’t tell anyone we spoke.',
         'Off you go.',
+        ...(payoutLine === undefined ? [] : [payoutLine]),
       ],
       button: 'Take the job',
       declineButton: 'Walk away',

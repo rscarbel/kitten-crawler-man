@@ -837,9 +837,28 @@ export abstract class Mob extends Player {
   private _levelSpeedMultiplier = 1;
   private _levelHpMultiplier = 1;
 
+  /**
+   * Ceiling on this mob's post-level walk speed, or `null` for uncapped.
+   *
+   * The unbounded per-level speed multiplier meeting a bounty's full-party-level
+   * escorts is what let a level-20 goblin outrun the player at 141% of their
+   * speed. Override this in a subclass to make a creature's walk speed obey a
+   * fixed ceiling regardless of how high it levels — both {@link applyMobLevel}
+   * and {@link setBaseSpeed} consult it so an enrage, evolution or checkpoint
+   * reset cannot climb back over the cap.
+   */
+  protected get levelledSpeedCap(): number | null {
+    return null;
+  }
+
   /** Re-author this mob's speed from a base constant, keeping its level scaling. */
   protected setBaseSpeed(baseSpeed: number): void {
-    this.speed = baseSpeed * this._levelSpeedMultiplier;
+    this.speed = this.clampToSpeedCap(baseSpeed * this._levelSpeedMultiplier);
+  }
+
+  private clampToSpeedCap(speed: number): number {
+    const cap = this.levelledSpeedCap;
+    return cap === null ? speed : Math.min(speed, cap);
   }
 
   /**
@@ -892,11 +911,33 @@ export abstract class Mob extends Player {
 
     // Speed
     this._levelSpeedMultiplier = 1 + extra * MOB_LEVEL_SPEED_SCALE;
-    this.speed = this.speed * this._levelSpeedMultiplier;
+    this.speed = this.clampToSpeedCap(this.speed * this._levelSpeedMultiplier);
 
     // Coins
     this.coinDropMin = Math.ceil(this.coinDropMin * (1 + extra * MOB_LEVEL_COIN_SCALE));
     this.coinDropMax = Math.ceil(this.coinDropMax * (1 + extra * MOB_LEVEL_COIN_SCALE));
+  }
+
+  private _difficultyRewardsApplied = false;
+  private _difficultyXpScale = 1;
+
+  /**
+   * Applies the active difficulty's explicit reward scale, alongside
+   * {@link applyMobLevel} at every spawn site. A separate method rather than a
+   * parameter on `applyMobLevel`: that method early-returns for `level <= 1`,
+   * so piggybacking here would silently skip reward scaling for every
+   * level-1 mob. Idempotent the same way `applyMobLevel` is, so a mob cannot
+   * be double-scaled by a caller that runs twice.
+   */
+  applyDifficultyRewards(xpScale: number, coinScale: number): void {
+    if (this._difficultyRewardsApplied) {
+      console.warn(`[Mob] ${this.mobType} already has difficulty rewards applied; ignoring`);
+      return;
+    }
+    this._difficultyRewardsApplied = true;
+    this._difficultyXpScale = xpScale;
+    this.coinDropMin = Math.ceil(this.coinDropMin * coinScale);
+    this.coinDropMax = Math.ceil(this.coinDropMax * coinScale);
   }
 
   /**
@@ -916,10 +957,10 @@ export abstract class Mob extends Player {
     return scaledCooldownFramesForLevel(baseFrames, this.mobLevel);
   }
 
-  /** Returns XP value scaled by mob level. */
+  /** Returns XP value scaled by mob level and the active difficulty's reward scale. */
   get scaledXpValue(): number {
-    if (this.mobLevel <= 1) return this.xpValue;
-    return Math.ceil(this.xpValue * (1 + (this.mobLevel - 1) * MOB_LEVEL_XP_SCALE));
+    const levelMultiplier = this.mobLevel <= 1 ? 1 : 1 + (this.mobLevel - 1) * MOB_LEVEL_XP_SCALE;
+    return Math.ceil(this.xpValue * levelMultiplier * this._difficultyXpScale);
   }
 
   /**

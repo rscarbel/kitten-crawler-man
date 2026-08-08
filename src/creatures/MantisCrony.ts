@@ -27,7 +27,7 @@ const MANTIS_SPEED = 1.35;
  * cronies flank, they do not lead.
  */
 const MANTIS_WALK_ADVANTAGE = 1.04;
-const MANTIS_MAX_SPEED = PLAYER_SPEED * MANTIS_WALK_ADVANTAGE;
+export const MANTIS_MAX_SPEED = PLAYER_SPEED * MANTIS_WALK_ADVANTAGE;
 const AGGRO_RANGE_TILES = 7;
 /** Reach of the raptorial strike, in tiles from the mantis's own tile origin. */
 const SLASH_RANGE_TILES = 1.15;
@@ -91,10 +91,9 @@ export class MantisCrony extends Mob {
     this.slashRangePx = tileSize * SLASH_RANGE_TILES;
   }
 
-  /** Levels up, then puts the ceiling back on the walk. See {@link MANTIS_MAX_SPEED}. */
-  override applyMobLevel(level: number): void {
-    super.applyMobLevel(level);
-    this.speed = Math.min(this.speed, MANTIS_MAX_SPEED);
+  /** Ceiling on the walk. See {@link MANTIS_MAX_SPEED}. */
+  protected override get levelledSpeedCap(): number {
+    return MANTIS_MAX_SPEED;
   }
 
   override resetToSpawn(): void {

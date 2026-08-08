@@ -13,6 +13,12 @@ interface ThrownKnife {
 
 const LEMUR_HP = 6;
 const LEMUR_SPEED = 2.6;
+/**
+ * The lemur already outpaces the player by design (base speed exceeds
+ * `PLAYER_SPEED`), so its cap equals its own base — levelling buys it no
+ * further speed, but the circus's already-faster feel is unchanged.
+ */
+export const LEMUR_MAX_SPEED = LEMUR_SPEED;
 const AGGRO_RANGE_TILES = 7;
 const MELEE_RANGE_TILES = 0.9;
 /** Frames between nip attacks (~0.67 s at 60 fps) — fast, weak swarm bites. */
@@ -60,6 +66,10 @@ export class CircusLemur extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, LEMUR_HP, LEMUR_SPEED);
+  }
+
+  protected override get levelledSpeedCap(): number {
+    return LEMUR_MAX_SPEED;
   }
 
   override resetToSpawn(): void {
