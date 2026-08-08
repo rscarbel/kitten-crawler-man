@@ -275,58 +275,67 @@ export const SUBJECTS: readonly SvgSubject[] = [
         {
           name: 'front',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(
-              dom,
-              0,
-              0,
-              unit,
-              STILL_FRAME,
-              false,
-              0,
-              0,
-              FACING_TOWARD_CAMERA,
-              false,
-              false,
-            ),
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              idleFrame: STILL_FRAME,
+            }),
+        },
+        {
+          name: 'back',
+          paint: ({ dom, unit }) =>
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_AWAY,
+              idleFrame: STILL_FRAME,
+            }),
         },
         {
           name: 'side',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(dom, 0, 0, unit, STILL_FRAME, false, 0, FACING_RIGHT, 0, false, false),
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              idleFrame: STILL_FRAME,
+            }),
         },
         {
           name: 'enraged',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(
-              dom,
-              0,
-              0,
-              unit,
-              STILL_FRAME,
-              false,
-              0,
-              0,
-              FACING_TOWARD_CAMERA,
-              true,
-              false,
-            ),
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: 0,
+              facingY: FACING_TOWARD_CAMERA,
+              idleFrame: STILL_FRAME,
+              isEnraged: true,
+            }),
         },
         {
           name: 'throw',
           paint: ({ dom, unit }) =>
-            drawJuicerSprite(
-              dom,
-              0,
-              0,
-              unit,
-              STILL_FRAME,
-              false,
-              ATTACK_MIDPOINT,
-              FACING_RIGHT,
-              0,
-              false,
-              true,
-            ),
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              throwProgress: ATTACK_MIDPOINT,
+              heldDumbbell: true,
+            }),
+        },
+        {
+          name: 'punch',
+          paint: ({ dom, unit }) =>
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              punchProgress: ATTACK_MIDPOINT,
+            }),
+        },
+        {
+          name: 'sprint',
+          paint: ({ dom, unit }) =>
+            drawJuicerSprite(dom, 0, 0, unit, {
+              facingX: FACING_RIGHT,
+              facingY: 0,
+              isSprinting: true,
+            }),
         },
       ];
     },

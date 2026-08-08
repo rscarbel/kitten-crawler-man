@@ -50,6 +50,9 @@ const PREVIEW_STATUSES: readonly string[] = [
   'cooldown_crisp',
   'whetstone',
   'drunk',
+  'well_rested',
+  'hearth_warmed',
+  'deep_slumber',
 ];
 
 /** The grounds a character is actually seen standing on, worst contrast first. */

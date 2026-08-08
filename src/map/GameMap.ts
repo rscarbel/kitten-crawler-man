@@ -13,7 +13,6 @@ import {
   FOUNTAIN,
   TORCH,
   WELL,
-  SAFE_ROOM_FLOOR,
   STAIRS_UP,
   STAIRS_DOWN,
   TABLE,
@@ -37,6 +36,10 @@ import {
   DANCE_FLOOR,
   placeProp,
   INTERIOR_BOARD_FLOOR,
+  INTERIOR_RUSH_FLOOR,
+  INTERIOR_EARTH_FLOOR,
+  INTERIOR_FLAG_FLOOR,
+  INTERIOR_INK_FLOOR,
   INTERIOR_COUNTER,
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
@@ -45,6 +48,15 @@ import {
   CAMPFIRE,
   GOBLIN_TENT,
   CLIFF,
+  DRILL_SAND_FLOOR,
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  MAP_TABLE,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  INK_BENCH,
+  GRINDING_SLAB,
 } from './tileTypes';
 import { isWalkableTileType } from './walkability';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -95,8 +107,6 @@ const DEFAULT_BOSS_ROOM_COUNT = 1;
 // ── Interior building dimensions (width × height in tiles) ────────────────────
 export const TOWER_INTERIOR_W = 20;
 const TOWER_INTERIOR_H = 16;
-const RESTAURANT_INTERIOR_W = 22;
-const RESTAURANT_INTERIOR_H = 16;
 const STORE_INTERIOR_W = 20;
 const STORE_INTERIOR_H = 12;
 const HOUSE_INTERIOR_W = 18;
@@ -131,21 +141,114 @@ const BIGTOP_BLEACHER_DEPTH = 2;
 // noticing. The exit door likewise names `FloorTypeValue.road` outright — it is
 // genuinely the outdoor threshold type, and a bare `1` said nothing.
 
+interface InteriorShell {
+  readonly w: number;
+  readonly h: number;
+  readonly floorType: number;
+}
+
 /** Interior shell per building kind. Exhaustive, so a new kind cannot ship unsized. */
-const INTERIOR_BY_KIND: Record<BuildingKind, { w: number; h: number; floorType: number }> = {
+const INTERIOR_BY_KIND: Record<BuildingKind, InteriorShell> = {
   tower: { w: TOWER_INTERIOR_W, h: TOWER_INTERIOR_H, floorType: INTERIOR_STONE_FLOOR },
-  restaurant: { w: RESTAURANT_INTERIOR_W, h: RESTAURANT_INTERIOR_H, floorType: SAFE_ROOM_FLOOR },
   store: { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
   club: { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR },
   house: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
 };
 
-/** The Big Top is registered as a `house`, so its interior is keyed by name instead. */
-const BIGTOP_INTERIOR = {
-  w: BIGTOP_INTERIOR_W,
-  h: BIGTOP_INTERIOR_H,
-  floorType: SAWDUST_FLOOR,
-};
+// ── The Sleeping Cat Inn's three zones ────────────────────────────────────────
+//
+// Stated here rather than inside the interior case because the safe-room bounds
+// below name the taproom band and the interior case builds it. Writing the row
+// twice is exactly how the two come apart.
+const INN_INTERIOR_W = 24;
+const INN_INTERIOR_H = 22;
+/** The guest wing: three private rooms, split by dividing walls. */
+const INN_GUEST_WING_FIRST_ROW = 1;
+const INN_GUEST_WING_LAST_ROW = 7;
+/** The wall the three guest rooms open through, one doorway each. */
+const INN_GUEST_WALL_ROW = 8;
+/** The landing corridor, running the width of the building. */
+const INN_LANDING_RUG_ROW = 9;
+const INN_LANDING_ROW = 10;
+/** The partition between the landing and the taproom, pierced by one archway. */
+const INN_PARTITION_ROW = 11;
+const INN_TAPROOM_FIRST_ROW = 12;
+const INN_TAPROOM_LAST_ROW = 20;
+
+// ── The Barracks' three zones ─────────────────────────────────────────────────
+//
+// Stated beside the shell for the same reason the inn's are: the drill hall's
+// sand is laid by the shell-independent loop below and the zones' walls are cut
+// by the interior case, and a row written twice is a row that comes apart.
+const BARRACKS_INTERIOR_W = 22;
+const BARRACKS_INTERIOR_H = 18;
+/** The wall between the quartermaster's armoury and the drill hall. */
+const BARRACKS_ZONE_DIVIDER_COL = 7;
+/** Both upper zones run from the north wall down to the partition. */
+const BARRACKS_UPPER_FIRST_ROW = 1;
+const BARRACKS_UPPER_LAST_ROW = 11;
+/** The wall between the two upper zones and the muster hall, pierced twice. */
+const BARRACKS_PARTITION_ROW = 12;
+const BARRACKS_MUSTER_FIRST_ROW = 13;
+
+/**
+ * Shells stated per building rather than per kind. A kind is a category — a
+ * shop, a house — and a category cannot say how big a mead hall is or what a
+ * garrison's drill floor is made of. Every town building wearing the same 18x14
+ * box in the same boards is the single largest reason they all felt alike.
+ * Anything absent here falls back to its kind's shell.
+ */
+const INTERIOR_BY_NAME: ReadonlyMap<string, InteriorShell> = new Map([
+  [
+    'The Sleeping Cat Inn',
+    { w: INN_INTERIOR_W, h: INN_INTERIOR_H, floorType: INTERIOR_RUSH_FLOOR },
+  ],
+  [
+    'The Barracks',
+    { w: BARRACKS_INTERIOR_W, h: BARRACKS_INTERIOR_H, floorType: INTERIOR_STONE_FLOOR },
+  ],
+  ['The Quiet Needle', { w: 18, h: 16, floorType: INTERIOR_INK_FLOOR }],
+  ['The Horned Flagon', { w: 22, h: 16, floorType: INTERIOR_RUSH_FLOOR }],
+  ['The Sunken Stump Pub', { w: 16, h: 14, floorType: INTERIOR_RUSH_FLOOR }],
+  ['Temple of the Sky', { w: 18, h: 18, floorType: INTERIOR_FLAG_FLOOR }],
+  ['The Rusty Anvil', { w: 18, h: 14, floorType: INTERIOR_FLAG_FLOOR }],
+  ['Herb & Remedy', { w: 16, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
+  ["Old Hilda's Cottage", { w: 14, h: 14, floorType: INTERIOR_EARTH_FLOOR }],
+  ["Cartwright's Workshop", { w: 20, h: 14, floorType: INTERIOR_EARTH_FLOOR }],
+  ["Miller's Farm", { w: 18, h: 14, floorType: INTERIOR_EARTH_FLOOR }],
+  ["Shepherd's Cabin", { w: 14, h: 12, floorType: INTERIOR_EARTH_FLOOR }],
+  ['Blackwood Lodge', { w: 18, h: 14, floorType: INTERIOR_BOARD_FLOOR }],
+  ['General Store', { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR }],
+  ['The Desperado Club', { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR }],
+  ['Big Top', { w: BIGTOP_INTERIOR_W, h: BIGTOP_INTERIOR_H, floorType: SAWDUST_FLOOR }],
+] satisfies ReadonlyArray<[string, InteriorShell]>);
+
+/**
+ * The band of a safe-room building's interior the safe room actually covers.
+ *
+ * Name-addressable rather than "the whole floor", because an inn's safe room is
+ * its taproom and not its guest wing. The whole interior is the fallback, so a
+ * future safe-room building works without an entry here.
+ */
+const SAFE_ROOM_BOUNDS_BY_NAME: ReadonlyMap<
+  string,
+  { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+> = new Map([
+  /*
+   * The inn's taproom, and none of its guest wing. A rented room is somewhere a
+   * crawler pays to be alone; the System's protection belongs to the public room
+   * downstairs, where the Bopca cooks and Mordecai sits.
+   */
+  [
+    'The Sleeping Cat Inn',
+    {
+      x: 1,
+      y: INN_TAPROOM_FIRST_ROW,
+      w: INN_INTERIOR_W - 2,
+      h: INN_TAPROOM_LAST_ROW - INN_TAPROOM_FIRST_ROW + 1,
+    },
+  ],
+]);
 
 // ── Tower stair placement ─────────────────────────────────────────────────────
 /** X offset from the east wall for the "stairs up" tile in tower floors. */
@@ -156,6 +259,12 @@ const TOWER_STAIR_ROW = 2;
 const TOWER_STAIR_DOWN_COL = 3;
 /** Maximum tower floor index — floors 0..3, so the cap is 3. */
 const TOWER_TOP_FLOOR = 3;
+/**
+ * How many storeys a tower generates. Stated here beside the top-floor index it
+ * is derived from, so a scene building the floors and a gate walking them cannot
+ * disagree about how many there are.
+ */
+export const TOWER_FLOOR_COUNT = TOWER_TOP_FLOOR + 1;
 
 // ── Decoration overlay index ──────────────────────────────────────────────────
 /** A decoration tile drawn in the Y-sorted overlay pass. */
@@ -198,6 +307,16 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   CAMPFIRE,
   GOBLIN_TENT,
   CLIFF,
+  // The garrison's and the inking shop's tall props. Y-sorted so a player
+  // standing north of a training dummy is drawn behind it. `MAP_TABLE` and
+  // `INK_BENCH` are absent for the same reason `TABLE` and `BED` are: both are
+  // waist height, drawn flat in the base pass, and nothing walks behind them.
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  GRINDING_SLAB,
 ]);
 
 /**
@@ -599,14 +718,19 @@ export class GameMap {
 
   /** Generates a small interior room for a building (called externally after construction).
    *  For towers, pass towerFloor (0-3) to generate per-floor stair layout. */
-  generateInterior(buildingType: BuildingKind, towerFloor = 0, buildingName = ''): void {
+  generateInterior(
+    buildingType: BuildingKind,
+    towerFloor = 0,
+    buildingName = '',
+    hasSafeRoom = false,
+  ): void {
     const isTower = buildingType === 'tower';
-    const isRestaurant = buildingType === 'restaurant';
     const isStore = buildingType === 'store';
     const isClub = buildingType === 'club';
     const isHouse = buildingType === 'house';
     const isCarnival = buildingName === 'Big Top';
-    const { w, h, floorType } = isCarnival ? BIGTOP_INTERIOR : INTERIOR_BY_KIND[buildingType];
+    const { w, h, floorType } =
+      INTERIOR_BY_NAME.get(buildingName) ?? INTERIOR_BY_KIND[buildingType];
 
     const grid: TileContent[][] = Array.from({ length: h }, (_, y) =>
       Array.from({ length: w }, (_, x) => ({
@@ -619,104 +743,48 @@ export class GameMap {
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) grid[y][x].type = floorType;
 
     if (isStore && !isCarnival) {
+      // Stock stands in two free-standing runs down the middle of the floor with
+      // a walking aisle either side of each, rather than being pushed flat against
+      // the walls. A perimeter run leaves a shop that is one empty room with
+      // things around the edge; aisles make the player walk the stock to cross it.
+      const storeEastWallCol = w - 2;
+      const storeSouthRow = h - 2;
       const storeCounterRow = 2;
-      const storeBehindCounterRow = 3;
-      const storeShelfStartRow = 4;
-      const storeShelfEndRow = 6;
-      const storeRugStartCol = 5;
-      const storeRugEndCol = 8;
-      // w - STORE_EAST_WALL_INSET = second column from east inner wall
-      const STORE_EAST_WALL_INSET = 3;
-      // h - STORE_ENTRANCE_ROW_INSET = rows before the south wall
-      const STORE_ENTRANCE_ROW_INSET = 3;
-      // Counter along the north interior (row 2, cols 2–17) — keeps shopkeeper separate
-      for (let x = 2; x <= w - STORE_EAST_WALL_INSET; x++)
-        grid[storeCounterRow][x].type = INTERIOR_COUNTER;
-      // Barrels behind counter on east side
-      placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET], BARREL);
-      placeProp(grid[storeBehindCounterRow][w - STORE_EAST_WALL_INSET - 1], BARREL);
-      placeProp(grid[storeShelfStartRow][w - STORE_EAST_WALL_INSET], BARREL);
-      placeProp(grid[storeShelfStartRow][1], BOOKSHELF);
-      placeProp(grid[storeShelfStartRow + 1][1], BOOKSHELF);
-      placeProp(grid[storeShelfEndRow][1], BOOKSHELF);
-      // Barrel cluster near entrance
-      placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][1], BARREL);
-      placeProp(grid[h - STORE_ENTRANCE_ROW_INSET][w - 2], BARREL);
-      // Small rug in front of counter
-      for (let x = storeRugStartCol; x <= storeRugEndCol; x++)
-        grid[storeShelfStartRow][x].type = RUG;
-      for (let x = storeRugStartCol; x <= storeRugEndCol; x++)
-        grid[storeShelfStartRow + 1][x].type = RUG;
-    }
-
-    if (isRestaurant) {
-      // The Barracks — the overworld safe room, laid out as a crawler guild
-      // bunkhouse. SafeRoomSystem derives Mordecai's spot and the sleeping bed
-      // from the room's centre, so the room's centre row is deliberately left
-      // clear of furniture — the bunk rows below skip it.
-      const BARRACKS_HEARTH_COL_1 = 10;
-      const BARRACKS_HEARTH_COL_2 = 11;
-      const BARRACKS_FIRST_BUNK_ROW = 3;
-      const BARRACKS_BUNK_ROW_PITCH = 3;
-      const BARRACKS_BUNK_STACKS_PER_WALL = 3;
-      const BARRACKS_BUNK_DEPTH = 2;
-      const BARRACKS_MESS_ROW = 6;
-      const BARRACKS_MESS_START_COL = 7;
-      const BARRACKS_MESS_END_COL = 11;
-      // Benches sit every other column, offset by one between the two sides so
-      // diners face the gaps opposite them rather than each other's shoulders.
-      const BARRACKS_BENCH_PITCH = 2;
-      const BARRACKS_SUPPLY_TOP_ROW = 12;
-      const BARRACKS_SUPPLY_BOTTOM_ROW = 13;
-      const BARRACKS_BRAZIER_WEST_COL = 8;
-      const BARRACKS_BRAZIER_EAST_COL = 13;
-      const BARRACKS_BRAZIER_ROW = 13;
-      const BARRACKS_RUG_START_COL = 9;
-      const BARRACKS_RUG_END_COL = 12;
-      const BARRACKS_EAST_WALL_COL = w - 2;
-      const BARRACKS_SECOND_EAST_COL = w - 2 - 1;
-
-      grid[1][BARRACKS_HEARTH_COL_1].type = FIREPLACE;
-      grid[1][BARRACKS_HEARTH_COL_2].type = FIREPLACE;
-
-      // Bunk pairs stacked along both side walls, two tiles deep each.
-      for (let stack = 0; stack < BARRACKS_BUNK_STACKS_PER_WALL; stack++) {
-        const bunkTopRow = BARRACKS_FIRST_BUNK_ROW + stack * BARRACKS_BUNK_ROW_PITCH;
-        for (let d = 0; d < BARRACKS_BUNK_DEPTH; d++) {
-          grid[bunkTopRow + d][1].type = BED;
-          grid[bunkTopRow + d][2].type = BED;
-          grid[bunkTopRow + d][BARRACKS_SECOND_EAST_COL].type = BED;
-          grid[bunkTopRow + d][BARRACKS_EAST_WALL_COL].type = BED;
-        }
+      const storeCounterStartCol = 2;
+      const storeCounterEndCol = storeEastWallCol - 1;
+      const storeRugRow = storeCounterRow + 1;
+      const storeRugStartCol = 8;
+      const storeRugEndCol = 11;
+      /** Floor left at each end of an aisle run, so neither run seals its lane. */
+      const storeAisleEndGap = 2;
+      const storeAisleStartCol = 1 + storeAisleEndGap;
+      const storeAisleEndCol = storeEastWallCol - storeAisleEndGap;
+      const storeFirstAisleRow = 5;
+      const storeAislePitch = 2;
+      const storeAisleRuns = 2;
+      /*
+       * Behind the counter, which is the north strip. The counter stops short of
+       * both side walls and nothing is stacked in those two columns, because the
+       * lanes past its ends are the only way into the strip at all.
+       */
+      const storeStockRow = 1;
+      const storeStockRunTiles = 3;
+      const storeStockStartCol = storeEastWallCol - storeStockRunTiles;
+      const storeEntranceRow = storeSouthRow - 1;
+      for (let rx = storeCounterStartCol; rx <= storeCounterEndCol; rx++)
+        grid[storeCounterRow][rx].type = INTERIOR_COUNTER;
+      for (let n = 0; n < storeStockRunTiles; n++)
+        placeProp(grid[storeStockRow][storeStockStartCol + n], BARREL);
+      for (let rx = storeRugStartCol; rx <= storeRugEndCol; rx++) grid[storeRugRow][rx].type = RUG;
+      for (let run = 0; run < storeAisleRuns; run++) {
+        const runRow = storeFirstAisleRow + run * storeAislePitch;
+        for (let rx = storeAisleStartCol; rx <= storeAisleEndCol; rx++)
+          placeProp(grid[runRow][rx], BOOKSHELF);
       }
-
-      // Long mess table with benches on both sides, kept west of centre so the
-      // corridor to the hearth stays walkable.
-      for (let x = BARRACKS_MESS_START_COL; x <= BARRACKS_MESS_END_COL; x++)
-        grid[BARRACKS_MESS_ROW][x].type = TABLE;
-      for (
-        let x = BARRACKS_MESS_START_COL + 1;
-        x <= BARRACKS_MESS_END_COL;
-        x += BARRACKS_BENCH_PITCH
-      )
-        grid[BARRACKS_MESS_ROW - 1][x].type = CHAIR;
-      for (let x = BARRACKS_MESS_START_COL; x <= BARRACKS_MESS_END_COL; x += BARRACKS_BENCH_PITCH)
-        grid[BARRACKS_MESS_ROW + 1][x].type = CHAIR;
-
-      // Supply stacks in the two southern corners.
-      for (let ry = BARRACKS_SUPPLY_TOP_ROW; ry <= BARRACKS_SUPPLY_BOTTOM_ROW; ry++) {
-        placeProp(grid[ry][1], CRATE);
-        placeProp(grid[ry][BARRACKS_EAST_WALL_COL], BARREL);
-      }
-      placeProp(grid[BARRACKS_SUPPLY_TOP_ROW][2], CRATE);
-      placeProp(grid[BARRACKS_SUPPLY_TOP_ROW][BARRACKS_SECOND_EAST_COL], BARREL);
-
-      // Braziers flanking the entry rug.
-      grid[BARRACKS_BRAZIER_ROW][BARRACKS_BRAZIER_WEST_COL].type = BRAZIER;
-      grid[BARRACKS_BRAZIER_ROW][BARRACKS_BRAZIER_EAST_COL].type = BRAZIER;
-      for (let ry = BARRACKS_SUPPLY_TOP_ROW; ry <= BARRACKS_SUPPLY_BOTTOM_ROW; ry++)
-        for (let rx = BARRACKS_RUG_START_COL; rx <= BARRACKS_RUG_END_COL; rx++)
-          grid[ry][rx].type = RUG;
+      placeProp(grid[storeEntranceRow][1], CRATE);
+      placeProp(grid[storeEntranceRow][2], CRATE);
+      placeProp(grid[storeEntranceRow][storeEastWallCol - 1], BARREL);
+      placeProp(grid[storeEntranceRow][storeEastWallCol], BARREL);
     }
 
     if (isClub) {
@@ -746,36 +814,41 @@ export class GameMap {
       'The Horned Flagon',
       'The Sunken Stump Pub',
       'Temple of the Sky',
-      "Signet's Ink",
+      'The Quiet Needle',
+      'The Barracks',
     ] as const;
     const isNamedBuilding = NAMED_BUILDINGS.some((n) => n === buildingName);
 
     if (isHouse && isNamedBuilding) {
       switch (buildingName) {
         case "Shepherd's Cabin": {
-          // Rustic shepherd's dwelling — hearth, simple cot, supply barrels
-          const cabinHearth1 = 4;
-          const cabinHearth2 = 5;
+          // One room, and the smallest interior in town — hearth, a cot, the
+          // barrels a season's wool goes into. Every column is derived from `w`
+          // and every row from `h`: this room is four tiles narrower and two
+          // shorter than a townhouse, and an absolute column here writes into
+          // the wall.
+          const cabinHearthCol1 = 4;
+          const cabinHearthCol2 = 5;
           const cabinBedNorthRow = 2;
           const cabinBedSouthRow = 3;
-          const cabinBedWestCol = 14;
-          const cabinBedEastCol = 15;
-          const cabinBarrelEndRow = 6;
-          const cabinTableRow = 7;
-          const cabinTableCol1 = 8;
-          const cabinTableCol2 = 9;
-          const cabinChairRow = 8;
-          const cabinSouthRow = 11;
-          const cabinBarrelSideRow = 10;
-          grid[1][cabinHearth1].type = FIREPLACE;
-          grid[1][cabinHearth2].type = FIREPLACE;
+          const cabinBedEastCol = w - 2;
+          const cabinBedWestCol = cabinBedEastCol - 1;
+          const cabinBarrelStartRow = 3;
+          const cabinBarrelEndRow = 5;
+          const cabinTableRow = 6;
+          const cabinTableCol1 = 6;
+          const cabinTableCol2 = 7;
+          const cabinChairRow = 7;
+          const cabinSouthRow = h - 2;
+          const cabinBarrelSideRow = cabinSouthRow - 2;
+          grid[1][cabinHearthCol1].type = FIREPLACE;
+          grid[1][cabinHearthCol2].type = FIREPLACE;
           grid[cabinBedNorthRow][cabinBedWestCol].type = BED;
           grid[cabinBedNorthRow][cabinBedEastCol].type = BED;
           grid[cabinBedSouthRow][cabinBedWestCol].type = BED;
           grid[cabinBedSouthRow][cabinBedEastCol].type = BED;
-          placeProp(grid[cabinHearth1][1], BARREL);
-          placeProp(grid[cabinHearth2][1], BARREL);
-          placeProp(grid[cabinBarrelEndRow][1], BARREL);
+          for (let ry = cabinBarrelStartRow; ry <= cabinBarrelEndRow; ry++)
+            placeProp(grid[ry][1], BARREL);
           grid[cabinTableRow][cabinTableCol1].type = TABLE;
           grid[cabinTableRow][cabinTableCol2].type = TABLE;
           grid[cabinChairRow][cabinTableCol1].type = CHAIR;
@@ -786,94 +859,136 @@ export class GameMap {
         }
 
         case 'Blackwood Lodge': {
-          // Military barracks — rows of bunks, briefing table, crate storage
-          const barracksBunkRow1 = 2;
-          const barracksBunkRow2 = 3;
-          const barracksBunkRow3 = 5;
-          const barracksBunkRow4 = 6;
-          const barracksEastBedCol1 = 14;
-          const barracksEastBedCol2 = 15;
-          const barracksBriefingRow = 7;
-          const barracksBriefingTableCol1 = 7;
-          const barracksBriefingTableCol2 = 8;
-          const barracksBriefingTableCol3 = 9;
-          const barracksChairRow = 8;
-          const barracksCrateRow1 = 10;
-          const barracksCrateRow2 = 11;
-          grid[barracksBunkRow1][1].type = BED;
-          grid[barracksBunkRow1][2].type = BED;
-          grid[barracksBunkRow2][1].type = BED;
-          grid[barracksBunkRow2][2].type = BED;
-          grid[barracksBunkRow3][1].type = BED;
-          grid[barracksBunkRow3][2].type = BED;
-          grid[barracksBunkRow4][1].type = BED;
-          grid[barracksBunkRow4][2].type = BED;
-          grid[barracksBunkRow1][barracksEastBedCol1].type = BED;
-          grid[barracksBunkRow1][barracksEastBedCol2].type = BED;
-          grid[barracksBunkRow2][barracksEastBedCol1].type = BED;
-          grid[barracksBunkRow2][barracksEastBedCol2].type = BED;
-          grid[barracksBunkRow3][barracksEastBedCol1].type = BED;
-          grid[barracksBunkRow3][barracksEastBedCol2].type = BED;
-          grid[barracksBunkRow4][barracksEastBedCol1].type = BED;
-          grid[barracksBunkRow4][barracksEastBedCol2].type = BED;
-          grid[barracksBriefingRow][barracksBriefingTableCol1].type = TABLE;
-          grid[barracksBriefingRow][barracksBriefingTableCol2].type = TABLE;
-          grid[barracksBriefingRow][barracksBriefingTableCol3].type = TABLE;
-          grid[barracksChairRow][barracksBriefingTableCol1].type = CHAIR;
-          grid[barracksChairRow][barracksBriefingTableCol3].type = CHAIR;
-          placeProp(grid[barracksCrateRow1][1], CRATE);
-          placeProp(grid[barracksCrateRow2][1], CRATE);
-          placeProp(grid[barracksCrateRow1][barracksEastBedCol2], CRATE);
-          placeProp(grid[barracksCrateRow2][barracksEastBedCol2], CRATE);
-          placeProp(grid[barracksCrateRow2][barracksBriefingTableCol2], BARREL);
+          // The town's other garrison ground, and the one that still looks like a
+          // garrison: racked steel along the north wall, bunks stacked down both
+          // sides in ranks with a lane between them, and a map table in the middle
+          // of the floor. Kessler holds this post with two men and a watch
+          // rotation nobody relieves, so the room is furnished for a section and
+          // occupied by a section's worth of empty bunks — which is the point.
+          //
+          // The briefing table is a `MAP_TABLE` rather than a plain one because
+          // what the Lodge is actually watching is the drainage under the alley,
+          // and a pinned map is the only thing in the room that says so.
+          const lodgeEastWallCol = w - 2;
+          const lodgeSouthRow = h - 2;
+          const lodgeRackRow = 1;
+          const lodgeWestRackStartCol = 2;
+          const lodgeRackRunTiles = 2;
+          const lodgeEastRackStartCol = lodgeEastWallCol - lodgeRackRunTiles;
+          /** Each bunk is two tiles square; the ranks are pitched to leave a lane between. */
+          const lodgeBunkDepth = 2;
+          const lodgeBunkPitch = 3;
+          const lodgeFirstBunkRow = 3;
+          const lodgeWestBunkRanks = 3;
+          const lodgeEastBunkRanks = 2;
+          const lodgeWestBunkCol = 1;
+          const lodgeEastBunkCol = lodgeEastWallCol - 1;
+          const lodgeMapTableRow = 6;
+          const lodgeMapTableStartCol = 7;
+          const lodgeMapTableEndCol = 10;
+          const lodgeChairRow = lodgeMapTableRow + 1;
+          const lodgeKitRow = lodgeSouthRow - 1;
+          for (let n = 0; n < lodgeRackRunTiles; n++) {
+            placeProp(grid[lodgeRackRow][lodgeWestRackStartCol + n], WEAPON_RACK);
+            placeProp(grid[lodgeRackRow][lodgeEastRackStartCol + n], WEAPON_RACK);
+          }
+          for (let rank = 0; rank < lodgeWestBunkRanks; rank++)
+            for (let d = 0; d < lodgeBunkDepth; d++)
+              for (let c = 0; c < lodgeBunkDepth; c++)
+                grid[lodgeFirstBunkRow + rank * lodgeBunkPitch + d][lodgeWestBunkCol + c].type =
+                  BED;
+          for (let rank = 0; rank < lodgeEastBunkRanks; rank++)
+            for (let d = 0; d < lodgeBunkDepth; d++)
+              for (let c = 0; c < lodgeBunkDepth; c++)
+                grid[lodgeFirstBunkRow + rank * lodgeBunkPitch + d][lodgeEastBunkCol + c].type =
+                  BED;
+          for (let rx = lodgeMapTableStartCol; rx <= lodgeMapTableEndCol; rx++)
+            grid[lodgeMapTableRow][rx].type = MAP_TABLE;
+          grid[lodgeChairRow][lodgeMapTableStartCol].type = CHAIR;
+          grid[lodgeChairRow][lodgeMapTableEndCol].type = CHAIR;
+          placeProp(grid[lodgeKitRow][1], CRATE);
+          placeProp(grid[lodgeKitRow][2], CRATE);
+          placeProp(grid[lodgeKitRow][lodgeEastWallCol - 1], BARREL);
+          placeProp(grid[lodgeKitRow][lodgeEastWallCol], BARREL);
           break;
         }
 
         case "Old Hilda's Cottage": {
-          // Witch's lair — cauldron braziers, dense spell-book shelves, work table
-          const hildaBrazierCol1 = 8;
-          const hildaBrazierCol2 = 9;
-          const hildaWestShelfStartRow = 2;
-          const hildaWestShelfEndRow = 7;
-          const hildaEastShelfEndRow = 5;
-          const hildaEastShelfCol = HOUSE_INTERIOR_W - 2;
-          const hildaTableRow = 5;
-          const hildaTableCol1 = 7;
-          const hildaTableCol2 = 8;
-          const hildaChairRow = 6;
-          const hildaBarrelRow1 = 8;
-          const hildaBarrelRow2 = 9;
-          const hildaCrateRow = 11;
-          const hildaCrateCol1 = 13;
-          const hildaCrateCol2 = 14;
-          grid[1][hildaBrazierCol1].type = BRAZIER;
-          grid[1][hildaBrazierCol2].type = BRAZIER;
-          for (let ry = hildaWestShelfStartRow; ry <= hildaWestShelfEndRow; ry++)
+          // A hedge-witch's one room, and it is meant to feel crowded rather than
+          // small: shelves run both side walls end to end and turn the corners
+          // along the north wall, so the walls are lined with work everywhere the
+          // hearth and the cauldron are not.
+          //
+          // The hearth is a real `FIREPLACE` and not another brazier because the
+          // cottage's second occupant — the customer waiting on a charm — is
+          // anchored to a hearth, and an anchor group that matches nothing drops
+          // its occupant with no error at all. A cottage with a cauldron and no
+          // fire to hang it over would not have read as one either.
+          const hildaEastShelfCol = w - 2;
+          const hildaSouthRow = h - 2;
+          const hildaHearthCol1 = 5;
+          const hildaHearthCol2 = 6;
+          const hildaCauldronCol = 8;
+          const hildaSideShelfStartRow = 2;
+          const hildaWestShelfEndRow = hildaSouthRow - 2;
+          const hildaEastShelfEndRow = hildaWestShelfEndRow - 1;
+          const hildaNorthWestShelfEndCol = 2;
+          const hildaNorthEastShelfStartCol = hildaEastShelfCol - 2;
+          const hildaTableRow = 6;
+          const hildaTableCol1 = hildaHearthCol1;
+          const hildaTableCol2 = hildaHearthCol2;
+          const hildaChairRow = hildaTableRow + 1;
+          const hildaClutterRow1 = 8;
+          const hildaClutterCol1 = hildaCauldronCol;
+          const hildaClutterRow2 = 9;
+          const hildaClutterCol2 = 3;
+          const hildaStoreRow = hildaSouthRow - 1;
+          grid[1][hildaHearthCol1].type = FIREPLACE;
+          grid[1][hildaHearthCol2].type = FIREPLACE;
+          grid[1][hildaCauldronCol].type = BRAZIER;
+          for (let rx = 1; rx <= hildaNorthWestShelfEndCol; rx++) placeProp(grid[1][rx], BOOKSHELF);
+          for (let rx = hildaNorthEastShelfStartCol; rx <= hildaEastShelfCol; rx++)
+            placeProp(grid[1][rx], BOOKSHELF);
+          for (let ry = hildaSideShelfStartRow; ry <= hildaWestShelfEndRow; ry++)
             placeProp(grid[ry][1], BOOKSHELF);
-          for (let ry = hildaWestShelfStartRow; ry <= hildaEastShelfEndRow; ry++)
+          for (let ry = hildaSideShelfStartRow; ry <= hildaEastShelfEndRow; ry++)
             placeProp(grid[ry][hildaEastShelfCol], BOOKSHELF);
           grid[hildaTableRow][hildaTableCol1].type = TABLE;
           grid[hildaTableRow][hildaTableCol2].type = TABLE;
           grid[hildaChairRow][hildaTableCol1].type = CHAIR;
-          placeProp(grid[hildaBarrelRow1][1], BARREL);
-          placeProp(grid[hildaBarrelRow2][1], BARREL);
-          placeProp(grid[hildaBarrelRow2][hildaTableCol2], BARREL_SIDE);
-          placeProp(grid[hildaBarrelRow2][hildaBrazierCol2], BARREL_SIDE);
-          placeProp(grid[hildaCrateRow][hildaCrateCol1], CRATE);
-          placeProp(grid[hildaCrateRow][hildaCrateCol2], CRATE);
+          placeProp(grid[hildaClutterRow1][hildaClutterCol1], BARREL_SIDE);
+          placeProp(grid[hildaClutterRow2][hildaClutterCol2], BARREL_SIDE);
+          placeProp(grid[hildaStoreRow][1], BARREL);
+          placeProp(grid[hildaStoreRow][2], BARREL);
+          placeProp(grid[hildaStoreRow][hildaEastShelfCol - 1], CRATE);
+          placeProp(grid[hildaStoreRow][hildaEastShelfCol], CRATE);
           break;
         }
 
         case "Cartwright's Workshop": {
-          // Builder's shop — dual north workbenches, raw material crates, scattered supplies
+          // A builder's shop, and a builder's shop is mostly timber. The east end
+          // is walled off into a stock bay stacked to the ceiling, and the
+          // workbench run stops dead against that wall rather than continuing —
+          // the break is what makes the bench read as a bench and not as a
+          // counter running the width of the room.
+          //
+          // The bay is closed on its west side and open along its south, so the
+          // stock is behind a wall without being behind a door.
+          const cartwrightEastWallCol = w - 2;
+          const cartwrightSouthRow = h - 2;
+          const cartwrightBayWidth = 4;
+          const cartwrightBayWallCol = cartwrightEastWallCol - cartwrightBayWidth;
+          const cartwrightBayFirstCol = cartwrightBayWallCol + 1;
+          const cartwrightBayWallLastRow = 7;
+          const cartwrightBayStackEndRow = 6;
+          const cartwrightBayInnerStackEndRow = 3;
           const cartwrightBenchRow = 2;
           const cartwrightBench1StartCol = 3;
           const cartwrightBench1EndCol = 7;
           const cartwrightBench2StartCol = 10;
-          const cartwrightBench2EndCol = 14;
+          const cartwrightBench2EndCol = cartwrightBayWallCol - 1;
           const cartwrightCrateStartRow = 4;
           const cartwrightCrateEndRow = 7;
-          const cartwrightEastWallCol = HOUSE_INTERIOR_W - 2;
           const cartwrightBarrelRow = 8;
           const cartwrightBarrelCol1 = 4;
           const cartwrightBarrelCol2 = 5;
@@ -882,17 +997,21 @@ export class GameMap {
           const cartwrightTableRow = 5;
           const cartwrightTableCol1 = 8;
           const cartwrightTableCol2 = 9;
-          const cartwrightSouthRow = 11;
-          const cartwrightSouthCrateCol1 = 14;
-          const cartwrightSouthCrateCol2 = 15;
+          const cartwrightStoreRow = cartwrightSouthRow - 1;
           for (let rx = cartwrightBench1StartCol; rx <= cartwrightBench1EndCol; rx++)
             grid[cartwrightBenchRow][rx].type = TABLE;
           for (let rx = cartwrightBench2StartCol; rx <= cartwrightBench2EndCol; rx++)
             grid[cartwrightBenchRow][rx].type = TABLE;
+          for (let ry = 1; ry <= cartwrightBayWallLastRow; ry++)
+            grid[ry][cartwrightBayWallCol].type = INTERIOR_WALL;
+          for (let ry = 1; ry <= cartwrightBayStackEndRow; ry++)
+            placeProp(grid[ry][cartwrightEastWallCol], CRATE);
+          for (let ry = 1; ry <= cartwrightBayInnerStackEndRow; ry++)
+            placeProp(grid[ry][cartwrightBayFirstCol], CRATE);
+          placeProp(grid[1][cartwrightBayFirstCol + 1], BARREL);
+          placeProp(grid[1][cartwrightBayFirstCol + 2], BARREL);
           for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow; ry++)
             placeProp(grid[ry][1], CRATE);
-          for (let ry = cartwrightCrateStartRow; ry <= cartwrightCrateEndRow - 1; ry++)
-            placeProp(grid[ry][cartwrightEastWallCol], BARREL);
           placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol1], BARREL_SIDE);
           placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol2], BARREL_SIDE);
           placeProp(grid[cartwrightBarrelRow][cartwrightBarrelCol3], BARREL_SIDE);
@@ -900,140 +1019,260 @@ export class GameMap {
           grid[cartwrightTableRow][cartwrightTableCol1].type = TABLE;
           grid[cartwrightTableRow][cartwrightTableCol2].type = TABLE;
           grid[cartwrightTableRow + 1][cartwrightTableCol1].type = CHAIR;
-          placeProp(grid[cartwrightSouthRow][1], BARREL);
-          placeProp(grid[cartwrightSouthRow][2], BARREL);
-          placeProp(grid[cartwrightSouthRow][cartwrightSouthCrateCol1], CRATE);
-          placeProp(grid[cartwrightSouthRow][cartwrightSouthCrateCol2], CRATE);
+          placeProp(grid[cartwrightStoreRow][1], BARREL);
+          placeProp(grid[cartwrightStoreRow][2], BARREL);
+          placeProp(grid[cartwrightStoreRow][cartwrightEastWallCol - 1], CRATE);
+          placeProp(grid[cartwrightStoreRow][cartwrightEastWallCol], CRATE);
           break;
         }
 
         case 'Herb & Remedy': {
-          // Apothecary — counter, dense ingredient shelves, display table
-          const herbCounterRow = 2;
-          const herbCounterStartCol = 5;
-          const herbCounterEndCol = 13;
-          const herbShelfStartRow = 3;
-          const herbWestShelfEndRow = 7;
-          const herbEastShelfEndRow = 6;
-          const herbEastShelfCol = HOUSE_INTERIOR_W - 2;
-          const herbBarrelRow1 = 3;
-          const herbBarrelRow2 = 4;
-          const herbBarrelCol1 = 14;
-          const herbBarrelCol2 = 15;
-          const herbRugStartCol = 4;
-          const herbRugEndCol = 12;
-          const herbTableRow = 8;
-          const herbTableCol1 = 7;
-          const herbTableCol2 = 8;
-          const herbBarrelSideCol = 3;
+          // An apothecary is a shop in front of a drying room, and the drying
+          // room is the half a customer does not walk into: bunched herbs on
+          // racks, out of the light and out of the traffic, behind a stub wall
+          // with one doorway at its east end.
+          //
+          // The counter hangs off the front of that wall with open floor at both
+          // ends of the run. The gaps are not decorative — the strip between the
+          // wall and the counter is where the herbalist's own anchor lands, and a
+          // run carried wall to wall would seal her into it.
+          const herbEastShelfCol = w - 2;
+          const herbSouthRow = h - 2;
+          const herbDryingLastRow = 4;
+          const herbPartitionRow = herbDryingLastRow + 1;
+          const herbDoorwayEastCol = herbEastShelfCol - 1;
+          const herbDoorwayWestCol = herbDoorwayEastCol - 1;
+          const herbRackEndRow = herbDryingLastRow;
+          const herbHangingBarrelCol1 = 5;
+          const herbHangingBarrelCol2 = 6;
+          /** Tiles of open floor at each end of the counter — the only way behind it. */
+          const herbCounterEndGap = 2;
+          const herbCounterRow = herbPartitionRow + 2;
+          const herbCounterStartCol = 1 + herbCounterEndGap;
+          const herbCounterEndCol = herbEastShelfCol - herbCounterEndGap - 1;
+          const herbShopShelfStartRow = herbCounterRow + 1;
+          const herbShopShelfEndRow = herbSouthRow - 2;
+          const herbRugStartRow = herbCounterRow + 1;
+          /** Floor left bare between the rug's edges and the side walls. */
+          const herbRugSideMargin = 3;
+          const herbRugStartCol = 1 + herbRugSideMargin;
+          const herbRugEndCol = herbEastShelfCol - herbRugSideMargin;
+          const herbTableRow = herbSouthRow - 2;
+          const herbTableCol1 = 6;
+          const herbTableCol2 = 7;
+          for (let ry = 1; ry <= herbRackEndRow; ry++) {
+            placeProp(grid[ry][1], BOOKSHELF);
+            placeProp(grid[ry][herbEastShelfCol], BOOKSHELF);
+          }
+          placeProp(grid[1][herbHangingBarrelCol1], BARREL);
+          placeProp(grid[1][herbHangingBarrelCol2], BARREL);
+          for (let rx = 1; rx <= herbEastShelfCol; rx++)
+            grid[herbPartitionRow][rx].type = INTERIOR_WALL;
+          grid[herbPartitionRow][herbDoorwayWestCol].type = floorType;
+          grid[herbPartitionRow][herbDoorwayEastCol].type = floorType;
           for (let rx = herbCounterStartCol; rx <= herbCounterEndCol; rx++)
             grid[herbCounterRow][rx].type = INTERIOR_COUNTER;
-          for (let ry = herbShelfStartRow; ry <= herbWestShelfEndRow; ry++)
+          for (let ry = herbShopShelfStartRow; ry <= herbShopShelfEndRow; ry++)
             placeProp(grid[ry][1], BOOKSHELF);
-          for (let ry = herbShelfStartRow; ry <= herbEastShelfEndRow; ry++)
-            placeProp(grid[ry][herbEastShelfCol], BOOKSHELF);
-          placeProp(grid[herbBarrelRow1][herbBarrelCol1], BARREL);
-          placeProp(grid[herbBarrelRow1][herbBarrelCol2], BARREL);
-          placeProp(grid[herbBarrelRow2][herbBarrelCol1], BARREL);
           for (let rx = herbRugStartCol; rx <= herbRugEndCol; rx++) {
-            grid[herbBarrelRow2][rx].type = RUG;
-            grid[herbBarrelRow2 + 1][rx].type = RUG;
+            grid[herbRugStartRow][rx].type = RUG;
+            grid[herbRugStartRow + 1][rx].type = RUG;
           }
           grid[herbTableRow][herbTableCol1].type = TABLE;
           grid[herbTableRow][herbTableCol2].type = TABLE;
-          placeProp(grid[herbTableRow][herbBarrelSideCol], BARREL_SIDE);
+          placeProp(grid[herbSouthRow][1], BARREL_SIDE);
+          placeProp(grid[herbSouthRow][herbEastShelfCol], BARREL_SIDE);
           break;
         }
 
         case 'The Sleeping Cat Inn': {
-          // Cozy inn — west & east guest rooms, common dining area, innkeeper desk
-          const innFireplaceCol1 = 8;
-          const innFireplaceCol2 = 9;
-          const innBunkRow1 = 2;
-          const innBunkRow2 = 3;
-          const innBunkRow3 = 5;
-          const innBunkRow4 = 6;
-          const innEastBedCol1 = 14;
-          const innEastBedCol2 = 15;
-          const innRugRow = 4;
-          const innRugStartCol = 4;
-          const innRugEndCol = 13;
-          const innDiningRow = 7;
-          const innDiningChairRow = 8;
-          const innWestTableCol1 = 4;
-          const innWestTableCol2 = 5;
-          const innEastTableCol1 = 11;
-          const innEastTableCol2 = 12;
-          const innCenterTableRow = 6;
-          const innCenterTableCol1 = 7;
-          const innCenterTableCol2 = 8;
-          const innCenterTableCol3 = 9;
-          const innSouthRow = 11;
-          // Reception bar in the south-east: gives the innkeeper a post to work
-          // (the occupant system stations `tend_counter` roles at interior walls)
-          // and gives the common room somewhere to be served a drink.
-          const innBarRow = 10;
-          const innBarStartCol = 10;
-          const innBarEndCol = HOUSE_INTERIOR_W - 2;
-          const innBarStoolRow = 11;
+          // An inn rather than a dormitory: three private guest rooms off a
+          // landing upstairs, and a taproom below the partition which is also
+          // the town's safe room. The three rooms are furnished alike and then
+          // given one thing each — a second bunk, a hearth, a shelf and a
+          // brazier — because that difference is the whole of what a crawler is
+          // choosing between when they pay for one.
+          const innEastWallCol = w - 2;
+          const innSouthRow = h - 2;
+
+          /** Walls between the three guest rooms, running the wing's full depth. */
+          const innAtticRoomEastWallCol = 8;
+          const innHearthsideRoomEastWallCol = 16;
+          const innGuestDividerCols = [innAtticRoomEastWallCol, innHearthsideRoomEastWallCol];
+          /** One doorway per guest room, cut in the wall the landing runs along. */
+          const innAtticDoorwayCol = 4;
+          const innHearthsideDoorwayCol = 12;
+          const innCatsOwnDoorwayCol = 19;
+          const innGuestDoorwayCols = [
+            innAtticDoorwayCol,
+            innHearthsideDoorwayCol,
+            innCatsOwnDoorwayCol,
+          ];
+          const innGuestBedFirstRow = 2;
+          const innGuestBedLastRow = 3;
+          const innGuestTableRow = 2;
+          const innGuestChairRow = 3;
+          const innGuestRugRow = 5;
+          /** Each guest room's shared fittings: a bed pair, a table and chair, a rug. */
+          const innGuestRooms = [
+            { bedWestCol: 2, tableCol: 5, rugStartCol: 2, rugEndCol: 5 },
+            { bedWestCol: 10, tableCol: 14, rugStartCol: 10, rugEndCol: 14 },
+            { bedWestCol: 18, tableCol: 21, rugStartCol: 18, rugEndCol: 21 },
+          ] as const;
+
+          // The Attic Cot: the cheap room, and the only one sleeping four.
+          const innAtticExtraBunkRow = 1;
+          const innAtticCrateCol = 7;
+          const innAtticCrateRow = 6;
+          // The Hearthside Room: a fire of its own, which is what it is sold on.
+          const innHearthsideCol1 = 11;
+          const innHearthsideCol2 = 12;
+          // The Cat's Own Room: reading shelf, a brazier, and a cask by the bed.
+          const innCatsOwnShelfCol = 17;
+          const innCatsOwnShelfFirstRow = 4;
+          const innCatsOwnShelfLastRow = 5;
+          const innCatsOwnBarrelCol = 21;
+          const innCatsOwnBarrelRow = 6;
+
+          /*
+           * The archway down to the taproom is deliberately off-centre.
+           *
+           * The Bopca's counter run is laid against the north wall of the safe
+           * room's bounds — this partition row — and centred on it, three rows
+           * deep including the galley behind. An archway in the middle would sit
+           * directly under that run, whose back bench is solid: the guest wing
+           * would be sealed off with no error and no log anywhere, and a crawler
+           * would walk into an inn whose entire upstairs could be seen and never
+           * entered. Kept hard against the taproom's west end instead, and the
+           * taproom's northern rows kept free of authored furniture across the
+           * middle so the run has somewhere to land.
+           */
+          const innArchwayWestCol = 3;
+          const innArchwayEastCol = 4;
+          const innArchwayCols = [innArchwayWestCol, innArchwayEastCol];
+
+          const innTaproomHearthCol1 = 1;
+          const innTaproomHearthCol2 = 2;
+          const innTaproomTableRow = 17;
+          const innTaproomChairRow = 18;
+          /** Two two-tile side tables along the west of the taproom. */
+          const innWestSideTableCol1 = 2;
+          const innWestSideTableCol2 = 3;
+          const innInnerSideTableCol1 = 6;
+          const innInnerSideTableCol2 = 7;
+          const innSideTableCols = [
+            innWestSideTableCol1,
+            innWestSideTableCol2,
+            innInnerSideTableCol1,
+            innInnerSideTableCol2,
+          ];
+          const innFeastTableRow = 19;
+          const innFeastTableStartCol = innInnerSideTableCol1;
+          const innFeastTableEndCol = 11;
+          /** Feast seats north of the long table that no side table already seats. */
+          const innFeastSeatWestCol = 9;
+          const innFeastSeatEastCol = innFeastTableEndCol;
+          const innFeastSeatCols = [innFeastSeatWestCol, innFeastSeatEastCol];
+          const innBarRunTiles = 7;
+          const innBarEndCol = innEastWallCol;
+          const innBarStartCol = innBarEndCol - (innBarRunTiles - 1);
           const innBarStoolPitch = 2;
-          grid[1][innFireplaceCol1].type = FIREPLACE;
-          grid[1][innFireplaceCol2].type = FIREPLACE;
-          grid[innBunkRow1][1].type = BED;
-          grid[innBunkRow1][2].type = BED;
-          grid[innBunkRow2][1].type = BED;
-          grid[innBunkRow2][2].type = BED;
-          grid[innBunkRow3][1].type = BED;
-          grid[innBunkRow3][2].type = BED;
-          grid[innBunkRow4][1].type = BED;
-          grid[innBunkRow4][2].type = BED;
-          grid[innBunkRow1][innEastBedCol1].type = BED;
-          grid[innBunkRow1][innEastBedCol2].type = BED;
-          grid[innBunkRow2][innEastBedCol1].type = BED;
-          grid[innBunkRow2][innEastBedCol2].type = BED;
-          grid[innBunkRow3][innEastBedCol1].type = BED;
-          grid[innBunkRow3][innEastBedCol2].type = BED;
-          grid[innBunkRow4][innEastBedCol1].type = BED;
-          grid[innBunkRow4][innEastBedCol2].type = BED;
-          for (let rx = innRugStartCol; rx <= innRugEndCol; rx++) grid[innRugRow][rx].type = RUG;
-          grid[innDiningRow][innWestTableCol1].type = TABLE;
-          grid[innDiningRow][innWestTableCol2].type = TABLE;
-          grid[innDiningChairRow][innWestTableCol1].type = CHAIR;
-          grid[innDiningChairRow][innWestTableCol2].type = CHAIR;
-          grid[innDiningRow][innEastTableCol1].type = TABLE;
-          grid[innDiningRow][innEastTableCol2].type = TABLE;
-          grid[innDiningChairRow][innEastTableCol1].type = CHAIR;
-          grid[innDiningChairRow][innEastTableCol2].type = CHAIR;
-          grid[innCenterTableRow][innCenterTableCol1].type = TABLE;
-          grid[innCenterTableRow][innCenterTableCol2].type = TABLE;
-          grid[innCenterTableRow][innCenterTableCol3].type = TABLE;
-          grid[innDiningRow][innCenterTableCol1].type = CHAIR;
-          placeProp(grid[innSouthRow][1], BARREL);
-          placeProp(grid[innSouthRow][2], BARREL);
+
+          for (const col of innGuestDividerCols) {
+            for (let ry = INN_GUEST_WING_FIRST_ROW; ry <= INN_GUEST_WING_LAST_ROW; ry++)
+              grid[ry][col].type = INTERIOR_WALL;
+          }
+          for (let rx = 1; rx <= innEastWallCol; rx++) {
+            grid[INN_GUEST_WALL_ROW][rx].type = INTERIOR_WALL;
+            grid[INN_PARTITION_ROW][rx].type = INTERIOR_WALL;
+          }
+          for (const col of innGuestDoorwayCols) grid[INN_GUEST_WALL_ROW][col].type = floorType;
+          for (const col of innArchwayCols) grid[INN_PARTITION_ROW][col].type = floorType;
+
+          for (const room of innGuestRooms) {
+            for (let ry = innGuestBedFirstRow; ry <= innGuestBedLastRow; ry++) {
+              grid[ry][room.bedWestCol].type = BED;
+              grid[ry][room.bedWestCol + 1].type = BED;
+            }
+            grid[innGuestTableRow][room.tableCol].type = TABLE;
+            grid[innGuestChairRow][room.tableCol].type = CHAIR;
+            for (let rx = room.rugStartCol; rx <= room.rugEndCol; rx++)
+              grid[innGuestRugRow][rx].type = RUG;
+          }
+
+          const [innAtticRoom] = innGuestRooms;
+          grid[innAtticExtraBunkRow][innAtticRoom.bedWestCol].type = BED;
+          grid[innAtticExtraBunkRow][innAtticRoom.bedWestCol + 1].type = BED;
+          placeProp(grid[innAtticCrateRow][innAtticCrateCol], CRATE);
+          grid[INN_GUEST_WING_FIRST_ROW][innHearthsideCol1].type = FIREPLACE;
+          grid[INN_GUEST_WING_FIRST_ROW][innHearthsideCol2].type = FIREPLACE;
+          for (let ry = innCatsOwnShelfFirstRow; ry <= innCatsOwnShelfLastRow; ry++)
+            placeProp(grid[ry][innCatsOwnShelfCol], BOOKSHELF);
+          grid[INN_GUEST_WING_FIRST_ROW][innEastWallCol].type = BRAZIER;
+          placeProp(grid[innCatsOwnBarrelRow][innCatsOwnBarrelCol], BARREL);
+
+          // The landing runner stops a column short of each side wall, where the
+          // corridor's own barrels stand.
+          const innLandingRugStartCol = 2;
+          const innLandingRugEndCol = innEastWallCol - 1;
+          for (let rx = innLandingRugStartCol; rx <= innLandingRugEndCol; rx++)
+            grid[INN_LANDING_RUG_ROW][rx].type = RUG;
+          placeProp(grid[INN_LANDING_ROW][1], BARREL);
+          placeProp(grid[INN_LANDING_ROW][innEastWallCol], BARREL);
+
+          grid[INN_TAPROOM_FIRST_ROW][innTaproomHearthCol1].type = FIREPLACE;
+          grid[INN_TAPROOM_FIRST_ROW][innTaproomHearthCol2].type = FIREPLACE;
+          placeProp(grid[INN_TAPROOM_FIRST_ROW][innEastWallCol], BARREL);
+          for (const col of innSideTableCols) {
+            grid[innTaproomTableRow][col].type = TABLE;
+            grid[innTaproomChairRow][col].type = CHAIR;
+          }
+          for (let rx = innFeastTableStartCol; rx <= innFeastTableEndCol; rx++)
+            grid[innFeastTableRow][rx].type = TABLE;
+          for (const col of innFeastSeatCols) grid[innTaproomChairRow][col].type = CHAIR;
           for (let rx = innBarStartCol; rx <= innBarEndCol; rx++)
-            grid[innBarRow][rx].type = INTERIOR_COUNTER;
-          for (let rx = innBarStartCol + 1; rx <= innBarEndCol; rx += innBarStoolPitch)
-            grid[innBarStoolRow][rx].type = CHAIR;
+            grid[innTaproomTableRow][rx].type = INTERIOR_COUNTER;
+          for (let rx = innBarStartCol; rx <= innBarEndCol; rx += innBarStoolPitch)
+            grid[innTaproomChairRow][rx].type = CHAIR;
+          placeProp(grid[innSouthRow][1], CRATE);
+          placeProp(grid[innSouthRow][2], CRATE);
+          placeProp(grid[innSouthRow][innEastWallCol - 1], BARREL);
+          placeProp(grid[innSouthRow][innEastWallCol], BARREL);
           break;
         }
 
         case 'The Rusty Anvil': {
-          // Blacksmith — twin forge braziers, anvil tables, raw material crates
+          // A smithy is two rooms, not one: a walled forge hall where the heat
+          // and the sparks are, and a small shop across the south end where a
+          // customer stands at a counter without walking into the quench. The
+          // partition's one doorway lines up with the street door, so the forge
+          // hall is still open to anyone who wants to look at it.
+          //
+          // The shop counter is what stations the smith: `InteriorOccupantSystem`
+          // anchors her on the room's `INTERIOR_COUNTER` run, and every brazier
+          // is north of the partition, so deleting this run would put her back
+          // in the forge hall and leave the room the player spawns into empty.
+          const anvilEastWallCol = w - 2;
           const anvilWestForgeCol1 = 3;
           const anvilWestForgeCol2 = 4;
-          const anvilEastForgeCol1 = 13;
-          const anvilEastForgeCol2 = 14;
+          const anvilEastForgeCol2 = anvilEastWallCol - 2;
+          const anvilEastForgeCol1 = anvilEastForgeCol2 - 1;
           const anvilTableRow = 3;
           const anvilCrateStartRow = 5;
-          const anvilCrateEndRow = 9;
-          const anvilEastWallCol = HOUSE_INTERIOR_W - 2;
-          const anvilBarrelSideRow = 5;
-          const anvilBarrelSideCol1 = 7;
-          const anvilBarrelSideCol2 = 8;
-          const anvilBarrelSideCol3 = 9;
-          const anvilBarrelSideCol4 = 10;
+          const anvilCrateEndRow = 8;
+          const anvilBarrelSideRow = 6;
+          const anvilQuenchStartCol = 7;
+          const anvilQuenchEndCol = 10;
           const anvilChairRow = 4;
-          const anvilSouthRow = 11;
+          const anvilSouthRow = h - 2;
+          /** The shop is three rows deep — enough for a counter and a lane, no more. */
+          const anvilShopDepth = 3;
+          const anvilPartitionRow = anvilSouthRow - anvilShopDepth;
+          const anvilDoorwayWestCol = Math.floor(w / 2) - 1;
+          const anvilDoorwayEastCol = anvilDoorwayWestCol + 1;
+          const anvilCounterRow = anvilSouthRow - 1;
+          const anvilCounterStartCol = 2;
+          const anvilCounterEndCol = anvilDoorwayWestCol - 2;
           grid[1][anvilWestForgeCol1].type = BRAZIER;
           grid[1][anvilWestForgeCol2].type = BRAZIER;
           grid[1][anvilEastForgeCol1].type = BRAZIER;
@@ -1044,50 +1283,64 @@ export class GameMap {
           grid[anvilTableRow][anvilEastForgeCol2].type = TABLE;
           for (let ry = anvilCrateStartRow; ry <= anvilCrateEndRow; ry++)
             placeProp(grid[ry][1], CRATE);
-          placeProp(grid[anvilCrateStartRow][anvilEastWallCol], BARREL);
-          placeProp(grid[anvilCrateStartRow + 1][anvilEastWallCol], BARREL);
-          placeProp(grid[anvilCrateStartRow + 2][anvilEastWallCol], BARREL);
-          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol1], BARREL_SIDE);
-          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol2], BARREL_SIDE);
-          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol3], BARREL_SIDE);
-          placeProp(grid[anvilBarrelSideRow][anvilBarrelSideCol4], BARREL_SIDE);
-          grid[anvilChairRow][anvilBarrelSideCol1].type = CHAIR;
+          for (let ry = anvilCrateStartRow; ry <= anvilCrateEndRow - 1; ry++)
+            placeProp(grid[ry][anvilEastWallCol], BARREL);
+          for (let rx = anvilQuenchStartCol; rx <= anvilQuenchEndCol; rx++)
+            placeProp(grid[anvilBarrelSideRow][rx], BARREL_SIDE);
+          grid[anvilChairRow][anvilQuenchStartCol].type = CHAIR;
+          for (let rx = 1; rx <= anvilEastWallCol; rx++)
+            grid[anvilPartitionRow][rx].type = INTERIOR_WALL;
+          grid[anvilPartitionRow][anvilDoorwayWestCol].type = floorType;
+          grid[anvilPartitionRow][anvilDoorwayEastCol].type = floorType;
+          for (let rx = anvilCounterStartCol; rx <= anvilCounterEndCol; rx++)
+            grid[anvilCounterRow][rx].type = INTERIOR_COUNTER;
+          placeProp(grid[anvilCounterRow][anvilEastWallCol], BARREL);
+          placeProp(grid[anvilCounterRow][anvilEastWallCol - 1], BARREL);
           placeProp(grid[anvilSouthRow][1], CRATE);
-          placeProp(grid[anvilSouthRow][2], CRATE);
-          placeProp(grid[anvilSouthRow][anvilEastForgeCol2], BARREL);
-          placeProp(grid[anvilSouthRow][anvilEastWallCol - 1], BARREL);
+          placeProp(grid[anvilSouthRow][anvilEastWallCol], CRATE);
           break;
         }
 
         case "Miller's Farm": {
-          // Farmhouse — hearth, single bed, harvest crates along east wall
+          // A farmhouse whose harvest no longer sits in the room the family eats
+          // in: the crates have moved into a lean-to walled off the south-east
+          // corner, open along its north side the way a lean-to is open to the
+          // yard it was nailed onto. The bed moves west to make room for it.
+          const farmEastWallCol = w - 2;
+          const farmSouthRow = h - 2;
           const farmHearth1 = 2;
           const farmHearth2 = 3;
           const farmBedNorthRow = 2;
           const farmBedSouthRow = 3;
-          const farmBedWestCol = 14;
-          const farmBedEastCol = 15;
-          const farmEastWallCol = HOUSE_INTERIOR_W - 2;
-          const farmCrateStartRow = 4;
-          const farmCrateEndRow = 7;
+          const farmBedWestCol = 5;
+          const farmBedEastCol = 6;
+          const farmBarrelStartRow = 4;
+          const farmBarrelEndRow = 6;
           const farmTableRow = 8;
           const farmTableCol1 = 7;
           const farmTableCol2 = 8;
           const farmBarrelSideRow1 = 10;
           const farmBarrelSideRow2 = 11;
+          const farmLeanToWidth = 4;
+          const farmLeanToWallCol = farmEastWallCol - farmLeanToWidth;
+          const farmLeanToFirstCol = farmLeanToWallCol + 1;
+          const farmLeanToFirstRow = 7;
+          const farmLeanToStackStartRow = farmLeanToFirstRow + 1;
+          const farmLeanToStackEndRow = farmSouthRow - 1;
           grid[1][farmHearth1].type = FIREPLACE;
           grid[1][farmHearth2].type = FIREPLACE;
           grid[farmBedNorthRow][farmBedWestCol].type = BED;
           grid[farmBedNorthRow][farmBedEastCol].type = BED;
           grid[farmBedSouthRow][farmBedWestCol].type = BED;
           grid[farmBedSouthRow][farmBedEastCol].type = BED;
-          placeProp(grid[farmCrateStartRow][1], BARREL);
-          placeProp(grid[farmCrateStartRow + 1][1], BARREL);
-          placeProp(grid[farmCrateStartRow + 2][1], BARREL);
-          placeProp(grid[farmCrateStartRow][farmEastWallCol], CRATE);
-          placeProp(grid[farmCrateStartRow + 1][farmEastWallCol], CRATE);
-          placeProp(grid[farmCrateStartRow + 2][farmEastWallCol], CRATE);
-          placeProp(grid[farmCrateEndRow][farmEastWallCol], CRATE);
+          for (let ry = farmBarrelStartRow; ry <= farmBarrelEndRow; ry++)
+            placeProp(grid[ry][1], BARREL);
+          for (let ry = farmLeanToFirstRow; ry <= farmSouthRow; ry++)
+            grid[ry][farmLeanToWallCol].type = INTERIOR_WALL;
+          for (let ry = farmLeanToStackStartRow; ry <= farmLeanToStackEndRow; ry++)
+            placeProp(grid[ry][farmEastWallCol], CRATE);
+          for (let ry = farmLeanToStackStartRow + 1; ry <= farmLeanToStackEndRow; ry++)
+            placeProp(grid[ry][farmLeanToFirstCol], CRATE);
           grid[farmTableRow][farmTableCol1].type = TABLE;
           grid[farmTableRow][farmTableCol2].type = TABLE;
           grid[farmTableRow + 1][farmTableCol1].type = CHAIR;
@@ -1099,31 +1352,72 @@ export class GameMap {
 
         case 'The Horned Flagon': {
           // A mead hall: one long central feast table with benches down both
-          // sides, a serving bar in the north-east corner, symmetric side tables.
+          // sides, a serving bar in the north-east corner, and a snug side bay
+          // at each end of the hall walled off the main floor by stub walls. The
+          // bays are what stop the mead hall from being one loud box — a party
+          // that wants a corner has one, and the hall reads as bigger than the
+          // dive down the road because part of it is out of sight.
+          const FLAGON_EAST_WALL_COL = w - 2;
+          /** A bar this long seats four stools and still leaves the alley a mouth. */
+          const FLAGON_BAR_RUN_TILES = 8;
           const FLAGON_BAR_ROW = 2;
-          const FLAGON_BAR_START_COL = 11;
+          const FLAGON_BAR_START_COL = FLAGON_EAST_WALL_COL - FLAGON_BAR_RUN_TILES + 1;
           const FLAGON_BAR_RETURN_ROW = 3;
           const FLAGON_STOOL_ROW = 3;
           const FLAGON_STOOL_PITCH = 2;
           const FLAGON_HEARTH_COL_1 = 3;
           const FLAGON_HEARTH_COL_2 = 4;
-          const FLAGON_FEAST_ROW = 7;
-          const FLAGON_FEAST_START_COL = 5;
-          const FLAGON_FEAST_END_COL = 12;
+          const FLAGON_FEAST_ROW = 8;
+          const FLAGON_FEAST_START_COL = 6;
+          /** Floor left between the feast table's east end and the side bay. */
+          const FLAGON_FEAST_EAST_GAP = 5;
+          const FLAGON_FEAST_END_COL = FLAGON_EAST_WALL_COL - FLAGON_FEAST_EAST_GAP;
           const FLAGON_BENCH_PITCH = 2;
+          /** Floor left south and east of a side bay, so its chairs have a lane. */
+          const FLAGON_SIDE_TABLE_MARGIN = 3;
+          const FLAGON_SIDE_TABLE_ROW = h - 2 - FLAGON_SIDE_TABLE_MARGIN;
+          /*
+           * One tile off the bay's own outer wall, mirrored east to west. The
+           * mirroring is load-bearing rather than tidy: the tile the bay is
+           * entered through is the one beside its stub wall, and a table pushed
+           * up against that side walls its own snug off.
+           */
+          const FLAGON_SIDE_TABLE_INSET = 1;
+          const FLAGON_SIDE_TABLE_WIDTH = 2;
           const FLAGON_SIDE_TABLES = [
-            { col: 2, row: 10 },
-            { col: 14, row: 10 },
+            { col: 1 + FLAGON_SIDE_TABLE_INSET, row: FLAGON_SIDE_TABLE_ROW },
+            {
+              col: FLAGON_EAST_WALL_COL - FLAGON_SIDE_TABLE_INSET - FLAGON_SIDE_TABLE_WIDTH + 1,
+              row: FLAGON_SIDE_TABLE_ROW,
+            },
+          ];
+          /*
+           * Each bay is closed on its north side and part of its inner side, and
+           * open for the two rows between. The mouth is deliberately two tiles
+           * rather than one: a snug entered through a single tile is a trap for
+           * anything that wanders into it, and every occupant in this room wanders.
+           */
+          const FLAGON_BAY_WIDTH = 4;
+          const FLAGON_BAY_WALL_ROW = FLAGON_SIDE_TABLE_ROW - 1;
+          const FLAGON_BAY_MOUTH_ROWS = 2;
+          const FLAGON_BAY_INNER_WALL_FIRST_ROW = FLAGON_BAY_WALL_ROW + 1 + FLAGON_BAY_MOUTH_ROWS;
+          const FLAGON_BAY_INNER_WALL_LAST_ROW = h - 2;
+          const FLAGON_BAYS = [
+            { firstCol: 1, lastCol: FLAGON_BAY_WIDTH, innerWallCol: FLAGON_BAY_WIDTH + 1 },
+            {
+              firstCol: FLAGON_EAST_WALL_COL - FLAGON_BAY_WIDTH + 1,
+              lastCol: FLAGON_EAST_WALL_COL,
+              innerWallCol: FLAGON_EAST_WALL_COL - FLAGON_BAY_WIDTH,
+            },
           ];
           const FLAGON_RUG_ROW = 5;
           const FLAGON_RUG_START_COL = 3;
-          const FLAGON_RUG_END_COL = 14;
+          const FLAGON_RUG_END_COL = FLAGON_EAST_WALL_COL - 2;
           const FLAGON_BARREL_TILES = [
             { x: 1, y: 4 },
             { x: 1, y: 5 },
-            { x: 16, y: 6 },
+            { x: FLAGON_EAST_WALL_COL, y: 6 },
           ];
-          const FLAGON_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
           for (let rx = FLAGON_BAR_START_COL; rx <= FLAGON_EAST_WALL_COL; rx++)
             grid[FLAGON_BAR_ROW][rx].type = INTERIOR_COUNTER;
           grid[FLAGON_BAR_RETURN_ROW][FLAGON_BAR_START_COL].type = INTERIOR_COUNTER;
@@ -1145,6 +1439,16 @@ export class GameMap {
             rx += FLAGON_BENCH_PITCH
           )
             grid[FLAGON_FEAST_ROW + 1][rx].type = CHAIR;
+          for (const bay of FLAGON_BAYS) {
+            for (let rx = bay.firstCol; rx <= bay.lastCol; rx++)
+              grid[FLAGON_BAY_WALL_ROW][rx].type = INTERIOR_WALL;
+            for (
+              let ry = FLAGON_BAY_INNER_WALL_FIRST_ROW;
+              ry <= FLAGON_BAY_INNER_WALL_LAST_ROW;
+              ry++
+            )
+              grid[ry][bay.innerWallCol].type = INTERIOR_WALL;
+          }
           for (const side of FLAGON_SIDE_TABLES) {
             grid[side.row][side.col].type = TABLE;
             grid[side.row][side.col + 1].type = TABLE;
@@ -1158,27 +1462,42 @@ export class GameMap {
         }
 
         case 'Temple of the Sky': {
-          // A hushed hall: altar under the north wall flanked by braziers, pew
-          // rows facing it, a rug aisle down the middle, scripture on both walls.
+          // A hushed hall: the altar stands on a dressed-stone dais under the
+          // north wall flanked by braziers, four pew ranks face it, a rug aisle
+          // runs the length of the nave, scripture lines both walls.
           const TEMPLE_ALTAR_ROW = 1;
           const TEMPLE_ALTAR_START_COL = 7;
           const TEMPLE_ALTAR_END_COL = 10;
           const TEMPLE_BRAZIER_WEST_COL = 5;
           const TEMPLE_BRAZIER_EAST_COL = 12;
+          /*
+           * The dais is a band of dressed stone laid over the nave's flagstones,
+           * the same trick the garrison's drill sand plays against its stone: two
+           * ground materials meeting produce the palette's own corner-mask fringe,
+           * so the step reads as a rim rather than as a flat change of colour.
+           */
+          const TEMPLE_DAIS_FIRST_ROW = 1;
+          const TEMPLE_DAIS_LAST_ROW = 2;
+          const TEMPLE_DAIS_START_COL = TEMPLE_BRAZIER_WEST_COL - 1;
+          const TEMPLE_DAIS_END_COL = TEMPLE_BRAZIER_EAST_COL + 1;
           const TEMPLE_FIRST_PEW_ROW = 4;
           const TEMPLE_PEW_ROW_PITCH = 2;
-          const TEMPLE_PEW_ROWS = 3;
+          /** The taller hall bought one more rank; the rest is nave and narthex. */
+          const TEMPLE_PEW_ROWS = 4;
           const TEMPLE_WEST_PEW_START_COL = 3;
           const TEMPLE_WEST_PEW_END_COL = 7;
           const TEMPLE_EAST_PEW_START_COL = 10;
           const TEMPLE_EAST_PEW_END_COL = 14;
           const TEMPLE_AISLE_START_COL = 8;
           const TEMPLE_AISLE_END_COL = 9;
-          const TEMPLE_AISLE_START_ROW = 3;
-          const TEMPLE_AISLE_END_ROW = 10;
+          const TEMPLE_AISLE_START_ROW = TEMPLE_DAIS_LAST_ROW + 1;
+          const TEMPLE_AISLE_END_ROW = h - 2 - 2;
           const TEMPLE_SCRIPTURE_START_ROW = 2;
           const TEMPLE_SCRIPTURE_END_ROW = 4;
-          const TEMPLE_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
+          const TEMPLE_EAST_WALL_COL = w - 2;
+          for (let ry = TEMPLE_DAIS_FIRST_ROW; ry <= TEMPLE_DAIS_LAST_ROW; ry++)
+            for (let rx = TEMPLE_DAIS_START_COL; rx <= TEMPLE_DAIS_END_COL; rx++)
+              grid[ry][rx].type = INTERIOR_STONE_FLOOR;
           for (let rx = TEMPLE_ALTAR_START_COL; rx <= TEMPLE_ALTAR_END_COL; rx++)
             grid[TEMPLE_ALTAR_ROW][rx].type = TABLE;
           grid[TEMPLE_ALTAR_ROW][TEMPLE_BRAZIER_WEST_COL].type = BRAZIER;
@@ -1200,37 +1519,274 @@ export class GameMap {
           break;
         }
 
-        case "Signet's Ink": {
-          // One work station under a wall of flash art, needle fire beside it,
-          // supplies stacked in the back and a rug where the customer waits.
-          const INK_STATION_ROW = 4;
-          const INK_STATION_COL_1 = 7;
-          const INK_STATION_COL_2 = 8;
-          const INK_CUSTOMER_CHAIR_ROW = 5;
-          const INK_NEEDLE_FIRE_COL = 11;
-          const INK_FLASH_ART_START_ROW = 2;
-          const INK_FLASH_ART_END_ROW = 6;
-          const INK_RUG_START_ROW = 7;
-          const INK_RUG_END_ROW = 8;
-          const INK_RUG_START_COL = 6;
-          const INK_RUG_END_COL = 11;
-          const INK_SUPPLY_ROW = 10;
-          const INK_BARREL_ROW_1 = 2;
-          const INK_BARREL_ROW_2 = 3;
-          const INK_EAST_WALL_COL = HOUSE_INTERIOR_W - 2;
-          grid[INK_STATION_ROW][INK_STATION_COL_1].type = TABLE;
-          grid[INK_STATION_ROW][INK_STATION_COL_2].type = TABLE;
-          grid[INK_CUSTOMER_CHAIR_ROW][INK_STATION_COL_1].type = CHAIR;
-          grid[INK_CUSTOMER_CHAIR_ROW][INK_STATION_COL_2].type = CHAIR;
-          grid[INK_STATION_ROW][INK_NEEDLE_FIRE_COL].type = BRAZIER;
-          for (let ry = INK_FLASH_ART_START_ROW; ry <= INK_FLASH_ART_END_ROW; ry++)
-            placeProp(grid[ry][1], BOOKSHELF);
-          for (let ry = INK_RUG_START_ROW; ry <= INK_RUG_END_ROW; ry++)
-            for (let rx = INK_RUG_START_COL; rx <= INK_RUG_END_COL; rx++) grid[ry][rx].type = RUG;
-          placeProp(grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL], CRATE);
-          placeProp(grid[INK_SUPPLY_ROW][INK_EAST_WALL_COL - 1], CRATE);
-          placeProp(grid[INK_BARREL_ROW_1][INK_EAST_WALL_COL], BARREL);
-          placeProp(grid[INK_BARREL_ROW_2][INK_EAST_WALL_COL], BARREL);
+        case 'The Quiet Needle': {
+          // A parlour rather than a shop floor, and three rooms rather than one
+          // box: a walled inking alcove to the north-west where the work is done
+          // out of sight, a pigment room to the north-east where it is ground,
+          // and a waiting room across the south end under a wall of flash art.
+          // The privacy is the whole reason the room reads as a parlour — a
+          // customer on a bench in the middle of a shop is a shop.
+          const NEEDLE_EAST_WALL_COL = w - 2;
+          const NEEDLE_SOUTH_WALL_ROW = h - 2;
+          const NEEDLE_WEST_WALL_COL = 1;
+          /** Both north rooms run from the north wall down to the partition. */
+          const NEEDLE_WORKROOM_FIRST_ROW = 1;
+          const NEEDLE_WORKROOM_LAST_ROW = 6;
+          /** The wall between the alcove and the pigment room. */
+          const NEEDLE_ZONE_DIVIDER_COL = 8;
+          /** The wall between the two north rooms and the waiting room. */
+          const NEEDLE_PARTITION_ROW = 7;
+          const NEEDLE_WAITING_FIRST_ROW = 8;
+
+          /*
+           * One doorway per north room, and neither of them on the divider.
+           * Each room is otherwise walled on all four sides, so a room that
+           * loses its doorway is a room the player can see and never enter —
+           * which throws nothing, logs nothing and looks like art.
+           */
+          const NEEDLE_ALCOVE_DOORWAY_COL = 5;
+          const NEEDLE_PIGMENT_DOORWAY_COL = 12;
+
+          const NEEDLE_ALCOVE_SHELF_ROW = 1;
+          const NEEDLE_ALCOVE_SHELF_LAST_COL = 3;
+          const NEEDLE_BENCH_ROW = 2;
+          const NEEDLE_BENCH_FIRST_COL = 3;
+          const NEEDLE_BENCH_LAST_COL = 5;
+          const NEEDLE_STOOL_ROW = 3;
+          const NEEDLE_STOOL_COL = 4;
+          const NEEDLE_ALCOVE_BRAZIER_COL = 6;
+          const NEEDLE_ALCOVE_RUG_ROW = 4;
+          const NEEDLE_ALCOVE_BARREL_ROW = 5;
+          const NEEDLE_ALCOVE_EAST_COL = NEEDLE_ZONE_DIVIDER_COL - 1;
+
+          const NEEDLE_PIGMENT_WEST_COL = NEEDLE_ZONE_DIVIDER_COL + 1;
+          const NEEDLE_SLAB_ROW = 1;
+          const NEEDLE_WORK_TABLE_ROW = 2;
+          const NEEDLE_WORK_STOOL_ROW = 3;
+          const NEEDLE_WORK_FIRST_COL = 13;
+          const NEEDLE_WORK_LAST_COL = 14;
+          const NEEDLE_PIGMENT_SHELF_FIRST_ROW = 5;
+          const NEEDLE_PIGMENT_SHELF_LAST_ROW = 6;
+
+          /*
+           * The flash art hangs in runs with gaps between them, and the two gaps
+           * that matter are the ones directly under the doorways: a sheet hung
+           * there would block the only way into its room.
+           */
+          const NEEDLE_FLASH_ROW = NEEDLE_WAITING_FIRST_ROW;
+          const NEEDLE_FLASH_SPANS: ReadonlyArray<{ first: number; last: number }> = [
+            { first: 2, last: 4 },
+            { first: 6, last: 6 },
+            { first: 10, last: 11 },
+            { first: 13, last: 15 },
+          ];
+          const NEEDLE_WAITING_BENCH_ROW = 10;
+          const NEEDLE_WEST_BENCH_FIRST_COL = 3;
+          const NEEDLE_WEST_BENCH_LAST_COL = 6;
+          const NEEDLE_EAST_BENCH_FIRST_COL = 11;
+          const NEEDLE_EAST_BENCH_LAST_COL = 14;
+          const NEEDLE_LOW_TABLE_FIRST_COL = 8;
+          const NEEDLE_LOW_TABLE_LAST_COL = 9;
+          const NEEDLE_WAITING_BARREL_ROW = 11;
+          const NEEDLE_WAITING_BARREL_WEST_COL = 2;
+          const NEEDLE_WAITING_BARREL_EAST_COL = NEEDLE_EAST_WALL_COL - 1;
+          const NEEDLE_WAITING_RUG_FIRST_ROW = 12;
+          const NEEDLE_WAITING_RUG_LAST_ROW = 13;
+          const NEEDLE_WAITING_RUG_FIRST_COL = 5;
+          const NEEDLE_WAITING_RUG_LAST_COL = 12;
+          const NEEDLE_DOOR_ROW = NEEDLE_SOUTH_WALL_ROW;
+          const NEEDLE_DOOR_BRAZIER_WEST_COL = 6;
+          const NEEDLE_DOOR_BRAZIER_EAST_COL = 11;
+
+          for (let ry = NEEDLE_WORKROOM_FIRST_ROW; ry <= NEEDLE_WORKROOM_LAST_ROW; ry++)
+            grid[ry][NEEDLE_ZONE_DIVIDER_COL].type = INTERIOR_WALL;
+          for (let rx = NEEDLE_WEST_WALL_COL; rx <= NEEDLE_EAST_WALL_COL; rx++)
+            grid[NEEDLE_PARTITION_ROW][rx].type = INTERIOR_WALL;
+          grid[NEEDLE_PARTITION_ROW][NEEDLE_ALCOVE_DOORWAY_COL].type = floorType;
+          grid[NEEDLE_PARTITION_ROW][NEEDLE_PIGMENT_DOORWAY_COL].type = floorType;
+
+          for (let rx = NEEDLE_WEST_WALL_COL; rx <= NEEDLE_ALCOVE_SHELF_LAST_COL; rx++)
+            placeProp(grid[NEEDLE_ALCOVE_SHELF_ROW][rx], PIGMENT_SHELF);
+          for (let rx = NEEDLE_BENCH_FIRST_COL; rx <= NEEDLE_BENCH_LAST_COL; rx++)
+            grid[NEEDLE_BENCH_ROW][rx].type = INK_BENCH;
+          grid[NEEDLE_STOOL_ROW][NEEDLE_STOOL_COL].type = CHAIR;
+          grid[NEEDLE_STOOL_ROW][NEEDLE_ALCOVE_BRAZIER_COL].type = BRAZIER;
+          for (let rx = NEEDLE_BENCH_FIRST_COL; rx <= NEEDLE_BENCH_LAST_COL; rx++)
+            grid[NEEDLE_ALCOVE_RUG_ROW][rx].type = RUG;
+          placeProp(grid[NEEDLE_ALCOVE_BARREL_ROW][NEEDLE_WEST_WALL_COL], BARREL);
+          placeProp(grid[NEEDLE_ALCOVE_BARREL_ROW][NEEDLE_ALCOVE_EAST_COL], BARREL);
+
+          for (let rx = NEEDLE_WORK_FIRST_COL; rx <= NEEDLE_WORK_LAST_COL; rx++) {
+            placeProp(grid[NEEDLE_SLAB_ROW][rx], GRINDING_SLAB);
+            grid[NEEDLE_WORK_TABLE_ROW][rx].type = TABLE;
+            grid[NEEDLE_WORK_STOOL_ROW][rx].type = CHAIR;
+          }
+          for (let ry = NEEDLE_PIGMENT_SHELF_FIRST_ROW; ry <= NEEDLE_PIGMENT_SHELF_LAST_ROW; ry++) {
+            placeProp(grid[ry][NEEDLE_PIGMENT_WEST_COL], PIGMENT_SHELF);
+            placeProp(grid[ry][NEEDLE_EAST_WALL_COL], PIGMENT_SHELF);
+          }
+
+          for (const span of NEEDLE_FLASH_SPANS)
+            for (let rx = span.first; rx <= span.last; rx++)
+              placeProp(grid[NEEDLE_FLASH_ROW][rx], FLASH_WALL);
+          for (let rx = NEEDLE_WEST_BENCH_FIRST_COL; rx <= NEEDLE_WEST_BENCH_LAST_COL; rx++)
+            grid[NEEDLE_WAITING_BENCH_ROW][rx].type = CHAIR;
+          for (let rx = NEEDLE_EAST_BENCH_FIRST_COL; rx <= NEEDLE_EAST_BENCH_LAST_COL; rx++)
+            grid[NEEDLE_WAITING_BENCH_ROW][rx].type = CHAIR;
+          for (let rx = NEEDLE_LOW_TABLE_FIRST_COL; rx <= NEEDLE_LOW_TABLE_LAST_COL; rx++)
+            grid[NEEDLE_WAITING_BENCH_ROW][rx].type = TABLE;
+          placeProp(grid[NEEDLE_WAITING_BARREL_ROW][NEEDLE_WAITING_BARREL_WEST_COL], BARREL);
+          placeProp(grid[NEEDLE_WAITING_BARREL_ROW][NEEDLE_WAITING_BARREL_EAST_COL], BARREL);
+          for (let ry = NEEDLE_WAITING_RUG_FIRST_ROW; ry <= NEEDLE_WAITING_RUG_LAST_ROW; ry++)
+            for (let rx = NEEDLE_WAITING_RUG_FIRST_COL; rx <= NEEDLE_WAITING_RUG_LAST_COL; rx++)
+              grid[ry][rx].type = RUG;
+          grid[NEEDLE_DOOR_ROW][NEEDLE_DOOR_BRAZIER_WEST_COL].type = BRAZIER;
+          grid[NEEDLE_DOOR_ROW][NEEDLE_DOOR_BRAZIER_EAST_COL].type = BRAZIER;
+          placeProp(grid[NEEDLE_DOOR_ROW][NEEDLE_WEST_WALL_COL], CRATE);
+          placeProp(grid[NEEDLE_DOOR_ROW][NEEDLE_EAST_WALL_COL], CRATE);
+          break;
+        }
+
+        case 'The Barracks': {
+          // The garrison, and three rooms rather than one box: the
+          // quartermaster's armoury penned behind its counter run to the west, a
+          // sanded drill hall with its dummies and its sparring ring to the
+          // east, and a muster hall across the south end that both of them open
+          // onto.
+          const BARRACKS_EAST_WALL_COL = w - 2;
+          const BARRACKS_SOUTH_WALL_ROW = h - 2;
+          const BARRACKS_ARMOURY_FIRST_COL = 1;
+          const BARRACKS_ARMOURY_LAST_COL = BARRACKS_ZONE_DIVIDER_COL - 1;
+          const BARRACKS_DRILL_FIRST_COL = BARRACKS_ZONE_DIVIDER_COL + 1;
+
+          /*
+           * Two archways rather than one, and neither of them centred.
+           *
+           * The armoury and the drill hall share no wall of their own, so each
+           * needs its own way down into the muster hall or one of the two is a
+           * room the player can see and never enter — a sealed wing throws
+           * nothing and logs nothing. The eastern archway is kept one column
+           * west of the lane the muster hall keeps clear, so the walk from the
+           * door to the drill hall never crosses the map table.
+           */
+          const BARRACKS_ARMOURY_ARCHWAY_COL = 3;
+          const BARRACKS_DRILL_ARCHWAY_COL = 14;
+          /**
+           * The north-south lane the muster hall keeps free of furniture, joining
+           * the entrance to both archways along row {@link BARRACKS_MUSTER_FIRST_ROW}.
+           */
+          const BARRACKS_MUSTER_LANE_COL = 13;
+
+          const BARRACKS_RACK_ROW = 1;
+          const BARRACKS_RACK_LAST_COL = 4;
+          const BARRACKS_STOCK_ROW = 2;
+          const BARRACKS_STOCK_BARREL_LAST_COL = 2;
+          /*
+           * The counter run stops one column short of the divider wall, and the
+           * gap it leaves is a flap rather than a decoration: it is the only way
+           * into the stock alley the run pens off along the north wall. A run
+           * spanning all six columns would seal that alley outright.
+           */
+          const BARRACKS_COUNTER_ROW = 3;
+          const BARRACKS_COUNTER_LAST_COL = BARRACKS_ARMOURY_LAST_COL - 1;
+          const BARRACKS_ISSUE_CRATE_FIRST_ROW = 5;
+          const BARRACKS_ISSUE_CRATE_LAST_ROW = 6;
+          const BARRACKS_ISSUE_SHELF_ROW = 8;
+          const BARRACKS_ISSUE_BARREL_ROW = 9;
+          const BARRACKS_ISSUE_STACK_ROW = BARRACKS_UPPER_LAST_ROW;
+
+          const BARRACKS_DUMMY_NORTH_ROW = 2;
+          const BARRACKS_DUMMY_SOUTH_ROW = 10;
+          const BARRACKS_DUMMY_WEST_COL = 11;
+          const BARRACKS_DUMMY_EAST_COL = 17;
+          const BARRACKS_RING_FIRST_ROW = 5;
+          const BARRACKS_RING_LAST_ROW = 8;
+          const BARRACKS_RING_FIRST_COL = 10;
+          const BARRACKS_RING_LAST_COL = 18;
+
+          const BARRACKS_BOARD_ROW = BARRACKS_MUSTER_FIRST_ROW;
+          const BARRACKS_BOARD_LAST_COL = 2;
+          const BARRACKS_MAP_TABLE_ROW = 14;
+          const BARRACKS_MAP_TABLE_FIRST_COL = 9;
+          const BARRACKS_MAP_TABLE_LAST_COL = 12;
+          const BARRACKS_MAP_STOOL_ROW = 15;
+          const BARRACKS_MUSTER_BARREL_ROW = 15;
+          const BARRACKS_MUSTER_BARREL_WEST_COL = 2;
+          const BARRACKS_MUSTER_BARREL_EAST_COL = BARRACKS_EAST_WALL_COL - 1;
+          const BARRACKS_BENCH_ROW = BARRACKS_SOUTH_WALL_ROW;
+          const BARRACKS_WEST_BENCH_FIRST_COL = 2;
+          const BARRACKS_EAST_BENCH_LAST_COL = BARRACKS_EAST_WALL_COL - 1;
+          const BARRACKS_BENCH_TILES = 2;
+          const BARRACKS_BRAZIER_WEST_COL = 6;
+          const BARRACKS_BRAZIER_EAST_COL = 15;
+          const BARRACKS_DOOR_RUG_FIRST_COL = BARRACKS_MAP_TABLE_FIRST_COL;
+          const BARRACKS_DOOR_RUG_LAST_COL = BARRACKS_MAP_TABLE_LAST_COL;
+
+          for (let ry = BARRACKS_UPPER_FIRST_ROW; ry <= BARRACKS_UPPER_LAST_ROW; ry++)
+            grid[ry][BARRACKS_ZONE_DIVIDER_COL].type = INTERIOR_WALL;
+          for (let rx = 1; rx <= BARRACKS_EAST_WALL_COL; rx++)
+            grid[BARRACKS_PARTITION_ROW][rx].type = INTERIOR_WALL;
+          grid[BARRACKS_PARTITION_ROW][BARRACKS_ARMOURY_ARCHWAY_COL].type = floorType;
+          grid[BARRACKS_PARTITION_ROW][BARRACKS_DRILL_ARCHWAY_COL].type = DRILL_SAND_FLOOR;
+
+          // Raked sand over the whole drill hall, laid before its furniture so
+          // the dummies and the ring stamp over it rather than under it.
+          for (let ry = BARRACKS_UPPER_FIRST_ROW; ry <= BARRACKS_UPPER_LAST_ROW; ry++)
+            for (let rx = BARRACKS_DRILL_FIRST_COL; rx <= BARRACKS_EAST_WALL_COL; rx++)
+              grid[ry][rx].type = DRILL_SAND_FLOOR;
+
+          for (let rx = BARRACKS_ARMOURY_FIRST_COL; rx <= BARRACKS_RACK_LAST_COL; rx++)
+            placeProp(grid[BARRACKS_RACK_ROW][rx], WEAPON_RACK);
+          for (let rx = BARRACKS_ARMOURY_FIRST_COL; rx <= BARRACKS_STOCK_BARREL_LAST_COL; rx++)
+            placeProp(grid[BARRACKS_STOCK_ROW][rx], BARREL);
+          for (let rx = BARRACKS_ARMOURY_FIRST_COL; rx <= BARRACKS_COUNTER_LAST_COL; rx++)
+            grid[BARRACKS_COUNTER_ROW][rx].type = INTERIOR_COUNTER;
+          for (let ry = BARRACKS_ISSUE_CRATE_FIRST_ROW; ry <= BARRACKS_ISSUE_CRATE_LAST_ROW; ry++) {
+            placeProp(grid[ry][BARRACKS_ARMOURY_FIRST_COL], CRATE);
+            placeProp(grid[ry][BARRACKS_ARMOURY_LAST_COL], CRATE);
+          }
+          placeProp(grid[BARRACKS_ISSUE_SHELF_ROW][BARRACKS_ARMOURY_FIRST_COL], BOOKSHELF);
+          placeProp(grid[BARRACKS_ISSUE_SHELF_ROW][BARRACKS_ARMOURY_LAST_COL], BOOKSHELF);
+          placeProp(grid[BARRACKS_ISSUE_BARREL_ROW][BARRACKS_ARMOURY_FIRST_COL], BARREL);
+          placeProp(grid[BARRACKS_ISSUE_BARREL_ROW][BARRACKS_ARMOURY_LAST_COL], BARREL);
+          for (let rx = BARRACKS_ARMOURY_FIRST_COL; rx <= BARRACKS_ARMOURY_LAST_COL; rx++) {
+            const insideTheArchway =
+              rx === BARRACKS_ARMOURY_ARCHWAY_COL || rx === BARRACKS_ARMOURY_ARCHWAY_COL + 1;
+            if (insideTheArchway) continue;
+            placeProp(grid[BARRACKS_ISSUE_STACK_ROW][rx], CRATE);
+          }
+
+          for (const dummyRow of [BARRACKS_DUMMY_NORTH_ROW, BARRACKS_DUMMY_SOUTH_ROW]) {
+            grid[dummyRow][BARRACKS_DUMMY_WEST_COL].type = TRAINING_DUMMY;
+            grid[dummyRow][BARRACKS_DUMMY_EAST_COL].type = TRAINING_DUMMY;
+          }
+          for (let ry = BARRACKS_RING_FIRST_ROW; ry <= BARRACKS_RING_LAST_ROW; ry++)
+            for (let rx = BARRACKS_RING_FIRST_COL; rx <= BARRACKS_RING_LAST_COL; rx++)
+              grid[ry][rx].type = RUG;
+
+          for (let rx = BARRACKS_ARMOURY_FIRST_COL; rx <= BARRACKS_BOARD_LAST_COL; rx++)
+            placeProp(grid[BARRACKS_BOARD_ROW][rx], MUSTER_BOARD);
+          for (let rx = BARRACKS_MAP_TABLE_FIRST_COL; rx <= BARRACKS_MAP_TABLE_LAST_COL; rx++)
+            grid[BARRACKS_MAP_TABLE_ROW][rx].type = MAP_TABLE;
+          grid[BARRACKS_MAP_STOOL_ROW][BARRACKS_MAP_TABLE_FIRST_COL].type = CHAIR;
+          grid[BARRACKS_MAP_STOOL_ROW][BARRACKS_MAP_TABLE_LAST_COL].type = CHAIR;
+          placeProp(grid[BARRACKS_MUSTER_BARREL_ROW][BARRACKS_MUSTER_BARREL_WEST_COL], BARREL);
+          placeProp(grid[BARRACKS_MUSTER_BARREL_ROW][BARRACKS_MUSTER_BARREL_EAST_COL], BARREL);
+          for (let seat = 0; seat < BARRACKS_BENCH_TILES; seat++) {
+            grid[BARRACKS_BENCH_ROW][BARRACKS_WEST_BENCH_FIRST_COL + seat].type = CHAIR;
+            grid[BARRACKS_BENCH_ROW][BARRACKS_EAST_BENCH_LAST_COL - seat].type = CHAIR;
+          }
+          grid[BARRACKS_BENCH_ROW][BARRACKS_BRAZIER_WEST_COL].type = BRAZIER;
+          grid[BARRACKS_BENCH_ROW][BARRACKS_BRAZIER_EAST_COL].type = BRAZIER;
+          for (let rx = BARRACKS_DOOR_RUG_FIRST_COL; rx <= BARRACKS_DOOR_RUG_LAST_COL; rx++)
+            grid[BARRACKS_BENCH_ROW][rx].type = RUG;
+
+          // Cleared last, after every fitting above it. The lane is what joins
+          // the entrance to both archways, so a prop that grew into it would cut
+          // the drill hall or the armoury off with no symptom anyone could
+          // report — only a room the player can see and never enter.
+          for (let ry = BARRACKS_MUSTER_FIRST_ROW; ry <= BARRACKS_SOUTH_WALL_ROW; ry++)
+            grid[ry][BARRACKS_MUSTER_LANE_COL].type = floorType;
           break;
         }
 
@@ -1238,31 +1794,53 @@ export class GameMap {
           // A cramped, dark dive: L-shaped bar penning in a barkeep alley,
           // stools along its front, tight table clusters and barrels everywhere.
           const STUMP_BAR_ROW = 3;
-          const STUMP_BAR_END_COL = 9;
+          const STUMP_BAR_END_COL = 7;
           const STUMP_BAR_RETURN_ROW = 2;
           const STUMP_STOOL_ROW = 4;
           const STUMP_FIRST_STOOL_COL = 2;
           const STUMP_STOOL_PITCH = 2;
-          const STUMP_HEARTH_COL_1 = 14;
-          const STUMP_HEARTH_COL_2 = 15;
-          const STUMP_TABLE_CLUSTERS = [
-            { col: 2, row: 7 },
-            { col: 6, row: 7 },
-            { col: 11, row: 6 },
-            { col: 2, row: 10 },
-            { col: 12, row: 10 },
-          ];
-          const STUMP_RUG_ROW = 9;
+          const STUMP_EAST_WALL_COL = w - 2;
+          const STUMP_SOUTH_WALL_ROW = h - 2;
+          const STUMP_HEARTH_COL_2 = STUMP_EAST_WALL_COL - 1;
+          const STUMP_HEARTH_COL_1 = STUMP_EAST_WALL_COL - 2;
+          /** The column the player walks in on, kept clear of furniture. */
+          const STUMP_DOOR_LANE_COL = Math.floor(w / 2);
+          /*
+           * Seven clusters jammed into a room the mead hall would fit twice over.
+           * The dive's whole character is that it is the cramped one, and a table
+           * count alone does not say that — what says it is the pitch: three
+           * columns per cluster leaves a one-tile lane between them, so a crawler
+           * crossing this floor squeezes past drinkers the entire way. The south
+           * rank leaves the door's own column open so the room is enterable.
+           */
+          const STUMP_CLUSTER_PITCH = 3;
+          const STUMP_FIRST_CLUSTER_COL = 2;
+          const STUMP_NORTH_CLUSTER_ROW = 6;
+          const STUMP_SOUTH_CLUSTER_ROW = 9;
+          const STUMP_NORTH_CLUSTER_COUNT = 4;
+          const STUMP_TABLE_CLUSTERS: Array<{ col: number; row: number }> = [];
+          for (let n = 0; n < STUMP_NORTH_CLUSTER_COUNT; n++)
+            STUMP_TABLE_CLUSTERS.push({
+              col: STUMP_FIRST_CLUSTER_COL + n * STUMP_CLUSTER_PITCH,
+              row: STUMP_NORTH_CLUSTER_ROW,
+            });
+          for (let n = 0; n < STUMP_NORTH_CLUSTER_COUNT; n++) {
+            const col = STUMP_FIRST_CLUSTER_COL + n * STUMP_CLUSTER_PITCH;
+            if (col <= STUMP_DOOR_LANE_COL && col + 1 >= STUMP_DOOR_LANE_COL) continue;
+            STUMP_TABLE_CLUSTERS.push({ col, row: STUMP_SOUTH_CLUSTER_ROW });
+          }
+          const STUMP_RUG_ROW = 8;
           const STUMP_RUG_START_COL = 5;
-          const STUMP_RUG_END_COL = 10;
+          const STUMP_RUG_END_COL = 9;
           const STUMP_BARREL_TILES = [
-            { x: 16, y: 4 },
-            { x: 16, y: 5 },
-            { x: 15, y: 4 },
+            { x: STUMP_EAST_WALL_COL, y: 4 },
+            { x: STUMP_EAST_WALL_COL, y: 5 },
+            { x: STUMP_EAST_WALL_COL - 1, y: 4 },
           ];
+          const STUMP_BARREL_SIDE_ROW = STUMP_SOUTH_WALL_ROW - 1;
           const STUMP_BARREL_SIDE_TILES = [
-            { x: 1, y: 11 },
-            { x: 16, y: 11 },
+            { x: 1, y: STUMP_BARREL_SIDE_ROW },
+            { x: STUMP_EAST_WALL_COL, y: STUMP_BARREL_SIDE_ROW },
           ];
           // The bar's long run plus its return arm; the gap east of the return is
           // the only way in or out of the alley, so the barkeep stays put.
@@ -1367,7 +1945,11 @@ export class GameMap {
 
       const bleacherSouthLimit = h - BIGTOP_RING_RADIUS + 1;
       for (let depth = 1; depth <= BIGTOP_BLEACHER_DEPTH; depth++) {
-        for (let x = 1 + BIGTOP_BLEACHER_DEPTH; x < w - 1 - BIGTOP_BLEACHER_DEPTH; x++) {
+        // Wall to wall, so the north stand meets the two side stands rather than
+        // stopping short of them. Insetting it left a pocket of bare floor in
+        // each north corner, walled in by bleachers on both sides — floor the
+        // player could see across the ring and never reach.
+        for (let x = 1; x < w - 1; x++) {
           grid[depth][x].type = BLEACHER;
         }
         for (let y = 1 + BIGTOP_BLEACHER_DEPTH; y < bleacherSouthLimit; y++) {
@@ -1592,12 +2174,16 @@ export class GameMap {
       }
     }
 
-    if (isRestaurant) {
-      const interior = { x: 1, y: 1, w: w - 2, h: h - 2 };
+    if (hasSafeRoom) {
+      const wholeInterior = { x: 1, y: 1, w: w - 2, h: h - 2 };
+      const bounds = SAFE_ROOM_BOUNDS_BY_NAME.get(buildingName) ?? wholeInterior;
       this.safeRooms = [
         {
-          bounds: interior,
-          centre: { x: Math.floor(w / 2), y: Math.floor(h / 2) },
+          bounds,
+          centre: {
+            x: bounds.x + Math.floor(bounds.w / 2),
+            y: bounds.y + Math.floor(bounds.h / 2),
+          },
         },
       ];
     } else {

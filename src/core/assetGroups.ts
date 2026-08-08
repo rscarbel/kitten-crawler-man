@@ -98,7 +98,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'millers_farm',
     'overworld_main_tower',
     'shepherds_cabin',
-    'signets_ink',
+    'quiet_needle',
     'sleeping_cat_inn',
     'sunken_stump',
     'temple',
@@ -241,7 +241,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   // it whenever any mob dies on the floor, not only near the Krakaren Clone —
   // grouped with him because his gauntlet is level 2's only other bespoke
   // group, not because the two are otherwise related.
-  boss_krakaren: ['krakaren', 'brindle_grub'],
+  boss_krakaren: ['krakaren', 'krakaren_tentacle', 'krakaren_slam', 'brindle_grub'],
   boss_ball_of_swine: ['ball_of_swine'],
   // Level 2's spider lab: the boss itself, its small-spider adds (spawned by
   // `SpiderQuestSystem`, not a spawn-table rule), and the lab dressing/minigame
@@ -324,7 +324,7 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   troglodyte: ['troglodyte', 'troglodyte_tongue'],
   tuskling: ['tuskling'],
   ball_of_swine: ['ball_of_swine'],
-  krakaren_clone: ['krakaren'],
+  krakaren_clone: ['krakaren', 'krakaren_tentacle', 'krakaren_slam'],
   brindle_grub: ['brindle_grub'],
   bugaboo: ['bugaboo'],
   grotesque_spider: [

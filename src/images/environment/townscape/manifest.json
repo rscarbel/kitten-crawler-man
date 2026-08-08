@@ -9,19 +9,19 @@
     "states": {
       "sway_0": {
         "row": 0,
-        "frameCount": 15
+        "frameCount": 16
       },
       "sway_1": {
         "row": 1,
-        "frameCount": 15
+        "frameCount": 16
       },
       "sway_2": {
         "row": 2,
-        "frameCount": 15
+        "frameCount": 16
       },
       "sway_3": {
         "row": 3,
-        "frameCount": 15
+        "frameCount": 16
       }
     }
   },

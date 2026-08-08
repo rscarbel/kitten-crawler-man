@@ -66,6 +66,14 @@ import {
   INTERIOR_STONE_RAMP,
   INTERIOR_PLASTER_RAMP,
   INTERIOR_COUNTER_RAMP,
+  INTERIOR_RUSH_RAMP,
+  INTERIOR_EARTH_RAMP,
+  INTERIOR_SWEEP_RAMP,
+  INTERIOR_FLAG_RAMP,
+  INTERIOR_FLAG_MORTAR_RAMP,
+  INK_WOAD_RAMP,
+  INK_GALL_RAMP,
+  INK_MADDER_RAMP,
   RIVER_WATER_RAMP,
   HIGHLAND_GRASS_RAMP,
   SCREE_RAMP,
@@ -1927,6 +1935,320 @@ const interiorCounter: Material = {
   },
 };
 
+interface StrewnStalkOptions {
+  readonly countPerTile: number;
+  readonly minLength: number;
+  readonly lengthRange: number;
+  readonly alpha: number;
+  readonly taper: number;
+}
+
+/**
+ * Short strokes lying at any angle.
+ *
+ * `paintBlades` points every stroke upward, because a blade of grass is rooted
+ * and standing. A rush on an inn floor was cut, dried and dropped, so the whole
+ * reason it reads as strewn rather than as growing is that it points nowhere.
+ */
+function paintStrewnStalks(
+  ctx: PaintContext,
+  ramp: Ramp,
+  seed: number,
+  options: StrewnStalkOptions,
+): void {
+  const total = Math.round(options.countPerTile * (ctx.size / TILE_PX) ** 2);
+  for (let i = 0; i < total; i++) {
+    const x = hashLattice(i, 21, seed) * ctx.size;
+    const y = hashLattice(i, 22, seed) * ctx.size;
+    const angle = hashLattice(i, 23, seed) * Math.PI * 2;
+    const length = options.minLength + hashLattice(i, 24, seed) * options.lengthRange;
+    wrappedStroke(
+      ctx.surface,
+      x,
+      y,
+      Math.cos(angle),
+      Math.sin(angle),
+      length,
+      sampleRamp(ramp, hashLattice(i, 25, seed)),
+      options.alpha,
+      options.taper,
+    );
+  }
+}
+
+interface BroomArcOptions {
+  readonly countPerTile: number;
+  readonly minRadius: number;
+  readonly radiusRange: number;
+  /** How far around its circle one arc is swept, in radians. */
+  readonly sweepRadians: number;
+  readonly alpha: number;
+}
+
+/**
+ * Long shallow curves dragged across the surface — the mark a besom leaves.
+ *
+ * Stepped around a circle a pixel at a time rather than handed to
+ * `wrappedStroke`, which walks a straight line: a swept floor's arcs are the one
+ * thing on it that says somebody keeps it, and a chord reads as a scratch.
+ */
+function paintBroomArcs(
+  ctx: PaintContext,
+  ramp: Ramp,
+  seed: number,
+  options: BroomArcOptions,
+): void {
+  const total = Math.round(options.countPerTile * (ctx.size / TILE_PX) ** 2);
+  for (let i = 0; i < total; i++) {
+    const radius = options.minRadius + hashLattice(i, 31, seed) * options.radiusRange;
+    const centreX = hashLattice(i, 32, seed) * ctx.size;
+    const centreY = hashLattice(i, 33, seed) * ctx.size;
+    const startAngle = hashLattice(i, 34, seed) * Math.PI * 2;
+    const color = sampleRamp(ramp, hashLattice(i, 35, seed));
+    const steps = Math.round(radius * options.sweepRadians);
+    for (let step = 0; step < steps; step++) {
+      const angle = startAngle + step / radius;
+      ctx.surface.blend(
+        centreX + Math.cos(angle) * radius,
+        centreY + Math.sin(angle) * radius,
+        color,
+        options.alpha,
+      );
+    }
+  }
+}
+
+const INTERIOR_RUSH_DRIFT_COUNT = 5;
+const INTERIOR_RUSH_DRIFT_MIN_RADIUS = 4;
+const INTERIOR_RUSH_DRIFT_MAX_RADIUS = 13;
+const INTERIOR_RUSH_DRIFT_ALPHA = 0.3;
+const INTERIOR_RUSH_DRIFT_SOFTNESS = 0.9;
+const INTERIOR_RUSH_STALK_COUNT = 34;
+const INTERIOR_RUSH_STALK_MIN_LENGTH = 4;
+const INTERIOR_RUSH_STALK_LENGTH_RANGE = 9;
+const INTERIOR_RUSH_STALK_ALPHA = 0.66;
+const INTERIOR_RUSH_STALK_TAPER = 0.5;
+
+/**
+ * An inn's floor: the same joinery as any other interior board, under a scatter
+ * of dried rushes and spilled straw.
+ *
+ * Deliberately built on `interior_boards`' own plank constants rather than a set
+ * of its own — it is the same carpenter's floor in the same town, and the rushes
+ * are what is *on* it. Unwaxed, because the boards under an inn's floor covering
+ * are the one floor in town nobody polishes.
+ */
+const interiorRushes: Material = {
+  id: 'interior_rushes',
+  label: 'Interior rush-strewn boards (inn, tavern)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintPlanks(ctx, {
+      boardsPerTile: INTERIOR_BOARDS_PER_TILE,
+      boardLengthTiles: INTERIOR_BOARD_LENGTH_TILES,
+      ramp: INTERIOR_BOARD_RAMP,
+      gapRamp: { ...INTERIOR_BOARD_RAMP, mid: shade(INTERIOR_BOARD_RAMP.shadow, 0.7) },
+      gapPx: INTERIOR_BOARD_GAP_PX,
+      gapStrength: INTERIOR_BOARD_GAP_STRENGTH,
+      bevelPx: INTERIOR_BOARD_BEVEL_PX,
+      bevelStrength: INTERIOR_BOARD_BEVEL_STRENGTH,
+      toneFloor: INTERIOR_BOARD_TONE_FLOOR,
+      toneSpread: INTERIOR_BOARD_TONE_SPREAD,
+      grainStrength: INTERIOR_BOARD_GRAIN_STRENGTH,
+    });
+    // Chaff first, whole stalks over it: the drifts are where the floor covering
+    // has been kicked into heaps, and a stalk lying on top of a heap is what
+    // separates the two layers at tile size.
+    paintSpeckles(ctx, ctx.detail + 101, {
+      count: INTERIOR_RUSH_DRIFT_COUNT,
+      minRadius: INTERIOR_RUSH_DRIFT_MIN_RADIUS,
+      maxRadius: INTERIOR_RUSH_DRIFT_MAX_RADIUS,
+      ramp: INTERIOR_RUSH_RAMP,
+      alpha: INTERIOR_RUSH_DRIFT_ALPHA,
+      softness: INTERIOR_RUSH_DRIFT_SOFTNESS,
+    });
+    paintStrewnStalks(ctx, INTERIOR_RUSH_RAMP, ctx.detail + 103, {
+      countPerTile: INTERIOR_RUSH_STALK_COUNT,
+      minLength: INTERIOR_RUSH_STALK_MIN_LENGTH,
+      lengthRange: INTERIOR_RUSH_STALK_LENGTH_RANGE,
+      alpha: INTERIOR_RUSH_STALK_ALPHA,
+      taper: INTERIOR_RUSH_STALK_TAPER,
+    });
+  },
+};
+
+const INTERIOR_EARTH_GROUND: GroundOptions = {
+  patchPeriod: 6,
+  patchWeight: 0.5,
+  contrast: 0.85,
+};
+const INTERIOR_EARTH_GRIT_COUNT = 26;
+const INTERIOR_EARTH_GRIT_MIN_RADIUS = 0.6;
+const INTERIOR_EARTH_GRIT_MAX_RADIUS = 1.8;
+const INTERIOR_EARTH_GRIT_ALPHA = 0.3;
+const INTERIOR_EARTH_GRIT_SOFTNESS = 0.4;
+const INTERIOR_EARTH_SWEEP_COUNT = 0.5;
+const INTERIOR_EARTH_SWEEP_MIN_RADIUS = 26;
+const INTERIOR_EARTH_SWEEP_RADIUS_RANGE = 34;
+const INTERIOR_EARTH_SWEEP_ARC = 1.1;
+const INTERIOR_EARTH_SWEEP_ALPHA = 0.09;
+
+/**
+ * A floor nobody ever boarded: earth trodden flat, with faint broom arcs.
+ *
+ * No plank seams and no joints at all, which is the whole point — it is the only
+ * town interior with no ruled line anywhere in it, so a cottage reads as poorer
+ * than the shop next door before the player has looked at a single prop.
+ */
+const interiorEarth: Material = {
+  id: 'interior_earth',
+  label: 'Interior packed earth (cottage, farm, workshop)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, INTERIOR_EARTH_RAMP, INTERIOR_EARTH_GROUND);
+    paintSpeckles(ctx, ctx.detail + 107, {
+      count: INTERIOR_EARTH_GRIT_COUNT,
+      minRadius: INTERIOR_EARTH_GRIT_MIN_RADIUS,
+      maxRadius: INTERIOR_EARTH_GRIT_MAX_RADIUS,
+      ramp: { ...INTERIOR_EARTH_RAMP, mid: INTERIOR_EARTH_RAMP.shadow },
+      alpha: INTERIOR_EARTH_GRIT_ALPHA,
+      softness: INTERIOR_EARTH_GRIT_SOFTNESS,
+    });
+    paintBroomArcs(ctx, INTERIOR_SWEEP_RAMP, ctx.detail + 109, {
+      countPerTile: INTERIOR_EARTH_SWEEP_COUNT,
+      minRadius: INTERIOR_EARTH_SWEEP_MIN_RADIUS,
+      radiusRange: INTERIOR_EARTH_SWEEP_RADIUS_RANGE,
+      sweepRadians: INTERIOR_EARTH_SWEEP_ARC,
+      alpha: INTERIOR_EARTH_SWEEP_ALPHA,
+    });
+  },
+};
+
+const INTERIOR_FLAG_SLABS_PER_TILE = 0.75;
+const INTERIOR_FLAG_JOINT_WIDTH = 0.13;
+const INTERIOR_FLAG_JOINT_STRENGTH = 0.6;
+const INTERIOR_FLAG_BEVEL_STRENGTH = 1.2;
+const INTERIOR_FLAG_CRACK_COUNT = 1;
+const INTERIOR_FLAG_WEAR_COUNT = 3;
+const INTERIOR_FLAG_WEAR_MIN_RADIUS = 7;
+const INTERIOR_FLAG_WEAR_MAX_RADIUS = 18;
+const INTERIOR_FLAG_WEAR_ALPHA = 0.11;
+const INTERIOR_FLAG_WEAR_SOFTNESS = 1;
+
+/**
+ * Large irregular flagstones on wide dark joints: a temple's nave, a smithy.
+ *
+ * Slabs wider than a game tile and jointed at a third again the plaza's width,
+ * so the floor carries long stretches without incident — the two rooms that wear
+ * it are the ones the player crosses rather than browses.
+ */
+const interiorFlag: Material = {
+  id: 'interior_flag',
+  label: 'Interior flagstone (temple, smithy)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintSlabs(ctx, {
+      slabsPerTile: INTERIOR_FLAG_SLABS_PER_TILE,
+      ramp: INTERIOR_FLAG_RAMP,
+      jointRamp: { ...INTERIOR_FLAG_MORTAR_RAMP, mid: INTERIOR_FLAG_MORTAR_RAMP.shadow },
+      jointWidth: INTERIOR_FLAG_JOINT_WIDTH,
+      jointStrength: INTERIOR_FLAG_JOINT_STRENGTH,
+      bevelStrength: INTERIOR_FLAG_BEVEL_STRENGTH,
+      crackCount: INTERIOR_FLAG_CRACK_COUNT,
+    });
+    paintSpeckles(ctx, ctx.detail + 113, {
+      count: INTERIOR_FLAG_WEAR_COUNT,
+      minRadius: INTERIOR_FLAG_WEAR_MIN_RADIUS,
+      maxRadius: INTERIOR_FLAG_WEAR_MAX_RADIUS,
+      ramp: { ...INTERIOR_FLAG_RAMP, mid: INTERIOR_FLAG_RAMP.light },
+      alpha: INTERIOR_FLAG_WEAR_ALPHA,
+      softness: INTERIOR_FLAG_WEAR_SOFTNESS,
+    });
+  },
+};
+
+const INTERIOR_INK_BLOT_MIN_RADIUS = 2;
+const INTERIOR_INK_BLOT_MAX_RADIUS = 7;
+const INTERIOR_INK_BLOT_SOFTNESS = 0.55;
+const INTERIOR_INK_WOAD_COUNT = 2.4;
+const INTERIOR_INK_WOAD_ALPHA = 0.42;
+const INTERIOR_INK_GALL_COUNT = 1.8;
+const INTERIOR_INK_GALL_ALPHA = 0.5;
+const INTERIOR_INK_MADDER_COUNT = 1.2;
+const INTERIOR_INK_MADDER_ALPHA = 0.38;
+const INTERIOR_INK_SPLASH_COUNT = 9;
+const INTERIOR_INK_SPLASH_MIN_RADIUS = 0.5;
+const INTERIOR_INK_SPLASH_MAX_RADIUS = 1.6;
+const INTERIOR_INK_SPLASH_ALPHA = 0.55;
+const INTERIOR_INK_SPLASH_SOFTNESS = 0.3;
+
+/**
+ * The inking shop's boards, blotched where pigment has been spilled and gone in.
+ *
+ * Three separate colours rather than one grubby tint: a stain the same hue as
+ * the wood reads as dirt, and dirt is not what this room is about. Woad carries
+ * it, gall black anchors it and madder is the accent, in that order of area, so
+ * the floor stays a wood floor with ink on it rather than becoming a palette.
+ */
+const interiorInk: Material = {
+  id: 'interior_ink',
+  label: 'Interior pigment-stained boards (inking shop)',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintPlanks(ctx, {
+      boardsPerTile: INTERIOR_BOARDS_PER_TILE,
+      boardLengthTiles: INTERIOR_BOARD_LENGTH_TILES,
+      ramp: INTERIOR_BOARD_RAMP,
+      gapRamp: { ...INTERIOR_BOARD_RAMP, mid: shade(INTERIOR_BOARD_RAMP.shadow, 0.7) },
+      gapPx: INTERIOR_BOARD_GAP_PX,
+      gapStrength: INTERIOR_BOARD_GAP_STRENGTH,
+      bevelPx: INTERIOR_BOARD_BEVEL_PX,
+      bevelStrength: INTERIOR_BOARD_BEVEL_STRENGTH,
+      toneFloor: INTERIOR_BOARD_TONE_FLOOR,
+      toneSpread: INTERIOR_BOARD_TONE_SPREAD,
+      grainStrength: INTERIOR_BOARD_GRAIN_STRENGTH,
+    });
+    paintSpeckles(ctx, ctx.detail + 127, {
+      count: INTERIOR_INK_WOAD_COUNT,
+      minRadius: INTERIOR_INK_BLOT_MIN_RADIUS,
+      maxRadius: INTERIOR_INK_BLOT_MAX_RADIUS,
+      ramp: INK_WOAD_RAMP,
+      alpha: INTERIOR_INK_WOAD_ALPHA,
+      softness: INTERIOR_INK_BLOT_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 131, {
+      count: INTERIOR_INK_GALL_COUNT,
+      minRadius: INTERIOR_INK_BLOT_MIN_RADIUS,
+      maxRadius: INTERIOR_INK_BLOT_MAX_RADIUS,
+      ramp: INK_GALL_RAMP,
+      alpha: INTERIOR_INK_GALL_ALPHA,
+      softness: INTERIOR_INK_BLOT_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + 137, {
+      count: INTERIOR_INK_MADDER_COUNT,
+      minRadius: INTERIOR_INK_BLOT_MIN_RADIUS,
+      maxRadius: INTERIOR_INK_BLOT_MAX_RADIUS,
+      ramp: INK_MADDER_RAMP,
+      alpha: INTERIOR_INK_MADDER_ALPHA,
+      softness: INTERIOR_INK_BLOT_SOFTNESS,
+    });
+    // Flicked spatter over the pooled stains, hard-edged and tiny: what says a
+    // needle was shaken out here rather than a bucket tipped over.
+    paintSpeckles(ctx, ctx.detail + 139, {
+      count: INTERIOR_INK_SPLASH_COUNT,
+      minRadius: INTERIOR_INK_SPLASH_MIN_RADIUS,
+      maxRadius: INTERIOR_INK_SPLASH_MAX_RADIUS,
+      ramp: INK_GALL_RAMP,
+      alpha: INTERIOR_INK_SPLASH_ALPHA,
+      softness: INTERIOR_INK_SPLASH_SOFTNESS,
+    });
+  },
+};
+
 // ── Bopca station set ──────────────────────────────────────────────────────
 //
 // A safe room is a waystation mess hall on floors 1 and 2, both of which are
@@ -2238,6 +2560,10 @@ export const MATERIALS: ReadonlyArray<Material> = [
   interiorStone,
   interiorPlaster,
   interiorCounter,
+  interiorRushes,
+  interiorEarth,
+  interiorFlag,
+  interiorInk,
   bopcaScuff,
   bopcaHearth,
   bopcaTile,

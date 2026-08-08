@@ -48,6 +48,14 @@ import {
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  MAP_TABLE,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  INK_BENCH,
+  GRINDING_SLAB,
 } from '../tileTypes';
 
 const CARDINAL_DIRS: [number, number][] = [
@@ -168,6 +176,17 @@ const NON_FLOOR_TYPES = new Set<number>([
   CLIFF,
   CAMPFIRE,
   GOBLIN_TENT,
+  // The garrison's and the inking shop's furniture, for the same reason every
+  // other piece is here: a neighbour probing for its own floor must not infer a
+  // weapon rack as ground and draw whatever material a rack claims.
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  MAP_TABLE,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  INK_BENCH,
+  GRINDING_SLAB,
 ]);
 
 /**

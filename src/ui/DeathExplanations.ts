@@ -11,6 +11,7 @@ export type DeathCause =
   | 'cockroach'
   | 'hoarder'
   | 'juicer'
+  | 'juicerPunch'
   | 'bugaboo'
   | 'burnedStatus'
   | 'poisonStatus'
@@ -22,6 +23,7 @@ export type DeathCause =
   | 'grotesqueSpiderSpit'
   | 'krakarenCloneSlam'
   | 'krakarenCloneRegularMelee'
+  | 'krakarenTentacleStrike'
   | 'ballOfSwine'
   | 'ballOfSwineStench'
   | 'tuskling'
@@ -95,6 +97,10 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You took a dumbbell to the face. That went as well as you might expect.',
     'The Juicer absolutely crushed you.',
     'Oof. The Juicer collapsed your windpipe with a thrown dumbbell.',
+  ],
+  juicerPunch: [
+    'The Juicer put both fists through the floor, and you were standing on it.',
+    'He punched the ground. The ground punched you. Never leg day, always dead.',
   ],
   bugaboo: [
     'A Bugaboo swarmed you to death. Hard to dodge what you cannot see.',
@@ -245,6 +251,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'A Krakaren Clone beat you to death with its tentacles.',
     "You were shredded by the Krakaren's tentacles. It happens.",
     'The Krakaren Clone tore you apart.',
+  ],
+  krakarenTentacleStrike: [
+    'A guard tentacle swatted you flat while you were watching the big one. The little ones hit too.',
+    'You died to the small tentacle beside you, not the boss in front of you. Cut them down first.',
+    'The guard tentacle whipped down where you were standing. It reared for half a second before it did.',
   ],
   ballOfSwine: [
     'The Ball of Swine ran you down. It never slows down on its own — make it hit something flat.',

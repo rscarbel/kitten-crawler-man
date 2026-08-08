@@ -7,8 +7,8 @@
  * It exists because a shop, a house and the tower used to be floored and walled
  * in the *dungeon's* generic tile types, so they wore whichever cellar's art was
  * loaded at the time; see the note above `INTERIOR_BOARD_FLOOR` in
- * `src/map/tileTypes.ts`. The restaurant, the Desperado Club and the Big Top
- * already had floor types of their own and are drawn elsewhere.
+ * `src/map/tileTypes.ts`. The Desperado Club and the Big Top already had floor
+ * types of their own and are drawn elsewhere.
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
@@ -16,7 +16,14 @@
 
 import type { SpriteStates } from '../../core/SpriteLoader';
 import type { GroundPalette, GroundSpill } from '../ground/GroundPalette';
-import { INTERIOR_BOARD_FLOOR, INTERIOR_STONE_FLOOR } from '../tileTypes';
+import {
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_RUSH_FLOOR,
+  INTERIOR_EARTH_FLOOR,
+  INTERIOR_FLAG_FLOOR,
+  INTERIOR_INK_FLOOR,
+} from '../tileTypes';
 
 /** Sheet holding every town-interior material, one material per row. */
 const GROUND_SHEET_KEY = 'ground_interior';
@@ -27,15 +34,20 @@ export type InteriorMaterial = SpriteStates[typeof GROUND_SHEET_KEY];
 /**
  * Which material wins where two meet.
  *
- * Nothing here ever actually meets anything: a building interior is floored end
- * to end in one material, and the two solids are drawn without a fringe at all.
- * The order exists because the renderer asks every material for one.
+ * A building interior is floored end to end in one material today, so nothing
+ * here actually meets anything and the two solids are drawn without a fringe at
+ * all. The order exists because the renderer asks every material for one; where
+ * a room does lay a second floor over part of itself, the harder surface wins.
  */
 const GROUND_BLEND_ORDER = {
   interior_boards: 0,
-  interior_stone: 1,
-  interior_plaster: 2,
-  interior_counter: 3,
+  interior_rushes: 1,
+  interior_ink: 2,
+  interior_earth: 3,
+  interior_stone: 4,
+  interior_flag: 5,
+  interior_plaster: 6,
+  interior_counter: 7,
 } as const satisfies Record<InteriorMaterial, number>;
 
 /**
@@ -52,6 +64,10 @@ const GROUND_FALLBACK_COLOR = {
   interior_stone: '#97979b',
   interior_plaster: '#b8ab95',
   interior_counter: '#5b3c24',
+  interior_rushes: '#a17c4f',
+  interior_earth: '#5f4f3e',
+  interior_flag: '#7b736a',
+  interior_ink: '#946f45',
 } as const satisfies Record<InteriorMaterial, string>;
 
 /** A finished room is swept, and none of its surfaces is loose. */
@@ -60,6 +76,10 @@ const GROUND_SPILL = {
   interior_stone: null,
   interior_plaster: null,
   interior_counter: null,
+  interior_rushes: null,
+  interior_earth: null,
+  interior_flag: null,
+  interior_ink: null,
 } as const satisfies Record<InteriorMaterial, GroundSpill | null>;
 
 /** Kerbs are a street feature; both sets are empty indoors. */
@@ -90,6 +110,14 @@ function interiorMaterialForTileType(type: number): InteriorMaterial | undefined
       return 'interior_boards';
     case INTERIOR_STONE_FLOOR:
       return 'interior_stone';
+    case INTERIOR_RUSH_FLOOR:
+      return 'interior_rushes';
+    case INTERIOR_EARTH_FLOOR:
+      return 'interior_earth';
+    case INTERIOR_FLAG_FLOOR:
+      return 'interior_flag';
+    case INTERIOR_INK_FLOOR:
+      return 'interior_ink';
     default:
       return undefined;
   }

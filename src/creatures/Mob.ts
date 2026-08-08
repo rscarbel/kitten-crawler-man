@@ -1437,6 +1437,28 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Fractional damage reduction, applied in `takeDamageFrom` and `takeDamage`
+   * at the same points that consult {@link isDamageImmune}. A mob that wants a
+   * partial guard rather than the all-or-nothing shield above — the Krakaren's
+   * guard tentacles — overrides this instead. Applying it at both entry points
+   * keeps a swung hit and a status/DoT tick under the same guard, for the same
+   * reason `isDamageImmune` is consulted at both.
+   */
+  protected get incomingDamageScale(): number {
+    return 1;
+  }
+
+  /**
+   * Only scales a genuine hit. Zero/negative amounts pass through untouched so
+   * the "amount <= 0" guards further down the pipeline (dodge rolls, no-op
+   * ticks) still see the caller's original value instead of a floor-forced 1.
+   */
+  private scaleIncomingDamage(amount: number): number {
+    if (amount <= 0) return amount;
+    return Math.max(1, Math.round(amount * this.incomingDamageScale));
+  }
+
+  /**
    * A shield that swallows the damage swallows the cause with it.
    *
    * Otherwise the sepsis a crown proc paid for lands on a boss that cannot be
@@ -1474,7 +1496,7 @@ export abstract class Mob extends Player {
     const isCrawlerAttack = attacker !== null && !(attacker instanceof Mob);
     if (isCrawlerAttack && !this.takesPlayerDamage(damageType)) return;
     const prev = this.hp;
-    this.hp = Math.max(0, this.hp - amount);
+    this.hp = Math.max(0, this.hp - this.scaleIncomingDamage(amount));
     const actual = prev - this.hp;
     if (actual > 0) {
       this.damageFlash = MOB_DAMAGE_FLASH_FRAMES;
@@ -1557,7 +1579,7 @@ export abstract class Mob extends Player {
       return false;
     }
     const prev = this.hp;
-    const connected = super.takeDamage(amount, source);
+    const connected = super.takeDamage(this.scaleIncomingDamage(amount), source);
     if (!connected) return false;
     const applier = source?.kind === 'status' ? source.applier : null;
     const dealt = prev - this.hp;

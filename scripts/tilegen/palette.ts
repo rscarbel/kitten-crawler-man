@@ -317,6 +317,84 @@ export const INTERIOR_COUNTER_RAMP: Ramp = {
 };
 
 /**
+ * Cut rushes strewn over an inn's boards.
+ *
+ * Paler and greyer than `DEAD_GRASS_RAMP`, which is grass that died standing in
+ * the weather; this is stalk cut green, dried under a roof and then walked flat.
+ */
+export const INTERIOR_RUSH_RAMP: Ramp = {
+  shadow: [116, 98, 58],
+  mid: [166, 146, 94],
+  light: [204, 186, 132],
+  accent: [226, 212, 166],
+};
+
+/**
+ * A floor that was never boarded: earth trodden flat and swept.
+ *
+ * Darker and much greyer than the street's `DIRT_RAMP`. Street dirt is churned
+ * and lit by the sky; this has lived under a roof for a generation, and the
+ * difference between the two is what stops a cottage reading as a yard.
+ */
+export const INTERIOR_EARTH_RAMP: Ramp = {
+  shadow: [56, 45, 35],
+  mid: [95, 79, 62],
+  light: [130, 112, 90],
+  accent: [154, 136, 112],
+};
+
+/** Broom-swept dust, dragged into arcs across packed earth. */
+export const INTERIOR_SWEEP_RAMP: Ramp = {
+  shadow: [110, 96, 76],
+  mid: [136, 120, 98],
+  light: [160, 144, 120],
+  accent: [178, 162, 138],
+};
+
+/**
+ * Flagstones laid indoors: warmer and dimmer than the street's `FLAGSTONE_RAMP`,
+ * because these are lit by hearth and candle rather than by open sky.
+ */
+export const INTERIOR_FLAG_RAMP: Ramp = {
+  shadow: [86, 80, 74],
+  mid: [136, 128, 118],
+  light: [172, 163, 150],
+  accent: [194, 186, 172],
+};
+
+/** The wide dark joints an interior flagstone floor is bedded in. */
+export const INTERIOR_FLAG_MORTAR_RAMP: Ramp = {
+  shadow: [38, 34, 30],
+  mid: [56, 50, 44],
+  light: [74, 67, 59],
+  accent: [90, 82, 72],
+};
+
+/** Woad, sunk into an inking shop's boards and never coming out again. */
+export const INK_WOAD_RAMP: Ramp = {
+  shadow: [22, 34, 62],
+  mid: [38, 58, 100],
+  light: [60, 86, 136],
+  accent: [88, 118, 168],
+};
+
+/** Oak-gall black: the darkest thing on an inking shop's floor. */
+export const INK_GALL_RAMP: Ramp = {
+  shadow: [14, 12, 14],
+  mid: [30, 26, 28],
+  light: [50, 44, 46],
+  accent: [70, 62, 64],
+};
+
+/** Madder red, thinned and spilled — a rust rather than a blood colour. */
+export const INK_MADDER_RAMP: Ramp = {
+  shadow: [70, 20, 18],
+  mid: [112, 36, 30],
+  light: [148, 58, 46],
+  accent: [176, 84, 68],
+};
+
+/**
  * The Bopca station's three floor ramps.
  *
  * Anchored to the art the floor has to sit next to rather than to the retired

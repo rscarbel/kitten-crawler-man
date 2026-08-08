@@ -46,6 +46,14 @@ import {
   TILE_TYPE_COUNT,
   INTERIOR_COUNTER,
   INTERIOR_WALL,
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  MAP_TABLE,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  INK_BENCH,
+  GRINDING_SLAB,
   RIVER_ROCK,
   BOULDER_SMALL,
   BOULDER_LARGE,
@@ -118,6 +126,17 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   // already solid; this is what keeps them that way.
   INTERIOR_WALL,
   INTERIOR_COUNTER,
+  // The garrison's and the inking shop's furniture. `DRILL_SAND_FLOOR` is
+  // deliberately absent — a drill hall's raked sand is ground the player is
+  // meant to cross, and it is the one member of that set that is a floor.
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  MAP_TABLE,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  INK_BENCH,
+  GRINDING_SLAB,
   // The floor-3 wilderness. `HIGHLAND_GRASS`, `SCREE`, `BRIDGE`,
   // `WILDFLOWER_TUFT`, `PEBBLE_SCATTER` and `DEN_HOLLOW` are deliberately
   // absent — the first three are ground the player is meant to cross and the

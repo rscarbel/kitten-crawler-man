@@ -546,44 +546,6 @@
       }
     }
   },
-  "signets_ink": {
-    "path": "environment/buildings/signets_ink.png",
-    "frameWidth": 384,
-    "frameHeight": 240,
-    "tileX": 0,
-    "tileY": 0,
-    "tileScale": 48,
-    "blockedRegions": [
-      {
-        "x1": 0,
-        "y1": 106,
-        "x2": 384,
-        "y2": 191
-      },
-      {
-        "x1": 0,
-        "y1": 192,
-        "x2": 96,
-        "y2": 240
-      },
-      {
-        "x1": 144,
-        "y1": 192,
-        "x2": 384,
-        "y2": 240
-      }
-    ],
-    "states": {
-      "idle": {
-        "row": 0,
-        "frameCount": 1
-      },
-      "life": {
-        "row": 1,
-        "frameCount": 8
-      }
-    }
-  },
   "millers_farm": {
     "path": "environment/buildings/millers_farm.png",
     "frameWidth": 384,
@@ -619,6 +581,44 @@
       "life": {
         "row": 1,
         "frameCount": 7
+      }
+    }
+  },
+  "quiet_needle": {
+    "path": "environment/buildings/quiet_needle.png",
+    "frameWidth": 384,
+    "frameHeight": 240,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 48,
+    "blockedRegions": [
+      {
+        "x1": 0,
+        "y1": 106,
+        "x2": 384,
+        "y2": 191
+      },
+      {
+        "x1": 0,
+        "y1": 192,
+        "x2": 96,
+        "y2": 240
+      },
+      {
+        "x1": 144,
+        "y1": 192,
+        "x2": 384,
+        "y2": 240
+      }
+    ],
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "life": {
+        "row": 1,
+        "frameCount": 8
       }
     }
   }

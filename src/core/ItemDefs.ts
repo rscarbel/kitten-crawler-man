@@ -11,6 +11,10 @@ export type ItemId =
   | 'enchanted_bigboi_boxers'
   | 'trollskin_shirt'
   | 'enchanted_crown_sepsis_whore'
+  | 'issue_kettle_helm'
+  | 'padded_gambeson'
+  | 'riveted_bracers'
+  | 'marching_boots'
   | 'scroll_of_confusing_fog'
   | 'goblin_dynamite'
   | 'gym_dumbbell'
@@ -198,6 +202,63 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
       'magical attacks, now have a 15% chance to inflict the Sepsis debuff. ' +
       'Sepsis is a health-sapping curse that slowly drains the life of its ' +
       'victim until they perish.',
+  },
+  // The garrison's issue kit. Mundane on purpose: no enchantment, no ability, a
+  // single stat point each. It is what the quartermaster can hand across a
+  // counter in a town whose supply requisition has been deferred eleven times,
+  // and it is the only armour in the game a crawler can simply buy.
+  issue_kettle_helm: {
+    id: 'issue_kettle_helm',
+    name: 'Issue Kettle Helm',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Head',
+    equipSubSlot: 'Hat',
+    statBonus: { constitution: 1 },
+    description:
+      'A wide-brimmed iron pot with a chin strap and somebody else’s dent in the crown. ' +
+      'The garrison issues these by the dozen because the things falling on you down there ' +
+      'mostly fall from above.',
+  },
+  padded_gambeson: {
+    id: 'padded_gambeson',
+    name: 'Padded Gambeson',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Torso',
+    equipSubSlot: 'Shirt',
+    statBonus: { constitution: 2 },
+    description:
+      'Twenty layers of linen quilted flat and stitched through. Stops a tooth, spreads a club, ' +
+      'and stinks. The quartermaster does not wash the insides and will explain why at length.',
+  },
+  riveted_bracers: {
+    id: 'riveted_bracers',
+    name: 'Riveted Bracers',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Gloves',
+    statBonus: { strength: 1 },
+    description:
+      'Boiled leather over the forearm, riveted at four points. Meant for the arm you block with, ' +
+      'which the drill sergeant insists is also the arm you swing with.',
+  },
+  marching_boots: {
+    id: 'marching_boots',
+    name: 'Marching Boots',
+    stackable: false,
+    canHotlist: true,
+    type: 'armor',
+    equipSlot: 'Feet',
+    equipSubSlot: 'Shoes',
+    statBonus: { dexterity: 1 },
+    description:
+      'Hobnailed, hard-soled, and broken in by a man who is not coming back for them. ' +
+      'Everything on this floor is faster than you. These make it less true.',
   },
   magic_missile_tome: {
     id: 'magic_missile_tome',

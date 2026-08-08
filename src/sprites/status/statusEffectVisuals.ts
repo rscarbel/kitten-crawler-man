@@ -41,14 +41,20 @@ import {
 } from './statusRestraints';
 import {
   cooldownCrispBodyLayer,
+  deepSlumberBodyLayer,
   drawCooldownCrisp,
+  drawDeepSlumber,
   drawDrunk,
+  drawHearthWarmed,
   drawJuggJuice,
   drawSpeedFizz,
+  drawWellRested,
   drawWhetstone,
   drunkBodyLayer,
+  hearthWarmedBodyLayer,
   juggJuiceBodyLayer,
   speedFizzBodyLayer,
+  wellRestedBodyLayer,
   whetstoneBodyLayer,
 } from './statusBoons';
 
@@ -190,6 +196,36 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: false,
       bodyLayers: (f) => [whetstoneBodyLayer(f)],
       overlay: drawWhetstone,
+    },
+  ],
+  [
+    'well_rested',
+    {
+      label: 'RSTD',
+      color: '#f5d68a',
+      harmful: false,
+      bodyLayers: (f) => [wellRestedBodyLayer(f)],
+      overlay: drawWellRested,
+    },
+  ],
+  [
+    'hearth_warmed',
+    {
+      label: 'WARM',
+      color: '#f4725c',
+      harmful: false,
+      bodyLayers: (f) => [hearthWarmedBodyLayer(f)],
+      overlay: drawHearthWarmed,
+    },
+  ],
+  [
+    'deep_slumber',
+    {
+      label: 'DEEP',
+      color: '#8a94f4',
+      harmful: false,
+      bodyLayers: (f) => [deepSlumberBodyLayer(f)],
+      overlay: drawDeepSlumber,
     },
   ],
   [

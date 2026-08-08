@@ -1,542 +1,474 @@
 /**
- * Draws the Krakaren Clone boss sprite — a massive immobile octopus monster
- * with a beaked mouth, clusters of eyes, and pink tentacles covered in
- * human-shaped mouths with bright red lips.
+ * Draws the Krakaren Clone boss from her baked sheet (`krakaren`), plus the two
+ * ground-slam floor decals that stay runtime-drawn.
  *
- * The boss is ~20 ft tall (occupies ~3×3 tiles visually) but collision stays
- * within a single tile.
+ * The decals are not part of the sheet on purpose: their radius is the slam's
+ * actual kill radius, and what the player sees sweep the floor has to be
+ * exactly what kills them. A baked burst could drift from that number without
+ * anything failing.
  */
+
+import { drawSpriteKey, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import { getSpriteDefByKey, type SpriteStates } from '../core/SpriteLoader';
+
+type KrakarenSheetState = SpriteStates['krakaren'];
+
+/** Which of the three drawn viewpoints a facing resolves to. */
+export type KrakarenView = 'front' | 'side' | 'away';
+
+type KrakarenBase = 'idle' | 'swipe' | 'channel';
+
+const SHEET_KEY = 'krakaren';
+
+/** The sheet's severed pieces, in the order the bake lays them into the gore row. */
+export const KRAKAREN_GORE_PARTS: ReadonlyArray<string> = [
+  'gore_mantle',
+  'gore_stub',
+  'gore_eye',
+  'gore_tentacle_a',
+  'gore_tentacle_b',
+  'gore_mouth_cluster',
+  'gore_entrails',
+];
+
+export const KRAKAREN_BODY_PART_KEY = 'krakaren';
+
+/**
+ * Enrage is a runtime treatment rather than a baked row, so the whole sheet
+ * stays half its size. A damage flash outranks it: a hit landing has to be
+ * readable through whatever else is tinting her.
+ */
+export const KRAKAREN_ENRAGED_FILTER = 'saturate(1.5) brightness(1.1)';
 
 const TWO_PI = Math.PI * 2;
+const MILLISECONDS_PER_SECOND = 1000;
 
-const TENTACLE_COUNT = 10;
-const TENTACLE_REACH_SCALE = 2.8;
-const TENTACLE_SEGMENTS = 8;
-const TENTACLE_PHASE_STRIDE = 7;
-const TENTACLE_PHASE_MOD = 11;
-const TENTACLE_MOUTH_COUNT_MOD = 3;
-const TENTACLE_LENGTH_BASE = 0.7;
-const TENTACLE_LENGTH_RANGE = 0.3;
-const TENTACLE_PHASE_STEP = 1.3;
-const TENTACLE_ANGLE_OFFSET_POS = 0.15;
-const TENTACLE_ANGLE_OFFSET_NEG = -0.15;
-const TENTACLE_SWAY_FREQ = 1.5;
-const TENTACLE_SWAY_AMPLITUDE = 0.15;
-const TENTACLE_CURL_FREQ = 2.0;
-const TENTACLE_CURL_AMPLITUDE = 0.12;
-const TENTACLE_CURL_SEGMENT_SCALE = 0.7;
-const TENTACLE_THICKNESS_BASE = 0.22;
-const TENTACLE_THICKNESS_TAPER = 0.18;
-const TENTACLE_PINK_R_BASE = 220;
-const TENTACLE_PINK_G_BASE = 120;
-const TENTACLE_PINK_B_BASE = 140;
-const TENTACLE_PINK_R_RANGE = 35;
-const TENTACLE_PINK_G_RANGE = 30;
-const TENTACLE_PINK_B_RANGE = 20;
-const TENTACLE_LINEWIDTH_SCALE = 2;
-const TENTACLE_MOUTH_START_SEGMENT = 1; // first mouth starts after segment 1
-const TENTACLE_SWING_AMPLITUDE = 1.2;
-
-const MOUTH_OUTER_LIP_RX = 1.2;
-const MOUTH_OUTER_LIP_RY = 0.7;
-const MOUTH_INNER_RX = 0.7;
-const MOUTH_INNER_RY = 0.35;
-const MOUTH_HIGHLIGHT_RX = 0.9;
-const MOUTH_HIGHLIGHT_RY = 0.2;
-const MOUTH_HIGHLIGHT_OFFSET = 0.15;
-
-const BODY_MANTLE_HEIGHT_SCALE = 1.3;
-const BODY_MANTLE_WIDTH_SCALE = 1.0;
-const BODY_MANTLE_Y_OFFSET = 0.6;
-const BODY_SHADOW_Y_OFFSET = 0.3;
-const BODY_SHADOW_RX = 1.1;
-const BODY_SHADOW_RY = 0.2;
-const BODY_BASE_RX = 0.85;
-const BODY_BASE_RY = 0.55;
-const BODY_PULSE_FREQ = 1.2;
-const BODY_PULSE_AMPLITUDE = 0.04;
-const BODY_HIGHLIGHT_X_OFFSET = 0.15;
-const BODY_HIGHLIGHT_Y_OFFSET = 0.25;
-const BODY_HIGHLIGHT_RX_SCALE = 0.45;
-const BODY_HIGHLIGHT_RY_SCALE = 0.5;
-const BODY_HIGHLIGHT_ANGLE = -0.3;
-
-const EYE_STEP = 0.14;
-const EYE_SWAY_FREQ = 2.1;
-const EYE_SWAY_AMPLITUDE = 0.05;
-const EYE_R = 0.08;
-const EYE_PUPIL_SCALE = 0.5;
-const EYE_PUPIL_TRACK = 0.35;
-const EYE_GLINT_OFFSET_X = 0.2;
-const EYE_GLINT_OFFSET_Y = 0.25;
-const EYE_GLINT_SCALE = 0.2;
-
-const BEAK_Y_OFFSET = 0.05;
-const BEAK_OPEN_BASE = 0.08;
-const BEAK_OPEN_FREQ = 3;
-const BEAK_OPEN_AMPLITUDE = 0.04;
-const BEAK_WIDTH_HALF = 0.15;
-const BEAK_UPPER_HEIGHT = 0.18;
-const BEAK_LOWER_MARGIN = 0.02;
-const BEAK_LOWER_WIDTH = 0.12;
-const BEAK_LOWER_HEIGHT = 0.16;
-
-const ENRAGE_GLOW_BASE_ALPHA = 0.25;
-const ENRAGE_GLOW_PULSE_AMPLITUDE = 0.15;
-const ENRAGE_GLOW_FREQ = 4;
-const ENRAGE_GLOW_LINEWIDTH = 3;
-const ENRAGE_GLOW_RX = 1.3;
-const ENRAGE_GLOW_RY = 1.5;
-const ENRAGE_GLOW_Y_OFFSET = 0.2;
-
-const SLAM_RADIUS_SCALE = 1.5;
-const SLAM_ALPHA_BASE = 0.15;
-const SLAM_ALPHA_SCALE = 0.5;
-const SLAM_PULSE_FREQ = 6;
-const SLAM_PULSE_AMPLITUDE = 0.08;
-const SLAM_INNER_SHADOW_SCALE = 0.8;
-const SLAM_RED_ALPHA_SCALE = 0.4;
-const SLAM_IMPACT_RADIUS_GROW = 1.5;
-const SLAM_IMPACT_ALPHA = 0.8;
-const SLAM_IMPACT_LINEWIDTH_BASE = 4;
-const SLAM_IMPACT_DEBRIS_COUNT = 8;
-const SLAM_IMPACT_DEBRIS_SPREAD = 0.6;
-const SLAM_IMPACT_DEBRIS_SPREAD_GROW = 0.5;
-const SLAM_IMPACT_DEBRIS_SIZE = 4;
-const SLAM_IMPACT_DEBRIS_HALF = 2;
-
-const SPRITE_CENTER_X = 0.5;
-const SPRITE_CENTER_Y = 0.5;
-
-const TENTACLE_FRONT_ANGLE_MIN = 0.25;
-const TENTACLE_FRONT_ANGLE_MAX = 1.75;
-
-const EYE_GROUP_LEFT_OX = -0.3;
-const EYE_GROUP_LEFT_OY = -0.5;
-const EYE_GROUP_MID_OX = 0.25;
-const EYE_GROUP_MID_OY = -0.4;
-const EYE_GROUP_TOP_OX = 0.0;
-const EYE_GROUP_TOP_OY = -0.85;
-const EYE_GROUP_COUNT_LARGE = 3;
-const EYE_GROUP_COUNT_SMALL = 2;
-
-/** Per-tentacle persistent data for idle sway. */
-interface TentacleDesc {
-  baseAngle: number; // radial angle from body centre
-  length: number; // 0–1 multiplier of max tentacle reach
-  phase: number; // animation phase offset
-  mouthCount: number; // how many mouths on this tentacle
-}
-
-/** Pre-generated tentacle descriptors (deterministic per instance via seed). */
-function buildTentacles(): TentacleDesc[] {
-  const out: TentacleDesc[] = [];
-  for (let i = 0; i < TENTACLE_COUNT; i++) {
-    out.push({
-      baseAngle:
-        (i / TENTACLE_COUNT) * TWO_PI +
-        (i % 2 === 0 ? TENTACLE_ANGLE_OFFSET_POS : TENTACLE_ANGLE_OFFSET_NEG),
-      length:
-        TENTACLE_LENGTH_BASE +
-        (((i * TENTACLE_PHASE_STRIDE + TENTACLE_MOUTH_COUNT_MOD) % TENTACLE_PHASE_MOD) /
-          TENTACLE_PHASE_MOD) *
-          TENTACLE_LENGTH_RANGE,
-      phase: i * TENTACLE_PHASE_STEP,
-      mouthCount: TENTACLE_MOUTH_COUNT_MOD + (i % TENTACLE_MOUTH_COUNT_MOD),
-    });
-  }
-  return out;
-}
-
-const TENTACLES = buildTentacles();
+/** Loop speeds for the clock-driven rows. */
+const IDLE_FPS = 6;
+const CHANNEL_FPS = 10;
 
 /**
- * Draw a single tentacle as a segmented curve.
- * Returns the tip position for slam indicator use.
+ * Read off the sheet rather than hand-tabled, because `drawSprite` *clamps* the
+ * frame index: a row that got shorter in a rebake would silently freeze on its
+ * last frame instead of failing.
  */
-function drawTentacle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  ts: number,
-  desc: TentacleDesc,
-  time: number,
-  attackTentacle: number, // index of tentacle doing melee swing, -1 if none
-  tentacleIndex: number,
-  attackProgress: number, // 0–1 for swing animation
-): { tipX: number; tipY: number } {
-  const reach = ts * TENTACLE_REACH_SCALE * desc.length;
-  const segments = TENTACLE_SEGMENTS;
-  const segLen = reach / segments;
+function frameCountOf(state: KrakarenSheetState): number {
+  return getSpriteDefByKey(SHEET_KEY)?.states.get(state)?.frameCount ?? 1;
+}
 
-  // Melee attack: the attacking tentacle sweeps forward rapidly
-  let swingOffset = 0;
-  if (attackTentacle === tentacleIndex && attackProgress > 0) {
-    swingOffset = Math.sin(attackProgress * Math.PI) * TENTACLE_SWING_AMPLITUDE;
-  }
+/** Views split on whichever axis she is facing hardest along; a tie reads as profile. */
+function viewFor(facingX: number, facingY: number): KrakarenView {
+  if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
+  return facingY < 0 ? 'away' : 'front';
+}
 
-  const sway =
-    Math.sin(time * TENTACLE_SWAY_FREQ + desc.phase) * TENTACLE_SWAY_AMPLITUDE + swingOffset;
-  let angle = desc.baseAngle + sway;
-  let px = cx;
-  let py = cy;
+function stateFor(base: KrakarenBase, view: KrakarenView): KrakarenSheetState {
+  if (view === 'side') return `${base}_side`;
+  if (view === 'away') return `${base}_away`;
+  return base;
+}
 
-  ctx.save();
-  ctx.lineCap = 'round';
-
-  for (let s = 0; s < segments; s++) {
-    const t = s / segments;
-    const thickness = ts * (TENTACLE_THICKNESS_BASE - t * TENTACLE_THICKNESS_TAPER);
-    const curlAmount =
-      Math.sin(time * TENTACLE_CURL_FREQ + desc.phase + s * TENTACLE_CURL_SEGMENT_SCALE) *
-      TENTACLE_CURL_AMPLITUDE *
-      (1 + t);
-    angle += curlAmount;
-
-    const nx = px + Math.cos(angle) * segLen;
-    const ny = py + Math.sin(angle) * segLen;
-
-    // Tentacle body — pink gradient darker at base
-    const pinkR = TENTACLE_PINK_R_BASE + Math.floor(t * TENTACLE_PINK_R_RANGE);
-    const pinkG = TENTACLE_PINK_G_BASE + Math.floor(t * TENTACLE_PINK_G_RANGE);
-    const pinkB = TENTACLE_PINK_B_BASE + Math.floor(t * TENTACLE_PINK_B_RANGE);
-    ctx.strokeStyle = `rgb(${pinkR},${pinkG},${pinkB})`;
-    ctx.lineWidth = thickness * TENTACLE_LINEWIDTH_SCALE;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(nx, ny);
-    ctx.stroke();
-
-    // Sucker-like mouths along the tentacle
-    if (s > TENTACLE_MOUTH_START_SEGMENT && s <= desc.mouthCount + TENTACLE_MOUTH_START_SEGMENT) {
-      const mx = (px + nx) / 2;
-      const my = (py + ny) / 2;
-      const mouthSize = thickness * BODY_BASE_RX;
-
-      // Red lips — oval
-      ctx.fillStyle = '#e01030';
-      ctx.beginPath();
-      ctx.ellipse(
-        mx,
-        my,
-        mouthSize * MOUTH_OUTER_LIP_RX,
-        mouthSize * MOUTH_OUTER_LIP_RY,
-        angle,
-        0,
-        TWO_PI,
-      );
-      ctx.fill();
-
-      // Dark mouth interior
-      ctx.fillStyle = '#2a0008';
-      ctx.beginPath();
-      ctx.ellipse(mx, my, mouthSize * MOUTH_INNER_RX, mouthSize * MOUTH_INNER_RY, angle, 0, TWO_PI);
-      ctx.fill();
-
-      // Upper lip highlight
-      ctx.fillStyle = '#ff4060';
-      ctx.beginPath();
-      ctx.ellipse(
-        mx - Math.sin(angle) * mouthSize * MOUTH_HIGHLIGHT_OFFSET,
-        my + Math.cos(angle) * mouthSize * MOUTH_HIGHLIGHT_OFFSET,
-        mouthSize * MOUTH_HIGHLIGHT_RX,
-        mouthSize * MOUTH_HIGHLIGHT_RY,
-        angle,
-        Math.PI,
-        TWO_PI,
-      );
-      ctx.fill();
-    }
-
-    px = nx;
-    py = ny;
-  }
-
-  ctx.restore();
-  return { tipX: px, tipY: py };
+/** Everything the body sprite needs to pick a pose. All fields optional. */
+export interface KrakarenSpriteState {
+  readonly facingX?: number;
+  readonly facingY?: number;
+  /** 0–1 through the melee lash; null when she is not swinging. */
+  readonly swipeProgress?: number | null;
+  /** Set while she is braced for a ground slam, which has its own silhouette. */
+  readonly isChanneling?: boolean;
+  /** Pins whichever clock-driven loop is playing, for the preview harness. */
+  readonly idleFrame?: number | null;
 }
 
 /**
- * Draw the central body — bulbous mantle with beak and eye clusters.
- */
-function drawBody(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  ts: number,
-  time: number,
-  isEnraged: boolean,
-  facingX: number,
-  facingY: number,
-): void {
-  // Mantle — large bulbous top
-  const mantleH = ts * BODY_MANTLE_HEIGHT_SCALE;
-  const mantleW = ts * BODY_MANTLE_WIDTH_SCALE;
-  const mantleY = cy - ts * BODY_MANTLE_Y_OFFSET;
-
-  // Shadow under body
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    cy + ts * BODY_SHADOW_Y_OFFSET,
-    ts * BODY_SHADOW_RX,
-    ts * BODY_SHADOW_RY,
-    0,
-    0,
-    TWO_PI,
-  );
-  ctx.fill();
-
-  // Body base (where tentacles connect)
-  ctx.fillStyle = isEnraged ? '#c04068' : '#d87090';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, ts * BODY_BASE_RX, ts * BODY_BASE_RY, 0, 0, TWO_PI);
-  ctx.fill();
-
-  // Mantle dome
-  const pulse = Math.sin(time * BODY_PULSE_FREQ) * BODY_PULSE_AMPLITUDE;
-  ctx.fillStyle = isEnraged ? '#a83058' : '#cc6888';
-  ctx.beginPath();
-  ctx.ellipse(cx, mantleY, mantleW * (1 + pulse), mantleH * (1 + pulse), 0, 0, TWO_PI);
-  ctx.fill();
-
-  // Mantle highlight
-  ctx.fillStyle = isEnraged ? '#d0506a' : '#e89aa8';
-  ctx.beginPath();
-  ctx.ellipse(
-    cx - ts * BODY_HIGHLIGHT_X_OFFSET,
-    mantleY - ts * BODY_HIGHLIGHT_Y_OFFSET,
-    mantleW * BODY_HIGHLIGHT_RX_SCALE,
-    mantleH * BODY_HIGHLIGHT_RY_SCALE,
-    BODY_HIGHLIGHT_ANGLE,
-    0,
-    TWO_PI,
-  );
-  ctx.fill();
-
-  // Eye clusters (3 groups of 2-3 eyes)
-  const eyeGroups = [
-    { ox: EYE_GROUP_LEFT_OX, oy: EYE_GROUP_LEFT_OY, count: EYE_GROUP_COUNT_LARGE },
-    { ox: EYE_GROUP_MID_OX, oy: EYE_GROUP_MID_OY, count: EYE_GROUP_COUNT_SMALL },
-    { ox: EYE_GROUP_TOP_OX, oy: EYE_GROUP_TOP_OY, count: EYE_GROUP_COUNT_LARGE },
-  ];
-
-  for (const eg of eyeGroups) {
-    for (let i = 0; i < eg.count; i++) {
-      const ex = cx + eg.ox * ts + (i - eg.count / 2) * ts * EYE_STEP;
-      const ey = mantleY + eg.oy * ts + Math.sin(i * EYE_SWAY_FREQ) * ts * EYE_SWAY_AMPLITUDE;
-      const er = ts * EYE_R;
-
-      // Eyeball
-      ctx.fillStyle = '#e8e0c0';
-      ctx.beginPath();
-      ctx.arc(ex, ey, er, 0, TWO_PI);
-      ctx.fill();
-
-      // Pupil — tracks facing direction
-      ctx.fillStyle = isEnraged ? '#ff2020' : '#1a1a00';
-      ctx.beginPath();
-      ctx.arc(
-        ex + facingX * er * EYE_PUPIL_TRACK,
-        ey + facingY * er * EYE_PUPIL_TRACK,
-        er * EYE_PUPIL_SCALE,
-        0,
-        TWO_PI,
-      );
-      ctx.fill();
-
-      // Eye glint
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.beginPath();
-      ctx.arc(
-        ex - er * EYE_GLINT_OFFSET_X,
-        ey - er * EYE_GLINT_OFFSET_Y,
-        er * EYE_GLINT_SCALE,
-        0,
-        TWO_PI,
-      );
-      ctx.fill();
-    }
-  }
-
-  // Beak (parrot-like, at the body centre)
-  const beakY = cy + ts * BEAK_Y_OFFSET;
-  const beakOpen = BEAK_OPEN_BASE + Math.sin(time * BEAK_OPEN_FREQ) * BEAK_OPEN_AMPLITUDE;
-
-  // Upper beak
-  ctx.fillStyle = '#2a1a10';
-  ctx.beginPath();
-  ctx.moveTo(cx - ts * BEAK_WIDTH_HALF, beakY);
-  ctx.quadraticCurveTo(cx, beakY - ts * BEAK_UPPER_HEIGHT, cx + ts * BEAK_WIDTH_HALF, beakY);
-  ctx.quadraticCurveTo(cx, beakY + ts * beakOpen, cx - ts * BEAK_WIDTH_HALF, beakY);
-  ctx.fill();
-
-  // Lower beak
-  ctx.fillStyle = '#1a0e08';
-  ctx.beginPath();
-  ctx.moveTo(cx - ts * BEAK_LOWER_WIDTH, beakY + ts * BEAK_LOWER_MARGIN);
-  ctx.quadraticCurveTo(
-    cx,
-    beakY + ts * BEAK_LOWER_HEIGHT,
-    cx + ts * BEAK_LOWER_WIDTH,
-    beakY + ts * BEAK_LOWER_MARGIN,
-  );
-  ctx.quadraticCurveTo(
-    cx,
-    beakY + ts * beakOpen + ts * BEAK_LOWER_MARGIN,
-    cx - ts * BEAK_LOWER_WIDTH,
-    beakY + ts * BEAK_LOWER_MARGIN,
-  );
-  ctx.fill();
-
-  // Enrage glow
-  if (isEnraged) {
-    ctx.save();
-    ctx.globalAlpha =
-      ENRAGE_GLOW_BASE_ALPHA + ENRAGE_GLOW_PULSE_AMPLITUDE * Math.sin(time * ENRAGE_GLOW_FREQ);
-    ctx.strokeStyle = '#ff2020';
-    ctx.lineWidth = ENRAGE_GLOW_LINEWIDTH;
-    ctx.beginPath();
-    ctx.ellipse(
-      cx,
-      cy - ts * ENRAGE_GLOW_Y_OFFSET,
-      ts * ENRAGE_GLOW_RX,
-      ts * ENRAGE_GLOW_RY,
-      0,
-      0,
-      TWO_PI,
-    );
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
-/**
- * Draw the slam shadow warning on the ground.
- */
-export function drawSlamShadow(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  ts: number,
-  progress: number, // 0–1 how close to impact
-): void {
-  const radius = ts * SLAM_RADIUS_SCALE;
-  const alpha = SLAM_ALPHA_BASE + progress * SLAM_ALPHA_SCALE;
-  const pulseScale = 1 + Math.sin(progress * Math.PI * SLAM_PULSE_FREQ) * SLAM_PULSE_AMPLITUDE;
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-
-  // Outer warning ring
-  ctx.strokeStyle = '#ff0000';
-  ctx.lineWidth = 2 + progress * 2;
-  ctx.beginPath();
-  ctx.arc(x, y, radius * pulseScale, 0, TWO_PI);
-  ctx.stroke();
-
-  // Inner dark shadow
-  ctx.fillStyle = '#200000';
-  ctx.beginPath();
-  ctx.arc(x, y, radius * progress * SLAM_INNER_SHADOW_SCALE, 0, TWO_PI);
-  ctx.fill();
-
-  // Red fill
-  ctx.fillStyle = '#ff0000';
-  ctx.globalAlpha = alpha * SLAM_RED_ALPHA_SCALE;
-  ctx.beginPath();
-  ctx.arc(x, y, radius * pulseScale, 0, TWO_PI);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-/**
- * Draw the slam impact effect.
- */
-export function drawSlamImpact(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  ts: number,
-  progress: number, // 0–1 (0 = just hit, 1 = fading)
-): void {
-  const radius = ts * SLAM_RADIUS_SCALE + progress * ts * SLAM_IMPACT_RADIUS_GROW;
-  const alpha = (1 - progress) * SLAM_IMPACT_ALPHA;
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-
-  // Shockwave ring
-  ctx.strokeStyle = '#ff4444';
-  ctx.lineWidth = SLAM_IMPACT_LINEWIDTH_BASE * (1 - progress);
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, TWO_PI);
-  ctx.stroke();
-
-  // Debris particles (cracks in the floor)
-  for (let i = 0; i < SLAM_IMPACT_DEBRIS_COUNT; i++) {
-    const angle = (i / SLAM_IMPACT_DEBRIS_COUNT) * TWO_PI;
-    const dist =
-      radius *
-      SLAM_IMPACT_DEBRIS_SPREAD *
-      (SLAM_ALPHA_SCALE + progress * SLAM_IMPACT_DEBRIS_SPREAD_GROW);
-    const px = x + Math.cos(angle) * dist;
-    const py = y + Math.sin(angle) * dist;
-    ctx.fillStyle = '#8a7060';
-    ctx.fillRect(
-      px - SLAM_IMPACT_DEBRIS_HALF,
-      py - SLAM_IMPACT_DEBRIS_HALF,
-      SLAM_IMPACT_DEBRIS_SIZE,
-      SLAM_IMPACT_DEBRIS_SIZE,
-    );
-  }
-
-  ctx.restore();
-}
-
-/**
- * Main sprite draw function for the Krakaren Clone.
+ * Draw the Krakaren Clone's body.
+ *
+ * Priority is swipe → channel → idle, so a committed melee lash still reads as
+ * a lash even on the frame a slam starts charging.
+ *
+ * Only the profile rows are mirrored; flipping a head-on view would put her
+ * eyes and beak on the wrong sides every time she turned around.
  */
 export function drawKrakarenSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
-  ts: number,
-  time: number,
-  isEnraged: boolean,
-  facingX: number,
-  facingY: number,
-  attackTentacle: number, // -1 if no melee attack, else tentacle index
-  attackProgress: number, // 0–1 for melee swing
+  tileSize: number,
+  state: KrakarenSpriteState = {},
 ): void {
-  // Centre of the boss (body occupies ~1 tile but visuals extend 3×3)
-  const cx = sx + ts * SPRITE_CENTER_X;
-  const cy = sy + ts * SPRITE_CENTER_Y;
+  const {
+    facingX = 0,
+    facingY = 1,
+    swipeProgress = null,
+    isChanneling = false,
+    idleFrame = null,
+  } = state;
 
-  // Draw tentacles behind body first (back half)
-  for (let i = 0; i < TENTACLE_COUNT; i++) {
-    const desc = TENTACLES[i];
-    if (
-      desc.baseAngle > Math.PI * TENTACLE_FRONT_ANGLE_MIN &&
-      desc.baseAngle < Math.PI * TENTACLE_FRONT_ANGLE_MAX
-    ) {
-      drawTentacle(ctx, cx, cy, ts, desc, time, attackTentacle, i, attackProgress);
-    }
+  const view = viewFor(facingX, facingY);
+  const flipX = view === 'side' && facingX < 0;
+  const opts = { flipX };
+
+  if (swipeProgress !== null) {
+    const key = stateFor('swipe', view);
+    drawSpriteKey(
+      ctx,
+      SHEET_KEY,
+      key,
+      progressFrameIndex(swipeProgress, frameCountOf(key)),
+      sx,
+      sy,
+      tileSize,
+      opts,
+    );
+    return;
   }
 
-  // Draw body
-  drawBody(ctx, cx, cy, ts, time, isEnraged, facingX, facingY);
+  const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND;
 
-  // Draw tentacles in front (front half)
-  for (let i = 0; i < TENTACLE_COUNT; i++) {
-    const desc = TENTACLES[i];
-    if (!(
-      desc.baseAngle > Math.PI * TENTACLE_FRONT_ANGLE_MIN &&
-      desc.baseAngle < Math.PI * TENTACLE_FRONT_ANGLE_MAX
-    )) {
-      drawTentacle(ctx, cx, cy, ts, desc, time, attackTentacle, i, attackProgress);
-    }
+  if (isChanneling) {
+    const key = stateFor('channel', view);
+    const count = frameCountOf(key);
+    drawSpriteKey(
+      ctx,
+      SHEET_KEY,
+      key,
+      idleFrame ?? timeFrameIndex(nowSeconds, CHANNEL_FPS, count),
+      sx,
+      sy,
+      tileSize,
+      opts,
+    );
+    return;
   }
+
+  const key = stateFor('idle', view);
+  const count = frameCountOf(key);
+  drawSpriteKey(
+    ctx,
+    SHEET_KEY,
+    key,
+    idleFrame ?? timeFrameIndex(nowSeconds, IDLE_FPS, count),
+    sx,
+    sy,
+    tileSize,
+    opts,
+  );
+}
+
+/** Clear air left between the top of her art and anything hung over her head. */
+const KRAKAREN_OVERHEAD_CLEARANCE_TILES = 0.2;
+
+interface KrakarenArtExtent {
+  /** Tiles the art rises above the tile she is anchored to. */
+  readonly topTiles: number;
+  /** Total height of a cell in tiles. */
+  readonly heightTiles: number;
+}
+
+/** Cached: the manifest never changes after load and these are read per frame. */
+let cachedArtExtent: KrakarenArtExtent | null = null;
+
+/**
+ * How far the baked cell reaches around her tile.
+ *
+ * Measured off the loaded manifest rather than copied, because every one of
+ * these numbers moves whenever a rebake resizes the cell — and a stale copy
+ * fails silently, as a health bar drawn across her mantle.
+ *
+ * Deliberately not cached on a miss: a missing def only means the sheet has not
+ * finished loading, and caching that would pin her to the fallbacks all session.
+ */
+function artExtentOf(): KrakarenArtExtent | null {
+  if (cachedArtExtent !== null) return cachedArtExtent;
+  const def = getSpriteDefByKey(SHEET_KEY);
+  if (def === undefined) return null;
+  cachedArtExtent = {
+    topTiles: def.tileY / def.tileScale,
+    heightTiles: def.frameHeight / def.tileScale,
+  };
+  return cachedArtExtent;
+}
+
+/** Tiles her art rises above her tile origin. */
+export function krakarenArtTopTiles(fallbackTiles: number): number {
+  return artExtentOf()?.topTiles ?? fallbackTiles;
+}
+
+/** Height of one baked cell in tiles — the divisor for sizing a portrait. */
+export function krakarenArtHeightTiles(fallbackTiles: number): number {
+  return artExtentOf()?.heightTiles ?? fallbackTiles;
+}
+
+/** How far above her tile origin to hang a health bar so it clears the mantle. */
+export function krakarenOverheadLiftTiles(fallbackTiles: number): number {
+  const extent = artExtentOf();
+  if (extent === null) return fallbackTiles;
+  return extent.topTiles + KRAKAREN_OVERHEAD_CLEARANCE_TILES;
+}
+
+const ENRAGE_GLOW_BASE_ALPHA = 0.25;
+const ENRAGE_GLOW_PULSE_AMPLITUDE = 0.15;
+const ENRAGE_GLOW_PULSE_FREQ = 4;
+const ENRAGE_GLOW_LINEWIDTH = 3;
+const ENRAGE_GLOW_RX_TILES = 1.3;
+const ENRAGE_GLOW_RY_TILES = 0.45;
+const ENRAGE_GLOW_CENTER_X_TILES = 0.5;
+const ENRAGE_GLOW_CENTER_Y_TILES = 0.5;
+const ENRAGE_GLOW_COLOR = '#ff2020';
+
+/**
+ * The red ring that says she has passed her enrage threshold.
+ *
+ * Drawn under the sprite rather than baked into it, because the sheet's tint
+ * treatment alone is easy to miss on a boss this saturated to begin with.
+ */
+export function drawKrakarenEnrageGlow(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  tileSize: number,
+  animTime: number,
+): void {
+  ctx.save();
+  ctx.globalAlpha =
+    ENRAGE_GLOW_BASE_ALPHA +
+    ENRAGE_GLOW_PULSE_AMPLITUDE * Math.sin(animTime * ENRAGE_GLOW_PULSE_FREQ);
+  ctx.strokeStyle = ENRAGE_GLOW_COLOR;
+  ctx.lineWidth = ENRAGE_GLOW_LINEWIDTH;
+  ctx.beginPath();
+  ctx.ellipse(
+    sx + tileSize * ENRAGE_GLOW_CENTER_X_TILES,
+    sy + tileSize * ENRAGE_GLOW_CENTER_Y_TILES,
+    tileSize * ENRAGE_GLOW_RX_TILES,
+    tileSize * ENRAGE_GLOW_RY_TILES,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * The slam's kill radius in tiles.
+ *
+ * `KrakarenClone`'s `SLAM_KILL_RADIUS_TILE_MULTIPLIER` is the same number and
+ * has to stay the same number: the telegraph ring is the player's only reading
+ * of where the instant kill lands, so a decal drawn at any other radius is a
+ * lie about the hitbox.
+ */
+export const SLAM_KILL_RADIUS_TILES = 1.5;
+
+const SLAM_SHADOW_ALPHA_BASE = 0.15;
+const SLAM_SHADOW_ALPHA_GROWTH = 0.5;
+const SLAM_SHADOW_PULSE_CYCLES = 6;
+const SLAM_SHADOW_PULSE_AMPLITUDE = 0.08;
+const SLAM_SHADOW_INNER_SCALE = 0.8;
+const SLAM_SHADOW_FILL_ALPHA_SCALE = 0.4;
+const SLAM_SHADOW_LINEWIDTH_BASE = 2;
+const SLAM_SHADOW_LINEWIDTH_GROWTH = 2;
+const SLAM_SHADOW_RING_COLOR = '#ff0000';
+const SLAM_SHADOW_INNER_COLOR = '#200000';
+
+/**
+ * Extra opacity carried by the ring while the tentacle is diving, on top of
+ * whatever the telegraph progress already earns it.
+ *
+ * The dive is the moment the thing goes under, and the ring is where it comes
+ * back up: pushing the ring hardest exactly then is what makes the two read as
+ * one movement rather than two unrelated effects.
+ */
+const SLAM_SHADOW_DIVE_ALPHA_BOOST = 0.25;
+
+/**
+ * The ground telegraph: a red ring at exactly the kill radius that fills in as
+ * the tentacle travels underground toward it.
+ *
+ * @param progress 0–1 through the telegraph window, 1 being the impact frame.
+ * @param diveProgress 0–1 through the tentacle's dive, 0 whenever it is not diving.
+ */
+export function drawSlamShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  tileSize: number,
+  progress: number,
+  diveProgress = 0,
+): void {
+  const radius = tileSize * SLAM_KILL_RADIUS_TILES;
+  const alpha =
+    SLAM_SHADOW_ALPHA_BASE +
+    progress * SLAM_SHADOW_ALPHA_GROWTH +
+    diveProgress * SLAM_SHADOW_DIVE_ALPHA_BOOST;
+  const pulseScale =
+    1 + Math.sin(progress * Math.PI * SLAM_SHADOW_PULSE_CYCLES) * SLAM_SHADOW_PULSE_AMPLITUDE;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  ctx.strokeStyle = SLAM_SHADOW_RING_COLOR;
+  ctx.lineWidth = SLAM_SHADOW_LINEWIDTH_BASE + progress * SLAM_SHADOW_LINEWIDTH_GROWTH;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * pulseScale, 0, TWO_PI);
+  ctx.stroke();
+
+  ctx.fillStyle = SLAM_SHADOW_INNER_COLOR;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * progress * SLAM_SHADOW_INNER_SCALE, 0, TWO_PI);
+  ctx.fill();
+
+  ctx.fillStyle = SLAM_SHADOW_RING_COLOR;
+  ctx.globalAlpha = alpha * SLAM_SHADOW_FILL_ALPHA_SCALE;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * pulseScale, 0, TWO_PI);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+const DUST_RING_ALPHA = 0.55;
+const DUST_RING_LINEWIDTH = 3;
+const DUST_RING_COLOR = 'rgba(196,174,158,1)';
+const DUST_PUFF_COUNT = 12;
+const DUST_PUFF_ALPHA = 0.35;
+const DUST_PUFF_COLOR = 'rgba(168,146,130,1)';
+/** Where the puffs sit at the moment of impact, as a fraction of the kill radius. */
+const DUST_PUFF_START_FRACTION = 0.72;
+/** How much further out they drift over the impact window, in kill radii. */
+const DUST_PUFF_DRIFT_FRACTION = 0.22;
+const DUST_PUFF_RADIUS_TILES = 0.1;
+const DUST_PUFF_SHRINK = 0.6;
+
+/**
+ * The impact decal: a low skirt of dust at the kill radius.
+ *
+ * The baked `smash` row carries the hit itself, so this deliberately does not
+ * try to be an explosion — it only draws the boundary the smash tentacle just
+ * landed inside, which is the part the art cannot promise to be accurate about.
+ *
+ * @param progress 0–1 through the impact window, 0 being the frame of the hit.
+ */
+export function drawSlamImpact(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  tileSize: number,
+  progress: number,
+): void {
+  const radius = tileSize * SLAM_KILL_RADIUS_TILES;
+  const fade = 1 - progress;
+
+  ctx.save();
+
+  ctx.globalAlpha = fade * DUST_RING_ALPHA;
+  ctx.strokeStyle = DUST_RING_COLOR;
+  ctx.lineWidth = DUST_RING_LINEWIDTH * fade;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, TWO_PI);
+  ctx.stroke();
+
+  ctx.globalAlpha = fade * DUST_PUFF_ALPHA;
+  ctx.fillStyle = DUST_PUFF_COLOR;
+  const puffDistance = radius * (DUST_PUFF_START_FRACTION + progress * DUST_PUFF_DRIFT_FRACTION);
+  const puffRadius = tileSize * DUST_PUFF_RADIUS_TILES * (1 - progress * DUST_PUFF_SHRINK);
+  for (let i = 0; i < DUST_PUFF_COUNT; i++) {
+    const angle = (i / DUST_PUFF_COUNT) * TWO_PI;
+    ctx.beginPath();
+    ctx.arc(
+      x + Math.cos(angle) * puffDistance,
+      y + Math.sin(angle) * puffDistance,
+      puffRadius,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+const SLAM_SHEET_KEY = 'krakaren_slam';
+
+type KrakarenSlamSheetState = SpriteStates['krakaren_slam'];
+
+/**
+ * The four beats of a ground slam, which are exactly the slam sheet's rows: the
+ * tentacle rises beside her, looms, dives back under, and smashes up through
+ * the marked ground.
+ */
+export type KrakarenSlamPhase = KrakarenSlamSheetState;
+
+function slamFrameCountOf(state: KrakarenSlamSheetState): number {
+  return getSpriteDefByKey(SLAM_SHEET_KEY)?.states.get(state)?.frameCount ?? 1;
+}
+
+/**
+ * How much of the impact window, at its tail end, is spent easing the
+ * tentacle's alpha down to 0 instead of leaving it visible.
+ *
+ * The kill is already decided by the shadow reticle before this row ever
+ * plays, so nothing about fairness depends on exactly when the model itself
+ * disappears — but a solid limb popping straight to nothing reads as a
+ * rendering glitch. Fading it out over the last stretch, the same way
+ * {@link drawSlamImpact}'s dust ring already tapers, gives the sink under the
+ * floor a visible end instead of a cut.
+ */
+const SLAM_TENTACLE_FADE_START_PROGRESS = 0.85;
+
+/**
+ * Which frame of `smash` is showing at a given point in the impact window.
+ *
+ * The row is played start to finish: the emergence and the downward strike
+ * are baked into its first frames (both complete by
+ * {@link SLAM_SMASH_IMPACT_PROGRESS} through the row's own timeline), and the
+ * rest of the row is the recoil and retract. Playing the whole thing is what
+ * makes the strike itself visible instead of only ever showing its aftermath.
+ */
+function smashFrameIndex(progress: number, frameCount: number): number {
+  return progressFrameIndex(progress, frameCount);
+}
+
+/** 1 through most of the window, easing to 0 over its tail. */
+function smashAlpha(progress: number): number {
+  if (progress <= SLAM_TENTACLE_FADE_START_PROGRESS) return 1;
+  const tail =
+    (progress - SLAM_TENTACLE_FADE_START_PROGRESS) / (1 - SLAM_TENTACLE_FADE_START_PROGRESS);
+  return Math.max(0, 1 - tail);
+}
+
+/** Everything the slam tentacle needs to pick a frame. */
+export interface KrakarenSlamSpriteState {
+  readonly phase: KrakarenSlamPhase;
+  /** 0–1 within the current phase. */
+  readonly progress: number;
+  /** The slam target is west of her, so the art leans toward it. */
+  readonly mirrored?: boolean;
+}
+
+/**
+ * Draw the big slam tentacle.
+ *
+ * No mob owns this sheet: the rise happens beside the boss and the smash lands
+ * wherever the telegraph is, up to the full aggro range away, so it is drawn
+ * from `KrakarenClone`'s marker by `BossRoomSystem` rather than out of any
+ * creature's own `drawSelf` and its cull margin.
+ *
+ * @param sx Screen x of the tile the tentacle stands on, top-left.
+ * @param sy Screen y of the tile the tentacle stands on, top-left.
+ */
+export function drawKrakarenSlamTentacle(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  tileSize: number,
+  state: KrakarenSlamSpriteState,
+): void {
+  const { phase, progress, mirrored = false } = state;
+  const frameCount = slamFrameCountOf(phase);
+  const frame =
+    phase === 'smash'
+      ? smashFrameIndex(progress, frameCount)
+      : progressFrameIndex(progress, frameCount);
+  const alpha = phase === 'smash' ? smashAlpha(progress) : 1;
+  drawSpriteKey(ctx, SLAM_SHEET_KEY, phase, frame, sx, sy, tileSize, { flipX: mirrored, alpha });
 }

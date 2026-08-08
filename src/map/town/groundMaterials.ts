@@ -149,8 +149,8 @@ const KERB_SOFT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>
  * any position whose floor is not an outdoor material: an indoor or dungeon
  * floor, or off-map — but an interior abutting outdoor ground would put grass
  * along that seam, and would want a material of its own rather than a better
- * stand-in. The restaurant is exactly that case: `GameMap.generateInterior`
- * floors it in `SAFE_ROOM_FLOOR`, which this palette does not know, so every
+ * stand-in. The Desperado Club is exactly that case: `GameMap.generateInterior`
+ * floors it in `CLUB_FLOOR`, which this palette does not know, so every
  * outdoor tile beside it falls back to grass here.
  */
 const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';

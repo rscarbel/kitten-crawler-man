@@ -16,6 +16,11 @@ import {
   PLAZA_STONE,
   FENCE,
   INTERIOR_BOARD_FLOOR,
+  INTERIOR_RUSH_FLOOR,
+  INTERIOR_EARTH_FLOOR,
+  INTERIOR_FLAG_FLOOR,
+  INTERIOR_INK_FLOOR,
+  DRILL_SAND_FLOOR,
   INTERIOR_COUNTER,
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
@@ -668,6 +673,16 @@ export class MiniMapSystem implements GameSystem {
         return '#6a4a30';
       case INTERIOR_STONE_FLOOR:
         return '#585860';
+      case INTERIOR_RUSH_FLOOR:
+        return '#7a5f3c';
+      case INTERIOR_EARTH_FLOOR:
+        return '#4a3e30';
+      case INTERIOR_FLAG_FLOOR:
+        return '#5e5850';
+      case INTERIOR_INK_FLOOR:
+        return '#6a5138';
+      case DRILL_SAND_FLOOR:
+        return '#8a7448';
       case INTERIOR_COUNTER:
         return '#4a3020';
       // The floor-3 wilderness. Every one of these needs an entry in this table,

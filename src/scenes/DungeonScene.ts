@@ -161,6 +161,7 @@ import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem'
 import {
   readMovement,
   applyMovement,
+  applyKnockbackMotion,
   isStandingInWater,
   type SouthCollisionAnchor,
   checkDeath,
@@ -2307,6 +2308,7 @@ export class DungeonScene extends GameplayScene {
       inactive.knockedOutFrames = 0;
       inactive.reviveProgress = 0;
       inactive.clearStatusEffects();
+      inactive.clearKnockback();
       this.audio?.play(inactive === this.human ? 'human_knocked_out' : 'cat_knocked_out');
     }
 
@@ -4727,6 +4729,10 @@ export class DungeonScene extends GameplayScene {
         this.levelDef.isOverworld === true ? 'waist' : 'sole';
       applyMovement(player, move, this.gameMap, southAnchor);
     }
+    // Both crawlers, not just the active one — a thrown dumbbell can knock back
+    // whichever player it hits, including the companion the input above never moved.
+    applyKnockbackMotion(this.human, this.gameMap);
+    applyKnockbackMotion(this.cat, this.gameMap);
 
     // Tutorial gate and ledge constraints — applied after movement
     this.tutorial?.applyGateConstraints(this.human, this.cat);
@@ -5260,12 +5266,23 @@ export class DungeonScene extends GameplayScene {
 
     const shakeOffset = this.spiderQuest.cameraOffset;
     const smushShake = this.combat.smushFx.cameraOffset;
+    const juicerShake = this.juicerRoom.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
     return {
-      x: clamp(camX, 0, mapPxW - viewportWidth()) + shakeOffset.x + sway.x + smushShake.x,
-      y: clamp(camY, 0, mapPxH - viewportHeight()) + shakeOffset.y + sway.y + smushShake.y,
+      x:
+        clamp(camX, 0, mapPxW - viewportWidth()) +
+        shakeOffset.x +
+        sway.x +
+        smushShake.x +
+        juicerShake.x,
+      y:
+        clamp(camY, 0, mapPxH - viewportHeight()) +
+        shakeOffset.y +
+        sway.y +
+        smushShake.y +
+        juicerShake.y,
     };
   }
 

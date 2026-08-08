@@ -1,5 +1,5 @@
 /**
- * Signet's Ink. The tattooist will put one living mark on a crawler — expensive,
+ * The Quiet Needle. The tattooist will put one living mark on a crawler — expensive,
  * permanent, and strictly one per character (`Player.tattooStat`), so the choice
  * of which stat it raises is the whole decision.
  *
@@ -78,9 +78,9 @@ function buildSkillTattooOption(player: Player): PricedOption {
 }
 
 const TATTOOIST_BARKS: ReadonlyArray<string> = [
-  'They move, mine. Tsarina Signet’s trick — hold still and you’ll feel it settle.',
-  'One per skin. Choose like you mean it, because I don’t do cover-ups.',
-  'Needle’s hot, ink’s awake. What are we putting on you?',
+  'Quiet shop, quiet needle. The screaming is the crawler’s part, not mine.',
+  'One mark per skin. Choose like you mean it — I don’t do cover-ups and the ink won’t sit twice.',
+  'Pigment’s ground, needle’s hot. What are we putting on you?',
 ];
 
 /** The tattooist's greeting, rotated by how many times the player has talked to them. */
@@ -105,7 +105,7 @@ export function buildTattooMenu(
 ): PricedMenu {
   const existing = player.tattooStat;
   return {
-    title: "Signet's Ink",
+    title: 'The Quiet Needle',
     bark: host?.line ?? tattooistBark(turn),
     byline: host?.name,
     options: TATTOO_DESIGNS.map((design) => {

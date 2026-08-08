@@ -18,6 +18,8 @@ import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
 import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
 import { TusklingPreviewScene } from '../scenes/TusklingPreviewScene';
+import { KrakarenPreviewScene } from '../scenes/KrakarenPreviewScene';
+import { JuicerPreviewScene } from '../scenes/JuicerPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -138,6 +140,16 @@ export function devBootScene(
 
   if (params.get('tuskling') !== null) {
     sceneManager.replace(new TusklingPreviewScene());
+    return true;
+  }
+
+  if (params.get('krakaren') !== null) {
+    sceneManager.replace(new KrakarenPreviewScene());
+    return true;
+  }
+
+  if (params.get('juicer') !== null) {
+    sceneManager.replace(new JuicerPreviewScene());
     return true;
   }
 

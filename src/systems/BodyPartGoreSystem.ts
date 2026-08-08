@@ -33,6 +33,12 @@ import {
 } from '../sprites/brindledVespaSprite';
 import { TROGLODYTE_BODY_PART_KEY, TROGLODYTE_GORE_PARTS } from '../sprites/troglodyteSprite';
 import { TUSKLING_BODY_PART_KEY, TUSKLING_GORE_PARTS } from '../sprites/tusklingSprite';
+import { JUICER_BODY_PART_KEY, JUICER_GORE_PARTS } from '../sprites/juicerSprite';
+import {
+  KRAKAREN_TENTACLE_BODY_PART_KEY,
+  KRAKAREN_TENTACLE_GORE_PARTS,
+} from '../sprites/krakarenTentacleSprite';
+import { KRAKAREN_BODY_PART_KEY, KRAKAREN_GORE_PARTS } from '../sprites/krakarenSprite';
 
 interface MobBodyPartConfig {
   readonly spriteKey: SpriteKey;
@@ -150,6 +156,31 @@ const TUSKLING_CONFIG: MobBodyPartConfig = {
   parts: TUSKLING_GORE_PARTS,
 };
 
+/**
+ * The Juicer's eight. The tail is what says a lizard came apart here, and the
+ * arm — an absurd bicep over a cut deltoid face — is what says it was him.
+ */
+const JUICER_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'juicer',
+  parts: JUICER_GORE_PARTS,
+};
+
+/**
+ * The guard tentacle's four. A killed one bursts rather than sliding back
+ * under — the burst is how the player learns that cutting it down is the thing
+ * that lifts the boss's guard.
+ */
+const KRAKAREN_TENTACLE_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'krakaren_tentacle',
+  parts: KRAKAREN_TENTACLE_GORE_PARTS,
+};
+
+/** The boss's own seven, on the last row of her own sheet. */
+const KRAKAREN_CONFIG: MobBodyPartConfig = {
+  spriteKey: 'krakaren',
+  parts: KRAKAREN_GORE_PARTS,
+};
+
 const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   ...ROCK_GOLEM_CONFIGS,
   ...GOBLIN_CONFIGS,
@@ -163,7 +194,10 @@ const BODY_PART_REGISTRY = new Map<string, MobBodyPartConfig>([
   [DARK_KNIGHT_BODY_PART_KEY, DARK_KNIGHT_CONFIG],
   [TROGLODYTE_BODY_PART_KEY, TROGLODYTE_CONFIG],
   [TUSKLING_BODY_PART_KEY, TUSKLING_CONFIG],
+  [JUICER_BODY_PART_KEY, JUICER_CONFIG],
   [BRINDLED_VESPA_BODY_PART_KEY, BRINDLED_VESPA_CONFIG],
+  [KRAKAREN_TENTACLE_BODY_PART_KEY, KRAKAREN_TENTACLE_CONFIG],
+  [KRAKAREN_BODY_PART_KEY, KRAKAREN_CONFIG],
   ...SKELETON_CONFIGS,
 ]);
 

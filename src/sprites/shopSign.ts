@@ -11,7 +11,7 @@
  * beside the opening, which is where an inn's sign goes and, more usefully, is
  * the one place a 15-building town has left for it: the row below a door is the
  * apron the player walks on, and the opening itself has to stay clear. Measured
- * at a 32 px tile over all fifteen emblems and a full sway cycle, the art
+ * at a 32 px tile over every emblem and a full sway cycle, the art
  * occupies y ∈ [−47, −10] px and x ∈ [−33, +16] px relative to the anchor's
  * top-left, so it is entirely above the anchor tile and mostly over the facade
  * tile west of it.
@@ -109,7 +109,7 @@ const BRACKET_IRON_LIGHT = '#585149';
 const BOARD_FACE = '#8d6a3f';
 const BOARD_SHADE = 'rgba(0,0,0,0.22)';
 
-/** Emblem colours, shared so fifteen small devices read as one signwriter's work. */
+/** Emblem colours, shared so sixteen small devices read as one signwriter's work. */
 const GOLD = '#d8b45a';
 const GOLD_DARK = '#a8842f';
 const IRON = '#8d949c';
@@ -119,11 +119,14 @@ const BLOOD = '#a83a3a';
 const LEAF = '#6f8f45';
 const SKY = '#7fb0d8';
 const EMBER = '#e08a3c';
+/** The Quiet Needle's shopfront violet, so the sign names the wall it hangs on. */
+const INK_VIOLET = '#a66cc2';
+const INK_VIOLET_LIGHT = '#cc98e0';
 
 /**
  * The box an emblem is drawn inside: the board's face, inset by its frame. Every
  * painter works in this box so a device can be retuned without touching the
- * board, and so all fifteen come out the same size.
+ * board, and so all sixteen come out the same size.
  */
 interface EmblemBox {
   readonly cx: number;
@@ -672,6 +675,133 @@ const drawSheaf: EmblemPainter = (ctx, box) => {
 };
 
 /**
+ * A tattooist's needle crossed by a ribbon of ink.
+ *
+ * The whole device is one silhouette read: a hairline of steel that comes to
+ * nothing at the point and swells into a flattened eye pad at the blunt end. A
+ * single wedge from head to point — which is what this was — has a wedge's
+ * proportions and reads as a chisel, so the shaft holds one fine width along
+ * most of its run and only tapers over the last stretch before the point.
+ *
+ * It is filled as a polygon rather than stroked because a stroke's join rounds
+ * the point off: at 26 px the rounded vertex is the entire tip, and a needle
+ * without a point is a nail. The dark edge is a second, fatter fill underneath
+ * for the same reason — steel against a brown board is barely a shape without
+ * an edge on it, and an outline stroke would round the point straight back.
+ *
+ * The ribbon crosses the shaft up near the eye rather than over the middle: a
+ * ribbon across the centre reads as a brim and the whole device turns into a
+ * hat, and crossing at the point's own taper covers the one cue that says
+ * needle. It is the shopfront's own violet, so the board names the wall it
+ * hangs on.
+ */
+const NEEDLE_TIP_X = -0.62;
+const NEEDLE_TIP_Y = 0.96;
+const NEEDLE_HEAD_X = 0.62;
+const NEEDLE_HEAD_Y = -0.96;
+/** The shaft's half-width along the run it holds — about a twelfth of its length. */
+const NEEDLE_SHAFT_HALF_WIDTH_PX = 1;
+/** Radius of the round head at the blunt end, which the eye is punched through. */
+const NEEDLE_HEAD_RADIUS_PX = 2.4;
+/** How much of the shaft, from the point back, is taper rather than full width. */
+const NEEDLE_POINT_FRACTION = 0.38;
+/** How much of the shaft, from the blunt end forward, swells into the head. */
+const NEEDLE_HEAD_SWELL_FRACTION = 0.24;
+/** Extra half-width of the dark fill under the steel, in px. */
+const NEEDLE_RIM_PX = 0.75;
+/**
+ * The eye is a hole rather than a dark mark: a dark dot on steel this narrow is
+ * a smudge, while a hole punched back to the board reads at a glance. It is only
+ * honest because the head sits in the board's upper two thirds, above the wash.
+ */
+const NEEDLE_EYE_RADIUS_PX = 1.1;
+const RIBBON_END_X = 0.96;
+const RIBBON_END_Y = 0.04;
+const RIBBON_BOW_Y = -0.54;
+const RIBBON_WIDTH_PX = 2.6;
+const RIBBON_HIGHLIGHT_WIDTH_PX = 1;
+/** How far above the ribbon's own line its highlight rides, as a fraction of the box. */
+const RIBBON_HIGHLIGHT_LIFT = 0.09;
+
+const drawNeedle: EmblemPainter = (ctx, box) => {
+  const tipX = box.cx + box.rx * NEEDLE_TIP_X;
+  const tipY = box.cy + box.ry * NEEDLE_TIP_Y;
+  const headX = box.cx + box.rx * NEEDLE_HEAD_X;
+  const headY = box.cy + box.ry * NEEDLE_HEAD_Y;
+
+  // The needle's own frame: one axis down the shaft from the point, one across
+  // it, so every width below is a width of the needle rather than of the board.
+  const shaftRunX = headX - tipX;
+  const shaftRunY = headY - tipY;
+  const shaftLength = Math.hypot(shaftRunX, shaftRunY);
+  const alongX = shaftRunX / shaftLength;
+  const alongY = shaftRunY / shaftLength;
+  const acrossX = -alongY;
+  const acrossY = alongX;
+
+  const shaftPointX = (along: number, across: number): number =>
+    tipX + alongX * along + acrossX * across;
+  const shaftPointY = (along: number, across: number): number =>
+    tipY + alongY * along + acrossY * across;
+
+  const taperEnd = shaftLength * NEEDLE_POINT_FRACTION;
+  const swellStart = shaftLength * (1 - NEEDLE_HEAD_SWELL_FRACTION);
+  const headAlong = shaftLength - NEEDLE_HEAD_RADIUS_PX;
+
+  const traceNeedle = (swell: number): void => {
+    const shaftHalf = NEEDLE_SHAFT_HALF_WIDTH_PX + swell;
+    const headRadius = NEEDLE_HEAD_RADIUS_PX + swell;
+    // The point moves forward by the swell as well as outward, or the dark fill
+    // stops short of the steel's own point and the tip loses its edge.
+    const pointAlong = -swell;
+    ctx.beginPath();
+    ctx.moveTo(shaftPointX(pointAlong, 0), shaftPointY(pointAlong, 0));
+    ctx.lineTo(shaftPointX(taperEnd, shaftHalf), shaftPointY(taperEnd, shaftHalf));
+    ctx.lineTo(shaftPointX(swellStart, shaftHalf), shaftPointY(swellStart, shaftHalf));
+    ctx.lineTo(shaftPointX(headAlong, headRadius), shaftPointY(headAlong, headRadius));
+    ctx.lineTo(shaftPointX(headAlong, -headRadius), shaftPointY(headAlong, -headRadius));
+    ctx.lineTo(shaftPointX(swellStart, -shaftHalf), shaftPointY(swellStart, -shaftHalf));
+    ctx.lineTo(shaftPointX(taperEnd, -shaftHalf), shaftPointY(taperEnd, -shaftHalf));
+    ctx.closePath();
+    ctx.fill();
+    fillCircle(ctx, shaftPointX(headAlong, 0), shaftPointY(headAlong, 0), headRadius);
+  };
+
+  ctx.fillStyle = IRON_DARK;
+  traceNeedle(NEEDLE_RIM_PX);
+  ctx.fillStyle = IRON;
+  traceNeedle(0);
+
+  ctx.fillStyle = BOARD_FACE;
+  fillCircle(ctx, shaftPointX(headAlong, 0), shaftPointY(headAlong, 0), NEEDLE_EYE_RADIUS_PX);
+
+  strokeRound(ctx, RIBBON_WIDTH_PX, INK_VIOLET);
+  ctx.beginPath();
+  ctx.moveTo(box.cx - box.rx * RIBBON_END_X, box.cy + box.ry * RIBBON_END_Y);
+  ctx.quadraticCurveTo(
+    box.cx,
+    box.cy + box.ry * RIBBON_BOW_Y,
+    box.cx + box.rx * RIBBON_END_X,
+    box.cy + box.ry * RIBBON_END_Y,
+  );
+  ctx.stroke();
+
+  strokeRound(ctx, RIBBON_HIGHLIGHT_WIDTH_PX, INK_VIOLET_LIGHT);
+  ctx.beginPath();
+  ctx.moveTo(
+    box.cx - box.rx * RIBBON_END_X,
+    box.cy + box.ry * (RIBBON_END_Y - RIBBON_HIGHLIGHT_LIFT),
+  );
+  ctx.quadraticCurveTo(
+    box.cx,
+    box.cy + box.ry * (RIBBON_BOW_Y - RIBBON_HIGHLIGHT_LIFT),
+    box.cx + box.rx * RIBBON_END_X,
+    box.cy + box.ry * (RIBBON_END_Y - RIBBON_HIGHLIGHT_LIFT),
+  );
+  ctx.stroke();
+};
+
+/**
  * Every device, keyed by the `ShopSignEmblem` union the `TownPlan` states. A
  * `Record` rather than a switch
  * so adding an emblem to `ShopSignEmblem` without drawing it fails to compile.
@@ -692,6 +822,7 @@ const EMBLEM_PAINTERS: Record<ShopSignEmblem, EmblemPainter> = {
   quill: drawQuill,
   cards: drawCards,
   sheaf: drawSheaf,
+  needle: drawNeedle,
 };
 
 /**

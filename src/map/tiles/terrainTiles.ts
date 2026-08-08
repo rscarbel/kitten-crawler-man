@@ -14,6 +14,10 @@ import {
   INTERIOR_BOARD_FLOOR,
   INTERIOR_COUNTER,
   INTERIOR_STONE_FLOOR,
+  INTERIOR_RUSH_FLOOR,
+  INTERIOR_EARTH_FLOOR,
+  INTERIOR_FLAG_FLOOR,
+  INTERIOR_INK_FLOOR,
   INTERIOR_WALL,
   LANE_STREET,
   PLAZA_STONE,
@@ -312,7 +316,11 @@ export function drawTerrainTile(
       break;
     }
     case INTERIOR_BOARD_FLOOR:
-    case INTERIOR_STONE_FLOOR: {
+    case INTERIOR_STONE_FLOOR:
+    case INTERIOR_RUSH_FLOOR:
+    case INTERIOR_EARTH_FLOOR:
+    case INTERIOR_FLAG_FLOOR:
+    case INTERIOR_INK_FLOOR: {
       drawGroundTile(ctx, TOWN_INTERIOR_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }

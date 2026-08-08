@@ -6,6 +6,7 @@ import { normalize, clamp } from '../utils';
 import { type GameMap } from '../map/GameMap';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
 import { type Player } from '../Player';
+import { pushPlayerWithCollision } from './playerDisplacement';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
@@ -15,10 +16,13 @@ import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { DarkKnight } from '../creatures/DarkKnight';
+import { Juicer } from '../creatures/Juicer';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Mongo } from '../creatures/Mongo';
+import { KrakarenClone } from '../creatures/KrakarenClone';
+import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -28,16 +32,28 @@ import { Mongo } from '../creatures/Mongo';
  * each phase independently understandable.
  *
  * Phase ordering:
- *   1. readMovement     — keyboard + mobile touch → dx/dy
- *   2. applyMovement    — dx/dy + collision → new player position
- *   3. updateSafeRoom   — protection flags, safe room entry achievements
- *   4. updateSystems    — barriers, juicer room, companion, spells, etc.
- *   5. updateMobAI      — activate nearby mobs, run AI, clamp bosses
- *   6. resolveCombat    — attack hits, kills, XP split, loot drops
- *   7. postCombat       — gore, grub spawns, arena phases, Mongo
- *   8. tickTimers       — player timers, loot TTL, dynamite, smush blasts, level timer
- *   9. checkDeath       — game over conditions
+ *   1. readMovement          — keyboard + mobile touch → dx/dy
+ *   2. applyMovement         — dx/dy + collision → new player position
+ *   3. applyKnockbackMotion  — hit-driven displacement, on top of applyMovement's result
+ *   4. updateSafeRoom        — protection flags, safe room entry achievements
+ *   5. updateSystems         — barriers, juicer room, companion, spells, etc.
+ *   6. updateMobAI           — activate nearby mobs, run AI, clamp bosses
+ *   7. resolveCombat         — attack hits, kills, XP split, loot drops
+ *   8. postCombat            — gore, grub spawns, arena phases, Mongo
+ *   9. tickTimers            — player timers, loot TTL, dynamite, smush blasts, level timer
+ *   10. checkDeath           — game over conditions
  */
+
+/** Fraction of a tile a single knockback frame may cover. See {@link KNOCKBACK_MAX_STEP_PX}. */
+const KNOCKBACK_MAX_STEP_TILE_FRACTION = 0.4;
+/**
+ * Largest distance knockback may move a player in a single frame.
+ *
+ * Kept below one tile so the per-axis wall check in `pushPlayerWithCollision`
+ * — which only tests the tile the player is about to land in, not anything
+ * between — can never be skipped over by a single oversized step.
+ */
+export const KNOCKBACK_MAX_STEP_PX = TILE_SIZE * KNOCKBACK_MAX_STEP_TILE_FRACTION;
 
 /** 90 seconds at 60 fps — the revival window before the run ends. */
 export const KNOCKOUT_TIMEOUT_FRAMES = 5400;
@@ -194,6 +210,35 @@ export function applyMovement(
     southAnchor === 'sole' && dy > 0 ? SOLE_COLLISION_OFFSET : CENTER_COLLISION_OFFSET;
   const tileYnext = Math.floor((nextY + TILE_SIZE * yAnchor) / TILE_SIZE);
   if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
+}
+
+/**
+ * Phase 3: Advance an in-progress knockback by one frame, on top of whatever
+ * `applyMovement` already did this frame.
+ *
+ * The per-frame share is weighted by frames remaining out of a triangular
+ * total (1 + 2 + ... + knockbackTotalFrames), so the first frame — the one
+ * with the most frames still remaining — carries the largest share and each
+ * later frame carries less: an ease-out stagger, not a linear glide. Distinct
+ * from `applyMovement`'s walk input, this is physical displacement and runs
+ * even while the player `hasStatus('stuck')`.
+ */
+export function applyKnockbackMotion(player: Player, gameMap: GameMap): void {
+  if (player.knockbackFramesRemaining <= 0) return;
+
+  const triangularTotal = (player.knockbackTotalFrames * (player.knockbackTotalFrames + 1)) / 2;
+  const easeShare = triangularTotal > 0 ? player.knockbackFramesRemaining / triangularTotal : 0;
+  const stepDistance = Math.min(player.knockbackDistancePx * easeShare, KNOCKBACK_MAX_STEP_PX);
+
+  pushPlayerWithCollision(
+    player,
+    player.knockbackDirX * stepDistance,
+    player.knockbackDirY * stepDistance,
+    gameMap,
+  );
+
+  player.knockbackFramesRemaining--;
+  if (player.knockbackFramesRemaining <= 0) player.clearKnockback();
 }
 
 /**
@@ -482,6 +527,61 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
     playSwineSpinup(mob, audio);
     playLordCastWindup(mob, audio);
     playDarkKnightCues(mob, audio);
+    playJuicerCues(mob, audio);
+    playKrakarenCloneCues(mob, audio);
+    playKrakarenTentacleCues(mob, audio);
+  }
+}
+
+/**
+ * The Krakaren Clone's slam telegraph rise — the "look at the boss" cue at the
+ * start of the 90-frame warning, ahead of the impact `krakaren_ground_slam`
+ * already covers.
+ */
+function playKrakarenCloneCues(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof KrakarenClone) || !mob.slamRiseSoundPending) return;
+  mob.slamRiseSoundPending = false;
+  audio?.play('krakaren_slam_rise');
+}
+
+/**
+ * The guard tentacle's own two cues — its death squelch is not among them: it
+ * dies through `resolveKills`' `mobKilled` event (see `AudioManager.wireEvents`)
+ * rather than a drained flag here, because by the time this function would see
+ * one on a later frame `BossRoomSystem`'s summon-cleanup pass has already
+ * compacted the spent tentacle out of the mob array `justDied` no longer
+ * protects.
+ */
+function playKrakarenTentacleCues(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof KrakarenTentacle)) return;
+  if (mob.emergeSoundPending) {
+    mob.emergeSoundPending = false;
+    audio?.play('krakaren_tentacle_emerge');
+  }
+  if (mob.strikeSoundPending) {
+    mob.strikeSoundPending = false;
+    audio?.play('krakaren_tentacle_strike');
+  }
+}
+
+/**
+ * The Juicer's ground punch, which `specialSoundPending` cannot carry: that one
+ * boolean is already the dumbbell throw, and a punch landing on the frame he
+ * winds up a throw would drop whichever cue came second.
+ */
+function playJuicerCues(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof Juicer)) return;
+  if (mob.punchWindupSoundPending) {
+    mob.punchWindupSoundPending = false;
+    // [STAND-IN] borrowed from the Dark Knight's mace whirl until something
+    // closer to a lizard hauling himself upright is sourced.
+    audio?.play('metal_winding_up');
+  }
+  if (mob.punchImpactSoundPending) {
+    mob.punchImpactSoundPending = false;
+    // [STAND-IN] the Rock Golem's slam, which is the library's only fist-sized
+    // impact into earth.
+    audio?.play('massive_strike_with_dirt_impact');
   }
 }
 

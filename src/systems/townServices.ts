@@ -28,19 +28,38 @@ export interface InteriorService {
   readonly verb: string;
 }
 
-const INTERIOR_SERVICES: ReadonlyMap<string, InteriorService> = new Map([
-  ['The Sunken Stump Pub', { role: 'innkeeper', surface: 'menu', verb: 'Order' }],
-  ['The Horned Flagon', { role: 'innkeeper', surface: 'menu', verb: 'Order' }],
-  ['The Sleeping Cat Inn', { role: 'innkeeper', surface: 'menu', verb: 'Order' }],
-  ['Temple of the Sky', { role: 'priest', surface: 'menu', verb: 'Pray' }],
-  ["Signet's Ink", { role: 'merchant', surface: 'menu', verb: 'Get inked' }],
-  ['Herb & Remedy', { role: 'merchant', surface: 'menu', verb: 'Buy' }],
-  ['The Rusty Anvil', { role: 'smith', surface: 'menu', verb: 'Sharpen' }],
-  ["Cartwright's Workshop", { role: 'laborer', surface: 'menu', verb: 'Buy' }],
-  ["Miller's Farm", { role: 'farmer', surface: 'menu', verb: 'Eat' }],
-  ["Shepherd's Cabin", { role: 'farmer', surface: 'menu', verb: 'Rest' }],
-  ["Old Hilda's Cottage", { role: 'priest', surface: 'reading', verb: 'Reading' }],
-] satisfies ReadonlyArray<[string, InteriorService]>);
+/**
+ * A building's services in roster order — a list rather than a single entry,
+ * because a garrison has both a quartermaster's counter and a drill yard and
+ * neither is a special case of the other.
+ *
+ * Two services in one building must never name the same role: the talk router
+ * matches the NPC the player walked up to by role, so a duplicate would leave
+ * one of the two counters silently unreachable. `verify:interiors` guards it.
+ */
+const INTERIOR_SERVICES: ReadonlyMap<string, ReadonlyArray<InteriorService>> = new Map([
+  ['The Sunken Stump Pub', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
+  ['The Horned Flagon', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
+  ['The Sleeping Cat Inn', [{ role: 'innkeeper', surface: 'menu', verb: 'Order' }]],
+  ['Temple of the Sky', [{ role: 'priest', surface: 'menu', verb: 'Pray' }]],
+  ['The Quiet Needle', [{ role: 'merchant', surface: 'menu', verb: 'Get inked' }]],
+  // Two counters, and the only building that runs more than one: the
+  // quartermaster issues armour, the drill sergeant sells the training that goes
+  // with it.
+  [
+    'The Barracks',
+    [
+      { role: 'merchant', surface: 'menu', verb: 'Requisition' },
+      { role: 'guard', surface: 'menu', verb: 'Train' },
+    ],
+  ],
+  ['Herb & Remedy', [{ role: 'merchant', surface: 'menu', verb: 'Buy' }]],
+  ['The Rusty Anvil', [{ role: 'smith', surface: 'menu', verb: 'Sharpen' }]],
+  ["Cartwright's Workshop", [{ role: 'laborer', surface: 'menu', verb: 'Buy' }]],
+  ["Miller's Farm", [{ role: 'farmer', surface: 'menu', verb: 'Eat' }]],
+  ["Shepherd's Cabin", [{ role: 'farmer', surface: 'menu', verb: 'Rest' }]],
+  ["Old Hilda's Cottage", [{ role: 'priest', surface: 'reading', verb: 'Reading' }]],
+] satisfies ReadonlyArray<[string, ReadonlyArray<InteriorService>]>);
 
 /**
  * Every building this registry names, so a headless check can walk the registry
@@ -52,12 +71,20 @@ export function interiorServiceBuildings(): ReadonlyArray<string> {
   return [...INTERIOR_SERVICES.keys()];
 }
 
-/** The service this building offers, or `undefined` when it offers none. */
-export function interiorServiceFor(building: string): InteriorService | undefined {
-  return INTERIOR_SERVICES.get(building);
+/** Every service this building offers, in roster order. Empty when it offers none. */
+export function interiorServicesFor(building: string): ReadonlyArray<InteriorService> {
+  return INTERIOR_SERVICES.get(building) ?? [];
 }
 
-/** Whether this building takes coin over a counter, and so needs the purchase cue. */
+/** The service the NPC in `role` provides here, or `undefined`. */
+export function interiorServiceForRole(
+  building: string,
+  role: TownRole,
+): InteriorService | undefined {
+  return interiorServicesFor(building).find((service) => service.role === role);
+}
+
+/** Whether this building takes coin over any counter, and so needs the purchase cue. */
 export function interiorSellsSomething(building: string): boolean {
-  return INTERIOR_SERVICES.get(building)?.surface === 'menu';
+  return interiorServicesFor(building).some((service) => service.surface === 'menu');
 }

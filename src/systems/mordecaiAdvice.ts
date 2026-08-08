@@ -53,9 +53,9 @@ export interface AdviceSnapshot {
    *
    * The safe room's own centre in the dungeon, so a floor's two safe rooms point
    * in genuinely different directions at the same boss. On floor 3 Mordecai
-   * stands inside the restaurant, whose interior grid has its own origin — so it
-   * is the restaurant's door tile there, the one position that exists in both
-   * that scene and overworld space.
+   * stands inside the town's safe-room building, whose interior grid has its
+   * own origin — so it is that building's door tile there, the one position
+   * that exists in both that scene and overworld space.
    */
   readonly bearingOrigin: { x: number; y: number };
   readonly objectives: ReadonlyArray<AdviceSlot>;
@@ -174,7 +174,8 @@ const ADVICE_TEXT = {
   krakaren_clone: {
     pages: [
       "I see a Krakaren Clone just {direction} of here. It is just a copy of the Krakaren boss, which really existed in this dungeon, but don't underestimate it nonetheless.",
-      "Krakaren may be noisy and obviously visible, but she has very powerful attacks. If you see the ground turn red below you, that is a signal that you may want to move or you'll die.",
+      "Krakaren may be noisy and obviously visible, but she has very powerful attacks. Watch for a tentacle rising out of the floor before she slams it down — if the ground below you turns red too, that is a signal that you may want to move or you'll die.",
+      "She'll also drag up smaller tentacles to guard herself while you fight — you'll see the floor crack open first. While one of those things is still alive your blows barely scratch her, so cut it down before you go back to hitting the big one.",
       "Krakaren is a very politicized figure here, but there's not really time to get into all that for now.",
     ],
   },

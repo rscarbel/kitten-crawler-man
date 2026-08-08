@@ -25,6 +25,12 @@ import {
   CAMPFIRE,
   GOBLIN_TENT,
   CLIFF,
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  GRINDING_SLAB,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
@@ -108,6 +114,16 @@ const DECORATION_TYPES = new Set([
   CAMPFIRE,
   GOBLIN_TENT,
   CLIFF,
+  // The garrison's and the inking shop's tall props. Y-sorted so a player
+  // standing north of a training dummy is drawn behind it. `MAP_TABLE` and
+  // `INK_BENCH` are absent for the same reason `TABLE` and `BED` are: both are
+  // waist height, drawn flat in the base pass, and nothing walks behind them.
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  GRINDING_SLAB,
 ]);
 
 /**

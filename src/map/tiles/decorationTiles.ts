@@ -37,6 +37,12 @@ import {
   propSpriteState,
   treeSpriteKey,
   treeSpriteState,
+  TRAINING_DUMMY,
+  WEAPON_RACK,
+  MUSTER_BOARD,
+  FLASH_WALL,
+  PIGMENT_SHELF,
+  GRINDING_SLAB,
 } from '../tileTypes';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
@@ -1068,6 +1074,15 @@ export function drawDecorationTile(
       case BARREL_SIDE:
       case CRATE:
       case BOOKSHELF:
+      // The garrison's and the inking shop's props. Without a case here the
+      // chunk bake draws nothing under them and every one sits in a solid black
+      // square — which is exactly what shipped for the boulders once already.
+      case TRAINING_DUMMY:
+      case WEAPON_RACK:
+      case MUSTER_BOARD:
+      case FLASH_WALL:
+      case PIGMENT_SHELF:
+      case GRINDING_SLAB:
       case MODERN_DECORATION: {
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {

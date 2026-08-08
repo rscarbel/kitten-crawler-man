@@ -147,7 +147,7 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
     case 'remove_status': {
       const player = resolvePlayer(ctx, action.target_player);
       const status = String(action.status);
-      player.statusEffects = player.statusEffects.filter((e) => e.type !== status);
+      player.cureStatuses([status]);
       break;
     }
 

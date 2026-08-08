@@ -4,6 +4,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import { Juicer } from '../creatures/Juicer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
+import { drawJuicerShockwave } from '../sprites/juicerShockwave';
 import {
   drawDumbbellFloor,
   drawBenchPressFloor,
@@ -58,6 +59,13 @@ const TREADMILL_POSITIONS = [
 // Room positioning
 const ROOM_NOT_FOUND_POS = -9999;
 
+/** Peak camera shake in px, on the frame his fists land. */
+const SHAKE_PEAK_PX = 6;
+/** Frames the shake takes to die away. */
+const SHAKE_FRAMES = 16;
+/** Centres `Math.random()` on zero so the shake swings both ways. */
+const RANDOM_MIDPOINT = 0.5;
+
 /**
  * The mutable half of a `GymPickup`. Item id and position are fixed at
  * construction from the boss room's bounds, so a checkpoint ignores them.
@@ -76,6 +84,16 @@ export class JuicerRoomSystem implements GameSystem {
   private pickups: GymPickup[] = [];
   private readonly roomOriginX: number; // tile coords
   private readonly roomOriginY: number;
+  /**
+   * The live boss, cached each update. `render` is handed a camera and nothing
+   * else, and his shockwave is floor paint that belongs in the ground pass.
+   */
+  private juicer: Juicer | null = null;
+  /** True while a wave is running, so the shake is armed once and not per frame. */
+  private shockwaveRunning = false;
+  private shakeFrames = 0;
+  private shakeX = 0;
+  private shakeY = 0;
 
   constructor(bossRoomBounds: { x: number; y: number; w: number; h: number } | undefined) {
     // If no second boss room was generated, system is a no-op
@@ -138,6 +156,17 @@ export class JuicerRoomSystem implements GameSystem {
       pickup.active = saved.active;
       pickup.respawnTimer = saved.respawnTimer;
     }
+    // A punch from the run that died must not go on shaking the camera of the
+    // one that replaces it.
+    this.shockwaveRunning = false;
+    this.shakeFrames = 0;
+    this.shakeX = 0;
+    this.shakeY = 0;
+  }
+
+  /** Camera displacement for this frame; the scene adds it after clamping. */
+  get cameraOffset(): { x: number; y: number } {
+    return { x: this.shakeX, y: this.shakeY };
   }
 
   /**
@@ -181,6 +210,8 @@ export class JuicerRoomSystem implements GameSystem {
     if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
     const { mobs } = ctx.roster;
     const juicer = mobs.find((m) => m instanceof Juicer) ?? null;
+    this.juicer = juicer;
+    this.updateShake(juicer);
 
     const ts = TILE_SIZE;
 
@@ -229,6 +260,29 @@ export class JuicerRoomSystem implements GameSystem {
     }
   }
 
+  /**
+   * Kicks the camera on the frame a wave appears and lets it fall away after.
+   *
+   * Armed off the marker becoming live rather than off a flag the boss sets,
+   * so the shake cannot be re-armed every frame of the wave it belongs to.
+   */
+  private updateShake(juicer: Juicer | null): void {
+    const wave = juicer?.punchShockwave ?? null;
+    if (wave !== null && !this.shockwaveRunning) this.shakeFrames = SHAKE_FRAMES;
+    this.shockwaveRunning = wave !== null;
+
+    if (this.shakeFrames > 0) {
+      this.shakeFrames--;
+      const falloff = this.shakeFrames / SHAKE_FRAMES;
+      const amplitude = SHAKE_PEAK_PX * falloff * falloff;
+      this.shakeX = (Math.random() - RANDOM_MIDPOINT) * 2 * amplitude;
+      this.shakeY = (Math.random() - RANDOM_MIDPOINT) * 2 * amplitude;
+    } else {
+      this.shakeX = 0;
+      this.shakeY = 0;
+    }
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -236,6 +290,17 @@ export class JuicerRoomSystem implements GameSystem {
     activePlayer?: HumanPlayer | CatPlayer,
   ): void {
     if (this.roomOriginX === ROOM_NOT_FOUND_POS) return;
+
+    const wave = this.juicer?.punchShockwave ?? null;
+    if (wave !== null) {
+      drawJuicerShockwave(ctx, {
+        cx: wave.x - camX,
+        cy: wave.y - camY,
+        radius: wave.radiusPx,
+        progress: wave.progress,
+        seed: wave.seed,
+      });
+    }
 
     const ts = TILE_SIZE;
     const collectRadius = ts * PICKUP_COLLECT_RADIUS_RATIO;

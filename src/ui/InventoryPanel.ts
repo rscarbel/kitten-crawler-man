@@ -1,5 +1,6 @@
 import type { Inventory } from '../core/Inventory';
 import { drawSkillBookIcon } from './icons/skillBookIcon';
+import { drawIssueKitIcon, isIssueKitItem } from './icons/issueKitIcon';
 import { HOTBAR_COUNT, SLOTS_PER_PAGE, QUEST_SLOT_IDX } from '../core/ItemDefs';
 import type { InventoryItem } from '../core/ItemDefs';
 import { drawSpriteKey } from '../core/SpriteRenderer';
@@ -1185,6 +1186,12 @@ export class InventoryPanel {
 
     if (item.skillId !== undefined) {
       drawSkillBookIcon(ctx, x, y, size, item.skillId);
+      ctx.restore();
+      return;
+    }
+
+    if (isIssueKitItem(item.id)) {
+      drawIssueKitIcon(ctx, x, y, size, item.id);
       ctx.restore();
       return;
     }

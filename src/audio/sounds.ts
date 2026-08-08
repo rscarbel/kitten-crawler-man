@@ -116,6 +116,10 @@ const SOUND_IDS_TUPLE = [
   'juicer_throw',
   'keyboard_hero_music_track_1',
   'krakaren_ground_slam',
+  'krakaren_slam_rise',
+  'krakaren_tentacle_death',
+  'krakaren_tentacle_emerge',
+  'krakaren_tentacle_strike',
   'krakaren_yell',
   'knight_magic_windup',
   'krasue_attack',
@@ -344,6 +348,16 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   keyboard_hero_music_track_1:
     './src/audio/bosses/grotesque_spider/keyboard_hero_music_track_1.mp3',
   krakaren_ground_slam: './src/audio/bosses/krakaren/krakaren_ground_slam.mp3',
+  // [STAND-IN] The Ball of Swine's charge rumble — the library's closest "look
+  // at the boss, something is coming" cue — until a rising-water dread sound is sourced.
+  krakaren_slam_rise: './src/audio/effects/deep_rumbling.mp3',
+  // [STAND-IN] A generic wet death splat, reused until the tentacle has its own.
+  krakaren_tentacle_death: './src/audio/enemies/splat_2.mp3',
+  // [STAND-IN] The Rock Golem's fist-into-dirt impact, the closest thing in the
+  // library to something bursting up out of the floor.
+  krakaren_tentacle_emerge: './src/audio/effects/massive_strike_with_dirt_impact.mp3',
+  // [STAND-IN] A whip-crack slash cue, reused until the tentacle has its own.
+  krakaren_tentacle_strike: './src/audio/effects/slash_strike_1.mp3',
   krakaren_yell: './src/audio/bosses/krakaren/krakaren_yell.mp3',
   knight_magic_windup: './src/audio/bosses/dark_knight/knight_magic_windup.mp3',
   krasue_attack: './src/audio/enemies/krasue/krasue_attack.mp3',

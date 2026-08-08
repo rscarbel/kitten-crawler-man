@@ -81,6 +81,14 @@ export interface BuildingEntry {
   name: string;
   type: BuildingKind;
   /**
+   * Whether this building's interior hosts the town's safe room.
+   *
+   * Carried on the entry rather than derived from `type`, because a safe room is
+   * a property of one specific building and not of a category — keying it to a
+   * kind is what forced The Barracks to be registered as a restaurant.
+   */
+  hasSafeRoom?: boolean;
+  /**
    * Device on the shop sign hanging over this door, when the building has one.
    *
    * Optional because two entries are not shop fronts: the main tower, and the
@@ -240,6 +248,17 @@ const FOREST_EDGE_NOISE_RADIUS = 0.7;
 const FOREST_EDGE_SKIP_CHANCE = 0.45;
 
 /**
+ * The Big Top's building-entry identity, exported so anything that needs to
+ * recognise its entry (e.g. `scripts/verify-interiors.ts`, which walks it as
+ * an enterable interior the town plan does not list) reads it from here
+ * rather than restating the literal — a rename or re-kind then propagates to
+ * every reader automatically instead of leaving a stale duplicate literal
+ * behind.
+ */
+export const BIG_TOP_ENTRY_NAME = 'Big Top';
+export const BIG_TOP_ENTRY_KIND: BuildingKind = 'house';
+
+/**
  * Generates the third-floor overworld: a town laid out from a declarative
  * `TownPlan` (see `src/map/town/`), ringed by ruins, forests and the circus.
  *
@@ -339,6 +358,7 @@ export function generateOverworld(size: number): OverworldData {
       doorTile: placement.doorTile,
       name: planned.name,
       type: planned.kind,
+      hasSafeRoom: planned.hasSafeRoom,
       sign: planned.sign,
       doorwayWidth: placement.doorwayWidth,
       doorwayX0: placement.doorwayX,
@@ -444,7 +464,8 @@ export function generateOverworld(size: number): OverworldData {
     // The player arrives in the middle of the plaza, looking down King's Road at
     // the south gate with the tower behind them.
     startTile: townSquareCentre,
-    // The overworld's safe room is inside the barracks, handled by BuildingInteriorScene.
+    // The overworld's safe room lives inside whichever building entry has
+    // `hasSafeRoom: true`, handled by BuildingInteriorScene.
     safeRooms: [],
     buildingEntries,
     bossRooms: [],
@@ -1191,8 +1212,8 @@ function paintCircus(
   circusStructures.push(bigTop);
   buildingEntries.push({
     doorTile: bigTopPlacement.doorTile,
-    name: 'Big Top',
-    type: 'house',
+    name: BIG_TOP_ENTRY_NAME,
+    type: BIG_TOP_ENTRY_KIND,
     doorwayX0: bigTopPlacement.doorTile.x,
     doorwayWidth: bigTopPlacement.doorwayWidth,
   });

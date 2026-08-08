@@ -31,16 +31,16 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 
 ### Districts
 
-| District          | Where          | Buildings                                                                                                  |
-| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                             |
-| **Garrison Row**  | north band     | The Barracks, Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge (dead-end alley — the cult hideout) |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                            |
-| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, Sleeping Cat Inn                                          |
-| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                    |
-| **Low Quarter**   | south band     | The Desperado Club, Signet's Ink, The Sunken Stump Pub — plus the service alley the murder mystery needs   |
-| **South Green**   | inside SE wall | Miller's Farm                                                                                              |
-| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                    |
+| District          | Where          | Buildings                                                                                                                 |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                            |
+| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Shepherd's Cabin, Blackwood Lodge (dead-end alley — the cult hideout) |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                           |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                              |
+| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                   |
+| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle, The Sunken Stump Pub — plus the service alley the murder mystery needs              |
+| **South Green**   | inside SE wall | Miller's Farm                                                                                                             |
+| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                   |
 
 ---
 
@@ -198,6 +198,51 @@ that, and each answers a different half of "I don't know what to do":
 
 ---
 
+## Interiors
+
+A door on the street opens a `BuildingInteriorScene` over a room built by
+`GameMap.generateInterior(kind, floor, name, hasSafeRoom)`. Four things about that room
+are worth knowing before changing one.
+
+**The shell is per building, not per kind.** `INTERIOR_BY_NAME` in `GameMap.ts` states
+each building's width, height and floor material, and `INTERIOR_BY_KIND` is only the
+fallback for anything absent from it. A kind is a category, and a category cannot say how
+big a mead hall is or what a garrison's drill floor is made of. Four interior floor
+materials ride the `ground_interior` sheet alongside the boards and stone —
+rushes, packed earth, flagstone and ink-blotched boards — and new materials are
+**appended** to that sheet's list, never inserted: a material's noise seed is its index,
+so inserting one re-rolls the art of every material after it.
+
+**Every walkable tile must be reachable from `startTile`.** A partition wall that seals a
+wing produces no error, no log and no symptom except a room the player can see across and
+never enter. `verify:interiors` flood-fills every interior — all fifteen walk-ins, the Big
+Top and all four tower storeys — and the only tiles it excuses are the Bopca's galley
+strip, which the counter's own side returns seal on purpose.
+
+**The safe room is the inn's taproom.** `hasSafeRoom` on the planned building is what
+puts Mordecai, the Bopca's counter and the lantern light in a room, and the bounds it
+uses are name-addressable, so the inn registers the taproom band rather than its whole
+floor. `planSafeRoomCounters` lays the counter run against the **north wall of those
+bounds** — which is why the taproom's archways to the landing are deliberately off-centre
+and why the middle of the taproom's top rows carry no authored furniture. A run laid
+across an archway would wall off the entire guest wing.
+
+**A building may run more than one counter.** `interiorServicesFor(name)` returns every
+service a building offers and `interiorServiceForRole(name, role)` picks the one the
+NPC the player walked up to provides, so the two services must never share a role — the
+talk router would have no way to tell the counters apart and one would be silently
+unreachable. The Barracks uses both: a quartermaster's armoury and a drill yard selling
+permanent stat points up to `DRILL_TRAINING_CAP` at an escalating price. The inn's three
+guest rooms are the timed counterpart — a full mend plus one time-bounded stat boon, and
+granting one cures the other two so the choice stays a choice. Occupants carry a `post`
+hint that decides which piece of their anchor group they take; without one they are placed
+in raw scan order, which is row-major from the north-west and put every shopkeeper in town
+in the same corner.
+
+`npm run verify:interiors` is the gate for all of it.
+
+---
+
 ## Invariants
 
 Load-bearing for quests, systems and save state. Anything that moves must be re-derived,
@@ -205,7 +250,20 @@ not hard-coded twice.
 
 **Building names.** All 16 `buildingEntries` names and `type` values, verbatim. Quests,
 dialog, interiors, mercenaries, the club, the murder mystery and the cult hideout key
-off these strings across ~20 files.
+off these strings across ~20 files. The tattoo parlour is **The Quiet Needle**
+(sprite key `quiet_needle`); Tsarina Signet is a character, not a building, and the
+facade's `replaces: 'tattoo_parlor'` stays as it is — the frozen footprint fixture the
+building gates measure against is keyed by `replaces`, not by the sprite key.
+
+A misspelled key is invisible from both directions: the building reports no service and
+the service names no building, so nothing throws and nothing logs. `verify:interiors`
+walks both sides for exactly that reason.
+
+**Safe-room-ness is `hasSafeRoom` on the planned building**, not a `BuildingKind`.
+`BuildingKind` is `'house' | 'tower' | 'store' | 'club'` — there is no `restaurant`
+member, and reintroducing one to mean "safe room" is what forced The Barracks to be
+registered as a restaurant for as long as it held the safe room. Exactly one building
+carries the flag, and `verify:interiors` asserts that.
 
 **`OverworldData` fields.** `startTile`, `buildingEntries`, `mainTowerAnchor`,
 `doomsdayEscapeTile`, `townSquareCentre`, `fountainCentre`, `circusCentre`,

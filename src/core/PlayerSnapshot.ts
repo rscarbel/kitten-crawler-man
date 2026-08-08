@@ -60,8 +60,10 @@ export interface PlayerSnapshot {
   equippedEntries: [string, ItemId][];
   explosivesHandling?: number;
   tattooStat: StatName | null;
-  /** Skill taught by Signet's brass mark. Absent on saves predating it. */
+  /** Skill taught by the Quiet Needle's brass mark. Absent on saves predating it. */
   skillTattoo?: SkillId | null;
+  /** Stat points bought on the garrison's sand. Absent on saves predating the drill yard. */
+  drillTraining?: number;
   /** Active buffs and DoTs, so a drink or a poison survives a building round-trip. */
   statusEffects: StatusEffect[];
   /** Max-HP loaned by an active Jugg Juice, so it is still repaid on the far side. */
@@ -124,6 +126,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     equippedEntries: p.inventory.equipment.entries(),
     tattooStat: p.tattooStat,
     skillTattoo: p.skillTattoo,
+    drillTraining: p.drillTraining,
     // The applier is dropped rather than copied: a snapshot is how a crawler
     // crosses into another scene, and that scene builds its own crawlers, so a
     // retained reference would credit a Player object nothing on the new map
@@ -250,6 +253,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.facingY = finiteOr(snap.facingY, p.facingY);
   p.tattooStat = snap.tattooStat;
   p.skillTattoo = snap.skillTattoo ?? null;
+  p.drillTraining = Math.max(0, finiteOr(snap.drillTraining, 0));
   p.isActive = snap.isActive ?? p.isActive;
   p.isKnockedOut = snap.isKnockedOut ?? false;
   p.knockedOutFrames = snap.knockedOutFrames ?? 0;

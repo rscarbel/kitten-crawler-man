@@ -41,6 +41,7 @@ import {
   SAFE_ROOM_TABLE,
   SAFE_ROOM_THRESHOLD,
   SAFE_ROOM_FLOOR,
+  INTERIOR_FLOOR_TYPES,
 } from './tileTypes';
 
 export interface SafeRoomDecorProp {
@@ -116,10 +117,19 @@ const DECOR_TYPES: ReadonlySet<number> = new Set([
  * what makes planning stamp-independent. The counter run, the galley strip and
  * any furniture the interior generator laid down are all other types, so they
  * are excluded without needing a second list to keep in step.
+ *
+ * A town building's own floor counts too. A safe room carved out of a dungeon is
+ * floored in `SAFE_ROOM_FLOOR`, but one that occupies a band of an inn's taproom
+ * keeps the inn's rushes — and against those two ids alone every candidate tile
+ * read as occupied, so the lanterns and the stove stamped nothing at all and the
+ * room had no light with nothing anywhere reporting a problem.
  */
 function isDecorSurface(tile: TileContent): boolean {
   return (
-    tile.type === SAFE_ROOM_FLOOR || tile.type === SAFE_ROOM_THRESHOLD || DECOR_TYPES.has(tile.type)
+    tile.type === SAFE_ROOM_FLOOR ||
+    tile.type === SAFE_ROOM_THRESHOLD ||
+    INTERIOR_FLOOR_TYPES.has(tile.type) ||
+    DECOR_TYPES.has(tile.type)
   );
 }
 

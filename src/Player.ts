@@ -4,9 +4,11 @@ import {
   makeJuggJuice,
   makeCooldownCrisp,
   makeDrunk,
+  STAT_BOON_BONUSES,
   WHETSTONE_MELEE_DAMAGE_BONUS,
 } from './core/StatusEffect';
 import { Inventory } from './core/Inventory';
+import { normalize } from './utils';
 import { drawText } from './ui/TextBox';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
 import { computeDodgeChance } from './core/dodge';
@@ -331,17 +333,25 @@ export abstract class Player {
   /** Gold coins collected — displayed in the inventory panel. */
   coins = 0;
   /**
-   * Which stat Signet's ink raised, or null if this crawler is still unmarked.
+   * Which stat the Quiet Needle's ink raised, or null if this crawler is still unmarked.
    * One tattoo per character, permanent — carried through building round-trips by
    * PlayerSnapshot so it can't be re-bought by stepping outside and back in.
    */
   tattooStat: StatName | null = null;
   /**
-   * The skill Signet's brass mark taught this crawler, or null if unmarked.
+   * The skill the Quiet Needle's brass mark taught this crawler, or null if unmarked.
    * Tracked separately from {@link tattooStat} so one stat tattoo and one skill
    * tattoo can coexist — but never two of either.
    */
   skillTattoo: SkillId | null = null;
+  /**
+   * Permanent stat points bought on the garrison's drill sand so far, across
+   * every stat. Capped by the drill yard itself; tracked on the crawler and
+   * carried through `PlayerSnapshot` because an interior is regenerated on every
+   * entry, so a counter living anywhere else would reset each time the player
+   * stepped out of the door and back in — and the sink would be unlimited.
+   */
+  drillTraining = 0;
   unspentPoints = 0;
   /** Frames remaining before the next potion can be used. Zero means ready. */
   potionCooldownFrames = 0;
@@ -393,6 +403,16 @@ export abstract class Player {
   tempStatMods: TempStatMod[] = [];
   protected tileSize: number;
 
+  /** Unit direction of the active knockback, applied each frame by `applyKnockbackMotion`. */
+  knockbackDirX = 0;
+  knockbackDirY = 0;
+  /** Frames left to spread the knockback's total distance over. */
+  knockbackFramesRemaining = 0;
+  /** The knockback's original frame count, kept alongside the countdown so the ease-out curve can weight early frames against it. */
+  knockbackTotalFrames = 0;
+  /** Total pixel distance this knockback covers over `knockbackTotalFrames`; constant for its life, not a remaining-distance counter. */
+  knockbackDistancePx = 0;
+
   constructor(tileX: number, tileY: number, tileSize: number, config: PlayerConfig = {}) {
     this.x = tileX * tileSize;
     this.y = tileY * tileSize;
@@ -420,12 +440,18 @@ export abstract class Player {
 
   /**
    * Effective value of a stat: stored base, plus the bonus from everything
-   * currently equipped, plus any live temporary modifiers.
+   * currently equipped, plus any live temporary modifiers, plus whatever a
+   * timed boon is lending right now.
    */
   private effectiveStat(stat: StatName): number {
     let total = this.baseStats[stat] + this.inventory.getEquippedStatBonus()[stat];
     for (const mod of this.tempStatMods) {
       if (mod.stat === stat) total += mod.delta;
+    }
+    // Read live rather than banked on grant, so an expiring boon takes its own
+    // bonus away with it and cannot leave a stale point behind.
+    for (const effect of this.statusEffects) {
+      total += STAT_BOON_BONUSES.get(effect.type)?.[stat] ?? 0;
     }
     return Math.max(MIN_STAT_VALUE, total + this._godModeStatBonus);
   }
@@ -797,7 +823,7 @@ export abstract class Player {
    * Whether a banked level-up point may be invested in `stat`.
    *
    * Only *spending* is gated. Equipment `statBonus`, stat-boost potions and
-   * Signet's tattoos all still raise a locked stat through
+   * The Quiet Needle's tattoos all still raise a locked stat through
    * {@link applyPermanentStat} — the lock models the System refusing an
    * allocation, not the attribute being frozen in place.
    */
@@ -880,7 +906,9 @@ export abstract class Player {
    *
    * Routed through the same expiry cleanup as `clearStatusEffects`, so a status
    * that loans the player something (Jugg Juice's max HP, Speed Fizz's
-   * multiplier) still pays it back if a caller ever names one.
+   * multiplier) still pays it back if a caller ever names one. The unconditional
+   * sync at the end covers a cured constitution boon for the same reason, and it
+   * runs after the list is replaced because the boon's bonus is read off it.
    */
   cureStatuses(types: ReadonlyArray<string>): number {
     const kept: StatusEffect[] = [];
@@ -926,6 +954,9 @@ export abstract class Player {
     } else {
       this.statusEffects.push(effect);
     }
+    // A constitution boon just moved max HP; without this the bar reads against
+    // the old maximum until something unrelated happens to reconcile them.
+    if (STAT_BOON_BONUSES.has(effect.type)) this.syncHpToMaxHp();
   }
 
   /**
@@ -944,6 +975,7 @@ export abstract class Player {
     // closure. Forward order matters: several effects can damage on the same
     // tick, and the last one to land owns the death cause.
     let kept = 0;
+    let statBoonExpired = false;
     for (const effect of this.statusEffects) {
       const elapsed = effect.totalTicks - effect.ticksRemaining;
       if (effect.type === 'burn' && elapsed > 0 && elapsed % BURN_TICK_INTERVAL === 0) {
@@ -983,12 +1015,17 @@ export abstract class Player {
         this._juggJuiceHpBoost = 0;
         this.syncHpToMaxHp();
       }
+      if (justExpired && STAT_BOON_BONUSES.has(effect.type)) statBoonExpired = true;
       if (effect.ticksRemaining >= 0) {
         this.statusEffects[kept] = effect;
         kept++;
       }
     }
     this.statusEffects.length = kept;
+    // Deliberately after the compaction, not inside the loop: a stat boon's
+    // bonus is read off this very list, so syncing while the expired effect is
+    // still in it would measure the maximum the boon was still paying for.
+    if (statBoonExpired) this.syncHpToMaxHp();
   }
 
   /** Extra max HP the active Jugg Juice is contributing, or 0 when none is active. */
@@ -1020,16 +1057,23 @@ export abstract class Player {
    * Jugg Juice (which mutates maxHp) are properly reversed.
    */
   clearStatusEffects(): void {
+    let hpMovingEffectCleared = false;
     for (const effect of this.statusEffects) {
       if (effect.type === 'speed_fizz') {
         this._potionSpeedBoost = 1;
       }
       if (effect.type === 'jugg_juice') {
         this._juggJuiceHpBoost = 0;
-        this.syncHpToMaxHp();
+        hpMovingEffectCleared = true;
       }
+      if (STAT_BOON_BONUSES.has(effect.type)) hpMovingEffectCleared = true;
     }
     this.statusEffects = [];
+    // After the list is emptied, never inside the loop: a constitution boon's
+    // bonus is read off `statusEffects`, so an earlier sync would still be
+    // measuring the maximum the boon was paying for and the bar would keep the
+    // HP the boon lent.
+    if (hpMovingEffectCleared) this.syncHpToMaxHp();
   }
 
   /**
@@ -1071,6 +1115,30 @@ export abstract class Player {
     // it must not spend the next five seconds unable to heal from a blow that
     // has been rewound out of existence.
     this.framesSinceDamaged = REGEN_SUPPRESS_FRAMES;
+    this.clearKnockback();
+  }
+
+  /**
+   * Starts (or replaces) this player's active knockback. The latest hit always
+   * wins — a second impact mid-stagger overwrites rather than stacking or
+   * queuing behind the first.
+   */
+  applyKnockback(dirX: number, dirY: number, distancePx: number, frames: number): void {
+    const n = normalize(dirX, dirY);
+    this.knockbackDirX = n.x;
+    this.knockbackDirY = n.y;
+    this.knockbackDistancePx = distancePx;
+    this.knockbackTotalFrames = frames;
+    this.knockbackFramesRemaining = frames;
+  }
+
+  /** Cancels any in-progress knockback so a checkpoint restore or a death doesn't leave the next life mid-stagger. */
+  clearKnockback(): void {
+    this.knockbackDirX = 0;
+    this.knockbackDirY = 0;
+    this.knockbackDistancePx = 0;
+    this.knockbackTotalFrames = 0;
+    this.knockbackFramesRemaining = 0;
   }
 
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
@@ -1128,7 +1196,7 @@ export abstract class Player {
 
   /**
    * Permanently raise one stat, flashing the same feedback a spent level-up point
-   * does. Shared by the stat-boost potion and Signet's tattoos.
+   * does. Shared by the stat-boost potion and the Quiet Needle's tattoos.
    */
   applyPermanentStat(stat: StatName, amount: number): void {
     this.baseStats[stat] += amount;

@@ -9,6 +9,7 @@
  *   npx tsx scripts/render-interior.ts --kind=store --scale=3
  *   npx tsx scripts/render-interior.ts --kind=house --name="The Horned Flagon"
  *   npx tsx scripts/render-interior.ts --kind=tower --floor=1
+ *   npx tsx scripts/render-interior.ts --name="The Sleeping Cat Inn" --safe-room
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -18,6 +19,8 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
+import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
+import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import type { BuildingKind } from '../src/map/town/townPlan.js';
 
 const DEFAULT_KIND = 'store';
@@ -32,6 +35,12 @@ function stringArg(name: string, fallback: string): string {
   return raw === undefined ? fallback : raw.slice(name.length + ARG_PREFIX_LENGTH);
 }
 
+/** Whether a bare `--flag` was passed. Safe-room-ness is a property of the
+ *  building, not of its kind, so it has to be stated rather than inferred. */
+function flagArg(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 function intArg(name: string, fallback: number): number {
   const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
   if (raw === undefined) return fallback;
@@ -40,7 +49,7 @@ function intArg(name: string, fallback: number): number {
   return value;
 }
 
-const KINDS: ReadonlyArray<BuildingKind> = ['store', 'house', 'tower', 'restaurant', 'club'];
+const KINDS: ReadonlyArray<BuildingKind> = ['store', 'house', 'tower', 'club'];
 
 function parseKind(raw: string): BuildingKind {
   const match = KINDS.find((k) => k === raw);
@@ -53,11 +62,19 @@ const buildingName = stringArg('name', '');
 const towerFloor = intArg('floor', DEFAULT_TOWER_FLOOR);
 const scale = intArg('scale', DEFAULT_SCALE);
 const outPath = stringArg('out', DEFAULT_OUT);
+const hasSafeRoom = flagArg('safe-room');
 
 await loadGameSpritesInNode();
 
 const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-map.generateInterior(kind, towerFloor, buildingName);
+map.generateInterior(kind, towerFloor, buildingName, hasSafeRoom);
+// `generateInterior` lays the room; the counter run and the furnishings are
+// stamped by the scene afterwards, so a harness that skipped them was showing a
+// safe room nobody ever plays in.
+if (hasSafeRoom) {
+  stampSafeRoomCounters(map);
+  stampSafeRoomDecor(map);
+}
 
 const tilesW = map.structure[0].length;
 const tilesH = map.structure.length;

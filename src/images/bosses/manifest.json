@@ -118,30 +118,110 @@
   },
   "juicer": {
     "path": "bosses/juicer.png",
-    "frameWidth": 208,
-    "frameHeight": 256,
-    "tileX": 72,
-    "tileY": 50,
+    "frameWidth": 176,
+    "frameHeight": 176,
+    "tileX": 56,
+    "tileY": 100,
     "tileScale": 64,
     "states": {
-      "walk": {
+      "idle": {
         "row": 0,
         "frameCount": 8
       },
-      "idle": {
+      "idle_side": {
         "row": 1,
-        "frameCount": 1
-      },
-      "throw": {
-        "row": 2,
-        "frameCount": 6
-      },
-      "walk_enraged": {
-        "row": 3,
         "frameCount": 8
       },
-      "idle_enraged": {
+      "idle_away": {
+        "row": 2,
+        "frameCount": 8
+      },
+      "walk": {
+        "row": 3,
+        "frameCount": 16
+      },
+      "walk_side": {
         "row": 4,
+        "frameCount": 16
+      },
+      "walk_away": {
+        "row": 5,
+        "frameCount": 16
+      },
+      "sprint": {
+        "row": 6,
+        "frameCount": 12
+      },
+      "sprint_side": {
+        "row": 7,
+        "frameCount": 12
+      },
+      "sprint_away": {
+        "row": 8,
+        "frameCount": 12
+      },
+      "throw": {
+        "row": 9,
+        "frameCount": 10
+      },
+      "throw_side": {
+        "row": 10,
+        "frameCount": 10
+      },
+      "throw_away": {
+        "row": 11,
+        "frameCount": 10
+      },
+      "punch": {
+        "row": 12,
+        "frameCount": 12
+      },
+      "punch_side": {
+        "row": 13,
+        "frameCount": 12
+      },
+      "punch_away": {
+        "row": 14,
+        "frameCount": 12
+      },
+      "gore_head": {
+        "row": 15,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_torso": {
+        "row": 15,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_arm": {
+        "row": 15,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_forearm": {
+        "row": 15,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_thigh": {
+        "row": 15,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_shin": {
+        "row": 15,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 15,
+        "colOffset": 6,
+        "frameCount": 1
+      },
+      "gore_tail": {
+        "row": 15,
+        "colOffset": 7,
         "frameCount": 1
       }
     }
@@ -189,23 +269,162 @@
   },
   "krakaren": {
     "path": "bosses/krakaren.png",
-    "frameWidth": 320,
-    "frameHeight": 320,
-    "tileX": 128,
-    "tileY": 128,
+    "frameWidth": 216,
+    "frameHeight": 184,
+    "tileX": 76,
+    "tileY": 100,
     "tileScale": 64,
     "states": {
       "idle": {
         "row": 0,
+        "frameCount": 10
+      },
+      "idle_side": {
+        "row": 1,
+        "frameCount": 10
+      },
+      "idle_away": {
+        "row": 2,
+        "frameCount": 10
+      },
+      "swipe": {
+        "row": 3,
+        "frameCount": 10
+      },
+      "swipe_side": {
+        "row": 4,
+        "frameCount": 10
+      },
+      "swipe_away": {
+        "row": 5,
+        "frameCount": 10
+      },
+      "channel": {
+        "row": 6,
         "frameCount": 8
       },
-      "attack": {
+      "channel_side": {
+        "row": 7,
+        "frameCount": 8
+      },
+      "channel_away": {
+        "row": 8,
+        "frameCount": 8
+      },
+      "gore_mantle": {
+        "row": 9,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_stub": {
+        "row": 9,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_eye": {
+        "row": 9,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_tentacle_a": {
+        "row": 9,
+        "colOffset": 3,
+        "frameCount": 1
+      },
+      "gore_tentacle_b": {
+        "row": 9,
+        "colOffset": 4,
+        "frameCount": 1
+      },
+      "gore_mouth_cluster": {
+        "row": 9,
+        "colOffset": 5,
+        "frameCount": 1
+      },
+      "gore_entrails": {
+        "row": 9,
+        "colOffset": 6,
+        "frameCount": 1
+      }
+    }
+  },
+  "krakaren_tentacle": {
+    "path": "bosses/krakaren_tentacle.png",
+    "frameWidth": 232,
+    "frameHeight": 160,
+    "tileX": 84,
+    "tileY": 48,
+    "tileScale": 64,
+    "states": {
+      "emerge": {
+        "row": 0,
+        "frameCount": 8
+      },
+      "idle": {
         "row": 1,
+        "frameCount": 8
+      },
+      "strike": {
+        "row": 2,
+        "frameCount": 10
+      },
+      "strike_side": {
+        "row": 3,
+        "frameCount": 10
+      },
+      "strike_away": {
+        "row": 4,
+        "frameCount": 10
+      },
+      "retreat": {
+        "row": 5,
         "frameCount": 6
       },
-      "enraged": {
-        "row": 2,
+      "gore_tip": {
+        "row": 6,
+        "colOffset": 0,
+        "frameCount": 1
+      },
+      "gore_mid": {
+        "row": 6,
+        "colOffset": 1,
+        "frameCount": 1
+      },
+      "gore_root": {
+        "row": 6,
+        "colOffset": 2,
+        "frameCount": 1
+      },
+      "gore_sucker_shred": {
+        "row": 6,
+        "colOffset": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "krakaren_slam": {
+    "path": "bosses/krakaren_slam.png",
+    "frameWidth": 224,
+    "frameHeight": 288,
+    "tileX": 80,
+    "tileY": 113,
+    "tileScale": 64,
+    "states": {
+      "rise": {
+        "row": 0,
+        "frameCount": 10
+      },
+      "loom": {
+        "row": 1,
         "frameCount": 8
+      },
+      "dive": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "smash": {
+        "row": 3,
+        "frameCount": 12
       }
     }
   }

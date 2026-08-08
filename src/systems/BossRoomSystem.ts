@@ -14,8 +14,18 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
-import { KrakarenClone } from '../creatures/KrakarenClone';
-import { drawSlamShadow, drawSlamImpact } from '../sprites/krakarenSprite';
+import {
+  KrakarenClone,
+  MAX_GUARD_TENTACLES,
+  KRAKAREN_VISUAL_SCALE,
+} from '../creatures/KrakarenClone';
+import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+import { hasRoomToMove } from '../map/findWalkableTile';
+import {
+  drawSlamShadow,
+  drawSlamImpact,
+  drawKrakarenSlamTentacle,
+} from '../sprites/krakarenSprite';
 import { viewportWidth } from '../core/Viewport';
 
 interface VomitProjectile {
@@ -889,7 +899,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
 
     this.cacheLiveKrakarens(mobs);
     this.spawnHoarderCockroaches(ctx.roster);
-    this.tickCockroachTTLs(mobs, mobGrid);
+    this.spawnKrakarenTentacles(ctx.roster);
+    this.tickSummonedMobTTLs(mobs, mobGrid);
     this.processVomitProjectiles(mobs, human, cat);
     this.tickAcidPuddles(human, cat);
   }
@@ -1218,9 +1229,89 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.catAcidTick = this.tickAcidFor(cat, this.catAcidTick);
   }
 
-  private tickCockroachTTLs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
+  /**
+   * One guard tentacle's frame. Returns 1 when it is a spent body the
+   * compaction below should drop, 0 otherwise.
+   *
+   * A tentacle leaves twice over: it stops counting towards the guard the
+   * moment it starts sliding back under, and it stops existing when the row
+   * finishes. TTL expiry and the death of the boss that raised it both send it
+   * on the same exit, so an add the player walked away from cannot go on
+   * quartering their damage from across the room.
+   */
+  private tickGuardTentacle(tentacle: KrakarenTentacle): number {
+    if (!tentacle.isAlive) return tentacle.justDied ? 0 : 1;
+    const ownerFell = tentacle.owner !== null && !tentacle.owner.isAlive;
+    if (ownerFell) {
+      tentacle.beginRetreat();
+      return 0;
+    }
+    if (tentacle.isLeaving) return 0;
+    tentacle.ttl--;
+    if (tentacle.ttl <= 0) tentacle.beginRetreat();
+    return 0;
+  }
+
+  /**
+   * Drains the Krakaren's pending guard tentacles, the way the Hoarder's
+   * roaches are drained.
+   *
+   * The map test is `hasRoomToMove` rather than a bare walkability check: a
+   * one-tile pocket between props is walkable ground that would root an add the
+   * player then has to squeeze in to reach, in a fight whose whole mechanic is
+   * reaching it.
+   */
+  private spawnKrakarenTentacles(roster: MobRoster): void {
+    const { mobs } = roster;
+    let bosses = 0;
+    let liveCount = 0;
+    for (const mob of mobs) {
+      if (!mob.isAlive) continue;
+      if (mob instanceof KrakarenTentacle) liveCount++;
+      else if (mob instanceof KrakarenClone) bosses++;
+    }
+    if (bosses === 0) return;
+
+    for (const mob of mobs) {
+      if (!(mob instanceof KrakarenClone) || !mob.isAlive) continue;
+
+      mob.guardTentacleAtCap = liveCount >= MAX_GUARD_TENTACLES;
+      if (mob.tentacleSpawns.length === 0) continue;
+
+      for (const sp of mob.tentacleSpawns) {
+        if (liveCount >= MAX_GUARD_TENTACLES) break;
+        const tileX = Math.floor(sp.x / TILE_SIZE);
+        const tileY = Math.floor(sp.y / TILE_SIZE);
+        if (!hasRoomToMove(this.gameMap, tileX, tileY)) continue;
+        const tentacle = new KrakarenTentacle(tileX, tileY, TILE_SIZE, mob);
+        // Once, at spawn, from the boss that raised it: an add levelled to a
+        // weaker curve than the fight it belongs to is free damage reduction.
+        tentacle.applyMobLevel(mob.mobLevel);
+        // Through the roster rather than by hand, so it receives the scene's
+        // map and spell context like anything else that joins a fight.
+        roster.add(tentacle);
+        mob.registerGuardTentacle(tentacle);
+        liveCount++;
+      }
+      mob.tentacleSpawns = [];
+    }
+  }
+
+  /**
+   * The clock on everything a boss brings up mid-fight, and the one pass that
+   * clears the spent ones out of the roster.
+   *
+   * Roaches and guard tentacles leave differently — a roach simply stops
+   * existing, a tentacle plays itself back underground first — but both end as
+   * a zero-HP mob nothing killed, and both are compacted out here.
+   */
+  private tickSummonedMobTTLs(mobs: Mob[], mobGrid: SpatialGrid<Mob>): void {
     let expired = 0;
     for (const mob of mobs) {
+      if (mob instanceof KrakarenTentacle) {
+        expired += this.tickGuardTentacle(mob);
+        continue;
+      }
       if (!(mob instanceof Cockroach) || !mob.isAlive) continue;
       mob.ttl--;
       if (mob.ttl <= 0) {
@@ -1245,12 +1336,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // dies, and compacting it away is the one thing that makes that
       // impossible — the rewind can only reach what is still in the array.
       const isOwedToCheckpoint = mob.presentAtCheckpoint && mob.aliveAtCheckpoint;
-      const isSpentCockroach = !mob.isAlive && mob instanceof Cockroach;
+      const isSpentSummon =
+        !mob.isAlive && (mob instanceof Cockroach || mob instanceof KrakarenTentacle);
       // A death the kill resolver has not seen yet is not spent: compacting it
       // out of the array here is the one way to lose its gore and its rewards
       // outright, and this pass now runs on any frame a roach times out rather
       // than only on the rare frame the swarm is enormous.
-      if (isSpentCockroach && !mob.justDied) {
+      if (isSpentSummon && !mob.justDied) {
         // Out of the grid on both paths. A dead mob is never `belongsInMobGrid`,
         // and one held back for the checkpoint is re-inserted when the rewind
         // rebuilds the grid — kept in the grid it is a stale entry that outlives
@@ -1311,13 +1403,40 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    */
   private renderKrakarenSlams(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const boss of this.liveKrakarens) {
+      const tentacle = boss.slamTentacle;
       const shadow = boss.slamShadow;
       if (shadow) {
-        drawSlamShadow(ctx, shadow.x - camX, shadow.y - camY, TILE_SIZE, shadow.progress);
+        const diveProgress = tentacle?.phase === 'dive' ? tentacle.progress : 0;
+        drawSlamShadow(
+          ctx,
+          shadow.x - camX,
+          shadow.y - camY,
+          TILE_SIZE,
+          shadow.progress,
+          diveProgress,
+        );
       }
       const impact = boss.slamImpact;
       if (impact) {
         drawSlamImpact(ctx, impact.x - camX, impact.y - camY, TILE_SIZE, impact.progress);
+      }
+      if (tentacle) {
+        // Decals are floor paint and the tentacle is the thing standing on it,
+        // so it goes over both of them.
+        const standsAtTarget = tentacle.phase === 'smash';
+        const worldX = standsAtTarget ? tentacle.targetX : tentacle.riseX;
+        const worldY = standsAtTarget ? tentacle.targetY : tentacle.riseY;
+        const tileOriginOffset = TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
+        // Drawn at the boss's own visual scale, anchored on the same world
+        // point, so it reads as belonging to her rather than to a smaller,
+        // separate creature.
+        drawKrakarenSlamTentacle(
+          ctx,
+          worldX - camX - tileOriginOffset,
+          worldY - camY - tileOriginOffset,
+          TILE_SIZE * KRAKAREN_VISUAL_SCALE,
+          tentacle,
+        );
       }
     }
   }

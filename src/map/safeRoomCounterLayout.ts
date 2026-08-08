@@ -140,8 +140,14 @@ function doorColumnsOnNorthWall(
  * stop being walkable and the room could lose its only way in. Avoiding those
  * columns entirely — rather than merely maximising distance from them — is what
  * makes that impossible.
+ *
+ * Exported so `verify-interiors.ts` can exercise the exclusion directly: the
+ * outcome check elsewhere in that script only ever inspects the run that
+ * lands on the town's own current geometry, which says nothing about the
+ * mechanism if no door on that geometry happens to fall where a naive
+ * centring would put the run anyway.
  */
-function widestFreeSpan(
+export function widestFreeSpan(
   bounds: { x: number; y: number; w: number; h: number },
   blockedColumns: ReadonlySet<number>,
 ): { x0: number; width: number } {

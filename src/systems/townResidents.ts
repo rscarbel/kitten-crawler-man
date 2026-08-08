@@ -38,6 +38,7 @@ export type ResidentId =
   | 'innkeep_marlow'
   | 'sgt_kessler'
   | 'corporal_pell'
+  | 'quartermaster_dann'
   | 'tattooist_nim'
   | 'stock_clerk_wick';
 
@@ -468,7 +469,7 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     role: 'innkeeper',
     home: 'The Sleeping Cat Inn',
     ambient: [
-      'Beds upstairs, stew downstairs, and no fighting on the rug.',
+      'Beds upstairs, stew downstairs, and nothing hostile past that door. The floor decided that, not me.',
       'You look like a person who has not eaten sitting down in a while.',
       'We are the quiet house. The Stump is that way and good luck to you.',
       'Everything on the board heals something. Even the bread. Especially the bread.',
@@ -488,10 +489,10 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
         'I write them in the ledger. Half are drink. But I have never yet had one turn out to be entirely invented.',
       ],
       [
-        'The upstairs rooms are all the same except the end one. That one has a bolt on the inside and one on the outside.',
-        'It was for a crawler who came up in a bad state and asked to be locked in. Politely. With a written note.',
-        'She was fine by morning. Ate two breakfasts and left a gold piece under the plate.',
-        'I have never taken the outside bolt off. Some nights the offer is the kindest thing I keep.',
+        'You will have noticed nothing has tried to come through that door since you sat down. That is not the door. That is the floor deciding.',
+        'The System put its mark on my taproom and the mark holds. Nothing hostile crosses it. Not the changed, not the krasue, not whatever you carried up the stair on your boot.',
+        'I was not asked and I was not warned. One morning this was a public house and by the evening it was the safe room, and the garrison up the road was just a garrison with cold men in it.',
+        'So sleep. Actually sleep. It is the only promise anybody on this floor has kept, and I have watched crawlers refuse to believe it and go and sit out in the rain instead.',
       ],
     ],
     reactive: (ctx) => {
@@ -691,24 +692,24 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     role: 'guard',
     home: 'The Barracks',
     ambient: [
-      'Off duty. Talk quietly and I will pretend I am not listening.',
-      'Bunk is warm, roof is whole. After a floor, that is a palace.',
-      'You want advice, the old rat by the fire gives it better than I do.',
-      'They let anybody up the stair into this room. That is the point of it.',
-      'I have been down. I am not going back down. We can still be friends.',
+      'Sand is raked and the pells are stood up. Hit something or get off my floor.',
+      'You swing like a man opening a door. Put your hip into it and swing again.',
+      'The quartermaster is behind his counter. He will not be hurried and he will not be haggled.',
+      'Spears racked at the wall, always. A man fumbling for his weapon is already dead.',
+      'I have been down. I am not going back down. I can still make you better at it.',
     ],
     lore: [
       [
         'I ran the second floor. Whole thing, gate to gate, with eleven others.',
         'Four came up. Then two of those went back for reasons I have stopped asking about.',
         'The garrison took me on because I could describe a stairwell accurately. That is the whole of my qualification.',
-        'So when I say a floor is survivable, understand what I am comparing it to.',
+        'Now I stand on sand and shout at people who are going to die anyway. It is not nothing. Four came up.',
       ],
       [
-        'The Barracks is a safe room. Actually safe — the system says so, and the system does not lie about that particular thing.',
-        'Nothing hostile crosses that threshold. Not the changed, not the krasue, not whatever you dragged home on your boot.',
-        'Every guard in here has slept through something outside that would have killed them awake.',
-        'It is the only promise anybody on this floor has kept. We are all a bit sentimental about it.',
+        'Do not sleep here. I have had three crawlers try it and I have thrown out three crawlers.',
+        'This is a barracks. Thick walls, men with spears, a bolt on the door. Every bit of that is an opinion, and an opinion can be argued with by something big enough.',
+        'You want a room that cannot be argued with, it is the Sleeping Cat Inn, down the way. Ask for Ossie. Nothing hostile crosses that threshold and the floor itself says so.',
+        'Sleep there. Train here. I am not confusing the two and neither are you.',
       ],
       [
         'Watch the timer, crawler. Everyone forgets the timer because the town has a market and a pub and it feels like a place.',
@@ -736,6 +737,33 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
       }
       return null;
     },
+  },
+  {
+    id: 'quartermaster_dann',
+    name: 'Quartermaster Dann',
+    role: 'merchant',
+    home: 'The Barracks',
+    ambient: [
+      'Everything behind this counter is signed for. Everything in front of it is yours to bleed in.',
+      'I do not sell edge. Edge is the smith, up the hill. I sell what stands between you and the floor.',
+      'Padded, boiled, riveted. That is the order of the price and it is also the order of the use.',
+      'A crawler who argues the cost of a helm has generally still got a head to argue with.',
+      'Try it on here. A strap you cannot find in the dark is a strap you do not own.',
+    ],
+    lore: [
+      [
+        'Every piece on that rack was worn by somebody who came up the stair and did not go back down it.',
+        'I do not scrub the inside. Scrubbing takes the shape out, and the shape is half of what you are paying me for.',
+        'A gambeson that has already been hit sits better than one that has not. Any of them out on the sand will tell you the same.',
+        'That is not superstition, it is compression. I have the dates written in the book and the book does not flatter anybody.',
+      ],
+      [
+        'Sixteen sacks a week from the mill at a rate set in the ninth year, and eleven reviews deferred. That is the garrison, on paper.',
+        'On paper we are also forty spears. We are nineteen. Eight of those are boys who have not been past the wall.',
+        'So when the magistracy asks me why the issue kit is not new, I write the number down and I send it back up.',
+        'They will not read it. I write it anyway. Somebody after me is going to want the count.',
+      ],
+    ],
   },
   {
     id: 'stock_clerk_wick',
@@ -791,7 +819,7 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     id: 'tattooist_nim',
     name: 'Nim',
     role: 'merchant',
-    home: "Signet's Ink",
+    home: 'The Quiet Needle',
     ambient: [
       'Sit. Do not watch the needle, watch the wall. Everyone thinks they are the exception.',
       'One mark per crawler. I have explained why. I will not explain again today.',
@@ -801,10 +829,10 @@ const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [
     ],
     lore: [
       [
-        'The shop is named for her, not run by her. Get that straight before you ask me for anything clever.',
+        'The board outside used to carry a name. It is a needle now. That was my doing and I will not be drawn on it.',
         'Tsarina Signet wears her work. All of it, all at once, and it moves when she is thinking.',
         'She came through once, looked at my line, and corrected it with her thumbnail. Did not say a word.',
-        'The line has been better ever since. I am not sure it is still mine.',
+        'The line has been better ever since. I am not sure it is still mine, and I am not sure I want her name over my door.',
       ],
       [
         'Living ink is not decoration. It is a small agreement with something that wants a place to sit.',

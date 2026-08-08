@@ -233,14 +233,13 @@ export const SAFE_ROOM_RUG = 76;
 // types are the town's own, so an interior is a decision on the map rather than
 // a side effect of somebody else's.
 //
-// The restaurant, the Desperado Club and the Big Top keep their own floor types
-// (`SAFE_ROOM_FLOOR`, `CLUB_FLOOR`, `SAWDUST_FLOOR`) — but their *walls* change
-// with everything else, because `generateInterior` rings every interior in one
-// wall type. That is the right answer for all three: a town restaurant is a
-// Bopca station built inside a building, so it should have the building's
-// plaster, where a dungeon station is cut out of rock and keeps the floor's
-// masonry. The station's own floor is identical in both, which is the part that
-// has to match.
+// The Desperado Club and the Big Top keep their own floor types (`CLUB_FLOOR`,
+// `SAWDUST_FLOOR`) — but their *walls* change with everything else, because
+// `generateInterior` rings every interior in one wall type. That is the right
+// answer for both: a town safe room is a Bopca station built inside a building,
+// so it should have the building's plaster, where a dungeon station is cut out
+// of rock and keeps the floor's masonry. The station's own floor is identical in
+// both, which is the part that has to match.
 
 /** Sawn boards: a shop's and a house's floor. */
 export const INTERIOR_BOARD_FLOOR = 77;
@@ -348,11 +347,82 @@ export const DEN_HOLLOW = 92;
  */
 export const ARENA_CAGE = 93;
 
+// ── Town interiors, second set ────────────────────────────────────────────────
+//
+// More floors and more furniture for the town's buildings, declared here rather
+// than beside `INTERIOR_BOARD_FLOOR` because a tile type is an index — into
+// `WALKABLE_BY_TILE_TYPE` and into both minimap colour tables — so the ids have
+// to keep running on from the end of the list rather than from the block they
+// belong to. Everything from `INTERIOR_RUSH_FLOOR` to `GRINDING_SLAB` is part of
+// the interior set that begins at `INTERIOR_BOARD_FLOOR`.
+
+/** An inn's boards under a scatter of dried rushes and spilled straw. */
+export const INTERIOR_RUSH_FLOOR = 94;
+
+/** Swept packed earth: a cottage, a farmhouse, a workshop with no boarding. */
+export const INTERIOR_EARTH_FLOOR = 95;
+
+/** Large irregular flagstones on wide mortar joints: a temple, a smithy. */
+export const INTERIOR_FLAG_FLOOR = 96;
+
+/** Boards blotched with sunk pigment — the inking shop's floor. */
+export const INTERIOR_INK_FLOOR = 97;
+
+/**
+ * Raked sand over a garrison's drill hall. A *floor*, and deliberately the one
+ * tile in this block that stays walkable — the whole point of a drill hall is
+ * that it is fought across.
+ */
+export const DRILL_SAND_FLOOR = 98;
+
+/** A straw-and-sacking pell on a post, hacked about by years of drill. */
+export const TRAINING_DUMMY = 99;
+
+/** An angled rack of spears and practice blades. */
+export const WEAPON_RACK = 100;
+
+/** A board of nailed parchment orders, hung flat against a wall. */
+export const MUSTER_BOARD = 101;
+
+/** A table under a pinned campaign map, counters standing on it. */
+export const MAP_TABLE = 102;
+
+/** Rows of pinned design parchments — the inking shop's flash art. */
+export const FLASH_WALL = 103;
+
+/** Stoppered jars of ground pigment on a stained shelf. */
+export const PIGMENT_SHELF = 104;
+
+/** A padded reclining bench with a leather headrest: where the needle works. */
+export const INK_BENCH = 105;
+
+/** A stone slab with a muller, a soot pot and a pestle, for grinding pigment. */
+export const GRINDING_SLAB = 106;
+
+/**
+ * Every ground a town building's interior can be floored in.
+ *
+ * Grouped because more than one pass has to ask "is this a surface I may stand
+ * something on?", and the answer used to be spelled out as a pair of safe-room
+ * ids at each site. That was fine while the only safe room was floored in
+ * `SAFE_ROOM_FLOOR`; the moment a safe room sat inside an ordinary building the
+ * tests stopped matching its floor and the fittings silently stamped nothing.
+ */
+export const INTERIOR_FLOOR_TYPES: ReadonlySet<number> = new Set([
+  INTERIOR_BOARD_FLOOR,
+  INTERIOR_STONE_FLOOR,
+  INTERIOR_RUSH_FLOOR,
+  INTERIOR_EARTH_FLOOR,
+  INTERIOR_FLAG_FLOOR,
+  INTERIOR_INK_FLOOR,
+  DRILL_SAND_FLOOR,
+]);
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 94;
+export const TILE_TYPE_COUNT = 107;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

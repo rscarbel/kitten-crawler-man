@@ -2,7 +2,7 @@ import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
 import { TILE_SIZE } from '../core/constants';
-import { GameMap, TOWER_INTERIOR_W } from '../map/GameMap';
+import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W } from '../map/GameMap';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
 import type { BuildingEntry } from '../systems/BuildingSystem';
@@ -84,7 +84,8 @@ import {
 } from '../systems/townResidents';
 import { buildApothecaryMenu, serveRemedy } from '../systems/townApothecary';
 import { buildSmithyMenu, sharpenEdges } from '../systems/townSmithy';
-import { buildInnMenu, serveInn, INN_ROOM_KEY } from '../systems/townInn';
+import { buildInnMenu, serveInn } from '../systems/townInn';
+import { isInnRoomKey } from '../systems/townInnRooms';
 import {
   buildCartwrightMenu,
   buildMillerMenu,
@@ -96,6 +97,8 @@ import {
 import { buildTavernMenu, serveDrinkAt } from '../systems/townPub';
 import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
 import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
+import { buildArmouryMenu, issueArmour } from '../systems/townArmoury';
+import { buildDrillYardMenu, runDrill } from '../systems/townDrillYard';
 import {
   PricedMenuPanel,
   type PricedOption,
@@ -107,7 +110,8 @@ import {
   notifyButtonClick,
   clearButtonMouseState,
 } from '../ui/Button';
-import { interiorServiceFor } from '../systems/townServices';
+import { interiorServiceForRole, interiorServicesFor } from '../systems/townServices';
+import type { TownRole } from '../sprites/person/PersonAppearance';
 import {
   createTownMemory,
   noteResidentTalk,
@@ -201,8 +205,7 @@ const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
   'The Sleeping Cat Inn',
 ]);
 
-const TOWER_FLOOR_COUNT = 4;
-const MAX_TOWER_FLOOR_INDEX = 3;
+const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
 const COMPANION_FOLLOW_OVERRIDE_RATIO = 0.8;
 const COMPANION_FOLLOW_NORMAL_RATIO = 1.5;
@@ -316,10 +319,10 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Exit/Stay hit-rects, rebuilt by `renderExitMenu` and read by `handleExitMenuClick`. */
   private exitMenuButtons: ButtonRect[] = [];
 
-  // Safe room (restaurant only)
+  // Safe room — the one building the town plan flags with `hasSafeRoom`
   private readonly safeRoom: SafeRoomSystem | null;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
-  /** Null outside a restaurant interior, which is the only safe-room building. */
+  /** Null in every interior but the one the town plan flags as the safe room. */
   private readonly bopca: BopcaSystem | null;
   /**
    * This scene's single event bus, wired to audio once and cleared once on exit —
@@ -418,7 +421,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * the shopkeeper's greeting one line further than the same visit's direct
    * talk does.
    */
-  private pendingServiceTalk: { target: Townsperson; turn: number } | null = null;
+  private pendingServiceTalk: { target: Townsperson; turn: number; role: TownRole } | null = null;
   /** Frames left in which a freshly-opened interior modal ignores the interact key. */
   private modalGraceFrames = 0;
   /**
@@ -523,14 +526,16 @@ export class BuildingInteriorScene extends GameplayScene {
       // Generate 4 tower floors
       for (let f = 0; f < TOWER_FLOOR_COUNT; f++) {
         const floorMap = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-        floorMap.generateInterior('tower', f, entry.name);
+        // Every storey of a tower passes `false`: a tower is not a safe-room
+        // building, and the flag belongs to the building rather than the floor.
+        floorMap.generateInterior('tower', f, entry.name, false);
         this.towerFloors.push(floorMap);
       }
       this.map = this.towerFloors[0];
     } else {
       // Build single interior map
       this.map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
-      this.map.generateInterior(entry.type, 0, entry.name);
+      this.map.generateInterior(entry.type, 0, entry.name, entry.hasSafeRoom === true);
     }
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
@@ -571,11 +576,11 @@ export class BuildingInteriorScene extends GameplayScene {
     this.wireFollowerMenu();
 
     this.safeRoom =
-      entry.type === 'restaurant'
+      entry.hasSafeRoom === true
         ? new SafeRoomSystem(this.map, sx, sy, 'level3', this.audio)
         : null;
 
-    if (entry.type === 'restaurant') {
+    if (entry.hasSafeRoom === true) {
       this.bopca = new BopcaSystem(this.map, stampSafeRoomCounters(this.map), this.bus, this.audio);
       // After the counter, because the furnishings keep clear of every tile it
       // owns and cannot know them until it is planned.
@@ -630,10 +635,10 @@ export class BuildingInteriorScene extends GameplayScene {
         combat: new CombatKit({
           world,
           abilityManager: this.abilityManager,
-          // Null even in the restaurant, which does host a safe room: that room
-          // covers the whole building, and narrowing attacks inside it would
-          // leave a crawler unable to swing anywhere indoors. Nothing hostile
-          // reaches a restaurant, so there is no protection to lose.
+          // Null even in the building that does host a safe room: narrowing
+          // attacks inside it would leave a crawler unable to swing anywhere
+          // indoors, and nothing hostile reaches a town interior, so there is no
+          // protection to lose.
           safeRoom: null,
         }),
       });
@@ -686,9 +691,16 @@ export class BuildingInteriorScene extends GameplayScene {
     this.ambientSound =
       this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
 
-    const service = interiorServiceFor(entry.name);
-    this.servicePanel = service?.surface === 'menu' ? new PricedMenuPanel() : null;
-    this.readingPanel = service?.surface === 'reading' ? new FortuneTellerPanel() : null;
+    // One panel of each kind however many counters this building has: only one
+    // surface is ever open at a time, because the player can only be standing at
+    // one of them.
+    const services = interiorServicesFor(entry.name);
+    this.servicePanel = services.some((service) => service.surface === 'menu')
+      ? new PricedMenuPanel()
+      : null;
+    this.readingPanel = services.some((service) => service.surface === 'reading')
+      ? new FortuneTellerPanel()
+      : null;
   }
 
   /**
@@ -1886,11 +1898,12 @@ export class BuildingInteriorScene extends GameplayScene {
     const ctx = this.townDialogContext();
     const inDanger = isTownInDanger(ctx);
     const resident = target.residentId === null ? null : residentById(target.residentId);
-    const sellsHere = target.role === interiorServiceFor(this.entry.name)?.role;
+    const service = interiorServiceForRole(this.entry.name, target.role);
+    const sellsHere = service !== undefined;
     const turn = this.turnFor(target);
 
     if (sellsHere && !this.hasUntoldLore(target)) {
-      this.openService(turn, resident);
+      this.openService(turn, resident, target.role);
       this.noteTalk(target, inDanger);
       return true;
     }
@@ -1904,7 +1917,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // the *player* walks off, which only holds if the other party stays put.
     target.frozen = true;
     this.citizenDialogTarget = target;
-    this.pendingServiceTalk = sellsHere ? { target, turn } : null;
+    this.pendingServiceTalk = sellsHere ? { target, turn, role: target.role } : null;
     this.noteTalk(target, inDanger);
     return true;
   }
@@ -1960,7 +1973,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (distance > TILE_SIZE * CONVERSATION_WALK_AWAY_TILES) return false;
 
     const resident = target.residentId === null ? null : residentById(target.residentId);
-    this.openService(queued.turn, resident);
+    this.openService(queued.turn, resident, queued.role);
     return true;
   }
 
@@ -2014,18 +2027,24 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Opens whatever this building's service NPC does — a priced menu almost
+   * Opens whatever the NPC in `role` does here — a priced menu almost
    * everywhere, a reading in Old Hilda's kitchen.
+   *
+   * Keyed on the role rather than on the building, because a building may run
+   * more than one counter and the player walked up to exactly one of them.
    */
-  private openService(turn: number, resident: ResidentDef | null): void {
-    if (this.readingPanel !== null) {
+  private openService(turn: number, resident: ResidentDef | null, role: TownRole): void {
+    const service = interiorServiceForRole(this.entry.name, role);
+    if (service === undefined) return;
+    if (service.surface === 'reading') {
+      if (this.readingPanel === null) return;
       this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
       this.beginModalGrace();
       this.audio?.play('menu_open');
       return;
     }
     if (this.servicePanel === null) return;
-    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn));
+    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn), role);
     this.beginModalGrace();
     this.audio?.play('menu_open');
   }
@@ -2045,21 +2064,34 @@ export class BuildingInteriorScene extends GameplayScene {
    * Fill the service panel with whatever this building sells. Each builder returns
    * both the rows and the handler that performs the service, so the two can never
    * drift apart.
+   *
+   * Switched on the building's name, and — inside a branch whose building runs
+   * more than one priced counter — on the role of the NPC the player walked up
+   * to. `openService` has already resolved that role from the talk target, so
+   * this never has to guess which counter is in front of the player.
    */
-  private openServiceMenu(panel: PricedMenuPanel, turn: number, host: ResidentHost | null): void {
+  private openServiceMenu(
+    panel: PricedMenuPanel,
+    turn: number,
+    host: ResidentHost | null,
+    role: TownRole,
+  ): void {
     const party = [this.human, this.cat];
-    // Every service confirms with the same purchase chime; the tavern layers its
-    // pour underneath so a round sounds like a round.
-    const never = (): boolean => false;
-    const always = (): boolean => true;
+    // Every service confirms with the same purchase chime; a counter that has a
+    // sound of its own layers that underneath, so a round sounds like a round
+    // and a rented room sounds like the door closing behind you.
+    const POUR_CUE = 'ambient_pouring_a_drink';
+    const never = (): SoundId | null => null;
+    const always = (): SoundId | null => POUR_CUE;
     const confirmed = (
       handler: PricedPurchaseHandler,
-      pours: (option: PricedOption) => boolean,
+      cue: (option: PricedOption) => SoundId | null,
     ): PricedPurchaseHandler => {
       return (option, buyer) => {
         const result = handler(option, buyer);
         if (!result.ok) return result;
-        if (pours(option)) this.audio?.play('ambient_pouring_a_drink');
+        const layered = cue(option);
+        if (layered !== null) this.audio?.play(layered);
         this.audio?.play('purchase_success');
         return result;
       };
@@ -2072,10 +2104,23 @@ export class BuildingInteriorScene extends GameplayScene {
           confirmed(() => ({ ok: true, line: grantBlessing(party, turn) }), never),
         );
         return;
-      case "Signet's Ink":
+      case 'The Quiet Needle':
         // Rebuilt per purchase, so inking one stat design marks the other stat
         // designs as spent — and the skill mark as spent independently of them.
         panel.open(() => buildTattooMenu(this.active(), turn, host), confirmed(inkTattoo, never));
+        return;
+      case 'The Barracks':
+        // The garrison's two counters. Split on role rather than on anything the
+        // room can be asked, because both stand in the same building and only
+        // the NPC the player talked to says which one they are at.
+        if (role === 'guard') {
+          panel.open(
+            () => buildDrillYardMenu(this.active(), turn, host),
+            confirmed(runDrill, never),
+          );
+          return;
+        }
+        panel.open(() => buildArmouryMenu(turn, host), confirmed(issueArmour, never));
         return;
       case 'Herb & Remedy':
         panel.open(
@@ -2112,16 +2157,15 @@ export class BuildingInteriorScene extends GameplayScene {
           () =>
             buildInnMenu(
               this.entry.name,
-              party,
               this.active(),
               turn,
               host,
               isTownInDanger(this.townDialogContext()),
             ),
-          // A round off the kitchen board pours; a bed does not.
-          confirmed(
-            serveInn(this.entry.name, party, turn),
-            (option) => option.key !== INN_ROOM_KEY,
+          // A round off the kitchen board pours; a room gets the safe room's own
+          // cue instead, because that is what the player just bought a night of.
+          confirmed(serveInn(this.entry.name, party, turn), (option) =>
+            isInnRoomKey(option.key) ? 'entered_safe_room' : POUR_CUE,
           ),
         );
         return;
@@ -2243,8 +2287,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * the verb only appears once the story is behind them.
    */
   private promptFor(target: Townsperson): string {
-    const service = interiorServiceFor(this.entry.name);
-    if (service?.role !== target.role) return TALK_PROMPT_LABEL;
+    const service = interiorServiceForRole(this.entry.name, target.role);
+    if (service === undefined) return TALK_PROMPT_LABEL;
     if (this.hasUntoldLore(target)) return TALK_PROMPT_LABEL;
     return service.verb;
   }
@@ -2849,7 +2893,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.club?.handleInteract(this.active());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
-    // the safe room didn't just sleep or open Mordecai (a restaurant has both
+    // the safe room didn't just sleep or open Mordecai (that building has both
     // Mordecai/bed and ambient occupants within one tap's reach).
     if (
       !dialogWasOpen &&

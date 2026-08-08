@@ -1105,6 +1105,13 @@ export class AudioManager {
         this.play('rock_golem_death');
         return;
       }
+      // A guard tentacle's death sound cannot be a `playMobAudioCues` flag: it
+      // is cut down and compacted out of the mob array well before the next
+      // frame's cue drain would see one — see `playKrakarenTentacleCues`.
+      if (e.mob.audioTag === 'krakaren_tentacle') {
+        this.play('krakaren_tentacle_death');
+        return;
+      }
       this.playRandom(['splat_1', 'splat_2', 'splat_3']);
     });
 

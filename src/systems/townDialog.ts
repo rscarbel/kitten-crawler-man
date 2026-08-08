@@ -148,7 +148,7 @@ const AMBIENT_LINES: Record<TownRole, ReadonlyArray<string>> = {
   commoner: [
     'Have you seen the new temple? Whole dome went up in a season.',
     'There’s a tattooist by the club now. My cousin got one. It winked at me.',
-    'The Barracks takes anyone off a floor. Warm bunk, no questions.',
+    'The Sleeping Cat is the safe room now. Nothing hostile gets through that door — try it once and you will not sleep anywhere else.',
     'Fine day, isn’t it? For now, anyway.',
     'You’re not from around here, are you?',
     'Heard the market’s got fresh stock. Worth a look.',

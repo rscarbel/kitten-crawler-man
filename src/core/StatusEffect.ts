@@ -1,4 +1,4 @@
-import type { Player } from '../Player';
+import type { Player, StatName } from '../Player';
 
 /**
  * A status effect applied to a Player (e.g. Burn, Frozen, Paralyzed).
@@ -143,4 +143,67 @@ export function makeWhetstone(): StatusEffect {
 /** Cooldown Crisp: halves all ability cooldowns for 25 seconds (1500 ticks at 60 fps). */
 export function makeCooldownCrisp(): StatusEffect {
   return { type: 'cooldown_crisp', ticksRemaining: 1500, totalTicks: 1500, applier: null };
+}
+
+// -- Room boons: what a night in a rented bed is actually worth ---------------
+
+/**
+ * Stat deltas a boon grants while it is live. Read by `Player.effectiveStat`,
+ * which is the whole of the mechanism: nothing is applied on grant and nothing
+ * is unwound on expiry, so a boon cannot leave a stale bonus behind.
+ *
+ * A constitution entry moves max HP, so every path that starts or ends one of
+ * these has to call `syncHpToMaxHp` — otherwise the HP bar and the max disagree
+ * until some unrelated event happens to reconcile them.
+ */
+export const STAT_BOON_BONUSES: ReadonlyMap<string, Partial<Record<StatName, number>>> = new Map([
+  ['well_rested', { constitution: 2 }],
+  ['hearth_warmed', { strength: 2 }],
+  ['deep_slumber', { dexterity: 2, intelligence: 2 }],
+]);
+
+const TICKS_PER_SECOND = 60;
+const SECONDS_PER_MINUTE = 60;
+
+/**
+ * Long enough that a room bought in town is still running when the crawlers
+ * reach whatever the stairs open onto — the boon is the product, and a buff that
+ * expires on the walk out is a con.
+ */
+export const ROOM_BOON_DURATION_MINUTES = 8;
+
+export const ROOM_BOON_TICKS = ROOM_BOON_DURATION_MINUTES * SECONDS_PER_MINUTE * TICKS_PER_SECOND;
+
+const WELL_RESTED_STATUS = 'well_rested';
+const HEARTH_WARMED_STATUS = 'hearth_warmed';
+const DEEP_SLUMBER_STATUS = 'deep_slumber';
+
+/**
+ * The boons an inn room grants. Exported so the inn can clear the other two when
+ * it grants one: three rooms rented in a row would otherwise stack every bonus,
+ * and the choice between the rooms would stop being a choice.
+ */
+export const ROOM_BOON_STATUSES: ReadonlyArray<string> = [
+  WELL_RESTED_STATUS,
+  HEARTH_WARMED_STATUS,
+  DEEP_SLUMBER_STATUS,
+];
+
+function makeRoomBoon(type: string): StatusEffect {
+  return { type, ticksRemaining: ROOM_BOON_TICKS, totalTicks: ROOM_BOON_TICKS, applier: null };
+}
+
+/** Well Rested: the attic cot's boon. */
+export function makeWellRested(): StatusEffect {
+  return makeRoomBoon(WELL_RESTED_STATUS);
+}
+
+/** Hearth Warmed: the hearthside room's boon. */
+export function makeHearthWarmed(): StatusEffect {
+  return makeRoomBoon(HEARTH_WARMED_STATUS);
+}
+
+/** Deep Slumber: the cat's own room's boon. */
+export function makeDeepSlumber(): StatusEffect {
+  return makeRoomBoon(DEEP_SLUMBER_STATUS);
 }

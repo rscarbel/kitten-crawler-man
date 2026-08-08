@@ -14,6 +14,8 @@ export type BuildingEntry = {
   doorTile: { x: number; y: number };
   name: string;
   type: BuildingKind;
+  /** Whether this building's interior hosts the town's safe room. */
+  readonly hasSafeRoom?: boolean;
   /** Westmost column of the opening; absent means the opening is `doorTile` alone. */
   doorwayX0?: number;
   /** Tiles wide the opening is; absent means one. */
@@ -40,7 +42,6 @@ function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readonly widt
 /** Entry-menu icon per building type. Exhaustive over `BuildingKind` by construction. */
 const BUILDING_TYPE_ICONS: Record<BuildingKind, string> = {
   tower: '🏰',
-  restaurant: '🍽',
   store: '🏪',
   club: '🔪',
   house: '🏠',
@@ -50,7 +51,7 @@ const BUILDING_TYPE_ICONS: Record<BuildingKind, string> = {
 const BUILDING_NAME_ICONS: Record<string, string> = {
   'The Barracks': '⚔️',
   'Temple of the Sky': '🕊',
-  "Signet's Ink": '💀',
+  'The Quiet Needle': '💀',
   'The Sunken Stump Pub': '🍺',
   'The Horned Flagon': '🍺',
   'The Sleeping Cat Inn': '🛏',

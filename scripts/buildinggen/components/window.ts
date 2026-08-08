@@ -369,7 +369,7 @@ function paintBottles(ctx: NodeCtx, seed: number, glass: Rect): void {
   }
 }
 
-/** Signet's pinned design sheets: rectangles at slight angles, each with its pin. */
+/** The Quiet Needle's pinned design sheets: rectangles at slight angles, each with its pin. */
 function paintFlashArt(ctx: NodeCtx, seed: number, glass: Rect): void {
   const inset = Math.min(glass.width, glass.height) * FLASH_SHEET_INSET_FRACTION;
   const sheetWidth = (glass.width - inset * 2) / 2;

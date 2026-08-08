@@ -142,6 +142,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'juicer_throw',
     'llama_fireball',
     'llama_fireball_explosion',
+    'massive_strike_with_dirt_impact',
+    'metal_winding_up',
     'rat_squeak_1',
     'rat_squeak_2',
     'rat_squeak_3',
@@ -162,6 +164,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grotesque_spider_spit_landing',
     'keyboard_hero_music_track_1',
     'krakaren_ground_slam',
+    'krakaren_slam_rise',
+    'krakaren_tentacle_death',
+    'krakaren_tentacle_emerge',
+    'krakaren_tentacle_strike',
     'krakaren_yell',
     'life_machine_powering_on',
     'llama_fireball',
@@ -275,7 +281,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    */
   mongoMercenary: ['sword_attack_1'],
 
-  /** The restaurant safe room's Bopca cook — `BopcaSystem`. */
+  /** The town safe room's Bopca cook — `BopcaSystem`. */
   interiorBopca: [
     'bopca_cooking',
     'bopca_dish_set_down',
@@ -351,13 +357,14 @@ export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
  * specific to what is *behind* the door.
  */
 export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundId[] {
-  const groups: readonly SfxGroup[] =
-    entry.type === 'restaurant'
-      ? ['interiorBopca']
-      : entry.type === 'club'
-        ? ['interiorCasino', 'interiorCommerce']
-        : entry.type === 'store' || (entry.type === 'house' && interiorSellsSomething(entry.name))
-          ? ['interiorCommerce']
-          : [];
+  const sellsSomething =
+    entry.type === 'club' ||
+    entry.type === 'store' ||
+    (entry.type === 'house' && interiorSellsSomething(entry.name));
+  const groups: readonly SfxGroup[] = [
+    ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
+    ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
+    ...(sellsSomething ? (['interiorCommerce'] as const) : []),
+  ];
   return groups.flatMap((group) => SFX_GROUPS[group]);
 }

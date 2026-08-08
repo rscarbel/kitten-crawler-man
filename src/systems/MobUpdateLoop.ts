@@ -13,7 +13,6 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
-import type { GameMap } from '../map/GameMap';
 import { SeparationGrid } from '../core/SeparationGrid';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import {
@@ -23,43 +22,12 @@ import {
   SEPARATION_RADIUS_SQ,
 } from './mobSeparation';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { pushPlayerWithCollision } from './playerDisplacement';
 
 const AI_RADIUS_TILES = 22;
 const AI_RADIUS = TILE_SIZE * AI_RADIUS_TILES;
 /** Effective mass used for players in separation calculations. */
 const PLAYER_MASS = 3;
-
-const LEADING_EDGE_FRONT = 0.72;
-const LEADING_EDGE_BACK = 0.28;
-const TILE_CENTER_OFFSET = 0.5;
-
-/**
- * Pushes a player by (dx, dy) with per-axis wall collision, mirroring
- * Mob.moveWithCollision so mobs act as solid obstacles for the player.
- */
-function pushPlayerWithCollision(
-  player: { x: number; y: number },
-  dx: number,
-  dy: number,
-  map: GameMap,
-): void {
-  const ts = TILE_SIZE;
-  if (dx !== 0) {
-    const nextX = player.x + dx;
-    const tileXnext =
-      dx >= 0
-        ? Math.floor((nextX + ts * LEADING_EDGE_FRONT) / ts)
-        : Math.floor((nextX + ts * LEADING_EDGE_BACK) / ts);
-    const tileYcur = Math.floor((player.y + ts * TILE_CENTER_OFFSET) / ts);
-    if (map.isWalkable(tileXnext, tileYcur)) player.x = nextX;
-  }
-  if (dy !== 0) {
-    const nextY = player.y + dy;
-    const tileXcur = Math.floor((player.x + ts * TILE_CENTER_OFFSET) / ts);
-    const tileYnext = Math.floor((nextY + ts * TILE_CENTER_OFFSET) / ts);
-    if (map.isWalkable(tileXcur, tileYnext)) player.y = nextY;
-  }
-}
 
 /**
  * Handed to a boss that must not engage yet — shared, so holding fire allocates

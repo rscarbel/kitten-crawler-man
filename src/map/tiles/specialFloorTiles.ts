@@ -10,6 +10,7 @@ import {
   SPIDER_LAB_FLOOR,
   CLUB_FLOOR,
   DANCE_FLOOR,
+  DRILL_SAND_FLOOR,
 } from '../tileTypes';
 import { drawWallShadow } from './helpers';
 import { drawGroundTile } from './groundTiles';
@@ -22,6 +23,14 @@ const GYM_RUBBER_DOT_RADIUS_FRACTION = 0.18;
 const GYM_RUBBER_DOT_CENTER_FRACTION = 0.5;
 const GYM_LINE_TILE_STRIDE = 4;
 const GYM_LINE_ALPHA = 0.18;
+
+/**
+ * The two tones of the Krakaren lair's wet stone, exported because her bake
+ * gate measures her lightness against the floor she is seen on and a copied hex
+ * goes stale the first time this file is retouched.
+ */
+export const KRAKAREN_LAIR_STONE_LIGHT = '#1a1e24';
+export const KRAKAREN_LAIR_STONE_DARK = '#161a20';
 
 const KRAKAREN_WET_SHEEN_HASH_X = 7;
 const KRAKAREN_WET_SHEEN_HASH_Y = 13;
@@ -339,6 +348,16 @@ function drawArenaFloor(
   }
 }
 
+const DRILL_SAND_BASE = '#c0a878';
+const DRILL_SAND_TRODDEN = 'rgba(146,124,84,0.32)';
+const DRILL_SAND_GROOVE_SHADOW = 'rgba(120,98,62,0.5)';
+const DRILL_SAND_GROOVE_LIGHT = 'rgba(226,208,168,0.4)';
+const DRILL_SAND_GROOVE_COUNT = 3;
+const DRILL_SAND_PATCH_FRACTION = 0.4;
+const DRILL_SAND_HASH_X = 37;
+const DRILL_SAND_HASH_Y = 53;
+const DRILL_SAND_HASH_MOD = 89;
+
 export function drawSpecialFloorTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -357,6 +376,34 @@ export function drawSpecialFloorTile(
     case SAFE_ROOM_FLOOR:
     case SAFE_ROOM_THRESHOLD: {
       drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
+      break;
+    }
+
+    // Raked sand over a garrison's drill hall. It lives here rather than with the
+    // interior furniture because every prop standing on it resolves its own
+    // ground through this dispatcher — a floor that only `drawInteriorTile` knows
+    // how to paint leaves a solid black square under every dummy on it.
+    case DRILL_SAND_FLOOR: {
+      ctx.fillStyle = DRILL_SAND_BASE;
+      ctx.fillRect(sx, sy, ts, ts);
+      const troddenHash = (tx * DRILL_SAND_HASH_X + ty * DRILL_SAND_HASH_Y) % DRILL_SAND_HASH_MOD;
+      const patchSize = Math.floor(ts * DRILL_SAND_PATCH_FRACTION);
+      ctx.fillStyle = DRILL_SAND_TRODDEN;
+      ctx.fillRect(
+        sx + (troddenHash % patchSize),
+        sy + (troddenHash % patchSize),
+        patchSize,
+        patchSize,
+      );
+      // The grooves sit at fixed rows inside the tile so they run unbroken across
+      // a whole rank of them: a drill floor is raked in lanes, not in squares.
+      for (let groove = 0; groove < DRILL_SAND_GROOVE_COUNT; groove++) {
+        const gy = sy + Math.floor(((groove + 1) * ts) / (DRILL_SAND_GROOVE_COUNT + 1));
+        ctx.fillStyle = DRILL_SAND_GROOVE_SHADOW;
+        ctx.fillRect(sx, gy, ts, 1);
+        ctx.fillStyle = DRILL_SAND_GROOVE_LIGHT;
+        ctx.fillRect(sx, gy + 1, ts, 1);
+      }
       break;
     }
 
@@ -418,8 +465,7 @@ export function drawSpecialFloorTile(
 
     // Krakaren Clone lair — dark wet cavern floor
     case KRAKAREN_BOSS_ROOM_FLOOR: {
-      // Dark blue-grey stone base
-      const cavBase = (tx + ty) % 2 === 0 ? '#1a1e24' : '#161a20';
+      const cavBase = (tx + ty) % 2 === 0 ? KRAKAREN_LAIR_STONE_LIGHT : KRAKAREN_LAIR_STONE_DARK;
       ctx.fillStyle = cavBase;
       ctx.fillRect(sx, sy, ts, ts);
       // Wet sheen patches

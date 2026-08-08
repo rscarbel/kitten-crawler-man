@@ -26,6 +26,8 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { renderCanvas, renderDecorationsOverlay } from '../src/map/TileRenderer.js';
+import { stampSafeRoomCounters } from '../src/map/safeRoomCounterLayout.js';
+import { stampSafeRoomDecor } from '../src/map/safeRoomDecorLayout.js';
 import { getLevelDef } from '../src/levels/index.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import {
@@ -83,6 +85,14 @@ const gameMap = new GameMap({
 // walls is a question only a framed screenshot answers.
 const safeRoom = process.argv.includes('--safe-room') ? gameMap.safeRooms[0] : undefined;
 const focus = safeRoom === undefined ? gameMap.startTile : safeRoom.centre;
+
+// The generator lays the room; `DungeonScene` stamps the counter run and the
+// furnishings on entering the floor. A harness that skipped them framed an empty
+// station, which is the one thing a station screenshot is not for.
+if (safeRoom !== undefined) {
+  stampSafeRoomCounters(gameMap);
+  stampSafeRoomDecor(gameMap);
+}
 
 const viewTileX = intArg('x', focus.x - Math.floor(viewTilesW / 2));
 const viewTileY = intArg('y', focus.y - Math.floor(viewTilesH / 2));

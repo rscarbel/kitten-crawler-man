@@ -258,6 +258,30 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Interior counter / bar top"
+      },
+      "interior_rushes": {
+        "row": 4,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior rush-strewn boards (inn, tavern)"
+      },
+      "interior_earth": {
+        "row": 5,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior packed earth (cottage, farm, workshop)"
+      },
+      "interior_flag": {
+        "row": 6,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior flagstone (temple, smithy)"
+      },
+      "interior_ink": {
+        "row": 7,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Interior pigment-stained boards (inking shop)"
       }
     }
   }

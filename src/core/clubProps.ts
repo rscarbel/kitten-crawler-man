@@ -33,6 +33,12 @@ export interface ClubProp {
   /** Top-left tile of the prop's one-tile-deep footprint. */
   tile: { x: number; y: number };
   /**
+   * Tiles to slide the *art* by when drawing, without moving the footprint the
+   * collision box and the Y-sort are derived from. Only the east velvet rope
+   * uses it; see the note on that entry for why the two have to disagree.
+   */
+  artShiftTilesX?: number;
+  /**
    * Whether the prop blocks movement. Stools are deliberately not solid: the
    * player is meant to be able to stand among them at the bar rail.
    */
@@ -64,6 +70,19 @@ export function propSortY(prop: ClubProp): number {
   return prop.tile.y * TILE_SIZE;
 }
 
+/**
+ * Half a tile west, which is where the east rope's outer stanchion has to be
+ * drawn to stand *against* the divider wall instead of in the middle of it.
+ *
+ * The rope sheet puts its two stanchions on the centre lines of its two
+ * columns, so a footprint at x16 paints the outer post down the middle of the
+ * wall tile at x17. A full tile of shift would mirror the west rope exactly,
+ * and is deliberately not taken: it would paint rope and stanchion across
+ * column 15, the one walkable way into the nook, so the lounge would read as
+ * sealed while the player walks straight through the art.
+ */
+const EAST_ROPE_ART_SHIFT_TILES = -0.5;
+
 export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   // ── The Bar — back-bar shelving, the bartender's row, the counter, the rail ──
   { sprite: 'club_drink_shelf', variant: 0, tile: { x: 2, y: 1 }, solid: true },
@@ -86,10 +105,24 @@ export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   { sprite: 'club_weapon_rack', variant: 0, tile: { x: 19, y: 13 }, solid: true },
   { sprite: 'club_merc_desk', variant: 0, tile: { x: 19, y: 15 }, solid: true },
 
-  // ── VIP Lounge — rope, podium, rope, walling off the whole north nook ────────
+  // ── VIP Lounge — rope, podium, rope, with the admitting gap at the east end ──
+  //
+  // The east rope is anchored into the divider wall rather than sitting one tile
+  // short of it, which leaves column 15 open. That tile is the only way in or out
+  // of the nook: carried unbroken the row makes ten tiles of walkable floor the
+  // player can see and can never reach, and an interior with a region sealed off
+  // from its own entrance has no symptom in the game at all. Its art is nudged
+  // back onto the wall face by `EAST_ROPE_ART_SHIFT_TILES`; the footprint stays
+  // where the reachable gap needs it.
   { sprite: 'club_velvet_rope', variant: 0, tile: { x: 7, y: 3 }, solid: true },
   { sprite: 'club_vip_counter', variant: 0, tile: { x: 9, y: 3 }, solid: true },
-  { sprite: 'club_velvet_rope', variant: 1, tile: { x: 15, y: 3 }, solid: true },
+  {
+    sprite: 'club_velvet_rope',
+    variant: 1,
+    tile: { x: 16, y: 3 },
+    solid: true,
+    artShiftTilesX: EAST_ROPE_ART_SHIFT_TILES,
+  },
 ];
 
 function collectSolidTiles(): ReadonlyArray<{ x: number; y: number }> {
@@ -117,8 +150,9 @@ function collectSolidTiles(): ReadonlyArray<{ x: number; y: number }> {
  * counter's art, which is the point — they are behind the bar, and the player
  * talks to them across it from up to 2.6 tiles away.
  *
- * The VIP row seals the x7–16 nook behind it on purpose: the lounge is a
- * look-but-don't-enter set piece, and its host is reachable across the counter.
- * Nothing the player needs lives inside it.
+ * The VIP row pens the x7–16 nook behind it and leaves one tile open at its east
+ * end. Nothing the player needs lives inside the lounge — its host is reachable
+ * across the counter — but the floor in there is walkable, and walkable floor
+ * with no route to it is the failure this layout is checked for.
  */
 export const CLUB_FURNITURE_TILES = collectSolidTiles();

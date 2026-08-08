@@ -13,14 +13,30 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
-import { BOOKSHELF, TABLE, CRATE, BARREL } from '../map/tileTypes';
+import {
+  BOOKSHELF,
+  TABLE,
+  CRATE,
+  BARREL,
+  MAP_TABLE,
+  MUSTER_BOARD,
+  PIGMENT_SHELF,
+} from '../map/tileTypes';
 import { readablesFor, type Readable, type ReadableAnchor } from './townReadables';
+import { anchorCursorForBuilding } from './interiorPlacement';
 
 /** The furniture tile types each anchor kind can sit on, in preference order. */
 const ANCHOR_TILE_TYPES: ReadonlyArray<{ kind: ReadableAnchor; types: ReadonlyArray<number> }> = [
-  { kind: 'shelf', types: [BOOKSHELF] },
-  { kind: 'table', types: [TABLE] },
+  // An inking shop's shelves are its pigment shelves; it holds no bookshelf at
+  // all, and a readable whose anchor group is empty is silently dropped.
+  { kind: 'shelf', types: [BOOKSHELF, PIGMENT_SHELF] },
+  // A garrison's map table is a table; the room holds no ordinary `TABLE`, and a
+  // readable whose anchor group is empty is silently dropped.
+  { kind: 'table', types: [TABLE, MAP_TABLE] },
   { kind: 'crate', types: [CRATE, BARREL] },
+  // Last, so a room that has a board keeps it for the readable authored to it
+  // rather than losing it to another readable's fallback pass.
+  { kind: 'board', types: [MUSTER_BOARD] },
 ];
 
 /** A readable within this range of the player shows a Read prompt / is readable. */
@@ -64,12 +80,13 @@ export class InteriorReadableSystem {
   ): InteriorReadableSystem | null {
     const readables = readablesFor(name);
     if (readables.length === 0) return null;
-    const system = new InteriorReadableSystem(map, readables, occupiedFurniture);
+    const system = new InteriorReadableSystem(map, name, readables, occupiedFurniture);
     return system.placed.length > 0 ? system : null;
   }
 
   private constructor(
     map: GameMap,
+    buildingName: string,
     readables: ReadonlyArray<Readable>,
     occupiedFurniture: ReadonlySet<string>,
   ) {
@@ -85,12 +102,16 @@ export class InteriorReadableSystem {
     // so "hard to reach" is not the same as "never".
     const stillLooking: Readable[] = [];
     for (const readable of readables) {
-      if (!this.tryPlace(readable, furniture, occupiedFurniture)) stillLooking.push(readable);
+      if (!this.tryPlace(readable, buildingName, furniture, occupiedFurniture)) {
+        stillLooking.push(readable);
+      }
     }
     // The fallback pass blocks nothing but the tiles this room's own readables
     // have already taken.
     const nothingBlocked: ReadonlySet<string> = new Set();
-    for (const readable of stillLooking) this.tryPlace(readable, furniture, nothingBlocked);
+    for (const readable of stillLooking) {
+      this.tryPlace(readable, buildingName, furniture, nothingBlocked);
+    }
   }
 
   /**
@@ -99,10 +120,11 @@ export class InteriorReadableSystem {
    */
   private tryPlace(
     readable: Readable,
+    buildingName: string,
     furniture: ReadonlyMap<ReadableAnchor, TileXY[]>,
     blocked: ReadonlySet<string>,
   ): boolean {
-    const tile = pickTile(readable.anchor, furniture, union(blocked, this.usedTiles));
+    const tile = pickTile(readable.anchor, buildingName, furniture, union(blocked, this.usedTiles));
     if (tile === null) return false;
     this.usedTiles.add(tileKey(tile.x, tile.y));
     this.placed.push({ readable, x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE });
@@ -147,9 +169,16 @@ function scanFurniture(map: GameMap): Map<ReadableAnchor, TileXY[]> {
   return groups;
 }
 
-/** The preferred anchor's first free tile, else any other kind's. */
+/**
+ * The preferred anchor's first free tile, else any other kind's.
+ *
+ * "First" is taken from a per-building offset rather than from index 0: the scan
+ * is row-major from `(1,1)`, so index 0 is always the north-westmost tile of its
+ * kind and every room in town would put its letter in the same corner.
+ */
 function pickTile(
   preferred: ReadableAnchor,
+  buildingName: string,
   furniture: ReadonlyMap<ReadableAnchor, TileXY[]>,
   usedTiles: ReadonlySet<string>,
 ): TileXY | null {
@@ -160,7 +189,9 @@ function pickTile(
   for (const kind of order) {
     const tiles = furniture.get(kind);
     if (tiles === undefined) continue;
-    for (const tile of tiles) {
+    const start = anchorCursorForBuilding(buildingName, tiles.length);
+    for (let offset = 0; offset < tiles.length; offset++) {
+      const tile = tiles[(start + offset) % tiles.length];
       if (!usedTiles.has(tileKey(tile.x, tile.y))) return tile;
     }
   }

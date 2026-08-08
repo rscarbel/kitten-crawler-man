@@ -130,7 +130,19 @@ const SHEETS: ReadonlyArray<SheetConfig> = [
   {
     key: 'ground_interior',
     file: 'ground_interior.png',
-    materials: ['interior_boards', 'interior_stone', 'interior_plaster', 'interior_counter'],
+    // Append only. A material's noise seed is `seedSlotBase + materialIndex`, so
+    // inserting one in the middle re-rolls the art of every material after it
+    // and silently changes floors that already shipped.
+    materials: [
+      'interior_boards',
+      'interior_stone',
+      'interior_plaster',
+      'interior_counter',
+      'interior_rushes',
+      'interior_earth',
+      'interior_flag',
+      'interior_ink',
+    ],
     seedSlotBase: 400,
   },
 ];

@@ -1039,7 +1039,7 @@ function paintSuitLanterns(
   }
 }
 
-// ── Signet's doorway ───────────────────────────────────────────────────────
+// ── The Quiet Needle's doorway ───────────────────────────────────────────────────────
 
 const BEAD_STRAND_COUNT = 7;
 const BEAD_PER_STRAND = 6;

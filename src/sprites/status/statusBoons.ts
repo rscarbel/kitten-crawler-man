@@ -1,6 +1,7 @@
 /**
  * The statuses that are *good* news: `speed_fizz`, `jugg_juice`,
- * `cooldown_crisp` and `drunk`.
+ * `cooldown_crisp`, `drunk`, the smith's `whetstone` edge, and the three boons
+ * the inn's rented rooms grant.
  *
  * These read differently from the ailments on purpose. An ailment sits on the
  * character — tinted skin, things dripping off. A boon radiates *outward*: light
@@ -16,6 +17,7 @@ import {
   bodyY,
   drawEmbermote,
   drawGlow,
+  drawGroundPool,
   hashRange,
   particlePhase,
   rgba,
@@ -384,6 +386,171 @@ export function drawWhetstone(ctx: CanvasRenderingContext2D, f: StatusVisualFram
       bodyY(f, EDGE_GLINT_RISE * phase),
       f.width * EDGE_GLINT_RADIUS,
       alpha,
+    );
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// -- well_rested: the attic cot, and a night nothing interrupted -------------
+
+const RESTED_CREAM: Rgb = [245, 214, 138];
+const RESTED_WHITE: Rgb = [255, 248, 226];
+
+const RESTED_RIM_ALPHA = 0.45;
+/**
+ * The dome breathes rather than flickers. A rested crawler should read as calm
+ * from across the room, which means the slowest cycle of any boon here.
+ */
+const RESTED_BREATH_SPEED = 0.00085;
+const RESTED_BREATH_DEPTH = 0.12;
+const RESTED_DOME_RADIUS = 1.15;
+const RESTED_DOME_UP = 0.72;
+const RESTED_DOME_ALPHA = 0.26;
+
+export function wellRestedBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
+  return {
+    rimColor: rgba(RESTED_WHITE, 1),
+    rimAlpha: RESTED_RIM_ALPHA * f.fade,
+  };
+}
+
+export function drawWellRested(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  const breath = 1 + RESTED_BREATH_DEPTH * Math.sin(f.timeMs * RESTED_BREATH_SPEED);
+
+  ctx.globalCompositeOperation = 'lighter';
+  drawGlow(
+    ctx,
+    RESTED_CREAM,
+    f.centerX,
+    bodyY(f, RESTED_DOME_UP),
+    f.width * RESTED_DOME_RADIUS * breath,
+    RESTED_DOME_ALPHA * f.fade,
+  );
+  drawRisingMotes(ctx, f, RESTED_CREAM, 0);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// -- hearth_warmed: the room with the fire in it ----------------------------
+
+const HEARTH_EMBER: Rgb = [244, 114, 92];
+const HEARTH_FLAME: Rgb = [255, 216, 176];
+
+const HEARTH_RIM_ALPHA = 0.5;
+const HEARTH_TINT_ALPHA = 0.16;
+/** Light pooling under the feet, so the warmth reads as coming from a fire the crawler slept beside. */
+const HEARTH_POOL_RADIUS_X = 1.05;
+const HEARTH_POOL_RADIUS_Y = 0.24;
+const HEARTH_POOL_ALPHA = 0.34;
+const HEARTH_FLICKER_SPEED = 0.0018;
+const HEARTH_FLICKER_DEPTH = 0.1;
+/** Embers lift off the pool rather than off the whole body, which is what separates this from Jugg Juice. */
+const HEARTH_EMBER_COUNT = 4;
+const HEARTH_EMBER_RATE_PER_MS = 0.0007;
+const HEARTH_EMBER_RISE = 0.9;
+const HEARTH_EMBER_SPREAD = 0.8;
+const HEARTH_EMBER_RADIUS = 0.1;
+const HEARTH_EMBER_ALPHA = 0.85;
+
+export function hearthWarmedBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
+  return {
+    paint: (target, box) => {
+      target.fillStyle = rgba(HEARTH_EMBER, 1);
+      target.fillRect(box.x, box.y, box.width, box.height);
+    },
+    blend: 'lighter',
+    alpha: HEARTH_TINT_ALPHA * f.fade,
+    rimColor: rgba(HEARTH_EMBER, 1),
+    rimAlpha: HEARTH_RIM_ALPHA * f.fade,
+  };
+}
+
+export function drawHearthWarmed(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  const flicker = 1 + HEARTH_FLICKER_DEPTH * Math.sin(f.timeMs * HEARTH_FLICKER_SPEED);
+
+  ctx.globalCompositeOperation = 'lighter';
+  drawGroundPool(
+    ctx,
+    HEARTH_EMBER,
+    f.centerX,
+    f.footY,
+    f.width * HEARTH_POOL_RADIUS_X * flicker,
+    f.height * HEARTH_POOL_RADIUS_Y * flicker,
+    HEARTH_POOL_ALPHA * f.fade,
+  );
+
+  for (let i = 0; i < HEARTH_EMBER_COUNT; i++) {
+    const key = f.seed + i * PARTICLE_KEY_STRIDE;
+    const phase = particlePhase(f, i, HEARTH_EMBER_RATE_PER_MS);
+    const alpha = Math.sin(phase * Math.PI) * HEARTH_EMBER_ALPHA * f.fade;
+    if (alpha <= 0) continue;
+    const x = bodyX(f, hashRange(key, HALF - HEARTH_EMBER_SPREAD, HALF + HEARTH_EMBER_SPREAD));
+    drawEmbermote(
+      ctx,
+      HEARTH_EMBER,
+      HEARTH_FLAME,
+      x,
+      f.footY - f.height * HEARTH_EMBER_RISE * phase,
+      f.width * HEARTH_EMBER_RADIUS,
+      alpha,
+    );
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// -- deep_slumber: the good room, and the sleep nobody wakes from ------------
+
+const SLUMBER_INDIGO: Rgb = [138, 148, 244];
+const SLUMBER_PALE: Rgb = [222, 228, 255];
+
+const SLUMBER_RIM_ALPHA = 0.45;
+const SLUMBER_HAZE_RADIUS = 0.95;
+const SLUMBER_HAZE_ALPHA = 0.2;
+/**
+ * Motes circle the head instead of rising off the body: a slow orbit reads as a
+ * mind still turning something over, which is the pair of stats this one buys.
+ */
+const SLUMBER_ORBIT_COUNT = 4;
+const SLUMBER_ORBIT_RATE_PER_MS = 0.00022;
+const SLUMBER_ORBIT_X = 0.85;
+const SLUMBER_ORBIT_Y = 0.12;
+const SLUMBER_ORBIT_ABOVE = 0.1;
+const SLUMBER_MOTE_RADIUS = 0.13;
+/** Motes on the far side of the orbit are drawn smaller and dimmer, so the ring has depth. */
+const SLUMBER_FAR_SCALE = 0.55;
+
+export function deepSlumberBodyLayer(f: StatusVisualFrame): SilhouetteLayer {
+  return {
+    rimColor: rgba(SLUMBER_INDIGO, 1),
+    rimAlpha: SLUMBER_RIM_ALPHA * f.fade,
+  };
+}
+
+export function drawDeepSlumber(ctx: CanvasRenderingContext2D, f: StatusVisualFrame): void {
+  const ringY = bodyTop(f) - f.height * SLUMBER_ORBIT_ABOVE;
+
+  ctx.globalCompositeOperation = 'lighter';
+  drawGlow(
+    ctx,
+    SLUMBER_INDIGO,
+    f.centerX,
+    ringY,
+    f.width * SLUMBER_HAZE_RADIUS,
+    SLUMBER_HAZE_ALPHA * f.fade,
+  );
+
+  for (let i = 0; i < SLUMBER_ORBIT_COUNT; i++) {
+    const angle =
+      (f.timeMs * SLUMBER_ORBIT_RATE_PER_MS + i / SLUMBER_ORBIT_COUNT) * Math.PI * 2 + f.seed;
+    const nearness = HALF + HALF * Math.sin(angle);
+    const scale = SLUMBER_FAR_SCALE + (1 - SLUMBER_FAR_SCALE) * nearness;
+    drawEmbermote(
+      ctx,
+      SLUMBER_INDIGO,
+      SLUMBER_PALE,
+      f.centerX + Math.cos(angle) * f.width * SLUMBER_ORBIT_X,
+      ringY + Math.sin(angle) * f.height * SLUMBER_ORBIT_Y,
+      f.width * SLUMBER_MOTE_RADIUS * scale,
+      f.fade * nearness,
     );
   }
   ctx.globalCompositeOperation = 'source-over';

@@ -45,7 +45,7 @@ const SEED_FLAGON = 731063;
 const SEED_HILDA = 731179;
 const SEED_SMITHY = 731291;
 const SEED_STUMP = 731417;
-const SEED_SIGNET = 731533;
+const SEED_QUIET_NEEDLE = 731533;
 const SEED_DESPERADO = 731659;
 const SEED_MILL = 731777;
 
@@ -1832,15 +1832,15 @@ const SUNKEN_STUMP: BuildingSpec = {
   },
 };
 
-/** Signet's Ink — the most colourful wall in the Low Quarter. */
-const SIGNETS_INK: BuildingSpec = {
-  key: 'signets_ink',
-  file: 'signets_ink.png',
-  title: "Signet's Ink",
+/** The Quiet Needle — the most colourful wall in the Low Quarter. */
+const QUIET_NEEDLE: BuildingSpec = {
+  key: 'quiet_needle',
+  file: 'quiet_needle.png',
+  title: 'The Quiet Needle',
   replaces: 'tattoo_parlor',
   tilesWide: 8,
   tilesHigh: 5,
-  seed: SEED_SIGNET,
+  seed: SEED_QUIET_NEEDLE,
   stories: 1,
   sideReturnTiles: 0.5,
   facade: {
@@ -2430,7 +2430,7 @@ export const BUILDING_SPECS: ReadonlyArray<BuildingSpec> = [
   HILDAS_COTTAGE,
   BLACKSMITH,
   SUNKEN_STUMP,
-  SIGNETS_INK,
+  QUIET_NEEDLE,
   DESPERADO_CLUB,
   MILLERS_FARM,
 ];

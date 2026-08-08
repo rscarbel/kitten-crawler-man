@@ -51,7 +51,7 @@ export interface TownOffset {
 }
 
 /** Categories `BuildingInteriorScene` keys its interiors off. */
-export type BuildingKind = 'house' | 'tower' | 'restaurant' | 'store' | 'club';
+export type BuildingKind = 'house' | 'tower' | 'store' | 'club';
 
 /**
  * One paved or planted region of the town.
@@ -132,6 +132,7 @@ export const SHOP_SIGN_EMBLEMS = [
   'quill',
   'cards',
   'sheaf',
+  'needle',
 ] as const;
 
 export type ShopSignEmblem = (typeof SHOP_SIGN_EMBLEMS)[number];
@@ -167,6 +168,14 @@ export interface PlannedBuilding {
   readonly spriteKey: string;
   readonly name: string;
   readonly kind: BuildingKind;
+  /**
+   * Whether this building's interior hosts the town's safe room — Mordecai, the
+   * Bopca's counter and the lantern light. Stated here rather than derived from
+   * `kind`, because a safe room is a property of one specific building and not
+   * of a category: keying it to a kind is what forced The Barracks to be
+   * registered as a restaurant.
+   */
+  readonly hasSafeRoom?: boolean;
   /** Device on the shop sign hung over this building's door. */
   readonly sign: ShopSignEmblem;
 }
@@ -773,7 +782,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     plotTop: GARRISON_TOP,
     spriteKey: 'barracks',
     name: 'The Barracks',
-    kind: 'restaurant',
+    kind: 'house',
     sign: 'shield',
   },
   {
@@ -821,6 +830,7 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     spriteKey: 'sleeping_cat_inn',
     name: 'The Sleeping Cat Inn',
     kind: 'house',
+    hasSafeRoom: true,
     sign: 'bed',
   },
 
@@ -867,10 +877,10 @@ const PLANNED_BUILDINGS: ReadonlyArray<PlannedBuilding> = [
     west: INNER_WEST_PLOT,
     frontRow: LOW_QUARTER_BOTTOM,
     plotTop: LOW_QUARTER_TOP,
-    spriteKey: 'signets_ink',
-    name: "Signet's Ink",
+    spriteKey: 'quiet_needle',
+    name: 'The Quiet Needle',
     kind: 'house',
-    sign: 'quill',
+    sign: 'needle',
   },
   {
     west: SERVICE_ALLEY_EAST + 1,
@@ -982,14 +992,14 @@ const PLANNED_YARDS: ReadonlyArray<PlannedYard> = [
     ],
   },
   /**
-   * Signet's Ink's garden and the drying green beside it, as one enclosure: the
-   * two are an L rather than two rectangles, and the fence painter skips any tile
-   * standing under building art, so stating the whole block and letting Signet's
-   * own facade close the middle of it is simpler than fencing two plots back to
-   * back along a line nobody can walk.
+   * The Quiet Needle's garden and the drying green beside it, as one enclosure:
+   * the two are an L rather than two rectangles, and the fence painter skips any
+   * tile standing under building art, so stating the whole block and letting the
+   * parlour's own facade close the middle of it is simpler than fencing two plots
+   * back to back along a line nobody can walk.
    */
   {
-    name: "Signet's back garden",
+    name: "The Quiet Needle's back garden",
     bounds: span(INNER_WEST_PLOT, BACK_GARDEN_TOP, KINGS_ROAD_WEST - 1, LOW_QUARTER_BOTTOM),
     kind: 'garden',
     fence: 'picket',

@@ -199,11 +199,11 @@ const CLUTTER_PLACEMENTS: ReadonlyArray<ClutterPlacement> = [
   },
   {
     kind: 'garden_pump',
-    anchor: { at: 'yard', name: "Signet's back garden", offset: { dx: 2, dy: 2 } },
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 2, dy: 2 } },
   },
   {
     kind: 'planter',
-    anchor: { at: 'yard', name: "Signet's back garden", offset: { dx: 9, dy: 6 } },
+    anchor: { at: 'yard', name: "The Quiet Needle's back garden", offset: { dx: 9, dy: 6 } },
   },
   {
     kind: 'barrel_stack',

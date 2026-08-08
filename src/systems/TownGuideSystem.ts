@@ -85,10 +85,10 @@ export class TownGuideSystem implements GameSystem {
       });
     }
 
-    // Found by kind, not by name: the town's safe room is whichever building is
-    // the one with a kitchen in it, and that is what `BuildingInteriorScene`
-    // itself keys Mordecai and the Bopcas off.
-    const safeRoom = gameMap.buildingEntries.find((entry) => entry.type === 'restaurant');
+    // Found by the flag the town plan sets, not by name: it is the same thing
+    // `BuildingInteriorScene` keys Mordecai and the Bopcas off, so the guide
+    // cannot point at a building that turns out to have no safe room in it.
+    const safeRoom = gameMap.buildingEntries.find((entry) => entry.hasSafeRoom === true);
     if (safeRoom !== undefined) {
       stops.push({
         id: 'safe_room',

@@ -1,6 +1,7 @@
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { VIAL_ATTACK_TYPE } from '../creatures/EvilClown';
 import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
+import { GROUND_PUNCH_ATTACK_TYPE } from '../creatures/Juicer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
 import type { DeathCause } from '../ui/DeathExplanations';
@@ -103,6 +104,11 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
     return 'darkKnight';
   }
 
+  // The thrown dumbbell is dodged at range; the ground punch is dodged by
+  // reading a telegraphed circle up close. Telling both deaths the same way
+  // loses the lesson the punch is meant to teach.
+  if (mobType === 'Juicer' && attackType === GROUND_PUNCH_ATTACK_TYPE) return 'juicerPunch';
+
   // The cone is a red shape on the ground the player was given time to leave;
   // the bolts are not. Telling both deaths the same way loses the lesson.
   if (mobType === 'SkeletonLord' && attackType === 'grasping_hands') return 'skeletonLordHands';
@@ -123,6 +129,8 @@ function causeFromDamageSource(source: DamageSource): DeathCause {
   // The thrown boulder is a third fight again — one you dodge by moving, not by
   // closing — and it can be attributed to a hired bruiser as well as to a golem.
   if (attackType === ROCK_THROW_ATTACK_TYPE) return 'rockGolemRock';
+
+  if (mobType === 'KrakarenTentacle') return 'krakarenTentacleStrike';
 
   if (mobType === 'KrakarenClone') {
     if (attackType === 'slam') return 'krakarenCloneSlam';

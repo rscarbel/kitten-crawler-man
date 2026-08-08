@@ -72,7 +72,7 @@ const BUILDING_RAMPS: Readonly<Record<string, Ramp>> = {
   plaster_cream: ramp([118, 109, 93], [166, 157, 137], [204, 196, 178], [222, 216, 200]),
   /** Older, greyer, damper plaster for the poorer buildings. */
   plaster_grey: ramp([74, 72, 68], [110, 107, 101], [142, 139, 132], [162, 158, 151]),
-  /** Signet's saturated shopfront — the most colourful wall in town. */
+  /** The Quiet Needle's saturated shopfront — the most colourful wall in town. */
   ink_violet: ramp([60, 36, 78], [112, 66, 140], [166, 108, 194], [204, 152, 224]),
   /** Herb & Remedy's soft sage wash. */
   apothecary_sage: ramp([92, 106, 88], [136, 152, 128], [178, 192, 168], [200, 212, 190]),

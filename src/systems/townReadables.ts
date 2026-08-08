@@ -13,7 +13,7 @@
  */
 
 /** The furniture a readable sits on, resolved to real tiles by the owning system. */
-export type ReadableAnchor = 'shelf' | 'table' | 'crate';
+export type ReadableAnchor = 'shelf' | 'table' | 'crate' | 'board';
 
 export interface Readable {
   /** Stable id, so a room can never place the same piece twice. */
@@ -164,6 +164,19 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
           '"No room — a cat. Would not be moved off the stool. TALKED. Talked me out of a ham. I am writing this so that when I am old I will know it happened."',
         ],
       },
+      {
+        id: 'inn_tariff_board',
+        title: 'The Tariff Board',
+        where: 'propped on the guest-room shelf, so nobody argues the bill',
+        anchor: 'shelf',
+        body: [
+          'A plank of chalked slate, ruled into three rows in a careful hand.',
+          'THE ATTIC COT. Four to a room, straw, one candle. Cheapest bed on the floor and the innkeep says so out loud.',
+          'THE HEARTHSIDE ROOM. Its own fire, laid before dusk. "Worth it in the wet months. Do not argue, just take it."',
+          "THE CAT'S OWN ROOM. The shelf, the good brazier, the door that bolts from both sides. The price has been rubbed out and written again four times, each larger than the last.",
+          'Under the rows, not chalk but paint, and older than the rest of the board: "NOTHING HOSTILE CROSSES THIS THRESHOLD. Nobody has to pay for that part."',
+        ],
+      },
     ],
   ],
   [
@@ -240,20 +253,34 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
       {
         id: 'barracks_orders',
         title: 'Standing Orders, Third Floor Garrison',
-        where: 'pinned by the door where everyone must pass it',
+        where: 'nailed to the muster board, four sheets deep',
+        anchor: 'board',
+        body: [
+          'ONE. This is not a safe room and no soldier is to tell a crawler otherwise. The room that cannot be argued with is the Sleeping Cat Inn. Send them there and stop sending them here.',
+          'TWO. Nobody goes past the wall alone. Not for a bet, not for a shortcut, not for a lost animal.',
+          'THREE. The sand is open to any crawler off the stair. Free of charge, and worth what you put into it.',
+          'FOUR. The floor timer is not a rumour and it is not fixed. Assume it will be shortened. Assume it will be shortened again.',
+          'Beneath the orders, the current postings: nineteen names in four watches, and a fifth watch ruled out with a line through it and nothing written underneath.',
+          'Under that, in a dozen different hands, a longer list with dates beside it. Some of the dates are very recent.',
+        ],
+      },
+      {
+        id: 'barracks_map_table',
+        title: 'The Floor Map',
+        where: 'pinned flat under counters and a broken rule',
         anchor: 'table',
         body: [
-          'ONE. This room is a safe room. Nothing hostile crosses the threshold. This is not a policy of the garrison; it is a fact of the floor, and it has never failed.',
-          'TWO. Any crawler off the stair may take a bunk. No questions, no fee, no limit. We were all off the stair once.',
-          'THREE. Nobody goes past the wall alone. Not for a bet, not for a shortcut, not for a lost animal.',
-          'FOUR. The floor timer is not a rumour and it is not fixed. Assume it will be shortened. Assume it will be shortened again.',
-          'Beneath the orders, in a dozen different hands, a list of names with dates beside them. Some of the dates are very recent.',
+          'The third floor as the garrison understands it, drawn over four times and corrected in three inks.',
+          'The wall is drawn heavy and confident. Everything outside it is a guess, and the guesses get thinner the further out they go.',
+          'Wooden counters mark the patrols. Twelve of them sit inside the wall. Four sit outside it and have not been moved in six weeks, and nobody has taken them off the map.',
+          'In the far corner, well past the last drawn road, somebody has inked a small neat circle with no label on it at all.',
+          'Beside the circle, in a different hand: "this is where they come from. do not put a counter here. i will not have men standing on it."',
         ],
       },
     ],
   ],
   [
-    "Signet's Ink",
+    'The Quiet Needle',
     [
       {
         id: 'ink_design_book',
@@ -265,6 +292,32 @@ const BUILDING_READABLES: ReadonlyMap<string, ReadonlyArray<Readable>> = new Map
           'Every design has a note under it in the tattooist\'s hand. "Settles in a day." "Argues with the ribs, do not pair." "Wakes when the wearer lies."',
           'One page near the back is different. The line is not the same line — it is better, and it moves very slightly when you are not looking at it directly.',
           'The note under that one says only: "Hers. Do not copy. It would not let me anyway."',
+        ],
+      },
+      {
+        id: 'needle_price_board',
+        title: 'The Board of Rates',
+        where: 'propped against the pigment jars, lettered in four inks',
+        anchor: 'shelf',
+        body: [
+          'A slate in a good hand, and the prices are not the interesting part.',
+          'STAT MARK — one hundred. ONE PER SKIN. This is not a haggle and it is not a rule of the house, it is a rule of the ink.',
+          'THROAT MARK, BRASS — two hundred and fifty. Separate from the above. Do not ask me to explain how, I only know that the two of them ignore each other.',
+          'COVER-UP — no. REMOVAL — no. SECOND MARK — no.',
+          'At the bottom, scratched smaller, without a price beside it: "Anything I will not put on you is on the last page of the design book and you may not read that page."',
+        ],
+      },
+      {
+        id: 'needle_customer_ledger',
+        title: "The Customer's Ledger",
+        where: 'open on the work table, weighted with a muller',
+        anchor: 'table',
+        body: [
+          'Names, dates, marks, and a fourth column with no heading on it.',
+          'Most of the fourth column is blank. Where it is not blank it says a floor number, and every number is lower than the one on the line above it.',
+          'Thirty-one lines in, the hand changes: the letters get smaller and the entries get shorter, and the fourth column starts being filled in on the same day the mark was cut.',
+          '"Cutler, ribs, boar. 4." "Halbrook, forearm, eye. 4." "Nissa, throat, brass. 4."',
+          'The last twelve lines have no fourth column at all, and one of them has been gone over so many times the parchment has given way.',
         ],
       },
     ],

@@ -169,7 +169,7 @@ const WELL_AO_REACH_FRACTION = 0.6;
 const HEAD_SHADOW_DEPTH = 0.68;
 const HEAD_SHADOW_REACH_FRACTION = 0.24;
 
-/** Signet's bead curtain, hung where a leaf would otherwise be. */
+/** The Quiet Needle's bead curtain, hung where a leaf would otherwise be. */
 const BEAD_STRING_SPACING_PX = 6;
 const BEAD_SPACING_PX = 5;
 const BEAD_RADIUS_PX = 1.7;

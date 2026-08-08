@@ -1,8 +1,12 @@
 import { drawHumanSprite } from '../sprites/humanSprite';
 import { drawCatSprite } from '../sprites/catSprite';
-import { drawJuicerSprite } from '../sprites/juicerSprite';
+import { drawJuicerSprite, JUICER_HEAD_CLEARANCE_TILES } from '../sprites/juicerSprite';
 import { drawHoarderSprite } from '../sprites/hoarderSprite';
-import { drawKrakarenSprite } from '../sprites/krakarenSprite';
+import {
+  drawKrakarenSprite,
+  krakarenArtHeightTiles,
+  krakarenArtTopTiles,
+} from '../sprites/krakarenSprite';
 import { ballOfSwinePortrait, drawBallOfSwineSprite } from '../sprites/ballOfSwineSprite';
 import { BOS_BODY_RADIUS_TILES } from '../sprites/ballOfSwineSheet';
 import { drawGrotesqueSpiderSprite } from '../sprites/grotesqueSpiderSprite';
@@ -73,12 +77,35 @@ const HUMAN_SPRITE_Y_OFFSET = 78;
 const HUMAN_SPRITE_SIZE = 72;
 /** Juicer sprite size. */
 const JUICER_SPRITE_SIZE = 56;
-/** Juicer sprite y offset. */
-const JUICER_SPRITE_Y_OFFSET = 32;
-/** Krakaren sprite size. */
-const KRAKAREN_SPRITE_SIZE = 70;
-/** Krakaren sprite y offset. */
-const KRAKAREN_SPRITE_Y_OFFSET = 22;
+/** How much clear panel is left above the top of his head. */
+const JUICER_PANEL_TOP_PAD = 12;
+/**
+ * Where his tile sits down the panel. Derived from his own headroom rather than
+ * picked: he is drawn most of a tile and a half above the tile he stands on, so
+ * a hand-picked offset puts his head through the top of the panel.
+ */
+const JUICER_SPRITE_Y_OFFSET =
+  JUICER_PANEL_TOP_PAD + Math.round(JUICER_SPRITE_SIZE * JUICER_HEAD_CLEARANCE_TILES);
+/** He is posed head-on in the panel, looking out at the player. */
+const JUICER_INTRO_FACING_Y = 1;
+/** A portrait holds one pose rather than breathing through the intro. */
+const JUICER_INTRO_IDLE_FRAME = 0;
+/**
+ * How tall her art is drawn in the panel.
+ *
+ * Her `ts` argument is a *tile* size and her baked cell stands nearly three
+ * tiles tall, so a flat size picked as a height would draw her at triple it and
+ * out through both ends of the panel. The tile size is divided back out of this.
+ */
+const KRAKAREN_SPRITE_SIZE = 120;
+/** How much clear panel is left above the top of her mantle. */
+const KRAKAREN_PANEL_TOP_PAD = 18;
+/** Used only until the sheet loads: her cell is about this many tiles tall/high. */
+const KRAKAREN_FALLBACK_ART_HEIGHT_TILES = 2.9;
+const KRAKAREN_FALLBACK_ART_TOP_TILES = 1.6;
+/** She is posed head-on in the panel, and a portrait holds one frame. */
+const KRAKAREN_INTRO_FACING_Y = 1;
+const KRAKAREN_INTRO_IDLE_FRAME = 0;
 /** Ball of Swine sprite size. */
 /**
  * How wide the ball is drawn in its panel, and the tile size that produces it.
@@ -343,33 +370,23 @@ export class BossIntroSystem implements GameSystem {
       ctx.save();
       if (intro.bossType === 'juicer') {
         const jS = JUICER_SPRITE_SIZE;
-        drawJuicerSprite(
-          ctx,
-          rightX + panelW / 2 - jS / 2,
-          panelY + JUICER_SPRITE_Y_OFFSET,
-          jS,
-          0,
-          false,
-          0,
-          0,
-          1,
-          false,
-          false,
-        );
+        drawJuicerSprite(ctx, rightX + panelW / 2 - jS / 2, panelY + JUICER_SPRITE_Y_OFFSET, jS, {
+          facingX: 0,
+          facingY: JUICER_INTRO_FACING_Y,
+          idleFrame: JUICER_INTRO_IDLE_FRAME,
+        });
       } else if (intro.bossType === 'krakaren_clone') {
-        const kS = KRAKAREN_SPRITE_SIZE;
-        drawKrakarenSprite(
-          ctx,
-          rightX + panelW / 2 - kS / 2,
-          panelY + KRAKAREN_SPRITE_Y_OFFSET,
-          kS,
-          0,
-          false,
-          0,
-          1,
-          -1,
-          0,
-        );
+        const kS =
+          KRAKAREN_SPRITE_SIZE / krakarenArtHeightTiles(KRAKAREN_FALLBACK_ART_HEIGHT_TILES);
+        const kY =
+          panelY +
+          KRAKAREN_PANEL_TOP_PAD +
+          kS * krakarenArtTopTiles(KRAKAREN_FALLBACK_ART_TOP_TILES);
+        drawKrakarenSprite(ctx, rightX + panelW / 2 - kS / 2, kY, kS, {
+          facingX: 0,
+          facingY: KRAKAREN_INTRO_FACING_Y,
+          idleFrame: KRAKAREN_INTRO_IDLE_FRAME,
+        });
       } else if (intro.bossType === 'ball_of_swine') {
         const bS = BOS_SPRITE_SIZE;
         drawBallOfSwineSprite(
