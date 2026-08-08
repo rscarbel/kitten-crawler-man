@@ -42,6 +42,9 @@ import { sfxGroupsForBuildingEntry } from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/SpriteLoader';
 import { aiAdapter } from '../ai/AIAdapter';
 import { drawText } from '../ui/TextBox';
+import { drawBox, drawOverlay } from '../ui/Box';
+import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../ui/Button';
+import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { resolveSkillBookPrompt } from '../systems/skillBookUse';
@@ -130,6 +133,7 @@ import {
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import {
   advanceFocusedOverlay,
+  auditOverlayFocus,
   focusedOverlay,
   keyboardSuppressed,
   worldHalted,
@@ -217,9 +221,27 @@ const EXIT_ARROW_Y_OFFSET = 15;
 const EXIT_MENU_TITLE_Y = 22;
 const EXIT_MENU_QUESTION_Y = 58;
 const EXIT_MENU_HINT_Y = 79;
-const EXIT_BTN_TEXT_Y = 16;
 const EXIT_BTN_Y_OFFSET = 110;
 const EXIT_BTN_GAP = 8;
+const EXIT_MENU_OVERLAY_ALPHA = 0.55;
+const EXIT_MENU_PANEL_WIDTH = 340;
+const EXIT_MENU_PANEL_HEIGHT = 190;
+const EXIT_MENU_TITLE_SIZE = 18;
+const EXIT_MENU_QUESTION_SIZE = 13;
+const EXIT_MENU_HINT_SIZE = 11;
+const EXIT_MENU_BUTTON_WIDTH = 120;
+const EXIT_MENU_BUTTON_HEIGHT = 42;
+const EXIT_MENU_BUTTON_TEXT_SIZE = 14;
+const EXIT_MENU_BG_COLOR = '#0d1a09';
+const EXIT_MENU_BORDER_COLOR = '#6aaa44';
+const EXIT_MENU_BORDER_WIDTH = 2;
+const EXIT_MENU_BUTTON_BORDER_WIDTH = 1.5;
+const EXIT_MENU_LEAVE_BG_COLOR = '#1a4d0d';
+const EXIT_MENU_LEAVE_TEXT_COLOR = '#d4edaa';
+const EXIT_MENU_STAY_BG_COLOR = '#1e293b';
+const EXIT_MENU_STAY_BORDER_COLOR = '#475569';
+const EXIT_MENU_STAY_TEXT_COLOR = '#94a3b8';
+const EXIT_MENU_HINT_TEXT_COLOR = '#64748b';
 /** Shown when the party falls indoors to something no quest encounter owns. */
 const INTERIOR_DEFEAT_MESSAGE = 'The building kept what was left of you.';
 /** Fraction of max HP both players are revived to after falling in an interior fight. */
@@ -291,6 +313,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private _mouseDown = false;
   private exitMenuOpen = false;
   private exitDismissed = false;
+  /** Exit/Stay hit-rects, rebuilt by `renderExitMenu` and read by `handleExitMenuClick`. */
+  private exitMenuButtons: ButtonRect[] = [];
 
   // Safe room (restaurant only)
   private readonly safeRoom: SafeRoomSystem | null;
@@ -732,35 +756,39 @@ export class BuildingInteriorScene extends GameplayScene {
     const servicePanel = this.servicePanel;
     const readingPanel = this.readingPanel;
     /** Every modal in this room stops the world; only the shop-floor chat does not. */
-    const modal = (isOpen: boolean): OverlayInputClaim => ({
+    const modal = (isOpen: boolean, focusContext: string | null): OverlayInputClaim => ({
       isOpen,
       space: { kind: 'swallow' },
       locksKeyboard: true,
       haltsWorld: true,
+      focusContext,
     });
     return [
       // The award stack outranks the death screen because it draws over it — a
       // level-up earned by the blow that killed you is still on top and still
       // has to be dismissible.
-      modal(this.menus.levelUpDialog.isShowing),
-      modal(this.menus.rewardGrantedDialog.isShowing),
-      modal(this.menus.skillBookPrompt.isOpen),
+      modal(this.menus.levelUpDialog.isShowing, 'level-up'),
+      modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
+      modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // `locksKeyboard` even though the death screen accepts from the keyboard:
       // its focus ring listens in the capture phase and consumes the press
       // before this handler is reached, so locking here only stops a hotbar key
       // spending a potion the revive is about to throw away.
-      { isOpen: this.gameOver, space: { kind: 'swallow' }, locksKeyboard: true, haltsWorld: true },
+      modal(this.gameOver, 'death-screen'),
       {
         isOpen: this.chat.isOpen,
         space: { kind: 'passThrough' },
         locksKeyboard: true,
         haltsWorld: true,
+        // The DOM input owns every key while it is up, the ring included.
+        focusContext: null,
       },
       {
         isOpen: this.bopca?.isDialogOpen === true,
         space: { kind: 'advance', advance: () => this.bopca?.advanceDialog() },
         locksKeyboard: true,
         haltsWorld: true,
+        focusContext: 'bopca-dialog',
       },
       {
         isOpen: this.safeRoom?.mordecaiDialogOpen === true,
@@ -771,22 +799,30 @@ export class BuildingInteriorScene extends GameplayScene {
         // ticking down.
         locksKeyboard: true,
         haltsWorld: true,
+        // Advance-anywhere: one speaker line, no buttons to reach.
+        focusContext: null,
       },
-      modal(this.safeRoom?.isSleeping === true),
-      modal(this.shop?.shopOpen === true),
+      // A timed fade with no buttons; the sleep ends itself.
+      modal(this.safeRoom?.isSleeping === true, null),
+      modal(this.shop?.shopOpen === true, 'shop'),
       {
         isOpen: this.club?.modalOpen === true,
         space: { kind: 'advance', advance: () => this.club?.dismissModal(this.active()) },
         locksKeyboard: true,
         haltsWorld: true,
+        // One claim over five stations — shop, casino, guild, VIP lounge, quest
+        // dialog — so the club answers for whichever of them is drawn.
+        focusContext: this.club?.focusContext ?? null,
       },
-      modal(servicePanel?.isOpen === true),
-      modal(readingPanel?.isOpen === true),
-      modal(this.readablePanel.isOpen),
-      modal(this.towerStairs?.menuOpen === true),
-      modal(this.exitMenuOpen),
-      modal(this.followerMenu.isOpen),
-      modal(this.pauseMenu.isOpen),
+      modal(servicePanel?.isOpen === true, 'priced-menu'),
+      modal(readingPanel?.isOpen === true, 'fortune-teller'),
+      // Pages of text with no buttons; Space turns them, and the panel declares
+      // an empty ring so nothing behind it keeps one.
+      modal(this.readablePanel.isOpen, 'readable'),
+      modal(this.exitMenuOpen, 'exit-building'),
+      modal(this.towerStairs?.menuOpen === true, 'tower-stairs'),
+      modal(this.followerMenu.isOpen, 'follower-menu'),
+      modal(this.pauseMenu.isOpen, 'pause'),
       // Last: the one overlay the world keeps running under — walking away from
       // an occupant is what ends the conversation — and the one every other
       // surface here is drawn over. Ranking it above them would hand Space and
@@ -796,6 +832,8 @@ export class BuildingInteriorScene extends GameplayScene {
         space: { kind: 'advance', advance: () => citizenDialog?.advance() },
         locksKeyboard: true,
         haltsWorld: false,
+        // Advance-anywhere: one speaker line, no buttons to reach.
+        focusContext: null,
       },
     ];
   }
@@ -1114,8 +1152,7 @@ export class BuildingInteriorScene extends GameplayScene {
       },
       dismissBuilding: () => {
         if (!this.exitMenuOpen) return false;
-        this.exitMenuOpen = false;
-        this.exitDismissed = true;
+        this.closeExitMenu();
         return true;
       },
       dismissFollowerMenu: () => {
@@ -1733,17 +1770,27 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
-  /** Exit or Stay, hit-tested against the same rects `renderExitMenu` draws. */
+  /**
+   * Exit or Stay, dispatched through the hit-rects `renderExitMenu` registered.
+   *
+   * The registered rects rather than a second call to `menuRects()`: the focus
+   * ring activates a button by synthesizing a click at the rect the *render*
+   * produced, so a click path measuring its own geometry is a second list that
+   * can disagree with the one the keyboard aims at.
+   */
   private handleExitMenuClick(mx: number, my: number): void {
-    const rects = this.menuRects();
-    if (pointInRect(mx, my, rects.exit)) {
-      this.doExit();
-      return;
+    for (const button of this.exitMenuButtons) {
+      if (pointInRect(mx, my, { x: button.x, y: button.y, w: button.w, h: button.h })) {
+        button.action?.();
+        return;
+      }
     }
-    if (pointInRect(mx, my, rects.stay)) {
-      this.exitMenuOpen = false;
-      this.exitDismissed = true;
-    }
+  }
+
+  /** Stay: shut the menu and remember the refusal until the player steps off the mat. */
+  private closeExitMenu(): void {
+    this.exitMenuOpen = false;
+    this.exitDismissed = true;
   }
 
   /**
@@ -2434,8 +2481,12 @@ export class BuildingInteriorScene extends GameplayScene {
     this.activeEncounter?.renderUI(ctx);
     this.soulCrystal.renderUI(ctx);
 
-    if (this.exitMenuOpen) this.renderExitMenu(ctx);
+    // The doormat draws over the stairs, not under them: `handleClick` answers
+    // the exit menu first, and the focus ring goes to whichever declares last,
+    // so drawing them the other way round would hand the keyboard to the stair
+    // menu while the mouse still drove the exit menu.
     if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx);
+    if (this.exitMenuOpen) this.renderExitMenu(ctx);
 
     this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
     this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
@@ -2469,6 +2520,11 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.gameOver) this.combat.deathScreen.render(ctx);
     this.menus.renderOverlays(ctx);
     this.chat.renderHint(ctx);
+
+    // Last, once every surface has drawn: the ring belongs to whoever declared
+    // it last, so this is the only point at which the frame's answer to "who
+    // owns the keyboard" is final.
+    auditOverlayFocus(this.overlayClaims, menuFocusContextId());
   }
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -2495,85 +2551,103 @@ export class BuildingInteriorScene extends GameplayScene {
     const cw = viewportWidth();
     const ch = viewportHeight();
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, cw, ch);
+    this.exitMenuButtons = [];
+    drawOverlay(ctx, {
+      canvasWidth: cw,
+      canvasHeight: ch,
+      alpha: EXIT_MENU_OVERLAY_ALPHA,
+    });
 
-    const panelW = 340;
-    const panelH = 190;
+    const panelW = EXIT_MENU_PANEL_WIDTH;
+    const panelH = EXIT_MENU_PANEL_HEIGHT;
     const panelX = cw / 2 - panelW / 2;
     const panelY = ch / 2 - panelH / 2;
 
-    ctx.fillStyle = '#0d1a09';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#6aaa44';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
+    drawBox(ctx, {
+      x: panelX,
+      y: panelY,
+      width: panelW,
+      height: panelH,
+      fill: EXIT_MENU_BG_COLOR,
+      border: EXIT_MENU_BORDER_COLOR,
+      borderWidth: EXIT_MENU_BORDER_WIDTH,
+      radius: 0,
+    });
 
     drawText(ctx, '▼  Exit Building  ▼', {
       x: cw / 2,
       y: panelY + EXIT_MENU_TITLE_Y,
-      size: 18,
+      size: EXIT_MENU_TITLE_SIZE,
       bold: true,
-      color: '#d4edaa',
+      color: EXIT_MENU_LEAVE_TEXT_COLOR,
       align: 'center',
     });
 
     drawText(ctx, `Leave ${this.entry.name}?`, {
       x: cw / 2,
       y: panelY + EXIT_MENU_QUESTION_Y,
-      size: 13,
-      color: '#94a3b8',
+      size: EXIT_MENU_QUESTION_SIZE,
+      color: EXIT_MENU_STAY_TEXT_COLOR,
       align: 'center',
     });
 
     drawText(ctx, '(Esc or Stay to remain inside)', {
       x: cw / 2,
       y: panelY + EXIT_MENU_HINT_Y,
-      size: 11,
-      color: '#64748b',
+      size: EXIT_MENU_HINT_SIZE,
+      color: EXIT_MENU_HINT_TEXT_COLOR,
       align: 'center',
     });
 
     const rects = this.menuRects();
 
-    ctx.fillStyle = '#1a4d0d';
-    ctx.fillRect(rects.exit.x, rects.exit.y, rects.exit.w, rects.exit.h);
-    ctx.strokeStyle = '#6aaa44';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(rects.exit.x, rects.exit.y, rects.exit.w, rects.exit.h);
-    drawText(ctx, 'Exit', {
-      x: rects.exit.x + rects.exit.w / 2,
-      y: rects.exit.y + EXIT_BTN_TEXT_Y,
-      size: 14,
-      bold: true,
-      color: '#d4edaa',
-      align: 'center',
+    // Exit is the default selection, shown highlighted from the moment the menu
+    // appears: standing on the doormat is how the player asks to leave, and the
+    // door menu on the way in reads the same way round. Unlike the stairwell,
+    // which keeps Stay as its default, nothing here is one-way — an accidental
+    // Exit puts the party back on the doorstep it came from.
+    beginMenuFocus('exit-building', true);
+    addButton(ctx, this.exitMenuButtons, {
+      x: rects.exit.x,
+      y: rects.exit.y,
+      width: rects.exit.w,
+      height: rects.exit.h,
+      label: 'Exit',
+      fill: EXIT_MENU_LEAVE_BG_COLOR,
+      border: EXIT_MENU_BORDER_COLOR,
+      borderWidth: EXIT_MENU_BUTTON_BORDER_WIDTH,
+      radius: 0,
+      labelSize: EXIT_MENU_BUTTON_TEXT_SIZE,
+      labelColor: EXIT_MENU_LEAVE_TEXT_COLOR,
+      primaryAction: true,
+      action: () => this.doExit(),
     });
-
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(rects.stay.x, rects.stay.y, rects.stay.w, rects.stay.h);
-    drawText(ctx, 'Stay', {
-      x: rects.stay.x + rects.stay.w / 2,
-      y: rects.stay.y + EXIT_BTN_TEXT_Y,
-      size: 14,
-      bold: true,
-      color: '#94a3b8',
-      align: 'center',
+    addButton(ctx, this.exitMenuButtons, {
+      x: rects.stay.x,
+      y: rects.stay.y,
+      width: rects.stay.w,
+      height: rects.stay.h,
+      label: 'Stay',
+      fill: EXIT_MENU_STAY_BG_COLOR,
+      border: EXIT_MENU_STAY_BORDER_COLOR,
+      borderWidth: EXIT_MENU_BUTTON_BORDER_WIDTH,
+      radius: 0,
+      labelSize: EXIT_MENU_BUTTON_TEXT_SIZE,
+      labelColor: EXIT_MENU_STAY_TEXT_COLOR,
+      action: () => this.closeExitMenu(),
     });
-
-    ctx.textAlign = 'left';
+    endMenuFocus();
   }
 
-  private menuRects() {
+  private menuRects(): {
+    exit: { x: number; y: number; w: number; h: number };
+    stay: { x: number; y: number; w: number; h: number };
+  } {
     const cw = viewportWidth();
     const ch = viewportHeight();
-    const panelH = 190;
-    const panelY = ch / 2 - panelH / 2;
-    const btnW = 120;
-    const btnH = 42;
+    const panelY = ch / 2 - EXIT_MENU_PANEL_HEIGHT / 2;
+    const btnW = EXIT_MENU_BUTTON_WIDTH;
+    const btnH = EXIT_MENU_BUTTON_HEIGHT;
     const btnY = panelY + EXIT_BTN_Y_OFFSET;
     return {
       exit: { x: cw / 2 - btnW - EXIT_BTN_GAP, y: btnY, w: btnW, h: btnH },

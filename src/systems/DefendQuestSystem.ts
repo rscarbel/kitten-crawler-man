@@ -31,7 +31,7 @@ import {
   drawChildSprite,
 } from '../sprites/questNPCSprite';
 import { drawText } from '../ui/TextBox';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export const DEFEND_QUEST_ID = 'defend_goblin_mother';
@@ -1298,6 +1298,10 @@ export class DefendQuestSystem implements GameSystem {
     const btnH = DIALOG_BTN_H;
     const btnY = dy + dh - DIALOG_BTN_Y_FROM_BOTTOM;
 
+    // Deliberately no primary: answering a plea for help is a choice the player
+    // has to aim at. A bare Space here would refuse the quest — or take it —
+    // depending on which button happened to be marked, so it does neither.
+    beginMenuFocus('defend-quest');
     const yesX = dx + dw / 2 - btnW - DIALOG_BTN_HALF_GAP;
     drawButton(ctx, {
       x: yesX,
@@ -1321,6 +1325,7 @@ export class DefendQuestSystem implements GameSystem {
       labelSize: DIALOG_BTN_LABEL_SIZE,
     });
     this.dialogButtons.push({ x: noX, y: btnY, w: btnW, h: btnH, action: 'decline' });
+    endMenuFocus();
   }
 
   private renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
@@ -1641,6 +1646,7 @@ export class DefendQuestSystem implements GameSystem {
     const btnY = dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM;
     const isLast = this.tutorialPage === PAGES - 1;
 
+    beginMenuFocus('defend-quest');
     drawButton(ctx, {
       x: btnX,
       y: btnY,
@@ -1649,6 +1655,10 @@ export class DefendQuestSystem implements GameSystem {
       label: isLast ? "Let's Go!" : 'Next  ›',
       ...(isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue),
       labelSize: TUTORIAL_BTN_LABEL_SIZE,
+      // The only button on the page, and Space turned it before the ring
+      // existed — without this the ring would swallow the press and strand the
+      // player on page one.
+      primaryAction: true,
     });
     this.tutorialButtons.push({
       x: btnX,
@@ -1657,6 +1667,7 @@ export class DefendQuestSystem implements GameSystem {
       h: TUTORIAL_BTN_H,
       action: isLast ? 'go' : 'next',
     });
+    endMenuFocus();
 
     ctx.restore();
   }

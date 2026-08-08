@@ -20,7 +20,9 @@ import {
   type ModalFit,
 } from '../ui/Box';
 import {
+  beginMenuFocus,
   drawButton,
+  endMenuFocus,
   BUTTON_PRESETS,
   setButtonPointerSpace,
   resetButtonPointerSpace,
@@ -225,6 +227,11 @@ export class MercenaryGuildSystem {
       align: 'center',
     });
 
+    // Opened after the panel chrome and closed after the Close button, so the
+    // ring holds exactly the desk's own controls in the order they are read:
+    // the contract already signed, then the fighters for hire, then the way out.
+    beginMenuFocus('club-guild');
+
     const hasContract = this.roster.active !== null;
     if (hasContract) this.renderActiveBanner(ctx, panel.x, panel.y, panelW);
     this.renderHireCards(ctx, panel.x, panel.y, panelW, player, hasContract);
@@ -240,6 +247,7 @@ export class MercenaryGuildSystem {
     }
 
     this.renderCloseButton(ctx, panel.y, centerX);
+    endMenuFocus();
 
     drawText(ctx, '[Space / Esc]  Leave the desk', {
       x: centerX,
@@ -268,6 +276,9 @@ export class MercenaryGuildSystem {
       height: CLOSE_BTN_H,
       label: 'Close',
       ...BUTTON_PRESETS.primary,
+      // Space with nothing focused walks away from the desk rather than
+      // spending coins on whichever card happens to lead the ring.
+      primaryAction: true,
     });
     this.buttons.push({
       x: btnX,

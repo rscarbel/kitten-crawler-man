@@ -25,7 +25,7 @@ import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import { getSpriteDefByKey, getSpriteDef } from '../core/SpriteLoader';
 import type { SpriteDef } from '../core/SpriteLoader';
 import { lifeMachineSacSplitFrame } from '../sprites/lifeMachineTiming';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { KeyboardHeroSystem, type KeyboardHeroCheckpoint } from './KeyboardHeroSystem';
 import { MAX_PLAYABLE_GAP_MS } from './keyboardHeroGeometry';
 import { SPIT_SPEED_PX, SPIT_ANIM_CYCLE_FRAMES } from '../creatures/GrotesqueSpider';
@@ -148,7 +148,7 @@ const DIALOG_BUTTON_WIDTH = 110;
 const DIALOG_BUTTON_HEIGHT = 30;
 const DIALOG_BUTTON_OFFSET_BOTTOM = 46;
 const DIALOG_BUTTON_SPACING = 10;
-const DIALOG_BUTTON_TEXT_VERTICAL_OFFSET = 20;
+const DIALOG_BUTTON_LABEL_SIZE = 12;
 const FAILED_DIALOG_WIDTH_MIN = 400;
 const FAILED_DIALOG_HEIGHT = 160;
 const FAILED_DIALOG_TITLE_OFFSET_Y = 26;
@@ -944,9 +944,6 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase === 'keyboard_hero_tutorial') {
       for (const btn of this._tutorialButtons) {
         if (pointInRect(mx, my, btn)) {
-          // Button rects are in screen space; drawButton's auto-sound doesn't fire through the
-          // scale transform, so trigger it manually here instead.
-          this.menuClickSoundPending = true;
           if (btn.action === 'next') {
             this._tutorialPage++;
             this._tutorialButtons = [];
@@ -2285,41 +2282,33 @@ export class SpiderQuestSystem implements GameSystem {
     const btnH = DIALOG_BUTTON_HEIGHT;
     const btnY = dy + dh - DIALOG_BUTTON_OFFSET_BOTTOM;
 
+    // No primary: taking the job or turning it down is a choice, and a bare
+    // accept key must not answer it either way.
+    beginMenuFocus('spider-quest');
     const helpX = dx + dw / 2 - btnW - DIALOG_BUTTON_SPACING;
-    ctx.save();
-    ctx.fillStyle = '#14532d';
-    ctx.fillRect(helpX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#4ade80';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(helpX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, "I'll help", {
-      x: helpX + btnW / 2,
-      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
-      size: 12,
-      bold: true,
-      color: '#4ade80',
-      align: 'center',
+    drawButton(ctx, {
+      x: helpX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: "I'll help",
+      ...BUTTON_PRESETS.success,
+      labelSize: DIALOG_BUTTON_LABEL_SIZE,
     });
     this.dialogButtons.push({ x: helpX, y: btnY, w: btnW, h: btnH, action: 'accept' });
 
     const notNowX = dx + dw / 2 + DIALOG_BUTTON_SPACING;
-    ctx.save();
-    ctx.fillStyle = '#7f1d1d';
-    ctx.fillRect(notNowX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(notNowX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, 'Not now', {
-      x: notNowX + btnW / 2,
-      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
-      size: 12,
-      bold: true,
-      color: '#ef4444',
-      align: 'center',
+    drawButton(ctx, {
+      x: notNowX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'Not now',
+      ...BUTTON_PRESETS.danger,
+      labelSize: DIALOG_BUTTON_LABEL_SIZE,
     });
     this.dialogButtons.push({ x: notNowX, y: btnY, w: btnW, h: btnH, action: 'decline' });
+    endMenuFocus();
   }
 
   private _renderHackFailedDialog(ctx: CanvasRenderingContext2D): void {
@@ -2360,41 +2349,34 @@ export class SpiderQuestSystem implements GameSystem {
     const btnH = DIALOG_BUTTON_HEIGHT;
     const btnY = dy + dh - DIALOG_BUTTON_OFFSET_BOTTOM;
 
+    // Retreat is the primary: a second hack attempt starts a rhythm game the
+    // moment it is chosen, which is not something a stray accept key should do.
+    beginMenuFocus('spider-quest');
     const retryX = dx + dw / 2 - btnW - BUTTON_GAP;
-    ctx.save();
-    ctx.fillStyle = '#1e3a5f';
-    ctx.fillRect(retryX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(retryX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, 'Try Again', {
-      x: retryX + btnW / 2,
-      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
-      size: 12,
-      bold: true,
-      color: '#93c5fd',
-      align: 'center',
+    drawButton(ctx, {
+      x: retryX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'Try Again',
+      ...BUTTON_PRESETS.blue,
+      labelSize: DIALOG_BUTTON_LABEL_SIZE,
     });
     this.hackFailedButtons.push({ x: retryX, y: btnY, w: btnW, h: btnH, action: 'retry' });
 
     const retreatX = dx + dw / 2 + BUTTON_GAP;
-    ctx.save();
-    ctx.fillStyle = '#374151';
-    ctx.fillRect(retreatX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#9ca3af';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(retreatX, btnY, btnW, btnH);
-    ctx.restore();
-    drawText(ctx, 'Retreat', {
-      x: retreatX + btnW / 2,
-      y: btnY + DIALOG_BUTTON_TEXT_VERTICAL_OFFSET - DIALOG_TEXT_SIZE_ADJUSTMENT,
-      size: 12,
-      bold: true,
-      color: '#d1d5db',
-      align: 'center',
+    drawButton(ctx, {
+      x: retreatX,
+      y: btnY,
+      width: btnW,
+      height: btnH,
+      label: 'Retreat',
+      ...BUTTON_PRESETS.toggle,
+      labelSize: DIALOG_BUTTON_LABEL_SIZE,
+      primaryAction: true,
     });
     this.hackFailedButtons.push({ x: retreatX, y: btnY, w: btnW, h: btnH, action: 'retreat' });
+    endMenuFocus();
   }
 
   /** Draw a single frame from the keyboard_hero_buttons sprite sheet at arbitrary screen size. */
@@ -2567,34 +2549,42 @@ export class SpiderQuestSystem implements GameSystem {
       });
     }
 
-    // Button — drawButton handles hover/press visuals and auto-registers for click sound
+    ctx.restore();
+
+    // The button alone is drawn back in screen space, after the modal transform
+    // is undone. `translate` then `scale` is not a pivot-centred transform, so
+    // it cannot be expressed as a button pointer space — and a button registered
+    // under it lands its hit-rect, its click sound and the focus ring's
+    // synthesized click in coordinates the pointer never visits.
     this._tutorialButtons = [];
     const isLast = this._tutorialPage === TUTORIAL_PAGES - 1;
-    const btnX = dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W;
-    const btnY = dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM - TUTORIAL_BTN_H;
+    const btnX = offsetX + (dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W) * modalScale;
+    const btnY = offsetY + (dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM - TUTORIAL_BTN_H) * modalScale;
+    const btnW = TUTORIAL_BTN_W * modalScale;
+    const btnH = TUTORIAL_BTN_H * modalScale;
     const btnPreset = isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue;
-    const btnResult = drawButton(ctx, {
+    beginMenuFocus('spider-quest');
+    drawButton(ctx, {
       ...btnPreset,
       x: btnX,
       y: btnY,
-      width: TUTORIAL_BTN_W,
-      height: TUTORIAL_BTN_H,
+      width: btnW,
+      height: btnH,
       label: isLast ? "Let's Go!" : 'Next  ›',
-      labelSize: TUTORIAL_BTN_LABEL_SIZE,
+      labelSize: TUTORIAL_BTN_LABEL_SIZE * modalScale,
       labelColor: isLast ? '#4ade80' : '#93c5fd',
+      // The only button on the page, and the quest's own Space listener turned
+      // it before the ring existed.
+      primaryAction: true,
     });
-    // Button rects must be in screen coordinates for handleClick hit detection.
-    // The rest of the modal draws in virtual space (before scale is applied),
-    // so we must transform back to screen space here.
+    endMenuFocus();
     this._tutorialButtons.push({
-      x: btnResult.x * modalScale + offsetX,
-      y: btnResult.y * modalScale + offsetY,
-      w: btnResult.width * modalScale,
-      h: btnResult.height * modalScale,
+      x: btnX,
+      y: btnY,
+      w: btnW,
+      h: btnH,
       action: isLast ? 'go' : 'next',
     });
-
-    ctx.restore();
   }
 
   private _renderTutorialPage0(

@@ -25,7 +25,14 @@ import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { DialogBox } from '../ui/DialogBox';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawButton, BUTTON_PRESETS, playButtonSound } from '../ui/Button';
+import {
+  beginMenuFocus,
+  drawButton,
+  endMenuFocus,
+  suppressMenuFocus,
+  BUTTON_PRESETS,
+  playButtonSound,
+} from '../ui/Button';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
 import {
@@ -971,7 +978,13 @@ export class BopcaSystem implements GameSystem {
     if (this.dialogPhase === 'closed' || box === null) return;
     box.render(ctx);
     this.choiceRects = [];
-    if (this.dialogPhase !== 'choices') return;
+    if (this.dialogPhase !== 'choices') {
+      // The line is still typing itself out: the box owns the screen but offers
+      // nothing to focus, so it declares an empty ring rather than leaving the
+      // live one to whatever drew before it.
+      suppressMenuFocus('bopca-dialog');
+      return;
+    }
 
     // Bounded by the dialog box rather than laid out at a fixed width: a phone
     // canvas is ~390 CSS px and three 168 px buttons come to 524, so a fixed row
@@ -985,15 +998,19 @@ export class BopcaSystem implements GameSystem {
     const rowY = boxRect.y - CHOICE_ROW_GAP - CHOICE_BUTTON_HEIGHT;
     let x = boxRect.x + (boxRect.width - rowWidth) / 2;
 
+    beginMenuFocus('bopca-dialog');
     choices.forEach((id, index) => {
-      const preset = id === 'leave' ? BUTTON_PRESETS.primary : BUTTON_PRESETS.safeRoom;
+      const isLeave = id === 'leave';
       drawButton(ctx, {
         x,
         y: rowY,
         width: buttonWidth,
         height: CHOICE_BUTTON_HEIGHT,
         label: `${index + 1}. ${this.choiceLabel(id)}`,
-        ...preset,
+        ...(isLeave ? BUTTON_PRESETS.primary : BUTTON_PRESETS.safeRoom),
+        // Space on the choice row has always been the polite exit; the ring
+        // keeps it that way rather than ordering food with it.
+        primaryAction: isLeave,
       });
       this.choiceRects.push({
         id,
@@ -1004,6 +1021,7 @@ export class BopcaSystem implements GameSystem {
       });
       x += buttonWidth + CHOICE_BUTTON_GAP;
     });
+    endMenuFocus();
   }
 
   private renderGalleyLight(

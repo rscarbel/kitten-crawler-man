@@ -4,6 +4,7 @@ import {
   focusNextButton,
   focusPreviousButton,
   focusedButtonClickPoint,
+  menuFocusContextId,
   menuFocusRingSize,
 } from '../ui/Button';
 import {
@@ -49,6 +50,15 @@ const FOCUS_NEXT_KEYS: ReadonlySet<string> = new Set(['Tab', 'ArrowDown', 'Arrow
 const FOCUS_PREVIOUS_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowLeft']);
 /** Keys that activate the focused button — or, with nothing focused, the primary one. */
 const FOCUS_ACTIVATE_KEYS: ReadonlySet<string> = new Set([' ', 'Enter']);
+
+/**
+ * Shortest gap between two focus steps driven by the OS key-repeat stream.
+ *
+ * Auto-repeat runs at around thirty presses a second, which walks a four-button
+ * menu end to end inside the frame the player is still reading. A fresh press is
+ * never throttled — only the repeats behind it.
+ */
+const FOCUS_REPEAT_INTERVAL_MS = 140;
 
 /** Elements that own their own keystrokes; the ring must not steal from them. */
 const TEXT_ENTRY_TAG_NAMES: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA']);
@@ -101,6 +111,27 @@ export class SceneManager {
    */
   private frameOverlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
 
+  /**
+   * Every key physically down right now, tracked here rather than read off
+   * `InputManager`: a held-key set that gameplay is free to clear cannot tell a
+   * finger coming up from the scene clearing it, and this guard turns entirely
+   * on that difference.
+   */
+  private readonly heldKeys = new Set<string>();
+
+  /**
+   * The keys that were already down when the menu now on screen appeared. Their
+   * repeats are leftovers from walking into the door, not menu input, so they
+   * stay inert until the player lifts the key and presses it again.
+   */
+  private readonly keysHeldWhenMenuOpened = new Set<string>();
+
+  /** The menu {@link keysHeldWhenMenuOpened} was snapshotted for. */
+  private lastMenuFocusContext: string | null = null;
+
+  /** `performance.now()` of the last focus step, for the auto-repeat throttle. */
+  private lastFocusStepAtMs = Number.NEGATIVE_INFINITY;
+
   constructor() {
     this.canvas = document.createElement('canvas');
     const gameEl = document.getElementById('game');
@@ -123,6 +154,24 @@ export class SceneManager {
     // registered on the same target, so that a key the menu ring consumes never
     // also fires an attack or a character switch underneath the open menu.
     window.addEventListener('keydown', (e) => this.handleMenuNavigation(e), { capture: true });
+
+    // A release re-arms a key the menu opened underneath: lifting the finger and
+    // pressing again is unambiguously aimed at the menu.
+    window.addEventListener(
+      'keyup',
+      (e) => {
+        this.heldKeys.delete(e.key);
+        this.keysHeldWhenMenuOpened.delete(e.key);
+      },
+      { capture: true },
+    );
+
+    // A window that loses focus never delivers the keyup, so every key held
+    // across an alt-tab would stay "down" forever and stay permanently inert.
+    window.addEventListener('blur', () => {
+      this.heldKeys.clear();
+      this.keysHeldWhenMenuOpened.clear();
+    });
 
     const getPos = (e: MouseEvent) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -218,6 +267,8 @@ export class SceneManager {
    * dismiss chains, which are the only way out of some of these menus.
    */
   private handleMenuNavigation(e: KeyboardEvent): void {
+    const pressPredatesMenu = this.trackHeldKey(e);
+
     if (isTypingIntoTextField()) return;
 
     if (isRebindCaptureActive()) {
@@ -236,8 +287,12 @@ export class SceneManager {
       e.stopPropagation();
     };
 
+    // Consumed before the guards below reject it, never after. A press the menu
+    // declines to act on still must not reach the world and swing a weapon
+    // behind the panel — the menu owns the screen either way.
     if (FOCUS_NEXT_KEYS.has(e.key)) {
       consume();
+      if (pressPredatesMenu || !this.allowFocusStep(e)) return;
       if (e.key === 'Tab' && e.shiftKey) focusPreviousButton();
       else focusNextButton();
       return;
@@ -245,6 +300,7 @@ export class SceneManager {
 
     if (FOCUS_PREVIOUS_KEYS.has(e.key)) {
       consume();
+      if (pressPredatesMenu || !this.allowFocusStep(e)) return;
       focusPreviousButton();
       return;
     }
@@ -252,14 +308,51 @@ export class SceneManager {
     if (FOCUS_ACTIVATE_KEYS.has(e.key)) {
       // Consumed whether or not anything answers it. A menu that declares a ring
       // but marks no primary — the casino's betting row is the deliberate case —
-      // must still not let the press reach the world and swing a weapon behind
-      // the panel. A held accept key never re-activates: one press, one button.
+      // must still not let the press reach the world. A held accept key never
+      // re-activates: one press, one button.
       consume();
-      if (e.repeat) return;
+      if (e.repeat || pressPredatesMenu) return;
       const point = focusedButtonClickPoint();
       if (point === null) return;
       this.current?.handleClick?.(point.x, point.y, e.timeStamp);
     }
+  }
+
+  /**
+   * Record the press and report whether it began before the menu now on screen
+   * did.
+   *
+   * Walking into a stairwell or a doorway means holding a direction at the
+   * moment the menu appears, and the browser keeps delivering auto-repeats for
+   * that key afterwards. Answering them races the selection across the menu
+   * before the player has read it — and the first thing they did was not aimed
+   * at a menu that did not exist yet.
+   *
+   * The snapshot is taken *before* the press joins the held set, so a key struck
+   * after the menu appeared is never caught by it.
+   */
+  private trackHeldKey(e: KeyboardEvent): boolean {
+    const contextId = menuFocusContextId();
+    if (contextId !== this.lastMenuFocusContext) {
+      this.lastMenuFocusContext = contextId;
+      this.keysHeldWhenMenuOpened.clear();
+      for (const key of this.heldKeys) this.keysHeldWhenMenuOpened.add(key);
+    }
+    const predatesMenu = this.keysHeldWhenMenuOpened.has(e.key);
+    this.heldKeys.add(e.key);
+    return predatesMenu;
+  }
+
+  /**
+   * Throttle to the auto-repeat stream only. Timed off `e.timeStamp` rather than
+   * `performance.now()`: a stalled main thread delivers every queued repeat at
+   * resume, and handler time would read them all as one instant and let the
+   * whole backlog through.
+   */
+  private allowFocusStep(e: KeyboardEvent): boolean {
+    if (e.repeat && e.timeStamp - this.lastFocusStepAtMs < FOCUS_REPEAT_INTERVAL_MS) return false;
+    this.lastFocusStepAtMs = e.timeStamp;
+    return true;
   }
 
   /** Visible width in CSS pixels. */

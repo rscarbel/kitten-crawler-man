@@ -143,10 +143,10 @@ exploration speed in the wilderness is meanwhile served by making Speed Fizz
 discoverable (Phase 4): the mechanic players asked for at 2× already exists,
 priced at pocket change, and nobody is finding it.
 
-## 4. Design — Mordecai's Return Stone
+## 4. Design — Wayfinder's Anchor
 
-One permanent item, `town_recall_stone`, display name **"Mordecai's Return
-Stone"**. Non-stackable, `canHotlist: true`, `canDrop: false` (like the tomes,
+One permanent item, `wayfinders_anchor`, display name **"Wayfinder's
+Anchor"**. Non-stackable, `canHotlist: true`, `canDrop: false` (like the tomes,
 e.g. the `magic_missile_tome` entry in `ITEM_DEF`, `src/core/ItemDefs.ts` — a
 fast-travel key you can lose is a support ticket). Granted once to **each**
 crawler so it sits on both hotbars.
@@ -211,7 +211,7 @@ Nobody should stumble onto this; it is handed over, named, and pointed at.
    Mordecai's gift: a `DialogBox` page in his voice ("Take this — the Over City
    is bigger than your legs. Squeeze it anywhere and it brings you to the
    square; squeeze it in the square and it puts you back on your trail."),
-   plus `SystemAnnouncer.announce('New item: Mordecai's Return Stone')`
+   plus `SystemAnnouncer.announce('New item: Wayfinder's Anchor')`
    (`src/ui/SystemAnnouncer.ts`) and a `HotbarToast`. Granting on arrival — not
    from a shop, not from a drop — is what guarantees discovery.
 2. **Mordecai keeps teaching it.** Add an advice objective to the floor-3 set

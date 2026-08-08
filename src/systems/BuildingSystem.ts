@@ -286,7 +286,10 @@ export class BuildingSystem implements GameSystem {
 
     const rects = this.menuRects();
 
-    beginMenuFocus('building-entry');
+    // Enter is the default selection, shown highlighted from the moment the menu
+    // appears: the player walked up to a door, and the door is the answer they
+    // came for. Escape and Leave are both still one press away.
+    beginMenuFocus('building-entry', true);
     drawButton(ctx, {
       x: rects.enter.x,
       y: rects.enter.y,
@@ -299,6 +302,7 @@ export class BuildingSystem implements GameSystem {
       radius: 4,
       labelSize: 14,
       labelColor: '#d4edaa',
+      primaryAction: true,
     });
 
     drawButton(ctx, {
@@ -311,7 +315,6 @@ export class BuildingSystem implements GameSystem {
       border: '#475569',
       labelSize: 14,
       labelColor: '#94a3b8',
-      primaryAction: true,
     });
     endMenuFocus();
   }

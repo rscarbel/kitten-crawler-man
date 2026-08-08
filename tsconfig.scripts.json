@@ -8,6 +8,7 @@
   },
   "include": [
     "scripts/verify-progression.ts",
+    "scripts/verify-menus.ts",
     "scripts/generate-spider-sprite.ts",
     "scripts/render-spider.ts",
     "scripts/catArt.ts",

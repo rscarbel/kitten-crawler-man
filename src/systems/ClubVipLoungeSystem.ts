@@ -2,13 +2,14 @@ import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { drawText } from '../ui/TextBox';
 import { drawModal, drawOverlay, drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { pointInRect } from '../utils';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // Panel geometry
 const PANEL_W = 540;
-const PANEL_H = 468;
+/** Tall enough for the three service cards plus the Leave button beneath them. */
+const PANEL_H = 536;
 const PANEL_PADDING = 24;
 const OVERLAY_ALPHA = 0.6;
 /** Minimum horizontal breathing room kept between the panel and the canvas edges on narrow (mobile) viewports. */
@@ -36,9 +37,12 @@ const ACTION_BTN_H = 44;
 const ACTION_BTN_MARGIN = 14;
 
 const FEEDBACK_SIZE = 12;
-const FEEDBACK_Y_FROM_BOTTOM = 40;
+const FEEDBACK_Y_FROM_BOTTOM = 46;
 const CLOSE_HINT_SIZE = 10;
 const CLOSE_HINT_Y_FROM_BOTTOM = 18;
+const LEAVE_BTN_W = 200;
+const LEAVE_BTN_H = 40;
+const LEAVE_BTN_Y_FROM_BOTTOM = 92;
 
 const ACCENT = '#e6c65a';
 const GOLD_TEXT = '#f6e08a';
@@ -265,7 +269,13 @@ export class ClubVipLoungeSystem {
       align: 'center',
     });
 
+    // The whole lounge is a coin sink: every service button spends money, so
+    // the ring has to end on a way out, and that way out has to be the primary.
+    // Without it a bare Space in here buys something.
+    beginMenuFocus('club-vip');
     this.renderServiceCards(ctx, panel.x, panel.y, panelW, player);
+    this.renderLeaveButton(ctx, panel.y, centerX);
+    endMenuFocus();
 
     if (this.feedbackMsg !== '') {
       drawText(ctx, this.feedbackMsg, {
@@ -283,6 +293,32 @@ export class ClubVipLoungeSystem {
       size: CLOSE_HINT_SIZE,
       color: '#9a8452',
       align: 'center',
+    });
+  }
+
+  /**
+   * The visible way out. The panel used to offer only a `[Space / Esc]` hint,
+   * which leaves a player driving with a mouse — or reading the buttons rather
+   * than the fine print — with nothing to aim at but the three purchases.
+   */
+  private renderLeaveButton(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
+    const btnX = centerX - LEAVE_BTN_W / 2;
+    const btnY = panelY + PANEL_H - LEAVE_BTN_Y_FROM_BOTTOM;
+    drawButton(ctx, {
+      x: btnX,
+      y: btnY,
+      width: LEAVE_BTN_W,
+      height: LEAVE_BTN_H,
+      label: 'Leave the Lounge',
+      ...BUTTON_PRESETS.primary,
+      primaryAction: true,
+    });
+    this.buttons.push({
+      x: btnX,
+      y: btnY,
+      w: LEAVE_BTN_W,
+      h: LEAVE_BTN_H,
+      action: { kind: 'close' },
     });
   }
 

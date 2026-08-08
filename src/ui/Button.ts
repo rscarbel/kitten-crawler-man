@@ -108,6 +108,9 @@ let _focusIndex: number | null = null;
  */
 let _activatedSinceRender = false;
 
+/** Whether this frame's menu wants its primary shown as focused before any keypress. */
+let _focusPrimaryByDefault = false;
+
 /**
  * Declare that the buttons drawn after this call, in this frame, form a
  * keyboard-navigable ring. One call at the top of a menu's render is the whole
@@ -119,10 +122,17 @@ let _activatedSinceRender = false;
  *
  * @param contextId - stable identity for this menu. Focus resets whenever the
  *   declared context changes, so a mouse user never sees a ring they did not ask for.
+ * @param focusPrimaryByDefault - start with the primary button visibly focused
+ *   rather than with nothing focused. Off by default, which is what keeps a
+ *   mouse user from being shown a selection they never made. Turn it on for a
+ *   menu whose expected answer is the one the player walked into — a doorway —
+ *   and leave it off wherever the safe answer is to do nothing, so that the ring
+ *   never draws a highlight on a button a stray press would regret.
  */
-export function beginMenuFocus(contextId: string): void {
+export function beginMenuFocus(contextId: string, focusPrimaryByDefault = false): void {
   _declaredContextId = contextId;
   _ringOpen = true;
+  _focusPrimaryByDefault = focusPrimaryByDefault;
   _focusRing.length = 0;
 }
 
@@ -158,6 +168,18 @@ export function menuFocusRingSize(): number {
 }
 
 /**
+ * Which menu the last rendered frame declared, or null while play has the floor.
+ *
+ * The identity, not the size: a keyboard consumer that has to tell "a different
+ * menu is up now" from "the same menu grew a button" cannot read that off the
+ * ring length, and the difference decides whether a key already being held is a
+ * request or a leftover.
+ */
+export function menuFocusContextId(): string | null {
+  return _declaredContextId;
+}
+
+/**
  * Drop focus without touching the ring — used when a menu closes from something
  * other than a context change, so re-opening it starts unfocused.
  */
@@ -165,6 +187,10 @@ export function clearMenuFocus(): void {
   _focusedContextId = null;
   _focusIndex = null;
   _focusRing.length = 0;
+  // The declaration goes with it, so `menuFocusContextId` never names a menu
+  // that stopped being on screen — a scene swap would otherwise keep reporting
+  // the outgoing scene's last menu until the incoming one first renders.
+  _declaredContextId = null;
 }
 
 /**
@@ -186,21 +212,37 @@ function adoptDeclaredContext(): void {
   else if (_focusIndex >= _focusRing.length) _focusIndex = _focusRing.length - 1;
 }
 
+/**
+ * Where focus sits right now, counting a default-focused primary as focused.
+ *
+ * Without this the first arrow press on a menu that shows a default selection
+ * would jump to the top of the ring rather than stepping off the button the
+ * player can see highlighted — the highlight and the movement would disagree.
+ */
+function resolvedFocusIndex(): number | null {
+  if (_focusIndex !== null) return _focusIndex;
+  if (!_focusPrimaryByDefault) return null;
+  const primary = _focusRing.findIndex((entry) => entry.isPrimary);
+  return primary === -1 ? null : primary;
+}
+
 /** Move focus forward, wrapping. The first press lands on the first button. */
 export function focusNextButton(): void {
   adoptDeclaredContext();
   if (_focusRing.length === 0) return;
-  _focusIndex = _focusIndex === null ? 0 : (_focusIndex + 1) % _focusRing.length;
+  const current = resolvedFocusIndex();
+  _focusIndex = current === null ? 0 : (current + 1) % _focusRing.length;
 }
 
 /** Move focus backward, wrapping. The first press lands on the last button. */
 export function focusPreviousButton(): void {
   adoptDeclaredContext();
   if (_focusRing.length === 0) return;
+  const current = resolvedFocusIndex();
   _focusIndex =
-    _focusIndex === null
+    current === null
       ? _focusRing.length - 1
-      : (_focusIndex + _focusRing.length - 1) % _focusRing.length;
+      : (current + _focusRing.length - 1) % _focusRing.length;
 }
 
 /** Canvas coordinates of a ring entry's centre — where a synthesized click lands. */
@@ -280,6 +322,7 @@ export function setButtonMouseState(mx: number, my: number, isDown = false): voi
   _focusRing.length = 0;
   _declaredContextId = null;
   _ringOpen = false;
+  _focusPrimaryByDefault = false;
   _activatedSinceRender = false;
   _pointerSpace = CANVAS_POINTER_SPACE;
 }
@@ -661,8 +704,15 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
   const pressed = hovered && _isDown;
 
   const joinsFocusRing = !disabled && focusable && _ringOpen;
-  const focused =
-    joinsFocusRing && _focusedContextId === _declaredContextId && _focusIndex === _focusRing.length;
+  // Two ways to be the focused button: the player walked the ring onto this
+  // index, or nobody has touched the ring yet and this menu asked for its
+  // primary to start selected. The second is deliberately not gated on the
+  // focused context matching — that reconciliation only runs on a keypress, and
+  // a default selection has to be visible before the first one.
+  const takenByKeyboard =
+    _focusedContextId === _declaredContextId && _focusIndex === _focusRing.length;
+  const defaultSelected = _focusIndex === null && _focusPrimaryByDefault && primaryAction;
+  const focused = joinsFocusRing && (takenByKeyboard || defaultSelected);
 
   const effectiveAlpha = disabled ? alpha * DISABLED_ALPHA_MULTIPLIER : alpha;
 

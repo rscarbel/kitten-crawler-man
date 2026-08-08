@@ -77,6 +77,7 @@ import {
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import {
   advanceFocusedOverlay,
+  auditOverlayFocus,
   focusedOverlay,
   keyboardSuppressed,
   worldHalted,
@@ -260,6 +261,7 @@ import {
   setButtonAudio,
   notifyButtonClick,
   clearButtonMouseState,
+  menuFocusContextId,
 } from '../ui/Button';
 
 /**
@@ -3261,148 +3263,102 @@ export class DungeonScene extends GameplayScene {
         this.audio?.play('menu_click');
       },
     });
+    /**
+     * The shape most of this list takes: a panel that stops the floor, takes the
+     * keyboard, and answers Space through its own focus ring rather than here.
+     */
+    const modal = (isOpen: boolean, focusContext: string | null): OverlayInputClaim => ({
+      isOpen,
+      space: { kind: 'swallow' },
+      locksKeyboard: true,
+      haltsWorld: true,
+      focusContext,
+    });
+    /** A dialog the player pages through, over a floor that keeps running. */
+    const floatingDialog = (isOpen: boolean, advance: () => void): OverlayInputClaim => ({
+      isOpen,
+      space: { kind: 'advance', advance },
+      locksKeyboard: false,
+      haltsWorld: false,
+      focusContext: null,
+    });
     return [
-      {
-        isOpen: this.chestRewardDialog.isOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: tutorial?.showNearGoblinDialog === true,
-        space: { kind: 'advance', advance: () => tutorial?.dismissNearGoblinDialog() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
+      modal(this.chestRewardDialog.isOpen, 'chest-reward'),
+      floatingDialog(tutorial?.showNearGoblinDialog === true, () =>
+        tutorial?.dismissNearGoblinDialog(),
+      ),
       // Not world-halting: `update` has its own branch for each of these two,
       // and it is what types the dialog out a character at a time. Halting here
       // would make that branch unreachable and every page arrive blank.
-      {
-        isOpen: tutorial?.showTutorialMordecaiDialog === true,
-        space: { kind: 'advance', advance: () => tutorial?.advanceTutorialMordecaiDialog() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
-      {
-        isOpen: tutorial?.showMordecaiReminderDialog === true,
-        space: { kind: 'advance', advance: () => tutorial?.advanceMordecaiReminderDialog() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
-      {
-        isOpen: this.achievementUI.isBlocking,
-        space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
+      floatingDialog(tutorial?.showTutorialMordecaiDialog === true, () =>
+        tutorial?.advanceTutorialMordecaiDialog(),
+      ),
+      floatingDialog(tutorial?.showMordecaiReminderDialog === true, () =>
+        tutorial?.advanceMordecaiReminderDialog(),
+      ),
+      // No single ring to promise: the award stack is several surfaces deep, and
+      // each of the notification, the loot box and the chest award declares its
+      // own. Floating, so the audit does not hold it to one.
+      floatingDialog(this.achievementUI.isBlocking, () => void this.achievementUI.handleSpaceBar()),
       // The four below each render an accept button inside their own focus ring,
       // so the ring takes the press before this chain is reached. The claim is
       // still needed to keep the rest of the keyboard — and the world behind —
       // out of it.
-      {
-        isOpen: this.menus.levelUpDialog.isShowing,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.menus.rewardGrantedDialog.isShowing,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.menus.skillBookPrompt.isOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
+      modal(this.menus.levelUpDialog.isShowing, 'level-up'),
+      modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
+      modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
       // Below the award stack because that stack draws over the death screen — a
       // level-up earned by the blow that killed you is still on top and still
       // has to be dismissible. `locksKeyboard` even so: the screen's own focus
       // ring listens in the capture phase and is reached first, so locking here
       // only stops a hotbar key spending a potion the respawn will throw away.
-      { isOpen: this.gameOver, space: { kind: 'swallow' }, locksKeyboard: true, haltsWorld: true },
+      modal(this.gameOver, 'death-screen'),
       {
         isOpen: this.levelCompleteScreen.isActive,
         space: { kind: 'swallow' },
         locksKeyboard: false,
         haltsWorld: true,
+        focusContext: 'level-complete',
       },
       {
         isOpen: this.chat.isOpen,
         space: { kind: 'passThrough' },
         locksKeyboard: true,
         haltsWorld: true,
+        // The DOM input owns every key while it is up, the ring included.
+        focusContext: null,
       },
       {
         isOpen: noticeBoard?.isOpen === true,
         space: closeWithClick(() => noticeBoard?.close()),
         locksKeyboard: true,
         haltsWorld: true,
+        focusContext: 'notice-board',
       },
-      {
-        isOpen: marketPanel?.isOpen === true,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: fortuneTeller?.isOpen === true,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
+      modal(marketPanel?.isOpen === true, 'priced-menu'),
+      modal(fortuneTeller?.isOpen === true, 'fortune-teller'),
       {
         isOpen: this.bopca.isDialogOpen,
         space: { kind: 'advance', advance: () => this.bopca.advanceDialog() },
         locksKeyboard: true,
         haltsWorld: false,
+        focusContext: 'bopca-dialog',
       },
       {
         isOpen: this.defendQuest.isDialogOpen,
         space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
         locksKeyboard: true,
         haltsWorld: true,
+        focusContext: 'defend-quest',
       },
-      {
-        isOpen: this.defendQuest.isOutcomeOverlayShowing,
-        space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
+      floatingDialog(this.defendQuest.isOutcomeOverlayShowing, () => this.advanceDefendQuestPage()),
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
-      {
-        isOpen: this.spiderQuest.isDialogOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.bounty?.isDialogOpen === true,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.circusQuest.isDialogOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.murderQuest.isDialogOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.safeRoom.mordecaiDialogOpen,
-        space: { kind: 'advance', advance: () => this.safeRoom.advanceMordecaiDialog() },
-        locksKeyboard: false,
-        haltsWorld: false,
-      },
+      modal(this.spiderQuest.isDialogOpen, 'spider-quest'),
+      modal(this.bounty?.isDialogOpen === true, 'quest-dialog'),
+      modal(this.circusQuest.isDialogOpen, 'quest-dialog'),
+      modal(this.murderQuest.isDialogOpen, 'quest-dialog'),
+      floatingDialog(this.safeRoom.mordecaiDialogOpen, () => this.safeRoom.advanceMordecaiDialog()),
       // Not world-halting for the same reason: `update`'s sleep branch is the
       // only thing that ticks the sleep down, and the only thing that ever ends
       // it. Halting here would leave the player asleep for good.
@@ -3411,30 +3367,26 @@ export class DungeonScene extends GameplayScene {
         space: { kind: 'swallow' },
         locksKeyboard: true,
         haltsWorld: false,
+        // A timed fade with no buttons; the sleep ends itself.
+        focusContext: null,
       },
-      {
-        isOpen: this.stairwell.menuOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
-      {
-        isOpen: this.building?.menuOpen === true,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-      },
+      modal(this.stairwell.menuOpen, 'stairwell'),
+      modal(this.building?.menuOpen === true, 'building-entry'),
       {
         isOpen: this.followerMenu.isOpen,
         space: { kind: 'swallow' },
         locksKeyboard: true,
         haltsWorld: false,
+        focusContext: 'follower-menu',
       },
       {
         isOpen: this.menus.pauseMenu.isOpen,
         space: { kind: 'swallow' },
         locksKeyboard: true,
         haltsWorld: true,
+        // The base of the namespace: the menu re-keys its ring per tab, and an
+        // inner confirm narrows it further, so the declared id is `pause-…`.
+        focusContext: 'pause',
       },
       // Last: the one overlay the world keeps running under — a street
       // conversation ends because the player walked away from it — and the one
@@ -3445,6 +3397,8 @@ export class DungeonScene extends GameplayScene {
         space: { kind: 'advance', advance: () => citizenDialog?.advance() },
         locksKeyboard: true,
         haltsWorld: false,
+        // Advance-anywhere: one speaker line, no buttons to reach.
+        focusContext: null,
       },
     ];
   }
@@ -4674,6 +4628,11 @@ export class DungeonScene extends GameplayScene {
         tutRenderCtx,
       );
     }
+
+    // Last, once every surface has drawn: the ring belongs to whoever declared
+    // it last, so this is the only point at which the frame's answer to "who
+    // owns the keyboard" is final.
+    auditOverlayFocus(this.overlayClaims, menuFocusContextId());
   }
 
   /** Gathers every quest's minimap markers into one reused array. */

@@ -1,6 +1,6 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { type ButtonRect, type PauseTab } from './types';
-import { addButton, beginMenuFocus, BUTTON_PRESETS } from '../Button';
+import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../Button';
 import { drawText } from '../TextBox';
 import { drawBox, BOX_PRESETS } from '../Box';
 import { platform } from '../../core/Platform';
@@ -423,5 +423,6 @@ export function renderSettingsTab(
     // buttons, so nothing behind the dim can be reached by pointer or keyboard.
     beginMenuFocus('pause-reset-confirm');
     renderResetConfirmDialog(ctx, buttons, bx, by, bw, bh, onCancelReset, onConfirmReset);
+    endMenuFocus();
   }
 }

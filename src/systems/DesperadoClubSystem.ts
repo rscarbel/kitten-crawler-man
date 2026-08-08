@@ -243,6 +243,23 @@ export class DesperadoClubSystem {
     return null;
   }
 
+  /**
+   * The keyboard focus context of whichever station is on screen — the promise
+   * the interior's overlay claim makes on the club's behalf.
+   *
+   * Mirrors `renderUI`'s order exactly, because that early-return chain decides
+   * which of the five stations actually draws, and only the one that draws
+   * declares a ring.
+   */
+  get focusContext(): string | null {
+    if (this.activeShop() !== null) return 'shop';
+    if (this.casino.open) return 'casino';
+    if (this.guild.open) return 'club-guild';
+    if (this.vip.open) return 'club-vip';
+    if (this.dialog.isOpen) return 'quest-dialog';
+    return null;
+  }
+
   get modalOpen(): boolean {
     return (
       this.dialog.isOpen ||
