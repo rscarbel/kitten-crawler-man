@@ -148,8 +148,10 @@ priced at pocket change, and nobody is finding it.
 One permanent item, `wayfinders_anchor`, display name **"Wayfinder's
 Anchor"**. Non-stackable, `canHotlist: true`, `canDrop: false` (like the tomes,
 e.g. the `magic_missile_tome` entry in `ITEM_DEF`, `src/core/ItemDefs.ts` — a
-fast-travel key you can lose is a support ticket). Granted once to **each**
-crawler so it sits on both hotbars.
+fast-travel key you can lose is a support ticket). It is **not** granted on
+arrival: the party assembles it from three shards during the questline in §5,
+and on assembly one is placed in **each** crawler's inventory so it sits on both
+hotbars.
 
 Two modes, chosen automatically by where you stand
 (`gameMap.isInTownSafeZone`, `src/map/GameMap.ts`):
@@ -201,26 +203,211 @@ Mechanics, all as named constants in the new system:
   through `active()` like every hotbar item (the start of
   `triggerHotbarActivation` in `src/scenes/DungeonScene.ts`).
 
-## 5. Discovery and unlock
+## 5. Unlock — the questline "The Anchor is Broken"
 
-Nobody should stumble onto this; it is handed over, named, and pointed at.
+The stone is **earned, not handed over**. The player starts floor 3 owning
+nothing of it. A short town questline — three shards from three townsfolk, then
+an assembly fee — walks the plaza ring once, deliberately, so that the trip the
+stone abolishes is a trip the player has actually made.
 
-1. **Granted on first arrival on floor 3.** In `DungeonScene` setup when
-   `levelDef.isOverworld` and neither crawler owns the stone: add one to each
-   crawler's inventory and auto-place it on a free hotbar slot. Frame it as
-   Mordecai's gift: a `DialogBox` page in his voice ("Take this — the Over City
-   is bigger than your legs. Squeeze it anywhere and it brings you to the
-   square; squeeze it in the square and it puts you back on your trail."),
-   plus `SystemAnnouncer.announce('New item: Wayfinder's Anchor')`
-   (`src/ui/SystemAnnouncer.ts`) and a `HotbarToast`. Granting on arrival — not
-   from a shop, not from a drop — is what guarantees discovery.
-2. **Mordecai keeps teaching it.** Add an advice objective to the floor-3 set
-   in `src/systems/mordecaiAdvice.ts` (shape: the `AdviceObjective` interface),
-   `complete` once the stone has been used at least once, with pages that
-   restate the two modes.
+Quest id `anchor_shards`, `type: 'mini'`, registered on a `QuestManager`
+(`src/core/QuestManager.ts`) owned privately by the new quest system — the same
+arrangement three of the five shipped questlines already use (see the header of
+`src/systems/questTracker.ts` for why there is no global manager).
+
+### 5.1 Progress lives outside both scenes
+
+The questline spans two scenes: the plaza and the market stall are
+`DungeonScene`, Hilda's cottage and the temple are `BuildingInteriorScene`, and
+an interior is **constructed fresh on every entry** — its systems, its
+`Townsperson`s and its whole tile grid are rebuilt each time a door opens (the
+header of `src/core/TownMemory.ts` states this and why). So the questline's
+record cannot live on either scene.
+
+Add `src/core/AnchorQuestProgress.ts`, a plain mutable record threaded by
+reference through both scene constructors, exactly as `MurderQuestProgress`
+(`src/core/MurderQuestProgress.ts`), `CircusQuestProgress` and `TownMemory`
+already are:
+
+- the quest's `QuestStatus`,
+- per-shard step state for the three givers (`offered` / `in progress` /
+  `shard owed` / `done`),
+- how many of Hilda's furnishings are repaired,
+- how many temple vermin remain.
+
+**Shard ownership is read from inventory, not mirrored in the record.** The two
+crawlers carry separate inventories (`inventory` on `Player`), so "do we have
+all three?" is a sum over _both_ — `human.inventory.countOf(id) +
+cat.inventory.countOf(id)` — for each shard id. Duplicating ownership into the
+progress record would give it two sources of truth that a checkpoint restore can
+desync; the record tracks only what inventory cannot say.
+
+### 5.2 The offer, at the plaza fortune teller
+
+Madame Voss reads the Anchor's ruin off her cards. She is a **prop**, not an
+NPC: `TownPropSystem` owns her tile (its `fortuneTile` field) and floats the
+`Consult` prompt, and `DungeonScene.openFortuneTeller` opens
+`FortuneTellerPanel` on `PLAZA_SEER` (`src/ui/FortuneTellerPanel.ts`). The quest
+intercepts **before** that panel: while the questline has anything to say, the
+Consult prompt opens the quest's `QuestDialog` instead of the card reading, and
+the reading is what you get when it does not.
+
+The offer's last page carries a decline button (the `declineButton` field on
+`DialogPage`, `src/ui/QuestDialog.ts`) and a **reward preview** — Ryan's
+requirement that a player can see what they are agreeing to work for:
+
+- Add an optional `reward` field to `DialogPage`: the reward item's id, its
+  display name, a one-or-two-line plain statement of what it does ("Anywhere in
+  the Over City: returns you to the town square. In the square: returns you to
+  where you left."), and the XP figure.
+- `QuestDialog` renders it as a `drawBox` strip below the body lines
+  (`BOX_PRESETS.panel`) with `drawText`, sized into the dialog's existing height
+  arithmetic (`DIALOG_BASE_HEIGHT` and friends) rather than overlapping it.
+- Draw the item's icon in the strip. `InventoryPanel.renderItemIcon`
+  (`src/ui/InventoryPanel.ts`) is the only place that knows how to draw an item;
+  extract its body to a free `drawItemIcon(ctx, item, x, y, size)` exported from
+  that module and have the panel and the strip both call it. No second icon
+  switch — a duplicate would drift the first time an icon changes.
+
+Declining leaves the quest `available` and Voss keeps the offer. Accepting
+starts it, emits `questStarted`, and her tile gains a quest marker (§5.6).
+
+### 5.3 Shard one — the tinker (coins)
+
+The tinker sold it for scrap and still has it. One extra `PricedOption` on the
+`TINKER` entry in `MARKET_VENDORS` (`src/systems/market/vendorDefs.ts`),
+present only while the quest is active and the shard is unowned; once bought,
+the row is gone. Price `ANCHOR_SHARD_PRICE_COINS = 20`.
+
+`PricedMenuPanel` already refuses an unaffordable row and calls `onBlocked`
+(the `unavailable` field on `PricedOption` and the `tryBuy` method,
+`src/ui/PricedMenuPanel.ts`), so a broke player gets the existing refusal, not a
+new one. Buying grants `anchor_shard_tinker`.
+
+This step is deliberately the trivial one: it is the shape of the quest stated
+in ten seconds, so the other two read as variations rather than as surprises.
+
+### 5.4 Shard two — Old Hilda (repair her furniture)
+
+**Her cottage is a wreck from the first time you walk in**, before the quest
+exists and whether or not you ever take it. A room that becomes broken the
+moment a quest tells it to reads as a stage flat; a room that was always broken
+reads as a hedge-witch who cannot afford a carpenter.
+
+- **Broken furnishings are real tile types.** Add `BROKEN_TABLE`,
+  `BROKEN_CHAIR` and `BROKEN_BOOKSHELF` to `src/map/tiles/interiorTiles.ts`
+  beside the intact ones they splinter, and register each in **both**
+  registries — `DECORATION_TYPES` in `src/map/TileRenderer.ts` and
+  `DECORATION_OVERLAY_TYPES` in `src/map/GameMap.ts`. A Y-sorted decoration
+  missing from either one renders as bare floor.
+- **Three of them**, `HILDA_REPAIRS_REQUIRED = 3`: her worktable, its chair, and
+  one wall shelf — the pieces the `case "Old Hilda's Cottage":` block in
+  `GameMap.generateInterior` already places (`TABLE`, `CHAIR`, `BOOKSHELF`).
+  The quest system rewrites those three tiles to their broken types on interior
+  entry for as many as the progress record says are unrepaired, rather than
+  `generateInterior` growing a quest parameter — hostiles are placed the same
+  way (`src/systems/interiorHostiles.ts`, whose header states the principle: a
+  room gains content by having content put in it, not by the generator learning
+  about quests).
+- **Talk to her first, and it is obvious.** `Townsperson`
+  (`src/creatures/Townsperson.ts`) has no marker today — every marker in the
+  game hangs off `QuestNPC`, `Shady`, `Signet` or `GumGum`. Add a
+  `markerType: NPCMarkerType` field to `Townsperson`, defaulting to `'none'`,
+  and draw the glyph with the shared `questMarkerColorFor` helper the four
+  existing markers already share (the `markerType` branches in
+  `src/creatures/QuestNPC.ts` are the drawing to copy). Follow the shipped
+  convention — **`'exclamation'` offers, `'question'` turns in** — so Hilda
+  wears an exclamation before you have spoken to her and a question once the
+  last repair is done. Her residency is already fixed: `residentId:
+'old_hilda'` in the `"Old Hilda's Cottage"` roster in
+  `src/systems/InteriorOccupantSystem.ts`. The quest dialog intercepts her
+  `reading` service (`src/systems/townServices.ts`) exactly as it intercepts
+  Voss's.
+- **The wood pile does not exist until she asks.** Only after that conversation
+  does a pile appear in the cottage. Reuse the defend quest's wholesale: the
+  same `quest_wood_board` item (`src/core/ItemDefs.ts` — it already exists and
+  its description will need a second sentence), the same `drawWoodPileSprite`
+  drawn by the system rather than baked into a tile, the same walk-over pickup
+  (`tickWoodPile` on `DefendQuestSystem`) and the same respawn cadence, so a
+  player who somehow wastes boards can never soft-lock. `BOARDS_PER_REPAIR = 2`.
+- **A repairable piece glows only when you can repair it.** Holding
+  `BOARDS_PER_REPAIR` or more, each unrepaired tile draws a pulsing highlight
+  ring from the quest system plus `drawInteractionPrompt` with the defend
+  quest's `'R'` key override (the build/repair prompt block in
+  `DefendQuestSystem.render` is the pattern, prompt label `Repair`). Holding
+  nothing, the furniture still reads broken but does not glow, and the pile gets
+  the pointer instead — the highlight always answers "what can I do _now_".
+- Repairing writes the tile back to its intact type, consumes the boards, and
+  increments the count in `AnchorQuestProgress` so a re-entered cottage stays
+  fixed. All three → her marker turns to `'question'` → talk → `anchor_shard_hilda`.
+
+### 5.5 Shard three — the temple (clear the vermin)
+
+Deacon Aviel is already the Temple of the Sky's altar occupant (`residentId:
+'deacon_aviel'` in the temple roster in `src/systems/InteriorOccupantSystem.ts`,
+selling blessings through `buildBlessingMenu` in `src/systems/townTemple.ts`).
+He gets the same `markerType` treatment as Hilda, and the same dialog intercept
+ahead of his blessing menu.
+
+- **The vermin appear when he asks, not before.** `TEMPLE_VERMIN_COUNT = 3`
+  spawn in the nave on the step starting — placed off the aisle through
+  `findNearbyWalkableTile` (`src/map/findWalkableTile.ts`) like every other
+  interior spawn, and joining the room's existing `MobRoster` so the room's
+  shipped `CombatKit` and `DestructionKit` fight and gore them with no new
+  combat code (the principle stated in the header of
+  `src/systems/interiorHostiles.ts`).
+- **They run away.** New `ShrineVermin extends Rat` (`src/creatures/Rat.ts`)
+  overriding `update` to flee: no aggro, no bite, no contact damage — it moves
+  _away_ from the nearer crawler at rat speed via `moveWithCollision`
+  (`src/creatures/Mob.ts`), and cowers when a wall leaves it nowhere to go. Rats
+  die in one or two hits (`RAT_HP = 3`), so the step is a chase, not a fight.
+  Two traps sit exactly here:
+  - `followTargetCollide` writes facing only when it actually walks — a fleeing
+    mob that stops must set its own facing or it keeps the direction it last
+    walked (the mobs-stop-facing-nothing gotcha). Flight computes its own
+    heading anyway; write it explicitly.
+  - The interior is 18×18 (`INTERIOR_BY_NAME` in `src/map/GameMap.ts`), so
+    flight must clamp to walkable tiles or a vermin presses into a pew forever.
+- Any kill counts — either crawler, the companion, a mercenary, a status effect.
+  Read deaths off the roster the room already prunes rather than off a
+  player-kill event, or a cat-killed rat will not count.
+- Progress is the questline's record, not `TownMemory.clearedRooms`: the room's
+  ordinary occupants are unaffected and the vermin are not a room feature. Leave
+  the `roomKey` set alone.
+- Last one dead → Aviel's marker turns to `'question'` → talk → `anchor_shard_temple`.
+
+### 5.6 Assembly, and what the player is told
+
+Back to Voss with all three. She charges `ANCHOR_ASSEMBLY_FEE_COINS = 25` —
+small enough to be a joke about seers rather than a wall, and refused with a
+`HotbarToast` naming the price if the party is short. On payment:
+
+- remove the three shards from whichever inventories hold them,
+- add `wayfinders_anchor` to **both** crawlers and auto-place it on a free
+  hotbar slot each,
+- `bus.emit('rewardGranted', …)` into `RewardGrantedDialog`
+  (`src/ui/RewardGrantedDialog.ts`) so the stone is presented, not just
+  deposited, plus `SystemAnnouncer.announce` (`src/ui/SystemAnnouncer.ts`) and a
+  `HotbarToast`,
+- `questManager.completeQuest('anchor_shards')` and the XP in `QuestRewards`.
+
+Everything else that teaches the stone still applies:
+
+1. **The Journal carries the questline.** Implement `TrackerSource`
+   (`src/systems/questTracker.ts`) on the new system: one entry per live step,
+   with an `objective` line and a `target` tile — the fortune tile, the tinker's
+   stall, Hilda's door and the temple door (`doorTileOf` on
+   `MurderMysteryQuestSystem` is the idiom for a door tile). That is what makes
+   a three-stop errand followable without a wiki, and it feeds the world arrow.
+2. **Mordecai points at the questline first.** An advice objective in
+   `src/systems/mordecaiAdvice.ts` (the `AdviceObjective` interface) sending the
+   player to the plaza seer with a `{direction}` bearing, `complete` once the
+   quest is accepted; then a second objective, after the stone exists, that
+   restates the two modes and completes on first use.
 3. **The item explains itself.** The `ITEM_DEF` description states both modes
    and the cooldown in one paragraph — descriptions render in the inventory
-   panel where players actually read them.
+   panel where players actually read them. Each shard's description says which
+   townsperson it came from and that Madame Voss can join them.
 4. **Speed Fizz signposting (the traversal half).** Same advice mechanism: an
    objective pointing at the market stalls ("The tinker sells Speed Fizz —
    twice your speed for 25 seconds — {direction}") with a bearing to
@@ -264,24 +451,64 @@ Nobody should stumble onto this; it is handed over, named, and pointed at.
 Type-safety rules apply throughout: no `as`, no `!`, no `any`; every number
 above becomes a named constant.
 
-### Phase 1 — Item definition and grant
+### Phase 1 — Items and the progress record
 
-- `src/core/ItemDefs.ts` — add `'town_recall_stone'` to the `ItemId` union;
-  add the `ITEM_DEF` entry (non-stackable, `canHotlist: true`,
-  `canDrop: false`, `type: 'consumable'`, description per §5.3).
-- `src/ui/InventoryPanel.ts` — icon branch in `renderItemIcon`.
-- Grant flow in `DungeonScene` setup (near the level-init blocks in the
-  constructor, around the boss-chest/treasure-room setup): overworld floor +
-  not owned → grant to both crawlers, auto-hotbar, queue the Mordecai dialog +
-  announcer + toast. Ownership check is `inventory.countOf` on both crawlers —
-  the item is undroppable, so presence is a reliable "already granted" flag
-  that survives save/restore via `PlayerSnapshot`
-  (`src/core/PlayerSnapshot.ts`) with no new persistence.
-- `src/dev/playtestPresets.ts` — add the stone to the floor-3 presets (idiom:
-  the `hotbar`/`bag` array literals on a `PlaytestPreset` such as `HOARDER`) so
-  `?playtest` drop-ins can exercise it.
+- `src/core/ItemDefs.ts` — add `'wayfinders_anchor'` and the three
+  `'anchor_shard_*'` ids to the `ItemId` union; add the `ITEM_DEF` entries. The
+  stone is non-stackable, `canHotlist: true`, `canDrop: false`,
+  `type: 'consumable'`, described per §5.6.3; each shard is
+  `isQuestItem: true`, `canDrop: false`, non-stackable. Extend the
+  `quest_wood_board` description to cover Hilda's repairs as well as the
+  barricades.
+- `src/ui/InventoryPanel.ts` — icon for the stone and one shared shard icon;
+  extract `renderItemIcon`'s body to an exported `drawItemIcon` (§5.2) so the
+  quest dialog's reward strip can draw the same art.
+- `src/core/AnchorQuestProgress.ts` — the record per §5.1, threaded through the
+  `DungeonScene` and `BuildingInteriorScene` constructors alongside `TownMemory`
+  and the other questline records.
+- `src/dev/playtestPresets.ts` — a floor-3 preset carrying all three shards
+  (quest mid-flight) and one carrying the finished stone (idiom: the
+  `hotbar`/`bag` array literals on a `PlaytestPreset` such as `HOARDER`), so
+  `?playtest` can drop into either half without playing the other.
 
-### Phase 2 — RecallSystem
+### Phase 2 — The offer and the assembly (fortune teller)
+
+- `src/ui/QuestDialog.ts` — the optional `reward` field on `DialogPage` and its
+  strip, folded into the dialog's height arithmetic (§5.2).
+- New `src/systems/AnchorQuestSystem.ts` implementing `GameSystem`
+  (`src/systems/GameSystem.ts`) and `TrackerSource`
+  (`src/systems/questTracker.ts`): owns the `QuestManager`, the dialog, the
+  marker states and the assembly transaction.
+- Intercept the Consult prompt in `DungeonScene` ahead of `openFortuneTeller`;
+  quest marker over `TownPropSystem`'s `fortuneTile`.
+- Assembly: shard removal across both inventories, dual grant, auto-hotbar,
+  `rewardGranted` + announcer + toast, `completeQuest`.
+
+### Phase 3 — Shard one, the tinker
+
+- The gated `PricedOption` on `TINKER` in
+  `src/systems/market/vendorDefs.ts` and its purchase hook (§5.3).
+
+### Phase 4 — Shard two, Hilda's repairs
+
+- `src/map/tiles/interiorTiles.ts` — the three `BROKEN_*` tile types, plus
+  registration in **both** `DECORATION_TYPES` (`src/map/TileRenderer.ts`) and
+  `DECORATION_OVERLAY_TYPES` (`src/map/GameMap.ts`).
+- `src/creatures/Townsperson.ts` — the `markerType` field and its glyph, drawn
+  through the shared `questMarkerColorFor` helper.
+- Interior-side half of `AnchorQuestSystem` (or a sibling system constructed by
+  `BuildingInteriorScene`): tile rewrite on entry, Hilda's dialog intercept
+  ahead of her `reading` service, the wood pile, the highlight, the `R` repair
+  interaction, the repaired count.
+
+### Phase 5 — Shard three, the temple vermin
+
+- `src/creatures/ShrineVermin.ts` — the fleeing `Rat` subclass (§5.5),
+  including the explicit facing write and the walkable clamp.
+- Spawn on step start into the room's existing `MobRoster`; count deaths off
+  the roster; Aviel's marker and dialog intercept ahead of the blessing menu.
+
+### Phase 6 — RecallSystem
 
 - New `src/systems/RecallSystem.ts` implementing `GameSystem`
   (`src/systems/GameSystem.ts`): owns channel state (frames, mode, caster),
@@ -303,7 +530,7 @@ above becomes a named constant.
   anchor; cooldown restores to its captured value (respawn already teleports
   you — a free cooldown reset would be a death-powered shortcut).
 
-### Phase 3 — Teleport execution and feedback
+### Phase 7 — Teleport execution and feedback
 
 - Party-warp helper in `DungeonScene` refactored out of the `!bounty go` block
   (`runBountyWarpCheat` and `findWarpLandingTile` in
@@ -316,20 +543,25 @@ above becomes a named constant.
 - Emit a bus event (`src/core/EventBus.ts` `GameEvents`) such as
   `fastTravelUsed` for the AI adapter and future achievements.
 
-### Phase 4 — Discovery content
+### Phase 8 — Discovery content
 
-- Mordecai advice objectives for the stone and for Speed Fizz
+- Mordecai advice objectives for the questline, for the stone and for Speed Fizz
   (`src/systems/mordecaiAdvice.ts`), completion flags fed from the scene's
   snapshot builder.
-- Grant dialog copy; `ITEM_DEF` description final wording.
+- Quest dialog copy for all four conversations; `ITEM_DEF` description final
+  wording for the stone and the shards.
 
-### Phase 5 — Verification
+### Phase 9 — Verification
 
 - `npm run typecheck`, `npm run lint`, `npm run format` — both gates must exit 0.
-- Headless sanity via `?playtest` floor-3 preset: use stone in wilderness →
-  assert player tile ≈ `townSquareCentre`; use again in town → assert back at
-  anchor; assert cooldown refusal in between. (Browser automation can drive
-  input; only timing feel needs a human.)
+- Headless sanity via `?playtest` floor-3 presets. Questline: accept at the
+  seer → assert three tracker entries; buy the tinker's shard → assert its row
+  disappears; enter the cottage → assert three `BROKEN_*` tiles, repair one →
+  assert it is intact on re-entry; enter the temple → assert three vermin spawn
+  and that each one's distance from the player is non-decreasing while it lives.
+  Stone: use in wilderness → assert player tile ≈ `townSquareCentre`; use again
+  in town → assert back at anchor; assert cooldown refusal in between. (Browser
+  automation can drive input; only timing feel needs a human.)
 - Confirm the service worker is unregistered before any browser check (stale
   bundle trap).
 
@@ -346,6 +578,17 @@ above becomes a named constant.
   in `update`, renders read state; no per-render timers.
 - **Canvas size reads** — all UI geometry via `viewportWidth()`/
   `viewportHeight()` like `StairwellSystem` (`src/systems/StairwellSystem.ts`).
+- **Two decoration registries** — the `BROKEN_*` tiles go in `DECORATION_TYPES`
+  **and** `DECORATION_OVERLAY_TYPES`, or they render as bare floor.
+- **Interiors are rebuilt on every entry** — nothing about the questline may
+  live on `BuildingInteriorScene` or on a `Townsperson`; it lives in
+  `AnchorQuestProgress` (§5.1).
+- **Mobs stop facing nothing** — a fleeing vermin that stops must write its own
+  facing.
+- **Decoration art must fit its blocked tiles** — a splintered table that
+  overhangs its tile lets the player stand inside it; the broken art stays
+  inside the intact piece's footprint.
+- **Two inventories, one party** — every shard check sums human and cat.
 
 ## 9. Deferred: the mount (what it would actually take)
 
@@ -363,6 +606,18 @@ round trip as much as the stone does.
 
 ## 10. Notes for Ryan's playtest
 
+- Is the questline the right length — three stops before fast travel, or one
+  stop too many when you are impatient to explore?
+- Are `ANCHOR_SHARD_PRICE_COINS = 20` and `ANCHOR_ASSEMBLY_FEE_COINS = 25`
+  pocket change at the point a player reaches floor 3, or a real wall?
+- Does the reward strip on the offer page make the stone worth the errand
+  before the errand starts?
+- Is the broken furniture legible as broken at 32 px without the glow, and does
+  the glow read as "you can fix this now" rather than as loot?
+- Do fleeing vermin feel like a chore in an 18×18 room? Tune their speed, or
+  give them a panic burst when struck.
+- Does Hilda's exclamation-then-question marker actually stop players from
+  walking straight past her to the wood pile?
 - Does the 60 s cooldown / 3 s channel feel like a travel tool rather
   than a combat escape? Tune `RECALL_COOLDOWN_FRAMES` /
   `RECALL_CHANNEL_FRAMES`.
